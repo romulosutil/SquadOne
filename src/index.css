@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* Tailwind v4 não tem utility de image-rendering (§4.2). */
+@utility pixelated {
+  image-rendering: pixelated;
+}
+
+/* Ciclo idle/working: CSS puro, steps(2), sem gastar rAF (§4.2). */
+@keyframes sprite-idle {
+  from { background-position-x: 0; }
+  to { background-position-x: -64px; }
+}
+
+@keyframes emoji-idle {
+  from { transform: translateY(0); }
+  to { transform: translateY(-1px); }
+}
+
+@keyframes emoji-walk {
+  from { transform: translateY(0); }
+  to { transform: translateY(-2px); }
+}
+
+/* Sala nova materializa em saltos discretos, coerente com pixel art (§4.4). */
+@keyframes room-build {
+  0%   { clip-path: inset(50% 50% 50% 50%); filter: brightness(4); }
+  60%  { clip-path: inset(0 0 0 0);         filter: brightness(4); }
+  100% { clip-path: inset(0 0 0 0);         filter: brightness(1); }
+}
+
+.room--new {
+  animation: room-build 450ms steps(6, end) both;
+}
