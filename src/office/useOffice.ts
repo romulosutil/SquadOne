@@ -1,28 +1,40 @@
 /**
- * Loop e câmera do escritório — spec §4.1 / §4.2.
+ * Loop e câmera do escritório — spec §4.1 / §4.2, em projeção isométrica.
  *
  * Um único requestAnimationFrame para todos os atores + a câmera. O loop para
  * sozinho quando ninguém anda (`raf = busy ? rAF(tick) : 0`). Idle/working é
- * CSS puro com steps(2), sem gastar rAF.
+ * CSS puro, sem gastar rAF.
  *
- * Três requisitos não-cosméticos de §4.2:
- *  1. Math.round() nas coordenadas de mundo (senão o sprite cintila a 2x).
+ * Três requisitos não-cosméticos de §4.2, mantidos na versão isométrica:
+ *  1. Math.round() nas coordenadas — agora nas de TELA, que são as que viram px.
  *  2. Escrita DIRETA em el.style.transform (ref() = 60 re-renders/s).
  *  3. Frame do ciclo de caminhada derivado da DISTÂNCIA, não do relógio.
+ *
+ * O ator anda no mundo ortogonal; `toScreen` projeta só na hora de pintar, e o
+ * sprite é um billboard (sempre de frente, espelhado quando anda para a
+ * esquerda da tela) porque a arte do CraftPix só tem a vista frontal.
  */
 
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import {
+  INNER_H,
+  INNER_OFFSET,
+  INNER_W,
+  NORTH_TILES,
   PROP_EMOJI,
-  PROP_SIZE,
   ROOM_H,
   ROOM_W,
+  PROP_SIZE,
   TILE,
+  WALL_H,
+  WEST_TILES,
+  isoBounds,
   localCenterPx,
   mapSizeTiles,
   parseRoom,
   roomOriginPx,
   slotKey,
+  toScreen,
   type PropKind,
   type RoomId,
   type Vec2,
@@ -35,36 +47,32 @@ export interface OfficeMember {
   papel: string
   slot: Vec2
   room: RoomId
-  /** fallback quando char_po.png dá 404 */
+  /** chave no craftpix.manifest.json */
+  sprite: string
+  /** graus de hue-rotate, para diferenciar papéis que reusam o mesmo sprite */
+  hue?: number
+  /** fallback quando o sheet não carrega */
   emoji: string
 }
 
-/** px-fonte por segundo. */
+/** px-fonte por segundo, no mundo ortogonal. */
 const SPEED = 96
 /** distância andada entre trocas de frame do ciclo de caminhada. */
-const STEP_PX = 16
-/** col: 0 parado, 1 passo-esq, 2 passo-dir (§5.1) */
-const PINGPONG = [0, 1, 0, 2]
-/** row: 0 baixo, 1 esq, 2 dir, 3 cima (§5.1) */
-const DIR_DOWN = 0
-const DIR_LEFT = 1
-const DIR_RIGHT = 2
-const DIR_UP = 3
-/** pés em y=30 dentro do frame 32x32 (§5.1) */
-const FOOT_Y = 30
+const STEP_PX = 6
 const CAM_LAMBDA = 8
 
-export const SPRITE_URL = {
-  char: '/sprites/char_po.png',
-  floor: '/sprites/tile_floor.png',
-  wall: '/sprites/tile_wall.png',
-  door: '/sprites/tile_door.png',
-  desk: '/sprites/prop_desk.png',
-  chair: '/sprites/prop_chair.png',
-  plant: '/sprites/prop_plant.png',
-} as const
+const MANIFEST_URL = '/sprites/craftpix.manifest.json'
 
-export type SpriteKey = keyof typeof SPRITE_URL
+interface CharAnim {
+  file: string
+  frames: number
+}
+
+export interface CharSheet {
+  frameW: number
+  frameH: number
+  anims: Record<string, CharAnim>
+}
 
 interface Actor {
   id: string
@@ -73,7 +81,8 @@ interface Actor {
   slot: Vec2
   route: Vec2[]
   dist: number
-  dir: number
+  /** direção na TELA: 1 = direita, -1 = esquerda (espelha o billboard) */
+  facing: number
   walking: boolean
 }
 
@@ -84,29 +93,29 @@ export interface RoomPropView {
   top: number
   width: number
   height: number
+  z: number
+}
+
+export interface WallView {
+  key: string
+  axis: 'x' | 'y'
+  left: number
+  top: number
+  len: number
+  z: number
 }
 
 export interface RoomView {
   key: string
   slot: Vec2
-  left: number
-  top: number
-  width: number
-  height: number
-  label: string
+  /** retângulos em coordenadas de MUNDO (a camada .ground é que projeta) */
+  base: { left: number; top: number; width: number; height: number }
+  floor: { left: number; top: number; width: number; height: number }
+  /** posição de tela da placa da sala */
+  label: { text: string; left: number; top: number }
   isNew: boolean
+  walls: WallView[]
   props: RoomPropView[]
-  doors: { left: number; top: number }[]
-}
-
-/** Carrega o PNG uma vez; false = 404 e a UI cai pro emoji. */
-function probe(url: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => resolve(img.naturalWidth > 0)
-    img.onerror = () => resolve(false)
-    img.src = url
-  })
 }
 
 export function useOffice(members: Ref<OfficeMember[]>) {
@@ -124,18 +133,11 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     applyCamera()
   }
 
-  /** SCALE aparece em UM lugar: o transform de .world. Tab alterna 2 <-> 1. */
-  const scale = ref(2)
+  /** SCALE aparece em UM lugar: o transform de .world. Tab alterna 1 <-> 2. */
+  const scale = ref(1)
 
-  const assets = reactive<Record<SpriteKey, boolean>>({
-    char: false,
-    floor: false,
-    wall: false,
-    door: false,
-    desk: false,
-    chair: false,
-    plant: false,
-  })
+  /** null enquanto carrega ou se o manifest não existir: a UI cai pro emoji. */
+  const sheets = shallowRef<Record<string, CharSheet> | null>(null)
 
   const newRooms = reactive(new Set<string>())
   const seenRooms = new Set<string>()
@@ -144,39 +146,81 @@ export function useOffice(members: Ref<OfficeMember[]>) {
 
   const mapTiles = computed(() => mapSizeTiles(members.value.map((m) => m.slot)))
   const mapPx = computed<Vec2>(() => [mapTiles.value[0] * TILE, mapTiles.value[1] * TILE])
+  const bounds = computed(() => isoBounds(mapPx.value[0], mapPx.value[1]))
+
+  /** Profundidade do pintor: a diagonal do mundo ortogonal. */
+  function depth(wx: number, wy: number): number {
+    return Math.round(wx + wy)
+  }
 
   const rooms = computed<RoomView[]>(() =>
     members.value.map((m) => {
       const parsed = parseRoom(m.room)
       const [ox, oy] = roomOriginPx(m.slot)
       const key = slotKey(m.slot)
-      const doors: { left: number; top: number }[] = []
-      if (parsed.hasEastDoor && unlocked.value.has(slotKey([m.slot[0] + 1, m.slot[1]]))) {
-        doors.push({ left: ox + 7 * TILE, top: oy + 2 * TILE })
+      const x0 = ox + INNER_OFFSET
+      const y0 = oy + INNER_OFFSET
+
+      // Só as paredes de trás são desenhadas: as da frente esconderiam a sala.
+      // Um tile por div — a profundidade de uma parede longa não cabe num único
+      // z-index, e o vão da porta vira simplesmente um tile que não existe.
+      const hasNorthDoor = unlocked.value.has(slotKey([m.slot[0], m.slot[1] - 1]))
+      const hasWestDoor = unlocked.value.has(slotKey([m.slot[0] - 1, m.slot[1]]))
+      const walls: WallView[] = []
+      for (let i = 0; i < NORTH_TILES; i++) {
+        if (hasNorthDoor && i === 2) continue // porta sul do vizinho = local x 3
+        const wx = x0 + i * TILE
+        const [sx, sy] = toScreen(wx, y0)
+        walls.push({
+          key: `${key}-n${i}`,
+          axis: 'x',
+          left: sx,
+          top: sy - WALL_H,
+          len: TILE,
+          z: depth(wx + TILE / 2, y0),
+        })
       }
-      if (parsed.hasSouthDoor && unlocked.value.has(slotKey([m.slot[0], m.slot[1] + 1]))) {
-        doors.push({ left: ox + 3 * TILE, top: oy + 5 * TILE })
+      for (let i = 0; i < WEST_TILES; i++) {
+        if (hasWestDoor && i === 1) continue // porta leste do vizinho = local y 2
+        const wy = y0 + i * TILE
+        const [sx, sy] = toScreen(x0, wy)
+        walls.push({
+          key: `${key}-w${i}`,
+          axis: 'y',
+          left: sx,
+          top: sy - WALL_H,
+          len: TILE,
+          z: depth(x0, wy + TILE / 2),
+        })
       }
+
+      const [lx, ly] = toScreen(x0, y0)
       return {
         key,
         slot: m.slot,
-        left: ox,
-        top: oy,
-        width: ROOM_W * TILE,
-        height: ROOM_H * TILE,
-        label: m.papel,
+        // A base cobre a sala inteira, faixa de parede inclusa: é o topo da
+        // parede. Sem ela a faixa compartilhada entre salas fica vazada.
+        base: { left: ox, top: oy, width: ROOM_W * TILE, height: ROOM_H * TILE },
+        floor: { left: x0, top: y0, width: INNER_W, height: INNER_H },
+        // A placa da sala é UI, não objeto de mundo: não entra no painter's
+        // algorithm, senão o ator da própria sala a cobre.
+        label: { text: m.papel, left: lx, top: ly - WALL_H - 16 },
         isNew: newRooms.has(key),
-        doors,
+        walls,
         props: parsed.props.map((p) => {
           const [w, h] = PROP_SIZE[p.kind]
+          // Âncora do prop: centro do tile no chão; o desenho sobe a partir dele.
+          const wx = ox + p.local[0] * TILE + TILE / 2
+          const wy = oy + p.local[1] * TILE + TILE / 2
+          const [sx, sy] = toScreen(wx, wy)
           return {
             kind: p.kind,
             emoji: PROP_EMOJI[p.kind],
-            // props mais altos que o tile estouram pra cima, ancorados no rodapé
-            left: ox + p.local[0] * TILE,
-            top: oy + p.local[1] * TILE - (h - TILE),
+            left: Math.round(sx - w / 2),
+            top: Math.round(sy - h),
             width: w,
             height: h,
+            z: depth(wx, wy),
           }
         }),
       }
@@ -190,11 +234,16 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   /** Fora do sistema de reatividade de propósito: o tick escreve no DOM direto. */
   const actors = new Map<string, Actor>()
   /** Nós do DOM, registrados pelo :ref do template (roda antes de onMounted). */
-  const els = new Map<string, { root: HTMLElement; sprite: HTMLElement | null }>()
+  const els = new Map<string, { root: HTMLElement; sprite: HTMLElement | null; walk: HTMLElement | null }>()
   const focused = ref<string | null>(null)
 
   function stationPx(m: OfficeMember): Vec2 {
     return localCenterPx(m.slot, parseRoom(m.room).station)
+  }
+
+  function sheetOf(id: string): CharSheet | null {
+    const m = members.value.find((x) => x.id === id)
+    return (m && sheets.value?.[m.sprite]) ?? null
   }
 
   function syncActors() {
@@ -204,16 +253,7 @@ export function useOffice(members: Ref<OfficeMember[]>) {
       let a = actors.get(m.id)
       if (!a) {
         const [x, y] = stationPx(m)
-        a = {
-          id: m.id,
-          x,
-          y,
-          slot: m.slot,
-          route: [],
-          dist: 0,
-          dir: DIR_DOWN,
-          walking: false,
-        }
+        a = { id: m.id, x, y, slot: m.slot, route: [], dist: 0, facing: 1, walking: false }
         actors.set(m.id, a)
       }
       paint(a)
@@ -227,15 +267,20 @@ export function useOffice(members: Ref<OfficeMember[]>) {
       els.delete(id)
       return
     }
-    els.set(id, { root: node, sprite: node.querySelector<HTMLElement>('[data-sprite]') })
+    els.set(id, {
+      root: node,
+      sprite: node.querySelector<HTMLElement>('[data-billboard]'),
+      walk: node.querySelector<HTMLElement>('[data-walk]'),
+    })
     const a = actors.get(id)
     if (a) paint(a)
   }
 
-  /** O nó [data-sprite] troca quando o probe do PNG resolve (sprite <-> emoji). */
+  /** Os nós do sprite trocam quando o manifest resolve (sheet <-> emoji). */
   function refreshSpriteEls() {
     for (const entry of els.values()) {
-      entry.sprite = entry.root.querySelector<HTMLElement>('[data-sprite]')
+      entry.sprite = entry.root.querySelector<HTMLElement>('[data-billboard]')
+      entry.walk = entry.root.querySelector<HTMLElement>('[data-walk]')
     }
     for (const a of actors.values()) paint(a)
   }
@@ -243,14 +288,23 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   function paint(a: Actor) {
     const entry = els.get(a.id)
     if (!entry) return
-    // (1) Math.round nas coordenadas de mundo; (2) escrita direta no style.
+    const sheet = sheetOf(a.id)
+    const w = sheet ? sheet.frameW : TILE
+    const h = sheet ? sheet.frameH : TILE
+    const [sx, sy] = toScreen(a.x, a.y)
+    // (1) Math.round nas coordenadas de tela; (2) escrita direta no style.
     entry.root.style.transform =
-      'translate3d(' + Math.round(a.x - TILE / 2) + 'px, ' + Math.round(a.y - FOOT_Y) + 'px, 0)'
+      'translate3d(' + Math.round(sx - w / 2) + 'px, ' + Math.round(sy - h) + 'px, 0)'
+    // Painter's algorithm: quem tem diagonal maior está mais à frente.
+    entry.root.style.zIndex = String(depth(a.x, a.y))
     entry.root.classList.toggle('actor--walk', a.walking)
-    if (!entry.sprite) return
+
+    if (entry.sprite) entry.sprite.style.transform = a.facing < 0 ? 'scaleX(-1)' : ''
+    if (!entry.walk || !sheet || !a.walking) return
     // (3) frame derivado da distância percorrida, não do relógio.
-    const col = a.walking ? PINGPONG[((a.dist / STEP_PX) | 0) % 4] : 0
-    entry.sprite.style.backgroundPosition = -col * TILE + 'px ' + -a.dir * TILE + 'px'
+    const frames = sheet.anims.walk?.frames ?? 1
+    const col = ((a.dist / STEP_PX) | 0) % frames
+    entry.walk.style.backgroundPositionX = -col * w + 'px'
   }
 
   /** Manda o ator até a estação da sala do slot (ou um tile local específico). */
@@ -274,11 +328,11 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   }
 
   // -------------------------------------------------------------------------
-  // Câmera
+  // Câmera (em coordenadas de tela)
   // -------------------------------------------------------------------------
 
   const cam = { x: 0, y: 0 }
-  const view = { w: 480, h: 320 }
+  const view = { w: 960, h: 640 }
 
   function measure() {
     const el = viewportRef.value
@@ -287,20 +341,21 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     view.h = el.clientHeight / scale.value
   }
 
-  function clampAxis(want: number, mapSize: number, viewSize: number): number {
-    const max = mapSize - viewSize
+  function clampAxis(want: number, min: number, max: number, viewSize: number): number {
+    const span = max - min
     // mapa menor que o viewport nesse eixo: centraliza
-    if (max <= 0) return max / 2
-    return want < 0 ? 0 : want > max ? max : want
+    if (span <= viewSize) return min - (viewSize - span) / 2
+    const hi = max - viewSize
+    return want < min ? min : want > hi ? hi : want
   }
 
   function camTarget(): Vec2 {
     const a = (focused.value ? actors.get(focused.value) : null) ?? actors.values().next().value
-    const cx = a ? a.x : mapPx.value[0] / 2
-    const cy = a ? a.y : mapPx.value[1] / 2
+    const b = bounds.value
+    const [sx, sy] = a ? toScreen(a.x, a.y) : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
     return [
-      clampAxis(cx - view.w / 2, mapPx.value[0], view.w),
-      clampAxis(cy - view.h / 2, mapPx.value[1], view.h),
+      clampAxis(sx - view.w / 2, b.minX, b.maxX, view.w),
+      clampAxis(sy - view.h / 2, b.minY, b.maxY, view.h),
     ]
   }
 
@@ -338,7 +393,9 @@ export function useOffice(members: Ref<OfficeMember[]>) {
         a.route.shift()
         continue
       }
-      a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? DIR_RIGHT : DIR_LEFT) : dy > 0 ? DIR_DOWN : DIR_UP
+      // billboard: o que importa é o sentido na tela, não no mundo
+      const screenDx = toScreen(dx, dy)[0]
+      if (Math.abs(screenDx) > 0.01) a.facing = screenDx < 0 ? -1 : 1
       if (d <= budget) {
         a.x = tx
         a.y = ty
@@ -355,7 +412,6 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     if (!a.route.length && a.walking) {
       a.walking = false
       a.dist = 0
-      a.dir = DIR_DOWN
     }
   }
 
@@ -407,7 +463,18 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   function onKey(e: KeyboardEvent) {
     if (e.key !== 'Tab') return
     e.preventDefault()
-    scale.value = scale.value === 2 ? 1 : 2
+    scale.value = scale.value === 1 ? 2 : 1
+  }
+
+  async function loadSheets() {
+    try {
+      const res = await fetch(MANIFEST_URL, { headers: { accept: 'application/json' } })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && typeof data === 'object' && data.chars) sheets.value = data.chars
+    } catch {
+      // manifest ausente ou inválido: segue no emoji
+    }
   }
 
   // Atores existem antes do primeiro render: os :ref do template rodam antes
@@ -415,7 +482,7 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   syncActors()
   for (const m of members.value) seenRooms.add(slotKey(m.slot))
 
-  onMounted(async () => {
+  onMounted(() => {
     snapCamera()
     // O CSS pode chegar depois do mount (style injetado): o layout só existe no
     // frame seguinte, então re-mede antes de fixar a câmera.
@@ -429,24 +496,19 @@ export function useOffice(members: Ref<OfficeMember[]>) {
       ro.observe(viewportRef.value)
     }
     window.addEventListener('keydown', onKey)
-
-    await Promise.all(
-      (Object.keys(SPRITE_URL) as SpriteKey[]).map(async (k) => {
-        assets[k] = await probe(SPRITE_URL[k])
-      })
-    )
+    void loadSheets()
   })
-
-  watch(
-    () => assets.char,
-    () => nextTick(refreshSpriteEls)
-  )
 
   onBeforeUnmount(() => {
     if (raf) cancelAnimationFrame(raf)
     raf = 0
     ro?.disconnect()
     window.removeEventListener('keydown', onKey)
+  })
+
+  watch(sheets, () => {
+    // o v-if troca o nó do sprite; repinta depois que o DOM assentar
+    requestAnimationFrame(refreshSpriteEls)
   })
 
   watch(scale, () => {
@@ -474,9 +536,9 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     setViewportEl,
     setWorldEl,
     scale,
-    assets,
+    sheets,
     rooms,
-    mapPx,
+    bounds,
     setActorEl,
     moveTo,
     focus: (id: string) => {
@@ -484,6 +546,5 @@ export function useOffice(members: Ref<OfficeMember[]>) {
       kick()
     },
     focused,
-    SPRITE_URL,
   }
 }

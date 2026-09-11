@@ -1,13 +1,59 @@
 /**
- * Geometria do escritório — spec §4.1.
+ * Geometria do escritório — spec §4.1, projetada em isométrico.
  *
- * Toda a matemática deste módulo é em *px-fonte* (tile de 32px, sem escala).
- * SCALE existe num único lugar: o transform do container `.world` (useOffice).
+ * Duas malhas de coordenadas, de propósito:
+ *
+ *   mundo   ortogonal, tile de 32px. Templates, BFS, rotas e colisão vivem aqui.
+ *   tela    isométrico 2:1, saída de `toScreen`. Só a pintura usa.
+ *
+ * Nenhuma lógica de caminho conhece o isométrico: trocar a projeção é trocar
+ * `toScreen` e `ISO_MATRIX`. SCALE continua existindo num único lugar: o
+ * transform do container `.world` (useOffice).
  */
 
 export type Vec2 = [number, number]
 
 export const TILE = 32
+
+/** Losango isométrico 2:1 — o tile de 32x32 vira 64x32 na tela. */
+export const TILE_W = 64
+export const TILE_H = 32
+
+/** Altura da parede em px de tela (não existe no mundo ortogonal). */
+export const WALL_H = 40
+
+const KX = TILE_W / (2 * TILE)
+const KY = TILE_H / (2 * TILE)
+
+/** Projeta um ponto do mundo ortogonal para a tela isométrica. */
+export function toScreen(wx: number, wy: number): Vec2 {
+  return [(wx - wy) * KX, (wx + wy) * KY]
+}
+
+/** A mesma projeção como matriz CSS, para a camada de chão. */
+export const ISO_MATRIX = `matrix(${KX}, ${KY}, ${-KX}, ${KY}, 0, 0)`
+
+/** Face de parede alinhada ao eixo X do mundo (parede norte). */
+export const WALL_MATRIX_X = `matrix(${KX}, ${KY}, 0, 1, 0, 0)`
+/** Face de parede alinhada ao eixo Y do mundo (parede oeste). */
+export const WALL_MATRIX_Y = `matrix(${-KX}, ${KY}, 0, 1, 0, 0)`
+
+export interface IsoBounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+/** Caixa da tela que envolve o mapa inteiro, com folga para a altura da parede. */
+export function isoBounds(mapW: number, mapH: number): IsoBounds {
+  return {
+    minX: -mapH * KX,
+    maxX: mapW * KX,
+    minY: -WALL_H,
+    maxY: (mapW + mapH) * KY,
+  }
+}
 
 /** Salas são sempre 8x6 tiles, com paredes compartilhadas. */
 export const ROOM_W = 8
@@ -166,6 +212,14 @@ export function worldTile(slot: Vec2, local: Vec2): Vec2 {
 export function roomOriginPx(slot: Vec2): Vec2 {
   return [slot[0] * PITCH_X * TILE, slot[1] * PITCH_Y * TILE]
 }
+
+/** Retângulo interno (o chão), sem a faixa de parede. */
+export const INNER_OFFSET = TILE
+export const INNER_W = (PITCH_X - 1) * TILE
+export const INNER_H = (PITCH_Y - 1) * TILE
+/** Tiles de parede desenhados por sala: só as de trás (norte e oeste). */
+export const NORTH_TILES = PITCH_X - 1
+export const WEST_TILES = PITCH_Y - 1
 
 /** Centro de um tile de mundo, em px-fonte. */
 export function tileCenterPx(tile: Vec2): Vec2 {

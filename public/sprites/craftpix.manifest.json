@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "source": "craftpix free wraith tiny style",
+  "chars": {
+    "wraith_01": {
+      "frameW": 46,
+      "frameH": 64,
+      "anims": {
+        "idle": {
+          "file": "/sprites/wraith_01_idle.png",
+          "frames": 12
+        },
+        "walk": {
+          "file": "/sprites/wraith_01_walk.png",
+          "frames": 12
+        }
+      }
+    },
+    "wraith_02": {
+      "frameW": 48,
+      "frameH": 64,
+      "anims": {
+        "idle": {
+          "file": "/sprites/wraith_02_idle.png",
+          "frames": 12
+        },
+        "walk": {
+          "file": "/sprites/wraith_02_walk.png",
+          "frames": 12
+        }
+      }
+    },
+    "wraith_03": {
+      "frameW": 48,
+      "frameH": 64,
+      "anims": {
+        "idle": {
+          "file": "/sprites/wraith_03_idle.png",
+          "frames": 12
+        },
+        "walk": {
+          "file": "/sprites/wraith_03_walk.png",
+          "frames": 12
+        }
+      }
+    }
+  }
+}

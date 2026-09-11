@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
-/* Tailwind v4 não tem utility de image-rendering (§4.2). */
+/* Tailwind v4 não tem utility de image-rendering. Os personagens do CraftPix
+   são vetoriais e NÃO usam isto; fica para tiles pixel art, se vierem. */
 @utility pixelated {
   image-rendering: pixelated;
 }
 
-/* Ciclo idle/working: CSS puro, steps(2), sem gastar rAF (§4.2). */
-@keyframes sprite-idle {
+/* Ciclo idle/working: CSS puro, sem gastar rAF (§4.2). O strip do CraftPix tem
+   N frames; o passo e o fim vem inline, do manifest. */
+@keyframes strip {
   from { background-position-x: 0; }
-  to { background-position-x: -64px; }
+  to { background-position-x: var(--strip-end, 0px); }
 }
 
 @keyframes emoji-idle {
