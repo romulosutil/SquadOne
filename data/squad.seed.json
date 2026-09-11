@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "unlockOrder": [[0,0],[1,0],[0,1],[1,1],[2,0],[2,1],[0,2],[1,2],[2,2]],
+  "members": [
+    {
+      "id": "po",
+      "nome": "Rômulo",
+      "papel": "PO",
+      "escopo": "tudo",
+      "sprite": "po",
+      "slot": [0, 0],
+      "room": "ROOM_SOLO",
+      "horario": { "inicio": "09:00", "fim": "19:00" },
+      "hiredAt": "2026-09-11T09:00:00-03:00"
+    }
+  ]
+}

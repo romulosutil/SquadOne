@@ -26,13 +26,13 @@ defineProps({
         <h3 class="font-bold text-lg leading-tight mb-2">{{ quest.titulo }}</h3>
         <div class="text-sm font-bold flex flex-col gap-1">
           <div class="flex items-center gap-1">
-            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.agente_responsavel }}</span>
+            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.po_id }}</span>
           </div>
           <div class="text-gray-800">
-            ⏰ {{ quest.tipo_agendamento === 'time_blocking' ? 'Foco: ' + (quest.tempo_estimado_minutos || 60) + 'm' : 'Deadline' }}
+            ⏰ {{ quest.tipo === 'time_blocking' ? 'Foco: ' + Math.round((new Date(quest.fim) - new Date(quest.inicio)) / 60000) + 'm' : 'Deadline' }}
           </div>
           <div class="text-gray-800 text-xs truncate">
-            📅 {{ quest.tipo_agendamento === 'time_blocking' ? (quest.data_inicio_sugerida ? new Date(quest.data_inicio_sugerida).toLocaleString() : 'Em breve') : (quest.data_limite ? new Date(quest.data_limite).toLocaleString() : 'S/ Data') }}
+            📅 {{ new Date(quest.tipo === 'time_blocking' ? quest.inicio : quest.fim).toLocaleString() }}
           </div>
         </div>
       </div>

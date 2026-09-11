@@ -1,46 +1,58 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
 
 const currentAgent = ref('Idle')
 const quests = ref([])
+const sugestoes = ref([])
+const squad = ref(null)
 const isLoading = ref(false)
+
+// O roster manda: papeis, slots desbloqueados e roteamento saem daqui.
+onMounted(async () => {
+  try {
+    const response = await fetch('/api/squad')
+    if (!response.ok) throw new Error('Falha ao carregar o squad')
+    squad.value = await response.json()
+  } catch (error) {
+    console.error('Falha ao carregar o squad:', error)
+  }
+})
 
 const handleDelegation = async (payload) => {
   if (isLoading.value) return;
-  
+
   isLoading.value = true;
-  // Move to center before processing
   currentAgent.value = 'Idle';
-  
+
   try {
     const response = await fetch('/api/orquestrar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      // TODO: Authorization: Bearer <access_token> do GIS (§3.4).
+      // Sem o header, agendar_evento falha e o erro volta em erros[].
+      body: JSON.stringify({ demanda: payload.demanda })
     })
-    
+
     if (!response.ok) throw new Error('Erro na requisição')
-    
-    const textResponse = await response.text()
-    
-    // Attempt to parse response (it might have markdown code blocks if the prompt wasn't followed strictly, but our server uses generateContent with application/json config)
-    let data;
-    try {
-      data = JSON.parse(textResponse);
-    } catch (e) {
-      console.warn("Resposta não é JSON puro, tentando limpar markdown");
-      const cleaned = textResponse.replace(/```json/g, '').replace(/```/g, '');
-      data = JSON.parse(cleaned);
+
+    const turno = await response.json()
+
+    if (turno.eventos_criados?.length) {
+      quests.value.unshift(...turno.eventos_criados)
+      currentAgent.value = turno.eventos_criados[0].po_id
     }
 
-    if (data.tarefas && data.tarefas.length > 0) {
-      // Add new quests to the beginning
-      quests.value.unshift(...data.tarefas)
-      // Trigger animation to the responsible agent station
-      currentAgent.value = data.tarefas[0].agente_responsavel
+    if (turno.sugestoes?.length) {
+      sugestoes.value = turno.sugestoes
+    }
+
+    if (turno.erros?.length) {
+      // try por tarefa: o lote sobrevive, os erros vem nomeados.
+      console.warn('Tarefas com erro:', turno.erros)
+      alert(turno.erros.map(e => `${e.capacidade}: ${e.erro}`).join('\n'))
     }
   } catch (error) {
     console.error('Falha ao orquestrar:', error)
@@ -73,7 +85,19 @@ const handleDelegation = async (payload) => {
       <QuestBackpack :quests="quests" />
 
       <!-- Map Area -->
-      <main class="flex-1 p-6 flex flex-col bg-[#e0e7ff]">
+      <main class="flex-1 p-6 flex flex-col gap-4 bg-[#e0e7ff] overflow-y-auto">
+        <!-- Sugestoes de contratacao: proposta, nao acao. O fluxo de
+             contratar (POST /api/squad/hire) ainda nao existe. -->
+        <div
+          v-for="(sugestao, index) in sugestoes"
+          :key="index"
+          class="border-4 border-black bg-[#ffdb58] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] shrink-0"
+        >
+          <h3 class="font-black uppercase text-lg">Contratar {{ sugestao.papel }}?</h3>
+          <p class="font-bold text-sm mt-1">{{ sugestao.justificativa }}</p>
+          <p class="text-xs font-bold mt-2 opacity-70">Escopo: {{ sugestao.escopo }}</p>
+        </div>
+
         <GameMap :agent="currentAgent" />
       </main>
     </div>
