@@ -25,6 +25,10 @@ export function clientIdValido(valor: string | undefined): boolean {
 }
 /** Renova antes do fim: um token que expira em voo vira 401 no meio do turno. */
 const MARGEM_MS = 60_000;
+/** Reconexão silenciosa é instantânea quando funciona; parar de esperar é barato. */
+const TIMEOUT_SILENCIOSO_MS = 10_000;
+/** O popup depende do usuário ler e clicar: aqui a paciência tem que ser outra. */
+const TIMEOUT_POPUP_MS = 5 * 60_000;
 
 export const conectado = ref(false);
 export const conectando = ref(false);
@@ -40,9 +44,15 @@ interface TokenResponse {
   error_description?: string;
 }
 
+interface ErroGis {
+  type?: string;
+  message?: string;
+}
+
 interface TokenClient {
   requestAccessToken: (overrides?: { prompt?: string }) => void;
   callback: (resp: TokenResponse) => void;
+  error_callback?: (err: ErroGis) => void;
 }
 
 declare global {
@@ -101,8 +111,11 @@ async function obterCliente(): Promise<TokenClient> {
     cliente = oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPE,
-      // Reatribuído a cada pedido: a lib chama este callback, não a Promise.
+      // Reatribuídos a cada pedido: a lib chama estes callbacks, não a Promise.
       callback: () => {},
+      // Sem este, uma recusa do GIS (popup bloqueado, consentimento negado)
+      // não chega em lugar nenhum e a Promise fica pendurada pra sempre.
+      error_callback: () => {},
     });
   }
   return cliente;
@@ -150,17 +163,49 @@ export function conectar(silencioso = false): Promise<string> {
   pendente = (async () => {
     const c = await obterCliente();
     return await new Promise<string>((resolve, reject) => {
-      c.callback = (resp) => {
-        try {
-          resolve(guardar(resp));
-        } catch (err) {
-          reject(err);
-        }
+      // O GIS pode simplesmente não responder: no fluxo silencioso, quando o
+      // browser bloqueia o iframe de sessão, ele não chama callback NEM
+      // error_callback. Sem este relógio a Promise nunca liquida, `pendente`
+      // nunca zera e toda chamada seguinte — inclusive a do botão — herda a
+      // mesma Promise morta, com `conectando` travado em true e o botão
+      // desabilitado. O sintoma vira "o calendário não conecta".
+      let vivo = true;
+      const relogio = setTimeout(() => {
+        if (!vivo) return;
+        vivo = false;
+        reject(
+          new Error(
+            silencioso
+              ? "Google não respondeu à reconexão silenciosa."
+              : "Google não respondeu ao pedido de autorização.",
+          ),
+        );
+      }, silencioso ? TIMEOUT_SILENCIOSO_MS : TIMEOUT_POPUP_MS);
+
+      const encerrar = (fn: () => void) => {
+        if (!vivo) return;
+        vivo = false;
+        clearTimeout(relogio);
+        fn();
       };
+
+      c.callback = (resp) =>
+        encerrar(() => {
+          try {
+            resolve(guardar(resp));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      c.error_callback = (err) =>
+        encerrar(() =>
+          reject(new Error(err?.message ?? err?.type ?? "GIS recusou o pedido.")),
+        );
+
       try {
         c.requestAccessToken(silencioso ? { prompt: "" } : {});
       } catch (err) {
-        reject(err);
+        encerrar(() => reject(err));
       }
     });
   })();
