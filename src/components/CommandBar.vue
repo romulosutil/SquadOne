@@ -17,9 +17,9 @@ const demanda = ref('')
 const modo = ref<Modo>('auto')
 
 const MODOS: { valor: Modo; rotulo: string; dica: string }[] = [
-  { valor: 'auto', rotulo: 'Auto', dica: 'O squad decide entre bloco de foco e prazo' },
-  { valor: 'foco', rotulo: 'Focar Agora', dica: 'Todo compromisso vira bloco de foco' },
-  { valor: 'prazo', rotulo: 'Prazo Final', dica: 'Todo compromisso vira deadline' }
+  { valor: 'auto', rotulo: 'Auto', dica: 'O squad decide entre foco e prazo; o servidor escolhe o horário' },
+  { valor: 'foco', rotulo: 'Focar Agora', dica: 'Próximo horário livre na janela de trabalho' },
+  { valor: 'prazo', rotulo: 'Prazo Final', dica: 'Marco no prazo + blocos de trabalho antes dele' }
 ]
 
 const onSubmit = () => {

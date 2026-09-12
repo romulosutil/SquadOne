@@ -63,8 +63,15 @@ export interface EventoCriado {
   responsavel_id: string;
   tipo: "time_blocking" | "deadline";
   dominio: string;
+  /** ISO; "AAAA-MM-DD" quando `dia_inteiro`. */
   inicio: string;
+  /** ISO; "AAAA-MM-DD" exclusivo quando `dia_inteiro`. */
   fim: string;
+  dia_inteiro: boolean;
+  /** foco = bloco avulso; marco = o prazo; bloco = trabalho antes de um marco. */
+  papel: "foco" | "marco" | "bloco";
+  /** eventId do marco, só em `papel: "bloco"`. */
+  prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
 }
@@ -120,11 +127,21 @@ export interface ErroTarefa {
   erro: string;
   /** Não rodou: o turno sugeriu trocar de squad e o servidor descartou o resto. */
   descartado?: true;
+  /** Por que falhou, quando há um gesto certo (ex.: reconectar). */
+  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
+}
+
+/** Feito, mas não como pedido (conflito, esforço parcial...). Não é erro. */
+export interface AvisoTarefa {
+  capacidade: string;
+  titulo: string;
+  aviso: string;
 }
 
 export interface TurnoResponse {
   eventos_criados: EventoCriado[];
   sugestoes: Sugestao[];
+  avisos: AvisoTarefa[];
   erros: ErroTarefa[];
 }
 
@@ -145,6 +162,8 @@ export interface QuestCalendario {
   membro: string;
   /** `squadone_squad`; vazio em eventos anteriores à Fase 1. */
   squad: string;
+  /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
+  prazoRef: string;
   htmlLink?: string;
 }
 

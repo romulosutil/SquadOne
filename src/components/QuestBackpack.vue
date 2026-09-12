@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { PropType } from 'vue'
 import type { QuestCalendario } from '../types'
+import { diasDoEventoDiaInteiro, infoDePrazo } from '../mochila'
 
-defineProps({
+const props = defineProps({
   // Vem de GET /api/mochila, ou seja, do Google Calendar. Nada aqui e estado
   // local do app: apagar o evento no Google some com o card na proxima leitura.
   quests: { type: Array as PropType<QuestCalendario[]>, default: () => [] },
@@ -17,18 +18,37 @@ defineEmits(['conectar', 'recarregar'])
 
 const quando = (quest: QuestCalendario) => {
   if (quest.diaInteiro) {
-    // Dia inteiro: `end.date` do Google e EXCLUSIVO (evento de 12/09 termina
-    // em 13/09), entao a data certa e sempre o inicio, mesmo num deadline. E
-    // "AAAA-MM-DD" puro o `new Date` le como meia-noite UTC, que em -03:00 cai
-    // no dia anterior: monta a data local pelas partes.
-    const [ano, mes, dia] = quest.inicio.split('-').map(Number)
-    return new Date(ano, mes - 1, dia).toLocaleDateString()
+    // `fim` do Google e exclusivo e "AAAA-MM-DD" puro viraria UTC (dia anterior
+    // em -03:00): o helper devolve datas locais. Varios dias mostram o
+    // intervalo, nao so o inicio.
+    const { primeiro, ultimo } = diasDoEventoDiaInteiro(quest.inicio, quest.fim)
+    return ultimo.getTime() === primeiro.getTime()
+      ? primeiro.toLocaleDateString()
+      : `${primeiro.toLocaleDateString()} – ${ultimo.toLocaleDateString()}`
   }
   return new Date(quest.tipo === 'deadline' ? quest.fim : quest.inicio).toLocaleString()
 }
 
 const duracao = (quest: QuestCalendario) =>
   Math.round((new Date(quest.fim).getTime() - new Date(quest.inicio).getTime()) / 60000)
+
+// Bloco e marco se reconhecem pela lista lida, nao por contador gravado:
+// apagar um bloco no Google corrige o "2/3" na proxima leitura.
+const rotuloDoTipo = (quest: QuestCalendario) => {
+  const info = infoDePrazo(quest, props.quests)
+  if (info.papel === 'bloco') return `Bloco ${info.posicao}/${info.total}: ${duracao(quest)}m`
+  if (quest.tipo === 'deadline') {
+    return info.papel === 'marco' ? `Deadline · ${info.blocos} bloco(s) de trabalho` : 'Deadline'
+  }
+  // Dia inteiro nao tem duracao em minutos que signifique algo: 1440m e ruido.
+  return quest.diaInteiro ? 'Foco: dia inteiro' : `Foco: ${duracao(quest)}m`
+}
+
+const prazoDoBloco = (quest: QuestCalendario) => {
+  const info = infoDePrazo(quest, props.quests)
+  if (info.papel !== 'bloco') return ''
+  return info.marco ? `Para o prazo de ${quando(info.marco)}` : 'Para um prazo fora da Mochila'
+}
 </script>
 
 <template>
@@ -90,11 +110,9 @@ const duracao = (quest: QuestCalendario) =>
             <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.membro || '?' }}</span>
             <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
           </div>
-          <div class="text-gray-800">
-            <!-- Dia inteiro nao tem duracao em minutos que signifique algo: 1440m e ruido. -->
-            ⏰ {{ quest.tipo === 'deadline' ? 'Deadline' : quest.diaInteiro ? 'Foco: dia inteiro' : 'Foco: ' + duracao(quest) + 'm' }}
-          </div>
+          <div class="text-gray-800">⏰ {{ rotuloDoTipo(quest) }}</div>
           <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>
+          <div v-if="prazoDoBloco(quest)" class="text-gray-800 text-xs truncate">🎯 {{ prazoDoBloco(quest) }}</div>
         </div>
       </a>
     </div>

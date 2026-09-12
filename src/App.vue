@@ -295,10 +295,21 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // cards novos ficariam bloqueados ate o POST antigo voltar.
     aprovando.value = ''
 
-    if (turno.erros?.length) {
-      // try por tarefa: o lote sobrevive, os erros vem nomeados.
-      console.warn('Tarefas com erro:', turno.erros)
-      alert(turno.erros.map(e => `${e.capacidade}: ${e.erro}`).join('\n'))
+    const erros = turno.erros ?? []
+    const avisos = turno.avisos ?? []
+    // Agendar sem credencial falha por compromisso, nao o turno inteiro: o
+    // motivo classificado e o que diz para a Mochila voltar a oferecer o
+    // botao de conectar.
+    if (erros.some(e => e.motivo === 'precisaConectar')) conectado.value = false
+    if (erros.length || avisos.length) {
+      // try por tarefa: o lote sobrevive, os erros vem nomeados. Avisos sao
+      // coisas feitas de um jeito diferente do pedido (conflito, esforco que
+      // nao coube antes do prazo) e o usuario precisa saber delas agora.
+      console.warn('Tarefas com erro:', erros, 'Avisos:', avisos)
+      alert([
+        ...erros.map(e => `${e.capacidade}: ${e.erro}`),
+        ...avisos.map(a => `Aviso — ${a.titulo}: ${a.aviso}`)
+      ].join('\n'))
     }
 
     // Rele o calendario em vez de confiar no retorno: o que o Google gravou e
