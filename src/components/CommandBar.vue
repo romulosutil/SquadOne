@@ -25,6 +25,9 @@ const onSubmit = () => {
   })
 
   demanda.value = ''
+  // Forcar tipo vale para UMA demanda: um Prazo esquecido ligado forcaria a
+  // proxima, que o usuario pensou em modo livre.
+  modo.value = 'auto'
 }
 </script>
 

@@ -89,6 +89,10 @@ const aprovarSugestao = async (id, nome) => {
   if (!sugestao) return
   aprovando.value = id
   erroSugestao.value = { ...erroSugestao.value, [id]: '' }
+  // Um turno novo pode substituir a lista enquanto o POST corre. Aí o card
+  // deste id nao existe mais, e mexer no estado dos cards (remover, gravar
+  // erro, liberar `aprovando`) atropelaria os cards do turno novo.
+  const aindaNaLista = () => sugestoes.value.some((s) => s.id === id)
   try {
     const response = await fetch('/api/squad/hire', {
       method: 'POST',
@@ -98,10 +102,13 @@ const aprovarSugestao = async (id, nome) => {
     const dados = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(dados.error ?? `HTTP ${response.status}`)
 
+    // O roster mudou de qualquer jeito: squad e aviso valem mesmo sem o card.
     squad.value = dados.squad
-    sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
-    const { [id]: _, ...outrosErros } = erroSugestao.value
-    erroSugestao.value = outrosErros
+    if (aindaNaLista()) {
+      sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
+      const { [id]: _, ...outrosErros } = erroSugestao.value
+      erroSugestao.value = outrosErros
+    }
     avisar(
       dados.kind === 'dominio'
         ? `${dados.pessoa.nome} abriu o dominio ${dados.dominio.nome}`
@@ -109,9 +116,11 @@ const aprovarSugestao = async (id, nome) => {
     )
   } catch (error) {
     console.error('Falha ao contratar:', error)
-    erroSugestao.value = { ...erroSugestao.value, [id]: error.message }
+    if (aindaNaLista()) erroSugestao.value = { ...erroSugestao.value, [id]: error.message }
   } finally {
-    aprovando.value = ''
+    // So libera se ainda for a aprovacao deste id: depois de um turno novo,
+    // `aprovando` pode ja pertencer a um card do turno novo.
+    if (aprovando.value === id) aprovando.value = ''
   }
 }
 
@@ -164,6 +173,9 @@ const handleDelegation = async (payload) => {
     // (ou nunca esvaziar) mostrava cards que ninguem pediu agora.
     sugestoes.value = turno.sugestoes ?? []
     erroSugestao.value = {}
+    // Aprovacao em curso era de um card que acabou de sair: sem zerar, os
+    // cards novos ficariam bloqueados ate o POST antigo voltar.
+    aprovando.value = ''
 
     if (turno.erros?.length) {
       // try por tarefa: o lote sobrevive, os erros vem nomeados.

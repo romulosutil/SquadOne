@@ -179,9 +179,11 @@ const agendarEvento: Capability = {
     // Com o tipo forçado, o modelo pode ter preenchido o campo de horário do
     // OUTRO tipo (pensou em bloco, mandou só `inicio`). O horário que ele deu
     // continua sendo a melhor referência de quando, e falhar perderia um
-    // compromisso bem descrito. Regra: deadline sem `prazo_final` usa `inicio`
-    // como limite; bloco sem `inicio` TERMINA no `prazo_final` (o trabalho vem
-    // antes do limite, não depois). Só com modo forçado: no auto a
+    // compromisso bem descrito. Regra: deadline sem `prazo_final` tem como
+    // limite o FIM do bloco que o modelo descreveu (`inicio` + `duracao_min`;
+    // "estudar 2h amanhã 14h" termina 16h, não 14h) e, sem `duracao_min`, o
+    // próprio `inicio`; bloco sem `inicio` TERMINA no `prazo_final` (o trabalho
+    // vem antes do limite, não depois). Só com modo forçado: no auto a
     // incoerência é do próprio modelo e o erro volta nomeado.
     const preenchido = (v: unknown) => v != null && String(v).trim() !== "";
 
@@ -203,9 +205,12 @@ const agendarEvento: Capability = {
       summary = `[${pessoa.papel}] ${titulo}`;
     } else {
       const usarInicio = forcado && !preenchido(args.prazo_final) && preenchido(args.inicio);
-      fim = usarInicio
-        ? exigirData(args.inicio, "inicio")
-        : exigirData(args.prazo_final, "prazo_final");
+      if (usarInicio) {
+        const duracao = Number(args.duracao_min) > 0 ? Number(args.duracao_min) : 0;
+        fim = new Date(exigirData(args.inicio, "inicio").getTime() + duracao * 60_000);
+      } else {
+        fim = exigirData(args.prazo_final, "prazo_final");
+      }
       inicio = new Date(fim.getTime() - 15 * 60_000);
       summary = `${PREFIXO_DEADLINE} [${pessoa.papel}] ${titulo}`;
     }

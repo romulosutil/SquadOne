@@ -64,8 +64,10 @@ Anunciados ao usuário; valem até ele derrubar.
 aceita `modo` ausente como `auto` e responde 400 para valor desconhecido. Em
 `foco`/`prazo` o prompt ganha a regra do tipo forçado e o handler de `agendar_evento`
 impõe `time_blocking`/`deadline` mesmo se o modelo divergir. Se o campo de horário
-esperado falta, usa o outro: deadline sem `prazo_final` usa `inicio` como limite;
-bloco sem `inicio` termina no `prazo_final`. Só com modo forçado. A semântica de
+esperado falta, usa o outro: deadline sem `prazo_final` tem como limite o fim do
+bloco descrito (`inicio` + `duracao_min`, ou só `inicio` sem duração); bloco sem
+`inicio` termina no `prazo_final`. Só com modo forçado. O toggle volta para Auto
+depois de cada envio. A semântica de
 "próximo slot livre" e "marco + blocos" é Fase 3.
 
 **Marca de tipo.** `squadone_tipo` em `extendedProperties.private`, junto de

@@ -68,7 +68,7 @@ Todo evento criado carrega três chaves em `extendedProperties.private` (constan
 
 ### Toggle Auto / Foco / Prazo
 
-A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400). `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** o handler de `agendar_evento` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo de horário esperado faltar, usa o outro (regra comentada no handler). Hoje o modo só força o tipo — "próximo slot livre" e "marco + blocos" são Fase 3 (`docs/superpowers/specs/2026-09-12-squadone-roadmap-design.md`).
+A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** o handler de `agendar_evento` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo de horário esperado faltar, usa o outro (regra comentada no handler). Hoje o modo só força o tipo — "próximo slot livre" e "marco + blocos" são Fase 3 (`docs/superpowers/specs/2026-09-12-squadone-roadmap-design.md`).
 
 ### Escrita no roster
 
