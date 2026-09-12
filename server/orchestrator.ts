@@ -10,6 +10,35 @@ export interface ErroTarefa {
   capacidade: string;
   args: Record<string, any>;
   erro: string;
+  /**
+   * A chamada nem rodou: o turno sugeriu trocar de squad (ver
+   * `descartarPorTroca`). Separa "falhou" de "foi descartada de propósito".
+   */
+  descartado?: true;
+}
+
+const TROCA_DE_SQUAD = "sugerir_troca_squad";
+
+/**
+ * Turno com `sugerir_troca_squad` descarta TODAS as outras chamadas, antes de
+ * executar. O prompt pede exclusividade, mas prompt é pedido, não garantia: se
+ * o modelo agendasse junto, o evento nasceria na squad de origem e "Trocar e
+ * reenviar" criaria o mesmo compromisso de novo na destino. Contratação também
+ * sai: a demanda foi julgada de outra squad, então crescer esta não se sustenta.
+ * Vale mesmo se a troca falhar (squad_id inválido): a intenção do modelo era
+ * tirar a demanda daqui, e agir nela aqui seria adivinhar.
+ */
+function descartarPorTroca(nome: string, args: Record<string, any>): ErroTarefa {
+  const porque =
+    nome === "agendar_evento"
+      ? "agendar aqui duplicaria o compromisso ao reenviar na outra squad"
+      : "a demanda foi julgada de outra squad, então esta chamada não se aplica aqui";
+  return {
+    capacidade: nome,
+    args,
+    erro: `descartado: turno sugeriu trocar de squad (${porque}).`,
+    descartado: true,
+  };
 }
 
 export interface TurnoResult {
@@ -211,12 +240,17 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
   const calls: FunctionCall[] = response.functionCalls ?? [];
   const ctx: CapabilityContext = { token, roster, squad, agora, modo, demanda };
 
+  // Decidido ANTES do Promise.all: as chamadas rodam em paralelo, então olhar
+  // o resultado da troca chegaria tarde demais para impedir o evento.
+  const temTroca = calls.some((c) => c.name === TROCA_DE_SQUAD);
+
   // One-shot: executa as calls e acaba. Sem realimentar o modelo.
   // Um try POR TAREFA: uma tarefa quebrada não pode matar o lote.
   const resultados = await Promise.all(
     calls.map(async (call): Promise<CapabilityResult | ErroTarefa> => {
       const nome = call.name ?? "";
       const args = (call.args ?? {}) as Record<string, any>;
+      if (temTroca && nome !== TROCA_DE_SQUAD) return descartarPorTroca(nome, args);
       const capacidade = CAPABILITIES[nome];
       if (!capacidade) {
         return { capacidade: nome, args, erro: `Capacidade desconhecida: '${nome}'` };

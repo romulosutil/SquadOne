@@ -118,6 +118,8 @@ export interface ErroTarefa {
   capacidade: string;
   args: Record<string, unknown>;
   erro: string;
+  /** Não rodou: o turno sugeriu trocar de squad e o servidor descartou o resto. */
+  descartado?: true;
 }
 
 export interface TurnoResponse {
