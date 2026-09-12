@@ -12,6 +12,7 @@ import {
   desconectar,
   ErroDeConfig,
   estaConectado,
+  GoogleIndisponivel,
   PrecisaConectar,
   tokenValido,
   trocarCodigo,
@@ -25,13 +26,17 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 /**
  * Traduz as falhas do auth-store em status HTTP. A distincao importa para a
  * interface: `PrecisaConectar` (401) pede o gesto do usuario; `ErroDeConfig`
- * (500) e problema de ambiente e nenhum clique do usuario conserta.
+ * (500) e problema de ambiente e nenhum clique do usuario conserta;
+ * `GoogleIndisponivel` (503) passa sozinho e a credencial segue guardada, entao
+ * nao pode virar 401 — o frontend derruba o "conectado" em qualquer 401.
  */
 function responderErroDeAuth(res: express.Response, err: unknown): void {
   if (err instanceof PrecisaConectar) {
     res.status(401).json({ error: (err as Error).message, precisaConectar: true });
   } else if (err instanceof ErroDeConfig) {
     res.status(500).json({ error: (err as Error).message, configuracao: true });
+  } else if (err instanceof GoogleIndisponivel) {
+    res.status(503).json({ error: (err as Error).message, transitorio: true });
   } else {
     res.status(502).json({ error: (err as Error).message });
   }

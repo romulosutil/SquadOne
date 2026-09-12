@@ -82,7 +82,7 @@ Sem banco de propósito: dois blobs de 1KB não justificam Postgres, e o escopo 
 /api/auth/logout    -> apaga o arquivo e revoga no Google
 ```
 
-`tokenValido()` devolve um access_token, renovando pelo refresh quando preciso. Lança `PrecisaConectar` (vira 401 + `precisaConectar: true`) quando não há credencial ou o Google recusou — o único caso em que a UI deve pedir gesto do usuário. `ErroDeConfig` vira 500 + `configuracao: true`: é ambiente, nenhum clique conserta.
+`tokenValido()` devolve um access_token, renovando pelo refresh quando preciso. Lança `PrecisaConectar` (vira 401 + `precisaConectar: true`) quando não há credencial ou o Google respondeu `invalid_grant` — o único caso em que a UI deve pedir gesto do usuário, e o único em que `data/google-auth.json` é apagado. `ErroDeConfig` vira 500 + `configuracao: true`: é ambiente (env faltando, `invalid_client`), nenhum clique conserta. `GoogleIndisponivel` (rede, timeout de 10s, 5xx, 429) vira 503 + `transitorio: true` e não toca na credencial. Refreshes simultâneos compartilham a mesma Promise.
 
 `prompt=consent` é obrigatório. Sem ele o Google omite o `refresh_token` quando já houve consentimento antes, e a credencial nasce sem como se renovar.
 
