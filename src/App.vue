@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
 import GrowthCard from './components/GrowthCard.vue'
-import type { Sugestao } from './types'
+import type { Modo, RosterView, SquadView, Sugestao } from './types'
 import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
+import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 
 const currentAgent = ref('Idle')
 // A Mochila NAO guarda quest local: a verdade e o Google Calendar. Esta ref e
@@ -13,7 +14,19 @@ const currentAgent = ref('Idle')
 const quests = ref([])
 const carregandoMochila = ref(false)
 const sugestoes = ref<Sugestao[]>([])
-const squad = ref(null)
+// O roster inteiro (todas as squads). Mapa e Mochila mostram só a ativa.
+const roster = ref<RosterView | null>(null)
+const squadAtivaId = ref<string | null>(lerSquadAtiva())
+/** Id guardado que não existe (outro volume, squad de outra instalação): primeira squad. */
+const squadAtiva = computed<SquadView | null>(() => {
+  const squads = roster.value?.squads ?? []
+  return squads.find((s) => s.id === squadAtivaId.value) ?? squads[0] ?? null
+})
+const nomesDeDominio = computed<Record<string, string>>(() =>
+  Object.fromEntries((squadAtiva.value?.dominios ?? []).map((d) => [d.id, d.nome]))
+)
+const nomeDaSquad = (id: string) => roster.value?.squads.find((s) => s.id === id)?.nome ?? id
+const sugestoesDeCrescimento = computed(() => sugestoes.value.filter((s) => s.kind !== 'troca_squad'))
 const isLoading = ref(false)
 // Contratacao em curso: id da sugestao sendo aprovada (so uma por vez, o
 // servidor serializa as escritas no roster de qualquer forma). Id, nao indice:
@@ -26,11 +39,9 @@ let toastTimer = 0
 // O roster manda: papeis, slots desbloqueados e roteamento saem daqui.
 onMounted(async () => {
   try {
-    const response = await fetch('/api/squad')
-    if (!response.ok) throw new Error('Falha ao carregar o squad')
-    squad.value = await response.json()
+    await carregarRoster()
   } catch (error) {
-    console.error('Falha ao carregar o squad:', error)
+    console.error('Falha ao carregar o roster:', error)
   }
 
   // Volta do consentimento: o callback redireciona para /?auth=ok ou
@@ -45,22 +56,59 @@ onMounted(async () => {
   if (await sincronizarStatus()) await carregarMochila()
 })
 
-const carregarMochila = async () => {
-  if (!conectado.value) return
+const carregarRoster = async () => {
+  const response = await fetch('/api/squad')
+  if (!response.ok) throw new Error('Falha ao carregar o roster')
+  roster.value = await response.json()
+  // Corrige o guardado quando ele apontava para uma squad que não existe.
+  const ativa = squadAtiva.value
+  if (ativa && ativa.id !== squadAtivaId.value) {
+    squadAtivaId.value = ativa.id
+    gravarSquadAtiva(ativa.id)
+  }
+}
+
+const trocarSquad = async (id: string) => {
+  if (id === squadAtiva.value?.id) return
+  // Squad criada em outra aba: o roster local ainda não a conhece.
+  if (!roster.value?.squads.some((s) => s.id === id)) await carregarRoster()
+  squadAtivaId.value = id
+  gravarSquadAtiva(id)
+  quests.value = []
+  currentAgent.value = 'Idle'
+  await carregarMochila()
+}
+
+/** 409 squadInexistente: a squad desta aba sumiu do servidor. */
+const recuperarSquadInexistente = async () => {
+  squadAtivaId.value = null
+  await carregarRoster()
+  avisar('A squad selecionada não existe mais: voltei para a primeira.')
+}
+
+const carregarMochila = async (recuperando = false) => {
+  if (!conectado.value || !squadAtiva.value) return
+  const squadId = squadAtiva.value.id
   carregandoMochila.value = true
   try {
-    const response = await fetch('/api/mochila')
+    const response = await fetch(`/api/mochila?squadId=${encodeURIComponent(squadId)}`)
+    const corpo = await response.json().catch(() => ({}))
+    // Trocou de squad enquanto esperava: esta resposta é da squad anterior, e
+    // gravá-la mostraria as quests de uma squad no mapa de outra.
+    if (squadAtiva.value?.id !== squadId) return
     if (!response.ok) {
+      if (response.status === 409 && corpo.squadInexistente && !recuperando) {
+        await recuperarSquadInexistente()
+        return await carregarMochila(true)
+      }
       // 401 = o servidor nao tem credencial valida (nunca conectou, ou o
       // Google recusou o refresh). Derruba o estado pra UI voltar a oferecer
       // o botao de conectar.
       if (response.status === 401) conectado.value = false
-      const corpo = await response.json().catch(() => ({}))
       throw new Error(corpo.error ?? `HTTP ${response.status}`)
     }
-    const dados = await response.json()
-    quests.value = dados.quests ?? []
-    if (dados.erros?.length) console.warn('Dominios com erro na Mochila:', dados.erros)
+    quests.value = corpo.quests ?? []
+    if (corpo.erros?.length) console.warn('Dominios com erro na Mochila:', corpo.erros)
   } catch (error) {
     // So no console, a Mochila vazia fica indistinguivel de "nao ha quests":
     // o motivo tem que chegar na tela de quem pode agir sobre ele.
@@ -102,17 +150,19 @@ const aprovarSugestao = async (id, nome) => {
     const dados = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(dados.error ?? `HTTP ${response.status}`)
 
-    // O roster mudou de qualquer jeito: squad e aviso valem mesmo sem o card.
-    squad.value = dados.squad
+    // O roster mudou de qualquer jeito: roster e aviso valem mesmo sem o card.
+    roster.value = dados.roster
     if (aindaNaLista()) {
       sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
       const { [id]: _, ...outrosErros } = erroSugestao.value
       erroSugestao.value = outrosErros
     }
+    // A contratação cai na squad da proposta, que pode não ser a da tela.
+    const onde = dados.squadId !== squadAtiva.value?.id ? ` na squad ${nomeDaSquad(dados.squadId)}` : ''
     avisar(
       dados.kind === 'dominio'
-        ? `${dados.pessoa.nome} abriu o dominio ${dados.dominio.nome}`
-        : `${dados.pessoa.nome} entrou no squad (${dados.dominio.nome})`
+        ? `${dados.pessoa.nome} abriu o dominio ${dados.dominio.nome}${onde}`
+        : `${dados.pessoa.nome} entrou no squad (${dados.dominio.nome})${onde}`
     )
   } catch (error) {
     console.error('Falha ao contratar:', error)
@@ -137,7 +187,7 @@ const desconectarGoogle = async () => {
   avisar('Calendário desconectado')
 }
 
-const handleDelegation = async (payload) => {
+const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
   if (isLoading.value) return;
 
   isLoading.value = true;
@@ -149,7 +199,7 @@ const handleDelegation = async (payload) => {
     const response = await fetch('/api/orquestrar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ demanda: payload.demanda, modo: payload.modo })
+      body: JSON.stringify({ demanda: payload.demanda, modo: payload.modo, squadId: squadAtiva.value?.id })
     })
 
     if (!response.ok) {
@@ -157,6 +207,14 @@ const handleDelegation = async (payload) => {
       // sozinho, por isso o texto manda tentar de novo em vez de sugerir que
       // algo quebrou.
       const corpo = await response.json().catch(() => ({}))
+      // A squad desta aba sumiu: o servidor recusou ANTES do Gemini, entao nada
+      // foi agendado. Reenviar sozinho mandaria a demanda para outra squad sem
+      // o usuario ver.
+      if (response.status === 409 && corpo.squadInexistente) {
+        await recuperarSquadInexistente()
+        alert('A squad selecionada não existe mais. Confira a squad no topo e reenvie a demanda.')
+        return
+      }
       throw new Error(corpo.error || 'Erro na requisição')
     }
 
@@ -237,8 +295,9 @@ const handleDelegation = async (payload) => {
         :quests="quests"
         :conectado="conectado"
         :carregando="carregandoMochila"
+        :nomes-de-dominio="nomesDeDominio"
         @conectar="conectarGoogle"
-        @recarregar="carregarMochila"
+        @recarregar="() => carregarMochila()"
       />
 
       <!-- Map Area -->
@@ -250,7 +309,7 @@ const handleDelegation = async (payload) => {
              digitado); com key por indice, o card seguinte herdava o nome
              depois de um descarte ou aprovacao. -->
         <GrowthCard
-          v-for="sugestao in sugestoes"
+          v-for="sugestao in sugestoesDeCrescimento"
           :key="sugestao.id"
           :sugestao="sugestao"
           :enviando="aprovando === sugestao.id"
@@ -259,7 +318,9 @@ const handleDelegation = async (payload) => {
           @descartar="descartarSugestao(sugestao.id)"
         />
 
-        <GameMap :agent="currentAgent" :squad="squad" />
+        <!-- :key por squad: recria useOffice ao trocar, senao as salas da
+             outra squad seriam lidas como crescimento e animariam. -->
+        <GameMap :key="squadAtiva?.id ?? 'sem-squad'" :agent="currentAgent" :squad="squadAtiva" />
       </main>
     </div>
 

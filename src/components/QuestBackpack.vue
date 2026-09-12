@@ -7,7 +7,10 @@ defineProps({
   // local do app: apagar o evento no Google some com o card na proxima leitura.
   quests: { type: Array as PropType<QuestCalendario[]>, default: () => [] },
   conectado: { type: Boolean, default: false },
-  carregando: { type: Boolean, default: false }
+  carregando: { type: Boolean, default: false },
+  // id -> nome dos domínios da squad ativa. Ids novos são `<squad>--<slug>`,
+  // feios de ler num badge; sem nome conhecido, cai no id.
+  nomesDeDominio: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
 })
 
 defineEmits(['conectar', 'recarregar'])
@@ -85,7 +88,7 @@ const duracao = (quest: QuestCalendario) =>
           <!-- As duas marcas do evento: dominio (filtro) e membro (responsavel). -->
           <div class="flex items-center gap-1 flex-wrap">
             <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.membro || '?' }}</span>
-            <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ quest.dominio }}</span>
+            <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
           </div>
           <div class="text-gray-800">
             <!-- Dia inteiro nao tem duracao em minutos que signifique algo: 1440m e ruido. -->

@@ -13,6 +13,10 @@
  *
  * O mapa vem do roster em ÁRVORE (§3.1): UMA SALA POR DOMÍNIO, com o PO e os
  * integrantes dele dentro. Nada aqui deriva sala de pessoa.
+ *
+ * Uma instância por SQUAD: App.vue monta com `:key="squadAtiva.id"`. Trocar de
+ * squad recria o componente, e com ele o `knownRooms` de useOffice — sem isso
+ * as salas da outra squad seriam lidas como crescimento e animariam.
  */
 import { computed, shallowRef, watch } from 'vue'
 import {
@@ -31,9 +35,9 @@ import {
   WALL_MATRIX_Y,
   type RoomId,
 } from '../office/rooms'
-import type { Pessoa, SquadResponse } from '../types'
+import type { Pessoa, SquadView } from '../types'
 
-const props = defineProps<{ agent?: string; squad?: SquadResponse | null }>()
+const props = defineProps<{ agent?: string; squad?: SquadView | null }>()
 
 /** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
 const SPRITE_POOL = ['wraith_01', 'wraith_02', 'wraith_03']

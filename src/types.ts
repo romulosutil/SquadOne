@@ -1,6 +1,7 @@
 /**
- * Espelho dos tipos do servidor. O roster é uma ÁRVORE (spec §3.1):
- * domínio -> { po, integrantes }. Uma sala do escritório = um domínio.
+ * Espelho dos tipos do servidor. O roster é uma ÁRVORE (spec Fase 1 §3):
+ * roster -> squad -> domínio -> { po, integrantes }. Uma squad = um escritório;
+ * uma sala do escritório = um domínio.
  */
 
 export interface Pessoa {
@@ -12,6 +13,8 @@ export interface Pessoa {
   hue?: number;
   horario?: { inicio: string; fim: string };
   hiredAt: string;
+  /** Reservado (Fase 2). */
+  arquivado?: boolean;
 }
 
 export interface Dominio {
@@ -25,13 +28,29 @@ export interface Dominio {
   criadoEm: string;
   po: Pessoa;
   integrantes: Pessoa[];
+  /** Reservado (Fase 2). */
+  arquivado?: boolean;
 }
 
-export interface SquadResponse {
-  version: number;
+export interface Squad {
+  /** valor de `squadone_squad` no Google Calendar. */
+  id: string;
+  nome: string;
+  escopo: string;
+  calendarId: string;
+  conta?: string;
   unlockOrder: [number, number][];
+  /** `dominios[0].po` é o PO raiz do escritório. */
   dominios: Dominio[];
-  unlockedSlots: [number, number][];
+}
+
+export type SquadView = Squad & { unlockedSlots: [number, number][] };
+
+/** `GET /api/squad`: todas as squads. A ativa é escolha da aba. */
+export interface RosterView {
+  version: 3;
+  squads: SquadView[];
+  idsAposentados: { pessoas: string[]; dominios: string[] };
 }
 
 /** Toggle da CommandBar; espelho de `Modo` em server/capabilities.ts. */
@@ -53,6 +72,8 @@ export interface EventoCriado {
 /** Proposta de abrir um domínio novo — sala nova no escritório. */
 export interface PropostaDominio {
   kind: "dominio";
+  /** Squad em que o turno rodou; a aprovação aplica nela. */
+  squad_id: string;
   dominio: string;
   papel_po: string;
   justificativa: string;
@@ -63,6 +84,8 @@ export interface PropostaDominio {
 /** Proposta de contratar dentro de um domínio existente — mesma sala. */
 export interface PropostaIntegrante {
   kind: "integrante";
+  /** Squad em que o turno rodou; a aprovação aplica nela. */
+  squad_id: string;
   dominio_id: string;
   dominio_nome: string;
   papel: string;
@@ -70,8 +93,18 @@ export interface PropostaIntegrante {
   escopo: string;
 }
 
+/** A demanda parece de outra squad. Só proposta: trocar é clique do usuário. */
+export interface PropostaTrocaSquad {
+  kind: "troca_squad";
+  squad_id: string;
+  destino_id: string;
+  destino_nome: string;
+  justificativa: string;
+  demanda: string;
+}
+
 /** `id` gerado pelo servidor a cada turno: identidade do card na tela. */
-export type Sugestao = (PropostaDominio | PropostaIntegrante) & { id: string };
+export type Sugestao = (PropostaDominio | PropostaIntegrante | PropostaTrocaSquad) & { id: string };
 
 export interface ErroTarefa {
   capacidade: string;
@@ -100,6 +133,8 @@ export interface QuestCalendario {
   dominio: string;
   /** `extendedProperties.private.squadone_membro` — eixo de atribuição. */
   membro: string;
+  /** `squadone_squad`; vazio em eventos anteriores à Fase 1. */
+  squad: string;
   htmlLink?: string;
 }
 
