@@ -1,6 +1,8 @@
+import type { Intervalo } from "./alocador.ts";
+
 /**
  * Marcação de propriedade. QUATRO chaves, cada uma um eixo (contrato do evento,
- * spec Fase 1 §5):
+ * spec Fase 1 §5), mais a ligação bloco→prazo da Fase 3:
  *
  * - `squadone_squad` é INFORMATIVA: diz de qual squad o evento veio. Não é
  *   filtro — eventos criados antes da Fase 1 não a têm, e o filtro por
@@ -22,6 +24,13 @@ export const PROP_SQUAD = "squadone_squad";
 export const PROP_DOMINIO = "squadone_dominio";
 export const PROP_MEMBRO = "squadone_membro";
 export const PROP_TIPO = "squadone_tipo";
+/**
+ * - `squadone_prazo_ref` LIGA um bloco de trabalho ao marco do prazo: valor é o
+ *   eventId do marco (gravado antes dos blocos, então o id já existe). Só em
+ *   blocos. Posição "2/3" não é gravada — a Mochila deriva da lista lida, e um
+ *   bloco apagado no Google sai da contagem sozinho.
+ */
+export const PROP_PRAZO_REF = "squadone_prazo_ref";
 
 /**
  * Falha de um domínio. `credencial` diz se reconectar resolve — o frontend
@@ -45,6 +54,8 @@ export interface QuestCalendario {
   membro: string;
   /** `squadone_squad`; "" em eventos anteriores à Fase 1. Informativo. */
   squad: string;
+  /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
+  prazoRef: string;
   htmlLink?: string;
 }
 
@@ -63,12 +74,15 @@ export function marcasDoEvento(m: {
   dominioId: string;
   pessoaId: string;
   tipo: "time_blocking" | "deadline";
+  /** eventId do marco; só em blocos de trabalho de um prazo. */
+  prazoRef?: string;
 }): Record<string, string> {
   return {
     [PROP_SQUAD]: m.squadId,
     [PROP_DOMINIO]: m.dominioId,
     [PROP_MEMBRO]: m.pessoaId,
     [PROP_TIPO]: m.tipo,
+    ...(m.prazoRef ? { [PROP_PRAZO_REF]: m.prazoRef } : {}),
   };
 }
 
@@ -112,6 +126,7 @@ export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
     dominio: priv[PROP_DOMINIO] ?? "",
     membro: priv[PROP_MEMBRO] ?? "",
     squad: priv[PROP_SQUAD] ?? "",
+    prazoRef: priv[PROP_PRAZO_REF] ?? "",
     htmlLink: ev.htmlLink,
   };
 }
@@ -228,4 +243,83 @@ export async function listarQuests(
     (a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime(),
   );
   return { quests, erros };
+}
+
+/**
+ * Ocupação da agenda para o alocador (Fase 3). GLOBAL: sempre o calendário
+ * principal inteiro, qualquer que seja o calendarId da squad, sem filtro de
+ * marca — conflito é com tudo que o usuário tem, inclusive o que o app não criou.
+ */
+export const CALENDARIO_DE_OCUPACAO = "primary";
+const CAMPOS_OCUPACAO =
+  "nextPageToken,items(status,transparency,eventType,start,end,attendees(self,responseStatus))";
+const PAGINAS_MAX = 10;
+
+export interface EventoDeOcupacao {
+  status?: string;
+  transparency?: string;
+  eventType?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: { self?: boolean; responseStatus?: string }[];
+}
+
+/**
+ * Um evento ocupa a agenda? Não ocupa: cancelado; transparente (o Google diz
+ * que não bloqueia — inclui os marcos do app); dia inteiro (feriado,
+ * aniversário, lembrete); workingLocation/birthday; recusado pelo próprio
+ * usuário. Todo o resto ocupa, inclusive tentativo e sem resposta: na dúvida,
+ * não marcar por cima.
+ */
+export function eventoOcupa(ev: EventoDeOcupacao): Intervalo | null {
+  if (ev.status === "cancelled") return null;
+  if (ev.transparency === "transparent") return null;
+  if (ev.eventType === "workingLocation" || ev.eventType === "birthday") return null;
+  if (!ev.start?.dateTime || !ev.end?.dateTime) return null;
+  if (ev.attendees?.some((a) => a.self && a.responseStatus === "declined")) return null;
+  const inicio = Date.parse(ev.start.dateTime);
+  const fim = Date.parse(ev.end.dateTime);
+  if (!(fim > inicio)) return null;
+  return { inicio, fim };
+}
+
+/**
+ * Lê a ocupação entre `de` e `ate`. `singleEvents` expande recorrentes;
+ * `maxAttendees=1` faz o Google devolver só o próprio usuário em eventos com
+ * muitos convidados (é dele que sai o "recusado"); `fields` corta o payload.
+ * Mais de 10 páginas é erro, não leitura parcial: alocar sobre ocupação
+ * incompleta marcaria por cima de compromissos.
+ */
+export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<Intervalo[]> {
+  const ocupado: Intervalo[] = [];
+  let pageToken: string | undefined;
+  for (let pagina = 0; pagina < PAGINAS_MAX; pagina++) {
+    const params = new URLSearchParams({
+      timeMin: de.toISOString(),
+      timeMax: ate.toISOString(),
+      singleEvents: "true",
+      showDeleted: "false",
+      maxResults: "2500",
+      maxAttendees: "1",
+      fields: CAMPOS_OCUPACAO,
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const resp = await fetch(`${urlDeEventos(CALENDARIO_DE_OCUPACAO)}?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
+    }
+    const json = (await resp.json()) as { items?: EventoDeOcupacao[]; nextPageToken?: string };
+    for (const ev of json.items ?? []) {
+      const intervalo = eventoOcupa(ev);
+      if (intervalo) ocupado.push(intervalo);
+    }
+    if (!json.nextPageToken) return ocupado;
+    pageToken = json.nextPageToken;
+  }
+  throw new Error(
+    `A agenda tem mais de ${PAGINAS_MAX} páginas de eventos nos próximos dias: ` +
+      "a ocupação ficaria incompleta, então nada foi alocado.",
+  );
 }
