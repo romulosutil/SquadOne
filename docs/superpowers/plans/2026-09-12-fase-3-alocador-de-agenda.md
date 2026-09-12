@@ -545,6 +545,8 @@ export function lerInstante(
     const minutos = Number(m[4]) * 60 + Number(m[5]);
     return { instante: instanteLocal(data, minutos, fuso) + Number(m[6] ?? 0) * 1000, data: null };
   }
+  // Implementado com validação de dia/hora (dataExiste): o V8 lê 2026-02-30T10:00Z
+  // como 02/03 sem reclamar. Ver server/alocador.ts.
   if (!/^\d{4}-\d{2}-\d{2}T/.test(texto)) return null;
   const t = new Date(texto).getTime();
   return Number.isNaN(t) ? null : { instante: t, data: null };
@@ -2763,6 +2765,8 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - [ ] **Step 4: Marcas e variáveis**
 
 - Na tabela/lista de marcas do Calendar (onde a Fase 1 documentou `squadone_squad`), acrescente: `squadone_prazo_ref` — eventId do marco, só em blocos de trabalho; a Mochila deriva "Bloco i/N" da lista.
+- Na seção "Toggle Auto / Foco / Prazo" (Fase 0/1), troque a frase "Hoje o modo só força o tipo — ... são Fase 3" pela regra atual: o fallback mora em `agendarCompromisso` (`esforco_min` ↔ `duracao_min`, `inicio_fixo` como prazo).
+- Em "Convenções", acrescente `JanelaMalConfigurada` e `ErroTarefa.motivo` à lista de erros classificados.
 - Na tabela "Variáveis de ambiente":
 
 ```markdown

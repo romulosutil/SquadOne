@@ -53,9 +53,9 @@
       responsavel_id: {
         type: Type.STRING,
         description:
-          "id da pessoa da squad responsável — pode ser o PO de um domínio ou um " +
-          "integrante dele. Use exatamente um dos ids da árvore do roster. O domínio " +
-          "do evento é derivado dela; não existe campo de domínio.",
+          "id da pessoa da squad atual responsável — pode ser o PO de um domínio " +
+          "ou um integrante dele. Use exatamente um dos ids da árvore do roster. " +
+          "O domínio do evento é derivado dela; não existe campo de domínio.",
       },
       tipo: {
         type: Type.STRING,
@@ -113,7 +113,7 @@ Datas são lidas por `lerInstante(valor, fuso)`:
 | `AAAA-MM-DD` válido | meia-noite local no fuso + `data` preenchida ("só data") |
 | `AAAA-MM-DDTHH:MM[:SS]` sem offset | hora de parede em `America/Sao_Paulo` (o container roda em UTC) |
 | ISO com offset ou `Z` | o instante |
-| qualquer outra coisa | inválida → erro nomeando o campo |
+| qualquer outra coisa, inclusive dia ou hora inexistente (`2026-02-30`, `25:00`, que `Date` normalizaria calado) | inválida → erro nomeando o campo |
 
 **time_blocking**
 
@@ -500,7 +500,7 @@ Todos verificáveis sem Google e sem Gemini reais (fetch e cliente do Gemini fal
    - B7 janela 09:00–09:30 todos os dias, esforço 900 → 20 slots (14/09…03/10), faltou 300.
    - D1 `America/New_York`, janela 01–04 todos os dias, agora 08/03/2026 00:30 −05:00, foco 120 → 06:00Z–08:00Z do dia 08. D2 foco 180 → 09/03 05:00Z–08:00Z. D3 janela 00–03, agora 31/10 23:00 −04:00, foco 240 → 01/11 04:00Z–08:00Z. D4 janela 02:30–05:00, agora 08/03 00:00 −05:00, foco 60 → 07:30Z–08:30Z. D5 São Paulo janela 00–02, agora 03/11/2018 23:00 −03:00, foco 60 → 04/11/2018 03:00Z–04:00Z.
    - Nenhum caso muta `ocupacao`.
-2. `lerJanela({})` = 09:00–19:00, `[1..5]`; `19:00-09:00`, `9-19`, `09:00-09:15`, `DIAS_TRABALHO=0,1` e `1,1` → `JanelaMalConfigurada`. `lerInstante` lê só data, sem offset (como São Paulo), `Z`; recusa `amanhã` e `2026-02-30`.
+2. `lerJanela({})` = 09:00–19:00, `[1..5]`; `19:00-09:00`, `9-19`, `09:00-09:15`, `DIAS_TRABALHO=0,1` e `1,1` → `JanelaMalConfigurada`. `lerInstante` lê só data, sem offset (como São Paulo), `Z`; recusa `amanhã`, `2026-02-30` (com e sem hora) e `25:00`. Env presente mas vazia = padrão.
 3. `server/alocador.ts` não contém `fetch(`, `process.env`, `Date.now(` nem `import`.
 4. `eventoOcupa`: transparente, dia inteiro, cancelado, `workingLocation`, recusado pelo próprio usuário → não ocupa; tentativo, recusa de outro convidado, `outOfOffice` → ocupa.
 5. `AgendaDoTurno`: duas `ocupacao()` fazem uma leitura (duas páginas = 2 GETs); URL em `/calendars/primary/events` com `singleEvents=true`, `timeMin=agora`, `timeMax=agora+60d`, `maxAttendees=1`, `maxResults=2500`, sem `privateExtendedProperty`; reserva entra na ocupação; 401 → `AgendaIndisponivel(credencial)` e nenhuma segunda leitura; sem token → erro classificado e zero `fetch`.

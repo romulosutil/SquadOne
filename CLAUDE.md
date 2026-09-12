@@ -37,10 +37,14 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/hire.ts          aplica contratação aprovada e cria squad
   server/orchestrator.ts  um turno: demanda -> 1 chamada ao Gemini -> capacidades
   server/capabilities.ts  as capacidades que o modelo pode invocar
+  server/alocador.ts      PURO: ocupação + janela + pedido + agora -> slots
+  server/agenda.ts        ocupação do turno: 1 leitura do primary + reservas
+  server/agendamento.ts   compromisso -> eventos (foco, ou marco + blocos)
   server/calendar.ts      leitura/escrita no Google Calendar
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
+  src/mochila.ts          sem Vue: "Bloco i/N" e intervalo de dia inteiro, derivados da lista
   src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard,
                           SquadSelector, NovaSquadModal, TrocaSquadCard
   src/office/             geometria isométrica, salas, sprites
@@ -58,20 +62,33 @@ data/                     volume em produção; nada aqui é versionado
 
 ### Marcas no Calendar
 
-Todo evento criado carrega quatro chaves em `extendedProperties.private`, montadas por `marcasDoEvento()` em `server/calendar.ts`:
+Todo evento criado carrega quatro chaves em `extendedProperties.private`, montadas por `marcasDoEvento()` em `server/calendar.ts`, e blocos de prazo uma quinta:
 
 | Chave | Eixo | Uso |
 |---|---|---|
 | `squadone_squad` | informativa | de qual squad veio; **não filtra** — eventos anteriores à Fase 1 não a têm e seguem aparecendo |
 | `squadone_dominio` | filtro | `events.list` com `privateExtendedProperty`, uma chamada por domínio da squad ativa |
 | `squadone_membro` | atribuição | quem executa |
-| `squadone_tipo` | semântica | `time_blocking` ou `deadline` |
+| `squadone_tipo` | semântica | `time_blocking` ou `deadline` (blocos de prazo são `time_blocking`) |
+| `squadone_prazo_ref` | ligação | só em blocos: eventId do marco. A Mochila deriva "Bloco i/N" da lista lida; posição não é gravada |
 
 `paraQuest` lê o tipo da marca e só cai no prefixo `⏰ DEADLINE:` do título quando ela não existe (eventos anteriores a 12/09/2026, sem migração). O prefixo segue no título como rótulo. Deadline grava `transparency: "transparent"`: é marco, não ocupa agenda.
 
 ### Toggle Auto / Foco / Prazo
 
-A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** o handler de `agendar_evento` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo de horário esperado faltar, usa o outro (regra comentada no handler). Hoje o modo só força o tipo — "próximo slot livre" e "marco + blocos" são Fase 3 (`docs/superpowers/specs/2026-09-12-squadone-roadmap-design.md`).
+A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** `agendarCompromisso` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo esperado faltar, usa o do outro tipo (`esforco_min` ↔ `duracao_min`, `inicio_fixo` como prazo; regra em `server/agendamento.ts`).
+
+### Agendamento: o horário é do servidor
+
+O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_final`, `a_partir_de`); o servidor escolhe o horário. `inicio_fixo` só existe quando o usuário disse a hora — é gravado mesmo com conflito, que vira aviso.
+
+- **Ocupação é global:** `events.list` do `primary` inteiro, uma vez por turno (preguiçosa: turno sem agendamento não lê), 60 dias à frente, sem filtro de marca, até 10 páginas. Não ocupa: transparente, dia inteiro, cancelado, `workingLocation`/`birthday`, recusado pelo próprio usuário. Outros calendários não contam.
+- **Janela:** `JANELA_TRABALHO` (padrão `09:00-19:00`) e `DIAS_TRABALHO` (padrão `1,2,3,4,5`), fuso `America/Sao_Paulo`. Env e não `squad.json`: é do usuário, não da squad. Ausente ou vazia = padrão; presente e ilegível = 500 `configuracao: true` antes do token e do Gemini, nunca o padrão calado. O boot loga a janela lida. Trocar exige **Implantar**.
+- **Focar Agora:** primeiro slot livre a partir de agora (grade de 15 min), até 14 dias. Não achou = erro `motivo: semHorarioLivre` só naquele compromisso.
+- **Prazo Final:** marco transparente no prazo (sem hora = dia inteiro) + blocos de 30–120 min antes dele, um por dia antes de empilhar, pausa de 15 min, até 20. Não coube = cria o que coube e avisa quanto faltou (`faltou_min`). Bloco que falha para a série sem apagar nada.
+- **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
+- **Sem credencial:** o turno roda; cada `agendar_evento` vira erro com `motivo: precisaConectar` sem chamar o Google, e a UI volta a oferecer "Conectar".
+- `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que a Fase 4 reusa. Mantenha assim.
 
 ### Escrita no roster
 
@@ -145,6 +162,8 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `IPS_PERMITIDOS` | servidor | allowlist; vazia desliga |
 | `APP_URL` | servidor | monta o `redirect_uri` |
 | `NODE_ENV` | servidor | `production` serve `dist/` em vez do Vite |
+| `JANELA_TRABALHO` | servidor | janela de alocação `HH:MM-HH:MM` (São Paulo); ausente/vazia = `09:00-19:00`; ilegível = 500 |
+| `DIAS_TRABALHO` | servidor | dias ISO da janela, `1`=segunda … `7`=domingo; ausente/vazia = `1,2,3,4,5`; ilegível = 500 |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 
@@ -155,6 +174,6 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`. A UI decide o que fazer pelo tipo.
-- Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`). A UI decide o que fazer pelo tipo.
+- Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
