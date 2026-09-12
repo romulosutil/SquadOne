@@ -1,4 +1,4 @@
-import type { SquadMember } from "./squad.ts";
+import type { Pessoa } from "./squad.ts";
 
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
@@ -33,12 +33,16 @@ export interface QuestCalendario {
 /** Prefixo do summary de um deadline; usado na ida e na volta. */
 export const PREFIXO_DEADLINE = "⏰ DEADLINE:";
 
-/** As duas marcas de um membro, prontas pra `extendedProperties.private`. */
+/**
+ * As duas marcas de uma pessoa, prontas pra `extendedProperties.private`.
+ * `dominio` é o id do DOMÍNIO a que ela pertence, não um campo dela: quem
+ * decide o eixo de filtro é a hierarquia, não a pessoa.
+ */
 export function marcasDoMembro(
-  membro: SquadMember,
+  pessoa: Pessoa,
   dominio: string,
 ): Record<string, string> {
-  return { [PROP_DOMINIO]: dominio, [PROP_MEMBRO]: membro.id };
+  return { [PROP_DOMINIO]: dominio, [PROP_MEMBRO]: pessoa.id };
 }
 
 interface GoogleEvent {

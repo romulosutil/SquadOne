@@ -13,6 +13,10 @@
  * O ator anda no mundo ortogonal; `toScreen` projeta só na hora de pintar, e o
  * sprite é um billboard (sempre de frente, espelhado quando anda para a
  * esquerda da tela) porque a arte do CraftPix só tem a vista frontal.
+ *
+ * A unidade de SALA é o DOMÍNIO, não a pessoa (§3.1): o slot pertence ao
+ * domínio e todas as pessoas dele — PO e integrantes — dividem a mesma sala,
+ * cada uma numa cadeira do template.
  */
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
@@ -24,6 +28,7 @@ import {
   PROP_EMOJI,
   ROOM_H,
   ROOM_W,
+  EXTRA_STATIONS,
   PROP_SIZE,
   TILE,
   WALL_H,
@@ -41,18 +46,27 @@ import {
 } from './rooms'
 import { bfsSlots, buildRoute } from './path'
 
-export interface OfficeMember {
+/** Uma pessoa do squad: o PO de um domínio ou um integrante dele. */
+export interface OfficePessoa {
   id: string
   nome: string
   papel: string
-  slot: Vec2
-  room: RoomId
   /** chave no craftpix.manifest.json */
   sprite: string
   /** graus de hue-rotate, para diferenciar papéis que reusam o mesmo sprite */
   hue?: number
   /** fallback quando o sheet não carrega */
   emoji: string
+}
+
+/** Um domínio = uma sala. O slot é dele, não de quem trabalha dentro. */
+export interface OfficeDominio {
+  id: string
+  nome: string
+  slot: Vec2
+  room: RoomId
+  /** PO na posição 0, integrantes na sequência — a ordem define a cadeira. */
+  pessoas: OfficePessoa[]
 }
 
 /** px-fonte por segundo, no mundo ortogonal. */
@@ -76,6 +90,8 @@ export interface CharSheet {
 
 interface Actor {
   id: string
+  /** domínio a que a pessoa pertence: define a sala em que ela está. */
+  dominioId: string
   x: number
   y: number
   slot: Vec2
@@ -118,7 +134,7 @@ export interface RoomView {
   props: RoomPropView[]
 }
 
-export function useOffice(members: Ref<OfficeMember[]>) {
+export function useOffice(dominios: Ref<OfficeDominio[]>) {
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
   // `:ref="worldRef"` passaria null em vez do objeto ref.
   const viewportRef = shallowRef<HTMLElement | null>(null)
@@ -142,9 +158,24 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   const newRooms = reactive(new Set<string>())
   const seenRooms = new Set<string>()
 
-  const unlocked = computed(() => new Set(members.value.map((m) => slotKey(m.slot))))
+  const unlocked = computed(() => new Set(dominios.value.map((d) => slotKey(d.slot))))
 
-  const mapTiles = computed(() => mapSizeTiles(members.value.map((m) => m.slot)))
+  const mapTiles = computed(() => mapSizeTiles(dominios.value.map((d) => d.slot)))
+
+  /**
+   * Índice pessoa -> domínio + posição dentro dele. É a tradução da árvore
+   * para o que o loop precisa: o ator é a pessoa, mas a geometria é do domínio.
+   */
+  const porPessoa = computed(() => {
+    const mapa = new Map<string, { pessoa: OfficePessoa; dominio: OfficeDominio; idx: number }>()
+    for (const dominio of dominios.value) {
+      dominio.pessoas.forEach((pessoa, idx) => mapa.set(pessoa.id, { pessoa, dominio, idx }))
+    }
+    return mapa
+  })
+
+  /** Lista achatada, na ordem da árvore — o v-for dos atores no template. */
+  const pessoas = computed<OfficePessoa[]>(() => dominios.value.flatMap((d) => d.pessoas))
   const mapPx = computed<Vec2>(() => [mapTiles.value[0] * TILE, mapTiles.value[1] * TILE])
   const bounds = computed(() => isoBounds(mapPx.value[0], mapPx.value[1]))
 
@@ -154,18 +185,18 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   }
 
   const rooms = computed<RoomView[]>(() =>
-    members.value.map((m) => {
-      const parsed = parseRoom(m.room)
-      const [ox, oy] = roomOriginPx(m.slot)
-      const key = slotKey(m.slot)
+    dominios.value.map((d) => {
+      const parsed = parseRoom(d.room)
+      const [ox, oy] = roomOriginPx(d.slot)
+      const key = slotKey(d.slot)
       const x0 = ox + INNER_OFFSET
       const y0 = oy + INNER_OFFSET
 
       // Só as paredes de trás são desenhadas: as da frente esconderiam a sala.
       // Um tile por div — a profundidade de uma parede longa não cabe num único
       // z-index, e o vão da porta vira simplesmente um tile que não existe.
-      const hasNorthDoor = unlocked.value.has(slotKey([m.slot[0], m.slot[1] - 1]))
-      const hasWestDoor = unlocked.value.has(slotKey([m.slot[0] - 1, m.slot[1]]))
+      const hasNorthDoor = unlocked.value.has(slotKey([d.slot[0], d.slot[1] - 1]))
+      const hasWestDoor = unlocked.value.has(slotKey([d.slot[0] - 1, d.slot[1]]))
       const walls: WallView[] = []
       for (let i = 0; i < NORTH_TILES; i++) {
         if (hasNorthDoor && i === 2) continue // porta sul do vizinho = local x 3
@@ -197,14 +228,15 @@ export function useOffice(members: Ref<OfficeMember[]>) {
       const [lx, ly] = toScreen(x0, y0)
       return {
         key,
-        slot: m.slot,
+        slot: d.slot,
         // A base cobre a sala inteira, faixa de parede inclusa: é o topo da
         // parede. Sem ela a faixa compartilhada entre salas fica vazada.
         base: { left: ox, top: oy, width: ROOM_W * TILE, height: ROOM_H * TILE },
         floor: { left: x0, top: y0, width: INNER_W, height: INNER_H },
         // A placa da sala é UI, não objeto de mundo: não entra no painter's
         // algorithm, senão o ator da própria sala a cobre.
-        label: { text: m.papel, left: lx, top: ly - WALL_H - 16 },
+        // A placa nomeia o DOMÍNIO: a sala inteira é dele, não de uma pessoa.
+        label: { text: d.nome, left: lx, top: ly - WALL_H - 16 },
         isNew: newRooms.has(key),
         walls,
         props: parsed.props.map((p) => {
@@ -237,24 +269,44 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   const els = new Map<string, { root: HTMLElement; sprite: HTMLElement | null; walk: HTMLElement | null }>()
   const focused = ref<string | null>(null)
 
-  function stationPx(m: OfficeMember): Vec2 {
-    return localCenterPx(m.slot, parseRoom(m.room).station)
+  /**
+   * Posto de trabalho da i-ésima pessoa do domínio: uma cadeira por pessoa, na
+   * ordem da árvore (PO primeiro). Domínio com mais gente que cadeira espalha
+   * o excedente pelo miolo da sala em vez de empilhar todo mundo no mesmo pixel.
+   */
+  function stationPx(dominio: OfficeDominio, idx: number): Vec2 {
+    const { stations } = parseRoom(dominio.room)
+    const local =
+      idx < stations.length
+        ? stations[idx]
+        : EXTRA_STATIONS[(idx - stations.length) % EXTRA_STATIONS.length]
+    return localCenterPx(dominio.slot, local)
   }
 
   function sheetOf(id: string): CharSheet | null {
-    const m = members.value.find((x) => x.id === id)
-    return (m && sheets.value?.[m.sprite]) ?? null
+    const entrada = porPessoa.value.get(id)
+    return (entrada && sheets.value?.[entrada.pessoa.sprite]) ?? null
   }
 
   function syncActors() {
     const alive = new Set<string>()
-    for (const m of members.value) {
-      alive.add(m.id)
-      let a = actors.get(m.id)
+    for (const { pessoa, dominio, idx } of porPessoa.value.values()) {
+      alive.add(pessoa.id)
+      let a = actors.get(pessoa.id)
       if (!a) {
-        const [x, y] = stationPx(m)
-        a = { id: m.id, x, y, slot: m.slot, route: [], dist: 0, facing: 1, walking: false }
-        actors.set(m.id, a)
+        const [x, y] = stationPx(dominio, idx)
+        a = {
+          id: pessoa.id,
+          dominioId: dominio.id,
+          x,
+          y,
+          slot: dominio.slot,
+          route: [],
+          dist: 0,
+          facing: 1,
+          walking: false,
+        }
+        actors.set(pessoa.id, a)
       }
       paint(a)
     }
@@ -307,17 +359,22 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     entry.walk.style.backgroundPositionX = -col * w + 'px'
   }
 
-  /** Manda o ator até a estação da sala do slot (ou um tile local específico). */
+  /** Manda o ator até a sala de um slot (ou até um tile local específico). */
   function moveTo(id: string, slot: Vec2, local?: Vec2): boolean {
     const a = actors.get(id)
     if (!a) return false
-    const dest = members.value.find((m) => slotKey(m.slot) === slotKey(slot))
+    const dest = dominios.value.find((d) => slotKey(d.slot) === slotKey(slot))
     if (!dest) return false
 
     const slotPath = bfsSlots(a.slot, slot, unlocked.value)
     if (!slotPath) return false
 
-    const target = local ? localCenterPx(slot, local) : stationPx(dest)
+    // Sem `local`, o ator volta para a PRÓPRIA cadeira: a posição dele na
+    // árvore do domínio de destino, nunca a cadeira de outra pessoa.
+    const idxNoDestino = dest.pessoas.findIndex((p) => p.id === id)
+    const target = local
+      ? localCenterPx(slot, local)
+      : stationPx(dest, idxNoDestino < 0 ? dest.pessoas.length : idxNoDestino)
     a.route = buildRoute(slotPath, target)
     a.slot = slot
     a.walking = true
@@ -480,7 +537,7 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   // Atores existem antes do primeiro render: os :ref do template rodam antes
   // de onMounted e precisam achar o registro.
   syncActors()
-  for (const m of members.value) seenRooms.add(slotKey(m.slot))
+  for (const d of dominios.value) seenRooms.add(slotKey(d.slot))
 
   onMounted(() => {
     snapCamera()
@@ -517,11 +574,11 @@ export function useOffice(members: Ref<OfficeMember[]>) {
   })
 
   watch(
-    members,
+    dominios,
     () => {
       syncActors()
-      for (const m of members.value) {
-        const key = slotKey(m.slot)
+      for (const d of dominios.value) {
+        const key = slotKey(d.slot)
         if (seenRooms.has(key)) continue
         seenRooms.add(key)
         newRooms.add(key)
@@ -537,6 +594,7 @@ export function useOffice(members: Ref<OfficeMember[]>) {
     setWorldEl,
     scale,
     sheets,
+    pessoas,
     rooms,
     bounds,
     setActorEl,

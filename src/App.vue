@@ -94,7 +94,9 @@ const handleDelegation = async (payload) => {
     const turno = await response.json()
 
     if (turno.eventos_criados?.length) {
-      currentAgent.value = turno.eventos_criados[0].po_id
+      // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
+      // qual DOMINIO ela esta para mandar o PO raiz ate a sala certa.
+      currentAgent.value = turno.eventos_criados[0].responsavel_id
     }
 
     if (turno.sugestoes?.length) {
@@ -162,19 +164,36 @@ const handleDelegation = async (payload) => {
 
       <!-- Map Area -->
       <main class="flex-1 p-6 flex flex-col gap-4 bg-[#e0e7ff] overflow-y-auto">
-        <!-- Sugestoes de contratacao: proposta, nao acao. O fluxo de
-             contratar (POST /api/squad/hire) ainda nao existe. -->
+        <!-- Crescimento em DOIS niveis (spec 3.2): um dominio novo abre sala,
+             um integrante entra na sala do dominio que ja existe. Proposta, nao
+             acao: o fluxo de aprovar (POST /api/squad/*) ainda nao existe. -->
         <div
           v-for="(sugestao, index) in sugestoes"
           :key="index"
           class="border-4 border-black bg-[#ffdb58] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] shrink-0"
         >
-          <h3 class="font-black uppercase text-lg">Contratar {{ sugestao.papel }}?</h3>
+          <template v-if="sugestao.kind === 'dominio'">
+            <h3 class="font-black uppercase text-lg">
+              Abrir dominio {{ sugestao.dominio }}?
+            </h3>
+            <p class="text-xs font-bold uppercase mt-1 opacity-70">
+              Sala nova + {{ sugestao.papel_po }}
+              <span v-if="sugestao.slot">no slot [{{ sugestao.slot[0] }},{{ sugestao.slot[1] }}]</span>
+            </p>
+          </template>
+          <template v-else>
+            <h3 class="font-black uppercase text-lg">
+              Contratar {{ sugestao.papel }} em {{ sugestao.dominio_nome }}?
+            </h3>
+            <p class="text-xs font-bold uppercase mt-1 opacity-70">
+              Entra na sala do dominio {{ sugestao.dominio_id }}
+            </p>
+          </template>
           <p class="font-bold text-sm mt-1">{{ sugestao.justificativa }}</p>
           <p class="text-xs font-bold mt-2 opacity-70">Escopo: {{ sugestao.escopo }}</p>
         </div>
 
-        <GameMap :agent="currentAgent" />
+        <GameMap :agent="currentAgent" :squad="squad" />
       </main>
     </div>
 

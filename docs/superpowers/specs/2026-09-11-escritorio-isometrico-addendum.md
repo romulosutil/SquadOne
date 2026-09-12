@@ -1,5 +1,10 @@
 # Adendo — escritório isométrico com arte CraftPix
 
+> **ABSORVIDO em 2026-09-12.** O conteúdo deste adendo foi incorporado à spec
+> principal (§2, §4 e §5 de `2026-09-11-squadone-escritorio-po-design.md`), que
+> agora já descreve o isométrico e a arte CraftPix. Este arquivo fica como
+> registro da decisão e do diff contra a versão top-down original.
+
 Complementa `2026-09-11-squadone-escritorio-po-design.md`. Onde os dois
 divergirem, vale este. Motivo: decisão do PO em 11/09/2026 por **isométrico** e
 pela arte do pacote CraftPix já disponível em `assets/craftpix/`.
@@ -45,8 +50,8 @@ cada frame — senão o personagem pula de posição a cada troca de frame.
 
 ## Pendências
 
-- 3 personagens no pacote para 4 papéis: o quarto reusa o primeiro com
-  `hue-rotate`. Palette swap real (§5.3.4) seria melhor.
+- 3 personagens no pacote para N papéis: o excedente reusa um sheet com
+  `hue-rotate`. Palette swap real seria melhor.
 - Props e mobília ainda são emoji.
 - Sem sombra projetada real, sem oclusão de ator atrás de parede alta.
 - Animações não usadas do pacote: `Attacking`, `Casting Spells`, `Taunt`,

@@ -10,40 +10,95 @@
  * Duas camadas: `.ground` leva a matriz isométrica e desenha os losangos de
  * chão; `.objects` fica sem skew e recebe paredes, props e atores já projetados,
  * ordenados por z-index = diagonal do mundo (algoritmo do pintor).
+ *
+ * O mapa vem do roster em ÁRVORE (§3.1): UMA SALA POR DOMÍNIO, com o PO e os
+ * integrantes dele dentro. Nada aqui deriva sala de pessoa.
  */
 import { computed, watch } from 'vue'
-import { useOffice, type OfficeMember } from '../office/useOffice'
-import { ISO_MATRIX, TILE, WALL_H, WALL_MATRIX_X, WALL_MATRIX_Y } from '../office/rooms'
+import { useOffice, type OfficeDominio, type OfficePessoa } from '../office/useOffice'
+import {
+  ISO_MATRIX,
+  ROOM_TEMPLATES,
+  TILE,
+  WALL_H,
+  WALL_MATRIX_X,
+  WALL_MATRIX_Y,
+  type RoomId,
+} from '../office/rooms'
+import type { Pessoa, SquadResponse } from '../types'
 
-const props = defineProps<{ agent?: string }>()
+const props = defineProps<{ agent?: string; squad?: SquadResponse | null }>()
 
-/**
- * Roster local até §3.1 (GET /api/squad) existir. A ordem segue UNLOCK_ORDER:
- * (0,0) (1,0) (0,1) (1,1) — monótona direita/baixo, nada já na tela se move.
- * São 3 personagens no pacote CraftPix para 4 papéis: o quarto reusa o primeiro
- * com hue-rotate (palette swap, §5.3).
- */
-const ROSTER: OfficeMember[] = [
-  { id: 'po', nome: 'Rômulo', papel: 'PO', slot: [0, 0], room: 'ROOM_SOLO', sprite: 'wraith_01', emoji: '🧑‍💼' },
-  { id: 'TechLead', nome: 'Tech Lead', papel: 'TechLead', slot: [1, 0], room: 'ROOM_DEV', sprite: 'wraith_02', emoji: '🧑‍💻' },
-  { id: 'ProfissionalMaker', nome: 'Maker', papel: 'Maker', slot: [0, 1], room: 'ROOM_STUDIO', sprite: 'wraith_03', emoji: '🧑‍🎨' },
-  { id: 'PessoalFamiliar', nome: 'Família', papel: 'Família', slot: [1, 1], room: 'ROOM_LOUNGE', sprite: 'wraith_01', hue: 150, emoji: '🧑‍🍼' },
+/** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
+const SPRITE_POOL = ['wraith_01', 'wraith_02', 'wraith_03']
+const HUE_POOL = [0, 150, 45, 280, 200, 320]
+
+const EMOJI_POR_PAPEL: { re: RegExp; emoji: string }[] = [
+  { re: /\bpo\b|product|produto/i, emoji: '🧑‍💼' },
+  { re: /tech|dev|eng/i, emoji: '🧑‍💻' },
+  { re: /design/i, emoji: '🧑‍🎨' },
+  { re: /qa|test/i, emoji: '🕵️' },
+  { re: /dados|data|analy/i, emoji: '🧑‍🔬' },
 ]
 
-const members = computed(() => ROSTER)
+function emojiDe(papel: string): string {
+  return EMOJI_POR_PAPEL.find((e) => e.re.test(papel))?.emoji ?? '🧑'
+}
 
-const { setViewportEl, setWorldEl, scale, sheets, rooms, bounds, setActorEl, moveTo } =
-  useOffice(members)
+function roomIdDe(room: string): RoomId {
+  return (room in ROOM_TEMPLATES ? room : 'ROOM_EMPTY') as RoomId
+}
 
-/** Tile livre no miolo de todas as salas — onde o PO para ao visitar alguém. */
+/**
+ * Árvore -> vista. A pessoa carrega só aparência; slot e sala são do domínio.
+ * `ordem` é um contador global só para distribuir sprites/hue entre quem não
+ * trouxe os seus do roster — não tem significado no modelo.
+ */
+function paraOfficePessoa(p: Pessoa, ordem: number): OfficePessoa {
+  return {
+    id: p.id,
+    nome: p.nome,
+    papel: p.papel,
+    sprite: p.sprite || SPRITE_POOL[ordem % SPRITE_POOL.length],
+    hue: p.hue ?? (p.sprite ? undefined : HUE_POOL[Math.floor(ordem / SPRITE_POOL.length) % HUE_POOL.length]),
+    emoji: emojiDe(p.papel),
+  }
+}
+
+const dominios = computed<OfficeDominio[]>(() => {
+  let ordem = 0
+  return (props.squad?.dominios ?? []).map((d) => ({
+    id: d.id,
+    nome: d.nome,
+    slot: d.slot,
+    room: roomIdDe(d.room),
+    // PO primeiro: a ordem define qual cadeira cada um ocupa na sala.
+    pessoas: [d.po, ...d.integrantes].map((p) => paraOfficePessoa(p, ordem++)),
+  }))
+})
+
+const { setViewportEl, setWorldEl, scale, sheets, pessoas, rooms, bounds, setActorEl, moveTo } =
+  useOffice(dominios)
+
+/** Tile livre no miolo de todas as salas — onde o PO raiz para ao visitar. */
 const VISIT_TILE: [number, number] = [4, 3]
 
+/** O PO raiz é o dono do primeiro domínio: é ele quem circula pelo escritório. */
+const poRaiz = computed(() => props.squad?.dominios[0]?.po.id ?? null)
+
+/**
+ * `agent` é o id de uma PESSOA (responsavel_id do turno). Quem anda é o PO
+ * raiz, até a SALA DO DOMÍNIO dessa pessoa — visitar alguém é ir ao domínio
+ * dele, não a uma coordenada pessoal.
+ */
 watch(
-  () => props.agent,
-  (agent) => {
-    const dest = ROSTER.find((m) => m.id === agent)
-    if (dest) moveTo('po', dest.slot, VISIT_TILE)
-    else moveTo('po', ROSTER[0].slot) // Idle: volta pra própria mesa
+  [() => props.agent, dominios],
+  ([agent]) => {
+    const raiz = poRaiz.value
+    if (!raiz || !dominios.value.length) return
+    const destino = dominios.value.find((d) => d.pessoas.some((p) => p.id === agent))
+    if (destino && destino.id !== dominios.value[0].id) moveTo(raiz, destino.slot, VISIT_TILE)
+    else moveTo(raiz, dominios.value[0].slot) // Idle ou próprio domínio: volta pra mesa
   },
   { immediate: true }
 )
@@ -57,13 +112,13 @@ const worldBox = computed(() => ({
   height: bounds.value.maxY - bounds.value.minY + 'px',
 }))
 
-function sheetOf(m: OfficeMember) {
-  return sheets.value?.[m.sprite] ?? null
+function sheetOf(p: OfficePessoa) {
+  return sheets.value?.[p.sprite] ?? null
 }
 
 /** Strip horizontal: uma linha, N frames de frameW. */
-function stripStyle(m: OfficeMember, anim: 'idle' | 'walk') {
-  const sheet = sheetOf(m)
+function stripStyle(p: OfficePessoa, anim: 'idle' | 'walk') {
+  const sheet = sheetOf(p)
   const a = sheet?.anims?.[anim]
   if (!sheet || !a) return {}
   const base: Record<string, string> = {
@@ -80,12 +135,12 @@ function stripStyle(m: OfficeMember, anim: 'idle' | 'walk') {
   return base
 }
 
-function actorStyle(m: OfficeMember) {
-  const sheet = sheetOf(m)
+function actorStyle(p: OfficePessoa) {
+  const sheet = sheetOf(p)
   return {
     width: `${sheet ? sheet.frameW : TILE}px`,
     height: `${sheet ? sheet.frameH : TILE}px`,
-    filter: m.hue ? `hue-rotate(${m.hue}deg)` : undefined,
+    filter: p.hue ? `hue-rotate(${p.hue}deg)` : undefined,
   }
 }
 </script>
@@ -159,6 +214,7 @@ function actorStyle(m: OfficeMember) {
               <span class="prop__emoji">{{ p.emoji }}</span>
             </div>
 
+            <!-- A placa é do DOMÍNIO: a sala inteira pertence a ele. -->
             <span
               class="room__label"
               :style="{ left: room.label.left + 'px', top: room.label.top + 'px' }"
@@ -168,21 +224,21 @@ function actorStyle(m: OfficeMember) {
 
           <!-- Atores: billboards, movidos por translate3d direto no style. -->
           <div
-            v-for="m in members"
-            :key="m.id"
-            :ref="(el) => setActorEl(m.id, el)"
+            v-for="p in pessoas"
+            :key="p.id"
+            :ref="(el) => setActorEl(p.id, el)"
             class="actor"
-            :style="actorStyle(m)"
+            :style="actorStyle(p)"
           >
             <div class="actor__shadow"></div>
             <div data-billboard class="actor__billboard">
-              <template v-if="sheetOf(m)">
-                <div class="actor__strip actor__strip--idle" :style="stripStyle(m, 'idle')"></div>
-                <div data-walk class="actor__strip actor__strip--walk" :style="stripStyle(m, 'walk')"></div>
+              <template v-if="sheetOf(p)">
+                <div class="actor__strip actor__strip--idle" :style="stripStyle(p, 'idle')"></div>
+                <div data-walk class="actor__strip actor__strip--walk" :style="stripStyle(p, 'walk')"></div>
               </template>
-              <div v-else class="actor__emoji">{{ m.emoji }}</div>
+              <div v-else class="actor__emoji">{{ p.emoji }}</div>
             </div>
-            <span class="actor__name">{{ m.nome }}</span>
+            <span class="actor__name">{{ p.nome }} · {{ p.papel }}</span>
           </div>
         </div>
       </div>

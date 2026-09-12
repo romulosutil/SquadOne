@@ -137,11 +137,25 @@ export interface RoomProp {
 
 export interface ParsedRoom {
   props: RoomProp[]
-  /** tile local onde o ator senta (primeira cadeira; fallback = centro). */
-  station: Vec2
+  /**
+   * Tiles locais onde os atores param, um por cadeira do template.
+   * São VÁRIOS porque uma sala é um DOMÍNIO inteiro (§3.1): o PO e os
+   * integrantes dele dividem o mesmo slot. Se houver mais gente que cadeira,
+   * o excedente cai em `EXTRA_STATIONS`.
+   */
+  stations: Vec2[]
   hasEastDoor: boolean
   hasSouthDoor: boolean
 }
+
+/**
+ * Posições de sobra quando o domínio tem mais gente que cadeiras no template.
+ * Ficam no miolo do retângulo convexo (x 1..6, y 1..4), longe das paredes e
+ * dos props — a interpolação reta de §4.3 exige interior limpo.
+ */
+export const EXTRA_STATIONS: Vec2[] = [
+  [3, 3], [4, 3], [2, 3], [5, 3], [3, 2], [4, 2], [2, 2], [5, 2],
+]
 
 const PROP_BY_CHAR: Record<string, PropKind> = {
   D: 'desk',
@@ -166,7 +180,7 @@ export function parseRoom(id: RoomId): ParsedRoom {
   }
 
   const props: RoomProp[] = []
-  let station: Vec2 | null = null
+  const stations: Vec2[] = []
   let hasEastDoor = false
   let hasSouthDoor = false
 
@@ -185,13 +199,13 @@ export function parseRoom(id: RoomId): ParsedRoom {
       const kind = PROP_BY_CHAR[ch]
       if (!kind) continue
       props.push({ kind, local: [x, y] })
-      if (kind === 'chair' && !station) station = [x, y]
+      if (kind === 'chair') stations.push([x, y])
     }
   }
 
   const parsed: ParsedRoom = {
     props,
-    station: station ?? [ROOM_W >> 1, ROOM_H >> 1],
+    stations: stations.length ? stations : [[ROOM_W >> 1, ROOM_H >> 1]],
     hasEastDoor,
     hasSouthDoor,
   }

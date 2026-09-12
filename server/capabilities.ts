@@ -1,5 +1,15 @@
 import { Type, type FunctionDeclaration } from "@google/genai";
-import { dominioDe, type Squad, type SquadMember } from "./squad.ts";
+import {
+  acharDominio,
+  acharPessoa,
+  idsDePessoas,
+  MAX_DOMINIOS,
+  proximoSlot,
+  slug,
+  type Dominio,
+  type Pessoa,
+  type Squad,
+} from "./squad.ts";
 import { marcasDoMembro, PREFIXO_DEADLINE } from "./calendar.ts";
 
 export interface CapabilityContext {
@@ -12,7 +22,7 @@ export interface CapabilityContext {
 export interface EventoCriado {
   kind: "evento";
   titulo: string;
-  po_id: string;
+  responsavel_id: string;
   tipo: "time_blocking" | "deadline";
   dominio: string;
   inicio: string;
@@ -21,14 +31,29 @@ export interface EventoCriado {
   htmlLink?: string;
 }
 
-export interface SugestaoContratacao {
-  kind: "sugestao";
+/** Proposta de ABRIR UM DOMÍNIO novo: sala nova, PO novo. */
+export interface PropostaDominio {
+  kind: "dominio";
+  dominio: string;
+  papel_po: string;
+  justificativa: string;
+  escopo: string;
+  /** Onde a sala nasceria, se aprovada. */
+  slot: [number, number] | null;
+}
+
+/** Proposta de CONTRATAR DENTRO de um domínio existente: mesma sala. */
+export interface PropostaIntegrante {
+  kind: "integrante";
+  dominio_id: string;
+  dominio_nome: string;
   papel: string;
   justificativa: string;
   escopo: string;
 }
 
-export type CapabilityResult = EventoCriado | SugestaoContratacao;
+export type Sugestao = PropostaDominio | PropostaIntegrante;
+export type CapabilityResult = EventoCriado | Sugestao;
 
 export interface Capability {
   declaration: FunctionDeclaration;
@@ -38,17 +63,18 @@ export interface Capability {
   ) => Promise<CapabilityResult>;
 }
 
-const CORES_POR_INDICE = ["9", "3", "2", "5", "6", "7", "10", "11", "4"];
+/** Uma cor por DOMÍNIO: no calendário a sala é a unidade que se lê de relance. */
+const CORES_POR_DOMINIO = ["9", "3", "2", "5", "6", "7", "10", "11", "4"];
 
-function exigirMembro(squad: Squad, poId: unknown): SquadMember {
-  const membro = squad.members.find((m) => m.id === poId);
-  if (!membro) {
-    const ids = squad.members.map((m) => m.id).join(", ");
+function exigirPessoa(squad: Squad, id: unknown): { pessoa: Pessoa; dominio: Dominio } {
+  const achada = acharPessoa(squad, id);
+  if (!achada) {
     throw new Error(
-      `po_id '${String(poId)}' não está no squad. Disponíveis: ${ids}`,
+      `responsavel_id '${String(id)}' não está no squad. ` +
+        `Disponíveis: ${idsDePessoas(squad).join(", ")}`,
     );
   }
-  return membro;
+  return achada;
 }
 
 function exigirData(valor: unknown, campo: string): Date {
@@ -72,10 +98,12 @@ const agendarEvento: Capability = {
           type: Type.STRING,
           description: "Título curto e acionável do evento.",
         },
-        po_id: {
+        responsavel_id: {
           type: Type.STRING,
           description:
-            "id do membro do squad responsável, exatamente como listado no roster.",
+            "id da pessoa do squad responsável — pode ser o PO de um domínio " +
+            "ou um integrante dele. Use exatamente um dos ids da árvore do roster. " +
+            "O domínio do evento é derivado dela; não existe campo de domínio.",
         },
         tipo: {
           type: Type.STRING,
@@ -99,7 +127,7 @@ const agendarEvento: Capability = {
             "Obrigatório quando tipo='deadline'. Data/hora ISO 8601 com offset do limite de entrega.",
         },
       },
-      required: ["titulo", "po_id", "tipo"],
+      required: ["titulo", "responsavel_id", "tipo"],
     },
   },
 
@@ -110,7 +138,7 @@ const agendarEvento: Capability = {
       );
     }
 
-    const membro = exigirMembro(ctx.squad, args.po_id);
+    const { pessoa, dominio } = exigirPessoa(ctx.squad, args.responsavel_id);
     const tipo = args.tipo === "deadline" ? "deadline" : "time_blocking";
     const titulo = String(args.titulo ?? "").trim();
     if (!titulo) throw new Error("Campo 'titulo' vazio.");
@@ -125,24 +153,26 @@ const agendarEvento: Capability = {
       inicio = exigirData(args.inicio, "inicio");
       const duracao = Number(args.duracao_min) > 0 ? Number(args.duracao_min) : 60;
       fim = new Date(inicio.getTime() + duracao * 60_000);
-      summary = `[${membro.papel}] ${titulo}`;
+      summary = `[${pessoa.papel}] ${titulo}`;
     } else {
       fim = exigirData(args.prazo_final, "prazo_final");
       inicio = new Date(fim.getTime() - 15 * 60_000);
-      summary = `${PREFIXO_DEADLINE} [${membro.papel}] ${titulo}`;
+      summary = `${PREFIXO_DEADLINE} [${pessoa.papel}] ${titulo}`;
     }
 
-    const indice = ctx.squad.members.indexOf(membro);
-    const dominio = dominioDe(membro);
+    const indice = ctx.squad.dominios.indexOf(dominio);
     const event = {
       summary,
-      description: `Criado pelo SquadOne. Responsável: ${membro.nome} (${membro.papel}).`,
-      colorId: CORES_POR_INDICE[indice % CORES_POR_INDICE.length],
+      description:
+        `Criado pelo SquadOne. Domínio: ${dominio.nome}. ` +
+        `Responsável: ${pessoa.nome} (${pessoa.papel}).`,
+      colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
       start: { dateTime: inicio.toISOString() },
       end: { dateTime: fim.toISOString() },
       // Duas marcas, não uma (ver server/calendar.ts): `squadone_dominio` é
       // o eixo de filtro do events.list, `squadone_membro` o de atribuição.
-      extendedProperties: { private: marcasDoMembro(membro, dominio) },
+      // A hierarquia é exatamente isso: o domínio filtra, a pessoa atribui.
+      extendedProperties: { private: marcasDoMembro(pessoa, dominio.id) },
     };
 
     const resp = await fetch(
@@ -168,9 +198,9 @@ const agendarEvento: Capability = {
     return {
       kind: "evento",
       titulo,
-      po_id: membro.id,
+      responsavel_id: pessoa.id,
       tipo,
-      dominio,
+      dominio: dominio.id,
       inicio: inicio.toISOString(),
       fim: fim.toISOString(),
       eventId: criado.id,
@@ -179,39 +209,130 @@ const agendarEvento: Capability = {
   },
 };
 
-const sugerirContratacao: Capability = {
+/**
+ * Eixo de crescimento 1: um TEMA novo que nenhum domínio cobre. Abre sala.
+ * Sem efeito colateral — quem contrata é o usuário, no card de aprovação.
+ */
+const criarPoDominio: Capability = {
   declaration: {
-    name: "sugerir_contratacao",
+    name: "criar_po_dominio",
     description:
-      "Propõe contratar um novo membro para o squad quando a demanda exige " +
-      "um papel que o roster atual não cobre. Não contrata ninguém: devolve " +
-      "uma proposta para o usuário aprovar.",
+      "Propõe ABRIR UM DOMÍNIO novo, com um PO próprio, quando a demanda trata " +
+      "de um tema que nenhum domínio atual cobre (ex: surge 'Financeiro' num " +
+      "squad que só tem 'Produto'). Abre uma sala nova no escritório. Não use " +
+      "quando o tema já tem domínio e falta apenas um papel dentro dele — nesse " +
+      "caso use contratar_integrante. Não cria nada: devolve uma proposta para " +
+      "o usuário aprovar.",
     parameters: {
       type: Type.OBJECT,
       properties: {
-        papel: {
+        dominio: {
           type: Type.STRING,
-          description: "Papel proposto, ex: 'Designer', 'QA'.",
+          description: "Nome do domínio proposto, ex: 'Financeiro', 'Saúde'.",
+        },
+        papel_po: {
+          type: Type.STRING,
+          description:
+            "Papel do PO que assumiria o domínio, ex: 'PO Financeiro'.",
         },
         justificativa: {
           type: Type.STRING,
-          description: "Por que o roster atual não cobre esta demanda.",
+          description: "Por que nenhum domínio atual cobre este tema.",
         },
         escopo: {
           type: Type.STRING,
-          description: "Que tipo de demanda passaria a ser roteada para este papel.",
+          description: "Que tipo de demanda passaria a ser roteada para este domínio.",
         },
       },
-      required: ["papel", "justificativa", "escopo"],
+      required: ["dominio", "papel_po", "justificativa", "escopo"],
     },
   },
 
-  // Sem efeito colateral: a contratação é decisão do usuário.
-  async handler(args): Promise<SugestaoContratacao> {
+  async handler(args, ctx): Promise<PropostaDominio> {
+    const dominio = String(args.dominio ?? "").trim();
+    if (!dominio) throw new Error("Campo 'dominio' vazio.");
+
+    // Proposta só vale se for executável. O id de um domínio é o slug do nome
+    // e é a chave de filtro do calendário: dois domínios com o mesmo slug
+    // misturariam os eventos dos dois.
+    const id = slug(dominio);
+    const existente = acharDominio(ctx.squad, id);
+    if (existente) {
+      throw new Error(
+        `O domínio '${existente.nome}' (id '${id}') já existe. ` +
+          `Para reforçá-lo, use contratar_integrante com dominio_id='${id}'.`,
+      );
+    }
+    if (ctx.squad.dominios.length >= MAX_DOMINIOS) {
+      throw new Error(
+        `O escritório já tem ${MAX_DOMINIOS} domínios — não há sala livre para um novo.`,
+      );
+    }
+
+    return {
+      kind: "dominio",
+      dominio,
+      papel_po: String(args.papel_po ?? "PO").trim() || "PO",
+      justificativa: String(args.justificativa ?? ""),
+      escopo: String(args.escopo ?? ""),
+      slot: proximoSlot(ctx.squad),
+    };
+  },
+};
+
+/**
+ * Eixo de crescimento 2: o tema já tem domínio, falta um PAPEL dentro dele.
+ * Não abre sala: o integrante entra na sala do PO que o contratou.
+ */
+const contratarIntegrante: Capability = {
+  declaration: {
+    name: "contratar_integrante",
+    description:
+      "Propõe CONTRATAR alguém DENTRO de um domínio existente (designer, tech " +
+      "lead, QA...) quando o tema já tem dono mas falta um papel para executar. " +
+      "O integrante entra na sala do domínio, junto com o PO — não abre sala " +
+      "nova. Não contrata ninguém: devolve uma proposta para o usuário aprovar.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        dominio_id: {
+          type: Type.STRING,
+          description:
+            "id do domínio que receberia o integrante, exatamente como na árvore do roster.",
+        },
+        papel: {
+          type: Type.STRING,
+          description: "Papel proposto, ex: 'Designer', 'Tech Lead', 'QA'.",
+        },
+        justificativa: {
+          type: Type.STRING,
+          description: "Por que o domínio não dá conta da demanda com quem já tem.",
+        },
+        escopo: {
+          type: Type.STRING,
+          description: "Que tipo de tarefa passaria a ser roteada para este integrante.",
+        },
+      },
+      required: ["dominio_id", "papel", "justificativa", "escopo"],
+    },
+  },
+
+  async handler(args, ctx): Promise<PropostaIntegrante> {
+    const dominio = acharDominio(ctx.squad, args.dominio_id);
+    if (!dominio) {
+      const ids = ctx.squad.dominios.map((d) => d.id).join(", ");
+      throw new Error(
+        `dominio_id '${String(args.dominio_id)}' não existe. Domínios: ${ids}. ` +
+          `Se o tema não tem dono, use criar_po_dominio.`,
+      );
+    }
     const papel = String(args.papel ?? "").trim();
     if (!papel) throw new Error("Campo 'papel' vazio.");
+
     return {
-      kind: "sugestao",
+      kind: "integrante",
+      dominio_id: dominio.id,
+      dominio_nome: dominio.nome,
       papel,
       justificativa: String(args.justificativa ?? ""),
       escopo: String(args.escopo ?? ""),
@@ -222,7 +343,8 @@ const sugerirContratacao: Capability = {
 /** Registry: adicionar uma capacidade é adicionar uma entrada aqui. */
 export const CAPABILITIES: Record<string, Capability> = {
   agendar_evento: agendarEvento,
-  sugerir_contratacao: sugerirContratacao,
+  criar_po_dominio: criarPoDominio,
+  contratar_integrante: contratarIntegrante,
 };
 
 export function declarations(): FunctionDeclaration[] {

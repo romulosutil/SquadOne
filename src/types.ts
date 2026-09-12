@@ -1,27 +1,44 @@
-export interface SquadMember {
+/**
+ * Espelho dos tipos do servidor. O roster é uma ÁRVORE (spec §3.1):
+ * domínio -> { po, integrantes }. Uma sala do escritório = um domínio.
+ */
+
+export interface Pessoa {
   id: string;
   nome: string;
   papel: string;
   escopo: string;
-  dominio?: string;
   sprite: string;
+  hue?: number;
+  horario?: { inicio: string; fim: string };
+  hiredAt: string;
+}
+
+export interface Dominio {
+  /** slug estável; é o valor de `squadone_dominio` no Google Calendar. */
+  id: string;
+  nome: string;
+  escopo: string;
+  /** O slot é do DOMÍNIO, não das pessoas: todas elas dividem esta sala. */
   slot: [number, number];
   room: string;
-  horario: { inicio: string; fim: string };
-  hiredAt: string;
+  criadoEm: string;
+  po: Pessoa;
+  integrantes: Pessoa[];
 }
 
 export interface SquadResponse {
   version: number;
   unlockOrder: [number, number][];
-  members: SquadMember[];
+  dominios: Dominio[];
   unlockedSlots: [number, number][];
 }
 
 export interface EventoCriado {
   kind: "evento";
   titulo: string;
-  po_id: string;
+  /** id da pessoa (PO ou integrante). O domínio é derivado dela. */
+  responsavel_id: string;
   tipo: "time_blocking" | "deadline";
   dominio: string;
   inicio: string;
@@ -30,12 +47,27 @@ export interface EventoCriado {
   htmlLink?: string;
 }
 
-export interface SugestaoContratacao {
-  kind: "sugestao";
+/** Proposta de abrir um domínio novo — sala nova no escritório. */
+export interface PropostaDominio {
+  kind: "dominio";
+  dominio: string;
+  papel_po: string;
+  justificativa: string;
+  escopo: string;
+  slot: [number, number] | null;
+}
+
+/** Proposta de contratar dentro de um domínio existente — mesma sala. */
+export interface PropostaIntegrante {
+  kind: "integrante";
+  dominio_id: string;
+  dominio_nome: string;
   papel: string;
   justificativa: string;
   escopo: string;
 }
+
+export type Sugestao = PropostaDominio | PropostaIntegrante;
 
 export interface ErroTarefa {
   capacidade: string;
@@ -45,7 +77,7 @@ export interface ErroTarefa {
 
 export interface TurnoResponse {
   eventos_criados: EventoCriado[];
-  sugestoes: SugestaoContratacao[];
+  sugestoes: Sugestao[];
   erros: ErroTarefa[];
 }
 
