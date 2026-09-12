@@ -4,7 +4,7 @@ import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
 import GrowthCard from './components/GrowthCard.vue'
-import { conectado, conectando, conectar, desconectar, garantirToken, tokenAtual } from './auth/google'
+import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
 
 const currentAgent = ref('Idle')
 // A Mochila NAO guarda quest local: a verdade e o Google Calendar. Esta ref e
@@ -31,28 +31,28 @@ onMounted(async () => {
     console.error('Falha ao carregar o squad:', error)
   }
 
-  // Silencioso: so pega token se o usuario ja consentiu neste browser. Se o
-  // Google recusar, nada abre — o botao Conectar (gesto do usuario) resolve.
-  try {
-    await conectar(true)
-    await carregarMochila()
-  } catch {
-    // sem consentimento previo: segue desconectado.
-  }
+  // Volta do consentimento: o callback redireciona para /?auth=ok ou
+  // /?auth=<motivo>. Avisar aqui e o unico feedback que o usuario tem de que
+  // a autorizacao deu certo, porque o resto do fluxo acontece no servidor.
+  const retorno = lerRetornoDoConsentimento()
+  if (retorno && retorno !== 'ok') avisar(`Google: ${retorno}`)
+  else if (retorno === 'ok') avisar('Calendário conectado')
+
+  // A credencial mora no servidor: basta perguntar. Sem popup, sem gesto — se
+  // ja houve consentimento antes, continua valendo depois de reload e deploy.
+  if (await sincronizarStatus()) await carregarMochila()
 })
 
 const carregarMochila = async () => {
-  const token = tokenAtual()
-  if (!token) return
+  if (!conectado.value) return
   carregandoMochila.value = true
   try {
-    const response = await fetch('/api/mochila', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    const response = await fetch('/api/mochila')
     if (!response.ok) {
-      // 401 = o Google recusou o token (expirou ou foi revogado). Derruba o
-      // estado de conectado pra UI voltar a oferecer o botao de conectar.
-      if (response.status === 401) desconectar()
+      // 401 = o servidor nao tem credencial valida (nunca conectou, ou o
+      // Google recusou o refresh). Derruba o estado pra UI voltar a oferecer
+      // o botao de conectar.
+      if (response.status === 401) conectado.value = false
       const corpo = await response.json().catch(() => ({}))
       throw new Error(corpo.error ?? `HTTP ${response.status}`)
     }
@@ -114,14 +114,13 @@ const descartarSugestao = (index) => {
   sugestoes.value = sugestoes.value.filter((_, i) => i !== index)
 }
 
-const conectarGoogle = async () => {
-  try {
-    await garantirToken()
-    await carregarMochila()
-  } catch (error) {
-    console.error('Falha ao conectar no Google:', error)
-    alert(`Falha ao conectar no Google Calendar: ${error.message}`)
-  }
+// Navega para fora da SPA; o retorno cai no onMounted acima.
+const conectarGoogle = () => irParaConsentimento()
+
+const desconectarGoogle = async () => {
+  await desconectar()
+  quests.value = []
+  avisar('Calendário desconectado')
 }
 
 const handleDelegation = async (payload) => {
@@ -131,16 +130,11 @@ const handleDelegation = async (payload) => {
   currentAgent.value = 'Idle';
 
   try {
-    // Bearer obrigatorio (§3.4): sem token, agendar_evento falha no servidor.
-    // Pede antes de gastar uma chamada no Gemini.
-    const token = await garantirToken()
-
+    // O token e problema do servidor: ele pega do store e renova sozinho. Um
+    // turno que nao toca o calendario roda mesmo sem credencial.
     const response = await fetch('/api/orquestrar', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ demanda: payload.demanda })
     })
 
@@ -191,7 +185,7 @@ const handleDelegation = async (payload) => {
           <span class="animate-spin text-xl">⚙️</span>
           Processando...
         </div>
-        <!-- Token GIS vive em memoria: some no reload, reconecta em ~1h (§3.4). -->
+        <!-- Credencial mora no servidor: sobrevive a reload e a deploy. -->
         <button
           v-if="!conectado"
           @click="conectarGoogle"
@@ -200,9 +194,14 @@ const handleDelegation = async (payload) => {
         >
           {{ conectando ? 'Conectando...' : '🔌 Conectar Google Calendar' }}
         </button>
-        <span v-else class="font-black text-xs uppercase bg-black text-white px-3 py-2">
+        <button
+          v-else
+          @click="desconectarGoogle"
+          title="Desconectar do Google Calendar"
+          class="font-black text-xs uppercase bg-black text-white px-3 py-2 hover:bg-red-700 transition-colors"
+        >
           📅 Calendário conectado
-        </span>
+        </button>
       </div>
     </header>
 
