@@ -77,8 +77,14 @@ const carregarRoster = async () => {
   }
 }
 
-const trocarSquad = async (id: string) => {
-  if (id === squadAtiva.value?.id) return
+/**
+ * Devolve se a squad ativa é `id` ao final. Com turno em curso não troca — o
+ * mesmo guarda do seletor: a resposta do turno e o recarregar da Mochila são
+ * da squad em que ele começou, e trocar no meio misturaria as duas.
+ */
+const trocarSquad = async (id: string): Promise<boolean> => {
+  if (id === squadAtiva.value?.id) return true
+  if (isLoading.value) return false
   // Squad criada em outra aba: o roster local ainda não a conhece.
   if (!roster.value?.squads.some((s) => s.id === id)) await carregarRoster()
   squadAtivaId.value = id
@@ -86,6 +92,7 @@ const trocarSquad = async (id: string) => {
   quests.value = []
   currentAgent.value = 'Idle'
   await carregarMochila()
+  return true
 }
 
 const abrirNovaSquad = () => {
@@ -107,8 +114,13 @@ const criarSquad = async (dados: DadosNovaSquad) => {
     if (!response.ok) throw new Error(corpo.error ?? `HTTP ${response.status}`)
     roster.value = corpo.roster
     criandoSquad.value = false
-    await trocarSquad(corpo.squad.id)
-    avisar(`Squad ${corpo.squad.nome} criada`)
+    // A squad já existe no servidor; só a troca espera o turno acabar.
+    const trocou = await trocarSquad(corpo.squad.id)
+    avisar(
+      trocou
+        ? `Squad ${corpo.squad.nome} criada`
+        : `Squad ${corpo.squad.nome} criada — troque no seletor quando o turno acabar`
+    )
   } catch (error) {
     erroNovaSquad.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -120,8 +132,10 @@ const criarSquad = async (dados: DadosNovaSquad) => {
 const aceitarTroca = async (id: string, reenviar: boolean) => {
   const proposta = sugestoesDeTroca.value.find((s) => s.id === id)
   if (!proposta) return
+  // Sem troca não há reenvio: reenviar na squad de origem agendaria justamente
+  // onde o modelo disse que a demanda não pertence. O card fica para depois.
+  if (!(await trocarSquad(proposta.destino_id))) return
   sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
-  await trocarSquad(proposta.destino_id)
   if (reenviar) await handleDelegation({ demanda: proposta.demanda, modo: 'auto' })
 }
 
@@ -234,7 +248,7 @@ const desconectarGoogle = async () => {
 }
 
 const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
-  if (isLoading.value) return;
+  if (isLoading.value || criandoSquad.value) return;
 
   isLoading.value = true;
   currentAgent.value = 'Idle';
@@ -407,7 +421,9 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     </div>
 
     <!-- Command Bar -->
-    <CommandBar @delegate="handleDelegation" />
+    <!-- Modal aberto bloqueia o envio: o Enter no input de baixo mandaria um
+         turno às cegas, e a troca de squad do modal colidiria com ele. -->
+    <CommandBar :desabilitado="criandoSquad" @delegate="handleDelegation" />
   </div>
 </template>
 

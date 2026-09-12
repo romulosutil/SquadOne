@@ -4,6 +4,12 @@ import type { Modo } from '../types'
 
 const emit = defineEmits(['delegate'])
 
+// Bloqueia o envio SEM apagar o texto: com um modal aberto por cima, o Enter
+// ainda chega no input que tinha foco e mandaria o turno às cegas.
+const props = defineProps({
+  desabilitado: { type: Boolean, default: false }
+})
+
 const demanda = ref('')
 // Auto por padrao: o modelo escolhe o tipo de cada compromisso. Foco e Prazo
 // sao o usuario sobrepondo essa escolha para a demanda inteira — o servidor
@@ -17,7 +23,7 @@ const MODOS: { valor: Modo; rotulo: string; dica: string }[] = [
 ]
 
 const onSubmit = () => {
-  if (!demanda.value.trim()) return
+  if (props.desabilitado || !demanda.value.trim()) return
 
   emit('delegate', {
     demanda: demanda.value,
@@ -37,6 +43,7 @@ const onSubmit = () => {
     <div class="flex-1">
       <input
         v-model="demanda"
+        :disabled="desabilitado"
         @keyup.enter="onSubmit"
         type="text"
         placeholder="Descreva a demanda da Quest..."
@@ -68,8 +75,9 @@ const onSubmit = () => {
     </div>
 
     <button
+      :disabled="desabilitado"
       @click="onSubmit"
-      class="h-14 px-8 border-4 border-black bg-[#3b82f6] text-white font-black text-xl uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[4px] hover:translate-y-[4px] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] transition-all"
+      class="disabled:opacity-50 h-14 px-8 border-4 border-black bg-[#3b82f6] text-white font-black text-xl uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[4px] hover:translate-y-[4px] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] transition-all"
     >
       Delegar Quest
     </button>
