@@ -9,10 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "vue-tsc --noEmit",
-    "sprites:gen": "tsx scripts/gen-sprites.ts",
-    "sprites:build": "python scripts/spritify.py build",
-    "sprites:palette": "python scripts/spritify.py palette"
+    "lint": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

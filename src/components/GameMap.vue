@@ -14,8 +14,14 @@
  * O mapa vem do roster em ÁRVORE (§3.1): UMA SALA POR DOMÍNIO, com o PO e os
  * integrantes dele dentro. Nada aqui deriva sala de pessoa.
  */
-import { computed, watch } from 'vue'
-import { useOffice, type OfficeDominio, type OfficePessoa, type RoomPhase } from '../office/useOffice'
+import { computed, shallowRef, watch } from 'vue'
+import {
+  useOffice,
+  type CharSheet,
+  type OfficeDominio,
+  type OfficePessoa,
+  type RoomPhase,
+} from '../office/useOffice'
 import {
   ISO_MATRIX,
   ROOM_TEMPLATES,
@@ -50,22 +56,41 @@ function roomIdDe(room: string): RoomId {
 }
 
 /**
+ * Espelho do manifest do CraftPix. `sheets` nasce DENTRO de useOffice, que por
+ * sua vez já precisa de `dominios` pronto — ler `sheets` direto no computed
+ * abaixo seria um ciclo. O espelho quebra o ciclo e mantém a reatividade: o
+ * computed re-avalia sozinho quando o fetch do manifest resolve.
+ */
+const manifest = shallowRef<Record<string, CharSheet> | null>(null)
+
+/**
  * Árvore -> vista. A pessoa carrega só aparência; slot e sala são do domínio.
  * `ordem` é um contador global só para distribuir sprites/hue entre quem não
  * trouxe os seus do roster — não tem significado no modelo.
+ *
+ * O sprite do roster só é honrado se existir em `chars`: um nome morto (roster
+ * de uma versão antiga) viraria sheet null e cairia no emoji em silêncio.
+ * Quem cai no pool por sprite inválido ganha hue como qualquer outro do pool.
+ * Sem manifest carregado não há o que validar — aí o emoji é o certo.
  */
-function paraOfficePessoa(p: Pessoa, ordem: number): OfficePessoa {
+function paraOfficePessoa(
+  p: Pessoa,
+  ordem: number,
+  chars: Record<string, CharSheet> | null
+): OfficePessoa {
+  const proprio = p.sprite && (!chars || chars[p.sprite]) ? p.sprite : ''
   return {
     id: p.id,
     nome: p.nome,
     papel: p.papel,
-    sprite: p.sprite || SPRITE_POOL[ordem % SPRITE_POOL.length],
-    hue: p.hue ?? (p.sprite ? undefined : HUE_POOL[Math.floor(ordem / SPRITE_POOL.length) % HUE_POOL.length]),
+    sprite: proprio || SPRITE_POOL[ordem % SPRITE_POOL.length],
+    hue: p.hue ?? (proprio ? undefined : HUE_POOL[Math.floor(ordem / SPRITE_POOL.length) % HUE_POOL.length]),
     emoji: emojiDe(p.papel),
   }
 }
 
 const dominios = computed<OfficeDominio[]>(() => {
+  const chars = manifest.value
   let ordem = 0
   return (props.squad?.dominios ?? []).map((d) => ({
     id: d.id,
@@ -73,12 +98,15 @@ const dominios = computed<OfficeDominio[]>(() => {
     slot: d.slot,
     room: roomIdDe(d.room),
     // PO primeiro: a ordem define qual cadeira cada um ocupa na sala.
-    pessoas: [d.po, ...d.integrantes].map((p) => paraOfficePessoa(p, ordem++)),
+    pessoas: [d.po, ...d.integrantes].map((p) => paraOfficePessoa(p, ordem++, chars)),
   }))
 })
 
 const { setViewportEl, setWorldEl, scale, sheets, pessoas, rooms, bounds, setActorEl, moveTo } =
   useOffice(dominios)
+
+// Só aqui `sheets` existe: liga o espelho. Imediato para nascer em sincronia.
+watch(sheets, (chars) => (manifest.value = chars), { immediate: true })
 
 /** Tile livre no miolo de todas as salas — onde o PO raiz para ao visitar. */
 const VISIT_TILE: [number, number] = [4, 3]

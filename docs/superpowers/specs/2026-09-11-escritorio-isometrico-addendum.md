@@ -32,10 +32,12 @@ pela arte do pacote CraftPix já disponível em `assets/craftpix/`.
 
 ## Consequência para o pipeline de sprites (§5)
 
-`scripts/spritify.py` e `scripts/gen-sprites.ts` miram os 7 arquivos pixel art de
-§5.1 — alvo morto para os **personagens**. Continuam válidos para props e tiles,
-se a decisão for ter chão/mobília em pixel art. Hoje props são emoji e
-chão/parede são CSS chapado, coerentes com o contorno grosso da arte.
+O pipeline de pixel art por IA (`gen-sprites.ts` + `spritify.py`) mirava os 7
+arquivos de §5.1 — alvo morto para os **personagens**. A ressalva "continuam
+válidos para props e tiles" não se confirmou: props são emoji e chão/parede são
+CSS chapado, coerentes com o contorno grosso da arte. Os scripts foram removidos
+em 12/09/2026; o registro do desenho antigo e do motivo do abandono está na
+spec §5.4.
 
 `scripts/craftpix-sheets.py` gera os strips:
 

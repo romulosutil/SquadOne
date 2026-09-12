@@ -451,13 +451,25 @@ A versão original desta spec gerava pixel art 32x32 por IA:
 `gemini-3.1-flash-lite-image`, paleta CC0 Endesga 32 travada no prompt **e** no
 quantizador, ordem de geração ancorada, frames de caminhada derivados por script,
 pipeline `chroma key → despill → downscale BOX → alpha binário → quantize`.
-`scripts/gen-sprites.ts` e `scripts/spritify.py` são o resto disso.
+O código disso vivia em `scripts/gen-sprites.ts`, `scripts/spritify.py`,
+`scripts/palette.png` e `scripts/sprites.manifest.json`.
 
 Motivo do abandono: decisão do PO em 11/09/2026 por isométrico + arte CraftPix
 pronta. O maior risco daquele caminho — 3 frames gerados virarem 3 pessoas
-diferentes — deixa de existir quando a arte já vem consistente. Os scripts
-continuam válidos **só** para props e tiles, se um dia a decisão for ter
-mobília em pixel art.
+diferentes — deixa de existir quando a arte já vem consistente.
+
+**Os quatro arquivos foram removidos em 12/09/2026**, junto com os scripts
+`sprites:gen`, `sprites:build` e `sprites:palette` do `package.json` e com a
+dependência `numpy` do `requirements.txt` (era exclusiva do `spritify.py`; o
+`craftpix-sheets.py` só precisa de Pillow). A hipótese de "continuam válidos para
+props e tiles" não se sustentou: props são emoji e chão/parede são CSS chapado,
+coerentes com o contorno grosso da arte vetorial — manter 25 KB de pipeline morto
+por um "se um dia" custava mais em confusão do que em esforço de reescrever.
+O parágrafo acima fica aqui justamente para preservar **o porquê**: se um dia a
+decisão for gerar pixel art de novo, o registro do desenho antigo — e do risco que
+o derrubou — está nesta seção, não no histórico do git.
+
+Pipeline vivo e único: `scripts/craftpix-sheets.py` (§5.2).
 
 ---
 
@@ -571,4 +583,5 @@ Não dá pra automatizar:
 3. OAuth Client → autorizar origem `http://localhost:3000`
 4. Criar `.env` (não existe hoje, só `.env.example`) com `GEMINI_API_KEY=...`
 5. ~~Escolher e salvar a paleta CC0 em `scripts/palette.png`~~ — morto: a arte
-   vem pronta do CraftPix (§5.1), não há mais quantização contra paleta.
+   vem pronta do CraftPix (§5.1), não há mais quantização contra paleta. O
+   arquivo e o script que o gerava foram removidos em 12/09/2026 (§5.4).
