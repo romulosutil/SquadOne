@@ -13,8 +13,15 @@ defineProps({
 defineEmits(['conectar', 'recarregar'])
 
 const quando = (quest: QuestCalendario) => {
-  const data = new Date(quest.tipo === 'deadline' ? quest.fim : quest.inicio)
-  return quest.diaInteiro ? data.toLocaleDateString() : data.toLocaleString()
+  if (quest.diaInteiro) {
+    // Dia inteiro: `end.date` do Google e EXCLUSIVO (evento de 12/09 termina
+    // em 13/09), entao a data certa e sempre o inicio, mesmo num deadline. E
+    // "AAAA-MM-DD" puro o `new Date` le como meia-noite UTC, que em -03:00 cai
+    // no dia anterior: monta a data local pelas partes.
+    const [ano, mes, dia] = quest.inicio.split('-').map(Number)
+    return new Date(ano, mes - 1, dia).toLocaleDateString()
+  }
+  return new Date(quest.tipo === 'deadline' ? quest.fim : quest.inicio).toLocaleString()
 }
 
 const duracao = (quest: QuestCalendario) =>
@@ -81,7 +88,8 @@ const duracao = (quest: QuestCalendario) =>
             <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ quest.dominio }}</span>
           </div>
           <div class="text-gray-800">
-            ⏰ {{ quest.tipo === 'time_blocking' ? 'Foco: ' + duracao(quest) + 'm' : 'Deadline' }}
+            <!-- Dia inteiro nao tem duracao em minutos que signifique algo: 1440m e ruido. -->
+            ⏰ {{ quest.tipo === 'deadline' ? 'Deadline' : quest.diaInteiro ? 'Foco: dia inteiro' : 'Foco: ' + duracao(quest) + 'm' }}
           </div>
           <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>
         </div>
