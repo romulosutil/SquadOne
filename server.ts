@@ -7,22 +7,91 @@ import { readSquad, unlockedSlots, dominiosDoSquad } from "./server/squad.ts";
 import { executarTurno } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
 import { aplicarContratacao, ConflitoDeRoster } from "./server/hire.ts";
+import { porteiroDeIp } from "./server/acesso.ts";
+import {
+  desconectar,
+  ErroDeConfig,
+  estaConectado,
+  PrecisaConectar,
+  tokenValido,
+  trocarCodigo,
+  urlDeConsentimento,
+} from "./server/auth-store.ts";
 
 dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-function bearer(header: string | undefined): string | null {
-  if (!header || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  return token || null;
+/**
+ * Traduz as falhas do auth-store em status HTTP. A distincao importa para a
+ * interface: `PrecisaConectar` (401) pede o gesto do usuario; `ErroDeConfig`
+ * (500) e problema de ambiente e nenhum clique do usuario conserta.
+ */
+function responderErroDeAuth(res: express.Response, err: unknown): void {
+  if (err instanceof PrecisaConectar) {
+    res.status(401).json({ error: (err as Error).message, precisaConectar: true });
+  } else if (err instanceof ErroDeConfig) {
+    res.status(500).json({ error: (err as Error).message, configuracao: true });
+  } else {
+    res.status(502).json({ error: (err as Error).message });
+  }
 }
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
+  // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
+  app.set("trust proxy", true);
+  // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
+  // deixa nem o index.html vazar para quem nao e o dono.
+  app.use(porteiroDeIp());
+
   app.use(express.json());
+
+  // --- Conexao com o Google -------------------------------------------
+  // O token nunca passa pelo browser: o servidor troca o code, guarda o
+  // refresh cifrado no volume e renova sozinho. O frontend so pergunta se
+  // esta conectado e manda o usuario para o consentimento.
+
+  app.get("/api/auth/status", async (_req, res) => {
+    try {
+      res.json({ conectado: await estaConectado() });
+    } catch (error) {
+      responderErroDeAuth(res, error);
+    }
+  });
+
+  app.get("/api/auth/google", (_req, res) => {
+    try {
+      res.redirect(urlDeConsentimento());
+    } catch (error: any) {
+      console.error("Erro ao montar o consentimento:", error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/auth/callback", async (req, res) => {
+    const { code, state, error: recusa } = req.query;
+    // O usuario pode simplesmente dizer nao na tela do Google.
+    if (recusa) return res.redirect(`/?auth=${encodeURIComponent(String(recusa))}`);
+    if (typeof code !== "string" || typeof state !== "string") {
+      return res.redirect("/?auth=callback_incompleto");
+    }
+    try {
+      await trocarCodigo(code, state);
+      res.redirect("/?auth=ok");
+    } catch (error: any) {
+      console.error("Erro no callback do Google:", error);
+      res.redirect(`/?auth=${encodeURIComponent(error.message)}`);
+    }
+  });
+
+  app.post("/api/auth/logout", async (_req, res) => {
+    await desconectar();
+    res.json({ conectado: false });
+  });
 
   // Roster: fonte de verdade do squad e dos slots desbloqueados.
   app.get("/api/squad", async (_req, res) => {
@@ -55,11 +124,11 @@ async function startServer() {
   // Mochila: as quests VEM do Google Calendar, nao de estado local. Editar
   // ou apagar no Google reflete aqui na proxima leitura (§2, verdade unica).
   app.get("/api/mochila", async (req, res) => {
-    const token = bearer(req.headers.authorization);
-    if (!token) {
-      return res
-        .status(401)
-        .json({ error: "Sem access_token do Google: conecte o calendário." });
+    let token: string;
+    try {
+      token = await tokenValido();
+    } catch (error) {
+      return responderErroDeAuth(res, error);
     }
     try {
       const squad = await readSquad();
@@ -100,11 +169,11 @@ async function startServer() {
         return res.status(400).json({ error: "Campo 'demanda' é obrigatório" });
       }
 
-      const turno = await executarTurno(
-        ai,
-        demanda.trim(),
-        bearer(req.headers.authorization),
-      );
+      // Sem credencial o turno ainda roda: nem toda demanda toca o
+      // calendario, e derrubar tudo por causa disso esconderia as capacidades
+      // que nao dependem do Google.
+      const token = await tokenValido().catch(() => null);
+      const turno = await executarTurno(ai, demanda.trim(), token);
       res.json(turno);
     } catch (error: any) {
       console.error("Erro no turno:", error);

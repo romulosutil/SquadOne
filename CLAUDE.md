@@ -86,9 +86,18 @@ Sem banco de propósito: dois blobs de 1KB não justificam Postgres, e o escopo 
 
 `prompt=consent` é obrigatório. Sem ele o Google omite o `refresh_token` quando já houve consentimento antes, e a credencial nasce sem como se renovar.
 
-### O prazo de 7 dias
+### O prazo de 7 dias (resolvido em 12/09/2026)
 
-Enquanto a tela de consentimento estiver em **Externo + Testando**, o Google expira o refresh_token em **7 dias**. Política do Google, não bug. Publicar o app remove o prazo — o código não muda em nenhum dos dois casos. Status em console.cloud.google.com/auth/audience (projeto `gen-lang-client-0086006291`).
+Em **Externo + Testando** o Google expirava o refresh_token em **7 dias**. Política do Google, não bug. O app foi **publicado (Em produção)** em 12/09/2026 e o prazo caiu. O código não muda em nenhum dos dois casos.
+
+Para publicar, o Google exigia os três links da página Branding preenchidos — sem eles o botão **Publicar app** fica desabilitado com *"you must complete your configuration on the Branding page"*. Os três apontam para a raiz do app (`https://aladdin-squadone-app.jicnzg.easypanel.host/`), o que basta porque o app segue **não verificado**:
+
+- consentimento mostra a tela "o Google não verificou este app" — clicar em *Avançado* passa;
+- teto vitalício de 100 usuários concedendo permissão. Um usuário, irrelevante.
+
+**Não subir logotipo.** Logo, mais de 10 domínios autorizados, ou escopo restrito forçam enviar o app para verificação — aí os links precisariam ser páginas reais e acessíveis, e o porteiro de IP bloqueia o rastreador do Google.
+
+Status em console.cloud.google.com/auth/audience (projeto `gen-lang-client-0086006291`); o botão de lá agora é **Voltar para o teste**, que reverte.
 
 ### Porteiro de IP
 
