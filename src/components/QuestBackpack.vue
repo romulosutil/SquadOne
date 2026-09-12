@@ -1,41 +1,88 @@
 <script setup>
 defineProps({
-  quests: {
-    type: Array,
-    default: () => []
-  }
+  // Vem de GET /api/mochila, ou seja, do Google Calendar. Nada aqui e estado
+  // local do app: apagar o evento no Google some com o card na proxima leitura.
+  quests: { type: Array, default: () => [] },
+  conectado: { type: Boolean, default: false },
+  carregando: { type: Boolean, default: false }
 })
+
+defineEmits(['conectar', 'recarregar'])
+
+const quando = (quest) => {
+  const data = new Date(quest.tipo === 'deadline' ? quest.fim : quest.inicio)
+  return quest.diaInteiro ? data.toLocaleDateString() : data.toLocaleString()
+}
+
+const duracao = (quest) =>
+  Math.round((new Date(quest.fim) - new Date(quest.inicio)) / 60000)
 </script>
 
 <template>
   <aside class="w-80 border-r-4 border-black bg-[#ff9b71] overflow-y-auto flex flex-col z-10 shadow-[6px_0px_0px_0px_rgba(0,0,0,1)] relative">
-    <div class="p-4 border-b-4 border-black bg-[#f4f0e6] sticky top-0 z-20">
+    <div class="p-4 border-b-4 border-black bg-[#f4f0e6] sticky top-0 z-20 flex items-center justify-between gap-2">
       <h2 class="font-black text-xl uppercase">🎒 Mochila de Quests</h2>
+      <button
+        v-if="conectado"
+        @click="$emit('recarregar')"
+        :disabled="carregando"
+        title="Reler do Google Calendar"
+        class="border-2 border-black bg-white px-2 py-1 font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+      >
+        <span :class="carregando ? 'inline-block animate-spin' : ''">↻</span>
+      </button>
     </div>
-    
+
     <div class="p-4 flex flex-col gap-4">
-      <div v-if="quests.length === 0" class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        Nenhuma quest ativa. <br/> Use a Command Bar!
+      <!-- Sem token nao ha o que mostrar: a lista vive no Google, nao aqui. -->
+      <div
+        v-if="!conectado"
+        class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+      >
+        Mochila fechada. <br />
+        <button
+          @click="$emit('conectar')"
+          class="mt-3 border-4 border-black bg-white px-3 py-2 font-black text-xs uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all"
+        >
+          Conectar Google Calendar
+        </button>
       </div>
-      
-      <div 
-        v-for="(quest, index) in quests" 
-        :key="index"
-        class="border-4 border-black bg-white p-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+
+      <div
+        v-else-if="carregando && quests.length === 0"
+        class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90"
+      >
+        Lendo o calendário...
+      </div>
+
+      <div
+        v-else-if="quests.length === 0"
+        class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+      >
+        Nenhuma quest no calendário. <br /> Use a Command Bar!
+      </div>
+
+      <a
+        v-for="quest in quests"
+        :key="quest.eventId"
+        :href="quest.htmlLink"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="block border-4 border-black bg-white p-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
       >
         <h3 class="font-bold text-lg leading-tight mb-2">{{ quest.titulo }}</h3>
         <div class="text-sm font-bold flex flex-col gap-1">
-          <div class="flex items-center gap-1">
-            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.po_id }}</span>
+          <!-- As duas marcas do evento: dominio (filtro) e membro (responsavel). -->
+          <div class="flex items-center gap-1 flex-wrap">
+            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.membro || '?' }}</span>
+            <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ quest.dominio }}</span>
           </div>
           <div class="text-gray-800">
-            ⏰ {{ quest.tipo === 'time_blocking' ? 'Foco: ' + Math.round((new Date(quest.fim) - new Date(quest.inicio)) / 60000) + 'm' : 'Deadline' }}
+            ⏰ {{ quest.tipo === 'time_blocking' ? 'Foco: ' + duracao(quest) + 'm' : 'Deadline' }}
           </div>
-          <div class="text-gray-800 text-xs truncate">
-            📅 {{ new Date(quest.tipo === 'time_blocking' ? quest.inicio : quest.fim).toLocaleString() }}
-          </div>
+          <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>
         </div>
-      </div>
+      </a>
     </div>
   </aside>
 </template>

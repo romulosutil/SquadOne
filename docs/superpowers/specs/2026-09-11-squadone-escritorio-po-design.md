@@ -73,8 +73,20 @@ sugerir_contratacao(papel, justificativa, escopo)
   → NÃO executa nada; devolve proposta pra UI
 ```
 
-Todo evento criado leva `extendedProperties.private.squadone = <po_id>`.
-A Mochila lê com `events.list?privateExtendedProperty=squadone=*`.
+Todo evento criado leva **duas** chaves em `extendedProperties.private`:
+
+- `squadone_dominio = <slug do dominio>` — eixo de **filtro**.
+- `squadone_membro = <po_id>` — eixo de **atribuição**.
+
+`events.list` só casa `privateExtendedProperty=chave=valor` **exato**: não
+existe wildcard (`squadone=*` não funciona). Por isso o filtro tem que cair
+sobre um valor estável e de baixa cardinalidade — o domínio — enquanto o
+responsável, que muda sem mudar o domínio, fica na segunda chave. Com uma
+chave só os dois eixos colidiriam.
+
+A Mochila (`GET /api/mochila`) faz um `events.list` por domínio do roster
+(`privateExtendedProperty=squadone_dominio=<dom>`; repetir o parâmetro seria
+AND, não OR), cada um no seu `try`, e devolve `{ quests, erros }`.
 
 Adicionar "gerar spec" depois = mais uma entrada. Nada mais muda.
 

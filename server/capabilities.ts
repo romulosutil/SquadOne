@@ -1,5 +1,6 @@
 import { Type, type FunctionDeclaration } from "@google/genai";
-import type { Squad, SquadMember } from "./squad.ts";
+import { dominioDe, type Squad, type SquadMember } from "./squad.ts";
+import { marcasDoMembro, PREFIXO_DEADLINE } from "./calendar.ts";
 
 export interface CapabilityContext {
   /** Access token OAuth do usuário (GIS, em memória no browser). */
@@ -13,6 +14,7 @@ export interface EventoCriado {
   titulo: string;
   po_id: string;
   tipo: "time_blocking" | "deadline";
+  dominio: string;
   inicio: string;
   fim: string;
   eventId: string;
@@ -127,19 +129,20 @@ const agendarEvento: Capability = {
     } else {
       fim = exigirData(args.prazo_final, "prazo_final");
       inicio = new Date(fim.getTime() - 15 * 60_000);
-      summary = `⏰ DEADLINE: [${membro.papel}] ${titulo}`;
+      summary = `${PREFIXO_DEADLINE} [${membro.papel}] ${titulo}`;
     }
 
     const indice = ctx.squad.members.indexOf(membro);
+    const dominio = dominioDe(membro);
     const event = {
       summary,
       description: `Criado pelo SquadOne. Responsável: ${membro.nome} (${membro.papel}).`,
       colorId: CORES_POR_INDICE[indice % CORES_POR_INDICE.length],
       start: { dateTime: inicio.toISOString() },
       end: { dateTime: fim.toISOString() },
-      // Marca de propriedade: a Mochila lê com
-      // events.list?privateExtendedProperty=squadone=*
-      extendedProperties: { private: { squadone: membro.id } },
+      // Duas marcas, não uma (ver server/calendar.ts): `squadone_dominio` é
+      // o eixo de filtro do events.list, `squadone_membro` o de atribuição.
+      extendedProperties: { private: marcasDoMembro(membro, dominio) },
     };
 
     const resp = await fetch(
@@ -167,6 +170,7 @@ const agendarEvento: Capability = {
       titulo,
       po_id: membro.id,
       tipo,
+      dominio,
       inicio: inicio.toISOString(),
       fim: fim.toISOString(),
       eventId: criado.id,

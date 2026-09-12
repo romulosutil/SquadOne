@@ -6,6 +6,8 @@ export interface SquadMember {
   nome: string;
   papel: string;
   escopo: string;
+  /** Domínio de atuação. Ausente no roster antigo: derivado do papel. */
+  dominio?: string;
   sprite: string;
   slot: [number, number];
   room: string;
@@ -63,6 +65,30 @@ export async function readSquad(): Promise<Squad> {
  */
 export function unlockedSlots(squad: Squad): [number, number][] {
   return squad.unlockOrder.slice(0, squad.members.length);
+}
+
+/**
+ * Slug estável usado como valor de `squadone_dominio` no Google Calendar.
+ * Precisa ser determinístico: é a chave de filtro do `events.list`, e um
+ * valor que mude quebra a leitura dos eventos já criados.
+ */
+export function slug(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "geral";
+}
+
+/** Domínio do membro: explícito no roster ou derivado do papel. */
+export function dominioDe(membro: SquadMember): string {
+  return slug(membro.dominio ?? membro.papel);
+}
+
+/** Domínios distintos do squad — um `events.list` por domínio na Mochila. */
+export function dominiosDoSquad(squad: Squad): string[] {
+  return [...new Set(squad.members.map(dominioDe))];
 }
 
 /** Linha do roster injetada no systemInstruction (§6). */
