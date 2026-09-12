@@ -154,14 +154,44 @@ export const ESCOPO_PESSOAL_PADRAO = "vida pessoal e tudo que não pertence a ou
  */
 let seqTmp = 0;
 async function gravarAtomico(destino: string, conteudo: string): Promise<void> {
-  await fs.mkdir(path.dirname(destino), { recursive: true });
+  const dir = path.dirname(destino);
+  await fs.mkdir(dir, { recursive: true });
   const tmp = `${destino}.${process.pid}.${++seqTmp}.tmp`;
-  await fs.writeFile(tmp, conteudo, "utf8");
   try {
+    // fsync ANTES do rename. Sem ele o rename pode chegar ao disco antes dos
+    // dados: queda de energia logo depois deixa `squad.json` apontando para um
+    // arquivo vazio. O caso que importa é a primeira migração em produção, que
+    // grava o backup do v2 e em seguida troca o squad.json por v3 — perder
+    // os dois ao mesmo tempo seria perder o roster inteiro.
+    const arquivo = await fs.open(tmp, "w");
+    try {
+      await arquivo.writeFile(conteudo, "utf8");
+      await arquivo.sync();
+    } finally {
+      await arquivo.close();
+    }
     await fs.rename(tmp, destino);
   } catch (err) {
     await fs.rm(tmp, { force: true });
     throw err;
+  }
+  await sincronizarDiretorio(dir);
+}
+
+/**
+ * fsync do diretório torna o próprio rename durável (a entrada nova do
+ * diretório). Linux deixa; Windows recusa abrir diretório (EISDIR) ou dar
+ * sync nele (EPERM), e lá o rename já é gravado pelo NTFS — ignorar é seguro.
+ */
+async function sincronizarDiretorio(dir: string): Promise<void> {
+  let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
+  try {
+    handle = await fs.open(dir, "r");
+    await handle.sync();
+  } catch (err: any) {
+    if (!["EPERM", "EISDIR", "EINVAL", "EBADF"].includes(err?.code)) throw err;
+  } finally {
+    await handle?.close();
   }
 }
 
