@@ -7,9 +7,10 @@ coverage/
 .env*
 !.env.example
 
-# roster escrito em runtime; a seed versionada e data/squad.seed.json
-data/*
-!data/squad.seed.json
+# data/ e um volume montado em producao: tudo que mora aqui e escrito em
+# runtime e sombreado pelo mount. A seed versionada fica em seed/, FORA do
+# volume, senao o primeiro boot com volume vazio nao acha de onde semear.
+data/
 
 # pacotes brutos do CraftPix (~55MB): a licenca free nao permite redistribuir
 # os fontes. Os strips derivados ficam em public/sprites e sao versionados.

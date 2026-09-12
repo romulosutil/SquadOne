@@ -48,7 +48,21 @@ export interface Squad {
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
-const SEED_PATH = path.join(DATA_DIR, "squad.seed.json");
+
+/**
+ * A seed NAO pode morar em `data/`. Em producao `data/` e um volume Docker
+ * montado por cima do diretorio da imagem: um volume novo sobe vazio e
+ * sombreia tudo que a imagem tinha ali, inclusive a seed. O primeiro boot
+ * entao nao acha de onde semear e todo `/api/squad` vira 500.
+ *
+ * `seed/` fica fora do mount, e por isso sobrevive. O caminho antigo segue na
+ * lista para nao quebrar checkout velho nem container que ja subiu com o
+ * arquivo no lugar anterior.
+ */
+const SEED_PATHS = [
+  path.join(process.cwd(), "seed", "squad.seed.json"),
+  path.join(DATA_DIR, "squad.seed.json"),
+];
 
 /** Salas do escritório: grade 3x3. Passou disso, não há slot para alocar. */
 export const MAX_DOMINIOS = 9;
@@ -102,6 +116,24 @@ export function salaPara(qtdPessoas: number, atual?: string): string {
   return atual ?? "ROOM_SOLO";
 }
 
+/**
+ * Le a seed do primeiro caminho que existir. Sem nenhum deles nao ha como
+ * semear: falhar com a lista tentada e mais util que um ENOENT solto, porque
+ * o motivo provavel e um volume montado sobre o diretorio errado.
+ */
+async function lerSeed(): Promise<Squad> {
+  for (const caminho of SEED_PATHS) {
+    try {
+      return JSON.parse(await fs.readFile(caminho, "utf8")) as Squad;
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") throw err;
+    }
+  }
+  throw new Error(
+    `Seed do roster nao encontrada. Procurei em: ${SEED_PATHS.join(", ")}.`,
+  );
+}
+
 /** Copia a seed versionada se `data/squad.json` ainda não existir. */
 async function ensureSquad(): Promise<void> {
   try {
@@ -110,7 +142,7 @@ async function ensureSquad(): Promise<void> {
   } catch {
     // não existe: semeia
   }
-  const seed = JSON.parse(await fs.readFile(SEED_PATH, "utf8")) as Squad;
+  const seed = await lerSeed();
   await writeSquad(seed);
 }
 
