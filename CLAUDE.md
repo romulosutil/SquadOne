@@ -1,6 +1,6 @@
 # SquadOne
 
-Escritório isométrico onde um squad de agentes de IA recebe demandas em linguagem natural e as transforma em eventos no Google Calendar. Uso pessoal, um usuário só.
+Escritório isométrico onde squads de agentes de IA (Pessoal, Pay4Fun...) recebem demandas em linguagem natural e as transforma em eventos no Google Calendar. Uso pessoal, um usuário só.
 
 ## Comandos
 
@@ -33,14 +33,16 @@ Um processo Express serve a API e a SPA Vue. Sem banco.
 server.ts                 Express: monta o porteiro, as rotas e o Vite/estáticos
   server/acesso.ts        porteiro de IP (403 antes de qualquer rota)
   server/auth-store.ts    credencial do Google: code flow, refresh, cifra em disco
-  server/squad.ts         roster em árvore; única fonte de verdade do squad
-  server/hire.ts          aplica uma contratação aprovada ao roster
+  server/squad.ts         roster v3 em árvore, migração, regras de id; única fonte de verdade das squads
+  server/hire.ts          aplica contratação aprovada e cria squad
   server/orchestrator.ts  um turno: demanda -> 1 chamada ao Gemini -> capacidades
   server/capabilities.ts  as capacidades que o modelo pode invocar
   server/calendar.ts      leitura/escrita no Google Calendar
-src/App.vue               orquestra a tela; dono do estado de squad e quests
+src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
-  src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard
+  src/squadAtiva.ts       squad ativa da aba (localStorage)
+  src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard,
+                          SquadSelector, NovaSquadModal, TrocaSquadCard
   src/office/             geometria isométrica, salas, sprites
 seed/squad.seed.json      roster inicial — FORA de data/, ver "Volume" abaixo
 data/                     volume em produção; nada aqui é versionado
@@ -48,19 +50,20 @@ data/                     volume em produção; nada aqui é versionado
 
 ### Três invariantes que o código assume
 
-**1. O roster é uma árvore, não uma lista.** `squad → domínio → { po, integrantes }`. Uma sala do escritório = um domínio inteiro. Contratar um integrante entra na sala existente; criar um domínio consome o próximo slot de `unlockOrder`. Máximo 9 domínios (grade 3x3).
+**1. O roster é uma árvore de três níveis.** `roster → squad → domínio → { po, integrantes }`. Uma squad = um escritório 3x3; uma sala = um domínio. Contratar um integrante entra na sala existente; criar um domínio ocupa o primeiro slot livre de `unlockOrder` (derivado dos slots ocupados, não de `dominios.length`). Máximo 9 domínios por squad. Squad nasce com 1 domínio + PO (o `GameMap` precisa de `dominios[0].po`). Ids de domínio e de pessoa são únicos entre **todas** as squads e `idsAposentados`; domínio novo é `<squad>--<slug>`, os legados (`po`, `geral`) ficam como estão.
 
-**2. O roster é o prompt.** A árvore inteira vai literal para o `systemInstruction` em `orchestrator.ts`. Não existe "treinamento do agente" guardado em outro lugar: `papel` + `escopo` de cada `Pessoa` *são* o treino. Persistir o roster já persiste os agentes.
+**2. O roster é o prompt.** A árvore **da squad ativa** vai literal para o `systemInstruction` em `orchestrator.ts`; as outras squads entram só por id, nome e escopo, para o modelo poder chamar `sugerir_troca_squad` sem conseguir agendar nelas. A squad ativa é escolha da aba (`localStorage`), mandada como `squadId` em `/api/orquestrar` e `/api/mochila`; a rota resolve a squad antes de pedir token e antes do Gemini. Não existe "treinamento do agente" guardado em outro lugar: `papel` + `escopo` de cada `Pessoa` *são* o treino. Persistir o roster já persiste os agentes.
 
 **3. As quests vivem no Google Calendar, não aqui.** `GET /api/mochila` lê do Google a cada chamada. Editar ou apagar no Google reflete na próxima leitura. `quests` no frontend é cache da última resposta, nunca fonte de verdade.
 
 ### Marcas no Calendar
 
-Todo evento criado carrega três chaves em `extendedProperties.private` (constantes em `server/calendar.ts`):
+Todo evento criado carrega quatro chaves em `extendedProperties.private`, montadas por `marcasDoEvento()` em `server/calendar.ts`:
 
 | Chave | Eixo | Uso |
 |---|---|---|
-| `squadone_dominio` | filtro | `events.list` com `privateExtendedProperty`, uma chamada por domínio |
+| `squadone_squad` | informativa | de qual squad veio; **não filtra** — eventos anteriores à Fase 1 não a têm e seguem aparecendo |
+| `squadone_dominio` | filtro | `events.list` com `privateExtendedProperty`, uma chamada por domínio da squad ativa |
 | `squadone_membro` | atribuição | quem executa |
 | `squadone_tipo` | semântica | `time_blocking` ou `deadline` |
 
@@ -72,20 +75,30 @@ A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 40
 
 ### Escrita no roster
 
-Toda mutação passa por `atualizarSquad()`, que serializa read-modify-write numa fila. Duas aprovações quase simultâneas leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeSquad` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`.
+Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write numa fila. Um arquivo para todas as squads, então uma fila só: duas aprovações quase simultâneas, mesmo em squads diferentes, leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeRoster` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`. Contratação aplica na squad da proposta (`sugestao.squad_id`), não na que a tela mostra.
 
 ## Persistência
 
-Volume Docker do Easypanel montado em `/app/data`. Dois arquivos, ~1KB somados:
+Volume Docker do Easypanel montado em `/app/data`. Poucos KB:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `data/squad.json` | árvore do roster = os agentes com seu treino |
+| `data/squad.json` | roster v3 `{ version: 3, squads, idsAposentados }` = os agentes com seu treino |
 | `data/google-auth.json` | `refresh_token` cifrado em AES-256-GCM |
+| `data/squad.v2.bak.json` | texto cru do roster v2, gravado uma vez pela migração; nunca sobrescrito |
+
+**Migração.** `readRoster()` detecta a versão pela **forma** (`squads` → v3, `dominios` → v2, `members` → v1), grava o backup do texto cru, converte (v2 inteiro vira a squad `pessoal`, ids intactos) e escreve v3. Forma desconhecida ou conversão que não passa na validação lança `RosterIlegivel` (500) e **não grava** `squad.json`. Migração e semeadura rodam sob promessa única: no boot `/api/squad` e `/api/mochila` chegam juntos.
+
+**Rollback da Fase 1.** O código anterior não lê v3 (todo `/api/squad` vira 500). Para reverter, **nesta ordem**:
+
+1. No Easypanel, implantar o commit anterior à Fase 1. Entre este passo e o próximo o roster responde 500.
+2. No console do container: `cp /app/data/squad.v2.bak.json /app/data/squad.json`.
+
+A ordem importa: restaurar o backup com o código da Fase 1 ainda no ar só dispara a migração de novo na leitura seguinte. Restaurar **perde** squads, domínios e contratações criados depois da migração. Eventos criados nesse meio continuam no Google; os de squads novas ficam órfãos (domínio `<squad>--...` que o roster v2 não conhece).
 
 **A seed não pode morar em `data/`.** Um volume novo sobe vazio e sombreia o que a imagem tinha naquele caminho. Por isso `seed/squad.seed.json` fica fora do mount; `SEED_PATHS` em `squad.ts` ainda tenta o caminho antigo para não quebrar checkout velho.
 
-Sem banco de propósito: dois blobs de 1KB não justificam Postgres, e o escopo da V1 é explicitamente só estes dois.
+Sem banco de propósito: dois blobs de poucos KB não justificam Postgres, e o escopo da V1 é explicitamente só estes dois.
 
 ## Autenticação
 
@@ -142,6 +155,6 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `ConflitoDeRoster` (409 vs 400), `PrecisaConectar` vs `ErroDeConfig`. A UI decide o que fazer pelo tipo.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`. A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
