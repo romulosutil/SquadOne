@@ -4,7 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { readSquad, unlockedSlots, dominiosDoSquad } from "./server/squad.ts";
-import { executarTurno } from "./server/orchestrator.ts";
+import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
 import { aplicarContratacao, ConflitoDeRoster } from "./server/hire.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
@@ -177,6 +177,11 @@ async function startServer() {
       res.json(turno);
     } catch (error: any) {
       console.error("Erro no turno:", error);
+      // Sobrecarga do Gemini nao e falha nossa: 503 + classificacao para a UI
+      // oferecer "tentar de novo" em vez do erro generico de sempre.
+      if (error instanceof ModeloOcupado) {
+        return res.status(503).json({ error: error.message, modeloOcupado: true });
+      }
       res.status(500).json({ error: error.message });
     }
   });

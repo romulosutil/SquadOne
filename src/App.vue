@@ -138,7 +138,13 @@ const handleDelegation = async (payload) => {
       body: JSON.stringify({ demanda: payload.demanda })
     })
 
-    if (!response.ok) throw new Error('Erro na requisição')
+    if (!response.ok) {
+      // O corpo carrega a classificacao: `modeloOcupado` e transitorio e passa
+      // sozinho, por isso o texto manda tentar de novo em vez de sugerir que
+      // algo quebrou.
+      const corpo = await response.json().catch(() => ({}))
+      throw new Error(corpo.error || 'Erro na requisição')
+    }
 
     const turno = await response.json()
 
@@ -163,7 +169,7 @@ const handleDelegation = async (payload) => {
     await carregarMochila()
   } catch (error) {
     console.error('Falha ao orquestrar:', error)
-    alert("Houve um erro ao processar a demanda. Tente novamente.");
+    alert(error?.message || 'Houve um erro ao processar a demanda. Tente novamente.')
   } finally {
     isLoading.value = false;
   }

@@ -77,28 +77,56 @@ Regras:
 }
 
 /**
- * gemini-3.7-flash devolve 503 UNAVAILABLE com alguma frequência ("high
- * demand"). Observado 3x em testes manuais em 2026-09-11. Sem retry, o turno
- * inteiro morre num erro que some sozinho em segundos.
+ * `gemini-3.7-flash` devolve 503 UNAVAILABLE com alguma frequencia ("high
+ * demand"). Observado 3x em testes manuais em 2026-09-11 e de novo em
+ * 2026-09-12, aí sobrevivendo às 3 retentativas do modelo principal.
+ */
+export class ModeloOcupado extends Error {}
+
+/**
+ * 503 é falta de capacidade DAQUELE modelo, não da conta. Quando o principal
+ * insiste em recusar, um modelo mais antigo costuma atender — pior qualidade
+ * de raciocínio vale mais que um turno perdido. A ordem importa: só se chega
+ * no segundo depois do primeiro esgotar as retentativas.
+ */
+const MODELOS_RESERVA = ["gemini-3.5-flash"];
+
+const TRANSITORIO = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED/;
+
+/**
+ * Duas tentativas POR MODELO, não mais: uma chamada em hora de pico já demora
+ * ~15s antes de falhar, e o usuario esta olhando um spinner. 2 modelos x 2
+ * tentativas e o teto que ainda cabe num clique.
  */
 async function gerarComRetry(
   ai: GoogleGenAI,
   params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
-  tentativas = 3,
+  tentativas = 2,
 ) {
   let ultimo: any;
-  for (let i = 0; i < tentativas; i++) {
-    try {
-      return await ai.models.generateContent(params);
-    } catch (err: any) {
-      const msg = String(err?.message ?? err);
-      const transitorio = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED/.test(msg);
-      if (!transitorio || i === tentativas - 1) throw err;
-      ultimo = err;
-      await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
+  for (const model of [params.model, ...MODELOS_RESERVA]) {
+    for (let i = 0; i < tentativas; i++) {
+      try {
+        return await ai.models.generateContent({ ...params, model });
+      } catch (err: any) {
+        const msg = String(err?.message ?? err);
+        if (!TRANSITORIO.test(msg)) throw err;
+        ultimo = err;
+        if (i < tentativas - 1) {
+          // Jitter junto do backoff: sem ele duas abas retentando batem no
+          // mesmo instante e colhem o mesmo 503.
+          const espera = 800 * 2 ** i + Math.random() * 400;
+          await new Promise((r) => setTimeout(r, espera));
+        }
+      }
     }
   }
-  throw ultimo;
+  // Classificado, nao so mensagem: a UI precisa saber que isto passa sozinho e
+  // que o gesto certo e tentar de novo, nao reconectar nem mexer em config.
+  throw new ModeloOcupado(
+    "Os modelos do Gemini estão sobrecarregados agora. Tente a demanda de novo em alguns segundos.",
+    { cause: ultimo },
+  );
 }
 
 export async function executarTurno(
