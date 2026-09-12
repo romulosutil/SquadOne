@@ -106,6 +106,14 @@ export interface PropostaTrocaSquad {
 /** `id` gerado pelo servidor a cada turno: identidade do card na tela. */
 export type Sugestao = (PropostaDominio | PropostaIntegrante | PropostaTrocaSquad) & { id: string };
 
+/** Corpo de `POST /api/squad/nova`. `nome_po` vazio = o servidor escolhe. */
+export interface DadosNovaSquad {
+  nome: string;
+  escopo: string;
+  papel_po: string;
+  nome_po: string;
+}
+
 export interface ErroTarefa {
   capacidade: string;
   args: Record<string, unknown>;

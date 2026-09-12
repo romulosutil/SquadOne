@@ -14,7 +14,9 @@ import { ref } from 'vue'
 defineProps({
   sugestao: { type: Object, required: true },
   enviando: { type: Boolean, default: false },
-  erro: { type: String, default: '' }
+  erro: { type: String, default: '' },
+  // Nome da squad de origem quando ela não é a que a tela mostra; vazio esconde o badge.
+  squadNome: { type: String, default: '' }
 })
 
 const emit = defineEmits(['aprovar', 'descartar'])
@@ -38,6 +40,9 @@ const nome = ref('')
       </span>
       <span v-else-if="sugestao.kind === 'integrante'" class="border-2 border-black px-2 py-0.5 text-xs uppercase font-bold">
         {{ sugestao.dominio_id }}
+      </span>
+      <span v-if="squadNome" class="border-2 border-black bg-[#ffdb58] px-2 py-0.5 text-xs uppercase font-bold">
+        Squad {{ squadNome }}
       </span>
     </div>
 

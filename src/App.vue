@@ -4,7 +4,10 @@ import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
 import GrowthCard from './components/GrowthCard.vue'
-import type { Modo, RosterView, SquadView, Sugestao } from './types'
+import SquadSelector from './components/SquadSelector.vue'
+import NovaSquadModal from './components/NovaSquadModal.vue'
+import TrocaSquadCard from './components/TrocaSquadCard.vue'
+import type { DadosNovaSquad, Modo, RosterView, SquadView, Sugestao } from './types'
 import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 
@@ -27,6 +30,12 @@ const nomesDeDominio = computed<Record<string, string>>(() =>
 )
 const nomeDaSquad = (id: string) => roster.value?.squads.find((s) => s.id === id)?.nome ?? id
 const sugestoesDeCrescimento = computed(() => sugestoes.value.filter((s) => s.kind !== 'troca_squad'))
+const sugestoesDeTroca = computed(() =>
+  sugestoes.value.filter((s): s is Extract<Sugestao, { kind: 'troca_squad' }> => s.kind === 'troca_squad')
+)
+const criandoSquad = ref(false)
+const enviandoSquad = ref(false)
+const erroNovaSquad = ref('')
 const isLoading = ref(false)
 // Contratacao em curso: id da sugestao sendo aprovada (so uma por vez, o
 // servidor serializa as escritas no roster de qualquer forma). Id, nao indice:
@@ -77,6 +86,43 @@ const trocarSquad = async (id: string) => {
   quests.value = []
   currentAgent.value = 'Idle'
   await carregarMochila()
+}
+
+const abrirNovaSquad = () => {
+  erroNovaSquad.value = ''
+  criandoSquad.value = true
+}
+
+const criarSquad = async (dados: DadosNovaSquad) => {
+  enviandoSquad.value = true
+  erroNovaSquad.value = ''
+  try {
+    const response = await fetch('/api/squad/nova', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados)
+    })
+    const corpo = await response.json().catch(() => ({}))
+    // Erro fica DENTRO do modal: o usuário corrige o nome sem redigitar o resto.
+    if (!response.ok) throw new Error(corpo.error ?? `HTTP ${response.status}`)
+    roster.value = corpo.roster
+    criandoSquad.value = false
+    await trocarSquad(corpo.squad.id)
+    avisar(`Squad ${corpo.squad.nome} criada`)
+  } catch (error) {
+    erroNovaSquad.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    enviandoSquad.value = false
+  }
+}
+
+/** Aceite do card de troca. Reenviar usa `auto`: o modo forçado era da squad anterior. */
+const aceitarTroca = async (id: string, reenviar: boolean) => {
+  const proposta = sugestoesDeTroca.value.find((s) => s.id === id)
+  if (!proposta) return
+  sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
+  await trocarSquad(proposta.destino_id)
+  if (reenviar) await handleDelegation({ demanda: proposta.demanda, modo: 'auto' })
 }
 
 /** 409 squadInexistente: a squad desta aba sumiu do servidor. */
@@ -264,6 +310,14 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         <h1 class="text-2xl font-black uppercase tracking-wider">Quest Hub <span class="text-xs ml-2 bg-black text-white px-2 py-1 align-middle">MVP</span></h1>
       </div>
       <div class="flex items-center gap-4">
+        <SquadSelector
+          v-if="roster"
+          :squads="roster.squads"
+          :ativa-id="squadAtiva?.id ?? ''"
+          :desabilitado="isLoading"
+          @trocar="trocarSquad"
+          @nova="abrirNovaSquad"
+        />
         <div v-if="isLoading" class="font-bold text-sm uppercase flex items-center gap-2">
           <span class="animate-spin text-xl">⚙️</span>
           Processando...
@@ -308,10 +362,22 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         <!-- :key pelo id do servidor: cada card tem seu proprio estado (nome
              digitado); com key por indice, o card seguinte herdava o nome
              depois de um descarte ou aprovacao. -->
+        <!-- Troca de squad: o modelo so propoe; trocar e reenviar sao cliques. -->
+        <TrocaSquadCard
+          v-for="sugestao in sugestoesDeTroca"
+          :key="sugestao.id"
+          :sugestao="sugestao"
+          :desabilitado="isLoading"
+          @trocar="aceitarTroca(sugestao.id, false)"
+          @reenviar="aceitarTroca(sugestao.id, true)"
+          @descartar="descartarSugestao(sugestao.id)"
+        />
+
         <GrowthCard
           v-for="sugestao in sugestoesDeCrescimento"
           :key="sugestao.id"
           :sugestao="sugestao"
+          :squad-nome="sugestao.squad_id !== squadAtiva?.id ? nomeDaSquad(sugestao.squad_id) : ''"
           :enviando="aprovando === sugestao.id"
           :erro="erroSugestao[sugestao.id] || ''"
           @aprovar="(nome) => aprovarSugestao(sugestao.id, nome)"
@@ -323,6 +389,14 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         <GameMap :key="squadAtiva?.id ?? 'sem-squad'" :agent="currentAgent" :squad="squadAtiva" />
       </main>
     </div>
+
+    <NovaSquadModal
+      v-if="criandoSquad"
+      :enviando="enviandoSquad"
+      :erro="erroNovaSquad"
+      @criar="criarSquad"
+      @fechar="criandoSquad = false"
+    />
 
     <!-- Toast: a contratacao acontece no mapa, longe do card que foi clicado. -->
     <div
