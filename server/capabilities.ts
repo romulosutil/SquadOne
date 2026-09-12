@@ -154,7 +154,7 @@ const agendarEvento: Capability = {
         responsavel_id: {
           type: Type.STRING,
           description:
-            "id da pessoa do squad responsável — pode ser o PO de um domínio " +
+            "id da pessoa da squad atual responsável — pode ser o PO de um domínio " +
             "ou um integrante dele. Use exatamente um dos ids da árvore do roster. " +
             "O domínio do evento é derivado dela; não existe campo de domínio.",
         },

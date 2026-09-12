@@ -3,11 +3,20 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { readSquad, unlockedSlots, dominiosDoSquad, PedidoInvalido } from "./server/squad.ts";
+import {
+  ConflitoDeRoster,
+  dominiosDoSquad,
+  paraVista,
+  PedidoInvalido,
+  readRoster,
+  resolverSquad,
+  SquadInexistente,
+  type Squad,
+} from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
 import { ehModo } from "./server/capabilities.ts";
-import { aplicarContratacao, ConflitoDeRoster } from "./server/hire.ts";
+import { aplicarContratacao, criarSquad } from "./server/hire.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
 import {
   desconectar,
@@ -36,6 +45,24 @@ function responderErroDeAuth(res: express.Response, err: unknown): void {
   } else {
     res.status(502).json({ error: (err as Error).message });
   }
+}
+
+/**
+ * Erros do roster em status HTTP. A flag `squadInexistente` separa "a squad
+ * desta aba sumiu" (a UI recarrega e cai na primeira) de um conflito comum.
+ * Devolve false quando o erro nao e do roster e a rota decide o 500.
+ */
+function responderErroDeRoster(res: express.Response, err: unknown): boolean {
+  if (err instanceof SquadInexistente) {
+    res.status(409).json({ error: err.message, squadInexistente: true });
+  } else if (err instanceof ConflitoDeRoster) {
+    res.status(409).json({ error: err.message });
+  } else if (err instanceof PedidoInvalido) {
+    res.status(400).json({ error: err.message });
+  } else {
+    return false;
+  }
+  return true;
 }
 
 async function startServer() {
@@ -94,14 +121,24 @@ async function startServer() {
     res.json({ conectado: false });
   });
 
-  // Roster: fonte de verdade do squad e dos slots desbloqueados.
+  // Roster inteiro, todas as squads: o seletor precisa da lista, o arquivo tem
+  // poucos KB e a squad ativa e conveniencia da aba, nao estado do servidor.
   app.get("/api/squad", async (_req, res) => {
     try {
-      const squad = await readSquad();
-      res.json({ ...squad, unlockedSlots: unlockedSlots(squad) });
+      res.json(paraVista(await readRoster()));
     } catch (error: any) {
-      console.error("Erro ao ler o squad:", error);
+      console.error("Erro ao ler o roster:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Gesto "Nova squad": nasce com um dominio e o PO dele. Nao toca o Google.
+  app.post("/api/squad/nova", async (req, res) => {
+    try {
+      res.status(201).json(await criarSquad(req.body ?? {}));
+    } catch (error: any) {
+      console.error("Erro ao criar squad:", error);
+      if (!responderErroDeRoster(res, error)) res.status(500).json({ error: error.message });
     }
   });
 
@@ -117,16 +154,24 @@ async function startServer() {
       // Conflito = a proposta nao cabe mais no roster atual (dominio duplicado,
       // escritorio cheio, squad inexistente): e estado que mudou, nao pedido
       // malformado. Erro sem classificacao e nosso (disco, roster ilegivel): 500.
-      const status =
-        error instanceof ConflitoDeRoster ? 409 : error instanceof PedidoInvalido ? 400 : 500;
       console.error("Erro ao contratar:", error);
-      res.status(status).json({ error: error.message });
+      if (!responderErroDeRoster(res, error)) res.status(500).json({ error: error.message });
     }
   });
 
   // Mochila: as quests VEM do Google Calendar, nao de estado local. Editar
   // ou apagar no Google reflete aqui na proxima leitura (§2, verdade unica).
   app.get("/api/mochila", async (req, res) => {
+    // Squad antes do token: um squadId velho se corrige sem gastar chamada
+    // ao Google, e o erro volta classificado.
+    let squad: Squad;
+    try {
+      squad = resolverSquad(await readRoster(), req.query.squadId);
+    } catch (error: any) {
+      if (responderErroDeRoster(res, error)) return;
+      console.error("Erro ao ler o roster:", error);
+      return res.status(500).json({ error: error.message });
+    }
     let token: string;
     try {
       token = await tokenValido();
@@ -134,7 +179,6 @@ async function startServer() {
       return responderErroDeAuth(res, error);
     }
     try {
-      const squad = await readSquad();
       const { quests, erros } = await listarQuests(
         token,
         squad.calendarId,
@@ -168,7 +212,7 @@ async function startServer() {
   // Um turno: demanda -> 1 chamada ao Gemini -> executa as capacidades.
   app.post("/api/orquestrar", async (req, res) => {
     try {
-      const { demanda, modo = "auto" } = req.body ?? {};
+      const { demanda, modo = "auto", squadId } = req.body ?? {};
       if (typeof demanda !== "string" || !demanda.trim()) {
         return res.status(400).json({ error: "Campo 'demanda' é obrigatório" });
       }
@@ -181,14 +225,20 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'prazo'" });
       }
 
+      // Squad antes do token e do Gemini: um squadId inexistente nao pode
+      // custar uma chamada ao modelo para depois falhar.
+      const roster = await readRoster();
+      const squad = resolverSquad(roster, squadId);
+
       // Sem credencial o turno ainda roda: nem toda demanda toca o
       // calendario, e derrubar tudo por causa disso esconderia as capacidades
       // que nao dependem do Google.
       const token = await tokenValido().catch(() => null);
-      const turno = await executarTurno(ai, demanda.trim(), token, modo);
+      const turno = await executarTurno(ai, { demanda: demanda.trim(), token, modo, roster, squad });
       res.json(turno);
     } catch (error: any) {
       console.error("Erro no turno:", error);
+      if (responderErroDeRoster(res, error)) return;
       // Sobrecarga do Gemini nao e falha nossa: 503 + classificacao para a UI
       // oferecer "tentar de novo" em vez do erro generico de sempre.
       if (error instanceof ModeloOcupado) {

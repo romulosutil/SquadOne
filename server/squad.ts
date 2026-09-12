@@ -600,16 +600,3 @@ export function outrasSquads(roster: Roster, ativaId: string): string {
     .map((s) => `- squad '${s.id}' — ${s.nome} (escopo: ${s.escopo})`);
   return linhas.length ? linhas.join("\n") : "(nenhuma)";
 }
-
-/**
- * PONTE da Fase 1 — removida na Task 4. Deixa hire/capabilities/orchestrator/
- * server compilando sobre a primeira squad enquanto migram para o roster.
- */
-export async function readSquad(): Promise<Squad> {
-  return (await readRoster()).squads[0];
-}
-
-/** PONTE da Fase 1 — removida na Task 4. */
-export function atualizarSquad<T>(mutador: (squad: Squad) => T): Promise<T> {
-  return atualizarRoster((roster) => mutador(roster.squads[0]));
-}

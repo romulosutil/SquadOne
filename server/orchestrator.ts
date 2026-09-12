@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
 import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
-import { readRoster, rosterTree } from "./squad.ts";
+import { outrasSquads, rosterTree, type Roster, type Squad } from "./squad.ts";
 
 export const MODEL = "gemini-3.7-flash";
 const TIMEZONE = "America/Sao_Paulo";
@@ -45,9 +45,22 @@ function agoraLocalISO(agora: Date): string {
  * domínio, e `criar_po_dominio` só se justifica quando NENHUM ramo da árvore
  * cobre o tema. Uma lista plana de pessoas apagaria exatamente a distinção
  * entre "falta um papel aqui dentro" e "falta um domínio inteiro".
+ *
+ * Só a squad ATIVA entra inteira. As outras aparecem por id, nome e escopo:
+ * o modelo precisa saber que existem para sugerir troca, mas se visse as
+ * pessoas delas poderia agendar fora da squad que o usuário escolheu.
  */
+export interface ContextoDoPrompt {
+  squadNome: string;
+  squadEscopo: string;
+  /** rosterTree da squad ativa. */
+  arvore: string;
+  /** outrasSquads(roster, ativa.id). */
+  outrasSquads: string;
+}
+
 export function buildSystemInstruction(
-  arvore: string,
+  contexto: ContextoDoPrompt,
   agoraISO: string,
   modo: Modo = "auto",
 ): string {
@@ -64,15 +77,18 @@ export function buildSystemInstruction(
   demanda: use-o em toda chamada de agendar_evento, com prazo_final.`
         : "";
 
-  return `Você é o PO raiz de um squad pessoal. Recebe demandas em português e as
+  return `Você é o PO raiz da squad '${contexto.squadNome}' (escopo: ${contexto.squadEscopo}). Recebe demandas em português e as
 transforma em compromissos no calendário do usuário.
 
-O squad é uma ÁRVORE: cada DOMÍNIO é um tema, tem um PO dono e ocupa uma sala do
+A squad é uma ÁRVORE: cada DOMÍNIO é um tema, tem um PO dono e ocupa uma sala do
 escritório; dentro do domínio o PO contrata INTEGRANTES (designer, tech lead,
 QA...) que dividem a sala com ele.
 
 Squad atual:
-${arvore}
+${contexto.arvore}
+
+Outras squads do usuário (você NÃO vê os domínios nem as pessoas delas e NÃO agenda nelas):
+${contexto.outrasSquads}
 
 Agora são ${agoraISO} (fuso ${TIMEZONE}). Toda data que você produzir deve ser
 ISO 8601 com offset, no mesmo formato.
@@ -90,7 +106,11 @@ Regras:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
     dele; passe o dominio_id exato.
-  Se o squad atual dá conta, não chame nenhuma das duas.
+  Se a squad atual dá conta, não chame nenhuma das duas.
+- Se a demanda pertence claramente ao escopo de uma das OUTRAS squads listadas,
+  chame APENAS sugerir_troca_squad com o squad_id dela e não agende nada nesta
+  squad. Na dúvida, trate a demanda na squad atual. Se não há outras squads,
+  nunca chame sugerir_troca_squad.
 - Não responda em texto: sua resposta são as chamadas de função.`;
 }
 
@@ -147,22 +167,34 @@ async function gerarComRetry(
   );
 }
 
-export async function executarTurno(
-  ai: GoogleGenAI,
-  demanda: string,
-  token: string | null,
-  modo: Modo = "auto",
-): Promise<TurnoResult> {
-  // Provisório (Task 4 passa roster e squad prontos pela rota).
-  const roster = await readRoster();
-  const squad = roster.squads[0];
+/** Tudo que um turno precisa, já resolvido pela rota antes de tocar Google e Gemini. */
+export interface PedidoDeTurno {
+  demanda: string;
+  token: string | null;
+  modo: Modo;
+  roster: Roster;
+  /** A squad ativa: o prompt e as capacidades agem só dentro dela. */
+  squad: Squad;
+}
+
+export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Promise<TurnoResult> {
+  const { demanda, token, modo, roster, squad } = pedido;
   const agora = new Date();
 
   const response = await gerarComRetry(ai, {
     model: MODEL,
     contents: demanda,
     config: {
-      systemInstruction: buildSystemInstruction(rosterTree(squad), agoraLocalISO(agora), modo),
+      systemInstruction: buildSystemInstruction(
+        {
+          squadNome: squad.nome,
+          squadEscopo: squad.escopo,
+          arvore: rosterTree(squad),
+          outrasSquads: outrasSquads(roster, squad.id),
+        },
+        agoraLocalISO(agora),
+        modo,
+      ),
       tools: [{ functionDeclarations: declarations() }],
       toolConfig: {
         // AUTO, nunca ANY: ANY forçaria uma proposta de contratação espúria em
