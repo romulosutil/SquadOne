@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { readSquad, unlockedSlots, dominiosDoSquad } from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
+import { ehModo } from "./server/capabilities.ts";
 import { aplicarContratacao, ConflitoDeRoster } from "./server/hire.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
 import {
@@ -164,16 +165,24 @@ async function startServer() {
   // Um turno: demanda -> 1 chamada ao Gemini -> executa as capacidades.
   app.post("/api/orquestrar", async (req, res) => {
     try {
-      const { demanda } = req.body ?? {};
+      const { demanda, modo = "auto" } = req.body ?? {};
       if (typeof demanda !== "string" || !demanda.trim()) {
         return res.status(400).json({ error: "Campo 'demanda' é obrigatório" });
+      }
+      // Ausente vira auto (cliente antigo continua funcionando); valor
+      // desconhecido e 400, nao auto: cair calado no auto gravaria o tipo que
+      // o usuario acabou de dizer que nao queria.
+      if (!ehModo(modo)) {
+        return res
+          .status(400)
+          .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'prazo'" });
       }
 
       // Sem credencial o turno ainda roda: nem toda demanda toca o
       // calendario, e derrubar tudo por causa disso esconderia as capacidades
       // que nao dependem do Google.
       const token = await tokenValido().catch(() => null);
-      const turno = await executarTurno(ai, demanda.trim(), token);
+      const turno = await executarTurno(ai, demanda.trim(), token, modo);
       res.json(turno);
     } catch (error: any) {
       console.error("Erro no turno:", error);

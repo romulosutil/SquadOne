@@ -34,6 +34,9 @@ export interface SquadResponse {
   unlockedSlots: [number, number][];
 }
 
+/** Toggle da CommandBar; espelho de `Modo` em server/capabilities.ts. */
+export type Modo = "auto" | "foco" | "prazo";
+
 export interface EventoCriado {
   kind: "evento";
   titulo: string;

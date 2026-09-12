@@ -1,5 +1,5 @@
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
-import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Sugestao } from "./capabilities.ts";
+import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
 import { readSquad, rosterTree } from "./squad.ts";
 
 export const MODEL = "gemini-3.7-flash";
@@ -45,7 +45,24 @@ function agoraLocalISO(agora: Date): string {
  * cobre o tema. Uma lista plana de pessoas apagaria exatamente a distinção
  * entre "falta um papel aqui dentro" e "falta um domínio inteiro".
  */
-export function buildSystemInstruction(arvore: string, agoraISO: string): string {
+export function buildSystemInstruction(
+  arvore: string,
+  agoraISO: string,
+  modo: Modo = "auto",
+): string {
+  // Só entra quando o usuário forçou: em `auto` a regra do tipo abaixo já diz
+  // como escolher, e uma linha a mais seria ruído no prompt. O handler de
+  // agendar_evento impõe o tipo de qualquer jeito; isto só evita que o modelo
+  // preencha o campo de horário errado.
+  const regraModo =
+    modo === "foco"
+      ? `\n- O usuário forçou tipo='time_blocking' para TODOS os compromissos desta
+  demanda: use-o em toda chamada de agendar_evento, com inicio e duracao_min.`
+      : modo === "prazo"
+        ? `\n- O usuário forçou tipo='deadline' para TODOS os compromissos desta
+  demanda: use-o em toda chamada de agendar_evento, com prazo_final.`
+        : "";
+
   return `Você é o PO raiz de um squad pessoal. Recebe demandas em português e as
 transforma em compromissos no calendário do usuário.
 
@@ -67,7 +84,7 @@ Regras:
   invente um id.
 - Use tipo='time_blocking' (com inicio e duracao_min) quando o usuário precisa
   reservar tempo para executar; tipo='deadline' (com prazo_final) quando ele só
-  precisa marcar o limite de entrega.
+  precisa marcar o limite de entrega.${regraModo}
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
@@ -133,6 +150,7 @@ export async function executarTurno(
   ai: GoogleGenAI,
   demanda: string,
   token: string | null,
+  modo: Modo = "auto",
 ): Promise<TurnoResult> {
   const squad = await readSquad();
   const agora = new Date();
@@ -141,7 +159,7 @@ export async function executarTurno(
     model: MODEL,
     contents: demanda,
     config: {
-      systemInstruction: buildSystemInstruction(rosterTree(squad), agoraLocalISO(agora)),
+      systemInstruction: buildSystemInstruction(rosterTree(squad), agoraLocalISO(agora), modo),
       tools: [{ functionDeclarations: declarations() }],
       toolConfig: {
         // AUTO, nunca ANY: ANY forçaria uma proposta de contratação espúria em
@@ -156,7 +174,7 @@ export async function executarTurno(
   });
 
   const calls: FunctionCall[] = response.functionCalls ?? [];
-  const ctx: CapabilityContext = { token, squad, agora };
+  const ctx: CapabilityContext = { token, squad, agora, modo };
 
   // One-shot: executa as calls e acaba. Sem realimentar o modelo.
   // Um try POR TAREFA: uma tarefa quebrada não pode matar o lote.

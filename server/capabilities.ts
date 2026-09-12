@@ -12,11 +12,37 @@ import {
 } from "./squad.ts";
 import { marcasDoMembro, PREFIXO_DEADLINE, PROP_TIPO } from "./calendar.ts";
 
+/**
+ * Toggle da CommandBar. `auto` deixa o modelo escolher o tipo de cada
+ * compromisso; `foco` e `prazo` são o usuário dizendo o tipo de antemão.
+ */
+export type Modo = "auto" | "foco" | "prazo";
+
+export function ehModo(valor: unknown): valor is Modo {
+  return valor === "auto" || valor === "foco" || valor === "prazo";
+}
+
+/**
+ * O que cada modo forçado impõe. Mora aqui, no handler, e não só no prompt:
+ * a instrução ao modelo é pedido, não garantia — se ele divergir, o servidor
+ * ainda grava o tipo que o usuário escolheu.
+ */
+const TIPO_FORCADO: Record<Modo, "time_blocking" | "deadline" | null> = {
+  auto: null,
+  foco: "time_blocking",
+  prazo: "deadline",
+};
+
 export interface CapabilityContext {
-  /** Access token OAuth do usuário (GIS, em memória no browser). */
+  /**
+   * Access token OAuth do usuário, obtido e renovado pelo servidor
+   * (auth-store) — o browser nunca o vê. `null` quando não há credencial: o
+   * turno roda assim mesmo e só as capacidades que tocam o Google falham.
+   */
   token: string | null;
   squad: Squad;
   agora: Date;
+  modo: Modo;
 }
 
 export interface EventoCriado {
@@ -139,9 +165,19 @@ const agendarEvento: Capability = {
     }
 
     const { pessoa, dominio } = exigirPessoa(ctx.squad, args.responsavel_id);
-    const tipo = args.tipo === "deadline" ? "deadline" : "time_blocking";
+    const forcado = TIPO_FORCADO[ctx.modo];
+    const tipo = forcado ?? (args.tipo === "deadline" ? "deadline" : "time_blocking");
     const titulo = String(args.titulo ?? "").trim();
     if (!titulo) throw new Error("Campo 'titulo' vazio.");
+
+    // Com o tipo forçado, o modelo pode ter preenchido o campo de horário do
+    // OUTRO tipo (pensou em bloco, mandou só `inicio`). O horário que ele deu
+    // continua sendo a melhor referência de quando, e falhar perderia um
+    // compromisso bem descrito. Regra: deadline sem `prazo_final` usa `inicio`
+    // como limite; bloco sem `inicio` TERMINA no `prazo_final` (o trabalho vem
+    // antes do limite, não depois). Só com modo forçado: no auto a
+    // incoerência é do próprio modelo e o erro volta nomeado.
+    const preenchido = (v: unknown) => v != null && String(v).trim() !== "";
 
     // Cada branch calcula seu próprio par início/fim. O bug antigo declarava
     // endTime dentro do branch time_blocking e lia no branch deadline.
@@ -150,12 +186,20 @@ const agendarEvento: Capability = {
     let summary: string;
 
     if (tipo === "time_blocking") {
-      inicio = exigirData(args.inicio, "inicio");
       const duracao = Number(args.duracao_min) > 0 ? Number(args.duracao_min) : 60;
-      fim = new Date(inicio.getTime() + duracao * 60_000);
+      if (forcado && !preenchido(args.inicio) && preenchido(args.prazo_final)) {
+        fim = exigirData(args.prazo_final, "prazo_final");
+        inicio = new Date(fim.getTime() - duracao * 60_000);
+      } else {
+        inicio = exigirData(args.inicio, "inicio");
+        fim = new Date(inicio.getTime() + duracao * 60_000);
+      }
       summary = `[${pessoa.papel}] ${titulo}`;
     } else {
-      fim = exigirData(args.prazo_final, "prazo_final");
+      const usarInicio = forcado && !preenchido(args.prazo_final) && preenchido(args.inicio);
+      fim = usarInicio
+        ? exigirData(args.inicio, "inicio")
+        : exigirData(args.prazo_final, "prazo_final");
       inicio = new Date(fim.getTime() - 15 * 60_000);
       summary = `${PREFIXO_DEADLINE} [${pessoa.papel}] ${titulo}`;
     }

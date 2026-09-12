@@ -135,7 +135,7 @@ const handleDelegation = async (payload) => {
     const response = await fetch('/api/orquestrar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ demanda: payload.demanda })
+      body: JSON.stringify({ demanda: payload.demanda, modo: payload.modo })
     })
 
     if (!response.ok) {
