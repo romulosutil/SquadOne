@@ -612,9 +612,21 @@ async function existe(caminho: string): Promise<boolean> {
  * Copia a seed se `data/squad.json` ainda não existir. Grava o texto como veio:
  * uma seed antiga v2 (caminho legado) é migrada pela leitura seguinte, com backup.
  */
+let semeadura: Promise<void> | null = null;
+
 async function ensureRoster(): Promise<void> {
   if (await existe(SQUAD_PATH)) return;
-  await gravarAtomico(SQUAD_PATH, await lerSeed());
+  // Correção (implementação): semeadura sob promessa única. Dois renames
+  // concorrentes sobre o mesmo destino falham com EPERM no Windows.
+  if (!semeadura) {
+    semeadura = (async () => {
+      if (await existe(SQUAD_PATH)) return;
+      await gravarAtomico(SQUAD_PATH, await lerSeed());
+    })().finally(() => {
+      semeadura = null;
+    });
+  }
+  await semeadura;
 }
 
 /** Roster v2: um squad implícito, domínios na raiz. */

@@ -1,24 +1,33 @@
 {
-  "version": 2,
-  "unlockOrder": [[0,0],[1,0],[0,1],[1,1],[2,0],[2,1],[0,2],[1,2],[2,2]],
-  "dominios": [
+  "version": 3,
+  "squads": [
     {
-      "id": "geral",
-      "nome": "Geral",
-      "escopo": "tudo que ainda não tem um domínio próprio",
-      "slot": [0, 0],
-      "room": "ROOM_SOLO",
-      "criadoEm": "2026-09-11T09:00:00-03:00",
-      "po": {
-        "id": "po",
-        "nome": "Rômulo",
-        "papel": "PO",
-        "escopo": "tudo que ainda não tem um domínio próprio",
-        "sprite": "wraith_01",
-        "horario": { "inicio": "09:00", "fim": "19:00" },
-        "hiredAt": "2026-09-11T09:00:00-03:00"
-      },
-      "integrantes": []
+      "id": "pessoal",
+      "nome": "Pessoal",
+      "escopo": "vida pessoal e tudo que não pertence a outra squad",
+      "calendarId": "primary",
+      "unlockOrder": [[0,0],[1,0],[0,1],[1,1],[2,0],[2,1],[0,2],[1,2],[2,2]],
+      "dominios": [
+        {
+          "id": "geral",
+          "nome": "Geral",
+          "escopo": "tudo que ainda não tem um domínio próprio",
+          "slot": [0, 0],
+          "room": "ROOM_SOLO",
+          "criadoEm": "2026-09-11T09:00:00-03:00",
+          "po": {
+            "id": "po",
+            "nome": "Rômulo",
+            "papel": "PO",
+            "escopo": "tudo que ainda não tem um domínio próprio",
+            "sprite": "wraith_01",
+            "horario": { "inicio": "09:00", "fim": "19:00" },
+            "hiredAt": "2026-09-11T09:00:00-03:00"
+          },
+          "integrantes": []
+        }
+      ]
     }
-  ]
+  ],
+  "idsAposentados": { "pessoas": [], "dominios": [] }
 }
