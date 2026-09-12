@@ -60,7 +60,10 @@ const carregarMochila = async () => {
     quests.value = dados.quests ?? []
     if (dados.erros?.length) console.warn('Dominios com erro na Mochila:', dados.erros)
   } catch (error) {
+    // So no console, a Mochila vazia fica indistinguivel de "nao ha quests":
+    // o motivo tem que chegar na tela de quem pode agir sobre ele.
     console.error('Falha ao ler a Mochila:', error)
+    avisar(`Mochila: ${error instanceof Error ? error.message : String(error)}`)
   } finally {
     carregandoMochila.value = false
   }

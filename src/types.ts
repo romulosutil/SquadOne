@@ -101,5 +101,5 @@ export interface QuestCalendario {
 
 export interface MochilaResponse {
   quests: QuestCalendario[];
-  erros: { dominio: string; erro: string }[];
+  erros: { dominio: string; erro: string; credencial: boolean }[];
 }

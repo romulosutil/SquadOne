@@ -18,6 +18,17 @@ const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 export const PROP_DOMINIO = "squadone_dominio";
 export const PROP_MEMBRO = "squadone_membro";
 
+/**
+ * Falha de um domínio. `credencial` diz se reconectar resolve — o frontend
+ * precisa dessa distincao para nao pedir reconexao contra um problema que
+ * mora na configuracao do projeto Google.
+ */
+export interface ErroDeDominio {
+  dominio: string;
+  erro: string;
+  credencial: boolean;
+}
+
 export interface QuestCalendario {
   eventId: string;
   titulo: string;
@@ -75,15 +86,52 @@ function paraQuest(ev: GoogleEvent): QuestCalendario | null {
   };
 }
 
+/**
+ * Erro do Google carregando o que separa "credencial ruim" de "projeto mal
+ * configurado". Os dois chegam como 403, e tratar os dois como credencial
+ * manda o usuário reconectar para sempre: o 403 de `accessNotConfigured` (API
+ * do Calendar desligada no projeto) não melhora com token novo nenhum.
+ */
+export class ErroCalendario extends Error {
+  readonly status: number;
+  /** `reason` do primeiro erro do corpo do Google; "" quando não vem. */
+  readonly motivo: string;
+
+  constructor(status: number, corpo: string) {
+    let motivo = "";
+    let detalhe = corpo.slice(0, 300);
+    try {
+      const json = JSON.parse(corpo) as {
+        error?: { message?: string; errors?: { reason?: string }[] };
+      };
+      motivo = json.error?.errors?.[0]?.reason ?? "";
+      detalhe = json.error?.message ?? detalhe;
+    } catch {
+      // Corpo não-JSON (HTML de proxy, texto vazio): fica o recorte cru.
+    }
+    super(`Google Calendar respondeu ${status}: ${detalhe}`);
+    this.name = "ErroCalendario";
+    this.status = status;
+    this.motivo = motivo;
+  }
+
+  /** Só o que reconectar resolve: token expirado, revogado ou sem escopo. */
+  get ehCredencial(): boolean {
+    if (this.status === 401) return true;
+    return (
+      this.status === 403 &&
+      ["authError", "insufficientPermissions", "forbidden"].includes(this.motivo)
+    );
+  }
+}
+
 async function chamar(url: string, token: string): Promise<GoogleEvent[]> {
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!resp.ok) {
     const corpo = await resp.text().catch(() => "");
-    throw new Error(
-      `Google Calendar respondeu ${resp.status}: ${corpo.slice(0, 300)}`,
-    );
+    throw new ErroCalendario(resp.status, corpo);
   }
   const json = (await resp.json()) as { items?: GoogleEvent[] };
   return json.items ?? [];
@@ -101,7 +149,7 @@ export async function listarQuests(
   token: string,
   dominios: string[],
   agora: Date,
-): Promise<{ quests: QuestCalendario[]; erros: { dominio: string; erro: string }[] }> {
+): Promise<{ quests: QuestCalendario[]; erros: ErroDeDominio[] }> {
   const timeMin = new Date(agora.getTime() - 7 * 24 * 3600_000).toISOString();
   const timeMax = new Date(agora.getTime() + 90 * 24 * 3600_000).toISOString();
 
@@ -119,17 +167,25 @@ export async function listarQuests(
           maxResults: "250",
         }).toString();
       try {
-        return { dominio, eventos: await chamar(url, token), erro: null as string | null };
+        return { dominio, eventos: await chamar(url, token), erro: null as ErroDeDominio | null };
       } catch (err: any) {
-        return { dominio, eventos: [] as GoogleEvent[], erro: err?.message ?? String(err) };
+        return {
+          dominio,
+          eventos: [] as GoogleEvent[],
+          erro: {
+            dominio,
+            erro: err?.message ?? String(err),
+            credencial: err instanceof ErroCalendario && err.ehCredencial,
+          },
+        };
       }
     }),
   );
 
   const porId = new Map<string, QuestCalendario>();
-  const erros: { dominio: string; erro: string }[] = [];
+  const erros: ErroDeDominio[] = [];
   for (const lote of lotes) {
-    if (lote.erro) erros.push({ dominio: lote.dominio, erro: lote.erro });
+    if (lote.erro) erros.push(lote.erro);
     for (const ev of lote.eventos) {
       if (ev.status === "cancelled") continue;
       const quest = paraQuest(ev);

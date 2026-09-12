@@ -68,18 +68,21 @@ async function startServer() {
         dominiosDoSquad(squad),
         new Date(),
       );
-      // Token expirado ou revogado: todo dominio falha em 401/403. Devolver
+      // Token expirado ou revogado: todo dominio falha na credencial. Devolver
       // 200 com uma lista vazia faria o frontend mostrar "nenhuma quest"
       // quando o problema e a credencial. 401 manda ele reconectar.
-      const soAuth =
-        erros.length > 0 &&
-        erros.length === dominiosDoSquad(squad).length &&
-        erros.every((e) => /respondeu 40[13]:/.test(e.erro));
-      if (soAuth) {
-        return res.status(401).json({
-          error: "Google recusou o access_token: reconecte o calendário.",
-          erros,
-        });
+      const todos = dominiosDoSquad(squad).length;
+      if (erros.length > 0 && erros.length === todos) {
+        if (erros.every((e) => e.credencial)) {
+          return res.status(401).json({
+            error: "Google recusou o access_token: reconecte o calendário.",
+            erros,
+          });
+        }
+        // Falhou em tudo por outro motivo — API desligada no projeto, quota,
+        // rede. Reconectar nao conserta nenhum deles, e mandar o usuario
+        // reconectar esconde a mensagem do Google que diz o que fazer.
+        return res.status(502).json({ error: erros[0].erro, erros });
       }
 
       res.json({ quests, erros });
