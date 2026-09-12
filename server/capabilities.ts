@@ -10,7 +10,7 @@ import {
   type Pessoa,
   type Squad,
 } from "./squad.ts";
-import { marcasDoMembro, PREFIXO_DEADLINE } from "./calendar.ts";
+import { marcasDoMembro, PREFIXO_DEADLINE, PROP_TIPO } from "./calendar.ts";
 
 export interface CapabilityContext {
   /** Access token OAuth do usuário (GIS, em memória no browser). */
@@ -169,10 +169,16 @@ const agendarEvento: Capability = {
       colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
       start: { dateTime: inicio.toISOString() },
       end: { dateTime: fim.toISOString() },
-      // Duas marcas, não uma (ver server/calendar.ts): `squadone_dominio` é
-      // o eixo de filtro do events.list, `squadone_membro` o de atribuição.
-      // A hierarquia é exatamente isso: o domínio filtra, a pessoa atribui.
-      extendedProperties: { private: marcasDoMembro(pessoa, dominio.id) },
+      // Deadline é um marco, não trabalho: opaco, os 15min dele apareceriam
+      // como "ocupado" e bloqueariam a agenda de quem consulta disponibilidade.
+      ...(tipo === "deadline" ? { transparency: "transparent" } : {}),
+      // Três marcas (ver server/calendar.ts): `squadone_dominio` é o eixo de
+      // filtro do events.list, `squadone_membro` o de atribuição e
+      // `squadone_tipo` a semântica — o prefixo do título é só rótulo, e o
+      // usuário pode apagá-lo no Google sem trocar o tipo da quest.
+      extendedProperties: {
+        private: { ...marcasDoMembro(pessoa, dominio.id), [PROP_TIPO]: tipo },
+      },
     };
 
     const resp = await fetch(

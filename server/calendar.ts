@@ -3,7 +3,7 @@ import type { Pessoa } from "./squad.ts";
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 /**
- * Marcação de propriedade. DUAS chaves, não uma:
+ * Marcação de propriedade. TRÊS chaves, cada uma um eixo:
  *
  * - `squadone_dominio` é o eixo de FILTRO. `events.list` só aceita
  *   `privateExtendedProperty=chave=valor` com match exato — não existe
@@ -11,12 +11,16 @@ const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
  *   tudo de um domínio numa chamada.
  * - `squadone_membro` é o eixo de ATRIBUIÇÃO: quem executa. Muda quando a
  *   tarefa troca de dono sem mudar de domínio.
+ * - `squadone_tipo` é o eixo de SEMÂNTICA: `time_blocking` ou `deadline`.
+ *   Antes o tipo era inferido do prefixo do título, que o usuário edita no
+ *   Google à vontade — renomear um deadline o transformava em bloco.
  *
- * Com uma chave só, os dois eixos colidiriam: filtrar por domínio perderia o
+ * Com uma chave só, os eixos colidiriam: filtrar por domínio perderia o
  * responsável, filtrar por responsável perderia a visão do domínio.
  */
 export const PROP_DOMINIO = "squadone_dominio";
 export const PROP_MEMBRO = "squadone_membro";
+export const PROP_TIPO = "squadone_tipo";
 
 /**
  * Falha de um domínio. `credencial` diz se reconectar resolve — o frontend
@@ -66,20 +70,28 @@ interface GoogleEvent {
   extendedProperties?: { private?: Record<string, string> };
 }
 
-function paraQuest(ev: GoogleEvent): QuestCalendario | null {
+export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
   const priv = ev.extendedProperties?.private ?? {};
   const inicio = ev.start?.dateTime ?? ev.start?.date;
   const fim = ev.end?.dateTime ?? ev.end?.date;
   if (!inicio || !fim) return null; // evento sem horário: não é quest.
 
   const titulo = ev.summary ?? "(sem título)";
+  const marca = priv[PROP_TIPO];
   return {
     eventId: ev.id,
     titulo,
     inicio,
     fim,
     diaInteiro: !ev.start?.dateTime,
-    tipo: titulo.startsWith(PREFIXO_DEADLINE) ? "deadline" : "time_blocking",
+    // A marca manda. O prefixo só vale para eventos criados antes dela
+    // existir — sem migração, eles continuam lidos como sempre foram.
+    tipo:
+      marca === "deadline" || marca === "time_blocking"
+        ? marca
+        : titulo.startsWith(PREFIXO_DEADLINE)
+          ? "deadline"
+          : "time_blocking",
     dominio: priv[PROP_DOMINIO] ?? "",
     membro: priv[PROP_MEMBRO] ?? "",
     htmlLink: ev.htmlLink,
