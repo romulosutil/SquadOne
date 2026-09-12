@@ -4,13 +4,14 @@ import {
   acharPessoa,
   idsDePessoas,
   MAX_DOMINIOS,
+  novoIdDeDominio,
   proximoSlot,
-  slug,
   type Dominio,
   type Pessoa,
+  type Roster,
   type Squad,
 } from "./squad.ts";
-import { marcasDoMembro, PREFIXO_DEADLINE, PROP_TIPO } from "./calendar.ts";
+import { marcasDoEvento, PREFIXO_DEADLINE, urlDeEventos } from "./calendar.ts";
 
 /**
  * Toggle da CommandBar. `auto` deixa o modelo escolher o tipo de cada
@@ -40,9 +41,14 @@ export interface CapabilityContext {
    * turno roda assim mesmo e só as capacidades que tocam o Google falham.
    */
   token: string | null;
+  /** O roster inteiro: unicidade de id é global. */
+  roster: Roster;
+  /** A squad ATIVA do turno. Capacidades só leem e agem dentro dela. */
   squad: Squad;
   agora: Date;
   modo: Modo;
+  /** Texto original da demanda — vai na proposta de troca para "Trocar e reenviar". */
+  demanda: string;
 }
 
 export interface EventoCriado {
@@ -60,6 +66,8 @@ export interface EventoCriado {
 /** Proposta de ABRIR UM DOMÍNIO novo: sala nova, PO novo. */
 export interface PropostaDominio {
   kind: "dominio";
+  /** Squad em que o turno rodou: a aprovação aplica nela, não na que a tela mostra. */
+  squad_id: string;
   dominio: string;
   papel_po: string;
   justificativa: string;
@@ -71,11 +79,24 @@ export interface PropostaDominio {
 /** Proposta de CONTRATAR DENTRO de um domínio existente: mesma sala. */
 export interface PropostaIntegrante {
   kind: "integrante";
+  /** Squad em que o turno rodou: a aprovação aplica nela, não na que a tela mostra. */
+  squad_id: string;
   dominio_id: string;
   dominio_nome: string;
   papel: string;
   justificativa: string;
   escopo: string;
+}
+
+/** Proposta de levar a demanda para OUTRA squad. Só propõe: trocar é gesto do usuário. */
+export interface PropostaTrocaSquad {
+  kind: "troca_squad";
+  /** Squad em que o turno rodou (origem), como nas outras propostas. */
+  squad_id: string;
+  destino_id: string;
+  destino_nome: string;
+  justificativa: string;
+  demanda: string;
 }
 
 /**
@@ -84,8 +105,8 @@ export interface PropostaIntegrante {
  * da proposta — por índice, remover um card fazia o seguinte herdar o nome
  * digitado e a aprovação em curso.
  */
-export type Sugestao = (PropostaDominio | PropostaIntegrante) & { id: string };
-export type CapabilityResult = EventoCriado | PropostaDominio | PropostaIntegrante;
+export type Sugestao = (PropostaDominio | PropostaIntegrante | PropostaTrocaSquad) & { id: string };
+export type CapabilityResult = EventoCriado | PropostaDominio | PropostaIntegrante | PropostaTrocaSquad;
 
 export interface Capability {
   declaration: FunctionDeclaration;
@@ -102,7 +123,7 @@ function exigirPessoa(squad: Squad, id: unknown): { pessoa: Pessoa; dominio: Dom
   const achada = acharPessoa(squad, id);
   if (!achada) {
     throw new Error(
-      `responsavel_id '${String(id)}' não está no squad. ` +
+      `responsavel_id '${String(id)}' não está na squad '${squad.nome}'. ` +
         `Disponíveis: ${idsDePessoas(squad).join(", ")}`,
     );
   }
@@ -227,26 +248,28 @@ const agendarEvento: Capability = {
       // Deadline é um marco, não trabalho: opaco, os 15min dele apareceriam
       // como "ocupado" e bloqueariam a agenda de quem consulta disponibilidade.
       ...(tipo === "deadline" ? { transparency: "transparent" } : {}),
-      // Três marcas (ver server/calendar.ts): `squadone_dominio` é o eixo de
-      // filtro do events.list, `squadone_membro` o de atribuição e
-      // `squadone_tipo` a semântica — o prefixo do título é só rótulo, e o
-      // usuário pode apagá-lo no Google sem trocar o tipo da quest.
+      // Quatro marcas (contrato da Fase 1, ver server/calendar.ts): squad
+      // informa, domínio filtra o events.list, membro atribui e tipo dá a
+      // semântica — o prefixo do título é só rótulo, e o usuário pode apagá-lo
+      // no Google sem trocar o tipo da quest.
       extendedProperties: {
-        private: { ...marcasDoMembro(pessoa, dominio.id), [PROP_TIPO]: tipo },
+        private: marcasDoEvento({
+          squadId: ctx.squad.id,
+          dominioId: dominio.id,
+          pessoaId: pessoa.id,
+          tipo,
+        }),
       },
     };
 
-    const resp = await fetch(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ctx.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(event),
+    const resp = await fetch(urlDeEventos(ctx.squad.calendarId), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.token}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(event),
+    });
 
     if (!resp.ok) {
       const corpo = await resp.text().catch(() => "");
@@ -279,7 +302,7 @@ const criarPoDominio: Capability = {
     name: "criar_po_dominio",
     description:
       "Propõe ABRIR UM DOMÍNIO novo, com um PO próprio, quando a demanda trata " +
-      "de um tema que nenhum domínio atual cobre (ex: surge 'Financeiro' num " +
+      "de um tema que nenhum domínio atual cobre (ex: surge 'Financeiro' numa " +
       "squad que só tem 'Produto'). Abre uma sala nova no escritório. Não use " +
       "quando o tema já tem domínio e falta apenas um papel dentro dele — nesse " +
       "caso use contratar_integrante. Não cria nada: devolve uma proposta para " +
@@ -313,30 +336,30 @@ const criarPoDominio: Capability = {
     const dominio = String(args.dominio ?? "").trim();
     if (!dominio) throw new Error("Campo 'dominio' vazio.");
 
-    // Proposta só vale se for executável. O id de um domínio é o slug do nome
-    // e é a chave de filtro do calendário: dois domínios com o mesmo slug
-    // misturariam os eventos dos dois.
-    const id = slug(dominio);
-    const existente = acharDominio(ctx.squad, id);
-    if (existente) {
+    const slot = proximoSlot(ctx.squad);
+    if (!slot) {
       throw new Error(
-        `O domínio '${existente.nome}' (id '${id}') já existe. ` +
-          `Para reforçá-lo, use contratar_integrante com dominio_id='${id}'.`,
+        `A squad '${ctx.squad.nome}' já tem ${MAX_DOMINIOS} domínios — não há sala livre para um novo.`,
       );
     }
-    if (ctx.squad.dominios.length >= MAX_DOMINIOS) {
-      throw new Error(
-        `O escritório já tem ${MAX_DOMINIOS} domínios — não há sala livre para um novo.`,
-      );
+    // Proposta só vale se for executável: a mesma regra de id que a aprovação
+    // vai aplicar (nome repetido na squad, id já usado em qualquer squad). O id
+    // é a chave de filtro do calendário: dois domínios com o mesmo id
+    // misturariam os eventos dos dois.
+    try {
+      novoIdDeDominio(ctx.roster, ctx.squad, dominio);
+    } catch (err: any) {
+      throw new Error(`${err.message} Para reforçar um domínio existente, use contratar_integrante.`);
     }
 
     return {
       kind: "dominio",
+      squad_id: ctx.squad.id,
       dominio,
       papel_po: String(args.papel_po ?? "PO").trim() || "PO",
       justificativa: String(args.justificativa ?? ""),
       escopo: String(args.escopo ?? ""),
-      slot: proximoSlot(ctx.squad),
+      slot,
     };
   },
 };
@@ -383,7 +406,7 @@ const contratarIntegrante: Capability = {
     if (!dominio) {
       const ids = ctx.squad.dominios.map((d) => d.id).join(", ");
       throw new Error(
-        `dominio_id '${String(args.dominio_id)}' não existe. Domínios: ${ids}. ` +
+        `dominio_id '${String(args.dominio_id)}' não existe na squad '${ctx.squad.nome}'. Domínios: ${ids}. ` +
           `Se o tema não tem dono, use criar_po_dominio.`,
       );
     }
@@ -392,6 +415,7 @@ const contratarIntegrante: Capability = {
 
     return {
       kind: "integrante",
+      squad_id: ctx.squad.id,
       dominio_id: dominio.id,
       dominio_nome: dominio.nome,
       papel,
@@ -401,11 +425,62 @@ const contratarIntegrante: Capability = {
   },
 };
 
+/**
+ * A demanda é de OUTRA squad. O modelo não troca de squad nem agenda lá — ele
+ * não vê os domínios e pessoas das outras. Só devolve um card; trocar (e
+ * reenviar) é gesto do usuário.
+ */
+const sugerirTrocaSquad: Capability = {
+  declaration: {
+    name: "sugerir_troca_squad",
+    description:
+      "Propõe levar a demanda para OUTRA squad do usuário quando ela pertence " +
+      "claramente ao escopo de uma das outras squads listadas no prompt. Não " +
+      "agenda nada e não troca de squad: devolve uma proposta para o usuário aprovar.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        squad_id: {
+          type: Type.STRING,
+          description: "id de uma das OUTRAS squads, exatamente como listado no prompt.",
+        },
+        justificativa: {
+          type: Type.STRING,
+          description: "Por que a demanda pertence ao escopo daquela squad e não desta.",
+        },
+      },
+      required: ["squad_id", "justificativa"],
+    },
+  },
+
+  async handler(args, ctx): Promise<PropostaTrocaSquad> {
+    const destino = ctx.roster.squads.find((s) => s.id === args.squad_id);
+    if (!destino) {
+      const outras = ctx.roster.squads.filter((s) => s.id !== ctx.squad.id).map((s) => s.id);
+      throw new Error(
+        `squad_id '${String(args.squad_id)}' não existe. Outras squads: ${outras.join(", ") || "(nenhuma)"}.`,
+      );
+    }
+    if (destino.id === ctx.squad.id) {
+      throw new Error(`A demanda já está na squad '${destino.nome}': não há troca a sugerir.`);
+    }
+    return {
+      kind: "troca_squad",
+      squad_id: ctx.squad.id,
+      destino_id: destino.id,
+      destino_nome: destino.nome,
+      justificativa: String(args.justificativa ?? ""),
+      demanda: ctx.demanda,
+    };
+  },
+};
+
 /** Registry: adicionar uma capacidade é adicionar uma entrada aqui. */
 export const CAPABILITIES: Record<string, Capability> = {
   agendar_evento: agendarEvento,
   criar_po_dominio: criarPoDominio,
   contratar_integrante: contratarIntegrante,
+  sugerir_troca_squad: sugerirTrocaSquad,
 };
 
 export function declarations(): FunctionDeclaration[] {

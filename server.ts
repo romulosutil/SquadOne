@@ -137,6 +137,7 @@ async function startServer() {
       const squad = await readSquad();
       const { quests, erros } = await listarQuests(
         token,
+        squad.calendarId,
         dominiosDoSquad(squad),
         new Date(),
       );

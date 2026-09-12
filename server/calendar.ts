@@ -1,10 +1,10 @@
-import type { Pessoa } from "./squad.ts";
-
-const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-
 /**
- * Marcação de propriedade. TRÊS chaves, cada uma um eixo:
+ * Marcação de propriedade. QUATRO chaves, cada uma um eixo (contrato do evento,
+ * spec Fase 1 §5):
  *
+ * - `squadone_squad` é INFORMATIVA: diz de qual squad o evento veio. Não é
+ *   filtro — eventos criados antes da Fase 1 não a têm, e o filtro por
+ *   domínio já separa as squads porque ids de domínio são globais.
  * - `squadone_dominio` é o eixo de FILTRO. `events.list` só aceita
  *   `privateExtendedProperty=chave=valor` com match exato — não existe
  *   wildcard `squadone=*`. Com um valor de domínio estável dá pra listar
@@ -18,6 +18,7 @@ const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
  * Com uma chave só, os eixos colidiriam: filtrar por domínio perderia o
  * responsável, filtrar por responsável perderia a visão do domínio.
  */
+export const PROP_SQUAD = "squadone_squad";
 export const PROP_DOMINIO = "squadone_dominio";
 export const PROP_MEMBRO = "squadone_membro";
 export const PROP_TIPO = "squadone_tipo";
@@ -42,6 +43,8 @@ export interface QuestCalendario {
   tipo: "time_blocking" | "deadline";
   dominio: string;
   membro: string;
+  /** `squadone_squad`; "" em eventos anteriores à Fase 1. Informativo. */
+  squad: string;
   htmlLink?: string;
 }
 
@@ -49,15 +52,29 @@ export interface QuestCalendario {
 export const PREFIXO_DEADLINE = "⏰ DEADLINE:";
 
 /**
- * As duas marcas de uma pessoa, prontas pra `extendedProperties.private`.
- * `dominio` é o id do DOMÍNIO a que ela pertence, não um campo dela: quem
- * decide o eixo de filtro é a hierarquia, não a pessoa.
+ * As quatro marcas de todo evento criado pelo app (contrato da Fase 1, spec §5).
+ * Uma função só para que nenhum ponto de escrita esqueça uma delas: um evento
+ * sem `squadone_dominio` simplesmente some da Mochila. `dominioId` é o id do
+ * DOMÍNIO da pessoa, não um campo dela: quem decide o eixo de filtro é a
+ * hierarquia, não a pessoa.
  */
-export function marcasDoMembro(
-  pessoa: Pessoa,
-  dominio: string,
-): Record<string, string> {
-  return { [PROP_DOMINIO]: dominio, [PROP_MEMBRO]: pessoa.id };
+export function marcasDoEvento(m: {
+  squadId: string;
+  dominioId: string;
+  pessoaId: string;
+  tipo: "time_blocking" | "deadline";
+}): Record<string, string> {
+  return {
+    [PROP_SQUAD]: m.squadId,
+    [PROP_DOMINIO]: m.dominioId,
+    [PROP_MEMBRO]: m.pessoaId,
+    [PROP_TIPO]: m.tipo,
+  };
+}
+
+/** Coleção de eventos de um calendário. `calendarId` vem da squad (hoje o principal). */
+export function urlDeEventos(calendarId: string): string {
+  return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
 }
 
 interface GoogleEvent {
@@ -94,6 +111,7 @@ export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
           : "time_blocking",
     dominio: priv[PROP_DOMINIO] ?? "",
     membro: priv[PROP_MEMBRO] ?? "",
+    squad: priv[PROP_SQUAD] ?? "",
     htmlLink: ev.htmlLink,
   };
 }
@@ -159,6 +177,7 @@ async function chamar(url: string, token: string): Promise<GoogleEvent[]> {
  */
 export async function listarQuests(
   token: string,
+  calendarId: string,
   dominios: string[],
   agora: Date,
 ): Promise<{ quests: QuestCalendario[]; erros: ErroDeDominio[] }> {
@@ -168,7 +187,7 @@ export async function listarQuests(
   const lotes = await Promise.all(
     dominios.map(async (dominio) => {
       const url =
-        `${API}?` +
+        `${urlDeEventos(calendarId)}?` +
         new URLSearchParams({
           privateExtendedProperty: `${PROP_DOMINIO}=${dominio}`,
           timeMin,

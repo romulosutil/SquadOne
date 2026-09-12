@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
 import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
-import { readSquad, rosterTree } from "./squad.ts";
+import { readRoster, rosterTree } from "./squad.ts";
 
 export const MODEL = "gemini-3.7-flash";
 const TIMEZONE = "America/Sao_Paulo";
@@ -153,7 +153,9 @@ export async function executarTurno(
   token: string | null,
   modo: Modo = "auto",
 ): Promise<TurnoResult> {
-  const squad = await readSquad();
+  // Provisório (Task 4 passa roster e squad prontos pela rota).
+  const roster = await readRoster();
+  const squad = roster.squads[0];
   const agora = new Date();
 
   const response = await gerarComRetry(ai, {
@@ -175,7 +177,7 @@ export async function executarTurno(
   });
 
   const calls: FunctionCall[] = response.functionCalls ?? [];
-  const ctx: CapabilityContext = { token, squad, agora, modo };
+  const ctx: CapabilityContext = { token, roster, squad, agora, modo, demanda };
 
   // One-shot: executa as calls e acaba. Sem realimentar o modelo.
   // Um try POR TAREFA: uma tarefa quebrada não pode matar o lote.
