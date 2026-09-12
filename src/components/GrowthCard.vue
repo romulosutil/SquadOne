@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * Card de crescimento do squad (spec §4.4) — mesmo vocabulário visual dos
  * cards da Mochila: borda preta de 4px, sombra dura, badges pretos.

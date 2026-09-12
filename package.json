@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "squadone",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
+    "lint": "vue-tsc --noEmit",
     "sprites:gen": "tsx scripts/gen-sprites.ts",
     "sprites:build": "python scripts/spritify.py build",
     "sprites:palette": "python scripts/spritify.py palette"
@@ -33,6 +33,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "vue-tsc": "^3.3.11"
   }
 }

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
@@ -69,7 +69,7 @@ const carregarMochila = async () => {
 const avisar = (texto) => {
   toast.value = texto
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toast.value = '' }, 4000)
+  toastTimer = window.setTimeout(() => { toast.value = '' }, 4000)
 }
 
 /**

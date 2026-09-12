@@ -1,21 +1,24 @@
-<script setup>
+<script setup lang="ts">
+import type { PropType } from 'vue'
+import type { QuestCalendario } from '../types'
+
 defineProps({
   // Vem de GET /api/mochila, ou seja, do Google Calendar. Nada aqui e estado
   // local do app: apagar o evento no Google some com o card na proxima leitura.
-  quests: { type: Array, default: () => [] },
+  quests: { type: Array as PropType<QuestCalendario[]>, default: () => [] },
   conectado: { type: Boolean, default: false },
   carregando: { type: Boolean, default: false }
 })
 
 defineEmits(['conectar', 'recarregar'])
 
-const quando = (quest) => {
+const quando = (quest: QuestCalendario) => {
   const data = new Date(quest.tipo === 'deadline' ? quest.fim : quest.inicio)
   return quest.diaInteiro ? data.toLocaleDateString() : data.toLocaleString()
 }
 
-const duracao = (quest) =>
-  Math.round((new Date(quest.fim) - new Date(quest.inicio)) / 60000)
+const duracao = (quest: QuestCalendario) =>
+  Math.round((new Date(quest.fim).getTime() - new Date(quest.inicio).getTime()) / 60000)
 </script>
 
 <template>
