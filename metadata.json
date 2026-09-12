@@ -1,6 +1,0 @@
-{
-  "name": "Orquestrador Multi-Agentes",
-  "description": "Sistema MVP de roteamento inteligente de tarefas usando o Gemini para classificar demandas por perfil (TechLead, Maker, Pessoal).",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
