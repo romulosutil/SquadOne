@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
-import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
+import { CAPABILITIES, declarations, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
 import { outrasSquads, rosterTree, type Roster, type Squad } from "./squad.ts";
+import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
+import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
+import { descreverJanela, FUSO, lerJanela, SemHorarioLivre, type Janela } from "./alocador.ts";
+import { prioridadeDeAgendamento } from "./agendamento.ts";
 
 export const MODEL = "gemini-3.7-flash";
-const TIMEZONE = "America/Sao_Paulo";
+/** Uma fonte só do fuso: o alocador e o prompt não podem discordar. */
+const TIMEZONE = FUSO;
 
 export interface ErroTarefa {
   capacidade: string;
@@ -15,6 +20,30 @@ export interface ErroTarefa {
    * `descartarPorTroca`). Separa "falhou" de "foi descartada de propósito".
    */
   descartado?: true;
+  /** Por que falhou, quando a UI tem um gesto certo para isso. Ausente = sem gesto específico. */
+  motivo?: MotivoDeErro;
+}
+
+/** Por que uma tarefa falhou, quando a UI tem um gesto certo para isso. */
+export type MotivoDeErro = "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
+
+/** Algo que foi feito, mas não exatamente como pedido. Não é falha. */
+export interface AvisoTarefa {
+  capacidade: string;
+  titulo: string;
+  aviso: string;
+}
+
+/**
+ * Classificação para a UI decidir o gesto. `AgendaIndisponivel` de credencial
+ * é o mesmo gesto que `PrecisaConectar`: reconectar.
+ */
+export function motivoDoErro(err: unknown): MotivoDeErro | undefined {
+  if (err instanceof PrecisaConectar) return "precisaConectar";
+  if (err instanceof ErroDeConfig) return "configuracao";
+  if (err instanceof SemHorarioLivre) return "semHorarioLivre";
+  if (err instanceof AgendaIndisponivel) return err.credencial ? "precisaConectar" : "agendaIndisponivel";
+  return undefined;
 }
 
 const TROCA_DE_SQUAD = "sugerir_troca_squad";
@@ -45,6 +74,8 @@ export interface TurnoResult {
   eventos_criados: EventoCriado[];
   /** Propostas de crescimento: de domínio (sala nova) ou de integrante (mesma sala). */
   sugestoes: Sugestao[];
+  /** Compromissos feitos de um jeito diferente do pedido (conflito, esforço parcial...). */
+  avisos: AvisoTarefa[];
   erros: ErroTarefa[];
 }
 
@@ -86,6 +117,8 @@ export interface ContextoDoPrompt {
   arvore: string;
   /** outrasSquads(roster, ativa.id). */
   outrasSquads: string;
+  /** Janela de trabalho legível (`descreverJanela`): o modelo precisa saber que o horário não é dele. */
+  janela: string;
 }
 
 export function buildSystemInstruction(
@@ -96,14 +129,14 @@ export function buildSystemInstruction(
   // Só entra quando o usuário forçou: em `auto` a regra do tipo abaixo já diz
   // como escolher, e uma linha a mais seria ruído no prompt. O handler de
   // agendar_evento impõe o tipo de qualquer jeito; isto só evita que o modelo
-  // preencha o campo de horário errado.
+  // preencha o campo de duração/esforço errado.
   const regraModo =
     modo === "foco"
       ? `\n- O usuário forçou tipo='time_blocking' para TODOS os compromissos desta
-  demanda: use-o em toda chamada de agendar_evento, com inicio e duracao_min.`
+  demanda: use-o em toda chamada de agendar_evento, com duracao_min.`
       : modo === "prazo"
         ? `\n- O usuário forçou tipo='deadline' para TODOS os compromissos desta
-  demanda: use-o em toda chamada de agendar_evento, com prazo_final.`
+  demanda: use-o em toda chamada de agendar_evento, com prazo_final e esforco_min.`
         : "";
 
   return `Você é o PO raiz da squad '${contexto.squadNome}' (escopo: ${contexto.squadEscopo}). Recebe demandas em português e as
@@ -119,8 +152,12 @@ ${contexto.arvore}
 Outras squads do usuário (você NÃO vê os domínios nem as pessoas delas e NÃO agenda nelas):
 ${contexto.outrasSquads}
 
-Agora são ${agoraISO} (fuso ${TIMEZONE}). Toda data que você produzir deve ser
-ISO 8601 com offset, no mesmo formato.
+Agora são ${agoraISO} (fuso ${TIMEZONE}). Datas que você produzir: AAAA-MM-DD
+quando o usuário não disse hora; com hora, ISO 8601 com offset no mesmo formato.
+
+Você NÃO escolhe horário. O servidor lê a agenda do usuário e reserva o próximo
+horário livre dentro da janela de trabalho ${contexto.janela}, sem colidir com o
+que já está lá. Você diz a intenção: o quê, quem, quanto tempo e até quando.
 
 Regras:
 - Quebre a demanda em quantos compromissos forem necessários e chame
@@ -128,9 +165,14 @@ Regras:
 - Em responsavel_id use o id de uma PESSOA da árvore — PO ou integrante. Escolha
   primeiro o domínio pelo tema, depois a pessoa dentro dele pelo papel. Nunca
   invente um id.
-- Use tipo='time_blocking' (com inicio e duracao_min) quando o usuário precisa
-  reservar tempo para executar; tipo='deadline' (com prazo_final) quando ele só
-  precisa marcar o limite de entrega.${regraModo}
+- tipo='time_blocking' quando o usuário precisa de um bloco para executar: mande
+  duracao_min. Se ele disse QUANDO sem hora ("amanhã", "segunda"), mande
+  a_partir_de com a data. Só se ele disse a HORA ("amanhã às 14h"), mande
+  inicio_fixo com data/hora.
+- tipo='deadline' quando há uma data limite de entrega: mande prazo_final e
+  esforco_min, sua estimativa realista do trabalho TOTAL até lá, em minutos. O
+  servidor cria o marco no prazo e divide o esforço em blocos antes dele. Não
+  chame agendar_evento de novo para os blocos.${regraModo}
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
@@ -204,11 +246,22 @@ export interface PedidoDeTurno {
   roster: Roster;
   /** A squad ativa: o prompt e as capacidades agem só dentro dela. */
   squad: Squad;
+  /** Por que não há token (a exceção de `tokenValido()`); ausente/null quando há. */
+  falhaDoToken?: unknown;
+  /**
+   * Janela de trabalho já validada pela rota. Ausente = padrão (09:00–19:00,
+   * seg–sex): chamadores anteriores à Fase 3 continuam válidos, e a rota sempre
+   * passa a lida do ambiente.
+   */
+  janela?: Janela;
+  /** Relógio do turno. A rota não passa; scripts de verificação fixam. */
+  agora?: Date;
 }
 
 export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Promise<TurnoResult> {
-  const { demanda, token, modo, roster, squad } = pedido;
-  const agora = new Date();
+  const { demanda, token, falhaDoToken, modo, roster, squad } = pedido;
+  const janela = pedido.janela ?? lerJanela({});
+  const agora = pedido.agora ?? new Date();
 
   const response = await gerarComRetry(ai, {
     model: MODEL,
@@ -220,6 +273,7 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
           squadEscopo: squad.escopo,
           arvore: rosterTree(squad),
           outrasSquads: outrasSquads(roster, squad.id),
+          janela: descreverJanela(janela),
         },
         agoraLocalISO(agora),
         modo,
@@ -238,36 +292,64 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
   });
 
   const calls: FunctionCall[] = response.functionCalls ?? [];
-  const ctx: CapabilityContext = { token, roster, squad, agora, modo, demanda };
+  const agenda = new AgendaDoTurno({ token, falhaDoToken, janela, agora });
+  const ctx: CapabilityContext = { token, roster, squad, agora, modo, demanda, agenda };
 
-  // Decidido ANTES do Promise.all: as chamadas rodam em paralelo, então olhar
-  // o resultado da troca chegaria tarde demais para impedir o evento.
+  // Decidido ANTES de executar qualquer chamada (regra da Fase 1): com troca de
+  // squad no turno, as outras chamadas são descartadas, inclusive agendamentos,
+  // e descartadas nem chegam a ler a agenda.
   const temTroca = calls.some((c) => c.name === TROCA_DE_SQUAD);
 
   // One-shot: executa as calls e acaba. Sem realimentar o modelo.
   // Um try POR TAREFA: uma tarefa quebrada não pode matar o lote.
-  const resultados = await Promise.all(
-    calls.map(async (call): Promise<CapabilityResult | ErroTarefa> => {
-      const nome = call.name ?? "";
-      const args = (call.args ?? {}) as Record<string, any>;
-      if (temTroca && nome !== TROCA_DE_SQUAD) return descartarPorTroca(nome, args);
-      const capacidade = CAPABILITIES[nome];
-      if (!capacidade) {
-        return { capacidade: nome, args, erro: `Capacidade desconhecida: '${nome}'` };
-      }
-      try {
-        return await capacidade.handler(args, ctx);
-      } catch (err: any) {
-        return { capacidade: nome, args, erro: err?.message ?? String(err) };
-      }
+  const executar = async (call: FunctionCall): Promise<CapabilityResult | ErroTarefa> => {
+    const nome = call.name ?? "";
+    const args = (call.args ?? {}) as Record<string, any>;
+    if (temTroca && nome !== TROCA_DE_SQUAD) return descartarPorTroca(nome, args);
+    const capacidade = CAPABILITIES[nome];
+    if (!capacidade) {
+      return { capacidade: nome, args, erro: `Capacidade desconhecida: '${nome}'` };
+    }
+    try {
+      return await capacidade.handler(args, ctx);
+    } catch (err: any) {
+      const motivo = motivoDoErro(err);
+      return { capacidade: nome, args, erro: err?.message ?? String(err), ...(motivo ? { motivo } : {}) };
+    }
+  };
+
+  // agendar_evento em SÉRIE, por prioridade: cada reserva precisa estar na
+  // ocupação antes do próximo compromisso escolher horário. Em paralelo, dois
+  // compromissos da mesma demanda liam a mesma agenda e caíam no mesmo slot.
+  // O resto (propostas) não disputa agenda e segue em paralelo.
+  const resultados: (CapabilityResult | ErroTarefa)[] = new Array(calls.length);
+  const forcado = tipoForcado(modo);
+  const deAgenda = calls
+    .map((call, indice) => ({ call, indice }))
+    .filter((x) => x.call.name === "agendar_evento")
+    .map((x) => ({
+      ...x,
+      prioridade: prioridadeDeAgendamento((x.call.args ?? {}) as Record<string, any>, forcado, janela.fuso),
+    }))
+    .sort((a, b) => a.prioridade[0] - b.prioridade[0] || a.prioridade[1] - b.prioridade[1] || a.indice - b.indice);
+  const emParalelo = Promise.all(
+    calls.map(async (call, indice) => {
+      if (call.name !== "agendar_evento") resultados[indice] = await executar(call);
     }),
   );
+  for (const { call, indice } of deAgenda) resultados[indice] = await executar(call);
+  await emParalelo;
 
-  const turno: TurnoResult = { eventos_criados: [], sugestoes: [], erros: [] };
+  // Resultados na ordem em que o modelo chamou, não na ordem de alocação.
+  const turno: TurnoResult = { eventos_criados: [], sugestoes: [], avisos: [], erros: [] };
   for (const r of resultados) {
     if ("erro" in r) turno.erros.push(r);
-    else if (r.kind === "evento") turno.eventos_criados.push(r);
-    else turno.sugestoes.push({ ...r, id: randomUUID() });
+    else if (r.kind === "compromisso") {
+      turno.eventos_criados.push(...r.eventos);
+      for (const aviso of r.avisos) {
+        turno.avisos.push({ capacidade: "agendar_evento", titulo: r.titulo, aviso });
+      }
+    } else turno.sugestoes.push({ ...r, id: randomUUID() });
   }
 
   if (calls.length === 0) {

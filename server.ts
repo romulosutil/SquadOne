@@ -18,6 +18,7 @@ import { listarQuests } from "./server/calendar.ts";
 import { ehModo } from "./server/capabilities.ts";
 import { aplicarContratacao, criarSquad } from "./server/hire.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
+import { descreverJanela, JanelaMalConfigurada, lerJanela } from "./server/alocador.ts";
 import {
   desconectar,
   ErroDeConfig,
@@ -230,15 +231,32 @@ async function startServer() {
       const roster = await readRoster();
       const squad = resolverSquad(roster, squadId);
 
+      // Janela antes do token e do Gemini: configuracao quebrada nao pode
+      // custar uma chamada ao modelo para depois falhar no primeiro agendamento.
+      const janela = lerJanela(process.env);
+
       // Sem credencial o turno ainda roda: nem toda demanda toca o
       // calendario, e derrubar tudo por causa disso esconderia as capacidades
-      // que nao dependem do Google.
-      const token = await tokenValido().catch(() => null);
-      const turno = await executarTurno(ai, { demanda: demanda.trim(), token, modo, roster, squad });
+      // que nao dependem do Google. O MOTIVO vai junto: agendar_evento devolve
+      // o erro classificado certo em vez de um generico "sem token".
+      let token: string | null = null;
+      let falhaDoToken: unknown = null;
+      try {
+        token = await tokenValido();
+      } catch (err) {
+        falhaDoToken = err;
+      }
+      const turno = await executarTurno(ai, {
+        demanda: demanda.trim(), token, falhaDoToken, modo, roster, squad, janela,
+      });
       res.json(turno);
     } catch (error: any) {
       console.error("Erro no turno:", error);
       if (responderErroDeRoster(res, error)) return;
+      // Ambiente, nao pedido: nenhum clique conserta, igual ao ErroDeConfig do auth.
+      if (error instanceof JanelaMalConfigurada) {
+        return res.status(500).json({ error: error.message, configuracao: true });
+      }
       // Sobrecarga do Gemini nao e falha nossa: 503 + classificacao para a UI
       // oferecer "tentar de novo" em vez do erro generico de sempre.
       if (error instanceof ModeloOcupado) {
@@ -261,6 +279,14 @@ async function startServer() {
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
+  }
+
+  // A janela e lida a cada turno; logar no boot mostra no painel do Easypanel
+  // o que vale agora, ou o erro, sem esperar alguem delegar uma quest.
+  try {
+    console.log(`Janela de trabalho: ${descreverJanela(lerJanela(process.env))}`);
+  } catch (error: any) {
+    console.error(`Janela de trabalho inválida: ${error.message}`);
   }
 
   app.listen(PORT, "0.0.0.0", () => {

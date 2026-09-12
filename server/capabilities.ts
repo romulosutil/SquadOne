@@ -11,7 +11,10 @@ import {
   type Roster,
   type Squad,
 } from "./squad.ts";
-import { marcasDoEvento, PREFIXO_DEADLINE, urlDeEventos } from "./calendar.ts";
+import type { AgendaDoTurno } from "./agenda.ts";
+import { agendarCompromisso, type CompromissoAgendado, type TipoEvento } from "./agendamento.ts";
+
+export type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
 
 /**
  * Toggle da CommandBar. `auto` deixa o modelo escolher o tipo de cada
@@ -28,11 +31,16 @@ export function ehModo(valor: unknown): valor is Modo {
  * a instrução ao modelo é pedido, não garantia — se ele divergir, o servidor
  * ainda grava o tipo que o usuário escolheu.
  */
-const TIPO_FORCADO: Record<Modo, "time_blocking" | "deadline" | null> = {
+const TIPO_FORCADO: Record<Modo, TipoEvento | null> = {
   auto: null,
   foco: "time_blocking",
   prazo: "deadline",
 };
+
+/** Tipo que o toggle impõe ao turno; null em `auto`. O orchestrator ordena por ele. */
+export function tipoForcado(modo: Modo): TipoEvento | null {
+  return TIPO_FORCADO[modo];
+}
 
 export interface CapabilityContext {
   /**
@@ -49,18 +57,11 @@ export interface CapabilityContext {
   modo: Modo;
   /** Texto original da demanda — vai na proposta de troca para "Trocar e reenviar". */
   demanda: string;
-}
-
-export interface EventoCriado {
-  kind: "evento";
-  titulo: string;
-  responsavel_id: string;
-  tipo: "time_blocking" | "deadline";
-  dominio: string;
-  inicio: string;
-  fim: string;
-  eventId: string;
-  htmlLink?: string;
+  /**
+   * Ocupação da agenda neste turno: lida uma vez, descontada a cada reserva.
+   * É por ela que dois compromissos da mesma demanda não caem no mesmo horário.
+   */
+  agenda: AgendaDoTurno;
 }
 
 /** Proposta de ABRIR UM DOMÍNIO novo: sala nova, PO novo. */
@@ -106,7 +107,7 @@ export interface PropostaTrocaSquad {
  * digitado e a aprovação em curso.
  */
 export type Sugestao = (PropostaDominio | PropostaIntegrante | PropostaTrocaSquad) & { id: string };
-export type CapabilityResult = EventoCriado | PropostaDominio | PropostaIntegrante | PropostaTrocaSquad;
+export type CapabilityResult = CompromissoAgendado | PropostaDominio | PropostaIntegrante | PropostaTrocaSquad;
 
 export interface Capability {
   declaration: FunctionDeclaration;
@@ -130,26 +131,20 @@ function exigirPessoa(squad: Squad, id: unknown): { pessoa: Pessoa; dominio: Dom
   return achada;
 }
 
-function exigirData(valor: unknown, campo: string): Date {
-  const d = new Date(String(valor ?? ""));
-  if (Number.isNaN(d.getTime())) {
-    throw new Error(`Campo '${campo}' não é uma data ISO válida: ${String(valor)}`);
-  }
-  return d;
-}
-
 const agendarEvento: Capability = {
   declaration: {
     name: "agendar_evento",
     description:
-      "Cria um evento no Google Calendar do usuário. Use uma chamada por " +
-      "compromisso: uma demanda com várias entregas vira várias chamadas.",
+      "Registra um compromisso na agenda do usuário. Você decide a INTENÇÃO — o quê, " +
+      "quem, quanto tempo e até quando; o servidor escolhe o horário livre. Use uma " +
+      "chamada por compromisso: uma demanda com várias entregas vira várias chamadas. " +
+      "Um prazo com blocos de trabalho é UMA chamada.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         titulo: {
           type: Type.STRING,
-          description: "Título curto e acionável do evento.",
+          description: "Título curto e acionável do compromisso.",
         },
         responsavel_id: {
           type: Type.STRING,
@@ -162,134 +157,60 @@ const agendarEvento: Capability = {
           type: Type.STRING,
           enum: ["time_blocking", "deadline"],
           description:
-            "'time_blocking' reserva um bloco de execução; 'deadline' marca só o limite de entrega.",
-        },
-        inicio: {
-          type: Type.STRING,
-          description:
-            "Obrigatório quando tipo='time_blocking'. Data/hora ISO 8601 com offset, ex: 2026-09-12T09:00:00-03:00.",
+            "'time_blocking' reserva UM bloco de execução no próximo horário livre. " +
+            "'deadline' marca a data limite e reserva blocos de trabalho antes dela, " +
+            "somando esforco_min.",
         },
         duracao_min: {
           type: Type.INTEGER,
+          description: "time_blocking: duração do bloco em minutos. Padrão 60.",
+        },
+        esforco_min: {
+          type: Type.INTEGER,
           description:
-            "Duração do bloco em minutos quando tipo='time_blocking'. Padrão 60.",
+            "deadline: sua estimativa realista do trabalho TOTAL até o prazo, em " +
+            "minutos. O servidor divide em blocos.",
         },
         prazo_final: {
           type: Type.STRING,
           description:
-            "Obrigatório quando tipo='deadline'. Data/hora ISO 8601 com offset do limite de entrega.",
+            "Obrigatório quando tipo='deadline'. AAAA-MM-DD se o usuário não disse " +
+            "hora (o marco vira dia inteiro); ISO 8601 com offset se disse.",
+        },
+        a_partir_de: {
+          type: Type.STRING,
+          description:
+            "Opcional. Só quando o usuário disse QUANDO começar sem dizer a hora " +
+            "('amanhã', 'segunda'). AAAA-MM-DD ou ISO 8601 com offset. O servidor " +
+            "procura horário livre a partir daí.",
+        },
+        inicio_fixo: {
+          type: Type.STRING,
+          description:
+            "Opcional, só time_blocking. Só quando o usuário disse a HORA exata " +
+            "('amanhã às 14h'). ISO 8601 com offset. É respeitado mesmo com conflito.",
         },
       },
       required: ["titulo", "responsavel_id", "tipo"],
     },
   },
 
-  async handler(args, ctx): Promise<EventoCriado> {
-    if (!ctx.token) {
-      throw new Error(
-        "Sem access_token do Google: conecte o calendário antes de agendar.",
-      );
-    }
-
+  async handler(args, ctx): Promise<CompromissoAgendado> {
+    // Pessoa antes da agenda: id inventado pelo modelo não custa leitura do Google.
     const { pessoa, dominio } = exigirPessoa(ctx.squad, args.responsavel_id);
-    const forcado = TIPO_FORCADO[ctx.modo];
-    const tipo = forcado ?? (args.tipo === "deadline" ? "deadline" : "time_blocking");
-    const titulo = String(args.titulo ?? "").trim();
-    if (!titulo) throw new Error("Campo 'titulo' vazio.");
-
-    // Com o tipo forçado, o modelo pode ter preenchido o campo de horário do
-    // OUTRO tipo (pensou em bloco, mandou só `inicio`). O horário que ele deu
-    // continua sendo a melhor referência de quando, e falhar perderia um
-    // compromisso bem descrito. Regra: deadline sem `prazo_final` tem como
-    // limite o FIM do bloco que o modelo descreveu (`inicio` + `duracao_min`;
-    // "estudar 2h amanhã 14h" termina 16h, não 14h) e, sem `duracao_min`, o
-    // próprio `inicio`; bloco sem `inicio` TERMINA no `prazo_final` (o trabalho
-    // vem antes do limite, não depois). Só com modo forçado: no auto a
-    // incoerência é do próprio modelo e o erro volta nomeado.
-    const preenchido = (v: unknown) => v != null && String(v).trim() !== "";
-
-    // Cada branch calcula seu próprio par início/fim. O bug antigo declarava
-    // endTime dentro do branch time_blocking e lia no branch deadline.
-    let inicio: Date;
-    let fim: Date;
-    let summary: string;
-
-    if (tipo === "time_blocking") {
-      const duracao = Number(args.duracao_min) > 0 ? Number(args.duracao_min) : 60;
-      if (forcado && !preenchido(args.inicio) && preenchido(args.prazo_final)) {
-        fim = exigirData(args.prazo_final, "prazo_final");
-        inicio = new Date(fim.getTime() - duracao * 60_000);
-      } else {
-        inicio = exigirData(args.inicio, "inicio");
-        fim = new Date(inicio.getTime() + duracao * 60_000);
-      }
-      summary = `[${pessoa.papel}] ${titulo}`;
-    } else {
-      const usarInicio = forcado && !preenchido(args.prazo_final) && preenchido(args.inicio);
-      if (usarInicio) {
-        const duracao = Number(args.duracao_min) > 0 ? Number(args.duracao_min) : 0;
-        fim = new Date(exigirData(args.inicio, "inicio").getTime() + duracao * 60_000);
-      } else {
-        fim = exigirData(args.prazo_final, "prazo_final");
-      }
-      inicio = new Date(fim.getTime() - 15 * 60_000);
-      summary = `${PREFIXO_DEADLINE} [${pessoa.papel}] ${titulo}`;
-    }
-
     const indice = ctx.squad.dominios.indexOf(dominio);
-    const event = {
-      summary,
-      description:
-        `Criado pelo SquadOne. Domínio: ${dominio.nome}. ` +
-        `Responsável: ${pessoa.nome} (${pessoa.papel}).`,
+    // O horário sai do servidor (server/agendamento.ts): o modelo só disse a
+    // intenção. Aqui fica o que é da squad — marcas, calendário, cor.
+    return agendarCompromisso({
+      args,
+      tipoForcado: tipoForcado(ctx.modo),
+      squadId: ctx.squad.id,
+      calendarId: ctx.squad.calendarId,
+      dominio,
+      pessoa,
       colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
-      start: { dateTime: inicio.toISOString() },
-      end: { dateTime: fim.toISOString() },
-      // Deadline é um marco, não trabalho: opaco, os 15min dele apareceriam
-      // como "ocupado" e bloqueariam a agenda de quem consulta disponibilidade.
-      ...(tipo === "deadline" ? { transparency: "transparent" } : {}),
-      // Quatro marcas (contrato da Fase 1, ver server/calendar.ts): squad
-      // informa, domínio filtra o events.list, membro atribui e tipo dá a
-      // semântica — o prefixo do título é só rótulo, e o usuário pode apagá-lo
-      // no Google sem trocar o tipo da quest.
-      extendedProperties: {
-        private: marcasDoEvento({
-          squadId: ctx.squad.id,
-          dominioId: dominio.id,
-          pessoaId: pessoa.id,
-          tipo,
-        }),
-      },
-    };
-
-    const resp = await fetch(urlDeEventos(ctx.squad.calendarId), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ctx.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(event),
+      agenda: ctx.agenda,
     });
-
-    if (!resp.ok) {
-      const corpo = await resp.text().catch(() => "");
-      throw new Error(
-        `Google Calendar respondeu ${resp.status}: ${corpo.slice(0, 300)}`,
-      );
-    }
-
-    const criado = (await resp.json()) as { id: string; htmlLink?: string };
-    return {
-      kind: "evento",
-      titulo,
-      responsavel_id: pessoa.id,
-      tipo,
-      dominio: dominio.id,
-      inicio: inicio.toISOString(),
-      fim: fim.toISOString(),
-      eventId: criado.id,
-      htmlLink: criado.htmlLink,
-    };
   },
 };
 
