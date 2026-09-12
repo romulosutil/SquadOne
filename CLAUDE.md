@@ -54,6 +54,22 @@ data/                     volume em produção; nada aqui é versionado
 
 **3. As quests vivem no Google Calendar, não aqui.** `GET /api/mochila` lê do Google a cada chamada. Editar ou apagar no Google reflete na próxima leitura. `quests` no frontend é cache da última resposta, nunca fonte de verdade.
 
+### Marcas no Calendar
+
+Todo evento criado carrega três chaves em `extendedProperties.private` (constantes em `server/calendar.ts`):
+
+| Chave | Eixo | Uso |
+|---|---|---|
+| `squadone_dominio` | filtro | `events.list` com `privateExtendedProperty`, uma chamada por domínio |
+| `squadone_membro` | atribuição | quem executa |
+| `squadone_tipo` | semântica | `time_blocking` ou `deadline` |
+
+`paraQuest` lê o tipo da marca e só cai no prefixo `⏰ DEADLINE:` do título quando ela não existe (eventos anteriores a 12/09/2026, sem migração). O prefixo segue no título como rótulo. Deadline grava `transparency: "transparent"`: é marco, não ocupa agenda.
+
+### Toggle Auto / Foco / Prazo
+
+A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400). `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** o handler de `agendar_evento` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo de horário esperado faltar, usa o outro (regra comentada no handler). Hoje o modo só força o tipo — "próximo slot livre" e "marco + blocos" são Fase 3 (`docs/superpowers/specs/2026-09-12-squadone-roadmap-design.md`).
+
 ### Escrita no roster
 
 Toda mutação passa por `atualizarSquad()`, que serializa read-modify-write numa fila. Duas aprovações quase simultâneas leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeSquad` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`.
