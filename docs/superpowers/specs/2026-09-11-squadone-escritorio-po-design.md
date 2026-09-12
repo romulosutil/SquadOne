@@ -339,21 +339,39 @@ slot do domínio da pessoa ativa, não uma coordenada pessoal.
 ### 4.4 Crescimento do escritório
 
 ```
-IA propõe → card neo-brutalista
+IA propõe → card neo-brutalista (GrowthCard.vue, vocabulário da Mochila)
   · criar_po_dominio     → "Abrir domínio Financeiro?"  → sala NOVA
   · contratar_integrante → "Contratar QA em Produto?"   → MESMA sala, + 1 ator
-  → [APROVAR]
-  → POST /api/squad/...   (ainda não implementado, §8)
+  → [APROVAR]  (+ nome opcional: o modelo propõe o papel, não a pessoa)
+  → POST /api/squad/hire  → server/hire.ts escreve o roster
+  → resposta traz o squad inteiro; trocar `squad.value` é o único gatilho
+    que o escritório precisa
 ```
+
+O endpoint é o **único** lugar que escreve o roster, e revalida tudo contra o
+`squad.json` atual — nunca contra o que a proposta afirma. O slot, em especial,
+sai de `proximoSlot()` na hora do APROVAR: a proposta pode ter sido feita antes
+de outro domínio ocupar aquele slot. Erro de forma → 400; proposta que não cabe
+mais no roster (domínio duplicado, escritório cheio) → 409, e o card mostra a
+mensagem em vez de sumir.
+
+Toda escrita passa por `atualizarSquad()`, que serializa read-modify-write: duas
+aprovações quase simultâneas leriam o mesmo arquivo e a segunda apagaria a
+primeira.
 
 Só o primeiro caso mexe no mapa:
 
 ```
-câmera pana ~700ms (tween existente)
-  → sala materializa ~450ms
+câmera pana 700ms (tween existente; a sala já conta para o mapa, invisível)
+  → sala materializa 450ms
   → personagem entra pela porta e anda até a mesa (sistema existente)
   → toast "Ana entrou no squad"
 ```
+
+Os três tempos são sequenciais de propósito: a sala não pode nascer fora do
+enquadramento, nem o ator andar dentro de uma sala invisível. Enquanto a câmera
+pana não existe ator para seguir — ela persegue um ponto de mundo (`lookPoint`,
+o miolo do slot novo) e só volta a seguir um ator quando alguém entra.
 
 Único código novo, ~12 linhas:
 ```css
@@ -366,8 +384,20 @@ câmera pana ~700ms (tween existente)
 ```
 `steps(6)` faz a sala abrir em saltos discretos, coerente com pixel art.
 
+Paredes, props e placa **não** podem usar esse keyframe: `clip-path` recorta
+pela caixa do elemento, e o wrapper de objetos não tem caixa própria (os filhos
+são todos `position: absolute`). Eles entram com `room-build-objects`, o mesmo
+flash um degrau depois do chão terminar de abrir.
+
 Contratar um integrante não anima sala nenhuma: aparece mais um ator na sala que
-já estava lá.
+já estava lá — mas ele também **entra pela porta**, não aparece sentado. A rota
+de chegada nasce fora da sala e reusa os waypoints perpendiculares de §4.3
+(a porta é o único ponto côncavo do mundo; entrar em diagonal atravessaria a
+parede). Origem é a primeira sala vizinha já desbloqueada; um domínio isolado
+recebe pela porta sul, vinda de fora do mapa.
+
+Quem já estava no roster quando o app abriu começa sentado: o primeiro roster
+que chega não é crescimento, o escritório já existia antes do app.
 
 ---
 
@@ -485,8 +515,6 @@ Isso entra junto com o roster, não depois.
 
 Explicitamente adiado, para não inflar:
 
-- `POST /api/squad/*`: aplicar a aprovação de um domínio ou de um integrante.
-  Hoje as duas tools param no card — o roster só muda editando o arquivo.
 - Refresh token / sessão persistente de OAuth
 - Capacidade "gerar spec" (o seam existe; a implementação não)
 - Salas além das 9; sala de reunião envidraçada
@@ -494,8 +522,10 @@ Explicitamente adiado, para não inflar:
   sem oclusão de ator atrás de parede alta. Animações do pacote ainda não usadas
   (`Attacking`, `Casting Spells`, `Taunt`, `Hurt`, `Dying`) são candidatas a
   estado "trabalhando" e "erro".
-- Templates com mais cadeiras: `ROOM_SOLO` e `ROOM_LOUNGE` têm uma só, então um
-  domínio cheio manda quase todo mundo para `EXTRA_STATIONS`.
+- Templates com mais cadeiras: só `ROOM_DEV` tem duas, então um domínio com 3+
+  pessoas manda o excedente para `EXTRA_STATIONS`. `salaPara()` promove
+  `ROOM_SOLO → ROOM_DEV` na segunda contratação e para por aí.
+- Desfazer uma contratação pela UI (o roster é um arquivo; dá para editar).
 - Mobile / responsivo
 - Testes automatizados (avaliar depois que a mecânica estabilizar)
 - Firestore / sync entre dispositivos
@@ -516,6 +546,9 @@ Verificado nesta sessão:
 | Parallel function calling suportado | ✅ doc oficial |
 | Modos `auto` / `any` / `none` / `validated` | ✅ doc oficial |
 | `endTime` fora de escopo | ✅ leitura do código |
+| Sequência pan → build → entrada roda na ordem | ✅ **medida no navegador**: `room--pending` em 0ms, `room--new` em ~700ms, ator visível andando em ~1150ms |
+| `POST /api/squad/hire` serializa escritas concorrentes | ✅ duas aprovações em paralelo → slots `1,0` e `1,1`, nenhuma perdida |
+| Escritório cheio devolve 409 e o card mostra o erro | ✅ medido com 9 domínios |
 
 **Não confirmado — tratar como hipótese, testar antes de projetar em cima:**
 

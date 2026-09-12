@@ -93,12 +93,15 @@ export const ROOM_TEMPLATES: Record<RoomId, string[]> = {
     '#P....D#',
     '###\u2593####',
   ],
+  // Duas estações em pontas opostas, não lado a lado: em isométrico dois tiles
+  // vizinhos ficam a 32px de tela e os sprites (64px de largura) se eclipsam —
+  // quem chegou por último cobriria o PO em vez de dividir a sala com ele.
   ROOM_DEV: [
     '########',
-    '#DD...P#',
-    '#cc....\u2593',
+    '#D....D#',
+    '#c....c\u2593',
     '#......#',
-    '#P...DD#',
+    '#P....P#',
     '###\u2593####',
   ],
   ROOM_STUDIO: [

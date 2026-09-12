@@ -70,6 +70,38 @@ export async function writeSquad(squad: Squad): Promise<void> {
   }
 }
 
+/**
+ * Fila de escrita: toda mutação do roster passa por aqui. Duas aprovações
+ * quase simultâneas (§4.4) leriam o MESMO `squad.json` e a segunda escrita
+ * apagaria a primeira — read-modify-write serializado elimina a corrida sem
+ * lock em disco, porque o processo do servidor é o único escritor.
+ */
+let fila: Promise<unknown> = Promise.resolve();
+
+export function atualizarSquad<T>(mutador: (squad: Squad) => T): Promise<T> {
+  const proximo = fila.then(async () => {
+    const squad = await readSquad();
+    // Se o mutador lançar, nada é gravado: o roster em disco fica intacto.
+    const saida = mutador(squad);
+    await writeSquad(squad);
+    return saida;
+  });
+  // A fila não pode morrer num erro: o próximo escritor ainda precisa rodar.
+  fila = proximo.catch(() => undefined);
+  return proximo;
+}
+
+/**
+ * Template da sala em função de quantas pessoas o domínio tem. Só PROMOVE:
+ * um domínio que já escolheu ROOM_STUDIO não volta para ROOM_SOLO ao crescer.
+ * Acima de 2 pessoas não há template maior — o excedente cai em
+ * EXTRA_STATIONS, no miolo da sala (src/office/rooms.ts).
+ */
+export function salaPara(qtdPessoas: number, atual?: string): string {
+  if (qtdPessoas >= 2 && (!atual || atual === "ROOM_SOLO")) return "ROOM_DEV";
+  return atual ?? "ROOM_SOLO";
+}
+
 /** Copia a seed versionada se `data/squad.json` ainda não existir. */
 async function ensureSquad(): Promise<void> {
   try {

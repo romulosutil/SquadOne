@@ -21,6 +21,7 @@
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import {
+  DOOR_SOUTH,
   INNER_H,
   INNER_OFFSET,
   INNER_W,
@@ -44,7 +45,7 @@ import {
   type RoomId,
   type Vec2,
 } from './rooms'
-import { bfsSlots, buildRoute } from './path'
+import { bfsSlots, buildRoute, doorCenterPx } from './path'
 
 /** Uma pessoa do squad: o PO de um domínio ou um integrante dele. */
 export interface OfficePessoa {
@@ -75,6 +76,16 @@ const SPEED = 96
 const STEP_PX = 6
 const CAM_LAMBDA = 8
 
+/**
+ * Crescimento do escritório (§4.4), na ordem em que o usuário enxerga:
+ * a câmera pana até o slot vazio, a sala materializa, e só então o personagem
+ * entra pela porta e anda até a mesa. Contratar um integrante pula os dois
+ * primeiros passos: a sala dele já está lá.
+ */
+const ROOM_PAN_MS = 700
+/** Casado com `room-build` em src/index.css. */
+const ROOM_BUILD_MS = 450
+
 const MANIFEST_URL = '/sprites/craftpix.manifest.json'
 
 interface CharAnim {
@@ -100,6 +111,8 @@ interface Actor {
   /** direção na TELA: 1 = direita, -1 = esquerda (espelha o billboard) */
   facing: number
   walking: boolean
+  /** ator de uma sala que ainda está nascendo: existe, mas não se pinta. */
+  hidden: boolean
 }
 
 export interface RoomPropView {
@@ -129,10 +142,16 @@ export interface RoomView {
   floor: { left: number; top: number; width: number; height: number }
   /** posição de tela da placa da sala */
   label: { text: string; left: number; top: number }
-  isNew: boolean
+  /**
+   * null = sala assentada. 'pending' = slot já reservado, mas a sala espera a
+   * câmera chegar. 'building' = tocando `room-build`.
+   */
+  phase: RoomPhase
   walls: WallView[]
   props: RoomPropView[]
 }
+
+export type RoomPhase = 'pending' | 'building' | null
 
 export function useOffice(dominios: Ref<OfficeDominio[]>) {
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
@@ -155,8 +174,26 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   /** null enquanto carrega ou se o manifest não existir: a UI cai pro emoji. */
   const sheets = shallowRef<Record<string, CharSheet> | null>(null)
 
-  const newRooms = reactive(new Set<string>())
-  const seenRooms = new Set<string>()
+  /** Fase de cada sala em obra, por slotKey. Vazio = escritório em repouso. */
+  const roomPhase = reactive(new Map<string, Exclude<RoomPhase, null>>())
+  const knownRooms = new Set<string>()
+  /**
+   * O primeiro roster que chega não é crescimento: o escritório já existia
+   * antes do app abrir. Só depois dele uma sala nova vira animação.
+   */
+  let primeiraCarga = true
+  const timers = new Set<ReturnType<typeof setTimeout>>()
+
+  function agendar(fn: () => void, ms: number) {
+    const t = setTimeout(() => {
+      timers.delete(t)
+      fn()
+    }, ms)
+    timers.add(t)
+  }
+
+  /** Ponto de mundo que a câmera persegue enquanto nenhum ator é o foco. */
+  const lookPoint = shallowRef<Vec2 | null>(null)
 
   const unlocked = computed(() => new Set(dominios.value.map((d) => slotKey(d.slot))))
 
@@ -237,7 +274,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         // algorithm, senão o ator da própria sala a cobre.
         // A placa nomeia o DOMÍNIO: a sala inteira é dele, não de uma pessoa.
         label: { text: d.nome, left: lx, top: ly - WALL_H - 16 },
-        isNew: newRooms.has(key),
+        phase: roomPhase.get(key) ?? null,
         walls,
         props: parsed.props.map((p) => {
           const [w, h] = PROP_SIZE[p.kind]
@@ -288,6 +325,60 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     return (entrada && sheets.value?.[entrada.pessoa.sprite]) ?? null
   }
 
+  /** Primeira sala vizinha já desbloqueada — por onde se chega a pé. */
+  function vizinhoDesbloqueado(slot: Vec2): Vec2 | null {
+    const lados: Vec2[] = [[-1, 0], [0, -1], [1, 0], [0, 1]]
+    for (const [dx, dy] of lados) {
+      const n: Vec2 = [slot[0] + dx, slot[1] + dy]
+      if (n[0] < 0 || n[1] < 0) continue
+      // Sala em obra não serve de origem: ninguém sai de uma sala que ainda
+      // não terminou de nascer.
+      if (unlocked.value.has(slotKey(n)) && !roomPhase.has(slotKey(n))) return n
+    }
+    return null
+  }
+
+  /**
+   * Rota de chegada de quem acabou de ser contratado (§4.4): nasce FORA da
+   * sala e atravessa a porta. Reusa os mesmos waypoints perpendiculares do
+   * pathfinding (§4.3) — a porta é o único ponto côncavo do mundo e entrar
+   * em diagonal atravessaria a parede.
+   */
+  function rotaDeEntrada(dominio: OfficeDominio, idx: number): { spawn: Vec2; route: Vec2[] } {
+    const alvo = stationPx(dominio, idx)
+    const vizinho = vizinhoDesbloqueado(dominio.slot)
+    if (vizinho) {
+      const [cx, cy] = doorCenterPx(vizinho, dominio.slot)
+      const dirX = Math.sign(dominio.slot[0] - vizinho[0])
+      const dirY = Math.sign(dominio.slot[1] - vizinho[1])
+      return {
+        spawn: [cx - dirX * TILE, cy - dirY * TILE],
+        route: [[cx, cy], [cx + dirX * TILE, cy + dirY * TILE], alvo],
+      }
+    }
+    // Sala isolada (o primeiro domínio do squad): entra pela porta sul, que
+    // todo template tem, vindo de fora do mapa.
+    const porta = localCenterPx(dominio.slot, DOOR_SOUTH)
+    const dentro = localCenterPx(dominio.slot, [DOOR_SOUTH[0], DOOR_SOUTH[1] - 1])
+    return { spawn: [porta[0], porta[1] + TILE], route: [porta, dentro, alvo] }
+  }
+
+  function iniciarEntrada(a: Actor, dominio: OfficeDominio, idx: number) {
+    const { spawn, route } = rotaDeEntrada(dominio, idx)
+    a.x = spawn[0]
+    a.y = spawn[1]
+    a.slot = dominio.slot
+    a.route = route
+    a.dist = 0
+    a.walking = true
+    a.hidden = false
+    // A câmera larga o ponto fixo da sala e passa a seguir quem está entrando.
+    lookPoint.value = null
+    focused.value = a.id
+    paint(a)
+    kick()
+  }
+
   function syncActors() {
     const alive = new Set<string>()
     for (const { pessoa, dominio, idx } of porPessoa.value.values()) {
@@ -305,12 +396,49 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
           dist: 0,
           facing: 1,
           walking: false,
+          hidden: false,
         }
         actors.set(pessoa.id, a)
+        // Quem já estava no roster quando o app abriu começa sentado. Quem
+        // chega depois foi contratado agora: entra pela porta.
+        if (!primeiraCarga) {
+          if (roomPhase.has(slotKey(dominio.slot))) a.hidden = true
+          else iniciarEntrada(a, dominio, idx)
+        }
       }
       paint(a)
     }
     for (const id of [...actors.keys()]) if (!alive.has(id)) actors.delete(id)
+  }
+
+  /**
+   * Sala nova: pan da câmera, materialização, e só então a entrada de quem
+   * mora nela. Os três tempos são sequenciais de propósito — a sala não pode
+   * nascer fora do enquadramento nem o ator andar dentro de uma sala invisível.
+   */
+  function registrarSalas() {
+    for (const d of dominios.value) {
+      const key = slotKey(d.slot)
+      if (knownRooms.has(key)) continue
+      knownRooms.add(key)
+      if (primeiraCarga) continue
+
+      roomPhase.set(key, 'pending')
+      lookPoint.value = localCenterPx(d.slot, [ROOM_W >> 1, ROOM_H >> 1])
+      kick()
+
+      agendar(() => {
+        roomPhase.set(key, 'building')
+        agendar(() => {
+          roomPhase.delete(key)
+          for (const { pessoa, dominio, idx } of porPessoa.value.values()) {
+            if (slotKey(dominio.slot) !== key) continue
+            const a = actors.get(pessoa.id)
+            if (a?.hidden) iniciarEntrada(a, dominio, idx)
+          }
+        }, ROOM_BUILD_MS)
+      }, ROOM_PAN_MS)
+    }
   }
 
   function setActorEl(id: string, el: unknown) {
@@ -350,6 +478,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     // Painter's algorithm: quem tem diagonal maior está mais à frente.
     entry.root.style.zIndex = String(depth(a.x, a.y))
     entry.root.classList.toggle('actor--walk', a.walking)
+    // Ator de sala em obra não some do DOM (o :ref precisa dele): fica só
+    // invisível até a sala terminar de nascer.
+    entry.root.style.visibility = a.hidden ? 'hidden' : ''
 
     if (entry.sprite) entry.sprite.style.transform = a.facing < 0 ? 'scaleX(-1)' : ''
     if (!entry.walk || !sheet || !a.walking) return
@@ -407,9 +538,17 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   }
 
   function camTarget(): Vec2 {
-    const a = (focused.value ? actors.get(focused.value) : null) ?? actors.values().next().value
     const b = bounds.value
-    const [sx, sy] = a ? toScreen(a.x, a.y) : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
+    // Enquanto uma sala nasce não há ator para seguir: a câmera persegue um
+    // ponto de mundo (o miolo do slot novo). Assim que alguém entra, volta a
+    // seguir o ator.
+    const alvo = lookPoint.value
+    const a = alvo ? null : (focused.value ? actors.get(focused.value) : null) ?? actors.values().next().value
+    const [sx, sy] = alvo
+      ? toScreen(alvo[0], alvo[1])
+      : a
+        ? toScreen(a.x, a.y)
+        : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
     return [
       clampAxis(sx - view.w / 2, b.minX, b.maxX, view.w),
       clampAxis(sy - view.h / 2, b.minY, b.maxY, view.h),
@@ -536,8 +675,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
 
   // Atores existem antes do primeiro render: os :ref do template rodam antes
   // de onMounted e precisam achar o registro.
+  registrarSalas()
   syncActors()
-  for (const d of dominios.value) seenRooms.add(slotKey(d.slot))
+  if (dominios.value.length) primeiraCarga = false
 
   onMounted(() => {
     snapCamera()
@@ -559,6 +699,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   onBeforeUnmount(() => {
     if (raf) cancelAnimationFrame(raf)
     raf = 0
+    for (const t of timers) clearTimeout(t)
+    timers.clear()
     ro?.disconnect()
     window.removeEventListener('keydown', onKey)
   })
@@ -576,14 +718,11 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   watch(
     dominios,
     () => {
+      // Ordem importa: `registrarSalas` decide se a sala está em obra, e
+      // `syncActors` usa isso para esconder quem ainda não pode entrar.
+      registrarSalas()
       syncActors()
-      for (const d of dominios.value) {
-        const key = slotKey(d.slot)
-        if (seenRooms.has(key)) continue
-        seenRooms.add(key)
-        newRooms.add(key)
-        setTimeout(() => newRooms.delete(key), 500)
-      }
+      if (dominios.value.length) primeiraCarga = false
       kick()
     },
     { deep: true }

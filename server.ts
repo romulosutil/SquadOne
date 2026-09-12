@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { readSquad, unlockedSlots, dominiosDoSquad } from "./server/squad.ts";
 import { executarTurno } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
+import { aplicarContratacao, ConflitoDeRoster } from "./server/hire.ts";
 
 dotenv.config();
 
@@ -31,6 +32,23 @@ async function startServer() {
     } catch (error: any) {
       console.error("Erro ao ler o squad:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Aprovacao de crescimento (§4.4): o unico endpoint que ESCREVE no roster.
+  // O modelo so propoe; contratar e um gesto do usuario, no card de sugestao.
+  // Nao exige Bearer: mexe em data/squad.json, nao no Google Calendar.
+  app.post("/api/squad/hire", async (req, res) => {
+    try {
+      const { sugestao, nome } = req.body ?? {};
+      const resultado = await aplicarContratacao(sugestao, nome);
+      res.json(resultado);
+    } catch (error: any) {
+      // Conflito = a proposta nao cabe mais no roster atual (dominio duplicado,
+      // escritorio cheio): nao e erro de forma do pedido, e estado que mudou.
+      const status = error instanceof ConflitoDeRoster ? 409 : 400;
+      console.error("Erro ao contratar:", error);
+      res.status(status).json({ error: error.message });
     }
   });
 

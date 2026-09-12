@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
+import GrowthCard from './components/GrowthCard.vue'
 import { conectado, conectando, conectar, desconectar, garantirToken, tokenAtual } from './auth/google'
 
 const currentAgent = ref('Idle')
@@ -13,6 +14,12 @@ const carregandoMochila = ref(false)
 const sugestoes = ref([])
 const squad = ref(null)
 const isLoading = ref(false)
+// Contratacao em curso: indice da sugestao sendo aprovada (so uma por vez, o
+// servidor serializa as escritas no roster de qualquer forma).
+const aprovando = ref(-1)
+const erroSugestao = ref({})
+const toast = ref('')
+let toastTimer = 0
 
 // O roster manda: papeis, slots desbloqueados e roteamento saem daqui.
 onMounted(async () => {
@@ -57,6 +64,51 @@ const carregarMochila = async () => {
   } finally {
     carregandoMochila.value = false
   }
+}
+
+const avisar = (texto) => {
+  toast.value = texto
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = '' }, 4000)
+}
+
+/**
+ * [APROVAR] do card (§4.4). E aqui que a proposta do modelo vira roster: o
+ * POST devolve o squad ja atualizado, e trocar `squad.value` e o unico gatilho
+ * de que o escritorio precisa — o GameMap ve um dominio (ou uma pessoa) a mais
+ * e roda a sequencia de crescimento sozinho.
+ */
+const aprovarSugestao = async (index, nome) => {
+  if (aprovando.value !== -1) return
+  aprovando.value = index
+  erroSugestao.value = { ...erroSugestao.value, [index]: '' }
+  try {
+    const response = await fetch('/api/squad/hire', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sugestao: sugestoes.value[index], nome })
+    })
+    const dados = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(dados.error ?? `HTTP ${response.status}`)
+
+    squad.value = dados.squad
+    sugestoes.value = sugestoes.value.filter((_, i) => i !== index)
+    erroSugestao.value = {}
+    avisar(
+      dados.kind === 'dominio'
+        ? `${dados.pessoa.nome} abriu o dominio ${dados.dominio.nome}`
+        : `${dados.pessoa.nome} entrou no squad (${dados.dominio.nome})`
+    )
+  } catch (error) {
+    console.error('Falha ao contratar:', error)
+    erroSugestao.value = { ...erroSugestao.value, [index]: error.message }
+  } finally {
+    aprovando.value = -1
+  }
+}
+
+const descartarSugestao = (index) => {
+  sugestoes.value = sugestoes.value.filter((_, i) => i !== index)
 }
 
 const conectarGoogle = async () => {
@@ -164,37 +216,29 @@ const handleDelegation = async (payload) => {
 
       <!-- Map Area -->
       <main class="flex-1 p-6 flex flex-col gap-4 bg-[#e0e7ff] overflow-y-auto">
-        <!-- Crescimento em DOIS niveis (spec 3.2): um dominio novo abre sala,
-             um integrante entra na sala do dominio que ja existe. Proposta, nao
-             acao: o fluxo de aprovar (POST /api/squad/*) ainda nao existe. -->
-        <div
+        <!-- Crescimento em DOIS niveis (spec 4.4): um dominio novo abre sala,
+             um integrante entra na sala do dominio que ja existe. O modelo so
+             propoe; aprovar aqui e o que escreve no roster. -->
+        <GrowthCard
           v-for="(sugestao, index) in sugestoes"
           :key="index"
-          class="border-4 border-black bg-[#ffdb58] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] shrink-0"
-        >
-          <template v-if="sugestao.kind === 'dominio'">
-            <h3 class="font-black uppercase text-lg">
-              Abrir dominio {{ sugestao.dominio }}?
-            </h3>
-            <p class="text-xs font-bold uppercase mt-1 opacity-70">
-              Sala nova + {{ sugestao.papel_po }}
-              <span v-if="sugestao.slot">no slot [{{ sugestao.slot[0] }},{{ sugestao.slot[1] }}]</span>
-            </p>
-          </template>
-          <template v-else>
-            <h3 class="font-black uppercase text-lg">
-              Contratar {{ sugestao.papel }} em {{ sugestao.dominio_nome }}?
-            </h3>
-            <p class="text-xs font-bold uppercase mt-1 opacity-70">
-              Entra na sala do dominio {{ sugestao.dominio_id }}
-            </p>
-          </template>
-          <p class="font-bold text-sm mt-1">{{ sugestao.justificativa }}</p>
-          <p class="text-xs font-bold mt-2 opacity-70">Escopo: {{ sugestao.escopo }}</p>
-        </div>
+          :sugestao="sugestao"
+          :enviando="aprovando === index"
+          :erro="erroSugestao[index] || ''"
+          @aprovar="(nome) => aprovarSugestao(index, nome)"
+          @descartar="descartarSugestao(index)"
+        />
 
         <GameMap :agent="currentAgent" :squad="squad" />
       </main>
+    </div>
+
+    <!-- Toast: a contratacao acontece no mapa, longe do card que foi clicado. -->
+    <div
+      v-if="toast"
+      class="fixed bottom-24 right-6 z-50 border-4 border-black bg-[#ffdb58] px-4 py-3 font-black text-sm uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+    >
+      ✨ {{ toast }}
     </div>
 
     <!-- Command Bar -->

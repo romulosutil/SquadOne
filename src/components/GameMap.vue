@@ -15,7 +15,7 @@
  * integrantes dele dentro. Nada aqui deriva sala de pessoa.
  */
 import { computed, watch } from 'vue'
-import { useOffice, type OfficeDominio, type OfficePessoa } from '../office/useOffice'
+import { useOffice, type OfficeDominio, type OfficePessoa, type RoomPhase } from '../office/useOffice'
 import {
   ISO_MATRIX,
   ROOM_TEMPLATES,
@@ -91,11 +91,20 @@ const poRaiz = computed(() => props.squad?.dominios[0]?.po.id ?? null)
  * raiz, até a SALA DO DOMÍNIO dessa pessoa — visitar alguém é ir ao domínio
  * dele, não a uma coordenada pessoal.
  */
+/**
+ * Só a troca de AGENTE move o PO raiz. O roster também entra no watch porque
+ * o primeiro carregamento precisa posicionar a câmera — mas uma contratação
+ * (§4.4) não pode puxar a câmera de volta para a sala do PO no meio da
+ * animação de entrada do recém-chegado.
+ */
 watch(
   [() => props.agent, dominios],
-  ([agent]) => {
+  ([agent], anterior) => {
+    const [agentAnterior, domAnterior] = anterior ?? [undefined, [] as OfficeDominio[]]
     const raiz = poRaiz.value
     if (!raiz || !dominios.value.length) return
+    const rosterChegou = !domAnterior?.length
+    if (!rosterChegou && agent === agentAnterior) return
     const destino = dominios.value.find((d) => d.pessoas.some((p) => p.id === agent))
     if (destino && destino.id !== dominios.value[0].id) moveTo(raiz, destino.slot, VISIT_TILE)
     else moveTo(raiz, dominios.value[0].slot) // Idle ou próprio domínio: volta pra mesa
@@ -135,6 +144,18 @@ function stripStyle(p: OfficePessoa, anim: 'idle' | 'walk') {
   return base
 }
 
+/**
+ * Crescimento do escritório (§4.4). 'pending' = o slot já conta para o mapa
+ * (a câmera precisa poder enquadrá-lo) mas nada aparece; 'building' toca
+ * `room-build`. Sem fase, a sala é só uma sala.
+ */
+function faseClasse(room: { phase: RoomPhase }) {
+  return {
+    'room--pending': room.phase === 'pending',
+    'room--new': room.phase === 'building',
+  }
+}
+
 function actorStyle(p: OfficePessoa) {
   const sheet = sheetOf(p)
   return {
@@ -165,6 +186,7 @@ function actorStyle(p: OfficePessoa) {
             v-for="room in rooms"
             :key="room.key + '-base'"
             class="base"
+            :class="faseClasse(room)"
             :style="{
               left: room.base.left + 'px',
               top: room.base.top + 'px',
@@ -176,7 +198,7 @@ function actorStyle(p: OfficePessoa) {
             v-for="room in rooms"
             :key="room.key + '-floor'"
             class="floor"
-            :class="{ 'room--new': room.isNew }"
+            :class="faseClasse(room)"
             :style="{
               left: room.floor.left + 'px',
               top: room.floor.top + 'px',
@@ -188,7 +210,11 @@ function actorStyle(p: OfficePessoa) {
 
         <!-- Objetos: já projetados, ordenados por diagonal do mundo. -->
         <div class="objects">
-          <template v-for="room in rooms" :key="room.key">
+          <!-- Um wrapper por sala para que paredes, props e placa materializem
+               JUNTOS com o chão. O wrapper é estático e sem filtro fora da
+               animação: não cria contexto de empilhamento e o z-index de cada
+               objeto continua valendo contra `.objects` (painter's algorithm). -->
+          <div v-for="room in rooms" :key="room.key" class="room-objects" :class="faseClasse(room)">
             <!-- Paredes de trás, um tile por div: o vão da porta é o tile ausente. -->
             <div
               v-for="w in room.walls"
@@ -220,7 +246,7 @@ function actorStyle(p: OfficePessoa) {
               :style="{ left: room.label.left + 'px', top: room.label.top + 'px' }"
               >{{ room.label.text }}</span
             >
-          </template>
+          </div>
 
           <!-- Atores: billboards, movidos por translate3d direto no style. -->
           <div

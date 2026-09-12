@@ -30,6 +30,28 @@
   100% { clip-path: inset(0 0 0 0);         filter: brightness(1); }
 }
 
-.room--new {
+.floor.room--new,
+.base.room--new {
   animation: room-build 450ms steps(6, end) both;
+}
+
+/* Enquanto a câmera ainda não chegou, a sala já conta para o mapa (o mundo
+   precisa do slot para enquadrar) mas não aparece. */
+.room--pending {
+  visibility: hidden;
+}
+
+/* Paredes, props e placa não podem usar `room-build`: o clip-path recorta pela
+   caixa do elemento, e o wrapper de objetos não tem caixa própria (os filhos
+   são todos position:absolute). Eles entram com o mesmo flash, um degrau
+   depois do chão terminar de abrir. */
+@keyframes room-build-objects {
+  0%   { opacity: 0; filter: brightness(4); }
+  50%  { opacity: 0; filter: brightness(4); }
+  67%  { opacity: 1; filter: brightness(4); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+
+.room-objects.room--new {
+  animation: room-build-objects 450ms steps(6, end) both;
 }
