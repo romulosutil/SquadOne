@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { readSquad, unlockedSlots, dominiosDoSquad } from "./server/squad.ts";
+import { readSquad, unlockedSlots, dominiosDoSquad, PedidoInvalido } from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
 import { ehModo } from "./server/capabilities.ts";
@@ -115,8 +115,10 @@ async function startServer() {
       res.json(resultado);
     } catch (error: any) {
       // Conflito = a proposta nao cabe mais no roster atual (dominio duplicado,
-      // escritorio cheio): nao e erro de forma do pedido, e estado que mudou.
-      const status = error instanceof ConflitoDeRoster ? 409 : 400;
+      // escritorio cheio, squad inexistente): e estado que mudou, nao pedido
+      // malformado. Erro sem classificacao e nosso (disco, roster ilegivel): 500.
+      const status =
+        error instanceof ConflitoDeRoster ? 409 : error instanceof PedidoInvalido ? 400 : 500;
       console.error("Erro ao contratar:", error);
       res.status(status).json({ error: error.message });
     }
