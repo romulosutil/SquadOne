@@ -70,7 +70,8 @@ export interface PropostaIntegrante {
   escopo: string;
 }
 
-export type Sugestao = PropostaDominio | PropostaIntegrante;
+/** `id` gerado pelo servidor a cada turno: identidade do card na tela. */
+export type Sugestao = (PropostaDominio | PropostaIntegrante) & { id: string };
 
 export interface ErroTarefa {
   capacidade: string;

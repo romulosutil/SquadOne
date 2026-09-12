@@ -4,6 +4,7 @@ import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
 import GrowthCard from './components/GrowthCard.vue'
+import type { Sugestao } from './types'
 import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
 
 const currentAgent = ref('Idle')
@@ -11,13 +12,14 @@ const currentAgent = ref('Idle')
 // so o cache da ultima leitura de GET /api/mochila.
 const quests = ref([])
 const carregandoMochila = ref(false)
-const sugestoes = ref([])
+const sugestoes = ref<Sugestao[]>([])
 const squad = ref(null)
 const isLoading = ref(false)
-// Contratacao em curso: indice da sugestao sendo aprovada (so uma por vez, o
-// servidor serializa as escritas no roster de qualquer forma).
-const aprovando = ref(-1)
-const erroSugestao = ref({})
+// Contratacao em curso: id da sugestao sendo aprovada (so uma por vez, o
+// servidor serializa as escritas no roster de qualquer forma). Id, nao indice:
+// um turno novo ou um descarte durante o POST desloca os indices.
+const aprovando = ref('')
+const erroSugestao = ref<Record<string, string>>({})
 const toast = ref('')
 let toastTimer = 0
 
@@ -81,22 +83,25 @@ const avisar = (texto) => {
  * de que o escritorio precisa — o GameMap ve um dominio (ou uma pessoa) a mais
  * e roda a sequencia de crescimento sozinho.
  */
-const aprovarSugestao = async (index, nome) => {
-  if (aprovando.value !== -1) return
-  aprovando.value = index
-  erroSugestao.value = { ...erroSugestao.value, [index]: '' }
+const aprovarSugestao = async (id, nome) => {
+  if (aprovando.value) return
+  const sugestao = sugestoes.value.find((s) => s.id === id)
+  if (!sugestao) return
+  aprovando.value = id
+  erroSugestao.value = { ...erroSugestao.value, [id]: '' }
   try {
     const response = await fetch('/api/squad/hire', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sugestao: sugestoes.value[index], nome })
+      body: JSON.stringify({ sugestao, nome })
     })
     const dados = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(dados.error ?? `HTTP ${response.status}`)
 
     squad.value = dados.squad
-    sugestoes.value = sugestoes.value.filter((_, i) => i !== index)
-    erroSugestao.value = {}
+    sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
+    const { [id]: _, ...outrosErros } = erroSugestao.value
+    erroSugestao.value = outrosErros
     avisar(
       dados.kind === 'dominio'
         ? `${dados.pessoa.nome} abriu o dominio ${dados.dominio.nome}`
@@ -104,14 +109,14 @@ const aprovarSugestao = async (index, nome) => {
     )
   } catch (error) {
     console.error('Falha ao contratar:', error)
-    erroSugestao.value = { ...erroSugestao.value, [index]: error.message }
+    erroSugestao.value = { ...erroSugestao.value, [id]: error.message }
   } finally {
-    aprovando.value = -1
+    aprovando.value = ''
   }
 }
 
-const descartarSugestao = (index) => {
-  sugestoes.value = sugestoes.value.filter((_, i) => i !== index)
+const descartarSugestao = (id) => {
+  sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
 }
 
 // Navega para fora da SPA; o retorno cai no onMounted acima.
@@ -154,9 +159,11 @@ const handleDelegation = async (payload) => {
       currentAgent.value = turno.eventos_criados[0].responsavel_id
     }
 
-    if (turno.sugestoes?.length) {
-      sugestoes.value = turno.sugestoes
-    }
+    // Cada turno SUBSTITUI as propostas, inclusive por nenhuma: sugestao de
+    // uma demanda antiga nao tem mais contexto, e deixar a lista so crescer
+    // (ou nunca esvaziar) mostrava cards que ninguem pediu agora.
+    sugestoes.value = turno.sugestoes ?? []
+    erroSugestao.value = {}
 
     if (turno.erros?.length) {
       // try por tarefa: o lote sobrevive, os erros vem nomeados.
@@ -227,14 +234,17 @@ const handleDelegation = async (payload) => {
         <!-- Crescimento em DOIS niveis (spec 4.4): um dominio novo abre sala,
              um integrante entra na sala do dominio que ja existe. O modelo so
              propoe; aprovar aqui e o que escreve no roster. -->
+        <!-- :key pelo id do servidor: cada card tem seu proprio estado (nome
+             digitado); com key por indice, o card seguinte herdava o nome
+             depois de um descarte ou aprovacao. -->
         <GrowthCard
-          v-for="(sugestao, index) in sugestoes"
-          :key="index"
+          v-for="sugestao in sugestoes"
+          :key="sugestao.id"
           :sugestao="sugestao"
-          :enviando="aprovando === index"
-          :erro="erroSugestao[index] || ''"
-          @aprovar="(nome) => aprovarSugestao(index, nome)"
-          @descartar="descartarSugestao(index)"
+          :enviando="aprovando === sugestao.id"
+          :erro="erroSugestao[sugestao.id] || ''"
+          @aprovar="(nome) => aprovarSugestao(sugestao.id, nome)"
+          @descartar="descartarSugestao(sugestao.id)"
         />
 
         <GameMap :agent="currentAgent" :squad="squad" />

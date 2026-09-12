@@ -78,8 +78,14 @@ export interface PropostaIntegrante {
   escopo: string;
 }
 
-export type Sugestao = PropostaDominio | PropostaIntegrante;
-export type CapabilityResult = EventoCriado | Sugestao;
+/**
+ * Proposta como sai do turno. O `id` é carimbado no orchestrator, não no
+ * handler: é identidade do card na tela (aprovar/descartar/`:key`), não dado
+ * da proposta — por índice, remover um card fazia o seguinte herdar o nome
+ * digitado e a aprovação em curso.
+ */
+export type Sugestao = (PropostaDominio | PropostaIntegrante) & { id: string };
+export type CapabilityResult = EventoCriado | PropostaDominio | PropostaIntegrante;
 
 export interface Capability {
   declaration: FunctionDeclaration;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
 import { CAPABILITIES, declarations, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
 import { readSquad, rosterTree } from "./squad.ts";
@@ -198,7 +199,7 @@ export async function executarTurno(
   for (const r of resultados) {
     if ("erro" in r) turno.erros.push(r);
     else if (r.kind === "evento") turno.eventos_criados.push(r);
-    else turno.sugestoes.push(r);
+    else turno.sugestoes.push({ ...r, id: randomUUID() });
   }
 
   if (calls.length === 0) {
