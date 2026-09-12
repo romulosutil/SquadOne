@@ -13,6 +13,16 @@ export const SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+/**
+ * O valor é embutido no bundle no `vite build`, não lido em runtime: um deploy
+ * que buildou sem a variável — ou com o placeholder do .env.example — carrega
+ * uma string qualquer, e uma string qualquer passa por `if (!CLIENT_ID)`. O
+ * Google então recusa o `initTokenClient` sem erro legível pro usuário. Exigir
+ * o formato aqui transforma esse silêncio numa mensagem que diz onde arrumar.
+ */
+export function clientIdValido(valor: string | undefined): boolean {
+  return /^[0-9]+-[0-9a-z]+\.apps\.googleusercontent\.com$/.test(valor ?? "");
+}
 /** Renova antes do fim: um token que expira em voo vira 401 no meio do turno. */
 const MARGEM_MS = 60_000;
 
@@ -76,10 +86,12 @@ function carregarGis(): Promise<void> {
 let cliente: TokenClient | null = null;
 
 async function obterCliente(): Promise<TokenClient> {
-  if (!CLIENT_ID) {
+  if (!clientIdValido(CLIENT_ID)) {
     throw new Error(
-      "VITE_GOOGLE_CLIENT_ID não configurado: copie .env.example para .env " +
-        "e preencha com o OAuth Client ID (tipo Web) do projeto Google.",
+      `VITE_GOOGLE_CLIENT_ID inválido (${CLIENT_ID ?? "ausente"}): precisa ser o ` +
+        "OAuth Client ID (tipo Web) do projeto Google, terminando em " +
+        ".apps.googleusercontent.com. Em produção ele é embutido no build — " +
+        "defina a variável ANTES do `vite build` e rebuilde.",
     );
   }
   await carregarGis();
