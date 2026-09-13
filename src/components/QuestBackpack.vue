@@ -11,7 +11,10 @@ const props = defineProps({
   carregando: { type: Boolean, default: false },
   // id -> nome dos domínios da squad ativa. Ids novos são `<squad>--<slug>`,
   // feios de ler num badge; sem nome conhecido, cai no id.
-  nomesDeDominio: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
+  nomesDeDominio: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
+  // id -> nome das pessoas da squad ativa. Quem foi arquivado continua dono das
+  // quests do domínio (spec Fase 2 §7.11) e aparece como "Nome (arquivado)".
+  nomesDePessoa: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
 })
 
 defineEmits(['conectar', 'recarregar'])
@@ -107,7 +110,7 @@ const prazoDoBloco = (quest: QuestCalendario) => {
         <div class="text-sm font-bold flex flex-col gap-1">
           <!-- As duas marcas do evento: dominio (filtro) e membro (responsavel). -->
           <div class="flex items-center gap-1 flex-wrap">
-            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ quest.membro || '?' }}</span>
+            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ nomesDePessoa[quest.membro] ?? (quest.membro || '?') }}</span>
             <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
           </div>
           <div class="text-gray-800">⏰ {{ rotuloDoTipo(quest) }}</div>

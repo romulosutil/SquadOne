@@ -261,3 +261,9 @@ export type DadosDeContratacao =
   | { alvo: "dominio"; nome: string; nomeDominio: string; escopoDominio: string; papelPo: string; escopoPo: string }
   | { alvo: "po"; integranteId: string }
   | { alvo: "po"; nome: string; papel: string; escopo: string };
+
+/** De onde o modal de edição foi aberto. Ids nunca são editáveis. */
+export type AlvoDeEdicao =
+  | { tipo: "pessoa"; pessoa: Pessoa }
+  | { tipo: "dominio"; dominio: Dominio }
+  | { tipo: "squad"; squad: SquadView };

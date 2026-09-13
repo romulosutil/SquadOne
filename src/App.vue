@@ -9,9 +9,12 @@ import NovaSquadModal from './components/NovaSquadModal.vue'
 import TrocaSquadCard from './components/TrocaSquadCard.vue'
 import SalasPainel from './components/SalasPainel.vue'
 import ContratarModal from './components/ContratarModal.vue'
-import { ErroDaApi, rosterApi } from './rosterApi'
+import EditarModal from './components/EditarModal.vue'
+import ArquivoModal from './components/ArquivoModal.vue'
+import { ErroDaApi, rosterApi, type TipoDoRoster } from './rosterApi'
 import type {
   AlvoDeContratacao,
+  AlvoDeEdicao,
   DadosDeContratacao,
   DadosNovaSquad,
   Modo,
@@ -365,6 +368,139 @@ const confirmarContratacao = async (dados: DadosDeContratacao) => {
   }
 }
 
+const edicao = ref<AlvoDeEdicao | null>(null)
+const enviandoEdicao = ref(false)
+const erroEdicao = ref('')
+const arquivoAberto = ref(false)
+const reativando = ref('')
+const errosArquivo = ref<Record<string, string>>({})
+// Arquivar em curso: um por vez, e o painel fica desabilitado enquanto isso.
+const arquivando = ref(false)
+const ocupadoComRoster = computed(() => isLoading.value || enviandoContratacao.value || arquivando.value)
+// Qualquer modal aberto bloqueia a CommandBar, como o de nova squad já fazia:
+// um Enter lá embaixo mandaria um turno às cegas com o roster mudando aqui.
+const modalAberto = computed(() => criandoSquad.value || !!contratacao.value || !!edicao.value || arquivoAberto.value)
+
+const nomesDePessoa = computed<Record<string, string>>(() => {
+  const squad = squadAtiva.value
+  if (!squad) return {}
+  const mapa: Record<string, string> = {}
+  for (const i of squad.arquivo.integrantes) mapa[i.pessoa.id] = `${i.pessoa.nome} (arquivado)`
+  for (const d of squad.dominios) for (const p of [d.po, ...d.integrantes]) mapa[p.id] = p.nome
+  return mapa
+})
+
+const acharPessoaAtiva = (id: string) =>
+  squadAtiva.value?.dominios.flatMap((d) => [d.po, ...d.integrantes]).find((p) => p.id === id)
+
+const abrirEdicao = (alvo: AlvoDeEdicao) => {
+  erroEdicao.value = ''
+  edicao.value = alvo
+}
+const editarPessoa = (id: string) => {
+  const pessoa = acharPessoaAtiva(id)
+  if (pessoa) abrirEdicao({ tipo: 'pessoa', pessoa })
+}
+const editarDominio = (id: string) => {
+  const dominio = acharDominioAtivo(id)
+  if (dominio) abrirEdicao({ tipo: 'dominio', dominio })
+}
+const editarSquadAtiva = () => {
+  if (squadAtiva.value) abrirEdicao({ tipo: 'squad', squad: squadAtiva.value })
+}
+
+const salvarEdicao = async (corpo: Record<string, string>) => {
+  const alvo = edicao.value
+  if (!alvo || enviandoEdicao.value) return
+  const [tipo, id]: [TipoDoRoster, string] =
+    alvo.tipo === 'pessoa'
+      ? ['pessoas', alvo.pessoa.id]
+      : alvo.tipo === 'dominio'
+        ? ['dominios', alvo.dominio.id]
+        : ['squads', alvo.squad.id]
+  enviandoEdicao.value = true
+  erroEdicao.value = ''
+  try {
+    const r = await rosterApi.editar(tipo, id, corpo)
+    roster.value = r.roster
+    edicao.value = null
+    avisar('Salvo')
+  } catch (error) {
+    erroEdicao.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    enviandoEdicao.value = false
+  }
+}
+
+/**
+ * Arquivar pede confirmação com o efeito explícito (spec §3.4). O perigo não é
+ * perder dado, é o usuário achar que perdeu.
+ */
+const arquivar = async (tipo: TipoDoRoster, id: string, pergunta: string) => {
+  if (arquivando.value || !window.confirm(pergunta)) return
+  arquivando.value = true
+  try {
+    const eraSquadAtiva = tipo === 'squads' && id === squadAtiva.value?.id
+    const r = await rosterApi.arquivar(tipo, id)
+    roster.value = r.roster
+    if (eraSquadAtiva && r.roster.squads[0]) {
+      // trocarSquad sairia cedo: o computed já caiu na primeira squad ativa
+      // quando o roster mudou. Grava a escolha e relê a Mochila à mão.
+      const nova = r.roster.squads[0]
+      squadAtivaId.value = nova.id
+      gravarSquadAtiva(nova.id)
+      quests.value = []
+      currentAgent.value = 'Idle'
+      await carregarMochila()
+    } else if (tipo === 'dominios') {
+      await carregarMochila()
+    }
+    avisar('Arquivado')
+  } catch (error) {
+    avisar(error instanceof Error ? error.message : String(error))
+  } finally {
+    arquivando.value = false
+  }
+}
+
+const arquivarPessoa = (id: string) => {
+  const p = acharPessoaAtiva(id)
+  if (!p) return
+  arquivar('pessoas', id, `Arquivar ${p.nome}? Sai do escritório e do prompt. Os eventos dele continuam no Google e na Mochila do domínio. Dá para reativar no Arquivo.`)
+}
+const arquivarDominio = (id: string) => {
+  const d = acharDominioAtivo(id)
+  if (!d) return
+  arquivar('dominios', id, `Arquivar a sala ${d.nome} com ${1 + d.integrantes.length} pessoa(s)? A sala fecha e libera o slot. Os eventos continuam no Google, mas saem da Mochila até você reativar.`)
+}
+const arquivarSquadAtiva = () => {
+  const s = squadAtiva.value
+  if (!s) return
+  arquivar('squads', s.id, `Arquivar a squad ${s.nome}? Ela some do seletor e do prompt. Os eventos continuam no Google.`)
+}
+
+const abrirArquivo = () => {
+  errosArquivo.value = {}
+  arquivoAberto.value = true
+}
+
+const reativar = async (tipo: TipoDoRoster, id: string) => {
+  if (reativando.value) return
+  const chave = `${tipo}:${id}`
+  reativando.value = chave
+  errosArquivo.value = { ...errosArquivo.value, [chave]: '' }
+  try {
+    const r = await rosterApi.reativar(tipo, id)
+    roster.value = r.roster
+    avisar('Reativado')
+    if (tipo === 'dominios') await carregarMochila()
+  } catch (error) {
+    errosArquivo.value = { ...errosArquivo.value, [chave]: error instanceof Error ? error.message : String(error) }
+  } finally {
+    reativando.value = ''
+  }
+}
+
 // Navega para fora da SPA; o retorno cai no onMounted acima.
 const conectarGoogle = () => irParaConsentimento()
 
@@ -375,7 +511,7 @@ const desconectarGoogle = async () => {
 }
 
 const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
-  if (isLoading.value || criandoSquad.value) return;
+  if (isLoading.value || modalAberto.value) return;
 
   isLoading.value = true;
   currentAgent.value = 'Idle';
@@ -466,9 +602,12 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           v-if="roster"
           :squads="roster.squads"
           :ativa-id="squadAtiva?.id ?? ''"
-          :desabilitado="isLoading"
+          :desabilitado="ocupadoComRoster"
+          :pode-arquivar="(roster?.squads.length ?? 0) > 1"
           @trocar="trocarSquad"
           @nova="abrirNovaSquad"
+          @editar="editarSquadAtiva"
+          @arquivar="arquivarSquadAtiva"
         />
         <div v-if="isLoading" class="font-bold text-sm uppercase flex items-center gap-2">
           <span class="animate-spin text-xl">⚙️</span>
@@ -502,6 +641,7 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         :conectado="conectado"
         :carregando="carregandoMochila"
         :nomes-de-dominio="nomesDeDominio"
+        :nomes-de-pessoa="nomesDePessoa"
         @conectar="conectarGoogle"
         @recarregar="() => carregarMochila()"
       />
@@ -542,10 +682,15 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           v-if="squadAtiva"
           :squad="squadAtiva"
           :total-arquivado="totalArquivado"
-          :desabilitado="isLoading || enviandoContratacao"
+          :desabilitado="ocupadoComRoster"
           @contratar="contratarNaSala"
           @abrir-sala="abrirSala"
           @substituir-po="substituirPoDaSala"
+          @editar-pessoa="editarPessoa"
+          @arquivar-pessoa="arquivarPessoa"
+          @editar-dominio="editarDominio"
+          @arquivar-dominio="arquivarDominio"
+          @abrir-arquivo="abrirArquivo"
         />
 
         <!-- :key por squad: recria useOffice ao trocar, senao as salas da
@@ -562,6 +707,25 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       :erro="erroContratacao"
       @contratar="confirmarContratacao"
       @fechar="contratacao = null"
+    />
+
+    <EditarModal
+      v-if="edicao"
+      :alvo="edicao"
+      :enviando="enviandoEdicao"
+      :erro="erroEdicao"
+      @salvar="salvarEdicao"
+      @fechar="edicao = null"
+    />
+
+    <ArquivoModal
+      v-if="arquivoAberto && squadAtiva && roster"
+      :squad="squadAtiva"
+      :squads-arquivadas="roster.squadsArquivadas"
+      :reativando="reativando"
+      :erros="errosArquivo"
+      @reativar="reativar"
+      @fechar="arquivoAberto = false"
     />
 
     <NovaSquadModal
@@ -583,7 +747,7 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     <!-- Command Bar -->
     <!-- Modal aberto bloqueia o envio: o Enter no input de baixo mandaria um
          turno às cegas, e a troca de squad do modal colidiria com ele. -->
-    <CommandBar :desabilitado="criandoSquad" @delegate="handleDelegation" />
+    <CommandBar :desabilitado="modalAberto" @delegate="handleDelegation" />
   </div>
 </template>
 

@@ -10,10 +10,12 @@ import type { SquadView } from '../types'
 defineProps({
   squads: { type: Array as PropType<SquadView[]>, default: () => [] },
   ativaId: { type: String, default: '' },
-  desabilitado: { type: Boolean, default: false }
+  desabilitado: { type: Boolean, default: false },
+  // Falso com uma squad ativa só: a última não se arquiva.
+  podeArquivar: { type: Boolean, default: false }
 })
 
-const emit = defineEmits<{ trocar: [id: string]; nova: [] }>()
+const emit = defineEmits<{ trocar: [id: string]; nova: []; editar: []; arquivar: [] }>()
 </script>
 
 <template>
@@ -28,6 +30,20 @@ const emit = defineEmits<{ trocar: [id: string]; nova: [] }>()
     >
       <option v-for="s in squads" :key="s.id" :value="s.id">{{ s.nome }}</option>
     </select>
+    <button
+      type="button"
+      :disabled="desabilitado"
+      title="Editar nome e escopo da squad"
+      class="border-4 border-black bg-white px-2 py-1 font-black text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+      @click="emit('editar')"
+    >✎</button>
+    <button
+      type="button"
+      :disabled="desabilitado || !podeArquivar"
+      :title="podeArquivar ? 'Arquivar esta squad' : 'A última squad ativa não pode ser arquivada'"
+      class="border-4 border-black bg-white px-2 py-1 font-black text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+      @click="emit('arquivar')"
+    >🗄</button>
     <button
       type="button"
       :disabled="desabilitado"
