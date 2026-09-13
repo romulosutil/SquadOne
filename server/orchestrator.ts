@@ -82,7 +82,7 @@ export interface TurnoResult {
 }
 
 /** Data/hora local com offset, no formato que o modelo deve devolver. */
-function agoraLocalISO(agora: Date): string {
+export function agoraLocalISO(agora: Date): string {
   const fmt = new Intl.DateTimeFormat("sv-SE", {
     timeZone: TIMEZONE,
     year: "numeric", month: "2-digit", day: "2-digit",
