@@ -97,22 +97,30 @@ export function escaparTexto(t: string, html: boolean): string {
   return s;
 }
 
-function normalizar(s: string, tirarTags: boolean): string {
-  let t = s;
-  if (tirarTags) {
-    t = t
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|div|li)>/gi, "\n")
-      .replace(/<[^>]*>/g, "");
-  }
-  return t
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/gi, "&")
-    .replace(/\u00A0/g, " ")
+/**
+ * Tags que a UI web do Calendar grava. Só estas saem na normalização: um
+ * "<RG do cliente>" numa descrição detectada como HTML continua sendo texto.
+ */
+const TAG_HTML = /<\/?(?:br|p|div|b|i|u|s|a|ul|ol|li|span|strong|em|font|strike|sub|sup|h[1-6]|hr|html-blob)\b[^>]*>/gi;
+const ENTIDADE = /&(?:(nbsp|lt|gt|quot|amp|apos)|#(\d{1,7})|#x([0-9a-f]{1,6}));/gi;
+const ENTIDADES_NOMEADAS: Record<string, string> = { nbsp: " ", lt: "<", gt: ">", quot: '"', amp: "&", apos: "'" };
+
+/**
+ * Uma passada só, entidade por entidade: `&amp;lt;` vira `&lt;` (o texto que o
+ * usuário vê), nunca `<`. Decodificar em cascata transformaria texto literal
+ * do modelo ou do usuário e acusaria edição onde não houve.
+ */
+function decodificarEntidades(s: string): string {
+  return s.replace(ENTIDADE, (m, nome: string, dec: string, hex: string) => {
+    if (nome) return ENTIDADES_NOMEADAS[nome.toLowerCase()];
+    const cp = dec ? Number(dec) : parseInt(hex, 16);
+    return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+  });
+}
+
+function porLinha(s: string): string {
+  return s
+    .replace(/\xA0/g, " ")
     .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((l) => l.replace(/[ \t]+/g, " ").trim())
@@ -121,25 +129,38 @@ function normalizar(s: string, tirarTags: boolean): string {
 }
 
 /**
- * O texto que o usuário VÊ. O hash é sobre isto, não sobre bytes: quando o
+ * O texto que o usuário VÊ, no modo da descrição inteira (`ehHtml`, a mesma
+ * detecção que decide `<br>`). O hash é sobre isto, não sobre bytes: quando o
  * usuário edita outra parte da descrição na UI web, o Google reescreve tudo em
- * HTML e o bloco do agente muda de bytes sem mudar de texto — hash cru travaria
- * o agente para sempre.
+ * HTML (escapa `&`, `<`, `>` e troca quebra por `<br>`) e o bloco muda de bytes
+ * sem mudar de texto — hash cru travaria o agente para sempre.
+ * - texto puro: `<...>` e `&...;` SÃO conteúdo e entram no hash como estão. Tirar
+ *   tags aqui deixava o usuário escrever "<RG do cliente>" no bloco sem o hash
+ *   mudar, e o agente sobrescrevia o texto dele;
+ * - HTML: quebras viram `\n`, tags conhecidas saem, entidades são decodificadas
+ *   uma vez. O round-trip escape → reescrita do Google → normalização devolve o
+ *   mesmo texto do modo puro.
  */
-export function normalizarTexto(s: string): string {
-  return normalizar(s, true);
+export function normalizarTexto(s: string, html: boolean): string {
+  if (!html) return porLinha(s);
+  const semTags = s
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n")
+    .replace(TAG_HTML, "");
+  return porLinha(decodificarEntidades(semTags));
 }
 
 /**
- * Descrição legível para o prompt. Só tira tags quando a descrição É HTML:
- * em texto puro, "Levar <RG>" é o que o usuário escreveu, não uma tag.
+ * Descrição legível para o prompt, pela mesma regra: em texto puro, "Levar
+ * <RG>" é o que o usuário escreveu, não uma tag.
  */
 export function paraTextoSimples(d: string): string {
-  return normalizar(d, ehHtml(d));
+  return normalizarTexto(d, ehHtml(d));
 }
 
-export function hashDoConteudo(conteudo: string): string {
-  return sha256(normalizarTexto(conteudo)).slice(0, 16);
+/** `html`: o modo da descrição em que o bloco mora (não o do bloco sozinho). */
+export function hashDoConteudo(conteudo: string, html: boolean): string {
+  return sha256(normalizarTexto(conteudo, html)).slice(0, 16);
 }
 
 /** Chave ≤ 44 (limite do Google, que DESCARTA chave maior em silêncio): 19 caracteres. */
@@ -214,7 +235,7 @@ export function estadoDoBloco(
   if (a.malformados.has(pessoaId)) return "editado";
   const bloco = a.blocos.get(pessoaId);
   if (!bloco) return "ausente";
-  return privado[chaveDeHash(pessoaId)] === `${pessoaId}:${hashDoConteudo(bloco.conteudo)}`
+  return privado[chaveDeHash(pessoaId)] === `${pessoaId}:${hashDoConteudo(bloco.conteudo, a.html)}`
     ? "nosso"
     : "editado";
 }
@@ -327,7 +348,7 @@ export function mesclarDescricao(e: EntradaDaMescla): SaidaDaMescla {
   const hashes: Record<string, string> = {};
   for (const i of itens) {
     hashes[chaveDeHash(i.c.pessoaId)] =
-      `${i.c.pessoaId}:${hashDoConteudo(conteudoDoBloco(i.c, e.quando, i.corpo, a.html))}`;
+      `${i.c.pessoaId}:${hashDoConteudo(conteudoDoBloco(i.c, e.quando, i.corpo, a.html), a.html)}`;
   }
   const mudou =
     descricao !== e.descricao || Object.entries(hashes).some(([k, v]) => e.privado[k] !== v);
