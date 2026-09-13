@@ -238,8 +238,15 @@ alocar(ocupacao, janela, pedido, agora):
 tamanho(livreMin, restante):
   se livreMin < 30 ou restante < 30: 0
   t = min(120, livreMin, restante)
-  se 0 < restante - t < 30 e restante - 30 >= 30: t = restante - 30   // 135 → 105 + 30, nunca 120 + 15
+  se 0 < restante - t < 30 e restante - 30 >= 30
+     e cabeResto(slot de restante - 30):         // 135 → 105 + 30, nunca 120 + 15
+    t = restante - 30
   devolve t
+
+cabeResto(novo):
+  // Encolher só vale se os 30 que sobram têm onde cair antes do prazo.
+  // Sem espaço, reserva tudo o que couber: esforço 75 e 60 livres → 60, faltou 15.
+  slots + 1 < 20 e algum dia tem livre >= 30 em mesclar(ocupado ∪ pausa(slots ∪ {novo}))
 
 janelasDosDias(de, ate):
   d = data local de `de`
@@ -497,6 +504,7 @@ Todos verificáveis sem Google e sem Gemini reais (fetch e cliente do Gemini fal
    - B4 esforço 600, limite seg 12:00 → seg 09–11, seg 11:15–12:00, faltou 435.
    - B5 limite antes de agora → nenhum slot, faltou 120.
    - B6 só buracos de 30 min, esforço 45 → 09:00–09:30, faltou 15.
+   - B8 esforço 75, só 09:00–10:00 livre antes do prazo (hoje 19:00) → 09:00–10:00, faltou 15 (não encolhe para 45: o resto de 30 não teria onde cair). B9 esforço 135, limite seg 11:00 → 09:00–11:00, faltou 15.
    - B7 janela 09:00–09:30 todos os dias, esforço 900 → 20 slots (14/09…03/10), faltou 300.
    - D1 `America/New_York`, janela 01–04 todos os dias, agora 08/03/2026 00:30 −05:00, foco 120 → 06:00Z–08:00Z do dia 08. D2 foco 180 → 09/03 05:00Z–08:00Z. D3 janela 00–03, agora 31/10 23:00 −04:00, foco 240 → 01/11 04:00Z–08:00Z. D4 janela 02:30–05:00, agora 08/03 00:00 −05:00, foco 60 → 07:30Z–08:30Z. D5 São Paulo janela 00–02, agora 03/11/2018 23:00 −03:00, foco 60 → 04/11/2018 03:00Z–04:00Z.
    - Nenhum caso muta `ocupacao`.

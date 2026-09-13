@@ -323,15 +323,23 @@ export function dentroDaJanela(slot: Intervalo, j: Janela): boolean {
 
 /**
  * Tamanho do próximo bloco num trecho livre de `livreMin`, faltando `restanteMin`.
- * Nunca deixa um resto menor que BLOCO_MIN quando dá para evitar: 135 min viram
- * 105 + 30, não 120 + 15.
+ * Evita deixar um resto menor que BLOCO_MIN (135 min viram 105 + 30, não
+ * 120 + 15), mas SÓ quando o resto de 30 tem onde cair: `cabeResto` responde
+ * se, com o bloco encolhido reservado, ainda existe um trecho de BLOCO_MIN
+ * antes do prazo. Sem espaço, encolher só trocaria 15 min sem reserva por 30
+ * (75 de esforço e 60 livres: reserva 60, faltam 15 — não 45 e faltam 30).
  */
-function tamanhoDoBloco(livreMin: number, restanteMin: number): number {
+function tamanhoDoBloco(
+  livreMin: number,
+  restanteMin: number,
+  cabeResto: (encolhidoMin: number) => boolean,
+): number {
   if (livreMin < BLOCO_MIN || restanteMin < BLOCO_MIN) return 0;
-  let t = Math.min(BLOCO_MAX, livreMin, restanteMin);
+  const t = Math.min(BLOCO_MAX, livreMin, restanteMin);
   const sobra = restanteMin - t;
-  if (sobra > 0 && sobra < BLOCO_MIN && restanteMin - BLOCO_MIN >= BLOCO_MIN) {
-    t = restanteMin - BLOCO_MIN;
+  const encolhido = restanteMin - BLOCO_MIN;
+  if (sobra > 0 && sobra < BLOCO_MIN && encolhido >= BLOCO_MIN && cabeResto(encolhido)) {
+    return encolhido;
   }
   return t;
 }
@@ -374,39 +382,42 @@ export function alocar(
   const slots: Intervalo[] = [];
   let restante = pedido.esforcoMin;
 
+  // Ocupação com pausa em volta dos blocos deste mesmo prazo (senão dois
+  // blocos encostados seriam um bloco gigante).
+  const ocupadoCom = (blocos: Intervalo[]) =>
+    mesclar([
+      ...ocupado,
+      ...blocos.map((s) => ({ inicio: s.inicio - PAUSA_MIN * MIN_MS, fim: s.fim + PAUSA_MIN * MIN_MS })),
+    ]);
+  // Com `novo` reservado, ainda sobra um trecho de BLOCO_MIN em algum dia antes do prazo?
+  const cabeResto = (novo: Intervalo) => {
+    if (slots.length + 1 >= BLOCOS_MAX) return false;
+    const oc = ocupadoCom([...slots, novo]);
+    return dias.some((d) => livres(d.inicio, d.fim, oc).some((l) => l.fim - l.inicio >= BLOCO_MIN * MIN_MS));
+  };
+  const reservarEm = (l: Intervalo): boolean => {
+    const t = tamanhoDoBloco((l.fim - l.inicio) / MIN_MS, restante, (encolhido) =>
+      cabeResto({ inicio: l.inicio, fim: l.inicio + encolhido * MIN_MS }),
+    );
+    if (t === 0) return false;
+    slots.push({ inicio: l.inicio, fim: l.inicio + t * MIN_MS });
+    restante -= t;
+    return true;
+  };
+
   // Passada 1: no máximo um bloco por dia, do mais cedo para o mais tarde.
   // Prazo distante não deve comer o dia de hoje inteiro.
   for (const dia of dias) {
     if (restante < BLOCO_MIN || slots.length >= BLOCOS_MAX) break;
     for (const l of livres(dia.inicio, dia.fim, ocupado)) {
-      const t = tamanhoDoBloco((l.fim - l.inicio) / MIN_MS, restante);
-      if (t > 0) {
-        slots.push({ inicio: l.inicio, fim: l.inicio + t * MIN_MS });
-        restante -= t;
-        break;
-      }
+      if (reservarEm(l)) break;
     }
   }
 
-  // Passada 2: o que sobrou vai onde couber, com pausa em volta dos blocos
-  // deste mesmo prazo (senão dois blocos encostados seriam um bloco gigante).
+  // Passada 2: o que sobrou vai onde couber, com pausa entre blocos do prazo.
   for (const dia of dias) {
     while (restante >= BLOCO_MIN && slots.length < BLOCOS_MAX) {
-      const comPausa = slots.map((s) => ({
-        inicio: s.inicio - PAUSA_MIN * MIN_MS,
-        fim: s.fim + PAUSA_MIN * MIN_MS,
-      }));
-      const ocupadoAgora = mesclar([...ocupado, ...comPausa]);
-      let achou = false;
-      for (const l of livres(dia.inicio, dia.fim, ocupadoAgora)) {
-        const t = tamanhoDoBloco((l.fim - l.inicio) / MIN_MS, restante);
-        if (t > 0) {
-          slots.push({ inicio: l.inicio, fim: l.inicio + t * MIN_MS });
-          restante -= t;
-          achou = true;
-          break;
-        }
-      }
+      const achou = livres(dia.inicio, dia.fim, ocupadoCom(slots)).some(reservarEm);
       if (!achou) break;
     }
   }
