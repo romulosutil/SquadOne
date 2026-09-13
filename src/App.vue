@@ -7,7 +7,19 @@ import GrowthCard from './components/GrowthCard.vue'
 import SquadSelector from './components/SquadSelector.vue'
 import NovaSquadModal from './components/NovaSquadModal.vue'
 import TrocaSquadCard from './components/TrocaSquadCard.vue'
-import type { DadosNovaSquad, Modo, RosterView, SquadView, Sugestao } from './types'
+import SalasPainel from './components/SalasPainel.vue'
+import ContratarModal from './components/ContratarModal.vue'
+import { ErroDaApi, rosterApi } from './rosterApi'
+import type {
+  AlvoDeContratacao,
+  DadosDeContratacao,
+  DadosNovaSquad,
+  Modo,
+  PreenchimentoDeContratacao,
+  RosterView,
+  SquadView,
+  Sugestao
+} from './types'
 import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 
@@ -238,6 +250,121 @@ const descartarSugestao = (id) => {
   sugestoes.value = sugestoes.value.filter((s) => s.id !== id)
 }
 
+// Modal de contratação aberto pela sala, pelo slot livre ou pelo "Ajustar" de
+// um card. `sugestaoId` existe só no último caso: contratar remove o card.
+const contratacao = ref<{ alvo: AlvoDeContratacao; inicial?: PreenchimentoDeContratacao; sugestaoId?: string } | null>(null)
+const enviandoContratacao = ref(false)
+const erroContratacao = ref('')
+
+const totalArquivado = computed(
+  () =>
+    (squadAtiva.value?.arquivo.dominios.length ?? 0) +
+    (squadAtiva.value?.arquivo.integrantes.length ?? 0) +
+    (roster.value?.squadsArquivadas.length ?? 0)
+)
+
+const acharDominioAtivo = (id: string) => squadAtiva.value?.dominios.find((d) => d.id === id)
+
+const abrirContratacao = (alvo: AlvoDeContratacao, inicial?: PreenchimentoDeContratacao, sugestaoId?: string) => {
+  erroContratacao.value = ''
+  contratacao.value = { alvo, inicial, sugestaoId }
+}
+
+const contratarNaSala = (dominioId: string) => {
+  const dominio = acharDominioAtivo(dominioId)
+  if (dominio && squadAtiva.value) abrirContratacao({ alvo: 'integrante', squadId: squadAtiva.value.id, dominio })
+}
+
+const abrirSala = () => {
+  const squad = squadAtiva.value
+  if (squad?.proximoSlot) abrirContratacao({ alvo: 'dominio', squadId: squad.id, slot: squad.proximoSlot })
+}
+
+const substituirPoDaSala = (dominioId: string) => {
+  const dominio = acharDominioAtivo(dominioId)
+  if (dominio && squadAtiva.value) abrirContratacao({ alvo: 'po', squadId: squadAtiva.value.id, dominio })
+}
+
+/** "Ajustar" do card: o mesmo modal, com a proposta do modelo como ponto de partida. */
+const ajustarSugestao = (id: string) => {
+  const s = sugestoes.value.find((x) => x.id === id)
+  if (!s || s.kind === 'troca_squad') return
+  const falhar = (msg: string) => {
+    erroSugestao.value = { ...erroSugestao.value, [id]: msg }
+  }
+  const squad = roster.value?.squads.find((q) => q.id === s.squad_id)
+  if (!squad) return falhar('A squad desta proposta não está ativa.')
+  if (s.kind === 'integrante') {
+    const dominio = squad.dominios.find((d) => d.id === s.dominio_id)
+    if (!dominio) return falhar('O domínio desta proposta não está mais ativo.')
+    abrirContratacao({ alvo: 'integrante', squadId: squad.id, dominio }, { papel: s.papel, escopo: s.escopo }, id)
+  } else {
+    if (!squad.proximoSlot) return falhar('Escritório cheio: não há sala livre.')
+    abrirContratacao(
+      { alvo: 'dominio', squadId: squad.id, slot: squad.proximoSlot },
+      { nomeDominio: s.dominio, escopoDominio: s.escopo, papel: s.papel_po, escopo: s.escopo },
+      id
+    )
+  }
+}
+
+/**
+ * Contratar pela UI usa as mesmas rotas do card (hire) e da substituição de PO.
+ * Trocar `roster` é o único gatilho de que o escritório precisa: o GameMap vê a
+ * sala ou a pessoa nova e anima sozinho.
+ */
+const confirmarContratacao = async (dados: DadosDeContratacao) => {
+  const atual = contratacao.value
+  if (!atual || enviandoContratacao.value) return
+  const { alvo } = atual
+  enviandoContratacao.value = true
+  erroContratacao.value = ''
+  try {
+    if (dados.alvo === 'po' && alvo.alvo === 'po') {
+      const corpo =
+        'integranteId' in dados
+          ? { integranteId: dados.integranteId }
+          : { nome: dados.nome || undefined, papel: dados.papel, escopo: dados.escopo }
+      const r = await rosterApi.substituirPo(alvo.dominio.id, corpo)
+      roster.value = r.roster
+      avisar(`${r.po.nome} é o novo PO de ${alvo.dominio.nome}`)
+    } else if (dados.alvo === 'integrante' && alvo.alvo === 'integrante') {
+      const r = await rosterApi.contratar(
+        { kind: 'integrante', squad_id: alvo.squadId, dominio_id: alvo.dominio.id, papel: dados.papel, escopo: dados.escopo },
+        dados.nome || undefined
+      )
+      roster.value = r.roster
+      avisar(`${r.pessoa.nome} entrou em ${r.dominio.nome}`)
+    } else if (dados.alvo === 'dominio' && alvo.alvo === 'dominio') {
+      const r = await rosterApi.contratar(
+        {
+          kind: 'dominio',
+          squad_id: alvo.squadId,
+          dominio: dados.nomeDominio,
+          escopo: dados.escopoDominio,
+          papel_po: dados.papelPo,
+          escopo_po: dados.escopoPo
+        },
+        dados.nome || undefined
+      )
+      roster.value = r.roster
+      avisar(`${r.pessoa.nome} abriu o domínio ${r.dominio.nome}`)
+    }
+    if (atual.sugestaoId) descartarSugestao(atual.sugestaoId)
+    contratacao.value = null
+  } catch (error) {
+    // Squad sumiu ou foi arquivada em outra aba: mesmo gesto da Fase 1.
+    if (error instanceof ErroDaApi && error.corpo.squadInexistente) {
+      contratacao.value = null
+      await recuperarSquadInexistente()
+      return
+    }
+    erroContratacao.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    enviandoContratacao.value = false
+  }
+}
+
 // Navega para fora da SPA; o retorno cai no onMounted acima.
 const conectarGoogle = () => irParaConsentimento()
 
@@ -407,6 +534,18 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           :erro="erroSugestao[sugestao.id] || ''"
           @aprovar="(nome) => aprovarSugestao(sugestao.id, nome)"
           @descartar="descartarSugestao(sugestao.id)"
+          @ajustar="ajustarSugestao(sugestao.id)"
+        />
+
+        <!-- Gestos por sala fora do canvas: o mapa segue sem eventos (Fase 2 §3.1). -->
+        <SalasPainel
+          v-if="squadAtiva"
+          :squad="squadAtiva"
+          :total-arquivado="totalArquivado"
+          :desabilitado="isLoading || enviandoContratacao"
+          @contratar="contratarNaSala"
+          @abrir-sala="abrirSala"
+          @substituir-po="substituirPoDaSala"
         />
 
         <!-- :key por squad: recria useOffice ao trocar, senao as salas da
@@ -414,6 +553,16 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         <GameMap :key="squadAtiva?.id ?? 'sem-squad'" :agent="currentAgent" :squad="squadAtiva" />
       </main>
     </div>
+
+    <ContratarModal
+      v-if="contratacao"
+      :alvo="contratacao.alvo"
+      :inicial="contratacao.inicial"
+      :enviando="enviandoContratacao"
+      :erro="erroContratacao"
+      @contratar="confirmarContratacao"
+      @fechar="contratacao = null"
+    />
 
     <NovaSquadModal
       v-if="criandoSquad"

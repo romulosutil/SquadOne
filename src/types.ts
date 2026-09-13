@@ -13,8 +13,9 @@ export interface Pessoa {
   hue?: number;
   horario?: { inicio: string; fim: string };
   hiredAt: string;
-  /** Reservado (Fase 2). */
+  /** Arquivado: fora do mapa e do prompt; vem só em SquadView.arquivo. */
   arquivado?: boolean;
+  arquivadoEm?: string;
 }
 
 export interface Dominio {
@@ -28,8 +29,9 @@ export interface Dominio {
   criadoEm: string;
   po: Pessoa;
   integrantes: Pessoa[];
-  /** Reservado (Fase 2). */
+  /** Arquivado: fora do mapa e do prompt; vem só em SquadView.arquivo. */
   arquivado?: boolean;
+  arquivadoEm?: string;
 }
 
 export interface Squad {
@@ -42,14 +44,31 @@ export interface Squad {
   unlockOrder: [number, number][];
   /** `dominios[0].po` é o PO raiz do escritório. */
   dominios: Dominio[];
+  arquivado?: boolean;
+  arquivadoEm?: string;
 }
 
-export type SquadView = Squad & { unlockedSlots: [number, number][] };
+export interface IntegranteArquivadoView {
+  pessoa: Pessoa;
+  dominioId: string;
+  dominioNome: string;
+}
 
-/** `GET /api/squad`: todas as squads. A ativa é escolha da aba. */
+/**
+ * `dominios` e `integrantes` só com ATIVOS: GameMap, seletor e Mochila leem
+ * estes campos sem saber que arquivamento existe. O arquivado vem à parte.
+ */
+export type SquadView = Squad & {
+  unlockedSlots: [number, number][];
+  proximoSlot: [number, number] | null;
+  arquivo: { dominios: Dominio[]; integrantes: IntegranteArquivadoView[] };
+};
+
+/** `GET /api/squad`: squads ativas + arquivadas. A ativa é escolha da aba. */
 export interface RosterView {
   version: 3;
   squads: SquadView[];
+  squadsArquivadas: SquadView[];
   idsAposentados: { pessoas: string[]; dominios: string[] };
 }
 
@@ -171,3 +190,74 @@ export interface MochilaResponse {
   quests: QuestCalendario[];
   erros: { dominio: string; erro: string; credencial: boolean }[];
 }
+
+/** Espelho de LIMITES em server/squad.ts: o formulário corta antes de o servidor recusar. */
+export const LIMITES = {
+  squadNome: 40,
+  squadEscopo: 200,
+  dominioNome: 60,
+  dominioEscopo: 200,
+  pessoaNome: 40,
+  papel: 60,
+  escopoPessoa: 1500,
+  frase: 300,
+} as const;
+
+/** Corpo de `POST /api/squad/redigir`. */
+export type PedidoDeRedacao =
+  | { alvo: "integrante" | "po"; squadId: string; dominioId: string; frase: string }
+  | { alvo: "pessoa"; pessoaId: string; frase: string }
+  | { alvo: "dominio"; squadId: string; frase: string };
+
+export interface RedacaoDePessoa {
+  alvo: "integrante" | "po" | "pessoa";
+  papel: string;
+  escopo: string;
+  truncado: boolean;
+}
+
+export interface RedacaoDeDominio {
+  alvo: "dominio";
+  nome: string;
+  escopo_dominio: string;
+  papel_po: string;
+  escopo_po: string;
+  truncado: boolean;
+}
+
+export type Redacao = RedacaoDePessoa | RedacaoDeDominio;
+
+export interface HireResponse {
+  kind: "dominio" | "integrante";
+  squadId: string;
+  roster: RosterView;
+  dominio: Dominio;
+  pessoa: Pessoa;
+}
+
+export interface SubstituicaoResponse {
+  roster: RosterView;
+  po: Pessoa;
+  anterior: Pessoa;
+}
+
+/** De onde o modal de contratação foi aberto. */
+export type AlvoDeContratacao =
+  | { alvo: "integrante"; squadId: string; dominio: Dominio }
+  | { alvo: "dominio"; squadId: string; slot: [number, number] }
+  | { alvo: "po"; squadId: string; dominio: Dominio };
+
+/** Texto inicial do modal quando vem do "Ajustar" de um card do modelo. */
+export interface PreenchimentoDeContratacao {
+  papel?: string;
+  escopo?: string;
+  nomeDominio?: string;
+  escopoDominio?: string;
+}
+
+/** O que o modal entrega ao App. No alvo `dominio`, papel/escopo/nome são do PO. */
+export type DadosDeContratacao =
+  | { alvo: "integrante"; nome: string; papel: string; escopo: string }
+  | { alvo: "dominio"; nome: string; nomeDominio: string; escopoDominio: string; papelPo: string; escopoPo: string }
+  | { alvo: "po"; integranteId: string }
+  | { alvo: "po"; nome: string; papel: string; escopo: string };

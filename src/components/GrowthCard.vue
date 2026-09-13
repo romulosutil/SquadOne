@@ -19,7 +19,7 @@ defineProps({
   squadNome: { type: String, default: '' }
 })
 
-const emit = defineEmits(['aprovar', 'descartar'])
+const emit = defineEmits(['aprovar', 'descartar', 'ajustar'])
 
 // Vazio = o servidor escolhe um nome livre. O papel vem do modelo, o nome nao:
 // quem entra no squad e decisao do usuario.
@@ -86,6 +86,16 @@ const nome = ref('')
         @click="emit('aprovar', nome)"
       >
         {{ enviando ? 'Contratando...' : 'Aprovar' }}
+      </button>
+      <!-- Ajustar abre o modal de contratação com a proposta pré-preenchida:
+           o usuário edita papel/escopo (ou redige de novo) antes de contratar. -->
+      <button
+        :disabled="enviando"
+        title="Editar a proposta antes de contratar"
+        class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all disabled:opacity-50"
+        @click="emit('ajustar')"
+      >
+        Ajustar
       </button>
       <button
         :disabled="enviando"
