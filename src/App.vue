@@ -12,7 +12,8 @@ import ContratarModal from './components/ContratarModal.vue'
 import EditarModal from './components/EditarModal.vue'
 import ArquivoModal from './components/ArquivoModal.vue'
 import ContribuirModal from './components/ContribuirModal.vue'
-import { criarFila, estadoDaResposta, MAX_PESSOAS_POR_PEDIDO, pedidosDoTurno } from './contribuicao'
+import AjusteCard from './components/AjusteCard.vue'
+import { criarFila, estadoDaResposta, MAX_PESSOAS_POR_PEDIDO, pedidosDoTurno, resumoDoAjuste } from './contribuicao'
 import { ErroDaApi, rosterApi, type TipoDoRoster } from './rosterApi'
 import type {
   AlvoDeContratacao,
@@ -27,6 +28,7 @@ import type {
   PropostaDeAjuste,
   QuestCalendario,
   ResultadoDeAgente,
+  RespostaDeAjuste,
   RosterView,
   SquadView,
   Sugestao
@@ -74,6 +76,10 @@ const questParaContribuir = ref<QuestCalendario | null>(null)
 // Propostas de ajuste dos agentes. Não somem com turno novo nem troca de squad:
 // pertencem a eventos que continuam existindo no Google.
 const ajustes = ref<PropostaDeAjuste[]>([])
+// Um ajuste por vez: cada um relê a agenda e grava no Google.
+const aprovandoAjuste = ref('')
+const erroAjuste = ref<Record<string, string>>({})
+const ajusteNaoCabe = ref<Record<string, boolean>>({})
 
 // O roster manda: papeis, slots desbloqueados e roteamento saem daqui.
 onMounted(async () => {
@@ -310,6 +316,56 @@ const confirmarContribuicao = (pessoaIds: string[]) => {
 const repetirContribuicao = (eventId: string, pessoaIds: string[]) => {
   const squadId = squadAtiva.value?.id
   if (squadId) pedirContribuicao({ eventId, squadId, pessoaIds })
+}
+
+const tirarAjuste = (id: string) => {
+  ajustes.value = ajustes.value.filter((a) => a.id !== id)
+  const { [id]: _e, ...erros } = erroAjuste.value
+  erroAjuste.value = erros
+  const { [id]: _n, ...naoCabe } = ajusteNaoCabe.value
+  ajusteNaoCabe.value = naoCabe
+}
+
+const aprovarAjuste = async (id: string, permitirMover: boolean) => {
+  if (aprovandoAjuste.value) return
+  const proposta = ajustes.value.find((a) => a.id === id)
+  if (!proposta) return
+  aprovandoAjuste.value = id
+  erroAjuste.value = { ...erroAjuste.value, [id]: '' }
+  try {
+    const response = await fetch(`/api/quests/${encodeURIComponent(proposta.eventId)}/ajustar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        squadId: proposta.squad_id,
+        alvo: proposta.alvo,
+        proposto_min: proposta.proposto_min,
+        permitirMover
+      })
+    })
+    const corpo = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      if (response.status === 401) conectado.value = false
+      // Evento apagado no Google: a proposta não tem mais onde valer.
+      if (response.status === 404 && corpo.questSumiu) {
+        tirarAjuste(id)
+        avisar(corpo.error ?? 'O evento não existe mais no Google.')
+        return
+      }
+      ajusteNaoCabe.value = { ...ajusteNaoCabe.value, [id]: response.status === 409 && !!corpo.naoCabe }
+      throw new Error(corpo.error ?? `HTTP ${response.status}`)
+    }
+    tirarAjuste(id)
+    avisar(resumoDoAjuste(corpo as RespostaDeAjuste))
+    // O horário mudou no Google: a Mochila relê em vez de confiar na resposta.
+    await carregarMochila()
+  } catch (error) {
+    if (ajustes.value.some((a) => a.id === id)) {
+      erroAjuste.value = { ...erroAjuste.value, [id]: error instanceof Error ? error.message : String(error) }
+    }
+  } finally {
+    aprovandoAjuste.value = ''
+  }
 }
 
 const avisar = (texto) => {
@@ -822,6 +878,20 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           @trocar="aceitarTroca(sugestao.id, false)"
           @reenviar="aceitarTroca(sugestao.id, true)"
           @descartar="descartarSugestao(sugestao.id)"
+        />
+
+        <!-- Ajuste proposto por um agente: nada muda no Google sem este clique,
+             e mover de horário é um segundo clique depois de "não cabe". -->
+        <AjusteCard
+          v-for="proposta in ajustes"
+          :key="proposta.id"
+          :proposta="proposta"
+          :squad-nome="proposta.squad_id !== squadAtiva?.id ? nomeDaSquad(proposta.squad_id) : ''"
+          :enviando="aprovandoAjuste === proposta.id"
+          :erro="erroAjuste[proposta.id] || ''"
+          :nao-cabe="!!ajusteNaoCabe[proposta.id]"
+          @aprovar="(mover) => aprovarAjuste(proposta.id, mover)"
+          @descartar="tirarAjuste(proposta.id)"
         />
 
         <GrowthCard
