@@ -234,6 +234,14 @@ export function lerJanela(env: Record<string, string | undefined>): Janela {
   if (resto.length || inicioMin === null || fimMin === null) {
     throw new JanelaMalConfigurada(`JANELA_TRABALHO='${bruto}' não é HH:MM-HH:MM.`);
   }
+  // Todo slot cai na grade de 15 min. Uma janela 09:10-09:40 tem 30 min no
+  // papel e só 15 na grade (09:15-09:30): nenhum bloco caberia, sem aviso.
+  if (inicioMin % GRADE_MIN !== 0 || fimMin % GRADE_MIN !== 0) {
+    throw new JanelaMalConfigurada(
+      `JANELA_TRABALHO='${bruto}' precisa de minutos múltiplos de ${GRADE_MIN} ` +
+        `(:00, :15, :30 ou :45) no formato HH:MM-HH:MM, ex.: 09:00-19:00.`,
+    );
+  }
   if (fimMin - inicioMin < BLOCO_MIN) {
     throw new JanelaMalConfigurada(
       `JANELA_TRABALHO='${bruto}' precisa terminar pelo menos ${BLOCO_MIN} min depois de começar.`,

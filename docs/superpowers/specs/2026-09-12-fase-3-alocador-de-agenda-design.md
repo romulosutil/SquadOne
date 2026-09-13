@@ -370,7 +370,7 @@ Contrato da Fase 1 + uma chave:
 
 | Var | Formato | Padrão |
 |---|---|---|
-| `JANELA_TRABALHO` | `HH:MM-HH:MM` (00:00–24:00, fim ≥ início + 30 min) | `09:00-19:00` |
+| `JANELA_TRABALHO` | `HH:MM-HH:MM` (00:00–24:00, minutos múltiplos de 15, fim ≥ início + 30 min) | `09:00-19:00` |
 | `DIAS_TRABALHO` | dias ISO separados por vírgula, `1` = segunda … `7` = domingo, sem repetir | `1,2,3,4,5` |
 
 Fuso fixo `America/Sao_Paulo` (constante `FUSO`).
