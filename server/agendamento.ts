@@ -38,6 +38,12 @@ export interface EventoCriado {
   prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
+  /**
+   * Quem o PO marcou para contribuir (Fase 4). Só no evento principal do
+   * compromisso — foco ou marco —, para o frontend pedir uma contribuição por
+   * compromisso e não uma por bloco.
+   */
+  colaboradores_ids?: string[];
 }
 
 /**
@@ -63,6 +69,8 @@ export interface CompromissoAgendado {
   avisos: AvisoDoCompromisso[];
   /** Minutos do esforço sem bloco reservado. 0 para foco. */
   faltou_min: number;
+  /** Colaboradores válidos (Fase 4); o handler de agendar_evento preenche. */
+  colaboradores_ids?: string[];
 }
 
 export interface PedidoDeCompromisso {

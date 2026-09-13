@@ -93,6 +93,8 @@ export interface EventoCriado {
   prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
+  /** Só no foco ou no marco: quem deve contribuir. A fila de contribuição lê daqui. */
+  colaboradores_ids?: string[];
 }
 
 /** Proposta de abrir um domínio novo — sala nova no escritório. */

@@ -184,6 +184,10 @@ Regras:
   esforco_min, sua estimativa realista do trabalho TOTAL até lá, em minutos. O
   servidor cria o marco no prazo e divide o esforço em blocos antes dele. Não
   chame agendar_evento de novo para os blocos.${regraModo}
+- colaboradores_ids: quando um compromisso claramente pede o olhar de OUTRO papel
+  da squad (ex.: revisar contrato pede o jurídico; lançamento pede o designer),
+  passe os ids dessas pessoas, no máximo 3, sem repetir o responsável. Elas vão
+  escrever notas na descrição do evento. Sem necessidade clara, omita.
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
