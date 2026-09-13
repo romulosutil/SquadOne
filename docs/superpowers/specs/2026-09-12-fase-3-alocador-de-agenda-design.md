@@ -333,7 +333,7 @@ Em `executarTurno`:
 - As chamadas de `agendar_evento` rodam **uma por vez**, na ordem de `prioridadeDeAgendamento(args, tipoForcado, fuso)`:
   1. `[0, 0]` time_blocking com `inicio_fixo` com hora — o usuário já decidiu; os outros desviam dele;
   2. `[1, 0]` demais time_blocking — "agora" é o que mais perde esperando;
-  3. `[2, instante do prazo]` deadline, prazo mais próximo primeiro (prazo ilegível por último).
+  3. `[2, limite efetivo]` deadline, prazo mais próximo primeiro — com hora o próprio prazo, só data o fim da janela daquele dia (prazo ilegível por último).
   Empate: ordem em que o modelo chamou.
 - Resultados voltam na ordem original das chamadas.
 - A regra da Fase 1 continua: turno com `sugerir_troca_squad` descarta todas as outras chamadas (inclusive agendamentos) antes de executar; descartadas não leem a agenda.

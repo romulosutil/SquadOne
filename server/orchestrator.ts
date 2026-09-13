@@ -344,7 +344,7 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
     .filter((x) => x.call.name === "agendar_evento")
     .map((x) => ({
       ...x,
-      prioridade: prioridadeDeAgendamento((x.call.args ?? {}) as Record<string, any>, forcado, janela.fuso),
+      prioridade: prioridadeDeAgendamento((x.call.args ?? {}) as Record<string, any>, forcado, janela),
     }))
     .sort((a, b) => a.prioridade[0] - b.prioridade[0] || a.prioridade[1] - b.prioridade[1] || a.indice - b.indice);
   const emParalelo = Promise.all(

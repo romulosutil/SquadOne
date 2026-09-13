@@ -14,6 +14,7 @@ import {
   proximoDia,
   type DataLocal,
   type Intervalo,
+  type Janela,
 } from "./alocador.ts";
 import { ErroCalendario, marcasDoEvento, PREFIXO_DEADLINE, urlDeEventos } from "./calendar.ts";
 import type { AgendaDoTurno } from "./agenda.ts";
@@ -102,19 +103,24 @@ function exigirInstante(valor: unknown, campo: string, fuso: string) {
  * primeiro (o usuário já decidiu; os outros desviam dele), depois foco (o
  * "agora" é o que mais perde com a espera), depois prazos do mais próximo ao
  * mais distante. Empate: a ordem em que o modelo chamou.
+ *
+ * "Mais próximo" é pelo LIMITE EFETIVO dos blocos, não pelo texto do prazo:
+ * "até hoje" (só data) vale até o fim da janela, então um prazo hoje às 13:00
+ * é mais urgente e escolhe horário antes. Com 00:00 a ordem saía invertida.
  */
 export function prioridadeDeAgendamento(
   args: Record<string, any>,
   tipoForcado: TipoEvento | null,
-  fuso: string,
+  janela: Janela,
 ): [number, number] {
+  const { fuso } = janela;
   const tipo = tipoForcado ?? (args.tipo === "deadline" ? "deadline" : "time_blocking");
   if (tipo === "time_blocking") {
     const fixo = preenchido(args.inicio_fixo) ? lerInstante(args.inicio_fixo, fuso) : null;
     return [fixo && fixo.data === null ? 0 : 1, 0];
   }
   const prazo = lerInstante(args.prazo_final, fuso);
-  return [2, prazo ? prazo.instante : Number.MAX_SAFE_INTEGER];
+  return [2, prazo ? limiteDoTrabalho(prazo, janela.fimMin, fuso) : Number.MAX_SAFE_INTEGER];
 }
 
 async function gravar(
