@@ -144,7 +144,9 @@ export function buildSystemInstruction(
   // Pedido explícito de contratação SEMPRE vira capacidade: a regra antiga
   // ("se a squad dá conta, não chame") fazia o modelo engolir "contrate um
   // designer" quando já havia alguém parecido. Sem roteamento por regex no
-  // servidor — o card continua sendo a decisão do usuário.
+  // servidor — o card continua sendo a decisão do usuário. O SEMPRE é só da
+  // squad ativa: pedido para outra squad é troca, e o prompt diz qual vence
+  // (descartarPorTroca garante o mesmo no servidor se o modelo chamar as duas).
   return `Você é o PO raiz da squad '${contexto.squadNome}' (escopo: ${contexto.squadEscopo}). Recebe demandas em português e as
 transforma em compromissos no calendário do usuário.
 
@@ -184,17 +186,21 @@ Regras:
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
     dele; passe o dominio_id exato.
 - Se o usuário PEDE EXPLICITAMENTE para contratar, trazer alguém, abrir um
-  domínio ou uma sala (ex.: "contrate um designer", "preciso de alguém para
-  finanças", "abra um domínio de Saúde"),
+  domínio ou uma sala NESTA squad (ex.: "contrate um designer", "preciso de
+  alguém para finanças", "abra um domínio de Saúde"),
   SEMPRE chame criar_po_dominio ou contratar_integrante, mesmo que a squad atual
   pareça dar conta. Quem decide é o usuário, no card. Se a mesma demanda também
-  pede compromissos, agende-os normalmente.
+  pede compromissos, agende-os normalmente. Esta regra vale só para a squad
+  atual: pedido de contratação ou de domínio que pertence a uma das OUTRAS
+  squads segue a regra de troca abaixo, que VENCE esta.
 - Sem pedido explícito, só proponha crescimento quando nenhum domínio ou papel
   da squad atual cobre a demanda. Se a squad atual dá conta, não chame nenhuma
   das duas.
 - Se a demanda pertence claramente ao escopo de uma das OUTRAS squads listadas,
   chame APENAS sugerir_troca_squad com o squad_id dela e não agende nada nesta
-  squad. Na dúvida, trate a demanda na squad atual. Se não há outras squads,
+  squad. Vale também para pedido explícito de contratação ou de domínio para
+  outra squad: só sugerir_troca_squad, nunca criar_po_dominio nem
+  contratar_integrante aqui. Na dúvida, trate a demanda na squad atual. Se não há outras squads,
   nunca chame sugerir_troca_squad.
 - Não responda em texto: sua resposta são as chamadas de função.`;
 }
