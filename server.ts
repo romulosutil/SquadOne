@@ -16,7 +16,19 @@ import {
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { listarQuests } from "./server/calendar.ts";
 import { ehModo } from "./server/capabilities.ts";
-import { aplicarContratacao, criarSquad } from "./server/hire.ts";
+import { aplicarContratacao, criarSquad, substituirPo } from "./server/hire.ts";
+import {
+  arquivarDominio,
+  arquivarPessoa,
+  arquivarSquad,
+  editarDominio,
+  editarPessoa,
+  editarSquad,
+  reativarDominio,
+  reativarPessoa,
+  reativarSquad,
+} from "./server/ciclo-de-vida.ts";
+import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
 import { descreverJanela, JanelaMalConfigurada, lerJanela } from "./server/alocador.ts";
 import {
@@ -143,8 +155,8 @@ async function startServer() {
     }
   });
 
-  // Aprovacao de crescimento (§4.4): o unico endpoint que ESCREVE no roster.
-  // O modelo so propoe; contratar e um gesto do usuario, no card de sugestao.
+  // Aprovacao de crescimento (§4.4): contrata a partir de card do modelo OU do
+  // formulario da UI (Fase 2). O modelo so propoe; contratar e gesto do usuario.
   // Nao exige Bearer: mexe em data/squad.json, nao no Google Calendar.
   app.post("/api/squad/hire", async (req, res) => {
     try {
@@ -159,6 +171,56 @@ async function startServer() {
       if (!responderErroDeRoster(res, error)) res.status(500).json({ error: error.message });
     }
   });
+
+  // Redacao do treino (Fase 2 §4.2): uma chamada ao Gemini, NADA gravado.
+  // Roster e alvo sao validados antes do modelo; falhar aqui nunca impede
+  // contratar a mao, entao cada falha volta classificada para a UI dizer isso.
+  app.post("/api/squad/redigir", async (req, res) => {
+    try {
+      const pedido = interpretarPedidoDeRedacao(await readRoster(), req.body);
+      res.json(await redigirTreino(ai, pedido));
+    } catch (error: any) {
+      if (responderErroDeRoster(res, error)) return;
+      if (error instanceof ModeloOcupado) {
+        return res.status(503).json({ error: error.message, modeloOcupado: true });
+      }
+      if (error instanceof RedacaoInvalida) {
+        return res.status(502).json({ error: error.message, redacaoFalhou: true });
+      }
+      console.error("Erro ao redigir:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Ciclo de vida (Fase 2 §4.4-§4.8): todas escrevem so em data/squad.json,
+   * nenhuma toca o Google, e todas devolvem o roster inteiro para a UI trocar
+   * o dela. Ids de pessoa e dominio sao globais, por isso o caminho nao leva
+   * squadId.
+   */
+  const rotaDoRoster =
+    (acao: (req: express.Request) => Promise<unknown>) =>
+    async (req: express.Request, res: express.Response) => {
+      try {
+        res.json(await acao(req));
+      } catch (error: any) {
+        if (responderErroDeRoster(res, error)) return;
+        console.error(`Erro em ${req.method} ${req.path}:`, error);
+        res.status(500).json({ error: error.message });
+      }
+    };
+
+  app.patch("/api/squad/pessoas/:id", rotaDoRoster((req) => editarPessoa(String(req.params.id), req.body)));
+  app.post("/api/squad/pessoas/:id/arquivar", rotaDoRoster((req) => arquivarPessoa(String(req.params.id))));
+  app.post("/api/squad/pessoas/:id/reativar", rotaDoRoster((req) => reativarPessoa(String(req.params.id))));
+  app.patch("/api/squad/dominios/:id", rotaDoRoster((req) => editarDominio(String(req.params.id), req.body)));
+  app.post("/api/squad/dominios/:id/arquivar", rotaDoRoster((req) => arquivarDominio(String(req.params.id))));
+  app.post("/api/squad/dominios/:id/reativar", rotaDoRoster((req) => reativarDominio(String(req.params.id))));
+  // PO nao se arquiva: substitui-se. O anterior vira integrante arquivado.
+  app.post("/api/squad/dominios/:id/po", rotaDoRoster((req) => substituirPo(String(req.params.id), req.body)));
+  app.patch("/api/squad/squads/:id", rotaDoRoster((req) => editarSquad(String(req.params.id), req.body)));
+  app.post("/api/squad/squads/:id/arquivar", rotaDoRoster((req) => arquivarSquad(String(req.params.id))));
+  app.post("/api/squad/squads/:id/reativar", rotaDoRoster((req) => reativarSquad(String(req.params.id))));
 
   // Mochila: as quests VEM do Google Calendar, nao de estado local. Editar
   // ou apagar no Google reflete aqui na proxima leitura (§2, verdade unica).
