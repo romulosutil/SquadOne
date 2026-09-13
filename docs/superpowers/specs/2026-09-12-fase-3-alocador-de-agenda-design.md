@@ -111,8 +111,8 @@ Datas são lidas por `lerInstante(valor, fuso)`:
 | Entrada | Leitura |
 |---|---|
 | `AAAA-MM-DD` válido | meia-noite local no fuso + `data` preenchida ("só data") |
-| `AAAA-MM-DDTHH:MM[:SS]` sem offset | hora de parede em `America/Sao_Paulo` (o container roda em UTC) |
-| ISO com offset ou `Z` | o instante |
+| `AAAA-MM-DDTHH:MM[:SS[.fração]]` sem offset | hora de parede em `America/Sao_Paulo` (o container roda em UTC). Nenhuma string sem offset passa por `new Date`, que a leria no fuso do processo |
+| ISO com offset (`±HH:MM`, `±HHMM`, até 14h) ou `Z` | o instante, montado pelas partes |
 | qualquer outra coisa, inclusive dia ou hora inexistente (`2026-02-30`, `25:00`, que `Date` normalizaria calado) | inválida → erro nomeando o campo |
 
 **time_blocking**

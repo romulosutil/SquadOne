@@ -150,8 +150,16 @@ export function instanteLocal(data: DataLocal, minutos: number, fuso: string): n
 }
 
 const SO_DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
-const SEM_OFFSET = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
-const COM_OFFSET = /^(\d{4})-(\d{2})-(\d{2})T/;
+/**
+ * Data/hora ISO com segundos e fração opcionais e offset opcional. Uma regex só
+ * para os dois casos: o instante é montado aqui, nunca por `new Date(texto)`,
+ * que lê string sem offset no fuso do PROCESSO (UTC no container) — foi assim
+ * que "14:00:00.000" virava 11:00 em São Paulo sem aviso.
+ */
+const DATA_HORA =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+/** Maior offset real (Kiribati, +14:00). Acima disso é lixo, não fuso. */
+const OFFSET_MAX_MIN = 14 * 60;
 
 /**
  * O dia existe no calendário? `Date.UTC` e o parser do V8 normalizam calados
@@ -165,32 +173,41 @@ function dataExiste(ano: number, mes: number, dia: number): boolean {
 /**
  * Lê uma data do modelo. `AAAA-MM-DD` → meia-noite local com `data` preenchida
  * (quem chama decide o que "dia sem hora" significa). ISO com offset/Z → o
- * instante. ISO SEM offset → hora de parede no fuso, não no fuso do container
- * (que em produção é UTC). Qualquer outra coisa, inclusive dia ou hora que não
- * existem → null.
+ * instante. ISO SEM offset (com ou sem segundos/fração) → hora de parede no
+ * fuso, não no fuso do container (que em produção é UTC). Qualquer outra coisa,
+ * inclusive dia, hora ou offset que não existem → null.
  */
 export function lerInstante(
   valor: unknown,
   fuso: string,
 ): { instante: number; data: DataLocal | null } | null {
   const texto = String(valor ?? "").trim();
-  let m = SO_DATA.exec(texto);
-  if (m) {
-    const data = { ano: Number(m[1]), mes: Number(m[2]), dia: Number(m[3]) };
+  const d = SO_DATA.exec(texto);
+  if (d) {
+    const data = { ano: Number(d[1]), mes: Number(d[2]), dia: Number(d[3]) };
     if (!dataExiste(data.ano, data.mes, data.dia)) return null;
     return { instante: instanteLocal(data, 0, fuso), data };
   }
-  m = SEM_OFFSET.exec(texto);
-  if (m) {
-    const data = { ano: Number(m[1]), mes: Number(m[2]), dia: Number(m[3]) };
-    const h = Number(m[4]), min = Number(m[5]), seg = Number(m[6] ?? 0);
-    if (!dataExiste(data.ano, data.mes, data.dia) || h > 23 || min > 59 || seg > 59) return null;
-    return { instante: instanteLocal(data, h * 60 + min, fuso) + seg * 1000, data: null };
+  const m = DATA_HORA.exec(texto);
+  if (!m) return null;
+  const data = { ano: Number(m[1]), mes: Number(m[2]), dia: Number(m[3]) };
+  const h = Number(m[4]), min = Number(m[5]), seg = Number(m[6] ?? 0);
+  if (!dataExiste(data.ano, data.mes, data.dia) || h > 23 || min > 59 || seg > 59) return null;
+  // Fração: só os milissegundos importam; "5" = 500 ms, "123456" = 123 ms.
+  const ms = m[7] ? Number(m[7].slice(0, 3).padEnd(3, "0")) : 0;
+  const extra = seg * 1000 + ms;
+  const offset = m[8];
+  if (!offset) return { instante: instanteLocal(data, h * 60 + min, fuso) + extra, data: null };
+
+  let offsetMinutos = 0;
+  if (offset.toUpperCase() !== "Z") {
+    const o = /^([+-])(\d{2}):?(\d{2})$/.exec(offset)!;
+    const valorMin = Number(o[2]) * 60 + Number(o[3]);
+    if (Number(o[3]) > 59 || valorMin > OFFSET_MAX_MIN) return null;
+    offsetMinutos = o[1] === "-" ? -valorMin : valorMin;
   }
-  m = COM_OFFSET.exec(texto);
-  if (!m || !dataExiste(Number(m[1]), Number(m[2]), Number(m[3]))) return null;
-  const t = new Date(texto).getTime();
-  return Number.isNaN(t) ? null : { instante: t, data: null };
+  const parede = Date.UTC(data.ano, data.mes - 1, data.dia, h, min);
+  return { instante: parede - offsetMinutos * MIN_MS + extra, data: null };
 }
 
 // --- Janela -------------------------------------------------------------
