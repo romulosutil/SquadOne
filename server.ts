@@ -14,7 +14,11 @@ import {
   type Squad,
 } from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
-import { listarQuests } from "./server/calendar.ts";
+import { ErroCalendario, LeituraIncompleta, listarQuests, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
+import { contribuirNaQuest, interpretarPedidoDeContribuicao } from "./server/contribuicao.ts";
+import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
+import { QuestRecusada } from "./server/quest.ts";
+import { AgendaIndisponivel } from "./server/agenda.ts";
 import { ehModo } from "./server/capabilities.ts";
 import { aplicarContratacao, criarSquad, substituirPo } from "./server/hire.ts";
 import {
@@ -30,7 +34,7 @@ import {
 } from "./server/ciclo-de-vida.ts";
 import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
-import { descreverJanela, JanelaMalConfigurada, lerJanela } from "./server/alocador.ts";
+import { descreverJanela, JanelaMalConfigurada, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
 import {
   desconectar,
   ErroDeConfig,
@@ -72,6 +76,41 @@ function responderErroDeRoster(res: express.Response, err: unknown): boolean {
     res.status(409).json({ error: err.message });
   } else if (err instanceof PedidoInvalido) {
     res.status(400).json({ error: err.message });
+  } else {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Erros das rotas de quest (Fase 4). A flag no corpo diz à UI o gesto:
+ * `questSumiu` tira o card, `naoCabe` oferece mover, `precisaConectar` pede
+ * reconexão, `conflitoDeEdicao` pede tentar de novo, `marcasPerdidas` manda
+ * conferir no Google. Devolve false quando não é nenhum e a rota decide o 500.
+ */
+function responderErroDeQuest(res: express.Response, err: unknown): boolean {
+  const error = (err as Error)?.message;
+  if (err instanceof QuestSumiu) {
+    res.status(404).json({ error, questSumiu: true });
+  } else if (err instanceof QuestRecusada) {
+    res.status(409).json({ error, [err.flag]: true });
+  } else if (err instanceof SemHorarioLivre) {
+    res.status(409).json({ error, semHorarioLivre: true });
+  } else if (err instanceof JanelaMalConfigurada) {
+    res.status(500).json({ error, configuracao: true });
+  } else if (err instanceof MarcasPerdidas) {
+    res.status(500).json({ error, marcasPerdidas: true });
+  } else if (
+    (err instanceof ErroCalendario && err.ehCredencial) ||
+    (err instanceof AgendaIndisponivel && err.credencial)
+  ) {
+    res.status(401).json({ error, precisaConectar: true });
+  } else if (
+    err instanceof ErroCalendario ||
+    err instanceof AgendaIndisponivel ||
+    err instanceof LeituraIncompleta
+  ) {
+    res.status(502).json({ error });
   } else {
     return false;
   }
@@ -324,6 +363,64 @@ async function startServer() {
       if (error instanceof ModeloOcupado) {
         return res.status(503).json({ error: error.message, modeloOcupado: true });
       }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Agentes escrevem na descrição de UMA quest (Fase 4). Pedido e roster antes
+  // do token, e o token antes do Google: nada externo é gasto num pedido que já
+  // não vale. 200 mesmo com agentes em erro: o resultado é por agente, e
+  // ModeloOcupado de um agente nunca vira status da rota.
+  app.post("/api/quests/:eventId/contribuir", async (req, res) => {
+    let pedido: ReturnType<typeof interpretarPedidoDeContribuicao>;
+    let roster: Awaited<ReturnType<typeof readRoster>>;
+    try {
+      roster = await readRoster();
+      pedido = interpretarPedidoDeContribuicao(roster, req.params.eventId, req.body);
+    } catch (error: any) {
+      if (responderErroDeRoster(res, error) || responderErroDeQuest(res, error)) return;
+      console.error("Erro ao ler o pedido de contribuição:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    let token: string;
+    try {
+      token = await tokenValido();
+    } catch (error) {
+      return responderErroDeAuth(res, error);
+    }
+    try {
+      res.json(await contribuirNaQuest(ai, { ...pedido, roster, token, agora: new Date() }));
+    } catch (error: any) {
+      console.error("Erro na contribuição:", error);
+      if (responderErroDeQuest(res, error)) return;
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Ajuste APROVADO pelo usuário. Janela antes do token (config quebrada não
+  // gasta chamada). Horário só muda de lugar com permitirMover.
+  app.post("/api/quests/:eventId/ajustar", async (req, res) => {
+    let pedido: ReturnType<typeof interpretarPedidoDeAjuste>;
+    let janela: ReturnType<typeof lerJanela>;
+    try {
+      pedido = interpretarPedidoDeAjuste(await readRoster(), req.params.eventId, req.body);
+      janela = lerJanela(process.env);
+    } catch (error: any) {
+      if (responderErroDeRoster(res, error) || responderErroDeQuest(res, error)) return;
+      console.error("Erro ao ler o pedido de ajuste:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    let token: string;
+    try {
+      token = await tokenValido();
+    } catch (error) {
+      return responderErroDeAuth(res, error);
+    }
+    try {
+      res.json(await aplicarAjuste({ ...pedido, token, janela, agora: new Date() }));
+    } catch (error: any) {
+      console.error("Erro no ajuste:", error);
+      if (responderErroDeQuest(res, error)) return;
       res.status(500).json({ error: error.message });
     }
   });
