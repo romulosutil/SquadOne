@@ -1,3 +1,4 @@
+import { FORMATO_ID_DE_EVENTO } from "./calendar.ts";
 import { acharDominio, PedidoInvalido, type Dominio, type Squad } from "./squad.ts";
 
 /**
@@ -26,10 +27,13 @@ export class QuestRecusada extends Error {
 /** Eventos anteriores à Fase 1 não têm `squadone_squad`; todos eram da squad pessoal. */
 export const SQUAD_DE_EVENTO_SEM_MARCA = "pessoal";
 
-/** Ids de evento do Google têm de 5 a 1024 caracteres; aqui só se barra o absurdo. */
+/**
+ * Id de evento vindo do caminho da rota. Validado ANTES de montar qualquer URL:
+ * `..` virava `calendars/primary/`. Fora do formato do Google = 400.
+ */
 export function lerIdDoEvento(valor: unknown): string {
-  if (typeof valor !== "string" || valor.length < 1 || valor.length > 1024) {
-    throw new PedidoInvalido("Id de evento inválido.");
+  if (typeof valor !== "string" || !FORMATO_ID_DE_EVENTO.test(valor)) {
+    throw new PedidoInvalido("Id de evento inválido: esperado o id do Google Calendar (letras, dígitos e _, de 5 a 1024).");
   }
   return valor;
 }

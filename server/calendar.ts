@@ -414,7 +414,21 @@ export interface EventoLido {
 
 export const CAMPOS_EVENTO = "id,etag,status,summary,colorId,start,end,description,extendedProperties";
 
+/**
+ * Formato de id de evento aceito. A doc do recurso Event: ids têm de 5 a 1024
+ * caracteres em base32hex (a-v, 0-9). Instâncias de evento recorrente, que o
+ * Google gera, acrescentam "_" e um carimbo com maiúsculas
+ * (`abc_20260915T130000Z`, `abc_R20260915T130000`): por isso letras, dígitos
+ * e "_". Barra `.`, `..`, `/`, `%`, `?` e `#`: com `..` a URL virava
+ * `calendars/primary/` e o PATCH iria para outro recurso.
+ */
+export const FORMATO_ID_DE_EVENTO = /^[A-Za-z0-9_]{5,1024}$/;
+
 export function urlDoEvento(calendarId: string, eventId: string): string {
+  // Id que vem de fora é validado antes pelo formato (400 em lerIdDoEvento). Ids
+  // lidos do próprio Google passam direto; a trava final só barra o que nem
+  // encodeURIComponent protege: segmento vazio, "." e "..".
+  if (!eventId || eventId === "." || eventId === "..") throw new Error(`Id de evento inválido: '${eventId}'.`);
   return `${urlDeEventos(calendarId)}/${encodeURIComponent(eventId)}`;
 }
 
