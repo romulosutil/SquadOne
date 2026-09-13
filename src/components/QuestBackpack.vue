@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { PropType } from 'vue'
+import { computed, onUnmounted, ref, type PropType } from 'vue'
 import type { EstadoDeContribuicao, QuestCalendario } from '../types'
-import { diasDoEventoDiaInteiro, infoDePrazo } from '../mochila'
+import { diasDoEventoDiaInteiro, infoDePrazo, questTerminou } from '../mochila'
 import { idsParaRepetir, linhasDeStatus } from '../contribuicao'
 
 const props = defineProps({
@@ -22,6 +22,14 @@ const props = defineProps({
 })
 
 defineEmits(['conectar', 'recarregar', 'contribuir', 'repetir'])
+
+// Quest terminada some do card, mas só da VISTA: `props.quests` segue inteira
+// para "Bloco i/N" não renumerar quando um bloco passa. O relógio anda sozinho
+// para o card sumir no horário sem esperar a próxima leitura do Google.
+const agora = ref(Date.now())
+const relogio = setInterval(() => { agora.value = Date.now() }, 30_000)
+onUnmounted(() => clearInterval(relogio))
+const visiveis = computed(() => props.quests.filter((q) => !questTerminou(q, agora.value)))
 
 // Na fila ou rodando: um segundo pedido juntaria na fila de qualquer jeito, mas
 // o botão ativo daria a impressão de que nada aconteceu.
@@ -96,14 +104,14 @@ const prazoDoBloco = (quest: QuestCalendario) => {
       </div>
 
       <div
-        v-else-if="carregando && quests.length === 0"
+        v-else-if="carregando && visiveis.length === 0"
         class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90"
       >
         Lendo o calendário...
       </div>
 
       <div
-        v-else-if="quests.length === 0"
+        v-else-if="visiveis.length === 0"
         class="text-center font-bold p-6 border-4 border-black border-dashed bg-[#f4f0e6] opacity-90 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
       >
         Nenhuma quest no calendário. <br /> Use a Command Bar!
@@ -113,7 +121,7 @@ const prazoDoBloco = (quest: QuestCalendario) => {
            o clique abriria o Google. Sem translação no hover: com rodapé, o card
            andando desalinharia o botão. -->
       <article
-        v-for="quest in quests"
+        v-for="quest in visiveis"
         :key="quest.eventId"
         class="border-4 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
       >

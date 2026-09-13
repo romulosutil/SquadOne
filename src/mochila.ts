@@ -14,6 +14,20 @@ export function diasDoEventoDiaInteiro(inicio: string, fim: string): { primeiro:
   return { primeiro, ultimo: ultimo > primeiro ? ultimo : primeiro }
 }
 
+/**
+ * A quest já terminou em `agora` (ms)? Terminou = sai da Mochila. Pelo FIM, não
+ * pelo início: foco em andamento continua visível até acabar. Dia inteiro
+ * termina na meia-noite local do dia seguinte ao último (o `fim` exclusivo do
+ * Google, lido pelas partes pelo mesmo motivo de `diasDoEventoDiaInteiro`).
+ */
+export function questTerminou(quest: QuestCalendario, agora: number): boolean {
+  if (quest.diaInteiro) {
+    const [a, m, d] = quest.fim.split('-').map(Number)
+    return new Date(a, m - 1, d).getTime() <= agora
+  }
+  return Date.parse(quest.fim) <= agora
+}
+
 export type InfoDePrazo =
   | { papel: 'bloco'; posicao: number; total: number; marco: QuestCalendario | null }
   | { papel: 'marco'; blocos: number }
