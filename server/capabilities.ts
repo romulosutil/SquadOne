@@ -228,7 +228,8 @@ const criarPoDominio: Capability = {
       "de um tema que nenhum domínio atual cobre (ex: surge 'Financeiro' numa " +
       "squad que só tem 'Produto'). Abre uma sala nova no escritório. Não use " +
       "quando o tema já tem domínio e falta apenas um papel dentro dele — nesse " +
-      "caso use contratar_integrante. Não cria nada: devolve uma proposta para " +
+      "caso use contratar_integrante. Use também sempre que o usuário pedir " +
+      "explicitamente para abrir um domínio ou uma sala. Não cria nada: devolve uma proposta para " +
       "o usuário aprovar.",
     parameters: {
       type: Type.OBJECT,
@@ -298,7 +299,9 @@ const contratarIntegrante: Capability = {
       "Propõe CONTRATAR alguém DENTRO de um domínio existente (designer, tech " +
       "lead, QA...) quando o tema já tem dono mas falta um papel para executar. " +
       "O integrante entra na sala do domínio, junto com o PO — não abre sala " +
-      "nova. Não contrata ninguém: devolve uma proposta para o usuário aprovar.",
+      "nova. Use também sempre que o usuário pedir explicitamente para contratar " +
+      "ou trazer alguém para um domínio existente. Não contrata ninguém: devolve " +
+      "uma proposta para o usuário aprovar.",
     parameters: {
       type: Type.OBJECT,
       properties: {

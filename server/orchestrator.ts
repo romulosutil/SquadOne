@@ -139,6 +139,10 @@ export function buildSystemInstruction(
   demanda: use-o em toda chamada de agendar_evento, com prazo_final e esforco_min.`
         : "";
 
+  // Pedido explícito de contratação SEMPRE vira capacidade: a regra antiga
+  // ("se a squad dá conta, não chame") fazia o modelo engolir "contrate um
+  // designer" quando já havia alguém parecido. Sem roteamento por regex no
+  // servidor — o card continua sendo a decisão do usuário.
   return `Você é o PO raiz da squad '${contexto.squadNome}' (escopo: ${contexto.squadEscopo}). Recebe demandas em português e as
 transforma em compromissos no calendário do usuário.
 
@@ -177,7 +181,15 @@ Regras:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
     dele; passe o dominio_id exato.
-  Se a squad atual dá conta, não chame nenhuma das duas.
+- Se o usuário PEDE EXPLICITAMENTE para contratar, trazer alguém, abrir um
+  domínio ou uma sala (ex.: "contrate um designer", "preciso de alguém para
+  finanças", "abra um domínio de Saúde"),
+  SEMPRE chame criar_po_dominio ou contratar_integrante, mesmo que a squad atual
+  pareça dar conta. Quem decide é o usuário, no card. Se a mesma demanda também
+  pede compromissos, agende-os normalmente.
+- Sem pedido explícito, só proponha crescimento quando nenhum domínio ou papel
+  da squad atual cobre a demanda. Se a squad atual dá conta, não chame nenhuma
+  das duas.
 - Se a demanda pertence claramente ao escopo de uma das OUTRAS squads listadas,
   chame APENAS sugerir_troca_squad com o squad_id dela e não agende nada nesta
   squad. Na dúvida, trate a demanda na squad atual. Se não há outras squads,
@@ -206,8 +218,11 @@ const TRANSITORIO = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED/;
  * Duas tentativas POR MODELO, não mais: uma chamada em hora de pico já demora
  * ~15s antes de falhar, e o usuario esta olhando um spinner. 2 modelos x 2
  * tentativas e o teto que ainda cabe num clique.
+ *
+ * Exportada para server/redacao.ts: a redação sofre o mesmo 503 e merece o
+ * mesmo modelo reserva.
  */
-async function gerarComRetry(
+export async function gerarComRetry(
   ai: GoogleGenAI,
   params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
   tentativas = 2,
