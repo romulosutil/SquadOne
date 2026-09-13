@@ -41,6 +41,12 @@ export interface ErroDeDominio {
   dominio: string;
   erro: string;
   credencial: boolean;
+  /**
+   * O domínio tem mais eventos que o teto de páginas: nenhuma quest dele volta.
+   * Lista cortada calada pareceria completa, e a Mochila é onde o usuário
+   * confere o que existe.
+   */
+  incompleto?: true;
 }
 
 export interface QuestCalendario {
@@ -170,16 +176,49 @@ export class ErroCalendario extends Error {
   }
 }
 
-async function chamar(url: string, token: string): Promise<GoogleEvent[]> {
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!resp.ok) {
-    const corpo = await resp.text().catch(() => "");
-    throw new ErroCalendario(resp.status, corpo);
+/** Teto de páginas de um events.list. Mochila: 10 x 250; ocupação: 10 x 2500. */
+const PAGINAS_MAX = 10;
+
+/**
+ * A leitura tinha mais páginas que o teto. Classificada, não mensagem solta:
+ * quem lê decide o que fazer com dado incompleto (a Mochila marca o domínio, a
+ * ocupação recusa alocar), mas ninguém usa a lista cortada como se fosse inteira.
+ */
+export class LeituraIncompleta extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "LeituraIncompleta";
   }
-  const json = (await resp.json()) as { items?: GoogleEvent[] };
-  return json.items ?? [];
+}
+
+/**
+ * events.list seguindo `nextPageToken` até PAGINAS_MAX. Sem paginar, o que
+ * passasse de `maxResults` sumia sem aviso.
+ */
+async function listarPaginado<T>(
+  calendarId: string,
+  params: Record<string, string>,
+  token: string,
+): Promise<T[]> {
+  const itens: T[] = [];
+  let pageToken: string | undefined;
+  for (let pagina = 0; pagina < PAGINAS_MAX; pagina++) {
+    const busca = new URLSearchParams(params);
+    if (pageToken) busca.set("pageToken", pageToken);
+    const resp = await fetch(`${urlDeEventos(calendarId)}?${busca}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
+    }
+    const json = (await resp.json()) as { items?: T[]; nextPageToken?: string };
+    itens.push(...(json.items ?? []));
+    if (!json.nextPageToken) return itens;
+    pageToken = json.nextPageToken;
+  }
+  throw new LeituraIncompleta(
+    `O Google Calendar devolveu mais de ${PAGINAS_MAX} páginas de eventos: a leitura ficaria incompleta.`,
+  );
 }
 
 /**
@@ -201,19 +240,18 @@ export async function listarQuests(
 
   const lotes = await Promise.all(
     dominios.map(async (dominio) => {
-      const url =
-        `${urlDeEventos(calendarId)}?` +
-        new URLSearchParams({
-          privateExtendedProperty: `${PROP_DOMINIO}=${dominio}`,
-          timeMin,
-          timeMax,
-          singleEvents: "true",
-          orderBy: "startTime",
-          showDeleted: "false",
-          maxResults: "250",
-        }).toString();
+      const params = {
+        privateExtendedProperty: `${PROP_DOMINIO}=${dominio}`,
+        timeMin,
+        timeMax,
+        singleEvents: "true",
+        orderBy: "startTime",
+        showDeleted: "false",
+        maxResults: "250",
+      };
       try {
-        return { dominio, eventos: await chamar(url, token), erro: null as ErroDeDominio | null };
+        const eventos = await listarPaginado<GoogleEvent>(calendarId, params, token);
+        return { dominio, eventos, erro: null as ErroDeDominio | null };
       } catch (err: any) {
         return {
           dominio,
@@ -222,6 +260,7 @@ export async function listarQuests(
             dominio,
             erro: err?.message ?? String(err),
             credencial: err instanceof ErroCalendario && err.ehCredencial,
+            ...(err instanceof LeituraIncompleta ? { incompleto: true as const } : {}),
           },
         };
       }
@@ -253,7 +292,6 @@ export async function listarQuests(
 export const CALENDARIO_DE_OCUPACAO = "primary";
 const CAMPOS_OCUPACAO =
   "nextPageToken,items(status,transparency,eventType,start,end,attendees(self,responseStatus))";
-const PAGINAS_MAX = 10;
 
 export interface EventoDeOcupacao {
   status?: string;
@@ -291,10 +329,9 @@ export function eventoOcupa(ev: EventoDeOcupacao): Intervalo | null {
  * incompleta marcaria por cima de compromissos.
  */
 export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<Intervalo[]> {
-  const ocupado: Intervalo[] = [];
-  let pageToken: string | undefined;
-  for (let pagina = 0; pagina < PAGINAS_MAX; pagina++) {
-    const params = new URLSearchParams({
+  const eventos = await listarPaginado<EventoDeOcupacao>(
+    CALENDARIO_DE_OCUPACAO,
+    {
       timeMin: de.toISOString(),
       timeMax: ate.toISOString(),
       singleEvents: "true",
@@ -302,24 +339,13 @@ export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<I
       maxResults: "2500",
       maxAttendees: "1",
       fields: CAMPOS_OCUPACAO,
-    });
-    if (pageToken) params.set("pageToken", pageToken);
-    const resp = await fetch(`${urlDeEventos(CALENDARIO_DE_OCUPACAO)}?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!resp.ok) {
-      throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
-    }
-    const json = (await resp.json()) as { items?: EventoDeOcupacao[]; nextPageToken?: string };
-    for (const ev of json.items ?? []) {
-      const intervalo = eventoOcupa(ev);
-      if (intervalo) ocupado.push(intervalo);
-    }
-    if (!json.nextPageToken) return ocupado;
-    pageToken = json.nextPageToken;
-  }
-  throw new Error(
-    `A agenda tem mais de ${PAGINAS_MAX} páginas de eventos nos próximos dias: ` +
-      "a ocupação ficaria incompleta, então nada foi alocado.",
+    },
+    token,
   );
+  const ocupado: Intervalo[] = [];
+  for (const ev of eventos) {
+    const intervalo = eventoOcupa(ev);
+    if (intervalo) ocupado.push(intervalo);
+  }
+  return ocupado;
 }

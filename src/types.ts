@@ -190,7 +190,8 @@ export interface QuestCalendario {
 
 export interface MochilaResponse {
   quests: QuestCalendario[];
-  erros: { dominio: string; erro: string; credencial: boolean }[];
+  /** `incompleto`: mais eventos que o teto de páginas; o domínio volta sem quests. */
+  erros: { dominio: string; erro: string; credencial: boolean; incompleto?: true }[];
 }
 
 /** Espelho de LIMITES em server/squad.ts: o formulário corta antes de o servidor recusar. */

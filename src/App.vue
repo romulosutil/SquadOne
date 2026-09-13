@@ -184,6 +184,10 @@ const carregarMochila = async (recuperando = false) => {
     }
     quests.value = corpo.quests ?? []
     if (corpo.erros?.length) console.warn('Dominios com erro na Mochila:', corpo.erros)
+    // Domínio com eventos demais volta sem quests: sem avisar na tela, a
+    // Mochila pareceria completa.
+    const incompletos = (corpo.erros ?? []).filter(e => e.incompleto).map(e => e.dominio)
+    if (incompletos.length) avisar(`Mochila incompleta: eventos demais em ${incompletos.join(', ')}`)
   } catch (error) {
     // So no console, a Mochila vazia fica indistinguivel de "nao ha quests":
     // o motivo tem que chegar na tela de quem pode agir sobre ele.
