@@ -8,9 +8,16 @@
 import { computed, reactive, ref } from 'vue'
 import { LIMITES, type AlvoDeEdicao } from '../types'
 import { mensagemDeRedacao, rosterApi } from '../rosterApi'
+import { useFecharComEsc } from '../modal'
 
 const props = defineProps<{ alvo: AlvoDeEdicao; enviando: boolean; erro: string }>()
 const emit = defineEmits<{ salvar: [corpo: Record<string, string>]; fechar: [] }>()
+
+// Com o PATCH em curso, nem overlay nem Esc fecham: a edição já pode estar gravada.
+const fechar = () => {
+  if (!props.enviando) emit('fechar')
+}
+useFecharComEsc(() => !props.enviando, fechar)
 
 /** Valores de partida: a diferença contra eles é o corpo do PATCH. */
 const original = (() => {
@@ -80,7 +87,7 @@ const ROTULO = 'flex flex-col gap-1 text-xs font-black uppercase'
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="emit('fechar')">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="fechar">
     <form
       class="flex max-h-full w-full max-w-xl flex-col gap-3 overflow-y-auto border-4 border-black bg-white p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
       @submit.prevent="podeSalvar && emit('salvar', mudancas)"

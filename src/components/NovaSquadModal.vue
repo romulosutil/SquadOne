@@ -6,13 +6,20 @@
  */
 import { reactive } from 'vue'
 import type { DadosNovaSquad } from '../types'
+import { useFecharComEsc } from '../modal'
 
-defineProps({
+const props = defineProps({
   enviando: { type: Boolean, default: false },
   erro: { type: String, default: '' }
 })
 
 const emit = defineEmits<{ criar: [dados: DadosNovaSquad]; fechar: [] }>()
+
+// Com a criação em curso, nem overlay nem Esc fecham: a squad já pode existir.
+const fechar = () => {
+  if (!props.enviando) emit('fechar')
+}
+useFecharComEsc(() => !props.enviando, fechar)
 
 const form = reactive<DadosNovaSquad>({ nome: '', escopo: '', papel_po: '', nome_po: '' })
 
@@ -29,7 +36,7 @@ const enviar = () => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="emit('fechar')">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="fechar">
     <form
       class="w-full max-w-md border-4 border-black bg-white p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3"
       @submit.prevent="enviar"

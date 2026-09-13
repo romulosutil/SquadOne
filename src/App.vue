@@ -110,12 +110,24 @@ const trocarSquad = async (id: string): Promise<boolean> => {
   return true
 }
 
+/**
+ * Cada abertura de modal ganha um número. Resposta atrasada só fecha ou escreve
+ * erro no modal se ele ainda for a MESMA abertura que fez a requisição: fechar e
+ * abrir outro no meio não pode ter o modal novo zerado pela resposta do antigo.
+ */
+let seqAbertura = 0
+const novaAbertura = () => ++seqAbertura
+let aberturaNovaSquad = 0
+
 const abrirNovaSquad = () => {
   erroNovaSquad.value = ''
+  aberturaNovaSquad = novaAbertura()
   criandoSquad.value = true
 }
 
 const criarSquad = async (dados: DadosNovaSquad) => {
+  const abertura = aberturaNovaSquad
+  const aindaAberto = () => criandoSquad.value && aberturaNovaSquad === abertura
   enviandoSquad.value = true
   erroNovaSquad.value = ''
   try {
@@ -128,7 +140,7 @@ const criarSquad = async (dados: DadosNovaSquad) => {
     // Erro fica DENTRO do modal: o usuário corrige o nome sem redigitar o resto.
     if (!response.ok) throw new Error(corpo.error ?? `HTTP ${response.status}`)
     roster.value = corpo.roster
-    criandoSquad.value = false
+    if (aindaAberto()) criandoSquad.value = false
     // A squad já existe no servidor; só a troca espera o turno acabar.
     const trocou = await trocarSquad(corpo.squad.id)
     avisar(
@@ -137,7 +149,7 @@ const criarSquad = async (dados: DadosNovaSquad) => {
         : `Squad ${corpo.squad.nome} criada — troque no seletor quando o turno acabar`
     )
   } catch (error) {
-    erroNovaSquad.value = error instanceof Error ? error.message : String(error)
+    if (aindaAberto()) erroNovaSquad.value = error instanceof Error ? error.message : String(error)
   } finally {
     enviandoSquad.value = false
   }
@@ -259,7 +271,13 @@ const descartarSugestao = (id) => {
 
 // Modal de contratação aberto pela sala, pelo slot livre ou pelo "Ajustar" de
 // um card. `sugestaoId` existe só no último caso: contratar remove o card.
-const contratacao = ref<{ alvo: AlvoDeContratacao; inicial?: PreenchimentoDeContratacao; sugestaoId?: string } | null>(null)
+const contratacao = ref<{
+  alvo: AlvoDeContratacao
+  inicial?: PreenchimentoDeContratacao
+  sugestaoId?: string
+  /** Número desta abertura (novaAbertura): identifica a quem a resposta pertence. */
+  abertura: number
+} | null>(null)
 const enviandoContratacao = ref(false)
 const erroContratacao = ref('')
 
@@ -274,7 +292,7 @@ const acharDominioAtivo = (id: string) => squadAtiva.value?.dominios.find((d) =>
 
 const abrirContratacao = (alvo: AlvoDeContratacao, inicial?: PreenchimentoDeContratacao, sugestaoId?: string) => {
   erroContratacao.value = ''
-  contratacao.value = { alvo, inicial, sugestaoId }
+  contratacao.value = { alvo, inicial, sugestaoId, abertura: novaAbertura() }
 }
 
 const contratarNaSala = (dominioId: string) => {
@@ -323,7 +341,8 @@ const ajustarSugestao = (id: string) => {
 const confirmarContratacao = async (dados: DadosDeContratacao) => {
   const atual = contratacao.value
   if (!atual || enviandoContratacao.value) return
-  const { alvo } = atual
+  const { alvo, abertura } = atual
+  const aindaAberto = () => contratacao.value?.abertura === abertura
   enviandoContratacao.value = true
   erroContratacao.value = ''
   try {
@@ -358,21 +377,23 @@ const confirmarContratacao = async (dados: DadosDeContratacao) => {
       avisar(`${r.pessoa.nome} abriu o domínio ${r.dominio.nome}`)
     }
     if (atual.sugestaoId) descartarSugestao(atual.sugestaoId)
-    contratacao.value = null
+    if (aindaAberto()) contratacao.value = null
   } catch (error) {
     // Squad sumiu ou foi arquivada em outra aba: mesmo gesto da Fase 1.
     if (error instanceof ErroDaApi && error.corpo.squadInexistente) {
-      contratacao.value = null
+      if (aindaAberto()) contratacao.value = null
       await recuperarSquadInexistente()
       return
     }
-    erroContratacao.value = error instanceof Error ? error.message : String(error)
+    if (aindaAberto()) erroContratacao.value = error instanceof Error ? error.message : String(error)
   } finally {
     enviandoContratacao.value = false
   }
 }
 
 const edicao = ref<AlvoDeEdicao | null>(null)
+let aberturaEdicao = 0
+let aberturaArquivo = 0
 const enviandoEdicao = ref(false)
 const erroEdicao = ref('')
 const arquivoAberto = ref(false)
@@ -399,6 +420,7 @@ const acharPessoaAtiva = (id: string) =>
 
 const abrirEdicao = (alvo: AlvoDeEdicao) => {
   erroEdicao.value = ''
+  aberturaEdicao = novaAbertura()
   edicao.value = alvo
 }
 const editarPessoa = (id: string) => {
@@ -422,15 +444,17 @@ const salvarEdicao = async (corpo: Record<string, string>) => {
       : alvo.tipo === 'dominio'
         ? ['dominios', alvo.dominio.id]
         : ['squads', alvo.squad.id]
+  const abertura = aberturaEdicao
+  const aindaAberto = () => !!edicao.value && aberturaEdicao === abertura
   enviandoEdicao.value = true
   erroEdicao.value = ''
   try {
     const r = await rosterApi.editar(tipo, id, corpo)
     roster.value = r.roster
-    edicao.value = null
+    if (aindaAberto()) edicao.value = null
     avisar('Salvo')
   } catch (error) {
-    erroEdicao.value = error instanceof Error ? error.message : String(error)
+    if (aindaAberto()) erroEdicao.value = error instanceof Error ? error.message : String(error)
   } finally {
     enviandoEdicao.value = false
   }
@@ -485,12 +509,15 @@ const arquivarSquadAtiva = () => {
 
 const abrirArquivo = () => {
   errosArquivo.value = {}
+  aberturaArquivo = novaAbertura()
   arquivoAberto.value = true
 }
 
 const reativar = async (tipo: TipoDoRoster, id: string) => {
   if (reativando.value) return
   const chave = `${tipo}:${id}`
+  const abertura = aberturaArquivo
+  const aindaAberto = () => arquivoAberto.value && aberturaArquivo === abertura
   reativando.value = chave
   errosArquivo.value = { ...errosArquivo.value, [chave]: '' }
   try {
@@ -499,7 +526,11 @@ const reativar = async (tipo: TipoDoRoster, id: string) => {
     avisar('Reativado')
     if (tipo === 'dominios') await carregarMochila()
   } catch (error) {
-    errosArquivo.value = { ...errosArquivo.value, [chave]: error instanceof Error ? error.message : String(error) }
+    if (aindaAberto()) {
+      errosArquivo.value = { ...errosArquivo.value, [chave]: error instanceof Error ? error.message : String(error) }
+    } else {
+      avisar(error instanceof Error ? error.message : String(error))
+    }
   } finally {
     reativando.value = ''
   }

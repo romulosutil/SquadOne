@@ -6,8 +6,9 @@
  */
 import type { SquadView } from '../types'
 import type { TipoDoRoster } from '../rosterApi'
+import { useFecharComEsc } from '../modal'
 
-defineProps<{
+const props = defineProps<{
   squad: SquadView
   squadsArquivadas: SquadView[]
   /** `${tipo}:${id}` em curso; vazio = nenhum. */
@@ -17,12 +18,19 @@ defineProps<{
 
 const emit = defineEmits<{ reativar: [tipo: TipoDoRoster, id: string]; fechar: [] }>()
 
+// Com uma reativação em curso, nem overlay, nem Esc, nem Fechar: a recusa
+// (409) precisa de onde aparecer.
+const fechar = () => {
+  if (!props.reativando) emit('fechar')
+}
+useFecharComEsc(() => !props.reativando, fechar)
+
 const data = (iso?: string) => (iso ? new Date(iso).toLocaleDateString() : '')
 const BOTAO = 'border-2 border-black bg-[#bbf7d0] px-2 py-0.5 font-black text-xs uppercase disabled:opacity-50'
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="emit('fechar')">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="fechar">
     <div class="flex max-h-full w-full max-w-xl flex-col gap-3 overflow-y-auto border-4 border-black bg-white p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
       <h2 class="font-black text-xl uppercase">🗄 Arquivo</h2>
       <p class="text-xs font-bold opacity-70">
@@ -66,7 +74,7 @@ const BOTAO = 'border-2 border-black bg-[#bbf7d0] px-2 py-0.5 font-black text-xs
       </div>
 
       <div class="flex justify-end">
-        <button type="button" class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase" @click="emit('fechar')">Fechar</button>
+        <button type="button" :disabled="!!reativando" class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase disabled:opacity-50" @click="fechar">Fechar</button>
       </div>
     </div>
   </div>

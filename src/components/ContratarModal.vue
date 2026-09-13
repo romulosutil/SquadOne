@@ -9,6 +9,7 @@
 import { computed, reactive, ref } from 'vue'
 import { LIMITES, type AlvoDeContratacao, type DadosDeContratacao, type PreenchimentoDeContratacao } from '../types'
 import { mensagemDeRedacao, rosterApi } from '../rosterApi'
+import { useFecharComEsc } from '../modal'
 
 const props = defineProps<{
   alvo: AlvoDeContratacao
@@ -18,6 +19,12 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ contratar: [dados: DadosDeContratacao]; fechar: [] }>()
+
+// Com envio em curso, nem overlay nem Esc fecham: o hire já pode estar gravado.
+const fechar = () => {
+  if (!props.enviando) emit('fechar')
+}
+useFecharComEsc(() => !props.enviando, fechar)
 
 /** O formato que o Gemini também segue (spec §5.3), mostrado como exemplo. */
 const PLACEHOLDER_ESCOPO =
@@ -117,7 +124,7 @@ const ROTULO = 'flex flex-col gap-1 text-xs font-black uppercase'
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="emit('fechar')">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="fechar">
     <form
       class="flex max-h-full w-full max-w-xl flex-col gap-3 overflow-y-auto border-4 border-black bg-white p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
       @submit.prevent="contratar"
