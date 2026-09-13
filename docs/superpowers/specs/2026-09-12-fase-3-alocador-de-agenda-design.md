@@ -156,7 +156,7 @@ interface CompromissoAgendado {
   tipo: "time_blocking" | "deadline";
   dominio: string;
   eventos: EventoCriado[];   // foco: [foco]; prazo: [marco, ...blocos]
-  avisos: string[];
+  avisos: { aviso: string; motivo?: "precisaConectar" }[];   // motivo: bloco recusado por credencial
   faltou_min: number;
 }
 ```
@@ -436,13 +436,13 @@ Cada `agendar_evento` do turno vira `ErroTarefa` classificado; propostas de cres
 | Foco sem slot no horizonte | `SemHorarioLivre` | um compromisso | `motivo = "semHorarioLivre"` |
 | Data ilegível, prazo passado/ausente, duração > janela, título vazio | `Error` | um compromisso | `ErroTarefa` sem `motivo` |
 | POST do marco ou do foco falha | `ErroCalendario` | um compromisso | `ErroTarefa` sem `motivo`; nada criado |
-| POST de um bloco falha | — | um compromisso | aviso; série para; `faltou_min` soma o resto |
+| POST de um bloco falha | — | um compromisso | aviso; série para; `faltou_min` soma o resto. 401/403 de credencial: aviso com `motivo = "precisaConectar"` (UI marca desconectado) |
 | Esforço parcial, conflito/fora da janela/passado/além do horizonte no fixo, esforço/duração acima do teto, prazo sem esforço | — | um compromisso | aviso |
 
 ```ts
 type MotivoDeErro = "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
 interface ErroTarefa { capacidade: string; args: Record<string, any>; erro: string; motivo?: MotivoDeErro }
-interface AvisoTarefa { capacidade: string; titulo: string; aviso: string }
+interface AvisoTarefa { capacidade: string; titulo: string; aviso: string; motivo?: MotivoDeErro }
 ```
 
 O status HTTP do turno não muda: 200 com `erros` e `avisos`.

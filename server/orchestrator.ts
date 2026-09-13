@@ -32,6 +32,8 @@ export interface AvisoTarefa {
   capacidade: string;
   titulo: string;
   aviso: string;
+  /** Gesto certo para a UI, como em `ErroTarefa`: bloco recusado por credencial pede reconectar. */
+  motivo?: MotivoDeErro;
 }
 
 /**
@@ -361,8 +363,8 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
     if ("erro" in r) turno.erros.push(r);
     else if (r.kind === "compromisso") {
       turno.eventos_criados.push(...r.eventos);
-      for (const aviso of r.avisos) {
-        turno.avisos.push({ capacidade: "agendar_evento", titulo: r.titulo, aviso });
+      for (const { aviso, motivo } of r.avisos) {
+        turno.avisos.push({ capacidade: "agendar_evento", titulo: r.titulo, aviso, ...(motivo ? { motivo } : {}) });
       }
     } else turno.sugestoes.push({ ...r, id: randomUUID() });
   }

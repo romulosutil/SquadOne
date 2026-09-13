@@ -40,6 +40,16 @@ export interface EventoCriado {
   htmlLink?: string;
 }
 
+/**
+ * Algo feito de um jeito diferente do pedido. `motivo` só quando há um gesto
+ * certo para a UI: um bloco recusado por credencial pede reconectar, mesmo o
+ * compromisso tendo saído em parte.
+ */
+export interface AvisoDoCompromisso {
+  aviso: string;
+  motivo?: "precisaConectar";
+}
+
 /** Resultado de UMA chamada de agendar_evento: um compromisso, 1..N eventos. */
 export interface CompromissoAgendado {
   kind: "compromisso";
@@ -50,7 +60,7 @@ export interface CompromissoAgendado {
   /** Na ordem de criação: foco = [bloco]; prazo = [marco, ...blocos]. */
   eventos: EventoCriado[];
   /** O que foi feito mas não saiu como pedido (conflito, esforço parcial...). */
-  avisos: string[];
+  avisos: AvisoDoCompromisso[];
   /** Minutos do esforço sem bloco reservado. 0 para foco. */
   faltou_min: number;
 }
@@ -155,7 +165,10 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
   if (!titulo) throw new Error("Campo 'titulo' vazio.");
   const tipo: TipoEvento =
     p.tipoForcado ?? (args.tipo === "deadline" ? "deadline" : "time_blocking");
-  const avisos: string[] = [];
+  const avisos: AvisoDoCompromisso[] = [];
+  const avisar = (aviso: string, motivo?: AvisoDoCompromisso["motivo"]) => {
+    avisos.push(motivo ? { aviso, motivo } : { aviso });
+  };
   const base = {
     titulo,
     responsavel_id: pessoa.id,
@@ -177,7 +190,7 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
       positivo(args.duracao_min) ?? (p.tipoForcado ? positivo(args.esforco_min) : null) ?? 60,
     );
     if (duracao > DURACAO_MAX_MIN) {
-      avisos.push(`Duração de ${formatarMinutos(duracao)} reduzida para ${formatarMinutos(DURACAO_MAX_MIN)}.`);
+      avisar(`Duração de ${formatarMinutos(duracao)} reduzida para ${formatarMinutos(DURACAO_MAX_MIN)}.`);
       duracao = DURACAO_MAX_MIN;
     }
 
@@ -188,17 +201,17 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
     if (fixo && fixo.data === null) {
       // O usuário disse a hora: respeita. Conflito é informação, não veto.
       slot = { inicio: fixo.instante, fim: fixo.instante + duracao * MIN_MS };
-      if (slot.inicio < agora) avisos.push("O horário fixo pedido já passou.");
+      if (slot.inicio < agora) avisar("O horário fixo pedido já passou.");
       if (slot.fim > agora + HORIZONTE_DIAS * 24 * 3600_000) {
-        avisos.push(`Conflito não verificado: o horário fica além dos ${HORIZONTE_DIAS} dias lidos da agenda.`);
+        avisar(`Conflito não verificado: o horário fica além dos ${HORIZONTE_DIAS} dias lidos da agenda.`);
       } else {
         const colisoes = conflitos(ocupacao, slot);
         if (colisoes.length) {
-          avisos.push(`O horário fixo conflita com ${colisoes.length} compromisso(s) já na agenda.`);
+          avisar(`O horário fixo conflita com ${colisoes.length} compromisso(s) já na agenda.`);
         }
       }
       if (!dentroDaJanela(slot, janela)) {
-        avisos.push(`O horário fixo fica fora da janela de trabalho ${descreverJanela(janela)}.`);
+        avisar(`O horário fixo fica fora da janela de trabalho ${descreverJanela(janela)}.`);
       }
     } else {
       if (duracao > janela.fimMin - janela.inicioMin) {
@@ -269,11 +282,11 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
   let slots: Intervalo[] = [];
   let faltou = 0;
   if (esforcoBruto === null) {
-    avisos.push("Sem esforco_min estimado: só o marco do prazo foi criado, nenhum bloco de trabalho.");
+    avisar("Sem esforco_min estimado: só o marco do prazo foi criado, nenhum bloco de trabalho.");
   } else {
     let esforco = Math.max(BLOCO_MIN, arredondar15(esforcoBruto));
     if (esforco > ESFORCO_MAX_MIN) {
-      avisos.push(`Esforço de ${formatarMinutos(esforco)} reduzido para ${formatarMinutos(ESFORCO_MAX_MIN)}.`);
+      avisar(`Esforço de ${formatarMinutos(esforco)} reduzido para ${formatarMinutos(ESFORCO_MAX_MIN)}.`);
       esforco = ESFORCO_MAX_MIN;
     }
     const alocacao = alocar(
@@ -285,7 +298,7 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
     slots = alocacao.slots;
     faltou = alocacao.faltouMin;
     if (faltou > 0) {
-      avisos.push(
+      avisar(
         `Faltaram ${formatarMinutos(faltou)} de trabalho antes do prazo: não coube em horário ` +
           `livre da janela ${descreverJanela(janela)} (até ${BLOCOS_MAX} blocos por prazo).`,
       );
@@ -347,9 +360,13 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
       // continuam certos. Para aqui para não abrir buracos no meio da série.
       const semReserva = slots.slice(i).reduce((s, x) => s + (x.fim - x.inicio) / MIN_MS, 0);
       faltou += semReserva;
-      avisos.push(
+      // Credencial recusada no meio da série é o mesmo gesto dos outros
+      // caminhos (reconectar): sem o motivo, a UI seguiria achando que está
+      // conectada e o próximo turno falharia igual.
+      avisar(
         `O ${rotulo} não foi criado (${err?.message ?? String(err)}); ` +
           `${formatarMinutos(semReserva)} ficaram sem reserva.`,
+        err instanceof ErroCalendario && err.ehCredencial ? "precisaConectar" : undefined,
       );
       break;
     }

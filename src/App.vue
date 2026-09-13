@@ -562,8 +562,10 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     const avisos = turno.avisos ?? []
     // Agendar sem credencial falha por compromisso, nao o turno inteiro: o
     // motivo classificado e o que diz para a Mochila voltar a oferecer o
-    // botao de conectar.
-    if (erros.some(e => e.motivo === 'precisaConectar')) conectado.value = false
+    // botao de conectar. Bloco de prazo recusado no meio da serie chega como
+    // aviso (o compromisso saiu em parte), com o mesmo motivo.
+    const precisaConectar = (x: { motivo?: string }) => x.motivo === 'precisaConectar'
+    if (erros.some(precisaConectar) || avisos.some(precisaConectar)) conectado.value = false
     if (erros.length || avisos.length) {
       // try por tarefa: o lote sobrevive, os erros vem nomeados. Avisos sao
       // coisas feitas de um jeito diferente do pedido (conflito, esforco que

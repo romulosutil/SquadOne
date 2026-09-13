@@ -155,6 +155,8 @@ export interface AvisoTarefa {
   capacidade: string;
   titulo: string;
   aviso: string;
+  /** Bloco de prazo recusado por credencial: mesmo gesto do erro `precisaConectar`. */
+  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
 }
 
 export interface TurnoResponse {
