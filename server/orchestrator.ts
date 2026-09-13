@@ -227,26 +227,50 @@ export class ModeloOcupado extends Error {}
  */
 const MODELOS_RESERVA = ["gemini-3.5-flash"];
 
-const TRANSITORIO = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED/;
+/** Transitório: vale retentar e cair no modelo reserva. TIMEOUT é o do próprio gerarComRetry. */
+const TRANSITORIO = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED|TIMEOUT/;
+
+/**
+ * Teto de UMA tentativa ao Gemini. Sem ele uma chamada travada prendia o turno
+ * para sempre e, na contribuição, a fila serial da aba inteira. 45s cobre as
+ * respostas lentas medidas em pico (~15s) com folga. Pior caso de uma geração:
+ * 2 modelos x 2 tentativas x 45s + backoff (~2,4s) ≈ 3 min.
+ */
+export const TIMEOUT_GEMINI_MS = 45_000;
 
 /**
  * Duas tentativas POR MODELO, não mais: uma chamada em hora de pico já demora
  * ~15s antes de falhar, e o usuario esta olhando um spinner. 2 modelos x 2
- * tentativas e o teto que ainda cabe num clique.
+ * tentativas e o teto que ainda cabe num clique. Cada tentativa tem timeout
+ * (`timeoutMs`), que conta como transitório.
  *
- * Exportada para server/redacao.ts: a redação sofre o mesmo 503 e merece o
- * mesmo modelo reserva.
+ * Exportada para server/redacao.ts e server/contribuicao.ts: sofrem o mesmo 503
+ * e merecem o mesmo modelo reserva.
  */
 export async function gerarComRetry(
   ai: GoogleGenAI,
   params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
   tentativas = 2,
+  timeoutMs = TIMEOUT_GEMINI_MS,
 ) {
   let ultimo: any;
   for (const model of [params.model, ...MODELOS_RESERVA]) {
     for (let i = 0; i < tentativas; i++) {
+      const controle = new AbortController();
+      let relogio: ReturnType<typeof setTimeout> | undefined;
+      // Race além do abortSignal: o SDK cancela o fetch pelo sinal, mas a
+      // tentativa não pode depender de ele honrar o cancelamento para acabar.
+      const estouro = new Promise<never>((_, rejeitar) => {
+        relogio = setTimeout(() => {
+          rejeitar(new Error(`TIMEOUT: ${model} não respondeu em ${Math.round(timeoutMs / 1000)}s.`));
+          controle.abort();
+        }, timeoutMs);
+      });
       try {
-        return await ai.models.generateContent({ ...params, model });
+        return await Promise.race([
+          ai.models.generateContent({ ...params, model, config: { ...params.config, abortSignal: controle.signal } }),
+          estouro,
+        ]);
       } catch (err: any) {
         const msg = String(err?.message ?? err);
         if (!TRANSITORIO.test(msg)) throw err;
@@ -257,6 +281,8 @@ export async function gerarComRetry(
           const espera = 800 * 2 ** i + Math.random() * 400;
           await new Promise((r) => setTimeout(r, espera));
         }
+      } finally {
+        clearTimeout(relogio);
       }
     }
   }
