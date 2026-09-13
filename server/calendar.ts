@@ -361,6 +361,34 @@ export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<I
   return ocupado;
 }
 
+// --- Token por chamada (Fase 4) -------------------------------------------
+
+/**
+ * Quem pede o access token a cada chamada (na rota, `tokenValido`). Uma
+ * contribuição dura dezenas de segundos de Gemini entre a leitura e o PATCH:
+ * um token lido uma vez no começo podia vencer no meio, o PATCH voltava 401 e
+ * a UI desconectava à toa. O cache do auth-store torna pedir de novo barato.
+ */
+export type ObterToken = () => Promise<string>;
+
+/**
+ * Pede o token IMEDIATAMENTE antes da chamada. Se o Google recusar a
+ * credencial, pede de novo e, vindo um token diferente, repete uma vez: 401
+ * só vira `precisaConectar` se persistir com o token recém-obtido. Repetir é
+ * seguro: 401 é recusa antes de aplicar, nada foi gravado.
+ */
+export async function comToken<T>(obter: ObterToken, fn: (token: string) => Promise<T>): Promise<T> {
+  const token = await obter();
+  try {
+    return await fn(token);
+  } catch (err) {
+    if (!(err instanceof ErroCalendario && err.ehCredencial)) throw err;
+    const novo = await obter();
+    if (novo === token) throw err;
+    return fn(novo);
+  }
+}
+
 // --- Um evento: ler, atualizar com If-Match, inserir (Fase 4) -------------
 
 /** O evento foi apagado no Google (404/410 ou `status: cancelled`). */
@@ -522,19 +550,20 @@ export function marcasPreservadas(
  * `PreCondicaoFalhou` do PATCH principal sobe: reler ou desistir é do chamador.
  */
 export async function atualizarPreservandoMarcas(
-  token: string,
+  token: string | ObterToken,
   calendarId: string,
   lido: EventoLido,
   corpo: Record<string, unknown> & { extendedProperties?: { private?: Record<string, string> } },
 ): Promise<EventoLido> {
+  const obter: ObterToken = typeof token === "string" ? async () => token : token;
   const privado = { ...lido.privado, ...(corpo.extendedProperties?.private ?? {}) };
   const completo = { ...corpo, extendedProperties: { private: privado } };
-  const resposta = await atualizarEvento(token, calendarId, lido.id, lido.etag, completo);
+  const resposta = await comToken(obter, (t) => atualizarEvento(t, calendarId, lido.id, lido.etag, completo));
   if (marcasPreservadas(lido.privado, resposta.privado)) return resposta;
   try {
-    const restaurado = await atualizarEvento(token, calendarId, lido.id, resposta.etag, {
-      extendedProperties: { private: privado },
-    });
+    const restaurado = await comToken(obter, (t) =>
+      atualizarEvento(t, calendarId, lido.id, resposta.etag, { extendedProperties: { private: privado } }),
+    );
     if (marcasPreservadas(lido.privado, restaurado.privado)) return restaurado;
   } catch (err) {
     console.error(`[calendar] restauração das marcas de '${lido.id}' falhou:`, err);

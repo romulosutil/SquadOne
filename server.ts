@@ -90,7 +90,12 @@ function responderErroDeRoster(res: express.Response, err: unknown): boolean {
  */
 function responderErroDeQuest(res: express.Response, err: unknown): boolean {
   const error = (err as Error)?.message;
-  if (err instanceof QuestSumiu) {
+  if (err instanceof PrecisaConectar) {
+    // O token é pedido de novo antes de cada chamada ao Google: pode faltar no meio.
+    res.status(401).json({ error, precisaConectar: true });
+  } else if (err instanceof ErroDeConfig) {
+    res.status(500).json({ error, configuracao: true });
+  } else if (err instanceof QuestSumiu) {
     res.status(404).json({ error, questSumiu: true });
   } else if (err instanceof QuestRecusada) {
     res.status(409).json({ error, [err.flag]: true });
@@ -382,14 +387,15 @@ async function startServer() {
       console.error("Erro ao ler o pedido de contribuição:", error);
       return res.status(500).json({ error: error.message });
     }
-    let token: string;
+    // Token antes do Gemini: sem credencial, 401 sem gastar modelo. Depois,
+    // contribuirNaQuest pede de novo antes de cada chamada ao Google.
     try {
-      token = await tokenValido();
+      await tokenValido();
     } catch (error) {
       return responderErroDeAuth(res, error);
     }
     try {
-      res.json(await contribuirNaQuest(ai, { ...pedido, roster, token, agora: new Date() }));
+      res.json(await contribuirNaQuest(ai, { ...pedido, roster, obterToken: tokenValido, agora: new Date() }));
     } catch (error: any) {
       console.error("Erro na contribuição:", error);
       if (responderErroDeQuest(res, error)) return;
@@ -410,14 +416,13 @@ async function startServer() {
       console.error("Erro ao ler o pedido de ajuste:", error);
       return res.status(500).json({ error: error.message });
     }
-    let token: string;
     try {
-      token = await tokenValido();
+      await tokenValido();
     } catch (error) {
       return responderErroDeAuth(res, error);
     }
     try {
-      res.json(await aplicarAjuste({ ...pedido, token, janela, agora: new Date() }));
+      res.json(await aplicarAjuste({ ...pedido, obterToken: tokenValido, janela, agora: new Date() }));
     } catch (error: any) {
       console.error("Erro no ajuste:", error);
       if (responderErroDeQuest(res, error)) return;

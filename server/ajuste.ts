@@ -10,6 +10,7 @@ import {
 import { formatarMinutos } from "./agendamento.ts";
 import {
   atualizarPreservandoMarcas,
+  comToken,
   inserirEvento,
   lerEvento,
   lerOcupacao,
@@ -20,6 +21,7 @@ import {
   PreCondicaoFalhou,
   QuestSumiu,
   type EventoLido,
+  type ObterToken,
 } from "./calendar.ts";
 import { planejarDuracao, planejarEsforco } from "./plano-de-ajuste.ts";
 import { lerIdDoEvento, QuestRecusada, validarQuestDaSquad } from "./quest.ts";
@@ -97,13 +99,15 @@ const conflitoDeEdicao = () =>
   new QuestRecusada("conflitoDeEdicao", "O evento mudou no Google depois da proposta. Peça a contribuição de novo.");
 
 export async function aplicarAjuste(
-  x: PedidoDeAjuste & { token: string; janela: Janela; agora: Date },
+  // `obterToken` antes de CADA chamada ao Google: um ajuste de esforço faz até
+  // dezenas de escritas em série, e um token lido no começo podia vencer no meio.
+  x: PedidoDeAjuste & { obterToken: ObterToken; janela: Janela; agora: Date },
 ): Promise<RespostaDeAjuste> {
-  const { squad, eventId, alvo, propostoMin, permitirMover, token, janela, agora } = x;
+  const { squad, eventId, alvo, propostoMin, permitirMover, obterToken, janela, agora } = x;
   const cal = squad.calendarId;
   const fuso = janela.fuso;
   const agoraMs = agora.getTime();
-  const ev = await lerEvento(token, cal, eventId);
+  const ev = await comToken(obterToken, (t) => lerEvento(t, cal, eventId));
   const dominio = validarQuestDaSquad(ev, squad);
   const horizonte = new Date(agoraMs + HORIZONTE_DIAS * DIA_MS);
 
@@ -115,14 +119,15 @@ export async function aplicarAjuste(
     }
     const atual = { inicio, fim };
     if (atual.fim <= agoraMs) throw alvoIncompativel("Este bloco já terminou.");
-    const lidos = await lerOcupacao(token, agora, horizonte);
+    const lidos = await comToken(obterToken, (t) => lerOcupacao(t, agora, horizonte));
     // O próprio evento não pode colidir consigo mesmo: sai UM intervalo igual.
     const i = lidos.findIndex((o) => o.inicio === atual.inicio && o.fim === atual.fim);
     const ocupacao = i === -1 ? lidos : [...lidos.slice(0, i), ...lidos.slice(i + 1)];
     let limite: number | undefined;
     if (ev.prazoRef) {
       try {
-        limite = limiteDoMarco(await lerEvento(token, cal, ev.prazoRef), janela);
+        const prazoRef = ev.prazoRef;
+        limite = limiteDoMarco(await comToken(obterToken, (t) => lerEvento(t, cal, prazoRef)), janela);
       } catch (err) {
         // Marco apagado: o bloco segue valendo, só sem limite.
         if (!(err instanceof QuestSumiu)) throw err;
@@ -147,7 +152,7 @@ export async function aplicarAjuste(
         ? { start: { dateTime: iso(plano.slot.inicio) }, end: { dateTime: iso(plano.slot.fim) } }
         : { end: { dateTime: iso(plano.slot.fim) } };
     try {
-      await atualizarPreservandoMarcas(token, cal, ev, corpo);
+      await atualizarPreservandoMarcas(obterToken, cal, ev, corpo);
     } catch (err) {
       // Sem retentativa: o ajuste foi calculado sobre um horário que mudou.
       if (err instanceof PreCondicaoFalhou) throw conflitoDeEdicao();
@@ -168,7 +173,14 @@ export async function aplicarAjuste(
   const limite = limiteDoMarco(ev, janela);
   if (limite === undefined) throw alvoIncompativel("O marco não tem data legível.");
 
-  const lida = await listarQuests(token, cal, [dominio.id], agora);
+  // listarQuests não lança: devolve o erro por domínio. Credencial recusada
+  // repete uma vez se vier token novo, como comToken.
+  const tokenDaLista = await obterToken();
+  let lida = await listarQuests(tokenDaLista, cal, [dominio.id], agora);
+  if (lida.erros.some((e) => e.credencial)) {
+    const novo = await obterToken();
+    if (novo !== tokenDaLista) lida = await listarQuests(novo, cal, [dominio.id], agora);
+  }
   if (lida.erros.length) {
     // Sem saber quais blocos existem, ajustar esforço seria cego.
     throw new AgendaIndisponivel(`Não deu para ler os blocos do prazo: ${lida.erros[0].erro}`, lida.erros[0].credencial);
@@ -177,7 +189,7 @@ export async function aplicarAjuste(
     .filter((q) => q.prazoRef === ev.id && !q.diaInteiro)
     .map((q) => ({ eventId: q.eventId, etag: q.etag ?? "", inicio: instante(q.inicio, fuso)!, fim: instante(q.fim, fuso)! }))
     .filter((b) => Number.isFinite(b.inicio) && Number.isFinite(b.fim));
-  const ocupacao = await lerOcupacao(token, agora, horizonte);
+  const ocupacao = await comToken(obterToken, (t) => lerOcupacao(t, agora, horizonte));
   const plano = planejarEsforco({ blocos, novoTotalMin: propostoMin, ocupacao, janela, agora: agoraMs, limite });
 
   const eventos: EventoAjustado[] = [];
@@ -196,9 +208,9 @@ export async function aplicarAjuste(
       // Lê o bloco para ter o private completo (a listagem não o traz) e confere
       // que é a MESMA versão que o plano considerou: etag diferente = o bloco
       // mudou desde a listagem, e o corte calculado não vale mais.
-      const lido = await lerEvento(token, cal, b.eventId);
+      const lido = await comToken(obterToken, (t) => lerEvento(t, cal, b.eventId));
       if (lido.etag !== b.etag) throw new PreCondicaoFalhou();
-      await atualizarPreservandoMarcas(token, cal, lido, { end: { dateTime: iso(b.fim) } });
+      await atualizarPreservandoMarcas(obterToken, cal, lido, { end: { dateTime: iso(b.fim) } });
       eventos.push({ eventId: b.eventId, inicio: iso(b.inicio), fim: iso(b.fim), acao: "encurtado" });
     } catch (err: any) {
       if (err instanceof MarcasPerdidas) throw err;
@@ -231,7 +243,7 @@ export async function aplicarAjuste(
   for (let i = 0; i < n; i++) {
     const s = plano.criar[i];
     try {
-      const criado = await inserirEvento(token, cal, {
+      const criado = await comToken(obterToken, (t) => inserirEvento(t, cal, {
         summary: `${tituloBase} (bloco extra ${i + 1}/${n})`,
         description: "Criado pelo SquadOne. Trabalho extra aprovado para o prazo.",
         ...(ev.colorId ? { colorId: ev.colorId } : {}),
@@ -242,7 +254,7 @@ export async function aplicarAjuste(
             squadId: squad.id, dominioId: dominio.id, pessoaId: ev.membro, tipo: "time_blocking", prazoRef: ev.id,
           }),
         },
-      });
+      }));
       eventos.push({ eventId: criado.id, inicio: iso(s.inicio), fim: iso(s.fim), acao: "criado" });
     } catch (err: any) {
       // Como a Fase 3: o que foi criado fica; a série para para não abrir buracos.

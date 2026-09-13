@@ -4,10 +4,12 @@ import { DURACAO_MAX_MIN, ESFORCO_MAX_MIN, FUSO, lerInstante } from "./alocador.
 import { formatarMinutos } from "./agendamento.ts";
 import {
   atualizarPreservandoMarcas,
+  comToken,
   lerEvento,
   listarQuests,
   PreCondicaoFalhou,
   type EventoLido,
+  type ObterToken,
   type QuestCalendario,
 } from "./calendar.ts";
 import {
@@ -89,7 +91,11 @@ export interface PedidoDeContribuicao {
   pessoas: { pessoa: Pessoa; dominio: Dominio }[];
 }
 
-export type ExecucaoDeContribuicao = PedidoDeContribuicao & { roster: Roster; token: string; agora: Date };
+/**
+ * `obterToken` é chamado antes de CADA chamada ao Google (não uma vez no
+ * começo): entre a leitura e o PATCH há até minutos de Gemini.
+ */
+export type ExecucaoDeContribuicao = PedidoDeContribuicao & { roster: Roster; obterToken: ObterToken; agora: Date };
 
 const cortar = (s: string, max: number) => (s.length <= max ? s : s.slice(0, max - 1) + "…");
 
@@ -391,8 +397,8 @@ const erroBlocoEditado = (pessoa: Pessoa): ResultadoDeAgente => ({
 });
 
 export async function contribuirNaQuest(ai: GoogleGenAI, x: ExecucaoDeContribuicao): Promise<RespostaDeContribuicao> {
-  const { squad, eventId, pessoas, roster, token, agora } = x;
-  const ev0 = await lerEvento(token, squad.calendarId, eventId);
+  const { squad, eventId, pessoas, roster, obterToken, agora } = x;
+  const ev0 = await comToken(obterToken, (t) => lerEvento(t, squad.calendarId, eventId));
   const dominioDoEvento = validarQuestDaSquad(ev0, squad);
   if (excedeSoComUsuario(ev0.description)) {
     throw new QuestRecusada(
@@ -425,7 +431,7 @@ export async function contribuirNaQuest(ai: GoogleGenAI, x: ExecucaoDeContribuic
   let doDominio: QuestCalendario[] | null = null;
   if (aGerar.length) {
     try {
-      const lida = await listarQuests(token, squad.calendarId, [dominioDoEvento.id], agora);
+      const lida = await listarQuests(await obterToken(), squad.calendarId, [dominioDoEvento.id], agora);
       doDominio = lida.erros.length ? null : lida.quests;
     } catch {
       doDominio = null;
@@ -484,7 +490,7 @@ export async function contribuirNaQuest(ai: GoogleGenAI, x: ExecucaoDeContribuic
       // atualizarPreservandoMarcas manda o private COMPLETO (lido + hashes) e
       // confere as marcas da resposta: a Mochila depende delas.
       if (m.mudou) {
-        await atualizarPreservandoMarcas(token, squad.calendarId, ev, {
+        await atualizarPreservandoMarcas(obterToken, squad.calendarId, ev, {
           description: m.descricao,
           extendedProperties: { private: m.hashes },
         });
@@ -498,7 +504,7 @@ export async function contribuirNaQuest(ai: GoogleGenAI, x: ExecucaoDeContribuic
       if (!(err instanceof PreCondicaoFalhou)) throw err;
       // A mescla é determinística e só troca os blocos envolvidos: refazer sobre
       // a versão nova não perde o que o usuário escreveu entre as leituras.
-      const ev1 = await lerEvento(token, squad.calendarId, eventId);
+      const ev1 = await comToken(obterToken, (t) => lerEvento(t, squad.calendarId, eventId));
       validarQuestDaSquad(ev1, squad);
       try {
         mescla = await tentar(ev1);
