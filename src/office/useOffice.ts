@@ -46,6 +46,7 @@ import {
   type Vec2,
 } from './rooms'
 import { bfsSlots, buildRoute, doorCenterPx } from './path'
+import { planejarSalas } from './salas'
 
 /** Uma pessoa do squad: o PO de um domínio ou um integrante dele. */
 export interface OfficePessoa {
@@ -144,14 +145,15 @@ export interface RoomView {
   label: { text: string; left: number; top: number }
   /**
    * null = sala assentada. 'pending' = slot já reservado, mas a sala espera a
-   * câmera chegar. 'building' = tocando `room-build`.
+   * câmera chegar. 'building' = tocando `room-build`. 'closing' = domínio
+   * arquivado: a sala toca `room-build` ao contrário e some.
    */
   phase: RoomPhase
   walls: WallView[]
   props: RoomPropView[]
 }
 
-export type RoomPhase = 'pending' | 'building' | null
+export type RoomPhase = 'pending' | 'building' | 'closing' | null
 
 export function useOffice(dominios: Ref<OfficeDominio[]>) {
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
@@ -176,7 +178,25 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
 
   /** Fase de cada sala em obra, por slotKey. Vazio = escritório em repouso. */
   const roomPhase = reactive(new Map<string, Exclude<RoomPhase, null>>())
-  const knownRooms = new Set<string>()
+  /**
+   * Última forma conhecida de cada sala, por slot. Guarda o domínio e não só o
+   * slot: um slot pode esvaziar (domínio arquivado) e voltar com outro dono, e
+   * a sala que sai precisa da última aparência para fechar na tela.
+   */
+  const knownRooms = new Map<string, OfficeDominio>()
+  /** Salas fora do roster ainda desenhadas, com fase 'closing', até a animação acabar. */
+  const fechando = shallowRef<OfficeDominio[]>([])
+  /**
+   * Geração por slot. Todo timer de obra ou fechamento guarda a geração em que
+   * nasceu e não faz nada se ela mudou: arquivar no meio da obra, ou reabrir no
+   * meio do fechamento, não deixa fase presa na sala nova do mesmo slot.
+   */
+  const geracao = new Map<string, number>()
+  function novaGeracao(key: string): number {
+    const g = (geracao.get(key) ?? 0) + 1
+    geracao.set(key, g)
+    return g
+  }
   /**
    * O primeiro roster que chega não é crescimento: o escritório já existia
    * antes do app abrir. Só depois dele uma sala nova vira animação.
@@ -197,7 +217,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
 
   const unlocked = computed(() => new Set(dominios.value.map((d) => slotKey(d.slot))))
 
-  const mapTiles = computed(() => mapSizeTiles(dominios.value.map((d) => d.slot)))
+  // A sala que fecha ainda precisa caber no mundo até sumir.
+  const mapTiles = computed(() => mapSizeTiles([...dominios.value, ...fechando.value].map((d) => d.slot)))
 
   /**
    * Índice pessoa -> domínio + posição dentro dele. É a tradução da árvore
@@ -222,7 +243,12 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   }
 
   const rooms = computed<RoomView[]>(() =>
-    dominios.value.map((d) => {
+    [
+      ...dominios.value.map((d) => ({ d, fase: (roomPhase.get(slotKey(d.slot)) ?? null) as RoomPhase })),
+      // Fora do roster, mas ainda na tela até `room--closing` terminar. As
+      // portas vêm de `unlocked` (só ativas): a sala que fecha já as perde.
+      ...fechando.value.map((d) => ({ d, fase: 'closing' as RoomPhase })),
+    ].map(({ d, fase }) => {
       const parsed = parseRoom(d.room)
       const [ox, oy] = roomOriginPx(d.slot)
       const key = slotKey(d.slot)
@@ -274,7 +300,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         // algorithm, senão o ator da própria sala a cobre.
         // A placa nomeia o DOMÍNIO: a sala inteira é dele, não de uma pessoa.
         label: { text: d.nome, left: lx, top: ly - WALL_H - 16 },
-        phase: roomPhase.get(key) ?? null,
+        phase: fase,
         walls,
         props: parsed.props.map((p) => {
           const [w, h] = PROP_SIZE[p.kind]
@@ -405,6 +431,23 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
           if (roomPhase.has(slotKey(dominio.slot))) a.hidden = true
           else iniciarEntrada(a, dominio, idx)
         }
+      } else if (!a.hidden) {
+        a.dominioId = dominio.id
+        const [x, y] = stationPx(dominio, idx)
+        if (!unlocked.value.has(slotKey(a.slot))) {
+          // A sala onde ele estava (ou para onde ia) foi arquivada. O BFS parte
+          // de um slot desbloqueado, então não há rota de volta: vai direto à cadeira.
+          a.x = x
+          a.y = y
+          a.slot = dominio.slot
+          a.route = []
+          a.walking = false
+        } else if (!a.walking && slotKey(a.slot) === slotKey(dominio.slot)) {
+          // Reassento: substituir PO, arquivar integrante ou promover o template
+          // muda a ordem das cadeiras. Parado na própria sala, senta na cadeira nova.
+          a.x = x
+          a.y = y
+        }
       }
       paint(a)
     }
@@ -415,12 +458,41 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
    * Sala nova: pan da câmera, materialização, e só então a entrada de quem
    * mora nela. Os três tempos são sequenciais de propósito — a sala não pode
    * nascer fora do enquadramento nem o ator andar dentro de uma sala invisível.
+   * Sala que sai: fecha no lugar, e quem morava nela já saiu do roster
+   * (syncActors remove). Primeira carga só registra: o escritório já existia
+   * antes do app abrir.
    */
   function registrarSalas() {
-    for (const d of dominios.value) {
+    const { fechar, trocadas, abrir } = planejarSalas(knownRooms, dominios.value)
+
+    for (const d of fechar) {
       const key = slotKey(d.slot)
-      if (knownRooms.has(key)) continue
-      knownRooms.add(key)
+      knownRooms.delete(key)
+      roomPhase.delete(key)
+      const g = novaGeracao(key)
+      if (primeiraCarga) continue
+      // A câmera não pode ficar presa olhando um slot que ficou vazio.
+      lookPoint.value = null
+      fechando.value = [...fechando.value.filter((f) => slotKey(f.slot) !== key), d]
+      agendar(() => {
+        if (geracao.get(key) !== g) return
+        fechando.value = fechando.value.filter((f) => slotKey(f.slot) !== key)
+      }, ROOM_BUILD_MS)
+      kick()
+    }
+
+    // Dono novo no mesmo slot: sem fechamento, a entrada abaixo anima a sala nova.
+    for (const key of trocadas) {
+      knownRooms.delete(key)
+      roomPhase.delete(key)
+    }
+
+    for (const d of abrir) {
+      const key = slotKey(d.slot)
+      knownRooms.set(key, d)
+      // Duas salas com o mesmo key colidiriam no v-for do template.
+      fechando.value = fechando.value.filter((f) => slotKey(f.slot) !== key)
+      const g = novaGeracao(key)
       if (primeiraCarga) continue
 
       roomPhase.set(key, 'pending')
@@ -428,8 +500,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
       kick()
 
       agendar(() => {
+        if (geracao.get(key) !== g) return
         roomPhase.set(key, 'building')
         agendar(() => {
+          if (geracao.get(key) !== g) return
           roomPhase.delete(key)
           for (const { pessoa, dominio, idx } of porPessoa.value.values()) {
             if (slotKey(dominio.slot) !== key) continue
@@ -439,6 +513,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         }, ROOM_BUILD_MS)
       }, ROOM_PAN_MS)
     }
+
+    // Salas que ficaram guardam a forma nova (nome, template): se saírem
+    // depois, fecham com a aparência atual.
+    for (const d of dominios.value) knownRooms.set(slotKey(d.slot), d)
   }
 
   function setActorEl(id: string, el: unknown) {

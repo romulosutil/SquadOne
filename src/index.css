@@ -55,3 +55,14 @@
 .room-objects.room--new {
   animation: room-build-objects 450ms steps(6, end) both;
 }
+
+/* Domínio arquivado: a sala desmaterializa com a mesma animação, ao contrário
+   (spec Fase 2 §8). Casado com ROOM_BUILD_MS em useOffice.ts. */
+.floor.room--closing,
+.base.room--closing {
+  animation: room-build 450ms steps(6, end) reverse both;
+}
+
+.room-objects.room--closing {
+  animation: room-build-objects 450ms steps(6, end) reverse both;
+}

@@ -179,12 +179,14 @@ function stripStyle(p: OfficePessoa, anim: 'idle' | 'walk') {
 /**
  * Crescimento do escritório (§4.4). 'pending' = o slot já conta para o mapa
  * (a câmera precisa poder enquadrá-lo) mas nada aparece; 'building' toca
- * `room-build`. Sem fase, a sala é só uma sala.
+ * `room-build`. Sem fase, a sala é só uma sala. 'closing' toca room-build ao
+ * contrário: a sala de um domínio arquivado some no lugar em que estava.
  */
 function faseClasse(room: { phase: RoomPhase }) {
   return {
     'room--pending': room.phase === 'pending',
     'room--new': room.phase === 'building',
+    'room--closing': room.phase === 'closing',
   }
 }
 
