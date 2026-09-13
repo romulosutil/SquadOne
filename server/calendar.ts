@@ -63,6 +63,11 @@ export interface QuestCalendario {
   /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
   prazoRef: string;
   htmlLink?: string;
+  /**
+   * ETag do evento na leitura. Só o servidor usa: o ajuste de esforço confere
+   * se o bloco listado ainda é a mesma versão antes de encurtá-lo.
+   */
+  etag?: string;
 }
 
 /** Prefixo do summary de um deadline; usado na ida e na volta. */
@@ -99,12 +104,25 @@ export function urlDeEventos(calendarId: string): string {
 
 interface GoogleEvent {
   id: string;
+  etag?: string;
   summary?: string;
+  colorId?: string;
+  description?: string;
   htmlLink?: string;
   status?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
   extendedProperties?: { private?: Record<string, string> };
+}
+
+/**
+ * A marca manda. O prefixo só vale para eventos criados antes dela existir —
+ * sem migração, eles continuam lidos como sempre foram.
+ */
+function tipoDoEvento(priv: Record<string, string>, titulo: string): "time_blocking" | "deadline" {
+  const marca = priv[PROP_TIPO];
+  if (marca === "deadline" || marca === "time_blocking") return marca;
+  return titulo.startsWith(PREFIXO_DEADLINE) ? "deadline" : "time_blocking";
 }
 
 export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
@@ -114,26 +132,19 @@ export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
   if (!inicio || !fim) return null; // evento sem horário: não é quest.
 
   const titulo = ev.summary ?? "(sem título)";
-  const marca = priv[PROP_TIPO];
   return {
     eventId: ev.id,
     titulo,
     inicio,
     fim,
     diaInteiro: !ev.start?.dateTime,
-    // A marca manda. O prefixo só vale para eventos criados antes dela
-    // existir — sem migração, eles continuam lidos como sempre foram.
-    tipo:
-      marca === "deadline" || marca === "time_blocking"
-        ? marca
-        : titulo.startsWith(PREFIXO_DEADLINE)
-          ? "deadline"
-          : "time_blocking",
+    tipo: tipoDoEvento(priv, titulo),
     dominio: priv[PROP_DOMINIO] ?? "",
     membro: priv[PROP_MEMBRO] ?? "",
     squad: priv[PROP_SQUAD] ?? "",
     prazoRef: priv[PROP_PRAZO_REF] ?? "",
     htmlLink: ev.htmlLink,
+    etag: ev.etag,
   };
 }
 
@@ -348,4 +359,185 @@ export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<I
     if (intervalo) ocupado.push(intervalo);
   }
   return ocupado;
+}
+
+// --- Um evento: ler, atualizar com If-Match, inserir (Fase 4) -------------
+
+/** O evento foi apagado no Google (404/410 ou `status: cancelled`). */
+export class QuestSumiu extends Error {
+  readonly eventId: string;
+  constructor(eventId: string) {
+    super(`O evento '${eventId}' não existe mais no Google Calendar.`);
+    this.name = "QuestSumiu";
+    this.eventId = eventId;
+  }
+}
+
+/** 412: o evento mudou entre a leitura e a escrita. Quem chama decide se relê. */
+export class PreCondicaoFalhou extends Error {
+  constructor() {
+    super("O evento mudou no Google entre a leitura e a escrita (412).");
+    this.name = "PreCondicaoFalhou";
+  }
+}
+
+/**
+ * O Google devolveu o evento sem as marcas squadone_*, e a restauração também
+ * falhou. Sem `squadone_dominio` a quest some da Mochila: o erro nomeia o
+ * evento para o usuário conferir no Google.
+ */
+export class MarcasPerdidas extends Error {
+  constructor(eventId: string) {
+    super(
+      `O Google devolveu o evento '${eventId}' sem as marcas do SquadOne: ele pode ter sumido da Mochila. Confira no Google Calendar.`,
+    );
+    this.name = "MarcasPerdidas";
+  }
+}
+
+export interface EventoLido {
+  id: string;
+  etag: string;
+  summary: string;
+  colorId?: string;
+  start: { dateTime?: string; date?: string };
+  end: { dateTime?: string; date?: string };
+  description: string;
+  privado: Record<string, string>;
+  tipo: "time_blocking" | "deadline";
+  dominio: string;
+  membro: string;
+  squad: string;
+  prazoRef: string;
+  diaInteiro: boolean;
+}
+
+export const CAMPOS_EVENTO = "id,etag,status,summary,colorId,start,end,description,extendedProperties";
+
+export function urlDoEvento(calendarId: string, eventId: string): string {
+  return `${urlDeEventos(calendarId)}/${encodeURIComponent(eventId)}`;
+}
+
+function paraEventoLido(ev: GoogleEvent): EventoLido {
+  const privado = { ...(ev.extendedProperties?.private ?? {}) };
+  const summary = ev.summary ?? "(sem título)";
+  return {
+    id: ev.id,
+    etag: ev.etag ?? "",
+    summary,
+    colorId: ev.colorId,
+    start: ev.start ?? {},
+    end: ev.end ?? {},
+    description: ev.description ?? "",
+    privado,
+    tipo: tipoDoEvento(privado, summary),
+    dominio: privado[PROP_DOMINIO] ?? "",
+    membro: privado[PROP_MEMBRO] ?? "",
+    squad: privado[PROP_SQUAD] ?? "",
+    prazoRef: privado[PROP_PRAZO_REF] ?? "",
+    diaInteiro: !ev.start?.dateTime,
+  };
+}
+
+export async function lerEvento(token: string, calendarId: string, eventId: string): Promise<EventoLido> {
+  const resp = await fetch(
+    `${urlDoEvento(calendarId, eventId)}?${new URLSearchParams({ fields: CAMPOS_EVENTO })}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (resp.status === 404 || resp.status === 410) throw new QuestSumiu(eventId);
+  if (!resp.ok) throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
+  const ev = (await resp.json()) as GoogleEvent;
+  if (ev.status === "cancelled") throw new QuestSumiu(eventId);
+  return paraEventoLido(ev);
+}
+
+/**
+ * PATCH com If-Match. `sendUpdates=none`: nota de agente ou ajuste de horário
+ * não pode disparar e-mail para convidados que o usuário tenha posto no Google.
+ * Pela doc do events.patch, campo fora do corpo fica intocado. Prefira
+ * `atualizarPreservandoMarcas`: esta não confere as marcas da resposta.
+ */
+export async function atualizarEvento(
+  token: string,
+  calendarId: string,
+  eventId: string,
+  etag: string,
+  corpo: Record<string, unknown>,
+): Promise<EventoLido> {
+  const resp = await fetch(
+    `${urlDoEvento(calendarId, eventId)}?${new URLSearchParams({ sendUpdates: "none", fields: CAMPOS_EVENTO })}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "If-Match": etag,
+      },
+      body: JSON.stringify(corpo),
+    },
+  );
+  if (resp.status === 412) throw new PreCondicaoFalhou();
+  if (resp.status === 404 || resp.status === 410) throw new QuestSumiu(eventId);
+  if (!resp.ok) throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
+  return paraEventoLido((await resp.json()) as GoogleEvent);
+}
+
+/**
+ * Toda marca squadone_* lida continua com o mesmo valor. Hashes de bloco
+ * (`squadone_h_*`) ficam de fora: são justamente o que o PATCH troca.
+ */
+export function marcasPreservadas(
+  lido: Record<string, string>,
+  resposta: Record<string, string> | undefined,
+): boolean {
+  if (!resposta) return false;
+  return Object.entries(lido)
+    .filter(([k]) => k.startsWith("squadone_") && !k.startsWith("squadone_h_"))
+    .every(([k, v]) => resposta[k] === v);
+}
+
+/**
+ * O ÚNICO PATCH de evento que as rotas usam: não pode apagar as marcas. O guia
+ * de extended properties diz que patch mexe em algumas chaves e deixa as
+ * outras, mas não é explícito o bastante para apostar a Mochila nisso. Então:
+ * 1. o corpo leva SEMPRE o `private` completo (tudo que foi lido + o que o
+ *    chamador acrescenta) — sob fusão por chave nada muda, sob substituição do
+ *    objeto as marcas continuam lá;
+ * 2. a resposta é conferida; marca sumida → uma restauração com If-Match da
+ *    resposta; ainda sumida (ou a restauração falhou) → `MarcasPerdidas`.
+ * `PreCondicaoFalhou` do PATCH principal sobe: reler ou desistir é do chamador.
+ */
+export async function atualizarPreservandoMarcas(
+  token: string,
+  calendarId: string,
+  lido: EventoLido,
+  corpo: Record<string, unknown> & { extendedProperties?: { private?: Record<string, string> } },
+): Promise<EventoLido> {
+  const privado = { ...lido.privado, ...(corpo.extendedProperties?.private ?? {}) };
+  const completo = { ...corpo, extendedProperties: { private: privado } };
+  const resposta = await atualizarEvento(token, calendarId, lido.id, lido.etag, completo);
+  if (marcasPreservadas(lido.privado, resposta.privado)) return resposta;
+  try {
+    const restaurado = await atualizarEvento(token, calendarId, lido.id, resposta.etag, {
+      extendedProperties: { private: privado },
+    });
+    if (marcasPreservadas(lido.privado, restaurado.privado)) return restaurado;
+  } catch (err) {
+    console.error(`[calendar] restauração das marcas de '${lido.id}' falhou:`, err);
+  }
+  throw new MarcasPerdidas(lido.id);
+}
+
+export async function inserirEvento(
+  token: string,
+  calendarId: string,
+  corpo: Record<string, unknown>,
+): Promise<{ id: string; htmlLink?: string }> {
+  const resp = await fetch(`${urlDeEventos(calendarId)}?${new URLSearchParams({ sendUpdates: "none" })}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+  if (!resp.ok) throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
+  return (await resp.json()) as { id: string; htmlLink?: string };
 }
