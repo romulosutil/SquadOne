@@ -272,3 +272,71 @@ export type AlvoDeEdicao =
   | { tipo: "pessoa"; pessoa: Pessoa }
   | { tipo: "dominio"; dominio: Dominio }
   | { tipo: "squad"; squad: SquadView };
+
+/** Proposta de ajuste que um agente devolveu. Vira card; só muda o Google se aprovada. */
+export interface PropostaDeAjuste {
+  id: string;
+  kind: "ajuste";
+  squad_id: string;
+  eventId: string;
+  titulo: string;
+  pessoa_id: string;
+  pessoa_nome: string;
+  papel: string;
+  alvo: "duracao" | "esforco";
+  atual_min: number;
+  proposto_min: number;
+  motivo: string;
+}
+
+/** Espelho de server/contribuicao.ts: resultado de UM agente num pedido. */
+export type ResultadoDeAgente =
+  | { pessoa_id: string; ok: true; truncado?: true; proposta?: PropostaDeAjuste }
+  | { pessoa_id: string; erro: string; modeloOcupado?: true; blocoEditado?: true; semEspaco?: true };
+
+export interface RespostaDeContribuicao {
+  eventId: string;
+  resultados: ResultadoDeAgente[];
+  descricaoTruncada: boolean;
+}
+
+/** Item da fila de contribuição da aba. `squadId` é o de quando foi pedido. */
+export interface PedidoDeContribuicao {
+  eventId: string;
+  squadId: string;
+  pessoaIds: string[];
+}
+
+/** Andamento de um pedido desta aba por eventId. Não é cache do Google. */
+export interface EstadoDeContribuicao {
+  estado: "fila" | "rodando" | "feito" | "erro";
+  pessoaIds: string[];
+  resultados: ResultadoDeAgente[];
+  erro?: string;
+  precisaConectar?: boolean;
+  /** O evento foi apagado no Google: tentar de novo não resolve. */
+  questSumiu?: boolean;
+}
+
+export interface PessoaEscolhivel {
+  id: string;
+  nome: string;
+  papel: string;
+  dominioNome: string;
+}
+
+export interface EventoAjustado {
+  eventId: string;
+  inicio: string;
+  fim: string;
+  acao: "encurtado" | "estendido" | "movido" | "criado";
+}
+
+/** Espelho de server/ajuste.ts. */
+export interface RespostaDeAjuste {
+  alvo: "duracao" | "esforco";
+  eventos: EventoAjustado[];
+  avisos: string[];
+  faltou_min: number;
+  sobra_min: number;
+}

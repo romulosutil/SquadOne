@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { PropType } from 'vue'
-import type { QuestCalendario } from '../types'
+import type { EstadoDeContribuicao, QuestCalendario } from '../types'
 import { diasDoEventoDiaInteiro, infoDePrazo } from '../mochila'
+import { idsParaRepetir, linhasDeStatus } from '../contribuicao'
 
 const props = defineProps({
   // Vem de GET /api/mochila, ou seja, do Google Calendar. Nada aqui e estado
@@ -14,10 +15,20 @@ const props = defineProps({
   nomesDeDominio: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
   // id -> nome das pessoas da squad ativa. Quem foi arquivado continua dono das
   // quests do domínio (spec Fase 2 §7.11) e aparece como "Nome (arquivado)".
-  nomesDePessoa: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
+  nomesDePessoa: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
+  // Andamento dos pedidos de contribuição desta aba, por eventId (App). Sobrevive
+  // a recarregar a Mochila: a contribuição é do evento no Google, não do card.
+  contribuicoes: { type: Object as PropType<Record<string, EstadoDeContribuicao>>, default: () => ({}) }
 })
 
-defineEmits(['conectar', 'recarregar'])
+defineEmits(['conectar', 'recarregar', 'contribuir', 'repetir'])
+
+// Na fila ou rodando: um segundo pedido juntaria na fila de qualquer jeito, mas
+// o botão ativo daria a impressão de que nada aconteceu.
+const ocupada = (quest: QuestCalendario) => {
+  const e = props.contribuicoes[quest.eventId]
+  return e?.estado === 'fila' || e?.estado === 'rodando'
+}
 
 const quando = (quest: QuestCalendario) => {
   if (quest.diaInteiro) {
@@ -98,26 +109,60 @@ const prazoDoBloco = (quest: QuestCalendario) => {
         Nenhuma quest no calendário. <br /> Use a Command Bar!
       </div>
 
-      <a
+      <!-- article com link e rodapé IRMÃOS: botão dentro de <a> é HTML inválido e
+           o clique abriria o Google. Sem translação no hover: com rodapé, o card
+           andando desalinharia o botão. -->
+      <article
         v-for="quest in quests"
         :key="quest.eventId"
-        :href="quest.htmlLink"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="block border-4 border-black bg-white p-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+        class="border-4 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
       >
-        <h3 class="font-bold text-lg leading-tight mb-2">{{ quest.titulo }}</h3>
-        <div class="text-sm font-bold flex flex-col gap-1">
-          <!-- As duas marcas do evento: dominio (filtro) e membro (responsavel). -->
-          <div class="flex items-center gap-1 flex-wrap">
-            <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ nomesDePessoa[quest.membro] ?? (quest.membro || '?') }}</span>
-            <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
+        <a
+          :href="quest.htmlLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="block p-3 hover:bg-[#fff7d6] transition-colors"
+        >
+          <h3 class="font-bold text-lg leading-tight mb-2">{{ quest.titulo }}</h3>
+          <div class="text-sm font-bold flex flex-col gap-1">
+            <!-- As duas marcas do evento: dominio (filtro) e membro (responsavel). -->
+            <div class="flex items-center gap-1 flex-wrap">
+              <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ nomesDePessoa[quest.membro] ?? (quest.membro || '?') }}</span>
+              <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
+            </div>
+            <div class="text-gray-800">⏰ {{ rotuloDoTipo(quest) }}</div>
+            <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>
+            <div v-if="prazoDoBloco(quest)" class="text-gray-800 text-xs truncate">🎯 {{ prazoDoBloco(quest) }}</div>
           </div>
-          <div class="text-gray-800">⏰ {{ rotuloDoTipo(quest) }}</div>
-          <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>
-          <div v-if="prazoDoBloco(quest)" class="text-gray-800 text-xs truncate">🎯 {{ prazoDoBloco(quest) }}</div>
-        </div>
-      </a>
+        </a>
+        <footer class="border-t-2 border-black px-3 py-2 flex flex-col gap-1 text-xs font-bold">
+          <button
+            type="button"
+            :disabled="ocupada(quest)"
+            class="self-start border-2 border-black bg-[#ffdb58] px-2 py-1 font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+            @click="$emit('contribuir', quest)"
+          >
+            🤝 Pedir contribuição
+          </button>
+          <template v-if="contribuicoes[quest.eventId]">
+            <div
+              v-for="(linha, i) in linhasDeStatus(contribuicoes[quest.eventId], nomesDePessoa)"
+              :key="i"
+              :class="linha.erro ? 'text-red-700' : 'text-gray-800'"
+            >
+              {{ linha.texto }}
+            </div>
+            <button
+              v-if="idsParaRepetir(contribuicoes[quest.eventId]).length"
+              type="button"
+              class="self-start underline"
+              @click="$emit('repetir', quest.eventId, idsParaRepetir(contribuicoes[quest.eventId]))"
+            >
+              Tentar de novo
+            </button>
+          </template>
+        </footer>
+      </article>
     </div>
   </aside>
 </template>
