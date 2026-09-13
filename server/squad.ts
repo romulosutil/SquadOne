@@ -29,8 +29,14 @@ export interface Pessoa {
   hue?: number;
   horario?: { inicio: string; fim: string };
   hiredAt: string;
-  /** Reservado para a Fase 2 (arquivar). Nada lê nem grava ainda. */
+  /**
+   * Arquivado sai do prompt, do mapa e da vista, mas NÃO sai da árvore: o id
+   * continua reservado e o registro volta intacto ao reativar. Reativar apaga
+   * esta chave e `arquivadoEm`.
+   */
   arquivado?: boolean;
+  /** ISO do arquivamento; só para ordenar e exibir no Arquivo. */
+  arquivadoEm?: string;
 }
 
 export interface Dominio {
@@ -43,8 +49,14 @@ export interface Dominio {
   criadoEm: string;
   po: Pessoa;
   integrantes: Pessoa[];
-  /** Reservado para a Fase 2 (arquivar). Nada lê nem grava ainda. */
+  /**
+   * Arquivado sai do prompt, do mapa e da vista, mas NÃO sai da árvore: o id
+   * continua reservado e o registro volta intacto ao reativar. Reativar apaga
+   * esta chave e `arquivadoEm`.
+   */
   arquivado?: boolean;
+  /** ISO do arquivamento; só para ordenar e exibir no Arquivo. */
+  arquivadoEm?: string;
 }
 
 export interface Squad {
@@ -63,6 +75,14 @@ export interface Squad {
   unlockOrder: [number, number][];
   /** ≥1. `dominios[0].po` é o PO raiz que circula pelo escritório. */
   dominios: Dominio[];
+  /**
+   * Arquivado sai do prompt, do mapa e da vista, mas NÃO sai da árvore: o id
+   * continua reservado e o registro volta intacto ao reativar. Reativar apaga
+   * esta chave e `arquivadoEm`.
+   */
+  arquivado?: boolean;
+  /** ISO do arquivamento; só para ordenar e exibir no Arquivo. */
+  arquivadoEm?: string;
 }
 
 export interface Roster {
@@ -72,13 +92,10 @@ export interface Roster {
   /**
    * Ids que já existiram e não voltam. GLOBAL porque a unicidade que protege é
    * global; dois namespaces porque pessoa e domínio podem ter o mesmo id legado
-   * (produção tem domínio "po" e pessoa "po"). Fase 1 só lê.
+   * (produção tem domínio "po" e pessoa "po"). Só acréscimo (aposentarIds).
    */
   idsAposentados: { pessoas: string[]; dominios: string[] };
 }
-
-export type SquadView = Squad & { unlockedSlots: [number, number][] };
-export type RosterView = Omit<Roster, "squads"> & { squads: SquadView[] };
 
 /** Forma do pedido errada: nenhum estado do roster tornaria o pedido válido (400). */
 export class PedidoInvalido extends Error {
@@ -107,6 +124,19 @@ export class SquadInexistente extends ConflitoDeRoster {
     super(`A squad '${squadId}' não existe. Squads: ${existentes.join(", ")}.`);
     this.name = "SquadInexistente";
     this.squadId = squadId;
+  }
+}
+
+/**
+ * Squad arquivada pedida por id. Herda de SquadInexistente de propósito: para a
+ * UI o gesto é o mesmo (recarregar o roster e cair na primeira ativa), e a rota
+ * já mapeia a classe mãe para 409 com `squadInexistente: true`.
+ */
+export class SquadArquivada extends SquadInexistente {
+  constructor(squad: Squad, ativas: string[]) {
+    super(squad.id, ativas);
+    this.message = `A squad '${squad.nome}' está arquivada. Squads ativas: ${ativas.join(", ")}.`;
+    this.name = "SquadArquivada";
   }
 }
 
@@ -145,6 +175,55 @@ export const UNLOCK_ORDER_PADRAO: [number, number][] = [
 ];
 
 export const ESCOPO_PESSOAL_PADRAO = "vida pessoal e tudo que não pertence a outra squad";
+
+/**
+ * Limites de texto do roster (spec Fase 2 §5.4). Um lugar só, espelhado em
+ * src/types.ts: o formulário corta antes de enviar e o servidor recusa ou
+ * trunca com o mesmo número. Escopo de pessoa é o "treino" do agente, por isso
+ * bem maior que os demais, que são linhas de roteamento.
+ */
+export const LIMITES = {
+  squadNome: 40,
+  squadEscopo: 200,
+  dominioNome: 60,
+  dominioEscopo: 200,
+  pessoaNome: 40,
+  papel: 60,
+  escopoPessoa: 1500,
+  frase: 300,
+} as const;
+
+/** Nome, papel, escopo de domínio/squad: uma linha só, espaços colapsados. */
+export function textoDeUmaLinha(texto: string): string {
+  return texto.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Escopo de pessoa: várias linhas (as cinco seções do treino), sem lixo de
+ * colagem. Caractere de controle e linha em branco em excesso só gastam prompt.
+ */
+export function normalizarEscopo(texto: string): string {
+  return texto
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "")
+    .split("\n")
+    .map((linha) => linha.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Corta no limite preferindo uma quebra de linha, para não deixar uma seção
+ * do treino pela metade. Só para texto que veio do modelo ou de card: texto
+ * que o usuário revisou é recusado (400), não cortado.
+ */
+export function limitar(texto: string, max: number): { texto: string; truncado: boolean } {
+  if (texto.length <= max) return { texto, truncado: false };
+  const quebra = texto.lastIndexOf("\n", max);
+  const corte = quebra > max * 0.6 ? quebra : max;
+  return { texto: texto.slice(0, corte).trimEnd(), truncado: true };
+}
 
 /**
  * Grava num `.tmp` no mesmo diretório e renomeia por cima. Um crash no meio
@@ -451,25 +530,98 @@ export async function readRoster(): Promise<Roster> {
 }
 
 /**
- * Slots OCUPADOS. Derivar de `dominios.length` quebrava quando um domínio sai
- * do meio da ordem: o próximo slot já estaria em uso. Guardar "salas
- * desbloqueadas" à parte seria estado duplicado.
+ * Ativo = não arquivado NESTE nível. Quem precisa da regra completa (pessoa
+ * ativa exige domínio e squad ativos) compõe pelos helpers abaixo, que sempre
+ * descem a partir de uma squad já resolvida como ativa.
+ */
+export function ativo(x: { arquivado?: boolean }): boolean {
+  return x.arquivado !== true;
+}
+
+export function squadsAtivas(roster: Roster): Squad[] {
+  return roster.squads.filter(ativo);
+}
+
+export function dominiosAtivos(squad: Squad): Dominio[] {
+  return squad.dominios.filter(ativo);
+}
+
+export function integrantesAtivos(dominio: Dominio): Pessoa[] {
+  return dominio.integrantes.filter(ativo);
+}
+
+/** Pessoas que podem receber compromisso: de domínios ativos, PO primeiro. */
+export function pessoasAtivas(squad: Squad): { pessoa: Pessoa; dominio: Dominio }[] {
+  return dominiosAtivos(squad).flatMap((d) =>
+    [d.po, ...integrantesAtivos(d)].map((pessoa) => ({ pessoa, dominio: d })),
+  );
+}
+
+/**
+ * Slots OCUPADOS, só por domínios ativos. Derivar de `dominios.length`
+ * quebrava quando um domínio sai do meio da ordem: o próximo slot já estaria
+ * em uso. Guardar "salas desbloqueadas" à parte seria estado duplicado.
  */
 export function unlockedSlots(squad: Squad): [number, number][] {
-  return squad.dominios.map((d) => d.slot);
+  return dominiosAtivos(squad).map((d) => d.slot);
 }
 
 /** Primeiro slot da ordem de desbloqueio que ninguém ocupa; null com as 9 cheias. */
 export function proximoSlot(squad: Squad): [number, number] | null {
-  const ocupados = new Set(squad.dominios.map((d) => d.slot.join(",")));
+  // Domínio arquivado libera o slot: quem ocupa é só quem aparece no mapa.
+  const ocupados = new Set(dominiosAtivos(squad).map((d) => d.slot.join(",")));
   return squad.unlockOrder.find((s) => !ocupados.has(s.join(","))) ?? null;
 }
 
-/** O que sai pela API: cada squad com os slots já calculados. */
+export interface IntegranteArquivadoView {
+  pessoa: Pessoa;
+  dominioId: string;
+  dominioNome: string;
+}
+
+/**
+ * O que sai pela API. `dominios` e `integrantes` só com ativos: GameMap,
+ * seletor e Mochila leem estes campos sem saber que arquivamento existe. O que
+ * foi arquivado vai à parte, em `arquivo`, para a tela de reativar.
+ */
+export type SquadView = Omit<Squad, "dominios"> & {
+  dominios: Dominio[];
+  unlockedSlots: [number, number][];
+  proximoSlot: [number, number] | null;
+  arquivo: { dominios: Dominio[]; integrantes: IntegranteArquivadoView[] };
+};
+
+export type RosterView = Omit<Roster, "squads"> & {
+  squads: SquadView[];
+  squadsArquivadas: SquadView[];
+};
+
+function vistaDaSquad(squad: Squad): SquadView {
+  const ativos = dominiosAtivos(squad);
+  return {
+    ...squad,
+    dominios: ativos.map((d) => ({ ...d, integrantes: integrantesAtivos(d) })),
+    unlockedSlots: unlockedSlots(squad),
+    proximoSlot: proximoSlot(squad),
+    arquivo: {
+      dominios: squad.dominios.filter((d) => !ativo(d)),
+      // Integrante de domínio arquivado aparece junto do domínio, não aqui:
+      // reativá-lo sozinho seria recusado (pai arquivado).
+      integrantes: ativos.flatMap((d) =>
+        d.integrantes
+          .filter((i) => !ativo(i))
+          .map((pessoa) => ({ pessoa, dominioId: d.id, dominioNome: d.nome })),
+      ),
+    },
+  };
+}
+
+/** O que sai pela API: squads ativas com os slots calculados; arquivadas à parte. */
 export function paraVista(roster: Roster): RosterView {
   return {
     ...roster,
-    squads: roster.squads.map((s) => ({ ...s, unlockedSlots: unlockedSlots(s) })),
+    squads: squadsAtivas(roster).map(vistaDaSquad),
+    squadsArquivadas: roster.squads.filter((s) => !ativo(s)).map(vistaDaSquad),
   };
 }
 
@@ -487,7 +639,11 @@ export function slug(texto: string): string {
     .replace(/^-+|-+$/g, "") || "geral";
 }
 
-/** Todas as pessoas da squad, cada uma com o domínio a que pertence. */
+/**
+ * Todas as pessoas da squad, cada uma com o domínio a que pertence. TODAS,
+ * arquivadas inclusive: é a base da unicidade de id (idsEmUso). Para turno,
+ * prompt e Mochila use pessoasAtivas.
+ */
 export function pessoas(squad: Squad): { pessoa: Pessoa; dominio: Dominio }[] {
   return squad.dominios.flatMap((d) =>
     [d.po, ...d.integrantes].map((pessoa) => ({ pessoa, dominio: d })),
@@ -495,43 +651,59 @@ export function pessoas(squad: Squad): { pessoa: Pessoa; dominio: Dominio }[] {
 }
 
 export function acharDominio(squad: Squad, id: unknown): Dominio | null {
-  return squad.dominios.find((d) => d.id === id) ?? null;
+  // Só ativos: domínio arquivado não recebe integrante nem compromisso.
+  return dominiosAtivos(squad).find((d) => d.id === id) ?? null;
 }
 
-/** Pessoa + o domínio dela. O domínio nunca é passado pelo modelo: é derivado. */
+/**
+ * Pessoa ATIVA + o domínio dela. O domínio nunca é passado pelo modelo: é
+ * derivado. Arquivada não recebe compromisso, então não é achada.
+ */
 export function acharPessoa(
   squad: Squad,
   id: unknown,
 ): { pessoa: Pessoa; dominio: Dominio } | null {
-  return pessoas(squad).find((p) => p.pessoa.id === id) ?? null;
+  return pessoasAtivas(squad).find((p) => p.pessoa.id === id) ?? null;
 }
 
-/** Ids válidos para `responsavel_id`, na ordem em que aparecem na árvore. */
+/** Ids válidos para `responsavel_id` (só ativos), na ordem em que aparecem na árvore. */
 export function idsDePessoas(squad: Squad): string[] {
-  return pessoas(squad).map((p) => p.pessoa.id);
-}
-
-/** Domínios distintos da squad — um `events.list` por domínio na Mochila. */
-export function dominiosDoSquad(squad: Squad): string[] {
-  return squad.dominios.map((d) => d.id);
+  return pessoasAtivas(squad).map((p) => p.pessoa.id);
 }
 
 /**
- * A ÁRVORE da squad injetada no systemInstruction (§6). Uma lista plana de
- * pessoas esconde a hierarquia: o modelo precisa ver a qual domínio cada pessoa
- * pertence para escolher o responsável certo e para saber se falta um domínio
- * inteiro (criar_po_dominio) ou só um papel dentro de um existente
- * (contratar_integrante).
+ * Domínios que a Mochila lê, um `events.list` por domínio: só ativos. Domínio
+ * arquivado sai da Mochila (spec Fase 2 §7.11); os eventos ficam no Google e
+ * voltam ao reativar.
+ */
+export function dominiosDoSquad(squad: Squad): string[] {
+  return dominiosAtivos(squad).map((d) => d.id);
+}
+
+/** Recuo de bloco: escopo de pessoa tem várias linhas e não cabe entre parênteses. */
+function emBloco(texto: string, recuo: string): string {
+  return texto.split("\n").map((linha) => recuo + linha).join("\n");
+}
+
+/**
+ * A ÁRVORE da squad injetada no systemInstruction (§6), só com o que está
+ * ATIVO. Uma lista plana de pessoas esconde a hierarquia: o modelo precisa ver
+ * a qual domínio cada pessoa pertence para escolher o responsável certo e para
+ * saber se falta um domínio inteiro (criar_po_dominio) ou só um papel dentro
+ * de um existente (contratar_integrante). O escopo de pessoa (até 1500
+ * caracteres, cinco seções) vai como bloco recuado abaixo dela; o de domínio é
+ * uma linha e segue inline.
  */
 export function rosterTree(squad: Squad): string {
-  return squad.dominios
+  return dominiosAtivos(squad)
     .map((d) => {
       const linhas = [
         `- domínio '${d.id}' — ${d.nome} (escopo: ${d.escopo})`,
-        `    PO: '${d.po.id}' ${d.po.nome} (${d.po.papel}: ${d.po.escopo})`,
+        `    PO: '${d.po.id}' ${d.po.nome} (${d.po.papel})`,
+        emBloco(d.po.escopo, "      "),
       ];
-      for (const i of d.integrantes) {
-        linhas.push(`    integrante: '${i.id}' ${i.nome} (${i.papel}: ${i.escopo})`);
+      for (const i of integrantesAtivos(d)) {
+        linhas.push(`    integrante: '${i.id}' ${i.nome} (${i.papel})`, emBloco(i.escopo, "      "));
       }
       return linhas.join("\n");
     })
@@ -539,14 +711,17 @@ export function rosterTree(squad: Squad): string {
 }
 
 /**
- * Squad do pedido. Ausente = a primeira: cliente antigo e chamada sem seletor
- * continuam funcionando.
+ * Squad do pedido. Ausente = a primeira ATIVA: cliente antigo e chamada sem
+ * seletor continuam funcionando. Validação garante ≥1 squad e o ciclo de vida
+ * garante ≥1 ativa (não se arquiva a última).
  */
 export function resolverSquad(roster: Roster, squadId: unknown): Squad {
-  if (squadId === undefined || squadId === null || squadId === "") return roster.squads[0];
+  const ativas = squadsAtivas(roster);
+  if (squadId === undefined || squadId === null || squadId === "") return ativas[0];
   if (typeof squadId !== "string") throw new PedidoInvalido("Campo 'squadId' deve ser texto.");
   const achada = roster.squads.find((s) => s.id === squadId);
-  if (!achada) throw new SquadInexistente(squadId, roster.squads.map((s) => s.id));
+  if (!achada) throw new SquadInexistente(squadId, ativas.map((s) => s.id));
+  if (!ativo(achada)) throw new SquadArquivada(achada, ativas.map((s) => s.id));
   return achada;
 }
 
@@ -601,7 +776,9 @@ export function novoIdDeDominio(roster: Roster, squad: Squad, nome: string): str
   const mesmoNome = squad.dominios.find((d) => slug(d.nome) === slug(nome));
   if (mesmoNome) {
     throw new ConflitoDeRoster(
-      `O domínio '${mesmoNome.nome}' (id '${mesmoNome.id}') já existe na squad '${squad.nome}'.`,
+      ativo(mesmoNome)
+        ? `O domínio '${mesmoNome.nome}' (id '${mesmoNome.id}') já existe na squad '${squad.nome}'.`
+        : `O domínio '${mesmoNome.nome}' existe arquivado na squad '${squad.nome}': reative-o no Arquivo.`,
     );
   }
   if (idsEmUso(roster).dominios.has(id)) {
@@ -614,19 +791,71 @@ export function novoIdDeSquad(roster: Roster, nome: string): string {
   const id = slugCurto(nome, 40);
   const existente = roster.squads.find((s) => s.id === id);
   if (existente) {
-    throw new ConflitoDeRoster(`A squad '${existente.nome}' (id '${id}') já existe.`);
+    throw new ConflitoDeRoster(
+      ativo(existente)
+        ? `A squad '${existente.nome}' (id '${id}') já existe.`
+        : `A squad '${existente.nome}' existe arquivada: reative-a.`,
+    );
   }
   return id;
 }
 
 /**
- * As OUTRAS squads para o prompt: só id, nome e escopo. O modelo precisa saber
- * que existem para sugerir troca, e não pode ver domínios nem pessoas delas
- * para não agendar fora da squad ativa.
+ * As OUTRAS squads ATIVAS para o prompt: só id, nome e escopo. O modelo precisa
+ * saber que existem para sugerir troca, e não pode ver domínios nem pessoas
+ * delas para não agendar fora da squad ativa. Arquivada não é destino.
  */
 export function outrasSquads(roster: Roster, ativaId: string): string {
-  const linhas = roster.squads
+  const linhas = squadsAtivas(roster)
     .filter((s) => s.id !== ativaId)
     .map((s) => `- squad '${s.id}' — ${s.nome} (escopo: ${s.escopo})`);
   return linhas.length ? linhas.join("\n") : "(nenhuma)";
+}
+
+export interface PessoaLocalizada {
+  squad: Squad;
+  dominio: Dominio;
+  pessoa: Pessoa;
+  posicao: "po" | "integrante";
+}
+
+/**
+ * Busca por id GLOBAL, arquivados inclusive. Ids de pessoa e domínio são únicos
+ * entre todas as squads, então as rotas de ciclo de vida não precisam de squadId.
+ */
+export function localizarPessoa(roster: Roster, id: unknown): PessoaLocalizada | null {
+  for (const squad of roster.squads) {
+    for (const dominio of squad.dominios) {
+      if (dominio.po.id === id) return { squad, dominio, pessoa: dominio.po, posicao: "po" };
+      const pessoa = dominio.integrantes.find((p) => p.id === id);
+      if (pessoa) return { squad, dominio, pessoa, posicao: "integrante" };
+    }
+  }
+  return null;
+}
+
+export function localizarDominio(roster: Roster, id: unknown): { squad: Squad; dominio: Dominio } | null {
+  for (const squad of roster.squads) {
+    const dominio = squad.dominios.find((d) => d.id === id);
+    if (dominio) return { squad, dominio };
+  }
+  return null;
+}
+
+export function localizarSquad(roster: Roster, id: unknown): Squad | null {
+  return roster.squads.find((s) => s.id === id) ?? null;
+}
+
+/**
+ * Só acréscimo, sem duplicata. Reativar NÃO remove: o id volta para o próprio
+ * dono e segue proibido para ids novos. Hoje o arquivado nunca sai da árvore;
+ * a lista mantém a garantia se um dia uma poda remover subárvores arquivadas.
+ */
+export function aposentarIds(roster: Roster, ids: { pessoas?: string[]; dominios?: string[] }): void {
+  for (const id of ids.pessoas ?? []) {
+    if (!roster.idsAposentados.pessoas.includes(id)) roster.idsAposentados.pessoas.push(id);
+  }
+  for (const id of ids.dominios ?? []) {
+    if (!roster.idsAposentados.dominios.includes(id)) roster.idsAposentados.dominios.push(id);
+  }
 }

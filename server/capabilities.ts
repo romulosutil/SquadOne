@@ -2,10 +2,12 @@ import { Type, type FunctionDeclaration } from "@google/genai";
 import {
   acharDominio,
   acharPessoa,
+  dominiosAtivos,
   idsDePessoas,
   MAX_DOMINIOS,
   novoIdDeDominio,
   proximoSlot,
+  squadsAtivas,
   type Dominio,
   type Pessoa,
   type Roster,
@@ -325,7 +327,8 @@ const contratarIntegrante: Capability = {
   async handler(args, ctx): Promise<PropostaIntegrante> {
     const dominio = acharDominio(ctx.squad, args.dominio_id);
     if (!dominio) {
-      const ids = ctx.squad.dominios.map((d) => d.id).join(", ");
+      // Só ativos na lista: um id arquivado aqui convidaria o modelo a repetir o erro.
+      const ids = dominiosAtivos(ctx.squad).map((d) => d.id).join(", ");
       throw new Error(
         `dominio_id '${String(args.dominio_id)}' não existe na squad '${ctx.squad.nome}'. Domínios: ${ids}. ` +
           `Se o tema não tem dono, use criar_po_dominio.`,
@@ -375,11 +378,13 @@ const sugerirTrocaSquad: Capability = {
   },
 
   async handler(args, ctx): Promise<PropostaTrocaSquad> {
-    const destino = ctx.roster.squads.find((s) => s.id === args.squad_id);
+    // Só ativas: squad arquivada não aparece no prompt e não pode ser destino.
+    const ativas = squadsAtivas(ctx.roster);
+    const destino = ativas.find((s) => s.id === args.squad_id);
     if (!destino) {
-      const outras = ctx.roster.squads.filter((s) => s.id !== ctx.squad.id).map((s) => s.id);
+      const outras = ativas.filter((s) => s.id !== ctx.squad.id).map((s) => s.id);
       throw new Error(
-        `squad_id '${String(args.squad_id)}' não existe. Outras squads: ${outras.join(", ") || "(nenhuma)"}.`,
+        `squad_id '${String(args.squad_id)}' não existe ou está arquivada. Outras squads: ${outras.join(", ") || "(nenhuma)"}.`,
       );
     }
     if (destino.id === ctx.squad.id) {
