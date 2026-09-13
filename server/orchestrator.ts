@@ -93,8 +93,11 @@ function agoraLocalISO(agora: Date): string {
   const partes = Object.fromEntries(
     fmt.formatToParts(agora).map((p) => [p.type, p.value]),
   );
-  // longOffset vem como "GMT-03:00"; "GMT" puro significa +00:00.
-  const offset = (partes.timeZoneName ?? "GMT").replace("GMT", "") || "+00:00";
+  // longOffset vem como "GMT-03:00"; "GMT" puro significa +00:00. Em sv-SE o
+  // sinal sai como U+2212 (sinal de menos tipográfico), não hífen: o modelo
+  // copiaria o formato e lerInstante recusaria o offset. Troca para ASCII.
+  const offset =
+    (partes.timeZoneName ?? "GMT").replace("GMT", "").replace("−", "-") || "+00:00";
   return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}${offset}`;
 }
 
