@@ -289,6 +289,12 @@ export type AlvoDeEdicao =
 export interface PropostaDeAjuste {
   id: string;
   kind: "ajuste";
+  /**
+   * Quem abriu o card. `usuario` é o gesto da Mochila: o card nasce editável e
+   * o tempo proposto é escolha de quem clicou, não sugestão de agente. A rota
+   * `/ajustar` é a mesma nos dois casos — muda só a origem da proposta.
+   */
+  origem: "agente" | "usuario";
   squad_id: string;
   eventId: string;
   titulo: string;
@@ -300,6 +306,18 @@ export interface PropostaDeAjuste {
   proposto_min: number;
   motivo: string;
 }
+
+/**
+ * Espelho dos limites de `interpretarPedidoDeAjuste` (server/ajuste.ts, sobre
+ * DURACAO_MAX_MIN/ESFORCO_MAX_MIN do alocador): o card corta antes de o
+ * servidor recusar com 400.
+ */
+export const LIMITES_DE_AJUSTE = {
+  duracao: { min: 15, max: 720 },
+  esforco: { min: 30, max: 2400 },
+  /** Todo slot cai na grade de 15 min; `proposto_min` fora dela é 400. */
+  grade: 15,
+} as const;
 
 export interface EventoAjustado {
   eventId: string;

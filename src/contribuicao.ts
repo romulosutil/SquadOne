@@ -1,4 +1,12 @@
-import type { EventoAjustado, RespostaDeAjuste } from './types'
+import { diasDoEventoDiaInteiro } from './mochila'
+import {
+  LIMITES_DE_AJUSTE,
+  type EventoAjustado,
+  type EventoCriado,
+  type PropostaDeAjuste,
+  type QuestCalendario,
+  type RespostaDeAjuste
+} from './types'
 
 /** Sem Vue para ser verificável com tsx. */
 
@@ -29,4 +37,132 @@ export function resumoDoAjuste(r: RespostaDeAjuste): string {
   }
   partes.push(...r.avisos)
   return partes.join(' · ') || 'Nada mudou'
+}
+
+/**
+ * Locale e fuso do navegador na UI; os testes fixam os dois para o texto não
+ * depender da máquina. Dia inteiro ignora `timeZone` de propósito: "AAAA-MM-DD"
+ * é dia de calendário, e reinterpretá-lo noutro fuso trocaria o dia.
+ */
+export interface FormatoDeData {
+  locale?: string
+  timeZone?: string
+}
+
+const duracaoMin = (e: EventoCriado) =>
+  Math.round((new Date(e.fim).getTime() - new Date(e.inicio).getTime()) / 60000)
+
+/**
+ * O que foi marcado num evento criado, para o toast do turno: título, dia/hora
+ * e duração. O modelo já decidia tudo isso; só não aparecia em lugar nenhum —
+ * o toast antigo era genérico e só erro/aviso chegava na tela.
+ */
+export function resumoDoEvento(e: EventoCriado, fmt: FormatoDeData = {}): string {
+  const zona = fmt.timeZone ? { timeZone: fmt.timeZone } : {}
+  const dia = (iso: string) =>
+    new Date(iso).toLocaleDateString(fmt.locale, { weekday: 'short', day: '2-digit', month: '2-digit', ...zona })
+  const hora = (iso: string) =>
+    new Date(iso).toLocaleTimeString(fmt.locale, { hour: '2-digit', minute: '2-digit', ...zona })
+
+  if (e.dia_inteiro) {
+    // `fim` do Google é exclusivo: o prazo é o ÚLTIMO dia, não o seguinte.
+    const { primeiro, ultimo } = diasDoEventoDiaInteiro(e.inicio, e.fim)
+    const diaLocal = (d: Date) => d.toLocaleDateString(fmt.locale, { weekday: 'short', day: '2-digit', month: '2-digit' })
+    const quando = ultimo.getTime() === primeiro.getTime()
+      ? diaLocal(primeiro)
+      : `${diaLocal(primeiro)} – ${diaLocal(ultimo)}`
+    return e.papel === 'marco' ? `${e.titulo}: prazo em ${quando}` : `${e.titulo}: dia inteiro, ${quando}`
+  }
+  if (e.papel === 'marco') return `${e.titulo}: prazo ${dia(e.fim)} ${hora(e.fim)}`
+  const rotulo = e.papel === 'bloco' ? 'bloco de ' : ''
+  return `${e.titulo}: ${rotulo}${formatarMinutos(duracaoMin(e))}, ${dia(e.inicio)} ${hora(e.inicio)}–${hora(e.fim)}`
+}
+
+/**
+ * Um toast para o turno inteiro. Os blocos de um prazo entram DOBRADOS no
+ * marco: um prazo pode render até 20 blocos, e listá-los um a um viraria um
+ * muro de texto num toast de 4 segundos. Bloco cujo marco não veio neste turno
+ * (o marco já existia) continua aparecendo sozinho.
+ */
+export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeData = {}): string {
+  const marcos = new Set(eventos.filter((e) => e.papel === 'marco').map((e) => e.eventId))
+  return eventos
+    .filter((e) => !(e.papel === 'bloco' && e.prazo_ref && marcos.has(e.prazo_ref)))
+    .map((e) => {
+      const blocos = e.papel === 'marco' ? eventos.filter((b) => b.prazo_ref === e.eventId) : []
+      if (!blocos.length) return resumoDoEvento(e, fmt)
+      const total = blocos.reduce((t, b) => t + duracaoMin(b), 0)
+      return `${resumoDoEvento(e, fmt)} (${blocos.length} bloco(s), ${formatarMinutos(total)})`
+    })
+    .join(' · ')
+}
+
+/**
+ * O que dá para ajustar nesta quest, ou "" quando nada. String e não null
+ * porque o tsconfig do projeto não tem strictNullChecks: `null` não discrimina
+ * a união e o template não conseguiria ler o alvo. Espelha o que
+ * `aplicarAjuste` aceita — duração só em bloco com horário, esforço só no
+ * marco de um prazo —, para o botão não abrir um card que vira 409.
+ */
+export function alvoDeAjuste(quest: QuestCalendario): 'duracao' | 'esforco' | '' {
+  if (quest.tipo === 'deadline') return 'esforco'
+  return quest.diaInteiro ? '' : 'duracao'
+}
+
+/** Minutos hoje reservados: a própria duração (bloco) ou a soma dos blocos do prazo (marco). */
+export function minutosAtuais(quest: QuestCalendario, quests: QuestCalendario[]): number {
+  const minutos = (q: QuestCalendario) =>
+    Math.round((new Date(q.fim).getTime() - new Date(q.inicio).getTime()) / 60000)
+  if (alvoDeAjuste(quest) === 'duracao') return minutos(quest)
+  return quests
+    .filter((q) => q.prazoRef === quest.eventId && !q.diaInteiro)
+    .reduce((t, q) => t + minutos(q), 0)
+}
+
+/**
+ * Põe `valor` na grade de 15 min e dentro dos limites do alvo, para o card não
+ * mandar um `proposto_min` que o servidor devolveria como 400.
+ */
+export function normalizarPropostoMin(alvo: 'duracao' | 'esforco', valor: number): number {
+  const { min, max } = LIMITES_DE_AJUSTE[alvo]
+  const grade = LIMITES_DE_AJUSTE.grade
+  if (!Number.isFinite(valor)) return min
+  return Math.min(max, Math.max(min, Math.round(valor / grade) * grade))
+}
+
+/**
+ * Ajuste iniciado pelo PRÓPRIO usuário na Mochila: monta a mesma proposta que
+ * o `AjusteCard` já sabia mostrar, sem agente nenhum ter sugerido antes. O id
+ * é derivado do evento, então clicar duas vezes não empilha dois cards do
+ * mesmo compromisso. Devolve `null` quando a quest não aceita ajuste.
+ */
+export function propostaDoUsuario(
+  quest: QuestCalendario,
+  quests: QuestCalendario[],
+  squadId: string,
+  responsavel = ''
+): PropostaDeAjuste | null {
+  const alvo = alvoDeAjuste(quest)
+  if (!alvo) return null
+  const atual = minutosAtuais(quest, quests)
+  return {
+    id: `usuario:${quest.eventId}`,
+    kind: 'ajuste',
+    origem: 'usuario',
+    squad_id: squadId,
+    eventId: quest.eventId,
+    titulo: quest.titulo,
+    pessoa_id: quest.membro,
+    pessoa_nome: responsavel || quest.membro,
+    papel: '',
+    alvo,
+    atual_min: atual,
+    // Começa no atual normalizado: o usuário edita no card, e aprovar sem
+    // mexer não muda nada (o servidor responde "a duração proposta é a atual").
+    proposto_min: normalizarPropostoMin(alvo, atual),
+    motivo:
+      alvo === 'duracao'
+        ? 'Escolha a nova duração deste bloco.'
+        : 'Escolha o esforço total reservado para este prazo.'
+  }
 }

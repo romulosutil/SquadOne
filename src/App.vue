@@ -12,7 +12,7 @@ import ContratarModal from './components/ContratarModal.vue'
 import EditarModal from './components/EditarModal.vue'
 import ArquivoModal from './components/ArquivoModal.vue'
 import AjusteCard from './components/AjusteCard.vue'
-import { resumoDoAjuste } from './contribuicao'
+import { propostaDoUsuario, resumoDoAjuste, resumoDosEventosCriados } from './contribuicao'
 import { ErroDaApi, rosterApi, type TipoDoRoster } from './rosterApi'
 import type {
   AlvoDeContratacao,
@@ -35,7 +35,7 @@ import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 const currentAgent = ref('Idle')
 // A Mochila NAO guarda quest local: a verdade e o Google Calendar. Esta ref e
 // so o cache da ultima leitura de GET /api/mochila.
-const quests = ref([])
+const quests = ref<QuestCalendario[]>([])
 const carregandoMochila = ref(false)
 const sugestoes = ref<Sugestao[]>([])
 // O roster inteiro (todas as squads). Mapa e Mochila mostram só a ativa.
@@ -251,7 +251,22 @@ const tirarAjuste = (id: string) => {
   ajusteNaoCabe.value = naoCabe
 }
 
-const aprovarAjuste = async (id: string, permitirMover: boolean) => {
+/**
+ * Ajuste iniciado pelo PRÓPRIO usuário, pelo botão da Mochila. Mesma rota e
+ * mesmo card das propostas de agente: muda só quem abriu e quem escolhe o
+ * tempo (o card nasce editável). O id vem do evento, então clicar de novo
+ * reabre o mesmo card em vez de empilhar outro.
+ */
+const abrirAjusteDaQuest = (quest: QuestCalendario) => {
+  const squad = squadAtiva.value
+  if (!squad || aprovandoAjuste.value) return
+  const proposta = propostaDoUsuario(quest, quests.value, squad.id, nomesDePessoa.value[quest.membro])
+  if (!proposta) return
+  tirarAjuste(proposta.id)
+  ajustes.value = [...ajustes.value, proposta]
+}
+
+const aprovarAjuste = async (id: string, permitirMover: boolean, propostoMin: number) => {
   if (aprovandoAjuste.value) return
   const proposta = ajustes.value.find((a) => a.id === id)
   if (!proposta) return
@@ -264,7 +279,8 @@ const aprovarAjuste = async (id: string, permitirMover: boolean) => {
       body: JSON.stringify({
         squadId: proposta.squad_id,
         alvo: proposta.alvo,
-        proposto_min: proposta.proposto_min,
+        // Do card, não da proposta: no ajuste do usuário o tempo é escolha dele.
+        proposto_min: propostoMin,
         permitirMover
       })
     })
@@ -674,6 +690,12 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
       // qual DOMINIO ela esta para mandar o PO raiz ate a sala certa.
       currentAgent.value = turno.eventos_criados[0].responsavel_id
+      // O que foi marcado, no toast: o servidor escolhe o horário e a duração,
+      // e sem isto o usuário só descobria abrindo a Mochila ou o Google. O
+      // toast do redirecionamento automático vem antes e seria sobrescrito por
+      // este, então a squad de destino entra aqui em vez de se perder.
+      const resumo = resumoDosEventosCriados(turno.eventos_criados)
+      avisar(turno.redirecionado ? `Squad ${turno.redirecionado.para_nome} — ${resumo}` : resumo)
     }
 
     // Cada turno SUBSTITUI as propostas, inclusive por nenhuma: sugestao de
@@ -771,8 +793,10 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         :carregando="carregandoMochila"
         :nomes-de-dominio="nomesDeDominio"
         :nomes-de-pessoa="nomesDePessoa"
+        :ajustando="!!aprovandoAjuste"
         @conectar="conectarGoogle"
         @recarregar="() => carregarMochila()"
+        @ajustar="abrirAjusteDaQuest"
       />
 
       <!-- Map Area -->
@@ -794,8 +818,9 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           @descartar="descartarSugestao(sugestao.id)"
         />
 
-        <!-- Ajuste proposto por um agente: nada muda no Google sem este clique,
-             e mover de horário é um segundo clique depois de "não cabe". -->
+        <!-- Ajuste proposto por um agente ou aberto pelo botão da Mochila: nada
+             muda no Google sem este clique, e mover de horário é um segundo
+             clique depois de "não cabe". -->
         <AjusteCard
           v-for="proposta in ajustes"
           :key="proposta.id"
@@ -804,7 +829,7 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
           :enviando="aprovandoAjuste === proposta.id"
           :erro="erroAjuste[proposta.id] || ''"
           :nao-cabe="!!ajusteNaoCabe[proposta.id]"
-          @aprovar="(mover) => aprovarAjuste(proposta.id, mover)"
+          @aprovar="(mover, min) => aprovarAjuste(proposta.id, mover, min)"
           @descartar="tirarAjuste(proposta.id)"
         />
 
@@ -879,10 +904,12 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       @fechar="criandoSquad = false"
     />
 
-    <!-- Toast: a contratacao acontece no mapa, longe do card que foi clicado. -->
+    <!-- Toast: a contratacao acontece no mapa, longe do card que foi clicado.
+         Sem `uppercase` e com largura máxima porque o resumo do turno traz
+         título, dia e hora — caixa alta numa linha só ficaria ilegível. -->
     <div
       v-if="toast"
-      class="fixed bottom-24 right-6 z-50 border-4 border-black bg-[#ffdb58] px-4 py-3 font-black text-sm uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+      class="fixed bottom-24 right-6 z-50 max-w-sm border-4 border-black bg-[#ffdb58] px-4 py-3 font-black text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
     >
       ✨ {{ toast }}
     </div>

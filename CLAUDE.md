@@ -9,12 +9,14 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
-npm test         # tsx --test server/*.test.ts (node:test, sem framework extra)
+npm test         # tsx --test server/*.test.ts src/*.test.ts (node:test, sem framework extra)
 ```
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
-(hoje `server/baixa-prioridade.test.ts`). Não cobrem a UI nem o Google; a
-verificação continua sendo typecheck + build + exercitar a rota.
+(hoje `server/baixa-prioridade.test.ts` e `src/ajuste-do-usuario.test.ts`). Os de
+`src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
+Google, e o texto depende de locale/fuso passados por parâmetro para não variar
+com a máquina. A verificação continua sendo typecheck + build + exercitar a rota.
 
 ## Protocolo de contexto
 
@@ -54,7 +56,7 @@ src/App.vue               orquestra a tela; dono do estado de roster, squad ativ
   src/squadAtiva.ts       squad ativa da aba (localStorage)
   src/mochila.ts          sem Vue: "Bloco i/N" e intervalo de dia inteiro, derivados da lista
   src/rosterApi.ts        escritas do roster com erro classificado
-  src/contribuicao.ts     sem Vue: formata minutos e resume o ajuste aplicado
+  src/contribuicao.ts     sem Vue: formata minutos, resume o turno e o ajuste, monta o ajuste do usuário
   src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard,
                           SquadSelector, NovaSquadModal, TrocaSquadCard,
                           SalasPainel, ContratarModal, EditarModal, ArquivoModal,
@@ -116,6 +118,7 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - **Prazo Final:** marco transparente no prazo (sem hora = dia inteiro) + blocos de 30–120 min antes dele, um por dia antes de empilhar, pausa de 15 min, até 20. Não coube = cria o que coube e avisa quanto faltou (`faltou_min`). Bloco que falha para a série sem apagar nada.
 - **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo, baixa prioridade) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
 - **Sem credencial:** o turno roda; cada `agendar_evento` vira erro com `motivo: precisaConectar` sem chamar o Google, e a UI volta a oferecer "Conectar".
+- **O toast diz o que foi marcado:** quem escolhe horário e duração é o servidor, então `resumoDosEventosCriados` (`src/contribuicao.ts`) monta título + duração + dia/hora por evento criado e `handleDelegation` mostra no toast — antes só erro e aviso chegavam à tela. Os blocos de um prazo entram dobrados no marco ("3 bloco(s), 3h"): um prazo rende até 20 e listá-los estouraria o toast. Com redirecionamento automático, a squad de destino entra neste mesmo toast, que substitui o do salto.
 - `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que o Ajuste reusa. Mantenha assim.
 
 ### Redirecionamento automático de squad
@@ -140,6 +143,7 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 
 O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/ajustar {alvo, proposto_min, permitirMover?}` só roda com aprovação (`AjusteCard`) e relê tudo do Google.
 
+- **Duas origens, um contrato.** A proposta pode vir de um agente ou do botão "⏱ Ajustar" da Mochila (`QuestBackpack` → `propostaDoUsuario` em `src/contribuicao.ts` → o mesmo `AjusteCard`). `PropostaDeAjuste.origem` distingue: em `usuario` o card nasce com um campo de minutos e o `proposto_min` emitido é o do card, não o da proposta. O botão só aparece onde o servidor aceitaria (`alvoDeAjuste`: bloco com horário → `duracao`, marco → `esforco`; foco de dia inteiro não tem alvo), e `normalizarPropostoMin` põe o valor na grade de 15 e nos limites de `interpretarPedidoDeAjuste` (`LIMITES_DE_AJUSTE` em `src/types.ts` é o espelho) — a rota não mudou.
 - **Alvos:** duração (foco/bloco) ou esforço total (marco, medido pelos blocos com `squadone_prazo_ref`). Duração muda só o fim; se não cabe, 409 `naoCabe` e mover é um segundo clique (`permitirMover`). Esforço cria blocos extras antes do prazo (com as 5 marcas) ou encurta blocos futuros até 30 min; bloco que mudou desde a listagem é pulado e vira `sobra_min`. Nada é apagado. 412 no ajuste não retenta.
 - **PATCH:** todo PATCH de evento passa por `atualizarPreservandoMarcas`: `If-Match` com o etag lido, `sendUpdates=none`, `extendedProperties.private` **completo** (lido + o que muda). A resposta é conferida: marca `squadone_*` sumida → restaura uma vez → `marcasPerdidas` (500).
 - **Token por chamada:** a rota checa `tokenValido()` antes e passa `obterToken`; cada leitura/PATCH/POST no Google pede o token de novo logo antes (`comToken`, o cache do auth-store absorve o custo). Um ajuste de esforço faz dezenas de escritas em série e um token lido só no começo venceria no meio. Google recusou a credencial: pede de novo e, vindo token diferente, repete uma vez; só com o mesmo token o 401 vira `precisaConectar`.

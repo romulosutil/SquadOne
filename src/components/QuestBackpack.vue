@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, type PropType } from 'vue'
 import type { QuestCalendario } from '../types'
 import { diasDoEventoDiaInteiro, infoDePrazo, questTerminou } from '../mochila'
+import { alvoDeAjuste } from '../contribuicao'
 
 const props = defineProps({
   // Vem de GET /api/mochila, ou seja, do Google Calendar. Nada aqui e estado
@@ -14,10 +15,21 @@ const props = defineProps({
   nomesDeDominio: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
   // id -> nome das pessoas da squad ativa. Quem foi arquivado continua dono das
   // quests do domínio (spec Fase 2 §7.11) e aparece como "Nome (arquivado)".
-  nomesDePessoa: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
+  nomesDePessoa: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
+  // Ajuste em curso (ou turno rodando): um por vez, como no card.
+  ajustando: { type: Boolean, default: false }
 })
 
-defineEmits(['conectar', 'recarregar'])
+defineEmits(['conectar', 'recarregar', 'ajustar'])
+
+// O botão só aparece onde o servidor aceitaria o ajuste (bloco com horário ou
+// marco de prazo): oferecê-lo num foco de dia inteiro abriria um card que só
+// serviria para virar 409 `alvoIncompativel`.
+const rotuloDeAjuste = (quest: QuestCalendario) => {
+  const alvo = alvoDeAjuste(quest)
+  if (!alvo) return ''
+  return alvo === 'duracao' ? '⏱ Ajustar horário' : '⏱ Ajustar esforço'
+}
 
 // Quest terminada some do card, mas só da VISTA: `props.quests` segue inteira
 // para "Bloco i/N" não renumerar quando um bloco passa. O relógio anda sozinho
@@ -129,6 +141,18 @@ const prazoDoBloco = (quest: QuestCalendario) => {
             <div v-if="prazoDoBloco(quest)" class="text-gray-800 text-xs truncate">🎯 {{ prazoDoBloco(quest) }}</div>
           </div>
         </a>
+        <!-- Fora do <a>: botão dentro de link é clique ambíguo, e este gesto
+             abre um card em vez de sair para o Google. -->
+        <div v-if="rotuloDeAjuste(quest)" class="border-t-4 border-black p-2">
+          <button
+            type="button"
+            :disabled="ajustando"
+            class="w-full border-2 border-black bg-[#c1f0c1] px-2 py-1 font-black text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+            @click="$emit('ajustar', quest)"
+          >
+            {{ rotuloDeAjuste(quest) }}
+          </button>
+        </div>
       </article>
     </div>
   </aside>
