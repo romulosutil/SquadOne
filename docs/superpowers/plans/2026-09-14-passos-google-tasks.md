@@ -30,6 +30,11 @@ Antes de tudo:
 5. Não mude as decisões abaixo sem perguntar. Se a documentação da API contradisser
    algum detalhe (formato do erro, ordem de inserção, `due`), siga a documentação,
    anote o que mudou no checkpoint e avise no fim.
+6. Tudo que depende do navegador logado do usuário (Google Cloud Console,
+   consentimento OAuth, conferir o Google Tasks e o Calendar, limpar dados de teste)
+   é feito com **Claude in Chrome**, seguindo a seção "Automação no navegador". Não
+   use o Browser de preview do app para isso: ele não tem a sessão Google do
+   usuário.
 
 ---
 
@@ -271,24 +276,103 @@ checklist de um item é dele.
 
 ---
 
-## Passos manuais no Google Cloud (fazer ANTES de o usuário autorizar; o deploy pode vir antes)
+## Automação no navegador (Claude in Chrome)
 
-Projeto `gen-lang-client-0086006291`. **Escreva estes passos no resumo final para o
-usuário executar; você não tem acesso ao console.**
+O Chrome real do usuário já está logado no Google. Isso permite fazer pelo agente o
+que antes era manual, **com os pontos de confirmação abaixo**. Uma mudança de
+configuração na conta ou no projeto Google do usuário é ação externa: descreva o que
+vai clicar e espere o "ok" no chat antes de salvar.
 
-1. Ativar a **Google Tasks API**: APIs & Services → Library → "Tasks API" → Enable.
-2. Consentimento → **Data Access** → adicionar o escopo `.../auth/tasks`.
-3. Atenção: **não** clicar em "Submit for verification", **não** subir logotipo e
-   **não** acrescentar domínios (ver "O prazo de 7 dias" no CLAUDE.md). O app segue
-   publicado e não verificado. O escopo do Tasks é *sensível*, como o
-   `calendar.events` que já está lá; a tela "o Google não verificou este app"
-   continua e *Avançado* passa.
-4. Confirmar que o status em `console.cloud.google.com/auth/audience` continua
-   **Em produção**.
+### Setup (uma vez, no início da Fase B)
 
-Ordem segura de rollout: **deploy do código** → passos 1–4 no console → clicar em
-"Autorizar Google Tasks" no app. Deploy sem a API ligada não quebra nada: sem o
-escopo, o Tasks nem é chamado.
+1. Carregue as ferramentas numa chamada só:
+   `ToolSearch` com
+   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__find,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__list_connected_browsers`.
+2. `list_connected_browsers`. Se a extensão não estiver conectada, **pare** e peça
+   ao usuário para conectar. Não gaste a sessão retentando. Sem extensão, os passos
+   abaixo voltam a ser manuais: escreva-os no chat e espere o usuário confirmar
+   cada um.
+3. Confira a conta logada (avatar em `console.cloud.google.com`). Tem que ser a dona
+   do projeto `gen-lang-client-0086006291`. Conta diferente: pare e pergunte.
+4. Trabalhe numa aba nova (`tabs_create_mcp`) e não feche abas do usuário.
+
+### C1. Google Cloud Console (faça no início da Fase B, antes dos cenários)
+
+Projeto `gen-lang-client-0086006291`. Antes de qualquer clique, confira na barra
+superior do console que o projeto selecionado é esse.
+
+| Passo | URL / caminho | O que fazer | Confirmação |
+|---|---|---|---|
+| 1 | `console.cloud.google.com/apis/library/tasks.googleapis.com?project=gen-lang-client-0086006291` | Se o botão for **Enable**, clique. Se já mostrar "API enabled"/**Manage**, só registre. | Peça "ok" antes de clicar em Enable |
+| 2 | `console.cloud.google.com/auth/scopes?project=gen-lang-client-0086006291` (Data Access) | **Add or remove scopes** → filtre por `tasks` → marque **só** `https://www.googleapis.com/auth/tasks` → Update → **Save**. Não desmarque nada que já esteja lá (`calendar.events`). | Mostre a lista final de escopos (`read_page`) e peça "ok" antes de **Save** |
+| 3 | `console.cloud.google.com/auth/audience?project=gen-lang-client-0086006291` | Só leitura: confirme que o status continua **Em produção** e que o botão é "Voltar para o teste". | — |
+| 4 | `console.cloud.google.com/auth/branding?project=gen-lang-client-0086006291` | Só leitura: confirme que não há logotipo. | — |
+
+**Proibido no console, mesmo que a UI sugira** (banner "verification required",
+"Prepare for verification" etc.):
+
+- clicar em **Submit for verification** / **Prepare for verification**;
+- clicar em **Voltar para o teste**;
+- subir logotipo, mexer em domínios autorizados, trocar o client OAuth ou mexer em
+  credenciais/secret.
+
+Se o Save do passo 2 exigir algum desses para concluir, **pare** e descreva ao
+usuário o que o console pediu. O CLAUDE.md explica por quê: verificação e logotipo
+quebram o arranjo atual com o porteiro de IP.
+
+Registre no checkpoint o que estava antes e o que ficou depois (API ligada? escopos
+listados? status do app?).
+
+Ordem de rollout: C1 → Fases B e C em dev → deploy (manual, do usuário) → "Autorizar
+Google Tasks" em produção. A ordem segura continua valendo: deploy sem a API ligada
+não quebra nada, porque sem o escopo o Tasks nem é chamado.
+
+### C2. Consentimento OAuth em dev (cenários 2 e 8)
+
+1. Com `npm run dev` no ar, navegue em `http://localhost:3000` no Chrome e clique em
+   "Autorizar Google Tasks" (ou abra `http://localhost:3000/api/auth/google`).
+2. A tela "o Google não verificou este app" é esperada (é o app do próprio usuário).
+   Descreva a tela no chat e peça "ok" antes de clicar em *Avançado → Acessar*.
+3. Na tela de consentimento, `read_page` para listar os escopos e as caixas. Mostre
+   ao usuário e **peça "ok" explícito** antes de clicar em *Continuar/Permitir*:
+   é conceder acesso à conta Google dele.
+   - Cenário 2: as duas caixas marcadas.
+   - Cenário 8: desmarque **só** a caixa do Calendar, com o usuário avisado de que
+     é teste de recusa. Depois confira que `data/google-auth.json` não mudou
+     (mtime/hash antes e depois) e que a URL final tem `?auth=escopo_calendar_negado`.
+4. Depois do redirect, confira `?auth=ok` na URL e `GET /api/auth/status` com
+   `tasks: true`.
+5. Nunca digite senha, código 2FA ou escolha outra conta. Se o Google pedir login ou
+   2FA, pare e peça ao usuário para fazer na aba e avisar.
+
+### C3. Conferência visual no Google (cenários 3, 5, 6 e 9)
+
+Só leitura, sem clicar em nada que edite.
+
+- **Google Tasks:** `https://tasks.google.com/` (ou o painel Tasks do Calendar).
+  Confira: existe **uma** lista `SquadOne · <squad>`; a mãe tem o título do
+  compromisso e a data certa; as subtarefas estão aninhadas e **na ordem** da
+  demanda; as notas da mãe têm o link do evento e `squadone_evento=`. Use
+  `get_page_text` e cole o trecho no checkpoint.
+- **Google Calendar:** abra o `htmlLink` do evento principal devolvido pela rota.
+  Confira título, dia e horário e se a mãe aparece como tarefa no dia do `due`. As
+  `extendedProperties` não aparecem na UI: confira-as pela API no servidor (log ou
+  script), não pelo Chrome.
+- **Cenário 6:** apagar a lista de teste no Google é destrutivo. Confirme que é a
+  lista criada pelo teste (título + id do `squad.json`), peça "ok" e só então
+  apague.
+
+### C4. Limpeza no fim da verificação
+
+1. Monte uma lista com tudo que os cenários criaram: eventIds, ids de lista e de
+   tarefas, com título e data, a partir das respostas das rotas guardadas no
+   checkpoint. **Não** use busca por título na agenda como fonte: pode pegar evento
+   real do usuário.
+2. Mostre a lista ao usuário e pergunte o que apagar.
+3. Apague só o que ele aprovar, no Chrome ou pela API, e registre no checkpoint.
+4. Se a lista de teste do Tasks for apagada, remova também `tasksListaId` da squad
+   em `data/squad.json` **de dev**, ou o próximo turno recria sozinho (D3). Nunca
+   mexa em `/app/data` de produção.
 
 **Rollback:** implantar o commit anterior. As chaves `squadone_tasks_*` nos eventos
 são ignoradas pelo código antigo, e `tasksListaId` no roster é tolerado por
@@ -304,10 +388,12 @@ Uma fase = um ou mais commits atômicos. Ao fim de cada fase: `npx vue-tsc --noE
 
 1. **Fase A — puros e transporte:** `server/passos.ts` + testes (TDD) e
    `server/tasks.ts` + classificação de erro com testes. Nada ligado ainda.
-2. **Fase B — escopo OAuth:** `auth-store.ts`, `server.ts` (status + callback),
-   `src/auth/google.ts`, chip e toast no `App.vue`. Verificar em dev: credencial
-   atual (só Calendar) → `/api/auth/status` com `tasks: false`, e Mochila e
-   agendamento funcionando igual.
+2. **Fase B — escopo OAuth:** primeiro o setup do Chrome e o **C1** (console).
+   Depois `auth-store.ts`, `server.ts` (status + callback), `src/auth/google.ts`,
+   chip e toast no `App.vue`. Verificar em dev: credencial atual (só Calendar) →
+   `/api/auth/status` com `tasks: false`, e Mochila e agendamento funcionando igual.
+   **Faça backup de `data/google-auth.json` de dev antes do C2** (cópia em
+   scratchpad): se o consentimento sair errado, restaurar volta ao estado anterior.
 3. **Fase C — lista e fluxo:** `squad.ts` (`tasksListaId`), `passos-no-google.ts`,
    ligação em `capabilities.ts` e `orchestrator.ts` (prompt), tipos, toast.
 4. **Fase D — docs:** CLAUDE.md completo.
@@ -315,19 +401,19 @@ Uma fase = um ou mais commits atômicos. Ao fim de cada fase: `npx vue-tsc --noE
 Verificação em dev contra a conta real (`npm run dev`). Exercite a rota com dados
 reais, sem mock. Registre no checkpoint o que saiu de cada cenário:
 
-| # | Cenário | Esperado |
-|---|---|---|
-| 1 | Credencial só com Calendar; demanda "prepara a apresentação de sexta, checklist: slides, dados, ensaio" | Eventos criados; aviso `ampliarAcesso`; **zero** requisições a `tasks.googleapis.com` (confira no log) |
-| 2 | Clicar em "Autorizar Google Tasks", consentir os dois | `/api/auth/status` com `tasks: true`; nenhum logout; Mochila intacta |
-| 3 | Repetir o cenário 1 | Lista `SquadOne · <squad>` criada; `tasksListaId` gravado em `data/squad.json`; mãe com `due` certo + 3 subtarefas **na ordem**; marco com `squadone_tasks_lista`/`_pai`; toast com "3 passos" |
-| 4 | "foca 1h em revisar o contrato" | Sem `passos`, sem chamada ao Tasks |
-| 5 | Dois turnos com passos em paralelo numa squad sem lista | Uma lista só (single-flight) |
-| 6 | Apagar a lista no Google e rodar outro turno com passos | Lista nova, id sobrescrito no roster |
-| 7 | Ajustar a duração de uma quest que tem passos (`POST /api/quests/:id/ajustar`) | 200; as chaves `squadone_tasks_*` continuam no evento |
-| 8 | Consentimento com o Calendar desmarcado | Redirect `?auth=escopo_calendar_negado`; credencial anterior intacta |
-| 9 | Evento às 22:30 (SP) com passos | `due` da mãe no mesmo dia local |
+| # | Cenário | Esperado | Como |
+|---|---|---|---|
+| 1 | Credencial só com Calendar; demanda "prepara a apresentação de sexta, checklist: slides, dados, ensaio" | Eventos criados; aviso `ampliarAcesso`; **zero** requisições a `tasks.googleapis.com` (confira no log) | `POST /api/orquestrar` por script/curl + log do servidor. Opcional: toast com o botão no Chrome |
+| 2 | Clicar em "Autorizar Google Tasks", consentir os dois | `/api/auth/status` com `tasks: true`; nenhum logout; Mochila intacta | Chrome, **C2** (com confirmações) |
+| 3 | Repetir o cenário 1 | Lista `SquadOne · <squad>` criada; `tasksListaId` gravado em `data/squad.json`; mãe com `due` certo + 3 subtarefas **na ordem**; marco com `squadone_tasks_lista`/`_pai`; toast com "3 passos" | Rota + leitura das marcas pela API no servidor + Chrome **C3** para lista, ordem e `due` |
+| 4 | "foca 1h em revisar o contrato" | Sem `passos`, sem chamada ao Tasks | Rota + log |
+| 5 | Dois turnos com passos em paralelo numa squad sem lista | Uma lista só (single-flight) | Duas requisições simultâneas por script + Chrome **C3** (contar as listas) |
+| 6 | Apagar a lista no Google e rodar outro turno com passos | Lista nova, id sobrescrito no roster | Chrome **C3** para apagar (com "ok") + rota + `squad.json` |
+| 7 | Ajustar a duração de uma quest que tem passos (`POST /api/quests/:id/ajustar`) | 200; as chaves `squadone_tasks_*` continuam no evento | Rota + leitura do evento pela API |
+| 8 | Consentimento com o Calendar desmarcado | Redirect `?auth=escopo_calendar_negado`; credencial anterior intacta | Chrome, **C2**. Rode **depois** do 2 e restaure/reautorize no fim para os demais cenários |
+| 9 | Evento às 22:30 (SP) com passos | `due` da mãe no mesmo dia local | Teste puro obrigatório; na API real, só se der para marcar `inicio_fixo` 22:30 sem atrapalhar a agenda (pergunte) + Chrome **C3** |
 
-Depois, `npm run build` verde.
+Depois, `npm run build` verde e **C4** (limpeza).
 
 ## Finalização
 
@@ -336,8 +422,13 @@ Depois, `npm run build` verde.
 2. `superpowers:requesting-code-review` sobre o diff inteiro.
 3. `git commit` (mensagens em português, estilo `feat(tasks): ...`, com a linha
    `Co-Authored-By` que o harness pedir) + `git push` em `main` + `graphify update .`.
-4. Não clique em **Implantar** no Easypanel. O resumo final ao usuário deve dizer:
+4. Não clique em **Implantar** no Easypanel, nem pelo Chrome. O resumo final ao
+   usuário deve dizer:
    - que o deploy é manual;
-   - os passos 1–4 do Google Cloud;
-   - o gesto "Autorizar Google Tasks" no app, **sem** logout;
+   - o estado do C1 (API ligada, escopos salvos, app ainda Em produção), ou os
+     passos pendentes, se a extensão não estava disponível;
+   - que em **produção** o gesto "Autorizar Google Tasks" ainda é do usuário, depois
+     do deploy e **sem** logout. A credencial de produção mora em `/app/data` e não
+     é a de dev;
+   - o que foi limpo no C4 e o que ficou;
    - os adiados: selo na Mochila, tarefa avulsa e renomear a lista.
