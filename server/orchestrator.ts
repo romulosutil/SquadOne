@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
-import { CAPABILITIES, declarations, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
+import { CAPABILITIES, declarations, ehBaixaPrioridade, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
 import { outrasSquads, rosterTree, squadsAtivas, type Roster, type Squad } from "./squad.ts";
 import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
@@ -154,9 +154,11 @@ export function buildSystemInstruction(
     modo === "foco"
       ? `\n- O usuário forçou tipo='time_blocking' para TODOS os compromissos desta
   demanda: use-o em toda chamada de agendar_evento, com duracao_min.`
-      : modo === "prazo"
-        ? `\n- O usuário forçou tipo='deadline' para TODOS os compromissos desta
-  demanda: use-o em toda chamada de agendar_evento, com prazo_final e esforco_min.`
+      : modo === "baixa_prioridade"
+        ? `\n- O usuário marcou esta demanda como BAIXA PRIORIDADE: use
+  tipo='time_blocking' em toda chamada de agendar_evento, com duracao_min. O
+  servidor encaixa o bloco em qualquer horário livre dos próximos dias úteis —
+  não é para agora, e não é um prazo.`
         : "";
 
   // Pedido explícito de contratação SEMPRE vira capacidade: a regra antiga
@@ -405,12 +407,18 @@ async function rodarTurno(
   // O resto (propostas) não disputa agenda e segue em paralelo.
   const resultados: (CapabilityResult | ErroTarefa)[] = new Array(calls.length);
   const forcado = tipoForcado(modo);
+  const baixaPrioridade = ehBaixaPrioridade(modo);
   const deAgenda = calls
     .map((call, indice) => ({ call, indice }))
     .filter((x) => x.call.name === "agendar_evento")
     .map((x) => ({
       ...x,
-      prioridade: prioridadeDeAgendamento((x.call.args ?? {}) as Record<string, any>, forcado, janela),
+      prioridade: prioridadeDeAgendamento(
+        (x.call.args ?? {}) as Record<string, any>,
+        forcado,
+        janela,
+        baixaPrioridade,
+      ),
     }))
     .sort((a, b) => a.prioridade[0] - b.prioridade[0] || a.prioridade[1] - b.prioridade[1] || a.indice - b.indice);
   const emParalelo = Promise.all(

@@ -11,15 +11,15 @@ const props = defineProps({
 })
 
 const demanda = ref('')
-// Auto por padrao: o modelo escolhe o tipo de cada compromisso. Foco e Prazo
-// sao o usuario sobrepondo essa escolha para a demanda inteira — o servidor
-// impoe o tipo mesmo que o modelo divirja.
+// Auto por padrao: o modelo escolhe o tipo de cada compromisso. Focar Agora e
+// Baixa Prioridade sao o usuario dizendo QUANDO quer o bloco para a demanda
+// inteira — o servidor impoe isso mesmo que o modelo divirja.
 const modo = ref<Modo>('auto')
 
 const MODOS: { valor: Modo; rotulo: string; dica: string }[] = [
-  { valor: 'auto', rotulo: 'Auto', dica: 'O squad decide entre foco e prazo; o servidor escolhe o horário' },
+  { valor: 'auto', rotulo: 'Auto', dica: 'O squad decide entre bloco e prazo; o servidor escolhe o horário' },
   { valor: 'foco', rotulo: 'Focar Agora', dica: 'Próximo horário livre na janela de trabalho' },
-  { valor: 'prazo', rotulo: 'Prazo Final', dica: 'Marco no prazo + blocos de trabalho antes dele' }
+  { valor: 'baixa_prioridade', rotulo: 'Baixa Prioridade', dica: 'Encaixa onde sobrar nos próximos 7 dias úteis' }
 ]
 
 const onSubmit = () => {

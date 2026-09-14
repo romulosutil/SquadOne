@@ -328,7 +328,7 @@ async function startServer() {
       if (!ehModo(modo)) {
         return res
           .status(400)
-          .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'prazo'" });
+          .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
       // Squad antes do token e do Gemini: um squadId inexistente nao pode

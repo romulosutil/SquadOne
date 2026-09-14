@@ -5,12 +5,14 @@ import {
   conflitos,
   dentroDaJanela,
   descreverJanela,
+  DIAS_UTEIS_BAIXA_PRIORIDADE,
   DURACAO_MAX_MIN,
   ESFORCO_MAX_MIN,
   GRADE_MIN,
   HORIZONTE_DIAS,
   instanteLocal,
   lerInstante,
+  limiteDeDiasUteis,
   proximoDia,
   type DataLocal,
   type Intervalo,
@@ -69,6 +71,12 @@ export interface PedidoDeCompromisso {
   args: Record<string, any>;
   /** Tipo imposto pelo toggle; null = o modelo escolheu. */
   tipoForcado: TipoEvento | null;
+  /**
+   * Toggle em Baixa Prioridade: mesmo bloco do Foco, mas a busca vai até o fim
+   * do 7º dia útil em vez dos 14 dias corridos — é o "quando sobrar" do usuário,
+   * e no turno estes compromissos escolhem horário por último.
+   */
+  baixaPrioridade: boolean;
   squadId: string;
   calendarId: string;
   dominio: { id: string; nome: string };
@@ -131,7 +139,8 @@ function exigirInstante(valor: unknown, campo: string, fuso: string) {
  * Ordem em que os agendar_evento de um turno são alocados. Horário fixo
  * primeiro (o usuário já decidiu; os outros desviam dele), depois foco (o
  * "agora" é o que mais perde com a espera), depois prazos do mais próximo ao
- * mais distante. Empate: a ordem em que o modelo chamou.
+ * mais distante, e por último a baixa prioridade — ela pega o que sobrar.
+ * Empate: a ordem em que o modelo chamou.
  *
  * "Mais próximo" é pelo LIMITE EFETIVO dos blocos, não pelo texto do prazo:
  * "até hoje" (só data) vale até o fim da janela, então um prazo hoje às 13:00
@@ -141,12 +150,16 @@ export function prioridadeDeAgendamento(
   args: Record<string, any>,
   tipoForcado: TipoEvento | null,
   janela: Janela,
+  baixaPrioridade = false,
 ): [number, number] {
   const { fuso } = janela;
   const tipo = tipoForcado ?? (args.tipo === "deadline" ? "deadline" : "time_blocking");
   if (tipo === "time_blocking") {
+    // Hora dita pelo usuário vence o toggle: o slot é o que ele pediu, e os
+    // outros compromissos do turno é que precisam desviar dele.
     const fixo = preenchido(args.inicio_fixo) ? lerInstante(args.inicio_fixo, fuso) : null;
-    return [fixo && fixo.data === null ? 0 : 1, 0];
+    if (fixo && fixo.data === null) return [0, 0];
+    return [baixaPrioridade ? 3 : 1, 0];
   }
   const prazo = lerInstante(args.prazo_final, fuso);
   return [2, prazo ? limiteDoTrabalho(prazo, janela.fimMin, fuso) : Number.MAX_SAFE_INTEGER];
@@ -244,10 +257,20 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
         );
       }
       // `inicio_fixo` só com data (sem hora) não fixou horário: vale como a_partir_de.
-      const limite =
+      const inicioDaBusca = Math.max(agora, fixo?.instante ?? aPartirDe ?? agora);
+      // Dois tetos possíveis, e vale o mais apertado: o prazo que o modelo
+      // mandou (toggle forçando bloco sobre um pedido de prazo) e a janela de
+      // dias úteis da Baixa Prioridade. "Quando sobrar" não pode passar de 7
+      // dias úteis, mas também não pode furar um prazo que o usuário deu.
+      const tetos = [
         p.tipoForcado && preenchido(args.prazo_final)
           ? limiteDoTrabalho(exigirInstante(args.prazo_final, "prazo_final", fuso), janela.fimMin, fuso)
-          : undefined;
+          : null,
+        p.baixaPrioridade
+          ? limiteDeDiasUteis(inicioDaBusca, janela, DIAS_UTEIS_BAIXA_PRIORIDADE)
+          : null,
+      ].filter((t): t is number => t !== null);
+      const limite = tetos.length ? Math.min(...tetos) : undefined;
       const { slots } = alocar(
         ocupacao,
         janela,

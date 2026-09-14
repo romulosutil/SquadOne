@@ -9,9 +9,12 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
+npm test         # tsx --test server/*.test.ts (node:test, sem framework extra)
 ```
 
-Não existe suíte de testes. Verificação é typecheck + build + exercitar a rota.
+Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
+(hoje `server/baixa-prioridade.test.ts`). Não cobrem a UI nem o Google; a
+verificação continua sendo typecheck + build + exercitar a rota.
 
 ## Protocolo de contexto
 
@@ -86,9 +89,22 @@ Todo evento criado carrega quatro chaves em `extendedProperties.private`, montad
 
 `paraQuest` lê o tipo da marca e só cai no prefixo `⏰ DEADLINE:` do título quando ela não existe (eventos anteriores a 12/09/2026, sem migração). O prefixo segue no título como rótulo. Deadline grava `transparency: "transparent"`: é marco, não ocupa agenda.
 
-### Toggle Auto / Foco / Prazo
+### Toggle Auto / Foco / Baixa Prioridade
 
-A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`prazo` acrescentam a regra ao prompt **e** `agendarCompromisso` impõe `time_blocking`/`deadline` mesmo se o modelo divergir; se o campo esperado faltar, usa o do outro tipo (`esforco_min` ↔ `duracao_min`, `inicio_fixo` como prazo; regra em `server/agendamento.ts`).
+A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`baixa_prioridade` acrescentam a regra ao prompt **e** `agendarCompromisso` impõe `time_blocking` mesmo se o modelo divergir; se o campo esperado faltar, usa o do outro tipo (`esforco_min` no lugar de `duracao_min`; regra em `server/agendamento.ts`).
+
+Os dois modos forçados gravam o mesmo tipo. O que muda é **até onde se procura horário**:
+
+| Modo | Tipo imposto | Busca | Vez na série |
+|---|---|---|---|
+| `auto` | nenhum (o modelo escolhe) | conforme o tipo | por tipo |
+| `foco` | `time_blocking` | primeiro slot livre a partir de agora, até 14 dias corridos | depois do horário fixo |
+| `baixa_prioridade` | `time_blocking` | primeiro slot livre até o fim do **7º dia útil** (`DIAS_UTEIS_BAIXA_PRIORIDADE`) | **por último** |
+
+- **7 dias úteis, não corridos:** `limiteDeDiasUteis` em `server/alocador.ts` conta pelos mesmos dias que o alocador varre — `DIAS_TRABALHO` — e reusa `janelasDosDias`, então dia sem janela não conta e o resto de HOJE já é o primeiro. É só um `limite` passado ao pedido de foco; o algoritmo é o mesmo.
+- **Por último na série:** `prioridadeDeAgendamento` dá 3 ao bloco de baixa prioridade (fixo 0, foco 1, prazo 2) — ele pega o que os outros compromissos do turno deixaram. `inicio_fixo` com hora continua vencendo: hora dita pelo usuário não é "quando sobrar".
+- **Prazo do modelo continua valendo como teto:** com `prazo_final` mais curto que os 7 dias úteis, vale o mais apertado dos dois.
+- **`deadline` (marco transparente + blocos, `squadone_prazo_ref`, "Bloco i/N", alvo `esforco` do Ajuste) não foi removido.** Só o botão que FORÇAVA esse tipo saiu da UI: em `auto` o modelo continua escolhendo `deadline` quando a frase descreve um prazo real ("entrega até sexta").
 
 ### Agendamento: o horário é do servidor
 
@@ -96,9 +112,9 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 
 - **Ocupação é global:** `events.list` do `primary` inteiro, uma vez por turno (preguiçosa: turno sem agendamento não lê), 60 dias à frente, sem filtro de marca, até 10 páginas. Não ocupa: transparente, dia inteiro, cancelado, `workingLocation`/`birthday`, recusado pelo próprio usuário. Outros calendários não contam.
 - **Janela:** `JANELA_TRABALHO` (padrão `09:00-19:00`; minutos em :00, :15, :30 ou :45, porque todo slot cai na grade de 15 min; pelo menos 30 min) e `DIAS_TRABALHO` (padrão `1,2,3,4,5`), fuso `America/Sao_Paulo`. Env e não `squad.json`: é do usuário, não da squad. Ausente ou vazia = padrão; presente e ilegível = 500 `configuracao: true` antes do token e do Gemini, nunca o padrão calado. O boot loga a janela lida. Trocar exige **Implantar**.
-- **Focar Agora:** primeiro slot livre a partir de agora (grade de 15 min), até 14 dias. Não achou = erro `motivo: semHorarioLivre` só naquele compromisso.
+- **Focar Agora:** primeiro slot livre a partir de agora (grade de 15 min), até 14 dias. Não achou = erro `motivo: semHorarioLivre` só naquele compromisso. **Baixa Prioridade** é o mesmo, com o teto no 7º dia útil (ver o toggle acima).
 - **Prazo Final:** marco transparente no prazo (sem hora = dia inteiro) + blocos de 30–120 min antes dele, um por dia antes de empilhar, pausa de 15 min, até 20. Não coube = cria o que coube e avisa quanto faltou (`faltou_min`). Bloco que falha para a série sem apagar nada.
-- **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
+- **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo, baixa prioridade) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
 - **Sem credencial:** o turno roda; cada `agendar_evento` vira erro com `motivo: precisaConectar` sem chamar o Google, e a UI volta a oferecer "Conectar".
 - `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que o Ajuste reusa. Mantenha assim.
 

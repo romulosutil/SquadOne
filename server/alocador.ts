@@ -21,6 +21,8 @@ export const BLOCOS_MAX = 20;
 export const PAUSA_MIN = 15;
 /** Focar Agora procura até 14 dias corridos a partir do início da busca. */
 export const HORIZONTE_FOCO_DIAS = 14;
+/** Baixa Prioridade procura dentro dos próximos 7 DIAS ÚTEIS, não corridos. */
+export const DIAS_UTEIS_BAIXA_PRIORIDADE = 7;
 /** Nada é alocado além de 60 dias de agora: é o quanto de agenda o turno lê. */
 export const HORIZONTE_DIAS = 60;
 /** Esforço de um prazo acima de 40h é sinal de compromisso que devia ser quebrado. */
@@ -315,6 +317,22 @@ function janelasDosDias(de: number, ate: number, j: Janela): Intervalo[] {
     d = proximoDia(d);
   }
   return saida;
+}
+
+/**
+ * Fim da janela do N-ésimo dia útil a partir de `de`: o limite da busca de
+ * Baixa Prioridade. "Dia útil" é o mesmo que o alocador varre — dia de
+ * `DIAS_TRABALHO` com janela sobrando —, por isso reusa `janelasDosDias` em vez
+ * de contar datas de novo: o resto de HOJE já conta como o primeiro dia, e um
+ * dia que só tem janela depois de `de` não conta.
+ *
+ * Menos dias úteis que o pedido dentro do horizonte lido (DIAS_TRABALHO com um
+ * dia só, por exemplo): devolve o último que existe, nunca mais que o horizonte.
+ */
+export function limiteDeDiasUteis(de: number, j: Janela, diasUteis: number): number {
+  const janelas = janelasDosDias(de, de + HORIZONTE_DIAS * DIA_MS, j);
+  const ultima = janelas[Math.min(diasUteis, janelas.length) - 1];
+  return ultima ? ultima.fim : de;
 }
 
 /** Eventos que colidem com `slot`. Para horário fixo: conflito vira aviso. */

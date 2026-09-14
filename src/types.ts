@@ -73,7 +73,7 @@ export interface RosterView {
 }
 
 /** Toggle da CommandBar; espelho de `Modo` em server/capabilities.ts. */
-export type Modo = "auto" | "foco" | "prazo";
+export type Modo = "auto" | "foco" | "baixa_prioridade";
 
 export interface EventoCriado {
   kind: "evento";

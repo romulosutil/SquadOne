@@ -20,12 +20,18 @@ export type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
 
 /**
  * Toggle da CommandBar. `auto` deixa o modelo escolher o tipo de cada
- * compromisso; `foco` e `prazo` são o usuário dizendo o tipo de antemão.
+ * compromisso; `foco` e `baixa_prioridade` são o usuário dizendo de antemão
+ * QUANDO quer o bloco — os dois gravam `time_blocking`, e o que muda é até onde
+ * o servidor procura horário (o agora, ou os próximos 7 dias úteis).
+ *
+ * `deadline` (marco + blocos) não sumiu: continua sendo escolha do modelo em
+ * `auto`, quando a própria frase descreve um prazo real. Só o botão que forçava
+ * esse tipo saiu da UI.
  */
-export type Modo = "auto" | "foco" | "prazo";
+export type Modo = "auto" | "foco" | "baixa_prioridade";
 
 export function ehModo(valor: unknown): valor is Modo {
-  return valor === "auto" || valor === "foco" || valor === "prazo";
+  return valor === "auto" || valor === "foco" || valor === "baixa_prioridade";
 }
 
 /**
@@ -36,12 +42,17 @@ export function ehModo(valor: unknown): valor is Modo {
 const TIPO_FORCADO: Record<Modo, TipoEvento | null> = {
   auto: null,
   foco: "time_blocking",
-  prazo: "deadline",
+  baixa_prioridade: "time_blocking",
 };
 
 /** Tipo que o toggle impõe ao turno; null em `auto`. O orchestrator ordena por ele. */
 export function tipoForcado(modo: Modo): TipoEvento | null {
   return TIPO_FORCADO[modo];
+}
+
+/** Baixa Prioridade: mesmo tipo do Foco, outra janela de busca e a vez por último. */
+export function ehBaixaPrioridade(modo: Modo): boolean {
+  return modo === "baixa_prioridade";
 }
 
 export interface CapabilityContext {
@@ -214,6 +225,7 @@ const agendarEvento: Capability = {
     const compromisso = await agendarCompromisso({
       args,
       tipoForcado: tipoForcado(ctx.modo),
+      baixaPrioridade: ehBaixaPrioridade(ctx.modo),
       squadId: ctx.squad.id,
       calendarId: ctx.squad.calendarId,
       dominio,
