@@ -33,6 +33,21 @@ export const PROP_TIPO = "squadone_tipo";
 export const PROP_PRAZO_REF = "squadone_prazo_ref";
 
 /**
+ * Vínculo com o Google Tasks (passos de um compromisso), só no evento
+ * PRINCIPAL — o foco, ou o marco de um prazo; blocos não levam. O Tasks não
+ * tem extendedProperties e `links` lá é somente leitura, então a ponta
+ * AUTORITATIVA do vínculo mora aqui:
+ * - `squadone_tasks_lista`: id da lista da squad no Tasks;
+ * - `squadone_tasks_pai`: id da tarefa-mãe.
+ * Não entram em `marcasDoEvento`: só existem depois de as tarefas nascerem, e
+ * chegam por PATCH (atualizarPreservandoMarcas). O prefixo `squadone_` é o que
+ * faz o PATCH do Ajuste preservá-las sem mudança (calendar.test.ts trava).
+ * `QuestCalendario`/`EventoLido` não as leem na V1: a Mochila não usa.
+ */
+export const PROP_TASKS_LISTA = "squadone_tasks_lista";
+export const PROP_TASKS_PAI = "squadone_tasks_pai";
+
+/**
  * Falha de um domínio. `credencial` diz se reconectar resolve — o frontend
  * precisa dessa distincao para nao pedir reconexao contra um problema que
  * mora na configuracao do projeto Google.
