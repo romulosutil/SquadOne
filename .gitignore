@@ -15,3 +15,9 @@ data/
 # pacotes brutos do CraftPix (~55MB): a licenca free nao permite redistribuir
 # os fontes. Os strips derivados ficam em public/sprites e sao versionados.
 assets/craftpix/
+
+# Cache local de tooling (MCP graphify/headroom/tokensave): regenerado por
+# comando (`graphify update .`), inclui .db/.wal binarios — nao versiona.
+graphify-out/
+.headroom/
+.tokensave/
