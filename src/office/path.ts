@@ -11,7 +11,20 @@
  * autorais no template, não A*.
  */
 
-import { DOOR_EAST, DOOR_SOUTH, TILE, localCenterPx, slotKey, type Vec2 } from './rooms'
+import { DOOR_EAST, DOOR_SOUTH, PITCH_X, PITCH_Y, TILE, localCenterPx, slotKey, type Vec2 } from './rooms'
+
+/**
+ * Slot da sala que contém um ponto de mundo (px-fonte). Serve para replanejar
+ * uma rota a partir de onde o ator ESTÁ, e não de `a.slot` (que já aponta para
+ * o destino assim que a rota começa). Na faixa de parede compartilhada a
+ * resposta é ambígua — qualquer dos dois lados dá rota válida, porque o ator
+ * só pisa na parede dentro do vão da porta.
+ */
+export function slotDoPontoPx(p: Vec2): Vec2 {
+  const tx = p[0] / TILE - 0.5
+  const ty = p[1] / TILE - 0.5
+  return [Math.max(0, Math.floor(tx / PITCH_X)), Math.max(0, Math.floor(ty / PITCH_Y))]
+}
 
 const NEIGHBORS: Vec2[] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 

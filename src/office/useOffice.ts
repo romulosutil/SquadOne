@@ -16,7 +16,15 @@
  *
  * A unidade de SALA é o DOMÍNIO, não a pessoa (§3.1): o slot pertence ao
  * domínio e todas as pessoas dele — PO e integrantes — dividem a mesma sala,
- * cada uma numa cadeira do template.
+ * cada uma num posto da sala (src/office/postos.ts).
+ *
+ * Dois tipos de movimento, com marcador explícito no ator em vez de heurística:
+ *  - COMANDO (`moveTo`, entrada de contratado): vence sempre, cancela o passeio
+ *    e é o único que a câmera segue.
+ *  - PASSEIO ambiente: quem está parado, visível e fora de obra sai de tempos em
+ *    tempos para um tile livre da própria sala (às vezes da vizinha), pausa e
+ *    volta. A espera e a pausa são setTimeout — o rAF continua dormindo quando
+ *    ninguém anda. Desligado com prefers-reduced-motion.
  */
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
@@ -29,7 +37,6 @@ import {
   PROP_EMOJI,
   ROOM_H,
   ROOM_W,
-  EXTRA_STATIONS,
   PROP_SIZE,
   TILE,
   WALL_H,
@@ -45,7 +52,8 @@ import {
   type RoomId,
   type Vec2,
 } from './rooms'
-import { bfsSlots, buildRoute, doorCenterPx } from './path'
+import { bfsSlots, buildRoute, doorCenterPx, slotDoPontoPx } from './path'
+import { postoLocal, tilesLivres } from './postos'
 import { planejarSalas } from './salas'
 
 /** Uma pessoa do squad: o PO de um domínio ou um integrante dele. */
@@ -87,6 +95,24 @@ const ROOM_PAN_MS = 700
 /** Casado com `room-build` em src/index.css. */
 const ROOM_BUILD_MS = 450
 
+/**
+ * Perambular (faixas [min, max] sorteadas uniformemente). A espera longa e
+ * aleatória é o que escalona: sem ela o escritório inteiro levantaria junto.
+ */
+const PASSEIO_ESPERA_MS: Vec2 = [6000, 16000]
+const PASSEIO_PAUSA_MS: Vec2 = [2000, 5000]
+/** Teto de gente passeando cheio: tenta de novo mais cedo, sem esperar um ciclo inteiro. */
+const PASSEIO_REPIQUE_MS: Vec2 = [2000, 6000]
+/** Chance de o passeio ser até a sala vizinha em vez de dentro da própria. */
+const PASSEIO_VIZINHO = 0.2
+/** No máximo esta fração dos atores fora do posto por passeio ao mesmo tempo. */
+const PASSEIO_FRACAO_MAX = 1 / 3
+/**
+ * Folga de tela entre o destino do passeio e qualquer outro ator (parado ou
+ * indo para algum lugar): passear até o colo de alguém recria a aglomeração.
+ */
+const PASSEIO_FOLGA_PX = 40
+
 const MANIFEST_URL = '/sprites/craftpix.manifest.json'
 
 interface CharAnim {
@@ -114,6 +140,20 @@ interface Actor {
   walking: boolean
   /** ator de uma sala que ainda está nascendo: existe, mas não se pinta. */
   hidden: boolean
+  /**
+   * Movimento mandado de fora (moveTo, entrada). Enquanto true o ator não
+   * passeia, e é só nesse estado que a câmera o segue.
+   */
+  comando: boolean
+  /**
+   * O comando termina ao chegar (voltar à própria cadeira). Visita a outra sala
+   * segura o ator lá até o próximo comando: o GameMap é quem manda voltar.
+   */
+  comandoAcabaAoChegar: boolean
+  /** Passeio ambiente em curso. null = no posto (ou sob comando). */
+  passeio: 'indo' | 'pausa' | 'voltando' | null
+  /** Espera até o próximo passeio ou pausa no destino. Um por ator, para cancelar. */
+  timerPasseio: ReturnType<typeof setTimeout> | null
 }
 
 export interface RoomPropView {
@@ -204,13 +244,29 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   let primeiraCarga = true
   const timers = new Set<ReturnType<typeof setTimeout>>()
 
-  function agendar(fn: () => void, ms: number) {
+  function agendar(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
     const t = setTimeout(() => {
       timers.delete(t)
       fn()
     }, ms)
     timers.add(t)
+    return t
   }
+
+  function desagendar(t: ReturnType<typeof setTimeout>) {
+    clearTimeout(t)
+    timers.delete(t)
+  }
+
+  /**
+   * prefers-reduced-motion: reduce desliga só o perambular. Movimento comandado
+   * continua — é ele que diz ao usuário quem está atendendo a demanda.
+   */
+  const mqMovimento =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null
+  let movimentoReduzido = mqMovimento?.matches ?? false
 
   /** Ponto de mundo que a câmera persegue enquanto nenhum ator é o foco. */
   const lookPoint = shallowRef<Vec2 | null>(null)
@@ -299,7 +355,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         // A placa da sala é UI, não objeto de mundo: não entra no painter's
         // algorithm, senão o ator da própria sala a cobre.
         // A placa nomeia o DOMÍNIO: a sala inteira é dele, não de uma pessoa.
-        label: { text: d.nome, left: lx, top: ly - WALL_H - 16 },
+        // A contagem vem da última forma conhecida: a sala que fecha mantém o formato.
+        label: { text: `${d.nome} · ${d.pessoas.length}`, left: lx, top: ly - WALL_H - 16 },
         phase: fase,
         walls,
         props: parsed.props.map((p) => {
@@ -333,17 +390,12 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   const focused = ref<string | null>(null)
 
   /**
-   * Posto de trabalho da i-ésima pessoa do domínio: uma cadeira por pessoa, na
-   * ordem da árvore (PO primeiro). Domínio com mais gente que cadeira espalha
-   * o excedente pelo miolo da sala em vez de empilhar todo mundo no mesmo pixel.
+   * Posto de trabalho da i-ésima pessoa do domínio: cadeiras do template na
+   * ordem da árvore (PO primeiro), e o excedente espalhado pela sala por
+   * `postoLocal` — que conhece o total para não empilhar ninguém.
    */
   function stationPx(dominio: OfficeDominio, idx: number): Vec2 {
-    const { stations } = parseRoom(dominio.room)
-    const local =
-      idx < stations.length
-        ? stations[idx]
-        : EXTRA_STATIONS[(idx - stations.length) % EXTRA_STATIONS.length]
-    return localCenterPx(dominio.slot, local)
+    return localCenterPx(dominio.slot, postoLocal(dominio.room, idx, dominio.pessoas.length))
   }
 
   function sheetOf(id: string): CharSheet | null {
@@ -391,6 +443,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
 
   function iniciarEntrada(a: Actor, dominio: OfficeDominio, idx: number) {
     const { spawn, route } = rotaDeEntrada(dominio, idx)
+    cancelarPasseio(a)
+    a.comando = true
+    a.comandoAcabaAoChegar = true
     a.x = spawn[0]
     a.y = spawn[1]
     a.slot = dominio.slot
@@ -401,6 +456,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     // A câmera larga o ponto fixo da sala e passa a seguir quem está entrando.
     lookPoint.value = null
     focused.value = a.id
+    ultimoAlvo = [a.x, a.y]
     paint(a)
     kick()
   }
@@ -423,6 +479,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
           facing: 1,
           walking: false,
           hidden: false,
+          comando: false,
+          comandoAcabaAoChegar: false,
+          passeio: null,
+          timerPasseio: null,
         }
         actors.set(pessoa.id, a)
         // Quem já estava no roster quando o app abriu começa sentado. Quem
@@ -430,6 +490,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         if (!primeiraCarga) {
           if (roomPhase.has(slotKey(dominio.slot))) a.hidden = true
           else iniciarEntrada(a, dominio, idx)
+        } else {
+          agendarPasseio(a)
         }
       } else if (!a.hidden) {
         a.dominioId = dominio.id
@@ -437,21 +499,211 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
         if (!unlocked.value.has(slotKey(a.slot))) {
           // A sala onde ele estava (ou para onde ia) foi arquivada. O BFS parte
           // de um slot desbloqueado, então não há rota de volta: vai direto à cadeira.
+          cancelarPasseio(a)
+          a.comando = false
           a.x = x
           a.y = y
           a.slot = dominio.slot
           a.route = []
           a.walking = false
+          agendarPasseio(a)
+        } else if (a.passeio) {
+          // Quem passeia não é teleportado: a volta já leva ao posto. Se o posto
+          // mudou (reassento), só troca o fim da rota de volta.
+          if (a.passeio === 'voltando' && a.route.length) a.route[a.route.length - 1] = [x, y]
         } else if (!a.walking && slotKey(a.slot) === slotKey(dominio.slot)) {
           // Reassento: substituir PO, arquivar integrante ou promover o template
           // muda a ordem das cadeiras. Parado na própria sala, senta na cadeira nova.
           a.x = x
           a.y = y
+        } else if (a.walking && a.comando && a.comandoAcabaAoChegar && a.route.length) {
+          // Comandado de volta à cadeira enquanto ela mudou: chega na cadeira nova.
+          a.route[a.route.length - 1] = [x, y]
         }
       }
       paint(a)
     }
-    for (const id of [...actors.keys()]) if (!alive.has(id)) actors.delete(id)
+    for (const [id, a] of [...actors]) {
+      if (alive.has(id)) continue
+      cancelarPasseio(a)
+      actors.delete(id)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Perambular
+  // -------------------------------------------------------------------------
+
+  function sortear([min, max]: Vec2): number {
+    return min + Math.random() * (max - min)
+  }
+
+  function cancelarPasseio(a: Actor) {
+    if (a.timerPasseio) desagendar(a.timerPasseio)
+    a.timerPasseio = null
+    a.passeio = null
+  }
+
+  /** Arma a espera até o próximo passeio. Idempotente: quem já tem timer mantém o dele. */
+  function agendarPasseio(a: Actor, faixa: Vec2 = PASSEIO_ESPERA_MS) {
+    if (movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio || a.timerPasseio) return
+    const t = agendar(() => {
+      if (a.timerPasseio !== t) return
+      a.timerPasseio = null
+      dispararPasseio(a)
+    }, sortear(faixa))
+    a.timerPasseio = t
+  }
+
+  /**
+   * Tile livre (centro, px-fonte) de uma sala, longe de todo outro ator — de
+   * onde ele está e de para onde vai. `miolo` restringe ao centro da sala:
+   * visitante não fica encostado na mesa de quem mora lá.
+   */
+  function destinoLivre(dominio: OfficeDominio, a: Actor, miolo: boolean): Vec2 | null {
+    const tiles = tilesLivres(dominio.room)
+    const centrais = miolo ? tiles.filter(([x, y]) => x >= 2 && x <= ROOM_W - 3 && y >= 2 && y <= ROOM_H - 3) : tiles
+    const ocupados: Vec2[] = []
+    for (const o of actors.values()) {
+      if (o === a || o.hidden) continue
+      ocupados.push([o.x, o.y])
+      if (o.route.length) ocupados.push(o.route[o.route.length - 1])
+    }
+    const longe = (p: Vec2, q: Vec2, px: number) => {
+      const [sx, sy] = toScreen(p[0] - q[0], p[1] - q[1])
+      return Math.hypot(sx, sy) >= px
+    }
+    const opcoes = (centrais.length ? centrais : tiles)
+      .map((t) => localCenterPx(dominio.slot, t))
+      .filter((p) => longe(p, [a.x, a.y], TILE) && ocupados.every((o) => longe(p, o, PASSEIO_FOLGA_PX)))
+    return opcoes.length ? opcoes[Math.floor(Math.random() * opcoes.length)] : null
+  }
+
+  function dispararPasseio(a: Actor) {
+    if (actors.get(a.id) !== a) return
+    if (movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio) return
+    const casa = porPessoa.value.get(a.id)
+    if (!casa) return
+    const { dominio } = casa
+    const chaveCasa = slotKey(dominio.slot)
+    if (roomPhase.has(chaveCasa) || !unlocked.value.has(chaveCasa)) {
+      agendarPasseio(a)
+      return
+    }
+
+    let fora = 0
+    for (const o of actors.values()) if (o.passeio) fora++
+    if (fora >= Math.max(1, Math.floor(actors.size * PASSEIO_FRACAO_MAX))) {
+      agendarPasseio(a, PASSEIO_REPIQUE_MS)
+      return
+    }
+
+    // Parado fora de casa sem comando (mudou de domínio, comando interrompido):
+    // o passeio da vez é só a volta.
+    if (slotKey(a.slot) !== chaveCasa) {
+      rumoACasa(a)
+      return
+    }
+
+    let route: Vec2[] | null = null
+    let destinoSlot: Vec2 = dominio.slot
+    if (Math.random() < PASSEIO_VIZINHO) {
+      const vizinhas = dominios.value.filter((d) => {
+        const dx = Math.abs(d.slot[0] - dominio.slot[0])
+        const dy = Math.abs(d.slot[1] - dominio.slot[1])
+        return dx + dy === 1 && !roomPhase.has(slotKey(d.slot))
+      })
+      const vizinha = vizinhas.length ? vizinhas[Math.floor(Math.random() * vizinhas.length)] : null
+      const caminho = vizinha && bfsSlots(a.slot, vizinha.slot, unlocked.value)
+      const alvo = vizinha && destinoLivre(vizinha, a, true)
+      if (vizinha && caminho && alvo) {
+        // buildRoute força a travessia perpendicular pela porta (§4.3).
+        route = buildRoute(caminho, alvo)
+        destinoSlot = vizinha.slot
+      }
+    }
+    if (!route) {
+      // Sala convexa: dentro dela o caminho é a reta até o tile.
+      const alvo = destinoLivre(dominio, a, false)
+      if (alvo) route = [alvo]
+    }
+    if (!route) {
+      agendarPasseio(a)
+      return
+    }
+
+    a.route = route
+    a.slot = destinoSlot
+    a.passeio = 'indo'
+    a.walking = true
+    a.dist = 0
+    paint(a)
+    kick()
+  }
+
+  /** Rota de volta ao posto, pela porta se estiver noutra sala. */
+  function rumoACasa(a: Actor) {
+    const casa = porPessoa.value.get(a.id)
+    if (!casa) {
+      a.passeio = null
+      return
+    }
+    const alvo = stationPx(casa.dominio, casa.idx)
+    const caminho = bfsSlots(a.slot, casa.dominio.slot, unlocked.value)
+    if (!caminho) {
+      // Sem ligação (a sala visitada sumiu entre um passo e outro): senta direto.
+      a.x = alvo[0]
+      a.y = alvo[1]
+      a.slot = casa.dominio.slot
+      a.route = []
+      a.walking = false
+      a.passeio = null
+      paint(a)
+      agendarPasseio(a)
+      return
+    }
+    a.route = buildRoute(caminho, alvo)
+    a.slot = casa.dominio.slot
+    a.passeio = 'voltando'
+    a.walking = true
+    a.dist = 0
+    paint(a)
+    kick()
+  }
+
+  /** Chamado pelo tick no frame em que a rota termina. */
+  function chegou(a: Actor) {
+    if (a.comando) {
+      if (!a.comandoAcabaAoChegar) return // visita: fica até o próximo comando
+      a.comando = false
+      agendarPasseio(a)
+      return
+    }
+    if (a.passeio === 'indo') {
+      a.passeio = 'pausa'
+      const t = agendar(() => {
+        if (a.timerPasseio !== t) return
+        a.timerPasseio = null
+        if (actors.get(a.id) !== a || a.comando || a.passeio !== 'pausa') return
+        rumoACasa(a)
+      }, sortear(PASSEIO_PAUSA_MS))
+      a.timerPasseio = t
+    } else if (a.passeio === 'voltando') {
+      a.passeio = null
+      agendarPasseio(a)
+    }
+  }
+
+  function onPreferenciaDeMovimento(e: MediaQueryListEvent) {
+    movimentoReduzido = e.matches
+    for (const a of actors.values()) {
+      if (!movimentoReduzido) agendarPasseio(a)
+      // Só a espera é cancelada: quem já está fora termina a volta ao posto.
+      else if (a.timerPasseio && a.passeio !== 'pausa') {
+        desagendar(a.timerPasseio)
+        a.timerPasseio = null
+      }
+    }
   }
 
   /**
@@ -556,6 +808,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     // Painter's algorithm: quem tem diagonal maior está mais à frente.
     entry.root.style.zIndex = String(depth(a.x, a.y))
     entry.root.classList.toggle('actor--walk', a.walking)
+    // Contrato com o GameMap: o nome aparece em quem a câmera acompanha andando
+    // por COMANDO. Sem `comando`, o PO raiz acenderia o nome a cada passeio.
+    entry.root.classList.toggle('actor--focus', focused.value === a.id && a.walking && a.comando)
     // Ator de sala em obra não some do DOM (o :ref precisa dele): fica só
     // invisível até a sala terminar de nascer.
     entry.root.style.visibility = a.hidden ? 'hidden' : ''
@@ -575,7 +830,11 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     const dest = dominios.value.find((d) => slotKey(d.slot) === slotKey(slot))
     if (!dest) return false
 
-    const slotPath = bfsSlots(a.slot, slot, unlocked.value)
+    // No meio de uma rota `a.slot` já é o destino antigo: replaneja a partir da
+    // sala onde o corpo está, senão o primeiro trecho atravessaria parede.
+    const aqui = a.walking ? slotDoPontoPx([a.x, a.y]) : a.slot
+    const origem = unlocked.value.has(slotKey(aqui)) ? aqui : a.slot
+    const slotPath = bfsSlots(origem, slot, unlocked.value)
     if (!slotPath) return false
 
     // Sem `local`, o ator volta para a PRÓPRIA cadeira: a posição dele na
@@ -584,11 +843,19 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     const target = local
       ? localCenterPx(slot, local)
       : stationPx(dest, idxNoDestino < 0 ? dest.pessoas.length : idxNoDestino)
+    // Comando vence o passeio. Só "voltar à própria cadeira" devolve o ator ao
+    // perambular ao chegar; visita o segura no destino até o próximo comando.
+    cancelarPasseio(a)
+    a.comando = true
+    a.comandoAcabaAoChegar = !local && idxNoDestino >= 0
     a.route = buildRoute(slotPath, target)
     a.slot = slot
     a.walking = true
     a.dist = 0
     focused.value = id
+    // Âncora já no início: uma rota de um passo (já está na cadeira) termina no
+    // mesmo frame em que a câmera leria o ator, e ela ficaria sem alvo.
+    ultimoAlvo = [a.x, a.y]
     kick()
     return true
   }
@@ -615,18 +882,24 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     return want < min ? min : want > hi ? hi : want
   }
 
+  /**
+   * Último ponto de mundo seguido por COMANDO. A câmera fica nele quando
+   * ninguém comandado anda: seguir quem passeia a faria tremer o tempo todo.
+   */
+  let ultimoAlvo: Vec2 | null = null
+
   function camTarget(): Vec2 {
     const b = bounds.value
     // Enquanto uma sala nasce não há ator para seguir: a câmera persegue um
     // ponto de mundo (o miolo do slot novo). Assim que alguém entra, volta a
     // seguir o ator.
-    const alvo = lookPoint.value
-    const a = alvo ? null : (focused.value ? actors.get(focused.value) : null) ?? actors.values().next().value
-    const [sx, sy] = alvo
-      ? toScreen(alvo[0], alvo[1])
-      : a
-        ? toScreen(a.x, a.y)
-        : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
+    let ponto = lookPoint.value
+    if (!ponto) {
+      const a = focused.value ? actors.get(focused.value) : undefined
+      if (a && a.comando && !a.hidden && (a.walking || a.route.length)) ultimoAlvo = [a.x, a.y]
+      ponto = ultimoAlvo
+    }
+    const [sx, sy] = ponto ? toScreen(ponto[0], ponto[1]) : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
     return [
       clampAxis(sx - view.w / 2, b.minX, b.maxX, view.w),
       clampAxis(sy - view.h / 2, b.minY, b.maxY, view.h),
@@ -701,6 +974,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
       if (a.route.length || a.walking) {
         advance(a, dt)
         busy = true
+        if (!a.walking) chegou(a)
       }
       paint(a)
     }
@@ -771,6 +1045,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
       ro.observe(viewportRef.value)
     }
     window.addEventListener('keydown', onKey)
+    mqMovimento?.addEventListener('change', onPreferenciaDeMovimento)
     void loadSheets()
   })
 
@@ -779,8 +1054,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     raf = 0
     for (const t of timers) clearTimeout(t)
     timers.clear()
+    for (const a of actors.values()) a.timerPasseio = null
     ro?.disconnect()
     window.removeEventListener('keydown', onKey)
+    mqMovimento?.removeEventListener('change', onPreferenciaDeMovimento)
   })
 
   watch(sheets, () => {
@@ -818,6 +1095,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     moveTo,
     focus: (id: string) => {
       focused.value = id
+      // Focar é pedido explícito de olhar: a câmera vai até ele mesmo parado.
+      const a = actors.get(id)
+      if (a) ultimoAlvo = [a.x, a.y]
       kick()
     },
     focused,

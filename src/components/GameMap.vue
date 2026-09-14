@@ -35,6 +35,7 @@ import {
   WALL_MATRIX_Y,
   type RoomId,
 } from '../office/rooms'
+import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
 import type { Pessoa, SquadView } from '../types'
 
 const props = defineProps<{ agent?: string; squad?: SquadView | null }>()
@@ -228,11 +229,14 @@ function actorStyle(p: OfficePessoa) {
               height: room.base.height + 'px',
             }"
           ></div>
+          <!-- `data-tapete` só varia a cor do tapete entre salas vizinhas; sai do
+               slot, então a mesma sala tem sempre o mesmo tapete. -->
           <div
             v-for="room in rooms"
             :key="room.key + '-floor'"
             class="floor"
             :class="faseClasse(room)"
+            :data-tapete="(room.slot[0] + 2 * room.slot[1]) % 3"
             :style="{
               left: room.floor.left + 'px',
               top: room.floor.top + 'px',
@@ -269,9 +273,22 @@ function actorStyle(p: OfficePessoa) {
               v-for="(p, i) in room.props"
               :key="room.key + '-p' + i"
               class="prop"
-              :style="{ left: p.left + 'px', top: p.top + 'px', width: p.width + 'px', height: p.height + 'px', zIndex: p.z }"
+              :style="{
+                left: p.left + 'px',
+                top: p.top + 'px',
+                width: p.width + 'px',
+                height: p.height + 'px',
+                zIndex: p.z + (VIES_Z[p.kind] ?? 0),
+              }"
             >
-              <span class="prop__emoji">{{ p.emoji }}</span>
+              <img
+                class="prop__sprite"
+                :src="PROP_SPRITE[p.kind]"
+                :width="p.width"
+                :height="p.height + PE_DO_PROP"
+                alt=""
+                draggable="false"
+              />
             </div>
 
             <!-- A placa é do DOMÍNIO: a sala inteira pertence a ele. -->
@@ -282,15 +299,22 @@ function actorStyle(p: OfficePessoa) {
             >
           </div>
 
-          <!-- Atores: billboards, movidos por translate3d direto no style. -->
+          <!-- Atores: billboards, movidos por translate3d direto no style.
+               Nada de :class aqui: useOffice escreve `actor--walk`/`actor--focus`
+               por classList e o patch de class do Vue apagaria as duas. O estado
+               que vem do componente entra por data-attribute. -->
           <div
             v-for="p in pessoas"
             :key="p.id"
             :ref="(el) => setActorEl(p.id, el)"
             class="actor"
+            :data-ativo="p.id === props.agent ? 'true' : undefined"
             :style="actorStyle(p)"
           >
             <div class="actor__shadow"></div>
+            <!-- Área de hover do corpo: o ator inteiro tem a caixa do frame, com
+                 muito vazio transparente em volta, e segue sem eventos. -->
+            <div class="actor__hit"></div>
             <div data-billboard class="actor__billboard">
               <template v-if="sheetOf(p)">
                 <div class="actor__strip actor__strip--idle" :style="stripStyle(p, 'idle')"></div>
@@ -328,51 +352,121 @@ function actorStyle(p: OfficePessoa) {
   background-color: #2a3448;
 }
 
+/*
+ * Chão em coordenadas de MUNDO: tudo aqui é retângulo e a matriz da `.ground`
+ * transforma em losango. Por isso o xadrez é um conic-gradient de 64px (2
+ * tiles) e a sombra de canto é um degrau reto — projetados, viram ladrilho
+ * isométrico e rodapé sem nenhuma conta de ângulo.
+ */
 .floor {
   position: absolute;
-  background-color: #e9dcc3;
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.16) 2px, transparent 2px),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 2px, transparent 2px);
-  background-size: 32px 32px;
+  background-color: #eadfc8;
+  background-image:
+    /* sombra dura junto das paredes de trás (norte e oeste) */
+    linear-gradient(to bottom, rgba(20, 22, 31, 0.22) 5px, transparent 5px),
+    linear-gradient(to right, rgba(20, 22, 31, 0.16) 5px, transparent 5px),
+    /* rejunte */
+    linear-gradient(to right, rgba(0, 0, 0, 0.1) 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 2px, transparent 2px),
+    /* xadrez de 2 tons */
+    conic-gradient(#dccdaf 25%, transparent 0 50%, #dccdaf 0 75%, transparent 0);
+  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px, 64px 64px;
   box-shadow: inset 0 0 0 2px #000;
 }
 
+/* Tapete no miolo (x 2..5, y 2..3): é chão, não prop — fica sempre sob os
+   atores e não entra no pintor. Some e aparece junto com o chão na obra. */
+.floor::after {
+  content: '';
+  position: absolute;
+  inset: 32px;
+  background-color: var(--tapete, #e58a6e);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 12px,
+    rgba(255, 255, 255, 0.18) 12px 16px
+  );
+  box-shadow:
+    0 0 0 2px #14161f,
+    inset 0 0 0 3px var(--tapete, #e58a6e),
+    inset 0 0 0 5px rgba(255, 255, 255, 0.55);
+}
+.floor[data-tapete='1']::after {
+  --tapete: #5fb3ab;
+}
+.floor[data-tapete='2']::after {
+  --tapete: #e0b44c;
+}
+
+/*
+ * Parede: faixas horizontais na face (a matriz só cisalha em Y, então as
+ * faixas continuam paralelas ao chão). De cima para baixo: aresta preta, fio
+ * de luz, painel, frisa, lambri mais escuro e rodapé. As duas faces usam as
+ * mesmas faixas com tons diferentes, a leste pegando mais luz que a oeste.
+ */
 .wall {
+  --parede-luz: #5a6a8e;
+  --parede: #3d4a63;
+  --parede-frisa: #2a3448;
+  --parede-lambri: #354157;
+  --parede-rodape: #1a202d;
   position: absolute;
   transform-origin: 0 0;
-  background-color: #3d4a63;
+  background-color: var(--parede);
+  background-image: linear-gradient(
+    to bottom,
+    var(--parede-luz) 0 3px,
+    transparent 3px calc(100% - 17px),
+    var(--parede-frisa) calc(100% - 17px) calc(100% - 15px),
+    var(--parede-lambri) calc(100% - 15px) calc(100% - 5px),
+    var(--parede-rodape) calc(100% - 5px)
+  );
   border-top: 3px solid #000;
+  /* junta entre placas: um tile por div, então a junta sai de graça */
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.28);
 }
-/* A face oeste pega menos luz: mesmo tom, um degrau mais escuro. */
 .wall--y {
-  background-color: #2a3448;
+  --parede-luz: #3f4c68;
+  --parede: #2a3448;
+  --parede-frisa: #1c2433;
+  --parede-lambri: #242d3f;
+  --parede-rodape: #12161f;
 }
 
 .prop {
   position: absolute;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
   pointer-events: none;
 }
-.prop__emoji {
-  font-size: 26px;
-  line-height: 1;
-  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
+/* O desenho desce meio losango abaixo da caixa (PE_DO_PROP): overflow visível. */
+.prop__sprite {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  max-width: none;
+  image-rendering: pixelated;
+  user-select: none;
 }
 
+/* Plaquinha de porta: creme, borda de 2px e sombra dura, como os cards da UI.
+   Sobe 6px além da âncora: a cadeira (1,2) fica logo abaixo do canto da sala,
+   e sem a folga o rótulo de quem senta nela some atrás da placa (que está
+   acima de todo ator). Mais que isso a placa sai do topo do mapa em 2x. */
 .room__label {
   position: absolute;
   z-index: 100000;
-  transform: translateX(-50%);
+  transform: translate(-50%, -6px);
   font-size: 9px;
   line-height: 1;
   font-weight: 900;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   text-transform: uppercase;
-  color: #fff;
-  background: #000;
-  padding: 3px 5px;
+  color: #000;
+  background: #f4f0e6;
+  border: 2px solid #000;
+  box-shadow: 2px 2px 0 #000;
+  padding: 2px 5px 3px;
   pointer-events: none;
 }
 
@@ -384,15 +478,41 @@ function actorStyle(p: OfficePessoa) {
   pointer-events: none;
 }
 
+/*
+ * Em hover o ator sobe acima de tudo (placas incluídas) para o rótulo não ficar
+ * embaixo de quem está na frente. Só em hover: foco e ativo ficam na
+ * profundidade do pintor, senão atravessariam mesas e paredes enquanto andam.
+ * `!important` porque o z-index de profundidade é escrito no style pelo loop.
+ */
+.actor:hover {
+  z-index: 100001 !important;
+}
+
+.actor__hit {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 28px;
+  height: 52px;
+  margin-left: -14px;
+  pointer-events: auto;
+}
+
+/* Elipse em degraus de 2px: um radial-gradient sairia com borda borrada. */
 .actor__shadow {
   position: absolute;
   left: 50%;
-  bottom: 2px;
-  width: 34px;
-  height: 16px;
-  margin-left: -17px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.28);
+  bottom: 0;
+  width: 32px;
+  height: 12px;
+  margin-left: -16px;
+  --sombra: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3));
+  background:
+    var(--sombra) 8px 0 / 16px 2px no-repeat,
+    var(--sombra) 2px 2px / 28px 2px no-repeat,
+    var(--sombra) 0 4px / 32px 4px no-repeat,
+    var(--sombra) 2px 8px / 28px 2px no-repeat,
+    var(--sombra) 8px 10px / 16px 2px no-repeat;
 }
 
 .actor__billboard {
@@ -432,10 +552,17 @@ function actorStyle(p: OfficePessoa) {
   animation: emoji-walk 0.35s steps(2) infinite;
 }
 
+/*
+ * Rótulo escondido por padrão: com cinco pessoas numa sala os rótulos fixos
+ * se empilhavam e nenhum era legível. Aparece em três casos — hover, foco da
+ * câmera (`actor--focus`, ligado por useOffice) e o agente ativo da demanda
+ * (`data-ativo`, do GameMap). visibility em vez de v-if: o nó continua lá e a
+ * troca não re-renderiza nada.
+ */
 .actor__name {
   position: absolute;
   left: 50%;
-  top: -12px;
+  top: -14px;
   transform: translateX(-50%);
   font-size: 8px;
   line-height: 1;
@@ -444,6 +571,30 @@ function actorStyle(p: OfficePessoa) {
   color: #000;
   background: #fff;
   border: 2px solid #000;
-  padding: 1px 3px;
+  box-shadow: 2px 2px 0 #000;
+  padding: 1px 3px 2px;
+  pointer-events: none;
+  visibility: hidden;
+}
+.actor:hover .actor__name,
+.actor--focus .actor__name,
+.actor[data-ativo] .actor__name {
+  visibility: visible;
+}
+/* Quem atende a demanda ganha a plaquinha amarela com a setinha de pixel. */
+.actor[data-ativo] .actor__name {
+  background: #ffd23f;
+}
+.actor[data-ativo] .actor__name::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 6px;
+  height: 4px;
+  margin: 2px 0 0 -3px;
+  background:
+    linear-gradient(#000, #000) 0 0 / 6px 2px no-repeat,
+    linear-gradient(#000, #000) 2px 2px / 2px 2px no-repeat;
 }
 </style>

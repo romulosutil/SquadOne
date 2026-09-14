@@ -9,11 +9,12 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
-npm test         # tsx --test server/*.test.ts src/*.test.ts (node:test, sem framework extra)
+npm test         # tsx --test server/*.test.ts src/*.test.ts src/office/*.test.ts (node:test, sem framework extra)
 ```
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
-(hoje `server/baixa-prioridade.test.ts` e `src/ajuste-do-usuario.test.ts`). Os de
+(hoje `server/baixa-prioridade.test.ts`, `src/ajuste-do-usuario.test.ts` e
+`src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. A verificação continua sendo typecheck + build + exercitar a rota.
@@ -63,6 +64,9 @@ src/App.vue               orquestra a tela; dono do estado de roster, squad ativ
                           AjusteCard
   src/office/             geometria isométrica, salas, sprites
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
+  src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
+  src/office/pixelProps.ts  SVG pixel art dos móveis (mesa, cadeira, planta, estante...)
+  src/office/useOffice.ts loop rAF, câmera, atores; passeio ambiente vs. movimento por comando
 seed/squad.seed.json      roster inicial — FORA de data/, ver "Volume" abaixo
 data/                     volume em produção; nada aqui é versionado
 ```
@@ -168,6 +172,15 @@ Contratar: botão por sala e **+ Abrir sala** (painel `SalasPainel` fora do canv
 | `POST /api/squad/hire` | card do modelo corta texto (escopo 1500); `escopo_po` separa o treino do PO do escopo do domínio |
 
 Ids de pessoa e domínio são globais, então as rotas não levam `squadId`. Id inexistente é 409, não 404: é aba com roster velho. Mochila: domínio arquivado some (um `events.list` só por domínio ativo); quest de integrante arquivado continua, com "(arquivado)". Squad arquivada em `/api/orquestrar`, `/api/mochila`, hire ou redigir é `SquadArquivada`, mesmo 409 + `squadInexistente` de squad sumida.
+
+### Escritório: gente demais e gente andando
+
+Só frontend; nada disto grava.
+
+- **Legível sem clicar é a SALA, não a pessoa.** Placa "NOME · N". O rótulo "nome · papel" do ator fica oculto e só aparece em hover, com `.actor--focus` (andando por comando, câmera junto) ou `[data-ativo]` (responsável da demanda). No `.actor` nada de `:class`: `useOffice` escreve `actor--walk`/`actor--focus` por `classList` e o patch de classe do Vue apagaria.
+- **Postos (`postos.ts`):** cadeiras do template primeiro, excedente espalhado maximizando distância de tela, nunca em porta nem no tile logo dentro dela. O posto depende só da sala e do índice: contratar não reassenta quem já estava. O teste fixa ≥ 40 px até 8 pessoas em todo template — encher um template de móveis quebra o teste de propósito.
+- **Passeio vs. comando:** ator parado passeia (6–16 s, 80% na própria sala, 20% na vizinha pela porta, no máximo 1/3 fora ao mesmo tempo). `moveTo`/entrada de contratado cancelam o passeio; visita do PO raiz segura o ator lá até o próximo comando. A câmera só segue quem anda por comando. `prefers-reduced-motion` desliga o passeio.
+- `SalasPainel`: PO sempre visível, integrantes atrás de "+N", lista com rolagem própria (40vh).
 
 ## Persistência
 

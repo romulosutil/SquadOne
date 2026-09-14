@@ -77,47 +77,58 @@ export const UNLOCK_ORDER: Vec2[] = [
 // ---------------------------------------------------------------------------
 
 // Legenda: '#' parede  '.' chão  'D' mesa  'c' cadeira  'P' planta
-//          '\u2593' porta  '=' vidro
+//          '\u2593' porta  '=' vidro (janela, só na linha 0)
+//          'S' estante  'W' bebedouro  'L' sofá
 //
 // 8 colunas x 6 linhas. Interior útil = x 1..6, y 1..4 (retângulo convexo,
 // pré-requisito da interpolação reta de §4.3 — não colocar prop no miolo).
+//
+// A mobília ocupa só os cantos do interior (e a coluna 6 no ROOM_DEV). Mais
+// prop na moldura parece inofensivo, mas tira candidatos de postos.ts: com um
+// tile a menos no meio da linha 1 ou 4 a 8ª pessoa já cai a menos de 40px de
+// tela de outra. Para variar as salas, troque o TIPO de prop num canto, não
+// acrescente tile ocupado. (6,2) e (3,4), logo dentro das portas, ficam livres.
+// A janela '=' fica na parede (y 0, fora do interior) e evita x 3: com vizinho
+// ao norte aquele tile de parede é vão de porta e a janela ficaria flutuando.
 
 export type RoomId = 'ROOM_SOLO' | 'ROOM_DEV' | 'ROOM_STUDIO' | 'ROOM_LOUNGE' | 'ROOM_EMPTY'
 
 export const ROOM_TEMPLATES: Record<RoomId, string[]> = {
   ROOM_SOLO: [
     '########',
-    '#D....P#',
+    '#D....S#',
     '#c.....\u2593',
     '#......#',
     '#P....D#',
     '###\u2593####',
   ],
-  // Duas estações em pontas opostas, não lado a lado: em isométrico dois tiles
-  // vizinhos ficam a 32px de tela e os sprites (64px de largura) se eclipsam —
+  // Duas estações longe uma da outra, não lado a lado: em isométrico dois tiles
+  // vizinhos ficam a 32px de tela e os sprites (~48px de largura) se eclipsam —
   // quem chegou por último cobriria o PO em vez de dividir a sala com ele.
+  // A segunda cadeira fica ATRÁS da mesa (6,3)/(6,4), não em (6,2): aquele é o
+  // tile de entrada da porta leste, e quem senta ali fica no caminho de todos.
   ROOM_DEV: [
     '########',
-    '#D....D#',
-    '#c....c\u2593',
-    '#......#',
-    '#P....P#',
+    '#D....P#',
+    '#c.....\u2593',
+    '#.....c#',
+    '#W....D#',
     '###\u2593####',
   ],
   ROOM_STUDIO: [
-    '###==###',
+    '#####==#',
     '#D....P#',
     '#c.....\u2593',
     '#......#',
-    '#PP...D#',
+    '#PL...D#',
     '###\u2593####',
   ],
   ROOM_LOUNGE: [
     '########',
-    '#P....P#',
+    '#S....P#',
     '#c.....\u2593',
     '#......#',
-    '#D....P#',
+    '#L....W#',
     '###\u2593####',
   ],
   ROOM_EMPTY: [
@@ -130,7 +141,7 @@ export const ROOM_TEMPLATES: Record<RoomId, string[]> = {
   ],
 }
 
-export type PropKind = 'desk' | 'chair' | 'plant' | 'glass'
+export type PropKind = 'desk' | 'chair' | 'plant' | 'glass' | 'shelf' | 'cooler' | 'sofa'
 
 export interface RoomProp {
   kind: PropKind
@@ -144,27 +155,21 @@ export interface ParsedRoom {
    * Tiles locais onde os atores param, um por cadeira do template.
    * São VÁRIOS porque uma sala é um DOMÍNIO inteiro (§3.1): o PO e os
    * integrantes dele dividem o mesmo slot. Se houver mais gente que cadeira,
-   * o excedente cai em `EXTRA_STATIONS`.
+   * o excedente é espalhado por `postosDaSala` (postos.ts).
    */
   stations: Vec2[]
   hasEastDoor: boolean
   hasSouthDoor: boolean
 }
 
-/**
- * Posições de sobra quando o domínio tem mais gente que cadeiras no template.
- * Ficam no miolo do retângulo convexo (x 1..6, y 1..4), longe das paredes e
- * dos props — a interpolação reta de §4.3 exige interior limpo.
- */
-export const EXTRA_STATIONS: Vec2[] = [
-  [3, 3], [4, 3], [2, 3], [5, 3], [3, 2], [4, 2], [2, 2], [5, 2],
-]
-
 const PROP_BY_CHAR: Record<string, PropKind> = {
   D: 'desk',
   c: 'chair',
   P: 'plant',
   '=': 'glass',
+  S: 'shelf',
+  W: 'cooler',
+  L: 'sofa',
 }
 
 const parseCache = new Map<string, ParsedRoom>()
@@ -264,19 +269,35 @@ export function slotKey(slot: Vec2): string {
 }
 
 // ---------------------------------------------------------------------------
-// Fallbacks de emoji (§ usado quando o PNG do sprite dá 404)
+// Props: emoji legado e caixa de desenho
 // ---------------------------------------------------------------------------
 
+/**
+ * O mapa pinta os props em pixel art (src/office/pixelProps.ts). O emoji segue
+ * exportado porque useOffice ainda o copia para RoomPropView; nada mais o desenha.
+ */
 export const PROP_EMOJI: Record<PropKind, string> = {
   desk: '\u{1F5A5}\uFE0F',
   chair: '\u{1FA91}',
   plant: '\u{1FAB4}',
   glass: '\u{1FA9F}',
+  shelf: '\u{1F4DA}',
+  cooler: '\u{1F6B0}',
+  sofa: '\u{1F6CB}\uFE0F',
 }
 
+/**
+ * [largura, altura acima da âncora] em px de tela; a âncora é o centro do tile
+ * no chão. O desenho de pixelProps desce mais meio losango abaixo dela.
+ * A janela tem 64 de largura e usa só a metade esquerda: com a âncora no centro
+ * do tile, a borda esquerda (sx - 32) cai exatamente no início da face da parede.
+ */
 export const PROP_SIZE: Record<PropKind, Vec2> = {
   desk: [64, 48],
   chair: [32, 32],
   plant: [32, 48],
-  glass: [32, 32],
+  glass: [64, 48],
+  shelf: [64, 64],
+  cooler: [32, 48],
+  sofa: [64, 48],
 }
