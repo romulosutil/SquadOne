@@ -40,8 +40,15 @@ interface Credencial {
 
 /** Falta configuração no ambiente — não adianta o usuário reconectar. */
 export class ErroDeConfig extends Error {}
-/** Não há credencial guardada, ou o Google recusou a que havia. */
+/** Não há credencial guardada, ou o Google recusou a que havia (revogada/expirada). */
 export class PrecisaConectar extends Error {}
+/**
+ * Google inacessível ao renovar (rede, timeout, 5xx) ou recusou por um motivo
+ * que não é a credencial (client OAuth mal configurado). Diferente de
+ * `PrecisaConectar`: não apaga nada, e a vigia (que renova ~1x/h, 24/7) só
+ * loga e tenta de novo na próxima varredura em vez de exigir reconexão.
+ */
+export class GoogleIndisponivel extends Error {}
 
 function exigir(nome: string): string {
   const valor = process.env[nome];
@@ -145,6 +152,21 @@ export function urlDeConsentimento(): string {
   return `${AUTH}?${q}`;
 }
 
+/**
+ * Erro do POST ao Google com status HTTP + `error` do corpo, para
+ * `tokenValido` decidir (via `refreshRecusado`) se é credencial morta ou
+ * falha transitória. `status` null = nem houve resposta (fetch que lançou).
+ */
+class ErroDoGoogle extends Error {
+  readonly status: number | null;
+  readonly codigo: string | undefined;
+  constructor(mensagem: string, status: number | null, codigo: string | undefined) {
+    super(mensagem);
+    this.status = status;
+    this.codigo = codigo;
+  }
+}
+
 async function pedirAoGoogle(corpo: Record<string, string>): Promise<any> {
   const resp = await fetch(TOKEN, {
     method: "POST",
@@ -153,11 +175,24 @@ async function pedirAoGoogle(corpo: Record<string, string>): Promise<any> {
   });
   const dados = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    throw new Error(
+    throw new ErroDoGoogle(
       dados.error_description || dados.error || `Google respondeu ${resp.status}.`,
+      resp.status,
+      dados.error,
     );
   }
   return dados;
+}
+
+/**
+ * Só refresh_token revogado ou expirado é credencial morta: o Google devolve
+ * `invalid_grant` em 400 ou 401 nesse caso. `invalid_client`/`unauthorized_client`
+ * são o client OAuth mal configurado (ambiente, não a credencial do usuário) e
+ * qualquer outro status (rede sem resposta, 5xx) é falha transitória — nenhum
+ * dos dois apaga o arquivo. Pura, para testar sem rede nem disco.
+ */
+export function refreshRecusado(status: number | null, codigo: string | undefined): boolean {
+  return (status === 400 || status === 401) && codigo === "invalid_grant";
 }
 
 /** Troca o `code` do callback pela credencial e grava. */
@@ -194,8 +229,11 @@ let cache: { token: string; expiraEm: number } | null = null;
 
 /**
  * Devolve um access_token válido, renovando se preciso. Lança
- * `PrecisaConectar` quando não há credencial ou o Google recusou a que havia —
- * o único caso em que a interface deve pedir o gesto do usuário.
+ * `PrecisaConectar` quando não há credencial ou o Google recusou a que havia
+ * de fato (`invalid_grant`) — o único caso em que a interface deve pedir o
+ * gesto do usuário. Rede fora do ar ou 5xx do Google vira `GoogleIndisponivel`
+ * sem tocar no arquivo: a vigia roda ~1x/h, 24/7, e uma oscilação às 3h não
+ * pode forçar reconectar (F1 da revisão final).
  */
 export async function tokenValido(): Promise<string> {
   if (cache && Date.now() < cache.expiraEm - MARGEM_MS) return cache.token;
@@ -203,20 +241,31 @@ export async function tokenValido(): Promise<string> {
   const cred = await ler();
   if (!cred) throw new PrecisaConectar("Nenhuma credencial do Google guardada.");
 
+  // Config ausente é ambiente, não credencial: fora do try, para sair como
+  // `ErroDeConfig` em vez de virar `GoogleIndisponivel` ou apagar o arquivo.
+  const id = clientId();
+  const secret = exigir("GOOGLE_CLIENT_SECRET");
+
   let dados;
   try {
     dados = await pedirAoGoogle({
-      client_id: clientId(),
-      client_secret: exigir("GOOGLE_CLIENT_SECRET"),
+      client_id: id,
+      client_secret: secret,
       refresh_token: cred.refresh_token,
       grant_type: "refresh_token",
     });
   } catch (err: any) {
-    // Refresh recusado = credencial morta (revogada, ou os 7 dias do modo
-    // Testando). Apagar evita ficar batendo num token que nunca mais vai valer.
-    await apagar();
-    cache = null;
-    throw new PrecisaConectar(`Google recusou a credencial: ${err.message}`);
+    if (err instanceof ErroDoGoogle && refreshRecusado(err.status, err.codigo)) {
+      // invalid_grant: credencial morta de verdade. Apagar evita ficar
+      // batendo num token que nunca mais vai valer.
+      await apagar();
+      cache = null;
+      throw new PrecisaConectar(`Google recusou a credencial: ${err.message}`);
+    }
+    // Rede (fetch lançou, sem resposta), 5xx, ou client OAuth mal configurado
+    // (invalid_client/unauthorized_client): transitório ou de ambiente, mas
+    // não prova que o refresh_token morreu. Não apaga nada.
+    throw new GoogleIndisponivel(`Google indisponível ao renovar: ${err.message}`);
   }
   cache = {
     token: dados.access_token,
