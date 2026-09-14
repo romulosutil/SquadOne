@@ -13,8 +13,9 @@ npm test         # tsx --test server/*.test.ts src/*.test.ts src/office/*.test.t
 ```
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
-(hoje `server/baixa-prioridade.test.ts`, `src/ajuste-do-usuario.test.ts` e
-`src/office/postos.test.ts`). Os de
+(hoje `server/baixa-prioridade.test.ts`, `server/push.test.ts`,
+`server/lembretes.test.ts`, `server/vigia.test.ts`, `server/auth-store.test.ts`,
+`src/ajuste-do-usuario.test.ts` e `src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. A verificação continua sendo typecheck + build + exercitar a rota.
@@ -166,7 +167,7 @@ Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de ca
 - **Quem avisa:** só evento com `squadone_dominio` de domínio ativo. Bloco com horário (foco ou bloco de prazo) conta do **início**; marco com horário conta do **fim** (o prazo real — o marco vai de prazo − 15 min até o prazo); marco de dia inteiro conta do início da `JANELA_TRABALHO` do dia; bloco de dia inteiro não avisa. Evento que o SquadOne não criou não avisa.
 - **Janela do disparo:** `[referência − 10 min, referência)`. Aviso atrasado ainda sai; depois do horário, não.
 - **Deduplicação só em memória** (`eventId@referência`), sem arquivo em `data/`. Evento movido ganha chave nova e é avisado de novo. Custo aceito: redeploy dentro dos 10 min reenvia uma vez; servidor fora do ar durante a janela inteira perde o aviso.
-- **Falha não se propaga:** `agendamento.ts` e `ajuste.ts` não sabem que o push existe. POST ao ntfy com timeout de 5 s; push que falha fica fora da deduplicação e é tentado na varredura seguinte. Um calendário que falha não cala os outros. Varreduras não se sobrepõem.
+- **Falha não se propaga:** `agendamento.ts` e `ajuste.ts` não sabem que o push existe. POST ao ntfy com timeout de 5 s; push que falha fica fora da deduplicação e é tentado na varredura seguinte. Um calendário que falha não cala os outros. As varreduras do laço (`iniciar()`) não se sobrepõem (`emAndamento`); isso não cobre `POST /api/push/varrer {enviar:true}`, que pode rodar junto com um tick do laço — ela lê a deduplicação em memória mas não grava nela, então na pior hora as duas mandam o mesmo aviso real em paralelo.
 - **Sem credencial do Google:** um push "SquadOne sem acesso ao Google" por perda (não por minuto); volta a avisar normalmente quando reconecta.
 - **Testar sem esperar o horário:** `POST /api/push/teste` manda um push fixo agora. `POST /api/push/varrer {"agora":"2026-09-15T13:50:00-03:00","enviar":false}` roda uma varredura real contra o Google com relógio simulado e devolve as mensagens que sairiam; `enviar: true` manda de fato. Nenhuma das duas grava na deduplicação da vigia.
 - **Dev:** com `LEMBRETES_NTFY_URL` no `.env` o `npm run dev` também varre. Use outro tópico, senão o celular recebe em dobro.
@@ -234,7 +235,7 @@ Sem banco de propósito: dois blobs de poucos KB não justificam Postgres, e o e
 /api/auth/logout    -> apaga o arquivo e revoga no Google
 ```
 
-`tokenValido()` devolve um access_token, renovando pelo refresh quando preciso. Lança `PrecisaConectar` (vira 401 + `precisaConectar: true`) quando não há credencial ou o Google recusou — o único caso em que a UI deve pedir gesto do usuário. `ErroDeConfig` vira 500 + `configuracao: true`: é ambiente, nenhum clique conserta.
+`tokenValido()` devolve um access_token, renovando pelo refresh quando preciso. Lança `PrecisaConectar` (vira 401 + `precisaConectar: true`) quando não há credencial ou o Google recusou — o único caso em que a UI deve pedir gesto do usuário. `ErroDeConfig` vira 500 + `configuracao: true`: é ambiente, nenhum clique conserta. Só `invalid_grant` (refresh revogado ou expirado) apaga a credencial: rede fora do ar, 5xx do Google ou `invalid_client`/`unauthorized_client` (client OAuth mal configurado) viram `GoogleIndisponivel` sem tocar no arquivo, porque a vigia dos lembretes (`server/vigia.ts`) pede o token a cada varredura (60 s) e o cache do access_token faz isso virar um refresh de verdade ao Google ~1x/h, 24/7 — e uma oscilação transitória não pode forçar reconectar.
 
 `prompt=consent` é obrigatório. Sem ele o Google omite o `refresh_token` quando já houve consentimento antes, e a credencial nasce sem como se renovar.
 
@@ -254,6 +255,8 @@ Status em console.cloud.google.com/auth/audience (projeto `gen-lang-client-00860
 ### Porteiro de IP
 
 Substitui login. `IPS_PERMITIDOS` (lista por vírgula) é checada antes de qualquer rota, inclusive estáticos. Vazia **desliga** o porteiro — default em dev. Em produção o IP real vem do primeiro item de `X-Forwarded-For`, porque o Traefik é o único caminho até o container.
+
+Com `IPS_PERMITIDOS` vazia, `POST /api/push/teste` e `POST /api/push/varrer` ficam abertos junto com o resto do app — nenhuma rota de push tem checagem própria além do porteiro.
 
 Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easypanel e implantar.
 
