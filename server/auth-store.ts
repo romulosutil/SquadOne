@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { escopoConcedido } from "./passos.ts";
 
 /**
  * Credencial do Google que SOBREVIVE a reinicio — persistência V1.
@@ -25,7 +26,18 @@ const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN = "https://oauth2.googleapis.com/token";
 const REVOKE = "https://oauth2.googleapis.com/revoke";
 
-export const SCOPE = "https://www.googleapis.com/auth/calendar.events";
+/**
+ * Dois escopos, pedidos juntos no MESMO consentimento (autorização
+ * incremental). Ampliar o acesso para o Google Tasks é refazer
+ * /api/auth/google — nunca logout: `desconectar` REVOGA o refresh_token no
+ * Google e derrubaria o Calendar junto. Com `include_granted_scopes` e
+ * `prompt=consent` o callback recebe um refresh_token novo que cobre os dois,
+ * e `gravar` substitui o antigo.
+ */
+export const ESCOPO_CALENDAR = "https://www.googleapis.com/auth/calendar.events";
+/** Leitura e escrita: `tasks.readonly` não cria a checklist. */
+export const ESCOPO_TASKS = "https://www.googleapis.com/auth/tasks";
+export const ESCOPOS: readonly string[] = [ESCOPO_CALENDAR, ESCOPO_TASKS];
 
 const ARQUIVO = path.join(process.cwd(), "data", "google-auth.json");
 
@@ -49,6 +61,13 @@ export class PrecisaConectar extends Error {}
  * loga e tenta de novo na próxima varredura em vez de exigir reconexão.
  */
 export class GoogleIndisponivel extends Error {}
+/**
+ * O usuário desmarcou o Google Calendar na tela de consentimento granular.
+ * Nada é gravado: sem o Calendar o app não agenda nada, e sobrescrever uma
+ * credencial que funcionava por uma que não serve seria perder a conexão por
+ * um clique de teste.
+ */
+export class EscopoNegado extends Error {}
 
 function exigir(nome: string): string {
   const valor = process.env[nome];
@@ -140,7 +159,7 @@ export function urlDeConsentimento(): string {
     client_id: clientId(),
     redirect_uri: redirectUri(),
     response_type: "code",
-    scope: SCOPE,
+    scope: ESCOPOS.join(" "),
     // offline + consent é o que faz o Google devolver refresh_token. Sem
     // `prompt=consent` ele omite o refresh quando já houve consentimento antes,
     // e a credencial nasceria sem como se renovar.
@@ -195,6 +214,21 @@ export function refreshRecusado(status: number | null, codigo: string | undefine
   return (status === 400 || status === 401) && codigo === "invalid_grant";
 }
 
+/**
+ * O `scope` que vai para o disco. Resposta sem `scope` (legado) vale só o
+ * Calendar: com dois escopos pedidos, cair em "o que pedimos" declararia um
+ * Tasks que ninguém concedeu e o fluxo dos passos bateria num 403.
+ */
+export function escopoDaCredencial(scopeDoGoogle: unknown): string {
+  const texto = typeof scopeDoGoogle === "string" ? scopeDoGoogle.trim() : "";
+  return texto || ESCOPO_CALENDAR;
+}
+
+/** O que um `scope` gravado concede, por escopo. Pura, para testar sem disco. */
+export function concessoesDoScope(scope: string | null | undefined): { calendar: boolean; tasks: boolean } {
+  return { calendar: escopoConcedido(scope, ESCOPO_CALENDAR), tasks: escopoConcedido(scope, ESCOPO_TASKS) };
+}
+
 /** Troca o `code` do callback pela credencial e grava. */
 export async function trocarCodigo(code: string, state: string): Promise<void> {
   // State desconhecido = callback que não saiu daqui. Recusar.
@@ -213,9 +247,15 @@ export async function trocarCodigo(code: string, state: string): Promise<void> {
       "Google não devolveu refresh_token. Sem ele a conexão não persiste.",
     );
   }
+  const scope = escopoDaCredencial(dados.scope);
+  // Consentimento granular: Calendar desmarcado recusa ANTES de gravar e antes
+  // de mexer no cache — a credencial anterior, se houver, continua valendo.
+  if (!concessoesDoScope(scope).calendar) {
+    throw new EscopoNegado("O acesso ao Google Calendar foi desmarcado no consentimento: nada foi gravado.");
+  }
   await gravar({
     refresh_token: dados.refresh_token,
-    scope: dados.scope ?? SCOPE,
+    scope,
     obtidoEm: new Date().toISOString(),
   });
   cache = {
@@ -276,6 +316,16 @@ export async function tokenValido(): Promise<string> {
 
 export async function estaConectado(): Promise<boolean> {
   return (await ler()) !== null;
+}
+
+/**
+ * O que a credencial em disco concede. Sem credencial (ou ilegível): os dois
+ * false. A rota lê UMA vez por turno — o scope só muda num callback, e o turno
+ * não precisa reler o disco a cada compromisso.
+ */
+export async function escoposConcedidos(): Promise<{ calendar: boolean; tasks: boolean }> {
+  const cred = await ler();
+  return cred ? concessoesDoScope(cred.scope) : { calendar: false, tasks: false };
 }
 
 export async function desconectar(): Promise<void> {
