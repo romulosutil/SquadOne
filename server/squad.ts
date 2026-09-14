@@ -72,6 +72,14 @@ export interface Squad {
   calendarId: string;
   /** Reservado: conta Google dona do calendário. Ausente = a conta conectada. */
   conta?: string;
+  /**
+   * Id da lista "SquadOne · <nome>" no Google Tasks. Lazy: nasce no primeiro
+   * compromisso com passos (passos-no-google.ts) e é sobrescrito quando a lista
+   * some no Google. Guardado por id, nunca procurado por título: o usuário
+   * renomeia no celular e a busca criaria duplicatas. Fora do prompt e da
+   * vista — é detalhe de transporte. Renomear a squad NÃO renomeia a lista (V1).
+   */
+  tasksListaId?: string;
   unlockOrder: [number, number][];
   /** ≥1. `dominios[0].po` é o PO raiz que circula pelo escritório. */
   dominios: Dominio[];
@@ -584,7 +592,7 @@ export interface IntegranteArquivadoView {
  * seletor e Mochila leem estes campos sem saber que arquivamento existe. O que
  * foi arquivado vai à parte, em `arquivo`, para a tela de reativar.
  */
-export type SquadView = Omit<Squad, "dominios"> & {
+export type SquadView = Omit<Squad, "dominios" | "tasksListaId"> & {
   dominios: Dominio[];
   unlockedSlots: [number, number][];
   proximoSlot: [number, number] | null;
@@ -598,8 +606,10 @@ export type RosterView = Omit<Roster, "squads"> & {
 
 function vistaDaSquad(squad: Squad): SquadView {
   const ativos = dominiosAtivos(squad);
+  // Sem o id da lista do Tasks: a vista vai para o browser e ninguém lá usa.
+  const { tasksListaId: _lista, ...semLista } = squad;
   return {
-    ...squad,
+    ...semLista,
     dominios: ativos.map((d) => ({ ...d, integrantes: integrantesAtivos(d) })),
     unlockedSlots: unlockedSlots(squad),
     proximoSlot: proximoSlot(squad),
@@ -844,6 +854,21 @@ export function localizarDominio(roster: Roster, id: unknown): { squad: Squad; d
 
 export function localizarSquad(roster: Roster, id: unknown): Squad | null {
   return roster.squads.find((s) => s.id === id) ?? null;
+}
+
+/**
+ * Grava o id da lista do Google Tasks da squad pela fila do roster. Só a
+ * GRAVAÇÃO passa pela fila: criar a lista no Google acontece antes, fora dela,
+ * porque segurar a fila durante uma chamada de rede travaria todas as escritas
+ * do roster. `false` = a squad não existe mais neste volume.
+ */
+export async function gravarTasksListaId(squadId: string, listaId: string): Promise<boolean> {
+  return atualizarRoster((roster) => {
+    const alvo = localizarSquad(roster, squadId);
+    if (!alvo) return false;
+    alvo.tasksListaId = listaId;
+    return true;
+  });
 }
 
 /**
