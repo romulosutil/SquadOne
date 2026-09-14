@@ -14,7 +14,7 @@ import {
   type Squad,
 } from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
-import { ErroCalendario, LeituraIncompleta, listarQuests, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
+import { ErroCalendario, LeituraIncompleta, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
 import { AgendaIndisponivel } from "./server/agenda.ts";
@@ -33,7 +33,10 @@ import {
 } from "./server/ciclo-de-vida.ts";
 import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
-import { descreverJanela, JanelaMalConfigurada, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
+import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
+import { descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
+import { ANTECEDENCIA_PUSH_MIN } from "./server/lembretes.ts";
+import { criarVigia, type Vigia } from "./server/vigia.ts";
 import {
   desconectar,
   ErroDeConfig,
@@ -371,6 +374,39 @@ async function startServer() {
     }
   });
 
+  // --- Lembretes push ---------------------------------------------------
+  // Config ilegível NÃO derruba o boot: push é acessório, o turno e a Mochila
+  // seguem. O erro fica guardado para o log e para as rotas /api/push/*.
+  let configDePush: ConfigDePush | null = null;
+  let falhaDoPush: string | null = null;
+  try {
+    configDePush = lerConfigDePush(process.env);
+  } catch (error: any) {
+    falhaDoPush = error instanceof PushMalConfigurado ? error.message : String(error?.message ?? error);
+  }
+  const vigia: Vigia | null = configDePush
+    ? criarVigia({
+        lerJanela: () => lerJanela(process.env),
+        lerRoster: readRoster,
+        obterToken: tokenValido,
+        listar: listarQuestsDaJanela,
+        enviar: (m) => enviarPush(configDePush!, m),
+      })
+    : null;
+
+  /** 409 quando desligado, 500 quando mal configurado; false = pode seguir. */
+  function pushIndisponivel(res: express.Response): boolean {
+    if (falhaDoPush) {
+      res.status(500).json({ error: falhaDoPush, configuracao: true });
+      return true;
+    }
+    if (!configDePush || !vigia) {
+      res.status(409).json({ error: "Push desligado: LEMBRETES_NTFY_URL vazia.", pushDesligado: true });
+      return true;
+    }
+    return false;
+  }
+
   // Ajuste APROVADO pelo usuário. Janela antes do token (config quebrada não
   // gasta chamada). Horário só muda de lugar com permitirMover.
   app.post("/api/quests/:eventId/ajustar", async (req, res) => {
@@ -398,6 +434,55 @@ async function startServer() {
     }
   });
 
+  // Confere servidor ntfy + celular sem esperar evento nenhum.
+  app.post("/api/push/teste", async (_req, res) => {
+    if (pushIndisponivel(res)) return;
+    try {
+      const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, dateStyle: "short", timeStyle: "short" }).format(new Date());
+      await enviarPush(configDePush!, {
+        titulo: "SquadOne: teste de lembrete",
+        corpo: `Push funcionando (${hora}).`,
+        prioridade: 3,
+        tags: ["white_check_mark"],
+      });
+      res.json({ enviado: true });
+    } catch (error: any) {
+      if (error instanceof ErroDePush) {
+        return res.status(502).json({ error: error.message, pushFalhou: true, credencial: error.credencial });
+      }
+      console.error("Erro no push de teste:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Uma varredura REAL contra o Google com relógio simulado: mostra o que
+  // sairia (enviar=false, padrão) ou manda de fato (enviar=true). Nunca grava
+  // na deduplicação da vigia — o teste não engole o aviso de verdade.
+  app.post("/api/push/varrer", async (req, res) => {
+    if (pushIndisponivel(res)) return;
+    const { agora, enviar = false } = req.body ?? {};
+    let relogio = new Date();
+    if (agora !== undefined) {
+      const lido = lerInstante(agora, FUSO);
+      if (!lido || lido.data !== null) {
+        return res.status(400).json({ error: "Campo 'agora' deve ser data/hora ISO, ex.: 2026-09-15T13:50:00-03:00" });
+      }
+      relogio = new Date(lido.instante);
+    }
+    if (typeof enviar !== "boolean") {
+      return res.status(400).json({ error: "Campo 'enviar' deve ser booleano" });
+    }
+    try {
+      res.json(await vigia!.varrer(relogio, { enviar, registrar: false }));
+    } catch (error: any) {
+      if (error instanceof JanelaMalConfigurada || error instanceof ErroDeConfig) {
+        return res.status(500).json({ error: error.message, configuracao: true });
+      }
+      console.error("Erro na varredura de teste:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -420,9 +505,14 @@ async function startServer() {
   } catch (error: any) {
     console.error(`Janela de trabalho inválida: ${error.message}`);
   }
+  if (falhaDoPush) console.error(`Lembretes push inválidos (desligados): ${falhaDoPush}`);
+  else if (configDePush) console.log(`Lembretes push: ${descreverPush(configDePush)}, ${ANTECEDENCIA_PUSH_MIN} min antes`);
+  else console.log("Lembretes push desligados (LEMBRETES_NTFY_URL vazia)");
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
+    // Depois do listen: a primeira varredura não disputa o boot do Vite.
+    vigia?.iniciar();
   });
 }
 

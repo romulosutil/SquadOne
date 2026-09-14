@@ -52,6 +52,9 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
   server/calendar.ts      leitura/escrita no Google Calendar (listar, GET/PATCH/POST de um evento)
+  server/push.ts          transporte ntfy: LEMBRETES_NTFY_URL, POST JSON, erros classificados
+  server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto
+  server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -155,6 +158,19 @@ O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/
 - Erros de quest: 404 `questSumiu`, 409 com a flag (`eventoSemMarca`, `eventoDeOutraSquad`, `dominioInativo`, `conflitoDeEdicao`, `alvoIncompativel`, `naoCabe`, `semHorarioLivre`), 401 `precisaConectar`, 500 `configuracao`/`marcasPerdidas`, 502 o resto do Google.
 - Nada disto grava fora do Google: a persistência continua só `squad.json` e `google-auth.json`.
 
+### Lembretes push (ntfy)
+
+Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de cada marco, via servidor **ntfy próprio** (serviço `ntfy` no projeto `aladdin` do Easypanel; nunca `ntfy.sh`). O celular usa o app ntfy oficial assinando o tópico.
+
+- **Nada é agendado para o futuro.** `server/vigia.ts` roda a cada 60 s: lê o roster, pede o token, faz **um** `events.list` por calendário distinto das squads ativas na janela `agora → agora + 12 min` (`listarQuestsDaJanela`, sem filtro de marca) e publica o que `disparosDevidos` (`server/lembretes.ts`, puro) devolver. Editar, apagar ou ajustar no Google reflete na varredura seguinte; redeploy não deixa timer órfão.
+- **Quem avisa:** só evento com `squadone_dominio` de domínio ativo. Bloco com horário (foco ou bloco de prazo) conta do **início**; marco com horário conta do **fim** (o prazo real — o marco vai de prazo − 15 min até o prazo); marco de dia inteiro conta do início da `JANELA_TRABALHO` do dia; bloco de dia inteiro não avisa. Evento que o SquadOne não criou não avisa.
+- **Janela do disparo:** `[referência − 10 min, referência)`. Aviso atrasado ainda sai; depois do horário, não.
+- **Deduplicação só em memória** (`eventId@referência`), sem arquivo em `data/`. Evento movido ganha chave nova e é avisado de novo. Custo aceito: redeploy dentro dos 10 min reenvia uma vez; servidor fora do ar durante a janela inteira perde o aviso.
+- **Falha não se propaga:** `agendamento.ts` e `ajuste.ts` não sabem que o push existe. POST ao ntfy com timeout de 5 s; push que falha fica fora da deduplicação e é tentado na varredura seguinte. Um calendário que falha não cala os outros. Varreduras não se sobrepõem.
+- **Sem credencial do Google:** um push "SquadOne sem acesso ao Google" por perda (não por minuto); volta a avisar normalmente quando reconecta.
+- **Testar sem esperar o horário:** `POST /api/push/teste` manda um push fixo agora. `POST /api/push/varrer {"agora":"2026-09-15T13:50:00-03:00","enviar":false}` roda uma varredura real contra o Google com relógio simulado e devolve as mensagens que sairiam; `enviar: true` manda de fato. Nenhuma das duas grava na deduplicação da vigia.
+- **Dev:** com `LEMBRETES_NTFY_URL` no `.env` o `npm run dev` também varre. Use outro tópico, senão o celular recebe em dobro.
+
 ### Escrita no roster
 
 Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write numa fila. Um arquivo para todas as squads, então uma fila só: duas aprovações quase simultâneas, mesmo em squads diferentes, leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeRoster` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`. Contratação aplica na squad da proposta (`sugestao.squad_id`), não na que a tela mostra.
@@ -254,6 +270,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `NODE_ENV` | servidor | `production` serve `dist/` em vez do Vite |
 | `JANELA_TRABALHO` | servidor | janela de alocação `HH:MM-HH:MM` (São Paulo), minutos múltiplos de 15 (`09:10` é recusado); ausente/vazia = `09:00-19:00`; ilegível = 500 |
 | `DIAS_TRABALHO` | servidor | dias ISO da janela, `1`=segunda … `7`=domingo; ausente/vazia = `1,2,3,4,5`; ilegível = 500 |
+| `LEMBRETES_NTFY_URL` | servidor | lembretes push: `https://:TOKEN@host/topico` do ntfy próprio; ausente/vazia = desligado; ilegível = log de erro no boot e desligado (não derruba nada) |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 
@@ -264,6 +281,6 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`). A UI decide o que fazer pelo tipo.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`). A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
