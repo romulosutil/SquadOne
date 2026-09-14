@@ -112,8 +112,8 @@ export function interpretarPedidoDeRedacao(roster: Roster, corpo: unknown): Pedi
 
 /**
  * Formato do escopo (spec Fase 2 §5.3). As três primeiras linhas servem ao
- * orquestrador agora, para escolher responsavel_id; "Ao opinar" e "Sinais de
- * alerta" são a rubrica do agente que contribui em quests na Fase 4.
+ * orquestrador para escolher responsavel_id; "Ao opinar" e "Sinais de alerta"
+ * são a rubrica da nota_de_execucao que nasce com o evento.
  */
 const FORMATO_ESCOPO = `O escopo tem EXATAMENTE cinco linhas, nesta ordem, cada uma começando pelo rótulo:
 Missão: uma ou duas frases sobre para que este agente existe.

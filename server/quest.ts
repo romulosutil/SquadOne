@@ -2,15 +2,13 @@ import { FORMATO_ID_DE_EVENTO } from "./calendar.ts";
 import { acharDominio, PedidoInvalido, type Dominio, type Squad } from "./squad.ts";
 
 /**
- * O que contribuir e ajustar compartilham: por que uma quest não aceita o
- * pedido. A flag vai no corpo do 409 e diz à UI o gesto certo.
+ * Por que uma quest não aceita o pedido de ajuste. A flag vai no corpo do 409
+ * e diz à UI o gesto certo.
  */
 export type FlagDeRecusa =
-  | "pessoaForaDaSquad"
   | "eventoSemMarca"
   | "eventoDeOutraSquad"
   | "dominioInativo"
-  | "descricaoCheia"
   | "conflitoDeEdicao"
   | "alvoIncompativel"
   | "naoCabe";
@@ -39,9 +37,9 @@ export function lerIdDoEvento(valor: unknown): string {
 }
 
 /**
- * O evento pertence à squad do pedido e a um domínio ativo dela. Sem isso um
- * agente de uma squad escreveria em compromisso de outra, ou num evento que o
- * app nem criou.
+ * O evento pertence à squad do pedido e a um domínio ativo dela. Sem isso o
+ * ajuste de uma squad mexeria em compromisso de outra, ou num evento que o app
+ * nem criou.
  */
 export function validarQuestDaSquad(evento: { dominio: string; squad: string }, squad: Squad): Dominio {
   if (!evento.dominio) {

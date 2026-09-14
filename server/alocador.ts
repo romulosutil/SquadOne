@@ -1,7 +1,7 @@
 /**
  * Alocador de horário: dado o que já ocupa a agenda, a janela de trabalho, um
  * pedido e o instante atual, devolve os slots. PURO de propósito — sem fetch,
- * sem relógio, sem env: a Fase 4 reusa para propor ajustes de duração, e só
+ * sem relógio, sem env: o Ajuste reusa para replanejar duração e esforço, e só
  * uma função pura dá para verificar com tabela de casos.
  *
  * Instantes são epoch ms (number). Intervalos são semiabertos [inicio, fim).

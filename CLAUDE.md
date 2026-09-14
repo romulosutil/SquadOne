@@ -42,8 +42,6 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/alocador.ts      PURO: ocupação + janela + pedido + agora -> slots
   server/agenda.ts        ocupação do turno: 1 leitura do primary + reservas
   server/agendamento.ts   compromisso -> eventos (foco, ou marco + blocos)
-  server/descricao.ts     PURO: blocos dos agentes na descrição (mescla, hash)
-  server/contribuicao.ts  agentes escrevem numa quest: Gemini por agente + 1 PATCH
   server/quest.ts         recusa classificada e validação comum das rotas de quest
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
@@ -53,11 +51,11 @@ src/App.vue               orquestra a tela; dono do estado de roster, squad ativ
   src/squadAtiva.ts       squad ativa da aba (localStorage)
   src/mochila.ts          sem Vue: "Bloco i/N" e intervalo de dia inteiro, derivados da lista
   src/rosterApi.ts        escritas do roster com erro classificado
-  src/contribuicao.ts     sem Vue: fila em série das contribuições da aba, status, resumo do ajuste
+  src/contribuicao.ts     sem Vue: formata minutos e resume o ajuste aplicado
   src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard,
                           SquadSelector, NovaSquadModal, TrocaSquadCard,
                           SalasPainel, ContratarModal, EditarModal, ArquivoModal,
-                          ContribuirModal, AjusteCard
+                          AjusteCard
   src/office/             geometria isométrica, salas, sprites
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
 seed/squad.seed.json      roster inicial — FORA de data/, ver "Volume" abaixo
@@ -85,7 +83,6 @@ Todo evento criado carrega quatro chaves em `extendedProperties.private`, montad
 | `squadone_membro` | atribuição | quem executa |
 | `squadone_tipo` | semântica | `time_blocking` ou `deadline` (blocos de prazo são `time_blocking`) |
 | `squadone_prazo_ref` | ligação | só em blocos: eventId do marco. A Mochila deriva "Bloco i/N" da lista lida; posição não é gravada |
-| `squadone_h_<8 hex>` | edição manual | um por agente que escreveu na descrição: `<pessoa_id>:<16 hex>` do texto normalizado do bloco. Ausente ou diferente = bloco editado à mão |
 
 `paraQuest` lê o tipo da marca e só cai no prefixo `⏰ DEADLINE:` do título quando ela não existe (eventos anteriores a 12/09/2026, sem migração). O prefixo segue no título como rótulo. Deadline grava `transparency: "transparent"`: é marco, não ocupa agenda.
 
@@ -103,7 +100,7 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - **Prazo Final:** marco transparente no prazo (sem hora = dia inteiro) + blocos de 30–120 min antes dele, um por dia antes de empilhar, pausa de 15 min, até 20. Não coube = cria o que coube e avisa quanto faltou (`faltou_min`). Bloco que falha para a série sem apagar nada.
 - **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
 - **Sem credencial:** o turno roda; cada `agendar_evento` vira erro com `motivo: precisaConectar` sem chamar o Google, e a UI volta a oferecer "Conectar".
-- `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que a Fase 4 reusa. Mantenha assim.
+- `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que o Ajuste reusa. Mantenha assim.
 
 ### Redirecionamento automático de squad
 
@@ -114,20 +111,25 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - Invariante de custo mantida: no 2º prompt a squad ativa é a **destino**, inteira; a origem vira "outra squad" (id, nome, escopo). Mesmo `agora` e mesmo `modo` nos dois turnos — o toggle é sobre o tipo do compromisso, não sobre a squad.
 - Destino inválido ou arquivado entre a proposta e o salto: sem 2º turno, o resultado da origem volta como antes.
 
-### Contribuição dos agentes (Fase 4)
+### Dica de execução na criação
 
-Agentes escrevem notas na descrição do evento no Google. Gatilho: o PO marca `colaboradores_ids` em `agendar_evento` (até 3, só no foco ou marco; inválido vira aviso) e o frontend pede depois do turno, ou o botão **Pedir contribuição** do card da Mochila (até 6). Rota: `POST /api/quests/:eventId/contribuir {squadId, pessoaIds}` → 200 com resultado por agente, mesmo com todos em erro.
+`agendar_evento` tem um campo `nota_de_execucao`: o modelo escreve a dica no **mesmo** turno em que decide data e duração, do ponto de vista do responsável e do treino dele ("Ao opinar sobre um compromisso" do escopo é a rubrica). Ela vira a descrição do evento no POST, **antes** da assinatura do SquadOne.
 
-- **Formato:** texto do usuário intocado + `[[squadone]]` (cabeçalho) + um bloco por agente entre `[[squadone:<pessoa_id>]]` e `[[/squadone:<pessoa_id>]]`. Bloco novo entra no fim; bloco existente muda só entre os marcadores. Teto 8000 caracteres, 1200 por bloco; descrição HTML (a UI web do Google grava assim) recebe `<br>`. Texto do modelo é escapado: nunca forma marcador nem tag.
-- **Edição manual:** hash de cada bloco em `squadone_h_*`. Hash que não bate = você editou o bloco; o agente **não** sobrescreve, avisa, e nem chega a chamar o Gemini. Para destravar, apague o bloco (ou só os marcadores) no Google. O hash é sobre o texto normalizado: a reescrita em HTML do Google não conta como edição.
-- **PATCH:** todo PATCH de evento passa por `atualizarPreservandoMarcas`: `If-Match` com o etag lido, `sendUpdates=none`, `extendedProperties.private` **completo** (lido + o que muda). A resposta é conferida: marca `squadone_*` sumida → restaura uma vez → `marcasPerdidas` (500). Contribuição em 412 relê, mescla de novo e tenta mais uma vez; dois 412 = 409 `conflitoDeEdicao`.
-- **Token por chamada:** as rotas de quest checam `tokenValido()` antes do Gemini (401 sem gastar modelo) e passam `obterToken`; cada leitura/PATCH/POST no Google pede o token de novo logo antes (`comToken`, o cache do auth-store absorve o custo). Google recusou a credencial: pede de novo e, vindo token diferente, repete uma vez; só com o mesmo token o 401 vira `precisaConectar`.
-- **Gemini:** uma chamada por agente (`registrar_contribuicao`, function calling `ANY`), no máximo 3 em paralelo, via `gerarComRetry`. A descrição vai no prompt delimitada como DADO. `ModeloOcupado` de um agente é erro só dele.
-- **Teto de tempo do Gemini (turno, redação e contribuição):** `gerarComRetry` dá 45 s (`TIMEOUT_GEMINI_MS`) a cada tentativa, por `abortSignal` + corrida contra um relógio. Timeout conta como transitório: retenta e cai no modelo reserva; esgotou, `ModeloOcupado`. Pior caso de uma geração: 2 modelos × 2 tentativas × 45 s + backoff ≈ **3 min** (turno e redação). Contribuição com 6 agentes: 2 rodadas de 3 ≈ **6 min** antes do PATCH, e a fila da aba espera. Proxy com timeout menor que isso corta a resposta (a UI mostra erro de rede; nada fica gravado pela metade).
-- **Fila em série no frontend:** cada pedido chama `tokenValido()`, e o auth-store não tem lock de refresh. A fila só anda sem leitura da Mochila em curso e começa depois da Mochila do turno. Não persiste: recarregar perde o que não rodou (nada fica gravado pela metade).
-- **Ajuste:** o agente pode propor duração (foco/bloco) ou esforço total (marco, medido pelos blocos com `squadone_prazo_ref`). Vira `AjusteCard`; `POST /api/quests/:eventId/ajustar {alvo, proposto_min, permitirMover?}` só roda com aprovação e relê tudo. Duração muda só o fim; se não cabe, 409 `naoCabe` e mover é um segundo clique (`permitirMover`). Esforço cria blocos extras antes do prazo (com as 5 marcas) ou encurta blocos futuros até 30 min; bloco que mudou desde a listagem é pulado e vira `sobra_min`. Nada é apagado. 412 no ajuste não retenta.
-- Erros de quest: 404 `questSumiu`, 409 com a flag (`pessoaForaDaSquad`, `eventoSemMarca`, `eventoDeOutraSquad`, `dominioInativo`, `descricaoCheia`, `conflitoDeEdicao`, `alvoIncompativel`, `naoCabe`, `semHorarioLivre`), 401 `precisaConectar`, 500 `configuracao`/`marcasPerdidas`, 502 o resto do Google.
-- Nada disto grava fora do Google: a persistência continua só `squad.json` e `google-auth.json`. Rollback: implantar o commit anterior; blocos e hashes ficam no Google como texto e marcas inertes.
+- **Texto puro.** Sem marcador de bloco e sem hash: é escrita única, na criação, e nada volta a reescrevê-la. O protocolo de proteção de edição manual que existia na Contribuição (removida em 13/09/2026) não se aplica aqui — editar a descrição no Google é seguro.
+- **Teto `MAX_NOTA_DE_EXECUCAO` (600) em `server/agendamento.ts`**, com reticências: a dica é para ser lida de relance no card do Google, e o teto é o que impede uma resposta fora do esperado de virar um muro de texto na agenda.
+- Só no evento principal. Os blocos de um prazo levam a assinatura sozinha: a dica é do compromisso, e repeti-la em cada bloco seria ruído.
+- Campo omitido ou vazio = descrição só com a assinatura, como antes.
+
+### Ajuste de tempo
+
+O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/ajustar {alvo, proposto_min, permitirMover?}` só roda com aprovação (`AjusteCard`) e relê tudo do Google.
+
+- **Alvos:** duração (foco/bloco) ou esforço total (marco, medido pelos blocos com `squadone_prazo_ref`). Duração muda só o fim; se não cabe, 409 `naoCabe` e mover é um segundo clique (`permitirMover`). Esforço cria blocos extras antes do prazo (com as 5 marcas) ou encurta blocos futuros até 30 min; bloco que mudou desde a listagem é pulado e vira `sobra_min`. Nada é apagado. 412 no ajuste não retenta.
+- **PATCH:** todo PATCH de evento passa por `atualizarPreservandoMarcas`: `If-Match` com o etag lido, `sendUpdates=none`, `extendedProperties.private` **completo** (lido + o que muda). A resposta é conferida: marca `squadone_*` sumida → restaura uma vez → `marcasPerdidas` (500).
+- **Token por chamada:** a rota checa `tokenValido()` antes e passa `obterToken`; cada leitura/PATCH/POST no Google pede o token de novo logo antes (`comToken`, o cache do auth-store absorve o custo). Um ajuste de esforço faz dezenas de escritas em série e um token lido só no começo venceria no meio. Google recusou a credencial: pede de novo e, vindo token diferente, repete uma vez; só com o mesmo token o 401 vira `precisaConectar`.
+- **Teto de tempo do Gemini (turno e redação):** `gerarComRetry` dá 45 s (`TIMEOUT_GEMINI_MS`) a cada tentativa, por `abortSignal` + corrida contra um relógio. Timeout conta como transitório: retenta e cai no modelo reserva; esgotou, `ModeloOcupado`. Pior caso de uma geração: 2 modelos × 2 tentativas × 45 s + backoff ≈ **3 min**. Proxy com timeout menor que isso corta a resposta (a UI mostra erro de rede; nada fica gravado pela metade).
+- Erros de quest: 404 `questSumiu`, 409 com a flag (`eventoSemMarca`, `eventoDeOutraSquad`, `dominioInativo`, `conflitoDeEdicao`, `alvoIncompativel`, `naoCabe`, `semHorarioLivre`), 401 `precisaConectar`, 500 `configuracao`/`marcasPerdidas`, 502 o resto do Google.
+- Nada disto grava fora do Google: a persistência continua só `squad.json` e `google-auth.json`.
 
 ### Escrita no roster
 

@@ -133,39 +133,6 @@ function exigirPessoa(squad: Squad, id: unknown): { pessoa: Pessoa; dominio: Dom
   return achada;
 }
 
-/** Cada colaborador é uma chamada ao Gemini depois do turno: teto baixo de propósito. */
-export const MAX_COLABORADORES = 3;
-
-/**
- * Colaborador inválido nunca derruba o compromisso: o evento é o que o usuário
- * pediu, a opinião extra é bônus. Inválido vira aviso; o responsável sai calado
- * (ele já é o dono); repetido some.
- */
-export function normalizarColaboradores(
-  valor: unknown,
-  squad: Squad,
-  responsavelId: string,
-): { ids: string[]; avisos: string[] } {
-  if (!Array.isArray(valor)) return { ids: [], avisos: [] };
-  const ids: string[] = [];
-  const excedentes: string[] = [];
-  const avisos: string[] = [];
-  for (const item of valor) {
-    const id = typeof item === "string" ? item.trim() : "";
-    if (id && (id === responsavelId || ids.includes(id) || excedentes.includes(id))) continue;
-    if (!id || !acharPessoa(squad, id)) {
-      avisos.push(`Colaborador '${String(item)}' ignorado: não é pessoa ativa desta squad.`);
-      continue;
-    }
-    if (ids.length >= MAX_COLABORADORES) excedentes.push(id);
-    else ids.push(id);
-  }
-  if (excedentes.length) {
-    avisos.push(`Só ${MAX_COLABORADORES} colaboradores por compromisso; ignorados: ${excedentes.join(", ")}.`);
-  }
-  return { ids, avisos };
-}
-
 const agendarEvento: Capability = {
   declaration: {
     name: "agendar_evento",
@@ -225,13 +192,13 @@ const agendarEvento: Capability = {
             "Opcional, só time_blocking. Só quando o usuário disse a HORA exata " +
             "('amanhã às 14h'). ISO 8601 com offset. É respeitado mesmo com conflito.",
         },
-        colaboradores_ids: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
+        nota_de_execucao: {
+          type: Type.STRING,
           description:
-            "Opcional. Até 3 ids de pessoas da squad atual, diferentes do responsável, " +
-            "cujo papel deve escrever notas neste compromisso. Omita se ninguém além do " +
-            "responsável precisa opinar.",
+            "Opcional. Uma dica CURTA de execução (até ~3 frases), do ponto de vista " +
+            "do responsável: por onde começar, o que checar, o risco óbvio. Vira a " +
+            "descrição do evento, escrita UMA vez na criação. Sem repetir o título e " +
+            "sem inventar fatos, pessoas ou documentos que a demanda não sugere.",
         },
       },
       required: ["titulo", "responsavel_id", "tipo"],
@@ -242,8 +209,6 @@ const agendarEvento: Capability = {
     // Pessoa antes da agenda: id inventado pelo modelo não custa leitura do Google.
     const { pessoa, dominio } = exigirPessoa(ctx.squad, args.responsavel_id);
     const indice = ctx.squad.dominios.indexOf(dominio);
-    // Antes da agenda, como o responsável: id inventado não custa leitura do Google.
-    const colaboradores = normalizarColaboradores(args.colaboradores_ids, ctx.squad, pessoa.id);
     // O horário sai do servidor (server/agendamento.ts): o modelo só disse a
     // intenção. Aqui fica o que é da squad — marcas, calendário, cor.
     const compromisso = await agendarCompromisso({
@@ -256,16 +221,7 @@ const agendarEvento: Capability = {
       colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
       agenda: ctx.agenda,
     });
-    // Só no evento principal (foco ou marco): o frontend pede UMA contribuição
-    // por compromisso, nunca uma por bloco. Nada disto vai ao Google.
-    if (colaboradores.ids.length) {
-      compromisso.eventos[0] = { ...compromisso.eventos[0], colaboradores_ids: colaboradores.ids };
-    }
-    return {
-      ...compromisso,
-      colaboradores_ids: colaboradores.ids,
-      avisos: [...colaboradores.avisos.map((aviso) => ({ aviso })), ...compromisso.avisos],
-    };
+    return compromisso;
   },
 };
 

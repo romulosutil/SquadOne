@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
@@ -11,24 +11,19 @@ import SalasPainel from './components/SalasPainel.vue'
 import ContratarModal from './components/ContratarModal.vue'
 import EditarModal from './components/EditarModal.vue'
 import ArquivoModal from './components/ArquivoModal.vue'
-import ContribuirModal from './components/ContribuirModal.vue'
 import AjusteCard from './components/AjusteCard.vue'
-import { criarFila, estadoDaResposta, MAX_PESSOAS_POR_PEDIDO, pedidosDoTurno, resumoDoAjuste } from './contribuicao'
+import { resumoDoAjuste } from './contribuicao'
 import { ErroDaApi, rosterApi, type TipoDoRoster } from './rosterApi'
 import type {
   AlvoDeContratacao,
   AlvoDeEdicao,
   DadosDeContratacao,
   DadosNovaSquad,
-  EstadoDeContribuicao,
   Modo,
-  PedidoDeContribuicao,
-  PessoaEscolhivel,
   PreenchimentoDeContratacao,
   PropostaDeAjuste,
   QuestCalendario,
   Redirecionamento,
-  ResultadoDeAgente,
   RespostaDeAjuste,
   RosterView,
   SquadView,
@@ -70,10 +65,6 @@ const aprovando = ref('')
 const erroSugestao = ref<Record<string, string>>({})
 const toast = ref('')
 let toastTimer = 0
-// Contribuição dos agentes por eventId (Fase 4). Não é cache do Google: é o
-// andamento dos pedidos desta aba. Recarregar a Mochila não apaga.
-const contribuicoes = ref<Record<string, EstadoDeContribuicao>>({})
-const questParaContribuir = ref<QuestCalendario | null>(null)
 // Propostas de ajuste dos agentes. Não somem com turno novo nem troca de squad:
 // pertencem a eventos que continuam existindo no Google.
 const ajustes = ref<PropostaDeAjuste[]>([])
@@ -250,93 +241,6 @@ const carregarMochila = async (recuperando = false) => {
   } finally {
     carregandoMochila.value = false
   }
-}
-
-/** Resolve quando nenhuma leitura da Mochila está em curso. */
-const esperarMochila = () =>
-  new Promise<void>((ok) => {
-    if (!carregandoMochila.value) return ok()
-    const parar = watch(carregandoMochila, (lendo) => {
-      if (lendo) return
-      parar()
-      ok()
-    })
-  })
-
-const marcarContribuicao = (eventId: string, estado: EstadoDeContribuicao) => {
-  contribuicoes.value = { ...contribuicoes.value, [eventId]: estado }
-}
-
-/** Proposta nova do mesmo agente para o mesmo evento substitui a antiga. */
-const receberPropostas = (resultados: ResultadoDeAgente[]) => {
-  const novas = resultados.flatMap((r) => ('ok' in r && r.proposta ? [r.proposta] : []))
-  if (!novas.length) return
-  const chave = (p: PropostaDeAjuste) => `${p.eventId}|${p.pessoa_id}`
-  const trocadas = new Set(novas.map(chave))
-  ajustes.value = [...ajustes.value.filter((p) => !trocadas.has(chave(p))), ...novas]
-}
-
-const executarContribuicao = async (p: PedidoDeContribuicao) => {
-  // Nunca junto de uma leitura da Mochila: as duas chamam tokenValido() no
-  // servidor, e o auth-store não tem lock de refresh.
-  await esperarMochila()
-  marcarContribuicao(p.eventId, { estado: 'rodando', pessoaIds: p.pessoaIds, resultados: [] })
-  try {
-    const response = await fetch(`/api/quests/${encodeURIComponent(p.eventId)}/contribuir`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ squadId: p.squadId, pessoaIds: p.pessoaIds })
-    })
-    const corpo = await response.json().catch(() => ({}))
-    marcarContribuicao(p.eventId, estadoDaResposta(p.pessoaIds, response.status, corpo))
-    if (response.ok) {
-      receberPropostas(corpo.resultados ?? [])
-    } else if (response.status === 401) {
-      // Sem credencial nenhum pedido seguinte passa: esvazia a fila em vez de
-      // bater N vezes no mesmo 401.
-      conectado.value = false
-      for (const pendente of fila.limpar()) {
-        marcarContribuicao(pendente.eventId, {
-          estado: 'erro', pessoaIds: pendente.pessoaIds, resultados: [],
-          erro: 'Conecte o Google Calendar e peça de novo.', precisaConectar: true
-        })
-      }
-    } else if (response.status === 409 && corpo.squadInexistente && p.squadId === squadAtiva.value?.id) {
-      // Só recupera se a squad sumida é a da tela: um pedido antigo de outra
-      // squad não pode jogar a aba para a primeira squad.
-      await recuperarSquadInexistente()
-    }
-  } catch (error) {
-    marcarContribuicao(p.eventId, estadoDaResposta(p.pessoaIds, 0, {
-      error: error instanceof Error ? error.message : String(error)
-    }))
-  }
-}
-
-const fila = criarFila(executarContribuicao)
-
-const pedirContribuicao = (p: PedidoDeContribuicao) => {
-  const atual = contribuicoes.value[p.eventId]
-  // Rodando: o status fica "rodando"; o pedido novo entra na fila e aparece depois.
-  if (atual?.estado !== 'rodando') {
-    const pessoaIds = atual?.estado === 'fila'
-      ? [...new Set([...atual.pessoaIds, ...p.pessoaIds])].slice(0, MAX_PESSOAS_POR_PEDIDO)
-      : p.pessoaIds
-    marcarContribuicao(p.eventId, { estado: 'fila', pessoaIds, resultados: [] })
-  }
-  fila.enfileirar(p)
-}
-
-const confirmarContribuicao = (pessoaIds: string[]) => {
-  const quest = questParaContribuir.value
-  const squadId = squadAtiva.value?.id
-  questParaContribuir.value = null
-  if (quest && squadId) pedirContribuicao({ eventId: quest.eventId, squadId, pessoaIds })
-}
-
-const repetirContribuicao = (eventId: string, pessoaIds: string[]) => {
-  const squadId = squadAtiva.value?.id
-  if (squadId) pedirContribuicao({ eventId, squadId, pessoaIds })
 }
 
 const tirarAjuste = (id: string) => {
@@ -584,7 +488,7 @@ const ocupadoComRoster = computed(() => isLoading.value || enviandoContratacao.v
 // Qualquer modal aberto bloqueia a CommandBar, como o de nova squad já fazia:
 // um Enter lá embaixo mandaria um turno às cegas com o roster mudando aqui.
 const modalAberto = computed(
-  () => criandoSquad.value || !!contratacao.value || !!edicao.value || arquivoAberto.value || !!questParaContribuir.value
+  () => criandoSquad.value || !!contratacao.value || !!edicao.value || arquivoAberto.value
 )
 
 const nomesDePessoa = computed<Record<string, string>>(() => {
@@ -595,13 +499,6 @@ const nomesDePessoa = computed<Record<string, string>>(() => {
   for (const d of squad.dominios) for (const p of [d.po, ...d.integrantes]) mapa[p.id] = p.nome
   return mapa
 })
-
-/** Quem pode ser chamado a contribuir: pessoas ATIVAS da squad ativa, PO primeiro em cada domínio. */
-const pessoasDaSquad = computed<PessoaEscolhivel[]>(() =>
-  (squadAtiva.value?.dominios ?? []).flatMap((d) =>
-    [d.po, ...d.integrantes].map((p) => ({ id: p.id, nome: p.nome, papel: p.papel, dominioNome: d.nome }))
-  )
-)
 
 const acharPessoaAtiva = (id: string) =>
   squadAtiva.value?.dominios.flatMap((d) => [d.po, ...d.integrantes]).find((p) => p.id === id)
@@ -771,9 +668,7 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // O turno pode ter rodado em OUTRA squad (redirecionamento automático do
     // servidor): os eventos nasceram lá, então a aba adota o destino ANTES de
     // reler a Mochila — senão ela viria da squad de origem, sem as quests novas.
-    const squadDoTurno = turno.redirecionado
-      ? await adotarSquadDoTurno(turno.redirecionado)
-      : squadIdDoTurno
+    if (turno.redirecionado) await adotarSquadDoTurno(turno.redirecionado)
 
     if (turno.eventos_criados?.length) {
       // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
@@ -812,12 +707,6 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // Rele o calendario em vez de confiar no retorno: o que o Google gravou e
     // o que vale, inclusive edicoes feitas fora do app.
     await carregarMochila()
-
-    // Colaboradores marcados pelo PO entram na fila DEPOIS da Mochila, nunca
-    // junto: tudo que chama tokenValido() anda em série nesta aba.
-    if (squadDoTurno) {
-      for (const pedido of pedidosDoTurno(turno, squadDoTurno)) pedirContribuicao(pedido)
-    }
   } catch (error) {
     console.error('Falha ao orquestrar:', error)
     alert(error?.message || 'Houve um erro ao processar a demanda. Tente novamente.')
@@ -882,11 +771,8 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         :carregando="carregandoMochila"
         :nomes-de-dominio="nomesDeDominio"
         :nomes-de-pessoa="nomesDePessoa"
-        :contribuicoes="contribuicoes"
         @conectar="conectarGoogle"
         @recarregar="() => carregarMochila()"
-        @contribuir="(q) => (questParaContribuir = q)"
-        @repetir="repetirContribuicao"
       />
 
       <!-- Map Area -->
@@ -983,14 +869,6 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       :erros="errosArquivo"
       @reativar="reativar"
       @fechar="arquivoAberto = false"
-    />
-
-    <ContribuirModal
-      v-if="questParaContribuir"
-      :quest="questParaContribuir"
-      :pessoas="pessoasDaSquad"
-      @pedir="confirmarContribuicao"
-      @fechar="questParaContribuir = null"
     />
 
     <NovaSquadModal

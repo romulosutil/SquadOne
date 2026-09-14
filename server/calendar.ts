@@ -361,13 +361,13 @@ export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<I
   return ocupado;
 }
 
-// --- Token por chamada (Fase 4) -------------------------------------------
+// --- Token por chamada -----------------------------------------------------
 
 /**
- * Quem pede o access token a cada chamada (na rota, `tokenValido`). Uma
- * contribuição dura dezenas de segundos de Gemini entre a leitura e o PATCH:
- * um token lido uma vez no começo podia vencer no meio, o PATCH voltava 401 e
- * a UI desconectava à toa. O cache do auth-store torna pedir de novo barato.
+ * Quem pede o access token a cada chamada (na rota, `tokenValido`). Um ajuste
+ * de esforço faz dezenas de escritas em série: um token lido uma vez no começo
+ * podia vencer no meio, o PATCH voltava 401 e a UI desconectava à toa. O cache
+ * do auth-store torna pedir de novo barato.
  */
 export type ObterToken = () => Promise<string>;
 
@@ -389,7 +389,7 @@ export async function comToken<T>(obter: ObterToken, fn: (token: string) => Prom
   }
 }
 
-// --- Um evento: ler, atualizar com If-Match, inserir (Fase 4) -------------
+// --- Um evento: ler, atualizar com If-Match, inserir -----------------------
 
 /** O evento foi apagado no Google (404/410 ou `status: cancelled`). */
 export class QuestSumiu extends Error {

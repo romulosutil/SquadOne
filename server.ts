@@ -15,7 +15,6 @@ import {
 } from "./server/squad.ts";
 import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
 import { ErroCalendario, LeituraIncompleta, listarQuests, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
-import { contribuirNaQuest, interpretarPedidoDeContribuicao } from "./server/contribuicao.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
 import { AgendaIndisponivel } from "./server/agenda.ts";
@@ -83,7 +82,7 @@ function responderErroDeRoster(res: express.Response, err: unknown): boolean {
 }
 
 /**
- * Erros das rotas de quest (Fase 4). A flag no corpo diz à UI o gesto:
+ * Erros das rotas de quest. A flag no corpo diz à UI o gesto:
  * `questSumiu` tira o card, `naoCabe` oferece mover, `precisaConectar` pede
  * reconexão, `conflitoDeEdicao` pede tentar de novo, `marcasPerdidas` manda
  * conferir no Google. Devolve false quando não é nenhum e a rota decide o 500.
@@ -368,37 +367,6 @@ async function startServer() {
       if (error instanceof ModeloOcupado) {
         return res.status(503).json({ error: error.message, modeloOcupado: true });
       }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Agentes escrevem na descrição de UMA quest (Fase 4). Pedido e roster antes
-  // do token, e o token antes do Google: nada externo é gasto num pedido que já
-  // não vale. 200 mesmo com agentes em erro: o resultado é por agente, e
-  // ModeloOcupado de um agente nunca vira status da rota.
-  app.post("/api/quests/:eventId/contribuir", async (req, res) => {
-    let pedido: ReturnType<typeof interpretarPedidoDeContribuicao>;
-    let roster: Awaited<ReturnType<typeof readRoster>>;
-    try {
-      roster = await readRoster();
-      pedido = interpretarPedidoDeContribuicao(roster, req.params.eventId, req.body);
-    } catch (error: any) {
-      if (responderErroDeRoster(res, error) || responderErroDeQuest(res, error)) return;
-      console.error("Erro ao ler o pedido de contribuição:", error);
-      return res.status(500).json({ error: error.message });
-    }
-    // Token antes do Gemini: sem credencial, 401 sem gastar modelo. Depois,
-    // contribuirNaQuest pede de novo antes de cada chamada ao Google.
-    try {
-      await tokenValido();
-    } catch (error) {
-      return responderErroDeAuth(res, error);
-    }
-    try {
-      res.json(await contribuirNaQuest(ai, { ...pedido, roster, obterToken: tokenValido, agora: new Date() }));
-    } catch (error: any) {
-      console.error("Erro na contribuição:", error);
-      if (responderErroDeQuest(res, error)) return;
       res.status(500).json({ error: error.message });
     }
   });

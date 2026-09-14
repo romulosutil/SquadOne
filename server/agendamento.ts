@@ -38,12 +38,6 @@ export interface EventoCriado {
   prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
-  /**
-   * Quem o PO marcou para contribuir (Fase 4). Só no evento principal do
-   * compromisso — foco ou marco —, para o frontend pedir uma contribuição por
-   * compromisso e não uma por bloco.
-   */
-  colaboradores_ids?: string[];
 }
 
 /**
@@ -69,8 +63,6 @@ export interface CompromissoAgendado {
   avisos: AvisoDoCompromisso[];
   /** Minutos do esforço sem bloco reservado. 0 para foco. */
   faltou_min: number;
-  /** Colaboradores válidos (Fase 4); o handler de agendar_evento preenche. */
-  colaboradores_ids?: string[];
 }
 
 export interface PedidoDeCompromisso {
@@ -87,7 +79,26 @@ export interface PedidoDeCompromisso {
 
 const MIN_MS = 60_000;
 
+/**
+ * Teto da dica de execução do modelo. Descrição de evento no Google aceita
+ * muito mais, mas a dica é para ser lida de relance no card do calendário —
+ * e um teto aqui é o que impede uma resposta fora do esperado de virar um
+ * muro de texto no compromisso do usuário.
+ */
+export const MAX_NOTA_DE_EXECUCAO = 600;
+
 const preenchido = (v: unknown) => v != null && String(v).trim() !== "";
+
+/**
+ * A dica que o modelo escreveu no MESMO turno que decidiu data e duração.
+ * Texto puro: escrita única, na criação, e nada volta a reescrevê-la — por isso
+ * não leva marcador nem hash.
+ */
+function notaDeExecucao(valor: unknown): string {
+  const texto = typeof valor === "string" ? valor.trim() : "";
+  if (!texto) return "";
+  return texto.length <= MAX_NOTA_DE_EXECUCAO ? texto : texto.slice(0, MAX_NOTA_DE_EXECUCAO - 1) + "…";
+}
 
 function positivo(v: unknown): number | null {
   const n = Number(v);
@@ -183,9 +194,14 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
     tipo,
     dominio: dominio.id,
   };
-  const descricao =
+  const assinatura =
     `Criado pelo SquadOne. Domínio: ${dominio.nome}. ` +
     `Responsável: ${pessoa.nome} (${pessoa.papel}).`;
+  // A dica vem PRIMEIRO: é o que o usuário lê no card do Google; a assinatura é
+  // rodapé. Os blocos de um prazo seguem com a assinatura só — a dica é do
+  // compromisso, e repeti-la em cada bloco seria ruído no calendário.
+  const nota = notaDeExecucao(args.nota_de_execucao);
+  const descricao = nota ? `${nota}\n\n${assinatura}` : assinatura;
 
   const aPartirDe = preenchido(args.a_partir_de)
     ? exigirInstante(args.a_partir_de, "a_partir_de", fuso).instante
@@ -317,7 +333,7 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
   // nada foi criado e o compromisso inteiro vira erro.
   const marcoCorpo = {
     summary: `${PREFIXO_DEADLINE} [${pessoa.papel}] ${titulo}`,
-    description: `${descricao} Prazo final.`,
+    description: nota ? `${nota}\n\n${assinatura} Prazo final.` : `${assinatura} Prazo final.`,
     colorId: p.colorId,
     // Marco não é trabalho: não ocupa a agenda.
     transparency: "transparent",
@@ -346,7 +362,7 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
     try {
       const bloco = await gravar(p, {
         summary: `[${pessoa.papel}] ${titulo} (${rotulo})`,
-        description: `${descricao} Trabalho para o prazo "${titulo}" (${rotulo}).`,
+        description: `${assinatura} Trabalho para o prazo "${titulo}" (${rotulo}).`,
         colorId: p.colorId,
         start: { dateTime: new Date(slot.inicio).toISOString() },
         end: { dateTime: new Date(slot.fim).toISOString() },

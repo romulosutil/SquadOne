@@ -96,7 +96,7 @@ function limiteDoMarco(marco: EventoLido, janela: Janela): number | undefined {
 
 const alvoIncompativel = (mensagem: string) => new QuestRecusada("alvoIncompativel", mensagem);
 const conflitoDeEdicao = () =>
-  new QuestRecusada("conflitoDeEdicao", "O evento mudou no Google depois da proposta. Peça a contribuição de novo.");
+  new QuestRecusada("conflitoDeEdicao", "O evento mudou no Google depois da proposta. Peça o ajuste de novo.");
 
 export async function aplicarAjuste(
   // `obterToken` antes de CADA chamada ao Google: um ajuste de esforço faz até

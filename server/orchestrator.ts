@@ -199,10 +199,11 @@ Regras:
   esforco_min, sua estimativa realista do trabalho TOTAL até lá, em minutos. O
   servidor cria o marco no prazo e divide o esforço em blocos antes dele. Não
   chame agendar_evento de novo para os blocos.${regraModo}
-- colaboradores_ids: quando um compromisso claramente pede o olhar de OUTRO papel
-  da squad (ex.: revisar contrato pede o jurídico; lançamento pede o designer),
-  passe os ids dessas pessoas, no máximo 3, sem repetir o responsável. Elas vão
-  escrever notas na descrição do evento. Sem necessidade clara, omita.
+- nota_de_execucao: escreva no MESMO turno uma dica curta de execução, do ponto
+  de vista do responsável e do treino dele — por onde começar, o que checar, o
+  risco óbvio. Ela vira a descrição do evento e é escrita uma única vez. Não
+  repita o título, não invente fatos, pessoas, documentos ou datas que a demanda
+  não sugere. Sem nada útil a dizer, omita.
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
@@ -247,8 +248,8 @@ const TRANSITORIO = /(429|503)|UNAVAILABLE|RESOURCE_EXHAUSTED|TIMEOUT/;
 
 /**
  * Teto de UMA tentativa ao Gemini. Sem ele uma chamada travada prendia o turno
- * para sempre e, na contribuição, a fila serial da aba inteira. 45s cobre as
- * respostas lentas medidas em pico (~15s) com folga. Pior caso de uma geração:
+ * para sempre. 45s cobre as respostas lentas medidas em pico (~15s) com folga.
+ * Pior caso de uma geração:
  * 2 modelos x 2 tentativas x 45s + backoff (~2,4s) ≈ 3 min.
  */
 export const TIMEOUT_GEMINI_MS = 45_000;
@@ -259,8 +260,8 @@ export const TIMEOUT_GEMINI_MS = 45_000;
  * tentativas e o teto que ainda cabe num clique. Cada tentativa tem timeout
  * (`timeoutMs`), que conta como transitório.
  *
- * Exportada para server/redacao.ts e server/contribuicao.ts: sofrem o mesmo 503
- * e merecem o mesmo modelo reserva.
+ * Exportada para server/redacao.ts: sofre o mesmo 503 e merece o mesmo modelo
+ * reserva.
  */
 export async function gerarComRetry(
   ai: GoogleGenAI,
