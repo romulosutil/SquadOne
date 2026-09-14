@@ -40,6 +40,8 @@ import { criarVigia, type Vigia } from "./server/vigia.ts";
 import {
   desconectar,
   ErroDeConfig,
+  escoposConcedidos,
+  EscopoNegado,
   estaConectado,
   PrecisaConectar,
   tokenValido,
@@ -144,7 +146,11 @@ async function startServer() {
 
   app.get("/api/auth/status", async (_req, res) => {
     try {
-      res.json({ conectado: await estaConectado() });
+      const conectado = await estaConectado();
+      // `tasks` é estado DEGRADADO, não conexão: credencial só com o Calendar
+      // segue conectada e agendando; a UI só oferece "Autorizar Google Tasks".
+      const { tasks } = conectado ? await escoposConcedidos() : { tasks: false };
+      res.json({ conectado, tasks });
     } catch (error) {
       responderErroDeAuth(res, error);
     }
@@ -170,6 +176,10 @@ async function startServer() {
       await trocarCodigo(code, state);
       res.redirect("/?auth=ok");
     } catch (error: any) {
+      // Calendar desmarcado no consentimento granular: nada foi gravado e a
+      // credencial anterior continua. Código fixo para a UI dizer isso com
+      // clareza, em vez de repetir a mensagem crua na URL.
+      if (error instanceof EscopoNegado) return res.redirect("/?auth=escopo_calendar_negado");
       console.error("Erro no callback do Google:", error);
       res.redirect(`/?auth=${encodeURIComponent(error.message)}`);
     }
