@@ -4,10 +4,11 @@
  * Google nem o ntfy.
  */
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import { lerJanela } from "./alocador.ts";
 import { PrecisaConectar } from "./auth-store.ts";
 import { listarQuestsDaJanela, type QuestCalendario } from "./calendar.ts";
+import { VARREDURA_MS } from "./lembretes.ts";
 import type { MensagemDePush } from "./push.ts";
 import type { Roster } from "./squad.ts";
 import { AVISO_DESCONECTADO, criarVigia, type DependenciasDaVigia } from "./vigia.ts";
@@ -148,6 +149,32 @@ describe("vigia", () => {
     assert.match(r.erros[0], /primary/);
   });
 
+  it("mesmo eventId em dois calendários dispara uma vez só na mesma varredura (F3)", async () => {
+    const roster2Squads: Roster = {
+      version: 3,
+      idsAposentados: { pessoas: [], dominios: [] },
+      squads: [
+        {
+          id: "pessoal", nome: "Pessoal", escopo: "", calendarId: "cal-a", unlockOrder: [[1, 1]],
+          dominios: [{ id: "geral", nome: "Geral", escopo: "", slot: [1, 1], room: "r", criadoEm: "2026-09-01", po: pessoa, integrantes: [] }],
+        },
+        {
+          id: "outra", nome: "Outra", escopo: "", calendarId: "cal-b", unlockOrder: [[1, 1]],
+          dominios: [{ id: "outro", nome: "Outro", escopo: "", slot: [1, 1], room: "r", criadoEm: "2026-09-01", po: pessoa, integrantes: [] }],
+        },
+      ],
+    };
+    const { vigia, enviadas } = montar({
+      lerRoster: async () => roster2Squads,
+      // Mesmo eventId volta para os dois calendários (ex.: as duas squads apontam
+      // o mesmo calendarId por engano, ou o Google devolve o mesmo evento).
+      listar: async () => [quest()],
+    });
+    const r = await vigia.varrer(AGORA, REAL);
+    assert.equal(enviadas.length, 1);
+    assert.equal(r.mensagens.length, 1);
+  });
+
   it("pede ao Google a janela agora → agora + antecedência + 2 varreduras", async () => {
     let pedido: { de: Date; ate: Date } | null = null;
     const { vigia } = montar({
@@ -159,6 +186,53 @@ describe("vigia", () => {
     await vigia.varrer(AGORA, REAL);
     assert.equal(pedido!.de.getTime(), AGORA.getTime());
     assert.equal(pedido!.ate.getTime(), AGORA.getTime() + 12 * 60_000);
+  });
+
+  it("iniciar: falha permanente loga uma vez, não a cada tick (F2)", async () => {
+    const logs: string[] = [];
+    let falhar = true;
+    const { vigia } = montar({
+      lerJanela: () => {
+        if (falhar) throw new Error("JANELA_TRABALHO ilegível");
+        return JANELA;
+      },
+      log: { log() {}, error: (m: unknown) => logs.push(String(m)) },
+    });
+    const flush = () => new Promise<void>((r) => setImmediate(r));
+
+    mock.timers.enable({ apis: ["setInterval"] });
+    try {
+      const parar = vigia.iniciar(() => AGORA);
+      await flush(); // tick imediato do iniciar()
+      mock.timers.tick(VARREDURA_MS);
+      await flush(); // mesma falha: não deve logar de novo
+      mock.timers.tick(VARREDURA_MS);
+      await flush(); // mesma falha de novo
+      assert.equal(
+        logs.filter((m) => m.startsWith("[push] varredura falhou")).length,
+        1,
+        "logou mais de uma vez a mesma falha",
+      );
+
+      falhar = false;
+      mock.timers.tick(VARREDURA_MS);
+      await flush(); // volta a funcionar: loga uma vez
+      assert.equal(
+        logs.filter((m) => m === "[push] varredura voltou a funcionar").length,
+        1,
+      );
+
+      mock.timers.tick(VARREDURA_MS);
+      await flush(); // continua ok: não loga de novo
+      assert.equal(
+        logs.filter((m) => m === "[push] varredura voltou a funcionar").length,
+        1,
+      );
+
+      parar();
+    } finally {
+      mock.timers.reset();
+    }
   });
 });
 

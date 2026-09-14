@@ -109,7 +109,12 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       }
     }
 
-    for (const d of disparosDevidos(quests, agora.getTime(), janela, alvos.dominios, enviados)) {
+    // Duas squads podem apontar o mesmo calendarId (ex.: as duas usam
+    // "primary"): sem isto o mesmo evento sairia duas vezes na mesma
+    // varredura, uma por calendário lido.
+    const questsUnicas = [...new Map(quests.map((q) => [q.eventId, q])).values()];
+
+    for (const d of disparosDevidos(questsUnicas, agora.getTime(), janela, alvos.dominios, enviados)) {
       const m = mensagemDoDisparo(d, agora.getTime(), janela.fuso, alvos.dominios.get(d.dominio) ?? d.dominio);
       let enviada = false;
       if (opcoes.enviar) {
@@ -135,12 +140,20 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
 
   function iniciar(relogio: () => Date = () => new Date()): () => void {
     let semCredencialAntes = false;
+    // Última mensagem de falha da própria varredura (JANELA_TRABALHO ilegível,
+    // RosterIlegivel, Google fora do ar); null = a varredura está ok. Só loga
+    // quando ela muda — senão uma falha permanente logaria 1440x/dia (F2).
+    let falhaAntes: string | null = null;
     const tick = async () => {
       // Google lento: não empilha varreduras nem manda o mesmo aviso duas vezes em paralelo.
       if (emAndamento) return;
       emAndamento = true;
       try {
         const r = await varrer(relogio(), { enviar: true, registrar: true });
+        if (falhaAntes !== null) {
+          log.error("[push] varredura voltou a funcionar");
+          falhaAntes = null;
+        }
         if (r.semCredencial !== semCredencialAntes) {
           log.error(
             r.semCredencial
@@ -152,7 +165,11 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
         for (const m of r.mensagens) if (m.enviada) log.log(`[push] ${m.titulo}`);
         for (const e of r.erros) log.error(`[push] ${e}`);
       } catch (err) {
-        log.error(`[push] varredura falhou: ${mensagemDe(err)}`);
+        const mensagem = mensagemDe(err);
+        if (mensagem !== falhaAntes) {
+          log.error(`[push] varredura falhou: ${mensagem}`);
+          falhaAntes = mensagem;
+        }
       } finally {
         emAndamento = false;
       }
