@@ -296,6 +296,40 @@ export async function listarQuests(
 }
 
 /**
+ * Eventos do SquadOne numa janela CURTA, para os lembretes (vigia.ts). Uma
+ * chamada por calendário e sem `privateExtendedProperty`: o filtro por marca
+ * exige uma chamada por domínio (match exato, sem wildcard), e numa janela de
+ * minutos o payload sem filtro é pequeno. A marca é conferida aqui, e o
+ * domínio ativo em `disparosDevidos`.
+ */
+export async function listarQuestsDaJanela(
+  token: string,
+  calendarId: string,
+  de: Date,
+  ate: Date,
+): Promise<QuestCalendario[]> {
+  const eventos = await listarPaginado<GoogleEvent>(
+    calendarId,
+    {
+      timeMin: de.toISOString(),
+      timeMax: ate.toISOString(),
+      singleEvents: "true",
+      showDeleted: "false",
+      maxResults: "250",
+    },
+    token,
+  );
+  const quests: QuestCalendario[] = [];
+  for (const ev of eventos) {
+    if (ev.status === "cancelled") continue;
+    if (!ev.extendedProperties?.private?.[PROP_DOMINIO]) continue;
+    const quest = paraQuest(ev);
+    if (quest) quests.push(quest);
+  }
+  return quests;
+}
+
+/**
  * Ocupação da agenda para o alocador (Fase 3). GLOBAL: sempre o calendário
  * principal inteiro, qualquer que seja o calendarId da squad, sem filtro de
  * marca — conflito é com tudo que o usuário tem, inclusive o que o app não criou.
