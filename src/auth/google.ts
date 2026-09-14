@@ -18,6 +18,12 @@ export const conectado = ref(false);
 export const conectando = ref(false);
 
 /**
+ * A credencial tem o escopo do Google Tasks? Estado degradado, não conexão:
+ * sem ele o Calendar funciona igual e só os passos não viram checklist.
+ */
+export const tasksLiberado = ref(false);
+
+/**
  * Pergunta ao servidor se existe credencial guardada. Barato e sem efeito
  * colateral: pode ser chamado no mount e depois de qualquer 401.
  */
@@ -27,9 +33,11 @@ export async function sincronizarStatus(): Promise<boolean> {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const dados = await resp.json();
     conectado.value = Boolean(dados.conectado);
+    tasksLiberado.value = Boolean(dados.tasks);
   } catch (err) {
     console.error("Falha ao ler o status da conexão:", err);
     conectado.value = false;
+    tasksLiberado.value = false;
   }
   return conectado.value;
 }
@@ -44,6 +52,15 @@ export function irParaConsentimento(): void {
   window.location.href = "/api/auth/google";
 }
 
+/**
+ * Pede o escopo do Google Tasks: é o MESMO consentimento, agora com os dois
+ * escopos. Nunca logout antes — logout revoga o refresh_token no Google e
+ * derrubaria o Calendar junto.
+ */
+export function ampliarAcesso(): void {
+  irParaConsentimento();
+}
+
 /** Apaga a credencial no servidor e revoga no Google. */
 export async function desconectar(): Promise<void> {
   try {
@@ -52,6 +69,7 @@ export async function desconectar(): Promise<void> {
     console.error("Falha ao desconectar:", err);
   }
   conectado.value = false;
+  tasksLiberado.value = false;
 }
 
 /**

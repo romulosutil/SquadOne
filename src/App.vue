@@ -29,7 +29,7 @@ import type {
   SquadView,
   Sugestao
 } from './types'
-import { conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus } from './auth/google'
+import { ampliarAcesso, conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus, tasksLiberado } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 
 const currentAgent = ref('Idle')
@@ -85,7 +85,14 @@ onMounted(async () => {
   // /?auth=<motivo>. Avisar aqui e o unico feedback que o usuario tem de que
   // a autorizacao deu certo, porque o resto do fluxo acontece no servidor.
   const retorno = lerRetornoDoConsentimento()
-  if (retorno && retorno !== 'ok') avisar(`Google: ${retorno}`)
+  if (retorno === 'escopo_calendar_negado') {
+    // O servidor recusou sem gravar: dizer que NADA mudou é o que evita o
+    // usuário achar que perdeu a conexão do Calendar.
+    avisar(
+      'Google: o Calendar foi desmarcado na autorização, então nada mudou e a conexão anterior continua valendo. Para autorizar o Google Tasks, repita marcando as duas caixas.',
+      { rotulo: 'Tentar de novo', fazer: ampliarAcesso }
+    )
+  } else if (retorno && retorno !== 'ok') avisar(`Google: ${retorno}`)
   else if (retorno === 'ok') avisar('Calendário conectado')
 
   // A credencial mora no servidor: basta perguntar. Sem popup, sem gesto — se
@@ -309,10 +316,22 @@ const aprovarAjuste = async (id: string, permitirMover: boolean, propostoMin: nu
   }
 }
 
-const avisar = (texto) => {
+/** Gesto opcional no toast: hoje, "Autorizar Google Tasks". */
+interface AcaoDoToast {
+  rotulo: string
+  fazer: () => void
+}
+const acaoDoToast = ref<AcaoDoToast | null>(null)
+
+const avisar = (texto: string, acao?: AcaoDoToast) => {
   toast.value = texto
+  acaoDoToast.value = acao ?? null
   clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => { toast.value = '' }, 4000)
+  // Com botão, mais tempo: 4 s mal dão para ler, que dirá decidir clicar.
+  toastTimer = window.setTimeout(() => {
+    toast.value = ''
+    acaoDoToast.value = null
+  }, acao ? 10000 : 4000)
 }
 
 /**
@@ -781,6 +800,17 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         >
           📅 Calendário conectado
         </button>
+        <!-- Degradado, não desconectado: o Calendar segue; só os passos não
+             viram checklist. Mesmo consentimento, sem logout. -->
+        <button
+          v-if="conectado && !tasksLiberado"
+          @click="ampliarAcesso"
+          :disabled="conectando"
+          title="Os passos dos compromissos viram checklist no Google Tasks. Não desconecta o Calendar."
+          class="border-2 border-black bg-white px-2 py-1 font-black text-[10px] uppercase hover:bg-black hover:text-white transition-colors disabled:opacity-50"
+        >
+          ✅ Autorizar Google Tasks
+        </button>
       </div>
     </header>
 
@@ -909,9 +939,16 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
          título, dia e hora — caixa alta numa linha só ficaria ilegível. -->
     <div
       v-if="toast"
-      class="fixed bottom-24 right-6 z-50 max-w-sm border-4 border-black bg-[#ffdb58] px-4 py-3 font-black text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+      class="fixed bottom-24 right-6 z-50 max-w-sm border-4 border-black bg-[#ffdb58] px-4 py-3 font-black text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2"
     >
-      ✨ {{ toast }}
+      <span>✨ {{ toast }}</span>
+      <button
+        v-if="acaoDoToast"
+        @click="acaoDoToast.fazer()"
+        class="self-start border-2 border-black bg-white px-2 py-1 text-xs uppercase hover:bg-black hover:text-white transition-colors"
+      >
+        {{ acaoDoToast.rotulo }}
+      </button>
     </div>
 
     <!-- Command Bar -->
