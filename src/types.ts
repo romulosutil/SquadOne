@@ -161,11 +161,25 @@ export interface AvisoTarefa {
   motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
 }
 
+/**
+ * O servidor trocou de squad sozinho e reprocessou a demanda lá: já aconteceu,
+ * não é proposta. A aba adota a squad de destino e avisa onde a demanda caiu.
+ */
+export interface Redirecionamento {
+  de_id: string;
+  de_nome: string;
+  para_id: string;
+  para_nome: string;
+  justificativa: string;
+}
+
 export interface TurnoResponse {
   eventos_criados: EventoCriado[];
   sugestoes: Sugestao[];
   avisos: AvisoTarefa[];
   erros: ErroTarefa[];
+  /** Ausente quando o turno rodou na squad que o usuário escolheu. */
+  redirecionado?: Redirecionamento;
 }
 
 /**

@@ -68,7 +68,7 @@ data/                     volume em produção; nada aqui é versionado
 
 **1. O roster é uma árvore de três níveis.** `roster → squad → domínio → { po, integrantes }`. Uma squad = um escritório 3x3; uma sala = um domínio. Contratar um integrante entra na sala existente; criar um domínio ocupa o primeiro slot livre de `unlockOrder` (derivado dos slots ocupados, não de `dominios.length`). Máximo 9 domínios por squad. Squad nasce com 1 domínio + PO (o `GameMap` precisa de `dominios[0].po`). Ids de domínio e de pessoa são únicos entre **todas** as squads e `idsAposentados`; domínio novo é `<squad>--<slug>`, os legados (`po`, `geral`) ficam como estão.
 
-**2. O roster é o prompt.** A árvore **da squad ativa** vai literal para o `systemInstruction` em `orchestrator.ts`; as outras squads entram só por id, nome e escopo, para o modelo poder chamar `sugerir_troca_squad` sem conseguir agendar nelas. A squad ativa é escolha da aba (`localStorage`), mandada como `squadId` em `/api/orquestrar` e `/api/mochila`; a rota resolve a squad antes de pedir token e antes do Gemini. Não existe "treinamento do agente" guardado em outro lugar: `papel` + `escopo` de cada `Pessoa` *são* o treino. Persistir o roster já persiste os agentes. O escopo de pessoa (até 1500 caracteres, cinco linhas: Missão, Cuida de, Não cuida de, Ao opinar sobre um compromisso, Sinais de alerta) é o treino; entra em bloco recuado na árvore.
+**2. O roster é o prompt.** A árvore **da squad ativa** vai literal para o `systemInstruction` em `orchestrator.ts`; as outras squads entram só por id, nome e escopo, para o modelo poder chamar `sugerir_troca_squad` sem conseguir agendar nelas (o servidor então troca e reprocessa sozinho — ver "Redirecionamento automático de squad"). A squad ativa é escolha da aba (`localStorage`), mandada como `squadId` em `/api/orquestrar` e `/api/mochila`; a rota resolve a squad antes de pedir token e antes do Gemini. Não existe "treinamento do agente" guardado em outro lugar: `papel` + `escopo` de cada `Pessoa` *são* o treino. Persistir o roster já persiste os agentes. O escopo de pessoa (até 1500 caracteres, cinco linhas: Missão, Cuida de, Não cuida de, Ao opinar sobre um compromisso, Sinais de alerta) é o treino; entra em bloco recuado na árvore.
 
 **3. As quests vivem no Google Calendar, não aqui.** `GET /api/mochila` lê do Google a cada chamada. Editar ou apagar no Google reflete na próxima leitura. `quests` no frontend é cache da última resposta, nunca fonte de verdade. A leitura vai 7 dias para trás, mas o card some quando a quest **termina** (`questTerminou` em `src/mochila.ts`, relógio de 30 s): filtro só da vista, a lista cheia segue alimentando "Bloco i/N".
 
@@ -104,6 +104,15 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - **Série:** os `agendar_evento` de um turno rodam um por vez (fixo, foco, prazo mais próximo) e cada reserva desconta da ocupação. O resto das capacidades segue em paralelo. Resultados voltam na ordem das chamadas. Turno com `sugerir_troca_squad` descarta os agendamentos antes de ler a agenda.
 - **Sem credencial:** o turno roda; cada `agendar_evento` vira erro com `motivo: precisaConectar` sem chamar o Google, e a UI volta a oferecer "Conectar".
 - `server/alocador.ts` é puro (sem `fetch`, relógio, env ou import) e é o que a Fase 4 reusa. Mantenha assim.
+
+### Redirecionamento automático de squad
+
+`sugerir_troca_squad` não espera clique. `executarTurno` roda o turno, vê a proposta, troca para a squad de destino e reprocessa a **mesma** demanda lá — uma 2ª chamada ao Gemini, só nesse caso — e devolve o resultado do 2º turno como se fosse o original, com `redirecionado: { de_id, de_nome, para_id, para_nome, justificativa }`. A aba adota `para_id` (localStorage) antes de reler a Mochila e só mostra um toast.
+
+- **Um salto por turno.** Se a squad de destino também sugerir troca, o servidor para e devolve o resultado dela, proposta inclusa: o `TrocaSquadCard` (Trocar / Trocar e reenviar / Descartar) sobra só para esse empate. Sem o teto, duas squads apontando uma para a outra rodariam o Gemini até o timeout do proxy, e cada salto é pago.
+- **O turno de origem não deixa rastro** porque não deixa efeito: `descartarPorTroca` já descarta todas as outras chamadas antes de executar, então nada nasceu no Google e a agenda nem foi lida. Os erros dele também não voltam.
+- Invariante de custo mantida: no 2º prompt a squad ativa é a **destino**, inteira; a origem vira "outra squad" (id, nome, escopo). Mesmo `agora` e mesmo `modo` nos dois turnos — o toggle é sobre o tipo do compromisso, não sobre a squad.
+- Destino inválido ou arquivado entre a proposta e o salto: sem 2º turno, o resultado da origem volta como antes.
 
 ### Contribuição dos agentes (Fase 4)
 

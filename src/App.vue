@@ -27,6 +27,7 @@ import type {
   PreenchimentoDeContratacao,
   PropostaDeAjuste,
   QuestCalendario,
+  Redirecionamento,
   ResultadoDeAgente,
   RespostaDeAjuste,
   RosterView,
@@ -176,7 +177,27 @@ const criarSquad = async (dados: DadosNovaSquad) => {
   }
 }
 
-/** Aceite do card de troca. Reenviar usa `auto`: o modo forçado era da squad anterior. */
+/**
+ * O servidor rodou o turno em outra squad e já criou os eventos lá. Não passa
+ * por `trocarSquad`: aquele recusa trocar com turno em curso (`isLoading`), e
+ * aqui a troca não é pedido, é fato consumado. Devolve o id adotado.
+ */
+const adotarSquadDoTurno = async (r: Redirecionamento): Promise<string> => {
+  // Squad criada em outra aba: sem ela no roster local, `squadAtiva` cairia na
+  // primeira squad em vez do destino, e a Mochila viria da squad errada.
+  if (!roster.value?.squads.some((s) => s.id === r.para_id)) await carregarRoster()
+  squadAtivaId.value = r.para_id
+  gravarSquadAtiva(r.para_id)
+  quests.value = []
+  avisar(`Demanda atendida pela squad ${r.para_nome}`)
+  return r.para_id
+}
+
+/**
+ * Aceite do card de troca. Fallback: o servidor já redireciona sozinho, e este
+ * card só sobra quando a squad de destino também mandou a demanda embora (o
+ * teto de um salto). Reenviar usa `auto`: o modo forçado era da squad anterior.
+ */
 const aceitarTroca = async (id: string, reenviar: boolean) => {
   const proposta = sugestoesDeTroca.value.find((s) => s.id === id)
   if (!proposta) return
@@ -747,6 +768,13 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
 
     const turno = await response.json()
 
+    // O turno pode ter rodado em OUTRA squad (redirecionamento automático do
+    // servidor): os eventos nasceram lá, então a aba adota o destino ANTES de
+    // reler a Mochila — senão ela viria da squad de origem, sem as quests novas.
+    const squadDoTurno = turno.redirecionado
+      ? await adotarSquadDoTurno(turno.redirecionado)
+      : squadIdDoTurno
+
     if (turno.eventos_criados?.length) {
       // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
       // qual DOMINIO ela esta para mandar o PO raiz ate a sala certa.
@@ -787,8 +815,8 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
 
     // Colaboradores marcados pelo PO entram na fila DEPOIS da Mochila, nunca
     // junto: tudo que chama tokenValido() anda em série nesta aba.
-    if (squadIdDoTurno) {
-      for (const pedido of pedidosDoTurno(turno, squadIdDoTurno)) pedirContribuicao(pedido)
+    if (squadDoTurno) {
+      for (const pedido of pedidosDoTurno(turno, squadDoTurno)) pedirContribuicao(pedido)
     }
   } catch (error) {
     console.error('Falha ao orquestrar:', error)

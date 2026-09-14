@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
 import { CAPABILITIES, declarations, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
-import { outrasSquads, rosterTree, type Roster, type Squad } from "./squad.ts";
+import { outrasSquads, rosterTree, squadsAtivas, type Roster, type Squad } from "./squad.ts";
 import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
 import { descreverJanela, FUSO, lerJanela, SemHorarioLivre, type Janela } from "./alocador.ts";
@@ -72,6 +72,19 @@ function descartarPorTroca(nome: string, args: Record<string, any>): ErroTarefa 
   };
 }
 
+/**
+ * O turno acabou rodando em OUTRA squad: o modelo disse que a demanda não era
+ * desta, o servidor trocou e reprocessou lá. A aba precisa disto para adotar a
+ * squad de destino e avisar o usuário — não é proposta, já aconteceu.
+ */
+export interface Redirecionamento {
+  de_id: string;
+  de_nome: string;
+  para_id: string;
+  para_nome: string;
+  justificativa: string;
+}
+
 export interface TurnoResult {
   eventos_criados: EventoCriado[];
   /** Propostas de crescimento: de domínio (sala nova) ou de integrante (mesma sala). */
@@ -79,6 +92,8 @@ export interface TurnoResult {
   /** Compromissos feitos de um jeito diferente do pedido (conflito, esforço parcial...). */
   avisos: AvisoTarefa[];
   erros: ErroTarefa[];
+  /** Ausente quando o turno rodou na squad que o usuário escolheu. */
+  redirecionado?: Redirecionamento;
 }
 
 /** Data/hora local com offset, no formato que o modelo deve devolver. */
@@ -314,10 +329,19 @@ export interface PedidoDeTurno {
   agora?: Date;
 }
 
-export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Promise<TurnoResult> {
-  const { demanda, token, falhaDoToken, modo, roster, squad } = pedido;
-  const janela = pedido.janela ?? lerJanela({});
-  const agora = pedido.agora ?? new Date();
+/**
+ * UM turno dentro de UMA squad: uma chamada ao Gemini e as capacidades que ela
+ * pediu. Quem decide se ele roda de novo em outra squad é `executarTurno` —
+ * aqui a squad é dada e não muda no meio.
+ */
+async function rodarTurno(
+  ai: GoogleGenAI,
+  pedido: PedidoDeTurno,
+  squad: Squad,
+  janela: Janela,
+  agora: Date,
+): Promise<TurnoResult> {
+  const { demanda, token, falhaDoToken, modo, roster } = pedido;
 
   const response = await gerarComRetry(ai, {
     model: MODEL,
@@ -417,4 +441,57 @@ export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Pro
   }
 
   return turno;
+}
+
+/** A primeira proposta de troca do turno, se houver. Mais de uma é o mesmo veredito repetido. */
+function trocaSugerida(turno: TurnoResult) {
+  return turno.sugestoes.find(
+    (s): s is Extract<Sugestao, { kind: "troca_squad" }> => s.kind === "troca_squad",
+  );
+}
+
+/**
+ * O turno, com redirecionamento automático de squad.
+ *
+ * Quando o modelo diz que a demanda é de outra squad, o servidor não devolve um
+ * card e espera clique: troca a squad e reprocessa a MESMA demanda lá (2ª
+ * chamada ao Gemini, só nesse caso), devolvendo o resultado de lá como se fosse
+ * o turno original. O turno de origem não deixa rastro porque não deixa efeito:
+ * `descartarPorTroca` já descarta todas as outras chamadas ANTES de executar,
+ * então nada foi criado no Google e a agenda nem chegou a ser lida.
+ *
+ * TETO DE UM SALTO. Sem ele, duas squads que apontam uma para a outra rodariam
+ * o Gemini até o timeout do proxy, e cada salto é uma chamada paga. Se a squad
+ * de destino também sugerir troca, o resultado dela volta com a proposta
+ * dentro: o `TrocaSquadCard` continua existindo exatamente para esse empate.
+ */
+export async function executarTurno(ai: GoogleGenAI, pedido: PedidoDeTurno): Promise<TurnoResult> {
+  const janela = pedido.janela ?? lerJanela({});
+  // Um relógio só para os dois turnos: o segundo é reprocessamento do mesmo
+  // pedido, não um pedido novo — "amanhã" tem que significar o mesmo dia nos dois.
+  const agora = pedido.agora ?? new Date();
+
+  const primeiro = await rodarTurno(ai, pedido, pedido.squad, janela, agora);
+  const troca = trocaSugerida(primeiro);
+  if (!troca) return primeiro;
+
+  // Destino já validado pelo handler (existe, ativa, diferente da origem); esta
+  // busca é só para pegar a Squad inteira, que a proposta não carrega.
+  const destino = squadsAtivas(pedido.roster).find((s) => s.id === troca.destino_id);
+  if (!destino) return primeiro;
+
+  // Mesmo `modo`: o toggle é intenção do usuário sobre o TIPO do compromisso
+  // ("bloco agora"), não sobre a squad. Diferente do reenvio manual do card,
+  // que é um gesto novo, depois do turno.
+  const segundo = await rodarTurno(ai, pedido, destino, janela, agora);
+  return {
+    ...segundo,
+    redirecionado: {
+      de_id: pedido.squad.id,
+      de_nome: pedido.squad.nome,
+      para_id: destino.id,
+      para_nome: destino.nome,
+      justificativa: troca.justificativa,
+    },
+  };
 }
