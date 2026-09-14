@@ -410,13 +410,21 @@ export type ObterToken = () => Promise<string>;
  * credencial, pede de novo e, vindo um token diferente, repete uma vez: 401
  * só vira `precisaConectar` se persistir com o token recém-obtido. Repetir é
  * seguro: 401 é recusa antes de aplicar, nada foi gravado.
+ *
+ * `ehCredencial` existe para o Google Tasks (server/tasks.ts) reusar o mesmo
+ * retry: lá só 401 é credencial — 403 de escopo insuficiente é "ampliar
+ * acesso", e repetir com token novo não o conserta.
  */
-export async function comToken<T>(obter: ObterToken, fn: (token: string) => Promise<T>): Promise<T> {
+export async function comToken<T>(
+  obter: ObterToken,
+  fn: (token: string) => Promise<T>,
+  ehCredencial: (err: unknown) => boolean = (err) => err instanceof ErroCalendario && err.ehCredencial,
+): Promise<T> {
   const token = await obter();
   try {
     return await fn(token);
   } catch (err) {
-    if (!(err instanceof ErroCalendario && err.ehCredencial)) throw err;
+    if (!ehCredencial(err)) throw err;
     const novo = await obter();
     if (novo === token) throw err;
     return fn(novo);
