@@ -15,6 +15,9 @@ import {
 } from "./squad.ts";
 import type { AgendaDoTurno } from "./agenda.ts";
 import { agendarCompromisso, type CompromissoAgendado, type TipoEvento } from "./agendamento.ts";
+import type { ObterToken } from "./calendar.ts";
+import { MAX_PASSOS, normalizarPassos } from "./passos.ts";
+import { passosNoGoogle } from "./passos-no-google.ts";
 
 export type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
 
@@ -75,6 +78,13 @@ export interface CapabilityContext {
    * É por ela que dois compromissos da mesma demanda não caem no mesmo horário.
    */
   agenda: AgendaDoTurno;
+  /**
+   * Google Tasks neste turno. `liberado` = a credencial tem o escopo, lido UMA
+   * vez pela rota (sem escopo, os passos nem chamam o Google). `obterToken` pede
+   * o token de novo antes de cada chamada, como no Ajuste: o retry de 401
+   * precisa de um token novo, e o `token` do contexto é fixo do começo do turno.
+   */
+  tasks: { liberado: boolean; obterToken: ObterToken };
 }
 
 /** Proposta de ABRIR UM DOMÍNIO novo: sala nova, PO novo. */
@@ -211,6 +221,15 @@ const agendarEvento: Capability = {
             "descrição do evento, escrita UMA vez na criação. Sem repetir o título e " +
             "sem inventar fatos, pessoas ou documentos que a demanda não sugere.",
         },
+        passos: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description:
+            "Opcional. Micro-passos concretos do compromisso, em ordem, que viram uma " +
+            "checklist no Google Tasks do usuário. Cada item: verbo no infinitivo, curto " +
+            "(até ~80 caracteres), sem repetir o título. Omita quando o compromisso é um " +
+            "bloco simples sem etapas distintas.",
+        },
       },
       required: ["titulo", "responsavel_id", "tipo"],
     },
@@ -233,6 +252,33 @@ const agendarEvento: Capability = {
       colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
       agenda: ctx.agenda,
     });
+    // Passos DEPOIS dos eventos: a tarefa-mãe aponta para o evento principal, e
+    // o modelo não recebe eventId de volta (turno one-shot) — por isso é campo
+    // daqui e não capacidade separada. Normalizado no servidor: o prompt pede
+    // 2–8 itens, mas prompt é pedido, não garantia.
+    const { passos, cortados } = normalizarPassos(args.passos);
+    if (passos.length === 0) return compromisso;
+    try {
+      const r = await passosNoGoogle.criarPassosDoCompromisso({
+        compromisso,
+        squad: ctx.squad,
+        passos,
+        obterToken: ctx.tasks.obterToken,
+        liberado: ctx.tasks.liberado,
+        fuso: ctx.agenda.janela.fuso,
+      });
+      if (r.criados > 0) compromisso.eventos[0].passos = r.criados;
+      compromisso.avisos.push(...r.avisos);
+      if (cortados > 0 && r.tarefaMaeId) {
+        compromisso.avisos.push({
+          aviso: `${cortados} passo(s) além do limite de ${MAX_PASSOS} ficaram de fora do Google Tasks.`,
+        });
+      }
+    } catch (err: any) {
+      // criarPassosDoCompromisso não lança; se lançar, é bug nosso — e ainda
+      // assim não pode apagar um compromisso que já está certo no Google.
+      compromisso.avisos.push({ aviso: `Passos não criados no Google Tasks: ${err?.message ?? String(err)}` });
+    }
     return compromisso;
   },
 };

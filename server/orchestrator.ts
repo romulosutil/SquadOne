@@ -6,6 +6,7 @@ import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
 import { descreverJanela, FUSO, lerJanela, SemHorarioLivre, type Janela } from "./alocador.ts";
 import { prioridadeDeAgendamento } from "./agendamento.ts";
+import type { ObterToken } from "./calendar.ts";
 
 export const MODEL = "gemini-3.7-flash";
 /** Uma fonte só do fuso: o alocador e o prompt não podem discordar. */
@@ -212,6 +213,14 @@ Regras:
   risco óbvio. Ela vira a descrição do evento e é escrita uma única vez. Não
   repita o título, não invente fatos, pessoas, documentos ou datas que a demanda
   não sugere. Sem nada útil a dizer, omita.
+- passos: mande SÓ quando (a) o usuário pediu explicitamente checklist, passos,
+  etapas ou lista para o compromisso, ou (b) o compromisso é um prazo
+  (tipo='deadline') cujo entregável tem etapas concretas e distintas que a própria
+  demanda sugere. Entre 2 e 8 itens, em ordem de execução, verbo no infinitivo.
+  Não invente etapas que a demanda não sugere e não use passos para repetir a
+  nota_de_execucao. Bloco simples de foco: omita. Pedido de checklist sem
+  compromisso: chame agendar_evento com os passos (time_blocking, duração
+  estimada).
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
@@ -336,6 +345,16 @@ export interface PedidoDeTurno {
   janela?: Janela;
   /** Relógio do turno. A rota não passa; scripts de verificação fixam. */
   agora?: Date;
+  /**
+   * A credencial tem o escopo do Google Tasks? Resolvido UMA vez pela rota.
+   * Ausente = false: chamadores antigos e scripts não criam passos por engano.
+   */
+  tasksLiberado?: boolean;
+  /**
+   * Token pedido de novo antes de cada chamada ao Tasks (a rota passa
+   * `tokenValido`). Ausente = o `token` do turno, ou `PrecisaConectar` sem ele.
+   */
+  obterToken?: ObterToken;
 }
 
 /**
@@ -382,7 +401,16 @@ async function rodarTurno(
 
   const calls: FunctionCall[] = response.functionCalls ?? [];
   const agenda = new AgendaDoTurno({ token, falhaDoToken, janela, agora });
-  const ctx: CapabilityContext = { token, roster, squad, agora, modo, demanda, agenda };
+  const obterToken: ObterToken =
+    pedido.obterToken ??
+    (async () => {
+      if (token) return token;
+      throw new PrecisaConectar("Nenhuma credencial do Google guardada.");
+    });
+  const ctx: CapabilityContext = {
+    token, roster, squad, agora, modo, demanda, agenda,
+    tasks: { liberado: pedido.tasksLiberado === true, obterToken },
+  };
 
   // Decidido ANTES de executar qualquer chamada (regra da Fase 1): com troca de
   // squad no turno, as outras chamadas são descartadas, inclusive agendamentos,

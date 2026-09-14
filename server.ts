@@ -364,8 +364,12 @@ async function startServer() {
       } catch (err) {
         falhaDoToken = err;
       }
+      // O scope gravado é lido UMA vez por turno, antes do Gemini: cada
+      // compromisso com passos consulta este booleano, não o disco.
+      const { tasks: tasksLiberado } = await escoposConcedidos();
       const turno = await executarTurno(ai, {
         demanda: demanda.trim(), token, falhaDoToken, modo, roster, squad, janela,
+        tasksLiberado, obterToken: tokenValido,
       });
       res.json(turno);
     } catch (error: any) {
