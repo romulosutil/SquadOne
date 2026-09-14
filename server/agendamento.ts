@@ -40,6 +40,12 @@ export interface EventoCriado {
   prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
+  /**
+   * Subtarefas criadas no Google Tasks, só no evento PRINCIPAL e só quando > 0.
+   * Quem preenche é o handler de agendar_evento (capabilities.ts): este módulo
+   * não sabe que o Tasks existe, assim como não sabe do push.
+   */
+  passos?: number;
 }
 
 /**
@@ -49,7 +55,8 @@ export interface EventoCriado {
  */
 export interface AvisoDoCompromisso {
   aviso: string;
-  motivo?: "precisaConectar";
+  /** `ampliarAcesso`: passos não criados por falta do escopo do Google Tasks — o Calendar segue ok. */
+  motivo?: "precisaConectar" | "ampliarAcesso";
 }
 
 /** Resultado de UMA chamada de agendar_evento: um compromisso, 1..N eventos. */

@@ -27,13 +27,19 @@ export interface ErroTarefa {
 /** Por que uma tarefa falhou, quando a UI tem um gesto certo para isso. */
 export type MotivoDeErro = "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
 
+/**
+ * Gesto de um AVISO. `ampliarAcesso` só existe aqui, não em `MotivoDeErro`:
+ * falta do escopo do Tasks nunca falha um compromisso, só deixa os passos de fora.
+ */
+export type MotivoDeAviso = MotivoDeErro | "ampliarAcesso";
+
 /** Algo que foi feito, mas não exatamente como pedido. Não é falha. */
 export interface AvisoTarefa {
   capacidade: string;
   titulo: string;
   aviso: string;
   /** Gesto certo para a UI, como em `ErroTarefa`: bloco recusado por credencial pede reconectar. */
-  motivo?: MotivoDeErro;
+  motivo?: MotivoDeAviso;
 }
 
 /**
