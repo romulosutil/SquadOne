@@ -82,7 +82,17 @@ export function lerConfigDePush(env: Record<string, string | undefined>): Config
     );
   }
   // Token como senha com usuário vazio (`https://:tk@host`) ou no lugar do usuário.
-  const token = decodeURIComponent(url.password || url.username) || null;
+  let token: string | null;
+  try {
+    token = decodeURIComponent(url.password || url.username) || null;
+  } catch {
+    // `%` seguido de algo que não é hex (ex.: `%ZZ`) faz decodeURIComponent
+    // lançar URIError. A mensagem NUNCA repete `url.password`/`url.username`:
+    // é justamente o token que está malformado.
+    throw new PushMalConfigurado(
+      "LEMBRETES_NTFY_URL tem um token mal codificado (formato: https://:TOKEN@host/topico).",
+    );
+  }
   return { servidor: url.origin, topico, token };
 }
 

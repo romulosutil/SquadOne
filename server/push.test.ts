@@ -43,6 +43,7 @@ describe("lerConfigDePush", () => {
     ["tópico com barra", "https://:tk_segredo@ntfy.exemplo.com/a/b"],
     ["tópico com caractere inválido", "https://:tk_segredo@ntfy.exemplo.com/t%C3%B3pico"],
     ["com query", "https://:tk_segredo@ntfy.exemplo.com/t1?x=1"],
+    ["token com % inválido para decodeURIComponent", "https://:tk_segredo%ZZ@ntfy.exemplo.com/t1"],
   ] as const) {
     it(`recusa ${caso} sem vazar o token`, () => {
       assert.throws(
