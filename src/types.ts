@@ -93,6 +93,8 @@ export interface EventoCriado {
   prazo_ref?: string;
   eventId: string;
   htmlLink?: string;
+  /** Subtarefas criadas no Google Tasks; só no evento principal e só quando > 0. */
+  passos?: number;
 }
 
 /** Proposta de abrir um domínio novo — sala nova no escritório. */
@@ -155,8 +157,11 @@ export interface AvisoTarefa {
   capacidade: string;
   titulo: string;
   aviso: string;
-  /** Bloco de prazo recusado por credencial: mesmo gesto do erro `precisaConectar`. */
-  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
+  /**
+   * `precisaConectar`: bloco de prazo recusado por credencial. `ampliarAcesso`:
+   * passos não criados por falta do escopo do Google Tasks (o Calendar segue ok).
+   */
+  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel" | "ampliarAcesso";
 }
 
 /**

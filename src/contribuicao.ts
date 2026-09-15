@@ -90,9 +90,13 @@ export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeD
     .filter((e) => !(e.papel === 'bloco' && e.prazo_ref && marcos.has(e.prazo_ref)))
     .map((e) => {
       const blocos = e.papel === 'marco' ? eventos.filter((b) => b.prazo_ref === e.eventId) : []
-      if (!blocos.length) return resumoDoEvento(e, fmt)
       const total = blocos.reduce((t, b) => t + duracaoMin(b), 0)
-      return `${resumoDoEvento(e, fmt)} (${blocos.length} bloco(s), ${formatarMinutos(total)})`
+      const base = blocos.length
+        ? `${resumoDoEvento(e, fmt)} (${blocos.length} bloco(s), ${formatarMinutos(total)})`
+        : resumoDoEvento(e, fmt)
+      // A checklist mora fora do app (Google Tasks): o toast é o único lugar
+      // em que o usuário fica sabendo que ela nasceu.
+      return e.passos ? `${base} · ${e.passos} passo(s) no Google Tasks` : base
     })
     .join(' · ')
 }

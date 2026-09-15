@@ -705,6 +705,16 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // reler a Mochila — senão ela viria da squad de origem, sem as quests novas.
     if (turno.redirecionado) await adotarSquadDoTurno(turno.redirecionado)
 
+    const erros = turno.erros ?? []
+    const avisos = turno.avisos ?? []
+    // Passos sem o escopo do Tasks: o compromisso saiu inteiro, então não é
+    // alert — é o toast do turno com o gesto certo. Nunca logout: ampliar é o
+    // mesmo consentimento.
+    const ampliar = (x: { motivo?: string }) => x.motivo === 'ampliarAcesso'
+    const pedeTasks = avisos.some(ampliar)
+    if (pedeTasks) tasksLiberado.value = false
+    const acaoTasks = pedeTasks ? { rotulo: 'Autorizar Google Tasks', fazer: ampliarAcesso } : undefined
+
     if (turno.eventos_criados?.length) {
       // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
       // qual DOMINIO ela esta para mandar o PO raiz ate a sala certa.
@@ -714,7 +724,10 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       // toast do redirecionamento automático vem antes e seria sobrescrito por
       // este, então a squad de destino entra aqui em vez de se perder.
       const resumo = resumoDosEventosCriados(turno.eventos_criados)
-      avisar(turno.redirecionado ? `Squad ${turno.redirecionado.para_nome} — ${resumo}` : resumo)
+      const texto = turno.redirecionado ? `Squad ${turno.redirecionado.para_nome} — ${resumo}` : resumo
+      avisar(pedeTasks ? `${texto} · Passos não criados: falta autorizar o Google Tasks.` : texto, acaoTasks)
+    } else if (pedeTasks) {
+      avisar('Passos não criados: falta autorizar o Google Tasks.', acaoTasks)
     }
 
     // Cada turno SUBSTITUI as propostas, inclusive por nenhuma: sugestao de
@@ -726,22 +739,21 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // cards novos ficariam bloqueados ate o POST antigo voltar.
     aprovando.value = ''
 
-    const erros = turno.erros ?? []
-    const avisos = turno.avisos ?? []
     // Agendar sem credencial falha por compromisso, nao o turno inteiro: o
     // motivo classificado e o que diz para a Mochila voltar a oferecer o
     // botao de conectar. Bloco de prazo recusado no meio da serie chega como
     // aviso (o compromisso saiu em parte), com o mesmo motivo.
     const precisaConectar = (x: { motivo?: string }) => x.motivo === 'precisaConectar'
     if (erros.some(precisaConectar) || avisos.some(precisaConectar)) conectado.value = false
-    if (erros.length || avisos.length) {
+    const avisosNoAlerta = avisos.filter((a) => !ampliar(a))
+    if (erros.length || avisosNoAlerta.length) {
       // try por tarefa: o lote sobrevive, os erros vem nomeados. Avisos sao
       // coisas feitas de um jeito diferente do pedido (conflito, esforco que
       // nao coube antes do prazo) e o usuario precisa saber delas agora.
       console.warn('Tarefas com erro:', erros, 'Avisos:', avisos)
       alert([
         ...erros.map(e => `${e.capacidade}: ${e.erro}`),
-        ...avisos.map(a => `Aviso — ${a.titulo}: ${a.aviso}`)
+        ...avisosNoAlerta.map(a => `Aviso — ${a.titulo}: ${a.aviso}`)
       ].join('\n'))
     }
 

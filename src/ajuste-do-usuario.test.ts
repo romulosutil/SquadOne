@@ -131,6 +131,24 @@ describe("A) toast do turno: o que foi marcado", () => {
   it("turno sem evento criado não vira toast", () => {
     assert.equal(resumoDosEventosCriados([], FMT), "");
   });
+
+  it("evento principal com passos ganha o sufixo do Google Tasks", () => {
+    const texto = resumoDosEventosCriados([evento({ titulo: "Apresentação", passos: 3 })], FMT);
+    assert.match(texto, /^Apresentação: 45 min, /);
+    assert.match(texto, /14:00–14:45 · 3 passo\(s\) no Google Tasks$/);
+  });
+
+  it("prazo com blocos e passos: o sufixo vem depois dos blocos dobrados", () => {
+    const marco = evento({ titulo: "Entrega", papel: "marco", tipo: "deadline", eventId: "marco1", fim: "2026-09-18T18:00:00-03:00", passos: 2 });
+    const bloco = evento({ titulo: "Entrega (bloco)", papel: "bloco", prazo_ref: "marco1", eventId: "b1", inicio: "2026-09-16T09:00:00-03:00", fim: "2026-09-16T10:00:00-03:00" });
+    const texto = resumoDosEventosCriados([marco, bloco], FMT);
+    assert.match(texto, /\(1 bloco\(s\), 1h\) · 2 passo\(s\) no Google Tasks$/);
+  });
+
+  it("sem passos (ausente ou 0): sem sufixo", () => {
+    assert.equal(resumoDosEventosCriados([evento({ passos: 0 })], FMT).includes("Google Tasks"), false);
+    assert.equal(resumoDosEventosCriados([evento({})], FMT).includes("Google Tasks"), false);
+  });
 });
 
 describe("B) ajuste iniciado pelo usuário: alvo", () => {
