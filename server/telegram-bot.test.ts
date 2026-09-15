@@ -18,8 +18,11 @@ const req = (corpo: unknown, segredo: string | null = SEGREDO): any => ({
   body: corpo,
   get: (h: string) => (h.toLowerCase() === "x-telegram-bot-api-secret-token" ? (segredo ?? undefined) : undefined),
 });
-const update = (id: number, text: string, chat = 111) => ({
-  update_id: id, message: { message_id: id * 10, chat: { id: chat, type: "private" }, text },
+const AGORA = new Date("2026-09-15T12:00:00Z");
+/** `date` em segundos, como o Telegram manda; padrão = mensagem recém-enviada. */
+const update = (id: number, text: string, chat = 111, idadeS = 5) => ({
+  update_id: id,
+  message: { message_id: id * 10, chat: { id: chat, type: "private" }, text, date: AGORA.getTime() / 1000 - idadeS },
 });
 
 function montar(x: Partial<DepsDoBot> = {}) {
@@ -32,6 +35,7 @@ function montar(x: Partial<DepsDoBot> = {}) {
     enviar: async (chatId, texto, responderA) => { enviadas.push({ chatId, texto, responderA }); },
     digitando: async () => {},
     fmt: FMT,
+    agora: () => AGORA,
     ...x,
   };
   return { bot: criarBotDoTelegram(deps), enviadas, rodadas };
@@ -135,6 +139,18 @@ describe("processar", () => {
     const texto = enviadas.at(-1)!.texto;
     assert.match(texto, /processada/);
     assert.doesNotMatch(texto, /Erro ao processar/);
+  });
+
+  it("demanda atrasada (backlog depois de o servidor voltar): sem turno, pede reenvio", async () => {
+    const { bot, rodadas, enviadas } = montar();
+    const r = res();
+    bot.processar(req(update(1, "/foco ligar pro banco", 111, 6 * 3600)), r, () => {});
+    await bot.ocioso();
+    assert.equal(r.statusCode, 200);
+    assert.equal(rodadas.length, 0);
+    assert.equal(enviadas.length, 1);
+    assert.match(enviadas[0].texto, /360 min de atraso/);
+    assert.equal(enviadas[0].responderA, 10);
   });
 
   it("enviar que falha não derruba a fila", async () => {

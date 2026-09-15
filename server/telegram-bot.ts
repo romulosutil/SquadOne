@@ -3,15 +3,23 @@ import type { Modo } from "./capabilities.ts";
 import type { TurnoResult } from "./orchestrator.ts";
 import type { FormatoDeData } from "../src/contribuicao.ts";
 import { segredoConfere } from "./telegram.ts";
-import { criarMemoriaDeUpdates, interpretarUpdate, TEXTO_DE_AJUDA, TEXTO_SEM_TEXTO } from "./telegram-entrada.ts";
+import {
+  criarMemoriaDeUpdates,
+  interpretarUpdate,
+  TEXTO_DE_AJUDA,
+  TEXTO_SEM_TEXTO,
+  textoDeDemandaAtrasada,
+} from "./telegram-entrada.ts";
 import { cortarParaTelegram, textoDaFalha, textoDoTurno } from "./telegram-resposta.ts";
 
 /**
  * A cola do bot: portão próprio (a rota fica FORA do porteiro de IP), 200
  * imediato e uma fila serial de turnos.
  *
- * - 200 antes do turno: um turno leva até ~3 min; segurar a resposta faria o
- *   Telegram desistir e reentregar o update, e o compromisso nasceria duas vezes.
+ * - 200 antes do turno: um turno leva até ~6 min no pior caso (redirecionamento
+ *   de squad = 2 gerações do Gemini de ~3 min cada, mais o Google); segurar a
+ *   resposta faria o Telegram desistir e reentregar o update, e o compromisso
+ *   nasceria duas vezes.
  * - Fila serial: dois turnos em paralelo leriam a agenda antes de o outro
  *   reservar e pegariam o mesmo horário. A CommandBar evita isso com isLoading.
  *   Turno da UI e do bot ao mesmo tempo continua possível (custo aceito).
@@ -25,6 +33,8 @@ export interface DepsDoBot {
   enviar(chatId: number, texto: string, responderA?: number): Promise<void>;
   digitando(chatId: number): Promise<void>;
   fmt: FormatoDeData;
+  /** Relógio injetado: decide se a demanda chegou atrasada demais para rodar. */
+  agora(): Date;
 }
 
 /** "digitando..." some em 5 s no Telegram. */
@@ -59,7 +69,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
   };
 
   const processar: RequestHandler = (req, res) => {
-    const entrada = interpretarUpdate(req.body, deps.chatsPermitidos);
+    const entrada = interpretarUpdate(req.body, deps.chatsPermitidos, deps.agora());
     // 200 para tudo que passou do segredo, inclusive o que é ignorado: status
     // diferente faz o Telegram reentregar e segurar os updates seguintes.
     res.sendStatus(200);
@@ -77,6 +87,12 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         return;
       case "semTexto":
         deps.enviar(entrada.chatId, TEXTO_SEM_TEXTO, entrada.mensagemId).catch(falhouAoEnviar);
+        return;
+      case "atrasada":
+        // Backlog reentregue depois de o servidor voltar: rodar agora marcaria
+        // horário errado ou duplicaria o que o usuário já reenviou pelo app.
+        console.warn(`[telegram] demanda com ${entrada.atrasoMin} min de atraso não processada`);
+        deps.enviar(entrada.chatId, textoDeDemandaAtrasada(entrada.atrasoMin), entrada.mensagemId).catch(falhouAoEnviar);
         return;
       case "demanda": {
         const { chatId, mensagemId, demanda, modo } = entrada;

@@ -168,6 +168,7 @@ async function startServer() {
       digitando: (chatId) => avisarDigitando(c, chatId),
       // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
       fmt: { locale: "pt-BR", timeZone: FUSO },
+      agora: () => new Date(),
     });
     app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
   }
