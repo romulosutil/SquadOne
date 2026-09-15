@@ -49,6 +49,17 @@ import {
   trocarCodigo,
   urlDeConsentimento,
 } from "./server/auth-store.ts";
+import {
+  avisarDigitando,
+  descreverTelegram,
+  enviarMensagem,
+  lerConfigDeTelegram,
+  registrarWebhook,
+  ROTA_WEBHOOK_TELEGRAM,
+  TelegramMalConfigurado,
+  type ConfigDeTelegram,
+} from "./server/telegram.ts";
+import { criarBotDoTelegram } from "./server/telegram-bot.ts";
 
 dotenv.config();
 
@@ -134,6 +145,33 @@ async function startServer() {
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
   app.set("trust proxy", true);
+
+  // --- Bot do Telegram ------------------------------------------------
+  // ANTES do porteiro de IP, e só esta rota: o Telegram não tem IP fixo. A
+  // trava dela é o segredo do webhook + a allowlist de chat_id. Desligado, a
+  // rota nem existe e o caminho cai no porteiro como qualquer outro.
+  let configDeTelegram: ConfigDeTelegram | null = null;
+  let falhaDoTelegram: string | null = null;
+  try {
+    configDeTelegram = lerConfigDeTelegram(process.env);
+  } catch (error: any) {
+    falhaDoTelegram = error instanceof TelegramMalConfigurado ? error.message : String(error?.message ?? error);
+  }
+  if (configDeTelegram) {
+    const c = configDeTelegram;
+    const bot = criarBotDoTelegram({
+      segredo: c.segredo,
+      chatsPermitidos: c.chatsPermitidos,
+      // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
+      rodar: (demanda, modo) => rodarDemanda(ai, { demanda, modo }),
+      enviar: (chatId, texto, responderA) => enviarMensagem(c, chatId, texto, responderA),
+      digitando: (chatId) => avisarDigitando(c, chatId),
+      // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
+      fmt: { locale: "pt-BR", timeZone: FUSO },
+    });
+    app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
+  }
+
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
@@ -497,10 +535,28 @@ async function startServer() {
   else if (configDePush) console.log(`Lembretes push: ${descreverPush(configDePush)}, ${ANTECEDENCIA_PUSH_MIN} min antes`);
   else console.log("Lembretes push desligados (LEMBRETES_NTFY_URL vazia)");
 
+  if (falhaDoTelegram) console.error(`Bot do Telegram inválido (desligado): ${falhaDoTelegram}`);
+  else if (configDeTelegram) console.log(`Bot do Telegram: ${descreverTelegram(configDeTelegram)}`);
+  else console.log("Bot do Telegram desligado (TELEGRAM_BOT_TOKEN vazia)");
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
     // Depois do listen: a primeira varredura não disputa o boot do Vite.
     vigia?.iniciar();
+
+    // Só em produção: o APP_URL de dev é http://localhost (o Telegram exige
+    // HTTPS) e registrar com o token real roubaria o webhook do servidor no ar.
+    if (configDeTelegram && process.env.NODE_ENV === "production") {
+      const base = process.env.APP_URL;
+      if (!base) {
+        console.error("Bot do Telegram: APP_URL vazia, webhook não registrado.");
+      } else {
+        const url = new URL(ROTA_WEBHOOK_TELEGRAM, base).href;
+        registrarWebhook(configDeTelegram, url)
+          .then(() => console.log(`Bot do Telegram: webhook registrado em ${url}`))
+          .catch((error) => console.error(`Bot do Telegram: falha ao registrar o webhook: ${error.message}`));
+      }
+    }
   });
 }
 

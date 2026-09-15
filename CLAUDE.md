@@ -17,7 +17,9 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/lembretes.test.ts`, `server/vigia.test.ts`, `server/auth-store.test.ts`,
 `server/passos.test.ts`, `server/tasks.test.ts`, `server/passos-no-google.test.ts`,
 `server/auth-escopos.test.ts`, `server/squad.test.ts`, `server/calendar.test.ts`,
-`server/prompt-passos.test.ts`, `src/ajuste-do-usuario.test.ts` e
+`server/prompt-passos.test.ts`, `server/telegram.test.ts`,
+`server/telegram-entrada.test.ts`, `server/telegram-resposta.test.ts`,
+`server/telegram-bot.test.ts`, `src/ajuste-do-usuario.test.ts` e
 `src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -42,7 +44,7 @@ graphify explain "<conceito>"
 Um processo Express serve a API e a SPA Vue. Sem banco.
 
 ```
-server.ts                 Express: monta o porteiro, as rotas e o Vite/estáticos
+server.ts                 Express: monta o webhook do Telegram antes do porteiro, o porteiro, as rotas e o Vite/estáticos
   server/acesso.ts        porteiro de IP (403 antes de qualquer rota)
   server/auth-store.ts    credencial do Google: code flow, refresh, cifra em disco
   server/squad.ts         roster v3 em árvore, migração, regras de id; única fonte de verdade das squads
@@ -50,6 +52,7 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/ciclo-de-vida.ts editar, arquivar e reativar pessoa/domínio/squad
   server/redacao.ts       Gemini redige papel + escopo (não grava)
   server/orchestrator.ts  um turno: demanda -> 1 chamada ao Gemini -> capacidades
+  server/turno.ts         demanda já validada -> um turno; ponto único usado por /api/orquestrar e pelo bot do Telegram
   server/capabilities.ts  as capacidades que o modelo pode invocar
   server/alocador.ts      PURO: ocupação + janela + pedido + agora -> slots
   server/agenda.ts        ocupação do turno: 1 leitura do primary + reservas
@@ -64,6 +67,10 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido
   server/tasks.ts         transporte do Google Tasks: lista, tarefa, ErroTasks classificado, timeout 10 s
   server/passos-no-google.ts  lista por squad (single-flight) + tarefa-mãe + subtarefas + vínculo no evento
+  server/telegram.ts      transporte da Bot API: lê a config do ambiente, segredo do webhook em tempo constante, sendMessage/sendChatAction/setWebhook
+  server/telegram-entrada.ts  PURO: update do Telegram -> comando/demanda/ignorar, dedupe de update_id em memória
+  server/telegram-resposta.ts PURO: TurnoResult -> texto do chat (sem parse_mode), reusa linhasDosEventosCriados
+  server/telegram-bot.ts  cola: portão (segredo + allowlist) + 200 imediato + fila serial de turnos
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -197,6 +204,20 @@ Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de ca
 - **Testar sem esperar o horário:** `POST /api/push/teste` manda um push fixo agora. `POST /api/push/varrer {"agora":"2026-09-15T13:50:00-03:00","enviar":false}` roda uma varredura real contra o Google com relógio simulado e devolve as mensagens que sairiam; `enviar: true` manda de fato. Nenhuma das duas grava na deduplicação da vigia.
 - **Dev:** com `LEMBRETES_NTFY_URL` no `.env` o `npm run dev` também varre. Use outro tópico, senão o celular recebe em dobro.
 
+### Bot do Telegram
+
+Segundo canal de entrada, além da CommandBar: mandar uma demanda pelo Telegram roda o mesmo turno e cria os mesmos eventos. `server/turno.ts` (`rodarDemanda`) é o ponto único que as duas portas de entrada chamam, para as duas terem a mesma ordem (squad e janela antes do token e do Gemini).
+
+- **Validação do webhook** (`server/telegram.ts`): o Telegram manda `TELEGRAM_WEBHOOK_SECRET` no header `X-Telegram-Bot-Api-Secret-Token` em todo POST — não segredo no path, que vazaria em log de acesso do Traefik e em qualquer `console.warn(req.path)`. Comparação em **tempo constante** (SHA-256 dos dois lados + `timingSafeEqual`: o hash iguala o tamanho, e um `if` de tamanho antes vazaria o tamanho do segredo). Ordem na rota: **segredo antes do parse do corpo** (`portao` → `express.json` → `processar`) — sem o segredo, 401 sem corpo e sem o JSON ser lido.
+- **Única rota fora do porteiro de IP.** O Telegram não tem IP fixo garantido (publica faixas, que podem mudar). `server.ts` monta `POST /api/telegram/webhook` **antes** de `app.use(porteiroDeIp())`, e só ela — qualquer outro método ou caminho continua atrás do porteiro. Com o bot desligado a rota nem é montada e o caminho cai no porteiro (403) como hoje. A trava própria da rota é o segredo (acima) + a allowlist de chat (abaixo).
+- **Allowlist de `chat_id` fecha quando vazia** — ao contrário de `IPS_PERMITIDOS`, que vazia desliga o porteiro. O username do bot é público e buscável; um bot aberto deixaria qualquer pessoa criar eventos no Google Calendar do usuário e gastar Gemini. `TELEGRAM_CHAT_IDS` vazia com token presente é `TelegramMalConfigurado`. Só `chat.type === "private"` conta; grupo é ignorado mesmo que o id esteja na lista. Chat fora da lista: **200 sem resposta nenhuma** (quem não passa não precisa saber que o bot está vivo) e `console.warn("[telegram] chat <id> não autorizado")` — é assim que o dono descobre o próprio `chat_id`: manda `/start`, lê o log do Easypanel. 200 e não 403 porque status ≠ 2xx faz o Telegram reentregar o mesmo update com backoff e segurar os seguintes.
+- **Squad ativa sem aba: primeira squad ativa, sem estado novo.** `rodarDemanda` recebe `squadId` ausente e `resolverSquad` devolve `squadsAtivas(roster)[0]` (hoje `pessoal`). O redirecionamento automático (`sugerir_troca_squad` → `executarTurno` troca e reprocessa) resolve demanda de outra squad — o usuário começa a mensagem dizendo do que se trata. Custo aceito: demanda de squad que não é a primeira custa **2 chamadas ao Gemini**. Alternativas descartadas: arquivo com a squad ativa (quebra o escopo de persistência V1 por algo que o redirecionamento já resolve); "última squad usada" em memória (estado escondido, some no redeploy); env `TELEGRAM_SQUAD_PADRAO` (duplica verdade do roster, squad arquivada/renomeada deixaria a env apontando pro nada).
+- **Webhook responde 200 imediatamente; turno roda numa fila serial.** Um turno leva até ~3 min (teto do Gemini, ver "Ajuste de tempo"); se o webhook segurasse a resposta, o Telegram desistiria e reentregaria o update — o mesmo compromisso nasceria duas vezes. Então: valida → `res.sendStatus(200)` → processa depois. **Dedupe de `update_id`** em memória (últimos 500): reentrega por ACK perdido não roda o turno de novo (redeploy zera, custo aceito, mesmo raciocínio da vigia). **Fila serial** (cadeia de promessas): dois turnos em paralelo leriam a agenda antes de o outro reservar e pegariam o mesmo horário — a CommandBar evita isso com `isLoading`, o bot precisa da fila. Turno da UI e do bot ao mesmo tempo continua possível (custo aceito). Enquanto roda: `sendChatAction typing` a cada 4 s; mensagem que chega com a fila ocupada recebe "⏳ Na fila (N antes desta)." Crash do processo depois do 200 e antes da resposta perde a resposta (custo aceito).
+- **Resposta em texto puro, sem componente Vue.** `server/telegram-resposta.ts` (PURO) espelha o que `handleDelegation` faz com o `TurnoResult`, mas em texto (sem `parse_mode`: título de evento com `_`/`*` quebraria o Markdown do Telegram). Reusa `linhasDosEventosCriados` (`src/contribuicao.ts`, `{ locale: "pt-BR", timeZone: FUSO }` — o container roda em UTC, o fuso é obrigatório). Texto cortado em 4096 caracteres (limite do `sendMessage`). **Propostas de contratação não se aprovam pelo chat** (V1): o card de crescimento só existe na aba, o turno do bot não é persistido — a resposta pede para reenviar pelo app.
+- **Comandos** (`server/telegram-entrada.ts`, PURO, depois da checagem de chat): texto sem `/` é demanda em `modo: auto`; `/foco <texto>` e `/baixa <texto>` forçam o modo (mesmo mecanismo do toggle da CommandBar); `/start`, `/ajuda`, `/help`, `/foco`/`/baixa` sem texto ou comando desconhecido devolvem texto de ajuda sem chamar o Gemini; mensagem sem `text` (foto, áudio, figurinha) devolve "Só texto por enquanto."; `edited_message`, `channel_post` e updates sem `message` são ignorados. Sufixo `@NomeDoBot` do comando é descartado.
+- **Registro do webhook no boot, só em produção.** Com o bot ligado, `NODE_ENV === "production"` e `APP_URL` presente, o boot chama `setWebhook` (idempotente) com `secret_token` e `allowed_updates: ["message"]`; falha vira `console.error` sem derrubar nada. Assim trocar `TELEGRAM_WEBHOOK_SECRET` e clicar **Implantar** já reconfigura o Telegram — sem isso um passo manual esquecido deixaria o bot recebendo 401 calado. Em dev nunca registra: `APP_URL` de dev é `http://localhost` (o Telegram exige HTTPS) e registrar com o token de produção roubaria o webhook do servidor real; teste local é com `curl` simulando o update.
+- **Privacidade:** chat de bot do Telegram **não é E2E** — demanda e resposta (títulos, horários) passam pelos servidores do Telegram, ao contrário do ntfy próprio (ver acima). Decisão do usuário, custo conhecido.
+
 ### Escrita no roster
 
 Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write numa fila. Um arquivo para todas as squads, então uma fila só: duas aprovações quase simultâneas, mesmo em squads diferentes, leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeRoster` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`. Contratação aplica na squad da proposta (`sugestao.squad_id`), não na que a tela mostra.
@@ -247,6 +268,8 @@ A ordem importa: restaurar o backup com o código da Fase 1 ainda no ar só disp
 
 **Rollback dos passos no Tasks.** Sem migração: implantar o commit anterior. As chaves `squadone_tasks_*` nos eventos são ignoradas pelo código antigo, `tasksListaId` é tolerado por `validarV3`, as tarefas já criadas continuam no Google e o refresh_token com dois escopos continua servindo ao Calendar.
 
+**Rollback do bot do Telegram.** Sem migração: implantar o commit anterior. O webhook continua registrado no Telegram apontando para uma rota que passa a dar 403 (código antigo não a monta, e ela cai no porteiro de IP): chame `deleteWebhook` ou ignore — o Telegram apenas reentrega e desiste depois de um tempo, nada quebra no resto do app.
+
 **A seed não pode morar em `data/`.** Um volume novo sobe vazio e sombreia o que a imagem tinha naquele caminho. Por isso `seed/squad.seed.json` fica fora do mount; `SEED_PATHS` em `squad.ts` ainda tenta o caminho antigo para não quebrar checkout velho.
 
 Sem banco de propósito: dois blobs de poucos KB não justificam Postgres, e o escopo da V1 é explicitamente só estes dois.
@@ -287,7 +310,7 @@ Status em console.cloud.google.com/auth/audience (projeto `gen-lang-client-00860
 
 ### Porteiro de IP
 
-Substitui login. `IPS_PERMITIDOS` (lista por vírgula) é checada antes de qualquer rota, inclusive estáticos. Vazia **desliga** o porteiro — default em dev. Em produção o IP real vem do primeiro item de `X-Forwarded-For`, porque o Traefik é o único caminho até o container.
+Substitui login. `IPS_PERMITIDOS` (lista por vírgula) é checada antes de qualquer rota, inclusive estáticos, exceto `POST /api/telegram/webhook`, montada antes, com trava própria (ver "Bot do Telegram"). Vazia **desliga** o porteiro — default em dev. Em produção o IP real vem do primeiro item de `X-Forwarded-For`, porque o Traefik é o único caminho até o container.
 
 Com `IPS_PERMITIDOS` vazia, `POST /api/push/teste` e `POST /api/push/varrer` ficam abertos junto com o resto do app — nenhuma rota de push tem checagem própria além do porteiro.
 
@@ -307,6 +330,9 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `JANELA_TRABALHO` | servidor | janela de alocação `HH:MM-HH:MM` (São Paulo), minutos múltiplos de 15 (`09:10` é recusado); ausente/vazia = `09:00-19:00`; ilegível = 500 |
 | `DIAS_TRABALHO` | servidor | dias ISO da janela, `1`=segunda … `7`=domingo; ausente/vazia = `1,2,3,4,5`; ilegível = 500 |
 | `LEMBRETES_NTFY_URL` | servidor | lembretes push: `https://:TOKEN@host/topico` do ntfy próprio; ausente/vazia = desligado; ilegível = log de erro no boot e desligado (não derruba nada) |
+| `TELEGRAM_BOT_TOKEN` | servidor | token do @BotFather; ausente/vazia = bot desligado (as duas abaixo são ignoradas); formato inválido = `TelegramMalConfigurado` |
+| `TELEGRAM_WEBHOOK_SECRET` | servidor | 32–256 chars `[A-Za-z0-9_-]`; obrigatória com o token presente; vai no `secret_token` do `setWebhook` e é conferida no header de cada POST |
+| `TELEGRAM_CHAT_IDS` | servidor | `chat_id` autorizados, por vírgula; obrigatória com o token presente; **vazia NÃO abre o bot** (ao contrário de `IPS_PERMITIDOS`) |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 
@@ -317,6 +343,6 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout). A UI decide o que fazer pelo tipo.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout), `TelegramMalConfigurado` (env do bot presente e ilegível: log de erro no boot, bot desligado, resto do app igual), `ErroDeTelegram` (`status` da Bot API, `null` quando nem houve resposta; só `console.error`, nunca derruba o turno nem a rota). A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série; a checklist do Tasks que falha não desfaz o compromisso.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
