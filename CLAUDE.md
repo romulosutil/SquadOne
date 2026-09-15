@@ -15,10 +15,15 @@ npm test         # tsx --test server/*.test.ts src/*.test.ts src/office/*.test.t
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
 (hoje `server/baixa-prioridade.test.ts`, `server/push.test.ts`,
 `server/lembretes.test.ts`, `server/vigia.test.ts`, `server/auth-store.test.ts`,
-`src/ajuste-do-usuario.test.ts` e `src/office/postos.test.ts`). Os de
+`server/passos.test.ts`, `server/tasks.test.ts`, `server/passos-no-google.test.ts`,
+`server/auth-escopos.test.ts`, `server/squad.test.ts`, `server/calendar.test.ts`,
+`server/prompt-passos.test.ts`, `src/ajuste-do-usuario.test.ts` e
+`src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
-com a máquina. A verificação continua sendo typecheck + build + exercitar a rota.
+com a máquina. `auth-escopos` e `squad` gravam num diretório temporário (chdir
+antes do import) e nunca em `data/`; `fetch` é dublê em todos. A verificação
+continua sendo typecheck + build + exercitar a rota.
 
 ## Protocolo de contexto
 
@@ -56,6 +61,9 @@ server.ts                 Express: monta o porteiro, as rotas e o Vite/estático
   server/push.ts          transporte ntfy: LEMBRETES_NTFY_URL, POST JSON, erros classificados
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto
   server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
+  server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido
+  server/tasks.ts         transporte do Google Tasks: lista, tarefa, ErroTasks classificado, timeout 10 s
+  server/passos-no-google.ts  lista por squad (single-flight) + tarefa-mãe + subtarefas + vínculo no evento
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -87,7 +95,7 @@ data/                     volume em produção; nada aqui é versionado
 
 ### Marcas no Calendar
 
-Todo evento criado carrega quatro chaves em `extendedProperties.private`, montadas por `marcasDoEvento()` em `server/calendar.ts`, e blocos de prazo uma quinta:
+Todo evento criado carrega quatro chaves em `extendedProperties.private`, montadas por `marcasDoEvento()` em `server/calendar.ts`; blocos de prazo levam uma quinta, e o evento principal com passos leva mais duas:
 
 | Chave | Eixo | Uso |
 |---|---|---|
@@ -96,6 +104,8 @@ Todo evento criado carrega quatro chaves em `extendedProperties.private`, montad
 | `squadone_membro` | atribuição | quem executa |
 | `squadone_tipo` | semântica | `time_blocking` ou `deadline` (blocos de prazo são `time_blocking`) |
 | `squadone_prazo_ref` | ligação | só em blocos: eventId do marco. A Mochila deriva "Bloco i/N" da lista lida; posição não é gravada |
+| `squadone_tasks_lista` | vínculo | só no evento principal (foco ou marco) com passos: id da lista da squad no Google Tasks. Entra por PATCH depois das tarefas, não em `marcasDoEvento` |
+| `squadone_tasks_pai` | vínculo | idem: id da tarefa-mãe. Autoritativo; as notas da mãe (`squadone_evento=<eventId>`) são só informativas |
 
 `paraQuest` lê o tipo da marca e só cai no prefixo `⏰ DEADLINE:` do título quando ela não existe (eventos anteriores a 12/09/2026, sem migração). O prefixo segue no título como rótulo. Deadline grava `transparency: "transparent"`: é marco, não ocupa agenda.
 
@@ -147,6 +157,20 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 - Só no evento principal. Os blocos de um prazo levam a assinatura sozinha: a dica é do compromisso, e repeti-la em cada bloco seria ruído.
 - Campo omitido ou vazio = descrição só com a assinatura, como antes.
 
+### Passos no Google Tasks
+
+Segundo canal para os micro-passos de um compromisso: uma tarefa-mãe com subtarefas no Google Tasks, visível no Gmail, no Calendar e no app Tasks do Android sem abrir o SquadOne.
+
+- **Campo, não capacidade.** `agendar_evento` tem `passos: string[]` opcional. O turno é one-shot e o modelo não recebe eventId de volta: uma capacidade separada não teria como apontar para o evento. É o mesmo padrão da `nota_de_execucao`. O prompt manda passos só com pedido explícito de checklist/etapas ou num prazo com etapas que a demanda sugere (2–8 itens); pedido de checklist sem compromisso vira `agendar_evento` com passos. Vale igual nos três modos.
+- **Normalização no servidor** (`normalizarPassos`, `server/passos.ts`): só strings, espaços colapsados, vazios fora, dedupe sem diferenciar maiúsculas, `MAX_TITULO_PASSO` 200 com reticências, `MAX_PASSOS` 10 (o excedente vira aviso). Um item cria.
+- **Uma lista por squad**, `SquadOne · <nome>`, criada no primeiro compromisso com passos. O id fica em `Squad.tasksListaId` (roster, fora do prompt e da vista) e nunca é procurado por título — o usuário renomeia no celular. Criação single-flight (`Map` em memória, processo único); a chamada ao Google fica fora da fila do `atualizarRoster`, só a gravação do id entra nela. Lista gravada que responde 404/410 é recriada e o id sobrescrito, uma vez por chamada.
+- **Fluxo** (depois de `agendarCompromisso`, só com passos): sem escopo → aviso `ampliarAcesso` e nenhuma chamada; lista; tarefa-mãe (título do compromisso, notas = `htmlLink` + `squadone_evento=<eventId>`, `due` = data LOCAL de São Paulo do evento principal como `AAAA-MM-DDT00:00:00.000Z` — o Tasks descarta a hora, e converter para UTC trocaria o dia depois das 21h; marco usa o dia do prazo); subtarefas em ordem com `parent` e `previous` (sem `previous` o Google põe cada uma no topo), sem `due` (com data cada uma viraria um chip no Calendar); PATCH do evento principal com `squadone_tasks_lista`/`_pai` via `lerEvento` + `atualizarPreservandoMarcas`.
+- **Falha não se propaga.** Nada do Tasks desfaz ou falha o compromisso. Falha antes da mãe: aviso (escopo → `ampliarAcesso`; API desligada → sem motivo, a mensagem do Google diz o que fazer). Subtarefa que falha para a série sem apagar e avisa quantas faltaram. PATCH que falha: aviso, tarefas ficam com o vínculo só nas notas. 401 repete uma vez com token novo (`comTokenTasks`); persistiu → `precisaConectar`. Timeout de 10 s por chamada: roda dentro da série de `agendar_evento`.
+- **Toast:** `EventoCriado.passos` (subtarefas criadas, só no evento principal) vira "· N passo(s) no Google Tasks".
+- **A Mochila não lê o Tasks** (invariante 3): nenhuma chamada nova, nenhum modo de falha novo. Tarefa não tem horário: não passa pelo alocador nem gera lembrete.
+- **Escrita única, de propósito:** nada reescreve as tarefas depois. O Ajuste não atualiza o `due`; apagar o evento deixa as tarefas órfãs; a vigia não sabe do Tasks; o redirecionamento de squad usa a lista da squad de destino sozinho.
+- **Adiado:** selo "passos 2/5" no card da Mochila (um `tasks.list` por lista com `showCompleted`/`showHidden`, casado pela marca, sem afetar a Mochila se falhar); tarefa avulsa sem compromisso; renomear a lista quando a squad é renomeada.
+
 ### Ajuste de tempo
 
 O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/ajustar {alvo, proposto_min, permitirMover?}` só roda com aprovação (`AjusteCard`) e relê tudo do Google.
@@ -156,6 +180,7 @@ O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/
 - **PATCH:** todo PATCH de evento passa por `atualizarPreservandoMarcas`: `If-Match` com o etag lido, `sendUpdates=none`, `extendedProperties.private` **completo** (lido + o que muda). A resposta é conferida: marca `squadone_*` sumida → restaura uma vez → `marcasPerdidas` (500).
 - **Token por chamada:** a rota checa `tokenValido()` antes e passa `obterToken`; cada leitura/PATCH/POST no Google pede o token de novo logo antes (`comToken`, o cache do auth-store absorve o custo). Um ajuste de esforço faz dezenas de escritas em série e um token lido só no começo venceria no meio. Google recusou a credencial: pede de novo e, vindo token diferente, repete uma vez; só com o mesmo token o 401 vira `precisaConectar`.
 - **Teto de tempo do Gemini (turno e redação):** `gerarComRetry` dá 45 s (`TIMEOUT_GEMINI_MS`) a cada tentativa, por `abortSignal` + corrida contra um relógio. Timeout conta como transitório: retenta e cai no modelo reserva; esgotou, `ModeloOcupado`. Pior caso de uma geração: 2 modelos × 2 tentativas × 45 s + backoff ≈ **3 min**. Proxy com timeout menor que isso corta a resposta (a UI mostra erro de rede; nada fica gravado pela metade).
+- **As chamadas ao Google Tasks também rodam em série**, dentro de `agendar_evento`, cada uma com `TIMEOUT_TASKS_MS` (10 s) — ver "Passos no Google Tasks". Um compromisso com passos soma cerca de `N + 4` chamadas ao Google (lista — 1: `lerLista` com id já gravado, ou `inserirLista` na primeira vez —, tarefa-mãe, N subtarefas, leitura + PATCH do vínculo), mais uma (`N + 5`) se a lista salva sumiu no Google, antes do próximo compromisso da série e da resposta HTTP: outro motivo para o proxy ter folga além do teto do Gemini acima.
 - Erros de quest: 404 `questSumiu`, 409 com a flag (`eventoSemMarca`, `eventoDeOutraSquad`, `dominioInativo`, `conflitoDeEdicao`, `alvoIncompativel`, `naoCabe`, `semHorarioLivre`), 401 `precisaConectar`, 500 `configuracao`/`marcasPerdidas`, 502 o resto do Google.
 - Nada disto grava fora do Google: a persistência continua só `squad.json` e `google-auth.json`.
 
@@ -205,8 +230,8 @@ Volume Docker do Easypanel montado em `/app/data`. Poucos KB:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `data/squad.json` | roster v3 `{ version: 3, squads, idsAposentados }` = os agentes com seu treino; inclui arquivados (`arquivado`, `arquivadoEm`) |
-| `data/google-auth.json` | `refresh_token` cifrado em AES-256-GCM |
+| `data/squad.json` | roster v3 `{ version: 3, squads, idsAposentados }` = os agentes com seu treino; inclui arquivados (`arquivado`, `arquivadoEm`); `tasksListaId` opcional por squad (lista do Google Tasks, lazy) |
+| `data/google-auth.json` | `refresh_token` cifrado em AES-256-GCM e o `scope` concedido (Calendar, e Tasks quando autorizado) |
 | `data/squad.v2.bak.json` | texto cru do roster v2, gravado uma vez pela migração; nunca sobrescrito |
 
 **Migração.** `readRoster()` detecta a versão pela **forma** (`squads` → v3, `dominios` → v2, `members` → v1), grava o backup do texto cru, converte (v2 inteiro vira a squad `pessoal`, ids intactos) e escreve v3. Forma desconhecida ou conversão que não passa na validação lança `RosterIlegivel` (500) e **não grava** `squad.json`. Migração e semeadura rodam sob promessa única: no boot `/api/squad` e `/api/mochila` chegam juntos.
@@ -220,6 +245,8 @@ A ordem importa: restaurar o backup com o código da Fase 1 ainda no ar só disp
 
 **Rollback da Fase 2.** Sem migração nem versão nova: basta implantar o commit anterior. Código anterior à Fase 2 ignora `arquivado` e mostraria arquivados como ativos (no mapa, no prompt e na Mochila); a leitura não quebra.
 
+**Rollback dos passos no Tasks.** Sem migração: implantar o commit anterior. As chaves `squadone_tasks_*` nos eventos são ignoradas pelo código antigo, `tasksListaId` é tolerado por `validarV3`, as tarefas já criadas continuam no Google e o refresh_token com dois escopos continua servindo ao Calendar.
+
 **A seed não pode morar em `data/`.** Um volume novo sobe vazio e sombreia o que a imagem tinha naquele caminho. Por isso `seed/squad.seed.json` fica fora do mount; `SEED_PATHS` em `squad.ts` ainda tenta o caminho antigo para não quebrar checkout velho.
 
 Sem banco de propósito: dois blobs de poucos KB não justificam Postgres, e o escopo da V1 é explicitamente só estes dois.
@@ -231,13 +258,19 @@ Sem banco de propósito: dois blobs de poucos KB não justificam Postgres, e o e
 ```
 /api/auth/google    -> redireciona para o consentimento (access_type=offline, prompt=consent)
 /api/auth/callback  -> troca o code, grava o refresh cifrado, volta para /?auth=ok
-/api/auth/status    -> { conectado: bool }
+/api/auth/status    -> { conectado: bool, tasks: bool }
 /api/auth/logout    -> apaga o arquivo e revoga no Google
 ```
 
 `tokenValido()` devolve um access_token, renovando pelo refresh quando preciso. Lança `PrecisaConectar` (vira 401 + `precisaConectar: true`) quando não há credencial ou o Google recusou — o único caso em que a UI deve pedir gesto do usuário. `ErroDeConfig` vira 500 + `configuracao: true`: é ambiente, nenhum clique conserta. Só `invalid_grant` (refresh revogado ou expirado) apaga a credencial: rede fora do ar, 5xx do Google ou `invalid_client`/`unauthorized_client` (client OAuth mal configurado) viram `GoogleIndisponivel` sem tocar no arquivo, porque a vigia dos lembretes (`server/vigia.ts`) pede o token a cada varredura (60 s) e o cache do access_token faz isso virar um refresh de verdade ao Google ~1x/h, 24/7 — e uma oscilação transitória não pode forçar reconectar.
 
 `prompt=consent` é obrigatório. Sem ele o Google omite o `refresh_token` quando já houve consentimento antes, e a credencial nasce sem como se renovar.
+
+**Dois escopos, autorização incremental.** O consentimento pede `calendar.events` e `tasks` juntos (`include_granted_scopes=true`). Ampliar o acesso de uma credencial antiga é refazer `/api/auth/google` ("Autorizar Google Tasks" na UI) — **nunca** logout, que revoga o refresh_token no Google e derruba o Calendar junto. Em produção vale o mesmo gesto: depois do deploy desta função, quem já estava conectado amplia clicando em **Autorizar Google Tasks**, nunca deslogando. `GET /api/auth/status` responde `{ conectado, tasks }`: sem o escopo do Tasks o app funciona igual e só os passos ficam de fora (aviso `ampliarAcesso`). O `scope` concedido é gravado na credencial; resposta sem `scope` vale só o Calendar.
+
+**Consentimento granular:** Tasks desmarcado grava normalmente (`tasks: false`). Calendar desmarcado recusa sem gravar (`EscopoNegado`), a credencial anterior fica intacta e o callback volta para `/?auth=escopo_calendar_negado`. 403 de escopo do Tasks nunca vira `precisaConectar`: a UI mostraria "Conectar" com o Calendar funcionando.
+
+**No console do Google Cloud, "Acesso a dados" não declara nenhum escopo** (nem `calendar.events`, nem `tasks`) — de propósito: o app não verificado pede os escopos em runtime (na tela de consentimento), e declarar escopo sensível ali dispara o pedido de verificação do Google, que exigiria os links da Branding apontando para páginas reais (o porteiro de IP bloqueia o rastreador — ver "Não subir logotipo" abaixo). A API do Google Tasks foi habilitada no projeto em 14/09/2026.
 
 ### O prazo de 7 dias (resolvido em 12/09/2026)
 
@@ -284,6 +317,6 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`). A UI decide o que fazer pelo tipo.
-- Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout). A UI decide o que fazer pelo tipo.
+- Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série; a checklist do Tasks que falha não desfaz o compromisso.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
