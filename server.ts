@@ -551,7 +551,17 @@ async function startServer() {
       if (!base) {
         console.error("Bot do Telegram: APP_URL vazia, webhook não registrado.");
       } else {
-        const url = new URL(ROTA_WEBHOOK_TELEGRAM, base).href;
+        // `new URL` lança se APP_URL vier sem esquema (ex.: "meu-app.host"). Isto
+        // roda dentro do callback de 'listening', fora de qualquer promise: uma
+        // excecao aqui sairia sem handler e derrubaria o processo — e falha do
+        // Telegram nunca pode derrubar o app.
+        let url: string;
+        try {
+          url = new URL(ROTA_WEBHOOK_TELEGRAM, base).href;
+        } catch {
+          console.error("Bot do Telegram: APP_URL inválida, webhook não registrado.");
+          return;
+        }
         registrarWebhook(configDeTelegram, url)
           .then(() => console.log(`Bot do Telegram: webhook registrado em ${url}`))
           .catch((error) => console.error(`Bot do Telegram: falha ao registrar o webhook: ${error.message}`));
