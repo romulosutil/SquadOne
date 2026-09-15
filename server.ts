@@ -13,7 +13,8 @@ import {
   SquadInexistente,
   type Squad,
 } from "./server/squad.ts";
-import { executarTurno, ModeloOcupado } from "./server/orchestrator.ts";
+import { ModeloOcupado } from "./server/orchestrator.ts";
+import { rodarDemanda } from "./server/turno.ts";
 import { ErroCalendario, LeituraIncompleta, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
@@ -344,34 +345,7 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
-      // Squad antes do token e do Gemini: um squadId inexistente nao pode
-      // custar uma chamada ao modelo para depois falhar.
-      const roster = await readRoster();
-      const squad = resolverSquad(roster, squadId);
-
-      // Janela antes do token e do Gemini: configuracao quebrada nao pode
-      // custar uma chamada ao modelo para depois falhar no primeiro agendamento.
-      const janela = lerJanela(process.env);
-
-      // Sem credencial o turno ainda roda: nem toda demanda toca o
-      // calendario, e derrubar tudo por causa disso esconderia as capacidades
-      // que nao dependem do Google. O MOTIVO vai junto: agendar_evento devolve
-      // o erro classificado certo em vez de um generico "sem token".
-      let token: string | null = null;
-      let falhaDoToken: unknown = null;
-      try {
-        token = await tokenValido();
-      } catch (err) {
-        falhaDoToken = err;
-      }
-      // O scope gravado é lido UMA vez por turno, antes do Gemini: cada
-      // compromisso com passos consulta este booleano, não o disco.
-      const { tasks: tasksLiberado } = await escoposConcedidos();
-      const turno = await executarTurno(ai, {
-        demanda: demanda.trim(), token, falhaDoToken, modo, roster, squad, janela,
-        tasksLiberado, obterToken: tokenValido,
-      });
-      res.json(turno);
+      res.json(await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }));
     } catch (error: any) {
       console.error("Erro no turno:", error);
       if (responderErroDeRoster(res, error)) return;
