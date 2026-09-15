@@ -85,19 +85,27 @@ onMounted(async () => {
   // /?auth=<motivo>. Avisar aqui e o unico feedback que o usuario tem de que
   // a autorizacao deu certo, porque o resto do fluxo acontece no servidor.
   const retorno = lerRetornoDoConsentimento()
+
+  // Sincroniza antes de decidir o texto: "nada mudou" só é verdade quando já
+  // havia credencial. Sem isso, a primeira conexão (recusando o Calendar)
+  // ouviria falar de uma "conexão anterior" que nunca existiu.
+  const jaEstavaConectado = await sincronizarStatus()
+
   if (retorno === 'escopo_calendar_negado') {
-    // O servidor recusou sem gravar: dizer que NADA mudou é o que evita o
-    // usuário achar que perdeu a conexão do Calendar.
     avisar(
-      'Google: o Calendar foi desmarcado na autorização, então nada mudou e a conexão anterior continua valendo. Para autorizar o Google Tasks, repita marcando as duas caixas.',
+      jaEstavaConectado
+        ? 'Google: o Calendar foi desmarcado na autorização, então nada mudou e a conexão anterior continua valendo. Para autorizar o Google Tasks, repita marcando as duas caixas.'
+        : 'Google: o Calendar foi desmarcado na autorização, então nada foi salvo. Para conectar, repita marcando a caixa do Calendar.',
       { rotulo: 'Tentar de novo', fazer: ampliarAcesso }
     )
   } else if (retorno && retorno !== 'ok') avisar(`Google: ${retorno}`)
-  else if (retorno === 'ok') avisar('Calendário conectado')
+  else if (retorno === 'ok') {
+    avisar(tasksLiberado.value ? 'Calendário e Google Tasks autorizados' : 'Calendário conectado')
+  }
 
   // A credencial mora no servidor: basta perguntar. Sem popup, sem gesto — se
   // ja houve consentimento antes, continua valendo depois de reload e deploy.
-  if (await sincronizarStatus()) await carregarMochila()
+  if (jaEstavaConectado) await carregarMochila()
 })
 
 const carregarRoster = async () => {
