@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   alvoDeAjuste,
+  linhasDosEventosCriados,
   minutosAtuais,
   normalizarPropostoMin,
   propostaDoUsuario,
@@ -148,6 +149,24 @@ describe("A) toast do turno: o que foi marcado", () => {
   it("sem passos (ausente ou 0): sem sufixo", () => {
     assert.equal(resumoDosEventosCriados([evento({ passos: 0 })], FMT).includes("Google Tasks"), false);
     assert.equal(resumoDosEventosCriados([evento({})], FMT).includes("Google Tasks"), false);
+  });
+
+  it("linhasDosEventosCriados: uma linha por compromisso, blocos dobrados no marco", () => {
+    const marco = evento({
+      titulo: "Relatório", papel: "marco", tipo: "deadline", eventId: "m1",
+      inicio: "2026-09-18T17:45:00-03:00", fim: "2026-09-18T18:00:00-03:00",
+    });
+    const bloco = evento({ titulo: "Relatório", papel: "bloco", prazo_ref: "m1", eventId: "b1" });
+    const foco = evento({ titulo: "Ligar pro banco", eventId: "f1", passos: 2 });
+    const linhas = linhasDosEventosCriados([marco, bloco, foco], FMT);
+    assert.equal(linhas.length, 2);
+    assert.match(linhas[0], /^Relatório: prazo .*\(1 bloco\(s\), 45 min\)$/);
+    assert.match(linhas[1], /^Ligar pro banco: 45 min, .* · 2 passo\(s\) no Google Tasks$/);
+    assert.equal(resumoDosEventosCriados([marco, bloco, foco], FMT), linhas.join(" · "));
+  });
+
+  it("linhasDosEventosCriados: lista vazia", () => {
+    assert.deepEqual(linhasDosEventosCriados([], FMT), []);
   });
 });
 

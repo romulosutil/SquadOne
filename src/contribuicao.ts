@@ -79,12 +79,13 @@ export function resumoDoEvento(e: EventoCriado, fmt: FormatoDeData = {}): string
 }
 
 /**
- * Um toast para o turno inteiro. Os blocos de um prazo entram DOBRADOS no
+ * Uma linha por compromisso do turno. Os blocos de um prazo entram DOBRADOS no
  * marco: um prazo pode render até 20 blocos, e listá-los um a um viraria um
- * muro de texto num toast de 4 segundos. Bloco cujo marco não veio neste turno
- * (o marco já existia) continua aparecendo sozinho.
+ * muro de texto. Bloco cujo marco não veio neste turno (o marco já existia)
+ * continua aparecendo sozinho. Lista e não string porque o bot do Telegram
+ * mostra uma por linha e o toast junta numa só.
  */
-export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeData = {}): string {
+export function linhasDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeData = {}): string[] {
   const marcos = new Set(eventos.filter((e) => e.papel === 'marco').map((e) => e.eventId))
   return eventos
     .filter((e) => !(e.papel === 'bloco' && e.prazo_ref && marcos.has(e.prazo_ref)))
@@ -94,11 +95,15 @@ export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeD
       const base = blocos.length
         ? `${resumoDoEvento(e, fmt)} (${blocos.length} bloco(s), ${formatarMinutos(total)})`
         : resumoDoEvento(e, fmt)
-      // A checklist mora fora do app (Google Tasks): o toast é o único lugar
+      // A checklist mora fora do app (Google Tasks): esta linha é o único lugar
       // em que o usuário fica sabendo que ela nasceu.
       return e.passos ? `${base} · ${e.passos} passo(s) no Google Tasks` : base
     })
-    .join(' · ')
+}
+
+/** Um toast para o turno inteiro (4 segundos na tela): as linhas numa só. */
+export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeData = {}): string {
+  return linhasDosEventosCriados(eventos, fmt).join(' · ')
 }
 
 /**
