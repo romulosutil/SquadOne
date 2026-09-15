@@ -83,14 +83,27 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         const antes = enfileirar(async () => {
           deps.digitando(chatId).catch(() => {});
           const relogio = setInterval(() => deps.digitando(chatId).catch(() => {}), INTERVALO_DIGITANDO_MS);
-          let texto: string;
+          let resultado: TurnoResult | undefined;
+          let texto: string | undefined;
           try {
-            texto = textoDoTurno(await deps.rodar(demanda, modo), deps.fmt);
+            resultado = await deps.rodar(demanda, modo);
           } catch (err) {
             console.error("[telegram] erro no turno:", err);
             texto = textoDaFalha(err);
           } finally {
             clearInterval(relogio);
+          }
+          if (texto === undefined) {
+            // rodar() teve sucesso — o compromisso já pode ter nascido no
+            // Google. Falha SÓ em formatar o resumo não é "erro ao processar
+            // a demanda": esse texto faria o usuário reenviar e duplicar o
+            // compromisso. Guarda própria, fora do try acima.
+            try {
+              texto = textoDoTurno(resultado!, deps.fmt);
+            } catch (err) {
+              console.error("[telegram] erro ao montar o resumo do turno:", err);
+              texto = "✅ Demanda processada, mas não consegui montar o resumo. Confira a agenda antes de reenviar.";
+            }
           }
           await deps.enviar(chatId, cortarParaTelegram(texto), mensagemId).catch(falhouAoEnviar);
         });

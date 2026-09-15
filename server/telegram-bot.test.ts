@@ -125,6 +125,18 @@ describe("processar", () => {
     assert.deepEqual(ordem, ["inicio a", "fim a", "inicio b", "fim b"]);
   });
 
+  it("resumo que falha depois do turno rodar não vira 'erro ao processar' (o compromisso já pode ter nascido no Google)", async () => {
+    // Formato malformado propositalmente: o que importa é que textoDoTurno
+    // lance DEPOIS de rodar() ter terminado com sucesso, não a causa real.
+    const turnoQuebrado = { eventos_criados: [null], sugestoes: [], avisos: [], erros: [] } as unknown as TurnoResult;
+    const { bot, enviadas } = montar({ rodar: async () => turnoQuebrado });
+    bot.processar(req(update(1, "reunião amanhã")), res(), () => {});
+    await bot.ocioso();
+    const texto = enviadas.at(-1)!.texto;
+    assert.match(texto, /processada/);
+    assert.doesNotMatch(texto, /Erro ao processar/);
+  });
+
   it("enviar que falha não derruba a fila", async () => {
     let n = 0;
     const { bot, rodadas } = montar({ enviar: async () => { n++; throw new Error("403 blocked"); } });
