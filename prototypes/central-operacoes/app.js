@@ -37,8 +37,8 @@
     },
     'google-off': {
       icon: '!',
-      title: 'A agenda externa ainda não está sincronizada.',
-      detail: 'Compromissos locais continuam visíveis; conecte o Google quando quiser.',
+      title: 'Google Agenda não está conectado.',
+      detail: 'Conecte sua conta Google para carregar e sincronizar os compromissos do SquadOne.',
       action: 'Conectar Google',
     },
     'empty-projects': {

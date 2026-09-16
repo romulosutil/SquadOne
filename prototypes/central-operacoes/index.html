@@ -9,8 +9,8 @@
       content="Protótipo visual isolado da Central de Operações do SquadOne."
     />
     <title>SquadOne · Operações — Protótipo</title>
-    <link rel="stylesheet" href="./styles.css?v=squadone-window-3" />
-    <script src="./app.js?v=squadone-window-2" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=project-contract" />
+    <script src="./app.js?v=project-contract" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
@@ -210,7 +210,7 @@
           <div class="agenda-empty agenda-empty--warning" id="google-off" hidden>
             <span class="empty-illustration" aria-hidden="true">!</span>
             <h3>Google não conectado</h3>
-            <p>A agenda local continua disponível. Conecte o Google para sincronizar compromissos externos.</p>
+            <p>Conecte sua conta Google para carregar e sincronizar a agenda do SquadOne.</p>
             <button type="button" class="button button--soft" data-demo-action="Conectar Google">Conectar Google</button>
           </div>
 
@@ -234,13 +234,13 @@
             <article class="project-row">
               <div class="project-row__identity">
                 <span class="project-glyph">SO</span>
-                <div><h3>SquadOne</h3><p>C:\dev\apps\SquadOne</p></div>
+                <div><h3>SquadOne</h3><p>/home/usuario/projetos/squadone</p></div>
               </div>
               <div class="project-row__squad"><i class="avatar avatar--yellow">S</i><span>Squad Produto</span></div>
               <time datetime="2026-09-16T10:12">aberto há 30 min</time>
               <div class="project-row__actions">
                 <button class="button button--primary" type="button" data-demo-action="Abrir projeto SquadOne">Abrir</button>
-                <button class="icon-button" type="button" aria-label="Editar projeto SquadOne" data-edit-project="SquadOne|C:\dev\apps\SquadOne">
+                <button class="icon-button" type="button" aria-label="Editar projeto SquadOne" data-edit-project="SquadOne|/home/usuario/projetos/squadone">
                   <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14 7 3 3"/></svg>
                 </button>
                 <button class="icon-button" type="button" aria-label="Mais ações para SquadOne" data-demo-action="Mais ações do projeto SquadOne">•••</button>
@@ -250,13 +250,13 @@
             <article class="project-row">
               <div class="project-row__identity">
                 <span class="project-glyph project-glyph--coral">CS</span>
-                <div><h3>CRM Silmer</h3><p>C:\dev\apps\crm-silmer</p></div>
+                <div><h3>CRM Silmer</h3><p>/home/usuario/projetos/crm-silmer</p></div>
               </div>
               <div class="project-row__squad"><i class="avatar avatar--coral">C</i><span>Squad Operações</span></div>
               <time datetime="2026-09-15T16:20">ontem, 16:20</time>
               <div class="project-row__actions">
                 <button class="button button--secondary" type="button" data-demo-action="Abrir projeto CRM Silmer">Abrir</button>
-                <button class="icon-button" type="button" aria-label="Editar projeto CRM Silmer" data-edit-project="CRM Silmer|C:\dev\apps\crm-silmer">
+                <button class="icon-button" type="button" aria-label="Editar projeto CRM Silmer" data-edit-project="CRM Silmer|/home/usuario/projetos/crm-silmer">
                   <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14 7 3 3"/></svg>
                 </button>
                 <button class="icon-button" type="button" aria-label="Mais ações para CRM Silmer" data-demo-action="Mais ações do projeto CRM Silmer">•••</button>
@@ -383,26 +383,18 @@
         </div>
 
         <div class="project-dialog__body">
-          <p>Crie um atalho para uma pasta local ou endereço web. Esta prévia não salva dados reais.</p>
+          <p>Informe somente um nome e o destino. Pode ser qualquer caminho acessível no Dell ou endereço web.</p>
           <label for="project-name">Nome do projeto</label>
           <input id="project-name" name="name" autocomplete="off" required placeholder="Ex.: Site institucional" />
 
-          <fieldset>
-            <legend>Tipo de destino</legend>
-            <label class="choice"><input type="radio" name="target-type" value="path" checked /><span><strong>Pasta local</strong><small>Abre o projeto na IDE</small></span></label>
-            <label class="choice"><input type="radio" name="target-type" value="link" /><span><strong>Link</strong><small>Abre no navegador</small></span></label>
-          </fieldset>
-
           <label for="project-path">Caminho ou link</label>
-          <input id="project-path" name="path" autocomplete="off" required placeholder="C:\dev\apps\projeto" />
-
-          <label for="project-squad">Squad relacionado <span>opcional</span></label>
-          <select id="project-squad" name="squad">
-            <option value="">Nenhum</option>
-            <option>Squad Produto</option>
-            <option>Squad Operações</option>
-            <option>Squad Web</option>
-          </select>
+          <input
+            id="project-path"
+            name="path"
+            autocomplete="off"
+            required
+            placeholder="Ex.: /home/usuario/projetos/site ou https://exemplo.com"
+          />
         </div>
 
         <div class="project-dialog__footer">

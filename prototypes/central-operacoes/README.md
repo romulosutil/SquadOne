@@ -17,6 +17,9 @@ servidor HTTP estático. A tela inclui cinco cenários demonstrativos:
 O painel lateral de projeto e os botões de ferramentas são interativos, mas as
 ações terminam em mensagens de demonstração.
 
+Projetos exigem apenas `Nome` e `Caminho ou link`. Associação a squad fica fora
+do fluxo principal e poderá ser acrescentada futuramente como dado opcional.
+
 O bloco `Seu escritório` usa uma prévia incorporada do SquadOne publicado. A
 ação `Abrir janela` mostra a aplicação existente em uma janela ampla sobre a
 Central, com alternativa para abrir em nova aba. Nenhum fluxo do SquadOne é
