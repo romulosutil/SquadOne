@@ -173,7 +173,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 
     <main id="main-content" class="ops-workspace" tabindex="-1">
       <section class="ops-now" aria-labelledby="now-title">
-        <div class="ops-now__heading"><h2 id="now-title">Agora</h2><span>Visão local e honesta</span></div>
+        <div class="ops-now__heading"><h2 id="now-title">Agora</h2><span><i aria-hidden="true" /> Modo foco</span></div>
         <div class="ops-now__grid">
           <article class="ops-next-event">
             <template v-if="nextEvent">
@@ -205,9 +205,22 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
           <aside class="ops-squadone-card" aria-labelledby="squadone-card-title">
             <p>SquadOne atual <span>Aplicação existente</span></p>
             <h3 id="squadone-card-title">Seu escritório</h3>
-            <p>Abra a aplicação completa para acessar squads, agentes, Mochila e Command Bar.</p>
+            <p>Veja o escritório atual sem sair da Central.</p>
             <div class="ops-office-preview" aria-hidden="true">
-              <span>SquadOne</span><i /><i /><i /><b /><b /><b />
+              <div class="ops-office-preview__bar">
+                <span><i /><i /><i /></span>
+                <strong>squadone.app</strong>
+                <em>Disponível</em>
+              </div>
+              <div class="ops-office-preview__viewport">
+                <div class="ops-office-preview__appbar"><i /><strong>SquadOne</strong><span>Squad Pessoal</span></div>
+                <div class="ops-office-preview__workspace">
+                  <div class="ops-office-preview__backpack"><strong>Mochila de Quests</strong><span>Próximas demandas</span></div>
+                  <div class="ops-office-preview__rooms"><span>Demandas</span><span>Heitor</span><span>Coisas para fazer</span></div>
+                  <div class="ops-office-preview__office"><i /><i /><i /><b /><b /><b /></div>
+                </div>
+                <div class="ops-office-preview__command"><span>Descreva a demanda…</span><strong>Delegar Quest</strong></div>
+              </div>
             </div>
             <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba"><span><strong>Abrir SquadOne</strong><small>Ir para o escritório</small></span><span aria-hidden="true">↗</span></a>
           </aside>

@@ -14,7 +14,7 @@ const labels: Record<OperationalState, string> = {
 <template>
   <section class="ops-panel ops-tools" aria-labelledby="tools-title">
     <div class="ops-section-heading">
-      <div><span>Acessos</span><h2 id="tools-title">Ferramentas</h2></div>
+      <div><h2 id="tools-title">Ferramentas locais</h2></div>
       <span v-if="loading" class="ops-loading" role="status">Verificando…</span>
     </div>
     <div class="ops-tool-grid">

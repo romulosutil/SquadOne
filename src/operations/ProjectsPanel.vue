@@ -16,7 +16,7 @@ const openUrl = (project: LocalProject, ideUrl: string) => {
 <template>
   <section class="ops-panel ops-projects" aria-labelledby="projects-title">
     <div class="ops-section-heading">
-      <div><span>Seus atalhos</span><h2 id="projects-title">Projetos</h2></div>
+      <div><h2 id="projects-title">Projetos</h2><p>Atalhos configurados por você</p></div>
       <button type="button" class="ops-button ops-button--outline" @click="emit('add')">＋ Adicionar projeto</button>
     </div>
 

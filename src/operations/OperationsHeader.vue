@@ -28,7 +28,8 @@ const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === i
 
     <div class="ops-welcome" aria-live="polite">
       <span v-if="displayName">Olá, {{ displayName }}</span>
-      <strong>{{ new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date()) }}</strong>
+      <strong>{{ new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()) }}</strong>
+      <span class="ops-welcome__time">{{ new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }}</span>
     </div>
 
     <div class="ops-header__actions">
