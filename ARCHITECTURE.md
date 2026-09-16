@@ -16,3 +16,34 @@ não devem carregar segredos, métricas ou estados operacionais reais.
 
 O protótipo `prototypes/central-operacoes/` explora a futura superfície de
 operação sem implementar infraestrutura, túneis, autenticação ou integrações.
+
+## Central de Operações
+
+A mesma aplicação possui dois perfis selecionados no servidor por
+`SQUADONE_MODE`:
+
+- `app` preserva o comportamento remoto e não registra `/api/operations/*`;
+- `operations` serve a Central em `/`, o app existente em `/squadone`, registra
+  as rotas locais e troca o bind do Express para `127.0.0.1`.
+
+`src/RootApp.vue` consulta somente `/api/runtime` para escolher a superfície.
+Os componentes da Central ficam em `src/operations/`; eles não incorporam o
+SquadOne em iframe e usam navegação interna para `/squadone`.
+
+`server/operations.ts` contém a fronteira local:
+
+- valida e persiste projetos em JSON com substituição atômica;
+- aceita somente caminhos Linux absolutos ou URLs `http`/`https`;
+- verifica uma lista fixa de serviços lida da configuração privada, com timeout
+  curto e sem aceitar comandos ou URLs enviados pelo navegador;
+- expõe somente launch URLs, estados e detalhes não sensíveis à interface.
+
+A agenda da Central reutiliza o armazenamento OAuth do SquadOne e a leitura do
+Google Calendar. Não existe agenda local paralela: sem conexão, a API devolve
+explicitamente `disconnected`.
+
+No Dell, `deploy/dell/squadone-operations.service` é instalado como serviço de
+usuário com linger. O arquivo de ambiente, a configuração real e os dados ficam
+respectivamente em `~/.config/squadone/operations.env`,
+`~/.config/squadone/operations.json` e
+`~/.local/share/squadone-operations`.

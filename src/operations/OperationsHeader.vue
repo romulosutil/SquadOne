@@ -1,0 +1,55 @@
+<script setup lang="ts">
+import type { OperationTool } from './types'
+
+const props = defineProps<{
+  displayName: string
+  tools: OperationTool[]
+  checkedAt: string
+  loading: boolean
+}>()
+
+defineEmits<{ refresh: [] }>()
+
+const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === id)
+</script>
+
+<template>
+  <header class="ops-header">
+    <a class="ops-brand" href="#main-content" aria-label="SquadOne, ir para o conteúdo da Central">
+      <span class="ops-brand__mark" aria-hidden="true"><i /></span>
+      <span><strong>SquadOne</strong><small>Operações</small></span>
+    </a>
+
+    <div class="ops-title">
+      <span>Seu ponto de partida</span>
+      <h1>Central de Operações</h1>
+    </div>
+
+    <div class="ops-welcome" aria-live="polite">
+      <span v-if="displayName">Olá, {{ displayName }}</span>
+      <strong>{{ new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date()) }}</strong>
+    </div>
+
+    <div class="ops-header__actions">
+      <div class="ops-connection" role="status">
+        <span class="ops-status-dot" :class="{ 'is-pending': loading }" aria-hidden="true" />
+        <span>Central local</span>
+        <small>{{ loading ? 'verificando' : 'via túnel SSH' }}</small>
+      </div>
+
+      <nav class="ops-quick" aria-label="Acessos rápidos">
+        <a v-if="tool('hermes')" :href="tool('hermes')!.launchUrl" target="_blank" rel="noopener">
+          <span aria-hidden="true">H</span> Hermes
+        </a>
+        <a v-if="tool('ide')" :href="tool('ide')!.launchUrl" target="_blank" rel="noopener">
+          <span aria-hidden="true">&lt;/&gt;</span> IDE
+        </a>
+        <button type="button" :disabled="loading" @click="$emit('refresh')">
+          <span aria-hidden="true">↻</span> Atualizar
+        </button>
+      </nav>
+
+      <a class="ops-enter" href="/squadone">Abrir SquadOne <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+</template>

@@ -1,0 +1,36 @@
+{
+  "displayName": "Seu nome",
+  "tools": {
+    "hermes": {
+      "label": "Hermes Chat Web",
+      "description": "Conversas e agentes",
+      "launchUrl": "http://127.0.0.1:9119/chat",
+      "healthUrl": "http://127.0.0.1:9119/api/status"
+    },
+    "ide": {
+      "label": "IDE",
+      "description": "code-server",
+      "launchUrl": "http://127.0.0.1:8080/",
+      "healthUrl": "http://127.0.0.1:8080/healthz"
+    },
+    "syncthing": {
+      "label": "Syncthing",
+      "description": "Arquivos locais",
+      "launchUrl": "http://127.0.0.1:8384/",
+      "healthUrl": "https://127.0.0.1:8384/rest/noauth/health",
+      "healthKind": "syncthing"
+    },
+    "n8n": {
+      "label": "n8n",
+      "description": "Automações",
+      "launchUrl": "http://127.0.0.1:5678/",
+      "healthUrl": "http://127.0.0.1:5678/healthz"
+    },
+    "remote": {
+      "label": "SquadOne remoto",
+      "description": "EasyPanel",
+      "launchUrl": "https://squadone.example.com/",
+      "healthUrl": "https://squadone.example.com/"
+    }
+  }
+}

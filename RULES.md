@@ -10,3 +10,11 @@
    da aplicação.
 6. Antes de mudar arquitetura, atualize este documento e `ARCHITECTURE.md` com
    a decisão aprovada.
+7. Rotas e dados da Central só existem quando `SQUADONE_MODE=operations`; esse
+   perfil deve escutar exclusivamente em loopback.
+8. Health checks operacionais são alvos fixos da configuração local. O
+   navegador nunca envia comandos, processos ou URLs para serem executados.
+9. Projetos locais ficam fora do Git, exigem nome e destino e recusam esquemas
+   diferentes de `http` e `https`.
+10. A superfície operacional é somente leitura para serviços: não adicionar
+    ações de parar, reiniciar ou reconfigurar infraestrutura.

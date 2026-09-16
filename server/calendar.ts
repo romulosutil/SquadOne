@@ -130,6 +130,16 @@ interface GoogleEvent {
   extendedProperties?: { private?: Record<string, string> };
 }
 
+export interface EventoDaAgendaDoDia {
+  id: string;
+  titulo: string;
+  inicio: string;
+  fim: string;
+  diaInteiro: boolean;
+  htmlLink?: string;
+  local?: string;
+}
+
 /**
  * A marca manda. O prefixo só vale para eventos criados antes dela existir —
  * sem migração, eles continuam lidos como sempre foram.
@@ -245,6 +255,46 @@ async function listarPaginado<T>(
   throw new LeituraIncompleta(
     `O Google Calendar devolveu mais de ${PAGINAS_MAX} páginas de eventos: a leitura ficaria incompleta.`,
   );
+}
+
+/**
+ * Visão resumida do dia para a Central de Operações. Diferente da Mochila,
+ * lê o calendário principal sem filtrar marcas do SquadOne: a agenda do dia
+ * precisa refletir também compromissos criados fora do produto.
+ */
+export async function listarAgendaDoDia(
+  token: string,
+  de: Date,
+  ate: Date,
+): Promise<EventoDaAgendaDoDia[]> {
+  const eventos = await listarPaginado<GoogleEvent & { location?: string }>(
+    CALENDARIO_DE_OCUPACAO,
+    {
+      timeMin: de.toISOString(),
+      timeMax: ate.toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+      showDeleted: "false",
+      maxResults: "250",
+      fields: "nextPageToken,items(id,status,summary,start,end,htmlLink,location)",
+    },
+    token,
+  );
+  return eventos.flatMap((evento) => {
+    if (evento.status === "cancelled") return [];
+    const inicio = evento.start?.dateTime ?? evento.start?.date;
+    const fim = evento.end?.dateTime ?? evento.end?.date;
+    if (!inicio || !fim) return [];
+    return [{
+      id: evento.id,
+      titulo: evento.summary?.trim() || "(sem título)",
+      inicio,
+      fim,
+      diaInteiro: !evento.start?.dateTime,
+      ...(evento.htmlLink ? { htmlLink: evento.htmlLink } : {}),
+      ...(evento.location ? { local: evento.location } : {}),
+    }];
+  });
 }
 
 /**

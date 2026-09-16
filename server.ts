@@ -15,7 +15,7 @@ import {
 } from "./server/squad.ts";
 import { ModeloOcupado } from "./server/orchestrator.ts";
 import { rodarDemanda } from "./server/turno.ts";
-import { ErroCalendario, LeituraIncompleta, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
+import { ErroCalendario, LeituraIncompleta, listarAgendaDoDia, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
 import { AgendaIndisponivel } from "./server/agenda.ts";
@@ -60,6 +60,15 @@ import {
   type ConfigDeTelegram,
 } from "./server/telegram.ts";
 import { criarBotDoTelegram } from "./server/telegram-bot.ts";
+import {
+  createOperationsRouter,
+  listenHostForMode,
+  OperationsProjectStore,
+  readOperationsConfig,
+  readSquadOneMode,
+  todayWindow,
+  type AgendaSummary,
+} from "./server/operations.ts";
 
 dotenv.config();
 
@@ -141,6 +150,8 @@ function responderErroDeQuest(res: express.Response, err: unknown): boolean {
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  const squadOneMode = readSquadOneMode();
+  const listenHost = listenHostForMode(squadOneMode);
 
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
@@ -179,6 +190,55 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Disponível nos dois perfis sem expor configuração local. O frontend usa
+  // apenas este discriminador para decidir entre o app e a Central.
+  app.get("/api/runtime", (_req, res) => {
+    res.json({ mode: squadOneMode });
+  });
+
+  if (squadOneMode === "operations") {
+    const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
+    if (!configPath) {
+      throw new Error("SQUADONE_OPERATIONS_CONFIG é obrigatório no perfil operations.");
+    }
+    const operationsConfig = await readOperationsConfig(configPath);
+    const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
+    const operationsStore = new OperationsProjectStore(operationsDataDir);
+    const readAgenda = async (): Promise<AgendaSummary> => {
+      if (!(await estaConectado())) return { state: "disconnected", events: [] };
+      try {
+        const { start, end } = todayWindow(new Date(), FUSO);
+        const events = await listarAgendaDoDia(await tokenValido(), start, end);
+        return {
+          state: "connected",
+          events: events.map((event) => ({
+            id: event.id,
+            title: event.titulo,
+            start: event.inicio,
+            end: event.fim,
+            allDay: event.diaInteiro,
+            ...(event.htmlLink ? { htmlLink: event.htmlLink } : {}),
+            ...(event.local ? { location: event.local } : {}),
+          })),
+        };
+      } catch (error) {
+        if (error instanceof PrecisaConectar) return { state: "disconnected", events: [] };
+        throw error;
+      }
+    };
+    app.use("/api/operations", createOperationsRouter({
+      config: operationsConfig,
+      store: operationsStore,
+      readAgenda,
+    }));
+  } else {
+    // Impede o fallback SPA de responder HTML 200 para uma rota operacional
+    // inexistente no EasyPanel. O perfil remoto falha fechado e explicitamente.
+    app.use("/api/operations", (_req, res) => {
+      res.status(404).json({ error: "Central de Operações indisponível neste perfil." });
+    });
+  }
+
   // --- Conexao com o Google -------------------------------------------
   // O token nunca passa pelo browser: o servidor troca o code, guarda o
   // refresh cifrado no volume e renova sozinho. O frontend so pergunta se
@@ -208,20 +268,21 @@ async function startServer() {
   app.get("/api/auth/callback", async (req, res) => {
     const { code, state, error: recusa } = req.query;
     // O usuario pode simplesmente dizer nao na tela do Google.
-    if (recusa) return res.redirect(`/?auth=${encodeURIComponent(String(recusa))}`);
+    const appPath = squadOneMode === "operations" ? "/squadone" : "/";
+    if (recusa) return res.redirect(`${appPath}?auth=${encodeURIComponent(String(recusa))}`);
     if (typeof code !== "string" || typeof state !== "string") {
-      return res.redirect("/?auth=callback_incompleto");
+      return res.redirect(`${appPath}?auth=callback_incompleto`);
     }
     try {
       await trocarCodigo(code, state);
-      res.redirect("/?auth=ok");
+      res.redirect(`${appPath}?auth=ok`);
     } catch (error: any) {
       // Calendar desmarcado no consentimento granular: nada foi gravado e a
       // credencial anterior continua. Código fixo para a UI dizer isso com
       // clareza, em vez de repetir a mensagem crua na URL.
-      if (error instanceof EscopoNegado) return res.redirect("/?auth=escopo_calendar_negado");
+      if (error instanceof EscopoNegado) return res.redirect(`${appPath}?auth=escopo_calendar_negado`);
       console.error("Erro no callback do Google:", error);
-      res.redirect(`/?auth=${encodeURIComponent(error.message)}`);
+      res.redirect(`${appPath}?auth=${encodeURIComponent(error.message)}`);
     }
   });
 
@@ -540,8 +601,8 @@ async function startServer() {
   else if (configDeTelegram) console.log(`Bot do Telegram: ${descreverTelegram(configDeTelegram)}`);
   else console.log("Bot do Telegram desligado (TELEGRAM_BOT_TOKEN vazia)");
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+  app.listen(PORT, listenHost, () => {
+    console.log(`SquadOne (${squadOneMode}) em http://${listenHost}:${PORT}`);
     // Depois do listen: a primeira varredura não disputa o boot do Vite.
     vigia?.iniciar();
 

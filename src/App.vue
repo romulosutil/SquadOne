@@ -32,6 +32,8 @@ import type {
 import { ampliarAcesso, conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus, tasksLiberado } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
 
+defineProps<{ operationsMode?: boolean }>()
+
 const currentAgent = ref('Idle')
 // A Mochila NAO guarda quest local: a verdade e o Google Calendar. Esta ref e
 // so o cache da ultima leitura de GET /api/mochila.
@@ -785,9 +787,16 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         <div class="w-8 h-8 bg-black flex items-center justify-center animate-pulse">
           <div class="w-4 h-4 bg-[#ffdb58]"></div>
         </div>
-        <h1 class="text-2xl font-black uppercase tracking-wider">Quest Hub <span class="text-xs ml-2 bg-black text-white px-2 py-1 align-middle">MVP</span></h1>
+        <h1 class="text-2xl font-black uppercase tracking-wider">SquadOne</h1>
       </div>
       <div class="flex items-center gap-4">
+        <a
+          v-if="operationsMode"
+          href="/"
+          class="border-2 border-black bg-white px-3 py-2 font-black text-xs uppercase hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          ← Central
+        </a>
         <SquadSelector
           v-if="roster"
           :squads="roster.squads"
