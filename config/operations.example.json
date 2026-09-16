@@ -30,8 +30,8 @@
     "remote": {
       "label": "SquadOne remoto",
       "description": "EasyPanel",
-      "launchUrl": "https://squadone.example.com/",
-      "healthUrl": "https://squadone.example.com/"
+      "launchUrl": "https://aladdin-squadone-app.jicnzg.easypanel.host/",
+      "healthUrl": "https://aladdin-squadone-app.jicnzg.easypanel.host/"
     }
   }
 }

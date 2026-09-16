@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { AgendaEvent, AgendaOverview } from './types'
 
-const props = defineProps<{ agenda: AgendaOverview | null; loading: boolean }>()
+const props = defineProps<{ agenda: AgendaOverview | null; loading: boolean; squadOneUrl: string }>()
 
 const events = computed(() => props.agenda?.state === 'connected' ? props.agenda.events : [])
 const time = (event: AgendaEvent) => event.allDay
@@ -31,7 +31,7 @@ const duration = (event: AgendaEvent) => {
       <span aria-hidden="true">!</span>
       <h3>Google não conectado</h3>
       <p>Abra o SquadOne e conecte sua conta para carregar a agenda do dia.</p>
-      <a href="/squadone">Conectar no SquadOne</a>
+      <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">Conectar no SquadOne</a>
     </div>
 
     <div v-else-if="agenda?.state === 'unavailable'" class="ops-empty ops-empty--warning" role="status">

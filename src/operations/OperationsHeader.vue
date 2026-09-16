@@ -4,6 +4,7 @@ import type { OperationTool } from './types'
 const props = defineProps<{
   displayName: string
   tools: OperationTool[]
+  squadOneUrl: string
   checkedAt: string
   loading: boolean
 }>()
@@ -49,7 +50,7 @@ const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === i
         </button>
       </nav>
 
-      <a class="ops-enter" href="/squadone">Abrir SquadOne <span aria-hidden="true">↗</span></a>
+      <a v-if="squadOneUrl" class="ops-enter" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">Abrir SquadOne <span aria-hidden="true">↗</span></a>
     </div>
   </header>
 </template>

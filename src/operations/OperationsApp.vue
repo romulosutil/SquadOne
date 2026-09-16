@@ -21,6 +21,7 @@ const projectError = ref('')
 let refreshTimer = 0
 
 const ideUrl = computed(() => overview.value?.tools.find(tool => tool.id === 'ide')?.launchUrl ?? 'http://127.0.0.1:8080/')
+const squadOneUrl = computed(() => overview.value?.tools.find(tool => tool.id === 'remote')?.launchUrl ?? '')
 const nextEvent = computed(() => {
   if (overview.value?.agenda.state !== 'connected') return null
   const now = Date.now()
@@ -127,6 +128,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
     <OperationsHeader
       :display-name="overview?.displayName ?? ''"
       :tools="overview?.tools ?? []"
+      :squad-one-url="squadOneUrl"
       :checked-at="overview?.checkedAt ?? ''"
       :loading="loadingOverview"
       @refresh="loadOverview"
@@ -156,7 +158,9 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
               <p>Agenda</p><strong class="ops-now__word">Sem conexão</strong>
               <h3>Conecte o Google no SquadOne</h3>
               <p>A Central não mantém uma agenda paralela.</p>
-              <div class="ops-now__actions"><a href="/squadone">Abrir SquadOne</a></div>
+              <div class="ops-now__actions">
+                <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">Abrir SquadOne</a>
+              </div>
             </template>
             <template v-else>
               <p>Próximo compromisso</p><strong class="ops-now__word">Livre</strong>
@@ -173,12 +177,12 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
             <div class="ops-office-preview" aria-hidden="true">
               <span>SquadOne</span><i /><i /><i /><b /><b /><b />
             </div>
-            <a href="/squadone"><span><strong>Abrir SquadOne</strong><small>Ir para o escritório</small></span><span aria-hidden="true">↗</span></a>
+            <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba"><span><strong>Abrir SquadOne</strong><small>Ir para o escritório</small></span><span aria-hidden="true">↗</span></a>
           </aside>
         </div>
       </section>
 
-      <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loadingOverview" />
+      <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loadingOverview" :squad-one-url="squadOneUrl" />
       <ProjectsPanel :projects="projects" :loading="loadingProjects" :ide-url="ideUrl" @add="openProjectDialog(null)" @edit="openProjectDialog" />
       <ToolsPanel :tools="overview?.tools ?? []" :loading="loadingOverview" />
       <HealthPanel :tools="overview?.tools ?? []" :checked-at="overview?.checkedAt ?? ''" />
