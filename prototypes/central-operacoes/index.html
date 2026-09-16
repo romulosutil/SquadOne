@@ -9,72 +9,25 @@
       content="Protótipo visual isolado da Central de Operações do SquadOne."
     />
     <title>SquadOne · Operações — Protótipo</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=entry-layer-2" />
     <script src="./app.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 
     <div class="app-shell">
-      <aside class="sidebar" aria-label="Navegação principal do SquadOne">
-        <a class="brand" href="#conteudo" aria-label="SquadOne, ir para a Central">
-          <span class="brand__mark" aria-hidden="true"><i></i></span>
-          <span>
-            <strong class="brand__name">SquadOne</strong>
-            <small>Seu espaço de trabalho</small>
-          </span>
-        </a>
-
-        <nav class="primary-nav" aria-label="Áreas do SquadOne">
-          <a class="primary-nav__item is-active" href="#conteudo" aria-current="page">
-            <span aria-hidden="true">⌂</span><strong>Central</strong>
-          </a>
-          <button class="primary-nav__item" type="button" data-demo-action="Abrir agenda completa">
-            <span aria-hidden="true">□</span><strong>Agenda</strong>
-          </button>
-          <button class="primary-nav__item" type="button" data-demo-action="Abrir projetos">
-            <span aria-hidden="true">◇</span><strong>Projetos</strong>
-          </button>
-          <button class="primary-nav__item" type="button" data-demo-action="Abrir squads">
-            <span aria-hidden="true">○</span><strong>Squads</strong>
-          </button>
-          <button class="primary-nav__item" type="button" data-demo-action="Abrir escritório da squad">
-            <span aria-hidden="true">⌗</span><strong>Escritório</strong>
-          </button>
-        </nav>
-
-        <div class="active-squad">
-          <p>Squad atual</p>
-          <button type="button" data-demo-action="Trocar squad">
-            <span class="active-squad__mark">P</span>
-            <span><strong>Pessoal</strong><small>3 pessoas ativas</small></span>
-            <span aria-hidden="true">⌄</span>
-          </button>
-          <div class="active-squad__people" aria-label="Pessoas ativas na squad Pessoal">
-            <span class="person person--active">RS</span>
-            <span class="person">MA</span>
-            <span class="person">QA</span>
-            <button type="button" data-demo-action="Abrir escritório da squad">Ver escritório →</button>
-          </div>
-        </div>
-
-        <div class="prototype-controls">
-          <span>Prévia visual · dados simulados</span>
-          <label for="scenario-select">Visualizar estado</label>
-          <select id="scenario-select">
-            <option value="healthy">Tudo saudável</option>
-            <option value="offline">Serviço indisponível</option>
-            <option value="empty-agenda">Agenda vazia</option>
-            <option value="google-off">Google desconectado</option>
-            <option value="empty-projects">Sem projetos</option>
-          </select>
-        </div>
-      </aside>
-
       <div class="app-main">
         <header class="topbar">
+          <a class="brand" href="#conteudo" aria-label="SquadOne, ir para o conteúdo da Central">
+            <span class="brand__mark" aria-hidden="true"><i></i></span>
+            <span>
+              <strong class="brand__name">SquadOne</strong>
+              <small>Operações</small>
+            </span>
+          </a>
+
           <div class="page-title">
-            <span>SquadOne</span>
+            <span>Seu ponto de partida</span>
             <h1>Central de Operações</h1>
           </div>
 
@@ -106,6 +59,10 @@
               </button>
             </nav>
 
+            <button class="enter-squadone" type="button" data-demo-action="Entrar no SquadOne atual">
+              Entrar no SquadOne <span aria-hidden="true">↗</span>
+            </button>
+
             <div id="mais-ferramentas" class="tools-popover" popover>
               <button type="button" data-tool="Syncthing">Abrir Syncthing</button>
               <button type="button" data-tool="n8n">Abrir n8n</button>
@@ -113,6 +70,18 @@
             </div>
           </div>
         </header>
+
+        <div class="demo-strip">
+          <p><strong>Prévia visual</strong> · dados simulados, sem integrações reais</p>
+          <label for="scenario-select">Visualizar estado</label>
+          <select id="scenario-select">
+            <option value="healthy">Tudo saudável</option>
+            <option value="offline">Serviço indisponível</option>
+            <option value="empty-agenda">Agenda vazia</option>
+            <option value="google-off">Google desconectado</option>
+            <option value="empty-projects">Sem projetos</option>
+          </select>
+        </div>
 
         <main id="conteudo" class="workspace" tabindex="-1">
         <section class="now" aria-labelledby="agora-titulo">
@@ -141,11 +110,11 @@
 
             <aside class="focus-work" aria-labelledby="foco-titulo">
               <div class="focus-work__heading">
-                <p class="eyebrow" id="foco-titulo">Squad em foco</p>
-                <span>No SquadOne</span>
+                <p class="eyebrow" id="foco-titulo">SquadOne atual</p>
+                <span>Aplicação existente</span>
               </div>
-              <h3>Pessoal</h3>
-              <p>O escritório, as pessoas e o trabalho desta squad continuam no SquadOne.</p>
+              <h3>Seu escritório</h3>
+              <p>Mochila, salas, agentes e Command Bar continuam exatamente como hoje.</p>
               <div class="office-presence" aria-label="Squad Pessoal: três pessoas ativas">
                 <div class="office-presence__desk" aria-hidden="true">
                   <span class="desk desk--one"></span>
@@ -158,12 +127,12 @@
                   <span class="person">QA</span>
                 </div>
                 <div>
-                  <strong>Escritório da squad</strong>
-                  <span>3 pessoas · 1 em movimento</span>
+                  <strong>Squad Pessoal</strong>
+                  <span>3 pessoas · 4 salas</span>
                 </div>
               </div>
-              <button class="text-action" type="button" data-demo-action="Abrir escritório da squad">
-                Abrir escritório <span aria-hidden="true">↗</span>
+              <button class="text-action" type="button" data-demo-action="Entrar no SquadOne atual">
+                Entrar no SquadOne <span aria-hidden="true">↗</span>
               </button>
             </aside>
           </div>

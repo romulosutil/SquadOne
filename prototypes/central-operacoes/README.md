@@ -24,7 +24,12 @@ no cabeçalho, coral na navegação, verde nas confirmações, superfícies crem
 bordas pretas espessas e sombras rígidas. A área `Agora` reaproveita o azul
 escuro do mapa do escritório para concentrar a atenção.
 
-O SquadOne é a moldura permanente: marca, navegação, squad ativa e acesso ao
-escritório vivem na lateral. A Central de Operações é uma página do produto,
-não um produto paralelo. A área `Agora` continua dominante; agenda, projetos e
-serviços se organizam pela proximidade da próxima decisão.
+A Central é uma camada inicial de uma página, aberta antes da aplicação atual.
+Ela resume o que exige atenção, oferece atalhos locais e mantém uma ação
+principal clara: `Entrar no SquadOne`. Esse acesso leva ao produto existente,
+onde continuam a Mochila de Quests, as salas, o escritório, os agentes e a
+Command Bar. Não são propostas novas rotas nem um segundo sistema de navegação.
+
+A área `Agora` continua dominante; agenda, projetos e serviços se organizam
+pela proximidade da próxima decisão. O seletor de cenários existe apenas para
+avaliar os estados visuais do protótipo.
