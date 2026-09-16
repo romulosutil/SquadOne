@@ -22,5 +22,9 @@ ações terminam em mensagens de demonstração.
 O protótipo mantém o amarelo, coral e menta do SquadOne atual, além da ideia de
 salas, pessoas e estações de trabalho. A expressão foi amadurecida para um
 “escritório noturno”: superfícies escuras, tipografia editorial, divisórias
-lineares e cor reservada a prioridade e estado. A área `Agora` é dominante;
-agenda, projetos e serviços se organizam pela proximidade da próxima decisão.
+lineares e cor reservada a prioridade e estado.
+
+O SquadOne é a moldura permanente: marca, navegação, squad ativa e acesso ao
+escritório vivem na lateral. A Central de Operações é uma página do produto,
+não um produto paralelo. A área `Agora` continua dominante; agenda, projetos e
+serviços se organizam pela proximidade da próxima decisão.

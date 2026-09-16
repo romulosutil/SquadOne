@@ -95,11 +95,7 @@
 
   function setScenario(scenario) {
     body.dataset.scenario = scenario
-    document.querySelectorAll('[data-scenario]').forEach((button) => {
-      const active = button.dataset.scenario === scenario
-      button.classList.toggle('is-active', active)
-      button.setAttribute('aria-pressed', String(active))
-    })
+    document.querySelector('#scenario-select').value = scenario
 
     const agendaSummary = document.querySelector('#agenda-summary')
     const timeline = document.querySelector('#timeline')
@@ -147,8 +143,8 @@
     window.setTimeout(() => nameInput.focus(), 60)
   }
 
-  document.querySelectorAll('[data-scenario]').forEach((button) => {
-    button.addEventListener('click', () => setScenario(button.dataset.scenario))
+  document.querySelector('#scenario-select').addEventListener('change', (event) => {
+    setScenario(event.target.value)
   })
 
   document.querySelectorAll('[data-open-project-dialog]').forEach((button) => {
