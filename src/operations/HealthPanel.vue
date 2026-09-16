@@ -12,7 +12,7 @@ const labels: Record<OperationalState, string> = {
 </script>
 
 <template>
-  <section class="ops-panel ops-health" aria-labelledby="health-title">
+  <section id="health" class="ops-panel ops-health" aria-labelledby="health-title">
     <div class="ops-section-heading">
       <div><span>Somente leitura</span><h2 id="health-title">Saúde operacional</h2></div>
       <time v-if="checkedAt" :datetime="checkedAt">

@@ -27,6 +27,38 @@ const nextEvent = computed(() => {
   const now = Date.now()
   return overview.value.agenda.events.find(event => Date.parse(event.end) > now) ?? null
 })
+const attention = computed(() => {
+  if (overviewError.value) {
+    return {
+      state: 'alert',
+      title: 'O estado dos serviços não pôde ser confirmado.',
+      detail: 'Use “Tentar novamente” antes de tomar uma decisão operacional.'
+    }
+  }
+
+  if (loadingOverview.value) {
+    return {
+      state: 'pending',
+      title: 'Atualizando a visão local.',
+      detail: 'A Central ainda está consultando agenda e serviços configurados.'
+    }
+  }
+
+  const unavailable = overview.value?.tools.filter(tool => tool.state === 'unavailable') ?? []
+  if (unavailable.length) {
+    return {
+      state: 'alert',
+      title: `${unavailable.length} serviço${unavailable.length === 1 ? '' : 's'} requer${unavailable.length === 1 ? '' : 'em'} atenção.`,
+      detail: unavailable.map(tool => tool.label).join(' · ')
+    }
+  }
+
+  return {
+    state: 'ready',
+    title: 'Nenhum serviço configurado exige atenção agora.',
+    detail: 'Este resumo reflete a última verificação local exibida abaixo.'
+  }
+})
 
 const loadOverview = async () => {
   loadingOverview.value = true
@@ -179,6 +211,11 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
             </div>
             <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba"><span><strong>Abrir SquadOne</strong><small>Ir para o escritório</small></span><span aria-hidden="true">↗</span></a>
           </aside>
+        </div>
+        <div class="ops-attention" :class="`is-${attention.state}`" role="status">
+          <span aria-hidden="true">{{ attention.state === 'alert' ? '!' : attention.state === 'pending' ? '…' : '✓' }}</span>
+          <div><strong>{{ attention.title }}</strong><small>{{ attention.detail }}</small></div>
+          <a href="#health">Ver saúde operacional</a>
         </div>
       </section>
 
