@@ -77,6 +77,7 @@ describe("estados operacionais", () => {
     assert.equal(mapOperationalState(false, null, "http"), "unavailable");
     assert.equal(mapOperationalState(true, null, "http"), "healthy");
     assert.equal(mapOperationalState(true, { status: "syncing" }, "syncthing"), "syncing");
+    assert.equal(mapOperationalState(true, { state: "scanning" }, "syncthing"), "syncing");
   });
 
   it("calcula a janela civil do dia no fuso configurado", () => {

@@ -16,6 +16,7 @@ export interface OperationToolConfig {
   launchUrl: string;
   healthUrl: string;
   healthKind?: "http" | "syncthing";
+  healthApiKeyFile?: string;
 }
 
 export interface OperationsConfig {
@@ -105,6 +106,9 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
       launchUrl: readHttpUrl(input.launchUrl, `tools.${id}.launchUrl`, local),
       healthUrl: readHttpUrl(input.healthUrl, `tools.${id}.healthUrl`, local),
       healthKind: input.healthKind === "syncthing" ? "syncthing" : "http",
+      ...(input.healthApiKeyFile
+        ? { healthApiKeyFile: path.resolve(String(input.healthApiKeyFile)) }
+        : {}),
     };
   }
   return {
@@ -235,7 +239,8 @@ export class OperationsProjectStore {
 export function mapOperationalState(ok: boolean, body: unknown, kind: OperationToolConfig["healthKind"]): OperationsState {
   if (!ok) return "unavailable";
   if (kind === "syncthing" && body && typeof body === "object") {
-    const status = String((body as Record<string, unknown>).status ?? "").toLowerCase();
+    const source = body as Record<string, unknown>;
+    const status = String(source.state ?? source.status ?? "").toLowerCase();
     if (["syncing", "scanning", "cleaning"].includes(status)) return "syncing";
   }
   return "healthy";
@@ -246,8 +251,18 @@ async function readHealth(tool: OperationToolConfig): Promise<{ ok: boolean; sta
   // Syncthing usa certificado local autoassinado no Dell. A exceção é restrita
   // ao health check fixo em loopback; nenhuma URL do navegador chega aqui.
   if (tool.healthKind === "syncthing" && url.protocol === "https:" && isLoopbackUrl(url)) {
+    let apiKey: string | undefined;
+    if (tool.healthApiKeyFile) {
+      const config = await fs.readFile(tool.healthApiKeyFile, "utf8");
+      apiKey = config.match(/<apikey>([^<]+)<\/apikey>/)?.[1]?.trim();
+      if (!apiKey) throw new Error("API key do Syncthing ausente.");
+    }
     return new Promise((resolve, reject) => {
-      const request = https.get(url, { rejectUnauthorized: false, timeout: 1800 }, (response) => {
+      const request = https.get(url, {
+        rejectUnauthorized: false,
+        timeout: 1800,
+        ...(apiKey ? { headers: { "X-API-Key": apiKey } } : {}),
+      }, (response) => {
         const chunks: Buffer[] = [];
         response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
         response.on("end", () => {
