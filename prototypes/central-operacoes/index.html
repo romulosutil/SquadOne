@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111713" />
+    <meta
+      name="description"
+      content="Protótipo visual isolado da Central de Operações do SquadOne."
+    />
+    <title>SquadOne · Operações — Protótipo</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#conteudo" aria-label="SquadOne Operações, ir ao início">
+          <span class="brand__mark" aria-hidden="true"><i></i></span>
+          <span class="brand__name">SquadOne</span>
+          <span class="brand__section">Operações</span>
+        </a>
+
+        <div class="welcome" aria-live="polite">
+          <span id="saudacao">Bom dia, Rômulo</span>
+          <strong id="data-atual">quarta-feira, 16 de setembro</strong>
+          <span id="hora-atual">10:42</span>
+        </div>
+
+        <div class="topbar__right">
+          <div class="connection" id="dell-connection">
+            <span class="status-dot status-dot--healthy" aria-hidden="true"></span>
+            <span>Dell conectado</span>
+            <small id="dell-latency">local</small>
+          </div>
+
+          <nav class="quick-actions" aria-label="Acessos rápidos">
+            <button class="quick-action" type="button" data-tool="Hermes">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 18V8l7-4 7 4v10l-7 3-7-3Z"/><path d="m8.5 10.5 3.5 2 3.5-2M12 12.5V17"/></svg>
+              <span>Hermes</span>
+            </button>
+            <button class="quick-action" type="button" data-tool="IDE">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg>
+              <span>IDE</span>
+            </button>
+            <button class="quick-action" type="button" data-tool="n8n">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="8" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="17" cy="17" r="2"/><path d="m8 8 8-2M7.5 9.5l8 6M18 8v7"/></svg>
+              <span>n8n</span>
+            </button>
+            <button class="quick-action quick-action--more" type="button" popovertarget="mais-ferramentas">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              <span>Mais</span>
+            </button>
+          </nav>
+
+          <div id="mais-ferramentas" class="tools-popover" popover>
+            <button type="button" data-tool="Syncthing">Abrir Syncthing</button>
+            <button type="button" data-tool="SquadOne remoto">Abrir SquadOne remoto</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="context-rail" aria-label="Contexto da demonstração">
+        <span class="context-rail__label">Prévia visual</span>
+        <span>Dados ilustrativos — nenhuma integração está ativa</span>
+        <div class="scenario-picker" role="group" aria-label="Escolher cenário da interface">
+          <span>Cenário</span>
+          <button type="button" class="scenario-button is-active" data-scenario="healthy" aria-pressed="true">Saudável</button>
+          <button type="button" class="scenario-button" data-scenario="offline" aria-pressed="false">Indisponível</button>
+          <button type="button" class="scenario-button" data-scenario="empty-agenda" aria-pressed="false">Agenda vazia</button>
+          <button type="button" class="scenario-button" data-scenario="google-off" aria-pressed="false">Google desconectado</button>
+          <button type="button" class="scenario-button" data-scenario="empty-projects" aria-pressed="false">Sem projetos</button>
+        </div>
+      </div>
+
+      <main id="conteudo" class="workspace" tabindex="-1">
+        <section class="now" aria-labelledby="agora-titulo">
+          <div class="section-kicker">
+            <span class="section-index">01</span>
+            <h1 id="agora-titulo">Agora</h1>
+            <span class="now__mode"><span aria-hidden="true"></span> Modo foco</span>
+          </div>
+
+          <div class="now__layout">
+            <article class="next-event" id="next-event">
+              <p class="eyebrow">Próximo compromisso <span>em 24 min</span></p>
+              <div class="next-event__time" aria-label="Das 11 horas às 11 horas e 45 minutos">
+                <strong>11:00</strong>
+                <span>— 11:45</span>
+              </div>
+              <h2>Revisão da arquitetura do CRM</h2>
+              <p class="next-event__meta">
+                <span class="squad-token"><i class="avatar avatar--coral">C</i> CRM Silmer</span>
+                <span>Google Meet</span>
+              </p>
+              <div class="event-actions">
+                <button class="button button--ink" type="button" data-demo-action="Abrir compromisso">Abrir compromisso</button>
+                <button class="button button--ghost" type="button" data-demo-action="Ver agenda do dia">Ver dia</button>
+              </div>
+            </article>
+
+            <aside class="focus-work" aria-labelledby="foco-titulo">
+              <div class="focus-work__heading">
+                <p class="eyebrow" id="foco-titulo">Trabalho em foco</p>
+                <span>Squad ativo</span>
+              </div>
+              <h2>Central de Operações</h2>
+              <p>Estruturar a linguagem visual e validar os estados críticos.</p>
+              <div class="office-presence" aria-label="Squad Design de Produto: três pessoas ativas">
+                <div class="office-presence__desk" aria-hidden="true">
+                  <span class="desk desk--one"></span>
+                  <span class="desk desk--two"></span>
+                  <span class="plant">✦</span>
+                </div>
+                <div class="office-presence__people">
+                  <span class="person person--active">RS</span>
+                  <span class="person">MA</span>
+                  <span class="person">QA</span>
+                </div>
+                <div>
+                  <strong>Design de Produto</strong>
+                  <span>3 pessoas · 1 em movimento</span>
+                </div>
+              </div>
+              <button class="text-action" type="button" data-demo-action="Abrir escritório da squad">
+                Abrir escritório <span aria-hidden="true">↗</span>
+              </button>
+            </aside>
+          </div>
+
+          <div class="attention-line" id="attention-line" role="status">
+            <span class="attention-line__icon" aria-hidden="true">✓</span>
+            <div>
+              <strong>Tudo em ordem para o próximo bloco.</strong>
+              <span>Sincronização concluída há 2 minutos; nenhum serviço exige atenção.</span>
+            </div>
+            <button type="button" class="text-action" data-demo-action="Revisar atividade recente">Ver atividade</button>
+          </div>
+        </section>
+
+        <section class="agenda" aria-labelledby="agenda-titulo">
+          <div class="section-heading">
+            <div>
+              <span class="section-index">02</span>
+              <h2 id="agenda-titulo">Agenda</h2>
+            </div>
+            <button class="date-switcher" type="button" data-demo-action="Escolher outro dia">
+              Hoje · 16 set <span aria-hidden="true">⌄</span>
+            </button>
+          </div>
+
+          <div class="agenda__summary" id="agenda-summary">
+            <strong>3 compromissos</strong>
+            <span>2h45 reservadas</span>
+          </div>
+
+          <ol class="timeline" id="timeline" aria-label="Compromissos de hoje">
+            <li class="timeline__item is-current">
+              <time datetime="2026-09-16T11:00">11:00</time>
+              <div class="timeline__marker" aria-hidden="true"></div>
+              <article>
+                <div class="timeline__title"><strong>Revisão da arquitetura</strong><span>45 min</span></div>
+                <p><i class="avatar avatar--coral">C</i> CRM Silmer · Meet</p>
+              </article>
+            </li>
+            <li class="timeline__item">
+              <time datetime="2026-09-16T14:30">14:30</time>
+              <div class="timeline__marker" aria-hidden="true"></div>
+              <article>
+                <div class="timeline__title"><strong>Bloco de implementação</strong><span>1h30</span></div>
+                <p><i class="avatar avatar--yellow">S</i> SquadOne · Foco</p>
+              </article>
+            </li>
+            <li class="timeline__item">
+              <time datetime="2026-09-16T17:00">17:00</time>
+              <div class="timeline__marker" aria-hidden="true"></div>
+              <article>
+                <div class="timeline__title"><strong>Fechamento do dia</strong><span>30 min</span></div>
+                <p><i class="avatar avatar--mint">P</i> Pessoal · Rotina</p>
+              </article>
+            </li>
+          </ol>
+
+          <div class="agenda-empty" id="agenda-empty" hidden>
+            <span class="empty-illustration" aria-hidden="true">16</span>
+            <h3>Seu dia está livre</h3>
+            <p>Use este espaço para um bloco de foco ou deixe a agenda respirar.</p>
+            <button type="button" class="button button--soft" data-demo-action="Criar compromisso">Criar compromisso</button>
+          </div>
+
+          <div class="agenda-empty agenda-empty--warning" id="google-off" hidden>
+            <span class="empty-illustration" aria-hidden="true">!</span>
+            <h3>Google não conectado</h3>
+            <p>A agenda local continua disponível. Conecte o Google para sincronizar compromissos externos.</p>
+            <button type="button" class="button button--soft" data-demo-action="Conectar Google">Conectar Google</button>
+          </div>
+
+          <button class="agenda__footer" type="button" data-demo-action="Abrir agenda completa">
+            Abrir agenda completa <span aria-hidden="true">→</span>
+          </button>
+        </section>
+
+        <section class="projects" aria-labelledby="projetos-titulo">
+          <div class="section-heading section-heading--projects">
+            <div>
+              <span class="section-index">03</span>
+              <h2 id="projetos-titulo">Projetos</h2>
+              <p>Atalhos configurados por você</p>
+            </div>
+            <button class="button button--outline" type="button" data-open-project-dialog>
+              <span aria-hidden="true">＋</span> Adicionar projeto
+            </button>
+          </div>
+
+          <div class="project-list" id="project-list">
+            <article class="project-row">
+              <div class="project-row__identity">
+                <span class="project-glyph">SO</span>
+                <div><h3>SquadOne</h3><p>C:\dev\apps\SquadOne</p></div>
+              </div>
+              <div class="project-row__squad"><i class="avatar avatar--yellow">S</i><span>Squad Produto</span></div>
+              <time datetime="2026-09-16T10:12">aberto há 30 min</time>
+              <div class="project-row__actions">
+                <button class="button button--primary" type="button" data-demo-action="Abrir projeto SquadOne">Abrir</button>
+                <button class="icon-button" type="button" aria-label="Editar projeto SquadOne" data-edit-project="SquadOne|C:\dev\apps\SquadOne">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14 7 3 3"/></svg>
+                </button>
+                <button class="icon-button" type="button" aria-label="Mais ações para SquadOne" data-demo-action="Mais ações do projeto SquadOne">•••</button>
+              </div>
+            </article>
+
+            <article class="project-row">
+              <div class="project-row__identity">
+                <span class="project-glyph project-glyph--coral">CS</span>
+                <div><h3>CRM Silmer</h3><p>C:\dev\apps\crm-silmer</p></div>
+              </div>
+              <div class="project-row__squad"><i class="avatar avatar--coral">C</i><span>Squad Operações</span></div>
+              <time datetime="2026-09-15T16:20">ontem, 16:20</time>
+              <div class="project-row__actions">
+                <button class="button button--secondary" type="button" data-demo-action="Abrir projeto CRM Silmer">Abrir</button>
+                <button class="icon-button" type="button" aria-label="Editar projeto CRM Silmer" data-edit-project="CRM Silmer|C:\dev\apps\crm-silmer">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14 7 3 3"/></svg>
+                </button>
+                <button class="icon-button" type="button" aria-label="Mais ações para CRM Silmer" data-demo-action="Mais ações do projeto CRM Silmer">•••</button>
+              </div>
+            </article>
+
+            <article class="project-row">
+              <div class="project-row__identity">
+                <span class="project-glyph project-glyph--mint">PF</span>
+                <div><h3>P4F Institucional</h3><p>https://p4f.com.br</p></div>
+              </div>
+              <div class="project-row__squad"><i class="avatar avatar--mint">W</i><span>Squad Web</span></div>
+              <time datetime="2026-09-12T09:40">sábado, 09:40</time>
+              <div class="project-row__actions">
+                <button class="button button--secondary" type="button" data-demo-action="Abrir projeto P4F Institucional">Abrir</button>
+                <button class="icon-button" type="button" aria-label="Editar projeto P4F Institucional" data-edit-project="P4F Institucional|https://p4f.com.br">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14 7 3 3"/></svg>
+                </button>
+                <button class="icon-button" type="button" aria-label="Mais ações para P4F Institucional" data-demo-action="Mais ações do projeto P4F Institucional">•••</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="project-empty" id="project-empty" hidden>
+            <div class="project-empty__visual" aria-hidden="true"><span>+</span></div>
+            <div>
+              <h3>Seu primeiro atalho começa aqui</h3>
+              <p>Adicione uma pasta local ou link para abrir o trabalho certo sem procurar por ele.</p>
+            </div>
+            <button class="button button--primary" type="button" data-open-project-dialog>Adicionar projeto</button>
+          </div>
+        </section>
+
+        <section class="tools" aria-labelledby="ferramentas-titulo">
+          <div class="section-heading">
+            <div>
+              <span class="section-index">04</span>
+              <h2 id="ferramentas-titulo">Ferramentas locais</h2>
+            </div>
+            <span class="legend"><i class="status-dot status-dot--healthy"></i> disponível</span>
+          </div>
+
+          <div class="tool-list" id="tool-list">
+            <article class="tool-row" data-service="Hermes">
+              <span class="tool-row__number">H</span>
+              <div class="tool-row__name"><h3>Hermes Chat Web</h3><p>Conversas e agentes</p></div>
+              <span class="service-state service-state--healthy"><i></i>Disponível</span>
+              <button class="button button--secondary" type="button" data-tool="Hermes">Abrir Hermes</button>
+            </article>
+            <article class="tool-row" data-service="IDE">
+              <span class="tool-row__number">⌁</span>
+              <div class="tool-row__name"><h3>IDE</h3><p>code-server</p></div>
+              <span class="service-state service-state--healthy"><i></i>Disponível</span>
+              <button class="button button--secondary" type="button" data-tool="IDE">Abrir IDE</button>
+            </article>
+            <article class="tool-row" data-service="Syncthing">
+              <span class="tool-row__number">S</span>
+              <div class="tool-row__name"><h3>Syncthing</h3><p>Arquivos locais</p></div>
+              <span class="service-state service-state--syncing"><i></i>Sincronizando</span>
+              <button class="button button--secondary" type="button" data-tool="Syncthing">Abrir Syncthing</button>
+            </article>
+            <article class="tool-row" data-service="n8n">
+              <span class="tool-row__number">N</span>
+              <div class="tool-row__name"><h3>n8n</h3><p>Automações</p></div>
+              <span class="service-state service-state--healthy"><i></i>Disponível</span>
+              <button class="button button--secondary" type="button" data-tool="n8n">Abrir n8n</button>
+            </article>
+            <article class="tool-row" data-service="SquadOne remoto">
+              <span class="tool-row__number">↗</span>
+              <div class="tool-row__name"><h3>SquadOne remoto</h3><p>EasyPanel</p></div>
+              <span class="service-state service-state--healthy"><i></i>Disponível</span>
+              <button class="button button--secondary" type="button" data-tool="SquadOne remoto">Abrir remoto</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="operations" aria-labelledby="saude-titulo">
+          <div class="section-heading section-heading--operations">
+            <div>
+              <span class="section-index">05</span>
+              <h2 id="saude-titulo">Saúde operacional</h2>
+            </div>
+            <span class="demo-badge">Exemplo</span>
+          </div>
+
+          <div class="operations__layout">
+            <div class="health-matrix" id="health-matrix" aria-label="Estado dos serviços">
+              <div class="health-row" data-health="Worker Linux"><span>Worker Linux</span><strong class="service-state service-state--healthy"><i></i>Saudável</strong><small>verificação exemplo · agora</small></div>
+              <div class="health-row" data-health="SSH"><span>SSH</span><strong class="service-state service-state--healthy"><i></i>Saudável</strong><small>túnel local · exemplo</small></div>
+              <div class="health-row" data-health="Syncthing"><span>Syncthing</span><strong class="service-state service-state--syncing"><i></i>Sincronizando</strong><small>2 arquivos · exemplo</small></div>
+              <div class="health-row" data-health="Hermes"><span>Hermes</span><strong class="service-state service-state--healthy"><i></i>Saudável</strong><small>verificação exemplo · 1 min</small></div>
+              <div class="health-row" data-health="IDE"><span>IDE</span><strong class="service-state service-state--healthy"><i></i>Saudável</strong><small>verificação exemplo · 1 min</small></div>
+              <div class="health-row" data-health="n8n"><span>n8n</span><strong class="service-state service-state--healthy"><i></i>Saudável</strong><small>verificação exemplo · 1 min</small></div>
+            </div>
+
+            <aside class="activity" aria-labelledby="atividade-titulo">
+              <div class="activity__heading">
+                <h3 id="atividade-titulo">Atividade recente</h3>
+                <button class="text-action" type="button" data-demo-action="Abrir histórico completo">Ver histórico</button>
+              </div>
+              <ol id="activity-list">
+                <li><time datetime="2026-09-16T10:40">10:40</time><span class="activity__dot activity__dot--healthy" aria-hidden="true"></span><p><strong>Sincronização concluída</strong><span>2 arquivos atualizados no Dell.</span></p></li>
+                <li><time datetime="2026-09-16T10:32">10:32</time><span class="activity__dot" aria-hidden="true"></span><p><strong>IDE aberta</strong><span>Projeto SquadOne.</span></p></li>
+                <li><time datetime="2026-09-16T09:58">09:58</time><span class="activity__dot activity__dot--healthy" aria-hidden="true"></span><p><strong>Túnel restabelecido</strong><span>Conexão local disponível.</span></p></li>
+              </ol>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>SquadOne · Central de Operações</span>
+        <span>Protótipo visual isolado · sem dados reais</span>
+      </footer>
+    </div>
+
+    <dialog class="project-dialog" id="project-dialog" aria-labelledby="project-dialog-title">
+      <form method="dialog" id="project-form">
+        <div class="project-dialog__header">
+          <div>
+            <span class="section-index">Projeto</span>
+            <h2 id="project-dialog-title">Adicionar projeto</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Fechar painel">×</button>
+        </div>
+
+        <div class="project-dialog__body">
+          <p>Crie um atalho para uma pasta local ou endereço web. Esta prévia não salva dados reais.</p>
+          <label for="project-name">Nome do projeto</label>
+          <input id="project-name" name="name" autocomplete="off" required placeholder="Ex.: Site institucional" />
+
+          <fieldset>
+            <legend>Tipo de destino</legend>
+            <label class="choice"><input type="radio" name="target-type" value="path" checked /><span><strong>Pasta local</strong><small>Abre o projeto na IDE</small></span></label>
+            <label class="choice"><input type="radio" name="target-type" value="link" /><span><strong>Link</strong><small>Abre no navegador</small></span></label>
+          </fieldset>
+
+          <label for="project-path">Caminho ou link</label>
+          <input id="project-path" name="path" autocomplete="off" required placeholder="C:\dev\apps\projeto" />
+
+          <label for="project-squad">Squad relacionado <span>opcional</span></label>
+          <select id="project-squad" name="squad">
+            <option value="">Nenhum</option>
+            <option>Squad Produto</option>
+            <option>Squad Operações</option>
+            <option>Squad Web</option>
+          </select>
+        </div>
+
+        <div class="project-dialog__footer">
+          <button class="button button--ghost" type="button" data-close-dialog>Continuar na Central</button>
+          <button class="button button--primary" type="submit">Salvar projeto</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span aria-hidden="true">◇</span>
+      <p><strong>Ação demonstrativa</strong><span id="toast-message">Nenhuma integração foi acionada.</span></p>
+      <button type="button" aria-label="Fechar aviso" data-close-toast>×</button>
+    </div>
+  </body>
+</html>
