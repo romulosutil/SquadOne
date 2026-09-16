@@ -159,7 +159,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
               <h3>Conecte o Google na Central</h3>
               <p>A autorização fica somente no Dell e não altera seu login no app público.</p>
               <div class="ops-now__actions">
-                <a href="/squadone">Conectar calendário</a>
+                <a href="/api/auth/google">Conectar calendário</a>
               </div>
             </template>
             <template v-else>

@@ -268,7 +268,10 @@ async function startServer() {
   app.get("/api/auth/callback", async (req, res) => {
     const { code, state, error: recusa } = req.query;
     // O usuario pode simplesmente dizer nao na tela do Google.
-    const appPath = squadOneMode === "operations" ? "/squadone" : "/";
+    // O app público e a Central retornam à própria superfície raiz. No perfil
+    // operations, a conexão é iniciada pela Central; mandar para /squadone
+    // acrescentaria uma etapa local sem propósito depois do consentimento.
+    const appPath = "/";
     if (recusa) return res.redirect(`${appPath}?auth=${encodeURIComponent(String(recusa))}`);
     if (typeof code !== "string" || typeof state !== "string") {
       return res.redirect(`${appPath}?auth=callback_incompleto`);

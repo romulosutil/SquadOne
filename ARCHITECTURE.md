@@ -42,7 +42,8 @@ A agenda da Central reutiliza o armazenamento OAuth e a leitura do Google
 Calendar do processo local do SquadOne. A credencial fica no Dell e é
 independente da produção; o callback retorna por loopback. Não existe agenda
 paralela: sem essa autorização local, a API devolve explicitamente
-`disconnected`.
+`disconnected`. A ação de conexão da Central inicia `/api/auth/google`
+diretamente e o callback retorna à raiz da Central.
 
 No Dell, `deploy/dell/squadone-operations.service` é instalado como serviço de
 usuário com linger. O arquivo de ambiente, a configuração real e os dados ficam

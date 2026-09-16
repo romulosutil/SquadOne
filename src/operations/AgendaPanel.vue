@@ -31,7 +31,7 @@ const duration = (event: AgendaEvent) => {
       <span aria-hidden="true">!</span>
       <h3>Google não conectado</h3>
       <p>Autorize o Google no app local para carregar a agenda do dia nesta Central.</p>
-      <a href="/squadone">Conectar calendário</a>
+      <a href="/api/auth/google">Conectar calendário</a>
     </div>
 
     <div v-else-if="agenda?.state === 'unavailable'" class="ops-empty ops-empty--warning" role="status">
