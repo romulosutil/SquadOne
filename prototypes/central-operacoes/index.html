@@ -9,8 +9,8 @@
       content="Protótipo visual isolado da Central de Operações do SquadOne."
     />
     <title>SquadOne · Operações — Protótipo</title>
-    <link rel="stylesheet" href="./styles.css?v=entry-layer-2" />
-    <script src="./app.js" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=squadone-window-3" />
+    <script src="./app.js?v=squadone-window-2" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
@@ -59,8 +59,8 @@
               </button>
             </nav>
 
-            <button class="enter-squadone" type="button" data-demo-action="Entrar no SquadOne atual">
-              Entrar no SquadOne <span aria-hidden="true">↗</span>
+            <button class="enter-squadone" type="button" data-open-squadone-window aria-haspopup="dialog">
+              Abrir SquadOne <span aria-hidden="true">↗</span>
             </button>
 
             <div id="mais-ferramentas" class="tools-popover" popover>
@@ -114,26 +114,37 @@
                 <span>Aplicação existente</span>
               </div>
               <h3>Seu escritório</h3>
-              <p>Mochila, salas, agentes e Command Bar continuam exatamente como hoje.</p>
-              <div class="office-presence" aria-label="Squad Pessoal: três pessoas ativas">
-                <div class="office-presence__desk" aria-hidden="true">
-                  <span class="desk desk--one"></span>
-                  <span class="desk desk--two"></span>
-                  <span class="plant">✦</span>
+              <p>Veja o escritório atual sem sair da Central.</p>
+
+              <div class="squadone-preview">
+                <div class="squadone-preview__bar" aria-hidden="true">
+                  <span class="window-dots"><i></i><i></i><i></i></span>
+                  <span>squadone.app</span>
+                  <span class="window-live">Disponível</span>
                 </div>
-                <div class="office-presence__people">
-                  <span class="person person--active">RS</span>
-                  <span class="person">MA</span>
-                  <span class="person">QA</span>
+                <div class="squadone-preview__viewport" aria-hidden="true">
+                  <div class="squadone-preview__mock">
+                    <div class="preview-appbar">
+                      <i></i><strong>SquadOne</strong><span>Squad Pessoal</span>
+                    </div>
+                    <div class="preview-workspace">
+                      <div class="preview-backpack"><strong>Mochila de Quests</strong><span>Próximas demandas</span></div>
+                      <div class="preview-office-area">
+                        <div class="preview-rooms"><span>Demandas</span><span>Heitor</span><span>Coisas para fazer</span></div>
+                        <div class="preview-office">
+                          <i></i><i></i><i></i><b></b><b></b><b></b>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="preview-command"><span>Descreva a demanda…</span><strong>Delegar Quest</strong></div>
+                  </div>
+                  <div class="squadone-preview__shade"></div>
                 </div>
-                <div>
-                  <strong>Squad Pessoal</strong>
-                  <span>3 pessoas · 4 salas</span>
-                </div>
+                <button type="button" data-open-squadone-window aria-haspopup="dialog">
+                  <span><strong>Abrir janela</strong><small>Mochila, salas, agentes e Command Bar</small></span>
+                  <span aria-hidden="true">↗</span>
+                </button>
               </div>
-              <button class="text-action" type="button" data-demo-action="Entrar no SquadOne atual">
-                Entrar no SquadOne <span aria-hidden="true">↗</span>
-              </button>
             </aside>
           </div>
 
@@ -399,6 +410,41 @@
           <button class="button button--primary" type="submit">Salvar projeto</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="squadone-window" id="squadone-window" aria-labelledby="squadone-window-title">
+      <div class="squadone-window__shell">
+        <header class="squadone-window__bar">
+          <div class="squadone-window__identity">
+            <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div>
+              <strong id="squadone-window-title">SquadOne</strong>
+              <span id="squadone-frame-status" aria-live="polite">Preparando escritório…</span>
+            </div>
+          </div>
+          <div class="squadone-window__actions">
+            <a
+              href="https://aladdin-squadone-app.jicnzg.easypanel.host/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Abrir em nova aba <span aria-hidden="true">↗</span></a>
+            <button type="button" data-close-squadone-window aria-label="Fechar janela do SquadOne">×</button>
+          </div>
+        </header>
+
+        <div class="squadone-window__viewport">
+          <div class="squadone-window__loading" id="squadone-window-loading">
+            <span aria-hidden="true"></span>
+            <strong>Abrindo o escritório…</strong>
+          </div>
+          <iframe
+            title="Aplicação SquadOne"
+            data-src="https://aladdin-squadone-app.jicnzg.easypanel.host/"
+            referrerpolicy="no-referrer"
+            sandbox="allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
+          ></iframe>
+        </div>
+      </div>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden>

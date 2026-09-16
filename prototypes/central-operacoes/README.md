@@ -17,6 +17,11 @@ servidor HTTP estático. A tela inclui cinco cenários demonstrativos:
 O painel lateral de projeto e os botões de ferramentas são interativos, mas as
 ações terminam em mensagens de demonstração.
 
+O bloco `Seu escritório` usa uma prévia incorporada do SquadOne publicado. A
+ação `Abrir janela` mostra a aplicação existente em uma janela ampla sobre a
+Central, com alternativa para abrir em nova aba. Nenhum fluxo do SquadOne é
+reimplementado na Central.
+
 ## Direção visual
 
 O protótipo usa a mesma linguagem neo-brutalista do SquadOne publicado: amarelo

@@ -9,7 +9,12 @@
   const pathInput = document.querySelector('#project-path')
   const toast = document.querySelector('#toast')
   const toastMessage = document.querySelector('#toast-message')
+  const squadOneWindow = document.querySelector('#squadone-window')
+  const squadOneFrame = squadOneWindow.querySelector('iframe')
+  const squadOneFrameStatus = document.querySelector('#squadone-frame-status')
+  const squadOneWindowLoading = document.querySelector('#squadone-window-loading')
   let toastTimer = 0
+  let frameReadyTimer = 0
 
   const scenarioCopy = {
     healthy: {
@@ -143,6 +148,24 @@
     window.setTimeout(() => nameInput.focus(), 60)
   }
 
+  function openSquadOneWindow() {
+    if (!squadOneFrame.src) {
+      squadOneFrame.src = squadOneFrame.dataset.src
+    }
+    squadOneFrameStatus.textContent = 'Carregando aplicação…'
+    squadOneWindowLoading.hidden = false
+    squadOneWindow.showModal()
+    window.clearTimeout(frameReadyTimer)
+    frameReadyTimer = window.setTimeout(() => {
+      squadOneWindowLoading.hidden = true
+      squadOneFrameStatus.textContent = 'Janela pronta'
+    }, 1800)
+  }
+
+  function closeSquadOneWindow() {
+    squadOneWindow.close()
+  }
+
   document.querySelector('#scenario-select').addEventListener('change', (event) => {
     setScenario(event.target.value)
   })
@@ -164,6 +187,22 @@
 
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close()
+  })
+
+  document.querySelectorAll('[data-open-squadone-window]').forEach((button) => {
+    button.addEventListener('click', openSquadOneWindow)
+  })
+
+  document.querySelector('[data-close-squadone-window]').addEventListener('click', closeSquadOneWindow)
+
+  squadOneWindow.addEventListener('click', (event) => {
+    if (event.target === squadOneWindow) closeSquadOneWindow()
+  })
+
+  squadOneFrame.addEventListener('load', () => {
+    window.clearTimeout(frameReadyTimer)
+    squadOneWindowLoading.hidden = true
+    squadOneFrameStatus.textContent = 'Aplicação carregada'
   })
 
   form.addEventListener('submit', (event) => {
