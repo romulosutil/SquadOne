@@ -198,10 +198,10 @@
 
 .ops-workspace {
   display: grid;
-  gap: clamp(1rem, 2.5vw, 2rem);
-  width: min(100%, 100rem);
+  gap: 1.25rem;
+  width: min(100%, 116rem);
   margin-inline: auto;
-  padding: clamp(1rem, 3vw, 2.5rem);
+  padding: 1.25rem;
 }
 
 .ops-now,
@@ -212,7 +212,7 @@
 }
 
 .ops-now {
-  padding: clamp(1rem, 3vw, 2rem);
+  padding: clamp(1.5rem, 2.6vw, 3rem);
   background: var(--ops-blue);
   color: var(--ops-paper);
 }
@@ -465,7 +465,7 @@
   .ops-header { grid-template-columns: auto minmax(18rem, 1fr) auto minmax(36rem, auto); }
   .ops-welcome { display: flex; flex-direction: column; font-size: 0.75rem; }
   .ops-header__actions { grid-column: auto; flex-wrap: nowrap; }
-  .ops-workspace { grid-template-columns: minmax(0, 1.5fr) minmax(20rem, 0.65fr); align-items: start; }
+  .ops-workspace { grid-template-columns: minmax(0, 1.75fr) minmax(21rem, 0.85fr); align-items: stretch; }
   .ops-now { grid-column: 1; }
   .ops-agenda { grid-column: 2; grid-row: 1; }
   .ops-projects { grid-column: 1; }
