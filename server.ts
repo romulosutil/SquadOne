@@ -61,6 +61,15 @@ import {
 } from "./server/telegram.ts";
 import { criarBotDoTelegram } from "./server/telegram-bot.ts";
 import {
+  AvaliacaoInvalida,
+  AvaliacoesDeTurnoStore,
+  CacheDeTurnosParaAvaliacao,
+  TurnoJaAvaliado,
+  avaliacoesHabilitadas,
+  interpretarPedidoDeAvaliacao,
+  resumirResultadoDoTurno,
+} from "./server/avaliacoes-turno.ts";
+import {
   createOperationsRouter,
   listenHostForMode,
   OperationsProjectStore,
@@ -152,6 +161,9 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
   const squadOneMode = readSquadOneMode();
   const listenHost = listenHostForMode(squadOneMode);
+  const avaliacoesAtivas = avaliacoesHabilitadas(process.env);
+  const cacheDeTurnos = new CacheDeTurnosParaAvaliacao();
+  const storeDeAvaliacoes = new AvaliacoesDeTurnoStore(path.join(process.cwd(), "data"));
 
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
@@ -193,7 +205,7 @@ async function startServer() {
   // Disponível nos dois perfis sem expor configuração local. O frontend usa
   // apenas este discriminador para decidir entre o app e a Central.
   app.get("/api/runtime", (_req, res) => {
-    res.json({ mode: squadOneMode });
+    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas });
   });
 
   if (squadOneMode === "operations") {
@@ -448,7 +460,13 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
-      res.json(await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }));
+      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId });
+      // A avaliação observa um turno já terminado; nunca participa da execução,
+      // da agenda ou do resultado principal. Falha posterior não pode induzir
+      // retry de uma delegação que talvez já tenha criado eventos no Google.
+      if (!avaliacoesAtivas) return res.json(resultado);
+      const turnoId = cacheDeTurnos.registrar(resumirResultadoDoTurno(modo, resultado, new Date().toISOString()));
+      res.json({ ...resultado, turno_id: turnoId });
     } catch (error: any) {
       console.error("Erro no turno:", error);
       if (responderErroDeRoster(res, error)) return;
@@ -462,6 +480,41 @@ async function startServer() {
         return res.status(503).json({ error: error.message, modeloOcupado: true });
       }
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Só aceita sinal do usuário para um resultado que este processo acabou de
+  // produzir. Não recebe demanda, prompt, roster, eventos ou argumentos.
+  app.post("/api/turnos/:turnoId/avaliacao", async (req, res) => {
+    if (!avaliacoesAtivas) {
+      return res.status(409).json({ error: "Avaliações de turno estão desligadas.", avaliacaoDesligada: true });
+    }
+    const turnoId = String(req.params.turnoId);
+    const evidencia = cacheDeTurnos.obter(turnoId);
+    if (!evidencia) {
+      return res.status(410).json({ error: "Turno expirado ou indisponível para avaliação.", turnoExpirado: true });
+    }
+    try {
+      const avaliacao = interpretarPedidoDeAvaliacao(req.body);
+      const registro = await storeDeAvaliacoes.registrar({ turnoId, avaliacao, evidencia });
+      cacheDeTurnos.remover(turnoId);
+      res.status(201).json({
+        avaliacao: {
+          id: registro.id,
+          turno_id: registro.turnoId,
+          criada_em: registro.criadaEm,
+          nota: registro.avaliacao.nota,
+          motivos: registro.avaliacao.motivos,
+          ...(registro.avaliacao.comentario ? { comentario: registro.avaliacao.comentario } : {}),
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof AvaliacaoInvalida) return res.status(400).json({ error: error.message });
+      if (error instanceof TurnoJaAvaliado) return res.status(409).json({ error: error.message, turnoJaAvaliado: true });
+      console.error("Erro ao salvar avaliação de turno:", error);
+      // O turno já foi entregue. O cache fica para o usuário tentar salvar o
+      // feedback sem repetir a delegação nem chamar provedores externos.
+      res.status(500).json({ error: "Não foi possível salvar a avaliação local." });
     }
   });
 
