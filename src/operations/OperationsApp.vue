@@ -156,10 +156,10 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
             </template>
             <template v-else-if="overview?.agenda.state === 'disconnected'">
               <p>Agenda</p><strong class="ops-now__word">Sem conexão</strong>
-              <h3>Conecte o Google no SquadOne</h3>
-              <p>A Central não mantém uma agenda paralela.</p>
+              <h3>Conecte o Google na Central</h3>
+              <p>A autorização fica somente no Dell e não altera seu login no app público.</p>
               <div class="ops-now__actions">
-                <a v-if="squadOneUrl" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">Abrir SquadOne</a>
+                <a href="/squadone">Conectar calendário</a>
               </div>
             </template>
             <template v-else>
@@ -182,7 +182,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
         </div>
       </section>
 
-      <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loadingOverview" :squad-one-url="squadOneUrl" />
+      <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loadingOverview" />
       <ProjectsPanel :projects="projects" :loading="loadingProjects" :ide-url="ideUrl" @add="openProjectDialog(null)" @edit="openProjectDialog" />
       <ToolsPanel :tools="overview?.tools ?? []" :loading="loadingOverview" />
       <HealthPanel :tools="overview?.tools ?? []" :checked-at="overview?.checkedAt ?? ''" />

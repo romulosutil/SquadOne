@@ -38,9 +38,11 @@ SquadOne em iframe e usam navegação interna para `/squadone`.
   curto e sem aceitar comandos ou URLs enviados pelo navegador;
 - expõe somente launch URLs, estados e detalhes não sensíveis à interface.
 
-A agenda da Central reutiliza o armazenamento OAuth do SquadOne e a leitura do
-Google Calendar. Não existe agenda local paralela: sem conexão, a API devolve
-explicitamente `disconnected`.
+A agenda da Central reutiliza o armazenamento OAuth e a leitura do Google
+Calendar do processo local do SquadOne. A credencial fica no Dell e é
+independente da produção; o callback retorna por loopback. Não existe agenda
+paralela: sem essa autorização local, a API devolve explicitamente
+`disconnected`.
 
 No Dell, `deploy/dell/squadone-operations.service` é instalado como serviço de
 usuário com linger. O arquivo de ambiente, a configuração real e os dados ficam

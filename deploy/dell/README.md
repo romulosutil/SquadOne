@@ -20,6 +20,11 @@ SQUADONE_OPERATIONS_CONFIG=/home/usuario/.config/squadone/operations.json
 SQUADONE_OPERATIONS_DATA_DIR=/home/usuario/.local/share/squadone-operations
 ```
 
+O serviço fixa `APP_URL=http://127.0.0.1:9120` para que a autorização Google da
+Central retorne ao processo local. O cliente OAuth precisa aceitar exatamente
+`http://127.0.0.1:9120/api/auth/callback` como URI de redirecionamento. Essa
+credencial fica no Dell e é independente da credencial usada pelo app público.
+
 Instalação do serviço de usuário:
 
 ```bash
