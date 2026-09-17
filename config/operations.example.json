@@ -24,7 +24,7 @@
     "n8n": {
       "label": "n8n",
       "description": "Automações",
-      "launchUrl": "http://127.0.0.1:5678/",
+      "launchUrl": "http://127.0.0.1:5679/",
       "healthUrl": "http://127.0.0.1:5678/healthz"
     },
     "remote": {
