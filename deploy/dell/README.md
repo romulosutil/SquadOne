@@ -7,7 +7,12 @@ Arquivos privados no Dell, fora do Git:
 
 - `~/.config/squadone/operations.env`;
 - `~/.config/squadone/operations.json`;
-- `~/.local/share/squadone-operations/projects.json`.
+- `~/.local/share/squadone-operations/projects.json`;
+- `~/.local/share/squadone-operations/auto-production.json`.
+
+Em `operations.json`, ajuste `autoDirectory` para o caminho absoluto da pasta
+sincronizada `auto` no Dell. A Central somente lê os artefatos dessa pasta; os
+marcos manuais ficam no diretório de dados acima.
 
 O arquivo de ambiente deve definir pelo menos:
 

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
+import { AutoProductionStore, InvalidAutoProductionInput } from "./auto-production.ts";
 
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
@@ -21,6 +22,7 @@ export interface OperationToolConfig {
 
 export interface OperationsConfig {
   displayName: string;
+  autoDirectory?: string;
   tools: Record<OperationToolId, OperationToolConfig>;
 }
 
@@ -113,6 +115,9 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
   }
   return {
     displayName: typeof raw.displayName === "string" ? raw.displayName.trim().slice(0, 80) : "",
+    ...(typeof raw.autoDirectory === "string" && raw.autoDirectory.trim()
+      ? { autoDirectory: path.resolve(raw.autoDirectory.trim()) }
+      : {}),
     tools,
   };
 }
@@ -316,6 +321,7 @@ async function checkTool(id: OperationToolId, tool: OperationToolConfig): Promis
 export function createOperationsRouter(options: {
   config: OperationsConfig;
   store: OperationsProjectStore;
+  autoProduction?: AutoProductionStore;
   readAgenda: () => Promise<AgendaSummary>;
 }): express.Router {
   const router = express.Router();
@@ -374,6 +380,52 @@ export function createOperationsRouter(options: {
       const status = error instanceof InvalidOperationInput ? 404 : 500;
       if (status === 500) console.error("[operations] Falha ao excluir projeto:", error);
       res.status(status).json({ error: status === 404 ? error.message : "Não foi possível excluir o projeto." });
+    }
+  });
+
+  router.get("/auto", async (_req, res) => {
+    if (!options.autoProduction) {
+      res.status(503).json({ error: "A pasta auto ainda não foi configurada nesta Central." });
+      return;
+    }
+    try {
+      res.json(await options.autoProduction.overview());
+    } catch (error) {
+      console.error("[operations] Falha ao ler Produção Auto:", error);
+      res.status(500).json({ error: "Não foi possível ler a pasta auto agora." });
+    }
+  });
+
+  router.get("/auto/clients/:id/thumbnail", async (req, res) => {
+    if (!options.autoProduction) {
+      res.status(404).end();
+      return;
+    }
+    try {
+      const filePath = await options.autoProduction.thumbnailPath(String(req.params.id));
+      if (!filePath) {
+        res.status(404).end();
+        return;
+      }
+      res.setHeader("Cache-Control", "private, max-age=60");
+      res.sendFile(filePath);
+    } catch (error) {
+      console.error("[operations] Falha ao ler miniatura da Produção Auto:", error);
+      res.status(500).end();
+    }
+  });
+
+  router.post("/auto/clients/:id/events", async (req, res) => {
+    if (!options.autoProduction) {
+      res.status(503).json({ error: "A pasta auto ainda não foi configurada nesta Central." });
+      return;
+    }
+    try {
+      res.status(201).json(await options.autoProduction.updateEvent(String(req.params.id), req.body));
+    } catch (error) {
+      const status = error instanceof InvalidAutoProductionInput ? 400 : 500;
+      if (status === 500) console.error("[operations] Falha ao registrar evento da Produção Auto:", error);
+      res.status(status).json({ error: status === 400 ? error.message : "Não foi possível registrar o evento operacional." });
     }
   });
 

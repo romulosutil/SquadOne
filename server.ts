@@ -78,6 +78,7 @@ import {
   todayWindow,
   type AgendaSummary,
 } from "./server/operations.ts";
+import { AutoProductionStore } from "./server/auto-production.ts";
 
 dotenv.config();
 
@@ -216,6 +217,9 @@ async function startServer() {
     const operationsConfig = await readOperationsConfig(configPath);
     const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
     const operationsStore = new OperationsProjectStore(operationsDataDir);
+    const autoProduction = operationsConfig.autoDirectory
+      ? new AutoProductionStore(operationsConfig.autoDirectory, operationsDataDir)
+      : undefined;
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
       try {
@@ -241,6 +245,7 @@ async function startServer() {
     app.use("/api/operations", createOperationsRouter({
       config: operationsConfig,
       store: operationsStore,
+      autoProduction,
       readAgenda,
     }));
   } else {

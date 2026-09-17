@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AgendaPanel from './AgendaPanel.vue'
+import AutoProductionPanel from './AutoProductionPanel.vue'
 import HealthPanel from './HealthPanel.vue'
 import OperationsHeader from './OperationsHeader.vue'
 import ProjectDialog from './ProjectDialog.vue'
@@ -231,6 +232,8 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
           <a href="#health">Ver saúde operacional</a>
         </div>
       </section>
+
+      <AutoProductionPanel />
 
       <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loadingOverview" />
       <ProjectsPanel :projects="projects" :loading="loadingProjects" :ide-url="ideUrl" @add="openProjectDialog(null)" @edit="openProjectDialog" />

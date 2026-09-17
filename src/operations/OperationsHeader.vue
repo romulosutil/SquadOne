@@ -40,6 +40,7 @@ const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === i
       </div>
 
       <nav class="ops-quick" aria-label="Acessos rápidos">
+        <a href="#producao-auto"><span aria-hidden="true">A</span> Produção Auto</a>
         <a v-if="tool('hermes')" :href="tool('hermes')!.launchUrl" target="_blank" rel="noopener">
           <span aria-hidden="true">H</span> Hermes
         </a>

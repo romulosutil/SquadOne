@@ -19,3 +19,7 @@ ou representar integrações como concluídas.
 O perfil local usa um arquivo privado baseado em
 `config/operations.example.json` e grava projetos em
 `SQUADONE_OPERATIONS_DATA_DIR`; ambos ficam fora do Git.
+
+A seção Produção Auto usa `autoDirectory` desse arquivo privado para ler
+artefatos locais e mantém seus marcos manuais em
+`SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`.

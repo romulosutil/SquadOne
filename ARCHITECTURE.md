@@ -38,6 +38,13 @@ SquadOne em iframe e usam navegação interna para `/squadone`.
   curto e sem aceitar comandos ou URLs enviados pelo navegador;
 - expõe somente launch URLs, estados e detalhes não sensíveis à interface.
 
+`server/auto-production.ts` lê somente artefatos conhecidos nas subpastas do
+diretório `autoDirectory` configurado localmente. Os marcos operacionais de
+Hermes, envio humano e confirmação são gravados separadamente em
+`SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com escrita atômica. A
+presença de `publicado.json` é exposta apenas como registro local e não como
+prova de disponibilidade pública.
+
 A agenda da Central reutiliza o armazenamento OAuth e a leitura do Google
 Calendar do processo local do SquadOne. A credencial fica no Dell e é
 independente da produção; o callback retorna por loopback. Não existe agenda

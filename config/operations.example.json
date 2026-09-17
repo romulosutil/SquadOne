@@ -1,5 +1,6 @@
 {
   "displayName": "Seu nome",
+  "autoDirectory": "/home/usuario/auto",
   "tools": {
     "hermes": {
       "label": "Hermes Chat Web",

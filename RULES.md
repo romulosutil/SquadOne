@@ -18,3 +18,9 @@
    diferentes de `http` e `https`.
 10. A superfície operacional é somente leitura para serviços: não adicionar
     ações de parar, reiniciar ou reconfigurar infraestrutura.
+11. A Produção Auto deriva artefatos apenas do `autoDirectory` local e mantém
+    os marcos operacionais em `SQUADONE_OPERATIONS_DATA_DIR`; não gravar esses
+    marcos dentro das pastas dos clientes.
+12. `publicado.json` é somente um registro local. Disponibilidade pública,
+    leitura, aprovação ou publicação pelo cliente exigem evidência própria e
+    nunca podem ser inferidas pela interface.
