@@ -27,17 +27,11 @@ com a máquina. `auth-escopos` e `squad` gravam num diretório temporário (chdi
 antes do import) e nunca em `data/`; `fetch` é dublê em todos. A verificação
 continua sendo typecheck + build + exercitar a rota.
 
-## Protocolo de contexto
-
-Antes de vasculhar código, use o grafo em `graphify-out/`:
-
-```bash
-graphify query "<pergunta>"        # subgrafo escopado, bem menor que grep
-graphify path "<A>" "<B>"          # relação entre dois símbolos
-graphify explain "<conceito>"
-```
-
-`graphify-out/GRAPH_REPORT.md` só para revisão ampla de arquitetura. Depois de mexer no código, `graphify update .`.
+### Architectural Context (Graphify)
+- READ ONLY: Always inspect and read existing graphs, AST maps, and architecture diagrams directly from:
+  `dev/graphify-out/` (or relative path to graphify-out/)
+- NEVER run graphify build, parse, or indexing commands locally on the Windows host.
+- Graph updates are handled automatically in the background by the Ubuntu Worker on git push and nightly schedules.
 
 ## Arquitetura
 
@@ -348,3 +342,9 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout), `TelegramMalConfigurado` (env do bot presente e ilegível: log de erro no boot, bot desligado, resto do app igual), `ErroDeTelegram` (`status` da Bot API, `null` quando nem houve resposta; só `console.error`, nunca derruba o turno nem a rota). A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série; a checklist do Tasks que falha não desfaz o compromisso.
 - Ao terminar tarefa: `git commit` + `git push` + `graphify update .`.
+
+### Remote Infrastructure Directives
+- Local Windows Docker service is disabled by design. All containers run exclusively on `dell-worker`.
+- Never search Windows paths for container binaries or Nginx executables.
+- Run container commands via `ssh dell-worker "docker ..."` or rely on `DOCKER_HOST="ssh://dell-worker"`.
+- Container mounts map to `~/workspace/` on Ubuntu (mirrored from `dev/` via Syncthing).
