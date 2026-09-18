@@ -211,7 +211,7 @@ async function nameFromPublishedRecord(filePath: string, fallback: string): Prom
 const stageLabels: Record<AutoStage, string> = {
   preparation: "Em preparação",
   generated: "Site gerado",
-  ready: "Pronto no worker · aguardando envio",
+  ready: "Avisado pelo Hermes · aguardando envio",
   sent: "Enviado · aguardando confirmação",
   confirmed: "Confirmado pelo cliente",
 };
