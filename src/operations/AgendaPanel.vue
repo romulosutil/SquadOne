@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { AgendaEvent, AgendaOverview } from './types'
+import { upcomingAgendaEvents } from './agenda-window'
 
 const props = defineProps<{ agenda: AgendaOverview | null; loading: boolean }>()
 
 const events = computed(() => props.agenda?.state === 'connected' ? props.agenda.events : [])
+const clock = ref(Date.now())
+let clockTimer = 0
+const upcomingEvents = computed(() => upcomingAgendaEvents(events.value, clock.value, Number.MAX_SAFE_INTEGER))
+const visibleEvents = computed(() => upcomingEvents.value.slice(0, 5))
+const laterCount = computed(() => Math.max(0, upcomingEvents.value.length - visibleEvents.value.length))
 const today = new Date()
 const dayLabel = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short' }).format(today).replace('.', '')
 const dayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -29,6 +35,11 @@ const duration = (event: AgendaEvent) => {
   const rest = minutes % 60
   return rest ? `${hours}h${String(rest).padStart(2, '0')}` : `${hours}h`
 }
+
+onMounted(() => {
+  clockTimer = window.setInterval(() => { clock.value = Date.now() }, 30_000)
+})
+onBeforeUnmount(() => window.clearInterval(clockTimer))
 </script>
 
 <template>
@@ -39,7 +50,7 @@ const duration = (event: AgendaEvent) => {
     </div>
 
     <div v-if="agenda?.state === 'connected'" class="ops-agenda-summary">
-      <strong>{{ events.length }} compromisso{{ events.length === 1 ? '' : 's' }}</strong>
+      <strong>{{ visibleEvents.length }} próximo{{ visibleEvents.length === 1 ? '' : 's' }}<template v-if="laterCount"> · +{{ laterCount }} depois</template></strong>
       <span>{{ reservedLabel }}</span>
     </div>
 
@@ -64,8 +75,14 @@ const duration = (event: AgendaEvent) => {
       <p>Nenhum compromisso foi encontrado no Google Calendar para hoje.</p>
     </div>
 
-    <ol v-else class="ops-timeline" aria-label="Compromissos de hoje">
-      <li v-for="event in events" :key="event.id">
+    <div v-else-if="agenda?.state === 'connected' && !visibleEvents.length" class="ops-empty" role="status">
+      <span aria-hidden="true">✓</span>
+      <h3>Agenda concluída</h3>
+      <p>Todos os compromissos de hoje já terminaram.</p>
+    </div>
+
+    <ol v-else class="ops-timeline" aria-label="Próximos cinco compromissos" aria-live="polite">
+      <li v-for="event in visibleEvents" :key="event.id">
         <time :datetime="event.start">{{ time(event) }}</time>
         <span class="ops-timeline__marker" aria-hidden="true" />
         <article>
