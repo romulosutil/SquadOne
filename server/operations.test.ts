@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
   classifyProjectTarget,
+  HermesReadingsStore,
   listenHostForMode,
   mapOperationalState,
   OperationsProjectStore,
@@ -49,6 +50,9 @@ describe("projetos locais", () => {
   it("valida os campos obrigatórios", () => {
     assert.deepEqual(validateProjectInput({ name: " SquadOne ", target: "/home/user/SquadOne" }), {
       name: "SquadOne",
+      description: "",
+      category: "",
+      pinned: false,
       target: "/home/user/SquadOne",
       kind: "linux_path",
     });
@@ -69,6 +73,32 @@ describe("projetos locais", () => {
 
     await store.remove(created.id);
     assert.deepEqual(await store.list(), []);
+  });
+});
+
+describe("leituras do Hermes", () => {
+  it("trata arquivo ausente como caixa vazia e ordena leituras válidas", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "squadone-hermes-"));
+    temporaryDirectories.push(directory);
+    const store = new HermesReadingsStore(directory);
+    assert.deepEqual(await store.list(), []);
+
+    await fs.writeFile(store.filePath, JSON.stringify([
+      { id: "old", projectId: "iris", projectName: "Iris", title: "Fila revisada", summary: "Sem bloqueios novos.", severity: "info", occurredAt: "2026-09-16T10:00:00Z", evidence: "scan local", source: "Hermes agent" },
+      { id: "new", projectId: "producao-auto", projectName: "Produção Auto", title: "Site pronto", summary: "Um artefato novo foi encontrado.", severity: "action", occurredAt: "2026-09-17T10:00:00Z", evidence: "index.html", source: "Hermes agent" },
+    ]));
+
+    const readings = await store.list();
+    assert.deepEqual(readings.map(reading => reading.id), ["new", "old"]);
+    assert.equal(readings[0].occurredAt, "2026-09-17T10:00:00.000Z");
+  });
+
+  it("recusa leitura sem evidência", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "squadone-hermes-invalid-"));
+    temporaryDirectories.push(directory);
+    const store = new HermesReadingsStore(directory);
+    await fs.writeFile(store.filePath, JSON.stringify([{ id: "x" }]));
+    await assert.rejects(store.list(), /severidade|evidência/);
   });
 });
 

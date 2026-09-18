@@ -35,6 +35,9 @@ export interface OperationsOverview {
 export interface LocalProject {
   id: string
   name: string
+  description: string
+  category: string
+  pinned: boolean
   target: string
   kind: 'url' | 'linux_path'
   createdAt: string
@@ -43,7 +46,24 @@ export interface LocalProject {
 
 export interface ProjectInput {
   name: string
+  description: string
+  category: string
+  pinned: boolean
   target: string
+}
+
+export type HermesReadingSeverity = 'info' | 'attention' | 'action' | 'done'
+
+export interface HermesReading {
+  id: string
+  projectId: string
+  projectName: string
+  title: string
+  summary: string
+  severity: HermesReadingSeverity
+  occurredAt: string
+  evidence: string
+  source: string
 }
 
 export type AutoStage = 'preparation' | 'generated' | 'ready' | 'sent' | 'confirmed'

@@ -7,11 +7,11 @@ const props = defineProps<{
   squadOneUrl: string
   checkedAt: string
   loading: boolean
+  currentPath: string
 }>()
 
 defineEmits<{ refresh: [] }>()
 
-const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === id)
 </script>
 
 <template>
@@ -21,10 +21,11 @@ const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === i
       <span><strong>SquadOne</strong><small>Operações</small></span>
     </a>
 
-    <div class="ops-title">
-      <span>Seu ponto de partida</span>
-      <h1>Central de Operações</h1>
-    </div>
+    <nav class="ops-main-nav" aria-label="Navegação principal">
+      <a href="/" :aria-current="currentPath === '/' ? 'page' : undefined">Hoje</a>
+      <a href="/projetos" :aria-current="currentPath.startsWith('/projetos') ? 'page' : undefined">Projetos</a>
+      <a href="/leituras" :aria-current="currentPath === '/leituras' ? 'page' : undefined">Leituras</a>
+    </nav>
 
     <div class="ops-welcome" aria-live="polite">
       <span v-if="displayName">Olá, {{ displayName }}</span>
@@ -39,20 +40,9 @@ const tool = (id: OperationTool['id']) => props.tools.find(item => item.id === i
         <small>{{ loading ? 'verificando' : 'via túnel SSH' }}</small>
       </div>
 
-      <nav class="ops-quick" aria-label="Acessos rápidos">
-        <a href="#producao-auto"><span aria-hidden="true">A</span> Produção Auto</a>
-        <a v-if="tool('hermes')" :href="tool('hermes')!.launchUrl" target="_blank" rel="noopener">
-          <span aria-hidden="true">H</span> Hermes
-        </a>
-        <a v-if="tool('ide')" :href="tool('ide')!.launchUrl" target="_blank" rel="noopener">
-          <span aria-hidden="true">&lt;/&gt;</span> IDE
-        </a>
-        <button type="button" :disabled="loading" @click="$emit('refresh')">
-          <span aria-hidden="true">↻</span> Atualizar
-        </button>
-      </nav>
+      <button class="ops-refresh" type="button" :disabled="loading" aria-label="Atualizar estado da Central" @click="$emit('refresh')"><span aria-hidden="true">↻</span></button>
 
-      <a v-if="squadOneUrl" class="ops-enter" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">Abrir SquadOne <span aria-hidden="true">↗</span></a>
+      <a v-if="squadOneUrl" class="ops-enter" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">SquadOne <span aria-hidden="true">↗</span></a>
     </div>
   </header>
 </template>

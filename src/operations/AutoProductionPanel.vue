@@ -167,10 +167,9 @@ onMounted(() => load())
   <section id="producao-auto" class="auto-production" aria-labelledby="auto-title">
     <div class="auto-masthead">
       <div class="auto-masthead__copy">
-        <span class="auto-kicker">Central local · nova seção</span>
-        <h2 id="auto-title">Produção<br><em>Auto</em></h2>
-        <p class="auto-subtitle">Acompanhamento local dos sites em produção</p>
-        <p>Dados derivados da pasta auto e dos registros operacionais locais.</p>
+        <span class="auto-kicker">Projeto · Dashboard operacional</span>
+        <h2 id="auto-title">Produção Auto</h2>
+        <p class="auto-subtitle">Sites em produção, pendências e marcos locais.</p>
       </div>
       <div class="auto-masthead__control">
         <span aria-hidden="true">↻</span>
@@ -197,16 +196,6 @@ onMounted(() => load())
         <p class="auto-discarded"><span>Fora da operação ativa</span><strong>{{ overview.summary.discarded }}</strong> descartado{{ overview.summary.discarded === 1 ? '' : 's' }}</p>
       </section>
 
-      <section class="auto-funnel" aria-labelledby="auto-funnel-title">
-        <div class="auto-section-label"><span>02</span><h3 id="auto-funnel-title">Funil de produção</h3></div>
-        <ol>
-          <li v-for="(step, index) in funnel" :key="step.label" :class="`is-${step.kind}`">
-            <span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ step.value }}</strong><em>{{ step.label }}</em>
-          </li>
-        </ol>
-        <div class="auto-legend"><span><i class="is-local" /> arquivos locais</span><span><i class="is-manual" /> registros operacionais</span></div>
-      </section>
-
       <section class="auto-action" aria-labelledby="auto-action-title">
         <header>
           <div><span>Sua ação agora</span><h3 id="auto-action-title">Enviar ao cliente</h3></div>
@@ -227,6 +216,16 @@ onMounted(() => load())
         </div>
         <p v-else class="auto-empty"><strong>Nenhum envio pendente.</strong> Assim que um aviso do Hermes for registrado, o cliente aparecerá aqui.</p>
       </section>
+
+      <details class="auto-funnel">
+        <summary><span>02</span><strong id="auto-funnel-title">Ver funil de produção</strong><small>Arquivos locais + registros operacionais</small></summary>
+        <ol aria-labelledby="auto-funnel-title">
+          <li v-for="(step, index) in funnel" :key="step.label" :class="`is-${step.kind}`">
+            <span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ step.value }}</strong><em>{{ step.label }}</em>
+          </li>
+        </ol>
+        <div class="auto-legend"><span><i class="is-local" /> arquivos locais</span><span><i class="is-manual" /> registros operacionais</span></div>
+      </details>
 
       <section class="auto-clients" aria-labelledby="auto-clients-title">
         <div class="auto-section-label"><span>03</span><h3 id="auto-clients-title">Clientes e sites</h3><strong>{{ overview.clients.length }} pastas</strong></div>

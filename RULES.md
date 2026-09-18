@@ -24,3 +24,7 @@
 12. `publicado.json` é somente um registro local. Disponibilidade pública,
     leitura, aprovação ou publicação pelo cliente exigem evidência própria e
     nunca podem ser inferidas pela interface.
+13. A home da Central é um resumo: dashboards completos pertencem a rotas de
+    projeto, e apenas projetos fixados e leituras recentes aparecem na raiz.
+14. Leituras do Hermes exigem projeto, origem, instante e evidência explícitos;
+    arquivo ausente significa estado vazio e não autoriza dados demonstrativos.

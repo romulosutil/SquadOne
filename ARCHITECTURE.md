@@ -30,6 +30,18 @@ A mesma aplicação possui dois perfis selecionados no servidor por
 Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe e usam navegação interna para `/squadone`.
 
+A Central é dividida em rotas navegáveis sem dependência adicional de roteador:
+
+- `/` concentra agenda, foco, projetos fixados e leituras recentes;
+- `/projetos` é o catálogo pesquisável de projetos;
+- `/projetos/producao-auto` contém o painel completo da Produção Auto;
+- `/leituras` é a caixa de entrada global do Hermes.
+
+Projetos podem ser módulos internos com dashboard, atalhos locais de acesso ou
+uma combinação dos dois. Módulos internos são registrados no frontend; atalhos
+continuam no armazenamento privado de projetos. A página inicial mostra apenas
+uma seleção fixada, sem replicar os dashboards completos.
+
 `server/operations.ts` contém a fronteira local:
 
 - valida e persiste projetos em JSON com substituição atômica;
@@ -44,6 +56,12 @@ Hermes, envio humano e confirmação são gravados separadamente em
 `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com escrita atômica. A
 presença de `publicado.json` é exposta apenas como registro local e não como
 prova de disponibilidade pública.
+
+As leituras do Hermes são uma entrada local, somente leitura, carregada de
+`SQUADONE_OPERATIONS_DATA_DIR/hermes-readings.json`. Cada leitura identifica o
+projeto, a origem, o instante, o resumo e a evidência disponível. A ausência do
+arquivo representa uma caixa vazia; a interface não inventa leituras nem oferece
+uma escrita genérica em nome do agente.
 
 A agenda da Central reutiliza o armazenamento OAuth e a leitura do Google
 Calendar do processo local do SquadOne. A credencial fica no Dell e é

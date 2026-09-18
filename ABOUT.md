@@ -23,3 +23,9 @@ O perfil local usa um arquivo privado baseado em
 A seção Produção Auto usa `autoDirectory` desse arquivo privado para ler
 artefatos locais e mantém seus marcos manuais em
 `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`.
+
+A Central separa o resumo diário (`/`), o catálogo escalável (`/projetos`), os
+dashboards de projeto e a caixa de leituras do Hermes (`/leituras`). Leituras
+locais podem ser fornecidas em
+`SQUADONE_OPERATIONS_DATA_DIR/hermes-readings.json`; o contrato de exemplo está
+em `config/hermes-readings.example.json`.

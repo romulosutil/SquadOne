@@ -7,17 +7,23 @@ const emit = defineEmits<{ close: []; save: [input: ProjectInput]; remove: [proj
 const dialog = ref<HTMLDialogElement | null>(null)
 const name = ref('')
 const target = ref('')
+const description = ref('')
+const category = ref('')
+const pinned = ref(false)
 
 watch(() => props.open, async open => {
   if (open) {
     name.value = props.project?.name ?? ''
     target.value = props.project?.target ?? ''
+    description.value = props.project?.description ?? ''
+    category.value = props.project?.category ?? ''
+    pinned.value = props.project?.pinned ?? false
     await nextTick()
     if (dialog.value && !dialog.value.open) dialog.value.showModal()
   } else if (dialog.value?.open) dialog.value.close()
 })
 
-const submit = () => emit('save', { name: name.value, target: target.value })
+const submit = () => emit('save', { name: name.value, description: description.value, category: category.value, pinned: pinned.value, target: target.value })
 const close = () => { if (!props.saving) emit('close') }
 </script>
 
@@ -32,9 +38,17 @@ const close = () => { if (!props.saving) emit('close') }
       <label for="project-name">Nome</label>
       <input id="project-name" v-model="name" required maxlength="80" autocomplete="off" />
 
+      <label for="project-description">Descrição <small>opcional</small></label>
+      <input id="project-description" v-model="description" maxlength="240" autocomplete="off" placeholder="O que você acompanha neste projeto" />
+
+      <label for="project-category">Categoria <small>opcional</small></label>
+      <input id="project-category" v-model="category" maxlength="60" autocomplete="off" placeholder="Ex.: SaaS, Conteúdo, Cliente" />
+
       <label for="project-target">Caminho ou link</label>
       <input id="project-target" v-model="target" required maxlength="1000" autocomplete="off" aria-describedby="project-target-hint" />
       <p id="project-target-hint">Use uma URL http/https ou um caminho Linux absoluto, começando com /.</p>
+
+      <label class="ops-checkbox"><input v-model="pinned" type="checkbox"> <span>Fixar este projeto na página Hoje</span></label>
 
       <p v-if="error" class="ops-form-error" role="alert">{{ error }}</p>
 

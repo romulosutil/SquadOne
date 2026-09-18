@@ -29,10 +29,27 @@ export interface OperationsConfig {
 export interface OperationsProject {
   id: string;
   name: string;
+  description: string;
+  category: string;
+  pinned: boolean;
   target: string;
   kind: "url" | "linux_path";
   createdAt: string;
   updatedAt: string;
+}
+
+export type HermesReadingSeverity = "info" | "attention" | "action" | "done";
+
+export interface HermesReading {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  summary: string;
+  severity: HermesReadingSeverity;
+  occurredAt: string;
+  evidence: string;
+  source: string;
 }
 
 export interface AgendaEventSummary {
@@ -152,9 +169,25 @@ export function classifyProjectTarget(value: unknown): { target: string; kind: O
   return { target: url.href, kind: "url" };
 }
 
-export function validateProjectInput(input: unknown): Pick<OperationsProject, "name" | "target" | "kind"> {
+function cleanOptionalText(value: unknown, maxLength: number): string {
+  if (value == null || value === "") return "";
+  if (typeof value !== "string") throw new InvalidOperationInput("Os detalhes do projeto são inválidos.");
+  const text = value.trim();
+  if (text.length > maxLength || /[\u0000-\u001f\u007f]/.test(text)) {
+    throw new InvalidOperationInput("Os detalhes do projeto são inválidos.");
+  }
+  return text;
+}
+
+export function validateProjectInput(input: unknown): Pick<OperationsProject, "name" | "description" | "category" | "pinned" | "target" | "kind"> {
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return { name: cleanName(body.name), ...classifyProjectTarget(body.target) };
+  return {
+    name: cleanName(body.name),
+    description: cleanOptionalText(body.description, 240),
+    category: cleanOptionalText(body.category, 60),
+    pinned: body.pinned === true,
+    ...classifyProjectTarget(body.target),
+  };
 }
 
 export class OperationsProjectStore {
@@ -241,6 +274,58 @@ export class OperationsProjectStore {
   }
 }
 
+const HERMES_SEVERITIES = new Set<HermesReadingSeverity>(["info", "attention", "action", "done"]);
+
+function readingText(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Leitura do Hermes sem ${field}.`);
+  const text = value.trim();
+  if (text.length > maxLength || /[\u0000-\u001f\u007f]/.test(text)) {
+    throw new Error(`Leitura do Hermes com ${field} inválido.`);
+  }
+  return text;
+}
+
+export function validateHermesReading(input: unknown): HermesReading {
+  if (!input || typeof input !== "object") throw new Error("Leitura do Hermes inválida.");
+  const item = input as Record<string, unknown>;
+  const severity = item.severity;
+  if (typeof severity !== "string" || !HERMES_SEVERITIES.has(severity as HermesReadingSeverity)) {
+    throw new Error("Leitura do Hermes com severidade inválida.");
+  }
+  const occurredAt = readingText(item.occurredAt, "data", 64);
+  if (Number.isNaN(Date.parse(occurredAt))) throw new Error("Leitura do Hermes com data inválida.");
+  return {
+    id: readingText(item.id, "id", 120),
+    projectId: readingText(item.projectId, "projeto", 120),
+    projectName: readingText(item.projectName, "nome do projeto", 120),
+    title: readingText(item.title, "título", 180),
+    summary: readingText(item.summary, "resumo", 1200),
+    severity: severity as HermesReadingSeverity,
+    occurredAt: new Date(occurredAt).toISOString(),
+    evidence: readingText(item.evidence, "evidência", 1000),
+    source: readingText(item.source, "origem", 120),
+  };
+}
+
+export class HermesReadingsStore {
+  readonly filePath: string;
+
+  constructor(dataDirectory: string) {
+    this.filePath = path.join(dataDirectory, "hermes-readings.json");
+  }
+
+  async list(): Promise<HermesReading[]> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.filePath, "utf8"));
+      if (!Array.isArray(parsed)) throw new Error("hermes-readings.json deve conter uma lista.");
+      return parsed.map(validateHermesReading).sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
+    } catch (error: any) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
+  }
+}
+
 export function mapOperationalState(ok: boolean, body: unknown, kind: OperationToolConfig["healthKind"]): OperationsState {
   if (!ok) return "unavailable";
   if (kind === "syncthing" && body && typeof body === "object") {
@@ -321,6 +406,7 @@ async function checkTool(id: OperationToolId, tool: OperationToolConfig): Promis
 export function createOperationsRouter(options: {
   config: OperationsConfig;
   store: OperationsProjectStore;
+  readings: HermesReadingsStore;
   autoProduction?: AutoProductionStore;
   readAgenda: () => Promise<AgendaSummary>;
 }): express.Router {
@@ -349,6 +435,17 @@ export function createOperationsRouter(options: {
     } catch (error: any) {
       console.error("[operations] Falha ao ler projetos:", error);
       res.status(500).json({ error: "Não foi possível ler os projetos locais." });
+    }
+  });
+
+  router.get("/readings", async (req, res) => {
+    try {
+      const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+      const readings = await options.readings.list();
+      res.json({ readings: projectId ? readings.filter((reading) => reading.projectId === projectId) : readings });
+    } catch (error) {
+      console.error("[operations] Falha ao ler as leituras do Hermes:", error);
+      res.status(500).json({ error: "Não foi possível ler a caixa do Hermes." });
     }
   });
 

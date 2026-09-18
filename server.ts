@@ -71,6 +71,7 @@ import {
 } from "./server/avaliacoes-turno.ts";
 import {
   createOperationsRouter,
+  HermesReadingsStore,
   listenHostForMode,
   OperationsProjectStore,
   readOperationsConfig,
@@ -217,6 +218,7 @@ async function startServer() {
     const operationsConfig = await readOperationsConfig(configPath);
     const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
     const operationsStore = new OperationsProjectStore(operationsDataDir);
+    const readings = new HermesReadingsStore(operationsDataDir);
     const autoProduction = operationsConfig.autoDirectory
       ? new AutoProductionStore(operationsConfig.autoDirectory, operationsDataDir)
       : undefined;
@@ -245,6 +247,7 @@ async function startServer() {
     app.use("/api/operations", createOperationsRouter({
       config: operationsConfig,
       store: operationsStore,
+      readings,
       autoProduction,
       readAgenda,
     }));

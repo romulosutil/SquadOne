@@ -1,0 +1,13 @@
+[
+  {
+    "id": "reading-2026-09-17-001",
+    "projectId": "producao-auto",
+    "projectName": "Produção Auto",
+    "title": "Novo site pronto para revisão",
+    "summary": "O Hermes encontrou um artefato gerado que precisa de ação humana.",
+    "severity": "action",
+    "occurredAt": "2026-09-17T12:00:00.000Z",
+    "evidence": "cliente-exemplo/index.html",
+    "source": "Hermes agent"
+  }
+]
