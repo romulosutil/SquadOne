@@ -50,7 +50,7 @@ describe("Produção Auto", () => {
     const ready = await store.updateEvent("cliente-pronto", { type: "ready", at: "2026-09-17T12:00:00-03:00" });
     const readyClient = ready.clients.find((client) => client.id === "cliente-pronto")!;
     assert.equal(readyClient.stage, "ready");
-    assert.equal(readyClient.operationalHistory[0].origin, "Hermes via WhatsApp");
+    assert.equal(readyClient.operationalHistory[0].origin, "registro manual");
     assert.equal(readyClient.operationalHistory[0].manual, true);
 
     const sent = await store.updateEvent("cliente-pronto", {
@@ -77,5 +77,26 @@ describe("Produção Auto", () => {
       store.updateEvent("../fora", { type: "ready", at: "2026-09-17T13:00:00-03:00" }),
       /não encontrado/,
     );
+  });
+
+  it("usa a evidência real do watcher e pagina a listagem", async () => {
+    const { root, data } = await fixture();
+    const notificationStateFile = path.join(data, "leads-notificados.json");
+    await fs.mkdir(data, { recursive: true });
+    await fs.writeFile(notificationStateFile, JSON.stringify(["cliente-pronto"]));
+    const store = new AutoProductionStore(root, data, { notificationStateFile });
+
+    const overview = await store.overview({ stage: "ready", pageSize: 5 });
+    assert.equal(overview.summary.ready, 1);
+    assert.equal(overview.page.total, 1);
+    assert.equal(overview.clients[0].hermesNotified, true);
+    assert.equal(overview.automation.notifier.notifiedCount, 1);
+
+    const sent = await store.updateEvent("cliente-pronto", {
+      type: "sent",
+      at: "2026-09-17T13:00:00-03:00",
+      channel: "WhatsApp",
+    });
+    assert.equal(sent.summary.awaitingConfirmation, 1);
   });
 });

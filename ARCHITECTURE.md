@@ -51,11 +51,24 @@ uma seleção fixada, sem replicar os dashboards completos.
 - expõe somente launch URLs, estados e detalhes não sensíveis à interface.
 
 `server/auto-production.ts` lê somente artefatos conhecidos nas subpastas do
-diretório `autoDirectory` configurado localmente. Os marcos operacionais de
-Hermes, envio humano e confirmação são gravados separadamente em
-`SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com escrita atômica. A
-presença de `publicado.json` é exposta apenas como registro local e não como
-prova de disponibilidade pública.
+diretório `autoDirectory` configurado localmente. A mesma fronteira agrega as
+evidências já emitidas pela automação: `.logs/status.json` e o log do runner,
+o arquivo de deduplicação do watcher do Hermes e a saúde HTTP configurada para
+o Hermes. Os marcos humanos de envio ao cliente e confirmação são gravados
+separadamente em `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com
+escrita atômica. A presença de `publicado.json` é exposta apenas como registro
+local e não como prova de disponibilidade pública.
+
+O fluxo observado é n8n → Google Drive → Syncthing → runner de produção →
+`publicado.json` → watcher Linux → `hermes send` → WhatsApp. Não existe chamada
+direta entre n8n e o runner. A rota de eventos da Produção Auto mantém uma
+conexão SSE com o navegador e sinaliza novas leituras periódicas; ela não
+executa, reinicia nem reconfigura nenhum desses serviços.
+
+A listagem de clientes é consultável e paginada no servidor. O resumo e o
+funil continuam representando todo o diretório; busca, estágio, ordenação e
+página limitam apenas as linhas devolvidas. Isso evita renderizar toda a base
+à medida que novos clientes e sites forem anexados.
 
 As leituras do Hermes são uma entrada local, somente leitura, carregada de
 `SQUADONE_OPERATIONS_DATA_DIR/hermes-readings.json`. Cada leitura identifica o

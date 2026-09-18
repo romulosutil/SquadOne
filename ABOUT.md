@@ -21,8 +21,14 @@ O perfil local usa um arquivo privado baseado em
 `SQUADONE_OPERATIONS_DATA_DIR`; ambos ficam fora do Git.
 
 A seção Produção Auto usa `autoDirectory` desse arquivo privado para ler
-artefatos locais e mantém seus marcos manuais em
+artefatos locais. Ela também acompanha as evidências já produzidas pela
+automação: estado e log do runner em `.logs/`, saúde do Hermes e do WhatsApp e
+a lista local de avisos enviados pelo watcher. Os marcos humanos continuam em
 `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`.
+
+O navegador mantém um canal de eventos com o servidor local. Esse canal
+atualiza o painel sem recarregar a página, mas não cria uma segunda automação:
+a pasta sincronizada, o runner e o Hermes permanecem como fontes de verdade.
 
 A Central separa o resumo diário (`/`), o catálogo escalável (`/projetos`), os
 dashboards de projeto e a caixa de leituras do Hermes (`/leituras`). Leituras

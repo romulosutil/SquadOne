@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AutoClient, AutoEventType, AutoProductionOverview } from './types'
 
 const overview = ref<AutoProductionOverview | null>(null)
@@ -19,11 +19,20 @@ const detailsDialog = ref<HTMLDialogElement | null>(null)
 const eventDialog = ref<HTMLDialogElement | null>(null)
 const detailsClose = ref<HTMLButtonElement | null>(null)
 const eventAtInput = ref<HTMLInputElement | null>(null)
+const search = ref('')
+const stage = ref('all')
+const sort = ref('priority')
+const page = ref(1)
+const streamState = ref<'connecting' | 'connected' | 'reconnecting'>('connecting')
 let returnFocus: HTMLElement | null = null
+let searchTimer = 0
+let refreshTimer = 0
+let eventSource: EventSource | null = null
+let requestNumber = 0
 
 const summaryCards = computed(() => overview.value ? [
   { label: 'Em preparação', value: overview.value.summary.preparing, tone: 'paper' },
-  { label: 'Prontos no worker', value: overview.value.summary.ready, tone: 'blue' },
+  { label: 'Avisados pelo Hermes', value: overview.value.summary.ready, tone: 'blue' },
   { label: 'Aguardando envio', value: overview.value.summary.awaitingSend, tone: 'yellow' },
   { label: 'Enviados', value: overview.value.summary.awaitingConfirmation, tone: 'paper' },
   { label: 'Confirmados', value: overview.value.summary.confirmed, tone: 'mint' },
@@ -34,13 +43,20 @@ const funnel = computed(() => overview.value ? [
   { label: 'Material recebido', value: overview.value.funnel.materialReceived, kind: 'local' },
   { label: 'Conteúdo e imagens', value: overview.value.funnel.contentAndImages, kind: 'local' },
   { label: 'Site gerado', value: overview.value.funnel.generated, kind: 'local' },
-  { label: 'Pronto no worker', value: overview.value.funnel.ready, kind: 'manual' },
+  { label: 'Aviso do Hermes', value: overview.value.funnel.ready, kind: 'evidence' },
   { label: 'Enviado ao cliente', value: overview.value.funnel.sent, kind: 'manual' },
   { label: 'Confirmado', value: overview.value.funnel.confirmed, kind: 'manual' },
 ] : [])
 
-const awaitingSend = computed(() => overview.value?.clients.filter((client) => client.readyAt && !client.sentAt) ?? [])
-const attentionClients = computed(() => overview.value?.clients.filter((client) => client.alerts.length) ?? [])
+const awaitingSend = computed(() => overview.value?.actionClients ?? [])
+const attentionClients = computed(() => overview.value?.attentionClients ?? [])
+const connections = computed(() => overview.value ? [
+  { key: 'folder', label: 'Pasta auto', ...overview.value.automation.folder },
+  { key: 'syncthing', label: 'Linux · Syncthing', ...(overview.value.automation.syncthing ?? { state: 'unknown', detail: 'Não verificado', evidence: 'health check' }) },
+  { key: 'runner', label: 'Runner', ...overview.value.automation.runner },
+  { key: 'hermes', label: 'Hermes', ...overview.value.automation.hermes },
+  { key: 'whatsapp', label: 'WhatsApp', ...overview.value.automation.whatsapp },
+] : [])
 
 const formatDateTime = (value?: string) => value
   ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
@@ -53,22 +69,42 @@ const dateTimeLocalNow = () => {
 }
 
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toLocaleUpperCase('pt-BR')
+const artifactProgress = (client: AutoClient) => [
+  client.artifacts.content,
+  client.artifacts.photos > 0,
+  client.artifacts.cover,
+  client.artifacts.generated,
+  client.artifacts.publishedRecord,
+].filter(Boolean).length
 
-const load = async (announce = false) => {
-  loading.value = true
+const load = async (announce = false, background = false) => {
+  const currentRequest = ++requestNumber
+  if (!background) loading.value = true
   error.value = ''
   try {
-    const response = await fetch('/api/operations/auto', { cache: 'no-store' })
+    const parameters = new URLSearchParams({
+      q: search.value,
+      stage: stage.value,
+      sort: sort.value,
+      page: String(page.value),
+      pageSize: '15',
+    })
+    const response = await fetch(`/api/operations/auto?${parameters}`, { cache: 'no-store' })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`)
+    if (currentRequest !== requestNumber) return
     overview.value = body
-    if (selected.value) selected.value = body.clients.find((client: AutoClient) => client.id === selected.value?.id) ?? null
+    page.value = body.page.number
+    if (selected.value) {
+      selected.value = [...body.clients, ...body.actionClients, ...body.attentionClients].find((client: AutoClient) => client.id === selected.value?.id) ?? selected.value
+    }
     if (announce) liveMessage.value = `Leitura atualizada. ${body.summary.active} sites na produção ativa.`
   } catch (reason) {
+    if (currentRequest !== requestNumber) return
     error.value = reason instanceof Error ? reason.message : String(reason)
     if (announce) liveMessage.value = 'Não foi possível atualizar a leitura da Produção Auto.'
   } finally {
-    loading.value = false
+    if (!background && currentRequest === requestNumber) loading.value = false
   }
 }
 
@@ -83,14 +119,13 @@ const closeDetails = () => {
 }
 
 const actionFor = (client: AutoClient): AutoEventType | null => {
-  if (!client.readyAt && client.artifacts.generated) return 'ready'
-  if (client.readyAt && !client.sentAt) return 'sent'
+  if ((client.hermesNotified || client.readyAt) && !client.sentAt) return 'sent'
   if (client.sentAt && !client.confirmedAt) return 'confirmed'
   return null
 }
 
 const actionLabel = (type: AutoEventType | null) => ({
-  ready: 'Registrar pronto no worker',
+  ready: 'Registrar evidência legada',
   sent: 'Marcar como enviado',
   confirmed: 'Confirmar recebimento',
 } as const)[type ?? 'ready']
@@ -126,11 +161,10 @@ const submitEvent = async () => {
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`)
-    overview.value = body
-    selected.value = body.clients.find((client: AutoClient) => client.id === selected.value?.id) ?? null
     const label = actionLabel(eventType.value)
     eventOpen.value = false
-    liveMessage.value = `${label} registrado para ${selected.value?.name ?? 'o cliente'}.`
+    liveMessage.value = `${label} registrado para ${selected.value.name}.`
+    await load(false, true)
   } catch (reason) {
     eventError.value = reason instanceof Error ? reason.message : String(reason)
   } finally {
@@ -160,7 +194,34 @@ watch(eventOpen, async (open) => {
   }
 })
 
-onMounted(() => load())
+const changePage = (nextPage: number) => {
+  if (!overview.value || nextPage < 1 || nextPage > overview.value.page.pages || nextPage === page.value) return
+  page.value = nextPage
+  load(false)
+}
+
+watch([search, stage, sort], () => {
+  page.value = 1
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => load(false), 250)
+})
+
+onMounted(async () => {
+  await load()
+  eventSource = new EventSource('/api/operations/auto/events')
+  eventSource.addEventListener('connected', () => { streamState.value = 'connected' })
+  eventSource.addEventListener('refresh', () => {
+    window.clearTimeout(refreshTimer)
+    refreshTimer = window.setTimeout(() => load(false, true), 150)
+  })
+  eventSource.onerror = () => { streamState.value = 'reconnecting' }
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer)
+  window.clearTimeout(refreshTimer)
+  eventSource?.close()
+})
 </script>
 
 <template>
@@ -169,13 +230,14 @@ onMounted(() => load())
       <div class="auto-masthead__copy">
         <span class="auto-kicker">Projeto · Dashboard operacional</span>
         <h2 id="auto-title">Produção Auto</h2>
-        <p class="auto-subtitle">Sites em produção, pendências e marcos locais.</p>
+        <p class="auto-subtitle">Uma leitura contínua da pasta auto, do Linux e do Hermes.</p>
       </div>
       <div class="auto-masthead__control">
         <span aria-hidden="true">↻</span>
         <button type="button" :disabled="loading" @click="load(true)">{{ loading ? 'Lendo pasta…' : 'Atualizar leitura' }}</button>
         <small v-if="overview">Última leitura {{ formatDateTime(overview.checkedAt) }}</small>
         <small v-else>Fonte: leitura local</small>
+        <small class="auto-stream-state" :class="`is-${streamState}`">{{ streamState === 'connected' ? 'Canal ao vivo conectado' : streamState === 'reconnecting' ? 'Reconectando canal ao vivo' : 'Conectando canal ao vivo' }}</small>
       </div>
     </div>
 
@@ -186,6 +248,17 @@ onMounted(() => load())
     </div>
 
     <template v-if="overview">
+      <section class="auto-bridge" aria-labelledby="auto-bridge-title">
+        <div class="auto-section-label"><span>00</span><h3 id="auto-bridge-title">Cadeia de comunicação</h3><strong>Atualização persistente</strong></div>
+        <ol class="auto-bridge__flow">
+          <li v-for="connection in connections" :key="connection.key" :class="`is-${connection.state}`">
+            <span class="auto-bridge__signal" aria-hidden="true"></span>
+            <div><strong>{{ connection.label }}</strong><small>{{ connection.detail }}</small><em>{{ connection.evidence }}<template v-if="connection.updatedAt"> · {{ formatDateTime(connection.updatedAt) }}</template></em></div>
+          </li>
+        </ol>
+        <p class="auto-bridge__note"><strong>{{ overview.automation.notifier.notifiedCount }}</strong> sites constam no estado do watcher. Isso prova o envio pelo Hermes, não a leitura da mensagem no WhatsApp.</p>
+      </section>
+
       <section class="auto-summary" aria-labelledby="auto-summary-title">
         <div class="auto-section-label"><span>01</span><h3 id="auto-summary-title">Resumo operacional</h3><strong>{{ overview.summary.active }} sites ativos</strong></div>
         <div class="auto-summary__grid">
@@ -207,14 +280,14 @@ onMounted(() => load())
               <span>{{ initials(client.name) }}</span>
               <img v-if="client.thumbnailUrl" :src="client.thumbnailUrl" alt="" @error="($event.currentTarget as HTMLImageElement).hidden = true">
             </div>
-            <div class="auto-action__copy"><span>Hermes informou</span><h4>{{ client.name }}</h4><time :datetime="client.readyAt">{{ formatDateTime(client.readyAt) }}</time><small>Hermes via WhatsApp · registro manual</small></div>
+            <div class="auto-action__copy"><span>Watcher do Hermes avisou</span><h4>{{ client.name }}</h4><time v-if="client.readyAt" :datetime="client.readyAt">{{ formatDateTime(client.readyAt) }}</time><small>{{ client.hermesNotified ? 'leads-notificados.json · envio automatizado' : 'marco legado · horário registrado' }}</small></div>
             <div class="auto-action__buttons">
               <button class="auto-button auto-button--primary" type="button" @click="openEvent(client, 'sent', $event)">Marcar como enviado</button>
               <button class="auto-text-button" type="button" @click="openDetails(client, $event)">Ver detalhes →</button>
             </div>
           </article>
         </div>
-        <p v-else class="auto-empty"><strong>Nenhum envio pendente.</strong> Assim que um aviso do Hermes for registrado, o cliente aparecerá aqui.</p>
+        <p v-else class="auto-empty"><strong>Nenhum envio pendente.</strong> Quando o watcher concluir um aviso pelo Hermes, o cliente aparecerá aqui.</p>
       </section>
 
       <details class="auto-funnel">
@@ -224,38 +297,37 @@ onMounted(() => load())
             <span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ step.value }}</strong><em>{{ step.label }}</em>
           </li>
         </ol>
-        <div class="auto-legend"><span><i class="is-local" /> arquivos locais</span><span><i class="is-manual" /> registros operacionais</span></div>
+        <div class="auto-legend"><span><i class="is-local" /> arquivos locais</span><span><i class="is-evidence" /> evidência automática</span><span><i class="is-manual" /> registros humanos</span></div>
       </details>
 
       <section class="auto-clients" aria-labelledby="auto-clients-title">
-        <div class="auto-section-label"><span>03</span><h3 id="auto-clients-title">Clientes e sites</h3><strong>{{ overview.clients.length }} pastas</strong></div>
-        <div class="auto-client-list">
-          <article v-for="client in overview.clients" :key="client.id" :class="`is-${client.stage}`">
-            <div class="auto-client__lead">
-              <div class="auto-thumb auto-thumb--small">
-                <span>{{ initials(client.name) }}</span>
-                <img v-if="client.thumbnailUrl" :src="client.thumbnailUrl" alt="" @error="($event.currentTarget as HTMLImageElement).hidden = true">
-              </div>
-              <div><h4>{{ client.name }}</h4><time :datetime="client.lastModified">Alterado {{ formatDateTime(client.lastModified) }}</time></div>
-            </div>
-            <ul class="auto-checklist" aria-label="Artefatos locais">
-              <li :class="{ 'is-ok': client.artifacts.content }"><span aria-hidden="true">{{ client.artifacts.content ? '✓' : '×' }}</span> Conteúdo</li>
-              <li :class="{ 'is-ok': client.artifacts.photos }"><span aria-hidden="true">{{ client.artifacts.photos ? '✓' : '×' }}</span> Fotos <small v-if="client.artifacts.photos">{{ client.artifacts.photos }}</small></li>
-              <li :class="{ 'is-ok': client.artifacts.cover }"><span aria-hidden="true">{{ client.artifacts.cover ? '✓' : '×' }}</span> Capa</li>
-              <li :class="{ 'is-ok': client.artifacts.generated }"><span aria-hidden="true">{{ client.artifacts.generated ? '✓' : '×' }}</span> Site</li>
-              <li :class="{ 'is-ok': client.artifacts.publishedRecord }"><span aria-hidden="true">{{ client.artifacts.publishedRecord ? '✓' : '×' }}</span> Registro</li>
-            </ul>
-            <div class="auto-client__state"><span :class="`auto-stage auto-stage--${client.stage}`">{{ client.stageLabel }}</span><small v-if="client.alerts.length">{{ client.alerts.length }} alerta{{ client.alerts.length === 1 ? '' : 's' }}</small></div>
-            <div class="auto-client__actions">
-              <button class="auto-text-button" type="button" @click="openDetails(client, $event)">Ver detalhes</button>
-              <button v-if="actionFor(client)" class="auto-button" :class="{ 'auto-button--primary': actionFor(client) === 'sent' }" type="button" @click="openEvent(client, actionFor(client)!, $event)">{{ actionLabel(actionFor(client)) }}</button>
-            </div>
-          </article>
+        <div class="auto-section-label"><span>03</span><h3 id="auto-clients-title">Clientes e sites</h3><strong>{{ overview.page.total }} de {{ overview.summary.active }}</strong></div>
+        <form class="auto-client-filters" role="search" @submit.prevent>
+          <label><span>Buscar cliente ou pasta</span><input v-model="search" type="search" placeholder="Ex.: clínica, loja, cidade…" autocomplete="off"></label>
+          <label><span>Etapa</span><select v-model="stage"><option value="all">Todas</option><option value="preparation">Em preparação</option><option value="generated">Site gerado</option><option value="ready">Avisado pelo Hermes</option><option value="sent">Enviado ao cliente</option><option value="confirmed">Confirmado</option><option value="attention">Com atenção</option></select></label>
+          <label><span>Ordenar</span><select v-model="sort"><option value="priority">Prioridade</option><option value="recent">Mais recentes</option><option value="name">Nome A–Z</option></select></label>
+        </form>
+        <div class="auto-client-table-wrap">
+          <table class="auto-client-table">
+            <thead><tr><th scope="col">Cliente</th><th scope="col">Etapa</th><th scope="col">Artefatos</th><th scope="col">Última mudança</th><th scope="col">Atenção</th><th scope="col"><span class="ops-visually-hidden">Ações</span></th></tr></thead>
+            <tbody>
+              <tr v-for="client in overview.clients" :key="client.id" :class="`is-${client.stage}`">
+                <th scope="row"><button class="auto-client-link" type="button" @click="openDetails(client, $event)"><span class="auto-client-avatar">{{ initials(client.name) }}</span><span><strong>{{ client.name }}</strong><small>{{ client.id }}</small></span></button></th>
+                <td data-label="Etapa"><span :class="`auto-stage auto-stage--${client.stage}`">{{ client.stageLabel }}</span></td>
+                <td data-label="Artefatos"><strong class="auto-progress">{{ artifactProgress(client) }}/5</strong><small>{{ client.artifacts.photos }} foto{{ client.artifacts.photos === 1 ? '' : 's' }}</small></td>
+                <td data-label="Última mudança"><time :datetime="client.lastModified">{{ formatDateTime(client.lastModified) }}</time></td>
+                <td data-label="Atenção"><span v-if="client.alerts.length" class="auto-alert-count">{{ client.alerts.length }} alerta{{ client.alerts.length === 1 ? '' : 's' }}</span><span v-else>—</span></td>
+                <td><button v-if="actionFor(client)" class="auto-button auto-button--compact" :class="{ 'auto-button--primary': actionFor(client) === 'sent' }" type="button" @click="openEvent(client, actionFor(client)!, $event)">{{ actionFor(client) === 'sent' ? 'Marcar envio' : 'Confirmar' }}</button><button v-else class="auto-text-button" type="button" @click="openDetails(client, $event)">Detalhes</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="!overview.clients.length" class="auto-empty"><strong>Nenhum resultado.</strong> Ajuste a busca ou os filtros.</p>
         </div>
+        <nav v-if="overview.page.pages > 1" class="auto-pagination" aria-label="Paginação de clientes"><button type="button" :disabled="overview.page.number === 1" @click="changePage(overview.page.number - 1)">← Anterior</button><span>Página <strong>{{ overview.page.number }}</strong> de {{ overview.page.pages }}</span><button type="button" :disabled="overview.page.number === overview.page.pages" @click="changePage(overview.page.number + 1)">Próxima →</button></nav>
       </section>
 
       <section class="auto-attention" aria-labelledby="auto-attention-title">
-        <div class="auto-section-label"><span>04</span><h3 id="auto-attention-title">Requer atenção</h3><strong>{{ attentionClients.length }}</strong></div>
+        <div class="auto-section-label"><span>04</span><h3 id="auto-attention-title">Requer atenção</h3><strong>{{ overview.summary.attention }}</strong></div>
         <div v-if="attentionClients.length" class="auto-attention__grid">
           <article v-for="client in attentionClients" :key="client.id">
             <span aria-hidden="true">!</span><div><h4>{{ client.name }}</h4><ul><li v-for="alert in client.alerts" :key="alert">{{ alert }}</li></ul></div>
@@ -304,7 +376,7 @@ onMounted(() => load())
         <header><span>Registro operacional</span><button type="button" aria-label="Fechar" @click="closeEvent">×</button></header>
         <div class="auto-event-dialog__body">
           <h3 id="auto-event-title">{{ actionLabel(eventType) }}</h3><p>{{ selected?.name }}</p>
-          <p v-if="eventType === 'ready'" class="auto-callout">Origem: <strong>Hermes via WhatsApp</strong><br>Enquanto não há integração confiável, este é um <strong>registro manual</strong>.</p>
+          <p v-if="eventType === 'ready'" class="auto-callout">Marco legado manual. O fluxo atual usa a evidência real de <strong>leads-notificados.json</strong>.</p>
           <label>Data e hora<input ref="eventAtInput" v-model="eventAt" type="datetime-local" required></label>
           <template v-if="eventType === 'sent'">
             <label>Canal de envio<select v-model="channel" required><option>WhatsApp</option><option>E-mail</option><option>Ligação</option><option>Outro</option></select></label>

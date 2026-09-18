@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
-import { AutoProductionStore, InvalidAutoProductionInput } from "./auto-production.ts";
+import { AutoProductionStore, InvalidAutoProductionInput, type AutoOverviewQuery, type AutoStage } from "./auto-production.ts";
 
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
@@ -23,6 +23,7 @@ export interface OperationToolConfig {
 export interface OperationsConfig {
   displayName: string;
   autoDirectory?: string;
+  autoNotificationStateFile?: string;
   tools: Record<OperationToolId, OperationToolConfig>;
 }
 
@@ -134,6 +135,9 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
     displayName: typeof raw.displayName === "string" ? raw.displayName.trim().slice(0, 80) : "",
     ...(typeof raw.autoDirectory === "string" && raw.autoDirectory.trim()
       ? { autoDirectory: path.resolve(raw.autoDirectory.trim()) }
+      : {}),
+    ...(typeof raw.autoNotificationStateFile === "string" && raw.autoNotificationStateFile.trim()
+      ? { autoNotificationStateFile: path.resolve(raw.autoNotificationStateFile.trim()) }
       : {}),
     tools,
   };
@@ -480,17 +484,54 @@ export function createOperationsRouter(options: {
     }
   });
 
-  router.get("/auto", async (_req, res) => {
+  router.get("/auto", async (req, res) => {
     if (!options.autoProduction) {
       res.status(503).json({ error: "A pasta auto ainda não foi configurada nesta Central." });
       return;
     }
     try {
-      res.json(await options.autoProduction.overview());
+      const validStages = new Set<AutoStage | "attention" | "all">(["preparation", "generated", "ready", "sent", "confirmed", "attention", "all"]);
+      const validSorts = new Set<NonNullable<AutoOverviewQuery["sort"]>>(["priority", "recent", "name"]);
+      const rawStage = typeof req.query.stage === "string" ? req.query.stage : "all";
+      const rawSort = typeof req.query.sort === "string" ? req.query.sort : "priority";
+      const query: AutoOverviewQuery = {
+        query: typeof req.query.q === "string" ? req.query.q : "",
+        stage: validStages.has(rawStage as AutoStage | "attention" | "all") ? rawStage as AutoOverviewQuery["stage"] : "all",
+        sort: validSorts.has(rawSort as NonNullable<AutoOverviewQuery["sort"]>) ? rawSort as AutoOverviewQuery["sort"] : "priority",
+        page: Number(req.query.page),
+        pageSize: Number(req.query.pageSize),
+      };
+      const [overview, syncthing] = await Promise.all([
+        options.autoProduction.overview(query),
+        checkTool("syncthing", options.config.tools.syncthing),
+      ]);
+      overview.automation.syncthing = {
+        state: syncthing.state === "healthy" ? "connected" : syncthing.state === "syncing" ? "running" : syncthing.state === "unavailable" ? "unavailable" : "unknown",
+        detail: syncthing.detail,
+        evidence: "health check do Syncthing",
+      };
+      res.json(overview);
     } catch (error) {
       console.error("[operations] Falha ao ler Produção Auto:", error);
       res.status(500).json({ error: "Não foi possível ler a pasta auto agora." });
     }
+  });
+
+  router.get("/auto/events", (req, res) => {
+    if (!options.autoProduction) {
+      res.status(503).end();
+      return;
+    }
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    res.write("retry: 5000\n");
+    res.write(`event: connected\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
+    const interval = setInterval(() => {
+      res.write(`event: refresh\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
+    }, 10_000);
+    req.on("close", () => clearInterval(interval));
   });
 
   router.get("/auto/clients/:id/thumbnail", async (req, res) => {

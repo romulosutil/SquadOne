@@ -152,7 +152,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
       </template>
 
       <ProjectsCatalog v-else-if="isCatalog" :projects="projects" :loading="loadingProjects" :ide-url="ideUrl" @add="openProjectDialog(null)" @edit="openProjectDialog" />
-      <template v-else-if="isAuto"><nav class="ops-breadcrumb" aria-label="Navegação estrutural"><a href="/projetos">Projetos</a><span aria-hidden="true">/</span><span>Produção Auto</span></nav><AutoProductionPanel /><HermesReadingsPanel compact project-id="producao-auto" title="Leituras deste projeto" /></template>
+      <template v-else-if="isAuto"><nav class="ops-breadcrumb" aria-label="Navegação estrutural"><a href="/projetos">Projetos</a><span aria-hidden="true">/</span><span>Produção Auto</span></nav><AutoProductionPanel /></template>
       <HermesReadingsPanel v-else-if="isReadings" />
       <section v-else-if="!knownRoute" class="ops-empty ops-not-found"><span aria-hidden="true">404</span><h2>Página não encontrada</h2><p>Este endereço não existe na Central local.</p><a class="ops-button ops-button--primary" href="/">Voltar para Hoje</a></section>
     </main>

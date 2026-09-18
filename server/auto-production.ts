@@ -58,9 +58,36 @@ export interface AutoClient {
   failureMessage?: string;
   fileHistory: AutoFileHistoryItem[];
   operationalHistory: AutoOperationalEvent[];
+  hermesNotified: boolean;
   readyAt?: string;
   sentAt?: string;
   confirmedAt?: string;
+}
+
+export type AutoConnectionState = "connected" | "running" | "idle" | "attention" | "unknown" | "unavailable";
+
+export interface AutoConnectionEvidence {
+  state: AutoConnectionState;
+  detail: string;
+  evidence: string;
+  updatedAt?: string;
+}
+
+export interface AutoAutomationStatus {
+  folder: AutoConnectionEvidence;
+  runner: AutoConnectionEvidence;
+  hermes: AutoConnectionEvidence;
+  whatsapp: AutoConnectionEvidence;
+  notifier: AutoConnectionEvidence & { notifiedCount: number };
+  syncthing?: AutoConnectionEvidence;
+}
+
+export interface AutoOverviewQuery {
+  query?: string;
+  stage?: AutoStage | "attention" | "all";
+  sort?: "priority" | "recent" | "name";
+  page?: number;
+  pageSize?: number;
 }
 
 export interface AutoProductionOverview {
@@ -84,6 +111,15 @@ export interface AutoProductionOverview {
     sent: number;
     confirmed: number;
   };
+  automation: AutoAutomationStatus;
+  page: {
+    number: number;
+    size: number;
+    total: number;
+    pages: number;
+  };
+  actionClients: AutoClient[];
+  attentionClients: AutoClient[];
   clients: AutoClient[];
 }
 
@@ -180,10 +216,10 @@ const stageLabels: Record<AutoStage, string> = {
   confirmed: "Confirmado pelo cliente",
 };
 
-function currentStage(artifacts: AutoArtifacts, record: AutoRecord): AutoStage {
+function currentStage(artifacts: AutoArtifacts, record: AutoRecord, hermesNotified: boolean): AutoStage {
   if (record.confirmed) return "confirmed";
   if (record.sent) return "sent";
-  if (record.ready) return "ready";
+  if (record.ready || hermesNotified) return "ready";
   return artifacts.generated ? "generated" : "preparation";
 }
 
@@ -205,13 +241,52 @@ async function discardedCount(rootDirectory: string): Promise<number> {
   return entries.filter((entry) => !entry.name.startsWith(".")).length;
 }
 
+async function readJsonOrNull(filePath: string): Promise<{ value: unknown; changedAt: string } | null> {
+  try {
+    const [text, stat] = await Promise.all([fs.readFile(filePath, "utf8"), fs.stat(filePath)]);
+    return { value: JSON.parse(text), changedAt: stat.mtime.toISOString() };
+  } catch (error: any) {
+    if (error?.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
+function notifiedIds(value: unknown): Set<string> {
+  if (Array.isArray(value)) return new Set(value.filter((item): item is string => typeof item === "string"));
+  if (!value || typeof value !== "object") return new Set();
+  const record = value as Record<string, unknown>;
+  for (const key of ["slugs", "notificados", "notified", "leads"]) {
+    if (Array.isArray(record[key])) return new Set((record[key] as unknown[]).filter((item): item is string => typeof item === "string"));
+  }
+  return new Set(Object.entries(record).filter(([, state]) => Boolean(state)).map(([id]) => id));
+}
+
+function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(value!)));
+}
+
 export class AutoProductionStore {
   private queue: Promise<unknown> = Promise.resolve();
   readonly recordsPath: string;
+  readonly notificationStateFile?: string;
+  readonly hermesHealthUrl?: string;
 
-  constructor(readonly rootDirectory: string, dataDirectory: string) {
+  constructor(
+    readonly rootDirectory: string,
+    dataDirectory: string,
+    options: { notificationStateFile?: string; hermesHealthUrl?: string } = {},
+  ) {
     this.rootDirectory = path.resolve(rootDirectory);
     this.recordsPath = path.join(dataDirectory, "auto-production.json");
+    this.notificationStateFile = options.notificationStateFile ? path.resolve(options.notificationStateFile) : undefined;
+    this.hermesHealthUrl = options.hermesHealthUrl;
+  }
+
+  private async notificationEvidence(): Promise<{ ids: Set<string>; changedAt?: string }> {
+    if (!this.notificationStateFile) return { ids: new Set() };
+    const state = await readJsonOrNull(this.notificationStateFile);
+    return state ? { ids: notifiedIds(state.value), changedAt: state.changedAt } : { ids: new Set() };
   }
 
   private async readRecords(): Promise<AutoRecordsFile> {
@@ -247,7 +322,7 @@ export class AutoProductionStore {
       .map((entry) => entry.name);
   }
 
-  private async readClient(id: string, record: AutoRecord): Promise<AutoClient> {
+  private async readClient(id: string, record: AutoRecord, hermesNotified = false): Promise<AutoClient> {
     const directory = path.join(this.rootDirectory, id);
     const rootEntries = await entriesOrEmpty(directory);
     const byLowerName = new Map(rootEntries.map((entry) => [entry.name.toLocaleLowerCase("pt-BR"), entry]));
@@ -301,7 +376,7 @@ export class AutoProductionStore {
       .sort((a, b) => Date.parse(b.changedAt) - Date.parse(a.changedAt))
       .slice(0, 12);
     const latestFileTime = fileHistory.length ? Date.parse(fileHistory[0].changedAt) : directoryStat.mtimeMs;
-    const stage = currentStage(artifacts, record);
+    const stage = currentStage(artifacts, record, hermesNotified);
     const operationalHistory = [record.ready, record.sent, record.confirmed].filter((item): item is AutoOperationalEvent => Boolean(item));
 
     return {
@@ -316,46 +391,143 @@ export class AutoProductionStore {
       ...(failureMessage ? { failureMessage } : {}),
       fileHistory,
       operationalHistory,
+      hermesNotified,
       ...(record.ready ? { readyAt: record.ready.at } : {}),
       ...(record.sent ? { sentAt: record.sent.at } : {}),
       ...(record.confirmed ? { confirmedAt: record.confirmed.at } : {}),
     };
   }
 
-  async overview(): Promise<AutoProductionOverview> {
+  private async automationStatus(notification: { ids: Set<string>; changedAt?: string }): Promise<AutoAutomationStatus> {
+    const [folderStat, runnerState, runnerLogStat] = await Promise.all([
+      statOrNull(this.rootDirectory),
+      readJsonOrNull(path.join(this.rootDirectory, ".logs", "status.json")),
+      statOrNull(path.join(this.rootDirectory, ".logs", "execucao-fila.log")),
+    ]);
+    const runner = (() => {
+      if (runnerState?.value && typeof runnerState.value === "object") {
+        const value = runnerState.value as Record<string, unknown>;
+        const rawState = typeof value.estado === "string" ? value.estado.toLocaleLowerCase("pt-BR") : "";
+        const lead = typeof value.lead === "string" && value.lead.trim() ? ` · ${value.lead.trim()}` : "";
+        if (/execut|process|rodando|ativo/.test(rawState)) {
+          return { state: "running" as const, detail: `Runner em execução${lead}`, evidence: ".logs/status.json", updatedAt: runnerState.changedAt };
+        }
+        if (/ocioso|idle|parado/.test(rawState)) {
+          return { state: "idle" as const, detail: "Runner ocioso e disponível", evidence: ".logs/status.json", updatedAt: runnerState.changedAt };
+        }
+        return { state: "attention" as const, detail: rawState ? `Estado informado: ${rawState}${lead}` : "Status do runner sem estado reconhecido", evidence: ".logs/status.json", updatedAt: runnerState.changedAt };
+      }
+      if (runnerLogStat) {
+        const stale = Date.now() - Number(runnerLogStat.mtimeMs) > 15 * 60 * 1000;
+        return {
+          state: stale ? "attention" as const : "unknown" as const,
+          detail: stale ? "Log existe, mas não há status atual do runner" : "Atividade recente no log; status atual ausente",
+          evidence: ".logs/execucao-fila.log",
+          updatedAt: runnerLogStat.mtime.toISOString(),
+        };
+      }
+      return { state: "unknown" as const, detail: "Runner ainda não publicou status nem log", evidence: ".logs/" };
+    })();
+
+    let hermes: AutoConnectionEvidence = { state: "unknown", detail: "Saúde do Hermes não configurada", evidence: "tools.hermes.healthUrl" };
+    let whatsapp: AutoConnectionEvidence = { state: "unknown", detail: "Conexão do WhatsApp não verificada", evidence: "Hermes /api/status" };
+    if (this.hermesHealthUrl) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      try {
+        const response = await fetch(this.hermesHealthUrl, { signal: controller.signal });
+        const body = await response.json().catch(() => ({})) as Record<string, any>;
+        const gatewayRunning = body.gateway_running === true || body.gateway_state === "running" || body.components?.gateway === "ok";
+        const whatsappState = body.gateway_platforms?.whatsapp?.state ?? body.platforms?.whatsapp?.state;
+        hermes = {
+          state: response.ok && gatewayRunning ? "connected" : "attention",
+          detail: response.ok && gatewayRunning ? "Gateway Hermes respondendo" : `Hermes respondeu sem gateway operacional${response.ok ? "" : ` · HTTP ${response.status}`}`,
+          evidence: "Hermes /api/status",
+        };
+        whatsapp = {
+          state: whatsappState === "connected" ? "connected" : "attention",
+          detail: whatsappState === "connected" ? "Canal conectado agora" : `Canal informado como ${String(whatsappState ?? "desconhecido")}`,
+          evidence: "Hermes /api/status",
+        };
+      } catch {
+        hermes = { state: "unavailable", detail: "Hermes não respondeu no tempo limite", evidence: "Hermes /api/status" };
+        whatsapp = { state: "unknown", detail: "Sem Hermes, o canal não pôde ser verificado", evidence: "Hermes /api/status" };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    return {
+      folder: folderStat
+        ? { state: "connected", detail: "Pasta auto acessível para leitura", evidence: "autoDirectory", updatedAt: folderStat.mtime.toISOString() }
+        : { state: "unavailable", detail: "Pasta auto não encontrada", evidence: "autoDirectory" },
+      runner,
+      hermes,
+      whatsapp,
+      notifier: this.notificationStateFile
+        ? notification.changedAt
+          ? { state: "connected", detail: `${notification.ids.size} site${notification.ids.size === 1 ? "" : "s"} registrado${notification.ids.size === 1 ? "" : "s"} como avisado${notification.ids.size === 1 ? "" : "s"}`, evidence: "leads-notificados.json", updatedAt: notification.changedAt, notifiedCount: notification.ids.size }
+          : { state: "attention", detail: "Watcher ainda não publicou o estado de avisos", evidence: "leads-notificados.json", notifiedCount: 0 }
+        : { state: "unknown", detail: "Estado do watcher não configurado", evidence: "autoNotificationStateFile", notifiedCount: 0 },
+    };
+  }
+
+  async overview(query: AutoOverviewQuery = {}): Promise<AutoProductionOverview> {
     await this.queue;
-    const records = await this.readRecords();
+    const [records, notification] = await Promise.all([this.readRecords(), this.notificationEvidence()]);
     const ids = await this.activeDirectoryIds();
-    const clients = await Promise.all(ids.map((id) => this.readClient(id, records.clients[id] ?? {})));
-    clients.sort((a, b) => {
+    const allClients = await Promise.all(ids.map((id) => this.readClient(id, records.clients[id] ?? {}, notification.ids.has(id))));
+    const sortPriority = (clients: AutoClient[]) => clients.sort((a, b) => {
       const stageOrder: Record<AutoStage, number> = { ready: 0, sent: 1, preparation: 2, generated: 3, confirmed: 4 };
       return stageOrder[a.stage] - stageOrder[b.stage] || a.name.localeCompare(b.name, "pt-BR");
     });
-    const hasReady = (client: AutoClient) => Boolean(client.readyAt);
+    sortPriority(allClients);
+    const hasReady = (client: AutoClient) => Boolean(client.readyAt || client.hermesNotified);
     const hasSent = (client: AutoClient) => Boolean(client.sentAt);
     const hasConfirmed = (client: AutoClient) => Boolean(client.confirmedAt);
+    const search = (query.query ?? "").trim().toLocaleLowerCase("pt-BR");
+    const stage = query.stage ?? "all";
+    const sort = query.sort ?? "priority";
+    const filtered = allClients.filter((client) => {
+      if (search && !`${client.name} ${client.id}`.toLocaleLowerCase("pt-BR").includes(search)) return false;
+      if (stage === "attention") return client.alerts.length > 0;
+      return stage === "all" || client.stage === stage;
+    });
+    if (sort === "recent") filtered.sort((a, b) => Date.parse(b.lastModified) - Date.parse(a.lastModified));
+    else if (sort === "name") filtered.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    else sortPriority(filtered);
+    const pageSize = clampInteger(query.pageSize, 15, 5, 50);
+    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const page = Math.min(clampInteger(query.page, 1, 1, Number.MAX_SAFE_INTEGER), pages);
+    const clients = filtered.slice((page - 1) * pageSize, page * pageSize);
+    const actionClients = allClients.filter((client) => hasReady(client) && !hasSent(client)).slice(0, 8);
+    const attentionClients = allClients.filter((client) => client.alerts.length).slice(0, 8);
 
     return {
       checkedAt: new Date().toISOString(),
       source: "leitura local",
       summary: {
-        active: clients.length,
-        preparing: clients.filter((client) => client.stage === "preparation").length,
-        ready: clients.filter(hasReady).length,
-        awaitingSend: clients.filter((client) => hasReady(client) && !hasSent(client)).length,
-        awaitingConfirmation: clients.filter((client) => hasSent(client) && !hasConfirmed(client)).length,
-        confirmed: clients.filter(hasConfirmed).length,
-        attention: clients.filter((client) => client.alerts.length).length,
+        active: allClients.length,
+        preparing: allClients.filter((client) => client.stage === "preparation").length,
+        ready: allClients.filter(hasReady).length,
+        awaitingSend: allClients.filter((client) => hasReady(client) && !hasSent(client)).length,
+        awaitingConfirmation: allClients.filter((client) => hasSent(client) && !hasConfirmed(client)).length,
+        confirmed: allClients.filter(hasConfirmed).length,
+        attention: allClients.filter((client) => client.alerts.length).length,
         discarded: await discardedCount(this.rootDirectory),
       },
       funnel: {
-        materialReceived: clients.filter((client) => client.artifacts.content || client.artifacts.photos || client.artifacts.cover).length,
-        contentAndImages: clients.filter((client) => client.artifacts.content && client.artifacts.photos && client.artifacts.cover).length,
-        generated: clients.filter((client) => client.artifacts.generated).length,
-        ready: clients.filter(hasReady).length,
-        sent: clients.filter(hasSent).length,
-        confirmed: clients.filter(hasConfirmed).length,
+        materialReceived: allClients.filter((client) => client.artifacts.content || client.artifacts.photos || client.artifacts.cover).length,
+        contentAndImages: allClients.filter((client) => client.artifacts.content && client.artifacts.photos && client.artifacts.cover).length,
+        generated: allClients.filter((client) => client.artifacts.generated).length,
+        ready: allClients.filter(hasReady).length,
+        sent: allClients.filter(hasSent).length,
+        confirmed: allClients.filter(hasConfirmed).length,
       },
+      automation: await this.automationStatus(notification),
+      page: { number: page, size: pageSize, total: filtered.length, pages },
+      actionClients,
+      attentionClients,
       clients,
     };
   }
@@ -392,9 +564,10 @@ export class AutoProductionStore {
       if (type === "ready") {
         const client = await this.readClient(id, record);
         if (!client.artifacts.generated) throw new InvalidAutoProductionInput("O site precisa ter index.html antes do aviso do Hermes.");
-        record.ready = { type, at, recordedAt, origin: "Hermes via WhatsApp", manual: true };
+        record.ready = { type, at, recordedAt, origin: "registro manual", manual: true };
       } else if (type === "sent") {
-        if (!record.ready) throw new InvalidAutoProductionInput("Registre primeiro o aviso do Hermes.");
+        const notified = (await this.notificationEvidence()).ids.has(id);
+        if (!record.ready && !notified) throw new InvalidAutoProductionInput("Aguarde uma evidência do watcher Hermes antes de registrar o envio.");
         const recipient = cleanOptionalText(body.recipient, 120);
         record.sent = {
           type,

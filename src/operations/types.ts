@@ -98,6 +98,7 @@ export interface AutoClient {
   failureMessage?: string
   fileHistory: Array<{ name: string; changedAt: string; origin: 'leitura local' }>
   operationalHistory: AutoOperationalEvent[]
+  hermesNotified: boolean
   readyAt?: string
   sentAt?: string
   confirmedAt?: string
@@ -124,5 +125,25 @@ export interface AutoProductionOverview {
     sent: number
     confirmed: number
   }
+  automation: {
+    folder: AutoConnectionEvidence
+    runner: AutoConnectionEvidence
+    hermes: AutoConnectionEvidence
+    whatsapp: AutoConnectionEvidence
+    notifier: AutoConnectionEvidence & { notifiedCount: number }
+    syncthing?: AutoConnectionEvidence
+  }
+  page: { number: number; size: number; total: number; pages: number }
+  actionClients: AutoClient[]
+  attentionClients: AutoClient[]
   clients: AutoClient[]
+}
+
+export type AutoConnectionState = 'connected' | 'running' | 'idle' | 'attention' | 'unknown' | 'unavailable'
+
+export interface AutoConnectionEvidence {
+  state: AutoConnectionState
+  detail: string
+  evidence: string
+  updatedAt?: string
 }

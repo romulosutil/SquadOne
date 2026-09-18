@@ -220,7 +220,10 @@ async function startServer() {
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
     const autoProduction = operationsConfig.autoDirectory
-      ? new AutoProductionStore(operationsConfig.autoDirectory, operationsDataDir)
+      ? new AutoProductionStore(operationsConfig.autoDirectory, operationsDataDir, {
+          notificationStateFile: operationsConfig.autoNotificationStateFile,
+          hermesHealthUrl: operationsConfig.tools.hermes.healthUrl,
+        })
       : undefined;
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
