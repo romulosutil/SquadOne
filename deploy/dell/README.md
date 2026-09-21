@@ -42,3 +42,20 @@ systemctl --user enable --now squadone-operations.service
 
 O login do Windows acessa a Central por túnel SSH local em
 `http://127.0.0.1:9120/`; nenhuma porta pública é necessária.
+
+O mesmo túnel pode expor somente em loopback as superfícies operacionais:
+
+```bash
+ssh -N \
+  -L 9120:127.0.0.1:9120 \
+  -L 9119:127.0.0.1:9119 \
+  -L 5679:127.0.0.1:5679 \
+  -L 8080:127.0.0.1:8080 \
+  dell-worker
+```
+
+O playbook do Hermes é versionado em
+`deploy/hermes/skills/dell-operations-manager/SKILL.md`. Instale-o no Dell em
+`~/.hermes/skills/dell-operations-manager/SKILL.md`. A pasta sincronizada
+`~/Pessoal-dev` é contexto de leitura e troca de arquivos; use um clone Git
+próprio para qualquer operação de branch, commit ou push.

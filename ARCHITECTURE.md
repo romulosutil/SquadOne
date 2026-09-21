@@ -88,3 +88,28 @@ usuário com linger. O arquivo de ambiente, a configuração real e os dados fic
 respectivamente em `~/.config/squadone/operations.env`,
 `~/.config/squadone/operations.json` e
 `~/.local/share/squadone-operations`.
+
+## Modelo operacional pessoal
+
+O Dell é o worker persistente. O Hermes é o gestor desse ambiente: observa e
+opera os serviços Linux, o Docker e o n8n, acompanha os repositórios pelo
+GitHub e usa a Central do SquadOne como superfície de leitura operacional.
+Codex e Claude executam demandas pesadas nos checkouts de desenvolvimento;
+Antigravity organiza documentação e arquivos.
+
+O diretório `~/Pessoal-dev` no Dell é uma réplica Syncthing da pasta de
+desenvolvimento. Ele serve para o Hermes enxergar o trabalho em andamento, mas
+não é uma fronteira Git confiável: metadados `.git` podem estar incompletos.
+Operações de branch, commit, push e pull usam clones Git próprios no Dell ou o
+checkout de origem no Windows. O GitHub é a fronteira de integração entre os
+agentes.
+
+Credenciais não ficam na pasta sincronizada, em skills ou na configuração do
+SquadOne. OAuth do n8n usa o armazenamento cifrado de credenciais do próprio
+n8n. Sessões web persistentes podem auxiliar o Hermes, mas login inicial, MFA
+e consentimentos sensíveis permanecem sob ação humana. O SquadOne recebe
+estado e evidências; ele não recebe senhas, tokens nem poder de controle sobre
+os serviços.
+
+O playbook instalável do gestor fica em
+`deploy/hermes/skills/dell-operations-manager/SKILL.md`.
