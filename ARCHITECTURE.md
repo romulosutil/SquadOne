@@ -113,3 +113,7 @@ os serviços.
 
 O playbook instalável do gestor fica em
 `deploy/hermes/skills/dell-operations-manager/SKILL.md`.
+
+O modelo de orquestração, as conexões pendentes e a separação entre credenciais
+humanas, OAuth e segredos técnicos estão em
+`docs/OPERATIONS-SECRETS-AND-ORCHESTRATION.md`.

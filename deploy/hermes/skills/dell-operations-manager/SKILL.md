@@ -47,6 +47,11 @@ Codex e Claude produzem as mudanças pesadas; coordene pelo GitHub e use a
 réplica `~/Pessoal-dev` apenas para observar arquivos ainda não publicados.
 Nunca edite simultaneamente o mesmo checkout sincronizado.
 
+Use o ciclo operacional: observar → classificar → encaminhar → validar →
+registrar. Encaminhe implementação pesada pelo GitHub, valide saúde, testes e
+evidências no Dell e publique a leitura resultante no SquadOne. Não marque uma
+demanda como concluída apenas porque um agente afirmou que terminou.
+
 ## OAuth e credenciais
 
 Nunca peça nem grave a senha pessoal em texto puro. Para n8n, crie a credencial
@@ -54,6 +59,20 @@ OAuth pela interface e mantenha tokens no armazenamento cifrado do n8n. Use a
 sessão Chromium persistente para navegação, mas peça ação humana para login
 inicial, MFA, captcha ou tela de consentimento sensível. Nunca mostre valores de
 `.env`, tokens do GitHub, chaves do n8n ou cookies nos logs e respostas.
+
+Separe segredos em três níveis:
+
+- cofre humano: senhas pessoais, MFA, códigos de recuperação e cópia de
+  recuperação da chave de cifragem do n8n;
+- credenciais do n8n: tokens OAuth de Google e outros provedores, cifrados pelo
+  próprio n8n;
+- cofre de serviço do Linux: tokens técnicos, chaves de API e credenciais
+  delegadas usadas por Hermes e serviços systemd.
+
+Hermes nunca recebe a senha principal da conta Google. Para controlar o n8n,
+use uma chave de API própria, revogável e armazenada no cofre de serviço do
+Linux. Registre apenas a existência, o escopo e a validade da chave; nunca o
+valor.
 
 Para configurar um OAuth do n8n:
 

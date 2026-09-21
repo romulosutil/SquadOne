@@ -54,12 +54,36 @@ check_container licitacoes-automation-collector-1
 check_container licitacoes-automation-db-1
 
 if docker inspect licitacoes-automation-db-1 >/dev/null 2>&1; then
+  owner_setup=$(docker exec licitacoes-automation-db-1 \
+    psql -U n8n -d n8n -Atc "select value from settings where key = 'userManagement.isInstanceOwnerSetUp';" 2>/dev/null || true)
+  mfa_enabled_count=$(docker exec licitacoes-automation-db-1 \
+    psql -U n8n -d n8n -Atc 'select count(*) from "user" where "mfaEnabled";' 2>/dev/null || true)
+  api_key_count=$(docker exec licitacoes-automation-db-1 \
+    psql -U n8n -d n8n -Atc 'select count(*) from user_api_keys;' 2>/dev/null || true)
   credential_count=$(docker exec licitacoes-automation-db-1 \
     psql -U n8n -d n8n -Atc 'select count(*) from credentials_entity;' 2>/dev/null || true)
   workflow_counts=$(docker exec licitacoes-automation-db-1 \
     psql -U n8n -d n8n -Atc 'select count(*), count(*) filter (where active) from workflow_entity;' 2>/dev/null || true)
   execution_count=$(docker exec licitacoes-automation-db-1 \
     psql -U n8n -d n8n -Atc 'select count(*) from execution_entity;' 2>/dev/null || true)
+
+  if [[ "$owner_setup" == true ]]; then
+    ok 'conta proprietária do n8n configurada'
+  else
+    fail 'conta proprietária do n8n ainda não foi configurada'
+  fi
+
+  if [[ "$mfa_enabled_count" =~ ^[0-9]+$ ]] && (( mfa_enabled_count > 0 )); then
+    ok "n8n possui MFA habilitado para $mfa_enabled_count usuário(s)"
+  else
+    warn 'conta proprietária do n8n ainda está sem MFA'
+  fi
+
+  if [[ "$api_key_count" =~ ^[0-9]+$ ]] && (( api_key_count > 0 )); then
+    ok "n8n possui $api_key_count chave(s) de API para automação técnica"
+  else
+    warn 'Hermes ainda não possui acesso autenticado à API do n8n'
+  fi
 
   if [[ "$credential_count" =~ ^[0-9]+$ ]] && (( credential_count > 0 )); then
     ok "n8n possui $credential_count credencial(is) armazenada(s)"
