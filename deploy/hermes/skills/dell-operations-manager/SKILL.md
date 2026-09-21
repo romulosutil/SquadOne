@@ -36,6 +36,10 @@ logs recentes. Reinicie somente o serviço necessário. Não ative workflows,
 envie mensagens, publique artefatos ou altere dados de negócio sem uma demanda
 explícita que autorize esse efeito.
 
+Execute `dell-validate` no início de toda validação operacional. O comando deve
+terminar sem itens `FAIL`. Itens `WARN` são pendências reais e precisam ser
+explicados ou resolvidos; não os converta em sucesso por inferência.
+
 ## GitHub e trabalho pesado
 
 Use `gh` e clones Git próprios para acompanhar issues, branches, PRs e checks.
@@ -50,6 +54,23 @@ OAuth pela interface e mantenha tokens no armazenamento cifrado do n8n. Use a
 sessão Chromium persistente para navegação, mas peça ação humana para login
 inicial, MFA, captcha ou tela de consentimento sensível. Nunca mostre valores de
 `.env`, tokens do GitHub, chaves do n8n ou cookies nos logs e respostas.
+
+Para configurar um OAuth do n8n:
+
+1. Rode `dell-validate` e confirme n8n, Chromium e túnel saudáveis.
+2. Abra a credencial no n8n local e preencha apenas identificadores públicos e
+   configurações do provedor; segredos entram no cofre de credenciais do n8n.
+3. Navegue até a autorização usando a sessão persistente. Quando aparecer
+   senha, MFA, captcha ou consentimento sensível, solicite a ação humana.
+4. Depois do callback, valide que a credencial passou a existir sem consultar
+   nem imprimir a coluna cifrada `data`.
+5. Execute um teste mínimo e reversível da credencial. Informe escopos, conta,
+   resultado e instante; não ative o workflow automaticamente.
+
+Você pode reiniciar os serviços do Hermes, SquadOne, code-server e o Compose do
+n8n; inspecionar logs; validar credenciais e testar chamadas reversíveis. Não
+pode alterar firewall, usuários, permissões, segredos, workflows ativos ou
+dados de negócio sem uma demanda explícita para esse efeito.
 
 ## SquadOne
 

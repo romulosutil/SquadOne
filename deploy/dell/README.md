@@ -54,8 +54,26 @@ ssh -N \
   dell-worker
 ```
 
+No Windows, o alias `dell-worker` deve apontar para o nome MagicDNS do
+Tailscale. A tarefa agendada `DellWorker-LocalPortForwards` inicia no logon,
+mantém o SSH vivo e recria os túneis depois de uma falha. As portas locais são:
+
+- `http://127.0.0.1:9120/`: Central do SquadOne;
+- `http://127.0.0.1:9119/chat`: Hermes;
+- `http://127.0.0.1:5679/`: n8n;
+- `http://127.0.0.1:8080/`: code-server.
+
+O Dell mantém `linger` ativo, ignora fechamento da tampa e tem os alvos de
+suspensão e hibernação mascarados. Wake-on-LAN continua como recuperação de
+melhor esforço: energia removida, falha do roteador ou uma limitação de
+Wake-on-WLAN ainda exigem intervenção física.
+
 O playbook do Hermes é versionado em
 `deploy/hermes/skills/dell-operations-manager/SKILL.md`. Instale-o no Dell em
 `~/.hermes/skills/dell-operations-manager/SKILL.md`. A pasta sincronizada
 `~/Pessoal-dev` é contexto de leitura e troca de arquivos; use um clone Git
 próprio para qualquer operação de branch, commit ou push.
+
+Instale também `deploy/hermes/scripts/validate-dell-operations.sh` como
+`~/.local/bin/dell-validate`. O comando é somente leitura, não imprime segredos
+e valida systemd, Docker, n8n, credenciais OAuth, GitHub, Chromium e SquadOne.
