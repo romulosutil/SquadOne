@@ -1,0 +1,14 @@
+[Unit]
+Description=Watch and recover Dell Worker local services
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/dell-worker-healthwatch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

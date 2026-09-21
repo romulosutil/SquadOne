@@ -36,9 +36,16 @@ Instalação do serviço de usuário:
 ```bash
 mkdir -p ~/.config/systemd/user ~/.config/squadone ~/.local/share/squadone-operations
 cp deploy/dell/squadone-operations.service ~/.config/systemd/user/
+cp deploy/dell/dell-worker-healthwatch.service ~/.config/systemd/user/
+cp deploy/dell/dell-worker-healthwatch.sh ~/.local/bin/
+chmod 0755 ~/.local/bin/dell-worker-healthwatch.sh
 systemctl --user daemon-reload
-systemctl --user enable --now squadone-operations.service
+systemctl --user enable --now squadone-operations.service dell-worker-healthwatch.service
 ```
+
+O healthwatch consulta o n8n pela porta publicada no host, `5679`. A porta
+interna `5678` existe somente dentro do container; usá-la no host cria um ciclo
+de reinício falso e interrompe operações da interface.
 
 O login do Windows acessa a Central por túnel SSH local em
 `http://127.0.0.1:9120/`; nenhuma porta pública é necessária.
