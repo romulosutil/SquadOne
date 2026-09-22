@@ -132,6 +132,10 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 
     <main id="main-content" class="ops-workspace" :class="{ 'ops-workspace--page': !isHome }" tabindex="-1">
       <template v-if="isHome">
+        <header class="ops-command-intro">
+          <div><span>Visão de decisão</span><h1>O que precisa de você agora</h1></div>
+          <p>Agenda, projetos, leituras e saúde operacional reunidos sem executar infraestrutura.</p>
+        </header>
         <section class="ops-now" aria-labelledby="now-title">
           <div class="ops-now__heading"><h2 id="now-title">Agora</h2><span><i aria-hidden="true" /> Modo foco</span></div>
           <div class="ops-now__grid">
