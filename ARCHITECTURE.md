@@ -117,3 +117,24 @@ O playbook instalável do gestor fica em
 O modelo de orquestração, as conexões pendentes e a separação entre credenciais
 humanas, OAuth e segredos técnicos estão em
 `docs/OPERATIONS-SECRETS-AND-ORCHESTRATION.md`.
+
+## Workflows PRUMO no n8n
+
+Os artefatos importáveis de `ops/n8n/workflows/` ligam a descoberta comercial
+ao diagnóstico sem transformar sinais públicos em diagnóstico. O
+`company_id`, derivado da chave de deduplicação do Google Places, é o vínculo
+entre a fila de revisão, o formulário pré-preenchido e o retorno do Índice
+PRUMO.
+
+O Lead Scout continua responsável pela descoberta e pela priorização. Um
+aceite comercial explícito (`status=CONTACT_ACCEPTED`) cria o convite e muda a
+linha para `DIAGNOSTIC_INVITE_READY`. Como a instância não possui credencial de
+e-mail ou WhatsApp, o workflow gera uma ação `mailto:`/`wa.me` para envio
+humano e não registra o convite como enviado.
+
+O workflow do diagnóstico consulta a cada cinco minutos a planilha vinculada
+ao Google Forms com a credencial Sheets já autorizada,
+mantém somente a resposta mais recente de cada um dos cinco papéis e atualiza
+a linha original do lead. Sessões incompletas produzem apenas a próxima ação;
+as cinco sessões completas produzem índice, médias por domínio, lacunas e um
+briefing interno com revisão humana obrigatória.

@@ -1,0 +1,301 @@
+[
+  {
+    "id": "b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f",
+    "name": "PRUMO — Pontuação do Diagnóstico (revisão humana)",
+    "description": null,
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "1",
+        "name": "Verificar respostas do Form — 5 min",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -600,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "17YaTuRFLSWyhRCcEE1LL4qSP81OLQHtZPV-jLO-xZXE",
+            "mode": "list",
+            "cachedResultName": "Prumo — Roteiro do Mapa (Matriz de Domínios) (respostas)"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "1819422736",
+            "mode": "list",
+            "cachedResultName": "Respostas ao formulário 1"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "combineFilters": "AND",
+          "options": {}
+        },
+        "id": "2",
+        "name": "Ler todas as sessões da empresa",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          -360,
+          100
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const allRows = $input.all().map(item => item.json);\nconst companyRefs = [...new Set(allRows.map(row => String(row['Empresa'] ?? '').trim()).filter(Boolean))];\nconst requiredRoles = ['Dono', 'Vendas', 'Compras', 'Financeiro/Cobrança', 'Operação/Entrega'];\nconst questions = [\n  { id: 'AR1', area: 'Vendas e precificação', prefix: 'Quando um vendedor precisa dar um desconto ou um prazo diferente do padrão', choices: ['Liga pro dono toda vez','Decide sozinho, mas sem regra escrita — cada um usa seu critério','Existe uma regra, mas nem todo mundo segue ou conhece','Existe regra escrita, publicada, todo mundo segue'] },\n  { id: 'AR2', area: 'Vendas e precificação', prefix: 'Como vocês decidem se um cliente novo pode comprar a prazo', choices: ['O dono decide cada caso, sem critério fixo','Existe um critério, mas só na cabeça de quem decide','Existe critério escrito, mas nem sempre é consultado','Critério escrito e seguido por quem vende'] },\n  { id: 'AD1', area: 'Vendas e precificação', prefix: 'Se eu pedir o preço de um produto pra você', choices: ['Não sei / provavelmente não','Às vezes bate, às vezes não','Geralmente bate, mas tem mais de um lugar com o preço','Sempre bate — tabela única, com dono e data de revisão'] },\n  { id: 'AM1', area: 'Vendas e precificação', prefix: 'Quando vocês abrem uma exceção de preço ou desconto', choices: ['Nunca registra','Às vezes, informalmente (WhatsApp, e-mail avulso)','Registra, mas ninguém revisita depois','Registra e é consultado quando o caso se repete'] },\n  { id: 'BR1', area: 'Compras', prefix: 'Como vocês escolhem entre dois fornecedores', choices: ['Cada compra é decidida na hora, sem critério','Existe um critério, mas informal/na cabeça de quem compra','Critério escrito, mas nem sempre seguido','Critério escrito e seguido'] },\n  { id: 'BR2', area: 'Compras', prefix: 'Existe um valor a partir do qual uma compra', choices: ['Toda compra passa pelo dono','Tem uma noção de limite, mas não está definida','Limite definido, mas não é sempre respeitado','Limite definido, escrito e respeitado'] },\n  { id: 'BD1', area: 'Compras', prefix: 'Existe um cadastro único de fornecedores', choices: ['Não existe cadastro, é tudo informal','Existe, mas espalhado em vários lugares','Existe um cadastro central, mas desatualizado','Cadastro único, atualizado, com responsável'] },\n  { id: 'BM1', area: 'Compras', prefix: 'Quando vocês trocam de fornecedor', choices: ['Não','Só de cabeça, ninguém escreve','Registra, mas ninguém consulta depois','Registra e consulta quando decide de novo'] },\n  { id: 'CR1', area: 'Cobrança', prefix: 'Quando um cliente com título vencido faz um pedido novo', choices: ['Libera de qualquer jeito, ou pergunta ao dono toda vez','Quem atende decide na hora, sem regra','Existe regra, mas nem sempre é seguida','Regra clara, todo mundo segue'] },\n  { id: 'CR2', area: 'Cobrança', prefix: 'Existe uma sequência definida de quando ligar', choices: ['Caso a caso, sem sequência','Existe uma prática, mas não está escrita','Está escrita, mas nem sempre seguida','Escrita e seguida'] },\n  { id: 'CD1', area: 'Cobrança', prefix: 'Onde vocês veem quem está inadimplente hoje', choices: ['Precisa perguntar/procurar em vários lugares','Existe uma planilha, mas não é sempre atualizada','Existe no sistema, mas nem todo mundo consulta lá','Fonte única, atualizada, todo mundo consulta ali'] },\n  { id: 'CM1', area: 'Cobrança', prefix: 'Quando decidem cortar ou manter um cliente que atrasa', choices: ['Não','Só de memória','Registra, mas não revisita','Registra e consulta depois'] },\n  { id: 'DR1', area: 'Decisões e conhecimento', prefix: 'Se uma pessoa-chave faltasse duas semanas', choices: ['Ninguém sabe, para tudo','Alguém tentaria, mas nunca fez','Tem backup, mas não treinado formalmente','Backup definido e treinado'] },\n  { id: 'DR2', area: 'Decisões e conhecimento', prefix: 'As pessoas sabem exatamente até onde podem decidir', choices: ['Não, sempre perguntam','Mais ou menos, por experiência','Sabem, mas não está escrito em lugar nenhum','Está escrito e todos conhecem'] },\n  { id: 'DD1', area: 'Decisões e conhecimento', prefix: 'Existe um organograma ou documento que mostra quem faz o quê', choices: ['Só na cabeça do dono','Existe uma ideia informal, não documentada','Existe documento, mas desatualizado','Documento existe e está atualizado'] },\n  { id: 'DM1', area: 'Decisões e conhecimento', prefix: 'Você lembra de decidir a mesma coisa mais de uma vez', choices: ['Acontece toda hora','Acontece de vez em quando','É raro, mas já aconteceu','Nunca acontece'] }\n];\n\nconst norm = value => String(value ?? '').trim().toLocaleLowerCase('pt-BR');\nconst output = [];\nfor (const companyRef of companyRefs) {\n  const separator = companyRef.indexOf('::');\n  if (separator <= 0) continue;\n  const companyId = companyRef.slice(0, separator).trim();\n  const company = companyRef.slice(separator + 2).trim();\n  const matchingRows = allRows.filter(row => norm(row['Empresa']) === norm(companyRef));\n  const latestByRole = new Map();\n  for (const row of matchingRows) {\n    const role = String(row['Sessão / papel de quem está respondendo'] ?? '').trim();\n    if (requiredRoles.includes(role)) latestByRole.set(role, row);\n  }\n\n  const sessions = [];\n  const areaScores = {};\n  for (const [role, row] of latestByRole) {\n    const answers = [];\n    for (const question of questions) {\n      const header = Object.keys(row).find(key => key.startsWith(question.prefix));\n      const answer = header ? String(row[header] ?? '').trim() : '';\n      const score = question.choices.indexOf(answer) + 1;\n      if (score > 0) {\n        answers.push({ id: question.id, area: question.area, score, answer });\n        areaScores[question.area] ??= [];\n        areaScores[question.area].push(score);\n      }\n    }\n    sessions.push({ role, answers });\n  }\n\n  const rolesReceived = sessions.map(session => session.role);\n  const incompleteRoles = sessions.filter(session => session.answers.length < questions.length).map(session => session.role);\n  const missingRoles = requiredRoles.filter(role => !rolesReceived.includes(role));\n  const pendingRoles = [...new Set([...missingRoles, ...incompleteRoles])];\n  const allScores = sessions.flatMap(session => session.answers.map(answer => answer.score));\n  const prumoIndex = allScores.length ? Math.round((allScores.reduce((a, b) => a + b, 0) / (4 * allScores.length)) * 1000) / 10 : null;\n  const areas = Object.fromEntries(Object.entries(areaScores).map(([area, scores]) => [area, Math.round((scores.reduce((a, b) => a + b, 0) / (4 * scores.length)) * 1000) / 10]));\n  const gaps = sessions.flatMap(session => session.answers.filter(answer => answer.score <= 2).map(answer => ({ ...answer, role: session.role })));\n  const lastResponseAt = String(matchingRows.at(-1)?.['Carimbo de data/hora'] ?? '');\n  const ready = pendingRoles.length === 0 && allScores.length === questions.length * requiredRoles.length;\n\n  output.push({ json: {\n    company_id: companyId,\n    company,\n    rolesReceived,\n    missingRoles,\n    incompleteRoles,\n    pendingRoles,\n    sessionCount: sessions.length,\n    answerCount: allScores.length,\n    prumoIndex,\n    areas,\n    gaps,\n    sessions,\n    lastResponseAt,\n    status: ready ? 'READY' : 'WAITING_FOR_SESSIONS'\n  } });\n}\nreturn output;"
+        },
+        "id": "3",
+        "name": "Agrupar e calcular Índice Prumo",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -100,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.status }}",
+                "rightValue": "READY",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "4",
+        "name": "Cinco sessões completas?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          160,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json;\nconst orderedAreas = Object.entries(input.areas).sort((a, b) => a[1] - b[1]);\nconst priorityAreas = orderedAreas.slice(0, 3);\nconst topGaps = input.gaps.slice(0, 6);\nconst band = input.prumoIndex < 45 ? 'dependência e informalidade altas' : input.prumoIndex < 70 ? 'processos parcialmente definidos, com aderência inconsistente' : 'base operacional padronizada, com oportunidades pontuais';\nconst priorities = priorityAreas.map(([area, score], index) => `${index + 1}. ${area} (${score}/100): validar regra, responsável e fonte de dados antes de automatizar.`).join('\\n');\nconst evidence = topGaps.map(gap => `- [${gap.id}] ${gap.role}: ${gap.answer}`).join('\\n') || '- Nenhuma resposta com pontuação 1 ou 2.';\nconst briefing = [\n  `Empresa: ${input.company}`,\n  `Índice PRUMO: ${input.prumoIndex}/100 — ${band}.`,\n  `Perspectivas concluídas: ${input.rolesReceived.join(\", \")}`,\n  '',\n  'Prioridades para revisão humana:',\n  priorities,\n  '',\n  'Evidências de menor maturidade:',\n  evidence,\n  '',\n  'Próximo passo: revisar o diagnóstico em workshop, confirmar regra, dono e dado-fonte e só então propor implementação.',\n].join('\\n');\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  company_id: input.company_id,\n  status: 'DIAGNOSTIC_REVIEW',\n  diagnostic_status: 'REVIEW_REQUIRED',\n  diagnostic_last_response_at: input.lastResponseAt,\n  diagnostic_roles_received: input.rolesReceived.join(' | '),\n  diagnostic_missing_roles: '',\n  diagnostic_session_count: input.sessionCount,\n  diagnostic_answer_count: input.answerCount,\n  prumo_index: input.prumoIndex,\n  diagnostic_areas: JSON.stringify(input.areas),\n  diagnostic_gaps: JSON.stringify(input.gaps),\n  diagnostic_briefing: briefing,\n  diagnostic_next_action: 'Revisar o briefing e conduzir workshop de priorização.',\n  diagnostic_result_at: now,\n  diagnostic_updated_at: now,\n} }];"
+        },
+        "id": "5",
+        "name": "Briefing do relatório — revisão humana",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const now = new Date().toISOString();\nreturn [{ json: {\n  company_id: $json.company_id,\n  status: 'DIAGNOSTIC_IN_PROGRESS',\n  diagnostic_status: 'WAITING_FOR_SESSIONS',\n  diagnostic_last_response_at: $json.lastResponseAt,\n  diagnostic_roles_received: $json.rolesReceived.join(' | '),\n  diagnostic_missing_roles: $json.pendingRoles.join(' | '),\n  diagnostic_session_count: $json.sessionCount,\n  diagnostic_answer_count: $json.answerCount,\n  prumo_index: $json.prumoIndex,\n  diagnostic_areas: JSON.stringify($json.areas),\n  diagnostic_gaps: JSON.stringify($json.gaps),\n  diagnostic_briefing: '',\n  diagnostic_next_action: `Aguardar sessões: ${$json.pendingRoles.join(\", \")}`,\n  diagnostic_updated_at: now,\n} }];"
+        },
+        "id": "6",
+        "name": "Aguardar sessões faltantes",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [
+              "company_id"
+            ],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "7",
+        "name": "Devolver briefing ao lead",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          700,
+          0
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [
+              "company_id"
+            ],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "8",
+        "name": "Atualizar pendência no lead",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          700,
+          220
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      }
+    ],
+    "connections": {
+      "Ler todas as sessões da empresa": {
+        "main": [
+          [
+            {
+              "node": "Agrupar e calcular Índice Prumo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agrupar e calcular Índice Prumo": {
+        "main": [
+          [
+            {
+              "node": "Cinco sessões completas?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cinco sessões completas?": {
+        "main": [
+          [
+            {
+              "node": "Briefing do relatório — revisão humana",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Aguardar sessões faltantes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Briefing do relatório — revisão humana": {
+        "main": [
+          [
+            {
+              "node": "Devolver briefing ao lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aguardar sessões faltantes": {
+        "main": [
+          [
+            {
+              "node": "Atualizar pendência no lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verificar respostas do Form — 5 min": {
+        "main": [
+          [
+            {
+              "node": "Ler todas as sessões da empresa",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "America/Sao_Paulo"
+    }
+  }
+]

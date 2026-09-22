@@ -1,0 +1,462 @@
+[
+  {
+    "id": "e02c6f43-17ce-430b-9238-0b997a7656ce",
+    "name": "PRUMO — Lead Scout (review-first)",
+    "description": null,
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "1",
+        "name": "Executar manualmente",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -680,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "weeks",
+                "triggerAtDay": [
+                  1
+                ],
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "id": "2",
+        "name": "Agenda semanal — ative após validar",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -680,
+          40
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Edite somente o mercado-alvo. O vínculo com o diagnóstico é estável e versionado.\nconst city = 'São Paulo/SP';\nconst targetVertical = 'distribuidora';\nreturn [{ json: {\n  city,\n  targetVertical,\n  query: `${targetVertical} em ${city}`,\n  minimumReviewCount: 30,\n  minimumRating: 4,\n  reviewThreshold: 45,\n  diagnosticFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform',\n  diagnosticCompanyEntryId: '171063854',\n} }];"
+        },
+        "id": "3",
+        "name": "Config — mercado-alvo",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -420,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://places.googleapis.com/v1/places:searchText",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Goog-FieldMask",
+                "value": "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri,places.rating,places.userRatingCount,places.businessStatus,places.types"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ textQuery: $json.query, languageCode: 'pt-BR', regionCode: 'BR', pageSize: 20 }) }}",
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "id": "4",
+        "name": "Google Places — busca pública",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -180,
+          100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "onError": "continueErrorOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "v7aU1q4PRbTSOYZu",
+            "name": "Google Maps API Key — PRUMO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst places = $json.places ?? [];\nconst discoveredAt = new Date().toISOString();\n\nreturn places.map((place) => {\n  const companyName = place.displayName?.text ?? '';\n  const address = place.formattedAddress ?? '';\n  const placeId = place.id ?? '';\n  const companyId = (placeId || `${companyName}|${address}`).toLowerCase();\n  return {\n    json: {\n      dedupe_key: companyId,\n      company_id: companyId,\n      place_id: placeId,\n      company_name: companyName,\n      address,\n      website: place.websiteUri ?? '',\n      phone: place.nationalPhoneNumber ?? '',\n      types: (place.types ?? []).join(', '),\n      rating: Number(place.rating ?? 0),\n      review_count: Number(place.userRatingCount ?? 0),\n      business_status: place.businessStatus ?? 'UNKNOWN',\n      discovered_at: discoveredAt,\n      search_query: cfg.query,\n      city: cfg.city,\n      target_vertical: cfg.targetVertical,\n    },\n  };\n});"
+        },
+        "id": "5",
+        "name": "Normalizar empresas",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          60,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\n\nreturn $input.all().map(({ json: lead }) => {\n  let fit = 0;\n  let complexity = 0;\n  let reachability = 0;\n  const reasons = [];\n\n  // Public signals only: priority for human research, never a diagnosis.\n  if (lead.business_status === 'OPERATIONAL') { fit += 10; reasons.push('status operacional público'); }\n  if (lead.rating >= cfg.minimumRating) { fit += 10; reasons.push(`nota pública ${lead.rating}`); }\n  if (lead.review_count >= cfg.minimumReviewCount) { fit += 20; reasons.push(`${lead.review_count} avaliações públicas`); }\n  else if (lead.review_count >= 10) { fit += 8; reasons.push(`${lead.review_count} avaliações públicas`); }\n  if (lead.website) { reachability += 10; reasons.push('site institucional público'); }\n  if (lead.phone) { reachability += 5; reasons.push('telefone institucional público'); }\n  if (lead.address) { fit += 5; reasons.push('endereço comercial público'); }\n  if (lead.types.includes('store') || lead.types.includes('point_of_interest')) { complexity += 5; }\n\n  const leadScore = Math.min(100, fit + complexity + reachability);\n  const status = leadScore >= cfg.reviewThreshold ? 'REVIEW' : 'DESCARTAR';\n  const researchNote = status === 'REVIEW'\n    ? 'Validar manualmente segmento, porte, decisor e hipótese antes de qualquer contato.'\n    : 'Não priorizado nesta rodada; score é apenas triagem por sinais públicos.';\n\n  return { json: {\n    ...lead,\n    fit_score: fit,\n    complexity_score: complexity,\n    reachability_score: reachability,\n    lead_score: leadScore,\n    score_reason: reasons.join('; '),\n    status,\n    research_note: researchNote,\n  }};\n});"
+        },
+        "id": "6",
+        "name": "Pontuar para revisão humana",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "review-status",
+                "leftValue": "={{ $json.status }}",
+                "rightValue": "REVIEW",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "7",
+        "name": "Enviar para revisão?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          540,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [
+              "dedupe_key"
+            ],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "8",
+        "name": "Persistir fila PRUMO",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          810,
+          60
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst error = $json.error ?? {};\nconst cause = error.message ?? error.description ?? $json.message ?? 'Falha sem detalhe retornado pelo Google Places';\nconst occurredAt = new Date().toISOString();\nconst companyId = `google-places-error-${Date.now()}`;\nreturn [{ json: {\n  dedupe_key: companyId,\n  company_id: companyId,\n  place_id: '',\n  company_name: '[FALHA] Google Places',\n  address: '', website: '', phone: '', types: '', rating: '', review_count: '', business_status: '',\n  discovered_at: occurredAt,\n  fit_score: '', complexity_score: '', reachability_score: '', lead_score: '', score_reason: '',\n  status: 'ERROR',\n  research_note: `Consulta: ${cfg.query}. Após 3 tentativas, Google Places falhou. Causa: ${String(cause).slice(0, 800)}`,\n} }];"
+        },
+        "id": "9",
+        "name": "Registrar falha de descoberta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          60,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "10",
+        "name": "Sincronizar aceites — 5 min",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -420,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "combineFilters": "AND",
+          "options": {}
+        },
+        "id": "11",
+        "name": "Ler fila para convites",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          -180,
+          500
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform';\nconst COMPANY_ENTRY_ID = '171063854';\nconst now = new Date().toISOString();\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const status = String(lead.status ?? '').trim().toUpperCase();\n  const diagnosticStatus = String(lead.diagnostic_status ?? '').trim().toUpperCase();\n  if (status !== 'CONTACT_ACCEPTED' || ['INVITE_READY', 'INVITED', 'IN_PROGRESS', 'REVIEW_REQUIRED', 'COMPLETED'].includes(diagnosticStatus)) return [];\n\n  const companyId = String(lead.company_id || lead.dedupe_key || '').trim();\n  const companyName = String(lead.company_name || '').trim();\n  if (!companyId || !companyName) return [];\n\n  const companyRef = `${companyId}::${companyName}`;\n  const formUrl = `${FORM_URL}?usp=pp_url&entry.${COMPANY_ENTRY_ID}=${encodeURIComponent(companyRef)}`;\n  const message = `Olá! Conforme combinado, este é o diagnóstico operacional PRUMO de ${companyName}. Cada uma das cinco perspectivas deve responder uma vez: ${formUrl}`;\n  const channel = String(lead.contact_channel ?? '').trim().toLowerCase();\n  const destination = String(lead.contact_url ?? '').trim();\n  let actionUrl = formUrl;\n  if (channel.includes('whatsapp')) {\n    const digits = destination.replace(/\\D/g, '');\n    if (digits) actionUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;\n  } else if (channel.includes('email') || destination.includes('@')) {\n    const email = destination.replace(/^mailto:/i, '');\n    actionUrl = `mailto:${email}?subject=${encodeURIComponent(`Diagnóstico PRUMO — ${companyName}`)}&body=${encodeURIComponent(message)}`;\n  }\n\n  return [{ json: {\n    company_id: companyId,\n    dedupe_key: String(lead.dedupe_key || companyId),\n    status: 'DIAGNOSTIC_INVITE_READY',\n    diagnostic_status: 'INVITE_READY',\n    diagnostic_form_url: formUrl,\n    diagnostic_invite_message: message,\n    diagnostic_invite_action_url: actionUrl,\n    diagnostic_next_action: 'Enviar o convite pelo canal validado e, após o envio, marcar diagnostic_status como INVITED.',\n    diagnostic_updated_at: now,\n  } }];\n});"
+        },
+        "id": "12",
+        "name": "Preparar convite do diagnóstico",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          80,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [
+              "dedupe_key"
+            ],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "13",
+        "name": "Atualizar convite na fila",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          360,
+          500
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      }
+    ],
+    "connections": {
+      "Executar manualmente": {
+        "main": [
+          [
+            {
+              "node": "Config — mercado-alvo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agenda semanal — ative após validar": {
+        "main": [
+          [
+            {
+              "node": "Config — mercado-alvo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Config — mercado-alvo": {
+        "main": [
+          [
+            {
+              "node": "Google Places — busca pública",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Places — busca pública": {
+        "main": [
+          [
+            {
+              "node": "Normalizar empresas",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Registrar falha de descoberta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar empresas": {
+        "main": [
+          [
+            {
+              "node": "Pontuar para revisão humana",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Pontuar para revisão humana": {
+        "main": [
+          [
+            {
+              "node": "Enviar para revisão?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar para revisão?": {
+        "main": [
+          [
+            {
+              "node": "Persistir fila PRUMO",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Registrar falha de descoberta": {
+        "main": [
+          [
+            {
+              "node": "Persistir fila PRUMO",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sincronizar aceites — 5 min": {
+        "main": [
+          [
+            {
+              "node": "Ler fila para convites",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ler fila para convites": {
+        "main": [
+          [
+            {
+              "node": "Preparar convite do diagnóstico",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar convite do diagnóstico": {
+        "main": [
+          [
+            {
+              "node": "Atualizar convite na fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "America/Sao_Paulo"
+    }
+  }
+]
