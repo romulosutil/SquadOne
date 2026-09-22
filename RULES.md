@@ -39,3 +39,7 @@
     vínculo canônico. Preparar um link ou uma ação de contato não prova envio;
     somente evidência do canal pode promover `Situação do diagnóstico` de
     `Convite pronto` para `Convite enviado`.
+18. O telefone público retornado pelo Google Places não prova disponibilidade
+    no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino
+    do contato` exige link público de WhatsApp no site institucional; na
+    ausência dele, somente confirmação humana pode classificar o número.

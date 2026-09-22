@@ -134,6 +134,12 @@ não possui credencial de
 e-mail ou WhatsApp, o workflow gera uma ação `mailto:`/`wa.me` para envio
 humano e não registra o convite como enviado.
 
+Depois do Google Places, o Lead Scout consulta a página inicial do site
+institucional e procura links públicos de WhatsApp. Somente essa evidência
+preenche automaticamente o canal e o destino; o telefone público do Places é
+mantido como referência, mas não prova que o número atende por WhatsApp. As
+células amarelas e suas validações delimitam os campos sob decisão humana.
+
 O workflow do diagnóstico consulta a cada cinco minutos a planilha vinculada
 ao Google Forms com a credencial Sheets já autorizada,
 mantém somente a resposta mais recente de cada um dos cinco papéis e atualiza

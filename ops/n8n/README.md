@@ -2,12 +2,14 @@
 
 Os dois JSONs em `workflows/` são os artefatos importáveis da integração:
 
-- `prumo-lead-scout.json`: descobre e pontua empresas, persiste `company_id` e
-  prepara o convite quando a coluna `Etapa` recebe `Contato aceito`;
+- `prumo-lead-scout.json`: descobre e pontua empresas, procura um WhatsApp
+  publicado no site institucional, persiste `company_id` e prepara o convite
+  quando a coluna `Etapa` recebe `Contato aceito`;
 - `prumo-diagnostico.json`: acompanha as respostas do Forms, consolida as cinco
   perspectivas e devolve estado, índice e briefing à mesma linha da fila;
 - `prumo-preparar-planilha.json`: aplica cabeçalhos em português, blocos de cor,
-  filtros, larguras, congelamento, notas e listas de estados na guia `Leads`.
+  filtros, larguras, congelamento, notas e validações na guia `Leads`. As
+  células amarelas são as destinadas ao preenchimento humano.
 
 ## Contrato da fila
 
@@ -55,14 +57,26 @@ Revisar
 de canal e uma política de destinatário; enquanto isso, a coluna
 `Enviar convite` abre uma mensagem pronta para envio humano.
 
+## Regra do WhatsApp
+
+O telefone retornado pelo Google Places permanece na coluna `Telefone`, mas
+não é tratado automaticamente como WhatsApp. O Lead Scout só preenche `Canal
+de contato` e `Destino do contato` quando encontra no site institucional um
+link público de WhatsApp (`wa.me` ou `api.whatsapp.com`). Um celular sem essa
+evidência fica pendente de confirmação humana; um telefone fixo não recebe
+pontuação de canal direto.
+
 ## Uso humano
 
 1. Filtre `Etapa = Revisar` e confirme segmento, porte e decisor.
-2. Preencha responsável, canal e destino do contato.
-3. Depois do aceite da empresa, selecione `Contato aceito` em `Etapa`.
-4. Em até cinco minutos, abra `Enviar convite`; o link já identifica a empresa.
-5. Acompanhe `Quem respondeu`, `Quem falta responder` e `Próxima ação`.
-6. Quando aparecer `Diagnóstico para revisar`, abra o `Briefing interno`.
+2. Preencha as células amarelas. `Canal de contato` possui lista de opções,
+   datas aceitam somente datas válidas e `Não contatar` é uma caixa de seleção.
+3. Confirme manualmente o WhatsApp quando houver apenas um celular público e
+   selecione `WhatsApp confirmado manualmente`; não reutilize um telefone fixo.
+4. Depois do aceite da empresa, selecione `Contato aceito` em `Etapa`.
+5. Em até cinco minutos, abra `Enviar convite`; o link já identifica a empresa.
+6. Acompanhe `Quem respondeu`, `Quem falta responder` e `Próxima ação`.
+7. Quando aparecer `Diagnóstico para revisar`, abra o `Briefing interno`.
 
 ## Regeneração
 

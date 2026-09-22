@@ -78,7 +78,7 @@ const sanitize = (workflow) => [{
 const lead = await loadWorkflow(leadSource)
 const diagnostic = await loadWorkflow(diagnosticSource)
 
-lead.nodes = lead.nodes.filter((candidate) => !['10', '11', '12', '13', '14'].includes(candidate.id))
+lead.nodes = lead.nodes.filter((candidate) => !['10', '11', '12', '13', '14', '15', '16', '17'].includes(candidate.id))
 diagnostic.nodes = diagnostic.nodes.filter((candidate) => !['7', '8', '9'].includes(candidate.id))
 
 node(lead, 'Config — mercado-alvo').parameters.jsCode = `// Edite somente o mercado-alvo. O vínculo com o diagnóstico é estável e versionado.
@@ -90,7 +90,9 @@ return [{ json: {
   query: \`${'${targetVertical}'} em ${'${city}'}\`,
   minimumReviewCount: 30,
   minimumRating: 4,
-  reviewThreshold: 45,
+  reviewThreshold: 60,
+  targetTerms: ['distribuidora', 'distribuidor', 'distribuicao', 'atacado', 'atacadista'],
+  requiredContactChannel: 'WHATSAPP_VERIFIED',
   diagnosticFormUrl: '${FORM_URL}',
   diagnosticCompanyEntryId: '${COMPANY_ENTRY_ID}',
 } }];`
@@ -123,6 +125,69 @@ return places.map((place) => {
       target_vertical: cfg.targetVertical,
     },
   };
+});`
+
+node(lead, 'Pontuar para revisão humana').parameters.jsCode = `const cfg = $('Config — mercado-alvo').first().json;
+
+return $input.all().map(({ json: lead }) => {
+  const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+  const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rating = clamp(Number(lead.rating ?? 0), 0, 5);
+  const reviewCount = Math.max(0, Number(lead.review_count ?? 0));
+  const types = String(lead.types ?? '').split(',').map(type => type.trim()).filter(Boolean);
+  const targetTerms = Array.isArray(cfg.targetTerms) ? cfg.targetTerms.map(normalize).filter(Boolean) : [];
+  const searchable = normalize([lead.company_name, lead.types].join(' '));
+
+  const operationalScore = lead.business_status === 'OPERATIONAL' ? 10 : 0;
+  const verticalScore = targetTerms.some(term => searchable.includes(term)) ? 15 : 0;
+  const ratingScore = rating >= cfg.minimumRating
+    ? Math.round(5 + (10 * (rating - cfg.minimumRating)) / Math.max(0.1, 5 - cfg.minimumRating))
+    : Math.round(4 * rating / Math.max(0.1, cfg.minimumRating));
+  const reviewScore = Math.round(15 * Math.log1p(Math.min(reviewCount, 500)) / Math.log1p(500));
+  const addressScore = lead.address ? 5 : 0;
+  const fit = clamp(operationalScore + verticalScore + ratingScore + reviewScore + addressScore, 0, 60);
+
+  const footprintScore = Math.round(10 * Math.log1p(Math.min(reviewCount, 500)) / Math.log1p(500));
+  const categoryScore = clamp(types.length - 1, 0, 5);
+  const siteScore = lead.website ? 5 : 0;
+  const complexity = clamp(footprintScore + categoryScore + siteScore, 0, 20);
+  const reachability = lead.whatsapp_verified ? 20 : 0;
+  const reasons = [];
+
+  // Public signals only: priority for human research, never a diagnosis.
+  if (operationalScore) reasons.push('operação ativa no Google');
+  if (verticalScore) reasons.push('nome ou categoria aderente ao segmento-alvo');
+  reasons.push(\`nota ${'${rating || 0}'} (${'${ratingScore}'}/15)\`);
+  reasons.push(\`${'${reviewCount}'} avaliações (${'${reviewScore}'}/15 em aderência; ${'${footprintScore}'}/10 em complexidade)\`);
+  if (addressScore) reasons.push('endereço comercial público');
+  if (siteScore) reasons.push('site institucional público');
+  if (categoryScore) reasons.push(\`${'${types.length}'} categorias públicas (${'${categoryScore}'}/5 em complexidade)\`);
+  if (lead.whatsapp_verified) {
+    reasons.push('WhatsApp publicado no site institucional (20/20)');
+  } else {
+    reasons.push('sem WhatsApp confirmado: inelegível para abordagem');
+  }
+
+  const leadScore = Math.min(100, fit + complexity + reachability);
+  const whatsappEligible = cfg.requiredContactChannel === 'WHATSAPP_VERIFIED' && lead.whatsapp_verified === true;
+  const status = whatsappEligible && leadScore >= cfg.reviewThreshold ? 'REVIEW' : 'DESCARTAR';
+  const researchNote = !whatsappEligible
+    ? 'Fora da fila: nenhum WhatsApp publicado foi confirmado no site institucional.'
+    : status === 'REVIEW'
+      ? 'Validar segmento, porte e decisor antes da abordagem pelo WhatsApp confirmado.'
+      : \`WhatsApp confirmado, mas prioridade ${'${leadScore}'} ficou abaixo do corte ${'${cfg.reviewThreshold}'}.\`;
+
+  return { json: {
+    ...lead,
+    whatsapp_eligible: whatsappEligible,
+    fit_score: fit,
+    complexity_score: complexity,
+    reachability_score: reachability,
+    lead_score: leadScore,
+    score_reason: reasons.join('; '),
+    status,
+    research_note: researchNote,
+  }};
 });`
 
 node(lead, 'Registrar falha de descoberta').parameters.jsCode = `const cfg = $('Config — mercado-alvo').first().json;
@@ -177,8 +242,11 @@ return $input.all().flatMap(({ json: lead }) => {
   const destination = String(value(lead, 'Destino do contato', 'contact_url')).trim();
   let actionUrl = formUrl;
   if (channel.includes('whatsapp')) {
-    const digits = destination.replace(/\\D/g, '');
-    if (digits) actionUrl = \`https://wa.me/${'${digits}'}?text=${'${encodeURIComponent(message)}'}\`;
+    const directNumber = destination.match(/(?:wa\\.me\\/|[?&]phone=)(\\d{10,15})/i)?.[1] ?? '';
+    let digits = directNumber || destination.replace(/\\D/g, '');
+    if (digits.length === 10 || digits.length === 11) digits = \`55${'${digits}'}\`;
+    if (digits.length >= 12 && digits.length <= 15) actionUrl = \`https://wa.me/${'${digits}'}?text=${'${encodeURIComponent(message)}'}\`;
+    else if (/^https?:\\/\\/(?:wa\\.me|(?:api\\.|web\\.)?whatsapp\\.com)\\//i.test(destination)) actionUrl = destination;
   } else if (channel.includes('email') || destination.includes('@')) {
     const email = destination.replace(/^mailto:/i, '');
     actionUrl = \`mailto:${'${email}'}?subject=${'${encodeURIComponent(`Diagnóstico PRUMO — ${companyName}`)}'}&body=${'${encodeURIComponent(message)}'}\`;
@@ -230,10 +298,124 @@ return $input.all().map(({ json: lead }) => ({ json: {
   'Cidade': lead.city,
   'Segmento': lead.target_vertical,
   'ID da empresa': lead.company_id,
+  ...(lead.whatsapp_verified ? {
+    'Canal de contato': 'WhatsApp confirmado no site',
+    'Destino do contato': lead.whatsapp_url,
+  } : {}),
   'Erro técnico': lead.status === 'ERROR' ? lead.research_note : '',
 } }));`),
+  codeNode('15', 'Preparar busca de WhatsApp', [260, 100], `const privateIpv4 = host => {
+  const parts = host.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return parts[0] === 10
+    || parts[0] === 127
+    || (parts[0] === 169 && parts[1] === 254)
+    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
+    || (parts[0] === 192 && parts[1] === 168);
+};
+
+return $input.all().flatMap(({ json: lead }) => {
+  try {
+    const url = new URL(String(lead.website ?? '').trim());
+    const host = url.hostname.toLowerCase().replace(/\.$/u, '');
+    const blockedHost = host === 'localhost'
+      || host.endsWith('.localhost')
+      || host.endsWith('.local')
+      || host.endsWith('.internal')
+      || host === '::1'
+      || host.startsWith('fc')
+      || host.startsWith('fd')
+      || host.startsWith('fe80:')
+      || privateIpv4(host);
+    if (!['http:', 'https:'].includes(url.protocol) || blockedHost) return [];
+    return [{ json: { ...lead, website_lookup_url: url.toString() } }];
+  } catch {
+    return [];
+  }
+});`),
+  {
+    parameters: {
+      url: '={{ $json.website_lookup_url }}',
+      sendHeaders: true,
+      headerParameters: { parameters: [{ name: 'User-Agent', value: 'Mozilla/5.0 (compatible; PRUMO-LeadScout/1.0)' }] },
+      options: {
+        timeout: 8000,
+        response: { response: { neverError: true, responseFormat: 'text' } },
+        redirect: { redirect: { followRedirects: true, maxRedirects: 4 } },
+      },
+    },
+    id: '16',
+    name: 'Site — procurar WhatsApp',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position: [260, 100],
+    onError: 'continueRegularOutput',
+  },
+  codeNode('17', 'Confirmar WhatsApp publicado', [760, 100], `const responses = $input.all();
+const leads = $('Preparar busca de WhatsApp').all();
+
+return responses.map(({ json: response }, index) => {
+  const lead = leads[index]?.json ?? {};
+  const rawHtml = typeof response === 'string'
+    ? response
+    : String(response.data ?? response.body ?? response.html ?? '');
+  const decodeEntities = value => value
+    .replace(/&amp;/gi, '&')
+    .replace(/&#0*38;/gi, '&')
+    .replace(/&#x0*26;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/\\u0026/gi, '&')
+    .replace(/\\\//g, '/');
+  let decoded = decodeEntities(rawHtml);
+  try {
+    if (/%(?:2f|3a|3f|3d)/i.test(decoded)) decoded += \`\\n${'${decodeURIComponent(decoded)}'}\`;
+  } catch {}
+  const patterns = [
+    /https?:\\/\\/(?:api\\.|web\\.)?whatsapp\\.com\\/(?:send\\/?)?\\?[^"'<>\\s]*/gi,
+    /https?:\\/\\/wa\\.me\\/(?:message\\/)?[^"'<>\\s]*/gi,
+    /whatsapp:\\/\\/send\\?[^"'<>\\s]*/gi,
+  ];
+  const candidates = patterns.flatMap(pattern => decoded.match(pattern) ?? []);
+  let whatsappUrl = '';
+  let whatsappNumber = '';
+
+  for (const candidate of candidates) {
+    const clean = candidate.replace(/[),.;]+$/u, '');
+    const phoneParam = clean.match(/[?&]phone=(?:%2B|\\+)?(\\d{10,15})/i)?.[1] ?? '';
+    const pathNumber = clean.match(/wa\\.me\\/(\\+?\\d{10,15})(?:[?/#]|$)/i)?.[1] ?? '';
+    let digits = (phoneParam || pathNumber).replace(/\\D/g, '');
+    if (digits.length === 10 || digits.length === 11) digits = \`55${'${digits}'}\`;
+    if (digits.length >= 12 && digits.length <= 15) {
+      whatsappNumber = digits;
+      whatsappUrl = \`https://wa.me/${'${digits}'}\`;
+      break;
+    }
+    if (!whatsappUrl && /wa\\.me\\/message\\//i.test(clean)) whatsappUrl = clean;
+  }
+
+  const phoneDigits = String(lead.phone ?? '').replace(/\\D/g, '');
+  const localDigits = phoneDigits.startsWith('55') && phoneDigits.length >= 12 ? phoneDigits.slice(2) : phoneDigits;
+  const phoneKind = localDigits.length === 11 && localDigits[2] === '9'
+    ? 'CELULAR_PROVAVEL'
+    : localDigits.length === 10
+      ? 'FIXO_PROVAVEL'
+      : lead.phone ? 'NAO_CLASSIFICADO' : 'AUSENTE';
+
+  return { json: {
+    ...lead,
+    phone_kind: phoneKind,
+    whatsapp_verified: Boolean(whatsappUrl),
+    whatsapp_url: whatsappUrl,
+    whatsapp_number: whatsappNumber,
+    whatsapp_source: whatsappUrl ? 'Site institucional' : '',
+  } };
+});`),
 )
 
+lead.connections['Normalizar empresas'] = { main: [[{ node: 'Preparar busca de WhatsApp', type: 'main', index: 0 }]] }
+lead.connections['Preparar busca de WhatsApp'] = { main: [[{ node: 'Site — procurar WhatsApp', type: 'main', index: 0 }]] }
+lead.connections['Site — procurar WhatsApp'] = { main: [[{ node: 'Confirmar WhatsApp publicado', type: 'main', index: 0 }]] }
+lead.connections['Confirmar WhatsApp publicado'] = { main: [[{ node: 'Pontuar para revisão humana', type: 'main', index: 0 }]] }
 lead.connections['Enviar para revisão?'].main[0] = [{ node: 'Humanizar linha da fila', type: 'main', index: 0 }]
 lead.connections['Registrar falha de descoberta'] = { main: [[{ node: 'Humanizar linha da fila', type: 'main', index: 0 }]] }
 lead.connections['Humanizar linha da fila'] = { main: [[{ node: 'Persistir fila PRUMO', type: 'main', index: 0 }]] }

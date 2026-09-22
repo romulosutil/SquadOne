@@ -25,6 +25,16 @@
       },
       {
         "parameters": {
+          "jsCode": "const sheetId = 957714022;\nconst requests = [...($json.requests ?? [])];\nconst range = (startColumnIndex, endColumnIndex, startRowIndex = 1, endRowIndex = 1000) => ({ sheetId, startColumnIndex, endColumnIndex, startRowIndex, endRowIndex });\nconst editable = { backgroundColor: { red: 1, green: 0.96, blue: 0.79 }, textFormat: { foregroundColor: { red: 0.16, green: 0.13, blue: 0.05 }, fontFamily: 'Arial', fontSize: 10 }, verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP' };\nfor (const [start, end] of [[16,17],[18,28],[32,33],[36,37]]) requests.push({ repeatCell: { range: range(start, end), cell: { userEnteredFormat: editable }, fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy' } });\nconst listRule = values => ({ condition: { type: 'ONE_OF_LIST', values: values.map(userEnteredValue => ({ userEnteredValue })) }, strict: true, showCustomUi: true });\nconst dateRule = { condition: { type: 'DATE_IS_VALID' }, strict: false, showCustomUi: false };\nrequests.push(\n  { setDataValidation: { range: range(21,22), rule: listRule(['WhatsApp confirmado no site','WhatsApp confirmado manualmente','E-mail','Ligação','Outro']) } },\n  { setDataValidation: { range: range(19,20), rule: dateRule } },\n  { setDataValidation: { range: range(23,25), rule: dateRule } },\n  { setDataValidation: { range: range(25,26), rule: listRule(['Em contato','Aceitou o diagnóstico','Sem retorno','Não tem interesse','Fora do perfil','Cliente']) } },\n  { setDataValidation: { range: range(26,27), rule: { condition: { type: 'BOOLEAN' }, strict: true, showCustomUi: true } } },\n  { setDataValidation: { range: range(36,37), rule: dateRule } },\n);\nconst notes = {\n  5: 'Telefone público retornado pelo Google Places. Não é considerado WhatsApp sem confirmação.',\n  18: 'Preencha quem é responsável por movimentar este lead.',\n  19: 'Data em que a revisão comercial foi concluída.',\n  20: 'Nome e papel da pessoa que decide ou patrocina o diagnóstico.',\n  21: 'O fluxo só marca WhatsApp automaticamente quando encontra um link publicado no site da empresa.',\n  22: 'Informe um link wa.me, número WhatsApp confirmado ou e-mail. Telefone fixo não entra automaticamente aqui.',\n  23: 'Data do primeiro contato efetivo.',\n  24: 'Data combinada para o próximo retorno.',\n  25: 'Resultado atual da abordagem comercial.',\n  26: 'Marque para impedir novas abordagens.',\n  27: 'Explique por que o lead foi encerrado ou descartado.',\n  32: 'Depois de enviar de verdade, mude de “Convite pronto” para “Convite enviado”.',\n  36: 'Data do envio efetivo do convite.'\n};\nfor (const [column, note] of Object.entries(notes)) requests.push({ updateCells: { range: range(Number(column), Number(column) + 1, 0, 1), rows: [{ values: [{ note }] }], fields: 'note' } });\nreturn [{ json: { requests } }];"
+        },
+        "id": "4",
+        "name": "Configurar células editáveis",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [-20, 0]
+      },
+      {
+        "parameters": {
           "method": "POST",
           "url": "https://sheets.googleapis.com/v4/spreadsheets/1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U:batchUpdate",
           "authentication": "predefinedCredentialType",
@@ -56,6 +66,9 @@
         "main": [[{ "node": "Montar visual e validações", "type": "main", "index": 0 }]]
       },
       "Montar visual e validações": {
+        "main": [[{ "node": "Configurar células editáveis", "type": "main", "index": 0 }]]
+      },
+      "Configurar células editáveis": {
         "main": [[{ "node": "Aplicar na planilha", "type": "main", "index": 0 }]]
       }
     },

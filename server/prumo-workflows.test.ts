@@ -92,11 +92,29 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
 
   const humanize = findNode(workflow, 'Humanizar linha da fila')
   const humanized = await runCode(humanize.parameters.jsCode, {
-    $input: { all: () => [{ json: { dedupe_key: 'lead-1', company_id: 'lead-1', company_name: 'Empresa', lead_score: 55, status: 'REVIEW' } }] },
+    $input: { all: () => [{ json: { dedupe_key: 'lead-1', company_id: 'lead-1', company_name: 'Empresa', lead_score: 55, status: 'REVIEW', whatsapp_verified: true, whatsapp_url: 'https://wa.me/5511999999999' } }] },
   })
   assert.equal(humanized[0].json.Empresa, 'Empresa')
   assert.equal(humanized[0].json.Etapa, 'Revisar')
   assert.equal(humanized[0].json.Prioridade, 55)
+  assert.equal(humanized[0].json['Canal de contato'], 'WhatsApp confirmado no site')
+  assert.equal(humanized[0].json['Destino do contato'], 'https://wa.me/5511999999999')
+
+  const confirm = findNode(workflow, 'Confirmar WhatsApp publicado')
+  const confirmed = await runCode(confirm.parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { phone: '(11) 3333-4444', website: 'https://empresa.example' } }] }),
+    $input: { all: () => [{ json: { data: '<a href="https://api.whatsapp.com/send?phone=5511987654321">WhatsApp</a>' } }] },
+  })
+  assert.equal(confirmed[0].json.whatsapp_verified, true)
+  assert.equal(confirmed[0].json.whatsapp_url, 'https://wa.me/5511987654321')
+  assert.equal(confirmed[0].json.phone_kind, 'FIXO_PROVAVEL')
+
+  const unconfirmed = await runCode(confirm.parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { phone: '(11) 3333-4444', website: 'https://empresa.example' } }] }),
+    $input: { all: () => [{ json: { data: '<html>Telefone: (11) 3333-4444</html>' } }] },
+  })
+  assert.equal(unconfirmed[0].json.whatsapp_verified, false)
+  assert.equal(unconfirmed[0].json.whatsapp_url, '')
 })
 
 test('Diagnóstico usa a planilha real, consolida uma sessão por papel e devolve briefing ao lead', async () => {
@@ -169,6 +187,13 @@ test('Preparação da planilha preserva o vínculo técnico e entrega uma fila h
   assert.equal(headers[46], 'Próxima ação')
   assert.ok(requests.some((request) => request.setBasicFilter))
   assert.ok(requests.some((request) => request.setDataValidation?.range.startColumnIndex === 16))
+
+  const editableBuilder = findNode(workflow, 'Configurar células editáveis')
+  const [editableResult] = await runCode(editableBuilder.parameters.jsCode, { $json: result.json })
+  const editableRequests = editableResult.json.requests as Array<Record<string, any>>
+  assert.ok(editableRequests.some((request) => request.repeatCell?.range.startColumnIndex === 18))
+  assert.ok(editableRequests.some((request) => request.setDataValidation?.range.startColumnIndex === 21))
+  assert.ok(editableRequests.some((request) => request.setDataValidation?.rule.condition.type === 'BOOLEAN'))
 
   const api = findNode(workflow, 'Aplicar na planilha')
   assert.equal(api.parameters.authentication, 'predefinedCredentialType')
