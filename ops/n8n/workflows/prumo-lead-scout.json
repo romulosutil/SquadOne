@@ -21,17 +21,15 @@
           "rule": {
             "interval": [
               {
-                "field": "weeks",
-                "triggerAtDay": [
-                  1
-                ],
+                "field": "days",
+                "daysInterval": 1,
                 "triggerAtHour": 9
               }
             ]
           }
         },
         "id": "2",
-        "name": "Agenda semanal — ative após validar",
+        "name": "Agenda diária — 9h",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
         "position": [
@@ -412,7 +410,7 @@
           ]
         ]
       },
-      "Agenda semanal — ative após validar": {
+      "Agenda diária — 9h": {
         "main": [
           [
             {

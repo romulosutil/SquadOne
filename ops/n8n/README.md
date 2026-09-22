@@ -84,6 +84,20 @@ Revisar
 de canal e uma política de destinatário; enquanto isso, a coluna
 `Enviar convite` abre uma mensagem pronta para envio humano.
 
+## Disparos
+
+- O **Lead Scout** descobre empresas diariamente às 9h (`America/Sao_Paulo`) e
+  também pode ser iniciado pelo botão de execução manual do n8n.
+- No mesmo workflow, **Sincronizar aceites** consulta a fila a cada cinco
+  minutos para preparar convites cujo `Etapa` seja `Contato aceito`.
+- O **Diagnóstico** consulta as respostas do Forms a cada cinco minutos e tem
+  o disparo manual **Reprocessar diagnóstico manualmente**.
+- **Preparar planilha** não possui agenda: é um workflow inativo e somente
+  manual, para aplicar o contrato visual e as validações à aba `Leads`.
+
+Os workflows não chamam um ao outro. A planilha e o `ID da empresa` são a
+fronteira entre descoberta, convite e diagnóstico.
+
 ## Regra do WhatsApp
 
 O telefone retornado pelo Google Places permanece na coluna `Telefone`, mas

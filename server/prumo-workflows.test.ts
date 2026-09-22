@@ -67,6 +67,14 @@ const response = (companyRef: string, role: string, timestamp: string) => ({
 
 test('Lead Scout cria company_id e prepara convite somente após aceite', async () => {
   const workflow = await load('prumo-lead-scout.json')
+  const manualTrigger = findNode(workflow, 'Executar manualmente')
+  const dailyTrigger = findNode(workflow, 'Agenda diária — 9h')
+  const acceptanceTrigger = findNode(workflow, 'Sincronizar aceites — 5 min')
+  assert.equal(manualTrigger.type, 'n8n-nodes-base.manualTrigger')
+  assert.equal(dailyTrigger.type, 'n8n-nodes-base.scheduleTrigger')
+  assert.deepEqual(dailyTrigger.parameters.rule.interval, [{ field: 'days', daysInterval: 1, triggerAtHour: 9 }])
+  assert.equal(acceptanceTrigger.type, 'n8n-nodes-base.scheduleTrigger')
+  assert.deepEqual(acceptanceTrigger.parameters.rule.interval, [{ field: 'minutes', minutesInterval: 5 }])
   const normalize = findNode(workflow, 'Normalizar empresas')
   const normalized = await runCode(normalize.parameters.jsCode, {
     $: () => ({ first: () => ({ json: { query: 'teste', city: 'São Paulo/SP', targetVertical: 'distribuidora' } }) }),
@@ -224,6 +232,8 @@ test('Diagnóstico incompleto registra precisamente os papéis pendentes', async
 
 test('Preparação da planilha preserva o vínculo técnico e entrega uma fila humana', async () => {
   const workflow = await load('prumo-preparar-planilha.json')
+  assert.equal(workflow.active, false)
+  assert.equal(findNode(workflow, 'Executar manualmente').type, 'n8n-nodes-base.manualTrigger')
   const builder = findNode(workflow, 'Montar visual e validações')
   const [result] = await runCode(builder.parameters.jsCode, {})
   const requests = result.json.requests as Array<Record<string, any>>
