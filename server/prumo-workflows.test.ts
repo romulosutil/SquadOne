@@ -131,6 +131,13 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.equal(unconfirmed[0].json.whatsapp_verified, false)
   assert.equal(unconfirmed[0].json.whatsapp_url, '')
 
+  const fixedLink = await runCode(confirm.parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { phone: '0800 000 5100', website: 'https://empresa.example' } }] }),
+    $input: { all: () => [{ json: { data: '<a href="https://wa.me/558000005100">Atendimento</a>' } }] },
+  })
+  assert.equal(fixedLink[0].json.whatsapp_verified, false)
+  assert.equal(fixedLink[0].json.whatsapp_url, '')
+
   const encoded = await runCode(confirm.parameters.jsCode, {
     $: () => ({ all: () => [{ json: { website: 'https://empresa.example' } }] }),
     $input: { all: () => [{ json: { data: 'https%3A%2F%2Fwa.me%2F5511977776666' } }] },

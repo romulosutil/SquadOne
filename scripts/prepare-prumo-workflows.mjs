@@ -315,22 +315,22 @@ return $input.all().map(({ json: lead }) => ({ json: {
 };
 
 return $input.all().flatMap(({ json: lead }) => {
-  try {
-    const url = new URL(String(lead.website ?? '').trim());
-    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');
-    const privateIpv6 = host.includes(':')
-      && (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:'));
-    const blockedHost = host === 'localhost'
-      || host.endsWith('.localhost')
-      || host.endsWith('.local')
-      || host.endsWith('.internal')
-      || privateIpv6
-      || privateIpv4(host);
-    if (!['http:', 'https:'].includes(url.protocol) || blockedHost) return [];
-    return [{ json: { ...lead, website_lookup_url: url.toString() } }];
-  } catch {
-    return [];
-  }
+  const rawUrl = String(lead.website ?? '').trim();
+  const parsed = rawUrl.match(/^(https?):\\/\\/(\\[[0-9a-f:.]+\\]|[^/?#:@\\s]+)(?::(\\d{1,5}))?(?:[/?#]|$)/i);
+  if (!parsed) return [];
+
+  const host = parsed[2].toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');
+  const port = parsed[3] ? Number(parsed[3]) : 0;
+  const privateIpv6 = host.includes(':')
+    && (host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:') || host.startsWith('::ffff:'));
+  const blockedHost = host === 'localhost'
+    || host.endsWith('.localhost')
+    || host.endsWith('.local')
+    || host.endsWith('.internal')
+    || privateIpv6
+    || privateIpv4(host);
+  if (blockedHost || port > 65535) return [];
+  return [{ json: { ...lead, website_lookup_url: rawUrl } }];
 });`),
   {
     parameters: {
@@ -384,7 +384,8 @@ return responses.map(({ json: response }, index) => {
     const pathNumber = clean.match(/wa\\.me\\/(\\+?\\d{10,15})(?:[?/#]|$)/i)?.[1] ?? '';
     let digits = (phoneParam || pathNumber).replace(/\\D/g, '');
     if (digits.length === 10 || digits.length === 11) digits = \`55${'${digits}'}\`;
-    if (digits.length >= 12 && digits.length <= 15) {
+    const brazilianMobile = /^55[1-9]\\d9\\d{8}$/.test(digits);
+    if (brazilianMobile) {
       whatsappNumber = digits;
       whatsappUrl = \`https://wa.me/${'${digits}'}\`;
       break;

@@ -49,7 +49,10 @@ O Lead Scout consulta somente sites públicos válidos e considera elegível par
 revisão comercial apenas a empresa cujo HTML publicado contém um link explícito
 do WhatsApp (`wa.me`, `api.whatsapp.com`, `web.whatsapp.com` ou
 `whatsapp://send`). Telefone do Google Places, mesmo celular, não comprova
-WhatsApp. Falhas técnicas continuam registradas separadamente para operação.
+WhatsApp. Quando o link expõe um número, ele precisa ser um celular brasileiro;
+fixos e 0800 são recusados mesmo dentro de um link do WhatsApp. Links diretos
+`wa.me/message` continuam válidos. Falhas técnicas continuam registradas
+separadamente para operação.
 
 Os quatro campos da triagem têm limites estáveis e somam no máximo 100:
 
@@ -88,7 +91,7 @@ não é tratado automaticamente como WhatsApp. O Lead Scout só preenche `Canal
 de contato` e `Destino do contato` quando encontra no site institucional um
 link público de WhatsApp (`wa.me` ou `api.whatsapp.com`). Um celular sem essa
 evidência fica pendente de confirmação humana; um telefone fixo não recebe
-pontuação de canal direto.
+pontuação de canal direto, mesmo se estiver embalado em um link do WhatsApp.
 
 ## Uso humano
 

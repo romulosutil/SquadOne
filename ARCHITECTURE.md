@@ -128,7 +128,9 @@ PRUMO.
 
 O Lead Scout continua responsável pela descoberta e pela priorização. Antes de
 pontuar, ele consulta o site público retornado pelo Google Places e só encaminha
-à fila comercial empresas com link de WhatsApp explicitamente publicado. A
+à fila comercial empresas com link de WhatsApp explicitamente publicado e,
+quando o link contém número, um celular brasileiro direto. Fixos e 0800 são
+recusados. A
 prioridade usa aderência graduada (0–60), complexidade pública como proxy
 (0–20) e facilidade de contato binária (0 ou 20), com corte mínimo de 60. Esses
 sinais servem apenas para ordenar a revisão humana e não constituem diagnóstico

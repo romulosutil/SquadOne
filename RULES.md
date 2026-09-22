@@ -42,4 +42,5 @@
 18. O telefone público retornado pelo Google Places não prova disponibilidade
     no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino
     do contato` exige link público de WhatsApp no site institucional; na
-    ausência dele, somente confirmação humana pode classificar o número.
+    ausência dele, somente confirmação humana pode classificar o número. Links
+    com número fixo ou 0800 não qualificam a empresa para abordagem automática.
