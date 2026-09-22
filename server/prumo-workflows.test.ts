@@ -7,6 +7,7 @@ type WorkflowNode = {
   type: string
   parameters: Record<string, any>
   credentials?: Record<string, { id: string; name: string }>
+  alwaysOutputData?: boolean
 }
 
 type Workflow = {
@@ -75,11 +76,30 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.deepEqual(dailyTrigger.parameters.rule.interval, [{ field: 'days', daysInterval: 1, triggerAtHour: 9 }])
   assert.equal(acceptanceTrigger.type, 'n8n-nodes-base.scheduleTrigger')
   assert.deepEqual(acceptanceTrigger.parameters.rule.interval, [{ field: 'minutes', minutesInterval: 5 }])
+  const registeredCompanies = findNode(workflow, 'Ler empresas já registradas')
+  assert.equal(registeredCompanies.type, 'n8n-nodes-base.googleSheets')
+  assert.equal(registeredCompanies.parameters.operation, 'read')
+  assert.equal(registeredCompanies.parameters.documentId.value, '1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U')
+  assert.equal(registeredCompanies.parameters.sheetName.value, '957714022')
+  assert.equal(registeredCompanies.alwaysOutputData, true)
+  const prepareDiscovery = findNode(workflow, 'Preparar descoberta sem repetidos')
+  const preparedDiscovery = await runCode(prepareDiscovery.parameters.jsCode, {
+    $: () => ({ first: () => ({ json: { query: 'teste' } }) }),
+    $input: { all: () => [{ json: { 'ID da empresa': 'ChIJ-Existente' } }, { json: { company_id: 'chij-outra' } }] },
+  })
+  assert.deepEqual(preparedDiscovery[0].json.existingCompanyIds, ['chij-existente', 'chij-outra'])
   const normalize = findNode(workflow, 'Normalizar empresas')
   const normalized = await runCode(normalize.parameters.jsCode, {
-    $: () => ({ first: () => ({ json: { query: 'teste', city: 'São Paulo/SP', targetVertical: 'distribuidora' } }) }),
-    $json: { places: [{ id: 'ChIJ-Teste', displayName: { text: 'Empresa Teste' }, formattedAddress: 'Rua 1' }] },
+    $: (name) => ({ first: () => ({ json: name === 'Preparar descoberta sem repetidos'
+      ? { existingCompanyIds: ['chij-existente'] }
+      : { query: 'teste', city: 'São Paulo/SP', targetVertical: 'distribuidora' } }) }),
+    $json: { places: [
+      { id: 'ChIJ-Existente', displayName: { text: 'Empresa Existente' }, formattedAddress: 'Rua 1' },
+      { id: 'ChIJ-Teste', displayName: { text: 'Empresa Teste' }, formattedAddress: 'Rua 2' },
+      { id: 'ChIJ-Teste', displayName: { text: 'Empresa Teste repetida' }, formattedAddress: 'Rua 2' },
+    ] },
   })
+  assert.equal(normalized.length, 1)
   assert.equal(normalized[0].json.company_id, 'chij-teste')
   assert.equal(normalized[0].json.dedupe_key, 'chij-teste')
 
@@ -96,6 +116,9 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.equal(prepared[0].json['Situação do diagnóstico'], 'Convite pronto')
   assert.match(prepared[0].json['Formulário do diagnóstico'], /entry\.171063854=lead-1%3A%3AEmpresa/u)
   assert.match(prepared[0].json['Enviar convite'], /^mailto:contato@example\.com/u)
+  const persistence = findNode(workflow, 'Persistir fila PRUMO')
+  assert.equal(persistence.parameters.operation, 'append')
+  assert.equal(persistence.parameters.columns.matchingColumns, undefined)
   assert.deepEqual(findNode(workflow, 'Atualizar convite na fila').parameters.columns.matchingColumns, ['ID do lead'])
 
   const humanize = findNode(workflow, 'Humanizar linha da fila')

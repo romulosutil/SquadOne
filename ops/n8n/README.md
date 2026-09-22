@@ -87,7 +87,9 @@ de canal e uma política de destinatário; enquanto isso, a coluna
 ## Disparos
 
 - O **Lead Scout** descobre empresas diariamente às 9h (`America/Sao_Paulo`) e
-  também pode ser iniciado pelo botão de execução manual do n8n.
+  também pode ser iniciado pelo botão de execução manual do n8n. Antes da
+  descoberta, lê a aba `Leads`; IDs de empresa já registrados são excluídos
+  antes da consulta ao site e da pontuação.
 - No mesmo workflow, **Sincronizar aceites** consulta a fila a cada cinco
   minutos para preparar convites cujo `Etapa` seja `Contato aceito`.
 - O **Diagnóstico** consulta as respostas do Forms a cada cinco minutos e tem
@@ -97,6 +99,10 @@ de canal e uma política de destinatário; enquanto isso, a coluna
 
 Os workflows não chamam um ao outro. A planilha e o `ID da empresa` são a
 fronteira entre descoberta, convite e diagnóstico.
+
+O Lead Scout somente acrescenta empresas inéditas à fila. Ele não limpa nem
+reescreve linhas existentes, preservando a revisão e os dados comerciais já
+registrados.
 
 ## Regra do WhatsApp
 

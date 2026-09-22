@@ -52,6 +52,59 @@
       },
       {
         "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "combineFilters": "AND",
+          "options": {}
+        },
+        "id": "15",
+        "name": "Ler empresas já registradas",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          -180,
+          100
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst existingCompanyIds = [...new Set($input.all()\n  .map(({ json }) => String(json['ID da empresa'] ?? json.company_id ?? '').trim().toLowerCase())\n  .filter(Boolean))];\n\nreturn [{ json: { ...cfg, existingCompanyIds } }];"
+        },
+        "id": "16",
+        "name": "Preparar descoberta sem repetidos",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          60,
+          100
+        ]
+      },
+      {
+        "parameters": {
           "method": "POST",
           "url": "https://places.googleapis.com/v1/places:searchText",
           "sendHeaders": true,
@@ -76,7 +129,7 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          -180,
+          300,
           100
         ],
         "retryOnFail": true,
@@ -92,7 +145,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst places = $json.places ?? [];\nconst discoveredAt = new Date().toISOString();\n\nreturn places.map((place) => {\n  const companyName = place.displayName?.text ?? '';\n  const address = place.formattedAddress ?? '';\n  const placeId = place.id ?? '';\n  const companyId = (placeId || `${companyName}|${address}`).toLowerCase();\n  return {\n    json: {\n      dedupe_key: companyId,\n      company_id: companyId,\n      place_id: placeId,\n      company_name: companyName,\n      address,\n      website: place.websiteUri ?? '',\n      phone: place.nationalPhoneNumber ?? '',\n      types: (place.types ?? []).join(', '),\n      rating: Number(place.rating ?? 0),\n      review_count: Number(place.userRatingCount ?? 0),\n      business_status: place.businessStatus ?? 'UNKNOWN',\n      discovered_at: discoveredAt,\n      search_query: cfg.query,\n      city: cfg.city,\n      target_vertical: cfg.targetVertical,\n    },\n  };\n});"
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst knownCompanyIds = new Set(($('Preparar descoberta sem repetidos').first().json.existingCompanyIds ?? [])\n  .map(value => String(value).trim().toLowerCase())\n  .filter(Boolean));\nconst places = $json.places ?? [];\nconst discoveredAt = new Date().toISOString();\nconst seenCompanyIds = new Set();\n\nreturn places.flatMap((place) => {\n  const companyName = place.displayName?.text ?? '';\n  const address = place.formattedAddress ?? '';\n  const placeId = place.id ?? '';\n  const companyId = (placeId || `${companyName}|${address}`).toLowerCase();\n  if (!companyId || knownCompanyIds.has(companyId) || seenCompanyIds.has(companyId)) return [];\n  seenCompanyIds.add(companyId);\n  return [{\n    json: {\n      dedupe_key: companyId,\n      company_id: companyId,\n      place_id: placeId,\n      company_name: companyName,\n      address,\n      website: place.websiteUri ?? '',\n      phone: place.nationalPhoneNumber ?? '',\n      types: (place.types ?? []).join(', '),\n      rating: Number(place.rating ?? 0),\n      review_count: Number(place.userRatingCount ?? 0),\n      business_status: place.businessStatus ?? 'UNKNOWN',\n      discovered_at: discoveredAt,\n      search_query: cfg.query,\n      city: cfg.city,\n      target_vertical: cfg.targetVertical,\n    },\n  }];\n});"
         },
         "id": "5",
         "name": "Normalizar empresas",
@@ -151,7 +204,7 @@
       },
       {
         "parameters": {
-          "operation": "appendOrUpdate",
+          "operation": "append",
           "documentId": {
             "__rl": true,
             "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
@@ -167,9 +220,6 @@
           "columns": {
             "mappingMode": "autoMapInputData",
             "value": {},
-            "matchingColumns": [
-              "ID do lead"
-            ],
             "schema": []
           },
           "options": {}
@@ -422,6 +472,28 @@
         ]
       },
       "Config — mercado-alvo": {
+        "main": [
+          [
+            {
+              "node": "Ler empresas já registradas",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ler empresas já registradas": {
+        "main": [
+          [
+            {
+              "node": "Preparar descoberta sem repetidos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar descoberta sem repetidos": {
         "main": [
           [
             {
