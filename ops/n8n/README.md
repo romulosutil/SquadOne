@@ -106,6 +106,12 @@ registrados. Empresas sem site consultável ou sem WhatsApp confirmado também
 são acrescentadas como `Fora do perfil`; assim, o fluxo não para no meio e o
 mesmo resultado não volta a ser descoberto no disparo seguinte.
 
+O nó `Persistir fila PRUMO` usa o append da API do Google Sheets. Mantenha as
+linhas após o último lead sem valores: validações e formatação podem cobrir a
+área futura, mas caixas de seleção em células vazias gravam `FALSE` e fazem a
+próxima inserção saltar para depois dessa área. Por isso `Não contatar` usa uma
+lista `Sim`/`Não`; deixar a célula vazia também significa não bloquear contato.
+
 ## Regra do WhatsApp
 
 O telefone retornado pelo Google Places permanece na coluna `Telefone`, mas
@@ -120,7 +126,7 @@ pontuação de canal direto, mesmo se estiver embalado em um link do WhatsApp.
 1. Filtre `Etapa = Revisar`; a lista já contém somente WhatsApps publicados,
    mas ainda exige confirmação humana de segmento, porte, número e decisor.
 2. Preencha as células amarelas. `Canal de contato` possui lista de opções,
-   datas aceitam somente datas válidas e `Não contatar` é uma caixa de seleção.
+   datas aceitam somente datas válidas e `Não contatar` usa `Sim` ou `Não`.
 3. Confirme manualmente o WhatsApp quando houver apenas um celular público e
    selecione `WhatsApp confirmado manualmente`; não reutilize um telefone fixo.
 4. Depois do aceite da empresa, selecione `Contato aceito` em `Etapa`.

@@ -222,7 +222,9 @@
             "value": {},
             "schema": []
           },
-          "options": {}
+          "options": {
+            "useAppend": true
+          }
         },
         "id": "8",
         "name": "Persistir fila PRUMO",

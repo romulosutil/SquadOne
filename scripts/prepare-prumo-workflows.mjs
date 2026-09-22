@@ -207,7 +207,10 @@ return [{ json: {
   research_note: \`Consulta: ${'${cfg.query}'}. Após 3 tentativas, Google Places falhou. Causa: ${'${String(cause).slice(0, 800)}'}\`,
 } }];`
 
-node(lead, 'Persistir fila PRUMO').parameters.columns.matchingColumns = ['ID do lead']
+const leadWriter = node(lead, 'Persistir fila PRUMO')
+leadWriter.parameters.operation = 'append'
+delete leadWriter.parameters.columns.matchingColumns
+leadWriter.parameters.options = { ...leadWriter.parameters.options, useAppend: true }
 
 lead.nodes.push(
   {

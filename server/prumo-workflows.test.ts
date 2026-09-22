@@ -119,6 +119,7 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   const persistence = findNode(workflow, 'Persistir fila PRUMO')
   assert.equal(persistence.parameters.operation, 'append')
   assert.equal(persistence.parameters.columns.matchingColumns, undefined)
+  assert.equal(persistence.parameters.options.useAppend, true)
   assert.deepEqual(findNode(workflow, 'Atualizar convite na fila').parameters.columns.matchingColumns, ['ID do lead'])
 
   const humanize = findNode(workflow, 'Humanizar linha da fila')
@@ -298,7 +299,9 @@ test('Preparação da planilha preserva o vínculo técnico e entrega uma fila h
   const editableRequests = editableResult.json.requests as Array<Record<string, any>>
   assert.ok(editableRequests.some((request) => request.repeatCell?.range.startColumnIndex === 18))
   assert.ok(editableRequests.some((request) => request.setDataValidation?.range.startColumnIndex === 21))
-  assert.ok(editableRequests.some((request) => request.setDataValidation?.rule.condition.type === 'BOOLEAN'))
+  const noContactValidation = editableRequests.find((request) => request.setDataValidation?.range.startColumnIndex === 26)?.setDataValidation
+  assert.equal(noContactValidation?.rule.condition.type, 'ONE_OF_LIST')
+  assert.deepEqual(noContactValidation?.rule.condition.values.map((value: any) => value.userEnteredValue), ['Sim', 'Não'])
 
   const api = findNode(workflow, 'Aplicar na planilha')
   assert.equal(api.parameters.authentication, 'predefinedCredentialType')
