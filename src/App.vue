@@ -12,7 +12,9 @@ import ContratarModal from './components/ContratarModal.vue'
 import EditarModal from './components/EditarModal.vue'
 import ArquivoModal from './components/ArquivoModal.vue'
 import AjusteCard from './components/AjusteCard.vue'
+import AvaliacaoTurnoCard from './components/AvaliacaoTurnoCard.vue'
 import { propostaDoUsuario, resumoDoAjuste, resumoDosEventosCriados } from './contribuicao'
+import type { MotivoDeAvaliacao } from './avaliacao'
 import { ErroDaApi, rosterApi, type TipoDoRoster } from './rosterApi'
 import type {
   AlvoDeContratacao,
@@ -27,7 +29,8 @@ import type {
   RespostaDeAjuste,
   RosterView,
   SquadView,
-  Sugestao
+  Sugestao,
+  TurnoResponse
 } from './types'
 import { ampliarAcesso, conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus, tasksLiberado } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
@@ -67,6 +70,11 @@ const aprovando = ref('')
 const erroSugestao = ref<Record<string, string>>({})
 const toast = ref('')
 let toastTimer = 0
+// Só aparece quando o servidor entregou um id opaco para este turno. O texto
+// da demanda continua fora do navegador e também fora do arquivo de feedback.
+const avaliacaoPendente = ref<string | null>(null)
+const enviandoAvaliacao = ref(false)
+const erroAvaliacao = ref('')
 // Propostas de ajuste dos agentes. Não somem com turno novo nem troca de squad:
 // pertencem a eventos que continuam existindo no Google.
 const ajustes = ref<PropostaDeAjuste[]>([])
@@ -342,6 +350,36 @@ const avisar = (texto: string, acao?: AcaoDoToast) => {
     toast.value = ''
     acaoDoToast.value = null
   }, acao ? 10000 : 4000)
+}
+
+/** Envia apenas o sinal voluntário para o turno opaco que ainda está no cache do servidor. */
+const enviarAvaliacao = async (avaliacao: { nota: 1 | 2 | 3 | 4 | 5; motivos: MotivoDeAvaliacao[]; comentario?: string }) => {
+  const turnoId = avaliacaoPendente.value
+  if (!turnoId || enviandoAvaliacao.value) return
+  enviandoAvaliacao.value = true
+  erroAvaliacao.value = ''
+  try {
+    const response = await fetch(`/api/turnos/${encodeURIComponent(turnoId)}/avaliacao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(avaliacao),
+    })
+    const corpo = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      if (response.status === 410 || response.status === 409) {
+        avaliacaoPendente.value = null
+        avisar(corpo.error ?? 'Esta resposta não aceita mais avaliação.')
+        return
+      }
+      throw new Error(corpo.error ?? `HTTP ${response.status}`)
+    }
+    avaliacaoPendente.value = null
+    avisar('Avaliação registrada. Obrigado.')
+  } catch (error) {
+    erroAvaliacao.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    enviandoAvaliacao.value = false
+  }
 }
 
 /**
@@ -708,7 +746,11 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
       throw new Error(corpo.error || 'Erro na requisição')
     }
 
-    const turno = await response.json()
+    const turno = await response.json() as TurnoResponse & { turno_id?: string }
+    // A flag é opt-in no servidor. Sem ela, não há id, cache ou interface de
+    // avaliação; um turno novo troca o cartão para não avaliar a resposta errada.
+    avaliacaoPendente.value = typeof turno.turno_id === 'string' ? turno.turno_id : null
+    erroAvaliacao.value = ''
 
     // O turno pode ter rodado em OUTRA squad (redirecionamento automático do
     // servidor): os eventos nasceram lá, então a aba adota o destino ANTES de
@@ -979,6 +1021,14 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
         {{ acaoDoToast.rotulo }}
       </button>
     </div>
+
+    <AvaliacaoTurnoCard
+      v-if="avaliacaoPendente"
+      :enviando="enviandoAvaliacao"
+      :erro="erroAvaliacao"
+      @enviar="enviarAvaliacao"
+      @fechar="avaliacaoPendente = null"
+    />
 
     <!-- Command Bar -->
     <!-- Modal aberto bloqueia o envio: o Enter no input de baixo mandaria um
