@@ -12,7 +12,7 @@
         "type": "n8n-nodes-base.manualTrigger",
         "typeVersion": 1,
         "position": [
-          -680,
+          -900,
           180
         ]
       },
@@ -33,7 +33,7 @@
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
         "position": [
-          -680,
+          -900,
           40
         ]
       },
@@ -46,7 +46,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          -420,
+          -680,
           100
         ]
       },
@@ -71,12 +71,12 @@
           "combineFilters": "AND",
           "options": {}
         },
-        "id": "15",
+        "id": "18",
         "name": "Ler empresas já registradas",
         "type": "n8n-nodes-base.googleSheets",
         "typeVersion": 4.7,
         "position": [
-          -180,
+          -450,
           100
         ],
         "credentials": {
@@ -94,12 +94,12 @@
         "parameters": {
           "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst existingCompanyIds = [...new Set($input.all()\n  .map(({ json }) => String(json['ID da empresa'] ?? json.company_id ?? '').trim().toLowerCase())\n  .filter(Boolean))];\n\nreturn [{ json: { ...cfg, existingCompanyIds } }];"
         },
-        "id": "16",
+        "id": "19",
         "name": "Preparar descoberta sem repetidos",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          60,
+          -220,
           100
         ]
       },
@@ -129,7 +129,7 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          300,
+          20,
           100
         ],
         "retryOnFail": true,
@@ -152,7 +152,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          60,
+          250,
           100
         ]
       },
@@ -165,7 +165,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          300,
+          1170,
           100
         ]
       },
@@ -198,7 +198,7 @@
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.2,
         "position": [
-          540,
+          1400,
           100
         ]
       },
@@ -229,7 +229,7 @@
         "type": "n8n-nodes-base.googleSheets",
         "typeVersion": 4.7,
         "position": [
-          810,
+          1880,
           60
         ],
         "credentials": {
@@ -251,7 +251,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          60,
+          250,
           300
         ]
       },
@@ -271,7 +271,7 @@
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
         "position": [
-          -420,
+          -680,
           500
         ]
       },
@@ -301,7 +301,7 @@
         "type": "n8n-nodes-base.googleSheets",
         "typeVersion": 4.7,
         "position": [
-          -180,
+          -420,
           500
         ],
         "credentials": {
@@ -323,7 +323,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          80,
+          -120,
           500
         ]
       },
@@ -357,7 +357,7 @@
         "type": "n8n-nodes-base.googleSheets",
         "typeVersion": 4.7,
         "position": [
-          360,
+          180,
           500
         ],
         "credentials": {
@@ -379,7 +379,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          980,
+          1640,
           80
         ]
       },
@@ -392,7 +392,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          260,
+          480,
           100
         ]
       },
@@ -429,7 +429,7 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          260,
+          710,
           100
         ],
         "onError": "continueRegularOutput"
@@ -443,7 +443,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          760,
+          940,
           100
         ]
       }
