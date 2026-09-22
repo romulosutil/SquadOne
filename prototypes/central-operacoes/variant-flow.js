@@ -9,10 +9,10 @@
           <a class="skip-link" href="#flow-content">Pular para o conteúdo</a>
           <header class="flow-header">
             <div class="flow-brand"><span class="flow-brand__mark">S1</span><div><strong>SquadOne</strong><small>work graph / local</small></div></div>
-            <nav aria-label="Navegação principal"><button type="button" data-view="today" class="is-active">Hoje</button><button type="button" data-view="projects">Projetos</button><button type="button" data-view="readings">Leituras <span>4</span></button></nav>
+            <nav aria-label="Navegação principal"><button type="button" data-view="today" class="is-active">Hoje</button><button type="button" data-view="projects">Projetos</button><button type="button" data-view="readings">Leituras <span data-reading-count>4</span></button></nav>
             <a href="https://aladdin-squadone-app.jicnzg.easypanel.host/" target="_blank" rel="noopener noreferrer" class="flow-scheduler"><span>Agendador pessoal</span><strong>Abrir app ↗</strong></a>
           </header>
-          <div class="flow-strip"><span class="prototype-flag">Protótipo · dados de exemplo</span><p><i class="signal signal--ok"></i>Coleta PC</p><span>→</span><p><i class="signal signal--ok"></i>n8n</p><span>→</span><p><i class="signal signal--ok"></i>SquadOne</p><span>→</span><p><i class="signal signal--ok"></i>Hermes</p><time data-current-date></time></div>
+          <div class="flow-strip"><span class="prototype-flag">Protótipo · dados de exemplo</span><p><i class="signal signal--ok"></i>PC + Dell + Cloud</p><span>→</span><p><i class="signal signal--ok"></i>Hermes</p><span>→</span><p><i class="signal signal--ok"></i>n8n</p><span>→</span><p><i class="signal signal--ok"></i>SquadOne</p><time data-current-date></time></div>
 
           <main id="flow-content" class="flow-main" tabindex="-1">
             <section class="flow-screen" data-screen="today">
@@ -43,7 +43,7 @@
 
             <section class="flow-screen" data-screen="readings" hidden>
               <header class="flow-page-heading"><div><span>Hermes → n8n → SquadOne</span><h1 tabindex="-1">Leituras rastreáveis</h1></div><p>Cada leitura nasce de fatos, passa por normalização e termina ligada ao projeto e à evidência que a sustenta.</p></header>
-              <div class="reading-pipeline" aria-label="Fluxo das leituras"><span>Fonte</span><i>→</i><span>Observação</span><i>→</i><span>Hermes interpreta</span><i>→</i><span>Você decide</span></div>
+              <div class="reading-pipeline" aria-label="Fluxo das leituras"><span>Fonte</span><i>→</i><span>Hermes</span><i>→</i><span>n8n normaliza</span><i>→</i><span>SquadOne apresenta</span><i>→</i><span>Você decide</span></div>
               <div class="flow-readings">
                 ${flowReadings()}
               </div>
@@ -77,13 +77,14 @@
 
   function flowReadings() {
     const readings = [
-      ['Dell / arquivo', 'Auto', 'attention', 'Runner sem evidência recente', 'A observação expirou; o estado correto é desconhecido até nova coleta.', '.logs/execucao-fila.log'],
-      ['Humano + Git', 'Iris', 'action', 'Momento comercial aberto', 'Deploy e produto podem estar saudáveis enquanto aquisição exige uma ação.', 'README + decisão de Rômulo'],
-      ['GitHub + Vercel', 'Portfólio', 'info', 'Ativos aguardam correlação', 'Repos e deploys com nomes próximos devem convergir no mesmo projeto.', 'Inventário das contas'],
-      ['PC / allowlist', 'Prumo', 'attention', 'Fonte não localizada', 'Nenhum contexto deve ser inventado até existir um vínculo explícito.', 'Diretório .claude']
+      ['auto-runner', 'Dell / arquivo', 'Auto', 'attention', 'Runner sem evidência recente', 'A observação expirou; o estado correto é desconhecido até nova coleta.', '.logs/execucao-fila.log'],
+      ['iris-commercial', 'Humano + Git', 'Iris', 'action', 'Momento comercial aberto', 'Deploy e produto podem estar saudáveis enquanto aquisição exige uma ação.', 'README + decisão de Rômulo'],
+      ['cloud-inventory', 'GitHub + Vercel', 'Portfólio', 'info', 'Ativos aguardam correlação', 'Repos e deploys com nomes próximos devem convergir no mesmo projeto.', 'Inventário das contas'],
+      ['prumo-source', 'PC / allowlist', 'Prumo', 'attention', 'Fonte não localizada', 'Nenhum contexto deve ser inventado até existir um vínculo explícito.', 'Diretório .claude']
     ]
-    return readings.map(([source, project, severity, title, copy, evidence], index) => `
-      <article class="flow-reading" data-reading><span class="flow-reading__rail"></span><div class="flow-reading__source"><small>Entrada ${index + 1}</small><strong>${source}</strong><span class="reading-severity reading-severity--${severity}">${severity}</span></div><div class="flow-reading__body"><small>${project}</small><h2>${title}</h2><p>${copy}</p><em>${evidence}</em></div><div class="flow-reading__actions"><button type="button" data-demo-action="Projeto ${project} aberto">Projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div></article>`).join('')
+    const severityLabels = { attention: 'Atenção', action: 'Ação', info: 'Informação' }
+    return readings.map(([id, source, project, severity, title, copy, evidence], index) => `
+      <article class="flow-reading" data-reading data-reading-id="${id}"><span class="flow-reading__rail"></span><div class="flow-reading__source"><small>Entrada ${index + 1}</small><strong>${source}</strong><span class="reading-severity reading-severity--${severity}">${severityLabels[severity]}</span></div><div class="flow-reading__body"><small>${project}</small><h2>${title}</h2><p>${copy}</p><em>${evidence}</em></div><div class="flow-reading__actions"><button type="button" data-open-project data-project-name="${project}" data-project-meta="Leitura do Hermes · ${evidence}" data-project-next="${title}.">Projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div></article>`).join('')
   }
 
   function projectDialogFlow() {

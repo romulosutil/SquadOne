@@ -12,7 +12,7 @@
             <nav class="command-nav">
               <button type="button" data-view="today" class="is-active"><span>01</span>Hoje</button>
               <button type="button" data-view="projects"><span>02</span>Projetos</button>
-              <button type="button" data-view="readings"><span>03</span>Leituras <b>4</b></button>
+              <button type="button" data-view="readings"><span>03</span>Leituras <b data-reading-count>4</b></button>
             </nav>
             <div class="command-sources" aria-label="Fontes conectadas">
               <p>Fontes</p>
@@ -68,7 +68,7 @@
               </section>
 
               <section class="command-screen" data-screen="projects" hidden>
-                <div class="command-heading"><div><span>Portfólio conectado</span><h1 tabindex="-1">Projetos</h1></div><strong class="inventory-count">8 visíveis · 5 fontes</strong></div>
+                <div class="command-heading"><div><span>Portfólio conectado</span><h1 tabindex="-1">Projetos</h1></div><strong class="inventory-count" data-project-total>8 visíveis</strong></div>
                 <div class="project-toolbar">
                   <label><span>Buscar projeto</span><input data-project-search type="search" placeholder="Nome, momento ou fonte" /></label>
                   <div class="scope-filter" aria-label="Filtrar por escopo"><button type="button" data-scope="all" aria-pressed="true">Todos</button><button type="button" data-scope="personal" aria-pressed="false">Pessoal</button><button type="button" data-scope="corporate" aria-pressed="false">Corporativo</button><button type="button" data-scope="client" aria-pressed="false">Clientes</button></div>
@@ -80,7 +80,7 @@
               </section>
 
               <section class="command-screen" data-screen="readings" hidden>
-                <div class="command-heading"><div><span>Hermes agent</span><h1 tabindex="-1">Leituras com evidência</h1></div><div class="reading-legend"><span>4 novas</span><span>2 ações</span></div></div>
+                <div class="command-heading"><div><span>Leituras do Hermes</span><h1 tabindex="-1">Leituras com evidência</h1></div><div class="reading-legend"><span data-reading-open>4 abertas</span><span>2 ações</span></div></div>
                 <div class="reading-inbox">
                   ${readingRowsCommand()}
                 </div>
@@ -115,16 +115,16 @@
 
   function readingRowsCommand() {
     const readings = [
-      ['Ação', 'Auto', 'Runner sem estado atual', 'O log existe, mas a última evidência de execução está desatualizada.', '.logs/execucao-fila.log · Dell worker'],
-      ['Ação', 'Iris', 'Próximo marco é comercial', 'O produto está em produção; aquisição de clientes deve aparecer separada da saúde técnica.', 'Contexto humano + README do Iris'],
-      ['Informação', 'Inventário', 'GitHub e Vercel foram correlacionados', 'Ativos cloud podem ser ligados aos projetos sem criar projetos duplicados.', 'GitHub CLI + Vercel CLI'],
-      ['Atenção', 'Prumo', 'Fonte canônica não localizada', 'O nome não apareceu no diretório .claude pesquisado no PC.', 'Varredura local allowlisted']
+      ['auto-runner', 'Ação', 'Auto', 'Runner sem estado atual', 'O log existe, mas a última evidência de execução está desatualizada.', '.logs/execucao-fila.log · Dell worker'],
+      ['iris-commercial', 'Ação', 'Iris', 'Próximo marco é comercial', 'O produto está em produção; aquisição de clientes deve aparecer separada da saúde técnica.', 'Contexto humano + README do Iris'],
+      ['cloud-inventory', 'Informação', 'Inventário', 'GitHub e Vercel foram correlacionados', 'Ativos cloud podem ser ligados aos projetos sem criar projetos duplicados.', 'GitHub CLI + Vercel CLI'],
+      ['prumo-source', 'Atenção', 'Prumo', 'Fonte canônica não localizada', 'O nome não apareceu no diretório .claude pesquisado no PC.', 'Varredura local allowlisted']
     ]
-    return readings.map(([severity, project, title, copy, evidence], index) => `
-      <article class="command-reading" data-reading>
+    return readings.map(([id, severity, project, title, copy, evidence], index) => `
+      <article class="command-reading" data-reading data-reading-id="${id}">
         <div><span class="reading-severity reading-severity--${severity.toLowerCase()}">${severity}</span><small>H-${String(index + 1).padStart(2, '0')}</small></div>
         <div><p>${project}</p><h2>${title}</h2><span>${copy}</span><small>Evidência: ${evidence}</small></div>
-        <div><button type="button" data-demo-action="Projeto ${project} aberto">Abrir projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div>
+        <div><button type="button" data-open-project data-project-name="${project}" data-project-meta="Leitura do Hermes · ${evidence}" data-project-next="${title}.">Abrir projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div>
       </article>`).join('')
   }
 

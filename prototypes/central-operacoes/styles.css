@@ -137,6 +137,7 @@ button { cursor: pointer; }
 .project-toolbar { display: grid; grid-template-columns: minmax(14rem, 1fr) auto auto; align-items: end; gap: 1rem; margin-bottom: 1rem; }
 .project-toolbar label, .flow-project-tools label, .portfolio-project-tools label { display: grid; gap: 0.3rem; }
 .project-toolbar label span, .flow-project-tools label span, .portfolio-project-tools label span { font-size: 0.66rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+.project-empty { margin: 1rem 0; padding: 1rem; border: 2px dashed currentColor; color: var(--muted); background: rgba(255, 255, 255, 0.45); font: 800 0.8rem var(--ui); text-align: center; }
 .project-toolbar input, .flow-project-tools input, .portfolio-project-tools input { width: 100%; min-height: 3rem; padding: 0.55rem 0.75rem; border: var(--line); border-radius: 0; background: var(--paper-strong); color: var(--ink); }
 .scope-filter { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .scope-filter button { padding: 0.45rem 0.7rem; border: 2px solid var(--ink); background: transparent; font-size: 0.7rem; font-weight: 900; }

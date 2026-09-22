@@ -9,14 +9,14 @@
           <a class="skip-link" href="#portfolio-content">Pular para o conteúdo</a>
           <header class="portfolio-header">
             <a class="portfolio-brand" href="#portfolio-content"><span>SquadOne</span><small>Mapa do trabalho</small></a>
-            <nav aria-label="Navegação principal"><button type="button" data-view="today" class="is-active">Hoje</button><button type="button" data-view="projects">Projetos</button><button type="button" data-view="readings">Leituras <sup>4</sup></button></nav>
+            <nav aria-label="Navegação principal"><button type="button" data-view="today" class="is-active">Hoje</button><button type="button" data-view="projects">Projetos</button><button type="button" data-view="readings">Leituras <sup data-reading-count>4</sup></button></nav>
             <a class="portfolio-scheduler" href="https://aladdin-squadone-app.jicnzg.easypanel.host/" target="_blank" rel="noopener noreferrer"><span>Agendador pessoal</span><strong>Abrir SquadOne ↗</strong></a>
           </header>
           <div class="portfolio-status"><span class="prototype-flag">Protótipo · dados de exemplo</span><span><i class="signal signal--ok"></i>PC conectado</span><span><i class="signal signal--ok"></i>Dell conectado</span><span><i class="signal signal--ok"></i>Cloud consultada</span><time data-current-date></time></div>
 
           <main id="portfolio-content" class="portfolio-main" tabindex="-1">
             <section class="portfolio-screen" data-screen="today">
-              <header class="portfolio-hero"><div><span>Domingo, uma visão inteira</span><h1 tabindex="-1">Seu trabalho,<br>sem perder o fio.</h1></div><p>O SquadOne reúne o que existe no PC, no Dell e na nuvem — e separa andamento técnico, momento comercial e a próxima decisão.</p></header>
+              <header class="portfolio-hero"><div><span>Hoje, uma visão inteira</span><h1 tabindex="-1">Seu trabalho,<br>sem perder o fio.</h1></div><p>O SquadOne reúne o que existe no PC, no Dell e na nuvem — e separa andamento técnico, momento comercial e a próxima decisão.</p></header>
               <section class="portfolio-now" aria-labelledby="portfolio-now-title">
                 <div class="portfolio-section-title"><span>01</span><div><p>O que pede movimento</p><h2 id="portfolio-now-title">Três decisões abertas</h2></div></div>
                 <div class="portfolio-feature-grid">
@@ -81,13 +81,13 @@
 
   function portfolioReadings() {
     const readings = [
-      ['21 set · Dell worker', 'Produção Auto', 'O runner perdeu atualidade, não necessariamente execução.', 'A evidência existente é antiga. A interface deve dizer “estado desconhecido”, não “parado”.', '.logs/execucao-fila.log'],
-      ['21 set · contexto humano', 'Iris', 'Pronto tecnicamente não significa concluído comercialmente.', 'O próximo marco é uma clínica piloto; saúde do deploy e aquisição precisam permanecer separadas.', 'README + decisão de Rômulo'],
-      ['21 set · inventário cloud', 'Portfólio', 'Ativos duplicados podem pertencer ao mesmo projeto.', 'Silmer, silmer-web e seus deploys precisam ser correlacionados, não exibidos como três projetos.', 'GitHub + Vercel'],
-      ['21 set · PC', 'Prumo', 'A fonte informada ainda não apareceu na varredura allowlisted.', 'É necessária uma referência explícita antes de mostrar andamento ou arquivos.', 'C:\\Users\\sutil\\.claude']
+      ['auto-runner', '21 set · Dell worker', 'Produção Auto', 'O runner perdeu atualidade, não necessariamente execução.', 'A evidência existente é antiga. A interface deve dizer “estado desconhecido”, não “parado”.', '.logs/execucao-fila.log'],
+      ['iris-commercial', '21 set · contexto humano', 'Iris', 'Pronto tecnicamente não significa concluído comercialmente.', 'O próximo marco é uma clínica piloto; saúde do deploy e aquisição precisam permanecer separadas.', 'README + decisão de Rômulo'],
+      ['cloud-inventory', '21 set · inventário cloud', 'Portfólio', 'Ativos duplicados podem pertencer ao mesmo projeto.', 'Silmer, silmer-web e seus deploys precisam ser correlacionados, não exibidos como três projetos.', 'GitHub + Vercel'],
+      ['prumo-source', '21 set · PC', 'Prumo', 'A fonte informada ainda não apareceu na varredura allowlisted.', 'É necessária uma referência explícita antes de mostrar andamento ou arquivos.', 'C:\\Users\\sutil\\.claude']
     ]
-    return readings.map(([date, project, title, copy, evidence], index) => `
-      <article class="portfolio-reading" data-reading><span class="portfolio-reading__index">0${index + 1}</span><div><small>${date}</small><p>${project}</p><h2>${title}</h2><span>${copy}</span><em>Evidência · ${evidence}</em></div><div><button type="button" data-demo-action="Projeto ${project} aberto">Ver projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div></article>`).join('')
+    return readings.map(([id, date, project, title, copy, evidence], index) => `
+      <article class="portfolio-reading" data-reading data-reading-id="${id}"><span class="portfolio-reading__index">0${index + 1}</span><div><small>${date}</small><p>${project}</p><h2>${title}</h2><span>${copy}</span><em>Evidência · ${evidence}</em></div><div><button type="button" data-open-project data-project-name="${project}" data-project-meta="Leitura do Hermes · ${evidence}" data-project-next="${title}.">Ver projeto</button><button type="button" data-resolve-reading aria-pressed="false">Marcar resolvida</button></div></article>`).join('')
   }
 
   function projectDialogPortfolio() {
