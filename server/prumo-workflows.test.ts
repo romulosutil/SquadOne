@@ -100,6 +100,18 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.equal(humanized[0].json['Canal de contato'], 'WhatsApp confirmado no site')
   assert.equal(humanized[0].json['Destino do contato'], 'https://wa.me/5511999999999')
 
+  const prepareLookup = findNode(workflow, 'Preparar busca de WhatsApp')
+  const lookup = await runCode(prepareLookup.parameters.jsCode, {
+    $input: { all: () => [
+      { json: { company_name: 'Empresa', website: 'https://empresa.example/contato' } },
+      { json: { company_name: 'Sem site', website: '' } },
+      { json: { company_name: 'Host privado', website: 'http://127.0.0.1/admin' } },
+    ] },
+  })
+  assert.equal(lookup.length, 1)
+  assert.equal(lookup[0].json.website_lookup_url, 'https://empresa.example/contato')
+  assert.equal(findNode(workflow, 'Site — procurar WhatsApp').parameters.url, '={{ $json.website_lookup_url }}')
+
   const confirm = findNode(workflow, 'Confirmar WhatsApp publicado')
   const confirmed = await runCode(confirm.parameters.jsCode, {
     $: () => ({ all: () => [{ json: { phone: '(11) 3333-4444', website: 'https://empresa.example' } }] }),
@@ -110,11 +122,39 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.equal(confirmed[0].json.phone_kind, 'FIXO_PROVAVEL')
 
   const unconfirmed = await runCode(confirm.parameters.jsCode, {
-    $: () => ({ all: () => [{ json: { phone: '(11) 3333-4444', website: 'https://empresa.example' } }] }),
-    $input: { all: () => [{ json: { data: '<html>Telefone: (11) 3333-4444</html>' } }] },
+    $: () => ({ all: () => [{ json: { phone: '(11) 99999-4444', website: 'https://empresa.example' } }] }),
+    $input: { all: () => [{ json: { data: '<html>Telefone: (11) 99999-4444</html>' } }] },
   })
   assert.equal(unconfirmed[0].json.whatsapp_verified, false)
   assert.equal(unconfirmed[0].json.whatsapp_url, '')
+
+  const encoded = await runCode(confirm.parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { website: 'https://empresa.example' } }] }),
+    $input: { all: () => [{ json: { data: 'https%3A%2F%2Fwa.me%2F5511977776666' } }] },
+  })
+  assert.equal(encoded[0].json.whatsapp_url, 'https://wa.me/5511977776666')
+
+  const score = findNode(workflow, 'Pontuar para revisão humana')
+  const scoreConfig = {
+    minimumRating: 4,
+    reviewThreshold: 60,
+    targetTerms: ['distribuidora', 'atacado'],
+    requiredContactChannel: 'WHATSAPP_VERIFIED',
+  }
+  const [topRanked, lowerRanked, noWhatsapp] = await runCode(score.parameters.jsCode, {
+    $: () => ({ first: () => ({ json: scoreConfig }) }),
+    $input: { all: () => [
+      { json: { company_name: 'Distribuidora Alpha', address: 'Rua 1', website: 'https://alpha.example', types: 'wholesaler, store, point_of_interest', rating: 4.8, review_count: 250, business_status: 'OPERATIONAL', whatsapp_verified: true } },
+      { json: { company_name: 'Comercial Beta', address: 'Rua 2', website: 'https://beta.example', types: 'store', rating: 4.1, review_count: 35, business_status: 'OPERATIONAL', whatsapp_verified: true } },
+      { json: { company_name: 'Distribuidora sem canal', address: 'Rua 3', website: 'https://sem-canal.example', types: 'wholesaler, store', rating: 5, review_count: 500, business_status: 'OPERATIONAL', whatsapp_verified: false } },
+    ] },
+  })
+  assert.ok(topRanked.json.lead_score > lowerRanked.json.lead_score)
+  assert.equal(topRanked.json.status, 'REVIEW')
+  assert.equal(topRanked.json.reachability_score, 20)
+  assert.equal(noWhatsapp.json.status, 'DESCARTAR')
+  assert.equal(noWhatsapp.json.reachability_score, 0)
+  assert.match(noWhatsapp.json.research_note, /Fora da fila/u)
 })
 
 test('Diagnóstico usa a planilha real, consolida uma sessão por papel e devolve briefing ao lead', async () => {
