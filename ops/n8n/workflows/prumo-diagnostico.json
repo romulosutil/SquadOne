@@ -107,7 +107,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const input = $json;\nconst orderedAreas = Object.entries(input.areas).sort((a, b) => a[1] - b[1]);\nconst priorityAreas = orderedAreas.slice(0, 3);\nconst topGaps = input.gaps.slice(0, 6);\nconst band = input.prumoIndex < 45 ? 'dependência e informalidade altas' : input.prumoIndex < 70 ? 'processos parcialmente definidos, com aderência inconsistente' : 'base operacional padronizada, com oportunidades pontuais';\nconst priorities = priorityAreas.map(([area, score], index) => `${index + 1}. ${area} (${score}/100): validar regra, responsável e fonte de dados antes de automatizar.`).join('\\n');\nconst evidence = topGaps.map(gap => `- [${gap.id}] ${gap.role}: ${gap.answer}`).join('\\n') || '- Nenhuma resposta com pontuação 1 ou 2.';\nconst briefing = [\n  `Empresa: ${input.company}`,\n  `Índice PRUMO: ${input.prumoIndex}/100 — ${band}.`,\n  `Perspectivas concluídas: ${input.rolesReceived.join(\", \")}`,\n  '',\n  'Prioridades para revisão humana:',\n  priorities,\n  '',\n  'Evidências de menor maturidade:',\n  evidence,\n  '',\n  'Próximo passo: revisar o diagnóstico em workshop, confirmar regra, dono e dado-fonte e só então propor implementação.',\n].join('\\n');\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  company_id: input.company_id,\n  status: 'DIAGNOSTIC_REVIEW',\n  diagnostic_status: 'REVIEW_REQUIRED',\n  diagnostic_last_response_at: input.lastResponseAt,\n  diagnostic_roles_received: input.rolesReceived.join(' | '),\n  diagnostic_missing_roles: '',\n  diagnostic_session_count: input.sessionCount,\n  diagnostic_answer_count: input.answerCount,\n  prumo_index: input.prumoIndex,\n  diagnostic_areas: JSON.stringify(input.areas),\n  diagnostic_gaps: JSON.stringify(input.gaps),\n  diagnostic_briefing: briefing,\n  diagnostic_next_action: 'Revisar o briefing e conduzir workshop de priorização.',\n  diagnostic_result_at: now,\n  diagnostic_updated_at: now,\n} }];"
+          "jsCode": "const input = $json;\nconst orderedAreas = Object.entries(input.areas).sort((a, b) => a[1] - b[1]);\nconst priorityAreas = orderedAreas.slice(0, 3);\nconst topGaps = input.gaps.slice(0, 6);\nconst band = input.prumoIndex < 45 ? 'dependência e informalidade altas' : input.prumoIndex < 70 ? 'processos parcialmente definidos, com aderência inconsistente' : 'base operacional padronizada, com oportunidades pontuais';\nconst priorities = priorityAreas.map(([area, score], index) => `${index + 1}. ${area} (${score}/100): validar regra, responsável e fonte de dados antes de automatizar.`).join('\\n');\nconst evidence = topGaps.map(gap => `- [${gap.id}] ${gap.role}: ${gap.answer}`).join('\\n') || '- Nenhuma resposta com pontuação 1 ou 2.';\nconst briefing = [\n  `Empresa: ${input.company}`,\n  `Índice PRUMO: ${input.prumoIndex}/100 — ${band}.`,\n  `Perspectivas concluídas: ${input.rolesReceived.join(\", \")}`,\n  '',\n  'Prioridades para revisão humana:',\n  priorities,\n  '',\n  'Evidências de menor maturidade:',\n  evidence,\n  '',\n  'Próximo passo: revisar o diagnóstico em workshop, confirmar regra, dono e dado-fonte e só então propor implementação.',\n].join('\\n');\nconst now = new Date().toISOString();\n\nreturn [{ json: {\n  'ID da empresa': input.company_id,\n  'Etapa': 'Diagnóstico para revisar',\n  'Situação do diagnóstico': 'Revisão necessária',\n  'Última resposta em': input.lastResponseAt,\n  'Quem respondeu': input.rolesReceived.join(' | '),\n  'Quem falta responder': '',\n  'Sessões recebidas': input.sessionCount,\n  'Respostas válidas': input.answerCount,\n  'Índice PRUMO': input.prumoIndex,\n  'Resultado por área': JSON.stringify(input.areas),\n  'Lacunas observadas': JSON.stringify(input.gaps),\n  'Briefing interno': briefing,\n  'Próxima ação': 'Revise o briefing e conduza o workshop de priorização.',\n  'Diagnóstico concluído em': now,\n  'Atualizado em': now,\n} }];"
         },
         "id": "5",
         "name": "Briefing do relatório — revisão humana",
@@ -120,7 +120,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const now = new Date().toISOString();\nreturn [{ json: {\n  company_id: $json.company_id,\n  status: 'DIAGNOSTIC_IN_PROGRESS',\n  diagnostic_status: 'WAITING_FOR_SESSIONS',\n  diagnostic_last_response_at: $json.lastResponseAt,\n  diagnostic_roles_received: $json.rolesReceived.join(' | '),\n  diagnostic_missing_roles: $json.pendingRoles.join(' | '),\n  diagnostic_session_count: $json.sessionCount,\n  diagnostic_answer_count: $json.answerCount,\n  prumo_index: $json.prumoIndex,\n  diagnostic_areas: JSON.stringify($json.areas),\n  diagnostic_gaps: JSON.stringify($json.gaps),\n  diagnostic_briefing: '',\n  diagnostic_next_action: `Aguardar sessões: ${$json.pendingRoles.join(\", \")}`,\n  diagnostic_updated_at: now,\n} }];"
+          "jsCode": "const now = new Date().toISOString();\nreturn [{ json: {\n  'ID da empresa': $json.company_id,\n  'Etapa': 'Diagnóstico em andamento',\n  'Situação do diagnóstico': 'Aguardando respostas',\n  'Última resposta em': $json.lastResponseAt,\n  'Quem respondeu': $json.rolesReceived.join(' | '),\n  'Quem falta responder': $json.pendingRoles.join(' | '),\n  'Sessões recebidas': $json.sessionCount,\n  'Respostas válidas': $json.answerCount,\n  'Índice PRUMO': $json.prumoIndex,\n  'Resultado por área': JSON.stringify($json.areas),\n  'Lacunas observadas': JSON.stringify($json.gaps),\n  'Briefing interno': '',\n  'Próxima ação': `Aguarde as respostas de: ${$json.pendingRoles.join(\", \")}`,\n  'Atualizado em': now,\n} }];"
         },
         "id": "6",
         "name": "Aguardar sessões faltantes",
@@ -150,7 +150,7 @@
             "mappingMode": "autoMapInputData",
             "value": {},
             "matchingColumns": [
-              "company_id"
+              "ID da empresa"
             ],
             "schema": []
           },
@@ -193,7 +193,7 @@
             "mappingMode": "autoMapInputData",
             "value": {},
             "matchingColumns": [
-              "company_id"
+              "ID da empresa"
             ],
             "schema": []
           },
@@ -216,6 +216,17 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {},
+        "id": "9",
+        "name": "Reprocessar diagnóstico manualmente",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -520,
+          -140
+        ]
       }
     ],
     "connections": {
@@ -282,6 +293,17 @@
         ]
       },
       "Verificar respostas do Form — 5 min": {
+        "main": [
+          [
+            {
+              "node": "Ler todas as sessões da empresa",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reprocessar diagnóstico manualmente": {
         "main": [
           [
             {

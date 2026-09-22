@@ -126,9 +126,11 @@ ao diagnóstico sem transformar sinais públicos em diagnóstico. O
 entre a fila de revisão, o formulário pré-preenchido e o retorno do Índice
 PRUMO.
 
-O Lead Scout continua responsável pela descoberta e pela priorização. Um
-aceite comercial explícito (`status=CONTACT_ACCEPTED`) cria o convite e muda a
-linha para `DIAGNOSTIC_INVITE_READY`. Como a instância não possui credencial de
+O Lead Scout continua responsável pela descoberta e pela priorização. A guia
+`Leads` apresenta um contrato humano em português e mantém identificadores e
+detalhes técnicos ocultos. Um aceite comercial explícito (`Etapa=Contato
+aceito`) cria o convite e muda a linha para `Convite pronto`. Como a instância
+não possui credencial de
 e-mail ou WhatsApp, o workflow gera uma ação `mailto:`/`wa.me` para envio
 humano e não registra o convite como enviado.
 

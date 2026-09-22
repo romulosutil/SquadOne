@@ -28,7 +28,7 @@ const node = (workflow, name) => {
 
 const sheetLocator = (id, cachedResultName) => ({ __rl: true, value: id, mode: 'list', cachedResultName })
 
-const sheetsNode = ({ id, name, position, documentId = REVIEW_SHEET_ID, sheetId = REVIEW_SHEET_GID, documentName = 'PRUMO — Fila de revisão', sheetName = 'Leads', operation = 'appendOrUpdate', matchingColumns = ['company_id'] }) => ({
+const sheetsNode = ({ id, name, position, documentId = REVIEW_SHEET_ID, sheetId = REVIEW_SHEET_GID, documentName = 'PRUMO — Fila de revisão', sheetName = 'Leads', operation = 'appendOrUpdate', matchingColumns = ['ID da empresa'] }) => ({
   parameters: operation === 'read'
     ? {
         operation,
@@ -77,6 +77,9 @@ const sanitize = (workflow) => [{
 
 const lead = await loadWorkflow(leadSource)
 const diagnostic = await loadWorkflow(diagnosticSource)
+
+lead.nodes = lead.nodes.filter((candidate) => !['10', '11', '12', '13', '14'].includes(candidate.id))
+diagnostic.nodes = diagnostic.nodes.filter((candidate) => !['7', '8', '9'].includes(candidate.id))
 
 node(lead, 'Config — mercado-alvo').parameters.jsCode = `// Edite somente o mercado-alvo. O vínculo com o diagnóstico é estável e versionado.
 const city = 'São Paulo/SP';
@@ -139,7 +142,7 @@ return [{ json: {
   research_note: \`Consulta: ${'${cfg.query}'}. Após 3 tentativas, Google Places falhou. Causa: ${'${String(cause).slice(0, 800)}'}\`,
 } }];`
 
-node(lead, 'Persistir fila PRUMO').parameters.columns.matchingColumns = ['dedupe_key']
+node(lead, 'Persistir fila PRUMO').parameters.columns.matchingColumns = ['ID do lead']
 
 lead.nodes.push(
   {
@@ -154,21 +157,24 @@ lead.nodes.push(
   codeNode('12', 'Preparar convite do diagnóstico', [80, 500], `const FORM_URL = '${FORM_URL}';
 const COMPANY_ENTRY_ID = '${COMPANY_ENTRY_ID}';
 const now = new Date().toISOString();
+const value = (lead, ...labels) => labels.map(label => lead[label]).find(candidate => candidate !== undefined && candidate !== null) ?? '';
+const normalizeState = state => String(state ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 
 return $input.all().flatMap(({ json: lead }) => {
-  const status = String(lead.status ?? '').trim().toUpperCase();
-  const diagnosticStatus = String(lead.diagnostic_status ?? '').trim().toUpperCase();
-  if (status !== 'CONTACT_ACCEPTED' || ['INVITE_READY', 'INVITED', 'IN_PROGRESS', 'REVIEW_REQUIRED', 'COMPLETED'].includes(diagnosticStatus)) return [];
+  const status = normalizeState(value(lead, 'Etapa', 'status'));
+  const diagnosticStatus = normalizeState(value(lead, 'Situação do diagnóstico', 'diagnostic_status'));
+  if (!['CONTATO ACEITO', 'CONTACT_ACCEPTED'].includes(status)) return [];
+  if (['CONVITE PRONTO', 'INVITE_READY', 'CONVITE ENVIADO', 'INVITED', 'EM ANDAMENTO', 'IN_PROGRESS', 'AGUARDANDO RESPOSTAS', 'WAITING_FOR_SESSIONS', 'REVISAO NECESSARIA', 'REVIEW_REQUIRED', 'CONCLUIDO', 'COMPLETED'].includes(diagnosticStatus)) return [];
 
-  const companyId = String(lead.company_id || lead.dedupe_key || '').trim();
-  const companyName = String(lead.company_name || '').trim();
+  const companyId = String(value(lead, 'ID da empresa', 'company_id', 'ID do lead', 'dedupe_key')).trim();
+  const companyName = String(value(lead, 'Empresa', 'company_name')).trim();
   if (!companyId || !companyName) return [];
 
   const companyRef = \`${'${companyId}'}::${'${companyName}'}\`;
   const formUrl = \`${'${FORM_URL}'}?usp=pp_url&entry.${'${COMPANY_ENTRY_ID}'}=${'${encodeURIComponent(companyRef)}'}\`;
   const message = \`Olá! Conforme combinado, este é o diagnóstico operacional PRUMO de ${'${companyName}'}. Cada uma das cinco perspectivas deve responder uma vez: ${'${formUrl}'}\`;
-  const channel = String(lead.contact_channel ?? '').trim().toLowerCase();
-  const destination = String(lead.contact_url ?? '').trim();
+  const channel = String(value(lead, 'Canal de contato', 'contact_channel')).trim().toLowerCase();
+  const destination = String(value(lead, 'Destino do contato', 'contact_url')).trim();
   let actionUrl = formUrl;
   if (channel.includes('whatsapp')) {
     const digits = destination.replace(/\\D/g, '');
@@ -179,25 +185,65 @@ return $input.all().flatMap(({ json: lead }) => {
   }
 
   return [{ json: {
-    company_id: companyId,
-    dedupe_key: String(lead.dedupe_key || companyId),
-    status: 'DIAGNOSTIC_INVITE_READY',
-    diagnostic_status: 'INVITE_READY',
-    diagnostic_form_url: formUrl,
-    diagnostic_invite_message: message,
-    diagnostic_invite_action_url: actionUrl,
-    diagnostic_next_action: 'Enviar o convite pelo canal validado e, após o envio, marcar diagnostic_status como INVITED.',
-    diagnostic_updated_at: now,
+    'ID da empresa': companyId,
+    'ID do lead': String(value(lead, 'ID do lead', 'dedupe_key') || companyId),
+    'Etapa': 'Convite pronto',
+    'Situação do diagnóstico': 'Convite pronto',
+    'Formulário do diagnóstico': formUrl,
+    'Mensagem do convite': message,
+    'Enviar convite': actionUrl,
+    'Próxima ação': 'Envie o convite pelo canal validado. Depois, marque a situação do diagnóstico como “Convite enviado”.',
+    'Atualizado em': now,
   } }];
 });`),
-  sheetsNode({ id: '13', name: 'Atualizar convite na fila', position: [360, 500], matchingColumns: ['dedupe_key'] }),
+  sheetsNode({ id: '13', name: 'Atualizar convite na fila', position: [360, 500], matchingColumns: ['ID do lead'] }),
+  codeNode('14', 'Humanizar linha da fila', [980, 80], `const labels = {
+  REVIEW: 'Revisar',
+  DESCARTAR: 'Fora do perfil',
+  ERROR: 'Erro na descoberta',
+  CONTACT_ACCEPTED: 'Contato aceito',
+  DIAGNOSTIC_INVITE_READY: 'Convite pronto',
+  DIAGNOSTIC_IN_PROGRESS: 'Diagnóstico em andamento',
+  DIAGNOSTIC_REVIEW: 'Diagnóstico para revisar',
+};
+
+return $input.all().map(({ json: lead }) => ({ json: {
+  'ID do lead': lead.dedupe_key,
+  'Google Place ID': lead.place_id,
+  'Empresa': lead.company_name,
+  'Endereço': lead.address,
+  'Site': lead.website,
+  'Telefone': lead.phone,
+  'Categorias no Google': lead.types,
+  'Nota no Google': lead.rating,
+  'Avaliações no Google': lead.review_count,
+  'Situação no Google': lead.business_status,
+  'Encontrado em': lead.discovered_at,
+  'Aderência': lead.fit_score,
+  'Complexidade': lead.complexity_score,
+  'Facilidade de contato': lead.reachability_score,
+  'Prioridade': lead.lead_score,
+  'Motivo da prioridade': lead.score_reason,
+  'Etapa': labels[lead.status] ?? lead.status,
+  'Próxima verificação': lead.research_note,
+  'Busca de origem': lead.search_query,
+  'Cidade': lead.city,
+  'Segmento': lead.target_vertical,
+  'ID da empresa': lead.company_id,
+  'Erro técnico': lead.status === 'ERROR' ? lead.research_note : '',
+} }));`),
 )
+
+lead.connections['Enviar para revisão?'].main[0] = [{ node: 'Humanizar linha da fila', type: 'main', index: 0 }]
+lead.connections['Registrar falha de descoberta'] = { main: [[{ node: 'Humanizar linha da fila', type: 'main', index: 0 }]] }
+lead.connections['Humanizar linha da fila'] = { main: [[{ node: 'Persistir fila PRUMO', type: 'main', index: 0 }]] }
 
 lead.connections['Sincronizar aceites — 5 min'] = { main: [[{ node: 'Ler fila para convites', type: 'main', index: 0 }]] }
 lead.connections['Ler fila para convites'] = { main: [[{ node: 'Preparar convite do diagnóstico', type: 'main', index: 0 }]] }
 lead.connections['Preparar convite do diagnóstico'] = { main: [[{ node: 'Atualizar convite na fila', type: 'main', index: 0 }]] }
 
-const responseTrigger = node(diagnostic, 'Nova resposta do Form')
+const responseTrigger = diagnostic.nodes.find((candidate) => ['Nova resposta do Form', 'Verificar respostas do Form — 5 min'].includes(candidate.name))
+if (!responseTrigger) throw new Error('Nó não encontrado: Nova resposta do Form')
 responseTrigger.name = 'Verificar respostas do Form — 5 min'
 responseTrigger.type = 'n8n-nodes-base.scheduleTrigger'
 responseTrigger.typeVersion = 1.2
@@ -322,48 +368,57 @@ const briefing = [
 const now = new Date().toISOString();
 
 return [{ json: {
-  company_id: input.company_id,
-  status: 'DIAGNOSTIC_REVIEW',
-  diagnostic_status: 'REVIEW_REQUIRED',
-  diagnostic_last_response_at: input.lastResponseAt,
-  diagnostic_roles_received: input.rolesReceived.join(' | '),
-  diagnostic_missing_roles: '',
-  diagnostic_session_count: input.sessionCount,
-  diagnostic_answer_count: input.answerCount,
-  prumo_index: input.prumoIndex,
-  diagnostic_areas: JSON.stringify(input.areas),
-  diagnostic_gaps: JSON.stringify(input.gaps),
-  diagnostic_briefing: briefing,
-  diagnostic_next_action: 'Revisar o briefing e conduzir workshop de priorização.',
-  diagnostic_result_at: now,
-  diagnostic_updated_at: now,
+  'ID da empresa': input.company_id,
+  'Etapa': 'Diagnóstico para revisar',
+  'Situação do diagnóstico': 'Revisão necessária',
+  'Última resposta em': input.lastResponseAt,
+  'Quem respondeu': input.rolesReceived.join(' | '),
+  'Quem falta responder': '',
+  'Sessões recebidas': input.sessionCount,
+  'Respostas válidas': input.answerCount,
+  'Índice PRUMO': input.prumoIndex,
+  'Resultado por área': JSON.stringify(input.areas),
+  'Lacunas observadas': JSON.stringify(input.gaps),
+  'Briefing interno': briefing,
+  'Próxima ação': 'Revise o briefing e conduza o workshop de priorização.',
+  'Diagnóstico concluído em': now,
+  'Atualizado em': now,
 } }];`
 
 node(diagnostic, 'Aguardar sessões faltantes').parameters.jsCode = `const now = new Date().toISOString();
 return [{ json: {
-  company_id: $json.company_id,
-  status: 'DIAGNOSTIC_IN_PROGRESS',
-  diagnostic_status: 'WAITING_FOR_SESSIONS',
-  diagnostic_last_response_at: $json.lastResponseAt,
-  diagnostic_roles_received: $json.rolesReceived.join(' | '),
-  diagnostic_missing_roles: $json.pendingRoles.join(' | '),
-  diagnostic_session_count: $json.sessionCount,
-  diagnostic_answer_count: $json.answerCount,
-  prumo_index: $json.prumoIndex,
-  diagnostic_areas: JSON.stringify($json.areas),
-  diagnostic_gaps: JSON.stringify($json.gaps),
-  diagnostic_briefing: '',
-  diagnostic_next_action: \`Aguardar sessões: ${'${$json.pendingRoles.join(", ")}'}\`,
-  diagnostic_updated_at: now,
+  'ID da empresa': $json.company_id,
+  'Etapa': 'Diagnóstico em andamento',
+  'Situação do diagnóstico': 'Aguardando respostas',
+  'Última resposta em': $json.lastResponseAt,
+  'Quem respondeu': $json.rolesReceived.join(' | '),
+  'Quem falta responder': $json.pendingRoles.join(' | '),
+  'Sessões recebidas': $json.sessionCount,
+  'Respostas válidas': $json.answerCount,
+  'Índice PRUMO': $json.prumoIndex,
+  'Resultado por área': JSON.stringify($json.areas),
+  'Lacunas observadas': JSON.stringify($json.gaps),
+  'Briefing interno': '',
+  'Próxima ação': \`Aguarde as respostas de: ${'${$json.pendingRoles.join(", ")}'}\`,
+  'Atualizado em': now,
 } }];`
 
 diagnostic.nodes.push(
   sheetsNode({ id: '7', name: 'Devolver briefing ao lead', position: [700, 0] }),
   sheetsNode({ id: '8', name: 'Atualizar pendência no lead', position: [700, 220] }),
+  {
+    parameters: {},
+    id: '9',
+    name: 'Reprocessar diagnóstico manualmente',
+    type: 'n8n-nodes-base.manualTrigger',
+    typeVersion: 1,
+    position: [-520, -140],
+  },
 )
 diagnostic.connections['Briefing do relatório — revisão humana'] = { main: [[{ node: 'Devolver briefing ao lead', type: 'main', index: 0 }]] }
 diagnostic.connections['Aguardar sessões faltantes'] = { main: [[{ node: 'Atualizar pendência no lead', type: 'main', index: 0 }]] }
-diagnostic.connections['Verificar respostas do Form — 5 min'] = diagnostic.connections['Nova resposta do Form']
+diagnostic.connections['Reprocessar diagnóstico manualmente'] = { main: [[{ node: 'Ler todas as sessões da empresa', type: 'main', index: 0 }]] }
+diagnostic.connections['Verificar respostas do Form — 5 min'] = diagnostic.connections['Nova resposta do Form'] ?? diagnostic.connections['Verificar respostas do Form — 5 min']
 delete diagnostic.connections['Nova resposta do Form']
 diagnostic.settings = { ...(diagnostic.settings ?? {}), timezone: 'America/Sao_Paulo' }
 

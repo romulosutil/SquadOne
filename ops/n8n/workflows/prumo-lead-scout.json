@@ -170,7 +170,7 @@
             "mappingMode": "autoMapInputData",
             "value": {},
             "matchingColumns": [
-              "dedupe_key"
+              "ID do lead"
             ],
             "schema": []
           },
@@ -268,7 +268,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform';\nconst COMPANY_ENTRY_ID = '171063854';\nconst now = new Date().toISOString();\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const status = String(lead.status ?? '').trim().toUpperCase();\n  const diagnosticStatus = String(lead.diagnostic_status ?? '').trim().toUpperCase();\n  if (status !== 'CONTACT_ACCEPTED' || ['INVITE_READY', 'INVITED', 'IN_PROGRESS', 'REVIEW_REQUIRED', 'COMPLETED'].includes(diagnosticStatus)) return [];\n\n  const companyId = String(lead.company_id || lead.dedupe_key || '').trim();\n  const companyName = String(lead.company_name || '').trim();\n  if (!companyId || !companyName) return [];\n\n  const companyRef = `${companyId}::${companyName}`;\n  const formUrl = `${FORM_URL}?usp=pp_url&entry.${COMPANY_ENTRY_ID}=${encodeURIComponent(companyRef)}`;\n  const message = `Olá! Conforme combinado, este é o diagnóstico operacional PRUMO de ${companyName}. Cada uma das cinco perspectivas deve responder uma vez: ${formUrl}`;\n  const channel = String(lead.contact_channel ?? '').trim().toLowerCase();\n  const destination = String(lead.contact_url ?? '').trim();\n  let actionUrl = formUrl;\n  if (channel.includes('whatsapp')) {\n    const digits = destination.replace(/\\D/g, '');\n    if (digits) actionUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;\n  } else if (channel.includes('email') || destination.includes('@')) {\n    const email = destination.replace(/^mailto:/i, '');\n    actionUrl = `mailto:${email}?subject=${encodeURIComponent(`Diagnóstico PRUMO — ${companyName}`)}&body=${encodeURIComponent(message)}`;\n  }\n\n  return [{ json: {\n    company_id: companyId,\n    dedupe_key: String(lead.dedupe_key || companyId),\n    status: 'DIAGNOSTIC_INVITE_READY',\n    diagnostic_status: 'INVITE_READY',\n    diagnostic_form_url: formUrl,\n    diagnostic_invite_message: message,\n    diagnostic_invite_action_url: actionUrl,\n    diagnostic_next_action: 'Enviar o convite pelo canal validado e, após o envio, marcar diagnostic_status como INVITED.',\n    diagnostic_updated_at: now,\n  } }];\n});"
+          "jsCode": "const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform';\nconst COMPANY_ENTRY_ID = '171063854';\nconst now = new Date().toISOString();\nconst value = (lead, ...labels) => labels.map(label => lead[label]).find(candidate => candidate !== undefined && candidate !== null) ?? '';\nconst normalizeState = state => String(state ?? '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const status = normalizeState(value(lead, 'Etapa', 'status'));\n  const diagnosticStatus = normalizeState(value(lead, 'Situação do diagnóstico', 'diagnostic_status'));\n  if (!['CONTATO ACEITO', 'CONTACT_ACCEPTED'].includes(status)) return [];\n  if (['CONVITE PRONTO', 'INVITE_READY', 'CONVITE ENVIADO', 'INVITED', 'EM ANDAMENTO', 'IN_PROGRESS', 'AGUARDANDO RESPOSTAS', 'WAITING_FOR_SESSIONS', 'REVISAO NECESSARIA', 'REVIEW_REQUIRED', 'CONCLUIDO', 'COMPLETED'].includes(diagnosticStatus)) return [];\n\n  const companyId = String(value(lead, 'ID da empresa', 'company_id', 'ID do lead', 'dedupe_key')).trim();\n  const companyName = String(value(lead, 'Empresa', 'company_name')).trim();\n  if (!companyId || !companyName) return [];\n\n  const companyRef = `${companyId}::${companyName}`;\n  const formUrl = `${FORM_URL}?usp=pp_url&entry.${COMPANY_ENTRY_ID}=${encodeURIComponent(companyRef)}`;\n  const message = `Olá! Conforme combinado, este é o diagnóstico operacional PRUMO de ${companyName}. Cada uma das cinco perspectivas deve responder uma vez: ${formUrl}`;\n  const channel = String(value(lead, 'Canal de contato', 'contact_channel')).trim().toLowerCase();\n  const destination = String(value(lead, 'Destino do contato', 'contact_url')).trim();\n  let actionUrl = formUrl;\n  if (channel.includes('whatsapp')) {\n    const digits = destination.replace(/\\D/g, '');\n    if (digits) actionUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;\n  } else if (channel.includes('email') || destination.includes('@')) {\n    const email = destination.replace(/^mailto:/i, '');\n    actionUrl = `mailto:${email}?subject=${encodeURIComponent(`Diagnóstico PRUMO — ${companyName}`)}&body=${encodeURIComponent(message)}`;\n  }\n\n  return [{ json: {\n    'ID da empresa': companyId,\n    'ID do lead': String(value(lead, 'ID do lead', 'dedupe_key') || companyId),\n    'Etapa': 'Convite pronto',\n    'Situação do diagnóstico': 'Convite pronto',\n    'Formulário do diagnóstico': formUrl,\n    'Mensagem do convite': message,\n    'Enviar convite': actionUrl,\n    'Próxima ação': 'Envie o convite pelo canal validado. Depois, marque a situação do diagnóstico como “Convite enviado”.',\n    'Atualizado em': now,\n  } }];\n});"
         },
         "id": "12",
         "name": "Preparar convite do diagnóstico",
@@ -298,7 +298,7 @@
             "mappingMode": "autoMapInputData",
             "value": {},
             "matchingColumns": [
-              "dedupe_key"
+              "ID do lead"
             ],
             "schema": []
           },
@@ -321,6 +321,19 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const labels = {\n  REVIEW: 'Revisar',\n  DESCARTAR: 'Fora do perfil',\n  ERROR: 'Erro na descoberta',\n  CONTACT_ACCEPTED: 'Contato aceito',\n  DIAGNOSTIC_INVITE_READY: 'Convite pronto',\n  DIAGNOSTIC_IN_PROGRESS: 'Diagnóstico em andamento',\n  DIAGNOSTIC_REVIEW: 'Diagnóstico para revisar',\n};\n\nreturn $input.all().map(({ json: lead }) => ({ json: {\n  'ID do lead': lead.dedupe_key,\n  'Google Place ID': lead.place_id,\n  'Empresa': lead.company_name,\n  'Endereço': lead.address,\n  'Site': lead.website,\n  'Telefone': lead.phone,\n  'Categorias no Google': lead.types,\n  'Nota no Google': lead.rating,\n  'Avaliações no Google': lead.review_count,\n  'Situação no Google': lead.business_status,\n  'Encontrado em': lead.discovered_at,\n  'Aderência': lead.fit_score,\n  'Complexidade': lead.complexity_score,\n  'Facilidade de contato': lead.reachability_score,\n  'Prioridade': lead.lead_score,\n  'Motivo da prioridade': lead.score_reason,\n  'Etapa': labels[lead.status] ?? lead.status,\n  'Próxima verificação': lead.research_note,\n  'Busca de origem': lead.search_query,\n  'Cidade': lead.city,\n  'Segmento': lead.target_vertical,\n  'ID da empresa': lead.company_id,\n  'Erro técnico': lead.status === 'ERROR' ? lead.research_note : '',\n} }));"
+        },
+        "id": "14",
+        "name": "Humanizar linha da fila",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          980,
+          80
+        ]
       }
     ],
     "connections": {
@@ -401,7 +414,7 @@
         "main": [
           [
             {
-              "node": "Persistir fila PRUMO",
+              "node": "Humanizar linha da fila",
               "type": "main",
               "index": 0
             }
@@ -413,7 +426,7 @@
         "main": [
           [
             {
-              "node": "Persistir fila PRUMO",
+              "node": "Humanizar linha da fila",
               "type": "main",
               "index": 0
             }
@@ -447,6 +460,17 @@
           [
             {
               "node": "Atualizar convite na fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Humanizar linha da fila": {
+        "main": [
+          [
+            {
+              "node": "Persistir fila PRUMO",
               "type": "main",
               "index": 0
             }

@@ -35,6 +35,7 @@
 16. Atualização persistente da Central é somente leitura: o canal SSE pode
     solicitar nova consulta, mas não iniciar runner, serviço, sincronização ou
     envio.
-17. Workflows PRUMO usam `company_id` como vínculo canônico. Preparar um link
-    ou uma ação de contato não prova envio; somente evidência do canal pode
-    promover `diagnostic_status` de `INVITE_READY` para `INVITED`.
+17. Workflows PRUMO usam `ID da empresa` (`company_id` internamente) como
+    vínculo canônico. Preparar um link ou uma ação de contato não prova envio;
+    somente evidência do canal pode promover `Situação do diagnóstico` de
+    `Convite pronto` para `Convite enviado`.
