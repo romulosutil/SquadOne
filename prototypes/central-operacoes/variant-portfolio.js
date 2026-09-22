@@ -8,7 +8,7 @@
         <div class="prototype prototype--portfolio" data-variant="portfolio">
           <a class="skip-link" href="#portfolio-content">Pular para o conteúdo</a>
           <header class="portfolio-header">
-            <a class="portfolio-brand" href="#portfolio-content"><span>SquadOne</span><small>Mapa do trabalho</small></a>
+            <a class="portfolio-brand" href="#portfolio-content"><span class="portfolio-brand__mark">S1</span><span class="portfolio-brand__copy"><strong>SquadOne</strong><small>Mapa do trabalho</small></span></a>
             <nav aria-label="Navegação principal"><button type="button" data-view="today" class="is-active">Hoje</button><button type="button" data-view="projects">Projetos</button><button type="button" data-view="readings">Leituras <sup data-reading-count>4</sup></button></nav>
             <a class="portfolio-scheduler" href="https://aladdin-squadone-app.jicnzg.easypanel.host/" target="_blank" rel="noopener noreferrer"><span>Agendador pessoal</span><strong>Abrir SquadOne ↗</strong></a>
           </header>

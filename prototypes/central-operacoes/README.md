@@ -17,6 +17,10 @@ estático. O seletor inferior alterna entre três direções completas:
 2. **Portfólio** — narrativa de produto e momentos de cada projeto;
 3. **Fluxo** — relações entre PC, Dell, nuvem, projetos e evidências.
 
+As três direções compartilham o sistema visual do Comando/SquadOne — marca S1,
+paleta, tipografia, superfícies e estados. Elas divergem apenas na organização
+da informação, não na identidade do produto.
+
 Use `1`–`3` ou as setas para trocar de direção e `R` para remontar a tela.
 Dentro de cada direção, navegue entre `Hoje`, `Projetos` e `Leituras`.
 

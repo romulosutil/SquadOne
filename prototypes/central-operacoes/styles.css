@@ -339,6 +339,280 @@ button { cursor: pointer; }
 .flow-reading.is-resolved { opacity: 0.42; }
 .flow-footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1rem, 3vw, 2.5rem) 6rem; border-top: 3px solid #142039; background: #e9eefb; font-size: 0.62rem; text-transform: uppercase; }
 
+/* Unified SquadOne visual system: Comando is the canonical skin. */
+.prototype--portfolio,
+.prototype--flow {
+  background: var(--blue-paper);
+  color: var(--ink);
+  font-family: var(--ui);
+}
+
+.prototype--flow { background-image: none; }
+
+.portfolio-header,
+.flow-header {
+  min-height: 5.5rem;
+  border-bottom: 4px solid var(--ink);
+  background: var(--blue);
+  color: var(--paper-strong);
+}
+
+.portfolio-brand,
+.flow-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--paper-strong);
+  text-decoration: none;
+}
+
+.portfolio-brand__mark,
+.flow-brand__mark {
+  display: grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 3px solid var(--ink);
+  background: var(--yellow);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--coral);
+  font: 950 0.9rem var(--ui);
+}
+
+.portfolio-brand__copy strong,
+.portfolio-brand__copy small,
+.flow-brand strong,
+.flow-brand small { display: block; }
+
+.portfolio-brand__copy strong,
+.flow-brand strong {
+  color: var(--paper-strong);
+  font: 950 1.1rem/1 var(--ui);
+  letter-spacing: -0.04em;
+}
+
+.portfolio-brand__copy small,
+.flow-brand small {
+  margin-top: 0.25rem;
+  color: #b9c2d4;
+  font: 750 0.6rem var(--ui);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.portfolio-header nav,
+.flow-header nav { gap: 0.35rem; }
+
+.portfolio-header nav button,
+.flow-header nav button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 2px solid transparent;
+  background: transparent;
+  color: #d7deeb;
+  font: 850 0.74rem var(--ui);
+  transition: transform 160ms var(--ease-out), background 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.portfolio-header nav button:hover,
+.flow-header nav button:hover { border-color: #8792a7; }
+
+.portfolio-header nav button.is-active,
+.flow-header nav button.is-active {
+  border-color: var(--ink);
+  background: var(--yellow);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--coral);
+}
+
+.portfolio-header nav button:active,
+.flow-header nav button:active { transform: translateY(1px); }
+
+.portfolio-header nav sup,
+.flow-header nav button span {
+  background: var(--coral);
+  color: var(--ink);
+  font-family: var(--ui);
+}
+
+.portfolio-scheduler,
+.flow-scheduler {
+  justify-self: end;
+  display: grid;
+  min-height: 3rem !important;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--yellow);
+  background: #111826;
+  color: var(--paper-strong);
+  box-shadow: none;
+  text-align: left;
+  text-decoration: none;
+  transition: transform 160ms var(--ease-out), background 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.portfolio-scheduler:hover,
+.flow-scheduler:hover { background: var(--yellow); color: var(--ink); }
+
+.portfolio-scheduler:active,
+.flow-scheduler:active { transform: translateY(1px); }
+
+.portfolio-scheduler span,
+.flow-scheduler span {
+  font: 800 0.58rem var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-scheduler strong,
+.flow-scheduler strong { margin-top: 0.1rem; font: 900 0.78rem var(--ui); }
+
+.portfolio-status,
+.flow-strip {
+  min-height: 3.5rem;
+  border-bottom: 4px solid var(--ink);
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.portfolio-main,
+.flow-main { max-width: 100rem; }
+
+.portfolio-screen,
+.flow-screen { padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 3vw, 3rem) 7rem; }
+
+.portfolio-hero h1,
+.portfolio-page-heading h1,
+.flow-page-heading h1 {
+  font: 950 clamp(2.3rem, 5vw, 5.6rem)/0.9 var(--ui);
+  letter-spacing: -0.075em;
+  text-wrap: balance;
+}
+
+.portfolio-section-title h2,
+.portfolio-feature h3,
+.portfolio-project-card h2,
+.portfolio-reading h2,
+.portfolio-presence strong,
+.flow-section-heading h2,
+.flow-agenda h2,
+.flow-project__name h2,
+.flow-reading__body h2 { font-family: var(--ui); font-weight: 950; }
+
+.portfolio-feature,
+.portfolio-presence,
+.portfolio-project-card,
+.portfolio-reading-list,
+.work-map,
+.decision-flow,
+.flow-agenda,
+.flow-project-list,
+.flow-readings,
+.reading-pipeline {
+  border: var(--line);
+  background: var(--paper-strong);
+  box-shadow: var(--shadow);
+}
+
+.portfolio-feature--lead,
+.flow-agenda { background: var(--yellow); }
+
+.portfolio-feature:nth-child(3) { background: var(--mint); }
+
+.portfolio-feature h3 { font-size: clamp(1.65rem, 3vw, 2.6rem); }
+
+.portfolio-project-card,
+.portfolio-project-card:nth-child(3n + 1),
+.portfolio-project-card:nth-child(3n + 2) { background: var(--paper-strong); }
+
+.portfolio-project-card__top > span {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--blue-paper);
+  font-family: var(--mono);
+  font-weight: 800;
+}
+
+.portfolio-presence strong { font-size: clamp(2.2rem, 4vw, 3.8rem); }
+
+.portfolio-reading p { color: var(--red); }
+
+.portfolio-feature button,
+.portfolio-project-card button,
+.portfolio-reading button,
+.decision-flow button,
+.flow-project button,
+.flow-reading button {
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--ui);
+  font-weight: 900;
+  transition: transform 160ms var(--ease-out), background 160ms var(--ease-out), color 160ms var(--ease-out), padding 160ms var(--ease-out);
+}
+
+.portfolio-feature button:hover,
+.portfolio-project-card button:hover,
+.portfolio-reading button:hover,
+.decision-flow button:hover,
+.flow-project button:hover,
+.flow-reading button:hover { background: var(--ink); color: var(--paper-strong); }
+
+.portfolio-feature button:active,
+.portfolio-project-card button:active,
+.portfolio-reading button:active,
+.decision-flow button:active,
+.flow-project button:active,
+.flow-reading button:active { transform: translateY(1px); }
+
+.scope-filter--paper button[aria-pressed="true"],
+.scope-filter--blueprint button[aria-pressed="true"] { background: var(--ink); color: var(--paper-strong); }
+
+.portfolio-project-tools input,
+.flow-project-tools input { border: var(--line); background: var(--paper-strong); }
+
+.flow-page-heading > p { border-left-color: var(--ink); }
+
+.work-map,
+.decision-flow,
+.flow-agenda,
+.flow-project-list,
+.flow-readings { border-color: var(--ink); }
+
+.flow-section-heading,
+.map-lane header,
+.decision-flow li,
+.flow-project,
+.flow-reading { border-color: var(--ink); }
+
+.map-lane { border-color: var(--ink); background: var(--paper-strong); }
+.map-lane--core { background: var(--mint); }
+.map-lane header > span { background: var(--blue); color: var(--paper-strong); }
+.map-lane li.is-gap { background: #fff0b9; }
+.decision-flow li > span { border-color: var(--ink); }
+.flow-project__nodes span { border-color: var(--ink); background: var(--blue-paper); }
+.reading-pipeline { border-style: dashed; box-shadow: none; }
+.reading-pipeline span { border-color: var(--ink); background: var(--mint); }
+.flow-reading__rail { background: var(--coral); }
+
+.portfolio-footer,
+.flow-footer {
+  border-top: 4px solid var(--ink);
+  background: var(--blue);
+  color: var(--paper-strong);
+}
+
+.project-detail--paper,
+.project-detail--blueprint { background: var(--paper-strong); }
+
+.project-detail--paper .project-detail__bar,
+.project-detail--blueprint .project-detail__bar { background: var(--yellow); }
+
+.project-detail--paper .project-detail__body h2 { font-family: var(--ui); font-weight: 950; }
+
 @keyframes proto-enter { from { opacity: 0; transform: translateY(0.65rem); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 1100px) {
