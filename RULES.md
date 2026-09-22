@@ -35,3 +35,9 @@
 16. Atualização persistente da Central é somente leitura: o canal SSE pode
     solicitar nova consulta, mas não iniciar runner, serviço, sincronização ou
     envio.
+17. `deploy/dell/licitacoes-automation/` versiona somente configuração e código
+    não sensíveis; `.env`, dados, históricos e backups do radar PNCP não entram
+    no Git.
+18. A chamada do n8n ao collector PNCP deve ser assíncrona e idempotente durante
+    uma execução ativa: confirmação rápida com ID, repetição com o mesmo ID e
+    acompanhamento por estado persistido.

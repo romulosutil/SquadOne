@@ -42,3 +42,13 @@ systemctl --user enable --now squadone-operations.service
 
 O login do Windows acessa a Central por túnel SSH local em
 `http://127.0.0.1:9120/`; nenhuma porta pública é necessária.
+
+## Radar PNCP
+
+Os arquivos não sensíveis do Compose do radar ficam em
+`deploy/dell/licitacoes-automation/`. Para atualizar o diretório operacional,
+copie esse conteúdo para `~/licitacoes-automation` sem remover `.env`, `data/`,
+`backups/` ou `graphify-out/`, valide com `docker compose config --quiet` e
+recrie apenas os serviços alterados. O workflow versionado usa gatilho manual
+para testes no editor e agenda diária para produção; ambos recebem confirmação
+rápida do collector, sem aguardar a resposta do PNCP.
