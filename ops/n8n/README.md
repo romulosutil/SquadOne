@@ -102,7 +102,9 @@ fronteira entre descoberta, convite e diagnóstico.
 
 O Lead Scout somente acrescenta empresas inéditas à fila. Ele não limpa nem
 reescreve linhas existentes, preservando a revisão e os dados comerciais já
-registrados.
+registrados. Empresas sem site consultável ou sem WhatsApp confirmado também
+são acrescentadas como `Fora do perfil`; assim, o fluxo não para no meio e o
+mesmo resultado não volta a ser descoberto no disparo seguinte.
 
 ## Regra do WhatsApp
 

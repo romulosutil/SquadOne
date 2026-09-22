@@ -146,6 +146,28 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   assert.equal(lookup[1].json.website_lookup_url, 'https://fcempresa.example/whatsapp')
   assert.equal(findNode(workflow, 'Site — procurar WhatsApp').parameters.url, '={{ $json.website_lookup_url }}')
 
+  const continueWithoutWebsite = findNode(workflow, 'Continuar sem site válido')
+  const withoutWebsite = await runCode(continueWithoutWebsite.parameters.jsCode, {
+    $input: { all: () => [
+      { json: { company_name: 'Empresa', website: 'https://empresa.example/contato' } },
+      { json: { company_name: 'Sem site', website: '', phone: '(11) 99999-4444' } },
+      { json: { company_name: 'Host privado', website: 'http://127.0.0.1/admin' } },
+      { json: { company_name: 'IPv6 privado', website: 'http://[::1]/admin' } },
+    ] },
+  })
+  assert.equal(withoutWebsite.length, 3)
+  assert.equal(withoutWebsite[0].json.company_name, 'Sem site')
+  assert.equal(withoutWebsite[0].json.whatsapp_verified, false)
+  assert.equal(withoutWebsite[0].json.phone_kind, 'CELULAR_PROVAVEL')
+  assert.equal(withoutWebsite[0].json.whatsapp_lookup_status, 'SEM_SITE')
+  assert.equal(withoutWebsite[1].json.whatsapp_lookup_status, 'SITE_NAO_CONSULTAVEL')
+
+  const reviewConnections = workflow.connections['Enviar para revisão?'] as {
+    main: Array<Array<{ node: string }>>
+  }
+  assert.equal(reviewConnections.main[0][0].node, 'Humanizar linha da fila')
+  assert.equal(reviewConnections.main[1][0].node, 'Humanizar linha da fila')
+
   const confirm = findNode(workflow, 'Confirmar WhatsApp publicado')
   const confirmed = await runCode(confirm.parameters.jsCode, {
     $: () => ({ all: () => [{ json: { phone: '(11) 3333-4444', website: 'https://empresa.example' } }] }),

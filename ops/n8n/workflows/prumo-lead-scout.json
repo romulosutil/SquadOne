@@ -393,7 +393,20 @@
         "typeVersion": 2,
         "position": [
           480,
-          100
+          40
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const privateIpv4 = host => {\n  const parts = host.split('.').map(Number);\n  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;\n  return parts[0] === 10\n    || parts[0] === 127\n    || (parts[0] === 169 && parts[1] === 254)\n    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)\n    || (parts[0] === 192 && parts[1] === 168);\n};\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const rawUrl = String(lead.website ?? '').trim();\n  const parsed = rawUrl.match(/^(https?):\\/\\/(\\[[0-9a-f:.]+\\]|[^/?#:@\\s]+)(?::(\\d{1,5}))?(?:[/?#]|$)/i);\n  let lookupAllowed = false;\n\n  if (parsed) {\n    const host = parsed[2].toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');\n    const port = parsed[3] ? Number(parsed[3]) : 0;\n    const privateIpv6 = host.includes(':')\n      && (host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:') || host.startsWith('::ffff:'));\n    const blockedHost = host === 'localhost'\n      || host.endsWith('.localhost')\n      || host.endsWith('.local')\n      || host.endsWith('.internal')\n      || privateIpv6\n      || privateIpv4(host);\n    lookupAllowed = !blockedHost && port <= 65535;\n  }\n\n  if (lookupAllowed) return [];\n\n  const phoneDigits = String(lead.phone ?? '').replace(/\\D/g, '');\n  const localDigits = phoneDigits.startsWith('55') && phoneDigits.length >= 12 ? phoneDigits.slice(2) : phoneDigits;\n  const phoneKind = localDigits.length === 11 && localDigits[2] === '9'\n    ? 'CELULAR_PROVAVEL'\n    : localDigits.length === 10\n      ? 'FIXO_PROVAVEL'\n      : lead.phone ? 'NAO_CLASSIFICADO' : 'AUSENTE';\n\n  return [{ json: {\n    ...lead,\n    phone_kind: phoneKind,\n    whatsapp_verified: false,\n    whatsapp_url: '',\n    whatsapp_number: '',\n    whatsapp_source: '',\n    whatsapp_lookup_status: rawUrl ? 'SITE_NAO_CONSULTAVEL' : 'SEM_SITE',\n  } }];\n});"
+        },
+        "id": "20",
+        "name": "Continuar sem site válido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          710,
+          220
         ]
       },
       {
@@ -430,7 +443,7 @@
         "typeVersion": 4.2,
         "position": [
           710,
-          100
+          40
         ],
         "onError": "continueRegularOutput"
       },
@@ -444,7 +457,7 @@
         "typeVersion": 2,
         "position": [
           940,
-          100
+          40
         ]
       }
     ],
@@ -529,6 +542,11 @@
               "node": "Preparar busca de WhatsApp",
               "type": "main",
               "index": 0
+            },
+            {
+              "node": "Continuar sem site válido",
+              "type": "main",
+              "index": 0
             }
           ]
         ]
@@ -553,7 +571,13 @@
               "index": 0
             }
           ],
-          []
+          [
+            {
+              "node": "Humanizar linha da fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
         ]
       },
       "Registrar falha de descoberta": {
@@ -623,6 +647,17 @@
         ]
       },
       "Confirmar WhatsApp publicado": {
+        "main": [
+          [
+            {
+              "node": "Pontuar para revisão humana",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Continuar sem site válido": {
         "main": [
           [
             {
