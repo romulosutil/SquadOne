@@ -126,11 +126,16 @@ ao diagnóstico sem transformar sinais públicos em diagnóstico. O
 entre a fila de revisão, o formulário pré-preenchido e o retorno do Índice
 PRUMO.
 
-O Lead Scout continua responsável pela descoberta e pela priorização. A guia
-`Leads` apresenta um contrato humano em português e mantém identificadores e
-detalhes técnicos ocultos. Um aceite comercial explícito (`Etapa=Contato
-aceito`) cria o convite e muda a linha para `Convite pronto`. Como a instância
-não possui credencial de
+O Lead Scout continua responsável pela descoberta e pela priorização. Antes de
+pontuar, ele consulta o site público retornado pelo Google Places e só encaminha
+à fila comercial empresas com link de WhatsApp explicitamente publicado. A
+prioridade usa aderência graduada (0–60), complexidade pública como proxy
+(0–20) e facilidade de contato binária (0 ou 20), com corte mínimo de 60. Esses
+sinais servem apenas para ordenar a revisão humana e não constituem diagnóstico
+ou confirmação do decisor. A guia `Leads` apresenta um contrato humano em
+português e mantém identificadores e detalhes técnicos ocultos. Um aceite
+comercial explícito (`Etapa=Contato aceito`) cria o convite e muda a linha para
+`Convite pronto`. Como a instância não possui credencial de
 e-mail ou WhatsApp, o workflow gera uma ação `mailto:`/`wa.me` para envio
 humano e não registra o convite como enviado.
 

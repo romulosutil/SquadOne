@@ -43,6 +43,30 @@ O formulário recebe no campo `Empresa` o valor pré-preenchido
 deve ser alterado: ele substitui
 a comparação frágil por nome e permite devolver o diagnóstico ao lead correto.
 
+## Priorização comercial
+
+O Lead Scout consulta somente sites públicos válidos e considera elegível para
+revisão comercial apenas a empresa cujo HTML publicado contém um link explícito
+do WhatsApp (`wa.me`, `api.whatsapp.com`, `web.whatsapp.com` ou
+`whatsapp://send`). Telefone do Google Places, mesmo celular, não comprova
+WhatsApp. Falhas técnicas continuam registradas separadamente para operação.
+
+Os quatro campos da triagem têm limites estáveis e somam no máximo 100:
+
+- `Aderência` (0–60): operação ativa, termos do segmento no nome/categorias,
+  nota pública graduada, volume de avaliações em escala logarítmica e endereço;
+- `Complexidade` (0–20): proxy de presença operacional pública, usando volume
+  de avaliações, diversidade de categorias e existência de site;
+- `Facilidade de contato` (0 ou 20): recebe 20 somente com WhatsApp publicado
+  e confirmado no site;
+- `Prioridade` (0–100): soma dos três componentes anteriores.
+
+Para entrar em `Revisar`, a empresa precisa ter WhatsApp confirmado **e** obter
+ao menos 60 pontos. A pontuação ordena a pesquisa humana; ela não diagnostica a
+empresa nem comprova que o número chega ao decisor. Sites que montam o link
+apenas via JavaScript podem gerar falso negativo e ficam fora da abordagem
+automática.
+
 ## Estados
 
 ```text
@@ -68,7 +92,8 @@ pontuação de canal direto.
 
 ## Uso humano
 
-1. Filtre `Etapa = Revisar` e confirme segmento, porte e decisor.
+1. Filtre `Etapa = Revisar`; a lista já contém somente WhatsApps publicados,
+   mas ainda exige confirmação humana de segmento, porte, número e decisor.
 2. Preencha as células amarelas. `Canal de contato` possui lista de opções,
    datas aceitam somente datas válidas e `Não contatar` é uma caixa de seleção.
 3. Confirme manualmente o WhatsApp quando houver apenas um celular público e

@@ -104,12 +104,15 @@ test('Lead Scout cria company_id e prepara convite somente após aceite', async 
   const lookup = await runCode(prepareLookup.parameters.jsCode, {
     $input: { all: () => [
       { json: { company_name: 'Empresa', website: 'https://empresa.example/contato' } },
+      { json: { company_name: 'Empresa FC', website: 'https://fcempresa.example/whatsapp' } },
       { json: { company_name: 'Sem site', website: '' } },
       { json: { company_name: 'Host privado', website: 'http://127.0.0.1/admin' } },
+      { json: { company_name: 'IPv6 privado', website: 'http://[::1]/admin' } },
     ] },
   })
-  assert.equal(lookup.length, 1)
+  assert.equal(lookup.length, 2)
   assert.equal(lookup[0].json.website_lookup_url, 'https://empresa.example/contato')
+  assert.equal(lookup[1].json.website_lookup_url, 'https://fcempresa.example/whatsapp')
   assert.equal(findNode(workflow, 'Site — procurar WhatsApp').parameters.url, '={{ $json.website_lookup_url }}')
 
   const confirm = findNode(workflow, 'Confirmar WhatsApp publicado')

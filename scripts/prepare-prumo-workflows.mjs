@@ -91,7 +91,7 @@ return [{ json: {
   minimumReviewCount: 30,
   minimumRating: 4,
   reviewThreshold: 60,
-  targetTerms: ['distribuidora', 'distribuidor', 'distribuicao', 'atacado', 'atacadista'],
+  targetTerms: ['distribuidora', 'distribuidor', 'distribuicao', 'atacado', 'atacadista', 'wholesaler', 'warehouse_store'],
   requiredContactChannel: 'WHATSAPP_VERIFIED',
   diagnosticFormUrl: '${FORM_URL}',
   diagnosticCompanyEntryId: '${COMPANY_ENTRY_ID}',
@@ -317,15 +317,14 @@ return $input.all().map(({ json: lead }) => ({ json: {
 return $input.all().flatMap(({ json: lead }) => {
   try {
     const url = new URL(String(lead.website ?? '').trim());
-    const host = url.hostname.toLowerCase().replace(/\.$/u, '');
+    const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');
+    const privateIpv6 = host.includes(':')
+      && (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:'));
     const blockedHost = host === 'localhost'
       || host.endsWith('.localhost')
       || host.endsWith('.local')
       || host.endsWith('.internal')
-      || host === '::1'
-      || host.startsWith('fc')
-      || host.startsWith('fd')
-      || host.startsWith('fe80:')
+      || privateIpv6
       || privateIpv4(host);
     if (!['http:', 'https:'].includes(url.protocol) || blockedHost) return [];
     return [{ json: { ...lead, website_lookup_url: url.toString() } }];
