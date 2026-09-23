@@ -84,3 +84,21 @@ próprio para qualquer operação de branch, commit ou push.
 Instale também `deploy/hermes/scripts/validate-dell-operations.sh` como
 `~/.local/bin/dell-validate`. O comando é somente leitura, não imprime segredos
 e valida systemd, Docker, n8n, credenciais OAuth, GitHub, Chromium e SquadOne.
+
+## Monitor do Dell (`dell-status`)
+
+Roda a cada minuto e faz duas coisas: grava
+`~/.local/share/squadone-operations/status.json`, que a página inicial da
+Central lê, e manda WhatsApp pelo Hermes (`hermes send`) quando uma verificação
+passa a falhar, a cada 12 h enquanto continuar falhando e quando volta ao normal.
+Estados `atencao` só aparecem na Central. Também esvazia
+`~/.local/share/avisos/fila/*.json` (`{"texto", "titulo"?}`), a fila que os
+containers usam para avisar sem abrir rede nem firewall.
+
+```bash
+install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
+mkdir -p ~/.local/share/avisos/fila && chmod 777 ~/.local/share/avisos/fila
+cp deploy/dell/dell-status.service deploy/dell/dell-status.timer ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now dell-status.timer
+dell-status --stdout   # confere sem gravar nem avisar
+```

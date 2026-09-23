@@ -1,0 +1,7 @@
+[Unit]
+Description=Retrato do Dell para a Central e avisos pelo Hermes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/dell-status
+TimeoutStartSec=150

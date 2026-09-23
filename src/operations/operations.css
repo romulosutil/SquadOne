@@ -1420,3 +1420,62 @@ html:has(.ops-shell),
   .ops-now__grid { padding: 1rem 0.8rem 0.8rem; }
   .ops-attention { margin-inline: 0.8rem; }
 }
+
+/* --- Central simplificada (23/09/2026): estado do Dell, agenda e acessos --- */
+.dell-status,
+.ops-home-grid { grid-column: 1 / -1; }
+
+.ops-home-grid { display: grid; gap: 1.25rem; align-items: start; }
+@media (min-width: 62rem) {
+  .ops-home-grid { grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr); }
+  .ops-home-grid .ops-agenda { grid-column: 1; grid-row: 1; }
+}
+
+.dell-dot { display: inline-block; flex: none; width: 0.8rem; height: 0.8rem; border: 2px solid var(--ops-ink); border-radius: 50%; background: var(--ops-green); }
+.dell-dot.is-atencao { background: var(--ops-yellow); }
+.dell-dot.is-falha { background: var(--ops-danger); }
+
+.dell-status { padding: clamp(1.25rem, 2.4vw, 2.25rem); }
+.dell-status.is-ok { background: var(--ops-mint); }
+.dell-status.is-atencao { background: #fff2a7; }
+.dell-status.is-falha { background: #ffd9d2; }
+.dell-status__hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1rem 1.25rem; align-items: center; }
+.dell-status__hero small { grid-column: 2; color: var(--ops-muted); font-size: 0.8rem; }
+.dell-status__sinal { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border: 4px solid var(--ops-ink); background: var(--ops-paper-strong); font-size: 1.8rem; font-weight: 950; }
+.dell-status h1 { font-size: clamp(1.9rem, 4vw, 3.2rem); line-height: 1; }
+.dell-status__hero p { margin: 0.4rem 0 0; font-size: 1rem; }
+@media (min-width: 48rem) {
+  .dell-status__hero { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .dell-status__hero small { grid-column: 3; align-self: start; }
+}
+
+.dell-status__pendencias { display: grid; gap: 0.6rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+.dell-status__pendencias li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.9rem; align-items: center; padding: 0.85rem 1rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); }
+.dell-status__pendencias strong { display: block; }
+.dell-status__pendencias small { display: block; color: var(--ops-muted); font-size: 0.85rem; }
+.dell-status a { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.8rem; border: 3px solid var(--ops-ink); background: var(--ops-yellow); color: var(--ops-ink); font-weight: 900; text-decoration: none; white-space: nowrap; }
+.dell-status a:hover { background: var(--ops-paper-strong); }
+
+.dell-status__tudo { margin-top: 1.25rem; }
+.dell-status__tudo summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 900; }
+.dell-status__grupo { margin-top: 1rem; }
+.dell-status__grupo h2 { font-size: 1rem; letter-spacing: 0; }
+.dell-status__grupo ul { display: grid; gap: 0; margin: 0.4rem 0 0; padding: 0; list-style: none; border-top: 2px solid var(--ops-ink); }
+.dell-status__grupo li { display: grid; grid-template-columns: auto minmax(8rem, 16rem) minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid rgba(17, 19, 15, 0.25); }
+.dell-status__grupo li small { color: var(--ops-muted); font-size: 0.85rem; }
+.dell-status__grupo li a { padding: 0.15rem 0.6rem; min-height: 36px; }
+@media (max-width: 48rem) {
+  .dell-status__grupo li { grid-template-columns: auto minmax(0, 1fr); }
+  .dell-status__grupo li small,
+  .dell-status__grupo li a { grid-column: 2; }
+  .dell-status__pendencias li { grid-template-columns: auto minmax(0, 1fr); }
+  .dell-status__pendencias li a { grid-column: 2; justify-self: start; }
+}
+
+.access h2 { font-size: 1.6rem; }
+.access ul { display: grid; gap: 0.6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.access a { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; gap: 0.9rem; align-items: center; padding: 0.7rem 0.9rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); text-decoration: none; }
+.access a:hover { background: var(--ops-yellow); }
+.access strong { display: block; font-size: 1.05rem; }
+.access small { display: block; color: var(--ops-muted); font-size: 0.82rem; }
+.access__icone { display: grid; place-items: center; width: 3rem; height: 3rem; border: 3px solid var(--ops-ink); background: var(--ops-blue); color: #fff; font-size: 0.85rem; font-weight: 950; }

@@ -30,17 +30,18 @@ A mesma aplicação possui dois perfis selecionados no servidor por
 Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe e usam navegação interna para `/squadone`.
 
-A Central é dividida em rotas navegáveis sem dependência adicional de roteador:
+A Central tem duas rotas, sem dependência adicional de roteador:
 
-- `/` concentra agenda, foco, projetos fixados e leituras recentes;
-- `/projetos` é o catálogo pesquisável de projetos;
-- `/projetos/producao-auto` contém o painel completo da Produção Auto;
-- `/leituras` é a caixa de entrada global do Hermes.
+- `/` responde se o Dell está bem, mostra a agenda de hoje e os acessos
+  (Terminal, n8n, Hermes, Syncthing, SquadOne, Produção Auto);
+- `/projetos/producao-auto` contém o painel completo da Produção Auto.
 
-Projetos podem ser módulos internos com dashboard, atalhos locais de acesso ou
-uma combinação dos dois. Módulos internos são registrados no frontend; atalhos
-continuam no armazenamento privado de projetos. A página inicial mostra apenas
-uma seleção fixada, sem replicar os dashboards completos.
+O estado do Dell vem de `SQUADONE_OPERATIONS_DATA_DIR/status.json`, gravado a
+cada minuto por `deploy/dell/dell-status.py` e lido por `server/dell-status.ts`
+dentro de `GET /api/operations/overview`. O mesmo monitor avisa o Rômulo pelo
+Hermes quando algo quebra e quando volta. Retrato com mais de 5 minutos vira a
+falha "Monitor do Dell". As rotas de projetos e leituras do Hermes seguem no
+servidor, mas saíram da interface em 23/09/2026.
 
 `server/operations.ts` contém a fronteira local:
 
