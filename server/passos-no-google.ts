@@ -21,6 +21,7 @@ import {
   lerLista,
   ListaSumiu,
   listarTarefas,
+  renomearLista,
   type CorpoDeTarefa,
   type TarefaLida,
 } from "./tasks.ts";
@@ -318,6 +319,41 @@ export async function anexarProgressoDosPassos(
       }
     }),
   );
+}
+
+export type RenomeacaoDaLista = "renomeada" | "personalizada" | "semLista" | "semEscopo" | "sumiu" | "igual";
+
+/**
+ * A squad mudou de nome: a lista `SquadOne · <antigo>` passa a `SquadOne · <novo>`.
+ * SÓ quando o título no Google ainda é o que o app gerou — se o usuário
+ * renomeou a lista no celular, o nome dele vence (a lista nunca é achada por
+ * título, então o nome é só dele). Lê antes de escrever por isso. Nada aqui
+ * toca o roster: `ciclo-de-vida.ts` continua sem chamar o Google (invariante
+ * 4); quem chama é a rota, depois de gravar o nome novo.
+ */
+export async function renomearListaDaSquad(p: {
+  listaId: string | undefined;
+  nomeAntigo: string;
+  nomeNovo: string;
+  liberado: boolean;
+  obterToken: ObterToken;
+  ler?: (token: string, listaId: string) => Promise<{ id: string; title?: string }>;
+  renomear?: (token: string, listaId: string, titulo: string) => Promise<unknown>;
+}): Promise<RenomeacaoDaLista> {
+  if (!p.listaId) return "semLista";
+  if (tituloDaLista(p.nomeAntigo) === tituloDaLista(p.nomeNovo)) return "igual";
+  if (!p.liberado) return "semEscopo";
+  const listaId = p.listaId;
+  try {
+    const atual = await comTokenTasks(p.obterToken, (t) => (p.ler ?? lerLista)(t, listaId));
+    if (atual.title !== tituloDaLista(p.nomeAntigo)) return "personalizada";
+    await comTokenTasks(p.obterToken, (t) => (p.renomear ?? renomearLista)(t, listaId, tituloDaLista(p.nomeNovo)));
+    return "renomeada";
+  } catch (err) {
+    // Apagada no celular: o próximo compromisso com passos cria outra já com o nome novo.
+    if (err instanceof ListaSumiu) return "sumiu";
+    throw err;
+  }
 }
 
 /** A instância do servidor: um Map de single-flight para o processo inteiro. */

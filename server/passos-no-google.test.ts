@@ -11,6 +11,7 @@ import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido, type
 import {
   AVISO_SEM_ESCOPO,
   anexarProgressoDosPassos,
+  renomearListaDaSquad,
   criarPassosNoGoogle,
   motivoDoErroTasks,
   TasksNaoAutorizado,
@@ -384,5 +385,43 @@ describe("anexarProgressoDosPassos", () => {
       liberado: true, obterToken: async () => "tk", listar: async () => { throw new ErroTasks(404, "{}"); },
     });
     assert.equal(quests[0].passos, undefined);
+  });
+});
+
+describe("renomearListaDaSquad", () => {
+  const base = { listaId: "L1", nomeAntigo: "Pessoal", nomeNovo: "Casa", liberado: true, obterToken: async () => "tk" };
+
+  it("título ainda é o gerado: renomeia para o nome novo", async () => {
+    const escritas: [string, string][] = [];
+    const r = await renomearListaDaSquad({
+      ...base,
+      ler: async (_t, id) => ({ id, title: "SquadOne · Pessoal" }),
+      renomear: async (_t, id, titulo) => { escritas.push([id, titulo]); return {}; },
+    });
+    assert.equal(r, "renomeada");
+    assert.deepEqual(escritas, [["L1", "SquadOne · Casa"]]);
+  });
+
+  it("usuário renomeou no celular: o nome dele vence, nenhuma escrita", async () => {
+    let escreveu = false;
+    const r = await renomearListaDaSquad({
+      ...base,
+      ler: async (_t, id) => ({ id, title: "Minhas coisas" }),
+      renomear: async () => { escreveu = true; return {}; },
+    });
+    assert.equal(r, "personalizada");
+    assert.equal(escreveu, false);
+  });
+
+  it("sem lista, sem escopo ou nome igual: nem lê o Google", async () => {
+    const ler = async () => { throw new Error("não deveria ler"); };
+    assert.equal(await renomearListaDaSquad({ ...base, listaId: undefined, ler }), "semLista");
+    assert.equal(await renomearListaDaSquad({ ...base, liberado: false, ler }), "semEscopo");
+    assert.equal(await renomearListaDaSquad({ ...base, nomeNovo: "Pessoal", ler }), "igual");
+  });
+
+  it("lista apagada no celular: 'sumiu', sem erro", async () => {
+    const r = await renomearListaDaSquad({ ...base, ler: async (_t, id) => { throw new ListaSumiu(id); } });
+    assert.equal(r, "sumiu");
   });
 });

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import {
   ConflitoDeRoster,
   dominiosDoSquad,
+  localizarSquad,
   paraVista,
   PedidoInvalido,
   readRoster,
@@ -49,7 +50,7 @@ import {
   trocarCodigo,
   urlDeConsentimento,
 } from "./server/auth-store.ts";
-import { anexarProgressoDosPassos } from "./server/passos-no-google.ts";
+import { anexarProgressoDosPassos, renomearListaDaSquad } from "./server/passos-no-google.ts";
 import {
   avisarDigitando,
   descreverTelegram,
@@ -403,7 +404,31 @@ async function startServer() {
   app.post("/api/squad/dominios/:id/reativar", rotaDoRoster((req) => reativarDominio(String(req.params.id))));
   // PO nao se arquiva: substitui-se. O anterior vira integrante arquivado.
   app.post("/api/squad/dominios/:id/po", rotaDoRoster((req) => substituirPo(String(req.params.id), req.body)));
-  app.patch("/api/squad/squads/:id", rotaDoRoster((req) => editarSquad(String(req.params.id), req.body)));
+  app.patch(
+    "/api/squad/squads/:id",
+    rotaDoRoster(async (req) => {
+      const id = String(req.params.id);
+      const antes = localizarSquad(await readRoster(), id);
+      const vista = await editarSquad(id, req.body);
+      const depois = localizarSquad(await readRoster(), id);
+      // Renomear a lista do Tasks junto, sem segurar a resposta nem falhar a
+      // edição: o nome já está gravado, e a lista é acessório no celular.
+      if (antes && depois && antes.nome !== depois.nome && depois.tasksListaId) {
+        void (async () => {
+          const { tasks } = await escoposConcedidos();
+          const r = await renomearListaDaSquad({
+            listaId: depois.tasksListaId,
+            nomeAntigo: antes.nome,
+            nomeNovo: depois.nome,
+            liberado: tasks,
+            obterToken: tokenValido,
+          });
+          if (r !== "renomeada") console.log(`[tasks] lista da squad '${id}' não renomeada: ${r}`);
+        })().catch((err) => console.warn(`[tasks] falha ao renomear a lista da squad '${id}':`, err?.message ?? err));
+      }
+      return vista;
+    }),
+  );
   app.post("/api/squad/squads/:id/arquivar", rotaDoRoster((req) => arquivarSquad(String(req.params.id))));
   app.post("/api/squad/squads/:id/reativar", rotaDoRoster((req) => reativarSquad(String(req.params.id))));
 

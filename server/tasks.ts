@@ -154,6 +154,16 @@ export async function lerLista(token: string, listaId: string): Promise<{ id: st
   }
 }
 
+/** Troca só o título da lista (PATCH parcial). */
+export async function renomearLista(token: string, listaId: string, titulo: string): Promise<{ id: string; title?: string }> {
+  try {
+    return await chamar(token, urlDaLista(listaId), { method: "PATCH", corpo: { title: titulo } });
+  } catch (err) {
+    if (err instanceof ErroTasks && (err.status === 404 || err.status === 410)) throw new ListaSumiu(listaId);
+    throw err;
+  }
+}
+
 /**
  * `previous` ausente põe a tarefa no TOPO das irmãs (doc do tasks.insert):
  * quem cria uma série em ordem passa o id da anterior.
