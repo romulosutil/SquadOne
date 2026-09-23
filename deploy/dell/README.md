@@ -133,3 +133,54 @@ envio e redireciona ao canal. Balcão e Lead Scout gravam contagens em
 `~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
 você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
 buscas.
+
+## Gerador de sites (`gerador-de-sites.*`)
+
+Desde 23/09/2026 a fila do "Site antes da venda" é gerada no Dell, não no PC:
+a tarefa `EsteiraLeads08h` do PC só rodava com ele ligado às 08h e não gerava
+nada desde 17/09 (ficou **desativada**; `Enable-ScheduledTask EsteiraLeads08h`
+a volta). O runner é o porte do `executar-fila-leads.ps1`, na mesma pasta
+(`~/auto-site`, sincronizada com o Drive pelo Syncthing): até 4 leads por dia,
+45 min por lead, timer persistente (Dell desligado às 08h roda quando voltar).
+Lead com 2 falhas em `falha.log` sai da fila; apagar o arquivo o devolve.
+`python3 ~/.local/bin/gerador-de-sites --listar` mostra a fila sem gerar nada.
+
+Instalação (uma vez, pelo Rômulo: o Claude roda autônomo, sem pedir
+permissão, então a decisão de ligá-lo é dele):
+
+```bash
+claude            # login da conta Claude (uma vez) — /login dentro dele
+vercel login      # conta da Vercel com o escopo romulodesigns
+install -m 755 ~/Pessoal-dev/apps/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+cp ~/Pessoal-dev/apps/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites.timer
+```
+
+## Observador do WhatsApp (`whatsapp-observador/`)
+
+O Rômulo aborda os leads direto no WhatsApp, sem os links rastreados. O
+observador é mais um dispositivo vinculado no número dele (independente do
+Hermes) e, para cada mensagem numa conversa 1:1 com um número que está nas
+planilhas, avisa o n8n (`claude-ops/whatsapp-conversa.py`):
+
+- PRUMO: mensagem dele com Etapa "Revisar" → "Convite enviado"; resposta do
+  lead com Etapa "Convite enviado" → Próxima ação "Respondeu no WhatsApp ...";
+- Site antes da venda: mensagem dele com status `pronto` → `enviado`.
+
+Só número (DDD + 8 últimos dígitos), direção e hora saem do processo: o
+conteúdo nunca é gravado, logado nem enviado, e conversa com quem não é lead
+não sai dele. Grupos, status e canais são ignorados; mensagem com mais de 15
+min (sincronização) também. Um aviso por número e direção a cada 6 h. Webhooks
+com header `X-Observador` (segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
+
+Instalação em `~/.local/share/whatsapp-observador` (`npm install`), pareamento
+por código (sem QR) e serviço:
+
+```bash
+cd ~/.local/share/whatsapp-observador && node observador.mjs --parear 55DDDNUMERO
+cp whatsapp-observador.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
+```
+
+Desconectado pelo celular: sai com código 3 (o systemd não insiste) e avisa
+pelo Hermes; é parear de novo.

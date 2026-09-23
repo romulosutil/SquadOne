@@ -1,0 +1,16 @@
+[Unit]
+Description=Observador do WhatsApp — marca conversas com leads na planilha
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/.local/share/whatsapp-observador
+ExecStart=/usr/bin/node %h/.local/share/whatsapp-observador/observador.mjs
+Restart=always
+RestartSec=15
+# 3 = desconectado pelo celular ou sem sessão: reiniciar não conserta, precisa parear.
+RestartPreventExitStatus=3
+MemoryMax=400M
+
+[Install]
+WantedBy=default.target
