@@ -158,29 +158,29 @@ systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites
 
 ## Observador do WhatsApp (`whatsapp-observador/`)
 
-O Rômulo aborda os leads direto no WhatsApp, sem os links rastreados. O
-observador é mais um dispositivo vinculado no número dele (independente do
-Hermes) e, para cada mensagem numa conversa 1:1 com um número que está nas
-planilhas, avisa o n8n (`claude-ops/whatsapp-conversa.py`):
+O Rômulo aborda os leads direto no WhatsApp, sem os links rastreados. O Hermes
+já está vinculado ao número dele, e a bridge registra em
+`~/.hermes/whatsapp/bridge.log` uma linha `self_chat_mode_rejects_non_self`
+(chat e remetente, **sem conteúdo**) para toda mensagem recebida. O
+`observador.py` acompanha esse log (tail -F, começa do fim) e, quando quem
+escreveu é um número das planilhas, avisa o n8n (`claude-ops/whatsapp-conversa.py`):
 
-- PRUMO: mensagem dele com Etapa "Revisar" → "Convite enviado"; resposta do
-  lead com Etapa "Convite enviado" → Próxima ação "Respondeu no WhatsApp ...";
-- Site antes da venda: mensagem dele com status `pronto` → `enviado`.
+- PRUMO: resposta com Etapa "Revisar" → "Convite enviado"; com "Convite
+  enviado" → Próxima ação "Respondeu no WhatsApp em ...";
+- Site antes da venda: resposta com status `pronto` → `enviado`.
 
-Só número (DDD + 8 últimos dígitos), direção e hora saem do processo: o
-conteúdo nunca é gravado, logado nem enviado, e conversa com quem não é lead
-não sai dele. Grupos, status e canais são ignorados; mensagem com mais de 15
-min (sincronização) também. Um aviso por número e direção a cada 6 h. Webhooks
-com header `X-Observador` (segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
-
-Instalação em `~/.local/share/whatsapp-observador` (`npm install`), pareamento
-por código (sem QR) e serviço:
+Por que o log e não um segundo aparelho: o pareamento por código falhou (no
+DDD 27 o WhatsApp registra o número sem o 9) e a bridge muda a cada
+`hermes update`; ler um log que ela já escreve não depende de nenhum dos dois.
+**Limite:** mensagem ENVIADA pelo Rômulo não aparece no log com o número, então
+o que marca é a resposta do lead (que prova o contato); o envio continua
+marcado pelos links rastreados. LID vira telefone pelo mapa da sessão do
+Hermes (`lid-mapping-*_reverse.json`, só leitura). Um aviso por número a cada
+6 h; log parado 6 h avisa pelo Hermes. Webhooks com header `X-Observador`
+(segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
 
 ```bash
-cd ~/.local/share/whatsapp-observador && node observador.mjs --parear 55DDDNUMERO
-cp whatsapp-observador.service ~/.config/systemd/user/
+install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
+cp ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
 ```
-
-Desconectado pelo celular: sai com código 3 (o systemd não insiste) e avisa
-pelo Hermes; é parear de novo.

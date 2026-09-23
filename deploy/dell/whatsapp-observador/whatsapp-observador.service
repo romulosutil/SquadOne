@@ -1,16 +1,12 @@
 [Unit]
-Description=Observador do WhatsApp — marca conversas com leads na planilha
-After=network-online.target
-Wants=network-online.target
+Description=Observador do WhatsApp — resposta de lead marca a planilha (lê o log da bridge do Hermes)
+After=hermes-gateway.service
 
 [Service]
-WorkingDirectory=%h/.local/share/whatsapp-observador
-ExecStart=/usr/bin/node %h/.local/share/whatsapp-observador/observador.mjs
+ExecStart=/usr/bin/python3 %h/.local/bin/whatsapp-observador
 Restart=always
 RestartSec=15
-# 3 = desconectado pelo celular ou sem sessão: reiniciar não conserta, precisa parear.
-RestartPreventExitStatus=3
-MemoryMax=400M
+MemoryMax=100M
 
 [Install]
 WantedBy=default.target

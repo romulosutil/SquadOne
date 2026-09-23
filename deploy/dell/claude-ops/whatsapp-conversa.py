@@ -2,15 +2,18 @@
 
 O Rômulo aborda os leads direto no WhatsApp, sem passar pelos links
 rastreados, e não tem tempo de voltar à planilha. O observador
-(`deploy/dell/whatsapp-observador/`) é um dispositivo vinculado no número dele
-e, para cada conversa 1:1 com um número que está nas planilhas, avisa este n8n:
+(`deploy/dell/whatsapp-observador/observador.py`) lê o log da bridge do Hermes,
+que já está vinculado ao número dele, e avisa este n8n quando um número das
+planilhas escreve:
 
 - GET  /webhook/whatsapp-telefones  -> {"chaves": [...]}: os números dos leads,
   que o observador usa como filtro (conversa com quem não é lead nunca sai dele);
 - POST /webhook/whatsapp-conversa   {"chave", "direcao": "saida"|"entrada", "em"}:
-  PRUMO: saída com Etapa "Revisar" -> "Convite enviado"; entrada com Etapa
-  "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ...".
-  Site antes da venda: saída com status "pronto" -> "enviado".
+  PRUMO: saída ou resposta com Etapa "Revisar" -> "Convite enviado"; resposta
+  com Etapa "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ...".
+  Site antes da venda: saída ou resposta com status "pronto" -> "enviado".
+  Hoje só chegam RESPOSTAS (observador.py lê o log da bridge do Hermes, que
+  não traz o número das mensagens enviadas); a saída fica pronta para quando houver.
 
 Só número, direção e hora: o conteúdo das mensagens nunca sai do observador.
 Os dois webhooks exigem o header X-Observador (credencial "Observador
@@ -30,7 +33,7 @@ SITE, LEADS_GID = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o", "396728619"
 SEGREDO = Path.home() / ".config/claude-ops/whatsapp-observador-segredo"
 CREDENCIAL = "Observador WhatsApp"
 
-# Mesma regra do observador (observador.mjs, chaveDoNumero).
+# Mesma regra do observador (observador.py, chave_do_numero).
 CHAVE_JS = """const chave = (bruto) => {
   let d = String(bruto ?? '').replace(/\\D/g, '');
   if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
@@ -137,6 +140,10 @@ for (const l of $('Ler Prospects').all().map(i => i.json)) {
   if (direcao === 'saida' && etapa === 'Revisar') {
     saida.push({ json: { planilha: 'prumo', ID: String(l['ID']), 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
       'Próxima ação': 'Aguarde o dono responder (16 perguntas, uns 5 minutos).' } });
+  } else if (direcao === 'entrada' && etapa === 'Revisar') {
+    // Resposta prova que o contato aconteceu, mesmo sem o link rastreado.
+    saida.push({ json: { planilha: 'prumo', ID: String(l['ID']), 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
+      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
   } else if (direcao === 'entrada' && etapa === 'Convite enviado') {
     // Reescreve a data do convite com ela mesma: o update grava todas as colunas mapeadas.
     saida.push({ json: { planilha: 'prumo', ID: String(l['ID']), 'Etapa': etapa, 'Convite enviado em': String(l['Convite enviado em'] ?? ''),
@@ -145,7 +152,8 @@ for (const l of $('Ler Prospects').all().map(i => i.json)) {
 }
 for (const l of $('Ler Leads do site').all().map(i => i.json)) {
   if (!alvo || chave(numeroDoSite(l)) !== alvo) continue;
-  if (direcao === 'saida' && String(l.status ?? '').trim() === 'pronto') {
+  // Saída ou resposta: as duas provam que o site chegou ao lead.
+  if (String(l.status ?? '').trim() === 'pronto') {
     saida.push({ json: { planilha: 'site', place_id: String(l.place_id), status: 'enviado', enviado_em: em.toISOString() } });
   }
 }
