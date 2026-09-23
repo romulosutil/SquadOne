@@ -273,8 +273,11 @@ def pendencias() -> list[dict]:
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
+    instalado = (HOME / ".config/systemd/user/gerador-de-sites.timer").is_file()
     out.append(check("pend:sites-fila", "pendencias", "Sites na fila do gerador", "atencao" if fila else "ok",
-                     f"{len(fila)} lead(s) com pasta e sem site publicado. O gerador do Dell trata 2 a cada 2 h."))
+                     f"{len(fila)} lead(s) com pasta e sem site publicado. "
+                     + ("O gerador do Dell trata 2 a cada 2 h." if instalado
+                        else "Gerador ainda não instalado no Dell: rode executar-fila-leads.ps1 no PC.")))
     for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
         try:
             d = json.loads(arq.read_text())
