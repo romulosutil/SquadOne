@@ -9,6 +9,11 @@ para o n8n do Dell. Idempotente: recria pelo nome.
   Drive\\auto). O Balcão lê os publicado.json direto de ~/auto-site.
 - Error Workflow: o aviso único pelo Hermes.
 
+Estado em 23/09/2026: Caçador (oow8TkxrAf4fVvTj) e Balcão (wjuoIknp2qlWo0QI)
+ativos no Dell; as versões do Easypanel e o "00 · Alerta" de lá foram
+despublicados. A credencial "Google Gemini (Dell)" precisa de chave com cota
+para busca no Google (grounding); a do Hermes não tem.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
 """
 import copy
