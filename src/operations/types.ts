@@ -29,7 +29,7 @@ export type DellCheckState = 'ok' | 'atencao' | 'falha'
 
 export interface DellCheck {
   id: string
-  grupo: 'servicos' | 'fluxos' | 'dados' | 'containers' | 'maquina'
+  grupo: 'servicos' | 'fluxos' | 'dados' | 'containers' | 'maquina' | 'pendencias'
   nome: string
   estado: DellCheckState
   detalhe: string

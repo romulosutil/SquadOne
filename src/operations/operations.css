@@ -1479,3 +1479,17 @@ html:has(.ops-shell),
 .access strong { display: block; font-size: 1.05rem; }
 .access small { display: block; color: var(--ops-muted); font-size: 0.82rem; }
 .access__icone { display: grid; place-items: center; width: 3rem; height: 3rem; border: 3px solid var(--ops-ink); background: var(--ops-blue); color: #fff; font-size: 0.85rem; font-weight: 950; }
+
+.pending { grid-column: 1 / -1; }
+.pending h2 { font-size: 1.6rem; }
+.pending__vazio { margin: 0.5rem 0 0; color: var(--ops-muted); }
+.pending ul { display: grid; gap: 0.6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.pending li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 1rem; align-items: center; padding: 0.8rem 1rem; border: 3px solid var(--ops-ink); background: #fff2a7; }
+.pending strong { font-size: 1.05rem; }
+.pending small { grid-column: 1; color: var(--ops-ink); font-size: 0.88rem; }
+.pending a { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.8rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); font-weight: 900; text-decoration: none; white-space: nowrap; }
+.pending a:hover { background: var(--ops-yellow); }
+@media (max-width: 48rem) {
+  .pending li { grid-template-columns: 1fr; }
+  .pending a { grid-column: 1; grid-row: auto; justify-self: start; }
+}

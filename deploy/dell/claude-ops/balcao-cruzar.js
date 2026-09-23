@@ -99,12 +99,17 @@ for (const item of recibos) {
     waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
   }
 
+  // 23/09/2026: wa_link passa a ser o link rastreado do n8n do Dell (aberto pelo
+  // túnel em 127.0.0.1:5679). O clique marca o lead como enviado e redireciona
+  // para o wa.me real, guardado em wa_me.
+  const waMe = waLink || String(linha.wa_me || '').trim() || (waAtual.indexOf('https://wa.me/') === 0 ? waAtual : '');
   saida.push({ json: {
     place_id: pid,
     status: ehNovo ? 'pronto' : status,
     site_url: siteUrl,
     vercel_project: rec.vercel_project || linha.vercel_project || '',
-    wa_link: waLink || waAtual
+    wa_me: waMe,
+    wa_link: waMe ? 'http://127.0.0.1:5679/webhook/enviar?place_id=' + encodeURIComponent(pid) : waAtual
   } });
   indice = indice + 1;
 }

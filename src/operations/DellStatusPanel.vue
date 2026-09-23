@@ -13,7 +13,8 @@ const GRUPOS: Array<[DellCheck['grupo'], string]> = [
 ]
 const ROTULO = { ok: 'Ok', atencao: 'Atenção', falha: 'Falhou' } as const
 
-const checks = computed(() => props.status?.verificacoes ?? [])
+// Pendências (trabalho humano) têm painel próprio e não contam como problema do Dell.
+const checks = computed(() => (props.status?.verificacoes ?? []).filter(c => c.grupo !== 'pendencias'))
 const falhas = computed(() => checks.value.filter(c => c.estado === 'falha'))
 const atencoes = computed(() => checks.value.filter(c => c.estado === 'atencao'))
 const porGrupo = computed(() => GRUPOS

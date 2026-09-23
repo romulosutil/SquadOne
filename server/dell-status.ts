@@ -6,7 +6,7 @@ import path from "node:path";
 // e o SquadOne não recebe chave de nenhum serviço (RULES 8 e 10).
 
 export type EstadoDaVerificacao = "ok" | "atencao" | "falha";
-export type GrupoDaVerificacao = "servicos" | "fluxos" | "dados" | "containers" | "maquina";
+export type GrupoDaVerificacao = "servicos" | "fluxos" | "dados" | "containers" | "maquina" | "pendencias";
 
 export interface Verificacao {
   id: string;
@@ -28,7 +28,7 @@ export const ARQUIVO_STATUS = "status.json";
 export const RETRATO_VENCIDO_MS = 5 * 60_000;
 
 const ESTADOS = new Set<EstadoDaVerificacao>(["ok", "atencao", "falha"]);
-const GRUPOS = new Set<GrupoDaVerificacao>(["servicos", "fluxos", "dados", "containers", "maquina"]);
+const GRUPOS = new Set<GrupoDaVerificacao>(["servicos", "fluxos", "dados", "containers", "maquina", "pendencias"]);
 
 function lerLink(valor: unknown): string | undefined {
   if (typeof valor !== "string") return undefined;

@@ -5,11 +5,12 @@ import AgendaPanel from './AgendaPanel.vue'
 import AutoProductionPanel from './AutoProductionPanel.vue'
 import DellStatusPanel from './DellStatusPanel.vue'
 import OperationsHeader from './OperationsHeader.vue'
+import PendingPanel from './PendingPanel.vue'
 import type { OperationsOverview } from './types'
 import './operations.css'
 
-// Uma página responde três perguntas: está tudo bem no Dell, o que tem na
-// agenda hoje e onde abro cada ferramenta. Quem corrige é Claude/Codex pelo
+// Uma página responde quatro perguntas: está tudo bem no Dell, o que está
+// esperando por mim, o que tem na agenda hoje e onde abro cada ferramenta. Quem corrige é Claude/Codex pelo
 // SSH; a Central só mostra (RULES 8 e 10).
 const overview = ref<OperationsOverview | null>(null)
 const loading = ref(true)
@@ -49,6 +50,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
     <main id="main-content" class="ops-workspace" :class="{ 'ops-workspace--page': !isHome }" tabindex="-1">
       <template v-if="isHome">
         <DellStatusPanel :status="overview?.dell ?? null" :loading="loading" :error="error" />
+        <PendingPanel :checks="overview?.dell.verificacoes ?? []" />
         <div class="ops-home-grid">
           <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loading" />
           <AccessPanel :tools="overview?.tools ?? []" />

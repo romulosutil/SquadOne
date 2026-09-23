@@ -154,7 +154,20 @@ def balcao(erro):
                     "documentId": {"__rl": True, "mode": "id", "value": PLANILHA, "cachedResultName": "Leads — Site antes da venda"},
                     "sheetName": {"__rl": True, "mode": "id", "value": "396728619", "cachedResultName": "Leads"}}
     colunas = [{"id": c, "displayName": c, "required": False, "defaultMatch": c == "place_id", "display": True,
-                "type": "string", "canBeUsedToMatch": c == "place_id"} for c in ("place_id", "status", "site_url", "vercel_project", "wa_link")]
+                "type": "string", "canBeUsedToMatch": c == "place_id"} for c in ("place_id", "status", "site_url", "vercel_project", "wa_me", "wa_link")]
+    pendencias = "\n".join([
+        "// O que depende do Rômulo nesta esteira. A Central lê este arquivo via dell-status.",
+        "const linhas = $input.all().map(i => i.json);",
+        "const planilha = 'https://docs.google.com/spreadsheets/d/" + PLANILHA + "/edit#gid=396728619';",
+        "const conta = (f) => linhas.filter(f).length;",
+        "const estado = { geradoEm: new Date().toISOString(), itens: [",
+        "  { id: 'site-enviar', nome: 'Sites prontos para enviar', quantidade: conta(l => String(l.status).trim() === 'pronto'),",
+        "    detalhe: 'Clique no wa_link do lead: abre o WhatsApp com a mensagem e marca como enviado.', link: planilha },",
+        "  { id: 'site-resposta', nome: 'Enviados esperando resposta', quantidade: conta(l => String(l.status).trim() === 'enviado' && !l.respondeu_em),",
+        "    detalhe: 'Quando o cliente responder, preencha respondeu_em.', link: planilha },",
+        "] };",
+        "return [{ json: estado, binary: { data: { data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'site-antes-da-venda.json' } } }];",
+    ])
     nos = [
         {"id": "hora", "name": "A cada hora", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0],
          "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 1, "triggerAtMinute": 10}]}}},
@@ -174,6 +187,15 @@ def balcao(erro):
     ]
     ordem = [n["name"] for n in nos]
     con = {a: {"main": [[{"node": b, "type": "main", "index": 0}]]} for a, b in zip(ordem, ordem[1:])}
+    nos += [
+        {"id": "pendencias", "name": "Pendências da esteira", "type": "n8n-nodes-base.code", "typeVersion": 2,
+         "position": [880, 220], "parameters": {"mode": "runOnceForAllItems", "jsCode": pendencias}},
+        {"id": "gravar-pendencias", "name": "Gravar pendências", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [1100, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
+                                                 "fileName": "/home/node/.n8n-files/estado/site-antes-da-venda.json"}},
+    ]
+    con["Ler a planilha"]["main"][0].append({"node": "Pendências da esteira", "type": "main", "index": 0})
+    con["Pendências da esteira"] = {"main": [[{"node": "Gravar pendências", "type": "main", "index": 0}]]}
     return {"name": "03 · Balcão (Site antes da venda)", "nodes": nos, "connections": con,
             "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "errorWorkflow": erro}}
 

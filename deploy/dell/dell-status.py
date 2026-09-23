@@ -244,6 +244,98 @@ def crons_hermes() -> list[dict]:
     return [check("crons", "dados", "Rotinas do Hermes", "ok", f"{ativos} rotinas ativas sem erro")]
 
 
+# ---------------------------------------------------------------- pendências (o que depende do Rômulo)
+
+ESTADO_N8N = HOME / ".local/share/n8n-estado"
+AUTO = HOME / "auto-site"
+
+
+def gerador() -> list[dict]:
+    creds = HOME / ".config/claude-ops"
+    faltam = [n for n, a in (("Claude", "claude-oauth-token"), ("Vercel", "vercel-token")) if not (creds / a).is_file()]
+    if faltam:
+        return [check("gerador", "dados", "Gerador de sites", "atencao",
+                      "Sem login de " + " e ".join(faltam) + ": a fila de sites não anda. Veja dev/DELL-WORKER.md.")]
+    r = subprocess.run(["systemctl", "--user", "show", "gerador-de-sites.service", "-p", "Result",
+                        "-p", "ExecMainExitTimestamp", "-p", "ActiveState"], capture_output=True, text=True).stdout
+    props = dict(l.split("=", 1) for l in r.splitlines() if "=" in l)
+    if props.get("ActiveState") == "activating":
+        return [check("gerador", "dados", "Gerador de sites", "ok", "Gerando site agora")]
+    if props.get("Result") not in (None, "", "success"):
+        return [check("gerador", "dados", "Gerador de sites", "falha", f"Última execução terminou com {props.get('Result')}")]
+    return [check("gerador", "dados", "Gerador de sites", "ok",
+                  "Roda a cada 2 h (08h–22h), 2 sites por vez" + (f"; última em {props.get('ExecMainExitTimestamp')}" if props.get("ExecMainExitTimestamp") else ""))]
+
+
+def pendencias() -> list[dict]:
+    """Não é saúde: é fila de trabalho humano. `atencao` quando há algo esperando,
+    e nunca vira WhatsApp (só `falha` vira)."""
+    out = []
+    fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
+            and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
+    out.append(check("pend:sites-fila", "pendencias", "Sites na fila do gerador", "atencao" if fila else "ok",
+                     f"{len(fila)} lead(s) com pasta e sem site publicado. O gerador do Dell trata 2 a cada 2 h."))
+    for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
+        try:
+            d = json.loads(arq.read_text())
+            gerado = datetime.fromisoformat(d["geradoEm"].replace("Z", "+00:00"))
+        except (OSError, ValueError, KeyError):
+            continue
+        velho = agora() - gerado > timedelta(hours=26)
+        for item in d.get("itens", []):
+            qtd = int(item.get("quantidade") or 0)
+            detalhe = (f"{qtd} · " if qtd else "") + str(item.get("detalhe", ""))
+            if velho:
+                detalhe += f" (contagem de {gerado.astimezone():%d/%m %H:%M})"
+            out.append(check(f"pend:{item['id']}", "pendencias", str(item["nome"]), "atencao" if qtd else "ok",
+                             detalhe, item.get("link")))
+    return out
+
+
+# ---------------------------------------------------------------- fora do Dell (Easypanel)
+
+def easypanel() -> list[dict]:
+    """O que ainda roda no Easypanel não passa pelo Error Workflow do Dell: pelo
+    menos confere se está no ar. Com a chave em ~/.config/claude-ops/easypanel-n8n-api-key,
+    também confere as execuções com erro dos fluxos ativos de lá."""
+    out = []
+    base = "https://schedule-n8n.jicnzg.easypanel.host"
+    ok, det = http_ok(f"{base}/healthz", timeout=10)
+    out.append(check("easypanel-n8n", "servicos", "n8n do Easypanel (Silmer, Food Helper)", "ok" if ok else "falha",
+                     "Respondendo" if ok else f"Sem resposta: {det}", f"{base}/home/workflows"))
+    chave = HOME / ".config/claude-ops/easypanel-n8n-api-key"
+    if chave.is_file():
+        h = {"X-N8N-API-KEY": chave.read_text().strip()}
+        try:
+            wfs = http_json(f"{base}/api/v1/workflows?active=true&limit=100", h, timeout=15)["data"]
+            desde = agora() - timedelta(hours=24)
+            for w in wfs:
+                ex = http_json(f"{base}/api/v1/executions?workflowId={w['id']}&limit=20", h, timeout=15)["data"]
+                erros = [e for e in ex if e.get("status") in ("error", "crashed") and e.get("startedAt")
+                         and datetime.fromisoformat(e["startedAt"].replace("Z", "+00:00")) >= desde]
+                if ex and ex[0].get("status") in ("error", "crashed"):
+                    out.append(check(f"easypanel:{w['id']}", "fluxos", f"{w['name']} (Easypanel)", "falha",
+                                     f"Última execução falhou ({len(erros)} em 24 h)", f"{base}/workflow/{w['id']}/executions/{ex[0]['id']}"))
+        except Exception as e:  # noqa: BLE001
+            out.append(check("easypanel-api", "fluxos", "Fluxos do Easypanel", "atencao", f"API sem resposta: {str(e)[:100]}"))
+    else:
+        out.append(check("easypanel-api", "fluxos", "Fluxos do Easypanel", "atencao",
+                         "Sem chave de API: falhas de lá não chegam aqui. Crie uma chave no n8n do Easypanel."))
+    # SquadOne (agendas) público: 403 é o porteiro de IP respondendo, ou seja, no ar.
+    try:
+        req = urllib.request.Request("https://aladdin-squadone-app.jicnzg.easypanel.host/")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            status = r.status
+    except urllib.error.HTTPError as e:
+        status = e.code
+    except Exception:  # noqa: BLE001
+        status = 0
+    out.append(check("squadone-app", "servicos", "SquadOne (agendas, Easypanel)", "ok" if 0 < status < 500 else "falha",
+                     "No ar" if 0 < status < 500 else f"Sem resposta (HTTP {status or 'nenhum'})",
+                     "https://aladdin-squadone-app.jicnzg.easypanel.host/"))
+    return out
+
+
 # ---------------------------------------------------------------- máquina
 
 def maquina() -> list[dict]:
@@ -336,7 +428,7 @@ def main() -> None:
     a = p.parse_args()
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

@@ -124,3 +124,12 @@ API (chave de operações em `~/.config/claude-ops/n8n-api-key`);
 `aviso-de-falha.py` liga o Error Workflow em todos os fluxos;
 `prumo-ajustes.py` e `site-antes-da-venda.py` aplicam as mudanças de
 23/09/2026; `rodar-agora.py <id>` executa um workflow agora.
+
+## Links rastreados e pendências (`claude-ops/fecha-ciclos.py`)
+
+`wa_link` (Site antes da venda) e "Enviar convite" (PRUMO) apontam para
+`http://127.0.0.1:5679/webhook/enviar` e `/webhook/convite`: o clique marca o
+envio e redireciona ao canal. Balcão e Lead Scout gravam contagens em
+`~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
+você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
+buscas.

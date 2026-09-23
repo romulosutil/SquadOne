@@ -37,9 +37,11 @@
     solicitar nova consulta, mas não iniciar runner, serviço, sincronização ou
     envio.
 17. Workflows PRUMO usam `ID da empresa` (`company_id` internamente) como
-    vínculo canônico. Preparar um link ou uma ação de contato não prova envio;
-    somente evidência do canal pode promover `Situação do diagnóstico` de
-    `Convite pronto` para `Convite enviado`.
+    vínculo canônico. Preparar um link ou uma ação de contato não prova envio.
+    Desde 23/09/2026 (decisão do Rômulo) o clique no link rastreado "Enviar
+    convite", que abre o canal com a mensagem pronta, conta como evidência e
+    promove `Convite pronto` para `Convite enviado`; o mesmo vale para o
+    `wa_link` do Site antes da venda (`pronto` → `enviado`).
 18. O telefone público retornado pelo Google Places não prova disponibilidade
     no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino
     do contato` exige link público de WhatsApp no site institucional; na
