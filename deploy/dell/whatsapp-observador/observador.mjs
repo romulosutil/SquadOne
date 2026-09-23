@@ -133,7 +133,9 @@ async function conectar({ parearCom } = {}) {
     printQRInTerminal: false,
     browser: ['SquadOne Observador', 'Chrome', '120.0'],
     syncFullHistory: false,
-    shouldSyncHistoryMessage: () => false,
+    // Sem desligar a sincronização inicial: é nela que o Baileys 7 recebe o mapa
+    // LID -> telefone, e sem o mapa uma conversa em LID não vira número. Mensagem
+    // antiga não marca nada mesmo assim (IDADE_MAXIMA_S).
     markOnlineOnConnect: false,
     getMessage: async () => ({ conversation: '' }),
   });

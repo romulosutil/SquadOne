@@ -71,6 +71,17 @@ def log(msg: str, nivel: str = "INFO", arquivo: Path | None = None) -> None:
             f.write(linha + "\n")
 
 
+def avisar(texto: str) -> None:
+    """Aviso pelo WhatsApp: a fila que o dell-status repassa ao Hermes."""
+    try:
+        fila_de_avisos = Path.home() / ".local/share/avisos/fila"
+        fila_de_avisos.mkdir(parents=True, exist_ok=True)
+        (fila_de_avisos / f"gerador-{int(time.time())}.json").write_text(
+            json.dumps({"titulo": "🌐 Gerador de sites", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        log(f"Aviso não gravado: {e}", "ERRO")
+
+
 def gravar_status(estado: dict) -> None:
     # Informativo (a Central lê); nunca derruba a execução.
     try:
@@ -259,6 +270,13 @@ def main() -> int:
         if not shutil.which(binario):
             log(f"'{binario}' não encontrado no PATH; nada gerado.", "ERRO")
             return 2
+    # Sem login o Claude falharia em todo lead, e 2 falhas tiram o lead da fila:
+    # checar ANTES, sem tocar em nenhum lead, e avisar quem pode resolver.
+    if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") and not (Path.home() / ".claude/.credentials.json").exists():
+        log("Claude sem login no Dell (sem CLAUDE_CODE_OAUTH_TOKEN nem ~/.claude/.credentials.json); nada gerado.", "ERRO")
+        avisar("O gerador de sites não rodou: o Claude não está logado no Dell. Grave o token em "
+               "~/.config/claude-ops/gerador.env (CLAUDE_CODE_OAUTH_TOKEN=...) e ele volta amanhã às 08h.")
+        return 2
     if not tomar_trava():
         return 0
     inicio = time.monotonic()
