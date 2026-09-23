@@ -77,7 +77,9 @@ export class InvalidOperationInput extends Error {
 }
 
 export function readSquadOneMode(env: NodeJS.ProcessEnv = process.env): SquadOneMode {
-  const mode = (env.SQUADONE_MODE ?? "app").trim();
+  // Ausente ou vazia = app, como as outras envs; só um valor presente e
+  // desconhecido derruba o boot.
+  const mode = (env.SQUADONE_MODE ?? "").trim() || "app";
   if (mode === "app" || mode === "operations") return mode;
   throw new Error("SQUADONE_MODE deve ser 'app' ou 'operations'.");
 }

@@ -19,7 +19,10 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/auth-escopos.test.ts`, `server/squad.test.ts`, `server/calendar.test.ts`,
 `server/prompt-passos.test.ts`, `server/telegram.test.ts`,
 `server/telegram-entrada.test.ts`, `server/telegram-resposta.test.ts`,
-`server/telegram-bot.test.ts`, `src/ajuste-do-usuario.test.ts` e
+`server/telegram-bot.test.ts`, `server/avaliacoes-turno.test.ts`,
+`server/operations.test.ts`, `server/auto-production.test.ts`,
+`server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
+`src/ajuste-do-usuario.test.ts`, `src/operations-agenda-window.test.ts` e
 `src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -65,6 +68,12 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/telegram-entrada.ts  PURO: update do Telegram -> comando/demanda/ignorar, dedupe de update_id em memória
   server/telegram-resposta.ts PURO: TurnoResult -> texto do chat (sem parse_mode), reusa linhasDosEventosCriados
   server/telegram-bot.ts  cola: portão (segredo) + processar (allowlist via telegram-entrada, 200 imediato, fila serial)
+  server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
+  server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
+  server/auto-production.ts   Central: leitura dos artefatos da Produção Auto (somente leitura)
+  server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py
+src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app) ou Central (perfil operations)
+  src/operations/         Central de Operações (só perfil operations)
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -241,6 +250,19 @@ Só frontend; nada disto grava.
 - **Passeio vs. comando:** ator parado passeia (6–16 s, 80% na própria sala, 20% na vizinha pela porta, no máximo 1/3 fora ao mesmo tempo). `moveTo`/entrada de contratado cancelam o passeio; visita do PO raiz segura o ator lá até o próximo comando. A câmera só segue quem anda por comando. `prefers-reduced-motion` desliga o passeio.
 - `SalasPainel`: PO sempre visível, integrantes atrás de "+N", lista com rolagem própria (40vh).
 
+### Dois perfis: app (Easypanel) e operations (Dell)
+
+O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor. Detalhes e regras da Central estão em `ARCHITECTURE.md` e `RULES.md` — leia-os antes de mexer em `server/operations.ts`, `server/auto-production.ts`, `server/dell-status.ts`, `src/operations/` ou `deploy/`.
+
+- **`app` (padrão, Easypanel):** o SquadOne de sempre, bind `0.0.0.0`. `/api/operations/*` responde 404 JSON (sem isto o fallback da SPA devolveria HTML 200). Ausente = `app`; valor desconhecido derruba o boot — perfil errado não pode abrir a Central calado.
+- **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/`, o app em `/squadone`, rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção.
+- **`src/RootApp.vue`** pergunta `/api/runtime` e escolhe a superfície. Falha na pergunta = abre o app, nunca a Central.
+- **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.
+
+### Avaliação de turno (desligada)
+
+`POST /api/turnos/:turnoId/avaliacao {nota 1–5, motivos[≤3], comentario?}` guarda a opinião do usuário sobre um turno que **este processo** acabou de devolver: com `SQUADONE_AVALIACOES=true`, `/api/orquestrar` devolve `turno_id` e guarda um resumo sem dados pessoais num cache em memória (30 min, 100 turnos). Grava em `data/avaliacoes-turno.json`, fora do roster e do prompt: a nota não treina nada sozinha. Nenhum componente da UI chama a rota ainda. Desligada é o padrão, e é o que mantém a persistência de produção só em `squad.json` + `google-auth.json`.
+
 ## Persistência
 
 Volume Docker do Easypanel montado em `/app/data`. Poucos KB:
@@ -329,6 +351,9 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `TELEGRAM_BOT_TOKEN` | servidor | token do @BotFather; ausente/vazia = bot desligado (as duas abaixo são ignoradas); formato inválido = `TelegramMalConfigurado` |
 | `TELEGRAM_WEBHOOK_SECRET` | servidor | 32–256 chars `[A-Za-z0-9_-]`; obrigatória com o token presente; vai no `secret_token` do `setWebhook` e é conferida no header de cada POST |
 | `TELEGRAM_CHAT_IDS` | servidor | `chat_id` autorizados, por vírgula; obrigatória com o token presente; **vazia NÃO abre o bot** (ao contrário de `IPS_PERMITIDOS`) |
+| `SQUADONE_MODE` | servidor | `app` (padrão, Easypanel) ou `operations` (Dell); outro valor derruba o boot. Ver "Dois perfis" |
+| `SQUADONE_OPERATIONS_CONFIG` / `_DATA_DIR` | servidor | só em `operations`: config privada da Central e diretório de dados; nunca no Easypanel |
+| `SQUADONE_AVALIACOES` | servidor | `true` liga a avaliação de turno; qualquer outro valor = desligada |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 

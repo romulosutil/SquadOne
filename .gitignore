@@ -21,3 +21,6 @@ assets/craftpix/
 graphify-out/
 .headroom/
 .tokensave/
+
+# notas de sessão locais (Claude/Codex); não versionar
+CHECKPOINT.md
