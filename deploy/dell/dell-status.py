@@ -250,34 +250,15 @@ ESTADO_N8N = HOME / ".local/share/n8n-estado"
 AUTO = HOME / "auto-site"
 
 
-def gerador() -> list[dict]:
-    creds = HOME / ".config/claude-ops"
-    faltam = [n for n, a in (("Claude", "claude-oauth-token"), ("Vercel", "vercel-token")) if not (creds / a).is_file()]
-    if faltam:
-        return [check("gerador", "dados", "Gerador de sites", "atencao",
-                      "Sem login de " + " e ".join(faltam) + ": a fila de sites não anda. Veja dev/DELL-WORKER.md.")]
-    r = subprocess.run(["systemctl", "--user", "show", "gerador-de-sites.service", "-p", "Result",
-                        "-p", "ExecMainExitTimestamp", "-p", "ActiveState"], capture_output=True, text=True).stdout
-    props = dict(l.split("=", 1) for l in r.splitlines() if "=" in l)
-    if props.get("ActiveState") == "activating":
-        return [check("gerador", "dados", "Gerador de sites", "ok", "Gerando site agora")]
-    if props.get("Result") not in (None, "", "success"):
-        return [check("gerador", "dados", "Gerador de sites", "falha", f"Última execução terminou com {props.get('Result')}")]
-    return [check("gerador", "dados", "Gerador de sites", "ok",
-                  "Roda a cada 2 h (08h–22h), 2 sites por vez" + (f"; última em {props.get('ExecMainExitTimestamp')}" if props.get("ExecMainExitTimestamp") else ""))]
-
-
 def pendencias() -> list[dict]:
     """Não é saúde: é fila de trabalho humano. `atencao` quando há algo esperando,
     e nunca vira WhatsApp (só `falha` vira)."""
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
-    instalado = (HOME / ".config/systemd/user/gerador-de-sites.timer").is_file()
     out.append(check("pend:sites-fila", "pendencias", "Sites na fila do gerador", "atencao" if fila else "ok",
-                     f"{len(fila)} lead(s) com pasta e sem site publicado. "
-                     + ("O gerador do Dell trata 2 a cada 2 h." if instalado
-                        else "Gerador ainda não instalado no Dell: rode executar-fila-leads.ps1 no PC.")))
+                     f"{len(fila)} lead(s) com pasta e sem site publicado. O PC gera até 4 por dia às 08h "
+                     "(tarefa EsteiraLeads08h); para adiantar, rode executar-fila-leads.ps1."))
     for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
         try:
             d = json.loads(arq.read_text())
@@ -321,9 +302,6 @@ def easypanel() -> list[dict]:
                                      f"Última execução falhou ({len(erros)} em 24 h)", f"{base}/workflow/{w['id']}/executions/{ex[0]['id']}"))
         except Exception as e:  # noqa: BLE001
             out.append(check("easypanel-api", "fluxos", "Fluxos do Easypanel", "atencao", f"API sem resposta: {str(e)[:100]}"))
-    else:
-        out.append(check("easypanel-api", "fluxos", "Fluxos do Easypanel", "atencao",
-                         "Sem chave de API: falhas de lá não chegam aqui. Crie uma chave no n8n do Easypanel."))
     # SquadOne (agendas) público: 403 é o porteiro de IP respondendo, ou seja, no ar.
     try:
         req = urllib.request.Request("https://aladdin-squadone-app.jicnzg.easypanel.host/")
@@ -431,7 +409,7 @@ def main() -> None:
     a = p.parse_args()
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, pendencias, easypanel):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
