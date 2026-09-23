@@ -22,7 +22,8 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/telegram-bot.test.ts`, `server/avaliacoes-turno.test.ts`,
 `server/operations.test.ts`, `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
-`src/ajuste-do-usuario.test.ts`, `src/operations-agenda-window.test.ts` e
+`server/tarefa-avulsa.test.ts`, `src/ajuste-do-usuario.test.ts`,
+`src/operations-agenda-window.test.ts` e
 `src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -50,7 +51,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/redacao.ts       Gemini redige papel + escopo (não grava)
   server/orchestrator.ts  um turno: demanda -> 1 chamada ao Gemini -> capacidades
   server/turno.ts         demanda já validada -> um turno; ponto único usado por /api/orquestrar e pelo bot do Telegram
-  server/capabilities.ts  as capacidades que o modelo pode invocar
+  server/capabilities.ts  as capacidades que o modelo pode invocar (agendar_evento, criar_tarefa, crescimento, troca de squad)
   server/alocador.ts      PURO: ocupação + janela + pedido + agora -> slots
   server/agenda.ts        ocupação do turno: 1 leitura do primary + reservas
   server/agendamento.ts   compromisso -> eventos (foco, ou marco + blocos)
@@ -171,7 +172,7 @@ O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_fin
 
 Segundo canal para os micro-passos de um compromisso: uma tarefa-mãe com subtarefas no Google Tasks, visível no Gmail, no Calendar e no app Tasks do Android sem abrir o SquadOne.
 
-- **Campo, não capacidade.** `agendar_evento` tem `passos: string[]` opcional. O turno é one-shot e o modelo não recebe eventId de volta: uma capacidade separada não teria como apontar para o evento. É o mesmo padrão da `nota_de_execucao`. O prompt manda passos só com pedido explícito de checklist/etapas ou num prazo com etapas que a demanda sugere (2–8 itens); pedido de checklist sem compromisso vira `agendar_evento` com passos. Vale igual nos três modos.
+- **Campo, não capacidade.** `agendar_evento` tem `passos: string[]` opcional. O turno é one-shot e o modelo não recebe eventId de volta: uma capacidade separada não teria como apontar para o evento. É o mesmo padrão da `nota_de_execucao`. O prompt manda passos só com pedido explícito de checklist/etapas ou num prazo com etapas que a demanda sugere (2–8 itens); pedido de checklist sem compromisso vira `criar_tarefa` com passos (ver "Tarefa avulsa"). Vale igual nos três modos.
 - **Normalização no servidor** (`normalizarPassos`, `server/passos.ts`): só strings, espaços colapsados, vazios fora, dedupe sem diferenciar maiúsculas, `MAX_TITULO_PASSO` 200 com reticências, `MAX_PASSOS` 10 (o excedente vira aviso). Um item cria.
 - **Uma lista por squad**, `SquadOne · <nome>`, criada no primeiro compromisso com passos. O id fica em `Squad.tasksListaId` (roster, fora do prompt e da vista) e nunca é procurado por título — o usuário renomeia no celular. Criação single-flight (`Map` em memória, processo único); a chamada ao Google fica fora da fila do `atualizarRoster`, só a gravação do id entra nela. Lista gravada que responde 404/410 é recriada e o id sobrescrito, uma vez por chamada.
 - **Fluxo** (depois de `agendarCompromisso`, só com passos): sem escopo → aviso `ampliarAcesso` e nenhuma chamada; lista; tarefa-mãe (título do compromisso, notas = `htmlLink` + `squadone_evento=<eventId>`, `due` = data LOCAL de São Paulo do evento principal como `AAAA-MM-DDT00:00:00.000Z` — o Tasks descarta a hora, e converter para UTC trocaria o dia depois das 21h; marco usa o dia do prazo); subtarefas em ordem com `parent` e `previous` (sem `previous` o Google põe cada uma no topo), sem `due` (com data cada uma viraria um chip no Calendar); PATCH do evento principal com `squadone_tasks_lista`/`_pai` via `lerEvento` + `atualizarPreservandoMarcas`.
@@ -179,7 +180,18 @@ Segundo canal para os micro-passos de um compromisso: uma tarefa-mãe com subtar
 - **Toast:** `EventoCriado.passos` (subtarefas criadas, só no evento principal) vira "· N passo(s) no Google Tasks".
 - **A Mochila não lê o Tasks** (invariante 3): nenhuma chamada nova, nenhum modo de falha novo. Tarefa não tem horário: não passa pelo alocador nem gera lembrete.
 - **Escrita única, de propósito:** nada reescreve as tarefas depois. O Ajuste não atualiza o `due`; apagar o evento deixa as tarefas órfãs; a vigia não sabe do Tasks; o redirecionamento de squad usa a lista da squad de destino sozinho.
-- **Adiado:** selo "passos 2/5" no card da Mochila (um `tasks.list` por lista com `showCompleted`/`showHidden`, casado pela marca, sem afetar a Mochila se falhar); tarefa avulsa sem compromisso; renomear a lista quando a squad é renomeada.
+- **Adiado:** selo "passos 2/5" no card da Mochila (um `tasks.list` por lista com `showCompleted`/`showHidden`, casado pela marca, sem afetar a Mochila se falhar); renomear a lista quando a squad é renomeada.
+
+### Tarefa avulsa (`criar_tarefa`)
+
+O que precisa ser feito mas não pede horário ("comprar leite", "pagar o boleto dia 30") vira item no Google Tasks, sem evento. Antes o único caminho para o Tasks era `passos` em `agendar_evento`, e todo lembrete virava um bloco de 60 min na agenda.
+
+- **Regra no prompt:** `agendar_evento` só quando a demanda precisa de TEMPO reservado; lembrete, compra, pagamento, recado, "anotar" é `criar_tarefa`. Desempate: parar o que está fazendo por mais de 15 min = agenda. Checklist sem compromisso = `criar_tarefa` com `passos`.
+- **Campos:** `titulo` e `responsavel_id` obrigatórios (pessoa validada antes de qualquer chamada, como no agendamento); `data` (`AAAA-MM-DD`) vira o `due` pela parte de data escrita — nunca convertida para UTC, mesmo motivo do `dueDaTarefa`; ilegível = tarefa sem data + aviso; `notas` com a assinatura `SquadOne · <pessoa> (<domínio>)` no fim; `passos` viram subtarefas (mesma normalização e teto). Tetos `MAX_TITULO_TAREFA` 300 e `MAX_NOTAS_TAREFA` 2000 em `server/passos.ts`.
+- **Mesma lista da squad** dos passos (`garantirListaDaSquad`, single-flight). Nenhum PATCH em evento: não há evento.
+- **Foco e Baixa Prioridade viram bloco.** Os dois modos são o usuário pedindo horário: o prompt proíbe `criar_tarefa` e, se o modelo chamar mesmo assim, o handler converte em `agendar_evento` `time_blocking` (duração padrão, `data` → `a_partir_de`, `notas` → `nota_de_execucao`). Por isso `criar_tarefa` entra na **série** de agendamento só nesses modos; em `auto` roda em paralelo.
+- **Aqui a falha é erro, não aviso:** a tarefa é o resultado inteiro. Sem o escopo → `TasksNaoAutorizado`, erro com `motivo: ampliarAcesso` (`MotivoDeErro` ganhou o valor); a UI e o bot tratam igual ao aviso dos passos (toast/linha "Autorizar Google Tasks", nunca alert nem logout). 403 de escopo e 401 seguem `motivoDoErroTasks`. Subtarefa que falha depois da tarefa = aviso.
+- **Resultado:** `TurnoResult.tarefas_criadas: TarefaCriada[]`; o toast (`resumoDosEventosCriados(eventos, fmt, tarefas)`) e o bot (linha `📋`) mostram título, dia e passos. É o único lugar do app que conta que a tarefa nasceu: a Mochila não lê o Tasks (invariante 3), a vigia não avisa, o alocador não a toca.
 
 ### Ajuste de tempo
 

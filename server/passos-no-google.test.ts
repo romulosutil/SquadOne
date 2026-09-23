@@ -11,6 +11,8 @@ import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido } fro
 import {
   AVISO_SEM_ESCOPO,
   criarPassosNoGoogle,
+  motivoDoErroTasks,
+  TasksNaoAutorizado,
   type DependenciasDosPassos,
   type PedidoDePassos,
 } from "./passos-no-google.ts";
@@ -273,5 +275,68 @@ describe("criarPassosDoCompromisso", () => {
     const r = await fluxo.criarPassosDoCompromisso(pedido());
     assert.equal(r.criados, 3);
     assert.equal(tarefas[0].listaId, "L1");
+  });
+});
+
+describe("criarTarefaAvulsa", () => {
+  const avulsa = (p: Record<string, unknown> = {}) => ({
+    squad: squadCom(), titulo: "Comprar leite", notas: "SquadOne · Ana (Geral)", passos: [] as string[],
+    obterToken: async () => "tk", liberado: true, ...p,
+  });
+
+  it("sem o escopo lança TasksNaoAutorizado (gesto ampliar) e não chama o Google", async () => {
+    const { fluxo, log, tarefas } = montar();
+    await assert.rejects(fluxo.criarTarefaAvulsa(avulsa({ liberado: false })), TasksNaoAutorizado);
+    assert.equal(motivoDoErroTasks(new TasksNaoAutorizado()), "ampliarAcesso");
+    assert.deepEqual(log, []);
+    assert.equal(tarefas.length, 0);
+  });
+
+  it("cria a lista da squad na primeira vez e a tarefa com due, sem PATCH em evento", async () => {
+    const { fluxo, log, tarefas, patches } = montar();
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ due: "2026-09-30T00:00:00.000Z" }));
+    assert.deepEqual(log, ["inserirLista:SquadOne · Pessoal", "gravar:pessoal:L1"]);
+    assert.deepEqual(tarefas, [
+      { listaId: "L1", corpo: { title: "Comprar leite", notes: "SquadOne · Ana (Geral)", due: "2026-09-30T00:00:00.000Z" }, posicao: undefined },
+    ]);
+    assert.deepEqual(r, { tarefaId: "T1", listaId: "L1", criados: 0, avisos: [] });
+    assert.equal(patches.length, 0);
+  });
+
+  it("sem data não manda due", async () => {
+    const { fluxo, tarefas } = montar({}, "L9");
+    await fluxo.criarTarefaAvulsa(avulsa());
+    assert.equal("due" in tarefas[0].corpo, false);
+    assert.equal(tarefas[0].listaId, "L9");
+  });
+
+  it("passos viram subtarefas em ordem sob a tarefa", async () => {
+    const { fluxo, tarefas } = montar({}, "L9");
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ passos: ["Leite", "Pão"] }));
+    assert.equal(r.criados, 2);
+    assert.deepEqual(tarefas.slice(1).map((t) => [t.corpo.title, t.posicao]), [
+      ["Leite", { parent: "T1", previous: undefined }],
+      ["Pão", { parent: "T1", previous: "T2" }],
+    ]);
+  });
+
+  it("falha na tarefa principal LANÇA com o erro classificado (é o resultado inteiro)", async () => {
+    const { fluxo } = montar({ inserirTarefa: async () => { throw new ErroTasks(403, ESCOPO_403); } }, "L9");
+    await assert.rejects(fluxo.criarTarefaAvulsa(avulsa()), (err) => motivoDoErroTasks(err) === "ampliarAcesso");
+  });
+
+  it("subtarefa que falha vira aviso e a tarefa fica", async () => {
+    let n = 0;
+    const { fluxo } = montar({
+      inserirTarefa: async () => {
+        n++;
+        if (n === 3) throw new ErroTasks(500, "{}");
+        return { id: `T${n}` };
+      },
+    }, "L9");
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ passos: ["a", "b", "c"] }));
+    assert.equal(r.tarefaId, "T1");
+    assert.equal(r.criados, 1);
+    assert.match(r.avisos[0].aviso, /2 de 3 passo/);
   });
 });

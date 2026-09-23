@@ -27,7 +27,8 @@ import type {
   RespostaDeAjuste,
   RosterView,
   SquadView,
-  Sugestao
+  Sugestao,
+  TarefaCriada
 } from './types'
 import { ampliarAcesso, conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus, tasksLiberado } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
@@ -721,23 +722,29 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     // alert — é o toast do turno com o gesto certo. Nunca logout: ampliar é o
     // mesmo consentimento.
     const ampliar = (x: { motivo?: string }) => x.motivo === 'ampliarAcesso'
-    const pedeTasks = avisos.some(ampliar)
+    // Tarefa avulsa sem o escopo chega como ERRO (não sobrou nada dela), mas o
+    // gesto é o mesmo dos passos: toast com "Autorizar", não alert.
+    const pedeTasks = avisos.some(ampliar) || erros.some(ampliar)
     if (pedeTasks) tasksLiberado.value = false
     const acaoTasks = pedeTasks ? { rotulo: 'Autorizar Google Tasks', fazer: ampliarAcesso } : undefined
+    const semTasks = 'Falta autorizar o Google Tasks: passos e tarefas ficaram de fora.'
+    const tarefas: TarefaCriada[] = turno.tarefas_criadas ?? []
 
-    if (turno.eventos_criados?.length) {
+    if (turno.eventos_criados?.length || tarefas.length) {
       // responsavel_id e uma PESSOA (PO ou integrante); o GameMap resolve em
       // qual DOMINIO ela esta para mandar o PO raiz ate a sala certa.
-      currentAgent.value = turno.eventos_criados[0].responsavel_id
+      currentAgent.value = (turno.eventos_criados?.[0] ?? tarefas[0]).responsavel_id
       // O que foi marcado, no toast: o servidor escolhe o horário e a duração,
       // e sem isto o usuário só descobria abrindo a Mochila ou o Google. O
       // toast do redirecionamento automático vem antes e seria sobrescrito por
-      // este, então a squad de destino entra aqui em vez de se perder.
-      const resumo = resumoDosEventosCriados(turno.eventos_criados)
+      // este, então a squad de destino entra aqui em vez de se perder. Tarefa
+      // avulsa não aparece na Mochila (vive só no Tasks): o toast é o único
+      // lugar do app que conta que ela nasceu.
+      const resumo = resumoDosEventosCriados(turno.eventos_criados ?? [], {}, tarefas)
       const texto = turno.redirecionado ? `Squad ${turno.redirecionado.para_nome} — ${resumo}` : resumo
-      avisar(pedeTasks ? `${texto} · Passos não criados: falta autorizar o Google Tasks.` : texto, acaoTasks)
+      avisar(pedeTasks ? `${texto} · ${semTasks}` : texto, acaoTasks)
     } else if (pedeTasks) {
-      avisar('Passos não criados: falta autorizar o Google Tasks.', acaoTasks)
+      avisar(semTasks, acaoTasks)
     }
 
     // Cada turno SUBSTITUI as propostas, inclusive por nenhuma: sugestao de
@@ -756,13 +763,14 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     const precisaConectar = (x: { motivo?: string }) => x.motivo === 'precisaConectar'
     if (erros.some(precisaConectar) || avisos.some(precisaConectar)) conectado.value = false
     const avisosNoAlerta = avisos.filter((a) => !ampliar(a))
-    if (erros.length || avisosNoAlerta.length) {
+    const errosNoAlerta = erros.filter((e) => !ampliar(e))
+    if (errosNoAlerta.length || avisosNoAlerta.length) {
       // try por tarefa: o lote sobrevive, os erros vem nomeados. Avisos sao
       // coisas feitas de um jeito diferente do pedido (conflito, esforco que
       // nao coube antes do prazo) e o usuario precisa saber delas agora.
       console.warn('Tarefas com erro:', erros, 'Avisos:', avisos)
       alert([
-        ...erros.map(e => `${e.capacidade}: ${e.erro}`),
+        ...errosNoAlerta.map(e => `${e.capacidade}: ${e.erro}`),
         ...avisosNoAlerta.map(a => `Aviso — ${a.titulo}: ${a.aviso}`)
       ].join('\n'))
     }

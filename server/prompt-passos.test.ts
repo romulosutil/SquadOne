@@ -24,7 +24,7 @@ describe("regra de passos no prompt", () => {
       const passos = p.indexOf("- passos: mande SÓ quando");
       assert.ok(passos > p.indexOf("- nota_de_execucao:"), "depois da nota");
       assert.ok(passos < p.indexOf("- Crescimento tem dois níveis"), "antes do crescimento");
-      assert.match(p, /Pedido de checklist sem\s+compromisso: chame agendar_evento com os passos/);
+      assert.match(p, /Pedido de checklist ou\s+lista sem compromisso na agenda: chame criar_tarefa com os itens em passos/);
       assert.match(p, /Entre 2 e 8 itens/);
     });
   }
@@ -37,5 +37,27 @@ describe("declaração de agendar_evento", () => {
     assert.equal(passos.type, Type.ARRAY);
     assert.equal(passos.items!.type, Type.STRING);
     assert.equal(params.required!.includes("passos"), false);
+  });
+});
+
+describe("criar_tarefa no prompt e na declaração", () => {
+  it("auto: regra de agenda ou tarefa presente, sem proibir criar_tarefa", () => {
+    const p = buildSystemInstruction(CONTEXTO, "2026-09-14T12:00:00-03:00", "auto");
+    assert.match(p, /- Agenda ou tarefa:/);
+    assert.doesNotMatch(p, /Não use\s+criar_tarefa/);
+  });
+
+  for (const modo of ["foco", "baixa_prioridade"] as const) {
+    it(`${modo}: o prompt manda não usar criar_tarefa`, () => {
+      const p = buildSystemInstruction(CONTEXTO, "2026-09-14T12:00:00-03:00", modo);
+      assert.match(p, /Não use\s+criar_tarefa: o usuário pediu\s+tempo na agenda/);
+    });
+  }
+
+  it("titulo e responsavel_id obrigatórios; data, notas e passos opcionais", () => {
+    const params = CAPABILITIES.criar_tarefa.declaration.parameters!;
+    assert.deepEqual(params.required, ["titulo", "responsavel_id"]);
+    assert.equal(params.properties!.passos!.type, Type.ARRAY);
+    for (const campo of ["data", "notas", "passos"]) assert.ok(params.properties![campo], campo);
   });
 });

@@ -5,7 +5,7 @@ import { ModeloOcupado, type TurnoResult } from "./orchestrator.ts";
 
 const SEGREDO = "s".repeat(40);
 const FMT = { locale: "pt-BR", timeZone: "America/Sao_Paulo" };
-const TURNO_VAZIO: TurnoResult = { eventos_criados: [], sugestoes: [], avisos: [], erros: [] };
+const TURNO_VAZIO: TurnoResult = { eventos_criados: [], tarefas_criadas: [], sugestoes: [], avisos: [], erros: [] };
 
 function res() {
   const r: any = { statusCode: 0, finalizado: false };

@@ -7,7 +7,7 @@ import { RosterIlegivel } from "./squad.ts";
 import type { EventoCriado } from "./capabilities.ts";
 
 const FMT = { locale: "pt-BR", timeZone: "America/Sao_Paulo" };
-const vazio = (x: Partial<TurnoResult> = {}): TurnoResult => ({ eventos_criados: [], sugestoes: [], avisos: [], erros: [], ...x });
+const vazio = (x: Partial<TurnoResult> = {}): TurnoResult => ({ eventos_criados: [], tarefas_criadas: [], sugestoes: [], avisos: [], erros: [], ...x });
 const evento = (x: Partial<EventoCriado> = {}): EventoCriado => ({
   kind: "evento", titulo: "Ligar pro banco", responsavel_id: "ana", tipo: "time_blocking", dominio: "pessoal--financas",
   inicio: "2026-09-15T14:00:00-03:00", fim: "2026-09-15T14:30:00-03:00", dia_inteiro: false, papel: "foco", eventId: "e1", ...x,
@@ -67,6 +67,22 @@ describe("textoDoTurno", () => {
     const t = textoDoTurno(vazio({ eventos_criados: [evento()], avisos: [aviso, { ...aviso, titulo: "B" }] }), FMT);
     assert.equal(t.match(/Autorizar Google Tasks/g)?.length, 1);
     assert.match(t, /não use Desconectar/);
+  });
+
+  it("tarefa avulsa: uma linha 📋 com o dia (sem trocar de dia pelo fuso) e os passos", () => {
+    const tarefa = { kind: "tarefa" as const, titulo: "Pagar boleto", responsavel_id: "ana", dominio: "d", tarefaId: "t1", listaId: "l1", avisos: [] };
+    const t = textoDoTurno(vazio({
+      tarefas_criadas: [{ ...tarefa, data: "2026-09-30", passos: 2 }, { ...tarefa, titulo: "Comprar leite" }],
+    }), FMT);
+    assert.equal(t, "📋 Pagar boleto: tarefa no Google Tasks, para qua., 30/09 · 2 passo(s)\n📋 Comprar leite: tarefa no Google Tasks");
+  });
+
+  it("tarefa sem escopo (erro ampliarAcesso) soma no mesmo gesto dos passos", () => {
+    const aviso = { capacidade: "agendar_evento", titulo: "A", aviso: "sem escopo", motivo: "ampliarAcesso" as const };
+    const erro = { capacidade: "criar_tarefa", args: { titulo: "Comprar leite" }, erro: "Tarefa não criada: falta autorizar o Google Tasks.", motivo: "ampliarAcesso" as const };
+    const t = textoDoTurno(vazio({ avisos: [aviso], erros: [erro] }), FMT);
+    assert.equal(t.match(/Autorizar Google Tasks/g)?.length, 1);
+    assert.match(t, /❌ Comprar leite: Tarefa não criada/);
   });
 
   it("aviso comum e propostas de contratação", () => {

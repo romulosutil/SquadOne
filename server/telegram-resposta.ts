@@ -1,4 +1,4 @@
-import { linhasDosEventosCriados, type FormatoDeData } from "../src/contribuicao.ts";
+import { linhasDasTarefasCriadas, linhasDosEventosCriados, type FormatoDeData } from "../src/contribuicao.ts";
 import { ModeloOcupado, type ErroTarefa, type TurnoResult } from "./orchestrator.ts";
 import { JanelaMalConfigurada } from "./alocador.ts";
 import { RosterIlegivel } from "./squad.ts";
@@ -15,7 +15,7 @@ const CORTE = "\n…(cortado)";
 
 const CONECTAR = "🔌 Google desconectado: abra o SquadOne e clique em Conectar.";
 const AMPLIAR =
-  '📋 Passos não criados: falta autorizar o Google Tasks. Abra o SquadOne e clique em "Autorizar Google Tasks" (não use Desconectar).';
+  '📋 Falta autorizar o Google Tasks (passos e tarefas ficaram de fora). Abra o SquadOne e clique em "Autorizar Google Tasks" (não use Desconectar).';
 /** O card de aprovação só existe na aba, e o turno não é gravado em lugar nenhum. */
 const APROVAR_NO_APP = "Para aprovar, peça de novo pelo app.";
 
@@ -32,6 +32,7 @@ function linhaDoErro(e: ErroTarefa): string {
       return `❌ ${tituloDoErro(e)}: configuração do servidor — ${e.erro}`;
     case "precisaConectar":
     case "semHorarioLivre":
+    case "ampliarAcesso":
       return `❌ ${tituloDoErro(e)}: ${e.erro}`;
     default:
       return `❌ ${e.capacidade}: ${e.erro}`;
@@ -44,14 +45,17 @@ export function textoDoTurno(turno: TurnoResult, fmt: FormatoDeData): string {
   if (r) linhas.push(`🔀 Squad ${r.para_nome} (a demanda não era de ${r.de_nome}).`);
 
   linhas.push(...linhasDosEventosCriados(turno.eventos_criados ?? [], fmt).map((l) => `✅ ${l}`));
+  linhas.push(...linhasDasTarefasCriadas(turno.tarefas_criadas ?? [], fmt).map((l) => `📋 ${l}`));
 
   const avisos = turno.avisos ?? [];
-  // Um gesto por turno, não um por compromisso: três passos sem escopo não são três pedidos.
-  if (avisos.some((a) => a.motivo === "ampliarAcesso")) linhas.push(AMPLIAR);
-  for (const a of avisos) if (a.motivo !== "ampliarAcesso") linhas.push(`⚠️ ${a.titulo}: ${a.aviso}`);
-
   // Descartados não são falha: o turno sugeriu outra squad, e a proposta abaixo explica.
   const erros = (turno.erros ?? []).filter((e) => !e.descartado);
+  // Um gesto por turno, não um por compromisso: três passos sem escopo não são
+  // três pedidos. Tarefa avulsa sem escopo chega como erro (com o título) e
+  // soma no mesmo gesto.
+  if ([...avisos, ...erros].some((x) => x.motivo === "ampliarAcesso")) linhas.push(AMPLIAR);
+  for (const a of avisos) if (a.motivo !== "ampliarAcesso") linhas.push(`⚠️ ${a.titulo}: ${a.aviso}`);
+
   linhas.push(...erros.map(linhaDoErro));
   if ([...erros, ...avisos].some((x) => x.motivo === "precisaConectar")) linhas.push(CONECTAR);
 

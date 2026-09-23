@@ -73,7 +73,40 @@ export interface ResultadoDosPassos {
   tarefaMaeId?: string;
 }
 
+export interface PedidoDeTarefaAvulsa {
+  /** A squad ATIVA do turno: a tarefa vai para a lista dela. */
+  squad: Squad;
+  /** Já normalizado (`normalizarTituloDaTarefa`), não vazio. */
+  titulo: string;
+  notas: string;
+  /** `dueDaData`; ausente = tarefa sem data. */
+  due?: string;
+  /** Já normalizados (`normalizarPassos`); vazio = tarefa sem subtarefas. */
+  passos: string[];
+  obterToken: ObterToken;
+  liberado: boolean;
+}
+
+export interface ResultadoDaTarefaAvulsa {
+  tarefaId: string;
+  listaId: string;
+  /** Subtarefas criadas. */
+  criados: number;
+  avisos: AvisoDoCompromisso[];
+}
+
 export const AVISO_SEM_ESCOPO = "Passos não criados: falta autorizar o Google Tasks.";
+
+/**
+ * Tarefa avulsa sem o escopo do Tasks. Não é falha de credencial: o Calendar
+ * funciona, e o gesto é AMPLIAR o acesso (`motivoDoErro` → `ampliarAcesso`).
+ */
+export class TasksNaoAutorizado extends Error {
+  constructor() {
+    super("Tarefa não criada: falta autorizar o Google Tasks.");
+    this.name = "TasksNaoAutorizado";
+  }
+}
 
 /**
  * Gesto de uma falha do Tasks. Escopo insuficiente é AMPLIAR, não reconectar:
@@ -82,6 +115,7 @@ export const AVISO_SEM_ESCOPO = "Passos não criados: falta autorizar o Google T
  * projeto não tem gesto: a mensagem do Google diz o que fazer.
  */
 export function motivoDoErroTasks(err: unknown): AvisoDoCompromisso["motivo"] {
+  if (err instanceof TasksNaoAutorizado) return "ampliarAcesso";
   if (err instanceof ErroTasks && err.escopoInsuficiente) return "ampliarAcesso";
   if ((err instanceof ErroTasks && err.ehCredencial) || err instanceof PrecisaConectar) return "precisaConectar";
   return undefined;
@@ -136,6 +170,62 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
     return promessa;
   }
 
+  /** Subtarefas em ordem sob `maeId`. Não lança: falha para a série e vira aviso. */
+  async function criarSubtarefas(
+    listaId: string,
+    maeId: string,
+    passos: string[],
+    obterToken: ObterToken,
+  ): Promise<{ criados: number; avisos: AvisoDoCompromisso[] }> {
+    const avisos: AvisoDoCompromisso[] = [];
+    let criados = 0;
+    let anterior: string | undefined;
+    for (let i = 0; i < passos.length; i++) {
+      try {
+        // Sem `due`: com data, cada subtarefa viraria um chip no Google Calendar.
+        // `previous` mantém a ordem da demanda (sem ele, cada uma iria ao topo).
+        const sub = await comTokenTasks(obterToken, (t) =>
+          dep.inserirTarefa(t, listaId, { title: passos[i] }, { parent: maeId, previous: anterior }),
+        );
+        anterior = sub.id;
+        criados++;
+      } catch (err) {
+        // Para a série como os blocos de prazo: não apaga nada, não abre buraco
+        // no meio da checklist.
+        const faltaram = passos.length - i;
+        avisos.push(
+          aviso(
+            `${faltaram} de ${passos.length} passo(s) não criado(s) no Google Tasks: ${mensagem(err)}`,
+            motivoDoErroTasks(err),
+          ),
+        );
+        break;
+      }
+    }
+    return { criados, avisos };
+  }
+
+  /**
+   * Tarefa AVULSA: sem evento, sem horário, só o Google Tasks. Diferente dos
+   * passos de um compromisso, aqui a tarefa É o resultado — então a falha antes
+   * de ela existir LANÇA (o turno a mostra como erro, com o gesto de
+   * `motivoDoErroTasks`), e só o que vem depois (subtarefas) vira aviso.
+   */
+  async function criarTarefaAvulsa(p: PedidoDeTarefaAvulsa): Promise<ResultadoDaTarefaAvulsa> {
+    if (!p.liberado) throw new TasksNaoAutorizado();
+    const listaId = await garantirListaDaSquad(p.squad, p.obterToken);
+    const tarefa = await comTokenTasks(p.obterToken, (t) =>
+      dep.inserirTarefa(t, listaId, {
+        title: p.titulo,
+        notes: p.notas,
+        ...(p.due ? { due: p.due } : {}),
+      }),
+    );
+    if (p.passos.length === 0) return { tarefaId: tarefa.id, listaId, criados: 0, avisos: [] };
+    const { criados, avisos } = await criarSubtarefas(listaId, tarefa.id, p.passos, p.obterToken);
+    return { tarefaId: tarefa.id, listaId, criados, avisos };
+  }
+
   async function criarPassosDoCompromisso(p: PedidoDePassos): Promise<ResultadoDosPassos> {
     const principal = p.compromisso.eventos[0];
     if (p.passos.length === 0 || !principal) return { criados: 0, avisos: [] };
@@ -162,31 +252,7 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
       };
     }
 
-    const avisos: AvisoDoCompromisso[] = [];
-    let criados = 0;
-    let anterior: string | undefined;
-    for (let i = 0; i < p.passos.length; i++) {
-      try {
-        // Sem `due`: com data, cada subtarefa viraria um chip no Google Calendar.
-        // `previous` mantém a ordem da demanda (sem ele, cada uma iria ao topo).
-        const sub = await comTokenTasks(p.obterToken, (t) =>
-          dep.inserirTarefa(t, listaId, { title: p.passos[i] }, { parent: maeId, previous: anterior }),
-        );
-        anterior = sub.id;
-        criados++;
-      } catch (err) {
-        // Para a série como os blocos de prazo: não apaga nada, não abre buraco
-        // no meio da checklist.
-        const faltaram = p.passos.length - i;
-        avisos.push(
-          aviso(
-            `${faltaram} de ${p.passos.length} passo(s) não criado(s) no Google Tasks: ${mensagem(err)}`,
-            motivoDoErroTasks(err),
-          ),
-        );
-        break;
-      }
-    }
+    const { criados, avisos } = await criarSubtarefas(listaId, maeId, p.passos, p.obterToken);
 
     try {
       const lido = await comToken(p.obterToken, (t) => dep.lerEvento(t, p.squad.calendarId, principal.eventId));
@@ -206,7 +272,7 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
     return { criados, avisos, listaId, tarefaMaeId: maeId };
   }
 
-  return { garantirListaDaSquad, criarPassosDoCompromisso };
+  return { garantirListaDaSquad, criarPassosDoCompromisso, criarTarefaAvulsa };
 }
 
 /** A instância do servidor: um Map de single-flight para o processo inteiro. */
