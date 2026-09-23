@@ -151,8 +151,8 @@ permissão, então a decisão de ligá-lo é dele):
 ```bash
 claude            # login da conta Claude (uma vez) — /login dentro dele
 vercel login      # conta da Vercel com o escopo romulodesigns
-install -m 755 ~/Pessoal-dev/apps/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
-cp ~/Pessoal-dev/apps/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
+install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+cp ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites.timer
 ```
 
