@@ -36,11 +36,9 @@
 16. Atualização persistente da Central é somente leitura: o canal SSE pode
     solicitar nova consulta, mas não iniciar runner, serviço, sincronização ou
     envio.
-17. Workflows PRUMO usam `ID da empresa` (`company_id` internamente) como
-    vínculo canônico. Preparar um link ou uma ação de contato não prova envio.
-    Desde 23/09/2026 (decisão do Rômulo) o clique no link rastreado "Enviar
-    convite", que abre o canal com a mensagem pronta, conta como evidência e
-    promove `Convite pronto` para `Convite enviado`; o mesmo vale para o
+17. Workflows PRUMO usam o `ID` (ID do Google Places) como vínculo canônico entre
+    Prospects, formulário e diagnóstico. O clique no link rastreado "Enviar
+    convite" conta como envio (Etapa → Convite enviado); o mesmo vale para o
     `wa_link` do Site antes da venda (`pronto` → `enviado`).
 18. O telefone público retornado pelo Google Places não prova disponibilidade
     no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino

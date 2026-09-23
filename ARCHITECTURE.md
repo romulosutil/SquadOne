@@ -126,36 +126,25 @@ humanas, OAuth e segredos técnicos estão em
 
 ## Workflows PRUMO no n8n
 
-Os artefatos importáveis de `ops/n8n/workflows/` ligam a descoberta comercial
-ao diagnóstico sem transformar sinais públicos em diagnóstico. O
-`company_id`, derivado da chave de deduplicação do Google Places, é o vínculo
-entre a fila de revisão, o formulário pré-preenchido e o retorno do Índice
-PRUMO.
+Desde 23/09/2026 o PRUMO é simples (decisão do Rômulo). A planilha "PRUMO — Fila
+de revisão" tem uma aba de trabalho, **Prospects**, com uma coluna **Etapa**:
+Revisar → Convite enviado → Diagnóstico pronto → Concluído | Sem interesse.
+"Descartados" (só para não reavaliar) e a antiga "Leads" ficam ocultas.
 
-O Lead Scout continua responsável pela descoberta e pela priorização. Antes de
-pontuar, ele consulta o site público retornado pelo Google Places e só encaminha
-à fila comercial empresas com link de WhatsApp explicitamente publicado e,
-quando o link contém número, um celular brasileiro direto. Fixos e 0800 são
-recusados. A
-prioridade usa aderência graduada (0–60), complexidade pública como proxy
-(0–20) e facilidade de contato binária (0 ou 20), com corte mínimo de 60. Esses
-sinais servem apenas para ordenar a revisão humana e não constituem diagnóstico
-ou confirmação do decisor. A guia `Leads` apresenta um contrato humano em
-português e mantém identificadores e detalhes técnicos ocultos. Um aceite
-comercial explícito (`Etapa=Contato aceito`) cria o convite e muda a linha para
-`Convite pronto`. Como a instância não possui credencial de
-e-mail ou WhatsApp, o workflow gera uma ação `mailto:`/`wa.me` para envio
-humano e não registra o convite como enviado.
+- **Lead Scout** (9h, rodízio de 80 buscas segmento × cidade): Google Places →
+  WhatsApp publicado no site → nota → Prospects (com o link "Enviar convite ↗")
+  ou Descartados; cadastro repetido (mesmo WhatsApp) é descartado. Resumo da
+  busca pelo Hermes.
+- **Clique em "Enviar convite"** (webhook do n8n pelo túnel): Etapa → Convite
+  enviado e abre o WhatsApp com a mensagem e o formulário já com a empresa e o
+  papel "Dono".
+- **Diagnóstico do dono** (de hora em hora): a resposta completa mais recente
+  da empresa fecha o Índice PRUMO, grava Índice e Briefing na linha, muda a
+  Etapa para Diagnóstico pronto e avisa pelo Hermes. Também grava as
+  pendências que a Central mostra em "Esperando você".
 
-Depois do Google Places, o Lead Scout consulta a página inicial do site
-institucional e procura links públicos de WhatsApp. Somente essa evidência
-preenche automaticamente o canal e o destino; o telefone público do Places é
-mantido como referência, mas não prova que o número atende por WhatsApp. As
-células amarelas e suas validações delimitam os campos sob decisão humana.
-
-O workflow do diagnóstico consulta a cada cinco minutos a planilha vinculada
-ao Google Forms com a credencial Sheets já autorizada,
-mantém somente a resposta mais recente de cada um dos cinco papéis e atualiza
-a linha original do lead. Sessões incompletas produzem apenas a próxima ação;
-as cinco sessões completas produzem índice, médias por domínio, lacunas e um
-briefing interno com revisão humana obrigatória.
+O vínculo entre formulário e linha é o `ID` (ID do Google Places), enviado no
+campo Empresa como `ID::Nome`. Os scripts que montam tudo isso estão em
+`deploy/dell/claude-ops/` (`prumo-simples.py`, `prumo-ajuste-planilha.py`); os
+JSON em `ops/n8n/workflows/` e o `scripts/prepare-prumo-workflows.mjs`
+descrevem a versão anterior.
