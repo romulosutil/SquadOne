@@ -1,0 +1,13 @@
+[Unit]
+Description=Site antes da venda — gera os sites da fila (Claude Code + Vercel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# claude e vercel moram em ~/.local/bin; o Claude autônomo roda dentro de ~/auto-site.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/.local/bin/gerador-de-sites --quantidade 4 --timeout-min 45
+# 4 leads x 45 min + deploys: teto folgado para o systemd não matar uma execução boa.
+TimeoutStartSec=4h
+Nice=10
