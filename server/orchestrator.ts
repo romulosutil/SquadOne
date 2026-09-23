@@ -159,6 +159,26 @@ export interface ContextoDoPrompt {
   janela: string;
 }
 
+const DIAS_DA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/**
+ * Hoje e os 7 dias seguintes com o nome do dia. Sem isto o modelo fazia a conta
+ * do dia da semana sozinho a partir da data ISO e errava: medido em 23/09/2026
+ * (quarta), "na sexta" virou 26/09, um sábado. A data vem da parte local de
+ * `agoraISO` (já em São Paulo) e a conta é em UTC só para não depender do fuso
+ * da máquina.
+ */
+export function calendarioDaSemana(agoraISO: string): string {
+  const [ano, mes, dia] = agoraISO.slice(0, 10).split("-").map(Number);
+  const dias: string[] = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(Date.UTC(ano, mes - 1, dia + i));
+    const data = d.toISOString().slice(0, 10);
+    dias.push(`${i === 0 ? "hoje, " : ""}${DIAS_DA_SEMANA[d.getUTCDay()]} ${data}`);
+  }
+  return `Dias: ${dias.join("; ")}. Use esta lista para "amanhã", "sexta", "semana que vem".`;
+}
+
 export function buildSystemInstruction(
   contexto: ContextoDoPrompt,
   agoraISO: string,
@@ -202,6 +222,7 @@ ${contexto.outrasSquads}
 
 Agora são ${agoraISO} (fuso ${TIMEZONE}). Datas que você produzir: AAAA-MM-DD
 quando o usuário não disse hora; com hora, ISO 8601 com offset no mesmo formato.
+${calendarioDaSemana(agoraISO)}
 
 Você NÃO escolhe horário. O servidor lê a agenda do usuário e reserva o próximo
 horário livre dentro da janela de trabalho ${contexto.janela}, sem colidir com o

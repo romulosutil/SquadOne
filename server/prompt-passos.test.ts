@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Type } from "@google/genai";
 import { CAPABILITIES } from "./capabilities.ts";
-import { buildSystemInstruction } from "./orchestrator.ts";
+import { buildSystemInstruction, calendarioDaSemana } from "./orchestrator.ts";
 
 const CONTEXTO = {
   squadNome: "Pessoal",
@@ -59,5 +59,19 @@ describe("criar_tarefa no prompt e na declaração", () => {
     assert.deepEqual(params.required, ["titulo", "responsavel_id"]);
     assert.equal(params.properties!.passos!.type, Type.ARRAY);
     for (const campo of ["data", "notas", "passos"]) assert.ok(params.properties![campo], campo);
+  });
+});
+
+describe("calendário da semana no prompt", () => {
+  it("hoje e os 7 dias seguintes com o nome certo, virando o mês", () => {
+    assert.equal(
+      calendarioDaSemana("2026-09-27T23:30:00-03:00"),
+      'Dias: hoje, domingo 2026-09-27; segunda 2026-09-28; terça 2026-09-29; quarta 2026-09-30; quinta 2026-10-01; sexta 2026-10-02; sábado 2026-10-03; domingo 2026-10-04. Use esta lista para "amanhã", "sexta", "semana que vem".',
+    );
+  });
+
+  it("entra no prompt logo depois do agora", () => {
+    const p = buildSystemInstruction(CONTEXTO, "2026-09-23T19:54:00-03:00", "auto");
+    assert.match(p, /hoje, quarta 2026-09-23; quinta 2026-09-24; sexta 2026-09-25/);
   });
 });
