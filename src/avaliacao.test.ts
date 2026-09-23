@@ -16,4 +16,9 @@ describe('avaliação de turno', () => {
     assert.equal(podeEnviarAvaliacao(2, ['agendamento']), true)
     assert.equal(podeEnviarAvaliacao(5, []), true)
   })
+
+  it('espelha o limite de três motivos do servidor', () => {
+    assert.equal(podeEnviarAvaliacao(2, ['prompt', 'papel', 'roteamento', 'outro']), false)
+    assert.equal(podeEnviarAvaliacao(5, ['prompt', 'papel', 'roteamento', 'outro']), false)
+  })
 })

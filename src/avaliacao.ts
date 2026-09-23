@@ -13,4 +13,4 @@ export const motivosObrigatorios = (nota: number | null): boolean => nota !== nu
 
 /** Espelha a regra do servidor antes de habilitar o envio, sem substituir a validação dele. */
 export const podeEnviarAvaliacao = (nota: number | null, motivos: readonly MotivoDeAvaliacao[]): boolean =>
-  nota !== null && (!motivosObrigatorios(nota) || motivos.length > 0)
+  nota !== null && motivos.length <= 3 && (!motivosObrigatorios(nota) || motivos.length > 0)
