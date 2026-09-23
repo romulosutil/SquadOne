@@ -92,11 +92,16 @@ respectivamente em `~/.config/squadone/operations.env`,
 
 ## Modelo operacional pessoal
 
-O Dell é o worker persistente. O Hermes é o gestor desse ambiente: observa e
-opera os serviços Linux, o Docker e o n8n, acompanha os repositórios pelo
-GitHub e usa a Central do SquadOne como superfície de leitura operacional.
-Codex e Claude executam demandas pesadas nos checkouts de desenvolvimento;
-Antigravity organiza documentação e arquivos.
+O Dell é o worker persistente e o servidor de projetos (Docker). Claude e
+Codex controlam e corrigem o ambiente pelo SSH, Tailscale e Syncthing; o guia
+de acesso é `dev/DELL-WORKER.md`. O Hermes é o secretário: não opera, só
+informa pelo WhatsApp, a partir das rotinas dele e dos avisos do monitor
+`dell-status` e do n8n. O n8n do Dell é o gerente de fluxos e todo fluxo termina
+respondendo a alguém (Error Workflow único + avisos pela fila). O SquadOne é o
+gerente de agendas. Antigravity organiza documentação e arquivos.
+
+O repositório CORPORATIVO é espelhado em `~/Corporativo-dev` como somente
+leitura no Dell: é editado no PC e nada no Dell propaga de volta.
 
 O diretório `~/Pessoal-dev` no Dell é uma réplica Syncthing da pasta de
 desenvolvimento. Ele serve para o Hermes enxergar o trabalho em andamento, mas

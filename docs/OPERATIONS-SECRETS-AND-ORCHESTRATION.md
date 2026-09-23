@@ -15,7 +15,7 @@ flowchart LR
   end
 
   subgraph Dell worker
-    H[Hermes gestor]
+    H[Hermes secretário]
     N[n8n]
     LS[Cofre de serviço Linux]
     S[SquadOne]

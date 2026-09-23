@@ -102,3 +102,25 @@ cp deploy/dell/dell-status.service deploy/dell/dell-status.timer ~/.config/syste
 systemctl --user daemon-reload && systemctl --user enable --now dell-status.timer
 dell-status --stdout   # confere sem gravar nem avisar
 ```
+
+## Pasta auto (Site antes da venda)
+
+O n8n não cria diretórios. O Caçador grava pacotes
+`{"caminho", "base64", "pastas"?}` em `~/.local/share/auto-entrada`, e
+`auto-entrada` (disparado por `auto-entrada.path`) materializa cada um em
+`~/auto-site/<caminho>`. O Syncthing leva `~/auto-site` para `G:\Meu Drive\auto`.
+
+```bash
+install -m 755 deploy/dell/auto-entrada.py ~/.local/bin/auto-entrada
+mkdir -p ~/.local/share/auto-entrada && chmod 777 ~/.local/share/auto-entrada
+cp deploy/dell/auto-entrada.path deploy/dell/auto-entrada.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now auto-entrada.path
+```
+
+## Scripts de operação do n8n (`claude-ops/`)
+
+Copiados para `~/.local/share/claude-ops` no Dell. `n8n.py` é o cliente da
+API (chave de operações em `~/.config/claude-ops/n8n-api-key`);
+`aviso-de-falha.py` liga o Error Workflow em todos os fluxos;
+`prumo-ajustes.py` e `site-antes-da-venda.py` aplicam as mudanças de
+23/09/2026; `rodar-agora.py <id>` executa um workflow agora.

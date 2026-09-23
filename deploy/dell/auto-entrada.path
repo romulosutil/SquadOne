@@ -1,0 +1,9 @@
+[Unit]
+Description=Pacotes do n8n para a pasta auto (Site antes da venda)
+
+[Path]
+DirectoryNotEmpty=%h/.local/share/auto-entrada
+MakeDirectory=yes
+
+[Install]
+WantedBy=default.target
