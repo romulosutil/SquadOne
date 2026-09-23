@@ -1,5 +1,7 @@
 import { linhasDasTarefasCriadas, linhasDosEventosCriados, type FormatoDeData } from "../src/contribuicao.ts";
 import { ModeloOcupado, type ErroTarefa, type TurnoResult } from "./orchestrator.ts";
+import type { Sugestao } from "./capabilities.ts";
+import { AudioSemFala } from "./transcricao.ts";
 import { JanelaMalConfigurada } from "./alocador.ts";
 import { RosterIlegivel } from "./squad.ts";
 
@@ -16,8 +18,6 @@ const CORTE = "\n…(cortado)";
 const CONECTAR = "🔌 Google desconectado: abra o SquadOne e clique em Conectar.";
 const AMPLIAR =
   '📋 Falta autorizar o Google Tasks (passos e tarefas ficaram de fora). Abra o SquadOne e clique em "Autorizar Google Tasks" (não use Desconectar).';
-/** O card de aprovação só existe na aba, e o turno não é gravado em lugar nenhum. */
-const APROVAR_NO_APP = "Para aprovar, peça de novo pelo app.";
 
 function tituloDoErro(e: ErroTarefa): string {
   const t = e.args?.titulo;
@@ -59,13 +59,46 @@ export function textoDoTurno(turno: TurnoResult, fmt: FormatoDeData): string {
   linhas.push(...erros.map(linhaDoErro));
   if ([...erros, ...avisos].some((x) => x.motivo === "precisaConectar")) linhas.push(CONECTAR);
 
+  // Contratação vai em mensagem própria, com os botões (ver `propostasDeContratacao`);
+  // aqui só a contagem, para o resumo não parecer vazio.
+  const contratacoes = propostasDeContratacao(turno).length;
+  if (contratacoes) linhas.push(`💡 ${contratacoes} proposta(s) de contratação abaixo.`);
   for (const s of turno.sugestoes ?? []) {
-    if (s.kind === "dominio") linhas.push(`💡 Proposta: abrir a sala "${s.dominio}" (${s.papel_po}). ${APROVAR_NO_APP}`);
-    else if (s.kind === "integrante") linhas.push(`💡 Proposta: contratar ${s.papel} em ${s.dominio_nome}. ${APROVAR_NO_APP}`);
-    else linhas.push(`🔀 Parece da squad ${s.destino_nome}: ${s.justificativa}. Reenvie dizendo de qual squad é.`);
+    if (s.kind === "troca_squad") linhas.push(`🔀 Parece da squad ${s.destino_nome}: ${s.justificativa}. Reenvie dizendo de qual squad é.`);
   }
 
   return linhas.length ? linhas.join("\n") : "Nada foi agendado.";
+}
+
+export type PropostaDeContratacao = Extract<Sugestao, { kind: "dominio" | "integrante" }>;
+
+export function propostasDeContratacao(turno: TurnoResult): PropostaDeContratacao[] {
+  return (turno.sugestoes ?? []).filter((s): s is PropostaDeContratacao => s.kind === "dominio" || s.kind === "integrante");
+}
+
+/**
+ * A mensagem de uma proposta, que leva os botões Aprovar/Descartar. O nome da
+ * pessoa sai do servidor na aprovação, como no card sem nome digitado.
+ */
+export function textoDaProposta(s: PropostaDeContratacao): string {
+  const cabeca = s.kind === "dominio"
+    ? `💡 Abrir a sala "${s.dominio}", com um ${s.papel_po} como PO.`
+    : `💡 Contratar ${s.papel} em ${s.dominio_nome}.`;
+  return s.justificativa.trim() ? `${cabeca}\n${s.justificativa.trim()}` : cabeca;
+}
+
+/** Resultado de `aplicarContratacao`, só o que o chat mostra. */
+export function textoDaContratacao(r: { kind: "dominio" | "integrante"; dominio: { nome: string }; pessoa: { nome: string; papel: string } }): string {
+  return r.kind === "dominio"
+    ? `✅ Sala "${r.dominio.nome}" aberta: ${r.pessoa.nome} (${r.pessoa.papel}) é o PO.`
+    : `✅ ${r.pessoa.nome} (${r.pessoa.papel}) contratado em ${r.dominio.nome}.`;
+}
+
+/** O áudio não virou demanda. */
+export function textoDaFalhaDeTranscricao(err: unknown): string {
+  if (err instanceof AudioSemFala) return "🎙️ Não entendi o áudio. Tente de novo ou escreva a demanda.";
+  if (err instanceof ModeloOcupado) return textoDaFalha(err);
+  return `🎙️ Não consegui ouvir o áudio: ${err instanceof Error ? err.message : String(err)}`;
 }
 
 /** O turno inteiro falhou antes de devolver resultado (mesmas classes que a rota traduz em status). */

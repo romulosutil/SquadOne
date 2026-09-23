@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { cortarParaTelegram, MAX_MENSAGEM_TELEGRAM, textoDaFalha, textoDoTurno } from "./telegram-resposta.ts";
+import {
+  cortarParaTelegram,
+  MAX_MENSAGEM_TELEGRAM,
+  propostasDeContratacao,
+  textoDaContratacao,
+  textoDaFalha,
+  textoDaFalhaDeTranscricao,
+  textoDaProposta,
+  textoDoTurno,
+} from "./telegram-resposta.ts";
+import { AudioSemFala, MAX_TRANSCRICAO, textoTranscrito } from "./transcricao.ts";
 import { ModeloOcupado, type TurnoResult } from "./orchestrator.ts";
 import { JanelaMalConfigurada } from "./alocador.ts";
 import { RosterIlegivel } from "./squad.ts";
@@ -94,8 +104,9 @@ describe("textoDoTurno", () => {
       ],
     }), FMT);
     assert.match(t, /⚠️ Relatório: faltaram 60 min antes do prazo/);
-    assert.match(t, /💡 Proposta: abrir a sala "Saúde" \(Coach\)\. Para aprovar, peça de novo pelo app\./);
-    assert.match(t, /💡 Proposta: contratar Contador em Finanças\. Para aprovar, peça de novo pelo app\./);
+    // As propostas vão em mensagens próprias, com botões: o resumo só conta.
+    assert.match(t, /💡 2 proposta\(s\) de contratação abaixo\./);
+    assert.doesNotMatch(t, /Saúde|Contador/);
   });
 });
 
@@ -115,5 +126,39 @@ describe("cortarParaTelegram", () => {
     const cortado = cortarParaTelegram("x".repeat(5000));
     assert.ok(cortado.length <= MAX_MENSAGEM_TELEGRAM);
     assert.ok(cortado.endsWith("…(cortado)"));
+  });
+});
+
+describe("propostas de contratação no chat", () => {
+  const dominio = { id: "s1", kind: "dominio" as const, squad_id: "pessoal", dominio: "Saúde", papel_po: "Coach", justificativa: "Ninguém cuida de saúde.", escopo: "", slot: null };
+  const integrante = { id: "s2", kind: "integrante" as const, squad_id: "pessoal", dominio_id: "d", dominio_nome: "Finanças", papel: "Contador", justificativa: " ", escopo: "" };
+
+  it("propostasDeContratacao ignora a troca de squad", () => {
+    const troca = { id: "s3", kind: "troca_squad" as const, squad_id: "pessoal", destino_id: "p4f", destino_nome: "Pay4Fun", justificativa: "", demanda: "" };
+    assert.deepEqual(propostasDeContratacao(vazio({ sugestoes: [dominio, troca, integrante] })).map((s) => s.id), ["s1", "s2"]);
+  });
+
+  it("textoDaProposta: cabeça + justificativa (quando há)", () => {
+    assert.equal(textoDaProposta(dominio), '💡 Abrir a sala "Saúde", com um Coach como PO.\nNinguém cuida de saúde.');
+    assert.equal(textoDaProposta(integrante), "💡 Contratar Contador em Finanças.");
+  });
+
+  it("textoDaContratacao", () => {
+    assert.equal(textoDaContratacao({ kind: "dominio", dominio: { nome: "Saúde" }, pessoa: { nome: "Bia", papel: "Coach" } }), '✅ Sala "Saúde" aberta: Bia (Coach) é o PO.');
+    assert.equal(textoDaContratacao({ kind: "integrante", dominio: { nome: "Finanças" }, pessoa: { nome: "Caio", papel: "Contador" } }), "✅ Caio (Contador) contratado em Finanças.");
+  });
+
+  it("textoDaFalhaDeTranscricao", () => {
+    assert.match(textoDaFalhaDeTranscricao(new AudioSemFala()), /Não entendi o áudio/);
+    assert.match(textoDaFalhaDeTranscricao(new ModeloOcupado("x")), /Gemini sobrecarregado/);
+    assert.match(textoDaFalhaDeTranscricao(new Error("rede")), /Não consegui ouvir o áudio: rede/);
+  });
+
+  it("textoTranscrito: espaços colapsados; vazio ou SEM_FALA = AudioSemFala; teto", () => {
+    assert.equal(textoTranscrito("  reunião   amanhã\n às 15h "), "reunião amanhã às 15h");
+    assert.throws(() => textoTranscrito(""), AudioSemFala);
+    assert.throws(() => textoTranscrito(" SEM_FALA "), AudioSemFala);
+    assert.throws(() => textoTranscrito(undefined), AudioSemFala);
+    assert.equal(textoTranscrito("x".repeat(MAX_TRANSCRICAO + 5)).length, MAX_TRANSCRICAO);
   });
 });

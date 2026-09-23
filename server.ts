@@ -53,15 +53,20 @@ import {
 import { anexarProgressoDosPassos, renomearListaDaSquad } from "./server/passos-no-google.ts";
 import {
   avisarDigitando,
+  baixarArquivo,
   descreverTelegram,
+  editarMensagem,
   enviarMensagem,
   lerConfigDeTelegram,
   registrarWebhook,
+  responderBotao,
   ROTA_WEBHOOK_TELEGRAM,
   TelegramMalConfigurado,
   type ConfigDeTelegram,
 } from "./server/telegram.ts";
 import { criarBotDoTelegram } from "./server/telegram-bot.ts";
+import { textoDaContratacao } from "./server/telegram-resposta.ts";
+import { transcreverAudio } from "./server/transcricao.ts";
 import {
   AvaliacaoInvalida,
   AvaliacoesDeTurnoStore,
@@ -191,8 +196,14 @@ async function startServer() {
       chatsPermitidos: c.chatsPermitidos,
       // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
       rodar: (demanda, modo) => rodarDemanda(ai, { demanda, modo }),
-      enviar: (chatId, texto, responderA) => enviarMensagem(c, chatId, texto, responderA),
+      enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
       digitando: (chatId) => avisarDigitando(c, chatId),
+      transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
+      // Mesma função da rota /api/squad/hire: aplica na squad da proposta e
+      // revalida tudo contra o roster atual. Sem nome: o servidor escolhe.
+      contratar: async (proposta) => textoDaContratacao(await aplicarContratacao(proposta)),
+      responderBotao: (callbackId, texto) => responderBotao(c, callbackId, texto),
+      editar: (chatId, mensagemId, texto) => editarMensagem(c, chatId, mensagemId, texto),
       // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
       fmt: { locale: "pt-BR", timeZone: FUSO },
       agora: () => new Date(),

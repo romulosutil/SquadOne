@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   criarMemoriaDeUpdates,
+  dadosDoBotao,
   IDADE_MAXIMA_DEMANDA_MIN,
+  MAX_BYTES_AUDIO,
+  MAX_DURACAO_AUDIO_S,
   interpretarUpdate as interpretarComRelogio,
   textoDeDemandaAtrasada,
 } from "./telegram-entrada.ts";
@@ -45,8 +48,32 @@ describe("interpretarUpdate", () => {
     });
   }
 
-  it("foto/áudio sem texto = semTexto", () => {
+  it("foto ou documento que não é áudio = semTexto", () => {
     assert.equal(interpretarUpdate(msg({ photo: [{}] }), PERMITIDOS).tipo, "semTexto");
+    assert.equal(interpretarUpdate(msg({ audio: { file_id: "f", mime_type: "application/pdf" } }), PERMITIDOS).tipo, "semTexto");
+  });
+
+  it("voz = audio em modo auto, com o file_id e o mime", () => {
+    assert.deepEqual(interpretarUpdate(msg({ voice: { file_id: "F1", duration: 12, mime_type: "audio/ogg", file_size: 20000 } }), PERMITIDOS), {
+      tipo: "audio", updateId: 9, chatId: 111, mensagemId: 5, fileId: "F1", mime: "audio/ogg", modo: "auto",
+    });
+  });
+
+  it("arquivo de áudio conta; legenda /foco força o modo; mime ausente vira audio/ogg", () => {
+    const e = interpretarUpdate(msg({ audio: { file_id: "F2", mime_type: "audio/mpeg", duration: 30 }, caption: "/foco" }), PERMITIDOS);
+    assert.equal(e.tipo, "audio");
+    assert.equal((e as any).modo, "foco");
+    assert.equal((e as any).mime, "audio/mpeg");
+    assert.equal((interpretarUpdate(msg({ voice: { file_id: "F3" } }), PERMITIDOS) as any).mime, "audio/ogg");
+  });
+
+  it("áudio acima do teto (duração ou tamanho) = audioLongo, sem baixar", () => {
+    assert.equal(interpretarUpdate(msg({ voice: { file_id: "F", duration: MAX_DURACAO_AUDIO_S + 1 } }), PERMITIDOS).tipo, "audioLongo");
+    assert.equal(interpretarUpdate(msg({ voice: { file_id: "F", duration: 5, file_size: MAX_BYTES_AUDIO + 1 } }), PERMITIDOS).tipo, "audioLongo");
+  });
+
+  it("áudio atrasado não roda, como a demanda em texto", () => {
+    assert.equal(interpretarUpdate(msg({ voice: { file_id: "F", duration: 5 }, date: AGORA_S - 3600 }), PERMITIDOS).tipo, "atrasada");
   });
 
   it("chat fora da allowlist = naoAutorizado, ANTES de olhar o comando", () => {
@@ -119,5 +146,32 @@ describe("criarMemoriaDeUpdates", () => {
     m.jaVisto(1); m.jaVisto(2); m.jaVisto(3);
     assert.equal(m.jaVisto(1), false);
     assert.equal(m.jaVisto(3), true);
+  });
+});
+
+describe("botões de proposta (callback_query)", () => {
+  const toque = (data: string, chat: Record<string, unknown> = { id: 111, type: "private" }) => ({
+    update_id: 20,
+    callback_query: { id: "cb1", from: { id: 111 }, data, message: { message_id: 77, chat } },
+  });
+
+  it("aprovar e descartar, com o id da proposta", () => {
+    assert.deepEqual(interpretarUpdate(toque(dadosDoBotao("abc-123", "aprovar")), PERMITIDOS), {
+      tipo: "botao", updateId: 20, chatId: 111, mensagemId: 77, callbackId: "cb1", acao: "aprovar", propostaId: "abc-123",
+    });
+    assert.equal((interpretarUpdate(toque(dadosDoBotao("abc-123", "descartar")), PERMITIDOS) as any).acao, "descartar");
+  });
+
+  it("id de proposta em UUID cabe nos 64 bytes do callback_data", () => {
+    const dados = dadosDoBotao("9f1c2a4e-1b2c-4d5e-8f90-a1b2c3d4e5f6", "aprovar");
+    assert.ok(Buffer.byteLength(dados) <= 64);
+    assert.equal(interpretarUpdate(toque(dados), PERMITIDOS).tipo, "botao");
+  });
+
+  it("chat fora da allowlist = naoAutorizado; grupo e dado estranho = ignorar", () => {
+    assert.equal(interpretarUpdate(toque("h:x:a", { id: 222, type: "private" }), PERMITIDOS).tipo, "naoAutorizado");
+    assert.equal(interpretarUpdate(toque("h:x:a", { id: 111, type: "group" }), PERMITIDOS).tipo, "ignorar");
+    assert.equal(interpretarUpdate(toque("rm -rf"), PERMITIDOS).tipo, "ignorar");
+    assert.equal(interpretarUpdate(toque("h:x:z"), PERMITIDOS).tipo, "ignorar");
   });
 });
