@@ -155,6 +155,8 @@ if __name__ == "__main__":
                      {"status": "enviado", "enviado_em": "={{ $json.agora }}"})
     webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
                      PRUMO, "957714022", "Leads", "ID do lead", "id", DECIDIR_PRUMO,
-                     {"Etapa": "Convite enviado", "Situação do diagnóstico": "Convite enviado",
+                     # Etapa fica em "Convite pronto": a validação da coluna não tem "Convite enviado"
+                     # (tem na Situação). A Pontuação move a Etapa na primeira resposta.
+                     {"Situação do diagnóstico": "Convite enviado",
                       "Convite enviado em": "={{ $json.agora }}", "Próxima ação": "Aguarde as respostas das cinco perspectivas."})
     lead_scout()
