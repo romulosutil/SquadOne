@@ -7,9 +7,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PrecisaConectar } from "./auth-store.ts";
 import type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
-import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido } from "./calendar.ts";
+import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido, type QuestCalendario } from "./calendar.ts";
 import {
   AVISO_SEM_ESCOPO,
+  anexarProgressoDosPassos,
   criarPassosNoGoogle,
   motivoDoErroTasks,
   TasksNaoAutorizado,
@@ -338,5 +339,50 @@ describe("criarTarefaAvulsa", () => {
     assert.equal(r.tarefaId, "T1");
     assert.equal(r.criados, 1);
     assert.match(r.avisos[0].aviso, /2 de 3 passo/);
+  });
+});
+
+describe("anexarProgressoDosPassos", () => {
+  const quest = (x: Partial<QuestCalendario>): QuestCalendario => ({
+    eventId: "e", titulo: "t", inicio: "", fim: "", diaInteiro: false, tipo: "time_blocking", dominio: "geral",
+    membro: "po", squad: "pessoal", prazoRef: "", tasksLista: "", tasksPai: "", ...x,
+  });
+
+  it("uma listagem por LISTA; conta só filhas das mães pedidas, concluídas e escondidas inclusive", async () => {
+    const quests = [
+      quest({ eventId: "a", tasksLista: "L1", tasksPai: "M1" }),
+      quest({ eventId: "b", tasksLista: "L1", tasksPai: "M2" }),
+      quest({ eventId: "c" }),
+    ];
+    const chamadas: string[] = [];
+    await anexarProgressoDosPassos(quests, {
+      liberado: true,
+      obterToken: async () => "tk",
+      listar: async (_t, listaId) => {
+        chamadas.push(listaId);
+        return [
+          { id: "M1" },
+          { id: "s1", parent: "M1", status: "completed" },
+          { id: "s2", parent: "M1", status: "needsAction" },
+          { id: "s3", parent: "M1", status: "completed", deleted: true },
+          { id: "s4", parent: "M2", status: "completed" },
+          { id: "x", parent: "OUTRA", status: "completed" },
+          { id: "avulsa" },
+        ];
+      },
+    });
+    assert.deepEqual(chamadas, ["L1"]);
+    assert.deepEqual(quests.map((q) => q.passos), [{ feitos: 1, total: 2 }, { feitos: 1, total: 1 }, undefined]);
+  });
+
+  it("sem escopo não chama o Google; falha na leitura deixa as quests sem selo", async () => {
+    const quests = [quest({ tasksLista: "L1", tasksPai: "M1" })];
+    let chamou = false;
+    await anexarProgressoDosPassos(quests, { liberado: false, obterToken: async () => "tk", listar: async () => { chamou = true; return []; } });
+    assert.equal(chamou, false);
+    await anexarProgressoDosPassos(quests, {
+      liberado: true, obterToken: async () => "tk", listar: async () => { throw new ErroTasks(404, "{}"); },
+    });
+    assert.equal(quests[0].passos, undefined);
   });
 });

@@ -224,6 +224,11 @@ export interface QuestCalendario {
   /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
   prazoRef: string;
   htmlLink?: string;
+  /**
+   * Checklist no Google Tasks: subtarefas concluídas / total. Ausente = quest
+   * sem passos, ou o servidor não conseguiu ler o Tasks (o selo só some).
+   */
+  passos?: { feitos: number; total: number };
 }
 
 export interface MochilaResponse {

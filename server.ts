@@ -49,6 +49,7 @@ import {
   trocarCodigo,
   urlDeConsentimento,
 } from "./server/auth-store.ts";
+import { anexarProgressoDosPassos } from "./server/passos-no-google.ts";
 import {
   avisarDigitando,
   descreverTelegram,
@@ -449,6 +450,9 @@ async function startServer() {
         return res.status(502).json({ error: erros[0].erro, erros });
       }
 
+      // Selo de passos: leitura do Tasks que nunca derruba a Mochila (não lança).
+      const { tasks: tasksLiberado } = await escoposConcedidos().catch(() => ({ tasks: false }));
+      await anexarProgressoDosPassos(quests, { liberado: tasksLiberado, obterToken: tokenValido });
       res.json({ quests, erros });
     } catch (error: any) {
       console.error("Erro ao ler a Mochila:", error);

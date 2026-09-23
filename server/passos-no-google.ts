@@ -9,8 +9,9 @@ import {
   PROP_TASKS_PAI,
   type EventoLido,
   type ObterToken,
+  type QuestCalendario,
 } from "./calendar.ts";
-import { dueDaTarefa, notasDaTarefaMae, tituloDaLista } from "./passos.ts";
+import { dueDaTarefa, notasDaTarefaMae, progressoDosPassos, tituloDaLista } from "./passos.ts";
 import { gravarTasksListaId, localizarSquad, readRoster, type Roster, type Squad } from "./squad.ts";
 import {
   comTokenTasks,
@@ -19,7 +20,9 @@ import {
   inserirTarefa,
   lerLista,
   ListaSumiu,
+  listarTarefas,
   type CorpoDeTarefa,
+  type TarefaLida,
 } from "./tasks.ts";
 
 /**
@@ -28,7 +31,8 @@ import {
  * aqui desfaz ou falha o compromisso: os eventos já estão certos no Google, e
  * a checklist é acessório. Toda falha volta como aviso classificado.
  *
- * Só capabilities.ts importa isto. agendamento.ts não sabe que o Tasks existe.
+ * capabilities.ts escreve por aqui; a rota da Mochila só LÊ o selo de progresso
+ * (`anexarProgressoDosPassos`). agendamento.ts não sabe que o Tasks existe.
  * Escrita única: nada reescreve as tarefas depois (o Ajuste não mexe no `due`,
  * apagar o evento deixa as tarefas órfãs, a vigia não sabe do Tasks).
  */
@@ -273,6 +277,47 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
   }
 
   return { garantirListaDaSquad, criarPassosDoCompromisso, criarTarefaAvulsa };
+}
+
+/**
+ * Selo "passos 2/5" da Mochila: lê a checklist de cada quest com
+ * `squadone_tasks_pai` e anexa `quest.passos`. Só LEITURA, e nunca estraga a
+ * Mochila: sem escopo, sem quest com passos ou com o Tasks fora do ar, as
+ * quests voltam como vieram, sem selo (o erro vai só para o log). Uma
+ * `tasks.list` por LISTA distinta, não por quest — hoje uma por squad.
+ */
+export async function anexarProgressoDosPassos(
+  quests: QuestCalendario[],
+  opcoes: {
+    liberado: boolean;
+    obterToken: ObterToken;
+    listar?: (token: string, listaId: string) => Promise<TarefaLida[]>;
+  },
+): Promise<void> {
+  if (!opcoes.liberado) return;
+  const listar = opcoes.listar ?? listarTarefas;
+  const porLista = new Map<string, QuestCalendario[]>();
+  for (const q of quests) {
+    if (!q.tasksLista || !q.tasksPai) continue;
+    porLista.set(q.tasksLista, [...(porLista.get(q.tasksLista) ?? []), q]);
+  }
+  await Promise.all(
+    [...porLista].map(async ([listaId, daLista]) => {
+      try {
+        const tarefas = await comTokenTasks(opcoes.obterToken, (t) => listar(t, listaId));
+        const progresso = progressoDosPassos(tarefas, daLista.map((q) => q.tasksPai));
+        for (const q of daLista) {
+          const p = progresso.get(q.tasksPai);
+          if (p) q.passos = p;
+        }
+      } catch (err) {
+        // Lista apagada no celular, escopo revogado, Tasks lento: o selo some,
+        // a Mochila não. Nada de 401 aqui — a credencial do Calendar acabou de
+        // funcionar nesta mesma rota.
+        console.warn(`[tasks] progresso da lista '${listaId}' não lido:`, mensagem(err));
+      }
+    }),
+  );
 }
 
 /** A instância do servidor: um Map de single-flight para o processo inteiro. */

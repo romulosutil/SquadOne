@@ -135,6 +135,13 @@ const prazoDoBloco = (quest: QuestCalendario) => {
             <div class="flex items-center gap-1 flex-wrap">
               <span class="bg-black text-white px-2 py-0.5 text-xs uppercase">{{ nomesDePessoa[quest.membro] ?? (quest.membro || '?') }}</span>
               <span v-if="quest.dominio" class="border-2 border-black px-2 py-0.5 text-xs uppercase">{{ nomesDeDominio[quest.dominio] ?? quest.dominio }}</span>
+              <!-- A checklist vive no Google Tasks: o selo só mostra quanto dela já foi feito. -->
+              <span
+                v-if="quest.passos"
+                class="border-2 border-black px-2 py-0.5 text-xs"
+                :class="quest.passos.feitos === quest.passos.total ? 'bg-[#c1f0c1]' : 'bg-[#fff7d6]'"
+                :title="`${quest.passos.feitos} de ${quest.passos.total} passo(s) concluído(s) no Google Tasks`"
+              >✓ passos {{ quest.passos.feitos }}/{{ quest.passos.total }}</span>
             </div>
             <div class="text-gray-800">⏰ {{ rotuloDoTipo(quest) }}</div>
             <div class="text-gray-800 text-xs truncate">📅 {{ quando(quest) }}</div>

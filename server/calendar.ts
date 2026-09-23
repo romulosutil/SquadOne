@@ -78,6 +78,15 @@ export interface QuestCalendario {
   /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
   prazoRef: string;
   htmlLink?: string;
+  /** `squadone_tasks_lista`/`_pai`: a checklist do compromisso no Google Tasks; "" sem passos. */
+  tasksLista?: string;
+  tasksPai?: string;
+  /**
+   * Progresso da checklist (subtarefas concluídas / total), anexado pela rota da
+   * Mochila quando a leitura do Tasks deu certo. Ausente = sem passos ou
+   * leitura falhou: o card simplesmente não mostra o selo.
+   */
+  passos?: { feitos: number; total: number };
   /**
    * ETag do evento na leitura. Só o servidor usa: o ajuste de esforço confere
    * se o bloco listado ainda é a mesma versão antes de encurtá-lo.
@@ -168,6 +177,8 @@ export function paraQuest(ev: GoogleEvent): QuestCalendario | null {
     membro: priv[PROP_MEMBRO] ?? "",
     squad: priv[PROP_SQUAD] ?? "",
     prazoRef: priv[PROP_PRAZO_REF] ?? "",
+    tasksLista: priv[PROP_TASKS_LISTA] ?? "",
+    tasksPai: priv[PROP_TASKS_PAI] ?? "",
     htmlLink: ev.htmlLink,
     etag: ev.etag,
   };

@@ -143,6 +143,29 @@ export function notasDaTarefaAvulsa(nota: unknown, responsavel: string): string 
 }
 
 /**
+ * Progresso de cada checklist: subtarefas concluídas / total, por tarefa-mãe.
+ * Só conta quem é FILHA de uma das mães pedidas — a lista da squad tem também
+ * as tarefas avulsas e as mães de outros compromissos. Apagada não conta.
+ * Mãe sem nenhuma filha viva fica de fora (o usuário apagou a checklist:
+ * "0/0" seria ruído no card).
+ */
+export function progressoDosPassos(
+  tarefas: { id: string; parent?: string; status?: string; deleted?: boolean }[],
+  maes: Iterable<string>,
+): Map<string, { feitos: number; total: number }> {
+  const pedidas = new Set(maes);
+  const progresso = new Map<string, { feitos: number; total: number }>();
+  for (const t of tarefas) {
+    if (t.deleted || !t.parent || !pedidas.has(t.parent)) continue;
+    const p = progresso.get(t.parent) ?? { feitos: 0, total: 0 };
+    p.total++;
+    if (t.status === "completed") p.feitos++;
+    progresso.set(t.parent, p);
+  }
+  return progresso;
+}
+
+/**
  * O `scope` que o Google devolve é uma string separada por espaço. Comparação
  * por item inteiro: `tasks.readonly` contém "tasks" como substring e não serve
  * para escrever.
