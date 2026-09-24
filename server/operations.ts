@@ -4,6 +4,7 @@ import https from "node:https";
 import path from "node:path";
 import express from "express";
 import { AutoProductionStore, InvalidAutoProductionInput, type AutoOverviewQuery, type AutoStage } from "./auto-production.ts";
+import { lerStatusDoDell } from "./dell-status.ts";
 
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
@@ -76,7 +77,9 @@ export class InvalidOperationInput extends Error {
 }
 
 export function readSquadOneMode(env: NodeJS.ProcessEnv = process.env): SquadOneMode {
-  const mode = (env.SQUADONE_MODE ?? "app").trim();
+  // Ausente ou vazia = app, como as outras envs; só um valor presente e
+  // desconhecido derruba o boot.
+  const mode = (env.SQUADONE_MODE ?? "").trim() || "app";
   if (mode === "app" || mode === "operations") return mode;
   throw new Error("SQUADONE_MODE deve ser 'app' ou 'operations'.");
 }
@@ -413,23 +416,26 @@ export function createOperationsRouter(options: {
   readings: HermesReadingsStore;
   autoProduction?: AutoProductionStore;
   readAgenda: () => Promise<AgendaSummary>;
+  dataDir: string;
 }): express.Router {
   const router = express.Router();
 
   router.get("/overview", async (_req, res) => {
-    const [tools, agenda] = await Promise.all([
+    const [tools, agenda, dell] = await Promise.all([
       Promise.all(OPERATION_TOOL_IDS.map((id) => checkTool(id, options.config.tools[id]))),
       options.readAgenda().catch((error: unknown) => ({
         state: "unavailable" as const,
         events: [] as [],
         message: error instanceof Error ? error.message : String(error),
       })),
+      lerStatusDoDell(options.dataDir),
     ]);
     res.json({
       displayName: options.config.displayName,
       checkedAt: new Date().toISOString(),
       tools,
       agenda,
+      dell,
     });
   });
 

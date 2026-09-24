@@ -23,6 +23,10 @@ afterEach(async () => {
 describe("perfil de execução", () => {
   it("mantém app como padrão e força loopback em operations", () => {
     assert.equal(readSquadOneMode({}), "app");
+    // Vazia vale o padrão, como as outras envs do projeto: um campo em branco
+    // no Easypanel não pode derrubar o boot.
+    assert.equal(readSquadOneMode({ SQUADONE_MODE: "" }), "app");
+    assert.equal(readSquadOneMode({ SQUADONE_MODE: "  " }), "app");
     assert.equal(readSquadOneMode({ SQUADONE_MODE: "operations" }), "operations");
     assert.equal(listenHostForMode("app"), "0.0.0.0");
     assert.equal(listenHostForMode("operations"), "127.0.0.1");

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { OperationTool } from './types'
+import { computed } from 'vue'
 
 const props = defineProps<{
   displayName: string
-  tools: OperationTool[]
-  squadOneUrl: string
+  falhas: number
+  semLeitura: boolean
   checkedAt: string
   loading: boolean
   currentPath: string
@@ -12,37 +12,37 @@ const props = defineProps<{
 
 defineEmits<{ refresh: [] }>()
 
+const checkedLabel = computed(() => props.checkedAt
+  ? `Atualizado às ${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(props.checkedAt))}`
+  : 'Aguardando leitura')
 </script>
 
 <template>
-  <header class="ops-header">
-    <a class="ops-brand" href="#main-content" aria-label="SquadOne, ir para o conteúdo da Central">
-      <span class="ops-brand__mark" aria-hidden="true"><i /></span>
-      <span><strong>SquadOne</strong><small>Operações</small></span>
+  <aside class="ops-command-rail" aria-label="Navegação da Central">
+    <a class="ops-brand" href="/" aria-label="SquadOne, abrir a visão Hoje">
+      <span class="ops-brand__mark" aria-hidden="true">S1</span>
+      <span><strong>SquadOne</strong><small>Central do Dell</small></span>
     </a>
 
     <nav class="ops-main-nav" aria-label="Navegação principal">
       <a href="/" :aria-current="currentPath === '/' ? 'page' : undefined">Hoje</a>
-      <a href="/projetos" :aria-current="currentPath.startsWith('/projetos') ? 'page' : undefined">Projetos</a>
-      <a href="/leituras" :aria-current="currentPath === '/leituras' ? 'page' : undefined">Leituras</a>
+      <a href="/projetos/producao-auto" :aria-current="currentPath.startsWith('/projetos') ? 'page' : undefined">Produção Auto</a>
     </nav>
+  </aside>
 
+  <header class="ops-command-topbar">
     <div class="ops-welcome" aria-live="polite">
-      <span v-if="displayName">Olá, {{ displayName }}</span>
+      <span>{{ displayName ? `Olá, ${displayName}` : 'Central do Dell' }}</span>
       <strong>{{ new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()) }}</strong>
-      <span class="ops-welcome__time">{{ new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }}</span>
     </div>
 
     <div class="ops-header__actions">
       <div class="ops-connection" role="status">
-        <span class="ops-status-dot" :class="{ 'is-pending': loading }" aria-hidden="true" />
-        <span>Central local</span>
-        <small>{{ loading ? 'verificando' : 'via túnel SSH' }}</small>
+        <span class="ops-status-dot" :class="{ 'is-pending': loading, 'is-alert': falhas }" aria-hidden="true" />
+        <span>{{ loading ? 'Conferindo' : falhas ? `${falhas} com falha` : semLeitura ? 'Sem leitura' : 'Tudo certo' }}</span>
+        <small>{{ checkedLabel }}</small>
       </div>
-
-      <button class="ops-refresh" type="button" :disabled="loading" aria-label="Atualizar estado da Central" @click="$emit('refresh')"><span aria-hidden="true">↻</span></button>
-
-      <a v-if="squadOneUrl" class="ops-enter" :href="squadOneUrl" target="_blank" rel="noopener" aria-label="Abrir SquadOne em nova aba">SquadOne <span aria-hidden="true">↗</span></a>
+      <button class="ops-refresh" type="button" :disabled="loading" aria-label="Atualizar agora" @click="$emit('refresh')"><span aria-hidden="true">↻</span></button>
     </div>
   </header>
 </template>

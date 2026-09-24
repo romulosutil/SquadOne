@@ -25,8 +25,9 @@
 12. `publicado.json` é somente um registro local. Disponibilidade pública,
     leitura, aprovação ou publicação pelo cliente exigem evidência própria e
     nunca podem ser inferidas pela interface.
-13. A home da Central é um resumo: dashboards completos pertencem a rotas de
-    projeto, e apenas projetos fixados e leituras recentes aparecem na raiz.
+13. A home da Central responde três perguntas e nada mais: o Dell está bem
+    (retrato de `dell-status`), o que há na agenda hoje e onde abrir cada
+    ferramenta. Dashboards completos pertencem a rotas de projeto.
 14. Leituras do Hermes exigem projeto, origem, instante e evidência explícitos;
     arquivo ausente significa estado vazio e não autoriza dados demonstrativos.
 15. Um slug no estado do watcher prova somente que `hermes send` foi concluído;
@@ -35,3 +36,20 @@
 16. Atualização persistente da Central é somente leitura: o canal SSE pode
     solicitar nova consulta, mas não iniciar runner, serviço, sincronização ou
     envio.
+17. Workflows PRUMO usam o `ID` (ID do Google Places) como vínculo canônico entre
+    Prospects, formulário e diagnóstico. O clique no link rastreado "Enviar
+    convite" conta como envio (Etapa → Convite enviado); o mesmo vale para o
+    `wa_link` do Site antes da venda (`pronto` → `enviado`).
+18. O telefone público retornado pelo Google Places não prova disponibilidade
+    no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino
+    do contato` exige link público de WhatsApp no site institucional; na
+    ausência dele, somente confirmação humana pode classificar o número. Links
+    com número fixo ou 0800 não qualificam a empresa para abordagem automática.
+19. O estado do Dell na Central vem só de `status.json`, gravado pelo monitor
+    `dell-status` no Dell. A Central não executa verificações, não recebe
+    chaves de serviço e, sem retrato recente, diz que não sabe em vez de
+    afirmar que está tudo bem.
+20. Papéis do ecossistema: Claude e Codex controlam e corrigem (SSH, Tailscale,
+    Syncthing); o Hermes é o secretário que avisa pelo WhatsApp; o SquadOne é o
+    gerente de agendas; o n8n do Dell é o gerente de fluxos e todo fluxo termina
+    respondendo a alguém; o Docker do Dell é o servidor de projetos.

@@ -253,6 +253,7 @@ async function startServer() {
       readings,
       autoProduction,
       readAgenda,
+      dataDir: operationsDataDir,
     }));
   } else {
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional

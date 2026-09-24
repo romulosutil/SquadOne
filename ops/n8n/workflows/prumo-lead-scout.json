@@ -1,0 +1,690 @@
+[
+  {
+    "id": "e02c6f43-17ce-430b-9238-0b997a7656ce",
+    "name": "PRUMO — Lead Scout (review-first)",
+    "description": null,
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "1",
+        "name": "Executar manualmente",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -900,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "days",
+                "daysInterval": 1,
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "id": "2",
+        "name": "Agenda diária — 9h",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -900,
+          40
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Edite somente o mercado-alvo. O vínculo com o diagnóstico é estável e versionado.\nconst city = 'São Paulo/SP';\nconst targetVertical = 'distribuidora';\nreturn [{ json: {\n  city,\n  targetVertical,\n  query: `${targetVertical} em ${city}`,\n  minimumReviewCount: 30,\n  minimumRating: 4,\n  reviewThreshold: 60,\n  targetTerms: ['distribuidora', 'distribuidor', 'distribuicao', 'atacado', 'atacadista', 'wholesaler', 'warehouse_store'],\n  requiredContactChannel: 'WHATSAPP_VERIFIED',\n  diagnosticFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform',\n  diagnosticCompanyEntryId: '171063854',\n} }];"
+        },
+        "id": "3",
+        "name": "Config — mercado-alvo",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -680,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "combineFilters": "AND",
+          "options": {}
+        },
+        "id": "18",
+        "name": "Ler empresas já registradas",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          -450,
+          100
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst existingCompanyIds = [...new Set($input.all()\n  .map(({ json }) => String(json['ID da empresa'] ?? json.company_id ?? '').trim().toLowerCase())\n  .filter(Boolean))];\n\nreturn [{ json: { ...cfg, existingCompanyIds } }];"
+        },
+        "id": "19",
+        "name": "Preparar descoberta sem repetidos",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -220,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://places.googleapis.com/v1/places:searchText",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Goog-FieldMask",
+                "value": "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri,places.rating,places.userRatingCount,places.businessStatus,places.types"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ textQuery: $json.query, languageCode: 'pt-BR', regionCode: 'BR', pageSize: 20 }) }}",
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "id": "4",
+        "name": "Google Places — busca pública",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          20,
+          100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "onError": "continueErrorOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "v7aU1q4PRbTSOYZu",
+            "name": "Google Maps API Key — PRUMO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst knownCompanyIds = new Set(($('Preparar descoberta sem repetidos').first().json.existingCompanyIds ?? [])\n  .map(value => String(value).trim().toLowerCase())\n  .filter(Boolean));\nconst places = $json.places ?? [];\nconst discoveredAt = new Date().toISOString();\nconst seenCompanyIds = new Set();\n\nreturn places.flatMap((place) => {\n  const companyName = place.displayName?.text ?? '';\n  const address = place.formattedAddress ?? '';\n  const placeId = place.id ?? '';\n  const companyId = (placeId || `${companyName}|${address}`).toLowerCase();\n  if (!companyId || knownCompanyIds.has(companyId) || seenCompanyIds.has(companyId)) return [];\n  seenCompanyIds.add(companyId);\n  return [{\n    json: {\n      dedupe_key: companyId,\n      company_id: companyId,\n      place_id: placeId,\n      company_name: companyName,\n      address,\n      website: place.websiteUri ?? '',\n      phone: place.nationalPhoneNumber ?? '',\n      types: (place.types ?? []).join(', '),\n      rating: Number(place.rating ?? 0),\n      review_count: Number(place.userRatingCount ?? 0),\n      business_status: place.businessStatus ?? 'UNKNOWN',\n      discovered_at: discoveredAt,\n      search_query: cfg.query,\n      city: cfg.city,\n      target_vertical: cfg.targetVertical,\n    },\n  }];\n});"
+        },
+        "id": "5",
+        "name": "Normalizar empresas",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          250,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\n\nreturn $input.all().map(({ json: lead }) => {\n  const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));\n  const normalize = value => String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();\n  const rating = clamp(Number(lead.rating ?? 0), 0, 5);\n  const reviewCount = Math.max(0, Number(lead.review_count ?? 0));\n  const types = String(lead.types ?? '').split(',').map(type => type.trim()).filter(Boolean);\n  const targetTerms = Array.isArray(cfg.targetTerms) ? cfg.targetTerms.map(normalize).filter(Boolean) : [];\n  const searchable = normalize([lead.company_name, lead.types].join(' '));\n\n  const operationalScore = lead.business_status === 'OPERATIONAL' ? 10 : 0;\n  const verticalScore = targetTerms.some(term => searchable.includes(term)) ? 15 : 0;\n  const ratingScore = rating >= cfg.minimumRating\n    ? Math.round(5 + (10 * (rating - cfg.minimumRating)) / Math.max(0.1, 5 - cfg.minimumRating))\n    : Math.round(4 * rating / Math.max(0.1, cfg.minimumRating));\n  const reviewScore = Math.round(15 * Math.log1p(Math.min(reviewCount, 500)) / Math.log1p(500));\n  const addressScore = lead.address ? 5 : 0;\n  const fit = clamp(operationalScore + verticalScore + ratingScore + reviewScore + addressScore, 0, 60);\n\n  const footprintScore = Math.round(10 * Math.log1p(Math.min(reviewCount, 500)) / Math.log1p(500));\n  const categoryScore = clamp(types.length - 1, 0, 5);\n  const siteScore = lead.website ? 5 : 0;\n  const complexity = clamp(footprintScore + categoryScore + siteScore, 0, 20);\n  const reachability = lead.whatsapp_verified ? 20 : 0;\n  const reasons = [];\n\n  // Public signals only: priority for human research, never a diagnosis.\n  if (operationalScore) reasons.push('operação ativa no Google');\n  if (verticalScore) reasons.push('nome ou categoria aderente ao segmento-alvo');\n  reasons.push(`nota ${rating || 0} (${ratingScore}/15)`);\n  reasons.push(`${reviewCount} avaliações (${reviewScore}/15 em aderência; ${footprintScore}/10 em complexidade)`);\n  if (addressScore) reasons.push('endereço comercial público');\n  if (siteScore) reasons.push('site institucional público');\n  if (categoryScore) reasons.push(`${types.length} categorias públicas (${categoryScore}/5 em complexidade)`);\n  if (lead.whatsapp_verified) {\n    reasons.push('WhatsApp publicado no site institucional (20/20)');\n  } else {\n    reasons.push('sem WhatsApp confirmado: inelegível para abordagem');\n  }\n\n  const leadScore = Math.min(100, fit + complexity + reachability);\n  const whatsappEligible = cfg.requiredContactChannel === 'WHATSAPP_VERIFIED' && lead.whatsapp_verified === true;\n  const status = whatsappEligible && leadScore >= cfg.reviewThreshold ? 'REVIEW' : 'DESCARTAR';\n  const researchNote = !whatsappEligible\n    ? 'Fora da fila: nenhum WhatsApp publicado foi confirmado no site institucional.'\n    : status === 'REVIEW'\n      ? 'Validar segmento, porte e decisor antes da abordagem pelo WhatsApp confirmado.'\n      : `WhatsApp confirmado, mas prioridade ${leadScore} ficou abaixo do corte ${cfg.reviewThreshold}.`;\n\n  return { json: {\n    ...lead,\n    whatsapp_eligible: whatsappEligible,\n    fit_score: fit,\n    complexity_score: complexity,\n    reachability_score: reachability,\n    lead_score: leadScore,\n    score_reason: reasons.join('; '),\n    status,\n    research_note: researchNote,\n  }};\n});"
+        },
+        "id": "6",
+        "name": "Pontuar para revisão humana",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1170,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "review-status",
+                "leftValue": "={{ $json.status }}",
+                "rightValue": "REVIEW",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "7",
+        "name": "Enviar para revisão?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1400,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "schema": []
+          },
+          "options": {
+            "useAppend": true
+          }
+        },
+        "id": "8",
+        "name": "Persistir fila PRUMO",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          1880,
+          60
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const cfg = $('Config — mercado-alvo').first().json;\nconst error = $json.error ?? {};\nconst cause = error.message ?? error.description ?? $json.message ?? 'Falha sem detalhe retornado pelo Google Places';\nconst occurredAt = new Date().toISOString();\nconst companyId = `google-places-error-${Date.now()}`;\nreturn [{ json: {\n  dedupe_key: companyId,\n  company_id: companyId,\n  place_id: '',\n  company_name: '[FALHA] Google Places',\n  address: '', website: '', phone: '', types: '', rating: '', review_count: '', business_status: '',\n  discovered_at: occurredAt,\n  fit_score: '', complexity_score: '', reachability_score: '', lead_score: '', score_reason: '',\n  status: 'ERROR',\n  research_note: `Consulta: ${cfg.query}. Após 3 tentativas, Google Places falhou. Causa: ${String(cause).slice(0, 800)}`,\n} }];"
+        },
+        "id": "9",
+        "name": "Registrar falha de descoberta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          250,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "10",
+        "name": "Sincronizar aceites — 5 min",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -680,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "combineFilters": "AND",
+          "options": {}
+        },
+        "id": "11",
+        "name": "Ler fila para convites",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          -420,
+          500
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform';\nconst COMPANY_ENTRY_ID = '171063854';\nconst now = new Date().toISOString();\nconst value = (lead, ...labels) => labels.map(label => lead[label]).find(candidate => candidate !== undefined && candidate !== null) ?? '';\nconst normalizeState = state => String(state ?? '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const status = normalizeState(value(lead, 'Etapa', 'status'));\n  const diagnosticStatus = normalizeState(value(lead, 'Situação do diagnóstico', 'diagnostic_status'));\n  if (!['CONTATO ACEITO', 'CONTACT_ACCEPTED'].includes(status)) return [];\n  if (['CONVITE PRONTO', 'INVITE_READY', 'CONVITE ENVIADO', 'INVITED', 'EM ANDAMENTO', 'IN_PROGRESS', 'AGUARDANDO RESPOSTAS', 'WAITING_FOR_SESSIONS', 'REVISAO NECESSARIA', 'REVIEW_REQUIRED', 'CONCLUIDO', 'COMPLETED'].includes(diagnosticStatus)) return [];\n\n  const companyId = String(value(lead, 'ID da empresa', 'company_id', 'ID do lead', 'dedupe_key')).trim();\n  const companyName = String(value(lead, 'Empresa', 'company_name')).trim();\n  if (!companyId || !companyName) return [];\n\n  const companyRef = `${companyId}::${companyName}`;\n  const formUrl = `${FORM_URL}?usp=pp_url&entry.${COMPANY_ENTRY_ID}=${encodeURIComponent(companyRef)}`;\n  const message = `Olá! Conforme combinado, este é o diagnóstico operacional PRUMO de ${companyName}. Cada uma das cinco perspectivas deve responder uma vez: ${formUrl}`;\n  const channel = String(value(lead, 'Canal de contato', 'contact_channel')).trim().toLowerCase();\n  const destination = String(value(lead, 'Destino do contato', 'contact_url')).trim();\n  let actionUrl = formUrl;\n  if (channel.includes('whatsapp')) {\n    const directNumber = destination.match(/(?:wa\\.me\\/|[?&]phone=)(\\d{10,15})/i)?.[1] ?? '';\n    let digits = directNumber || destination.replace(/\\D/g, '');\n    if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;\n    if (digits.length >= 12 && digits.length <= 15) actionUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;\n    else if (/^https?:\\/\\/(?:wa\\.me|(?:api\\.|web\\.)?whatsapp\\.com)\\//i.test(destination)) actionUrl = destination;\n  } else if (channel.includes('email') || destination.includes('@')) {\n    const email = destination.replace(/^mailto:/i, '');\n    actionUrl = `mailto:${email}?subject=${encodeURIComponent(`Diagnóstico PRUMO — ${companyName}`)}&body=${encodeURIComponent(message)}`;\n  }\n\n  return [{ json: {\n    'ID da empresa': companyId,\n    'ID do lead': String(value(lead, 'ID do lead', 'dedupe_key') || companyId),\n    'Etapa': 'Convite pronto',\n    'Situação do diagnóstico': 'Convite pronto',\n    'Formulário do diagnóstico': formUrl,\n    'Mensagem do convite': message,\n    'Enviar convite': actionUrl,\n    'Próxima ação': 'Envie o convite pelo canal validado. Depois, marque a situação do diagnóstico como “Convite enviado”.',\n    'Atualizado em': now,\n  } }];\n});"
+        },
+        "id": "12",
+        "name": "Preparar convite do diagnóstico",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -120,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U",
+            "mode": "list",
+            "cachedResultName": "PRUMO — Fila de revisão"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "957714022",
+            "mode": "list",
+            "cachedResultName": "Leads"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [
+              "ID do lead"
+            ],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "13",
+        "name": "Atualizar convite na fila",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          180,
+          500
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const labels = {\n  REVIEW: 'Revisar',\n  DESCARTAR: 'Fora do perfil',\n  ERROR: 'Erro na descoberta',\n  CONTACT_ACCEPTED: 'Contato aceito',\n  DIAGNOSTIC_INVITE_READY: 'Convite pronto',\n  DIAGNOSTIC_IN_PROGRESS: 'Diagnóstico em andamento',\n  DIAGNOSTIC_REVIEW: 'Diagnóstico para revisar',\n};\n\nreturn $input.all().map(({ json: lead }) => ({ json: {\n  'ID do lead': lead.dedupe_key,\n  'Google Place ID': lead.place_id,\n  'Empresa': lead.company_name,\n  'Endereço': lead.address,\n  'Site': lead.website,\n  'Telefone': lead.phone,\n  'Categorias no Google': lead.types,\n  'Nota no Google': lead.rating,\n  'Avaliações no Google': lead.review_count,\n  'Situação no Google': lead.business_status,\n  'Encontrado em': lead.discovered_at,\n  'Aderência': lead.fit_score,\n  'Complexidade': lead.complexity_score,\n  'Facilidade de contato': lead.reachability_score,\n  'Prioridade': lead.lead_score,\n  'Motivo da prioridade': lead.score_reason,\n  'Etapa': labels[lead.status] ?? lead.status,\n  'Próxima verificação': lead.research_note,\n  'Busca de origem': lead.search_query,\n  'Cidade': lead.city,\n  'Segmento': lead.target_vertical,\n  'ID da empresa': lead.company_id,\n  ...(lead.whatsapp_verified ? {\n    'Canal de contato': 'WhatsApp confirmado no site',\n    'Destino do contato': lead.whatsapp_url,\n  } : {}),\n  'Erro técnico': lead.status === 'ERROR' ? lead.research_note : '',\n} }));"
+        },
+        "id": "14",
+        "name": "Humanizar linha da fila",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1640,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const privateIpv4 = host => {\n  const parts = host.split('.').map(Number);\n  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;\n  return parts[0] === 10\n    || parts[0] === 127\n    || (parts[0] === 169 && parts[1] === 254)\n    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)\n    || (parts[0] === 192 && parts[1] === 168);\n};\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const rawUrl = String(lead.website ?? '').trim();\n  const parsed = rawUrl.match(/^(https?):\\/\\/(\\[[0-9a-f:.]+\\]|[^/?#:@\\s]+)(?::(\\d{1,5}))?(?:[/?#]|$)/i);\n  if (!parsed) return [];\n\n  const host = parsed[2].toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');\n  const port = parsed[3] ? Number(parsed[3]) : 0;\n  const privateIpv6 = host.includes(':')\n    && (host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:') || host.startsWith('::ffff:'));\n  const blockedHost = host === 'localhost'\n    || host.endsWith('.localhost')\n    || host.endsWith('.local')\n    || host.endsWith('.internal')\n    || privateIpv6\n    || privateIpv4(host);\n  if (blockedHost || port > 65535) return [];\n  return [{ json: { ...lead, website_lookup_url: rawUrl } }];\n});"
+        },
+        "id": "15",
+        "name": "Preparar busca de WhatsApp",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          40
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const privateIpv4 = host => {\n  const parts = host.split('.').map(Number);\n  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;\n  return parts[0] === 10\n    || parts[0] === 127\n    || (parts[0] === 169 && parts[1] === 254)\n    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)\n    || (parts[0] === 192 && parts[1] === 168);\n};\n\nreturn $input.all().flatMap(({ json: lead }) => {\n  const rawUrl = String(lead.website ?? '').trim();\n  const parsed = rawUrl.match(/^(https?):\\/\\/(\\[[0-9a-f:.]+\\]|[^/?#:@\\s]+)(?::(\\d{1,5}))?(?:[/?#]|$)/i);\n  let lookupAllowed = false;\n\n  if (parsed) {\n    const host = parsed[2].toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/u, '');\n    const port = parsed[3] ? Number(parsed[3]) : 0;\n    const privateIpv6 = host.includes(':')\n      && (host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:') || host.startsWith('::ffff:'));\n    const blockedHost = host === 'localhost'\n      || host.endsWith('.localhost')\n      || host.endsWith('.local')\n      || host.endsWith('.internal')\n      || privateIpv6\n      || privateIpv4(host);\n    lookupAllowed = !blockedHost && port <= 65535;\n  }\n\n  if (lookupAllowed) return [];\n\n  const phoneDigits = String(lead.phone ?? '').replace(/\\D/g, '');\n  const localDigits = phoneDigits.startsWith('55') && phoneDigits.length >= 12 ? phoneDigits.slice(2) : phoneDigits;\n  const phoneKind = localDigits.length === 11 && localDigits[2] === '9'\n    ? 'CELULAR_PROVAVEL'\n    : localDigits.length === 10\n      ? 'FIXO_PROVAVEL'\n      : lead.phone ? 'NAO_CLASSIFICADO' : 'AUSENTE';\n\n  return [{ json: {\n    ...lead,\n    phone_kind: phoneKind,\n    whatsapp_verified: false,\n    whatsapp_url: '',\n    whatsapp_number: '',\n    whatsapp_source: '',\n    whatsapp_lookup_status: rawUrl ? 'SITE_NAO_CONSULTAVEL' : 'SEM_SITE',\n  } }];\n});"
+        },
+        "id": "20",
+        "name": "Continuar sem site válido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          710,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.website_lookup_url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (compatible; PRUMO-LeadScout/1.0)"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 8000,
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "text"
+              }
+            },
+            "redirect": {
+              "redirect": {
+                "followRedirects": true,
+                "maxRedirects": 4
+              }
+            }
+          }
+        },
+        "id": "16",
+        "name": "Site — procurar WhatsApp",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          710,
+          40
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const responses = $input.all();\nconst leads = $('Preparar busca de WhatsApp').all();\n\nreturn responses.map(({ json: response }, index) => {\n  const lead = leads[index]?.json ?? {};\n  const rawHtml = typeof response === 'string'\n    ? response\n    : String(response.data ?? response.body ?? response.html ?? '');\n  const decodeEntities = value => value\n    .replace(/&amp;/gi, '&')\n    .replace(/&#0*38;/gi, '&')\n    .replace(/&#x0*26;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/\\u0026/gi, '&')\n    .replace(/\\//g, '/');\n  let decoded = decodeEntities(rawHtml);\n  try {\n    if (/%(?:2f|3a|3f|3d)/i.test(decoded)) decoded += `\\n${decodeURIComponent(decoded)}`;\n  } catch {}\n  const patterns = [\n    /https?:\\/\\/(?:api\\.|web\\.)?whatsapp\\.com\\/(?:send\\/?)?\\?[^\"'<>\\s]*/gi,\n    /https?:\\/\\/wa\\.me\\/(?:message\\/)?[^\"'<>\\s]*/gi,\n    /whatsapp:\\/\\/send\\?[^\"'<>\\s]*/gi,\n  ];\n  const candidates = patterns.flatMap(pattern => decoded.match(pattern) ?? []);\n  let whatsappUrl = '';\n  let whatsappNumber = '';\n\n  for (const candidate of candidates) {\n    const clean = candidate.replace(/[),.;]+$/u, '');\n    const phoneParam = clean.match(/[?&]phone=(?:%2B|\\+)?(\\d{10,15})/i)?.[1] ?? '';\n    const pathNumber = clean.match(/wa\\.me\\/(\\+?\\d{10,15})(?:[?/#]|$)/i)?.[1] ?? '';\n    let digits = (phoneParam || pathNumber).replace(/\\D/g, '');\n    if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;\n    const brazilianMobile = /^55[1-9]\\d9\\d{8}$/.test(digits);\n    if (brazilianMobile) {\n      whatsappNumber = digits;\n      whatsappUrl = `https://wa.me/${digits}`;\n      break;\n    }\n    if (!whatsappUrl && /wa\\.me\\/message\\//i.test(clean)) whatsappUrl = clean;\n  }\n\n  const phoneDigits = String(lead.phone ?? '').replace(/\\D/g, '');\n  const localDigits = phoneDigits.startsWith('55') && phoneDigits.length >= 12 ? phoneDigits.slice(2) : phoneDigits;\n  const phoneKind = localDigits.length === 11 && localDigits[2] === '9'\n    ? 'CELULAR_PROVAVEL'\n    : localDigits.length === 10\n      ? 'FIXO_PROVAVEL'\n      : lead.phone ? 'NAO_CLASSIFICADO' : 'AUSENTE';\n\n  return { json: {\n    ...lead,\n    phone_kind: phoneKind,\n    whatsapp_verified: Boolean(whatsappUrl),\n    whatsapp_url: whatsappUrl,\n    whatsapp_number: whatsappNumber,\n    whatsapp_source: whatsappUrl ? 'Site institucional' : '',\n  } };\n});"
+        },
+        "id": "17",
+        "name": "Confirmar WhatsApp publicado",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          940,
+          40
+        ]
+      }
+    ],
+    "connections": {
+      "Executar manualmente": {
+        "main": [
+          [
+            {
+              "node": "Config — mercado-alvo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agenda diária — 9h": {
+        "main": [
+          [
+            {
+              "node": "Config — mercado-alvo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Config — mercado-alvo": {
+        "main": [
+          [
+            {
+              "node": "Ler empresas já registradas",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ler empresas já registradas": {
+        "main": [
+          [
+            {
+              "node": "Preparar descoberta sem repetidos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar descoberta sem repetidos": {
+        "main": [
+          [
+            {
+              "node": "Google Places — busca pública",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Places — busca pública": {
+        "main": [
+          [
+            {
+              "node": "Normalizar empresas",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Registrar falha de descoberta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar empresas": {
+        "main": [
+          [
+            {
+              "node": "Preparar busca de WhatsApp",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Continuar sem site válido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Pontuar para revisão humana": {
+        "main": [
+          [
+            {
+              "node": "Enviar para revisão?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar para revisão?": {
+        "main": [
+          [
+            {
+              "node": "Humanizar linha da fila",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Humanizar linha da fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Registrar falha de descoberta": {
+        "main": [
+          [
+            {
+              "node": "Humanizar linha da fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sincronizar aceites — 5 min": {
+        "main": [
+          [
+            {
+              "node": "Ler fila para convites",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ler fila para convites": {
+        "main": [
+          [
+            {
+              "node": "Preparar convite do diagnóstico",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar convite do diagnóstico": {
+        "main": [
+          [
+            {
+              "node": "Atualizar convite na fila",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Humanizar linha da fila": {
+        "main": [
+          [
+            {
+              "node": "Persistir fila PRUMO",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Site — procurar WhatsApp": {
+        "main": [
+          [
+            {
+              "node": "Confirmar WhatsApp publicado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Confirmar WhatsApp publicado": {
+        "main": [
+          [
+            {
+              "node": "Pontuar para revisão humana",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Continuar sem site válido": {
+        "main": [
+          [
+            {
+              "node": "Pontuar para revisão humana",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar busca de WhatsApp": {
+        "main": [
+          [
+            {
+              "node": "Site — procurar WhatsApp",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "America/Sao_Paulo"
+    }
+  }
+]

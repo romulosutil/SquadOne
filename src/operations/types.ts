@@ -25,45 +25,30 @@ export type AgendaOverview =
   | { state: 'disconnected'; events: [] }
   | { state: 'unavailable'; events: []; message: string }
 
+export type DellCheckState = 'ok' | 'atencao' | 'falha'
+
+export interface DellCheck {
+  id: string
+  grupo: 'servicos' | 'fluxos' | 'dados' | 'containers' | 'maquina' | 'pendencias'
+  nome: string
+  estado: DellCheckState
+  detalhe: string
+  desde?: string
+  link?: string
+}
+
+// Retrato gravado a cada minuto no Dell por deploy/dell/dell-status.py.
+export interface DellStatus {
+  geradoEm: string | null
+  verificacoes: DellCheck[]
+}
+
 export interface OperationsOverview {
   displayName: string
   checkedAt: string
   tools: OperationTool[]
   agenda: AgendaOverview
-}
-
-export interface LocalProject {
-  id: string
-  name: string
-  description: string
-  category: string
-  pinned: boolean
-  target: string
-  kind: 'url' | 'linux_path'
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ProjectInput {
-  name: string
-  description: string
-  category: string
-  pinned: boolean
-  target: string
-}
-
-export type HermesReadingSeverity = 'info' | 'attention' | 'action' | 'done'
-
-export interface HermesReading {
-  id: string
-  projectId: string
-  projectName: string
-  title: string
-  summary: string
-  severity: HermesReadingSeverity
-  occurredAt: string
-  evidence: string
-  source: string
+  dell: DellStatus
 }
 
 export type AutoStage = 'preparation' | 'generated' | 'ready' | 'sent' | 'confirmed'

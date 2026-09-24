@@ -1,0 +1,6 @@
+[Unit]
+Description=Materializar pacotes do n8n na pasta auto
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/auto-entrada

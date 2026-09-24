@@ -1,0 +1,80 @@
+[
+  {
+    "id": "prumo-preparar-planilha",
+    "name": "PRUMO — Preparar planilha",
+    "description": "Aplica o contrato humano, a hierarquia visual e as validações da fila PRUMO.",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "1",
+        "name": "Executar manualmente",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [-420, 0]
+      },
+      {
+        "parameters": {
+          "jsCode": "const sheetId = 957714022;\nconst headers = ['ID do lead','Google Place ID','Empresa','Endereço','Site','Telefone','Categorias no Google','Nota no Google','Avaliações no Google','Situação no Google','Encontrado em','Aderência','Complexidade','Facilidade de contato','Prioridade','Motivo da prioridade','Etapa','Próxima verificação','Responsável','Revisado em','Decisor','Canal de contato','Destino do contato','Primeiro contato em','Próximo retorno','Resultado comercial','Não contatar','Motivo da perda','Busca de origem','Cidade','Segmento','ID da empresa','Situação do diagnóstico','Formulário do diagnóstico','Mensagem do convite','Enviar convite','Convite enviado em','Última resposta em','Quem respondeu','Quem falta responder','Sessões recebidas','Respostas válidas','Índice PRUMO','Resultado por área','Lacunas observadas','Briefing interno','Próxima ação','Diagnóstico concluído em','Atualizado em','Erro técnico'];\nconst notes = {\n  2: 'Empresa descoberta pelo Lead Scout.',\n  14: 'Pontuação de triagem por sinais públicos. Não é diagnóstico.',\n  16: 'Mude para “Contato aceito” somente após a empresa aceitar o diagnóstico.',\n  17: 'O próximo passo humano recomendado para este lead.',\n  31: 'Identificador imutável que conecta lead, formulário e diagnóstico. Não edite.',\n  32: 'Estado atual das respostas do diagnóstico.',\n  35: 'Link de ação pronto para abrir o canal de envio.',\n  42: 'Índice calculado apenas quando as cinco perspectivas estiverem completas.',\n  45: 'Leitura interna produzida pelo fluxo de diagnóstico.',\n  46: 'Ação recomendada para movimentar o lead.',\n  49: 'Detalhe técnico para correção; fica oculto no uso diário.'\n};\nconst color = (red, green, blue) => ({ red, green, blue });\nconst white = color(1, 1, 1);\nconst headerFormat = backgroundColor => ({ backgroundColor, textFormat: { foregroundColor: white, bold: true, fontFamily: 'Arial', fontSize: 10 }, horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP' });\nconst range = (startColumnIndex, endColumnIndex, startRowIndex = 0, endRowIndex = 1000) => ({ sheetId, startColumnIndex, endColumnIndex, startRowIndex, endRowIndex });\nconst requests = [\n  { updateCells: { range: range(0, 50, 0, 1), rows: [{ values: headers.map((header, index) => ({ userEnteredValue: { stringValue: header }, ...(notes[index] ? { note: notes[index] } : {}) })) }], fields: 'userEnteredValue,note' } },\n  { repeatCell: { range: range(0, 2, 0, 1), cell: { userEnteredFormat: headerFormat(color(0.25, 0.29, 0.31)) }, fields: 'userEnteredFormat' } },\n  { repeatCell: { range: range(2, 11, 0, 1), cell: { userEnteredFormat: headerFormat(color(0.08, 0.25, 0.21)) }, fields: 'userEnteredFormat' } },\n  { repeatCell: { range: range(11, 18, 0, 1), cell: { userEnteredFormat: headerFormat(color(0.43, 0.27, 0.06)) }, fields: 'userEnteredFormat' } },\n  { repeatCell: { range: range(18, 31, 0, 1), cell: { userEnteredFormat: headerFormat(color(0.12, 0.27, 0.42)) }, fields: 'userEnteredFormat' } },\n  { repeatCell: { range: range(31, 50, 0, 1), cell: { userEnteredFormat: headerFormat(color(0.32, 0.17, 0.38)) }, fields: 'userEnteredFormat' } },\n  { repeatCell: { range: range(0, 50, 1, 1000), cell: { userEnteredFormat: { textFormat: { fontFamily: 'Arial', fontSize: 10, foregroundColor: color(0.12, 0.14, 0.15) }, verticalAlignment: 'MIDDLE', wrapStrategy: 'CLIP' } }, fields: 'userEnteredFormat.textFormat,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy' } },\n  { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1, frozenColumnCount: 3 } }, fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount' } },\n  { updateDimensionProperties: { range: { sheetId, dimension: 'ROWS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 48 }, fields: 'pixelSize' } },\n  { updateDimensionProperties: { range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: 1000 }, properties: { pixelSize: 34 }, fields: 'pixelSize' } },\n  { autoResizeDimensions: { dimensions: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 50 } } },\n  { setDataValidation: { range: range(16, 17, 1, 1000), rule: { condition: { type: 'ONE_OF_LIST', values: ['Revisar','Contato aceito','Convite pronto','Diagnóstico em andamento','Diagnóstico para revisar','Concluído','Fora do perfil','Erro na descoberta'].map(userEnteredValue => ({ userEnteredValue })) }, strict: true, showCustomUi: true } } },\n  { setDataValidation: { range: range(32, 33, 1, 1000), rule: { condition: { type: 'ONE_OF_LIST', values: ['Não iniciado','Convite pronto','Convite enviado','Aguardando respostas','Revisão necessária','Concluído'].map(userEnteredValue => ({ userEnteredValue })) }, strict: true, showCustomUi: true } } },\n  { setBasicFilter: { filter: { range: range(0, 50, 0, 1000) } } },\n  { findReplace: { range: range(16, 17, 1, 1000), find: 'REVIEW', replacement: 'Revisar', matchCase: true } },\n  { findReplace: { range: range(16, 17, 1, 1000), find: 'CONTACT_ACCEPTED', replacement: 'Contato aceito', matchCase: true } },\n  { findReplace: { range: range(16, 17, 1, 1000), find: 'DIAGNOSTIC_INVITE_READY', replacement: 'Convite pronto', matchCase: true } },\n  { findReplace: { range: range(16, 17, 1, 1000), find: 'DIAGNOSTIC_IN_PROGRESS', replacement: 'Diagnóstico em andamento', matchCase: true } },\n  { findReplace: { range: range(16, 17, 1, 1000), find: 'DIAGNOSTIC_REVIEW', replacement: 'Diagnóstico para revisar', matchCase: true } },\n  { findReplace: { range: range(32, 33, 1, 1000), find: 'INVITE_READY', replacement: 'Convite pronto', matchCase: true } },\n  { findReplace: { range: range(32, 33, 1, 1000), find: 'INVITED', replacement: 'Convite enviado', matchCase: true } },\n  { findReplace: { range: range(32, 33, 1, 1000), find: 'WAITING_FOR_SESSIONS', replacement: 'Aguardando respostas', matchCase: true } },\n  { findReplace: { range: range(32, 33, 1, 1000), find: 'REVIEW_REQUIRED', replacement: 'Revisão necessária', matchCase: true } }\n];\nconst widths = [[2,3,240],[3,4,320],[4,6,160],[7,9,100],[10,11,150],[11,15,105],[15,16,320],[16,17,190],[17,18,320],[18,23,155],[23,25,150],[25,28,180],[29,31,145],[32,33,200],[33,34,240],[34,35,360],[35,36,180],[36,40,170],[40,43,115],[45,46,440],[46,47,320],[47,49,170]];\nfor (const [startIndex, endIndex, pixelSize] of widths) requests.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex, endIndex }, properties: { pixelSize }, fields: 'pixelSize' } });\nfor (const [startIndex, endIndex] of [[0,2],[6,7],[9,10],[28,29],[31,32],[43,45],[49,50]]) requests.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex, endIndex }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });\nfor (const [startColumnIndex, endColumnIndex] of [[2,6],[15,18],[18,28],[32,40],[45,47]]) requests.push({ repeatCell: { range: range(startColumnIndex, endColumnIndex, 1, 1000), cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy' } });\nreturn [{ json: { requests } }];"
+        },
+        "id": "2",
+        "name": "Montar visual e validações",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [-160, 0]
+      },
+      {
+        "parameters": {
+          "jsCode": "const sheetId = 957714022;\nconst requests = [...($json.requests ?? [])];\nconst range = (startColumnIndex, endColumnIndex, startRowIndex = 1, endRowIndex = 1000) => ({ sheetId, startColumnIndex, endColumnIndex, startRowIndex, endRowIndex });\nconst editable = { backgroundColor: { red: 1, green: 0.96, blue: 0.79 }, textFormat: { foregroundColor: { red: 0.16, green: 0.13, blue: 0.05 }, fontFamily: 'Arial', fontSize: 10 }, verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP' };\nfor (const [start, end] of [[16,17],[18,28],[32,33],[36,37]]) requests.push({ repeatCell: { range: range(start, end), cell: { userEnteredFormat: editable }, fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy' } });\nconst listRule = values => ({ condition: { type: 'ONE_OF_LIST', values: values.map(userEnteredValue => ({ userEnteredValue })) }, strict: true, showCustomUi: true });\nconst dateRule = { condition: { type: 'DATE_IS_VALID' }, strict: false, showCustomUi: false };\nrequests.push(\n  { setDataValidation: { range: range(21,22), rule: listRule(['WhatsApp confirmado no site','WhatsApp confirmado manualmente','E-mail','Ligação','Outro']) } },\n  { setDataValidation: { range: range(19,20), rule: dateRule } },\n  { setDataValidation: { range: range(23,25), rule: dateRule } },\n  { setDataValidation: { range: range(25,26), rule: listRule(['Em contato','Aceitou o diagnóstico','Sem retorno','Não tem interesse','Fora do perfil','Cliente']) } },\n  { setDataValidation: { range: range(26,27), rule: listRule(['Sim','Não']) } },\n  { setDataValidation: { range: range(36,37), rule: dateRule } },\n);\nconst notes = {\n  5: 'Telefone público retornado pelo Google Places. Não é considerado WhatsApp sem confirmação.',\n  18: 'Preencha quem é responsável por movimentar este lead.',\n  19: 'Data em que a revisão comercial foi concluída.',\n  20: 'Nome e papel da pessoa que decide ou patrocina o diagnóstico.',\n  21: 'O fluxo só marca WhatsApp automaticamente quando encontra um link publicado no site da empresa.',\n  22: 'Informe um link wa.me, número WhatsApp confirmado ou e-mail. Telefone fixo não entra automaticamente aqui.',\n  23: 'Data do primeiro contato efetivo.',\n  24: 'Data combinada para o próximo retorno.',\n  25: 'Resultado atual da abordagem comercial.',\n  26: 'Selecione Sim para impedir novas abordagens.',\n  27: 'Explique por que o lead foi encerrado ou descartado.',\n  32: 'Depois de enviar de verdade, mude de “Convite pronto” para “Convite enviado”.',\n  36: 'Data do envio efetivo do convite.'\n};\nfor (const [column, note] of Object.entries(notes)) requests.push({ updateCells: { range: range(Number(column), Number(column) + 1, 0, 1), rows: [{ values: [{ note }] }], fields: 'note' } });\nreturn [{ json: { requests } }];"
+        },
+        "id": "4",
+        "name": "Configurar células editáveis",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [-20, 0]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://sheets.googleapis.com/v4/spreadsheets/1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U:batchUpdate",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "id": "3",
+        "name": "Aplicar na planilha",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [120, 0],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "5Dy1tDUiFtAq7PHj",
+            "name": "Google Sheets account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Executar manualmente": {
+        "main": [[{ "node": "Montar visual e validações", "type": "main", "index": 0 }]]
+      },
+      "Montar visual e validações": {
+        "main": [[{ "node": "Configurar células editáveis", "type": "main", "index": 0 }]]
+      },
+      "Configurar células editáveis": {
+        "main": [[{ "node": "Aplicar na planilha", "type": "main", "index": 0 }]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "America/Sao_Paulo"
+    }
+  }
+]

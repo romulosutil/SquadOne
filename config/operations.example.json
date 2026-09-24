@@ -27,7 +27,7 @@
       "label": "n8n",
       "description": "Automações",
       "launchUrl": "http://127.0.0.1:5679/",
-      "healthUrl": "http://127.0.0.1:5678/healthz"
+      "healthUrl": "http://127.0.0.1:5679/healthz"
     },
     "remote": {
       "label": "SquadOne remoto",

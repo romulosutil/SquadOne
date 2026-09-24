@@ -30,17 +30,18 @@ A mesma aplicação possui dois perfis selecionados no servidor por
 Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe e usam navegação interna para `/squadone`.
 
-A Central é dividida em rotas navegáveis sem dependência adicional de roteador:
+A Central tem duas rotas, sem dependência adicional de roteador:
 
-- `/` concentra agenda, foco, projetos fixados e leituras recentes;
-- `/projetos` é o catálogo pesquisável de projetos;
-- `/projetos/producao-auto` contém o painel completo da Produção Auto;
-- `/leituras` é a caixa de entrada global do Hermes.
+- `/` responde se o Dell está bem, mostra a agenda de hoje e os acessos
+  (Terminal, n8n, Hermes, Syncthing, SquadOne, Produção Auto);
+- `/projetos/producao-auto` contém o painel completo da Produção Auto.
 
-Projetos podem ser módulos internos com dashboard, atalhos locais de acesso ou
-uma combinação dos dois. Módulos internos são registrados no frontend; atalhos
-continuam no armazenamento privado de projetos. A página inicial mostra apenas
-uma seleção fixada, sem replicar os dashboards completos.
+O estado do Dell vem de `SQUADONE_OPERATIONS_DATA_DIR/status.json`, gravado a
+cada minuto por `deploy/dell/dell-status.py` e lido por `server/dell-status.ts`
+dentro de `GET /api/operations/overview`. O mesmo monitor avisa o Rômulo pelo
+Hermes quando algo quebra e quando volta. Retrato com mais de 5 minutos vira a
+falha "Monitor do Dell". As rotas de projetos e leituras do Hermes seguem no
+servidor, mas saíram da interface em 23/09/2026.
 
 `server/operations.ts` contém a fronteira local:
 
@@ -88,3 +89,62 @@ usuário com linger. O arquivo de ambiente, a configuração real e os dados fic
 respectivamente em `~/.config/squadone/operations.env`,
 `~/.config/squadone/operations.json` e
 `~/.local/share/squadone-operations`.
+
+## Modelo operacional pessoal
+
+O Dell é o worker persistente e o servidor de projetos (Docker). Claude e
+Codex controlam e corrigem o ambiente pelo SSH, Tailscale e Syncthing; o guia
+de acesso é `dev/DELL-WORKER.md`. O Hermes é o secretário: não opera, só
+informa pelo WhatsApp, a partir das rotinas dele e dos avisos do monitor
+`dell-status` e do n8n. O n8n do Dell é o gerente de fluxos e todo fluxo termina
+respondendo a alguém (Error Workflow único + avisos pela fila). O SquadOne é o
+gerente de agendas. Antigravity organiza documentação e arquivos.
+
+O repositório CORPORATIVO é espelhado em `~/Corporativo-dev` como somente
+leitura no Dell: é editado no PC e nada no Dell propaga de volta.
+
+O diretório `~/Pessoal-dev` no Dell é uma réplica Syncthing da pasta de
+desenvolvimento. Ele serve para o Hermes enxergar o trabalho em andamento, mas
+não é uma fronteira Git confiável: metadados `.git` podem estar incompletos.
+Operações de branch, commit, push e pull usam clones Git próprios no Dell ou o
+checkout de origem no Windows. O GitHub é a fronteira de integração entre os
+agentes.
+
+Credenciais não ficam na pasta sincronizada, em skills ou na configuração do
+SquadOne. OAuth do n8n usa o armazenamento cifrado de credenciais do próprio
+n8n. Sessões web persistentes podem auxiliar o Hermes, mas login inicial, MFA
+e consentimentos sensíveis permanecem sob ação humana. O SquadOne recebe
+estado e evidências; ele não recebe senhas, tokens nem poder de controle sobre
+os serviços.
+
+O playbook instalável do gestor fica em
+`deploy/hermes/skills/dell-operations-manager/SKILL.md`.
+
+O modelo de orquestração, as conexões pendentes e a separação entre credenciais
+humanas, OAuth e segredos técnicos estão em
+`docs/OPERATIONS-SECRETS-AND-ORCHESTRATION.md`.
+
+## Workflows PRUMO no n8n
+
+Desde 23/09/2026 o PRUMO é simples (decisão do Rômulo). A planilha "PRUMO — Fila
+de revisão" tem uma aba de trabalho, **Prospects**, com uma coluna **Etapa**:
+Revisar → Convite enviado → Diagnóstico pronto → Concluído | Sem interesse.
+"Descartados" (só para não reavaliar) e a antiga "Leads" ficam ocultas.
+
+- **Lead Scout** (9h, rodízio de 80 buscas segmento × cidade): Google Places →
+  WhatsApp publicado no site → nota → Prospects (com o link "Enviar convite ↗")
+  ou Descartados; cadastro repetido (mesmo WhatsApp) é descartado. Resumo da
+  busca pelo Hermes.
+- **Clique em "Enviar convite"** (webhook do n8n pelo túnel): Etapa → Convite
+  enviado e abre o WhatsApp com a mensagem e o formulário já com a empresa e o
+  papel "Dono".
+- **Diagnóstico do dono** (de hora em hora): a resposta completa mais recente
+  da empresa fecha o Índice PRUMO, grava Índice e Briefing na linha, muda a
+  Etapa para Diagnóstico pronto e avisa pelo Hermes. Também grava as
+  pendências que a Central mostra em "Esperando você".
+
+O vínculo entre formulário e linha é o `ID` (ID do Google Places), enviado no
+campo Empresa como `ID::Nome`. Os scripts que montam tudo isso estão em
+`deploy/dell/claude-ops/` (`prumo-simples.py`, `prumo-ajuste-planilha.py`); os
+JSON em `ops/n8n/workflows/` e o `scripts/prepare-prumo-workflows.mjs`
+descrevem a versão anterior.

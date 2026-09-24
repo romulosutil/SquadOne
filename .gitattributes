@@ -1,0 +1,3 @@
+# Scripts executados no Dell: sempre LF, senão o shebang e o systemd quebram.
+deploy/dell/** text eol=lf
+deploy/hermes/** text eol=lf
