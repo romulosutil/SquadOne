@@ -1,0 +1,58 @@
+{
+  "id": "c8d62107-67db-4a1e-b6a9-211f9d9ef0df",
+  "name": "Radar PNCP — coleta diária",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "30 7 * * *" }] } },
+      "id": "b32eab67-6c69-4c01-9ea1-4982ff2fd3cf",
+      "name": "Todos os dias às 07:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {},
+      "id": "9b9b60d1-9c56-4e65-907e-108a2df8e21b",
+      "name": "Teste manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [260, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://collector:3000/collect",
+        "options": { "timeout": 10000 }
+      },
+      "id": "d2f0a009-637f-4618-8e23-6396aabf80dc",
+      "name": "Coletar PNCP (somente leitura)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nreturn [{ json: { collection_id: response.collection_id, status: response.status, mensagem: response.message, duplicada: response.duplicate ?? false, acompanhar_em: response.status_url, solicitada_em: response.requested_at } }];"
+      },
+      "id": "8fbe8b8a-caa7-49f0-9b0e-b069211292a7",
+      "name": "Confirmar coleta em segundo plano",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Todos os dias às 07:30": { "main": [[{ "node": "Coletar PNCP (somente leitura)", "type": "main", "index": 0 }]] },
+    "Teste manual": { "main": [[{ "node": "Coletar PNCP (somente leitura)", "type": "main", "index": 0 }]] },
+    "Coletar PNCP (somente leitura)": { "main": [[{ "node": "Confirmar coleta em segundo plano", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "timezone": "America/Sao_Paulo" },
+  "versionId": "fa7bc420-261e-43c2-90d6-e8edbe9cd2b4",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

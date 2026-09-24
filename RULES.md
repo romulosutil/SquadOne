@@ -53,3 +53,9 @@
     Syncthing); o Hermes é o secretário que avisa pelo WhatsApp; o SquadOne é o
     gerente de agendas; o n8n do Dell é o gerente de fluxos e todo fluxo termina
     respondendo a alguém; o Docker do Dell é o servidor de projetos.
+21. `deploy/dell/licitacoes-automation/` versiona somente configuração e código
+    não sensíveis; `.env`, dados, históricos e backups do radar PNCP não entram
+    no Git.
+22. A chamada do n8n ao collector PNCP deve ser assíncrona e idempotente durante
+    uma execução ativa: confirmação rápida com ID, repetição com o mesmo ID e
+    acompanhamento por estado persistido.

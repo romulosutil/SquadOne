@@ -148,3 +148,13 @@ campo Empresa como `ID::Nome`. Os scripts que montam tudo isso estão em
 `deploy/dell/claude-ops/` (`prumo-simples.py`, `prumo-ajuste-planilha.py`); os
 JSON em `ops/n8n/workflows/` e o `scripts/prepare-prumo-workflows.mjs`
 descrevem a versão anterior.
+
+## Radar PNCP
+
+O radar PNCP é executado pelo Compose em `~/licitacoes-automation` no Dell, com
+fontes versionadas em `deploy/dell/licitacoes-automation/`. O n8n apenas inicia
+a coleta: `POST /collect` responde `202 Accepted` com um `collection_id`, e o
+collector consulta o PNCP em segundo plano. Uma nova chamada durante a coleta
+ativa reutiliza o mesmo ID; `GET /collections/:id` expõe o estado persistido.
+Falhas da fonte são gravadas como `source_unavailable` para a próxima execução
+agendada tentar novamente sem manter o workflow bloqueado.

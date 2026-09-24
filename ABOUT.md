@@ -20,6 +20,11 @@ O perfil local usa um arquivo privado baseado em
 `config/operations.example.json` e grava projetos em
 `SQUADONE_OPERATIONS_DATA_DIR`; ambos ficam fora do Git.
 
+Os arquivos não sensíveis do radar PNCP operado pelo n8n no Dell ficam
+versionados em `deploy/dell/licitacoes-automation/`. Segredos, dados coletados,
+histórico e backups permanecem exclusivamente no diretório operacional do
+worker.
+
 A seção Produção Auto usa `autoDirectory` desse arquivo privado para ler
 artefatos locais. Ela também acompanha as evidências já produzidas pela
 automação: estado e log do runner em `.logs/`, saúde do Hermes e do WhatsApp e

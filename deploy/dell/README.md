@@ -184,3 +184,13 @@ install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/observador
 cp ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
 ```
+
+## Radar PNCP
+
+Os arquivos não sensíveis do Compose do radar ficam em
+`deploy/dell/licitacoes-automation/`. Para atualizar o diretório operacional,
+copie esse conteúdo para `~/licitacoes-automation` sem remover `.env`, `data/`,
+`backups/` ou `graphify-out/`, valide com `docker compose config --quiet` e
+recrie apenas os serviços alterados. O workflow versionado usa gatilho manual
+para testes no editor e agenda diária para produção; ambos recebem confirmação
+rápida do collector, sem aguardar a resposta do PNCP.
