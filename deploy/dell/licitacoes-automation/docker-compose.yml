@@ -20,12 +20,13 @@ services:
     entrypoint: ["node"]
     command: ["/opt/licitacoes/scripts/collector-server.mjs"]
     restart: unless-stopped
+    dns: [1.1.1.1, 8.8.8.8]
     environment:
       RADAR_DATA_DIR: /data
-      PNCP_MAX_PAGES: 5
-      PNCP_REQUEST_TIMEOUT_MS: 20000
-      PNCP_MAX_ATTEMPTS: 2
-      PNCP_RETRY_DELAY_MS: 1500
+      PNCP_MAX_PAGES: 20
+      PNCP_REQUEST_TIMEOUT_MS: 90000
+      PNCP_MAX_ATTEMPTS: 3
+      PNCP_RETRY_DELAY_MS: 15000
     volumes:
       - ./scripts:/opt/licitacoes/scripts:ro
       - ./data:/data
@@ -55,11 +56,13 @@ services:
       DB_POSTGRESDB_DATABASE: n8n
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
-      N8N_HOST: localhost
+      N8N_HOST: 127.0.0.1
       N8N_PORT: 5678
       N8N_PROTOCOL: http
-      N8N_EDITOR_BASE_URL: http://localhost:5679/
-      N8N_WEBHOOK_URL: http://localhost:5679/
+      N8N_EDITOR_BASE_URL: http://127.0.0.1:5679/
+      N8N_WEBHOOK_URL: http://127.0.0.1:5679/
+      # Acesso só por loopback/túnel SSH, sem https: cookie seguro derrubava a sessão.
+      N8N_SECURE_COOKIE: "false"
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
       N8N_DIAGNOSTICS_ENABLED: "false"
@@ -73,6 +76,14 @@ services:
       - ./workflows:/opt/licitacoes/workflows:ro
       - ../prumo-automation:/opt/prumo:ro
       - ./data:/data
+      # Fila de avisos: arquivo JSON aqui vira WhatsApp pelo Hermes (dell-status).
+      - ${HOME}/.local/share/avisos/fila:/home/node/.n8n-files/avisos
+      # Pasta auto (Site antes da venda): Syncthing <-> G:\Meu Drive\auto no PC.
+      - ${HOME}/auto-site:/home/node/.n8n-files/auto
+      # Pacotes do Caçador: ~/.local/bin/auto-entrada cria as pastas em ~/auto-site.
+      - ${HOME}/.local/share/auto-entrada:/home/node/.n8n-files/auto-entrada
+      # Pendências para a Central (lidas pelo dell-status).
+      - ${HOME}/.local/share/n8n-estado:/home/node/.n8n-files/estado
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -84,6 +95,7 @@ services:
           touch "$$marker"
         fi
         exec n8n start
+    dns: [1.1.1.1, 8.8.8.8]
     networks: [licitacoes]
 
 networks:

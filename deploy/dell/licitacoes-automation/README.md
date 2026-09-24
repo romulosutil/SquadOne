@@ -37,7 +37,7 @@ docker compose logs -f n8n
 
 Depois da primeira abertura do editor, crie o proprietário local do n8n. O workflow é importado e ativado durante a implantação.
 
-A coleta diária lê no máximo 5 páginas. Cada chamada ao PNCP tem limite de 20 segundos e no máximo 2 tentativas, com espera curta entre elas. Se a fonte continuar lenta ou indisponível, a falha é persistida de forma controlada e a próxima tentativa fica para o acionamento seguinte. Para testar no editor do n8n, use o nó `Teste manual`.
+A coleta diária lê no máximo 20 páginas. Cada chamada ao PNCP tem limite de 90 segundos e no máximo 3 tentativas, com 15 segundos de espera entre elas (valores no `docker-compose.yml`). Se a fonte continuar lenta ou indisponível, a falha é persistida de forma controlada e a próxima tentativa fica para o acionamento seguinte. Para testar no editor do n8n, use o nó `Teste manual`.
 
 ## Segurança
 
