@@ -46,6 +46,9 @@ PASTAS_FORA = {"node_modules", ".git", "graphify-out", "dist", "build", ".next",
 TIMEOUT_S = 20 * 60
 DIAS_DIARIO = 90
 DIAS_SNAPSHOT = 7  # pastas AAAA-MM-DD que o graphify deixa em graphify-out
+# Grafo maior que isto fica só no projeto: no global, tornaria toda consulta do
+# Hermes lenta (o do espectro tinha 157 MB em 23/09/2026).
+LIMITE_GLOBAL_MB = 40
 
 
 def arquivos_de_codigo(projeto: Path):
@@ -57,6 +60,9 @@ def arquivos_de_codigo(projeto: Path):
 
 
 def tamanho_do_grafo(grafo: Path):
+    mb = grafo.stat().st_size / 1e6
+    if mb > LIMITE_GLOBAL_MB:
+        return {"mb": round(mb)}  # não carrega: um JSON desse tamanho come GB de RAM
     try:
         d = json.loads(grafo.read_text())
     except (OSError, ValueError):
@@ -117,15 +123,23 @@ def main() -> int:
         saida = proj / "graphify-out"
         grafo = saida / "graph.json"
         info = dict(anterior, arquivos_de_codigo=len(codigo), verificado_em=agora)
+        # Pelo arquivo mais recente, não pelo que mudou nesta rodada: projeto parado
+        # também precisa dizer desde quando está parado.
+        recente = max(f.stat().st_mtime for f in codigo)
+        info["ultima_atividade"] = datetime.fromtimestamp(recente).isoformat(timespec="minutes")
 
-        if grafo.exists() and not alterados:
+        # Sem mudança só pula se o grafo já foi medido e entrou no global; senão um
+        # projeto parado nunca apareceria para o Hermes.
+        if grafo.exists() and not alterados and anterior.get("no_global"):
             estado["projetos"][proj.name] = info
             continue
 
-        try:
-            rc, log = rodar([GRAPHIFY, "update", str(proj)], cwd=proj)
-        except subprocess.TimeoutExpired:
-            rc, log = 124, f"passou de {TIMEOUT_S // 60} min"
+        rc, log = 0, ""
+        if alterados or not grafo.exists():
+            try:
+                rc, log = rodar([GRAPHIFY, "update", str(proj)], cwd=proj)
+            except subprocess.TimeoutExpired:
+                rc, log = 124, f"passou de {TIMEOUT_S // 60} min"
         if rc != 0 or not grafo.exists():
             falhas.append(f"{proj.name}: {log.splitlines()[-1] if log else f'saiu com {rc}'}")
             info["erro"] = log[-500:]
@@ -135,21 +149,27 @@ def main() -> int:
 
         tam = tamanho_do_grafo(grafo) or {}
         antes = anterior.get("grafo") or {}
-        rc_g, log_g = rodar([GRAPHIFY, "global", "add", str(grafo), "--as", proj.name], cwd=proj, timeout=300)
+        if "mb" in tam:
+            rc_g, log_g = 0, ""  # grande demais para o global; consulta vai no grafo do projeto
+        else:
+            rc_g, log_g = rodar([GRAPHIFY, "global", "add", str(grafo), "--as", proj.name], cwd=proj, timeout=300)
         if rc_g != 0:
             falhas.append(f"{proj.name} (grafo global): {log_g.splitlines()[-1] if log_g else rc_g}")
         podar_snapshots(saida)
 
-        info.update(grafo=tam, atualizado_em=agora, erro=None)
-        if alterados:
-            info["ultima_atividade"] = datetime.fromtimestamp(alterados[0].stat().st_mtime).isoformat(timespec="minutes")
+        info.update(grafo=tam, atualizado_em=agora, erro=None, no_global=rc_g == 0)
         estado["projetos"][proj.name] = info
+        if not alterados:
+            continue  # só entrou no global; não é atividade para o diário
         mudancas[proj.name] = {
             "arquivos": len(alterados),
             "exemplos": [str(f.relative_to(proj)) for f in alterados[:15]],
             "nos": tam.get("nos"),
             "delta_nos": (tam.get("nos") or 0) - (antes.get("nos") or 0) if antes else None,
         }
+
+    if not nomes:
+        limpar_global(set(estado["projetos"]))
 
     estado["rodado_em"] = datetime.fromtimestamp(agora).isoformat(timespec="minutes")
     tmp = estado_p.with_suffix(".tmp")
@@ -171,6 +191,18 @@ def main() -> int:
               + "\n".join(f"• {f}" for f in falhas)
               + "\n\nOs outros projetos estão em dia. Detalhe em ~/.local/share/graphify-hermes/estado.json.")
     return 0
+
+
+def limpar_global(projetos_vivos) -> None:
+    """O grafo global é deste script: tira o que não é mais projeto (ex.: o
+    `workspace` que o crontab antigo grafava, ou um projeto apagado)."""
+    rc, log = rodar([GRAPHIFY, "global", "list"], cwd=HOME, timeout=60)
+    if rc != 0:
+        return
+    for linha in log.splitlines():
+        m = re.match(r"\s+(\S+): \d+ nodes", linha)
+        if m and m.group(1) not in projetos_vivos:
+            rodar([GRAPHIFY, "global", "remove", m.group(1)], cwd=HOME, timeout=60)
 
 
 def escrever_resumo(estado) -> None:
@@ -196,8 +228,10 @@ def escrever_resumo(estado) -> None:
     ]
     ordem = sorted(estado["projetos"].items(), key=lambda kv: kv[1].get("ultima_atividade") or "", reverse=True)
     for nome, info in ordem:
+        g = info.get("grafo") or {}
+        tamanho = g.get("nos", f"{g['mb']} MB, fora do global" if "mb" in g else "—")
         linhas.append(f"| {nome} | {info.get('ultima_atividade') or '—'} | {na_semana.get(nome, 0)} | "
-                      f"{(info.get('grafo') or {}).get('nos', '—')}{' ⚠️ erro' if info.get('erro') else ''} |")
+                      f"{tamanho}{' ⚠️ erro' if info.get('erro') else ''} |")
     (ESTADO_DIR / "RESUMO.md").write_text("\n".join(linhas) + "\n")
 
 

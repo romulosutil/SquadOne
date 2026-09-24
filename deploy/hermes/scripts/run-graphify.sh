@@ -5,6 +5,9 @@
 # ele pede ao Hermes para rodar o job no próximo tick, em vez de rodar o
 # graphify por fora. Instalado em ~/workspace/scripts/run-graphify.sh.
 set -eu
+# SSH do pre-push é sessão não interativa: sem ~/.local/bin no PATH, o plugin
+# rtk-rewrite do Hermes não acha o rtk e avisa a cada chamada.
+export PATH="$HOME/.local/bin:$PATH"
 id=$(python3 - <<'EOF'
 import json, pathlib
 jobs = json.loads((pathlib.Path.home() / ".hermes/cron/jobs.json").read_text())["jobs"]
