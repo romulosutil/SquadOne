@@ -97,6 +97,20 @@ export interface EventoCriado {
   passos?: number;
 }
 
+/** Tarefa avulsa no Google Tasks (`criar_tarefa`): sem evento nem horário. */
+export interface TarefaCriada {
+  kind: "tarefa";
+  titulo: string;
+  responsavel_id: string;
+  dominio: string;
+  /** "AAAA-MM-DD"; ausente = sem data. */
+  data?: string;
+  /** Subtarefas criadas; ausente quando 0. */
+  passos?: number;
+  tarefaId: string;
+  listaId: string;
+}
+
 /** Proposta de abrir um domínio novo — sala nova no escritório. */
 export interface PropostaDominio {
   kind: "dominio";
@@ -148,8 +162,11 @@ export interface ErroTarefa {
   erro: string;
   /** Não rodou: o turno sugeriu trocar de squad e o servidor descartou o resto. */
   descartado?: true;
-  /** Por que falhou, quando há um gesto certo (ex.: reconectar). */
-  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
+  /**
+   * Por que falhou, quando há um gesto certo (ex.: reconectar). `ampliarAcesso`:
+   * tarefa avulsa sem o escopo do Google Tasks.
+   */
+  motivo?: "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel" | "ampliarAcesso";
 }
 
 /** Feito, mas não como pedido (conflito, esforço parcial...). Não é erro. */
@@ -178,6 +195,8 @@ export interface Redirecionamento {
 
 export interface TurnoResponse {
   eventos_criados: EventoCriado[];
+  /** Ausente em servidor anterior à tarefa avulsa. */
+  tarefas_criadas?: TarefaCriada[];
   sugestoes: Sugestao[];
   avisos: AvisoTarefa[];
   erros: ErroTarefa[];
@@ -205,6 +224,11 @@ export interface QuestCalendario {
   /** `squadone_prazo_ref`: eventId do marco quando a quest é bloco de um prazo; "" senão. */
   prazoRef: string;
   htmlLink?: string;
+  /**
+   * Checklist no Google Tasks: subtarefas concluídas / total. Ausente = quest
+   * sem passos, ou o servidor não conseguiu ler o Tasks (o selo só some).
+   */
+  passos?: { feitos: number; total: number };
 }
 
 export interface MochilaResponse {

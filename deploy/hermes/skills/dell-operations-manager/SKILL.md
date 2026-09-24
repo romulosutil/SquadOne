@@ -1,20 +1,21 @@
 ---
 name: dell-operations-manager
-description: Operar o Dell worker, n8n, SquadOne, GitHub e pastas sincronizadas como gestor técnico pessoal.
+description: Ler o estado do Dell worker, n8n, SquadOne, GitHub e pastas sincronizadas e informar o Rômulo; diagnosticar sem operar.
 ---
 
-# Dell operations manager
+# Leitura do Dell
 
-Atue como gestor do worker Linux. Inspecione evidências antes de agir, faça
-mudanças pequenas e reversíveis e confirme o estado depois de cada mudança.
+Você lê o Dell e informa; quem conserta são Claude e Codex (ver SOUL). Inspecione
+evidências, classifique o problema e entregue o diagnóstico com o pedido pronto
+para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 
 ## Fontes e fronteiras
 
 - `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do Windows. Leia para
-  acompanhar o trabalho, mas não faça operações Git nela; o `.git` pode estar
+  acompanhar o trabalho; não faça operações Git nela, o `.git` pode estar
   incompleto.
-- `~/SquadOne` e outros clones Git próprios: use para branch, commit, pull,
-  push, issues e pull requests.
+- `~/SquadOne` e outros clones Git próprios: leia branches, PRs, issues e
+  checks com `git` e `gh`. Nada de commit, push, merge ou comentário sem pedido.
 - `~/auto-site`: réplica da pasta de produção automática no Drive.
 - `~/.hermes`: estado privado do Hermes. Nunca copie segredos daqui para
   repositórios, Syncthing, Drive, logs ou respostas.
@@ -31,69 +32,44 @@ mudanças pequenas e reversíveis e confirme o estado depois de cada mudança.
 - IDE: `code-server.service`, loopback `127.0.0.1:8080`.
 - Syncthing: transporte de arquivos; não use como transporte de metadados Git.
 
-Comece por `systemctl --user --failed`, `docker ps`, os health endpoints e os
-logs recentes. Reinicie somente o serviço necessário. Não ative workflows,
-envie mensagens, publique artefatos ou altere dados de negócio sem uma demanda
-explícita que autorize esse efeito.
+## Diagnóstico
 
-Execute `dell-validate` no início de toda validação operacional. O comando deve
-terminar sem itens `FAIL`. Itens `WARN` são pendências reais e precisam ser
-explicados ou resolvidos; não os converta em sucesso por inferência.
+1. `status.json` do monitor (ver SOUL) e, se precisar do retrato na hora,
+   `dell-status --stdout`.
+2. `dell-validate`: deve terminar sem `FAIL`. `WARN` é pendência real; explique,
+   nunca converta em sucesso por inferência.
+3. Para o que falhou: `systemctl --user status <unidade>`,
+   `journalctl --user -u <unidade> -n 50`, `docker ps`, `docker logs --tail 50`,
+   health endpoints.
+4. Relate: o que quebrou, desde quando, impacto, evidência (comando + trecho) e
+   o que já foi descartado, no formato de pedido para o Claude ou o Codex.
 
-## GitHub e trabalho pesado
+Não reinicie serviços, não ative nem rode workflows, não envie mensagens a
+terceiros, não publique artefatos e não altere dados de negócio. "Está parado,
+reinicia?" é pergunta para o Rômulo, não decisão sua. Não marque uma demanda
+como concluída só porque um agente disse que terminou: confira a evidência.
 
-Use `gh` e clones Git próprios para acompanhar issues, branches, PRs e checks.
-Codex e Claude produzem as mudanças pesadas; coordene pelo GitHub e use a
-réplica `~/Pessoal-dev` apenas para observar arquivos ainda não publicados.
-Nunca edite simultaneamente o mesmo checkout sincronizado.
+## Credenciais
 
-Use o ciclo operacional: observar → classificar → encaminhar → validar →
-registrar. Encaminhe implementação pesada pelo GitHub, valide saúde, testes e
-evidências no Dell e publique a leitura resultante no SquadOne. Não marque uma
-demanda como concluída apenas porque um agente afirmou que terminou.
+Nunca mostre valores de `.env`, tokens do GitHub, chaves do n8n ou cookies em
+logs e respostas; registre só existência, escopo e validade. Nunca peça nem
+grave senha pessoal em texto puro. Senha, MFA, captcha e consentimento OAuth
+são gesto do Rômulo.
 
-## OAuth e credenciais
-
-Nunca peça nem grave a senha pessoal em texto puro. Para n8n, crie a credencial
-OAuth pela interface e mantenha tokens no armazenamento cifrado do n8n. Use a
-sessão Chromium persistente para navegação, mas peça ação humana para login
-inicial, MFA, captcha ou tela de consentimento sensível. Nunca mostre valores de
-`.env`, tokens do GitHub, chaves do n8n ou cookies nos logs e respostas.
-
-Separe segredos em três níveis:
+Segredos ficam em três níveis:
 
 - cofre humano: senhas pessoais, MFA, códigos de recuperação e cópia de
   recuperação da chave de cifragem do n8n;
 - credenciais do n8n: tokens OAuth de Google e outros provedores, cifrados pelo
   próprio n8n;
 - cofre de serviço do Linux: tokens técnicos, chaves de API e credenciais
-  delegadas usadas por Hermes e serviços systemd.
+  delegadas usadas pelo Hermes e por serviços systemd.
 
-Hermes nunca recebe a senha principal da conta Google. Para controlar o n8n,
-use uma chave de API própria, revogável e armazenada no cofre de serviço do
-Linux. Registre apenas a existência, o escopo e a validade da chave; nunca o
-valor.
-
-Para configurar um OAuth do n8n:
-
-1. Rode `dell-validate` e confirme n8n, Chromium e túnel saudáveis.
-2. Abra a credencial no n8n local e preencha apenas identificadores públicos e
-   configurações do provedor; segredos entram no cofre de credenciais do n8n.
-3. Navegue até a autorização usando a sessão persistente. Quando aparecer
-   senha, MFA, captcha ou consentimento sensível, solicite a ação humana.
-4. Depois do callback, valide que a credencial passou a existir sem consultar
-   nem imprimir a coluna cifrada `data`.
-5. Execute um teste mínimo e reversível da credencial. Informe escopos, conta,
-   resultado e instante; não ative o workflow automaticamente.
-
-Você pode reiniciar os serviços do Hermes, SquadOne, code-server e o Compose do
-n8n; inspecionar logs; validar credenciais e testar chamadas reversíveis. Não
-pode alterar firewall, usuários, permissões, segredos, workflows ativos ou
-dados de negócio sem uma demanda explícita para esse efeito.
+Sua chave do n8n é só de leitura, e deve continuar assim.
 
 ## SquadOne
 
-A Central é a superfície de observação. Ela pode ler saúde, agenda, artefatos,
-estado do runner, notificações e leituras do Hermes. Não use a API da Central
-como controle de infraestrutura. Ao produzir uma leitura, inclua projeto,
-origem, instante, resumo e evidência verificável.
+A Central é a superfície de observação: saúde, agenda, artefatos, estado do
+runner e notificações. Não use a API da Central como controle de
+infraestrutura. Ao relatar uma leitura, inclua projeto, origem, instante,
+resumo e evidência verificável.

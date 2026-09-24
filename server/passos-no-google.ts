@@ -9,8 +9,9 @@ import {
   PROP_TASKS_PAI,
   type EventoLido,
   type ObterToken,
+  type QuestCalendario,
 } from "./calendar.ts";
-import { dueDaTarefa, notasDaTarefaMae, tituloDaLista } from "./passos.ts";
+import { dueDaTarefa, notasDaTarefaMae, progressoDosPassos, tituloDaLista } from "./passos.ts";
 import { gravarTasksListaId, localizarSquad, readRoster, type Roster, type Squad } from "./squad.ts";
 import {
   comTokenTasks,
@@ -19,7 +20,10 @@ import {
   inserirTarefa,
   lerLista,
   ListaSumiu,
+  listarTarefas,
+  renomearLista,
   type CorpoDeTarefa,
+  type TarefaLida,
 } from "./tasks.ts";
 
 /**
@@ -28,7 +32,8 @@ import {
  * aqui desfaz ou falha o compromisso: os eventos já estão certos no Google, e
  * a checklist é acessório. Toda falha volta como aviso classificado.
  *
- * Só capabilities.ts importa isto. agendamento.ts não sabe que o Tasks existe.
+ * capabilities.ts escreve por aqui; a rota da Mochila só LÊ o selo de progresso
+ * (`anexarProgressoDosPassos`). agendamento.ts não sabe que o Tasks existe.
  * Escrita única: nada reescreve as tarefas depois (o Ajuste não mexe no `due`,
  * apagar o evento deixa as tarefas órfãs, a vigia não sabe do Tasks).
  */
@@ -73,7 +78,40 @@ export interface ResultadoDosPassos {
   tarefaMaeId?: string;
 }
 
+export interface PedidoDeTarefaAvulsa {
+  /** A squad ATIVA do turno: a tarefa vai para a lista dela. */
+  squad: Squad;
+  /** Já normalizado (`normalizarTituloDaTarefa`), não vazio. */
+  titulo: string;
+  notas: string;
+  /** `dueDaData`; ausente = tarefa sem data. */
+  due?: string;
+  /** Já normalizados (`normalizarPassos`); vazio = tarefa sem subtarefas. */
+  passos: string[];
+  obterToken: ObterToken;
+  liberado: boolean;
+}
+
+export interface ResultadoDaTarefaAvulsa {
+  tarefaId: string;
+  listaId: string;
+  /** Subtarefas criadas. */
+  criados: number;
+  avisos: AvisoDoCompromisso[];
+}
+
 export const AVISO_SEM_ESCOPO = "Passos não criados: falta autorizar o Google Tasks.";
+
+/**
+ * Tarefa avulsa sem o escopo do Tasks. Não é falha de credencial: o Calendar
+ * funciona, e o gesto é AMPLIAR o acesso (`motivoDoErro` → `ampliarAcesso`).
+ */
+export class TasksNaoAutorizado extends Error {
+  constructor() {
+    super("Tarefa não criada: falta autorizar o Google Tasks.");
+    this.name = "TasksNaoAutorizado";
+  }
+}
 
 /**
  * Gesto de uma falha do Tasks. Escopo insuficiente é AMPLIAR, não reconectar:
@@ -82,6 +120,7 @@ export const AVISO_SEM_ESCOPO = "Passos não criados: falta autorizar o Google T
  * projeto não tem gesto: a mensagem do Google diz o que fazer.
  */
 export function motivoDoErroTasks(err: unknown): AvisoDoCompromisso["motivo"] {
+  if (err instanceof TasksNaoAutorizado) return "ampliarAcesso";
   if (err instanceof ErroTasks && err.escopoInsuficiente) return "ampliarAcesso";
   if ((err instanceof ErroTasks && err.ehCredencial) || err instanceof PrecisaConectar) return "precisaConectar";
   return undefined;
@@ -136,6 +175,62 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
     return promessa;
   }
 
+  /** Subtarefas em ordem sob `maeId`. Não lança: falha para a série e vira aviso. */
+  async function criarSubtarefas(
+    listaId: string,
+    maeId: string,
+    passos: string[],
+    obterToken: ObterToken,
+  ): Promise<{ criados: number; avisos: AvisoDoCompromisso[] }> {
+    const avisos: AvisoDoCompromisso[] = [];
+    let criados = 0;
+    let anterior: string | undefined;
+    for (let i = 0; i < passos.length; i++) {
+      try {
+        // Sem `due`: com data, cada subtarefa viraria um chip no Google Calendar.
+        // `previous` mantém a ordem da demanda (sem ele, cada uma iria ao topo).
+        const sub = await comTokenTasks(obterToken, (t) =>
+          dep.inserirTarefa(t, listaId, { title: passos[i] }, { parent: maeId, previous: anterior }),
+        );
+        anterior = sub.id;
+        criados++;
+      } catch (err) {
+        // Para a série como os blocos de prazo: não apaga nada, não abre buraco
+        // no meio da checklist.
+        const faltaram = passos.length - i;
+        avisos.push(
+          aviso(
+            `${faltaram} de ${passos.length} passo(s) não criado(s) no Google Tasks: ${mensagem(err)}`,
+            motivoDoErroTasks(err),
+          ),
+        );
+        break;
+      }
+    }
+    return { criados, avisos };
+  }
+
+  /**
+   * Tarefa AVULSA: sem evento, sem horário, só o Google Tasks. Diferente dos
+   * passos de um compromisso, aqui a tarefa É o resultado — então a falha antes
+   * de ela existir LANÇA (o turno a mostra como erro, com o gesto de
+   * `motivoDoErroTasks`), e só o que vem depois (subtarefas) vira aviso.
+   */
+  async function criarTarefaAvulsa(p: PedidoDeTarefaAvulsa): Promise<ResultadoDaTarefaAvulsa> {
+    if (!p.liberado) throw new TasksNaoAutorizado();
+    const listaId = await garantirListaDaSquad(p.squad, p.obterToken);
+    const tarefa = await comTokenTasks(p.obterToken, (t) =>
+      dep.inserirTarefa(t, listaId, {
+        title: p.titulo,
+        notes: p.notas,
+        ...(p.due ? { due: p.due } : {}),
+      }),
+    );
+    if (p.passos.length === 0) return { tarefaId: tarefa.id, listaId, criados: 0, avisos: [] };
+    const { criados, avisos } = await criarSubtarefas(listaId, tarefa.id, p.passos, p.obterToken);
+    return { tarefaId: tarefa.id, listaId, criados, avisos };
+  }
+
   async function criarPassosDoCompromisso(p: PedidoDePassos): Promise<ResultadoDosPassos> {
     const principal = p.compromisso.eventos[0];
     if (p.passos.length === 0 || !principal) return { criados: 0, avisos: [] };
@@ -162,31 +257,7 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
       };
     }
 
-    const avisos: AvisoDoCompromisso[] = [];
-    let criados = 0;
-    let anterior: string | undefined;
-    for (let i = 0; i < p.passos.length; i++) {
-      try {
-        // Sem `due`: com data, cada subtarefa viraria um chip no Google Calendar.
-        // `previous` mantém a ordem da demanda (sem ele, cada uma iria ao topo).
-        const sub = await comTokenTasks(p.obterToken, (t) =>
-          dep.inserirTarefa(t, listaId, { title: p.passos[i] }, { parent: maeId, previous: anterior }),
-        );
-        anterior = sub.id;
-        criados++;
-      } catch (err) {
-        // Para a série como os blocos de prazo: não apaga nada, não abre buraco
-        // no meio da checklist.
-        const faltaram = p.passos.length - i;
-        avisos.push(
-          aviso(
-            `${faltaram} de ${p.passos.length} passo(s) não criado(s) no Google Tasks: ${mensagem(err)}`,
-            motivoDoErroTasks(err),
-          ),
-        );
-        break;
-      }
-    }
+    const { criados, avisos } = await criarSubtarefas(listaId, maeId, p.passos, p.obterToken);
 
     try {
       const lido = await comToken(p.obterToken, (t) => dep.lerEvento(t, p.squad.calendarId, principal.eventId));
@@ -206,7 +277,83 @@ export function criarPassosNoGoogle(dep: DependenciasDosPassos) {
     return { criados, avisos, listaId, tarefaMaeId: maeId };
   }
 
-  return { garantirListaDaSquad, criarPassosDoCompromisso };
+  return { garantirListaDaSquad, criarPassosDoCompromisso, criarTarefaAvulsa };
+}
+
+/**
+ * Selo "passos 2/5" da Mochila: lê a checklist de cada quest com
+ * `squadone_tasks_pai` e anexa `quest.passos`. Só LEITURA, e nunca estraga a
+ * Mochila: sem escopo, sem quest com passos ou com o Tasks fora do ar, as
+ * quests voltam como vieram, sem selo (o erro vai só para o log). Uma
+ * `tasks.list` por LISTA distinta, não por quest — hoje uma por squad.
+ */
+export async function anexarProgressoDosPassos(
+  quests: QuestCalendario[],
+  opcoes: {
+    liberado: boolean;
+    obterToken: ObterToken;
+    listar?: (token: string, listaId: string) => Promise<TarefaLida[]>;
+  },
+): Promise<void> {
+  if (!opcoes.liberado) return;
+  const listar = opcoes.listar ?? listarTarefas;
+  const porLista = new Map<string, QuestCalendario[]>();
+  for (const q of quests) {
+    if (!q.tasksLista || !q.tasksPai) continue;
+    porLista.set(q.tasksLista, [...(porLista.get(q.tasksLista) ?? []), q]);
+  }
+  await Promise.all(
+    [...porLista].map(async ([listaId, daLista]) => {
+      try {
+        const tarefas = await comTokenTasks(opcoes.obterToken, (t) => listar(t, listaId));
+        const progresso = progressoDosPassos(tarefas, daLista.map((q) => q.tasksPai));
+        for (const q of daLista) {
+          const p = progresso.get(q.tasksPai);
+          if (p) q.passos = p;
+        }
+      } catch (err) {
+        // Lista apagada no celular, escopo revogado, Tasks lento: o selo some,
+        // a Mochila não. Nada de 401 aqui — a credencial do Calendar acabou de
+        // funcionar nesta mesma rota.
+        console.warn(`[tasks] progresso da lista '${listaId}' não lido:`, mensagem(err));
+      }
+    }),
+  );
+}
+
+export type RenomeacaoDaLista = "renomeada" | "personalizada" | "semLista" | "semEscopo" | "sumiu" | "igual";
+
+/**
+ * A squad mudou de nome: a lista `SquadOne · <antigo>` passa a `SquadOne · <novo>`.
+ * SÓ quando o título no Google ainda é o que o app gerou — se o usuário
+ * renomeou a lista no celular, o nome dele vence (a lista nunca é achada por
+ * título, então o nome é só dele). Lê antes de escrever por isso. Nada aqui
+ * toca o roster: `ciclo-de-vida.ts` continua sem chamar o Google (invariante
+ * 4); quem chama é a rota, depois de gravar o nome novo.
+ */
+export async function renomearListaDaSquad(p: {
+  listaId: string | undefined;
+  nomeAntigo: string;
+  nomeNovo: string;
+  liberado: boolean;
+  obterToken: ObterToken;
+  ler?: (token: string, listaId: string) => Promise<{ id: string; title?: string }>;
+  renomear?: (token: string, listaId: string, titulo: string) => Promise<unknown>;
+}): Promise<RenomeacaoDaLista> {
+  if (!p.listaId) return "semLista";
+  if (tituloDaLista(p.nomeAntigo) === tituloDaLista(p.nomeNovo)) return "igual";
+  if (!p.liberado) return "semEscopo";
+  const listaId = p.listaId;
+  try {
+    const atual = await comTokenTasks(p.obterToken, (t) => (p.ler ?? lerLista)(t, listaId));
+    if (atual.title !== tituloDaLista(p.nomeAntigo)) return "personalizada";
+    await comTokenTasks(p.obterToken, (t) => (p.renomear ?? renomearLista)(t, listaId, tituloDaLista(p.nomeNovo)));
+    return "renomeada";
+  } catch (err) {
+    // Apagada no celular: o próximo compromisso com passos cria outra já com o nome novo.
+    if (err instanceof ListaSumiu) return "sumiu";
+    throw err;
+  }
 }
 
 /** A instância do servidor: um Map de single-flight para o processo inteiro. */

@@ -88,6 +88,84 @@ export function dueDaTarefa(evento: EventoPrincipal, fuso: string): string {
 }
 
 /**
+ * Título de uma tarefa avulsa. Mais folga que o passo (é o item inteiro, não
+ * uma linha de checklist), bem abaixo do limite da API (1024).
+ */
+export const MAX_TITULO_TAREFA = 300;
+
+/** Notas da tarefa avulsa: lidas no celular, não um documento. A API aceita 8192. */
+export const MAX_NOTAS_TAREFA = 2000;
+
+function cortar(texto: string, max: number): string {
+  return texto.length <= max ? texto : texto.slice(0, max - 1) + "…";
+}
+
+/** Título da tarefa avulsa, ou "" quando não há o que gravar. */
+export function normalizarTituloDaTarefa(valor: unknown): string {
+  if (typeof valor !== "string") return "";
+  return cortar(valor.replace(/\s+/g, " ").trim(), MAX_TITULO_TAREFA);
+}
+
+/**
+ * `due` de uma tarefa avulsa a partir da `data` que o modelo mandou. O Tasks
+ * guarda só a data, então vale a parte AAAA-MM-DD escrita pelo modelo, que já
+ * é a data LOCAL (o prompt pede o offset de São Paulo quando há hora) — pelo
+ * mesmo motivo de `dueDaTarefa`, converter para UTC trocaria o dia à noite.
+ * Ausente/vazia = `null` sem aviso (tarefa sem data é válida); presente e
+ * ilegível = `invalida`, para o handler avisar em vez de gravar um dia errado.
+ */
+export function dueDaData(valor: unknown): { due: string | null; invalida: boolean } {
+  if (valor === undefined || valor === null || (typeof valor === "string" && !valor.trim())) {
+    return { due: null, invalida: false };
+  }
+  if (typeof valor !== "string") return { due: null, invalida: true };
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(valor.trim());
+  if (!m) return { due: null, invalida: true };
+  const [ano, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  // Date.UTC normaliza 31/02 para 03/03: conferir de volta é o que recusa o dia inexistente.
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  if (d.getUTCFullYear() !== ano || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) {
+    return { due: null, invalida: true };
+  }
+  return { due: `${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`, invalida: false };
+}
+
+/**
+ * Notas da tarefa avulsa: o texto do modelo e, por último, quem responde por
+ * ela. A assinatura fica no fim pelo mesmo motivo da descrição do evento: o
+ * que o usuário lê primeiro no celular é o conteúdo, não a origem.
+ */
+export function notasDaTarefaAvulsa(nota: unknown, responsavel: string): string {
+  const texto = typeof nota === "string" ? nota.replace(/\r\n?/g, "\n").trim() : "";
+  const assinatura = `SquadOne · ${responsavel}`;
+  if (!texto) return assinatura;
+  return `${cortar(texto, MAX_NOTAS_TAREFA - assinatura.length - 2)}\n\n${assinatura}`;
+}
+
+/**
+ * Progresso de cada checklist: subtarefas concluídas / total, por tarefa-mãe.
+ * Só conta quem é FILHA de uma das mães pedidas — a lista da squad tem também
+ * as tarefas avulsas e as mães de outros compromissos. Apagada não conta.
+ * Mãe sem nenhuma filha viva fica de fora (o usuário apagou a checklist:
+ * "0/0" seria ruído no card).
+ */
+export function progressoDosPassos(
+  tarefas: { id: string; parent?: string; status?: string; deleted?: boolean }[],
+  maes: Iterable<string>,
+): Map<string, { feitos: number; total: number }> {
+  const pedidas = new Set(maes);
+  const progresso = new Map<string, { feitos: number; total: number }>();
+  for (const t of tarefas) {
+    if (t.deleted || !t.parent || !pedidas.has(t.parent)) continue;
+    const p = progresso.get(t.parent) ?? { feitos: 0, total: 0 };
+    p.total++;
+    if (t.status === "completed") p.feitos++;
+    progresso.set(t.parent, p);
+  }
+  return progresso;
+}
+
+/**
  * O `scope` que o Google devolve é uma string separada por espaço. Comparação
  * por item inteiro: `tasks.readonly` contém "tasks" como substring e não serve
  * para escrever.

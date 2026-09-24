@@ -5,7 +5,8 @@ import {
   type EventoCriado,
   type PropostaDeAjuste,
   type QuestCalendario,
-  type RespostaDeAjuste
+  type RespostaDeAjuste,
+  type TarefaCriada
 } from './types'
 
 /** Sem Vue para ser verificável com tsx. */
@@ -101,9 +102,29 @@ export function linhasDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeD
     })
 }
 
+/**
+ * Uma linha por tarefa avulsa. A data é dia de calendário ("AAAA-MM-DD"), como
+ * o dia inteiro: montada no fuso local e sem `timeZone`, para não trocar o dia.
+ */
+export function linhasDasTarefasCriadas(tarefas: TarefaCriada[], fmt: FormatoDeData = {}): string[] {
+  return tarefas.map((t) => {
+    let linha = `${t.titulo}: tarefa no Google Tasks`
+    const m = t.data ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(t.data) : null
+    if (m) {
+      const dia = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      linha += `, para ${dia.toLocaleDateString(fmt.locale, { weekday: 'short', day: '2-digit', month: '2-digit' })}`
+    }
+    return t.passos ? `${linha} · ${t.passos} passo(s)` : linha
+  })
+}
+
 /** Um toast para o turno inteiro (4 segundos na tela): as linhas numa só. */
-export function resumoDosEventosCriados(eventos: EventoCriado[], fmt: FormatoDeData = {}): string {
-  return linhasDosEventosCriados(eventos, fmt).join(' · ')
+export function resumoDosEventosCriados(
+  eventos: EventoCriado[],
+  fmt: FormatoDeData = {},
+  tarefas: TarefaCriada[] = []
+): string {
+  return [...linhasDosEventosCriados(eventos, fmt), ...linhasDasTarefasCriadas(tarefas, fmt)].join(' · ')
 }
 
 /**

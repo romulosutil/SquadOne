@@ -16,7 +16,7 @@ import {
 import type { AgendaDoTurno } from "./agenda.ts";
 import { agendarCompromisso, type CompromissoAgendado, type TipoEvento } from "./agendamento.ts";
 import type { ObterToken } from "./calendar.ts";
-import { MAX_PASSOS, normalizarPassos } from "./passos.ts";
+import { dueDaData, MAX_PASSOS, normalizarPassos, normalizarTituloDaTarefa, notasDaTarefaAvulsa } from "./passos.ts";
 import { passosNoGoogle } from "./passos-no-google.ts";
 
 export type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
@@ -130,7 +130,24 @@ export interface PropostaTrocaSquad {
  * digitado e a aprovação em curso.
  */
 export type Sugestao = (PropostaDominio | PropostaIntegrante | PropostaTrocaSquad) & { id: string };
-export type CapabilityResult = CompromissoAgendado | PropostaDominio | PropostaIntegrante | PropostaTrocaSquad;
+
+/** Resultado de `criar_tarefa`: um item no Google Tasks, sem evento nem horário. */
+export interface TarefaCriada {
+  kind: "tarefa";
+  titulo: string;
+  responsavel_id: string;
+  dominio: string;
+  /** `AAAA-MM-DD` da data da tarefa; ausente = sem data. */
+  data?: string;
+  /** Subtarefas criadas; ausente quando 0. */
+  passos?: number;
+  tarefaId: string;
+  listaId: string;
+  /** Feito mas não como pedido (data ilegível, subtarefa que falhou...). */
+  avisos: { aviso: string; motivo?: "precisaConectar" | "ampliarAcesso" }[];
+}
+
+export type CapabilityResult = CompromissoAgendado | TarefaCriada | PropostaDominio | PropostaIntegrante | PropostaTrocaSquad;
 
 export interface Capability {
   declaration: FunctionDeclaration;
@@ -280,6 +297,112 @@ const agendarEvento: Capability = {
       compromisso.avisos.push({ aviso: `Passos não criados no Google Tasks: ${err?.message ?? String(err)}` });
     }
     return compromisso;
+  },
+};
+
+/**
+ * Tarefa AVULSA no Google Tasks: o que não precisa de horário ("comprar leite",
+ * "pagar o boleto dia 30"). Antes disto o único caminho para o Tasks era
+ * `passos` dentro de `agendar_evento`, e todo lembrete virava um bloco de 60
+ * min na agenda. Sem evento, a Mochila não a vê (invariante 3), a vigia não a
+ * avisa e o alocador não a toca: o Tasks do celular é quem lembra.
+ */
+const criarTarefa: Capability = {
+  declaration: {
+    name: "criar_tarefa",
+    description:
+      "Cria uma tarefa (to-do) no Google Tasks do usuário, SEM reservar horário na " +
+      "agenda. Use para o que precisa ser feito mas não pede um bloco de tempo: " +
+      "lembretes, compras, pagamentos, recados, checklists soltas. Uma chamada por tarefa.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        titulo: {
+          type: Type.STRING,
+          description: "Título curto e acionável da tarefa, verbo no infinitivo.",
+        },
+        responsavel_id: {
+          type: Type.STRING,
+          description:
+            "id da pessoa da squad atual que responde pelo tema (PO ou integrante), " +
+            "exatamente como na árvore do roster.",
+        },
+        data: {
+          type: Type.STRING,
+          description:
+            "Opcional. AAAA-MM-DD do dia em que a tarefa vence, só quando o usuário " +
+            "disse um dia ('sexta', 'dia 30'). O Google Tasks guarda só a data.",
+        },
+        notas: {
+          type: Type.STRING,
+          description:
+            "Opcional. Detalhe útil que a demanda trouxe (quantidade, valor, onde). " +
+            "Sem inventar e sem repetir o título.",
+        },
+        passos: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description:
+            "Opcional. Itens de uma checklist pedida pelo usuário, em ordem, que viram " +
+            "subtarefas. Cada item curto, sem repetir o título.",
+        },
+      },
+      required: ["titulo", "responsavel_id"],
+    },
+  },
+
+  async handler(args, ctx): Promise<CompromissoAgendado | TarefaCriada> {
+    const { pessoa, dominio } = exigirPessoa(ctx.squad, args.responsavel_id);
+    // Foco e Baixa Prioridade são o usuário pedindo HORÁRIO para a demanda
+    // inteira. O prompt manda usar agendar_evento nesses modos, mas prompt é
+    // pedido, não garantia: se o modelo chamar criar_tarefa mesmo assim, vira
+    // o bloco que o toggle pediu (duração padrão, a partir da data, se houver).
+    if (ctx.modo !== "auto") {
+      return agendarEvento.handler(
+        {
+          titulo: args.titulo,
+          responsavel_id: args.responsavel_id,
+          tipo: "time_blocking",
+          ...(typeof args.data === "string" && args.data.trim() ? { a_partir_de: args.data } : {}),
+          ...(typeof args.notas === "string" && args.notas.trim() ? { nota_de_execucao: args.notas } : {}),
+          ...(args.passos !== undefined ? { passos: args.passos } : {}),
+        },
+        ctx,
+      ) as Promise<CompromissoAgendado>;
+    }
+
+    const titulo = normalizarTituloDaTarefa(args.titulo);
+    if (!titulo) throw new Error("Campo 'titulo' vazio.");
+    const { due, invalida } = dueDaData(args.data);
+    const { passos, cortados } = normalizarPassos(args.passos);
+    const r = await passosNoGoogle.criarTarefaAvulsa({
+      squad: ctx.squad,
+      titulo,
+      notas: notasDaTarefaAvulsa(args.notas, `${pessoa.nome} (${dominio.nome})`),
+      ...(due ? { due } : {}),
+      passos,
+      obterToken: ctx.tasks.obterToken,
+      liberado: ctx.tasks.liberado,
+    });
+
+    const avisos: TarefaCriada["avisos"] = [...r.avisos];
+    // Data ilegível não impede a tarefa: gravar sem data e avisar é melhor que
+    // perder o lembrete — e melhor que adivinhar um dia.
+    if (invalida) avisos.unshift({ aviso: `Data '${String(args.data)}' ilegível: a tarefa ficou sem data.` });
+    if (cortados > 0) {
+      avisos.push({ aviso: `${cortados} item(ns) além do limite de ${MAX_PASSOS} ficaram de fora da checklist.` });
+    }
+    return {
+      kind: "tarefa",
+      titulo,
+      responsavel_id: pessoa.id,
+      dominio: dominio.id,
+      ...(due ? { data: due.slice(0, 10) } : {}),
+      ...(r.criados > 0 ? { passos: r.criados } : {}),
+      tarefaId: r.tarefaId,
+      listaId: r.listaId,
+      avisos,
+    };
   },
 };
 
@@ -474,6 +597,7 @@ const sugerirTrocaSquad: Capability = {
 /** Registry: adicionar uma capacidade é adicionar uma entrada aqui. */
 export const CAPABILITIES: Record<string, Capability> = {
   agendar_evento: agendarEvento,
+  criar_tarefa: criarTarefa,
   criar_po_dominio: criarPoDominio,
   contratar_integrante: contratarIntegrante,
   sugerir_troca_squad: sugerirTrocaSquad,

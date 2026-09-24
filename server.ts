@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import {
   ConflitoDeRoster,
   dominiosDoSquad,
+  localizarSquad,
   paraVista,
   PedidoInvalido,
   readRoster,
@@ -49,17 +50,23 @@ import {
   trocarCodigo,
   urlDeConsentimento,
 } from "./server/auth-store.ts";
+import { anexarProgressoDosPassos, renomearListaDaSquad } from "./server/passos-no-google.ts";
 import {
   avisarDigitando,
+  baixarArquivo,
   descreverTelegram,
+  editarMensagem,
   enviarMensagem,
   lerConfigDeTelegram,
   registrarWebhook,
+  responderBotao,
   ROTA_WEBHOOK_TELEGRAM,
   TelegramMalConfigurado,
   type ConfigDeTelegram,
 } from "./server/telegram.ts";
 import { criarBotDoTelegram } from "./server/telegram-bot.ts";
+import { textoDaContratacao } from "./server/telegram-resposta.ts";
+import { transcreverAudio } from "./server/transcricao.ts";
 import {
   AvaliacaoInvalida,
   AvaliacoesDeTurnoStore,
@@ -189,8 +196,14 @@ async function startServer() {
       chatsPermitidos: c.chatsPermitidos,
       // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
       rodar: (demanda, modo) => rodarDemanda(ai, { demanda, modo }),
-      enviar: (chatId, texto, responderA) => enviarMensagem(c, chatId, texto, responderA),
+      enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
       digitando: (chatId) => avisarDigitando(c, chatId),
+      transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
+      // Mesma função da rota /api/squad/hire: aplica na squad da proposta e
+      // revalida tudo contra o roster atual. Sem nome: o servidor escolhe.
+      contratar: async (proposta) => textoDaContratacao(await aplicarContratacao(proposta)),
+      responderBotao: (callbackId, texto) => responderBotao(c, callbackId, texto),
+      editar: (chatId, mensagemId, texto) => editarMensagem(c, chatId, mensagemId, texto),
       // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
       fmt: { locale: "pt-BR", timeZone: FUSO },
       agora: () => new Date(),
@@ -402,7 +415,31 @@ async function startServer() {
   app.post("/api/squad/dominios/:id/reativar", rotaDoRoster((req) => reativarDominio(String(req.params.id))));
   // PO nao se arquiva: substitui-se. O anterior vira integrante arquivado.
   app.post("/api/squad/dominios/:id/po", rotaDoRoster((req) => substituirPo(String(req.params.id), req.body)));
-  app.patch("/api/squad/squads/:id", rotaDoRoster((req) => editarSquad(String(req.params.id), req.body)));
+  app.patch(
+    "/api/squad/squads/:id",
+    rotaDoRoster(async (req) => {
+      const id = String(req.params.id);
+      const antes = localizarSquad(await readRoster(), id);
+      const vista = await editarSquad(id, req.body);
+      const depois = localizarSquad(await readRoster(), id);
+      // Renomear a lista do Tasks junto, sem segurar a resposta nem falhar a
+      // edição: o nome já está gravado, e a lista é acessório no celular.
+      if (antes && depois && antes.nome !== depois.nome && depois.tasksListaId) {
+        void (async () => {
+          const { tasks } = await escoposConcedidos();
+          const r = await renomearListaDaSquad({
+            listaId: depois.tasksListaId,
+            nomeAntigo: antes.nome,
+            nomeNovo: depois.nome,
+            liberado: tasks,
+            obterToken: tokenValido,
+          });
+          if (r !== "renomeada") console.log(`[tasks] lista da squad '${id}' não renomeada: ${r}`);
+        })().catch((err) => console.warn(`[tasks] falha ao renomear a lista da squad '${id}':`, err?.message ?? err));
+      }
+      return vista;
+    }),
+  );
   app.post("/api/squad/squads/:id/arquivar", rotaDoRoster((req) => arquivarSquad(String(req.params.id))));
   app.post("/api/squad/squads/:id/reativar", rotaDoRoster((req) => reativarSquad(String(req.params.id))));
 
@@ -449,6 +486,9 @@ async function startServer() {
         return res.status(502).json({ error: erros[0].erro, erros });
       }
 
+      // Selo de passos: leitura do Tasks que nunca derruba a Mochila (não lança).
+      const { tasks: tasksLiberado } = await escoposConcedidos().catch(() => ({ tasks: false }));
+      await anexarProgressoDosPassos(quests, { liberado: tasksLiberado, obterToken: tokenValido });
       res.json({ quests, erros });
     } catch (error: any) {
       console.error("Erro ao ler a Mochila:", error);

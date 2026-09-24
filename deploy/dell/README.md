@@ -133,3 +133,54 @@ envio e redireciona ao canal. Balcão e Lead Scout gravam contagens em
 `~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
 você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
 buscas.
+
+## Gerador de sites (`gerador-de-sites.*`)
+
+Desde 23/09/2026 a fila do "Site antes da venda" é gerada no Dell, não no PC:
+a tarefa `EsteiraLeads08h` do PC só rodava com ele ligado às 08h e não gerava
+nada desde 17/09 (ficou **desativada**; `Enable-ScheduledTask EsteiraLeads08h`
+a volta). O runner é o porte do `executar-fila-leads.ps1`, na mesma pasta
+(`~/auto-site`, sincronizada com o Drive pelo Syncthing): até 4 leads por dia,
+45 min por lead, timer persistente (Dell desligado às 08h roda quando voltar).
+Lead com 2 falhas em `falha.log` sai da fila; apagar o arquivo o devolve.
+`python3 ~/.local/bin/gerador-de-sites --listar` mostra a fila sem gerar nada.
+
+Instalação (uma vez, pelo Rômulo: o Claude roda autônomo, sem pedir
+permissão, então a decisão de ligá-lo é dele):
+
+```bash
+claude            # login da conta Claude (uma vez) — /login dentro dele
+vercel login      # conta da Vercel com o escopo romulodesigns
+install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+cp ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites.timer
+```
+
+## Observador do WhatsApp (`whatsapp-observador/`)
+
+O Rômulo aborda os leads direto no WhatsApp, sem os links rastreados. O Hermes
+já está vinculado ao número dele, e a bridge registra em
+`~/.hermes/whatsapp/bridge.log` uma linha `self_chat_mode_rejects_non_self`
+(chat e remetente, **sem conteúdo**) para toda mensagem recebida. O
+`observador.py` acompanha esse log (tail -F, começa do fim) e, quando quem
+escreveu é um número das planilhas, avisa o n8n (`claude-ops/whatsapp-conversa.py`):
+
+- PRUMO: resposta com Etapa "Revisar" → "Convite enviado"; com "Convite
+  enviado" → Próxima ação "Respondeu no WhatsApp em ...";
+- Site antes da venda: resposta com status `pronto` → `enviado`.
+
+Por que o log e não um segundo aparelho: o pareamento por código falhou (no
+DDD 27 o WhatsApp registra o número sem o 9) e a bridge muda a cada
+`hermes update`; ler um log que ela já escreve não depende de nenhum dos dois.
+**Limite:** mensagem ENVIADA pelo Rômulo não aparece no log com o número, então
+o que marca é a resposta do lead (que prova o contato); o envio continua
+marcado pelos links rastreados. LID vira telefone pelo mapa da sessão do
+Hermes (`lid-mapping-*_reverse.json`, só leitura). Um aviso por número a cada
+6 h; log parado 6 h avisa pelo Hermes. Webhooks com header `X-Observador`
+(segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
+
+```bash
+install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
+cp ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
+```

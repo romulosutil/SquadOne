@@ -6,11 +6,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  dueDaData,
   dueDaTarefa,
   escopoConcedido,
   MAX_PASSOS,
+  MAX_NOTAS_TAREFA,
   MAX_TITULO_PASSO,
+  MAX_TITULO_TAREFA,
   normalizarPassos,
+  normalizarTituloDaTarefa,
+  notasDaTarefaAvulsa,
   notasDaTarefaMae,
   tituloDaLista,
 } from "./passos.ts";
@@ -122,4 +127,42 @@ describe("escopoConcedido", () => {
       assert.equal(escopoConcedido(scope, escopo), esperado);
     });
   }
+});
+
+describe("tarefa avulsa: título, data e notas", () => {
+  it("título colapsa espaços, recusa não-string e corta com reticências", () => {
+    assert.equal(normalizarTituloDaTarefa("  Comprar   leite \n"), "Comprar leite");
+    assert.equal(normalizarTituloDaTarefa(42), "");
+    assert.equal(normalizarTituloDaTarefa("   "), "");
+    const longo = normalizarTituloDaTarefa("x".repeat(MAX_TITULO_TAREFA + 10));
+    assert.equal(longo.length, MAX_TITULO_TAREFA);
+    assert.ok(longo.endsWith("…"));
+  });
+
+  const casos: [unknown, string | null, boolean][] = [
+    [undefined, null, false],
+    ["", null, false],
+    ["  ", null, false],
+    ["2026-09-30", "2026-09-30T00:00:00.000Z", false],
+    // Com hora e offset local: vale o dia escrito, não o dia em UTC (22h em SP já é o dia seguinte em UTC).
+    ["2026-09-30T22:00:00-03:00", "2026-09-30T00:00:00.000Z", false],
+    ["2026-02-31", null, true],
+    ["30/09/2026", null, true],
+    ["sexta", null, true],
+    [20260930, null, true],
+  ];
+  for (const [entrada, due, invalida] of casos) {
+    it(`dueDaData(${JSON.stringify(entrada)})`, () => {
+      assert.deepEqual(dueDaData(entrada), { due, invalida });
+    });
+  }
+
+  it("notas: texto primeiro, assinatura no fim; sem texto, só a assinatura", () => {
+    assert.equal(notasDaTarefaAvulsa("2 litros", "Ana (Geral)"), "2 litros\n\nSquadOne · Ana (Geral)");
+    assert.equal(notasDaTarefaAvulsa("  ", "Ana (Geral)"), "SquadOne · Ana (Geral)");
+    assert.equal(notasDaTarefaAvulsa(undefined, "Ana (Geral)"), "SquadOne · Ana (Geral)");
+    const longa = notasDaTarefaAvulsa("y".repeat(MAX_NOTAS_TAREFA * 2), "Ana (Geral)");
+    assert.equal(longa.length, MAX_NOTAS_TAREFA);
+    assert.ok(longa.endsWith("SquadOne · Ana (Geral)"));
+  });
 });

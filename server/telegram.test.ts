@@ -6,11 +6,14 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   avisarDigitando,
+  baixarArquivo,
   descreverTelegram,
+  editarMensagem,
   enviarMensagem,
   ErroDeTelegram,
   lerConfigDeTelegram,
   registrarWebhook,
+  responderBotao,
   segredoConfere,
   TelegramMalConfigurado,
   type ConfigDeTelegram,
@@ -104,12 +107,12 @@ describe("transporte", () => {
     assert.deepEqual(chamadas[0].corpo, { chat_id: 111, action: "typing" });
   });
 
-  it("setWebhook com segredo e só updates de mensagem", async () => {
+  it("setWebhook com segredo, mensagens e toques de botão", async () => {
     const chamadas = duble({ status: 200, corpo: { ok: true, result: true } });
     await registrarWebhook(c, "https://app.exemplo/api/telegram/webhook");
     assert.match(chamadas[0].url, /\/setWebhook$/);
     assert.equal(chamadas[0].corpo.secret_token, SEGREDO);
-    assert.deepEqual(chamadas[0].corpo.allowed_updates, ["message"]);
+    assert.deepEqual(chamadas[0].corpo.allowed_updates, ["message", "callback_query"]);
   });
 
   it("resposta de erro vira ErroDeTelegram com status, sem o token", async () => {
@@ -122,5 +125,45 @@ describe("transporte", () => {
     globalThis.fetch = (async () => { throw new TypeError(`fetch failed https://api.telegram.org/bot${TOKEN}/x`); }) as unknown as typeof fetch;
     await assert.rejects(enviarMensagem(c, 111, "oi"), (e: unknown) =>
       e instanceof ErroDeTelegram && e.status === null && !e.message.includes(TOKEN));
+  });
+
+  it("sendMessage com botões vira inline_keyboard de uma linha", async () => {
+    const chamadas = duble({ status: 200, corpo: { ok: true, result: {} } });
+    await enviarMensagem(c, 111, "proposta", undefined, [{ texto: "✅ Aprovar", dados: "h:p1:a" }, { texto: "🗑️ Descartar", dados: "h:p1:d" }]);
+    assert.deepEqual(chamadas[0].corpo.reply_markup, {
+      inline_keyboard: [[{ text: "✅ Aprovar", callback_data: "h:p1:a" }, { text: "🗑️ Descartar", callback_data: "h:p1:d" }]],
+    });
+    assert.equal(chamadas[0].corpo.reply_parameters, undefined);
+  });
+
+  it("answerCallbackQuery e editMessageText (sem reply_markup: os botões somem)", async () => {
+    const chamadas = duble({ status: 200, corpo: { ok: true, result: true } });
+    await responderBotao(c, "cb1", "Contratando…");
+    await editarMensagem(c, 111, 500, "feito");
+    assert.match(chamadas[0].url, /\/answerCallbackQuery$/);
+    assert.deepEqual(chamadas[0].corpo, { callback_query_id: "cb1", text: "Contratando…" });
+    assert.match(chamadas[1].url, /\/editMessageText$/);
+    assert.deepEqual(chamadas[1].corpo, { chat_id: 111, message_id: 500, text: "feito" });
+  });
+
+  it("baixarArquivo: getFile, depois o download pela URL de arquivo", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(String(url));
+      if (String(url).endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: "voice/file_1.oga" } }));
+      return new Response(new Uint8Array([1, 2, 3]));
+    }) as unknown as typeof fetch;
+    const bytes = await baixarArquivo(c, "F1");
+    assert.deepEqual([...bytes], [1, 2, 3]);
+    assert.equal(urls[1], `https://api.telegram.org/file/bot${TOKEN}/voice/file_1.oga`);
+  });
+
+  it("baixarArquivo que falha não expõe o token", async () => {
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: "voice/x.oga" } }));
+      return new Response("nope", { status: 404 });
+    }) as unknown as typeof fetch;
+    await assert.rejects(baixarArquivo(c, "F1"), (e: unknown) =>
+      e instanceof ErroDeTelegram && e.status === 404 && !e.message.includes(TOKEN));
   });
 });

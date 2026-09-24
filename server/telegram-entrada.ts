@@ -7,6 +7,11 @@ import type { Modo } from "./capabilities.ts";
 
 export type Entrada =
   | { tipo: "demanda"; updateId: number; chatId: number; mensagemId: number; demanda: string; modo: Modo }
+  /** Mensagem de voz/áudio: vira demanda depois de transcrita (`telegram-bot.ts`). */
+  | { tipo: "audio"; updateId: number; chatId: number; mensagemId: number; fileId: string; mime: string; modo: Modo }
+  | { tipo: "audioLongo"; updateId: number; chatId: number; mensagemId: number }
+  /** Toque num botão Aprovar/Descartar de uma proposta de contratação. */
+  | { tipo: "botao"; updateId: number; chatId: number; mensagemId: number; callbackId: string; acao: "aprovar" | "descartar"; propostaId: string }
   | { tipo: "atrasada"; updateId: number; chatId: number; mensagemId: number; atrasoMin: number }
   | { tipo: "ajuda"; updateId: number; chatId: number; mensagemId: number }
   | { tipo: "semTexto"; updateId: number; chatId: number; mensagemId: number }
@@ -14,14 +19,33 @@ export type Entrada =
   | { tipo: "ignorar"; updateId: number | null };
 
 export const TEXTO_DE_AJUDA = [
-  "Mande a demanda em texto, começando pelo assunto — a squad certa é escolhida pelo conteúdo.",
+  "Mande a demanda em texto ou áudio (até 2 min), começando pelo assunto — a squad certa é escolhida pelo conteúdo.",
   "",
   "/foco <demanda> — primeiro horário livre a partir de agora",
   "/baixa <demanda> — encaixa até o 7º dia útil, depois dos outros",
   "Sem comando = o modelo escolhe o tipo (como o Auto do app).",
 ].join("\n");
 
-export const TEXTO_SEM_TEXTO = "Só texto por enquanto.";
+export const TEXTO_SEM_TEXTO = "Só texto ou áudio por enquanto.";
+
+/**
+ * Teto do áudio: a transcrição é uma chamada paga ao Gemini com o arquivo
+ * inteiro inline, e uma demanda de verdade cabe em 2 min. 5 MB sobra para 2 min
+ * de voz em OGG/Opus (~16 kbit/s) e fica bem abaixo do limite inline do Gemini.
+ */
+export const MAX_DURACAO_AUDIO_S = 120;
+export const MAX_BYTES_AUDIO = 5 * 1024 * 1024;
+
+export function textoDeAudioLongo(): string {
+  return `🎙️ Áudio longo demais: mande até ${MAX_DURACAO_AUDIO_S / 60} min, ou escreva a demanda.`;
+}
+
+/** callback_data dos botões: `h:<id>:a|d`. O Telegram limita a 64 bytes. */
+const BOTAO = /^h:([A-Za-z0-9_-]{1,40}):([ad])$/;
+
+export function dadosDoBotao(propostaId: string, acao: "aprovar" | "descartar"): string {
+  return `h:${propostaId}:${acao === "aprovar" ? "a" : "d"}`;
+}
 
 /**
  * Demanda mais velha que isto não roda. Enquanto a rota não existe (rollback,
@@ -45,6 +69,7 @@ const COMANDO = /^\/([A-Za-z0-9_]+)(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/;
 export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<number>, agora: Date): Entrada {
   const u = update as any;
   const updateId = typeof u?.update_id === "number" ? u.update_id : null;
+  if (updateId !== null && u?.callback_query) return interpretarBotao(updateId, u.callback_query, chatsPermitidos);
   const m = u?.message;
   // Só `message`: editar uma mensagem já enviada rodaria o turno de novo e
   // duplicaria o compromisso.
@@ -58,6 +83,28 @@ export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<
   if (!chatsPermitidos.has(chatId)) return { tipo: "naoAutorizado", updateId, chatId };
   const base = { updateId, chatId, mensagemId: m.message_id as number };
 
+  // Só a demanda envelhece: ajuda antiga não cria compromisso, responder não faz mal.
+  // `date` ausente ou no futuro (relógio adiantado) não bloqueia — na dúvida, roda.
+  const atrasoMin = (): number | null => {
+    if (typeof m.date !== "number") return null;
+    const idadeS = agora.getTime() / 1000 - m.date;
+    return idadeS > IDADE_MAXIMA_DEMANDA_MIN * 60 ? Math.floor(idadeS / 60) : null;
+  };
+
+  // Voz (nota do microfone) ou arquivo de áudio. A legenda pode trazer /foco ou
+  // /baixa, como o texto; sem legenda é auto.
+  const audio = m.voice ?? (typeof m.audio?.mime_type === "string" && m.audio.mime_type.startsWith("audio/") ? m.audio : null);
+  if (audio && typeof audio.file_id === "string") {
+    const legenda = typeof m.caption === "string" ? COMANDO.exec(m.caption.trim()) : null;
+    const modo = legenda ? MODOS[legenda[1].toLowerCase()] ?? "auto" : "auto";
+    if ((audio.duration ?? 0) > MAX_DURACAO_AUDIO_S || (audio.file_size ?? 0) > MAX_BYTES_AUDIO) {
+      return { tipo: "audioLongo", ...base };
+    }
+    const atraso = atrasoMin();
+    if (atraso !== null) return { tipo: "atrasada", ...base, atrasoMin: atraso };
+    return { tipo: "audio", ...base, fileId: audio.file_id, mime: audio.mime_type ?? "audio/ogg", modo };
+  }
+
   if (typeof m.text !== "string") return { tipo: "semTexto", ...base };
   const texto = m.text.trim();
   if (!texto) return { tipo: "semTexto", ...base };
@@ -67,15 +114,34 @@ export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<
   const demanda = cmd ? (cmd[2] ?? "").trim() : texto;
   if (!modo || !demanda) return { tipo: "ajuda", ...base };
 
-  // Só a demanda envelhece: ajuda antiga não cria compromisso, responder não faz mal.
-  // `date` ausente ou no futuro (relógio adiantado) não bloqueia — na dúvida, roda.
-  if (typeof m.date === "number") {
-    const idadeS = agora.getTime() / 1000 - m.date;
-    if (idadeS > IDADE_MAXIMA_DEMANDA_MIN * 60) {
-      return { tipo: "atrasada", ...base, atrasoMin: Math.floor(idadeS / 60) };
-    }
-  }
+  const atraso = atrasoMin();
+  if (atraso !== null) return { tipo: "atrasada", ...base, atrasoMin: atraso };
   return { tipo: "demanda", ...base, demanda, modo };
+}
+
+/**
+ * Botão de proposta. Mesma trava da mensagem: só chat privado da allowlist —
+ * a mensagem com os botões só foi mandada para lá, mas o update é que decide.
+ * Sem guarda de idade: aprovar tarde não marca horário, e a proposta expira
+ * sozinha na memória do bot.
+ */
+function interpretarBotao(updateId: number, q: any, chatsPermitidos: ReadonlySet<number>): Entrada {
+  const chatId = q?.message?.chat?.id;
+  if (typeof q?.id !== "string" || typeof chatId !== "number" || q.message?.chat?.type !== "private") {
+    return { tipo: "ignorar", updateId };
+  }
+  if (!chatsPermitidos.has(chatId)) return { tipo: "naoAutorizado", updateId, chatId };
+  const b = typeof q.data === "string" ? BOTAO.exec(q.data) : null;
+  if (!b || typeof q.message?.message_id !== "number") return { tipo: "ignorar", updateId };
+  return {
+    tipo: "botao",
+    updateId,
+    chatId,
+    mensagemId: q.message.message_id,
+    callbackId: q.id,
+    acao: b[2] === "a" ? "aprovar" : "descartar",
+    propostaId: b[1],
+  };
 }
 
 /**

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
-import { CAPABILITIES, declarations, ehBaixaPrioridade, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao } from "./capabilities.ts";
+import { CAPABILITIES, declarations, ehBaixaPrioridade, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao, type TarefaCriada } from "./capabilities.ts";
+import { motivoDoErroTasks } from "./passos-no-google.ts";
 import { outrasSquads, rosterTree, squadsAtivas, type Roster, type Squad } from "./squad.ts";
 import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
@@ -26,13 +27,20 @@ export interface ErroTarefa {
 }
 
 /** Por que uma tarefa falhou, quando a UI tem um gesto certo para isso. */
-export type MotivoDeErro = "precisaConectar" | "configuracao" | "semHorarioLivre" | "agendaIndisponivel";
+export type MotivoDeErro =
+  | "precisaConectar"
+  | "configuracao"
+  | "semHorarioLivre"
+  | "agendaIndisponivel"
+  /** `criar_tarefa` sem o escopo do Google Tasks: ampliar, nunca reconectar. */
+  | "ampliarAcesso";
 
 /**
- * Gesto de um AVISO. `ampliarAcesso` só existe aqui, não em `MotivoDeErro`:
- * falta do escopo do Tasks nunca falha um compromisso, só deixa os passos de fora.
+ * Gesto de um AVISO. Mesmo conjunto do erro: nos passos de um compromisso a
+ * falta do escopo do Tasks é aviso (o evento saiu), numa tarefa avulsa é erro
+ * (não sobrou nada).
  */
-export type MotivoDeAviso = MotivoDeErro | "ampliarAcesso";
+export type MotivoDeAviso = MotivoDeErro;
 
 /** Algo que foi feito, mas não exatamente como pedido. Não é falha. */
 export interface AvisoTarefa {
@@ -52,7 +60,8 @@ export function motivoDoErro(err: unknown): MotivoDeErro | undefined {
   if (err instanceof ErroDeConfig) return "configuracao";
   if (err instanceof SemHorarioLivre) return "semHorarioLivre";
   if (err instanceof AgendaIndisponivel) return err.credencial ? "precisaConectar" : "agendaIndisponivel";
-  return undefined;
+  // Falhas do Google Tasks (criar_tarefa): escopo → ampliar, 401 → reconectar.
+  return motivoDoErroTasks(err);
 }
 
 const TROCA_DE_SQUAD = "sugerir_troca_squad";
@@ -94,6 +103,8 @@ export interface Redirecionamento {
 
 export interface TurnoResult {
   eventos_criados: EventoCriado[];
+  /** Tarefas avulsas no Google Tasks (`criar_tarefa`), sem evento. */
+  tarefas_criadas: TarefaCriada[];
   /** Propostas de crescimento: de domínio (sala nova) ou de integrante (mesma sala). */
   sugestoes: Sugestao[];
   /** Compromissos feitos de um jeito diferente do pedido (conflito, esforço parcial...). */
@@ -148,6 +159,26 @@ export interface ContextoDoPrompt {
   janela: string;
 }
 
+const DIAS_DA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/**
+ * Hoje e os 7 dias seguintes com o nome do dia. Sem isto o modelo fazia a conta
+ * do dia da semana sozinho a partir da data ISO e errava: medido em 23/09/2026
+ * (quarta), "na sexta" virou 26/09, um sábado. A data vem da parte local de
+ * `agoraISO` (já em São Paulo) e a conta é em UTC só para não depender do fuso
+ * da máquina.
+ */
+export function calendarioDaSemana(agoraISO: string): string {
+  const [ano, mes, dia] = agoraISO.slice(0, 10).split("-").map(Number);
+  const dias: string[] = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(Date.UTC(ano, mes - 1, dia + i));
+    const data = d.toISOString().slice(0, 10);
+    dias.push(`${i === 0 ? "hoje, " : ""}${DIAS_DA_SEMANA[d.getUTCDay()]} ${data}`);
+  }
+  return `Dias: ${dias.join("; ")}. Use esta lista para "amanhã", "sexta", "semana que vem".`;
+}
+
 export function buildSystemInstruction(
   contexto: ContextoDoPrompt,
   agoraISO: string,
@@ -160,12 +191,14 @@ export function buildSystemInstruction(
   const regraModo =
     modo === "foco"
       ? `\n- O usuário forçou tipo='time_blocking' para TODOS os compromissos desta
-  demanda: use-o em toda chamada de agendar_evento, com duracao_min.`
+  demanda: use-o em toda chamada de agendar_evento, com duracao_min. Não use
+  criar_tarefa: o usuário pediu tempo na agenda.`
       : modo === "baixa_prioridade"
         ? `\n- O usuário marcou esta demanda como BAIXA PRIORIDADE: use
   tipo='time_blocking' em toda chamada de agendar_evento, com duracao_min. O
   servidor encaixa o bloco em qualquer horário livre dos próximos dias úteis —
-  não é para agora, e não é um prazo.`
+  não é para agora, e não é um prazo. Não use criar_tarefa: o usuário pediu
+  tempo na agenda.`
         : "";
 
   // Pedido explícito de contratação SEMPRE vira capacidade: a regra antiga
@@ -175,7 +208,7 @@ export function buildSystemInstruction(
   // squad ativa: pedido para outra squad é troca, e o prompt diz qual vence
   // (descartarPorTroca garante o mesmo no servidor se o modelo chamar as duas).
   return `Você é o PO raiz da squad '${contexto.squadNome}' (escopo: ${contexto.squadEscopo}). Recebe demandas em português e as
-transforma em compromissos no calendário do usuário.
+transforma em compromissos no calendário do usuário ou em tarefas no Google Tasks.
 
 A squad é uma ÁRVORE: cada DOMÍNIO é um tema, tem um PO dono e ocupa uma sala do
 escritório; dentro do domínio o PO contrata INTEGRANTES (designer, tech lead,
@@ -189,6 +222,7 @@ ${contexto.outrasSquads}
 
 Agora são ${agoraISO} (fuso ${TIMEZONE}). Datas que você produzir: AAAA-MM-DD
 quando o usuário não disse hora; com hora, ISO 8601 com offset no mesmo formato.
+${calendarioDaSemana(agoraISO)}
 
 Você NÃO escolhe horário. O servidor lê a agenda do usuário e reserva o próximo
 horário livre dentro da janela de trabalho ${contexto.janela}, sem colidir com o
@@ -197,6 +231,13 @@ que já está lá. Você diz a intenção: o quê, quem, quanto tempo e até qua
 Regras:
 - Quebre a demanda em quantos compromissos forem necessários e chame
   agendar_evento uma vez por compromisso.
+- Agenda ou tarefa: agendar_evento só quando a demanda precisa de TEMPO
+  reservado — trabalho que ocupa um bloco, reunião, hora marcada, prazo de
+  entrega com esforço. O que só precisa não ser esquecido (lembrete, compra,
+  pagamento, recado, ligação rápida, "anotar", "lembrar de") é criar_tarefa, sem
+  duração nem horário; se o usuário disse um dia, mande em data. Na dúvida entre
+  os dois, pense se o usuário precisaria parar o que está fazendo por mais de
+  15 minutos: se sim, agenda; se não, tarefa.
 - Em responsavel_id use o id de uma PESSOA da árvore — PO ou integrante. Escolha
   primeiro o domínio pelo tema, depois a pessoa dentro dele pelo papel. Nunca
   invente um id.
@@ -218,9 +259,8 @@ Regras:
   (tipo='deadline') cujo entregável tem etapas concretas e distintas que a própria
   demanda sugere. Entre 2 e 8 itens, em ordem de execução, verbo no infinitivo.
   Não invente etapas que a demanda não sugere e não use passos para repetir a
-  nota_de_execucao. Bloco simples de foco: omita. Pedido de checklist sem
-  compromisso: chame agendar_evento com os passos (time_blocking, duração
-  estimada).
+  nota_de_execucao. Bloco simples de foco: omita. Pedido de checklist ou
+  lista sem compromisso na agenda: chame criar_tarefa com os itens em passos.
 - Crescimento tem dois níveis, e escolher o errado é erro:
   - criar_po_dominio quando o TEMA não pertence a nenhum domínio existente.
   - contratar_integrante quando o tema já tem domínio mas falta um PAPEL dentro
@@ -442,9 +482,13 @@ async function rodarTurno(
   const resultados: (CapabilityResult | ErroTarefa)[] = new Array(calls.length);
   const forcado = tipoForcado(modo);
   const baixaPrioridade = ehBaixaPrioridade(modo);
+  // criar_tarefa num modo forçado vira bloco na agenda (ver o handler), então
+  // entra na mesma série; em `auto` não toca a agenda e segue em paralelo.
+  const disputaAgenda = (call: FunctionCall) =>
+    call.name === "agendar_evento" || (call.name === "criar_tarefa" && forcado !== null);
   const deAgenda = calls
     .map((call, indice) => ({ call, indice }))
-    .filter((x) => x.call.name === "agendar_evento")
+    .filter((x) => disputaAgenda(x.call))
     .map((x) => ({
       ...x,
       prioridade: prioridadeDeAgendamento(
@@ -457,20 +501,25 @@ async function rodarTurno(
     .sort((a, b) => a.prioridade[0] - b.prioridade[0] || a.prioridade[1] - b.prioridade[1] || a.indice - b.indice);
   const emParalelo = Promise.all(
     calls.map(async (call, indice) => {
-      if (call.name !== "agendar_evento") resultados[indice] = await executar(call);
+      if (!disputaAgenda(call)) resultados[indice] = await executar(call);
     }),
   );
   for (const { call, indice } of deAgenda) resultados[indice] = await executar(call);
   await emParalelo;
 
   // Resultados na ordem em que o modelo chamou, não na ordem de alocação.
-  const turno: TurnoResult = { eventos_criados: [], sugestoes: [], avisos: [], erros: [] };
+  const turno: TurnoResult = { eventos_criados: [], tarefas_criadas: [], sugestoes: [], avisos: [], erros: [] };
   for (const r of resultados) {
     if ("erro" in r) turno.erros.push(r);
     else if (r.kind === "compromisso") {
       turno.eventos_criados.push(...r.eventos);
       for (const { aviso, motivo } of r.avisos) {
         turno.avisos.push({ capacidade: "agendar_evento", titulo: r.titulo, aviso, ...(motivo ? { motivo } : {}) });
+      }
+    } else if (r.kind === "tarefa") {
+      turno.tarefas_criadas.push(r);
+      for (const { aviso, motivo } of r.avisos) {
+        turno.avisos.push({ capacidade: "criar_tarefa", titulo: r.titulo, aviso, ...(motivo ? { motivo } : {}) });
       }
     } else turno.sugestoes.push({ ...r, id: randomUUID() });
   }

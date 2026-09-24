@@ -7,10 +7,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PrecisaConectar } from "./auth-store.ts";
 import type { CompromissoAgendado, EventoCriado } from "./agendamento.ts";
-import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido } from "./calendar.ts";
+import { ErroCalendario, PROP_TASKS_LISTA, PROP_TASKS_PAI, type EventoLido, type QuestCalendario } from "./calendar.ts";
 import {
   AVISO_SEM_ESCOPO,
+  anexarProgressoDosPassos,
+  renomearListaDaSquad,
   criarPassosNoGoogle,
+  motivoDoErroTasks,
+  TasksNaoAutorizado,
   type DependenciasDosPassos,
   type PedidoDePassos,
 } from "./passos-no-google.ts";
@@ -273,5 +277,151 @@ describe("criarPassosDoCompromisso", () => {
     const r = await fluxo.criarPassosDoCompromisso(pedido());
     assert.equal(r.criados, 3);
     assert.equal(tarefas[0].listaId, "L1");
+  });
+});
+
+describe("criarTarefaAvulsa", () => {
+  const avulsa = (p: Record<string, unknown> = {}) => ({
+    squad: squadCom(), titulo: "Comprar leite", notas: "SquadOne · Ana (Geral)", passos: [] as string[],
+    obterToken: async () => "tk", liberado: true, ...p,
+  });
+
+  it("sem o escopo lança TasksNaoAutorizado (gesto ampliar) e não chama o Google", async () => {
+    const { fluxo, log, tarefas } = montar();
+    await assert.rejects(fluxo.criarTarefaAvulsa(avulsa({ liberado: false })), TasksNaoAutorizado);
+    assert.equal(motivoDoErroTasks(new TasksNaoAutorizado()), "ampliarAcesso");
+    assert.deepEqual(log, []);
+    assert.equal(tarefas.length, 0);
+  });
+
+  it("cria a lista da squad na primeira vez e a tarefa com due, sem PATCH em evento", async () => {
+    const { fluxo, log, tarefas, patches } = montar();
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ due: "2026-09-30T00:00:00.000Z" }));
+    assert.deepEqual(log, ["inserirLista:SquadOne · Pessoal", "gravar:pessoal:L1"]);
+    assert.deepEqual(tarefas, [
+      { listaId: "L1", corpo: { title: "Comprar leite", notes: "SquadOne · Ana (Geral)", due: "2026-09-30T00:00:00.000Z" }, posicao: undefined },
+    ]);
+    assert.deepEqual(r, { tarefaId: "T1", listaId: "L1", criados: 0, avisos: [] });
+    assert.equal(patches.length, 0);
+  });
+
+  it("sem data não manda due", async () => {
+    const { fluxo, tarefas } = montar({}, "L9");
+    await fluxo.criarTarefaAvulsa(avulsa());
+    assert.equal("due" in tarefas[0].corpo, false);
+    assert.equal(tarefas[0].listaId, "L9");
+  });
+
+  it("passos viram subtarefas em ordem sob a tarefa", async () => {
+    const { fluxo, tarefas } = montar({}, "L9");
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ passos: ["Leite", "Pão"] }));
+    assert.equal(r.criados, 2);
+    assert.deepEqual(tarefas.slice(1).map((t) => [t.corpo.title, t.posicao]), [
+      ["Leite", { parent: "T1", previous: undefined }],
+      ["Pão", { parent: "T1", previous: "T2" }],
+    ]);
+  });
+
+  it("falha na tarefa principal LANÇA com o erro classificado (é o resultado inteiro)", async () => {
+    const { fluxo } = montar({ inserirTarefa: async () => { throw new ErroTasks(403, ESCOPO_403); } }, "L9");
+    await assert.rejects(fluxo.criarTarefaAvulsa(avulsa()), (err) => motivoDoErroTasks(err) === "ampliarAcesso");
+  });
+
+  it("subtarefa que falha vira aviso e a tarefa fica", async () => {
+    let n = 0;
+    const { fluxo } = montar({
+      inserirTarefa: async () => {
+        n++;
+        if (n === 3) throw new ErroTasks(500, "{}");
+        return { id: `T${n}` };
+      },
+    }, "L9");
+    const r = await fluxo.criarTarefaAvulsa(avulsa({ passos: ["a", "b", "c"] }));
+    assert.equal(r.tarefaId, "T1");
+    assert.equal(r.criados, 1);
+    assert.match(r.avisos[0].aviso, /2 de 3 passo/);
+  });
+});
+
+describe("anexarProgressoDosPassos", () => {
+  const quest = (x: Partial<QuestCalendario>): QuestCalendario => ({
+    eventId: "e", titulo: "t", inicio: "", fim: "", diaInteiro: false, tipo: "time_blocking", dominio: "geral",
+    membro: "po", squad: "pessoal", prazoRef: "", tasksLista: "", tasksPai: "", ...x,
+  });
+
+  it("uma listagem por LISTA; conta só filhas das mães pedidas, concluídas e escondidas inclusive", async () => {
+    const quests = [
+      quest({ eventId: "a", tasksLista: "L1", tasksPai: "M1" }),
+      quest({ eventId: "b", tasksLista: "L1", tasksPai: "M2" }),
+      quest({ eventId: "c" }),
+    ];
+    const chamadas: string[] = [];
+    await anexarProgressoDosPassos(quests, {
+      liberado: true,
+      obterToken: async () => "tk",
+      listar: async (_t, listaId) => {
+        chamadas.push(listaId);
+        return [
+          { id: "M1" },
+          { id: "s1", parent: "M1", status: "completed" },
+          { id: "s2", parent: "M1", status: "needsAction" },
+          { id: "s3", parent: "M1", status: "completed", deleted: true },
+          { id: "s4", parent: "M2", status: "completed" },
+          { id: "x", parent: "OUTRA", status: "completed" },
+          { id: "avulsa" },
+        ];
+      },
+    });
+    assert.deepEqual(chamadas, ["L1"]);
+    assert.deepEqual(quests.map((q) => q.passos), [{ feitos: 1, total: 2 }, { feitos: 1, total: 1 }, undefined]);
+  });
+
+  it("sem escopo não chama o Google; falha na leitura deixa as quests sem selo", async () => {
+    const quests = [quest({ tasksLista: "L1", tasksPai: "M1" })];
+    let chamou = false;
+    await anexarProgressoDosPassos(quests, { liberado: false, obterToken: async () => "tk", listar: async () => { chamou = true; return []; } });
+    assert.equal(chamou, false);
+    await anexarProgressoDosPassos(quests, {
+      liberado: true, obterToken: async () => "tk", listar: async () => { throw new ErroTasks(404, "{}"); },
+    });
+    assert.equal(quests[0].passos, undefined);
+  });
+});
+
+describe("renomearListaDaSquad", () => {
+  const base = { listaId: "L1", nomeAntigo: "Pessoal", nomeNovo: "Casa", liberado: true, obterToken: async () => "tk" };
+
+  it("título ainda é o gerado: renomeia para o nome novo", async () => {
+    const escritas: [string, string][] = [];
+    const r = await renomearListaDaSquad({
+      ...base,
+      ler: async (_t, id) => ({ id, title: "SquadOne · Pessoal" }),
+      renomear: async (_t, id, titulo) => { escritas.push([id, titulo]); return {}; },
+    });
+    assert.equal(r, "renomeada");
+    assert.deepEqual(escritas, [["L1", "SquadOne · Casa"]]);
+  });
+
+  it("usuário renomeou no celular: o nome dele vence, nenhuma escrita", async () => {
+    let escreveu = false;
+    const r = await renomearListaDaSquad({
+      ...base,
+      ler: async (_t, id) => ({ id, title: "Minhas coisas" }),
+      renomear: async () => { escreveu = true; return {}; },
+    });
+    assert.equal(r, "personalizada");
+    assert.equal(escreveu, false);
+  });
+
+  it("sem lista, sem escopo ou nome igual: nem lê o Google", async () => {
+    const ler = async () => { throw new Error("não deveria ler"); };
+    assert.equal(await renomearListaDaSquad({ ...base, listaId: undefined, ler }), "semLista");
+    assert.equal(await renomearListaDaSquad({ ...base, liberado: false, ler }), "semEscopo");
+    assert.equal(await renomearListaDaSquad({ ...base, nomeNovo: "Pessoal", ler }), "igual");
+  });
+
+  it("lista apagada no celular: 'sumiu', sem erro", async () => {
+    const r = await renomearListaDaSquad({ ...base, ler: async (_t, id) => { throw new ListaSumiu(id); } });
+    assert.equal(r, "sumiu");
   });
 });

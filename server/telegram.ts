@@ -90,7 +90,7 @@ export function segredoConfere(esperado: string, recebido: unknown): boolean {
   return timingSafeEqual(a, b);
 }
 
-async function chamar(c: ConfigDeTelegram, metodo: string, corpo: Record<string, unknown>): Promise<void> {
+async function chamar<T = unknown>(c: ConfigDeTelegram, metodo: string, corpo: Record<string, unknown>): Promise<T> {
   let resp: Response;
   try {
     resp = await fetch(`https://api.telegram.org/bot${c.token}/${metodo}`, {
@@ -109,26 +109,75 @@ async function chamar(c: ConfigDeTelegram, metodo: string, corpo: Record<string,
     const descricao = typeof lido?.description === "string" ? lido.description.slice(0, 200) : "";
     throw new ErroDeTelegram(`Telegram respondeu ${resp.status} em ${metodo}: ${descricao}`, resp.status);
   }
+  const lido: any = await resp.json().catch(() => ({}));
+  return lido?.result as T;
 }
 
 /**
  * Texto PURO, sem parse_mode: título de compromisso com `_` ou `*` quebraria o
  * Markdown do Telegram e a mensagem inteira seria recusada.
  */
-export function enviarMensagem(c: ConfigDeTelegram, chatId: number, texto: string, responderA?: number): Promise<void> {
-  return chamar(c, "sendMessage", {
+export async function enviarMensagem(
+  c: ConfigDeTelegram,
+  chatId: number,
+  texto: string,
+  responderA?: number,
+  botoes?: Botao[],
+): Promise<void> {
+  await chamar(c, "sendMessage", {
     chat_id: chatId,
     text: texto,
     ...(responderA ? { reply_parameters: { message_id: responderA, allow_sending_without_reply: true } } : {}),
+    ...(botoes?.length ? { reply_markup: { inline_keyboard: [botoes.map((b) => ({ text: b.texto, callback_data: b.dados }))] } } : {}),
   });
 }
 
-/** "digitando..." dura 5 s no Telegram: quem chama repete enquanto o turno roda. */
-export function avisarDigitando(c: ConfigDeTelegram, chatId: number): Promise<void> {
-  return chamar(c, "sendChatAction", { chat_id: chatId, action: "typing" });
+/** Um botão inline: `dados` volta no `callback_query` (máx. 64 bytes). */
+export interface Botao {
+  texto: string;
+  dados: string;
 }
 
-/** Idempotente: o boot chama a cada deploy, então trocar o segredo e implantar já basta. */
-export function registrarWebhook(c: ConfigDeTelegram, url: string): Promise<void> {
-  return chamar(c, "setWebhook", { url, secret_token: c.segredo, allowed_updates: ["message"] });
+/** Tira o "carregando" do botão tocado; o texto aparece como aviso curto no topo do chat. */
+export async function responderBotao(c: ConfigDeTelegram, callbackId: string, texto: string): Promise<void> {
+  await chamar(c, "answerCallbackQuery", { callback_query_id: callbackId, text: texto.slice(0, 200) });
+}
+
+/** Troca o texto de uma mensagem do bot; sem `reply_markup`, os botões somem — o toque vale uma vez. */
+export async function editarMensagem(c: ConfigDeTelegram, chatId: number, mensagemId: number, texto: string): Promise<void> {
+  await chamar(c, "editMessageText", { chat_id: chatId, message_id: mensagemId, text: texto });
+}
+
+/**
+ * Bytes de um arquivo mandado ao bot (a mensagem de voz). Duas etapas da Bot
+ * API: `getFile` dá o caminho, e o download é por outra URL — que também leva
+ * o token, então nenhum erro daqui repete a URL.
+ */
+export async function baixarArquivo(c: ConfigDeTelegram, fileId: string): Promise<Buffer> {
+  const arquivo = await chamar<{ file_path?: string }>(c, "getFile", { file_id: fileId });
+  if (!arquivo?.file_path) throw new ErroDeTelegram("Telegram não devolveu o caminho do arquivo.", null);
+  let resp: Response;
+  try {
+    resp = await fetch(`https://api.telegram.org/file/bot${c.token}/${arquivo.file_path}`, {
+      signal: AbortSignal.timeout(TIMEOUT_TELEGRAM_MS),
+    });
+  } catch (err: any) {
+    const causa = err?.cause?.code ?? err?.name ?? "erro de rede";
+    throw new ErroDeTelegram(`Telegram inacessível ao baixar o áudio (${causa}).`, null);
+  }
+  if (!resp.ok) throw new ErroDeTelegram(`Telegram respondeu ${resp.status} ao baixar o áudio.`, resp.status);
+  return Buffer.from(await resp.arrayBuffer());
+}
+
+/** "digitando..." dura 5 s no Telegram: quem chama repete enquanto o turno roda. */
+export async function avisarDigitando(c: ConfigDeTelegram, chatId: number): Promise<void> {
+  await chamar(c, "sendChatAction", { chat_id: chatId, action: "typing" });
+}
+
+/**
+ * Idempotente: o boot chama a cada deploy, então trocar o segredo e implantar
+ * já basta. `callback_query` = os botões Aprovar/Descartar das propostas.
+ */
+export async function registrarWebhook(c: ConfigDeTelegram, url: string): Promise<void> {
+  await chamar(c, "setWebhook", { url, secret_token: c.segredo, allowed_updates: ["message", "callback_query"] });
 }

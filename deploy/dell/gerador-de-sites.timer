@@ -1,0 +1,12 @@
+[Unit]
+Description=Site antes da venda — gerar a fila todo dia às 08h
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+# Dell desligado às 08h: roda assim que voltar, em vez de pular o dia (o que
+# acontecia com a tarefa do PC).
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

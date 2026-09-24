@@ -154,6 +154,16 @@ export async function lerLista(token: string, listaId: string): Promise<{ id: st
   }
 }
 
+/** Troca só o título da lista (PATCH parcial). */
+export async function renomearLista(token: string, listaId: string, titulo: string): Promise<{ id: string; title?: string }> {
+  try {
+    return await chamar(token, urlDaLista(listaId), { method: "PATCH", corpo: { title: titulo } });
+  } catch (err) {
+    if (err instanceof ErroTasks && (err.status === 404 || err.status === 410)) throw new ListaSumiu(listaId);
+    throw err;
+  }
+}
+
 /**
  * `previous` ausente põe a tarefa no TOPO das irmãs (doc do tasks.insert):
  * quem cria uma série em ordem passa o id da anterior.
@@ -169,6 +179,40 @@ export async function inserirTarefa(
   if (posicao.previous) busca.set("previous", posicao.previous);
   const query = busca.toString();
   return chamar(token, `${urlDeTarefas(listaId)}${query ? `?${query}` : ""}`, { method: "POST", corpo });
+}
+
+/** O que a leitura do progresso precisa de cada tarefa. */
+export interface TarefaLida {
+  id: string;
+  parent?: string;
+  status?: "needsAction" | "completed";
+  deleted?: boolean;
+}
+
+/**
+ * Teto de páginas de `listarTarefas`: 100 tarefas por página. Uma lista por
+ * squad acumula tudo o que o SquadOne já criou; sem teto uma lista antiga
+ * faria a Mochila esperar dezenas de chamadas por um selo.
+ */
+export const MAX_PAGINAS_TAREFAS = 5;
+
+/**
+ * Tarefas de uma lista, concluídas e escondidas inclusive: subtarefa marcada
+ * como feita e "limpa" no celular vira `hidden`, e sem `showHidden` o selo
+ * contaria menos feitas do que o usuário fez.
+ */
+export async function listarTarefas(token: string, listaId: string): Promise<TarefaLida[]> {
+  const todas: TarefaLida[] = [];
+  let pagina: string | undefined;
+  for (let i = 0; i < MAX_PAGINAS_TAREFAS; i++) {
+    const busca = new URLSearchParams({ showCompleted: "true", showHidden: "true", showDeleted: "false", maxResults: "100" });
+    if (pagina) busca.set("pageToken", pagina);
+    const r = await chamar<{ items?: TarefaLida[]; nextPageToken?: string }>(token, `${urlDeTarefas(listaId)}?${busca}`);
+    todas.push(...(r.items ?? []));
+    pagina = r.nextPageToken;
+    if (!pagina) break;
+  }
+  return todas;
 }
 
 /** O retry de credencial do Calendar, com o critério do Tasks (só 401). */
