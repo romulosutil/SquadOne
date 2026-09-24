@@ -279,29 +279,10 @@ def pendencias() -> list[dict]:
 # ---------------------------------------------------------------- fora do Dell (Easypanel)
 
 def easypanel() -> list[dict]:
-    """O que ainda roda no Easypanel não passa pelo Error Workflow do Dell: pelo
-    menos confere se está no ar. Com a chave em ~/.config/claude-ops/easypanel-n8n-api-key,
-    também confere as execuções com erro dos fluxos ativos de lá."""
+    """Do Easypanel, só o SquadOne (agendas) é do ecossistema do Dell. O n8n de
+    lá (Silmer, Food Helper) não é conferido: não é do Dell, e cair ou falhar
+    não deve virar aviso "Dell worker" no WhatsApp (decisão de 24/09/2026)."""
     out = []
-    base = "https://schedule-n8n.jicnzg.easypanel.host"
-    ok, det = http_ok(f"{base}/healthz", timeout=10)
-    out.append(check("easypanel-n8n", "servicos", "n8n do Easypanel (Silmer, Food Helper)", "ok" if ok else "falha",
-                     "Respondendo" if ok else f"Sem resposta: {det}", f"{base}/home/workflows"))
-    chave = HOME / ".config/claude-ops/easypanel-n8n-api-key"
-    if chave.is_file():
-        h = {"X-N8N-API-KEY": chave.read_text().strip()}
-        try:
-            wfs = http_json(f"{base}/api/v1/workflows?active=true&limit=100", h, timeout=15)["data"]
-            desde = agora() - timedelta(hours=24)
-            for w in wfs:
-                ex = http_json(f"{base}/api/v1/executions?workflowId={w['id']}&limit=20", h, timeout=15)["data"]
-                erros = [e for e in ex if e.get("status") in ("error", "crashed") and e.get("startedAt")
-                         and datetime.fromisoformat(e["startedAt"].replace("Z", "+00:00")) >= desde]
-                if ex and ex[0].get("status") in ("error", "crashed"):
-                    out.append(check(f"easypanel:{w['id']}", "fluxos", f"{w['name']} (Easypanel)", "falha",
-                                     f"Última execução falhou ({len(erros)} em 24 h)", f"{base}/workflow/{w['id']}/executions/{ex[0]['id']}"))
-        except Exception as e:  # noqa: BLE001
-            out.append(check("easypanel-api", "fluxos", "Fluxos do Easypanel", "atencao", f"API sem resposta: {str(e)[:100]}"))
     # SquadOne (agendas) público: 403 é o porteiro de IP respondendo, ou seja, no ar.
     try:
         req = urllib.request.Request("https://aladdin-squadone-app.jicnzg.easypanel.host/")
