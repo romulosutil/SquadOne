@@ -282,6 +282,9 @@ def perguntas_atuais():
 
 
 def pontuacao(pid):
+    spec = importlib.util.spec_from_file_location("prumo_aviso_unico", AQUI / "prumo-aviso-unico.py")
+    aviso = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(aviso)  # memória dos avisos de resposta fora da lista
     perguntas = perguntas_atuais()
     (AQUI / "prumo-perguntas.js").write_text(perguntas, encoding="utf-8")  # cópia para a próxima recriação
     planilha_url = f"https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={pid}"
@@ -294,30 +297,14 @@ for (const r of $input.all().map(i => i.json)) {{
   const ref = String(r['Empresa'] ?? '').trim();
   if (ref) ultima.set(ref.toLowerCase(), r);  // a planilha do Form está em ordem de chegada
 }}
-// Resposta fora dos prospects avisa uma vez só: a memória do fluxo guarda cada
-// uma (empresa + carimbo). Sem memória ainda, marca as atuais sem avisar: todas
-// já tinham sido avisadas, de hora em hora.
-const memoria = $getWorkflowStaticData('global');
-const semeando = !memoria.foraDaLista;
-const foraDaLista = {{ ...(memoria.foraDaLista ?? {{}}) }};
-let lembrou = semeando;
-const saida = [];
+{aviso.MEMORIA}const saida = [];
 for (const r of ultima.values()) {{
   const ref = String(r['Empresa']).trim();
   const sep = ref.indexOf('::');
   const id = sep > 0 ? ref.slice(0, sep).trim() : '';
   const empresa = sep > 0 ? ref.slice(sep + 2).trim() : ref;
   const p = prospects.get(id.toLowerCase());
-  if (!p) {{
-    const chave = ref.toLowerCase() + '|' + String(r['Carimbo de data/hora'] ?? r.row_number ?? '');
-    if (!(chave in foraDaLista)) {{
-      foraDaLista[chave] = new Date().toISOString();
-      lembrou = true;
-      if (!semeando) saida.push({{ json: {{ naFila: false, id: id || ref, empresa }} }});
-    }}
-    continue;
-  }}
-  const respostas = [];
+{aviso.FORA_DEPOIS}  const respostas = [];
   const porArea = {{}};
   for (const q of QUESTIONS) {{
     const coluna = Object.keys(r).find(k => k.startsWith(q.prefix));
@@ -345,8 +332,6 @@ for (const r of ultima.values()) {{
     'Próxima ação': 'Leia o briefing e marque o workshop com o dono.', 'Diagnóstico em': new Date().toISOString(),
   }} }});
 }}
-// Reatribuir no nível de cima marca a memória como alterada (o n8n só grava em execução agendada).
-if (lembrou) memoria.foraDaLista = foraDaLista;
 return saida;"""
     pendencias = f"""// O que depende do Rômulo no PRUMO; a Central lê via dell-status.
 const linhas = $input.all().map(i => i.json).filter(l => l['ID']);
@@ -408,6 +393,8 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
     liga(con, om["name"], og["name"])
     liga(con, "Gravar diagnóstico", pm["name"])
     liga(con, pm["name"], pg["name"])
+    nos += aviso.nos_memoria()
+    aviso.ligar_memoria(con, aviso_gravado=og["name"])
     wf = api("GET", f"/workflows/{PONTUACAO}")
     wf["name"] = "PRUMO — Diagnóstico do dono"
     wf["nodes"], wf["connections"] = nos, con

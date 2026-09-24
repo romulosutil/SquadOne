@@ -124,7 +124,10 @@ API (chave de operações em `~/.config/claude-ops/n8n-api-key`);
 `aviso-de-falha.py` liga o Error Workflow em todos os fluxos;
 `prumo-ajustes.py` e `site-antes-da-venda.py` aplicam as mudanças de
 23/09/2026; `prumo-aviso-unico.py` faz a resposta do formulário fora dos
-prospects avisar uma vez só (memória do fluxo, 24/09/2026);
+prospects avisar uma vez só (memória em `~/.local/share/n8n-estado/prumo-avisados.json`,
+24/09/2026; apagar o arquivo faz cada resposta avisar mais uma vez). A memória
+do fluxo (`$getWorkflowStaticData`) não serve aqui: o n8n só a grava quando o
+id do fluxo tem até 21 caracteres, e os fluxos importados do PRUMO usam UUID;
 `rodar-agora.py <id>` executa um workflow agora.
 
 ## Links rastreados e pendências (`claude-ops/fecha-ciclos.py`)
