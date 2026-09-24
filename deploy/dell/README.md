@@ -123,7 +123,9 @@ Copiados para `~/.local/share/claude-ops` no Dell. `n8n.py` é o cliente da
 API (chave de operações em `~/.config/claude-ops/n8n-api-key`);
 `aviso-de-falha.py` liga o Error Workflow em todos os fluxos;
 `prumo-ajustes.py` e `site-antes-da-venda.py` aplicam as mudanças de
-23/09/2026; `rodar-agora.py <id>` executa um workflow agora.
+23/09/2026; `prumo-aviso-unico.py` faz a resposta do formulário fora dos
+prospects avisar uma vez só (memória do fluxo, 24/09/2026);
+`rodar-agora.py <id>` executa um workflow agora.
 
 ## Links rastreados e pendências (`claude-ops/fecha-ciclos.py`)
 
