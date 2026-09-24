@@ -23,7 +23,11 @@ export const PAUSA_MIN = 15;
 export const HORIZONTE_FOCO_DIAS = 14;
 /** Baixa Prioridade procura dentro dos próximos 7 DIAS ÚTEIS, não corridos. */
 export const DIAS_UTEIS_BAIXA_PRIORIDADE = 7;
-/** Nada é alocado além de 60 dias de agora: é o quanto de agenda o turno lê. */
+/**
+ * Nada é alocado além de 60 dias do INÍCIO da busca (`horizonteDaBusca`), e é
+ * esse trecho que quem chama precisa ter lido da agenda. Contar de agora fazia
+ * "depois de 15/01/2027", pedido em setembro, procurar num intervalo vazio.
+ */
 export const HORIZONTE_DIAS = 60;
 /** Esforço de um prazo acima de 40h é sinal de compromisso que devia ser quebrado. */
 export const ESFORCO_MAX_MIN = 2400;
@@ -372,22 +376,32 @@ function tamanhoDoBloco(
 
 // --- Alocação -----------------------------------------------------------
 
+/**
+ * O trecho em que `alocar` procura: do início da busca (agora ou `aPartirDe`,
+ * o mais tarde, na grade) até o teto do pedido, nunca mais que HORIZONTE_DIAS
+ * depois do início. Quem chama lê a agenda deste trecho — `alocar` só enxerga
+ * a ocupação que recebeu. `fim <= inicio` é trecho vazio (prazo antes do início).
+ */
+export function horizonteDaBusca(pedido: PedidoDeSlot, agora: number): Intervalo {
+  const inicio = teto(Math.max(agora, pedido.aPartirDe ?? agora));
+  const teto60 = inicio + HORIZONTE_DIAS * DIA_MS;
+  const fim =
+    pedido.tipo === "foco"
+      ? Math.min(inicio + HORIZONTE_FOCO_DIAS * DIA_MS, pedido.limite ?? Infinity, teto60)
+      : Math.min(pedido.limite, teto60);
+  return { inicio, fim };
+}
+
 export function alocar(
   ocupacao: Intervalo[],
   janela: Janela,
   pedido: PedidoDeSlot,
   agora: number,
 ): Alocacao {
-  const base = teto(Math.max(agora, pedido.aPartirDe ?? agora));
-  const tetoAbsoluto = agora + HORIZONTE_DIAS * DIA_MS;
+  const { inicio: base, fim: fimBusca } = horizonteDaBusca(pedido, agora);
   const ocupado = mesclar(ocupacao);
 
   if (pedido.tipo === "foco") {
-    const fimBusca = Math.min(
-      base + HORIZONTE_FOCO_DIAS * DIA_MS,
-      pedido.limite ?? Infinity,
-      tetoAbsoluto,
-    );
     const duracaoMs = pedido.duracaoMin * MIN_MS;
     for (const dia of janelasDosDias(base, fimBusca, janela)) {
       for (const l of livres(dia.inicio, dia.fim, ocupado)) {
@@ -403,7 +417,6 @@ export function alocar(
     );
   }
 
-  const fimBusca = Math.min(pedido.limite, tetoAbsoluto);
   const dias = janelasDosDias(base, fimBusca, janela);
   const slots: Intervalo[] = [];
   let restante = pedido.esforcoMin;

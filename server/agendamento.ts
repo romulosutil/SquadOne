@@ -9,7 +9,7 @@ import {
   DURACAO_MAX_MIN,
   ESFORCO_MAX_MIN,
   GRADE_MIN,
-  HORIZONTE_DIAS,
+  horizonteDaBusca,
   instanteLocal,
   lerInstante,
   limiteDeDiasUteis,
@@ -17,6 +17,7 @@ import {
   type DataLocal,
   type Intervalo,
   type Janela,
+  type PedidoDeSlot,
 } from "./alocador.ts";
 import { ErroCalendario, marcasDoEvento, PREFIXO_DEADLINE, urlDeEventos } from "./calendar.ts";
 import type { AgendaDoTurno } from "./agenda.ts";
@@ -194,7 +195,8 @@ async function gravar(
  */
 export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<CompromissoAgendado> {
   // Antes de tudo: sem agenda não há o que alocar, e o erro já vem classificado.
-  const ocupacao = await p.agenda.ocupacao();
+  // A leitura vem depois, quando o pedido diz QUAL trecho da agenda importa.
+  p.agenda.exigirAcesso();
   const { janela } = p.agenda;
   const fuso = janela.fuso;
   const agora = p.agenda.agora.getTime();
@@ -246,13 +248,9 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
       // O usuário disse a hora: respeita. Conflito é informação, não veto.
       slot = { inicio: fixo.instante, fim: fixo.instante + duracao * MIN_MS };
       if (slot.inicio < agora) avisar("O horário fixo pedido já passou.");
-      if (slot.fim > agora + HORIZONTE_DIAS * 24 * 3600_000) {
-        avisar(`Conflito não verificado: o horário fica além dos ${HORIZONTE_DIAS} dias lidos da agenda.`);
-      } else {
-        const colisoes = conflitos(ocupacao, slot);
-        if (colisoes.length) {
-          avisar(`O horário fixo conflita com ${colisoes.length} compromisso(s) já na agenda.`);
-        }
+      const colisoes = conflitos(await p.agenda.ocupacao(slot), slot);
+      if (colisoes.length) {
+        avisar(`O horário fixo conflita com ${colisoes.length} compromisso(s) já na agenda.`);
       }
       if (!dentroDaJanela(slot, janela)) {
         avisar(`O horário fixo fica fora da janela de trabalho ${descreverJanela(janela)}.`);
@@ -278,13 +276,9 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
           : null,
       ].filter((t): t is number => t !== null);
       const limite = tetos.length ? Math.min(...tetos) : undefined;
-      const { slots } = alocar(
-        ocupacao,
-        janela,
-        { tipo: "foco", duracaoMin: duracao, aPartirDe: fixo?.instante ?? aPartirDe, limite },
-        agora,
-      );
-      slot = slots[0];
+      const pedido: PedidoDeSlot = { tipo: "foco", duracaoMin: duracao, aPartirDe: fixo?.instante ?? aPartirDe, limite };
+      const ocupacao = await p.agenda.ocupacao(horizonteDaBusca(pedido, agora));
+      slot = alocar(ocupacao, janela, pedido, agora).slots[0];
     }
 
     const criado = await gravar(p, {
@@ -343,12 +337,11 @@ export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<Compro
       avisar(`Esforço de ${formatarMinutos(esforco)} reduzido para ${formatarMinutos(ESFORCO_MAX_MIN)}.`);
       esforco = ESFORCO_MAX_MIN;
     }
-    const alocacao = alocar(
-      ocupacao,
-      janela,
-      { tipo: "blocos", esforcoMin: esforco, aPartirDe, limite: limiteDoTrabalho(prazo, janela.fimMin, fuso) },
-      agora,
-    );
+    const pedido: PedidoDeSlot = {
+      tipo: "blocos", esforcoMin: esforco, aPartirDe, limite: limiteDoTrabalho(prazo, janela.fimMin, fuso),
+    };
+    const ocupacao = await p.agenda.ocupacao(horizonteDaBusca(pedido, agora));
+    const alocacao = alocar(ocupacao, janela, pedido, agora);
     slots = alocacao.slots;
     faltou = alocacao.faltouMin;
     if (faltou > 0) {

@@ -33,6 +33,7 @@ function agendaFalsa(ocupacao: Intervalo[], agora = AGORA, janela: Janela = JANE
     janela,
     agora,
     reservas,
+    exigirAcesso() {},
     async ocupacao() {
       return [...ocupacao, ...reservas];
     },

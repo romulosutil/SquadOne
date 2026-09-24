@@ -22,7 +22,8 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/telegram-bot.test.ts`, `server/avaliacoes-turno.test.ts`,
 `server/operations.test.ts`, `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
-`server/tarefa-avulsa.test.ts`, `src/ajuste-do-usuario.test.ts`,
+`server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
+`src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts` e
 `src/office/postos.test.ts`). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
@@ -142,7 +143,8 @@ Os dois modos forçados gravam o mesmo tipo. O que muda é **até onde se procur
 
 O modelo decide a intenção (`tipo`, `duracao_min` ou `esforco_min`, `prazo_final`, `a_partir_de`); o servidor escolhe o horário. `inicio_fixo` só existe quando o usuário disse a hora — é gravado mesmo com conflito, que vira aviso.
 
-- **Ocupação é global:** `events.list` do `primary` inteiro, uma vez por turno (preguiçosa: turno sem agendamento não lê), 60 dias à frente, sem filtro de marca, até 10 páginas. Não ocupa: transparente, dia inteiro, cancelado, `workingLocation`/`birthday`, recusado pelo próprio usuário. Outros calendários não contam.
+- **Ocupação é global:** `events.list` do `primary` inteiro, uma vez por turno (preguiçosa: turno sem agendamento não lê), 60 dias à frente, sem filtro de marca, até 10 páginas.
+- **O horizonte conta do início da busca, não de agora:** `horizonteDaBusca` (`server/alocador.ts`) dá o trecho que `alocar` varre — de `a_partir_de` (ou agora) até o teto do pedido, no máximo 60 dias depois do início. Pedido que cabe nos 60 dias de agora usa a leitura padrão; "depois de 15/01/2027" pedido em setembro lê só o próprio trecho (`AgendaDoTurno.ocupacao(trecho)`, uma leitura por trecho no turno). Antes o teto era `agora + 60 dias` e pedido distante virava "Nenhum horário livre … entre 2027-01-16 e 2027-01-16". Horário fixo distante também tem o conflito verificado agora (lê o trecho do slot). Não ocupa: transparente, dia inteiro, cancelado, `workingLocation`/`birthday`, recusado pelo próprio usuário. Outros calendários não contam.
 - **Dias da semana no prompt:** `calendarioDaSemana` (`server/orchestrator.ts`) põe hoje e os 7 dias seguintes com o nome ("hoje, quarta 2026-09-23; quinta 2026-09-24; ..."). Sem ele o modelo fazia a conta sozinho e errava — medido em 23/09/2026, "na sexta" virou um sábado. Vale para `a_partir_de`, `prazo_final` e a `data` da tarefa.
 - **Janela:** `JANELA_TRABALHO` (padrão `09:00-19:00`; minutos em :00, :15, :30 ou :45, porque todo slot cai na grade de 15 min; pelo menos 30 min) e `DIAS_TRABALHO` (padrão `1,2,3,4,5`), fuso `America/Sao_Paulo`. Env e não `squad.json`: é do usuário, não da squad. Ausente ou vazia = padrão; presente e ilegível = 500 `configuracao: true` antes do token e do Gemini, nunca o padrão calado. O boot loga a janela lida. Trocar exige **Implantar**.
 - **Focar Agora:** primeiro slot livre a partir de agora (grade de 15 min), até 14 dias. Não achou = erro `motivo: semHorarioLivre` só naquele compromisso. **Baixa Prioridade** é o mesmo, com o teto no 7º dia útil (ver o toggle acima).
