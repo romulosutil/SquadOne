@@ -375,7 +375,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 
 ## Deploy
 
-Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-app.jicnzg.easypanel.host`. Nixpacks a partir do GitHub (`romulosutil/SquadOne`, branch `main`). Push em `main` não implanta sozinho: é preciso clicar **Implantar** no painel.
+Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-app.jicnzg.easypanel.host`. Nixpacks a partir do GitHub (`romulosutil/SquadOne`, branch `main`). **Implantação automática ligada** (24/09/2026): todo push/merge em `main` dispara o build no Easypanel — não existe mais "clicar Implantar" como passo. Dois merges seguidos disparam dois builds e o segundo pode cancelar o primeiro ("context canceled" no log): confira em Implantações se o último ficou verde, e se não ficou clique **Implantar** uma vez. Onde este arquivo ainda diz "clicar **Implantar**", leia "fazer push em `main`".
 
 ## Convenções
 
