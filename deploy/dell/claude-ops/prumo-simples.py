@@ -413,8 +413,25 @@ const achou = id !== '' && String(l['ID'] ?? '') === id;
 const empresa = String(l['Empresa'] ?? '');
 // Formulário já com a empresa (liga a resposta à linha) e o papel Dono.
 const form = '{FORM}?usp=pp_url&entry.{ENTRY_EMPRESA}=' + encodeURIComponent(id + '::' + empresa) + '&entry.{ENTRY_PAPEL}=' + encodeURIComponent('Dono');
-const mensagem = 'Olá! Aqui é o Rômulo. Conforme combinamos, este é o diagnóstico operacional PRUMO da ' + empresa
-  + ': 16 perguntas rápidas, uns 5 minutos, para o dono responder. ' + form;
+// Link curto no TinyURL (API sem conta), com apelido legível "prumo-<empresa>-<4>".
+// Apelido já usado (segundo clique) -> tenta sem apelido; serviço fora -> link longo.
+const slug = empresa.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase()
+  .replace(/\\b(ltda|me|epp|eireli|s\\/?a)\\b/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 18).replace(/-+$/, '');
+let h = 0;
+for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+const apelido = ['prumo', slug, h.toString(36).slice(-4)].filter(Boolean).join('-');
+const encurtar = async (qs) => {{
+  try {{
+    const r = String(await this.helpers.httpRequest({{ method: 'GET', url: 'https://tinyurl.com/api-create.php', qs, timeout: 5000 }})).trim();
+    return r.startsWith('https://tinyurl.com/') ? r : '';
+  }} catch (e) {{ return ''; }}
+}};
+const link = achou ? (await encurtar({{ url: form, alias: apelido }}) || await encurtar({{ url: form }}) || form) : form;
+// Vai depois da conversa (roteiro em prumo/03-captacao/roteiro-ate-o-convite.md), nunca como primeiro contato.
+const mensagem = 'Olá! Como combinamos, segue o diagnóstico da sua empresa:\\n' + link
+  + '\\n\\nSão 16 perguntas de marcar sobre a rotina, sem nenhum dado financeiro. Leva uns 10 minutos.'
+  + '\\nNão existe resposta certa: quanto mais perto do dia a dia, mais útil fica.'
+  + '\\nQuando terminar, me avise por aqui. Em até 3 dias úteis te mando o resultado.';
 let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
@@ -423,7 +440,8 @@ return [{{ json: {{ chave: id, destino, marcar: achou && String(l['Etapa'] ?? ''
     fc.webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
                         PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
                         {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
-                         "Próxima ação": "Aguarde o dono responder (16 perguntas, uns 5 minutos)."})
+                         "Próxima ação": "Aguarde o dono responder (16 perguntas, uns 10 minutos). "
+                                         "Sem resposta em 3 dias, ofereça fazer por telefone."})
 
 
 if __name__ == "__main__":
