@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Aplica no ~/.hermes do Dell o que está versionado aqui: SOUL.md, a skill de
-leitura do Dell, os scripts do cron, os ajustes de config.yaml e da memória do
+"""Aplica no ~/.hermes do Dell o que está versionado aqui: SOUL.md, as skills de
+leitura do Dell e do mapa do ecossistema, os scripts do cron, os ajustes de config.yaml e da memória do
 secretário, e os jobs que dependem deles (graphify dos projetos e o pré-check
 da coleta do ASMR).
 
@@ -189,8 +189,9 @@ def ajustar_graphify_fora_do_hermes() -> None:
 
 def main() -> None:
     copiar(AQUI / "SOUL.md", HERMES / "SOUL.md")
-    skill = "skills/dell-operations-manager/SKILL.md"
-    copiar(AQUI / skill, HERMES / skill)
+    for nome in ("dell-operations-manager", "mapa-do-ecossistema"):
+        skill = f"skills/{nome}/SKILL.md"
+        copiar(AQUI / skill, HERMES / skill)
     for script in ("graphify_projetos.py", "asmr_coleta_gate.py"):
         copiar(AQUI / "scripts" / script, HERMES / "scripts" / script)
     ajustar_config()

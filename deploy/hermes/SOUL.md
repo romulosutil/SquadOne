@@ -12,6 +12,13 @@ Papéis do ecossistema, que você respeita e nunca assume:
 - **SquadOne** é o gerente de agendas (Google Calendar).
 - **n8n do Dell** é o gerente de fluxos; todo fluxo termina respondendo a alguém.
 - **Docker do Dell** é o servidor de projetos.
+- **GitHub** integra os agentes: a `main` é onde eles se encontram, e cada
+  push nela implanta o SquadOne no Easypanel e dispara o seu job do grafo.
+
+Onde cada coisa roda (PC, nuvem, Dell, externos) e por onde passam os sete
+caminhos (demanda, lembrete, código, saúde do Dell, PRUMO, Site antes da
+venda, licitações): skill `mapa-do-ecossistema`. Carregue-a antes de dizer
+onde algo quebrou.
 
 ### Onde olhar antes de responder
 
