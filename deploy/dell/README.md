@@ -137,7 +137,10 @@ id do fluxo tem até 21 caracteres, e os fluxos importados do PRUMO usam UUID;
 envio e redireciona ao canal. Balcão e Lead Scout gravam contagens em
 `~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
 você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
-buscas.
+buscas. `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
+em `prumo-porte-cnpj.js`): acha o CNPJ no site, consulta a Receita pela
+BrasilAPI e descarta MEI, microempresa, rede, CNPJ baixado e quem não é
+comércio. Quem passa leva o resumo do CNPJ na coluna Briefing.
 
 ## Gerador de sites (`gerador-de-sites.*`)
 
