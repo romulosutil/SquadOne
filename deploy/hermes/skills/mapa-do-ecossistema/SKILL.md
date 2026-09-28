@@ -6,8 +6,9 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 # Mapa do ecossistema
 
 Vem do design "Estrutura do SquadOne" (24/09/2026), conferido no Dell em
-25/09/2026. O mapa diz **onde procurar**; a verdade é a fonte viva
-(`systemctl --user`, n8n, `status.json`, `cron/jobs.json`). Mapa e fonte
+25/09/2026 e atualizado em 28/09/2026 com a perda do PC. O mapa diz **onde
+procurar**; a verdade é a fonte viva (`systemctl --user`, n8n, `status.json`,
+`cron/jobs.json`). Mapa e fonte
 divergindo é notícia: diga qual divergência viu e deixe o Claude ou o Codex
 atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
@@ -15,7 +16,7 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
 | Quem | Papel |
 |---|---|
-| Claude e Codex | controlam e corrigem (SSH, Tailscale, Syncthing) |
+| Claude e Codex | controlam e corrigem; sem PC, rodam no próprio Dell |
 | Hermes (você) | informa pelo WhatsApp |
 | n8n do Dell | gerencia os fluxos; todo fluxo termina respondendo a alguém |
 | SquadOne | gerencia as agendas |
@@ -26,21 +27,28 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
 ### PC e celular (o Rômulo)
 
-- **PC Windows 11:** Claude Code e Codex editam o código, fazem commit e push
-  e corrigem o Dell por SSH. A tarefa `DellWorker-LocalPortForwards` sobe no
-  logon e mantém os túneis para 9120, 9119, 5679 e 8080.
-- **Syncthing** espelha `dev/` no Dell; o grafo que você gera volta por ele.
+- **Não há PC desde 25/09/2026.** O PC Windows 11 queimou (NVMe) e não volta;
+  o Rômulo soube em 28/09. O que não tinha sincronizado com o Dell nem ido ao
+  GitHub foi perdido e não se recupera: não trate como pendência nem sugira
+  recuperar. Um PC novo está a caminho e vai receber a organização do
+  SquadOne; até lá **o Dell é a máquina de controle**: Claude Code e Codex
+  rodam nele, sem túnel. Estado e checklist: `SquadOne/deploy/pc/README.md`.
+- **Syncthing** não tem mais com quem sincronizar: `~/Pessoal-dev`,
+  `~/Corporativo-dev` e o grafo que você gera ficam no Dell. O aparelho
+  `Rômulo` ainda aparece desconectado na configuração até o PC novo chegar;
+  isso não é falha nova.
 - **Celular:** ntfy recebe os lembretes do SquadOne; o Telegram manda
   demandas ao SquadOne (texto ou áudio); o WhatsApp recebe você.
-- **`EsteiraLeads08h` foi desativada em 23/09/2026.** O PC não gera mais site
-  nenhum: a fila passou para o `gerador-de-sites` do Dell. Documento ou
-  resposta dizendo que o PC gera está desatualizado.
+- **`EsteiraLeads08h` foi desativada em 23/09/2026** e se perdeu com o PC. A
+  fila é do `gerador-de-sites` do Dell. Documento ou resposta dizendo que o PC
+  gera ou controla algo está desatualizado.
 
 ### Nuvem: GitHub e Easypanel (projeto `aladdin`)
 
 - **GitHub** `romulosutil/SquadOne`: todo push em `main` dispara o build no
-  Easypanel (implantação automática desde 24/09/2026) e, ao mesmo tempo, o seu
-  job "Graphify — projetos".
+  Easypanel (implantação automática desde 24/09/2026). O seu job "Graphify —
+  projetos" também rodava a cada push, chamado pelo pre-push do PC; sem PC,
+  roda só às 03:00.
 - **`squadone-app`**: `https://aladdin-squadone-app.jicnzg.easypanel.host`,
   perfil `SQUADONE_MODE=app`, atrás do Traefik e do porteiro de IP. O volume
   `/app/data` guarda só `squad.json` (os agentes e o treino deles) e
@@ -96,12 +104,14 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 
 `PRUMO — Preparar planilha` fica desligado de propósito (manual).
 
-Syncthing no Dell:
+Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
 
-- `~/Pessoal-dev`: réplica de `dev/PESSOAL`. Contexto para você; não é
-  fronteira Git.
-- `~/Corporativo-dev`: somente leitura; nada do Dell volta para o PC.
-- `~/auto-site` ↔ `G:\Meu Drive\auto`: os sites do Site antes da venda.
+- `~/Pessoal-dev`: réplica de `dev/PESSOAL`, congelada em 25/09/2026.
+  Contexto para você; não é fronteira Git.
+- `~/Corporativo-dev`: somente leitura, último retrato de 25/09/2026.
+- `~/auto-site`: os sites do Site antes da venda. É a pasta de verdade e a
+  única cópia completa; o espelho em `G:\Meu Drive\auto` parou em 25/09/2026
+  com o PC. A esteira não depende do Drive e segue rodando.
 
 ### Externos
 
@@ -110,7 +120,8 @@ Syncthing no Dell:
 - **Gemini:** uma chamada por turno do SquadOne; mais uma se ele trocar de
   squad ou se a demanda vier em áudio.
 - **Telegram Bot API:** webhook com segredo no header e allowlist de chat.
-- **Places, Sheets e Drive:** leads e planilha do PRUMO; pasta `auto`.
+- **Places, Sheets e Drive:** leads e planilha do PRUMO; pasta `auto` (parada
+  em 25/09/2026, sem PC para espelhar).
 - **PNCP:** portal de licitações que o radar consulta.
 - **Vercel:** publica os sites do gerador.
 
@@ -148,7 +159,8 @@ Para responder sobre agenda sem abrir código:
    criado pelo SquadOne (os de fora não avisam)? Bloco de dia inteiro não
    avisa.
 3. **Código:** push em `main` → GitHub → Easypanel implanta; ao mesmo tempo
-   você refaz o grafo → volta ao PC pelo Syncthing. Falhou: seu job
+   você refaz o grafo (fica no Dell; sem PC não volta para lugar nenhum).
+   Sem o pre-push do PC, só o horário das 03:00 dispara. Falhou: seu job
    "Graphify — projetos" em `cron/jobs.json`. Dois merges seguidos podem
    cancelar o primeiro build: se o app não mudou, peça ao Claude conferir as
    Implantações no Easypanel.
@@ -160,7 +172,8 @@ Para responder sobre agenda sem abrir código:
    Pendências em `pend:prumo-*` do `status.json`.
 6. **Site antes da venda:** Caçador 06h → `auto-entrada` → `gerador-de-sites`
    08h → Vercel publica (`publicado.json`) → Balcão monta o link → clique no
-   wa_link marca enviado; tudo espelhado no Drive pelo Syncthing. Status: skill
+   wa_link marca enviado. O wa_link é `127.0.0.1:5679`: sem PC, só abre no
+   navegador do próprio Dell. O espelho no Drive parou em 25/09/2026. Status: skill
    `site-antes-da-venda`. Falhou: `journalctl --user -u gerador-de-sites -n 50`
    e o `falha.log` na pasta do lead (2 falhas tiram o lead da fila). Sem
    `~/.config/claude-ops/gerador.env` o runner avisa e não toca na fila.

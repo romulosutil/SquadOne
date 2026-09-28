@@ -48,7 +48,9 @@ interna `5678` existe somente dentro do container; usá-la no host cria um ciclo
 de reinício falso e interrompe operações da interface.
 
 O login do Windows acessa a Central por túnel SSH local em
-`http://127.0.0.1:9120/`; nenhuma porta pública é necessária.
+`http://127.0.0.1:9120/`; nenhuma porta pública é necessária. Sem PC desde
+28/09/2026 (ver `deploy/pc/README.md`), as mesmas URLs abrem direto no
+navegador do próprio Dell, sem túnel; o que segue vale para o PC novo.
 
 O mesmo túnel pode expor somente em loopback as superfícies operacionais:
 
@@ -108,7 +110,9 @@ dell-status --stdout   # confere sem gravar nem avisar
 O n8n não cria diretórios. O Caçador grava pacotes
 `{"caminho", "base64", "pastas"?}` em `~/.local/share/auto-entrada`, e
 `auto-entrada` (disparado por `auto-entrada.path`) materializa cada um em
-`~/auto-site/<caminho>`. O Syncthing leva `~/auto-site` para `G:\Meu Drive\auto`.
+`~/auto-site/<caminho>`. `~/auto-site` é a pasta de verdade: o Syncthing a
+espelhava em `G:\Meu Drive\auto` no PC, e esse espelho parou em 25/09/2026
+junto com o PC. A esteira não lê o Drive.
 
 ```bash
 install -m 755 deploy/dell/auto-entrada.py ~/.local/bin/auto-entrada
@@ -134,7 +138,8 @@ id do fluxo tem até 21 caracteres, e os fluxos importados do PRUMO usam UUID;
 
 `wa_link` (Site antes da venda) e "Enviar convite" (PRUMO) apontam para
 `http://127.0.0.1:5679/webhook/enviar` e `/webhook/convite`: o clique marca o
-envio e redireciona ao canal. Balcão e Lead Scout gravam contagens em
+envio e redireciona ao canal. O endereço é loopback, então o link só abre no
+Dell ou numa máquina com o túnel (hoje, só no navegador do próprio Dell). Balcão e Lead Scout gravam contagens em
 `~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
 você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
 buscas. `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
@@ -146,9 +151,9 @@ comércio. Quem passa leva o resumo do CNPJ na coluna Briefing.
 
 Desde 23/09/2026 a fila do "Site antes da venda" é gerada no Dell, não no PC:
 a tarefa `EsteiraLeads08h` do PC só rodava com ele ligado às 08h e não gerava
-nada desde 17/09 (ficou **desativada**; `Enable-ScheduledTask EsteiraLeads08h`
-a volta). O runner é o porte do `executar-fila-leads.ps1`, na mesma pasta
-(`~/auto-site`, sincronizada com o Drive pelo Syncthing): até 4 leads por dia,
+nada desde 17/09 (ficou desativada e se perdeu com o PC em 25/09/2026). O
+runner é o porte do `executar-fila-leads.ps1`, na mesma pasta
+(`~/auto-site`): até 4 leads por dia,
 45 min por lead, timer persistente (Dell desligado às 08h roda quando voltar).
 Lead com 2 falhas em `falha.log` sai da fila; apagar o arquivo o devolve.
 `python3 ~/.local/bin/gerador-de-sites --listar` mostra a fila sem gerar nada.

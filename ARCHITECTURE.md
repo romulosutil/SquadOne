@@ -60,11 +60,15 @@ separadamente em `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com
 escrita atômica. A presença de `publicado.json` é exposta apenas como registro
 local e não como prova de disponibilidade pública.
 
-O fluxo observado é n8n → Google Drive → Syncthing → runner de produção →
-`publicado.json` → watcher Linux → `hermes send` → WhatsApp. Não existe chamada
-direta entre n8n e o runner. A rota de eventos da Produção Auto mantém uma
-conexão SSE com o navegador e sinaliza novas leituras periódicas; ela não
-executa, reinicia nem reconfigura nenhum desses serviços.
+O fluxo observado é Caçador do n8n → pacote em `auto-entrada` → `~/auto-site`
+→ `gerador-de-sites` (Claude Code + Vercel) → `publicado.json` → watcher Linux
+→ `hermes send` → WhatsApp; o Balcão do n8n lê os mesmos `publicado.json` em
+`~/auto-site`. O Google Drive saiu do fluxo em 23/09/2026: a pasta `auto` do
+Drive era só um espelho, pelo PC, e está parada desde 25/09/2026 (ver
+`deploy/pc/README.md`). Não existe chamada direta entre n8n e o runner. A rota
+de eventos da Produção Auto mantém uma conexão SSE com o navegador e sinaliza
+novas leituras periódicas; ela não executa, reinicia nem reconfigura nenhum
+desses serviços.
 
 A listagem de clientes é consultável e paginada no servidor. O resumo e o
 funil continuam representando todo o diretório; busca, estágio, ordenação e
@@ -93,22 +97,31 @@ respectivamente em `~/.config/squadone/operations.env`,
 ## Modelo operacional pessoal
 
 O Dell é o worker persistente e o servidor de projetos (Docker). Claude e
-Codex controlam e corrigem o ambiente pelo SSH, Tailscale e Syncthing; o guia
-de acesso é `dev/DELL-WORKER.md`. O Hermes é o secretário: não opera, só
-informa pelo WhatsApp, a partir das rotinas dele e dos avisos do monitor
-`dell-status` e do n8n. O n8n do Dell é o gerente de fluxos e todo fluxo termina
-respondendo a alguém (Error Workflow único + avisos pela fila). O SquadOne é o
-gerente de agendas. Antigravity organiza documentação e arquivos.
+Codex controlam e corrigem o ambiente a partir da máquina de controle, pelo
+SSH, Tailscale e Syncthing.
+
+**Máquina de controle, desde 28/09/2026:** o PC Windows queimou (NVMe; visto
+pela última vez em 25/09/2026) e, até o PC novo chegar, o próprio Dell é a
+máquina de controle: Claude e Codex rodam nele. O que não tinha sincronizado
+com o Dell nem ido ao GitHub foi perdido. O PC novo vai receber a organização
+do SquadOne; estado, consequências e checklist em `deploy/pc/README.md`.
+
+O Hermes é o secretário: não opera, só informa pelo WhatsApp, a partir das
+rotinas dele e dos avisos do monitor `dell-status` e do n8n. O n8n do Dell é o
+gerente de fluxos e todo fluxo termina respondendo a alguém (Error Workflow
+único + avisos pela fila). O SquadOne é o gerente de agendas. Antigravity
+organiza documentação e arquivos.
 
 O repositório CORPORATIVO é espelhado em `~/Corporativo-dev` como somente
-leitura no Dell: é editado no PC e nada no Dell propaga de volta.
+leitura no Dell: era editado no PC e nada no Dell propaga de volta. Sem o PC,
+a pasta é o último retrato de 25/09/2026 e não recebe mais nada.
 
 O diretório `~/Pessoal-dev` no Dell é uma réplica Syncthing da pasta de
-desenvolvimento. Ele serve para o Hermes enxergar o trabalho em andamento, mas
-não é uma fronteira Git confiável: metadados `.git` podem estar incompletos.
-Operações de branch, commit, push e pull usam clones Git próprios no Dell ou o
-checkout de origem no Windows. O GitHub é a fronteira de integração entre os
-agentes.
+desenvolvimento do PC, congelada em 25/09/2026. Ele serve para o Hermes
+enxergar o trabalho, mas não é uma fronteira Git confiável: metadados `.git`
+podem estar incompletos. Operações de branch, commit, push e pull usam clones
+Git próprios no Dell (o checkout de origem no Windows se perdeu com o PC). O
+GitHub é a fronteira de integração entre os agentes.
 
 Credenciais não ficam na pasta sincronizada, em skills ou na configuração do
 SquadOne. OAuth do n8n usa o armazenamento cifrado de credenciais do próprio

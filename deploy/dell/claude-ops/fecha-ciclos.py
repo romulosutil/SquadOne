@@ -8,7 +8,8 @@
 - Lead Scout: "Enviar convite" vira o link rastreado e a sincronização horária
   grava as pendências do PRUMO para a Central.
 
-Os links usam 127.0.0.1:5679, que o túnel SSH abre no PC.
+Os links usam 127.0.0.1:5679, que o túnel SSH abria no PC. Sem PC (desde
+28/09/2026), só abrem no navegador do próprio Dell.
 """
 from n8n import api, put
 

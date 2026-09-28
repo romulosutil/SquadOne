@@ -11,12 +11,13 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 
 ## Fontes e fronteiras
 
-- `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do Windows. Leia para
-  acompanhar o trabalho; não faça operações Git nela, o `.git` pode estar
-  incompleto.
+- `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do PC Windows, congelada
+  em 25/09/2026 (o PC queimou; nada novo chega). Leia como retrato; não faça
+  operações Git nela, o `.git` pode estar incompleto.
 - `~/SquadOne` e outros clones Git próprios: leia branches, PRs, issues e
   checks com `git` e `gh`. Nada de commit, push, merge ou comentário sem pedido.
-- `~/auto-site`: réplica da pasta de produção automática no Drive.
+- `~/auto-site`: a pasta de produção automática, a de verdade e a única cópia
+  completa. O espelho no Drive, pelo PC, parou em 25/09/2026.
 - `~/.hermes`: estado privado do Hermes. Nunca copie segredos daqui para
   repositórios, Syncthing, Drive, logs ou respostas.
 - `~/.config/squadone` e `~/.local/share/squadone-operations`: configuração e

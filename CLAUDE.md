@@ -387,6 +387,7 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Ao terminar tarefa: `git commit` + `git push`. O grafo é do Hermes no Dell (job "Graphify — projetos", às 03:00 e a cada push; volta pelo Syncthing): nunca rode `graphify update` no Windows.
 
 ### Remote Infrastructure Directives
+- **Sem PC desde 28/09/2026.** O PC Windows queimou (NVMe; visto pela última vez em 25/09) e o que não tinha sincronizado foi perdido: não procure nem reconstrua. Até o PC novo chegar, você roda **no próprio Dell**: Git no clone `~/SquadOne` (atualizado do GitHub), nunca na réplica congelada `~/Pessoal-dev`; `docker` direto, sem `ssh dell-worker`. As regras de Windows abaixo voltam a valer no PC novo. Estado e checklist: `deploy/pc/README.md`.
 - Local Windows Docker service is disabled by design. All containers run exclusively on `dell-worker`.
 - Never search Windows paths for container binaries or Nginx executables.
 - Run container commands via `ssh dell-worker "docker ..."` or rely on `DOCKER_HOST="ssh://dell-worker"`.

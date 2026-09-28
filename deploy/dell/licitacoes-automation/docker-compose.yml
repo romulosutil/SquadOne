@@ -78,7 +78,8 @@ services:
       - ./data:/data
       # Fila de avisos: arquivo JSON aqui vira WhatsApp pelo Hermes (dell-status).
       - ${HOME}/.local/share/avisos/fila:/home/node/.n8n-files/avisos
-      # Pasta auto (Site antes da venda): Syncthing <-> G:\Meu Drive\auto no PC.
+      # Pasta auto (Site antes da venda). O espelho em G:\Meu Drive\auto, pelo
+      # PC, parou em 25/09/2026 (PC queimado): esta pasta é a de verdade.
       - ${HOME}/auto-site:/home/node/.n8n-files/auto
       # Pacotes do Caçador: ~/.local/bin/auto-entrada cria as pastas em ~/auto-site.
       - ${HOME}/.local/share/auto-entrada:/home/node/.n8n-files/auto-entrada

@@ -5,8 +5,9 @@ para o n8n do Dell. Idempotente: recria pelo nome.
 - Places: chave do Dell. Gemini: credencial criada a partir de GOOGLE_API_KEY
   do Hermes, sem passar a chave por nenhum outro lugar.
 - Drive saiu: o Caçador grava pacotes em /home/node/.n8n-files/auto-entrada e
-  o auto-entrada do Dell cria as pastas em ~/auto-site (Syncthing -> G:\\Meu
-  Drive\\auto). O Balcão lê os publicado.json direto de ~/auto-site.
+  o auto-entrada do Dell cria as pastas em ~/auto-site (o espelho em G:\\Meu
+  Drive\\auto, pelo PC, parou em 25/09/2026). O Balcão lê os publicado.json
+  direto de ~/auto-site.
 - Error Workflow: o aviso único pelo Hermes.
 
 Estado em 23/09/2026: Caçador (oow8TkxrAf4fVvTj) e Balcão (wjuoIknp2qlWo0QI)

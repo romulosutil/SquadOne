@@ -3,7 +3,7 @@
 
 Porte do `executar-fila-leads.ps1` (G:\\Meu Drive\\auto), que só rodava com o PC
 ligado às 08h e não gerava nada automático desde 17/09/2026. A pasta é a mesma
-(`~/auto-site`, a `auto` do Drive, sincronizada pelo Syncthing), e o contrato
+(`~/auto-site`; o espelho no Drive, pelo PC, parou em 25/09/2026), e o contrato
 também:
 
 - fila = pasta sem `.`/`_` no começo, com `content.md` e sem `publicado.json`,

@@ -8,8 +8,9 @@ Então o n8n grava pacotes em ~/.local/share/auto-entrada/*.json:
     {"caminho": "<slug>/content.md", "base64": "...", "pastas": ["Fotos", "Logotipo"]?}
 
 e este script materializa cada um em ~/auto-site/<caminho>, criando as pastas.
-O Syncthing leva ~/auto-site para G:\\Meu Drive\\auto no PC, e o Google Drive
-para Desktop sobe para a nuvem: o mesmo lugar onde o Caçador gravava antes.
+~/auto-site é a pasta de verdade. O Syncthing a espelhava em G:\\Meu Drive\\auto
+no PC (e dali para o Drive); o PC queimou em 25/09/2026 e o espelho do Drive
+ficou parado até o PC novo (deploy/pc/README.md).
 
 Pacote inválido vai para ~/.local/share/auto-entrada-erro/ e gera aviso pelo
 Hermes (fila de avisos).
