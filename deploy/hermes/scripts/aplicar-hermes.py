@@ -6,7 +6,7 @@ da coleta do ASMR).
 
 Rodar pelo Python do Hermes (tem ruamel, que preserva os comentários do YAML):
 
-    ~/.hermes/hermes-agent/venv/bin/python ~/Pessoal-dev/SquadOne/deploy/hermes/scripts/aplicar-hermes.py
+    ~/.hermes/hermes-agent/venv/bin/python ~/SquadOne/deploy/hermes/scripts/aplicar-hermes.py
 
 Idempotente. Guarda backup datado de cada arquivo que muda e reinicia o
 hermes-gateway no fim, porque o gateway só relê config.yaml no boot.

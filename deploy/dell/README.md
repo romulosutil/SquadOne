@@ -1,7 +1,17 @@
 # Central de Operações no Dell
 
-O serviço usa o build do checkout em `~/Pessoal-dev/SquadOne` e escuta apenas
-em `127.0.0.1:9120`.
+O serviço usa o build do clone Git `~/SquadOne` e escuta apenas em
+`127.0.0.1:9120`. Até 28/09/2026 usava a réplica `~/Pessoal-dev/SquadOne`, que
+congelou com o PC; o `.env` (o build lê `VITE_GOOGLE_CLIENT_ID`, e o
+`TOKEN_ENC_KEY` abre o `data/google-auth.json`) e o `data/` foram copiados de
+lá e ficam no clone, fora do Git.
+
+Para atualizar a Central (fast-forward da `main`, build e reinício com teste):
+
+```bash
+install -m 755 deploy/dell/atualizar-central.sh ~/.local/bin/atualizar-central
+atualizar-central
+```
 
 Arquivos privados no Dell, fora do Git:
 
@@ -139,9 +149,9 @@ id do fluxo tem até 21 caracteres, e os fluxos importados do PRUMO usam UUID;
 `wa_link` (Site antes da venda) e "Enviar convite" (PRUMO) apontam para
 `http://127.0.0.1:5679/webhook/enviar` e `/webhook/convite`: o clique marca o
 envio e redireciona ao canal. O endereço é loopback, então o link só abre no
-Dell ou numa máquina com o túnel (hoje, só no navegador do próprio Dell). Balcão e Lead Scout gravam contagens em
-`~/.local/share/n8n-estado/*.json`, que o `dell-status` mostra em "Esperando
-você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
+Dell ou numa máquina com o túnel (hoje, só no navegador do próprio Dell).
+Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
+que o `dell-status` mostra em "Esperando você" na Central. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
 buscas. `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
 em `prumo-porte-cnpj.js`): acha o CNPJ no site, consulta a Receita pela
 BrasilAPI e descarta MEI, microempresa, rede, CNPJ baixado e quem não é
@@ -164,8 +174,8 @@ permissão, então a decisão de ligá-lo é dele):
 ```bash
 claude            # login da conta Claude (uma vez) — /login dentro dele
 vercel login      # conta da Vercel com o escopo romulodesigns
-install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
-cp ~/Pessoal-dev/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
+install -m 755 ~/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+cp ~/SquadOne/deploy/dell/gerador-de-sites.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites.timer
 ```
 
@@ -193,8 +203,8 @@ Hermes (`lid-mapping-*_reverse.json`, só leitura). Um aviso por número a cada
 (segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
 
 ```bash
-install -m 755 ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
-cp ~/Pessoal-dev/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
+cp ~/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
 ```
 

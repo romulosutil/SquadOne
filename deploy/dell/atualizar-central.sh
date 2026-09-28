@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Atualiza a Central do SquadOne no Dell a partir da main do GitHub.
+#
+# A Central roda do clone ~/SquadOne desde 28/09/2026. Antes rodava da réplica
+# Syncthing ~/Pessoal-dev/SquadOne, que congelou quando o PC queimou. O .env
+# (VITE_GOOGLE_CLIENT_ID entra no build; TOKEN_ENC_KEY abre o data/google-auth.json)
+# e o data/ ficam fora do Git, no próprio clone.
+#
+# Só avança em fast-forward: commit local não enviado faz o script parar em vez
+# de mesclar sozinho.
+set -euo pipefail
+
+CLONE="$HOME/SquadOne"
+URL="http://127.0.0.1:9120/api/runtime"
+
+cd "$CLONE"
+[ -f .env ] || { echo "Falta $CLONE/.env: o build precisa do VITE_GOOGLE_CLIENT_ID." >&2; exit 1; }
+
+git fetch -q origin
+git merge -q --ff-only origin/main
+echo "Código em $(git log -1 --format='%h %s')"
+
+# Sem package-lock: o projeto versiona bun.lock, e o Dell não tem bun.
+npm install --no-package-lock --no-audit --no-fund
+npm run build
+systemctl --user restart squadone-operations.service
+
+for _ in $(seq 1 30); do
+  if curl -sf "$URL" >/dev/null; then
+    echo "Central no ar: $(curl -s "$URL")"
+    exit 0
+  fi
+  sleep 1
+done
+echo "A Central não respondeu em 30 s." >&2
+journalctl --user -u squadone-operations.service -n 30 --no-pager >&2
+exit 1
