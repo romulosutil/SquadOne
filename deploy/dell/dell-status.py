@@ -257,8 +257,8 @@ def pendencias() -> list[dict]:
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
     out.append(check("pend:sites-fila", "pendencias", "Sites na fila do gerador", "atencao" if fila else "ok",
-                     f"{len(fila)} lead(s) com pasta e sem site publicado. O PC gera até 4 por dia às 08h "
-                     "(tarefa EsteiraLeads08h); para adiantar, rode executar-fila-leads.ps1."))
+                     f"{len(fila)} lead(s) com pasta e sem site publicado. O gerador do Dell faz até 4 por dia "
+                     "às 08h; para adiantar, rode /lead-novo numa sessão do Claude em ~/auto-site."))
     for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
         try:
             d = json.loads(arq.read_text())
@@ -273,6 +273,50 @@ def pendencias() -> list[dict]:
                 detalhe += f" (contagem de {gerado.astimezone():%d/%m %H:%M})"
             out.append(check(f"pend:{item['id']}", "pendencias", str(item["nome"]), "atencao" if qtd else "ok",
                              detalhe, item.get("link")))
+    return out
+
+
+# ---------------------------------------------------------------- backup (Dell → Drive)
+
+BACKUP_STATUS = HOME / ".local/state/backup-dell/status.json"
+
+
+def backup() -> list[dict]:
+    """Um check por fonte do backup-dell (deploy/dell/backup), pela idade do
+    último sucesso: uma rodada ruim isolada é só atenção na Central; o que fica
+    sem sucesso além do limite da fonte vira falha e, portanto, WhatsApp."""
+    try:
+        d = json.loads(BACKUP_STATUS.read_text(encoding="utf-8"))
+    except OSError:
+        return [check("backup", "dados", "Backup no Drive", "atencao", "Ainda não rodou (backup-dell)")]
+    except ValueError:
+        return [check("backup", "dados", "Backup no Drive", "atencao", "status.json do backup ilegível")]
+    out = []
+    t = agora()
+    for fid, f in sorted(d.get("fontes", {}).items()):
+        nome = f"Backup · {f.get('nome', fid)}"
+        detalhe = str(f.get("detalhe") or "")
+        ok_em = f.get("ultimo_sucesso")
+        idade = (t - datetime.fromisoformat(ok_em)).total_seconds() / 3600 if ok_em else None
+        if f.get("tipo") == "ensaio":
+            if idade is None:
+                estado = "atencao" if f.get("estado") != "falha" else "falha"
+                detalhe = detalhe or "Ensaio de restauração ainda não rodou"
+            elif idade > 35 * 24:
+                estado, detalhe = "atencao", f"Último ensaio ok em {datetime.fromisoformat(ok_em):%d/%m}; o próximo cofre roda outro"
+            else:
+                estado = "ok"
+        elif idade is None:
+            estado, detalhe = "atencao", f"Ainda sem sucesso. {detalhe}".strip()
+        elif idade > f.get("falha_h", 24):
+            estado, detalhe = "falha", f"Sem backup há {idade:.0f} h. {detalhe}".strip()
+        elif idade > f.get("atencao_h", 3) or f.get("estado") in ("falha", "atencao"):
+            estado = "atencao"
+        else:
+            estado = "ok"
+        if f.get("tipo") == "cofre" and f.get("check") == "falha":
+            estado, detalhe = "falha", f"restic check falhou: {f.get('check_detalhe', '')}"
+        out.append(check(f"backup:{fid}", "dados", nome, estado, detalhe))
     return out
 
 
@@ -390,7 +434,7 @@ def main() -> None:
     a = p.parse_args()
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, pendencias, easypanel):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, pendencias, easypanel, backup):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

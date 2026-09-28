@@ -1,0 +1,133 @@
+# Backup do Dell para o Google Drive: o que vai, para onde, e quando avisar.
+#
+# Uma fonte nova é um bloco novo aqui; o runner (backup-dell.py) não muda.
+# Instalado em ~/.config/backup-dell/fontes.toml (ver README.md ao lado).
+#
+# Duas classes, decididas em 28/09/2026:
+# - espelho: cópia legível, só num sentido (Dell → Drive). O Dell é a verdade;
+#   o que alguém mudar ou apagar no Drive é refeito na rodada seguinte, e a
+#   versão anterior fica na lixeira por 30 dias.
+# - cofre: restic cifrado com a home inteira menos o que se reinstala, mais
+#   dumps consistentes do n8n e dos SQLite do Hermes. É o que refaz o Dell.
+#
+# Caminhos com "~/" são relativos à home do Dell. Caminhos no Drive são
+# relativos à raiz do remote do rclone.
+
+[geral]
+# Remote do rclone com escopo drive.file: ele só enxerga o que ele mesmo criou.
+# Um defeito aqui não alcança o resto do Drive, e pastas criadas à mão com o
+# mesmo nome ficam invisíveis para ele (ele criaria outra).
+remoto = "gdrive"
+# O que o espelho apaga ou troca vai para <lixeira>/<id>/<AAAA-MM-DDTHH>.
+lixeira = "PRUMO/_lixeira"
+lixeira_dias = 30
+# De dia o backup não disputa a rede com o resto (formato do --bwlimit).
+banda = "08:00,2M 23:00,off"
+# Espelho e cofre usam a mesma trava: os dois regravam o rclone.conf quando o
+# token renova e não podem fazer isso ao mesmo tempo.
+espera_trava_min = 5
+
+[[espelho]]
+id = "sites"
+nome = "Sites antes da venda"
+origem = "~/auto-site"
+destino = "PRUMO/Sites antes da venda"
+intervalo_h = 1
+atencao_h = 3
+falha_h = 24
+# Sem este arquivo a origem é tratada como vazia ou desmontada e a rodada para:
+# um sync de origem vazia apagaria o espelho inteiro.
+sentinela = "CLAUDE.md"
+# Mover muitos leads de uma vez (ex.: para _recusados) gera apagamentos; acima
+# disso a rodada falha e pede confirmação (backup-dell espelho --sem-limite).
+max_apagar = 500
+# O gerador escreve index.html e publicado.json durante a rodada das 08h;
+# enquanto a trava dele for recente, o espelho espera (estado "adiado").
+adiar_se_recente = { arquivo = ".logs/gerador.lock", horas = 4 }
+# .claude/, .agents/ e CLAUDE.md vão junto: fazem parte da esteira.
+excluir = [
+  "/.logs/**", "/.playwright-mcp/**", "/.tokensave/**", "/.headroom/**",
+  "/.impeccable/**", "/.stfolder/**", "/.stversions/**", "/graphify-out/**",
+  "*.parcial", "*.tmp", "/.parar",
+]
+leia_me = """Espelho da pasta ~/auto-site do Dell (esteira Site antes da venda do PRUMO).
+Atualizado a cada hora, só no sentido Dell -> Drive.
+Editar ou apagar aqui não volta para o Dell e é desfeito na rodada seguinte.
+O que o espelho apagou ou trocou fica 30 dias em PRUMO/_lixeira/sites.
+"""
+
+[[espelho]]
+id = "consultoria"
+nome = "PRUMO — consultoria"
+origem = "~/prumo"
+destino = "PRUMO/Consultoria"
+intervalo_h = 24
+atencao_h = 30
+falha_h = 72
+sentinela = "README.md"
+max_apagar = 200
+excluir = ["/.git/**", "/graphify-out/**"]
+leia_me = """Espelho do repositório romulosutil/prumo (~/prumo no Dell), a fonte da verdade do PRUMO.
+Atualizado uma vez por dia, só no sentido Dell -> Drive. Para editar, edite o repositório.
+"""
+
+[cofre]
+repositorio = "rclone:gdrive:Backups/dell-worker/restic"
+senha = "~/.config/backup-dell/restic.senha"
+raiz = "~"
+atencao_h = 26
+falha_h = 50
+reter = { diarios = 7, semanais = 4, mensais = 6 }
+# Uma rodada que acrescenta mais que isso quase sempre é pasta nova grande que
+# ninguém classificou; vira atenção para alguém decidir se exclui.
+alerta_mb = 500
+# Se algum destes sumir, o cofre não refaz o Dell: vira atenção.
+obrigatorios = [
+  "~/.hermes/.env", "~/.hermes/config.yaml", "~/.hermes/cron/jobs.json",
+  "~/.hermes/memories", "~/licitacoes-automation/.env",
+  "~/.config/claude-ops", "~/.config/squadone", "~/.config/rclone/rclone.conf",
+  "~/SquadOne/.env", "~/SquadOne/data", "~/.ssh", "~/.local/state/syncthing",
+]
+# Reinstalável, regenerável ou grande sem valor de restauração. Padrão sem "/"
+# vale em qualquer nível (regra do restic).
+excluir = [
+  "~/.cache", "~/snap", "~/.npm", "~/.local/lib", "~/.local/share/uv",
+  "~/.local/share/Trash", "~/.local/share/containers", "~/.config/Claude",
+  "~/.antigravity-ide-server", "~/.config/google-chrome*", "~/.local/opt",
+  "~/.agent-browser/browsers", "~/.cua-driver/packages", "~/.graphify",
+  "~/.hermes/hermes-agent", "~/.hermes/tools", "~/.hermes/venv*",
+  "~/.hermes/cache", "~/.hermes/*_cache", "~/.hermes/*cache*.json",
+  "~/.hermes/backups", "~/.hermes/chrome-debug", "~/.hermes/lsp",
+  "~/.hermes/bin", "~/.hermes/installs", "~/.hermes/state-snapshots",
+  # Os SQLite vivos do Hermes entram pelo preparo, copiados de forma consistente.
+  "~/.hermes/*.db", "~/.hermes/*.db-*", "~/.hermes/cron/*.db", "~/.hermes/cron/*.db-*",
+  "~/.local/state/syncthing/index-*", "~/.local/state/backup-dell/ensaio",
+  "~/qa-shots", "~/shots", "~/tmp-shots", "~/.qa-shots", "~/*.png", "~/*.deb",
+  "~/auto-site/.playwright-mcp",
+  "node_modules", ".gocache*", ".gomodcache", "graphify-out", "__pycache__",
+  ".venv", "venv", "venv-*",
+]
+
+# Rodados antes de cada cópia; o resultado vai para ~/.local/state/backup-dell/preparo
+# e entra no cofre junto com a home.
+[[cofre.preparo]]
+tipo = "postgres"
+nome = "n8n"
+compose = "~/licitacoes-automation/docker-compose.yml"
+servico = "db"
+banco = "n8n"
+env = "~/licitacoes-automation/.env"
+
+[[cofre.preparo]]
+tipo = "pasta-do-container"
+nome = "n8n-home"
+compose = "~/licitacoes-automation/docker-compose.yml"
+servico = "n8n"
+pasta = "/home/node/.n8n"
+# O config guarda a encryptionKey; nodes/ e storage/ os pacotes instalados.
+excluir = ["n8nEventLog*", "crash.journal"]
+
+[[cofre.preparo]]
+tipo = "sqlite"
+nome = "hermes"
+arquivos = ["~/.hermes/*.db", "~/.hermes/cron/*.db"]

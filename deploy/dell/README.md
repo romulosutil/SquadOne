@@ -120,9 +120,10 @@ dell-status --stdout   # confere sem gravar nem avisar
 O n8n não cria diretórios. O Caçador grava pacotes
 `{"caminho", "base64", "pastas"?}` em `~/.local/share/auto-entrada`, e
 `auto-entrada` (disparado por `auto-entrada.path`) materializa cada um em
-`~/auto-site/<caminho>`. `~/auto-site` é a pasta de verdade: o Syncthing a
-espelhava em `G:\Meu Drive\auto` no PC, e esse espelho parou em 25/09/2026
-junto com o PC. A esteira não lê o Drive.
+`~/auto-site/<caminho>`. `~/auto-site` é a pasta de verdade. A esteira não lê
+o Drive: o espelho no Drive (`PRUMO/Sites antes da venda`, a cada hora) é feito
+pelo backup, só no sentido Dell → Drive (ver "Backup no Drive"). Até 25/09/2026
+o Syncthing a espelhava em `G:\Meu Drive\auto` pelo PC.
 
 ```bash
 install -m 755 deploy/dell/auto-entrada.py ~/.local/bin/auto-entrada
@@ -130,6 +131,17 @@ mkdir -p ~/.local/share/auto-entrada && chmod 777 ~/.local/share/auto-entrada
 cp deploy/dell/auto-entrada.path deploy/dell/auto-entrada.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now auto-entrada.path
 ```
+
+## Backup no Drive (`backup/`)
+
+Desde 28/09/2026 o Dell manda direto ao Drive, sem PC:
+- espelho só de leitura em `PRUMO/Sites antes da venda` (de `~/auto-site`, a
+  cada hora) e em `PRUMO/Consultoria` (de `~/prumo`, diário);
+- cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes,
+  segredos), às 03:30, com ensaio de restauração mensal.
+
+Um manifesto (`backup/fontes.toml`) e um runner (`backup-dell`). Instalação,
+decisões e alertas em `backup/README.md`; restauração em `backup/RESTAURAR.md`.
 
 ## Scripts de operação do n8n (`claude-ops/`)
 

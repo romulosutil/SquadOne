@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup do Dell: espelho legível no Drive (PRUMO/)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/backup-dell espelho
+TimeoutStartSec=6h
+Nice=15
+IOSchedulingClass=idle
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

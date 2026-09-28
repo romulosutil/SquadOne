@@ -20,9 +20,11 @@ SquadOne inteiro vai ser organizado nele. Até ele chegar:
   Dell.
 - **A pasta `auto` do Drive parou em 25/09/2026.** O caminho era `~/auto-site`
   → Syncthing → `G:\Meu Drive\auto` no PC → Google Drive para Desktop. A esteira
-  não depende do Drive (o Balcão lê `~/auto-site` direto), então segue rodando;
-  só o espelho parou. `~/auto-site` no Dell é a única cópia completa e **não
-  tem backup fora do Dell** até o PC novo.
+  não depende do Drive (o Balcão lê `~/auto-site` direto), então segue rodando.
+  Desde 28/09 o Dell manda direto ao Drive, sem PC (`deploy/dell/backup/`):
+  espelho só de leitura em `PRUMO/Sites antes da venda` (a cada hora) e
+  `PRUMO/Consultoria`, mais um cofre cifrado em `Backups/dell-worker`. A `auto`
+  antiga virou `auto (até 25-09)`.
 - **`~/Pessoal-dev` e `~/Corporativo-dev` são o último retrato do PC** e não
   recebem mais nada. A fonte é o GitHub. O `dev/DELL-WORKER.md`, as tarefas
   agendadas (`DellWorker-LocalPortForwards`, `EsteiraLeads08h`) e o pre-push
@@ -39,17 +41,18 @@ SquadOne inteiro vai ser organizado nele. Até ele chegar:
    o nome MagicDNS. Se for Windows, `dell-worker-tunnels.ps1` (nesta pasta)
    como tarefa agendada no logon (`DellWorker-LocalPortForwards`).
 2. **Código:** antes, levar ao GitHub o que só existe no Dell (commits locais
-   em `~/SquadOne` e outros clones). No PC novo, clonar do GitHub; não copiar
-   da réplica, cujo `.git` é incompleto.
-3. **Pasta `auto` e Drive:** Google Drive para Desktop na conta
-   sutil.romulo@gmail.com. A `auto` do Drive guarda o retrato de 25/09, com
-   leads que depois foram movidos ou apagados no Dell. **Não parear o
-   Syncthing em cima dela:** o aparelho novo não tem histórico, então tudo que
-   ele tem vira "novo" e volta para o Dell, ressuscitando leads na fila do
-   gerador. Renomear a pasta antiga (ex.: `auto-ate-2509`) e deixar o Syncthing
-   criar `auto` vazia, recebendo do Dell. Mesmo cuidado com `Pessoal-dev` e
-   `Corporativo-dev`: o PC novo começa vazio e recebe; nunca "Override changes"
-   do lado novo.
+   em clones do Dell). No PC novo, clonar do GitHub (`romulosutil/SquadOne`,
+   `romulosutil/prumo`…); não copiar da réplica, cujo `.git` é incompleto.
+3. **Drive:** Google Drive para Desktop na conta sutil.romulo@gmail.com. Os
+   sites e a consultoria já aparecem em `G:\Meu Drive\PRUMO\`, **só leitura**
+   (o que se edita ali é desfeito pelo espelho do Dell).
+   - **Não sincronize os sites pelo Syncthing:** o Drive já os traz, e o
+     risco de ressuscitar leads na fila do gerador acaba.
+   - **Para editar no PC,** use um Syncthing à parte, Dell↔PC, com o PC
+     começando **vazio** e recebendo. Um aparelho novo não tem histórico, e
+     tudo que ele tem vira "novo" e volta para o Dell. Mesmo cuidado com
+     `Pessoal-dev` e `Corporativo-dev`: nunca "Override changes" do lado novo.
+   - Apagar `auto (até 25-09)` quando o Rômulo decidir.
 4. **Syncthing:** parear o aparelho novo; depois remover o antigo (`Rômulo`,
    `LHPOUZN-…`) das pastas e dos aparelhos do Dell. Decidir o sentido do
    `Corporativo-dev` (hoje `receiveonly` no Dell porque o PC era a origem).

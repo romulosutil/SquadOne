@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup do Dell: cofre todo dia às 03:30 (Dell desligado: roda quando voltar)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Backup do Dell: cofre cifrado (restic) no Drive, com manutenção e ensaio quando vencem
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/backup-dell cofre
+TimeoutStartSec=12h
+Nice=15
+IOSchedulingClass=idle
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+# Sem ProtectHome/ProtectSystem: o cofre lê a home inteira, fala com o socket do
+# Docker (pg_dump, ensaio) e o rclone regrava o token no rclone.conf.

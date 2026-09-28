@@ -106,6 +106,17 @@ máquina de controle: Claude e Codex rodam nele. O que não tinha sincronizado
 com o Dell nem ido ao GitHub foi perdido. O PC novo vai receber a organização
 do SquadOne; estado, consequências e checklist em `deploy/pc/README.md`.
 
+**O PRUMO é dono de tudo (28/09/2026).** O Site antes da venda passa a ser a
+frente "Vender mais" do PRUMO. A fonte da verdade do PRUMO é o repositório
+privado `romulosutil/prumo` (`~/prumo` no Dell). No Drive, o negócio fica em
+`PRUMO/`: `Sites antes da venda/` (espelho de `~/auto-site`) e `Consultoria/`
+(espelho do repositório). São espelhos só de leitura, feitos pelo próprio Dell.
+Um cofre cifrado com o que refaz o Dell (n8n e chave, Hermes, segredos) fica à
+parte, em `Backups/dell-worker/`. Tudo sai de um manifesto único
+(`deploy/dell/backup/fontes.toml`) e o `dell-status` avisa quando um deles
+atrasa. A junção física da esteira dentro do PRUMO (pastas, fluxos) é um passo
+seguinte.
+
 O Hermes é o secretário: não opera, só informa pelo WhatsApp, a partir das
 rotinas dele e dos avisos do monitor `dell-status` e do n8n. O n8n do Dell é o
 gerente de fluxos e todo fluxo termina respondendo a alguém (Error Workflow

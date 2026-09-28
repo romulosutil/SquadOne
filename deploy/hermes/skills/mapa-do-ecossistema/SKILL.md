@@ -81,6 +81,8 @@ Unidades `systemctl --user`:
 | `whatsapp-observador.service` | contínuo | lê o `bridge.log` da sua bridge (sem o conteúdo das mensagens); resposta de lead das planilhas avisa o n8n. Só vê **respostas** de leads, nunca o envio do Rômulo |
 | `pncp-catchup.timer` | 08h, persistente | refaz a coleta do PNCP se o n8n perdeu a das 07:30 |
 | `dell-worker-healthwatch.service` | contínuo | confere por HTTP os serviços do usuário |
+| `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`) e `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) |
+| `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
 | `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você |
 
 Docker Compose em `~/licitacoes-automation`: `n8n` (credenciais OAuth
@@ -109,9 +111,17 @@ Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
 - `~/Pessoal-dev`: réplica de `dev/PESSOAL`, congelada em 25/09/2026.
   Contexto para você; não é fronteira Git.
 - `~/Corporativo-dev`: somente leitura, último retrato de 25/09/2026.
-- `~/auto-site`: os sites do Site antes da venda. É a pasta de verdade e a
-  única cópia completa; o espelho em `G:\Meu Drive\auto` parou em 25/09/2026
-  com o PC. A esteira não depende do Drive e segue rodando.
+- `~/auto-site`: os sites do Site antes da venda, a pasta de verdade. Não depende
+  mais do Syncthing: o `backup-dell` a espelha no Drive (`PRUMO/Sites antes da
+  venda`). A antiga `auto` do Drive virou `auto (até 25-09)`.
+
+Backup no Drive (desde 28/09/2026, `SquadOne/deploy/dell/backup/`): o PRUMO é
+dono de tudo, então o negócio fica em `PRUMO/` (espelhos só de leitura: editar
+no Drive é desfeito) e o cofre cifrado do Dell em `Backups/dell-worker`. O
+estado está em `~/.local/state/backup-dell/status.json` e nas verificações
+`backup:*` do `status.json`. `backup-dell status` resume. Falhou: diga qual
+fonte e o detalhe, e peça ao Claude. Nunca rode backup, restauração ou ensaio
+por conta própria.
 
 ### Externos
 
@@ -120,8 +130,8 @@ Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
 - **Gemini:** uma chamada por turno do SquadOne; mais uma se ele trocar de
   squad ou se a demanda vier em áudio.
 - **Telegram Bot API:** webhook com segredo no header e allowlist de chat.
-- **Places, Sheets e Drive:** leads e planilha do PRUMO; pasta `auto` (parada
-  em 25/09/2026, sem PC para espelhar).
+- **Places, Sheets e Drive:** leads e planilha do PRUMO; no Drive, `PRUMO/`
+  (espelhos do Dell) e `Backups/dell-worker` (cofre).
 - **PNCP:** portal de licitações que o radar consulta.
 - **Vercel:** publica os sites do gerador.
 
@@ -173,7 +183,8 @@ Para responder sobre agenda sem abrir código:
 6. **Site antes da venda:** Caçador 06h → `auto-entrada` → `gerador-de-sites`
    08h → Vercel publica (`publicado.json`) → Balcão monta o link → clique no
    wa_link marca enviado. O wa_link é `127.0.0.1:5679`: sem PC, só abre no
-   navegador do próprio Dell. O espelho no Drive parou em 25/09/2026. Status: skill
+   navegador do próprio Dell. O site aparece em até 1 h em `PRUMO/Sites antes
+   da venda` no Drive (espelho do backup). Status: skill
    `site-antes-da-venda`. Falhou: `journalctl --user -u gerador-de-sites -n 50`
    e o `falha.log` na pasta do lead (2 falhas tiram o lead da fila). Sem
    `~/.config/claude-ops/gerador.env` o runner avisa e não toca na fila.
