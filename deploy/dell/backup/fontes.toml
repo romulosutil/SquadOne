@@ -123,6 +123,9 @@ excluir = [
   "~/auto-site/.playwright-mcp",
   "node_modules", ".gocache*", ".gomodcache", "graphify-out", "__pycache__",
   ".venv", "venv", "venv-*",
+  # Travas de navegador (Chrome, Codex, Claude): links sem alvo que o restic
+  # não lê e que fariam toda rodada sair com "arquivos não puderam ser lidos".
+  "Singleton*",
 ]
 
 # Rodados antes de cada cópia; o resultado vai para ~/.local/state/backup-dell/preparo
