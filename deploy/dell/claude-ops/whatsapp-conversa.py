@@ -11,9 +11,21 @@ planilhas escreve:
 - POST /webhook/whatsapp-conversa   {"chave", "direcao": "saida"|"entrada", "em"}:
   PRUMO: saída ou resposta com Etapa "Revisar" -> "Convite enviado"; resposta
   com Etapa "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ...".
-  Site antes da venda: saída ou resposta com status "pronto" -> "enviado".
+  Site antes da venda (29/09/2026): saída ou resposta com status "novo" ou
+  "pronto" -> "enviado" (+ enviado_em se vazio; o Balcão completa site_url de
+  quem virou enviado antes de ele passar); resposta a 5 min ou mais do envio ->
+  respondeu_em (e "expirado" volta a "enviado"). A pasta do lead vai para
+  _em-conversa pelo site-pastas do Dell (o Balcão lista o que mover).
   Hoje só chegam RESPOSTAS (observador.py lê o log da bridge do Hermes, que
   não traz o número das mensagens enviadas); a saída fica pronta para quando houver.
+
+Por que 5 min: em 28/09/2026 dez leads "responderam" entre 16:30 e 16:49, na
+ordem e no ritmo em que o Rômulo mandava, cada um segundos depois do envio. É a
+saudação automática do WhatsApp Business, não gente. Por isso a primeira
+mensagem de um lead "pronto" só prova o envio, e resposta é mensagem que chega a
+5 min ou mais do envio. O observador manda um segundo aviso ("seguinte": true)
+quando o lead volta a escrever depois desses 5 min; o PRUMO ignora esse
+segundo aviso e continua marcando uma vez por janela, como antes.
 
 Só número, direção e hora: o conteúdo das mensagens nunca sai do observador.
 Os dois webhooks exigem o header X-Observador (credencial "Observador
@@ -106,7 +118,7 @@ const prumo = $('Ler Prospects').all().map(i => i.json)
   .filter(l => !['Concluído', 'Sem interesse'].includes(String(l['Etapa'] ?? '').trim()))
   .map(l => chave(l['WhatsApp']));
 const site = $('Ler Leads do site').all().map(i => i.json)
-  .filter(l => ['pronto', 'enviado'].includes(String(l.status ?? '').trim()))
+  .filter(l => ['novo', 'pronto', 'enviado', 'expirado'].includes(String(l.status ?? '').trim()))
   .map(l => chave(numeroDoSite(l)));
 return [{ json: { chaves: [...new Set([...prumo, ...site].filter(Boolean))] } }];"""
     nos = [
@@ -131,11 +143,15 @@ def conversa(auth):
 const ev = $('Conversa no WhatsApp').first().json.body ?? {};
 const alvo = chave(ev.chave);
 const direcao = ev.direcao === 'entrada' ? 'entrada' : 'saida';
+// Segundo aviso do observador na mesma conversa: só serve ao Site (resposta depois da saudação).
+const seguinte = ev.seguinte === true;
 const em = ev.em ? new Date(ev.em) : new Date();
+// Saudação automática do WhatsApp Business chega segundos depois do envio; gente demora mais.
+const SAUDACAO_MS = 5 * 60 * 1000;
 const quando = em.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const saida = [];
 for (const l of $('Ler Prospects').all().map(i => i.json)) {
-  if (!alvo || chave(l['WhatsApp']) !== alvo) continue;
+  if (!alvo || seguinte || chave(l['WhatsApp']) !== alvo) continue;
   const etapa = String(l['Etapa'] ?? '').trim();
   if (direcao === 'saida' && etapa === 'Revisar') {
     saida.push({ json: { planilha: 'prumo', ID: String(l['ID']), 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
@@ -152,10 +168,21 @@ for (const l of $('Ler Prospects').all().map(i => i.json)) {
 }
 for (const l of $('Ler Leads do site').all().map(i => i.json)) {
   if (!alvo || chave(numeroDoSite(l)) !== alvo) continue;
+  // "novo" com site publicado: o Rômulo manda a demo assim que o Hermes avisa, antes de o Balcão passar.
+  const status = String(l.status ?? '').trim();
+  if (!['novo', 'pronto', 'enviado', 'expirado'].includes(status)) continue;
+  const aEnviar = status === 'novo' || status === 'pronto';
+  const enviadoAntes = String(l.enviado_em ?? '').trim();
+  const respondeuAntes = String(l.respondeu_em ?? '').trim();
   // Saída ou resposta: as duas provam que o site chegou ao lead.
-  if (String(l.status ?? '').trim() === 'pronto') {
-    saida.push({ json: { planilha: 'site', place_id: String(l.place_id), status: 'enviado', enviado_em: em.toISOString() } });
-  }
+  const enviado = enviadoAntes || (aEnviar ? em.toISOString() : '');
+  // Enviado sem data legível (marcado à mão) conta como envio antigo.
+  const desde = Date.parse(enviado);
+  const longe = !Number.isFinite(desde) || em.getTime() - desde >= SAUDACAO_MS;
+  const respondeu = respondeuAntes || (direcao === 'entrada' && longe ? em.toISOString() : '');
+  const novoStatus = aEnviar || (status === 'expirado' && respondeu) ? 'enviado' : status;
+  if (novoStatus === status && enviado === enviadoAntes && respondeu === respondeuAntes) continue;
+  saida.push({ json: { planilha: 'site', place_id: String(l.place_id), status: novoStatus, enviado_em: enviado, respondeu_em: respondeu } });
 }
 return saida;"""
     marca_prumo = {"ID": "={{ $json.ID }}", "Etapa": "={{ $json['Etapa'] }}",
@@ -186,8 +213,9 @@ return saida;"""
          "position": [1100, 100], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
          "parameters": {"resource": "sheet", "operation": "update", **doc(SITE, LEADS_GID, "Leads"),
                         "columns": {"mappingMode": "defineBelow", "matchingColumns": ["place_id"],
-                                    "value": {"place_id": "={{ $json.place_id }}", "status": "enviado", "enviado_em": "={{ $json.enviado_em }}"},
-                                    "schema": schema(["place_id", "status", "enviado_em"], "place_id")},
+                                    "value": {"place_id": "={{ $json.place_id }}", "status": "={{ $json.status }}",
+                                              "enviado_em": "={{ $json.enviado_em }}", "respondeu_em": "={{ $json.respondeu_em }}"},
+                                    "schema": schema(["place_id", "status", "enviado_em", "respondeu_em"], "place_id")},
                         "options": {"cellFormat": "RAW"}}},
     ]
     con = {"Conversa no WhatsApp": {"main": [[{"node": "Recebido", "type": "main", "index": 0}]]},

@@ -26,6 +26,7 @@ import subprocess
 import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from datetime import time as horario
 from pathlib import Path
 
 HOME = Path.home()
@@ -224,24 +225,213 @@ def pncp() -> dict:
     return check("pncp", "dados", "Radar PNCP", "falha", f"Fonte do governo indisponível ({d.get('error', '')[:60]}); {desde}")
 
 
+# ---------------------------------------------------------------- rotinas do Hermes
+
+AGENDAS = HOME / ".local/state/dell-status/agendas.json"
+# O Hermes grava last_run_at no FIM da rodada; as rodadas levam até ~7 min.
+FOLGA_CRON = timedelta(minutes=30)
+MACROS_CRON = {"@hourly": "0 * * * *", "@daily": "0 0 * * *", "@midnight": "0 0 * * *",
+               "@weekly": "0 0 * * 0", "@monthly": "0 0 1 * *", "@yearly": "0 0 1 1 *", "@annually": "0 0 1 1 *"}
+agendas_vistas: dict = {}  # preenchido por crons_hermes(); main() grava (fora do --stdout)
+
+
+def _quando(txt) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(txt).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.astimezone()
+
+
+def _campo_cron(txt: str, menor: int, maior: int) -> set[int]:
+    vals: set[int] = set()
+    for parte in txt.split(","):
+        faixa, _, passo = parte.partition("/")
+        if faixa == "*":
+            ini, fim = menor, maior
+        elif "-" in faixa:
+            ini, fim = (int(x) for x in faixa.split("-", 1))
+        else:
+            ini = int(faixa)
+            fim = maior if passo else ini  # "5/15" = de 5 até o fim, de 15 em 15
+        if not menor <= ini <= fim <= maior:
+            raise ValueError(f"fora da faixa: {parte}")
+        vals.update(range(ini, fim + 1, int(passo or 1)))
+    return vals
+
+
+def ultimo_disparo(expr: str, t: datetime) -> datetime | None:
+    """Último horário <= t em que a expressão cron de 5 campos dispara, na hora
+    local de t (a do Dell, que é a do Hermes). Aceita números, `*`, `,`, `-`,
+    `/` e macros @daily etc.; nome de mês/dia levanta ValueError."""
+    campos = MACROS_CRON.get(expr.strip(), expr).split()
+    if len(campos) != 5:
+        raise ValueError(f"esperava 5 campos: {expr!r}")
+    minutos, horas, dias, meses = (_campo_cron(c, a, b) for c, (a, b)
+                                   in zip(campos, ((0, 59), (0, 23), (1, 31), (1, 12))))
+    semana = {d % 7 for d in _campo_cron(campos[4], 0, 7)}  # 0 e 7 = domingo
+    # Regra do cron: com dia do mês E da semana restritos, basta um dos dois.
+    um_basta = not campos[2].startswith("*") and not campos[4].startswith("*")
+    t = t.replace(second=0, microsecond=0)
+    for atras in range(367):
+        d = (t - timedelta(days=atras)).date()
+        no_dia, na_semana = d.day in dias, d.isoweekday() % 7 in semana
+        if d.month not in meses or not ((no_dia or na_semana) if um_basta else (no_dia and na_semana)):
+            continue
+        for h in sorted(horas, reverse=True):
+            for m in sorted(minutos, reverse=True):
+                quando = datetime.combine(d, horario(h, m), tzinfo=t.tzinfo)
+                if quando <= t:
+                    return quando
+    return None
+
+
+def _agenda_coerente(j: dict) -> bool:
+    """O último disparo registrado bate com a agenda atual? Se não bate, a
+    agenda mudou depois dele e o horário antigo não pode ser cobrado."""
+    ag = j.get("schedule") or {}
+    marcado = _quando((j.get("last_dispatch") or {}).get("scheduled_at"))
+    if ag.get("kind") != "cron" or not marcado:
+        return True
+    try:
+        return ultimo_disparo(ag["expr"], marcado) == marcado.replace(second=0, microsecond=0)
+    except (KeyError, ValueError):
+        return True
+
+
 def crons_hermes() -> list[dict]:
+    """Um check por rotina ativa do Hermes (~/.hermes/cron/jobs.json, lido a cada
+    minuto: rotina nova ou horário mudado no Hermes não exige mexer aqui).
+    Falha quando a última rodada deu erro ou quando a rotina não rodou: cron sem
+    rodada depois do último horário previsto + 30 min (em 29/09/2026 o gateway
+    parou às 09:04 e o briefing das 09:00 sumiu calado); intervalo sem rodada há
+    mais de 3 intervalos. Pausadas ficam de fora. Horário que mudou (ou rotina
+    que voltou da pausa) só é cobrado a partir do disparo seguinte."""
     try:
         d = json.loads(CRON_JOBS.read_text())
     except (OSError, ValueError):
         return [check("crons", "dados", "Rotinas do Hermes", "atencao", "jobs.json ilegível")]
     jobs = d.get("jobs", d) if isinstance(d, dict) else d
     jobs = jobs.values() if isinstance(jobs, dict) else jobs
-    ruins = []
-    ativos = 0
+    try:
+        vistas = json.loads(AGENDAS.read_text())
+    except (OSError, ValueError):
+        vistas = {}
+    t = agora().astimezone()
+    agendas_vistas.clear()
+    out = []
     for j in jobs:
-        if not j.get("enabled") or (j.get("schedule") or {}).get("kind") == "once":
+        jid = str(j.get("id") or j.get("name"))
+        ag = j.get("schedule") or {}
+        ativa = bool(j.get("enabled", True)) and j.get("state") not in ("paused", "completed")
+        assinatura = json.dumps({"agenda": ag, "ativa": ativa}, sort_keys=True)
+        ant = vistas.get(jid) or {}
+        if ant.get("assinatura") == assinatura:
+            desde = ant.get("desde") or iso(t)
+        elif ant or not _agenda_coerente(j):
+            desde = iso(t)
+        else:  # primeira vez que o monitor vê a rotina, com a agenda de sempre
+            desde = j.get("created_at") or iso(t)
+        agendas_vistas[jid] = {"assinatura": assinatura, "desde": desde}
+        if not ativa or ag.get("kind") not in ("cron", "interval"):
             continue
-        ativos += 1
-        if j.get("last_status") not in (None, "ok"):
-            ruins.append(f"{j.get('name')}: {str(j.get('last_error') or j.get('last_status'))[:80]}")
-    if ruins:
-        return [check("crons", "dados", "Rotinas do Hermes", "falha", " · ".join(ruins))]
-    return [check("crons", "dados", "Rotinas do Hermes", "ok", f"{ativos} rotinas ativas sem erro")]
+        nome = f"Rotina · {j.get('name') or jid}"
+        agenda_txt = j.get("schedule_display") or ag.get("display") or ag.get("expr") or ""
+        base = max(filter(None, (_quando(desde), _quando(j.get("created_at")))), default=t)
+        ultima = _quando(j.get("last_run_at"))
+        ultima_txt = f"{ultima.astimezone():%d/%m %H:%M}" if ultima else "nunca"
+        if j.get("last_status") not in (None, "ok") or j.get("state") == "error":
+            out.append(check(f"cron:{jid}", "dados", nome, "falha",
+                             f"Última rodada ({ultima_txt}) deu erro: "
+                             f"{str(j.get('last_error') or j.get('last_status'))[:100]}"))
+            continue
+        atraso = None
+        try:
+            if ag["kind"] == "cron":
+                previsto = ultimo_disparo(ag["expr"], t - FOLGA_CRON)
+                if previsto and previsto >= base and (not ultima or ultima < previsto):
+                    atraso = f"Não rodou às {previsto:%H:%M de %d/%m} (última rodada: {ultima_txt})"
+            else:
+                passo = timedelta(minutes=float(ag.get("minutes") or 0))
+                referencia = max(ultima, base) if ultima else base
+                if passo and t - referencia > 3 * passo:
+                    horas = (t - referencia).total_seconds() / 3600
+                    atraso = f"Sem rodar há {horas:.0f} h ({agenda_txt}; última rodada: {ultima_txt})"
+        except (KeyError, ValueError, TypeError) as e:
+            out.append(check(f"cron:{jid}", "dados", nome, "atencao", f"Agenda não entendida ({agenda_txt}): {e}"))
+            continue
+        if atraso:
+            out.append(check(f"cron:{jid}", "dados", nome, "falha", atraso))
+        else:
+            out.append(check(f"cron:{jid}", "dados", nome, "ok", f"Última rodada ok em {ultima_txt} · {agenda_txt}"))
+    return out
+
+
+# ---------------------------------------------------------------- gerador de sites
+
+GERADOR_LOGS = HOME / "auto-site/.logs"
+
+
+def _unit_resultado(unit: str) -> tuple[str, datetime | None]:
+    """(Result, fim da última execução) do systemd para a unit."""
+    r = subprocess.run(["systemctl", "--user", "show", unit, "-p", "Result", "-p", "ExecMainExitTimestamp",
+                        "--timestamp=unix"], capture_output=True, text=True, timeout=10)
+    campos = dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+    fim = campos.get("ExecMainExitTimestamp", "").lstrip("@")
+    return campos.get("Result", ""), datetime.fromtimestamp(float(fim), timezone.utc) if fim else None
+
+
+def gerador() -> list[dict]:
+    """Gerador de sites (gerador-de-sites.py), pelo resumo que o próprio runner
+    grava em ~/auto-site/.logs/status.json. Falha: execução com falha e nenhum
+    site, `erro` do runner (sem login, SIGTERM, bug), runner morto no meio de um
+    lead, ou o systemd registrando falha depois do último resumo (runner que
+    nem chegou a gravar). Lead descartado pelo Claude não é falha."""
+    nome = "Gerador de sites"
+    try:
+        st = json.loads((GERADOR_LOGS / "status.json").read_text(encoding="utf-8"))
+    except OSError:
+        return [check("gerador", "dados", nome, "atencao", "Ainda não rodou (sem ~/auto-site/.logs/status.json)")]
+    except ValueError:
+        return [check("gerador", "dados", nome, "atencao", "status.json do gerador ilegível")]
+    diario = "journalctl --user -u gerador-de-sites"
+    if st.get("estado") == "processando":
+        lead, inicio = st.get("lead", "?"), _quando(st.get("inicio"))
+        desde = f"{inicio.astimezone():%H:%M}" if inicio else "?"
+        try:
+            dono = json.loads((GERADOR_LOGS / "gerador.lock").read_text(encoding="utf-8"))
+            vivo = dono.get("host") != socket.gethostname() or Path(f"/proc/{dono.get('pid')}").exists()
+        except (OSError, ValueError):
+            vivo = False
+        if vivo:
+            return [check("gerador", "dados", nome, "ok", f"Gerando {lead} desde {desde}")]
+        return [check("gerador", "dados", nome, "falha",
+                      f"O runner morreu no meio de {lead} (começou {desde}) sem gravar resumo. Veja {diario}")]
+    r = st.get("ultimo_resumo") or {}
+    fim = _quando(r.get("fim"))
+    quando = f"{fim.astimezone():%d/%m %H:%M}" if fim else "data desconhecida"
+    concluidos, falhas = r.get("concluidos") or [], r.get("falhas") or []
+    descartados, sumidos = r.get("descartados") or [], r.get("sumidos") or []
+    resumo = (f"{len(concluidos)} site(s) publicado(s), {len(falhas)} falha(s)"
+              + (f", {len(descartados)} descartado(s) pelo Claude" if descartados else "")
+              + (f", {len(sumidos)} pasta(s) sumida(s)" if sumidos else "")
+              + f"; {r.get('pendentes', '?')} na fila")
+    try:
+        resultado, saiu = _unit_resultado("gerador-de-sites.service")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        resultado, saiu = "", None
+    if resultado not in ("", "success") and saiu and (not fim or saiu - fim > timedelta(minutes=1)):
+        return [check("gerador", "dados", nome, "falha",
+                      f"O runner caiu às {saiu.astimezone():%d/%m %H:%M} sem gravar resumo (systemd: {resultado}). "
+                      f"Veja {diario}")]
+    if r.get("erro"):
+        return [check("gerador", "dados", nome, "falha", f"Execução de {quando} parou: {r['erro']}"[:300])]
+    if falhas and not concluidos:
+        return [check("gerador", "dados", nome, "falha",
+                      f"Execução de {quando} sem nenhum site: {resumo}. {falhas[0]}"[:300])]
+    if falhas or sumidos:
+        return [check("gerador", "dados", nome, "atencao", f"Execução de {quando}: {resumo}. Veja ~/auto-site/.logs")]
+    return [check("gerador", "dados", nome, "ok", f"Execução de {quando}: {resumo}")]
 
 
 # ---------------------------------------------------------------- pendências (o que depende do Rômulo)
@@ -434,7 +624,7 @@ def main() -> None:
     a = p.parse_args()
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, pendencias, easypanel, backup):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel, backup):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
@@ -456,6 +646,8 @@ def main() -> None:
         c["desde"] = estado[c["id"]]["desde"]
     gravar(ESTADO, estado)
     gravar(SAIDA, snapshot)
+    if agendas_vistas:
+        gravar(AGENDAS, agendas_vistas)
     drenar_fila()
 
 

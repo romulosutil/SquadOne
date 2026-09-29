@@ -20,7 +20,11 @@ Diferenças de propósito em relação ao PS1:
 - `index.html` truncado não é apagado: é renomeado para `index.truncado.html`,
   para o próximo Claude recomeçar sem perder a evidência;
 - trava em `.logs/gerador.lock` (com host e pid): se o PC ainda rodar a tarefa
-  antiga, os dois não pegam o mesmo lead ao mesmo tempo.
+  antiga, os dois não pegam o mesmo lead ao mesmo tempo;
+- lead que o Claude tira da raiz no meio da geração (duplicado ou que já tem
+  site vai para `_descartados/`) é resultado legítimo, não falha: fica no log
+  e no resumo, e a fila segue. Nenhum erro de um lead derruba o lote (29/09/2026:
+  um `falha.log` na pasta que o Claude tinha movido matou a execução inteira).
 
 Sinais na raiz da pasta, como no PS1: `.parar` encerra a execução no fim do
 lead atual. O `.logs/status.json` continua sendo o que a Central lê.
@@ -40,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.request
 from pathlib import Path
 
@@ -51,6 +56,9 @@ TRAVA = LOGS / "gerador.lock"
 SINAL_PARAR = AUTO / ".parar"
 VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 MAX_FALHAS = 2
+# TimeoutStartSec=4h no .service: não começa lead que pode estourar o teto (com
+# folga para o deploy do último), senão o systemd mata a execução no meio.
+TETO_MIN = 4 * 60 - 20
 PROMPT = (
     "/lead-novo {slug} com mais movimento, usando as fotos e recursos extras; cumpra o passo 1.6.1: "
     "selecione uma referencia em styles.refero.design, copie o DESIGN.md para a pasta do lead e registre a referencia"
@@ -93,10 +101,11 @@ def gravar_status(estado: dict) -> None:
 
 
 def falhas_registradas(pasta: Path) -> int:
-    f = pasta / "falha.log"
-    if not f.exists():
+    try:
+        texto = (pasta / "falha.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
         return 0
-    return sum(1 for linha in f.read_text(encoding="utf-8", errors="replace").splitlines() if linha.strip())
+    return sum(1 for linha in texto.splitlines() if linha.strip())
 
 
 def fila() -> list[Path]:
@@ -104,12 +113,23 @@ def fila() -> list[Path]:
     for p in AUTO.iterdir():
         if not p.is_dir() or p.name.startswith((".", "_")):
             continue
-        if not (p / "content.md").is_file() or (p / "publicado.json").exists():
-            continue
-        if falhas_registradas(p) >= MAX_FALHAS:
-            continue
-        leads.append(p)
-    return sorted(leads, key=lambda p: ((p / "content.md").stat().st_mtime, p.name))
+        try:
+            if not (p / "content.md").is_file() or (p / "publicado.json").exists():
+                continue
+            if falhas_registradas(p) >= MAX_FALHAS:
+                continue
+            leads.append(((p / "content.md").stat().st_mtime, p.name, p))
+        except OSError:
+            continue  # a pasta mudou de lugar durante a listagem (o Claude move leads)
+    return [p for _, _, p in sorted(leads)]
+
+
+def paradeiro(pasta: Path) -> Path | None:
+    """Onde foi parar um lead que saiu da raiz durante a geração: o Claude move
+    duplicados e leads que já têm site para `_descartados/` (regras do CLAUDE.md
+    da pasta). None = sumiu (renomeado ou apagado)."""
+    candidatos = [AUTO / "_descartados" / pasta.name] + sorted(AUTO.glob(f"_*/{pasta.name}"))
+    return next((d for d in candidatos if d.is_dir()), None)
 
 
 def html_completo(caminho: Path) -> bool:
@@ -119,8 +139,13 @@ def html_completo(caminho: Path) -> bool:
 
 
 def registrar_falha(pasta: Path, motivo: str, log_lead: Path) -> None:
-    with open(pasta / "falha.log", "a", encoding="utf-8") as f:
-        f.write(f"[{agora()}] {motivo} Consulte: {log_lead}\n")
+    # Nunca derruba o lote: sem a pasta (ou sem disco), a falha fica só no log.
+    try:
+        with open(pasta / "falha.log", "a", encoding="utf-8") as f:
+            f.write(f"[{agora()}] {motivo} Consulte: {log_lead}\n")
+    except OSError as e:
+        log(f"Falha de {pasta.name} não registrada em falha.log ({e}); só neste log.", "ERRO", log_lead)
+        return
     log(f"Falha registrada em {pasta / 'falha.log'} ({falhas_registradas(pasta)}/{MAX_FALHAS})", "ERRO")
 
 
@@ -141,6 +166,10 @@ def rodar_claude(slug: str, log_lead: Path, timeout_min: int) -> dict:
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGKILL)
             codigo, estourou = 124, True
+        except BaseException:
+            # Runner interrompido (SIGTERM, Ctrl+C): não deixa o Claude órfão no grupo dele.
+            os.killpg(proc.pid, signal.SIGTERM)
+            raise
     texto = log_lead.read_text(encoding="utf-8", errors="replace")[-4000:]
     return {
         "codigo": codigo,
@@ -219,6 +248,8 @@ def processar(pasta: Path, timeout_min: int) -> tuple[bool, str]:
             log(f"index.html anterior estava truncado; guardado como index.truncado.html.", "ERRO", log_lead)
         resultado = rodar_claude(slug, log_lead, timeout_min)
         log(f"Claude Code finalizado com exit code {resultado['codigo']} em {resultado.get('minutos')} min.", arquivo=log_lead)
+        if not pasta.is_dir():
+            return False, "a pasta do lead saiu da raiz durante a geração"
         if indice.exists() and not html_completo(indice):
             indice.replace(pasta / "index.truncado.html")
             log("index.html ficou truncado (sem </html>): guardado como index.truncado.html, não publicado.", "ERRO", log_lead)
@@ -255,6 +286,19 @@ def tomar_trava() -> bool:
     return True
 
 
+def resumo_de_erro(erro: str) -> dict:
+    """Execução que não chegou a gerar nada (sem login, sem binário): o
+    dell-status lê o `erro` e avisa."""
+    try:
+        pendentes = len(fila())
+    except OSError:
+        pendentes = -1
+    return {"host": socket.gethostname(), "estado": "ocioso", "ultimo_resumo": {
+        "concluidos": [], "falhas": [], "descartados": [], "sumidos": [], "tentativas": 0,
+        "pendentes": pendentes, "erro": erro,
+        "fim": dt.datetime.now().astimezone().isoformat(timespec="seconds")}}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--quantidade", type=int, default=4)
@@ -269,6 +313,7 @@ def main() -> int:
     for binario in ("claude", "vercel"):
         if not shutil.which(binario):
             log(f"'{binario}' não encontrado no PATH; nada gerado.", "ERRO")
+            gravar_status(resumo_de_erro(f"'{binario}' não encontrado no PATH"))
             return 2
     # Sem login o Claude falharia em todo lead, e 2 falhas tiram o lead da fila:
     # checar ANTES, sem tocar em nenhum lead, e avisar quem pode resolver.
@@ -276,50 +321,92 @@ def main() -> int:
         log("Claude sem login no Dell (sem CLAUDE_CODE_OAUTH_TOKEN nem ~/.claude/.credentials.json); nada gerado.", "ERRO")
         avisar("O gerador de sites não rodou: o Claude não está logado no Dell. Grave o token em "
                "~/.config/claude-ops/gerador.env (CLAUDE_CODE_OAUTH_TOKEN=...) e ele volta amanhã às 08h.")
+        gravar_status(resumo_de_erro("Claude sem login no Dell"))
         return 2
     if not tomar_trava():
         return 0
+    # systemctl stop / teto do systemd: sair pelo finally, que grava o resumo e solta a trava.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     inicio = time.monotonic()
-    concluidos, falhas = [], []
+    inicio_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    concluidos, falhas, descartados, sumidos = [], [], [], []
+    erro = None
     try:
         log("Execução da fila iniciada (Dell).")
-        while len(concluidos) + len(falhas) < a.quantidade:
+        # Descartado/sumido não conta como site do dia, mas também tem teto.
+        while len(concluidos) + len(falhas) < a.quantidade and len(descartados) + len(sumidos) < a.quantidade:
             if SINAL_PARAR.exists():
                 SINAL_PARAR.unlink()
                 log("Sinal .parar recebido; encerrando a fila.", "ERRO")
+                break
+            if (time.monotonic() - inicio) / 60 + a.timeout_min > TETO_MIN:
+                log("Sem tempo para mais um lead antes do teto de 4 h do systemd; o resto fica para a próxima execução.")
                 break
             pendentes = fila()
             if not pendentes:
                 log("Fila vazia.")
                 break
             lead = pendentes[0]
+            log_lead = LOGS / f"execucao-{lead.name}.log"
             log(f"{len(pendentes)} lead(s) pendente(s). Próximo: {lead.name}.")
             # "processando"/"ocioso": os estados que server/auto-production.ts reconhece.
             gravar_status({"host": socket.gethostname(), "estado": "processando", "lead": lead.name,
                            "inicio": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                            "timeout_min": a.timeout_min, "pendentes": len(pendentes)})
-            ok, motivo = processar(lead, a.timeout_min)
+            try:
+                ok, motivo = processar(lead, a.timeout_min)
+            except Exception as e:  # noqa: BLE001 — um lead quebrado não derruba o lote
+                ok, motivo = False, f"erro no runner: {type(e).__name__}: {e}"
+                log(f"{lead.name}: {motivo}\n{traceback.format_exc().rstrip()}", "ERRO", log_lead)
             if ok:
                 concluidos.append(lead.name)
                 log(f"Lead concluído: {lead.name}", "SUCESSO")
+            elif not lead.is_dir():
+                destino = paradeiro(lead)
+                if destino:
+                    descartados.append(f"{lead.name} → {destino.parent.name}")
+                    log(f"Lead saiu da fila pelo Claude: {lead.name} foi para {destino.parent.name}/ "
+                        "(motivo no registro.md da pasta). Não é falha; seguindo.", arquivo=log_lead)
+                else:
+                    sumidos.append(lead.name)
+                    log(f"A pasta de {lead.name} sumiu durante a geração e não está em nenhuma _*/ "
+                        f"(renomeada ou apagada?). Veja {log_lead}. Seguindo.", "ERRO", log_lead)
             else:
                 falhas.append(f"{lead.name}: {motivo}")
-                registrar_falha(lead, motivo, LOGS / f"execucao-{lead.name}.log")
+                registrar_falha(lead, motivo, log_lead)
                 if motivo.startswith("limite de uso"):
                     log("Limite de uso do Claude: parando a execução para não queimar a fila.", "ERRO")
                     break
+    except Exception as e:  # noqa: BLE001 — erro fora de um lead: registra no resumo em vez de sumir
+        erro = f"{type(e).__name__}: {e}"
+        log(f"Execução interrompida por erro do runner: {erro}\n{traceback.format_exc().rstrip()}", "ERRO")
+    except SystemExit:
+        erro = "execução interrompida (SIGTERM: systemctl stop ou teto do systemd)"
+        log(erro, "ERRO")
+        raise
     finally:
-        restantes = len(fila())
+        try:
+            restantes = len(fila())
+        except OSError:
+            restantes = -1
         duracao = dt.timedelta(seconds=int(time.monotonic() - inicio))
-        nivel = "ERRO" if falhas else "SUCESSO"
-        log(f"Resumo: {len(concluidos) + len(falhas)} tentativa(s); {len(concluidos)} concluído(s); "
-            f"{len(falhas)} falha(s); {restantes} pendente(s); duração {duracao}."
-            + (f" Falhas: {'; '.join(falhas)}" if falhas else ""), nivel)
+        nivel = "ERRO" if falhas or sumidos or erro else "SUCESSO"
+        tentativas = len(concluidos) + len(falhas) + len(descartados) + len(sumidos)
+        log(f"Resumo: {tentativas} tentativa(s); {len(concluidos)} concluído(s); "
+            f"{len(falhas)} falha(s); {len(descartados)} descartado(s); {len(sumidos)} sumido(s); "
+            f"{restantes} pendente(s); duração {duracao}."
+            + (f" Falhas: {'; '.join(falhas)}" if falhas else "")
+            + (f" Descartados: {'; '.join(descartados)}" if descartados else "")
+            + (f" Sumidos: {'; '.join(sumidos)}" if sumidos else "")
+            + (f" Erro: {erro}" if erro else ""), nivel)
+        # O dell-status lê este resumo (falha sem nenhum concluído ou `erro` vira WhatsApp).
         gravar_status({"host": socket.gethostname(), "estado": "ocioso", "ultimo_resumo": {
-            "concluidos": concluidos, "falhas": falhas, "pendentes": restantes,
+            "concluidos": concluidos, "falhas": falhas, "descartados": descartados, "sumidos": sumidos,
+            "tentativas": tentativas, "pendentes": restantes, "inicio": inicio_iso,
+            **({"erro": erro} if erro else {}),
             "fim": dt.datetime.now().astimezone().isoformat(timespec="seconds")}})
         TRAVA.unlink(missing_ok=True)
-    return 1 if falhas and not concluidos else 0
+    return 1 if erro or (falhas and not concluidos) else 0
 
 
 if __name__ == "__main__":

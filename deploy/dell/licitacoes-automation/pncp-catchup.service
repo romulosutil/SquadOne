@@ -1,0 +1,12 @@
+[Unit]
+Description=Catch up the daily PNCP collection when n8n missed its 07:30 run
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/docker exec licitacoes-automation-collector-1 node /opt/licitacoes/scripts/pncp-catchup.mjs
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=20min

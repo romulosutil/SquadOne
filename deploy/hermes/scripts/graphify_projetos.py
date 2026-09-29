@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Mantém os grafos do graphify de todos os projetos e o diário do que mudou.
 
-É o único lugar que roda `graphify update`: o Windows nunca roda (regra do
-workspace), o crontab antigo saiu e o pre-push só pede ao Hermes que rode este
-job agora. Roda como job `no_agent` do cron do Hermes: stdout vazio = silêncio,
+É o único lugar que roda `graphify update` fora das sessões de código: o
+crontab antigo saiu e o `run-graphify.sh` só pede ao Hermes que rode este job
+agora. Roda como job `no_agent` do cron do Hermes: stdout vazio = silêncio,
 qualquer texto vira mensagem no WhatsApp. Por isso só imprime falha.
 
-Para cada projeto em ~/Pessoal-dev (réplica Syncthing de dev/PESSOAL/apps):
+Para cada pasta viva do Dell (PROJETOS: os clones do GitHub e o ~/auto-site;
+~/Pessoal-dev é réplica congelada em 25/09/2026 e fica de fora):
 
 1. conta os arquivos de código alterados desde a última rodada;
 2. sem alteração e com grafo: não roda nada (a rodada noturna custa segundos);
@@ -31,14 +32,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 HOME = Path.home()
-RAIZES = [HOME / "Pessoal-dev"]
+# Pastas vivas: clones próprios do GitHub e a pasta de verdade da esteira.
+PROJETOS = [HOME / "SquadOne", HOME / "prumo", HOME / "auto-site", HOME / "crm-silmer"]
+# Réplica congelada em 25/09/2026: os grafos de lá ficam como retrato, fora do global.
+CONGELADOS = HOME / "Pessoal-dev"
 ESTADO_DIR = HOME / ".local/share/graphify-hermes"
 GRAPHIFY = next(
     (str(p) for p in (HOME / ".local/bin/graphify", HOME / "workspace/agents/venv-hermes/bin/graphify") if p.exists()),
     "graphify",
 )
-# Cópias de publicação e pastas-sombra não são projetos de verdade.
-IGNORAR = re.compile(r"-publish-|\+$")
 CODIGO = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte", ".py", ".go",
           ".rs", ".java", ".kt", ".swift", ".php", ".rb", ".cs", ".sql"}
 PASTAS_FORA = {"node_modules", ".git", "graphify-out", "dist", "build", ".next", ".nuxt",
@@ -88,13 +90,9 @@ def podar_snapshots(saida: Path) -> None:
 
 
 def projetos(nomes):
-    for raiz in RAIZES:
-        if not raiz.is_dir():
-            continue
-        for p in sorted(raiz.iterdir()):
-            if p.is_dir() and not p.name.startswith(".") and not IGNORAR.search(p.name):
-                if not nomes or p.name in nomes:
-                    yield p
+    for p in PROJETOS:
+        if p.is_dir() and (not nomes or p.name in nomes):
+            yield p
 
 
 def main() -> int:
@@ -114,6 +112,8 @@ def main() -> int:
 
     for proj in projetos(nomes):
         anterior = estado["projetos"].get(proj.name, {})
+        if anterior.get("pasta") != str(proj):
+            anterior = {}  # até 28/09/2026 o mesmo nome era a cópia em ~/Pessoal-dev
         desde = anterior.get("verificado_em", agora - 86400)
         codigo = list(arquivos_de_codigo(proj))
         if not codigo:
@@ -122,7 +122,7 @@ def main() -> int:
                            key=lambda f: f.stat().st_mtime, reverse=True)
         saida = proj / "graphify-out"
         grafo = saida / "graph.json"
-        info = dict(anterior, arquivos_de_codigo=len(codigo), verificado_em=agora)
+        info = dict(anterior, pasta=str(proj), arquivos_de_codigo=len(codigo), verificado_em=agora)
         # Pelo arquivo mais recente, não pelo que mudou nesta rodada: projeto parado
         # também precisa dizer desde quando está parado.
         recente = max(f.stat().st_mtime for f in codigo)
@@ -135,7 +135,7 @@ def main() -> int:
             continue
 
         rc, log = 0, ""
-        if alterados or not grafo.exists():
+        if alterados or not grafo.exists() or not anterior:
             try:
                 rc, log = rodar([GRAPHIFY, "update", str(proj)], cwd=proj)
             except subprocess.TimeoutExpired:
@@ -169,7 +169,10 @@ def main() -> int:
         }
 
     if not nomes:
-        limpar_global(set(estado["projetos"]))
+        vivos = {p.name for p in PROJETOS}
+        # Sai do estado e do global o que não é pasta viva (os de ~/Pessoal-dev até 28/09/2026).
+        estado["projetos"] = {k: v for k, v in estado["projetos"].items() if k in vivos}
+        limpar_global(vivos)
 
     estado["rodado_em"] = datetime.fromtimestamp(agora).isoformat(timespec="minutes")
     tmp = estado_p.with_suffix(".tmp")
@@ -194,8 +197,8 @@ def main() -> int:
 
 
 def limpar_global(projetos_vivos) -> None:
-    """O grafo global é deste script: tira o que não é mais projeto (ex.: o
-    `workspace` que o crontab antigo grafava, ou um projeto apagado)."""
+    """O grafo global é deste script: tira o que não é pasta viva (ex.: os
+    projetos da réplica congelada ou um projeto apagado)."""
     rc, log = rodar([GRAPHIFY, "global", "list"], cwd=HOME, timeout=60)
     if rc != 0:
         return
@@ -220,7 +223,7 @@ def escrever_resumo(estado) -> None:
         "# Projetos do Rômulo (gerado por graphify_projetos.py)",
         "",
         f"Atualizado em {estado['rodado_em']}. Diário completo: diario.jsonl.",
-        "Perguntas sobre um projeto: `graphify query \"<pergunta>\" --graph ~/Pessoal-dev/<projeto>/graphify-out/graph.json`.",
+        "Perguntas sobre um projeto: `graphify query \"<pergunta>\" --graph ~/<projeto>/graphify-out/graph.json`.",
         "Entre projetos: `graphify query \"<pergunta>\" --graph ~/.graphify/global-graph.json`.",
         "",
         "| Projeto | Última atividade | Arquivos mudados em 7 dias | Nós no grafo |",
@@ -232,6 +235,11 @@ def escrever_resumo(estado) -> None:
         tamanho = g.get("nos", f"{g['mb']} MB, fora do global" if "mb" in g else "—")
         linhas.append(f"| {nome} | {info.get('ultima_atividade') or '—'} | {na_semana.get(nome, 0)} | "
                       f"{tamanho}{' ⚠️ erro' if info.get('erro') else ''} |")
+    retratos = sorted(g.parent.parent.name for g in CONGELADOS.glob("*/graphify-out/graph.json"))
+    if retratos:
+        linhas += ["", "Retratos de 25/09/2026, sem atualização e fora do global (réplica congelada): "
+                   "`--graph ~/Pessoal-dev/<projeto>/graphify-out/graph.json` para "
+                   + ", ".join(retratos) + "."]
     (ESTADO_DIR / "RESUMO.md").write_text("\n".join(linhas) + "\n")
 
 

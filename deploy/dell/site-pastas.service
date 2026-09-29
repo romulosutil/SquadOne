@@ -1,0 +1,6 @@
+[Unit]
+Description=Mover pastas da pasta auto conforme a planilha (respondeu, expirado)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/site-pastas

@@ -1,0 +1,93 @@
+{
+ "versao": 1,
+ "origem": "n8n · PRUMO — Diagnóstico do dono",
+ "resposta_id": "exemplo-vale-norte|01/09/2026 10:00:00",
+ "prospect_id": "exemplo-vale-norte",
+ "empresa": "Distribuidora Vale Norte",
+ "cidade": "Serra, ES",
+ "segmento": "Materiais de construção e hidráulica",
+ "carimbo": "01/09/2026 10:00:00",
+ "indice_100": 51.6,
+ "gerado_em": "2026-09-29T00:00:00.000Z",
+ "sessoes": [
+  {
+   "papel": "Dono",
+   "data": "2026-09-01",
+   "respostas": {
+    "AR1": {
+     "resposta": "Existe uma regra, mas nem todo mundo segue ou conhece",
+     "nota": 2
+    },
+    "AR2": {
+     "resposta": "Existe um critério, mas só na cabeça de quem decide",
+     "nota": 1
+    },
+    "AD1": {
+     "resposta": "Às vezes bate, às vezes não",
+     "nota": 1
+    },
+    "AM1": {
+     "resposta": "Às vezes, informalmente (WhatsApp, e-mail avulso)",
+     "nota": 1
+    },
+    "BR1": {
+     "resposta": "Existe um critério, mas informal/na cabeça de quem compra",
+     "nota": 1
+    },
+    "BR2": {
+     "resposta": "Limite definido, mas não é sempre respeitado",
+     "nota": 2
+    },
+    "BD1": {
+     "resposta": "Existe, mas espalhado em vários lugares",
+     "nota": 1
+    },
+    "BM1": {
+     "resposta": "Só de cabeça, ninguém escreve",
+     "nota": 1
+    },
+    "CR1": {
+     "resposta": "Quem atende decide na hora, sem regra",
+     "nota": 1
+    },
+    "CR2": {
+     "resposta": "Está escrita, mas nem sempre seguida",
+     "nota": 2
+    },
+    "CD1": {
+     "resposta": "Existe no sistema, mas nem todo mundo consulta lá",
+     "nota": 2
+    },
+    "CM1": {
+     "resposta": "Não",
+     "nota": 0
+    },
+    "DR1": {
+     "resposta": "Alguém tentaria, mas nunca fez",
+     "nota": 1
+    },
+    "DR2": {
+     "resposta": "Mais ou menos, por experiência",
+     "nota": 1
+    },
+    "DD1": {
+     "resposta": "Só na cabeça do dono",
+     "nota": 0
+    },
+    "DM1": {
+     "resposta": "Acontece toda hora",
+     "nota": 0
+    }
+   },
+   "aprofundamentos": {
+    "AR1": "38 por semana, uns 9 minutos cada",
+    "AR2": "6 por semana",
+    "AD1": "R$ 3,49 · R$ 3,72 · R$ 3,87 (10,9%)",
+    "BR1": "6",
+    "CR1": "11 por semana",
+    "DR1": "A Marlene: só ela tem a senha do certificado digital; para o faturamento",
+    "DM1": "14"
+   }
+  }
+ ]
+}

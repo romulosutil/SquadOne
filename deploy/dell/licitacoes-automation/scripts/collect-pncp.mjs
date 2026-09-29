@@ -16,6 +16,11 @@ const MAX_ATTEMPTS = Number(process.env.PNCP_MAX_ATTEMPTS ?? 2);
 const RETRY_DELAY_MS = Number(process.env.PNCP_RETRY_DELAY_MS ?? 1_500);
 const MIN_VALUE = 5_000;
 const MAX_VALUE = 80_000;
+// O radar chega no WhatsApp às 08:00, meia hora depois da coleta: item que
+// encerra antes de coleta + 3 h já chega vencido ou sem tempo de proposta
+// (29/09/2026: qualificou um pregão que encerrava às 07:59). Sai da lista de
+// qualificados e fica só na contagem e em `deadline_dropped`, para auditoria.
+const MIN_HOURS_BEFORE_DEADLINE = Number(process.env.PNCP_MIN_HOURS_BEFORE_DEADLINE ?? 3);
 
 const terms = [
   'design grafico', 'design', 'identidade visual', 'comunicacao visual',
@@ -40,6 +45,14 @@ function brDate(now = new Date()) {
   }).formatToParts(now);
   const value = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
   return `${value.year}${value.month}${value.day}`;
+}
+
+function deadlineCutoff(now) {
+  return new Date(now.getTime() + MIN_HOURS_BEFORE_DEADLINE * 3_600_000);
+}
+
+function brDateTime(iso) {
+  return new Date(iso).toLocaleString('pt-BR', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' });
 }
 
 function brl(value) {
@@ -91,7 +104,7 @@ function hasTerm(text, term) {
   return new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`).test(text);
 }
 
-function scoreItem(item, now) {
+export function scoreItem(item, now) {
   const object = item.objetoCompra ?? '';
   const text = normalize(object);
   const matches = terms.filter((term) => hasTerm(text, term));
@@ -114,10 +127,14 @@ function scoreItem(item, now) {
   const economics = !Number.isFinite(estimated) ? 5 : estimated <= 30_000 ? 10 : 8;
   const timing = days >= 7 ? 10 : days >= 3 ? 7 : days >= 1 ? 4 : 1;
   const score = adherence + effort + qualification + economics + timing;
+  const tooClose = score >= 70 && end !== null && end < deadlineCutoff(now);
 
   return {
-    keep: score >= 70,
-    reason: score >= 70 ? 'triagem aprovada' : `score ${score} abaixo do mínimo`,
+    keep: score >= 70 && !tooClose,
+    too_close: tooClose,
+    reason: tooClose
+      ? `prazo encerra em menos de ${MIN_HOURS_BEFORE_DEADLINE} h (antes da entrega do radar)`
+      : score >= 70 ? 'triagem aprovada' : `score ${score} abaixo do mínimo`,
     score,
     matches,
     estimated: Number.isFinite(estimated) ? estimated : null,
@@ -153,6 +170,9 @@ function markdown(report) {
     `- Objetos triados: ${report.counts.screened}`,
     `- Qualificados (score ≥70): ${report.counts.qualified}`,
     `- Novos ou atualizados: ${report.counts.new_or_updated}`,
+    ...(report.deadline_cutoff
+      ? [`- Descartados por prazo curto (encerram antes de ${brDateTime(report.deadline_cutoff)}): ${report.counts.deadline_dropped}`]
+      : []),
     '',
   ];
   if (report.status === 'source_unavailable') {
@@ -187,14 +207,24 @@ export async function runCollector({ collectionId = null, dataDir = DATA_DIR, no
   const rows = [first, ...pages].flatMap((page) => page.data ?? []);
   const state = await loadState(stateFile);
   const qualified = [];
+  const deadlineDropped = [];
   let screened = 0;
   let newlyChanged = 0;
 
   for (const item of rows) {
     const decision = scoreItem(item, now);
     if (decision.reason !== 'fora do escopo de palavras-chave') screened += 1;
-    if (!decision.keep) continue;
     const id = item.numeroControlePNCP ?? `${item.orgaoEntidade?.cnpj}-${item.anoCompra}-${item.sequencialCompra}`;
+    if (decision.too_close) {
+      deadlineDropped.push({
+        id,
+        score: decision.score,
+        orgao: item.orgaoEntidade?.razaoSocial ?? 'Órgão não informado',
+        prazo_final: item.dataEncerramentoProposta ?? null,
+        url: publicUrl(item),
+      });
+    }
+    if (!decision.keep) continue;
     const revision = item.dataAtualizacao ?? item.dataInclusao ?? '';
     const isNewOrUpdated = state.seen[id] !== revision;
     if (isNewOrUpdated) newlyChanged += 1;
@@ -223,8 +253,16 @@ export async function runCollector({ collectionId = null, dataDir = DATA_DIR, no
     status: 'completed',
     run_at: now.toISOString(),
     source: { endpoint: firstUrl, data_final: date, pages_read: totalPages },
-    counts: { fetched: rows.length, screened, qualified: qualified.length, new_or_updated: newlyChanged },
+    counts: {
+      fetched: rows.length,
+      screened,
+      qualified: qualified.length,
+      new_or_updated: newlyChanged,
+      deadline_dropped: deadlineDropped.length,
+    },
+    deadline_cutoff: deadlineCutoff(now).toISOString(),
     qualified,
+    deadline_dropped: deadlineDropped,
   };
   await writeAtomically(stateFile, state);
   await writeAtomically(path.join(dataDir, 'latest-run.json'), report);

@@ -1,0 +1,9 @@
+[Unit]
+Description=Pacotes do Mapa (PRUMO) vindos do n8n
+
+[Path]
+DirectoryNotEmpty=%h/.local/share/n8n-estado/mapa-fila
+MakeDirectory=yes
+
+[Install]
+WantedBy=default.target

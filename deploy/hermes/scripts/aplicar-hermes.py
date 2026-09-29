@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Aplica no ~/.hermes do Dell o que está versionado aqui: SOUL.md, as skills de
 leitura do Dell e do mapa do ecossistema, os scripts do cron, os ajustes de config.yaml e da memória do
-secretário, e os jobs que dependem deles (graphify dos projetos e o pré-check
-da coleta do ASMR).
+secretário, os jobs que dependem deles (graphify dos projetos, "Sites e
+pendências" das 10:30 e o pré-check da coleta do ASMR) e as ferramentas que as
+skills do ASMR chamam no terminal (yt-dlp, agent-reach, mcporter).
 
 Rodar pelo Python do Hermes (tem ruamel, que preserva os comentários do YAML):
 
@@ -79,6 +80,13 @@ def ajustar_config() -> None:
     for plat in ("teams", "google_chat"):
         (c.get("platform_toolsets") or {}).pop(plat, None)
 
+    # agent-log é só do app desktop (desktop/plugin.js, sem parte Python) e o app
+    # rodava no PC perdido: habilitado, falhava ao carregar em toda rodada ("No
+    # __init__.py"). No PC novo, `hermes plugins enable agent-log` se quiser o visor.
+    habilitados = (c.get("plugins") or {}).get("enabled")
+    if habilitados and "agent-log" in habilitados:
+        habilitados.remove("agent-log")
+
     backup(p)
     with p.open("w") as f:
         y.dump(c, f)
@@ -96,11 +104,19 @@ TROCAS_USER = {
         "request for that specific change."
     ),
 }
-MEMORY_NOVA = (
+# Entradas que MEMORY.md tem de ter. As outras, que o Hermes ou o Claude
+# gravaram depois, ficam: até 29/09/2026 o arquivo era sobrescrito inteiro e a
+# entrada da perda do PC (28/09) sumiu numa aplicação.
+MEMORIAS = [
     "A rotina `SquadOne — aprender e evoluir` (cron eb9282f96df6) está desligada "
     "desde 23/09/2026: editar repositório não é papel do secretário. Não reativar "
-    "sem pedido explícito do Rômulo."
-)
+    "sem pedido explícito do Rômulo.",
+    "O PC Windows do Rômulo queimou (NVMe); o Dell o viu pela última vez em 25/09/2026. "
+    "O que não sincronizou foi perdido e não se recupera. Até o PC novo chegar, o Dell é "
+    "a máquina de controle (Claude e Codex rodam nele); o PC novo vai receber a organização "
+    "do SquadOne. A pasta auto do Drive parou em 25/09 (a esteira não depende dela). "
+    "Detalhes: skill mapa-do-ecossistema.",
+]
 
 
 def ajustar_memoria() -> None:
@@ -121,16 +137,25 @@ def ajustar_memoria() -> None:
         print(f"igual     {user}")
 
     mem = HERMES / "memories/MEMORY.md"
-    if mem.read_text().strip() != MEMORY_NOVA:
+    atuais = [e.strip() for e in mem.read_text().split("\n§\n") if e.strip()] if mem.exists() else []
+    faltam = [m for m in MEMORIAS if m not in atuais]
+    if faltam:
         backup(mem)
-        mem.write_text(MEMORY_NOVA)
-        print(f"ajustado  {mem}")
+        mem.write_text("\n§\n".join(atuais + faltam) + "\n")
+        print(f"ajustado  {mem} (+{len(faltam)} entrada(s))")
     else:
         print(f"igual     {mem}")
 
 
 HERMES_CLI = str(Path.home() / ".local/bin/hermes")
 JOB_GRAPHIFY = "Graphify — projetos"
+# Era "Site antes da venda — briefing diário 08h", com modelo, e saía antes do gerador.
+JOB_SITES = "18c55d8bbae7"
+NOME_SITES = "Sites e pendências — 10h30"
+JOB_ASMR_BRIEFING = "d12b6431a2e6"  # ASMR FULLBRINGER — briefing diário
+AVISO_FERRAMENTAS = (
+    "No Dell não há conda: `agent-reach`, `yt-dlp` e `mcporter` estão no PATH; chame direto.\n\n"
+)
 JOB_ASMR = "79a04dbf2d81"  # ASMR FULLBRINGER — coleta de métricas
 AVISO_ASMR = (
     "O pré-check acima lista os Shorts que cruzaram um marco de idade (2, 6, 12, 24, 48 ou 72 h) "
@@ -156,6 +181,29 @@ def ajustar_cron() -> None:
     else:
         print(f"igual     job {JOB_GRAPHIFY}")
 
+    # Sites e pendências: sem modelo, às 10:30, depois do gerador das 08h (de 24 a
+    # 28/09/2026 ele terminou entre 09:17 e 10:17). Junta o briefing dos sites e a
+    # fila do que espera o Rômulo numa mensagem só.
+    sites = next((j for j in jobs() if j["id"] == JOB_SITES or j["name"] == NOME_SITES), None)
+    if sites is None:
+        hermes("cron", "create", "30 10 * * *", "--no-agent", "--script", "sites_e_pendencias.py",
+               "--deliver", "whatsapp", "--name", NOME_SITES)
+        print(f"criado    job {NOME_SITES}")
+    elif (sites["name"] != NOME_SITES or not sites.get("no_agent") or sites.get("skills")
+          or sites["schedule"].get("expr") != "30 10 * * *"):
+        hermes("cron", "edit", sites["id"], "--name", NOME_SITES, "--schedule", "30 10 * * *",
+               "--no-agent", "--script", "sites_e_pendencias.py", "--clear-skills", "--no-continuity",
+               "--prompt", "")
+        print(f"ajustado  job {NOME_SITES} (era o briefing das 08h com modelo)")
+    else:
+        print(f"igual     job {NOME_SITES}")
+
+    # ASMR briefing: a skill agent-reach manda usar `conda run -n dl`, que era do PC.
+    brief = next((j for j in jobs() if j["id"] == JOB_ASMR_BRIEFING), None)
+    if brief and not brief["prompt"].startswith(AVISO_FERRAMENTAS):
+        hermes("cron", "edit", JOB_ASMR_BRIEFING, "--prompt", AVISO_FERRAMENTAS + brief["prompt"])
+        print("ajustado  job ASMR briefing (ferramentas no PATH, sem conda)")
+
     # ASMR: pré-check de hora em hora; o agente só acorda em marco de idade.
     asmr = next(j for j in jobs() if j["id"] == JOB_ASMR)
     prompt = asmr["prompt"] if asmr["prompt"].startswith(AVISO_ASMR) else AVISO_ASMR + asmr["prompt"]
@@ -167,6 +215,52 @@ def ajustar_cron() -> None:
     from cron.jobs import update_job
     update_job(JOB_ASMR, {"enabled_toolsets": ["browser", "file"]})
     print("ajustado  job ASMR coleta (pré-check de hora em hora, browser+file, esforço medium)")
+
+
+# Ferramentas que as skills do ASMR chamam no terminal (youtube-channel-analysis,
+# agent-reach). Tudo no espaço do usuário, em ~/.local/bin, que está no PATH do gateway.
+BIN = Path.home() / ".local/bin"
+UV = str(HERMES / "bin/uv")
+FERRAMENTAS = {
+    "yt-dlp": [UV, "tool", "install", "yt-dlp[default]"],
+    "agent-reach": [UV, "tool", "install",
+                    "agent-reach @ https://github.com/Panniantong/agent-reach/archive/refs/tags/v1.5.0.zip"],
+    # Busca Exa do agent-reach. Pede node >= 24: o do Hermes vem antes no PATH do gateway.
+    "mcporter": ["npm", "install", "-g", "--prefix", str(Path.home() / ".local"), "mcporter@0.14.1"],
+}
+
+
+def instalar_ferramentas() -> None:
+    for nome, instalar in FERRAMENTAS.items():
+        if (BIN / nome).exists():
+            print(f"igual     {BIN / nome}")
+            continue
+        subprocess.run(instalar, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"instalado {BIN / nome}")
+
+    # O YouTube exige runtime JS; o yt-dlp só liga o deno sozinho, e o Dell tem node.
+    conf = Path.home() / ".config/yt-dlp/config"
+    atual = conf.read_text() if conf.exists() else ""
+    if "--js-runtimes node" not in atual.split("\n"):
+        backup(conf)
+        conf.parent.mkdir(parents=True, exist_ok=True)
+        conf.write_text(atual + ("" if atual.endswith("\n") or not atual else "\n") + "--js-runtimes node\n")
+        print(f"ajustado  {conf}")
+    else:
+        print(f"igual     {conf}")
+
+    # Exa sem chave, no config de usuário do mcporter (o `config add` sem --scope grava na pasta atual).
+    import json
+    mcp = Path.home() / ".mcporter/mcporter.json"
+    d = json.loads(mcp.read_text()) if mcp.exists() else {}
+    if "exa" not in d.get("mcpServers", {}):
+        backup(mcp)
+        d.setdefault("mcpServers", {})["exa"] = {"baseUrl": "https://mcp.exa.ai/mcp"}
+        mcp.parent.mkdir(parents=True, exist_ok=True)
+        mcp.write_text(json.dumps(d, indent=2) + "\n")
+        print(f"ajustado  {mcp}")
+    else:
+        print(f"igual     {mcp}")
 
 
 def ajustar_graphify_fora_do_hermes() -> None:
@@ -192,10 +286,13 @@ def main() -> None:
     for nome in ("dell-operations-manager", "mapa-do-ecossistema"):
         skill = f"skills/{nome}/SKILL.md"
         copiar(AQUI / skill, HERMES / skill)
-    for script in ("graphify_projetos.py", "asmr_coleta_gate.py"):
+    for script in ("graphify_projetos.py", "asmr_coleta_gate.py", "sites_e_pendencias.py", "site_antes_venda_watcher.py"):
         copiar(AQUI / "scripts" / script, HERMES / "scripts" / script)
+    # O watcher é serviço próprio (site-antes-venda-watcher), não job do cron: só relê o script no boot.
+    subprocess.run(["systemctl", "--user", "restart", "site-antes-venda-watcher"], check=False)
     ajustar_config()
     ajustar_memoria()
+    instalar_ferramentas()
     ajustar_graphify_fora_do_hermes()
     ajustar_cron()
     subprocess.run(["systemctl", "--user", "restart", "hermes-gateway"], check=True)

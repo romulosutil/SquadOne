@@ -1,0 +1,8 @@
+[Unit]
+Description=Pedido do Balcão para mover pastas da pasta auto (Site antes da venda)
+
+[Path]
+PathChanged=%h/.local/share/n8n-estado/site-pastas.json
+
+[Install]
+WantedBy=default.target

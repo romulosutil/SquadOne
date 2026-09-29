@@ -31,7 +31,7 @@ ENTRY_EMPRESA, ENTRY_PAPEL = "171063854", "1936869861"
 SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sheets account"}}
 LEAD_SCOUT = "e02c6f43-17ce-430b-9238-0b997a7656ce"
 PONTUACAO = "b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f"
-CONVITE_URL = "http://127.0.0.1:5679/webhook/convite?id="
+CONVITE_URL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook/convite?id="  # tailnet desde 29/09/2026: abre no celular
 
 PROSPECTS = ["ID", "Empresa", "Cidade", "Segmento", "WhatsApp", "Site", "Nota Google", "Etapa", "Enviar convite",
              "Índice PRUMO", "Próxima ação", "Briefing", "Google Maps", "Encontrado em", "Convite enviado em", "Diagnóstico em"]
@@ -395,6 +395,12 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
     liga(con, pm["name"], pg["name"])
     nos += aviso.nos_memoria()
     aviso.ligar_memoria(con, aviso_gravado=og["name"])
+    # Resposta completa vira pacote do Mapa (P3); sem isto, recriar o fluxo apagaria o ramo.
+    spec = importlib.util.spec_from_file_location("prumo_mapa_n8n", AQUI / "prumo-mapa-n8n.py")
+    mapa = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mapa)
+    nos += mapa.nos(perguntas)
+    mapa.ligar(con)
     wf = api("GET", f"/workflows/{PONTUACAO}")
     wf["name"] = "PRUMO — Diagnóstico do dono"
     wf["nodes"], wf["connections"] = nos, con

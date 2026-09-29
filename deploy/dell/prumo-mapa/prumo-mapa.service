@@ -1,0 +1,7 @@
+[Unit]
+Description=Rascunho do Mapa (PRUMO) a partir dos pacotes do n8n
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/prumo-mapa/prumo_mapa.py --fila
+TimeoutStartSec=20min

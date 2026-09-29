@@ -15,7 +15,12 @@ ativos no Dell; as versões do Easypanel e o "00 · Alerta" de lá foram
 despublicados. A credencial "Google Gemini (Dell)" precisa de chave com cota
 para busca no Google (grounding); a do Hermes não tem.
 
+29/09/2026: o Balcão também grava `estado/site-pastas.json`, a lista de pastas
+que o `site-pastas` do Dell move (respondeu -> _em-conversa, expirado ->
+_concluidos), e conta como "esperando resposta" só quem ainda está na raiz.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
+     python3 site-antes-da-venda.py --balcao     (só o Balcão, sem mexer no Caçador)
 """
 import copy
 import json
@@ -29,6 +34,26 @@ SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sh
 PLACES = {"httpHeaderAuth": {"id": "v7aU1q4PRbTSOYZu", "name": "Google Maps API Key — PRUMO"}}
 ENTRADA = "/home/node/.n8n-files/auto-entrada/"
 AQUI = Path(__file__).resolve().parent
+# Follow-up, expiração e mudança automática de pasta valem para quem foi enviado
+# (ou respondeu) a partir daqui; o que veio antes é acervo e fica à mão.
+CORTE = "2026-09-29T00:00:00-03:00"
+
+# Onde mora o lead hoje: place_id -> "slug" (raiz) ou "_recusados/slug" etc.
+# Vem do diretório de cada publicado.json lido por "Ler recibos da pasta auto".
+PASTA_DO_LEAD_JS = """const AUTO = '/home/node/.n8n-files/auto/';
+const arquivosDosRecibos = $('Ler recibos da pasta auto').all();
+const pasta = {};
+$('Ler o JSON do recibo').all().forEach((r, i) => {
+  const pid = r.json.recibo?.place_id;
+  const dir = String(arquivosDosRecibos[r.pairedItem?.item ?? i]?.binary?.data?.directory ?? '');
+  if (pid && dir.startsWith(AUTO)) pasta[pid] = dir.slice(AUTO.length);
+});
+const naRaiz = (pid) => Boolean(pasta[pid]) && !pasta[pid].includes('/');"""
+
+
+def codigo_js(*arquivos):
+    """Junta arquivos .js desta pasta num só código de nó (site-mensagem.js vai na frente)."""
+    return "\n".join((AQUI / a).read_text(encoding="utf-8") for a in arquivos)
 
 
 def erro_wf():
@@ -158,16 +183,44 @@ def balcao(erro):
                 "type": "string", "canBeUsedToMatch": c == "place_id"} for c in ("place_id", "status", "site_url", "vercel_project", "wa_me", "wa_link")]
     pendencias = "\n".join([
         "// O que depende do Rômulo nesta esteira. A Central lê este arquivo via dell-status.",
+        PASTA_DO_LEAD_JS,
         "const linhas = $input.all().map(i => i.json);",
         "const planilha = 'https://docs.google.com/spreadsheets/d/" + PLANILHA + "/edit#gid=396728619';",
         "const conta = (f) => linhas.filter(f).length;",
         "const estado = { geradoEm: new Date().toISOString(), itens: [",
         "  { id: 'site-enviar', nome: 'Sites prontos para enviar', quantidade: conta(l => String(l.status).trim() === 'pronto'),",
         "    detalhe: 'Clique no wa_link do lead: abre o WhatsApp com a mensagem e marca como enviado.', link: planilha },",
-        "  { id: 'site-resposta', nome: 'Enviados esperando resposta', quantidade: conta(l => String(l.status).trim() === 'enviado' && !l.respondeu_em),",
-        "    detalhe: 'Quando o cliente responder, preencha respondeu_em.', link: planilha },",
+        "  // Pasta fora da raiz (_recusados, _em-conversa) já tem destino: não espera mais nada.",
+        "  { id: 'site-resposta', nome: 'Enviados esperando resposta',",
+        "    quantidade: conta(l => String(l.status).trim() === 'enviado' && !l.respondeu_em && naRaiz(l.place_id)),",
+        "    detalhe: 'A resposta no WhatsApp preenche respondeu_em sozinha. Sem resposta, o follow-up chega em 3 dias e o lead expira em 10.', link: planilha },",
         "] };",
         "return [{ json: estado, binary: { data: { data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'site-antes-da-venda.json' } } }];",
+    ])
+    pastas = "\n".join([
+        "// Pastas que o site-pastas do Dell move (o n8n não move diretórios). Sem 'itens':",
+        "// o dell-status e o Hermes leem estado/*.json e ignoram este arquivo.",
+        "// Só resposta a partir de 29/09/2026 move: o que já estava enviado antes fica onde está.",
+        PASTA_DO_LEAD_JS,
+        "const CORTE = Date.parse('" + CORTE + "');",
+        "const mover = [];",
+        "for (const l of $input.all().map(i => i.json)) {",
+        "  const atual = pasta[l.place_id];",
+        "  if (!atual) continue;",
+        "  const partes = atual.split('/');",
+        "  const topo = partes.length > 1 ? partes[0] : '';",
+        "  const slug = partes[partes.length - 1];",
+        "  const status = String(l.status ?? '').trim();",
+        "  const respondeu = String(l.respondeu_em ?? '').trim();",
+        "  const base = { place_id: l.place_id, nome: l.nome, de: atual };",
+        "  if (['enviado', 'expirado'].includes(status) && respondeu && Date.parse(respondeu) >= CORTE && (topo === '' || topo === '_concluidos')) {",
+        "    mover.push({ ...base, para: '_em-conversa/' + slug, motivo: 'respondeu em ' + respondeu });",
+        "  } else if (status === 'expirado' && !respondeu && topo === '') {",
+        "    mover.push({ ...base, para: '_concluidos/' + slug, motivo: '10 dias sem resposta' });",
+        "  }",
+        "}",
+        "const estado = { geradoEm: new Date().toISOString(), mover };",
+        "return [{ json: estado, binary: { data: { data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'site-pastas.json' } } }];",
     ])
     nos = [
         {"id": "hora", "name": "A cada hora", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0],
@@ -179,7 +232,7 @@ def balcao(erro):
         {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [660, 0],
          "parameters": ler_planilha, "credentials": SHEETS, "executeOnce": True, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000},
         {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [880, 0],
-         "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": (AQUI / "balcao-cruzar.js").read_text(encoding="utf-8")}},
+         "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": codigo_js("site-mensagem.js", "balcao-cruzar.js")}},
         {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1100, 0],
          "parameters": {**{k: v for k, v in ler_planilha.items() if k != "operation"}, "operation": "update",
                         "columns": {"mappingMode": "autoMapInputData", "matchingColumns": ["place_id"], "value": {}, "schema": colunas},
@@ -194,15 +247,28 @@ def balcao(erro):
         {"id": "gravar-pendencias", "name": "Gravar pendências", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
          "position": [1100, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
                                                  "fileName": "/home/node/.n8n-files/estado/site-antes-da-venda.json"}},
+        {"id": "pastas", "name": "Pastas a mover", "type": "n8n-nodes-base.code", "typeVersion": 2,
+         "position": [880, 440], "parameters": {"mode": "runOnceForAllItems", "jsCode": pastas}},
+        {"id": "gravar-pastas", "name": "Gravar pastas a mover", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [1100, 440], "parameters": {"operation": "write", "dataPropertyName": "data",
+                                                 "fileName": "/home/node/.n8n-files/estado/site-pastas.json"}},
     ]
     con["Ler a planilha"]["main"][0].append({"node": "Pendências da esteira", "type": "main", "index": 0})
+    con["Ler a planilha"]["main"][0].append({"node": "Pastas a mover", "type": "main", "index": 0})
     con["Pendências da esteira"] = {"main": [[{"node": "Gravar pendências", "type": "main", "index": 0}]]}
+    con["Pastas a mover"] = {"main": [[{"node": "Gravar pastas a mover", "type": "main", "index": 0}]]}
     return {"name": "03 · Balcão (Site antes da venda)", "nodes": nos, "connections": con,
             "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "errorWorkflow": erro}}
 
 
 if __name__ == "__main__":
     erro = erro_wf()
+    if sys.argv[1:2] == ["--balcao"]:
+        wf = balcao(erro)
+        wid = criar_ou_trocar(wf)
+        api("POST", f"/workflows/{wid}/activate")  # o PUT guarda; ativar publica a versão nova
+        print(wf["name"], "->", wid, f"({len(wf['nodes'])} nós, ativo)")
+        sys.exit(0)
     gemini = credencial_gemini()
     ids = {}
     for wf in (cacador(sys.argv[1], gemini, erro), balcao(erro)):

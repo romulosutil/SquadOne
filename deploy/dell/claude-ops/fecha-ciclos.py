@@ -8,15 +8,29 @@
 - Lead Scout: "Enviar convite" vira o link rastreado e a sincronização horária
   grava as pendências do PRUMO para a Central.
 
-Os links usam 127.0.0.1:5679, que o túnel SSH abria no PC. Sem PC (desde
-28/09/2026), só abrem no navegador do próprio Dell.
+Até 29/09/2026 os links usavam 127.0.0.1:5679, que só abria no Dell (ou pelo
+túnel do PC). Desde então passam pela tailnet: `tailscale serve` publica
+/webhook do n8n em LINKS, só para aparelhos da tailnet (não é Funnel), então o
+link abre no celular com o Tailscale ligado. `--tailnet` troca a base no Lead
+Scout e reescreve os "Enviar convite" do PRUMO ainda em "Revisar"; o wa_link do
+Site é remontado pelo Balcão a cada hora (balcao-cruzar.js).
+
+Desde 23/09/2026 o fluxo do convite PRUMO e o Lead Scout vêm de prumo-simples.py
+(que usa webhook_workflow daqui); rodar este arquivo sem opção refaz só o 04.
+
+Uso: python3 fecha-ciclos.py [--tailnet]
 """
+import sys
+from urllib.parse import quote
+
 from n8n import api, put
 
 SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sheets account"}}
 SITE = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o"
 PRUMO = "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U"
 LEAD_SCOUT = "e02c6f43-17ce-430b-9238-0b997a7656ce"
+LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
+LOCAL = "http://127.0.0.1:5679/webhook"
 
 
 def doc(planilha, gid, aba):
@@ -75,7 +89,7 @@ def webhook_workflow(nome, caminho, webhook_id, planilha, gid, aba, coluna_chave
     else:
         wid = api("POST", "/workflows", wf)["id"]
     api("POST", f"/workflows/{wid}/activate")
-    print(nome, "->", wid, f"http://127.0.0.1:5679/webhook/{caminho}")
+    print(nome, "->", wid, f"{LINKS}/{caminho}")
 
 
 DECIDIR_SITE = """const pid = String($('Clique (enviar)').first().json.query?.place_id ?? '');
@@ -129,7 +143,7 @@ def lead_scout():
     if antigo in conv["jsCode"]:
         conv["jsCode"] = conv["jsCode"].replace(antigo,
             "    // Link rastreado: o clique marca o convite como enviado e abre o canal (actionUrl).\n"
-            "    'Enviar convite': 'http://127.0.0.1:5679/webhook/convite?id=' + encodeURIComponent(String(value(lead, 'ID do lead', 'dedupe_key') || companyId)),\n")
+            "    'Enviar convite': '" + LINKS + "/convite?id=' + encodeURIComponent(String(value(lead, 'ID do lead', 'dedupe_key') || companyId)),\n")
         conv["jsCode"] = conv["jsCode"].replace(
             "'Envie o convite pelo canal validado. Depois, marque a situação do diagnóstico como “Convite enviado”.'",
             "'Clique em “Enviar convite”: abre o canal com a mensagem pronta e marca o convite como enviado.'")
@@ -150,14 +164,43 @@ def lead_scout():
     print("Lead Scout: convite rastreado + pendências")
 
 
+def tailnet():
+    """Base dos links rastreados do PRUMO: Lead Scout (só a string) e convites pendentes na planilha."""
+    wf = api("GET", f"/workflows/{LEAD_SCOUT}")
+    trocados = 0
+    for n in wf["nodes"]:
+        codigo = n["parameters"].get("jsCode", "")
+        if LOCAL + "/convite?id=" in codigo:
+            n["parameters"]["jsCode"] = codigo.replace(LOCAL + "/convite?id=", LINKS + "/convite?id=")
+            trocados += 1
+    if trocados:
+        put(wf)
+        api("POST", f"/workflows/{LEAD_SCOUT}/activate")
+    print(f"Lead Scout: {trocados} nó(s) com a base nova")
+
+    from sheets_proxy import SheetsProxy
+    with SheetsProxy([PRUMO]) as s:
+        v = s.get(f"/v4/spreadsheets/{PRUMO}/values/" + quote("Prospects!A1:P1000") + "?valueRenderOption=FORMULA")["values"]
+        cab = v[0]
+        etapa, convite = cab.index("Etapa"), cab.index("Enviar convite")
+        coluna = chr(ord("A") + convite)
+        dados = []
+        for n, linha in enumerate(v[1:], start=2):
+            linha = linha + [""] * (len(cab) - len(linha))
+            if str(linha[etapa]).strip() == "Revisar" and LOCAL + "/convite?id=" in str(linha[convite]):
+                dados.append({"range": f"Prospects!{coluna}{n}",
+                              "values": [[str(linha[convite]).replace(LOCAL + "/convite?id=", LINKS + "/convite?id=")]]})
+        if dados:
+            s.post(f"/v4/spreadsheets/{PRUMO}/values:batchUpdate", {"valueInputOption": "USER_ENTERED", "data": dados})
+        print(f"Prospects: {len(dados)} convite(s) em Revisar com a base nova")
+
+
 if __name__ == "__main__":
+    if "--tailnet" in sys.argv:
+        tailnet()
+        sys.exit(0)
     webhook_workflow("04 · Clique no wa_link (marca enviado)", "enviar", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60001",
                      SITE, "396728619", "Leads", "place_id", "place_id", DECIDIR_SITE,
                      {"status": "enviado", "enviado_em": "={{ $json.agora }}"})
-    webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
-                     PRUMO, "957714022", "Leads", "ID do lead", "id", DECIDIR_PRUMO,
-                     # Etapa fica em "Convite pronto": a validação da coluna não tem "Convite enviado"
-                     # (tem na Situação). A Pontuação move a Etapa na primeira resposta.
-                     {"Situação do diagnóstico": "Convite enviado",
-                      "Convite enviado em": "={{ $json.agora }}", "Próxima ação": "Aguarde as respostas das cinco perspectivas."})
-    lead_scout()
+    # O convite PRUMO (aba Leads antiga, DECIDIR_PRUMO) e o lead_scout() abaixo são de antes de
+    # prumo-simples.py: rodá-los hoje desfaria o PRUMO simples. Ficam só como histórico.

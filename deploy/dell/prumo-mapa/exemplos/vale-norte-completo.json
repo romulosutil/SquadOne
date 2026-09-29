@@ -1,0 +1,403 @@
+{
+ "_como_usar": "Exemplo completo (cliente FICTÍCIO, simulacao-mapa-vale-norte.md): deve reproduzir o documento Vale Norte de 7 páginas. prumo-mapa exemplos/vale-norte-completo.json --saida /tmp/vn",
+ "versao": 1,
+ "origem": "exemplo",
+ "resposta_id": "exemplo-vale-norte-completo",
+ "empresa": "Distribuidora Vale Norte",
+ "descricao": [
+  "Materiais de construção e hidráulica · Serra, ES",
+  "22 pessoas · 1 loja e 1 centro de distribuição · 4 vendedores externos"
+ ],
+ "datas": {
+  "coleta": "25 a 29 de agosto",
+  "analise": "1 a 5 de setembro",
+  "devolutiva": "8 de setembro",
+  "decisao": "Até 15 de setembro",
+  "inicio": "22 de setembro",
+  "documento": "Setembro de 2026"
+ },
+ "pro_labore_dono": 18000,
+ "valor_hora_dono": null,
+ "valor_hora_time": 70,
+ "preco_mapa": 1500,
+ "sessoes": [
+  {
+   "papel": "Dono",
+   "quem": "Antônio Rangel",
+   "respostas": {
+    "AR1": {
+     "resposta": "Existe uma regra, mas nem todo mundo segue ou conhece",
+     "nota": 2
+    },
+    "AR2": {
+     "resposta": "Existe um critério, mas só na cabeça de quem decide",
+     "nota": 1
+    },
+    "AM1": {
+     "resposta": "Às vezes, informalmente (WhatsApp, e-mail avulso)",
+     "nota": 1
+    },
+    "BR1": {
+     "resposta": "Existe um critério, mas informal/na cabeça de quem compra",
+     "nota": 1
+    },
+    "BR2": {
+     "resposta": "Limite definido, mas não é sempre respeitado",
+     "nota": 2
+    },
+    "BM1": {
+     "resposta": "Só de cabeça, ninguém escreve",
+     "nota": 1
+    },
+    "CR1": {
+     "resposta": "Quem atende decide na hora, sem regra",
+     "nota": 1
+    },
+    "CR2": {
+     "resposta": "Está escrita, mas nem sempre seguida",
+     "nota": 2
+    },
+    "CM1": {
+     "resposta": "Não",
+     "nota": 0
+    },
+    "DR1": {
+     "resposta": "Alguém tentaria, mas nunca fez",
+     "nota": 1
+    },
+    "DR2": {
+     "resposta": "Mais ou menos, por experiência",
+     "nota": 1
+    },
+    "DD1": {
+     "resposta": "Só na cabeça do dono",
+     "nota": 0
+    },
+    "DM1": {
+     "resposta": "Acontece toda hora",
+     "nota": 0
+    }
+   },
+   "aprofundamentos": {
+    "AR1": "38 por semana, uns 9 minutos cada",
+    "AR2": "6 por semana",
+    "BR1": "6",
+    "CR1": "11 por semana",
+    "DR1": "A Marlene: só ela tem a senha do certificado digital; para o faturamento",
+    "DM1": "14"
+   }
+  },
+  {
+   "papel": "Vendas",
+   "quem": "Vendedor 1",
+   "respostas": {
+    "AR1": {
+     "resposta": "Liga pro dono toda vez",
+     "nota": 0
+    },
+    "AD1": {
+     "resposta": "Às vezes bate, às vezes não",
+     "nota": 1
+    }
+   }
+  },
+  {
+   "papel": "Vendas",
+   "quem": "Vendedor 2",
+   "respostas": {
+    "AR1": {
+     "resposta": "Liga pro dono toda vez",
+     "nota": 0
+    }
+   }
+  },
+  {
+   "papel": "Compras",
+   "quem": "Elaine",
+   "respostas": {
+    "BR1": {
+     "resposta": "Existe um critério, mas informal/na cabeça de quem compra",
+     "nota": 1
+    },
+    "BR2": {
+     "resposta": "Tem uma noção de limite, mas não está definida",
+     "nota": 1
+    },
+    "BD1": {
+     "resposta": "Existe, mas espalhado em vários lugares",
+     "nota": 1
+    }
+   },
+   "aprofundamentos": {
+    "BR2": "teto citado R$ 5.000; compra real R$ 12.400"
+   }
+  },
+  {
+   "papel": "Financeiro",
+   "quem": "Marlene",
+   "respostas": {
+    "CR1": {
+     "resposta": "Quem atende decide na hora, sem regra",
+     "nota": 1
+    },
+    "CR2": {
+     "resposta": "Está escrita, mas nem sempre seguida",
+     "nota": 2
+    },
+    "CD1": {
+     "resposta": "Existe no sistema, mas nem todo mundo consulta lá",
+     "nota": 2
+    }
+   },
+   "aprofundamentos": {
+    "CR2": "R$ 143.000 em aberto >60d"
+   }
+  },
+  {
+   "papel": "Operação",
+   "quem": "Wesley",
+   "respostas": {
+    "CR1": {
+     "resposta": "Libera de qualquer jeito, ou pergunta ao dono toda vez",
+     "nota": 0
+    },
+    "DR1": {
+     "resposta": "Alguém tentaria, mas nunca fez",
+     "nota": 1
+    }
+   }
+  },
+  {
+   "papel": "Coleta direta",
+   "respostas": {
+    "AD1": {
+     "resposta": "Às vezes bate, às vezes não",
+     "nota": 1
+    },
+    "BD1": {
+     "resposta": "Existe, mas espalhado em vários lugares",
+     "nota": 1
+    },
+    "CD1": {
+     "resposta": "Existe no sistema, mas nem todo mundo consulta lá",
+     "nota": 2
+    },
+    "DD1": {
+     "resposta": "Só na cabeça do dono",
+     "nota": 0
+    }
+   },
+   "aprofundamentos": {
+    "AD1": "variação 10,9% · R$ 180.000/mês na linha",
+    "BD1": "4 cópias do cadastro",
+    "DD1": "não existe organograma"
+   }
+  }
+ ],
+ "leitura_indice": "A empresa funciona, mas ainda passa quase inteira por você. Nenhum dos seis blocos chegou a 1,5 de 3.",
+ "achados": [
+  {
+   "titulo": "A regra de desconto existe. Só que dentro da sua cabeça.",
+   "texto": "Você respondeu que existe uma regra. Os dois vendedores responderam que ligam para você toda vez. São 38 pedidos por semana, 9 minutos cada."
+  },
+  {
+   "titulo": "Três pessoas, três preços para o mesmo item.",
+   "texto": "Pedimos o preço do registro de gaveta 3/4 a três pessoas na mesma manhã: R$ 3,49 · R$ 3,72 · R$ 3,87. Diferença de 10,9%."
+  },
+  {
+   "titulo": "Uma pessoa sozinha segura o faturamento.",
+   "texto": "Só a Marlene tem a senha do certificado digital e conhece a régua de cobrança. Duas semanas sem ela param cerca de R$ 388 mil de faturamento."
+  }
+ ],
+ "recomendacao_resumo": "Seguir para a Fonte, no formato com IA — depois de três consertos de duas semanas que não dependem dela. Detalhe na página 06.",
+ "scorecard": {
+  "vendemos": "Falta alçada de desconto escrita e publicada, e um critério de crédito para cliente novo que não more só com você.",
+  "compramos": "Falta dizer quando é obrigatório cotar — hoje 6 de cada 10 compras saem sem comparação — e um teto de aprovação que valha na prática.",
+  "entregamos": "Falta regra de liberação para cliente com título vencido. A régua está escrita desde 2024 e ninguém segue.",
+  "quem": "Falta substituto treinado para as três funções-chave e os limites de decisão por escrito. Não existe organograma.",
+  "cadastros": "Três versões de tabela de preço e quatro cópias do cadastro de fornecedor. Só a inadimplência tem fonte confiável.",
+  "decisoes": "Nada registra por que uma exceção foi aberta ou por que um cliente foi cortado. No trimestre, 14 assuntos voltaram do zero."
+ },
+ "divergencias_texto": {
+  "AR1": "Você diz que existe uma regra. Os dois vendedores dizem que ligam para você toda vez.",
+  "BR2": "Você diz R$ 5.000 definido. A Elaine diz que tem uma noção — e a última compra sem aviso foi de R$ 12.400.",
+  "CR1": "Você e a Marlene dizem que quem atende decide. O Wesley, na expedição, diz que libera de qualquer jeito."
+ },
+ "dependencia": {
+  "nota": "Contagem feita durante os cinco dias de coleta, cruzando o seu WhatsApp, as ligações registradas e o que as seis pessoas relataram nas entrevistas.",
+  "linhas": [
+   {
+    "decisao": "Desconto ou prazo fora do padrão",
+    "por_semana": 38,
+    "minutos": 9,
+    "delegavel": true
+   },
+   {
+    "decisao": "Dúvida de preço de tabela",
+    "por_semana": 12,
+    "minutos": 5,
+    "delegavel": true
+   },
+   {
+    "decisao": "Liberar entrega para cliente com título vencido",
+    "por_semana": 11,
+    "minutos": 12,
+    "delegavel": true
+   },
+   {
+    "decisao": "Aprovação de compra",
+    "por_semana": 9,
+    "minutos": 15,
+    "delegavel": false
+   },
+   {
+    "decisao": "Crédito para cliente novo",
+    "por_semana": 6,
+    "minutos": 20,
+    "delegavel": false
+   },
+   {
+    "decisao": "Exceções diversas (troca, garantia, frete)",
+    "por_semana": 7,
+    "minutos": 18,
+    "delegavel": false
+   }
+  ]
+ },
+ "inventario": {
+  "linhas": [
+   {
+    "informacao": "Preço de venda",
+    "sistema": "nao_confiavel",
+    "planilha": "nao_confiavel",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Desconto que cada vendedor pode dar",
+    "sistema": "nao_existe",
+    "planilha": "nao_existe",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Crédito para cliente novo",
+    "sistema": "nao_existe",
+    "planilha": "nao_existe",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Cadastro de fornecedor e preço negociado",
+    "sistema": "nao_confiavel",
+    "planilha": "nao_confiavel",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Quem está inadimplente hoje",
+    "sistema": "vive",
+    "planilha": "nao_confiavel",
+    "cabeca": "nao_existe"
+   },
+   {
+    "informacao": "Régua de cobrança",
+    "sistema": "nao_existe",
+    "planilha": "nao_confiavel",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Quem faz o quê e quem cobre quem",
+    "sistema": "nao_existe",
+    "planilha": "nao_existe",
+    "cabeca": "vive"
+   },
+   {
+    "informacao": "Por que abrimos aquela exceção",
+    "sistema": "nao_existe",
+    "planilha": "nao_confiavel",
+    "cabeca": "vive"
+   }
+  ],
+  "destaque": {
+   "numero": "17",
+   "legenda": "planilhas circulando entre as duas unidades",
+   "titulo": "Seis delas carregam o mesmo dado em versões diferentes.",
+   "texto": "Nenhuma está errada de propósito. O problema é que nenhuma é a oficial — então quem precisa de um número pergunta a uma pessoa, não a um lugar. E a pessoa costuma ser você."
+  },
+  "fonte": "Levantado a partir dos exports do sistema e das planilhas em uso na semana de 25 a 29 de agosto"
+ },
+ "travas": [
+  {
+   "titulo": "Todo desconto passa por você",
+   "formula": "tempo_dono",
+   "por_semana": 38,
+   "minutos": 9,
+   "conta": "38 pedidos por semana · 9 minutos cada · R$ 112,50 a sua hora"
+  },
+  {
+   "titulo": "O mesmo assunto volta a ser discutido do zero",
+   "formula": "retrabalho",
+   "por_trimestre": 14,
+   "minutos": 50,
+   "pessoas": 3,
+   "conta": "14 assuntos no último trimestre · 50 minutos cada · 3 pessoas na sala · R$ 70 a hora média"
+  },
+  {
+   "titulo": "Cada um vende com um preço diferente",
+   "formula": "margem",
+   "base_mes": 180000,
+   "fracao_pct": 30,
+   "taxa_pct": 10.9,
+   "conta": "R$ 180.000 vendidos por mês na linha testada · 30% saindo pelo preço mais baixo · 10,9% de diferença"
+  },
+  {
+   "titulo": "Liberar entrega para quem deve é decidido caso a caso",
+   "formula": "tempo_dono",
+   "por_semana": 11,
+   "minutos": 12
+  },
+  {
+   "titulo": "Compra fechada sem comparar preço",
+   "formula": "margem",
+   "base_mes": 520000,
+   "fracao_pct": 60,
+   "taxa_pct": 1.5,
+   "conta": "R$ 520.000 comprados por mês · 6 de cada 10 compras sem cotação · 1,5% de ganho típico ao cotar"
+  }
+ ],
+ "riscos": [
+  {
+   "valor": 388000,
+   "texto": "de faturamento parado se a Marlene ficar duas semanas fora. É a única pessoa com a senha do certificado digital."
+  },
+  {
+   "valor": 143000,
+   "texto": "em aberto há mais de 60 dias sem nenhuma cobrança ativa. A régua existe escrita desde 2024 e não é seguida."
+  }
+ ],
+ "recomendacao": {
+  "primeiro": [
+   {
+    "acao": "**Uma tabela de preço só**, com um dono e uma data de revisão. As outras duas versões saem de circulação no mesmo dia.",
+    "quem": "Elaine e você",
+    "efeito": "Resolve a trava 1"
+   },
+   {
+    "acao": "**A alçada de desconto numa folha**, colada onde os vendedores enxergam. Até X% cada um decide sozinho; acima disso, pergunta.",
+    "quem": "Você",
+    "efeito": "Resolve a trava 3"
+   },
+   {
+    "acao": "**Uma segunda pessoa** com acesso ao certificado digital e treinada na régua de cobrança, com a Marlene junto.",
+    "quem": "Marlene e Wesley",
+    "efeito": "Tira R$ 388 mil de risco"
+   }
+  ],
+  "resumo": "Os dois primeiros devolvem cerca de **R$ 8.663 por mês**; o terceiro tira **R$ 388 mil** de risco da mesa. Nenhum custa nada além de decisão sua — faça antes de contratar qualquer coisa, inclusive a mim.",
+  "depois": {
+   "formato": "ia",
+   "texto": "Recomendo o formato com IA, e não o Notion, por um motivo concreto: são 83 consultas por semana e quatro vendedores em campo. Ninguém para dentro de uma obra para procurar num site — pergunta num chat e recebe preço, prazo e limite na hora."
+  },
+  "nao_recomendado": {
+   "titulo": "Trocar de ERP.",
+   "texto": "O sistema que vocês têm dá conta do que precisa. O problema não é o software — é que ninguém combinou o que entra nele e quando. Trocar agora muda a bagunça de lugar e custa seis meses da operação."
+  }
+ }
+}

@@ -16,7 +16,7 @@ from sheets_proxy import SheetsProxy
 PLANILHA = "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U"
 PID, DID = 1838781376, 1418162405
 LEAD_SCOUT = "e02c6f43-17ce-430b-9238-0b997a7656ce"
-CONVITE_URL = "http://127.0.0.1:5679/webhook/convite?id="
+CONVITE_URL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook/convite?id="  # tailnet desde 29/09/2026: abre no celular
 ETAPA_COL = 7
 CORES = {"Revisar": (1, 0.95, 0.65), "Convite enviado": (0.8, 0.88, 1), "Diagnóstico pronto": (0.73, 0.96, 0.8),
          "Concluído": (0.85, 0.85, 0.85), "Sem interesse": (0.95, 0.85, 0.85)}

@@ -71,6 +71,23 @@ leia_me = """Espelho do repositório romulosutil/prumo (~/prumo no Dell), a font
 Atualizado uma vez por dia, só no sentido Dell -> Drive. Para editar, edite o repositório.
 """
 
+[[espelho]]
+id = "entregas"
+nome = "PRUMO — entregas"
+origem = "~/prumo-entregas"
+destino = "PRUMO/Entregas"
+intervalo_h = 24
+atencao_h = 30
+falha_h = 72
+# Rascunhos do Mapa gerados pelo prumo-mapa (29/09/2026). Dado de cliente: fica
+# fora do repositório ~/prumo, e o Drive é a cópia legível.
+sentinela = "LEIA-ME.txt"
+max_apagar = 50
+excluir = ["*.parcial"]
+leia_me = """Rascunhos do Mapa gerados no Dell (~/prumo-entregas).
+Atualizado uma vez por dia, só no sentido Dell -> Drive. Editar aqui não volta para o Dell.
+"""
+
 [cofre]
 repositorio = "rclone:gdrive:Backups/dell-worker/restic"
 senha = "~/.config/backup-dell/restic.senha"

@@ -1,0 +1,7 @@
+[Unit]
+Description=Atualizar a Central do SquadOne quando a main andar
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/atualizar-central --se-mudou
+TimeoutStartSec=900

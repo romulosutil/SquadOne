@@ -6,10 +6,10 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 # Mapa do ecossistema
 
 Vem do design "Estrutura do SquadOne" (24/09/2026), conferido no Dell em
-25/09/2026 e atualizado em 28/09/2026 com a perda do PC. O mapa diz **onde
-procurar**; a verdade é a fonte viva (`systemctl --user`, n8n, `status.json`,
-`cron/jobs.json`). Mapa e fonte
-divergindo é notícia: diga qual divergência viu e deixe o Claude ou o Codex
+25/09/2026, atualizado em 28/09/2026 com a perda do PC e em 29/09/2026 com o
+que entrou no Dell nesse dia. O mapa diz **onde procurar**; a verdade é a
+fonte viva (`systemctl --user`, n8n, `status.json`, `cron/jobs.json`). Mapa e
+fonte divergindo é notícia: diga qual divergência viu e deixe o Claude ou o Codex
 atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
 ## Quem faz o quê
@@ -33,6 +33,9 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
   recuperar. Um PC novo está a caminho e vai receber a organização do
   SquadOne; até lá **o Dell é a máquina de controle**: Claude Code e Codex
   rodam nele, sem túnel. Estado e checklist: `SquadOne/deploy/pc/README.md`.
+- **Fontes de verdade no Dell:** clones próprios do GitHub (`~/SquadOne`,
+  `~/prumo`, `~/crm-silmer`) e `~/auto-site`. O PRUMO é dono de tudo; o Site
+  antes da venda é a frente "Vender mais" dele.
 - **Syncthing** não tem mais com quem sincronizar: `~/Pessoal-dev`,
   `~/Corporativo-dev` e o grafo que você gera ficam no Dell. O aparelho
   `Rômulo` ainda aparece desconectado na configuração até o PC novo chegar;
@@ -62,6 +65,10 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 ### Dell (`dell-worker`, Ubuntu, Tailscale)
 
 Tudo escuta só em `127.0.0.1`. Linger ligado; tampa fechada não suspende.
+A exceção é o Tailscale Serve, só para aparelhos da tailnet:
+`https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net` publica o seu
+painel (`/`, porta 9119) e os webhooks do n8n (`/webhook`). Fora da tailnet
+não abre; no celular, só com o Tailscale ligado.
 
 | Porta | Serviço |
 |---|---|
@@ -74,16 +81,29 @@ Unidades `systemctl --user`:
 
 | Unidade | Quando | O que faz |
 |---|---|---|
-| `dell-status.timer` | 1 min | grava o `status.json` da Central; avisa por você quando algo quebra, a cada 12 h enquanto continuar quebrado e quando volta; esvazia a fila de avisos |
-| `gerador-de-sites.timer` | 08h, persistente | até 4 leads por dia, 45 min cada, Claude Code + Vercel. Dell desligado às 08h: roda quando voltar |
+| `dell-status.timer` | 1 min | grava o `status.json` da Central; avisa por você quando algo quebra, a cada 12 h enquanto continuar quebrado e quando volta; esvazia a fila de avisos. Suas rotinas: verificação `crons` (falha) e, desde 29/09/2026, uma `cron:<id>` por rotina, que acusa atraso de mais de 30 min |
+| `gerador-de-sites.timer` | 08h, persistente | até 4 leads por dia, 45 min cada, Claude Code + Vercel; de 24 a 28/09/2026 terminou entre 09:17 e 10:17. Dell desligado às 08h: roda quando voltar. Resumo em `~/auto-site/.logs/status.json`; desde 29/09/2026 a falha vira aviso por você pela verificação `gerador` do `dell-status`, e lead que o Claude descarta no meio não derruba mais a rodada |
 | `auto-entrada.path` | ao chegar pacote | o n8n não cria pastas: materializa em `~/auto-site` os pacotes que o Caçador deixa |
 | `site-antes-venda-watcher.service` | contínuo | avisa pelo WhatsApp quando um lead é publicado |
 | `whatsapp-observador.service` | contínuo | lê o `bridge.log` da sua bridge (sem o conteúdo das mensagens); resposta de lead das planilhas avisa o n8n. Só vê **respostas** de leads, nunca o envio do Rômulo |
 | `pncp-catchup.timer` | 08h, persistente | refaz a coleta do PNCP se o n8n perdeu a das 07:30 |
 | `dell-worker-healthwatch.service` | contínuo | confere por HTTP os serviços do usuário |
-| `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`) e `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) |
+| `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central, que roda dele; falha vira aviso por você |
+| `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, os rascunhos do Mapa, 1x ao dia) |
 | `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
+
+O backup roda desde 29/09/2026 (primeiro espelho e primeiro cofre feitos à mão
+nesse dia, depois os timers). O kit de recuperação do cofre fica com o Rômulo.
 | `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você |
+
+Suas rotinas que tocam o ecossistema (todas em `~/.hermes/cron/jobs.json`):
+
+- **Sites e pendências**, 10:30, sem modelo (`sites_e_pendencias.py`): o
+  resultado do gerador do dia e o que espera o Rômulo (pendências do n8n e do
+  `dell-status`), com os links que vêm nos dados. Troca o briefing das 08h,
+  que saía antes do gerador.
+- **Graphify — projetos**, 03:00, sem modelo: `~/SquadOne`, `~/prumo`,
+  `~/auto-site` e `~/crm-silmer`; só falha vira mensagem.
 
 Docker Compose em `~/licitacoes-automation`: `n8n` (credenciais OAuth
 cifradas no próprio n8n), `db` (Postgres 17, banco do n8n) e `collector` do
@@ -105,6 +125,21 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 | Radar PNCP — coleta diária | 07:30 | só dispara a coleta; não espera o PNCP |
 
 `PRUMO — Preparar planilha` fica desligado de propósito (manual).
+
+Links rastreados (`wa_link` do Site antes da venda, "Enviar convite" do
+PRUMO) passam pelo webhook do n8n: o clique marca o envio e abre o WhatsApp.
+Desde 29/09/2026 usam o endereço da tailnet (`https://...ts.net/webhook/...`),
+que abre no celular com o Tailscale ligado; antes era `http://127.0.0.1:5679`,
+que só abria no Dell. Link com `127.0.0.1` que ainda aparecer é da leva antiga. Nunca monte um link:
+use o que está na planilha ou nos dados.
+
+Follow-up e vencimento dos leads (desde 29/09/2026): o fluxo "05 · Acompanhamento"
+(09h) manda aviso com o texto de follow-up no 3º dia sem resposta e marca
+`expirado` no 10º; vale para leads enviados a partir de 29/09. A resposta do
+lead preenche `respondeu_em` (mensagem 5 min ou mais depois do envio; antes
+disso é saudação automática do WhatsApp Business) e a pasta vai para
+`_em-conversa`. Toda segunda às 08h, "06 · Funil" manda o funil por nicho;
+não muda a aba Buscas sozinho.
 
 Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
 
@@ -168,9 +203,10 @@ Para responder sobre agenda sem abrir código:
    antes. Não chegou: o `squadone-app` estava no ar na janela? O evento foi
    criado pelo SquadOne (os de fora não avisam)? Bloco de dia inteiro não
    avisa.
-3. **Código:** push em `main` → GitHub → Easypanel implanta; ao mesmo tempo
-   você refaz o grafo (fica no Dell; sem PC não volta para lugar nenhum).
-   Sem o pre-push do PC, só o horário das 03:00 dispara. Falhou: seu job
+3. **Código:** push em `main` → GitHub → Easypanel implanta; o
+   `atualizar-central` puxa a `main` para o clone `~/SquadOne` e seu job
+   refaz o grafo dos clones às 03:00 (sem o pre-push do PC, é o único
+   disparo). Falhou: seu job
    "Graphify — projetos" em `cron/jobs.json`. Dois merges seguidos podem
    cancelar o primeiro build: se o app não mudou, peça ao Claude conferir as
    Implantações no Easypanel.
@@ -181,14 +217,15 @@ Para responder sobre agenda sem abrir código:
    convite no WhatsApp → observador lê a resposta → Etapa avança na planilha.
    Pendências em `pend:prumo-*` do `status.json`.
 6. **Site antes da venda:** Caçador 06h → `auto-entrada` → `gerador-de-sites`
-   08h → Vercel publica (`publicado.json`) → Balcão monta o link → clique no
-   wa_link marca enviado. O wa_link é `127.0.0.1:5679`: sem PC, só abre no
-   navegador do próprio Dell. O site aparece em até 1 h em `PRUMO/Sites antes
-   da venda` no Drive (espelho do backup). Status: skill
-   `site-antes-da-venda`. Falhou: `journalctl --user -u gerador-de-sites -n 50`
-   e o `falha.log` na pasta do lead (2 falhas tiram o lead da fila). Sem
-   `~/.config/claude-ops/gerador.env` o runner avisa e não toca na fila.
-   Pendências em `pend:sites-fila`, `pend:site-*`.
+   08h → Vercel publica (`publicado.json`) → Balcão monta o link → 10:30 você
+   manda "Sites e pendências" → clique no wa_link marca enviado. O wa_link
+   abre no celular só quando é o da tailnet (ver "Links rastreados"). O site
+   aparece em até 1 h em `PRUMO/Sites antes da venda` no Drive (espelho do
+   backup). Status: skill `site-antes-da-venda`. Falhou: verificação
+   `gerador` do `status.json`, `~/auto-site/.logs/status.json`,
+   `journalctl --user -u gerador-de-sites -n 50` e o `falha.log` na pasta do
+   lead (2 falhas tiram o lead da fila). Sem login do Claude o runner avisa e
+   não toca na fila. Pendências em `pend:sites-fila`, `pend:site-*`.
 7. **Licitações:** n8n às 07:30 → `POST /collect` responde 202 com um
    `collection_id` → collector busca o PNCP em segundo plano → estado em
    `GET /collections/:id` e resultado em

@@ -39,7 +39,9 @@
 17. Workflows PRUMO usam o `ID` (ID do Google Places) como vínculo canônico entre
     Prospects, formulário e diagnóstico. O clique no link rastreado "Enviar
     convite" conta como envio (Etapa → Convite enviado); o mesmo vale para o
-    `wa_link` do Site antes da venda (`pronto` → `enviado`).
+    `wa_link` do Site antes da venda (`pronto` → `enviado`). No Site antes da
+    venda, só mensagem do lead a 5 min ou mais do envio conta como resposta
+    (`respondeu_em`); antes disso pode ser saudação automática.
 18. O telefone público retornado pelo Google Places não prova disponibilidade
     no WhatsApp. O preenchimento automático de `Canal de contato` e `Destino
     do contato` exige link público de WhatsApp no site institucional; na
