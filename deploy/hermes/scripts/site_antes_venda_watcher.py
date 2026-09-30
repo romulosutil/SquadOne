@@ -82,11 +82,14 @@ FEMININOS = {"clinica", "academia", "casa", "barbearia", "pizzaria", "padaria", 
 
 def abordagem(nome: str, url: str, phone: str) -> str:
     if phone.startswith("1") and len(phone) == 11:  # EUA, como no Balcão
-        return f"Hi! I'm Rômulo. I came across {nome} and built a website to show how it could look: {url} What do you think?"
+        return (f"Hi! My name is Rômulo and I'm with Prumo; we help local businesses attract more customers online. "
+                f"I came across {nome} on Google and built a demo website to show how yours could look:\n{url}\n\nWhat do you think?")
     primeira = unicodedata.normalize("NFD", nome.split(" ")[0] if nome else "")
     primeira = "".join(ch for ch in primeira if ch.isalnum()).lower()
     artigo = "da" if primeira in FEMININOS else "do"
-    return f"Oi! Sou o Rômulo. Vi o perfil de vocês e fiz o site {artigo} {nome} pra mostrar como ficaria: {url} O que acharam?"
+    return (f"Olá! Me chamo Rômulo e represento o Prumo, que ajuda negócios locais a atrair mais clientes pela internet. "
+            f"Encontrei o perfil {artigo} {nome} no Google e montei um site de demonstração para mostrar como o de vocês "
+            f"poderia ficar:\n{url}\n\nO que acharam?")
 
 
 def notify(lead_dir: Path, state_path: Path, dry_run: bool) -> bool:
@@ -116,7 +119,7 @@ def notify(lead_dir: Path, state_path: Path, dry_run: bool) -> bool:
         f"*Demo:* {site_url}\n"
         f"*WhatsApp:* {wa_link}\n\n"
         "*Mensagem para copiar:*\n"
-        f"> {abordagem(nome, site_url, phone)}"
+        + "\n".join(f"> {linha}" if linha else "" for linha in abordagem(nome, site_url, phone).split("\n"))
     )
     state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with state_path.open("a+", encoding="utf-8") as lockfile:

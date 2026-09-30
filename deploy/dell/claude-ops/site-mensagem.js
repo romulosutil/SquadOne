@@ -6,15 +6,20 @@
 // enquanto forem null, todo lead sai na variacao A.
 // 22/09/2026: saiu o {NOME_CONTATO}. Ele usava a primeira palavra do nome do
 // negocio ("Oi Clinica!", "Oi Academia!"), e a planilha nao tem o nome do dono.
-const VARIACOES = ['Oi! Sou o Rômulo. Vi o perfil de vocês e fiz o site {ARTIGO} {NOME} pra mostrar como ficaria: {URL}{DETALHE} O que acharam?', null, null];
+// 30/09/2026: toda mensagem abre dizendo quem escreve e por quem ("Me chamo
+// Romulo e represento o Prumo"): o Site antes da venda e a frente Vender mais
+// do Prumo, e um numero desconhecido sem apresentacao parece golpe. O link vai
+// numa linha so dele, e a mensagem fecha com uma pergunta so.
+const VARIACOES = ['Olá! Me chamo Rômulo e represento o Prumo, que ajuda negócios locais a atrair mais clientes pela internet. Encontrei o perfil {ARTIGO} {NOME} no Google e montei um site de demonstração para mostrar como o de vocês poderia ficar:\n{URL}\n\n{DETALHE}O que acharam?', null, null];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
-const VARIACAO_EN = "Hi! I'm Rômulo. I came across {NOME} and built a website to show how it could look: {URL} What do you think?";
+const VARIACAO_EN = "Hi! My name is Rômulo and I'm with Prumo; we help local businesses attract more customers online. I came across {NOME} on Google and built a demo website to show how yours could look:\n{URL}\n\nWhat do you think?";
 
 // 29/09/2026: follow-up de 3 dias sem resposta, no mesmo tom da variacao A.
 // Vai pelo Acompanhamento como aviso ao Romulo; quem envia e ele.
-const FOLLOWUP = 'Oi! Passando pra saber se deu tempo de ver o site que fiz {ARTIGO} {NOME}: {URL} Se quiserem, ajusto o que for preciso. O que acharam?';
-const FOLLOWUP_EN = 'Hi! Just checking in: did you get a chance to see the website I built for {NOME}? {URL} Happy to adjust anything. What do you think?';
+// 30/09/2026: repete quem escreve; depois de 3 dias ninguem lembra do numero.
+const FOLLOWUP = 'Olá! Aqui é o Rômulo, do Prumo. Passando para saber se deu tempo de ver o site de demonstração {ARTIGO} {NOME}:\n{URL}\n\nSe quiserem, ajusto o que for preciso. O que acharam?';
+const FOLLOWUP_EN = "Hi! It's Rômulo from Prumo. Just checking in: did you get a chance to see the demo website I built for {NOME}?\n{URL}\n\nHappy to adjust anything. What do you think?";
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.
@@ -53,7 +58,7 @@ function preencher(molde, nome, url, detalhe) {
 // O briefing do Cacador comeca com "**Elogiam:**" e a primeira frase costuma
 // ter "Dr." ou "Dra." no meio, que cortava a frase ao meio.
 // Quando a frase nao e uma lista do que elogiam ("a academia e vista como...",
-// "Os clientes destacam..."), "Os clientes elogiam" + frase fica quebrado:
+// "Os clientes destacam..."), "Vi que os clientes elogiam" + frase fica quebrado:
 // nesse caso a mensagem sai sem detalhe.
 function detalheDoBriefing(b) {
   const texto = String(b || '')
@@ -67,7 +72,8 @@ function detalheDoBriefing(b) {
   if (/^(reclamam|palavras deles|os clientes|clientes)/i.test(frase)) return '';
   if (/\s(é|são|foi|foram|está|estão|destacam|elogiam|apontam|mencionam)\s/i.test(frase)) return '';
   if (frase.length > 140) frase = frase.slice(0, 140).replace(/[\s,;]+\S*$/, '') + '...';
-  return ' Os clientes elogiam ' + frase.charAt(0).toLowerCase() + frase.slice(1) + (/[.!?]$/.test(frase) ? '' : '.');
+  // 30/09/2026: vira a frase de quem pesquisou ("Vi que..."), na linha da pergunta final.
+  return 'Vi que os clientes elogiam ' + frase.charAt(0).toLowerCase() + frase.slice(1) + (/[.!?]$/.test(frase) ? '' : '.') + ' ';
 }
 
 // Numero do lead para o wa.me: o que o Balcao guardou em wa_me ou, sem ele, o telefone.

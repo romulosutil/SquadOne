@@ -303,8 +303,12 @@ cd ~/.local/share/claude-ops && python3 fecha-ciclos.py --tailnet   # base no Le
 
 O Balcão remonta o `wa_link` dos leads `pronto` a cada hora
 (`balcao-cruzar.js`); os textos das mensagens ficam em `site-mensagem.js`.
-`prumo-simples.py` e `prumo-ajuste-planilha.py` ainda têm a base antiga em
-`CONVITE_URL`: rodá-los sem trocar volta os convites novos para loopback.
+O texto do convite do PRUMO fica em `prumo-simples.py` (função `convite`) e é
+montado a cada clique; `python3 prumo-simples.py --convite` publica só esse
+fluxo, sem mexer na planilha, no Lead Scout nem na Pontuação. Desde 30/09/2026
+todas as mensagens abrem com "Me chamo Rômulo e represento o Prumo" (decisão em
+`romulosutil/prumo`, `00-contexto/decisoes.md`), e o aviso do Hermes
+(`site_antes_venda_watcher.py`) repete a abordagem do Site.
 
 Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
 

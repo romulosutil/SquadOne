@@ -15,6 +15,7 @@
 import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -433,11 +434,30 @@ const encurtar = async (qs) => {{
   }} catch (e) {{ return ''; }}
 }};
 const link = achou ? (await encurtar({{ url: form, alias: apelido }}) || await encurtar({{ url: form }}) || form) : form;
-// Vai depois da conversa (roteiro em prumo/03-captacao/roteiro-ate-o-convite.md), nunca como primeiro contato.
-const mensagem = 'Olá! Como combinamos, segue o diagnóstico da sua empresa:\\n' + link
-  + '\\n\\nSão 16 perguntas de marcar sobre a rotina, sem nenhum dado financeiro. Leva uns 10 minutos.'
-  + '\\nNão existe resposta certa: quanto mais perto do dia a dia, mais útil fica.'
-  + '\\nQuando terminar, me avise por aqui. Em até 3 dias úteis te mando o resultado.';
+// 30/09/2026: o botão é o primeiro contato (é o que se clica no Novo do CRM), e
+// "Como combinamos" não fazia sentido para quem nunca falou com o Rômulo.
+// Ordem: quem escreve e por quem, o que o Prumo faz no segmento dele, de onde
+// veio o contato; só então o diagnóstico e o link. Áreas por segmento vêm do
+// roteiro (prumo/03-captacao/roteiro-ate-o-convite.md, passo 2).
+const seg = String(l['Segmento'] ?? '').trim().toLowerCase();
+const distribuidora = /^distribuidoras? /.test(seg);
+const publico = distribuidora ? seg.replace(/^distribuidoras? /, 'distribuidoras ') : 'empresas como a de vocês';
+const regras = !distribuidora ? 'as regras do dia a dia'
+  : /autope/.test(seg) ? 'as regras de orçamento, preço e compras'
+  : /constru/.test(seg) ? 'as regras de preço, desconto e crédito'
+  : /aliment|bebida/.test(seg) ? 'as regras de preço, prazo e cobrança'
+  : 'as regras de preço, crédito e entregas';
+let nome = empresa.trim();
+for (let i = 0; i < 2; i++) nome = nome.replace(/[\\s,.-]+(ltda|me|epp|eireli|s\\.?\\/?a\\.?)\\.?$/i, '').trim();
+// Nome todo em maiúsculas ("CACAU PEÇAS PARA MOTORES") denuncia mensagem automática.
+if (nome === nome.toUpperCase() && /\\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
+  .replace(/(^|\\s)(\\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
+const mensagem = 'Olá! Me chamo Rômulo e represento o Prumo, consultoria que ajuda donos de ' + publico
+  + ' a colocar no papel ' + regras + ', para a equipe seguir mesmo quando o dono não está.'
+  + '\\n\\nEncontrei ' + (nome ? 'a ' + nome : 'vocês') + ' pelo Google e gostaria de oferecer um diagnóstico gratuito'
+  + ' da rotina de vocês: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\\n' + link
+  + '\\n\\nEm até 3 dias úteis eu devolvo o resultado, mostrando onde dá para ganhar tempo sem perder o controle.'
+  + '\\n\\nSe não for você quem cuida disso, pode encaminhar ao responsável? Obrigado!';
 let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
@@ -446,11 +466,17 @@ return [{{ json: {{ chave: id, destino, marcar: achou && String(l['Etapa'] ?? ''
     fc.webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
                         PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
                         {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
-                         "Próxima ação": "Aguarde o dono responder (16 perguntas, uns 10 minutos). "
-                                         "Sem resposta em 3 dias, ofereça fazer por telefone."})
+                         "Próxima ação": "Aguarde a resposta (do dono ou de quem atende o número). "
+                                         "Sem resposta em 3 dias, um lembrete só: ofereça fazer por telefone."})
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--convite"]:
+        # Só o texto do convite: não mexe na planilha, no Lead Scout nem na Pontuação.
+        with SheetsProxy([PLANILHA]) as s:
+            abas = s.get(f"/v4/spreadsheets/{PLANILHA}?fields=sheets.properties")["sheets"]
+        convite(next(a["properties"]["sheetId"] for a in abas if a["properties"]["title"] == "Prospects"))
+        sys.exit(0)
     pid, did = planilha()
     lead_scout(pid, did)
     pontuacao(pid)
