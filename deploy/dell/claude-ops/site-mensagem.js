@@ -61,9 +61,12 @@ function preencher(molde, nome, url, detalhe) {
 // "Os clientes destacam..."), "Vi que os clientes elogiam" + frase fica quebrado:
 // nesse caso a mensagem sai sem detalhe.
 function detalheDoBriefing(b) {
-  const texto = String(b || '')
-    .replace(/\*\*/g, '')
-    .replace(/^\s*Elogiam:\s*/i, '')
+  const bruto = String(b || '').replace(/\*\*/g, '');
+  // 30/09/2026: sem "Elogiam:" nao ha lista de elogios (descricao do negocio,
+  // motivo de descarte do Cacador); a mensagem sai sem detalhe.
+  if (!/^\s*Elogiam\s*:/i.test(bruto)) return '';
+  const texto = bruto
+    .replace(/^\s*Elogiam\s*:\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!texto) return '';
@@ -71,9 +74,38 @@ function detalheDoBriefing(b) {
   let frase = (fim >= 0 ? texto.slice(0, fim) : texto).trim();
   if (/^(reclamam|palavras deles|os clientes|clientes)/i.test(frase)) return '';
   if (/\s(é|são|foi|foram|está|estão|destacam|elogiam|apontam|mencionam)\s/i.test(frase)) return '';
-  if (frase.length > 140) frase = frase.slice(0, 140).replace(/[\s,;]+\S*$/, '') + '...';
+  frase = resumoDosElogios(frase);
+  if (!frase) return '';
   // 30/09/2026: vira a frase de quem pesquisou ("Vi que..."), na linha da pergunta final.
-  return 'Vi que os clientes elogiam ' + frase.charAt(0).toLowerCase() + frase.slice(1) + (/[.!?]$/.test(frase) ? '' : '.') + ' ';
+  return 'Vi que os clientes elogiam ' + frase.charAt(0).toLowerCase() + frase.slice(1) + '. ';
+}
+
+// 30/09/2026: o corte em 140 caracteres com "..." deixava a primeira mensagem
+// terminando em "o atendimento atencioso da...", cara de robo. Agora a lista
+// perde os parenteses e o que vem depois de travessao, e ficam os primeiros
+// itens inteiros que cabem em LIMITE_ELOGIOS, ligados por "e".
+const LIMITE_ELOGIOS = 110;
+function resumoDosElogios(frase) {
+  const limpa = String(frase || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+[—–]\s.*$/, '')
+    .replace(/[.!?]+$/, '').replace(/\s+/g, ' ').trim();
+  if (limpa.length <= LIMITE_ELOGIOS) return limpa;
+  const cabem = (partes) => {
+    const r = [];
+    for (const p of partes) {
+      if ([...r, p].join(', ').length > LIMITE_ELOGIOS) break;
+      r.push(p);
+    }
+    return r;
+  };
+  // Item novo comeca em ", o/a/os/as ..." ou ", alem do/da ..." (o "alem d" sai).
+  const itens = limpa.split(/,\s+(?:além\s+d(?=[oa]s?\s)|(?=(?:o|a|os|as)\s))/i).map(i => i.trim()).filter(Boolean);
+  const escolhidos = cabem(itens);
+  if (escolhidos.length) {
+    return escolhidos.length === 1 ? escolhidos[0] : escolhidos.slice(0, -1).join(', ') + ' e ' + escolhidos[escolhidos.length - 1];
+  }
+  // Primeiro item longo, sem artigo nos pedacos ("atendimento acolhedor, humano
+  // e prestativo, ..."): fica o comeco dele, cortado numa virgula, como estava.
+  return cabem(itens[0].split(/,\s+/)).join(', ');
 }
 
 // Numero do lead para o wa.me: o que o Balcao guardou em wa_me ou, sem ele, o telefone.
