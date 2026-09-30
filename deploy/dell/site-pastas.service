@@ -1,5 +1,5 @@
 [Unit]
-Description=Mover pastas da pasta auto conforme a planilha (respondeu, expirado)
+Description=Mover pastas da pasta auto conforme a planilha (respondeu, expirado, recusou, fechou)
 
 [Service]
 Type=oneshot

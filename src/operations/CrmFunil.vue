@@ -1,0 +1,119 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura } from './crm-formato'
+import type { CrmEtapa, CrmLead, CrmVisao } from './types'
+
+// "Funil": as 6 etapas lado a lado (no celular, uma coluna por vez com rolagem
+// horizontal). Estado sempre por texto, cor só reforça (RULES 3).
+const props = defineProps<{ leads: CrmLead[]; visao: CrmVisao; etapaEmFoco: CrmEtapa | null }>()
+const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null] }>()
+
+const busca = ref('')
+const nicho = ref('')
+const cidade = ref('')
+const mostrarDescartados = ref(false)
+const LIMITE = 30
+const limites = ref<Record<CrmEtapa, number>>(Object.fromEntries(ETAPAS.map(e => [e, LIMITE])) as Record<CrmEtapa, number>)
+
+const ordenar = (a: string, b: string) => a.localeCompare(b, 'pt-BR')
+const nichos = computed(() => [...new Set(props.leads.map(l => l.nicho).filter(Boolean))].sort(ordenar))
+const cidades = computed(() => [...new Set(props.leads.filter(l => !nicho.value || l.nicho === nicho.value).map(l => l.cidade).filter(Boolean))].sort(ordenar))
+watch(nicho, () => { if (cidade.value && !cidades.value.includes(cidade.value)) cidade.value = '' })
+
+const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const filtrados = computed(() => {
+  const termo = normalizar(busca.value.trim())
+  return props.leads.filter(l => (!nicho.value || l.nicho === nicho.value) && (!cidade.value || l.cidade === cidade.value)
+    && (!termo || normalizar(`${l.empresa} ${l.nicho} ${l.cidade}`).includes(termo)))
+})
+
+// Dentro da coluna: o que pede ação primeiro; etapas abertas do mais antigo
+// para o mais novo, encerradas do mais recente para o mais antigo.
+const peso = (l: CrmLead) => (l.respostaNova ? 0 : l.followupHoje ? 1 : l.proximoPasso ? 2 : l.links.enviar || l.links.convite ? 3 : l.divergencias.length ? 4 : 5)
+const porEtapa = computed(() => {
+  const grupos = Object.fromEntries(ETAPAS.map(e => [e, [] as CrmLead[]])) as Record<CrmEtapa, CrmLead[]>
+  for (const lead of filtrados.value) grupos[lead.etapa].push(lead)
+  for (const etapa of ETAPAS) {
+    const encerrada = etapa === 'ganho' || etapa === 'perdido'
+    grupos[etapa].sort((a, b) => peso(a) - peso(b)
+      || (encerrada ? -1 : 1) * ((Date.parse(a.desde ?? '') || 0) - (Date.parse(b.desde ?? '') || 0))
+      || ordenar(a.empresa, b.empresa))
+  }
+  return grupos
+})
+const descartados = computed(() => porEtapa.value.perdido.filter(l => l.motivoPerda === 'descartado').length)
+const cartoes = (etapa: CrmEtapa) => {
+  const lista = etapa === 'perdido' && !mostrarDescartados.value ? porEtapa.value.perdido.filter(l => l.motivoPerda !== 'descartado') : porEtapa.value[etapa]
+  return { lista: lista.slice(0, limites.value[etapa]), resto: Math.max(0, lista.length - limites.value[etapa]) }
+}
+const mais = (etapa: CrmEtapa) => { limites.value = { ...limites.value, [etapa]: limites.value[etapa] + LIMITE } }
+
+const temMarcos = (l: CrmLead) => ['contatado', 'conversando', 'proposta'].includes(l.etapa) || Boolean(l.marcos.enviado)
+const artefatos = (l: CrmLead) => {
+  const a = l.pasta?.artefatos
+  if (!a || l.sinal !== 'na-fila') return ''
+  return [a.conteudo ? 'conteúdo ✓' : 'sem conteúdo', `${a.fotos} foto${a.fotos === 1 ? '' : 's'}`, a.capa ? 'capa ✓' : 'sem capa', a.gerado ? 'site gerado' : 'site ainda não gerado'].join(' · ')
+}
+</script>
+
+<template>
+  <div class="crm-funil">
+    <form class="crm-filtros" role="search" @submit.prevent>
+      <label><span>Buscar</span><input v-model="busca" type="search" placeholder="Empresa, nicho ou cidade" autocomplete="off"></label>
+      <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n" :value="n">{{ n }}</option></select></label>
+      <label><span>Cidade</span><select v-model="cidade"><option value="">Todas</option><option v-for="c in cidades" :key="c" :value="c">{{ c }}</option></select></label>
+    </form>
+    <p v-if="busca || nicho || cidade" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leads.length }} leads com este filtro.</p>
+
+    <div class="crm-colunas">
+      <section v-for="etapa in ETAPAS" :id="`crm-coluna-${etapa}`" :key="etapa" class="crm-coluna" :class="[`is-${etapa}`, { 'is-foco': etapaEmFoco === etapa }]" :aria-labelledby="`crm-coluna-titulo-${etapa}`" tabindex="-1">
+        <header class="crm-coluna__cabeca">
+          <h2 :id="`crm-coluna-titulo-${etapa}`">{{ ROTULO_DA_ETAPA[etapa] }}</h2>
+          <strong>{{ porEtapa[etapa].length }}</strong>
+          <small>{{ DICA_DA_ETAPA[etapa] }}</small>
+        </header>
+
+        <p v-if="etapa === 'novo' && visao.gerador" class="crm-coluna__nota">
+          Gerador de sites: {{ visao.gerador.estado === 'processando' ? 'gerando agora' : visao.gerador.estado === 'ocioso' ? 'ocioso' : visao.gerador.estado === 'atencao' ? 'precisa de atenção' : 'sem status' }}.
+          {{ visao.gerador.detalhe }}{{ visao.gerador.pendentes !== undefined ? ` ${visao.gerador.pendentes} na fila.` : '' }}{{ visao.gerador.atualizadoEm ? ` (às ${hora(visao.gerador.atualizadoEm)})` : '' }}
+        </p>
+        <template v-if="etapa === 'perdido'">
+          <p class="crm-coluna__nota">Recusou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'recusou').length }} · Expirou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'expirou').length }} · Sem interesse {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-interesse').length }} · Descartado {{ descartados }}</p>
+          <label v-if="descartados" class="crm-check"><input v-model="mostrarDescartados" type="checkbox"> Mostrar os {{ descartados }} descartados antes do contato</label>
+        </template>
+
+        <ul class="crm-cartoes">
+          <li v-for="lead in cartoes(etapa).lista" :key="lead.id">
+            <article class="crm-cartao" :class="{ 'tem-divergencia': lead.divergencias.length }" :aria-labelledby="`crm-cartao-${lead.id}`">
+              <button :id="`crm-cartao-${lead.id}`" type="button" class="crm-cartao__abrir" :data-lead="lead.id" @click="emit('abrir', lead.id, $event.currentTarget as HTMLElement)">
+                <strong>{{ lead.empresa }}</strong>
+                <small>{{ onde(lead) }}</small>
+              </button>
+              <p class="crm-cartao__estado"><span class="crm-tag" :class="`is-${lead.produto}`">{{ SIGLA_DO_PRODUTO[lead.produto] }}</span> {{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</p>
+              <ol v-if="temMarcos(lead)" class="crm-marcos" aria-label="Enviado, leitura e resposta">
+                <li :class="{ 'is-feito': lead.marcos.enviado }">{{ lead.marcos.enviado ? `${lead.produto === 'prumo' ? 'Convite' : 'Enviado'} ${dataCurta(lead.marcos.enviado)}` : 'Não enviado' }}</li>
+                <li :class="{ 'is-feito': lead.leitura === 'viu' || lead.leitura === 'pela-resposta', 'is-desconhecido': lead.leitura === 'desconhecida' }">{{ textoDaLeitura(lead) || 'Leitura —' }}</li>
+                <li :class="{ 'is-feito': lead.marcos.respondeu }">{{ lead.marcos.respondeu ? `Respondeu ${dataCurta(lead.marcos.respondeu)}` : 'Sem resposta' }}</li>
+              </ol>
+              <p v-if="artefatos(lead)" class="crm-cartao__artefatos">{{ artefatos(lead) }}<template v-if="lead.pasta?.falha"> · falhou: {{ lead.pasta.falha }}</template></p>
+              <p v-if="lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo" class="crm-sinais">
+                <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
+                <span v-if="lead.followupHoje" class="crm-sinal is-followup">Follow-up hoje</span>
+                <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
+                <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
+                <span v-if="lead.acervo && lead.etapa === 'contatado'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
+              </p>
+              <p v-if="lead.links.enviar || lead.links.convite || lead.links.site" class="crm-cartao__links">
+                <a v-if="lead.links.enviar" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.convite" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="ops-visually-hidden">de {{ lead.empresa }}</span>↗</a>
+              </p>
+            </article>
+          </li>
+        </ul>
+        <p v-if="!cartoes(etapa).lista.length" class="crm-coluna__vazia">Nenhum lead nesta etapa{{ busca || nicho || cidade ? ' com este filtro' : '' }}.</p>
+        <button v-if="cartoes(etapa).resto" type="button" class="crm-mais" @click="mais(etapa)">Mostrar mais {{ Math.min(cartoes(etapa).resto, LIMITE) }} de {{ cartoes(etapa).resto }}</button>
+      </section>
+    </div>
+  </div>
+</template>

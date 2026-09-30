@@ -35,6 +35,12 @@ export interface DellCheck {
   detalhe: string
   desde?: string
   link?: string
+  /** O que isso quer dizer e o que o Rômulo faz (escrito pelo dell-status). */
+  oQueFazer?: string
+  /** O link que resolve: URL http(s) ou rota da Central (ex.: /crm?produto=site). */
+  acao?: { rotulo: string; url: string }
+  /** Resolve sozinho: aparece só para ele saber. */
+  sozinho?: boolean
 }
 
 // Retrato gravado a cada minuto no Dell por deploy/dell/dell-status.py.
@@ -51,84 +57,97 @@ export interface OperationsOverview {
   dell: DellStatus
 }
 
-export type AutoStage = 'preparation' | 'generated' | 'ready' | 'sent' | 'confirmed'
-export type AutoEventType = 'ready' | 'sent' | 'confirmed'
+// CRM (Site antes da venda + PRUMO). Espelha server/crm.ts; a Central só lê.
+export type CrmEtapa = 'novo' | 'contatado' | 'conversando' | 'proposta' | 'ganho' | 'perdido'
+export type CrmProduto = 'site' | 'prumo'
+export type CrmSinal =
+  | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
+  | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
+  | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'descartado' | 'sem-interesse'
 
-export interface AutoOperationalEvent {
-  type: AutoEventType
-  at: string
-  recordedAt: string
-  origin: 'Hermes via WhatsApp' | 'registro manual'
-  manual: true
-  channel?: string
-  recipient?: string
+export interface CrmEvento {
+  tipo: string
+  rotulo: string
+  em: string
+  origem: 'automático' | 'manual'
+  fonte: string
+  texto?: string
+  estimado?: boolean
 }
 
-export interface AutoClient {
+export interface CrmLink {
+  rotulo: string
+  url: string
+}
+
+export interface CrmLead {
   id: string
-  name: string
-  stage: AutoStage
-  stageLabel: string
-  artifacts: {
-    content: boolean
-    photos: number
-    cover: boolean
-    generated: boolean
-    publishedRecord: boolean
-    failure: boolean
+  produto: CrmProduto
+  chave: string
+  empresa: string
+  nicho: string
+  cidade: string
+  etapa: CrmEtapa
+  sinal: CrmSinal
+  subEtapa: string
+  motivoPerda?: 'recusou' | 'expirou' | 'descartado' | 'sem-interesse'
+  estadoNaPlanilha: string
+  desde?: string
+  diasNaEtapa?: number
+  ultimoEvento?: string
+  diasDesdeUltimoEvento?: number
+  leitura: 'viu' | 'pela-resposta' | 'desconhecida' | 'nao-se-aplica'
+  marcos: { enviado?: string; visto?: string; respondeu?: string }
+  followupHoje: boolean
+  respostaNova: boolean
+  acervo: boolean
+  proximoPasso?: { texto: string; data: string; registradoEm: string }
+  proposta?: { em: string; data: string }
+  notas: number
+  eventos: CrmEvento[]
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; planilha?: string }
+  pasta?: {
+    lugar: string
+    slug: string
+    artefatos?: { conteudo: boolean; fotos: number; capa: boolean; gerado: boolean; publicado: boolean; falha: boolean }
+    falha?: string
   }
-  lastModified: string
-  thumbnailUrl?: string
-  alerts: string[]
-  failureMessage?: string
-  fileHistory: Array<{ name: string; changedAt: string; origin: 'leitura local' }>
-  operationalHistory: AutoOperationalEvent[]
-  hermesNotified: boolean
-  readyAt?: string
-  sentAt?: string
-  confirmedAt?: string
+  divergencias: string[]
 }
 
-export interface AutoProductionOverview {
-  checkedAt: string
-  source: 'leitura local'
-  summary: {
-    active: number
-    preparing: number
-    ready: number
-    awaitingSend: number
-    awaitingConfirmation: number
-    confirmed: number
-    attention: number
-    discarded: number
-  }
-  funnel: {
-    materialReceived: number
-    contentAndImages: number
-    generated: number
-    ready: number
-    sent: number
-    confirmed: number
-  }
-  automation: {
-    folder: AutoConnectionEvidence
-    runner: AutoConnectionEvidence
-    hermes: AutoConnectionEvidence
-    whatsapp: AutoConnectionEvidence
-    notifier: AutoConnectionEvidence & { notifiedCount: number }
-    syncthing?: AutoConnectionEvidence
-  }
-  page: { number: number; size: number; total: number; pages: number }
-  actionClients: AutoClient[]
-  attentionClients: AutoClient[]
-  clients: AutoClient[]
+export type CrmGrupoHojeId = 'proximo' | 'followup' | 'resposta' | 'revisar' | 'proposta' | 'enviar'
+
+export interface CrmGrupoHoje {
+  id: CrmGrupoHojeId
+  titulo: string
+  explicacao: string
+  itens: Array<{ leadId: string; acao: string; detalhe: string; links: CrmLink[]; ordem: number }>
 }
 
-export type AutoConnectionState = 'connected' | 'running' | 'idle' | 'attention' | 'unknown' | 'unavailable'
-
-export interface AutoConnectionEvidence {
-  state: AutoConnectionState
-  detail: string
-  evidence: string
-  updatedAt?: string
+export interface CrmContagem {
+  total: number
+  site: number
+  prumo: number
 }
+
+export interface CrmVisao {
+  estado: 'ok' | 'sem-retrato' | 'retrato-invalido'
+  mensagem?: string
+  geradoEm?: string
+  minutosAteVelho: number
+  fontes: Array<{ id: 'site' | 'prumo' | 'registros'; nome: string; linhas: number; erro?: string }>
+  colunasAusentes: string[]
+  contagens: Record<CrmEtapa, CrmContagem>
+  perdas: { recusou: number; expirou: number; descartado: number; semInteresse: number }
+  hoje: CrmGrupoHoje[]
+  leads: CrmLead[]
+  divergencias: number
+  pastasSemLinha: string[]
+  pastasLidas: boolean
+  gerador?: { estado: 'processando' | 'ocioso' | 'atencao' | 'desconhecido'; detalhe: string; atualizadoEm?: string; pendentes?: number }
+  registro: { disponivel: boolean; motivo?: string }
+  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaCrm?: string }
+  ultimaFalha?: { em: string; erro: string }
+}
+
+export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita'

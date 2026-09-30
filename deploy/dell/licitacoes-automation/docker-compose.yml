@@ -69,7 +69,9 @@ services:
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       EXECUTIONS_DATA_PRUNE: "true"
-      EXECUTIONS_DATA_MAX_AGE: 14
+      # Em HORAS (o padrão do n8n é 336 = 14 dias). Até 30/09/2026 estava 14, e o
+      # n8n apagava tudo com mais de 14 h: o Caçador (06:00) sumia à noite.
+      EXECUTIONS_DATA_MAX_AGE: 336
     volumes:
       - n8n_data:/home/node/.n8n
       - ./scripts:/opt/licitacoes/scripts:ro

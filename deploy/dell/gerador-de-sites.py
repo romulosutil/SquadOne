@@ -28,11 +28,18 @@ Diferenças de propósito em relação ao PS1:
 
 Sinais na raiz da pasta, como no PS1: `.parar` encerra a execução no fim do
 lead atual. O `.logs/status.json` continua sendo o que a Central lê.
+
+Desde 30/09/2026 o Claude não roda mais com `--dangerously-skip-permissions`:
+roda em modo `dontAsk` com uma lista de permissão montada por lead
+(`permissoes_do_claude`). O que não está na lista é negado sem pergunta, o
+Claude segue pelo caminho permitido, e cada negação vai para o log do lead como
+`[NEGADO] ...`, para afinar a lista.
 """
 
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime as dt
 import json
 import os
@@ -64,6 +71,148 @@ PROMPT = (
     "selecione uma referencia em styles.refero.design, copie o DESIGN.md para a pasta do lead e registre a referencia"
 )
 LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
+
+# Lista de permissão do Claude headless. Saiu das transcrições dos leads de
+# 24-30/09/2026 (~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/): o
+# /lead-novo processa imagem e fonte em python3, tira captura no Chrome
+# headless, confere domínio com curl, lê Instagram/Refero/site do negócio e
+# publica com o vercel. Programas liberados com qualquer argumento; os comandos de
+# arquivo (mkdir, cp, mv, sed...) o próprio Claude Code só aceita dentro de
+# ~/auto-site e do rascunho do lead.
+PROGRAMAS_LIVRES = (
+    # "chrome" não existe no Dell, mas o CLAUDE.md usa esse nome: negado, o Claude
+    # concluiu (lead de teste de 30/09) que o Chrome todo estava proibido e
+    # publicou sem captura nenhuma; liberado, ele recebe "command not found" e
+    # passa para o google-chrome.
+    "python3", "node", "google-chrome", "chrome", "chromium", "/snap/bin/chromium", "pyftsubset", "fonttools", "curl",
+    "mkdir", "cp", "mv", "touch", "sed", "tee", "date", "sleep", "base64", "file", "xxd", "md5sum", "sort", "uniq",
+    "cut", "awk", "tr", "od", "basename", "dirname", "realpath", "printf", "fc-list", "unzip", "getent", "host",
+    "nslookup", "dig",
+)
+PROGRAMAS_NEGADOS = (
+    "git", "sudo", "su", "ssh", "scp", "rsync", "wget", "systemctl", "crontab", "pip", "pip3", "npm", "npx",
+    "chmod", "chown", "python3 -m pip",
+)
+# curl só para ler (GET, código HTTP, baixar fonte no rascunho): nada que envie dados.
+CURL_QUE_ENVIA = ("-d", "--data", "-F", "--form", "-T", "--upload-file", "-X", "--request", "--json", "-K", "--config")
+# Nem rm nem mv tocam nestes, em lugar nenhum da pasta.
+PROTEGIDOS = ("registro.md", "CLAUDE.md", "content.md", "publicado.json", ".claude", ".logs",
+              "_recusados", "_concluidos", "_em-conversa")
+# Redundante de propósito: fora da pasta o Claude já não lê nada sem regra, mas
+# estes ficam negados mesmo que alguém abra a leitura depois.
+SEGREDOS = (".ssh/**", ".config/**", ".hermes/**", "SquadOne/**", ".claude.json", ".claude/.credentials.json",
+            ".local/share/com.vercel.cli/**", ".gnupg/**", "Pessoal-dev/**", "Corporativo-dev/**")
+
+
+def palco_do_deploy(slug: str, rascunho: Path) -> Path:
+    # O mesmo "${TMPDIR:-/tmp}/esteira-deploy/demo-<slug>" do passo 5 do CLAUDE.md.
+    return rascunho / "esteira-deploy" / f"demo-{slug}"
+
+
+def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
+    """Settings (`--settings`) de um lead: escreve só na pasta dele, no registro.md,
+    em `_build/` e no rascunho; rm só na pasta dele e no rascunho; vercel só no
+    projeto demo-<slug>, a partir do palco. Caminho absoluto em regra = `//caminho`."""
+    lead, palco, home = AUTO / slug, palco_do_deploy(slug, rascunho), Path.home()
+    allow = [f"Bash({p})" for p in PROGRAMAS_LIVRES] + [f"Bash({p} *)" for p in PROGRAMAS_LIVRES]
+    for alvo in (str(rascunho), str(lead), slug):
+        allow += [f"Bash(rm {opcao}{alvo}/*)" for opcao in ("", "-f ", "-r ", "-rf ")]
+    allow += [f"Bash(pkill -f *{p}*)" for p in ("chrom", "headless", "remote-debugging")]
+    allow += [
+        f"Bash({home}/.claude/skills/impeccable/scripts/impeccable *)",
+        "Bash(~/.claude/skills/impeccable/scripts/impeccable *)",
+        "Bash(vercel whoami)", "Bash(vercel --version)",
+        f"Bash(vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE})",
+        f"Bash(vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE})",
+    ]
+    for alvo in (f"{lead}/**", f"{AUTO}/registro.md", f"{AUTO}/_build/**", f"{rascunho}/**"):
+        allow += [f"Edit(/{alvo})", f"Write(/{alvo})"]
+    allow += [f"Read(/{home}/.claude/skills/**)", "WebFetch", "WebSearch", "Skill"]
+
+    deny = [f"Bash({p} *)" for p in PROGRAMAS_NEGADOS]
+    for opcao in CURL_QUE_ENVIA:
+        deny += [f"Bash(curl {opcao}*)", f"Bash(curl * {opcao}*)"]
+    deny += ["Bash(curl *file:*)", "Bash(curl * -o ~*)", "Bash(curl * -o /home/*)", "Bash(curl * --output*)"]
+    for nome in PROTEGIDOS:
+        deny += [f"Bash(rm *{nome}*)", f"Bash(mv *{nome}*)"]
+    deny.append("Bash(rm *_descartados*)")  # mover o lead para lá pode (regra do CLAUDE.md); apagar, não
+    for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**", f"{home}/.claude/**"):
+        deny += [f"Edit(/{alvo})", f"Write(/{alvo})"]
+    deny += [f"Read(/{home}/{p})" for p in SEGREDOS]
+    deny.append("mcp__*")
+    return {"permissions": {"allow": allow, "deny": deny, "additionalDirectories": [str(rascunho)]}}
+
+
+def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
+    """Vai no --append-system-prompt: sem isto o Claude gasta turnos batendo nas
+    negações (o roteiro de deploy do CLAUDE.md usa variável de shell, que o
+    Claude Code nega em caminho)."""
+    lead, palco = AUTO / slug, palco_do_deploy(slug, rascunho)
+    return f"""Execução automática do gerador de sites no Dell, com lista de permissão (modo dontAsk): o que não está na lista é negado na hora, sem pergunta. Não repita um comando negado; siga pelo caminho permitido.
+- A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
+- Escreva só em {lead}/, {AUTO}/registro.md, {AUTO}/_build/ e no rascunho {rascunho} (é o $TMPDIR: capturas, fontes, imagens e scripts temporários, palco do deploy). CLAUDE.md, .claude/ e .logs/ são só leitura.
+- No Bash, escreva caminhos literais: variável de shell em caminho ("$stage", "${{TMPDIR:-/tmp}}") e laço for/while com variável são negados. Python de mais de uma linha: grave o script no rascunho (Write) e rode `python3 <arquivo>`; heredoc (`python3 - <<EOF`) e `python3 -c` de várias linhas costumam ser negados. Pasta nova: mkdir -p numa chamada só dele, e só na chamada seguinte use a pasta (cd, > arquivo).
+- rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
+- Para pesquisar (Instagram, Refero, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
+- Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes quatro comandos, um por chamada (outra forma de vercel é negada):
+  mkdir -p {palco}
+  cp {lead}/index.html {palco}/
+  vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE}
+  vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE}
+  Depois siga o CLAUDE.md: URL da linha "Aliased:", curl dando 200, publicado.json, registro.md. Se o deploy falhar, deixe o index.html completo sem publicado.json: o runner publica.
+- No resumo final, diga se alguma negação fez falta ao site."""
+
+
+def comando_do_claude(slug: str, rascunho: Path) -> list[str]:
+    return [
+        "claude", "-p", PROMPT.format(slug=slug),
+        "--permission-mode", "dontAsk",
+        "--settings", json.dumps(permissoes_do_claude(slug, rascunho), ensure_ascii=False, separators=(",", ":")),
+        "--append-system-prompt", instrucoes_da_execucao(slug, rascunho),
+        "--strict-mcp-config",  # nenhum servidor MCP: o /lead-novo não usa
+        "--output-format", "json",  # o resumo final traz as permission_denials
+    ]
+
+
+def descrever_negacao(negacao: dict) -> str:
+    entrada = negacao.get("tool_input") or {}
+    alvo = next((entrada[k] for k in ("command", "file_path", "path", "url", "skill", "query") if entrada.get(k)), None)
+    alvo = str(alvo) if alvo is not None else json.dumps(entrada, ensure_ascii=False)
+    alvo = " ⏎ ".join(linha.strip() for linha in alvo.strip().splitlines())
+    return f"{negacao.get('tool_name', '?')}: {alvo[:300]}{'…' if len(alvo) > 300 else ''}"
+
+
+def registrar_saida_do_claude(bruto: str, log_lead: Path) -> int:
+    """Grava no log do lead o resumo final do Claude e as permissões negadas.
+    Devolve quantas foram negadas. Saída que não é JSON (erro antes de começar,
+    limite de uso) vai crua, como antes."""
+    resultado = None
+    for linha in reversed(bruto.strip().splitlines()):
+        if linha.startswith("{"):
+            try:
+                resultado = json.loads(linha)
+                break
+            except ValueError:
+                pass
+    with open(log_lead, "a", encoding="utf-8") as f:
+        if not isinstance(resultado, dict):
+            f.write(bruto if bruto.endswith("\n") or not bruto else bruto + "\n")
+            return 0
+        f.write(str(resultado.get("result") or "").rstrip() + "\n")
+        if resultado.get("is_error"):
+            f.write(f"Claude terminou com erro ({resultado.get('subtype')}).\n")
+        f.write(f"Sessão do Claude: {resultado.get('session_id')} ({resultado.get('num_turns')} turnos); "
+                "transcrição em ~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/.\n")
+        negadas = resultado.get("permission_denials") or []
+        if not negadas:
+            f.write("Permissões negadas: nenhuma.\n")
+            return 0
+        contagem = collections.Counter(descrever_negacao(n) for n in negadas if isinstance(n, dict))
+        f.write(f"Permissões negadas: {len(negadas)}. Se alguma fez falta, ajuste permissoes_do_claude "
+                "em deploy/dell/gerador-de-sites.py (ver README, \"Gerador de sites\").\n")
+        for texto, vezes in contagem.most_common():
+            f.write(f"[NEGADO] {texto}{f' (x{vezes})' if vezes > 1 else ''}\n")
+        return len(negadas)
 
 
 def agora() -> str:
@@ -149,33 +298,52 @@ def registrar_falha(pasta: Path, motivo: str, log_lead: Path) -> None:
     log(f"Falha registrada em {pasta / 'falha.log'} ({falhas_registradas(pasta)}/{MAX_FALHAS})", "ERRO")
 
 
+def matar_grupo(pid: int, sinal: int = signal.SIGTERM) -> None:
+    try:
+        os.killpg(pid, sinal)
+    except ProcessLookupError:
+        pass
+
+
 def rodar_claude(slug: str, log_lead: Path, timeout_min: int) -> dict:
-    cmd = ["claude", "-p", PROMPT.format(slug=slug), "--dangerously-skip-permissions"]
-    log(f"Iniciando processo novo do Claude para {slug} (contexto limpo).", arquivo=log_lead)
+    # Rascunho do lead, fora de ~/auto-site (que o Syncthing e o backup espelham).
+    # Caminho curto de propósito: o Chrome headless não sobe com socket em caminho longo.
+    rascunho = Path(tempfile.mkdtemp(prefix="gerador-"))
+    cmd = comando_do_claude(slug, rascunho)
+    log(f"Iniciando processo novo do Claude para {slug} (contexto limpo, lista de permissão, rascunho {rascunho}).",
+        arquivo=log_lead)
     inicio = time.monotonic()
-    with open(log_lead, "a", encoding="utf-8") as saida:
-        # Grupo próprio: no timeout mata o Claude E os filhos (vercel, node...).
-        proc = subprocess.Popen(cmd, cwd=AUTO, stdout=saida, stderr=subprocess.STDOUT, start_new_session=True)
-        try:
-            codigo = proc.wait(timeout=timeout_min * 60)
-            estourou = False
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGTERM)
+    try:
+        with open(log_lead, "a", encoding="utf-8") as erros, tempfile.TemporaryFile() as saida:
+            # Grupo próprio: no timeout mata o Claude E os filhos (vercel, Chrome...).
+            proc = subprocess.Popen(cmd, cwd=AUTO, stdin=subprocess.DEVNULL, stdout=saida, stderr=erros,
+                                    env={**os.environ, "TMPDIR": str(rascunho)}, start_new_session=True)
             try:
-                proc.wait(timeout=30)
+                codigo = proc.wait(timeout=timeout_min * 60)
+                estourou = False
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-            codigo, estourou = 124, True
-        except BaseException:
-            # Runner interrompido (SIGTERM, Ctrl+C): não deixa o Claude órfão no grupo dele.
-            os.killpg(proc.pid, signal.SIGTERM)
-            raise
+                matar_grupo(proc.pid)
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    matar_grupo(proc.pid, signal.SIGKILL)
+                codigo, estourou = 124, True
+            except BaseException:
+                # Runner interrompido (SIGTERM, Ctrl+C): não deixa o Claude órfão no grupo dele.
+                matar_grupo(proc.pid)
+                raise
+            matar_grupo(proc.pid)  # Chrome que o Claude deixou em segundo plano
+            saida.seek(0)
+            negadas = registrar_saida_do_claude(saida.read().decode("utf-8", errors="replace"), log_lead)
+    finally:
+        shutil.rmtree(rascunho, ignore_errors=True)
     texto = log_lead.read_text(encoding="utf-8", errors="replace")[-4000:]
     return {
         "codigo": codigo,
         "estourou": estourou,
         "limite": bool(LIMITE_DE_USO.search(texto)) and codigo != 0,
         "minutos": round((time.monotonic() - inicio) / 60, 1),
+        "negadas": negadas,
     }
 
 
@@ -247,7 +415,10 @@ def processar(pasta: Path, timeout_min: int) -> tuple[bool, str]:
             indice.replace(pasta / "index.truncado.html")
             log(f"index.html anterior estava truncado; guardado como index.truncado.html.", "ERRO", log_lead)
         resultado = rodar_claude(slug, log_lead, timeout_min)
-        log(f"Claude Code finalizado com exit code {resultado['codigo']} em {resultado.get('minutos')} min.", arquivo=log_lead)
+        negadas = resultado.get("negadas", 0)
+        log(f"Claude Code finalizado com exit code {resultado['codigo']} em {resultado.get('minutos')} min; "
+            + (f"{negadas} permissão(ões) negada(s), ver [NEGADO] em {log_lead}." if negadas else "nenhuma permissão negada."),
+            arquivo=log_lead)
         if not pasta.is_dir():
             return False, "a pasta do lead saiu da raiz durante a geração"
         if indice.exists() and not html_completo(indice):

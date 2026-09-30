@@ -1,3 +1,4 @@
+import net from "node:net";
 import type { NextFunction, Request, Response } from "express";
 
 /**
@@ -9,6 +10,11 @@ import type { NextFunction, Request, Response } from "express";
  *
  * `IPS_PERMITIDOS` vazio DESLIGA o porteiro. Isso e o default de propósito:
  * em dev nao ha proxy na frente e travar por IP so atrapalharia.
+ *
+ * Cada item e um IP exato ou uma faixa CIDR (30/09/2026). A faixa existe para
+ * a Central do Dell: ela escuta so em loopback e o Tailscale Serve a publica
+ * na tailnet; o Serve repassa o IP do aparelho da tailnet (100.64.0.0/10 ou
+ * fd7a:115c:a1e0::/48) no X-Forwarded-For, que ele mesmo reescreve.
  */
 const LOCAIS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
@@ -34,17 +40,42 @@ function ipDoCliente(req: Request): string {
   return ip.startsWith("::ffff:") ? ip.slice("::ffff:".length) : ip;
 }
 
+/** Lista de IPs e faixas CIDR; item ilegivel derruba o boot (porteiro errado nao pode abrir calado). */
+export function listaDePermitidos(itens: string[]): (ip: string) => boolean {
+  const exatos = new Set<string>();
+  const faixas = new net.BlockList();
+  for (const item of itens) {
+    const [endereco, prefixo] = item.split("/");
+    const tipo = net.isIPv4(endereco) ? "ipv4" : net.isIPv6(endereco) ? "ipv6" : null;
+    if (!tipo) throw new Error(`IPS_PERMITIDOS: "${item}" nao e IP nem faixa CIDR.`);
+    if (prefixo === undefined) {
+      exatos.add(endereco);
+      continue;
+    }
+    const bits = Number(prefixo);
+    if (!/^\d{1,3}$/.test(prefixo) || bits > (tipo === "ipv4" ? 32 : 128)) throw new Error(`IPS_PERMITIDOS: prefixo invalido em "${item}".`);
+    faixas.addSubnet(endereco, bits, tipo);
+  }
+  return (ip: string) => {
+    if (exatos.has(ip)) return true;
+    if (net.isIPv4(ip)) return faixas.check(ip, "ipv4");
+    if (net.isIPv6(ip)) return faixas.check(ip, "ipv6");
+    return false;
+  };
+}
+
 export function porteiroDeIp() {
-  const permitidos = new Set(listaDoEnv());
-  if (permitidos.size === 0) {
+  const itens = listaDoEnv();
+  if (itens.length === 0) {
     console.log("[acesso] IPS_PERMITIDOS vazio: porteiro de IP desligado.");
     return (_req: Request, _res: Response, next: NextFunction) => next();
   }
-  console.log(`[acesso] porteiro de IP ligado para ${permitidos.size} IP(s).`);
+  const permitido = listaDePermitidos(itens);
+  console.log(`[acesso] porteiro de IP ligado para ${itens.length} IP(s)/faixa(s).`);
 
   return (req: Request, res: Response, next: NextFunction) => {
     const ip = ipDoCliente(req);
-    if (permitidos.has(ip) || LOCAIS.has(ip)) return next();
+    if (permitido(ip) || LOCAIS.has(ip)) return next();
     // Sem detalhe na resposta: quem nao passa nao precisa saber por que.
     console.warn(`[acesso] bloqueado ${ip} em ${req.method} ${req.path}`);
     res.status(403).type("text/plain").send("403");

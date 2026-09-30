@@ -27,12 +27,16 @@ Arquivos privados no Dell, fora do Git:
 - `~/.config/squadone/operations.env`;
 - `~/.config/squadone/operations.json`;
 - `~/.local/share/squadone-operations/projects.json`;
-- `~/.local/share/squadone-operations/auto-production.json`.
+- `~/.config/claude-ops/crm-segredo` (segredo do registro do CRM, 600; ver "CRM").
 
-Em `operations.json`, ajuste `autoDirectory` para o caminho absoluto da pasta
-sincronizada `auto` no Dell e `autoNotificationStateFile` para
-`~/.hermes/leads-notificados.json` usando o caminho absoluto. A Central somente
-lê esses artefatos; os marcos manuais ficam no diretório de dados acima.
+Em `operations.json`, `autoDirectory` é o caminho absoluto de `~/auto-site`. O
+bloco `crm` é opcional (os padrões são os do Dell): `retrato`
+(`~/.local/share/n8n-estado/crm.json`), `registroUrl`
+(`http://127.0.0.1:5679/webhook/crm-registro`, só loopback), `segredoArquivo`
+e `entregasPrumo` (`~/prumo-entregas`). A Central só lê pastas e retrato.
+`auto-production.json` (marcos manuais da antiga Produção Auto) e
+`autoNotificationStateFile` deixaram de ser lidos em 30/09/2026; o arquivo
+ficou no disco, sem uso.
 
 O arquivo de ambiente deve definir pelo menos:
 
@@ -40,7 +44,7 @@ O arquivo de ambiente deve definir pelo menos:
 NODE_ENV=production
 PORT=9120
 SQUADONE_MODE=operations
-IPS_PERMITIDOS=127.0.0.1,::1
+IPS_PERMITIDOS=127.0.0.1,::1,100.64.0.0/10,fd7a:115c:a1e0::/48
 SQUADONE_OPERATIONS_CONFIG=/home/usuario/.config/squadone/operations.json
 SQUADONE_OPERATIONS_DATA_DIR=/home/usuario/.local/share/squadone-operations
 ```
@@ -65,6 +69,44 @@ systemctl --user enable --now squadone-operations.service dell-worker-healthwatc
 O healthwatch consulta o n8n pela porta publicada no host, `5679`. A porta
 interna `5678` existe somente dentro do container; usá-la no host cria um ciclo
 de reinício falso e interrompe operações da interface.
+
+**A home (30/09/2026)**, pedido do Rômulo ("um botão que abra os agentes do
+SquadOne" e "coloque aqui os fluxos e como são, e o que fazer com cada
+alerta"), de cima para baixo:
+
+- **Precisa de você**: o vermelho (falhou), a sua fila (pendências do CRM) e o
+  que vale olhar, cada um com **O que fazer** (texto do `dell-status`), o botão
+  que resolve (ex.: "Abrir no CRM") e o link da fonte ("Abrir no Dell" quando o
+  endereço é loopback e só abre no navegador do próprio Dell). Falhas com o
+  mesmo remédio (ex.: reconectar a mesma credencial do Google) ganham uma
+  linha "N falhas, um gesto só". O que resolve sozinho fica fechado embaixo;
+- **Como funciona**: um fluxo por vez (Site antes da venda, PRUMO, CRM, Radar
+  PNCP, Alertas e saúde, Backup, WhatsApp, Código e Central, Agenda e agentes)
+  com onde roda, quando, "Com você" ou "Automático", e "Um dia" com os
+  horários. O conteúdo é `src/operations/fluxos.ts` (mudou um fluxo, mude lá);
+  o retrato vivo acrescenta "Falhou agora" e "N esperando" no passo;
+- **Agenda** e **Abrir** (CRM, Agentes do SquadOne, Terminal, n8n, Hermes...);
+- **Tudo que o Dell confere**, fechado.
+
+O botão **Agentes do SquadOne** (também no topo, em qualquer página da
+Central) abre o app do Easypanel (https://aladdin-squadone-app.jicnzg.easypanel.host/), onde moram
+as squads e pessoas. Desde 30/09/2026 a Central não serve mais uma cópia do app
+em `/squadone`; link antigo redireciona para lá.
+
+**No celular (30/09/2026):** a Central abre em
+`https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/` (o CRM em
+`/crm`) em qualquer aparelho da tailnet do Rômulo, com o Tailscale ligado. O
+processo continua só em loopback; quem publica é o Tailscale Serve, só na
+tailnet (nunca Funnel), numa porta própria para não mexer em `/` (Hermes) e
+`/webhook` (n8n) da 443. O Serve reescreve o `X-Forwarded-For` com o IP do
+aparelho, por isso `IPS_PERMITIDOS` leva as faixas da tailnet (o porteiro
+aceita CIDR). Aparelho novo na tailnet entra sem mudar nada.
+
+```bash
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:9120
+tailscale serve status   # 443: / -> 9119, /webhook -> 5679; 8443: / -> 9120 (tailnet only)
+sudo tailscale serve --https=8443 off   # desfaz
+```
 
 O login do Windows acessa a Central por túnel SSH local em
 `http://127.0.0.1:9120/`; nenhuma porta pública é necessária. Sem PC desde
@@ -133,8 +175,41 @@ Desde 29/09/2026 também confere:
   systemd registrou falha depois do último resumo. Falha com algum site ou pasta
   sumida é atenção; lead descartado pelo Claude é normal.
 
+Desde 30/09/2026 cada verificação que não está ok diz **o que fazer**
+(`o_que_fazer`, uma ou duas frases; `acao` com o link que resolve; `sozinho`
+quando resolve sem o Rômulo). O texto também vai no WhatsApp, e o link do aviso
+passou a ser o da tailnet (`…ts.net:8443`), que abre no celular. Vermelho quer
+dizer "você precisa agir ou está quebrado agora"; amarelo, "vale olhar". Para
+isso, menos ruído:
+
+- **Fluxos do n8n pela agenda de cada um** (`avaliar_fluxo`): o Schedule
+  Trigger vira cron e o fluxo é cobrado pelo último horário + 15 min, só a
+  partir da versão atual (fluxo recém-ativado não é cobrado pelo passado).
+  Fluxo só de webhook/clique/formulário é ok sem rodar ("espera um clique").
+  Horário que caiu com o Dell ou o n8n fora do ar é atenção que resolve
+  sozinha (o n8n não repete rodada perdida). A última execução que falhou é
+  vermelho, com a causa (nó e mensagem; "credencial do Google precisa ser
+  reconectada" diz qual credencial reconectar) e o que acontece depois (a
+  próxima rodada, ou Retry para webhook). Fluxo que não guarda as execuções
+  boas (`saveDataSuccessExecution: none`) só é vermelho por 30 min depois da
+  falha. A memória (`~/.local/state/dell-status/fluxos.json`) guarda a última
+  execução vista, porque o n8n apagava as execuções com mais de 14 **horas**
+  (`EXECUTIONS_DATA_MAX_AGE` é em horas; corrigido para 336 no compose, vale
+  quando o container for recriado) e o Caçador aparecia como "ainda não rodou".
+- **Rotinas do Hermes**: horário perdido com o Dell desligado é atenção que
+  resolve sozinha; intervalo conta desde que o Dell ligou.
+- **Radar PNCP**: antes das 09:00 a coleta de ontem ainda vale; PNCP fora do
+  ar há menos de 3 dias é atenção que resolve sozinha.
+- **Backup**: token do Google recusado pelo rclone (`invalid_grant`) é
+  vermelho na hora, com o comando `rclone config reconnect gdrive:`; adiado
+  e ensaio atrasado resolvem sozinhos. O cofre registra quais arquivos não
+  conseguiu ler (antes era só "alguns arquivos").
+- **Filas** (`pend:*`): cada uma diz o que fazer e leva ao CRM
+  (`/crm?produto=site|prumo`); "Sites na fila do gerador" e "Enviados
+  esperando resposta" andam sozinhas.
+
 ```bash
-python3 deploy/dell/dell-status.test.py   # cron, rotinas e gerador, sem tocar no Dell
+python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, backup e "o que fazer", sem tocar no Dell
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
 mkdir -p ~/.local/share/avisos/fila && chmod 777 ~/.local/share/avisos/fila
 cp deploy/dell/dell-status.service deploy/dell/dell-status.timer ~/.config/systemd/user/
@@ -165,8 +240,19 @@ Balcão grava em `~/.local/share/n8n-estado/site-pastas.json` o que mover, e
 → `_em-conversa/`; `expirado` (10 dias sem resposta) → `_concluidos/`. Só vale
 para resposta ou envio a partir de 29/09/2026 (o acervo fica onde está), só
 tira pasta da raiz (ou de `_concluidos/` quando um expirado responde), confere
-o `place_id` do `publicado.json` e nunca sobrescreve. `_recusados/` continua à
-mão. `site-pastas --listar` mostra o que faria.
+o `place_id` do `publicado.json` e nunca sobrescreve. `site-pastas --listar`
+mostra o que faria.
+
+Desde 30/09/2026 o `site-pastas` também atende os botões da página do lead
+(ver "Página do lead e pausa dos demos"): um pacote por toque em
+`~/.local/share/n8n-estado/site-acoes/` (segundo gatilho do `.path`,
+"diretório não vazio"; o pacote lido é apagado, o ilegível vai para
+`~/.local/share/site-acoes-erro/` com aviso). Recusou → `_recusados/`, Fechou →
+`_fechados/` (pasta nova), de onde a pasta estiver; Desfazer devolve para onde
+estava (pilha em `~/.local/state/site-pastas/acoes.json`; sem histórico, de
+`_recusados/` vai para `_em-conversa/`). Cada mudança por botão ganha uma linha
+no `registro.md` (`**Recusou.**`, `**Fechou.**`, `**Recusa desfeita.**`...).
+`_descartados/` nunca entra.
 
 ```bash
 install -m 755 deploy/dell/site-pastas.py ~/.local/bin/site-pastas
@@ -241,6 +327,141 @@ buscas. `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
 em `prumo-porte-cnpj.js`): acha o CNPJ no site, consulta a Receita pela
 BrasilAPI e descarta MEI, microempresa, rede, CNPJ baixado e quem não é
 comércio. Quem passa leva o resumo do CNPJ na coluna Briefing.
+
+## Página do lead e pausa dos demos (`claude-ops/site-lead-acoes.py`, `site-demos-pausa.*`)
+
+Decisões do Rômulo de 29/09/2026: o Hermes **não manda mensagem a lead**
+(risco de banimento do WhatsApp), mas o desfecho de cada lead se marca com um
+toque no celular; e demo de quem recusou ou expirou é **pausado** na Vercel 15
+dias depois, nunca apagado.
+
+**Página do lead** (fluxo `07 · Lead: página e ações`, id `Kf5IWNdEFFnuSOy2`):
+`…/webhook/lead?id=<place_id>` pela tailnet (mesma base do `wa_link`) mostra
+nome, link do demo, estado e três botões. Nada é enviado a ninguém:
+
+- **Recusou**: `status` = `recusado`, `recusado_em`, pasta → `_recusados/`;
+- **Fechou**: `status` = `fechado`, `fechado_em`, pasta → `_fechados/`;
+- **Desfazer** (só em recusado/fechado): volta a `status_anterior` (sem ele,
+  `enviado`), apaga a data, a pasta volta para onde estava.
+
+Repetir um toque não muda nada; id desconhecido mostra "lead não encontrado" e
+não grava. Lead em `_recusados/` sem `recusado` na planilha (acervo de 25/09)
+já conta como recusado; Desfazer nele só tira a pasta de lá. O fluxo grava a
+planilha (colunas `status_anterior`, `recusado_em`, `fechado_em`,
+acrescentadas no fim da aba Leads) e o pacote do `site-pastas`, espera 2 s e
+volta para a página. A cada hora (:20) grava o retrato
+`n8n-estado/site-leads.json` (sem `itens`: não é pendência) e preenche a coluna
+`acoes_link` de quem tem site. O resumo das 10:30
+(`deploy/hermes/scripts/sites_e_pendencias.py`) lê esse retrato e põe uma linha
+com o link para cada enviado sem resposta e cada lead em conversa (até 15 por
+grupo, os mais antigos primeiro).
+
+**Pausa dos demos** (`site-demos-pausa`, todo dia às 09:40, depois do 05 e do
+Balcão): a pasta diz quem está fora (`_recusados/` = recusado, `_concluidos/` =
+expirado; `fechado` na planilha veta). Conta 15 dias desde `recusado_em` (ou
+`enviado_em` + 10 dias para expirado) do retrato; sem isso (acervo), a data
+mais recente entre a linha `**Recusou.**` do `registro.md` e a ctime da pasta,
+congelada no estado; sem nada, o primeiro dia em que viu. Só toca em projeto
+`demo-*` de um `publicado.json`, só despausa o que ele pausou, nunca apaga.
+Quem volta (Desfazer, expirado que responde) tem o demo de volta no ar: o
+`site-pastas` acorda o serviço logo depois de um botão. Estado em
+`~/.local/state/site-demos-pausa/` (`estado.json`, `historico.jsonl`); um aviso
+por rodada, só quando algo mudou. Token: o da Vercel CLI (`auth.json`),
+renovado pela CLI quando está para vencer; a API de pausa só aceita o id
+`prj_…`. Em 30/09/2026 os 74 leads de `_recusados/` (73 projetos) contam desde
+25/09 (ctime + balanço do `registro.md`): pausa em 10/10/2026.
+
+```bash
+cp deploy/dell/claude-ops/site-lead-acoes.py ~/.local/share/claude-ops/
+cd ~/.local/share/claude-ops
+python3 site-lead-acoes.py --testar        # cópia com planilha de mentira, não grava nada
+python3 site-lead-acoes.py                 # colunas que faltam + publica e ativa o 07
+python3 site-lead-acoes.py --retrato-agora # retrato + acoes_link agora
+python3 site-lead-acoes.py --verificar ChIJ64zCC14ZqwcRJ2DcIs-rioA   # id falso + I&C (já recusada): nada muda
+
+install -m 755 deploy/dell/site-demos-pausa.py ~/.local/bin/site-demos-pausa
+cp deploy/dell/site-demos-pausa.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now site-demos-pausa.timer
+site-demos-pausa --simular   # o que pausaria agora e depois, com a evidência de cada data
+```
+
+## CRM (`/crm`, fluxo `08 · CRM`, `claude-ops/crm.py`)
+
+Pedido do Rômulo (30/09/2026): "não sei quem viu, quem não viu, quem já
+respondeu, quem recusou" e um CRM simples para o Site antes da venda e o
+PRUMO. **A fonte da verdade são as planilhas**; todo sinal já escreve nelas
+sozinho (clique no `wa_link`/"Enviar convite" e o que o Rômulo escreve →
+enviado; recibo de leitura → `visto_em` ou "Leu o convite em ..."; resposta →
+`respondeu_em`/"Respondeu no WhatsApp em ..."; 05 → `followup_em` e
+`expirado`; página do lead → `recusado`/`fechado`). As pastas espelham a
+planilha (`site-pastas`). A Central não tem etapa própria.
+
+**Ciclo de vida (as 6 etapas, iguais para os dois produtos).** Regras em
+`server/crm.ts` (`etapaDoSite`, `etapaDoPrumo`); nomes de coluna em
+`COLUNAS_DO_SITE`/`COLUNAS_DO_PRUMO` (coluna ausente = vazia, com aviso na tela).
+A primeira linha que casar, de cima para baixo, decide:
+
+| Etapa | Site antes da venda (aba Leads + pasta) | PRUMO (aba Prospects) |
+|---|---|---|
+| **Ganho** | `status` fechado | Etapa Concluído |
+| **Perdido** | `recusado`; pasta em `_recusados/` (recusa anotada à mão); `expirado` sem resposta; `descartado`; pasta em `_descartados/` | Etapa Sem interesse |
+| **Proposta** | "Proposta enviada" marcada na Central (aba CRM), até ser desfeita | idem |
+| **Conversando** | `respondeu_em`, ou pasta em `_em-conversa/` | "Respondeu no WhatsApp em ..." na Próxima ação; Etapa Diagnóstico pronto / `Diagnóstico em` (formulário respondido; Mapa, se houver, na linha do tempo) |
+| **Contatado** | `enviado` (ou `enviado_em`) sem resposta: "Viu" com `visto_em`, senão "leitura desconhecida" | Convite enviado: "Leu o convite em ..." ou "leitura desconhecida" |
+| **Novo** | `pronto` ("Pronto, não enviado"); `novo` com pasta na raiz ("Na fila do gerador", com os artefatos) | Etapa Revisar |
+
+"Entregue sem lido" é **não sei**, nunca "não viu": quem desliga a confirmação
+de leitura nunca aparece como lido; quem respondeu aparece como "leu
+(respondeu)". Sinais: **follow-up hoje** (Contatado há 3+ dias sem resposta;
+no Site só envio a partir de 29/09 e uma vez por lembrete do 05), **resposta
+nova** (respondeu nas últimas 48 h; exato quando houver colunas de última
+entrada/saída), dias na etapa e desde o último evento, **divergência**
+(planilha e pasta discordam depois de 2 h de folga: nota na ficha, nunca
+correção).
+
+**As três vistas** (celular primeiro; `?ver=funil`, `?produto=site|prumo`,
+`?lead=site:<place_id>`):
+
+- **Hoje** (padrão): próximos passos vencendo, follow-ups, respostas para
+  responder, prospects para revisar, propostas esperando e sites prontos para
+  enviar, cada linha com a ação e o link que a resolve (`wa_link`, "Enviar
+  convite", conversa no WhatsApp, site);
+- **Funil**: as 6 colunas com contagem, resumo do funil no topo, filtros por
+  produto, nicho, cidade e busca; cartão com nicho · cidade, subetapa, dias na
+  etapa, marcos (enviado → leitura → resposta, com data) e links. Novo mostra o
+  estado do gerador e os artefatos de quem está na fila; Perdido mostra os
+  motivos e esconde os descartados antes do contato até pedir;
+- **Ficha**: etapa e subetapa, valor cru da planilha e pasta, linha do tempo
+  com data e origem (automático: planilha, pasta, `publicado.json`, Mapa;
+  manual: aba CRM), ações (Recusou/Fechou/Desfazer na página do lead do fluxo
+  07; no PRUMO, a linha na planilha para mudar a Etapa) e os três registros
+  manuais: **nota**, **próximo passo + data** e **proposta enviada** (e
+  desfazer).
+
+**Caminho dos dados.** O fluxo `08 · CRM: retrato e registros (Site antes da
+venda + PRUMO)` (id `AsjxktRCqRJSmj9P`) lê Leads, Prospects e a aba **CRM**
+da planilha do Site a cada 10 min e grava `~/.local/share/n8n-estado/crm.json`
+(linhas como vieram, sem briefing, endereço, telefone e nota do Google; sem
+`itens`, então não vira pendência no `dell-status` nem no Hermes). Leitura que
+falha não apaga o retrato: vai para `crm-falha.json`, e a Central mostra o
+retrato anterior com o motivo. Registro: ficha → `POST /api/operations/crm/registro`
+→ servidor da Central → `POST 127.0.0.1:5679/webhook/crm-registro` com o
+header `X-CRM` (credencial "CRM Central"; segredo em
+`~/.config/claude-ops/crm-segredo`) → uma linha na aba CRM
+(`em, produto, id, empresa, tipo, texto, data, origem`, gravada como RAW) → o
+retrato é refeito na hora. Outro fluxo que queira atualizar o retrato depois de
+um evento: `POST http://127.0.0.1:5678/webhook/crm-atualizar` com a credencial
+"CRM Central".
+
+```bash
+cp deploy/dell/claude-ops/crm.py ~/.local/share/claude-ops/
+cd ~/.local/share/claude-ops
+python3 crm.py --testar   # cópia com planilhas de mentira: retrato, leitura caída, registro ok/inválido/sem segredo
+python3 crm.py            # aba CRM (se faltar) + credencial + publica e ativa o 08 (backup em claude-ops/backups/<dia>/)
+python3 crm.py --aba      # só a aba CRM (precisa da credencial do Google viva)
+python3 crm.py --agora    # retrato agora
+curl -s http://127.0.0.1:9120/api/operations/crm | head -c 300
+```
 
 ## Mapa do PRUMO (`prumo-mapa/`)
 
@@ -318,8 +539,77 @@ sumida matou a execução, com 3 leads sem tentar):
   Dell"). `python3 deploy/dell/gerador-de-sites.test.py` testa isso numa pasta
   temporária, sem Claude nem Vercel.
 
-Instalação (uma vez, pelo Rômulo: o Claude roda autônomo, sem pedir
-permissão, então a decisão de ligá-lo é dele):
+### Permissões do Claude (lista de permissão, desde 30/09/2026)
+
+Até 29/09 o Claude rodava com `--dangerously-skip-permissions`: podia fazer
+qualquer coisa no Dell. Agora roda com `--permission-mode dontAsk` e uma lista
+de permissão que o runner monta para cada lead (`permissoes_do_claude` em
+`gerador-de-sites.py`, passada em `--settings`), mais `--strict-mcp-config`
+(nenhum MCP). O que não está na lista é negado na hora, sem pergunta; o Claude
+segue pelo caminho permitido. A lista saiu das transcrições dos leads de
+24-30/09 (o que o `/lead-novo` de fato usa):
+
+- **escrita** (Edit/Write e redirecionamento `>`): só a pasta do lead,
+  `registro.md`, `_build/` e um rascunho próprio do lead
+  (`/tmp/gerador-XXXX`, que vira o `$TMPDIR` e é apagado no fim do lead).
+  `CLAUDE.md`, `.claude/` e `.logs/` de `~/auto-site` e todo `~/.claude/` ficam
+  negados; `~/.claude/skills` é só leitura (as skills de design);
+- **leitura**: `~/auto-site`, o rascunho e as skills. Fora disso nada; `~/.ssh`,
+  `~/.config`, `~/.hermes`, `~/SquadOne`, credenciais do Claude e da Vercel
+  estão também em `deny`;
+- **Bash**: `python3`, `node`, Chrome/Chromium headless (captura e DOM
+  renderizado), `pyftsubset`/`fonttools`, `curl` só para ler, o script do
+  `impeccable` e utilitários de texto e arquivo (`mkdir`, `cp`, `mv`, `sed`,
+  `sort`...), que o Claude Code só aceita dentro de `~/auto-site` e do
+  rascunho. `rm` só na pasta do lead e no rascunho, e nunca em `registro.md`,
+  `content.md`, `publicado.json` nem nas pastas `_*`. `vercel` só nos dois
+  comandos do passo 5, com `--cwd` no palco do deploy e projeto `demo-<slug>`
+  (o runner passa os comandos exatos ao Claude em `--append-system-prompt`,
+  porque o roteiro do `CLAUDE.md` usa variável de shell, que o Claude Code nega
+  em caminho). Negados: `git`, `sudo`, `ssh`, `wget`, `pip`/`npm`/`npx`,
+  `chmod`, `systemctl`, `crontab`, `curl` que envia dados (`-d`, `-F`, `-T`,
+  `-X`...) ou grava em `~/`, e `pkill` fora do Chrome;
+- **web**: `WebFetch` (qualquer domínio: Instagram, Refero, site do negócio) e
+  `WebSearch`; `Skill` liberado.
+
+**Onde ver o que foi negado:** cada negação vai para o log do lead
+(`~/auto-site/.logs/execucao-<slug>.log`) como `[NEGADO] <ferramenta>:
+<comando ou arquivo>`, com o id da sessão (a transcrição completa fica em
+`~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/`). A linha "Claude Code
+finalizado" do `execucao-fila.log` diz quantas foram negadas.
+
+**Como afinar:** se uma negação fez falta ao site, acrescente a regra em
+`permissoes_do_claude` (`PROGRAMAS_LIVRES` para um programa novo; `allow`/`deny`
+para o resto; sintaxe em code.claude.com/docs/en/permissions, ex.
+`Bash(programa *)`, `Edit(//caminho/absoluto/**)`), rode o teste e reinstale
+com o `install` abaixo. Negação que não fez falta não precisa de regra.
+
+Negações que aparecem sempre e não fazem falta (o Claude Code as nega por não
+conseguir analisar o comando, com qualquer regra): laço `for`/`while` com
+variável, variável de shell em caminho, `python3 - <<EOF` e `python3 -c` de
+várias linhas, `grep`/`sed` com `{n,m}` e `mkdir -p X && <usa X>` na mesma
+chamada. O Claude contorna com um script Python no rascunho.
+
+Teste de 30/09/2026 (3 leads, um por vez, pela lista): `pousada-valle-do-luar`
+publicou em 16 min, mas o Claude tentou `chrome` (nome do `CLAUDE.md`, que não
+existe no Dell), levou a negação como "Chrome proibido" e publicou sem captura
+de QA, com fonte de sistema e 1 das 5 skills. Daí `chrome` na lista e a linha
+"a lista não muda o processo" nas instruções. `absolute-estetica-automotiva`
+foi descartado em 3 min (o site Wix voltou ao ar; confirmado com o DOM
+renderizado no `google-chrome`). `estetica-automotiva-dominic` publicou em 25
+min com 4 skills, capturas de desktop e celular, fontes embutidas e deploy
+pelo próprio Claude; 13 negações, todas do tipo acima.
+
+**O que a lista não resolve:** não é sandbox. `python3`, `node` e o Chrome
+rodam qualquer código, então um Claude enganado por uma página (injeção de
+prompt no Instagram ou no site de um lead) ainda consegue ler e mandar arquivos
+por eles; a lista fecha os caminhos diretos e deixa rastro. Isolamento de
+verdade é o sandbox do Claude Code (`sandbox.enabled`, bubblewrap), que no
+Ubuntu precisa também do `socat` (`sudo apt install socat`, não instalado em
+30/09/2026) e de um teste com o Chrome dentro do sandbox.
+
+Instalação (uma vez, pelo Rômulo, que decide ligar o gerador; o Claude roda sem
+pedir nada a ninguém, mas só dentro da lista acima):
 
 ```bash
 claude            # login da conta Claude (uma vez) — /login dentro dele
@@ -332,21 +622,42 @@ systemctl --user daemon-reload && systemctl --user enable --now gerador-de-sites
 ## Observador do WhatsApp (`whatsapp-observador/`)
 
 O Rômulo aborda os leads direto no WhatsApp, sem os links rastreados. O Hermes
-já está vinculado ao número dele, e a bridge registra em
-`~/.hermes/whatsapp/bridge.log` uma linha `self_chat_mode_rejects_non_self`
-(chat e remetente, **sem conteúdo**) para toda mensagem recebida. O
-`observador.py` acompanha esse log (tail -F; na primeira vez começa do fim,
-depois continua de onde parou, guardado em `~/.local/state/whatsapp-observador`)
-e, quando quem escreveu é um número das planilhas, avisa o n8n
-(`claude-ops/whatsapp-conversa.py`). Só começa a ler depois de receber a lista
-de números: em 29/09/2026 um boot com o n8n ainda subindo perdeu três respostas.
+já está vinculado ao número dele (aparelho conectado), e a bridge escreve em
+`~/.hermes/whatsapp/bridge.log`, **sem conteúdo**:
 
-- PRUMO: resposta com Etapa "Revisar" → "Convite enviado"; com "Convite
-  enviado" → Próxima ação "Respondeu no WhatsApp em ...";
-- Site antes da venda: resposta com status `novo` ou `pronto` → `enviado`
-  (+ `enviado_em`); resposta a 5 min ou mais do envio → `respondeu_em`
-  (`expirado` volta a `enviado`), e a pasta vai para `_em-conversa/` (ver
-  "Pasta auto").
+- para toda mensagem recebida, uma linha `self_chat_mode_rejects_non_self`
+  (chat e remetente; é da própria bridge);
+- desde 30/09/2026, com o remendo `deploy/hermes/scripts/patch_bridge_envios.py`,
+  `owner_sent` (chat e hora) quando o Rômulo escreve a alguém numa conversa
+  1:1, pelo celular ou outro aparelho (eco do Hermes, reação, edição, apagar e
+  voto não contam), e `owner_receipt` (`entregue` ou `lido`, chat e hora) quando
+  a mensagem dele chega ou é lida: uma linha por chat e estado a cada 30 min.
+
+O `observador.py` acompanha esse log (tail -F; na primeira vez começa do fim,
+depois continua de onde parou, guardado em `~/.local/state/whatsapp-observador`)
+e, quando o número é das planilhas, avisa o n8n (`claude-ops/whatsapp-conversa.py`).
+Só começa a ler depois de receber a lista de números: em 29/09/2026 um boot com
+o n8n ainda subindo perdeu três respostas.
+
+- **O Rômulo escreveu** (`saida`): Site antes da venda `novo`/`pronto` →
+  `enviado` + `enviado_em` (como o clique no `wa_link`); `recusado`/`expirado`
+  → `enviado` com `enviado_em` de agora (retomou a conversa; o acompanhamento
+  conta de novo, a pasta fica onde está); `enviado`/`fechado` → nada (conversa
+  normal). PRUMO: Etapa "Revisar" → "Convite enviado" (como o clique em "Enviar
+  convite"). Abordagem nova vira um aviso pelo Hermes, juntando o que acontecer
+  em 5 min: "Registrado: você abordou <Nome> (Site antes da venda) às HH:MM".
+  Conversa com quem já estava `enviado` não avisa.
+- **O lead leu** (`lido`): Site → `visto_em`, só a primeira vez (lido em
+  `novo`/`pronto` também marca `enviado`: prova um envio que passou batido);
+  PRUMO com "Convite enviado" → Próxima ação "Leu o convite em ..." (se ainda
+  não diz "Respondeu"). Sem aviso. **Quem desligou a confirmação de leitura
+  nunca aparece como lido: "entregue sem lido" é "não sei", não "não viu".**
+  `entregue` fica só no log.
+- **O lead escreveu** (`entrada`): PRUMO com Etapa "Revisar" → "Convite
+  enviado"; com "Convite enviado" → Próxima ação "Respondeu no WhatsApp em
+  ..."; Site `novo`/`pronto` → `enviado` (+ `enviado_em`); resposta a 5 min ou
+  mais do envio → `respondeu_em` (`expirado` volta a `enviado`), e a pasta vai
+  para `_em-conversa/` (ver "Pasta auto").
 
 Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp
@@ -357,19 +668,46 @@ passa despercebida: o follow-up do 3º dia lembra, e `respondeu_em` pode ser
 preenchido à mão.
 
 Por que o log e não um segundo aparelho: o pareamento por código falhou (no
-DDD 27 o WhatsApp registra o número sem o 9) e a bridge muda a cada
-`hermes update`; ler um log que ela já escreve não depende de nenhum dos dois.
-**Limite:** mensagem ENVIADA pelo Rômulo não aparece no log com o número, então
-o que marca é a resposta do lead (que prova o contato); o envio continua
-marcado pelos links rastreados. LID vira telefone pelo mapa da sessão do
-Hermes (`lid-mapping-*_reverse.json`, só leitura). Até dois avisos por número
-a cada 6 h; log parado 6 h avisa pelo Hermes. Webhooks com header `X-Observador`
-(segredo em `~/.config/claude-ops/whatsapp-observador-segredo`).
+DDD 27 o WhatsApp registra o número sem o 9). O remendo da bridge é pequeno,
+idempotente e marcado (`// >>> squadone:` ... `// <<< squadone:`); o
+`hermes update` guarda e reaplica mudanças locais, mas pode perdê-lo se a bridge
+mudar perto das âncoras. O `aplicar-hermes.py` reaplica, e o observador avisa
+uma vez quando as marcas somem do `bridge.js`. Âncora não encontrada = o script
+sai com erro sem tocar no arquivo (e, com `--avisar`, avisa pelo Hermes).
+LID vira telefone pelo mapa da sessão do Hermes (`lid-mapping-*_reverse.json`,
+só leitura). Até dois avisos de resposta por número a cada 6 h; um de escrita a
+cada 30 min; um de leitura a cada 6 h; log parado 6 h avisa pelo Hermes.
+Webhooks com header `X-Observador` (segredo em
+`~/.config/claude-ops/whatsapp-observador-segredo`); o de conversa responde
+depois de ler as planilhas e antes de gravar, com o que vai marcar.
+
+n8n com erro (30/09/2026): o evento não se perde. Fica numa fila, na ordem, e o
+observador tenta de novo depois de 1 min, 4, 16 e então de hora em hora (cada
+tentativa que falha dentro do n8n vira um aviso de falha); a posição gravada não
+passa do primeiro pendente, então um reinício relê dali. O que foi escrito com o
+observador parado é "atrasado": envio e leitura têm hora na linha; mensagem
+recebida ganha a última hora conhecida do log, para uma saudação relida depois
+não virar resposta. Para reprocessar um trecho, pare o serviço e ponha em
+`posicao.json` o byte de onde recomeçar e `salvo_em` (epoch) da hora dele.
+
+Privacidade: desde 30/09/2026 o `bridge.log` guarda também os números para quem
+o Rômulo escreve e de quem leu o que ele mandou, nunca o conteúdo; o observador
+só manda ao n8n os que são lead (DDD + 8 dígitos) e não grava nada além da
+posição no log. Risco de banimento: o remendo só registra, no Dell, eventos que
+o aparelho conectado já recebe; não envia, não marca como lido e não muda
+presença. O risco de usar um cliente não oficial (Baileys) já existia antes.
 
 ```bash
+python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --verificar   # 0 = aplicado
+python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --reiniciar   # aplica; reinicia o hermes-gateway se mudou
+python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --testar      # numa cópia
 install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
 cp ~/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now whatsapp-observador
+python3 ~/SquadOne/deploy/dell/whatsapp-observador/observador.test.py
+cd ~/.local/share/claude-ops && python3 whatsapp-conversa.py --testar && python3 whatsapp-conversa.py --testar-n8n
+python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna visto_em
+python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
 ## Radar PNCP

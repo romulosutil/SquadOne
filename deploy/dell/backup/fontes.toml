@@ -126,6 +126,10 @@ excluir = [
   # Travas de navegador (Chrome, Codex, Claude): links sem alvo que o restic
   # não lê e que fariam toda rodada sair com "arquivos não puderam ser lidos".
   "Singleton*",
+  # Saída do container MoneyPrinterTurbo, gravada como root (cache de busca,
+  # vídeos gerados, script.json com modo 600): o restic não lê e cada tarefa
+  # nova repetiria o aviso. Regenerável; config.toml e o compose continuam no cofre.
+  "~/workspace/moneyprinterturbo/storage",
 ]
 
 # Rodados antes de cada cópia; o resultado vai para ~/.local/state/backup-dell/preparo

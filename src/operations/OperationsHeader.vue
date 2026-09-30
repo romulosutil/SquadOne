@@ -26,8 +26,11 @@ const checkedLabel = computed(() => props.checkedAt
 
     <nav class="ops-main-nav" aria-label="Navegação principal">
       <a href="/" :aria-current="currentPath === '/' ? 'page' : undefined">Hoje</a>
-      <a href="/projetos/producao-auto" :aria-current="currentPath.startsWith('/projetos') ? 'page' : undefined">Produção Auto</a>
+      <a href="/crm" :aria-current="currentPath.startsWith('/crm') ? 'page' : undefined">CRM</a>
     </nav>
+
+    <!-- Um botão só para os agentes (squads e pessoas) do SquadOne: o app no Easypanel. -->
+    <a class="ops-enter ops-enter--rail" href="https://aladdin-squadone-app.jicnzg.easypanel.host/" target="_blank" rel="noopener"><span>Abrir</span><strong>Agentes do SquadOne</strong></a>
   </aside>
 
   <header class="ops-command-topbar">

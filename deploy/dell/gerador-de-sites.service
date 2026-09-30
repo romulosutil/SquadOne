@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# claude e vercel moram em ~/.local/bin; o Claude autônomo roda dentro de ~/auto-site.
+# claude e vercel moram em ~/.local/bin; o Claude roda dentro de ~/auto-site, sem
+# pedir nada a ninguém, mas só com a lista de permissão do runner (modo dontAsk).
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # CLAUDE_CODE_OAUTH_TOKEN=... (claude setup-token), arquivo 600 fora do git.
 # O "-" deixa o serviço subir sem ele: o runner então avisa e não toca na fila.

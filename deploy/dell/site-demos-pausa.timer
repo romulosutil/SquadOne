@@ -1,0 +1,12 @@
+[Unit]
+Description=Site antes da venda — pausar demos de recusados/expirados, todo dia às 09:40
+
+[Timer]
+# Depois do 05 · Acompanhamento (09:00, marca expirado) e do Balcão (09:10, move
+# a pasta para _concluidos/).
+OnCalendar=*-*-* 09:40:00
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

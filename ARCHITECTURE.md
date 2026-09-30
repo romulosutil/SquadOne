@@ -23,7 +23,7 @@ A mesma aplicação possui dois perfis selecionados no servidor por
 `SQUADONE_MODE`:
 
 - `app` preserva o comportamento remoto e não registra `/api/operations/*`;
-- `operations` serve a Central em `/`, o app existente em `/squadone`, registra
+- `operations` serve só a Central (em `/`; desde 30/09/2026 sem a cópia do app em `/squadone`, que redireciona ao app do Easypanel), registra
   as rotas locais e troca o bind do Express para `127.0.0.1`.
 
 `src/RootApp.vue` consulta somente `/api/runtime` para escolher a superfície.
@@ -32,13 +32,20 @@ SquadOne em iframe e usam navegação interna para `/squadone`.
 
 A Central tem duas rotas, sem dependência adicional de roteador:
 
-- `/` responde se o Dell está bem, mostra a agenda de hoje e os acessos
-  (Terminal, n8n, Hermes, Syncthing, SquadOne, Produção Auto);
-- `/projetos/producao-auto` contém o painel completo da Produção Auto.
+- `/` diz o que precisa do Rômulo agora e o que fazer com cada alerta
+  ("Precisa de você", do `status.json`), como a operação funciona (os fluxos
+  de `src/operations/fluxos.ts`, um por vez, e "Um dia"), a agenda de hoje e
+  os acessos (CRM, Agentes do SquadOne em `/squadone`, Terminal, n8n, Hermes,
+  Syncthing); o detalhe de cada verificação fica fechado no fim;
+- `/crm` é o CRM do Site antes da venda e do PRUMO (desde 30/09/2026; o antigo
+  `/projetos/producao-auto` redireciona para cá).
 
 O estado do Dell vem de `SQUADONE_OPERATIONS_DATA_DIR/status.json`, gravado a
 cada minuto por `deploy/dell/dell-status.py` e lido por `server/dell-status.ts`
-dentro de `GET /api/operations/overview`. O mesmo monitor avisa o Rômulo pelo
+dentro de `GET /api/operations/overview`. Desde 30/09/2026 cada verificação
+pode trazer `o_que_fazer`, `acao` ({rotulo, url}: http(s) ou rota da Central)
+e `sozinho` (resolve sem o Rômulo); os três são opcionais e o leitor aceita
+retrato antigo sem eles. O mesmo monitor avisa o Rômulo pelo
 Hermes quando algo quebra e quando volta. Retrato com mais de 5 minutos vira a
 falha "Monitor do Dell". As rotas de projetos e leituras do Hermes seguem no
 servidor, mas saíram da interface em 23/09/2026.
@@ -51,24 +58,51 @@ servidor, mas saíram da interface em 23/09/2026.
   curto e sem aceitar comandos ou URLs enviados pelo navegador;
 - expõe somente launch URLs, estados e detalhes não sensíveis à interface.
 
-`server/auto-production.ts` lê somente artefatos conhecidos nas subpastas do
-diretório `autoDirectory` configurado localmente. A mesma fronteira agrega as
-evidências já emitidas pela automação: `.logs/status.json` e o log do runner,
-o arquivo de deduplicação do watcher do Hermes e a saúde HTTP configurada para
-o Hermes. Os marcos humanos de envio ao cliente e confirmação são gravados
-separadamente em `SQUADONE_OPERATIONS_DATA_DIR/auto-production.json`, com
-escrita atômica. A presença de `publicado.json` é exposta apenas como registro
-local e não como prova de disponibilidade pública.
+### CRM (30/09/2026)
+
+Até 29/09/2026 o estado de um lead morava em três lugares que discordavam: a
+planilha, as pastas de `~/auto-site` e os marcos manuais da Produção Auto
+(`auto-production.json`). Desde 30/09/2026 a fonte da verdade é a planilha
+(aba Leads do Site antes da venda; aba Prospects do PRUMO), as pastas a
+espelham (`site-pastas`) e a Central só lê:
+
+- o fluxo `08 · CRM` do n8n lê Leads, Prospects e a aba CRM a cada 10 min (e
+  por `POST /webhook/crm-atualizar`) e grava `~/.local/share/n8n-estado/crm.json`,
+  as linhas como vieram, com o cabeçalho que a planilha tiver; falha de leitura
+  grava `crm-falha.json` e deixa o retrato anterior valendo;
+- `server/crm.ts` junta esse retrato com as pastas (`server/auto-production.ts`,
+  que agora só lê pastas, artefatos da fila do gerador e `.logs/status.json`) e
+  os Mapas de `~/prumo-entregas` e põe cada lead numa das 6 etapas (Novo,
+  Contatado, Conversando, Proposta, Ganho, Perdido) com a subetapa do produto.
+  As regras ficam em `etapaDoSite`/`etapaDoPrumo` e os nomes de coluna em
+  `COLUNAS_DO_*`; coluna ausente vira vazio e aviso na tela;
+- divergência entre planilha e pasta vira nota na ficha, nunca correção;
+- nota, próximo passo e proposta: `POST /api/operations/crm/registro` →
+  servidor da Central → `POST http://127.0.0.1:5679/webhook/crm-registro` com o
+  header `X-CRM` → uma linha acrescentada na aba CRM. A Central não grava etapa
+  nem registro próprio; `auto-production.json` deixou de ser lido.
+
+`GET /api/operations/crm` não leva o instante da leitura: a resposta só muda
+com o retrato, as pastas ou o dia, e o ETag do Express devolve 304 ao celular.
+
+### Acesso pelo celular (30/09/2026)
+
+O processo continua escutando só em `127.0.0.1:9120`. O Tailscale Serve do Dell
+publica esse loopback em `https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/`,
+só para a tailnet (não é Funnel), numa porta própria: `/` (Hermes) e
+`/webhook` (n8n) na 443 não mudam. O Serve reescreve o `X-Forwarded-For` com o
+IP do aparelho da tailnet, e o porteiro de IP (`server/acesso.ts`, que desde
+então aceita faixas CIDR) admite loopback e as faixas da tailnet.
 
 O fluxo observado é Caçador do n8n → pacote em `auto-entrada` → `~/auto-site`
 → `gerador-de-sites` (Claude Code + Vercel) → `publicado.json` → watcher Linux
 → `hermes send` → WhatsApp; o Balcão do n8n lê os mesmos `publicado.json` em
 `~/auto-site`. O Google Drive saiu do fluxo em 23/09/2026: a pasta `auto` do
 Drive era só um espelho, pelo PC, e está parada desde 25/09/2026 (ver
-`deploy/pc/README.md`). Não existe chamada direta entre n8n e o runner. A rota
-de eventos da Produção Auto mantém uma conexão SSE com o navegador e sinaliza
-novas leituras periódicas; ela não executa, reinicia nem reconfigura nenhum
-desses serviços.
+`deploy/pc/README.md`). Não existe chamada direta entre n8n e o runner. A
+Central não executa, reinicia nem reconfigura nenhum desses serviços; o CRM
+relê o retrato a cada 2 min com a aba visível (a rota SSE da Produção Auto saiu
+em 30/09/2026).
 
 A listagem de clientes é consultável e paginada no servidor. O resumo e o
 funil continuam representando todo o diretório; busca, estágio, ordenação e

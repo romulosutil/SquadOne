@@ -102,5 +102,94 @@ class Gerador(unittest.TestCase):
         self.assertEqual(r["concluidos"], [])
 
 
+CLAUDE_FALSO = r'''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+Path(os.environ["CLAUDE_FALSO_REGISTRO"]).write_text(json.dumps(
+    {"argv": sys.argv[1:], "tmpdir": os.environ.get("TMPDIR"), "cwd": os.getcwd()}))
+Path(os.environ["TMPDIR"], "captura.png").write_text("x")
+if os.environ.get("CLAUDE_FALSO_MODO") == "limite":
+    print("Claude AI usage limit reached")
+    sys.exit(1)
+print(json.dumps({"type": "result", "result": "Site publicado.", "session_id": "abc", "num_turns": 3,
+                  "permission_denials": [
+                      {"tool_name": "Bash", "tool_input": {"command": "git status"}},
+                      {"tool_name": "Bash", "tool_input": {"command": "git status"}},
+                      {"tool_name": "Write", "tool_input": {"file_path": "/x/CLAUDE.md", "content": "..."}}]}))
+'''
+
+
+class ListaDePermissao(unittest.TestCase):
+    """30/09/2026: o Claude sai do --dangerously-skip-permissions para a lista."""
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        self.m = carregar(self.auto)
+        (self.auto / "b-bom").mkdir()
+
+    def test_comando_sem_bypass_e_com_lista(self):
+        rascunho = Path("/tmp/gerador-x")
+        cmd = self.m.comando_do_claude("b-bom", rascunho)
+        self.assertNotIn("--dangerously-skip-permissions", cmd)
+        self.assertNotIn("bypassPermissions", " ".join(cmd))
+        self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "dontAsk")
+        self.assertIn("--strict-mcp-config", cmd)
+        self.assertEqual(cmd[cmd.index("--output-format") + 1], "json")
+        p = json.loads(cmd[cmd.index("--settings") + 1])["permissions"]
+        a = f"/{self.auto}"  # regra de caminho absoluto começa com //
+        for regra in ("Bash(python3 *)", "Bash(google-chrome *)", "Bash(chrome *)", "Bash(curl *)", "WebFetch", "Skill",
+                      f"Edit({a}/b-bom/**)", f"Write({a}/registro.md)", f"Write(//tmp/gerador-x/**)",
+                      "Bash(rm -rf b-bom/*)",
+                      "Bash(vercel link --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom --yes --project demo-b-bom "
+                      "--scope romulodesigns)",
+                      "Bash(vercel deploy --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom --prod --yes "
+                      "--scope romulodesigns)"):
+            self.assertIn(regra, p["allow"])
+        # nada de escrever na pasta inteira, de rm livre nem de vercel livre
+        for regra in (f"Edit({a}/**)", f"Write({a}/**)", "Bash(rm *)", "Bash(vercel *)", "Bash(git *)", "Bash"):
+            self.assertNotIn(regra, p["allow"])
+        for regra in ("Bash(git *)", "Bash(sudo *)", "Bash(wget *)", "Bash(npx *)", "Bash(curl * -d*)",
+                      "Bash(rm *registro.md*)", f"Edit({a}/CLAUDE.md)", f"Write({a}/.claude/**)",
+                      f"Read(/{Path.home()}/.ssh/**)", f"Read(/{Path.home()}/.config/**)", "mcp__*"):
+            self.assertIn(regra, p["deny"])
+        self.assertEqual(p["additionalDirectories"], ["/tmp/gerador-x"])
+        instrucoes = cmd[cmd.index("--append-system-prompt") + 1]
+        self.assertIn("vercel deploy --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom", instrucoes)
+
+    def rodar_claude_falso(self, modo=""):
+        bin_falso = self.auto / ".bin"
+        bin_falso.mkdir()
+        (bin_falso / "claude").write_text(CLAUDE_FALSO)
+        (bin_falso / "claude").chmod(0o755)
+        registro = self.auto / ".registro-do-falso.json"
+        antes = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(antes)))
+        os.environ.update(PATH=f"{bin_falso}:{os.environ['PATH']}", CLAUDE_FALSO_REGISTRO=str(registro),
+                          CLAUDE_FALSO_MODO=modo)
+        log_lead = self.auto / ".logs/execucao-b-bom.log"
+        log_lead.parent.mkdir(exist_ok=True)
+        r = self.m.rodar_claude("b-bom", log_lead, 1)
+        return r, json.loads(registro.read_text()), log_lead.read_text()
+
+    def test_negacoes_vao_para_o_log_do_lead(self):
+        r, visto, log = self.rodar_claude_falso()
+        self.assertEqual((r["codigo"], r["negadas"], r["limite"]), (0, 3, False))
+        self.assertNotIn("--dangerously-skip-permissions", visto["argv"])
+        self.assertEqual(Path(visto["cwd"]), self.auto)
+        self.assertIn("Site publicado.", log)
+        self.assertIn("Sessão do Claude: abc", log)
+        self.assertIn("[NEGADO] Bash: git status (x2)", log)
+        self.assertIn("[NEGADO] Write: /x/CLAUDE.md", log)
+        # rascunho próprio no $TMPDIR, apagado depois do lead
+        self.assertTrue(Path(visto["tmpdir"]).name.startswith("gerador-"))
+        self.assertFalse(Path(visto["tmpdir"]).exists())
+
+    def test_saida_que_nao_e_json_vai_crua_e_limite_e_detectado(self):
+        r, _, log = self.rodar_claude_falso("limite")
+        self.assertEqual((r["codigo"], r["negadas"], r["limite"]), (1, 0, True))
+        self.assertIn("usage limit reached", log)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

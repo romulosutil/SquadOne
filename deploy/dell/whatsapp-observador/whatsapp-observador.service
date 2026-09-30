@@ -1,5 +1,5 @@
 [Unit]
-Description=Observador do WhatsApp — resposta de lead marca a planilha (lê o log da bridge do Hermes)
+Description=Observador do WhatsApp — conversa com lead marca a planilha (lê o log da bridge do Hermes)
 After=hermes-gateway.service
 
 [Service]

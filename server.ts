@@ -86,7 +86,7 @@ import {
   todayWindow,
   type AgendaSummary,
 } from "./server/operations.ts";
-import { AutoProductionStore } from "./server/auto-production.ts";
+import { CrmStore, configDoCrm } from "./server/crm.ts";
 
 dotenv.config();
 
@@ -232,12 +232,8 @@ async function startServer() {
     const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
-    const autoProduction = operationsConfig.autoDirectory
-      ? new AutoProductionStore(operationsConfig.autoDirectory, operationsDataDir, {
-          notificationStateFile: operationsConfig.autoNotificationStateFile,
-          hermesHealthUrl: operationsConfig.tools.hermes.healthUrl,
-        })
-      : undefined;
+    // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
+    const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
       try {
@@ -264,7 +260,7 @@ async function startServer() {
       config: operationsConfig,
       store: operationsStore,
       readings,
-      autoProduction,
+      crm,
       readAgenda,
       dataDir: operationsDataDir,
     }));

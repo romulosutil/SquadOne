@@ -2,9 +2,15 @@
 """Retrato do Dell worker a cada minuto: grava o estado para a Central e avisa
 o Rômulo pelo Hermes (WhatsApp) quando algo quebra e quando volta.
 
-Uma verificação é {id, grupo, nome, estado, detalhe, link?}. `estado` é
-`ok`, `atencao` ou `falha`. Só `falha` vira WhatsApp: `atencao` aparece na
-Central e não interrompe ninguém.
+Uma verificação é {id, grupo, nome, estado, detalhe, link?, o_que_fazer?,
+acao?, sozinho?}. `estado` é `ok`, `atencao` ou `falha`. Só `falha` vira
+WhatsApp: `atencao` aparece na Central e não interrompe ninguém. Vermelho quer
+dizer "você precisa agir, ou está quebrado agora"; amarelo, "vale olhar".
+`o_que_fazer` diz, em uma ou duas frases, o que aquilo significa e o que o
+Rômulo faz (ou "nada — resolve sozinho quando…", com `sozinho: true`); `acao`
+({rotulo, url}) é o link que resolve, quando existe (URL http(s) ou rota da
+Central, como /crm). Os três campos são opcionais: quem lê status.json sem
+eles continua funcionando.
 
 Também esvazia a fila de avisos (~/.local/share/avisos/fila/*.json) que os
 containers (n8n, collector) gravam, para que um fluxo sempre "responda a
@@ -19,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -40,6 +47,9 @@ N8N_EDITOR = "http://127.0.0.1:5679"
 PNCP_RUN = HOME / "licitacoes-automation/data/latest-run.json"
 CRON_JOBS = HOME / ".hermes/cron/jobs.json"
 LEMBRETE_FALHA_H = 12  # falha que continua é relembrada, não repetida a cada minuto
+# O aviso do WhatsApp é lido no celular: o link é o da tailnet, não o loopback.
+CENTRAL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/"
+N8N_CONTAINER = "licitacoes-automation-n8n-1"
 
 
 def agora() -> datetime:
@@ -50,11 +60,55 @@ def iso(d: datetime) -> str:
     return d.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def check(id_: str, grupo: str, nome: str, estado: str, detalhe: str, link: str | None = None) -> dict:
+def check(id_: str, grupo: str, nome: str, estado: str, detalhe: str, link: str | None = None,
+          o_que_fazer: str | None = None, acao: tuple[str, str] | None = None, sozinho: bool = False) -> dict:
     c = {"id": id_, "grupo": grupo, "nome": nome, "estado": estado, "detalhe": detalhe}
     if link:
         c["link"] = link
+    if o_que_fazer:
+        c["o_que_fazer"] = o_que_fazer
+    if acao:
+        c["acao"] = {"rotulo": acao[0], "url": acao[1]}
+    if sozinho:
+        c["sozinho"] = True
     return c
+
+
+def _hm(d: datetime, t: datetime | None = None) -> str:
+    """HH:MM se for hoje (hora do Dell); senão HH:MM de dd/mm."""
+    local = d.astimezone()
+    return f"{local:%H:%M}" if local.date() == (t or agora()).astimezone().date() else f"{local:%H:%M de %d/%m}"
+
+
+def ligado_desde() -> datetime | None:
+    """Quando o Dell ligou (btime do kernel)."""
+    try:
+        for linha in Path("/proc/stat").read_text().splitlines():
+            if linha.startswith("btime "):
+                return datetime.fromtimestamp(int(linha.split()[1]), timezone.utc)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def n8n_no_ar_desde() -> datetime | None:
+    """Quando o container do n8n subiu pela última vez."""
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", N8N_CONTAINER],
+                           capture_output=True, text=True, timeout=10)
+        txt = re.sub(r"\.\d+", "", r.stdout.strip())
+        return datetime.fromisoformat(txt.replace("Z", "+00:00")) if r.returncode == 0 and txt else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def _parado_em(previsto: datetime, ligado: datetime | None, n8n: datetime | None) -> str | None:
+    """Se o horário previsto caiu com o Dell (ou o n8n) fora do ar, diz isso."""
+    if ligado and previsto < ligado:
+        return f"o Dell estava desligado (ligou às {_hm(ligado)})"
+    if n8n and previsto < n8n:
+        return f"o n8n estava fora do ar (voltou às {_hm(n8n)})"
+    return None
 
 
 def http_ok(url: str, timeout: float = 5, headers: dict | None = None) -> tuple[bool, str]:
@@ -161,38 +215,269 @@ def containers() -> list[dict]:
 
 # ---------------------------------------------------------------- fluxos (n8n)
 
+FLUXOS_VISTOS = HOME / ".local/state/dell-status/fluxos.json"
+ERRO_N8N = ("error", "crashed")
+FOLGA_FLUXO = timedelta(minutes=15)  # startedAt é a hora do disparo; 15 min cobre fila e relógio
+SEM_REGISTRO_OK = timedelta(minutes=30)
+# Gatilhos que só rodam quando alguém chama: não rodar não é problema.
+ESPERA = {"webhook": "um clique ou uma chamada (webhook)", "formTrigger": "uma resposta do formulário",
+          "errorTrigger": "a falha de outro fluxo", "manualTrigger": "alguém rodar à mão",
+          "executeWorkflowTrigger": "outro fluxo chamar"}
+# O que cada fluxo muda para o Rômulo quando falha (pelo começo do nome no n8n).
+DICAS_DO_FLUXO = {
+    "00 · Avisar falha": "É ele que avisa as falhas dos outros fluxos: parado, as falhas ficam caladas.",
+    "01 · Caçador": "Sem ele não entram leads novos no dia; a fila do gerador segue.",
+    "03 · Balcão": "Sem ele os sites novos não viram \"pronto\" nem ganham o link de envio.",
+    "04 · Clique no wa_link": "O clique que falhou não marcou o lead como enviado: confira no CRM.",
+    "05 · Acompanhamento": "Sem ele não chegam os follow-ups do 3º dia nem a expiração do 10º.",
+    "07 · Lead": "Sem ele a página do lead (Recusou, Fechou, Desfazer) não abre.",
+    "08 · CRM": "O CRM mostra o último retrato bom e diz que está velho.",
+    "PRUMO — Clique em Enviar convite": "O clique que falhou não marcou o convite: confira no CRM (PRUMO).",
+    "PRUMO — Diagnóstico": "Formulário respondido fica sem Índice e sem rascunho do Mapa até rodar.",
+    "PRUMO — Lead Scout": "Sem ele não entram prospects novos no dia.",
+    "Radar PNCP": "A repescagem das 08:00 (pncp-catchup) refaz a coleta perdida: veja \"Radar PNCP\" em Dados.",
+    "WhatsApp —": "O observador repete sozinho (1, 4 e 16 min, depois de hora em hora): corrigida a causa, nada se perde.",
+}
+fluxos_vistos: dict = {}  # preenchido por fluxos(); main() grava (fora do --stdout)
+
+
+def _dica_do_fluxo(nome: str) -> str:
+    return next((d for prefixo, d in DICAS_DO_FLUXO.items() if nome.startswith(prefixo)), "")
+
+
+def regra_para_cron(r: dict) -> str | None:
+    """Uma regra do Schedule Trigger do n8n em cron de 5 campos. None = não cabe
+    num cron (ex.: "a cada 2 semanas") e o horário não é cobrado."""
+    campo = r.get("field") or "days"
+    h, m = int(r.get("triggerAtHour") or 0), int(r.get("triggerAtMinute") or 0)
+    if campo == "cronExpression":
+        partes = str(r.get("expression") or "").split()
+        if len(partes) == 6:
+            partes = partes[1:]  # o n8n aceita os segundos na frente
+        return " ".join(partes) if len(partes) == 5 else None
+    if campo == "seconds":
+        return "* * * * *"
+    if campo == "minutes":
+        return f"*/{int(r.get('minutesInterval') or 5)} * * * *"
+    if campo == "hours":
+        return f"{m} */{int(r.get('hoursInterval') or 1)} * * *"
+    if campo == "days":
+        n = int(r.get("daysInterval") or 1)
+        return f"{m} {h} {'*' if n == 1 else f'*/{n}'} * *"
+    if campo == "weeks":
+        if int(r.get("weeksInterval") or 1) != 1:
+            return None
+        dias = r.get("triggerAtDay") or [0]
+        return f"{m} {h} * * {','.join(str(int(d)) for d in dias)}"
+    if campo == "months":
+        n = int(r.get("monthsInterval") or 1)
+        return f"{m} {h} {int(r.get('triggerAtDayOfMonth') or 1)} {'*' if n == 1 else f'*/{n}'} *"
+    return None
+
+
+def gatilhos(w: dict) -> tuple[list[str], list[str]]:
+    """(agendas em cron, o que o fluxo espera) dos gatilhos ligados do fluxo."""
+    agendas, espera = [], []
+    for n in w.get("nodes") or []:
+        if n.get("disabled"):
+            continue
+        tipo = str(n.get("type", "")).rsplit(".", 1)[-1]
+        if tipo == "scheduleTrigger":
+            for r in ((n.get("parameters") or {}).get("rule") or {}).get("interval") or [{}]:
+                try:
+                    expr = regra_para_cron(r)
+                    if expr:
+                        ultimo_disparo(expr, agora())  # valida
+                        agendas.append(expr)
+                except (ValueError, TypeError):
+                    continue
+        elif tipo in ESPERA and ESPERA[tipo] not in espera:
+            espera.append(ESPERA[tipo])
+    return agendas, espera
+
+
+def classificar_erro(msg: str, descricao: str = "", no: str | None = None) -> dict:
+    """Causa de uma execução que falhou, em português e sem números longos
+    (a mensagem de um nó pode trazer telefone ou linha da planilha)."""
+    tudo = f"{msg} {descricao}".lower()
+    cred = re.search(r'credential "([^"]+)"', msg)
+    if any(x in tudo for x in ("reconnect", "invalid_grant", "refresh token", "revoked", "access token",
+                               "unauthorized", "invalid credentials")):
+        causa = {"tipo": "credencial", "texto": "a credencial do Google precisa ser reconectada"}
+        if cred:
+            causa["credencial"] = cred.group(1)
+    elif any(x in tudo for x in ("econnrefused", "etimedout", "enotfound", "eai_again", "timeout", "socket hang up", "503", "502")):
+        causa = {"tipo": "rede", "texto": "um serviço não respondeu"}
+    elif any(x in tudo for x in ("429", "quota", "rate limit", "too many requests")):
+        causa = {"tipo": "cota", "texto": "o Google limitou o uso da API"}
+    else:
+        causa = {"tipo": "outro", "texto": re.sub(r"\d{8,}", "…", msg.strip())[:100] or "erro sem mensagem"}
+    if no:
+        causa["no"] = str(no)[:60]
+    return causa
+
+
+def _causa_da_falha(h: dict, eid, w: dict) -> dict:
+    try:
+        e = http_json(f"{N8N}/api/v1/executions/{eid}?includeData=true", h, timeout=15)
+    except Exception:  # noqa: BLE001 — sem a causa, o alerta sai sem ela
+        return {}
+    rd = (e.get("data") or {}).get("resultData") or {}
+    err = rd.get("error") or {}
+    causa = classificar_erro(str(err.get("message") or ""), str(err.get("description") or ""),
+                             rd.get("lastNodeExecuted") or (err.get("node") or {}).get("name"))
+    if causa["tipo"] == "credencial" and "credencial" not in causa:
+        # A mensagem nem sempre diz qual credencial: o nó que falhou diz.
+        no = next((n for n in w.get("nodes") or [] if n.get("name") == causa.get("no")), {})
+        nomes = [c.get("name") for c in (no.get("credentials") or {}).values() if isinstance(c, dict) and c.get("name")]
+        if nomes:
+            causa["credencial"] = nomes[0]
+    return causa
+
+
+def _o_que_fazer_na_falha(causa: dict | None, agendado: bool, proxima: datetime | None, dica: str, t: datetime) -> str:
+    depois = (f"a próxima rodada, às {_hm(proxima, t)}, volta sozinha (ou rode o fluxo agora no n8n)" if agendado and proxima
+              else "abra esta execução no n8n e clique em Retry para refazer o que ficou sem marcar")
+    tipo = (causa or {}).get("tipo")
+    if tipo == "credencial":
+        txt = (f"Reconecte a credencial \"{causa.get('credencial', 'Google')}\" no n8n (Credentials › abrir › "
+               f"Reconnect, com a conta do Google). Depois disso, {depois}.")
+    elif tipo in ("rede", "cota"):
+        txt = (f"Costuma passar sozinho: {depois}. Se falhar de novo, peça ao Claude."
+               if agendado else f"Quando o serviço voltar, {depois}.")
+    elif agendado:
+        txt = (f"Abra a execução e veja o erro. A próxima rodada{f', às {_hm(proxima, t)},' if proxima else ''} "
+               "tenta de novo; se falhar outra vez, peça ao Claude.")
+    else:
+        txt = "Abra a execução e veja o erro; corrigida a causa, clique em Retry. Sem saber a causa, peça ao Claude."
+    return f"{txt} {dica}".strip()
+
+
+def avaliar_fluxo(w: dict, execucoes: list[dict], mem: dict, t: datetime, ligado: datetime | None = None,
+                  n8n: datetime | None = None, primeira_leitura: bool = False) -> tuple[dict, dict]:
+    """PURO: um fluxo ativo do n8n + execuções (mais recente primeiro) + memória
+    do monitor → (verificação, memória nova). A memória guarda a última execução
+    vista, porque o n8n apaga as antigas (EXECUTIONS_DATA_MAX_AGE, em horas).
+
+    - Só webhook/clique/formulário/erro: não rodar é normal ("espera um clique").
+    - Agendado: cobrado pelo último horário da agenda (+15 min), só a partir da
+      versão atual do fluxo; horário que caiu com o Dell ou o n8n fora do ar é
+      atenção que resolve sozinha (o n8n não repete rodada perdida).
+    - Fluxo que não guarda as execuções boas (saveDataSuccessExecution=none):
+      a última falha só é "falha agora" por 30 min; depois, atenção sozinha."""
+    wid, nome = w["id"], w["name"]
+    link = f"{N8N_EDITOR}/workflow/{wid}"
+    so_erros = (w.get("settings") or {}).get("saveDataSuccessExecution") == "none"
+    agendas, espera = gatilhos(w)
+    mem = dict(mem)
+    exs = [e for e in execucoes if _quando(e.get("startedAt"))]
+    if exs:
+        e0, ant = exs[0], mem.get("ultima") or {}
+        if not ant or _quando(e0["startedAt"]) >= (_quando(ant.get("em")) or t - timedelta(days=3650)):
+            mem["ultima"] = {"id": e0.get("id"), "status": e0.get("status"), "em": e0["startedAt"]}
+    if "visto_desde" not in mem:
+        # Primeira leitura do monitor: vale a versão atual do fluxo. Fluxo que
+        # aparece depois (acabou de ser ativado) só é cobrado dali em diante.
+        mem["visto_desde"] = (w.get("updatedAt") or w.get("createdAt") or iso(t)) if primeira_leitura else iso(t)
+    ultima = mem.get("ultima")
+    quando_ult = _quando(ultima["em"]) if ultima else None
+    base = max(filter(None, (_quando(w.get("createdAt")), _quando(w.get("updatedAt")), _quando(mem["visto_desde"]))),
+               default=t)
+    proxima = min(filter(None, (proximo_disparo(a, t) for a in agendas)), default=None)
+    dica = _dica_do_fluxo(nome)
+    erros24 = [_quando(e["startedAt"]) for e in exs
+               if e.get("status") in ERRO_N8N and _quando(e["startedAt"]) >= t - timedelta(hours=24)]
+
+    def saida(estado, detalhe, link_=link, o=None, sozinho=False):
+        return check(f"fluxo:{wid}", "fluxos", nome, estado, detalhe, link_, o, sozinho=sozinho), mem
+
+    # 1) A última execução falhou.
+    if ultima and ultima.get("status") in ERRO_N8N and not (so_erros and t - quando_ult > timedelta(hours=24)):
+        causa = mem.get("causa") if (mem.get("causa") or {}).get("id") == ultima.get("id") else None
+        motivo = f" ({causa['no']}: {causa['texto']})" if causa and causa.get("no") else (f" ({causa['texto']})" if causa else "")
+        link_ex = f"{link}/executions/{ultima['id']}"
+        n = max(len(erros24), 1)
+        if so_erros and t - quando_ult > SEM_REGISTRO_OK:
+            primeira = min(erros24, default=quando_ult)
+            det = (f"{n} falhas entre {_hm(primeira, t)} e {_hm(quando_ult, t)}{motivo}; nenhuma desde então" if n > 1
+                   else f"Falhou às {_hm(quando_ult, t)}{motivo}; nenhuma falha desde então")
+            o = ("Nada, se a causa já passou: este fluxo não guarda as execuções que dão certo e não falhou mais. "
+                 "Sai daqui 24 h depois da última falha.")
+            return saida("atencao", det, link_ex, f"{o} {dica}".strip(), True)
+        det = f"Última execução falhou às {_hm(quando_ult, t)}{motivo}" + (f" · {n} falhas em 24 h" if n > 1 else "")
+        return saida("falha", det, link_ex, _o_que_fazer_na_falha(causa, bool(agendas), proxima, dica, t))
+
+    # 2) Agendado e não rodou no horário (quem não guarda as boas não dá para cobrar).
+    if agendas and not so_erros:
+        previstos = [p for p in (ultimo_disparo(a, (t - FOLGA_FLUXO).astimezone()) for a in agendas) if p]
+        previsto = max(previstos, default=None)
+        if previsto and previsto >= base and (not quando_ult or quando_ult < previsto):
+            prox = f"às {_hm(proxima, t)}" if proxima else "no próximo horário"
+            parado = _parado_em(previsto, ligado, n8n)
+            if parado:
+                o = (f"Nada: o n8n não repete rodada perdida; a próxima é {prox}. Se precisar antes, abra o fluxo "
+                     "no n8n e clique em Execute workflow.")
+                return saida("atencao", f"Não rodou às {_hm(previsto, t)}: {parado}", link, f"{o} {dica}".strip(), True)
+            ult_txt = _hm(quando_ult, t) if quando_ult else "nenhuma registrada"
+            o = ("O gatilho não disparou com o n8n no ar. Confira no n8n se o fluxo está ativo; se estiver, peça ao "
+                 f"Claude: \"o fluxo {nome} não rodou no horário\".")
+            return saida("falha", f"Não rodou às {_hm(previsto, t)} (última execução: {ult_txt})", link, o)
+
+    # 3) Falhou nas últimas 24 h, mas a execução seguinte deu certo.
+    if erros24:
+        o = "Nada: já voltou a funcionar. Sai daqui 24 h depois da última falha."
+        return saida("atencao", f"{len(erros24)} falha(s) em 24 h, a última às {_hm(max(erros24), t)}; "
+                     f"depois deu certo ({_hm(quando_ult, t)})", link, o, True)
+
+    # 4) Tudo certo.
+    prox_txt = f"; próxima às {_hm(proxima, t)}" if proxima else ""
+    quem = " ou ".join(espera) or "ser chamado"
+    if so_erros:
+        det = "Sem falha registrada em 24 h (este fluxo não guarda as execuções que dão certo)"
+    elif ultima and ultima.get("status") in ("running", "new", "waiting"):
+        det = f"Rodando desde {_hm(quando_ult, t)}"
+    elif ultima and not agendas:
+        det = f"Última chamada ok às {_hm(quando_ult, t)} · espera {quem}"
+    elif ultima:
+        det = f"Última execução ok às {_hm(quando_ult, t)}{prox_txt}"
+    elif agendas:
+        det = f"Ainda não rodou; a primeira rodada é às {_hm(proxima, t)}" if proxima else "Ainda não rodou"
+    else:
+        det = f"Espera {quem}: ainda não foi chamado"
+    return saida("ok", det)
+
+
 def fluxos() -> list[dict]:
     key = ler_env(HOME / ".hermes/.env", "N8N_API_KEY")
     if not key:
-        return [check("n8n-api", "fluxos", "Fluxos do n8n", "atencao", "Sem chave de API para ler execuções")]
+        return [check("n8n-api", "fluxos", "Fluxos do n8n", "atencao", "Sem chave de API para ler execuções",
+                      o_que_fazer="O monitor não consegue ler os fluxos (falta N8N_API_KEY em ~/.hermes/.env). "
+                                  "Peça ao Claude recolocar a chave.")]
     h = {"X-N8N-API-KEY": key}
     try:
         wfs = http_json(f"{N8N}/api/v1/workflows?active=true&limit=100", h)["data"]
     except Exception as e:  # noqa: BLE001
-        return [check("n8n-api", "fluxos", "Fluxos do n8n", "falha", f"API sem resposta: {str(e)[:100]}")]
-    desde = agora() - timedelta(hours=24)
+        return [check("n8n-api", "fluxos", "Fluxos do n8n", "falha", f"API sem resposta: {str(e)[:100]}",
+                      o_que_fazer="O n8n não respondeu: nenhum fluxo está sendo conferido. Veja \"n8n\" em Serviços; "
+                                  "o healthwatch reinicia sozinho, e se continuar, peça ao Claude.")]
+    try:
+        memoria = json.loads(FLUXOS_VISTOS.read_text())
+    except (OSError, ValueError):
+        memoria = {}
+    t, ligado, n8n = agora(), ligado_desde(), n8n_no_ar_desde()
+    fluxos_vistos.clear()
     out = []
     for w in wfs:
         try:
             ex = http_json(f"{N8N}/api/v1/executions?workflowId={w['id']}&limit=50", h)["data"]
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — sem a lista, vale a memória
             ex = []
-        recentes = [e for e in ex if e.get("startedAt") and datetime.fromisoformat(e["startedAt"].replace("Z", "+00:00")) >= desde]
-        erros = [e for e in recentes if e.get("status") in ("error", "crashed")]
-        ultima = ex[0] if ex else None
-        link = f"{N8N_EDITOR}/workflow/{w['id']}"
-        if not ultima:
-            estado, det = "atencao", "Ainda não rodou"
-        elif ultima.get("status") in ("error", "crashed"):
-            estado, det = "falha", f"Última execução falhou ({len(erros)} falha(s) em 24 h)"
-            link = f"{N8N_EDITOR}/workflow/{w['id']}/executions/{ultima['id']}"
-        elif erros:
-            estado, det = "atencao", f"{len(erros)} falha(s) em 24 h; a última deu certo"
-        else:
-            quando = datetime.fromisoformat(ultima["startedAt"].replace("Z", "+00:00"))
-            det = f"Última execução ok às {quando.astimezone().strftime('%H:%M de %d/%m')}"
-            estado = "ok"
-        out.append(check(f"fluxo:{w['id']}", "fluxos", w["name"], estado, det, link))
+        mem = dict(memoria.get(w["id"]) or {})
+        e0 = next((e for e in ex if e.get("startedAt")), None)
+        if e0 and e0.get("status") in ERRO_N8N and (mem.get("causa") or {}).get("id") != e0.get("id"):
+            mem["causa"] = {"id": e0.get("id"), **_causa_da_falha(h, e0.get("id"), w)}
+        c, fluxos_vistos[w["id"]] = avaliar_fluxo(w, ex, mem, t, ligado, n8n, primeira_leitura=not memoria)
+        out.append(c)
     return out
 
 
@@ -202,14 +487,22 @@ def pncp() -> dict:
     try:
         d = json.loads(PNCP_RUN.read_text())
     except OSError:
-        return check("pncp", "dados", "Radar PNCP", "atencao", "Nenhuma coleta registrada")
+        return check("pncp", "dados", "Radar PNCP", "atencao", "Nenhuma coleta registrada",
+                     o_que_fazer="O radar ainda não gravou nenhuma coleta. Se passar de um dia, peça ao Claude.")
     run_at = datetime.fromisoformat(d["run_at"].replace("Z", "+00:00"))
-    hoje = agora().astimezone().date()
+    t = agora().astimezone()
+    hoje = t.date()
     if d.get("status", "completed") == "completed":
+        contagem = f"{d['counts']['fetched']} registros, {d['counts']['qualified']} qualificado(s)"
         if run_at.astimezone().date() == hoje:
-            return check("pncp", "dados", "Radar PNCP", "ok",
-                         f"Coletado hoje: {d['counts']['fetched']} registros, {d['counts']['qualified']} qualificado(s)")
-        return check("pncp", "dados", "Radar PNCP", "atencao", f"Última coleta em {run_at.astimezone():%d/%m}")
+            return check("pncp", "dados", "Radar PNCP", "ok", f"Coletado hoje: {contagem}")
+        # A de hoje é às 07:30, com repescagem às 08:00: até as 09:00 a de ontem ainda é a mais nova.
+        if run_at.astimezone().date() == hoje - timedelta(days=1) and t.time() < horario(9, 0):
+            return check("pncp", "dados", "Radar PNCP", "ok", f"Coletado ontem: {contagem}; a de hoje roda às 07:30")
+        return check("pncp", "dados", "Radar PNCP", "atencao", f"Última coleta em {run_at.astimezone():%d/%m}",
+                     o_que_fazer="A coleta de hoje não aconteceu. Se o Dell estava desligado, a repescagem "
+                                 "(pncp-catchup) roda quando ele volta; veja também \"Radar PNCP — coleta diária\" "
+                                 "em Fluxos. Se amanhã continuar assim, peça ao Claude.")
     # Procura a última coleta completa no histórico para dizer há quanto tempo está parado.
     ultima_ok = None
     for f in sorted((PNCP_RUN.parent / "history").glob("*.json"), reverse=True):
@@ -222,7 +515,15 @@ def pncp() -> dict:
             break
     dias = (agora() - ultima_ok).days if ultima_ok else None
     desde = f"sem dados há {dias} dia(s)" if dias is not None else "nunca coletou com sucesso"
-    return check("pncp", "dados", "Radar PNCP", "falha", f"Fonte do governo indisponível ({d.get('error', '')[:60]}); {desde}")
+    detalhe = f"Fonte do governo indisponível ({d.get('error', '')[:60]}); {desde}"
+    # O portal fora do ar não é defeito nosso e volta sozinho; três dias sem dados já pede alguém olhar.
+    if dias is not None and dias < 3:
+        return check("pncp", "dados", "Radar PNCP", "atencao", detalhe, sozinho=True,
+                     o_que_fazer="Nada: o portal do governo (PNCP) estava fora do ar. A próxima coleta (07:30) "
+                                 "tenta de novo sozinha.")
+    return check("pncp", "dados", "Radar PNCP", "falha", detalhe,
+                 o_que_fazer="O PNCP não responde há dias. Abra pncp.gov.br para ver se o portal mudou e peça ao "
+                             "Claude conferir o collector do radar.")
 
 
 # ---------------------------------------------------------------- rotinas do Hermes
@@ -260,10 +561,9 @@ def _campo_cron(txt: str, menor: int, maior: int) -> set[int]:
     return vals
 
 
-def ultimo_disparo(expr: str, t: datetime) -> datetime | None:
-    """Último horário <= t em que a expressão cron de 5 campos dispara, na hora
-    local de t (a do Dell, que é a do Hermes). Aceita números, `*`, `,`, `-`,
-    `/` e macros @daily etc.; nome de mês/dia levanta ValueError."""
+def _disparos(expr: str, t: datetime, para_tras: bool):
+    """Horários em que a expressão cron de 5 campos dispara, a partir do dia de
+    t, para trás ou para a frente, até um ano. Na hora local de t."""
     campos = MACROS_CRON.get(expr.strip(), expr).split()
     if len(campos) != 5:
         raise ValueError(f"esperava 5 campos: {expr!r}")
@@ -272,18 +572,32 @@ def ultimo_disparo(expr: str, t: datetime) -> datetime | None:
     semana = {d % 7 for d in _campo_cron(campos[4], 0, 7)}  # 0 e 7 = domingo
     # Regra do cron: com dia do mês E da semana restritos, basta um dos dois.
     um_basta = not campos[2].startswith("*") and not campos[4].startswith("*")
-    t = t.replace(second=0, microsecond=0)
-    for atras in range(367):
-        d = (t - timedelta(days=atras)).date()
+    sentido = -1 if para_tras else 1
+    for passo in range(367):
+        d = (t + timedelta(days=sentido * passo)).date()
         no_dia, na_semana = d.day in dias, d.isoweekday() % 7 in semana
         if d.month not in meses or not ((no_dia or na_semana) if um_basta else (no_dia and na_semana)):
             continue
-        for h in sorted(horas, reverse=True):
-            for m in sorted(minutos, reverse=True):
-                quando = datetime.combine(d, horario(h, m), tzinfo=t.tzinfo)
-                if quando <= t:
-                    return quando
-    return None
+        for h in sorted(horas, reverse=para_tras):
+            for m in sorted(minutos, reverse=para_tras):
+                yield datetime.combine(d, horario(h, m), tzinfo=t.tzinfo)
+
+
+def ultimo_disparo(expr: str, t: datetime) -> datetime | None:
+    """Último horário <= t em que a expressão cron de 5 campos dispara, na hora
+    local de t (a do Dell, que é a do Hermes e a do n8n). Aceita números, `*`,
+    `,`, `-`, `/` e macros @daily etc.; nome de mês/dia levanta ValueError."""
+    t = t.replace(second=0, microsecond=0)
+    return next((q for q in _disparos(expr, t, True) if q <= t), None)
+
+
+def proximo_disparo(expr: str, t: datetime) -> datetime | None:
+    """Primeiro horário > t em que a expressão dispara; None se não entender."""
+    try:
+        t = t.astimezone()
+        return next((q for q in _disparos(expr, t, False) if q > t), None)
+    except ValueError:
+        return None
 
 
 def _agenda_coerente(j: dict) -> bool:
@@ -318,6 +632,7 @@ def crons_hermes() -> list[dict]:
     except (OSError, ValueError):
         vistas = {}
     t = agora().astimezone()
+    ligado = ligado_desde()
     agendas_vistas.clear()
     out = []
     for j in jobs:
@@ -343,25 +658,39 @@ def crons_hermes() -> list[dict]:
         if j.get("last_status") not in (None, "ok") or j.get("state") == "error":
             out.append(check(f"cron:{jid}", "dados", nome, "falha",
                              f"Última rodada ({ultima_txt}) deu erro: "
-                             f"{str(j.get('last_error') or j.get('last_status'))[:100]}"))
+                             f"{str(j.get('last_error') or j.get('last_status'))[:100]}",
+                             o_que_fazer="A rotina do Hermes deu erro e a mensagem dela não saiu. Se o erro acima "
+                                         f"não disser o motivo, peça ao Claude: \"a rotina {j.get('name') or jid} "
+                                         "do Hermes falhou\". A próxima rodada tenta de novo."))
             continue
-        atraso = None
+        atraso = parado = None
         try:
             if ag["kind"] == "cron":
                 previsto = ultimo_disparo(ag["expr"], t - FOLGA_CRON)
                 if previsto and previsto >= base and (not ultima or ultima < previsto):
                     atraso = f"Não rodou às {previsto:%H:%M de %d/%m} (última rodada: {ultima_txt})"
+                    parado = _parado_em(previsto, ligado, None)
             else:
                 passo = timedelta(minutes=float(ag.get("minutes") or 0))
-                referencia = max(ultima, base) if ultima else base
+                # O intervalo conta também desde que o Dell ligou: desligado não é atraso.
+                referencia = max(filter(None, (ultima, base, ligado)))
                 if passo and t - referencia > 3 * passo:
                     horas = (t - referencia).total_seconds() / 3600
                     atraso = f"Sem rodar há {horas:.0f} h ({agenda_txt}; última rodada: {ultima_txt})"
         except (KeyError, ValueError, TypeError) as e:
-            out.append(check(f"cron:{jid}", "dados", nome, "atencao", f"Agenda não entendida ({agenda_txt}): {e}"))
+            out.append(check(f"cron:{jid}", "dados", nome, "atencao", f"Agenda não entendida ({agenda_txt}): {e}",
+                             o_que_fazer="O monitor não entendeu o horário desta rotina e não a confere. "
+                                         "Peça ao Claude ajustar o dell-status."))
             continue
-        if atraso:
-            out.append(check(f"cron:{jid}", "dados", nome, "falha", atraso))
+        if atraso and parado:
+            proxima = proximo_disparo(ag["expr"], t)
+            out.append(check(f"cron:{jid}", "dados", nome, "atencao", f"{atraso.split(' (')[0]}: {parado}",
+                             o_que_fazer="Nada: roda de novo no próximo horário"
+                                         + (f" ({_hm(proxima, t)})." if proxima else "."), sozinho=True))
+        elif atraso:
+            out.append(check(f"cron:{jid}", "dados", nome, "falha", atraso,
+                             o_que_fazer="O Hermes não rodou a rotina no horário. Veja se \"Hermes (WhatsApp)\" está "
+                                         "ok em Serviços; se estiver, peça ao Claude conferir o agendador do Hermes."))
         else:
             out.append(check(f"cron:{jid}", "dados", nome, "ok", f"Última rodada ok em {ultima_txt} · {agenda_txt}"))
     return out
@@ -440,15 +769,38 @@ ESTADO_N8N = HOME / ".local/share/n8n-estado"
 AUTO = HOME / "auto-site"
 
 
+# O que o Rômulo faz com cada fila e onde (rota da Central). sozinho = a fila anda sem ele.
+FILAS = {
+    "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00. Para adiantar um lead, rode /lead-novo "
+                   "numa sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    "site-enviar": ("Abra o CRM em Hoje › Sites prontos para enviar: cada linha abre o WhatsApp com a mensagem "
+                    "pronta. Escrever direto ao número do lead também conta como envio.",
+                    ("Abrir no CRM", "/crm?produto=site"), False),
+    "site-resposta": ("Nada por enquanto: a resposta no WhatsApp marca sozinha. Sem resposta, o follow-up pronto "
+                      "chega no 3º dia (09:00) e o lead expira no 10º.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    "prumo-revisar": ("Abra o CRM em Hoje › Prospects para revisar: veja o site e, se fizer sentido, clique em "
+                      "Enviar convite.", ("Abrir no CRM", "/crm?produto=prumo"), False),
+    "prumo-aguardando": ("Vale um lembrete no WhatsApp do dono; o CRM mostra há quantos dias cada convite espera.",
+                         ("Abrir no CRM", "/crm?produto=prumo"), False),
+    "prumo-diagnostico": ("Leia o diagnóstico e o rascunho do Mapa (~/prumo-entregas) e marque o workshop com o dono.",
+                          ("Abrir no CRM", "/crm?produto=prumo"), False),
+}
+
+
+def _fila(id_: str, nome: str, qtd: int, detalhe: str, link: str | None = None) -> dict:
+    o, acao, sozinho = FILAS.get(id_, (None, None, False))
+    return check(f"pend:{id_}", "pendencias", nome, "atencao" if qtd else "ok", detalhe, link,
+                 o if qtd else None, acao if qtd else None, sozinho=bool(qtd and sozinho))
+
+
 def pendencias() -> list[dict]:
     """Não é saúde: é fila de trabalho humano. `atencao` quando há algo esperando,
     e nunca vira WhatsApp (só `falha` vira)."""
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
-    out.append(check("pend:sites-fila", "pendencias", "Sites na fila do gerador", "atencao" if fila else "ok",
-                     f"{len(fila)} lead(s) com pasta e sem site publicado. O gerador do Dell faz até 4 por dia "
-                     "às 08h; para adiantar, rode /lead-novo numa sessão do Claude em ~/auto-site."))
+    out.append(_fila("sites-fila", "Sites na fila do gerador", len(fila),
+                     f"{len(fila)} lead(s) com pasta e sem site publicado"))
     for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
         try:
             d = json.loads(arq.read_text())
@@ -461,8 +813,7 @@ def pendencias() -> list[dict]:
             detalhe = (f"{qtd} · " if qtd else "") + str(item.get("detalhe", ""))
             if velho:
                 detalhe += f" (contagem de {gerado.astimezone():%d/%m %H:%M})"
-            out.append(check(f"pend:{item['id']}", "pendencias", str(item["nome"]), "atencao" if qtd else "ok",
-                             detalhe, item.get("link")))
+            out.append(_fila(str(item["id"]), str(item["nome"]), qtd, detalhe, item.get("link")))
     return out
 
 
@@ -484,30 +835,63 @@ def backup() -> list[dict]:
     out = []
     t = agora()
     for fid, f in sorted(d.get("fontes", {}).items()):
-        nome = f"Backup · {f.get('nome', fid)}"
-        detalhe = str(f.get("detalhe") or "")
-        ok_em = f.get("ultimo_sucesso")
-        idade = (t - datetime.fromisoformat(ok_em)).total_seconds() / 3600 if ok_em else None
-        if f.get("tipo") == "ensaio":
-            if idade is None:
-                estado = "atencao" if f.get("estado") != "falha" else "falha"
-                detalhe = detalhe or "Ensaio de restauração ainda não rodou"
-            elif idade > 35 * 24:
-                estado, detalhe = "atencao", f"Último ensaio ok em {datetime.fromisoformat(ok_em):%d/%m}; o próximo cofre roda outro"
-            else:
-                estado = "ok"
-        elif idade is None:
-            estado, detalhe = "atencao", f"Ainda sem sucesso. {detalhe}".strip()
-        elif idade > f.get("falha_h", 24):
-            estado, detalhe = "falha", f"Sem backup há {idade:.0f} h. {detalhe}".strip()
-        elif idade > f.get("atencao_h", 3) or f.get("estado") in ("falha", "atencao"):
-            estado = "atencao"
+        out.append(_fonte_do_backup(fid, f, t))
+    return out
+
+
+# O Google recusou o token do rclone: não passa sozinho, alguém precisa reconectar.
+TOKEN_RECUSADO = re.compile(r"invalid_grant|couldn't fetch token|token (has been )?(expired|revoked)|reconnect", re.I)
+
+
+def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
+    nome = f"Backup · {f.get('nome', fid)}"
+    detalhe = str(f.get("detalhe") or "")
+    ok_em = f.get("ultimo_sucesso")
+    idade = (t - datetime.fromisoformat(ok_em)).total_seconds() / 3600 if ok_em else None
+    if f.get("tipo") == "ensaio":
+        if idade is None:
+            estado = "atencao" if f.get("estado") != "falha" else "falha"
+            detalhe = detalhe or "Ensaio de restauração ainda não rodou"
+        elif idade > 35 * 24:
+            estado, detalhe = "atencao", f"Último ensaio ok em {datetime.fromisoformat(ok_em):%d/%m}; o próximo cofre roda outro"
         else:
             estado = "ok"
-        if f.get("tipo") == "cofre" and f.get("check") == "falha":
-            estado, detalhe = "falha", f"restic check falhou: {f.get('check_detalhe', '')}"
-        out.append(check(f"backup:{fid}", "dados", nome, estado, detalhe))
-    return out
+    elif idade is None:
+        estado, detalhe = "atencao", f"Ainda sem sucesso. {detalhe}".strip()
+    elif idade > f.get("falha_h", 24):
+        estado, detalhe = "falha", f"Sem backup há {idade:.0f} h. {detalhe}".strip()
+    elif idade > f.get("atencao_h", 3) or f.get("estado") in ("falha", "atencao"):
+        estado = "atencao"
+    else:
+        estado = "ok"
+    if f.get("tipo") == "cofre" and f.get("check") == "falha":
+        estado, detalhe = "falha", f"restic check falhou: {f.get('check_detalhe', '')}"
+    o, sozinho = None, False
+    if estado == "ok":
+        pass
+    elif f.get("estado") in ("falha", "atencao") and TOKEN_RECUSADO.search(detalhe):
+        estado = "falha"
+        o = ("O Google desconectou o backup. No terminal do Dell rode: rclone config reconnect gdrive: "
+             "(abre o navegador para entrar com a conta do Google). A próxima rodada volta sozinha.")
+    elif "restic check falhou" in detalhe:
+        o = "O cofre pode ter partes estragadas. Peça ao Claude agora: \"o restic check do cofre falhou\"."
+    elif f.get("estado") == "adiado":
+        o, sozinho = "Nada: o espelho espera o gerador terminar de escrever e roda na hora seguinte.", True
+    elif "não puderam ser lidos" in detalhe:
+        o = ("O cofre foi feito, mas alguns arquivos ficaram de fora (sem permissão de leitura). Se forem "
+             "importantes, peça ao Claude; se não, peça para entrarem no \"excluir\" do fontes.toml.")
+    elif "faltando:" in detalhe:
+        o = "Um arquivo que refaz o Dell sumiu do cofre (veja o detalhe). Peça ao Claude conferir."
+    elif "MB novos numa rodada" in detalhe:
+        o = "Entrou uma pasta grande nova no cofre. Se ela não precisa de backup, peça ao Claude pô-la no \"excluir\"."
+    elif estado == "falha":
+        o = "O backup está parado além do limite. Veja o detalhe e peça ao Claude: \"o backup do Dell parou\"."
+    elif f.get("tipo") == "ensaio" and estado == "atencao":
+        o, sozinho = "Nada: o ensaio de restauração é mensal e roda junto com o próximo cofre (03:30).", True
+    elif estado == "atencao":
+        o, sozinho = ("Uma rodada não deu certo; a próxima tenta de novo sozinha. Se passar do limite, vira "
+                      "falha e o Hermes avisa."), True
+    return check(f"backup:{fid}", "dados", nome, estado, detalhe, o_que_fazer=o, sozinho=sozinho)
 
 
 # ---------------------------------------------------------------- fora do Dell (Easypanel)
@@ -553,6 +937,71 @@ def maquina() -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------- o que fazer
+
+# Para quem a verificação não trouxe o próprio texto: (o que fazer, resolve sozinho?).
+O_QUE_FAZER = {
+    "hermes": ("O Hermes parou: os avisos do WhatsApp não chegam. O healthwatch religa sozinho em até 1 min; se "
+               "continuar, peça ao Claude: \"o Hermes parou no Dell\".", False),
+    "hermes-navegador": ("O Chromium do Hermes não responde: as coletas pelo navegador (ASMR, radar) param. Se "
+                         "passar de 10 min, peça ao Claude religar o hermes-google-browser.", False),
+    "n8n": ("O n8n não responde: nenhum fluxo roda (leads, cliques, CRM). O healthwatch reinicia sozinho; se "
+            "continuar, peça ao Claude.", False),
+    "terminal": ("O terminal do navegador (code-server) não responde. Só afeta o Terminal; peça ao Claude se "
+                 "precisar dele.", False),
+    "syncthing": ("Sem o PC, o Syncthing não tem com quem sincronizar. Abra-o para ver qual pasta tem erro; se não "
+                  "souber o que é, pode esperar o PC novo.", False),
+    "squadone-app": ("O SquadOne de agendas (Easypanel) não responde: demandas e lembretes param. Peça ao Claude "
+                     "conferir o app no Easypanel.", False),
+    "docker": ("O Docker não responde: o n8n e os projetos param. Peça ao Claude.", False),
+    "containers": ("Veja na lista qual container parou.", False),
+    "disco": ("O disco está enchendo. Peça ao Claude liberar espaço (caches, vídeos, imagens do Docker).", False),
+    "memoria": ("Pouca memória livre. Se durar mais de uma hora, algum processo travou: peça ao Claude olhar.", False),
+    "crons": ("O monitor não conseguiu ler as rotinas do Hermes. Peça ao Claude conferir ~/.hermes/cron/jobs.json.",
+              False),
+    "backup": ("O backup no Drive ainda não registrou nenhuma rodada. Se passar de um dia, peça ao Claude.", False),
+}
+
+
+def explicar(c: dict) -> dict:
+    """Completa `o_que_fazer` de quem não está ok e não trouxe o próprio texto."""
+    if c["estado"] == "ok" or c.get("o_que_fazer"):
+        return c
+    cid, det = c["id"], c["detalhe"]
+    texto, sozinho = O_QUE_FAZER.get(cid, (None, False))
+    if cid == "dns":
+        texto, sozinho = (("Algumas consultas de nome falharam: costuma ser a rede oscilando e passa sozinho.", True)
+                          if c["estado"] == "atencao" else
+                          ("O Dell está sem internet: nada que depende da rede funciona. Confira o Wi-Fi e o "
+                           "roteador.", False))
+    elif cid.startswith("container:"):
+        texto = (f"O container {c['nome']} parou ou está sem saúde. Se for do n8n ou do radar, peça ao Claude já; os "
+                 "outros são projetos e só afetam o próprio projeto.")
+    elif cid == "gerador":
+        if "sem login" in det.lower() or "login" in det.lower():
+            texto = "O Claude do gerador está sem login. No terminal do Dell rode claude e faça /login."
+        elif "Ainda não rodou" in det:
+            texto = "O gerador de sites ainda não gravou nenhuma execução. Se passar das 10:00, peça ao Claude."
+        elif c["estado"] == "atencao":
+            texto, sozinho = ("Alguns leads falharam e tentam de novo amanhã às 08:00 (duas falhas tiram o lead da "
+                              "fila). Nada a fazer, a não ser que queira adiantar."), True
+        else:
+            texto = ("O gerador não fez nenhum site nesta rodada. Os leads voltam amanhã às 08:00; se repetir, peça "
+                     "ao Claude: \"o gerador de sites falhou\" (log: journalctl --user -u gerador-de-sites).")
+    elif cid == "monitor":
+        texto = ("O monitor do Dell parou ou o Dell está desligado: o que aparece aqui pode estar velho. Se o Dell "
+                 "está ligado, peça ao Claude: \"o dell-status parou\".")
+    elif cid.startswith("erro:"):
+        texto = "Uma verificação do monitor quebrou; as outras seguem. Peça ao Claude olhar o dell-status."
+    elif not texto:
+        texto = ("Veja o detalhe; se não souber o que fazer, peça ao Claude."
+                 if c["estado"] == "falha" else "Vale olhar o detalhe; nada quebrou.")
+    c["o_que_fazer"] = texto
+    if sozinho:
+        c["sozinho"] = True
+    return c
+
+
 # ---------------------------------------------------------------- avisos
 
 def enviar(msg: str) -> bool:
@@ -594,16 +1043,19 @@ def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime) -> dict
             voltou.append(c)
         novo[c["id"]] = {"estado": c["estado"], "desde": desde, **({"avisado": avisado} if avisado else {})}
     # Itens que sumiram (ex.: container removido) não geram aviso.
+    def item(c: dict) -> str:
+        return f"• {c['nome']}: {c['detalhe']}" + (f"\n  O que fazer: {c['o_que_fazer']}" if c.get("o_que_fazer") else "")
+
     linhas = []
     if quebrou:
-        linhas += ["Quebrou:"] + [f"• {c['nome']}: {c['detalhe']}" for c in quebrou]
+        linhas += ["Quebrou:"] + [item(c) for c in quebrou]
     if lembrar:
-        linhas += ["Continua fora:"] + [f"• {c['nome']}: {c['detalhe']}" for c in lembrar]
+        linhas += ["Continua fora:"] + [item(c) for c in lembrar]
     if voltou:
         linhas += ["Voltou ao normal:"] + [f"• {c['nome']}" for c in voltou]
     if linhas:
         titulo = "⚠️ Dell worker" if (quebrou or lembrar) else "✅ Dell worker"
-        if not enviar(titulo + "\n" + "\n".join(linhas) + "\nDetalhes: http://127.0.0.1:9120/"):
+        if not enviar(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}"):
             # WhatsApp fora: nada fica marcado como avisado e o próximo minuto tenta de novo.
             for c in quebrou + lembrar:
                 novo[c["id"]].pop("avisado", None)
@@ -633,6 +1085,7 @@ def main() -> None:
         checks.append(pncp())
     except Exception as e:  # noqa: BLE001
         checks.append(check("pncp", "dados", "Radar PNCP", "atencao", str(e)[:120]))
+    checks = [explicar(c) for c in checks]
     snapshot = {"geradoEm": iso(t), "verificacoes": checks}
     if a.stdout:
         print(json.dumps(snapshot, ensure_ascii=False, indent=1))
@@ -648,6 +1101,8 @@ def main() -> None:
     gravar(SAIDA, snapshot)
     if agendas_vistas:
         gravar(AGENDAS, agendas_vistas)
+    if fluxos_vistos:
+        gravar(FLUXOS_VISTOS, fluxos_vistos)
     drenar_fila()
 
 

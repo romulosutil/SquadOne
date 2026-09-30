@@ -295,6 +295,8 @@ def main() -> None:
     instalar_ferramentas()
     ajustar_graphify_fora_do_hermes()
     ajustar_cron()
+    # Remendo da bridge (envios/recibos do dono no bridge.log); falha vira aviso pelo Hermes.
+    subprocess.run(["python3", str(AQUI / "scripts/patch_bridge_envios.py"), "--avisar"], check=False)
     subprocess.run(["systemctl", "--user", "restart", "hermes-gateway"], check=True)
     time.sleep(5)
     subprocess.run(["systemctl", "--user", "is-active", "hermes-gateway"], check=False)

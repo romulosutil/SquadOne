@@ -1,26 +1,30 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { soNoDell } from './alertas'
 import type { OperationTool } from './types'
 
 const props = defineProps<{ tools: OperationTool[] }>()
 
 // Ordem pelo uso: primeiro onde se trabalha, depois onde se acompanha.
 const ORDEM = ['ide', 'n8n', 'hermes', 'syncthing', 'remote'] as const
-const ICONE: Record<string, string> = { ide: '>_', n8n: 'n8n', hermes: 'H', syncthing: '⇄', remote: 'S1' }
+const ICONE: Record<string, string> = { ide: '>_', n8n: 'n8n', hermes: 'H', syncthing: '⇄', remote: '☁', crm: 'CRM', agentes: 'S1' }
 const DICA: Record<string, string> = {
   ide: 'Terminal e arquivos do Dell',
   n8n: 'Fluxos e execuções',
   hermes: 'Conversas e rotinas',
   syncthing: 'Pastas espelhadas com o PC',
-  remote: 'Agendas (Google Calendar)',
+  remote: 'O app de agendas no Easypanel',
 }
 
+// As ferramentas do Dell (loopback) só abrem no navegador do próprio Dell.
 const links = computed(() => [
+  { id: 'crm', nome: 'CRM', dica: 'Leads do Site antes da venda e do PRUMO', url: '/crm', fora: false, externo: false },
+  { id: 'agentes', nome: 'Agentes do SquadOne', dica: 'Squads, pessoas e o que cada uma cuida', url: 'https://aladdin-squadone-app.jicnzg.easypanel.host/', fora: false, externo: true },
   ...ORDEM.map(id => props.tools.find(t => t.id === id)).filter((t): t is OperationTool => Boolean(t)).map(t => ({
-    id: t.id, nome: t.id === 'ide' ? 'Terminal' : t.id === 'remote' ? 'SquadOne' : t.label, dica: DICA[t.id] ?? t.description,
+    id: t.id, nome: t.id === 'ide' ? 'Terminal' : t.id === 'remote' ? 'SquadOne na nuvem' : t.label,
+    dica: `${DICA[t.id] ?? t.description}${soNoDell(t.launchUrl) ? ' · só no Dell' : ''}`,
     url: t.launchUrl, fora: t.state === 'unavailable', externo: true,
   })),
-  { id: 'auto', nome: 'Produção Auto', dica: 'Sites da esteira de vendas', url: '/projetos/producao-auto', fora: false, externo: false },
 ])
 </script>
 

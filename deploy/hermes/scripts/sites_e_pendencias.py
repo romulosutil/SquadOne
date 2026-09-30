@@ -13,6 +13,10 @@ Fontes, só leitura:
 - ~/auto-site: a fila do gerador (mesma regra do gerador-de-sites) e os
   publicados hoje;
 - ~/.local/share/n8n-estado/*.json: contagens e links que o n8n grava;
+- ~/.local/share/n8n-estado/site-leads.json: o retrato da planilha que o fluxo
+  07 grava a cada hora, com o link da página de cada lead (30/09/2026). Cada
+  enviado sem resposta e cada lead em conversa ganha uma linha com o link, onde
+  um toque marca "recusou" ou "fechou" (nada vai ao lead);
 - ~/.local/share/squadone-operations/status.json: pendências do dell-status
   que não vêm do n8n.
 
@@ -40,6 +44,9 @@ STATUS_VELHO = timedelta(minutes=15)
 # Primeiro os sites, depois o PRUMO; o resto na ordem do nome do arquivo.
 ORDEM_N8N = ["site-antes-da-venda", "prumo"]
 DIAS_GUARDADOS = 14
+RETRATO = N8N / "site-leads.json"
+# Uma linha por lead; passando disso, o resto está na coluna acoes_link da planilha.
+MAX_LEADS = 15
 
 agora = datetime.now().astimezone()
 hoje = agora.date()
@@ -176,8 +183,40 @@ def sublinks(item: dict) -> list:
     return out[:3]
 
 
+def leads_do_retrato() -> dict:
+    """grupo ("resposta", "conversa") -> [{nome, link}] do retrato do fluxo 07, se tiver até 26 h."""
+    d = ler_json(RETRATO)
+    gerado = quando(d.get("geradoEm", "")) if isinstance(d, dict) else None
+    if not gerado or agora - gerado > N8N_VELHO:
+        return {}
+    grupos = {}
+    for l in d.get("leads") or []:
+        if l.get("grupo") and l.get("link"):
+            grupos.setdefault(l["grupo"], []).append({"nome": l.get("nome") or l.get("place_id"), "link": l["link"],
+                                                      "enviado_em": l.get("enviado_em") or ""})
+    return {g: sorted(ls, key=lambda l: l["enviado_em"]) for g, ls in grupos.items()}
+
+
+def com_links_dos_leads(itens: list) -> list:
+    """Um link por lead: sob "Enviados esperando resposta" e num item "em conversa" logo depois."""
+    grupos = leads_do_retrato()
+    if not grupos:
+        return itens
+    planilha = None
+    for it in itens:
+        if it["chave"] == "pend:site-resposta":
+            it["sub"], planilha = grupos.get("resposta", []), it["link"]
+    conversa = grupos.get("conversa", [])
+    if conversa:
+        depois = max((i + 1 for i, it in enumerate(itens) if it["chave"].startswith("pend:site-")), default=0)
+        itens.insert(depois, {"chave": "pend:site-conversa", "qtd": len(conversa), "nome": "Leads em conversa",
+                              "detalhe": "fechou ou recusou? Toque no link do lead", "link": planilha,
+                              "nota": "", "sub": conversa})
+    return itens
+
+
 def bloco_pendencias(antes: dict, contagens: dict, avisos: list) -> list:
-    itens = itens_pendentes(avisos)
+    itens = com_links_dos_leads(itens_pendentes(avisos))
     if not itens:
         return [] if avisos else ["*Esperando você:* nada."]
     linhas = ["*Esperando você*"]
@@ -187,7 +226,9 @@ def bloco_pendencias(antes: dict, contagens: dict, avisos: list) -> list:
         if it["detalhe"]:
             texto += f" — {minuscula(it['detalhe'])}"
         linhas.append(texto)
-        linhas += [f"   – {s.get('nome') or s.get('titulo') or ''} {s['link']}".replace("  ", " ") for s in it["sub"]]
+        linhas += [f"   – {s.get('nome') or s.get('titulo') or ''} {s['link']}".replace("  ", " ") for s in it["sub"][:MAX_LEADS]]
+        if len(it["sub"]) > MAX_LEADS:
+            linhas.append(f"  – e mais {len(it['sub']) - MAX_LEADS}: coluna acoes_link da planilha")
         # Um link por grupo: itens seguidos com o mesmo link (mesma planilha) dividem a linha.
         proximo = itens[i + 1]["link"] if i + 1 < len(itens) else None
         if it["link"] and it["link"] != proximo:

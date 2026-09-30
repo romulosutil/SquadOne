@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
-import { AutoProductionStore, InvalidAutoProductionInput, type AutoOverviewQuery, type AutoStage } from "./auto-production.ts";
+import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
 import { lerStatusDoDell } from "./dell-status.ts";
 
 export type SquadOneMode = "app" | "operations";
@@ -24,7 +24,8 @@ export interface OperationToolConfig {
 export interface OperationsConfig {
   displayName: string;
   autoDirectory?: string;
-  autoNotificationStateFile?: string;
+  /** Bloco "crm" de operations.json (caminhos do retrato e do registro); ausente = padrões do Dell. */
+  crm?: unknown;
   tools: Record<OperationToolId, OperationToolConfig>;
 }
 
@@ -139,9 +140,7 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
     ...(typeof raw.autoDirectory === "string" && raw.autoDirectory.trim()
       ? { autoDirectory: path.resolve(raw.autoDirectory.trim()) }
       : {}),
-    ...(typeof raw.autoNotificationStateFile === "string" && raw.autoNotificationStateFile.trim()
-      ? { autoNotificationStateFile: path.resolve(raw.autoNotificationStateFile.trim()) }
-      : {}),
+    ...(raw.crm && typeof raw.crm === "object" ? { crm: raw.crm } : {}),
     tools,
   };
 }
@@ -414,7 +413,7 @@ export function createOperationsRouter(options: {
   config: OperationsConfig;
   store: OperationsProjectStore;
   readings: HermesReadingsStore;
-  autoProduction?: AutoProductionStore;
+  crm?: CrmStore;
   readAgenda: () => Promise<AgendaSummary>;
   dataDir: string;
 }): express.Router {
@@ -490,87 +489,50 @@ export function createOperationsRouter(options: {
     }
   });
 
-  router.get("/auto", async (req, res) => {
-    if (!options.autoProduction) {
-      res.status(503).json({ error: "A pasta auto ainda não foi configurada nesta Central." });
+  // CRM (Site antes da venda + PRUMO). Leitura do retrato que o n8n grava; a
+  // única escrita é o registro (nota, próximo passo, proposta), que vai para a
+  // planilha pelo próprio n8n. A Central não guarda etapa de lead.
+  router.get("/crm", async (_req, res) => {
+    if (!options.crm) {
+      res.status(503).json({ error: "O CRM não está configurado nesta Central." });
       return;
     }
     try {
-      const validStages = new Set<AutoStage | "attention" | "all">(["preparation", "generated", "ready", "sent", "confirmed", "attention", "all"]);
-      const validSorts = new Set<NonNullable<AutoOverviewQuery["sort"]>>(["priority", "recent", "name"]);
-      const rawStage = typeof req.query.stage === "string" ? req.query.stage : "all";
-      const rawSort = typeof req.query.sort === "string" ? req.query.sort : "priority";
-      const query: AutoOverviewQuery = {
-        query: typeof req.query.q === "string" ? req.query.q : "",
-        stage: validStages.has(rawStage as AutoStage | "attention" | "all") ? rawStage as AutoOverviewQuery["stage"] : "all",
-        sort: validSorts.has(rawSort as NonNullable<AutoOverviewQuery["sort"]>) ? rawSort as AutoOverviewQuery["sort"] : "priority",
-        page: Number(req.query.page),
-        pageSize: Number(req.query.pageSize),
-      };
-      const [overview, syncthing] = await Promise.all([
-        options.autoProduction.overview(query),
-        checkTool("syncthing", options.config.tools.syncthing),
-      ]);
-      overview.automation.syncthing = {
-        state: syncthing.state === "healthy" ? "connected" : syncthing.state === "syncing" ? "running" : syncthing.state === "unavailable" ? "unavailable" : "unknown",
-        detail: syncthing.detail,
-        evidence: "health check do Syncthing",
-      };
-      res.json(overview);
+      // no-cache (não no-store): o navegador revalida e o ETag devolve 304 quando nada mudou.
+      res.setHeader("Cache-Control", "no-cache");
+      res.json(await options.crm.visao());
     } catch (error) {
-      console.error("[operations] Falha ao ler Produção Auto:", error);
-      res.status(500).json({ error: "Não foi possível ler a pasta auto agora." });
+      console.error("[operations] Falha ao ler o CRM:", error);
+      res.status(500).json({ error: "Não foi possível ler o CRM agora." });
     }
   });
 
-  router.get("/auto/events", (req, res) => {
-    if (!options.autoProduction) {
-      res.status(503).end();
-      return;
-    }
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-    res.write("retry: 5000\n");
-    res.write(`event: connected\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
-    const interval = setInterval(() => {
-      res.write(`event: refresh\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
-    }, 10_000);
-    req.on("close", () => clearInterval(interval));
-  });
-
-  router.get("/auto/clients/:id/thumbnail", async (req, res) => {
-    if (!options.autoProduction) {
-      res.status(404).end();
+  router.post("/crm/registro", async (req, res) => {
+    if (!options.crm) {
+      res.status(503).json({ error: "O CRM não está configurado nesta Central." });
       return;
     }
     try {
-      const filePath = await options.autoProduction.thumbnailPath(String(req.params.id));
-      if (!filePath) {
-        res.status(404).end();
-        return;
+      res.status(201).json(await options.crm.registrar(req.body));
+    } catch (error) {
+      if (error instanceof RegistroInvalido) {
+        res.status(400).json({ error: error.message });
+      } else if (error instanceof RegistroIndisponivel) {
+        res.status(503).json({ error: error.message, configuracao: true });
+      } else if (error instanceof RegistroFalhou) {
+        console.warn(`[operations] Registro do CRM recusado pelo n8n (${error.status ?? "sem resposta"}): ${error.message}`);
+        res.status(502).json({ error: error.message, n8nFalhou: true });
+      } else {
+        console.error("[operations] Falha ao registrar no CRM:", error);
+        res.status(500).json({ error: "Não foi possível registrar agora." });
       }
-      res.setHeader("Cache-Control", "private, max-age=60");
-      res.sendFile(filePath);
-    } catch (error) {
-      console.error("[operations] Falha ao ler miniatura da Produção Auto:", error);
-      res.status(500).end();
     }
   });
 
-  router.post("/auto/clients/:id/events", async (req, res) => {
-    if (!options.autoProduction) {
-      res.status(503).json({ error: "A pasta auto ainda não foi configurada nesta Central." });
-      return;
-    }
-    try {
-      res.status(201).json(await options.autoProduction.updateEvent(String(req.params.id), req.body));
-    } catch (error) {
-      const status = error instanceof InvalidAutoProductionInput ? 400 : 500;
-      if (status === 500) console.error("[operations] Falha ao registrar evento da Produção Auto:", error);
-      res.status(status).json({ error: status === 400 ? error.message : "Não foi possível registrar o evento operacional." });
-    }
+  // Rota operacional inexistente (ex.: a antiga /auto) responde 404 JSON em vez
+  // de cair no fallback da SPA com HTML 200.
+  router.use((_req, res) => {
+    res.status(404).json({ error: "Rota operacional inexistente." });
   });
 
   return router;

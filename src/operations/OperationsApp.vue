@@ -2,22 +2,26 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AccessPanel from './AccessPanel.vue'
 import AgendaPanel from './AgendaPanel.vue'
-import AutoProductionPanel from './AutoProductionPanel.vue'
-import DellStatusPanel from './DellStatusPanel.vue'
+import ComoFuncionaPanel from './ComoFuncionaPanel.vue'
+import CrmPanel from './CrmPanel.vue'
+import DellConferePanel from './DellConferePanel.vue'
 import OperationsHeader from './OperationsHeader.vue'
-import PendingPanel from './PendingPanel.vue'
+import PrecisaDeVoce from './PrecisaDeVoce.vue'
 import type { OperationsOverview } from './types'
 import './operations.css'
 
-// Uma página responde quatro perguntas: está tudo bem no Dell, o que está
-// esperando por mim, o que tem na agenda hoje e onde abro cada ferramenta. Quem corrige é Claude/Codex pelo
-// SSH; a Central só mostra (RULES 8 e 10).
+// A home responde, nesta ordem (RULES 13): o que precisa de mim agora e o que
+// fazer com cada alerta, como a operação funciona, o que tem na agenda hoje e
+// onde abro cada ferramenta; o detalhe do Dell fica fechado no fim. Quem
+// corrige é o Claude; a Central só mostra (RULES 8 e 10).
 const overview = ref<OperationsOverview | null>(null)
 const loading = ref(true)
 const error = ref('')
+// A antiga Produção Auto (/projetos/producao-auto) virou o CRM em 30/09/2026.
+if (window.location.pathname.replace(/\/$/, '') === '/projetos/producao-auto') window.history.replaceState(null, '', '/crm')
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/'
 const isHome = currentPath === '/'
-const isAuto = currentPath === '/projetos/producao-auto'
+const isCrm = currentPath === '/crm'
 let refreshTimer = 0
 
 const load = async () => {
@@ -49,14 +53,15 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 
     <main id="main-content" class="ops-workspace" :class="{ 'ops-workspace--page': !isHome }" tabindex="-1">
       <template v-if="isHome">
-        <DellStatusPanel :status="overview?.dell ?? null" :loading="loading" :error="error" />
-        <PendingPanel :checks="overview?.dell.verificacoes ?? []" />
+        <PrecisaDeVoce :status="overview?.dell ?? null" :loading="loading" :error="error" />
+        <ComoFuncionaPanel :checks="overview?.dell.verificacoes ?? []" />
         <div class="ops-home-grid">
           <AgendaPanel :agenda="overview?.agenda ?? null" :loading="loading" />
           <AccessPanel :tools="overview?.tools ?? []" />
         </div>
+        <DellConferePanel :status="overview?.dell ?? null" />
       </template>
-      <AutoProductionPanel v-else-if="isAuto" />
+      <CrmPanel v-else-if="isCrm" />
       <section v-else class="ops-empty ops-not-found"><span aria-hidden="true">404</span><h2>Página não encontrada</h2><p>Este endereço não existe na Central local.</p><a class="ops-button ops-button--primary" href="/">Voltar para Hoje</a></section>
     </main>
   </div>

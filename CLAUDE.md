@@ -23,9 +23,11 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/operations.test.ts`, `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
+`server/crm.test.ts`, `server/acesso.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
-`src/operations-agenda-window.test.ts` e
-`src/office/postos.test.ts`). Os de
+`src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` e
+`src/office/postos.test.ts`). O monitor do Dell tem os seus em Python:
+`python3 deploy/dell/dell-status.test.py`. Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. `auth-escopos` e `squad` gravam num diretório temporário (chdir
@@ -73,10 +75,17 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/transcricao.ts   áudio do Telegram -> texto da demanda (uma chamada ao Gemini)
   server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
-  server/auto-production.ts   Central: leitura dos artefatos da Produção Auto (somente leitura)
-  server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py
+  server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
+  server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
+  server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app) ou Central (perfil operations)
   src/operations/         Central de Operações (só perfil operations)
+    OperationsApp.vue     home (/) e CRM (/crm); OperationsHeader.vue com o botão "Agentes do SquadOne" (app do Easypanel)
+    PrecisaDeVoce.vue     topo da home: alertas com "o que fazer" e o link que resolve; o que resolve sozinho fechado
+    ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado)
+    alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
+    AgendaPanel.vue, AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado)
+    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil e Ficha
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -273,7 +282,7 @@ Só frontend; nada disto grava.
 O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor. Detalhes e regras da Central estão em `ARCHITECTURE.md` e `RULES.md` — leia-os antes de mexer em `server/operations.ts`, `server/auto-production.ts`, `server/dell-status.ts`, `src/operations/` ou `deploy/`.
 
 - **`app` (padrão, Easypanel):** o SquadOne de sempre, bind `0.0.0.0`. `/api/operations/*` responde 404 JSON (sem isto o fallback da SPA devolveria HTML 200). Ausente = `app`; valor desconhecido derruba o boot — perfil errado não pode abrir a Central calado.
-- **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/`, o app em `/squadone`, rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção.
+- **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** só a Central em `/` (`/squadone` redireciona ao app do Easypanel desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção.
 - **`src/RootApp.vue`** pergunta `/api/runtime` e escolhe a superfície. Falha na pergunta = abre o app, nunca a Central.
 - **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.
 

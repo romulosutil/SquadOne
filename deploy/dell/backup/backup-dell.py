@@ -89,8 +89,27 @@ def log(msg: str) -> None:
 
 def ultima_linha(texto: str, n: int = 240) -> str:
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
+    # Token do Google recusado aparece numa linha do rclone antes do "Fatal" do
+    # restic: é ela que diz o que fazer (reconectar), então vem primeiro.
+    token = [l for l in linhas if re.search(r"(?i)invalid_grant|couldn't fetch token", l)]
     erros = [l for l in linhas if re.search(r"(?i)error|erro|fatal|failed", l)]
-    return ((erros or linhas or ["sem saída"])[-1])[:n]
+    return ((token or erros or linhas or ["sem saída"])[-1])[:n]
+
+
+def ilegiveis(stderr: str) -> list[str]:
+    """Arquivos que o restic não conseguiu ler (saída --json ou texto)."""
+    itens = []
+    for linha in (stderr or "").splitlines():
+        try:
+            j = json.loads(linha)
+        except ValueError:
+            m = re.match(r"error: \w+ (/.+?): ", linha.strip())
+            if m:
+                itens.append(m.group(1))
+            continue
+        if isinstance(j, dict) and j.get("message_type") == "error" and j.get("item"):
+            itens.append(str(j["item"]))
+    return [str(Path(i).relative_to(HOME)) if i.startswith(str(HOME) + "/") else i for i in dict.fromkeys(itens)]
 
 
 def ler_manifesto(caminho: Path) -> dict:
@@ -448,7 +467,12 @@ def _cofre(m: dict, c: dict, a: argparse.Namespace, base: dict) -> int:
     mb = resumo.get("data_added", 0) / 1e6
     avisos = []
     if r.returncode == 3:
-        avisos.append("alguns arquivos não puderam ser lidos")
+        # Diz quais: sem isso a Central só sabe que "alguns" ficaram de fora.
+        fora = ilegiveis(r.stderr)
+        for arq in fora:
+            log(f"cofre: não li ~/{arq}")
+        avisos.append(f"{len(fora)} arquivo(s) não puderam ser lidos (ex.: ~/{fora[0]})" if fora
+                      else "alguns arquivos não puderam ser lidos")
     if problemas:
         avisos.append("preparo: " + "; ".join(problemas))
     if faltando:
