@@ -144,7 +144,11 @@ não muda a aba Buscas sozinho.
 Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
 
 - `~/Pessoal-dev`: réplica de `dev/PESSOAL`, congelada em 25/09/2026.
-  Contexto para você; não é fronteira Git.
+  Contexto para você; não é fronteira Git. Desde 30/09/2026 sem as cópias de
+  SquadOne e prumo (o que era só delas está em `~/Arquivo/2026-09-30/pc-2509`).
+- `~/PRUMO` (desde 30/09/2026): índice com atalhos para as pastas de verdade,
+  com os nomes do Drive, e um `LEIA-ME.md` com o mapa. Para dizer ao Rômulo
+  onde algo está, use os nomes de lá.
 - `~/Corporativo-dev`: somente leitura, último retrato de 25/09/2026.
 - `~/auto-site`: os sites do Site antes da venda, a pasta de verdade. Não depende
   mais do Syncthing: o `backup-dell` a espelha no Drive (`PRUMO/Sites antes da
