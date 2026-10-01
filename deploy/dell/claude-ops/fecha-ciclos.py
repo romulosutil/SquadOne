@@ -2,7 +2,10 @@
 
 - "Clique no wa_link" (GET /webhook/enviar?place_id=): marca o lead do Site antes
   da venda como enviado (status + enviado_em) no primeiro clique e redireciona
-  para o wa.me guardado em wa_me.
+  para o wa.me guardado em wa_me. Com `&marcar=nao` (01/10/2026) só redireciona:
+  é o caminho do operador do Dell, que envia pelo WhatsApp Web, e o lead vira
+  "enviado" pelo observador quando a mensagem sai de verdade (owner_sent), nunca
+  no clique. Assim um envio que falha depois do clique não deixa o lead marcado.
 - "Clique em Enviar convite" (GET /webhook/convite?id=): marca o convite do PRUMO
   como enviado e redireciona para o WhatsApp/e-mail/formulário do lead.
 - Lead Scout: "Enviar convite" vira o link rastreado e a sincronização horária
@@ -92,13 +95,16 @@ def webhook_workflow(nome, caminho, webhook_id, planilha, gid, aba, coluna_chave
     print(nome, "->", wid, f"{LINKS}/{caminho}")
 
 
-DECIDIR_SITE = """const pid = String($('Clique (enviar)').first().json.query?.place_id ?? '');
+DECIDIR_SITE = """const q = $('Clique (enviar)').first().json.query ?? {};
+const pid = String(q.place_id ?? '');
+// marcar=nao: só abre o WhatsApp. Quem marca "enviado" é o observador, quando a mensagem sai.
+const soAbrir = String(q.marcar ?? '') === 'nao';
 const l = $input.first()?.json ?? {};
 const achou = pid !== '' && l.place_id === pid;
 const waMe = String(l.wa_me || '').trim() || (String(l.wa_link || '').startsWith('https://wa.me/') ? String(l.wa_link) : '');
 // Sem wa.me (lead sem telefone ou não achado): abre a planilha para decidir à mão.
 const destino = achou && waMe ? waMe : 'https://docs.google.com/spreadsheets/d/""" + SITE + """/edit#gid=396728619';
-return [{ json: { chave: pid, destino, marcar: achou && waMe !== '' && String(l.status).trim() === 'pronto', agora: new Date().toISOString() } }];"""
+return [{ json: { chave: pid, destino, marcar: !soAbrir && achou && waMe !== '' && String(l.status).trim() === 'pronto', agora: new Date().toISOString() } }];"""
 
 DECIDIR_PRUMO = """const id = String($('Clique (convite)').first().json.query?.id ?? '');
 const l = $input.first()?.json ?? {};
