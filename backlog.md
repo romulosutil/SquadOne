@@ -1,6 +1,6 @@
 # Backlog — SquadOne
 
-Atualizado em 12/09/2026. Objetivo da V1 de persistência: **roster de agentes + conexão OAuth sobrevivem a reinício e deploy.** Nada além disso.
+Atualizado em 12/09/2026. App OAuth do Google revisto em 30/09/2026. Objetivo da V1 de persistência: **roster de agentes + conexão OAuth sobrevivem a reinício e deploy.** Nada além disso.
 
 ---
 
@@ -31,9 +31,15 @@ Atualizado em 12/09/2026. Objetivo da V1 de persistência: **roster de agentes +
 
 | Item | Situação |
 |---|---|
-| Refresh token expira em 7 dias | Consent screen em **Externo + Testando**. Política do Google. Publicar remove o prazo. |
-| Botão "Publicar app" desabilitado | Todos os campos com `*` do Branding estão preenchidos. O bloqueio exato **não foi confirmado** — suspeita é a seção "Domínio do app" vazia. Não investigado até o fim. |
 | Persistência não testada ponta a ponta | O roster foi semeado no volume novo, mas ninguém escreveu → redeployou → conferiu que sobreviveu. |
+| Links de política do Branding não levam a uma política | Em 30/09/2026, Política de Privacidade e Termos de Serviço apontavam para a raiz do app (`https://aladdin-squadone-app.jicnzg.easypanel.host/`). Fica atrás do porteiro de IP e não é página de política. Higiene, não bloqueio: app não verificado não precisa de mais. Só pesa se o app for para verificação (ver CLAUDE.md, "Não subir logotipo"). |
+
+### Sabido e resolvido
+
+| Item | Situação |
+|---|---|
+| Refresh token expirava em 7 dias | Resolvido em 12/09/2026. App publicado: **Em produção**, tipo de usuário Externo. O prazo caiu. Conferido no console (Público-alvo) em 30/09/2026. |
+| Botão "Publicar app" desabilitado | Resolvido em 12/09/2026. Faltavam os três links da página Branding. Preenchidos, o botão liberou. Detalhes no CLAUDE.md, "O prazo de 7 dias". |
 
 ---
 
@@ -85,16 +91,9 @@ Abrir o app pelo 4G do celular (IP diferente). Deve dar **403**. Se der, a trava
 
 > Se o seu IP mudar e você se trancar do lado de fora: esvaziar `IPS_PERMITIDOS` no Easypanel e implantar.
 
-### 7. (Opcional) Tentar publicar o app
+### 7. ~~(Opcional) Tentar publicar o app~~ — feito em 12/09/2026
 
-Só se quiser matar o prazo de 7 dias.
-
-1. Abrir https://console.cloud.google.com/auth/audience?project=gen-lang-client-0086006291
-2. Ver se **"Publicar app"** está clicável. Se estiver, clicar e seguir.
-3. Se continuar desabilitado, ir na página **Branding** e preencher "Página inicial", "Política de Privacidade" e "Termos de Serviço". Voltar e tentar de novo.
-4. Se o Google exigir **domínio autorizado verificado**, aí sim precisa de domínio próprio — `easypanel.host` não é seu e não passa no Search Console.
-
-Publicar **não muda uma linha de código**. É só status.
+O app está **Em produção** desde 12/09/2026 (conferido em 30/09/2026 em https://console.cloud.google.com/auth/audience?project=gen-lang-client-0086006291). O prazo de 7 dias caiu. Não clicar em **Voltar para o teste**: reverte.
 
 ---
 
@@ -106,9 +105,9 @@ Prompts prontos para colar. Cada um é autossuficiente.
 
 > No SquadOne, quero prova de que a persistência funciona, não suposição. Escreva um teste de ponta a ponta que: (1) sobe o servidor com um `data/` temporário vazio e `seed/squad.seed.json` presente, confere que o roster foi semeado; (2) contrata alguém via `POST /api/squad/hire`; (3) derruba o processo e sobe de novo apontando para o MESMO `data/`; (4) confere que a pessoa contratada continua lá. Faça o mesmo para a credencial: grave um refresh_token falso pelo `auth-store`, reinicie, confira que `estaConectado()` continua true e que a cifra decifra. Não use mocks para o filesystem — o ponto é justamente o disco. Rode e me mostre a saída.
 
-### B. Avisar antes dos 7 dias vencerem
+### B. ~~Avisar antes dos 7 dias vencerem~~ — desnecessária
 
-> No SquadOne o refresh_token do Google expira em 7 dias enquanto o consent screen está em "Externo + Testando" (ver CLAUDE.md). Hoje o usuário só descobre quando a Mochila quebra. Faça a interface avisar antes: `server/auth-store.ts` já grava `obtidoEm` na credencial — exponha a idade dela em `GET /api/auth/status` e mostre no header do app um aviso discreto quando passar de 5 dias, com o botão de reconectar à mão. Não invente contagem regressiva exata: o prazo do Google não é garantido ao segundo.
+Desnecessária: com o app Em produção desde 12/09/2026, o refresh_token não vence mais em 7 dias, então não há prazo para avisar.
 
 ### C. Tornar o 403 do porteiro legível
 
