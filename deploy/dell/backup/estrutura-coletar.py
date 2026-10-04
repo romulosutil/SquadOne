@@ -176,9 +176,18 @@ def valores_conhecidos(home: Path) -> set:
     for p in arquivos:
         try:
             for linha in p.read_text(encoding="utf-8", errors="replace").splitlines():
-                m = re.match(rf"\s*(?:export\s+)?([\w.\-]*{_PALAVRAS}[\w.\-]*)\s*=\s*(.+)", linha, re.I)
-                if m:
+                m = re.match(r"\s*(?:export\s+)?([\w.\-]+)\s*=\s*(.+)", linha)
+                if not m:
+                    continue
+                if re.search(_PALAVRAS, m.group(1), re.I):
                     guardar(m.group(2))
+                else:
+                    # Chave sem cara de segredo (ex.: WHATSAPP_HOME_CHANNEL, o id do chat do Rômulo):
+                    # nada de .env vai para o Drive, então a prova confere todos os valores. Mais
+                    # exigente (12) e sem URL pura, que aparece de propósito nos documentos.
+                    v = m.group(2).strip().strip("\"'")
+                    if not re.fullmatch(r"https?://[^@\s]*", v):
+                        guardar(v, 12)
         except OSError:
             continue
     try:
@@ -380,8 +389,11 @@ def fonte_hermes_cron(ctx: Contexto, rel: Relatorio):
               "| Nome | Agenda | Script | Ativa | Entrega |", "|---|---|---|---|---|"]
     for j in jobs:
         agenda = j.get("schedule_display") or (j.get("schedule") or {}).get("display") or ""
+        # "whatsapp:<id do chat>@lid": o id é do Rômulo (e igual ao WHATSAPP_HOME_CHANNEL do .env do
+        # Hermes), não é para o Drive. Só a plataforma.
+        entrega = (j.get("deliver") or "").split(":", 1)[0]
         linhas.append(f"| {j.get('name', '?')} | {agenda} | {j.get('script') or '(com agente)'} | "
-                      f"{'sim' if j.get('enabled') else 'não'} | {j.get('deliver') or ''} |")
+                      f"{'sim' if j.get('enabled') else 'não'} | {entrega} |")
     return [Item("dell/hermes-cron.md", "\n".join(linhas) + "\n", "estrito", "~/.hermes/cron/jobs.json (campos escolhidos)")]
 
 
