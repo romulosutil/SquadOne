@@ -110,6 +110,8 @@ def validar(reg: dict, home: Path, origin=origin_do_git, checar_disco: bool = Tr
             erro(f"{nome}: clone-vivo precisa de repositorio")
         if p["tipo"] == "espelho" and not p["repositorio"]:
             erro(f"{nome}: espelho precisa de repositorio")
+        if "grupo" in p and not (isinstance(p["grupo"], str) and " · " in p["grupo"]):
+            erro(f"{nome}: grupo deve ser 'Frente · Parte' (ex.: Silmer · Site)")
     projetos = [p for p in projetos if all(c in p for c in OBRIGATORIOS)]
 
     # 2. Unicidade: nome, caminho, repositório (a regra "uma pasta por projeto").
@@ -198,6 +200,18 @@ def renderizar_md(reg: dict) -> str:
         "",
         "`Grafo` diz se o graphify lê a pasta. `Dono`: Rômulo edita; Hermes é a Mel mantendo sozinha.",
     ]
+    # Uma frente (ex.: Silmer) pode ter site, CRM e marketing em tipos e pastas
+    # diferentes; o mapa por frente junta tudo num lugar antes das tabelas por tipo.
+    frentes = {}
+    for p in projetos:
+        if p.get("grupo"):
+            frentes.setdefault(p["grupo"].split(" · ")[0], []).append(p)
+    for frente, doGrupo in frentes.items():
+        linhas += ["", f"## {frente}: mapa por frente", "", "| Parte | Projeto | Caminho | Repositório | Papel |", "|---|---|---|---|---|"]
+        for p in sorted(doGrupo, key=lambda x: x["grupo"]):
+            caminho = f"`{p['caminho']}`" + (" *(a criar)*" if p["estado"] == "a-criar" else "")
+            repo = f"`{p['repositorio']}`" if p["repositorio"] else "—"
+            linhas.append(f"| {p['grupo'].split(' · ', 1)[1]} | **{_celula(p['nome'])}** | {caminho} | {repo} | {_celula(p['papel'])} |")
     for tipo in TIPOS:
         grupo = [p for p in projetos if p.get("tipo") == tipo]
         if not grupo:

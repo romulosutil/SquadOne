@@ -27,7 +27,9 @@
 #   grafo        o graphify lê esta pasta? (decisão padrão; a Fase 4 aplica).
 #   papel        uma linha: para que serve.
 # Opcionais: dentro_de (nome do projeto cujo caminho contém este), worktrees,
-#   cobertura_github, observacao.
+#   cobertura_github, observacao, grupo ("Frente · Parte": o PROJETOS.md junta as
+#   entradas da mesma Frente num mapa só, ex.: Silmer · Site, Silmer · CRM,
+#   Silmer · Marketing).
 
 [geral]
 # Pastas de topo da home que não são projeto (as do sistema e do snap).
@@ -69,8 +71,9 @@ dono = "Rômulo"
 estado = "existe"
 grafo = true
 worktrees = ["~/crm-silmer-wt/tecnica-e-arte"]
-papel = "O CRM do cliente Silmer (branch master). Os worktrees de ~/crm-silmer-wt são deste mesmo repositório."
-observacao = "Repositório PÚBLICO no GitHub: nunca dar push de segredo nem de dado de cliente. A branch fix/inbox-live-tests tem 1 commit só local, num worktree em /tmp (efêmero): a Fase 3 guarda um git bundle."
+grupo = "Silmer · CRM"
+papel = "O CRM do cliente Silmer (branch master; banco no container crm-silmer-postgres, porta 5434 na tailnet). Os worktrees de ~/crm-silmer-wt são deste mesmo repositório."
+observacao = "Repositório PÚBLICO no GitHub: nunca dar push de segredo nem de dado de cliente. Em 04/10 havia 46 commits em 12 branches locais que o GitHub não tem (30/09 a 03/10: ficha v3, itens do pedido, inbox, bot do n8n, RFC 006); nada foi enviado. Backup: ~/Arquivo/2026-10-04/crm-silmer-todas-as-branches.bundle. Decidir se o repositório continua público antes de publicar."
 
 # ---------------------------------------------------------------------------
 # Pastas sem Git (ou sem repositório próprio). Os serviços do Dell dependem do
@@ -148,8 +151,22 @@ tipo = "pasta"
 dono = "Rômulo"
 estado = "existe"
 grafo = false
-papel = "Marketing do cliente Silmer, sincronizado nos dois sentidos com o Drive a cada 5 minutos (silmer-drive-sync)."
-observacao = "A pasta .git da raiz está vazia: não é repositório. Mover exige rclone bisync --resync; deixar por último. Dentro dela há um repositório Git de verdade, silmer-calendario-mobile (1 commit de 01/10, sem remoto, só dist/ e .openai/, não existe no GitHub), e o bisync o leva ao Drive junto com o .git: contraria a regra de nunca ter Git em pasta sincronizada. Decisão do Rômulo (tirar o .git de lá ou mover o projeto), nada feito."
+grupo = "Silmer · Marketing"
+papel = "Marketing do cliente Silmer (marca, planejamento do Instagram, conteúdo por mês, relatório de Meta Ads, vídeos), sincronizado nos dois sentidos com o Drive a cada 5 minutos (silmer-drive-sync)."
+observacao = "A pasta .git da raiz está vazia: não é repositório. Mover a raiz exige rclone bisync --resync; deixar por último. Em 04/10 tinha 41 grupos de arquivos idênticos (114 MB repetidos, sobretudo os posts da política em 3 cópias) e 4 imagens em .sync-conflicts; organização proposta em ~/PRUMO/SILMER.md, ainda não aplicada (mexe no Drive)."
+
+[[projeto]]
+nome = "silmer-calendario-mobile"
+caminho = "~/Silmer/silmer-calendario-mobile"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+dentro_de = "Silmer"
+grupo = "Silmer · Marketing"
+papel = "Página estática do calendário de Instagram de outubro (dist/ com o PDF). Só o resultado publicado; sem código-fonte."
+observacao = "Tem um .git de verdade (1 commit, 4 arquivos) dentro da pasta sincronizada com o Drive, o que contraria a regra de nunca ter Git ali. O commit foi enviado em 04/10 ao repositório PRIVADO romulosutil/silmer-calendario-mobile (sem gravar remoto no .git da pasta). Falta tirar o .git daqui, junto com a organização do ~/Silmer."
 
 [[projeto]]
 nome = "workspace"
@@ -195,7 +212,7 @@ dono = "Rômulo"
 estado = "existe"
 grafo = false
 papel = "Réplica de 25/09 do PC antigo. Contém aladdin, iris, portfolio, espectro, port, Silmer, crm-silmer, agent-context e agent-context+."
-observacao = "Quem tem GitHub (Aladdin, Iris, espectro, product_designer, silmer-web) entra pelo espelho Git. O .git do espectro está corrompido: não rodar comando git que escreva nele. A Fase 3 arquiva port, espectro, crm-silmer e Silmer em ~/Arquivo."
+observacao = "Quem tem GitHub (Aladdin, Iris, espectro, product_designer, silmer-web) entra pelo espelho Git. O .git do espectro está corrompido (o do iris também perdeu objetos): não rodar comando git que escreva neles. A Fase 3 arquivou tudo em ~/Arquivo/2026-10-04 (port, espectro, aladdin, iris, portfolio, Silmer e crm-silmer). Conferido em 04/10: o código local de espectro, aladdin, iris e portfolio é igual ao do GitHub (a diferença era só CRLF)."
 
 [[projeto]]
 nome = "Corporativo-dev"
@@ -318,6 +335,37 @@ estado = "existe"
 grafo = true
 dentro_de = "Corporativo-dev"
 papel = "Corp: landpage com CMS da P4F. Não existe no GitHub."
+
+# ---------------------------------------------------------------------------
+# Silmer · Site: dois repositórios, que são projetos diferentes (1% dos arquivos
+# em comum). O CRM e o marketing do Silmer estão nas seções acima.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "silmer-web"
+caminho = "~/Mel/Repos/silmer-web"
+repositorio = "romulosutil/silmer-web"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+grupo = "Silmer · Site"
+papel = "O site atual da Silmer (monorepo: apps, packages, design tokens, Meta Pixel; último push 23/09). Privado."
+observacao = "Onde o site é hospedado e quem publica: conferir (o registro não afirma). ~/Pessoal-dev/Silmer é o workspace antigo dele: 66% dos arquivos em comum e 57 só locais (social/, crm/, post/, docs/, historico-datacrazy/, _tmp_certificado), arquivado em ~/Arquivo/2026-10-04/Pessoal-dev-Silmer.tar.zst."
+
+[[projeto]]
+nome = "silmer-legado"
+caminho = "~/Mel/Repos/Silmer"
+repositorio = "romulosutil/Silmer"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = false
+dentro_de = "Mel/Repos"
+grupo = "Silmer · Site"
+papel = "Site antigo (React/Vite, último push 27/04/2026). Outro projeto, não o silmer-web. Fica como histórico; privado."
+observacao = "A pasta se chama Silmer, igual a ~/Silmer (marketing): num sistema sem distinção de maiúsculas elas colidem. Por isso o nome do registro é silmer-legado e ele fica fora do grafo."
 
 # ---------------------------------------------------------------------------
 # Áreas da Mel: nascem nas fases 4 e 6. Tudo que a Mel gerencia sozinha mora aqui.

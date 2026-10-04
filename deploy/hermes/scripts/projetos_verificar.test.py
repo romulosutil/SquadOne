@@ -164,6 +164,26 @@ class Documento(unittest.TestCase):
         self.assertIn("`Downloads`", md)
         self.assertNotIn("## Congelados", md)  # grupo vazio não aparece
 
+    def test_md_tem_mapa_por_frente(self):
+        reg = {"projeto": [
+            proj("crm", "~/crm", tipo="clone-vivo", repositorio="o/crm", grupo="Silmer · CRM"),
+            proj("site", "~/Mel/Repos/site", tipo="espelho", repositorio="o/site", estado="a-criar", grupo="Silmer · Site"),
+            proj("avulso", "~/x"),
+        ]}
+        md = pv.renderizar_md(reg)
+        self.assertIn("## Silmer: mapa por frente", md)
+        self.assertLess(md.index("mapa por frente"), md.index("## Clones vivos"))  # o mapa vem antes das tabelas por tipo
+        self.assertEqual(md.count("## Silmer: mapa por frente"), 1)  # uma frente, uma seção
+        self.assertIn("| CRM | **crm** |", md)
+        self.assertIn("| Site | **site** | `~/Mel/Repos/site` *(a criar)*", md)
+        self.assertNotIn("avulso**", md.split("## Clones vivos")[0])  # sem grupo, fora do mapa
+
+    def test_grupo_precisa_de_frente_e_parte(self):
+        def erros(p):
+            return [m for n, m in pv.validar({"projeto": [p]}, Path("/home/x"), checar_disco=False) if n == "erro"]
+        self.assertTrue(any("grupo deve ser" in m for m in erros(proj("a", "~/a", grupo="Silmer"))))
+        self.assertEqual(erros(proj("a", "~/a", grupo="Silmer · CRM")), [])
+
     def test_registro_real_tem_estrutura_valida(self):
         """O projetos.toml versionado: campos, valores, unicidade e aninhamento.
         Sem olhar o disco (o Dell é que sabe se as pastas existem)."""
