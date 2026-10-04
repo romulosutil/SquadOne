@@ -39,6 +39,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -212,7 +213,43 @@ def flags_rclone(g: dict, nivel: str = "NOTICE") -> list[str]:
             "--stats", "0", "--stats-one-line", "--stats-log-level", "NOTICE", "--log-level", nivel]
 
 
+def remoto_do(g: dict, f: dict) -> str:
+    """Remote do bloco. Sem `remoto` próprio vale o de [geral]: os blocos antigos
+    não mudam."""
+    return f.get("remoto", g["remoto"])
+
+
+def lixeira_do(g: dict, f: dict) -> str:
+    return f.get("lixeira", g["lixeira"])
+
+
+def no_remoto(remoto: str, *partes: str) -> str:
+    """remoto:a/b, sem barra sobrando quando o destino é a raiz do remote
+    (destino = "")."""
+    return f"{remoto}:" + "/".join(p.strip("/") for p in partes if p and p.strip("/"))
+
+
+def dentro_da_janela(janela, t: dt.datetime) -> bool:
+    """janela = ["04:00", "06:00"]: o bloco só roda quando o relógio está nela
+    (o timer do espelho é de hora em hora; assim um bloco diário cai de madrugada).
+    Sem janela, sempre. Janela que atravessa a meia-noite também vale."""
+    if not janela:
+        return True
+    ini, fim = (dt.datetime.strptime(x, "%H:%M").time() for x in janela)
+    agora_t = t.time()
+    return ini <= agora_t <= fim if ini <= fim else (agora_t >= ini or agora_t <= fim)
+
+
 def filtros(f: dict) -> list[str]:
+    if f.get("incluir"):
+        # Só o que casa com `incluir` é espelhado; o resto do destino fica intocado (nem
+        # copia, nem apaga). É o que deixa um bloco morar na raiz de uma pasta que tem coisas
+        # do dono, e a lixeira ficar dentro dela sem sobrepor o destino. Com --filter a ordem
+        # é a escrita (a primeira regra que casa vale); misturar --include e --exclude o rclone
+        # avisa que tem ordem indefinida, e o "- /LEIA-ME.txt" precisa ganhar.
+        regras = ["- /LEIA-ME.txt", *[f"- {e}" for e in f.get("excluir", [])],
+                  *[f"+ {i}" for i in f["incluir"]], "- **"]
+        return [x for r in regras for x in ("--filter", r)]
     out = ["--exclude", "/LEIA-ME.txt"]  # escrito aqui, não existe na origem; excluído não é apagado
     for e in f.get("excluir", []):
         out += ["--exclude", e]
@@ -226,15 +263,15 @@ def garantir_leia_me(g: dict, f: dict) -> None:
     h = hashlib.sha256(texto.encode()).hexdigest()[:12]
     if ler_status().get("fontes", {}).get(f["id"], {}).get("leia_me") == h:
         return
-    r = rodar(["rclone", "rcat", f"{g['remoto']}:{f['destino']}/LEIA-ME.txt"], input=texto + "\n", timeout=120)
+    r = rodar(["rclone", "rcat", no_remoto(remoto_do(g, f), f["destino"], "LEIA-ME.txt")], input=texto + "\n", timeout=120)
     if r.returncode == 0:
         registrar(f["id"], leia_me=h)
 
 
-def limpar_lixeira(g: dict, fid: str) -> str:
+def limpar_lixeira(g: dict, f: dict) -> str:
     """Apaga pela data no nome da pasta: o arquivo movido para a lixeira
     mantém a data de modificação original, então --min-age apagaria na hora."""
-    base = f"{g['remoto']}:{g['lixeira']}/{fid}"
+    base = no_remoto(remoto_do(g, f), lixeira_do(g, f), f["id"])
     r = rodar(["rclone", "lsf", "--dirs-only", base], timeout=300)
     if r.returncode != 0:
         return "lixeira ainda vazia" if "not found" in (r.stderr or "").lower() else f"lixeira: {ultima_linha(r.stderr)}"
@@ -253,7 +290,7 @@ def limpar_lixeira(g: dict, fid: str) -> str:
 
 def verificar_espelho(g: dict, f: dict) -> str:
     """Compara origem e Drive por MD5 sem baixar nada."""
-    r = rodar(["rclone", "check", exp(f["origem"]), f"{g['remoto']}:{f['destino']}", "--one-way",
+    r = rodar(["rclone", "check", exp(f["origem"]), no_remoto(remoto_do(g, f), f["destino"]), "--one-way",
                "--fast-list", "--tpslimit", "8", *filtros(f), "--log-level", "NOTICE"], timeout=3600)
     if r.returncode == 0:
         return "ok"
@@ -264,14 +301,26 @@ def verificar_espelho(g: dict, f: dict) -> str:
 def espelho_uma(g: dict, f: dict, a: argparse.Namespace) -> bool:
     fid = f["id"]
     origem = Path(exp(f["origem"]))
-    destino = f"{g['remoto']}:{f['destino']}"
-    base = {"tipo": "espelho", "nome": f.get("nome", fid), "destino": f["destino"],
+    destino = no_remoto(remoto_do(g, f), f["destino"])
+    base = {"tipo": "espelho", "nome": f.get("nome", fid), "destino": f["destino"] or "(raiz)",
             "atencao_h": f.get("atencao_h", 3), "falha_h": f.get("falha_h", 24)}
     st = ler_status().get("fontes", {}).get(fid, {})
     idade = idade_h(st.get("ultimo_sucesso"))
     if not (a.forcar or a.dry_run) and idade is not None and idade < f.get("intervalo_h", 1) - 0.1:
         return True
     t = agora()
+    if not (a.forcar or a.dry_run) and not dentro_da_janela(f.get("janela"), t):
+        return True  # vencido, mas fora da janela do bloco: a hora certa tenta
+    # Preparo: comandos que deixam a origem fresca antes de sincronizar (ex.: o
+    # coletor da Estrutura). Falhou, não sincroniza: melhor o Drive velho do que
+    # um espelho de uma origem pela metade.
+    for cmd in f.get("preparo", []):
+        rp = rodar([exp(p) for p in shlex.split(cmd)], timeout=f.get("preparo_timeout_s", 900))
+        if rp.returncode != 0:
+            detalhe = f"Preparo falhou ({shlex.split(cmd)[-1]}): {ultima_linha((rp.stderr or '') + (rp.stdout or ''))}"
+            registrar(fid, **base, estado="falha", ultima_tentativa=iso(t), detalhe=detalhe)
+            log(f"{fid}: FALHA — {detalhe}")
+            return False
     if not (origem / f["sentinela"]).is_file():
         # Origem sem o arquivo de sempre: pasta vazia ou desmontada. Sincronizar
         # apagaria o espelho inteiro.
@@ -286,7 +335,7 @@ def espelho_uma(g: dict, f: dict, a: argparse.Namespace) -> bool:
                       detalhe=f"Adiado: {adiar['arquivo']} recente (o gerador está escrevendo).")
             log(f"{fid}: adiado ({adiar['arquivo']} recente)")
             return True
-    lixeira = f"{g['remoto']}:{g['lixeira']}/{fid}/{t:%Y-%m-%dT%H}"
+    lixeira = no_remoto(remoto_do(g, f), lixeira_do(g, f), fid, f"{t:%Y-%m-%dT%H}")
     max_apagar = "-1" if a.sem_limite else str(f.get("max_apagar", 500))
     cmd = ["rclone", "sync", str(origem), destino, "--backup-dir", lixeira, "--max-delete", max_apagar,
            *flags_rclone(g, "INFO" if a.dry_run else "NOTICE"), *filtros(f)]
@@ -316,7 +365,7 @@ def espelho_uma(g: dict, f: dict, a: argparse.Namespace) -> bool:
     garantir_leia_me(g, f)
     st = ler_status().get("fontes", {}).get(fid, {})
     if (idade_h(st.get("ultima_limpeza")) or 1e9) > 20:
-        registrar(fid, ultima_limpeza=iso(agora()), limpeza=limpar_lixeira(g, fid))
+        registrar(fid, ultima_limpeza=iso(agora()), limpeza=limpar_lixeira(g, f))
     if (idade_h(st.get("ultima_verificacao")) or 1e9) > 7 * DIA:
         v = verificar_espelho(g, f)
         registrar(fid, ultima_verificacao=iso(agora()), verificacao=v)
@@ -634,12 +683,16 @@ def iniciar(m: dict, a: argparse.Namespace) -> int:
     about = json.loads(r.stdout)
     livre = (about.get("total", 0) - about.get("used", 0)) / 1e9 if about.get("total") else None
     print(f"Drive: {about.get('used', 0) / 1e9:.1f} GB usados" + (f", {livre:.1f} GB livres" if livre is not None else ""))
-    pastas = [f["destino"] for f in m.get("espelho", [])] + [g["lixeira"]]
+    # (remote, pasta): cada bloco pode ter o seu remote; a raiz de um remote (destino = "") já existe.
+    pastas = []
+    for f in m.get("espelho", []):
+        pastas += [(remoto_do(g, f), p) for p in (f["destino"], lixeira_do(g, f)) if p.strip("/")]
+    pastas.append((g["remoto"], g["lixeira"]))
     repo_rclone = c["repositorio"].removeprefix("rclone:")
-    pastas.append(repo_rclone.split(":", 1)[1].rsplit("/", 1)[0])
-    for p in pastas:
-        rr = rodar(["rclone", "mkdir", f"{g['remoto']}:{p}"], timeout=120)
-        print(("ok    " if rr.returncode == 0 else "ERRO  ") + p)
+    pastas.append((g["remoto"], repo_rclone.split(":", 1)[1].rsplit("/", 1)[0]))
+    for remoto, p in dict.fromkeys(pastas):
+        rr = rodar(["rclone", "mkdir", no_remoto(remoto, p)], timeout=120)
+        print(("ok    " if rr.returncode == 0 else "ERRO  ") + f"{remoto}:{p}")
     senha = Path(exp(c["senha"]))
     CONF.mkdir(parents=True, exist_ok=True, mode=0o700)
     if restic(["cat", "config"], c, timeout=300).returncode == 0:

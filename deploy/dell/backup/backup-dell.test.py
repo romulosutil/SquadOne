@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Testes do que o backup-dell ganhou para o bloco da Estrutura: remote e
+lixeira por bloco, `incluir`, `janela` e `preparo`. E, o mais importante, que o
+bloco ANTIGO (sem nada disso) se comporta como antes. Tudo com `rodar` falso e
+numa pasta de estado temporária: não chama rclone e não toca o status.json do Dell.
+
+  python3 deploy/dell/backup/backup-dell.test.py
+"""
+import argparse
+import datetime as dt
+import importlib.util
+import json
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+AQUI = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location("backup_dell", AQUI / "backup-dell.py")
+bd = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bd)
+
+GERAL = {"remoto": "gdrive", "lixeira": "PRUMO/_lixeira", "lixeira_dias": 30, "banda": "off"}
+
+
+def ok(out="", err=""):
+    return SimpleNamespace(returncode=0, stdout=out, stderr=err)
+
+
+def falha(rc=1, err="deu ruim"):
+    return SimpleNamespace(returncode=rc, stdout="", stderr=err)
+
+
+class Helpers(unittest.TestCase):
+    def test_no_remoto(self):
+        self.assertEqual(bd.no_remoto("gdrive", "PRUMO/Sites antes da venda"), "gdrive:PRUMO/Sites antes da venda")
+        self.assertEqual(bd.no_remoto("gdrive-estrutura", ""), "gdrive-estrutura:")          # raiz do remote
+        self.assertEqual(bd.no_remoto("gdrive-estrutura", "", "LEIA-ME.txt"), "gdrive-estrutura:LEIA-ME.txt")
+        self.assertEqual(bd.no_remoto("r", "/_lixeira/", "estrutura", "2026-10-04T04"), "r:_lixeira/estrutura/2026-10-04T04")
+
+    def test_remoto_e_lixeira_do_bloco_com_padrao_do_geral(self):
+        antigo = {"id": "sites", "destino": "PRUMO/Sites"}
+        novo = {"id": "estrutura", "destino": "", "remoto": "gdrive-estrutura", "lixeira": "_lixeira"}
+        self.assertEqual((bd.remoto_do(GERAL, antigo), bd.lixeira_do(GERAL, antigo)), ("gdrive", "PRUMO/_lixeira"))
+        self.assertEqual((bd.remoto_do(GERAL, novo), bd.lixeira_do(GERAL, novo)), ("gdrive-estrutura", "_lixeira"))
+
+    def test_filtros_sem_incluir_ficam_como_antes(self):
+        self.assertEqual(bd.filtros({"excluir": ["/.logs/**"]}), ["--exclude", "/LEIA-ME.txt", "--exclude", "/.logs/**"])
+
+    def test_filtros_com_incluir_usam_filter_ordenado(self):
+        f = bd.filtros({"incluir": ["/dell/**", "/pc/**"], "excluir": ["*.parcial"]})
+        regras = [f[i + 1] for i, x in enumerate(f) if x == "--filter"]
+        # o LEIA-ME vem primeiro (o que o rclone escreve fica fora do sync, nem copiado nem apagado),
+        # depois os excluir, depois os incluir, e por fim "tudo o mais fora"
+        self.assertEqual(regras, ["- /LEIA-ME.txt", "- *.parcial", "+ /dell/**", "+ /pc/**", "- **"])
+        self.assertNotIn("--include", f)      # misturar --include e --exclude tem ordem indefinida no rclone
+        self.assertNotIn("--exclude", f)
+
+    def test_janela(self):
+        h = lambda x: dt.datetime(2026, 10, 4, int(x[:2]), int(x[3:]))
+        self.assertTrue(bd.dentro_da_janela(None, h("15:00")))
+        self.assertTrue(bd.dentro_da_janela(["04:00", "06:00"], h("04:05")))
+        self.assertFalse(bd.dentro_da_janela(["04:00", "06:00"], h("15:05")))
+        self.assertTrue(bd.dentro_da_janela(["23:00", "02:00"], h("23:30")))   # atravessa a meia-noite
+        self.assertTrue(bd.dentro_da_janela(["23:00", "02:00"], h("01:00")))
+        self.assertFalse(bd.dentro_da_janela(["23:00", "02:00"], h("12:00")))
+
+
+class Espelho(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.estado, self.estado_antigo, self.status_antigo = self.d / "estado", bd.ESTADO, bd.STATUS
+        bd.ESTADO, bd.STATUS = self.estado, self.estado / "status.json"
+        self.rodar_antigo = bd.rodar
+        self.cmds = []
+        self.respostas = {}        # prefixo do comando -> resposta
+        bd.rodar = self.falso
+        self.origem = self.d / "origem"
+        (self.origem / "dell").mkdir(parents=True)
+        (self.origem / "dell/MANIFESTO.md").write_text("manifesto")
+        self.a = argparse.Namespace(forcar=False, dry_run=False, sem_limite=False)
+
+    def tearDown(self):
+        bd.rodar, bd.ESTADO, bd.STATUS = self.rodar_antigo, self.estado_antigo, self.status_antigo
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def falso(self, cmd, env=None, timeout=None, **kw):
+        self.cmds.append(list(cmd))
+        for prefixo, r in self.respostas.items():
+            if " ".join(cmd).startswith(prefixo):
+                return r
+        return ok("2026/10/04 NOTICE: Transferred: 3 / 3, 100%")
+
+    def sync(self):
+        return [c for c in self.cmds if c[:2] == ["rclone", "sync"]]
+
+    def bloco_estrutura(self, **extra):
+        f = {"id": "estrutura", "nome": "Estrutura", "origem": str(self.origem), "destino": "",
+             "remoto": "gdrive-estrutura", "lixeira": "_lixeira", "incluir": ["/dell/**", "/pc/**"],
+             "intervalo_h": 24, "atencao_h": 30, "falha_h": 72, "sentinela": "dell/MANIFESTO.md", "max_apagar": 40}
+        f.update(extra)
+        return f
+
+    def estado_de(self, fid):
+        return json.loads((self.estado / "status.json").read_text())["fontes"][fid]
+
+    def test_bloco_novo_sincroniza_no_remote_dele_com_lixeira_propria(self):
+        self.assertTrue(bd.espelho_uma(GERAL, self.bloco_estrutura(), self.a))
+        cmd = self.sync()[0]
+        self.assertEqual(cmd[3], "gdrive-estrutura:")
+        i = cmd.index("--backup-dir")
+        self.assertRegex(cmd[i + 1], r"^gdrive-estrutura:_lixeira/estrutura/\d{4}-\d\d-\d\dT\d\d$")
+        self.assertEqual(cmd[cmd.index("--max-delete") + 1], "40")
+        regras = [cmd[i + 1] for i, x in enumerate(cmd) if x == "--filter"]
+        self.assertEqual(regras, ["- /LEIA-ME.txt", "+ /dell/**", "+ /pc/**", "- **"])
+        self.assertEqual(self.estado_de("estrutura")["estado"], "ok")
+        self.assertEqual(self.estado_de("estrutura")["destino"], "(raiz)")
+
+    def test_bloco_antigo_continua_igual(self):
+        antigo = {"id": "sites", "nome": "Sites", "origem": str(self.origem), "destino": "PRUMO/Sites antes da venda",
+                  "sentinela": "dell/MANIFESTO.md", "intervalo_h": 1, "max_apagar": 500}
+        self.assertTrue(bd.espelho_uma(GERAL, antigo, self.a))
+        cmd = self.sync()[0]
+        self.assertEqual(cmd[3], "gdrive:PRUMO/Sites antes da venda")
+        self.assertRegex(cmd[cmd.index("--backup-dir") + 1], r"^gdrive:PRUMO/_lixeira/sites/")
+        self.assertNotIn("--include", cmd)
+        self.assertNotIn("--filter", cmd)     # o bloco antigo segue com --exclude, igual a antes
+        self.assertEqual(cmd[cmd.index("--max-delete") + 1], "500")
+
+    def test_fora_da_janela_nao_roda_e_no_forcar_roda(self):
+        f = self.bloco_estrutura(janela=["04:00", "06:00"])
+        agora_antigo = bd.agora
+        bd.agora = lambda: dt.datetime(2026, 10, 4, 15, 5).astimezone()
+        try:
+            self.assertTrue(bd.espelho_uma(GERAL, f, self.a))
+            self.assertEqual(self.sync(), [])
+            self.a.forcar = True
+            self.assertTrue(bd.espelho_uma(GERAL, f, self.a))
+            self.assertEqual(len(self.sync()), 1)
+        finally:
+            bd.agora = agora_antigo
+
+    def test_preparo_roda_antes_do_sync(self):
+        f = self.bloco_estrutura(preparo=["systemctl --user start estrutura-coletar.service"])
+        self.assertTrue(bd.espelho_uma(GERAL, f, self.a))
+        nomes = [c[0] for c in self.cmds]
+        self.assertLess(nomes.index("systemctl"), nomes.index("rclone"))
+        self.assertEqual(self.cmds[0], ["systemctl", "--user", "start", "estrutura-coletar.service"])
+
+    def test_preparo_que_falha_nao_sincroniza_e_vira_falha(self):
+        self.respostas["systemctl"] = falha(1, "FALHOU: valor conhecido ou padrão de segredo em: dell/x")
+        f = self.bloco_estrutura(preparo=["systemctl --user start estrutura-coletar.service"])
+        self.assertFalse(bd.espelho_uma(GERAL, f, self.a))
+        self.assertEqual(self.sync(), [])
+        st = self.estado_de("estrutura")
+        self.assertEqual(st["estado"], "falha")
+        self.assertIn("Preparo falhou", st["detalhe"])
+        self.assertIn("FALHOU", st["detalhe"])
+
+    def test_sentinela_ausente_para_antes_do_sync(self):
+        (self.origem / "dell/MANIFESTO.md").unlink()
+        self.assertFalse(bd.espelho_uma(GERAL, self.bloco_estrutura(), self.a))
+        self.assertEqual(self.sync(), [])
+        self.assertIn("não sincronizei", self.estado_de("estrutura")["detalhe"])
+
+    def test_intervalo_ainda_nao_venceu(self):
+        bd.registrar("estrutura", ultimo_sucesso=bd.iso(bd.agora()))
+        self.assertTrue(bd.espelho_uma(GERAL, self.bloco_estrutura(), self.a))
+        self.assertEqual(self.cmds, [])
+
+    def test_leia_me_e_lixeira_usam_o_remote_do_bloco(self):
+        f = self.bloco_estrutura(leia_me="Espelho da Estrutura.")
+        bd.espelho_uma(GERAL, f, self.a)
+        rcat = [c for c in self.cmds if c[:2] == ["rclone", "rcat"]][0]
+        self.assertEqual(rcat[2], "gdrive-estrutura:LEIA-ME.txt")           # sem barra sobrando na raiz
+        lsf = [c for c in self.cmds if c[:2] == ["rclone", "lsf"]][0]
+        self.assertEqual(lsf[-1], "gdrive-estrutura:_lixeira/estrutura")
+
+    def test_verificar_espelho_usa_filtros_e_remote_do_bloco(self):
+        bd.verificar_espelho(GERAL, self.bloco_estrutura())
+        chk = [c for c in self.cmds if c[:2] == ["rclone", "check"]][0]
+        self.assertEqual(chk[3], "gdrive-estrutura:")
+        self.assertIn("--filter", chk)
+
+
+if __name__ == "__main__":
+    unittest.main()
