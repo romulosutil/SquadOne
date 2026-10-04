@@ -1,0 +1,404 @@
+# Registro de projetos da Mel: um caminho canônico por projeto.
+#
+# É a fonte para as máquinas (o Hermes lê este arquivo). A versão para humanos,
+# ~/PRUMO/PROJETOS.md, é GERADA daqui, então as duas nunca divergem:
+#   python3 deploy/hermes/scripts/projetos_verificar.py --md > ~/PRUMO/PROJETOS.md
+# Para conferir (caminhos, duplicatas, origin dos clones, pastas fora do registro):
+#   python3 deploy/hermes/scripts/projetos_verificar.py
+#
+# Regras, para qualquer agente (Claude, Codex, Hermes), no Dell e no PC:
+# 1. Antes de criar pasta ou clonar, leia este registro. Se o projeto existe,
+#    trabalhe nele; nada de "outra cópia ao lado".
+# 2. Projeto novo entra aqui primeiro. Só depois nasce a pasta.
+# 3. Cópia de leitura é "espelho" (tipo abaixo) e ninguém edita nela.
+# 4. Para guardar uma versão, use ~/Arquivo/<AAAA-MM-DD>, nunca uma pasta ao lado.
+#
+# Campos de cada [[projeto]]:
+#   nome         chave única (para quem não é pasta do disco, o nome no grafo).
+#   caminho      único no registro. "~/" é a home do Dell.
+#   repositorio  "dono/nome" no GitHub; "" se não há; "dono/*" para uma área
+#                que guarda vários espelhos.
+#   tipo         clone-vivo (Git atualizado do GitHub, o Dell opera);
+#                espelho (clone raso do Hermes, ninguém edita);
+#                pasta (sem Git, ou sem repositório próprio);
+#                congelado (réplica antiga do PC, só consulta).
+#   dono         Rômulo (edita) ou Hermes (a Mel mantém sozinha).
+#   estado       existe | a-criar (a pasta nasce numa fase futura).
+#   grafo        o graphify lê esta pasta? (decisão padrão; a Fase 4 aplica).
+#   papel        uma linha: para que serve.
+# Opcionais: dentro_de (nome do projeto cujo caminho contém este), worktrees,
+#   cobertura_github, observacao, grupo ("Frente · Parte": o PROJETOS.md junta as
+#   entradas da mesma Frente num mapa só, ex.: Silmer · Site, Silmer · CRM,
+#   Silmer · Marketing).
+
+[geral]
+# Pastas de topo da home que não são projeto (as do sistema e do snap).
+home_ignorar = [
+  "Documentos", "Downloads", "Imagens", "Modelos", "Músicas", "Público",
+  "Vídeos", "Área de trabalho", "snap",
+]
+
+# ---------------------------------------------------------------------------
+# Clones vivos: Git atualizado do GitHub. Edita-se por worktree e pull request.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "SquadOne"
+caminho = "~/SquadOne"
+repositorio = "romulosutil/SquadOne"
+tipo = "clone-vivo"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+papel = "Código da Central, dos agentes, do Hermes e dos scripts do Dell. É o checkout que a Central roda: não editar nem trocar de branch aqui; trabalhar num worktree (~/.cache/mel-work/SquadOne) e entregar por pull request."
+
+[[projeto]]
+nome = "prumo"
+caminho = "~/prumo"
+repositorio = "romulosutil/prumo"
+tipo = "clone-vivo"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+papel = "O método, a marca, as propostas e os modelos do PRUMO (aparece no Drive como PRUMO/Consultoria)."
+
+[[projeto]]
+nome = "crm-silmer"
+caminho = "~/crm-silmer"
+repositorio = "romulosutil/crm-silmer"
+tipo = "clone-vivo"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+worktrees = ["~/crm-silmer-wt/tecnica-e-arte"]
+grupo = "Silmer · CRM"
+papel = "O CRM do cliente Silmer (branch master; banco no container crm-silmer-postgres, porta 5434 na tailnet). Os worktrees de ~/crm-silmer-wt são deste mesmo repositório."
+observacao = "Repositório PÚBLICO no GitHub: nunca dar push de segredo nem de dado de cliente. Em 04/10 havia 46 commits em 12 branches locais que o GitHub não tem (30/09 a 03/10: ficha v3, itens do pedido, inbox, bot do n8n, RFC 006); nada foi enviado. Backup: ~/Arquivo/2026-10-04/crm-silmer-todas-as-branches.bundle (17 branches, com .sha256). Para o PC trazer tudo sem publicar: scp do bundle e git clone dele, depois git remote set-url origin para o GitHub. Decidir se o repositório continua público antes de publicar."
+
+# ---------------------------------------------------------------------------
+# Pastas sem Git (ou sem repositório próprio). Os serviços do Dell dependem do
+# caminho: não mover nem renomear.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "auto-site"
+caminho = "~/auto-site"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+papel = "A esteira Site antes da venda: uma pasta por lead, com o site gerado. Backup: espelho de hora em hora no Drive (PRUMO/Sites antes da venda)."
+observacao = "O n8n, o gerador e o observador escrevem aqui. O CLAUDE.md da raiz é a sentinela do backup: sem ele a rodada para."
+
+[[projeto]]
+nome = "prumo-entregas"
+caminho = "~/prumo-entregas"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Rascunhos do Mapa gerados quando um diagnóstico fecha."
+observacao = "Dado de cliente: fica fora do Git e fora do grafo."
+
+[[projeto]]
+nome = "licitacoes-automation"
+caminho = "~/licitacoes-automation"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "O n8n do Dell (Docker) e o coletor do PNCP, com os fluxos exportados."
+observacao = "Os fluxos só existem aqui e no cofre do backup. Se entra no grafo, decidir na Fase 4."
+
+[[projeto]]
+nome = "prumo-automation"
+caminho = "~/prumo-automation"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Fluxos antigos do PRUMO; o n8n ainda monta esta pasta, então fica."
+
+[[projeto]]
+nome = "Licitacoes"
+caminho = "~/Licitacoes"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Dossiês de edital da R SUTIL CORREA LTDA."
+
+[[projeto]]
+nome = "renda-2026"
+caminho = "~/renda-2026"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Notas da operação de receita; o Hermes lê às segundas."
+
+[[projeto]]
+nome = "Silmer"
+caminho = "~/Silmer"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+grupo = "Silmer · Marketing"
+papel = "Marketing do cliente Silmer (marca, planejamento do Instagram, conteúdo por mês, relatório de Meta Ads, vídeos), sincronizado nos dois sentidos com o Drive a cada 5 minutos (silmer-drive-sync)."
+observacao = "A pasta tem mapa e regras próprios no AGENTS.md dela, que mandam NÃO mover nem renomear (roteiros e o sincronismo dependem dos caminhos): a estrutura não foi mexida. As cópias Politica/ e drive-download-…/ (parte dos 114 MB repetidos em 41 grupos de arquivos idênticos) são conhecidas e estão documentadas lá, e o .sync-conflicts também é para não mexer. .git, .agents e .codex são vazios (sandbox do Codex) e ficam fora do sincronismo. Mover a raiz exigiria rclone bisync --resync (--max-delete 10 é em porcentagem): só com ordem do Rômulo."
+
+[[projeto]]
+nome = "silmer-calendario-mobile"
+caminho = "~/Silmer/silmer-calendario-mobile"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+dentro_de = "Silmer"
+grupo = "Silmer · Marketing"
+papel = "Página estática do calendário de Instagram de outubro (dist/ com o PDF). Só o resultado publicado; sem código-fonte."
+observacao = "Tem um .git de verdade (1 commit, 4 arquivos), mas o sincronismo exclui **/.git/**, então ele não vai ao Drive. O AGENTS.md do ~/Silmer manda não mexer nesta pasta. O commit foi enviado em 04/10 ao repositório PRIVADO romulosutil/silmer-calendario-mobile (push direto pela URL, sem gravar remoto no .git daqui)."
+
+[[projeto]]
+nome = "workspace"
+caminho = "~/workspace"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "infra-docker (os bancos dos projetos), moneyprinterturbo e os agentes. Os containers dependem do caminho."
+observacao = "Não mexer em infra-docker sem ordem do Rômulo. Se entra no grafo, decidir na Fase 4."
+
+[[projeto]]
+nome = "PRUMO"
+caminho = "~/PRUMO"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Índice: atalhos para as pastas de verdade, com os nomes do Drive, mais o LEIA-ME, o MANIFESTO e este registro."
+
+[[projeto]]
+nome = "Arquivo"
+caminho = "~/Arquivo"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Guardado por via das dúvidas, uma pasta por data (~/Arquivo/AAAA-MM-DD). Descarte vai para a lixeira, nunca rm."
+
+# ---------------------------------------------------------------------------
+# Réplicas congeladas do PC que queimou (25/09/2026). Só consulta.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "Pessoal-dev"
+caminho = "~/Pessoal-dev"
+repositorio = ""
+tipo = "congelado"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Réplica de 25/09 do PC antigo. Hoje contém agent-context, aladdin, iris e portfolio, até o PC novo pegar. port, espectro, Silmer, crm-silmer e a casca vazia agent-context+ foram para a lixeira em 04/10, depois de arquivados."
+observacao = "Quem tem GitHub (Aladdin, Iris, espectro, product_designer, silmer-web) entra pelo espelho Git. O .git do espectro está corrompido (o do iris também perdeu objetos): não rodar comando git que escreva neles. A Fase 3 arquivou tudo em ~/Arquivo/2026-10-04 (port, espectro, aladdin, iris, portfolio, Silmer, crm-silmer e agent-context). Conferido em 04/10: o código local de espectro, aladdin, iris e portfolio é igual ao do GitHub (a diferença era só CRLF)."
+
+[[projeto]]
+nome = "Corporativo-dev"
+caminho = "~/Corporativo-dev"
+repositorio = ""
+tipo = "congelado"
+dono = "Rômulo"
+estado = "existe"
+grafo = false
+papel = "Réplica de 25/09 dos projetos Pay4Fun (sem .git). Só consulta; o PC novo recebe um pacote pronto na Fase 3."
+observacao = "É da Pay4Fun: confira a política da empresa. Por decisão de 04/10 o Corp entra no grafo global, pelos projetos abaixo e não por esta pasta."
+
+# Corp: o que o GitHub cobre da pasta local (arquivos em comum, medido em 04/10):
+# ds_auditor 100%, p4fhub 98%, p4f-site-institucional 18%, ds4fun 0% (o
+# repositório tem só 3 arquivos). Só os dois primeiros entram pelo espelho; os
+# outros ficam como pasta, para não perder cobertura no grafo.
+
+[[projeto]]
+nome = "ds_auditor"
+caminho = "~/Mel/Repos/ds_auditor"
+repositorio = "romulosutil/ds_auditor"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+cobertura_github = "100%"
+papel = "Corp: auditor do design system ds4fun. Entra pelo espelho Git; a cópia local em ~/Corporativo-dev/ds_auditor é igual."
+observacao = "Repositório PÚBLICO no GitHub."
+
+[[projeto]]
+nome = "p4fhub"
+caminho = "~/Mel/Repos/p4fhub"
+repositorio = "romulosutil/p4fhub"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+cobertura_github = "98%"
+papel = "Corp: P4Fhub. Entra pelo espelho Git; a cópia local em ~/Corporativo-dev/p4fhub tem 1 arquivo a mais."
+
+[[projeto]]
+nome = "ds4fun"
+caminho = "~/Mel/Repos/ds4fun"
+repositorio = "romulosutil/ds4fun"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+cobertura_github = "0%"
+papel = "Corp: o repositório ds4fun do GitHub, que tem só 3 arquivos (index.html, ds4fun-library.css e .gitattributes)."
+observacao = "NÃO é a pasta local ~/Corporativo-dev/ds4fun (257 arquivos): esta entra como corp-ds4fun."
+
+[[projeto]]
+nome = "p4f"
+caminho = "~/Mel/Repos/p4f"
+repositorio = "romulosutil/p4f"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+cobertura_github = "18%"
+papel = "Corp: o repositório p4f do GitHub (api, client, server, src, vercel.json)."
+observacao = "Não é o mesmo conteúdo da pasta local p4f-site-institucional (18% dos arquivos em comum): pode ser outro projeto ou outra versão; a pasta local entra como corp-p4f-site-institucional."
+
+[[projeto]]
+nome = "corp-ds4fun"
+caminho = "~/Corporativo-dev/ds4fun"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+dentro_de = "Corporativo-dev"
+papel = "Corp: ds4fun, o design system completo (storybook, specs, changelog). O GitHub não o cobre."
+
+[[projeto]]
+nome = "corp-p4f-site-institucional"
+caminho = "~/Corporativo-dev/p4f-site-institucional"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+dentro_de = "Corporativo-dev"
+papel = "Corp: site institucional da P4F (client, server, docker-compose). Só 18% bate com o repositório p4f."
+
+[[projeto]]
+nome = "corp-databasepay4fun"
+caminho = "~/Corporativo-dev/databasepay4fun"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+dentro_de = "Corporativo-dev"
+papel = "Corp: databasepay4fun. Não existe no GitHub."
+
+[[projeto]]
+nome = "corp-vera"
+caminho = "~/Corporativo-dev/Vera"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+dentro_de = "Corporativo-dev"
+papel = "Corp: Vera. Não existe no GitHub."
+
+[[projeto]]
+nome = "corp-pay4fun-p4f-landpage-cms"
+caminho = "~/Corporativo-dev/pay4fun-p4f-landpage-cms-c56450cf8060"
+repositorio = ""
+tipo = "pasta"
+dono = "Rômulo"
+estado = "existe"
+grafo = true
+dentro_de = "Corporativo-dev"
+papel = "Corp: landpage com CMS da P4F. Não existe no GitHub."
+
+# ---------------------------------------------------------------------------
+# Silmer · Site: dois repositórios, que são projetos diferentes (1% dos arquivos
+# em comum). O CRM e o marketing do Silmer estão nas seções acima.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "silmer-web"
+caminho = "~/Mel/Repos/silmer-web"
+repositorio = "romulosutil/silmer-web"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+dentro_de = "Mel/Repos"
+grupo = "Silmer · Site"
+papel = "O site atual da Silmer (monorepo: apps, packages, design tokens, Meta Pixel; último push 23/09). Privado."
+observacao = "Onde o site é hospedado e quem publica: conferir (o registro não afirma). ~/Pessoal-dev/Silmer é o workspace antigo dele: 66% dos arquivos em comum e 57 só locais (social/, crm/, post/, docs/, historico-datacrazy/, _tmp_certificado), arquivado em ~/Arquivo/2026-10-04/Pessoal-dev-Silmer.tar.zst."
+
+[[projeto]]
+nome = "silmer-legado"
+caminho = "~/Mel/Repos/Silmer"
+repositorio = "romulosutil/Silmer"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = false
+dentro_de = "Mel/Repos"
+grupo = "Silmer · Site"
+papel = "Site antigo (React/Vite, último push 27/04/2026). Outro projeto, não o silmer-web. Fica como histórico; privado."
+observacao = "A pasta se chama Silmer, igual a ~/Silmer (marketing): num sistema sem distinção de maiúsculas elas colidem. Por isso o nome do registro é silmer-legado e ele fica fora do grafo."
+
+# ---------------------------------------------------------------------------
+# Áreas da Mel: nascem nas fases 4 e 6. Tudo que a Mel gerencia sozinha mora aqui.
+# ---------------------------------------------------------------------------
+
+[[projeto]]
+nome = "Mel/Repos"
+caminho = "~/Mel/Repos"
+repositorio = "romulosutil/*"
+tipo = "espelho"
+dono = "Hermes"
+estado = "a-criar"
+grafo = true
+papel = "Um clone raso (--depth 1) por repositório do GitHub, mantido pelo Hermes para o graphify. Ninguém edita. Atualiza com fetch + reset --hard, nunca merge, nunca clean -x."
+observacao = "Fora daqui, porque já são clones vivos: SquadOne, prumo e crm-silmer. Ignora arquivados e forks. Fora do cofre do backup (é regenerável)."
+
+[[projeto]]
+nome = "Mel/Cofre"
+caminho = "~/Mel/Cofre"
+repositorio = ""
+tipo = "pasta"
+dono = "Hermes"
+estado = "a-criar"
+grafo = false
+papel = "Segredos cifrados com age (*.age) e o indice.json (id, rótulo, tipo e data; nunca valores)."
+observacao = "Nunca no grafo, nunca no Git, nunca em texto claro no Drive."
+
+[[projeto]]
+nome = "Mel/Entrada"
+caminho = "~/Mel/Entrada"
+repositorio = ""
+tipo = "pasta"
+dono = "Hermes"
+estado = "a-criar"
+grafo = false
+papel = "A caixa de entrada da Mel: chegou/ (bruto), organizado/ (por destino) e diario.jsonl. O Hermes organiza aqui dentro, e só aqui."
