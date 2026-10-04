@@ -168,7 +168,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Commit e push na main', texto: 'GitHub romulosutil/*.', onde: 'nuvem', quando: 'fim da tarefa' },
       { titulo: 'Easypanel publica o app', texto: 'O SquadOne de agendas implanta sozinho.', onde: 'nuvem', quando: 'no push', verificacao: 'squadone-app' },
       { titulo: 'A Central se atualiza', texto: 'atualizar-central confere a main e reconstrói só quando ela andou.', onde: 'dell', quando: 'a cada 10 min' },
-      { titulo: 'Grafo dos projetos', texto: 'O Hermes roda o graphify nos clones.', onde: 'dell', quando: '03:00' },
+      { titulo: 'Grafo dos projetos', texto: 'O Hermes mantém um clone raso de cada repositório do GitHub e roda o graphify em todos. O PC puxa os grafos por SSH.', onde: 'dell', quando: '03:00' },
       { titulo: 'Central no celular', texto: 'Pela tailnet, com o Tailscale ligado no celular (porta 8443).', onde: 'voce', quando: 'quando quiser' },
     ],
   },
