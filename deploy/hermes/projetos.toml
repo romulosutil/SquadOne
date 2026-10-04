@@ -76,7 +76,7 @@ grafo = true
 worktrees = ["~/crm-silmer-wt/tecnica-e-arte"]
 grupo = "Silmer · CRM"
 papel = "O CRM do cliente Silmer (branch master; banco no container crm-silmer-postgres, porta 5434 na tailnet). Os worktrees de ~/crm-silmer-wt são deste mesmo repositório."
-observacao = "Repositório PÚBLICO no GitHub: nunca dar push de segredo nem de dado de cliente. Em 04/10 havia 46 commits em 12 branches locais que o GitHub não tem (30/09 a 03/10: ficha v3, itens do pedido, inbox, bot do n8n, RFC 006); nada foi enviado. Backup: ~/Arquivo/2026-10-04/crm-silmer-todas-as-branches.bundle (17 branches, com .sha256). Para o PC trazer tudo sem publicar: scp do bundle e git clone dele, depois git remote set-url origin para o GitHub. Decidir se o repositório continua público antes de publicar."
+observacao = "Repositório PÚBLICO no GitHub: nunca dar push de segredo nem de dado de cliente. Conferido por CONTEÚDO em 04/10 (git cherry): dos 46 commits em branches locais, 43 já estão na master do GitHub com outro SHA (o Codex na nuvem faz os merges lá); só 3 commits de docs do RFC 006 (30/09) não estão em nenhuma branch nem PR, e o 1º tem nomes de vendedores que o 3º remove: reescrever antes de publicar. Bundle: ~/Arquivo/2026-10-04/crm-silmer-todas-as-branches.bundle. A pasta antiga Pessoal-dev/crm-silmer tinha 68 arquivos que não estão no GitHub (pacote de revisão em ~/Arquivo/2026-10-04/crm-silmer-so-na-pasta-velha/)."
 
 # ---------------------------------------------------------------------------
 # Pastas sem Git (ou sem repositório próprio). Os serviços do Dell dependem do
