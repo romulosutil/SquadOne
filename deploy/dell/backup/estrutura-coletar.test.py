@@ -28,6 +28,7 @@ JWT = "ey" + "J" + "a" * 12 + "." + "b" * 12 + "." + "c" * 8
 CHAVE_PRIVADA = "-----BEGIN " + "OPENSSH PRIVATE" + " KEY-----\nbase64\n-----END OPENSSH PRIVATE KEY-----"
 AGE = "AGE-SECRET" + "-KEY-1" + "Q" * 40
 SENHA_DB = "s3nh4-Forte-9X"
+ID_CHAT_FALSO = "999888777666555@lid"
 
 
 class Filtro(unittest.TestCase):
@@ -152,7 +153,9 @@ class Montagem(unittest.TestCase):
         (h / ".hermes/cron").mkdir(parents=True)
         (h / ".hermes/cron/jobs.json").write_text(json.dumps({"jobs": [
             {"name": "Graphify", "schedule_display": "0 3 * * *", "script": "g.py", "enabled": True, "deliver": "whatsapp",
-             "prompt": "NUNCA-DEVE-APARECER"}]}))
+             "prompt": "NUNCA-DEVE-APARECER"},
+            {"name": "Aprender", "schedule_display": "weekdays at 9am", "enabled": False,
+             "deliver": f"whatsapp:{ID_CHAT_FALSO}"}]}))
         (h / "SquadOne/deploy/hermes").mkdir(parents=True)
         (h / "SquadOne/deploy/hermes/projetos.toml").write_text(
             '[[projeto]]\nnome="SquadOne"\ncaminho="~/SquadOne"\nrepositorio="o/SquadOne"\ntipo="clone-vivo"\n'
@@ -209,6 +212,13 @@ class Montagem(unittest.TestCase):
         self.assertNotIn("NUNCA-DEVE-APARECER", self.texto_de_tudo())
         self.assertIn("Graphify", (self.raiz / "dell/hermes-cron.md").read_text())
 
+    def test_entrega_do_cron_mostra_so_a_plataforma_nao_o_id_do_chat(self):
+        self.coletar()
+        tabela = (self.raiz / "dell/hermes-cron.md").read_text()
+        self.assertNotIn(ID_CHAT_FALSO, self.texto_de_tudo())
+        linha = next(l for l in tabela.splitlines() if "Aprender" in l)
+        self.assertTrue(linha.rstrip().endswith("| não | whatsapp |"), linha)
+
     def test_fluxo_do_n8n_com_segredo_e_excluido_e_listado(self):
         rel, _ = self.coletar()
         self.assertTrue((self.raiz / "dell/n8n/fluxo-bom-w1.json").exists())
@@ -238,6 +248,22 @@ class Montagem(unittest.TestCase):
             self.coletar()
         self.assertIn("dell/MANIFESTO.md", str(e.exception))
         self.assertNotIn("valor-longo-do-env-9", str(e.exception))     # a mensagem diz onde, nunca o quê
+
+    def test_prova_final_confere_tambem_valor_de_chave_sem_cara_de_segredo(self):
+        # WHATSAPP_HOME_CHANNEL não tem "token/senha" no nome, mas é do .env: não pode ir ao Drive.
+        (self.h / ".hermes/.env").write_text("WHATSAPP_HOME_CHANNEL=555444333222111@lid\n")
+        (self.h / "PRUMO/MANIFESTO.md").write_text("# m\ncanal de entrega: 555444333222111@lid\n")
+        with self.assertRaises(ec.Vazamento) as e:
+            self.coletar()
+        self.assertIn("dell/MANIFESTO.md", str(e.exception))
+        self.assertNotIn("555444333222111", str(e.exception))
+
+    def test_url_pura_de_um_env_nao_derruba_a_coleta(self):
+        # URL sem credencial é informação que os documentos citam de propósito; só URL com @ é segredo.
+        (self.h / ".hermes/.env").write_text("PUBLIC_URL=https://mel.exemplo.ts.net:8443\n")
+        (self.h / "PRUMO/MANIFESTO.md").write_text("# m\nabra https://mel.exemplo.ts.net:8443\n")
+        self.coletar()
+        self.assertIn("mel.exemplo.ts.net", (self.raiz / "dell/MANIFESTO.md").read_text())
 
     def test_falha_nao_toca_na_area_anterior(self):
         self.coletar()
