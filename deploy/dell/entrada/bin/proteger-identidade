@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Protege a identidade age da Mel com uma senha SUA (age -p). Interativo: só roda num terminal, porque a
+# senha é digitada por você; este script nunca a conhece, nunca a grava e nunca imprime a chave.
+#
+#   1. cifra ~/.config/mel/age/identity.txt com a senha  ->  identity.txt.age
+#   2. confere: cifra um texto de teste para a chave pública e decifra com a identidade protegida
+#      (pede a senha de novo); se não bater, NADA é alterado
+#   3. só então apaga a cópia em claro com `shred -u`
+#
+# Depois disso o `cofre ler` / `cofre recifrar` pedem a senha no terminal, e um agente com shell não lê o cofre.
+# A identidade protegida passa a ser a que o serviço e o backup enxergam (identity.txt.age).
+set -euo pipefail
+CLARA="${MEL_IDENTIDADE_CLARA:-$HOME/.config/mel/age/identity.txt}"
+PROT="${CLARA}.age"
+
+if ! { [ -t 0 ] && [ -t 1 ]; }; then
+  echo "Rode num terminal: a senha é sua e é digitada aqui." >&2
+  exit 2
+fi
+[ -f "$CLARA" ] || { echo "Não achei $CLARA (talvez já esteja protegida: $PROT)." >&2; exit 1; }
+[ ! -e "$PROT" ] || { echo "$PROT já existe: não sobrescrevo." >&2; exit 1; }
+command -v age >/dev/null && command -v age-keygen >/dev/null || { echo "Falta o age (sudo apt install age)." >&2; exit 1; }
+
+umask 077
+T="$(mktemp -d)"
+limpar() { [ -f "$T/c.age" ] && shred -u "$T/c.age" 2>/dev/null || true; [ -d "$T" ] && rmdir "$T" 2>/dev/null || true; [ -f "${PROT}.novo" ] && shred -u "${PROT}.novo" 2>/dev/null || true; }
+trap limpar EXIT
+
+PUB="$(age-keygen -y "$CLARA")"
+echo "1/3  Escolha a senha da identidade da Mel (digite duas vezes) e guarde-a no gerenciador de senhas."
+echo "     (Se deixar em branco o age inventa uma senha e a mostra na tela: copie na hora.)"
+age -p -o "${PROT}.novo" "$CLARA"
+
+echo "2/3  Conferindo: digite a mesma senha mais uma vez."
+SINAL="conferencia-$$-$RANDOM"
+printf '%s' "$SINAL" | age -r "$PUB" -o "$T/c.age"
+SAIDA="$(age -d -i "${PROT}.novo" "$T/c.age" || true)"
+if [ "$SAIDA" != "$SINAL" ]; then
+  echo "A conferência falhou (senha diferente?). NADA foi alterado: a identidade em claro continua no lugar." >&2
+  exit 1
+fi
+mv "${PROT}.novo" "$PROT"
+chmod 600 "$PROT"
+
+echo "3/3  Apagando a cópia em claro (shred)."
+shred -u "$CLARA"
+echo "Pronto: $PROT. A identidade em claro não existe mais."
+echo "Teste com:  cofre listar    (e, quando houver item,  cofre ler <id>  pede a senha)."

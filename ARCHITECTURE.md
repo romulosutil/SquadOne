@@ -37,6 +37,11 @@ A Central tem duas rotas, sem dependência adicional de roteador:
   de `src/operations/fluxos.ts`, um por vez, e "Um dia"), a agenda de hoje e
   os acessos (CRM, Agentes do SquadOne em `/squadone`, Terminal, n8n, Hermes,
   Syncthing); o detalhe de cada verificação fica fechado no fim;
+- `/entrada/` abre a página da Entrada da Mel (texto e arquivos para o Hermes organizar; segredos
+  vão para o cofre `age`). Não é da SPA: `server/entrada-proxy.ts` repassa três rotas fechadas ao
+  serviço `deploy/dell/entrada/` em `127.0.0.1:9130`, com o mesmo porteiro de IP, e o item
+  "Entrada" do menu fica logo abaixo de CRM. Pela tailnet é a mesma porta 8443 da Central: não há
+  outro listener do Tailscale Serve. Detalhes e modelo de segurança em `deploy/dell/entrada/README.md`.
 - `/crm` é o CRM do Site antes da venda e do PRUMO (desde 30/09/2026; o antigo
   `/projetos/producao-auto` redireciona para cá).
 

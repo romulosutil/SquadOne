@@ -160,6 +160,19 @@ export const FLUXOS: FluxoDaOperacao[] = [
     ],
   },
   {
+    id: 'entrada',
+    grupo: 'Operação do Dell',
+    nome: 'Entrada para o Hermes',
+    frase: 'Uma página privada onde você manda texto e arquivos e o Hermes arruma. Segredo nunca chega ao modelo.',
+    passos: [
+      { titulo: 'Você manda', texto: 'No menu "Entrada" da Central (logo abaixo de CRM), com três botões: guardar no cofre, organizar ou só guardar sem IA.', onde: 'voce', quando: 'quando quiser', comVoce: true, link: { rotulo: 'Abrir a Entrada', url: '/entrada/' } },
+      { titulo: 'O filtro olha primeiro', texto: 'Chave, senha, token ou chave privada no que você mandou para organizar: bloqueia e pede o cofre. O código decide, antes de qualquer modelo.', onde: 'dell', quando: 'na hora' },
+      { titulo: 'Cofre', texto: 'Cifra com age para a Mel e para você; o valor nunca volta à página. Ler só no terminal da Mel (cofre ler), com confirmação.', onde: 'dell', quando: 'na hora' },
+      { titulo: 'O Hermes organiza', texto: 'Só se a fila tem algo (fila vazia não gasta token). O modelo, sem ferramentas, propõe um plano; um executor com lista de permissão arruma em ~/Mel/Entrada/organizado ou em ~/Arquivo/<dia>, sem apagar nem sobrescrever.', onde: 'dell', quando: 'a cada 5 min' },
+      { titulo: 'Resumo no WhatsApp', texto: 'Só o que mudou.', onde: 'dell', quando: 'na hora' },
+    ],
+  },
+  {
     id: 'codigo',
     grupo: 'Operação do Dell',
     nome: 'Código e Central',

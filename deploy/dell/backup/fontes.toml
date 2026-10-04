@@ -137,6 +137,10 @@ obrigatorios = [
   "~/.hermes/memories", "~/licitacoes-automation/.env",
   "~/.config/claude-ops", "~/.config/squadone", "~/.config/rclone/rclone.conf",
   "~/SquadOne/.env", "~/SquadOne/data", "~/.ssh", "~/.local/state/syncthing",
+  # Fase 6 (Entrada): sem a identidade da Mel e sem o cofre, o que foi guardado como segredo não se abre.
+  # Hoje a identidade está sem senha (decisão de 04/10); se for protegida (bin/proteger-identidade),
+  # troque por "~/.config/mel/age/identity.txt.age". Este cofre do backup é cifrado pelo restic.
+  "~/.config/mel/age/identity.txt", "~/Mel/Cofre",
 ]
 # Reinstalável, regenerável ou grande sem valor de restauração. Padrão sem "/"
 # vale em qualquer nível (regra do restic).

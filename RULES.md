@@ -78,3 +78,17 @@
 22. A chamada do n8n ao collector PNCP deve ser assíncrona e idempotente durante
     uma execução ativa: confirmação rápida com ID, repetição com o mesmo ID e
     acompanhamento por estado persistido.
+23. `/entrada/` (menu "Entrada", desde 04/10/2026) é só uma ponte: `server/entrada-proxy.ts`
+    repassa um conjunto FECHADO de rotas (`GET /`, `GET /api/estado`, `POST /api/enviar`) para
+    um destino FIXO de configuração, `127.0.0.1:9130` (o serviço da Entrada em
+    `deploy/dell/entrada/`). Fica antes do `express.json()` porque o corpo é um arquivo de
+    até 200 MB que passa em fluxo. Só seguem cabeçalhos de uma lista de permissão (nunca
+    `Cookie` nem `Authorization`) e a query não segue. O repasse não interpreta o conteúdo:
+    segredo, tamanho e origem são decididos pelo serviço da Entrada. Não é ação de parar,
+    reiniciar ou reconfigurar infraestrutura (regra 10) e o navegador não escolhe destino
+    (regra 8). Só existe no perfil `operations`. Duas consequências aceitas: o repasse manda
+    `Host`, `Origin` e `X-Forwarded-For` como vieram (quem confere é a Entrada, que continua
+    conferindo; a ponte não os substitui); e a `Origin` aceita por `/entrada/api/enviar` é a da
+    Central inteira, então um XSS em QUALQUER rota da Central escreveria na Entrada. Por isso
+    `src/` não usa `v-html` nem `innerHTML` (não introduza); um token na página não adianta
+    (o mesmo script o leria), só origem própria resolveria.

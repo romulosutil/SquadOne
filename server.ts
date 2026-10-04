@@ -35,6 +35,7 @@ import {
 } from "./server/ciclo-de-vida.ts";
 import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
 import { porteiroDeIp } from "./server/acesso.ts";
+import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
 import { descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
 import { ANTECEDENCIA_PUSH_MIN } from "./server/lembretes.ts";
@@ -214,6 +215,12 @@ async function startServer() {
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
+
+  // A página da Entrada (menu "Entrada"): só no perfil operations, destino fixo no loopback, e ANTES do
+  // express.json(): o corpo de um envio é um arquivo de até 200 MB e passa em fluxo, sem ser lido aqui.
+  if (squadOneMode === "operations") {
+    app.use(ENTRADA_PREFIXO, criarRepasseDaEntrada());
+  }
 
   app.use(express.json());
 
