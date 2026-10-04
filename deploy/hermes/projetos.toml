@@ -32,6 +32,9 @@
 #   Silmer · Marketing).
 
 [geral]
+# Repositório do GitHub maior que isto (em MB) não ganha espelho nem grafo: o
+# graphify_projetos.py avisa na fila e segue. Sobe-se aqui, por pull request.
+graphify_limite_repo_mb = 300
 # Pastas de topo da home que não são projeto (as do sistema e do snap).
 home_ignorar = [
   "Documentos", "Downloads", "Imagens", "Modelos", "Músicas", "Público",
@@ -379,8 +382,19 @@ tipo = "espelho"
 dono = "Hermes"
 estado = "a-criar"
 grafo = true
-papel = "Um clone raso (--depth 1) por repositório do GitHub, mantido pelo Hermes para o graphify. Ninguém edita. Atualiza com fetch + reset --hard, nunca merge, nunca clean -x."
+papel = "Um clone raso (--depth 1) por repositório do GitHub, mantido pelo Hermes (graphify_projetos.py, todo dia às 03:00) para o graphify. Ninguém edita. Atualiza com fetch + reset --hard, nunca merge, nunca clean -x. Repositório novo entra sozinho na noite seguinte."
 observacao = "Fora daqui, porque já são clones vivos: SquadOne, prumo e crm-silmer. Ignora arquivados e forks. Fora do cofre do backup (é regenerável)."
+
+[[projeto]]
+nome = "Mel/Grafos"
+caminho = "~/Mel/Grafos"
+repositorio = ""
+tipo = "pasta"
+dono = "Hermes"
+estado = "a-criar"
+grafo = false
+papel = "Cópias dos grafos do graphify para o PC puxar por SSH: <projeto>/graphify-out/{graph.json,GRAPH_REPORT.md,graph.html}, mais global-graph.json, RESUMO.md e indice.json. O graphify_projetos.py reescreve tudo a cada rodada; ninguém edita."
+observacao = "Cópias reais, não links (scp e robocopy tratam link de jeitos diferentes). Regenerável: fora do cofre do backup. No PC: scp -r mel:Mel/Grafos/ ."
 
 [[projeto]]
 nome = "Mel/Cofre"

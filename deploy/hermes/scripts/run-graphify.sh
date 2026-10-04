@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # O graphify é do Hermes (job "Graphify — projetos", script
-# ~/.hermes/scripts/graphify_projetos.py, sobre ~/SquadOne, ~/prumo, ~/auto-site
-# e ~/crm-silmer). Este caminho pede ao Hermes para rodar o job no próximo tick,
+# ~/.hermes/scripts/graphify_projetos.py, sobre os projetos do registro
+# deploy/hermes/projetos.toml e os espelhos de todos os repositórios do GitHub).
+# Este caminho pede ao Hermes para rodar o job no próximo tick,
 # em vez de rodar o graphify por fora. Quem o chamava por SSH era o pre-push do
 # PC (dev/tools/trigger-graphify.ps1), perdido em 25/09/2026; fica para o PC
 # novo e para disparo manual. Instalado em ~/workspace/scripts/run-graphify.sh.

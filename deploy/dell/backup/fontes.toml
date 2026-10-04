@@ -121,6 +121,9 @@ excluir = [
   "~/.local/state/syncthing/index-*", "~/.local/state/backup-dell/ensaio",
   "~/qa-shots", "~/shots", "~/tmp-shots", "~/.qa-shots", "~/*.png", "~/*.deb",
   "~/auto-site/.playwright-mcp",
+  # Espelhos do GitHub e cópias dos grafos: o graphify_projetos.py refaz tudo
+  # (o código está no GitHub e o grafo se regenera em minutos).
+  "~/Mel/Repos", "~/Mel/Grafos",
   "node_modules", ".gocache*", ".gomodcache", "graphify-out", "__pycache__",
   ".venv", "venv", "venv-*",
   # Travas de navegador (Chrome, Codex, Claude): links sem alvo que o restic

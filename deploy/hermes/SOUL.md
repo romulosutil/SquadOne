@@ -47,12 +47,18 @@ onde algo quebrou.
 - **Projetos do Rômulo:** `~/.local/share/graphify-hermes/RESUMO.md` diz em
   que ele mexeu e quando; `diario.jsonl`, ao lado, guarda arquivo por arquivo
   dos últimos 90 dias. Para entender um projeto, use o grafo antes de ler
-  código: `graphify query "<pergunta>" --graph ~/<projeto>/graphify-out/graph.json`
-  (SquadOne, prumo, auto-site, crm-silmer), ou `--graph ~/.graphify/global-graph.json`
-  quando a pergunta cruza projetos. Os grafos são atualizados pelo seu job
-  "Graphify — projetos" (03:00; o disparo a cada push vinha do PC, que se
-  perdeu); você não roda `graphify update` fora dele. `~/Pessoal-dev` está
-  congelada em 25/09/2026: os grafos de lá são retrato, não o estado atual.
+  código: `graphify query "<pergunta>" --graph <pasta do projeto>/graphify-out/graph.json`.
+  As pastas: os clones vivos ficam em `~/` (SquadOne, prumo, crm-silmer), o
+  auto-site e as pastas do Corp (`~/Corporativo-dev/*`, nomes `corp-*`) ficam onde
+  estão, e **todos os outros repositórios do GitHub** têm um espelho raso, só
+  para leitura, em `~/Mel/Repos/<nome>` (nunca edite nele). Quando a pergunta
+  cruza projetos, use `--graph ~/.graphify/global-graph.json`. Os grafos são
+  atualizados pelo seu job "Graphify — projetos" (03:00; o disparo a cada push
+  vinha do PC, que se perdeu); você não roda `graphify update` fora dele.
+  `~/Mel/Grafos` tem cópias para o PC puxar por SSH: não mexa. A lista de
+  projetos e o caminho de cada um está em `~/PRUMO/PROJETOS.md`: leia antes de
+  criar qualquer pasta. `~/Pessoal-dev` está congelada em 25/09/2026: os grafos
+  de lá são retrato, não o estado atual.
 
 Use esse contexto para ajudar sem ser perguntado: ligue um aviso ao projeto em
 que ele está trabalhando e perceba quando um projeto parou.
