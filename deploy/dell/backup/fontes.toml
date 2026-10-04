@@ -88,6 +88,39 @@ leia_me = """Rascunhos do Mapa gerados no Dell (~/prumo-entregas).
 Atualizado uma vez por dia, só no sentido Dell -> Drive. Editar aqui não volta para o Dell.
 """
 
+# A pasta Estrutura (decisão de 04/10/2026): o mapa e as configurações da Mel e do PC,
+# sem segredo. É o destino final de tudo que descreve a operação; o Rômulo a lê pelo PC.
+# Remote próprio (gdrive-estrutura = cópia do gdrive-silmer com a raiz na pasta Estrutura:
+# o remote "gdrive" tem escopo drive.file e não enxerga pasta criada à mão).
+[[espelho]]
+id = "estrutura"
+nome = "Estrutura"
+origem = "~/.local/share/mel/estrutura"
+destino = ""                       # a raiz do remote é a própria pasta Estrutura
+remoto = "gdrive-estrutura"
+lixeira = "_lixeira"               # dentro da Estrutura, fora do que o sync gerencia (ver incluir)
+# Só dell/ e pc/ são do espelho: o que o Rômulo guardar na raiz da Estrutura não é tocado.
+incluir = ["/dell/**", "/pc/**"]
+# Uma vez por dia, de madrugada (o timer do espelho é de hora em hora). 12 h, e não 24, porque
+# com janela uma rodada manual no meio do dia empurraria o dia seguinte para fora dela.
+intervalo_h = 12
+janela = ["04:00", "06:00"]
+atencao_h = 30
+falha_h = 72
+sentinela = "dell/MANIFESTO.md"
+max_apagar = 40
+# O coletor tem unidade própria porque aqui o sandbox do espelho (NoNewPrivileges) impediria o
+# `sudo ufw status`. Se ele falhar (segredo achado, manifesto ausente), nada é enviado.
+preparo = ["systemctl --user start estrutura-coletar.service"]
+preparo_timeout_s = 600
+leia_me = """Estrutura: o mapa e as configurações da Mel (o Dell) e do PC, sem segredos.
+dell/  gerado todo dia às 4h pelo estrutura-coletar (manifesto, projetos, units do systemd, compose,
+       fluxos do n8n, repositórios, estado da rede). Veja dell/COLETA.md.
+pc/    enviado pelo PC.
+Só leitura: o que mudar em dell/ ou pc/ é desfeito na rodada seguinte (a versão anterior fica 30 dias em _lixeira/).
+O que estiver fora de dell/ e pc/ não é tocado.
+"""
+
 [cofre]
 repositorio = "rclone:gdrive:Backups/dell-worker/restic"
 senha = "~/.config/backup-dell/restic.senha"

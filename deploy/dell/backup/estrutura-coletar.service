@@ -1,0 +1,14 @@
+[Unit]
+Description=Coleta o mapa e as configurações da Mel para a pasta Estrutura (área de preparo do backup)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/estrutura-coletar
+TimeoutStartSec=15min
+Nice=15
+IOSchedulingClass=idle
+UMask=0077
+# Sem NoNewPrivileges de propósito: o coletor roda `sudo -n ufw status`, e com a trava o sudo
+# não funciona. É por isso que o coletor não roda dentro do backup-dell-espelho.service
+# (que tem NoNewPrivileges): o espelho o chama com `systemctl --user start`.

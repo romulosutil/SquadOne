@@ -12,7 +12,11 @@ Meu Drive/
 │   ├── Sites antes da venda/    espelho de ~/auto-site, a cada hora
 │   ├── Consultoria/             espelho de ~/prumo (romulosutil/prumo), diário
 │   └── _lixeira/<fonte>/<AAAA-MM-DDTHH>/   o que o espelho apagou ou trocou (30 dias)
-└── Backups/dell-worker/restic/  cofre cifrado, diário às 03:30
+├── Backups/dell-worker/restic/  cofre cifrado, diário às 03:30
+└── Estrutura/                   o mapa e as configurações da Mel e do PC, sem segredo (remote gdrive-estrutura)
+    ├── dell/                    gerado todo dia às 4h pelo estrutura-coletar
+    ├── pc/                      enviado pelo PC, passando pelo Dell
+    └── _lixeira/estrutura/<AAAA-MM-DDTHH>/   o que o espelho trocou (30 dias)
 ```
 
 - **Espelho:** legível no Drive e no PC novo, **só leitura**. O Dell é a
@@ -21,6 +25,10 @@ Meu Drive/
 - **Cofre:** restic cifrado com a home inteira menos o que se reinstala, mais
   dumps consistentes (Postgres do n8n, pasta `/home/node/.n8n` do container,
   7 SQLite do Hermes). Leva os segredos, por isso é cifrado. Refaz o Dell.
+- **Estrutura:** espelho (só dell/ e pc/) do que descreve a operação: manifesto,
+  projetos, units do systemd, `docker-compose` (sem as senhas), fluxos do n8n,
+  repositórios, estado da rede. É o destino final de tudo que o Rômulo lê pelo
+  PC. **Sem segredos**: ver o filtro abaixo.
 - **Ensaio:** depois do cofre, quando o último ensaio tem mais de 30 dias,
   restaura o essencial numa pasta à parte e sobe um Postgres e um n8n
   descartáveis, sem rede, para provar que as credenciais do n8n decifram com a
@@ -41,8 +49,39 @@ um `backup:<fonte>` por fonte, pela idade do último sucesso:
   Dump do n8n que falhou também é `falha`. Arquivo `obrigatorios` sumido ou
   rodada com mais de 500 MB novos viram `atencao`.
 - **Ensaio:** com mais de 35 dias, `atencao`.
+- **Estrutura** (`backup:estrutura`): `atencao` com mais de 30 h sem sucesso,
+  `falha` com mais de 72 h. Coletor que falha (segredo achado, manifesto
+  ausente) também vira `falha`, com a causa no detalhe.
 
 ## Decisões que não são óbvias
+
+- **Estrutura: o filtro de segredos é o centro do bloco.** O
+  `estrutura-coletar.py` copia só o que está numa lista de permissão e passa
+  tudo por um filtro (valor de `CHAVE=`, `senha:`, URL com senha, Bearer,
+  prefixos como `ghp_`, cadeias de alta entropia → `<oculto>`; chave privada
+  exclui o arquivo; fluxo do n8n com segredo é excluído, nunca remendado).
+  Além das regras há uma **prova**: os valores de verdade dos `.env` e do
+  `rclone.conf` são carregados em memória, e a coleta falha se qualquer um
+  aparecer no que vai para o Drive. O relatório (`dell/COLETA.md`) lista
+  arquivos e regras, nunca valores. Falhou, nada é enviado.
+  - Os testes usam só segredos falsos, montados em tempo de execução.
+  - `.env`, `auth.json`, `rclone.conf`, chaves privadas e bancos nunca entram.
+- **Estrutura mora na raiz de um remote próprio.** O remote `gdrive` (escopo
+  `drive.file`) não enxerga pasta criada à mão, então `gdrive-estrutura` é uma
+  cópia do `gdrive-silmer` só com o `root_folder_id` trocado. No bloco:
+  `incluir = ["/dell/**", "/pc/**"]` deixa intocado o que o dono guardar fora
+  dessas pastas, e é o que permite a `_lixeira` morar dentro da mesma pasta sem
+  o `rclone` reclamar de sobreposição com o destino.
+- **`janela` e `preparo` por bloco.** `janela = ["04:00", "06:00"]` faz um
+  bloco diário rodar de madrugada mesmo com o timer de hora em hora; com ela o
+  `intervalo_h` é 12 e não 24, senão uma rodada manual no meio do dia empurraria
+  o dia seguinte para fora da janela. `preparo` roda antes do sync; se falhar,
+  não sincroniza.
+- **O coletor tem unidade própria** (`estrutura-coletar.service`): o
+  `backup-dell-espelho.service` tem `NoNewPrivileges`, que impede o `sudo ufw
+  status` do coletor. O espelho o chama com `systemctl --user start`.
+- **`remoto` e `lixeira` por bloco**, com o de `[geral]` como padrão: os blocos
+  antigos não mudam.
 
 - **Escopo do rclone:** `drive.file`, com cliente OAuth próprio publicado em
   produção. Em modo de teste o token expira a cada 7 dias.
@@ -86,6 +125,14 @@ install -m 755 deploy/dell/backup/backup-dell.py ~/.local/bin/backup-dell
 install -d -m 700 ~/.config/backup-dell
 install -m 600 deploy/dell/backup/fontes.toml ~/.config/backup-dell/fontes.toml
 backup-dell iniciar          # pastas no Drive, repositório restic e kit de recuperação
+
+# Estrutura: o remote é a cópia do gdrive-silmer com a raiz na pasta Estrutura (não precisa de
+# login novo). Copie a seção [gdrive-silmer] do rclone.conf para [gdrive-estrutura] e troque SÓ o
+# root_folder_id, segurando a trava do backup (flock ~/.local/state/backup-dell/trava) e fora do
+# minuto do silmer-drive-sync. Nunca imprima o conteúdo do arquivo.
+install -m 755 deploy/dell/backup/estrutura-coletar.py ~/.local/bin/estrutura-coletar
+cp deploy/dell/backup/estrutura-coletar.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+install -d -m 700 ~/.local/share/mel/estrutura/pc-incoming    # onde o PC deixa o backup dele
 ```
 
 `iniciar` grava `~/.config/backup-dell/KIT-DE-RECUPERACAO.txt`, com as duas
