@@ -127,6 +127,9 @@ Arquivos existem; verificador no Dell: **27 projetos, 0 erros, 0 avisos**; todo 
 
 ## Fase 3: arrumar o que sai do Dell (04/10 13:25–13:42)
 
+> **CORREÇÃO (04/10, ~16:50): os '46 commits só locais' do crm-silmer, citados nesta seção, eram erro de método.** Comparei por SHA; por conteúdo (`git cherry`) 43 dos 46 já estão na `master` do GitHub. Só 3 commits de docs do RFC 006 não estão em nenhuma branch nem PR. E a pasta antiga `Pessoal-dev/crm-silmer` (lixeira) NÃO era cópia velha: 68 arquivos dela não existem no GitHub (pacote de revisão em `crm-silmer-so-na-pasta-velha/`). Detalhes na seção 'Rodada 16:00 a 17:00' no fim e em `CHECKPOINT.md`.
+
+
 Relatório completo: `~/Arquivo/2026-10-04/relatorio-saida-do-dell.md`. Saúde (Central, n8n, Drive...) `TUDO OK` no pré-voo, depois de cada bloco de tarballs e no fechamento (13:40).
 
 ### Feito
