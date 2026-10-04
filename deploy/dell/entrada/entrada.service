@@ -1,0 +1,27 @@
+[Unit]
+Description=Entrada da Mel: página privada para mandar texto e arquivos (127.0.0.1:9130; a tailnet chega pelo tailscale serve)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/lib/mel-entrada/servidor.py
+# Sai com erro se não achar o nome da Mel na tailnet (o tailscaled pode ainda estar subindo no boot):
+# o systemd tenta de novo em 5 s, em vez de ficar de pé respondendo 403 calado.
+Restart=on-failure
+RestartSec=5
+UMask=0077
+Nice=10
+Environment=PYTHONUNBUFFERED=1
+# O que de fato funciona numa unidade de USUÁRIO nesta máquina (conferido em 04/10/2026):
+#  - NoNewPrivileges e os limites de cgroup valem;
+#  - ProtectSystem/ProtectHome/PrivateTmp/ReadWritePaths NÃO têm efeito (o AppArmor restringe namespaces
+#    sem privilégio: o serviço fica no mesmo namespace de montagem da sessão). Não os repita aqui: dão falsa
+#    segurança. A defesa dos segredos é a permissão 600, o código (o servidor nunca lê a identidade) e,
+#    se o Rômulo quiser, a identidade protegida por senha (README, "Cofre e agentes").
+NoNewPrivileges=true
+MemoryMax=768M
+TasksMax=64
+CPUQuota=150%
+
+[Install]
+WantedBy=default.target

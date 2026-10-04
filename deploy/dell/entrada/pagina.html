@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Entrada da Mel</title>
+<style nonce="__NONCE__">
+  :root { color-scheme: light dark; --fundo:#f6f7f9; --card:#fff; --texto:#15181d; --suave:#5a6270; --borda:#c9ced6;
+          --cofre:#8a1c1c; --cofre-fundo:#fdf0f0; --acao:#134e9e; --neutro:#3d4655; --ok:#176b3a; --erro:#a11d1d; --aviso:#8a5a00; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fundo:#0f1217; --card:#181d25; --texto:#e8ebf0; --suave:#9aa3b2; --borda:#38404d;
+            --cofre:#ff9b9b; --cofre-fundo:#2b1717; --acao:#8fb8ff; --neutro:#b8c0cc; --ok:#6fd49a; --erro:#ff8c8c; --aviso:#f0c070; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fundo); color:var(--texto); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.35rem; margin:8px 0 4px; }
+  p.sub { color:var(--suave); margin:0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--borda); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin:12px 0 4px; }
+  label:first-child { margin-top:0; }
+  textarea, input[type=text] { width:100%; font:inherit; color:inherit; background:transparent; border:1px solid var(--borda); border-radius:8px; padding:10px; }
+  textarea { min-height:140px; resize:vertical; }
+  input[type=file] { width:100%; font:inherit; padding:8px 0; }
+  [hidden] { display:none !important; }
+  .dica { color:var(--suave); font-size:.9rem; margin:4px 0 0; }
+  .leve { font-weight:400; }
+  .h2 { font-size:1rem; margin:0 0 4px; }
+  button { display:block; width:100%; min-height:48px; margin-top:12px; padding:10px 14px; font:inherit; font-weight:600; text-align:left;
+           border-radius:10px; border:2px solid currentColor; background:transparent; cursor:pointer; }
+  button small { display:block; font-weight:400; color:var(--suave); }
+  button:disabled { opacity:.5; cursor:progress; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline:3px solid var(--acao); outline-offset:2px; }
+  #b-cofre { color:var(--cofre); background:var(--cofre-fundo); }
+  #b-organizar { color:var(--acao); }
+  #b-guardar { color:var(--neutro); }
+  #b-redigir { color:var(--cofre); border-style:dashed; }
+  .aviso { border-left:4px solid var(--aviso); padding:8px 12px; background:transparent; color:var(--aviso); margin:0 0 12px; }
+  ul#resultado { list-style:none; margin:0; padding:0; }
+  ul#resultado li { border-left:4px solid var(--borda); padding:6px 10px; margin:8px 0; word-break:break-word; }
+  li.ok { border-color:var(--ok); } li.erro { border-color:var(--erro); } li.info { border-color:var(--aviso); }
+  .volta { margin:4px 0 0; } .volta a { color:var(--acao); }
+  footer { color:var(--suave); font-size:.85rem; margin:8px 0 24px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="volta" id="volta" hidden><a href="/">← Voltar à Central</a></p>
+  <h1>Entrada da Mel</h1>
+  <p class="sub">Mande um texto ou arquivos. Esta página só abre pela sua tailnet e nunca mostra segredo de volta.</p>
+
+  <div id="avisos"></div>
+
+  <form class="card" id="form" autocomplete="off" novalidate>
+    <label for="texto">Texto</label>
+    <textarea id="texto" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Escreva ou cole aqui"></textarea>
+
+    <label for="arquivos">Arquivos</label>
+    <input id="arquivos" type="file" multiple>
+    <p class="dica">O filtro de segredos procura o que tem <em>forma</em> de segredo (palavra como senha ou token seguida de valor, chaves conhecidas, textos aleatórios). Não é infalível e não lê o que está dentro de arquivo compactado, cifrado ou imagem. <strong>Segredo de verdade vai sempre pelo cofre.</strong></p>
+
+    <label for="rotulo">Rótulo <span class="dica leve">(o que é isto? Obrigatório no cofre. Aparece na lista; o valor, nunca.)</span></label>
+    <input id="rotulo" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="ex.: senha do banco do cliente X">
+
+    <button type="button" id="b-cofre" data-acao="cofre">Guardar no cofre (segredo)
+      <small>Cifra na hora, nunca vai a modelo nenhum e não aparece de volta aqui.</small></button>
+    <button type="button" id="b-organizar" data-acao="organizar">Organizar
+      <small>O Hermes arruma em até 5 minutos e só vê um trecho com o que parece segredo escondido. Se o filtro achar segredo, bloqueia e pede o cofre.</small></button>
+    <button type="button" id="b-guardar" data-acao="guardar">Só guardar (sem IA)
+      <small>Vai para a pasta “chegou”, sem ninguém organizar. Também bloqueia se o filtro achar segredo.</small></button>
+    <button type="button" id="b-redigir" hidden>Guardar os segredos no cofre e organizar só o resto
+      <small>Vale para texto de até 5 MB e até 20 segredos. Cada um vira {{SEGREDO:id}} no texto que segue.</small></button>
+  </form>
+
+  <section class="card" aria-labelledby="t-res">
+    <h2 id="t-res" class="h2">Resultado</h2>
+    <ul id="resultado" aria-live="polite"></ul>
+  </section>
+  <footer id="rodape"></footer>
+</main>
+
+<script nonce="__NONCE__">
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const botoes = [...document.querySelectorAll('button')];
+  let limite = 200 * 1024 * 1024;
+
+  function linha(tipo, texto) {
+    const li = document.createElement('li');
+    li.className = tipo;
+    li.textContent = texto;               // textContent: nada do servidor vira HTML
+    $('resultado').prepend(li);
+  }
+  function travar(sim) { botoes.forEach((b) => { b.disabled = sim; }); }
+
+  async function estado() {
+    try {
+      const r = await fetch('api/estado', { cache: 'no-store' });
+      const e = await r.json();
+      if (e.limite_mb) limite = e.limite_mb * 1024 * 1024;
+      $('avisos').replaceChildren(...(e.avisos || []).map((t) => {
+        const p = document.createElement('p'); p.className = 'aviso'; p.textContent = t; return p; }));
+      const c = e.cofre ? `Cofre: ${e.cofre.itens} item(ns), ${e.cofre.destinatarios} destinatário(s). ` : '';
+      $('rodape').textContent = `${c}Na fila do Hermes: ${e.pendentes}. Limite: ${e.limite_mb} MB por envio.`;
+    } catch (_) { $('rodape').textContent = 'Não consegui ler o estado.'; }
+  }
+
+  async function enviarUm(acao, corpo, nome, rotulo, comCofre) {
+    const h = { 'X-Acao': acao, 'X-Rotulo': encodeURIComponent(rotulo), 'Content-Type': 'application/octet-stream' };
+    if (nome) h['X-Nome'] = encodeURIComponent(nome);
+    if (comCofre) h['X-Com-Cofre'] = '1';
+    try {
+      const r = await fetch('api/enviar', { method: 'POST', headers: h, body: corpo });
+      const j = await r.json().catch(() => ({ ok: false, mensagem: 'Resposta inesperada do servidor.' }));
+      return { status: r.status, ...j };
+    } catch (_) { return { ok: false, mensagem: 'Falha de rede. Nada foi guardado.' }; }
+  }
+
+  async function enviar(acao, comCofre) {
+    const texto = $('texto').value;
+    const arquivos = [...$('arquivos').files];
+    const rotulo = $('rotulo').value.trim();
+    if (!texto.trim() && !arquivos.length) { linha('erro', 'Escreva um texto ou escolha um arquivo.'); return; }
+    if (acao === 'cofre' && !rotulo) { linha('erro', 'Dê um rótulo: o que é isto? (aparece na lista; o valor não).'); $('rotulo').focus(); return; }
+    travar(true); $('b-redigir').hidden = true;
+    const itens = [];
+    if (texto.trim()) itens.push({ corpo: new Blob([texto], { type: 'text/plain' }), nome: null, nomeShow: 'texto' });
+    arquivos.forEach((f) => itens.push({ corpo: f, nome: f.name, nomeShow: f.name }));
+    let tudoOk = true, podeRedigir = false;
+    for (let i = 0; i < itens.length; i++) {
+      const it = itens[i];
+      if (it.corpo.size > limite) {
+        tudoOk = false;
+        linha('erro', `${it.nomeShow}: grande demais (limite de ${Math.round(limite / 1048576)} MB por envio). Nada foi enviado.`);
+        continue;
+      }
+      linha('info', `Enviando ${i + 1} de ${itens.length}: ${it.nomeShow}…`);
+      const r = await enviarUm(acao, it.corpo, it.nome, rotulo, comCofre);
+      if (r.ok) {
+        linha('ok', `${it.nomeShow}: ${r.mensagem}` + (r.aviso ? ` ⚠ ${r.aviso}` : ''));
+      } else {
+        tudoOk = false;
+        if (r.bloqueado && r.pode_redigir && acao === 'organizar') podeRedigir = true;
+        const onde = r.regras && r.regras.length ? ` (${r.regras.join(', ')}${r.linhas && r.linhas.length ? '; linha ' + r.linhas.join(', ') : ''})` : '';
+        linha('erro', `${it.nomeShow}: ${r.mensagem}${onde}`);
+      }
+    }
+    if (tudoOk) {                        // limpa da tela o que acabou de ser tratado
+      $('texto').value = ''; $('arquivos').value = '';
+      if (acao === 'cofre') $('rotulo').value = '';
+    }
+    $('b-redigir').hidden = !podeRedigir;
+    travar(false); estado();
+  }
+
+  document.querySelectorAll('button[data-acao]').forEach((b) => b.addEventListener('click', () => enviar(b.dataset.acao, false)));
+  $('b-redigir').addEventListener('click', () => enviar('organizar', true));
+  if (location.pathname.startsWith('/entrada')) $('volta').hidden = false;   // aberta pela Central: mostra o caminho de volta
+  estado();
+})();
+</script>
+</body>
+</html>

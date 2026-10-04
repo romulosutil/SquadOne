@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Atalho em ~/.local/bin/cofre: a linha de comando do cofre da Mel (veja cofre_cli.py)."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path.home() / ".local/lib/mel-entrada"))
+from cofre_cli import main  # noqa: E402
+
+sys.exit(main())
