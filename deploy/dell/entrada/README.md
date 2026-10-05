@@ -166,8 +166,9 @@ Tudo isso foi corrigido e virou teste: a camada do modelo ganhou idempotência (
 
 ## Pendências
 
-- **Job do Hermes ("Organizar") ainda não criado.** O serviço, o cofre e o "Só guardar" estão no ar desde 04/10 às 20:36; o job só nasce depois do merge deste PR e da reinstalação (`hermes cron create "every 5m" --name "Entrada — organizar" --script entrada_organizar.py --no-agent --deliver whatsapp`).
-- **Chave pública `age1…` do Rômulo** (gerada no PC): `cofre adicionar-destinatario <chave> --recifrar`. Até lá a página avisa que o cofre só abre na Mel.
+- **Instalado e no ar (04/10/2026).** Serviço às 20:36 (PR #9); correção do filtro às 23:26 (PR #10, `.bak-2026-10-04-fase6c` em cada arquivo); **job do Hermes `Entrada — organizar` (`cbb21e966fce`, a cada 5 min, `--no-agent`) criado às 23:30**, com `jobs.json.bak-2026-10-04-fase6c`. Conferido pelo **runner real do cron** com duas notas falsas na fila: as duas foram organizadas, o valor da senha não estava em nenhum prompt enviado ao modelo (`requisicoes/`), cada chamada apagou a sua sessão do Hermes (`sessoes_restantes: 0`) e a pasta do agente ficou vazia. Para desfazer o job: `hermes cron remove cbb21e966fce`.
+- **Chave `age1…` do PC já está no cofre** (04/10, 23:27): 2 destinatários; os itens antigos foram recifrados. `cofre adicionar-destinatario <chave> --recifrar` é o comando para uma terceira.
+- **Tokens de entrada por chamada sob o runner do cron variaram** no teste (789 e 5.009 nas duas chamadas; ~5.700 numa chamada do shell) e **não medi o porquê**: acompanhar `entrada_tokens` no `diario.jsonl`.
 - O `dell-status` ainda não monitora a Entrada (só `systemctl --user --failed`, que a `saude.sh` já olha). `fila/`, `requisicoes/` e `diario.jsonl` não têm rotação.
 - A varredura de duplicatas ainda não alimenta o agente.
 - Quem está na tailnet abre a página: o controle é a tailnet (ACL do Tailscale), não um login.
