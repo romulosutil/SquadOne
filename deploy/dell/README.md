@@ -108,12 +108,12 @@ tailscale serve status   # 443: / -> 9119, /webhook -> 5679; 8443: / -> 9120 (ta
 sudo tailscale serve --https=8443 off   # desfaz
 ```
 
-O login do Windows acessa a Central por túnel SSH local em
-`http://127.0.0.1:9120/`; nenhuma porta pública é necessária. Sem PC desde
-28/09/2026 (ver `deploy/pc/README.md`), as mesmas URLs abrem direto no
-navegador do próprio Dell, sem túnel; o que segue vale para o PC novo.
+Do PC (o Jarvis, desde 04/10/2026), a Central, o Hermes e os webhooks abrem
+pela tailnet (acima); nenhuma porta pública é necessária. No próprio Dell as
+URLs `127.0.0.1` abrem direto, sem túnel.
 
-O mesmo túnel pode expor somente em loopback as superfícies operacionais:
+O editor do n8n e o code-server só escutam em loopback; no PC, um túnel SSH
+põe as superfícies operacionais no mesmo endereço local:
 
 ```bash
 ssh -N \
@@ -121,12 +121,13 @@ ssh -N \
   -L 9119:127.0.0.1:9119 \
   -L 5679:127.0.0.1:5679 \
   -L 8080:127.0.0.1:8080 \
-  dell-worker
+  mel
 ```
 
-No Windows, o alias `dell-worker` deve apontar para o nome MagicDNS do
-Tailscale. A tarefa agendada `DellWorker-LocalPortForwards` inicia no logon,
-mantém o SSH vivo e recria os túneis depois de uma falha. As portas locais são:
+No PC, `mel` é o `Host` do `~/.ssh/config` que aponta para o nome MagicDNS do
+Tailscale (o PC antigo usava `dell-worker`). A tarefa agendada `Mel-Tuneis`
+(`deploy/pc/instalar-tuneis.ps1`) inicia no logon, mantém o SSH vivo e recria
+os túneis depois de uma falha. As portas locais são:
 
 - `http://127.0.0.1:9120/`: Central do SquadOne;
 - `http://127.0.0.1:9119/chat`: Hermes;

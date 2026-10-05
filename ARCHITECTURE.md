@@ -135,15 +135,18 @@ respectivamente em `~/.config/squadone/operations.env`,
 
 ## Modelo operacional pessoal
 
-O Dell é o worker persistente e o servidor de projetos (Docker). Claude e
-Codex controlam e corrigem o ambiente a partir da máquina de controle, pelo
-SSH, Tailscale e Syncthing.
+O Dell (a Mel) é o worker persistente e o servidor de projetos (Docker).
+Claude e Codex controlam e corrigem o ambiente a partir da máquina de controle,
+pelo SSH e pela Tailscale; o código vai pelo GitHub.
 
-**Máquina de controle, desde 28/09/2026:** o PC Windows queimou (NVMe; visto
-pela última vez em 25/09/2026) e, até o PC novo chegar, o próprio Dell é a
-máquina de controle: Claude e Codex rodam nele. O que não tinha sincronizado
-com o Dell nem ido ao GitHub foi perdido. O PC novo vai receber a organização
-do SquadOne; estado, consequências e checklist em `deploy/pc/README.md`.
+**Máquina de controle, desde 04/10/2026:** o PC novo (o Jarvis, Windows,
+`paiduben` na tailnet). Ele entra na Mel por `ssh mel` (só chave), abre a
+Central, a Entrada, o Hermes e os webhooks pela tailnet, e o editor do n8n e o
+code-server por túnel SSH; o app Claude do PC também pode abrir sessões do
+Claude Code que rodam na Mel. De 28/09 a 04/10/2026 o próprio Dell foi a máquina de
+controle, porque o PC antigo queimou (NVMe; visto pela última vez em
+25/09/2026); o que não tinha sincronizado com o Dell nem ido ao GitHub foi
+perdido. Estado, túneis e checklist em `deploy/pc/README.md`.
 
 **O PRUMO é dono de tudo (28/09/2026).** O Site antes da venda passa a ser a
 frente "Vender mais" do PRUMO. A fonte da verdade do PRUMO é o repositório

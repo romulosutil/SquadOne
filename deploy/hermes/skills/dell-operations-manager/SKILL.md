@@ -11,9 +11,10 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 
 ## Fontes e fronteiras
 
-- `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do PC Windows, congelada
-  em 25/09/2026 (o PC queimou; nada novo chega). Leia como retrato; não faça
-  operações Git nela, o `.git` pode estar incompleto.
+- `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do PC Windows antigo,
+  congelada em 25/09/2026 (aquele PC queimou; nada novo chega, e o PC novo
+  clona do GitHub). Leia como retrato; não faça operações Git nela, o `.git`
+  pode estar incompleto.
 - `~/SquadOne`, `~/prumo`, `~/crm-silmer` e outros clones Git próprios: a
   fonte de verdade no Dell (o PRUMO é dono de tudo; `~/prumo` é a dele). Leia
   branches, PRs, issues e checks com `git` e `gh`. Nada de commit, push, merge
@@ -38,7 +39,7 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 - Tailscale Serve: publica na tailnet o painel do Hermes (`/`) e os webhooks
   do n8n (`/webhook`); `tailscale serve status` mostra.
 - Syncthing: transporte de arquivos; não use como transporte de metadados Git.
-  Sem o PC, nenhuma pasta tem com quem sincronizar.
+  Sem aparelho pareado (desde 04/10/2026), nenhuma pasta tem com quem sincronizar.
 
 ## Diagnóstico
 
