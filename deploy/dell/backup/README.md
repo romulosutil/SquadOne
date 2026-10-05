@@ -74,9 +74,12 @@ um `backup:<fonte>` por fonte, pela idade do último sucesso:
   o `rclone` reclamar de sobreposição com o destino.
 - **`janela` e `preparo` por bloco.** `janela = ["04:00", "06:00"]` faz um
   bloco diário rodar de madrugada mesmo com o timer de hora em hora; com ela o
-  `intervalo_h` é 12 e não 24, senão uma rodada manual no meio do dia empurraria
-  o dia seguinte para fora da janela. `preparo` roda antes do sync; se falhar,
-  não sincroniza.
+  `intervalo_h` é 10 e não 24, senão uma rodada manual no meio do dia empurraria
+  o dia seguinte para fora da janela (o bloco só roda com o intervalo vencido
+  **e** o relógio na janela: uma rodada manual às T h exige T + 10 ≤ 06:00, ou
+  seja, até as 20h; com 12 h o limite era 18h e a rodada de 04/10 às 18:23 fez a
+  coleta de 05/10 não rodar). `preparo` roda antes do sync; se falhar, não
+  sincroniza.
 - **O coletor tem unidade própria** (`estrutura-coletar.service`): o
   `backup-dell-espelho.service` tem `NoNewPrivileges`, que impede o `sudo ufw
   status` do coletor. O espelho o chama com `systemctl --user start`.
