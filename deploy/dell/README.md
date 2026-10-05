@@ -319,11 +319,24 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   no 10º dia vira `expirado`. O que foi enviado antes é acervo: saiu um resumo
   único (`--resumo-backlog`) e nada é automático.
 - **06 · Funil semanal** (segunda, 08:00): por nicho (vertical + cidade)
-  leads, sites, enviados, responderam, em conversa, recusados e concluídos, e
-  as buscas ativas com 5+ enviados e nenhuma resposta como candidatas a
-  desativar (a aba Buscas não muda sozinha). Aviso pelo Hermes e
-  `n8n-estado/site-funil.json`, sem `itens` (não vira pendência).
-- `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar.
+  leads, sites, enviados, responderam, em conversa, recusados e concluídos.
+  Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira
+  pendência).
+- **Busca que não paga o site é pausada** (desde 05/10/2026; antes o funil só
+  a listava como candidata e o Caçador seguia rodando): ativa, 5+ enviados e
+  nenhuma resposta humana (`respondeu_em` a 5 min ou mais do envio, ou pasta
+  em `_em-conversa/`) vira `ativa` FALSE na aba Buscas, com `pausada_em` e
+  `pausa_motivo`, e o aviso diz quais. Religar é pôr TRUE em `ativa`: com
+  `pausada_em` preenchida a regra não pausa de novo. O retrato ganha
+  `nao_gerar` (leads `novo` de busca desligada), que o gerador de sites deixa
+  fora da fila.
+- **A vez entre as buscas ativas** (`claude-ops/site-cacador-escolha.py`, desde
+  05/10/2026): o Caçador roda uma busca por dia, a mais atrasada, e o atraso de
+  pousada, espaço de eventos e buffet (as verticais que responderam) conta em
+  dobro. Nunca rodada continua primeiro.
+- `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
+  `--testar-regra` e `python3 site-cacador-escolha.py --testar` rodam só o
+  código dos nós no node, sem n8n nem planilha.
 
 Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
