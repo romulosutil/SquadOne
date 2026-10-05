@@ -46,13 +46,23 @@ git pull
 powershell -ExecutionPolicy Bypass -File deploy\pc\instalar-tuneis.ps1
 ```
 
-O instalador confere o `ssh-agent`, o `ssh mel` sem senha e as portas 9119,
-9120, 5679 e 8080 livres no PC; copia `mel-tuneis.ps1` para
-`%LOCALAPPDATA%\Mel\` (trocar de branch no clone não muda o que roda); registra
-a tarefa `Mel-Tuneis` (no logon, só do seu usuário, sem limite de tempo) e testa
-as quatro portas. Não precisa de administrador, salvo se o Windows negar a
-tarefa. Log das quedas: `%LOCALAPPDATA%\Mel\tuneis.log`.
+O instalador confere o `ssh-agent` e o `ssh mel` sem senha; tira a tarefa
+antiga `DellWorker-LocalPortForwards` se existir; exige a porta 5679 livre no
+PC (sem ela o editor do n8n não abre) e só avisa se 9120, 9119 ou 8080 estiverem
+ocupadas; copia `mel-tuneis.ps1` para `%LOCALAPPDATA%\Mel\` (trocar de branch
+no clone não muda o que roda) com um lançador `.vbs` que o abre **sem janela**
+(com o Windows Terminal como padrão, `-WindowStyle Hidden` deixa uma janela que,
+fechada, derrubaria os túneis); registra a tarefa `Mel-Tuneis` (no logon, só do
+seu usuário, sem limite de tempo) e testa as portas por até 30 s cada. Não
+precisa de administrador, salvo se o Windows negar a tarefa (aí, PowerShell de
+administrador com o **mesmo** usuário). Logs: `%LOCALAPPDATA%\Mel\tuneis.log`
+(quedas e portas puladas) e `ssh.log` (o erro do ssh).
 Desfazer: `instalar-tuneis.ps1 -Desfazer`.
+
+Porta ocupada por outro programa no PC (um servidor de desenvolvimento na 8080,
+por exemplo) fica de fora só daquela rodada; os outros túneis sobem e ela volta
+quando liberar. Só roda uma instância por vez: para testar à mão, pare a tarefa
+antes (`Stop-ScheduledTask Mel-Tuneis`).
 
 Pré-requisito: o serviço **OpenSSH Authentication Agent** com início
 automático e a chave carregada (`ssh-add -l` lista `jarvis-pc-2`). O túnel roda
