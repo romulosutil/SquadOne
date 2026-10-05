@@ -21,8 +21,10 @@ um número das planilhas:
   (acao "retomou": o acompanhamento conta de novo; a pasta não muda);
   "enviado"/"fechado": conversa normal, nada muda. PRUMO: Etapa "Revisar" ->
   "Convite enviado" (como o clique em "Enviar convite").
-- "entrada": o lead escreveu. PRUMO: Etapa "Revisar" -> "Convite enviado";
-  "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ...". Site
+- "entrada": o lead escreveu. PRUMO (05/10/2026, a mesma regra do Site): Etapa
+  "Revisar" -> "Convite enviado" (a mensagem prova o contato, não é resposta);
+  "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ..." só se a
+  mensagem chegou 5 min ou mais depois de "Convite enviado em". Site
   (29/09/2026): "novo"/"pronto" -> "enviado" (+ enviado_em se vazio); resposta a
   5 min ou mais do envio -> respondeu_em (e "expirado" volta a "enviado"). A
   pasta do lead vai para _em-conversa pelo site-pastas do Dell (o Balcão lista
@@ -38,8 +40,15 @@ ordem e no ritmo em que o Rômulo mandava, cada um segundos depois do envio. É 
 saudação automática do WhatsApp Business, não gente. Por isso a primeira
 mensagem de um lead "pronto" só prova o envio, e resposta é mensagem que chega a
 5 min ou mais do envio. O observador manda um segundo aviso ("seguinte": true)
-quando o lead volta a escrever depois desses 5 min; o PRUMO ignora esse
-segundo aviso e continua marcando uma vez por janela, como antes.
+quando o lead volta a escrever depois desses 5 min.
+
+O PRUMO ficou de fora dessa regra até 05/10/2026: qualquer mensagem de quem
+tinha "Convite enviado" virava "Respondeu no WhatsApp". Dos 20 prospects
+marcados assim, todos "responderam" até cerca de 5 min depois do convite e 17
+em menos de 1 min. Eram saudações, e a tela Hoje do CRM listava "Respostas
+para responder" e "Conversando" que não existiam.
+Agora o PRUMO segue o Site, inclusive o segundo aviso; prumo-desfazer-saudacao.py
+desfaz as marcas antigas.
 
 Só número, direção e hora: o conteúdo das mensagens nunca sai do observador.
 Os dois webhooks exigem o header X-Observador (credencial "Observador
@@ -93,8 +102,8 @@ const ev = $('Conversa no WhatsApp').first().json.body ?? {};
 const alvo = chave(ev.chave);
 // saida: o Rômulo escreveu; entrada: o lead escreveu; lido: o lead leu (recibo azul). Outra coisa: nada.
 const direcao = ['saida', 'entrada', 'lido'].includes(ev.direcao) ? ev.direcao : '';
-// Segundo aviso do observador na mesma conversa: só serve ao Site (resposta depois da saudação).
-const seguinte = ev.seguinte === true;
+// ev.seguinte (segundo aviso do observador, depois da janela da saudação) não precisa de tratamento:
+// a regra dos 5 min abaixo, igual para o Site e o PRUMO, já o separa da saudação.
 const recebido = ev.em ? new Date(ev.em) : new Date();
 const em = Number.isFinite(recebido.getTime()) ? recebido : new Date();
 // Saudação automática do WhatsApp Business chega segundos depois do envio; gente demora mais.
@@ -104,17 +113,21 @@ const txt = (v) => String(v ?? '').trim();
 const CONVITE = 'Aguarde o dono responder (16 perguntas, uns 10 minutos). Sem resposta em 3 dias, ofereça fazer por telefone.';
 const saida = [];
 for (const l of $('Ler Prospects').all().map(i => i.json)) {
-  if (!alvo || !direcao || seguinte || chave(l['WhatsApp']) !== alvo) continue;
+  if (!alvo || !direcao || chave(l['WhatsApp']) !== alvo) continue;
   const etapa = txt(l['Etapa']);
   const base = { planilha: 'prumo', ID: String(l['ID']), nome: txt(l['Empresa']) || String(l['ID']), antes: etapa };
   if (direcao === 'saida' && etapa === 'Revisar') {
     // O Rômulo escreveu ao prospect: vale o clique em "Enviar convite".
     saida.push({ json: { ...base, acao: 'abordou', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(), 'Próxima ação': CONVITE } });
   } else if (direcao === 'entrada' && etapa === 'Revisar') {
-    // Resposta prova que o contato aconteceu, mesmo sem o link rastreado.
-    saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
-      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
+    // Mensagem do prospect prova que o contato aconteceu, mesmo sem o link rastreado, mas é a saudação
+    // do WhatsApp Business: só prova o envio. Resposta de verdade chega a 5 min ou mais (segundo aviso).
+    saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(), 'Próxima ação': CONVITE } });
   } else if (direcao === 'entrada' && etapa === 'Convite enviado') {
+    // Mesma regra do Site: dentro de 5 min do convite é saudação automática, nada muda. Convite sem data
+    // legível (marcado à mão) conta como envio antigo.
+    const desde = Date.parse(txt(l['Convite enviado em']));
+    if (Number.isFinite(desde) && em.getTime() - desde < SAUDACAO_MS) continue;
     // Reescreve a data do convite com ela mesma: o update grava todas as colunas mapeadas.
     saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': etapa, 'Convite enviado em': String(l['Convite enviado em'] ?? ''),
       'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
@@ -412,7 +425,7 @@ def testar() -> int:
             self.assertEqual(decidir("lido", prumos=[prumo("Revisar")])[0], [])
 
     class Resposta(unittest.TestCase):
-        """A regra de 29/09 não mudou."""
+        """Site: a regra de 29/09 não mudou. PRUMO: a mesma regra desde 05/10."""
 
         def test_saudacao_so_prova_o_envio(self):
             itens, _ = decidir("entrada", [site("pronto")])
@@ -426,10 +439,49 @@ def testar() -> int:
         def test_recusado_nao_responde(self):
             self.assertEqual(decidir("entrada", [site("recusado", enviado_em="2026-09-01T12:00:00Z")])[0], [])
 
-        def test_prumo_ignora_o_segundo_aviso(self):
-            self.assertEqual(decidir("entrada", prumos=[prumo("Revisar")], seguinte=True)[0], [])
+        def test_prumo_saudacao_nao_e_resposta(self):
+            # 2 min depois do convite: saudação automática do WhatsApp Business, nada muda.
+            convite = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:58:00Z"})
+            self.assertEqual(decidir("entrada", prumos=[convite])[0], [])
+            # 17 de 20 "respostas" de 05/10 chegaram menos de 1 min depois do convite.
+            segundos = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:59:40Z"})
+            self.assertEqual(decidir("entrada", prumos=[segundos])[0], [])
+
+        def test_prumo_resposta_depois_de_5_min(self):
+            convite = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:50:00Z"})
+            itens, _ = decidir("entrada", prumos=[convite])
+            self.assertEqual(itens[0]["acao"], "respondeu")
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 30/09"))
+            self.assertEqual(itens[0]["Convite enviado em"], "2026-09-30T12:50:00Z")
+            # Exatamente 5 min já é resposta (mesmo limite do Site: >=).
+            cinco = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:55:00Z"})
+            self.assertEqual(len(decidir("entrada", prumos=[cinco])[0]), 1)
+
+        def test_prumo_segundo_aviso_marca_a_resposta(self):
+            # O observador manda "seguinte" quando o lead volta a escrever depois da saudação; antes o
+            # PRUMO o ignorava, e a única marca era a da própria saudação.
+            convite = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T11:00:00Z"})
+            itens, _ = decidir("entrada", prumos=[convite], seguinte=True)
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp"))
+            recente = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:59:00Z"})
+            self.assertEqual(decidir("entrada", prumos=[recente], seguinte=True)[0], [])
+
+        def test_prumo_revisar_com_mensagem_do_lead_so_prova_o_envio(self):
+            itens, _ = decidir("entrada", prumos=[prumo("Revisar")])
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Convite enviado em"]), ("Convite enviado", "2026-09-30T13:00:00.000Z"))
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Aguarde o dono responder"))
+            # O segundo aviso, 5 min ou mais depois, é que vira resposta.
+            depois = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:40:00Z", "Próxima ação": "Aguarde o dono responder"})
+            self.assertTrue(decidir("entrada", prumos=[depois], seguinte=True)[0][0]["Próxima ação"].startswith("Respondeu"))
+
+        def test_prumo_convite_sem_data_conta_como_antigo(self):
+            # Marcado à mão, sem "Convite enviado em": igual ao Site, a mensagem vale como resposta.
             itens, _ = decidir("entrada", prumos=[prumo("Convite enviado")])
             self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp"))
+
+        def test_prumo_nao_toca_em_quem_nao_esta_em_convite_enviado(self):
+            for etapa in ("Diagnóstico pronto", "Concluído", "Sem interesse"):
+                self.assertEqual(decidir("entrada", prumos=[prumo(etapa, **{"Convite enviado em": "2026-09-30T12:00:00Z"})])[0], [])
 
     class Numeros(unittest.TestCase):
         def test_filtro(self):
