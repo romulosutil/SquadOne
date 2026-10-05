@@ -46,10 +46,25 @@ ordem, e o leitor tenta de novo depois de 1 min, 4, 16 e então de hora em hora
 fora do ar, conexão recusada, tenta a cada 30 s sem aviso). A posição gravada
 nunca passa do primeiro evento da fila: se o serviço reinicia, relê dali.
 
-Privacidade: o log não tem conteúdo e este leitor não guarda nada além da
-posição no log; só o número de quem é lead sai daqui (DDD + 8 últimos dígitos).
+Texto das respostas (05/10/2026): o CRM precisa separar resposta negativa, robô
+(saudação automática, menu do WhatsApp Business) e interesse, e isso só se sabe
+lendo. O remendo `squadone:respostas` da bridge grava o texto do que um lead
+escreveu em respostas.jsonl, e só para número que está em `leads.json` — a
+lista que este leitor grava, na mesma pasta, a cada leitura dos números do n8n.
+Este leitor junta as mensagens de cada lead até ficar ESPERA_DA_CONVERSA_S sem
+mensagem nova (quem escreve "Oi" e depois "não temos interesse" vira um envio
+só) e manda ao n8n (POST /webhook/whatsapp-resposta), que classifica com o
+Gemini e marca a planilha (`claude-ops/whatsapp-conversa.py`). O n8n devolve o
+aviso que vai ao Rômulo pelo Hermes ("<Nome> respondeu: ..."). O arquivo é
+apagado assim que lido; o texto fica só na memória até o n8n confirmar. Custo
+aceito: reiniciar o serviço com uma conversa ainda juntando perde a
+classificação dela (o SIGTERM tenta mandar antes de sair), e a marcação de
+"respondeu" pelo log continua valendo.
+
+Privacidade: o bridge.log não tem conteúdo; texto só de quem é lead, e só até
+o n8n receber. Só o número de quem é lead sai daqui (DDD + 8 últimos dígitos).
 Grupos, canais, listas de transmissão e status são ignorados. O log do serviço
-mostra só DDD + 2 últimos dígitos.
+mostra só DDD + 2 últimos dígitos, nunca o texto.
 """
 from __future__ import annotations
 
@@ -89,8 +104,11 @@ SILENCIO_SUSPEITO_S = 6 * 3600
 RETENTAR_CONEXAO_S = 30
 ESPERAS_FALHA_S = (60, 240, 960, 3600)
 MAX_PENDENTES = 500
+# Sem mensagem nova do lead por este tempo, a conversa vai ao n8n para classificar.
+ESPERA_DA_CONVERSA_S = 90
+MAX_MENSAGENS_POR_CONVERSA = 20
 MOTIVO = "self_chat_mode_rejects_non_self"
-MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos")
+MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos", "squadone:respostas")
 ROTULO = {"site": "Site antes da venda", "prumo": "PRUMO"}
 FEITO = {"entrada": "respondeu", "saida": "recebeu mensagem sua", "lido": "leu"}
 COMANDO_REMENDO = "python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --reiniciar"
@@ -246,9 +264,17 @@ class Observador:
     """O que o leitor lembra entre linhas. `chamar`, `avisar` e `relogio` entram de fora nos testes."""
 
     def __init__(self, chaves: set[str], chamar=http, avisar=avisar_pelo_hermes, relogio=time.time,
-                 telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS):
+                 telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None):
         agora = relogio()
         self.chaves = chaves
+        # leads.json (para a bridge) e respostas.jsonl (da bridge) moram junto da posição.
+        self.pasta = pasta or POSICAO.parent
+        # chave -> {"mensagens": [{"em", "texto"}], "ultima": instante}: juntando até a conversa parar.
+        self.conversas: dict[str, dict] = {}
+        # Conversas prontas que o n8n ainda não recebeu, na ordem.
+        self.conversas_prontas: deque = deque()
+        self.falhas_conversa = 0
+        self.conversa_tentar_em = 0.0
         self.chamar, self.avisar, self.relogio, self.telefone, self.bridge_js = chamar, avisar, relogio, telefone, bridge_js
         self.proxima_leitura = agora + RELER_NUMEROS_S
         self.falhas_numeros = 0
@@ -266,6 +292,7 @@ class Observador:
         self.hora_do_log: float | None = None
         self.proxima_conferencia = agora
         self.remendo_avisado = False
+        self.gravar_lista()
 
     # ------------------------------------------------------------ linhas do log
 
@@ -367,11 +394,82 @@ class Observador:
             self.chaves = ler_numeros(self.chamar)
             self.falhas_numeros = 0
             self.proxima_leitura = agora + RELER_NUMEROS_S
+            self.gravar_lista()
         except Exception as e:  # noqa: BLE001 — mantém a lista anterior
             self.falhas_numeros += 1
             espera = espera_da_falha(e, self.falhas_numeros)
             self.proxima_leitura = agora + espera
             log(f"não consegui reler os números dos leads (tento em {espera} s):", e)
+
+    # ------------------------------------------------------------ texto das respostas
+
+    def gravar_lista(self) -> None:
+        """leads.json: o filtro da bridge para gravar texto. Escrita atômica, 600."""
+        try:
+            self.pasta.mkdir(parents=True, exist_ok=True)
+            tmp = self.pasta / "leads.json.tmp"
+            tmp.write_text(json.dumps(sorted(self.chaves)))
+            tmp.chmod(0o600)
+            tmp.replace(self.pasta / "leads.json")
+        except OSError as e:
+            log("lista de leads não gravada para a bridge:", e)
+
+    def ler_respostas(self) -> None:
+        """Tira o respostas.jsonl do caminho (a bridge abre o arquivo a cada linha e cria outro),
+        lê e apaga. Um .lendo que sobrou de uma parada no meio é lido primeiro."""
+        arquivo, lendo = self.pasta / "respostas.jsonl", self.pasta / "respostas.lendo.jsonl"
+        try:
+            if not lendo.exists():
+                if not arquivo.exists() or arquivo.stat().st_size == 0:
+                    return
+                arquivo.replace(lendo)
+            linhas = lendo.read_text(encoding="utf-8", errors="replace").splitlines()
+            lendo.unlink()
+        except OSError as e:
+            log("respostas não lidas:", e)
+            return
+        agora = self.relogio()
+        for texto in linhas:
+            try:
+                r = json.loads(texto)
+                chave, msg = str(r["chave"]), str(r["texto"]).strip()
+            except (ValueError, KeyError, TypeError):
+                continue
+            # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
+            if chave not in self.chaves or not msg:
+                continue
+            quando = self._hora_vista(r.get("ts"), agora)
+            c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora})
+            if len(c["mensagens"]) < MAX_MENSAGENS_POR_CONVERSA:
+                c["mensagens"].append({"em": iso(quando), "texto": msg[:1000]})
+            c["ultima"] = agora
+
+    def fechar_conversas(self, todas: bool = False) -> None:
+        agora = self.relogio()
+        for chave in [k for k, c in self.conversas.items() if todas or agora - c["ultima"] >= ESPERA_DA_CONVERSA_S]:
+            self.conversas_prontas.append({"chave": chave, "mensagens": self.conversas.pop(chave)["mensagens"]})
+
+    def mandar_conversas(self) -> None:
+        if self.relogio() < self.conversa_tentar_em:
+            return
+        while self.conversas_prontas:
+            conversa = self.conversas_prontas[0]
+            try:
+                resposta = self.chamar("POST", "whatsapp-resposta", conversa)
+            except Exception as e:  # noqa: BLE001 — fica na fila e tenta de novo
+                self.falhas_conversa += 1
+                espera = espera_da_falha(e, self.falhas_conversa)
+                self.conversa_tentar_em = self.relogio() + espera
+                log(f"n8n não recebeu a resposta de {mascarar(conversa['chave'])}, tento de novo em {espera} s:", e)
+                return
+            self.conversas_prontas.popleft()
+            self.falhas_conversa = 0
+            marcados = (resposta.get("marcados") or []) if isinstance(resposta, dict) else []
+            tipos = ", ".join(str(m.get("tipo")) for m in marcados if isinstance(m, dict)) or "nenhum lead"
+            log(f"resposta classificada: {mascarar(conversa['chave'])} ({len(conversa['mensagens'])} msg) -> {tipos}")
+            for m in marcados:
+                if isinstance(m, dict) and m.get("aviso"):
+                    self.avisar(str(m["aviso"]))
 
     # ------------------------------------------------------------ rotina
 
@@ -381,6 +479,10 @@ class Observador:
             self.reler_numeros()
         if self.pendentes:
             self.esvaziar()
+        self.ler_respostas()
+        self.fechar_conversas()
+        if self.conversas_prontas:
+            self.mandar_conversas()
         if self.lote and agora - (self.lote_desde or agora) >= LOTE_AVISO_S:
             self.avisar_lote()
         if agora >= self.proxima_conferencia:
@@ -404,7 +506,8 @@ class Observador:
         elif not self.remendo_avisado:
             self.remendo_avisado = True
             self.avisar("A bridge do WhatsApp perdeu o remendo (provável `hermes update`): o que você manda aos "
-                        "leads e os recibos de leitura não estão marcando a planilha; respostas continuam marcando. "
+                        "leads, os recibos de leitura e o texto das respostas (negativa, robô, interesse) não estão "
+                        "chegando à planilha; que o lead respondeu continua marcando. "
                         f"Para pôr de volta: {COMANDO_REMENDO}")
 
     def posicao_segura(self, onde: dict) -> tuple[int, int] | None:
@@ -437,6 +540,9 @@ def main() -> int:
         return acompanhar(obs, onde)
     finally:
         obs.avisar_lote()  # parar o serviço não engole o aviso
+        obs.ler_respostas()  # nem a conversa que ainda estava juntando
+        obs.fechar_conversas(todas=True)
+        obs.mandar_conversas()
         if pos := obs.posicao_segura(onde):
             salvar_posicao(*pos)
 

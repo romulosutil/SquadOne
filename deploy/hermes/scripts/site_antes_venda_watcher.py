@@ -81,15 +81,16 @@ FEMININOS = {"clinica", "academia", "casa", "barbearia", "pizzaria", "padaria", 
 
 
 def abordagem(nome: str, url: str, phone: str) -> str:
+    # 05/10/2026: a primeira mensagem pede licença e não leva o link (ver site-mensagem.js);
+    # o link vai depois do "pode mandar", pelo aviso de resposta. `url` fica no aviso, para o Rômulo.
     if phone.startswith("1") and len(phone) == 11:  # EUA, como no Balcão
-        return (f"Hi! My name is Rômulo and I'm with Prumo; we help local businesses attract more customers online. "
-                f"I came across {nome} on Google and built a demo website to show how yours could look:\n{url}\n\nWhat do you think?")
+        return (f"Hi! This is Rômulo. I found {nome} on Google and put together a demo website for you, on my own "
+                f"initiative. Can I send you the link so you can take a look? No strings attached.")
     primeira = unicodedata.normalize("NFD", nome.split(" ")[0] if nome else "")
     primeira = "".join(ch for ch in primeira if ch.isalnum()).lower()
     artigo = "da" if primeira in FEMININOS else "do"
-    return (f"Olá! Me chamo Rômulo e represento o Prumo, que ajuda negócios locais a atrair mais clientes pela internet. "
-            f"Encontrei o perfil {artigo} {nome} no Google e montei um site de demonstração para mostrar como o de vocês "
-            f"poderia ficar:\n{url}\n\nO que acharam?")
+    return (f"Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração "
+            f"de site {artigo} {nome}. Posso te mandar o link para dar uma olhada? É sem compromisso.")
 
 
 def notify(lead_dir: Path, state_path: Path, dry_run: bool) -> bool:

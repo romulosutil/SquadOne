@@ -7,16 +7,27 @@
   no 10º dia, status "expirado" (a pasta vai para _concluidos/ pelo site-pastas
   na hora seguinte, depois que o Balcão listar).
 - "06 · Funil semanal" (segunda, 08:00): por nicho (vertical + cidade) leads,
-  sites, enviados, responderam, em conversa, recusados e concluídos; buscas
-  ativas com 5+ enviados e nenhuma resposta viram candidatas a desativar (a
-  aba Buscas não muda sozinha). Aviso pelo Hermes e estado/site-funil.json
-  (sem "itens": o dell-status e o Hermes não o leem como pendência).
+  sites, enviados, responderam, em conversa, recusados e concluídos. Aviso pelo
+  Hermes e estado/site-funil.json (sem "itens": o dell-status e o Hermes não o
+  leem como pendência).
+
+Desde 05/10/2026 o funil pausa a busca que não paga o site: ativa, 5+
+enviados e nenhuma resposta humana (respondeu_em a 5 min ou mais do envio,
+RULES 17, ou pasta em _em-conversa) vira `ativa` FALSE na aba Buscas, com
+`pausada_em` e `pausa_motivo`. Antes ela só aparecia no aviso como candidata e
+o Caçador seguia rodando a busca; 83 enviados, 11 respostas, e odontologia,
+pilates, academia, vidraçaria e marcenaria somavam 0 de 21. Busca com
+`pausada_em` não é pausada de novo: religar `ativa` à mão é a palavra final do
+Rômulo. O retrato ganha `nao_gerar`: leads `novo` de busca desligada, que o
+gerador de sites deixa fora da fila (gerador-de-sites.py).
 
 O que foi enviado antes de 29/09/2026 é acervo: nada automático; o resumo único
 sai por `--resumo-backlog`.
 
-Uso: python3 site-acompanhamento.py              publica e ativa os dois fluxos
+Uso: python3 site-acompanhamento.py              colunas que faltam na aba Buscas + publica e ativa os dois fluxos
+     python3 site-acompanhamento.py --colunas    só acrescenta pausada_em e pausa_motivo na aba Buscas
      python3 site-acompanhamento.py --testar     roda cópias sem gravar nada (planilha de mentira no 05)
+     python3 site-acompanhamento.py --testar-regra   a regra da pausa no node, sem n8n nem planilha
      python3 site-acompanhamento.py --resumo-backlog [--enviar]   o resumo do acervo (--enviar põe na fila)
 """
 import copy
@@ -42,6 +53,8 @@ PLANILHA, SHEETS, CORTE = sv.PLANILHA, sv.SHEETS, sv.CORTE
 LEADS_GID, BUSCAS_GID = "396728619", "52197070"
 LINK_PLANILHA = f"https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={LEADS_GID}"
 FOLLOWUP_DIAS, EXPIRA_DIAS, MIN_ENVIADOS = 3, 10, 5
+# Escritas pelo funil quando pausa uma busca; o resto da aba Buscas é do Rômulo e do Caçador.
+COLUNAS_BUSCAS = ["pausada_em", "pausa_motivo"]
 FILA = Path.home() / ".local/share/avisos/fila"
 AUTO = Path.home() / "auto-site"
 
@@ -162,7 +175,8 @@ def acompanhamento(erro):
 
 # ------------------------------------------------------------------ 06 · Funil semanal
 
-FUNIL = f"""// Funil por nicho (vertical + cidade) e buscas candidatas a desativar. Só lê.
+FUNIL = f"""// Funil por nicho (vertical + cidade) e buscas a pausar. Só calcula: quem grava a
+// pausa na aba Buscas é "Pausar na aba Buscas", com o que sai daqui.
 {sv.PASTA_DO_LEAD_JS}
 const DIA = 24 * 60 * 60 * 1000;
 const agora = Date.now();
@@ -180,13 +194,23 @@ for (const r of $('Ler o JSON do recibo').all()) if (r.json.recibo?.place_id) pu
 const leads = $('Ler a planilha').all().map(i => i.json).filter(l => txt(l.place_id) && !/^TESTE/.test(txt(l.place_id)));
 const topo = (l) => {{ const p = pasta[l.place_id] ?? ''; return p.includes('/') ? p.split('/')[0] : (p ? 'raiz' : ''); }};
 const enviado = (l) => ['enviado', 'expirado'].includes(txt(l.status)) || Boolean(txt(l.enviado_em));
-const respondeu = (l) => Boolean(txt(l.respondeu_em)) || topo(l) === '_em-conversa';
+// Resposta humana (RULES 17): a 5 min ou mais do envio; antes pode ser a saudação
+// automática do WhatsApp Business. O observador já só grava assim; a conta de novo
+// cobre o preenchimento à mão. Só a data (sem hora), escrita à mão, vale como resposta.
+const respondeuHumano = (l) => {{
+  const r = txt(l.respondeu_em);
+  if (!r) return false;
+  if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(r)) return true;
+  const em = Date.parse(r), env = Date.parse(txt(l.enviado_em));
+  return !Number.isFinite(em) || !Number.isFinite(env) || em - env >= 5 * 60 * 1000;
+}};
+const respondeu = (l) => respondeuHumano(l) || topo(l) === '_em-conversa';
 const medir = (ls) => ({{
   leads: ls.filter(l => txt(l.status) !== 'descartado').length,
   descartados: ls.filter(l => txt(l.status) === 'descartado').length,
   sites: ls.filter(l => txt(l.site_url)).length,
   enviados: ls.filter(enviado).length,
-  responderam: ls.filter(l => txt(l.respondeu_em)).length,
+  responderam: ls.filter(respondeuHumano).length,
   em_conversa: ls.filter(l => topo(l) === '_em-conversa').length,
   recusados: ls.filter(l => topo(l) === '_recusados').length,
   concluidos: ls.filter(l => topo(l) === '_concluidos').length,
@@ -215,7 +239,8 @@ const buscas = $input.all().map(i => i.json).filter(b => txt(b.query)).map(b => 
   for (const l of daRodada) conta[txt(l.cidade)] = (conta[txt(l.cidade)] ?? 0) + 1;
   const cidade = Object.entries(conta).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
   return {{ query: txt(b.query), vertical: txt(b.vertical), lat: txt(b.lat), lng: txt(b.lng),
-    ativa: ['true', 'verdadeiro', 'sim', 'x', '1'].includes(norm(b.ativa)), cidade, r, leads: [] }};
+    ativa: ['true', 'verdadeiro', 'sim', 'x', '1'].includes(norm(b.ativa)), cidade, r, leads: [],
+    linha: b.row_number, pausada_em: txt(b.pausada_em) }};
 }});
 for (const l of leads) {{
   const rl = radicais(l.vertical);
@@ -224,10 +249,19 @@ for (const l of leads) {{
   const dona = naCidade[0] ?? (candidatas.length === 1 && !candidatas[0].cidade ? candidatas[0] : null);
   if (dona) dona.leads.push(l);
 }}
+// Pausa: ativa, MIN_ENVIADOS+ enviados e nenhuma resposta humana. Quem já tem
+// pausada_em e está ativa foi religada pelo Rômulo: a regra não pausa de novo.
+const nao_gerar = [];
 const porBusca = buscas.map(({{ r, leads: ls, ...b }}) => {{
   const enviados = ls.filter(enviado).length, respostas = ls.filter(respondeu).length;
+  const pausar = b.ativa && !b.pausada_em && enviados >= MIN_ENVIADOS && respostas === 0;
+  const desligada = !b.ativa || pausar;
+  const rotulo = '"' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '');
+  // Lead novo de busca desligada: o gerador de sites não gasta uma sessão nele.
+  if (desligada) for (const l of ls) if (txt(l.status) === 'novo' && !txt(l.site_url))
+    nao_gerar.push({{ place_id: txt(l.place_id), nome: txt(l.nome), busca: rotulo }});
   return {{ ...b, leads: ls.filter(l => txt(l.status) !== 'descartado').length, enviados, respostas,
-    candidata: b.ativa && enviados >= MIN_ENVIADOS && respostas === 0 }};
+    candidata: pausar, pausar, ativa_depois: !desligada }};
 }});
 
 const semana = {{
@@ -236,8 +270,8 @@ const semana = {{
   enviados: leads.filter(l => recente(l.enviado_em)).length,
   responderam: leads.filter(l => recente(l.respondeu_em)).length,
 }};
-const estado = {{ geradoEm: new Date().toISOString(), regra: {{ min_enviados: MIN_ENVIADOS }},
-  semana, totais: medir(leads), nichos, buscas: porBusca }};
+const estado = {{ geradoEm: new Date().toISOString(), regra: {{ min_enviados: MIN_ENVIADOS, resposta_min: 5 }},
+  semana, totais: medir(leads), nichos, buscas: porBusca, nao_gerar }};
 return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: 'site-funil.json' }} }} }}];"""
 
@@ -245,7 +279,8 @@ AVISO_FUNIL = f"""const NL = String.fromCharCode(10);
 const f = $('Funil').first().json;
 const linha = (m) => [m.leads, m.sites, m.enviados, m.responderam, m.em_conversa, m.recusados, m.concluidos].join(' · ');
 const nichos = f.nichos.filter(n => n.sites > 0);
-const candidatas = f.buscas.filter(b => b.candidata);
+const pausadas = f.buscas.filter(b => b.pausar);
+const naoGerar = f.nao_gerar ?? [];
 const texto = [
   'Últimos 7 dias: ' + f.semana.leads + ' leads, ' + f.semana.sites + ' sites, ' + f.semana.enviados + ' enviados, ' + f.semana.responderam + ' respostas.',
   '',
@@ -253,18 +288,45 @@ const texto = [
   ...nichos.map(n => '• ' + n.nicho + ': ' + linha(n)),
   '*Total:* ' + linha(f.totais),
   '',
-  candidatas.length
-    ? 'Buscas para pensar em desativar ({MIN_ENVIADOS}+ enviados, nenhuma resposta):' + NL
-      + candidatas.map(b => '• "' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '') + ' (' + b.lat + ', ' + b.lng + '): '
+  pausadas.length
+    ? 'Buscas pausadas agora ({MIN_ENVIADOS}+ enviados, nenhuma resposta; o Caçador não as roda mais):' + NL
+      + pausadas.map(b => '• "' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '') + ' (' + b.lat + ', ' + b.lng + '): '
         + b.enviados + ' enviados, 0 respostas').join(NL)
-      + NL + 'A aba Buscas não muda sozinha: para desativar, ponha FALSE em ativa.'
+      + NL + 'Para religar, ponha TRUE em ativa na aba Buscas: com pausada_em preenchida a regra não pausa de novo.'
     : 'Nenhuma busca ativa com {MIN_ENVIADOS}+ enviados sem resposta.',
+  ...(naoGerar.length ? ['', naoGerar.length + ' lead(s) novo(s) de busca desligada ficam fora da fila do gerador de sites.'] : []),
   '',
   'Planilha: {LINK_PLANILHA}',
 ].join(NL);
 const titulo = '📊 Site antes da venda: funil da semana';
 return [{{ json: {{ titulo, texto }}, binary: {{ data: {{ data: Buffer.from(JSON.stringify({{ titulo, texto }}), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: 'aviso.json' }} }} }}];"""
+
+
+BUSCAS_A_PAUSAR = """// Uma linha por busca pausada agora; sem nenhuma, "Pausar na aba Buscas" nem roda.
+const agora = $now.toFormat("yyyy-MM-dd'T'HH:mm");
+return $('Funil').first().json.buscas.filter(b => b.pausar && b.linha).map(b => ({ json: {
+  row_number: Number(b.linha), ativa: 'FALSE', pausada_em: agora,
+  pausa_motivo: b.enviados + ' enviados e nenhuma resposta (funil semanal)',
+} }));"""
+
+
+def pausar_buscas(x, y):
+    """Update da aba Buscas pela linha, como o "Registrar ultima_rodada" do Caçador.
+    USER_ENTERED: FALSE vira booleano (checkbox ou texto, o Caçador lê os dois)."""
+    colunas = ["row_number", "ativa", *COLUNAS_BUSCAS]
+    return {"id": "pausar-buscas", "name": "Pausar na aba Buscas", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
+            "position": [x, y], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
+            "parameters": {"resource": "sheet", "operation": "update",
+                           "documentId": {"__rl": True, "mode": "id", "value": PLANILHA},
+                           "sheetName": {"__rl": True, "mode": "id", "value": BUSCAS_GID, "cachedResultName": "Buscas"},
+                           "columns": {"mappingMode": "defineBelow", "matchingColumns": ["row_number"],
+                                       "value": {c: "={{ $json." + c + " }}" for c in colunas},
+                                       "schema": [{"id": c, "displayName": c, "required": False, "defaultMatch": False,
+                                                   "display": True, "type": "number" if c == "row_number" else "string",
+                                                   "canBeUsedToMatch": True, **({"readOnly": True} if c == "row_number" else {})}
+                                                  for c in colunas]},
+                           "options": {"cellFormat": "USER_ENTERED"}}}
 
 
 def funil(erro):
@@ -283,10 +345,14 @@ def funil(erro):
                                                   "fileName": "/home/node/.n8n-files/estado/site-funil.json"}},
         code("aviso-funil", "Montar aviso", AVISO_FUNIL, [1320, 120]),
         gravar,
+        code("buscas-a-pausar", "Buscas a pausar", BUSCAS_A_PAUSAR, [1320, 360]),
+        pausar_buscas(1540, 360),
     ]
     con = em_fila(["Segunda 08:00", "Ler recibos da pasta auto", "Ler o JSON do recibo", "Ler a planilha", "Ler Buscas", "Funil"])
-    con["Funil"] = {"main": [[{"node": "Gravar funil", "type": "main", "index": 0}, {"node": "Montar aviso", "type": "main", "index": 0}]]}
+    con["Funil"] = {"main": [[{"node": n, "type": "main", "index": 0}
+                              for n in ("Gravar funil", "Montar aviso", "Buscas a pausar")]]}
     con["Montar aviso"] = {"main": [[{"node": "Avisar pelo Hermes", "type": "main", "index": 0}]]}
+    con["Buscas a pausar"] = {"main": [[{"node": "Pausar na aba Buscas", "type": "main", "index": 0}]]}
     return {"name": "06 · Funil semanal (Site antes da venda)", "nodes": nos, "connections": con,
             "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "errorWorkflow": erro}}
 
@@ -376,6 +442,30 @@ def cenario_acompanhamento():
     return linhas
 
 
+def colunas_buscas():
+    """Acrescenta no fim do cabeçalho da aba Buscas as colunas da pausa, se faltarem
+    (o fluxo escreve pelo nome; coluna que não existe é ignorada pelo n8n)."""
+    from sheets_proxy import SheetsProxy
+    with SheetsProxy([PLANILHA]) as s:
+        meta = s.get(f"/v4/spreadsheets/{PLANILHA}?fields=sheets.properties")
+        props = next(x["properties"] for x in meta["sheets"] if str(x["properties"]["sheetId"]) == BUSCAS_GID)
+        aba = props["title"]
+        cab = (s.get(f"/v4/spreadsheets/{PLANILHA}/values/" + quote(f"{aba}!1:1")).get("values") or [[]])[0]
+        faltam = [c for c in COLUNAS_BUSCAS if c not in cab]
+        if not faltam:
+            print(f"{aba}: colunas já existem:", ", ".join(COLUNAS_BUSCAS))
+            return
+        grade = props["gridProperties"]["columnCount"]
+        if len(cab) + len(faltam) > grade:
+            s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": [{"appendDimension": {
+                "sheetId": int(BUSCAS_GID), "dimension": "COLUMNS", "length": len(cab) + len(faltam) - grade}}]})
+        letra = lambda n: (letra(n // 26 - 1) if n >= 26 else "") + chr(ord("A") + n % 26)
+        faixa = f"{aba}!{letra(len(cab))}1:{letra(len(cab) + len(faltam) - 1)}1"
+        s.post(f"/v4/spreadsheets/{PLANILHA}/values:batchUpdate",
+               {"valueInputOption": "RAW", "data": [{"range": faixa, "values": [faltam]}]})
+        print(f"{aba}: colunas novas em {faixa}:", ", ".join(faltam))
+
+
 def resumo_backlog():
     """Resumo único do acervo: enviados antes do corte, sem resposta, com a pasta na raiz."""
     from sheets_proxy import SheetsProxy
@@ -419,7 +509,93 @@ def resumo_backlog():
     return {"titulo": "🗂️ Site antes da venda: acervo sem automação", "texto": texto}
 
 
+def rodar_no(codigo: str, dados: dict, entrada: list) -> list:
+    """Roda o código de um nó Code no node do Dell: `$('Nó')` devolve `dados[nó]`
+    (lista = .all(), objeto = .first()) e `$input.all()` devolve `entrada`."""
+    import shutil
+    import tempfile
+    exe = shutil.which("node") or max(Path.home().glob(".hermes/tools/node-*/bin/node"), default=None)
+    prog = ("const dados = " + json.dumps(dados, ensure_ascii=False) + ";\n"
+            "const $ = (n) => ({ all: () => (dados[n] ?? []).map(json => ({ json })), first: () => ({ json: dados[n] }) });\n"
+            "const $input = { all: () => " + json.dumps(entrada, ensure_ascii=False) + ".map(json => ({ json })) };\n"
+            "const $now = { toFormat: () => '2026-10-05T08:00' };\n"
+            "const itens = (() => {\n" + codigo + "\n})();\n"
+            "console.log(JSON.stringify(itens.map(i => i.json)));\n")
+    with tempfile.TemporaryDirectory() as d:
+        arq = Path(d) / "no.mjs"
+        arq.write_text(prog, encoding="utf-8")
+        r = subprocess.run([str(exe), str(arq)], capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        raise AssertionError(r.stderr)
+    return json.loads(r.stdout)
+
+
+def testar_regra() -> int:
+    """A regra da pausa sem n8n nem planilha: o código dos nós Funil e "Buscas a
+    pausar" no node, com uma aba Buscas e uma aba Leads de mentira."""
+    import unittest
+
+    def busca(linha, query, vertical, rodada, ativa="TRUE", pausada_em=""):
+        return {"row_number": linha, "query": query, "vertical": vertical, "lat": "0", "lng": "0", "ativa": ativa,
+                "ultima_rodada": rodada, "pausada_em": pausada_em}
+
+    def leads(prefixo, vertical, cidade, criado, n, **k):
+        return [{"place_id": f"{prefixo}{i}", "nome": f"{prefixo}{i}", "vertical": vertical, "cidade": cidade,
+                 "criado_em": criado, "status": "enviado", "site_url": "https://x", "enviado_em": "2026-10-01T10:00:00-03:00",
+                 "respondeu_em": "", **k} for i in range(n)]
+
+    buscas = [
+        busca(2, "vidraçaria", "vidracaria", "2026-09-23T06:00"),
+        busca(3, "pousada", "pousada", "2026-09-25T06:00"),
+        busca(4, "espaço para eventos", "eventos", "2026-09-24T06:00"),
+        busca(5, "academia", "fitness", "2026-09-18T06:00", pausada_em="2026-09-28T08:00"),  # religada pelo Rômulo
+        busca(6, "clínica odontológica", "odontologia", "2026-09-15T06:00", ativa="FALSE"),
+    ]
+    planilha = (
+        leads("vid", "vidraçaria", "Joinville", "2026-09-23T06:05:00-03:00", 5)
+        + [{**leads("vidnovo", "vidraçaria", "Joinville", "2026-09-23T06:05:00-03:00", 1)[0], "status": "novo", "site_url": "", "enviado_em": ""}]
+        # Só a saudação automática (2 min depois do envio): não é resposta humana.
+        + leads("pou", "pousada", "Ubatuba", "2026-09-25T06:05:00-03:00", 5, respondeu_em="2026-10-01T10:02:00-03:00")
+        + leads("eve", "espaço de eventos", "Campinas", "2026-09-24T06:05:00-03:00", 4)
+        + leads("evr", "espaço de eventos", "Campinas", "2026-09-24T06:05:00-03:00", 1, respondeu_em="2026-10-01T11:00:00-03:00")
+        + leads("aca", "academia", "Belo Horizonte", "2026-09-18T06:05:00-03:00", 5)
+        + [{**leads("odo", "odontologia", "São Paulo", "2026-09-15T06:05:00-03:00", 1)[0], "status": "novo", "site_url": "", "enviado_em": ""}]
+    )
+    dados = {"Ler o JSON do recibo": [], "Ler recibos da pasta auto": [], "Ler a planilha": planilha}
+
+    class Regra(unittest.TestCase):
+        @classmethod
+        def setUpClass(cls):
+            cls.f = rodar_no(FUNIL, dados, buscas)[0]
+            cls.pausas = rodar_no(BUSCAS_A_PAUSAR, {"Funil": cls.f}, [])
+            cls.aviso = rodar_no(AVISO_FUNIL, {"Funil": cls.f}, [])[0]["texto"]
+
+        def test_pausa_so_sem_resposta_humana(self):
+            por = {b["query"]: b for b in self.f["buscas"]}
+            self.assertTrue(por["vidraçaria"]["pausar"])
+            self.assertTrue(por["pousada"]["pausar"])  # resposta a 2 min do envio não conta
+            self.assertFalse(por["espaço para eventos"]["pausar"])  # 1 resposta humana
+            self.assertFalse(por["academia"]["pausar"])  # pausada_em + ativa: o Rômulo religou
+            self.assertFalse(por["clínica odontológica"]["pausar"])  # já desligada
+            self.assertEqual([p["row_number"] for p in self.pausas], [2, 3])
+            self.assertEqual({p["ativa"] for p in self.pausas}, {"FALSE"})
+            self.assertTrue(all(p["pausada_em"] and "5 enviados" in p["pausa_motivo"] for p in self.pausas))
+
+        def test_nao_gerar_leva_os_novos_de_busca_desligada(self):
+            self.assertEqual(sorted(x["place_id"] for x in self.f["nao_gerar"]), ["odo0", "vidnovo0"])
+
+        def test_aviso_conta_as_pausas(self):
+            self.assertIn("Buscas pausadas agora", self.aviso)
+            self.assertIn('"vidraçaria" em Joinville', self.aviso)
+            self.assertIn("2 lead(s) novo(s) de busca desligada", self.aviso)
+
+    r = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Regra))
+    return 0 if r.wasSuccessful() else 1
+
+
 if __name__ == "__main__":
+    if "--testar-regra" in sys.argv:
+        sys.exit(testar_regra())
     erro = sv.erro_wf()
     if "--resumo-backlog" in sys.argv:
         aviso = resumo_backlog()
@@ -435,10 +611,18 @@ if __name__ == "__main__":
         s = testar(wf, {"Ler a planilha": planilha_de_mentira(cenario_acompanhamento()), "Decidir": decidir,
                         "Marcar na planilha": noop("Marcar na planilha"), "Avisar pelo Hermes": noop("Avisar pelo Hermes")})
         print(json.dumps({"Decidir": s.get("Decidir"), "Montar avisos": s.get("Montar avisos")}, ensure_ascii=False, indent=1))
-        s = testar(funil(erro), {"Gravar funil": noop("Gravar funil"), "Avisar pelo Hermes": noop("Avisar pelo Hermes")})
+        s = testar(funil(erro), {"Gravar funil": noop("Gravar funil"), "Avisar pelo Hermes": noop("Avisar pelo Hermes"),
+                                 "Pausar na aba Buscas": noop("Pausar na aba Buscas")})
         f = (s.get("Funil") or [{}])[0]
-        print(json.dumps({k: f.get(k) for k in ("semana", "totais", "buscas")}, ensure_ascii=False, indent=1))
+        print(json.dumps({k: f.get(k) for k in ("semana", "totais", "buscas", "nao_gerar")}, ensure_ascii=False, indent=1))
+        print("pausaria:", json.dumps(s.get("Buscas a pausar") or [], ensure_ascii=False))
         print((s.get("Montar aviso") or [{}])[0].get("texto"))
+    elif "--colunas" in sys.argv:
+        colunas_buscas()
     else:
+        try:
+            colunas_buscas()
+        except (SystemExit, Exception) as e:  # sem as colunas a pausa funciona, só não lembra quem o Rômulo religou
+            print(f"colunas da aba Buscas não criadas ({e}); rode de novo com --colunas")
         publicar(acompanhamento(erro))
         publicar(funil(erro))

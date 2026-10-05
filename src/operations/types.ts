@@ -63,7 +63,16 @@ export type CrmProduto = 'site' | 'prumo'
 export type CrmSinal =
   | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
   | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
-  | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'descartado' | 'sem-interesse'
+  | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  | 'so-robo'
+
+export type CrmTipoDeResposta = 'negativa' | 'interesse' | 'neutra' | 'bot'
+
+export interface CrmResposta {
+  tipo: CrmTipoDeResposta
+  trecho: string
+  em?: string
+}
 
 export interface CrmEvento {
   tipo: string
@@ -90,7 +99,7 @@ export interface CrmLead {
   etapa: CrmEtapa
   sinal: CrmSinal
   subEtapa: string
-  motivoPerda?: 'recusou' | 'expirou' | 'descartado' | 'sem-interesse'
+  motivoPerda?: 'recusou' | 'expirou' | 'descartado' | 'sem-interesse' | 'sem-contato'
   estadoNaPlanilha: string
   desde?: string
   diasNaEtapa?: number
@@ -104,8 +113,9 @@ export interface CrmLead {
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }
   notas: number
+  resposta?: CrmResposta
   eventos: CrmEvento[]
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; planilha?: string }
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string }
   pasta?: {
     lugar: string
     slug: string
@@ -150,4 +160,4 @@ export interface CrmVisao {
   ultimaFalha?: { em: string; erro: string }
 }
 
-export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita'
+export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'

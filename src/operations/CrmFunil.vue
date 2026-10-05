@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura } from './crm-formato'
 import type { CrmEtapa, CrmLead, CrmVisao } from './types'
 
 // "Funil": as 6 etapas lado a lado (no celular, uma coluna por vez com rolagem
@@ -78,7 +78,7 @@ const artefatos = (l: CrmLead) => {
           {{ visao.gerador.detalhe }}{{ visao.gerador.pendentes !== undefined ? ` ${visao.gerador.pendentes} na fila.` : '' }}{{ visao.gerador.atualizadoEm ? ` (às ${hora(visao.gerador.atualizadoEm)})` : '' }}
         </p>
         <template v-if="etapa === 'perdido'">
-          <p class="crm-coluna__nota">Recusou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'recusou').length }} · Expirou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'expirou').length }} · Sem interesse {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-interesse').length }} · Descartado {{ descartados }}</p>
+          <p class="crm-coluna__nota">Recusou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'recusou').length }} · Expirou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'expirou').length }} · Sem interesse {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-interesse').length }} · Sem contato {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-contato').length }} · Descartado {{ descartados }}</p>
           <label v-if="descartados" class="crm-check"><input v-model="mostrarDescartados" type="checkbox"> Mostrar os {{ descartados }} descartados antes do contato</label>
         </template>
 
@@ -96,14 +96,17 @@ const artefatos = (l: CrmLead) => {
                 <li :class="{ 'is-feito': lead.marcos.respondeu }">{{ lead.marcos.respondeu ? `Respondeu ${dataCurta(lead.marcos.respondeu)}` : 'Sem resposta' }}</li>
               </ol>
               <p v-if="artefatos(lead)" class="crm-cartao__artefatos">{{ artefatos(lead) }}<template v-if="lead.pasta?.falha"> · falhou: {{ lead.pasta.falha }}</template></p>
-              <p v-if="lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo" class="crm-sinais">
+              <p v-if="lead.resposta?.trecho && lead.etapa !== 'novo'" class="crm-cartao__resposta">“{{ lead.resposta.trecho }}”</p>
+              <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo" class="crm-sinais">
+                <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
                 <span v-if="lead.followupHoje" class="crm-sinal is-followup">Follow-up hoje</span>
                 <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
                 <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
                 <span v-if="lead.acervo && lead.etapa === 'contatado'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
               </p>
-              <p v-if="lead.links.enviar || lead.links.convite || lead.links.site" class="crm-cartao__links">
+              <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.site" class="crm-cartao__links">
+                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico' : 'Mandar o link' }} <span class="ops-visually-hidden">para {{ lead.empresa }}</span>↗</a>
                 <a v-if="lead.links.enviar" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
                 <a v-if="lead.links.convite" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
                 <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="ops-visually-hidden">de {{ lead.empresa }}</span>↗</a>

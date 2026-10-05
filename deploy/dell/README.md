@@ -319,11 +319,24 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   no 10º dia vira `expirado`. O que foi enviado antes é acervo: saiu um resumo
   único (`--resumo-backlog`) e nada é automático.
 - **06 · Funil semanal** (segunda, 08:00): por nicho (vertical + cidade)
-  leads, sites, enviados, responderam, em conversa, recusados e concluídos, e
-  as buscas ativas com 5+ enviados e nenhuma resposta como candidatas a
-  desativar (a aba Buscas não muda sozinha). Aviso pelo Hermes e
-  `n8n-estado/site-funil.json`, sem `itens` (não vira pendência).
-- `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar.
+  leads, sites, enviados, responderam, em conversa, recusados e concluídos.
+  Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira
+  pendência).
+- **Busca que não paga o site é pausada** (desde 05/10/2026; antes o funil só
+  a listava como candidata e o Caçador seguia rodando): ativa, 5+ enviados e
+  nenhuma resposta humana (`respondeu_em` a 5 min ou mais do envio, ou pasta
+  em `_em-conversa/`) vira `ativa` FALSE na aba Buscas, com `pausada_em` e
+  `pausa_motivo`, e o aviso diz quais. Religar é pôr TRUE em `ativa`: com
+  `pausada_em` preenchida a regra não pausa de novo. O retrato ganha
+  `nao_gerar` (leads `novo` de busca desligada), que o gerador de sites deixa
+  fora da fila.
+- **A vez entre as buscas ativas** (`claude-ops/site-cacador-escolha.py`, desde
+  05/10/2026): o Caçador roda uma busca por dia, a mais atrasada, e o atraso de
+  pousada, espaço de eventos e buffet (as verticais que responderam) conta em
+  dobro. Nunca rodada continua primeiro.
+- `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
+  `--testar-regra` e `python3 site-cacador-escolha.py --testar` rodam só o
+  código dos nós no node, sem n8n nem planilha.
 
 Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
@@ -544,6 +557,39 @@ sumida matou a execução, com 3 leads sem tentar):
   Dell"). `python3 deploy/dell/gerador-de-sites.test.py` testa isso numa pasta
   temporária, sem Claude nem Vercel.
 
+Desde 05/10/2026 **quem move o lead descartado é o runner**. Naquele dia o
+Claude concluiu que o `baby-school-bercario-maternal` já tinha site no ar, mas
+a lista de permissão só o deixa escrever na pasta do lead: não moveu para
+`_descartados/`, o lead contou como falha duas vezes (2/2 no `falha.log`,
+serviço FAILED, aviso no WhatsApp). Agora:
+
+- o Claude grava `<slug>/DESCARTAR.md` (primeira linha = motivo; depois as
+  evidências) e a linha `— (não publicado)` no `registro.md`, e termina sem
+  `index.html`/`publicado.json` (as instruções da execução dizem isso);
+- o runner, quando o Claude sai, move a pasta para `_descartados/` (slug que já
+  está lá ganha sufixo `--AAAAMMDD-HHMMSS`, nunca sobrescreve) e conta como
+  **descartado**, com o motivo no log do lead. `DESCARTAR.md` vence até um
+  `index.html` completo: lead descartado nunca vai para a Vercel;
+- pasta com `DESCARTAR.md` nunca entra na fila; se o movimento falhar, conta uma
+  falha (atenção na Central) e o começo da próxima execução tenta de novo, sem
+  gastar o teto do dia. Gravar o arquivo à mão também descarta.
+
+Também desde 05/10/2026 **o demo tem cartão de prévia**. O Rômulo manda só o
+link no WhatsApp, e o WhatsApp mostra o cartão (og:*) antes de o dono abrir;
+nenhum dos demos de 03-04/10 tinha `og:image` (o cartão saía sem foto) e 3 de
+4 não tinham favicon. As instruções da execução pedem `<slug>/og.jpg`
+(1200x630, da melhor foto real do negócio), as metas og/twitter com
+`https://demo-<slug>.vercel.app/og.jpg` e um favicon SVG inline. Sobe para a
+Vercel o `index.html` e, se existir, o `og.jpg`; nada mais da pasta (o deploy
+de reserva do runner faz o mesmo).
+
+Também desde 05/10/2026 **lead de busca pausada não é gerado**: o "06 · Funil
+semanal" lista em `nao_gerar` (`~/.local/share/n8n-estado/site-funil.json`) os
+leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
+Rômulo; ver "Depois do envio"). O gerador os deixa na raiz, fora da fila
+(`--listar` mostra o motivo); religar a busca os devolve na segunda seguinte.
+Sem o arquivo, ou ilegível, a fila é a de sempre.
+
 ### Permissões do Claude (lista de permissão, desde 30/09/2026)
 
 Até 29/09 o Claude rodava com `--dangerously-skip-permissions`: podia fazer
@@ -659,9 +705,9 @@ o n8n ainda subindo perdeu três respostas.
   nunca aparece como lido: "entregue sem lido" é "não sei", não "não viu".**
   `entregue` fica só no log.
 - **O lead escreveu** (`entrada`): PRUMO com Etapa "Revisar" → "Convite
-  enviado" (só prova o envio); com "Convite enviado" → Próxima ação "Respondeu
-  no WhatsApp em ..." só se a mensagem veio 5 min ou mais depois de "Convite
-  enviado em" (desde 05/10/2026; antes qualquer mensagem valia); Site
+  enviado" + "Respondeu no WhatsApp em ..."; com "Convite enviado" → Próxima
+  ação "Respondeu no WhatsApp em ..." só se a mensagem veio 5 min ou mais depois
+  de "Convite enviado em" (desde 05/10/2026; antes qualquer mensagem valia); Site
   `novo`/`pronto` → `enviado` (+ `enviado_em`); resposta a 5 min ou mais do
   envio → `respondeu_em` (`expirado` volta a `enviado`), e a pasta vai para
   `_em-conversa/` (ver "Pasta auto").
@@ -670,12 +716,16 @@ Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp
 Business. Então a primeira mensagem só prova o envio, e o observador manda um
 segundo aviso (`"seguinte": true`) quando o lead volta a escrever 5 min ou mais
-depois; Site e PRUMO usam esse segundo aviso. O PRUMO só passou a seguir a regra
-em 05/10/2026: até então 20 prospects viraram "Respondeu no WhatsApp" até cerca
-de 5 min depois do convite (17 em menos de 1 min: saudação), e a tela Hoje do
-CRM mostrava respostas que não existiam (`claude-ops/prumo-desfazer-saudacao.py` desfaz as marcas). Resposta
-única dentro dos 5 min passa despercebida: o follow-up do 3º dia lembra, e
-`respondeu_em` pode ser preenchido à mão.
+depois; o Site usa esse segundo aviso e o PRUMO continua marcando uma vez por
+janela. Resposta única dentro dos 5 min passa despercebida: o follow-up do 3º
+dia lembra, e `respondeu_em` pode ser preenchido à mão.
+
+O PRUMO só ganhou a regra dos 5 min em 05/10/2026. Até então toda mensagem de
+quem tinha "Convite enviado" virava "Respondeu no WhatsApp": 20 prospects, todos
+até cerca de 5 min depois do convite e 17 em menos de 1 min (saudação), e a tela
+Hoje do CRM mostrava "Conversando" e "Respostas para responder" que não
+existiam. `claude-ops/prumo-desfazer-saudacao.py` devolve essas marcas antigas
+a "Só resposta automática" (simula por padrão; só grava com `--aplicar`).
 
 Por que o log e não um segundo aparelho: o pareamento por código falhou (no
 DDD 27 o WhatsApp registra o número sem o 9). O remendo da bridge é pequeno,
