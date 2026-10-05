@@ -64,10 +64,29 @@ por exemplo) fica de fora só daquela rodada; os outros túneis sobem e ela volt
 quando liberar. Só roda uma instância por vez: para testar à mão, pare a tarefa
 antes (`Stop-ScheduledTask Mel-Tuneis`).
 
-Pré-requisito: o serviço **OpenSSH Authentication Agent** com início
-automático e a chave carregada (`ssh-add -l` lista `jarvis-pc-2`). O túnel roda
-com `BatchMode=yes`: sem o agente ele falha em vez de pedir a senha, e tenta de
-novo com espera crescente (até 5 min) para não martelar a Mel.
+### Ligou o PC, conectou
+
+Depois do instalador, nada a fazer a cada vez: ao entrar no Windows a tarefa
+`Mel-Tuneis` sobe sem janela, espera a Mel aparecer na rede (olha a cada 3 s,
+só TCP, sem login, enquanto a Tailscale sobe) e conecta na hora; se cair (rede,
+sono, Mel reiniciando), religa sozinha. O instalador deixa pronto o que isso
+exige:
+
+- **ssh-agent automático:** se não estiver, ele pede o UAC uma vez e liga o
+  início automático do serviço **OpenSSH Authentication Agent**.
+- **Chave no agente:** se o agente estiver vazio e o terminal for interativo,
+  roda `ssh-add` (pede a senha da chave **uma vez**; o agente do Windows a
+  guarda entre reinícios). O túnel roda com `BatchMode=yes`: sem chave no
+  agente ele falha em vez de pedir senha e tenta de novo com espera crescente
+  (até 5 min), para não martelar a Mel.
+- **Confere e avisa** (não mexe): serviço da Tailscale automático, Tailscale
+  em **Run unattended** (conecta antes do login; sem isso os túneis esperam o
+  login e a Tailscale subir) e a tarefa `Backup-Estrutura-PC`.
+
+Fora do PC, uma vez, no painel da Tailscale (login.tailscale.com → Machines →
+⋯ → **Disable key expiry**) para a Mel e para o PC: hoje as chaves vencem em
+17/03/2027 (Mel) e 02/04/2027 (PC), e ao vencer o PC perde a Mel até alguém
+relogar.
 
 Antes, o script era `dell-worker-tunnels.ps1`, com o apelido `dell-worker` e a
 tarefa `DellWorker-LocalPortForwards` do PC antigo. O PC novo usa o apelido

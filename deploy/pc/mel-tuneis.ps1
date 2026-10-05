@@ -48,6 +48,30 @@ function Porta-Livre([int]$porta) {
   try { $ouvinte.Start(); return $true } catch { return $false } finally { try { $ouvinte.Stop() } catch { } }
 }
 
+function Endereco-Da-Mel {
+  # O mesmo endereco que o ssh vai usar (Host mel do ~/.ssh/config). Sem
+  # resposta do ssh -G, volta $null e o laco nao espera pela rede: tenta o ssh
+  # direto (melhor tentar a toa do que esperar para sempre um nome errado).
+  $nome = $null; $porta = 22
+  foreach ($linha in (& $ssh -G mel 2>$null)) {
+    if ($linha -match '^hostname\s+(\S+)') { $nome = $Matches[1] }
+    elseif ($linha -match '^port\s+(\d+)') { $porta = [int]$Matches[1] }
+  }
+  return @($nome, $porta)
+}
+
+function Mel-Alcancavel([string]$nome, [int]$porta) {
+  # So TCP, sem login: enquanto a Tailscale sobe (logo depois de ligar o PC ou
+  # de acordar do sono) o nome nem resolve, e isso nao conta como falha do ssh.
+  $cliente = New-Object System.Net.Sockets.TcpClient
+  try {
+    $tentativa = $cliente.BeginConnect($nome, $porta, $null, $null)
+    if (-not $tentativa.AsyncWaitHandle.WaitOne(2000)) { return $false }
+    $cliente.EndConnect($tentativa)
+    return $true
+  } catch { return $false } finally { $cliente.Close() }
+}
+
 # Uma instancia so: duas brigariam pelas mesmas portas e uma ficaria
 # logando na Mel a cada tentativa.
 $criado = $false
@@ -56,11 +80,23 @@ if (-not $criado) { Registrar 'outra instancia ja esta rodando; saindo'; exit 0 
 
 # Espera entre tentativas: 15 s depois de uma sessao longa; dobra (ate 5 min)
 # quando o ssh cai logo, para uma chave fora do agente nao virar uma tentativa
-# de login na Mel a cada poucos segundos.
+# de login na Mel a cada poucos segundos. Rede fora (Mel inalcancavel) nao
+# entra nessa conta: o script olha a cada 3 s e conecta assim que a Mel
+# aparece, sem fazer login nenhum enquanto isso.
 $espera = 15
+$melNome, $melPorta = Endereco-Da-Mel
+Registrar ("iniciado; Mel em {0}:{1}" -f $(if ($melNome) { $melNome } else { '(ssh -G sem resposta)' }), $melPorta)
+$avisouRede = $false
 while ($true) {
   Girar $log
   Girar $logSsh
+
+  if ($melNome -and -not (Mel-Alcancavel $melNome $melPorta)) {
+    if (-not $avisouRede) { Registrar 'Mel ainda inalcancavel (Tailscale subindo ou sem rede); conecto assim que aparecer'; $avisouRede = $true }
+    Start-Sleep -Seconds 3
+    continue
+  }
+  if ($avisouRede) { Registrar 'Mel alcancavel'; $avisouRede = $false }
 
   # Porta ocupada por outro programa fica de fora nesta rodada: com
   # ExitOnForwardFailure, uma so derrubaria os quatro tuneis (e o login na Mel
@@ -79,6 +115,7 @@ while ($true) {
       '-N'
       '-o', 'BatchMode=yes'
       '-o', 'ExitOnForwardFailure=yes'
+      '-o', 'ConnectTimeout=10'
       '-o', 'ServerAliveInterval=15'
       '-o', 'ServerAliveCountMax=3'
       '-E', $logSsh
