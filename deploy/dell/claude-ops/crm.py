@@ -18,7 +18,7 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
 - POST /webhook/crm-registro (header X-CRM; só o servidor da Central tem o
   segredo): acrescenta uma linha na aba CRM {em, produto, id, empresa, tipo,
   texto, data, origem} com tipo nota | proximo_passo | proposta |
-  proposta_desfeita, responde {ok} e refaz o retrato na hora. Nada vai para
+  proposta_desfeita | sem_contato | sem_contato_desfeito, responde {ok} e refaz o retrato na hora. Nada vai para
   lead nenhum.
 
 Segredo: ~/.config/claude-ops/crm-segredo (600), nasce aqui e nunca é impresso;
@@ -105,7 +105,7 @@ return arquivo('crm.json', {
 VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confere de novo antes da planilha.
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
-const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita'];
+const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
 if (!['site', 'prumo'].includes(b.produto)) return recusa('Produto inválido.');
 const id = txt(b.id, 200);

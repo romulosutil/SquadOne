@@ -227,6 +227,21 @@ describe("CRM: etapas do PRUMO", () => {
     assert.equal(lead(leads, "prumo:revisar").links.whatsapp, "https://wa.me/5511900000000");
   });
 
+  it("sem contato fácil encerra o lead como perdido e dá para desfazer", () => {
+    const base = retrato();
+    base.fontes.registros.linhas.push(
+      { em: dias(1), produto: "prumo", id: "revisar", tipo: "sem_contato", texto: "", data: "" },
+      { em: dias(2), produto: "prumo", id: "leu", tipo: "sem_contato", texto: "", data: "" },
+      { em: dias(1), produto: "prumo", id: "leu", tipo: "sem_contato_desfeito", texto: "", data: "" },
+      { em: dias(1), produto: "prumo", id: "concluido", tipo: "sem_contato", texto: "", data: "" },
+    );
+    const { leads } = montarCrm(base, { agora: AGORA });
+    const perdido = lead(leads, "prumo:revisar");
+    assert.equal(`${perdido.etapa}/${perdido.sinal}/${perdido.motivoPerda}`, "perdido/sem-contato/sem-contato");
+    assert.equal(lead(leads, "prumo:leu").etapa, "contatado");
+    assert.equal(lead(leads, "prumo:concluido").etapa, "ganho");
+  });
+
   it("põe o Mapa e os registros manuais na linha do tempo, com origem", () => {
     const { leads } = visao();
     const diagnostico = lead(leads, "prumo:diagnostico");
@@ -243,6 +258,59 @@ describe("CRM: etapas do PRUMO", () => {
     const leu = dataNaProximaAcao("Leu o convite em 01/10, 09:05. Sem resposta em 3 dias, ofereça fazer por telefone.", "leu", undefined, AGORA.getTime());
     assert.equal(new Date(leu!).toISOString(), "2026-10-01T12:05:00.000Z");
     assert.equal(dataNaProximaAcao("Aguarde o dono responder", "respondeu", undefined, AGORA.getTime()), undefined);
+  });
+});
+
+describe("CRM: resposta classificada (05/10/2026)", () => {
+  function comRespostas() {
+    const base = retrato();
+    base.fontes.site.linhas.push(
+      linhaSite("robo", { status: "enviado", enviado_em: dias(1), resposta_tipo: "bot", resposta_em: dias(0.99) }),
+      linhaSite("quer-ver", { status: "enviado", enviado_em: dias(1), respondeu_em: dias(0.1), site_url: "https://demo-quer-ver.vercel.app",
+        wa_me: "https://wa.me/5527999990009?text=oi", resposta_tipo: "interesse", resposta_trecho: "pode mandar", resposta_em: dias(0.1) }),
+      linhaSite("nao-quer", { status: "recusado", enviado_em: dias(2), respondeu_em: dias(1), recusado_em: dias(1),
+        resposta_tipo: "negativa", resposta_trecho: "não temos interesse", resposta_em: dias(1) }),
+      linhaSite("tipo-estranho", { status: "enviado", enviado_em: dias(1), resposta_tipo: "talvez" }),
+    );
+    base.fontes.prumo.linhas.push(
+      linhaPrumo("robo", { Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "bot",
+        "Próxima ação": "Só resposta automática em 01/10, 12:00. Sem resposta de gente em 3 dias, um lembrete só." }),
+      linhaPrumo("quer", { Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "interesse", Resposta: "sou eu, pode falar",
+        "Próxima ação": "Respondeu no WhatsApp em 02/10, 11:00 (interesse): “sou eu, pode falar”. Mande o diagnóstico (botão na ficha do CRM)." }),
+    );
+    return montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads;
+  }
+
+  it("só robô fica em Contatado, mesmo com resposta marcada antes; gente vai para Conversando com o tipo", () => {
+    const leads = comRespostas();
+    const robo = lead(leads, "site:robo");
+    assert.equal(`${robo.etapa}/${robo.sinal}`, "contatado/so-robo");
+    assert.deepEqual(robo.resposta, { tipo: "bot", trecho: "", em: dias(0.99) });
+    const quer = lead(leads, "site:quer-ver");
+    assert.equal(`${quer.etapa}/${quer.subEtapa}`, "conversando/Respondeu: quer ver (interesse)");
+    assert.ok(quer.links.segunda?.startsWith("https://wa.me/5527999990009?text="));
+    assert.ok(decodeURIComponent(quer.links.segunda!).includes("Aqui está: https://demo-quer-ver.vercel.app"));
+    assert.ok(quer.eventos.some((e) => e.tipo === "resposta" && e.texto === "pode mandar"));
+    const nao = lead(leads, "site:nao-quer");
+    assert.equal(`${nao.etapa}/${nao.motivoPerda}/${nao.subEtapa}`, "perdido/recusou/Recusou no WhatsApp (resposta negativa)");
+    assert.equal(nao.links.segunda, undefined);
+    assert.equal(lead(leads, "site:tipo-estranho").resposta, undefined);
+  });
+
+  it("PRUMO: robô não é resposta; interesse leva ao botão do diagnóstico e ao Hoje", () => {
+    const leads = comRespostas();
+    assert.equal(lead(leads, "prumo:robo").sinal, "so-robo");
+    const quer = lead(leads, "prumo:quer");
+    assert.equal(quer.etapa, "conversando");
+    assert.equal(quer.links.segunda, `${WEBHOOK}/convite?id=quer&passo=diagnostico`);
+    const { hoje } = montarCrm((() => { const b = retrato(); b.fontes.prumo.linhas.push(linhaPrumo("quer", {
+      Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "interesse", Resposta: "sou eu, pode falar",
+      "Próxima ação": "Respondeu no WhatsApp em 02/10, 11:00 (interesse): “sou eu”." })); return b; })(), { agora: AGORA, pastas: PASTAS });
+    const item = hoje.flatMap((g) => g.itens).find((i) => i.leadId === "prumo:quer");
+    assert.ok(item, "resposta de interesse não entrou no Hoje");
+    assert.equal(item.acao, "Quer saber mais: mandar o diagnóstico");
+    assert.ok(item.detalhe.includes("“sou eu, pode falar”"));
+    assert.equal(item.links[0].rotulo, "Mandar o diagnóstico");
   });
 });
 

@@ -77,6 +77,10 @@ export const COLUNAS_DO_SITE = {
   // Se o observador passar a gravar a última mensagem de cada lado, "responder" fica exato.
   ultimaEntradaEm: { nomes: ["ultima_entrada_em", "ultima_resposta_em", "ultima_mensagem_do_lead_em"] },
   ultimaSaidaEm: { nomes: ["ultima_saida_em", "ultimo_envio_em", "ultima_mensagem_minha_em"] },
+  // O que o lead escreveu, classificado pelo n8n (fluxo "WhatsApp — resposta de lead", 05/10/2026).
+  respostaTipo: { nomes: ["resposta_tipo"] },
+  respostaTrecho: { nomes: ["resposta_trecho"] },
+  respostaEm: { nomes: ["resposta_em"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
@@ -95,8 +99,42 @@ export const COLUNAS_DO_PRUMO = {
   respondeuEm: { nomes: ["respondeu_em"] },
   diagnosticoEm: { nomes: ["diagnostico_em"] },
   indice: { nomes: ["indice_prumo"] },
+  respostaTipo: { nomes: ["tipo_da_resposta"] },
+  respostaTrecho: { nomes: ["resposta"] },
+  respostaEm: { nomes: ["resposta_em"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
+
+/**
+ * Segunda mensagem do Site antes da venda: o link, para quem respondeu à primeira (que pede
+ * licença, sem link). Espelho de SEGUNDA em deploy/dell/claude-ops/site-mensagem.js; o aviso do
+ * Hermes usa aquele, a ficha usa este. Mudou lá, mude aqui.
+ */
+export const SEGUNDA_MENSAGEM_DO_SITE = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?";
+
+export const TIPOS_DE_RESPOSTA = ["negativa", "interesse", "neutra", "bot"] as const;
+export type CrmTipoDeResposta = (typeof TIPOS_DE_RESPOSTA)[number];
+
+export interface CrmResposta {
+  tipo: CrmTipoDeResposta;
+  /** Frase da pessoa que decidiu a classificação (até 200 caracteres); vazia quando é robô. */
+  trecho: string;
+  em?: string;
+}
+
+export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
+  negativa: "Negativa",
+  interesse: "Interesse",
+  neutra: "Sem sim nem não",
+  bot: "Só resposta automática",
+};
+
+function respostaDaLinha(c: (campo: "respostaTipo" | "respostaTrecho" | "respostaEm") => string): CrmResposta | undefined {
+  const tipo = c("respostaTipo").toLowerCase() as CrmTipoDeResposta;
+  if (!TIPOS_DE_RESPOSTA.includes(tipo)) return undefined;
+  const em = instante(c("respostaEm"));
+  return { tipo, trecho: c("respostaTrecho"), ...(em !== undefined ? { em: new Date(em).toISOString() } : {}) };
+}
 
 /** Aba "CRM" da planilha do Site antes da venda: uma linha por registro feito na Central (só acrescenta). */
 export const COLUNAS_DO_REGISTRO = {
@@ -108,7 +146,7 @@ export const COLUNAS_DO_REGISTRO = {
   data: { nomes: ["data"] },
 } satisfies Record<string, Coluna>;
 
-export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita"] as const;
+export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito"] as const;
 export type CrmTipoDeRegistro = (typeof TIPOS_DE_REGISTRO)[number];
 
 export function normalizarCabecalho(nome: string): string {
@@ -291,7 +329,7 @@ export interface CrmLead {
   etapa: CrmEtapa;
   sinal: CrmSinal;
   subEtapa: string;
-  motivoPerda?: "recusou" | "expirou" | "descartado" | "sem-interesse";
+  motivoPerda?: "recusou" | "expirou" | "descartado" | "sem-interesse" | "sem-contato";
   /** Valor cru da planilha (status do Site, Etapa do PRUMO), para conferência. */
   estadoNaPlanilha: string;
   desde?: string;
@@ -310,8 +348,11 @@ export interface CrmLead {
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
   notas: number;
+  /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
+  resposta?: CrmResposta;
   eventos: CrmEvento[];
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; planilha?: string };
+  /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o diagnóstico). */
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
   divergencias: string[];
 }
@@ -408,12 +449,21 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
 function manuais(registros: Registro[]) {
   let proposta: Registro | undefined;
   let proximo: Registro | undefined;
+  let semContato: Registro | undefined;
   for (const r of registros) {
+    if (r.tipo === "sem_contato") semContato = r;
+    if (r.tipo === "sem_contato_desfeito") semContato = undefined;
     if (r.tipo === "proposta") proposta = r;
     if (r.tipo === "proposta_desfeita") proposta = undefined;
     if (r.tipo === "proximo_passo") proximo = r.texto ? r : undefined;
   }
-  return { proposta, proximo, notas: registros.filter((r) => r.tipo === "nota").length };
+  return { proposta, proximo, semContato, notas: registros.filter((r) => r.tipo === "nota").length };
+}
+
+/** "Sem contato fácil" marcado à mão: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
+function comPerdaManual(calculada: EtapaCalculada, semContato: Registro | undefined): EtapaCalculada {
+  if (!semContato || calculada.etapa === "ganho" || calculada.etapa === "perdido") return calculada;
+  return { etapa: "perdido", sinal: "sem-contato", subEtapa: "Perdido: sem contato fácil", desde: semContato.em, motivoPerda: "sem-contato" };
 }
 
 function eventosManuais(registros: Registro[]): CrmEvento[] {
@@ -422,6 +472,8 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     proximo_passo: "Próximo passo",
     proposta: "Proposta enviada",
     proposta_desfeita: "Proposta desfeita",
+    sem_contato: "Perdido: sem contato fácil",
+    sem_contato_desfeito: "Perda por falta de contato desfeita",
   };
   return registros.map((r) => ({
     tipo: r.tipo,
@@ -443,6 +495,12 @@ function formatarDia(valor: string): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(t));
 }
 
+function eventoDaResposta(resposta: CrmResposta | undefined, fonte: string): CrmEvento[] {
+  if (!resposta?.em) return [];
+  return [{ tipo: "resposta", rotulo: `Resposta classificada: ${ROTULO_DA_RESPOSTA[resposta.tipo]}`, em: resposta.em,
+    origem: "automático", fonte, ...(resposta.trecho ? { texto: resposta.trecho } : {}) }];
+}
+
 function evento(tipo: string, rotulo: string, t: number | undefined, fonte: string, extra: Partial<CrmEvento> = {}): CrmEvento[] {
   return t === undefined ? [] : [{ tipo, rotulo, em: new Date(t).toISOString(), origem: "automático", fonte, ...extra }];
 }
@@ -461,7 +519,7 @@ const dias = (desde: number | undefined, agora: number) => (desde === undefined 
 export type CrmSinal =
   | "na-fila" | "publicado" | "pronto" | "enviado" | "viu" | "respondeu" | "em-conversa"
   | "revisar" | "sem-etapa" | "convite" | "convite-visto" | "respondeu-prumo" | "diagnostico"
-  | "proposta" | "fechou" | "concluido" | "recusou" | "recusou-pasta" | "expirou" | "descartado" | "sem-interesse";
+  | "proposta" | "fechou" | "concluido" | "recusou" | "recusou-pasta" | "expirou" | "descartado" | "sem-interesse" | "sem-contato" | "so-robo";
 
 interface EtapaCalculada {
   etapa: CrmEtapa;
@@ -476,6 +534,13 @@ interface EtapaCalculada {
  * planilha ainda não sabe e o resto da esteira já trata como estado (recusa
  * anotada à mão em _recusados/, conversa movida para _em-conversa/).
  */
+/** "Respondeu" diz o que a pessoa disse, quando o n8n classificou; sem classificação, como antes. */
+function subEtapaDaResposta(resposta: CrmResposta | undefined, base = "Respondeu"): string {
+  if (resposta?.tipo === "interesse") return `${base}: quer ver (interesse)`;
+  if (resposta?.tipo === "neutra") return `${base}: sem sim nem não`;
+  return base;
+}
+
 export function etapaDoSite(entrada: {
   status: string;
   lugar?: LugarDaPasta;
@@ -488,10 +553,14 @@ export function etapaDoSite(entrada: {
   criado?: number;
   publicadoEm?: number;
   proposta?: Registro;
+  resposta?: CrmResposta;
 }): EtapaCalculada {
-  const { status, lugar } = entrada;
+  const { status, lugar, resposta } = entrada;
   if (status === "fechado") return { etapa: "ganho", sinal: "fechou", subEtapa: "Fechou", desde: entrada.fechado };
-  if (status === "recusado") return { etapa: "perdido", sinal: "recusou", subEtapa: "Recusou", desde: entrada.recusado, motivoPerda: "recusou" };
+  if (status === "recusado") {
+    const noWhatsapp = resposta?.tipo === "negativa" ? " no WhatsApp (resposta negativa)" : "";
+    return { etapa: "perdido", sinal: "recusou", subEtapa: `Recusou${noWhatsapp}`, desde: entrada.recusado, motivoPerda: "recusou" };
+  }
   if (lugar === "_recusados") return { etapa: "perdido", sinal: "recusou-pasta", subEtapa: "Recusou (anotado na pasta _recusados/)", motivoPerda: "recusou" };
   if (status === "expirado" && entrada.respondeu === undefined) {
     return {
@@ -506,7 +575,11 @@ export function etapaDoSite(entrada: {
   // O gerador (ou uma sessão do Claude) descarta movendo a pasta, sem tocar na planilha: a divergência aparece na ficha.
   if (lugar === "_descartados") return { etapa: "perdido", sinal: "descartado", subEtapa: "Descartado (pasta _descartados/)", motivoPerda: "descartado" };
   if (entrada.proposta) return { etapa: "proposta", sinal: "proposta", subEtapa: "Proposta enviada", desde: dataDoDia(entrada.proposta.data) ?? entrada.proposta.em };
-  if (entrada.respondeu !== undefined) return { etapa: "conversando", sinal: "respondeu", subEtapa: "Respondeu", desde: entrada.respondeu };
+  if (entrada.respondeu !== undefined) return { etapa: "conversando", sinal: "respondeu", subEtapa: subEtapaDaResposta(resposta), desde: entrada.respondeu };
+  // Só robô respondeu (o n8n já apagou o respondeu_em): é contato sem conversa, mesmo com a pasta em _em-conversa/.
+  if (resposta?.tipo === "bot" && (status === "enviado" || status === "expirado")) {
+    return { etapa: "contatado", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.enviado };
+  }
   if (lugar === "_em-conversa") return { etapa: "conversando", sinal: "em-conversa", subEtapa: "Em conversa (pasta _em-conversa/)", desde: entrada.enviado };
   if (status === "enviado" || status === "expirado" || entrada.enviado !== undefined) {
     return entrada.visto !== undefined
@@ -532,7 +605,7 @@ function leadDoSite(linha: Linha, contexto: {
   const status = c("status").toLowerCase();
   const pasta = contexto.pastaPorId.get(chave);
   const registros = contexto.registros.get(`site:${chave}`) ?? [];
-  const { proposta, proximo, notas } = manuais(registros);
+  const { proposta, proximo, semContato, notas } = manuais(registros);
   const t = {
     criado: instante(c("criadoEm")),
     enviado: instante(c("enviadoEm")),
@@ -545,7 +618,8 @@ function leadDoSite(linha: Linha, contexto: {
     ultimaEntrada: instante(c("ultimaEntradaEm")),
     ultimaSaida: instante(c("ultimaSaidaEm")),
   };
-  const calculada = etapaDoSite({ status, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta });
+  const resposta = respostaDaLinha(c);
+  const calculada = comPerdaManual(etapaDoSite({ status, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta }), semContato);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
   const diasDesdeEnvio = dias(t.enviado, agora);
@@ -564,6 +638,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...evento("enviado", "Enviado pelo WhatsApp", t.enviado, "planilha · enviado_em"),
     ...evento("visto", "Viu a mensagem", t.visto, "planilha · visto_em"),
     ...evento("respondeu", "Respondeu", t.respondeu, "planilha · respondeu_em"),
+    ...eventoDaResposta(resposta, "planilha · resposta_tipo"),
     ...evento("followup", "Lembrete de follow-up (05 · Acompanhamento)", t.followup, "planilha · followup_em"),
     ...(status === "expirado" && t.enviado !== undefined
       ? evento("expirou", "Expirou sem resposta", t.enviado + DIAS_ATE_EXPIRAR * DIA_MS, "status expirado · data pela regra dos 10 dias", { estimado: true })
@@ -579,6 +654,9 @@ function leadDoSite(linha: Linha, contexto: {
   const planilha = contexto.links.planilhaSite && c("linha") ? `${contexto.links.planilhaSite}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaSite;
   const site = urlHttps(c("site")) ?? pasta?.siteUrl;
   const acoes = urlHttps(c("acoesLink")) ?? (webhook && (pasta || c("site")) ? `${webhook}/lead?id=${encodeURIComponent(chave)}` : undefined);
+  // Depois do "sim": a primeira mensagem (desde 05/10/2026) pede licença e não leva o link.
+  const segunda = calculada.etapa === "conversando" && resposta?.tipo !== "negativa" && site && whatsapp
+    ? `https://wa.me/${whatsapp}?text=${encodeURIComponent(SEGUNDA_MENSAGEM_DO_SITE.replace("{URL}", site))}` : undefined;
 
   const divergencias: string[] = [];
   if (contexto.pastasLidas) {
@@ -631,12 +709,14 @@ function leadDoSite(linha: Linha, contexto: {
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     notas,
+    ...(resposta ? { resposta } : {}),
     eventos,
     links: {
       ...(site ? { site } : {}),
       ...(status === "pronto" && waLink ? { enviar: waLink } : {}),
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(acoes ? { acoes } : {}),
+      ...(segunda ? { segunda } : {}),
       ...(planilha ? { planilha } : {}),
     },
     ...(pasta ? {
@@ -662,15 +742,25 @@ export function etapaDoPrumo(entrada: {
   respondeu?: number;
   diagnostico?: number;
   proposta?: Registro;
+  resposta?: CrmResposta;
 }): EtapaCalculada {
   const etapa = normalizarCabecalho(entrada.etapa);
+  const { resposta } = entrada;
   if (etapa === "concluido") return { etapa: "ganho", sinal: "concluido", subEtapa: "Concluído (Etapa na planilha)" };
-  if (etapa === "sem_interesse") return { etapa: "perdido", sinal: "sem-interesse", subEtapa: "Sem interesse", motivoPerda: "sem-interesse" };
+  if (etapa === "sem_interesse") {
+    const noWhatsapp = resposta?.tipo === "negativa" ? " (resposta negativa no WhatsApp)" : "";
+    return { etapa: "perdido", sinal: "sem-interesse", subEtapa: `Sem interesse${noWhatsapp}`, motivoPerda: "sem-interesse" };
+  }
   if (entrada.proposta) return { etapa: "proposta", sinal: "proposta", subEtapa: "Proposta enviada", desde: dataDoDia(entrada.proposta.data) ?? entrada.proposta.em };
   if (etapa === "diagnostico_pronto" || entrada.diagnostico !== undefined) {
     return { etapa: "conversando", sinal: "diagnostico", subEtapa: "Formulário respondido · diagnóstico pronto", desde: entrada.diagnostico };
   }
-  if (entrada.respondeu !== undefined) return { etapa: "conversando", sinal: "respondeu-prumo", subEtapa: "Respondeu no WhatsApp", desde: entrada.respondeu };
+  if (entrada.respondeu !== undefined) {
+    return { etapa: "conversando", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Respondeu no WhatsApp"), desde: entrada.respondeu };
+  }
+  if (resposta?.tipo === "bot" && (etapa === "convite_enviado" || entrada.convite !== undefined)) {
+    return { etapa: "contatado", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.convite };
+  }
   if (etapa === "convite_enviado" || entrada.convite !== undefined) {
     return entrada.visto !== undefined
       ? { etapa: "contatado", sinal: "convite-visto", subEtapa: "Viu o convite, sem resposta", desde: entrada.convite ?? entrada.visto }
@@ -691,7 +781,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   if (!chave) return null;
   const { agora } = contexto;
   const registros = contexto.registros.get(`prumo:${chave}`) ?? [];
-  const { proposta, proximo, notas } = manuais(registros);
+  const { proposta, proximo, semContato, notas } = manuais(registros);
   const convite = instante(c("conviteEm"));
   const t = {
     encontrado: instante(c("encontradoEm")),
@@ -701,7 +791,8 @@ function leadDoPrumo(linha: Linha, contexto: {
     diagnostico: instante(c("diagnosticoEm")),
   };
   const mapa = contexto.mapas.get(chave);
-  const calculada = etapaDoPrumo({ etapa: c("etapa"), ...t, proposta });
+  const resposta = respostaDaLinha(c);
+  const calculada = comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato);
   const diasDesdeConvite = dias(t.convite, agora);
   const followupHoje = calculada.etapa === "contatado" && diasDesdeConvite !== undefined
     && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_ATE_EXPIRAR;
@@ -712,6 +803,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...evento("convite", "Convite enviado", t.convite, "planilha · Convite enviado em"),
     ...evento("visto", "Leu o convite", t.visto, instante(c("vistoEm")) !== undefined ? "planilha · visto_em" : "planilha · Próxima ação"),
     ...evento("respondeu", "Respondeu no WhatsApp", t.respondeu, instante(c("respondeuEm")) !== undefined ? "planilha · respondeu_em" : "planilha · Próxima ação"),
+    ...eventoDaResposta(resposta, "planilha · Tipo da resposta"),
     ...evento("diagnostico", `Formulário respondido · diagnóstico pronto${c("indice") ? ` (Índice ${c("indice")})` : ""}`, t.diagnostico, "planilha · Diagnóstico em"),
     ...evento("mapa", "Mapa gerado (rascunho em ~/prumo-entregas)", instante(mapa?.geradoEm ?? ""), `pasta · ${mapa?.pasta ?? ""}`),
     ...eventosManuais(registros),
@@ -743,10 +835,13 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     notas,
+    ...(resposta ? { resposta } : {}),
     eventos,
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
       ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/convite?id=${encodeURIComponent(chave)}` } : {}),
+      ...(calculada.etapa === "conversando" && t.diagnostico === undefined && webhook
+        ? { segunda: `${webhook}/convite?id=${encodeURIComponent(chave)}&passo=diagnostico` } : {}),
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(planilha ? { planilha } : {}),
     },
@@ -803,11 +898,18 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
     }
     if (lead.respostaNova) {
       const t = Date.parse(lead.marcos.respondeu ?? "");
+      const r = lead.resposta && lead.resposta.tipo !== "bot" ? lead.resposta : undefined;
+      const segunda = lead.links.segunda
+        ? [{ rotulo: lead.produto === "prumo" ? "Mandar o diagnóstico" : "Mandar o link do site", url: lead.links.segunda }] : [];
       itens.resposta.push({
         leadId: lead.id,
-        acao: "Responder no WhatsApp",
-        detalhe: Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",
-        links: conversa,
+        acao: r?.tipo === "interesse" ? (lead.produto === "prumo" ? "Quer saber mais: mandar o diagnóstico" : "Quer ver: mandar o link do site")
+          : "Responder no WhatsApp",
+        detalhe: [
+          Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",
+          ...(r?.trecho ? [`“${r.trecho}”`] : []),
+        ].join(" "),
+        links: r?.tipo === "interesse" ? [...segunda, ...conversa] : [...conversa, ...segunda],
         ordem: Number.isFinite(t) ? t : 0,
       });
     }
@@ -1003,7 +1105,7 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (data && !Number.isFinite(Date.parse(`${data}T12:00:00-03:00`))) throw new RegistroInvalido("Data inválida.");
   if (tipo === "proximo_passo" && textoSeguro && !data) throw new RegistroInvalido("Informe a data do próximo passo.");
   if (tipo === "proposta" && !data) data = hojeEmSP(agora);
-  if (tipo === "nota" || tipo === "proposta_desfeita") data = "";
+  if (tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito") data = "";
   return { produto, id, tipo, texto: textoSeguro, data };
 }
 
@@ -1152,6 +1254,8 @@ export class CrmStore {
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
     if (registro.tipo === "proposta" && lead.etapa === "proposta") throw new RegistroInvalido("Este lead já está em Proposta.");
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");
+    if (registro.tipo === "sem_contato" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
+    if (registro.tipo === "sem_contato_desfeito" && lead.motivoPerda !== "sem-contato") throw new RegistroInvalido("Este lead não foi perdido por falta de contato.");
     if (registro.tipo === "proposta" && (lead.etapa === "ganho" || lead.etapa === "perdido")) {
       throw new RegistroInvalido("Lead já encerrado: desfaça o desfecho na página do lead antes.");
     }

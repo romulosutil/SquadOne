@@ -1180,6 +1180,14 @@ html:has(.ops-shell),
 .crm-sinal.is-followup { background: var(--ops-coral); }
 .crm-sinal.is-divergencia { border-style: dashed; background: #ffd9d2; }
 .crm-sinal.is-acervo { color: var(--ops-muted); font-weight: 700; }
+/* Tipo da resposta: o texto diz o tipo; a cor só reforça (RULES 3). */
+.crm-sinal.is-interesse, .crm-resposta.is-interesse strong { background: var(--ops-green); color: #fff; }
+.crm-sinal.is-negativa, .crm-resposta.is-negativa strong { background: #f5d0ca; color: #6b1e18; }
+.crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--ops-muted); font-weight: 700; }
+.crm-cartao__resposta { margin: 0.35rem 0 0; font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
+.crm-resposta { margin: 0 0 0.5rem; }
+.crm-resposta strong { padding: 0.1rem 0.4rem; border: 2px solid var(--ops-ink); }
+.crm-resposta__trecho { margin: 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--ops-ink); background: var(--ops-paper); overflow-wrap: anywhere; }
 
 /* Ficha */
 .crm-ficha { display: grid; gap: 1rem; width: 100%; max-width: 52rem; }

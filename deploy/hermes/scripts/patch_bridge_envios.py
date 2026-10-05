@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Remendo da bridge do WhatsApp do Hermes: envios e recibos do dono no bridge.log.
+"""Remendo da bridge do WhatsApp do Hermes: envios, recibos e respostas de leads.
 
 O Rômulo aborda os leads pelo celular. O Hermes está vinculado ao número dele
 (aparelho conectado, modo self-chat), então a bridge já recebe tudo o que ele
 manda e os recibos de entregue/lido dessas mensagens, mas descarta sem registrar.
-Este remendo acrescenta duas coisas, só leitura passiva (nada é enviado a
-ninguém, nenhum conteúdo é gravado):
+Este remendo acrescenta três coisas, só leitura passiva (nada é enviado a
+ninguém). As duas primeiras vão ao bridge.log sem conteúdo:
 
 - `squadone:envios`: quando o dono escreve numa conversa 1:1 que não é a dele
   mesmo, uma linha `{"event":"owner_sent","chatId","ts"}`. Eco do próprio Hermes
@@ -15,6 +15,14 @@ ninguém, nenhum conteúdo é gravado):
   (3 = entregue; 4 lido e 5 ouviu = lido). No máximo uma linha por chat e
   estado a cada 30 min. `key.fromMe` separa "o lead leu a mensagem do dono" de
   "o dono leu a do lead em outro aparelho" (read-self).
+- `squadone:respostas` (05/10/2026, pedido do Rômulo: o CRM precisa saber se a
+  resposta é negativa, robô ou interesse): o TEXTO do que um lead escreveu, até
+  1000 caracteres (mídia vira "[áudio]", "[imagem] legenda"...), em
+  ~/.local/state/whatsapp-observador/respostas.jsonl (600) como
+  `{"chave", "ts", "texto"}`. Só para número que está em `leads.json` da mesma
+  pasta, a lista que o observador grava a partir das planilhas; sem a lista,
+  nada. Amigos, família e clientes não são leads e não têm nada gravado. O
+  observador repassa ao n8n e apaga o arquivo.
 
 O `whatsapp-observador` (deploy/dell/whatsapp-observador) lê essas linhas.
 
@@ -101,15 +109,71 @@ sock.ev.on('messages.update', (updates) => {
 });
 // <<< squadone:recibos"""
 
+# Respostas (05/10/2026): o texto do que um LEAD escreveu, para o n8n separar negativa, bot e
+# interesse. Fica no ramo do self-chat que hoje só registra "ignored" para quem não é o dono.
+# Só grava quando o número está em leads.json (a lista que o observador mantém a partir das
+# planilhas): conversa com quem não é lead continua sem nada gravado. Vai para um arquivo
+# próprio (600), nunca para o bridge.log; o observador apaga o que já repassou.
+RESPOSTAS = """// >>> squadone:respostas (SquadOne deploy/hermes/scripts/patch_bridge_envios.py)
+// Texto de LEAD (número em ~/.local/state/whatsapp-observador/leads.json) vai para respostas.jsonl
+// (600), nunca para o bridge.log. Número fora da lista: nada é gravado.
+try {
+  const fs = process.getBuiltinModule('fs');
+  const pasta = path.join(process.env.HOME || '~', '.local', 'state', 'whatsapp-observador');
+  const lista = path.join(pasta, 'leads.json');
+  const st = fs.statSync(lista, { throwIfNoEntry: false });
+  const cache = globalThis.squadoneLeads ??= { mtime: -1, chaves: new Set() };
+  if (st && st.mtimeMs !== cache.mtime) {
+    cache.chaves = new Set(JSON.parse(fs.readFileSync(lista, 'utf8')));
+    cache.mtime = st.mtimeMs;
+  }
+  const usuario = (j) => String(j || '').replace(/[:@].*/, '');
+  let tel = '';
+  if (/@s\\.whatsapp\\.net$/.test(chatId)) tel = usuario(chatId);
+  else if (String(senderAltId || '').endsWith('@s.whatsapp.net')) tel = usuario(senderAltId);
+  else if (/@lid$/.test(chatId)) {
+    try { tel = String(JSON.parse(fs.readFileSync(path.join(SESSION_DIR, `lid-mapping-${usuario(chatId)}_reverse.json`), 'utf8'))); } catch {}
+  }
+  let d = tel.replace(/\\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  const chave = d.length >= 10 && d.length <= 11 ? d.slice(0, 2) + d.slice(-8) : '';
+  if (st && chave && cache.chaves.has(chave)) {
+    const c = getMessageContent(msg) || {};
+    const legenda = (m) => String(m?.caption || '').trim();
+    const texto = String(
+      c.conversation ?? c.extendedTextMessage?.text
+      ?? c.buttonsResponseMessage?.selectedDisplayText ?? c.templateButtonReplyMessage?.selectedDisplayText
+      ?? c.listResponseMessage?.title
+      ?? (c.imageMessage ? ('[imagem] ' + legenda(c.imageMessage)).trim()
+        : c.videoMessage ? ('[vídeo] ' + legenda(c.videoMessage)).trim()
+        : c.audioMessage ? '[áudio]'
+        : c.documentMessage ? ('[documento] ' + String(c.documentMessage.fileName || '')).trim()
+        : c.stickerMessage ? '[figurinha]'
+        : c.contactMessage || c.contactsArrayMessage ? '[contato]'
+        : c.locationMessage ? '[localização]' : '')
+    ).slice(0, 1000);
+    if (texto) {
+      fs.appendFileSync(path.join(pasta, 'respostas.jsonl'),
+        JSON.stringify({ chave, ts: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000), texto }) + '\\n',
+        { mode: 0o600 });
+    }
+  }
+} catch {}
+// <<< squadone:respostas"""
+
 # (nome, regex da âncora, onde entra, recuo extra). A âncora tem de aparecer exatamente uma vez.
 ANCORAS = [
+    ("respostas",
+     re.compile(r"^( *)if \(WHATSAPP_MODE === 'self-chat'\) \{\n(?=\s*try \{\s*\n\s*writeJsonLine\(\{\s*\n\s*event: 'ignored',\s*\n"
+                r"\s*reason: 'self_chat_mode_rejects_non_self')", re.M),
+     "depois", "  "),
     ("envios",
      re.compile(r"^( *)if \(!isSelfChat\) \{\n(?=\s*emitDebugEvent\(\{\s*\n\s*stage: 'ignored',\s*\n\s*reason: 'self_chat_mismatch')",
                 re.M),
      "depois", "  "),
     ("recibos", re.compile(r"^( *)sock\.ev\.on\('messages\.upsert', ", re.M), "antes", ""),
 ]
-BLOCOS = {"envios": ENVIOS, "recibos": RECIBOS}
+BLOCOS = {"envios": ENVIOS, "recibos": RECIBOS, "respostas": RESPOSTAS}
 
 # O que os blocos usam da bridge; se sumir, a bridge mudou demais para remendar às cegas.
 REQUISITOS = [
@@ -118,6 +182,8 @@ REQUISITOS = [
     ("jidNormalizedUser importado do Baileys", re.compile(r"import \{[^}]*\bjidNormalizedUser\b[^}]*\} from '@whiskeysockets/baileys'")),
     ("recentlySentIds (ids do que o Hermes mandou)", re.compile(r"^const recentlySentIds = ", re.M)),
     ("modo self-chat com isSelfChat", re.compile(r"const isSelfChat = ")),
+    ("senderAltId e SESSION_DIR (número do lead no formato de telefone)",
+     re.compile(r"const senderAltId = [\s\S]*const SESSION_DIR = |const SESSION_DIR = [\s\S]*const senderAltId = ")),
 ]
 
 
@@ -328,6 +394,10 @@ def testar(bridge: Path) -> int:
             uma = self.copia.read_text()
             self.assertEqual(uma.count("// >>> squadone:envios"), 1)
             self.assertEqual(uma.count("// >>> squadone:recibos"), 1)
+            self.assertEqual(uma.count("// >>> squadone:respostas"), 1)
+            i_resp = uma.index("// >>> squadone:respostas")
+            self.assertLess(uma.index("if (WHATSAPP_MODE === 'self-chat') {", uma.index("if (!msg.key.fromMe) {")), i_resp)
+            self.assertLess(i_resp, uma.index("reason: 'self_chat_mode_rejects_non_self'"))
             self.assertFalse(aplicar(self.copia))
             self.assertEqual(self.copia.read_text(), uma)
             self.assertEqual(len(list((self.dir / "backups").rglob("bridge.js.*"))), 1)
@@ -440,6 +510,49 @@ def testar(bridge: Path) -> int:
                 {"event": "owner_receipt", "chatId": lead, "status": "lido", "ts": 200},
                 {"event": "owner_receipt", "chatId": "777@lid", "status": "lido", "ts": 300},
             ])
+
+        def test_respostas_so_de_lead_e_fora_do_log(self):
+            casa = Path(tempfile.mkdtemp())
+            try:
+                pasta = casa / ".local/state/whatsapp-observador"
+                sessao = casa / "sessao"
+                pasta.mkdir(parents=True)
+                sessao.mkdir()
+                (pasta / "leads.json").write_text(json.dumps(["2788887777", "1144445555"]))
+                (sessao / "lid-mapping-999_reverse.json").write_text(json.dumps("5511944445555"))
+                lead, amigo = "5527988887777@s.whatsapp.net", "5521911112222@s.whatsapp.net"
+                casos = [
+                    [lead, "", {"conversation": "Não temos interesse, obrigado"}, 1790770000],
+                    [amigo, "", {"conversation": "conversa pessoal"}, 1790770001],          # fora da lista
+                    ["999@lid", "", {"extendedTextMessage": {"text": "pode mandar"}}, 1790770002],  # lid -> mapa
+                    ["555@lid", lead, {"audioMessage": {}}, 1790770003],                      # lid -> senderAltId
+                    [lead, "", {"imageMessage": {"caption": "cardápio"}}, 1790770004],
+                    [lead, "", {"reactionMessage": {"text": "👍"}}, 1790770005],             # sem texto
+                ]
+                bloco = "\n".join("    " + l for l in RESPOSTAS.split("\n"))
+                prog = ("import path from 'path';\nconst saida = [];\nconst writeJsonLine = (p) => saida.push(p);\n"
+                        f"process.env.HOME = {json.dumps(str(casa))};\nconst SESSION_DIR = {json.dumps(str(sessao))};\n"
+                        "const getMessageContent = (m) => m.message;\n"
+                        f"for (const [chatId, senderAltId, message, ts] of {json.dumps(casos)}) {{\n"
+                        "  const msg = { message, messageTimestamp: ts };\n  (() => {\n" + bloco + "\n  })();\n}\n"
+                        "console.log(JSON.stringify(saida));\n")
+                self.assertEqual(rodar_js(prog), [])  # nada no bridge.log
+                linhas = [json.loads(l) for l in (pasta / "respostas.jsonl").read_text().splitlines()]
+                self.assertEqual(linhas, [
+                    {"chave": "2788887777", "ts": 1790770000, "texto": "Não temos interesse, obrigado"},
+                    {"chave": "1144445555", "ts": 1790770002, "texto": "pode mandar"},
+                    {"chave": "2788887777", "ts": 1790770003, "texto": "[áudio]"},
+                    {"chave": "2788887777", "ts": 1790770004, "texto": "[imagem] cardápio"},
+                ])
+                if os.name != "nt":
+                    self.assertEqual((pasta / "respostas.jsonl").stat().st_mode & 0o777, 0o600)
+                # Sem leads.json: nada é gravado.
+                (pasta / "respostas.jsonl").unlink()
+                (pasta / "leads.json").unlink()
+                rodar_js(prog.replace("globalThis.squadoneLeads", "globalThis.squadoneLeads2"))
+                self.assertFalse((pasta / "respostas.jsonl").exists())
+            finally:
+                shutil.rmtree(casa)
 
     carga = unittest.TestLoader()
     suite = unittest.TestSuite([carga.loadTestsFromTestCase(Remendo), carga.loadTestsFromTestCase(Comportamento)])
