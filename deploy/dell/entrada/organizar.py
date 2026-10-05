@@ -10,8 +10,10 @@ Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio 
    frase-semente). O texto exato é conferido de novo pelo filtro antes de ir; item reprovado não vai;
 3. grava o texto exato em Entrada/requisicoes/ (a prova do que foi ao modelo);
 4. conta a tentativa ANTES de chamar (qualquer queda já vale) e chama `hermes -z` SEM ferramentas
-   (`-t clarify`: só perguntas, sem terminal, arquivos, código nem navegador) numa pasta vazia.
-   O modelo só PROPÕE um JSON;
+   (`-t clarify`: só perguntas, sem terminal, arquivos, código nem navegador) numa pasta vazia, com
+   o `stdin` fechado e só o ambiente que ele precisa. O modelo só PROPÕE um JSON. Cada `-z` grava uma
+   SESSÃO (com o texto do prompt) no state.db do Hermes, onde o Hermes do WhatsApp poderia achá-la:
+   depois da chamada as sessões dessa pasta de trabalho são apagadas, uma por id;
 5. o executor valida cada plano contra a lista de permissão e executa, ou recusa;
 6. imprime só o que mudou (o Hermes entrega no WhatsApp).
 
@@ -30,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -44,7 +47,7 @@ TRECHO_NO_PROMPT = 4000
 MAX_PROMPT_BYTES = 100_000     # o argv do Linux recusa mais que ~128 KiB num argumento só
 MAX_RESPOSTA = 200_000
 MAX_TENTATIVAS = 3
-TIMEOUT_MODELO_S = 600
+TIMEOUT_MODELO_S = 180          # as chamadas reais levam 10 a 20 s; o Hermes mata o script do cron em 1 h
 TOOLSET = "clarify"            # o único conjunto de ferramentas: só faz perguntas
 _PASTA_PARA_O_MODELO = re.compile(r"[0-9A-Za-zÀ-ÿ][0-9A-Za-zÀ-ÿ._\-]{0,29}")
 
@@ -69,12 +72,22 @@ A lista de pastas vem entre [[PASTAS {marca}]] e [[/PASTAS {marca}]].
 
 # ----------------------------------------------------------------------- prompt
 def item_para_modelo(item: dict, limite_texto: int = TRECHO_NO_PROMPT) -> dict:
-    d = {"id": item["id"], "nome": item.get("nome_original") or item.get("arquivo"), "tipo": item.get("tipo"),
-         "bytes": item.get("bytes"), "rotulo_do_usuario": item.get("rotulo")}
+    """O item como o MODELO o vê. Nome e rótulo (texto livre do usuário) e o texto da fila passam pela camada do
+    modelo AQUI, na hora de montar o prompt, e não só quando o item chegou: um item que entrou numa versão
+    anterior do filtro, ou cujo arquivo na fila foi editado, não leva o que a versão atual esconderia."""
+    nome = item.get("nome_original") or item.get("arquivo")
+    rotulo = item.get("rotulo")
+    d = {"id": item["id"], "nome": segredos.mascarar_nome_para_o_modelo(nome) if isinstance(nome, str) else nome,
+         "tipo": item.get("tipo"), "bytes": item.get("bytes"),
+         "rotulo_do_usuario": segredos.mascarar_nome_para_o_modelo(rotulo) if isinstance(rotulo, str) else rotulo}
     texto = item.get("texto")
     if isinstance(texto, str) and limite_texto > 0:
-        d["texto"] = texto[:limite_texto]
-        d["texto_cortado"] = bool(item.get("texto_truncado") or len(texto) > limite_texto)
+        visao = segredos.mascarar_para_o_modelo(texto)
+        if visao is None:                                   # sinal de segredo partido em linhas: nenhum texto
+            d["texto_retido"] = True
+        else:
+            d["texto"] = visao[:limite_texto]
+            d["texto_cortado"] = bool(item.get("texto_truncado") or len(visao) > limite_texto)
     elif item.get("texto_retido"):
         d["texto_retido"] = True
     return d
@@ -89,7 +102,7 @@ def pastas_existentes(entrada: entrada_mod.Entrada, limite: int = 40) -> list[st
             partes = p.relative_to(entrada.organizado).parts
             if "_propostas" in partes or len(partes) > 3:
                 continue
-            if all(_PASTA_PARA_O_MODELO.fullmatch(c) for c in partes) and not segredos.tem_segredo("/".join(partes)):
+            if all(_PASTA_PARA_O_MODELO.fullmatch(c) for c in partes) and not segredos.tem_segredo("/".join(partes), estrito=True):
                 out.append("/".join(partes))
         if len(out) >= limite:
             break
@@ -117,7 +130,7 @@ def bloco_do_item(item: dict, marca: str, limite_texto: int = TRECHO_NO_PROMPT) 
 def montar_prompt(itens: list[dict], pastas: list[str], marca: str | None = None, teto: int = MAX_PROMPT_BYTES) -> str:
     marca = marca or secrets.token_hex(4)          # delimitador que um texto não consegue adivinhar
     for limite in (TRECHO_NO_PROMPT, 2000, 1000, 500, 0):
-        prompt = (INSTRUCOES.replace("{marca}", marca) + f"[[PASTAS {marca}]]\n" + "\n".join(pastas)
+        prompt = (INSTRUCOES.replace("{marca}", marca) + f"[[PASTAS {marca}]]\n" + "\n".join(f"• {p}" for p in pastas)
                   + f"\n[[/PASTAS {marca}]]\n" + "\n".join(bloco_do_item(i, marca, limite) for i in itens) + "\n")
         if len(prompt.encode("utf-8")) <= teto:
             break
@@ -146,28 +159,108 @@ class ErroModelo(Exception):
 
 
 def comando_hermes() -> list[str]:
+    # O gancho de teste só vale com ENTRADA_TESTE=1: em produção, uma variável de ambiente trocando o binário
+    # seria execução de comando com o texto do prompt na linha de comando.
     env = os.environ.get("ENTRADA_HERMES_CMD")
-    if env:
+    if env and os.environ.get("ENTRADA_TESTE") == "1":
         return shlex.split(env)
-    return [shutil.which("hermes") or str(Path.home() / ".local/bin/hermes")]
+    fixo = Path.home() / ".local/bin/hermes"                 # o PATH do cron do Hermes começa por outra pasta
+    if fixo.is_file() and os.access(fixo, os.X_OK):
+        return [str(fixo)]
+    return [shutil.which("hermes") or str(fixo)]
+
+
+_ENV_DO_FILHO = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "HERMES_HOME",
+                 "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
+
+
+def ambiente_do_filho() -> dict[str, str]:
+    """O hermes herdava o ambiente inteiro do job, que pode trazer chave de API de outros serviços. Só o que ele
+    precisa para rodar: as credenciais dele vêm de ~/.hermes/.env, que ele mesmo lê. De `HERMES_*` só o HERMES_HOME
+    (o gateway também exporta `HERMES_SUPERVISED_CHILD` e afins: comportamento que não medi, então não repasso)."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_DO_FILHO}
+    if os.environ.get("ENTRADA_TESTE") == "1":              # o hermes de mentira dos testes recebe o que o teste lhe passa
+        env.update({k: v for k, v in os.environ.items() if k.startswith("HERMES_STUB_")})
+    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    return env
+
+
+_ID_SESSAO = re.compile(r"\d{8}_\d{6}_[0-9a-f]{6,}")
+_TENTATIVAS_DELETE = 3
+_ESPERA_DELETE_S = 1.0                  # "database is locked": o gateway do WhatsApp também grava no state.db
+
+
+def _sessoes_do_agente(pasta: Path, base: list[str], comum: dict) -> list[str] | None:
+    """Ids das sessões cujo workspace é EXATAMENTE a pasta do agente. A tabela do `hermes sessions list` tem as
+    colunas Title, Workspace, Last Active e ID, separadas por 2+ espaços: lê-se da DIREITA (o título é texto livre,
+    gerado pelo modelo, e pode conter qualquer coisa, inclusive algo com cara de id). None = a listagem falhou."""
+    try:
+        r = subprocess.run(base + ["sessions", "list", "--workspace", str(pasta), "--limit", "200"], **comum)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return None
+    if r.returncode != 0:
+        return None
+    ids = []
+    for linha in r.stdout.splitlines():
+        cols = re.split(r"\s{2,}", linha.strip())
+        if len(cols) >= 4 and _ID_SESSAO.fullmatch(cols[-1]) and cols[-3] == pasta.name:
+            ids.append(cols[-1])
+    return ids
+
+
+def limpar_sessoes(pasta: Path, timeout: int = 60) -> tuple[int, int]:
+    """Apaga as sessões que o `hermes -z` gravou nesta pasta de trabalho (o texto do prompt, já mascarado, ficaria no
+    state.db, onde o Hermes do WhatsApp poderia achá-lo numa busca). Uma por id, só as do workspace exato. NUNCA
+    `sessions prune`: ele recusa com o gateway no ar e `--force` arriscaria o banco do Hermes. Tenta de novo se o banco
+    estiver travado e confere no fim. Devolve (apagadas, restantes); falhar aqui não derruba a rodada."""
+    base = comando_hermes()
+    comum = dict(cwd=pasta, capture_output=True, text=True, errors="replace", timeout=timeout,
+                 stdin=subprocess.DEVNULL, env=ambiente_do_filho())
+    ids = _sessoes_do_agente(pasta, base, comum)
+    if not ids:
+        return 0, 0
+    apagadas = 0
+    for sid in ids:
+        for tentativa in range(_TENTATIVAS_DELETE):
+            try:
+                d = subprocess.run(base + ["sessions", "delete", "--yes", sid], **comum)
+            except (subprocess.TimeoutExpired, OSError, ValueError):
+                break
+            if d.returncode == 0:
+                apagadas += 1
+                break
+            if tentativa + 1 < _TENTATIVAS_DELETE:
+                time.sleep(_ESPERA_DELETE_S)
+    restantes = _sessoes_do_agente(pasta, base, comum)
+    return apagadas, (len(restantes) if restantes is not None else len(ids) - apagadas)
 
 
 def chamar_modelo(prompt: str, pasta_vazia: Path, timeout: int = TIMEOUT_MODELO_S) -> tuple[str, dict]:
-    """hermes -z SEM ferramentas (só o conjunto `clarify`), numa pasta vazia, e devolve (resposta, uso)."""
+    """hermes -z SEM ferramentas (só o conjunto `clarify`), numa pasta vazia, e devolve (resposta, uso).
+    A pasta tem de estar vazia de fato: o `-z` carrega o AGENTS.md que estiver NELA (o do ~ não entra, medido).
+    As sessões do agente são apagadas ANTES (sobra de uma rodada que caiu: o hermes órfão grava depois) e DEPOIS."""
+    if any(pasta_vazia.iterdir()):
+        raise ErroModelo("a pasta de trabalho do agente não está vazia")
+    apagadas_antes, _ = limpar_sessoes(pasta_vazia)
     with tempfile.TemporaryDirectory(prefix="entrada-uso-") as tmp:
         uso_arq = Path(tmp) / "uso.json"
         cmd = comando_hermes() + ["-z", prompt, "-t", TOOLSET, "--usage-file", str(uso_arq)]
+        apagadas = restantes = 0
         try:
-            r = subprocess.run(cmd, cwd=pasta_vazia, capture_output=True, text=True, errors="replace", timeout=timeout)
+            r = subprocess.run(cmd, cwd=pasta_vazia, capture_output=True, text=True, errors="replace", timeout=timeout,
+                               stdin=subprocess.DEVNULL, env=ambiente_do_filho())
         except subprocess.TimeoutExpired:
             raise ErroModelo("o modelo demorou demais") from None
-        except OSError as ex:
+        except (OSError, ValueError) as ex:                 # ValueError: NUL no prompt (o filtro já tira, mas não derruba a rodada)
             raise ErroModelo(f"não consegui rodar o hermes ({type(ex).__name__})") from None
+        finally:
+            apagadas, restantes = limpar_sessoes(pasta_vazia)
         uso = {}
         try:
             uso = json.loads(uso_arq.read_text())
         except (OSError, ValueError):
             pass
+    uso["sessoes_apagadas"], uso["sessoes_restantes"] = apagadas_antes + apagadas, restantes
     if r.returncode != 0:
         raise ErroModelo(f"o hermes saiu com {r.returncode}")
     if not r.stdout.strip():
@@ -201,10 +294,17 @@ def extrair_planos(resposta: str) -> list:
 
 
 # ------------------------------------------------------------------------- job
+def caminho_para_aviso(para) -> str:
+    """O destino que o modelo escolheu, para o WhatsApp: cada pedaço do caminho passa pela máscara de nomes."""
+    return "/".join(segredos.mascarar_nome_para_o_modelo(c) for c in str(para).split("/"))
+
+
 def nome_para_aviso(item: dict) -> str:
     """O que vai ao WhatsApp: nunca algo que o filtro reprove (nome e rótulo já passaram, mas confere de novo)."""
     n = item.get("nome_original") or item.get("rotulo") or "texto"
-    return item["id"] if segredos.tem_segredo(n) else n
+    if not isinstance(n, str) or segredos.tem_segredo(n, estrito=True) or segredos.mascarar_nome_para_o_modelo(n) != n:
+        return item["id"]                                   # o nome tem cara de segredo: no WhatsApp vai só o id
+    return n
 
 
 def _desistir_ou_repetir(entrada, it, motivo, sem_plano):
@@ -226,6 +326,10 @@ def rodar_grupo(entrada, executor, grupo, pastas, chamar, feitos, sem_plano, avi
     if not bons:
         return
     prompt = montar_prompt(bons, pastas)
+    if pastas and segredos.tem_segredo(prompt):             # nomes de pasta que o MODELO criou não podem travar a fila
+        entrada.diario("pastas-fora-do-prompt", motivo="a lista de pastas fez o prompt parecer segredo")
+        pastas = []
+        prompt = montar_prompt(bons, pastas)
     if segredos.tem_segredo(prompt):                        # cinto e suspensório: o texto EXATO que iria
         for it in bons:
             it["estado"] = "bloqueado"
@@ -254,21 +358,25 @@ def rodar_grupo(entrada, executor, grupo, pastas, chamar, feitos, sem_plano, avi
             por_id.setdefault(p["id"], p)
     entrada.diario("modelo-chamado", itens=[i["id"] for i in bons], requisicao=req.name,
                    entrada_tokens=uso.get("input_tokens"), saida_tokens=uso.get("output_tokens"),
-                   modelo=uso.get("model"), erro=erro_geral)
+                   modelo=uso.get("model"), sessoes_apagadas=uso.get("sessoes_apagadas"),
+                   sessoes_restantes=uso.get("sessoes_restantes"), erro=erro_geral)
+    if uso.get("sessoes_restantes"):
+        avisos.append(f"⚠️ ficaram {uso['sessoes_restantes']} sessão(ões) do agente no Hermes que não consegui apagar")
     for it in bons:
         motivo = erro_geral or "sem plano para este item"
         plano = por_id.get(it["id"])
         if plano is not None:
             try:
                 r = executor.aplicar(plano, it)
-                feitos.append(f"• {nome_para_aviso(it)} → {r['para']}" + (" (com resumo)" if r.get("resumo_em") else ""))
+                feitos.append(f"• {nome_para_aviso(it)} → {caminho_para_aviso(r['para'])}"
+                              + (" (com resumo)" if r.get("resumo_em") else ""))
                 continue
             except executor_mod.PlanoInvalido as ex:
                 motivo = f"plano recusado: {ex}"
             except Exception as ex:  # noqa: BLE001  (o texto da exceção pode ter caminho; só o tipo)
                 motivo = f"erro ao executar o plano ({type(ex).__name__})"
                 if it.get("estado") == "organizado":        # o arquivo já foi para o lugar; só o resto falhou
-                    feitos.append(f"• {nome_para_aviso(it)} → {it.get('destino', '?')}")
+                    feitos.append(f"• {nome_para_aviso(it)} → {caminho_para_aviso(it.get('destino', '?'))}")
                     continue
         _desistir_ou_repetir(entrada, it, motivo, sem_plano)
 
@@ -278,6 +386,16 @@ def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=
     pendentes = entrada.pendentes()
     if not pendentes:
         return ""
+    pasta, marca = entrada.raiz / ".agente", entrada.raiz / ".aviso-pasta-suja"
+    if pasta.is_dir() and any(pasta.iterdir()):
+        # problema do ambiente, não do item: não gasta tentativa, não grava "prova" de prompt que não saiu, avisa UMA vez
+        entrada.diario("pasta-do-agente-suja")
+        if marca.exists():
+            return ""
+        os.close(os.open(marca, os.O_WRONLY | os.O_CREAT, 0o600))
+        return ("⚠️ Entrada: a pasta de trabalho do agente (~/Mel/Entrada/.agente) tem arquivos e precisa ficar vazia. "
+                "Nada foi enviado ao modelo e os itens seguem esperando.")
+    marca.unlink(missing_ok=True)
     pastas = pastas_existentes(entrada)
     feitos: list[str] = []
     sem_plano: list[dict] = []

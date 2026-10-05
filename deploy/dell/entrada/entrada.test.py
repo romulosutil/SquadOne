@@ -203,7 +203,9 @@ class RedigirNoCofre(Base):
         self.assertEqual(len(r["segredos_no_cofre"]), 2)
         it = self.ent.pendentes()[0]
         self.assertIn("{{SEGREDO:" + r["segredos_no_cofre"][0] + "}}", it["texto"])
-        self.assertIn("Combinar a migração.", it["texto"])
+        self.assertIn("Servidor novo do cliente.", it["texto"])
+        # o que vem logo abaixo de uma linha de segredo pode ser mais segredo sem contexto: some junto (revisão de 04/10)
+        self.assertNotIn("Combinar a migração.", it["texto"])
         for valor in (SENHA, GHP):
             self.assertNotIn(valor, it["texto"])
             self.assertNotIn(valor.encode(), self.tudo_no_disco(), "o valor só pode existir cifrado")
@@ -386,11 +388,11 @@ class Revisao_de_seguranca(Base):
 
     def test_o_trecho_do_agente_e_mascarado_e_cortado_em_fim_de_linha(self):
         hex64 = "9f2c" * 16
-        self.enviar("organizar", f"Carteira nova\nchave {hex64}\nfim", nome="carteira.txt")
+        self.enviar("organizar", f"Anotação nova\nchave {hex64}\nfim", nome="anotacao.txt")
         it = self.ent.pendentes()[0]
         self.assertNotIn(hex64, it["texto"])
         self.assertNotIn(hex64[:8], it["texto"])
-        self.assertIn("Carteira nova", it["texto"])
+        self.assertIn("Anotação nova", it["texto"])
         longo = "linha de anotação comum\n" * 600
         self.enviar("organizar", longo, nome="longo.txt")
         it2 = [i for i in self.ent.pendentes() if i["nome_original"] == "longo.txt"][0]
@@ -431,6 +433,157 @@ class Revisao_de_seguranca(Base):
     def test_diario_aguenta_surrogate_solto(self):
         self.ent.diario("teste", campo="oi \ud800 fim")
         self.assertIn('"evento": "teste"', self.ent.arq_diario.read_text())
+
+
+class Segunda_rodada_de_revisao(Base):
+    """Achados da 2ª rodada de revisão adversarial (04/10/2026)."""
+
+    def test_bom_utf16_falso_nao_esconde_o_segredo(self):
+        # arquivo que só COMEÇA com o BOM e é ASCII: virava ideogramas reversíveis e passava pelo filtro
+        for corpo_ascii in (f"# chave\n{AGE_FALSA}\nsenha do banco: x\n", f"senha: {SENHA}\n", f"nota\n{PEM}\n"):
+            for extra in ("", "x"):                              # tamanho par e ímpar
+                dados = b"\xff\xfe" + (corpo_ascii + extra).encode()
+                for acao in ("organizar", "guardar"):
+                    with self.assertRaises(e.Recusado, msg=f"{acao}/{len(dados)}"):
+                        self.enviar(acao, dados, nome="x.txt")
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertNotIn(AGE_FALSA[:20].encode(), self.tudo_no_disco())
+
+    def test_utf16_de_verdade_com_ascii_acrescentado_depois_e_bloqueado(self):
+        # o `echo ... >> arquivo.txt` do cmd do Windows acrescenta ASCII a um arquivo UTF-16 com BOM. Com um corpo
+        # longo o arquivo todo parecia texto e o rabo chegava ao modelo como ideogramas reversíveis; agora um par de
+        # bytes ASCII legível em qualquer ponto torna o arquivo binário (sem texto para o modelo).
+        corpo_longo = ("Reunião com o cliente sobre a proposta de 2026 e o contrato revisado.\r\n" * 30)
+        rabo = f"senha: {SENHA} \r\n".encode()
+        self.assertEqual(len(rabo) % 2, 0, "rabo de tamanho par: senão o decode de UTF-16 falha por outro motivo")
+        dados = corpo_longo.encode("utf-16") + rabo
+        self.assertIsNone(e.Entrada._decodificar(dados), "ASCII lido como UTF-16 (par de bytes legíveis): vira binário")
+        for acao in ("organizar", "guardar"):
+            with self.assertRaises(e.Recusado, msg=acao):
+                self.enviar(acao, dados, nome="nota.txt")
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+
+    def test_bom_falso_sem_segredo_e_tratado_como_binario_e_nao_vira_texto_para_o_modelo(self):
+        dados = b"\xff\xfe" + "so uma anotacao simples aqui!\n".encode()
+        self.assertEqual(len(dados) % 2, 0, "tamanho par: senão o decode falha por outro motivo")
+        self.assertIsNotNone(dados.decode("utf-16"), "decodifica (em ideogramas): só a plausibilidade o recusa")
+        self.enviar("organizar", dados, nome="nota.dat")
+        it = self.ent.pendentes()[0]
+        self.assertIsNone(it["texto"])
+        self.assertNotEqual(it["tipo"], "texto")
+
+    def test_utf16_com_acentos_e_cirilico_continua_texto(self):
+        self.enviar("organizar", "Reunião — Привет мир, ação 2026".encode("utf-16"), nome="nota.txt")
+        it = self.ent.pendentes()[0]
+        self.assertEqual(it["tipo"], "texto")
+        self.assertIn("Привет", it["texto"])
+
+    @unittest.skipUnless(TEM_AGE, "age não instalado")
+    def test_sobra_de_segredo_depois_de_redigir_recusa_e_nao_guarda_nada(self):
+        # o cinto de segurança (`tem_segredo(novo)`): um redigir que deixe segredo no texto não pode seguir
+        from unittest import mock
+        with mock.patch.object(e.segredos, "redigir", return_value=(f"senha: {SENHA}\n", [])):
+            with self.assertRaises(e.Recusado) as x:
+                self.enviar("organizar", f"senha: {SENHA}\n", com_cofre=True)
+        self.assertEqual(x.exception.codigo, 422)
+        self.assertIn("Sobrou", str(x.exception))
+        self.assertFalse(x.exception.extra["pode_redigir"])
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertNotIn("redigido", [d["evento"] for d in self.diario()])
+
+
+class Rotulo_e_nome_no_modo_estrito(Base):
+    """Rótulo e nome são texto curto e entram no índice do cofre (texto claro): sem os afrouxamentos do texto comum."""
+
+    def test_rotulo_que_so_o_modo_estrito_pega_e_recusado(self):
+        for rotulo in ("senha: ver no Bitwarden", "token_expiry: 3600", "api_key: Valid@2026x"):
+            with self.assertRaises(e.Recusado, msg=rotulo) as x:
+                self.enviar("organizar", "uma nota comum", rotulo=rotulo)
+            self.assertEqual(x.exception.codigo, 422)
+        for nome in ("senha: ver no Bitwarden.txt", "token_expiry=3600.txt"):
+            with self.assertRaises(e.Recusado, msg=nome):
+                self.enviar("organizar", "uma nota comum", nome=nome)
+        self.enviar("organizar", "uma nota comum", rotulo="contrato da Silmer 2026", nome="contrato-silmer-2026.txt")
+        self.assertEqual(len(self.ent.pendentes()), 1)
+
+    @unittest.skipUnless(TEM_AGE, "age não instalado")
+    def test_rotulo_do_cofre_tambem_e_estrito(self):
+        from cofre import CofreErro
+        with self.assertRaises(CofreErro):
+            self.cofre.guardar("senha: ver no Bitwarden", b"valor")
+        self.assertEqual(self.cofre.listar(), [])
+        self.cofre.guardar("conta do banco da Silmer", b"valor")
+
+    def test_diario_esconde_o_que_o_modo_estrito_reconhece(self):
+        self.ent.diario("teste", campo="senha: ver no Bitwarden", outro="texto comum")
+        ult = self.diario()[-1]
+        self.assertEqual(ult["campo"], "<oculto>")
+        self.assertEqual(ult["outro"], "texto comum")
+
+
+class Codificacoes(Base):
+    """UTF-16/32 com BOM (LE e BE), rabo ASCII, NUL e escritas não latinas (revisões C e D de 04/10/2026)."""
+    CORPO = "Reunião com o cliente sobre a proposta de 2026 e o contrato revisado.\r\n" * 30
+    BOMS = {"utf-16-le": b"\xff\xfe", "utf-16-be": b"\xfe\xff", "utf-32-le": b"\xff\xfe\x00\x00", "utf-32-be": b"\x00\x00\xfe\xff"}
+
+    def com_bom(self, texto, codec, rabo=b""):
+        return self.BOMS[codec] + texto.encode(codec) + rabo
+
+    def test_texto_legitimo_em_todas_as_variantes_continua_texto(self):
+        for codec in self.BOMS:
+            for texto in ("Reunião — “aspas” … ação 2026 € £ ¥\r\n", "Привет мир, Γειά σου\r\n", self.CORPO):
+                self.assertIsNotNone(e.Entrada._decodificar(self.com_bom(texto, codec)), (codec, texto[:12]))
+
+    def test_rabo_ascii_com_segredo_do_filtro_principal_e_bloqueado_em_toda_variante(self):
+        rabos = (f"senha: {SENHA} \r\n", f"{AGE_FALSA}  ", f"nota\r\n{PEM}\r\n", f"token: {GHP}  \r\n")
+        for codec in ("utf-16-le", "utf-16-be"):
+            for rabo in rabos:
+                b = rabo.encode() + (b" " if len(rabo.encode()) % 2 else b"")
+                dados = self.com_bom(self.CORPO, codec, b)
+                self.assertIsNone(e.Entrada._decodificar(dados), f"{codec}: o rabo ASCII faz o arquivo virar binário")
+                for acao in ("organizar", "guardar"):
+                    with self.assertRaises(e.Recusado, msg=f"{codec}/{acao}/{rabo[:12]!r}"):
+                        self.enviar(acao, dados, nome="x.txt")
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+
+    def test_rabo_com_valor_que_so_a_camada_do_modelo_pegaria_nao_vira_texto_para_o_modelo(self):
+        # sem padrão do filtro principal: aceito como binário (em claro em chegou/, limite documentado), SEM texto ao modelo
+        for rabo in ("Senha do wifi\r\ncasa2026   \r\n", "wifi psw casa2026 \r\n", "google app: abcd efgh ijkl mnop", "contrasena casa2026! "):
+            b = rabo.encode() + (b" " if len(rabo.encode()) % 2 else b"")
+            for codec in ("utf-16-le", "utf-16-be"):
+                self.enviar("organizar", self.com_bom(self.CORPO, codec, b), nome=f"n-{abs(hash((rabo, codec)))}.txt")
+        for it in self.ent.pendentes():
+            self.assertIsNone(it["texto"], "nada que o filtro não entenda vai ao modelo")
+            self.assertNotEqual(it["tipo"], "texto")
+
+    def test_rabo_depois_dos_100_mil_caracteres_tambem_e_visto(self):
+        corpo = ("Reunião com o cliente sobre a proposta de 2026 e o contrato revisado.\r\n" * 1700)      # ~120 mil caracteres
+        self.assertGreater(len(corpo), 100_000)
+        dados = self.com_bom(corpo, "utf-16-le", f"senha: {SENHA} \r\n".encode())
+        self.assertIsNone(e.Entrada._decodificar(dados), "a checagem varre o arquivo todo, não só o começo")
+
+    def test_nul_em_qualquer_ponto_e_binario(self):
+        self.assertIsNone(e.Entrada._decodificar(("x" * 9000 + "\x00y").encode()), "NUL depois dos 8192 primeiros bytes")
+        japones = ("こんにちは世界。" * 600)
+        self.assertGreater(len(japones.encode()), 8192)
+        dados = (japones[:2000] + "\x00" + japones[2000:]).encode()
+        self.assertIsNone(e.Entrada._decodificar(dados))
+        self.assertIsNone(e.Entrada._decodificar(self.com_bom("texto normal " * 20, "utf-16-le", b"\x00\x00")))
+
+    def test_escrita_nao_latina_em_utf16_vira_binario_sem_texto_ao_modelo_mas_em_utf8_e_texto(self):
+        for texto in ("こんにちは世界、これはメモです。" * 5, "مرحبا بالعالم، هذه ملاحظة" * 5, "שלום עולם, זו הערה" * 5, "😀📌🔑" * 20):
+            self.assertIsNone(e.Entrada._decodificar(self.com_bom(texto, "utf-16-le")), texto[:6])
+            self.assertEqual(e.Entrada._decodificar(texto.encode("utf-8")), texto)
+
+    def test_utf8_com_bom_e_texto(self):
+        self.assertEqual(e.Entrada._decodificar(b"\xef\xbb\xbf" + "Reunião".encode()), "﻿Reunião")
+
+    def test_utf8_invalido_e_binario(self):
+        self.assertIsNone(e.Entrada._decodificar(b"abc \xff\xfe\x80 def"))
 
 
 if __name__ == "__main__":

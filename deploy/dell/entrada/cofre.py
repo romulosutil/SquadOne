@@ -131,7 +131,7 @@ class Cofre:
             raise CofreErro(f"{campo} com mais de {MAX_ROTULO} caracteres")
         if any(ord(c) < 32 or ord(c) == 127 for c in valor):
             raise CofreErro(f"{campo} com caractere de controle")
-        if valor and segredos.tem_segredo(valor):
+        if valor and segredos.tem_segredo(valor, estrito=True):      # texto curto: sem os afrouxamentos
             raise CofreErro(f"o {campo} parece um segredo: o índice é texto claro, escreva uma descrição")
         return valor
 

@@ -78,7 +78,8 @@ class Executor:
         if tem_controle(v, permite_quebra=quebra):
             raise PlanoInvalido(f"{campo} com caractere de controle ou invisível")
         # caminho: a barra junta as partes numa "cadeia longa" que não existe; cada pasta é conferida sozinha
-        if any(segredos.tem_segredo(p) for p in (v.split("/") if por_partes else [v])):
+        # campo de uma linha (destino, nome, rótulo): modo estrito; só o resumo, que é prosa, usa o filtro normal
+        if any(segredos.tem_segredo(p, estrito=not quebra) for p in (v.split("/") if por_partes else [v])):
             raise PlanoInvalido(f"{campo} parece um segredo")
         return v
 
