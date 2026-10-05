@@ -64,12 +64,40 @@ if ($Desfazer) {
 # 1. Pre-requisitos. Cada falha diz o que fazer e para antes de instalar.
 if (-not (Test-Path $ssh)) { throw "Nao achei $ssh. Instale o OpenSSH Client (Configuracoes > Apps > Recursos opcionais)." }
 
+# Para "ligou o PC, conectou": o ssh-agent tem de iniciar sozinho no boot. O
+# agente do Windows guarda a chave adicionada com ssh-add entre reinicios
+# (cifrada para o seu usuario), entao a senha da chave so e pedida uma vez.
 $agente = Get-Service ssh-agent -ErrorAction SilentlyContinue
-if (-not $agente -or $agente.Status -ne 'Running') {
-  throw "O servico ssh-agent nao esta rodando. Num PowerShell de administrador: Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent. Depois, no seu PowerShell normal: ssh-add ~/.ssh/id_ed25519"
+if (-not $agente) { throw "Nao achei o servico ssh-agent (OpenSSH Authentication Agent). Instale o OpenSSH Client (Configuracoes > Apps > Recursos opcionais)." }
+if ($agente.StartType -ne 'Automatic' -or $agente.Status -ne 'Running') {
+  Write-Host "..  ssh-agent: StartType=$($agente.StartType), Status=$($agente.Status). Vou pedir permissao de administrador (janela do UAC) so para ligar o inicio automatico."
+  try {
+    Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile -Command "Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent"'
+  } catch {
+    Write-Warning "Permissao de administrador negada ou indisponivel ($($_.Exception.Message))."
+  }
+  $agente = Get-Service ssh-agent
+  if ($agente.StartType -ne 'Automatic' -or $agente.Status -ne 'Running') {
+    throw "ssh-agent continua StartType=$($agente.StartType), Status=$($agente.Status). Num PowerShell de administrador: Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent. Depois rode este script de novo."
+  }
 }
-if ($agente.StartType -ne 'Automatic') {
-  Write-Warning "ssh-agent esta rodando mas nao inicia sozinho (StartType=$($agente.StartType)). Depois de reiniciar o PC os tuneis nao sobem. Admin: Set-Service ssh-agent -StartupType Automatic"
+Write-Host "ok  ssh-agent automatico e rodando"
+
+# Chave no agente. ssh-add -l: 0 = tem chave, 1 = vazio, 2 = sem agente.
+$ErrorActionPreference = 'Continue'
+& (Join-Path $env:WINDIR 'System32\OpenSSH\ssh-add.exe') -l *> $null
+$temChave = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = 'Stop'
+if (-not $temChave) {
+  $interativo = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+  if ($interativo) {
+    Write-Host "..  o agente esta sem chave: o ssh-add vai pedir a senha da chave UMA vez (fica guardada entre reinicios)."
+    $ErrorActionPreference = 'Continue'
+    & (Join-Path $env:WINDIR 'System32\OpenSSH\ssh-add.exe')
+    $ErrorActionPreference = 'Stop'
+  } else {
+    throw "O ssh-agent esta sem chave e este terminal nao e interativo (nao da para pedir a senha). Abra um PowerShell e rode: ssh-add   (pede a senha uma vez). Depois rode este script de novo."
+  }
 }
 
 # No PowerShell 5.1, stderr de programa nativo com ErrorActionPreference=Stop
@@ -152,6 +180,25 @@ foreach ($item in $testes.GetEnumerator()) {
 }
 if ($falhou) {
   Write-Warning "Algum tunel nao respondeu. Veja $pasta\tuneis.log e $pasta\ssh.log."
-} else {
-  Write-Host "Pronto. Os tuneis sobem sozinhos a cada logon, sem janela."
 }
+
+# 5. O resto do "ligou o PC, conectou": so confere e diz o que falta (nao mexe
+#    na Tailscale nem na tarefa de backup).
+Write-Host ""
+Write-Host "Ao ligar o PC:"
+$ts = Get-Service Tailscale -ErrorAction SilentlyContinue
+if ($ts -and $ts.StartType -eq 'Automatic') { Write-Host "ok  Tailscale inicia com o Windows" }
+else { Write-Warning "Servico Tailscale nao esta automatico (StartType=$($ts.StartType)). Admin: Set-Service Tailscale -StartupType Automatic" }
+$tsExe = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
+if (Test-Path $tsExe) {
+  $ErrorActionPreference = 'Continue'
+  $prefs = (& $tsExe debug prefs 2>$null) -join "`n"
+  $ErrorActionPreference = 'Stop'
+  if ($prefs -match '"ForceDaemon":\s*true') { Write-Host "ok  Tailscale em 'Run unattended' (conecta antes do login)" }
+  elseif ($prefs) { Write-Warning "Tailscale sem 'Run unattended': ela so conecta depois do login, e os tuneis esperam por ela. Para conectar ja no boot: icone da Tailscale > Settings (ou Preferences) > Run unattended." }
+}
+if (Get-ScheduledTask -TaskName 'Backup-Estrutura-PC' -ErrorAction SilentlyContinue) { Write-Host "ok  tarefa Backup-Estrutura-PC (logon e 03:30)" }
+else { Write-Warning "Nao achei a tarefa Backup-Estrutura-PC (backup diario do PC para a Mel)." }
+Write-Host "ok  tarefa ${tarefa}: no logon, sem janela; espera a Mel aparecer na rede e conecta na hora; religa sozinha se cair"
+Write-Host ""
+Write-Host "Pronto. Sessao do Claude na Mel: app Claude > Code > ambiente > + Add SSH connection > host mel."
