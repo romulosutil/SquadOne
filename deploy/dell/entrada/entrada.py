@@ -184,7 +184,7 @@ class Entrada:
         """Uma linha por evento. Texto que o filtro reconhece como segredo é trocado por <oculto>."""
         reg = {"ts": self.agora().isoformat(timespec="seconds"), "evento": evento}
         for k, v in campos.items():
-            reg[k] = "<oculto>" if isinstance(v, str) and segredos.tem_segredo(v) else v
+            reg[k] = "<oculto>" if isinstance(v, str) and segredos.tem_segredo(v, estrito=True) else v
         linha = (json.dumps(reg, ensure_ascii=False) + "\n").encode("utf-8", "backslashreplace")
         fd = os.open(self.arq_diario, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
@@ -215,7 +215,7 @@ class Entrada:
             raise Recusado(400, f"{campo} com mais de {maximo} caracteres.")
         if tem_controle(valor):
             raise Recusado(400, f"{campo} com caractere de controle ou invisível.")
-        if valor and segredos.tem_segredo(valor):
+        if valor and segredos.tem_segredo(valor, estrito=True):      # rótulo e nome: curtos, sem os afrouxamentos
             raise Recusado(422, f"O {campo} parece um segredo. Escreva uma descrição, não o valor.",
                            bloqueado=True, onde=campo)
         return valor
@@ -291,9 +291,17 @@ class Entrada:
 
     @staticmethod
     def _plausivel(texto: str) -> bool:
-        """UTF-16/32 só vale se o resultado for TEXTO. Um arquivo que só começa com o BOM e é ASCII vira ideogramas
-        (reversíveis) e escondia o segredo do filtro (revisão de 04/10): acontece de verdade no Windows, onde um
-        `echo ... >>` acrescenta ASCII a um arquivo UTF-16. Latim, grego, cirílico e pontuação passam."""
+        """UTF-16/32 só vale se o resultado for TEXTO. ASCII lido como UTF-16 vira ideogramas REVERSÍVEIS que o filtro
+        não entende, e acontece de verdade no Windows (um `echo ... >>` acrescenta ASCII a um arquivo UTF-16 com BOM,
+        e o corpo legítimo faz o arquivo todo parecer texto). Por isso: qualquer caractere cujos DOIS bytes são ASCII
+        legível (U+2070..U+7E7E, fora da pontuação e das moedas) ou um NUL torna o arquivo binário. Texto latino,
+        grego e cirílico legítimo nunca tem esse par (o byte alto é 0x00..0x05); japonês, chinês, árabe e emoji em
+        UTF-16 viram "binário" (sem trecho para o modelo): é o preço."""
+        if "\x00" in texto:
+            return False
+        for o in map(ord, texto):                           # varre TUDO: o rabo ASCII fica no fim do arquivo
+            if 0x2070 <= o <= 0x7E7E and 0x20 <= (o >> 8) <= 0x7E and 0x20 <= (o & 0xFF) <= 0x7E:
+                return False
         amostra = texto[:100_000]
         if not amostra:
             return True
@@ -311,7 +319,7 @@ class Entrada:
                 except UnicodeDecodeError:
                     return None
                 return texto if cls._plausivel(texto) else None
-        if b"\x00" in dados[:8192]:
+        if b"\x00" in dados:                                # NUL em qualquer ponto: binário (e subprocess recusa NUL no prompt)
             return None
         try:
             return dados.decode("utf-8")

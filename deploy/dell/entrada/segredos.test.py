@@ -379,7 +379,11 @@ class Camada_do_modelo(unittest.TestCase):
         v = s.mascarar_para_o_modelo(t)
         self.assertIn("{{SEGREDO:" + ID1 + "}}", v)
         self.assertIn("{{SEGREDO:" + ID2 + "}}", v)
-        self.assertIn("Combinar a migração.", v)
+        # o que vem logo abaixo de uma linha de segredo pode ser mais segredo sem contexto: some junto (revisão de 04/10)
+        self.assertNotIn("Combinar a migração.", v)
+        # ...mas só as próximas linhas: um parágrafo mais adiante fica
+        longe = t + "\n" * 12 + "Combinar a migração."
+        self.assertIn("Combinar a migração.", s.mascarar_para_o_modelo(longe))
 
     def test_pedacos_de_senha_viram_oculto(self):
         for tok in ["Kx9;mP2)vL8]", "9f2c" * 8, "JBSWY3DPEHPK3PXP", "abc123def456ghi789jkl", "https://x.io/a1b2c3d4e5f6g7h8"]:
@@ -512,11 +516,13 @@ class Estrutura_variada(unittest.TestCase):
             visao = s.mascarar_para_o_modelo(texto)
             self.assertFalse(vaza(visao, valor), f"o valor chegou à visão do modelo: {desc} -> {visao!r}")
 
-    def test_utf16_utf32_crlf_e_bom_dao_o_mesmo_resultado(self):
-        for desc, texto, valor, _ in self.casos()[:12]:
-            for codec in ("utf-16", "utf-32", "utf-8-sig"):
-                dec = texto.replace("\n", "\r\n").encode(codec).decode(codec).lstrip("﻿")
-                self.assertFalse(vaza(s.mascarar_para_o_modelo(dec), valor), f"{desc} em {codec}")
+    def test_o_fluxo_real_mascara_duas_vezes_e_a_segunda_nao_muda_nem_revela_nada(self):
+        # na fila o trecho é mascarado ao chegar e DE NOVO ao montar o prompt: a proteção não pode depender de uma só passada
+        for desc, texto, valor, _ in self.casos():
+            um = s.mascarar_para_o_modelo(texto)
+            dois = s.mascarar_para_o_modelo(um)
+            self.assertEqual(dois, um, f"não idempotente: {desc}")
+            self.assertFalse(vaza(dois, valor), desc)
 
     def test_a_visao_do_modelo_nao_e_bloqueada_de_novo_por_causa_do_que_sobrou(self):
         # o que o modelo recebe passa no filtro principal (senão o organizador barraria tudo)
@@ -843,6 +849,206 @@ class Camada_do_modelo_reforcada(unittest.TestCase):
                 self.assertLess(time.time() - ini, 2.0, f"{nome} com {n} caracteres")
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Revisão C (04/10/2026, depois do PR #10 aberto): o que o filtro ainda deixava passar e o que eu afrouxei demais.
+def dupla(texto):
+    """A visão que o modelo recebe de verdade: mascarada ao chegar e mascarada de novo ao montar o prompt."""
+    return s.mascarar_para_o_modelo(s.mascarar_para_o_modelo(texto))
+
+
+ES = "ábaco abdomen abeja abierto abogado abono aborto abrazo abrir abuelo abuso acabar".split()
+FR = "abaisser abandon abdiquer abeille abolir aborder aboutir aboyer abrasif abreuver abriter absence".split()
+ES_ACENTO = "canción césped dragón lágrima melón música pájaro razón sábado último volcán corazón".split()
+
+
+class Contexto_e_estrutura(unittest.TestCase):
+    def test_a_segunda_passada_nao_esconde_mais_que_a_primeira(self):
+        # "<oculto> senha <oculto>" (saída da 1ª passada) não pode armar a janela das linhas de baixo na 2ª
+        t = "Trocar a senha do wifi amanhã, está fraca\nLevar o contrato e o orçamento revisado\nFim"
+        um = s.mascarar_para_o_modelo(t)
+        self.assertIn("Levar o contrato", um)
+        self.assertEqual(dupla(t), um)
+
+    def casos(self):
+        return [
+            # camelCase: a palavra é prefixo
+            ("camelCase JSON", f'{{"senhaAdmin": "{W}"}}\n', W, True),
+            ("camelCase const", f'const senhaWifi = "{W}";\n', W, True),
+            ("camelCase password", f'passwordRoot = "{W}x"\n', W + "x", True),
+            ("camelCase pin", f"pinCartao: {PIN}\n", PIN, True),
+            ("valor antes de uma palavra camelCase", f"{W} senhaAdmin\n", W, False),
+            ("camelCase token", f"tokenBot: {W}\n", W, True),
+            # palavras e idiomas que faltavam
+            ("chave do cofre, valor antes", f"{W} é a chave do cofre\n", W, False),
+            ("Chave do cofre, valor embaixo", f"Chave do cofre\n{PIN}\n", PIN, False),
+            ("chave do portão", f"chave do portão {PIN}\n", PIN, False),
+            ("chave do cadeado, valor embaixo", f"Chave do cadeado:\n{PIN}\n", PIN, False),
+            ("chave do roteador", f"chave do roteador {W}\n", W, False),
+            ("API key + valor embaixo", f"API key\n{W}\n", W, False),
+            ("apiKey + valor embaixo", f"apiKey\n{W}\n", W, False),
+            ("pswd", f"pswd: {W}\n", W, True),
+            ("mdp", f"mdp : {W}\n", W, False),
+            ("cód. alarme", f"cód. alarme: {PIN}\n", PIN, False),
+            ("combinação do cofre", f"Combinação do cofre: {PIN}\n", PIN, False),
+            ("passw0rd", f"passw0rd: {W}\n", W, False),
+            ("holandês", f"wachtwoord: {W}\n", W, False),
+            ("sueco", f"lösenord: {W}\n", W, False),
+            ("polonês", f"hasło: {W}\n", W, False),
+            ("turco", f"şifre: {W}\n", W, False),
+            ("russo", f"пароль: {W}\n", W, False),
+            ("chinês", f"密码: {W}\n", W, False),
+            ("japonês", f"パスワード: {W}\n", W, False),
+            # comandos
+            ("SQL IDENTIFIED BY", f"CREATE USER 'app'@'localhost' IDENTIFIED BY '{W}';\n", W, True),
+            ("net user", f"net user administrador {W} /add\n", W, True),
+            ("curl -u com aspas", f"curl -u romulo:'minha casa {W}' https://api.exemplo.com\n", W, True),
+            ("echo | sudo -S", f'echo "{W}" | sudo -S apt update\n', W, True),
+            # unicode
+            ("largura total", "ｓｅｎｈａ: " + W + "\n", W, True),
+            ("isolado de direção (U+2066)", "se⁦nha: " + W + "\n", W, True),
+            ("acento decomposto", "código do alarme: " + PIN + "\n", PIN, False),
+            # lista anunciada no plural, com os valores nas linhas de baixo
+            ("senhas no plural", f"Seguem as senhas novas do pessoal da firma\nJoana {W}\nPedro mesa4821\n", W, False),
+            ("senhas, uma por linha", f"Anotei aqui as senhas do escritório, uma por linha.\n{W}\n", W, False),
+            # tabelas e janelas
+            ("tabela com coluna de observação", f"| Serviço | Login | Senha | Obs |\n|---|---|---|---|\n| Nubank | romulo | {W} | conta corrente, trocar em dezembro |\n| Itaú | romulo.s | mesa4821 | poupança |\n", "mesa4821", False),
+            ("TSV com nota longa", f"Serviço\tUsuário\tSenha\tNota\nNubank\tromulo\t{W}\tconta corrente que precisa ser revisada com cuidado em dezembro\nItaú\tr\tmesa4821\tx\n", "mesa4821", False),
+            ("CSV com observação", f"servico, usuario, senha, obs\nnubank, romulo, {W}, conta corrente e poupança de dezembro\nitau, r, mesa4821, x\n", "mesa4821", False),
+            ("tabela de 40 linhas", "| Serviço | Senha |\n|---|---|\n" + "".join(f"| s{k} | lua{k:02d}26 |\n" for k in range(40)), "lua3926", False),
+            ("muitas linhas em branco", f"Senhas:\n\n\n\n\n\nNubank {W}\n", W, False),
+            ("prosa longa no meio da janela", f"Senhas do escritório:\nEstas são as contas que usamos e que precisam ser revisadas com muita atenção por todos antes do fim do mês de dezembro.\nNubank {W}\n", W, False),
+            ("depois do marcador do cofre", f"senha: {{{{SEGREDO:{ID1}}}}}\nconvidados: {W}\n", W, False),
+        ]
+
+    def test_cada_formato_nas_duas_passadas(self):
+        for desc, texto, valor, deve_bloquear in self.casos():
+            if deve_bloquear:
+                self.assertTrue(s.procurar(texto), f"o filtro principal devia bloquear: {desc}")
+            for rotulo, visao in (("1 passada", s.mascarar_para_o_modelo(texto)), ("2 passadas", dupla(texto))):
+                self.assertFalse(vaza(visao, valor), f"{rotulo}: o valor chegou à visão do modelo: {desc} -> {visao!r}")
+
+    def test_frase_semente_em_qualquer_formato_e_lingua(self):
+        formatos = {
+            "1 - w": lambda ws: "\n".join(f"{k + 1} - {w}" for k, w in enumerate(ws)),
+            "1: w": lambda ws: "\n".join(f"{k + 1}: {w}" for k, w in enumerate(ws)),
+            "#1 w": lambda ws: "\n".join(f"#{k + 1} {w}" for k, w in enumerate(ws)),
+            "01 - w": lambda ws: "\n".join(f"{k + 1:02d} - {w}" for k, w in enumerate(ws)),
+            "JSON": lambda ws: "words = [" + ", ".join(f'"{w}"' for w in ws) + "]",
+            "vírgula sem espaço": lambda ws: ",".join(ws),
+            "hífen": lambda ws: "-".join(ws),
+            "barra": lambda ws: " / ".join(ws),
+            "tabela": lambda ws: "| # | palavra |\n" + "\n".join(f"| {k + 1} | {w} |" for k, w in enumerate(ws)),
+            "duas colunas": lambda ws: "\n".join(f"{k + 1}. {ws[k]}    {k + 7}. {ws[k + 6]}" for k in range(6)),
+            "canônico": lambda ws: " ".join(ws),
+        }
+        for lingua, ws in (("EN", SEED), ("ES", ES), ("FR", FR), ("ES com acento", ES_ACENTO)):
+            for nome, f in formatos.items():
+                for titulo in ("", "Metamask\n"):                       # com e sem palavra de contexto
+                    texto = titulo + f(ws) + "\n"
+                    visao = dupla(texto)
+                    restantes = [w for w in ws[2:10] if w in (visao or "")]
+                    self.assertEqual(restantes, [], f"{lingua} {nome} {titulo!r}: {visao!r}")
+
+    def test_prosa_com_muitas_palavras_curtas_nao_e_semente(self):
+        prosa = "o cliente pediu uma revisao completa do contrato antes de assinar para evitar problemas depois"
+        self.assertEqual(dupla(prosa), prosa)
+
+    def test_chave_so_vira_contexto_com_substantivo_de_credencial(self):
+        for comum in ("Chave do carro está na gaveta da cozinha.", "a chave do problema fica no texto",
+                      "Chave da casa da praia com a vizinha"):
+            self.assertEqual(dupla(comum), comum)
+
+    def test_camelcase_so_com_a_corcunda_e_nao_em_palavra_inteira_maiuscula(self):
+        for ok in ("TOKENIZER: texto", "SECRETARY: Joao", "Tokenizer: x", "keyboard: x", "PASSIVE: x"):
+            self.assertEqual(s.procurar(ok), [], ok)
+
+    def test_nome_e_rotulo_com_cara_de_segredo_ficam_escondidos_e_o_comum_nao(self):
+        for esconde in ("chave-cofre-482193.txt", "senhaWifi-casa2026.txt", "pswd casa2026.txt", "4111 1111 1111 1111 val 12/29",
+                        " ".join(SEED), ",".join(SEED), "ZkQxLmVbNcRtYwPhDfGjAeSxK", "netflix Sommer2026!", "roteador Kx9mP2vL8q", "google abcd efgh ijkl mnop",
+                        "Wi-Fi CasaRomulo / casa2026"):
+            m = s.mascarar_nome_para_o_modelo(esconde)
+            self.assertNotEqual(m, esconde, esconde)
+            for pedaco in ("482193", "casa2026", "Sommer2026", "Kx9mP2vL8q", "abcd efgh", "4111", "abandon ability", "ZkQxLmVb"):
+                if pedaco in esconde:
+                    self.assertNotIn(pedaco, m, esconde)
+        for normal in ("contrato-silmer-2026.pdf", "Proposta_Silmer_2026.pdf", "IMG_20261004_153012.jpg", "Relatorio-Outubro-2026.xlsx",
+                       "foto (1).jpg", "WhatsApp Image 2026-10-04 at 15.30.12.jpeg", "Reunião com o cliente", "nota fiscal 4521.pdf"):
+            self.assertEqual(s.mascarar_nome_para_o_modelo(normal), normal)
+
+    def test_nome_com_caractere_de_controle_sai_limpo(self):
+        self.assertEqual(s.mascarar_nome_para_o_modelo("nota\x00 da\x01 reuniao.txt"), "nota da reuniao.txt")
+        self.assertNotIn("\x00", s.mascarar_nome_para_o_modelo("senha\x00wifi casa2026.txt"))
+
+    def test_rotulo_no_modo_estrito_nao_tem_os_afrouxamentos(self):
+        for rotulo in ("api_key: Valid@2026x", "apiKey: ok-Xk9mP2vL8q", "private_key: check-Kx9mP2", "access_key = expired.Pq7wLz2Nv",
+                       "senha: ver no Bitwarden", "token_expiry: 3600"):
+            self.assertTrue(s.tem_segredo(rotulo, estrito=True), rotulo)
+        self.assertFalse(s.tem_segredo("contrato da Silmer 2026", estrito=True))
+        # a entropia também: num rótulo, cadeia longa em URL ou só com letras NÃO tem o passe do texto comum
+        longa = "https://drive.google.com/file/d/1aBcD3fGhIjKlMnOpQrStUvWxYz0123456/view"
+        self.assertFalse(s.tem_segredo(longa))
+        self.assertTrue(s.tem_segredo(longa, estrito=True))
+        self.assertFalse(s.tem_segredo("ZkQxLmVbNcRtYwPhDfGjAeSxK"))
+        self.assertTrue(s.tem_segredo("ZkQxLmVbNcRtYwPhDfGjAeSxK", estrito=True))
+
+
+class Afrouxamentos_nos_dois_sentidos(unittest.TestCase):
+    """Cada afrouxamento da camada 1 tem um limite, e o que fica fora dele continua sendo bloqueado."""
+
+    def test_o_que_o_revisor_mostrou_ser_largo_demais_voltou_a_bloquear(self):
+        K = "Xk9mP2vL" + "8qR4tY6w" + "Z1nB3cD5"
+        for forte in ("senha: Valid@2026", "password: Check!4821", "senha do roteador: ver-casa-2026", "senha = casa(2026)",
+                      "token: abc.def.Ghi2026x", "segredo do wifi: minha casa azul", "senha: $enha123", f"senha: $HOME {W}",
+                      "https://discord.com/api/webhooks/123456789012345678/" + K + K,
+                      "https://hooks.slack.com/services/T024BE7LD/B024BE7LH/" + K,
+                      "https://app.exemplo.com/magic/" + K, f"data:text/plain;base64,{K}", f"<{K}@mail.exemplo.com>", f"sha256-{K}"):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_o_que_continua_sendo_texto_comum(self):
+        K = "Xk9mP2vL" + "8qR4tY6w" + "Z1nB3cD5"
+        b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        integridade = "sha512-" + "q2DgYxG0vJ8QwNnL3k7JQZ0gq8m2Q1F3cXb5w9Z8yR4t+V0aL6pD2sK7hN1oB3eC9fU5iT4rW6xY8zA0bE2cG=="
+        for ok in (f'<img src="data:image/png;base64,{b64}">', f'"integrity": "{integridade}"',
+                   f"Message-ID: <{K}@mail.gmail.com>", "docker run -e POSTGRES_PASSWORD=$PG_PASS postgres:16",
+                   "senha: $senha", "password=${DB_PASSWORD}"):
+            self.assertEqual(s.procurar(ok), [], ok)
+
+    def test_o_segundo_clique_funciona_para_xml_define_netrc_sql_net_user_e_sudo(self):
+        casos = ((f"<password>{W}x</password>", W + "x"), (f"define( 'DB_PASSWORD', '{W}' );", W),
+                 (f"machine api.heroku.com login r@x.com password {W}", W), (f"CREATE USER a IDENTIFIED BY '{W}';", W),
+                 (f"net user administrador {W} /add", W), (f'echo "{W}" | sudo -S apt update', W))
+        for texto, valor in casos:
+            achados = []
+            novo, _ = s.redigir(texto, lambda v, r: achados.append(v) or ID1)
+            self.assertEqual(achados, [valor], texto)
+            self.assertEqual(s.procurar(novo), [], f"sobrou algo achável: {novo!r}")
+
+    def test_comando_nao_atravessa_a_quebra_de_linha(self):
+        self.assertEqual(s.procurar("sshpass fica na lista de ferramentas\n-p: |\n"), [])
+        self.assertEqual(s.procurar("mysql\n-pvalorqualquer"), [], "-p na linha de baixo não é argumento do mysql de cima")
+        self.assertEqual(s.procurar("sshpass esta instalado\n-p valorqualquer x"), [])
+        self.assertEqual(s.procurar("curl https://x.io\n-u romulo:valorqualquer"), [])
+        self.assertTrue(s.procurar("mysql -u r -pvalorqualquer"))
+
+    def test_texto_ofuscado_em_unicode_so_bloqueia_nao_se_redige(self):
+        achados = s.procurar("ｓｅｎｈａ: " + W)
+        self.assertTrue(achados)
+        self.assertTrue(all(not a.redigivel for a in achados if a.regra == "segredo-ofuscado-em-unicode"))
+        with self.assertRaises(s.NaoRedigivel):
+            s.redigir("ｓｅｎｈａ: " + W, lambda v, r: ID1)
+
+    def test_controles_e_nul_nao_chegam_ao_modelo(self):
+        v = s.mascarar_para_o_modelo("linha um\x00linha dois\n\x01\x02\x1bfim\x7f")
+        self.assertEqual(v, "linha umlinha dois\nfim")
+
+    def test_utf8_nao_latino_tambem_e_texto_para_a_entropia_do_varredor(self):
+        v = s.Varredor()
+        corpo = ("Привет, это обычный русский текст для проверки. " * 3000).encode("utf-8")
+        chave = ("\nключ: " + ENT + "\n").encode("utf-8")
+        self.assertTrue(v.alimentar(corpo + chave), "a chave no meio de 150 KB de cirílico é achada")
+        self.assertFalse(s.Varredor().alimentar(corpo))
+
+
 class Desempenho(unittest.TestCase):
     """Cerca de 1 s por MB, também COM a palavra-chave presente (a regra pesada tem que rodar)."""
 
@@ -889,6 +1095,16 @@ class Desempenho(unittest.TestCase):
             mb = max(len(t) / 1e6, 0.1)
             for fn in (s.procurar, s.tem_segredo, lambda x: s.Varredor().alimentar(x.encode())):
                 self.assertLess(self.tempo(lambda: fn(t)) / mb, 3, nome)
+
+    def test_valor_ignorado_nao_e_mais_lento_que_o_resto(self):
+        # descritivo/código/referência são "pulados": o caminho de pular chegou a custar 2,9 s/MB (revisão C)
+        casos = {"descritivo": "token=ver x  " * 80_000, "código": "senha = getpass.getpass()\n" * 40_000,
+                 "referência": "password=$PG_PASS other\n" * 40_000, "camelCase": "senhaAdmin: a\n" * 70_000,
+                 "uma linha só": "token=ver x " * 90_000}
+        for nome, t in casos.items():
+            mb = len(t) / 1e6
+            for fn in (s.procurar, s.tem_segredo):
+                self.assertLess(self.tempo(lambda: fn(t)) / mb, 2.0, nome)
 
     def test_um_invisivel_num_texto_grande_nao_estoura_tempo_nem_memoria(self):
         import tracemalloc
