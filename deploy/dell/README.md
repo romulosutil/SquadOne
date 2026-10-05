@@ -544,6 +544,30 @@ sumida matou a execução, com 3 leads sem tentar):
   Dell"). `python3 deploy/dell/gerador-de-sites.test.py` testa isso numa pasta
   temporária, sem Claude nem Vercel.
 
+Desde 05/10/2026 **quem move o lead descartado é o runner**. Naquele dia o
+Claude concluiu que o `baby-school-bercario-maternal` já tinha site no ar, mas
+a lista de permissão só o deixa escrever na pasta do lead: não moveu para
+`_descartados/`, o lead contou como falha duas vezes (2/2 no `falha.log`,
+serviço FAILED, aviso no WhatsApp). Agora:
+
+- o Claude grava `<slug>/DESCARTAR.md` (primeira linha = motivo; depois as
+  evidências) e a linha `— (não publicado)` no `registro.md`, e termina sem
+  `index.html`/`publicado.json` (as instruções da execução dizem isso);
+- o runner, quando o Claude sai, move a pasta para `_descartados/` (slug que já
+  está lá ganha sufixo `--AAAAMMDD-HHMMSS`, nunca sobrescreve) e conta como
+  **descartado**, com o motivo no log do lead. `DESCARTAR.md` vence até um
+  `index.html` completo: lead descartado nunca vai para a Vercel;
+- pasta com `DESCARTAR.md` nunca entra na fila; se o movimento falhar, conta uma
+  falha (atenção na Central) e o começo da próxima execução tenta de novo, sem
+  gastar o teto do dia. Gravar o arquivo à mão também descarta.
+
+Também desde 05/10/2026 **lead de busca pausada não é gerado**: o "06 · Funil
+semanal" lista em `nao_gerar` (`~/.local/share/n8n-estado/site-funil.json`) os
+leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
+Rômulo; ver "Depois do envio"). O gerador os deixa na raiz, fora da fila
+(`--listar` mostra o motivo); religar a busca os devolve na segunda seguinte.
+Sem o arquivo, ou ilegível, a fila é a de sempre.
+
 ### Permissões do Claude (lista de permissão, desde 30/09/2026)
 
 Até 29/09 o Claude rodava com `--dangerously-skip-permissions`: podia fazer

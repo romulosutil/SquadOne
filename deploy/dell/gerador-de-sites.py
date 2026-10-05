@@ -34,6 +34,19 @@ roda em modo `dontAsk` com uma lista de permissão montada por lead
 (`permissoes_do_claude`). O que não está na lista é negado sem pergunta, o
 Claude segue pelo caminho permitido, e cada negação vai para o log do lead como
 `[NEGADO] ...`, para afinar a lista.
+
+Desde 05/10/2026 quem move um lead descartado é o runner, não o Claude: a lista
+só deixa o Claude escrever na pasta do lead, e naquele dia ele concluiu que o
+`baby-school-bercario-maternal` já tinha site, não pôde movê-lo para
+`_descartados/` e o lead contou como falha duas vezes (serviço FAILED, aviso no
+WhatsApp). Agora o Claude grava `DESCARTAR.md` (motivo) na pasta do lead e o
+runner a move e conta como descarte. Pasta com `DESCARTAR.md` nunca entra na
+fila, e o começo de cada execução move as que ficaram de uma anterior.
+
+Também desde 05/10/2026 o lead cuja busca foi pausada (o "06 · Funil semanal"
+pausa busca com 5+ enviados e nenhuma resposta, ou o Rômulo desliga `ativa`)
+fica fora da fila: o funil lista os `place_id` em `nao_gerar` no
+`site-funil.json`. Sem o arquivo, ou ilegível, a fila é a de sempre.
 """
 
 from __future__ import annotations
@@ -61,6 +74,13 @@ LOG_FILA = LOGS / "execucao-fila.log"
 STATUS = LOGS / "status.json"
 TRAVA = LOGS / "gerador.lock"
 SINAL_PARAR = AUTO / ".parar"
+# O Claude grava este arquivo na pasta do lead para descartá-lo (ele não pode
+# mover a pasta: a lista de permissão só abre a escrita dentro dela).
+SINAL_DESCARTE = "DESCARTAR.md"
+DESCARTADOS = AUTO / "_descartados"
+# Gravado pelo "06 · Funil semanal" (n8n, segunda 08:00); `nao_gerar` são os
+# leads `novo` de busca pausada.
+FUNIL = Path(os.environ.get("SITE_FUNIL", str(Path.home() / ".local/share/n8n-estado/site-funil.json")))
 VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 MAX_FALHAS = 2
 # TimeoutStartSec=4h no .service: não começa lead que pode estourar o teto (com
@@ -152,6 +172,7 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
 - Escreva só em {lead}/, {AUTO}/registro.md, {AUTO}/_build/ e no rascunho {rascunho} (é o $TMPDIR: capturas, fontes, imagens e scripts temporários, palco do deploy). CLAUDE.md, .claude/ e .logs/ são só leitura.
 - No Bash, escreva caminhos literais: variável de shell em caminho ("$stage", "${{TMPDIR:-/tmp}}") e laço for/while com variável são negados. Python de mais de uma linha: grave o script no rascunho (Write) e rode `python3 <arquivo>`; heredoc (`python3 - <<EOF`) e `python3 -c` de várias linhas costumam ser negados. Pasta nova: mkdir -p numa chamada só dele, e só na chamada seguinte use a pasta (cd, > arquivo).
+- Descartar o lead (regras do CLAUDE.md: o negócio já tem site no ar, é rede/franquia com site, é duplicado ou já tem linha "— (não publicado)" no registro.md): não mova a pasta, mover para _descartados/ está fora da lista. Grave {lead}/{SINAL_DESCARTE} com o motivo (primeira linha: o motivo numa frase; depois as evidências: URLs testadas e o que o curl ou o DOM renderizado mostrou), anote a linha "— (não publicado)" no registro.md e termine sem index.html e sem publicado.json. O runner move a pasta para _descartados/ e conta como descarte, não como falha. Onde o CLAUDE.md manda mover para _descartados/, grave o {SINAL_DESCARTE}. Não grave {SINAL_DESCARTE} no caso "presença digital fraca ou nula" (lá o CLAUDE.md manda parar e devolver ao Rômulo, sem descartar).
 - rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
 - Para pesquisar (Instagram, Refero, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
 - Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes quatro comandos, um por chamada (outra forma de vercel é negada):
@@ -257,7 +278,40 @@ def falhas_registradas(pasta: Path) -> int:
     return sum(1 for linha in texto.splitlines() if linha.strip())
 
 
-def fila() -> list[Path]:
+def place_id_do_lead(pasta: Path) -> str | None:
+    try:
+        conteudo = (pasta / "content.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = re.search(r"(?i)place_id[:* \t]+([a-zA-Z0-9_-]+)", conteudo)
+    return m.group(1).strip() if m else None
+
+
+def nao_gerar() -> dict[str, str]:
+    """place_id -> busca pausada, do retrato do funil. Sem arquivo ou ilegível: nada
+    fica de fora (a fila de sempre), porque o funil é ajuda, não trava."""
+    try:
+        estado = json.loads(FUNIL.read_text(encoding="utf-8"))
+        return {str(x["place_id"]): str(x.get("busca") or "busca pausada")
+                for x in estado.get("nao_gerar") or [] if isinstance(x, dict) and x.get("place_id")}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
+
+
+def fora_da_fila(pasta: Path, pausados: dict[str, str]) -> str | None:
+    """Por que um lead pronto para gerar fica de fora; None = entra na fila."""
+    if (pasta / SINAL_DESCARTE).is_file():
+        return f"{SINAL_DESCARTE} (o runner move para _descartados/)"
+    if falhas_registradas(pasta) >= MAX_FALHAS:
+        return f"{MAX_FALHAS} falhas em falha.log"
+    pid = place_id_do_lead(pasta) if pausados else None
+    if pid and pid in pausados:
+        return f"busca pausada: {pausados[pid]}"
+    return None
+
+
+def candidatos_da_fila() -> list[Path]:
+    """Pastas da raiz com `content.md` e sem `publicado.json`, mais antiga primeiro."""
     leads = []
     for p in AUTO.iterdir():
         if not p.is_dir() or p.name.startswith((".", "_")):
@@ -265,20 +319,65 @@ def fila() -> list[Path]:
         try:
             if not (p / "content.md").is_file() or (p / "publicado.json").exists():
                 continue
-            if falhas_registradas(p) >= MAX_FALHAS:
-                continue
             leads.append(((p / "content.md").stat().st_mtime, p.name, p))
         except OSError:
             continue  # a pasta mudou de lugar durante a listagem (o Claude move leads)
     return [p for _, _, p in sorted(leads)]
 
 
+def fila() -> list[Path]:
+    pausados = nao_gerar()
+    return [p for p in candidatos_da_fila() if fora_da_fila(p, pausados) is None]
+
+
 def paradeiro(pasta: Path) -> Path | None:
-    """Onde foi parar um lead que saiu da raiz durante a geração: o Claude move
-    duplicados e leads que já têm site para `_descartados/` (regras do CLAUDE.md
-    da pasta). None = sumiu (renomeado ou apagado)."""
-    candidatos = [AUTO / "_descartados" / pasta.name] + sorted(AUTO.glob(f"_*/{pasta.name}"))
+    """Onde foi parar um lead que saiu da raiz durante a geração: o runner (pelo
+    `DESCARTAR.md`) ou o Claude movem duplicados e leads que já têm site para
+    `_descartados/` (regras do CLAUDE.md da pasta). None = sumiu (renomeado ou apagado)."""
+    candidatos = ([DESCARTADOS / pasta.name] + sorted(DESCARTADOS.glob(f"{pasta.name}--*"), reverse=True)
+                  + sorted(AUTO.glob(f"_*/{pasta.name}")))
     return next((d for d in candidatos if d.is_dir()), None)
+
+
+def motivo_do_descarte(pasta: Path) -> str:
+    try:
+        texto = (pasta / SINAL_DESCARTE).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "sem motivo legível"
+    linha = next((l.strip().lstrip("#").strip() for l in texto.splitlines() if l.strip()), "")
+    return (linha[:200] + ("…" if len(linha) > 200 else "")) or "sem motivo escrito"
+
+
+def descartar_pelo_sinal(pasta: Path, log_lead: Path) -> Path | None:
+    """Move para `_descartados/` o lead em que o Claude gravou `DESCARTAR.md`.
+    Nunca sobrescreve: o slug que já está lá (o n8n trouxe o lead de volta)
+    ganha sufixo com a hora. None = não moveu (o lead fica fora da fila pelo
+    sinal e a próxima execução tenta de novo)."""
+    destino = DESCARTADOS / pasta.name
+    if destino.exists():
+        destino = DESCARTADOS / f"{pasta.name}--{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    try:
+        DESCARTADOS.mkdir(exist_ok=True)
+        pasta.rename(destino)
+    except OSError as e:
+        log(f"{pasta.name} pediu descarte ({SINAL_DESCARTE}), mas a pasta não foi movida: {e}. "
+            "Fica fora da fila; a próxima execução tenta de novo.", "ERRO", log_lead)
+        return None
+    log(f"Descartado pelo Claude ({SINAL_DESCARTE}): {pasta.name} -> {destino.relative_to(AUTO)}/. "
+        f"Motivo: {motivo_do_descarte(destino)}", arquivo=log_lead)
+    return destino
+
+
+def varrer_descartes() -> list[str]:
+    """Pastas que ficaram na raiz com `DESCARTAR.md` (movimento que falhou, ou o
+    Rômulo gravou o arquivo à mão): move antes de começar a fila."""
+    movidos = []
+    for p in candidatos_da_fila():
+        if (p / SINAL_DESCARTE).is_file():
+            destino = descartar_pelo_sinal(p, LOGS / f"execucao-{p.name}.log")
+            if destino:
+                movidos.append(f"{p.name} → {destino.parent.name}")
+    return movidos
 
 
 def html_completo(caminho: Path) -> bool:
@@ -421,6 +520,11 @@ def processar(pasta: Path, timeout_min: int) -> tuple[bool, str]:
             arquivo=log_lead)
         if not pasta.is_dir():
             return False, "a pasta do lead saiu da raiz durante a geração"
+        # Antes do deploy: lead descartado nunca é publicado, mesmo com index.html completo.
+        if (pasta / SINAL_DESCARTE).is_file() and not (pasta / "publicado.json").exists():
+            if descartar_pelo_sinal(pasta, log_lead):
+                return False, "descartado pelo Claude"
+            return False, f"{SINAL_DESCARTE} gravado, mas a pasta não pôde ser movida para _descartados/"
         if indice.exists() and not html_completo(indice):
             indice.replace(pasta / "index.truncado.html")
             log("index.html ficou truncado (sem </html>): guardado como index.truncado.html, não publicado.", "ERRO", log_lead)
@@ -478,8 +582,10 @@ def main() -> int:
     a = ap.parse_args()
 
     if a.listar:
-        for p in fila():
-            print(p.name)
+        pausados = nao_gerar()
+        for p in candidatos_da_fila():
+            motivo = fora_da_fila(p, pausados)
+            print(p.name if motivo is None else f"{p.name}  (fora da fila: {motivo})")
         return 0
     for binario in ("claude", "vercel"):
         if not shutil.which(binario):
@@ -504,8 +610,12 @@ def main() -> int:
     erro = None
     try:
         log("Execução da fila iniciada (Dell).")
+        # Sinal que ficou de uma execução anterior: move antes, e não gasta o teto do dia.
+        varridos = varrer_descartes()
+        descartados += varridos
         # Descartado/sumido não conta como site do dia, mas também tem teto.
-        while len(concluidos) + len(falhas) < a.quantidade and len(descartados) + len(sumidos) < a.quantidade:
+        while (len(concluidos) + len(falhas) < a.quantidade
+               and len(descartados) - len(varridos) + len(sumidos) < a.quantidade):
             if SINAL_PARAR.exists():
                 SINAL_PARAR.unlink()
                 log("Sinal .parar recebido; encerrando a fila.", "ERRO")
@@ -537,7 +647,7 @@ def main() -> int:
                 if destino:
                     descartados.append(f"{lead.name} → {destino.parent.name}")
                     log(f"Lead saiu da fila pelo Claude: {lead.name} foi para {destino.parent.name}/ "
-                        "(motivo no registro.md da pasta). Não é falha; seguindo.", arquivo=log_lead)
+                        f"(motivo em {SINAL_DESCARTE} ou no registro.md). Não é falha; seguindo.", arquivo=log_lead)
                 else:
                     sumidos.append(lead.name)
                     log(f"A pasta de {lead.name} sumiu durante a geração e não está em nenhuma _*/ "

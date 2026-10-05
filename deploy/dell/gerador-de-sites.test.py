@@ -18,6 +18,7 @@ AQUI = Path(__file__).resolve().parent
 
 def carregar(auto: Path):
     os.environ["AUTO_DIR"] = str(auto)
+    os.environ["SITE_FUNIL"] = str(auto / ".funil.json")  # nunca o retrato real do n8n
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -100,6 +101,110 @@ class Gerador(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertEqual(len(r["falhas"]), 2)
         self.assertEqual(r["concluidos"], [])
+
+
+class Descarte(unittest.TestCase):
+    """05/10/2026: o Claude não pode mover a pasta (lista de permissão), grava
+    DESCARTAR.md e o runner move. Antes o lead contava 2 falhas e o serviço caía."""
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "teste"
+        self.m = carregar(self.auto)
+        for i, slug in enumerate(["a-ja-tem-site", "b-bom"]):
+            (self.auto / slug).mkdir()
+            (self.auto / slug / "content.md").write_text(f"# {slug}\n- **place_id:** pid-{slug}\n")
+            os.utime(self.auto / slug / "content.md", (1000 + i, 1000 + i))
+
+        def nao_publica(pasta, log_lead):
+            raise AssertionError(f"publicou {pasta.name}, que foi descartado")
+        self.m.publicar_na_vercel = nao_publica
+
+    def rodar(self, claude, *args):
+        self.m.rodar_claude = claude
+        sys.argv = ["gerador-de-sites", "--timeout-min", "1", *args]
+        codigo = self.m.main()
+        return codigo, json.loads((self.auto / ".logs/status.json").read_text())["ultimo_resumo"]
+
+    def claude(self, slug, log_lead, timeout_min):
+        pasta = self.auto / slug
+        if slug == "a-ja-tem-site":
+            # Mesmo com index.html completo: descarte vence, nada vai para a Vercel.
+            (pasta / "index.html").write_text("<html></html>")
+            (pasta / "DESCARTAR.md").write_text("\n# Já tem site no ar: https://exemplo.com.br responde 200\n\nDOM com 9 mil caracteres.\n")
+        else:
+            (pasta / "index.html").write_text("<html></html>")
+            (pasta / "publicado.json").write_text('{"site_url": "https://x"}')
+        return {"codigo": 0, "estourou": False, "limite": False, "minutos": 0}
+
+    def test_descartar_md_vira_descarte_e_nao_falha(self):
+        codigo, r = self.rodar(self.claude)
+        self.assertEqual(codigo, 0)
+        self.assertEqual(r["descartados"], ["a-ja-tem-site → _descartados"])
+        self.assertEqual(r["falhas"], [])
+        self.assertEqual(r["concluidos"], ["b-bom"])
+        self.assertTrue((self.auto / "_descartados/a-ja-tem-site/DESCARTAR.md").is_file())
+        self.assertFalse((self.auto / "_descartados/a-ja-tem-site/falha.log").exists())
+        self.assertFalse((self.auto / "a-ja-tem-site").exists())
+        log = (self.auto / ".logs/execucao-a-ja-tem-site.log").read_text()
+        self.assertIn("Motivo: Já tem site no ar: https://exemplo.com.br responde 200", log)
+
+    def test_nao_sobrescreve_quem_ja_esta_em_descartados(self):
+        (self.auto / "_descartados/a-ja-tem-site").mkdir(parents=True)
+        (self.auto / "_descartados/a-ja-tem-site/content.md").write_text("antigo")
+        codigo, r = self.rodar(self.claude)
+        self.assertEqual(codigo, 0)
+        self.assertEqual(r["descartados"], ["a-ja-tem-site → _descartados"])
+        self.assertEqual((self.auto / "_descartados/a-ja-tem-site/content.md").read_text(), "antigo")
+        novos = list((self.auto / "_descartados").glob("a-ja-tem-site--*"))
+        self.assertEqual(len(novos), 1)
+        self.assertTrue((novos[0] / "DESCARTAR.md").is_file())
+
+    def test_sinal_de_execucao_anterior_e_movido_antes_e_nao_gasta_o_teto(self):
+        (self.auto / "a-ja-tem-site/DESCARTAR.md").write_text("Rede com site.\n")
+        self.assertEqual([p.name for p in self.m.fila()], ["b-bom"])  # nunca entra na fila
+        vistos = []
+
+        def claude(slug, log_lead, timeout_min):
+            vistos.append(slug)
+            return self.claude(slug, log_lead, timeout_min)
+        codigo, r = self.rodar(claude, "--quantidade", "1")
+        self.assertEqual(vistos, ["b-bom"])
+        self.assertEqual(r["descartados"], ["a-ja-tem-site → _descartados"])
+        self.assertEqual(r["concluidos"], ["b-bom"])
+
+    def test_movimento_que_falha_fica_fora_da_fila(self):
+        original = self.m.Path.rename
+        def rename(p, alvo):
+            if p.name == "a-ja-tem-site":
+                raise PermissionError("negado")
+            return original(p, alvo)
+        self.m.Path.rename = rename
+        self.addCleanup(setattr, self.m.Path, "rename", original)
+        codigo, r = self.rodar(self.claude)
+        # Uma tentativa só: com o sinal na pasta, o lead não volta para a fila no mesmo dia.
+        self.assertEqual(len(r["falhas"]), 1)
+        self.assertIn("DESCARTAR.md gravado", r["falhas"][0])
+        self.assertEqual(r["concluidos"], ["b-bom"])
+        self.assertNotIn("a-ja-tem-site", [p.name for p in self.m.fila()])
+
+    def test_lead_de_busca_pausada_fica_fora_da_fila(self):
+        (self.auto / ".funil.json").write_text(json.dumps({"nao_gerar": [
+            {"place_id": "pid-a-ja-tem-site", "nome": "A", "busca": "\"vidraçaria\" em Joinville"}]}))
+        self.assertEqual([p.name for p in self.m.fila()], ["b-bom"])
+        self.assertEqual(self.m.fora_da_fila(self.auto / "a-ja-tem-site", self.m.nao_gerar()),
+                         "busca pausada: \"vidraçaria\" em Joinville")
+
+    def test_funil_ausente_ou_ilegivel_nao_tira_ninguem(self):
+        self.assertEqual(len(self.m.fila()), 2)
+        (self.auto / ".funil.json").write_text("{quebrado")
+        self.assertEqual(len(self.m.fila()), 2)
+
+    def test_instrucoes_mandam_gravar_o_sinal(self):
+        texto = self.m.instrucoes_da_execucao("b-bom", Path("/tmp/gerador-x"))
+        self.assertIn(f"{self.auto}/b-bom/DESCARTAR.md", texto)
+        self.assertIn("não mova a pasta", texto)
 
 
 CLAUDE_FALSO = r'''#!/usr/bin/env python3
