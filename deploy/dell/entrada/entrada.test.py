@@ -386,11 +386,11 @@ class Revisao_de_seguranca(Base):
 
     def test_o_trecho_do_agente_e_mascarado_e_cortado_em_fim_de_linha(self):
         hex64 = "9f2c" * 16
-        self.enviar("organizar", f"Carteira nova\nchave {hex64}\nfim", nome="carteira.txt")
+        self.enviar("organizar", f"Anotação nova\nchave {hex64}\nfim", nome="anotacao.txt")
         it = self.ent.pendentes()[0]
         self.assertNotIn(hex64, it["texto"])
         self.assertNotIn(hex64[:8], it["texto"])
-        self.assertIn("Carteira nova", it["texto"])
+        self.assertIn("Anotação nova", it["texto"])
         longo = "linha de anotação comum\n" * 600
         self.enviar("organizar", longo, nome="longo.txt")
         it2 = [i for i in self.ent.pendentes() if i["nome_original"] == "longo.txt"][0]
@@ -431,6 +431,65 @@ class Revisao_de_seguranca(Base):
     def test_diario_aguenta_surrogate_solto(self):
         self.ent.diario("teste", campo="oi \ud800 fim")
         self.assertIn('"evento": "teste"', self.ent.arq_diario.read_text())
+
+
+class Segunda_rodada_de_revisao(Base):
+    """Achados da 2ª rodada de revisão adversarial (04/10/2026)."""
+
+    def test_bom_utf16_falso_nao_esconde_o_segredo(self):
+        # arquivo que só COMEÇA com o BOM e é ASCII: virava ideogramas reversíveis e passava pelo filtro
+        for corpo_ascii in (f"# chave\n{AGE_FALSA}\nsenha do banco: x\n", f"senha: {SENHA}\n", f"nota\n{PEM}\n"):
+            for extra in ("", "x"):                              # tamanho par e ímpar
+                dados = b"\xff\xfe" + (corpo_ascii + extra).encode()
+                for acao in ("organizar", "guardar"):
+                    with self.assertRaises(e.Recusado, msg=f"{acao}/{len(dados)}"):
+                        self.enviar(acao, dados, nome="x.txt")
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertNotIn(AGE_FALSA[:20].encode(), self.tudo_no_disco())
+
+    def test_utf16_de_verdade_com_ascii_acrescentado_depois_e_bloqueado(self):
+        # o `echo ... >> arquivo.txt` do cmd do Windows acrescenta ASCII a um arquivo UTF-16 com BOM. Com um corpo
+        # longo o resultado ainda parece texto (passa na checagem de plausibilidade): só a varredura dos BYTES pega.
+        corpo_longo = ("Reunião com o cliente sobre a proposta de 2026 e o contrato revisado.\r\n" * 30)
+        rabo = f"senha: {SENHA} \r\n".encode()
+        self.assertEqual(len(rabo) % 2, 0, "rabo de tamanho par: senão o decode de UTF-16 falha por outro motivo")
+        dados = corpo_longo.encode("utf-16") + rabo
+        self.assertIsNotNone(e.Entrada._decodificar(dados), "o corpo longo ainda é plausível: o teste só vale assim")
+        for acao in ("organizar", "guardar"):
+            with self.assertRaises(e.Recusado, msg=acao):
+                self.enviar(acao, dados, nome="nota.txt")
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+
+    def test_bom_falso_sem_segredo_e_tratado_como_binario_e_nao_vira_texto_para_o_modelo(self):
+        dados = b"\xff\xfe" + "so uma anotacao simples aqui!\n".encode()
+        self.assertEqual(len(dados) % 2, 0, "tamanho par: senão o decode falha por outro motivo")
+        self.assertIsNotNone(dados.decode("utf-16"), "decodifica (em ideogramas): só a plausibilidade o recusa")
+        self.enviar("organizar", dados, nome="nota.dat")
+        it = self.ent.pendentes()[0]
+        self.assertIsNone(it["texto"])
+        self.assertNotEqual(it["tipo"], "texto")
+
+    def test_utf16_com_acentos_e_cirilico_continua_texto(self):
+        self.enviar("organizar", "Reunião — Привет мир, ação 2026".encode("utf-16"), nome="nota.txt")
+        it = self.ent.pendentes()[0]
+        self.assertEqual(it["tipo"], "texto")
+        self.assertIn("Привет", it["texto"])
+
+    @unittest.skipUnless(TEM_AGE, "age não instalado")
+    def test_sobra_de_segredo_depois_de_redigir_recusa_e_nao_guarda_nada(self):
+        # o cinto de segurança (`tem_segredo(novo)`): um redigir que deixe segredo no texto não pode seguir
+        from unittest import mock
+        with mock.patch.object(e.segredos, "redigir", return_value=(f"senha: {SENHA}\n", [])):
+            with self.assertRaises(e.Recusado) as x:
+                self.enviar("organizar", f"senha: {SENHA}\n", com_cofre=True)
+        self.assertEqual(x.exception.codigo, 422)
+        self.assertIn("Sobrou", str(x.exception))
+        self.assertFalse(x.exception.extra["pode_redigir"])
+        self.assertEqual(self.arquivos(self.ent.chegou), [])
+        self.assertEqual(self.arquivos(self.ent.fila), [])
+        self.assertNotIn("redigido", [d["evento"] for d in self.diario()])
 
 
 if __name__ == "__main__":

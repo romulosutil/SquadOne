@@ -282,16 +282,35 @@ class Entrada:
             raise
         return (None, set(v.regras)) if achou else (anon, set())
 
+    _BOMS = ((b"\xff\xfe\x00\x00", "utf-32"), (b"\x00\x00\xfe\xff", "utf-32"),
+             (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16"))
+
+    @classmethod
+    def _tem_bom(cls, dados: bytes) -> bool:
+        return any(dados.startswith(bom) for bom, _ in cls._BOMS)
+
     @staticmethod
-    def _decodificar(dados: bytes) -> str | None:
+    def _plausivel(texto: str) -> bool:
+        """UTF-16/32 só vale se o resultado for TEXTO. Um arquivo que só começa com o BOM e é ASCII vira ideogramas
+        (reversíveis) e escondia o segredo do filtro (revisão de 04/10): acontece de verdade no Windows, onde um
+        `echo ... >>` acrescenta ASCII a um arquivo UTF-16. Latim, grego, cirílico e pontuação passam."""
+        amostra = texto[:100_000]
+        if not amostra:
+            return True
+        bons = sum(1 for c in amostra if ord(c) < 0x250 or 0x370 <= ord(c) <= 0x52F
+                   or 0x2000 <= ord(c) <= 0x206F or 0x20A0 <= ord(c) <= 0x20CF)
+        return bons / len(amostra) >= 0.7
+
+    @classmethod
+    def _decodificar(cls, dados: bytes) -> str | None:
         """O texto do arquivo, ou None se for binário. Entende UTF-8 e UTF-16/32 com BOM."""
-        for bom, codec in ((b"\xff\xfe\x00\x00", "utf-32"), (b"\x00\x00\xfe\xff", "utf-32"),
-                           (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16")):
+        for bom, codec in cls._BOMS:
             if dados.startswith(bom):
                 try:
-                    return dados.decode(codec)
+                    texto = dados.decode(codec)
                 except UnicodeDecodeError:
                     return None
+                return texto if cls._plausivel(texto) else None
         if b"\x00" in dados[:8192]:
             return None
         try:
@@ -322,6 +341,10 @@ class Entrada:
                 raise self._bloqueio(i, acao, v.regras, [], tamanho, pode_redigir=False)
             conteudo = dados
         else:
+            if self._tem_bom(dados):                        # o BOM pode ser só a capa de bytes ASCII acrescentados depois
+                v = segredos.Varredor()
+                if v.alimentar(dados):
+                    raise self._bloqueio(i, acao, v.regras, [], tamanho, pode_redigir=False)
             achados = segredos.procurar(texto)
             conteudo = dados
             if achados:

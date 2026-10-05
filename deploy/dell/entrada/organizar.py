@@ -10,8 +10,10 @@ Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio 
    frase-semente). O texto exato é conferido de novo pelo filtro antes de ir; item reprovado não vai;
 3. grava o texto exato em Entrada/requisicoes/ (a prova do que foi ao modelo);
 4. conta a tentativa ANTES de chamar (qualquer queda já vale) e chama `hermes -z` SEM ferramentas
-   (`-t clarify`: só perguntas, sem terminal, arquivos, código nem navegador) numa pasta vazia.
-   O modelo só PROPÕE um JSON;
+   (`-t clarify`: só perguntas, sem terminal, arquivos, código nem navegador) numa pasta vazia, com
+   o `stdin` fechado e só o ambiente que ele precisa. O modelo só PROPÕE um JSON. Cada `-z` grava uma
+   SESSÃO (com o texto do prompt) no state.db do Hermes, onde o Hermes do WhatsApp poderia achá-la:
+   depois da chamada as sessões dessa pasta de trabalho são apagadas, uma por id;
 5. o executor valida cada plano contra a lista de permissão e executa, ou recusa;
 6. imprime só o que mudou (o Hermes entrega no WhatsApp).
 
@@ -69,12 +71,22 @@ A lista de pastas vem entre [[PASTAS {marca}]] e [[/PASTAS {marca}]].
 
 # ----------------------------------------------------------------------- prompt
 def item_para_modelo(item: dict, limite_texto: int = TRECHO_NO_PROMPT) -> dict:
-    d = {"id": item["id"], "nome": item.get("nome_original") or item.get("arquivo"), "tipo": item.get("tipo"),
-         "bytes": item.get("bytes"), "rotulo_do_usuario": item.get("rotulo")}
+    """O item como o MODELO o vê. Nome e rótulo (texto livre do usuário) e o texto da fila passam pela camada do
+    modelo AQUI, na hora de montar o prompt, e não só quando o item chegou: um item que entrou numa versão
+    anterior do filtro, ou cujo arquivo na fila foi editado, não leva o que a versão atual esconderia."""
+    nome = item.get("nome_original") or item.get("arquivo")
+    rotulo = item.get("rotulo")
+    d = {"id": item["id"], "nome": segredos.mascarar_nome_para_o_modelo(nome) if isinstance(nome, str) else nome,
+         "tipo": item.get("tipo"), "bytes": item.get("bytes"),
+         "rotulo_do_usuario": segredos.mascarar_nome_para_o_modelo(rotulo) if isinstance(rotulo, str) else rotulo}
     texto = item.get("texto")
     if isinstance(texto, str) and limite_texto > 0:
-        d["texto"] = texto[:limite_texto]
-        d["texto_cortado"] = bool(item.get("texto_truncado") or len(texto) > limite_texto)
+        visao = segredos.mascarar_para_o_modelo(texto)
+        if visao is None:                                   # sinal de segredo partido em linhas: nenhum texto
+            d["texto_retido"] = True
+        else:
+            d["texto"] = visao[:limite_texto]
+            d["texto_cortado"] = bool(item.get("texto_truncado") or len(visao) > limite_texto)
     elif item.get("texto_retido"):
         d["texto_retido"] = True
     return d
@@ -146,28 +158,80 @@ class ErroModelo(Exception):
 
 
 def comando_hermes() -> list[str]:
+    # O gancho de teste só vale com ENTRADA_TESTE=1: em produção, uma variável de ambiente trocando o binário
+    # seria execução de comando com o texto do prompt na linha de comando.
     env = os.environ.get("ENTRADA_HERMES_CMD")
-    if env:
+    if env and os.environ.get("ENTRADA_TESTE") == "1":
         return shlex.split(env)
     return [shutil.which("hermes") or str(Path.home() / ".local/bin/hermes")]
 
 
+_ENV_DO_FILHO = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
+                 "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
+
+
+def ambiente_do_filho() -> dict[str, str]:
+    """O hermes herdava o ambiente inteiro do job, que pode trazer chave de API de outros serviços. Só o que ele
+    precisa para rodar (as credenciais dele vêm de ~/.hermes/.env, que ele mesmo lê) e as `HERMES_*`."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_DO_FILHO or k.startswith("HERMES_")}
+    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    return env
+
+
+_ID_SESSAO = re.compile(r"\b\d{8}_\d{6}_[0-9a-f]{6}\b")
+
+
+def limpar_sessoes(pasta: Path, timeout: int = 60) -> int:
+    """Apaga as sessões que o `hermes -z` gravou nesta pasta de trabalho (o texto do prompt, já mascarado, ficaria no
+    state.db, onde o Hermes do WhatsApp poderia achá-lo numa busca). Uma por id, só linha cujo workspace é a pasta
+    do agente. NUNCA `sessions prune`: ele recusa com o gateway no ar e `--force` arriscaria o banco do Hermes.
+    Falhar aqui não derruba a rodada: devolve quantas apagou."""
+    base, env = comando_hermes(), ambiente_do_filho()
+    comum = dict(cwd=pasta, capture_output=True, text=True, errors="replace", timeout=timeout,
+                 stdin=subprocess.DEVNULL, env=env)
+    try:
+        r = subprocess.run(base + ["sessions", "list", "--workspace", str(pasta), "--limit", "200"], **comum)
+    except (subprocess.TimeoutExpired, OSError):
+        return 0
+    if r.returncode != 0:
+        return 0
+    apagadas = 0
+    for linha in r.stdout.splitlines():
+        achou = _ID_SESSAO.search(linha)
+        if not achou or pasta.name not in linha:
+            continue
+        try:
+            d = subprocess.run(base + ["sessions", "delete", "--yes", achou.group(0)], **comum)
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        apagadas += d.returncode == 0
+    return apagadas
+
+
 def chamar_modelo(prompt: str, pasta_vazia: Path, timeout: int = TIMEOUT_MODELO_S) -> tuple[str, dict]:
-    """hermes -z SEM ferramentas (só o conjunto `clarify`), numa pasta vazia, e devolve (resposta, uso)."""
+    """hermes -z SEM ferramentas (só o conjunto `clarify`), numa pasta vazia, e devolve (resposta, uso).
+    A pasta tem de estar vazia de fato: o `-z` carrega o AGENTS.md que estiver NELA (o do ~ não entra, medido)."""
+    if any(pasta_vazia.iterdir()):
+        raise ErroModelo("a pasta de trabalho do agente não está vazia")
     with tempfile.TemporaryDirectory(prefix="entrada-uso-") as tmp:
         uso_arq = Path(tmp) / "uso.json"
         cmd = comando_hermes() + ["-z", prompt, "-t", TOOLSET, "--usage-file", str(uso_arq)]
+        apagadas = 0
         try:
-            r = subprocess.run(cmd, cwd=pasta_vazia, capture_output=True, text=True, errors="replace", timeout=timeout)
+            r = subprocess.run(cmd, cwd=pasta_vazia, capture_output=True, text=True, errors="replace", timeout=timeout,
+                               stdin=subprocess.DEVNULL, env=ambiente_do_filho())
         except subprocess.TimeoutExpired:
             raise ErroModelo("o modelo demorou demais") from None
         except OSError as ex:
             raise ErroModelo(f"não consegui rodar o hermes ({type(ex).__name__})") from None
+        finally:
+            apagadas = limpar_sessoes(pasta_vazia)
         uso = {}
         try:
             uso = json.loads(uso_arq.read_text())
         except (OSError, ValueError):
             pass
+    uso["sessoes_apagadas"] = apagadas
     if r.returncode != 0:
         raise ErroModelo(f"o hermes saiu com {r.returncode}")
     if not r.stdout.strip():
@@ -201,10 +265,17 @@ def extrair_planos(resposta: str) -> list:
 
 
 # ------------------------------------------------------------------------- job
+def caminho_para_aviso(para) -> str:
+    """O destino que o modelo escolheu, para o WhatsApp: cada pedaço do caminho passa pela máscara de nomes."""
+    return "/".join(segredos.mascarar_nome_para_o_modelo(c) for c in str(para).split("/"))
+
+
 def nome_para_aviso(item: dict) -> str:
     """O que vai ao WhatsApp: nunca algo que o filtro reprove (nome e rótulo já passaram, mas confere de novo)."""
     n = item.get("nome_original") or item.get("rotulo") or "texto"
-    return item["id"] if segredos.tem_segredo(n) else n
+    if not isinstance(n, str) or segredos.tem_segredo(n) or segredos.mascarar_nome_para_o_modelo(n) != n:
+        return item["id"]                                   # o nome tem cara de segredo: no WhatsApp vai só o id
+    return n
 
 
 def _desistir_ou_repetir(entrada, it, motivo, sem_plano):
@@ -254,21 +325,22 @@ def rodar_grupo(entrada, executor, grupo, pastas, chamar, feitos, sem_plano, avi
             por_id.setdefault(p["id"], p)
     entrada.diario("modelo-chamado", itens=[i["id"] for i in bons], requisicao=req.name,
                    entrada_tokens=uso.get("input_tokens"), saida_tokens=uso.get("output_tokens"),
-                   modelo=uso.get("model"), erro=erro_geral)
+                   modelo=uso.get("model"), sessoes_apagadas=uso.get("sessoes_apagadas"), erro=erro_geral)
     for it in bons:
         motivo = erro_geral or "sem plano para este item"
         plano = por_id.get(it["id"])
         if plano is not None:
             try:
                 r = executor.aplicar(plano, it)
-                feitos.append(f"• {nome_para_aviso(it)} → {r['para']}" + (" (com resumo)" if r.get("resumo_em") else ""))
+                feitos.append(f"• {nome_para_aviso(it)} → {caminho_para_aviso(r['para'])}"
+                              + (" (com resumo)" if r.get("resumo_em") else ""))
                 continue
             except executor_mod.PlanoInvalido as ex:
                 motivo = f"plano recusado: {ex}"
             except Exception as ex:  # noqa: BLE001  (o texto da exceção pode ter caminho; só o tipo)
                 motivo = f"erro ao executar o plano ({type(ex).__name__})"
                 if it.get("estado") == "organizado":        # o arquivo já foi para o lugar; só o resto falhou
-                    feitos.append(f"• {nome_para_aviso(it)} → {it.get('destino', '?')}")
+                    feitos.append(f"• {nome_para_aviso(it)} → {caminho_para_aviso(it.get('destino', '?'))}")
                     continue
         _desistir_ou_repetir(entrada, it, motivo, sem_plano)
 

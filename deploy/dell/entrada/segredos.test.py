@@ -369,9 +369,10 @@ class Camada_do_modelo(unittest.TestCase):
         t = "Reunião com o cliente na terça.\nLevar o contrato e o orçamento revisado."
         self.assertEqual(s.mascarar_para_o_modelo(t), t)
 
-    def test_resto_da_linha_com_palavra_de_segredo_e_ocultado(self):
-        self.assertEqual(s.mascarar_para_o_modelo("a senha do wifi está no post-it azul"), "a senha <oculto>")
-        self.assertEqual(s.mascarar_para_o_modelo("Reunião\nmeu token de acesso novo\nfim"), "Reunião\nmeu token <oculto>\nfim")
+    def test_a_linha_com_palavra_de_segredo_some_e_fica_so_a_palavra(self):
+        # a linha INTEIRA some (o valor pode vir antes da palavra: "X é a senha do wifi"); só a palavra fica
+        self.assertEqual(s.mascarar_para_o_modelo("a senha do wifi está no post-it azul"), "<oculto> senha <oculto>")
+        self.assertEqual(s.mascarar_para_o_modelo("Reunião\nmeu token de acesso novo\nfim"), "Reunião\n<oculto> token <oculto>\nfim")
 
     def test_marcador_do_cofre_atravessa_a_camada(self):
         t = "senha: {{SEGREDO:" + ID1 + "}}\nchave do repo {{SEGREDO:" + ID2 + "}}\nCombinar a migração."
@@ -426,6 +427,420 @@ class Varredura(unittest.TestCase):
         v = s.Varredor()
         for _ in range(20):
             self.assertFalse(v.alimentar(b"nada de mais aqui, so texto comum\n" * 2000))
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# 2ª rodada de revisão adversarial (04/10/2026): o mesmo segredo em formatos que furavam as DUAS camadas.
+# Valores falsos, montados em tempo de execução.
+W = "casa" + "2026"                                   # senha fraca (minúsculas + dígitos), comum na vida real
+PIN = "48" + "2193"
+FRASE_SENHA = "correct horse " + "battery staple"
+SEED = ["abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access", "accident"]
+BACKUP = ["1234 " + "5678", "2345 " + "6789", "3456 " + "7890", "4567 " + "8901"]
+CARTAO = "4111 1111 " + "1111 1111"
+_R = random.Random(20261004)
+APP = " ".join(aleatorio(_R, 4, "abcdefghijklmnopqrstuvwxyz") for _ in range(4))             # senha de app do Google
+TOTP = " ".join(aleatorio(_R, 4, "abcdefghijklmnopqrstuvwxyz234567") for _ in range(8))      # chave do autenticador
+TOTP_U = " ".join(aleatorio(_R, 4, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567") for _ in range(8))
+FORTE_GRUPOS = "Kx9;" + " mP2)" + " vL8]"
+
+
+class Estrutura_variada(unittest.TestCase):
+    """Cada caso tem de ser BLOQUEADO ou ter o valor escondido da visão do modelo (as duas barreiras)."""
+
+    def casos(self):
+        sem = lambda ws: " ".join(f"{k + 1}. {w}" for k, w in enumerate(ws))      # noqa: E731
+        return [
+            # (descrição, texto, valor, o filtro principal TEM de bloquear?)
+            ("valor na linha de baixo", f"Wi-Fi de casa\nSenha do wifi\n{W}\n", W, False),
+            ("'Senha:' sozinha e o valor embaixo", f"Banco\nSenha:\n{W}\n", W, False),
+            ("YAML bloco literal", f"db:\n  user: romulo\n  password: |\n    {FRASE_SENHA}\n", FRASE_SENHA, False),
+            ("tabela Markdown", f"| Serviço | Usuário | Senha |\n|---|---|---|\n| Banco | romulo | {W} |\n", W, False),
+            ("TSV colado de planilha", f"Serviço\tUsuário\tSenha\nBanco\tromulo\t{W}\n", W, False),
+            ("CSV com espaço após a vírgula", f"servico, usuario, senha\nbanco, romulo, {W}\n", W, False),
+            ("valor ANTES da palavra", f"{W} é a senha do wifi\n", W, False),
+            ("'usei X como senha'", f"Usei {W} como senha do banco\n", W, False),
+            ("'X (senha do wifi)'", f"{W} (senha do wifi)\n", W, False),
+            ("ES: contraseña", f"contraseña: {W}\n", W, False),
+            ("ES: clave", f"clave del wifi: {W}\n", W, False),
+            ("ES: frase natural", f"la contraseña del wifi es {W}\n", W, False),
+            ("DE: Passwort", f"Passwort: {W}\n", W, False),
+            ("FR: mot de passe", f"mot de passe : {W}\n", W, False),
+            ("PT-PT: palavra-passe", f"palavra-passe: {W}\n", W, False),
+            ("psw:", f"psw: {W}\n", W, False),
+            ("pw:", f"pw: {W}\n", W, False),
+            ("passcode:", f"passcode: {PIN}\n", PIN, False),
+            ("código do alarme", f"código do alarme: {PIN}\n", PIN, False),
+            ("'acesso: usuário / senha' sem a palavra senha", f"acesso ao banco: romulo / {W}\n", W, False),
+            ("Wi-Fi: rede / senha", f"Wi-Fi: CasaRomulo / {W}\n", W, False),
+            ("códigos de backup do Google", "Códigos de backup do Google:\n" + "\n".join(BACKUP) + "\n", BACKUP[1], False),
+            ("senha de app do Gmail sem a palavra senha", f"Gmail no Thunderbird: {APP}\n", APP, False),
+            ("chave TOTP em grupos (minúsculas)", f"Authenticator do GitHub: {TOTP}\n", TOTP, False),
+            ("chave TOTP em grupos (MAIÚSCULAS)", f"2º fator do banco\n{TOTP_U}\n", TOTP_U, False),
+            ("senha forte em pedaços com símbolo", f"nova: {FORTE_GRUPOS}\n", "Kx9;", False),
+            ("número do cartão antes do cvv", f"Cartão Nubank {CARTAO} val 12/29 cvv 123\n", CARTAO, False),
+            ("frase-semente com rótulo", "frase de recuperação: " + " ".join(SEED) + "\n", " ".join(SEED[3:6]), False),
+            ("frase-semente numerada", sem(SEED) + "\n", SEED[5] + " ", False),
+            ("frase-semente uma palavra por linha", "carteira\n" + "\n".join(SEED) + "\n", SEED[10] + "\n" + SEED[11], False),
+            ("frase-semente em 3 linhas de 4", "\n".join(" ".join(SEED[i:i + 4]) for i in range(0, 12, 4)) + "\n", " ".join(SEED[4:6]), False),
+            ("frase-semente com vírgulas", ", ".join(SEED) + "\n", ", ".join(SEED[2:4]), False),
+            ("frase-semente Capitalizada", " ".join(w.capitalize() for w in SEED) + "\n", " ".join(w.capitalize() for w in SEED[2:4]), False),
+            # linha de comando: o filtro principal bloqueia
+            ("sshpass -p X (com espaço)", f"sshpass -p {W} ssh root@10.0.0.5\n", W, True),
+            ("redis-cli -a X", f"redis-cli -h 127.0.0.1 -a {W} ping\n", W, True),
+            ("docker login -u u -p X", f"docker login -u romulo -p {W} registry.exemplo.com\n", W, True),
+            ("zip -P X", f"zip -P {W} backup.zip notas.txt\n", W, True),
+            ("ssh-keygen -N X", f"ssh-keygen -t ed25519 -N {W} -f chave\n", W, True),
+            ("mongo -p X", f"mongo -u admin -p {W} --authenticationDatabase admin\n", W, True),
+            # e os que já eram bloqueados continuam sendo
+            ("wp-config define()", f"define( 'DB_PASSWORD', '{W}' );\n", W, True),
+            ("TOML", f'[db]\npassword = "{W}"\n', W, True),
+            ("INI", f"[mysql]\nuser=romulo\npassword={W}\n", W, True),
+            ("git remote com senha", f"git remote add origin https://romulo:{W}@github.com/x/y.git\n", W, True),
+            ("senha na query", f"https://exemplo.com/login?user=romulo&senha={W}\n", W, True),
+            # menos óbvios, só escondidos
+            ("smbclient -U user%X", f"smbclient //nas/fotos -U romulo%{W}\n", W, False),
+            ("net use (Windows)", f"net use Z: \\\\nas\\fotos {W} /user:romulo\n", W, False),
+            ("htpasswd -b", f"htpasswd -b /etc/nginx/.htpasswd romulo {W}\n", W, False),
+            (".netrc numa linha", f"machine api.heroku.com login r@x.com password {W}\n", W, True),
+        ]
+
+    def test_cada_formato_e_bloqueado_ou_escondido(self):
+        for desc, texto, valor, deve_bloquear in self.casos():
+            if deve_bloquear:
+                self.assertTrue(s.procurar(texto), f"o filtro principal devia bloquear: {desc}")
+            visao = s.mascarar_para_o_modelo(texto)
+            self.assertFalse(vaza(visao, valor), f"o valor chegou à visão do modelo: {desc} -> {visao!r}")
+
+    def test_utf16_utf32_crlf_e_bom_dao_o_mesmo_resultado(self):
+        for desc, texto, valor, _ in self.casos()[:12]:
+            for codec in ("utf-16", "utf-32", "utf-8-sig"):
+                dec = texto.replace("\n", "\r\n").encode(codec).decode(codec).lstrip("﻿")
+                self.assertFalse(vaza(s.mascarar_para_o_modelo(dec), valor), f"{desc} em {codec}")
+
+    def test_a_visao_do_modelo_nao_e_bloqueada_de_novo_por_causa_do_que_sobrou(self):
+        # o que o modelo recebe passa no filtro principal (senão o organizador barraria tudo)
+        for desc, texto, valor, _ in self.casos():
+            visao = s.mascarar_para_o_modelo(texto)
+            self.assertEqual(s.procurar(visao), [], f"a visão ainda parece segredo: {desc} -> {visao!r}")
+
+
+class Orcamento_de_falso_positivo(unittest.TestCase):
+    """Textos NORMAIS, sem segredo (corpus da revisão de 04/10). O bloqueio custa um clique; num PDF ou imagem, nem
+    isso. Antes da correção: 26 de 73 (36%). O teto agora é só o que é credencial de verdade ou indistinguível."""
+    CORPUS = {
+        "nota": [
+            "Reunião com o cliente na terça. Levar o contrato e o orçamento.",
+            "Comprar pão, leite, café e frutas. Pagar o boleto da luz até dia 10.",
+            "Ideia: site de receitas com assinatura mensal de R$ 19,90.",
+            "O segredo é paciência: deixar a massa descansar 2 horas.",
+            "Trocar a senha do wifi amanhã (está fraca).",
+            "Senha: ver no Bitwarden",
+            "Token: expira em 24h, renovar na segunda",
+            "Lembrar: o token do cliente vence em dezembro.",
+            "Segredo do bolo: manteiga gelada.",
+            "Credenciais: pedir ao TI da empresa",
+            "Chave do carro está na gaveta da cozinha.",
+            "A chave do sucesso é a consistência.",
+            "PIN do cadeado: lembrar de trocar",
+            "Viagem: voo AD4567 sai 14h35, localizador XKJ9PL.",
+            "Treino: 3x12 supino, 4x10 agachamento, 20 min esteira.",
+            "Consulta no dentista dia 15/10 às 9h30, Dr. Paulo, sala 304.",
+            "Pix do João: joao.silva@gmail.com — devolver R$ 50.",
+            "CPF da Ana: 123.456.789-09 (para o contrato).",
+            "Telefone do encanador: (11) 98765-4321.",
+            "Código de rastreio dos Correios: AA123456789BR",
+            "Boleto: 23793.38128 60000.000003 00000.000400 1 84340000012345",
+            "Endereço: Rua das Flores, 123, ap 45, CEP 01234-567, São Paulo.",
+            "Lista de filmes: Duna 2, Oppenheimer, Pobres Criaturas.",
+            "Projeto PRUMO: revisar o funil de vendas e a página de captura.",
+        ],
+        "e-mail": [
+            "Olá Rômulo,\nSegue o relatório do mês.\nAbraços,\nMaria",
+            "Seu código de verificação é 482913. Ele expira em 10 minutos.",
+            "Sua senha foi alterada com sucesso. Se não foi você, entre em contato.",
+            "Para redefinir sua senha, clique no link abaixo.",
+            "Token de acesso: expira em 24 horas.",
+            "Message-ID: <CAJxqR7b8kQm2vZ9pL4nT6wY3sX1cF5hD0eG@mail.gmail.com>",
+            "Assunto: Proposta comercial — PRUMO\nPrezado, segue a proposta em anexo.",
+            "Recebemos seu pedido nº 7894561230. Previsão de entrega: 12/10.",
+        ],
+        "config": [
+            '{"name": "app", "version": "1.2.3", "private": true}',
+            '{"token_expiry": 3600, "refresh_interval": 600}',
+            '{"password_min_length": 12, "password_require_symbol": true}',
+            '{"auth": {"token_endpoint": "https://accounts.google.com/o/oauth2/token"}}',
+            '{"key": "home.title", "value": "Página inicial"}',
+            '[{"key": "ctrl+shift+p", "command": "workbench.action.showCommands"}]',
+            '{"seed": 12345, "epochs": 10, "lr": 0.001}',
+            "secret_name: app-tls\nnamespace: producao",
+            "[database]\nhost = localhost\nport = 5432\nuser = app",
+            "TOKEN_TTL=3600\nPASSWORD_RESET_URL=https://app.exemplo.com/reset",
+            "spring.datasource.password=${DB_PASSWORD}",
+            '"integrity": "sha512-q2DgYxG0vJ8QwNnL3k7JQZ0gq8m2Q1F3cXb5w9Z8yR4t+V0aL6pD2sK7hN1oB3eC9fU5iT4rW6xY8zA0bE2cG=="',
+        ],
+        "código": [
+            "def login(user, password):\n    return auth.check(user, password)",
+            "if not token:\n    raise ValueError('sem token')",
+            "password = getpass.getpass()",
+            "const token = req.headers.authorization;",
+            "senha = input('Digite a senha: ')",
+            "git commit -m 'fix: token refresh no login'",
+            "docker run -e POSTGRES_PASSWORD=$PG_PASS postgres:16",
+            "for i in range(10):\n    print(i)",
+        ],
+        "url": [
+            "https://drive.google.com/file/d/1aBcD3fGhIjKlMnOpQrStUvWxYz0123456/view?usp=sharing",
+            "https://docs.google.com/document/d/1Xy2Zw3Vu4Ts5Rq6Po7Nm8Lk9Ji0HgFeDcBa/edit",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+            "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=8f3a2b1c9d4e",
+            "https://www.notion.so/Planejamento-2026-1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+            "https://maps.app.goo.gl/Xk9PqL2mN7vR4sT1",
+            "https://www.amazon.com.br/dp/B08N5WRWNW/ref=sr_1_3?keywords=fone",
+            "https://github.com/romulosutil/SquadOne/pull/8/commits/889359f",
+            "https://meet.google.com/abc-defg-hij",
+            "https://www.instagram.com/p/CxYz12AbCdE/",
+            "https://wa.me/5511987654321",
+        ],
+        "log": [
+            "2026-10-04 12:00:01 INFO request_id=7f3a9c2e1b4d servico=entrada status=200",
+            "2026-10-04 12:00:02 WARN token expirado para usuario=romulo; renovando",
+            "2026-10-04 12:00:03 ERROR auth: token=expired user=romulo",
+            "Oct 04 12:00:04 mel systemd[1]: Started entrada.service.",
+            "trace_id=4bf92f3577b34da6a3ce929d0e0e4736 span_id=00f067aa0ba902b7",
+            "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "commit 889359f3a2b1c4d5e6f708192a3b4c5d6e7f8091\nAuthor: Romulo",
+        ],
+    }
+    # Sobram de propósito: "a senha é X" é indistinguível de uma frase-senha; `?pwd=` e `session=` são credenciais.
+    CONHECIDOS = {"A senha é pessoal e intransferível, diz o manual do banco.",
+                  "https://zoom.us/j/98765432100?pwd=VmRtWnNKcFZ2b3JhQ0M4dz09",
+                  "[2026-10-04T12:00:05Z] session=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA started"}
+    EXTRAS = ["A senha é pessoal e intransferível, diz o manual do banco.",
+              "https://zoom.us/j/98765432100?pwd=VmRtWnNKcFZ2b3JhQ0M4dz09",
+              "[2026-10-04T12:00:05Z] session=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA started"]
+
+    def test_o_bloqueio_so_pega_o_que_e_credencial_ou_indistinguivel(self):
+        bloqueados = [t for cat in self.CORPUS.values() for t in cat if s.procurar(t)]
+        self.assertEqual(set(bloqueados) - self.CONHECIDOS, set(), f"falso positivo novo: {set(bloqueados) - self.CONHECIDOS}")
+        total = sum(len(c) for c in self.CORPUS.values()) + len(self.EXTRAS)
+        self.assertLessEqual((len(bloqueados) + len(self.EXTRAS)) / total, 0.05)
+
+    def test_os_conhecidos_continuam_bloqueados(self):
+        for t in self.EXTRAS:
+            self.assertTrue(s.procurar(t), t)
+
+    def test_a_camada_do_modelo_nao_come_o_texto_comum(self):
+        palavras = ocultas = 0
+        for cat in ("nota", "e-mail"):
+            for t in self.CORPUS[cat]:
+                visao = s.mascarar_para_o_modelo(t) or ""
+                palavras += len(t.split())
+                ocultas += visao.count(s.OCULTO)
+        self.assertLess(ocultas / palavras, 0.2, f"{ocultas}/{palavras} palavras viraram <oculto>")
+
+
+class Binarios_e_arquivos_reais(unittest.TestCase):
+    """PDF e imagem exportados por Word, LibreOffice, Acrobat ou editor de fotos levam o pacote XMP, com um id fixo que
+    parece chave. Antes da correção: 8 de 8 bloqueados sem segundo clique (revisão de 04/10)."""
+    XMP_ID = "W5M0MpCehiHzreSzNTczkc9d"
+    XMP = ('<?xpacket begin="" id="' + XMP_ID + '"?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
+           '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF></x:xmpmeta><?xpacket end="w"?>').encode()
+
+    def varrer(self, dados: bytes, passo: int = 65536) -> bool:
+        v = s.Varredor()
+        return any(v.alimentar(dados[i:i + passo]) for i in range(0, len(dados), passo))
+
+    def test_pdf_com_xmp_e_dados_binarios_passa(self):
+        r = random.Random(1)
+        pdf = b"%PDF-1.7\n" + r.randbytes(150_000) + self.XMP + r.randbytes(150_000) + b"\n%%EOF"
+        self.assertFalse(self.varrer(pdf))
+
+    def test_imagem_e_fonte_com_nomes_ascii_no_meio_de_bytes_aleatorios_passam(self):
+        r = random.Random(2)
+        fonte = r.randbytes(40_000) + b"DejaVuSansCondensed-BoldOblique" + r.randbytes(40_000) + b"Copyright2026BitstreamVeraSans" + r.randbytes(40_000)
+        self.assertFalse(self.varrer(fonte))
+        jpeg = b"\xff\xd8\xff\xe1" + self.XMP + r.randbytes(200_000) + b"\xff\xd9"
+        self.assertFalse(self.varrer(jpeg))
+
+    def test_xmp_em_texto_tambem_passa(self):
+        self.assertEqual(s.procurar(self.XMP.decode()), [])
+        self.assertFalse(self.varrer(self.XMP))
+
+    def test_o_que_continua_bloqueado_em_binario(self):
+        r = random.Random(3)
+        self.assertTrue(self.varrer(r.randbytes(5000) + AGE.encode() + r.randbytes(5000)), "chave age no meio de bytes")
+        self.assertTrue(self.varrer(r.randbytes(5000) + PEM.encode() + r.randbytes(5000)), "chave privada")
+        self.assertTrue(self.varrer(("senha: " + SENHA_BOA + "\n").encode("utf-16")), "UTF-16")
+        self.assertTrue(self.varrer(("senha: " + SENHA_BOA + " ação\n").encode("latin-1")), "Latin-1")
+        texto_longo = ("linha de texto comum\n" * 40_000 + "chave " + ENT + "\n").encode()
+        self.assertTrue(self.varrer(texto_longo), "texto de 1 MB com uma cadeia aleatória no fim")
+
+    def test_a_entropia_so_vale_em_texto(self):
+        # a mesma cadeia aleatória: em texto bloqueia; dentro de bytes aleatórios (que não parecem texto) não, pela entropia
+        r = random.Random(4)
+        self.assertTrue(self.varrer(("x = " + ENT + "\n").encode()))
+        self.assertFalse(self.varrer(r.randbytes(20_000) + ENT.encode() + r.randbytes(20_000)))
+
+
+class Camada_1_nos_dois_sentidos(unittest.TestCase):
+    """O que a revisão pediu para parar de bloquear (ruído) e, junto, a prova de que o que é segredo continua sendo."""
+
+    def valores(self, texto):
+        achados: list[str] = []
+        s.redigir(texto, lambda v, r: achados.append(v) or ID1)
+        return achados
+
+    def test_comandos_com_argumento_separado_por_espaco(self):
+        for cmd in (f"sshpass -p {W} ssh root@10.0.0.5", f"redis-cli -h 127.0.0.1 -a {W} ping", f"docker login -u r -p {W} reg.exemplo.com",
+                    f"zip -P {W} a.zip b.txt", f"ssh-keygen -t ed25519 -N {W} -f k", f"mongo -u admin -p {W} --authenticationDatabase admin"):
+            self.assertEqual(self.valores(cmd), [W], cmd)
+        for ok in ("mysql -u root -p mydb", "mkdir -p /tmp/a/b", "ls -a notas", "zip -r a.zip pasta", "ssh-keygen -t ed25519 -f chave"):
+            self.assertEqual(s.procurar(ok), [], ok)
+
+    def test_senha_de_url_pode_ter_arroba(self):
+        self.assertEqual(self.valores("postgres://app:" + "p@ss-" + "Forte9" + "@db:5432/x"), ["p@ss-Forte9"])
+        self.assertEqual(self.valores("https://user:pass1234@host.com/caminho"), ["pass1234"])
+        self.assertEqual(self.valores("https://user:pass1234@host.com"), ["pass1234"])
+        self.assertEqual(s.procurar("escreva para mim@exemplo.com e para ana@x.org"), [])
+
+    def test_referencia_so_vale_como_nome_de_variavel(self):
+        for ok in ("senha: ${DB_PASSWORD}", "password=$PG_PASS", "senha: $senha", "senha: %SENHA%", "token: {{ vars.token }}",
+                   "senha: <sua-senha>", "senha: ********", "password: null"):
+            self.assertEqual(s.procurar(ok), [], ok)
+        for forte in ("senha: $Kx9mP2" + "vL8qR", "senha: <aB3$" + "kL9xQ>", "senha: ${Kx9mP2" + "vL8}-x9"):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_valor_que_descreve_ou_e_codigo_nao_e_segredo(self):
+        for ok in ("Senha: ver no Bitwarden", "Token: expira em 24h, renovar na segunda", "Credenciais: pedir ao TI da empresa",
+                   "token=expired user=romulo", "password = getpass.getpass()", "const token = req.headers.authorization;",
+                   "senha = input('Digite a senha: ')", "docker run -e POSTGRES_PASSWORD=$PG_PASS postgres:16",
+                   "Token de acesso: expira em 24 horas."):
+            self.assertEqual(s.procurar(ok), [], ok)
+
+    def test_o_que_parece_descricao_mas_e_valor_continua_bloqueado(self):
+        for forte in (f"senha: {W}", "password: expira" + "2026", "senha: ver" + "1234", "token: Kx9mP2" + "vL8qR4", f"senha = foo{W}",
+                      "token: valido" + "Xk9", f"password = Kx9(mP2)" + "x1", "senha: " + "Ok" + "7Pq2Lm"):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_chave_de_configuracao_so_com_valor_de_configuracao(self):
+        for ok in ("token_expiry: 3600", "password_min_length: 12", "secret_name: app-tls", "TOKEN_TTL=3600", "DB_PASSWORD_FILE=/run/secrets/db",
+                   "PASSWORD_RESET_URL=https://app.exemplo.com/reset", "token-endpoint: https://x.io/token", "password_required: true"):
+            self.assertEqual(s.procurar(ok), [], ok)
+        for forte in (f"password_hint: {W}", "DB_PASSWORD_ID=Kx9mP2" + "vL8qR4", f"secret_name: {W}", "token_length: Pq7" + "wLz2Nv"):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_segredo_como_assunto_so_com_valor_que_parece_segredo(self):
+        for ok in ("Segredo do bolo: manteiga gelada.", "O segredo é paciência: deixar a massa descansar 2 horas.", "o segredo da empresa é a equipe"):
+            self.assertEqual(s.procurar(ok), [], ok)
+        for forte in (f"segredo: {W}", f"o segredo é {W}", "client_secret=" + "abc12345xyz", f"segredo do wifi: {W}", "secret = Kx9mP2" + "vL8"):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_a_frase_toda_vai_para_o_cofre_no_ramo_do_e(self):
+        # antes o 2º clique guardava só a 1ª palavra e o resto ficava em claro em chegou/
+        for texto, esperado in (("a senha do wifi é minha casa azul 2026", "minha casa azul 2026"),
+                                ("my password is correct horse battery staple 9", "correct horse battery staple 9")):
+            self.assertEqual(self.valores(texto), [esperado], texto)
+            novo, _ = s.redigir(texto, lambda v, r: ID1)
+            self.assertEqual(s.procurar(novo), [])
+
+    def test_valor_em_bloco_yaml_nas_linhas_de_baixo(self):
+        self.assertEqual(self.valores("password: |\n    correct horse battery staple\n"), ["correct horse battery staple"])
+        self.assertEqual(self.valores(f"password: >-\n  {W}\n"), [W])
+        self.assertEqual(self.valores(f"db:\n  password: |\n    {W}\n  host: x\n"), [W])
+        for ok in ("description: |\n  texto normal aqui\n", "password_hint: >\n  o nome do cachorro\n", "password: |\nhost: x\n"):
+            self.assertEqual(s.procurar(ok), [], ok)
+
+    def test_cadeia_longa_em_url_e_id_nao_e_chave_mas_parametro_sensivel_e(self):
+        for ok in ("https://drive.google.com/file/d/1aBcD3fGhIjKlMnOpQrStUvWxYz0123456/view?usp=sharing",
+                   "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+                   "Message-ID: <CAJxqR7b8kQm2vZ9pL4nT6wY3sX1cF5hD0eG@mail.gmail.com>", "id=W5M0MpCehiHzreSzNTczkc9d",
+                   '"integrity": "sha512-q2DgYxG0vJ8QwNnL3k7JQZ0gq8m2Q1F3cXb5w9Z8yR4t+V0aL6pD2sK7hN1oB3eC9fU5iT4rW6xY8zA0bE2cG=="'):
+            self.assertEqual(s.procurar(ok), [], ok)
+        for forte in ("https://zoom.us/j/98765432100?pwd=VmRtWnNKcFZ2b3JhQ0M4dz09", "https://x.io/api?token=" + "Zk9Qx2Lm4Vb7Nc1Rt8Yw3",
+                      "https://x.io/a?user=r&sig=" + "Zk9Qx2Lm4Vb7Nc1Rt8Yw3", "Zk9Qx2Lm4Vb7Nc1Rt8Yw3Ph6D", "x = " + ENT):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_imagem_embutida_e_caminho_relativo_nao_sao_chave(self):
+        b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        for ok in (f'<img src="data:image/png;base64,{b64}">', f"url(data:font/woff2;base64,{b64}0123456789)",
+                   "Files: examples/functions/substr2", "veja data/profiles/sRGB-v2-nano-coated e docs/guia/passo-a-passo-2026"):
+            self.assertEqual(s.procurar(ok), [], ok)
+        for forte in (f"foto = {b64}0Zk9Qx2Lm4Vb7Nc1", "x = Zk9Qx2Lm4Vb/7Nc1Rt8Yw3Ph6Df5/Gj0Ae9Sx2Kq",
+                      f'<a href="data:text/plain,{b64}Zk9Qx2Lm4Vb7Nc1Rt8Yw3">'):
+            self.assertTrue(s.procurar(forte), forte)
+
+    def test_cadeia_de_20_a_31_so_com_letras_nao_e_chave(self):
+        self.assertEqual(s.procurar("ClasseGerenciadoraDeRelatorios"), [])          # 30 letras, CamelCase
+        # troca aceita: 25 letras aleatórias SEM dígito já não são bloqueadas (só a camada do modelo as esconde);
+        # com um dígito, ou com 32+ caracteres, continuam bloqueadas
+        solta = "ZkQxLmVbNcRtYwPhDfGjAeSxK"
+        self.assertEqual(s.procurar(solta), [])
+        self.assertIn("<oculto>", s.mascarar_para_o_modelo(f"anotei {solta} ontem"))
+        self.assertTrue(s.procurar("Zk9QxLmVbNcRtYwPhDfGjAeSxK"))
+        self.assertTrue(s.procurar("ZkQxLmVbNcRtYwPhDfGjAeSxKbVn" + "TrEwQaZxSw"))
+
+
+class Camada_do_modelo_reforcada(unittest.TestCase):
+    def test_flags_de_senha(self):
+        casos = {f"sshpass -p {W} ssh x": W, f"zip -P {W} a.zip": W, f"app --password {W} --x": W, f"app --token={W}": W,
+                 f"smbclient //n/f -U romulo%{W}": W, f"net use Z: \\\\n\\f {W} /user:r": W, f"redis-cli -a {W}": W}
+        for texto, valor in casos.items():
+            self.assertNotIn(valor, s.mascarar_para_o_modelo(texto), texto)
+        self.assertEqual(s.mascarar_para_o_modelo("cp a.txt b.txt"), "cp a.txt b.txt")
+
+    def test_grupos_curtos_so_quando_parecem_segredo(self):
+        for escondido in ("abcd efgh ijkl mnop", "jbsw y3dp ehpk 3pxp", "1234 5678", "4111 1111 1111 1111", "ABCD-EFGH-IJKL-MNOP", "Kx9; mP2) vL8]"):
+            self.assertEqual(s.mascarar_para_o_modelo(f"anota {escondido} aí"), "anota <oculto> aí", escondido)
+        for normal in ("reunião às 10h com a Maria", "casa grande azul", "dia 12 do mês 10", "R$ 19,90 por mês", "Duna 2 e Oppenheimer"):
+            self.assertEqual(s.mascarar_para_o_modelo(normal), normal, normal)
+
+    def test_semente_em_qualquer_formato_mas_prosa_comum_nao(self):
+        for texto in (" ".join(SEED), ", ".join(SEED), "\n".join(SEED), " ".join(f"{k + 1}. {w}" for k, w in enumerate(SEED)),
+                      " ".join(w.capitalize() for w in SEED), "frase: " + " ".join(SEED)):
+            visao = s.mascarar_para_o_modelo(texto)
+            self.assertFalse(any(w in visao.lower() for w in SEED[2:10]), repr(visao))
+        prosa = "o cliente pediu uma revisao completa do contrato antes de assinar para evitar problemas depois"
+        self.assertEqual(s.mascarar_para_o_modelo(prosa), prosa)
+        onze = "ele pediu nova revisao completa antes assinar contrato porque duvidas restavam"      # 11 palavras: não é semente
+        self.assertEqual(s.mascarar_para_o_modelo(onze), onze)
+
+    def test_linha_de_rotulo_esconde_as_de_baixo_ate_voltar_a_prosa(self):
+        t = "Senha:\n" + "\n".join(f"palavra{k}" for k in range(20)) + "\nDepois disso o cliente respondeu com várias perguntas sobre o prazo da entrega final."
+        v = s.mascarar_para_o_modelo(t)
+        self.assertNotIn("palavra19", v)
+        self.assertIn("o cliente respondeu", v)
+        self.assertEqual(s.mascarar_para_o_modelo("Trocar a senha do wifi amanhã, está fraca\nLevar o contrato"), "<oculto> senha <oculto>\nLevar o contrato")
+
+    def test_marcador_do_cofre_sobrevive_a_linha_escondida(self):
+        t = f"o código do banco: {{{{SEGREDO:{ID1}}}}} e mais coisa\nfim"
+        v = s.mascarar_para_o_modelo(t)
+        self.assertIn("{{SEGREDO:" + ID1 + "}}", v)
+        self.assertIn("fim", v)
+
+    def test_nome_e_rotulo_so_mudam_quando_tem_cara_de_segredo(self):
+        for ok in ("contrato-silmer-2026.pdf", "relatorio_vendas_outubro.xlsx", "foto da viagem.jpg", "Reunião com o cliente"):
+            self.assertEqual(s.mascarar_nome_para_o_modelo(ok), ok)
+        for nome, ext in ((f"senha-wifi-{W}.txt", ".txt"), (f"wifi {W}.png", ".png")):
+            m = s.mascarar_nome_para_o_modelo(nome)
+            self.assertNotIn(W, m)
+            self.assertTrue(m.endswith(ext), m)
+        self.assertNotIn(W, s.mascarar_nome_para_o_modelo(f"senha do wifi {W}"))
+        self.assertNotIn(W, s.mascarar_nome_para_o_modelo(f"Wi-Fi CasaRomulo / {W}"))
+        m = s.mascarar_nome_para_o_modelo("x" + AGE + ".txt")
+        self.assertNotIn("QQQQQQ", m)
+        self.assertTrue(m.endswith(".txt"), m)
+
+    def test_e_linear(self):
+        # entradas adversárias, no tamanho máximo do trecho do modelo (8000) e 10 vezes isso
+        casos = {"grupos": "abcd " * 4000, "grupos com dígito": "ab3d " * 4000, "símbolos": "Kx9; " * 4000, "sementes": "palavra " * 4000,
+                 "flags": "-p x " * 4000, "hífens": "abcd-" * 4000, "rótulos": "senha:\n" * 4000, "contexto": "wifi " * 4000,
+                 "percentuais": "u%x " * 4000, "numeração": "1. abc " * 4000, "uma palavra só": "a" * 20000, "um token": "ab%" * 20000}
+        for nome, t in casos.items():
+            for n in (8000, 80000):
+                ini = time.time()
+                s.mascarar_para_o_modelo(t[:n])
+                self.assertLess(time.time() - ini, 2.0, f"{nome} com {n} caracteres")
 
 
 class Desempenho(unittest.TestCase):

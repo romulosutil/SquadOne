@@ -85,13 +85,23 @@ _REGRAS: list[tuple[str, re.Pattern, int | str]] = [
     ("authorization", re.compile(
         r"(?i)\bauthorization[\"']?\s*[:=]\s*[\"']?(?:bearer|basic|token)\s+(?P<v>[A-Za-z0-9._~+/=\-]{8,})"), "v"),
     ("authorization", re.compile(r"(?i)\bbearer\s+(?P<v>[A-Za-z0-9._~+/=\-]{20,})"), "v"),
+    # A senha pode ter "@": vale até o ÚLTIMO "@" que ainda é seguido de um host ("p@ss-Forte9@db:5432/x").
     ("url-com-credencial", re.compile(
-        r"(?<![A-Za-z0-9+.\-])[a-zA-Z][a-zA-Z0-9+.\-]{1,20}://[^\s/:@]{1,100}:(?P<v>[^\s/@]{1,200})@"), "v"),
+        r"(?<![A-Za-z0-9+.\-])[a-zA-Z][a-zA-Z0-9+.\-]{1,20}://[^\s/:@]{1,100}:(?P<v>[^\s/]{1,200})@(?=[^\s@/]{1,255}(?:[:/]|\s|$))"), "v"),
     ("linha-de-comando", re.compile(
         r"(?i)--(?:password|passwd|pass|passphrase|token|secret|api-?key|apikey)(?:=|[ \t]+)(?P<v>\"[^\"]+\"|'[^']+'|[^\s\"']+)"), "v"),
     ("linha-de-comando", re.compile(
         r"(?i)\b(?:mysql|mysqldump|mariadb|mongo|mongosh|mongodump|sshpass|redis-cli|psql)\b[^\n]{0,300}?\s-p(?P<v>[^\s\-]\S*)"), "v"),
     ("linha-de-comando", re.compile(r"(?i)\bcurl\b[^\n]{0,300}?\s(?:-u|--user)[ =]?[\"']?[^\s:\"']+:(?P<v>[^\s\"']+)"), "v"),
+    # Programas em que a flag seguida de ESPAÇO é a senha (`mysql -p db` não entra: ali o argumento é o banco).
+    ("linha-de-comando", re.compile(
+        r"(?i)\b(?:sshpass[^\n]{0,200}?\s-p|redis-cli[^\n]{0,200}?\s-a|docker\s+login[^\n]{0,200}?\s(?:-p|--password)|"
+        r"zip[^\n]{0,200}?\s-P|ssh-keygen[^\n]{0,200}?\s-N|(?:mongo|mongosh|mongodump)[^\n]{0,200}?\s-p)"
+        r"[ \t]+(?P<v>\"[^\"\n]+\"|'[^'\n]+'|[^\s\"']+)"), "v"),
+    ("define-php", re.compile(
+        r"(?i)\bdefine\s*\(\s*['\"][A-Z0-9_]{0,40}(?:pass\w*|secret|token|api_?key|salt|private_?key)[A-Z0-9_]{0,40}['\"]"
+        r"\s*,\s*['\"](?P<v>[^'\"\n]{3,200})['\"]"), "v"),
+    ("netrc", re.compile(r"(?i)\bmachine\s+\S{1,100}\s+login\s+\S{1,100}\s+password\s+(?P<v>\S{3,200})"), "v"),
     ("tag-xml", re.compile(
         r"(?i)<(?:password|passwd|senha|secret|segredo|token|api[_-]?key|private[_-]?key)\b[^>\n]{0,200}>(?P<v>[^<\n]{3,500})<"), "v"),
 ]
@@ -100,8 +110,10 @@ _DICAS: dict[str, re.Pattern | str] = {
     "chave-privada": "PRIVATE KEY",
     "authorization": re.compile(r"(?i)bearer|authorization"),
     "url-com-credencial": "://",
-    "linha-de-comando": re.compile(r"(?i)--(?:pass|token|secret|api)|\s-p\S|\s-u|--user"),
+    "linha-de-comando": re.compile(r"(?i)--(?:pass|token|secret|api)|\s-p\S|\s-[uUpPaN]\s|--user"),
     "tag-xml": "<",
+    "define-php": re.compile(r"(?i)define\s*\("),
+    "netrc": re.compile(r"(?i)machine\s"),
 }
 _SO_FRAGMENTAVEIS = ("token-conhecido", "age-chave-secreta")
 
@@ -124,18 +136,22 @@ RE_PALAVRA = re.compile(
     rf"(?i)(?P<f>(?:{_FORTE_LIVRE})(?:s|es)?(?![a-z])|(?<![a-z])(?:{_FORTE_COM_FRONTEIRA})s?(?![a-z]))"
     rf"|(?<![a-z])(?P<w>(?:{_FRACA})s?)(?![a-z])")
 # O que vem depois da palavra: resto do nome, "do/da/de..." e o separador (: = => ou "é").
+# `nome` = o resto do nome da chave ("_expiry" em token_expiry); `con` = "do bolo" em "segredo do bolo".
 RE_SEPARADOR = re.compile(
-    r"[\w.\-]{0,80}+(?:[ \t]++(?:d[aoe]s?|of|for|para)[ \t]++[\w.\-]++){0,4}+[\"']?"
+    r"(?P<nome>[\w.\-]{0,80}+)(?P<con>(?:[ \t]++(?:d[aoe]s?|of|for|para)[ \t]++[\w.\-]++){0,4}+)[\"']?"
     r"(?:[ \t]*+(?P<s1>:|=>|=)|[ \t]++(?P<s2>é|eh|is)[ \t]*+:?)[ \t]*+", re.I)
 _CAP_VALOR = 2000
 # Referência ou máscara EXATA: ${VAR}, $VAR, %VAR%, {{ nome }}, <oculto>, ****. Qualquer outra coisa é valor.
+# Variável sem chaves só em MAIÚSCULAS ($PG_PASS) ou só em minúsculas ($senha): "$Kx9mP2vL8" é uma senha que
+# começa com "$", não uma referência. Placeholder <...> só com letras: "<aB3$kL9>" é valor.
 RE_REFERENCIA = re.compile(
-    r"\$\{?[A-Za-z_]\w*\}?|%[A-Za-z_]\w*%|\$?\{\{\s*[\w.\-]+\s*\}\}|<[^<>\s]{1,30}>|[\*x•\.\-_#~]+|"
-    r"null|none|nil|true|false|undefined", re.I)
+    r"\$\{[A-Za-z_]\w*\}|(?-i:\$[A-Z_][A-Z0-9_]*|\$[a-z_][a-z0-9_]*)|%[A-Za-z_]\w*%|\$?\{\{\s*[\w.\-]+\s*\}\}|"
+    r"<[A-Za-z_\-]{1,30}>|[\*x•\.\-_#~]+|null|none|nil|true|false|undefined", re.I)
 
 
 def _classes(s: str) -> int:
-    return sum(bool(re.search(p, s)) for p in ("[a-z]", "[A-Z]", "[0-9]", r"[^A-Za-z0-9\s]"))
+    # "paciência" não tem símbolo: letra acentuada é letra (\w), só pontuação e "_" contam como símbolo
+    return sum(bool(re.search(p, s)) for p in ("[a-z]", "[A-Z]", "[0-9]", r"[^\w\s]|_"))
 
 
 def _valor_ignorado(v: str) -> bool:
@@ -151,6 +167,66 @@ def _parece_segredo(v: str, palavra: str) -> bool:
     return len(v) >= 8 and " " not in v and _classes(v) >= 2
 
 
+# Palavra que, num nome composto ou numa frase, fala DE segredo e não é um: "segredo do bolo", "o segredo é paciência".
+_ASSUNTO = frozenset({"segredo", "segredos", "secret", "secrets"})
+# Sufixo que marca metadado de configuração: token_expiry, password_min_length, secret_name, DB_PASSWORD_FILE...
+_SUFIXO_CONFIG = re.compile(
+    r"(?i)[_\-.](?:expir\w*|ttl|url|uri|endpoint|name|length|len|min|max|count|seconds?|secs?|timeout|type|file|path|"
+    r"header|prefix|suffix|id|label|hint|policy|required?|enabled?|interval|rotation|reset|field)$")
+_PONTUACAO_FINAL = "\"'`,;:.!?)"
+_FECHOS = "}]),;\"'`"                                       # o que sobra colado ao valor em JSON/código de uma linha só
+# Valor que descreve ou aponta, não é segredo: "ver no Bitwarden", "expira em 24h", "token=expired".
+_DESCRITIVO = re.compile(
+    r"(?i)(?:ver|veja|consultar|consulte|pedir|pe[çc]a|perguntar|see|ask|check|expira[a-zç]*|expired|expires|vence[a-z]*|"
+    r"renov[a-zç]+|invalid[a-z]*|inv[áa]lid[a-z]*|missing|ausente|revoked|revogad[a-z]+|valid[ao]?|ok)\b")
+# Valor que é código, não segredo: `getpass.getpass()`, `input('Senha: ')`, `req.headers.authorization`.
+_CODIGO_CHAMADA = re.compile(r"[a-z_][a-z_.]*\(.*\);?")
+_CODIGO_ATRIBUTO = re.compile(r"[a-z_]+(?:\.[A-Za-z_]\w*){2,}")
+_REFERENCIA_NO_INICIO = re.compile(
+    r"\$\{[A-Za-z_]\w*\}|(?-i:\$[A-Z_][A-Z0-9_]*|\$[a-z_][a-z0-9_]*)|%[A-Za-z_]\w*%|\{\{[^}]*\}\}")
+
+
+def _aleatorio_forte(v: str) -> bool:
+    return (len(v) >= 8 and " " not in v and _classes(v) >= 2 and not v.isdigit()
+            and not re.match(r"[A-Za-z][A-Za-z0-9+.\-]*://", v)      # URL de endpoint não é segredo
+            and not v.startswith(("/", "~/", "./", "../")))             # nem caminho de arquivo (DB_PASSWORD_FILE=/run/secrets/db)
+
+
+def _valor_nao_e_segredo(v: str, s2: bool) -> bool:
+    nu = v.rstrip(_FECHOS)
+    if _valor_ignorado(v) or _valor_ignorado(nu):
+        return True
+    primeiro = v.split(None, 1)[0].rstrip(_FECHOS) if v.split() else ""
+    if primeiro and _REFERENCIA_NO_INICIO.fullmatch(primeiro):       # "$PG_PASS postgres:16"
+        return True
+    if s2:
+        return False
+    return bool(_DESCRITIVO.match(v) or _CODIGO_CHAMADA.fullmatch(v) or _CODIGO_ATRIBUTO.fullmatch(nu))
+
+
+_RE_BLOCO_YAML = re.compile(r"[|>][+-]?\d?")
+_MAX_LINHAS_DE_BLOCO = 20
+
+
+def _bloco_yaml(texto: str, pos_chave: int, fim_linha: int) -> tuple[int, int] | None:
+    """`password: |` / `password: >-`: o valor são as linhas de baixo, mais recuadas que a chave. Devolve onde
+    ele começa (no 1º caractere que não é recuo) e termina; None se não houver."""
+    ini_linha = texto.rfind("\n", 0, pos_chave) + 1
+    linha = texto[ini_linha:fim_linha]
+    recuo = len(linha) - len(linha.lstrip(" \t"))
+    cursor, ini, fim, n = fim_linha + 1, None, 0, 0
+    while cursor <= len(texto) and n < _MAX_LINHAS_DE_BLOCO:
+        f = texto.find("\n", cursor)
+        f = len(texto) if f < 0 else f
+        linha = texto[cursor:f]
+        if not linha.strip() or len(linha) - len(linha.lstrip(" \t")) <= recuo:
+            break
+        if ini is None:
+            ini = cursor + len(linha) - len(linha.lstrip(" \t"))
+        fim, n, cursor = f, n + 1, f + 1
+    return (ini, fim) if ini is not None and fim - ini >= 3 else None
+
+
 def _achar_chave_valor(texto: str, primeiro: bool = False) -> list[tuple[int, int, str]]:
     achados: list[tuple[int, int, str]] = []
     consumido = 0
@@ -164,16 +240,28 @@ def _achar_chave_valor(texto: str, primeiro: bool = False) -> list[tuple[int, in
         if not s:
             continue
         resto = trecho[s.end():]
-        if s.group("s2"):                                    # "a senha é X": só a próxima palavra
+        ini = m.end() + s.end()
+        valor = resto.rstrip()                              # o que SE GUARDA: sempre até o fim da linha
+        if s.group("s1") and _RE_BLOCO_YAML.fullmatch(valor.strip()):
+            bloco = _bloco_yaml(texto, m.start(), fim_linha)
+            if bloco is None:
+                continue
+            ini, valor = bloco[0], texto[bloco[0]:bloco[1]]  # YAML: o valor está nas linhas de baixo
+            v = " ".join(valor.split())
+        elif s.group("s2"):                                 # "a senha é X Y Z": decide pela 1ª palavra, guarda a frase toda
             tok = re.match(r"\S+", resto)
-            resto = tok.group(0) if tok else ""
-        valor = resto.rstrip()
-        v = valor.strip().strip("\"'`,;")
-        if len(v) < 3 or _valor_ignorado(v):
+            v = (tok.group(0) if tok else "").strip(_PONTUACAO_FINAL)
+        else:                                               # (sem cortar na aspa: senha aleatória pode ter aspas; redigir pela
+            v = valor.strip().strip("\"'`,;")               #  metade é pior que redigir demais)
+        if len(v) < 3 or _valor_nao_e_segredo(v, bool(s.group("s2"))):
             continue
         if m.group("w") and not _parece_segredo(v, m.group("w")):
             continue
-        ini = m.end() + s.end()
+        if _SUFIXO_CONFIG.search(s.group("nome") or "") and not _aleatorio_forte(v):
+            continue                                        # token_expiry: 3600, password_min_length: 12, secret_name: app-tls
+        palavra = (m.group("f") or m.group("w") or "").lower()
+        if palavra in _ASSUNTO and (s.group("con").strip() or s.group("s2")) and not _parece_segredo(v, palavra):
+            continue                                        # "segredo do bolo: ...", "o segredo é paciência"
         achados.append((ini, ini + len(valor), "chave-valor"))
         consumido = ini + len(valor)
         if primeiro:
@@ -196,14 +284,44 @@ def entropia(s: str) -> float:
     return -sum(f / n * math.log2(f / n) for f in freq.values())
 
 
+# Constantes fixas que parecem aleatórias e não são segredo: o id do pacote XMP, que vai em todo PDF e imagem
+# exportados por Word, LibreOffice, Acrobat ou editor de fotos.
+_CONSTANTES_CONHECIDAS = frozenset({"W5M0MpCehiHzreSzNTczkc9d"})
+_PARAM_SENSIVEL = re.compile(r"(?i)[?&;#][\w.\-]*(?:token|key|sig|secret|pass|pwd|auth|code|session)[\w.\-]*=\Z")
+
+
+def _contexto_inofensivo(texto: str, ini: int, fim: int) -> bool:
+    """O trecho [ini, fim) de uma cadeia longa está onde cadeia longa é normal: dentro de uma URL (id do Drive,
+    do YouTube, do Notion), num `sha512-…` de integridade ou num `<id@host>` de cabeçalho de e-mail? Valor de
+    parâmetro sensível (`?token=`, `&pwd=`, `&sig=`) NÃO é inofensivo. Olha só 300 caracteres para trás."""
+    janela = texto[max(0, ini - 300):ini]
+    corte = max(janela.rfind(c) for c in " \t\n\r") + 1
+    antes = janela[corte:]                                   # o pedaço da "palavra" que vem antes do trecho
+    if re.match(r"sha\d{1,3}-", texto[ini:ini + 8]):
+        return True
+    if re.search(r"(?i)data:[\w/+.\-]{1,60};base64,\Z", antes):         # imagem/fonte embutida em HTML, SVG ou CSS
+        return True
+    if antes.endswith("<") and texto[fim:fim + 1] == "@":
+        return True
+    if "://" in antes:
+        return _PARAM_SENSIVEL.search(antes) is None
+    return False
+
+
 def _entropia_alta(s: str) -> bool:
+    if s in _CONSTANTES_CONHECIDAS:
+        return False
     if s.startswith(("/", "~/", "./", "../")):
         return False
     if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", s):          # slug: "politica-de-privacidade-2026"
         return False
+    if re.fullmatch(r"[a-z0-9._\-]+(?:/[a-z0-9._\-]+){2,}", s):    # caminho relativo em minúsculas: examples/functions/substr2
+        return False
     if re.fullmatch(r"[0-9a-fA-F\-]+", s):                    # hash, UUID (o modelo recebe isto mascarado)
         return False
     if sum(bool(re.search(p, s)) for p in ("[a-z]", "[A-Z]", "[0-9]")) < 2:
+        return False
+    if len(s) < 32 and not re.search(r"[0-9]", s):          # 20 a 31 só com letras: nome em CamelCase, não chave
         return False
     return entropia(s) >= (4.3 if len(s) >= 32 else 4.0)
 
@@ -220,7 +338,7 @@ def _base64_de_usuario_e_senha(s: str) -> bool:
 def _achar_entropia(texto: str, primeiro: bool = False) -> list[tuple[int, int, str]]:
     out: list[tuple[int, int, str]] = []
     for m in _RE_LONGO.finditer(texto):
-        if _entropia_alta(m.group(0)):
+        if _entropia_alta(m.group(0)) and not _contexto_inofensivo(texto, m.start(), m.end()):
             out.append((m.start(), m.end(), "alta-entropia"))
             if primeiro:
                 return out
@@ -451,11 +569,217 @@ def _frase_semente(linha: str) -> bool:
     return len(palavras) in (12, 15, 18, 21, 24) and all(re.fullmatch(r"[a-z]{3,8}", p) for p in palavras)
 
 
-def mascarar_para_o_modelo(trecho: str) -> str | None:
+# ---- reforço da camada do modelo (2ª rodada de revisão, 04/10/2026). Tudo em varredura LINEAR: nada de regex
+# aninhado sobre texto livre. O falso positivo aqui é de graça (o agente só arruma pastas).
+# Palavra de contexto: a linha inteira some (fica só a palavra), o que cobre o valor ANTES da palavra
+# ("X é a senha do wifi"), em outros idiomas ("contraseña", "Passwort") e abreviado ("psw", "pw").
+_CTX = re.compile(
+    r"(?i)(?<![a-zà-ÿ])(?:senhas?|passwords?|passwd|pwd|psw|pw|pass|passcode|passphrase|contrase[ñn]as?|clave|"
+    r"passwort|kennwort|mot de passe|palavra-passe|tokens?|secrets?|segredos?|credenciai?s?|c[óo]digos?|codes?|"
+    r"pin|cvv|otp|totp|2fa|2º fator|autenticador|authenticator|recupera[çc][ãa]o|recovery|seed|frase|"
+    r"carteira|wallet|cart[ãa]o|card|wi-?fi|acesso|login)(?![a-zà-ÿ])")
+_RE_SENT = re.compile("\ue000\\d+\ue001")
+_FLAGS_DE_SENHA = frozenset({"-p", "-P", "-a", "-N", "-k", "-w"})
+_FLAG_LONGA = re.compile(r"(?i)--?(?:pass\w*|token|secret|key|api-?key)")
+_RE_ALNUM = re.compile(r"[A-Za-z0-9]+")
+_RE_PALAVRA_SEMENTE = re.compile(r"[A-Za-z]{3,8}[,;.]?")
+_RE_NUMERACAO = re.compile(r"\d{1,2}[.)]?")
+_LINHAS_DE_BAIXO = 30                   # até quantas linhas seguintes somem depois de uma linha que só nomeia o segredo
+_PALAVRAS_DE_PROSA = 12                 # linha mais longa que isto é prosa, não valor: a sequência escondida termina
+_TETO_MASCARA = 100_000                 # o trecho do modelo tem até 8.000; isto é só uma trava contra abuso
+
+
+def _so_marcadores(linha: str) -> str:
+    return "".join(" " + s for s in _RE_SENT.findall(linha))
+
+
+def _linha_de_rotulo(ln: str, m: re.Match) -> bool:
+    """A linha só NOMEIA o segredo (o valor está na linha de baixo)? Nada depois da palavra, termina em ':',
+    é curta, ou é cabeçalho de tabela (| ou TAB) ou de CSV (2+ vírgulas)."""
+    resto = _RE_SENT.sub("", ln[m.end():]).strip(" \t:=|>-\"'")
+    if not resto or ln.rstrip().endswith(":") or len(ln.split()) <= 4:
+        return True
+    return ln.count("|") >= 2 or "\t" in ln or ln.count(", ") >= 2
+
+
+def _esconder_flags(linha: str) -> str:
+    """O argumento das flags de senha (-p X, -P X, -a X, -N X, --password X, --token=X, /user:x, user%X)."""
+    partes = re.split(r"(\s+)", linha)
+    saida: list[str] = []
+    esconder_proxima = False
+    ultima_palavra = -1                                   # índice (em `saida`) da última palavra, para "X /user:nome"
+    for p in partes:
+        if not p or p.isspace():
+            saida.append(p)
+            continue
+        if esconder_proxima:
+            saida.append(OCULTO)
+            esconder_proxima = False
+        elif p in _FLAGS_DE_SENHA or _FLAG_LONGA.fullmatch(p):
+            saida.append(p)
+            esconder_proxima = True
+        elif "=" in p and _FLAG_LONGA.fullmatch(p.split("=", 1)[0]):
+            saida.append(p.split("=", 1)[0] + "=" + OCULTO)
+        elif p.startswith("/user:"):
+            if ultima_palavra >= 0:                       # `net use Z: \\nas\x W /user:r`: a senha vem ANTES
+                saida[ultima_palavra] = OCULTO
+            saida.append(p)
+        elif 0 < p.find("%") < len(p) - 1 and p[:p.find("%")].isalnum():
+            saida.append(p[:p.find("%") + 1] + OCULTO)    # smbclient -U user%senha
+        else:
+            saida.append(p)
+        ultima_palavra = len(saida) - 1
+    return "".join(saida)
+
+
+def _esconder_pedacos_com_simbolo(linha: str) -> str:
+    """Senha forte escrita em pedaços curtos separados por espaço ("Kx9; mP2) vL8]"): 3 ou mais palavras seguidas de
+    3 a 8 caracteres em que cada uma mistura 3 classes (minúscula, maiúscula, número, símbolo)."""
+    seq: list[re.Match] = []
+    cortes: list[tuple[int, int]] = []
+    for x in [*re.finditer(r"\S+", linha), None]:
+        if x is not None and 3 <= len(x.group(0)) <= 8 and _classes(x.group(0)) >= 3:
+            seq.append(x)
+            continue
+        if len(seq) >= 3:
+            cortes.append((seq[0].start(), seq[-1].end()))
+        seq = []
+    for a, b in reversed(cortes):
+        linha = linha[:a] + OCULTO + linha[b:]
+    return linha
+
+
+def _esconder_grupos(linha: str) -> str:
+    """Senha de app do Google, chave do autenticador, códigos de backup, número de cartão: grupos curtos de
+    3 a 8 caracteres separados por UM espaço ou hífen. Some um bloco de grupos seguidos de MESMO tamanho (4 ou
+    mais; 3 se algum tem dígito), um bloco de 3 ou mais com dígito e um par só de números ("1234 5678")."""
+    linha = _esconder_pedacos_com_simbolo(linha)
+    ms = list(_RE_ALNUM.finditer(linha))
+    if len(ms) < 2:
+        return linha
+    cortes: list[tuple[int, int]] = []
+
+    def blocos(sub: list[re.Match]) -> None:
+        # sub: grupos de 3 a 8 caracteres, seguidos e separados por 1 espaço/hífen
+        textos = [x.group(0) for x in sub]
+        n = len(sub)
+        i = 0
+        while i < n:                                              # (a) mesmo tamanho
+            j = i
+            while j + 1 < n and len(textos[j + 1]) == len(textos[i]):
+                j += 1
+            tam = j - i + 1
+            if tam >= 4 or (tam >= 3 and any(re.search(r"\d", g) for g in textos[i:j + 1])) \
+                    or (tam >= 2 and all(g.isdigit() for g in textos[i:j + 1])):
+                cortes.append((sub[i].start(), sub[j].end()))
+            i = j + 1
+        i = 0
+        while i < n:                                              # (b) com dígito
+            if not re.search(r"\d", textos[i]):
+                i += 1
+                continue
+            j = i
+            while j + 1 < n and re.search(r"\d", textos[j + 1]):
+                j += 1
+            if j - i + 1 >= 3 or (j - i + 1 >= 2 and all(g.isdigit() for g in textos[i:j + 1])):
+                cortes.append((sub[i].start(), sub[j].end()))
+            i = j + 1
+
+    sub: list[re.Match] = []
+    anterior: re.Match | None = None
+    for x in ms:
+        curto = 3 <= len(x.group(0)) <= 8
+        junto = anterior is not None and x.start() == anterior.end() + 1 and linha[anterior.end()] in " -"
+        if curto and (junto or not sub):
+            sub.append(x)
+        else:
+            blocos(sub)
+            sub = [x] if curto else []
+        anterior = x
+    blocos(sub)
+    # junta cortes que se tocam ou se sobrepõem e aplica de trás para a frente
+    unidos: list[list[int]] = []
+    for a, b in sorted(cortes):
+        if unidos and a <= unidos[-1][1] + 1:
+            unidos[-1][1] = max(unidos[-1][1], b)
+        else:
+            unidos.append([a, b])
+    for a, b in reversed(unidos):
+        linha = linha[:a] + OCULTO + linha[b:]
+    return linha
+
+
+def _esconder_semente_corrida(texto: str) -> str:
+    """Frase-semente fora do formato canônico (numerada, com vírgulas, uma palavra por linha, com rótulo na
+    frente, Capitalizada): 12 ou mais palavras seguidas de 3 a 8 letras, quase todas diferentes."""
+    cortes: list[tuple[int, int]] = []
+    run: list[re.Match] = []
+    palavras: list[str] = []
+    fim_run = 0
+
+    def fechar() -> None:
+        if len(palavras) >= 12 and len({w.lower() for w in palavras}) >= 10:
+            cortes.append((run[0].start(), fim_run))
+
+    for m in re.finditer(r"\S+", texto):
+        tok = m.group(0)
+        if _RE_PALAVRA_SEMENTE.fullmatch(tok):
+            run.append(m)
+            palavras.append(tok.strip(",;."))
+            fim_run = m.end()
+        elif _RE_NUMERACAO.fullmatch(tok) and run:
+            fim_run = m.end()
+        else:
+            if run:
+                fechar()
+            run, palavras = [], []
+    if run:
+        fechar()
+    for a, b in reversed(cortes):
+        texto = texto[:a] + OCULTO + texto[b:]
+    return texto
+
+
+def _processar_linhas(linhas: list[str], reforco: bool) -> list[str]:
+    saida: list[str] = []
+    esconder = vazias = 0
+    for ln in linhas:
+        if esconder:
+            if not ln.strip():
+                vazias += 1
+                esconder = 0 if vazias > 3 else esconder
+                saida.append(ln)
+                continue
+            if len(ln.split()) <= _PALAVRAS_DE_PROSA:
+                saida.append(OCULTO + _so_marcadores(ln))
+                esconder -= 1
+                continue
+        esconder = vazias = 0
+        if _frase_semente(ln.strip()):
+            saida.append(OCULTO)
+            continue
+        if not reforco:
+            saida.append(_mascarar_linha(ln))
+            continue
+        ln = _esconder_flags(ln)
+        m = _CTX.search(ln)
+        if m is None:
+            saida.append(_esconder_grupos(_mascarar_linha(ln)))
+            continue
+        if not ln[:m.start()].strip() and _SO_SENTINELAS.fullmatch(ln[m.end():]):
+            saida.append(ln)                                   # "senha: {{SEGREDO:id}}": já está no cofre, fica
+            continue
+        if _linha_de_rotulo(ln, m):
+            esconder = _LINHAS_DE_BAIXO
+        saida.append(f"{OCULTO} {m.group(0)} {OCULTO}" + _so_marcadores(ln))
+    return saida
+
+
+def mascarar_para_o_modelo(trecho: str, reforco: bool = True) -> str | None:
     """O trecho (já cortado) que pode ir ao modelo, com tudo que lembre segredo trocado por
     <oculto>. None = não mande texto (há sinal de segredo partido em linhas). O arquivo
     original NÃO muda; isto é só a visão do agente."""
-    limpo, _ = _sem_invisiveis(trecho)
+    limpo, _ = _sem_invisiveis(trecho[:_TETO_MASCARA])
     achados = procurar(limpo)
     if any(not a.redigivel for a in achados):
         return None
@@ -470,8 +794,24 @@ def mascarar_para_o_modelo(trecho: str) -> str | None:
     marcadores = RE_MARCADOR.findall(visao)                    # os do cofre atravessam a camada intactos
     for i, mk in enumerate(marcadores):
         visao = visao.replace(mk, f"\ue000{i}\ue001", 1)
-    linhas = [OCULTO if _frase_semente(l.strip()) else _mascarar_linha(l) for l in visao.split("\n")]
-    return _RE_SENTINELA.sub(lambda m: marcadores[int(m.group(1))], "\n".join(linhas))
+    texto = "\n".join(_processar_linhas(visao.split("\n"), reforco))
+    if reforco:
+        texto = _esconder_semente_corrida(texto)
+    return _RE_SENTINELA.sub(lambda m: marcadores[int(m.group(1))], texto)
+
+
+def mascarar_nome_para_o_modelo(nome: str) -> str:
+    """Nome de arquivo ou rótulo que pode ir ao modelo e ao aviso do WhatsApp. Só mexe no que tem cara de segredo
+    (palavra de contexto, ou o filtro principal achou): senão `contrato-silmer-2026.pdf` viraria `<oculto>` e
+    o modelo não teria o que organizar. A extensão fica (o modelo precisa repeti-la)."""
+    base, ponto, ext = nome.rpartition(".")
+    if not ponto or not base or not re.fullmatch(r"[A-Za-z0-9]{1,8}", ext):
+        base, ext = nome, ""
+    m = _CTX.search(base)
+    if m is None and not tem_segredo(base):
+        return nome
+    corpo = f"{OCULTO} {m.group(0)} {OCULTO}" if m else OCULTO
+    return corpo + (f".{ext}" if ext else "")
 
 
 # ---------------------------------------------------------------- varredura em fluxo
@@ -484,11 +824,22 @@ class Varredor:
         self._cauda = b""
         self.regras: set[str] = set()
 
+    @staticmethod
+    def _parece_texto(visao: bytes) -> bool:
+        """Cadeia longa e aleatória só vale como segredo em texto: num PDF, numa fonte ou numa imagem os bytes
+        de dados formam cadeias que parecem chave e não são (revisão de 04/10: 141 de 320 arquivos reais
+        bloqueados, sem segundo clique). Regras de forma (chave privada, token conhecido...) valem sempre."""
+        amostra = visao[:65536]
+        if not amostra:
+            return True
+        legiveis = sum(1 for b in amostra if b in (9, 10, 13) or 32 <= b <= 126)
+        return legiveis / len(amostra) >= 0.85
+
     def alimentar(self, pedaco: bytes) -> bool:
         dados = self._cauda + pedaco
         visoes = (dados, dados.replace(b"\x00", b"")) if b"\x00" in dados else (dados,)
         for visao in visoes:
-            for _, _, nome in _brutos(visao.decode("latin-1"), True, primeiro=True):
+            for _, _, nome in _brutos(visao.decode("latin-1"), self._parece_texto(visao), primeiro=True):
                 self.regras.add(nome)
         self._cauda = dados[-self.JANELA:]
         return bool(self.regras)
