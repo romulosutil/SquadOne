@@ -81,6 +81,11 @@ DESCARTADOS = AUTO / "_descartados"
 # Gravado pelo "06 · Funil semanal" (n8n, segunda 08:00); `nao_gerar` são os
 # leads `novo` de busca pausada.
 FUNIL = Path(os.environ.get("SITE_FUNIL", str(Path.home() / ".local/share/n8n-estado/site-funil.json")))
+# Imagem do cartão de prévia (og:image). O Rômulo manda só o link no WhatsApp, e
+# até 05/10/2026 nenhum demo tinha og:image: o cartão saía sem foto. É o único
+# arquivo além do index.html que sobe (lista de permissão: content.md, Fotos/ e o
+# resto da pasta nunca vão para a Vercel).
+IMAGEM_DA_PREVIA = "og.jpg"
 VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 MAX_FALHAS = 2
 # TimeoutStartSec=4h no .service: não começa lead que pode estourar o teto (com
@@ -175,9 +180,11 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - Descartar o lead (regras do CLAUDE.md: o negócio já tem site no ar, é rede/franquia com site, é duplicado ou já tem linha "— (não publicado)" no registro.md): não mova a pasta, mover para _descartados/ está fora da lista. Grave {lead}/{SINAL_DESCARTE} com o motivo (primeira linha: o motivo numa frase; depois as evidências: URLs testadas e o que o curl ou o DOM renderizado mostrou), anote a linha "— (não publicado)" no registro.md e termine sem index.html e sem publicado.json. O runner move a pasta para _descartados/ e conta como descarte, não como falha. Onde o CLAUDE.md manda mover para _descartados/, grave o {SINAL_DESCARTE}. Não grave {SINAL_DESCARTE} no caso "presença digital fraca ou nula" (lá o CLAUDE.md manda parar e devolver ao Rômulo, sem descartar).
 - rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
 - Para pesquisar (Instagram, Refero, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
-- Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes quatro comandos, um por chamada (outra forma de vercel é negada):
+- Prévia do link no WhatsApp: o Rômulo manda só o link, e o WhatsApp mostra o cartão de prévia (og:*) antes de o dono abrir o site. Sem og:image o cartão sai sem foto. Antes do passo 5: (a) gere {lead}/{IMAGEM_DA_PREVIA} com python3/PIL a partir da melhor foto real do negócio (a do hero), 1200x630, recorte centrado, JPEG qualidade ~80, menos de 300 KB; (b) no <head> do index.html ponha og:type website, og:locale (pt_BR no Brasil), og:title (nome do negócio + cidade), og:description (a promessa do hero, até 150 caracteres), og:image https://demo-{slug}.vercel.app/{IMAGEM_DA_PREVIA} com og:image:width 1200 e og:image:height 630, twitter:card summary_large_image, e um favicon SVG inline (data: URI com a inicial ou o símbolo da marca, na cor da marca). Só foto do próprio negócio (nunca a ilustrativa do Unsplash nem imagem de paciente); sem foto real, não gere a imagem nem o og:image e pule o cp dela. Se a linha "Aliased:" der outra URL, corrija o og:image para ela e publique de novo.
+- Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes comandos, um por chamada (outra forma de vercel é negada); além do index.html, sobe só a {IMAGEM_DA_PREVIA}:
   mkdir -p {palco}
   cp {lead}/index.html {palco}/
+  cp {lead}/{IMAGEM_DA_PREVIA} {palco}/
   vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE}
   vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE}
   Depois siga o CLAUDE.md: URL da linha "Aliased:", curl dando 200, publicado.json, registro.md. Se o deploy falhar, deixe o index.html completo sem publicado.json: o runner publica.
@@ -450,6 +457,8 @@ def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
     slug = pasta.name
     with tempfile.TemporaryDirectory(prefix=f"demo-{slug}-") as palco:
         shutil.copy2(pasta / "index.html", Path(palco) / "index.html")
+        if (pasta / IMAGEM_DA_PREVIA).is_file():  # o og:image do index.html aponta para ela
+            shutil.copy2(pasta / IMAGEM_DA_PREVIA, Path(palco) / IMAGEM_DA_PREVIA)
         log(f"Publicando demo-{slug} na Vercel...", arquivo=log_lead)
         with open(log_lead, "a", encoding="utf-8") as saida:
             subprocess.run(["vercel", "link", "--yes", "--project", f"demo-{slug}", "--scope", VERCEL_SCOPE],

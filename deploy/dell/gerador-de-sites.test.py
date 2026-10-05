@@ -119,6 +119,7 @@ class Descarte(unittest.TestCase):
 
         def nao_publica(pasta, log_lead):
             raise AssertionError(f"publicou {pasta.name}, que foi descartado")
+        self.publicar_de_verdade = self.m.publicar_na_vercel
         self.m.publicar_na_vercel = nao_publica
 
     def rodar(self, claude, *args):
@@ -200,6 +201,33 @@ class Descarte(unittest.TestCase):
         self.assertEqual(len(self.m.fila()), 2)
         (self.auto / ".funil.json").write_text("{quebrado")
         self.assertEqual(len(self.m.fila()), 2)
+
+    def test_deploy_do_runner_leva_so_index_e_imagem_da_previa(self):
+        pasta = self.auto / "b-bom"
+        (pasta / "index.html").write_text("<html></html>")
+        (pasta / "og.jpg").write_bytes(b"\xff\xd8jpg")
+        (pasta / "Fotos").mkdir()
+        vistos = []
+
+        class Saida:
+            stdout, stderr = "Aliased: https://demo-b-bom.vercel.app\n", ""
+
+        def run(cmd, cwd=None, **k):
+            vistos.append(sorted(os.listdir(cwd)))
+            return Saida()
+        self.m.subprocess.run = run
+        self.addCleanup(setattr, self.m.subprocess, "run", __import__("subprocess").run)
+        self.m.LOGS.mkdir(exist_ok=True)
+        self.m.publicar_na_vercel = self.publicar_de_verdade  # com o subprocess falso
+        self.assertTrue(self.m.publicar_na_vercel(pasta, self.auto / ".logs/x.log"))
+        self.assertEqual(vistos[-1], ["index.html", "og.jpg"])  # nada de content.md nem Fotos/
+        recibo = json.loads((pasta / "publicado.json").read_text())
+        self.assertEqual((recibo["site_url"], recibo["place_id"]), ("https://demo-b-bom.vercel.app", "pid-b-bom"))
+
+    def test_instrucoes_pedem_a_previa_do_link(self):
+        texto = self.m.instrucoes_da_execucao("b-bom", Path("/tmp/gerador-x"))
+        self.assertIn(f"cp {self.auto}/b-bom/og.jpg /tmp/gerador-x/esteira-deploy/demo-b-bom/", texto)
+        self.assertIn("og:image https://demo-b-bom.vercel.app/og.jpg", texto)
 
     def test_instrucoes_mandam_gravar_o_sinal(self):
         texto = self.m.instrucoes_da_execucao("b-bom", Path("/tmp/gerador-x"))

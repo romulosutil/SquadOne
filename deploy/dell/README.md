@@ -574,6 +574,15 @@ serviço FAILED, aviso no WhatsApp). Agora:
   falha (atenção na Central) e o começo da próxima execução tenta de novo, sem
   gastar o teto do dia. Gravar o arquivo à mão também descarta.
 
+Também desde 05/10/2026 **o demo tem cartão de prévia**. O Rômulo manda só o
+link no WhatsApp, e o WhatsApp mostra o cartão (og:*) antes de o dono abrir;
+nenhum dos demos de 03-04/10 tinha `og:image` (o cartão saía sem foto) e 3 de
+4 não tinham favicon. As instruções da execução pedem `<slug>/og.jpg`
+(1200x630, da melhor foto real do negócio), as metas og/twitter com
+`https://demo-<slug>.vercel.app/og.jpg` e um favicon SVG inline. Sobe para a
+Vercel o `index.html` e, se existir, o `og.jpg`; nada mais da pasta (o deploy
+de reserva do runner faz o mesmo).
+
 Também desde 05/10/2026 **lead de busca pausada não é gerado**: o "06 · Funil
 semanal" lista em `nao_gerar` (`~/.local/share/n8n-estado/site-funil.json`) os
 leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
