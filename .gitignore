@@ -25,3 +25,4 @@ graphify-out/
 # notas de sessão locais (Claude/Codex); não versionar
 CHECKPOINT.md
 __pycache__/
+.claude/worktrees/
