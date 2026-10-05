@@ -64,7 +64,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Marca o desfecho', texto: 'Na página do lead (link no CRM e na mensagem das 10:30): Recusou, Fechou ou Desfazer. Planilha e pasta mudam juntas.', onde: 'voce', quando: 'um toque', comVoce: true, verificacao: 'fluxo:Kf5IWNdEFFnuSOy2', link: CRM_SITE },
       { ramo: 'se recusou ou expirou', titulo: 'Demo pausado em 15 dias', texto: 'O site sai do ar na Vercel, sem apagar. Desfazer ou uma resposta nova põe de volta.', onde: 'dell', quando: '09:40' },
       { titulo: 'Conversa, proposta e fechamento', texto: 'Com você. A ficha do CRM guarda nota, próximo passo e "proposta enviada"; prumo-pdf faz o PDF da proposta.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_SITE },
-      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento, com buscas candidatas a desligar. Não muda nada sozinho.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0' },
+      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento, e pausa a busca com 5+ enviados e nenhuma resposta (o gerador pula os leads dela). Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0' },
     ],
   },
   {
