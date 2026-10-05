@@ -39,7 +39,8 @@ const FOLLOWUP_COM_LINK_EN = "Hi! It's Rômulo again. Did you get a chance to se
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.
-const FEMININOS = ['clinica', 'academia', 'casa', 'barbearia', 'pizzaria', 'padaria', 'oficina', 'loja', 'escola', 'pousada', 'sorveteria', 'confeitaria', 'lavanderia', 'farmacia', 'marcenaria', 'vidracaria'];
+// 05/10/2026: nichos novos (desentupidora, contabilidade, usinagem, locação...).
+const FEMININOS = ['clinica', 'academia', 'casa', 'barbearia', 'pizzaria', 'padaria', 'oficina', 'loja', 'escola', 'pousada', 'sorveteria', 'confeitaria', 'lavanderia', 'farmacia', 'marcenaria', 'vidracaria', 'desentupidora', 'dedetizadora', 'contabilidade', 'assessoria', 'advocacia', 'sociedade', 'usinagem', 'caldeiraria', 'metalurgica', 'industria', 'fabrica', 'empresa', 'locadora', 'locacao', 'construtora', 'serralheria', 'distribuidora', 'transportadora'];
 
 function semAcento(t) { return String(t || '').normalize('NFD').replace(/[^a-zA-Z0-9 ]/g, ''); }
 function primeiraPalavra(t) { return String(t || '').trim().split(' ')[0] || ''; }

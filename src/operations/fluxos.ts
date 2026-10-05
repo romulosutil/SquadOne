@@ -49,7 +49,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'Site antes da venda',
     frase: 'O Dell acha o negócio, faz o site e publica. Você aborda e marca o desfecho. Envio, leitura, resposta e follow-up se marcam sozinhos.',
     passos: [
-      { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. O funil de segunda sugere buscas para desligar.', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. Desde 05/10: serviço que se procura no Google (advocacia, contabilidade, desentupidora, indústria, reformas); B2C de vitrine deu 0 interesse. O funil de segunda pausa a busca sem interesse.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'Caçador acha o lead', texto: 'n8n 01: Google Places + Gemini. Fica quem tem nota 60 ou mais e WhatsApp; vira linha "novo" na planilha.', onde: 'dell', quando: '06:00', verificacao: 'fluxo:oow8TkxrAf4fVvTj' },
       { titulo: 'A pasta do lead nasce', texto: 'auto-entrada cria ~/auto-site/<lead> com fotos e content.md.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Gerador faz e publica o site', texto: 'Claude (/lead-novo), até 4 por dia, 45 min cada; publica na Vercel como demo-<lead>. Com o Dell desligado às 08:00, roda quando ele liga.', onde: 'dell', quando: '08:00', verificacao: 'gerador', fila: 'pend:sites-fila' },
