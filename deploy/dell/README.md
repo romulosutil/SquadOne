@@ -705,18 +705,27 @@ o n8n ainda subindo perdeu três respostas.
   nunca aparece como lido: "entregue sem lido" é "não sei", não "não viu".**
   `entregue` fica só no log.
 - **O lead escreveu** (`entrada`): PRUMO com Etapa "Revisar" → "Convite
-  enviado"; com "Convite enviado" → Próxima ação "Respondeu no WhatsApp em
-  ..."; Site `novo`/`pronto` → `enviado` (+ `enviado_em`); resposta a 5 min ou
-  mais do envio → `respondeu_em` (`expirado` volta a `enviado`), e a pasta vai
-  para `_em-conversa/` (ver "Pasta auto").
+  enviado" + "Respondeu no WhatsApp em ..."; com "Convite enviado" → Próxima
+  ação "Respondeu no WhatsApp em ..." só se a mensagem veio 5 min ou mais depois
+  de "Convite enviado em" (desde 05/10/2026; antes qualquer mensagem valia); Site
+  `novo`/`pronto` → `enviado` (+ `enviado_em`); resposta a 5 min ou mais do
+  envio → `respondeu_em` (`expirado` volta a `enviado`), e a pasta vai para
+  `_em-conversa/` (ver "Pasta auto").
 
 Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp
 Business. Então a primeira mensagem só prova o envio, e o observador manda um
 segundo aviso (`"seguinte": true`) quando o lead volta a escrever 5 min ou mais
-depois; o PRUMO ignora esse segundo aviso. Resposta única dentro dos 5 min
-passa despercebida: o follow-up do 3º dia lembra, e `respondeu_em` pode ser
-preenchido à mão.
+depois; o Site usa esse segundo aviso e o PRUMO continua marcando uma vez por
+janela. Resposta única dentro dos 5 min passa despercebida: o follow-up do 3º
+dia lembra, e `respondeu_em` pode ser preenchido à mão.
+
+O PRUMO só ganhou a regra dos 5 min em 05/10/2026. Até então toda mensagem de
+quem tinha "Convite enviado" virava "Respondeu no WhatsApp": 20 prospects, todos
+até cerca de 5 min depois do convite e 17 em menos de 1 min (saudação), e a tela
+Hoje do CRM mostrava "Conversando" e "Respostas para responder" que não
+existiam. `claude-ops/prumo-desfazer-saudacao.py` devolve essas marcas antigas
+a "Só resposta automática" (simula por padrão; só grava com `--aplicar`).
 
 Por que o log e não um segundo aparelho: o pareamento por código falhou (no
 DDD 27 o WhatsApp registra o número sem o 9). O remendo da bridge é pequeno,

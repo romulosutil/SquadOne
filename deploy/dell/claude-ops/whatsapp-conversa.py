@@ -22,7 +22,8 @@ um número das planilhas:
   "enviado"/"fechado": conversa normal, nada muda. PRUMO: Etapa "Revisar" ->
   "Convite enviado" (como o clique em "Enviar convite").
 - "entrada": o lead escreveu. PRUMO: Etapa "Revisar" -> "Convite enviado";
-  "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ...". Site
+  "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ..." só se a mensagem
+  veio 5 min ou mais depois de "Convite enviado em" (desde 05/10/2026). Site
   (29/09/2026): "novo"/"pronto" -> "enviado" (+ enviado_em se vazio); resposta a
   5 min ou mais do envio -> respondeu_em (e "expirado" volta a "enviado"). A
   pasta do lead vai para _em-conversa pelo site-pastas do Dell (o Balcão lista
@@ -39,7 +40,14 @@ saudação automática do WhatsApp Business, não gente. Por isso a primeira
 mensagem de um lead "pronto" só prova o envio, e resposta é mensagem que chega a
 5 min ou mais do envio. O observador manda um segundo aviso ("seguinte": true)
 quando o lead volta a escrever depois desses 5 min; o PRUMO ignora esse
-segundo aviso e continua marcando uma vez por janela, como antes.
+segundo aviso e continua marcando uma vez por janela.
+
+O PRUMO ficou de fora dessa regra até 05/10/2026: qualquer mensagem de quem
+tinha "Convite enviado" virava "Respondeu no WhatsApp". Dos 20 prospects
+marcados assim, todos "responderam" até cerca de 5 min depois do convite e 17
+em menos de 1 min. Eram saudações, e a tela Hoje do CRM listava "Respostas
+para responder" e "Conversando" que não existiam. prumo-desfazer-saudacao.py
+devolve as marcas antigas a "Só resposta automática".
 
 Só número, direção e hora: o conteúdo das mensagens nunca sai do observador.
 Os dois webhooks exigem o header X-Observador (credencial "Observador
@@ -694,6 +702,33 @@ def testar() -> int:
             self.assertEqual(decidir("entrada", prumos=[prumo("Revisar")], seguinte=True)[0], [])
             itens, _ = decidir("entrada", prumos=[prumo("Convite enviado")])
             self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp"))
+
+        def test_prumo_saudacao_nao_e_resposta(self):
+            # 2 min depois do convite: saudação automática do WhatsApp Business, nada muda.
+            convite = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:58:00Z"})
+            self.assertEqual(decidir("entrada", prumos=[convite])[0], [])
+            # 17 de 20 "respostas" de 05/10 chegaram menos de 1 min depois do convite.
+            segundos = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:59:40Z"})
+            self.assertEqual(decidir("entrada", prumos=[segundos])[0], [])
+
+        def test_prumo_resposta_depois_de_5_min(self):
+            convite = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:50:00Z"})
+            itens, _ = decidir("entrada", prumos=[convite])
+            self.assertEqual(itens[0]["acao"], "respondeu")
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 30/09"))
+            self.assertEqual(itens[0]["Convite enviado em"], "2026-09-30T12:50:00Z")
+            # Exatamente 5 min já é resposta (mesmo limite do Site: >=).
+            cinco = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:55:00Z"})
+            self.assertEqual(len(decidir("entrada", prumos=[cinco])[0]), 1)
+
+        def test_prumo_convite_sem_data_conta_como_antigo(self):
+            # Marcado à mão, sem "Convite enviado em": igual ao Site, a mensagem vale como resposta.
+            itens, _ = decidir("entrada", prumos=[prumo("Convite enviado")])
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp"))
+
+        def test_prumo_nao_toca_em_quem_nao_esta_em_convite_enviado(self):
+            for etapa in ("Diagnóstico pronto", "Concluído", "Sem interesse"):
+                self.assertEqual(decidir("entrada", prumos=[prumo(etapa, **{"Convite enviado em": "2026-09-30T12:00:00Z"})])[0], [])
 
     class Numeros(unittest.TestCase):
         def test_filtro(self):
