@@ -430,8 +430,8 @@ const empresa = String(l['Empresa'] ?? '');
 const form = '{FORM}?usp=pp_url&entry.{ENTRY_EMPRESA}=' + encodeURIComponent(id + '::' + empresa) + '&entry.{ENTRY_PAPEL}=' + encodeURIComponent('Dono');
 // Link curto no TinyURL (API sem conta), com apelido legível "prumo-<empresa>-<4>".
 // Apelido já usado (segundo clique) -> tenta sem apelido; serviço fora -> link longo.
-const slug = empresa.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  .replace(/\b(ltda|me|epp|eireli|s\/?a)\b/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 18).replace(/-+$/, '');
+const slug = empresa.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase()
+  .replace(/\\b(ltda|me|epp|eireli|s\\/?a)\\b/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 18).replace(/-+$/, '');
 let h = 0;
 for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
 const apelido = ['prumo', slug, h.toString(36).slice(-4)].filter(Boolean).join('-');
@@ -453,19 +453,19 @@ const areas = !distribuidora ? 'do dia a dia'
   : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança'
   : 'de preço, crédito e entregas';
 let nome = empresa.trim();
-for (let i = 0; i < 2; i++) nome = nome.replace(/[\s,.-]+(ltda|me|epp|eireli|s\.?\/?a\.?)\.?$/i, '').trim();
+for (let i = 0; i < 2; i++) nome = nome.replace(/[\\s,.-]+(ltda|me|epp|eireli|s\\.?\\/?a\\.?)\\.?$/i, '').trim();
 // Nome todo em maiúsculas ("CACAU PEÇAS PARA MOTORES") denuncia mensagem automática.
-if (nome === nome.toUpperCase() && /\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
-  .replace(/(^|\s)(\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
+if (nome === nome.toUpperCase() && /\\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
+  .replace(/(^|\\s)(\\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
 // Cumprimento da hora de São Paulo (o clique é a hora do envio).
 const hora = Number(new Date().toLocaleString('en-US', {{ timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }}));
 const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
 const mensagem = passo === 'convite'
   ? ola + '! Aqui é o Rômulo, do Prumo. Ajudo donos de ' + publico + ' a passar para a equipe as decisões '
-    + areas + ' que hoje dependem só deles.\n\nConsigo falar com o responsável pela ' + (nome || 'empresa') + ' por aqui?'
-  : 'Obrigado! Eu faço um diagnóstico gratuito da rotina: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\n'
-    + link + '\n\nEm até 3 dias úteis eu devolvo o resultado, mostrando o que dá para passar para a equipe sem perder o controle.';
-let digitos = String(l['WhatsApp'] ?? '').replace(/\D/g, '');
+    + areas + ' que hoje dependem só deles.\\n\\nConsigo falar com o responsável pela ' + (nome || 'empresa') + ' por aqui?'
+  : 'Obrigado! Eu faço um diagnóstico gratuito da rotina: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\\n'
+    + link + '\\n\\nEm até 3 dias úteis eu devolvo o resultado, mostrando o que dá para passar para a equipe sem perder o controle.';
+let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
 if (!achou) destino = 'https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={pid}';
