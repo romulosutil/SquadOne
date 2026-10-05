@@ -6,8 +6,9 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 # Mapa do ecossistema
 
 Vem do design "Estrutura do SquadOne" (24/09/2026), conferido no Dell em
-25/09/2026, atualizado em 28/09/2026 com a perda do PC e em 29/09/2026 com o
-que entrou no Dell nesse dia. O mapa diz **onde procurar**; a verdade é a
+25/09/2026, atualizado em 28/09/2026 com a perda do PC, em 29/09/2026 com o
+que entrou no Dell nesse dia e em 05/10/2026 com o PC novo. O mapa diz
+**onde procurar**; a verdade é a
 fonte viva (`systemctl --user`, n8n, `status.json`, `cron/jobs.json`). Mapa e
 fonte divergindo é notícia: diga qual divergência viu e deixe o Claude ou o Codex
 atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
@@ -16,7 +17,7 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
 | Quem | Papel |
 |---|---|
-| Claude e Codex | controlam e corrigem; sem PC, rodam no próprio Dell |
+| Claude e Codex | controlam e corrigem a partir do PC novo; o que instala e mexe no Dell roda numa sessão no Dell |
 | Hermes (você) | informa pelo WhatsApp |
 | n8n do Dell | gerencia os fluxos; todo fluxo termina respondendo a alguém |
 | SquadOne | gerencia as agendas |
@@ -27,31 +28,34 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 
 ### PC e celular (o Rômulo)
 
-- **Não há PC desde 25/09/2026.** O PC Windows 11 queimou (NVMe) e não volta;
-  o Rômulo soube em 28/09. O que não tinha sincronizado com o Dell nem ido ao
-  GitHub foi perdido e não se recupera: não trate como pendência nem sugira
-  recuperar. Um PC novo está a caminho e vai receber a organização do
-  SquadOne; até lá **o Dell é a máquina de controle**: Claude Code e Codex
-  rodam nele, sem túnel. Estado e checklist: `SquadOne/deploy/pc/README.md`.
+- **O PC novo (o Jarvis, Windows, `paiduben` na tailnet) é a máquina de
+  controle desde 04/10/2026.** Entra no Dell por `ssh mel` (só chave), abre a
+  Central, a Entrada, o seu painel e os webhooks pela tailnet, e o editor do
+  n8n e o code-server por túnel SSH. Manda um backup de configuração toda
+  noite às 03:30 (`Estrutura/pc/` no Drive). O PC antigo queimou em 25/09/2026
+  (o Dell foi a máquina de controle de 28/09 a 04/10): o que não tinha
+  sincronizado foi perdido e não se recupera; não trate como pendência nem
+  sugira recuperar. Estado e checklist: `SquadOne/deploy/pc/README.md`.
 - **Fontes de verdade no Dell:** clones próprios do GitHub (`~/SquadOne`,
   `~/prumo`, `~/crm-silmer`) e `~/auto-site`. O PRUMO é dono de tudo; o Site
   antes da venda é a frente "Vender mais" dele.
-- **Syncthing** não tem mais com quem sincronizar: `~/Pessoal-dev`,
-  `~/Corporativo-dev` e o grafo que você gera ficam no Dell. O aparelho
-  `Rômulo` ainda aparece desconectado na configuração até o PC novo chegar;
-  isso não é falha nova.
+- **Syncthing** não tem com quem sincronizar: o aparelho `Rômulo` (PC antigo)
+  saiu da configuração em 04/10/2026 e o PC novo não foi pareado (código vai
+  pelo GitHub; material, pelo Drive). `~/Pessoal-dev` e `~/Corporativo-dev`
+  são retratos congelados do PC antigo; o PC novo puxa os grafos por SSH de
+  `~/Mel/Grafos`.
 - **Celular:** ntfy recebe os lembretes do SquadOne; o Telegram manda
   demandas ao SquadOne (texto ou áudio); o WhatsApp recebe você.
-- **`EsteiraLeads08h` foi desativada em 23/09/2026** e se perdeu com o PC. A
-  fila é do `gerador-de-sites` do Dell. Documento ou resposta dizendo que o PC
-  gera ou controla algo está desatualizado.
+- **`EsteiraLeads08h` foi desativada em 23/09/2026** e se perdeu com o PC
+  antigo. A fila é do `gerador-de-sites` do Dell: o PC novo controla (decide,
+  edita, abre PR), mas não gera site nem roda fluxo da operação.
 
 ### Nuvem: GitHub e Easypanel (projeto `aladdin`)
 
 - **GitHub** `romulosutil/SquadOne`: todo push em `main` dispara o build no
   Easypanel (implantação automática desde 24/09/2026). O seu job "Graphify —
-  projetos" também rodava a cada push, chamado pelo pre-push do PC; sem PC,
-  roda só às 03:00.
+  projetos" também rodava a cada push, chamado pelo pre-push do PC antigo;
+  hoje roda só às 03:00.
 - **`squadone-app`**: `https://aladdin-squadone-app.jicnzg.easypanel.host`,
   perfil `SQUADONE_MODE=app`, atrás do Traefik e do porteiro de IP. O volume
   `/app/data` guarda só `squad.json` (os agentes e o treino deles) e
@@ -62,7 +66,7 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
   quebrou: diga que não é coberto. Do Easypanel, o monitor só olha o
   `squadone-app` (verificação `squadone-app` do `status.json`).
 
-### Dell (`dell-worker`, Ubuntu, Tailscale)
+### Dell (a Mel, `romulo-sutil-corr-a-latitude-7420`, Ubuntu, Tailscale)
 
 Tudo escuta só em `127.0.0.1`. Linger ligado; tampa fechada não suspende.
 A exceção é o Tailscale Serve, só para aparelhos da tailnet:
@@ -141,7 +145,7 @@ disso é saudação automática do WhatsApp Business) e a pasta vai para
 `_em-conversa`. Toda segunda às 08h, "06 · Funil" manda o funil por nicho;
 não muda a aba Buscas sozinho.
 
-Syncthing no Dell (sem o PC, nenhuma pasta tem com quem sincronizar):
+Syncthing no Dell (sem aparelho pareado desde 04/10/2026, nenhuma pasta tem com quem sincronizar):
 
 - `~/Pessoal-dev`: réplica de `dev/PESSOAL`, congelada em 25/09/2026.
   Contexto para você; não é fronteira Git. Desde 30/09/2026 sem as cópias de
@@ -209,7 +213,7 @@ Para responder sobre agenda sem abrir código:
    avisa.
 3. **Código:** push em `main` → GitHub → Easypanel implanta; o
    `atualizar-central` puxa a `main` para o clone `~/SquadOne` e seu job
-   refaz o grafo dos clones às 03:00 (sem o pre-push do PC, é o único
+   refaz o grafo dos clones às 03:00 (sem o pre-push do PC antigo, é o único
    disparo). Falhou: seu job
    "Graphify — projetos" em `cron/jobs.json`. Dois merges seguidos podem
    cancelar o primeiro build: se o app não mudou, peça ao Claude conferir as

@@ -38,7 +38,7 @@ continua sendo typecheck + build + exercitar a rota.
 - READ ONLY: Always inspect and read existing graphs, AST maps, and architecture diagrams directly from:
   `dev/graphify-out/` (or relative path to graphify-out/)
 - NEVER run graphify build, parse, or indexing commands locally on the Windows host.
-- Graph updates run on the Dell: the Hermes job "Graphify — projetos" refreshes every project nightly at 03:00 (the live clones in place, and each other GitHub repo as a shallow mirror in `~/Mel/Repos/<name>`). The PC reads those graphs by pulling them over SSH (`scp -r mel:Mel/Grafos/ .`: one `<project>/graphify-out/` folder per project, plus `global-graph.json`); it never rebuilds them. While the Dell is the control machine (since 28/09/2026), `graphify update .` after a code change is fine (AST only, no API cost).
+- Graph updates run on the Dell: the Hermes job "Graphify — projetos" refreshes every project nightly at 03:00 (the live clones in place, and each other GitHub repo as a shallow mirror in `~/Mel/Repos/<name>`). The PC reads those graphs by pulling them over SSH (`scp -r mel:Mel/Grafos/ .`: one `<project>/graphify-out/` folder per project, plus `global-graph.json`); it never rebuilds them. In a session running on the Dell (local or an SSH session from the PC), `graphify update .` after a code change is fine (AST only, no API cost).
 
 ## Arquitetura
 
@@ -396,8 +396,10 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Ao terminar tarefa: `git commit` + `git push`. O grafo é do Hermes no Dell (job "Graphify — projetos", às 03:00, sobre os clones vivos e os espelhos de todos os repositórios do GitHub; o PC puxa por SSH de `~/Mel/Grafos`); no Dell, `graphify update .` depois de mudar código; nunca no Windows. Depois do push, a Central do Dell se atualiza sozinha em até 10 min (`atualizar-central.timer`).
 
 ### Remote Infrastructure Directives
-- **Sem PC desde 28/09/2026.** O PC Windows queimou (NVMe; visto pela última vez em 25/09) e o que não tinha sincronizado foi perdido: não procure nem reconstrua. Até o PC novo chegar, você roda **no próprio Dell**: Git no clone `~/SquadOne` (atualizado do GitHub), nunca na réplica congelada `~/Pessoal-dev`; `docker` direto, sem `ssh dell-worker`. As regras de Windows abaixo voltam a valer no PC novo. Estado e checklist: `deploy/pc/README.md`.
-- Local Windows Docker service is disabled by design. All containers run exclusively on `dell-worker`.
+- **O PC novo (Jarvis, Windows, `paiduben` na tailnet) é a máquina de controle desde 04/10/2026**; o Dell é a Mel (`romulo-sutil-corr-a-latitude-7420`, sempre ligado). De 28/09 a 04/10 o próprio Dell controlou, porque o PC antigo queimou (NVMe): o que não tinha sincronizado foi perdido, não procure nem reconstrua. Estado, túneis e checklist: `deploy/pc/README.md`.
+- **No PC:** o apelido SSH é `mel` (`ssh mel`, só chave); o antigo `dell-worker` não existe no PC novo. Editor do n8n e code-server só pelo túnel (`deploy/pc/instalar-tuneis.ps1`). Git em clones do GitHub em `C:\Users\sutil\dev`, fora de pasta sincronizada.
+- **Numa sessão que roda no Dell** (local ou sessão SSH do app Claude do PC): `docker` direto; `~/SquadOne` é o checkout de produção da Central (não edite nem troque de branch: worktree em `~/.cache/mel-work/` e PR); nunca Git na réplica congelada `~/Pessoal-dev`. Instalar, systemd, Docker, n8n e rclone só numa sessão no Dell.
+- Local Windows Docker service is disabled by design. All containers run exclusively on the Dell.
 - Never search Windows paths for container binaries or Nginx executables.
-- Run container commands via `ssh dell-worker "docker ..."` or rely on `DOCKER_HOST="ssh://dell-worker"`.
-- Container mounts map to `~/workspace/` on Ubuntu (mirrored from `dev/` via Syncthing).
+- From the PC, run container commands via `ssh mel "docker ..."` or `DOCKER_HOST="ssh://mel"`.
+- Container mounts map to `~/workspace/` on the Dell. Nothing is mirrored from the PC anymore (Syncthing has no paired device since 04/10/2026): code reaches the Dell through GitHub.

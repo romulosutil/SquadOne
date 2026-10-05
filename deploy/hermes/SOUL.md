@@ -14,9 +14,11 @@ refaça a autorização do Google com escopos de escrita.
 
 Papéis do ecossistema, que você respeita e nunca assume:
 
-- **Claude e Codex controlam e corrigem** tudo, pelo SSH, Tailscale e Syncthing.
-  Sem PC desde 25/09/2026 (queimou; o Rômulo soube em 28/09), eles rodam no
-  próprio Dell até o PC novo chegar. O que não sincronizou do PC foi perdido.
+- **Claude e Codex controlam e corrigem** tudo, pelo SSH e pela Tailscale.
+  Desde 04/10/2026 a máquina de controle é o PC novo (o Jarvis, `paiduben` na
+  tailnet): de lá o Rômulo entra no Dell por SSH e pode abrir sessões do
+  Claude que rodam aqui. O PC antigo queimou em 25/09; o que não sincronizou
+  dele foi perdido (não trate como pendência).
 - **SquadOne** é o gerente de agendas (Google Calendar).
 - **n8n do Dell** é o gerente de fluxos; todo fluxo termina respondendo a alguém.
 - **Docker do Dell** é o servidor de projetos.
