@@ -10,16 +10,32 @@
 // Romulo e represento o Prumo"): o Site antes da venda e a frente Vender mais
 // do Prumo, e um numero desconhecido sem apresentacao parece golpe. O link vai
 // numa linha so dele, e a mensagem fecha com uma pergunta so.
-const VARIACOES = ['Olá! Me chamo Rômulo e represento o Prumo, que ajuda negócios locais a atrair mais clientes pela internet. Encontrei o perfil {ARTIGO} {NOME} no Google e montei um site de demonstração para mostrar como o de vocês poderia ficar:\n{URL}\n\n{DETALHE}O que acharam?', null, null];
+// 05/10/2026: duas mensagens. A primeira pede licenca e NAO leva link; o link
+// vai na SEGUNDA, depois do "pode mandar". Medido ate 05/10: o texto curto de
+// antes ("Oi! Sou o Romulo...") teve 8 respostas em 56 envios (14%); o de
+// 30/09 ("Me chamo Romulo e represento o Prumo, que ajuda negocios locais...",
+// link na primeira mensagem) teve 2 em 34 (6%) e 0 vendas. Numero desconhecido
+// + apresentacao de agencia + link na primeira mensagem e o desenho de golpe e
+// de spam; pedir licenca transforma a primeira resposta num "sim" pequeno, e o
+// observador separa esse "sim" (interesse) do resto. {URL} nao entra na primeira.
+const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', null, null];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
-const VARIACAO_EN = "Hi! My name is Rômulo and I'm with Prumo; we help local businesses attract more customers online. I came across {NOME} on Google and built a demo website to show how yours could look:\n{URL}\n\nWhat do you think?";
+const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put together a demo website for you, on my own initiative. Can I send you the link so you can take a look? No strings attached.";
 
-// 29/09/2026: follow-up de 3 dias sem resposta, no mesmo tom da variacao A.
-// Vai pelo Acompanhamento como aviso ao Romulo; quem envia e ele.
-// 30/09/2026: repete quem escreve; depois de 3 dias ninguem lembra do numero.
-const FOLLOWUP = 'Olá! Aqui é o Rômulo, do Prumo. Passando para saber se deu tempo de ver o site de demonstração {ARTIGO} {NOME}:\n{URL}\n\nSe quiserem, ajusto o que for preciso. O que acharam?';
-const FOLLOWUP_EN = "Hi! It's Rômulo from Prumo. Just checking in: did you get a chance to see the demo website I built for {NOME}?\n{URL}\n\nHappy to adjust anything. What do you think?";
+// A segunda mensagem: sai pelo aviso do Hermes e pela ficha do CRM quando a
+// resposta e de interesse. Diz o que acontece se gostarem e se nao gostarem.
+const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?';
+const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from your photos and Google reviews. If you like it, I can put it live under your own address; if not, I'll take it down, no problem. What do you think?";
+
+// 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
+// aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira
+// mensagem sem link e lembrado do pedido; quem ja recebeu o link (texto de
+// antes de 05/10, ver followupDe) e lembrado do link.
+const FOLLOWUP = 'Oi, tudo bem? Aqui é o Rômulo de novo. Montei uma demonstração de site {ARTIGO} {NOME} e queria te mostrar. Posso mandar o link?';
+const FOLLOWUP_EN = "Hi! It's Rômulo again. I put together a demo website for {NOME} and would love to show you. Can I send you the link?";
+const FOLLOWUP_COM_LINK = 'Oi, tudo bem? Aqui é o Rômulo de novo. Deu tempo de ver a demonstração de site {ARTIGO} {NOME}?\n{URL}\n\nSe quiserem, ajusto o que for preciso. O que acharam?';
+const FOLLOWUP_COM_LINK_EN = "Hi! It's Rômulo again. Did you get a chance to see the demo website I built for {NOME}?\n{URL}\n\nHappy to adjust anything. What do you think?";
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.
@@ -76,8 +92,9 @@ function detalheDoBriefing(b) {
   if (/\s(é|são|foi|foram|está|estão|destacam|elogiam|apontam|mencionam)\s/i.test(frase)) return '';
   frase = resumoDosElogios(frase);
   if (!frase) return '';
-  // 30/09/2026: vira a frase de quem pesquisou ("Vi que..."), na linha da pergunta final.
-  return 'Vi que os clientes elogiam ' + frase.charAt(0).toLowerCase() + frase.slice(1) + '. ';
+  // 05/10/2026: entra no meio da primeira mensagem ("...demonstração de site da X,
+  // destacando o que os clientes mais elogiam: ..."), antes do pedido de licença.
+  return ', destacando o que os clientes mais elogiam: ' + frase.charAt(0).toLowerCase() + frase.slice(1);
 }
 
 // 30/09/2026: o corte em 140 caracteres com "..." deixava a primeira mensagem
@@ -114,11 +131,28 @@ function numeroDoLead(l) {
   return guardado ? guardado[1] : telefoneE164(l.telefone);
 }
 
-// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
-function followupDe(l) {
+// A primeira mensagem guardada em wa_me ja levava o link? (texto de antes de 05/10/2026)
+function linkJaFoi(l) {
+  const url = String(l.site_url || '').trim();
+  let texto = '';
+  try { texto = decodeURIComponent(String(l.wa_me || '').split('?text=')[1] || ''); } catch (e) { texto = String(l.wa_me || ''); }
+  return Boolean(url) && texto.indexOf(url) >= 0;
+}
+
+function abrirNoWhatsApp(l, moldeBr, moldeEn) {
   const numero = numeroDoLead(l);
   const nome = String(l.nome || '').trim();
-  const texto = preencher(numero && ehEua(numero) ? FOLLOWUP_EN : FOLLOWUP, nome, String(l.site_url || '').trim(), '');
+  const texto = preencher(numero && ehEua(numero) ? moldeEn : moldeBr, nome, String(l.site_url || '').trim(), '');
   return { numero, texto, link: numero ? 'https://wa.me/' + numero + '?text=' + encodeURIComponent(texto) : '' };
+}
+
+// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
+function followupDe(l) {
+  return linkJaFoi(l) ? abrirNoWhatsApp(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN) : abrirNoWhatsApp(l, FOLLOWUP, FOLLOWUP_EN);
+}
+
+// Segunda mensagem (o link), para quem respondeu com interesse.
+function segundaDe(l) {
+  return abrirNoWhatsApp(l, SEGUNDA, SEGUNDA_EN);
 }
 

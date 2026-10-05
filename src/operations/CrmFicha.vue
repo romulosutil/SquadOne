@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaLeitura } from './crm-formato'
+import { ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaLeitura } from './crm-formato'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
-// (nota, próximo passo, proposta) e todas vão para a aba CRM da planilha pelo
+// (nota, próximo passo, proposta, sem contato fácil) e todas vão para a aba CRM da planilha pelo
 // n8n (POST /api/operations/crm/registro). Recusou/Fechou/Desfazer ficam na
 // página do lead do n8n (fluxo 07); a Etapa do PRUMO muda na planilha.
 const props = defineProps<{ lead: CrmLead; visao: CrmVisao }>()
@@ -78,6 +78,8 @@ const salvarProximo = async () => {
 const limparProximo = () => registrar('proximo_passo', '', '', 'Próximo passo limpo.')
 const marcarProposta = () => registrar('proposta', '', propostaData.value || hoje, 'Proposta marcada.')
 const desfazerProposta = () => registrar('proposta_desfeita', '', '', 'Proposta desfeita.')
+const marcarSemContato = () => registrar('sem_contato', '', '', 'Lead marcado como perdido.')
+const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perda desfeita.')
 </script>
 
 <template>
@@ -107,15 +109,30 @@ const desfazerProposta = () => registrar('proposta_desfeita', '', '', 'Proposta 
       <small>A Central não corrige nada: vale a planilha. Confira a planilha ou a pasta.</small>
     </div>
 
+    <section v-if="lead.resposta" class="crm-ficha__bloco" aria-labelledby="crm-ficha-resposta">
+      <h3 id="crm-ficha-resposta">O que respondeu</h3>
+      <p class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
+        <strong>{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</strong>
+        <template v-if="lead.resposta.em"> · {{ dataHora(lead.resposta.em) }}</template>
+      </p>
+      <blockquote v-if="lead.resposta.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
+      <p v-else class="crm-muted">Só mensagem automática (saudação, horário, menu): ninguém respondeu ainda.</p>
+    </section>
+
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-acoes">
       <h3 id="crm-ficha-acoes">Ações</h3>
       <div class="crm-ficha__links">
-        <a v-if="lead.links.enviar" class="is-principal" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar o site pelo WhatsApp (marca como enviado) ↗</a>
+        <a v-if="lead.links.enviar" class="is-principal" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar a primeira mensagem pelo WhatsApp (marca como enviado) ↗</a>
         <a v-if="lead.links.convite" class="is-principal" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite (marca como enviado) ↗</a>
+        <a v-if="lead.links.segunda" :class="{ 'is-principal': lead.resposta?.tipo === 'interesse' }" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico (link do formulário)' : 'Mandar o link do site (segunda mensagem)' }} ↗</a>
         <a v-if="lead.links.whatsapp" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp ↗</a>
         <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Ver o demo' : 'Ver o site da empresa' }} ↗</a>
         <a v-if="lead.links.acoes" :href="lead.links.acoes" target="_blank" rel="noopener">Recusou · Fechou · Desfazer (página do lead) ↗</a>
         <a v-if="lead.links.planilha" :href="lead.links.planilha" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha' }} ↗</a>
+      </div>
+      <div class="crm-form__botoes">
+        <button v-if="aberto" class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
+        <button v-else-if="lead.motivoPerda === 'sem-contato'" class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer perda por falta de contato' }}</button>
       </div>
     </section>
 

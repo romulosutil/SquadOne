@@ -414,7 +414,15 @@ def convite(pid):
     spec = importlib.util.spec_from_file_location("fecha_ciclos", AQUI / "fecha-ciclos.py")
     fc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fc)
-    decidir = f"""const id = String($('Clique (convite)').first().json.query?.id ?? '');
+    decidir = f"""const q = $('Clique (convite)').first().json.query ?? {{}};
+const id = String(q.id ?? '');
+// 05/10/2026: dois passos. "convite" (padrão, o botão Enviar convite): pede para
+// falar com o responsável, sem link. "diagnostico" (botão da ficha do CRM e do
+// aviso do Hermes, depois do "sim"): o formulário. Medido até 05/10: o convite de
+// cinco parágrafos com link encurtado na primeira mensagem teve 0 respostas de
+// gente em 45 envios; o roteiro (prumo/03-captacao/roteiro-ate-o-convite.md)
+// sempre disse "uma pergunta por mensagem" e "apresentar-se antes de pedir".
+const passo = String(q.passo ?? '') === 'diagnostico' ? 'diagnostico' : 'convite';
 const l = $input.first()?.json ?? {{}};
 const achou = id !== '' && String(l['ID'] ?? '') === id;
 const empresa = String(l['Empresa'] ?? '');
@@ -422,8 +430,8 @@ const empresa = String(l['Empresa'] ?? '');
 const form = '{FORM}?usp=pp_url&entry.{ENTRY_EMPRESA}=' + encodeURIComponent(id + '::' + empresa) + '&entry.{ENTRY_PAPEL}=' + encodeURIComponent('Dono');
 // Link curto no TinyURL (API sem conta), com apelido legível "prumo-<empresa>-<4>".
 // Apelido já usado (segundo clique) -> tenta sem apelido; serviço fora -> link longo.
-const slug = empresa.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase()
-  .replace(/\\b(ltda|me|epp|eireli|s\\/?a)\\b/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 18).replace(/-+$/, '');
+const slug = empresa.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/\b(ltda|me|epp|eireli|s\/?a)\b/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 18).replace(/-+$/, '');
 let h = 0;
 for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
 const apelido = ['prumo', slug, h.toString(36).slice(-4)].filter(Boolean).join('-');
@@ -433,41 +441,40 @@ const encurtar = async (qs) => {{
     return r.startsWith('https://tinyurl.com/') ? r : '';
   }} catch (e) {{ return ''; }}
 }};
-const link = achou ? (await encurtar({{ url: form, alias: apelido }}) || await encurtar({{ url: form }}) || form) : form;
-// 30/09/2026: o botão é o primeiro contato (é o que se clica no Novo do CRM), e
-// "Como combinamos" não fazia sentido para quem nunca falou com o Rômulo.
-// Ordem: quem escreve e por quem, o que o Prumo faz no segmento dele, de onde
-// veio o contato; só então o diagnóstico e o link. Áreas por segmento vêm do
-// roteiro (prumo/03-captacao/roteiro-ate-o-convite.md, passo 2).
+// Só o passo do diagnóstico leva link: o convite não gasta o TinyURL.
+const link = achou && passo === 'diagnostico' ? (await encurtar({{ url: form, alias: apelido }}) || await encurtar({{ url: form }}) || form) : form;
+// Áreas por segmento vêm do roteiro (passo 2).
 const seg = String(l['Segmento'] ?? '').trim().toLowerCase();
 const distribuidora = /^distribuidoras? /.test(seg);
 const publico = distribuidora ? seg.replace(/^distribuidoras? /, 'distribuidoras ') : 'empresas como a de vocês';
-const regras = !distribuidora ? 'as regras do dia a dia'
-  : /autope/.test(seg) ? 'as regras de orçamento, preço e compras'
-  : /constru/.test(seg) ? 'as regras de preço, desconto e crédito'
-  : /aliment|bebida/.test(seg) ? 'as regras de preço, prazo e cobrança'
-  : 'as regras de preço, crédito e entregas';
+const areas = !distribuidora ? 'do dia a dia'
+  : /autope/.test(seg) ? 'de orçamento, preço e compras'
+  : /constru/.test(seg) ? 'de preço, desconto e crédito'
+  : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança'
+  : 'de preço, crédito e entregas';
 let nome = empresa.trim();
-for (let i = 0; i < 2; i++) nome = nome.replace(/[\\s,.-]+(ltda|me|epp|eireli|s\\.?\\/?a\\.?)\\.?$/i, '').trim();
+for (let i = 0; i < 2; i++) nome = nome.replace(/[\s,.-]+(ltda|me|epp|eireli|s\.?\/?a\.?)\.?$/i, '').trim();
 // Nome todo em maiúsculas ("CACAU PEÇAS PARA MOTORES") denuncia mensagem automática.
-if (nome === nome.toUpperCase() && /\\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
-  .replace(/(^|\\s)(\\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
-const mensagem = 'Olá! Me chamo Rômulo e represento o Prumo, consultoria que ajuda donos de ' + publico
-  + ' a colocar no papel ' + regras + ', para a equipe seguir mesmo quando o dono não está.'
-  + '\\n\\nEncontrei ' + (nome ? 'a ' + nome : 'vocês') + ' pelo Google e gostaria de oferecer um diagnóstico gratuito'
-  + ' da rotina de vocês: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\\n' + link
-  + '\\n\\nEm até 3 dias úteis eu devolvo o resultado, mostrando onde dá para ganhar tempo sem perder o controle.'
-  + '\\n\\nSe não for você quem cuida disso, pode encaminhar ao responsável? Obrigado!';
-let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
+if (nome === nome.toUpperCase() && /\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
+  .replace(/(^|\s)(\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
+// Cumprimento da hora de São Paulo (o clique é a hora do envio).
+const hora = Number(new Date().toLocaleString('en-US', {{ timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }}));
+const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+const mensagem = passo === 'convite'
+  ? ola + '! Aqui é o Rômulo, do Prumo. Ajudo donos de ' + publico + ' a passar para a equipe as decisões '
+    + areas + ' que hoje dependem só deles.\n\nConsigo falar com o responsável pela ' + (nome || 'empresa') + ' por aqui?'
+  : 'Obrigado! Eu faço um diagnóstico gratuito da rotina: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\n'
+    + link + '\n\nEm até 3 dias úteis eu devolvo o resultado, mostrando o que dá para passar para a equipe sem perder o controle.';
+let digitos = String(l['WhatsApp'] ?? '').replace(/\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
 if (!achou) destino = 'https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={pid}';
-return [{{ json: {{ chave: id, destino, marcar: achou && String(l['Etapa'] ?? '').trim() === 'Revisar', agora: new Date().toISOString() }} }}];"""
+return [{{ json: {{ chave: id, destino, marcar: achou && passo === 'convite' && String(l['Etapa'] ?? '').trim() === 'Revisar', agora: new Date().toISOString() }} }}];"""
     fc.webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
                         PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
                         {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
-                         "Próxima ação": "Aguarde a resposta (do dono ou de quem atende o número). "
-                                         "Sem resposta em 3 dias, um lembrete só: ofereça fazer por telefone."})
+                         "Próxima ação": "Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, "
+                                         "mande o diagnóstico pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só."})
 
 
 if __name__ == "__main__":

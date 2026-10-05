@@ -1,4 +1,4 @@
-import type { CrmEtapa, CrmLead, CrmProduto } from './types'
+import type { CrmEtapa, CrmLead, CrmProduto, CrmTipoDeResposta } from './types'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
@@ -20,6 +20,14 @@ export const DICA_DA_ETAPA: Record<CrmEtapa, string> = {
   proposta: 'Proposta enviada (marcada à mão)',
   ganho: 'Fechou',
   perdido: 'Recusou, expirou, descartado ou sem interesse',
+}
+
+// O que o lead respondeu, classificado pelo n8n a partir do texto (05/10/2026).
+export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
+  negativa: 'Negativa',
+  interesse: 'Interesse',
+  neutra: 'Sem sim nem não',
+  bot: 'Só robô',
 }
 
 export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site antes da venda', prumo: 'PRUMO' }

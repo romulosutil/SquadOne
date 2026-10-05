@@ -101,7 +101,7 @@ const em = Number.isFinite(recebido.getTime()) ? recebido : new Date();
 const SAUDACAO_MS = 5 * 60 * 1000;
 const quando = em.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const txt = (v) => String(v ?? '').trim();
-const CONVITE = 'Aguarde o dono responder (16 perguntas, uns 10 minutos). Sem resposta em 3 dias, ofereça fazer por telefone.';
+const CONVITE = 'Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, mande o diagnóstico pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só.';
 const saida = [];
 for (const l of $('Ler Prospects').all().map(i => i.json)) {
   if (!alvo || !direcao || seguinte || chave(l['WhatsApp']) !== alvo) continue;
@@ -115,6 +115,10 @@ for (const l of $('Ler Prospects').all().map(i => i.json)) {
     saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
       'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
   } else if (direcao === 'entrada' && etapa === 'Convite enviado') {
+    // 05/10/2026: a regra dos 5 min do Site vale aqui também. Até então toda saudação automática
+    // virava "Respondeu no WhatsApp" (05/10: pares de "respostas" no mesmo minuto do lote de convites).
+    const desde = Date.parse(txt(l['Convite enviado em']));
+    if (Number.isFinite(desde) && em.getTime() - desde < SAUDACAO_MS) continue;
     // Reescreve a data do convite com ela mesma: o update grava todas as colunas mapeadas.
     saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': etapa, 'Convite enviado em': String(l['Convite enviado em'] ?? ''),
       'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
@@ -167,6 +171,172 @@ return saida.length ? saida : [{ json: { planilha: 'nenhuma' } }];"""
 # Resposta ao observador (expressão do nó "Responder ao observador").
 RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site'].includes(i.json.planilha))"
                ".map(i => ({ planilha: i.json.planilha, nome: i.json.nome, acao: i.json.acao, antes: i.json.antes })) }")
+
+
+# ---------------------------------------------------------------- texto das respostas (05/10/2026)
+#
+# POST /webhook/whatsapp-resposta {"chave", "mensagens": [{"em", "texto"}]}: o observador junta o que
+# um lead escreveu (remendo squadone:respostas da bridge) e manda aqui. O Gemini classifica:
+#   bot       só mensagem automática (saudação, ausência, menu, catálogo): não é resposta. Apaga o
+#             respondeu_em que a regra dos 5 min tenha posto nesta conversa e o lead volta a Contatado,
+#             com follow-up e expiração de sempre. Nunca apaga uma classificação de gente.
+#   negativa  gente recusou: Site -> "recusado" (como o botão Recusou, com status_anterior e o pacote
+#             que leva a pasta para _recusados/); PRUMO -> Etapa "Sem interesse". Sai do funil.
+#   interesse gente quer ver: respondeu_em; o aviso traz o link da segunda mensagem (Site: o site;
+#             PRUMO: o diagnóstico).
+#   neutra    gente respondeu sem sim nem não: respondeu_em; continue a conversa.
+# Grava o tipo e o trecho na planilha (Site: resposta_tipo, resposta_trecho, resposta_em; PRUMO:
+# "Tipo da resposta", "Resposta", "Resposta em") e responde ao observador com o aviso de cada lead
+# (gente, não bot), que vai ao Rômulo pelo Hermes. O texto inteiro não é guardado: só o trecho.
+
+LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
+GEMINI_MODELO = "models/gemini-3.6-flash"  # o mesmo do Caçador
+TIPOS_HUMANOS = ("negativa", "interesse", "neutra")
+COLUNAS_RESPOSTA_SITE = ["resposta_tipo", "resposta_trecho", "resposta_em"]
+COLUNAS_RESPOSTA_PRUMO = ["Tipo da resposta", "Resposta", "Resposta em"]
+
+MONTAR_RESPOSTA_JS = CHAVE_JS + """
+const ev = $('Resposta no WhatsApp').first().json.body ?? {};
+const alvo = chave(ev.chave);
+const txt = (v) => String(v ?? '').trim();
+const mensagens = (Array.isArray(ev.mensagens) ? ev.mensagens : [])
+  .map(m => ({ em: txt(m?.em), texto: txt(m?.texto).slice(0, 1000) })).filter(m => m.texto).slice(0, 20);
+const achados = [];
+for (const l of $('Ler Prospects').all().map(i => i.json)) {
+  if (alvo && mensagens.length && chave(l['WhatsApp']) === alvo && txt(l['Etapa']) !== 'Concluído') {
+    achados.push({ planilha: 'prumo', linha: l, enviado: txt(l['Convite enviado em']) });
+  }
+}
+for (const l of $('Ler Leads do site').all().map(i => i.json)) {
+  if (alvo && mensagens.length && chave(numeroDoSite(l)) === alvo
+      && ['novo', 'pronto', 'enviado', 'expirado', 'recusado'].includes(txt(l.status))) {
+    achados.push({ planilha: 'site', linha: l, enviado: txt(l.enviado_em) });
+  }
+}
+const O_QUE_FOI = {
+  site: 'Uma mensagem oferecendo um site de demonstração que ele montou de graça para o negócio, perguntando se pode mandar o link.',
+  prumo: 'Um convite de uma consultoria (Prumo) que ajuda donos de empresa a passar decisões do dia a dia para a equipe, perguntando se consegue falar com o responsável.',
+};
+const primeiro = achados[0];
+const desde = Date.parse(primeiro?.enviado ?? '');
+const depois = (em) => {
+  const s = Math.round((Date.parse(em) - desde) / 1000);
+  if (!Number.isFinite(s)) return '?';
+  return s < 120 ? s + ' s' : s < 7200 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h';
+};
+const prompt = !primeiro ? '' : [
+  'O Rômulo mandou, pelo WhatsApp, uma mensagem de prospecção a um negócio que não o conhece.',
+  'O que ele mandou: ' + O_QUE_FOI[primeiro.planilha],
+  '',
+  'Mensagens que chegaram do número do negócio, na ordem (tempo desde o envio entre colchetes):',
+  ...mensagens.map(m => '- [' + depois(m.em) + '] ' + JSON.stringify(m.texto)),
+  '',
+  'Classifique a conversa em um tipo:',
+  '- "bot": só mensagens automáticas (saudação ou ausência do WhatsApp Business, horário de atendimento, menu "digite 1",',
+  '  "recebemos sua mensagem, em breve retornaremos", link de catálogo, cardápio ou agendamento), sem nenhuma frase escrita',
+  '  por uma pessoa em resposta ao que o Rômulo disse. Mensagem que chega segundos depois do envio quase sempre é automática.',
+  '- "negativa": uma pessoa recusou: "não tenho interesse", "já temos site", "não precisamos", "não, obrigado",',
+  '  pediu para não mandar mais, reclamou de spam, disse que é número errado, ou foi hostil.',
+  '- "interesse": uma pessoa quer ver ou saber mais: "pode mandar", "manda sim", "quanto custa?", "como funciona?",',
+  '  "sou eu, pode falar", "gostei", ou aceitou.',
+  '- "neutra": uma pessoa respondeu sem sim nem não ("quem é?", "do que se trata?", "vou passar para o dono", "ok"),',
+  '  ou não dá para saber.',
+  'Se houver mensagem automática e mensagem de pessoa, decida pela de pessoa; se a pessoa mudou de ideia, pela última.',
+  '',
+  'Responda só com JSON, sem texto em volta:',
+  '{"tipo": "bot|negativa|interesse|neutra", "trecho": "a frase da pessoa que decidiu, literal, até 160 caracteres (vazio se bot)", "motivo": "até 12 palavras"}',
+].join('\\n');
+return [{ json: { tem: achados.length > 0, achados, mensagens, prompt } }];"""
+
+DECIDIR_RESPOSTA_JS = CHAVE_JS + """
+const m = $('Montar pergunta').first().json;
+const g = $('Gemini: classificar resposta').first().json ?? {};
+const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
+let r = {};
+try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)); } catch (e) { r = {}; }
+const HUMANOS = ['negativa', 'interesse', 'neutra'];
+// Resposta ilegível do modelo: "neutra" (gente, sem decidir nada sozinho) em vez de tirar alguém do funil.
+const tipo = ['bot', ...HUMANOS].includes(r.tipo) ? r.tipo : 'neutra';
+const txt = (v) => String(v ?? '').trim();
+const ultima = m.mensagens[m.mensagens.length - 1] ?? { em: new Date().toISOString(), texto: '' };
+const trecho = tipo === 'bot' ? '' : (txt(r.trecho) || ultima.texto).replace(/\\s+/g, ' ').slice(0, 200);
+const agora = new Date().toISOString();
+const primeiraEm = m.mensagens[0]?.em || ultima.em;
+const quando = new Date(ultima.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const ROTULO = { site: 'Site antes da venda', prumo: 'PRUMO' };
+const aspas = (t) => '\\u201c' + t + '\\u201d';
+const saida = [];
+for (const a of m.achados) {
+  const l = a.linha;
+  const tipoAntes = txt(a.planilha === 'site' ? l.resposta_tipo : l['Tipo da resposta']);
+  // Robô depois de gente (lembrete respondido pela saudação automática) não apaga o que a pessoa disse.
+  if (tipo === 'bot' && HUMANOS.includes(tipoAntes)) continue;
+  const nome = txt(a.planilha === 'site' ? l.nome : l['Empresa']) || 'lead';
+  const cab = '\\ud83d\\udcac ' + nome + ' (' + ROTULO[a.planilha] + ') respondeu: ' + aspas(trecho) + '\\n\\u2192 ';
+  if (a.planilha === 'site') {
+    const status = txt(l.status);
+    const respondeuAntes = txt(l.respondeu_em);
+    const item = { planilha: 'site', nome, tipo, place_id: String(l.place_id), status, status_anterior: txt(l.status_anterior),
+      recusado_em: txt(l.recusado_em), respondeu_em: respondeuAntes, resposta_tipo: tipo, resposta_trecho: trecho, resposta_em: ultima.em };
+    if (tipo === 'bot') {
+      // A regra dos 5 min pode ter marcado a saudação como resposta: só o respondeu_em desta conversa sai.
+      const t = Date.parse(respondeuAntes);
+      if (Number.isFinite(t) && t >= Date.parse(primeiraEm) - 10 * 60 * 1000) item.respondeu_em = '';
+    } else {
+      item.respondeu_em = respondeuAntes || ultima.em;
+      if (['novo', 'pronto', 'expirado'].includes(status)) item.status = 'enviado';
+    }
+    if (tipo === 'negativa' && status !== 'recusado') {
+      // Igual ao botão Recusou da página do lead: o Desfazer de lá devolve status_anterior.
+      Object.assign(item, { status: 'recusado', status_anterior: status === 'expirado' ? 'enviado' : status, recusado_em: agora,
+        pacote: { place_id: String(l.place_id), acao: 'recusou', nome, em: agora, status: 'recusado' } });
+      item.aviso = cab + 'Negativa: saiu do funil (Recusou). Se foi engano, desfaça na página do lead: ' + (txt(l.acoes_link) || 'planilha');
+    } else if (tipo === 'interesse') {
+      const s = segundaDe(l);
+      item.aviso = cab + 'Interesse! Mande o link do site' + (s.link ? ': ' + s.link : ' (sem WhatsApp na linha).');
+    } else if (tipo === 'neutra') {
+      const n = numeroDoLead(l);
+      item.aviso = cab + 'Gente, sem sim nem não: continue a conversa' + (n ? ': https://wa.me/' + n : '.');
+    }
+    if (status === 'recusado' && tipo !== 'negativa' && item.aviso) item.aviso += '\\n(Estava como Recusou; se mudou de ideia, desfaça na página do lead.)';
+    saida.push({ json: item });
+  } else {
+    const etapa = txt(l['Etapa']);
+    const item = { planilha: 'prumo', nome, tipo, ID: String(l['ID']), 'Etapa': etapa,
+      'Convite enviado em': txt(l['Convite enviado em']), 'Próxima ação': txt(l['Próxima ação']),
+      'Tipo da resposta': tipo, 'Resposta': trecho, 'Resposta em': ultima.em };
+    const diagnostico = '""" + LINKS + """/convite?id=' + encodeURIComponent(String(l['ID'])) + '&passo=diagnostico';
+    if (etapa === 'Revisar') Object.assign(item, { 'Etapa': 'Convite enviado', 'Convite enviado em': item['Convite enviado em'] || primeiraEm });
+    if (tipo === 'bot') {
+      // O CRM lê "Respondeu no WhatsApp em ..." da Próxima ação: só a saudação, isso sai.
+      if (/^Respondeu/.test(item['Próxima ação']) && !HUMANOS.includes(tipoAntes)) {
+        item['Próxima ação'] = 'Só resposta automática em ' + quando + '. Sem resposta de gente em 3 dias, um lembrete só.';
+      }
+    } else if (tipo === 'negativa') {
+      Object.assign(item, { 'Etapa': 'Sem interesse', 'Próxima ação': 'Recusou no WhatsApp em ' + quando + ': ' + aspas(trecho) });
+      item.aviso = cab + 'Negativa: saiu do funil (Sem interesse). Se foi engano, volte a Etapa na planilha.';
+    } else if (tipo === 'interesse') {
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. Mande o diagnóstico (botão na ficha do CRM).';
+      item.aviso = cab + 'Interesse! Mande o diagnóstico: ' + diagnostico;
+    } else {
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Continue a conversa.';
+      item.aviso = cab + 'Gente, sem sim nem não: continue a conversa.';
+    }
+    saida.push({ json: item });
+  }
+}
+return saida.length ? saida : [{ json: { planilha: 'nenhuma' } }];"""
+
+RESPOSTA_CLASSIFICADA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site'].includes(i.json.planilha))"
+                            ".map(i => ({ planilha: i.json.planilha, nome: i.json.nome, tipo: i.json.tipo,"
+                            " ...(i.json.aviso ? { aviso: i.json.aviso } : {}) })) }")
+
+PACOTE_JS = """// Pacote para o site-pastas do Dell (o n8n não move diretórios), como o botão Recusou.
+return $input.all().filter(i => i.json.pacote).map(i => {
+  const nome = Date.now() + '-' + String(i.json.pacote.place_id).replace(/[^a-zA-Z0-9_-]+/g, '_') + '.json';
+  return { json: { nome }, binary: { data: { data: Buffer.from(JSON.stringify(i.json.pacote), 'utf8').toString('base64'),
+    mimeType: 'application/json', fileName: nome } } };
+});"""
 
 
 def doc(planilha, gid, aba):
@@ -295,38 +465,132 @@ def conversa(auth):
     publicar(montar_conversa(auth))
 
 
+def codigo_site_mensagem():
+    """Textos e telefone do Site antes da venda (segundaDe, numeroDoLead): o mesmo arquivo do Balcão."""
+    return (Path(__file__).resolve().parent / "site-mensagem.js").read_text(encoding="utf-8")
+
+
+def credencial_gemini():
+    from n8n import api
+    nome = "Google Gemini (Dell)"  # criada pelo site-antes-da-venda.py (Caçador)
+    achada = next((c for c in api("GET", "/credentials?limit=100").get("data", []) if c["name"] == nome), None)
+    if not achada:
+        raise SystemExit(f"credencial {nome!r} não existe no n8n: rode antes o site-antes-da-venda.py")
+    return {"googlePalmApi": {"id": achada["id"], "name": nome}}
+
+
+def montar_resposta(auth, gemini):
+    marca_site = {c: "={{ $json." + c + " }}" for c in
+                  ["place_id", "status", "status_anterior", "recusado_em", "respondeu_em", *COLUNAS_RESPOSTA_SITE]}
+    marca_prumo = {c: "={{ $json['" + c + "'] }}" for c in
+                   ["ID", "Etapa", "Convite enviado em", "Próxima ação", *COLUNAS_RESPOSTA_PRUMO]}
+    se_tem = {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
+                             "combinator": "and", "conditions": [{"id": "tem", "leftValue": "={{ $json.tem }}", "rightValue": "",
+                                                                  "operator": {"type": "boolean", "operation": "true", "singleValue": True}}]},
+              "options": {}}
+    regra = lambda valor, saida: {
+        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2}, "combinator": "and",
+                       "conditions": [{"leftValue": "={{ $json.planilha }}", "rightValue": valor, "operator": {"type": "string", "operation": "equals"}}]},
+        "renameOutput": True, "outputKey": saida}
+    nos = [
+        gatilho("evento", "Resposta no WhatsApp", "POST", "whatsapp-resposta", "7c1d2e3f-4a5b-4c6d-8e7f-a1b2c3d4e503", auth),
+        ler("prumo", "Ler Prospects", PRUMO, PROSPECTS_GID, "Prospects", 220, 0),
+        ler("site", "Ler Leads do site", SITE, LEADS_GID, "Leads", 440, 0),
+        {"id": "montar", "name": "Montar pergunta", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 0],
+         "parameters": {"mode": "runOnceForAllItems", "jsCode": MONTAR_RESPOSTA_JS}},
+        {"id": "tem", "name": "É de um lead?", "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [880, 0],
+         "parameters": se_tem},
+        responder("nada", "Responder: não é lead", "={{ { ok: true, marcados: [] } }}", 1100, 200),
+        {"id": "gemini", "name": "Gemini: classificar resposta", "type": "@n8n/n8n-nodes-langchain.googleGemini", "typeVersion": 1.2,
+         "position": [1100, -100], "credentials": gemini, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
+         "parameters": {"resource": "text", "operation": "message",
+                        "modelId": {"__rl": True, "mode": "list", "value": GEMINI_MODELO, "cachedResultName": GEMINI_MODELO},
+                        "messages": {"values": [{"role": "user", "content": "={{ $json.prompt }}"}]},
+                        "simplify": True, "jsonOutput": False,
+                        "options": {"systemMessage": "Você classifica respostas de WhatsApp a mensagens de prospecção. "
+                                                     "Responde só com o JSON pedido.",
+                                    "temperature": 0, "maxOutputTokens": 1024}}},
+        {"id": "decidir", "name": "Decidir pela resposta", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1320, -100],
+         "parameters": {"mode": "runOnceForAllItems", "jsCode": codigo_site_mensagem() + "\n" + DECIDIR_RESPOSTA_JS}},
+        # Responde depois de classificar e antes de gravar: Gemini fora do ar volta como erro e o
+        # observador tenta de novo; gravação que falha vira aviso de falha (Error Workflow).
+        responder("ok", "Responder ao observador", "={{ " + RESPOSTA_CLASSIFICADA_JS + " }}", 1540, -100),
+        {"id": "qual", "name": "Qual planilha?", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1760, -100],
+         "parameters": {"rules": {"values": [regra("prumo", "PRUMO"), regra("site", "Site")]}, "options": {}}},
+        {"id": "marcar-prumo", "name": "Marcar no PRUMO", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
+         "position": [1980, -200], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
+         "parameters": {"resource": "sheet", "operation": "update", **doc(PRUMO, PROSPECTS_GID, "Prospects"),
+                        "columns": {"mappingMode": "defineBelow", "matchingColumns": ["ID"], "value": marca_prumo,
+                                    "schema": schema(list(marca_prumo), "ID")},
+                        "options": {"cellFormat": "RAW"}}},
+        {"id": "marcar-site", "name": "Marcar no Site antes da venda", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
+         "position": [1980, 0], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
+         "parameters": {"resource": "sheet", "operation": "update", **doc(SITE, LEADS_GID, "Leads"),
+                        "columns": {"mappingMode": "defineBelow", "matchingColumns": ["place_id"], "value": marca_site,
+                                    "schema": schema(list(marca_site), "place_id")},
+                        "options": {"cellFormat": "RAW"}}},
+        {"id": "pacote", "name": "Pacote da pasta (recusou)", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1980, 200],
+         "parameters": {"mode": "runOnceForAllItems", "jsCode": PACOTE_JS}},
+        {"id": "pasta", "name": "Pedir a mudança de pasta", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [2200, 200],
+         "parameters": {"operation": "write", "dataPropertyName": "data",
+                        "fileName": "={{ '/home/node/.n8n-files/estado/site-acoes/' + $json.nome }}"}},
+    ]
+    con = {"Resposta no WhatsApp": {"main": [[{"node": "Ler Prospects", "type": "main", "index": 0}]]},
+           "Ler Prospects": {"main": [[{"node": "Ler Leads do site", "type": "main", "index": 0}]]},
+           "Ler Leads do site": {"main": [[{"node": "Montar pergunta", "type": "main", "index": 0}]]},
+           "Montar pergunta": {"main": [[{"node": "É de um lead?", "type": "main", "index": 0}]]},
+           "É de um lead?": {"main": [[{"node": "Gemini: classificar resposta", "type": "main", "index": 0}],
+                                      [{"node": "Responder: não é lead", "type": "main", "index": 0}]]},
+           "Gemini: classificar resposta": {"main": [[{"node": "Decidir pela resposta", "type": "main", "index": 0}]]},
+           "Decidir pela resposta": {"main": [[{"node": "Responder ao observador", "type": "main", "index": 0}]]},
+           "Responder ao observador": {"main": [[{"node": "Qual planilha?", "type": "main", "index": 0}]]},
+           "Qual planilha?": {"main": [[{"node": "Marcar no PRUMO", "type": "main", "index": 0}],
+                                       [{"node": "Marcar no Site antes da venda", "type": "main", "index": 0},
+                                        {"node": "Pacote da pasta (recusou)", "type": "main", "index": 0}]]},
+           "Pacote da pasta (recusou)": {"main": [[{"node": "Pedir a mudança de pasta", "type": "main", "index": 0}]]}}
+    return {"name": "WhatsApp — resposta de lead (classifica)", "nodes": nos, "connections": con}
+
+
+def resposta(auth):
+    publicar(montar_resposta(auth, credencial_gemini()))
+
+
 def colunas():
-    """Acrescenta visto_em no fim do cabeçalho da aba Leads, se faltar (os fluxos escrevem pelo nome)."""
+    """Acrescenta no fim do cabeçalho as colunas que faltam (os fluxos escrevem pelo nome):
+    visto_em e as da resposta na aba Leads; as da resposta na aba Prospects."""
     from sheets_proxy import SheetsProxy
-    with SheetsProxy([SITE]) as s:
-        meta = s.get(f"/v4/spreadsheets/{SITE}?fields=sheets.properties")
-        props = next(x["properties"] for x in meta["sheets"] if str(x["properties"]["sheetId"]) == LEADS_GID)
-        cab = (s.get(f"/v4/spreadsheets/{SITE}/values/" + quote("Leads!1:1")).get("values") or [[]])[0]
-        faltam = [c for c in COLUNAS_NOVAS if c not in cab]
-        if not faltam:
-            print("Leads: coluna já existe:", ", ".join(COLUNAS_NOVAS))
-            return
-        grade = props["gridProperties"]["columnCount"]
-        if len(cab) + len(faltam) > grade:
-            s.post(f"/v4/spreadsheets/{SITE}:batchUpdate", {"requests": [{"appendDimension": {
-                "sheetId": int(LEADS_GID), "dimension": "COLUMNS", "length": len(cab) + len(faltam) - grade}}]})
-        letra = lambda n: (letra(n // 26 - 1) if n >= 26 else "") + chr(ord("A") + n % 26)
-        faixa = f"Leads!{letra(len(cab))}1:{letra(len(cab) + len(faltam) - 1)}1"
-        s.post(f"/v4/spreadsheets/{SITE}/values:batchUpdate",
-               {"valueInputOption": "RAW", "data": [{"range": faixa, "values": [faltam]}]})
-        print(f"Leads: coluna nova em {faixa}:", ", ".join(faltam))
+    with SheetsProxy([SITE, PRUMO]) as s:
+        for planilha, gid, aba, novas in ((SITE, LEADS_GID, "Leads", COLUNAS_NOVAS + COLUNAS_RESPOSTA_SITE),
+                                          (PRUMO, PROSPECTS_GID, "Prospects", COLUNAS_RESPOSTA_PRUMO)):
+            meta = s.get(f"/v4/spreadsheets/{planilha}?fields=sheets.properties")
+            props = next(x["properties"] for x in meta["sheets"] if str(x["properties"]["sheetId"]) == gid)
+            cab = (s.get(f"/v4/spreadsheets/{planilha}/values/" + quote(f"{aba}!1:1")).get("values") or [[]])[0]
+            faltam = [c for c in novas if c not in cab]
+            if not faltam:
+                print(f"{aba}: colunas já existem:", ", ".join(novas))
+                continue
+            grade = props["gridProperties"]["columnCount"]
+            if len(cab) + len(faltam) > grade:
+                s.post(f"/v4/spreadsheets/{planilha}:batchUpdate", {"requests": [{"appendDimension": {
+                    "sheetId": int(gid), "dimension": "COLUMNS", "length": len(cab) + len(faltam) - grade}}]})
+            letra = lambda n: (letra(n // 26 - 1) if n >= 26 else "") + chr(ord("A") + n % 26)
+            faixa = f"{aba}!{letra(len(cab))}1:{letra(len(cab) + len(faltam) - 1)}1"
+            s.post(f"/v4/spreadsheets/{planilha}/values:batchUpdate",
+                   {"valueInputOption": "RAW", "data": [{"range": faixa, "values": [faltam]}]})
+            print(f"{aba}: colunas novas em {faixa}:", ", ".join(faltam))
 
 
 # ---------------------------------------------------------------- testes (sem n8n nem planilha)
 
-def rodar_no(codigo: str, dados: dict):
+def rodar_no(codigo: str, dados: dict, resposta_js: str = RESPOSTA_JS):
     """Roda o código de um nó Code no node, com `$('Nó')` devolvendo `dados`."""
     exe = shutil.which("node") or max(Path.home().glob(".hermes/tools/node-*/bin/node"), default=None)
     prog = ("const dados = " + json.dumps(dados, ensure_ascii=False) + ";\n"
             "const $ = (n) => ({ all: () => (dados[n] ?? []).map(json => ({ json })), first: () => ({ json: dados[n] }) });\n"
             "const itens = (() => {\n" + codigo + "\n})();\n"
             "const $input = { all: () => itens };\n"
-            "console.log(JSON.stringify({ itens: itens.map(i => i.json), resposta: " + RESPOSTA_JS + " }));\n")
+            "console.log(JSON.stringify({ itens: itens.map(i => i.json), resposta: " + resposta_js + " }));\n")
     with tempfile.TemporaryDirectory() as d:
         arq = Path(d) / "no.mjs"
         arq.write_text(prog, encoding="utf-8")
@@ -380,7 +644,7 @@ def testar() -> int:
         def test_prumo_revisar_vira_convite_enviado(self):
             itens, resp = decidir("saida", prumos=[prumo("Revisar")])
             self.assertEqual((itens[0]["Etapa"], itens[0]["acao"]), ("Convite enviado", "abordou"))
-            self.assertTrue(itens[0]["Próxima ação"].startswith("Aguarde o dono responder"))
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Aguarde a resposta"))
             self.assertEqual(resp["marcados"][0]["nome"], "Oficina Teste")
             self.assertEqual(decidir("saida", prumos=[prumo("Convite enviado")])[0], [])
 
@@ -444,8 +708,98 @@ def testar() -> int:
                 r = json.loads(subprocess.run([str(exe), str(arq)], capture_output=True, text=True, check=True).stdout)
             self.assertEqual(r["chaves"], [LEAD[:2] + LEAD[-8:]])  # recusado entra; fechado e "Sem interesse", não
 
+    class Classifica(unittest.TestCase):
+        """Texto das respostas (05/10/2026): Montar pergunta -> (Gemini de mentira) -> Decidir pela resposta."""
+
+        ENVIO = "2026-10-05T12:00:00Z"
+
+        def classificar(self, gemini, mensagens, sites=(), prumos=(), chave=LEAD):
+            dados = {"Resposta no WhatsApp": {"body": {"chave": chave, "mensagens": mensagens}},
+                     "Ler Prospects": list(prumos), "Ler Leads do site": list(sites)}
+            montado = rodar_no(MONTAR_RESPOSTA_JS, dados)["itens"][0]
+            if not montado["tem"]:
+                return montado, [], {"ok": True, "marcados": []}
+            dados2 = {"Montar pergunta": montado, "Gemini: classificar resposta": {"content": {"parts": [{"text": gemini}]}}}
+            r = rodar_no(codigo_site_mensagem() + "\n" + DECIDIR_RESPOSTA_JS, dados2, RESPOSTA_CLASSIFICADA_JS)
+            return montado, [i for i in r["itens"] if i.get("planilha") != "nenhuma"], r["resposta"]
+
+        def lead_site(self, **k):
+            return {**site("enviado", enviado_em=self.ENVIO, site_url="https://demo-padaria.vercel.app",
+                           acoes_link="https://x/webhook/lead?id=pid-1", resposta_tipo="", status_anterior="", recusado_em=""), **k}
+
+        def test_prompt_tem_o_tempo_desde_o_envio_e_nao_e_lead_nao_chama_o_gemini(self):
+            montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:00:08Z", "texto": "Olá! Em breve retornaremos."}],
+                                             [self.lead_site()])
+            self.assertTrue(montado["tem"])
+            self.assertIn('[8 s] "Olá! Em breve retornaremos."', montado["prompt"])
+            self.assertIn("site de demonstração", montado["prompt"])
+            montado, itens, resp = self.classificar("{}", [{"em": "x", "texto": "oi"}], [self.lead_site()], chave=OUTRO)
+            self.assertEqual((montado["tem"], itens, resp), (False, [], {"ok": True, "marcados": []}))
+
+        def test_negativa_tira_do_funil_como_o_botao_recusou(self):
+            _, itens, resp = self.classificar('```json\n{"tipo": "negativa", "trecho": "Não temos interesse", "motivo": "recusou"}\n```',
+                                              [{"em": "2026-10-05T12:30:00Z", "texto": "Não temos interesse"}], [self.lead_site()])
+            i = itens[0]
+            self.assertEqual((i["status"], i["status_anterior"], i["respondeu_em"], i["resposta_tipo"], i["resposta_trecho"]),
+                             ("recusado", "enviado", "2026-10-05T12:30:00Z", "negativa", "Não temos interesse"))
+            self.assertTrue(i["recusado_em"])
+            self.assertEqual(i["pacote"]["acao"], "recusou")
+            self.assertEqual(resp["marcados"][0]["tipo"], "negativa")
+            self.assertIn("saiu do funil", resp["marcados"][0]["aviso"])
+            self.assertIn("https://x/webhook/lead?id=pid-1", resp["marcados"][0]["aviso"])
+
+        def test_interesse_manda_a_segunda_mensagem_com_o_link(self):
+            _, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "pode mandar"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "pode mandar"}], [self.lead_site(status="expirado")])
+            self.assertEqual((itens[0]["status"], itens[0]["respondeu_em"]), ("enviado", "2026-10-05T12:40:00Z"))
+            aviso = resp["marcados"][0]["aviso"]
+            self.assertIn("Interesse", aviso)
+            self.assertIn("https://wa.me/55" + LEAD + "?text=", aviso)
+            self.assertIn("demo-padaria.vercel.app", aviso)
+
+        def test_bot_apaga_a_resposta_da_saudacao_e_nao_avisa(self):
+            lead = self.lead_site(respondeu_em="2026-10-05T12:06:00Z")  # a regra dos 5 min marcou a saudação
+            _, itens, resp = self.classificar('{"tipo": "bot", "trecho": ""}',
+                                              [{"em": "2026-10-05T12:06:00Z", "texto": "Nosso horário é de 8h às 18h"}], [lead])
+            self.assertEqual((itens[0]["status"], itens[0]["respondeu_em"], itens[0]["resposta_tipo"]), ("enviado", "", "bot"))
+            self.assertNotIn("aviso", resp["marcados"][0])
+            # Resposta de gente antiga (de outro dia) não é apagada por um robô de hoje.
+            antigo = self.lead_site(respondeu_em="2026-10-01T12:00:00Z")
+            _, itens, _ = self.classificar('{"tipo": "bot"}', [{"em": "2026-10-05T12:06:00Z", "texto": "Olá!"}], [antigo])
+            self.assertEqual(itens[0]["respondeu_em"], "2026-10-01T12:00:00Z")
+
+        def test_bot_nunca_apaga_o_que_uma_pessoa_disse(self):
+            lead = self.lead_site(resposta_tipo="interesse", respondeu_em="2026-10-05T12:40:00Z")
+            _, itens, resp = self.classificar('{"tipo": "bot"}', [{"em": "2026-10-05T13:00:00Z", "texto": "Olá!"}], [lead])
+            self.assertEqual((itens, resp), ([], {"ok": True, "marcados": []}))
+
+        def test_resposta_ilegivel_do_modelo_vira_neutra(self):
+            _, itens, resp = self.classificar("desculpe, não entendi", [{"em": "2026-10-05T12:40:00Z", "texto": "quem é?"}],
+                                              [self.lead_site()])
+            self.assertEqual((itens[0]["resposta_tipo"], itens[0]["status"], itens[0]["resposta_trecho"]), ("neutra", "enviado", "quem é?"))
+            self.assertIn("continue a conversa", resp["marcados"][0]["aviso"])
+
+        def test_prumo(self):
+            p = prumo("Convite enviado", **{"Convite enviado em": self.ENVIO, "Tipo da resposta": "",
+                                             "Próxima ação": "Respondeu no WhatsApp em 05/10, 09:06. Continue a conversa."})
+            _, itens, _ = self.classificar('{"tipo": "bot"}', [{"em": "2026-10-05T12:06:00Z", "texto": "Olá, seja bem-vindo!"}], prumos=[p])
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Só resposta automática em 05/10"))
+            _, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "sou eu, pode falar"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "sou eu, pode falar"}], prumos=[p])
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 05/10, 09:40 (interesse)"))
+            self.assertIn("/convite?id=ID-1&passo=diagnostico", resp["marcados"][0]["aviso"])
+            _, itens, _ = self.classificar('{"tipo": "negativa", "trecho": "não"}', [{"em": "2026-10-05T12:40:00Z", "texto": "não"}], prumos=[p])
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("Sem interesse", "negativa"))
+
+    class Saudacao(unittest.TestCase):
+        def test_prumo_nao_conta_a_saudacao_como_resposta(self):
+            p = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:58:00Z"})
+            self.assertEqual(decidir("entrada", prumos=[p])[0], [])  # 2 min depois do convite
+            p = prumo("Convite enviado", **{"Convite enviado em": "2026-09-30T12:50:00Z"})
+            self.assertTrue(decidir("entrada", prumos=[p])[0][0]["Próxima ação"].startswith("Respondeu"))
+
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Envio, Lido, Resposta, Numeros))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Envio, Lido, Resposta, Numeros, Classifica, Saudacao))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
@@ -523,7 +877,8 @@ if __name__ == "__main__":
     auth = credencial()
     telefones(auth)
     conversa(auth)
+    resposta(auth)
     try:
         colunas()
     except Exception as e:  # noqa: BLE001 — os fluxos já estão no ar; a coluna pode vir depois
-        print(f"coluna visto_em não criada ({e}); rode de novo com --colunas quando a credencial Google estiver ok")
+        print(f"colunas não criadas ({e}); rode de novo com --colunas quando a credencial Google estiver ok")

@@ -56,10 +56,10 @@ class Base(unittest.TestCase):
         self.avisos = []
         self.dir = Path(tempfile.mkdtemp())
         self.bridge = self.dir / "bridge.js"
-        self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n")
+        self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n// >>> squadone:respostas\n")
         self._sessao, ob.SESSAO_HERMES = ob.SESSAO_HERMES, self.dir
         self.obs = ob.Observador({CHAVE, CHAVE2}, chamar=self.n8n, avisar=self.avisos.append,
-                                 relogio=lambda: self.agora, bridge_js=self.bridge)
+                                 relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado")
 
     def tearDown(self):
         ob.SESSAO_HERMES = self._sessao
@@ -236,11 +236,77 @@ class Remendo(Base):
         self.passar(ob.RELER_NUMEROS_S)
         self.assertEqual(len(self.avisos), 1)
         self.assertIn("patch_bridge_envios.py", self.avisos[0])
-        self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n")
+        self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n// >>> squadone:respostas\n")
         self.passar(ob.RELER_NUMEROS_S)
         self.bridge.write_text("")
         self.passar(ob.RELER_NUMEROS_S)
         self.assertEqual(len(self.avisos), 2)
+
+
+class Respostas(Base):
+    """Texto das respostas: a bridge grava respostas.jsonl, o observador junta e manda ao n8n."""
+
+    def escrever(self, *linhas):
+        with open(self.obs.pasta / "respostas.jsonl", "a", encoding="utf-8") as f:
+            for chave, ts, texto in linhas:
+                f.write(json.dumps({"chave": chave, "ts": ts, "texto": texto}, ensure_ascii=False) + "\n")
+
+    def conversas(self):
+        return [c[2] for c in self.n8n.chamadas if c[1] == "whatsapp-resposta"]
+
+    def test_grava_a_lista_de_leads_para_a_bridge(self):
+        lista = self.obs.pasta / "leads.json"
+        self.assertEqual(json.loads(lista.read_text()), sorted([CHAVE, CHAVE2]))
+        if os.name != "nt":
+            self.assertEqual(lista.stat().st_mode & 0o777, 0o600)
+        self.passar(ob.RELER_NUMEROS_S)  # n8n de mentira devolve as mesmas duas
+        self.assertEqual(json.loads(lista.read_text()), sorted([CHAVE, CHAVE2]))
+
+    def test_junta_a_conversa_e_manda_depois_da_pausa(self):
+        # O tick lê o arquivo; a pausa conta da última leitura com mensagem nova.
+        self.escrever((CHAVE, T0, "Olá! Obrigado pelo contato. Em breve retornaremos."))
+        self.passar(1)
+        self.passar(29)
+        self.escrever((CHAVE, T0 + 30, "não temos interesse"))
+        self.passar(1)
+        self.passar(ob.ESPERA_DA_CONVERSA_S - 2)
+        self.assertEqual(self.conversas(), [])  # ainda dentro da pausa
+        self.passar(2)
+        self.assertEqual(self.conversas(), [{"chave": CHAVE, "mensagens": [
+            {"em": ob.iso(T0), "texto": "Olá! Obrigado pelo contato. Em breve retornaremos."},
+            {"em": ob.iso(T0 + 30), "texto": "não temos interesse"}]}])
+        self.assertFalse((self.obs.pasta / "respostas.jsonl").exists())  # lido e apagado
+        self.assertFalse((self.obs.pasta / "respostas.lendo.jsonl").exists())
+
+    def test_quem_nao_e_lead_nao_sai_daqui(self):
+        self.escrever((ob.chave_do_numero(OUTRO), T0, "oi"), (CHAVE2, T0, "pode mandar"))
+        self.passar(1)
+        self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertEqual([c["chave"] for c in self.conversas()], [CHAVE2])
+
+    def test_aviso_do_n8n_vai_pelo_hermes_e_falha_tenta_de_novo(self):
+        self.escrever((CHAVE, T0, "pode mandar o link"))
+        self.passar(1)
+        self.n8n.falhar = urllib.error.HTTPError("u", 500, "erro", {}, None)
+        self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertEqual(self.conversas(), [])
+        self.n8n.falhar = None
+        self.n8n.respostas.append({"ok": True, "marcados": [{"planilha": "site", "tipo": "interesse", "aviso": "X respondeu"}]})
+        self.passar(30)
+        self.assertEqual(self.conversas(), [])  # espera de 1 min depois da falha
+        self.passar(31)
+        self.assertEqual(len(self.conversas()), 1)
+        self.assertEqual(self.avisos, ["X respondeu"])
+
+    def test_sobra_de_uma_parada_no_meio_e_lida(self):
+        self.obs.pasta.mkdir(parents=True, exist_ok=True)
+        (self.obs.pasta / "respostas.lendo.jsonl").write_text(json.dumps({"chave": CHAVE, "ts": T0, "texto": "a"}) + "\n")
+        self.escrever((CHAVE2, T0, "b"))
+        self.passar(1)
+        self.passar(1)
+        self.obs.fechar_conversas(todas=True)
+        self.obs.mandar_conversas()
+        self.assertEqual(sorted(c["chave"] for c in self.conversas()), sorted([CHAVE, CHAVE2]))
 
 
 class Seguir(unittest.TestCase):
