@@ -331,9 +331,27 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   `nao_gerar` (leads `novo` de busca desligada), que o gerador de sites deixa
   fora da fila.
 - **A vez entre as buscas ativas** (`claude-ops/site-cacador-escolha.py`, desde
-  05/10/2026): o Caçador roda uma busca por dia, a mais atrasada, e o atraso de
-  pousada, espaço de eventos e buffet (as verticais que responderam) conta em
-  dobro. Nunca rodada continua primeiro.
+  05/10/2026): o Caçador roda uma busca por dia, a mais atrasada, e o atraso
+  das `PREFERIDAS` (advocacia, desde a migração abaixo) conta em dobro. Nunca
+  rodada continua primeiro.
+- **Resposta negativa não segura a busca** (05/10/2026): para a pausa, só conta
+  resposta com `resposta_tipo` que não seja `negativa` nem `bot` (ou pasta em
+  `_em-conversa/`). Antes, "não tenho interesse" mantinha pousada e eventos
+  ativas.
+- **Migração de nicho** (`claude-ops/site-nichos.py`, 05/10/2026): 83 envios
+  para B2C de vitrine (pousada, eventos, estética, academia...) deram 11
+  respostas, todas negativas, e 0 vendas. O script pausou as 11 buscas ativas
+  (`pausa_motivo` "migração de nicho") e ligou 16 buscas novas, de serviço que
+  o cliente procura no Google para contratar: desentupidora, dedetizadora,
+  caçamba, contabilidade, advocacia (4 buscas; é o dono que mais procura "site
+  para advogado" no Google Trends), usinagem, caldeiraria, locação de andaimes,
+  reformas e engenharia, em cidades médias. No Caçador, a regra 1 do Gemini
+  passou a aceitar escritório, indústria, empresa que atende na casa do cliente
+  e profissional liberal com escritório; o Pontuar dá +15 a esses ramos e não
+  tira 10 de quem não posta no Instagram. O `~/auto-site/CLAUDE.md` ganhou a
+  seção do gerador para eles (OAB sóbria, sem avaliações na página de
+  advocacia; B2B com "Pedir orçamento"; urgência com botão fixo). Rodar de novo
+  não muda nada; `--testar` e `--testar-vivo` não gravam.
 - `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
   `--testar-regra` e `python3 site-cacador-escolha.py --testar` rodam só o
   código dos nós no node, sem n8n nem planilha.

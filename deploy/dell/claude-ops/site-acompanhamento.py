@@ -21,6 +21,10 @@ pilates, academia, vidraçaria e marcenaria somavam 0 de 21. Busca com
 Rômulo. O retrato ganha `nao_gerar`: leads `novo` de busca desligada, que o
 gerador de sites deixa fora da fila (gerador-de-sites.py).
 
+Na mesma data, depois da migração de nicho: resposta com `resposta_tipo`
+negativa ou bot não segura a busca. As 11 respostas até ali eram todas "não
+tenho interesse", e pousada e eventos seguiam ativas por causa delas.
+
 O que foi enviado antes de 29/09/2026 é acervo: nada automático; o resumo único
 sai por `--resumo-backlog`.
 
@@ -204,7 +208,12 @@ const respondeuHumano = (l) => {{
   const em = Date.parse(r), env = Date.parse(txt(l.enviado_em));
   return !Number.isFinite(em) || !Number.isFinite(env) || em - env >= 5 * 60 * 1000;
 }};
-const respondeu = (l) => respondeuHumano(l) || topo(l) === '_em-conversa';
+// Para a pausa, "não tenho interesse" e robô não pagam o site (migração de nicho de
+// 05/10/2026: 11 respostas em 83 envios, as 11 negativas, e pousada seguia rodando
+// porque a regra contava qualquer resposta). Vale interesse, neutra ("quem é?"),
+// resposta ainda sem tipo e conversa aberta à mão.
+const respondeu = (l) => topo(l) === '_em-conversa'
+  || (respondeuHumano(l) && !['negativa', 'bot'].includes(txt(l.resposta_tipo).toLowerCase()));
 const medir = (ls) => ({{
   leads: ls.filter(l => txt(l.status) !== 'descartado').length,
   descartados: ls.filter(l => txt(l.status) === 'descartado').length,
@@ -249,7 +258,7 @@ for (const l of leads) {{
   const dona = naCidade[0] ?? (candidatas.length === 1 && !candidatas[0].cidade ? candidatas[0] : null);
   if (dona) dona.leads.push(l);
 }}
-// Pausa: ativa, MIN_ENVIADOS+ enviados e nenhuma resposta humana. Quem já tem
+// Pausa: ativa, MIN_ENVIADOS+ enviados e nenhuma resposta que não seja recusa. Quem já tem
 // pausada_em e está ativa foi religada pelo Rômulo: a regra não pausa de novo.
 const nao_gerar = [];
 const porBusca = buscas.map(({{ r, leads: ls, ...b }}) => {{
@@ -289,11 +298,11 @@ const texto = [
   '*Total:* ' + linha(f.totais),
   '',
   pausadas.length
-    ? 'Buscas pausadas agora ({MIN_ENVIADOS}+ enviados, nenhuma resposta; o Caçador não as roda mais):' + NL
+    ? 'Buscas pausadas agora ({MIN_ENVIADOS}+ enviados, nenhum interesse; o Caçador não as roda mais):' + NL
       + pausadas.map(b => '• "' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '') + ' (' + b.lat + ', ' + b.lng + '): '
-        + b.enviados + ' enviados, 0 respostas').join(NL)
+        + b.enviados + ' enviados, nenhum interesse').join(NL)
       + NL + 'Para religar, ponha TRUE em ativa na aba Buscas: com pausada_em preenchida a regra não pausa de novo.'
-    : 'Nenhuma busca ativa com {MIN_ENVIADOS}+ enviados sem resposta.',
+    : 'Nenhuma busca ativa com {MIN_ENVIADOS}+ enviados sem interesse.',
   ...(naoGerar.length ? ['', naoGerar.length + ' lead(s) novo(s) de busca desligada ficam fora da fila do gerador de sites.'] : []),
   '',
   'Planilha: {LINK_PLANILHA}',
@@ -307,7 +316,7 @@ BUSCAS_A_PAUSAR = """// Uma linha por busca pausada agora; sem nenhuma, "Pausar 
 const agora = $now.toFormat("yyyy-MM-dd'T'HH:mm");
 return $('Funil').first().json.buscas.filter(b => b.pausar && b.linha).map(b => ({ json: {
   row_number: Number(b.linha), ativa: 'FALSE', pausada_em: agora,
-  pausa_motivo: b.enviados + ' enviados e nenhuma resposta (funil semanal)',
+  pausa_motivo: b.enviados + ' enviados e nenhum interesse (funil semanal)',
 } }));"""
 
 
@@ -550,6 +559,7 @@ def testar_regra() -> int:
         busca(4, "espaço para eventos", "eventos", "2026-09-24T06:00"),
         busca(5, "academia", "fitness", "2026-09-18T06:00", pausada_em="2026-09-28T08:00"),  # religada pelo Rômulo
         busca(6, "clínica odontológica", "odontologia", "2026-09-15T06:00", ativa="FALSE"),
+        busca(7, "buffet infantil", "eventos", "2026-09-26T06:00"),
     ]
     planilha = (
         leads("vid", "vidraçaria", "Joinville", "2026-09-23T06:05:00-03:00", 5)
@@ -558,6 +568,10 @@ def testar_regra() -> int:
         + leads("pou", "pousada", "Ubatuba", "2026-09-25T06:05:00-03:00", 5, respondeu_em="2026-10-01T10:02:00-03:00")
         + leads("eve", "espaço de eventos", "Campinas", "2026-09-24T06:05:00-03:00", 4)
         + leads("evr", "espaço de eventos", "Campinas", "2026-09-24T06:05:00-03:00", 1, respondeu_em="2026-10-01T11:00:00-03:00")
+        # Só "não tenho interesse": responderam, mas a busca não paga o site.
+        + leads("buf", "buffet infantil", "Ribeirão Preto", "2026-09-26T06:05:00-03:00", 4)
+        + leads("bun", "buffet infantil", "Ribeirão Preto", "2026-09-26T06:05:00-03:00", 2,
+                respondeu_em="2026-10-01T12:00:00-03:00", resposta_tipo="negativa")
         + leads("aca", "academia", "Belo Horizonte", "2026-09-18T06:05:00-03:00", 5)
         + [{**leads("odo", "odontologia", "São Paulo", "2026-09-15T06:05:00-03:00", 1)[0], "status": "novo", "site_url": "", "enviado_em": ""}]
     )
@@ -577,9 +591,10 @@ def testar_regra() -> int:
             self.assertFalse(por["espaço para eventos"]["pausar"])  # 1 resposta humana
             self.assertFalse(por["academia"]["pausar"])  # pausada_em + ativa: o Rômulo religou
             self.assertFalse(por["clínica odontológica"]["pausar"])  # já desligada
-            self.assertEqual([p["row_number"] for p in self.pausas], [2, 3])
+            self.assertTrue(por["buffet infantil"]["pausar"])  # só respostas negativas
+            self.assertEqual([p["row_number"] for p in self.pausas], [2, 3, 7])
             self.assertEqual({p["ativa"] for p in self.pausas}, {"FALSE"})
-            self.assertTrue(all(p["pausada_em"] and "5 enviados" in p["pausa_motivo"] for p in self.pausas))
+            self.assertTrue(all(p["pausada_em"] and "enviados e nenhum interesse" in p["pausa_motivo"] for p in self.pausas))
 
         def test_nao_gerar_leva_os_novos_de_busca_desligada(self):
             self.assertEqual(sorted(x["place_id"] for x in self.f["nao_gerar"]), ["odo0", "vidnovo0"])

@@ -10,6 +10,10 @@ com o atraso das verticais que respondem contando em dobro. Nunca rodada
 continua primeiro (na ordem da aba), e a escolha segue sendo uma só por
 execução: os nós seguintes leem `$('Montar área da busca').first()`.
 
+Ainda em 05/10/2026, na migração de nicho (site-nichos.py), PREFERIDAS virou
+advocacia: as respostas de pousada e eventos eram todas "não tenho interesse",
+e advogado é o dono que mais procura site no Google Trends.
+
 A pausa de quem não responde é do "06 · Funil semanal" (site-acompanhamento.py),
 que desliga `ativa` na aba Buscas; aqui só muda a vez entre as que seguem ativas.
 
@@ -32,10 +36,13 @@ NOME = "Escolher a busca"
 BACKUPS = Path.home() / ".local/share/claude-ops/backups"
 
 ESCOLHER = """// Uma busca por execução (os nós seguintes leem .first()): a mais atrasada,
-// com o atraso das verticais que respondem contando em dobro (funil de 05/10/2026:
-// pousada, espaço de eventos e buffet responderam; o resto, quase nada).
+// com o atraso das PREFERIDAS contando em dobro.
 // Para mudar a preferência, edite só PREFERIDAS (trecho do query ou da vertical).
-const PREFERIDAS = ['pousada', 'evento', 'buffet'];
+// Migração de nicho de 05/10/2026: saíram pousada, eventos e buffet (as 11
+// respostas eram todas "não tenho interesse"). Entrou advocacia, o ramo cujo
+// dono mais procura "site para advogado" no Google Trends (site-nichos.py).
+// Troque pelos ramos que o funil mostrar com interesse de verdade.
+const PREFERIDAS = ['advog', 'advoc'];
 const PESO = 2;
 const norm = (t) => String(t ?? '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
 const agora = Date.now();
@@ -76,11 +83,17 @@ def aplicar(wf: dict) -> dict:
     return wf
 
 
-def escolher_no_node(buscas: list, agora_iso: str) -> dict:
+def escolher_no_node(buscas: list, agora_iso: str, preferidas=None) -> dict:
+    """`preferidas` troca a lista do nó só no teste (a de produção pode estar vazia)."""
     exe = shutil.which("node") or max(Path.home().glob(".hermes/tools/node-*/bin/node"), default=None)
+    codigo = ESCOLHER
+    if preferidas is not None:
+        inicio = codigo.index("const PREFERIDAS = ")
+        fim = codigo.index("\n", inicio)
+        codigo = codigo[:inicio] + "const PREFERIDAS = " + json.dumps(preferidas) + ";" + codigo[fim:]
     prog = (f"Date.now = () => Date.parse({json.dumps(agora_iso)});\n"
             "const $input = { all: () => " + json.dumps(buscas, ensure_ascii=False) + ".map(json => ({ json })) };\n"
-            "const r = (() => {\n" + ESCOLHER + "\n})();\nconsole.log(JSON.stringify(r[0] ?? null));\n")
+            "const r = (() => {\n" + codigo + "\n})();\nconsole.log(JSON.stringify(r[0] ?? null));\n")
     with tempfile.TemporaryDirectory() as d:
         arq = Path(d) / "escolher.mjs"
         arq.write_text(prog, encoding="utf-8")
@@ -99,25 +112,34 @@ def testar() -> int:
     agora = "2026-10-05T06:00:00-03:00"
 
     class Escolha(unittest.TestCase):
-        def escolhida(self, buscas):
-            r = escolher_no_node(buscas, agora)
+        def escolhida(self, buscas, preferidas=None):
+            r = escolher_no_node(buscas, agora, preferidas)
             return r and (r["json"]["query"], r["pairedItem"])
 
         def test_nunca_rodada_vem_primeiro_na_ordem_da_aba(self):
             self.assertEqual(self.escolhida([b("pousada", "pousada", "2026-09-01T06:00"), b("vidraçaria", "vidracaria", ""),
                                              b("buffet infantil", "eventos", "")]), ("vidraçaria", 1))
 
-        def test_vertical_que_responde_conta_em_dobro(self):
-            # vidraçaria 10 dias atrasada; pousada 6 dias (= 12 em dobro): vai a pousada.
-            self.assertEqual(self.escolhida([b("vidraçaria", "vidracaria", "2026-09-25T06:00"),
-                                             b("pousada", "pousada", "2026-09-29T06:00")]), ("pousada", 1))
-            # pousada 4 dias (= 8): a vidraçaria, 10 dias parada, ainda tem a vez.
-            self.assertEqual(self.escolhida([b("vidraçaria", "vidracaria", "2026-09-25T06:00"),
-                                             b("pousada", "pousada", "2026-10-01T06:00")]), ("vidraçaria", 0))
+        def test_fora_das_preferidas_vence_a_mais_atrasada(self):
+            self.assertEqual(self.escolhida([b("desentupidora", "desentupidora", "2026-09-29T06:00"),
+                                             b("escritório de contabilidade", "contabilidade", "2026-09-25T06:00")]),
+                             ("escritório de contabilidade", 1))
 
-        def test_espaco_para_eventos_e_buffet_sao_preferidas(self):
-            self.assertEqual(self.escolhida([b("instalação de ar condicionado", "climatizacao", "2026-09-27T06:00"),
-                                             b("espaço para eventos", "eventos", "2026-09-30T06:00")]), ("espaço para eventos", 1))
+        def test_advocacia_e_preferida(self):
+            # contabilidade 8 dias atrasada; advogado 5 dias (= 10 em dobro): vai o advogado.
+            self.assertEqual(self.escolhida([b("escritório de contabilidade", "contabilidade", "2026-09-27T06:00"),
+                                             b("advogado previdenciário", "advocacia", "2026-09-30T06:00")]),
+                             ("advogado previdenciário", 1))
+
+        def test_preferida_conta_em_dobro(self):
+            pref = ["desentup"]
+            # contabilidade 10 dias atrasada; desentupidora 6 dias (= 12 em dobro): vai a desentupidora.
+            self.assertEqual(self.escolhida([b("escritório de contabilidade", "contabilidade", "2026-09-25T06:00"),
+                                             b("desentupidora", "desentupidora", "2026-09-29T06:00")], pref), ("desentupidora", 1))
+            # desentupidora 4 dias (= 8): a contabilidade, 10 dias parada, ainda tem a vez.
+            self.assertEqual(self.escolhida([b("escritório de contabilidade", "contabilidade", "2026-09-25T06:00"),
+                                             b("desentupidora", "desentupidora", "2026-10-01T06:00")], pref),
+                             ("escritório de contabilidade", 0))
 
         def test_sem_busca_ativa_nao_escolhe_nada(self):
             self.assertIsNone(escolher_no_node([], agora))
