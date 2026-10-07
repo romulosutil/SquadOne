@@ -180,9 +180,12 @@ WHATSAPP_HEALTH = "http://127.0.0.1:3000/health"
 def avaliar_whatsapp(resposta, erro: str | None = None) -> dict:
     """`status` do /health da bridge do Hermes. Gateway "active" não basta: em
     06/10/2026 a sessão caiu (Logged out) e a bridge morria em laço com o
-    gateway de pé; os avisos ficavam na fila sem ninguém saber."""
+    gateway de pé; os avisos ficavam na fila sem ninguém saber.
+
+    A bridge do Hermes diz `connected`/`disconnected` (bridge.js, connectionState);
+    `open` é o nome cru do Baileys e vale também, caso uma versão o repasse."""
     status = resposta.get("status") if isinstance(resposta, dict) else None
-    if status == "open":
+    if status in ("connected", "open"):
         return check("whatsapp-sessao", "servicos", "Sessão do WhatsApp", "ok", "Conectada (bridge do Hermes)")
     detalhe = (f"Bridge responde, mas a sessão está '{status}'" if status
                else f"Bridge do WhatsApp sem resposta em :3000 ({(erro or 'resposta sem status')[:80]})")
