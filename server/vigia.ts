@@ -1,23 +1,25 @@
 /**
  * A vigia dos lembretes: a cada VARREDURA_MS relê a agenda numa janela curta e
- * publica no ntfy o que ficou devido. Nada é agendado para o futuro e nada vai
+ * publica o que ficou devido como `Aviso` (no Dell, a fila de avisos que o
+ * Hermes entrega no WhatsApp). Nada é agendado para o futuro e nada vai
  * para o disco: o Google é a verdade (editar, apagar ou ajustar lá reflete na
  * varredura seguinte) e um redeploy não deixa timer órfão.
  *
- * Roda separada do turno: falha do ntfy ou da leitura nunca chega em
+ * Roda separada do turno: falha do transporte ou da leitura nunca chega em
  * agendamento.ts nem em ajuste.ts.
  */
 import type { Janela } from "./alocador.ts";
 import { PrecisaConectar } from "./auth-store.ts";
+import type { Aviso } from "./avisos.ts";
 import type { QuestCalendario } from "./calendar.ts";
 import {
   alvosDoRoster,
   ANTECEDENCIA_PUSH_MIN,
   disparosDevidos,
   mensagemDoDisparo,
+  ORIGEM_DOS_LEMBRETES,
   VARREDURA_MS,
 } from "./lembretes.ts";
-import type { MensagemDePush } from "./push.ts";
 import type { Roster } from "./squad.ts";
 
 const MIN_MS = 60_000;
@@ -31,13 +33,14 @@ export interface DependenciasDaVigia {
   lerRoster: () => Promise<Roster>;
   obterToken: () => Promise<string>;
   listar: (token: string, calendarId: string, de: Date, ate: Date) => Promise<QuestCalendario[]>;
-  enviar: (m: MensagemDePush) => Promise<void>;
+  /** Publica o aviso (fila de avisos no Dell; ntfy no Easypanel durante a sombra). */
+  enviar: (a: Aviso) => Promise<void>;
   log?: { log: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 }
 
 export interface ResultadoDaVarredura {
-  /** Na ordem dos eventos. `enviada` false = só montada (enviar=false) ou o ntfy falhou (ver erros). */
-  mensagens: (MensagemDePush & { eventId: string; enviada: boolean })[];
+  /** Na ordem dos eventos. `enviada` false = só montada (enviar=false) ou o transporte falhou (ver erros). */
+  mensagens: (Aviso & { eventId: string; enviada: boolean })[];
   erros: string[];
   semCredencial: boolean;
 }
@@ -55,14 +58,20 @@ export interface Vigia {
 
 /**
  * Sem credencial a vigia fica cega e o usuário não abriria o app para
- * descobrir: o próprio push avisa, uma vez por perda.
+ * descobrir: o próprio canal avisa, uma vez por perda. A chave leva o instante
+ * da perda: duas perdas no mesmo dia são dois avisos, e a fila não confunde.
+ * P1, não P0: não acorda ninguém de madrugada, sai às 7h.
  */
-export const AVISO_DESCONECTADO: MensagemDePush = {
-  titulo: "SquadOne sem acesso ao Google",
-  corpo: "Os lembretes pararam. Abra o SquadOne e reconecte o calendário.",
-  prioridade: 4,
-  tags: ["warning"],
-};
+export function avisoDeDesconexao(agora: Date): Aviso {
+  return {
+    titulo: "⚠️ SquadOne sem acesso ao Google",
+    texto: "Os lembretes pararam até o Google ser reconectado no SquadOne.",
+    origem: ORIGEM_DOS_LEMBRETES,
+    chave: `google-desconectado:${agora.toISOString()}`,
+    prioridade: 1,
+    expiraEm: new Date(agora.getTime() + 24 * 3600_000).toISOString(),
+  };
+}
 
 const mensagemDe = (err: unknown) => (err as Error)?.message ?? String(err);
 
@@ -87,7 +96,7 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       resultado.semCredencial = true;
       if (opcoes.enviar && opcoes.registrar && !avisouDesconexao) {
         try {
-          await dep.enviar(AVISO_DESCONECTADO);
+          await dep.enviar(avisoDeDesconexao(agora));
           avisouDesconexao = true;
         } catch (e) {
           resultado.erros.push(`aviso de desconexão não saiu: ${mensagemDe(e)}`);
@@ -124,7 +133,7 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
           if (opcoes.registrar) enviados.set(d.chave, d.referencia);
         } catch (err) {
           // Fora da deduplicação: a próxima varredura tenta de novo enquanto o evento não começar.
-          resultado.erros.push(`push de '${d.titulo}' não saiu: ${mensagemDe(err)}`);
+          resultado.erros.push(`aviso de '${d.titulo}' não saiu: ${mensagemDe(err)}`);
         }
       }
       resultado.mensagens.push({ ...m, eventId: d.eventId, enviada });
@@ -151,23 +160,23 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       try {
         const r = await varrer(relogio(), { enviar: true, registrar: true });
         if (falhaAntes !== null) {
-          log.error("[push] varredura voltou a funcionar");
+          log.error("[vigia] varredura voltou a funcionar");
           falhaAntes = null;
         }
         if (r.semCredencial !== semCredencialAntes) {
           log.error(
             r.semCredencial
-              ? "[push] sem credencial do Google: lembretes parados até reconectar"
-              : "[push] credencial de volta: lembretes retomados",
+              ? "[vigia] sem credencial do Google: lembretes parados até reconectar"
+              : "[vigia] credencial de volta: lembretes retomados",
           );
           semCredencialAntes = r.semCredencial;
         }
-        for (const m of r.mensagens) if (m.enviada) log.log(`[push] ${m.titulo}`);
-        for (const e of r.erros) log.error(`[push] ${e}`);
+        for (const m of r.mensagens) if (m.enviada) log.log(`[vigia] ${m.titulo}`);
+        for (const e of r.erros) log.error(`[vigia] ${e}`);
       } catch (err) {
         const mensagem = mensagemDe(err);
         if (mensagem !== falhaAntes) {
-          log.error(`[push] varredura falhou: ${mensagem}`);
+          log.error(`[vigia] varredura falhou: ${mensagem}`);
           falhaAntes = mensagem;
         }
       } finally {

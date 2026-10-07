@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import os from "node:os";
 import {
   ConflitoDeRoster,
   dominiosDoSquad,
@@ -11,6 +12,9 @@ import {
   PedidoInvalido,
   readRoster,
   resolverSquad,
+  RosterAusente,
+  RosterCongelado,
+  rosterCongelado,
   SquadInexistente,
   type Squad,
 } from "./server/squad.ts";
@@ -34,10 +38,15 @@ import {
   reativarSquad,
 } from "./server/ciclo-de-vida.ts";
 import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
-import { porteiroDeIdentidade, porteiroDeIp } from "./server/acesso.ts";
+import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
+import { avisoParaPush, descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
+import { publicarAviso, type Aviso } from "./server/avisos.ts";
+import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
+import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
+import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
+import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_PUSH_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import {
@@ -55,6 +64,7 @@ import { anexarProgressoDosPassos, renomearListaDaSquad } from "./server/passos-
 import {
   avisarDigitando,
   baixarArquivo,
+  buscarAtualizacoes,
   descreverTelegram,
   editarMensagem,
   enviarMensagem,
@@ -117,6 +127,11 @@ function responderErroDeAuth(res: express.Response, err: unknown): void {
 function responderErroDeRoster(res: express.Response, err: unknown): boolean {
   if (err instanceof SquadInexistente) {
     res.status(409).json({ error: err.message, squadInexistente: true });
+  } else if (err instanceof RosterCongelado) {
+    res.status(409).json({ error: err.message, rosterCongelado: true });
+  } else if (err instanceof RosterAusente) {
+    // Dell antes da cópia do roster de produção: ambiente, nenhum clique conserta.
+    res.status(503).json({ error: err.message, rosterAusente: true });
   } else if (err instanceof ConflitoDeRoster) {
     res.status(409).json({ error: err.message });
   } else if (err instanceof PedidoInvalido) {
@@ -174,28 +189,47 @@ async function startServer() {
   const listenHost = listenHostForMode(squadOneMode);
   const avaliacoesAtivas = avaliacoesHabilitadas(process.env);
   const cacheDeTurnos = new CacheDeTurnosParaAvaliacao();
-  const storeDeAvaliacoes = new AvaliacoesDeTurnoStore(path.join(process.cwd(), "data"));
+  const dataDir = diretorioDeDados();
+  const storeDeAvaliacoes = new AvaliacoesDeTurnoStore(dataDir);
+
+  // A agenda (roster, turno, Mochila, ajuste, vigia, bot) no perfil operations
+  // só com o diretório de dados próprio, fora do clone (regra 7): sem ele o
+  // processo do Dell seria montado sobre o retrato de 14/09/2026. No perfil app
+  // ela está sempre ligada, como sempre esteve.
+  const motivoDaAgendaDesligada = squadOneMode === "operations" ? motivoParaAgendaDesligada() : null;
+  const agendaAtiva = motivoDaAgendaDesligada === null;
 
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
   app.set("trust proxy", true);
 
   // --- Bot do Telegram ------------------------------------------------
-  // ANTES do porteiro de IP, e só esta rota: o Telegram não tem IP fixo. A
-  // trava dela é o segredo do webhook + a allowlist de chat_id. Desligado, a
-  // rota nem existe e o caminho cai no porteiro como qualquer outro.
+  // Webhook (Easypanel): a rota fica ANTES do porteiro de IP, e só ela — o
+  // Telegram não tem IP fixo; a trava é o segredo + a allowlist de chat_id.
+  // Polling (Dell): sem rota nenhuma; o laço começa depois do listen.
   let configDeTelegram: ConfigDeTelegram | null = null;
   let falhaDoTelegram: string | null = null;
   try {
+    // No Dell não há URL pública (Funnel é proibido): webhook lá nunca receberia
+    // nada, e o setWebhook do boot roubaria a entrada do polling. Antes de ler o
+    // resto, para o erro dizer isso e não "falta o segredo do webhook".
+    const comToken = Boolean((process.env.TELEGRAM_BOT_TOKEN ?? "").trim());
+    if (comToken && squadOneMode === "operations" && (process.env.TELEGRAM_TRANSPORTE ?? "").trim() !== "polling") {
+      throw new TelegramMalConfigurado("No perfil operations o bot é TELEGRAM_TRANSPORTE=polling.");
+    }
     configDeTelegram = lerConfigDeTelegram(process.env);
+    if (configDeTelegram && !agendaAtiva) {
+      throw new TelegramMalConfigurado(`agenda desligada neste processo: ${motivoDaAgendaDesligada}`);
+    }
   } catch (error: any) {
+    configDeTelegram = null;
     falhaDoTelegram = error instanceof TelegramMalConfigurado ? error.message : String(error?.message ?? error);
   }
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
     const bot = (botDoTelegram = criarBotDoTelegram({
-      segredo: c.segredo,
+      segredo: c.transporte === "webhook" ? c.segredo : null,
       chatsPermitidos: c.chatsPermitidos,
       // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
       rodar: (demanda, modo) => rodarDemanda(ai, { demanda, modo }),
@@ -211,11 +245,13 @@ async function startServer() {
       fmt: { locale: "pt-BR", timeZone: FUSO },
       agora: () => new Date(),
     }));
-    app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
+    if (c.transporte === "webhook") {
+      app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
+    }
   }
 
-  // A configuração da Central vem antes das travas: a lista de logins do
-  // Tailscale (RULES 7) mora nela.
+  // A configuração da Central vem antes das travas: config ilegível derruba o
+  // boot antes de qualquer rota responder.
   let operationsConfig: Awaited<ReturnType<typeof readOperationsConfig>> | null = null;
   if (squadOneMode === "operations") {
     const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
@@ -229,18 +265,25 @@ async function startServer() {
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
 
-  // Segunda trava (RULES 7): quem chega pelo Tailscale Serve precisa de um
-  // login da lista. Com a lista vazia ela fica desligada aqui, para a Central
-  // de hoje não trancar quem a usa; as finanças fecham sozinhas nesse caso.
-  if (operationsConfig?.tailscaleLogins.length) {
-    app.use(porteiroDeIdentidade(operationsConfig.tailscaleLogins));
-    console.log(`[acesso] identidade do Tailscale exigida (${operationsConfig.tailscaleLogins.length} login(s)).`);
+  // Segunda trava da regra 7 no Dell: o login do Tailscale que o Serve põe em
+  // cada pedido, contra SQUADONE_LOGINS_TAILSCALE. Ligada sempre que a agenda
+  // está aqui (lista vazia então FECHA a tailnet) ou que a lista existe. Sem a
+  // agenda e sem lista, a Central segue como antes: só lê o Dell, e travar já
+  // derrubaria o celular no merge, antes do runbook. As finanças fecham
+  // sozinhas nesse caso (ver criarRotasDeFinancas).
+  const loginsDoTailscale = lerLoginsPermitidos();
+  const identidadeLigada = squadOneMode === "operations" && (agendaAtiva || loginsDoTailscale.size > 0);
+  if (identidadeLigada) {
+    app.use(guardaDeIdentidade(loginsDoTailscale));
   }
 
   // A página da Entrada (menu "Entrada"): só no perfil operations, destino fixo no loopback, e ANTES do
   // express.json(): o corpo de um envio é um arquivo de até 200 MB e passa em fluxo, sem ser lido aqui.
   if (squadOneMode === "operations") {
     app.use(ENTRADA_PREFIXO, criarRepasseDaEntrada());
+    // Escrita só da mesma origem (regra 7): o header de identidade acompanha
+    // também um POST forjado por outra página aberta no celular.
+    app.use("/api", guardaDeOrigem());
   }
 
   app.use(express.json());
@@ -248,14 +291,15 @@ async function startServer() {
   // Disponível nos dois perfis sem expor configuração local. O frontend usa
   // apenas este discriminador para decidir entre o app e a Central. `ocupado`
   // é para o atualizar-central do Dell esperar o turno (ou a fila do bot)
-  // terminar antes de reiniciar o processo.
+  // terminar antes de reiniciar o processo. `agenda` diz se o app (Pedir,
+  // Escritório) mora neste processo: no Dell, só depois do cutover.
   app.get("/api/runtime", (_req, res) => {
     const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false);
-    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado });
+    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva });
   });
 
+  const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
   if (operationsConfig) {
-    const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
@@ -294,7 +338,7 @@ async function startServer() {
     // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
     // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
     const financas = await prepararFinancas(operationsDataDir);
-    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: operationsConfig.tailscaleLogins }));
+    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale }));
     iniciarLeituraDiaria(financas);
   } else {
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional
@@ -304,10 +348,11 @@ async function startServer() {
     });
   }
 
-  // Rotas do app (roster, Mochila, turno, ajuste, push): só no perfil app. No
-  // operations a Central não as usa, e o data/squad.json do Dell é um retrato
-  // velho de 14/09/2026; montadas lá, um POST na Central escreveria agentes e
-  // eventos a partir dele. A Central só precisa conectar o Google (abaixo).
+  // Rotas do app (roster, Mochila, turno, ajuste, avisos): no perfil app sempre;
+  // no operations só com a agenda ligada (`agendaAtiva`), isto é, com o
+  // diretório de dados próprio que recebe o roster de PRODUÇÃO. Antes disso o
+  // Dell só tem o retrato de 14/09/2026, e um POST escreveria agentes e eventos
+  // a partir dele. A Central sozinha só precisa conectar o Google (abaixo).
   const rotasDoApp = express.Router();
 
   // --- Conexao com o Google -------------------------------------------
@@ -328,7 +373,16 @@ async function startServer() {
     }
   });
 
-  app.get("/api/auth/google", (_req, res) => {
+  app.get("/api/auth/google", (req, res) => {
+    // Credencial do Dell: o consentimento volta pelo loopback, aberto do PC pelo
+    // túnel (Mel-Tuneis). Pela tailnet o redirect iria para 127.0.0.1 do
+    // celular; nada de redirect em ts.net (não está no cliente OAuth).
+    if (squadOneMode === "operations" && veioPeloServe(req)) {
+      return res
+        .status(409)
+        .type("text/plain")
+        .send("Conectar o Google é pelo PC, com o túnel Mel-Tuneis ligado: abra http://127.0.0.1:9120/api/auth/google no navegador do PC.");
+    }
     try {
       res.redirect(urlDeConsentimento());
     } catch (error: any) {
@@ -338,6 +392,9 @@ async function startServer() {
   });
 
   app.get("/api/auth/callback", async (req, res) => {
+    if (squadOneMode === "operations" && veioPeloServe(req)) {
+      return res.status(409).type("text/plain").send("O callback do Google volta só pelo loopback do Dell.");
+    }
     const { code, state, error: recusa } = req.query;
     // O usuario pode simplesmente dizer nao na tela do Google.
     // O app público e a Central retornam à própria superfície raiz. No perfil
@@ -605,23 +662,44 @@ async function startServer() {
     }
   });
 
-  // --- Lembretes push ---------------------------------------------------
-  // Config ilegível NÃO derruba o boot: push é acessório, o turno e a Mochila
-  // seguem. O erro fica guardado para o log e para as rotas /api/push/*.
+  // --- Lembretes: a vigia ------------------------------------------------
+  // Dell (operations com a agenda): a vigia publica na fila de avisos, que o
+  // dell-status drena para o WhatsApp do Hermes; P0 também vai ao Telegram.
+  // Easypanel (app): ntfy, só enquanto durar a sombra (LEMBRETES_NTFY_URL);
+  // depois o Easypanel não roda vigia (regra 25). Config ilegível NÃO derruba o
+  // boot: lembrete é acessório, o turno e a Mochila seguem.
   let configDePush: ConfigDePush | null = null;
   let falhaDoPush: string | null = null;
-  try {
-    configDePush = lerConfigDePush(process.env);
-  } catch (error: any) {
-    falhaDoPush = error instanceof PushMalConfigurado ? error.message : String(error?.message ?? error);
+  if (squadOneMode === "app") {
+    try {
+      configDePush = lerConfigDePush(process.env);
+    } catch (error: any) {
+      falhaDoPush = error instanceof PushMalConfigurado ? error.message : String(error?.message ?? error);
+    }
   }
-  const vigia: Vigia | null = configDePush
+  const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
+  const telegramDoDono = configDeTelegram
+    ? async (texto: string) => {
+        for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto);
+      }
+    : undefined;
+  const transporteDaVigia: ((a: Aviso) => Promise<void>) | null =
+    squadOneMode === "operations"
+      ? agendaAtiva
+        ? async (a) => {
+            await publicarAviso(a, { fila: filaDeAvisos, telegram: telegramDoDono });
+          }
+        : null
+      : configDePush
+        ? (a) => enviarPush(configDePush!, avisoParaPush(a))
+        : null;
+  const vigia: Vigia | null = transporteDaVigia
     ? criarVigia({
         lerJanela: () => lerJanela(process.env),
         lerRoster: readRoster,
         obterToken: tokenValido,
         listar: listarQuestsDaJanela,
-        enviar: (m) => enviarPush(configDePush!, m),
+        enviar: transporteDaVigia,
       })
     : null;
 
@@ -665,8 +743,43 @@ async function startServer() {
     }
   });
 
-  // Confere servidor ntfy + celular sem esperar evento nenhum.
-  rotasDoApp.post("/api/push/teste", async (_req, res) => {
+  /** `agora` opcional do corpo; null (e o 400 já respondido) quando ilegível. */
+  function relogioDoPedido(req: express.Request, res: express.Response): Date | null {
+    const { agora } = req.body ?? {};
+    if (agora === undefined) return new Date();
+    const lido = lerInstante(agora, FUSO);
+    if (!lido || lido.data !== null) {
+      res.status(400).json({ error: "Campo 'agora' deve ser data/hora ISO, ex.: 2026-09-15T13:50:00-03:00" });
+      return null;
+    }
+    return new Date(lido.instante);
+  }
+
+  // Simulação da vigia do Dell: uma varredura REAL contra o Google com relógio
+  // simulado, que devolve os avisos que sairiam e NÃO grava nada na fila nem na
+  // deduplicação. Enviar de verdade não existe aqui: o único caminho para a fila
+  // é a própria vigia, com as regras dela (é o que a sombra valida).
+  if (squadOneMode === "operations") {
+    rotasDoApp.post("/api/avisos/varrer", async (req, res) => {
+      if (!vigia) return res.status(409).json({ error: "Vigia desligada neste processo.", vigiaDesligada: true });
+      const relogio = relogioDoPedido(req, res);
+      if (!relogio) return;
+      try {
+        res.json(await vigia.varrer(relogio, { enviar: false, registrar: false }));
+      } catch (error: any) {
+        if (error instanceof JanelaMalConfigurada || error instanceof ErroDeConfig) {
+          return res.status(500).json({ error: error.message, configuracao: true });
+        }
+        if (responderErroDeRoster(res, error)) return;
+        console.error("Erro na varredura simulada:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+  }
+
+  // Confere servidor ntfy + celular sem esperar evento nenhum. Só no Easypanel,
+  // durante a sombra: sai com o ntfy.
+  if (squadOneMode === "app") rotasDoApp.post("/api/push/teste", async (_req, res) => {
     if (pushIndisponivel(res)) return;
     try {
       const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, dateStyle: "short", timeStyle: "short" }).format(new Date());
@@ -689,17 +802,11 @@ async function startServer() {
   // Uma varredura REAL contra o Google com relógio simulado: mostra o que
   // sairia (enviar=false, padrão) ou manda de fato (enviar=true). Nunca grava
   // na deduplicação da vigia — o teste não engole o aviso de verdade.
-  rotasDoApp.post("/api/push/varrer", async (req, res) => {
+  if (squadOneMode === "app") rotasDoApp.post("/api/push/varrer", async (req, res) => {
     if (pushIndisponivel(res)) return;
-    const { agora, enviar = false } = req.body ?? {};
-    let relogio = new Date();
-    if (agora !== undefined) {
-      const lido = lerInstante(agora, FUSO);
-      if (!lido || lido.data !== null) {
-        return res.status(400).json({ error: "Campo 'agora' deve ser data/hora ISO, ex.: 2026-09-15T13:50:00-03:00" });
-      }
-      relogio = new Date(lido.instante);
-    }
+    const { enviar = false } = req.body ?? {};
+    const relogio = relogioDoPedido(req, res);
+    if (!relogio) return;
     if (typeof enviar !== "boolean") {
       return res.status(400).json({ error: "Campo 'enviar' deve ser booleano" });
     }
@@ -714,13 +821,15 @@ async function startServer() {
     }
   });
 
-  if (squadOneMode === "app") {
+  if (agendaAtiva) {
     app.use(rotasDoApp);
-  } else {
-    // Espelho do 404 de /api/operations no perfil app: sem isto o fallback da
-    // SPA responderia HTML 200 a um POST de escrita, e quem chama acharia que deu certo.
+  }
+  // Espelho do 404 de /api/operations no perfil app: sem isto o fallback da SPA
+  // responderia HTML 200 a um POST de escrita (rota do app com a agenda
+  // desligada, ou rota que não existe), e quem chama acharia que deu certo.
+  if (squadOneMode === "operations") {
     app.use("/api", (_req, res) => {
-      res.status(404).json({ error: "Rota do app indisponível no perfil operations." });
+      res.status(404).json({ error: agendaAtiva ? "Rota inexistente." : "Rota do app indisponível no perfil operations." });
     });
   }
 
@@ -746,9 +855,40 @@ async function startServer() {
   } catch (error: any) {
     console.error(`Janela de trabalho inválida: ${error.message}`);
   }
-  if (falhaDoPush) console.error(`Lembretes push inválidos (desligados): ${falhaDoPush}`);
-  else if (configDePush) console.log(`Lembretes push: ${descreverPush(configDePush)}, ${ANTECEDENCIA_PUSH_MIN} min antes`);
-  else console.log("Lembretes push desligados (LEMBRETES_NTFY_URL vazia)");
+  if (squadOneMode === "operations") {
+    console.log(`Diretório de dados: ${dataDir}`);
+    if (!agendaAtiva) console.log(`Agenda desligada neste processo: ${motivoDaAgendaDesligada}`);
+    else {
+      console.log(`Agenda ligada; lembretes pela fila de avisos (${filaDeAvisos}), ${ANTECEDENCIA_PUSH_MIN} min antes`);
+      if (!process.env.GEMINI_API_KEY) console.error("GEMINI_API_KEY vazia: turno, redação e transcrição vão falhar.");
+    }
+    if (identidadeLigada) {
+      if (loginsDoTailscale.size === 0) console.error("[acesso] SQUADONE_LOGINS_TAILSCALE vazia: todo pedido pela tailnet leva 403.");
+      else console.log(`[acesso] identidade do Tailscale conferida (${loginsDoTailscale.size} login(s)).`);
+    } else {
+      console.log("[acesso] identidade do Tailscale não conferida (agenda desligada e SQUADONE_LOGINS_TAILSCALE vazia).");
+    }
+  } else {
+    if (falhaDoPush) console.error(`Lembretes push inválidos (desligados): ${falhaDoPush}`);
+    else if (configDePush) console.log(`Lembretes push: ${descreverPush(configDePush)}, ${ANTECEDENCIA_PUSH_MIN} min antes`);
+    else console.log("Lembretes push desligados (LEMBRETES_NTFY_URL vazia)");
+  }
+  if (rosterCongelado()) console.log("Roster CONGELADO (SQUADONE_ROSTER_CONGELADO=true): contratações e edições recusadas.");
+
+  // Sinal de vida (healthchecks.io): só no Dell, que é quem tem o status.json
+  // do dell-status para saber da sessão do WhatsApp.
+  let sinal: ReturnType<typeof criarSinalDeVida> | null = null;
+  try {
+    const url = lerUrlDoSinal(process.env);
+    if (url && squadOneMode === "operations") {
+      sinal = criarSinalDeVida({ url, lerStatus: (agora) => lerStatusDoDell(operationsDataDir, agora), pingar: pingarHealthchecks });
+      console.log("Sinal de vida: healthchecks a cada minuto (/fail com o WhatsApp fora há mais de 15 min)");
+    } else if (url) {
+      console.log("Sinal de vida: DEADMAN_URL ignorada fora do perfil operations");
+    }
+  } catch (error: any) {
+    console.error(`Sinal de vida inválido (desligado): ${error.message}`);
+  }
 
   if (falhaDoTelegram) console.error(`Bot do Telegram inválido (desligado): ${falhaDoTelegram}`);
   else if (configDeTelegram) console.log(`Bot do Telegram: ${descreverTelegram(configDeTelegram)}`);
@@ -758,10 +898,24 @@ async function startServer() {
     console.log(`SquadOne (${squadOneMode}) em http://${listenHost}:${PORT}`);
     // Depois do listen: a primeira varredura não disputa o boot do Vite.
     vigia?.iniciar();
+    sinal?.iniciar();
+
+    // Polling (Dell): busca as mensagens; nunca registra webhook.
+    if (configDeTelegram?.transporte === "polling" && botDoTelegram) {
+      const c = configDeTelegram;
+      const offset = arquivoDeOffset(path.join(dataDir, "telegram-offset.json"));
+      criarPollingDoTelegram({
+        buscar: (o) => buscarAtualizacoes(c, o),
+        receber: botDoTelegram.receber,
+        lerOffset: offset.ler,
+        gravarOffset: offset.gravar,
+        esperar: (ms) => new Promise((ok) => setTimeout(ok, ms)),
+      }).iniciar();
+    }
 
     // Só em produção: o APP_URL de dev é http://localhost (o Telegram exige
     // HTTPS) e registrar com o token real roubaria o webhook do servidor no ar.
-    if (configDeTelegram && process.env.NODE_ENV === "production") {
+    if (configDeTelegram?.transporte === "webhook" && process.env.NODE_ENV === "production") {
       const base = process.env.APP_URL;
       if (!base) {
         console.error("Bot do Telegram: APP_URL vazia, webhook não registrado.");

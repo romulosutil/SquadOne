@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { diretorioDeDados } from "./dados.ts";
 import { escopoConcedido } from "./passos.ts";
 
 /**
@@ -39,7 +40,8 @@ export const ESCOPO_CALENDAR = "https://www.googleapis.com/auth/calendar.events"
 export const ESCOPO_TASKS = "https://www.googleapis.com/auth/tasks";
 export const ESCOPOS: readonly string[] = [ESCOPO_CALENDAR, ESCOPO_TASKS];
 
-const ARQUIVO = path.join(process.cwd(), "data", "google-auth.json");
+/** Na hora do uso: o server.ts importa este módulo antes do `dotenv.config()`. */
+const arquivo = () => path.join(diretorioDeDados(), "google-auth.json");
 
 /** Renova antes do fim: token que expira em voo vira 401 no meio do turno. */
 const MARGEM_MS = 60_000;
@@ -81,8 +83,24 @@ function clientId(): string {
   return exigir("VITE_GOOGLE_CLIENT_ID");
 }
 
-export function redirectUri(): string {
-  const base = process.env.APP_URL || "http://localhost:3000";
+export function redirectUri(env: NodeJS.ProcessEnv = process.env): string {
+  const base = env.APP_URL || "http://localhost:3000";
+  // No Dell o consentimento volta pelo loopback, aberto do PC pelo túnel
+  // (Mel-Tuneis, porta 9120): a credencial é a do Dell, e um redirect para o
+  // endereço da tailnet exigiria cadastrá-lo no cliente OAuth e levaria o
+  // `code` por outro caminho. APP_URL fora do loopback aqui é erro de ambiente.
+  if ((env.SQUADONE_MODE ?? "").trim() === "operations") {
+    let host = "";
+    try {
+      const url = new URL(base);
+      host = url.protocol === "http:" ? url.hostname : "";
+    } catch {
+      host = "";
+    }
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) {
+      throw new ErroDeConfig("No perfil operations o APP_URL é o loopback (http://127.0.0.1:9120): o callback do Google nunca volta pela tailnet.");
+    }
+  }
   return `${base.replace(/\/+$/, "")}/api/auth/callback`;
 }
 
@@ -123,7 +141,7 @@ function decifrar(blob: string): string {
 
 async function ler(): Promise<Credencial | null> {
   try {
-    return JSON.parse(decifrar(await fs.readFile(ARQUIVO, "utf8"))) as Credencial;
+    return JSON.parse(decifrar(await fs.readFile(arquivo(), "utf8"))) as Credencial;
   } catch (err: any) {
     if (err?.code === "ENOENT") return null;
     // Chave trocada ou arquivo corrompido: tratar como "não conectado" em vez
@@ -134,14 +152,16 @@ async function ler(): Promise<Credencial | null> {
 }
 
 async function gravar(cred: Credencial): Promise<void> {
-  await fs.mkdir(path.dirname(ARQUIVO), { recursive: true });
-  const tmp = `${ARQUIVO}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, cifrar(JSON.stringify(cred)), "utf8");
-  await fs.rename(tmp, ARQUIVO);
+  await fs.mkdir(path.dirname(arquivo()), { recursive: true });
+  const destino = arquivo();
+  const tmp = `${destino}.${process.pid}.tmp`;
+  // 600: é a credencial do Google; no Dell o diretório também é 700 (regra 24).
+  await fs.writeFile(tmp, cifrar(JSON.stringify(cred)), { encoding: "utf8", mode: 0o600 });
+  await fs.rename(tmp, destino);
 }
 
 async function apagar(): Promise<void> {
-  await fs.rm(ARQUIVO, { force: true });
+  await fs.rm(arquivo(), { force: true });
 }
 
 /* --------------------------------------------------------------- fluxo ---- */

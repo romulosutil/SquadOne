@@ -24,9 +24,11 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
 `server/crm.test.ts`, `server/acesso.test.ts`,
+`server/avisos.test.ts`, `server/telegram-polling.test.ts`,
+`server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
-vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander` e `sync`, este com um
+vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso) e `sync`, este com um
 SQLite num diretório temporário),
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` e
@@ -34,8 +36,9 @@ SQLite num diretório temporário),
 `python3 deploy/dell/dell-status.test.py`. Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
-com a máquina. `auth-escopos` e `squad` gravam num diretório temporário (chdir
-antes do import) e nunca em `data/`; `fetch` é dublê em todos. A verificação
+com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório
+temporário (chdir/env antes do import) e nunca em `data/`; `avisos` e
+`telegram-polling` gravam a fila e o offset em temporário; `fetch` é dublê em todos. A verificação
 continua sendo typecheck + build + exercitar a rota.
 
 ### Architectural Context (Graphify)
@@ -50,7 +53,8 @@ Um processo Express serve a API e a SPA Vue. Sem banco.
 
 ```
 server.ts                 Express: monta o webhook do Telegram antes do porteiro, o porteiro, as rotas e o Vite/estáticos
-  server/acesso.ts        porteiro de IP (403 antes de qualquer rota)
+  server/acesso.ts        porteiro de IP (403 antes de qualquer rota); no Dell, identidade do Serve e escrita da mesma origem
+  server/dados.ts         SQUADONE_DATA_DIR e a trava que só liga a agenda no Dell com ele fora do clone
   server/auth-store.ts    credencial do Google: code flow, refresh, cifra em disco
   server/squad.ts         roster v3 em árvore, migração, regras de id; única fonte de verdade das squads
   server/hire.ts          contratação (card ou UI), nova squad, substituição de PO
@@ -66,16 +70,19 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
   server/calendar.ts      leitura/escrita no Google Calendar (listar, GET/PATCH/POST de um evento)
-  server/push.ts          transporte ntfy: LEMBRETES_NTFY_URL, POST JSON, erros classificados
-  server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto
+  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 também no Telegram, cartões, sem R$
+  server/push.ts          transporte ntfy (só a sombra do Easypanel, sai depois): LEMBRETES_NTFY_URL, POST JSON
+  server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
   server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
+  server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min
   server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido
   server/tasks.ts         transporte do Google Tasks: lista, tarefa, ErroTasks classificado, timeout 10 s
   server/passos-no-google.ts  lista por squad (single-flight) + tarefa-mãe + subtarefas + vínculo no evento
   server/telegram.ts      transporte da Bot API: lê a config do ambiente, segredo do webhook em tempo constante, sendMessage/sendChatAction/setWebhook
   server/telegram-entrada.ts  PURO: update do Telegram -> comando/demanda/ignorar, dedupe de update_id em memória
   server/telegram-resposta.ts PURO: TurnoResult -> texto do chat (sem parse_mode), reusa linhasDosEventosCriados
-  server/telegram-bot.ts  cola: portão (segredo) + processar (allowlist via telegram-entrada, 200 imediato, fila serial, áudio, botões de contratação)
+  server/telegram-bot.ts  cola: portão (segredo) + receber/processar (allowlist via telegram-entrada, 200 imediato, fila serial, áudio, botões de contratação)
+  server/telegram-polling.ts  entrada por getUpdates (Dell): offset persistido ao enfileirar, nunca setWebhook
   server/transcricao.ts   áudio do Telegram -> texto da demanda (uma chamada ao Gemini)
   server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
@@ -229,9 +236,23 @@ O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/
 - Erros de quest: 404 `questSumiu`, 409 com a flag (`eventoSemMarca`, `eventoDeOutraSquad`, `dominioInativo`, `conflitoDeEdicao`, `alvoIncompativel`, `naoCabe`, `semHorarioLivre`), 401 `precisaConectar`, 500 `configuracao`/`marcasPerdidas`, 502 o resto do Google.
 - Nada disto grava fora do Google: a persistência continua só `squad.json` e `google-auth.json`.
 
+### Agenda no Dell (perfil operations)
+
+A agenda (roster, turno, Mochila, ajuste, vigia, bot) muda do Easypanel para o processo `operations` do Dell (`127.0.0.1:9120`), regras 7, 20 e 25. O código chega desligado; quem liga é o runbook manual `deploy/dell/CUTOVER-AGENDA.md`, passo a passo, com volta em cada um.
+
+- **Só liga com o diretório de dados próprio.** `SQUADONE_DATA_DIR` (padrão `./data`, `server/dados.ts`) guarda `squad.json`, `google-auth.json` e o offset do Telegram. No `operations`, `motivoParaAgendaDesligada` deixa a agenda desligada (rotas do app em 404, sem vigia, sem bot) enquanto a env falta ou aponta para dentro do checkout: o `~/SquadOne/data` do Dell é o retrato de 14/09/2026, e o primeiro `atualizar-central` depois do merge montaria tudo sobre ele. No Dell o diretório é `~/.local/share/squadone`, fora do clone, no cofre (`fontes.toml`).
+- **Nunca semeia no Dell.** Sem `squad.json`, `readRoster` lança `RosterAusente` (503 + `rosterAusente`) em vez de copiar a seed: uma agenda nova e vazia seria usada pelo bot e pela vigia como a de verdade. O roster de **produção** é a verdade; o do Dell é arquivado, nunca mesclado (`scripts/conferir-roster.ts` só compara).
+- **Congelamento.** `SQUADONE_ROSTER_CONGELADO=true` faz `atualizarRoster` lançar `RosterCongelado` (409 + `rosterCongelado`, filha de `ConflitoDeRoster`) dentro da fila: contratar, editar, arquivar e gravar o id da lista do Tasks param durante a cópia, a comparação e a troca. A leitura continua. Fica `true` no Easypanel depois do cutover (reserva fria).
+- **Acesso (regra 7).** No `operations`, `guardaDeIdentidade` confere o `Tailscale-User-Login` que o Serve põe em cada pedido contra `SQUADONE_LOGINS_TAILSCALE` (leitura também; Funnel nunca); pedido local direto (sem `X-Forwarded-For` nem header do Serve) passa. Ligada sempre que a agenda está no processo — aí lista vazia **fecha** a tailnet — ou que a lista existe; sem os dois a Central segue como antes, para o merge não derrubar o celular. `guardaDeOrigem` em `/api`: POST/PUT/PATCH/DELETE só com `Origin` de host e porta iguais ao `Host` e `Sec-Fetch-Site` (quando vem) `same-origin`; GET passa (GET nunca escreve). curl local de escrita precisa de `-H 'Origin: http://127.0.0.1:9120'`.
+- **OAuth pelo loopback.** No `operations`, `redirectUri` exige `APP_URL` em `http://127.0.0.1`/`localhost` (`ErroDeConfig` se não) e `/api/auth/google` e `/callback` respondem 409 a pedido vindo pelo Serve: conectar (e autorizar o Tasks) é pelo PC, com o túnel `Mel-Tuneis`, em `http://127.0.0.1:9120/api/auth/google`. Nada de redirect em `ts.net`.
+- **`/squadone`** é o endereço dos agentes na Central inteira: com `agenda: true` no `/api/runtime` o `RootApp` abre o app ali; sem, redireciona ao Easypanel (como antes do cutover).
+- **Avisos, não push** (`server/avisos.ts`). `Aviso {titulo, texto, origem, chave, prioridade, expiraEm, link?}` validado no schema da fila da fase 1 (`deploy/dell/README.md`, "Fila de avisos") e gravado atomicamente (`.tmp` oculto + rename) em `~/.local/share/avisos/fila` (`SQUADONE_AVISOS_FILA`), que o dell-status drena para o WhatsApp com teto, silêncio e chave de 24 h. Não cria a pasta (é `2770` com o grupo do n8n). P0 também vai ao Telegram (`sendMessage` a cada chat de `TELEGRAM_CHAT_IDS`), mesmo com a fila quebrada; falha do Telegram não falha o aviso. **Nenhum "R$"** passa em título, texto ou link (`AvisoInvalido`); `semValores` troca o valor de texto do usuário por "[valor]". Cartão que pede decisão (`avisoDeCartao`): link só da origem da tailnet (https, `.ts.net`) + caminho sem query nem fragmento, e texto sem URL — abrir não confirma.
+- **Sinal de vida** (`server/sinal-de-vida.ts`): com `DEADMAN_URL`, GET a cada minuto no healthchecks.io; `/fail` quando a sessão do WhatsApp (`whatsapp-sessao` no `status.json` do dell-status; retrato velho conta como fora) está fora há mais de 15 min. Só no `operations`. Falha do ping é só log.
+- **Simular a vigia do Dell:** `POST /api/avisos/varrer {"agora":"…"}` faz uma varredura real com relógio simulado e devolve os avisos que sairiam, sem gravar na fila nem na deduplicação. Não há envio de teste: o único caminho para a fila é a vigia.
+
 ### Lembretes push (ntfy)
 
-Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de cada marco, via servidor **ntfy próprio** (serviço `ntfy` no projeto `aladdin` do Easypanel; nunca `ntfy.sh`). O celular usa o app ntfy oficial assinando o tópico.
+Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de cada marco, via servidor **ntfy próprio** (serviço `ntfy` no projeto `aladdin` do Easypanel; nunca `ntfy.sh`). O celular usa o app ntfy oficial assinando o tópico. **Em extinção:** `mensagemDoDisparo` agora devolve um `Aviso` (marco P1, bloco P2, `chave` = `lembrete:<eventId>@<referência>`, `expiraEm` = o horário) e a vigia é a mesma nos dois perfis; no Dell ela publica na fila de avisos (acima), no Easypanel `avisoParaPush` o converte para o ntfy só durante os 3 dias úteis de sombra. Depois, o PR que remove o ntfy apaga esta seção.
 
 - **Nada é agendado para o futuro.** `server/vigia.ts` roda a cada 60 s: lê o roster, pede o token, faz **um** `events.list` por calendário distinto das squads ativas na janela `agora → agora + 12 min` (`listarQuestsDaJanela`, sem filtro de marca) e publica o que `disparosDevidos` (`server/lembretes.ts`, puro) devolver. Editar, apagar ou ajustar no Google reflete na varredura seguinte; redeploy não deixa timer órfão.
 - **Quem avisa:** só evento com `squadone_dominio` de domínio ativo. Bloco com horário (foco ou bloco de prazo) conta do **início**; marco com horário conta do **fim** (o prazo real — o marco vai de prazo − 15 min até o prazo); marco de dia inteiro conta do início da `JANELA_TRABALHO` do dia; bloco de dia inteiro não avisa. Evento que o SquadOne não criou não avisa.
@@ -245,6 +266,8 @@ Push no celular `ANTECEDENCIA_PUSH_MIN` (10) minutos antes de cada bloco e de ca
 ### Bot do Telegram
 
 Segundo canal de entrada, além da CommandBar: mandar uma demanda pelo Telegram roda o mesmo turno e cria os mesmos eventos. `server/turno.ts` (`rodarDemanda`) é o ponto único que as duas portas de entrada chamam, para as duas terem a mesma ordem (squad e janela antes do token e do Gemini).
+
+- **Dois transportes** (`TELEGRAM_TRANSPORTE`): `webhook` (padrão, Easypanel; tudo abaixo sobre rota, segredo e `setWebhook`) e `polling` (Dell, obrigatório no `operations`). No polling (`server/telegram-polling.ts`) o processo busca com `getUpdates` (`timeout` 50, `allowed_updates` mensagens + botões), sem rota e sem `TELEGRAM_WEBHOOK_SECRET` (a trava vira o token, que só existe no Dell). Cada update vai a `bot.receber` (o mesmo de `processar`, sem Express: deduplica e enfileira) e **só então** o offset (`update_id + 1`) é gravado em `SQUADONE_DATA_DIR/telegram-offset.json`; o `getUpdates` seguinte o confirma. Nunca chama `setWebhook`: 409 (webhook ainda registrado ou outro processo buscando) vira log uma vez e espera de 30 s. A guarda de demanda atrasada é a mesma: o backlog que o `deleteWebhook` **sem** drop deixa vira "⌛".
 
 - **Validação do webhook** (`server/telegram.ts`): o Telegram manda `TELEGRAM_WEBHOOK_SECRET` no header `X-Telegram-Bot-Api-Secret-Token` em todo POST — não segredo no path, que vazaria em log de acesso do Traefik e em qualquer `console.warn(req.path)`. Comparação em **tempo constante** (SHA-256 dos dois lados + `timingSafeEqual`: o hash iguala o tamanho, e um `if` de tamanho antes vazaria o tamanho do segredo). Ordem na rota: **segredo antes do parse do corpo** (`portao` → `express.json` → `processar`) — sem o segredo, 401 sem corpo e sem o JSON ser lido.
 - **Única rota fora do porteiro de IP.** O Telegram não tem IP fixo garantido (publica faixas, que podem mudar). `server.ts` monta `POST /api/telegram/webhook` **antes** de `app.use(porteiroDeIp())`, e só ela — qualquer outro método ou caminho continua atrás do porteiro. Com o bot desligado a rota nem é montada e o caminho cai no porteiro (403) como hoje. A trava própria da rota é o segredo (acima) + a allowlist de chat (abaixo).
@@ -292,8 +315,8 @@ Só frontend; nada disto grava.
 O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor. Detalhes e regras da Central estão em `ARCHITECTURE.md` e `RULES.md` — leia-os antes de mexer em `server/operations.ts`, `server/auto-production.ts`, `server/dell-status.ts`, `src/operations/` ou `deploy/`.
 
 - **`app` (padrão, Easypanel):** o SquadOne de sempre, bind `0.0.0.0`. `/api/operations/*` responde 404 JSON (sem isto o fallback da SPA devolveria HTML 200). Ausente = `app`; valor desconhecido derruba o boot — perfil errado não pode abrir a Central calado.
-- **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** só a Central em `/` (`/squadone` redireciona ao app do Easypanel desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção. As rotas do app (`rotasDoApp` em `server.ts`: roster, Mochila, turno, ajuste, push, avaliação) **não são montadas** nesse perfil: o resto de `/api` é 404 JSON, e do Google ficam só `/api/auth/google` e `/callback` (a agenda da Central). O `data/squad.json` do Dell é um retrato de 14/09/2026.
-- **`GET /api/runtime`** devolve `{ mode, avaliacoes, ocupado }`. `ocupado` = turno em andamento (`haTurnoEmAndamento`, contado em `rodarDemanda`) ou mensagem na fila do bot (`bot.ocupado()`); o `deploy/dell/atualizar-central.sh` espera `false` (até 10 min) antes de reiniciar.
+- **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/` (`/squadone` abre os agentes aqui com a agenda ligada; sem ela, redireciona ao app do Easypanel, como desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção. As rotas do app (`rotasDoApp` em `server.ts`: roster, Mochila, turno, ajuste, avisos, avaliação) só são montadas com a agenda ligada (ver "Agenda no Dell"); sem ela o resto de `/api` é 404 JSON, e do Google ficam só `/api/auth/google` e `/callback` (a agenda da Central). `/api/push/*` nunca existe aqui. O `~/SquadOne/data/squad.json` do Dell é um retrato de 14/09/2026 e nunca vira a agenda.
+- **`GET /api/runtime`** devolve `{ mode, avaliacoes, ocupado, agenda }` (`agenda`: o app mora neste processo). `ocupado` = turno em andamento (`haTurnoEmAndamento`, contado em `rodarDemanda`) ou mensagem na fila do bot (`bot.ocupado()`); o `deploy/dell/atualizar-central.sh` espera `false` (até 10 min) antes de reiniciar.
 - **`src/RootApp.vue`** pergunta `/api/runtime` e escolhe a superfície. Falha na pergunta = abre o app, nunca a Central.
 - **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.
 
@@ -303,7 +326,7 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 
 ## Persistência
 
-Volume Docker do Easypanel montado em `/app/data`. Poucos KB:
+Volume Docker do Easypanel montado em `/app/data`; no Dell, `~/.local/share/squadone` (`SQUADONE_DATA_DIR`, fora do clone, mais o `telegram-offset.json` do polling). Onde a tabela diz `data/`, leia "o diretório de dados". Poucos KB:
 
 | Arquivo | Conteúdo |
 |---|---|
@@ -394,6 +417,12 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_MODE` | servidor | `app` (padrão, Easypanel) ou `operations` (Dell); outro valor derruba o boot. Ver "Dois perfis" |
 | `SQUADONE_OPERATIONS_CONFIG` / `_DATA_DIR` | servidor | só em `operations`: config privada da Central e diretório de dados; nunca no Easypanel |
 | `SQUADONE_AVALIACOES` | servidor | `true` liga a avaliação de turno; qualquer outro valor = desligada |
+| `SQUADONE_DATA_DIR` | servidor | `squad.json`, `google-auth.json`, offset do Telegram; ausente = `./data`. No `operations` a agenda só liga com ela presente e fora do checkout (Dell: `~/.local/share/squadone`, caminho absoluto) |
+| `SQUADONE_ROSTER_CONGELADO` | servidor | `true` recusa toda escrita no roster (409 `rosterCongelado`): cutover e reserva fria |
+| `TELEGRAM_TRANSPORTE` | servidor | `webhook` (padrão) ou `polling`; no `operations` só `polling`; outro valor = `TelegramMalConfigurado` |
+| `SQUADONE_LOGINS_TAILSCALE` | servidor | só `operations`: logins aceitos no `Tailscale-User-Login`, por vírgula; com a agenda ligada, vazia fecha a tailnet; vazia fecha `/api/financas/*` pela tailnet sempre |
+| `SQUADONE_AVISOS_FILA` | servidor | só `operations`: pasta da fila de avisos; ausente = `~/.local/share/avisos/fila` |
+| `DEADMAN_URL` | servidor | só `operations`: ping do healthchecks.io (https, sem query); ausente = sem sinal; ilegível = log e desligado |
 | `PLUGGY_CLIENT_ID` / `_SECRET` / `PLUGGY_ITEM_IDS` | servidor | só em `operations`, no EnvironmentFile `~/.config/squadone/financas.env` (600); ausentes = finanças sem leitura; um presente sem os outros = log de erro e Pluggy desligada. Nunca impressos |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
@@ -405,7 +434,7 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 ## Convenções
 
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
-- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout), `TelegramMalConfigurado` (env do bot presente e ilegível: log de erro no boot, bot desligado, resto do app igual), `ErroDeTelegram` (`status` da Bot API, `null` quando nem houve resposta; só `console.error`, nunca derruba o turno nem a rota). A UI decide o que fazer pelo tipo.
+- Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `PushMalConfigurado` (500 + `configuracao`, só nas rotas `/api/push/*`), `ErroDePush` (502 + `pushFalhou`; `credencial` quando o ntfy deu 401/403), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout), `TelegramMalConfigurado` (env do bot presente e ilegível: log de erro no boot, bot desligado, resto do app igual), `ErroDeTelegram` (`status` da Bot API, `null` quando nem houve resposta; só `console.error`, nunca derruba o turno nem a rota), `RosterAusente` (503 + `rosterAusente`: Dell sem o roster de produção), `RosterCongelado` (409 + `rosterCongelado`), `AvisoInvalido` (fora do schema da fila ou com R$: o aviso não é gravado), `SinalMalConfigurado` (`DEADMAN_URL` ilegível: log, sem sinal). A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série; a checklist do Tasks que falha não desfaz o compromisso.
 - Ao terminar tarefa: `git commit` + `git push`. O grafo é do Hermes no Dell (job "Graphify — projetos", às 03:00, sobre os clones vivos e os espelhos de todos os repositórios do GitHub; o PC puxa por SSH de `~/Mel/Grafos`); no Dell, `graphify update .` depois de mudar código; nunca no Windows. Depois do push, a Central do Dell se atualiza sozinha em até 10 min (`atualizar-central.timer`).
 

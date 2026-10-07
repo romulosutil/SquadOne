@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { diretorioDeDados } from "./dados.ts";
 
 /**
  * Roster em ÁRVORE de três níveis (spec Fase 1 §1).
@@ -156,8 +157,47 @@ export class RosterIlegivel extends Error {
   }
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
+/**
+ * Sem `squad.json` num processo que não pode semear (perfil operations, no
+ * Dell). 503: o roster de produção ainda não foi copiado, e semear ali criaria
+ * uma agenda nova e vazia que o bot e a vigia usariam como se fosse a de
+ * verdade (regra 7).
+ */
+export class RosterAusente extends Error {
+  constructor() {
+    super("Roster de produção ainda não copiado para este diretório de dados (veja o runbook do cutover).");
+    this.name = "RosterAusente";
+  }
+}
+
+/**
+ * Escrita com `SQUADONE_ROSTER_CONGELADO=true`: durante a cópia, a comparação
+ * e a troca do roster entre o Easypanel e o Dell nada pode contratar, editar
+ * nem arquivar — a mudança ficaria só de um lado e se perderia na troca. É
+ * conflito (409), não erro nosso: o roster está certo, só fechado.
+ */
+export class RosterCongelado extends ConflitoDeRoster {
+  constructor() {
+    super("Roster congelado durante a mudança da agenda para o Dell: contratações e edições voltam depois da troca.");
+    this.name = "RosterCongelado";
+  }
+}
+
+export function rosterCongelado(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.SQUADONE_ROSTER_CONGELADO ?? "").trim() === "true";
+}
+
+/** No Dell nunca se semeia: o roster vem de produção, copiado à mão. */
+function podeSemear(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.SQUADONE_MODE ?? "").trim() !== "operations";
+}
+
+/**
+ * Lidos na hora do uso, não no import: o server.ts importa este módulo antes do
+ * `dotenv.config()`, e um SQUADONE_DATA_DIR vindo do .env ficaria de fora.
+ */
+const dataDir = () => diretorioDeDados();
+const squadPath = () => path.join(dataDir(), "squad.json");
 
 /**
  * A seed NAO pode morar em `data/`. Em producao `data/` e um volume Docker
@@ -169,9 +209,9 @@ const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
  * lista para nao quebrar checkout velho nem container que ja subiu com o
  * arquivo no lugar anterior.
  */
-const SEED_PATHS = [
+const seedPaths = () => [
   path.join(process.cwd(), "seed", "squad.seed.json"),
-  path.join(DATA_DIR, "squad.seed.json"),
+  path.join(dataDir(), "squad.seed.json"),
 ];
 
 /** Salas de um escritório: grade 3x3. Passou disso, não há slot para alocar. */
@@ -283,7 +323,7 @@ async function sincronizarDiretorio(dir: string): Promise<void> {
 }
 
 export async function writeRoster(roster: Roster): Promise<void> {
-  await gravarAtomico(SQUAD_PATH, JSON.stringify(roster, null, 2) + "\n");
+  await gravarAtomico(squadPath(), JSON.stringify(roster, null, 2) + "\n");
 }
 
 /**
@@ -297,6 +337,8 @@ let fila: Promise<unknown> = Promise.resolve();
 
 export function atualizarRoster<T>(mutador: (roster: Roster) => T): Promise<T> {
   const proximo = fila.then(async () => {
+    // Dentro da fila: uma escrita que esperava quando o congelamento entrou também para.
+    if (rosterCongelado()) throw new RosterCongelado();
     const roster = await readRoster();
     // Se o mutador lançar, nada é gravado: o roster em disco fica intacto.
     const saida = mutador(roster);
@@ -325,7 +367,7 @@ export function salaPara(qtdPessoas: number, atual?: string): string {
  * porque o motivo provavel e um volume montado sobre o diretorio errado.
  */
 async function lerSeed(): Promise<string> {
-  for (const caminho of SEED_PATHS) {
+  for (const caminho of seedPaths()) {
     try {
       return await fs.readFile(caminho, "utf8");
     } catch (err: any) {
@@ -333,7 +375,7 @@ async function lerSeed(): Promise<string> {
     }
   }
   throw new Error(
-    `Seed do roster nao encontrada. Procurei em: ${SEED_PATHS.join(", ")}.`,
+    `Seed do roster nao encontrada. Procurei em: ${seedPaths().join(", ")}.`,
   );
 }
 
@@ -359,12 +401,13 @@ let semeadura: Promise<void> | null = null;
  * uma seed antiga v2 (caminho legado) é migrada pela leitura seguinte, com backup.
  */
 async function ensureRoster(): Promise<void> {
-  if (await existe(SQUAD_PATH)) return;
+  if (await existe(squadPath())) return;
+  if (!podeSemear()) throw new RosterAusente();
   if (!semeadura) {
     semeadura = (async () => {
       // Relê: outra semeadura pode ter terminado entre o `existe` de fora e aqui.
-      if (await existe(SQUAD_PATH)) return;
-      await gravarAtomico(SQUAD_PATH, await lerSeed());
+      if (await existe(squadPath())) return;
+      await gravarAtomico(squadPath(), await lerSeed());
     })().finally(() => {
       semeadura = null;
     });
@@ -459,7 +502,7 @@ export function migrarV2(v2: RosterV2): Roster {
 }
 
 /** Forma mínima que o resto do código assume. Não checa unicidade: isso é da escrita. */
-function validarV3(bruto: any): Roster {
+export function validarV3(bruto: any): Roster {
   const falha = (mensagem: string): never => {
     throw new RosterIlegivel(mensagem);
   };
@@ -505,14 +548,14 @@ let migracao: Promise<Roster> | null = null;
 async function migrarNoDisco(): Promise<Roster> {
   // Relê aqui dentro: quem disparou pode ter lido v2 logo antes de outra
   // migração terminar. Nesse caso o arquivo já é v3 e não há o que fazer.
-  const texto = await fs.readFile(SQUAD_PATH, "utf8");
+  const texto = await fs.readFile(squadPath(), "utf8");
   const bruto = interpretar(texto);
   const versao = detectarVersao(bruto);
   if (versao === 3) return validarV3(bruto);
 
   // Backup do texto CRU antes de qualquer escrita, e nunca por cima de um
   // backup existente: o primeiro é o único que garantidamente é o original.
-  const backup = path.join(DATA_DIR, `squad.v${versao}.bak.json`);
+  const backup = path.join(dataDir(), `squad.v${versao}.bak.json`);
   if (!(await existe(backup))) await gravarAtomico(backup, texto);
 
   const v2 = versao === 1 ? migrarV1(bruto as any) : (bruto as RosterV2);
@@ -524,7 +567,7 @@ async function migrarNoDisco(): Promise<Roster> {
 
 export async function readRoster(): Promise<Roster> {
   await ensureRoster();
-  const bruto = interpretar(await fs.readFile(SQUAD_PATH, "utf8"));
+  const bruto = interpretar(await fs.readFile(squadPath(), "utf8"));
   if (detectarVersao(bruto) === 3) return validarV3(bruto);
 
   if (!migracao) {

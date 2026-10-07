@@ -89,11 +89,15 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
 3. **Finanças no Dell**, que não esperam a mudança da agenda: banco próprio,
    tela de Visão, e nasce a casca mobile (tokens, barra inferior com o ＋Pedir
    desabilitado). Implementado em 07/10/2026 (ver "Finanças", abaixo); a
-   conferência de identidade do Serve entrou junto, ligada por
-   `tailscaleLogins`.
+   conferência de identidade do Serve entrou junto; desde a mudança da agenda
+   a lista é a mesma dela, `SQUADONE_LOGINS_TAILSCALE`.
 4. **Mudança da agenda para o Dell.** O roster de **produção** é a verdade; o
    do Dell é arquivado, nunca mesclado, com as contratações congeladas durante
-   a troca. Nesta ordem, cada passo com volta:
+   a troca. O código (diretório de dados fora do clone, polling do Telegram,
+   avisos pela fila, travas de identidade e origem, sinal de vida) chega
+   desligado: a agenda só liga no Dell com `SQUADONE_DATA_DIR` presente e fora
+   do checkout. O runbook, passo a passo e com volta em cada um, é
+   `deploy/dell/CUTOVER-AGENDA.md`. Nesta ordem:
    1. tirar `TELEGRAM_*` do Easypanel e implantar;
    2. copiar o `squad.json` de produção para o Dell;
    3. travar o Easypanel (`IPS_PERMITIDOS=127.0.0.1`), implantável;
@@ -273,13 +277,16 @@ continua aceita. Escrita exige `Origin`/`Sec-Fetch-Site` da mesma origem,
 porque o header de identidade também acompanha um POST forjado por outra
 página aberta no celular.
 
-No código (07/10/2026, `server/acesso.ts`): `porteiroDeIdentidade` vale para
-toda requisição quando `operations.json` tem `tailscaleLogins`; sem a lista, a
-Central de hoje segue aberta à tailnet como antes, e só `/api/financas/*` fecha
-para quem chega pelo Serve. "Chegou pelo Serve" = trouxe `X-Forwarded-For` ou
-`Tailscale-User-Login`. `exigeMesmaOrigem` aceita `Sec-Fetch-Site:
-same-origin`; sem ele, `Origin` com o mesmo host; sem os dois, só a requisição
-local direta. A ACL do Tailscale continua um passo manual no console.
+No código (07/10/2026, `server/acesso.ts`): uma lista só,
+`SQUADONE_LOGINS_TAILSCALE` no `operations.env`. `guardaDeIdentidade` vale para
+toda requisição quando a agenda está no processo (lista vazia então fecha a
+tailnet) ou quando a lista existe; sem os dois, a Central de hoje segue aberta
+à tailnet como antes, e só `/api/financas/*` fecha para quem chega pelo Serve.
+"Chegou pelo Serve" = trouxe `X-Forwarded-For`, `Tailscale-User-Login` ou
+`Tailscale-Funnel-Request`; Funnel nunca passa. `guardaDeOrigem` exige, em toda
+escrita em `/api`, `Origin` com host e porta iguais aos do `Host` e, quando o
+navegador manda, `Sec-Fetch-Site: same-origin`. A ACL do Tailscale continua um
+passo manual no console.
 
 O fluxo observado é Caçador do n8n → pacote em `auto-entrada` → `~/auto-site`
 → `gerador-de-sites` (Claude Code + Vercel) → `publicado.json` → watcher Linux

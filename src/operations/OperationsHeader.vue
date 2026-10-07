@@ -33,8 +33,9 @@ const checkedLabel = computed(() => props.checkedAt
       <a href="/entrada/" :aria-current="currentPath.startsWith('/entrada') ? 'page' : undefined">Entrada</a>
     </nav>
 
-    <!-- Um botão só para os agentes (squads e pessoas) do SquadOne: o app no Easypanel. -->
-    <a class="ops-enter ops-enter--rail" href="https://aladdin-squadone-app.jicnzg.easypanel.host/" target="_blank" rel="noopener"><span>Abrir</span><strong>Agentes do SquadOne</strong></a>
+    <!-- Um botão só para os agentes (squads e pessoas) do SquadOne: /squadone abre o app aqui quando a
+         agenda mora no Dell, e redireciona ao Easypanel antes do cutover (RootApp.vue). -->
+    <a class="ops-enter ops-enter--rail" href="/squadone"><span>Abrir</span><strong>Agentes do SquadOne</strong></a>
   </aside>
 
   <header class="ops-command-topbar">

@@ -33,8 +33,19 @@ Todo o resto de `/api` (roster, Mochila, turno, ajuste, push, avaliação,
 `/api/auth/status` e `/logout`) responde **404 JSON**, como `/api/operations`
 no perfil `app`. Antes ficavam montadas sobre o `~/SquadOne/data/squad.json` do
 Dell, um retrato de 14/09/2026: um POST na Central criaria agentes e eventos a
-partir dele. Confira: `curl -s -X POST 127.0.0.1:9120/api/quests/x/ajustar`
+partir dele. Confira: `curl -s -X POST -H 'Origin: http://127.0.0.1:9120' 127.0.0.1:9120/api/quests/x/ajustar`
 → `404 {"error":"Rota do app indisponível no perfil operations."}`.
+
+**A agenda no Dell (cutover, em `CUTOVER-AGENDA.md`).** As rotas do app voltam
+ao `operations` só com `SQUADONE_DATA_DIR` no `operations.env`, apontando para
+`~/.local/share/squadone` (fora do clone), onde o runbook põe o roster de
+**produção** e a credencial do Google do Dell; o retrato de 14/09/2026 é
+arquivado, nunca mesclado. Com a agenda: bot do Telegram por `getUpdates`
+(`TELEGRAM_TRANSPORTE=polling`), lembretes pela fila de avisos, conferência do
+`Tailscale-User-Login` (`SQUADONE_LOGINS_TAILSCALE`), escrita só da mesma
+origem (curl de escrita leva `-H 'Origin: http://127.0.0.1:9120'`) e sinal de
+vida para o healthchecks.io (`DEADMAN_URL`). Conectar ou ampliar o Google é
+sempre pelo PC, no túnel: `http://127.0.0.1:9120/api/auth/google`.
 
 ```bash
 cp deploy/dell/atualizar-central.{service,timer} ~/.config/systemd/user/
@@ -66,6 +77,19 @@ SQUADONE_MODE=operations
 IPS_PERMITIDOS=127.0.0.1,::1,100.64.0.0/10,fd7a:115c:a1e0::/48
 SQUADONE_OPERATIONS_CONFIG=/home/usuario/.config/squadone/operations.json
 SQUADONE_OPERATIONS_DATA_DIR=/home/usuario/.local/share/squadone-operations
+```
+
+Depois do cutover da agenda (`CUTOVER-AGENDA.md`), o mesmo arquivo ganha, com
+os valores digitados pelo Rômulo (nunca pelo chat):
+
+```dotenv
+SQUADONE_DATA_DIR=/home/usuario/.local/share/squadone
+SQUADONE_LOGINS_TAILSCALE=<login do Tailscale>
+GEMINI_API_KEY=<chave paga>
+DEADMAN_URL=<URL de ping do healthchecks.io>
+TELEGRAM_BOT_TOKEN=<token>
+TELEGRAM_TRANSPORTE=polling
+TELEGRAM_CHAT_IDS=<chat do Rômulo>
 ```
 
 O serviço fixa `APP_URL=http://127.0.0.1:9120` para que a autorização Google da
@@ -367,12 +391,13 @@ grava a cópia `financas.copia.db` com `VACUUM INTO` (é ela que vai ao cofre).
    # PLUGGY_ITEM_IDS=id1,id2,id3
    ```
 
-2. A lista de logins do Tailscale em `operations.json` (RULES 7). Sem ela,
-   finanças pela tailnet respondem 403 (de propósito); com ela, **toda** a
-   Central passa a exigir o `Tailscale-User-Login` de quem chega pelo Serve:
+2. A lista de logins do Tailscale no `~/.config/squadone/operations.env`
+   (RULES 7; a mesma do passo 0 de `CUTOVER-AGENDA.md`). Sem ela, finanças pela
+   tailnet respondem 403 (de propósito); com ela, **toda** a Central passa a
+   exigir o `Tailscale-User-Login` de quem chega pelo Serve:
 
-   ```json
-   "tailscaleLogins": ["sutil.romulo@gmail.com"]
+   ```bash
+   SQUADONE_LOGINS_TAILSCALE=sutil.romulo@gmail.com
    ```
 
 3. O serviço novo (lê o `financas.env` e cria tudo 600 com `UMask=0077`):

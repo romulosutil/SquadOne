@@ -20,7 +20,12 @@ UMask=0077
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data
+# squadone-operations: status.json, projetos. squadone: o diretório da agenda
+# (SQUADONE_DATA_DIR: roster de produção, google-auth.json, offset do Telegram),
+# fora do clone. avisos/fila: a fila que o dell-status drena para o WhatsApp.
+# O "-" deixa o serviço subir antes do cutover, quando as duas últimas ainda
+# não existem. %h/SquadOne/data fica até o runbook mover a credencial do Google.
+ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data -%h/.local/share/squadone -%h/.local/share/avisos/fila
 
 [Install]
 WantedBy=default.target

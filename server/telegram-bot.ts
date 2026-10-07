@@ -24,7 +24,8 @@ import {
 
 /**
  * A cola do bot: portão próprio (a rota fica FORA do porteiro de IP), 200
- * imediato e uma fila serial de turnos.
+ * imediato e uma fila serial de turnos. Duas portas para o mesmo `receber`:
+ * `processar` (webhook, Express) e o polling (`telegram-polling.ts`).
  *
  * - 200 antes do turno: um turno leva até ~6 min no pior caso (redirecionamento
  *   de squad = 2 gerações do Gemini de ~3 min cada, mais o Google); segurar a
@@ -42,7 +43,8 @@ import {
  */
 
 export interface DepsDoBot {
-  segredo: string;
+  /** Segredo do webhook; null no polling (sem rota, o portão recusa tudo). */
+  segredo: string | null;
   chatsPermitidos: ReadonlySet<number>;
   rodar(demanda: string, modo: Modo): Promise<TurnoResult>;
   enviar(chatId: number, texto: string, responderA?: number, botoes?: Botao[]): Promise<void>;
@@ -202,7 +204,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
   }
 
   const portao: RequestHandler = (req, res, next) => {
-    if (!segredoConfere(deps.segredo, req.get("X-Telegram-Bot-Api-Secret-Token"))) {
+    if (deps.segredo === null || !segredoConfere(deps.segredo, req.get("X-Telegram-Bot-Api-Secret-Token"))) {
       // Sem detalhe e sem logar o header: quem não tem o segredo não é o Telegram.
       console.warn("[telegram] webhook com segredo inválido");
       res.status(401).end();
@@ -211,11 +213,13 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
     next();
   };
 
-  const processar: RequestHandler = (req, res) => {
-    const entrada = interpretarUpdate(req.body, deps.chatsPermitidos, deps.agora());
-    // 200 para tudo que passou do segredo, inclusive o que é ignorado: status
-    // diferente faz o Telegram reentregar e segurar os updates seguintes.
-    res.sendStatus(200);
+  /**
+   * Um update: interpreta, deduplica e enfileira (ou responde na hora). Volta
+   * assim que o update está na fila, sem esperar o turno: é o ponto em que o
+   * webhook responde 200 e o polling avança o offset.
+   */
+  function receber(update: unknown): void {
+    const entrada = interpretarUpdate(update, deps.chatsPermitidos, deps.agora());
     if (entrada.updateId !== null && memoria.jaVisto(entrada.updateId)) return;
 
     switch (entrada.tipo) {
@@ -268,9 +272,16 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         return;
       }
     }
+  }
+
+  const processar: RequestHandler = (req, res) => {
+    // 200 para tudo que passou do segredo, inclusive o que é ignorado: status
+    // diferente faz o Telegram reentregar e segurar os updates seguintes.
+    res.sendStatus(200);
+    receber(req.body);
   };
 
   // `ocupado` conta também o que espera na fila, não só o turno da vez: a
   // mensagem já recebeu 200 e o Telegram não a reentrega se o processo cair.
-  return { portao, processar, ocioso: () => fila, ocupado: () => pendentes > 0 };
+  return { portao, processar, receber, ocioso: () => fila, ocupado: () => pendentes > 0 };
 }

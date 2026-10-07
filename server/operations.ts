@@ -26,12 +26,6 @@ export interface OperationsConfig {
   autoDirectory?: string;
   /** Bloco "crm" de operations.json (caminhos do retrato e do registro); ausente = padrões do Dell. */
   crm?: unknown;
-  /**
-   * Logins do Tailscale aceitos pelo Serve (`Tailscale-User-Login`, RULES 7).
-   * Vazio = ninguém que chegue pelo Serve passa nas rotas que exigem
-   * identidade (finanças); com itens, vale para toda requisição pelo Serve.
-   */
-  tailscaleLogins: string[];
   tools: Record<OperationToolId, OperationToolConfig>;
 }
 
@@ -118,18 +112,6 @@ function readHttpUrl(value: unknown, field: string, loopbackOnly: boolean): stri
   return url.href;
 }
 
-/** Lista de logins (e-mail) do Tailscale; item ilegível derruba o boot, como o porteiro de IP. */
-export function lerLoginsDoTailscale(valor: unknown): string[] {
-  if (valor === undefined || valor === null) return [];
-  if (!Array.isArray(valor)) throw new Error("tailscaleLogins deve ser uma lista de logins do Tailscale.");
-  return valor.map((item) => {
-    if (typeof item !== "string" || !/^[^\s@]+@[^\s@]+$/.test(item.trim())) {
-      throw new Error("tailscaleLogins: cada item é um login do Tailscale (e-mail).");
-    }
-    return item.trim().toLowerCase();
-  });
-}
-
 export async function readOperationsConfig(filePath: string): Promise<OperationsConfig> {
   const raw = JSON.parse(await fs.readFile(filePath, "utf8")) as Partial<OperationsConfig>;
   if (!raw.tools || typeof raw.tools !== "object") {
@@ -159,7 +141,6 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
       ? { autoDirectory: path.resolve(raw.autoDirectory.trim()) }
       : {}),
     ...(raw.crm && typeof raw.crm === "object" ? { crm: raw.crm } : {}),
-    tailscaleLogins: lerLoginsDoTailscale(raw.tailscaleLogins),
     tools,
   };
 }

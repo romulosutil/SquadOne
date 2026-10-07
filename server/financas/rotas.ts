@@ -1,5 +1,5 @@
 import express from "express";
-import { exigeMesmaOrigem, identidadeAceita, veioPeloServe } from "../acesso.ts";
+import { guardaDeIdentidade, guardaDeOrigem, veioPeloServe } from "../acesso.ts";
 import { FUSO } from "../alocador.ts";
 import { abrirBanco, FinancasIndisponiveis, type BancoDeFinancas } from "./banco.ts";
 import { ehMes, mesDe } from "./comum.ts";
@@ -21,9 +21,11 @@ import { mesDaFatura, type Visao } from "./visoes.ts";
  *
  * Travas (RULES 7), além do porteiro de IP que já vem antes:
  * - quem chega pelo Tailscale Serve precisa de um `Tailscale-User-Login` da
- *   lista `tailscaleLogins` de `operations.json`; lista vazia FECHA aqui, e é
- *   de propósito: finanças não abrem para a tailnet inteira por esquecimento;
- * - toda escrita exige a mesma origem (`exigeMesmaOrigem`).
+ *   lista `SQUADONE_LOGINS_TAILSCALE`; lista vazia FECHA aqui, e é de
+ *   propósito: finanças não abrem para a tailnet inteira por esquecimento;
+ *   Funnel nunca passa (`guardaDeIdentidade`);
+ * - toda escrita exige a mesma origem (`guardaDeOrigem`: `Origin` com host e
+ *   porta do `Host`, e `Sec-Fetch-Site: same-origin` quando vem).
  *
  * Privacidade (RULES 24): as respostas levam R$ porque são a TELA do app;
  * nada daqui vai a log (só contagens e status), push, Telegram, Hermes ou ao
@@ -97,23 +99,23 @@ export function iniciarLeituraDiaria(estado: EstadoDasFinancas, agora: () => Dat
   };
 }
 
-export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins: readonly string[]; agora?: () => Date }): express.Router {
+export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins: ReadonlySet<string>; agora?: () => Date }): express.Router {
   const router = express.Router();
   const agora = opcoes.agora ?? (() => new Date());
 
   router.use((req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
-    if (veioPeloServe(req.headers) && opcoes.logins.length === 0) {
-      res.status(403).json({ error: "Finanças fechadas pela tailnet: falta tailscaleLogins em operations.json.", configuracao: true });
-      return;
-    }
-    if (!identidadeAceita(req.headers, opcoes.logins)) {
-      res.status(403).type("text/plain").send("403");
+    if (veioPeloServe(req) && opcoes.logins.size === 0) {
+      res.status(403).json({ error: "Finanças fechadas pela tailnet: falta SQUADONE_LOGINS_TAILSCALE no operations.env.", configuracao: true });
       return;
     }
     next();
   });
-  router.use(exigeMesmaOrigem);
+  // A mesma guarda que o server.ts liga para o processo inteiro quando a
+  // agenda está aqui ou a lista existe: repetida aqui para as finanças nunca
+  // dependerem dessa decisão.
+  router.use(guardaDeIdentidade(opcoes.logins));
+  router.use(guardaDeOrigem());
   router.use((_req, res, next) => {
     if (estado.banco) return next();
     res.status(503).json({ error: estado.problema ?? "Finanças indisponíveis.", financasIndisponiveis: true });

@@ -82,71 +82,100 @@ export function porteiroDeIp() {
   };
 }
 
+/* ------------------------------------------------- identidade e origem --- */
+
 /**
- * Segunda e terceira travas da RULES 7 (06/10/2026), para o que o app guarda
- * no Dell (finanças agora; agenda e roster na mudança).
+ * Pedido que chegou pelo Tailscale Serve (a 8443 da tailnet). O Serve reescreve
+ * o X-Forwarded-For com o IP do aparelho e põe os headers `Tailscale-User-*`;
+ * pedido local direto (processos do Dell, túnel SSH do PC no callback do OAuth)
+ * não traz nenhum dos dois. Confiar nisso só vale porque o processo escuta só
+ * em loopback: quem põe o header é o Serve, não o navegador (ver "Confiança no
+ * loopback" no ARCHITECTURE.md).
+ */
+export function veioPeloServe(req: Request): boolean {
+  return Boolean(req.headers["x-forwarded-for"] || req.headers["tailscale-user-login"] || req.headers["tailscale-funnel-request"]);
+}
+
+/** `SQUADONE_LOGINS_TAILSCALE`: logins da tailnet (e-mail do Tailscale), por vírgula, sem diferenciar maiúsculas. */
+export function lerLoginsPermitidos(env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+  return new Set(
+    (env.SQUADONE_LOGINS_TAILSCALE ?? "")
+      .split(",")
+      .map((l) => l.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Segunda trava da regra 7, atrás da ACL do Tailscale: todo pedido que chega
+ * pelo Serve precisa do `Tailscale-User-Login` de um dos logins da lista. Vale
+ * para leitura também (a agenda é dado pessoal). Ausente ou fora da lista é
+ * 403; nó com tag não tem usuário e fica de fora, de propósito. Funnel nunca
+ * passa, mesmo com login: Funnel é proibido.
  *
- * "Veio pelo Serve" = trouxe `X-Forwarded-For` ou `Tailscale-User-Login`: o
- * processo escuta só em loopback, então quem chega com eles é o Tailscale
- * Serve (que reescreve os dois) ou um processo do próprio Dell (risco aceito
- * em ARCHITECTURE "Confiança no loopback"). Requisição local direta, sem
- * nenhum dos dois, segue valendo: o atualizar-central e o túnel SSH do PC.
+ * Lista vazia FECHA: nenhum pedido pelo Serve entra. Quem decide se a trava
+ * está ligada é o server.ts (ligada sempre que a agenda está no processo).
  */
-export function veioPeloServe(headers: Request["headers"]): boolean {
-  return Boolean(headers["x-forwarded-for"] || headers["tailscale-user-login"]);
-}
-
-function cabecalho(headers: Request["headers"], nome: string): string | undefined {
-  const v = headers[nome];
-  return Array.isArray(v) ? v[0] : v;
-}
-
-/** PURO: o login do Serve está na lista? Lista vazia FECHA (ao contrário de IPS_PERMITIDOS). */
-export function identidadeAceita(headers: Request["headers"], logins: readonly string[]): boolean {
-  if (!veioPeloServe(headers)) return true;
-  const login = cabecalho(headers, "tailscale-user-login")?.trim().toLowerCase();
-  return Boolean(login) && logins.some((l) => l.trim().toLowerCase() === login);
-}
-
-/**
- * Confere o `Tailscale-User-Login` contra a lista da configuração. Nó com tag
- * não tem usuário e fica de fora, de propósito. Sem detalhe na resposta,
- * igual ao porteiro.
- */
-export function porteiroDeIdentidade(logins: readonly string[]) {
+export function guardaDeIdentidade(logins: ReadonlySet<string>) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (identidadeAceita(req.headers, logins)) return next();
-    console.warn(`[acesso] identidade do Tailscale recusada em ${req.method} ${req.path}`);
+    if (!veioPeloServe(req)) return next();
+    if (req.headers["tailscale-funnel-request"]) {
+      console.warn(`[acesso] pedido pelo Funnel recusado em ${req.method} ${req.path}`);
+      return res.status(403).type("text/plain").send("403");
+    }
+    const login = String(req.get("Tailscale-User-Login") ?? "").trim().toLowerCase();
+    if (login && logins.has(login)) return next();
+    // Sem o login no log: com a lista certa, quem não passa é tag ou outro usuário.
+    console.warn(`[acesso] identidade do Serve recusada em ${req.method} ${req.path}${login ? "" : " (sem login)"}`);
     res.status(403).type("text/plain").send("403");
   };
 }
 
+const METODOS_SEM_ESCRITA = new Set(["GET", "HEAD", "OPTIONS"]);
+
 /**
- * PURO: a escrita vem de uma página da MESMA origem? O header de identidade
- * não protege de CSRF: uma página qualquer aberta no celular do Rômulo, que
- * está na tailnet, faria o POST com a identidade dele.
- *
- * `Sec-Fetch-Site` (todo navegador atual manda) decide quando existe; sem ele,
- * o `Origin` tem de ter o mesmo host da requisição; sem os dois, não é
- * navegador, e só a requisição local direta passa.
+ * PURO: o pedido de escrita veio de uma página da mesma origem. O header de
+ * identidade não protege de CSRF — uma página qualquer aberta no celular do
+ * Rômulo, que está na tailnet, faria o POST com a identidade dele. Por isso:
+ * `Origin` obrigatório, com host E porta iguais aos do `Host` (o Serve repassa
+ * o Host da tailnet; no loopback é 127.0.0.1:9120), e `Sec-Fetch-Site`, quando
+ * o navegador manda, `same-origin`. Mesmo critério da Entrada (servidor.py).
  */
-export function origemAceita(headers: Request["headers"]): boolean {
-  const site = cabecalho(headers, "sec-fetch-site");
-  if (site !== undefined) return site === "same-origin";
-  const origin = cabecalho(headers, "origin");
-  if (origin !== undefined) {
-    const host = cabecalho(headers, "x-forwarded-host") ?? cabecalho(headers, "host");
-    try {
-      return Boolean(host) && new URL(origin).host === host;
-    } catch {
-      return false;
-    }
+export function origemConfere(headers: { origin?: string; host?: string; secFetchSite?: string }): boolean {
+  if (headers.secFetchSite !== undefined && headers.secFetchSite !== "same-origin") return false;
+  if (!headers.origin || !headers.host) return false;
+  try {
+    const origem = new URL(headers.origin);
+    if (origem.protocol !== "http:" && origem.protocol !== "https:") return false;
+    const padrao = origem.protocol === "https:" ? "443" : "80";
+    const [hostDoPedido, portaDoPedido] = splitHost(headers.host.toLowerCase());
+    return origem.hostname.toLowerCase() === hostDoPedido && (origem.port || padrao) === (portaDoPedido || padrao);
+  } catch {
+    return false;
   }
-  return !veioPeloServe(headers);
 }
 
-export function exigeMesmaOrigem(req: Request, res: Response, next: NextFunction) {
-  if (req.method === "GET" || req.method === "HEAD" || origemAceita(req.headers)) return next();
-  console.warn(`[acesso] escrita de outra origem recusada em ${req.method} ${req.path}`);
-  res.status(403).json({ error: "Escrita só pela própria página do SquadOne.", origemRecusada: true });
+function splitHost(host: string): [string, string] {
+  // [::1]:9120 → ["[::1]", "9120"]; exemplo.ts.net:8443 → [..., "8443"]
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(host);
+  return m ? [m[1], m[2] ?? ""] : [host, ""];
+}
+
+/**
+ * Terceira trava das escritas (regra 7): POST/PUT/PATCH/DELETE só da mesma
+ * origem. Leitura passa: `GET` nunca escreve (regra 10), então o link de um
+ * cartão no WhatsApp só abre a tela, e quem confirma é um POST daqui.
+ */
+export function guardaDeOrigem() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (METODOS_SEM_ESCRITA.has(req.method)) return next();
+    const ok = origemConfere({
+      origin: req.get("Origin") ?? undefined,
+      host: req.get("Host") ?? undefined,
+      secFetchSite: req.get("Sec-Fetch-Site") ?? undefined,
+    });
+    if (ok) return next();
+    console.warn(`[acesso] escrita de outra origem recusada em ${req.method} ${req.baseUrl}${req.path}`);
+    res.status(403).json({ error: "Escrita só pela própria página do SquadOne (mesma origem).", origemRecusada: true });
+  };
 }
