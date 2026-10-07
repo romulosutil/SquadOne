@@ -95,7 +95,18 @@ não muda mais lá, e é ele que vai para o Dell.
 
 **Confere:** no log da implantação, `Bot do Telegram desligado` e `Roster
 CONGELADO`. No app do Easypanel, "Contratar" responde que o roster está
-congelado.
+congelado. De fora, sem segredo: `POST /api/telegram/webhook` responde 401
+enquanto o bot existe (o portão recusa o segredo) e 403 quando ele saiu (a
+rota não é montada e o porteiro responde).
+
+**Apagar variável exige build, não só Implantar** (visto no cutover de
+07/10/2026). Acrescentar uma variável e clicar **Implantar** vale na hora; apagar,
+não: a implantação levou 2 s (reiniciou a imagem que já existia) e o bot seguiu
+respondendo 401 sem nenhuma `TELEGRAM_*` no Ambiente. A explicação é o `.env`
+que o build grava na imagem com o Ambiente da hora: o `dotenv.config()` do
+servidor o carrega e completa o que falta no ambiente, então a variável apagada
+volta por ele. Só um build novo (um push na `main`) a tira de vez. O mesmo vale
+para `LEMBRETES_NTFY_URL` no passo 6 e para qualquer volta que apague variável.
 
 **Volta:** devolver as três `TELEGRAM_*`, tirar `SQUADONE_ROSTER_CONGELADO` e
 **Implantar**: o boot registra o webhook de novo, e o que ficou pendente chega
