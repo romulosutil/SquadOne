@@ -72,6 +72,7 @@ describe("transacaoDaPluggy", () => {
     assert.equal(t.dataLancamento, "2026-09-20");
     assert.deepEqual([t.parcelaN, t.parcelaTotal], [2, 5]);
     assert.equal(t.faturaId, "pluggy:b1");
+    assert.equal(t.faturaFonte, "pluggy:b1", "a fatura da fonte fica à parte da derivada");
     assert.equal(t.cartaoFinal, "6264");
     assert.equal(t.chaveDedupe, "pluggy:t1");
   });

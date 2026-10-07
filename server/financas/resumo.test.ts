@@ -113,6 +113,38 @@ describe("resumir: devo", () => {
     ]);
   });
 
+  it("Santander: a parcela lançada no dia do fechamento é da fatura aberta, e o devo não perde um mês", () => {
+    // Compra de 01/07 em 6x. O Santander lança cada parcela no dia do fechamento e a cobra na
+    // fatura SEGUINTE: a 3 (04/09) na de 12/10, a 4 (05/10) na de 12/11, que ainda não está em
+    // /bills. Faltam a 5 e a 6 (dez e jan). Pela data, a 4 caía na de 12/10, a projeção a via
+    // em outubro e acabava em dezembro, e um mês de parcelas virava "sem detalhe".
+    const setembro = fatura("s-set", "cartao", "2026-09-12", 0, { fechamento: "2026-09-04" });
+    const outubro = fatura("s-out", "cartao", "2026-10-12", 2500, { fechamento: "2026-10-05" });
+    const faturas = [setembro, outubro];
+    const comLimite = { ...cartao, limiteCentavos: 1000000, limiteDisponivelCentavos: 990000 };
+    const parcela = (n: number, data: string, faturaId: string) =>
+      tx("cartao", data, -2500, `LOJA Q PARC 0${n}/06`, { dataCompra: "2026-07-01", parcelaN: n, parcelaTotal: 6, faturaId });
+    const lidas = [parcela(3, "2026-09-04", "s-out"), parcela(4, "2026-10-05", "s-nov")];
+    // Duas vezes: o passe ao abrir as finanças roda sobre o que o anterior gravou.
+    const transacoes = processar([comLimite], faturas, processar([comLimite], faturas, lidas));
+    const r = resumir({ contas: [comLimite], faturas, transacoes, conexoes: [] }, hoje, "2026-10", "competencia");
+    const c = r.devo.cartoes[0];
+    assert.deepEqual(c.fechada, { vencimento: "2026-10-12", centavos: 2500, pagoCentavos: 0 });
+    assert.deepEqual(c.aberta, { vencimento: "2026-11-12", centavos: 2500, semLancamentos: false });
+    assert.equal(c.futurasCentavos, 5000);
+    assert.equal(c.semDetalheCentavos, 0);
+    assert.equal(r.devo.parcelasAcabamEm, "2027-01");
+    assert.deepEqual(r.devo.porMes, [
+      { mes: "2026-10", centavos: 2500 },
+      { mes: "2026-11", centavos: 2500 },
+      { mes: "2026-12", centavos: 2500 },
+      { mes: "2027-01", centavos: 2500 },
+    ]);
+    // A competência de outubro tem só a 3; a 4 é de novembro.
+    assert.equal(r.gastei.totalCentavos, 2500);
+    assert.equal(resumir({ contas: [comLimite], faturas, transacoes, conexoes: [] }, hoje, "2026-11", "competencia").gastei.totalCentavos, 2500);
+  });
+
   it("com o limite usado do banco, ele é o total, e a diferença aparece como sem detalhe", () => {
     const comLimite = { ...cartao, limiteCentavos: 1000000, limiteDisponivelCentavos: 900000 };
     const transacoes = processar([comLimite], [fechada], [compraFechada]);

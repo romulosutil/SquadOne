@@ -204,6 +204,7 @@ export function transacoesDoPdf(pdf: FaturaDoPdf, fatura: Fatura): Transacao[] {
       idOrigem: "",
       chaveDedupe: chave,
       ...base,
+      faturaFonte: fatura.id,
       // Compra parcelada antiga cai na fatura pela data de fechamento, não pela da compra.
       dataLancamento: l.parcelaN && l.parcelaN > 1 ? dataLancamento : base.dataCompra,
       natureza: l.centavos < 0 ? "despesa" : "estorno",

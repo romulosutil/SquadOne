@@ -87,7 +87,7 @@ describe("transacoesDoPdf", () => {
     const curso = a.find((t) => t.descricao === "CURSO ONLINE")!;
     assert.equal(curso.dataCompra, "2025-11-02");
     assert.equal(curso.dataLancamento, "2026-10-03");
-    assert.equal(a.every((t) => t.faturaId === "pluggy:b" && t.contaId === "pluggy:cartao" && t.fonte === "pdf"), true);
+    assert.equal(a.every((t) => t.faturaId === "pluggy:b" && t.faturaFonte === "pluggy:b" && t.contaId === "pluggy:cartao" && t.fonte === "pdf"), true);
   });
 
   it("duas linhas idênticas viram dois lançamentos", () => {

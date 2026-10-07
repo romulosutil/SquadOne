@@ -122,6 +122,7 @@ export function transacaoDaPluggy(t: Json, contaId: string): Transacao | null {
     ...parcela,
   };
   const forecast = texto(meta.billForecastDate);
+  const fatura = texto(meta.billId) ? `pluggy:${texto(meta.billId)}` : null;
   return {
     id: `pluggy:${id}`,
     fonte: "pluggy",
@@ -131,7 +132,8 @@ export function transacaoDaPluggy(t: Json, contaId: string): Transacao | null {
     categoria: "",
     origemCategoria: "nenhuma",
     categoriaFonte,
-    faturaId: texto(meta.billId) ? `pluggy:${texto(meta.billId)}` : null,
+    faturaId: fatura,
+    faturaFonte: fatura,
     mesFaturaFonte: /^\d{4}-\d{2}$/.test(forecast) ? forecast : null,
     grupoParcela: null,
     parId: null,
