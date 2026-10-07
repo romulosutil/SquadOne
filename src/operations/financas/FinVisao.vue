@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import FinExplicar from './FinExplicar.vue'
 import FinImportar from './FinImportar.vue'
 import { brl, diaMes, enviarJson, mesCurto, mesLongo, ROTULO_DO_SEMAFORO, ROTULO_DO_TIPO, somarMeses, variacao } from './formato'
 import type { VisaoFinanceira } from './types'
@@ -35,6 +36,9 @@ const nomeDoCartao = (c: { nome: string; final: string | null }) => (c.final ? `
 
 <template>
   <div class="fin-blocos">
+    <!-- Só com SQUADONE_FINANCAS_IA no Dell; nada sai sem a folha mostrar o texto antes. -->
+    <FinExplicar v-if="dados.explicacaoIa" :mes="dados.mes" :visao="dados.visao" />
+
     <!-- TENHO -->
     <section class="fin-bloco" aria-labelledby="fin-tenho">
       <header class="fin-bloco__topo">

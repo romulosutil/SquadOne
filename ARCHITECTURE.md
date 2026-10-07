@@ -138,12 +138,17 @@ de −1 a +7 dias, agrupado pelo domínio ativo, cache de 60 s em memória, nada
 em disco). Squad cujo calendário não foi lido continua "Sem sinal", com o
 motivo.
 
-**Ainda não feito (fase 8, sem data):** Luna em modo sombra e explicação das
-finanças com IA. Hábitos, check-in e metas foram cortados em 07/10/2026 (só
-voltam se aparecer pedido real). Fora do código e sem confirmação registrada:
-o teste de que o aviso do Hermes vibra o celular bloqueado (se não vibrar, o
-Hermes precisa de um chip próprio) e a cifra do disco do Dell (ver "Riscos
-aceitos"). O faturamento do Gemini foi confirmado pelo usuário em 07/10/2026.
+**Fase 8d, feito:** **explicação das finanças com IA, a pedido** (07/10/2026,
+ver "Explicação com IA (a pedido)" em "Finanças"). Desligada até
+`SQUADONE_FINANCAS_IA=true` no `operations.env`.
+
+**Ainda não feito (fase 8, sem data):** Luna em modo sombra. Hábitos, check-in
+e metas foram cortados em 07/10/2026 (só voltam se aparecer pedido real). Fora
+do código e sem confirmação registrada: o teste de que o aviso do Hermes vibra
+o celular bloqueado (se não vibrar, o Hermes precisa de um chip próprio) e a
+cifra do disco do Dell (ver "Riscos aceitos"). O faturamento do Gemini foi
+confirmado pelo usuário em 07/10/2026, e é a condição para ligar a explicação
+das finanças (no plano grátis o Google usa os prompts).
 
 ### PRUMO como squad (07/10/2026)
 
@@ -207,9 +212,11 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   └─ conferência contra o total da fatura da Pluggy → grava no 2º toque
 extrato OFX/CSV de reserva ── extrato.ts (PURO) → parearEntreFontes contra a Pluggy
 /api/financas/{visao,lancamentos,sincronizar,importar/santander,importar/extrato,
-               organizacao,categorias,orcamento,recorrentes,estado,alertas/simular}
+               organizacao,categorias,orcamento,recorrentes,estado,alertas/simular,
+               explicar/previa,explicar}
   └─ resumo.ts (PURO): tenho, devo, gastei (competência|caixa), orçamento, recorrentes
   └─ alertas.ts (PURO): 70/90/100% → fila de avisos (só % e semáforo)
+  └─ explicacao.ts (PURO): resumo → texto da prévia → Gemini (só a pedido, com a flag)
 Telegram "gastei 30 no mercado" ── gasto-falado.ts (PURO) → conta manual
 ```
 
@@ -265,6 +272,32 @@ Telegram "gastei 30 no mercado" ── gasto-falado.ts (PURO) → conta manual
   `optionalDependencies`, carregados por `import()` só quando as finanças
   abrem. O perfil `app` (Easypanel) nunca os carrega, e uma instalação que
   falhe neles derruba só as finanças (503), não a Central.
+- **Explicação com IA (a pedido)** (fase 8d, 07/10/2026). O botão "Explicar
+  este mês" no topo da Visão abre uma folha (`FinExplicar.vue`) com dois
+  toggles desligados ("Incluir valores em R$", "Incluir estabelecimentos") e,
+  sob "Isto é exatamente o que vai sair para o Gemini", o texto da prévia, que
+  vem do servidor: `explicacao.ts` (PURO, determinístico) monta do
+  `ResumoFinanceiro` seções fixas (Tenho, Devo por cartão, Gastei por
+  categoria com variação contra o mês anterior, Orçamento, Recorrentes,
+  Parcelamentos, Saúde das conexões). O padrão leva só categorias, % de
+  variação, % do orçamento e do limite, contagens e meses; R$ e até 10
+  estabelecimentos por categoria só entram pelo toggle (sem ele, a função nem
+  recebe a lista de estabelecimentos, e as descrições de recorrentes e
+  parcelamentos não são escritas). `POST /api/financas/explicar/previa`
+  devolve `{ pacote, hash, caracteres }`; `POST /api/financas/explicar` remonta
+  com os mesmos parâmetros e só chama o Gemini se o hash (sha256, 16 hex)
+  bater — senão 409 `previaDesatualizada`, porque sairia um texto que o
+  Rômulo não viu. Uma chamada `gerarComRetry`, `contents` = o pacote,
+  `systemInstruction` = um prompt fixo (até 15 linhas, sem inventar números,
+  sem conselho de investimento), sem ferramentas: a resposta é texto para a
+  folha (cortado em 4000, interpolado, nunca `v-html`), nunca uma ação.
+  `ModeloOcupado` = 503 `modeloOcupado`. Nada é gravado nem guardado em cache;
+  fechar a folha descarta; o log diz só o tamanho e as opções. Nada disso vai
+  a Telegram, WhatsApp, fila, Luna, nem ao `systemInstruction` do turno.
+  **Desligada por padrão:** sem `SQUADONE_FINANCAS_IA=true` as rotas
+  respondem 404 ("Explicação com IA desligada") e o botão não aparece
+  (`explicacaoIa` na situação das finanças). Ligar só com a chave do Gemini
+  num projeto com faturamento (no plano grátis o Google usa os prompts).
 - **Riscos aceitos:** o leitor do PDF do Santander foi escrito pelo layout
   descrito (seções por cartão, Parcelamentos e Despesas com n/total, Resumo) e
   testado com texto sintético; a conferência é a trava contra layout que
