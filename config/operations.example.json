@@ -1,5 +1,6 @@
 {
   "displayName": "Seu nome",
+  "tailscaleLogins": [],
   "autoDirectory": "/home/usuario/auto",
   "autoNotificationStateFile": "/home/usuario/.hermes/leads-notificados.json",
   "tools": {

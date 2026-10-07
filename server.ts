@@ -34,7 +34,7 @@ import {
   reativarSquad,
 } from "./server/ciclo-de-vida.ts";
 import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./server/redacao.ts";
-import { porteiroDeIp } from "./server/acesso.ts";
+import { porteiroDeIdentidade, porteiroDeIp } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
 import { descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
@@ -88,6 +88,7 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
+import { criarRotasDeFinancas, iniciarLeituraDiaria, prepararFinancas } from "./server/financas/rotas.ts";
 
 dotenv.config();
 
@@ -213,9 +214,28 @@ async function startServer() {
     app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
   }
 
+  // A configuração da Central vem antes das travas: a lista de logins do
+  // Tailscale (RULES 7) mora nela.
+  let operationsConfig: Awaited<ReturnType<typeof readOperationsConfig>> | null = null;
+  if (squadOneMode === "operations") {
+    const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
+    if (!configPath) {
+      throw new Error("SQUADONE_OPERATIONS_CONFIG é obrigatório no perfil operations.");
+    }
+    operationsConfig = await readOperationsConfig(configPath);
+  }
+
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
+
+  // Segunda trava (RULES 7): quem chega pelo Tailscale Serve precisa de um
+  // login da lista. Com a lista vazia ela fica desligada aqui, para a Central
+  // de hoje não trancar quem a usa; as finanças fecham sozinhas nesse caso.
+  if (operationsConfig?.tailscaleLogins.length) {
+    app.use(porteiroDeIdentidade(operationsConfig.tailscaleLogins));
+    console.log(`[acesso] identidade do Tailscale exigida (${operationsConfig.tailscaleLogins.length} login(s)).`);
+  }
 
   // A página da Entrada (menu "Entrada"): só no perfil operations, destino fixo no loopback, e ANTES do
   // express.json(): o corpo de um envio é um arquivo de até 200 MB e passa em fluxo, sem ser lido aqui.
@@ -234,12 +254,7 @@ async function startServer() {
     res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado });
   });
 
-  if (squadOneMode === "operations") {
-    const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
-    if (!configPath) {
-      throw new Error("SQUADONE_OPERATIONS_CONFIG é obrigatório no perfil operations.");
-    }
-    const operationsConfig = await readOperationsConfig(configPath);
+  if (operationsConfig) {
     const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
@@ -275,6 +290,12 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
     }));
+
+    // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
+    // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
+    const financas = await prepararFinancas(operationsDataDir);
+    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: operationsConfig.tailscaleLogins }));
+    iniciarLeituraDiaria(financas);
   } else {
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional
     // inexistente no EasyPanel. O perfil remoto falha fechado e explicitamente.

@@ -742,6 +742,7 @@ html:has(.ops-shell),
 .ops-command-rail .ops-main-nav a:nth-child(1)::before { content: "01"; }
 .ops-command-rail .ops-main-nav a:nth-child(2)::before { content: "02"; }
 .ops-command-rail .ops-main-nav a:nth-child(3)::before { content: "03"; }
+.ops-command-rail .ops-main-nav a:nth-child(4)::before { content: "04"; }
 .ops-command-rail .ops-main-nav a:hover { border-color: #8792a7; }
 .ops-command-rail .ops-main-nav a:active { transform: translateY(1px); }
 
@@ -951,7 +952,7 @@ html:has(.ops-shell),
   }
 
   .ops-command-rail .ops-brand { align-self: center; padding: 0; border: 0; }
-  .ops-command-rail .ops-main-nav { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(3, 1fr); margin: 0; }
+  .ops-command-rail .ops-main-nav { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(4, 1fr); margin: 0; }
   .ops-command-rail .ops-main-nav a { grid-template-columns: 1fr; justify-items: center; }
   .ops-command-rail .ops-main-nav a::before,
   .ops-rail-sources { display: none; }

@@ -1,0 +1,70 @@
+/* Casca mobile (06/10/2026): barra inferior abaixo de 1024 px. Tokens em tokens.css. */
+
+.barra-inferior { display: none; }
+
+@media (max-width: 63.99rem) {
+  .barra-inferior {
+    position: fixed;
+    z-index: 50;
+    inset: auto 0 0 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-height: var(--tamanho-barra-inferior);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 3px solid var(--cor-tinta);
+    background: var(--barra-fundo);
+    font-family: var(--fonte);
+  }
+
+  .barra-inferior a,
+  .barra-inferior button {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    padding: 0.35rem 0.1rem;
+    border: 0;
+    background: transparent;
+    color: var(--barra-texto);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .barra-inferior a[aria-current="page"] {
+    background: var(--barra-ativo);
+    color: var(--barra-ativo-texto);
+  }
+
+  .barra-inferior :focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
+
+  .barra-inferior__icone { font-size: 1.05rem; line-height: 1; }
+
+  .barra-inferior__pedir:disabled { opacity: 0.6; cursor: not-allowed; }
+  .barra-inferior__pedir small { font-size: 0.58rem; font-weight: 700; }
+
+  /* Espaço para a barra não cobrir o fim da página. */
+  .ops-shell { padding-bottom: calc(var(--tamanho-barra-inferior) + env(safe-area-inset-bottom, 0px)); }
+  /* A barra assume a navegação: o trilho (que vira topo) fica só com a marca. */
+  .ops-shell .ops-command-rail .ops-main-nav { display: none; }
+}
+
+/* "Mais" */
+.mais { display: grid; gap: 1rem; width: 100%; max-width: 48rem; margin: 0 auto; }
+.mais__links h2 { font-size: 1.6rem; }
+.mais__links ul { display: grid; gap: 0.5rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.mais__links a { display: grid; min-height: 44px; padding: 0.75rem 1rem; border: 3px solid var(--cor-tinta); background: var(--cor-papel-forte); color: var(--cor-tinta); font-weight: 900; text-decoration: none; }
+.mais__links a:hover { background: var(--cor-amarelo); }
+.mais__links small { color: var(--cor-apagado); font-size: 0.8rem; font-weight: 700; }
+
+/* Trilho em cima (abaixo de 1120 px): a marca na primeira célula. Sem isto o
+   `grid-area: brand` do cabeçalho antigo cria uma trilha implícita e a marca
+   cai no canto de baixo à direita. */
+@media (max-width: 70rem) {
+  .ops-shell .ops-command-rail .ops-brand { grid-column: 1; grid-row: 1; }
+}

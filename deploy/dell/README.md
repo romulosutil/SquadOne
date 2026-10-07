@@ -340,6 +340,66 @@ em atenção). Refaça depois de contratar, editar ou arquivar alguém.
 O `google-auth.json` do Easypanel **não** vem junto: é cifrado com o
 `TOKEN_ENC_KEY` de lá, e o Dell tem a credencial própria (ver acima).
 
+## Finanças (`/financas`, desde 07/10/2026)
+
+Visão geral do que o Rômulo tem, deve e gasta, só no perfil `operations`.
+Código em `server/financas/` (regras puras com testes) e
+`src/operations/financas/`; regras de privacidade na RULES 24.
+
+**Fonte:** Meu Pluggy (API da Pluggy, `api.pluggy.ai`, conector 200), uso
+pessoal e gratuito. As conexões (Santander, Nubank, Mercado Pago) se fazem e
+renovam no app Meu Pluggy; o SquadOne só lê. Leitura por **polling**: uma vez
+por dia depois das 7h (`iniciarLeituraDiaria`, confere a cada 30 min; falhou,
+tenta de novo depois de 2 h) e no botão **Atualizar agora** da tela. O webhook
+da Pluggy exigiria URL pública, e o Funnel é proibido (RULES 7). Cada leitura
+grava a cópia `financas.copia.db` com `VACUUM INTO` (é ela que vai ao cofre).
+
+**Instalação (uma vez, numa sessão no Dell):**
+
+1. O Rômulo digita a credencial no Dell, nunca pelo chat. O arquivo é só
+   chaves, 600, fora do repo, do n8n e de `data/`:
+
+   ```bash
+   install -m 600 /dev/null ~/.config/squadone/financas.env   # se ainda não existe
+   nano ~/.config/squadone/financas.env
+   # PLUGGY_CLIENT_ID=...
+   # PLUGGY_CLIENT_SECRET=...
+   # PLUGGY_ITEM_IDS=id1,id2,id3
+   ```
+
+2. A lista de logins do Tailscale em `operations.json` (RULES 7). Sem ela,
+   finanças pela tailnet respondem 403 (de propósito); com ela, **toda** a
+   Central passa a exigir o `Tailscale-User-Login` de quem chega pelo Serve:
+
+   ```json
+   "tailscaleLogins": ["sutil.romulo@gmail.com"]
+   ```
+
+3. O serviço novo (lê o `financas.env` e cria tudo 600 com `UMask=0077`):
+
+   ```bash
+   cp deploy/dell/squadone-operations.service ~/.config/systemd/user/
+   systemctl --user daemon-reload && systemctl --user restart squadone-operations
+   ```
+
+4. O manifesto do cofre (`deploy/dell/backup/fontes.toml`) tira o
+   `financas.db` vivo e passa a exigir a cópia; reinstale-o em
+   `~/.config/backup-dell/fontes.toml`.
+
+**Conferir sem ver valor** (nada disto imprime R$ nem estabelecimento):
+
+```bash
+ls -l ~/.config/squadone/financas.env ~/.local/share/squadone-operations/financas*.db   # -rw-------
+journalctl --user -u squadone-operations | grep '\[financas\]'                         # contagens e status
+```
+
+**O cartão Santander Unique** vem da Pluggy com as faturas (total, vencimento,
+pagamentos, encargos) e 0 lançamentos, e sem os cartões digitais. O "devo"
+funciona pelas faturas; o "em quê gastei" vem da fatura em PDF importada na
+tela (Visão → "Fatura do Santander em PDF"): o servidor lê o texto, mostra a
+conferência contra o total da fatura da Pluggy (saldo anterior + débitos −
+créditos, no centavo) e só grava no segundo toque. O PDF não é salvo.
+
 ## Pasta auto (Site antes da venda)
 
 O n8n não cria diretórios. O Caçador grava pacotes
