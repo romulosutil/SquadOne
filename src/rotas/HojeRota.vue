@@ -2,10 +2,11 @@
 /**
  * Hoje (/), celular primeiro, nesta ordem (RULES 13):
  *  1. o que precisa do Rômulo agora, no máximo 3 cartões (falhas do Dell,
- *     cartões de decisão dos agentes, fila e "vale olhar"); o resto atrás de
- *     "ver todos";
+ *     cartões de decisão dos agentes, finanças em laranja/vermelho, fila e
+ *     "vale olhar"); o resto atrás de "ver todos";
  *  2. os próximos compromissos (os 3 primeiros da agenda dos agentes);
- *  3. o time: uma linha por squad, com texto e só com fonte;
+ *  3. o time: uma linha por squad, com texto e só com fonte (a Mochila da
+ *     ativa e o /api/time de todas);
  *  4. a linha do funil (o resumo do CRM, que abre /crm);
  *  5. o que resolve sozinho, fechado.
  */
@@ -14,6 +15,7 @@ import AjusteCard from '../components/AjusteCard.vue'
 import GrowthCard from '../components/GrowthCard.vue'
 import TrocaSquadCard from '../components/TrocaSquadCard.vue'
 import DellAlerta from '../casca/DellAlerta.vue'
+import FinancasAlerta from '../casca/FinancasAlerta.vue'
 import ListaDeQuests from '../agentes/ListaDeQuests.vue'
 import { useAgentes } from '../agentes/estado'
 import { useOverview } from '../casca/overview'
@@ -24,7 +26,9 @@ import {
   estadoDaSquad,
   pendenciasDaHoje,
   proximasQuests,
-  resumoDoFunil
+  resumoDoFunil,
+  type EstadoDasFinancasLido,
+  type TimeLido
 } from '../casca/hoje'
 import { remedioEmComum, separarAlertas } from '../operations/alertas'
 import { upcomingAgendaEvents } from '../operations/agenda-window'
@@ -67,12 +71,31 @@ let relogio = 0
 // ---------------------------------------------------------------- 1. precisa de você
 
 const alertas = computed(() => (ops.value && overview.value ? separarAlertas(overview.value.dell.verificacoes) : null))
+
+// Finanças em semáforo: só o Dell tem o banco. A leitura é a mesma da Sala
+// Finanças (só % e semáforo, nunca R$). Falha = sem cartão: não dá para
+// afirmar um estado que não foi lido (RULES 2).
+const financas = ref<EstadoDasFinancasLido | null>(null)
+async function lerFinancas() {
+  try {
+    const r = await fetch('/api/financas/estado')
+    const json = (r.headers.get('content-type') ?? '').includes('application/json')
+    financas.value = r.ok && json ? await r.json() : null
+  } catch {
+    financas.value = null
+  }
+}
+
 const pendencias = computed(() =>
-  pendenciasDaHoje(alertas.value, {
-    trocas: agentes.value ? sugestoesDeTroca.value.map((s) => s.id) : [],
-    ajustes: agentes.value ? ajustes.value.map((a) => a.id) : [],
-    crescimentos: agentes.value ? sugestoesDeCrescimento.value.map((s) => s.id) : []
-  })
+  pendenciasDaHoje(
+    alertas.value,
+    {
+      trocas: agentes.value ? sugestoesDeTroca.value.map((s) => s.id) : [],
+      ajustes: agentes.value ? ajustes.value.map((a) => a.id) : [],
+      crescimentos: agentes.value ? sugestoesDeCrescimento.value.map((s) => s.id) : []
+    },
+    ops.value ? financas.value : null
+  )
 )
 const verTodos = ref(false)
 const mostradas = computed(() => (verTodos.value ? pendencias.value : pendencias.value.slice(0, MAX_NA_HOJE)))
@@ -120,12 +143,51 @@ const hora = (iso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit'
 
 // ---------------------------------------------------------------- 3. time
 
+// O time de TODAS as squads ativas, de uma leitura só no servidor (um
+// events.list por calendário, cache de 60 s lá). A Mochila das outras squads
+// não é lida aqui: seriam N leituras por domínio só para uma linha de texto.
+const timeLido = ref<TimeLido | null>(null)
+const erroDoTime = ref('')
+async function lerTime() {
+  try {
+    const r = await fetch('/api/time')
+    const corpo = await r.json().catch(() => ({}))
+    if (!r.ok) {
+      throw new Error(r.status === 401 ? 'Google Calendar desconectado.' : corpo.error ?? `HTTP ${r.status}`)
+    }
+    timeLido.value = corpo
+    erroDoTime.value = ''
+  } catch (e) {
+    // Leitura velha não vale como estado de agora: sem leitura, sem sinal (com o motivo).
+    timeLido.value = null
+    erroDoTime.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+/** Nome por id em todas as squads ativas, inclusive integrante arquivado (o evento continua no Google). */
+const nomeDaPessoa = computed(() => {
+  const mapa = new Map<string, string>()
+  for (const s of roster.value?.squads ?? []) {
+    for (const i of s.arquivo.integrantes) mapa.set(i.pessoa.id, `${i.pessoa.nome} (arquivado)`)
+    for (const d of s.dominios) for (const p of [d.po, ...d.integrantes]) mapa.set(p.id, p.nome)
+  }
+  return (id: string) => mapa.get(id) ?? id
+})
+
 const time = computed(() =>
   (roster.value?.squads ?? []).map((s) => {
     const pessoas = s.dominios.reduce((t, d) => t + 1 + d.integrantes.length, 0)
     const proxima = mochilaDe.value === s.id ? proximasQuests(quests.value, agora.value, 1)[0] ?? null : null
-    const { estado, detalhe } = estadoDaSquad(s.id, { turnoSquadId: turnoSquadId.value, mochilaDe: mochilaDe.value, proxima })
-    return { id: s.id, nome: s.nome, ativa: s.id === squadAtiva.value?.id, salas: s.dominios.length, pessoas, estado, detalhe }
+    const { estado, detalhe, emBloco, lidoEm } = estadoDaSquad(s.id, {
+      turnoSquadId: turnoSquadId.value,
+      mochilaDe: mochilaDe.value,
+      proxima,
+      time: timeLido.value,
+      erroDoTime: erroDoTime.value,
+      nomeDaPessoa: nomeDaPessoa.value
+    })
+    const fonte = lidoEm ? `lido do Google às ${hora(lidoEm)}` : ''
+    return { id: s.id, nome: s.nome, ativa: s.id === squadAtiva.value?.id, salas: s.dominios.length, pessoas, estado, detalhe, emBloco, fonte }
   })
 )
 const abrirEscritorio = async (id: string) => {
@@ -157,11 +219,26 @@ const linhaDoFunil = computed(() => {
 })
 const fonteDoFunil = computed(() => (funil.value?.geradoEm ? `planilhas lidas às ${hora(funil.value.geradoEm)}` : ''))
 
+// Finanças e time: no mount e a cada 5 min com a aba visível. A % muda com a
+// leitura diária da Pluggy ou um gasto anotado; o time, com o relógio.
+let releitura = 0
+function lerFontesDaHoje() {
+  if (ops.value) void lerFinancas()
+  if (agentes.value) void lerTime()
+}
+
 onMounted(() => {
   relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
   if (ops.value) void lerFunil()
+  lerFontesDaHoje()
+  releitura = window.setInterval(() => {
+    if (document.visibilityState === 'visible') lerFontesDaHoje()
+  }, 5 * 60_000)
 })
-onBeforeUnmount(() => window.clearInterval(relogio))
+onBeforeUnmount(() => {
+  window.clearInterval(relogio)
+  window.clearInterval(releitura)
+})
 </script>
 
 <template>
@@ -177,6 +254,7 @@ onBeforeUnmount(() => window.clearInterval(relogio))
       <ol v-if="mostradas.length" class="hoje__cartoes">
         <li v-for="p in mostradas" :key="p.chave">
           <DellAlerta v-if="p.tipo === 'dell'" :check="p.check" />
+          <FinancasAlerta v-else-if="p.tipo === 'financas'" :pendencia="p" />
           <TrocaSquadCard
             v-else-if="p.tipo === 'troca' && troca(p.id)"
             :sugestao="troca(p.id)!"
@@ -280,6 +358,8 @@ onBeforeUnmount(() => window.clearInterval(relogio))
           <p class="hoje__estado">
             <span class="estado" :class="`is-${s.estado}`">{{ ROTULO_DO_ESTADO_DA_SQUAD[s.estado] }}</span>
             <span class="texto-2 texto-pequeno">{{ s.detalhe }}</span>
+            <span v-for="(linha, i) in s.emBloco" :key="i" class="hoje__bloco-agora">{{ linha }}</span>
+            <small v-if="s.fonte" class="texto-2 texto-pequeno">{{ s.fonte }}</small>
           </p>
           <button type="button" class="botao botao--leve" :disabled="isLoading && !s.ativa" @click="abrirEscritorio(s.id)">
             Ver salas<span class="so-leitor"> da squad {{ s.nome }}</span>
@@ -332,6 +412,7 @@ onBeforeUnmount(() => window.clearInterval(relogio))
 .hoje__squad { display: grid; gap: 0.1rem; }
 .hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: 1.05rem; }
 .hoje__estado { display: grid; gap: 0.1rem; }
+.hoje__bloco-agora { font-weight: 800; overflow-wrap: anywhere; }
 .hoje__funil { gap: var(--esp-1); color: var(--texto); text-decoration: none; }
 .hoje__funil:hover { background: var(--superficie-2); }
 .hoje__funil-rotulo { font-size: 1rem; font-weight: 950; letter-spacing: 0.06em; text-transform: uppercase; }

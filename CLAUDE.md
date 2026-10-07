@@ -9,7 +9,7 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
-npm test         # tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts (node:test, sem framework extra)
+npm test         # tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts src/casca/*.test.ts (node:test, sem framework extra)
 ```
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
@@ -26,6 +26,7 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/crm.test.ts`, `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
+`server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
 vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso),
@@ -36,8 +37,9 @@ vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de a
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
-`src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje, estado do
-time só com fonte, linha do funil)). O monitor do Dell tem os seus em Python:
+`src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
+semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
+linha do funil)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py`. Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -79,6 +81,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
   server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
   server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min
+  server/time.ts          time vivo da Hoje: agruparTimePorSquad (PURO) + leitor de /api/time (1 leitura por calendário, cache 60 s)
   server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido
   server/tasks.ts         transporte do Google Tasks: lista, tarefa, ErroTasks classificado, timeout 10 s
   server/passos-no-google.ts  lista por squad (single-flight) + tarefa-mãe + subtarefas + vínculo no evento
@@ -101,9 +104,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
 src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
   src/casca/              destinos.ts (PURO: rota por perfil, barra, Ctrl+K), hoje.ts (PURO: ordem da Hoje,
-                          estado do time só com fonte, linha do funil), rota.ts (pushState sem roteador),
+                          semáforo das finanças, estado do time só com fonte, linha do funil), rota.ts (pushState sem roteador),
                           overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
-                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta
+                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta
   src/rotas/              HojeRota (/), AgendaRota (/agenda), EscritorioRota (/squadone), MaisRota (/mais)
   src/agentes/estado.ts   estado e ações dos agentes (era o <script> do App.vue): roster, squad ativa, Mochila,
                           turno, cartões, folhas; um por aba (`useAgentes`), com as guardas de isLoading e abertura
@@ -326,6 +329,7 @@ Só frontend; nada disto grava.
 - **Escala inteira, sem Tab:** o GameMap escolhe a maior escala inteira em que o andar cabe (`escalaInteira`, até 3×) e oferece Afastar/Aproximar/Encaixar. A tecla Tab, que alternava 1×/2× e prendia quem navega por teclado, não faz mais nada no mapa.
 - **Toque:** cada personagem tem um `<button>` de 44×44 px de TELA (`calc(44px / var(--escala))`) com o estado no nome acessível; tocar abre a sala numa folha, com os gestos da Lista.
 - **Estado com texto e só com fonte** (`estadoDaPessoa`, `estadoDaSquad` em `casca/hoje.ts`): bloco em curso ou próximo compromisso (da agenda lida desta squad), responsável pelo último pedido desta aba, ou `Sem sinal` por extenso. Nada de "ocioso"/"trabalhando" inventado.
+- **Time vivo (07/10/2026):** `GET /api/time` (em `rotasDoApp`) dá agenda a TODAS as squads ativas na Hoje, não só à da Mochila. `server/time.ts`: lê o roster, pede o token, faz **um** `listarQuestsDaJanela` por `calendarId` distinto (`alvosDoRoster`, os mesmos da vigia) em `[agora − 1 dia, agora + 7 dias]` e `agruparTimePorSquad` (PURO) devolve por squad `{ id, emBlocoAgora: {pessoaId, titulo}[], proxima }`. A squad vem do **domínio** ativo (evento sem marca, de domínio ou squad arquivados fica fora; dedupe por `eventId`, porque duas squads no mesmo calendário leem o mesmo evento). Resposta `{ squads, lidoEm, erros }`: squad cujo calendário falhou sai de `squads` e vai a `erros` com o motivo (agenda não lida não é agenda vazia); todo calendário recusando o token, ou sem credencial = 401 `precisaConectar`. Cache de 60 s em memória e single-flight, nada em disco (o Google é a verdade). Na Hoje, `estadoDaSquad` recebe o `time` lido: `atendendo` (turno nesta aba) > `com_agenda`/`livre` (a Mochila da ativa, que vai 90 dias à frente e manda no "próximo", ou o `/api/time`) > `sem_sinal` (com o motivo da falha). A linha mostra "Em bloco agora: <pessoa> — <título>" e "lido do Google às HH:MM". Lido no mount e a cada 5 min com a aba visível; a Mochila das outras squads nunca é lida no front.
 - **rAF pausado** com a aba em segundo plano (`visibilitychange`) ou o mapa fora da tela (`IntersectionObserver`): nem loop, nem passeio, nem ciclo idle (`animation-play-state`); ao voltar, a câmera encaixa.
 - **Automáticos da sala:** sob cada sala da Lista (slot `rodape` do `SalaCartao`), em texto, os trabalhadores automáticos dela pelo catálogo (`src/office/trabalhadores.ts`), sem estado — rodou/falhou é da Central.
 
@@ -337,7 +341,7 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 - **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/` (`/squadone` abre os agentes aqui com a agenda ligada; sem ela, redireciona ao app do Easypanel, como desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção. As rotas do app (`rotasDoApp` em `server.ts`: roster, Mochila, turno, ajuste, avisos, avaliação) só são montadas com a agenda ligada (ver "Agenda no Dell"); sem ela o resto de `/api` é 404 JSON, e do Google ficam só `/api/auth/google` e `/callback` (a agenda da Central). `/api/push/*` não existe mais (o ntfy saiu). O `~/SquadOne/data/squad.json` do Dell é um retrato de 14/09/2026 e nunca vira a agenda.
 - **`GET /api/runtime`** devolve `{ mode, avaliacoes, ocupado, agenda }` (`agenda`: o app mora neste processo). `ocupado` = turno em andamento (`haTurnoEmAndamento`, contado em `rodarDemanda`) ou mensagem na fila do bot (`bot.ocupado()`); o `deploy/dell/atualizar-central.sh` espera `false` (até 10 min) antes de reiniciar.
 - **`src/RootApp.vue`** pergunta `/api/runtime` e monta a MESMA casca (`App.vue`) com `{ perfil, agentes }`: no `operations`, Hoje com o estado do Dell, Funil, Finanças, Entrada e, com `agenda: true`, os agentes (Pedir, Agenda, Escritório); no `app`, só os agentes. Falha na pergunta = perfil `app`, nunca a Central. `/squadone` sem a agenda continua redirecionando ao Easypanel.
-- **Casca mobile (07/10/2026):** barra inferior abaixo de 1024 px (Hoje · Funil · ＋Pedir · Finanças · Mais no Dell; Hoje · Agenda · ＋Pedir · Escritório · Mais no Easypanel), barra lateral e Ctrl+K/⌘K a partir dela. Links de rota da casca navegam com `pushState` (`casca/rota.ts`), sem recarregar: recarregar no meio de um turno perderia a resposta. A Hoje segue a RULES 13 (no máximo 3 cartões, depois "ver todas"). Tudo usa os tokens (`tokens.css`), com modo escuro: o CRM em `src/operations/crm.css`, os painéis de Mais (como funciona, acessos, o que o Dell confere) em `src/operations/mais.css`. O `operations.css` (o shell antigo da Central, só claro) saiu.
+- **Casca mobile (07/10/2026):** barra inferior abaixo de 1024 px (Hoje · Funil · ＋Pedir · Finanças · Mais no Dell; Hoje · Agenda · ＋Pedir · Escritório · Mais no Easypanel), barra lateral e Ctrl+K/⌘K a partir dela. Links de rota da casca navegam com `pushState` (`casca/rota.ts`), sem recarregar: recarregar no meio de um turno perderia a resposta. A Hoje segue a RULES 13 (no máximo 3 cartões, depois "ver todas"), nesta ordem: falhas do Dell → troca de squad → ajuste → contratação → **finanças** → fila → vale olhar. O cartão de finanças (`casca/FinancasAlerta.vue`, `pendenciasDeFinancas` em `casca/hoje.ts`) vem do `GET /api/financas/estado` (o mesmo da Sala Finanças: o cartão mais usado e o orçamento do mês, só % e semáforo, "dados até") e só entra em **laranja ou vermelho (≥ 90 %)**; o amarelo (70 %) fica na aba Finanças, senão ocuparia um dos três lugares o mês inteiro. Texto "Cartão <banco>: N% do limite" / "Orçamento do mês: N%", link para `/financas`, nenhum R$ nem estabelecimento (RULES 24). Lido só no `operations`, no mount e a cada 5 min com a aba visível; falha = sem cartão, nunca estado inventado. Tudo usa os tokens (`tokens.css`), com modo escuro: o CRM em `src/operations/crm.css`, os painéis de Mais (como funciona, acessos, o que o Dell confere) em `src/operations/mais.css`. O `operations.css` (o shell antigo da Central, só claro) saiu.
 - **Pedir é uma folha** (`casca/PedirFolha.vue`, era a CommandBar): chip da squad, Auto/Foco/Baixa de 44 px, ditado pelo navegador (Web Speech API, pt-BR, desabilitado com o motivo onde não existe) e o MESMO corpo `{ demanda, modo, squadId }` em `/api/orquestrar`. Erros e avisos do turno ficam por extenso na folha até o próximo pedido (eram `alert()`); com a folha fechada, o aviso traz "Ver detalhes".
 - **`Sheet`** (`components/Sheet.vue`) é a folha de tudo: Pedir, contratar, editar, nova squad, arquivo, sala do mapa, ficha do CRM, Ctrl+K. `role="dialog"` + `aria-modal`, Esc, alça (arrastar para baixo), botão Fechar, foco preso (Tab gira e o `#app` fica `inert`) e devolvido a quem abriu; `bloqueada` durante um envio (nada fecha). Abaixo de 48 rem sobe de baixo; acima, diálogo no meio.
 - **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.

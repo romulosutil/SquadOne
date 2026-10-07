@@ -48,6 +48,7 @@ import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/si
 import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
+import { criarLeitorDoTime } from "./server/time.ts";
 import {
   desconectar,
   ErroDeConfig,
@@ -608,6 +609,21 @@ async function startServer() {
       res.json({ quests, erros });
     } catch (error: any) {
       console.error("Erro ao ler a Mochila:", error);
+      res.status(502).json({ error: error.message });
+    }
+  });
+
+  // Time vivo na Hoje: o que cada squad ATIVA tem na agenda agora, de uma vez
+  // (um events.list por calendário, não a Mochila de cada squad). Só leitura;
+  // cache de 60 s em memória, nada em disco: o Google continua a verdade.
+  const lerTime = criarLeitorDoTime({ lerRoster: readRoster, obterToken: tokenValido, listar: listarQuestsDaJanela });
+  rotasDoApp.get("/api/time", async (_req, res) => {
+    try {
+      res.json(await lerTime());
+    } catch (error: any) {
+      if (responderErroDeRoster(res, error)) return;
+      if (error instanceof PrecisaConectar || error instanceof ErroDeConfig) return responderErroDeAuth(res, error);
+      console.error("Erro ao ler o time:", error);
       res.status(502).json({ error: error.message });
     }
   });
