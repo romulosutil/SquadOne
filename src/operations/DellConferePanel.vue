@@ -25,17 +25,17 @@ const rotulo = (c: DellCheck) => c.estado === 'falha' ? 'Falhou' : c.estado === 
 </script>
 
 <template>
-  <section v-if="porGrupo.length" class="ops-panel dell-confere" aria-labelledby="dell-confere-title">
+  <section v-if="porGrupo.length" class="painel dell-confere" aria-labelledby="dell-confere-title">
     <details>
       <summary><h2 id="dell-confere-title">Tudo que o Dell confere</h2><span>{{ ok }} de {{ checks.length }} ok · abrir</span></summary>
-      <div v-for="g in porGrupo" :key="g.id" class="dell-status__grupo">
+      <div v-for="g in porGrupo" :key="g.id" class="dell-confere__grupo">
         <h3>{{ g.nome }}</h3>
         <ul>
           <li v-for="c in g.itens" :key="c.id">
             <span class="dell-dot" :class="`is-${c.estado}`" aria-hidden="true" />
             <strong>{{ c.nome }}</strong>
-            <small><span :class="{ 'ops-visually-hidden': c.estado === 'ok' }" class="dell-confere__estado">{{ rotulo(c) }}: </span>{{ c.detalhe }}</small>
-            <a v-if="c.link" :href="c.link" target="_blank" rel="noopener">{{ soNoDell(c.link) ? 'No Dell' : 'Abrir' }} <span class="ops-visually-hidden">{{ c.nome }}</span><span aria-hidden="true">↗</span></a>
+            <small><span :class="{ 'so-leitor': c.estado === 'ok' }" class="dell-confere__estado">{{ rotulo(c) }}: </span>{{ c.detalhe }}</small>
+            <a v-if="c.link" :href="c.link" target="_blank" rel="noopener">{{ soNoDell(c.link) ? 'No Dell' : 'Abrir' }} <span class="so-leitor">{{ c.nome }}</span><span aria-hidden="true">↗</span></a>
           </li>
         </ul>
       </div>
