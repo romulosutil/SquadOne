@@ -50,7 +50,10 @@ npm run build
 # Central fora do ar, ou versão sem o campo, conta como ociosa.
 ESPERA_OCIOSA_S=600
 for i in $(seq 0 10 "$ESPERA_OCIOSA_S"); do
-  curl -sf -m 5 "$URL" | grep -q '"ocupado":true' || break
+  # Em variável, não `curl | grep -q`: com pipefail, o grep saindo cedo faria o
+  # curl falhar (SIGPIPE) e o pipeline leria "ociosa" com a Central ocupada.
+  runtime=$(curl -sf -m 5 "$URL" || true)
+  case "$runtime" in *'"ocupado":true'*) ;; *) break ;; esac
   if [ "$i" -ge "$ESPERA_OCIOSA_S" ]; then
     echo "A Central seguiu ocupada por $((ESPERA_OCIOSA_S / 60)) min; reiniciando assim mesmo." >&2
     break

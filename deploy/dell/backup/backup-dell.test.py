@@ -244,6 +244,14 @@ class Preparo(unittest.TestCase):
         f.write_bytes(b"\xff\xfe" * 1000 + b"\n-- Dump completed on 2026-10-06\n")
         self.assertIn("-- Dump completed", bd.fim_do_arquivo(f))
 
+    def test_carga_do_dumpall_aceita_so_o_papel_e_o_banco_que_ja_existem(self):
+        stderr = ('psql:/ensaio/dump.sql:9: ERROR:  role "iris" already exists\n'
+                  'psql:/ensaio/dump.sql:80: ERROR:  database "postgres" already exists\n')
+        self.assertEqual(bd.erros_da_carga(stderr), [])
+        ruim = stderr + 'psql:/ensaio/dump.sql:62: ERROR:  permission denied to grant privileges as role "iris"\n'
+        self.assertEqual(len(bd.erros_da_carga(ruim)), 1)
+        self.assertIn("permission denied", bd.erros_da_carga(ruim)[0])
+
     def test_comparar_contagens(self):
         vivo = {"iris:public.a": 3, "iris_542:public.b": 0}
         self.assertIn("2 banco(s), 2 tabelas e 3 linhas", bd.comparar_contagens(vivo, dict(vivo)))

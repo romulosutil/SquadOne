@@ -772,6 +772,16 @@ def _contagem_pg(sql_de) -> dict[str, int]:
     return out
 
 
+# Carregar um pg_dumpall num cluster novo sempre esbarra no papel de boot (e no
+# banco padrão) que o próprio container criou: são os únicos erros aceitos.
+ERRO_ESPERADO_PG = re.compile(r'ERROR:\s+(role|database) "[^"]+" already exists')
+
+
+def erros_da_carga(stderr: str) -> list[str]:
+    return [linha.strip() for linha in stderr.splitlines()
+            if "ERROR:" in linha and not ERRO_ESPERADO_PG.search(linha)]
+
+
 def _esperar_no_log(nome: str, frase: str, pronto: list[str], limite_s: int = 240) -> None:
     """O entrypoint sobe um servidor temporário para o initdb e depois o
     reinicia: aceitar conexão antes da frase do fim do init é cedo demais."""
@@ -794,22 +804,29 @@ def ensaiar_dump(p: dict, sql: Path) -> str:
     rodar(["docker", "rm", "-f", nome], timeout=60)
     try:
         if p["tipo"] == "postgres":
+            if p.get("banco"):
+                raise RuntimeError("ensaio-dump compara o cluster inteiro; este preparo é de um banco só")
+            # O superusuário do descartável tem o MESMO nome do vivo, como numa
+            # restauração de verdade (o compose o cria): o pg_dumpall grava
+            # "GRANT … GRANTED BY <ele>", que outro superusuário não pode repetir.
+            usuario = rodar(vivo + ["printenv", "POSTGRES_USER"], timeout=60).stdout.strip()
+            if not usuario:
+                raise RuntimeError("não li o POSTGRES_USER do container vivo")
             r = rodar(["docker", "run", "-d", "--rm", "--name", nome, "--network", "none",
-                       "-e", "POSTGRES_PASSWORD=ensaio", "-e", "POSTGRES_USER=ensaio", "-e", "POSTGRES_DB=ensaio",
+                       "-e", "POSTGRES_PASSWORD=ensaio", "-e", f"POSTGRES_USER={usuario}", "-e", "POSTGRES_DB=postgres",
                        "-v", f"{sql}:/ensaio/dump.sql:ro", img], timeout=300)
             if r.returncode != 0:
                 raise RuntimeError(f"container do ensaio: {ultima_linha(r.stderr)}")
-            _esperar_no_log(nome, "PostgreSQL init process complete", ["pg_isready", "-U", "ensaio", "-d", "ensaio"])
-            r = rodar(["docker", "exec", nome, "psql", "-U", "ensaio", "-d", "postgres", "-q", "-v", "ON_ERROR_STOP=1",
-                       "-f", "/ensaio/dump.sql"], timeout=1800)
-            if r.returncode != 0:
-                raise RuntimeError(f"carga do dump: {ultima_linha(r.stderr)}")
-            if p.get("banco"):
-                raise RuntimeError("ensaio-dump compara o cluster inteiro; este preparo é de um banco só")
+            _esperar_no_log(nome, "PostgreSQL init process complete", ["pg_isready", "-U", usuario, "-d", "postgres"])
+            r = rodar(["docker", "exec", nome, "psql", "-U", usuario, "-d", "postgres", "-q", "-f", "/ensaio/dump.sql"],
+                      timeout=1800)
+            erros = erros_da_carga(r.stderr or "")
+            if r.returncode != 0 or erros:
+                raise RuntimeError(f"carga do dump: {erros[0] if erros else ultima_linha(r.stderr)}")
             antes = _contagem_pg(lambda q, banco: _linhas(rodar(
                 vivo + ["sh", "-c", 'psql -U "$POSTGRES_USER" -d "$1" -Atc "$2"', "sh", banco, q], timeout=300), "banco vivo"))
             depois = _contagem_pg(lambda q, banco: _linhas(rodar(
-                ["docker", "exec", nome, "psql", "-U", "ensaio", "-d", banco, "-Atc", q], timeout=300), "restaurado"))
+                ["docker", "exec", nome, "psql", "-U", usuario, "-d", banco, "-Atc", q], timeout=300), "restaurado"))
         elif p["tipo"] == "mysql":
             r = rodar(["docker", "run", "-d", "--rm", "--name", nome, "--network", "none",
                        "-e", "MYSQL_ROOT_PASSWORD=ensaio", "-v", f"{sql}:/ensaio/dump.sql:ro", img], timeout=300)
