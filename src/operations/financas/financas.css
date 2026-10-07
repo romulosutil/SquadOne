@@ -1,6 +1,5 @@
 /* Finanças (06/10/2026). Celular primeiro, só tokens (src/estilos/tokens.css), modo escuro de graça. */
 
-.ops-shell.ops-shell--tokens { background: var(--fundo); }
 
 .fin {
   display: grid;

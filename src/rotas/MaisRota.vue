@@ -3,7 +3,7 @@
  * Mais (/mais): o que não cabe na barra inferior. Os destinos sem lugar nela
  * (Agenda, Escritório, Lançamentos, Entrada), como a operação funciona, os
  * acessos e tudo que o Dell confere (RULES 13: dashboards e detalhe moram fora
- * da Hoje). Os painéis da Central mantêm o visual de operations.css.
+ * da Hoje). Os painéis da Central usam mais.css, só com tokens.
  */
 import { computed } from 'vue'
 import AccessPanel from '../operations/AccessPanel.vue'
@@ -11,6 +11,7 @@ import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
 import { useOverview } from '../casca/overview'
 import type { Capacidades } from '../casca/destinos'
+import '../operations/mais.css'
 
 const props = defineProps<{ capacidades: Capacidades }>()
 const { overview } = useOverview()
@@ -45,7 +46,7 @@ const links = computed(() => [
       </ul>
     </section>
 
-    <div v-if="ops" class="ops-escopo mais__ops">
+    <div v-if="ops" class="mais__ops">
       <ComoFuncionaPanel :checks="overview?.dell.verificacoes ?? []" />
       <AccessPanel :tools="overview?.tools ?? []" />
       <DellConferePanel :status="overview?.dell ?? null" />

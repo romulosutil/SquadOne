@@ -104,7 +104,7 @@ const artefatos = (l: CrmLead) => {
     <template v-if="celular">
       <div class="segmentado crm-segmento" role="group" aria-label="Produto">
         <button v-for="s in SEGMENTOS" :key="s.id" type="button" :aria-pressed="segmento === s.id" @click="emit('produto', s.id)">
-          {{ s.rotulo }}<span class="ops-visually-hidden">{{ s.id === 'prumo' ? ' (PRUMO)' : ' antes da venda' }}</span>
+          {{ s.rotulo }}<span class="so-leitor">{{ s.id === 'prumo' ? ' (PRUMO)' : ' antes da venda' }}</span>
         </button>
       </div>
       <div class="crm-abas" role="tablist" aria-label="Etapas do funil">
@@ -176,10 +176,10 @@ const artefatos = (l: CrmLead) => {
                 <span v-if="lead.acervo && lead.etapa === 'contatado'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
               </p>
               <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.site" class="crm-cartao__links">
-                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico' : 'Mandar o link' }} <span class="ops-visually-hidden">para {{ lead.empresa }}</span>↗</a>
-                <a v-if="lead.links.enviar" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.convite" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="ops-visually-hidden">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="ops-visually-hidden">de {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.enviar" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.convite" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
               </p>
             </article>
           </li>

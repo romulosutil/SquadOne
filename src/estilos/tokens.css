@@ -1,10 +1,10 @@
 /*
- * Tokens do SquadOne (06/10/2026). A paleta é a da Central
- * (src/operations/operations.css); os nomes semânticos são o que as telas
- * novas usam, para o modo escuro trocar só aqui. Regras em design.md.
+ * Tokens do SquadOne (06/10/2026). A paleta veio da Central antiga; os nomes
+ * semânticos são o que as telas usam, para o modo escuro trocar só aqui.
+ * Regras em design.md.
  *
- * Os painéis de Mais (ComoFunciona, Access, DellConfere) ainda usam as --ops-*
- * direto (claras sempre); o CRM migrou para estes nomes em 07/10/2026 (crm.css).
+ * Desde 07/10/2026 TODA tela usa estes nomes (casca, agentes, Finanças, CRM em
+ * crm.css, painéis de Mais em mais.css): o operations.css e as --ops-* saíram.
  */
 :root {
   /* Paleta */

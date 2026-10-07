@@ -174,7 +174,7 @@ function fecharFicha() {
       </div>
       <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
     </header>
-    <p class="ops-visually-hidden" aria-live="polite">{{ anuncio }}</p>
+    <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
 
     <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 

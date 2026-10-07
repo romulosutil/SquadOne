@@ -122,9 +122,10 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    sozinho" fechado), Agenda própria, escritório com Lista|Mapa (Mapa carregado
    só quando aberto, escala inteira, toque de 44 px, rAF pausado fora de
    vista), Funil do celular com Site/Organizar e abas de etapa, ficha do CRM em
-   folha cheia, barra lateral + Ctrl+K a partir de 1024 px. O CRM saiu do
-   `operations.css` para `src/operations/crm.css`, só com tokens (modo escuro
-   incluso); ficam no `operations.css`, claros, só os painéis de Mais.
+   folha cheia, barra lateral + Ctrl+K a partir de 1024 px. Toda tela usa os
+   tokens, com modo escuro: o CRM em `src/operations/crm.css`, os painéis de
+   Mais em `src/operations/mais.css`; o `operations.css` (o shell antigo da
+   Central, só claro, quase todo sem uso) foi apagado.
 6. Organização das finanças e alertas de 70/90/100% (feito em 07/10/2026, ver
    "Organização das finanças"); 7. PRUMO como uma squad, com o Site antes da
    venda como sala (feito em 07/10/2026, ver "PRUMO como squad"); 8. o resto
