@@ -105,6 +105,7 @@ describe("resumir: devo", () => {
     ]);
     const r = resumir({ contas: [cartao], faturas, transacoes, conexoes: [] }, hoje, "2026-10", "competencia");
     assert.equal(r.devo.parcelamentos.length, 1);
+    assert.equal(r.devo.cartoes[0].aberta.centavos, 10000, "a 6, ainda não lançada, é da fatura aberta");
     assert.equal(r.devo.cartoes[0].futurasCentavos, 20000);
     assert.deepEqual(r.devo.porMes.slice(-2), [
       { mes: "2026-12", centavos: 10000 },

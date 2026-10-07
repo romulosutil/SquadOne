@@ -191,7 +191,10 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
 - **Devo** por cartão = o limite usado que o banco informa, quando ele dá o
   disponível; o detalhe (fatura fechada a pagar + fatura aberta + parcelas
   futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
-  vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
+  vez de sumir. A fatura aberta soma os lançamentos já listados e as parcelas
+  dela que o banco ainda não lançou (o Santander e o Mercado Pago lançam as
+  parcelas no dia do fechamento; sem a projeção, um mês inteiro de parcelas
+  virava "sem detalhe"). A Pluggy não dá id de compra parcelada: o grupo é heurístico
   (`parcelas.ts`) e a chave é a **data da compra** quando a fonte a dá
   (`purchaseDate`, a data da linha no PDF): datas diferentes são compras
   diferentes, e na mesma data o valor da parcela pode variar até 1% (o

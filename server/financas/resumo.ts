@@ -14,7 +14,8 @@ import { fechamentoDa, gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevis
  * - faturas FECHADAS com vencimento de hoje em diante (total − o que foi
  *   pago depois do fechamento: `pagoDasFaturas`);
  * - a fatura ABERTA (o ciclo que ainda não fechou): os lançamentos do cartão
- *   sem fatura fechada que caem no próximo vencimento;
+ *   sem fatura fechada que caem no próximo vencimento, mais as parcelas dela
+ *   que a fonte ainda não listou (projetadas, `parcelas.ts`);
  * - as PARCELAS FUTURAS depois da fatura aberta (`parcelas.ts`).
  *
  * Quando o banco dá o limite usado (limite − disponível), é ELE o total do
@@ -194,7 +195,9 @@ export function resumir(
     let futurasCentavos = 0;
     for (const p of projecao.filter((p) => p.contaId === c.id)) {
       for (const [m, centavos] of Object.entries(p.porMes)) {
-        futurasCentavos += centavos;
+        // No mês da aberta a projeção só traz parcela que a fonte ainda não listou: é da aberta.
+        if (m === mesAberto) abertaCentavos += centavos;
+        else futurasCentavos += centavos;
         somarPorChave(porMesTotal, m, centavos);
       }
     }

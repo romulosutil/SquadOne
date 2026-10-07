@@ -120,6 +120,13 @@ describe("projetarParcelas", () => {
     assert.equal(proj.restantes, 2);
   });
 
+  it("a parcela da fatura aberta que a fonte ainda não listou é projetada nela", () => {
+    // A 4/6 está na fatura fechada de outubro; a 5/6 ainda não foi lançada e vence com a aberta (novembro).
+    const [proj] = projetarParcelas([{ ...p("a", "2026-10", 4, 6), grupo: "g" }], () => "2026-11");
+    assert.deepEqual(proj.porMes, { "2026-11": 10000, "2026-12": 10000 });
+    assert.equal(proj.restantes, 2);
+  });
+
   it("a parcela do mês já contado (fatura aberta) não soma de novo", () => {
     const [proj] = projetarParcelas([{ ...p("a", "2026-11", 5, 6), grupo: "g" }], () => "2026-11");
     assert.deepEqual(proj.porMes, { "2026-12": 10000 });

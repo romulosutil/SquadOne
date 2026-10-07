@@ -125,20 +125,25 @@ export interface ParcelamentoProjetado {
   total: number;
   /** Última parcela já vista (n) e o mês dela. */
   ultimaVista: number;
-  /** Parcelas que ainda vão ser cobradas DEPOIS de `aPartirDe` (vistas ou projetadas). */
+  /** Parcelas que ainda vão ser cobradas: as vistas depois de `aPartirDe` e as projetadas desde ele. */
   restantes: number;
   /** Mês (AAAA-MM) da última parcela. */
   acabaEm: string;
-  /** Mês → centavos ainda a cobrar (só meses depois de `aPartirDe`). */
+  /** Mês → centavos ainda a cobrar (o próprio `aPartirDe` só com parcela projetada). */
   porMes: Record<string, number>;
 }
 
 /**
- * Projeção das parcelas que faltam. `aPartirDe` é o último mês que já está
- * contado em outro lugar (a fatura aberta): só o que vem DEPOIS dele entra,
- * para a parcela deste mês não somar duas vezes no "devo" — uma na fatura,
- * outra na projeção. Parcela futura que a fonte já listou conta pelo próprio
- * lançamento; a que não listou é projetada a partir da última vista.
+ * Projeção das parcelas que faltam. `aPartirDe` é o mês da fatura aberta.
+ *
+ * - Parcela que a fonte já LISTOU conta pelo próprio lançamento, e só depois
+ *   desse mês: até ele, o lançamento já está na fatura fechada ou na aberta, e
+ *   contá-lo aqui somaria duas vezes no "devo".
+ * - Parcela que a fonte ainda NÃO listou é projetada a partir da última vista
+ *   e conta DESDE o mês da fatura aberta. O banco só lista a parcela quando a
+ *   lança, e o Santander e o Mercado Pago lançam no dia do fechamento: até lá
+ *   a parcela da fatura aberta não está em lançamento nenhum, e pulá-la a
+ *   deixava fora do "devo" (o mês inteiro de parcelas virava "sem detalhe").
  */
 export function projetarParcelas(
   parcelas: (ParcelaDeEntrada & { grupo: string })[],
@@ -159,10 +164,10 @@ export function projetarParcelas(
     const porMes: Record<string, number> = {};
     // Vistas, depois do limite.
     for (const p of lista) if (p.mes > limite) porMes[p.mes] = (porMes[p.mes] ?? 0) + Math.abs(p.centavos);
-    // Projetadas: n+1..total depois da última vista, um mês cada.
+    // Projetadas: n+1..total depois da última vista, um mês cada, a partir do limite.
     for (let k = ultima.parcelaN! + 1; k <= total; k++) {
       const mes = somarMeses(ultima.mes, k - ultima.parcelaN!);
-      if (mes > limite) porMes[mes] = (porMes[mes] ?? 0) + valor;
+      if (mes >= limite) porMes[mes] = (porMes[mes] ?? 0) + valor;
     }
     const acabaEm = somarMeses(ultima.mes, total - ultima.parcelaN!);
     const restantes = Object.values(porMes).reduce((s, c) => s + c, 0);
