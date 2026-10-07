@@ -228,9 +228,9 @@
     Religar a reserva é um passo manual do runbook, com o Dell fora.
 26. **Trabalhadores automáticos ficam fora do prompt.** Os fluxos do n8n e os
     timers do Dell que fazem trabalho de uma sala (Caçador, Lead Scout,
-    gerador, Balcão, Diagnóstico) ligam-se a ela só pelo catálogo versionado
-    `src/office/trabalhadores.ts`, pelo id do domínio. O catálogo é para o
-    Rômulo ver quem trabalha em cada sala; nunca entra no `systemInstruction`
+    gerador, Balcão, Diagnóstico, rascunho do Mapa) ligam-se a ela só pelo
+    catálogo versionado `src/office/trabalhadores.ts`, pelo id do domínio. O
+    catálogo é para o Rômulo ver quem trabalha em cada sala; nunca entra no `systemInstruction`
     e nenhum módulo do servidor o importa (o teste confere). O roster vai em
     toda chamada ao modelo, e um agente que lesse o horário do Caçador
     acharia que pode acionar, reagendar ou consertar o Caçador — a
