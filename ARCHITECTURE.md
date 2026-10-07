@@ -91,7 +91,11 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    desabilitado).
 4. **Mudança da agenda para o Dell.** O roster de **produção** é a verdade; o
    do Dell é arquivado, nunca mesclado, com as contratações congeladas durante
-   a troca. Nesta ordem, cada passo com volta:
+   a troca. O código (diretório de dados fora do clone, polling do Telegram,
+   avisos pela fila, travas de identidade e origem, sinal de vida) chega
+   desligado: a agenda só liga no Dell com `SQUADONE_DATA_DIR` presente e fora
+   do checkout. O runbook, passo a passo e com volta em cada um, é
+   `deploy/dell/CUTOVER-AGENDA.md`. Nesta ordem:
    1. tirar `TELEGRAM_*` do Easypanel e implantar;
    2. copiar o `squad.json` de produção para o Dell;
    3. travar o Easypanel (`IPS_PERMITIDOS=127.0.0.1`), implantável;

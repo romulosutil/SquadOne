@@ -19,7 +19,8 @@ const DICA: Record<string, string> = {
 // As ferramentas do Dell (loopback) só abrem no navegador do próprio Dell.
 const links = computed(() => [
   { id: 'crm', nome: 'CRM', dica: 'Leads do Site antes da venda e do PRUMO', url: '/crm', fora: false, externo: false },
-  { id: 'agentes', nome: 'Agentes do SquadOne', dica: 'Squads, pessoas e o que cada uma cuida', url: 'https://aladdin-squadone-app.jicnzg.easypanel.host/', fora: false, externo: true },
+  // /squadone: o app aqui com a agenda no Dell, o Easypanel antes do cutover (RootApp.vue decide).
+  { id: 'agentes', nome: 'Agentes do SquadOne', dica: 'Squads, pessoas e o que cada uma cuida', url: '/squadone', fora: false, externo: false },
   ...ORDEM.map(id => props.tools.find(t => t.id === id)).filter((t): t is OperationTool => Boolean(t)).map(t => ({
     id: t.id, nome: t.id === 'ide' ? 'Terminal' : t.id === 'remote' ? 'SquadOne na nuvem' : t.label,
     dica: `${DICA[t.id] ?? t.description}${soNoDell(t.launchUrl) ? ' · só no Dell' : ''}`,

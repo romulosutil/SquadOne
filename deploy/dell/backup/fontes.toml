@@ -147,6 +147,10 @@ obrigatorios = [
   # Cópia manual do roster do Easypanel (o de verdade; o ~/SquadOne/data do Dell é de 14/09/2026).
   # Como copiar: deploy/dell/README.md, "Cópia do roster do Easypanel".
   "~/Mel/Easypanel/squad.json",
+  # A agenda no Dell (SQUADONE_DATA_DIR, desde o cutover): o roster de produção e a credencial do
+  # Google do Dell. Sem eles o cofre não refaz a agenda. Instale esta versão do manifesto no passo 2
+  # do runbook (deploy/dell/CUTOVER-AGENDA.md): antes, o diretório não existe e o cofre ficaria em atenção.
+  "~/.local/share/squadone/squad.json", "~/.local/share/squadone/google-auth.json",
 ]
 # Reinstalável, regenerável ou grande sem valor de restauração. Padrão sem "/"
 # vale em qualquer nível (regra do restic).

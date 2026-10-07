@@ -209,12 +209,14 @@ async function startServer() {
   let configDeTelegram: ConfigDeTelegram | null = null;
   let falhaDoTelegram: string | null = null;
   try {
-    configDeTelegram = lerConfigDeTelegram(process.env);
     // No Dell não há URL pública (Funnel é proibido): webhook lá nunca receberia
-    // nada, e o setWebhook do boot roubaria a entrada do polling.
-    if (configDeTelegram && squadOneMode === "operations" && configDeTelegram.transporte !== "polling") {
+    // nada, e o setWebhook do boot roubaria a entrada do polling. Antes de ler o
+    // resto, para o erro dizer isso e não "falta o segredo do webhook".
+    const comToken = Boolean((process.env.TELEGRAM_BOT_TOKEN ?? "").trim());
+    if (comToken && squadOneMode === "operations" && (process.env.TELEGRAM_TRANSPORTE ?? "").trim() !== "polling") {
       throw new TelegramMalConfigurado("No perfil operations o bot é TELEGRAM_TRANSPORTE=polling.");
     }
+    configDeTelegram = lerConfigDeTelegram(process.env);
     if (configDeTelegram && !agendaAtiva) {
       throw new TelegramMalConfigurado(`agenda desligada neste processo: ${motivoDaAgendaDesligada}`);
     }

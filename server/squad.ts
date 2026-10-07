@@ -498,7 +498,7 @@ export function migrarV2(v2: RosterV2): Roster {
 }
 
 /** Forma mínima que o resto do código assume. Não checa unicidade: isso é da escrita. */
-function validarV3(bruto: any): Roster {
+export function validarV3(bruto: any): Roster {
   const falha = (mensagem: string): never => {
     throw new RosterIlegivel(mensagem);
   };

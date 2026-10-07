@@ -7,11 +7,14 @@ type RuntimeMode = 'app' | 'operations'
 
 const mode = ref<RuntimeMode | null>(null)
 const failed = ref(false)
+/** Os agentes (o app) abertos dentro da Central: /squadone no Dell com a agenda. */
+const agentesAqui = ref(false)
 
-// Os agentes do SquadOne moram no app do Easypanel (30/09/2026: a cópia em
-// /squadone da Central foi tirada a pedido do Rômulo). Link antigo vai para lá.
+// /squadone é o endereço dos agentes em toda a Central. Com a agenda neste
+// processo (o Dell depois do cutover, `agenda` no /api/runtime) ele abre o app
+// aqui mesmo; antes disso os agentes moram no Easypanel e o link vai para lá.
 const APP_DOS_AGENTES = 'https://aladdin-squadone-app.jicnzg.easypanel.host/'
-const showOperations = computed(() => mode.value === 'operations')
+const showOperations = computed(() => mode.value === 'operations' && !agentesAqui.value)
 
 onMounted(async () => {
   try {
@@ -20,7 +23,8 @@ onMounted(async () => {
     const body = await response.json()
     mode.value = body.mode === 'operations' ? 'operations' : 'app'
     if (mode.value === 'operations' && window.location.pathname.startsWith('/squadone')) {
-      window.location.replace(APP_DOS_AGENTES)
+      if (body.agenda === true) agentesAqui.value = true
+      else window.location.replace(APP_DOS_AGENTES)
     }
   } catch (error) {
     console.error('Falha ao identificar o perfil do SquadOne:', error)

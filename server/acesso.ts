@@ -175,7 +175,7 @@ export function guardaDeOrigem() {
       secFetchSite: req.get("Sec-Fetch-Site") ?? undefined,
     });
     if (ok) return next();
-    console.warn(`[acesso] escrita de outra origem recusada em ${req.method} ${req.path}`);
+    console.warn(`[acesso] escrita de outra origem recusada em ${req.method} ${req.baseUrl}${req.path}`);
     res.status(403).json({ error: "Escrita só pela própria página do SquadOne (mesma origem).", origemRecusada: true });
   };
 }

@@ -193,7 +193,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Uma frase vira evento no Google Calendar e lembrete no celular. Os agentes do SquadOne decidem quem cuida.',
     passos: [
       { titulo: 'Manda a demanda', texto: 'Pela barra do SquadOne ou pelo Telegram (texto ou áudio).', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'O agente certo decide', texto: 'Squads e pessoas do SquadOne viram o prompt; o Gemini escolhe a intenção, uma chamada por turno.', onde: 'externo', quando: 'na hora', link: { rotulo: 'Agentes do SquadOne', url: 'https://aladdin-squadone-app.jicnzg.easypanel.host/' } },
+      { titulo: 'O agente certo decide', texto: 'Squads e pessoas do SquadOne viram o prompt; o Gemini escolhe a intenção, uma chamada por turno.', onde: 'externo', quando: 'na hora', link: { rotulo: 'Agentes do SquadOne', url: '/squadone' } },
       { titulo: 'O servidor escolhe o horário', texto: 'Foco, prazo ou baixa prioridade, na grade de 15 min.', onde: 'nuvem', quando: 'na hora', verificacao: 'squadone-app' },
       { titulo: 'Calendar e Tasks', texto: 'Eventos e passos na lista da squad.', onde: 'externo', quando: 'na hora' },
       { titulo: 'Lembrete no celular', texto: 'ntfy, 10 min antes de cada bloco e prazo.', onde: 'voce', quando: '10 min antes' },
