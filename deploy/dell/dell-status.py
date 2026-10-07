@@ -13,16 +13,19 @@ Central, como /crm). Os três campos são opcionais: quem lê status.json sem
 eles continua funcionando.
 
 Também esvazia a fila de avisos (~/.local/share/avisos/fila/*.json) que os
-containers (n8n, collector) gravam, para que um fluxo sempre "responda a
-alguém" sem abrir rede nem firewall entre container e host.
+containers (n8n, collector) e os scripts do Dell gravam, para que um fluxo
+sempre "responda a alguém" sem abrir rede nem firewall entre container e host.
+Formato, teto, silêncio e deduplicação: ver "fila de avisos" abaixo.
 
 Somente biblioteca padrão. Uso:
-  dell-status                 # verifica, grava status.json e avisa
+  dell-status                 # verifica, grava status.json, avisa e drena a fila
   dell-status --stdout        # só imprime o JSON; não grava nem avisa
+  dell-status --drenar        # só drena a fila (com flock), sem verificar nada
 """
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -30,11 +33,13 @@ import shutil
 import socket
 import ssl
 import subprocess
+import sys
 import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from datetime import time as horario
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 HOME = Path.home()
 SAIDA = HOME / ".local/share/squadone-operations/status.json"
@@ -165,7 +170,34 @@ def servicos() -> list[dict]:
     out.append(check("terminal", "servicos", "Terminal e IDE (code-server)", "ok" if ok else "falha",
                      "Respondendo" if ok else f"Sem resposta: {det}", "http://127.0.0.1:8080/"))
     out.append(syncthing())
+    out.append(whatsapp_sessao())
     return out
+
+
+WHATSAPP_HEALTH = "http://127.0.0.1:3000/health"
+
+
+def avaliar_whatsapp(resposta, erro: str | None = None) -> dict:
+    """`status` do /health da bridge do Hermes. Gateway "active" não basta: em
+    06/10/2026 a sessão caiu (Logged out) e a bridge morria em laço com o
+    gateway de pé; os avisos ficavam na fila sem ninguém saber."""
+    status = resposta.get("status") if isinstance(resposta, dict) else None
+    if status == "open":
+        return check("whatsapp-sessao", "servicos", "Sessão do WhatsApp", "ok", "Conectada (bridge do Hermes)")
+    detalhe = (f"Bridge responde, mas a sessão está '{status}'" if status
+               else f"Bridge do WhatsApp sem resposta em :3000 ({(erro or 'resposta sem status')[:80]})")
+    return check("whatsapp-sessao", "servicos", "Sessão do WhatsApp", "falha", detalhe,
+                 o_que_fazer=("Nenhum aviso chega pelo WhatsApp (ficam na fila e saem quando voltar) — inclusive "
+                              "este. Se ~/.hermes/whatsapp/bridge.log diz 'Logged out', a sessão foi desconectada "
+                              "no celular: refaça o pareamento do WhatsApp do Hermes no Dell (QR code no celular). "
+                              "Se não, peça ao Claude: \"o WhatsApp do Hermes caiu\"."))
+
+
+def whatsapp_sessao() -> dict:
+    try:
+        return avaliar_whatsapp(http_json(WHATSAPP_HEALTH, timeout=5))
+    except Exception as e:  # noqa: BLE001 — qualquer erro vira "sem resposta"
+        return avaliar_whatsapp(None, str(getattr(e, "reason", e)))
 
 
 def syncthing() -> dict:
@@ -1012,18 +1044,242 @@ def enviar(msg: str) -> bool:
         return False
 
 
-def drenar_fila() -> None:
-    """Avisos gravados por containers: {"texto", "titulo"?}. Ilegível também avisa."""
-    if not FILA.is_dir():
+# ---------------------------------------------------------------- fila de avisos
+#
+# Formato (06/10/2026): {titulo, texto, origem, chave?, prioridade?, expira_em?, link?}.
+# Antes era {texto, titulo?} sem teto nenhum: um fluxo com defeito podia mandar
+# centenas de WhatsApp, e o mesmo aviso repetido a cada rodada chegava a cada
+# rodada. Agora:
+# - fora do formato é RECUSADO (não vai ao WhatsApp): o arquivo e o motivo ficam
+#   em FILA_RECUSADOS e a verificação "Fila de avisos" fica vermelha até alguém
+#   olhar. Recusar calado perderia aviso; mandar como antes manteria o defeito;
+# - `prioridade` 0 (urgente) a 3 (baixa), padrão 2. Das 22h às 7h (São Paulo) só
+#   P0 sai; o resto espera na fila e sai às 7h;
+# - `chave` já enviada nas últimas 24 h é descartada (estado em FILA_ESTADO);
+# - `expira_em` (ISO 8601) vencido é descartado sem enviar;
+# - até TETO_POR_HORA envios por hora; o excedente vai junto num resumo só.
+# A drenagem roda sob flock: o dell-status de cada minuto e um `--drenar` avulso
+# nunca mandam o mesmo arquivo duas vezes.
+
+FILA_TRAVA = HOME / ".local/state/dell-status/fila.lock"
+FILA_ESTADO = HOME / ".local/state/dell-status/fila.json"
+FILA_RECUSADOS = HOME / ".local/state/dell-status/avisos-recusados"
+FUSO_BR = ZoneInfo("America/Sao_Paulo")
+TETO_POR_HORA = 20
+JANELA_DA_CHAVE = timedelta(hours=24)
+SILENCIO_DE, SILENCIO_ATE = 22, 7  # horas cheias, hora de São Paulo
+PRIORIDADE_PADRAO = 2
+MAX_BYTES_AVISO = 16 * 1024
+# Arquivo mais novo que isto espera a rodada seguinte: o nó do n8n grava direto
+# no .json (sem .tmp + rename) e podia ser lido pela metade.
+FRESCOR_S = 5.0
+CAMPOS_DO_AVISO = {"titulo", "texto", "origem", "chave", "prioridade", "expira_em", "link"}
+MAX_CARACTERES = {"titulo": 120, "texto": 4000, "origem": 80, "chave": 200, "link": 500}
+MAX_LINHAS_RESUMO = 25
+
+
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def _instante(txt) -> datetime | None:
+    """ISO 8601; sem fuso vale a hora de São Paulo (é como o Rômulo escreve)."""
+    if not isinstance(txt, str):
+        return None
+    try:
+        d = datetime.fromisoformat(txt.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=FUSO_BR)
+
+
+def validar_aviso(d) -> dict:
+    """O aviso normalizado, ou ValueError com o motivo da recusa."""
+    if not isinstance(d, dict):
+        raise ValueError("não é um objeto JSON")
+    sobra = sorted(set(d) - CAMPOS_DO_AVISO)
+    if sobra:
+        raise ValueError("campo(s) fora do formato: " + ", ".join(sobra))
+    for campo in ("titulo", "texto", "origem"):
+        if not isinstance(d.get(campo), str) or not d[campo].strip():
+            raise ValueError(f"'{campo}' é obrigatório (texto não vazio)")
+    for campo, teto in MAX_CARACTERES.items():
+        v = d.get(campo)
+        if v is None:
+            continue
+        if not isinstance(v, str):
+            raise ValueError(f"'{campo}' deve ser texto")
+        if len(v) > teto:
+            raise ValueError(f"'{campo}' passa de {teto} caracteres ({len(v)})")
+        if campo != "texto" and ("\n" in v or "\r" in v):
+            raise ValueError(f"'{campo}' não pode ter quebra de linha")
+    p = d.get("prioridade")
+    p = PRIORIDADE_PADRAO if p is None else p
+    if isinstance(p, bool) or not isinstance(p, int) or not 0 <= p <= 3:
+        raise ValueError("'prioridade' deve ser inteiro de 0 a 3")
+    expira = None
+    if d.get("expira_em") is not None:
+        expira = _instante(d["expira_em"])
+        if not expira:
+            raise ValueError("'expira_em' deve ser data/hora ISO 8601")
+    link = d.get("link")
+    if link is not None and not re.match(r"https?://\S+$", link):
+        raise ValueError("'link' deve ser URL http(s) sem espaços")
+    chave = d.get("chave")
+    return {"titulo": d["titulo"].strip(), "texto": d["texto"].strip(), "origem": d["origem"].strip(),
+            "chave": chave.strip() if chave and chave.strip() else None, "prioridade": p,
+            "expira_em": expira, "link": link}
+
+
+def em_silencio(t: datetime) -> bool:
+    h = t.astimezone(FUSO_BR).hour
+    return h >= SILENCIO_DE or h < SILENCIO_ATE
+
+
+def mensagem_do_aviso(a: dict) -> str:
+    return f"{a['titulo']}\n{a['texto']}" + (f"\n{a['link']}" if a["link"] else "")
+
+
+def mensagem_do_resumo(avisos: list[dict]) -> str:
+    linhas = [f"📦 {len(avisos)} avisos agrupados",
+              f"Passou de {TETO_POR_HORA} avisos na última hora; estes vieram juntos (só o título):"]
+    for a in avisos[:MAX_LINHAS_RESUMO]:
+        p = f"[P{a['prioridade']}] " if a["prioridade"] < PRIORIDADE_PADRAO else ""
+        linhas.append(f"• {p}{a['titulo'][:90]} ({a['origem'][:40]})")
+    if len(avisos) > MAX_LINHAS_RESUMO:
+        linhas.append(f"• e mais {len(avisos) - MAX_LINHAS_RESUMO}")
+    return "\n".join(linhas)
+
+
+def _ler_estado_fila(t: datetime) -> dict:
+    try:
+        e = json.loads(FILA_ESTADO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        e = {}
+    envios = [x for x in e.get("envios", []) if (q := _instante(x)) and t - q < timedelta(hours=1)]
+    chaves = {k: v for k, v in (e.get("chaves") or {}).items() if (q := _instante(v)) and t - q < JANELA_DA_CHAVE}
+    return {"envios": envios, "chaves": chaves, "resumo_em": e.get("resumo_em")}
+
+
+def _recusar(f: Path, motivo: str, t: datetime) -> None:
+    FILA_RECUSADOS.mkdir(parents=True, exist_ok=True, mode=0o700)
+    destino = FILA_RECUSADOS / f"{t.astimezone(FUSO_BR):%Y%m%d-%H%M%S}-{f.name}"
+    try:
+        shutil.move(str(f), destino)
+        destino.with_name(destino.name + ".motivo.txt").write_text(motivo + "\n", encoding="utf-8")
+    except OSError as e:
+        log(f"fila: não consegui mover {f.name} para os recusados: {e}")
         return
+    log(f"fila: RECUSADO {f.name}: {motivo}")
+
+
+def _descartar(f: Path, motivo: str) -> None:
+    f.unlink(missing_ok=True)
+    log(f"fila: descartado {f.name}: {motivo}")
+
+
+def drenar_fila(t: datetime | None = None) -> dict:
+    """Esvazia a fila sob flock. Outra drenagem em andamento = sai sem fazer nada."""
+    FILA_TRAVA.parent.mkdir(parents=True, exist_ok=True)
+    with open(FILA_TRAVA, "a") as trava:
+        try:
+            fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            log("fila: outra drenagem em andamento; esta sai sem enviar")
+            return {"ocupada": True}
+        return _drenar(t or agora())
+
+
+def _drenar(t: datetime) -> dict:
+    r = {"enviados": 0, "agrupados": 0, "descartados": 0, "recusados": 0, "esperando": 0}
+    if not FILA.is_dir():
+        return r
+    estado = _ler_estado_fila(t)
+    silencio = em_silencio(t)
+    vistas: set[str] = set()
+    prontos: list[tuple[Path, dict, float]] = []
     for f in sorted(FILA.glob("*.json")):
         try:
-            d = json.loads(f.read_text(encoding="utf-8"))
-            msg = f"{d.get('titulo') or '🧭 Operação'}\n{str(d['texto']).strip()}"
-        except (OSError, ValueError, KeyError) as e:
-            msg = f"🧭 Operação\nAviso ilegível na fila ({f.name}): {e}"
-        if enviar(msg):
+            st = f.stat()
+            if time.time() - st.st_mtime < FRESCOR_S:
+                r["esperando"] += 1
+                continue
+            if st.st_size > MAX_BYTES_AVISO:
+                raise ValueError(f"arquivo passa de {MAX_BYTES_AVISO} bytes ({st.st_size})")
+            a = validar_aviso(json.loads(f.read_text(encoding="utf-8")))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError) as e:  # JSON e UTF-8 inválidos também são ValueError
+            _recusar(f, str(e)[:300], t)
+            r["recusados"] += 1
+            continue
+        if a["expira_em"] and a["expira_em"] <= t:
+            _descartar(f, f"expirou em {iso(a['expira_em'])}")
+            r["descartados"] += 1
+            continue
+        if a["chave"] and (a["chave"] in estado["chaves"] or a["chave"] in vistas):
+            _descartar(f, f"chave '{a['chave']}' já enviada nas últimas 24 h")
+            r["descartados"] += 1
+            continue
+        if silencio and a["prioridade"] != 0:
+            r["esperando"] += 1  # sai às 7h; a chave só conta quando sair
+            continue
+        if a["chave"]:
+            vistas.add(a["chave"])
+        prontos.append((f, a, st.st_mtime))
+    prontos.sort(key=lambda x: (x[1]["prioridade"], x[2], x[0].name))
+
+    vagas = TETO_POR_HORA - len(estado["envios"])
+    if len(prontos) <= vagas:
+        individuais, excedente = prontos, []
+    else:
+        # Uma vaga fica para o resumo. Sem vaga nenhuma, o resumo ainda sai uma
+        # vez por hora (o "~" do teto); fora disso o excedente espera na fila.
+        individuais, excedente = prontos[:max(vagas - 1, 0)], prontos[max(vagas - 1, 0):]
+        ultimo = _instante(estado["resumo_em"]) if estado["resumo_em"] else None
+        if vagas < 1 and ultimo and t - ultimo < timedelta(hours=1):
+            r["esperando"] += len(excedente)
+            excedente = []
+
+    def entregue(arquivos: list[tuple[Path, dict, float]]) -> None:
+        estado["envios"].append(iso(t))
+        for f, a, _ in arquivos:
+            if a["chave"]:
+                estado["chaves"][a["chave"]] = iso(t)
             f.unlink(missing_ok=True)
+
+    falhou = False
+    for item in individuais:
+        if not enviar(mensagem_do_aviso(item[1])):
+            falhou = True  # Hermes fora: cada tentativa leva até 2 min; tenta de novo no próximo minuto
+            break
+        entregue([item])
+        r["enviados"] += 1
+    if excedente and not falhou:
+        if enviar(mensagem_do_resumo([a for _, a, _ in excedente])):
+            entregue(excedente)
+            estado["resumo_em"] = iso(t)
+            r["agrupados"] += len(excedente)
+            log(f"fila: {len(excedente)} aviso(s) agrupados num resumo (teto de {TETO_POR_HORA}/h)")
+    gravar(FILA_ESTADO, estado)
+    return r
+
+
+def fila_de_avisos() -> list[dict]:
+    """Recusado não foi ao WhatsApp: vermelho até alguém ler o motivo e apagar."""
+    recusados = sorted(FILA_RECUSADOS.glob("*.json")) if FILA_RECUSADOS.is_dir() else []
+    pendentes = len(list(FILA.glob("*.json"))) if FILA.is_dir() else 0
+    if recusados:
+        nomes = ", ".join(f.name for f in recusados[:3]) + ("…" if len(recusados) > 3 else "")
+        return [check("fila-avisos", "servicos", "Fila de avisos", "falha",
+                      f"{len(recusados)} aviso(s) recusado(s), fora do formato: {nomes}",
+                      o_que_fazer=("Algum script ou fluxo gravou um aviso fora do formato {titulo, texto, origem, …} "
+                                   "e ele NÃO chegou no WhatsApp. O motivo está ao lado de cada arquivo em "
+                                   "~/.local/state/dell-status/avisos-recusados/. Peça ao Claude: \"aviso recusado na "
+                                   "fila do dell-status\"; depois de corrigir quem gravou, apague os arquivos."))]
+    return [check("fila-avisos", "servicos", "Fila de avisos", "ok",
+                  f"{pendentes} esperando" + (" (silêncio até as 7h; só P0 sai)" if em_silencio(agora()) and pendentes
+                                              else ""))]
 
 
 def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime) -> dict:
@@ -1073,10 +1329,15 @@ def gravar(path: Path, dados: dict) -> None:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--stdout", action="store_true", help="só imprime; não grava nem avisa")
+    p.add_argument("--drenar", action="store_true", help="só drena a fila de avisos (com flock)")
     a = p.parse_args()
+    if a.drenar:
+        print(json.dumps(drenar_fila(), ensure_ascii=False))
+        return
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel, backup):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel, backup,
+               fila_de_avisos):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

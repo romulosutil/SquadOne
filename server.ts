@@ -15,7 +15,7 @@ import {
   type Squad,
 } from "./server/squad.ts";
 import { ModeloOcupado } from "./server/orchestrator.ts";
-import { rodarDemanda } from "./server/turno.ts";
+import { haTurnoEmAndamento, rodarDemanda } from "./server/turno.ts";
 import { ErroCalendario, LeituraIncompleta, listarAgendaDoDia, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
@@ -190,9 +190,10 @@ async function startServer() {
   } catch (error: any) {
     falhaDoTelegram = error instanceof TelegramMalConfigurado ? error.message : String(error?.message ?? error);
   }
+  let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
-    const bot = criarBotDoTelegram({
+    const bot = (botDoTelegram = criarBotDoTelegram({
       segredo: c.segredo,
       chatsPermitidos: c.chatsPermitidos,
       // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
@@ -208,7 +209,7 @@ async function startServer() {
       // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
       fmt: { locale: "pt-BR", timeZone: FUSO },
       agora: () => new Date(),
-    });
+    }));
     app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
   }
 
@@ -225,9 +226,12 @@ async function startServer() {
   app.use(express.json());
 
   // Disponível nos dois perfis sem expor configuração local. O frontend usa
-  // apenas este discriminador para decidir entre o app e a Central.
+  // apenas este discriminador para decidir entre o app e a Central. `ocupado`
+  // é para o atualizar-central do Dell esperar o turno (ou a fila do bot)
+  // terminar antes de reiniciar o processo.
   app.get("/api/runtime", (_req, res) => {
-    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas });
+    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false);
+    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado });
   });
 
   if (squadOneMode === "operations") {
@@ -279,12 +283,19 @@ async function startServer() {
     });
   }
 
+  // Rotas do app (roster, Mochila, turno, ajuste, push): só no perfil app. No
+  // operations a Central não as usa, e o data/squad.json do Dell é um retrato
+  // velho de 14/09/2026; montadas lá, um POST na Central escreveria agentes e
+  // eventos a partir dele. A Central só precisa conectar o Google (abaixo).
+  const rotasDoApp = express.Router();
+
   // --- Conexao com o Google -------------------------------------------
   // O token nunca passa pelo browser: o servidor troca o code, guarda o
   // refresh cifrado no volume e renova sozinho. O frontend so pergunta se
-  // esta conectado e manda o usuario para o consentimento.
+  // esta conectado e manda o usuario para o consentimento. Consentimento e
+  // callback valem nos dois perfis: é por eles que a agenda da Central conecta.
 
-  app.get("/api/auth/status", async (_req, res) => {
+  rotasDoApp.get("/api/auth/status", async (_req, res) => {
     try {
       const conectado = await estaConectado();
       // `tasks` é estado DEGRADADO, não conexão: credencial só com o Calendar
@@ -329,14 +340,14 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/logout", async (_req, res) => {
+  rotasDoApp.post("/api/auth/logout", async (_req, res) => {
     await desconectar();
     res.json({ conectado: false });
   });
 
   // Roster inteiro, todas as squads: o seletor precisa da lista, o arquivo tem
   // poucos KB e a squad ativa e conveniencia da aba, nao estado do servidor.
-  app.get("/api/squad", async (_req, res) => {
+  rotasDoApp.get("/api/squad", async (_req, res) => {
     try {
       res.json(paraVista(await readRoster()));
     } catch (error: any) {
@@ -346,7 +357,7 @@ async function startServer() {
   });
 
   // Gesto "Nova squad": nasce com um dominio e o PO dele. Nao toca o Google.
-  app.post("/api/squad/nova", async (req, res) => {
+  rotasDoApp.post("/api/squad/nova", async (req, res) => {
     try {
       res.status(201).json(await criarSquad(req.body ?? {}));
     } catch (error: any) {
@@ -358,7 +369,7 @@ async function startServer() {
   // Aprovacao de crescimento (§4.4): contrata a partir de card do modelo OU do
   // formulario da UI (Fase 2). O modelo so propoe; contratar e gesto do usuario.
   // Nao exige Bearer: mexe em data/squad.json, nao no Google Calendar.
-  app.post("/api/squad/hire", async (req, res) => {
+  rotasDoApp.post("/api/squad/hire", async (req, res) => {
     try {
       const { sugestao, nome } = req.body ?? {};
       const resultado = await aplicarContratacao(sugestao, nome);
@@ -375,7 +386,7 @@ async function startServer() {
   // Redacao do treino (Fase 2 §4.2): uma chamada ao Gemini, NADA gravado.
   // Roster e alvo sao validados antes do modelo; falhar aqui nunca impede
   // contratar a mao, entao cada falha volta classificada para a UI dizer isso.
-  app.post("/api/squad/redigir", async (req, res) => {
+  rotasDoApp.post("/api/squad/redigir", async (req, res) => {
     try {
       const pedido = interpretarPedidoDeRedacao(await readRoster(), req.body);
       res.json(await redigirTreino(ai, pedido));
@@ -410,15 +421,15 @@ async function startServer() {
       }
     };
 
-  app.patch("/api/squad/pessoas/:id", rotaDoRoster((req) => editarPessoa(String(req.params.id), req.body)));
-  app.post("/api/squad/pessoas/:id/arquivar", rotaDoRoster((req) => arquivarPessoa(String(req.params.id))));
-  app.post("/api/squad/pessoas/:id/reativar", rotaDoRoster((req) => reativarPessoa(String(req.params.id))));
-  app.patch("/api/squad/dominios/:id", rotaDoRoster((req) => editarDominio(String(req.params.id), req.body)));
-  app.post("/api/squad/dominios/:id/arquivar", rotaDoRoster((req) => arquivarDominio(String(req.params.id))));
-  app.post("/api/squad/dominios/:id/reativar", rotaDoRoster((req) => reativarDominio(String(req.params.id))));
+  rotasDoApp.patch("/api/squad/pessoas/:id", rotaDoRoster((req) => editarPessoa(String(req.params.id), req.body)));
+  rotasDoApp.post("/api/squad/pessoas/:id/arquivar", rotaDoRoster((req) => arquivarPessoa(String(req.params.id))));
+  rotasDoApp.post("/api/squad/pessoas/:id/reativar", rotaDoRoster((req) => reativarPessoa(String(req.params.id))));
+  rotasDoApp.patch("/api/squad/dominios/:id", rotaDoRoster((req) => editarDominio(String(req.params.id), req.body)));
+  rotasDoApp.post("/api/squad/dominios/:id/arquivar", rotaDoRoster((req) => arquivarDominio(String(req.params.id))));
+  rotasDoApp.post("/api/squad/dominios/:id/reativar", rotaDoRoster((req) => reativarDominio(String(req.params.id))));
   // PO nao se arquiva: substitui-se. O anterior vira integrante arquivado.
-  app.post("/api/squad/dominios/:id/po", rotaDoRoster((req) => substituirPo(String(req.params.id), req.body)));
-  app.patch(
+  rotasDoApp.post("/api/squad/dominios/:id/po", rotaDoRoster((req) => substituirPo(String(req.params.id), req.body)));
+  rotasDoApp.patch(
     "/api/squad/squads/:id",
     rotaDoRoster(async (req) => {
       const id = String(req.params.id);
@@ -443,12 +454,12 @@ async function startServer() {
       return vista;
     }),
   );
-  app.post("/api/squad/squads/:id/arquivar", rotaDoRoster((req) => arquivarSquad(String(req.params.id))));
-  app.post("/api/squad/squads/:id/reativar", rotaDoRoster((req) => reativarSquad(String(req.params.id))));
+  rotasDoApp.post("/api/squad/squads/:id/arquivar", rotaDoRoster((req) => arquivarSquad(String(req.params.id))));
+  rotasDoApp.post("/api/squad/squads/:id/reativar", rotaDoRoster((req) => reativarSquad(String(req.params.id))));
 
   // Mochila: as quests VEM do Google Calendar, nao de estado local. Editar
   // ou apagar no Google reflete aqui na proxima leitura (§2, verdade unica).
-  app.get("/api/mochila", async (req, res) => {
+  rotasDoApp.get("/api/mochila", async (req, res) => {
     // Squad antes do token: um squadId velho se corrige sem gastar chamada
     // ao Google, e o erro volta classificado.
     let squad: Squad;
@@ -500,7 +511,7 @@ async function startServer() {
   });
 
   // Um turno: demanda -> 1 chamada ao Gemini -> executa as capacidades.
-  app.post("/api/orquestrar", async (req, res) => {
+  rotasDoApp.post("/api/orquestrar", async (req, res) => {
     try {
       const { demanda, modo = "auto", squadId } = req.body ?? {};
       if (typeof demanda !== "string" || !demanda.trim()) {
@@ -540,7 +551,7 @@ async function startServer() {
 
   // Só aceita sinal do usuário para um resultado que este processo acabou de
   // produzir. Não recebe demanda, prompt, roster, eventos ou argumentos.
-  app.post("/api/turnos/:turnoId/avaliacao", async (req, res) => {
+  rotasDoApp.post("/api/turnos/:turnoId/avaliacao", async (req, res) => {
     if (!avaliacoesAtivas) {
       return res.status(409).json({ error: "Avaliações de turno estão desligadas.", avaliacaoDesligada: true });
     }
@@ -608,7 +619,7 @@ async function startServer() {
 
   // Ajuste APROVADO pelo usuário. Janela antes do token (config quebrada não
   // gasta chamada). Horário só muda de lugar com permitirMover.
-  app.post("/api/quests/:eventId/ajustar", async (req, res) => {
+  rotasDoApp.post("/api/quests/:eventId/ajustar", async (req, res) => {
     let pedido: ReturnType<typeof interpretarPedidoDeAjuste>;
     let janela: ReturnType<typeof lerJanela>;
     try {
@@ -634,7 +645,7 @@ async function startServer() {
   });
 
   // Confere servidor ntfy + celular sem esperar evento nenhum.
-  app.post("/api/push/teste", async (_req, res) => {
+  rotasDoApp.post("/api/push/teste", async (_req, res) => {
     if (pushIndisponivel(res)) return;
     try {
       const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, dateStyle: "short", timeStyle: "short" }).format(new Date());
@@ -657,7 +668,7 @@ async function startServer() {
   // Uma varredura REAL contra o Google com relógio simulado: mostra o que
   // sairia (enviar=false, padrão) ou manda de fato (enviar=true). Nunca grava
   // na deduplicação da vigia — o teste não engole o aviso de verdade.
-  app.post("/api/push/varrer", async (req, res) => {
+  rotasDoApp.post("/api/push/varrer", async (req, res) => {
     if (pushIndisponivel(res)) return;
     const { agora, enviar = false } = req.body ?? {};
     let relogio = new Date();
@@ -681,6 +692,16 @@ async function startServer() {
       res.status(500).json({ error: error.message });
     }
   });
+
+  if (squadOneMode === "app") {
+    app.use(rotasDoApp);
+  } else {
+    // Espelho do 404 de /api/operations no perfil app: sem isto o fallback da
+    // SPA responderia HTML 200 a um POST de escrita, e quem chama acharia que deu certo.
+    app.use("/api", (_req, res) => {
+      res.status(404).json({ error: "Rota do app indisponível no perfil operations." });
+    });
+  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

@@ -90,7 +90,7 @@ def rotulo(topo: str) -> str:
 def avisar(texto: str) -> None:
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     (FILA_AVISOS / f"site-pastas-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "🌐 Sites", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+        json.dumps({"titulo": "🌐 Sites", "texto": texto, "origem": "site-pastas"}, ensure_ascii=False), encoding="utf-8")
 
 
 def pedido_do_balcao(listar: bool) -> int | None:

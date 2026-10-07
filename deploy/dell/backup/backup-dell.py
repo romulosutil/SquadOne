@@ -11,6 +11,7 @@ runner não conhece fonte nenhuma pelo nome.
   quando vence o próprio intervalo.
 - cofre: restic cifrado (backend rclone) da home inteira menos o que se
   reinstala, precedido de dumps consistentes (Postgres do n8n, pasta do n8n,
+  cada banco Docker do Dell (Postgres, MySQL, MinIO),
   SQLite do Hermes). Diário; manutenção semanal e leitura mensal sozinhas.
 - ensaio: restaura o essencial numa pasta à parte, sobe um Postgres e um n8n
   descartáveis sem rede e prova que as credenciais do n8n decifram. Roda
@@ -25,6 +26,7 @@ Somente biblioteca padrão. Uso:
   backup-dell espelho [--fonte ID] [--forcar] [--dry-run] [--sem-limite]
   backup-dell cofre [--dry-run] [--sem-ensaio]
   backup-dell ensaio
+  backup-dell ensaio-dump NOME          # dump novo de um banco, restaurado num container descartável
   backup-dell status
 """
 from __future__ import annotations
@@ -43,6 +45,7 @@ import shlex
 import shutil
 import sqlite3
 import subprocess
+import tempfile
 import sys
 import time
 import tomllib
@@ -166,7 +169,7 @@ def avisar(titulo: str, texto: str) -> None:
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     nome = FILA_AVISOS / f"backup-dell-{time.time_ns()}.json"
     tmp = nome.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"titulo": titulo, "texto": texto}, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(json.dumps({"titulo": titulo, "texto": texto, "origem": "backup-dell"}, ensure_ascii=False), encoding="utf-8")
     tmp.replace(nome)
 
 
@@ -399,6 +402,73 @@ def env_restic(c: dict) -> dict:
     return {"RESTIC_REPOSITORY": c["repositorio"], "RESTIC_PASSWORD_FILE": exp(c["senha"])}
 
 
+# Bancos: dump que falha deixa o cofre em falha (não refaz o banco). Desde
+# 06/10/2026 todo banco Docker do Dell entra ("nenhum é descartável"); outro
+# tipo pode pedir o mesmo com `critico = true`.
+TIPOS_DE_BANCO = ("postgres", "mysql")
+SISTEMA_MYSQL = "mysql|sys|information_schema|performance_schema"
+
+
+def eh_critico(p: dict) -> bool:
+    return bool(p.get("critico", p["tipo"] in TIPOS_DE_BANCO))
+
+
+def comando_do_dump(p: dict) -> tuple[list[str], str]:
+    """(comando, marca que o dump completo termina com). Senhas ficam DENTRO do
+    container (variáveis dele): nunca na linha de comando do host, que o ps mostra."""
+    # -T: sem TTY sob systemd. Texto puro: o restic deduplica e comprime melhor.
+    no_container = ["docker", "compose", "-f", exp(p["compose"]), "exec", "-T", p["servico"]]
+    if p["tipo"] == "postgres" and p.get("banco"):
+        usuario = p.get("usuario") or ler_env(exp(p["env"]))["POSTGRES_USER"]
+        return (no_container + ["pg_dump", "-U", usuario, "-d", p["banco"], "--no-owner", "--no-privileges"],
+                "PostgreSQL database dump complete")
+    if p["tipo"] == "postgres":
+        # Sem `banco`: o cluster inteiro (todos os bancos e os papéis). Projetos
+        # têm bancos além do principal (iris_542, crm_silmer_test...) e um dump
+        # só do POSTGRES_DB perderia esses calado.
+        return no_container + ["sh", "-c", 'exec pg_dumpall -U "$POSTGRES_USER"'], "PostgreSQL database cluster dump complete"
+    if p["tipo"] == "mysql":
+        # Todos os bancos menos os de sistema: o usuário e a senha do app o
+        # compose recria no container novo (MYSQL_USER), e carregar o schema
+        # `mysql` de outro servidor trocaria a senha do root no meio da carga.
+        script = (f'dbs=$(MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "show databases" | grep -Ev "^({SISTEMA_MYSQL})$"); '
+                  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --databases $dbs '
+                  '--single-transaction --routines --triggers --events --hex-blob')
+        return no_container + ["sh", "-c", script], "-- Dump completed"
+    raise RuntimeError(f"tipo de dump desconhecido: {p['tipo']}")
+
+
+def fim_do_arquivo(caminho: Path, n: int = 400) -> str:
+    with open(caminho, "rb") as fh:
+        fh.seek(max(0, caminho.stat().st_size - n))
+        return fh.read().decode("utf-8", errors="replace")
+
+
+def gerar_dump(p: dict, saida: Path) -> None:
+    cmd, fim = comando_do_dump(p)
+    with open(saida, "wb") as fh:
+        r = subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE, timeout=1800)
+    if r.returncode != 0:
+        raise RuntimeError(ultima_linha(r.stderr.decode(errors="replace")))
+    if fim not in fim_do_arquivo(saida):
+        raise RuntimeError("dump sem o fim esperado (truncado?)")
+
+
+def comando_da_pasta(p: dict) -> list[str]:
+    """tar de uma pasta do container para a saída padrão. Com `imagem`, o tar
+    roda num container descartável que monta os volumes do serviço só para
+    leitura (--volumes-from …:ro): a imagem do MinIO, por exemplo, não tem tar."""
+    excl = [x for e in p.get("excluir", []) for x in ("--exclude", e)]
+    tar = ["-C", p["pasta"], *excl, "-cf", "-", "."]
+    if not p.get("imagem"):
+        return ["docker", "compose", "-f", exp(p["compose"]), "exec", "-T", p["servico"], "tar", *tar]
+    cid = rodar(["docker", "compose", "-f", exp(p["compose"]), "ps", "-q", p["servico"]], timeout=60).stdout.strip()
+    if not cid:
+        raise RuntimeError(f"serviço {p['servico']} não está rodando")
+    return ["docker", "run", "--rm", "--network", "none", "--volumes-from", f"{cid}:ro",
+            "--entrypoint", "tar", p["imagem"], *tar]
+
+
 def preparar(c: dict) -> list[str]:
     """Dumps consistentes para o que não se copia vivo. Devolve os problemas."""
     problemas = []
@@ -409,26 +479,14 @@ def preparar(c: dict) -> list[str]:
     for p in c.get("preparo", []):
         nome = p["nome"]
         try:
-            if p["tipo"] == "postgres":
-                usuario = ler_env(exp(p["env"]))["POSTGRES_USER"]
+            if p["tipo"] in TIPOS_DE_BANCO:
                 saida = PREPARO / f"{nome}.sql"
-                with open(saida, "w", encoding="utf-8") as fh:
-                    # -T: sem TTY sob systemd. Texto puro: o restic deduplica e comprime melhor.
-                    r = subprocess.run(["docker", "compose", "-f", exp(p["compose"]), "exec", "-T", p["servico"],
-                                        "pg_dump", "-U", usuario, "-d", p["banco"], "--no-owner", "--no-privileges"],
-                                       stdout=fh, stderr=subprocess.PIPE, text=True, timeout=1800)
-                if r.returncode != 0:
-                    raise RuntimeError(ultima_linha(r.stderr))
-                if "PostgreSQL database dump complete" not in saida.read_text(encoding="utf-8")[-400:]:
-                    raise RuntimeError("dump sem o fim esperado (truncado?)")
+                gerar_dump(p, saida)
                 resumo["itens"].append({"nome": nome, "arquivo": saida.name, "bytes": saida.stat().st_size})
             elif p["tipo"] == "pasta-do-container":
                 saida = PREPARO / f"{nome}.tar"
-                excl = [x for e in p.get("excluir", []) for x in ("--exclude", e)]
                 with open(saida, "wb") as fh:
-                    r = subprocess.run(["docker", "compose", "-f", exp(p["compose"]), "exec", "-T", p["servico"],
-                                        "tar", "-C", p["pasta"], *excl, "-cf", "-", "."],
-                                       stdout=fh, stderr=subprocess.PIPE, timeout=1800)
+                    r = subprocess.run(comando_da_pasta(p), stdout=fh, stderr=subprocess.PIPE, timeout=1800)
                 if r.returncode != 0:
                     raise RuntimeError(ultima_linha(r.stderr.decode(errors="replace")))
                 resumo["itens"].append({"nome": nome, "arquivo": saida.name, "bytes": saida.stat().st_size})
@@ -530,8 +588,9 @@ def _cofre(m: dict, c: dict, a: argparse.Namespace, base: dict) -> int:
         avisos.append(f"{mb:.0f} MB novos numa rodada (pasta grande nova sem regra?)")
     detalhe = (f"Snapshot {str(resumo.get('snapshot_id', ''))[:8]} às {agora():%H:%M}: "
                f"{mb:.0f} MB novos de {resumo.get('total_bytes_processed', 0) / 1e9:.1f} GB lidos")
-    # O dump do n8n é o que refaz os fluxos e as credenciais: sem ele o cofre falhou.
-    critico = any(p.startswith(tuple(x["nome"] + ":" for x in c.get("preparo", []) if x["tipo"] == "postgres"))
+    # Sem o dump de um banco (o do n8n refaz fluxos e credenciais; os dos
+    # projetos, os dados deles) o cofre não refaz o Dell: falhou.
+    critico = any(p.startswith(tuple(x["nome"] + ":" for x in c.get("preparo", []) if eh_critico(x)))
                   for p in problemas)
     estado = "falha" if critico else "atencao" if avisos else "ok"
     campos = dict(**base, estado=estado, ultima_tentativa=iso(t),
@@ -599,7 +658,10 @@ def _ensaio(c: dict) -> str:
     alvo = ENSAIO / f"{agora():%Y%m%d-%H%M%S}"
     alvo.mkdir(parents=True, mode=0o700)
     pg = "backup-dell-ensaio-pg"
-    compose_n8n = next((exp(p["compose"]) for p in c.get("preparo", []) if p["tipo"] == "postgres"), None)
+    # O do n8n pelo banco, não "o primeiro postgres": desde 06/10/2026 há um
+    # dump por banco Docker do Dell no mesmo preparo.
+    n8n = next((p for p in c.get("preparo", []) if p["tipo"] == "postgres" and p.get("banco") == "n8n"), None)
+    compose_n8n = exp(n8n["compose"]) if n8n else None
     try:
         # Só o essencial: o preparo e o .env com a chave. Nunca por cima do original.
         incluir = [str(PREPARO), exp("~/licitacoes-automation/.env")]
@@ -616,8 +678,8 @@ def _ensaio(c: dict) -> str:
                 if con.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise RuntimeError(f"SQLite corrompido: {db.name}")
         # 2. Postgres descartável, sem rede, com o dump restaurado
-        sql = next(prep.glob("*.sql"), None)
-        if not sql or not compose_n8n:
+        sql = prep / f"{n8n['nome']}.sql" if n8n else None
+        if not sql or not sql.exists() or not compose_n8n:
             raise RuntimeError("dump do n8n ausente no snapshot")
         img_pg = imagem_do_servico(compose_n8n, "db")
         img_n8n = imagem_do_servico(compose_n8n, "n8n")
@@ -671,6 +733,157 @@ def _ensaio(c: dict) -> str:
         rodar(["docker", "rm", "-f", pg], timeout=120)
         # O ensaio restaura segredos: não ficam no disco.
         shutil.rmtree(alvo, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- ensaio de um dump
+
+# Linhas por tabela, exatas, numa consulta só por banco (query_to_xml roda um
+# count(*) por tabela sem precisar montar SQL no shell).
+CONTAGEM_PG = ("select table_schema || '.' || table_name, (xpath('/row/c/text()', query_to_xml("
+               "format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text "
+               "from information_schema.tables where table_type = 'BASE TABLE' "
+               "and table_schema not in ('pg_catalog', 'information_schema') order by 1")
+BANCOS_PG = "select datname from pg_database where not datistemplate order by 1"
+TABELAS_MYSQL = ("select concat(table_schema, '.', table_name) from information_schema.tables "
+                 "where table_type = 'BASE TABLE' and table_schema not in "
+                 "('mysql', 'sys', 'information_schema', 'performance_schema') order by 1")
+
+
+def _linhas(r: subprocess.CompletedProcess, onde: str) -> list[list[str]]:
+    if r.returncode != 0:
+        raise RuntimeError(f"{onde}: {ultima_linha(r.stderr)}")
+    return [linha.split("\t" if "\t" in linha else "|") for linha in r.stdout.splitlines() if linha.strip()]
+
+
+def _contagem_mysql(sql_de) -> dict[str, int]:
+    tabelas = [t for (t,) in sql_de(TABELAS_MYSQL)]
+    if not tabelas:
+        return {}
+    uniao = " union all ".join(
+        f"select '{t}', count(*) from `{t.split('.', 1)[0]}`.`{t.split('.', 1)[1]}`" for t in tabelas)
+    return {t: int(n) for t, n in sql_de(uniao)}
+
+
+def _contagem_pg(sql_de) -> dict[str, int]:
+    out = {}
+    for (banco,) in sql_de(BANCOS_PG, "postgres"):
+        for tabela, n in sql_de(CONTAGEM_PG, banco):
+            out[f"{banco}:{tabela}"] = int(n)
+    return out
+
+
+# Carregar um pg_dumpall num cluster novo sempre esbarra no papel de boot (e no
+# banco padrão) que o próprio container criou: são os únicos erros aceitos.
+ERRO_ESPERADO_PG = re.compile(r'ERROR:\s+(role|database) "[^"]+" already exists')
+
+
+def erros_da_carga(stderr: str) -> list[str]:
+    return [linha.strip() for linha in stderr.splitlines()
+            if "ERROR:" in linha and not ERRO_ESPERADO_PG.search(linha)]
+
+
+def _esperar_no_log(nome: str, frase: str, pronto: list[str], limite_s: int = 240) -> None:
+    """O entrypoint sobe um servidor temporário para o initdb e depois o
+    reinicia: aceitar conexão antes da frase do fim do init é cedo demais."""
+    for _ in range(limite_s // 2):
+        logs = rodar(["docker", "logs", nome], timeout=30)
+        if frase in (logs.stdout or "") + (logs.stderr or "") and rodar(["docker", "exec", nome, *pronto], timeout=30).returncode == 0:
+            return
+        time.sleep(2)
+    raise RuntimeError(f"{nome} não ficou pronto em {limite_s} s")
+
+
+def ensaiar_dump(p: dict, sql: Path) -> str:
+    """Carrega o dump num container descartável, sem rede, da MESMA imagem do
+    serviço (pgvector etc.), e compara as linhas de cada tabela com o banco vivo.
+    Nunca toca o banco vivo além de ler a contagem."""
+    compose = exp(p["compose"])
+    img = imagem_do_servico(compose, p["servico"])
+    nome = f"backup-dell-ensaio-{re.sub(r'[^a-z0-9-]', '-', p['nome'].lower())}"
+    vivo = ["docker", "compose", "-f", compose, "exec", "-T", p["servico"]]
+    rodar(["docker", "rm", "-f", nome], timeout=60)
+    try:
+        if p["tipo"] == "postgres":
+            if p.get("banco"):
+                raise RuntimeError("ensaio-dump compara o cluster inteiro; este preparo é de um banco só")
+            # O superusuário do descartável tem o MESMO nome do vivo, como numa
+            # restauração de verdade (o compose o cria): o pg_dumpall grava
+            # "GRANT … GRANTED BY <ele>", que outro superusuário não pode repetir.
+            usuario = rodar(vivo + ["printenv", "POSTGRES_USER"], timeout=60).stdout.strip()
+            if not usuario:
+                raise RuntimeError("não li o POSTGRES_USER do container vivo")
+            r = rodar(["docker", "run", "-d", "--rm", "--name", nome, "--network", "none",
+                       "-e", "POSTGRES_PASSWORD=ensaio", "-e", f"POSTGRES_USER={usuario}", "-e", "POSTGRES_DB=postgres",
+                       "-v", f"{sql}:/ensaio/dump.sql:ro", img], timeout=300)
+            if r.returncode != 0:
+                raise RuntimeError(f"container do ensaio: {ultima_linha(r.stderr)}")
+            _esperar_no_log(nome, "PostgreSQL init process complete", ["pg_isready", "-U", usuario, "-d", "postgres"])
+            r = rodar(["docker", "exec", nome, "psql", "-U", usuario, "-d", "postgres", "-q", "-f", "/ensaio/dump.sql"],
+                      timeout=1800)
+            erros = erros_da_carga(r.stderr or "")
+            if r.returncode != 0 or erros:
+                raise RuntimeError(f"carga do dump: {erros[0] if erros else ultima_linha(r.stderr)}")
+            antes = _contagem_pg(lambda q, banco: _linhas(rodar(
+                vivo + ["sh", "-c", 'psql -U "$POSTGRES_USER" -d "$1" -Atc "$2"', "sh", banco, q], timeout=300), "banco vivo"))
+            depois = _contagem_pg(lambda q, banco: _linhas(rodar(
+                ["docker", "exec", nome, "psql", "-U", usuario, "-d", banco, "-Atc", q], timeout=300), "restaurado"))
+        elif p["tipo"] == "mysql":
+            r = rodar(["docker", "run", "-d", "--rm", "--name", nome, "--network", "none",
+                       "-e", "MYSQL_ROOT_PASSWORD=ensaio", "-v", f"{sql}:/ensaio/dump.sql:ro", img], timeout=300)
+            if r.returncode != 0:
+                raise RuntimeError(f"container do ensaio: {ultima_linha(r.stderr)}")
+            _esperar_no_log(nome, "init process done", ["mysqladmin", "ping", "-uroot", "-pensaio", "--silent"])
+            r = rodar(["docker", "exec", nome, "sh", "-c", "MYSQL_PWD=ensaio mysql -uroot < /ensaio/dump.sql"], timeout=1800)
+            if r.returncode != 0:
+                raise RuntimeError(f"carga do dump: {ultima_linha(r.stderr)}")
+            antes = _contagem_mysql(lambda q: _linhas(rodar(
+                vivo + ["sh", "-c", 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "$1"', "sh", q], timeout=300), "banco vivo"))
+            depois = _contagem_mysql(lambda q: _linhas(rodar(
+                ["docker", "exec", nome, "sh", "-c", 'MYSQL_PWD=ensaio mysql -uroot -N -e "$1"', "sh", q], timeout=300),
+                "restaurado"))
+        else:
+            raise RuntimeError(f"ensaio-dump não sabe ensaiar o tipo {p['tipo']}")
+    finally:
+        rodar(["docker", "rm", "-f", nome], timeout=120)
+    return comparar_contagens(antes, depois)
+
+
+def comparar_contagens(vivo: dict[str, int], restaurado: dict[str, int]) -> str:
+    """Igual = ok. Diferença vira erro com as primeiras tabelas: o banco vivo
+    pode ter escrito entre o dump e a contagem, então rode de novo antes de concluir."""
+    if not vivo:
+        raise RuntimeError("nenhuma tabela no banco vivo: o ensaio não prova nada")
+    dif = [f"{t}: vivo {vivo.get(t)}, restaurado {restaurado.get(t)}"
+           for t in sorted(set(vivo) | set(restaurado)) if vivo.get(t) != restaurado.get(t)]
+    if dif:
+        raise RuntimeError(f"{len(dif)} tabela(s) diferentes: " + "; ".join(dif[:5]))
+    bancos = {t.split(":", 1)[0] for t in vivo if ":" in t} or {t.split(".", 1)[0] for t in vivo}
+    return f"{len(bancos)} banco(s) com tabelas, {len(vivo)} tabelas e {sum(vivo.values())} linhas iguais ao banco vivo"
+
+
+def ensaio_dump(m: dict, a: argparse.Namespace) -> int:
+    """Gera AGORA o dump de um preparo (pasta temporária, apagada no fim; o
+    preparo do cofre não é tocado) e o restaura num container descartável."""
+    p = next((x for x in m["cofre"].get("preparo", []) if x["nome"] == a.nome), None)
+    if not p or p["tipo"] not in TIPOS_DE_BANCO:
+        bancos = ", ".join(x["nome"] for x in m["cofre"].get("preparo", []) if x["tipo"] in TIPOS_DE_BANCO)
+        sys.exit(f"'{a.nome}' não é um preparo de banco. Opções: {bancos}")
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    pasta = Path(tempfile.mkdtemp(prefix="ensaio-dump-", dir=ESTADO))
+    try:
+        pasta.chmod(0o755)  # o container do ensaio lê o dump como outro usuário
+        sql = pasta / f"{p['nome']}.sql"
+        gerar_dump(p, sql)
+        sql.chmod(0o644)
+        log(f"ensaio-dump {p['nome']}: dump de {sql.stat().st_size / 1e6:.1f} MB; restaurando")
+        det = ensaiar_dump(p, sql)
+    except RuntimeError as e:
+        log(f"ensaio-dump {p['nome']}: FALHA {e}")
+        return 1
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+    log(f"ensaio-dump {p['nome']}: ok — {det}")
+    return 0
 
 
 # ---------------------------------------------------------------- iniciar e status
@@ -756,10 +969,13 @@ def main() -> None:
     cf.add_argument("--dry-run", action="store_true")
     cf.add_argument("--sem-ensaio", action="store_true")
     sub.add_parser("ensaio")
+    ed = sub.add_parser("ensaio-dump", help="dump novo de um banco restaurado num container descartável")
+    ed.add_argument("nome", help="nome do [[cofre.preparo]] (ex.: aladdin-pg)")
     sub.add_parser("status")
     a = p.parse_args()
     m = ler_manifesto(a.manifesto)
-    acoes = {"iniciar": iniciar, "espelho": espelho, "cofre": cofre, "ensaio": ensaio, "status": status}
+    acoes = {"iniciar": iniciar, "espelho": espelho, "cofre": cofre, "ensaio": ensaio, "ensaio-dump": ensaio_dump,
+             "status": status}
     sys.exit(acoes[a.cmd](m, a))
 
 

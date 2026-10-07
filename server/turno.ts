@@ -18,7 +18,28 @@ export interface PedidoDeDemanda {
   squadId?: unknown;
 }
 
+/**
+ * Turnos rodando agora, das duas portas. `/api/runtime` expõe isso como
+ * `ocupado` para o atualizar-central do Dell não reiniciar o processo no meio
+ * de um turno: o turno pode já ter criado eventos no Google e a resposta se
+ * perderia, levando o usuário a reenviar e duplicar.
+ */
+let turnosEmAndamento = 0;
+
+export function haTurnoEmAndamento(): boolean {
+  return turnosEmAndamento > 0;
+}
+
 export async function rodarDemanda(ai: GoogleGenAI, pedido: PedidoDeDemanda): Promise<TurnoResult> {
+  turnosEmAndamento++;
+  try {
+    return await rodarDemandaContada(ai, pedido);
+  } finally {
+    turnosEmAndamento--;
+  }
+}
+
+async function rodarDemandaContada(ai: GoogleGenAI, pedido: PedidoDeDemanda): Promise<TurnoResult> {
   const roster = await readRoster();
   const squad = resolverSquad(roster, pedido.squadId);
   const janela = lerJanela(process.env);

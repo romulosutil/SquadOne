@@ -212,7 +212,7 @@ def projeto(nome: str, chave: str) -> dict | None:
 def avisar(texto: str) -> None:
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     (FILA_AVISOS / f"site-demos-pausa-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "⏸️ Site antes da venda: demos", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+        json.dumps({"titulo": "⏸️ Site antes da venda: demos", "texto": texto, "origem": "site-demos-pausa"}, ensure_ascii=False), encoding="utf-8")
 
 
 def anotar(evento: dict) -> None:

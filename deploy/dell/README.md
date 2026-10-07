@@ -15,7 +15,26 @@ atualizar-central
 
 Desde 29/09/2026 isso roda sozinho: `atualizar-central.timer` confere a
 `main` a cada 10 min e só reconstrói quando ela andou (`--se-mudou`). Uma falha
-vira aviso na fila do `dell-status`, que chega pelo WhatsApp.
+vira aviso na fila do `dell-status`, que chega pelo WhatsApp (uma vez por
+commit: `chave` = o commit da `main`).
+
+Desde 06/10/2026 o reinício espera a Central ficar ociosa: depois do build,
+`atualizar-central` lê `GET /api/runtime` a cada 10 s e só reinicia com
+`"ocupado": false` (nenhum turno rodando nem mensagem na fila do bot do
+Telegram), no máximo 10 min; passou disso, reinicia assim mesmo e registra no
+journal. Reiniciar no meio de um turno perderia a resposta de um compromisso que
+talvez já tenha nascido no Google. Por isso `TimeoutStartSec` do serviço subiu
+para 25 min.
+
+**Só as rotas da Central (06/10/2026).** No perfil `operations` o servidor
+monta `/api/runtime`, `/api/operations/*`, `/entrada/` e, do Google, só
+`/api/auth/google` e `/api/auth/callback` (o "Conectar calendário" da agenda).
+Todo o resto de `/api` (roster, Mochila, turno, ajuste, push, avaliação,
+`/api/auth/status` e `/logout`) responde **404 JSON**, como `/api/operations`
+no perfil `app`. Antes ficavam montadas sobre o `~/SquadOne/data/squad.json` do
+Dell, um retrato de 14/09/2026: um POST na Central criaria agentes e eventos a
+partir dele. Confira: `curl -s -X POST 127.0.0.1:9120/api/quests/x/ajustar`
+→ `404 {"error":"Rota do app indisponível no perfil operations."}`.
 
 ```bash
 cp deploy/dell/atualizar-central.{service,timer} ~/.config/systemd/user/
@@ -156,8 +175,9 @@ Roda a cada minuto e faz duas coisas: grava
 Central lê, e manda WhatsApp pelo Hermes (`hermes send`) quando uma verificação
 passa a falhar, a cada 12 h enquanto continuar falhando e quando volta ao normal.
 Estados `atencao` só aparecem na Central. Também esvazia
-`~/.local/share/avisos/fila/*.json` (`{"texto", "titulo"?}`), a fila que os
-containers usam para avisar sem abrir rede nem firewall.
+`~/.local/share/avisos/fila/*.json`, a fila que os containers e os scripts do
+Dell usam para avisar sem abrir rede nem firewall (formato e regras em "Fila de
+avisos", abaixo).
 
 Desde 29/09/2026 também confere:
 
@@ -209,14 +229,115 @@ isso, menos ruído:
   (`/crm?produto=site|prumo`); "Sites na fila do gerador" e "Enviados
   esperando resposta" andam sozinhas.
 
+- **Sessão do WhatsApp** (`whatsapp-sessao`, desde 06/10/2026): `GET
+  http://127.0.0.1:3000/health` da bridge do Hermes precisa responder `status:
+  "open"`. O gateway `active` não basta: em 06/10/2026 a sessão foi desconectada
+  ("Logged out" em `~/.hermes/whatsapp/bridge.log`) e a bridge morria em laço
+  com o gateway de pé. Vermelho; o aviso desse vermelho, claro, não chega pelo
+  WhatsApp — aparece na Central, e o remédio é parear de novo.
+
+### Fila de avisos (06/10/2026)
+
+Um arquivo JSON por aviso em `~/.local/share/avisos/fila/`:
+
+```json
+{"titulo": "🌐 Sites", "texto": "…", "origem": "gerador-de-sites",
+ "chave": "gerador:2026-10-06", "prioridade": 2, "expira_em": "2026-10-06T18:00:00-03:00",
+ "link": "https://…"}
+```
+
+| Campo | Regra |
+|---|---|
+| `titulo` | obrigatório, até 120 caracteres, uma linha |
+| `texto` | obrigatório, até 4000 caracteres |
+| `origem` | obrigatório, até 80, uma linha: quem gravou (`n8n:<fluxo>`, nome do script) |
+| `chave` | opcional, até 200: a mesma chave enviada nas últimas 24 h é descartada |
+| `prioridade` | opcional, inteiro 0 (urgente) a 3 (baixa); padrão 2 |
+| `expira_em` | opcional, ISO 8601 (sem fuso = São Paulo): vencido é descartado sem enviar |
+| `link` | opcional, URL http(s), até 500; vai numa linha no fim da mensagem |
+
+Arquivo de até 16 KB, sem outros campos. Grave em `.tmp` e renomeie (o nó do
+n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
+
+- **Fora do formato é recusado**: não vai ao WhatsApp. O arquivo e o motivo
+  (`….motivo.txt`) ficam em `~/.local/state/dell-status/avisos-recusados/`, o
+  journal registra, e a verificação **Fila de avisos** fica vermelha até alguém
+  corrigir quem gravou e apagar os arquivos. Antes um aviso ilegível virava um
+  "Aviso ilegível na fila" no WhatsApp.
+- **Silêncio das 22h às 7h** (São Paulo): só P0 sai; o resto espera e sai às 7h.
+- **Teto de 20 envios por hora** (janela móvel). Quando a fila tem mais do que
+  cabe, saem os de maior prioridade (e mais antigos) e o resto vai num
+  **resumo** só ("📦 N avisos agrupados", com título e origem de cada). Sem vaga
+  nenhuma, sai no máximo um resumo por hora e o excedente espera.
+- Estado (envios da última hora, chaves das últimas 24 h, último resumo) em
+  `~/.local/state/dell-status/fila.json`; trava em `fila.lock` (`flock`): a
+  rodada de cada minuto e um `dell-status --drenar` avulso nunca mandam o mesmo
+  arquivo duas vezes.
+- Hermes fora do ar: o aviso fica na fila e a drenagem para no primeiro envio
+  que falha (cada tentativa leva até 2 min); tenta de novo no minuto seguinte.
+
+Os fluxos do n8n montam o aviso em nós Code (`claude-ops/n8n.py`,
+`aviso_nodes`, com `origem: 'n8n:' + $workflow.name`). Fluxos publicados antes
+de 06/10/2026 não mandam `origem`: `claude-ops/aviso-origem.py --aplicar` os
+ajusta (sem `--aplicar` só lista). **Rode-o antes de instalar este
+`dell-status`**: o antigo ignora o campo a mais, o novo recusa aviso sem ele.
+
+A pasta é `770` com o grupo do usuário `node` do container do n8n (gid 1000,
+o mesmo do Rômulo no Dell), e não mais `777`: qualquer processo do Dell podia
+gravar aviso em nome de quem quisesse. O `2` (setgid) mantém o grupo nos
+arquivos novos.
+
 ```bash
-python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, backup e "o que fazer", sem tocar no Dell
+python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup e "o que fazer"
+(cd deploy/dell/claude-ops && python3 aviso-origem.py --aplicar)   # antes do dell-status novo
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
-mkdir -p ~/.local/share/avisos/fila && chmod 777 ~/.local/share/avisos/fila
+mkdir -p ~/.local/share/avisos/fila
+chgrp "$(docker exec licitacoes-automation-n8n-1 id -g)" ~/.local/share/avisos/fila && chmod 2770 ~/.local/share/avisos/fila
 cp deploy/dell/dell-status.service deploy/dell/dell-status.timer ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now dell-status.timer
 dell-status --stdout   # confere sem gravar nem avisar
+dell-status --drenar   # só esvazia a fila agora (com a mesma trava)
 ```
+
+## Cópia do roster do Easypanel (`squad.json`)
+
+O roster de verdade (squads, pessoas e o treino de cada uma) mora no volume do
+app do Easypanel, em `/app/data/squad.json`. O `~/SquadOne/data/squad.json` do
+Dell é um retrato velho de 14/09/2026, que a Central não usa (ver "Só as rotas
+da Central"): **não o sobrescreva**; o que fazer com ele é decisão do cutover
+da agenda. Para o cofre do Dell (restic cifrado no Drive, às 03:30) ter o roster
+atual, copie-o pelo console do Easypanel para `~/Mel/Easypanel/`, que entra no
+cofre e está nos `obrigatorios` do `backup/fontes.toml` (faltando, o cofre fica
+em atenção). Refaça depois de contratar, editar ou arquivar alguém.
+
+1. No Easypanel: projeto **aladdin** → serviço **squadone-app** → **Console**
+   (shell `sh`). Rode e deixe a saída na tela:
+
+   ```bash
+   sha256sum /app/data/squad.json
+   base64 /app/data/squad.json
+   ```
+
+   Base64, e não `cat`: o console quebra linha longa ao copiar, e JSON com
+   quebra no meio de uma string não volta igual.
+2. No Dell (terminal local ou `ssh mel` do PC), cole o bloco base64 e feche com
+   Ctrl-D:
+
+   ```bash
+   mkdir -p ~/Mel/Easypanel && chmod 700 ~/Mel/Easypanel
+   f=~/Mel/Easypanel/squad-$(date +%F).json
+   base64 -d > "$f"        # cole o bloco, Enter, Ctrl-D
+   chmod 600 "$f"
+   sha256sum "$f"          # tem de bater com o do console
+   python3 -m json.tool "$f" > /dev/null && cp -p "$f" ~/Mel/Easypanel/squad.json
+   ```
+
+3. A rodada seguinte do cofre leva o arquivo (ou rode já: `backup-dell cofre
+   --sem-ensaio`). Conferir que está lá:
+   `restic ls latest ~/Mel/Easypanel` (variáveis do `backup/RESTAURAR.md`).
+
+O `google-auth.json` do Easypanel **não** vem junto: é cifrado com o
+`TOKEN_ENC_KEY` de lá, e o Dell tem a credencial própria (ver acima).
 
 ## Pasta auto (Site antes da venda)
 

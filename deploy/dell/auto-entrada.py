@@ -39,7 +39,7 @@ def destino_seguro(caminho: str) -> Path:
 def avisar(texto: str) -> None:
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     nome = FILA_AVISOS / f"auto-entrada-{time.time_ns()}.json"
-    nome.write_text(json.dumps({"titulo": "🌐 Sites", "texto": texto}, ensure_ascii=False))
+    nome.write_text(json.dumps({"titulo": "🌐 Sites", "texto": texto, "origem": "auto-entrada"}, ensure_ascii=False))
 
 
 def main() -> None:

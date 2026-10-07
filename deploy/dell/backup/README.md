@@ -24,6 +24,8 @@ Meu Drive/
   anterior vai para a `_lixeira`).
 - **Cofre:** restic cifrado com a home inteira menos o que se reinstala, mais
   dumps consistentes (Postgres do n8n, pasta `/home/node/.n8n` do container,
+  cada banco Docker dos projetos desde 06/10/2026: aladdin, crm-silmer, p4f e
+  iris em `pg_dumpall`, o MinIO do iris em tar, o MySQL do espectro,
   7 SQLite do Hermes). Leva os segredos, por isso é cifrado. Refaz o Dell.
 - **Estrutura:** espelho (só dell/ e pc/) do que descreve a operação: manifesto,
   projetos, units do systemd, `docker-compose` (sem as senhas), fluxos do n8n,
@@ -46,7 +48,8 @@ um `backup:<fonte>` por fonte, pela idade do último sucesso:
   3 h sem sucesso (30 h na consultoria) também é `atencao`, e mais de 24 h
   (72 h) vira `falha`, com WhatsApp pelo Hermes.
 - **Cofre:** mais de 50 h sem sucesso, ou `restic check` falho, vira `falha`.
-  Dump do n8n que falhou também é `falha`. Arquivo `obrigatorios` sumido ou
+  Dump de banco que falhou (n8n ou projeto: todo `postgres`/`mysql`, e o que
+  tiver `critico = true`) também é `falha`. Arquivo `obrigatorios` sumido ou
   rodada com mais de 500 MB novos viram `atencao`.
 - **Ensaio:** com mais de 35 dias, `atencao`.
 - **Estrutura** (`backup:estrutura`): `atencao` com mais de 30 h sem sucesso,

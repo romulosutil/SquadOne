@@ -269,7 +269,7 @@ def avisar(texto: str) -> None:
     try:
         FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
         (FILA_DE_AVISOS / f"bridge-envios-{int(time.time())}.json").write_text(
-            json.dumps({"titulo": "⚠️ Hermes (WhatsApp)", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+            json.dumps({"titulo": "⚠️ Hermes (WhatsApp)", "texto": texto, "origem": "hermes:patch-bridge-envios"}, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         print("aviso não gravado:", e, file=sys.stderr)
 

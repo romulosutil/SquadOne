@@ -24,9 +24,15 @@ A mesma aplicação possui dois perfis selecionados no servidor por
 
 - `app` preserva o comportamento remoto e não registra `/api/operations/*`;
 - `operations` serve só a Central (em `/`; desde 30/09/2026 sem a cópia do app em `/squadone`, que redireciona ao app do Easypanel), registra
-  as rotas locais e troca o bind do Express para `127.0.0.1`.
+  as rotas locais e troca o bind do Express para `127.0.0.1`. Desde 06/10/2026
+  as rotas do app (escritas no roster e no Google) não são montadas nesse
+  perfil: do Google ficam só `/api/auth/google` e `/api/auth/callback` (a agenda
+  da Central), e o resto de `/api` responde 404 JSON. O `data/squad.json` do
+  Dell é um retrato de 14/09/2026 e nada da Central o lê ou escreve.
 
 `src/RootApp.vue` consulta somente `/api/runtime` para escolher a superfície.
+A mesma rota diz `ocupado` (turno ou fila do bot do Telegram em andamento),
+que o `atualizar-central` do Dell espera virar `false` antes de reiniciar.
 Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe e usam navegação interna para `/squadone`.
 

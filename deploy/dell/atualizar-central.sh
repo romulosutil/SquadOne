@@ -23,7 +23,8 @@ SE_MUDOU=0
 avisar_falha() {
   [ "$SE_MUDOU" = 1 ] || return 0
   mkdir -p "$FILA"
-  printf '{"titulo": "Central não atualizou", "texto": "O atualizar-central falhou depois de um push na main. Veja: journalctl --user -u atualizar-central -n 50"}\n' \
+  printf '{"titulo": "Central não atualizou", "texto": "O atualizar-central falhou depois de um push na main. Veja: journalctl --user -u atualizar-central -n 50", "origem": "atualizar-central", "chave": "atualizar-central:%s"}\n' \
+    "$(git -C "$CLONE" rev-parse --short origin/main 2>/dev/null || echo sem-commit)" \
     > "$FILA/atualizar-central-$(date +%Y%m%d%H%M%S).json"
 }
 trap avisar_falha ERR
@@ -41,6 +42,25 @@ echo "Código em $(git log -1 --format='%h %s')"
 # Sem package-lock: o projeto versiona bun.lock, e o Dell não tem bun.
 npm install --no-package-lock --no-audit --no-fund
 npm run build
+
+# Não reinicia no meio de um turno (ou com a fila do bot andando): o turno pode
+# já ter criado eventos no Google, e a resposta perdida leva a reenviar e
+# duplicar. Espera `ocupado: false` em /api/runtime por até 10 min; depois
+# disso reinicia assim mesmo (um turno não passa de ~6 min, então é travamento).
+# Central fora do ar, ou versão sem o campo, conta como ociosa.
+ESPERA_OCIOSA_S=600
+for i in $(seq 0 10 "$ESPERA_OCIOSA_S"); do
+  # Em variável, não `curl | grep -q`: com pipefail, o grep saindo cedo faria o
+  # curl falhar (SIGPIPE) e o pipeline leria "ociosa" com a Central ocupada.
+  runtime=$(curl -sf -m 5 "$URL" || true)
+  case "$runtime" in *'"ocupado":true'*) ;; *) break ;; esac
+  if [ "$i" -ge "$ESPERA_OCIOSA_S" ]; then
+    echo "A Central seguiu ocupada por $((ESPERA_OCIOSA_S / 60)) min; reiniciando assim mesmo." >&2
+    break
+  fi
+  [ "$i" = 0 ] && echo "Central ocupada (turno ou fila do bot); esperando ficar ociosa..."
+  sleep 10
+done
 systemctl --user restart squadone-operations.service
 
 for _ in $(seq 1 30); do

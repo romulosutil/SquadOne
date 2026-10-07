@@ -262,7 +262,7 @@ def avisar(texto: str) -> None:
         fila_de_avisos = Path.home() / ".local/share/avisos/fila"
         fila_de_avisos.mkdir(parents=True, exist_ok=True)
         (fila_de_avisos / f"gerador-{int(time.time())}.json").write_text(
-            json.dumps({"titulo": "🌐 Gerador de sites", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+            json.dumps({"titulo": "🌐 Gerador de sites", "texto": texto, "origem": "gerador-de-sites"}, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         log(f"Aviso não gravado: {e}", "ERRO")
 

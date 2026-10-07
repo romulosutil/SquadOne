@@ -144,6 +144,9 @@ obrigatorios = [
   # Hoje a identidade está sem senha (decisão de 04/10); se for protegida (bin/proteger-identidade),
   # troque por "~/.config/mel/age/identity.txt.age". Este cofre do backup é cifrado pelo restic.
   "~/.config/mel/age/identity.txt", "~/Mel/Cofre",
+  # Cópia manual do roster do Easypanel (o de verdade; o ~/SquadOne/data do Dell é de 14/09/2026).
+  # Como copiar: deploy/dell/README.md, "Cópia do roster do Easypanel".
+  "~/Mel/Easypanel/squad.json",
 ]
 # Reinstalável, regenerável ou grande sem valor de restauração. Padrão sem "/"
 # vale em qualquer nível (regra do restic).
@@ -198,3 +201,52 @@ excluir = ["n8nEventLog*", "crash.journal"]
 tipo = "sqlite"
 nome = "hermes"
 arquivos = ["~/.hermes/*.db", "~/.hermes/cron/*.db"]
+
+# Bancos Docker dos projetos (06/10/2026: "nenhum é descartável"). Até aqui só o
+# volume do Docker os guardava, e /var/lib/docker fica fora da home: o cofre não
+# os tinha. Postgres sem `banco` = pg_dumpall do cluster inteiro (todos os bancos
+# e papéis: o iris tem sete bancos, o crm-silmer três). Usuário e senha vêm de
+# dentro do container. Dump que falha deixa o cofre em falha (backup-dell.py,
+# eh_critico). Prova da restauração: `backup-dell ensaio-dump <nome>`.
+[[cofre.preparo]]
+tipo = "postgres"
+nome = "aladdin-pg"
+compose = "~/workspace/infra-docker/aladdin/docker-compose.yml"
+servico = "db"
+
+[[cofre.preparo]]
+tipo = "postgres"
+nome = "crm-silmer-pg"
+compose = "~/workspace/infra-docker/crm-silmer/docker-compose.yml"
+servico = "postgres"
+
+[[cofre.preparo]]
+tipo = "postgres"
+nome = "p4f-db"
+compose = "~/workspace/infra-docker/p4f/docker-compose.yml"
+servico = "db"
+
+[[cofre.preparo]]
+tipo = "postgres"
+nome = "iris-pg"
+compose = "~/workspace/infra-docker/iris/docker-compose.yml"
+servico = "postgres"
+
+# Os objetos do MinIO do iris (bucket = pastas em /data). A imagem do MinIO não
+# tem tar: ele roda numa imagem que já está no Dell, com os volumes do serviço
+# montados só para leitura.
+[[cofre.preparo]]
+tipo = "pasta-do-container"
+nome = "iris-minio"
+compose = "~/workspace/infra-docker/iris/docker-compose.yml"
+servico = "minio"
+pasta = "/data"
+imagem = "postgres:17-alpine"
+critico = true
+
+# Todos os bancos menos os de sistema; o usuário do app o compose recria.
+[[cofre.preparo]]
+tipo = "mysql"
+nome = "espectro-mysql"
+compose = "~/workspace/infra-docker/espectro/docker-compose.yml"
+servico = "mysql"

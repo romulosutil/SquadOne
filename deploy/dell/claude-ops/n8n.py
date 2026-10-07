@@ -19,6 +19,8 @@ SETTINGS_OK = {
 }
 
 FILA_NO_CONTAINER = "/home/node/.n8n-files/avisos/"
+# Campo `origem` do aviso, em JavaScript, para os nós Code que montam o JSON da fila.
+ORIGEM_JS = "origem: ('n8n:' + $workflow.name).slice(0, 80)"
 
 
 def api(method, path, body=None):
@@ -50,9 +52,12 @@ def aviso_nodes(prefixo, x, y, texto_expr, titulo="🧭 Operação", agregado=Fa
     (quebra de linha). Com `agregado=True` roda uma vez só, com `itens` (todos
     os itens de entrada) e `NL`, e devolve [] quando o texto for vazio: assim
     um único WhatsApp resume a execução e "nada a dizer" não vira mensagem.
+
+    `origem` (obrigatória no dell-status desde 06/10/2026) é o nome do fluxo,
+    lido na execução: renomear o fluxo não exige regerar o nó.
     """
     arquivo = ("const arquivo = (texto) => ({ json: { texto }, binary: { data: { data: Buffer.from(JSON.stringify("
-               f"{{ titulo: {json.dumps(titulo, ensure_ascii=False)}, texto }}), 'utf8').toString('base64'),"
+               f"{{ titulo: {json.dumps(titulo, ensure_ascii=False)}, texto, {ORIGEM_JS} }}), 'utf8').toString('base64'),"
                " mimeType: 'application/json', fileName: 'aviso.json' } } });")
     if agregado:
         corpo = ["const itens = $input.all();", f"const texto = {texto_expr};", "return texto ? [arquivo(texto)] : [];"]

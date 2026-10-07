@@ -184,5 +184,92 @@ class Espelho(unittest.TestCase):
         self.assertIn("--filter", chk)
 
 
+class Preparo(unittest.TestCase):
+    """Os dumps dos bancos Docker (06/10/2026) e o do n8n como era."""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.rodar_antigo = bd.rodar
+        self.addCleanup(setattr, bd, "rodar", self.rodar_antigo)
+
+    def test_n8n_continua_pg_dump_de_um_banco_com_usuario_do_env(self):
+        env = self.d / ".env"
+        env.write_text("POSTGRES_USER=n8nuser\nPOSTGRES_PASSWORD=segredo\n")
+        cmd, fim = bd.comando_do_dump({"tipo": "postgres", "nome": "n8n", "compose": "/c.yml", "servico": "db",
+                                       "banco": "n8n", "env": str(env)})
+        self.assertEqual(cmd[-7:], ["pg_dump", "-U", "n8nuser", "-d", "n8n", "--no-owner", "--no-privileges"])
+        self.assertEqual(fim, "PostgreSQL database dump complete")
+        self.assertNotIn("segredo", " ".join(cmd))
+
+    def test_postgres_sem_banco_e_o_cluster_inteiro(self):
+        cmd, fim = bd.comando_do_dump({"tipo": "postgres", "nome": "iris-pg", "compose": "/i.yml", "servico": "postgres"})
+        self.assertEqual(cmd[:7], ["docker", "compose", "-f", "/i.yml", "exec", "-T", "postgres"])
+        self.assertIn("pg_dumpall", cmd[-1])
+        self.assertEqual(fim, "PostgreSQL database cluster dump complete")
+
+    def test_mysql_sem_bancos_de_sistema_e_senha_so_dentro_do_container(self):
+        cmd, fim = bd.comando_do_dump({"tipo": "mysql", "nome": "espectro-mysql", "compose": "/e.yml", "servico": "mysql"})
+        script = cmd[-1]
+        self.assertIn('MYSQL_PWD="$MYSQL_ROOT_PASSWORD"', script)
+        self.assertIn("grep -Ev \"^(mysql|sys|information_schema|performance_schema)$\"", script)
+        self.assertIn("--single-transaction", script)
+        self.assertEqual(fim, "-- Dump completed")
+
+    def test_todo_banco_e_critico_e_pasta_so_quando_pedido(self):
+        self.assertTrue(bd.eh_critico({"tipo": "postgres"}))
+        self.assertTrue(bd.eh_critico({"tipo": "mysql"}))
+        self.assertFalse(bd.eh_critico({"tipo": "pasta-do-container"}))
+        self.assertTrue(bd.eh_critico({"tipo": "pasta-do-container", "critico": True}))
+        self.assertFalse(bd.eh_critico({"tipo": "sqlite"}))
+
+    def test_pasta_com_imagem_roda_tar_num_container_descartavel_so_leitura(self):
+        bd.rodar = lambda cmd, **kw: ok("abc123\n") if cmd[-3:] == ["ps", "-q", "minio"] else falha()
+        cmd = bd.comando_da_pasta({"tipo": "pasta-do-container", "compose": "/i.yml", "servico": "minio",
+                                   "pasta": "/data", "imagem": "postgres:17-alpine"})
+        self.assertEqual(cmd[:8], ["docker", "run", "--rm", "--network", "none", "--volumes-from", "abc123:ro",
+                                   "--entrypoint"])
+        self.assertEqual(cmd[8:], ["tar", "postgres:17-alpine", "-C", "/data", "-cf", "-", "."])
+        sem = bd.comando_da_pasta({"compose": "/c.yml", "servico": "n8n", "pasta": "/home/node/.n8n",
+                                   "excluir": ["crash.journal"]})
+        self.assertEqual(sem[-8:], ["tar", "-C", "/home/node/.n8n", "--exclude", "crash.journal", "-cf", "-", "."])
+
+    def test_pasta_com_imagem_e_servico_parado_falha(self):
+        bd.rodar = lambda cmd, **kw: ok("")
+        with self.assertRaisesRegex(RuntimeError, "não está rodando"):
+            bd.comando_da_pasta({"compose": "/i.yml", "servico": "minio", "pasta": "/data", "imagem": "x"})
+
+    def test_fim_do_arquivo_aceita_bytes_que_nao_sao_utf8(self):
+        f = self.d / "dump.sql"
+        f.write_bytes(b"\xff\xfe" * 1000 + b"\n-- Dump completed on 2026-10-06\n")
+        self.assertIn("-- Dump completed", bd.fim_do_arquivo(f))
+
+    def test_carga_do_dumpall_aceita_so_o_papel_e_o_banco_que_ja_existem(self):
+        stderr = ('psql:/ensaio/dump.sql:9: ERROR:  role "iris" already exists\n'
+                  'psql:/ensaio/dump.sql:80: ERROR:  database "postgres" already exists\n')
+        self.assertEqual(bd.erros_da_carga(stderr), [])
+        ruim = stderr + 'psql:/ensaio/dump.sql:62: ERROR:  permission denied to grant privileges as role "iris"\n'
+        self.assertEqual(len(bd.erros_da_carga(ruim)), 1)
+        self.assertIn("permission denied", bd.erros_da_carga(ruim)[0])
+
+    def test_comparar_contagens(self):
+        vivo = {"iris:public.a": 3, "iris_542:public.b": 0}
+        self.assertIn("2 banco(s) com tabelas, 2 tabelas e 3 linhas", bd.comparar_contagens(vivo, dict(vivo)))
+        with self.assertRaisesRegex(RuntimeError, "1 tabela"):
+            bd.comparar_contagens(vivo, {"iris:public.a": 2, "iris_542:public.b": 0})
+        with self.assertRaisesRegex(RuntimeError, "nenhuma tabela"):
+            bd.comparar_contagens({}, {})
+
+    def test_manifesto_versionado_tem_um_dump_por_banco_docker(self):
+        m = bd.ler_manifesto(AQUI / "fontes.toml")
+        preparo = {p["nome"]: p for p in m["cofre"]["preparo"]}
+        for nome in ("n8n", "aladdin-pg", "crm-silmer-pg", "p4f-db", "iris-pg", "iris-minio", "espectro-mysql"):
+            self.assertIn(nome, preparo)
+            self.assertTrue(bd.eh_critico(preparo[nome]) or nome == "n8n-home", nome)
+        # O ensaio mensal acha o dump do n8n pelo banco, não "o primeiro postgres".
+        n8n = [p for p in preparo.values() if p["tipo"] == "postgres" and p.get("banco") == "n8n"]
+        self.assertEqual([p["nome"] for p in n8n], ["n8n"])
+
+
 if __name__ == "__main__":
     unittest.main()

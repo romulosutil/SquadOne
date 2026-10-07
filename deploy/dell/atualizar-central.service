@@ -4,4 +4,5 @@ Description=Atualizar a Central do SquadOne quando a main andar
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/atualizar-central --se-mudou
-TimeoutStartSec=900
+# Build (~5 min) + até 10 min esperando a Central ficar ociosa.
+TimeoutStartSec=1500
