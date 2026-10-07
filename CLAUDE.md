@@ -26,6 +26,7 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/crm.test.ts`, `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
+`server/roster-historico.test.ts`,
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
@@ -64,6 +65,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/dados.ts         SQUADONE_DATA_DIR e a trava que só liga a agenda no Dell com ele fora do clone
   server/auth-store.ts    credencial do Google: code flow, refresh, cifra em disco
   server/squad.ts         roster v3 em árvore, migração, regras de id; única fonte de verdade das squads
+  server/roster-historico.ts  cópia datada do squad.json anterior a cada gravação, poda 30/90 dias (PURO: nome e poda; I/O: cópia)
   server/hire.ts          contratação (card ou UI), nova squad, substituição de PO
   server/ciclo-de-vida.ts editar, arquivar e reativar pessoa/domínio/squad
   server/redacao.ts       Gemini redige papel + escopo (não grava)
@@ -302,7 +304,7 @@ Segundo canal de entrada, além do Pedir: mandar uma demanda pelo Telegram roda 
 
 ### Escrita no roster
 
-Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write numa fila. Um arquivo para todas as squads, então uma fila só: duas aprovações quase simultâneas, mesmo em squads diferentes, leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeRoster` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`. Contratação aplica na squad da proposta (`sugestao.squad_id`), não na que a tela mostra.
+Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write numa fila. Um arquivo para todas as squads, então uma fila só: duas aprovações quase simultâneas, mesmo em squads diferentes, leriam o mesmo `squad.json` e a segunda apagaria a primeira. `writeRoster` grava num `.tmp` e renomeia por cima — crash no meio deixa o `.tmp` pela metade, nunca o `squad.json`. Contratação aplica na squad da proposta (`sugestao.squad_id`), não na que a tela mostra. Antes do rename, `writeRoster` copia o `squad.json` atual para `historico/` e, depois dele, poda (ver "Persistência"); o formato do arquivo não muda, porque o Easypanel (reserva fria) o lê — foi por isso que o SQLite com Litestream foi descartado.
 
 ### Contratação e ciclo de vida
 
@@ -359,6 +361,7 @@ Volume Docker do Easypanel montado em `/app/data`; no Dell, `~/.local/share/squa
 | `data/squad.json` | roster v3 `{ version: 3, squads, idsAposentados }` = os agentes com seu treino; inclui arquivados (`arquivado`, `arquivadoEm`); `tasksListaId` opcional por squad (lista do Google Tasks, lazy) |
 | `data/google-auth.json` | `refresh_token` cifrado em AES-256-GCM e o `scope` concedido (Calendar, e Tasks quando autorizado) |
 | `data/squad.v2.bak.json` | texto cru do roster v2, gravado uma vez pela migração; nunca sobrescrito |
+| `data/historico/squad.<AAAA-MM-DDTHHMMSSZ>.json` | derivado, modo 600: o `squad.json` ANTERIOR a cada gravação do roster (`server/roster-historico.ts`), para voltar atrás de uma edição ou arquivamento. Poda: ficam as 30 mais recentes ou as dos últimos 90 dias, o que guardar mais. Só com `SQUADONE_DATA_DIR` definida e o roster não congelado: sem a env (dev, Easypanel) ou com `SQUADONE_ROSTER_CONGELADO=true` nenhuma pasta é criada. Falha ao copiar ou podar vai ao log (uma vez por tipo) e não impede a gravação. Restaurar: `deploy/dell/backup/RESTAURAR.md`, seção "Roster"; listar e comparar: `npx tsx scripts/conferir-roster.ts --historico <dados> [--diff <a> <b>]` |
 
 No Dell (perfil `operations`) há também `SQUADONE_OPERATIONS_DATA_DIR/financas.db` (SQLite só das finanças, 600, migrações numeradas) e a `financas.copia.db` que cada sincronização grava com `VACUUM INTO` para o cofre restic. Nada disso existe no Easypanel.
 

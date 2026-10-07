@@ -48,6 +48,7 @@ import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/si
 import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
+import { descreverHistorico } from "./server/roster-historico.ts";
 import { criarLeitorDoTime } from "./server/time.ts";
 import {
   desconectar,
@@ -827,6 +828,8 @@ async function startServer() {
     else {
       console.log(`Agenda ligada; lembretes pela fila de avisos (${filaDeAvisos}), ${ANTECEDENCIA_LEMBRETE_MIN} min antes`);
       if (!process.env.GEMINI_API_KEY) console.error("GEMINI_API_KEY vazia: turno, redação e transcrição vão falhar.");
+      // Só a contagem e a data da mais recente: nada do conteúdo do roster no log.
+      void descreverHistorico(dataDir).then((linha) => console.log(linha));
     }
     if (identidadeLigada) {
       if (loginsDoTailscale.size === 0) console.error("[acesso] SQUADONE_LOGINS_TAILSCALE vazia: todo pedido pela tailnet leva 403.");

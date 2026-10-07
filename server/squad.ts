@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { diretorioDeDados } from "./dados.ts";
+import { dadosExplicitos, diretorioDeDados } from "./dados.ts";
+import { copiarParaHistorico, podarDoHistorico } from "./roster-historico.ts";
 
 /**
  * Roster em ÁRVORE de três níveis (spec Fase 1 §1).
@@ -323,7 +324,17 @@ async function sincronizarDiretorio(dir: string): Promise<void> {
 }
 
 export async function writeRoster(roster: Roster): Promise<void> {
+  // A cópia do squad.json ANTERIOR vem antes do rename que o substitui (depois,
+  // o anterior já não existiria) e só com o diretório de dados escolhido de
+  // propósito: em dev e no Easypanel (sem SQUADONE_DATA_DIR) nada é criado. No
+  // congelamento (reserva fria, regra 25) o arquivo é o que está sendo
+  // comparado e trocado, e uma pasta nova ao lado dele só confundiria a conferência.
+  // Os dois passos do histórico nunca lançam: ele não pode impedir a gravação.
+  const historico = dadosExplicitos() && !rosterCongelado();
+  if (historico) await copiarParaHistorico(dataDir());
   await gravarAtomico(squadPath(), JSON.stringify(roster, null, 2) + "\n");
+  // A poda vem depois: se ela falhar, o roster novo já está gravado.
+  if (historico) await podarDoHistorico(dataDir());
 }
 
 /**
