@@ -36,9 +36,21 @@ import {
   type RoomId,
 } from '../office/rooms'
 import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
+import type { EstadoDoAgente } from '../office/salaFinancas'
 import type { Pessoa, SquadView } from '../types'
 
-const props = defineProps<{ agent?: string; squad?: SquadView | null }>()
+/**
+ * `estadosDasSalas`: domínio → estado que o PO da sala mostra num balão
+ * sempre visível (hoje só a Sala Finanças: % do cartão e do orçamento, ver
+ * `office/salaFinancas.ts`). Dado da tela, não do roster.
+ */
+const props = defineProps<{ agent?: string; squad?: SquadView | null; estadosDasSalas?: Record<string, EstadoDoAgente> }>()
+
+/** Pessoa → balão: o estado de uma sala é do agente que responde por ela, o PO. */
+const estadoDoAtor = computed<Record<string, EstadoDoAgente>>(() => {
+  const estados = props.estadosDasSalas ?? {}
+  return Object.fromEntries((props.squad?.dominios ?? []).filter((d) => estados[d.id]).map((d) => [d.po.id, estados[d.id]]))
+})
 
 /** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
 const SPRITE_POOL = ['wraith_01', 'wraith_02', 'wraith_03']
@@ -323,6 +335,7 @@ function actorStyle(p: OfficePessoa) {
               <div v-else class="actor__emoji">{{ p.emoji }}</div>
             </div>
             <span class="actor__name">{{ p.nome }} · {{ p.papel }}</span>
+            <span v-if="estadoDoAtor[p.id]" class="actor__estado" :data-semaforo="estadoDoAtor[p.id].semaforo">{{ estadoDoAtor[p.id].texto }}</span>
           </div>
         </div>
       </div>
@@ -581,6 +594,30 @@ function actorStyle(p: OfficePessoa) {
 .actor[data-ativo] .actor__name {
   visibility: visible;
 }
+/* Balão de estado (Sala Finanças): sempre visível, acima da plaquinha do nome.
+   A borda esquerda é o semáforo; o texto já diz a %, então a cor nunca é a
+   única pista. Cores fixas como o resto do mapa (o mapa não segue o tema). */
+.actor__estado {
+  position: absolute;
+  left: 50%;
+  top: -30px;
+  transform: translateX(-50%);
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #000;
+  background: #f4f0e6;
+  border: 2px solid #000;
+  border-left-width: 6px;
+  box-shadow: 2px 2px 0 #000;
+  padding: 2px 4px 3px;
+  pointer-events: none;
+}
+.actor__estado[data-semaforo='verde'] { border-left-color: #167a4c; }
+.actor__estado[data-semaforo='amarelo'] { border-left-color: #e0b100; }
+.actor__estado[data-semaforo='laranja'] { border-left-color: #ff6a2b; }
+.actor__estado[data-semaforo='vermelho'] { border-left-color: #c92f3f; background: #ffd9d2; }
 /* Quem atende a demanda ganha a plaquinha amarela com a setinha de pixel. */
 .actor[data-ativo] .actor__name {
   background: #ffd23f;

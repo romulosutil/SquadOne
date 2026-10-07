@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import type { Modo } from "./capabilities.ts";
 import type { TurnoResult } from "./orchestrator.ts";
 import type { FormatoDeData } from "../src/contribuicao.ts";
+import { lerGastoFalado, textoDoGastoAnotado, type GastoFalado } from "./financas/gasto-falado.ts";
 import { segredoConfere, type Botao } from "./telegram.ts";
 import {
   criarMemoriaDeUpdates,
@@ -61,7 +62,17 @@ export interface DepsDoBot {
   fmt: FormatoDeData;
   /** Relógio injetado: decide se a demanda chegou atrasada demais para rodar. */
   agora(): Date;
+  /**
+   * Grava "gastei 30 no mercado" nas finanças e devolve a categoria. Ausente =
+   * finanças não moram neste processo: o bot responde isso, e a frase NÃO vira
+   * turno (nada de finanças vai ao modelo, RULES 24). `origem` identifica a
+   * mensagem (`tg:<chat>:<mensagem>`): reentregue, não duplica.
+   */
+  anotarGasto?(gasto: GastoFalado, origem: string, quando: Date): Promise<string>;
 }
+
+export const TEXTO_FINANCAS_FORA = "As finanças não estão neste servidor: anote o gasto pelo app.";
+export const TEXTO_GASTO_FALHOU = "Não consegui anotar o gasto agora. Tente de novo em instantes.";
 
 /** "digitando..." some em 5 s no Telegram. */
 export const INTERVALO_DIGITANDO_MS = 4000;
@@ -180,6 +191,17 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
     });
   }
 
+  /** A resposta a um gasto anotado: só a categoria. Nem o valor nem o "onde" vão ao chat ou ao log (RULES 24). */
+  async function anotar(gasto: GastoFalado, chatId: number, mensagemId: number, quando: Date): Promise<string> {
+    if (!deps.anotarGasto) return TEXTO_FINANCAS_FORA;
+    try {
+      return textoDoGastoAnotado(await deps.anotarGasto(gasto, `tg:${chatId}:${mensagemId}`, quando));
+    } catch (err) {
+      console.error(`[telegram] gasto não anotado (${err instanceof Error ? err.name : "erro"})`);
+      return TEXTO_GASTO_FALHOU;
+    }
+  }
+
   async function tocarBotao(chatId: number, mensagemId: number, callbackId: string, acao: "aprovar" | "descartar", id: string) {
     const pendente = tomarProposta(id, chatId);
     if (!pendente) {
@@ -246,6 +268,12 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         console.warn(`[telegram] demanda com ${entrada.atrasoMin} min de atraso não processada`);
         deps.enviar(entrada.chatId, textoDeDemandaAtrasada(entrada.atrasoMin), entrada.mensagemId).catch(falhouAoEnviar);
         return;
+      case "gasto":
+        // Fora da fila de turnos: não lê a agenda nem chama o modelo.
+        anotar(entrada.gasto, entrada.chatId, entrada.mensagemId, entrada.quando)
+          .then((texto) => deps.enviar(entrada.chatId, texto, entrada.mensagemId))
+          .catch(falhouAoEnviar);
+        return;
       case "botao":
         // Fora da fila de turnos: contratar não lê a agenda, e a fila do
         // roster (`atualizarRoster`) já serializa a gravação.
@@ -258,6 +286,12 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => {
           try {
             const demanda = await deps.transcrever(fileId, mime);
+            // "gastei 30 no mercado" falado: anota em vez de rodar o turno, e
+            // sem ecoar a transcrição (ela traz o valor). Volta como `falha`
+            // porque é o caminho que responde sem turno. Com comando na legenda
+            // (/p, /foco) é demanda, como "/p gastei…" no texto.
+            const gasto = !squadId && modo === "auto" ? lerGastoFalado(demanda) : null;
+            if (gasto) return { falha: `🎙️ ${await anotar(gasto, chatId, mensagemId, deps.agora())}` };
             return { demanda, prefixo: `🎙️ “${demanda}”\n\n` };
           } catch (err) {
             console.error("[telegram] transcrição falhou:", err);

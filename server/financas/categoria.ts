@@ -1,18 +1,21 @@
-import { descricaoNormalizada } from "./comum.ts";
+import { descricaoNormalizada, estabelecimentoDe } from "./comum.ts";
 import type { Natureza, OrigemDaCategoria } from "./tipos.ts";
 
 /**
  * Categoria por REGRA DETERMINÍSTICA (RULES 24: nada de finanças vai ao
- * modelo). PURO. Três fontes, nesta ordem:
+ * modelo). PURO. Quatro fontes, nesta ordem:
  *
  * 1. a natureza manda quando ela já diz o que é (pagamento de fatura,
  *    transferência entre contas, rendimento, encargo): categoria de despesa
  *    nessas linhas confundiria o "gastei";
- * 2. a categoria da Pluggy (em inglês), traduzida por tabela;
- * 3. palavras da descrição, para o que chega sem categoria (a fatura em PDF do
+ * 2. a regra que o Rômulo criou para o estabelecimento ("aplicar sempre a
+ *    este estabelecimento", tabela `regra_categoria`);
+ * 3. a categoria da Pluggy (em inglês), traduzida por tabela;
+ * 4. palavras da descrição, para o que chega sem categoria (a fatura em PDF do
  *    Santander, a Pluggy quando não classificou).
  *
- * A categoria dada pelo Rômulo (`origem: "usuario"`) nunca passa por aqui.
+ * A categoria dada pelo Rômulo no próprio lançamento (`origem: "usuario"`)
+ * nunca passa por aqui.
  */
 
 export const SEM_CATEGORIA = "Outros";
@@ -23,6 +26,14 @@ const POR_NATUREZA: Partial<Record<Natureza, string>> = {
   rendimento: "Rendimentos",
   encargo: "Juros, IOF e encargos",
 };
+
+/**
+ * Categorias que a ESTRUTURA dá (natureza) e o "Outros" de reserva: não se
+ * renomeiam, não se removem e não se escolhem à mão. Renomear "Pagamento de
+ * fatura" não mudaria a natureza, e um gasto marcado com ela pareceria quitar
+ * uma fatura.
+ */
+export const CATEGORIAS_FIXAS: readonly string[] = [...new Set(Object.values(POR_NATUREZA)), SEM_CATEGORIA];
 
 /** Categoria da Pluggy (minúsculas, contém) → nossa. A primeira que casa vence: o específico antes do geral. */
 const DA_PLUGGY: [string[], string][] = [
@@ -88,21 +99,33 @@ export function categoriaDaDescricao(descricao: string): string | null {
   return null;
 }
 
+/** Todas as categorias que as regras daqui produzem: a lista inicial da tela "Organizar". */
+export const CATEGORIAS_PADRAO: readonly string[] = [
+  ...new Set([...Object.values(POR_NATUREZA), ...DA_PLUGGY.map(([, c]) => c), ...DA_DESCRICAO.map(([, c]) => c), "Outras receitas", SEM_CATEGORIA]),
+];
+
 /**
  * Categoria de um lançamento. A da natureza vence a da Pluggy de propósito: a
  * Pluggy pode chamar de "Transfer - PIX" o Pix que pagou a fatura, e o "gastei"
- * somaria um gasto que já está nas compras do cartão.
+ * somaria um gasto que já está nas compras do cartão. A regra do Rômulo vem
+ * logo depois da natureza: ele a criou corrigindo justamente o que a Pluggy
+ * ou a descrição diziam.
  */
-export function categorizar(t: {
-  natureza: Natureza;
-  descricao: string;
-  categoriaFonte: string;
-  categoria?: string;
-  origemCategoria?: OrigemDaCategoria;
-}): { categoria: string; origemCategoria: OrigemDaCategoria } {
+export function categorizar(
+  t: {
+    natureza: Natureza;
+    descricao: string;
+    categoriaFonte: string;
+    categoria?: string;
+    origemCategoria?: OrigemDaCategoria;
+  },
+  regras: ReadonlyMap<string, string> = new Map(),
+): { categoria: string; origemCategoria: OrigemDaCategoria } {
   if (t.origemCategoria === "usuario" && t.categoria) return { categoria: t.categoria, origemCategoria: "usuario" };
   const daNatureza = POR_NATUREZA[t.natureza];
   if (daNatureza) return { categoria: daNatureza, origemCategoria: "regra" };
+  const daRegra = regras.size ? regras.get(estabelecimentoDe(t.descricao)) : undefined;
+  if (daRegra) return { categoria: daRegra, origemCategoria: "regra_usuario" };
   const daPluggy = categoriaDaPluggy(t.categoriaFonte);
   // "Pix e transferências" da Pluggy é genérica demais quando a descrição diz mais.
   if (daPluggy && daPluggy !== "Pix e transferências") return { categoria: daPluggy, origemCategoria: "pluggy" };

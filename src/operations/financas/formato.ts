@@ -71,6 +71,33 @@ export const ROTULO_DA_NATUREZA: Record<string, string> = {
   encargo: 'Encargo',
 }
 
+export const ROTULO_DO_SEMAFORO = { verde: 'Tranquilo', amarelo: 'Passou de 70%', laranja: 'Passou de 90%', vermelho: 'Chegou a 100%' } as const
+
+/** "1.234,56", "500", "R$ 80,5" → centavos; vazio ou ilegível = null. */
+export function centavosDeReais(texto: string): number | null {
+  const limpo = texto.replace(/R\$|\s/gi, '')
+  if (!/^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+([.,]\d{1,2})?$/.test(limpo)) return null
+  const n = /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(limpo) ? Number(limpo.replace(/\./g, '').replace(',', '.')) : Number(limpo.replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null
+}
+
+/** Centavos → "1234,56" para preencher um campo de reais. */
+export function reaisDoCampo(centavos: number | null): string {
+  return centavos === null ? '' : (centavos / 100).toFixed(2).replace('.', ',').replace(/,00$/, '')
+}
+
+/** Escrita nas rotas de finanças: JSON, erro com a mensagem do servidor. */
+export async function enviarJson<T = Record<string, unknown>>(metodo: 'POST' | 'PUT' | 'PATCH', caminho: string, corpo: unknown): Promise<T> {
+  const resposta = await fetch(`/api/financas${caminho}`, {
+    method: metodo,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(corpo),
+  })
+  const dados = await resposta.json().catch(() => ({}))
+  if (!resposta.ok) throw new Error(dados.error ?? `HTTP ${resposta.status}`)
+  return dados as T
+}
+
 /** O que dizer de cada status da Pluggy quando ele pede gesto. */
 export function oQueFazer(status: string): string {
   if (status === 'LOGIN_ERROR') return 'Reconecte o banco no app Meu Pluggy.'

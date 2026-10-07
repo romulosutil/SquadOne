@@ -75,9 +75,9 @@ export async function lerUmaConexao(banco: BancoDeFinancas, cliente: ClienteDaPl
   return { nome: instituicao, status: String(item?.status ?? ""), contas: contas.length, transacoes: manter.length };
 }
 
-/** Refaz natureza, pares, parcelas e categorias sobre tudo que está gravado. */
+/** Refaz natureza, pares, parcelas e categorias (com as regras e renomes do Rômulo) sobre tudo que está gravado. */
 export function reprocessar(banco: BancoDeFinancas) {
-  banco.gravarDerivados(processar(banco.contas(), banco.faturas(), banco.transacoes()));
+  banco.gravarDerivados(processar(banco.contas(), banco.faturas(), banco.transacoes(), banco.organizacao()));
 }
 
 export function criarSincronizador(deps: {
@@ -85,6 +85,8 @@ export function criarSincronizador(deps: {
   cliente: ClienteDaPluggy | null;
   itemIds: string[];
   agora?: () => Date;
+  /** Depois de gravar e reprocessar (os alertas de 70/90/100%). Falha dele não falha a sincronização. */
+  depois?: () => Promise<unknown>;
 }) {
   const agora = () => (deps.agora?.() ?? new Date()).toISOString();
   let emAndamento: Promise<ResultadoDaSincronizacao> | null = null;
@@ -125,6 +127,7 @@ export function criarSincronizador(deps: {
     const fim = agora();
     banco.terminarSincronizacao(id, fim, ok, resumo);
     console.log(`[financas] sincronização (${origem}) ${ok ? "ok" : "com falha"}: ${resumo}`);
+    await deps.depois?.().catch((erro) => console.error(`[financas] falha depois da sincronização: ${descreverErro(erro)}`));
     return { ok, conexoes, fim };
   }
 
