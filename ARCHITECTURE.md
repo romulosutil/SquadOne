@@ -120,8 +120,17 @@ versão 2 de 06/10/2026. O que foi feito, na ordem:
 7. **PRUMO como uma squad**, com o Site antes da venda como sala
    (07/10/2026, ver "PRUMO como squad").
 
+**Fase 8, feito:** **cartões e time vivo** (07/10/2026). A Hoje ganhou o
+cartão de finanças em semáforo da regra 13 (`GET /api/financas/estado`, só
+laranja e vermelho, ≥ 90 %; só % e o nome do banco, nunca R$) entre os
+cartões dos agentes e a fila, e o estado de **todas** as squads ativas por
+`GET /api/time` (`server/time.ts`: um `events.list` por calendário na janela
+de −1 a +7 dias, agrupado pelo domínio ativo, cache de 60 s em memória, nada
+em disco). Squad cujo calendário não foi lido continua "Sem sinal", com o
+motivo.
+
 **Ainda não feito (fase 8, sem data):** roster em SQLite com Litestream,
-cartões e time vivo completos, Luna em modo sombra, explicação das finanças
+Luna em modo sombra, explicação das finanças
 com IA, hábitos, check-in e metas. Fora do código e sem confirmação
 registrada: o teste de que o aviso do Hermes vibra o celular bloqueado (se não
 vibrar, o Hermes precisa de um chip próprio), o faturamento do Gemini ativo
