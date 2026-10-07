@@ -28,6 +28,9 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 `server/roster-historico.test.ts`,
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
+`server/luna-sombra.test.ts` (a saída da Luna como dado, a comparação com o
+Gemini, as flags do `codex exec --help`, e a cola — teto do dia, fila serial,
+cota, JSONL — com o `codex` dublado num diretório temporário),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
 vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
@@ -97,6 +100,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/telegram-polling.ts  entrada por getUpdates (Dell): offset persistido ao enfileirar, nunca setWebhook
   server/transcricao.ts   áudio do Telegram -> texto da demanda (uma chamada ao Gemini)
   server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
+  server/luna-sombra.ts   Luna em sombra (desligada): prompt, leitura da saída e comparação PUROS; cola com fila, teto/dia, codex exec sem shell, JSONL 600
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n

@@ -395,6 +395,20 @@ export interface PedidoDeTurno {
    * `tokenValido`). Ausente = o `token` do turno, ou `PrecisaConectar` sem ele.
    */
   obterToken?: ObterToken;
+  /**
+   * Chamado ao fim de CADA turno do Gemini (dois, com redirecionamento) com o
+   * systemInstruction usado e as functionCalls cruas. É o gancho da Luna em
+   * sombra (`server/luna-sombra.ts`): callback, e não campo do TurnoResult,
+   * para o prompt e as chamadas não irem à UI nem ao Telegram. Lança = só log.
+   */
+  aoTerminarTurno?: (turno: TurnoObservado) => void;
+}
+
+/** O que um turno do Gemini mostrou, para quem observa de fora (a sombra). */
+export interface TurnoObservado {
+  squad: Squad;
+  systemInstruction: string;
+  chamadas: FunctionCall[];
 }
 
 /**
@@ -411,21 +425,22 @@ async function rodarTurno(
 ): Promise<TurnoResult> {
   const { demanda, token, falhaDoToken, modo, roster } = pedido;
 
+  const systemInstruction = buildSystemInstruction(
+    {
+      squadNome: squad.nome,
+      squadEscopo: squad.escopo,
+      arvore: rosterTree(squad),
+      outrasSquads: outrasSquads(roster, squad.id),
+      janela: descreverJanela(janela),
+    },
+    agoraLocalISO(agora),
+    modo,
+  );
   const response = await gerarComRetry(ai, {
     model: MODEL,
     contents: demanda,
     config: {
-      systemInstruction: buildSystemInstruction(
-        {
-          squadNome: squad.nome,
-          squadEscopo: squad.escopo,
-          arvore: rosterTree(squad),
-          outrasSquads: outrasSquads(roster, squad.id),
-          janela: descreverJanela(janela),
-        },
-        agoraLocalISO(agora),
-        modo,
-      ),
+      systemInstruction,
       tools: [{ functionDeclarations: declarations() }],
       toolConfig: {
         // AUTO, nunca ANY: ANY forçaria uma proposta de contratação espúria em
@@ -530,6 +545,16 @@ async function rodarTurno(
       args: {},
       erro: "O modelo não chamou nenhuma capacidade para esta demanda.",
     });
+  }
+
+  // Depois de tudo e sem await: quem observa não participa do turno, e um
+  // observador quebrado não pode custar um compromisso que já nasceu no Google.
+  if (pedido.aoTerminarTurno) {
+    try {
+      pedido.aoTerminarTurno({ squad, systemInstruction, chamadas: calls });
+    } catch (err) {
+      console.warn("[turno] observador falhou:", err instanceof Error ? err.message : err);
+    }
   }
 
   return turno;

@@ -25,7 +25,9 @@ ProtectHome=read-only
 # fora do clone. avisos/fila: a fila que o dell-status drena para o WhatsApp.
 # O "-" deixa o serviço subir antes do cutover, quando as duas últimas ainda
 # não existem. %h/SquadOne/data fica até o runbook mover a credencial do Google.
-ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data -%h/.local/share/squadone -%h/.local/share/avisos/fila
+# .codex: o `codex exec` da Luna em sombra grava as sessões lá (risco aceito do
+# disco sem cifra, ARCHITECTURE "Luna em modo sombra"); sem isto ele falha.
+ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data -%h/.local/share/squadone -%h/.local/share/avisos/fila -%h/.codex
 
 [Install]
 WantedBy=default.target
