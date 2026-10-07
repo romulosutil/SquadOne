@@ -137,7 +137,7 @@ describe("pagoDasFaturas: um pagamento quita a última fatura já fechada quando
     ["depois do fechamento, antes do vencimento (Mercado Pago, Nubank)", [{ data: "2026-10-08", centavos: 100 }], { set: 0, out: 100 }],
     ["depois do vencimento, antes do fechamento seguinte (pago com atraso)", [{ data: "2026-10-14", centavos: 100 }], { set: 0, out: 100 }],
     ["dentro do ciclo da fatura de outubro: é da de setembro (Santander)", [{ data: "2026-09-13", centavos: 100 }], { set: 100, out: 0 }],
-    ["no dia do fechamento ainda é o ciclo da própria fatura", [{ data: "2026-10-05", centavos: 100 }], { set: 100, out: 0 }],
+    ["no dia do fechamento, na dúvida, não quita a fatura que fecha", [{ data: "2026-10-05", centavos: 100 }], { set: 100, out: 0 }],
     ["antes de toda fatura conhecida: de nenhuma", [{ data: "2026-08-20", centavos: 100 }], { set: 0, out: 0 }],
   ];
   for (const [nome, pagamentos, esperado] of casos) {

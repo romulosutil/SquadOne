@@ -134,7 +134,9 @@ export function pagoDasFaturas(faturasDoCartao: Fatura[], lancamentosDoCartao: T
   const porFechamento = [...faturasDoCartao].sort((a, b) => fechamentoDa(a).localeCompare(fechamentoDa(b)));
   const pago = new Map(faturasDoCartao.map((f) => [f.id, 0]));
   for (const p of pagamentos) {
-    // No dia do fechamento ainda é o ciclo da própria fatura: o pagamento é da anterior.
+    // No dia do fechamento é ambíguo (o Santander já conta o dia na fatura seguinte; o Mercado
+    // Pago, na que fecha). Na dúvida, não quita a que fecha: mostrar uma dívida já paga é melhor
+    // do que esconder uma a pagar (RULES 2).
     const fatura = porFechamento.filter((f) => fechamentoDa(f) < p.data).at(-1);
     if (fatura) pago.set(fatura.id, pago.get(fatura.id)! + p.centavos);
   }
