@@ -20,6 +20,7 @@ import {
 } from "./server/squad.ts";
 import { ModeloOcupado } from "./server/orchestrator.ts";
 import { haTurnoEmAndamento, rodarDemanda } from "./server/turno.ts";
+import { prepararSombra } from "./server/luna-sombra.ts";
 import { ErroCalendario, LeituraIncompleta, listarAgendaDoDia, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
@@ -202,6 +203,12 @@ async function startServer() {
   const motivoDaAgendaDesligada = squadOneMode === "operations" ? motivoParaAgendaDesligada() : null;
   const agendaAtiva = motivoDaAgendaDesligada === null;
 
+  // Luna em sombra (ARCHITECTURE "Luna em modo sombra"): mede, não decide. Só
+  // com SQUADONE_LUNA_SOMBRA=true, no operations com a agenda, e com o `codex`
+  // do Dell conferido no boot; qualquer falta vira log e null — o turno roda
+  // igual, com ou sem ela.
+  const sombra = await prepararSombra(process.env, { dataDir, operations: squadOneMode === "operations", agendaAtiva });
+
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
   app.set("trust proxy", true);
@@ -241,7 +248,7 @@ async function startServer() {
       chatsPermitidos: c.chatsPermitidos,
       // O bot não tem aba: sem prefixo, squadId ausente = primeira squad ativa +
       // redirecionamento automático; com `/p`, a squad do prefixo (telegram-entrada).
-      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }),
+      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }, sombra),
       enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
       digitando: (chatId) => avisarDigitando(c, chatId),
       transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
@@ -648,7 +655,7 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
-      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId });
+      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }, sombra);
       // A avaliação observa um turno já terminado; nunca participa da execução,
       // da agenda ou do resultado principal. Falha posterior não pode induzir
       // retry de uma delegação que talvez já tenha criado eventos no Google.

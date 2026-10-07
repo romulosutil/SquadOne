@@ -138,17 +138,24 @@ de −1 a +7 dias, agrupado pelo domínio ativo, cache de 60 s em memória, nada
 em disco). Squad cujo calendário não foi lido continua "Sem sinal", com o
 motivo.
 
+**Fase 8c, código no ar e desligado:** **Luna em modo sombra** (07/10/2026,
+ver "Luna em modo sombra"). Depois de cada turno real do Gemini, a Luna
+(`gpt-6-luna`, `codex exec`) responde ao mesmo prompt só com as chamadas que
+faria, nada é executado e o veredito da comparação vai para um JSONL no
+diretório de dados. Liga-se com `SQUADONE_LUNA_SOMBRA=true`, só no Dell; a
+medição aprovada é de ~30 dias com teto de 10 por dia.
+
 **Fase 8d, feito:** **explicação das finanças com IA, a pedido** (07/10/2026,
 ver "Explicação com IA (a pedido)" em "Finanças"). Desligada até
 `SQUADONE_FINANCAS_IA=true` no `operations.env`.
 
-**Ainda não feito (fase 8, sem data):** Luna em modo sombra. Hábitos, check-in
-e metas foram cortados em 07/10/2026 (só voltam se aparecer pedido real). Fora
-do código e sem confirmação registrada: o teste de que o aviso do Hermes vibra
-o celular bloqueado (se não vibrar, o Hermes precisa de um chip próprio) e a
-cifra do disco do Dell (ver "Riscos aceitos"). O faturamento do Gemini foi
-confirmado pelo usuário em 07/10/2026, e é a condição para ligar a explicação
-das finanças (no plano grátis o Google usa os prompts).
+**Ainda não feito (fase 8, sem data):** nada de código pendente. Hábitos,
+check-in e metas foram cortados em 07/10/2026 (só voltam se aparecer pedido
+real). Fora do código e sem confirmação registrada: o teste de que o aviso do
+Hermes vibra o celular bloqueado (se não vibrar, o Hermes precisa de um chip
+próprio) e a cifra do disco do Dell (ver "Riscos aceitos"). O faturamento do
+Gemini foi confirmado pelo usuário em 07/10/2026, e é a condição para ligar a
+explicação das finanças (no plano grátis o Google usa os prompts).
 
 ### PRUMO como squad (07/10/2026)
 
@@ -191,6 +198,83 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
   hoje ninguém. O rascunho do Mapa ganhou a verificação `prumo-mapa` em
   07/10/2026 (gatilho, idade da `mapa-fila` e pasta de erro; ver
   `deploy/dell/README.md`, "Monitor do Dell").
+
+### Luna em modo sombra (fase 8c, 07/10/2026)
+
+A Luna é o `gpt-6-luna` pelo `codex exec`, com o login ChatGPT Pro que já
+existe no Dell (nunca a API da OpenAI). **Modo sombra**: depois de cada turno
+real do Gemini, a Luna recebe o **mesmo** `systemInstruction` e a mesma demanda
+e responde só com as chamadas de capacidade que faria, em JSON. Nada do que ela
+responde é executado: o servidor compara com as `functionCalls` do Gemini e
+grava o veredito. Serve para medir, ao longo de ~30 dias e com teto de 10 por
+dia, se ela substituiria o Gemini como motor do turno — aprovado pelo Rômulo em
+07/10/2026, só medir. O código sobe **desligado**; ligar é gesto dele
+(`SQUADONE_LUNA_SOMBRA=true`), só no perfil `operations` com a agenda ligada.
+Instalação e leitura em `deploy/dell/README.md`, "Luna em sombra".
+
+```
+demanda ─► rodarTurno (Gemini) ─► capacidades ─► TurnoResult (como sempre)
+              │ aoTerminarTurno(systemInstruction, functionCalls)
+              ▼ sem await, fora de turnosEmAndamento
+        server/luna-sombra.ts: fila própria (uma por vez), teto do dia, 120 s
+              ├─► codex exec --model gpt-6-luna --sandbox read-only … (prompt por stdin)
+              ├─► interpretarSaidaDaLuna → compararChamadas: igual | parcial | diferente
+              └─► SQUADONE_DATA_DIR/luna-sombra/AAAA-MM.jsonl (600), uma linha por turno
+```
+
+- **O que vai à OpenAI:** o `systemInstruction` do turno — a árvore da squad
+  ativa (nomes, papéis e o treino de cada pessoa), id, nome e escopo das
+  outras squads, a janela de trabalho e a data —, a declaração das
+  capacidades e a demanda. É exatamente o que já vai ao Google em todo turno;
+  o custo novo é um **segundo provedor** ver o roster.
+- **O que nunca vai:** áudio cru (a transcrição já virou texto, e é ela que
+  roda); "gastei …" (não é turno: `gasto-falado` o intercepta antes do bot
+  chamar o turno); qualquer coisa de finanças (regra 24: o `systemInstruction`
+  não as tem); a resposta do Gemini (a comparação é **cega**: ver a resposta
+  dele mediria concordância induzida, não a Luna); as pessoas das outras
+  squads; credenciais.
+- **Por que não decide nada:** `observar` é chamado sem `await` e nunca lança;
+  a sombra não conta em `turnosEmAndamento` (`/api/runtime.ocupado` não a
+  espera; um reinício no meio perde uma medição, nunca um turno); falha,
+  timeout ou cota viram linha com `falha` ou log, nunca aviso nem Telegram; o
+  que ela devolve é lido como **dado** (JSON com nomes de `declarations()`),
+  e qualquer outra coisa é `falhou` classificado. Nada realimenta o Gemini,
+  o turno ou o roster. Sem retry: uma medição perdida é só uma linha a menos.
+- **O registro** (`luna-sombra/<AAAA-MM>.jsonl`, 600, no diretório de dados,
+  fora do clone): `quando`, `squad`, `modo`, `hashDaDemanda` (sha256),
+  `tamanhoDaDemanda`, as chamadas dos dois lados **resumidas aos campos
+  comparados** (nome, `responsavel_id`, `tipo`, `a_partir_de`, `prazo_final`,
+  `inicio_fixo`, `data`, `duracao_min`, `esforco_min`, `squad_id`,
+  `dominio_id`, quantidade de `passos` — nunca título, nota de execução,
+  notas ou justificativa, que repetiriam a demanda em claro), `veredito`,
+  `detalhes` por chamada, `duracaoMs` e `falha?`. A demanda em claro entra só
+  com `SQUADONE_LUNA_GUARDAR_DEMANDA=true`. Nada disto entra em aviso, log ou
+  `status.json`; o resumo é `scripts/luna-sombra-resumo.ts`, que só lê.
+- **Vereditos** (`compararChamadas`, puro): `igual` quando toda chamada do
+  Gemini casa com uma da Luna de mesmo nome, mesma pessoa, mesmo tipo, mesmas
+  datas, duração/esforço dentro de ±25 % e mesma squad de troca, sem sobrar;
+  `parcial` quando casou com divergência em algum campo, ou faltou/sobrou
+  chamada; `diferente` quando nada casa — inclusive Gemini sem chamada e Luna
+  com alguma, ou o contrário.
+- **Execução:** `child_process.execFile` (nunca shell), binário de
+  `SQUADONE_CODEX_BIN` (padrão `codex`; fora do PATH = log uma vez, sombra
+  desligada), prompt por **stdin** (por argumento apareceria em `ps` e no
+  journal), `--model gpt-6-luna --sandbox read-only --skip-git-repo-check`,
+  `cwd` vazio e próprio (`luna-sombra/cwd`, 700: o `codex` não lê o clone nem
+  o diretório de dados), última mensagem lida de arquivo
+  (`--output-last-message`, dentro desse `cwd`) e não do stdout, que traz o
+  progresso. Timeout de 120 s com `kill`. Erro de cota do `codex` = log uma
+  vez e sombra parada até o dia seguinte (meia-noite de São Paulo, o mesmo
+  relógio do teto). **O `codex` do Dell não foi conferido pelo PC**: no boot a
+  sombra roda `codex exec --help` e confere que cada flag usada está lá;
+  faltando uma, desliga com log claro — a primeira coisa a fazer ao ligar é
+  ler esse log.
+- **Riscos aceitos:** `~/.codex` (login do ChatGPT e as sessões, com o prompt
+  inteiro) já estava no disco sem cifra (ver "Riscos aceitos"); com a sombra
+  ligada, o roster e as demandas passam a existir também ali, em texto. O
+  serviço ganha `-%h/.codex` em `ReadWritePaths` só por isso. Antes de ligar,
+  conferir na conta ChatGPT que "Melhorar o modelo para todos" está
+  desligado: sem isso o roster viraria dado de treino.
 
 ### Finanças (07/10/2026)
 
