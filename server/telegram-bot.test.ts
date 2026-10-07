@@ -28,14 +28,14 @@ const update = (id: number, text: string, chat = 111, idadeS = 5) => ({
 
 function montar(x: Partial<DepsDoBot> = {}) {
   const enviadas: { chatId: number; texto: string; responderA?: number; botoes?: { texto: string; dados: string }[] }[] = [];
-  const rodadas: { demanda: string; modo: string }[] = [];
+  const rodadas: { demanda: string; modo: string; squadId?: string }[] = [];
   const contratadas: string[] = [];
   const respostasDeBotao: string[] = [];
   const edicoes: { mensagemId: number; texto: string }[] = [];
   const deps: DepsDoBot = {
     segredo: SEGREDO,
     chatsPermitidos: new Set([111]),
-    rodar: async (demanda, modo) => { rodadas.push({ demanda, modo }); return TURNO_VAZIO; },
+    rodar: async (demanda, modo, squadId) => { rodadas.push({ demanda, modo, ...(squadId ? { squadId } : {}) }); return TURNO_VAZIO; },
     enviar: async (chatId, texto, responderA, botoes) => { enviadas.push({ chatId, texto, responderA, ...(botoes ? { botoes } : {}) }); },
     digitando: async () => {},
     transcrever: async () => "reunião amanhã",
@@ -116,6 +116,20 @@ describe("processar", () => {
     await bot.ocioso();
     assert.deepEqual(rodadas, [{ demanda: "revisar contrato", modo: "foco" }]);
     assert.ok(enviadas.some((e) => e.texto.includes("/foco")));
+  });
+
+  it("/p leva a squad do prefixo ao turno, no texto e na legenda do áudio; sem prefixo, nenhuma", async () => {
+    const { bot, rodadas } = montar({ transcrever: async () => "ajustar o demo" });
+    bot.processar(req(update(1, "/p /foco revisar o Mapa")), res(), () => {});
+    bot.processar(req(update(2, "reunião amanhã")), res(), () => {});
+    const audio = voz(3);
+    bot.processar(req({ ...audio, message: { ...audio.message, caption: "/p" } }), res(), () => {});
+    await bot.ocioso();
+    assert.deepEqual(rodadas, [
+      { demanda: "revisar o Mapa", modo: "foco", squadId: "prumo" },
+      { demanda: "reunião amanhã", modo: "auto" },
+      { demanda: "ajustar o demo", modo: "auto", squadId: "prumo" },
+    ]);
   });
 
   it("falha do turno vira texto classificado", async () => {
