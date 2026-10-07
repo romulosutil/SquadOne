@@ -30,7 +30,7 @@ const links = computed(() => [
 </script>
 
 <template>
-  <section class="ops-panel access" aria-labelledby="access-title">
+  <section class="painel access" aria-labelledby="access-title">
     <h2 id="access-title">Abrir</h2>
     <ul>
       <li v-for="l in links" :key="l.id">

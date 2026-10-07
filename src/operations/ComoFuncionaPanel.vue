@@ -49,7 +49,7 @@ function teclas(evento: KeyboardEvent) {
 </script>
 
 <template>
-  <section class="ops-panel como" aria-labelledby="como-title">
+  <section class="painel como" aria-labelledby="como-title">
     <div class="como__topo">
       <h2 id="como-title">Como funciona</h2>
       <p>Escolha um fluxo e veja só ele: onde roda, quando roda e o que é com você.</p>
@@ -94,7 +94,7 @@ function teclas(evento: KeyboardEvent) {
                 <span v-if="selo(passo)" class="como__marca" :class="`is-${selo(passo)?.tom}`">{{ selo(passo)?.texto }}</span>
                 <span v-if="esperando(passo)" class="como__marca is-fila">{{ esperando(passo) }} esperando</span>
               </p>
-              <a v-if="passo.link" class="como__link" :href="passo.link.url" :target="linkExterno(passo.link.url) ? '_blank' : undefined" :rel="linkExterno(passo.link.url) ? 'noopener' : undefined">{{ passo.link.rotulo }}<span class="ops-visually-hidden">: {{ passo.titulo }}</span></a>
+              <a v-if="passo.link" class="como__link" :href="passo.link.url" :target="linkExterno(passo.link.url) ? '_blank' : undefined" :rel="linkExterno(passo.link.url) ? 'noopener' : undefined">{{ passo.link.rotulo }}<span class="so-leitor">: {{ passo.titulo }}</span></a>
             </div>
           </li>
         </ol>

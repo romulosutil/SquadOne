@@ -36,7 +36,7 @@ const alternar = (id: CrmGrupoHojeId) => {
           <div class="crm-item__quem">
             <button type="button" class="crm-item__empresa" :data-lead="item.leadId" @click="emit('abrir', item.leadId, $event.currentTarget as HTMLElement)">
               {{ leads.get(item.leadId)?.empresa ?? item.leadId }}
-              <span class="ops-visually-hidden">: abrir a ficha</span>
+              <span class="so-leitor">: abrir a ficha</span>
             </button>
             <span class="crm-tag" :class="`is-${leads.get(item.leadId)?.produto}`">{{ SIGLA_DO_PRODUTO[leads.get(item.leadId)?.produto ?? 'site'] }}</span>
           </div>

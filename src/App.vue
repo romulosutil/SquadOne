@@ -39,7 +39,6 @@ import {
   type Comando,
   type Perfil
 } from './casca/destinos'
-import './operations/operations.css'
 import './estilos/tokens.css'
 import './estilos/casca.css'
 import './estilos/agentes.css'

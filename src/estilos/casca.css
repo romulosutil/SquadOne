@@ -268,5 +268,3 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
   .barra-lateral :focus-visible { outline: 3px solid var(--cor-amarelo); outline-offset: 2px; }
 }
 
-/* Os painéis da Central (operations.css) dentro da casca: o mesmo visual de antes. */
-.ops-escopo { min-width: 0; }
