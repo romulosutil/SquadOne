@@ -77,11 +77,47 @@ export interface ContextoDasVisoes {
   faturasDoCartao: (contaId: string) => Fatura[];
 }
 
+/** A fatura que a fonte deu, se é uma fatura conhecida DESTE cartão; senão null. */
+export function faturaConhecidaDaFonte(t: Pick<Transacao, "contaId" | "faturaFonte">, ctx: ContextoDasVisoes): Fatura | null {
+  const f = t.faturaFonte ? ctx.faturaPorId(t.faturaFonte) : undefined;
+  return f && f.cartaoId === t.contaId ? f : null;
+}
+
+/**
+ * A data que decide o ciclo de um lançamento de cartão sem fatura conhecida:
+ * a do lançamento, menos num caso. No dia do fechamento, cada banco faz de um
+ * jeito: o Mercado Pago cobra o que entra nesse dia na fatura que fecha; o
+ * Santander (Meu Pluggy), na SEGUINTE (visto em 07/10/2026 nos 12 meses de
+ * nov/2025 a set/2026). Pela data não dá para saber; pelo `billId` dá.
+ *
+ * Um `billId` da fonte que não é de nenhuma fatura conhecida do cartão, num
+ * lançamento do dia do último fechamento em diante, é de uma fatura que a
+ * Pluggy ainda não lista: depois da última conhecida. Então o dia do último
+ * fechamento já é do ciclo seguinte, e o lançamento conta como do dia
+ * depois. Sem isso, durante o mês em que a fatura nova não está em /bills, o
+ * que o Santander lança no dia do fechamento caía na fatura que acabou de
+ * fechar: a competência subia um mês e a parcela de novembro contava em
+ * outubro (e o "devo" perdia um mês de parcelas para o "sem detalhe").
+ *
+ * Fica de fora, como antes: um `billId` desconhecido ANTES do último
+ * fechamento (fatura antiga que a Pluggy já não lista: vale a data) e o dia
+ * de um fechamento seguinte enquanto a fatura dele ainda não apareceu (duas
+ * faturas fora de /bills; corrige-se quando ela aparece).
+ */
+export function dataDoCiclo(t: Pick<Transacao, "contaId" | "faturaFonte" | "dataLancamento">, ctx: ContextoDasVisoes): string {
+  if (!t.faturaFonte || faturaConhecidaDaFonte(t, ctx)) return t.dataLancamento;
+  const ultimo = ctx
+    .faturasDoCartao(t.contaId)
+    .map(fechamentoDa)
+    .reduce<string | null>((max, f) => (max === null || f > max ? f : max), null);
+  return ultimo !== null && t.dataLancamento === ultimo ? somarDias(ultimo, 1) : t.dataLancamento;
+}
+
 /** Mês da fatura em que um lançamento de cartão é cobrado. */
 export function mesDaFatura(t: Transacao, ctx: ContextoDasVisoes): string {
   const fatura = t.faturaId ? ctx.faturaPorId(t.faturaId) : undefined;
   if (fatura) return mesDe(fatura.vencimento);
-  return mesDe(vencimentoPrevisto(t.dataLancamento, ctx.faturasDoCartao(t.contaId)));
+  return mesDe(vencimentoPrevisto(dataDoCiclo(t, ctx), ctx.faturasDoCartao(t.contaId)));
 }
 
 const GASTO_NO_CARTAO: ReadonlySet<Natureza> = new Set(["despesa", "encargo", "estorno"]);

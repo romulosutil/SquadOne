@@ -3,12 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { abrirBanco, ARQUIVO_DA_COPIA, ARQUIVO_DO_BANCO, type BancoDeFinancas } from "./banco.ts";
+import Database from "better-sqlite3";
+import { abrirBanco, ARQUIVO_DA_COPIA, ARQUIVO_DO_BANCO, MIGRACOES, type BancoDeFinancas } from "./banco.ts";
 import type { ClienteDaPluggy } from "./pluggy.ts";
 import { resumir } from "./resumo.ts";
 import { prepararFinancas } from "./rotas.ts";
-import { conta, tx } from "./teste-apoio.ts";
-import { criarSincronizador, leituraDiariaDevida } from "./sync.ts";
+import { conta, fatura, tx } from "./teste-apoio.ts";
+import { criarSincronizador, leituraDiariaDevida, reprocessar } from "./sync.ts";
 
 // Banco num diretório temporário, nunca em data/. A Pluggy é um dublê: valores inventados.
 let dir: string;
@@ -134,6 +135,61 @@ describe("ao abrir as finanças, o passe puro é refeito sobre o que está grava
       estado.banco!.fechar();
       assert.equal(grupos.size, 1);
       assert.ok(!grupos.has("velho-a") && !grupos.has("velho-b"));
+    } finally {
+      fs.rmSync(dirProprio, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a fatura que a fonte deu sobrevive ao passe (migração 3)", () => {
+  const conexao = { itemId: "item", nome: "Banco Teste", status: "UPDATED", executionStatus: "SUCCESS", dadosAte: null, consentimentoAte: null, lidoEm: null, erroLeitura: null };
+
+  it("o billId da fatura aberta não se perde ao reabrir as finanças: o dia do fechamento segue na seguinte", async () => {
+    const dirProprio = fs.mkdtempSync(path.join(os.tmpdir(), "financas-fonte-"));
+    try {
+      const primeiro = await abrirBanco(dirProprio);
+      primeiro.gravarLeitura({
+        conexao,
+        contas: [conta("cartao", "cartao")],
+        faturas: [fatura("s-out", "cartao", "2026-10-12", 0, { fechamento: "2026-10-05" })],
+        // Lançado no dia do fechamento, cobrado na fatura de 12/11, que ainda não está em /bills.
+        transacoes: [tx("cartao", "2026-10-05", -1000, "LOJA Y", { id: "y", chaveDedupe: "pluggy:y", faturaId: "s-nov" })],
+        removerTransacoes: [],
+      });
+      reprocessar(primeiro);
+      primeiro.fechar();
+
+      // Reabrir refaz o passe sobre o que o anterior gravou (fatura_id já é a derivada).
+      const estado = await prepararFinancas(dirProprio, {});
+      const [t] = estado.banco!.transacoes();
+      estado.banco!.fechar();
+      assert.equal(t.faturaFonte, "s-nov");
+      assert.equal(t.faturaId, null, "fatura aberta, não a de 12/10");
+    } finally {
+      fs.rmSync(dirProprio, { recursive: true, force: true });
+    }
+  });
+
+  it("a migração parte do que já estava gravado (da Pluggy e do PDF), e o que não veio de fonte fica sem", async () => {
+    const dirProprio = fs.mkdtempSync(path.join(os.tmpdir(), "financas-migracao-"));
+    try {
+      const antigo = new Database(path.join(dirProprio, ARQUIVO_DO_BANCO));
+      for (const m of MIGRACOES.slice(0, 2)) antigo.exec(m);
+      antigo.pragma("user_version = 2");
+      const inserir = antigo.prepare(
+        `INSERT INTO transacao (id, conta_id, fonte, chave_dedupe, data_compra, data_lancamento, descricao, centavos, natureza, fatura_id, status)
+         VALUES (?, 'cartao', ?, ?, '2026-09-20', '2026-09-20', 'LOJA', -100, 'despesa', ?, 'lancada')`,
+      );
+      inserir.run("p", "pluggy", "k-p", "f-1");
+      inserir.run("d", "pdf", "k-d", "f-1");
+      inserir.run("o", "ofx", "k-o", "f-1");
+      inserir.run("s", "pluggy", "k-s", null);
+      antigo.close();
+
+      const b = await abrirBanco(dirProprio);
+      const fonte = Object.fromEntries(b.transacoesDasContas(["cartao"]).map((t) => [t.id, t.faturaFonte]));
+      b.fechar();
+      assert.deepEqual(fonte, { p: "f-1", d: "f-1", o: null, s: null });
     } finally {
       fs.rmSync(dirProprio, { recursive: true, force: true });
     }

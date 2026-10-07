@@ -88,7 +88,14 @@ export interface Transacao {
   origemCategoria: OrigemDaCategoria;
   /** Categoria crua da fonte (Pluggy em inglês), para refazer a regra sem nova leitura. */
   categoriaFonte: string;
+  /** Fatura em que o lançamento é cobrado, DERIVADA pelo passe (`processar.ts`); null = a aberta. */
   faturaId: string | null;
+  /**
+   * Fatura que a FONTE deu (Pluggy `billId`, a do PDF), como veio. O passe a
+   * lê e nunca a sobrescreve: `faturaId` é refeita a cada passe, e um `billId`
+   * que ainda não está em /bills (a fatura aberta) só se reconhece por ele.
+   */
+  faturaFonte: string | null;
   /** AAAA-MM previsto pela fonte para a fatura (Pluggy `billForecastDate`). */
   mesFaturaFonte: string | null;
   parcelaN: number | null;

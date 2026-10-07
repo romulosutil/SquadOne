@@ -4,7 +4,7 @@ import { naturezaDaLinha, pagamentosDeFaturaPeloValor } from "./natureza.ts";
 import { agruparParcelas } from "./parcelas.ts";
 import { parearTransferencias } from "./transferencias.ts";
 import type { Conta, Fatura, Transacao } from "./tipos.ts";
-import { faturaDoLancamento, mesDaFatura, type ContextoDasVisoes } from "./visoes.ts";
+import { dataDoCiclo, faturaConhecidaDaFonte, faturaDoLancamento, mesDaFatura, type ContextoDasVisoes } from "./visoes.ts";
 
 /**
  * O passe que deriva tudo o que não vem pronto da fonte. PURO e refeito do
@@ -13,8 +13,9 @@ import { faturaDoLancamento, mesDaFatura, type ContextoDasVisoes } from "./visoe
  * existe depois de lida. Nesta ordem:
  *
  * 1. natureza pela linha (`natureza.ts`);
- * 2. fatura de cada lançamento do cartão (a da fonte, se ela deu; senão pelo
- *    fechamento);
+ * 2. fatura de cada lançamento do cartão (a da fonte, se ela deu e é conhecida;
+ *    senão pelo fechamento, com o dia dele na seguinte quando a fonte aponta
+ *    uma fatura que ainda não lista: `dataDoCiclo`);
  * 3. pagamento de fatura pelo valor (o débito de descrição muda);
  * 4. pares entre contas próprias (transferência ou pagamento);
  * 5. grupos de parcela;
@@ -55,8 +56,10 @@ export function processar(contas: Conta[], faturas: Fatura[], transacoes: Transa
   const ctx = contextoDas(contas, faturas);
   const saida = transacoes.map((t): Transacao => {
     const tipo = ctx.tipoDaConta(t.contaId) ?? "corrente";
-    let faturaId = t.faturaId && ctx.faturaPorId(t.faturaId)?.cartaoId === t.contaId ? t.faturaId : null;
-    if (tipo === "cartao" && !faturaId) faturaId = faturaDoLancamento(t.dataLancamento, ctx.faturasDoCartao(t.contaId))?.id ?? null;
+    // Da fatura que a FONTE deu, nunca da derivada no passe anterior: a derivada perde o `billId`
+    // da fatura aberta, e o dia do fechamento voltaria para a fatura que fecha (`dataDoCiclo`).
+    let faturaId = faturaConhecidaDaFonte(t, ctx)?.id ?? null;
+    if (tipo === "cartao" && !faturaId) faturaId = faturaDoLancamento(dataDoCiclo(t, ctx), ctx.faturasDoCartao(t.contaId))?.id ?? null;
     return {
       ...t,
       natureza: naturezaDaLinha(t, tipo, { categoriaFonte: t.categoriaFonte }),

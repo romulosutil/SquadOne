@@ -62,5 +62,7 @@ export function tx(contaId: string, data: string, centavos: number, descricao: s
     status: "lancada",
     cartaoFinal: null,
     ...extra,
+    // Como a leitura da Pluggy: a fatura que a fonte deu é também a de partida do passe.
+    faturaFonte: extra.faturaFonte !== undefined ? extra.faturaFonte : (extra.faturaId ?? null),
   };
 }

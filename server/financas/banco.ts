@@ -122,6 +122,14 @@ export const MIGRACOES: string[] = [
      chave TEXT PRIMARY KEY,
      em TEXT NOT NULL
    );`,
+  // 3 (07/10/2026): a fatura que a fonte deu, à parte da derivada. `fatura_id` é
+  // reescrita a cada passe (`gravarDerivados`), e um `billId` que ainda não está
+  // em /bills — o da fatura aberta — se perdia no primeiro reprocessamento sem
+  // releitura. Parte do que já está gravado: o passe confiava em `fatura_id`
+  // quando ela era de uma fatura conhecida, e a próxima leitura da Pluggy troca
+  // pelo que a fonte disser.
+  `ALTER TABLE transacao ADD COLUMN fatura_fonte TEXT;
+   UPDATE transacao SET fatura_fonte = fatura_id WHERE fonte IN ('pluggy', 'pdf') AND fatura_id IS NOT NULL;`,
 ];
 
 export class FinancasIndisponiveis extends Error {
@@ -190,6 +198,7 @@ const transacaoDaLinha = (r: Linha): Transacao => ({
   origemCategoria: r.origem_categoria,
   categoriaFonte: r.categoria_fonte,
   faturaId: r.fatura_id,
+  faturaFonte: r.fatura_fonte ?? null,
   mesFaturaFonte: r.mes_fatura_fonte,
   parcelaN: r.parcela_n,
   parcelaTotal: r.parcela_total,
@@ -309,12 +318,13 @@ export class BancoDeFinancas {
   private upsertTransacoes(transacoes: Transacao[]) {
     const upsert = this.db.prepare(
       `INSERT INTO transacao (id, conta_id, fonte, id_origem, chave_dedupe, data_compra, data_lancamento, descricao, centavos, natureza,
-         categoria, origem_categoria, categoria_fonte, fatura_id, mes_fatura_fonte, parcela_n, parcela_total, grupo_parcela, par_id, status, cartao_final)
+         categoria, origem_categoria, categoria_fonte, fatura_id, fatura_fonte, mes_fatura_fonte, parcela_n, parcela_total, grupo_parcela, par_id, status, cartao_final)
        VALUES (@id, @contaId, @fonte, @idOrigem, @chaveDedupe, @dataCompra, @dataLancamento, @descricao, @centavos, @natureza,
-         @categoria, @origemCategoria, @categoriaFonte, @faturaId, @mesFaturaFonte, @parcelaN, @parcelaTotal, @grupoParcela, @parId, @status, @cartaoFinal)
+         @categoria, @origemCategoria, @categoriaFonte, @faturaId, @faturaFonte, @mesFaturaFonte, @parcelaN, @parcelaTotal, @grupoParcela, @parId, @status, @cartaoFinal)
        ON CONFLICT(chave_dedupe) DO UPDATE SET conta_id = excluded.conta_id, data_compra = excluded.data_compra,
          data_lancamento = excluded.data_lancamento, descricao = excluded.descricao, centavos = excluded.centavos,
          categoria_fonte = excluded.categoria_fonte, fatura_id = COALESCE(excluded.fatura_id, transacao.fatura_id),
+         fatura_fonte = COALESCE(excluded.fatura_fonte, transacao.fatura_fonte),
          mes_fatura_fonte = excluded.mes_fatura_fonte, parcela_n = excluded.parcela_n, parcela_total = excluded.parcela_total,
          status = excluded.status, cartao_final = excluded.cartao_final`,
     );

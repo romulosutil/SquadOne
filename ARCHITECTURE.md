@@ -229,6 +229,20 @@ Telegram "gastei 30 no mercado" ── gasto-falado.ts (PURO) → conta manual
   põem na fatura o pagamento dela; o Santander põe os pagamentos feitos
   dentro do ciclo, que são da fatura anterior (visto em 07/10/2026: a fatura
   fechada aparecia paga e sumia do "devo").
+- **A fatura de um lançamento é a que a fonte deu** (`billId`), quando é uma
+  fatura conhecida do cartão; senão, pela data. O dia do fechamento é o caso
+  difícil: o Mercado Pago cobra o que entra nele na fatura que fecha; o
+  Santander, na SEGUINTE (visto em 07/10/2026 nos 12 meses de nov/2025 a
+  set/2026). Durante o mês em que a fatura seguinte ainda não está em
+  /bills, o `billId` do Santander aponta para uma fatura desconhecida: um
+  `billId` desconhecido no dia do último fechamento é da fatura aberta
+  (`dataDoCiclo`, `visoes.ts`). Sem isso, a competência subia um mês e a
+  parcela de novembro contava em outubro. Por isso o `billId` fica numa
+  coluna própria (`fatura_fonte`, migração 3), que o passe lê e nunca
+  reescreve: a `fatura_id` é a derivada, refeita a cada passe, e nela o
+  `billId` da fatura aberta se perdia ao reabrir as finanças. Fica como
+  antes o dia de um fechamento cuja fatura ainda não apareceu (duas faturas
+  fora de /bills): corrige-se quando ela aparece.
 - **Categoria por regra**: natureza → regra do Rômulo por estabelecimento →
   tabela da categoria da Pluggy → palavras da descrição; nada vai ao modelo
   (RULES 24). A do usuário (`origem_categoria = usuario`) nunca é

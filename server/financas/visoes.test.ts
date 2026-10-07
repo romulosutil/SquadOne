@@ -4,7 +4,7 @@ import { contextoDas, processar } from "./processar.ts";
 import { resumir } from "./resumo.ts";
 import { conta, fatura, tx } from "./teste-apoio.ts";
 import type { Transacao } from "./tipos.ts";
-import { faturaDoLancamento, gastoNaVisao, vencimentoPrevisto, VISOES, type Visao } from "./visoes.ts";
+import { faturaDoLancamento, gastoNaVisao, mesDaFatura, vencimentoPrevisto, VISOES, type Visao } from "./visoes.ts";
 
 const contas = [conta("cc", "corrente"), conta("nubank", "corrente"), conta("cartao", "cartao")];
 const faturaSet = fatura("f-set", "cartao", "2026-09-10", 10000, { fechamento: "2026-09-03", pagamentos: [{ data: "2026-09-10", centavos: 10000 }] });
@@ -95,5 +95,66 @@ describe("fatura do lançamento", () => {
   it("fatura da fonte (billId) vence o cálculo", () => {
     const [t] = processar(contas, faturas, [tx("cartao", "2026-08-20", -100, "X", { faturaId: "f-out" })]);
     assert.equal(t.faturaId, "f-out");
+  });
+});
+
+describe("o dia do fechamento, quando a fonte aponta uma fatura que ainda não está em /bills", () => {
+  // Santander (Meu Pluggy): o que entra no dia do fechamento é da fatura SEGUINTE. A fatura
+  // que vence em 12/10 fechou em 05/10 e já está em /bills; a de 12/11 (a aberta) ainda não,
+  // e o billId do lançamento de 05/10 aponta para ela.
+  const cartoes = [conta("cartao", "cartao")];
+  const setembro = fatura("s-set", "cartao", "2026-09-12", 0, { fechamento: "2026-09-04" });
+  const outubro = fatura("s-out", "cartao", "2026-10-12", 0, { fechamento: "2026-10-05" });
+  const conhecidas = [setembro, outubro];
+  const ctx = contextoDas(cartoes, conhecidas);
+  const noFechamento = (extra: Partial<Transacao> = {}) => tx("cartao", "2026-10-05", -1000, "LOJA Y", { id: "y", faturaId: "s-nov", ...extra });
+
+  it("é da fatura aberta: cobrado em novembro, não em outubro", () => {
+    const [t] = processar(cartoes, conhecidas, [noFechamento()]);
+    assert.equal(t.faturaId, null);
+    assert.equal(mesDaFatura(t, ctx), "2026-11");
+    assert.deepEqual(gastoNaVisao(t, "competencia", ctx), { mes: "2026-11", centavos: 1000 });
+  });
+
+  it("e continua lá num passe sem releitura (ao abrir as finanças, ao importar o PDF)", () => {
+    // O passe troca a fatura pela derivada (null, a aberta); a da fonte fica.
+    const [t] = processar(cartoes, conhecidas, processar(cartoes, conhecidas, [noFechamento()]));
+    assert.equal(t.faturaFonte, "s-nov");
+    assert.equal(t.faturaId, null);
+    assert.equal(mesDaFatura(t, ctx), "2026-11");
+  });
+
+  it("quando a fatura aparece em /bills, vale ela", () => {
+    const novembro = fatura("s-nov", "cartao", "2026-11-12", 0, { fechamento: "2026-11-05" });
+    const [t] = processar(cartoes, [...conhecidas, novembro], [noFechamento()]);
+    assert.equal(t.faturaId, "s-nov");
+  });
+
+  it("Mercado Pago: o billId é o da fatura que fecha, e vale ela", () => {
+    const [t] = processar(cartoes, conhecidas, [noFechamento({ faturaId: "s-out" })]);
+    assert.equal(t.faturaId, "s-out");
+    assert.equal(mesDaFatura(t, ctx), "2026-10");
+  });
+
+  it("sem billId, a data não diz o banco: o dia do fechamento fica na fatura que fecha", () => {
+    const [t] = processar(cartoes, conhecidas, [noFechamento({ faturaId: null })]);
+    assert.equal(t.faturaId, "s-out");
+  });
+
+  it("billId desconhecido num fechamento ANTERIOR (fatura antiga que a Pluggy não lista mais) vai pela data", () => {
+    const [t] = processar(cartoes, conhecidas, [tx("cartao", "2026-09-04", -1000, "LOJA Y", { faturaId: "antiga" })]);
+    assert.equal(t.faturaId, "s-set");
+  });
+
+  it("depois do dia do fechamento nada muda: aberta pela data", () => {
+    const [t] = processar(cartoes, conhecidas, [tx("cartao", "2026-10-06", -1000, "LOJA Y", { faturaId: "s-nov" })]);
+    assert.equal(t.faturaId, null);
+    assert.equal(mesDaFatura(t, ctx), "2026-11");
+  });
+
+  it("billId de fatura de OUTRO cartão não é conhecido para este", () => {
+    const doOutro = fatura("o-out", "outro", "2026-10-20", 0, { fechamento: "2026-10-05" });
+    const [t] = processar([...cartoes, conta("outro", "cartao")], [...conhecidas, doOutro], [noFechamento({ faturaId: "o-out" })]);
+    assert.equal(t.faturaId, null);
   });
 });

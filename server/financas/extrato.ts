@@ -272,6 +272,7 @@ export function transacoesDoExtrato(extrato: ExtratoLido, contaId: string, inver
       origemCategoria: "nenhuma",
       categoriaFonte: "",
       faturaId: null,
+      faturaFonte: null,
       mesFaturaFonte: null,
       parcelaN: null,
       parcelaTotal: null,
