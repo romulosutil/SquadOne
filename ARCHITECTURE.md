@@ -141,8 +141,10 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
 - **"Não cuida de" explícito em todo escopo** (squad, sala e treino do PO),
   apontando a sala ou a squad certa. É o que evita ida e volta no
   redirecionamento: a squad PJ já tinha uma sala Prospecção (clientes
-  freelance), e o escopo da squad PRUMO diz que não cuida deles. O treino só
-  existe no roster de produção; muda-se pelo ✎, não pelo Git.
+  freelance). Os dois lados dizem a fronteira: o escopo da squad PRUMO não
+  cuida deles, e o da sala `pj--prospeccao` ganhou "Não cuida de: PRUMO e
+  Site antes da venda (squad PRUMO)". O treino só existe no roster de
+  produção; muda-se pelo ✎, não pelo Git.
 - **Telegram `/p`** (`server/telegram-entrada.ts`, `PREFIXOS_DE_SQUAD`):
   prefixo sem estado que fixa a squad `prumo` pelo id, combinável com
   `/foco`/`/baixa` em qualquer ordem e na legenda do áudio. Nenhuma chamada a
