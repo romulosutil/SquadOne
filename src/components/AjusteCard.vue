@@ -4,8 +4,8 @@
  * Aprovar, e mover de horário é um SEGUNDO clique, oferecido só depois de o
  * servidor dizer que no mesmo horário não cabe.
  *
- * Duas origens, mesma rota e mesmo card: um agente propõe (texto fixo), ou o
- * usuário abre o ajuste pela Mochila e escolhe o tempo aqui (`origem:
+ * Duas origens, mesma rota e mesmo cartão: um agente propõe (texto fixo), ou o
+ * usuário abre o ajuste pela agenda e escolhe o tempo aqui (`origem:
  * 'usuario'`, campo editável). A diferença acaba no `proposto_min` emitido.
  */
 import { computed, ref, watch } from 'vue'
@@ -23,8 +23,8 @@ const props = defineProps({
   naoCabe: { type: Boolean, default: false }
 })
 
-// `proposto_min` viaja no evento porque o card editável é dono do valor: o App
-// não pode ler de `proposta`, que guarda só o ponto de partida.
+// `proposto_min` viaja no evento porque o cartão editável é dono do valor: o
+// estado não pode ler de `proposta`, que guarda só o ponto de partida.
 const emit = defineEmits<{ aprovar: [permitirMover: boolean, propostoMin: number]; descartar: [] }>()
 
 const editavel = computed(() => props.proposta.origem === 'usuario')
@@ -32,7 +32,7 @@ const limites = computed(() => LIMITES_DE_AJUSTE[props.proposta.alvo])
 const grade = LIMITES_DE_AJUSTE.grade
 
 const escolhido = ref(props.proposta.proposto_min)
-// Card reaproveitado por outra quest (mesma posição na lista, id diferente):
+// Cartão reaproveitado por outra quest (mesma posição na lista, id diferente):
 // sem isto o campo ficaria com o tempo do compromisso anterior.
 watch(() => props.proposta.id, () => { escolhido.value = props.proposta.proposto_min })
 
@@ -61,49 +61,39 @@ const explicacao = computed(() =>
 </script>
 
 <template>
-  <div class="border-4 border-black bg-[#c1f0c1] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2">
-    <div class="flex items-start justify-between gap-2">
-      <h3 class="font-black leading-tight">⏱ {{ titulo }}</h3>
-      <button type="button" class="font-black text-lg leading-none" title="Descartar" :disabled="enviando" @click="emit('descartar')">✕</button>
+  <article class="cartao cartao--ajuste" :aria-label="`Ajuste de tempo: ${proposta.titulo}`">
+    <div class="selos">
+      <span class="selo selo--ok">Ajuste de tempo</span>
+      <span v-if="squadNome" class="selo selo--destaque">Squad {{ squadNome }}</span>
     </div>
-    <span v-if="squadNome" class="self-start bg-black text-white px-2 py-0.5 text-xs uppercase">{{ squadNome }}</span>
-    <p class="italic text-sm">{{ proposta.pessoa_nome }}: {{ proposta.motivo }}</p>
+    <h3>{{ titulo }}</h3>
+    <p class="texto-pequeno"><em>{{ proposta.pessoa_nome }}: {{ proposta.motivo }}</em></p>
 
-    <label v-if="editavel" class="flex items-center gap-2 text-xs font-black uppercase">
-      {{ proposta.alvo === 'duracao' ? 'Nova duração' : 'Novo esforço total' }}
+    <label v-if="editavel" class="rotulo">
+      {{ proposta.alvo === 'duracao' ? 'Nova duração, em minutos' : 'Novo esforço total, em minutos' }}
       <input
         v-model.number="escolhido"
+        class="campo"
         type="number"
+        inputmode="numeric"
         :min="limites.min"
         :max="limites.max"
         :step="grade"
         :disabled="enviando"
-        class="w-24 border-4 border-black bg-white px-2 py-1 font-black disabled:opacity-50"
       />
-      min
-      <span class="font-bold normal-case">({{ formatarMinutos(normalizarPropostoMin(proposta.alvo, Number(escolhido))) }})</span>
+      <small>Fica {{ formatarMinutos(normalizarPropostoMin(proposta.alvo, Number(escolhido))) }}, de {{ grade }} em {{ grade }} min.</small>
     </label>
 
-    <p class="text-xs">{{ explicacao }}</p>
-    <p v-if="erro" class="text-sm font-bold text-red-700">{{ erro }}</p>
-    <div class="flex flex-wrap gap-2">
-      <button
-        type="button"
-        :disabled="enviando"
-        class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-        @click="aprovar(false)"
-      >
-        {{ enviando ? 'Aplicando...' : 'Aprovar' }}
+    <p class="texto-2 texto-pequeno">{{ explicacao }}</p>
+    <p v-if="erro" class="recado recado--erro" role="alert">{{ erro }}</p>
+    <div class="acoes">
+      <button type="button" class="botao botao--primario" :disabled="enviando" @click="aprovar(false)">
+        {{ enviando ? 'Aplicando…' : 'Aprovar' }}
       </button>
-      <button
-        v-if="naoCabe"
-        type="button"
-        :disabled="enviando"
-        class="border-4 border-black bg-[#ffdb58] px-3 py-1 font-black text-xs uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-        @click="aprovar(true)"
-      >
+      <button v-if="naoCabe" type="button" class="botao" :disabled="enviando" @click="aprovar(true)">
         Mover para o próximo horário livre
       </button>
+      <button type="button" class="botao botao--leve" :disabled="enviando" @click="emit('descartar')">Descartar</button>
     </div>
-  </div>
+  </article>
 </template>

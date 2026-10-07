@@ -8,7 +8,9 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 // n8n (POST /api/operations/crm/registro). Recusou/Fechou/Desfazer ficam na
 // página do lead do n8n (fluxo 07); a Etapa do PRUMO muda na planilha.
 const props = defineProps<{ lead: CrmLead; visao: CrmVisao }>()
-const emit = defineEmits<{ voltar: []; registrado: [] }>()
+// Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
+// voltar do navegador, então a ficha não tem botão de voltar próprio.
+const emit = defineEmits<{ registrado: [] }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
 const nota = ref('')
@@ -84,8 +86,6 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 
 <template>
   <article class="crm-ficha" aria-labelledby="crm-ficha-titulo">
-    <button type="button" class="crm-voltar" @click="emit('voltar')"><span aria-hidden="true">←</span> Voltar</button>
-
     <header class="crm-ficha__cabeca">
       <span class="crm-kicker">{{ ROTULO_DO_PRODUTO[lead.produto] }} · {{ onde(lead) }}</span>
       <h2 id="crm-ficha-titulo" ref="titulo" tabindex="-1">{{ lead.empresa }}</h2>

@@ -15,24 +15,16 @@ const emit = defineEmits<{ trocar: []; reenviar: []; descartar: [] }>()
 </script>
 
 <template>
-  <div class="border-4 border-black bg-white p-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] shrink-0">
-    <span class="bg-black text-white px-2 py-0.5 text-xs uppercase font-bold">🔀 Outra squad</span>
-    <h3 class="font-bold text-lg leading-tight mt-2">Levar para a squad {{ sugestao.destino_nome }}?</h3>
-    <p class="font-bold text-sm mt-2">{{ sugestao.justificativa }}</p>
-    <p class="text-xs font-bold mt-1 opacity-70">Demanda: {{ sugestao.demanda }}</p>
-    <div class="flex items-stretch gap-2 mt-3">
-      <button type="button" :disabled="desabilitado" @click="emit('trocar')"
-        class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50">
-        Trocar
-      </button>
-      <button type="button" :disabled="desabilitado" @click="emit('reenviar')"
-        class="border-4 border-black bg-[#ffdb58] px-3 py-1 font-black text-xs uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50">
-        Trocar e reenviar
-      </button>
-      <button type="button" :disabled="desabilitado" title="Descartar a proposta" @click="emit('descartar')"
-        class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase disabled:opacity-50">
-        ✕
-      </button>
+  <article class="cartao cartao--decisao" :aria-label="`Proposta: levar para a squad ${sugestao.destino_nome}`">
+    <div class="selos"><span class="selo selo--forte">Outra squad</span></div>
+    <h3>Levar para a squad {{ sugestao.destino_nome }}?</h3>
+    <p>{{ sugestao.justificativa }}</p>
+    <p class="texto-2 texto-pequeno">Pedido: {{ sugestao.demanda }}</p>
+    <p v-if="desabilitado" class="texto-2 texto-pequeno" role="status">Espere o pedido em andamento terminar.</p>
+    <div class="acoes">
+      <button type="button" class="botao botao--primario" :disabled="desabilitado" @click="emit('reenviar')">Trocar e reenviar</button>
+      <button type="button" class="botao" :disabled="desabilitado" @click="emit('trocar')">Só trocar</button>
+      <button type="button" class="botao botao--leve" :disabled="desabilitado" @click="emit('descartar')">Descartar</button>
     </div>
-  </div>
+  </article>
 </template>

@@ -17,8 +17,11 @@
   --ops-display: Inter, "Arial Black", Arial, sans-serif;
 }
 
+/* `.ops-escopo`: os painéis da Central dentro da casca (07/10/2026), com a
+   mesma base que tinham dentro de `.ops-shell`. */
 .ops-shell,
-.ops-dialog {
+.ops-dialog,
+.ops-escopo {
   color: var(--ops-ink);
   font-family: var(--ops-font);
   font-size: 1rem;
@@ -32,11 +35,15 @@
 }
 
 .ops-shell *,
-.ops-dialog * { box-sizing: border-box; }
+.ops-dialog *,
+.ops-escopo * { box-sizing: border-box; }
 
 .ops-shell h1,
 .ops-shell h2,
 .ops-shell h3,
+.ops-escopo h1,
+.ops-escopo h2,
+.ops-escopo h3,
 .ops-dialog h2 {
   margin: 0;
   font-family: var(--ops-display);
@@ -46,6 +53,8 @@
 
 .ops-shell button,
 .ops-shell a,
+.ops-escopo button,
+.ops-escopo a,
 .ops-dialog button,
 .ops-dialog input {
   font: inherit;
@@ -53,9 +62,12 @@
 
 .ops-shell button,
 .ops-shell a,
+.ops-escopo button,
+.ops-escopo a,
 .ops-dialog button { min-height: 44px; }
 
 .ops-shell :focus-visible,
+.ops-escopo :focus-visible,
 .ops-dialog :focus-visible,
 .ops-skip-link:focus-visible {
   outline: 4px solid #1e64d4;
@@ -1225,6 +1237,20 @@ html:has(.ops-shell),
 .crm-rodape { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--ops-muted); font-size: 0.78rem; }
 .crm-rodape a { color: var(--ops-ink); font-weight: 800; }
 @media (prefers-reduced-motion: reduce) { .crm-colunas { scroll-behavior: auto; } }
+
+/* Funil no celular (07/10/2026): Site / Organizar, abas de etapa e a lista de uma. */
+.crm-segmento { display: flex; border: var(--ops-line); background: var(--ops-paper-strong); }
+.crm-segmento button { min-height: 44px; flex: 1; border: 0; background: transparent; color: var(--ops-ink); font-weight: 900; cursor: pointer; }
+.crm-segmento button + button { border-left: var(--ops-line); }
+.crm-segmento button[aria-pressed="true"] { background: var(--ops-yellow); }
+.crm-abas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.crm-abas button { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.3rem; padding: 0 0.6rem; border: 2px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); font-size: 0.85rem; font-weight: 800; cursor: pointer; }
+.crm-abas button[aria-selected="true"] { background: var(--ops-ink); color: var(--ops-paper-strong); }
+.crm-colunas--uma { display: block; overflow: visible; padding-bottom: 0; }
+/* No celular quem escolhe o produto é o segmentado do Funil. */
+@media (max-width: 63.99rem) { .crm-controles--funil .crm-produtos { display: none; } }
+/* A ficha numa folha cheia (fora do .crm): respiro e a base da Central. */
+.crm-na-folha { display: grid; gap: 1rem; }
 
 /* --- Home (30/09/2026): Precisa de você, Como funciona, e o detalhe do Dell fechado no fim --- */
 .precisa,
