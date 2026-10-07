@@ -120,6 +120,15 @@ versão 2 de 06/10/2026. O que foi feito, na ordem:
 7. **PRUMO como uma squad**, com o Site antes da venda como sala
    (07/10/2026, ver "PRUMO como squad").
 
+**Roster em SQLite com Litestream: trocado pelo histórico datado** (fase 8,
+07/10/2026). O SQLite mudaria o formato do roster, e o Easypanel, que é a
+reserva fria (regra 25), lê o `squad.json`: a volta ensaiada se o Dell morresse
+deixaria de funcionar. No lugar, cada gravação guarda o `squad.json`
+**anterior** em `historico/squad.<AAAA-MM-DDTHHMMSSZ>.json` (modo 600, 30
+cópias ou 90 dias, o que guardar mais), só com `SQUADONE_DATA_DIR` e o roster
+não congelado. Nenhum formato, rota ou dependência mudou; `conferir-roster
+--historico` lista e compara, e a volta é um `install` (RESTAURAR.md, "Roster").
+
 **Fase 8, feito:** **cartões e time vivo** (07/10/2026). A Hoje ganhou o
 cartão de finanças em semáforo da regra 13 (`GET /api/financas/estado`, só
 laranja e vermelho, ≥ 90 %; só % e o nome do banco, nunca R$) entre os
@@ -133,13 +142,13 @@ motivo.
 ver "Explicação com IA (a pedido)" em "Finanças"). Desligada até
 `SQUADONE_FINANCAS_IA=true` no `operations.env`.
 
-**Ainda não feito (fase 8, sem data):** roster em SQLite com Litestream,
-Luna em modo sombra, hábitos, check-in e metas. Fora do código e sem confirmação
-registrada: o teste de que o aviso do Hermes vibra o celular bloqueado (se não
-vibrar, o Hermes precisa de um chip próprio) e a cifra do disco do Dell (ver
-"Riscos aceitos"). O faturamento do Gemini ativo (no plano grátis o Google usa
-os prompts) foi confirmado pelo Rômulo em 07/10/2026, e é a condição para
-ligar a explicação das finanças.
+**Ainda não feito (fase 8, sem data):** Luna em modo sombra. Hábitos, check-in
+e metas foram cortados em 07/10/2026 (só voltam se aparecer pedido real). Fora
+do código e sem confirmação registrada: o teste de que o aviso do Hermes vibra
+o celular bloqueado (se não vibrar, o Hermes precisa de um chip próprio) e a
+cifra do disco do Dell (ver "Riscos aceitos"). O faturamento do Gemini foi
+confirmado pelo usuário em 07/10/2026, e é a condição para ligar a explicação
+das finanças (no plano grátis o Google usa os prompts).
 
 ### PRUMO como squad (07/10/2026)
 
