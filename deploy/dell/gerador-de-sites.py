@@ -47,6 +47,17 @@ Também desde 05/10/2026 o lead cuja busca foi pausada (o "06 · Funil semanal"
 pausa busca com 5+ enviados e nenhuma resposta, ou o Rômulo desliga `ativa`)
 fica fora da fila: o funil lista os `place_id` em `nao_gerar` no
 `site-funil.json`. Sem o arquivo, ou ilegível, a fila é a de sempre.
+
+Modo personalizado (`--refazer SLUG...`, 07/10/2026): a Baby School, ao ver o demo,
+deixou claro que o trabalho não parecia feito para ela. O `content.md` do Places
+tem ~2 KB (nome, endereço, telefone, nota, avaliações) e dele só sai uma página
+correta e intercambiável. Neste modo o runner refaz leads que já têm demo e AINDA
+NÃO FORAM ENVIADOS (status `pronto` no retrato da planilha; enviado nunca é
+refeito): guarda o site anterior em `_v1/` dentro da pasta, devolve o lead à
+fila só desta execução e manda o Claude pesquisar o negócio (dossiê), definir um
+conceito que só serve àquele negócio, escrever o texto à mão e se revisar como o
+dono antes de publicar. Falhou ou estourou o tempo: o `_v1/` volta para o lugar
+e o demo antigo segue no ar. Uma tentativa por lead, sem `falha.log`.
 """
 
 from __future__ import annotations
@@ -96,6 +107,22 @@ PROMPT = (
     "selecione uma referencia em styles.refero.design, copie o DESIGN.md para a pasta do lead e registre a referencia"
 )
 LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
+# Modo personalizado: o site anterior do lead fica aqui dentro (nunca sobe para a
+# Vercel: só index.html e og.jpg sobem) até o novo ser publicado e validado.
+V1 = "_v1"
+ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md")
+SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
+PROMPT_PERSONALIZADO = (
+    "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, conceito autoral, "
+    "redação própria e revisão crítica antes de publicar), com mais movimento, usando as fotos e recursos extras; "
+    "cumpra o passo 1.6.1: selecione uma referencia em styles.refero.design, copie o DESIGN.md para a pasta do lead "
+    "e registre a referencia"
+)
+# Frases que cabem em qualquer negócio do ramo: a revisão crítica as caça.
+CLICHES = ("qualidade e compromisso", "excelência", "soluções completas", "a melhor opção", "venha nos conhecer",
+           "tradição e inovação", "profissionais qualificados", "atendimento personalizado", "referência em",
+           "sua satisfação é nossa prioridade", "cuidado que você merece", "compromisso com você", "há anos no mercado",
+           "o melhor custo-benefício", "equipe experiente", "tecnologia de ponta", "confiança e segurança")
 
 # Lista de permissão do Claude headless. Saiu das transcrições dos leads de
 # 24-30/09/2026 (~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/): o
@@ -191,12 +218,33 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - No resumo final, diga se alguma negação fez falta ao site."""
 
 
-def comando_do_claude(slug: str, rascunho: Path) -> list[str]:
+def instrucoes_personalizado(slug: str) -> str:
+    """Segundo bloco do --append-system-prompt no modo `--refazer`. Vem DEPOIS de
+    `instrucoes_da_execucao` e do CLAUDE.md: soma etapas, não troca nenhuma regra."""
+    lead = AUTO / slug
+    cliches = "; ".join(f"\"{c}\"" for c in CLICHES)
+    return f"""MODO PERSONALIZADO (pedido do Rômulo, 07/10/2026). Contexto: uma escola, ao ver o demo que fizemos, respondeu que o trabalho não parecia feito para ela. Um site que serviria a qualquer concorrente do ramo é o defeito a eliminar. O que sai daqui será enviado a um dono real: ele precisa se reconhecer na página.
+- Isto é um REFAZER. O site anterior deste lead está em {lead}/{V1}/ (index.html, og.jpg, DESIGN.md). Leia-o uma vez só para saber o que NÃO repetir: outra estrutura de página, outra paleta, outro estilo, outra ideia, outro texto. Não copie nada dele. O `registro.md` já tem a linha do site anterior: isto é retrabalho pedido, a regra contra retrabalho não vale aqui; acrescente uma linha nova marcada "Refeito (personalizado)". Neste modo NÃO grave {SINAL_DESCARTE}: o lead já passou pela triagem; faça o site.
+- Faça as etapas A a E, nesta ordem, ANTES do `/design` e do código (as cinco skills continuam rodando, e o resto do CLAUDE.md vale):
+  A. DOSSIÊ. Grave {lead}/DOSSIE.md (uma página, em português) com o que você achou sobre ESTE negócio: quem é o dono ou os sócios (pelo nome, só se publicado), como e quando começou, bairro e cidade (o que o cliente daquela região vive e procura), o que os clientes realmente elogiam (3 trechos curtos e literais das avaliações do `content.md`, entre aspas), o vocabulário do próprio negócio (5 expressões que ele mesmo usa no Instagram, Facebook, Google ou site antigo), o que ele faz e o concorrente local não mostra, e o que se sabe da identidade visual real (logo, cores, fotos próprias). Fontes: `content.md`, as imagens de `Fotos/` e `Logotipo/`, perfil de Instagram e Facebook se existirem, e WebSearch pelo nome + cidade (ache o que o Google Places não tem: matérias, CNPJ/data de abertura, site antigo, redes). Cada afirmação do dossiê leva a fonte entre parênteses. O que não achar vira a linha "Lacuna: ..." — nunca preenchimento, nunca invenção.
+  B. CONCEITO AUTORAL. Em {lead}/DOSSIE.md, uma seção "Conceito": uma ideia central em UMA frase que só serve a este negócio. Teste obrigatório: troque o nome por o de outro negócio do mesmo ramo e cidade; se a frase continuar verdadeira, ela é genérica, descarte e refaça. Depois diga qual ESTRUTURA de página nasce dessa ideia. Não parta do esquema "hero, serviços, depoimentos, contato": a ordem e o formato das seções vêm do conceito (um percurso, um dia de trabalho, uma linha do tempo, um mapa do bairro, perguntas que o cliente real faz...). Pode ser mais curta que o esquema padrão, nunca mais genérica.
+  C. REDAÇÃO AUTORAL. Escreva você mesmo cada título, subtítulo, botão e microtexto na voz deste negócio, com especificidade: nomes, lugares, números verificáveis, momentos do atendimento, palavras do dossiê. Cada seção tem pelo menos uma frase que só caberia neste negócio. Proibido texto de gaveta: {cliches}, e qualquer variação. Nada inventado (número de anos, prêmio, equipe, certificação, cliente): só o que o dossiê prova. O hero abre com a ideia do conceito, não com o nome do serviço.
+  D. IDENTIDADE E ASSINATURA. Cor, tipografia e o "momento de assinatura" do CLAUDE.md saem do dossiê (identidade real do negócio, do bairro, do ofício), não de um repertório fixo. Use as fotos reais onde elas provam algo e diga na legenda o que mostram.
+  E. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) o que o conceito prometeu e a página entregou ou não. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
+- Advocacia: o Provimento 205/2021 da OAB continua valendo (sem avaliações na página, sem promessa de resultado, sem preço, sem superlativo, sem captação). A personalização vem do que é público e permitido: como é o primeiro atendimento, as áreas explicadas pelo que o cliente daquela cidade enfrenta, o fórum e a comarca, a linguagem do próprio advogado em artigos e posts.
+- Tempo: este modo pode usar até o dobro do tempo de um lead comum. Gaste-o na pesquisa e na redação, não em efeitos.
+- No resumo final, diga qual foi o conceito e qual frase do site mais prova que ele foi feito para este negócio."""
+
+
+def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:
+    instrucoes = instrucoes_da_execucao(slug, rascunho)
+    if personalizado:
+        instrucoes += "\n\n" + instrucoes_personalizado(slug)
     cmd = [
-        "claude", "-p", PROMPT.format(slug=slug),
+        "claude", "-p", (PROMPT_PERSONALIZADO if personalizado else PROMPT).format(slug=slug),
         "--permission-mode", "dontAsk",
         "--settings", json.dumps(permissoes_do_claude(slug, rascunho), ensure_ascii=False, separators=(",", ":")),
-        "--append-system-prompt", instrucoes_da_execucao(slug, rascunho),
+        "--append-system-prompt", instrucoes,
         "--strict-mcp-config",  # nenhum servidor MCP: o /lead-novo não usa
         "--output-format", "json",  # o resumo final traz as permission_denials
     ]
@@ -419,11 +467,11 @@ def matar_grupo(pid: int, sinal: int = signal.SIGTERM) -> None:
         pass
 
 
-def rodar_claude(slug: str, log_lead: Path, timeout_min: int) -> dict:
+def rodar_claude(slug: str, log_lead: Path, timeout_min: int, personalizado: bool = False) -> dict:
     # Rascunho do lead, fora de ~/auto-site (que o Syncthing e o backup espelham).
     # Caminho curto de propósito: o Chrome headless não sobe com socket em caminho longo.
     rascunho = Path(tempfile.mkdtemp(prefix="gerador-"))
-    cmd = comando_do_claude(slug, rascunho)
+    cmd = comando_do_claude(slug, rascunho, personalizado)
     log(f"Iniciando processo novo do Claude para {slug} (contexto limpo, lista de permissão, rascunho {rascunho}).",
         arquivo=log_lead)
     inicio = time.monotonic()
@@ -519,7 +567,64 @@ def validar(pasta: Path, log_lead: Path) -> bool:
     return codigo == 200
 
 
-def processar(pasta: Path, timeout_min: int) -> tuple[bool, str]:
+def status_no_retrato(place_id: str | None) -> str | None:
+    """Status do lead na planilha (retrato do fluxo 07, até 26 h); None = sem retrato ou lead fora dele."""
+    try:
+        d = json.loads(SITE_LEADS.read_text(encoding="utf-8"))
+        gerado = dt.datetime.fromisoformat(str(d.get("geradoEm")).replace("Z", "+00:00"))
+        if dt.datetime.now(dt.timezone.utc) - gerado > dt.timedelta(hours=26):
+            return None
+        return next((str(l.get("status")) for l in d.get("leads", []) if l.get("place_id") == place_id), None)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def preparar_refazer(pasta: Path, log_lead: Path) -> str | None:
+    """Põe o site publicado de um lead não enviado em `_v1/` e devolve o lead à
+    fila desta execução (sem index.html nem publicado.json). None = pronto; texto =
+    motivo de recusar (nada foi mexido)."""
+    if not pasta.is_dir() or not (pasta / "content.md").is_file():
+        return "sem pasta ou sem content.md na raiz"
+    if not (pasta / "publicado.json").is_file() or not (pasta / "index.html").is_file():
+        return "não tem um demo publicado para refazer"
+    if (pasta / V1).exists():
+        return f"{V1}/ já existe (já foi refeito ou há restauração pendente)"
+    status = status_no_retrato(place_id_do_lead(pasta))
+    if status != "pronto":
+        return f"status na planilha é {status!r}: só se refaz 'pronto' (não enviado)"
+    v1 = pasta / V1
+    v1.mkdir()
+    movidos = []
+    try:
+        for nome in ARQUIVOS_DO_SITE:
+            if (pasta / nome).exists():
+                (pasta / nome).replace(v1 / nome)
+                movidos.append(nome)
+    except OSError as e:
+        restaurar_v1(pasta, log_lead)
+        return f"não consegui guardar o site anterior: {e}"
+    log(f"Refazer: site anterior de {pasta.name} guardado em {V1}/ ({', '.join(movidos)}).", arquivo=log_lead)
+    return None
+
+
+def restaurar_v1(pasta: Path, log_lead: Path) -> None:
+    """Volta o site anterior (o demo antigo continua no ar); o que o refazer deixou
+    de novo fica em `_v2-tentativa/` para olhar depois."""
+    v1 = pasta / V1
+    if not v1.is_dir():
+        return
+    tentativa = pasta / "_v2-tentativa"
+    tentativa.mkdir(exist_ok=True)
+    for nome in ARQUIVOS_DO_SITE:
+        if (pasta / nome).exists():
+            (pasta / nome).replace(tentativa / nome)
+    for f in v1.iterdir():
+        f.replace(pasta / f.name)
+    v1.rmdir()
+    log(f"Refazer falhou: site anterior de {pasta.name} restaurado (a tentativa ficou em _v2-tentativa/).", "ERRO", log_lead)
+
+
+def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tuple[bool, str]:
     slug = pasta.name
     log_lead = LOGS / f"execucao-{slug}.log"
     indice = pasta / "index.html"
@@ -530,7 +635,8 @@ def processar(pasta: Path, timeout_min: int) -> tuple[bool, str]:
         if indice.exists():
             indice.replace(pasta / "index.truncado.html")
             log(f"index.html anterior estava truncado; guardado como index.truncado.html.", "ERRO", log_lead)
-        resultado = rodar_claude(slug, log_lead, timeout_min)
+        resultado = (rodar_claude(slug, log_lead, timeout_min, True) if personalizado
+                     else rodar_claude(slug, log_lead, timeout_min))
         negadas = resultado.get("negadas", 0)
         log(f"Claude Code finalizado com exit code {resultado['codigo']} em {resultado.get('minutos')} min; "
             + (f"{negadas} permissão(ões) negada(s), ver [NEGADO] em {log_lead}." if negadas else "nenhuma permissão negada."),
@@ -596,7 +702,13 @@ def main() -> int:
     ap.add_argument("--quantidade", type=int, default=4)
     ap.add_argument("--timeout-min", type=int, default=45)
     ap.add_argument("--listar", action="store_true", help="só mostra a fila, sem gerar nada")
+    ap.add_argument("--refazer", nargs="+", metavar="SLUG",
+                    help="modo personalizado: refaz estes leads (publicados e não enviados), na ordem dada")
+    ap.add_argument("--teto-horas", type=float, default=4.0,
+                    help="duração máxima da execução (TimeoutStartSec do serviço); mude junto com o systemd-run")
     a = ap.parse_args()
+    if a.refazer and not all(re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.refazer):
+        ap.error("--refazer espera slugs de pasta (minúsculas, números, ponto, hífen e sublinhado)")
 
     if a.listar:
         pausados = nao_gerar()
@@ -624,9 +736,13 @@ def main() -> int:
     inicio = time.monotonic()
     inicio_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     concluidos, falhas, descartados, sumidos = [], [], [], []
+    tentados: set[str] = set()
     erro = None
+    if a.refazer:
+        a.quantidade = max(a.quantidade, len(a.refazer))
     try:
-        log("Execução da fila iniciada (Dell).")
+        log("Execução da fila iniciada (Dell)." if not a.refazer
+            else f"Refazer em modo personalizado iniciado (Dell): {len(a.refazer)} lead(s).")
         # Sinal que ficou de uma execução anterior: move antes, e não gasta o teto do dia.
         varridos = varrer_descartes()
         descartados += varridos
@@ -637,25 +753,41 @@ def main() -> int:
                 SINAL_PARAR.unlink()
                 log("Sinal .parar recebido; encerrando a fila.", "ERRO")
                 break
-            if (time.monotonic() - inicio) / 60 + a.timeout_min > TETO_MIN:
-                log("Sem tempo para mais um lead antes do teto de 4 h do systemd; o resto fica para a próxima execução.")
+            if (time.monotonic() - inicio) / 60 + a.timeout_min > a.teto_horas * 60 - 20:
+                log(f"Sem tempo para mais um lead antes do teto de {a.teto_horas:g} h do systemd; o resto fica para a próxima execução.")
                 break
-            pendentes = fila()
+            pendentes = [AUTO / s for s in a.refazer if s not in tentados] if a.refazer else fila()
             if not pendentes:
-                log("Fila vazia.")
+                log("Lista de refazer concluída." if a.refazer else "Fila vazia.")
                 break
             lead = pendentes[0]
+            tentados.add(lead.name)
             log_lead = LOGS / f"execucao-{lead.name}.log"
-            log(f"{len(pendentes)} lead(s) pendente(s). Próximo: {lead.name}.")
+            log(f"{len(pendentes)} lead(s) pendente(s). Próximo: {lead.name}"
+                + (" (refazer, modo personalizado)." if a.refazer else "."))
+            if a.refazer:
+                recusa = preparar_refazer(lead, log_lead)
+                if recusa:
+                    falhas.append(f"{lead.name}: pulado, {recusa}")
+                    log(f"Refazer pulado: {lead.name}: {recusa}.", "ERRO", log_lead)
+                    continue
             # "processando"/"ocioso": os estados que server/auto-production.ts reconhece.
             gravar_status({"host": socket.gethostname(), "estado": "processando", "lead": lead.name,
                            "inicio": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                            "timeout_min": a.timeout_min, "pendentes": len(pendentes)})
             try:
-                ok, motivo = processar(lead, a.timeout_min)
+                ok, motivo = processar(lead, a.timeout_min, bool(a.refazer))
             except Exception as e:  # noqa: BLE001 — um lead quebrado não derruba o lote
                 ok, motivo = False, f"erro no runner: {type(e).__name__}: {e}"
                 log(f"{lead.name}: {motivo}\n{traceback.format_exc().rstrip()}", "ERRO", log_lead)
+            if a.refazer and not ok and lead.is_dir():
+                # Uma tentativa por lead: o demo antigo volta e segue no ar; sem falha.log.
+                restaurar_v1(lead, log_lead)
+                falhas.append(f"{lead.name}: {motivo}")
+                if motivo.startswith("limite de uso"):
+                    log("Limite de uso do Claude: parando a lista de refazer.", "ERRO")
+                    break
+                continue
             if ok:
                 concluidos.append(lead.name)
                 log(f"Lead concluído: {lead.name}", "SUCESSO")

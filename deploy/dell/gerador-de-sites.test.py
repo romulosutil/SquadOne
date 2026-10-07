@@ -19,6 +19,7 @@ AQUI = Path(__file__).resolve().parent
 def carregar(auto: Path):
     os.environ["AUTO_DIR"] = str(auto)
     os.environ["SITE_FUNIL"] = str(auto / ".funil.json")  # nunca o retrato real do n8n
+    os.environ["SITE_LEADS"] = str(auto / ".leads.json")  # nem a planilha real
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -317,6 +318,101 @@ class ListaDePermissao(unittest.TestCase):
         # rascunho próprio no $TMPDIR, apagado depois do lead
         self.assertTrue(Path(visto["tmpdir"]).name.startswith("gerador-"))
         self.assertFalse(Path(visto["tmpdir"]).exists())
+
+    # ---- modo personalizado (--refazer)
+
+    def publicado(self, slug, status="pronto", pid="x1"):
+        """Lead com demo publicado e a linha dele no retrato da planilha."""
+        pasta = self.auto / slug
+        pasta.mkdir(exist_ok=True)
+        (pasta / "content.md").write_text(f"# {slug}\nplace_id: {pid}\n")
+        (pasta / "index.html").write_text("<html>v1</html>")
+        (pasta / "og.jpg").write_bytes(b"jpg-v1")
+        (pasta / "publicado.json").write_text('{"site_url": "https://v1"}')
+        agora = self.m.dt.datetime.now(self.m.dt.timezone.utc).isoformat()
+        (self.auto / ".leads.json").write_text(json.dumps(
+            {"geradoEm": agora, "leads": [{"place_id": pid, "status": status}]}))
+
+    def refazer(self, claude, *slugs):
+        self.m.rodar_claude = claude
+        sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--refazer", *slugs]
+        codigo = self.m.main()
+        return codigo, json.loads((self.auto / ".logs/status.json").read_text())["ultimo_resumo"]
+
+    def test_refazer_guarda_o_v1_e_publica_o_novo(self):
+        self.publicado("lead-r")
+        visto = {}
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            pasta = self.auto / slug
+            visto["v1"] = sorted(p.name for p in (pasta / "_v1").iterdir())
+            visto["sem_site_antes"] = not (pasta / "index.html").exists() and not (pasta / "publicado.json").exists()
+            (pasta / "index.html").write_text("<html>v2</html>")
+            (pasta / "publicado.json").write_text('{"site_url": "https://v2"}')
+            return {"codigo": 0, "estourou": False, "limite": False, "minutos": 0}
+
+        codigo, r = self.refazer(claude, "lead-r")
+        self.assertEqual((codigo, r["concluidos"], r["falhas"]), (0, ["lead-r"], []))
+        self.assertEqual(visto["v1"], ["index.html", "og.jpg", "publicado.json"])
+        self.assertTrue(visto["sem_site_antes"])
+        self.assertEqual((self.auto / "lead-r/index.html").read_text(), "<html>v2</html>")
+        self.assertEqual((self.auto / "lead-r/_v1/index.html").read_text(), "<html>v1</html>")
+
+    def test_refazer_que_falha_restaura_o_demo_antigo_sem_falha_log(self):
+        self.publicado("lead-r")
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            (self.auto / slug / "index.html").write_text("<html>meio")  # truncado
+            return {"codigo": 1, "estourou": False, "limite": False, "minutos": 0}
+
+        codigo, r = self.refazer(claude, "lead-r")
+        self.assertEqual(r["concluidos"], [])
+        self.assertEqual(len(r["falhas"]), 1)
+        pasta = self.auto / "lead-r"
+        self.assertEqual((pasta / "index.html").read_text(), "<html>v1</html>")
+        self.assertEqual((pasta / "publicado.json").read_text(), '{"site_url": "https://v1"}')
+        self.assertFalse((pasta / "_v1").exists())
+        self.assertTrue((pasta / "_v2-tentativa").is_dir())
+        self.assertFalse((pasta / "falha.log").exists())  # uma tentativa, sem castigo de fila
+
+    def test_refazer_so_mexe_em_lead_nao_enviado(self):
+        for status in ("enviado", "recusado", None):
+            with self.subTest(status=status):
+                self.publicado("lead-e", status=status or "pronto", pid="y9")
+                if status is None:
+                    (self.auto / ".leads.json").write_text("{}")  # retrato sem o lead
+                chamado = []
+                claude = lambda *a, **k: chamado.append(a) or {"codigo": 0, "estourou": False, "limite": False, "minutos": 0}
+                codigo, r = self.refazer(claude, "lead-e")
+                self.assertEqual(chamado, [])
+                self.assertIn("pulado", r["falhas"][0])
+                self.assertEqual((self.auto / "lead-e/index.html").read_text(), "<html>v1</html>")
+                self.assertFalse((self.auto / "lead-e/_v1").exists())
+
+    def test_refazer_nao_repete_um_lead_ja_refeito(self):
+        self.publicado("lead-r")
+        (self.auto / "lead-r/_v1").mkdir()
+        chamado = []
+        codigo, r = self.refazer(lambda *a, **k: chamado.append(a), "lead-r")
+        self.assertEqual(chamado, [])
+        self.assertIn("já existe", r["falhas"][0])
+
+    def test_refazer_recusa_slug_com_caminho(self):
+        sys.argv = ["gerador-de-sites", "--refazer", "../fora"]
+        with self.assertRaises(SystemExit):
+            self.m.main()
+
+    def test_comando_personalizado_traz_o_roteiro_e_o_prompt_proprio(self):
+        cmd = self.m.comando_do_claude("lead-r", Path("/tmp/x"), True)
+        self.assertIn("MODO PERSONALIZADO", cmd[2])
+        sistema = cmd[cmd.index("--append-system-prompt") + 1]
+        for trecho in ("DOSSIE.md", "REVISAO.md", "_v1/", "excelência", "Provimento 205/2021"):
+            self.assertIn(trecho, sistema)
+        # as instruções comuns (lista de permissão, deploy) continuam valendo
+        self.assertIn("Passo 5 (publicar)", sistema)
+        comum = self.m.comando_do_claude("lead-r", Path("/tmp/x"))
+        self.assertNotIn("MODO PERSONALIZADO", comum[2])
+        self.assertNotIn("MODO PERSONALIZADO", comum[comum.index("--append-system-prompt") + 1])
 
     def test_saida_que_nao_e_json_vai_crua_e_limite_e_detectado(self):
         r, _, log = self.rodar_claude_falso("limite")
