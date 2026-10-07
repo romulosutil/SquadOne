@@ -356,6 +356,15 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 
 `POST /api/turnos/:turnoId/avaliacao {nota 1–5, motivos[≤3], comentario?}` guarda a opinião do usuário sobre um turno que **este processo** acabou de devolver: com `SQUADONE_AVALIACOES=true`, `/api/orquestrar` devolve `turno_id` e guarda um resumo sem dados pessoais num cache em memória (30 min, 100 turnos). Grava em `data/avaliacoes-turno.json`, fora do roster e do prompt: a nota não treina nada sozinha. Nenhum componente da UI chama a rota ainda. Desligada é o padrão, e é o que mantém a persistência de produção só em `squad.json` + `google-auth.json`.
 
+### Luna em modo sombra (desligada)
+
+Medição, não motor (ARCHITECTURE "Luna em modo sombra"; ligar e ler em `deploy/dell/README.md`, "Luna em sombra"). Com `SQUADONE_LUNA_SOMBRA=true`, só no `operations` com a agenda, cada turno real do Gemini chama `aoTerminarTurno` (`PedidoDeTurno`) com o `systemInstruction` usado e as `functionCalls` cruas; `rodarDemanda` devolve o `TurnoResult` e, **sem `await`**, chama `sombra.observar(...)`. A sombra (`server/luna-sombra.ts`) roda a Luna (`gpt-6-luna`) pelo `codex exec` com o **mesmo** prompt e a mesma demanda, pede só `{"chamadas":[{"nome","args"}]}`, **não executa nada**, compara com o Gemini (`compararChamadas`: `igual` | `parcial` | `diferente` — mesmo nome, `responsavel_id`, `tipo`, datas, duração/esforço em ±25 %, `squad_id` de troca) e grava uma linha em `SQUADONE_DATA_DIR/luna-sombra/<AAAA-MM>.jsonl` (600; sem a demanda em claro a não ser com `SQUADONE_LUNA_GUARDAR_DEMANDA=true`; as chamadas só com os campos comparados, nunca título ou notas).
+
+- Fila serial própria, teto diário (`SQUADONE_LUNA_TETO_DIA`, 10, zera à meia-noite de São Paulo e conta as linhas de hoje ao subir), timeout 120 s com `kill`, sem retry. Erro de cota do `codex` = log uma vez e parada até o dia seguinte.
+- `execFile` sem shell, prompt por **stdin**, `--model gpt-6-luna --sandbox read-only --skip-git-repo-check --output-last-message <arquivo no cwd>`, `cwd` = `luna-sombra/cwd` (vazio, 700). No boot confere `codex exec --help` contra cada flag usada e desliga com log se faltar uma: o binário do Dell não foi conferido pelo PC.
+- Não conta em `turnosEmAndamento`; falha nunca afeta o turno nem o Telegram; nunca realimenta o Gemini. Só turnos de texto (a transcrição de áudio já é texto); "gastei …" não é turno e nada de finanças chega ao prompt (RULES 24). Com redirecionamento de squad são **dois** turnos do Gemini e duas observações.
+- Resumo: `npx tsx scripts/luna-sombra-resumo.ts ~/.local/share/squadone/luna-sombra` (só lê).
+
 ## Persistência
 
 Volume Docker do Easypanel montado em `/app/data`; no Dell, `~/.local/share/squadone` (`SQUADONE_DATA_DIR`, fora do clone, mais o `telegram-offset.json` do polling). Onde a tabela diz `data/`, leia "o diretório de dados". Poucos KB:
@@ -455,6 +464,10 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `DEADMAN_URL` | servidor | só `operations`: ping do healthchecks.io (https, sem query); ausente = sem sinal; ilegível = log e desligado |
 | `SQUADONE_FINANCAS_IA` | servidor | só `operations`: `true` liga o "Explicar este mês" das finanças (prévia literal, envio com o hash dela); qualquer outro valor = rotas em 404 e sem botão. Ligar só com a chave do Gemini em projeto com faturamento — confirmado pelo usuário em 07/10/2026; nunca no Easypanel |
 | `PLUGGY_CLIENT_ID` / `_SECRET` / `PLUGGY_ITEM_IDS` | servidor | só em `operations`, no EnvironmentFile `~/.config/squadone/financas.env` (600); ausentes = finanças sem leitura; um presente sem os outros = log de erro e Pluggy desligada. Nunca impressos |
+| `SQUADONE_LUNA_SOMBRA` | servidor | só `operations` com a agenda; **nunca no Easypanel**. `true` liga a Luna em modo sombra (ver "Luna em modo sombra"); qualquer outro valor = desligada (padrão) |
+| `SQUADONE_LUNA_TETO_DIA` | servidor | só `operations`: turnos observados pela sombra por dia (São Paulo); ausente = 10; ilegível ou ≤ 0 = log e sombra desligada |
+| `SQUADONE_LUNA_GUARDAR_DEMANDA` | servidor | só `operations`: `true` grava a demanda em claro no JSONL da sombra; padrão só o sha256 e o tamanho |
+| `SQUADONE_CODEX_BIN` | servidor | só `operations`: binário do `codex` para a sombra; ausente = `codex` no PATH; não encontrado = log uma vez e sombra desligada |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 

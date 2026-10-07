@@ -372,6 +372,91 @@ em atenção). Refaça depois de contratar, editar ou arquivar alguém.
 O `google-auth.json` do Easypanel **não** vem junto: é cifrado com o
 `TOKEN_ENC_KEY` de lá, e o Dell tem a credencial própria (ver acima).
 
+## Luna em sombra (fase 8c, desde 07/10/2026, desligada)
+
+Medição de ~30 dias para saber se a Luna (`gpt-6-luna`, pelo `codex exec` com
+o login ChatGPT Pro do Dell) substituiria o Gemini como motor do turno. Depois
+de cada turno real do Gemini o servidor roda a Luna com o **mesmo** prompt e a
+mesma demanda, pede só as chamadas de capacidade em JSON, **não executa nada**,
+compara e grava. Nenhum comportamento do app muda; o que ela responde nunca
+vira evento, tarefa, proposta ou mensagem. Decisão e desenho em
+`ARCHITECTURE.md`, "Luna em modo sombra".
+
+**Antes de ligar:**
+
+1. Na conta ChatGPT (Configurações → Controles de dados), conferir que
+   **"Melhorar o modelo para todos" está desligado**: o prompt leva o roster
+   inteiro da squad ativa (nomes, papéis e o treino de cada pessoa) e a
+   demanda.
+2. Saber que `~/.codex` (login do ChatGPT e as sessões do `codex`, que guardam
+   o prompt em texto) já era um risco aceito do disco sem cifra do Dell
+   (`ARCHITECTURE.md`, "Riscos aceitos"); com a sombra ligada, o roster e as
+   demandas passam a existir também ali. O serviço ganhou `-%h/.codex` em
+   `ReadWritePaths` só por isso (reinstale a unit).
+3. `codex login status` numa sessão no Dell: a sombra não faz login e não
+   pede; sem sessão o `codex` falha e cada linha sai com `falha`.
+
+**Ligar** (no `~/.config/squadone/operations.env`, valores digitados pelo
+Rômulo):
+
+```dotenv
+SQUADONE_LUNA_SOMBRA=true
+# opcionais:
+# SQUADONE_LUNA_TETO_DIA=10              # turnos observados por dia (São Paulo); padrão 10
+# SQUADONE_LUNA_GUARDAR_DEMANDA=true     # grava a demanda em claro no JSONL; padrão só sha256 + tamanho
+# SQUADONE_CODEX_BIN=/home/usuario/.npm-global/bin/codex   # padrão: `codex` no PATH do serviço
+```
+
+```bash
+cp deploy/dell/squadone-operations.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user restart squadone-operations
+journalctl --user -u squadone-operations -n 50 | grep '\[luna\]'
+```
+
+**A primeira coisa a fazer ao ligar é ler esse log.** O PC não tem o `codex`
+e as flags usadas (`--model`, `--sandbox`, `--skip-git-repo-check`,
+`--output-last-message`) não foram conferidas contra o binário do Dell: no
+boot a sombra roda `codex exec --help` e, se alguma flag faltar, desliga com
+`[luna] sombra desligada: codex exec --help não lista …`. Binário fora do PATH
+do serviço (systemd não lê o `.bashrc`) dá `[luna] sombra desligada: binário
+'codex' não encontrado` — aponte `SQUADONE_CODEX_BIN` para o caminho
+absoluto. Ligada, o log diz `[luna] sombra ligada: teto N/dia, registro em …`.
+
+**Teto e custo:** no máximo `SQUADONE_LUNA_TETO_DIA` turnos observados por
+dia (zera à meia-noite de São Paulo; o contador sobrevive a reinício porque
+conta as linhas de hoje no JSONL); um turno com redirecionamento de squad
+são dois turnos do Gemini e duas observações; o excedente é só ignorado (log
+uma vez por dia). Erro de cota do `codex` para a sombra até o dia seguinte.
+Cada observação é uma execução do `codex` de até 120 s, numa fila própria de
+um por vez, fora da fila do bot e fora do `ocupado` de `/api/runtime`: o
+`atualizar-central` não a espera, e um reinício no meio perde só uma medição.
+
+**Onde fica o registro:** `~/.local/share/squadone/luna-sombra/AAAA-MM.jsonl`
+(600, dentro do `SQUADONE_DATA_DIR`; entra no cofre com o resto do diretório).
+Uma linha por turno observado: `quando`, `squad`, `modo`, `hashDaDemanda`,
+`tamanhoDaDemanda`, as chamadas do Gemini e da Luna resumidas aos campos
+comparados (nunca título, nota ou notas), `veredito` (`igual`, `parcial`,
+`diferente` ou `falhou`), `detalhes`, `duracaoMs` e `falha?`. Ao lado, o
+`cwd/` vazio em que o `codex` roda (700), com o arquivo da última mensagem
+apagado depois de lido. Nada disso vai a aviso, WhatsApp, Telegram ou
+`status.json`.
+
+**Ler o resumo** (só lê, nunca grava; sem a demanda, a não ser que ela esteja
+gravada):
+
+```bash
+cd ~/SquadOne && npx tsx scripts/luna-sombra-resumo.ts ~/.local/share/squadone/luna-sombra
+```
+
+Imprime o total, a contagem por veredito, a concordância por capacidade
+(`agendar_evento`, `criar_tarefa`, …: quantas casaram iguais, com divergência,
+só no Gemini, só na Luna) e as 10 divergências mais recentes.
+
+**Desligar:** apagar (ou pôr `false` em) `SQUADONE_LUNA_SOMBRA` no
+`operations.env` e reiniciar o serviço. O registro fica; apagar é decisão à
+parte (`rm -r ~/.local/share/squadone/luna-sombra`). Não há nada a desfazer no
+Google, no Telegram ou no roster: a sombra nunca escreveu neles.
+
 ## Finanças (`/financas`, desde 07/10/2026)
 
 Visão geral do que o Rômulo tem, deve e gasta, só no perfil `operations`.
