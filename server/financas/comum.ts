@@ -72,6 +72,17 @@ export function descricaoNormalizada(descricao: string): string {
     .trim();
 }
 
+/**
+ * O "estabelecimento" de um lançamento: a descrição normalizada, cortada em
+ * 120. É a chave das regras do Rômulo ("aplicar sempre a este
+ * estabelecimento") e dos recorrentes. Sem tentar tirar prefixo de
+ * adquirente ("IFD*", "MP *"): a normalização já some com o símbolo, e uma
+ * limpeza esperta juntaria lojas diferentes debaixo da mesma regra.
+ */
+export function estabelecimentoDe(descricao: string): string {
+  return descricaoNormalizada(descricao).slice(0, 120).trim();
+}
+
 /** Hash curto e estável (FNV-1a, 32 bits) para chaves derivadas; não é segurança. */
 export function hashCurto(texto: string): string {
   let h = 0x811c9dc5;

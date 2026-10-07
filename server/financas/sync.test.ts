@@ -6,6 +6,8 @@ import { after, before, describe, it } from "node:test";
 import { abrirBanco, ARQUIVO_DA_COPIA, ARQUIVO_DO_BANCO, type BancoDeFinancas } from "./banco.ts";
 import type { ClienteDaPluggy } from "./pluggy.ts";
 import { resumir } from "./resumo.ts";
+import { prepararFinancas } from "./rotas.ts";
+import { conta, tx } from "./teste-apoio.ts";
 import { criarSincronizador, leituraDiariaDevida } from "./sync.ts";
 
 // Banco num diretório temporário, nunca em data/. A Pluggy é um dublê: valores inventados.
@@ -106,4 +108,34 @@ describe("leituraDiariaDevida", () => {
     ["falhou há 3 h, tenta", "2026-10-06T09:00:00Z", "2026-10-07T09:00:00Z", 9, true],
   ];
   for (const [nome, ok, tentativa, hora, esperado] of casos) it(nome, () => assert.equal(leituraDiariaDevida(agora, ok, tentativa, hora), esperado));
+});
+
+describe("ao abrir as finanças, o passe puro é refeito sobre o que está gravado", () => {
+  it("um grupo de parcela gravado por uma regra antiga é corrigido sem esperar a próxima leitura", async () => {
+    const dirProprio = fs.mkdtempSync(path.join(os.tmpdir(), "financas-abrir-"));
+    try {
+      const primeiro = await abrirBanco(dirProprio);
+      const cartao = conta("cartao", "cartao");
+      primeiro.gravarLeitura({
+        conexao: { itemId: "item", nome: "Banco Teste", status: "UPDATED", executionStatus: "SUCCESS", dadosAte: null, consentimentoAte: null, lidoEm: null, erroLeitura: null },
+        contas: [cartao],
+        faturas: [],
+        transacoes: [],
+        removerTransacoes: [],
+      });
+      // A mesma compra, gravada em dois grupos (como a regra de 1 centavo fazia).
+      const parcela = (n: number, data: string, centavos: number, grupo: string) =>
+        tx("cartao", data, centavos, "LOJA P", { id: `p${n}`, dataCompra: "2026-05-11", parcelaN: n, parcelaTotal: 6, grupoParcela: grupo });
+      primeiro.inserirTransacoes([parcela(1, "2026-05-12", -10005, "velho-a"), parcela(2, "2026-06-05", -10005, "velho-a"), parcela(3, "2026-07-06", -10000, "velho-b")]);
+      primeiro.fechar();
+
+      const estado = await prepararFinancas(dirProprio, {});
+      const grupos = new Set(estado.banco!.transacoes().map((t) => t.grupoParcela));
+      estado.banco!.fechar();
+      assert.equal(grupos.size, 1);
+      assert.ok(!grupos.has("velho-a") && !grupos.has("velho-b"));
+    } finally {
+      fs.rmSync(dirProprio, { recursive: true, force: true });
+    }
+  });
 });

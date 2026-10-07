@@ -88,8 +88,43 @@
 .fin-pares dd { margin: 0; font-weight: 900; font-variant-numeric: tabular-nums; text-align: right; }
 .fin-pares small { font-weight: 600; color: var(--texto-2); }
 .fin-uso { display: grid; gap: var(--esp-1); margin: 0; font-size: 0.85rem; }
-.fin-uso.is-alto .fin-barra i { background: var(--destaque); }
-.fin-uso.is-estouro .fin-barra i { background: var(--negativo); }
+
+/* Semáforo (07/10/2026): o mesmo de 70, 90 e 100% dos avisos. A cor nunca é a
+   única pista: a % e o rótulo vão em texto ao lado. */
+.is-verde > .fin-barra i, .fin-uso.is-verde .fin-barra i { background: var(--positivo); }
+.is-amarelo > .fin-barra i, .fin-uso.is-amarelo .fin-barra i { background: var(--destaque); }
+.is-laranja > .fin-barra i, .fin-uso.is-laranja .fin-barra i { background: var(--acento); }
+.is-vermelho > .fin-barra i, .fin-uso.is-vermelho .fin-barra i { background: var(--negativo); }
+
+.fin-orcamento { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.fin-orcamento li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-1) var(--esp-3); align-items: center; padding: var(--esp-2); border: var(--linha-fina); }
+.fin-orcamento .fin-barra { grid-column: 1 / -1; height: 0.9rem; }
+.fin-orcamento small { grid-column: 1 / -1; color: var(--texto-2); font-size: 0.78rem; }
+.fin-orcamento__nome { font-weight: 800; overflow-wrap: anywhere; }
+
+.fin-recorrente__lado { display: grid; justify-items: end; gap: var(--esp-1); }
+.fin-botao--pequeno { min-height: 36px; padding: 0 var(--esp-2); font-size: 0.8rem; box-shadow: none; }
+
+/* Organizar */
+.fin-org { display: grid; margin: 0; padding: 0; list-style: none; }
+.fin-org li { display: grid; gap: var(--esp-2); padding: var(--esp-3) 0; border-top: 1px solid color-mix(in srgb, var(--borda) 35%, transparent); }
+.fin-org li:first-child { border-top: 0; }
+.fin-org__nome b { display: block; font-weight: 900; overflow-wrap: anywhere; }
+.fin-org__nome small, .fin-org__orcamento small { color: var(--texto-2); font-size: 0.8rem; }
+.fin-linha-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--esp-2); }
+.fin-linha-form label { display: grid; gap: var(--esp-1); flex: 1 1 10rem; min-width: 0; font-size: 0.8rem; font-weight: 900; }
+.fin-linha-form input, .fin-editor select { width: 100%; min-width: 0; min-height: 44px; padding: 0 var(--esp-2); border: var(--linha-fina); background: var(--superficie); color: var(--texto); font: inherit; font-weight: 700; }
+.fin-linha-form > input { flex: 1 1 10rem; }
+.fin-oculto-visual { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Lançamentos: o lançamento é um botão que abre o editor logo abaixo. */
+.fin-linhas li.fin-lanc { grid-template-columns: minmax(0, 1fr); padding: 0; }
+.fin-lanc__abrir { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-3); align-items: center; width: 100%; min-height: 44px; padding: var(--esp-2) 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fin-lanc__abrir:hover b { text-decoration: underline; }
+.fin-editor { display: grid; gap: var(--esp-2); margin-bottom: var(--esp-2); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
+.fin-editor label { display: grid; gap: var(--esp-1); font-size: 0.8rem; font-weight: 900; }
+.fin-editor .fin-marca { display: flex; align-items: center; gap: var(--esp-2); min-height: 44px; font-size: 0.9rem; font-weight: 700; }
+.fin-editor .fin-marca input { width: 1.2rem; height: 1.2rem; }
 
 .fin-barra { position: relative; display: block; height: 0.7rem; border: var(--linha-fina); background: var(--superficie); overflow: hidden; }
 .fin-barra i { position: absolute; inset: 0 auto 0 0; background: var(--acento); }

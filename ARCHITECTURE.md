@@ -125,9 +125,10 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    folha cheia, barra lateral + Ctrl+K a partir de 1024 px. Fica para depois:
    migrar o `operations.css` (CRM, Mais) para os tokens — até lá `/crm` abre
    no tema claro.
-6. Organização das finanças e alertas de 70/90/100%; 7. PRUMO como uma squad,
-   com o Site antes da venda como sala (feito em 07/10/2026, ver "PRUMO como
-   squad"); 8. o resto (roster em SQLite, Luna em sombra, explicação com IA).
+6. Organização das finanças e alertas de 70/90/100% (feito em 07/10/2026, ver
+   "Organização das finanças"); 7. PRUMO como uma squad, com o Site antes da
+   venda como sala (feito em 07/10/2026, ver "PRUMO como squad"); 8. o resto
+   (roster em SQLite, Luna em sombra, explicação com IA).
 
 ### PRUMO como squad (07/10/2026)
 
@@ -180,12 +181,17 @@ Meu Pluggy (Santander, Nubank, Mercado Pago)
             ├─ dedupe.ts (PURO): PENDENTE→LANÇADO, id trocado, Pluggy vence PDF
             └─ banco.ts: financas.db (SQLite, 600, migrações em user_version)
        └─ processar.ts (PURO), sobre tudo: natureza → fatura → pagamento pelo
-          valor → pares entre contas → parcelas → categoria
+          valor → pares entre contas → parcelas → categoria (refeito também ao
+          abrir as finanças: uma regra nova vale no deploy)
        └─ VACUUM INTO financas.copia.db (600) → cofre restic
 fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   └─ conferência contra o total da fatura da Pluggy → grava no 2º toque
-/api/financas/{visao,lancamentos,sincronizar,importar/santander}
-  └─ resumo.ts (PURO): tenho, devo, gastei (competência|caixa), recorrentes
+extrato OFX/CSV de reserva ── extrato.ts (PURO) → parearEntreFontes contra a Pluggy
+/api/financas/{visao,lancamentos,sincronizar,importar/santander,importar/extrato,
+               organizacao,categorias,orcamento,recorrentes,estado,alertas/simular}
+  └─ resumo.ts (PURO): tenho, devo, gastei (competência|caixa), orçamento, recorrentes
+  └─ alertas.ts (PURO): 70/90/100% → fila de avisos (só % e semáforo)
+Telegram "gastei 30 no mercado" ── gasto-falado.ts (PURO) → conta manual
 ```
 
 - **Dinheiro em centavos inteiros**, com sinal do ponto de vista do
@@ -201,12 +207,27 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
 - **Devo** por cartão = o limite usado que o banco informa, quando ele dá o
   disponível; o detalhe (fatura fechada a pagar + fatura aberta + parcelas
   futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
-  vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
-  (`parcelas.ts`).
-- **Categoria por regra**: tabela da categoria da Pluggy + palavras da
-  descrição; nada vai ao modelo (RULES 24). A do usuário (`origem_categoria =
-  usuario`) nunca é sobrescrita, mas ainda não há tela para mudá-la
-  ("Transição", 6).
+  vez de sumir. A fatura aberta soma os lançamentos já listados e as parcelas
+  dela que o banco ainda não lançou (o Santander e o Mercado Pago lançam as
+  parcelas no dia do fechamento; sem a projeção, um mês inteiro de parcelas
+  virava "sem detalhe"). A Pluggy não dá id de compra parcelada: o grupo é heurístico
+  (`parcelas.ts`) e a chave é a **data da compra** quando a fonte a dá
+  (`purchaseDate`, a data da linha no PDF): datas diferentes são compras
+  diferentes, e na mesma data o valor da parcela pode variar até 1% (o
+  Santander e o Mercado Pago cobram as primeiras uns centavos acima; com a
+  tolerância de 1 centavo a mesma compra virava dois grupos e as parcelas
+  que faltam contavam em dobro). Sem a data, valor ±1 centavo e mês de
+  origem ±1.
+- **O pago de uma fatura sai da data do pagamento** (`pagoDasFaturas`), não
+  do `pago` que a fonte põe nela: um pagamento quita a última fatura que já
+  tinha fechado. Cada banco informa de um jeito: o Mercado Pago e o Nubank
+  põem na fatura o pagamento dela; o Santander põe os pagamentos feitos
+  dentro do ciclo, que são da fatura anterior (visto em 07/10/2026: a fatura
+  fechada aparecia paga e sumia do "devo").
+- **Categoria por regra**: natureza → regra do Rômulo por estabelecimento →
+  tabela da categoria da Pluggy → palavras da descrição; nada vai ao modelo
+  (RULES 24). A do usuário (`origem_categoria = usuario`) nunca é
+  sobrescrita. A tela de mudar veio com a organização (abaixo).
 - **Dependências opcionais**: `better-sqlite3` e `pdfjs-dist` são
   `optionalDependencies`, carregados por `import()` só quando as finanças
   abrem. O perfil `app` (Easypanel) nunca os carrega, e uma instalação que
@@ -216,6 +237,55 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   testado com texto sintético; a conferência é a trava contra layout que
   mudou. O pareamento de transferências pode casar dois Pix de mesmo valor a
   até 2 dias entre contas próprias que não eram o mesmo dinheiro.
+
+#### Organização das finanças (07/10/2026)
+
+O banco guarda só o que o Rômulo DECIDIU (migração 2: `categoria_criada`,
+`categoria_renomeada`, `regra_categoria`, `orcamento`, `recorrente_marca`,
+`alerta_enviado`); o resto é derivado a cada passe. Tela "Organizar"
+(`/financas/organizar`) e o editor de cada lançamento em Lançamentos.
+
+- **Categorias editáveis** (`organizacao.ts`, PURO): criar, renomear (para um
+  nome que existe = juntar), remover (= juntar em "Outros"). O renome fica num
+  mapa que o passe aplica depois da regra embutida, para "Mercado" renomeada
+  continuar com o nome novo a cada sincronização. Fixas (as da natureza e
+  "Outros") não se renomeiam nem se escolhem à mão.
+- **"Aplicar sempre a este estabelecimento"**: a correção de um lançamento vira
+  `regra_categoria` (estabelecimento = descrição normalizada), que vale para
+  os novos e os antigos, menos os mudados à mão.
+- **Orçamento mensal por categoria**, sempre em competência (a compra no mês
+  da fatura), com barra e semáforo na Visão: verde < 70, amarelo ≥ 70, laranja
+  ≥ 90, vermelho ≥ 100. A % arredonda para baixo.
+- **Recorrentes**: mesmo estabelecimento a cada ~30 dias (±10; um mês pulado
+  vale), 3 vezes em 120 dias, a última há até 45 dias, valor até o dobro. Marcar
+  e desmarcar vencem a detecção; `null` volta para ela.
+- **Alertas de 70/90/100%** (`alertas.ts`, PURO) do limite de cada cartão e do
+  orçamento de cada categoria, pela fila de avisos (origem
+  `squadone:financas`), depois de cada sincronização e de cada escrita. Só
+  semáforo e % (categoria e nome do cartão podem; R$, valor e estabelecimento
+  nunca; a chave leva o hash da categoria). Uma vez por faixa e período (mês da
+  fatura aberta, mês do orçamento), só a faixa mais alta, guardado em
+  `alerta_enviado` depois de entrar na fila; 70% é P2, 90/100% P1, nenhum P0.
+  `POST /api/financas/alertas/simular` mostra o que sairia, sem gravar.
+- **Sala Finanças no escritório**: um domínio comum aberto com o nome
+  "Finanças" (ou id `…--financas`). O PO dela mostra num balão a % do cartão
+  mais usado e do orçamento (`GET /api/financas/estado`, `src/office/salaFinancas.ts`).
+  Nada disso entra no roster nem no prompt.
+- **"gastei 30 no mercado" no Telegram** (`gasto-falado.ts`, PURO e
+  determinístico): "gastei/paguei/gasto" + valor + onde. Vai à conta manual
+  `manual:dinheiro` (sem saldo, fora do "tenho"), chave pela mensagem (reentrega
+  não duplica), data da mensagem (sem a guarda de atraso). A resposta é
+  "Anotado: <categoria>", sem valor; a frase nunca vira turno, e sem finanças no
+  processo o bot só diz isso. Áudio que transcreve para um gasto é anotado sem
+  ecoar a transcrição (o áudio em si já passou pelo Gemini para transcrever).
+- **Extrato OFX/CSV de reserva** (`extrato.ts`, PURO), para quando uma conexão
+  parar: prévia e confirmação, como o PDF. Chave pelo FITID (OFX), pelo
+  identificador (CSV) ou pelo conteúdo + ordem. Contra a Pluggy, pareamento UM
+  A UM (`parearEntreFontes`, mesma conta e valor, até 2 dias, descrição
+  parecida ou candidato único); quando a conexão volta, a Pluggy vence e a linha
+  do extrato sai (`dedupe.ts`, caso 3). Risco aceito: duas compras de mesmo
+  valor a até 2 dias, uma em cada fonte e com descrições sem nada em comum,
+  viram um par.
 
 ## Central de Operações
 

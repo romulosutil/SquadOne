@@ -97,7 +97,9 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
-import { criarRotasDeFinancas, iniciarLeituraDiaria, prepararFinancas } from "./server/financas/rotas.ts";
+import { criarRotasDeFinancas, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
+import { FinancasIndisponiveis } from "./server/financas/banco.ts";
+import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
 
 dotenv.config();
 
@@ -224,6 +226,11 @@ async function startServer() {
     configDeTelegram = null;
     falhaDoTelegram = error instanceof TelegramMalConfigurado ? error.message : String(error?.message ?? error);
   }
+  // As finanças abrem mais abaixo, com a Central; o bot (criado antes) as acha
+  // por aqui quando chega um "gastei 30 no mercado".
+  let financasDoProcesso: EstadoDasFinancas | null = null;
+  // Fila de avisos do Dell (regra 20): lembretes da vigia e alertas de finanças.
+  const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
@@ -244,6 +251,18 @@ async function startServer() {
       // O container roda em UTC: sem o fuso o horário da resposta sairia 3h adiantado.
       fmt: { locale: "pt-BR", timeZone: FUSO },
       agora: () => new Date(),
+      // Finanças só no Dell. No Easypanel a frase recebe "não estão neste
+      // servidor" e não vira turno: nada de finanças vai ao modelo.
+      anotarGasto:
+        squadOneMode === "operations"
+          ? async (gasto, origem, quando) => {
+              const banco = financasDoProcesso?.banco;
+              if (!banco) throw new FinancasIndisponiveis(financasDoProcesso?.problema ?? "finanças ainda não abriram");
+              const r = anotarGasto(banco, gasto, origem, quando);
+              if (r.novo) depoisDeEscrever(banco, financasDoProcesso!.avisador);
+              return r.categoria;
+            }
+          : undefined,
     }));
     if (c.transporte === "webhook") {
       app.post(ROTA_WEBHOOK_TELEGRAM, bot.portao, express.json({ limit: "256kb" }), bot.processar);
@@ -337,7 +356,12 @@ async function startServer() {
 
     // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
     // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
-    const financas = await prepararFinancas(operationsDataDir);
+    // Os alertas de 70/90/100% vão à mesma fila de avisos da vigia (só % e
+    // semáforo, RULES 24); nenhum é P0, então nada vai ao Telegram.
+    const financas = await prepararFinancas(operationsDataDir, process.env, {
+      publicar: (aviso) => publicarAviso(aviso, { fila: filaDeAvisos }),
+    });
+    financasDoProcesso = financas;
     app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale }));
     iniciarLeituraDiaria(financas);
   } else {
@@ -667,7 +691,6 @@ async function startServer() {
   // o dell-status drena para o WhatsApp do Hermes; P0 também vai ao Telegram. O
   // Easypanel (app) não roda vigia (regra 25): dois processos varrendo a mesma
   // agenda mandariam cada lembrete duas vezes.
-  const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   const telegramDoDono = configDeTelegram
     ? async (texto: string) => {
         for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto);

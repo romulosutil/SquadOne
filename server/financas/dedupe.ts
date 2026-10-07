@@ -17,7 +17,9 @@ import type { Fonte, Transacao } from "./tipos.ts";
  *    meses, e apagar o histórico mais velho seria perder o que já se sabia.
  * 3. **Duas fontes.** A fatura em PDF do Santander cobre o que a Pluggy não
  *    traz; se um dia a Pluggy passar a trazer, o lançamento dela vence e o do
- *    PDF sai (mesma conta, valor, data da compra a ±1 dia, mesma parcela).
+ *    PDF sai (mesma conta, valor, data da compra a ±1 dia, mesma parcela). O
+ *    extrato OFX/CSV de reserva (`extrato.ts`) também perde para a Pluggy
+ *    quando a conexão volta, pelo pareamento um a um (`parearEntreFontes`).
  *
  * A `chaveDedupe` (UNIQUE no banco) garante a idempotência de cada fonte:
  * ler a Pluggy ou reimportar o mesmo PDF duas vezes não duplica nada.
@@ -101,10 +103,57 @@ export function dedupeDaLeitura(novas: Transacao[], existentes: Transacao[], con
       if (manter.some((n) => n.status === "lancada" && mesmoLancamento(n, e, 1))) remover.push(e.id);
     }
   }
+  if (fonte === "pluggy") {
+    // Caso 3 com o extrato de reserva (OFX/CSV): a conexão voltou e trouxe o
+    // que foi importado à mão. Um a um, para duas compras iguais não virarem
+    // uma removida e uma contada duas vezes.
+    const extratos = existentes.filter((e) => contasLidas.has(e.contaId) && (e.fonte === "ofx" || e.fonte === "csv") && !chavesNovas.has(e.chaveDedupe));
+    remover.push(...parearEntreFontes(extratos, manter).keys());
+  }
   return { manter, remover };
 }
 
 /** Linhas de uma fonte secundária (PDF) que a Pluggy já tem: não entram. */
 export function jaExisteEmOutraFonte(t: Transacao, existentes: Transacao[]): boolean {
   return existentes.some((e) => e.fonte !== t.fonte && e.status === "lancada" && mesmoLancamento(e, t, 1));
+}
+
+/** Folga de data entre a mesma compra em duas fontes (o extrato traz a data do lançamento, a Pluggy às vezes a da compra). */
+export const DIAS_ENTRE_FONTES = 2;
+
+/**
+ * Pares UM A UM entre `a` e `b` do mesmo dinheiro em fontes diferentes:
+ * mesma conta, mesmo valor no centavo, mesma parcela, a até 2 dias. Prefere a
+ * descrição parecida e a data mais próxima; sem descrição parecida, só casa
+ * quando há UM candidato (o banco escreve "PIX TRANSF JOAO" num lugar e
+ * "TRANSFERENCIA PIX" no outro). Um a um: duas compras iguais no mesmo dia em
+ * cada lado viram dois pares, não uma conta dupla nem uma perdida.
+ *
+ * Risco aceito: duas compras de mesmo valor a até 2 dias, uma só em cada
+ * fonte e com descrições sem nada em comum, viram um par.
+ */
+export function parearEntreFontes(a: readonly Transacao[], b: readonly Transacao[], dias = DIAS_ENTRE_FONTES): Map<string, string> {
+  const pares = new Map<string, string>();
+  const usados = new Set<string>();
+  const ordenadas = [...a].sort((x, y) => x.dataCompra.localeCompare(y.dataCompra) || x.id.localeCompare(y.id));
+  for (const x of ordenadas) {
+    const candidatos = b.filter(
+      (y) =>
+        !usados.has(y.id) &&
+        y.fonte !== x.fonte &&
+        y.status === "lancada" &&
+        y.contaId === x.contaId &&
+        y.centavos === x.centavos &&
+        (y.parcelaN ?? null) === (x.parcelaN ?? null) &&
+        Math.abs(diasEntre(x.dataCompra, y.dataCompra)) <= dias,
+    );
+    const perto = (y: Transacao) => Math.abs(diasEntre(x.dataCompra, y.dataCompra));
+    const parecidos = candidatos.filter((y) => descricoesParecidas(x.descricao, y.descricao)).sort((p, q) => perto(p) - perto(q));
+    const escolhido = parecidos[0] ?? (candidatos.length === 1 ? candidatos[0] : undefined);
+    if (escolhido) {
+      usados.add(escolhido.id);
+      pares.set(x.id, escolhido.id);
+    }
+  }
+  return pares;
 }

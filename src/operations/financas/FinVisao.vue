@@ -1,13 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import FinImportar from './FinImportar.vue'
-import { brl, diaMes, mesCurto, mesLongo, ROTULO_DO_TIPO, somarMeses, variacao } from './formato'
+import { brl, diaMes, enviarJson, mesCurto, mesLongo, ROTULO_DO_SEMAFORO, ROTULO_DO_TIPO, somarMeses, variacao } from './formato'
 import type { VisaoFinanceira } from './types'
 
-// Visão: os três blocos (tenho, devo, gastei) e o que se repete. Os números
-// vêm prontos do servidor (server/financas/resumo.ts); aqui é só a tela.
+// Visão: os três blocos (tenho, devo, gastei), o orçamento do mês e o que se
+// repete. Os números vêm prontos do servidor (server/financas/resumo.ts);
+// aqui é só a tela e os gestos de marcar/desmarcar recorrente.
 const props = defineProps<{ dados: VisaoFinanceira }>()
 const emit = defineEmits<{ mudar: [mes: string, visao: 'competencia' | 'caixa']; importado: [] }>()
+
+const marcando = ref('')
+const erroDeMarca = ref('')
+async function marcarRecorrente(estabelecimento: string, recorrente: boolean | null) {
+  marcando.value = estabelecimento
+  erroDeMarca.value = ''
+  try {
+    await enviarJson('PUT', '/recorrentes', { estabelecimento, recorrente })
+    emit('importado')
+  } catch (e) {
+    erroDeMarca.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    marcando.value = ''
+  }
+}
 
 const maiorMes = computed(() => Math.max(1, ...props.dados.devo.porMes.map((m) => m.centavos)))
 const maiorCategoria = computed(() => Math.max(1, ...props.dados.gastei.categorias.map((c) => Math.max(c.centavos, c.anteriorCentavos))))
@@ -67,9 +83,9 @@ const nomeDoCartao = (c: { nome: string; final: string | null }) => (c.final ? `
         </dl>
         <p v-if="c.aberta.semLancamentos" class="fin-sub">O banco não envia os lançamentos deste cartão: importe a fatura em PDF abaixo para ver em quê gastou.</p>
         <p v-if="c.semDetalheCentavos" class="fin-sub">"Sem detalhe" é a diferença entre o limite usado que o banco informa e o que dá para detalhar aqui.</p>
-        <p v-if="c.usoPct !== null && c.limiteCentavos" class="fin-uso" :class="{ 'is-alto': c.usoPct >= 70, 'is-estouro': c.usoPct >= 100 }">
+        <p v-if="c.usoPct !== null && c.limiteCentavos" class="fin-uso" :class="c.semaforo ? `is-${c.semaforo}` : ''">
           <span class="fin-barra" aria-hidden="true"><i :style="{ width: `${Math.min(100, c.usoPct)}%` }" /></span>
-          Limite usado: {{ c.usoPct }}% de {{ brl(c.limiteCentavos) }}
+          Limite usado: {{ c.usoPct }}% de {{ brl(c.limiteCentavos) }}<template v-if="c.semaforo && c.semaforo !== 'verde'"> · {{ ROTULO_DO_SEMAFORO[c.semaforo] }}</template>
         </p>
       </article>
 
@@ -138,19 +154,65 @@ const nomeDoCartao = (c: { nome: string; final: string | null }) => (c.final ? `
       </ul>
     </section>
 
+    <!-- ORÇAMENTO -->
+    <section class="fin-bloco" aria-labelledby="fin-orcamento">
+      <header class="fin-bloco__topo">
+        <h2 id="fin-orcamento">Orçamento de {{ mesCurto(dados.mes) }}</h2>
+        <template v-if="dados.orcamento">
+          <strong class="fin-total">{{ dados.orcamento.pct }}%</strong>
+          <p class="fin-sub">{{ brl(dados.orcamento.gastoCentavos) }} de {{ brl(dados.orcamento.limiteCentavos) }} nas categorias com orçamento, contando as compras no mês da fatura.</p>
+        </template>
+      </header>
+      <p v-if="!dados.orcamento" class="fin-vazio">Nenhum orçamento ainda. <a href="/financas/organizar">Defina em Organizar</a>.</p>
+      <ul v-else class="fin-orcamento">
+        <li v-for="o in dados.orcamento.categorias" :key="o.categoria" :class="`is-${o.semaforo}`">
+          <span class="fin-orcamento__nome">{{ o.categoria }}</span>
+          <span class="fin-valor">{{ o.pct }}%</span>
+          <span
+            class="fin-barra"
+            role="meter"
+            :aria-label="`${o.categoria}: ${o.pct}% do orçamento`"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.min(100, o.pct)"
+          ><i :style="{ width: `${Math.min(100, Math.max(2, o.pct))}%` }" /></span>
+          <small>{{ brl(o.gastoCentavos) }} de {{ brl(o.limiteCentavos) }}<template v-if="o.semaforo !== 'verde'"> · {{ ROTULO_DO_SEMAFORO[o.semaforo] }}</template></small>
+        </li>
+      </ul>
+      <a v-if="dados.orcamento" class="fin-sub" href="/financas/organizar">Mudar orçamentos</a>
+    </section>
+
     <!-- RECORRENTES -->
-    <section v-if="dados.recorrentes.length" class="fin-bloco" aria-labelledby="fin-recorrentes">
+    <section v-if="dados.recorrentes.length || dados.recorrentesDesmarcados.length" class="fin-bloco" aria-labelledby="fin-recorrentes">
       <header class="fin-bloco__topo">
         <h2 id="fin-recorrentes">Todo mês</h2>
         <strong class="fin-total">{{ brl(dados.recorrentes.reduce((s, r) => s + r.mediaCentavos, 0)) }}</strong>
-        <p class="fin-sub">Gastos que aparecem em 3 dos últimos 4 meses, com valor parecido.</p>
+        <p class="fin-sub">O mesmo estabelecimento a cada ~30 dias, com valor parecido, ou o que você marcou em Lançamentos.</p>
       </header>
+      <p v-if="erroDeMarca" class="fin-aviso is-forte" role="alert">{{ erroDeMarca }}</p>
       <ul class="fin-linhas">
-        <li v-for="r in dados.recorrentes" :key="r.descricao">
-          <span><b>{{ r.descricao }}</b><small>{{ r.categoria }} · {{ r.meses }} meses · último em {{ mesCurto(r.ultimoMes) }}</small></span>
-          <span class="fin-valor">{{ brl(r.mediaCentavos) }}</span>
+        <li v-for="r in dados.recorrentes" :key="r.estabelecimento">
+          <span>
+            <b>{{ r.descricao }}</b>
+            <small>{{ r.categoria }} · {{ r.origem === 'marcado' ? 'marcado por você' : `${r.vezes} vezes` }} · última em {{ diaMes(r.ultimaData) }}</small>
+          </span>
+          <span class="fin-recorrente__lado">
+            <span class="fin-valor">{{ brl(r.mediaCentavos) }}</span>
+            <button type="button" class="fin-botao fin-botao--pequeno" :disabled="marcando === r.estabelecimento" @click="marcarRecorrente(r.estabelecimento, r.origem === 'marcado' ? null : false)">
+              Não é recorrente
+            </button>
+          </span>
         </li>
       </ul>
+      <details v-if="dados.recorrentesDesmarcados.length" class="fin-dobra">
+        <summary>{{ dados.recorrentesDesmarcados.length }} que você disse que não é recorrente</summary>
+        <ul class="fin-linhas">
+          <li v-for="d in dados.recorrentesDesmarcados" :key="d.estabelecimento">
+            <span><b>{{ d.descricao }}</b></span>
+            <button type="button" class="fin-botao fin-botao--pequeno" :disabled="marcando === d.estabelecimento" @click="marcarRecorrente(d.estabelecimento, null)">Voltar a detectar</button>
+          </li>
+        </ul>
+      </details>
     </section>
 
     <FinImportar @importado="emit('importado')" />
