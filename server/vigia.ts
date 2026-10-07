@@ -14,7 +14,7 @@ import type { Aviso } from "./avisos.ts";
 import type { QuestCalendario } from "./calendar.ts";
 import {
   alvosDoRoster,
-  ANTECEDENCIA_PUSH_MIN,
+  ANTECEDENCIA_LEMBRETE_MIN,
   disparosDevidos,
   mensagemDoDisparo,
   ORIGEM_DOS_LEMBRETES,
@@ -33,7 +33,7 @@ export interface DependenciasDaVigia {
   lerRoster: () => Promise<Roster>;
   obterToken: () => Promise<string>;
   listar: (token: string, calendarId: string, de: Date, ate: Date) => Promise<QuestCalendario[]>;
-  /** Publica o aviso (fila de avisos no Dell; ntfy no Easypanel durante a sombra). */
+  /** Publica o aviso (a fila de avisos do Dell). */
   enviar: (a: Aviso) => Promise<void>;
   log?: { log: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 }
@@ -107,7 +107,7 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
     if (opcoes.registrar) avisouDesconexao = false;
 
     // Margem de 2 varreduras: um tick atrasado (Google lento) não perde evento na borda.
-    const ate = new Date(agora.getTime() + ANTECEDENCIA_PUSH_MIN * MIN_MS + 2 * VARREDURA_MS);
+    const ate = new Date(agora.getTime() + ANTECEDENCIA_LEMBRETE_MIN * MIN_MS + 2 * VARREDURA_MS);
     const quests: QuestCalendario[] = [];
     for (const calendarId of alvos.calendarios) {
       // Um calendário quebrado não cala os outros.

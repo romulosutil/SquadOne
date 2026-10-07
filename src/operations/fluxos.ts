@@ -180,7 +180,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     passos: [
       { titulo: 'Pede ao Claude', texto: 'Claude no próprio Dell, nos clones ~/SquadOne, ~/prumo e ~/crm-silmer.', onde: 'voce', quando: 'você decide', comVoce: true },
       { titulo: 'Commit e push na main', texto: 'GitHub romulosutil/*.', onde: 'nuvem', quando: 'fim da tarefa' },
-      { titulo: 'Easypanel publica o app', texto: 'O SquadOne de agendas implanta sozinho.', onde: 'nuvem', quando: 'no push', verificacao: 'squadone-app' },
+      { titulo: 'Easypanel publica a reserva', texto: 'A cópia fria do SquadOne implanta sozinha, travada e sem Telegram: é a volta se o Dell morrer.', onde: 'nuvem', quando: 'no push', verificacao: 'squadone-app' },
       { titulo: 'A Central se atualiza', texto: 'atualizar-central confere a main e reconstrói só quando ela andou.', onde: 'dell', quando: 'a cada 10 min' },
       { titulo: 'Grafo dos projetos', texto: 'O Hermes mantém um clone raso de cada repositório do GitHub e roda o graphify em todos. O PC puxa os grafos por SSH.', onde: 'dell', quando: '03:00' },
       { titulo: 'Central no celular', texto: 'Pela tailnet, com o Tailscale ligado no celular (porta 8443).', onde: 'voce', quando: 'quando quiser' },
@@ -190,13 +190,13 @@ export const FLUXOS: FluxoDaOperacao[] = [
     id: 'agenda',
     grupo: 'Pessoal',
     nome: 'Agenda e agentes',
-    frase: 'Uma frase vira evento no Google Calendar e lembrete no celular. Os agentes do SquadOne decidem quem cuida.',
+    frase: 'Uma frase vira evento no Google Calendar e lembrete no WhatsApp. Os agentes do SquadOne, no Dell, decidem quem cuida.',
     passos: [
-      { titulo: 'Manda a demanda', texto: 'Pela barra do SquadOne ou pelo Telegram (texto ou áudio).', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Manda a demanda', texto: 'Pelo SquadOne ou pelo Telegram (texto ou áudio), que o Dell busca sozinho.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'O agente certo decide', texto: 'Squads e pessoas do SquadOne viram o prompt; o Gemini escolhe a intenção, uma chamada por turno.', onde: 'externo', quando: 'na hora', link: { rotulo: 'Agentes do SquadOne', url: '/squadone' } },
-      { titulo: 'O servidor escolhe o horário', texto: 'Foco, prazo ou baixa prioridade, na grade de 15 min.', onde: 'nuvem', quando: 'na hora', verificacao: 'squadone-app' },
+      { titulo: 'O servidor escolhe o horário', texto: 'Foco, prazo ou baixa prioridade, na grade de 15 min.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Calendar e Tasks', texto: 'Eventos e passos na lista da squad.', onde: 'externo', quando: 'na hora' },
-      { titulo: 'Lembrete no celular', texto: 'ntfy, 10 min antes de cada bloco e prazo.', onde: 'voce', quando: '10 min antes' },
+      { titulo: 'Lembrete no WhatsApp', texto: 'Pela fila de avisos do Hermes, 10 min antes de cada bloco e prazo. Se o WhatsApp cair por mais de 15 min, o healthchecks avisa no Telegram e por e-mail.', onde: 'voce', quando: '10 min antes', verificacao: 'whatsapp-sessao' },
     ],
   },
 ]
