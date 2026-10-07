@@ -89,6 +89,29 @@ describe("resumir: devo", () => {
     assert.deepEqual(r.devo.cartoes[0].fechada, { vencimento: "2026-10-10", centavos: 30000, pagoCentavos: 20000 });
   });
 
+  it("a mesma compra com as primeiras parcelas uns centavos acima é um parcelamento só, sem contar as futuras duas vezes", () => {
+    // Compra de 11/05 em 8x, uma parcela por fatura: 1 e 2 a 100,05, da 3 em diante a 100,00.
+    // A 5 está na fatura fechada de 10/10; a 6 é da aberta (nov); faltam a 7 e a 8 (dez e jan).
+    const meses = ["06", "07", "08", "09"];
+    const faturas = [...meses.map((m) => fatura(`f-${m}`, "cartao", `2026-${m}-10`, 0, { fechamento: `2026-${m}-03` })), fechada];
+    const parcela = (n: number, faturaId: string, centavos: number) =>
+      tx("cartao", n === 1 ? "2026-05-12" : `2026-0${n + 4}-01`, centavos, `LOJA P PARC 0${n}/08`, { dataCompra: "2026-05-11", parcelaN: n, parcelaTotal: 8, faturaId });
+    const transacoes = processar([cartao], faturas, [
+      parcela(1, "f-06", -10005),
+      parcela(2, "f-07", -10005),
+      parcela(3, "f-08", -10000),
+      parcela(4, "f-09", -10000),
+      parcela(5, "f-out", -10000),
+    ]);
+    const r = resumir({ contas: [cartao], faturas, transacoes, conexoes: [] }, hoje, "2026-10", "competencia");
+    assert.equal(r.devo.parcelamentos.length, 1);
+    assert.equal(r.devo.cartoes[0].futurasCentavos, 20000);
+    assert.deepEqual(r.devo.porMes.slice(-2), [
+      { mes: "2026-12", centavos: 10000 },
+      { mes: "2027-01", centavos: 10000 },
+    ]);
+  });
+
   it("com o limite usado do banco, ele é o total, e a diferença aparece como sem detalhe", () => {
     const comLimite = { ...cartao, limiteCentavos: 1000000, limiteDisponivelCentavos: 900000 };
     const transacoes = processar([comLimite], [fechada], [compraFechada]);

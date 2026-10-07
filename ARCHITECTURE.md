@@ -192,7 +192,13 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   disponível; o detalhe (fatura fechada a pagar + fatura aberta + parcelas
   futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
   vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
-  (`parcelas.ts`).
+  (`parcelas.ts`) e a chave é a **data da compra** quando a fonte a dá
+  (`purchaseDate`, a data da linha no PDF): datas diferentes são compras
+  diferentes, e na mesma data o valor da parcela pode variar até 1% (o
+  Santander e o Mercado Pago cobram as primeiras uns centavos acima; com a
+  tolerância de 1 centavo a mesma compra virava dois grupos e as parcelas
+  que faltam contavam em dobro). Sem a data, valor ±1 centavo e mês de
+  origem ±1.
 - **O pago de uma fatura sai da data do pagamento** (`pagoDasFaturas`), não
   do `pago` que a fonte põe nela: um pagamento quita a última fatura que já
   tinha fechado. Cada banco informa de um jeito: o Mercado Pago e o Nubank
