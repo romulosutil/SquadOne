@@ -6,10 +6,14 @@ import { lerGastoFalado, type GastoFalado } from "./financas/gasto-falado.ts";
  * nem Express, e o relógio chega por parâmetro — dá para fixar em tabela de casos.
  */
 
+/**
+ * `squadId` só existe com um prefixo de squad (`/p`); ausente = a primeira
+ * squad ativa e o redirecionamento automático, como sempre.
+ */
 export type Entrada =
-  | { tipo: "demanda"; updateId: number; chatId: number; mensagemId: number; demanda: string; modo: Modo }
+  | { tipo: "demanda"; updateId: number; chatId: number; mensagemId: number; demanda: string; modo: Modo; squadId?: string }
   /** Mensagem de voz/áudio: vira demanda depois de transcrita (`telegram-bot.ts`). */
-  | { tipo: "audio"; updateId: number; chatId: number; mensagemId: number; fileId: string; mime: string; modo: Modo }
+  | { tipo: "audio"; updateId: number; chatId: number; mensagemId: number; fileId: string; mime: string; modo: Modo; squadId?: string }
   | { tipo: "audioLongo"; updateId: number; chatId: number; mensagemId: number }
   /**
    * "gastei 30 no mercado": vai para as finanças, NUNCA para o turno (nada de
@@ -31,6 +35,8 @@ export const TEXTO_DE_AJUDA = [
   "",
   "/foco <demanda> — primeiro horário livre a partir de agora",
   "/baixa <demanda> — encaixa até o 7º dia útil, depois dos outros",
+  "/p <demanda> — direto na squad PRUMO, sem a escolha pelo conteúdo",
+  "Dá para juntar: /p /foco <demanda>. No áudio, o comando vai na legenda.",
   "Sem comando = o modelo escolhe o tipo (como o Auto do app).",
   "",
   "gastei 30 no mercado — anota um gasto em dinheiro (a resposta diz só a categoria)",
@@ -74,7 +80,49 @@ export function textoDeDemandaAtrasada(atrasoMin: number): string {
 /** Comandos que mudam o modo; o resto do texto é a demanda. Espelha o toggle da CommandBar. */
 const MODOS: Record<string, Modo> = { foco: "foco", baixa: "baixa_prioridade" };
 
+/**
+ * Prefixos que fixam a squad do turno, sem estado: `/p ...` roda direto na
+ * squad `prumo`, com a mesma ordem de sempre (squad antes do token e do
+ * Gemini) e nenhuma chamada a mais ao modelo. Sem prefixo, nada muda: primeira
+ * squad ativa e o redirecionamento automático. O redirecionamento continua
+ * valendo DEPOIS do prefixo, como rede, se a demanda for de outra squad.
+ *
+ * Aponta para o ID, que nunca muda (renomear a squad não quebra o prefixo).
+ * Squad arquivada ou inexistente: o turno falha com `SquadInexistente` antes
+ * do Gemini, em vez de rodar calado em outra squad. Fixo no código, e não em
+ * env ou no roster: é um atalho de digitação, e uma tabela que o usuário
+ * edita seria estado novo para algo que o redirecionamento já resolve.
+ */
+export const PREFIXOS_DE_SQUAD: Readonly<Record<string, string>> = { p: "prumo" };
+
 const COMANDO = /^\/([A-Za-z0-9_]+)(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/;
+
+interface Comandos {
+  modo: Modo;
+  squadId?: string;
+  /** O texto depois dos comandos: a demanda. */
+  resto: string;
+}
+
+/**
+ * Os comandos do INÍCIO do texto: no máximo um de modo e um de squad, em
+ * qualquer ordem (`/p /foco x` = `/foco /p x`). Barra no meio da demanda é
+ * texto. null = comando desconhecido ou repetido, que vira ajuda. `hasOwn` e
+ * não `MODOS[nome]`: `/constructor` acharia o protótipo do objeto.
+ */
+function lerComandos(texto: string): Comandos | null {
+  let modo: Modo | undefined;
+  let squadId: string | undefined;
+  let resto = texto;
+  for (let cmd = COMANDO.exec(resto); cmd; cmd = COMANDO.exec(resto)) {
+    const nome = cmd[1].toLowerCase();
+    if (Object.hasOwn(MODOS, nome) && !modo) modo = MODOS[nome];
+    else if (Object.hasOwn(PREFIXOS_DE_SQUAD, nome) && !squadId) squadId = PREFIXOS_DE_SQUAD[nome];
+    else return null;
+    resto = (cmd[2] ?? "").trim();
+  }
+  return { modo: modo ?? "auto", ...(squadId ? { squadId } : {}), resto };
+}
 
 export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<number>, agora: Date): Entrada {
   const u = update as any;
@@ -101,37 +149,45 @@ export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<
     return idadeS > IDADE_MAXIMA_DEMANDA_MIN * 60 ? Math.floor(idadeS / 60) : null;
   };
 
-  // Voz (nota do microfone) ou arquivo de áudio. A legenda pode trazer /foco ou
-  // /baixa, como o texto; sem legenda é auto.
+  // Voz (nota do microfone) ou arquivo de áudio. A legenda pode trazer /foco,
+  // /baixa e /p, como o texto; o resto da legenda é ignorado. Sem legenda, ou
+  // com uma que não se lê, é auto na squad padrão.
   const audio = m.voice ?? (typeof m.audio?.mime_type === "string" && m.audio.mime_type.startsWith("audio/") ? m.audio : null);
   if (audio && typeof audio.file_id === "string") {
-    const legenda = typeof m.caption === "string" ? COMANDO.exec(m.caption.trim()) : null;
-    const modo = legenda ? MODOS[legenda[1].toLowerCase()] ?? "auto" : "auto";
+    const legenda = typeof m.caption === "string" ? lerComandos(m.caption.trim()) : null;
     if ((audio.duration ?? 0) > MAX_DURACAO_AUDIO_S || (audio.file_size ?? 0) > MAX_BYTES_AUDIO) {
       return { tipo: "audioLongo", ...base };
     }
     const atraso = atrasoMin();
     if (atraso !== null) return { tipo: "atrasada", ...base, atrasoMin: atraso };
-    return { tipo: "audio", ...base, fileId: audio.file_id, mime: audio.mime_type ?? "audio/ogg", modo };
+    return {
+      tipo: "audio",
+      ...base,
+      fileId: audio.file_id,
+      mime: audio.mime_type ?? "audio/ogg",
+      modo: legenda?.modo ?? "auto",
+      ...(legenda?.squadId ? { squadId: legenda.squadId } : {}),
+    };
   }
 
   if (typeof m.text !== "string") return { tipo: "semTexto", ...base };
   const texto = m.text.trim();
   if (!texto) return { tipo: "semTexto", ...base };
 
-  const cmd = COMANDO.exec(texto);
-  const gasto = cmd ? null : lerGastoFalado(texto);
+  // Gasto antes dos comandos, e só em texto sem "/": "/p gastei 30 no mercado"
+  // continua sendo demanda da squad, como o usuário pediu.
+  const gasto = texto.startsWith("/") ? null : lerGastoFalado(texto);
   if (gasto) {
     const quando = typeof m.date === "number" && m.date * 1000 <= agora.getTime() ? new Date(m.date * 1000) : agora;
     return { tipo: "gasto", ...base, gasto, quando };
   }
-  const modo = cmd ? MODOS[cmd[1].toLowerCase()] : "auto";
-  const demanda = cmd ? (cmd[2] ?? "").trim() : texto;
-  if (!modo || !demanda) return { tipo: "ajuda", ...base };
+  const comandos = lerComandos(texto);
+  if (!comandos || !comandos.resto) return { tipo: "ajuda", ...base };
 
   const atraso = atrasoMin();
   if (atraso !== null) return { tipo: "atrasada", ...base, atrasoMin: atraso };
-  return { tipo: "demanda", ...base, demanda, modo };
+  const { modo, squadId, resto: demanda } = comandos;
+  return { tipo: "demanda", ...base, demanda, modo, ...(squadId ? { squadId } : {}) };
 }
 
 /**

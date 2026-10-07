@@ -192,7 +192,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'Agenda e agentes',
     frase: 'Uma frase vira evento no Google Calendar e lembrete no WhatsApp. Os agentes do SquadOne, no Dell, decidem quem cuida.',
     passos: [
-      { titulo: 'Manda a demanda', texto: 'Pelo SquadOne ou pelo Telegram (texto ou áudio), que o Dell busca sozinho.', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Manda a demanda', texto: 'Pelo SquadOne ou pelo Telegram (texto ou áudio), que o Dell busca sozinho. Com /p na frente, vai direto para a squad PRUMO.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'O agente certo decide', texto: 'Squads e pessoas do SquadOne viram o prompt; o Gemini escolhe a intenção, uma chamada por turno.', onde: 'externo', quando: 'na hora', link: { rotulo: 'Agentes do SquadOne', url: '/squadone' } },
       { titulo: 'O servidor escolhe o horário', texto: 'Foco, prazo ou baixa prioridade, na grade de 15 min.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Calendar e Tasks', texto: 'Eventos e passos na lista da squad.', onde: 'externo', quando: 'na hora' },

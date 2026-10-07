@@ -7,6 +7,8 @@ import {
   MAX_BYTES_AUDIO,
   MAX_DURACAO_AUDIO_S,
   interpretarUpdate as interpretarComRelogio,
+  PREFIXOS_DE_SQUAD,
+  TEXTO_DE_AJUDA,
   textoDeDemandaAtrasada,
 } from "./telegram-entrada.ts";
 
@@ -42,11 +44,80 @@ describe("interpretarUpdate", () => {
     });
   }
 
-  for (const texto of ["/start", "/ajuda", "/help", "/foco", "/baixa   ", "/qualquer coisa"]) {
+  for (const texto of ["/start", "/ajuda", "/help", "/foco", "/baixa   ", "/qualquer coisa", "/constructor x", "/toString x"]) {
     it(`ajuda: ${JSON.stringify(texto)}`, () => {
       assert.equal(interpretarUpdate(msg({ text: texto }), PERMITIDOS).tipo, "ajuda");
     });
   }
+
+  describe("prefixo de squad /p (sem estado, sem chamada ao modelo)", () => {
+    it("o prefixo aponta para o id da squad prumo", () => {
+      assert.equal(PREFIXOS_DE_SQUAD.p, "prumo");
+    });
+
+    it("/p <texto> = demanda auto na squad prumo", () => {
+      assert.deepEqual(interpretarUpdate(msg({ text: "/p revisar o Mapa da padaria" }), PERMITIDOS), {
+        tipo: "demanda", updateId: 9, chatId: 111, mensagemId: 5, demanda: "revisar o Mapa da padaria", modo: "auto", squadId: "prumo",
+      });
+    });
+
+    const combinados: [string, string, string][] = [
+      ["/p /foco revisar o Mapa", "foco", "revisar o Mapa"],
+      ["/foco /p revisar o Mapa", "foco", "revisar o Mapa"],
+      ["/P /baixa trocar o logo do demo", "baixa_prioridade", "trocar o logo do demo"],
+      ["/p@SquadOneBot ligar para o dono", "auto", "ligar para o dono"],
+      ["/p\nlinha 1\nlinha 2", "auto", "linha 1\nlinha 2"],
+    ];
+    for (const [texto, modo, demanda] of combinados) {
+      it(`com modo, em qualquer ordem: ${JSON.stringify(texto)}`, () => {
+        const e = interpretarUpdate(msg({ text: texto }), PERMITIDOS) as any;
+        assert.equal(e.tipo, "demanda");
+        assert.equal(e.squadId, "prumo");
+        assert.equal(e.modo, modo);
+        assert.equal(e.demanda, demanda);
+      });
+    }
+
+    it("sem prefixo não fixa squad (primeira ativa + redirecionamento)", () => {
+      assert.equal("squadId" in interpretarUpdate(msg({ text: "/foco revisar contrato" }), PERMITIDOS), false);
+      assert.equal("squadId" in interpretarUpdate(msg({ text: "proposta da padaria /p" }), PERMITIDOS), false);
+    });
+
+    it("barra no meio da demanda é texto", () => {
+      const e = interpretarUpdate(msg({ text: "/p proposta 2/3 com /foco no prazo" }), PERMITIDOS) as any;
+      assert.equal(e.demanda, "proposta 2/3 com /foco no prazo");
+      assert.equal(e.modo, "auto");
+    });
+
+    for (const texto of ["/p", "/p   ", "/p /foco", "/p /p x", "/foco /baixa x", "/p /start", "/p /qualquer x"]) {
+      it(`ajuda: ${JSON.stringify(texto)}`, () => {
+        assert.equal(interpretarUpdate(msg({ text: texto }), PERMITIDOS).tipo, "ajuda");
+      });
+    }
+
+    it("legenda /p no áudio fixa a squad; /p /foco também o modo", () => {
+      const voz = (caption?: string) => msg({ voice: { file_id: "F9", duration: 10 }, ...(caption ? { caption } : {}) });
+      assert.deepEqual(interpretarUpdate(voz("/p"), PERMITIDOS), {
+        tipo: "audio", updateId: 9, chatId: 111, mensagemId: 5, fileId: "F9", mime: "audio/ogg", modo: "auto", squadId: "prumo",
+      });
+      const comFoco = interpretarUpdate(voz("/p /foco"), PERMITIDOS) as any;
+      assert.equal(comFoco.squadId, "prumo");
+      assert.equal(comFoco.modo, "foco");
+      assert.equal("squadId" in interpretarUpdate(voz(), PERMITIDOS), false);
+      // Legenda que não se lê continua auto, sem squad, como antes do prefixo.
+      const estranha = interpretarUpdate(voz("/qualquer"), PERMITIDOS) as any;
+      assert.equal(estranha.modo, "auto");
+      assert.equal("squadId" in estranha, false);
+    });
+
+    it("demanda /p atrasada também não roda", () => {
+      assert.equal(interpretarUpdate(msg({ text: "/p revisar", date: AGORA_S - 3600 }), PERMITIDOS).tipo, "atrasada");
+    });
+
+    it("a ajuda ensina o prefixo", () => {
+      assert.match(TEXTO_DE_AJUDA, /^\/p <demanda> — direto na squad PRUMO/m);
+    });
+  });
 
   it("foto ou documento que não é áudio = semTexto", () => {
     assert.equal(interpretarUpdate(msg({ photo: [{}] }), PERMITIDOS).tipo, "semTexto");

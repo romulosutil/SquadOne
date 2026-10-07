@@ -61,6 +61,8 @@ describe("interpretarUpdate: gasto falado", () => {
 
   it("comando e frase sem valor continuam demanda", () => {
     assert.equal(interpretarUpdate(texto(2, "/foco gastei 30 no mercado"), new Set([111]), AGORA).tipo, "demanda");
+    const prumo = interpretarUpdate(texto(9, "/p gastei 30 no mercado"), new Set([111]), AGORA);
+    assert.deepEqual([prumo.tipo, (prumo as { squadId?: string }).squadId], ["demanda", "prumo"]);
     assert.equal(interpretarUpdate(texto(3, "gastei a tarde no mercado"), new Set([111]), AGORA).tipo, "demanda");
   });
 
@@ -110,5 +112,17 @@ describe("bot: gasto falado", () => {
     assert.equal(rodadas.length, 0);
     assert.equal(anotados[0].centavos, 4250);
     assert.deepEqual(enviadas, ["🎙️ Anotado: Farmácia"]);
+  });
+
+  it("áudio com /p na legenda é demanda da squad, não gasto", async () => {
+    const { bot, rodadas, anotados } = montar();
+    bot.receber({
+      update_id: 10,
+      message: { message_id: 100, chat: { id: 111, type: "private" }, voice: { file_id: "F", duration: 4, mime_type: "audio/ogg" }, caption: "/p", date: AGORA_S - 5 },
+    });
+    await bot.ocioso();
+    await esperar();
+    assert.equal(anotados.length, 0);
+    assert.deepEqual(rodadas, ["gastei 42,50 na farmácia"]);
   });
 });
