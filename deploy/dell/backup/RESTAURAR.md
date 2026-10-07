@@ -75,6 +75,42 @@ home viva mistura estados.
   antigos. O que faltar desde a cópia volta na próxima leitura da Pluggy; só a
   fatura em PDF importada depois dela precisa ser reimportada.
 
+## Roster (voltar atrás de uma edição ou arquivamento)
+
+O servidor guarda, a cada gravação do roster, o `squad.json` **anterior** em
+`~/.local/share/squadone/historico/squad.<AAAA-MM-DDTHHMMSSZ>.json` (modo 600;
+as 30 mais recentes ou as dos últimos 90 dias). A cópia de data X é o roster
+como estava ANTES da mudança feita em X: para desfazer, escolha a primeira
+cópia com data posterior à mudança. O arquivo é o mesmo formato do
+`squad.json`, então é o mesmo caminho do Easypanel (reserva fria).
+
+1. Ver e comparar (só lê; do PC ou do Dell, num clone do repositório):
+   `npx tsx scripts/conferir-roster.ts --historico ~/.local/share/squadone`
+   lista as cópias com as contagens de ativos e arquivados;
+   `--diff <a> <b>` (nomes de cópia, caminhos ou `atual`) mostra o que existe
+   só de um lado, o que mudou de estado e o que teve o texto alterado.
+2. Parar o serviço: `systemctl --user stop squadone-operations`.
+3. Trocar o arquivo, **sem** `mv` (o `install` grava com o modo certo):
+   ```bash
+   cd ~/.local/share/squadone
+   install -m 600 historico/squad.<AAAA-MM-DDTHHMMSSZ>.json squad.json
+   ```
+4. Religar: `systemctl --user start squadone-operations`. O `install` não
+   passa pelo servidor, então o `squad.json` que saiu NÃO vira cópia: se
+   quiser poder refazer, guarde-o antes do passo 3
+   (`cp squad.json /tmp/squad.antes.json`).
+
+O que se perde ao voltar: contratações, edições e arquivamentos feitos depois
+da cópia escolhida; eventos já criados no Google continuam lá.
+
+**A partir do cofre** (Dell perdido ou `historico/` apagado) é o mesmo
+caminho, com outra origem: o cofre leva o `squad.json` e o `google-auth.json`
+(`fontes.toml`), não a pasta `historico/`. Restaure em pasta à parte (seção 2) e
+instale por cima:
+`restic restore latest --target /tmp/restaurado --include /home/romulo-sutil-corr-a/.local/share/squadone/squad.json`
+e depois `install -m 600 /tmp/restaurado/home/romulo-sutil-corr-a/.local/share/squadone/squad.json ~/.local/share/squadone/squad.json`,
+com o serviço parado.
+
 ## 4. Depois de restaurar
 
 - O Syncthing volta com as chaves de `~/.local/state/syncthing` (mesmo ID de

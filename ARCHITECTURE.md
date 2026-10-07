@@ -120,8 +120,16 @@ versão 2 de 06/10/2026. O que foi feito, na ordem:
 7. **PRUMO como uma squad**, com o Site antes da venda como sala
    (07/10/2026, ver "PRUMO como squad").
 
-**Ainda não feito (fase 8, sem data):** roster em SQLite com Litestream,
-cartões e time vivo completos, Luna em modo sombra, explicação das finanças
+**Roster em SQLite com Litestream: trocado pelo histórico datado** (fase 8,
+07/10/2026). O SQLite mudaria o formato do roster, e o Easypanel, que é a
+reserva fria (regra 25), lê o `squad.json`: a volta ensaiada se o Dell morresse
+deixaria de funcionar. No lugar, cada gravação guarda o `squad.json`
+**anterior** em `historico/squad.<AAAA-MM-DDTHHMMSSZ>.json` (modo 600, 30
+cópias ou 90 dias, o que guardar mais), só com `SQUADONE_DATA_DIR` e o roster
+não congelado. Nenhum formato, rota ou dependência mudou; `conferir-roster
+--historico` lista e compara, e a volta é um `install` (RESTAURAR.md, "Roster").
+
+**Ainda não feito (fase 8, sem data):** cartões e time vivo completos, Luna em modo sombra, explicação das finanças
 com IA, hábitos, check-in e metas. Fora do código e sem confirmação
 registrada: o teste de que o aviso do Hermes vibra o celular bloqueado (se não
 vibrar, o Hermes precisa de um chip próprio), o faturamento do Gemini ativo
