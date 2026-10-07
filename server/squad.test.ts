@@ -1,9 +1,9 @@
 /**
  * `tasksListaId` no roster: gravado pela fila, preservado por toda escrita do
  * ciclo de vida, e fora do prompt e da vista. Roda num diretório temporário:
- * squad.ts fixa o caminho de data/squad.json a partir do cwd NO IMPORT, por
- * isso o chdir vem antes do import dinâmico (cada arquivo de teste roda no seu
- * próprio processo).
+ * squad.ts resolve data/squad.json a partir do cwd, por isso o chdir vem antes
+ * do import dinâmico e não volta (cada arquivo de teste roda no seu próprio
+ * processo).
  */
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";

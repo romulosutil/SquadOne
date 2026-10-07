@@ -2,8 +2,8 @@
  * A agenda no perfil operations (Dell): diretório de dados próprio, nunca
  * semear, roster congelado durante o cutover e callback do Google só pelo
  * loopback. Roda em diretórios temporários: o "checkout" é o cwd e os dados
- * ficam FORA dele, como no Dell. As envs vêm antes do import dinâmico porque
- * squad.ts fixa o caminho no import (cada arquivo de teste é um processo).
+ * ficam FORA dele, como no Dell. squad.ts lê o caminho a cada uso; o chdir e
+ * as envs vêm antes do import mesmo assim (cada arquivo de teste é um processo).
  */
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";

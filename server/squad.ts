@@ -192,8 +192,12 @@ function podeSemear(env: NodeJS.ProcessEnv = process.env): boolean {
   return (env.SQUADONE_MODE ?? "").trim() !== "operations";
 }
 
-const DATA_DIR = diretorioDeDados();
-const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
+/**
+ * Lidos na hora do uso, não no import: o server.ts importa este módulo antes do
+ * `dotenv.config()`, e um SQUADONE_DATA_DIR vindo do .env ficaria de fora.
+ */
+const dataDir = () => diretorioDeDados();
+const squadPath = () => path.join(dataDir(), "squad.json");
 
 /**
  * A seed NAO pode morar em `data/`. Em producao `data/` e um volume Docker
@@ -205,9 +209,9 @@ const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
  * lista para nao quebrar checkout velho nem container que ja subiu com o
  * arquivo no lugar anterior.
  */
-const SEED_PATHS = [
+const seedPaths = () => [
   path.join(process.cwd(), "seed", "squad.seed.json"),
-  path.join(DATA_DIR, "squad.seed.json"),
+  path.join(dataDir(), "squad.seed.json"),
 ];
 
 /** Salas de um escritório: grade 3x3. Passou disso, não há slot para alocar. */
@@ -319,7 +323,7 @@ async function sincronizarDiretorio(dir: string): Promise<void> {
 }
 
 export async function writeRoster(roster: Roster): Promise<void> {
-  await gravarAtomico(SQUAD_PATH, JSON.stringify(roster, null, 2) + "\n");
+  await gravarAtomico(squadPath(), JSON.stringify(roster, null, 2) + "\n");
 }
 
 /**
@@ -363,7 +367,7 @@ export function salaPara(qtdPessoas: number, atual?: string): string {
  * porque o motivo provavel e um volume montado sobre o diretorio errado.
  */
 async function lerSeed(): Promise<string> {
-  for (const caminho of SEED_PATHS) {
+  for (const caminho of seedPaths()) {
     try {
       return await fs.readFile(caminho, "utf8");
     } catch (err: any) {
@@ -371,7 +375,7 @@ async function lerSeed(): Promise<string> {
     }
   }
   throw new Error(
-    `Seed do roster nao encontrada. Procurei em: ${SEED_PATHS.join(", ")}.`,
+    `Seed do roster nao encontrada. Procurei em: ${seedPaths().join(", ")}.`,
   );
 }
 
@@ -397,13 +401,13 @@ let semeadura: Promise<void> | null = null;
  * uma seed antiga v2 (caminho legado) é migrada pela leitura seguinte, com backup.
  */
 async function ensureRoster(): Promise<void> {
-  if (await existe(SQUAD_PATH)) return;
+  if (await existe(squadPath())) return;
   if (!podeSemear()) throw new RosterAusente();
   if (!semeadura) {
     semeadura = (async () => {
       // Relê: outra semeadura pode ter terminado entre o `existe` de fora e aqui.
-      if (await existe(SQUAD_PATH)) return;
-      await gravarAtomico(SQUAD_PATH, await lerSeed());
+      if (await existe(squadPath())) return;
+      await gravarAtomico(squadPath(), await lerSeed());
     })().finally(() => {
       semeadura = null;
     });
@@ -544,14 +548,14 @@ let migracao: Promise<Roster> | null = null;
 async function migrarNoDisco(): Promise<Roster> {
   // Relê aqui dentro: quem disparou pode ter lido v2 logo antes de outra
   // migração terminar. Nesse caso o arquivo já é v3 e não há o que fazer.
-  const texto = await fs.readFile(SQUAD_PATH, "utf8");
+  const texto = await fs.readFile(squadPath(), "utf8");
   const bruto = interpretar(texto);
   const versao = detectarVersao(bruto);
   if (versao === 3) return validarV3(bruto);
 
   // Backup do texto CRU antes de qualquer escrita, e nunca por cima de um
   // backup existente: o primeiro é o único que garantidamente é o original.
-  const backup = path.join(DATA_DIR, `squad.v${versao}.bak.json`);
+  const backup = path.join(dataDir(), `squad.v${versao}.bak.json`);
   if (!(await existe(backup))) await gravarAtomico(backup, texto);
 
   const v2 = versao === 1 ? migrarV1(bruto as any) : (bruto as RosterV2);
@@ -563,7 +567,7 @@ async function migrarNoDisco(): Promise<Roster> {
 
 export async function readRoster(): Promise<Roster> {
   await ensureRoster();
-  const bruto = interpretar(await fs.readFile(SQUAD_PATH, "utf8"));
+  const bruto = interpretar(await fs.readFile(squadPath(), "utf8"));
   if (detectarVersao(bruto) === 3) return validarV3(bruto);
 
   if (!migracao) {

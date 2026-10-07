@@ -40,7 +40,8 @@ export const ESCOPO_CALENDAR = "https://www.googleapis.com/auth/calendar.events"
 export const ESCOPO_TASKS = "https://www.googleapis.com/auth/tasks";
 export const ESCOPOS: readonly string[] = [ESCOPO_CALENDAR, ESCOPO_TASKS];
 
-const ARQUIVO = path.join(diretorioDeDados(), "google-auth.json");
+/** Na hora do uso: o server.ts importa este módulo antes do `dotenv.config()`. */
+const arquivo = () => path.join(diretorioDeDados(), "google-auth.json");
 
 /** Renova antes do fim: token que expira em voo vira 401 no meio do turno. */
 const MARGEM_MS = 60_000;
@@ -140,7 +141,7 @@ function decifrar(blob: string): string {
 
 async function ler(): Promise<Credencial | null> {
   try {
-    return JSON.parse(decifrar(await fs.readFile(ARQUIVO, "utf8"))) as Credencial;
+    return JSON.parse(decifrar(await fs.readFile(arquivo(), "utf8"))) as Credencial;
   } catch (err: any) {
     if (err?.code === "ENOENT") return null;
     // Chave trocada ou arquivo corrompido: tratar como "não conectado" em vez
@@ -151,14 +152,16 @@ async function ler(): Promise<Credencial | null> {
 }
 
 async function gravar(cred: Credencial): Promise<void> {
-  await fs.mkdir(path.dirname(ARQUIVO), { recursive: true });
-  const tmp = `${ARQUIVO}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, cifrar(JSON.stringify(cred)), "utf8");
-  await fs.rename(tmp, ARQUIVO);
+  await fs.mkdir(path.dirname(arquivo()), { recursive: true });
+  const destino = arquivo();
+  const tmp = `${destino}.${process.pid}.tmp`;
+  // 600: é a credencial do Google; no Dell o diretório também é 700 (regra 24).
+  await fs.writeFile(tmp, cifrar(JSON.stringify(cred)), { encoding: "utf8", mode: 0o600 });
+  await fs.rename(tmp, destino);
 }
 
 async function apagar(): Promise<void> {
-  await fs.rm(ARQUIVO, { force: true });
+  await fs.rm(arquivo(), { force: true });
 }
 
 /* --------------------------------------------------------------- fluxo ---- */
