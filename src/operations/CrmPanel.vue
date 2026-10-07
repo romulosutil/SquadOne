@@ -6,6 +6,7 @@ import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
+import './crm.css'
 
 // CRM da Central (/crm): Site antes da venda + PRUMO num modelo só, com três
 // vistas — Hoje (padrão), Funil e a Ficha de um lead. Tudo vem do retrato que
@@ -171,11 +172,11 @@ function fecharFicha() {
         <h1 id="crm-titulo">CRM</h1>
         <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
       </div>
-      <button class="ops-button ops-button--outline" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
+      <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
     </header>
     <p class="ops-visually-hidden" aria-live="polite">{{ anuncio }}</p>
 
-    <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="ops-button" type="button" @click="carregar(true)">Tentar de novo</button></div>
+    <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
     <template v-if="visao">
       <div v-if="visao.estado !== 'ok'" class="crm-aviso is-forte" role="status">
@@ -216,7 +217,7 @@ function fecharFicha() {
       <CrmFunil v-else :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" @abrir="abrirFicha" @produto="trocarProduto" />
 
       <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
-        <div class="ops-escopo crm-na-folha">
+        <div class="crm-na-folha">
           <CrmFicha v-if="lead" :key="lead.id" :lead="lead" :visao="visao" @registrado="depoisDoRegistro" />
           <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
         </div>
