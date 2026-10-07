@@ -394,6 +394,8 @@ def main() -> int:
 
     linha = linha_femininos()
     for resumo in api("GET", "/workflows?limit=200")["data"]:
+        if resumo.get("isArchived"):
+            continue  # arquivado não aceita PUT (400) e não roda
         wf = api("GET", f"/workflows/{resumo['id']}")
         novo, mudou = aplicar_femininos(wf, linha)
         if mudou:
