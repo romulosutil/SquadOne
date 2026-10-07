@@ -15,9 +15,15 @@ import {
   estadoDaPessoa,
   estadoDaSquad,
   pendenciasDaHoje,
+  pendenciasDeFinancas,
   proximasQuests,
   resumoDoFunil,
+  textoDaPendenciaDeFinancas,
+  type ContextoDoTime,
+  type EstadoDasFinancasLido,
+  type TimeLido,
 } from './hoje.ts'
+import type { Semaforo } from '../office/salaFinancas.ts'
 import type { DellCheck } from '../operations/types.ts'
 import type { QuestCalendario } from '../types.ts'
 
@@ -116,6 +122,65 @@ describe('pendenciasDaHoje', () => {
   })
 })
 
+describe('pendenciasDaHoje com finanças em semáforo', () => {
+  const alertas = { falhas: [check('balcao', 'falha')], fila: [check('pend:x', 'atencao', 'pendencias')], olhar: [check('cofre', 'atencao', 'dados')], sozinhos: [] }
+  const cartoes = { trocas: [], ajustes: ['a1'], crescimentos: [] }
+  const cartao = (pct: number, semaforo: Semaforo) => ({ pct, semaforo, nome: 'Nubank' })
+  const orcamento = (pct: number, semaforo: Semaforo) => ({ pct, semaforo })
+
+  const casos: Array<{ nome: string; financas: EstadoDasFinancasLido | null; chaves: string[] }> = [
+    {
+      nome: '≥ 90 % entra depois dos cartões dos agentes e antes da fila',
+      financas: { cartao: cartao(92, 'laranja'), orcamento: orcamento(40, 'verde') },
+      chaves: ['dell:balcao', 'ajuste:a1', 'financas:cartao', 'dell:pend:x', 'dell:cofre'],
+    },
+    {
+      nome: '70 % (amarelo) fica na aba Finanças',
+      financas: { cartao: cartao(75, 'amarelo'), orcamento: orcamento(72, 'amarelo') },
+      chaves: ['dell:balcao', 'ajuste:a1', 'dell:pend:x', 'dell:cofre'],
+    },
+    {
+      nome: 'os dois acima de 90 %: o vermelho na frente',
+      financas: { cartao: cartao(91, 'laranja'), orcamento: orcamento(104, 'vermelho') },
+      chaves: ['dell:balcao', 'ajuste:a1', 'financas:orcamento', 'financas:cartao', 'dell:pend:x', 'dell:cofre'],
+    },
+    {
+      nome: 'sem leitura das finanças (falha ou Easypanel), nenhum cartão inventado',
+      financas: null,
+      chaves: ['dell:balcao', 'ajuste:a1', 'dell:pend:x', 'dell:cofre'],
+    },
+    {
+      nome: 'cartão sem limite e sem orçamento no mês: nada',
+      financas: { cartao: null, orcamento: null },
+      chaves: ['dell:balcao', 'ajuste:a1', 'dell:pend:x', 'dell:cofre'],
+    },
+  ]
+  for (const c of casos) {
+    it(c.nome, () => {
+      assert.deepEqual(pendenciasDaHoje(alertas, cartoes, c.financas).map((x) => x.chave), c.chaves)
+    })
+  }
+
+  it('falha do Dell sempre primeiro, mesmo com finanças no vermelho; o corte em MAX_NA_HOJE deixa o resto atrás de "ver todas"', () => {
+    const p = pendenciasDaHoje(
+      { falhas: [check('balcao', 'falha'), check('cofre', 'falha', 'dados')], fila: [], olhar: [], sozinhos: [] },
+      { trocas: ['t1'], ajustes: [], crescimentos: [] },
+      { cartao: cartao(100, 'vermelho'), orcamento: orcamento(95, 'laranja') }
+    )
+    assert.deepEqual(p.slice(0, MAX_NA_HOJE).map((x) => x.chave), ['dell:balcao', 'dell:cofre', 'troca:t1'])
+    assert.deepEqual(p.slice(MAX_NA_HOJE).map((x) => x.chave), ['financas:cartao', 'financas:orcamento'])
+  })
+
+  it('o texto leva % e o nome do banco, nunca R$', () => {
+    const [c, o] = pendenciasDeFinancas({ cartao: cartao(92, 'laranja'), orcamento: orcamento(101, 'vermelho'), dadosAte: '2026-10-06' }).sort((a, b) => a.chave.localeCompare(b.chave))
+    assert.equal(textoDaPendenciaDeFinancas(c), 'Cartão Nubank: 92% do limite')
+    assert.equal(textoDaPendenciaDeFinancas(o), 'Orçamento do mês: 101%')
+    assert.equal(c.dadosAte, '2026-10-06')
+    assert.equal(textoDaPendenciaDeFinancas({ ...c, nome: undefined }), 'Cartão: 92% do limite')
+    assert.ok(![c, o].some((p) => textoDaPendenciaDeFinancas(p).includes('R$')))
+  })
+})
+
 const quest = (eventId: string, inicio: string, fim: string, extra: Partial<QuestCalendario> = {}): QuestCalendario => ({
   eventId, titulo: eventId, inicio, fim, diaInteiro: false, tipo: 'time_blocking', dominio: 'd', membro: 'm', squad: 's', prazoRef: '', ...extra,
 })
@@ -143,6 +208,63 @@ describe('estado do time, só com fonte', () => {
     // A agenda lida é de outra squad: não serve de fonte para esta.
     assert.equal(estadoDaSquad('p4f', { turnoSquadId: 'pessoal', mochilaDe: 'pessoal', proxima }).estado, 'sem_sinal')
   })
+
+  const TIME: TimeLido = {
+    lidoEm: '2026-10-07T15:00:00.000Z',
+    squads: [
+      { id: 'pessoal', emBlocoAgora: [], proxima: { titulo: 'Da agenda curta', inicio: '2026-10-07T18:00:00-03:00', pessoaId: 'ana' } },
+      { id: 'p4f', emBlocoAgora: [{ pessoaId: 'bia', titulo: 'Deploy' }], proxima: { titulo: 'Revisão', inicio: '2026-10-08T10:00:00-03:00', pessoaId: 'bia' } },
+      { id: 'vazia', emBlocoAgora: [], proxima: null },
+    ],
+    erros: [{ squadId: 'prumo', erro: 'Google Calendar respondeu 500' }],
+  }
+  const nomeDaPessoa = (id: string) => ({ bia: 'Bia' })[id] ?? id
+
+  const casos: Array<{ nome: string; squad: string; ctx: ContextoDoTime; estado: string; detalhe?: string; emBloco?: string[]; lidoEm?: string | null }> = [
+    { nome: 'sem /api/time, outra squad continua sem sinal', squad: 'p4f', ctx: { turnoSquadId: null, mochilaDe: 'pessoal', proxima }, estado: 'sem_sinal', emBloco: [], lidoEm: null },
+    {
+      nome: 'com /api/time, outra squad ganha bloco em curso e próximo',
+      squad: 'p4f',
+      ctx: { turnoSquadId: null, mochilaDe: 'pessoal', proxima, time: TIME, nomeDaPessoa },
+      estado: 'com_agenda',
+      detalhe: 'Próximo na agenda: Revisão',
+      emBloco: ['Em bloco agora: Bia — Deploy'],
+      lidoEm: TIME.lidoEm,
+    },
+    { nome: 'lida e sem nada: livre (agenda lida, não sem sinal)', squad: 'vazia', ctx: { turnoSquadId: null, mochilaDe: null, proxima: null, time: TIME }, estado: 'livre', lidoEm: TIME.lidoEm },
+    {
+      nome: 'a Mochila da ativa manda no próximo (vai mais longe que o /api/time)',
+      squad: 'pessoal',
+      ctx: { turnoSquadId: null, mochilaDe: 'pessoal', proxima, time: TIME },
+      estado: 'com_agenda',
+      detalhe: 'Próximo na agenda: Revisar contrato',
+    },
+    { nome: 'turno nesta aba vence a agenda lida', squad: 'p4f', ctx: { turnoSquadId: 'p4f', mochilaDe: null, proxima: null, time: TIME, nomeDaPessoa }, estado: 'atendendo', emBloco: ['Em bloco agora: Bia — Deploy'] },
+    {
+      nome: 'calendário da squad falhou: sem sinal com o motivo',
+      squad: 'prumo',
+      ctx: { turnoSquadId: null, mochilaDe: null, proxima: null, time: TIME },
+      estado: 'sem_sinal',
+      detalhe: 'Agenda não lida: Google Calendar respondeu 500',
+      lidoEm: null,
+    },
+    {
+      nome: 'a leitura inteira falhou: sem sinal com o motivo',
+      squad: 'p4f',
+      ctx: { turnoSquadId: null, mochilaDe: null, proxima: null, time: null, erroDoTime: 'Google desconectado' },
+      estado: 'sem_sinal',
+      detalhe: 'Agenda não lida: Google desconectado',
+    },
+  ]
+  for (const c of casos) {
+    it(`squad: ${c.nome}`, () => {
+      const r = estadoDaSquad(c.squad, c.ctx)
+      assert.equal(r.estado, c.estado)
+      if (c.detalhe !== undefined) assert.equal(r.detalhe, c.detalhe)
+      if (c.emBloco !== undefined) assert.deepEqual(r.emBloco, c.emBloco)
+      if (c.lidoEm !== undefined) assert.equal(r.lidoEm, c.lidoEm)
+    })
+  }
 
   it('pessoa: bloco em curso, último pedido, próximo ou sem sinal', () => {
     const quests = [

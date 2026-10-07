@@ -8,17 +8,30 @@
  */
 import type { AlertasDaHome } from '../operations/alertas'
 import type { CrmContagem, CrmEtapa, DellCheck } from '../operations/types'
+import type { EstadoDasFinancas, Semaforo } from '../office/salaFinancas'
 import type { QuestCalendario } from '../types'
 import { questTerminou } from '../mochila'
 
 /** Mais de 3 cartões numa tela de celular vira lista que ninguém lê (RULES 13). */
 export const MAX_NA_HOJE = 3
 
+export type PendenciaDeFinancas = {
+  chave: 'financas:cartao' | 'financas:orcamento'
+  tipo: 'financas'
+  pct: number
+  semaforo: Semaforo
+  /** Só no cartão: o nome do banco, não onde se gastou (RULES 24). */
+  nome?: string
+  /** "Dados até" da leitura: número sem data é número que mente (design.md, 4). */
+  dadosAte?: string | null
+}
+
 export type Pendencia =
   | { chave: string; tipo: 'dell'; check: DellCheck }
   | { chave: string; tipo: 'troca'; id: string }
   | { chave: string; tipo: 'ajuste'; id: string }
   | { chave: string; tipo: 'crescimento'; id: string }
+  | PendenciaDeFinancas
 
 export interface CartoesDosAgentes {
   trocas: string[]
@@ -26,13 +39,55 @@ export interface CartoesDosAgentes {
   crescimentos: string[]
 }
 
+/** O que `/api/financas/estado` devolve: só % e semáforo, nunca R$. */
+export type EstadoDasFinancasLido = EstadoDasFinancas & { dadosAte?: string | null }
+
+/**
+ * Só laranja (≥ 90 %) e vermelho (≥ 100 %) sobem para a Hoje. O amarelo (70 %)
+ * já foi ao WhatsApp e fica na aba Finanças: na Hoje ele ocuparia um dos três
+ * lugares por semanas, o mês inteiro acima de 70 %, e empurraria para baixo do
+ * corte o que precisa de gesto agora.
+ */
+const SOBE_PARA_A_HOJE: ReadonlySet<Semaforo> = new Set<Semaforo>(['laranja', 'vermelho'])
+const GRAVIDADE: Record<Semaforo, number> = { verde: 0, amarelo: 1, laranja: 2, vermelho: 3 }
+
+export function pendenciasDeFinancas(estado: EstadoDasFinancasLido | null | undefined): PendenciaDeFinancas[] {
+  if (!estado) return []
+  const dadosAte = estado.dadosAte ?? null
+  const saida: PendenciaDeFinancas[] = []
+  if (estado.cartao && SOBE_PARA_A_HOJE.has(estado.cartao.semaforo)) {
+    const { pct, semaforo, nome } = estado.cartao
+    saida.push({ chave: 'financas:cartao', tipo: 'financas', pct, semaforo, ...(nome ? { nome } : {}), dadosAte })
+  }
+  if (estado.orcamento && SOBE_PARA_A_HOJE.has(estado.orcamento.semaforo)) {
+    const { pct, semaforo } = estado.orcamento
+    saida.push({ chave: 'financas:orcamento', tipo: 'financas', pct, semaforo, dadosAte })
+  }
+  // O vermelho na frente; empate fica cartão, orçamento (sort estável).
+  return saida.sort((a, b) => GRAVIDADE[b.semaforo] - GRAVIDADE[a.semaforo])
+}
+
+/** "Cartão Nubank: 92% do limite" / "Orçamento do mês: 104%". Sem R$ nem estabelecimento. */
+export function textoDaPendenciaDeFinancas(p: PendenciaDeFinancas): string {
+  if (p.chave === 'financas:cartao') return `Cartão${p.nome ? ` ${p.nome}` : ''}: ${p.pct}% do limite`
+  return `Orçamento do mês: ${p.pct}%`
+}
+
 /**
  * Tudo o que espera o Rômulo, do mais grave ao menos: falha do Dell (quebrado
  * agora), a demanda que nenhuma squad quis (não foi atendida), o ajuste e a
- * contratação propostos, a fila de trabalho do CRM e o "vale olhar". Quem
- * mostra corta em MAX_NA_HOJE; o resto fica atrás de "ver todos".
+ * contratação propostos, o alerta de finanças em semáforo (≥ 90 %), a fila de
+ * trabalho do CRM e o "vale olhar". Quem mostra corta em MAX_NA_HOJE; o resto
+ * fica atrás de "ver todos".
+ *
+ * Finanças depois dos cartões dos agentes: o cartão de decisão some se a aba
+ * recarregar (vive na memória dela), o semáforo das finanças continua lá.
  */
-export function pendenciasDaHoje(alertas: AlertasDaHome | null, cartoes: CartoesDosAgentes): Pendencia[] {
+export function pendenciasDaHoje(
+  alertas: AlertasDaHome | null,
+  cartoes: CartoesDosAgentes,
+  financas: EstadoDasFinancasLido | null = null
+): Pendencia[] {
   const dell = (lista: DellCheck[] | undefined): Pendencia[] =>
     (lista ?? []).map((check) => ({ chave: `dell:${check.id}`, tipo: 'dell', check }))
   return [
@@ -40,6 +95,7 @@ export function pendenciasDaHoje(alertas: AlertasDaHome | null, cartoes: Cartoes
     ...cartoes.trocas.map<Pendencia>((id) => ({ chave: `troca:${id}`, tipo: 'troca', id })),
     ...cartoes.ajustes.map<Pendencia>((id) => ({ chave: `ajuste:${id}`, tipo: 'ajuste', id })),
     ...cartoes.crescimentos.map<Pendencia>((id) => ({ chave: `crescimento:${id}`, tipo: 'crescimento', id })),
+    ...pendenciasDeFinancas(financas),
     ...dell(alertas?.fila),
     ...dell(alertas?.olhar),
   ]
@@ -69,6 +125,20 @@ export const ROTULO_DO_ESTADO_DA_SQUAD: Record<EstadoDaSquad, string> = {
   sem_sinal: 'Sem sinal',
 }
 
+/** Espelho de `RespostaDoTime` (`server/time.ts`), o que `GET /api/time` devolve. */
+export interface TimeDaSquadLido {
+  id: string
+  emBlocoAgora: { pessoaId: string; titulo: string }[]
+  /** `inicio` é o prazo num marco. */
+  proxima: { titulo: string; inicio: string; pessoaId: string } | null
+}
+export interface TimeLido {
+  /** Só as squads cujo calendário foi lido; as outras estão em `erros`. */
+  squads: TimeDaSquadLido[]
+  lidoEm: string
+  erros: { squadId: string; erro: string }[]
+}
+
 export interface ContextoDoTime {
   /** Squad do turno em andamento nesta aba; null sem turno. */
   turnoSquadId: string | null
@@ -76,20 +146,53 @@ export interface ContextoDoTime {
   mochilaDe: string | null
   /** A quest mais próxima da squad lida. */
   proxima: QuestCalendario | null
+  /** A última leitura de `/api/time` (todas as squads ativas); null/ausente sem leitura. */
+  time?: TimeLido | null
+  /** Por que `/api/time` não foi lido ('' ou ausente sem falha): vira o motivo do `sem_sinal`. */
+  erroDoTime?: string
+  /** Nome de quem está em bloco; sem ele, o id (melhor que nada, e nunca inventado). */
+  nomeDaPessoa?: (pessoaId: string) => string
 }
 
+export interface EstadoDaSquadNaHoje {
+  estado: EstadoDaSquad
+  detalhe: string
+  /** "Em bloco agora: Ana — Revisar contrato", uma por bloco em curso. */
+  emBloco: string[]
+  /** Quando o Google foi lido para esta linha (`/api/time`); null sem essa leitura. */
+  lidoEm: string | null
+}
+
+const SEM_SINAL = 'Sem pedido em andamento e sem agenda lida: não dá para saber o que faz agora.'
+
 /**
- * Uma linha por squad, com o que se sabe dela e de onde vem. Só a squad ativa
- * tem a agenda lida; as outras ficam `sem_sinal` fora de um pedido.
+ * Uma linha por squad, com o que se sabe dela e de onde vem, nesta ordem:
+ * o turno desta aba (`atendendo`) > a agenda lida — a Mochila da ativa ou o
+ * `/api/time` de todas — (`com_agenda`/`livre`) > `sem_sinal`, com o motivo
+ * da falha quando houve uma. Squad que nenhuma leitura cobriu nunca é "livre":
+ * agenda não lida não é agenda vazia (RULES 2).
  */
-export function estadoDaSquad(squadId: string, ctx: ContextoDoTime): { estado: EstadoDaSquad; detalhe: string } {
-  if (ctx.turnoSquadId === squadId) return { estado: 'atendendo', detalhe: 'Um pedido seu está rodando nesta squad agora.' }
-  if (ctx.mochilaDe === squadId) {
-    return ctx.proxima
-      ? { estado: 'com_agenda', detalhe: `Próximo na agenda: ${ctx.proxima.titulo}` }
-      : { estado: 'livre', detalhe: 'Nada marcado pela frente na agenda.' }
+export function estadoDaSquad(squadId: string, ctx: ContextoDoTime): EstadoDaSquadNaHoje {
+  const lida = ctx.time?.squads.find((s) => s.id === squadId) ?? null
+  const nome = ctx.nomeDaPessoa ?? ((id: string) => id)
+  const emBloco = (lida?.emBlocoAgora ?? []).map((b) => `Em bloco agora: ${nome(b.pessoaId)} — ${b.titulo}`)
+  const lidoEm = lida ? ctx.time!.lidoEm : null
+  const comFonte = { emBloco, lidoEm }
+
+  if (ctx.turnoSquadId === squadId) {
+    return { estado: 'atendendo', detalhe: 'Um pedido seu está rodando nesta squad agora.', ...comFonte }
   }
-  return { estado: 'sem_sinal', detalhe: 'Sem pedido em andamento e sem agenda lida: não dá para saber o que faz agora.' }
+  // A Mochila da ativa vai 90 dias à frente e o /api/time só 7: para "o
+  // próximo", a Mochila manda quando existe.
+  const daMochila = ctx.mochilaDe === squadId
+  if (daMochila || lida) {
+    const proxima = daMochila ? ctx.proxima?.titulo : lida!.proxima?.titulo
+    if (proxima) return { estado: 'com_agenda', detalhe: `Próximo na agenda: ${proxima}`, ...comFonte }
+    if (emBloco.length) return { estado: 'com_agenda', detalhe: 'Nada marcado depois do bloco em curso.', ...comFonte }
+    return { estado: 'livre', detalhe: 'Nada marcado pela frente na agenda.', ...comFonte }
+  }
+  const falha = ctx.time?.erros.find((e) => e.squadId === squadId)?.erro || ctx.erroDoTime
+  return { estado: 'sem_sinal', detalhe: falha ? `Agenda não lida: ${falha}` : SEM_SINAL, ...comFonte }
 }
 
 export type EstadoDaPessoa = 'em_bloco' | 'proximo' | 'responsavel' | 'sem_sinal'

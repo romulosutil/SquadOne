@@ -129,12 +129,21 @@ cópias ou 90 dias, o que guardar mais), só com `SQUADONE_DATA_DIR` e o roster
 não congelado. Nenhum formato, rota ou dependência mudou; `conferir-roster
 --historico` lista e compara, e a volta é um `install` (RESTAURAR.md, "Roster").
 
-**Ainda não feito (fase 8, sem data):** cartões e time vivo completos, Luna em modo sombra, explicação das finanças
-com IA, hábitos, check-in e metas. Fora do código e sem confirmação
-registrada: o teste de que o aviso do Hermes vibra o celular bloqueado (se não
-vibrar, o Hermes precisa de um chip próprio), o faturamento do Gemini ativo
-(no plano grátis o Google usa os prompts) e a cifra do disco do Dell (ver
-"Riscos aceitos").
+**Fase 8, feito:** **cartões e time vivo** (07/10/2026). A Hoje ganhou o
+cartão de finanças em semáforo da regra 13 (`GET /api/financas/estado`, só
+laranja e vermelho, ≥ 90 %; só % e o nome do banco, nunca R$) entre os
+cartões dos agentes e a fila, e o estado de **todas** as squads ativas por
+`GET /api/time` (`server/time.ts`: um `events.list` por calendário na janela
+de −1 a +7 dias, agrupado pelo domínio ativo, cache de 60 s em memória, nada
+em disco). Squad cujo calendário não foi lido continua "Sem sinal", com o
+motivo.
+
+**Ainda não feito (fase 8, sem data):** Luna em modo sombra e explicação das
+finanças com IA. Hábitos, check-in e metas foram cortados em 07/10/2026 (só
+voltam se aparecer pedido real). Fora do código e sem confirmação registrada:
+o teste de que o aviso do Hermes vibra o celular bloqueado (se não vibrar, o
+Hermes precisa de um chip próprio) e a cifra do disco do Dell (ver "Riscos
+aceitos"). O faturamento do Gemini foi confirmado pelo usuário em 07/10/2026.
 
 ### PRUMO como squad (07/10/2026)
 
