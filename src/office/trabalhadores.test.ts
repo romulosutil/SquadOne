@@ -39,8 +39,8 @@ describe("catálogo dos trabalhadores automáticos", () => {
     }
   });
 
-  it("sem verificação viva só quem o monitor do Dell não confere (perder uma por engano quebra aqui)", () => {
-    assert.deepEqual(TRABALHADORES.filter((t) => !t.verificacao).map((t) => t.id), ["prumo-mapa"]);
+  it("sem verificação viva só quem o monitor do Dell não confere (hoje ninguém; perder uma por engano quebra aqui)", () => {
+    assert.deepEqual(TRABALHADORES.filter((t) => !t.verificacao).map((t) => t.id), []);
   });
 
   it("trabalhadoresDaSala filtra pelo id; sala sem ninguém ou desconhecida = lista vazia", () => {

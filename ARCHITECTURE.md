@@ -168,8 +168,9 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
   `status.json` que o passo dele em `fluxos.ts`; o teste confere as duas
   listas e que nenhum módulo do servidor importa o catálogo. Quem o
   `dell-status` não confere fica sem verificação, e o teste fixa a lista:
-  hoje só o rascunho do Mapa (`prumo-mapa`), cuja unit e fila `mapa-fila`
-  ninguém monitora.
+  hoje ninguém. O rascunho do Mapa ganhou a verificação `prumo-mapa` em
+  07/10/2026 (gatilho, idade da `mapa-fila` e pasta de erro; ver
+  `deploy/dell/README.md`, "Monitor do Dell").
 
 ### Finanças (07/10/2026)
 

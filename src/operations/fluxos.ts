@@ -5,7 +5,7 @@
 // Ao mudar um fluxo, mude aqui também.
 //
 // `verificacao` e `fila` ligam um passo a uma verificação viva do status.json
-// (fluxo:<id do n8n>, gerador, backup:*, pend:*): a tela mostra "Falhou agora"
+// (fluxo:<id do n8n>, gerador, prumo-mapa, backup:*, pend:*): a tela mostra "Falhou agora"
 // ou "53 esperando" no passo. Id que não existir no retrato não mostra nada.
 
 export type Onde = 'voce' | 'dell' | 'nuvem' | 'externo'
@@ -80,7 +80,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { ramo: 'se não responder', titulo: 'Manda um lembrete', texto: 'O CRM mostra há quantos dias cada convite espera; o lembrete é com você.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-aguardando', link: CRM_PRUMO },
       { titulo: 'Dono responde o formulário', texto: '"Prumo — Roteiro do Mapa", 16 perguntas.', onde: 'nuvem', quando: 'quando ele responder' },
       { titulo: 'Diagnóstico', texto: 'n8n: Índice PRUMO e briefing na planilha, aviso no WhatsApp.', onde: 'dell', quando: 'de hora em hora', verificacao: 'fluxo:b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f', fila: 'pend:prumo-diagnostico' },
-      { titulo: 'Rascunho do Mapa em PDF', texto: 'O Dell monta o Mapa de 7 páginas com o que o formulário permite e deixa [PREENCHER] no resto. Fica em ~/prumo-entregas e no Drive (PRUMO/Entregas).', onde: 'dell', quando: 'na hora' },
+      { titulo: 'Rascunho do Mapa em PDF', texto: 'O Dell monta o Mapa de 7 páginas com o que o formulário permite e deixa [PREENCHER] no resto. Fica em ~/prumo-entregas e no Drive (PRUMO/Entregas).', onde: 'dell', quando: 'na hora', verificacao: 'prumo-mapa' },
       { titulo: 'Completa o Mapa e conduz', texto: 'Entrevistas, travas em R$, recomendação, workshop e proposta. prumo-mapa refaz o PDF depois que você edita; "proposta enviada" vai na ficha do CRM.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PRUMO },
     ],
   },
