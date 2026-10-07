@@ -231,7 +231,8 @@ isso, menos ruído:
 
 - **Sessão do WhatsApp** (`whatsapp-sessao`, desde 06/10/2026): `GET
   http://127.0.0.1:3000/health` da bridge do Hermes precisa responder `status:
-  "open"`. O gateway `active` não basta: em 06/10/2026 a sessão foi desconectada
+  "connected"` (a bridge diz `connected`/`disconnected`; `open`, o nome cru do
+  Baileys, também vale). O gateway `active` não basta: em 06/10/2026 a sessão foi desconectada
   ("Logged out" em `~/.hermes/whatsapp/bridge.log`) e a bridge morria em laço
   com o gateway de pé. Vermelho; o aviso desse vermelho, claro, não chega pelo
   WhatsApp — aparece na Central, e o remédio é parear de novo.

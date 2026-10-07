@@ -500,7 +500,10 @@ class FilaDeAvisos(unittest.TestCase):
 
 class WhatsApp(unittest.TestCase):
     def test_sessao(self):
+        # A bridge do Hermes responde "connected" (visto no Dell em 07/10/2026); "open" é o do Baileys.
+        self.assertEqual(ds.avaliar_whatsapp({"status": "connected", "queueLength": 0})["estado"], "ok")
         self.assertEqual(ds.avaliar_whatsapp({"status": "open", "queueLength": 0})["estado"], "ok")
+        self.assertEqual(ds.avaliar_whatsapp({"status": "disconnected"})["estado"], "falha")
         fechada = ds.avaliar_whatsapp({"status": "close"})
         self.assertEqual(fechada["estado"], "falha")
         self.assertIn("'close'", fechada["detalhe"])
