@@ -622,6 +622,36 @@ renovado pela CLI quando está para vencer; a API de pausa só aceita o id
 `prj_…`. Em 30/09/2026 os 74 leads de `_recusados/` (73 projetos) contam desde
 25/09 (ctime + balanço do `registro.md`): pausa em 10/10/2026.
 
+**Limpeza dos demos sem interação** (`site-demos-limpeza`, desde 07/10/2026, todo
+dia às 09:50): a outra ponta da pausa, só para quem **nunca interagiu**. A
+Vercel hobby limita projetos e demo parado ocupa a vaga do gerador, então
+`enviado`/`expirado` sem `respondeu_em`, `fechado_em` nem `recusado_em`, na raiz
+de `~/auto-site` ou em `_concluidos/`, com `enviado_em` + 10 dias já passado,
+tem o projeto `demo-*` **apagado** na Vercel (a pasta fica; o `publicado.json`
+ganha `apagado_em` e o `site-demos-pausa` passa a ignorá-lo). Recusado não entra
+(recusar é interação; esses seguem a pausa de 15 dias, que é reversível), nem
+`_em-conversa/`, `_fechados/` ou `_recusados/`. O retrato da planilha com mais
+de 3 h invalida a rodada: uma resposta de hoje poderia estar de fora. **O timer
+só lista e avisa** (um aviso quando aparece candidato novo); apagar é ordem sua:
+
+```bash
+site-demos-limpeza --simular             # quem entra e por que os outros não, sem aviso nem estado
+site-demos-limpeza --apagar              # apaga todos os que entram
+site-demos-limpeza --apagar demo-a demo-b   # só esses (têm de estar entre os que entram)
+```
+
+Pelo `vercel project rm` à mão (pede confirmação; o `y` vem do `printf`):
+`printf 'y\n' | vercel project rm demo-x --scope romulodesigns`. Para trazer um
+demo de volta basta republicar a pasta (`vercel link` + `vercel deploy`, como o
+passo 5 do gerador). Estado e histórico em `~/.local/state/site-demos-limpeza/`.
+
+```bash
+install -m 755 deploy/dell/site-demos-limpeza.py ~/.local/bin/site-demos-limpeza
+cp deploy/dell/site-demos-limpeza.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now site-demos-limpeza.timer
+python3 deploy/dell/site-demos-limpeza.test.py
+```
+
 ```bash
 cp deploy/dell/claude-ops/site-lead-acoes.py ~/.local/share/claude-ops/
 cd ~/.local/share/claude-ops

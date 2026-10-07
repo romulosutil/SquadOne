@@ -1,0 +1,11 @@
+[Unit]
+Description=Site antes da venda — listar demos sem interação, todo dia às 09:50
+
+[Timer]
+# Depois do 05 · Acompanhamento (09:00), do Balcão (09:10) e da pausa dos demos (09:40).
+OnCalendar=*-*-* 09:50:00
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
