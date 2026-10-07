@@ -2,7 +2,7 @@
  * Os trabalhadores automáticos do Dell (fluxos do n8n e timers) ligados à sala
  * que responde pelo trabalho deles. Catálogo estático e versionado, como
  * `src/operations/fluxos.ts`: mudou um fluxo, muda aqui e lá (o teste confere
- * que cada `verificacao` existe nos fluxos).
+ * que cada `verificacao` existe nos fluxos, e fixa quem não tem uma).
  *
  * FORA DO PROMPT, de propósito (RULES 26). O roster vai inteiro em toda
  * chamada ao Gemini; isto não. Um agente que lesse "o Caçador busca leads às
@@ -28,8 +28,12 @@ export interface TrabalhadorAutomatico {
   /** Onde roda, para quem for conferir. */
   onde: string;
   quando: string;
-  /** Verificação viva do status.json do Dell (a mesma do passo em fluxos.ts). */
-  verificacao: string;
+  /**
+   * Verificação viva do status.json do Dell (a mesma do passo em fluxos.ts).
+   * Ausente = o monitor do Dell não confere este trabalhador hoje: nenhuma tela
+   * pode dizer se ele rodou ou falhou, e não se inventa um estado (RULES 2).
+   */
+  verificacao?: string;
 }
 
 export const TRABALHADORES: readonly TrabalhadorAutomatico[] = [
@@ -77,6 +81,16 @@ export const TRABALHADORES: readonly TrabalhadorAutomatico[] = [
     onde: "n8n, no Dell",
     quando: "de hora em hora",
     verificacao: "fluxo:b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f",
+  },
+  {
+    // Sem verificação: o dell-status não confere a unit nem a fila mapa-fila.
+    // Pacote parado ali só aparece como Mapa que não chegou a ~/prumo-entregas.
+    id: "prumo-mapa",
+    nome: "Rascunho do Mapa",
+    sala: "prumo--organizar",
+    faz: "monta o PDF de 7 páginas do Mapa com o que o formulário permite e deixa [PREENCHER] no resto, em ~/prumo-entregas",
+    onde: "prumo-mapa (unit .path sobre a fila do n8n), no Dell",
+    quando: "na hora, quando o Diagnóstico manda o pacote",
   },
 ];
 

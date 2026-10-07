@@ -132,7 +132,7 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
 | Atendimento e proposta (`prumo--geral`, sala raiz) | todo contato com lead e dono: convite, abordagem com o site, follow-up, conversa, proposta, fechamento; e o do PRUMO sem outra sala | Balcão |
 | Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador, Lead Scout |
 | Site antes da venda (`prumo--site-antes-da-venda`) | fazer, publicar, ajustar e pausar os sites (demo e de quem fechou) | gerador |
-| Organizar (`prumo--organizar`) | a consultoria: diagnóstico, Índice PRUMO, Mapa, entrevistas, recomendação, workshop | Diagnóstico |
+| Organizar (`prumo--organizar`) | a consultoria: diagnóstico, Índice PRUMO, Mapa, entrevistas, recomendação, workshop | Diagnóstico, rascunho do Mapa (`prumo-mapa`) |
 
 - **`prumo--geral` é o Atendimento.** Nova squad sempre nasce com a sala
   "Geral"; ela foi renomeada no ✎, e id nunca muda. Ser a sala raiz combina
@@ -155,7 +155,10 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
   regra 26): versionado, fora do prompt, mostrado em texto sob cada sala no
   painel de salas. Cada trabalhador aponta para a mesma verificação do
   `status.json` que o passo dele em `fluxos.ts`; o teste confere as duas
-  listas e que nenhum módulo do servidor importa o catálogo.
+  listas e que nenhum módulo do servidor importa o catálogo. Quem o
+  `dell-status` não confere fica sem verificação, e o teste fixa a lista:
+  hoje só o rascunho do Mapa (`prumo-mapa`), cuja unit e fila `mapa-fila`
+  ninguém monitora.
 
 ### Finanças (07/10/2026)
 
