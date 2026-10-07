@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { diretorioDeDados } from "./dados.ts";
 
 /**
  * Roster em ÁRVORE de três níveis (spec Fase 1 §1).
@@ -156,7 +157,42 @@ export class RosterIlegivel extends Error {
   }
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+/**
+ * Sem `squad.json` num processo que não pode semear (perfil operations, no
+ * Dell). 503: o roster de produção ainda não foi copiado, e semear ali criaria
+ * uma agenda nova e vazia que o bot e a vigia usariam como se fosse a de
+ * verdade (regra 7).
+ */
+export class RosterAusente extends Error {
+  constructor() {
+    super("Roster de produção ainda não copiado para este diretório de dados (veja o runbook do cutover).");
+    this.name = "RosterAusente";
+  }
+}
+
+/**
+ * Escrita com `SQUADONE_ROSTER_CONGELADO=true`: durante a cópia, a comparação
+ * e a troca do roster entre o Easypanel e o Dell nada pode contratar, editar
+ * nem arquivar — a mudança ficaria só de um lado e se perderia na troca. É
+ * conflito (409), não erro nosso: o roster está certo, só fechado.
+ */
+export class RosterCongelado extends ConflitoDeRoster {
+  constructor() {
+    super("Roster congelado durante a mudança da agenda para o Dell: contratações e edições voltam depois da troca.");
+    this.name = "RosterCongelado";
+  }
+}
+
+export function rosterCongelado(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.SQUADONE_ROSTER_CONGELADO ?? "").trim() === "true";
+}
+
+/** No Dell nunca se semeia: o roster vem de produção, copiado à mão. */
+function podeSemear(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.SQUADONE_MODE ?? "").trim() !== "operations";
+}
+
+const DATA_DIR = diretorioDeDados();
 const SQUAD_PATH = path.join(DATA_DIR, "squad.json");
 
 /**
@@ -297,6 +333,8 @@ let fila: Promise<unknown> = Promise.resolve();
 
 export function atualizarRoster<T>(mutador: (roster: Roster) => T): Promise<T> {
   const proximo = fila.then(async () => {
+    // Dentro da fila: uma escrita que esperava quando o congelamento entrou também para.
+    if (rosterCongelado()) throw new RosterCongelado();
     const roster = await readRoster();
     // Se o mutador lançar, nada é gravado: o roster em disco fica intacto.
     const saida = mutador(roster);
@@ -360,6 +398,7 @@ let semeadura: Promise<void> | null = null;
  */
 async function ensureRoster(): Promise<void> {
   if (await existe(SQUAD_PATH)) return;
+  if (!podeSemear()) throw new RosterAusente();
   if (!semeadura) {
     semeadura = (async () => {
       // Relê: outra semeadura pode ter terminado entre o `existe` de fora e aqui.

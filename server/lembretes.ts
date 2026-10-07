@@ -1,18 +1,19 @@
 /**
- * Lembretes push: QUAIS eventos avisar e O QUE dizer. Sem fetch, relógio, env
- * ou estado — quem varre (`vigia.ts`) passa o `agora`, a janela e o que já foi
- * enviado. É isso que deixa testar o disparo sem esperar o horário real.
+ * Lembretes: QUAIS eventos avisar e O QUE dizer. Sem fetch, relógio, env ou
+ * estado — quem varre (`vigia.ts`) passa o `agora`, a janela e o que já foi
+ * enviado. É isso que deixa testar o disparo sem esperar o horário real. O que
+ * sai daqui é um `Aviso` (`avisos.ts`): o transporte é de quem publica.
  */
 import { instanteLocal, lerInstante, type Janela } from "./alocador.ts";
+import { LIMITES_DO_AVISO, semValores, umaLinha, type Aviso } from "./avisos.ts";
 import { PREFIXO_DEADLINE, type QuestCalendario } from "./calendar.ts";
-import type { MensagemDePush } from "./push.ts";
 import { dominiosAtivos, squadsAtivas, type Roster } from "./squad.ts";
 
 const MIN_MS = 60_000;
 
 /**
- * Minutos de antecedência. Constante e não env: uma env só foi o combinado
- * (LEMBRETES_NTFY_URL). Virar env é trocar isto por um leitor como lerJanela.
+ * Minutos de antecedência. Constante e não env: virar env é trocar isto por um
+ * leitor como lerJanela.
  */
 export const ANTECEDENCIA_PUSH_MIN = 10;
 
@@ -115,34 +116,48 @@ export function disparosDevidos(
   return disparos.sort((a, b) => a.referencia - b.referencia);
 }
 
+/** Quem grava na fila: aparece no resumo do dell-status e nos recusados. */
+export const ORIGEM_DOS_LEMBRETES = "squadone:vigia";
+
 /**
- * Texto da notificação. Minutos contados do `agora` real, não da antecedência
+ * Texto do aviso. Minutos contados do `agora` real, não da antecedência
  * nominal: um aviso atrasado diz quanto falta de verdade.
+ *
+ * - `chave` = `lembrete:<eventId>@<referência>`: a fila descarta a mesma chave
+ *   em 24 h, então um redeploy dentro dos 10 min não manda o lembrete de novo
+ *   (a deduplicação da vigia é só memória);
+ * - `expiraEm` = o próprio horário: lembrete preso no teto por hora ou com o
+ *   Hermes fora não serve depois. Marco de dia inteiro (avisa no início da
+ *   janela) vale até o fim do dia;
+ * - marco é P1 e bloco P2; nenhum é P0 (P0 fura o silêncio e vai ao Telegram);
+ * - o título do compromisso vem do usuário: uma linha, cortado e sem valor em
+ *   R$ (regra 24).
  */
-export function mensagemDoDisparo(d: Disparo, agora: number, fuso: string, nomeDoDominio: string): MensagemDePush {
+export function mensagemDoDisparo(d: Disparo, agora: number, fuso: string, nomeDoDominio: string): Aviso {
   const formato = new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const hora = (instante: number) => formato.format(instante);
   const faltam = Math.max(1, Math.ceil((d.referencia - agora) / MIN_MS));
-  const clique = d.htmlLink ? { clique: d.htmlLink } : {};
+  const titulo = (prefixo: string) => umaLinha(`${prefixo}${semValores(d.titulo)}`, LIMITES_DO_AVISO.titulo);
+  const dominio = umaLinha(semValores(nomeDoDominio), 200);
+  const comum = {
+    origem: ORIGEM_DOS_LEMBRETES,
+    chave: `lembrete:${d.chave}`,
+    expiraEm: new Date(d.referencia).toISOString(),
+    ...(d.htmlLink && d.htmlLink.length <= LIMITES_DO_AVISO.link ? { link: d.htmlLink } : {}),
+  };
 
   if (d.tipo === "time_blocking") {
     const intervalo = d.fim === null ? hora(d.referencia) : `${hora(d.referencia)}–${hora(d.fim)}`;
-    return {
-      titulo: `Em ${faltam} min: ${d.titulo}`,
-      corpo: `${intervalo} · ${nomeDoDominio}`,
-      prioridade: 3,
-      tags: ["hourglass_flowing_sand"],
-      ...clique,
-    };
+    return { ...comum, titulo: titulo(`⏳ Em ${faltam} min: `), texto: `${intervalo} · ${dominio}`, prioridade: 2 };
   }
   if (d.diaInteiro) {
-    return { titulo: `Prazo hoje: ${d.titulo}`, corpo: `Vence hoje · ${nomeDoDominio}`, prioridade: 4, tags: ["alarm_clock"], ...clique };
+    return {
+      ...comum,
+      titulo: titulo("⏰ Prazo hoje: "),
+      texto: `Vence hoje · ${dominio}`,
+      prioridade: 1,
+      expiraEm: new Date(d.referencia + 12 * 60 * MIN_MS).toISOString(),
+    };
   }
-  return {
-    titulo: `Prazo em ${faltam} min: ${d.titulo}`,
-    corpo: `Vence às ${hora(d.referencia)} · ${nomeDoDominio}`,
-    prioridade: 4,
-    tags: ["alarm_clock"],
-    ...clique,
-  };
+  return { ...comum, titulo: titulo(`⏰ Prazo em ${faltam} min: `), texto: `Vence às ${hora(d.referencia)} · ${dominio}`, prioridade: 1 };
 }

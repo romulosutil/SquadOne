@@ -8,6 +8,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
  *
  * O token vai na URL da Bot API. Por isso nenhuma mensagem de erro deste módulo
  * repete a URL nem o `err.message` cru do fetch.
+ *
+ * Dois transportes de entrada (TELEGRAM_TRANSPORTE):
+ * - `webhook` (padrão, Easypanel): o Telegram faz POST numa URL pública;
+ * - `polling` (Dell): o processo busca com `getUpdates`. Webhook exigiria URL
+ *   pública, e Funnel é proibido (regra 7); o polling só abre conexão de saída.
+ *   Sem rota de webhook, a trava do segredo vira a do token, que só existe no
+ *   Dell. Polling nunca chama setWebhook: o Telegram recusa `getUpdates`
+ *   enquanto houver webhook, e quem o tira é o runbook (deleteWebhook SEM drop).
  */
 
 export const ROTA_WEBHOOK_TELEGRAM = "/api/telegram/webhook";
@@ -15,12 +23,25 @@ export const ROTA_WEBHOOK_TELEGRAM = "/api/telegram/webhook";
 /** Turno de 3 min já é da fila; uma chamada à Bot API que passa disto não vai voltar. */
 export const TIMEOUT_TELEGRAM_MS = 10_000;
 
-export interface ConfigDeTelegram {
+/** Segundos que o `getUpdates` segura a conexão esperando mensagem (long polling). */
+export const TIMEOUT_POLLING_S = 50;
+/** Mensagens e toques de botão: os mesmos do setWebhook. */
+export const ATUALIZACOES_DO_BOT = ["message", "callback_query"] as const;
+
+export type TransporteDoTelegram = "webhook" | "polling";
+
+interface ConfigComum {
   token: string;
-  /** Valor do header `X-Telegram-Bot-Api-Secret-Token`; o mesmo passado ao setWebhook. */
-  segredo: string;
   chatsPermitidos: ReadonlySet<number>;
 }
+
+export type ConfigDeTelegram =
+  | (ConfigComum & {
+      transporte: "webhook";
+      /** Valor do header `X-Telegram-Bot-Api-Secret-Token`; o mesmo passado ao setWebhook. */
+      segredo: string;
+    })
+  | (ConfigComum & { transporte: "polling" });
 
 /** Env presente e ilegível. Ambiente: nenhuma mensagem no chat conserta. */
 export class TelegramMalConfigurado extends Error {
@@ -47,10 +68,11 @@ const FORMATO_SEGREDO = /^[A-Za-z0-9_-]{32,256}$/;
 const FORMATO_CHAT = /^\d+$/;
 
 /**
- * Token ausente/vazio = bot desligado. Token presente exige segredo e allowlist
- * válidos — e allowlist VAZIA É ERRO, ao contrário de IPS_PERMITIDOS: o username
- * do bot é público, e um bot aberto deixaria qualquer um criar eventos na sua
- * agenda. As mensagens nunca repetem o valor lido.
+ * Token ausente/vazio = bot desligado. Token presente exige allowlist válida —
+ * e allowlist VAZIA É ERRO, ao contrário de IPS_PERMITIDOS: o username do bot é
+ * público, e um bot aberto deixaria qualquer um criar eventos na sua agenda. O
+ * segredo do webhook só é exigido (e só é lido) no transporte webhook. As
+ * mensagens nunca repetem o valor lido.
  */
 export function lerConfigDeTelegram(env: Record<string, string | undefined>): ConfigDeTelegram | null {
   const token = (env.TELEGRAM_BOT_TOKEN ?? "").trim();
@@ -58,11 +80,18 @@ export function lerConfigDeTelegram(env: Record<string, string | undefined>): Co
   if (!FORMATO_TOKEN.test(token)) {
     throw new TelegramMalConfigurado("TELEGRAM_BOT_TOKEN fora do formato do BotFather (<número>:<chave>).");
   }
-  const segredo = (env.TELEGRAM_WEBHOOK_SECRET ?? "").trim();
-  if (!FORMATO_SEGREDO.test(segredo)) {
-    throw new TelegramMalConfigurado(
-      "TELEGRAM_WEBHOOK_SECRET obrigatória com o bot ligado: 32 a 256 caracteres entre letras, dígitos, '_' e '-'.",
-    );
+  const transporte = (env.TELEGRAM_TRANSPORTE ?? "").trim() || "webhook";
+  if (transporte !== "webhook" && transporte !== "polling") {
+    throw new TelegramMalConfigurado("TELEGRAM_TRANSPORTE deve ser 'webhook' ou 'polling'.");
+  }
+  let segredo = "";
+  if (transporte === "webhook") {
+    segredo = (env.TELEGRAM_WEBHOOK_SECRET ?? "").trim();
+    if (!FORMATO_SEGREDO.test(segredo)) {
+      throw new TelegramMalConfigurado(
+        "TELEGRAM_WEBHOOK_SECRET obrigatória com o bot em webhook: 32 a 256 caracteres entre letras, dígitos, '_' e '-'.",
+      );
+    }
   }
   const ids = (env.TELEGRAM_CHAT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (ids.length === 0) {
@@ -71,12 +100,16 @@ export function lerConfigDeTelegram(env: Record<string, string | undefined>): Co
   if (!ids.every((id) => FORMATO_CHAT.test(id))) {
     throw new TelegramMalConfigurado("TELEGRAM_CHAT_IDS aceita só chat_id de conversa privada: inteiros positivos separados por vírgula.");
   }
-  return { token, segredo, chatsPermitidos: new Set(ids.map(Number)) };
+  const chatsPermitidos = new Set(ids.map(Number));
+  return transporte === "webhook"
+    ? { transporte, token, segredo, chatsPermitidos }
+    : { transporte, token, chatsPermitidos };
 }
 
 /** Para o log do boot: nunca token nem segredo. */
 export function descreverTelegram(c: ConfigDeTelegram): string {
-  return `webhook em ${ROTA_WEBHOOK_TELEGRAM}, ${c.chatsPermitidos.size} chat(s) permitido(s)`;
+  const como = c.transporte === "webhook" ? `webhook em ${ROTA_WEBHOOK_TELEGRAM}` : "polling (getUpdates)";
+  return `${como}, ${c.chatsPermitidos.size} chat(s) permitido(s)`;
 }
 
 /**
@@ -90,14 +123,19 @@ export function segredoConfere(esperado: string, recebido: unknown): boolean {
   return timingSafeEqual(a, b);
 }
 
-async function chamar<T = unknown>(c: ConfigDeTelegram, metodo: string, corpo: Record<string, unknown>): Promise<T> {
+async function chamar<T = unknown>(
+  c: ConfigDeTelegram,
+  metodo: string,
+  corpo: Record<string, unknown>,
+  timeoutMs = TIMEOUT_TELEGRAM_MS,
+): Promise<T> {
   let resp: Response;
   try {
     resp = await fetch(`https://api.telegram.org/bot${c.token}/${metodo}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
-      signal: AbortSignal.timeout(TIMEOUT_TELEGRAM_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err: any) {
     // Só o nome/código: a mensagem do fetch pode trazer a URL, e a URL traz o token.
@@ -176,8 +214,25 @@ export async function avisarDigitando(c: ConfigDeTelegram, chatId: number): Prom
 
 /**
  * Idempotente: o boot chama a cada deploy, então trocar o segredo e implantar
- * já basta. `callback_query` = os botões Aprovar/Descartar das propostas.
+ * já basta. `callback_query` = os botões Aprovar/Descartar das propostas. Só
+ * existe no transporte webhook: o tipo não deixa o polling chamar.
  */
-export async function registrarWebhook(c: ConfigDeTelegram, url: string): Promise<void> {
-  await chamar(c, "setWebhook", { url, secret_token: c.segredo, allowed_updates: ["message", "callback_query"] });
+export async function registrarWebhook(c: Extract<ConfigDeTelegram, { transporte: "webhook" }>, url: string): Promise<void> {
+  await chamar(c, "setWebhook", { url, secret_token: c.segredo, allowed_updates: [...ATUALIZACOES_DO_BOT] });
+}
+
+/**
+ * Long polling: segura a conexão até `TIMEOUT_POLLING_S` esperando mensagem.
+ * `offset` confirma ao Telegram tudo abaixo dele (o update some de lá). O
+ * timeout do fetch fica 15 s acima do do Telegram: quem encerra a espera vazia
+ * é ele, e um fetch que corta antes trataria a espera normal como falha.
+ */
+export async function buscarAtualizacoes(c: ConfigDeTelegram, offset: number | null): Promise<unknown[]> {
+  const lido = await chamar<unknown>(
+    c,
+    "getUpdates",
+    { ...(offset !== null ? { offset } : {}), timeout: TIMEOUT_POLLING_S, allowed_updates: [...ATUALIZACOES_DO_BOT] },
+    (TIMEOUT_POLLING_S + 15) * 1000,
+  );
+  return Array.isArray(lido) ? lido : [];
 }

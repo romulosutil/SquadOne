@@ -2,7 +2,13 @@
  * Transporte dos lembretes: servidor ntfy PRÓPRIO (nunca ntfy.sh — o título do
  * compromisso é dado pessoal). Só sabe publicar; quem decide o que e quando
  * avisar é `lembretes.ts`, e quem varre é `vigia.ts`.
+ *
+ * Em extinção (regra 20): o Dell avisa pela fila de avisos (`avisos.ts`). Este
+ * módulo só existe para o Easypanel seguir mandando lembrete durante os 3 dias
+ * úteis de sombra; sai depois dela, com as rotas `/api/push/*` e
+ * LEMBRETES_NTFY_URL.
  */
+import type { Aviso } from "./avisos.ts";
 
 export interface MensagemDePush {
   titulo: string;
@@ -94,6 +100,20 @@ export function lerConfigDePush(env: Record<string, string | undefined>): Config
     );
   }
   return { servidor: url.origin, topico, token };
+}
+
+/**
+ * O aviso da vigia no formato do ntfy (sombra no Easypanel). P0 e P1 viram a
+ * prioridade alta do ntfy, como o marco era antes; o resto, a padrão.
+ */
+export function avisoParaPush(a: Aviso): MensagemDePush {
+  return {
+    titulo: a.titulo,
+    corpo: a.texto,
+    prioridade: a.prioridade <= 1 ? 4 : 3,
+    tags: [],
+    ...(a.link ? { clique: a.link } : {}),
+  };
 }
 
 /** Para o log do boot: nunca o token. */

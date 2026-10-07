@@ -7,6 +7,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   avisarDigitando,
   baixarArquivo,
+  buscarAtualizacoes,
   descreverTelegram,
   editarMensagem,
   enviarMensagem,
@@ -34,11 +35,23 @@ describe("lerConfigDeTelegram", () => {
     assert.equal(lerConfigDeTelegram(env({ TELEGRAM_BOT_TOKEN: "  " })), null);
   });
 
-  it("lê token, segredo e allowlist", () => {
+  it("lê token, segredo e allowlist (webhook é o padrão)", () => {
     const c = lerConfigDeTelegram(env({ TELEGRAM_CHAT_IDS: " 111, 222 " }))!;
+    assert.equal(c.transporte, "webhook");
     assert.equal(c.token, TOKEN);
-    assert.equal(c.segredo, SEGREDO);
+    assert.equal(c.transporte === "webhook" && c.segredo, SEGREDO);
     assert.deepEqual([...c.chatsPermitidos], [111, 222]);
+  });
+
+  it("polling dispensa o segredo do webhook, mas não a allowlist", () => {
+    const c = lerConfigDeTelegram({ TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_TRANSPORTE: "polling", TELEGRAM_CHAT_IDS: "111" })!;
+    assert.equal(c.transporte, "polling");
+    assert.equal("segredo" in c, false);
+    assert.match(descreverTelegram(c), /polling/);
+    assert.throws(
+      () => lerConfigDeTelegram({ TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_TRANSPORTE: "polling", TELEGRAM_CHAT_IDS: "" }),
+      TelegramMalConfigurado,
+    );
   });
 
   const invalidos: [string, Record<string, string>][] = [
@@ -49,6 +62,7 @@ describe("lerConfigDeTelegram", () => {
     ["allowlist vazia NÃO abre o bot", { TELEGRAM_CHAT_IDS: "" }],
     ["chat id não numérico", { TELEGRAM_CHAT_IDS: "111,abc" }],
     ["chat id de grupo (negativo)", { TELEGRAM_CHAT_IDS: "-100123" }],
+    ["transporte desconhecido", { TELEGRAM_TRANSPORTE: "websocket" }],
   ];
   for (const [nome, x] of invalidos) {
     it(`recusa: ${nome}`, () => {
@@ -79,7 +93,7 @@ describe("segredoConfere", () => {
 describe("transporte", () => {
   const original = globalThis.fetch;
   afterEach(() => { globalThis.fetch = original; });
-  const c: ConfigDeTelegram = { token: TOKEN, segredo: SEGREDO, chatsPermitidos: new Set([111]) };
+  const c = { transporte: "webhook", token: TOKEN, segredo: SEGREDO, chatsPermitidos: new Set([111]) } satisfies ConfigDeTelegram;
 
   function duble(resposta: { status: number; corpo: unknown }) {
     const chamadas: { url: string; corpo: any }[] = [];
@@ -156,6 +170,23 @@ describe("transporte", () => {
     const bytes = await baixarArquivo(c, "F1");
     assert.deepEqual([...bytes], [1, 2, 3]);
     assert.equal(urls[1], `https://api.telegram.org/file/bot${TOKEN}/voice/file_1.oga`);
+  });
+
+  it("getUpdates: long polling de 50 s, mensagens e botões, offset quando há", async () => {
+    const chamadas = duble({ status: 200, corpo: { ok: true, result: [{ update_id: 7 }] } });
+    const polling: ConfigDeTelegram = { transporte: "polling", token: TOKEN, chatsPermitidos: new Set([111]) };
+    assert.deepEqual(await buscarAtualizacoes(polling, 42), [{ update_id: 7 }]);
+    assert.match(chamadas[0].url, /\/getUpdates$/);
+    assert.deepEqual(chamadas[0].corpo, { offset: 42, timeout: 50, allowed_updates: ["message", "callback_query"] });
+    await buscarAtualizacoes(polling, null);
+    assert.equal("offset" in chamadas[1].corpo, false);
+  });
+
+  it("getUpdates com webhook ativo: ErroDeTelegram 409, sem o token", async () => {
+    duble({ status: 409, corpo: { ok: false, error_code: 409, description: "Conflict: can't use getUpdates method while webhook is active" } });
+    const polling: ConfigDeTelegram = { transporte: "polling", token: TOKEN, chatsPermitidos: new Set([111]) };
+    await assert.rejects(buscarAtualizacoes(polling, null), (e: unknown) =>
+      e instanceof ErroDeTelegram && e.status === 409 && !e.message.includes(TOKEN));
   });
 
   it("baixarArquivo que falha não expõe o token", async () => {

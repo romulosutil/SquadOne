@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { lerJanela } from "./alocador.ts";
+import { validarAviso } from "./avisos.ts";
 import type { QuestCalendario } from "./calendar.ts";
 import {
   alvosDoRoster,
@@ -131,32 +132,47 @@ describe("disparosDevidos", () => {
 describe("mensagemDoDisparo", () => {
   const fuso = JANELA.fuso;
 
-  it("bloco: minutos que faltam, intervalo e domínio", () => {
+  it("bloco: minutos que faltam, intervalo e domínio, num Aviso que a fila aceita", () => {
     const [d] = disparosDevidos([quest()], AGORA, JANELA, ATIVOS, NADA);
-    assert.deepEqual(mensagemDoDisparo(d, AGORA, fuso, "Geral"), {
-      titulo: "Em 10 min: [PO] Revisar contrato",
-      corpo: "12:10–13:10 · Geral",
-      prioridade: 3,
-      tags: ["hourglass_flowing_sand"],
-      clique: "https://calendar.google.com/ev1",
+    const a = mensagemDoDisparo(d, AGORA, fuso, "Geral");
+    assert.deepEqual(a, {
+      titulo: "⏳ Em 10 min: [PO] Revisar contrato",
+      texto: "12:10–13:10 · Geral",
+      origem: "squadone:vigia",
+      chave: `lembrete:${d.chave}`,
+      prioridade: 2,
+      // Lembrete que ficou preso na fila depois do horário não serve.
+      expiraEm: "2026-09-14T15:10:00.000Z",
+      link: "https://calendar.google.com/ev1",
     });
+    validarAviso(a);
   });
 
-  it("marco com horário: prioridade alta e hora do prazo", () => {
+  it("marco com horário: P1 (não P0) e hora do prazo", () => {
     const marco = quest({ tipo: "deadline", titulo: "⏰ DEADLINE: [PO] Entregar", inicio: "2026-09-14T11:50:00-03:00", fim: "2026-09-14T12:05:00-03:00" });
     const [d] = disparosDevidos([marco], AGORA, JANELA, ATIVOS, NADA);
     const m = mensagemDoDisparo(d, AGORA, fuso, "Geral");
-    assert.equal(m.titulo, "Prazo em 5 min: [PO] Entregar");
-    assert.equal(m.corpo, "Vence às 12:05 · Geral");
-    assert.equal(m.prioridade, 4);
+    assert.equal(m.titulo, "⏰ Prazo em 5 min: [PO] Entregar");
+    assert.equal(m.texto, "Vence às 12:05 · Geral");
+    assert.equal(m.prioridade, 1);
   });
 
-  it("marco de dia inteiro: 'Prazo hoje'", () => {
+  it("marco de dia inteiro: 'Prazo hoje', vale até o fim do dia", () => {
     const marco = quest({ tipo: "deadline", titulo: "⏰ DEADLINE: [PO] Entregar", diaInteiro: true, inicio: "2026-09-14", fim: "2026-09-15" });
     const agora = t("2026-09-14T08:50:00-03:00");
     const [d] = disparosDevidos([marco], agora, JANELA, ATIVOS, NADA);
     const m = mensagemDoDisparo(d, agora, fuso, "Geral");
-    assert.equal(m.titulo, "Prazo hoje: [PO] Entregar");
-    assert.equal(m.corpo, "Vence hoje · Geral");
+    assert.equal(m.titulo, "⏰ Prazo hoje: [PO] Entregar");
+    assert.equal(m.texto, "Vence hoje · Geral");
+    assert.equal(m.expiraEm, "2026-09-15T00:00:00.000Z");
+  });
+
+  it("título com valor em R$, quebra de linha ou longo demais ainda vira aviso válido, sem o valor", () => {
+    const [d] = disparosDevidos([quest({ titulo: "Pagar boleto R$ 1.234,56\nda escola " + "x".repeat(200) })], AGORA, JANELA, ATIVOS, NADA);
+    const a = mensagemDoDisparo(d, AGORA, fuso, "Geral");
+    validarAviso(a);
+    assert.equal(a.titulo.includes("R$"), false);
+    assert.match(a.titulo, /^⏳ Em 10 min: Pagar boleto \[valor\] da escola x+…$/);
+    assert.ok(a.titulo.length <= 120);
   });
 });

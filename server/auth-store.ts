@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { diretorioDeDados } from "./dados.ts";
 import { escopoConcedido } from "./passos.ts";
 
 /**
@@ -39,7 +40,7 @@ export const ESCOPO_CALENDAR = "https://www.googleapis.com/auth/calendar.events"
 export const ESCOPO_TASKS = "https://www.googleapis.com/auth/tasks";
 export const ESCOPOS: readonly string[] = [ESCOPO_CALENDAR, ESCOPO_TASKS];
 
-const ARQUIVO = path.join(process.cwd(), "data", "google-auth.json");
+const ARQUIVO = path.join(diretorioDeDados(), "google-auth.json");
 
 /** Renova antes do fim: token que expira em voo vira 401 no meio do turno. */
 const MARGEM_MS = 60_000;
@@ -81,8 +82,24 @@ function clientId(): string {
   return exigir("VITE_GOOGLE_CLIENT_ID");
 }
 
-export function redirectUri(): string {
-  const base = process.env.APP_URL || "http://localhost:3000";
+export function redirectUri(env: NodeJS.ProcessEnv = process.env): string {
+  const base = env.APP_URL || "http://localhost:3000";
+  // No Dell o consentimento volta pelo loopback, aberto do PC pelo túnel
+  // (Mel-Tuneis, porta 9120): a credencial é a do Dell, e um redirect para o
+  // endereço da tailnet exigiria cadastrá-lo no cliente OAuth e levaria o
+  // `code` por outro caminho. APP_URL fora do loopback aqui é erro de ambiente.
+  if ((env.SQUADONE_MODE ?? "").trim() === "operations") {
+    let host = "";
+    try {
+      const url = new URL(base);
+      host = url.protocol === "http:" ? url.hostname : "";
+    } catch {
+      host = "";
+    }
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) {
+      throw new ErroDeConfig("No perfil operations o APP_URL é o loopback (http://127.0.0.1:9120): o callback do Google nunca volta pela tailnet.");
+    }
+  }
   return `${base.replace(/\/+$/, "")}/api/auth/callback`;
 }
 

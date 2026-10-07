@@ -1,17 +1,17 @@
 /**
  * Vigia dos lembretes: deduplicação em memória, retentativa, aviso de
  * desconexão e isolamento de falhas. Dependências são dublês — nada toca o
- * Google nem o ntfy.
+ * Google nem a fila de avisos.
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 import { lerJanela } from "./alocador.ts";
+import { validarAviso, type Aviso } from "./avisos.ts";
 import { PrecisaConectar } from "./auth-store.ts";
 import { listarQuestsDaJanela, type QuestCalendario } from "./calendar.ts";
 import { VARREDURA_MS } from "./lembretes.ts";
-import type { MensagemDePush } from "./push.ts";
 import type { Roster } from "./squad.ts";
-import { AVISO_DESCONECTADO, criarVigia, type DependenciasDaVigia } from "./vigia.ts";
+import { avisoDeDesconexao, criarVigia, type DependenciasDaVigia } from "./vigia.ts";
 
 const JANELA = lerJanela({});
 const AGORA = new Date("2026-09-14T12:00:00-03:00");
@@ -38,7 +38,7 @@ function quest(p: Partial<QuestCalendario> = {}): QuestCalendario {
 }
 
 function montar(sobre: Partial<DependenciasDaVigia> = {}) {
-  const enviadas: MensagemDePush[] = [];
+  const enviadas: Aviso[] = [];
   const dep: DependenciasDaVigia = {
     lerJanela: () => JANELA,
     lerRoster: async () => ROSTER,
@@ -61,15 +61,15 @@ describe("vigia", () => {
     await vigia.varrer(AGORA, REAL);
     await vigia.varrer(new Date(AGORA.getTime() + 60_000), REAL);
     assert.equal(enviadas.length, 1);
-    assert.equal(enviadas[0].titulo, "Em 10 min: [PO] Revisar contrato");
+    assert.equal(enviadas[0].titulo, "⏳ Em 10 min: [PO] Revisar contrato");
   });
 
-  it("push que falhou não entra na deduplicação e é tentado de novo", async () => {
+  it("aviso que falhou não entra na deduplicação e é tentado de novo", async () => {
     let falhar = true;
-    const enviadas: MensagemDePush[] = [];
+    const enviadas: Aviso[] = [];
     const { vigia } = montar({
       enviar: async (m) => {
-        if (falhar) throw new Error("ntfy fora");
+        if (falhar) throw new Error("fila fora");
         enviadas.push(m);
       },
     });
@@ -118,7 +118,8 @@ describe("vigia", () => {
     const r = await vigia.varrer(AGORA, REAL);
     assert.equal(r.semCredencial, true);
     await vigia.varrer(AGORA, REAL);
-    assert.deepEqual(enviadas, [AVISO_DESCONECTADO]);
+    assert.deepEqual(enviadas, [avisoDeDesconexao(AGORA)]);
+    validarAviso(enviadas[0]);
 
     conectado = true;
     await vigia.varrer(AGORA, REAL);
@@ -209,7 +210,7 @@ describe("vigia", () => {
       mock.timers.tick(VARREDURA_MS);
       await flush(); // mesma falha de novo
       assert.equal(
-        logs.filter((m) => m.startsWith("[push] varredura falhou")).length,
+        logs.filter((m) => m.startsWith("[vigia] varredura falhou")).length,
         1,
         "logou mais de uma vez a mesma falha",
       );
@@ -218,14 +219,14 @@ describe("vigia", () => {
       mock.timers.tick(VARREDURA_MS);
       await flush(); // volta a funcionar: loga uma vez
       assert.equal(
-        logs.filter((m) => m === "[push] varredura voltou a funcionar").length,
+        logs.filter((m) => m === "[vigia] varredura voltou a funcionar").length,
         1,
       );
 
       mock.timers.tick(VARREDURA_MS);
       await flush(); // continua ok: não loga de novo
       assert.equal(
-        logs.filter((m) => m === "[push] varredura voltou a funcionar").length,
+        logs.filter((m) => m === "[vigia] varredura voltou a funcionar").length,
         1,
       );
 
