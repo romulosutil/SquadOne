@@ -26,7 +26,7 @@ def garantir_workflow():
         gatilho["name"]: {"main": [[{"node": montar["name"], "type": "main", "index": 0}]]},
         montar["name"]: {"main": [[{"node": gravar["name"], "type": "main", "index": 0}]]},
     }
-    existentes = [w for w in api("GET", "/workflows?limit=200")["data"] if w["name"] == NOME]
+    existentes = [w for w in api("GET", "/workflows?limit=200")["data"] if w["name"] == NOME and not w.get("isArchived")]
     if existentes:
         wf = api("GET", f"/workflows/{existentes[0]['id']}")
         wf["nodes"], wf["connections"] = [gatilho, montar, gravar], conexoes
@@ -41,7 +41,9 @@ def garantir_workflow():
 
 def ligar_em_todos(erro_id):
     for resumo in api("GET", "/workflows?limit=200")["data"]:
-        if resumo["id"] == erro_id:
+        # Arquivado não aceita PUT (400 "Cannot update an archived workflow.") e não roda:
+        # não precisa de Error Workflow.
+        if resumo["id"] == erro_id or resumo.get("isArchived"):
             continue
         wf = api("GET", f"/workflows/{resumo['id']}")
         if (wf.get("settings") or {}).get("errorWorkflow") == erro_id:
