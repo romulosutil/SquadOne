@@ -15,7 +15,7 @@ const MESMA_ORIGEM = { origin: "https://mel.tail0000.ts.net:8443", "sec-fetch-si
 
 function servidor(logins: string) {
   const app = express();
-  const estado = { banco: null, sincronizador: null, problema: null };
+  const estado = { banco: null, sincronizador: null, avisador: null, problema: null };
   app.use("/api/financas", criarRotasDeFinancas(estado, { logins: lerLoginsPermitidos({ SQUADONE_LOGINS_TAILSCALE: logins }) }));
   return http.createServer(app);
 }

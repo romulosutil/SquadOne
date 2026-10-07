@@ -10,7 +10,7 @@
  * Tocar num personagem do Mapa abre a sala dele numa folha, com os mesmos
  * gestos da Lista.
  */
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Sheet from '../components/Sheet.vue'
 import SalaCartao from '../components/SalaCartao.vue'
 import SalasPainel from '../components/SalasPainel.vue'
@@ -18,6 +18,7 @@ import SquadSelector from '../components/SquadSelector.vue'
 import { useAgentes } from '../agentes/estado'
 import { estadoDaPessoa } from '../casca/hoje'
 import { gravarVista, lerVistaGuardada, vistaInicial, type VistaDoEscritorio } from '../office/vista'
+import { ehSalaDeFinancas, estadoDoAgente, type EstadoDasFinancas, type EstadoDoAgente } from '../office/salaFinancas'
 
 const GameMap = defineAsyncComponent({
   loader: () => import('../components/GameMap.vue'),
@@ -74,6 +75,43 @@ const status = computed(() => {
   return 'Aguardando pedidos'
 })
 
+// Sala Finanças (07/10/2026): o PO da sala "Finanças" mostra a % do limite do
+// cartão e do orçamento do mês — balão no Mapa, linha de texto na Lista. Só o
+// Dell tem finanças: no Easypanel a rota cai no fallback da SPA (HTML), e a
+// sala fica sem estado. Só % e semáforo (RULES 24); nada entra no roster nem no prompt.
+const estadoDasFinancas = ref<EstadoDasFinancas | null>(null)
+const salasDeFinancas = computed(() => (squadAtiva.value?.dominios ?? []).filter(ehSalaDeFinancas))
+const estadoDaSalaFinancas = computed(() => estadoDoAgente(estadoDasFinancas.value))
+const estadosDasSalas = computed<Record<string, EstadoDoAgente>>(() => {
+  const estado = estadoDaSalaFinancas.value
+  return estado ? Object.fromEntries(salasDeFinancas.value.map((d) => [d.id, estado])) : {}
+})
+async function lerEstadoDasFinancas() {
+  if (!salasDeFinancas.value.length) return
+  try {
+    const resposta = await fetch('/api/financas/estado')
+    const json = (resposta.headers.get('content-type') ?? '').includes('application/json')
+    estadoDasFinancas.value = resposta.ok && json ? await resposta.json() : null
+  } catch {
+    estadoDasFinancas.value = null
+  }
+}
+watch(
+  () => salasDeFinancas.value.length > 0,
+  (tem) => {
+    if (tem) void lerEstadoDasFinancas()
+  },
+  { immediate: true }
+)
+let relogioDasFinancas = 0
+onMounted(() => {
+  // A leitura diária da Pluggy e um gasto anotado pelo Telegram mudam a %: relê com a aba visível.
+  relogioDasFinancas = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void lerEstadoDasFinancas()
+  }, 5 * 60_000)
+})
+onBeforeUnmount(() => window.clearInterval(relogioDasFinancas))
+
 const salaAberta = ref<string | null>(null)
 const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id === salaAberta.value) ?? null)
 </script>
@@ -107,6 +145,9 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         <!-- No Mapa o estado fica no cabeçalho dele, junto da escala. -->
         <p v-if="vista === 'lista'" class="escritorio__status" role="status">{{ status }}</p>
       </div>
+      <p v-if="vista === 'lista' && estadoDaSalaFinancas" class="escritorio__financas" :data-semaforo="estadoDaSalaFinancas.semaforo">
+        <b>Sala {{ salasDeFinancas[0].nome }}:</b> {{ estadoDaSalaFinancas.texto }} <a href="/financas">ver Finanças</a>
+      </p>
 
       <SalasPainel
         v-if="vista === 'lista'"
@@ -132,6 +173,7 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         :squad="squadAtiva"
         :estados="estados"
         :status="status"
+        :estados-das-salas="estadosDasSalas"
         @abrir-sala="salaAberta = $event"
       />
     </template>
@@ -161,4 +203,11 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
 .escritorio p { margin: 0; }
 .escritorio__barra { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3); }
 .escritorio__status { font-weight: 900; }
+/* A borda é o semáforo; o texto já diz a %, a cor nunca é a única pista. */
+.escritorio__financas { padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); border-left-width: 8px; background: var(--superficie); }
+.escritorio__financas[data-semaforo='verde'] { border-left-color: var(--positivo); }
+.escritorio__financas[data-semaforo='amarelo'] { border-left-color: var(--destaque); }
+.escritorio__financas[data-semaforo='laranja'] { border-left-color: var(--acento); }
+.escritorio__financas[data-semaforo='vermelho'] { border-left-color: var(--negativo); background: var(--erro-fundo); }
+.escritorio__financas a { color: inherit; font-weight: 900; }
 </style>

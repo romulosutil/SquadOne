@@ -28,6 +28,7 @@ export interface CartaoVisto {
   limiteCentavos: number | null
   usadoBancoCentavos: number | null
   usoPct: number | null
+  semaforo: Semaforo | null
   fechada: { vencimento: string; centavos: number; pagoCentavos: number } | null
   aberta: { vencimento: string; centavos: number; semLancamentos: boolean }
   futurasCentavos: number
@@ -47,6 +48,26 @@ export interface Parcelamento {
   acabaEm: string
 }
 
+export type Semaforo = 'verde' | 'amarelo' | 'laranja' | 'vermelho'
+
+export interface OrcamentoDaCategoria {
+  categoria: string
+  limiteCentavos: number
+  gastoCentavos: number
+  pct: number
+  semaforo: Semaforo
+}
+
+export interface Recorrente {
+  estabelecimento: string
+  descricao: string
+  categoria: string
+  mediaCentavos: number
+  vezes: number
+  ultimaData: string
+  origem: 'detectado' | 'marcado'
+}
+
 export interface VisaoFinanceira extends Situacao {
   hoje: string
   mes: string
@@ -61,8 +82,29 @@ export interface VisaoFinanceira extends Situacao {
   }
   gastei: { totalCentavos: number; anteriorCentavos: number; categorias: { categoria: string; centavos: number; anteriorCentavos: number }[] }
   recebi: { totalCentavos: number; anteriorCentavos: number }
-  recorrentes: { descricao: string; categoria: string; mediaCentavos: number; meses: number; ultimoMes: string }[]
+  orcamento: { limiteCentavos: number; gastoCentavos: number; pct: number; semaforo: Semaforo; categorias: OrcamentoDaCategoria[] } | null
+  recorrentes: Recorrente[]
+  recorrentesDesmarcados: { estabelecimento: string; descricao: string }[]
   saude: { conexoes: ConexaoVista[]; dadosAte: string | null }
+}
+
+export interface Organizacao extends Situacao {
+  categorias: { nome: string; lancamentos: number; orcamentoCentavos: number | null; fixa: boolean }[]
+  regras: { estabelecimento: string; categoria: string; lancamentos: number }[]
+}
+
+export interface PreviaDoExtrato {
+  conta: { id: string; nome: string; tipo: string }
+  formato: 'ofx' | 'csv'
+  lidos: number
+  novos: number
+  jaEstavam: number
+  ignoradas: number
+  invertido: boolean
+  sugereInverter: boolean
+  periodo: { de: string; ate: string }
+  lancamentos: { data: string; descricao: string; centavos: number; novo: boolean }[]
+  gravado: boolean
 }
 
 export interface Lancamento {
@@ -73,6 +115,11 @@ export interface Lancamento {
   centavos: number
   natureza: string
   categoria: string
+  origemCategoria: 'pluggy' | 'regra' | 'regra_usuario' | 'usuario' | 'nenhuma'
+  estabelecimento: string
+  temRegra: boolean
+  recorrente: boolean
+  marcaDeRecorrente: boolean | null
   contaId: string
   conta: string
   parcela: string | null
@@ -88,6 +135,7 @@ export interface ListaDeLancamentos extends Situacao {
   lancamentos: Lancamento[]
   contas: { id: string; nome: string; tipo: string }[]
   categorias: string[]
+  categoriasEscolhiveis: string[]
 }
 
 export interface PreviaDaFatura {
