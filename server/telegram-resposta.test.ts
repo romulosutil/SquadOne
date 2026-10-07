@@ -13,7 +13,7 @@ import {
 import { AudioSemFala, MAX_TRANSCRICAO, textoTranscrito } from "./transcricao.ts";
 import { ModeloOcupado, type TurnoResult } from "./orchestrator.ts";
 import { JanelaMalConfigurada } from "./alocador.ts";
-import { RosterIlegivel } from "./squad.ts";
+import { RosterIlegivel, SquadArquivada, SquadInexistente } from "./squad.ts";
 import type { EventoCriado } from "./capabilities.ts";
 
 const FMT = { locale: "pt-BR", timeZone: "America/Sao_Paulo" };
@@ -117,6 +117,14 @@ describe("textoDaFalha", () => {
     assert.match(textoDaFalha(new RosterIlegivel("forma desconhecida")), /^⚙️ squad\.json ilegível no servidor/);
     assert.match(textoDaFalha(new Error("boom")), /^❌ Erro ao processar a demanda: boom$/);
     assert.match(textoDaFalha("string solta"), /^❌ Erro ao processar a demanda: string solta$/);
+  });
+
+  it("squad do prefixo /p sumida ou arquivada: diz que nada foi criado e como mandar sem o prefixo", () => {
+    const sumida = textoDaFalha(new SquadInexistente("prumo", ["pessoal", "pj"]));
+    assert.match(sumida, /^❌ A squad 'prumo' não existe\./);
+    assert.match(sumida, /Nada foi criado; mande sem o prefixo/);
+    const arquivada = { id: "prumo", nome: "PRUMO", calendarId: "primary", escopo: "", unlockOrder: [], dominios: [] };
+    assert.match(textoDaFalha(new SquadArquivada(arquivada, ["pessoal"])), /^❌ A squad 'PRUMO' está arquivada\..*Nada foi criado/);
   });
 });
 

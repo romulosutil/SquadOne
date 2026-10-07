@@ -230,8 +230,9 @@ async function startServer() {
     const bot = (botDoTelegram = criarBotDoTelegram({
       segredo: c.transporte === "webhook" ? c.segredo : null,
       chatsPermitidos: c.chatsPermitidos,
-      // Sem squadId: o bot não tem aba. Primeira squad ativa + redirecionamento automático.
-      rodar: (demanda, modo) => rodarDemanda(ai, { demanda, modo }),
+      // O bot não tem aba: sem prefixo, squadId ausente = primeira squad ativa +
+      // redirecionamento automático; com `/p`, a squad do prefixo (telegram-entrada).
+      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }),
       enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
       digitando: (chatId) => avisarDigitando(c, chatId),
       transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),

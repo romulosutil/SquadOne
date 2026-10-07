@@ -116,8 +116,44 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
 5. **Casca mobile completa**: `App.vue` dividido, Pedir como folha, Hoje na
    ordem da regra 13, escritório com Lista|Mapa.
 6. Organização das finanças e alertas de 70/90/100%; 7. PRUMO como uma squad,
-   com o Site antes da venda como sala; 8. o resto (roster em SQLite, Luna em
-   sombra, explicação com IA).
+   com o Site antes da venda como sala (feito em 07/10/2026, ver "PRUMO como
+   squad"); 8. o resto (roster em SQLite, Luna em sombra, explicação com IA).
+
+### PRUMO como squad (07/10/2026)
+
+SquadOne (app) › PRUMO (squad `prumo`) › Site antes da venda (sala). Criada
+no roster de produção do Dell pelo fluxo de Nova squad que já existia (Nova
+squad, ✎ na sala raiz, Abrir sala três vezes), sem mudar o schema v3. São
+quatro salas, no máximo, e cada uma é **quem trabalha**, não uma etapa do
+funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
+
+| Sala (id) | Quem trabalha | Automáticos (catálogo) |
+|---|---|---|
+| Atendimento e proposta (`prumo--geral`, sala raiz) | todo contato com lead e dono: convite, abordagem com o site, follow-up, conversa, proposta, fechamento; e o do PRUMO sem outra sala | Balcão |
+| Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador, Lead Scout |
+| Site antes da venda (`prumo--site-antes-da-venda`) | fazer, publicar, ajustar e pausar os sites (demo e de quem fechou) | gerador |
+| Organizar (`prumo--organizar`) | a consultoria: diagnóstico, Índice PRUMO, Mapa, entrevistas, recomendação, workshop | Diagnóstico |
+
+- **`prumo--geral` é o Atendimento.** Nova squad sempre nasce com a sala
+  "Geral"; ela foi renomeada no ✎, e id nunca muda. Ser a sala raiz combina
+  com o papel: o PO dela é quem fala com o cliente e recebe o que não tem
+  outra sala.
+- **"Não cuida de" explícito em todo escopo** (squad, sala e treino do PO),
+  apontando a sala ou a squad certa. É o que evita ida e volta no
+  redirecionamento: a squad PJ já tinha uma sala Prospecção (clientes
+  freelance), e o escopo da squad PRUMO diz que não cuida deles. O treino só
+  existe no roster de produção; muda-se pelo ✎, não pelo Git.
+- **Telegram `/p`** (`server/telegram-entrada.ts`, `PREFIXOS_DE_SQUAD`):
+  prefixo sem estado que fixa a squad `prumo` pelo id, combinável com
+  `/foco`/`/baixa` em qualquer ordem e na legenda do áudio. Nenhuma chamada a
+  mais ao modelo; o redirecionamento automático continua como rede. Squad
+  arquivada ou sumida: o turno falha antes do Gemini e a resposta diz para
+  mandar sem o prefixo (regra 20).
+- **Catálogo dos trabalhadores automáticos** (`src/office/trabalhadores.ts`,
+  regra 26): versionado, fora do prompt, mostrado em texto sob cada sala no
+  painel de salas. Cada trabalhador aponta para a mesma verificação do
+  `status.json` que o passo dele em `fluxos.ts`; o teste confere as duas
+  listas e que nenhum módulo do servidor importa o catálogo.
 
 ### Finanças (07/10/2026)
 

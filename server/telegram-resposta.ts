@@ -3,7 +3,7 @@ import { ModeloOcupado, type ErroTarefa, type TurnoResult } from "./orchestrator
 import type { Sugestao } from "./capabilities.ts";
 import { AudioSemFala } from "./transcricao.ts";
 import { JanelaMalConfigurada } from "./alocador.ts";
-import { RosterIlegivel } from "./squad.ts";
+import { RosterIlegivel, SquadInexistente } from "./squad.ts";
 
 /**
  * PURO: o `TurnoResult` em texto de chat. É o `handleDelegation` do App.vue sem
@@ -107,6 +107,9 @@ export function textoDaFalha(err: unknown): string {
   if (err instanceof ModeloOcupado) return "⏳ Gemini sobrecarregado agora. Reenvie a mensagem em alguns segundos.";
   if (err instanceof JanelaMalConfigurada) return `⚙️ JANELA_TRABALHO/DIAS_TRABALHO inválida no servidor: ${msg}`;
   if (err instanceof RosterIlegivel) return "⚙️ squad.json ilegível no servidor. Veja o log do Easypanel.";
+  // No bot só um prefixo de squad (`/p`) pede squad por id. Falha antes do
+  // Gemini: nada foi criado, e sem o prefixo a squad sai do conteúdo.
+  if (err instanceof SquadInexistente) return `❌ ${msg} Nada foi criado; mande sem o prefixo para a squad ser escolhida pelo conteúdo.`;
   return `❌ Erro ao processar a demanda: ${msg}`;
 }
 

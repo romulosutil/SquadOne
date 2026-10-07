@@ -7,6 +7,7 @@
  */
 import { ref } from 'vue'
 import type { Dominio, SquadView } from '../types'
+import { trabalhadoresDaSala } from '../office/trabalhadores'
 
 const props = defineProps<{ squad: SquadView; totalArquivado: number; desabilitado: boolean }>()
 
@@ -48,6 +49,14 @@ const contagem = (d: Dominio) => {
 }
 
 const rotulo = (p: { nome: string; papel: string }) => `${p.nome} · ${p.papel}`
+
+/**
+ * Fluxos do n8n e timers do Dell ligados a esta sala pelo catálogo versionado
+ * (office/trabalhadores.ts). Só leitura e só aqui: o catálogo não entra no
+ * prompt, e o estado de cada um (rodou, falhou) fica na Central, que lê o
+ * status.json — mostrar saúde aqui sem essa fonte seria inventar (RULES 2).
+ */
+const automaticos = (d: Dominio) => trabalhadoresDaSala(d.id)
 
 const BOTAO =
   'border-2 border-black bg-white px-2 py-0.5 font-black text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-40'
@@ -135,6 +144,13 @@ const TEXTO_CHIP = 'min-w-0 truncate'
             <button type="button" :class="MINI" :disabled="desabilitado" title="Arquivar" @click="emit('arquivarPessoa', p.id)">🗄</button>
           </li>
         </ul>
+
+        <p v-if="automaticos(d).length" class="mt-1 text-xs font-bold text-gray-700">
+          <span class="font-black uppercase">Automáticos:</span>
+          <template v-for="(t, i) in automaticos(d)" :key="t.id">
+            {{ i ? ' · ' : ' ' }}<span :title="`${t.faz} (${t.onde})`">{{ t.nome }} ({{ t.quando }})</span>
+          </template>
+        </p>
       </li>
     </ul>
   </section>
