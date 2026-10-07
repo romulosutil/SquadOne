@@ -219,6 +219,14 @@ Desde 29/09/2026 também confere:
   no meio de um lead (status "processando" sem o processo da trava) ou quando o
   systemd registrou falha depois do último resumo. Falha com algum site ou pasta
   sumida é atenção; lead descartado pelo Claude é normal.
+- **Rascunho do Mapa** (`prumo-mapa`, desde 07/10/2026), pelo rastro em disco,
+  porque o `prumo-mapa` não grava resumo: falha com o `prumo-mapa.path` parado
+  ou com pacote na `mapa-fila` há mais de 30 min (a unit tem 20 min de teto;
+  o detalhe traz o `Result` do systemd quando a última execução caiu). Pacote
+  em `~/.local/share/prumo-mapa-erro` é atenção, não WhatsApp: o próprio
+  `prumo-mapa` já avisou com o motivo. O ok conta os rascunhos de
+  `~/prumo-entregas` (pastas `-teste-` fora) e a data do último, sem nome de
+  empresa.
 
 Desde 30/09/2026 cada verificação que não está ok diz **o que fazer**
 (`o_que_fazer`, uma ou duas frases; `acao` com o link que resolve; `sozinho`
@@ -723,6 +731,10 @@ resposta completa de um prospect, grava um pacote em
   o PDF (7 páginas A4, visual do exemplo Vale Norte, Archivo embutida);
 - avisa o Rômulo pela fila de avisos. Pacote ruim vai para
   `~/.local/share/prumo-mapa-erro/`, com aviso; resposta repetida é descartada.
+
+O `dell-status` confere o gatilho, a fila e a pasta de erro (verificação
+`prumo-mapa`, ver "Monitor do Dell"); a Central mostra o estado no passo
+"Rascunho do Mapa em PDF" e na sala Organizar.
 
 O formulário só tem as respostas do dono: mapa de dependência, inventário,
 travas em reais e recomendação saem como `[PREENCHER]` (página que estoura

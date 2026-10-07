@@ -36,7 +36,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from datetime import time as horario
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -798,6 +798,79 @@ def gerador() -> list[dict]:
     return [check("gerador", "dados", nome, "ok", f"Execução de {quando}: {resumo}")]
 
 
+# ---------------------------------------------------------------- rascunho do Mapa (PRUMO)
+
+MAPA_FILA = HOME / ".local/share/n8n-estado/mapa-fila"
+MAPA_ERRO = HOME / ".local/share/prumo-mapa-erro"
+MAPA_ENTREGAS = HOME / "prumo-entregas"
+# A unit tem 20 min de teto (TimeoutStartSec): pacote mais velho que isto na
+# fila não está sendo gerado, está esquecido.
+MAPA_PARADO = timedelta(minutes=30)
+
+
+def avaliar_prumo_mapa(gatilho: bool, fila: list[datetime], erros: list[datetime], entregas: list[date],
+                       resultado: str, saiu: datetime | None, t: datetime) -> dict:
+    """O rascunho do Mapa não grava resumo próprio: a evidência é o rastro em
+    disco. O n8n põe um pacote em mapa-fila, o prumo-mapa.path dispara o
+    gerador e ele apaga o pacote ao terminar (ou o move para a pasta de erro,
+    avisando com o motivo). Gatilho parado ou pacote além de MAPA_PARADO =
+    falha: nenhum Mapa sai até alguém mexer. Pacote na pasta de erro =
+    atenção: o próprio prumo-mapa já avisou pelo WhatsApp, e repetir a cada
+    12 h não ajuda. Nome de empresa nunca entra no detalhe."""
+    nome = "Rascunho do Mapa (PRUMO)"
+    diario = "journalctl --user -u prumo-mapa"
+    if not gatilho:
+        return check("prumo-mapa", "dados", nome, "falha",
+                     "O gatilho prumo-mapa.path está parado: diagnóstico novo não vira rascunho do Mapa"
+                     + (f"; {len(fila)} pacote(s) esperando" if fila else "") + ".",
+                     o_que_fazer="Peça ao Claude: \"o prumo-mapa.path parou no Dell\". Os pacotes esperam na fila "
+                                 "e viram Mapa quando o gatilho voltar.")
+    parados = sorted(m for m in fila if t - m > MAPA_PARADO)
+    if parados:
+        caiu = (f" A última execução caiu às {_hm(saiu, t)} (systemd: {resultado})."
+                if resultado not in ("", "success") and saiu else "")
+        return check("prumo-mapa", "dados", nome, "falha",
+                     f"{len(parados)} pacote(s) na fila desde {_hm(parados[0], t)} sem virar Mapa.{caiu}",
+                     o_que_fazer=f"Peça ao Claude: \"o prumo-mapa travou\" (log: {diario}). O pacote continua na "
+                                 "fila e vira Mapa assim que o gerador voltar.")
+    if erros:
+        return check("prumo-mapa", "dados", nome, "atencao",
+                     f"{len(erros)} pacote(s) com erro desde {_hm(min(erros), t)} em ~/.local/share/prumo-mapa-erro.",
+                     o_que_fazer="Um diagnóstico ficou sem rascunho do Mapa (o motivo veio no aviso do WhatsApp). "
+                                 "Peça ao Claude: \"o prumo-mapa falhou\": ele corrige, devolve o pacote à fila e "
+                                 "tira da pasta de erro o que não servir.")
+    if fila:
+        return check("prumo-mapa", "dados", nome, "ok", f"Gerando: {len(fila)} pacote(s) na fila.")
+    if not entregas:
+        return check("prumo-mapa", "dados", nome, "ok", "Fila vazia; nenhum rascunho ainda.")
+    return check("prumo-mapa", "dados", nome, "ok",
+                 f"Fila vazia; {len(entregas)} rascunho(s) gerado(s), o último em {max(entregas):%d/%m}.")
+
+
+def prumo_mapa() -> list[dict]:
+    """Rascunho do Mapa (deploy/dell/prumo-mapa), pelo rastro em disco e pelo
+    systemd. Pastas de teste (`-teste-` no nome) não contam como entrega."""
+    def instantes(pasta: Path) -> list[datetime]:
+        if not pasta.is_dir():
+            return []
+        return [datetime.fromtimestamp(p.stat().st_mtime, timezone.utc) for p in pasta.glob("*.json")]
+
+    entregas = []
+    for dj in MAPA_ENTREGAS.glob("*/dados.json") if MAPA_ENTREGAS.is_dir() else []:
+        if "-teste-" in dj.parent.name:
+            continue
+        try:
+            entregas.append(date.fromisoformat(dj.parent.name[:10]))
+        except ValueError:
+            continue
+    try:
+        resultado, saiu = _unit_resultado("prumo-mapa.service")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        resultado, saiu = "", None
+    return [avaliar_prumo_mapa(unit_ativa("prumo-mapa.path"), instantes(MAPA_FILA), instantes(MAPA_ERRO),
+                               entregas, resultado, saiu, agora())]
+
+
 # ---------------------------------------------------------------- pendências (o que depende do Rômulo)
 
 ESTADO_N8N = HOME / ".local/share/n8n-estado"
@@ -1339,8 +1412,8 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, pendencias, easypanel, backup,
-               fila_de_avisos):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, prumo_mapa, pendencias, easypanel,
+               backup, fila_de_avisos):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

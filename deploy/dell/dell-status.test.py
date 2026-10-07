@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
-de cron, as rotinas do Hermes, o gerador de sites, os fluxos do n8n (pela
+de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
 agenda de cada um), as filas, o backup e o "o que fazer" de cada alerta. Tudo
 em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
 Hermes.
@@ -13,7 +13,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
@@ -194,6 +194,78 @@ class Gerador(unittest.TestCase):
         ds._unit_resultado = lambda unit: ("exit-code", br("2026-09-29T08:05:35"))
         c = self.estado(self.resumo(concluidos=["a"]))
         self.assertEqual(c["estado"], "ok")
+
+
+class PrumoMapa(unittest.TestCase):
+    T = br("2026-10-07T10:00")
+
+    def avaliar(self, gatilho=True, fila=(), erros=(), entregas=(), resultado="success", saiu=None):
+        return ds.avaliar_prumo_mapa(gatilho, list(fila), list(erros), list(entregas), resultado, saiu, self.T)
+
+    def test_fila_vazia_e_ok(self):
+        c = self.avaliar()
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("nenhum rascunho", c["detalhe"])
+        c = self.avaliar(entregas=[date(2026, 10, 1), date(2026, 10, 5)])
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("2 rascunho(s)", c["detalhe"])
+        self.assertIn("05/10", c["detalhe"])
+
+    def test_pacote_recente_esta_sendo_gerado(self):
+        c = self.avaliar(fila=[self.T - timedelta(minutes=29)])
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("Gerando", c["detalhe"])
+
+    def test_pacote_esquecido_na_fila_e_falha(self):
+        velho = self.T - timedelta(minutes=31)
+        c = self.avaliar(fila=[velho, self.T - timedelta(minutes=2)], resultado="exit-code",
+                         saiu=self.T - timedelta(minutes=25))
+        self.assertEqual(c["estado"], "falha")
+        self.assertIn("1 pacote(s) na fila", c["detalhe"])
+        self.assertIn("systemd: exit-code", c["detalhe"])
+        self.assertIn("travou", c["o_que_fazer"])
+        self.assertNotIn("caiu", self.avaliar(fila=[velho])["detalhe"])
+
+    def test_gatilho_parado_e_falha_mesmo_sem_pacote(self):
+        self.assertEqual(self.avaliar(gatilho=False)["estado"], "falha")
+        c = self.avaliar(gatilho=False, fila=[self.T - timedelta(minutes=1)])
+        self.assertIn("1 pacote(s) esperando", c["detalhe"])
+        self.assertIn("prumo-mapa.path", c["o_que_fazer"])
+
+    def test_pacote_com_erro_e_atencao_porque_o_prumo_mapa_ja_avisou(self):
+        c = self.avaliar(erros=[self.T - timedelta(days=2)], entregas=[date(2026, 10, 1)])
+        self.assertEqual(c["estado"], "atencao")
+        self.assertIn("1 pacote(s) com erro", c["detalhe"])
+        self.assertIn("devolve o pacote à fila", c["o_que_fazer"])
+        # Fila travada vence: é ela que impede o próximo Mapa.
+        c = self.avaliar(erros=[self.T - timedelta(days=2)], fila=[self.T - timedelta(hours=1)])
+        self.assertEqual(c["estado"], "falha")
+
+    def test_le_o_rastro_em_disco_sem_contar_teste_nem_por_nome_de_empresa(self):
+        raiz = Path(tempfile.mkdtemp(prefix="dell-status-mapa-"))
+        self.addCleanup(shutil.rmtree, raiz)
+        for nome in ("MAPA_FILA", "MAPA_ERRO", "MAPA_ENTREGAS", "unit_ativa", "_unit_resultado"):
+            self.addCleanup(setattr, ds, nome, getattr(ds, nome))
+        ds.MAPA_FILA, ds.MAPA_ERRO, ds.MAPA_ENTREGAS = raiz / "fila", raiz / "erro", raiz / "entregas"
+        ds.unit_ativa = lambda unit: unit == "prumo-mapa.path"
+        ds._unit_resultado = lambda unit: ("success", None)
+        for pasta in ("2026-10-05-padaria-do-ze", "2026-09-29-teste-vale-norte", "sem-data"):
+            (ds.MAPA_ENTREGAS / pasta).mkdir(parents=True)
+            (ds.MAPA_ENTREGAS / pasta / "dados.json").write_text("{}")
+        (ds.MAPA_ENTREGAS / "LEIA-ME.txt").write_text("x")
+        ds.MAPA_FILA.mkdir()
+        pacote = ds.MAPA_FILA / "resp-1.json"
+        pacote.write_text("{}")
+        uma_hora = ds.agora().timestamp() - 3600
+        os.utime(pacote, (uma_hora, uma_hora))
+        (c,) = ds.prumo_mapa()
+        self.assertEqual(c["estado"], "falha")
+        pacote.unlink()
+        (c,) = ds.prumo_mapa()
+        self.assertEqual((c["id"], c["estado"]), ("prumo-mapa", "ok"))
+        self.assertIn("1 rascunho(s)", c["detalhe"])
+        self.assertIn("05/10", c["detalhe"])
+        self.assertNotIn("padaria", json.dumps(c))
 
 
 def fluxo(id_="w1", nome="01 · Caçador", gatilho=None, salva_boas=True, criado="2026-09-23T15:13:29.465Z",

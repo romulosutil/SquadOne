@@ -83,14 +83,13 @@ export const TRABALHADORES: readonly TrabalhadorAutomatico[] = [
     verificacao: "fluxo:b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f",
   },
   {
-    // Sem verificação: o dell-status não confere a unit nem a fila mapa-fila.
-    // Pacote parado ali só aparece como Mapa que não chegou a ~/prumo-entregas.
     id: "prumo-mapa",
     nome: "Rascunho do Mapa",
     sala: "prumo--organizar",
     faz: "monta o PDF de 7 páginas do Mapa com o que o formulário permite e deixa [PREENCHER] no resto, em ~/prumo-entregas",
     onde: "prumo-mapa (unit .path sobre a fila do n8n), no Dell",
     quando: "na hora, quando o Diagnóstico manda o pacote",
+    verificacao: "prumo-mapa",
   },
 ];
 
