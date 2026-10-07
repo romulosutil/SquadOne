@@ -10,7 +10,7 @@
  * primeiro: barra inferior com o ＋Pedir no meio; a partir de 1024 px, barra
  * lateral e Ctrl+K.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ArquivoFolha from './components/ArquivoFolha.vue'
 import ContratarFolha from './components/ContratarFolha.vue'
 import EditarFolha from './components/EditarFolha.vue'
@@ -63,13 +63,6 @@ const abrirPedir = () => {
   if (!pedirIndisponivel.value) ag.abrirPedir()
 }
 
-// O CRM ainda usa o visual da Central (operations.css, só claro): na rota dele
-// a página inteira fica no tema claro, folhas inclusive, para nada ficar com
-// texto escuro sobre o fundo escuro. As telas novas usam os tokens e o escuro.
-watchEffect(() => {
-  if (rota.value === 'funil') document.documentElement.dataset.theme = 'light'
-  else if (document.documentElement.dataset.theme === 'light') delete document.documentElement.dataset.theme
-})
 
 // ---------------------------------------------------------------- Ctrl+K
 
@@ -172,7 +165,7 @@ const {
       <main id="conteudo" class="casca__conteudo" tabindex="-1">
         <HojeRota v-if="rota === 'hoje'" :capacidades="capacidades" />
         <AgendaRota v-else-if="rota === 'agenda'" />
-        <div v-else-if="rota === 'funil'" class="ops-escopo"><CrmPanel /></div>
+        <CrmPanel v-else-if="rota === 'funil'" />
         <!-- :key pelo caminho: Visão e Lançamentos leem a aba ao montar. -->
         <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
         <EscritorioRota v-else-if="rota === 'escritorio'" />
