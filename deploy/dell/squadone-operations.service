@@ -7,11 +7,16 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=%h/SquadOne
 EnvironmentFile=%h/.config/squadone/operations.env
+# Credencial da Pluggy (PLUGGY_CLIENT_ID, _SECRET, _ITEM_IDS): 600, fora do repo,
+# do n8n e de data/; só este processo a lê. O "-" deixa a Central subir sem ela.
+EnvironmentFile=-%h/.config/squadone/financas.env
 Environment=APP_URL=http://127.0.0.1:9120
 ExecStart=/usr/bin/npm start
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
+# Todo arquivo que o processo cria nasce 600 (financas.db e a cópia, RULES 24).
+UMask=0077
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only

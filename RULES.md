@@ -41,9 +41,13 @@
    agenda para o Dell, junto com o roster de **produção**, nunca sobre o
    retrato de 14/09/2026 que o Dell tem hoje: até lá seguem desmontadas e
    respondem 404 JSON (a higiene de 06/10/2026 fechou a escrita no Dell por
-   isso). `/api/operations/*` continua só no `operations`: o perfil `app` não
-   tem os dados do Dell. Rota nova entra explicitamente, nunca por "montar
-   tudo".
+   isso). A exceção são as **finanças** (`/api/financas/*`, 07/10/2026): não
+   dependem do roster nem da agenda e entram antes ("Transição", 3), já com a
+   segunda e a terceira trava — a lista de logins fica em `tailscaleLogins` do
+   `operations.json`, e com ela vazia as finanças fecham para quem chega pelo
+   Serve. `/api/operations/*` e `/api/financas/*` continuam só no `operations`:
+   o perfil `app` não tem os dados do Dell. Rota nova entra explicitamente,
+   nunca por "montar tudo".
 8. Health checks operacionais são alvos fixos da configuração local. O
    navegador nunca envia comandos, processos ou URLs para serem executados.
 9. Projetos locais ficam fora do Git, exigem nome e destino e recusam esquemas

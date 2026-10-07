@@ -88,7 +88,9 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
 2. **Regras** (este documento e o `RULES.md`).
 3. **Finanças no Dell**, que não esperam a mudança da agenda: banco próprio,
    tela de Visão, e nasce a casca mobile (tokens, barra inferior com o ＋Pedir
-   desabilitado).
+   desabilitado). Implementado em 07/10/2026 (ver "Finanças", abaixo); a
+   conferência de identidade do Serve entrou junto, ligada por
+   `tailscaleLogins`.
 4. **Mudança da agenda para o Dell.** O roster de **produção** é a verdade; o
    do Dell é arquivado, nunca mesclado, com as contratações congeladas durante
    a troca. Nesta ordem, cada passo com volta:
@@ -113,6 +115,56 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    com o Site antes da venda como sala; 8. o resto (roster em SQLite, Luna em
    sombra, explicação com IA).
 
+### Finanças (07/10/2026)
+
+Como está no código (perfil `operations`; instalação e conferência em
+`deploy/dell/README.md`, "Finanças"):
+
+```
+Meu Pluggy (Santander, Nubank, Mercado Pago)
+  └─ api.pluggy.ai ── polling 1x/dia depois das 7h + botão "Atualizar agora"
+       └─ server/financas/sync.ts ── por conexão, numa transação
+            ├─ pluggy-mapa.ts (PURO): JSON → conta, fatura, transação
+            ├─ dedupe.ts (PURO): PENDENTE→LANÇADO, id trocado, Pluggy vence PDF
+            └─ banco.ts: financas.db (SQLite, 600, migrações em user_version)
+       └─ processar.ts (PURO), sobre tudo: natureza → fatura → pagamento pelo
+          valor → pares entre contas → parcelas → categoria
+       └─ VACUUM INTO financas.copia.db (600) → cofre restic
+fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
+  └─ conferência contra o total da fatura da Pluggy → grava no 2º toque
+/api/financas/{visao,lancamentos,sincronizar,importar/santander}
+  └─ resumo.ts (PURO): tenho, devo, gastei (competência|caixa), recorrentes
+```
+
+- **Dinheiro em centavos inteiros**, com sinal do ponto de vista do
+  patrimônio (negativo = saiu ou aumentou a dívida). A conferência da fatura
+  exige bater no centavo.
+- **A regra da dupla contagem** (`natureza.ts`, teste obrigatório em
+  `visoes.test.ts`): o pagamento da fatura na conta é sempre
+  `pagamento_fatura`, reconhecido pela descrição/categoria **ou** pelo valor
+  (igual a um pagamento registrado na fatura a ±3 dias, ou ao total perto do
+  vencimento) **ou** pelo par com o "pagamento recebido" no cartão. Na
+  competência conta a compra (no mês da fatura); no caixa, o pagamento; nunca
+  os dois.
+- **Devo** por cartão = o limite usado que o banco informa, quando ele dá o
+  disponível; o detalhe (fatura fechada a pagar + fatura aberta + parcelas
+  futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
+  vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
+  (`parcelas.ts`).
+- **Categoria por regra**: tabela da categoria da Pluggy + palavras da
+  descrição; nada vai ao modelo (RULES 24). A do usuário (`origem_categoria =
+  usuario`) nunca é sobrescrita, mas ainda não há tela para mudá-la
+  ("Transição", 6).
+- **Dependências opcionais**: `better-sqlite3` e `pdfjs-dist` são
+  `optionalDependencies`, carregados por `import()` só quando as finanças
+  abrem. O perfil `app` (Easypanel) nunca os carrega, e uma instalação que
+  falhe neles derruba só as finanças (503), não a Central.
+- **Riscos aceitos:** o leitor do PDF do Santander foi escrito pelo layout
+  descrito (seções por cartão, Parcelamentos e Despesas com n/total, Resumo) e
+  testado com texto sintético; a conferência é a trava contra layout que
+  mudou. O pareamento de transferências pode casar dois Pix de mesmo valor a
+  até 2 dias entre contas próprias que não eram o mesmo dinheiro.
+
 ## Central de Operações
 
 Esta seção descreve o código como está hoje. Com o app único (acima), a
@@ -127,7 +179,8 @@ A mesma aplicação possui dois perfis selecionados no servidor por
   as rotas locais e troca o bind do Express para `127.0.0.1`. Desde 06/10/2026
   as rotas do app (escritas no roster e no Google) não são montadas nesse
   perfil: do Google ficam só `/api/auth/google` e `/api/auth/callback` (a agenda
-  da Central), e o resto de `/api` responde 404 JSON. O `data/squad.json` do
+  da Central), além de `/api/financas/*` (desde 07/10/2026, ver "Finanças"),
+  e o resto de `/api` responde 404 JSON. O `data/squad.json` do
   Dell é um retrato de 14/09/2026 e nada da Central o lê ou escreve.
 
 `src/RootApp.vue` consulta somente `/api/runtime` para escolher a superfície.
@@ -219,6 +272,14 @@ sem `X-Forwarded-For` do Serve (o `atualizar-central` perguntando
 continua aceita. Escrita exige `Origin`/`Sec-Fetch-Site` da mesma origem,
 porque o header de identidade também acompanha um POST forjado por outra
 página aberta no celular.
+
+No código (07/10/2026, `server/acesso.ts`): `porteiroDeIdentidade` vale para
+toda requisição quando `operations.json` tem `tailscaleLogins`; sem a lista, a
+Central de hoje segue aberta à tailnet como antes, e só `/api/financas/*` fecha
+para quem chega pelo Serve. "Chegou pelo Serve" = trouxe `X-Forwarded-For` ou
+`Tailscale-User-Login`. `exigeMesmaOrigem` aceita `Sec-Fetch-Site:
+same-origin`; sem ele, `Origin` com o mesmo host; sem os dois, só a requisição
+local direta. A ACL do Tailscale continua um passo manual no console.
 
 O fluxo observado é Caçador do n8n → pacote em `auto-entrada` → `~/auto-site`
 → `gerador-de-sites` (Claude Code + Vercel) → `publicado.json` → watcher Linux

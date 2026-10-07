@@ -1,0 +1,266 @@
+import { descricaoNormalizada, mesDe, somarMeses } from "./comum.ts";
+import { projetarParcelas, type ParcelamentoProjetado } from "./parcelas.ts";
+import { contextoDas } from "./processar.ts";
+import type { Conexao, Conta, Fatura, SaudeDaConexao, TipoDeConta, Transacao } from "./tipos.ts";
+import { gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao } from "./visoes.ts";
+
+/**
+ * O resumo da tela "Visão": quanto tenho, quanto devo, quanto gastei e o que
+ * se repete. PURO: recebe os lançamentos JÁ processados (`processar.ts`), o
+ * dia de hoje (AAAA-MM-DD, São Paulo) e o mês pedido.
+ *
+ * "Devo" por cartão é a soma de três pedaços que não se sobrepõem:
+ * - faturas FECHADAS com vencimento de hoje em diante (total − pago);
+ * - a fatura ABERTA (o ciclo que ainda não fechou): os lançamentos do cartão
+ *   sem fatura fechada que caem no próximo vencimento;
+ * - as PARCELAS FUTURAS depois da fatura aberta (`parcelas.ts`).
+ *
+ * Quando o banco dá o limite usado (limite − disponível), é ELE o total do
+ * cartão: é o número do banco e inclui o que não detalhamos. A diferença para
+ * a soma dos pedaços vira "sem detalhe" na tela, em vez de sumir.
+ */
+
+export const TIPOS_DE_PATRIMONIO: readonly TipoDeConta[] = ["corrente", "poupanca", "investimento", "dinheiro", "beneficio"];
+
+export interface ContaResumida {
+  id: string;
+  nome: string;
+  instituicao: string;
+  tipo: TipoDeConta;
+  saldoCentavos: number;
+}
+
+export interface CartaoResumido {
+  id: string;
+  nome: string;
+  instituicao: string;
+  final: string | null;
+  limiteCentavos: number | null;
+  /** Limite usado segundo o banco; null quando a fonte não dá o disponível. */
+  usadoBancoCentavos: number | null;
+  /** % do limite usado (0–100+), para o semáforo; null sem limite. */
+  usoPct: number | null;
+  fechada: { vencimento: string; centavos: number; pagoCentavos: number } | null;
+  aberta: { vencimento: string; centavos: number; semLancamentos: boolean };
+  futurasCentavos: number;
+  detalhadoCentavos: number;
+  semDetalheCentavos: number;
+  totalCentavos: number;
+}
+
+export interface ResumoFinanceiro {
+  hoje: string;
+  mes: string;
+  visao: Visao;
+  tenho: { totalCentavos: number; contas: ContaResumida[] };
+  devo: {
+    totalCentavos: number;
+    cartoes: CartaoResumido[];
+    porMes: { mes: string; centavos: number }[];
+    parcelamentos: (ParcelamentoProjetado & { cartao: string })[];
+    /** Mês da última parcela conhecida (AAAA-MM), ou null. */
+    parcelasAcabamEm: string | null;
+  };
+  gastei: {
+    totalCentavos: number;
+    anteriorCentavos: number;
+    categorias: { categoria: string; centavos: number; anteriorCentavos: number }[];
+  };
+  recebi: { totalCentavos: number; anteriorCentavos: number };
+  recorrentes: Recorrente[];
+  saude: { conexoes: (Conexao & { saude: SaudeDaConexao })[]; dadosAte: string | null };
+}
+
+export interface Recorrente {
+  descricao: string;
+  categoria: string;
+  mediaCentavos: number;
+  meses: number;
+  ultimoMes: string;
+}
+
+/** Status da Pluggy → semáforo. Desconhecido conta como erro: na dúvida, não dizer que está tudo bem (RULES 2). */
+export function saudeDa(c: Pick<Conexao, "status" | "erroLeitura">): SaudeDaConexao {
+  if (c.erroLeitura) return "erro";
+  switch (c.status) {
+    case "UPDATED":
+      return "ok";
+    case "UPDATING":
+      return "atualizando";
+    case "OUTDATED":
+    case "WAITING_USER_ACTION":
+      return "atencao";
+    default:
+      return "erro";
+  }
+}
+
+function somarPorChave(mapa: Map<string, number>, chave: string, centavos: number) {
+  mapa.set(chave, (mapa.get(chave) ?? 0) + centavos);
+}
+
+export function resumir(
+  entrada: { contas: Conta[]; faturas: Fatura[]; transacoes: Transacao[]; conexoes: Conexao[] },
+  hoje: string,
+  mes: string,
+  visao: Visao,
+): ResumoFinanceiro {
+  const { contas, faturas, transacoes } = entrada;
+  const ctx = contextoDas(contas, faturas);
+  const mesAnterior = somarMeses(mes, -1);
+
+  // --- Tenho ----------------------------------------------------------
+  const patrimonio = contas.filter((c) => TIPOS_DE_PATRIMONIO.includes(c.tipo));
+  const tenho = {
+    totalCentavos: patrimonio.reduce((s, c) => s + c.saldoCentavos, 0),
+    contas: patrimonio
+      .map(({ id, nome, instituicao, tipo, saldoCentavos }) => ({ id, nome, instituicao, tipo, saldoCentavos }))
+      .sort((a, b) => b.saldoCentavos - a.saldoCentavos),
+  };
+
+  // --- Devo -----------------------------------------------------------
+  const cartoes = contas.filter((c) => c.tipo === "cartao");
+  const mesAbertoDe = new Map(cartoes.map((c) => [c.id, mesDe(vencimentoPrevisto(hoje, ctx.faturasDoCartao(c.id)))]));
+  const parcelas = transacoes
+    .filter((t) => t.grupoParcela && ctx.tipoDaConta(t.contaId) === "cartao" && t.centavos < 0)
+    .map((t) => ({ ...t, grupo: t.grupoParcela!, mes: mesDaFatura(t, ctx) }));
+  const projecao = projetarParcelas(parcelas, (contaId) => mesAbertoDe.get(contaId) ?? mesDe(hoje)).filter((p) => p.restantes > 0);
+
+  const porMesTotal = new Map<string, number>();
+  const resumoDosCartoes: CartaoResumido[] = cartoes.map((c) => {
+    const proprias = ctx.faturasDoCartao(c.id);
+    const aPagar = proprias.filter((f) => f.vencimento >= hoje && f.totalBanco - f.pagoCentavos > 0).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    let fechadaCentavos = 0;
+    for (const f of aPagar) {
+      const devido = f.totalBanco - f.pagoCentavos;
+      fechadaCentavos += devido;
+      somarPorChave(porMesTotal, mesDe(f.vencimento), devido);
+    }
+    const mesAberto = mesAbertoDe.get(c.id)!;
+    const doCartao = transacoes.filter((t) => t.contaId === c.id);
+    let abertaCentavos = 0;
+    for (const t of doCartao) {
+      if (t.faturaId || !["despesa", "encargo", "estorno"].includes(t.natureza)) continue;
+      if (mesDaFatura(t, ctx) === mesAberto) abertaCentavos -= t.centavos;
+    }
+    abertaCentavos = Math.max(0, abertaCentavos);
+    somarPorChave(porMesTotal, mesAberto, abertaCentavos);
+    let futurasCentavos = 0;
+    for (const p of projecao.filter((p) => p.contaId === c.id)) {
+      for (const [m, centavos] of Object.entries(p.porMes)) {
+        futurasCentavos += centavos;
+        somarPorChave(porMesTotal, m, centavos);
+      }
+    }
+    const detalhado = fechadaCentavos + abertaCentavos + futurasCentavos;
+    const usado = c.limiteCentavos !== null && c.limiteDisponivelCentavos !== null ? Math.max(0, c.limiteCentavos - c.limiteDisponivelCentavos) : null;
+    const total = usado ?? detalhado;
+    const primeira = aPagar[0];
+    return {
+      id: c.id,
+      nome: c.nome,
+      instituicao: c.instituicao,
+      final: c.final,
+      limiteCentavos: c.limiteCentavos,
+      usadoBancoCentavos: usado,
+      usoPct: usado !== null && c.limiteCentavos ? Math.round((usado / c.limiteCentavos) * 100) : null,
+      fechada: primeira ? { vencimento: primeira.vencimento, centavos: fechadaCentavos, pagoCentavos: aPagar.reduce((s, f) => s + f.pagoCentavos, 0) } : null,
+      aberta: {
+        vencimento: vencimentoPrevisto(hoje, proprias),
+        centavos: abertaCentavos,
+        // Cartão sem nenhum lançamento lido (o Santander na Pluggy): a fatura aberta é desconhecida, não zero.
+        semLancamentos: doCartao.length === 0,
+      },
+      futurasCentavos,
+      detalhadoCentavos: detalhado,
+      semDetalheCentavos: usado !== null ? Math.max(0, usado - detalhado) : 0,
+      totalCentavos: total,
+    };
+  });
+  const nomeDoCartao = new Map(cartoes.map((c) => [c.id, c.final ? `${c.nome} ·${c.final}` : c.nome]));
+  const devo = {
+    totalCentavos: resumoDosCartoes.reduce((s, c) => s + c.totalCentavos, 0),
+    cartoes: resumoDosCartoes,
+    porMes: [...porMesTotal].filter(([, c]) => c > 0).sort(([a], [b]) => a.localeCompare(b)).map(([m, centavos]) => ({ mes: m, centavos })),
+    parcelamentos: projecao.map((p) => ({ ...p, cartao: nomeDoCartao.get(p.contaId) ?? "" })),
+    parcelasAcabamEm: projecao.reduce<string | null>((max, p) => (max === null || p.acabaEm > max ? p.acabaEm : max), null),
+  };
+
+  // --- Gastei e recebi ------------------------------------------------
+  const atual = new Map<string, number>();
+  const anterior = new Map<string, number>();
+  let recebi = 0;
+  let recebiAntes = 0;
+  for (const t of transacoes) {
+    const g = gastoNaVisao(t, visao, ctx);
+    if (g?.mes === mes) somarPorChave(atual, t.categoria, g.centavos);
+    else if (g?.mes === mesAnterior) somarPorChave(anterior, t.categoria, g.centavos);
+    const r = receitaDoMes(t, ctx);
+    if (r?.mes === mes) recebi += r.centavos;
+    else if (r?.mes === mesAnterior) recebiAntes += r.centavos;
+  }
+  const categorias = [...new Set([...atual.keys(), ...anterior.keys()])]
+    .map((categoria) => ({ categoria, centavos: atual.get(categoria) ?? 0, anteriorCentavos: anterior.get(categoria) ?? 0 }))
+    .filter((c) => c.centavos !== 0 || c.anteriorCentavos !== 0)
+    .sort((a, b) => b.centavos - a.centavos || b.anteriorCentavos - a.anteriorCentavos);
+  const gastei = {
+    totalCentavos: [...atual.values()].reduce((s, c) => s + c, 0),
+    anteriorCentavos: [...anterior.values()].reduce((s, c) => s + c, 0),
+    categorias,
+  };
+
+  // --- Saúde ----------------------------------------------------------
+  const conexoes = entrada.conexoes.map((c) => ({ ...c, saude: saudeDa(c) }));
+  // A data que vale é a da conexão mais atrasada: "dados até" promete que TUDO está até ali.
+  const dadosAte = conexoes.map((c) => c.dadosAte).filter((d): d is string => !!d).sort()[0] ?? null;
+
+  return {
+    hoje,
+    mes,
+    visao,
+    tenho,
+    devo,
+    gastei,
+    recebi: { totalCentavos: recebi, anteriorCentavos: recebiAntes },
+    recorrentes: recorrentes(transacoes, mes, ctx),
+    saude: { conexoes, dadosAte },
+  };
+}
+
+/** Meses olhados para dizer que algo se repete, e em quantos dele tem de aparecer. */
+export const JANELA_RECORRENTE = 4;
+export const MINIMO_RECORRENTE = 3;
+
+/**
+ * Gastos que se repetem: mesma descrição normalizada em pelo menos 3 dos 4
+ * meses até `mes` (competência), fora parcela (parcela já está no "devo") e
+ * com valor estável (o maior mês até o dobro do menor) — o mercado da semana
+ * aparece todo mês e não é assinatura.
+ */
+export function recorrentes(transacoes: Transacao[], mes: string, ctx: ReturnType<typeof contextoDas>): Recorrente[] {
+  const primeiro = somarMeses(mes, -(JANELA_RECORRENTE - 1));
+  const porDescricao = new Map<string, { descricao: string; categoria: string; meses: Map<string, number> }>();
+  for (const t of transacoes) {
+    if (t.natureza !== "despesa" || (t.parcelaTotal ?? 1) > 1) continue;
+    const g = gastoNaVisao(t, "competencia", ctx);
+    if (!g || g.mes < primeiro || g.mes > mes || g.centavos <= 0) continue;
+    const chave = descricaoNormalizada(t.descricao);
+    if (!chave) continue;
+    if (!porDescricao.has(chave)) porDescricao.set(chave, { descricao: t.descricao, categoria: t.categoria, meses: new Map() });
+    somarPorChave(porDescricao.get(chave)!.meses, g.mes, g.centavos);
+  }
+  const saida: Recorrente[] = [];
+  for (const { descricao, categoria, meses } of porDescricao.values()) {
+    if (meses.size < MINIMO_RECORRENTE) continue;
+    const valores = [...meses.values()];
+    if (Math.max(...valores) > 2 * Math.min(...valores)) continue;
+    saida.push({
+      descricao,
+      categoria,
+      mediaCentavos: Math.round(valores.reduce((s, c) => s + c, 0) / valores.length),
+      meses: meses.size,
+      ultimoMes: [...meses.keys()].sort().at(-1)!,
+    });
+  }
+  return saida.sort((a, b) => b.mediaCentavos - a.mediaCentavos).slice(0, 20);
+}

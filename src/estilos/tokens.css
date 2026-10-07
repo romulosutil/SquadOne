@@ -1,0 +1,108 @@
+/*
+ * Tokens do SquadOne (06/10/2026). A paleta é a da Central
+ * (src/operations/operations.css); os nomes semânticos são o que as telas
+ * novas usam, para o modo escuro trocar só aqui. Regras em design.md.
+ *
+ * A Central antiga ainda usa as --ops-* direto (claras sempre); ela migra
+ * para estes nomes na casca mobile completa (ARCHITECTURE "Transição", 5).
+ */
+:root {
+  /* Paleta */
+  --cor-tinta: #11130f;
+  --cor-papel: #f4f0e6;
+  --cor-papel-forte: #fffdf6;
+  --cor-papel-azul: #dce3ff;
+  --cor-amarelo: #ffdc59;
+  --cor-coral: #ff966f;
+  --cor-menta: #b9f6d0;
+  --cor-azul: #20293b;
+  --cor-verde: #167a4c;
+  --cor-perigo: #c92f3f;
+  --cor-apagado: #565c55;
+
+  /* Semânticos (claro) */
+  --fundo: var(--cor-papel-azul);
+  --superficie: var(--cor-papel-forte);
+  --superficie-2: var(--cor-papel);
+  --texto: var(--cor-tinta);
+  --texto-2: var(--cor-apagado);
+  --borda: var(--cor-tinta);
+  --destaque: var(--cor-amarelo);
+  --destaque-texto: var(--cor-tinta);
+  --acento: var(--cor-coral);
+  --positivo: var(--cor-verde);
+  --negativo: var(--cor-perigo);
+  --ok-fundo: var(--cor-menta);
+  --atencao-fundo: #fff2a7;
+  --erro-fundo: #ffd9d2;
+  --barra-fundo: var(--cor-azul);
+  --barra-texto: #d7deeb;
+  --barra-ativo: var(--cor-amarelo);
+  --barra-ativo-texto: var(--cor-tinta);
+  --foco: #1e64d4;
+
+  /* Forma */
+  --linha: 3px solid var(--borda);
+  --linha-fina: 2px solid var(--borda);
+  --sombra: 4px 4px 0 var(--borda);
+  --sombra-pequena: 2px 2px 0 var(--borda);
+
+  /* Espaço (múltiplos de 4 px) e tipo */
+  --esp-1: 0.25rem;
+  --esp-2: 0.5rem;
+  --esp-3: 0.75rem;
+  --esp-4: 1rem;
+  --esp-6: 1.5rem;
+  --fonte: Inter, "Arial Black", Arial, sans-serif;
+  --tamanho-barra-inferior: 4rem;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fundo: #10131a;
+    --superficie: #1b202a;
+    --superficie-2: #242a36;
+    --texto: #f1ede2;
+    --texto-2: #aab2c0;
+    --borda: #8792a7;
+    --destaque: var(--cor-amarelo);
+    --destaque-texto: var(--cor-tinta);
+    --acento: var(--cor-coral);
+    --positivo: #6fdc9a;
+    --negativo: #ff8a80;
+    --ok-fundo: #1d4532;
+    --atencao-fundo: #4a4016;
+    --erro-fundo: #561f27;
+    --barra-fundo: #0b0e14;
+    --barra-texto: #c3cad8;
+    --foco: #8ab4ff;
+    --sombra: 4px 4px 0 #000;
+    --sombra-pequena: 2px 2px 0 #000;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --fundo: #10131a;
+  --superficie: #1b202a;
+  --superficie-2: #242a36;
+  --texto: #f1ede2;
+  --texto-2: #aab2c0;
+  --borda: #8792a7;
+  --destaque: var(--cor-amarelo);
+  --destaque-texto: var(--cor-tinta);
+  --acento: var(--cor-coral);
+  --positivo: #6fdc9a;
+  --negativo: #ff8a80;
+  --ok-fundo: #1d4532;
+  --atencao-fundo: #4a4016;
+  --erro-fundo: #561f27;
+  --barra-fundo: #0b0e14;
+  --barra-texto: #c3cad8;
+  --foco: #8ab4ff;
+  --sombra: 4px 4px 0 #000;
+  --sombra-pequena: 2px 2px 0 #000;
+  color-scheme: dark;
+}

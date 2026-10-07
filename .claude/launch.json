@@ -7,6 +7,18 @@
       "runtimeArgs": ["tsx", "server.ts"],
       "env": { "PORT": "3199" },
       "port": 3199
+    },
+    {
+      "name": "squadone-operations",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "server.ts"],
+      "env": {
+        "PORT": "3198",
+        "SQUADONE_MODE": "operations",
+        "SQUADONE_OPERATIONS_CONFIG": "config/operations.example.json",
+        "SQUADONE_OPERATIONS_DATA_DIR": "data/operations-dev"
+      },
+      "port": 3198
     }
   ]
 }

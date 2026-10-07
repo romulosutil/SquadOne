@@ -147,6 +147,10 @@ obrigatorios = [
   # Cópia manual do roster do Easypanel (o de verdade; o ~/SquadOne/data do Dell é de 14/09/2026).
   # Como copiar: deploy/dell/README.md, "Cópia do roster do Easypanel".
   "~/Mel/Easypanel/squad.json",
+  # Finanças (06/10/2026): a cópia que o SquadOne faz com VACUUM INTO depois de
+  # cada sincronização e importação (600, consistente). Só existe depois da
+  # primeira leitura da Pluggy. Restaurar: RESTAURAR.md, "Finanças".
+  "~/.local/share/squadone-operations/financas.copia.db",
 ]
 # Reinstalável, regenerável ou grande sem valor de restauração. Padrão sem "/"
 # vale em qualquer nível (regra do restic).
@@ -159,6 +163,11 @@ excluir = [
   "~/.hermes/cache", "~/.hermes/*_cache", "~/.hermes/*cache*.json",
   "~/.hermes/backups", "~/.hermes/chrome-debug", "~/.hermes/lsp",
   "~/.hermes/bin", "~/.hermes/installs", "~/.hermes/state-snapshots",
+  # O financas.db vivo (WAL) fica fora: copiado cru no meio de uma escrita viria
+  # corrompido. Quem entra é a financas.copia.db, ao lado (RULES 24: só no cofre).
+  "~/.local/share/squadone-operations/financas.db",
+  "~/.local/share/squadone-operations/financas.db-*",
+  "~/.local/share/squadone-operations/financas.copia.db.tmp",
   # Os SQLite vivos do Hermes entram pelo preparo, copiados de forma consistente.
   "~/.hermes/*.db", "~/.hermes/*.db-*", "~/.hermes/cron/*.db", "~/.hermes/cron/*.db-*",
   "~/.local/state/syncthing/index-*", "~/.local/state/backup-dell/ensaio",

@@ -67,6 +67,13 @@ home viva mistura estados.
 - **`sqlite/.hermes/…`:** cópias consistentes dos bancos do Hermes. Com o
   Hermes parado, copie cada uma para o lugar de origem, sem os `-wal`/`-shm`
   antigos.
+- **Finanças** (não é dump do preparo: já vem na home): a
+  `~/.local/share/squadone-operations/financas.copia.db` é a foto que o
+  SquadOne grava com `VACUUM INTO` depois de cada leitura da Pluggy. O
+  `financas.db` vivo fica fora do cofre. Com o `squadone-operations` parado:
+  `install -m 600 financas.copia.db financas.db` na mesma pasta, sem `-wal`/`-shm`
+  antigos. O que faltar desde a cópia volta na próxima leitura da Pluggy; só a
+  fatura em PDF importada depois dela precisa ser reimportada.
 
 ## 4. Depois de restaurar
 
