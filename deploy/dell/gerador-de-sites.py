@@ -192,7 +192,7 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 
 
 def comando_do_claude(slug: str, rascunho: Path) -> list[str]:
-    return [
+    cmd = [
         "claude", "-p", PROMPT.format(slug=slug),
         "--permission-mode", "dontAsk",
         "--settings", json.dumps(permissoes_do_claude(slug, rascunho), ensure_ascii=False, separators=(",", ":")),
@@ -200,6 +200,14 @@ def comando_do_claude(slug: str, rascunho: Path) -> list[str]:
         "--strict-mcp-config",  # nenhum servidor MCP: o /lead-novo não usa
         "--output-format", "json",  # o resumo final traz as permission_denials
     ]
+    # Modelo do design do site (GERADOR_MODELO no gerador.env). Ausente = o padrão
+    # do Claude Code, como antes. O id completo (claude-opus-5-5) exige o CLI >= 2.1.280:
+    # em 07/10/2026 o do Dell estava na 2.1.274 e devolvia 400 sem gerar nada, então um
+    # id que o CLI não aceita derruba o lead inteiro — teste com `claude -p ok --model <id>`.
+    modelo = os.environ.get("GERADOR_MODELO", "").strip()
+    if modelo:
+        cmd += ["--model", modelo]
+    return cmd
 
 
 def descrever_negacao(negacao: dict) -> str:
