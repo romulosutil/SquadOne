@@ -351,5 +351,163 @@ class OQueFazer(unittest.TestCase):
         self.assertEqual(ds.pncp()["estado"], "atencao")
 
 
+def aviso(**extra) -> dict:
+    return {"titulo": "🌐 Sites", "texto": "2 sites prontos", "origem": "teste", **extra}
+
+
+class FilaDeAvisos(unittest.TestCase):
+    """A fila de ~/.local/share/avisos/fila: formato, teto, silêncio, chave, flock."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="dell-status-fila-"))
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.antes = {k: getattr(ds, k) for k in ("FILA", "FILA_TRAVA", "FILA_ESTADO", "FILA_RECUSADOS",
+                                                  "FRESCOR_S", "enviar")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
+        ds.FILA = self.dir / "fila"
+        ds.FILA.mkdir()
+        ds.FILA_TRAVA = self.dir / "estado" / "fila.lock"
+        ds.FILA_ESTADO = self.dir / "estado" / "fila.json"
+        ds.FILA_RECUSADOS = self.dir / "estado" / "recusados"
+        ds.FRESCOR_S = 0
+        self.enviadas: list[str] = []
+        self.hermes_no_ar = True
+
+        def enviar(msg):
+            if self.hermes_no_ar:
+                self.enviadas.append(msg)
+            return self.hermes_no_ar
+        ds.enviar = enviar
+        self.n = 0
+
+    def gravar(self, conteudo, nome: str | None = None) -> Path:
+        self.n += 1
+        f = ds.FILA / (nome or f"{self.n:04d}.json")
+        f.write_text(conteudo if isinstance(conteudo, str) else json.dumps(conteudo), encoding="utf-8")
+        return f
+
+    def test_formato(self):
+        self.assertEqual(ds.validar_aviso(aviso())["prioridade"], 2)
+        self.assertIsNone(ds.validar_aviso(aviso(chave=None, link=None))["chave"])
+        self.assertEqual(ds.validar_aviso(aviso(expira_em="2026-10-06T22:00"))["expira_em"], br("2026-10-06T22:00"))
+        for ruim, motivo in (
+            ({"titulo": "x", "texto": "y"}, "origem"),
+            (aviso(origem="  "), "origem"),
+            (aviso(extra=1), "fora do formato"),
+            (aviso(prioridade=4), "prioridade"),
+            (aviso(prioridade=True), "prioridade"),
+            (aviso(prioridade="0"), "prioridade"),
+            (aviso(texto="x" * 4001), "4000"),
+            (aviso(titulo="a\nb"), "quebra de linha"),
+            (aviso(link="ftp://x"), "link"),
+            (aviso(expira_em="amanhã"), "expira_em"),
+            (aviso(chave=3), "chave"),
+            ([aviso()], "objeto"),
+        ):
+            with self.assertRaisesRegex(ValueError, motivo):
+                ds.validar_aviso(ruim)
+
+    def test_envia_valido_e_recusa_o_resto_com_motivo(self):
+        ok = self.gravar(aviso(link="https://exemplo.com/x"))
+        self.gravar("{nem json")
+        self.gravar({"titulo": "Antigo", "texto": "sem origem"})
+        self.gravar(aviso(texto="x" * 20_000))
+        r = ds.drenar_fila(br("2026-10-06T10:00"))
+        self.assertEqual((r["enviados"], r["recusados"]), (1, 3))
+        self.assertEqual(self.enviadas, ["🌐 Sites\n2 sites prontos\nhttps://exemplo.com/x"])
+        self.assertFalse(ok.exists())
+        self.assertEqual(list(ds.FILA.glob("*.json")), [])
+        recusados = sorted(ds.FILA_RECUSADOS.glob("*.json"))
+        self.assertEqual(len(recusados), 3)
+        self.assertTrue(all(f.with_name(f.name + ".motivo.txt").exists() for f in recusados))
+        c = ds.fila_de_avisos()[0]
+        self.assertEqual(c["estado"], "falha")
+        self.assertIn("avisos-recusados", c["o_que_fazer"])
+        for f in ds.FILA_RECUSADOS.iterdir():
+            f.unlink()
+        self.assertEqual(ds.fila_de_avisos()[0]["estado"], "ok")
+
+    def test_expirado_e_descartado_sem_enviar(self):
+        velho = self.gravar(aviso(expira_em="2026-10-06T09:00:00-03:00"))
+        self.gravar(aviso(titulo="Vale", expira_em="2026-10-06T11:00:00-03:00"))
+        r = ds.drenar_fila(br("2026-10-06T10:00"))
+        self.assertEqual((r["enviados"], r["descartados"]), (1, 1))
+        self.assertFalse(velho.exists())
+        self.assertTrue(self.enviadas[0].startswith("Vale"))
+
+    def test_chave_repetida_em_24h_e_descartada(self):
+        self.gravar(aviso(chave="gerador:2026-10-06"))
+        self.gravar(aviso(chave="gerador:2026-10-06"))  # mesma rodada: só um sai
+        ds.drenar_fila(br("2026-10-06T10:00"))
+        self.assertEqual(len(self.enviadas), 1)
+        self.gravar(aviso(chave="gerador:2026-10-06"))
+        r = ds.drenar_fila(br("2026-10-07T09:59"))
+        self.assertEqual((r["enviados"], r["descartados"]), (0, 1))
+        self.gravar(aviso(chave="gerador:2026-10-06"))
+        self.assertEqual(ds.drenar_fila(br("2026-10-07T10:01"))["enviados"], 1)
+
+    def test_silencio_das_22h_as_7h_so_p0(self):
+        normal = self.gravar(aviso(titulo="Normal"))
+        self.gravar(aviso(titulo="Urgente", prioridade=0))
+        r = ds.drenar_fila(br("2026-10-06T23:30"))
+        self.assertEqual((r["enviados"], r["esperando"]), (1, 1))
+        self.assertTrue(self.enviadas[0].startswith("Urgente"))
+        self.assertTrue(normal.exists())
+        self.assertEqual(ds.drenar_fila(br("2026-10-07T06:59"))["enviados"], 0)
+        self.assertEqual(ds.drenar_fila(br("2026-10-07T07:00"))["enviados"], 1)
+        self.assertFalse(normal.exists())
+
+    def test_teto_por_hora_dobra_o_excedente_num_resumo(self):
+        for i in range(25):
+            self.gravar(aviso(titulo=f"Aviso {i:02d}"))
+        self.gravar(aviso(titulo="Urgente", prioridade=0), nome="9999.json")
+        r = ds.drenar_fila(br("2026-10-06T10:00"))
+        self.assertEqual((r["enviados"], r["agrupados"]), (19, 7))
+        self.assertEqual(len(self.enviadas), 20)
+        self.assertTrue(self.enviadas[0].startswith("Urgente"))  # P0 vai primeiro, mesmo gravado por último
+        self.assertIn("7 avisos agrupados", self.enviadas[-1])
+        self.assertEqual(list(ds.FILA.glob("*.json")), [])
+        # Teto cheio e resumo recente: o que chega espera; passada a hora, sai.
+        self.gravar(aviso(titulo="Depois"))
+        r = ds.drenar_fila(br("2026-10-06T10:30"))
+        self.assertEqual((r["enviados"], r["agrupados"], r["esperando"]), (0, 0, 1))
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T11:01"))["enviados"], 1)
+
+    def test_hermes_fora_mantem_na_fila(self):
+        f = self.gravar(aviso(chave="k"))
+        self.hermes_no_ar = False
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:00"))["enviados"], 0)
+        self.assertTrue(f.exists())
+        self.hermes_no_ar = True
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:01"))["enviados"], 1)
+
+    def test_flock_impede_drenagem_dupla(self):
+        import fcntl
+        self.gravar(aviso())
+        ds.FILA_TRAVA.parent.mkdir(parents=True)
+        with open(ds.FILA_TRAVA, "a") as outra:
+            fcntl.flock(outra, fcntl.LOCK_EX)
+            self.assertEqual(ds.drenar_fila(br("2026-10-06T10:00")), {"ocupada": True})
+        self.assertEqual(self.enviadas, [])
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:00"))["enviados"], 1)
+
+    def test_arquivo_recem_gravado_espera(self):
+        ds.FRESCOR_S = 3600
+        f = self.gravar(aviso())
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:00"))["esperando"], 1)
+        self.assertTrue(f.exists())
+
+
+class WhatsApp(unittest.TestCase):
+    def test_sessao(self):
+        self.assertEqual(ds.avaliar_whatsapp({"status": "open", "queueLength": 0})["estado"], "ok")
+        fechada = ds.avaliar_whatsapp({"status": "close"})
+        self.assertEqual(fechada["estado"], "falha")
+        self.assertIn("'close'", fechada["detalhe"])
+        sem_resposta = ds.avaliar_whatsapp(None, "Connection refused")
+        self.assertEqual(sem_resposta["estado"], "falha")
+        self.assertIn("pareamento", sem_resposta["o_que_fazer"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

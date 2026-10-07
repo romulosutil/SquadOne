@@ -48,6 +48,22 @@ home viva mistura estados.
 - **`n8n-home.tar`:** a pasta `/home/node/.n8n` do container (o `config` tem a
   `encryptionKey`; `nodes/` guarda os pacotes da comunidade).
   - `docker compose run --rm -T --entrypoint tar n8n -C /home/node/.n8n -xf - < n8n-home.tar`
+- **Bancos dos projetos** (desde 06/10/2026), um arquivo por `[[cofre.preparo]]`:
+  - `aladdin-pg.sql`, `crm-silmer-pg.sql`, `p4f-db.sql`, `iris-pg.sql`:
+    `pg_dumpall` do cluster inteiro (todos os bancos e os papéis, com o hash das
+    senhas). Suba o compose do projeto com um volume **novo** e carregue no banco
+    `postgres`; os erros "role … already exists" do usuário que o próprio
+    container criou são esperados:
+    `docker compose exec -T <servico> sh -c 'psql -U "$POSTGRES_USER" -d postgres' < aladdin-pg.sql`.
+  - `espectro-mysql.sql`: `mysqldump` de todos os bancos menos os de sistema
+    (o usuário do app o compose recria a partir do `.env`):
+    `docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < espectro-mysql.sql`.
+  - `iris-minio.tar`: a pasta `/data` do MinIO (buckets e `.minio.sys`). Com o
+    MinIO parado e o volume novo:
+    `docker run --rm -i --volumes-from <container do minio> --entrypoint tar postgres:17-alpine -C /data -xf - < iris-minio.tar`.
+  - Prova sem tocar o banco vivo: `backup-dell ensaio-dump <nome>` faz um dump
+    novo, carrega num container descartável da mesma imagem, sem rede, e
+    compara as linhas de cada tabela com o banco vivo.
 - **`sqlite/.hermes/…`:** cópias consistentes dos bancos do Hermes. Com o
   Hermes parado, copie cada uma para o lugar de origem, sem os `-wal`/`-shm`
   antigos.

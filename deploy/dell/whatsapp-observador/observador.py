@@ -172,7 +172,7 @@ def avisar_pelo_hermes(texto: str) -> None:
     try:
         FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
         (FILA_DE_AVISOS / f"observador-{time.time_ns()}.json").write_text(
-            json.dumps({"titulo": "📱 Observador do WhatsApp", "texto": texto}, ensure_ascii=False))
+            json.dumps({"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}, ensure_ascii=False))
     except OSError as e:
         log("aviso não gravado:", e)
 

@@ -126,7 +126,7 @@ return saida;"""
 AVISOS = """// Um aviso por follow-up (o texto fica sozinho para copiar) e um só para os expirados.
 const NL = String.fromCharCode(10);
 const arquivo = (titulo, texto) => ({ json: { titulo, texto }, binary: { data: {
-  data: Buffer.from(JSON.stringify({ titulo, texto }), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'aviso.json' } } });
+  data: Buffer.from(JSON.stringify({ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'aviso.json' } } });
 const itens = $('Decidir').all().map(i => i.json);
 const onde = (l) => l.nome + (l.cidade ? ' (' + l.cidade + ')' : '');
 const saida = itens.filter(l => l.acao === 'followup').map(l => arquivo('🔁 Site antes da venda: follow-up', [
@@ -308,7 +308,7 @@ const texto = [
   'Planilha: {LINK_PLANILHA}',
 ].join(NL);
 const titulo = '📊 Site antes da venda: funil da semana';
-return [{{ json: {{ titulo, texto }}, binary: {{ data: {{ data: Buffer.from(JSON.stringify({{ titulo, texto }}), 'utf8').toString('base64'),
+return [{{ json: {{ titulo, texto }}, binary: {{ data: {{ data: Buffer.from(JSON.stringify({{ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }}), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: 'aviso.json' }} }} }}];"""
 
 
@@ -515,7 +515,7 @@ def resumo_backlog():
         "", "Fora da lista (status enviado na planilha, pasta já decidida): "
         + ", ".join(f"{n} em {k}" for k, n in sorted(fora.items())) + ".",
     ])
-    return {"titulo": "🗂️ Site antes da venda: acervo sem automação", "texto": texto}
+    return {"titulo": "🗂️ Site antes da venda: acervo sem automação", "texto": texto, "origem": "site-acompanhamento"}
 
 
 def rodar_no(codigo: str, dados: dict, entrada: list) -> list:

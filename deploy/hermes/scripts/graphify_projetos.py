@@ -375,7 +375,7 @@ def avisar_na_fila(ctx: Contexto, estado: dict, avisos: list, agora: float) -> N
         arq = ctx.fila / f"graphify-duplicatas-{datetime.fromtimestamp(agora):%Y%m%d%H%M%S}-{time.time_ns() % 10**6:06d}.json"
         texto = "Conferi as pastas do Dell contra o registro de projetos e achei:\n" + "\n".join(f"• {a}" for a in novos) \
             + "\n\nNada foi mexido. Veja ~/PRUMO/PROJETOS.md; quem decide é você."
-        arq.write_text(json.dumps({"titulo": "Mel: pastas fora do registro ou repetidas", "texto": texto}, ensure_ascii=False) + "\n")
+        arq.write_text(json.dumps({"titulo": "Mel: pastas fora do registro ou repetidas", "texto": texto, "origem": "hermes:graphify-projetos"}, ensure_ascii=False) + "\n")
     estado["avisos_vistos"] = sorted(avisos)
 
 

@@ -15,6 +15,11 @@
    alcançada pela tailnet do Rômulo: Tailscale Serve (nunca Funnel) na porta
    HTTPS 8443 repassa ao loopback, e o porteiro de IP (`IPS_PERMITIDOS`) admite
    só loopback e as faixas da tailnet (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`).
+   O inverso também vale (06/10/2026): as rotas do app (roster, Mochila, turno,
+   ajuste, push, avaliação, `/api/auth/status` e `/logout`) só existem no perfil
+   `app`. No `operations`, `/api` fora de `/api/runtime`, `/api/operations/*`,
+   `/api/auth/google` e `/api/auth/callback` responde 404 JSON. Rota nova que a
+   Central precise entra explicitamente, nunca por "montar o app inteiro".
 8. Health checks operacionais são alvos fixos da configuração local. O
    navegador nunca envia comandos, processos ou URLs para serem executados.
 9. Projetos locais ficam fora do Git, exigem nome e destino e recusam esquemas

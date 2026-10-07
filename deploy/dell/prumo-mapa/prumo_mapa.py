@@ -365,7 +365,7 @@ def avisar(texto: str, teste: bool = False) -> None:
     if teste:
         texto = "[teste] " + texto
     arq = FILA_AVISOS / f"prumo-mapa-{time.time_ns()}.json"
-    arq.write_text(json.dumps({"titulo": "📊 PRUMO", "texto": texto}, ensure_ascii=False), encoding="utf-8")
+    arq.write_text(json.dumps({"titulo": "📊 PRUMO", "texto": texto, "origem": "prumo-mapa"}, ensure_ascii=False), encoding="utf-8")
 
 
 def ja_feito(resposta_id: str) -> Path | None:

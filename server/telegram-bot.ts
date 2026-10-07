@@ -270,5 +270,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
     }
   };
 
-  return { portao, processar, ocioso: () => fila };
+  // `ocupado` conta também o que espera na fila, não só o turno da vez: a
+  // mensagem já recebeu 200 e o Telegram não a reentrega se o processo cair.
+  return { portao, processar, ocioso: () => fila, ocupado: () => pendentes > 0 };
 }

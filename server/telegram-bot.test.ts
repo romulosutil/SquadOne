@@ -146,6 +146,24 @@ describe("processar", () => {
     assert.deepEqual(ordem, ["inicio a", "fim a", "inicio b", "fim b"]);
   });
 
+  it("ocupado enquanto há turno rodando ou esperando na fila (o atualizar-central do Dell espera)", async () => {
+    let liberar!: () => void;
+    const { bot } = montar({
+      rodar: async (demanda) => {
+        if (demanda === "a") await new Promise<void>((ok) => { liberar = ok; });
+        return TURNO_VAZIO;
+      },
+    });
+    assert.equal(bot.ocupado(), false);
+    bot.processar(req(update(1, "a")), res(), () => {});
+    bot.processar(req(update(2, "b")), res(), () => {});
+    await new Promise((ok) => setImmediate(ok));
+    assert.equal(bot.ocupado(), true);
+    liberar();
+    await bot.ocioso();
+    assert.equal(bot.ocupado(), false);
+  });
+
   it("resumo que falha depois do turno rodar não vira 'erro ao processar' (o compromisso já pode ter nascido no Google)", async () => {
     // Formato malformado propositalmente: o que importa é que textoDoTurno
     // lance DEPOIS de rodar() ter terminado com sucesso, não a causa real.
