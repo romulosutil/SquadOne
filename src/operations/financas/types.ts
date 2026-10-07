@@ -18,6 +18,8 @@ export interface Situacao {
   problema: string | null
   sincronizando: boolean
   ultimaSincronizacao: { inicio: string; fim: string | null; ok: boolean | null; origem: string } | null
+  /** "Explicar este mês" ligado no servidor (SQUADONE_FINANCAS_IA). */
+  explicacaoIa?: boolean
 }
 
 export interface CartaoVisto {

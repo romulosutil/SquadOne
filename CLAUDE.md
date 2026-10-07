@@ -29,9 +29,12 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
-vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso),
-`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, e `sync` e
-`organizar`, estes dois com um SQLite num diretório temporário),
+vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
+e o "Explicar este mês": sem a flag 404, hash errado 409, o dublê do Gemini recebe o
+texto da prévia, `ModeloOcupado` 503 — com um SQLite num diretório temporário),
+`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, `explicacao`
+(o pacote padrão sem R$ nem estabelecimento, o que cada toggle acrescenta, o hash),
+e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `server/telegram-gasto.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
@@ -99,6 +102,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
     organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
+    explicacao (PURO): o texto exato do "Explicar este mês", o hash da prévia e o prompt fixo; só sai a pedido (SQUADONE_FINANCAS_IA)
     pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
     servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
@@ -446,6 +450,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_LOGINS_TAILSCALE` | servidor | só `operations`: logins aceitos no `Tailscale-User-Login`, por vírgula; com a agenda ligada, vazia fecha a tailnet; vazia fecha `/api/financas/*` pela tailnet sempre |
 | `SQUADONE_AVISOS_FILA` | servidor | só `operations`: pasta da fila de avisos; ausente = `~/.local/share/avisos/fila` |
 | `DEADMAN_URL` | servidor | só `operations`: ping do healthchecks.io (https, sem query); ausente = sem sinal; ilegível = log e desligado |
+| `SQUADONE_FINANCAS_IA` | servidor | só `operations`: `true` liga o "Explicar este mês" das finanças (prévia literal, envio com o hash dela); qualquer outro valor = rotas em 404 e sem botão. Ligar só com a chave do Gemini em projeto com faturamento — confirmado pelo usuário em 07/10/2026; nunca no Easypanel |
 | `PLUGGY_CLIENT_ID` / `_SECRET` / `PLUGGY_ITEM_IDS` | servidor | só em `operations`, no EnvironmentFile `~/.config/squadone/financas.env` (600); ausentes = finanças sem leitura; um presente sem os outros = log de erro e Pluggy desligada. Nunca impressos |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.

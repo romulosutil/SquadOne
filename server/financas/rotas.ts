@@ -1,11 +1,14 @@
+import type { GoogleGenAI } from "@google/genai";
 import express from "express";
 import { guardaDeIdentidade, guardaDeOrigem, veioPeloServe } from "../acesso.ts";
 import type { Aviso } from "../avisos.ts";
+import { gerarComRetry, MODEL, ModeloOcupado } from "../orchestrator.ts";
 import { estadoDaSala } from "./alertas.ts";
 import { abrirBanco, FinancasIndisponiveis, type BancoDeFinancas } from "./banco.ts";
 import { SEM_CATEGORIA } from "./categoria.ts";
 import { ehMes, estabelecimentoDe, mesDe } from "./comum.ts";
 import { jaExisteEmOutraFonte, parearEntreFontes } from "./dedupe.ts";
+import { estabelecimentosDoMes, explicacaoParaTela, hashDoPacote, montarPacote, promptDaExplicacao, type OpcoesDoPacote } from "./explicacao.ts";
 import { ExtratoIlegivel, lerExtrato, sugereInverter, transacoesDoExtrato, type FormatoDoExtrato } from "./extrato.ts";
 import { conferir, faturaDoPdf, lerFaturaSantander, transacoesDoPdf } from "./fatura-santander.ts";
 import {
@@ -46,7 +49,16 @@ import { gastoNaVisao, mesDaFatura, type Visao } from "./visoes.ts";
  * Os alertas de 70/90/100% vão à fila de avisos só com semáforo e %
  * (`alertas.ts`). `Cache-Control: no-store`: o celular não guarda extrato em
  * cache.
+ *
+ * A única saída para o modelo é "Explicar este mês" (`/explicar/*`, fase 8d),
+ * e só com `SQUADONE_FINANCAS_IA=true`: prévia do texto exato → o Rômulo lê →
+ * envio com o hash da prévia (ver `explicacao.ts`).
  */
+
+/** "Explicar este mês" só existe com a flag: sem ela, as rotas respondem 404 e o botão nem aparece. */
+export function explicacaoIaLigada(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SQUADONE_FINANCAS_IA === "true";
+}
 
 export const LIMITE_PDF = "10mb";
 export const LIMITE_EXTRATO = "5mb";
@@ -141,9 +153,19 @@ function textoDoArquivo(b: Buffer): string {
   return utf8.includes("�") ? b.toString("latin1") : utf8;
 }
 
-export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins: ReadonlySet<string>; agora?: () => Date }): express.Router {
+export interface OpcoesDasRotasDeFinancas {
+  logins: ReadonlySet<string>;
+  agora?: () => Date;
+  /** De onde ler `SQUADONE_FINANCAS_IA` (padrão: `process.env`). */
+  env?: NodeJS.ProcessEnv;
+  /** O cliente do Gemini, injetado para o teste passar um dublê. Sem ele, a explicação fica desligada. */
+  ai?: GoogleGenAI | null;
+}
+
+export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: OpcoesDasRotasDeFinancas): express.Router {
   const router = express.Router();
   const agora = opcoes.agora ?? (() => new Date());
+  const ai = explicacaoIaLigada(opcoes.env) && opcoes.ai ? opcoes.ai : null;
 
   router.use((req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -158,6 +180,13 @@ export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins
   // dependerem dessa decisão.
   router.use(guardaDeIdentidade(opcoes.logins));
   router.use(guardaDeOrigem());
+  // Desligada: nenhuma rota de explicação existe, e o 404 diz por quê (antes do
+  // 503 do banco, para a resposta não depender de o banco estar aberto).
+  if (!ai) {
+    router.use("/explicar", (_req, res) => {
+      res.status(404).json({ error: "Explicação com IA desligada (SQUADONE_FINANCAS_IA).", explicacaoDesligada: true });
+    });
+  }
   router.use((_req, res, next) => {
     if (estado.banco) return next();
     res.status(503).json({ error: estado.problema ?? "Finanças indisponíveis.", financasIndisponiveis: true });
@@ -176,6 +205,7 @@ export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins
       problema: estado.problema,
       sincronizando: estado.sincronizador?.emAndamento() ?? false,
       ultimaSincronizacao: ultima,
+      explicacaoIa: ai !== null,
     };
   }
 
@@ -415,6 +445,85 @@ export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: { logins
       res.status(500).json({ error: "Não foi possível simular agora." });
     }
   });
+
+  // --- Explicar este mês (fase 8d) ----------------------------------
+  //
+  // Só com a flag (acima). Duas etapas, como a importação: `/explicar/previa`
+  // monta o texto e o devolve com o hash (nada sai daqui); `/explicar` remonta
+  // com os MESMOS parâmetros e só chama o Gemini se o hash bater — se os dados
+  // mudaram entre a prévia e o clique (uma leitura da Pluggy, uma categoria
+  // corrigida), sairia um texto que o Rômulo não viu, e isso é 409. Nada é
+  // gravado nem guardado em cache; o log leva só o tamanho e as opções.
+  if (ai) {
+    const pedidoDeExplicacao = (corpo: unknown) => {
+      const b = (corpo && typeof corpo === "object" ? corpo : {}) as Record<string, unknown>;
+      if (!ehMes(b.mes)) throw new PedidoFinanceiroInvalido("'mes' é AAAA-MM.");
+      if (b.visao !== "competencia" && b.visao !== "caixa") throw new PedidoFinanceiroInvalido("'visao' é competencia ou caixa.");
+      return { mes: b.mes, visao: b.visao as Visao, comValores: b.comValores === true, comEstabelecimentos: b.comEstabelecimentos === true };
+    };
+    const pacoteDo = (p: ReturnType<typeof pedidoDeExplicacao>) => {
+      const b = banco();
+      const resumo = resumoDoBanco(b, hojeEm(agora()), p.mes, p.visao);
+      // Os estabelecimentos só são lidos com o toggle ligado: sem ele, o pacote nem os recebe.
+      const opcoesDoPacote: OpcoesDoPacote = p.comEstabelecimentos
+        ? { comValores: p.comValores, comEstabelecimentos: true, estabelecimentos: estabelecimentosDoMes(b.transacoes(), contextoDas(b.contas(), b.faturas()), p.mes, p.visao) }
+        : { comValores: p.comValores, comEstabelecimentos: false };
+      return montarPacote(resumo, opcoesDoPacote);
+    };
+    const comPedido = (res: express.Response, corpo: unknown, seguir: (p: ReturnType<typeof pedidoDeExplicacao>, pacote: string) => Promise<void> | void) => {
+      let p: ReturnType<typeof pedidoDeExplicacao>;
+      let pacote: string;
+      try {
+        p = pedidoDeExplicacao(corpo);
+        pacote = pacoteDo(p);
+      } catch (erro) {
+        if (erro instanceof PedidoFinanceiroInvalido) {
+          res.status(400).json({ error: erro.message });
+          return;
+        }
+        console.error(`[financas] falha ao montar o texto da explicação (${(erro as Error)?.name ?? "erro"})`);
+        res.status(500).json({ error: "Não foi possível montar o texto agora." });
+        return;
+      }
+      return seguir(p, pacote);
+    };
+
+    router.post("/explicar/previa", (req, res) => {
+      void comPedido(res, req.body, (_p, pacote) => {
+        res.json({ pacote, hash: hashDoPacote(pacote), caracteres: pacote.length });
+      });
+    });
+
+    router.post("/explicar", async (req, res) => {
+      await comPedido(res, req.body, async (p, pacote) => {
+        if (typeof req.body?.hash !== "string" || req.body.hash !== hashDoPacote(pacote)) {
+          res.status(409).json({ error: "Os dados mudaram desde a prévia. Confira o texto de novo antes de enviar.", previaDesatualizada: true });
+          return;
+        }
+        console.log(
+          `[financas] explicação pedida: ${pacote.length} caracteres, ${p.comValores ? "com" : "sem"} valores, ${p.comEstabelecimentos ? "com" : "sem"} estabelecimentos`,
+        );
+        try {
+          // Uma chamada, sem ferramentas: a resposta é texto para a tela, nunca uma ação.
+          const resposta = await gerarComRetry(ai, { model: MODEL, contents: pacote, config: { systemInstruction: promptDaExplicacao() } });
+          const explicacao = explicacaoParaTela(resposta.text ?? "");
+          if (!explicacao) {
+            res.status(502).json({ error: "O Gemini respondeu vazio. Tente de novo.", explicacaoFalhou: true });
+            return;
+          }
+          res.json({ explicacao });
+        } catch (erro) {
+          if (erro instanceof ModeloOcupado) {
+            res.status(503).json({ error: erro.message, modeloOcupado: true });
+            return;
+          }
+          // Só o tipo: a mensagem do SDK pode ecoar parte do pedido.
+          console.error(`[financas] a explicação falhou (${(erro as Error)?.name ?? "erro"})`);
+          res.status(502).json({ error: "O Gemini não respondeu a explicação agora.", explicacaoFalhou: true });
+        }
+      });
+    });
+  }
 
   // --- Leitura e importação -----------------------------------------
 

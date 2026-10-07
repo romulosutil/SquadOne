@@ -98,7 +98,7 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
-import { criarRotasDeFinancas, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
+import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
 
@@ -363,7 +363,10 @@ async function startServer() {
       publicar: (aviso) => publicarAviso(aviso, { fila: filaDeAvisos }),
     });
     financasDoProcesso = financas;
-    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale }));
+    // "Explicar este mês" só com SQUADONE_FINANCAS_IA=true (RULES 24): o
+    // cliente do Gemini vai junto, mas sem a flag as rotas nem montam.
+    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale, ai }));
+    if (explicacaoIaLigada()) console.log("[financas] explicação com IA ligada (só a pedido, com prévia).");
     iniciarLeituraDiaria(financas);
   } else {
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional

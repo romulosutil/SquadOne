@@ -172,6 +172,17 @@
 .fin-escolha label { display: grid; gap: var(--esp-1); font-weight: 900; }
 .fin-previa { display: grid; gap: var(--esp-3); }
 
+/* Explicar este mês: a folha vai para o body (Teleport), por isso as classes não dependem de .fin */
+.fin-explicar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.fin-explicar__opcoes { display: grid; gap: var(--esp-1); margin: 0; padding: var(--esp-3); border: var(--linha-fina); }
+.fin-explicar__opcoes legend { padding: 0 var(--esp-1); font-weight: 900; }
+.fin-explicar__opcoes label { display: flex; align-items: center; gap: var(--esp-2); min-height: 44px; font-weight: 700; cursor: pointer; }
+.fin-explicar__opcoes input { width: 1.2rem; height: 1.2rem; }
+.fin-explicar__previa, .fin-explicar__resposta { display: grid; gap: var(--esp-2); min-width: 0; }
+.fin-explicar__previa h3, .fin-explicar__resposta h3 { margin: 0; font-size: 0.95rem; }
+.fin-explicar__previa pre { max-height: 40dvh; margin: 0; padding: var(--esp-3); overflow: auto; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.8rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fin-explicar__resposta p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 @media (min-width: 48rem) {
   .fin-topo { grid-template-columns: minmax(0, 1fr) auto auto; }
   .fin-filtros { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; }
