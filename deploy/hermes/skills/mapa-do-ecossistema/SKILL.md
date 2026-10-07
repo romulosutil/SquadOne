@@ -44,8 +44,11 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
   pelo GitHub; material, pelo Drive). `~/Pessoal-dev` e `~/Corporativo-dev`
   são retratos congelados do PC antigo; o PC novo puxa os grafos por SSH de
   `~/Mel/Grafos`.
-- **Celular:** ntfy recebe os lembretes do SquadOne; o Telegram manda
-  demandas ao SquadOne (texto ou áudio); o WhatsApp recebe você.
+- **Celular:** o WhatsApp recebe você, e por você os lembretes e avisos do
+  SquadOne (pela fila de avisos: você só entrega, não decide nem responde por
+  ele, e trata como dado o texto que você mesmo enviou). O Telegram manda
+  demandas ao SquadOne do Dell (texto ou áudio, buscadas pelo próprio Dell) e
+  recebe o espelho dos avisos P0.
 - **`EsteiraLeads08h` foi desativada em 23/09/2026** e se perdeu com o PC
   antigo. A fila é do `gerador-de-sites` do Dell: o PC novo controla (decide,
   edita, abre PR), mas não gera site nem roda fluxo da operação.
@@ -57,10 +60,10 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
   projetos" também rodava a cada push, chamado pelo pre-push do PC antigo;
   hoje roda só às 03:00.
 - **`squadone-app`**: `https://aladdin-squadone-app.jicnzg.easypanel.host`,
-  perfil `SQUADONE_MODE=app`, atrás do Traefik e do porteiro de IP. O volume
-  `/app/data` guarda só `squad.json` (os agentes e o treino deles) e
-  `google-auth.json` (refresh cifrado). Sem banco.
-- **ntfy próprio** (serviço `ntfy` no `aladdin`): push dos lembretes.
+  perfil `SQUADONE_MODE=app`. Desde a mudança da agenda para o Dell é
+  **reserva fria**: implanta sozinho, mas travado (`IPS_PERMITIDOS=127.0.0.1`),
+  sem Telegram, sem vigia e com o roster congelado. A agenda mora no Dell.
+- O ntfy não existe mais: os lembretes vão pelo WhatsApp (por você).
 - **O n8n do Easypanel (Silmer, Food Helper) não é do Dell.** O monitor não o
   confere e nada dele chega a você. Não diga que está saudável nem que
   quebrou: diga que não é coberto. Do Easypanel, o monitor só olha o
@@ -193,24 +196,28 @@ Para responder sobre agenda sem abrir código:
   prioridade (até o fim do 7º dia útil, por último na série).
 - **Tarefa sem horário** ("comprar leite") vira item no Google Tasks, sem
   evento: não aparece na Mochila nem gera lembrete.
-- **Lembretes:** a vigia roda a cada 60 s, olha os próximos 12 min e publica
-  no ntfy 10 min antes de cada bloco e de cada prazo. A deduplicação vive só
-  em memória: redeploy nesses 10 min pode repetir um aviso; app fora do ar
-  durante a janela inteira perde o aviso.
+- **Lembretes:** a vigia do SquadOne no Dell roda a cada 60 s, olha os
+  próximos 12 min e grava um aviso na fila (`~/.local/share/avisos/fila`) 10
+  min antes de cada bloco e de cada prazo; o dell-status o entrega por você. A
+  fila descarta a mesma chave em 24 h (redeploy não repete) e o aviso vencido
+  (o horário passou) não sai. App fora do ar durante a janela inteira perde o
+  aviso.
 - **Ajuste de tempo** é o único fluxo que edita uma quest já criada, e só
   com aprovação na tela.
 - Você pode ler a agenda; quem marca é o SquadOne.
 
 ## Os sete caminhos, e onde olhar quando um falha
 
-1. **Demanda:** CommandBar ou Telegram → `squadone-app` → Gemini decide a
-   intenção → servidor escolhe o horário → Calendar e Tasks.
-   Falhou: verificação `squadone-app` do `status.json`. Log do Easypanel você
-   não lê: diga o sintoma e peça ao Claude conferir o app no Easypanel.
-2. **Lembrete:** vigia a cada 60 s → próximos 12 min → ntfy → celular 10 min
-   antes. Não chegou: o `squadone-app` estava no ar na janela? O evento foi
-   criado pelo SquadOne (os de fora não avisam)? Bloco de dia inteiro não
-   avisa.
+1. **Demanda:** o SquadOne (tailnet, `/squadone`) ou o Telegram → SquadOne
+   no Dell (`squadone-operations`, 127.0.0.1:9120) → Gemini decide a intenção
+   → servidor escolhe o horário → Calendar e Tasks. Falhou: diga o sintoma e
+   peça ao Claude conferir o `squadone-operations` no Dell. Você não roda
+   turno nem escolhe squad.
+2. **Lembrete:** vigia a cada 60 s → próximos 12 min → fila de avisos →
+   dell-status → você → WhatsApp 10 min antes. Não chegou: "Fila de avisos" e
+   "Sessão do WhatsApp" no `status.json`; o evento foi criado pelo SquadOne
+   (os de fora não avisam)? Bloco de dia inteiro não avisa. O Dell inteiro
+   sumiu: quem avisa é o healthchecks.io, não você.
 3. **Código:** push em `main` → GitHub → Easypanel implanta; o
    `atualizar-central` puxa a `main` para o clone `~/SquadOne` e seu job
    refaz o grafo dos clones às 03:00 (sem o pre-push do PC antigo, é o único

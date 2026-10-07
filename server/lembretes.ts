@@ -15,7 +15,7 @@ const MIN_MS = 60_000;
  * Minutos de antecedência. Constante e não env: virar env é trocar isto por um
  * leitor como lerJanela.
  */
-export const ANTECEDENCIA_PUSH_MIN = 10;
+export const ANTECEDENCIA_LEMBRETE_MIN = 10;
 
 /**
  * Intervalo entre varreduras. O aviso sai com até 1 min de atraso — irrelevante
@@ -91,7 +91,7 @@ export function disparosDevidos(
   janela: Janela,
   dominiosAtivos: { has(id: string): boolean },
   jaEnviados: { has(chave: string): boolean },
-  antecedenciaMin = ANTECEDENCIA_PUSH_MIN,
+  antecedenciaMin = ANTECEDENCIA_LEMBRETE_MIN,
 ): Disparo[] {
   const disparos: Disparo[] = [];
   for (const q of quests) {

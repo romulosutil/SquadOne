@@ -41,13 +41,12 @@ import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./se
 import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { avisoParaPush, descreverPush, enviarPush, ErroDePush, lerConfigDePush, PushMalConfigurado, type ConfigDePush } from "./server/push.ts";
 import { publicarAviso, type Aviso } from "./server/avisos.ts";
 import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
 import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
 import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
 import { lerStatusDoDell } from "./server/dell-status.ts";
-import { ANTECEDENCIA_PUSH_MIN } from "./server/lembretes.ts";
+import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import {
   desconectar,
@@ -649,58 +648,28 @@ async function startServer() {
   });
 
   // --- Lembretes: a vigia ------------------------------------------------
-  // Dell (operations com a agenda): a vigia publica na fila de avisos, que o
-  // dell-status drena para o WhatsApp do Hermes; P0 também vai ao Telegram.
-  // Easypanel (app): ntfy, só enquanto durar a sombra (LEMBRETES_NTFY_URL);
-  // depois o Easypanel não roda vigia (regra 25). Config ilegível NÃO derruba o
-  // boot: lembrete é acessório, o turno e a Mochila seguem.
-  let configDePush: ConfigDePush | null = null;
-  let falhaDoPush: string | null = null;
-  if (squadOneMode === "app") {
-    try {
-      configDePush = lerConfigDePush(process.env);
-    } catch (error: any) {
-      falhaDoPush = error instanceof PushMalConfigurado ? error.message : String(error?.message ?? error);
-    }
-  }
+  // Só no Dell (operations com a agenda): a vigia publica na fila de avisos, que
+  // o dell-status drena para o WhatsApp do Hermes; P0 também vai ao Telegram. O
+  // Easypanel (app) não roda vigia (regra 25): dois processos varrendo a mesma
+  // agenda mandariam cada lembrete duas vezes.
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   const telegramDoDono = configDeTelegram
     ? async (texto: string) => {
         for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto);
       }
     : undefined;
-  const transporteDaVigia: ((a: Aviso) => Promise<void>) | null =
-    squadOneMode === "operations"
-      ? agendaAtiva
-        ? async (a) => {
+  const vigia: Vigia | null =
+    squadOneMode === "operations" && agendaAtiva
+      ? criarVigia({
+          lerJanela: () => lerJanela(process.env),
+          lerRoster: readRoster,
+          obterToken: tokenValido,
+          listar: listarQuestsDaJanela,
+          enviar: async (a: Aviso) => {
             await publicarAviso(a, { fila: filaDeAvisos, telegram: telegramDoDono });
-          }
-        : null
-      : configDePush
-        ? (a) => enviarPush(configDePush!, avisoParaPush(a))
-        : null;
-  const vigia: Vigia | null = transporteDaVigia
-    ? criarVigia({
-        lerJanela: () => lerJanela(process.env),
-        lerRoster: readRoster,
-        obterToken: tokenValido,
-        listar: listarQuestsDaJanela,
-        enviar: transporteDaVigia,
-      })
-    : null;
-
-  /** 409 quando desligado, 500 quando mal configurado; false = pode seguir. */
-  function pushIndisponivel(res: express.Response): boolean {
-    if (falhaDoPush) {
-      res.status(500).json({ error: falhaDoPush, configuracao: true });
-      return true;
-    }
-    if (!configDePush || !vigia) {
-      res.status(409).json({ error: "Push desligado: LEMBRETES_NTFY_URL vazia.", pushDesligado: true });
-      return true;
-    }
-    return false;
-  }
+          },
+        })
+      : null;
 
   // Ajuste APROVADO pelo usuário. Janela antes do token (config quebrada não
   // gasta chamada). Horário só muda de lugar com permitirMover.
@@ -741,10 +710,11 @@ async function startServer() {
     return new Date(lido.instante);
   }
 
-  // Simulação da vigia do Dell: uma varredura REAL contra o Google com relógio
+  // Simulação da vigia do Dell (substitui as antigas /api/push/teste e
+  // /api/push/varrer do ntfy): uma varredura REAL contra o Google com relógio
   // simulado, que devolve os avisos que sairiam e NÃO grava nada na fila nem na
   // deduplicação. Enviar de verdade não existe aqui: o único caminho para a fila
-  // é a própria vigia, com as regras dela (é o que a sombra valida).
+  // é a própria vigia, com as regras dela.
   if (squadOneMode === "operations") {
     rotasDoApp.post("/api/avisos/varrer", async (req, res) => {
       if (!vigia) return res.status(409).json({ error: "Vigia desligada neste processo.", vigiaDesligada: true });
@@ -762,50 +732,6 @@ async function startServer() {
       }
     });
   }
-
-  // Confere servidor ntfy + celular sem esperar evento nenhum. Só no Easypanel,
-  // durante a sombra: sai com o ntfy.
-  if (squadOneMode === "app") rotasDoApp.post("/api/push/teste", async (_req, res) => {
-    if (pushIndisponivel(res)) return;
-    try {
-      const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, dateStyle: "short", timeStyle: "short" }).format(new Date());
-      await enviarPush(configDePush!, {
-        titulo: "SquadOne: teste de lembrete",
-        corpo: `Push funcionando (${hora}).`,
-        prioridade: 3,
-        tags: ["white_check_mark"],
-      });
-      res.json({ enviado: true });
-    } catch (error: any) {
-      if (error instanceof ErroDePush) {
-        return res.status(502).json({ error: error.message, pushFalhou: true, credencial: error.credencial });
-      }
-      console.error("Erro no push de teste:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Uma varredura REAL contra o Google com relógio simulado: mostra o que
-  // sairia (enviar=false, padrão) ou manda de fato (enviar=true). Nunca grava
-  // na deduplicação da vigia — o teste não engole o aviso de verdade.
-  if (squadOneMode === "app") rotasDoApp.post("/api/push/varrer", async (req, res) => {
-    if (pushIndisponivel(res)) return;
-    const { enviar = false } = req.body ?? {};
-    const relogio = relogioDoPedido(req, res);
-    if (!relogio) return;
-    if (typeof enviar !== "boolean") {
-      return res.status(400).json({ error: "Campo 'enviar' deve ser booleano" });
-    }
-    try {
-      res.json(await vigia!.varrer(relogio, { enviar, registrar: false }));
-    } catch (error: any) {
-      if (error instanceof JanelaMalConfigurada || error instanceof ErroDeConfig) {
-        return res.status(500).json({ error: error.message, configuracao: true });
-      }
-      console.error("Erro na varredura de teste:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   if (agendaAtiva) {
     app.use(rotasDoApp);
@@ -845,7 +771,7 @@ async function startServer() {
     console.log(`Diretório de dados: ${dataDir}`);
     if (!agendaAtiva) console.log(`Agenda desligada neste processo: ${motivoDaAgendaDesligada}`);
     else {
-      console.log(`Agenda ligada; lembretes pela fila de avisos (${filaDeAvisos}), ${ANTECEDENCIA_PUSH_MIN} min antes`);
+      console.log(`Agenda ligada; lembretes pela fila de avisos (${filaDeAvisos}), ${ANTECEDENCIA_LEMBRETE_MIN} min antes`);
       if (!process.env.GEMINI_API_KEY) console.error("GEMINI_API_KEY vazia: turno, redação e transcrição vão falhar.");
     }
     if (identidadeLigada) {
@@ -854,10 +780,6 @@ async function startServer() {
     } else {
       console.log("[acesso] identidade do Tailscale não conferida (agenda desligada e SQUADONE_LOGINS_TAILSCALE vazia).");
     }
-  } else {
-    if (falhaDoPush) console.error(`Lembretes push inválidos (desligados): ${falhaDoPush}`);
-    else if (configDePush) console.log(`Lembretes push: ${descreverPush(configDePush)}, ${ANTECEDENCIA_PUSH_MIN} min antes`);
-    else console.log("Lembretes push desligados (LEMBRETES_NTFY_URL vazia)");
   }
   if (rosterCongelado()) console.log("Roster CONGELADO (SQUADONE_ROSTER_CONGELADO=true): contratações e edições recusadas.");
 
