@@ -1,13 +1,24 @@
-import { descricaoNormalizada, mesDe, somarMeses } from "./comum.ts";
+import { mesDe, somarMeses } from "./comum.ts";
+import {
+  fimDoMes,
+  orcamentoDoMes,
+  porcentagem,
+  recorrentesAte,
+  semaforoDe,
+  type OrcamentoDoMes,
+  type Recorrente,
+  type Recorrentes,
+  type Semaforo,
+} from "./organizacao.ts";
 import { projetarParcelas, type ParcelamentoProjetado } from "./parcelas.ts";
 import { contextoDas } from "./processar.ts";
 import type { Conexao, Conta, Fatura, SaudeDaConexao, TipoDeConta, Transacao } from "./tipos.ts";
 import { gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao } from "./visoes.ts";
 
 /**
- * O resumo da tela "Visão": quanto tenho, quanto devo, quanto gastei e o que
- * se repete. PURO: recebe os lançamentos JÁ processados (`processar.ts`), o
- * dia de hoje (AAAA-MM-DD, São Paulo) e o mês pedido.
+ * O resumo da tela "Visão": quanto tenho, quanto devo, quanto gastei, o
+ * orçamento e o que se repete. PURO: recebe os lançamentos JÁ processados
+ * (`processar.ts`), o dia de hoje (AAAA-MM-DD, São Paulo) e o mês pedido.
  *
  * "Devo" por cartão é a soma de três pedaços que não se sobrepõem:
  * - faturas FECHADAS com vencimento de hoje em diante (total − pago);
@@ -21,6 +32,13 @@ import { gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao
  */
 
 export const TIPOS_DE_PATRIMONIO: readonly TipoDeConta[] = ["corrente", "poupanca", "investimento", "dinheiro", "beneficio"];
+
+/**
+ * A conta dos gastos anotados à mão ("gastei 30 no mercado" no Telegram).
+ * Não tem saldo (ninguém conta o dinheiro da carteira): fica fora do "tenho",
+ * e os lançamentos dela entram no "gastei" como os de qualquer conta.
+ */
+export const CONTA_MANUAL = "manual:dinheiro";
 
 export interface ContaResumida {
   id: string;
@@ -38,8 +56,9 @@ export interface CartaoResumido {
   limiteCentavos: number | null;
   /** Limite usado segundo o banco; null quando a fonte não dá o disponível. */
   usadoBancoCentavos: number | null;
-  /** % do limite usado (0–100+), para o semáforo; null sem limite. */
+  /** % do limite usado (0–100+, arredondado para baixo), para o semáforo; null sem limite. */
   usoPct: number | null;
+  semaforo: Semaforo | null;
   fechada: { vencimento: string; centavos: number; pagoCentavos: number } | null;
   aberta: { vencimento: string; centavos: number; semLancamentos: boolean };
   futurasCentavos: number;
@@ -67,17 +86,20 @@ export interface ResumoFinanceiro {
     categorias: { categoria: string; centavos: number; anteriorCentavos: number }[];
   };
   recebi: { totalCentavos: number; anteriorCentavos: number };
+  /** Sempre em competência (ver `orcamentoDoMes`); null sem orçamento nenhum. */
+  orcamento: OrcamentoDoMes | null;
   recorrentes: Recorrente[];
+  recorrentesDesmarcados: Recorrentes["desmarcados"];
   saude: { conexoes: (Conexao & { saude: SaudeDaConexao })[]; dadosAte: string | null };
 }
 
-export interface Recorrente {
-  descricao: string;
-  categoria: string;
-  mediaCentavos: number;
-  meses: number;
-  ultimoMes: string;
+/** O que o Rômulo organizou e o resumo usa: orçamento por categoria e marcas de recorrente. */
+export interface OrganizacaoDoResumo {
+  orcamentos: ReadonlyMap<string, number>;
+  marcasDeRecorrente: ReadonlyMap<string, boolean>;
 }
+
+const SEM_ORGANIZACAO: OrganizacaoDoResumo = { orcamentos: new Map(), marcasDeRecorrente: new Map() };
 
 /** Status da Pluggy → semáforo. Desconhecido conta como erro: na dúvida, não dizer que está tudo bem (RULES 2). */
 export function saudeDa(c: Pick<Conexao, "status" | "erroLeitura">): SaudeDaConexao {
@@ -104,13 +126,14 @@ export function resumir(
   hoje: string,
   mes: string,
   visao: Visao,
+  org: OrganizacaoDoResumo = SEM_ORGANIZACAO,
 ): ResumoFinanceiro {
   const { contas, faturas, transacoes } = entrada;
   const ctx = contextoDas(contas, faturas);
   const mesAnterior = somarMeses(mes, -1);
 
   // --- Tenho ----------------------------------------------------------
-  const patrimonio = contas.filter((c) => TIPOS_DE_PATRIMONIO.includes(c.tipo));
+  const patrimonio = contas.filter((c) => TIPOS_DE_PATRIMONIO.includes(c.tipo) && c.id !== CONTA_MANUAL);
   const tenho = {
     totalCentavos: patrimonio.reduce((s, c) => s + c.saldoCentavos, 0),
     contas: patrimonio
@@ -156,6 +179,7 @@ export function resumir(
     const usado = c.limiteCentavos !== null && c.limiteDisponivelCentavos !== null ? Math.max(0, c.limiteCentavos - c.limiteDisponivelCentavos) : null;
     const total = usado ?? detalhado;
     const primeira = aPagar[0];
+    const usoPct = usado !== null && c.limiteCentavos ? porcentagem(usado, c.limiteCentavos) : null;
     return {
       id: c.id,
       nome: c.nome,
@@ -163,7 +187,8 @@ export function resumir(
       final: c.final,
       limiteCentavos: c.limiteCentavos,
       usadoBancoCentavos: usado,
-      usoPct: usado !== null && c.limiteCentavos ? Math.round((usado / c.limiteCentavos) * 100) : null,
+      usoPct,
+      semaforo: usoPct === null ? null : semaforoDe(usoPct),
       fechada: primeira ? { vencimento: primeira.vencimento, centavos: fechadaCentavos, pagoCentavos: aPagar.reduce((s, f) => s + f.pagoCentavos, 0) } : null,
       aberta: {
         vencimento: vencimentoPrevisto(hoje, proprias),
@@ -189,12 +214,16 @@ export function resumir(
   // --- Gastei e recebi ------------------------------------------------
   const atual = new Map<string, number>();
   const anterior = new Map<string, number>();
+  // O orçamento é sempre em competência, qualquer que seja a visão da tela.
+  const competencia = new Map<string, number>();
   let recebi = 0;
   let recebiAntes = 0;
   for (const t of transacoes) {
     const g = gastoNaVisao(t, visao, ctx);
     if (g?.mes === mes) somarPorChave(atual, t.categoria, g.centavos);
     else if (g?.mes === mesAnterior) somarPorChave(anterior, t.categoria, g.centavos);
+    const c = visao === "competencia" ? g : gastoNaVisao(t, "competencia", ctx);
+    if (c?.mes === mes) somarPorChave(competencia, t.categoria, c.centavos);
     const r = receitaDoMes(t, ctx);
     if (r?.mes === mes) recebi += r.centavos;
     else if (r?.mes === mesAnterior) recebiAntes += r.centavos;
@@ -209,6 +238,9 @@ export function resumir(
     categorias,
   };
 
+  // --- Recorrentes ----------------------------------------------------
+  const { lista, desmarcados } = recorrentesAte(transacoes, fimDoMes(mes), org.marcasDeRecorrente, (t) => gastoNaVisao(t, "competencia", ctx)?.centavos ?? null);
+
   // --- Saúde ----------------------------------------------------------
   const conexoes = entrada.conexoes.map((c) => ({ ...c, saude: saudeDa(c) }));
   // A data que vale é a da conexão mais atrasada: "dados até" promete que TUDO está até ali.
@@ -222,45 +254,9 @@ export function resumir(
     devo,
     gastei,
     recebi: { totalCentavos: recebi, anteriorCentavos: recebiAntes },
-    recorrentes: recorrentes(transacoes, mes, ctx),
+    orcamento: orcamentoDoMes(org.orcamentos, competencia),
+    recorrentes: lista,
+    recorrentesDesmarcados: desmarcados,
     saude: { conexoes, dadosAte },
   };
-}
-
-/** Meses olhados para dizer que algo se repete, e em quantos dele tem de aparecer. */
-export const JANELA_RECORRENTE = 4;
-export const MINIMO_RECORRENTE = 3;
-
-/**
- * Gastos que se repetem: mesma descrição normalizada em pelo menos 3 dos 4
- * meses até `mes` (competência), fora parcela (parcela já está no "devo") e
- * com valor estável (o maior mês até o dobro do menor) — o mercado da semana
- * aparece todo mês e não é assinatura.
- */
-export function recorrentes(transacoes: Transacao[], mes: string, ctx: ReturnType<typeof contextoDas>): Recorrente[] {
-  const primeiro = somarMeses(mes, -(JANELA_RECORRENTE - 1));
-  const porDescricao = new Map<string, { descricao: string; categoria: string; meses: Map<string, number> }>();
-  for (const t of transacoes) {
-    if (t.natureza !== "despesa" || (t.parcelaTotal ?? 1) > 1) continue;
-    const g = gastoNaVisao(t, "competencia", ctx);
-    if (!g || g.mes < primeiro || g.mes > mes || g.centavos <= 0) continue;
-    const chave = descricaoNormalizada(t.descricao);
-    if (!chave) continue;
-    if (!porDescricao.has(chave)) porDescricao.set(chave, { descricao: t.descricao, categoria: t.categoria, meses: new Map() });
-    somarPorChave(porDescricao.get(chave)!.meses, g.mes, g.centavos);
-  }
-  const saida: Recorrente[] = [];
-  for (const { descricao, categoria, meses } of porDescricao.values()) {
-    if (meses.size < MINIMO_RECORRENTE) continue;
-    const valores = [...meses.values()];
-    if (Math.max(...valores) > 2 * Math.min(...valores)) continue;
-    saida.push({
-      descricao,
-      categoria,
-      mediaCentavos: Math.round(valores.reduce((s, c) => s + c, 0) / valores.length),
-      meses: meses.size,
-      ultimoMes: [...meses.keys()].sort().at(-1)!,
-    });
-  }
-  return saida.sort((a, b) => b.mediaCentavos - a.mediaCentavos).slice(0, 20);
 }

@@ -1,4 +1,5 @@
 import type { Modo } from "./capabilities.ts";
+import { lerGastoFalado, type GastoFalado } from "./financas/gasto-falado.ts";
 
 /**
  * PURO: o que um update do Telegram significa para o SquadOne. Sem fetch, env
@@ -10,6 +11,13 @@ export type Entrada =
   /** Mensagem de voz/áudio: vira demanda depois de transcrita (`telegram-bot.ts`). */
   | { tipo: "audio"; updateId: number; chatId: number; mensagemId: number; fileId: string; mime: string; modo: Modo }
   | { tipo: "audioLongo"; updateId: number; chatId: number; mensagemId: number }
+  /**
+   * "gastei 30 no mercado": vai para as finanças, NUNCA para o turno (nada de
+   * finanças vai ao modelo). `quando` é a hora da mensagem: o gasto é do dia em
+   * que foi escrito, mesmo entregue atrasado (por isso sem a guarda de atraso;
+   * a mesma mensagem duas vezes não duplica, a chave é o id dela).
+   */
+  | { tipo: "gasto"; updateId: number; chatId: number; mensagemId: number; gasto: GastoFalado; quando: Date }
   /** Toque num botão Aprovar/Descartar de uma proposta de contratação. */
   | { tipo: "botao"; updateId: number; chatId: number; mensagemId: number; callbackId: string; acao: "aprovar" | "descartar"; propostaId: string }
   | { tipo: "atrasada"; updateId: number; chatId: number; mensagemId: number; atrasoMin: number }
@@ -24,6 +32,8 @@ export const TEXTO_DE_AJUDA = [
   "/foco <demanda> — primeiro horário livre a partir de agora",
   "/baixa <demanda> — encaixa até o 7º dia útil, depois dos outros",
   "Sem comando = o modelo escolhe o tipo (como o Auto do app).",
+  "",
+  "gastei 30 no mercado — anota um gasto em dinheiro (a resposta diz só a categoria)",
 ].join("\n");
 
 export const TEXTO_SEM_TEXTO = "Só texto ou áudio por enquanto.";
@@ -110,6 +120,11 @@ export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<
   if (!texto) return { tipo: "semTexto", ...base };
 
   const cmd = COMANDO.exec(texto);
+  const gasto = cmd ? null : lerGastoFalado(texto);
+  if (gasto) {
+    const quando = typeof m.date === "number" && m.date * 1000 <= agora.getTime() ? new Date(m.date * 1000) : agora;
+    return { tipo: "gasto", ...base, gasto, quando };
+  }
   const modo = cmd ? MODOS[cmd[1].toLowerCase()] : "auto";
   const demanda = cmd ? (cmd[2] ?? "").trim() : texto;
   if (!modo || !demanda) return { tipo: "ajuda", ...base };

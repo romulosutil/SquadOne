@@ -30,8 +30,12 @@ export type Natureza = (typeof NATUREZAS)[number];
 export const FONTES = ["pluggy", "ofx", "csv", "manual", "pdf"] as const;
 export type Fonte = (typeof FONTES)[number];
 
-/** De onde veio a categoria: da Pluggy, da regra local, ou do Rômulo (essa nunca é sobrescrita). */
-export type OrigemDaCategoria = "pluggy" | "regra" | "usuario" | "nenhuma";
+/**
+ * De onde veio a categoria: da Pluggy, da regra local, de uma regra que o
+ * Rômulo criou ("aplicar sempre a este estabelecimento"), ou dele no próprio
+ * lançamento (essa nunca é sobrescrita).
+ */
+export type OrigemDaCategoria = "pluggy" | "regra" | "regra_usuario" | "usuario" | "nenhuma";
 
 export type StatusDaTransacao = "pendente" | "lancada";
 

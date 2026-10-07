@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import GameMap from './components/GameMap.vue'
 import CommandBar from './components/CommandBar.vue'
 import QuestBackpack from './components/QuestBackpack.vue'
@@ -32,6 +32,7 @@ import type {
 } from './types'
 import { ampliarAcesso, conectado, conectando, desconectar, irParaConsentimento, lerRetornoDoConsentimento, sincronizarStatus, tasksLiberado } from './auth/google'
 import { gravarSquadAtiva, lerSquadAtiva } from './squadAtiva'
+import { ehSalaDeFinancas, estadoDoAgente, type EstadoDasFinancas, type EstadoDoAgente } from './office/salaFinancas'
 
 defineProps<{ operationsMode?: boolean }>()
 
@@ -75,6 +76,43 @@ const ajustes = ref<PropostaDeAjuste[]>([])
 const aprovandoAjuste = ref('')
 const erroAjuste = ref<Record<string, string>>({})
 const ajusteNaoCabe = ref<Record<string, boolean>>({})
+
+// Sala Finanças (07/10/2026): o PO da sala "Finanças" mostra a % do limite do
+// cartão e do orçamento do mês. Só o Dell tem finanças: no Easypanel a rota
+// cai no fallback da SPA (HTML), e a sala fica sem balão. Só % e semáforo
+// (RULES 24), e nada disto entra no roster nem no prompt.
+const estadoDasFinancas = ref<EstadoDasFinancas | null>(null)
+const temSalaDeFinancas = computed(() => (squadAtiva.value?.dominios ?? []).some(ehSalaDeFinancas))
+const estadosDasSalas = computed<Record<string, EstadoDoAgente>>(() => {
+  const estado = estadoDoAgente(estadoDasFinancas.value)
+  if (!estado) return {}
+  return Object.fromEntries((squadAtiva.value?.dominios ?? []).filter(ehSalaDeFinancas).map((d) => [d.id, estado]))
+})
+async function lerEstadoDasFinancas() {
+  if (!temSalaDeFinancas.value) return
+  try {
+    const resposta = await fetch('/api/financas/estado')
+    const json = (resposta.headers.get('content-type') ?? '').includes('application/json')
+    estadoDasFinancas.value = resposta.ok && json ? await resposta.json() : null
+  } catch {
+    estadoDasFinancas.value = null
+  }
+}
+watch(
+  temSalaDeFinancas,
+  (tem) => {
+    if (tem) void lerEstadoDasFinancas()
+  },
+  { immediate: true }
+)
+let relogioDasFinancas = 0
+onMounted(() => {
+  // A leitura diária da Pluggy e um gasto anotado pelo Telegram mudam a %: relê com a aba visível.
+  relogioDasFinancas = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void lerEstadoDasFinancas()
+  }, 5 * 60_000)
+})
+onBeforeUnmount(() => window.clearInterval(relogioDasFinancas))
 
 // O roster manda: papeis, slots desbloqueados e roteamento saem daqui.
 onMounted(async () => {
@@ -930,7 +968,7 @@ const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
 
         <!-- :key por squad: recria useOffice ao trocar, senao as salas da
              outra squad seriam lidas como crescimento e animariam. -->
-        <GameMap :key="squadAtiva?.id ?? 'sem-squad'" :agent="currentAgent" :squad="squadAtiva" />
+        <GameMap :key="squadAtiva?.id ?? 'sem-squad'" :agent="currentAgent" :squad="squadAtiva" :estados-das-salas="estadosDasSalas" />
       </main>
     </div>
 
