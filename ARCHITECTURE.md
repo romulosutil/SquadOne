@@ -170,7 +170,8 @@ Meu Pluggy (Santander, Nubank, Mercado Pago)
             ├─ dedupe.ts (PURO): PENDENTE→LANÇADO, id trocado, Pluggy vence PDF
             └─ banco.ts: financas.db (SQLite, 600, migrações em user_version)
        └─ processar.ts (PURO), sobre tudo: natureza → fatura → pagamento pelo
-          valor → pares entre contas → parcelas → categoria
+          valor → pares entre contas → parcelas → categoria (refeito também ao
+          abrir as finanças: uma regra nova vale no deploy)
        └─ VACUUM INTO financas.copia.db (600) → cofre restic
 fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   └─ conferência contra o total da fatura da Pluggy → grava no 2º toque

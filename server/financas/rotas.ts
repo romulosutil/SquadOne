@@ -59,6 +59,14 @@ export async function prepararFinancas(dataDir: string, env: NodeJS.ProcessEnv =
     console.error(`[financas] desligadas: ${mensagem}`);
     return { banco: null, sincronizador: null, problema: mensagem };
   }
+  // O passe puro muda com o código (uma regra de parcela, de natureza): refeito ao abrir, a
+  // correção vale no deploy, e não só na próxima leitura da Pluggy. Só recalcula o que já está
+  // gravado (a categoria do Rômulo nunca muda); falha aqui não fecha as finanças.
+  try {
+    reprocessar(banco);
+  } catch (erro) {
+    console.error(`[financas] falha ao refazer o passe puro ao abrir (${(erro as Error)?.name ?? "erro"}).`);
+  }
   let problema: string | null = null;
   let config: ReturnType<typeof lerConfigDaPluggy> = null;
   try {
