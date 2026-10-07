@@ -77,6 +77,14 @@ export async function prepararFinancas(
     console.error(`[financas] desligadas: ${mensagem}`);
     return { banco: null, sincronizador: null, avisador: null, problema: mensagem };
   }
+  // O passe puro muda com o código (uma regra de parcela, de natureza): refeito ao abrir, a
+  // correção vale no deploy, e não só na próxima leitura da Pluggy. Só recalcula o que já está
+  // gravado (a categoria do Rômulo nunca muda); falha aqui não fecha as finanças.
+  try {
+    reprocessar(banco);
+  } catch (erro) {
+    console.error(`[financas] falha ao refazer o passe puro ao abrir (${(erro as Error)?.name ?? "erro"}).`);
+  }
   let problema: string | null = null;
   let config: ReturnType<typeof lerConfigDaPluggy> = null;
   try {
@@ -93,12 +101,6 @@ export async function prepararFinancas(
     itemIds: config?.itemIds ?? [],
     depois: () => avisador.avisar(),
   });
-  // O que o código novo deriva (regras, renomes) vale já, sem esperar a leitura diária.
-  try {
-    reprocessar(banco);
-  } catch (erro) {
-    console.error(`[financas] falha ao reprocessar no boot (${(erro as Error)?.name ?? "erro"})`);
-  }
   console.log(`[financas] banco aberto; Pluggy ${config ? `com ${config.itemIds.length} conexão(ões)` : "desligada"}; alertas ${opcoes.publicar ? "pela fila de avisos" : "desligados"}.`);
   return { banco, sincronizador, avisador, problema };
 }

@@ -171,7 +171,8 @@ Meu Pluggy (Santander, Nubank, Mercado Pago)
             ├─ dedupe.ts (PURO): PENDENTE→LANÇADO, id trocado, Pluggy vence PDF
             └─ banco.ts: financas.db (SQLite, 600, migrações em user_version)
        └─ processar.ts (PURO), sobre tudo: natureza → fatura → pagamento pelo
-          valor → pares entre contas → parcelas → categoria
+          valor → pares entre contas → parcelas → categoria (refeito também ao
+          abrir as finanças: uma regra nova vale no deploy)
        └─ VACUUM INTO financas.copia.db (600) → cofre restic
 fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   └─ conferência contra o total da fatura da Pluggy → grava no 2º toque
@@ -196,8 +197,23 @@ Telegram "gastei 30 no mercado" ── gasto-falado.ts (PURO) → conta manual
 - **Devo** por cartão = o limite usado que o banco informa, quando ele dá o
   disponível; o detalhe (fatura fechada a pagar + fatura aberta + parcelas
   futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
-  vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
-  (`parcelas.ts`).
+  vez de sumir. A fatura aberta soma os lançamentos já listados e as parcelas
+  dela que o banco ainda não lançou (o Santander e o Mercado Pago lançam as
+  parcelas no dia do fechamento; sem a projeção, um mês inteiro de parcelas
+  virava "sem detalhe"). A Pluggy não dá id de compra parcelada: o grupo é heurístico
+  (`parcelas.ts`) e a chave é a **data da compra** quando a fonte a dá
+  (`purchaseDate`, a data da linha no PDF): datas diferentes são compras
+  diferentes, e na mesma data o valor da parcela pode variar até 1% (o
+  Santander e o Mercado Pago cobram as primeiras uns centavos acima; com a
+  tolerância de 1 centavo a mesma compra virava dois grupos e as parcelas
+  que faltam contavam em dobro). Sem a data, valor ±1 centavo e mês de
+  origem ±1.
+- **O pago de uma fatura sai da data do pagamento** (`pagoDasFaturas`), não
+  do `pago` que a fonte põe nela: um pagamento quita a última fatura que já
+  tinha fechado. Cada banco informa de um jeito: o Mercado Pago e o Nubank
+  põem na fatura o pagamento dela; o Santander põe os pagamentos feitos
+  dentro do ciclo, que são da fatura anterior (visto em 07/10/2026: a fatura
+  fechada aparecia paga e sumia do "devo").
 - **Categoria por regra**: natureza → regra do Rômulo por estabelecimento →
   tabela da categoria da Pluggy → palavras da descrição; nada vai ao modelo
   (RULES 24). A do usuário (`origem_categoria = usuario`) nunca é
