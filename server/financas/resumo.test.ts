@@ -189,7 +189,7 @@ describe("resumir: gastei por categoria contra o mês anterior", () => {
 
 describe("resumir: recorrentes", () => {
   const contas = [conta("cc", "corrente")];
-  it("aparece em 3 dos 4 meses com valor estável", () => {
+  it("mesmo estabelecimento a ~30 dias (um mês pulado vale), com valor estável", () => {
     const transacoes = processar(contas, [], [
       tx("cc", "2026-07-05", -3990, "NETFLIX.COM"),
       tx("cc", "2026-08-05", -3990, "NETFLIX.COM"),
@@ -197,7 +197,7 @@ describe("resumir: recorrentes", () => {
       tx("cc", "2026-10-06", -9000, "LOJA UNICA"),
     ]);
     const r = resumir({ contas, faturas: [], transacoes, conexoes: [] }, hoje, "2026-10", "competencia");
-    assert.deepEqual(r.recorrentes.map((x) => [x.descricao, x.meses, x.mediaCentavos, x.ultimoMes]), [["NETFLIX.COM", 3, 4157, "2026-10"]]);
+    assert.deepEqual(r.recorrentes.map((x) => [x.descricao, x.vezes, x.mediaCentavos, x.ultimaData, x.origem]), [["NETFLIX.COM", 3, 4157, "2026-10-05", "detectado"]]);
   });
   it("valor que varia mais que o dobro não é recorrente", () => {
     const transacoes = processar(contas, [], [

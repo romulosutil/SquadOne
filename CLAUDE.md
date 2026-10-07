@@ -28,11 +28,13 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
-vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso) e `sync`, este com um
-SQLite num diretório temporário),
+vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso),
+`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, e `sync` e
+`organizar`, estes dois com um SQLite num diretório temporário),
+`server/telegram-gasto.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
-`src/office/postos.test.ts` e `src/office/trabalhadores.test.ts`). O monitor do Dell tem os seus em Python:
+`src/office/postos.test.ts`, `src/office/trabalhadores.test.ts` e `src/office/salaFinancas.test.ts`). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py`. Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -90,7 +92,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
+    organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
     pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
+    servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app) ou Central (perfil operations)
   src/operations/         Central de Operações (só perfil operations)
     OperationsApp.vue     home (/) e CRM (/crm); OperationsHeader.vue com o botão "Agentes do SquadOne" (app do Easypanel)
@@ -99,7 +103,7 @@ src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AgendaPanel.vue, AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado)
     Crm*.vue, crm-formato.ts  CRM: Hoje, Funil e Ficha
-    financas/             Finanças: Visão (tenho, devo, gastei, todo mês) e Lançamentos; saúde e "dados até" em toda tela
+    financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
     BarraInferior.vue, MaisPanel.vue  casca mobile: barra Hoje · Funil · ＋Pedir (desabilitado) · Finanças · Mais
   src/estilos/            tokens.css (paleta da Central + modo escuro), casca.css, design.md
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
@@ -116,6 +120,7 @@ src/App.vue               orquestra a tela; dono do estado de roster, squad ativ
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
   src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
   src/office/trabalhadores.ts  catálogo versionado: trabalhador automático (n8n, timer) → sala; FORA do prompt (RULES 26)
+  src/office/salaFinancas.ts  PURO: Sala Finanças (domínio "Finanças") e o balão do PO com % do cartão e do orçamento
   src/office/pixelProps.ts  SVG pixel art dos móveis (mesa, cadeira, planta, estante...)
   src/office/useOffice.ts loop rAF, câmera, atores; passeio ambiente vs. movimento por comando
 seed/squad.seed.json      roster inicial — FORA de data/, ver "Volume" abaixo
@@ -278,6 +283,7 @@ Segundo canal de entrada, além da CommandBar: mandar uma demanda pelo Telegram 
 - **Contratação se aprova por botão.** O resumo do turno só conta "💡 N proposta(s) de contratação abaixo"; cada proposta de domínio/integrante vai numa mensagem própria (`textoDaProposta`) com **✅ Aprovar** / **🗑️ Descartar** (`inline_keyboard`, `callback_data` = `h:<id da sugestão>:a|d`, ≤ 64 bytes). O toque chega como `callback_query`: mesma allowlist (chat privado da lista; fora dela, silêncio), `answerCallbackQuery` para tirar o "carregando", e a mensagem é editada com o resultado — sem `reply_markup`, então os botões somem. Aprovar chama o MESMO `aplicarContratacao` da rota `/api/squad/hire` (revalida tudo contra o roster atual, aplica na squad da proposta, nome escolhido pelo servidor). As propostas vivem **só em memória** do processo (`VALIDADE_PROPOSTA_MS` 24h, `MAX_PROPOSTAS_PENDENTES` 50): redeploy ou vencimento = "⌛ Proposta expirada". **Uso único:** a proposta sai da memória ANTES de aplicar, então dois toques rápidos não contratam duas pessoas, e uma contratação que falha não deixa botão para repetir (pede de novo). Toque fora da fila de turnos: contratar não lê a agenda, e `atualizarRoster` já serializa a gravação. A troca de squad (o empate de dois saltos) continua só texto.
 - **Áudio vira demanda.** Voz (`message.voice`) ou arquivo `audio/*` (`message.audio`); legenda `/foco`/`/baixa` força o modo. Teto `MAX_DURACAO_AUDIO_S` 120 e `MAX_BYTES_AUDIO` 5 MB, conferido pelo update ANTES de baixar ("🎙️ Áudio longo demais"). Na fila serial, como o texto: `getFile` + download (`baixarArquivo`, a URL de arquivo também leva o token e nunca aparece em erro), transcrição por uma chamada separada ao Gemini (`server/transcricao.ts`, arquivo inline, `gerarComRetry`, `SEM_FALA` → `AudioSemFala` → "Não entendi o áudio"), e a transcrição roda como demanda — a resposta começa ecoando `🎙️ “<o que entendeu>”` para o usuário conferir. Custo: **uma geração a mais por áudio**, e o áudio passa pelo Google além do Telegram. Guarda de demanda atrasada vale igual.
 - **Comandos** (`server/telegram-entrada.ts`, PURO, depois da checagem de chat): texto sem `/` é demanda em `modo: auto`; `/foco <texto>` e `/baixa <texto>` forçam o modo (mesmo mecanismo do toggle da CommandBar); `/p <texto>` fixa a squad PRUMO, combinável com um modo em qualquer ordem (`/p /foco x`) e na legenda do áudio — um comando de modo e um de squad no máximo, repetido ou desconhecido vira ajuda; `/start`, `/ajuda`, `/help`, `/foco`/`/baixa` sem texto ou comando desconhecido devolvem texto de ajuda sem chamar o Gemini; mensagem sem `text` nem áudio (foto, figurinha, documento) devolve "Só texto ou áudio por enquanto."; `edited_message`, `channel_post` e updates sem `message`/`callback_query` são ignorados. Sufixo `@NomeDoBot` do comando é descartado.
+- **"gastei 30 no mercado" é gasto, não demanda** (07/10/2026). `lerGastoFalado` (`server/financas/gasto-falado.ts`, PURO, sem modelo) é conferido antes dos comandos, só em texto que não começa com `/` (`/p gastei 30…` continua demanda da squad); casou, vai a `DepsDoBot.anotarGasto` (só no `operations`, conta manual das finanças) e a resposta é "Anotado: <categoria>", sem o valor (RULES 24). Fora da fila de turnos e sem a guarda de atraso (a chave é a mensagem: reentrega não duplica). Sem finanças no processo, responde isso e **não** roda o turno. Áudio cuja transcrição casa também anota, sem ecoar a transcrição.
 - **Registro do webhook no boot, só em produção.** Com o bot ligado, `NODE_ENV === "production"` e `APP_URL` presente, o boot chama `setWebhook` (idempotente) com `secret_token` e `allowed_updates: ["message", "callback_query"]` (o segundo são os botões; o **Implantar** que traz esta versão já o registra); falha vira `console.error` sem derrubar nada — inclusive `APP_URL` sem esquema (`new URL` lançaria dentro do callback de `listen`, fora de qualquer promise, o que derrubaria o processo sem o try/catch). Assim trocar `TELEGRAM_WEBHOOK_SECRET` e clicar **Implantar** já reconfigura o Telegram — sem isso um passo manual esquecido deixaria o bot recebendo 401 calado. Em dev nunca registra: `APP_URL` de dev é `http://localhost` (o Telegram exige HTTPS) e registrar com o token de produção roubaria o webhook do servidor real; teste local é com `curl` simulando o update.
 - **Privacidade:** chat de bot do Telegram **não é E2E** — demanda e resposta (títulos, horários) passam pelos servidores do Telegram (os lembretes, pelo Hermes e pelo WhatsApp). Decisão do usuário, custo conhecido.
 - **`chat_id` não é segredo** (é visível para quem conversa com o bot ou lê um encaminhamento); o segredo do webhook é a trava de verdade — quem tem `TELEGRAM_WEBHOOK_SECRET` forja um update com o `chat_id` do dono e passa pela allowlist como se fosse o Telegram. A allowlist só filtra tráfego genuíno do Telegram vindo de estranhos, não substitui o segredo. Segredo vazou: rotacione (troca a env + **Implantar**, o boot registra o webhook de novo com o valor novo).

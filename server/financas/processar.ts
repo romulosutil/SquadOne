@@ -18,8 +18,23 @@ import { faturaDoLancamento, mesDaFatura, type ContextoDasVisoes } from "./visoe
  * 3. pagamento de fatura pelo valor (o débito de descrição muda);
  * 4. pares entre contas próprias (transferência ou pagamento);
  * 5. grupos de parcela;
- * 6. categoria (a do Rômulo nunca muda).
+ * 6. categoria (a do Rômulo nunca muda), com as regras dele por
+ *    estabelecimento e os renomes de categoria por cima.
  */
+
+/** O que o Rômulo organizou e o passe precisa saber (tabelas do banco, migração 2). */
+export interface OrganizacaoDoPasse {
+  /** Estabelecimento (`estabelecimentoDe`) → categoria. */
+  regras: ReadonlyMap<string, string>;
+  /**
+   * Categoria antiga → nome novo. A regra embutida continua produzindo
+   * "Mercado"; depois de renomeada para "Supermercado", é este mapa que
+   * mantém o nome novo a cada sincronização.
+   */
+  renomes: ReadonlyMap<string, string>;
+}
+
+const SEM_ORGANIZACAO: OrganizacaoDoPasse = { regras: new Map(), renomes: new Map() };
 
 export function contextoDas(contas: Conta[], faturas: Fatura[]): ContextoDasVisoes {
   const tipos = new Map(contas.map((c) => [c.id, c.tipo]));
@@ -36,7 +51,7 @@ export function contextoDas(contas: Conta[], faturas: Fatura[]): ContextoDasViso
   };
 }
 
-export function processar(contas: Conta[], faturas: Fatura[], transacoes: Transacao[]): Transacao[] {
+export function processar(contas: Conta[], faturas: Fatura[], transacoes: Transacao[], org: OrganizacaoDoPasse = SEM_ORGANIZACAO): Transacao[] {
   const ctx = contextoDas(contas, faturas);
   const saida = transacoes.map((t): Transacao => {
     const tipo = ctx.tipoDaConta(t.contaId) ?? "corrente";
@@ -70,7 +85,8 @@ export function processar(contas: Conta[], faturas: Fatura[], transacoes: Transa
   );
   for (const t of saida) {
     t.grupoParcela = grupos.get(t.id) ?? null;
-    Object.assign(t, categorizar(t));
+    const c = categorizar(t, org.regras);
+    Object.assign(t, { ...c, categoria: org.renomes.get(c.categoria) ?? c.categoria });
   }
   return saida;
 }

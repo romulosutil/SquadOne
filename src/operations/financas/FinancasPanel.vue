@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import FinLancamentos from './FinLancamentos.vue'
+import FinOrganizar from './FinOrganizar.vue'
 import FinSaude from './FinSaude.vue'
 import FinVisao from './FinVisao.vue'
 import type { VisaoFinanceira } from './types'
 import './financas.css'
 
-// Finanças (06/10/2026): Visão (/financas) e Lançamentos (/financas/lancamentos).
-// O cabeçalho com a saúde de cada conexão e o "dados até" vale para as duas.
-// Valores só nesta tela (RULES 24): nada de R$ em título, anúncio ou URL.
+// Finanças (06/10/2026): Visão (/financas), Lançamentos (/financas/lancamentos)
+// e Organizar (/financas/organizar: categorias, orçamento, regras e o extrato
+// de reserva, 07/10/2026). O cabeçalho com a saúde de cada conexão e o "dados
+// até" vale para as três. Valores só nesta tela (RULES 24): nada de R$ em
+// título, anúncio ou URL.
 const props = defineProps<{ caminho: string }>()
 
-const aba = props.caminho.startsWith('/financas/lancamentos') ? 'lancamentos' : 'visao'
+const aba = props.caminho.startsWith('/financas/lancamentos') ? 'lancamentos' : props.caminho.startsWith('/financas/organizar') ? 'organizar' : 'visao'
+const TITULO = { visao: 'Visão', lancamentos: 'Lançamentos', organizar: 'Organizar' } as const
 const dados = ref<VisaoFinanceira | null>(null)
 const carregando = ref(true)
 const erro = ref('')
@@ -84,11 +88,12 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
     <header class="fin-topo">
       <div>
         <span class="fin-kicker">Finanças</span>
-        <h1>{{ aba === 'visao' ? 'Visão' : 'Lançamentos' }}</h1>
+        <h1>{{ TITULO[aba] }}</h1>
       </div>
       <nav class="fin-abas" aria-label="Finanças">
         <a href="/financas" :aria-current="aba === 'visao' ? 'page' : undefined">Visão</a>
         <a href="/financas/lancamentos" :aria-current="aba === 'lancamentos' ? 'page' : undefined">Lançamentos</a>
+        <a href="/financas/organizar" :aria-current="aba === 'organizar' ? 'page' : undefined">Organizar</a>
       </nav>
       <button
         type="button"
@@ -108,5 +113,6 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
 
     <FinVisao v-if="aba === 'visao' && dados" :dados="dados" @mudar="mudar" @importado="carregar" />
     <FinLancamentos v-if="aba === 'lancamentos'" :versao="versao" />
+    <FinOrganizar v-if="aba === 'organizar'" :versao="versao" @mudou="carregar" />
   </div>
 </template>

@@ -94,6 +94,34 @@ export const MIGRACOES: string[] = [
      origem TEXT NOT NULL,
      resumo TEXT
    );`,
+  // 2 (07/10/2026): a organização do Rômulo. Só o que ele DECIDIU; o resto
+  // (categoria de cada lançamento, recorrentes detectados, %) é derivado.
+  `CREATE TABLE categoria_criada (
+     nome TEXT PRIMARY KEY,
+     criada_em TEXT NOT NULL
+   );
+   CREATE TABLE categoria_renomeada (
+     de TEXT PRIMARY KEY,
+     para TEXT NOT NULL
+   );
+   CREATE TABLE regra_categoria (
+     estabelecimento TEXT PRIMARY KEY,
+     categoria TEXT NOT NULL,
+     criada_em TEXT NOT NULL
+   );
+   CREATE TABLE orcamento (
+     categoria TEXT PRIMARY KEY,
+     centavos INTEGER NOT NULL CHECK (centavos > 0)
+   );
+   CREATE TABLE recorrente_marca (
+     estabelecimento TEXT PRIMARY KEY,
+     recorrente INTEGER NOT NULL CHECK (recorrente IN (0, 1)),
+     em TEXT NOT NULL
+   );
+   CREATE TABLE alerta_enviado (
+     chave TEXT PRIMARY KEY,
+     em TEXT NOT NULL
+   );`,
 ];
 
 export class FinancasIndisponiveis extends Error {
@@ -181,6 +209,15 @@ const conexaoDaLinha = (r: Linha): Conexao => ({
   lidoEm: r.lido_em,
   erroLeitura: r.erro_leitura,
 });
+
+/** As decisões do Rômulo, como o passe (`processar.ts`) e o resumo as leem. */
+export interface Organizacao {
+  regras: Map<string, string>;
+  renomes: Map<string, string>;
+  orcamentos: Map<string, number>;
+  marcasDeRecorrente: Map<string, boolean>;
+  criadas: string[];
+}
 
 export interface LeituraDeUmaConexao {
   conexao: Conexao;
@@ -298,6 +335,119 @@ export class BancoDeFinancas {
     this.db.transaction(() => {
       for (const t of transacoes) atualizar.run(t);
     })();
+  }
+
+  transacao(id: string): Transacao | null {
+    const r = this.db.prepare("SELECT * FROM transacao WHERE id = ?").get(id) as Linha | undefined;
+    return r ? transacaoDaLinha(r) : null;
+  }
+
+  existeChave(chaveDedupe: string): boolean {
+    return this.db.prepare("SELECT 1 FROM transacao WHERE chave_dedupe = ?").get(chaveDedupe) !== undefined;
+  }
+
+  // --- Organização (migração 2) --------------------------------------
+
+  organizacao(): Organizacao {
+    const pares = (sql: string) => (this.db.prepare(sql).all() as Linha[]).map((r) => [r.a, r.b] as [string, any]);
+    return {
+      regras: new Map(pares("SELECT estabelecimento AS a, categoria AS b FROM regra_categoria")),
+      renomes: new Map(pares("SELECT de AS a, para AS b FROM categoria_renomeada")),
+      orcamentos: new Map(pares("SELECT categoria AS a, centavos AS b FROM orcamento")),
+      marcasDeRecorrente: new Map(pares("SELECT estabelecimento AS a, recorrente AS b FROM recorrente_marca").map(([a, b]) => [a, b === 1])),
+      criadas: (this.db.prepare("SELECT nome FROM categoria_criada ORDER BY nome").all() as Linha[]).map((r) => r.nome),
+    };
+  }
+
+  criarCategoria(nome: string, agora: string) {
+    this.db.prepare("INSERT OR IGNORE INTO categoria_criada (nome, criada_em) VALUES (?, ?)").run(nome, agora);
+  }
+
+  /**
+   * Renomeia (ou junta, quando `para` já existe) numa transação: lançamentos,
+   * regras, orçamento e a lista das criadas, mais o renome que mantém o nome
+   * novo quando a regra embutida voltar a produzir o antigo. `renomes` já vem
+   * calculado (`renomesDepois`, puro).
+   */
+  renomearCategoria(de: string, para: string, renomes: ReadonlyMap<string, string>, agora: string) {
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE transacao SET categoria = ? WHERE categoria = ?").run(para, de);
+      this.db.prepare("UPDATE regra_categoria SET categoria = ? WHERE categoria = ?").run(para, de);
+      const destino = this.db.prepare("SELECT 1 FROM orcamento WHERE categoria = ?").get(para);
+      // Juntando duas com orçamento, vale o do destino: somar seria inventar um número.
+      if (destino) this.db.prepare("DELETE FROM orcamento WHERE categoria = ?").run(de);
+      else this.db.prepare("UPDATE orcamento SET categoria = ? WHERE categoria = ?").run(para, de);
+      this.db.prepare("DELETE FROM categoria_criada WHERE nome = ?").run(de);
+      this.db.prepare("INSERT OR IGNORE INTO categoria_criada (nome, criada_em) VALUES (?, ?)").run(para, agora);
+      this.db.prepare("DELETE FROM categoria_renomeada").run();
+      const inserir = this.db.prepare("INSERT INTO categoria_renomeada (de, para) VALUES (?, ?)");
+      for (const [a, b] of renomes) inserir.run(a, b);
+    })();
+  }
+
+  /** A categoria escolhida à mão no lançamento: nunca mais sobrescrita pelo passe. */
+  definirCategoria(id: string, categoria: string) {
+    this.db.prepare("UPDATE transacao SET categoria = ?, origem_categoria = 'usuario' WHERE id = ?").run(categoria, id);
+  }
+
+  gravarRegra(estabelecimento: string, categoria: string, agora: string) {
+    this.db
+      .prepare(
+        `INSERT INTO regra_categoria (estabelecimento, categoria, criada_em) VALUES (?, ?, ?)
+         ON CONFLICT(estabelecimento) DO UPDATE SET categoria = excluded.categoria, criada_em = excluded.criada_em`,
+      )
+      .run(estabelecimento, categoria, agora);
+  }
+
+  removerRegra(estabelecimento: string): boolean {
+    return this.db.prepare("DELETE FROM regra_categoria WHERE estabelecimento = ?").run(estabelecimento).changes > 0;
+  }
+
+  /** `null` tira o orçamento da categoria. */
+  definirOrcamento(categoria: string, centavos: number | null) {
+    if (centavos === null) this.db.prepare("DELETE FROM orcamento WHERE categoria = ?").run(categoria);
+    else
+      this.db
+        .prepare("INSERT INTO orcamento (categoria, centavos) VALUES (?, ?) ON CONFLICT(categoria) DO UPDATE SET centavos = excluded.centavos")
+        .run(categoria, centavos);
+  }
+
+  /** `null` volta para a detecção automática. */
+  marcarRecorrente(estabelecimento: string, recorrente: boolean | null, agora: string) {
+    if (recorrente === null) this.db.prepare("DELETE FROM recorrente_marca WHERE estabelecimento = ?").run(estabelecimento);
+    else
+      this.db
+        .prepare(
+          `INSERT INTO recorrente_marca (estabelecimento, recorrente, em) VALUES (?, ?, ?)
+           ON CONFLICT(estabelecimento) DO UPDATE SET recorrente = excluded.recorrente, em = excluded.em`,
+        )
+        .run(estabelecimento, recorrente ? 1 : 0, agora);
+  }
+
+  // --- Alertas de 70/90/100% -----------------------------------------
+
+  alertasEnviados(): Set<string> {
+    return new Set((this.db.prepare("SELECT chave FROM alerta_enviado").all() as Linha[]).map((r) => r.chave));
+  }
+
+  registrarAlertas(chaves: readonly string[], agora: string) {
+    const inserir = this.db.prepare("INSERT OR IGNORE INTO alerta_enviado (chave, em) VALUES (?, ?)");
+    this.db.transaction(() => {
+      for (const c of chaves) inserir.run(c, agora);
+    })();
+  }
+
+  // --- Gastos anotados à mão -----------------------------------------
+
+  /** A conta sem saldo onde caem os gastos anotados ("gastei 30 no mercado"). */
+  garantirContaManual(id: string, agora: string) {
+    this.db
+      .prepare(
+        `INSERT INTO conta (id, item_id, nome, instituicao, tipo, saldo_centavos, limite_centavos, limite_disponivel_centavos, final, atualizado_em, ativa)
+         VALUES (?, '', 'Dinheiro e outros', 'Anotado à mão', 'dinheiro', 0, NULL, NULL, NULL, ?, 1)
+         ON CONFLICT(id) DO UPDATE SET ativa = 1`,
+      )
+      .run(id, agora);
   }
 
   iniciarSincronizacao(origem: string, agora: string): number {

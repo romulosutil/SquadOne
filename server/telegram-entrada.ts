@@ -1,4 +1,5 @@
 import type { Modo } from "./capabilities.ts";
+import { lerGastoFalado, type GastoFalado } from "./financas/gasto-falado.ts";
 
 /**
  * PURO: o que um update do Telegram significa para o SquadOne. Sem fetch, env
@@ -14,6 +15,13 @@ export type Entrada =
   /** Mensagem de voz/áudio: vira demanda depois de transcrita (`telegram-bot.ts`). */
   | { tipo: "audio"; updateId: number; chatId: number; mensagemId: number; fileId: string; mime: string; modo: Modo; squadId?: string }
   | { tipo: "audioLongo"; updateId: number; chatId: number; mensagemId: number }
+  /**
+   * "gastei 30 no mercado": vai para as finanças, NUNCA para o turno (nada de
+   * finanças vai ao modelo). `quando` é a hora da mensagem: o gasto é do dia em
+   * que foi escrito, mesmo entregue atrasado (por isso sem a guarda de atraso;
+   * a mesma mensagem duas vezes não duplica, a chave é o id dela).
+   */
+  | { tipo: "gasto"; updateId: number; chatId: number; mensagemId: number; gasto: GastoFalado; quando: Date }
   /** Toque num botão Aprovar/Descartar de uma proposta de contratação. */
   | { tipo: "botao"; updateId: number; chatId: number; mensagemId: number; callbackId: string; acao: "aprovar" | "descartar"; propostaId: string }
   | { tipo: "atrasada"; updateId: number; chatId: number; mensagemId: number; atrasoMin: number }
@@ -30,6 +38,8 @@ export const TEXTO_DE_AJUDA = [
   "/p <demanda> — direto na squad PRUMO, sem a escolha pelo conteúdo",
   "Dá para juntar: /p /foco <demanda>. No áudio, o comando vai na legenda.",
   "Sem comando = o modelo escolhe o tipo (como o Auto do app).",
+  "",
+  "gastei 30 no mercado — anota um gasto em dinheiro (a resposta diz só a categoria)",
 ].join("\n");
 
 export const TEXTO_SEM_TEXTO = "Só texto ou áudio por enquanto.";
@@ -164,6 +174,13 @@ export function interpretarUpdate(update: unknown, chatsPermitidos: ReadonlySet<
   const texto = m.text.trim();
   if (!texto) return { tipo: "semTexto", ...base };
 
+  // Gasto antes dos comandos, e só em texto sem "/": "/p gastei 30 no mercado"
+  // continua sendo demanda da squad, como o usuário pediu.
+  const gasto = texto.startsWith("/") ? null : lerGastoFalado(texto);
+  if (gasto) {
+    const quando = typeof m.date === "number" && m.date * 1000 <= agora.getTime() ? new Date(m.date * 1000) : agora;
+    return { tipo: "gasto", ...base, gasto, quando };
+  }
   const comandos = lerComandos(texto);
   if (!comandos || !comandos.resto) return { tipo: "ajuda", ...base };
 
