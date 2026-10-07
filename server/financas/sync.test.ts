@@ -1,0 +1,109 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { after, before, describe, it } from "node:test";
+import { abrirBanco, ARQUIVO_DA_COPIA, ARQUIVO_DO_BANCO, type BancoDeFinancas } from "./banco.ts";
+import type { ClienteDaPluggy } from "./pluggy.ts";
+import { resumir } from "./resumo.ts";
+import { criarSincronizador, leituraDiariaDevida } from "./sync.ts";
+
+// Banco num diretório temporário, nunca em data/. A Pluggy é um dublê: valores inventados.
+let dir: string;
+let banco: BancoDeFinancas;
+
+before(async () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "financas-"));
+  banco = await abrirBanco(dir);
+});
+after(() => {
+  banco.fechar();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function pluggyFalsa(transacoesDoCartao: object[], falharItem?: string): ClienteDaPluggy {
+  return {
+    item: async (id: string) => {
+      if (id === falharItem) throw Object.assign(new Error("Pluggy respondeu 500 em /items"), { name: "ErroPluggy" });
+      return { id, status: "UPDATED", executionStatus: "SUCCESS", lastUpdatedAt: "2026-10-06T09:00:00Z", connector: { name: "Banco Teste" } };
+    },
+    contas: async () => [
+      { id: "cc", itemId: "item-a", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Conta", balance: 1000 },
+      { id: "cartao", itemId: "item-a", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão", number: "1234", balance: 100, creditData: {} },
+    ],
+    faturas: async () => [
+      { id: "b-set", dueDate: "2026-09-10", billClosingDate: "2026-09-03", totalAmount: 100, payments: [{ paymentDate: "2026-09-10", amount: 100 }] },
+    ],
+    investimentos: async () => [{ id: "inv", itemId: "item-a", name: "CDB", balance: 500, status: "ACTIVE" }],
+    transacoes: async (accountId: string) =>
+      accountId === "cartao"
+        ? transacoesDoCartao
+        : [{ id: "pix", description: "PIX ENVIADO", amount: -100, type: "DEBIT", date: "2026-09-10", status: "POSTED" }],
+  } as unknown as ClienteDaPluggy;
+}
+
+describe("sincronização com o banco SQLite", () => {
+  it("lê, grava, deriva a natureza e faz a cópia; o pagamento da fatura não vira gasto", async () => {
+    const s = criarSincronizador({
+      banco,
+      cliente: pluggyFalsa([
+        { id: "pend", description: "LOJA X", amount: 100, type: "DEBIT", date: "2026-08-20", status: "PENDING" },
+      ]),
+      itemIds: ["item-a"],
+      agora: () => new Date("2026-10-07T12:00:00Z"),
+    });
+    const r = await s.sincronizar("botao");
+    assert.equal(r.ok, true);
+    assert.equal(fs.existsSync(path.join(dir, ARQUIVO_DA_COPIA)), true);
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(path.join(dir, ARQUIVO_DO_BANCO)).mode & 0o777, 0o600);
+      assert.equal(fs.statSync(path.join(dir, ARQUIVO_DA_COPIA)).mode & 0o777, 0o600);
+    }
+    assert.equal(banco.transacoes().find((t) => t.id === "pluggy:pix")?.natureza, "pagamento_fatura");
+    assert.deepEqual(banco.contas().map((c) => c.tipo).sort(), ["cartao", "corrente", "investimento"]);
+  });
+
+  it("na leitura seguinte o LANÇADO substitui o PENDENTE (outro id), e o gasto conta uma vez", async () => {
+    const s = criarSincronizador({
+      banco,
+      cliente: pluggyFalsa([{ id: "post", description: "LOJA X LTDA", amount: 100, type: "DEBIT", date: "2026-08-21", status: "POSTED" }]),
+      itemIds: ["item-a"],
+      agora: () => new Date("2026-10-08T12:00:00Z"),
+    });
+    await s.sincronizar("diaria");
+    const ids = banco.transacoes().map((t) => t.id).sort();
+    assert.deepEqual(ids, ["pluggy:pix", "pluggy:post"]);
+    for (const visao of ["competencia", "caixa"] as const) {
+      const resumo = resumir({ contas: banco.contas(), faturas: banco.faturas(), transacoes: banco.transacoes(), conexoes: banco.conexoes() }, "2026-10-08", "2026-09", visao);
+      assert.equal(resumo.gastei.totalCentavos, 10000, visao);
+    }
+  });
+
+  it("conexão que falha grava a falha e não cala as outras", async () => {
+    const s = criarSincronizador({ banco, cliente: pluggyFalsa([], "item-b"), itemIds: ["item-b", "item-a"] });
+    const r = await s.sincronizar("botao");
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.conexoes.map((c) => c.erro === null), [false, true]);
+    assert.match(banco.conexoes().find((c) => c.itemId === "item-b")!.erroLeitura!, /falha interna|500/);
+  });
+
+  it("dois cliques esperam a mesma leitura", async () => {
+    const s = criarSincronizador({ banco, cliente: pluggyFalsa([]), itemIds: ["item-a"] });
+    const [a, b] = [s.sincronizar("botao"), s.sincronizar("botao")];
+    assert.equal(a, b);
+    await a;
+  });
+});
+
+describe("leituraDiariaDevida", () => {
+  const agora = new Date("2026-10-07T12:00:00Z");
+  const casos: [string, string | null, string | null, number, boolean][] = [
+    ["antes das 7h, não", null, null, 6, false],
+    ["nunca leu, sim", null, null, 9, true],
+    ["leu há 3 h, não", "2026-10-07T09:00:00Z", "2026-10-07T09:00:00Z", 9, false],
+    ["leu ontem cedo, sim", "2026-10-06T09:00:00Z", "2026-10-06T09:00:00Z", 9, true],
+    ["falhou há 1 h, espera", "2026-10-06T09:00:00Z", "2026-10-07T11:00:00Z", 9, false],
+    ["falhou há 3 h, tenta", "2026-10-06T09:00:00Z", "2026-10-07T09:00:00Z", 9, true],
+  ];
+  for (const [nome, ok, tentativa, hora, esperado] of casos) it(nome, () => assert.equal(leituraDiariaDevida(agora, ok, tentativa, hora), esperado));
+});

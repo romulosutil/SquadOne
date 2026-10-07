@@ -26,7 +26,8 @@ const checkedLabel = computed(() => props.checkedAt
 
     <nav class="ops-main-nav" aria-label="Navegação principal">
       <a href="/" :aria-current="currentPath === '/' ? 'page' : undefined">Hoje</a>
-      <a href="/crm" :aria-current="currentPath.startsWith('/crm') ? 'page' : undefined">CRM</a>
+      <a href="/crm" :aria-current="currentPath.startsWith('/crm') ? 'page' : undefined">Funil</a>
+      <a href="/financas" :aria-current="currentPath.startsWith('/financas') ? 'page' : undefined">Finanças</a>
       <!-- A página da Entrada (texto e arquivos para a Mel) não é da SPA: /entrada/ é repassado pelo servidor
            (server/entrada-proxy.ts) para o serviço da Entrada. Navegação completa, com link de volta na página. -->
       <a href="/entrada/" :aria-current="currentPath.startsWith('/entrada') ? 'page' : undefined">Entrada</a>
