@@ -1,0 +1,11 @@
+[Unit]
+Description=Site antes da venda — lista os demos enviados sem nenhuma interação (apagar é ordem explícita)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Só lista e avisa; nunca apaga sozinho (site-demos-limpeza --apagar é à mão).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/.local/bin/site-demos-limpeza
+TimeoutStartSec=5min
