@@ -78,42 +78,31 @@ Easypanel: reserva fria, travada, sem TELEGRAM_*
 
 ### Transição
 
-O que ainda **não** é como acima, e em que ordem muda (o plano completo está no
-artefato "SquadOne Único", versão 2 de 06/10/2026):
+A transição está **concluída até a fase 7**: tudo o que o diagrama acima
+descreve é verdade hoje. O plano completo está no artefato "SquadOne Único",
+versão 2 de 06/10/2026. O que foi feito, na ordem:
 
-1. **Higiene** (feita em 06/10/2026, PR #20): a escrita do app saiu do perfil
-   `operations`, porque o `data/squad.json` do Dell é um retrato de 14/09/2026;
-   `/api/runtime` diz `ocupado`; a fila de avisos ganhou schema e teto; os
-   bancos Docker entraram no cofre.
-2. **Regras** (este documento e o `RULES.md`).
-3. **Finanças no Dell**, que não esperam a mudança da agenda: banco próprio,
-   tela de Visão, e nasce a casca mobile (tokens, barra inferior com o ＋Pedir
-   desabilitado). Implementado em 07/10/2026 (ver "Finanças", abaixo); a
-   conferência de identidade do Serve entrou junto; desde a mudança da agenda
-   a lista é a mesma dela, `SQUADONE_LOGINS_TAILSCALE`.
-4. **Mudança da agenda para o Dell.** O roster de **produção** é a verdade; o
-   do Dell é arquivado, nunca mesclado, com as contratações congeladas durante
-   a troca. O código (diretório de dados fora do clone, polling do Telegram,
-   avisos pela fila, travas de identidade e origem, sinal de vida) chega
-   desligado: a agenda só liga no Dell com `SQUADONE_DATA_DIR` presente e fora
-   do checkout. O runbook, passo a passo e com volta em cada um, é
-   `deploy/dell/CUTOVER-AGENDA.md`. Nesta ordem:
-   1. tirar `TELEGRAM_*` do Easypanel e implantar;
-   2. copiar o `squad.json` de produção para o Dell;
-   3. travar o Easypanel (`IPS_PERMITIDOS=127.0.0.1`), implantável;
-   4. `deleteWebhook` **sem** `drop_pending_updates` (as mensagens pendentes
-      passam a ser buscadas pelo Dell, e a guarda de 10 min continua valendo)
-      e ligar o `getUpdates`;
-   5. vigia do Dell avisando pelo WhatsApp em sombra por 3 dias úteis, com o
-      ntfy ainda ligado;
-   6. só com a sombra validada pelo Rômulo: apagar `server/push.ts`, as rotas
-      `/api/push/*` e `LEMBRETES_NTFY_URL`, e depois o serviço ntfy do
-      Easypanel e o app do celular.
-
-   Até este passo, o botão "Agentes do SquadOne" (`OperationsHeader.vue`,
-   `AccessPanel.vue`, `fluxos.ts`) e o `/squadone` ainda levam ao Easypanel, e
-   o bot do Telegram ainda é webhook no Easypanel.
-5. **Casca mobile completa** (feita em 07/10/2026): `App.vue` dividido em
+1. **Higiene** (06/10/2026, PR #20): a escrita do app saiu do perfil
+   `operations` enquanto o `data/squad.json` do Dell era um retrato de
+   14/09/2026; `/api/runtime` diz `ocupado`; a fila de avisos ganhou schema e
+   teto; os bancos Docker entraram no cofre.
+2. **Regras** (PR #23): este documento e o `RULES.md`.
+3. **Finanças no Dell** (07/10/2026, ver "Finanças"): banco próprio, tela de
+   Visão e a casca mobile. A conferência de identidade do Serve entrou junto;
+   a lista é a mesma da agenda, `SQUADONE_LOGINS_TAILSCALE`.
+4. **Agenda no Dell** (07/10/2026): o roster de **produção** foi a verdade; o
+   do Dell ficou arquivado, nunca mesclado, com as contratações congeladas
+   durante a troca. Diretório de dados fora do clone, polling do Telegram,
+   avisos pela fila, travas de identidade e origem e sinal de vida estão no
+   ar; a agenda só liga no Dell com `SQUADONE_DATA_DIR` presente e fora do
+   checkout. O runbook, com volta em cada passo, é
+   `deploy/dell/CUTOVER-AGENDA.md` (encerrado): `TELEGRAM_*` saiu do
+   Easypanel, o `squad.json` de produção foi copiado, o Easypanel ficou
+   travado e implantável (reserva fria), `deleteWebhook` sem
+   `drop_pending_updates` e `getUpdates` ligado, vigia em sombra pelo WhatsApp
+   e, validada a sombra, o ntfy foi apagado (`server/push.ts`, `/api/push/*`,
+   `LEMBRETES_NTFY_URL`). O `/squadone` abre os agentes na própria Central.
+5. **Casca mobile completa** (07/10/2026): `App.vue` dividido em
    casca + rotas (`src/casca/`, `src/rotas/`, o estado em
    `src/agentes/estado.ts`), sem mudar contrato de API; a Central e o app são
    UMA casca nos dois perfis (`RootApp` passa `{ perfil, agentes }`). Pedir
@@ -126,10 +115,18 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    tokens, com modo escuro: o CRM em `src/operations/crm.css`, os painéis de
    Mais em `src/operations/mais.css`; o `operations.css` (o shell antigo da
    Central, só claro, quase todo sem uso) foi apagado.
-6. Organização das finanças e alertas de 70/90/100% (feito em 07/10/2026, ver
-   "Organização das finanças"); 7. PRUMO como uma squad, com o Site antes da
-   venda como sala (feito em 07/10/2026, ver "PRUMO como squad"); 8. o resto
-   (roster em SQLite, Luna em sombra, explicação com IA).
+6. **Organização das finanças e alertas de 70/90/100%** (07/10/2026, ver
+   "Organização das finanças").
+7. **PRUMO como uma squad**, com o Site antes da venda como sala
+   (07/10/2026, ver "PRUMO como squad").
+
+**Ainda não feito (fase 8, sem data):** roster em SQLite com Litestream,
+cartões e time vivo completos, Luna em modo sombra, explicação das finanças
+com IA, hábitos, check-in e metas. Fora do código e sem confirmação
+registrada: o teste de que o aviso do Hermes vibra o celular bloqueado (se não
+vibrar, o Hermes precisa de um chip próprio), o faturamento do Gemini ativo
+(no plano grátis o Google usa os prompts) e a cifra do disco do Dell (ver
+"Riscos aceitos").
 
 ### PRUMO como squad (07/10/2026)
 
