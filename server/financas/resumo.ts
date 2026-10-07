@@ -1,8 +1,9 @@
-import { descricaoNormalizada, mesDe, somarMeses } from "./comum.ts";
+import { descricaoNormalizada, diasEntre, mesDe, somarMeses } from "./comum.ts";
+import { DIAS_PAGAMENTO_REGISTRADO } from "./natureza.ts";
 import { projetarParcelas, type ParcelamentoProjetado } from "./parcelas.ts";
 import { contextoDas } from "./processar.ts";
 import type { Conexao, Conta, Fatura, SaudeDaConexao, TipoDeConta, Transacao } from "./tipos.ts";
-import { gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao } from "./visoes.ts";
+import { fechamentoDa, gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao } from "./visoes.ts";
 
 /**
  * O resumo da tela "Visão": quanto tenho, quanto devo, quanto gastei e o que
@@ -10,7 +11,8 @@ import { gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao
  * dia de hoje (AAAA-MM-DD, São Paulo) e o mês pedido.
  *
  * "Devo" por cartão é a soma de três pedaços que não se sobrepõem:
- * - faturas FECHADAS com vencimento de hoje em diante (total − pago);
+ * - faturas FECHADAS com vencimento de hoje em diante (total − o que foi
+ *   pago depois do fechamento: `pagoDasFaturas`);
  * - a fatura ABERTA (o ciclo que ainda não fechou): os lançamentos do cartão
  *   sem fatura fechada que caem no próximo vencimento;
  * - as PARCELAS FUTURAS depois da fatura aberta (`parcelas.ts`).
@@ -95,6 +97,49 @@ export function saudeDa(c: Pick<Conexao, "status" | "erroLeitura">): SaudeDaCone
   }
 }
 
+/**
+ * Quanto já foi pago de cada fatura do cartão (id → centavos), pela DATA do
+ * pagamento: um pagamento quita a última fatura que já tinha fechado quando
+ * ele foi feito. O que foi pago antes de a fatura fechar não é dela: quitou a
+ * anterior, ou o banco já o abateu do total com que ela fechou.
+ *
+ * O "pago" que a fonte põe em cada fatura não serve como está, porque cada
+ * banco o informa de um jeito. O Mercado Pago e o Nubank põem na fatura o
+ * pagamento DELA, feito depois do fechamento. O Santander (Meu Pluggy) põe os
+ * pagamentos feitos DENTRO do ciclo, que são os da fatura ANTERIOR: lido ao pé
+ * da letra, a fatura fechada aparecia paga com o dinheiro do mês anterior e
+ * sumia do "devo". Pela data, os três bancos caem na mesma regra.
+ *
+ * Os pagamentos vêm de duas listas que se repetem: os registrados nas faturas
+ * e os créditos de pagamento no próprio cartão. O crédito chega antes (o
+ * Santander só registra o pagamento quando a fatura SEGUINTE fecha); um
+ * registrado do mesmo valor a até `DIAS_PAGAMENTO_REGISTRADO` dias de um
+ * crédito é o mesmo pagamento e conta uma vez.
+ */
+export function pagoDasFaturas(faturasDoCartao: Fatura[], lancamentosDoCartao: Transacao[]): Map<string, number> {
+  const creditos = lancamentosDoCartao
+    .filter((t) => t.natureza === "pagamento_fatura" && t.centavos > 0 && t.status === "lancada")
+    .map((t) => ({ data: t.dataLancamento, centavos: t.centavos }));
+  const pagamentos = [...creditos];
+  const casados = new Set<number>();
+  for (const p of faturasDoCartao.flatMap((f) => f.pagamentos)) {
+    if (p.centavos <= 0) continue;
+    const i = creditos.findIndex(
+      (c, k) => !casados.has(k) && c.centavos === p.centavos && Math.abs(diasEntre(c.data, p.data)) <= DIAS_PAGAMENTO_REGISTRADO,
+    );
+    if (i >= 0) casados.add(i);
+    else pagamentos.push(p);
+  }
+  const porFechamento = [...faturasDoCartao].sort((a, b) => fechamentoDa(a).localeCompare(fechamentoDa(b)));
+  const pago = new Map(faturasDoCartao.map((f) => [f.id, 0]));
+  for (const p of pagamentos) {
+    // No dia do fechamento ainda é o ciclo da própria fatura: o pagamento é da anterior.
+    const fatura = porFechamento.filter((f) => fechamentoDa(f) < p.data).at(-1);
+    if (fatura) pago.set(fatura.id, pago.get(fatura.id)! + p.centavos);
+  }
+  return pago;
+}
+
 function somarPorChave(mapa: Map<string, number>, chave: string, centavos: number) {
   mapa.set(chave, (mapa.get(chave) ?? 0) + centavos);
 }
@@ -129,15 +174,16 @@ export function resumir(
   const porMesTotal = new Map<string, number>();
   const resumoDosCartoes: CartaoResumido[] = cartoes.map((c) => {
     const proprias = ctx.faturasDoCartao(c.id);
-    const aPagar = proprias.filter((f) => f.vencimento >= hoje && f.totalBanco - f.pagoCentavos > 0).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    const doCartao = transacoes.filter((t) => t.contaId === c.id);
+    const pago = pagoDasFaturas(proprias, doCartao);
+    const devidoDa = (f: Fatura) => f.totalBanco - (pago.get(f.id) ?? 0);
+    const aPagar = proprias.filter((f) => f.vencimento >= hoje && devidoDa(f) > 0).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
     let fechadaCentavos = 0;
     for (const f of aPagar) {
-      const devido = f.totalBanco - f.pagoCentavos;
-      fechadaCentavos += devido;
-      somarPorChave(porMesTotal, mesDe(f.vencimento), devido);
+      fechadaCentavos += devidoDa(f);
+      somarPorChave(porMesTotal, mesDe(f.vencimento), devidoDa(f));
     }
     const mesAberto = mesAbertoDe.get(c.id)!;
-    const doCartao = transacoes.filter((t) => t.contaId === c.id);
     let abertaCentavos = 0;
     for (const t of doCartao) {
       if (t.faturaId || !["despesa", "encargo", "estorno"].includes(t.natureza)) continue;
@@ -164,7 +210,7 @@ export function resumir(
       limiteCentavos: c.limiteCentavos,
       usadoBancoCentavos: usado,
       usoPct: usado !== null && c.limiteCentavos ? Math.round((usado / c.limiteCentavos) * 100) : null,
-      fechada: primeira ? { vencimento: primeira.vencimento, centavos: fechadaCentavos, pagoCentavos: aPagar.reduce((s, f) => s + f.pagoCentavos, 0) } : null,
+      fechada: primeira ? { vencimento: primeira.vencimento, centavos: fechadaCentavos, pagoCentavos: aPagar.reduce((s, f) => s + (pago.get(f.id) ?? 0), 0) } : null,
       aberta: {
         vencimento: vencimentoPrevisto(hoje, proprias),
         centavos: abertaCentavos,

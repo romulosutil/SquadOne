@@ -193,6 +193,12 @@ fatura do Santander em PDF ── pdf-texto.ts → fatura-santander.ts (PURO)
   futuras, sem sobrepor) aparece abaixo, e a diferença vira "sem detalhe" em
   vez de sumir. A Pluggy não dá id de compra parcelada: o grupo é heurístico
   (`parcelas.ts`).
+- **O pago de uma fatura sai da data do pagamento** (`pagoDasFaturas`), não
+  do `pago` que a fonte põe nela: um pagamento quita a última fatura que já
+  tinha fechado. Cada banco informa de um jeito: o Mercado Pago e o Nubank
+  põem na fatura o pagamento dela; o Santander põe os pagamentos feitos
+  dentro do ciclo, que são da fatura anterior (visto em 07/10/2026: a fatura
+  fechada aparecia paga e sumia do "devo").
 - **Categoria por regra**: tabela da categoria da Pluggy + palavras da
   descrição; nada vai ao modelo (RULES 24). A do usuário (`origem_categoria =
   usuario`) nunca é sobrescrita, mas ainda não há tela para mudá-la
