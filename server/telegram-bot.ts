@@ -46,7 +46,8 @@ export interface DepsDoBot {
   /** Segredo do webhook; null no polling (sem rota, o portão recusa tudo). */
   segredo: string | null;
   chatsPermitidos: ReadonlySet<number>;
-  rodar(demanda: string, modo: Modo): Promise<TurnoResult>;
+  /** `squadId` só com prefixo de squad (`/p`); ausente = primeira squad ativa. */
+  rodar(demanda: string, modo: Modo, squadId?: string): Promise<TurnoResult>;
   enviar(chatId: number, texto: string, responderA?: number, botoes?: Botao[]): Promise<void>;
   digitando(chatId: number): Promise<void>;
   /** Baixa o áudio do Telegram e devolve a transcrição (lança `AudioSemFala` sem fala). */
@@ -137,6 +138,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
     chatId: number,
     mensagemId: number,
     modo: Modo,
+    squadId: string | undefined,
     obterDemanda: () => Promise<{ demanda: string; prefixo?: string } | { falha: string }>,
   ): number {
     return enfileirar(async () => {
@@ -152,7 +154,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         } else {
           prefixo = obtida.prefixo ?? "";
           try {
-            resultado = await deps.rodar(obtida.demanda, modo);
+            resultado = await deps.rodar(obtida.demanda, modo, squadId);
           } catch (err) {
             console.error("[telegram] erro no turno:", err);
             texto = textoDaFalha(err);
@@ -252,8 +254,8 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         );
         return;
       case "audio": {
-        const { chatId, mensagemId, fileId, mime, modo } = entrada;
-        const antes = turnoNaFila(chatId, mensagemId, modo, async () => {
+        const { chatId, mensagemId, fileId, mime, modo, squadId } = entrada;
+        const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => {
           try {
             const demanda = await deps.transcrever(fileId, mime);
             return { demanda, prefixo: `🎙️ “${demanda}”\n\n` };
@@ -266,8 +268,8 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         return;
       }
       case "demanda": {
-        const { chatId, mensagemId, demanda, modo } = entrada;
-        const antes = turnoNaFila(chatId, mensagemId, modo, async () => ({ demanda }));
+        const { chatId, mensagemId, demanda, modo, squadId } = entrada;
+        const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => ({ demanda }));
         if (antes > 0) deps.enviar(chatId, `⏳ Na fila (${antes} antes desta).`, mensagemId).catch(falhouAoEnviar);
         return;
       }
