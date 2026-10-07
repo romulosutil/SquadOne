@@ -254,7 +254,7 @@ class Preparo(unittest.TestCase):
 
     def test_comparar_contagens(self):
         vivo = {"iris:public.a": 3, "iris_542:public.b": 0}
-        self.assertIn("2 banco(s), 2 tabelas e 3 linhas", bd.comparar_contagens(vivo, dict(vivo)))
+        self.assertIn("2 banco(s) com tabelas, 2 tabelas e 3 linhas", bd.comparar_contagens(vivo, dict(vivo)))
         with self.assertRaisesRegex(RuntimeError, "1 tabela"):
             bd.comparar_contagens(vivo, {"iris:public.a": 2, "iris_542:public.b": 0})
         with self.assertRaisesRegex(RuntimeError, "nenhuma tabela"):

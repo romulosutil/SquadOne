@@ -858,7 +858,7 @@ def comparar_contagens(vivo: dict[str, int], restaurado: dict[str, int]) -> str:
     if dif:
         raise RuntimeError(f"{len(dif)} tabela(s) diferentes: " + "; ".join(dif[:5]))
     bancos = {t.split(":", 1)[0] for t in vivo if ":" in t} or {t.split(".", 1)[0] for t in vivo}
-    return f"{len(bancos)} banco(s), {len(vivo)} tabelas e {sum(vivo.values())} linhas iguais ao banco vivo"
+    return f"{len(bancos)} banco(s) com tabelas, {len(vivo)} tabelas e {sum(vivo.values())} linhas iguais ao banco vivo"
 
 
 def ensaio_dump(m: dict, a: argparse.Namespace) -> int:
