@@ -1,6 +1,137 @@
-/* Casca mobile (06/10/2026): barra inferior abaixo de 1024 px. Tokens em tokens.css. */
+/*
+ * Casca do SquadOne (07/10/2026): barra inferior abaixo de 1024 px, barra
+ * lateral a partir dela. Celular primeiro: 16 px de margem, sem rolagem
+ * lateral da página, toque de 44 px. Só tokens (tokens.css); regras em design.md.
+ */
+
+html { background: var(--fundo); overflow-x: clip; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--fonte); }
+
+.casca {
+  min-height: 100dvh;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte);
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-x: clip;
+}
+.casca *, .casca *::before, .casca *::after { box-sizing: border-box; }
+.casca :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+.pular {
+  position: fixed;
+  z-index: 100;
+  inset: var(--esp-3) auto auto var(--esp-3);
+  padding: var(--esp-3) var(--esp-4);
+  border: var(--linha);
+  background: var(--superficie);
+  color: var(--texto);
+  font-weight: 900;
+  transform: translateY(-200%);
+}
+.pular:focus { transform: none; }
+
+.casca__principal { min-width: 0; }
+.casca__conteudo {
+  display: grid;
+  gap: var(--esp-4);
+  padding: var(--esp-4) var(--esp-4) var(--esp-6);
+  outline: none;
+}
+
+/* ------------------------------------------------------------ topo */
+
+.topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2) var(--esp-3);
+  padding: var(--esp-2) var(--esp-4);
+  border-bottom: var(--linha);
+  background: var(--superficie);
+}
+.topo__marca {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--esp-2);
+  color: var(--texto);
+  font-size: 1.15rem;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.topo__marca span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  background: var(--texto);
+  color: var(--superficie);
+  font-size: 0.75rem;
+}
+.topo__dia { margin: 0; color: var(--texto-2); font-size: 0.85rem; text-transform: capitalize; }
+.topo__estados { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.topo__chip {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: var(--esp-1);
+  margin: 0;
+  padding: 0 var(--esp-2);
+  border: var(--linha-fina);
+  background: var(--superficie-2);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+.topo__chip::before { content: ""; width: 0.6rem; height: 0.6rem; border: 2px solid var(--borda); border-radius: 50%; }
+.topo__chip.is-ok::before { background: var(--positivo); }
+.topo__chip.is-falha { background: var(--erro-fundo); }
+.topo__chip.is-falha::before { background: var(--negativo); }
+.topo__chip.is-pendente { background: var(--atencao-fundo); }
+.topo__chip.is-pendente::before { background: var(--destaque); }
+.topo__chip small { color: var(--texto-2); font-weight: 700; }
+
+/* ------------------------------------------------------------ aviso (toast) */
+
+.aviso {
+  position: fixed;
+  z-index: 90;
+  right: var(--esp-4);
+  bottom: calc(var(--tamanho-barra-inferior) + env(safe-area-inset-bottom, 0px) + var(--esp-3));
+  left: var(--esp-4);
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+  font-family: var(--fonte);
+}
+.aviso__caixa {
+  display: grid;
+  width: min(100%, 26rem);
+  gap: var(--esp-2);
+  padding: var(--esp-3) var(--esp-4);
+  border: var(--linha);
+  background: var(--destaque);
+  color: var(--destaque-texto);
+  box-shadow: var(--sombra);
+  pointer-events: auto;
+}
+.aviso__caixa p { margin: 0; font-weight: 800; overflow-wrap: anywhere; }
+.aviso__caixa .botao { border-color: var(--destaque-texto); }
+.aviso__caixa .botao--leve { background: transparent; color: var(--destaque-texto); }
+
+/* ------------------------------------------------------------ 404 */
+
+.nao-encontrada { display: grid; gap: var(--esp-3); justify-items: start; padding: var(--esp-4); border: var(--linha); background: var(--superficie); }
+.nao-encontrada h1 { margin: 0; }
+.nao-encontrada p { margin: 0; }
+
+/* ------------------------------------------------------------ barra inferior (< 1024 px) */
 
 .barra-inferior { display: none; }
+.barra-lateral { display: none; }
 
 @media (max-width: 63.99rem) {
   .barra-inferior {
@@ -34,6 +165,7 @@
     font-size: 0.72rem;
     font-weight: 800;
     text-decoration: none;
+    cursor: pointer;
   }
 
   .barra-inferior a[aria-current="page"] {
@@ -45,26 +177,96 @@
 
   .barra-inferior__icone { font-size: 1.05rem; line-height: 1; }
 
+  /* O ＋Pedir é o gesto principal: maior e em destaque, no meio. */
+  .barra-inferior__pedir { margin: -0.9rem 0.25rem 0.15rem; border: 3px solid var(--cor-tinta) !important; background: var(--destaque) !important; color: var(--destaque-texto) !important; box-shadow: var(--sombra-pequena); }
+  .barra-inferior__pedir .barra-inferior__icone { font-size: 1.5rem; }
   .barra-inferior__pedir:disabled { opacity: 0.6; cursor: not-allowed; }
   .barra-inferior__pedir small { font-size: 0.58rem; font-weight: 700; }
 
   /* Espaço para a barra não cobrir o fim da página. */
-  .ops-shell { padding-bottom: calc(var(--tamanho-barra-inferior) + env(safe-area-inset-bottom, 0px)); }
-  /* A barra assume a navegação: o trilho (que vira topo) fica só com a marca. */
-  .ops-shell .ops-command-rail .ops-main-nav { display: none; }
+  .casca { padding-bottom: calc(var(--tamanho-barra-inferior) + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* "Mais" */
-.mais { display: grid; gap: 1rem; width: 100%; max-width: 48rem; margin: 0 auto; }
-.mais__links h2 { font-size: 1.6rem; }
-.mais__links ul { display: grid; gap: 0.5rem; margin: 1rem 0 0; padding: 0; list-style: none; }
-.mais__links a { display: grid; min-height: 44px; padding: 0.75rem 1rem; border: 3px solid var(--cor-tinta); background: var(--cor-papel-forte); color: var(--cor-tinta); font-weight: 900; text-decoration: none; }
-.mais__links a:hover { background: var(--cor-amarelo); }
-.mais__links small { color: var(--cor-apagado); font-size: 0.8rem; font-weight: 700; }
+/* ------------------------------------------------------------ barra lateral (>= 1024 px) */
 
-/* Trilho em cima (abaixo de 1120 px): a marca na primeira célula. Sem isto o
-   `grid-area: brand` do cabeçalho antigo cria uma trilha implícita e a marca
-   cai no canto de baixo à direita. */
-@media (max-width: 70rem) {
-  .ops-shell .ops-command-rail .ops-brand { grid-column: 1; grid-row: 1; }
+@media (min-width: 64rem) {
+  .casca { display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+  .topo__marca { display: none; }
+  .aviso { bottom: var(--esp-6); left: auto; }
+  .casca__conteudo { padding: var(--esp-6) clamp(1.5rem, 3vw, 3rem) 4rem; }
+
+  .barra-lateral {
+    position: sticky;
+    top: 0;
+    display: flex;
+    height: 100dvh;
+    flex-direction: column;
+    gap: var(--esp-4);
+    padding: var(--esp-4) var(--esp-3);
+    border-right: var(--linha);
+    background: var(--barra-fundo);
+    color: var(--barra-texto);
+    overflow-y: auto;
+  }
+  .barra-lateral__marca { display: flex; min-height: 44px; align-items: center; gap: var(--esp-2); color: #fffdf6; text-decoration: none; }
+  .barra-lateral__selo { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; background: var(--cor-amarelo); color: var(--cor-tinta); font-weight: 950; }
+  .barra-lateral__marca strong { display: block; font-size: 1.1rem; font-weight: 950; }
+  .barra-lateral__marca small { display: block; color: var(--barra-texto); font-size: 0.7rem; font-weight: 700; }
+
+  .barra-lateral__pedir {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 48px;
+    gap: 0.1rem 0.4rem;
+    padding: var(--esp-2) var(--esp-3);
+    border: 3px solid var(--cor-tinta);
+    background: var(--cor-amarelo);
+    color: var(--cor-tinta);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 950;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #000;
+  }
+  .barra-lateral__pedir:disabled { opacity: 0.6; cursor: not-allowed; }
+  .barra-lateral__pedir small { flex-basis: 100%; font-size: 0.7rem; font-weight: 700; }
+
+  .barra-lateral nav { display: grid; gap: var(--esp-1); }
+  .barra-lateral nav a {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: var(--esp-2);
+    padding: 0 var(--esp-3);
+    border: 2px solid transparent;
+    color: var(--barra-texto);
+    font-weight: 800;
+    text-decoration: none;
+  }
+  .barra-lateral nav a:hover { border-color: var(--barra-texto); }
+  .barra-lateral nav a[aria-current="page"] { background: var(--barra-ativo); color: var(--barra-ativo-texto); }
+  .barra-lateral__icone { display: inline-grid; width: 1.6rem; place-items: center; font-size: 0.85rem; }
+
+  .barra-lateral__paleta {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--esp-2);
+    margin-top: auto;
+    padding: 0 var(--esp-3);
+    border: 2px solid var(--barra-texto);
+    background: transparent;
+    color: var(--barra-texto);
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .barra-lateral__paleta kbd { padding: 0.05rem 0.35rem; border: 1px solid var(--barra-texto); font: inherit; font-size: 0.75rem; }
+  .barra-lateral :focus-visible { outline: 3px solid var(--cor-amarelo); outline-offset: 2px; }
 }
+
+/* Os painéis da Central (operations.css) dentro da casca: o mesmo visual de antes. */
+.ops-escopo { min-width: 0; }

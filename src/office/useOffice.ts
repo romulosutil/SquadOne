@@ -210,8 +210,22 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     applyCamera()
   }
 
-  /** SCALE aparece em UM lugar: o transform de .world. Tab alterna 1 <-> 2. */
+  /**
+   * SCALE aparece em UM lugar: o transform de .world. Sempre inteiro (pixel art
+   * em escala fracionária borra); quem escolhe é o GameMap, pelo encaixe do
+   * andar no viewport ou pelos botões. Antes a tecla Tab alternava 1 <-> 2 e
+   * roubava o Tab da página inteira: quem navega por teclado ficava preso.
+   */
   const scale = ref(1)
+
+  /**
+   * Loop pausado: aba em segundo plano (visibilitychange) ou mapa fora da tela
+   * (IntersectionObserver). Nem rAF nem passeio rodam: ninguém está vendo, e o
+   * celular agradece a bateria. Ao voltar, a câmera encaixa e o loop retoma.
+   */
+  const pausado = ref(false)
+  let abaOculta = typeof document !== 'undefined' ? document.hidden : false
+  let foraDaTela = false
 
   /** null enquanto carrega ou se o manifest não existir: a UI cai pro emoji. */
   const sheets = shallowRef<Record<string, CharSheet> | null>(null)
@@ -582,6 +596,11 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   function dispararPasseio(a: Actor) {
     if (actors.get(a.id) !== a) return
     if (movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio) return
+    // Ninguém vendo: não sai do lugar, só tenta de novo mais tarde.
+    if (pausado.value) {
+      agendarPasseio(a)
+      return
+    }
     const casa = porPessoa.value.get(a.id)
     if (!casa) return
     const { dominio } = casa
@@ -980,8 +999,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     }
 
     const [wx, wy] = camTarget()
-    // suavização independente de framerate
-    const k = 1 - Math.exp(-CAM_LAMBDA * dt)
+    // suavização independente de framerate; com movimento reduzido a câmera
+    // salta direto ao alvo (o ator ainda anda: é ele que diz quem atende).
+    const k = movimentoReduzido ? 1 : 1 - Math.exp(-CAM_LAMBDA * dt)
     cam.x += (wx - cam.x) * k
     cam.y += (wy - cam.y) * k
     if (Math.abs(wx - cam.x) < 0.5 && Math.abs(wy - cam.y) < 0.5) {
@@ -997,9 +1017,28 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   }
 
   function kick() {
-    if (raf) return
+    if (raf || pausado.value) return
     last = performance.now()
     raf = requestAnimationFrame(tick)
+  }
+
+  function atualizarPausa() {
+    const agora = abaOculta || foraDaTela
+    if (agora === pausado.value) return
+    pausado.value = agora
+    if (agora) {
+      if (raf) cancelAnimationFrame(raf)
+      raf = 0
+      return
+    }
+    // Voltou: o layout pode ter mudado enquanto ninguém olhava.
+    snapCamera()
+    kick()
+  }
+
+  function onVisibilidade() {
+    abaOculta = document.hidden
+    atualizarPausa()
   }
 
   // -------------------------------------------------------------------------
@@ -1007,12 +1046,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   // -------------------------------------------------------------------------
 
   let ro: ResizeObserver | null = null
-
-  function onKey(e: KeyboardEvent) {
-    if (e.key !== 'Tab') return
-    e.preventDefault()
-    scale.value = scale.value === 1 ? 2 : 1
-  }
+  let io: IntersectionObserver | null = null
 
   async function loadSheets() {
     try {
@@ -1044,8 +1078,16 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
       })
       ro.observe(viewportRef.value)
     }
-    window.addEventListener('keydown', onKey)
+    if (viewportRef.value && typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver((entradas) => {
+        foraDaTela = !entradas.some((e) => e.isIntersecting)
+        atualizarPausa()
+      })
+      io.observe(viewportRef.value)
+    }
+    document.addEventListener('visibilitychange', onVisibilidade)
     mqMovimento?.addEventListener('change', onPreferenciaDeMovimento)
+    atualizarPausa()
     void loadSheets()
   })
 
@@ -1056,7 +1098,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     timers.clear()
     for (const a of actors.values()) a.timerPasseio = null
     ro?.disconnect()
-    window.removeEventListener('keydown', onKey)
+    io?.disconnect()
+    document.removeEventListener('visibilitychange', onVisibilidade)
     mqMovimento?.removeEventListener('change', onPreferenciaDeMovimento)
   })
 
@@ -1067,6 +1110,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
 
   watch(scale, () => {
     measure()
+    // Escala nova muda o que cabe: a câmera encaixa já, sem esperar alguém andar.
+    snapCamera()
     kick()
   })
 
@@ -1093,6 +1138,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     bounds,
     setActorEl,
     moveTo,
+    pausado,
     focus: (id: string) => {
       focused.value = id
       // Focar é pedido explícito de olhar: a câmera vai até ele mesmo parado.

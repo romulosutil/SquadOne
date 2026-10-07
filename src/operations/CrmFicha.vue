@@ -8,7 +8,9 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 // n8n (POST /api/operations/crm/registro). Recusou/Fechou/Desfazer ficam na
 // página do lead do n8n (fluxo 07); a Etapa do PRUMO muda na planilha.
 const props = defineProps<{ lead: CrmLead; visao: CrmVisao }>()
-const emit = defineEmits<{ voltar: []; registrado: [] }>()
+// Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
+// voltar do navegador, então a ficha não tem botão de voltar próprio.
+const emit = defineEmits<{ registrado: [] }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
 const nota = ref('')
@@ -84,8 +86,6 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 
 <template>
   <article class="crm-ficha" aria-labelledby="crm-ficha-titulo">
-    <button type="button" class="crm-voltar" @click="emit('voltar')"><span aria-hidden="true">←</span> Voltar</button>
-
     <header class="crm-ficha__cabeca">
       <span class="crm-kicker">{{ ROTULO_DO_PRODUTO[lead.produto] }} · {{ onde(lead) }}</span>
       <h2 id="crm-ficha-titulo" ref="titulo" tabindex="-1">{{ lead.empresa }}</h2>
@@ -131,8 +131,8 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <a v-if="lead.links.planilha" :href="lead.links.planilha" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha' }} ↗</a>
       </div>
       <div class="crm-form__botoes">
-        <button v-if="aberto" class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
-        <button v-else-if="lead.motivoPerda === 'sem-contato'" class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer perda por falta de contato' }}</button>
+        <button v-if="aberto" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
+        <button v-else-if="lead.motivoPerda === 'sem-contato'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer perda por falta de contato' }}</button>
       </div>
     </section>
 
@@ -147,8 +147,8 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <label><span>O que fazer</span><input v-model="proximoTexto" type="text" maxlength="200" :disabled="!disponivel" placeholder="Ex.: ligar para combinar a conversa"></label>
         <label><span>Quando</span><input v-model="proximoData" type="date" :min="hoje" :disabled="!disponivel"></label>
         <div class="crm-form__botoes">
-          <button class="ops-button ops-button--primary" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proximo_passo' ? 'Salvando…' : 'Salvar próximo passo' }}</button>
-          <button v-if="lead.proximoPasso" class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="limparProximo">Limpar</button>
+          <button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proximo_passo' ? 'Salvando…' : 'Salvar próximo passo' }}</button>
+          <button v-if="lead.proximoPasso" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="limparProximo">Limpar</button>
         </div>
       </form>
     </section>
@@ -157,11 +157,11 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       <h3 id="crm-ficha-proposta">Proposta</h3>
       <template v-if="lead.etapa === 'proposta'">
         <p>Proposta enviada em {{ diaEscolhido(lead.proposta?.data) || dataCurta(lead.proposta?.em) }} (marcada à mão).</p>
-        <button class="ops-button" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerProposta">{{ salvando === 'proposta_desfeita' ? 'Desfazendo…' : 'Desfazer proposta' }}</button>
+        <button class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerProposta">{{ salvando === 'proposta_desfeita' ? 'Desfazendo…' : 'Desfazer proposta' }}</button>
       </template>
       <form v-else-if="aberto" class="crm-form" @submit.prevent="marcarProposta">
         <label><span>Enviada em</span><input v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>
-        <div class="crm-form__botoes"><button class="ops-button ops-button--primary" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar proposta enviada' }}</button></div>
+        <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar proposta enviada' }}</button></div>
       </form>
       <p v-else class="crm-muted">Lead encerrado ({{ ROTULO_DA_ETAPA[lead.etapa] }}). Para reabrir, use Desfazer na página do lead.</p>
     </section>
@@ -170,7 +170,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       <h3 id="crm-ficha-nota">Nova nota</h3>
       <form class="crm-form" @submit.prevent="salvarNota">
         <label><span>Nota <small>({{ lead.notas }} já registrada{{ lead.notas === 1 ? '' : 's' }})</small></span><textarea v-model="nota" rows="3" maxlength="1000" :disabled="!disponivel" placeholder="O que ele disse, o que ficou combinado…" /></label>
-        <div class="crm-form__botoes"><button class="ops-button ops-button--primary" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'nota' ? 'Salvando…' : 'Salvar nota' }}</button></div>
+        <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'nota' ? 'Salvando…' : 'Salvar nota' }}</button></div>
       </form>
     </section>
 

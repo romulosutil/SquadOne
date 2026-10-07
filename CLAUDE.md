@@ -34,7 +34,10 @@ vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de a
 `server/telegram-gasto.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
-`src/office/postos.test.ts`, `src/office/trabalhadores.test.ts` e `src/office/salaFinancas.test.ts`). O monitor do Dell tem os seus em Python:
+`src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
+`src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
+`src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje, estado do
+time só com fonte, linha do funil)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py`. Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -95,28 +98,33 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
     organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
     pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
     servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
-src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app) ou Central (perfil operations)
-  src/operations/         Central de Operações (só perfil operations)
-    OperationsApp.vue     home (/) e CRM (/crm); OperationsHeader.vue com o botão "Agentes do SquadOne" (app do Easypanel)
-    PrecisaDeVoce.vue     topo da home: alertas com "o que fazer" e o link que resolve; o que resolve sozinho fechado
+src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
+src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
+  src/casca/              destinos.ts (PURO: rota por perfil, barra, Ctrl+K), hoje.ts (PURO: ordem da Hoje,
+                          estado do time só com fonte, linha do funil), rota.ts (pushState sem roteador),
+                          overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
+                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta
+  src/rotas/              HojeRota (/), AgendaRota (/agenda), EscritorioRota (/squadone), MaisRota (/mais)
+  src/agentes/estado.ts   estado e ações dos agentes (era o <script> do App.vue): roster, squad ativa, Mochila,
+                          turno, cartões, folhas; um por aba (`useAgentes`), com as guardas de isLoading e abertura
+  src/agentes/ListaDeQuests.vue  compromissos da Mochila: "próximos 3" na Hoje e a Agenda por dia
+  src/operations/         Central de Operações (só perfil operations), montada como rotas da casca
     ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
-    AgendaPanel.vue, AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado)
-    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil e Ficha
+    AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
+    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista) e Ficha (folha cheia)
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
-    BarraInferior.vue, MaisPanel.vue  casca mobile: barra Hoje · Funil · ＋Pedir (desabilitado) · Finanças · Mais
-  src/estilos/            tokens.css (paleta da Central + modo escuro), casca.css, design.md
-src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
+  src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
   src/mochila.ts          sem Vue: "Bloco i/N" e intervalo de dia inteiro, derivados da lista
   src/rosterApi.ts        escritas do roster com erro classificado
   src/contribuicao.ts     sem Vue: formata minutos, resume o turno e o ajuste, monta o ajuste do usuário
-  src/components/         GameMap, CommandBar, QuestBackpack, GrowthCard,
-                          SquadSelector, NovaSquadModal, TrocaSquadCard,
-                          SalasPainel, ContratarModal, EditarModal, ArquivoModal,
-                          AjusteCard
+  src/components/         Sheet (folha acessível), GameMap (import dinâmico), GrowthCard, AjusteCard,
+                          TrocaSquadCard, SquadSelector, SalasPainel, SalaCartao,
+                          ContratarFolha, EditarFolha, NovaSquadFolha, ArquivoFolha
   src/office/             geometria isométrica, salas, sprites
+  src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch) e a escala inteira do mapa
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
   src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
   src/office/trabalhadores.ts  catálogo versionado: trabalhador automático (n8n, timer) → sala; FORA do prompt (RULES 26)
@@ -155,7 +163,7 @@ Todo evento criado carrega quatro chaves em `extendedProperties.private`, montad
 
 ### Toggle Auto / Foco / Baixa Prioridade
 
-A CommandBar manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`baixa_prioridade` acrescentam a regra ao prompt **e** `agendarCompromisso` impõe `time_blocking` mesmo se o modelo divergir; se o campo esperado faltar, usa o do outro tipo (`esforco_min` no lugar de `duracao_min`; regra em `server/agendamento.ts`).
+A folha Pedir (era a CommandBar) manda `modo` em `/api/orquestrar` (ausente = `auto`, inválido = 400) e volta para Auto depois de cada envio. `auto` deixa o modelo escolher o tipo. `foco`/`baixa_prioridade` acrescentam a regra ao prompt **e** `agendarCompromisso` impõe `time_blocking` mesmo se o modelo divergir; se o campo esperado faltar, usa o do outro tipo (`esforco_min` no lugar de `duracao_min`; regra em `server/agendamento.ts`).
 
 Os dois modos forçados gravam o mesmo tipo. O que muda é **até onde se procura horário**:
 
@@ -232,7 +240,7 @@ O que precisa ser feito mas não pede horário ("comprar leite", "pagar o boleto
 
 O único fluxo que edita uma quest depois de criada. `POST /api/quests/:eventId/ajustar {alvo, proposto_min, permitirMover?}` só roda com aprovação (`AjusteCard`) e relê tudo do Google.
 
-- **Duas origens, um contrato.** A proposta pode vir de um agente ou do botão "⏱ Ajustar" da Mochila (`QuestBackpack` → `propostaDoUsuario` em `src/contribuicao.ts` → o mesmo `AjusteCard`). `PropostaDeAjuste.origem` distingue: em `usuario` o card nasce com um campo de minutos e o `proposto_min` emitido é o do card, não o da proposta. O botão só aparece onde o servidor aceitaria (`alvoDeAjuste`: bloco com horário → `duracao`, marco → `esforco`; foco de dia inteiro não tem alvo), e `normalizarPropostoMin` põe o valor na grade de 15 e nos limites de `interpretarPedidoDeAjuste` (`LIMITES_DE_AJUSTE` em `src/types.ts` é o espelho) — a rota não mudou.
+- **Duas origens, um contrato.** A proposta pode vir de um agente ou do botão "Ajustar" da agenda (`ListaDeQuests` → `propostaDoUsuario` em `src/contribuicao.ts` → o mesmo `AjusteCard`). `PropostaDeAjuste.origem` distingue: em `usuario` o card nasce com um campo de minutos e o `proposto_min` emitido é o do card, não o da proposta. O botão só aparece onde o servidor aceitaria (`alvoDeAjuste`: bloco com horário → `duracao`, marco → `esforco`; foco de dia inteiro não tem alvo), e `normalizarPropostoMin` põe o valor na grade de 15 e nos limites de `interpretarPedidoDeAjuste` (`LIMITES_DE_AJUSTE` em `src/types.ts` é o espelho) — a rota não mudou.
 - **Alvos:** duração (foco/bloco) ou esforço total (marco, medido pelos blocos com `squadone_prazo_ref`). Duração muda só o fim; se não cabe, 409 `naoCabe` e mover é um segundo clique (`permitirMover`). Esforço cria blocos extras antes do prazo (com as 5 marcas) ou encurta blocos futuros até 30 min; bloco que mudou desde a listagem é pulado e vira `sobra_min`. Nada é apagado. 412 no ajuste não retenta.
 - **PATCH:** todo PATCH de evento passa por `atualizarPreservandoMarcas`: `If-Match` com o etag lido, `sendUpdates=none`, `extendedProperties.private` **completo** (lido + o que muda). A resposta é conferida: marca `squadone_*` sumida → restaura uma vez → `marcasPerdidas` (500).
 - **Token por chamada:** a rota checa `tokenValido()` antes e passa `obterToken`; cada leitura/PATCH/POST no Google pede o token de novo logo antes (`comToken`, o cache do auth-store absorve o custo). Um ajuste de esforço faz dezenas de escritas em série e um token lido só no começo venceria no meio. Google recusou a credencial: pede de novo e, vindo token diferente, repete uma vez; só com o mesmo token o 401 vira `precisaConectar`.
@@ -270,7 +278,7 @@ Aviso no WhatsApp `ANTECEDENCIA_LEMBRETE_MIN` (10) minutos antes de cada bloco e
 
 ### Bot do Telegram
 
-Segundo canal de entrada, além da CommandBar: mandar uma demanda pelo Telegram roda o mesmo turno e cria os mesmos eventos. `server/turno.ts` (`rodarDemanda`) é o ponto único que as duas portas de entrada chamam, para as duas terem a mesma ordem (squad e janela antes do token e do Gemini).
+Segundo canal de entrada, além do Pedir: mandar uma demanda pelo Telegram roda o mesmo turno e cria os mesmos eventos. `server/turno.ts` (`rodarDemanda`) é o ponto único que as duas portas de entrada chamam, para as duas terem a mesma ordem (squad e janela antes do token e do Gemini).
 
 - **Dois transportes** (`TELEGRAM_TRANSPORTE`): `webhook` (padrão, Easypanel; tudo abaixo sobre rota, segredo e `setWebhook`) e `polling` (Dell, obrigatório no `operations`). No polling (`server/telegram-polling.ts`) o processo busca com `getUpdates` (`timeout` 50, `allowed_updates` mensagens + botões), sem rota e sem `TELEGRAM_WEBHOOK_SECRET` (a trava vira o token, que só existe no Dell). Cada update vai a `bot.receber` (o mesmo de `processar`, sem Express: deduplica e enfileira) e **só então** o offset (`update_id + 1`) é gravado em `SQUADONE_DATA_DIR/telegram-offset.json`; o `getUpdates` seguinte o confirma. Nunca chama `setWebhook`: 409 (webhook ainda registrado ou outro processo buscando) vira log uma vez e espera de 30 s. A guarda de demanda atrasada é a mesma: o backlog que o `deleteWebhook` **sem** drop deixa vira "⌛".
 
@@ -279,7 +287,7 @@ Segundo canal de entrada, além da CommandBar: mandar uma demanda pelo Telegram 
 - **Allowlist de `chat_id` fecha quando vazia** — ao contrário de `IPS_PERMITIDOS`, que vazia desliga o porteiro. O username do bot é público e buscável; um bot aberto deixaria qualquer pessoa criar eventos no Google Calendar do usuário e gastar Gemini. `TELEGRAM_CHAT_IDS` vazia com token presente é `TelegramMalConfigurado`. Só `chat.type === "private"` conta; grupo é ignorado mesmo que o id esteja na lista. Chat fora da lista: **200 sem resposta nenhuma** (quem não passa não precisa saber que o bot está vivo) e `console.warn("[telegram] chat <id> não autorizado (TELEGRAM_CHAT_IDS)")` — é assim que o dono descobre o próprio `chat_id`: manda `/start`, lê o log do Easypanel. 200 e não 403 porque status ≠ 2xx faz o Telegram reentregar o mesmo update com backoff e segurar os seguintes.
 - **Squad ativa sem aba: primeira squad ativa, sem estado novo.** `rodarDemanda` recebe `squadId` ausente e `resolverSquad` devolve `squadsAtivas(roster)[0]` (hoje `pessoal`). A exceção é o prefixo `/p` (`PREFIXOS_DE_SQUAD` em `server/telegram-entrada.ts`): fixa `squadId: "prumo"` pelo id, sem estado e sem chamada a mais ao modelo, e o redirecionamento continua valendo depois dele; squad sumida ou arquivada = `SquadInexistente` antes do Gemini, e `textoDaFalha` diz que nada foi criado e para mandar sem o prefixo. O redirecionamento automático (`sugerir_troca_squad` → `executarTurno` troca e reprocessa) resolve demanda de outra squad — o usuário começa a mensagem dizendo do que se trata. Custo aceito: demanda de squad que não é a primeira custa **2 chamadas ao Gemini**. Alternativas descartadas: arquivo com a squad ativa (quebra o escopo de persistência V1 por algo que o redirecionamento já resolve); "última squad usada" em memória (estado escondido, some no redeploy); env `TELEGRAM_SQUAD_PADRAO` (duplica verdade do roster, squad arquivada/renomeada deixaria a env apontando pro nada).
 - **Webhook responde 200 imediatamente; turno roda numa fila serial.** Um turno pode levar até ~6 min no pior caso — com redirecionamento automático de squad, até 2 gerações do Gemini (teto de ~3 min cada, ver "Ajuste de tempo") mais as chamadas ao Google; se o webhook segurasse a resposta, o Telegram desistiria e reentregaria o update — o mesmo compromisso nasceria duas vezes. Então: valida → `res.sendStatus(200)` → processa depois. **Dedupe de `update_id`** em memória (últimos 500): reentrega por ACK perdido não roda o turno de novo (redeploy zera, custo aceito, mesmo raciocínio da vigia). **Fila serial** (cadeia de promessas): dois turnos em paralelo leriam a agenda antes de o outro reservar e pegariam o mesmo horário — a CommandBar evita isso com `isLoading`, o bot precisa da fila. Turno da UI e do bot ao mesmo tempo continua possível (custo aceito). Enquanto roda: `sendChatAction typing` a cada 4 s; mensagem que chega com a fila ocupada recebe "⏳ Na fila (N antes desta)." Crash do processo depois do 200 e antes da resposta perde a resposta (custo aceito).
-- **Resposta em texto puro, sem componente Vue.** `server/telegram-resposta.ts` (PURO) espelha o que `handleDelegation` faz com o `TurnoResult`, mas em texto (sem `parse_mode`: título de evento com `_`/`*` quebraria o Markdown do Telegram). Reusa `linhasDosEventosCriados` (`src/contribuicao.ts`, `{ locale: "pt-BR", timeZone: FUSO }` — o container roda em UTC, o fuso é obrigatório). Texto cortado em 4096 caracteres (limite do `sendMessage`). Tarefas avulsas entram com `📋`.
+- **Resposta em texto puro, sem componente Vue.** `server/telegram-resposta.ts` (PURO) espelha o que `handleDelegation` (`src/agentes/estado.ts`) faz com o `TurnoResult`, mas em texto (sem `parse_mode`: título de evento com `_`/`*` quebraria o Markdown do Telegram). Reusa `linhasDosEventosCriados` (`src/contribuicao.ts`, `{ locale: "pt-BR", timeZone: FUSO }` — o container roda em UTC, o fuso é obrigatório). Texto cortado em 4096 caracteres (limite do `sendMessage`). Tarefas avulsas entram com `📋`.
 - **Contratação se aprova por botão.** O resumo do turno só conta "💡 N proposta(s) de contratação abaixo"; cada proposta de domínio/integrante vai numa mensagem própria (`textoDaProposta`) com **✅ Aprovar** / **🗑️ Descartar** (`inline_keyboard`, `callback_data` = `h:<id da sugestão>:a|d`, ≤ 64 bytes). O toque chega como `callback_query`: mesma allowlist (chat privado da lista; fora dela, silêncio), `answerCallbackQuery` para tirar o "carregando", e a mensagem é editada com o resultado — sem `reply_markup`, então os botões somem. Aprovar chama o MESMO `aplicarContratacao` da rota `/api/squad/hire` (revalida tudo contra o roster atual, aplica na squad da proposta, nome escolhido pelo servidor). As propostas vivem **só em memória** do processo (`VALIDADE_PROPOSTA_MS` 24h, `MAX_PROPOSTAS_PENDENTES` 50): redeploy ou vencimento = "⌛ Proposta expirada". **Uso único:** a proposta sai da memória ANTES de aplicar, então dois toques rápidos não contratam duas pessoas, e uma contratação que falha não deixa botão para repetir (pede de novo). Toque fora da fila de turnos: contratar não lê a agenda, e `atualizarRoster` já serializa a gravação. A troca de squad (o empate de dois saltos) continua só texto.
 - **Áudio vira demanda.** Voz (`message.voice`) ou arquivo `audio/*` (`message.audio`); legenda `/foco`/`/baixa` força o modo. Teto `MAX_DURACAO_AUDIO_S` 120 e `MAX_BYTES_AUDIO` 5 MB, conferido pelo update ANTES de baixar ("🎙️ Áudio longo demais"). Na fila serial, como o texto: `getFile` + download (`baixarArquivo`, a URL de arquivo também leva o token e nunca aparece em erro), transcrição por uma chamada separada ao Gemini (`server/transcricao.ts`, arquivo inline, `gerarComRetry`, `SEM_FALA` → `AudioSemFala` → "Não entendi o áudio"), e a transcrição roda como demanda — a resposta começa ecoando `🎙️ “<o que entendeu>”` para o usuário conferir. Custo: **uma geração a mais por áudio**, e o áudio passa pelo Google além do Telegram. Guarda de demanda atrasada vale igual.
 - **Comandos** (`server/telegram-entrada.ts`, PURO, depois da checagem de chat): texto sem `/` é demanda em `modo: auto`; `/foco <texto>` e `/baixa <texto>` forçam o modo (mesmo mecanismo do toggle da CommandBar); `/p <texto>` fixa a squad PRUMO, combinável com um modo em qualquer ordem (`/p /foco x`) e na legenda do áudio — um comando de modo e um de squad no máximo, repetido ou desconhecido vira ajuda; `/start`, `/ajuda`, `/help`, `/foco`/`/baixa` sem texto ou comando desconhecido devolvem texto de ajuda sem chamar o Gemini; mensagem sem `text` nem áudio (foto, figurinha, documento) devolve "Só texto ou áudio por enquanto."; `edited_message`, `channel_post` e updates sem `message`/`callback_query` são ignorados. Sufixo `@NomeDoBot` do comando é descartado.
@@ -295,7 +303,7 @@ Toda mutação passa por `atualizarRoster()`, que serializa read-modify-write nu
 
 ### Contratação e ciclo de vida
 
-Contratar: botão por sala e **+ Abrir sala** (painel `SalasPainel` fora do canvas; o `GameMap` segue sem eventos), ou card do modelo (Aprovar/Ajustar). O prompt manda o modelo sempre chamar a capacidade de crescimento quando o pedido é explícito. Redigir (`POST /api/squad/redigir`) é uma chamada de function calling restrita (`ANY` + um nome), via `gerarComRetry`, e não grava nada: `responseMimeType` é instável na troca de modelo do retry. Falha dela nunca impede contratar à mão.
+Contratar: botão por sala e **+ Abrir sala** (na Lista do Escritório, `SalasPainel`, ou na folha que abre ao tocar num personagem do Mapa), ou card do modelo (Aprovar/Ajustar). O prompt manda o modelo sempre chamar a capacidade de crescimento quando o pedido é explícito. Redigir (`POST /api/squad/redigir`) é uma chamada de function calling restrita (`ANY` + um nome), via `gerarComRetry`, e não grava nada: `responseMimeType` é instável na troca de modelo do retry. Falha dela nunca impede contratar à mão.
 
 | Rota | Efeito |
 |---|---|
@@ -313,8 +321,13 @@ Só frontend; nada disto grava.
 
 - **Legível sem clicar é a SALA, não a pessoa.** Placa "NOME · N". O rótulo "nome · papel" do ator fica oculto e só aparece em hover, com `.actor--focus` (andando por comando, câmera junto) ou `[data-ativo]` (responsável da demanda). No `.actor` nada de `:class`: `useOffice` escreve `actor--walk`/`actor--focus` por `classList` e o patch de classe do Vue apagaria.
 - **Postos (`postos.ts`):** cadeiras do template primeiro, excedente espalhado maximizando distância de tela, nunca em porta nem no tile logo dentro dela. O posto depende só da sala e do índice: contratar não reassenta quem já estava. O teste fixa ≥ 40 px até 8 pessoas em todo template — encher um template de móveis quebra o teste de propósito.
-- **Passeio vs. comando:** ator parado passeia (6–16 s, 80% na própria sala, 20% na vizinha pela porta, no máximo 1/3 fora ao mesmo tempo). `moveTo`/entrada de contratado cancelam o passeio; visita do PO raiz segura o ator lá até o próximo comando. A câmera só segue quem anda por comando. `prefers-reduced-motion` desliga o passeio.
-- `SalasPainel`: PO sempre visível, integrantes atrás de "+N", lista com rolagem própria (40vh); sob a sala, em texto, os trabalhadores automáticos dela pelo catálogo (`src/office/trabalhadores.ts`), sem estado — rodou/falhou é da Central.
+- **Passeio vs. comando:** ator parado passeia (6–16 s, 80% na própria sala, 20% na vizinha pela porta, no máximo 1/3 fora ao mesmo tempo). `moveTo`/entrada de contratado cancelam o passeio; visita do PO raiz segura o ator lá até o próximo comando. A câmera só segue quem anda por comando. `prefers-reduced-motion` desliga o passeio, os ciclos idle em CSS e a suavização da câmera (o ator comandado ainda anda: é ele que diz quem atende).
+- **Lista | Mapa (07/10/2026):** o Escritório (`/squadone`) abre em Lista no celular e em Mapa a partir de 1024 px; a escolha fica no `localStorage` (`squadone:escritorio:vista`, try/catch em `office/vista.ts`). A Lista (`SalasPainel` → `SalaCartao`) é texto e tem todos os gestos; o Mapa só carrega quando aberto (`defineAsyncComponent`, pedaço próprio do bundle). Um andar (squad) por vez, `:key` pela squad.
+- **Escala inteira, sem Tab:** o GameMap escolhe a maior escala inteira em que o andar cabe (`escalaInteira`, até 3×) e oferece Afastar/Aproximar/Encaixar. A tecla Tab, que alternava 1×/2× e prendia quem navega por teclado, não faz mais nada no mapa.
+- **Toque:** cada personagem tem um `<button>` de 44×44 px de TELA (`calc(44px / var(--escala))`) com o estado no nome acessível; tocar abre a sala numa folha, com os gestos da Lista.
+- **Estado com texto e só com fonte** (`estadoDaPessoa`, `estadoDaSquad` em `casca/hoje.ts`): bloco em curso ou próximo compromisso (da agenda lida desta squad), responsável pelo último pedido desta aba, ou `Sem sinal` por extenso. Nada de "ocioso"/"trabalhando" inventado.
+- **rAF pausado** com a aba em segundo plano (`visibilitychange`) ou o mapa fora da tela (`IntersectionObserver`): nem loop, nem passeio, nem ciclo idle (`animation-play-state`); ao voltar, a câmera encaixa.
+- **Automáticos da sala:** sob cada sala da Lista (slot `rodape` do `SalaCartao`), em texto, os trabalhadores automáticos dela pelo catálogo (`src/office/trabalhadores.ts`), sem estado — rodou/falhou é da Central.
 
 ### Dois perfis: app (Easypanel) e operations (Dell)
 
@@ -323,7 +336,10 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 - **`app` (padrão, Easypanel):** o SquadOne de sempre, bind `0.0.0.0`. `/api/operations/*` responde 404 JSON (sem isto o fallback da SPA devolveria HTML 200). Ausente = `app`; valor desconhecido derruba o boot — perfil errado não pode abrir a Central calado.
 - **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/` (`/squadone` abre os agentes aqui com a agenda ligada; sem ela, redireciona ao app do Easypanel, como desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção. As rotas do app (`rotasDoApp` em `server.ts`: roster, Mochila, turno, ajuste, avisos, avaliação) só são montadas com a agenda ligada (ver "Agenda no Dell"); sem ela o resto de `/api` é 404 JSON, e do Google ficam só `/api/auth/google` e `/callback` (a agenda da Central). `/api/push/*` não existe mais (o ntfy saiu). O `~/SquadOne/data/squad.json` do Dell é um retrato de 14/09/2026 e nunca vira a agenda.
 - **`GET /api/runtime`** devolve `{ mode, avaliacoes, ocupado, agenda }` (`agenda`: o app mora neste processo). `ocupado` = turno em andamento (`haTurnoEmAndamento`, contado em `rodarDemanda`) ou mensagem na fila do bot (`bot.ocupado()`); o `deploy/dell/atualizar-central.sh` espera `false` (até 10 min) antes de reiniciar.
-- **`src/RootApp.vue`** pergunta `/api/runtime` e escolhe a superfície. Falha na pergunta = abre o app, nunca a Central.
+- **`src/RootApp.vue`** pergunta `/api/runtime` e monta a MESMA casca (`App.vue`) com `{ perfil, agentes }`: no `operations`, Hoje com o estado do Dell, Funil, Finanças, Entrada e, com `agenda: true`, os agentes (Pedir, Agenda, Escritório); no `app`, só os agentes. Falha na pergunta = perfil `app`, nunca a Central. `/squadone` sem a agenda continua redirecionando ao Easypanel.
+- **Casca mobile (07/10/2026):** barra inferior abaixo de 1024 px (Hoje · Funil · ＋Pedir · Finanças · Mais no Dell; Hoje · Agenda · ＋Pedir · Escritório · Mais no Easypanel), barra lateral e Ctrl+K/⌘K a partir dela. Links de rota da casca navegam com `pushState` (`casca/rota.ts`), sem recarregar: recarregar no meio de um turno perderia a resposta. A Hoje segue a RULES 13 (no máximo 3 cartões, depois "ver todas"). O CRM tem CSS próprio só com tokens (`src/operations/crm.css`, modo escuro incluso); só os painéis de Mais (como funciona, acessos, o que o Dell confere) seguem em `operations.css`, claros, com fundo próprio.
+- **Pedir é uma folha** (`casca/PedirFolha.vue`, era a CommandBar): chip da squad, Auto/Foco/Baixa de 44 px, ditado pelo navegador (Web Speech API, pt-BR, desabilitado com o motivo onde não existe) e o MESMO corpo `{ demanda, modo, squadId }` em `/api/orquestrar`. Erros e avisos do turno ficam por extenso na folha até o próximo pedido (eram `alert()`); com a folha fechada, o aviso traz "Ver detalhes".
+- **`Sheet`** (`components/Sheet.vue`) é a folha de tudo: Pedir, contratar, editar, nova squad, arquivo, sala do mapa, ficha do CRM, Ctrl+K. `role="dialog"` + `aria-modal`, Esc, alça (arrastar para baixo), botão Fechar, foco preso (Tab gira e o `#app` fica `inert`) e devolvido a quem abriu; `bloqueada` durante um envio (nada fecha). Abaixo de 48 rem sobe de baixo; acima, diálogo no meio.
 - **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.
 
 ### Avaliação de turno (desligada)

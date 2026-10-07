@@ -3,8 +3,8 @@
  * (src/operations/operations.css); os nomes semânticos são o que as telas
  * novas usam, para o modo escuro trocar só aqui. Regras em design.md.
  *
- * A Central antiga ainda usa as --ops-* direto (claras sempre); ela migra
- * para estes nomes na casca mobile completa (ARCHITECTURE "Transição", 5).
+ * Os painéis de Mais (ComoFunciona, Access, DellConfere) ainda usam as --ops-*
+ * direto (claras sempre); o CRM migrou para estes nomes em 07/10/2026 (crm.css).
  */
 :root {
   /* Paleta */

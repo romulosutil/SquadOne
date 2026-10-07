@@ -37,10 +37,32 @@ Modo escuro: `prefers-color-scheme: dark`, a não ser que `<html data-theme="lig
 ## Navegação
 
 - Abaixo de 1024 px: **barra inferior** Hoje · Funil · ＋Pedir · Finanças ·
-  Mais, fixa, com a área segura do iPhone. O ＋Pedir fica desabilitado (com
-  "em breve" escrito) até a mudança da agenda para o Dell.
-- A partir de 1024 px: o trilho lateral da Central, com os mesmos destinos.
+  Mais, fixa, com a área segura do iPhone. O ＋Pedir é o gesto principal
+  (maior, em `--destaque`) e abre a folha Pedir; sem a agenda no processo fica
+  desabilitado com o motivo escrito ("sem agenda aqui"). No Easypanel, sem
+  Funil nem Finanças: Hoje · Agenda · ＋Pedir · Escritório · Mais.
+- A partir de 1024 px: **barra lateral** com todos os destinos (Agenda,
+  Escritório e Entrada inclusive), o Pedir em cima e "Buscar e ir" (Ctrl+K /
+  ⌘K) embaixo.
 - O item atual leva `aria-current="page"` e o fundo `--barra-ativo`.
+
+## Folha (Sheet)
+
+Tudo que abre por cima é uma folha (`components/Sheet.vue`): sobe de baixo no
+celular, com alça, e vira diálogo no meio da tela a partir de 48 rem. Título
+sempre; botão **Fechar** com texto (nunca só ✕); ação principal no rodapé, à
+direita. Esc fecha, o foco fica preso dentro e volta a quem abriu. Durante um
+envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
+
+## Agentes
+
+- **Cartão de decisão** (contratação, troca de squad): `.cartao--decisao`,
+  faixa `--acento` à esquerda; ajuste de tempo em `--positivo`; falha do Dell
+  em `--negativo`. Selo em caixa alta com a palavra, nunca só a cor.
+- **Estado de agente** (`.estado`): ponto + palavra. Sem fonte é "Sem sinal",
+  com o ponto tracejado e o texto em `--texto-2` — nunca "ocioso" inventado.
+- **Segmentado** (Auto/Foco/Baixa, Lista/Mapa, Site/Organizar): 44 px por
+  botão, `aria-pressed`, o escolhido em `--destaque`.
 
 ## Componentes de finanças
 

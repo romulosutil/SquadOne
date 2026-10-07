@@ -14,11 +14,18 @@
  * O mapa vem do roster em ÁRVORE (§3.1): UMA SALA POR DOMÍNIO, com o PO e os
  * integrantes dele dentro. Nada aqui deriva sala de pessoa.
  *
- * Uma instância por SQUAD: App.vue monta com `:key="squadAtiva.id"`. Trocar de
- * squad recria o componente, e com ele o `knownRooms` de useOffice — sem isso
- * as salas da outra squad seriam lidas como crescimento e animariam.
+ * Uma instância por SQUAD (um andar por vez): o Escritório monta com
+ * `:key="squadAtiva.id"`, e só quando o Mapa está aberto (import assíncrono).
+ * Trocar de squad recria o componente, e com ele o `knownRooms` de useOffice —
+ * sem isso as salas da outra squad seriam lidas como crescimento e animariam.
+ *
+ * Toque: cada personagem tem um botão de 44×44 px de TELA (dividido pela
+ * escala) que abre a sala dele. O estado de cada um vai no nome acessível, em
+ * texto (`estados`, só com fonte; `Sem sinal` quando não há).
  */
-import { computed, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch, watchEffect } from 'vue'
+import { ESCALA_MAXIMA, escalaInteira } from '../office/vista'
+import type { EstadoDaPessoa } from '../casca/hoje'
 import {
   useOffice,
   type CharSheet,
@@ -39,12 +46,22 @@ import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
 import type { EstadoDoAgente } from '../office/salaFinancas'
 import type { Pessoa, SquadView } from '../types'
 
-/**
- * `estadosDasSalas`: domínio → estado que o PO da sala mostra num balão
- * sempre visível (hoje só a Sala Finanças: % do cartão e do orçamento, ver
- * `office/salaFinancas.ts`). Dado da tela, não do roster.
- */
-const props = defineProps<{ agent?: string; squad?: SquadView | null; estadosDasSalas?: Record<string, EstadoDoAgente> }>()
+const props = defineProps<{
+  agent?: string
+  squad?: SquadView | null
+  /** Estado de cada pessoa, em texto. Quem não está aqui é `Sem sinal`. */
+  estados?: Record<string, { estado: EstadoDaPessoa; texto: string }>
+  /** Uma frase sobre o andar agora ("Pedido em andamento", "Último pedido: Ana"). */
+  status?: string
+  /**
+   * Domínio → estado que o PO da sala mostra num balão sempre visível (hoje
+   * só a Sala Finanças: % do cartão e do orçamento, ver
+   * `office/salaFinancas.ts`). Dado da tela, não do roster.
+   */
+  estadosDasSalas?: Record<string, EstadoDoAgente>
+}>()
+
+const emit = defineEmits<{ abrirSala: [dominioId: string] }>()
 
 /** Pessoa → balão: o estado de uma sala é do agente que responde por ela, o PO. */
 const estadoDoAtor = computed<Record<string, EstadoDoAgente>>(() => {
@@ -119,8 +136,51 @@ const dominios = computed<OfficeDominio[]>(() => {
   }))
 })
 
-const { setViewportEl, setWorldEl, scale, sheets, pessoas, rooms, bounds, setActorEl, moveTo } =
+const { setViewportEl, setWorldEl, scale, sheets, pessoas, rooms, bounds, setActorEl, moveTo, pausado } =
   useOffice(dominios)
+
+/** Sala de cada pessoa: o toque no personagem abre a sala, não a pessoa. */
+const salaDe = computed(() => {
+  const mapa = new Map<string, { id: string; nome: string }>()
+  for (const d of dominios.value) for (const p of d.pessoas) mapa.set(p.id, { id: d.id, nome: d.nome })
+  return mapa
+})
+
+const rotuloDoAtor = (p: OfficePessoa) => {
+  const sala = salaDe.value.get(p.id)
+  const estado = props.estados?.[p.id]?.texto ?? 'Sem sinal'
+  return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${estado}. Abrir a sala.`
+}
+
+// ---------------------------------------------------------------- escala
+
+/** Tamanho do viewport em px de tela, medido por ResizeObserver. */
+const caixa = ref({ w: 0, h: 0 })
+let roCaixa: ResizeObserver | null = null
+function ligarViewport(el: unknown) {
+  setViewportEl(el)
+  roCaixa?.disconnect()
+  roCaixa = null
+  const no = el as HTMLElement | null
+  if (!no || typeof ResizeObserver === 'undefined') return
+  roCaixa = new ResizeObserver(() => {
+    caixa.value = { w: no.clientWidth, h: no.clientHeight }
+  })
+  roCaixa.observe(no)
+}
+onBeforeUnmount(() => roCaixa?.disconnect())
+
+/** null = encaixe automático (a maior escala inteira em que o andar cabe). */
+const zoom = ref<number | null>(null)
+const encaixe = computed(() =>
+  escalaInteira(caixa.value, { w: bounds.value.maxX - bounds.value.minX, h: bounds.value.maxY - bounds.value.minY })
+)
+watchEffect(() => {
+  scale.value = zoom.value ?? encaixe.value
+})
+const aproximar = () => { zoom.value = Math.min(ESCALA_MAXIMA, scale.value + 1) }
+const afastar = () => { zoom.value = Math.max(1, scale.value - 1) }
+const encaixar = () => { zoom.value = null }
 
 // Só aqui `sheets` existe: liga o espelho. Imediato para nascer em sincronia.
 watch(sheets, (chars) => (manifest.value = chars), { immediate: true })
@@ -157,13 +217,11 @@ watch(
   { immediate: true }
 )
 
-const statusLabel = computed(() =>
-  !props.agent || props.agent === 'Idle' ? 'Aguardando Demandas' : `Agente ${props.agent} Ativo`
-)
-
 const worldBox = computed(() => ({
   width: bounds.value.maxX - bounds.value.minX + 'px',
   height: bounds.value.maxY - bounds.value.minY + 'px',
+  // O botão de toque divide por isto para ter 44 px na TELA em qualquer escala.
+  '--escala': String(scale.value),
 }))
 
 function sheetOf(p: OfficePessoa) {
@@ -214,17 +272,19 @@ function actorStyle(p: OfficePessoa) {
 </script>
 
 <template>
-  <div class="w-full h-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-[#8cb07a] relative overflow-hidden flex flex-col">
-    <div class="p-2 border-b-4 border-black bg-[#f4f0e6] z-20 shrink-0 flex justify-between items-center">
-      <span class="font-black uppercase text-sm">📍 Mapa do Escritório</span>
-      <div class="flex items-center gap-2">
-        <span class="font-bold text-[10px] uppercase px-2 py-1 border-2 border-black">Tab: {{ scale }}x</span>
-        <span class="font-bold text-xs uppercase px-2 py-1 bg-black text-white">Status: {{ statusLabel }}</span>
+  <section class="mapa" :aria-label="`Mapa do escritório de ${squad?.nome ?? 'squad'}`">
+    <div class="mapa__barra">
+      <p class="mapa__status" role="status">{{ status || 'Aguardando pedidos' }}<template v-if="pausado"> · animação pausada (mapa fora de vista)</template></p>
+      <div class="mapa__zoom" role="group" aria-label="Escala do mapa">
+        <button type="button" class="botao botao--leve" :disabled="scale <= 1" @click="afastar">Afastar</button>
+        <span class="mapa__escala">Escala {{ scale }}x{{ zoom === null ? ' (encaixe)' : '' }}</span>
+        <button type="button" class="botao botao--leve" :disabled="scale >= ESCALA_MAXIMA" @click="aproximar">Aproximar</button>
+        <button v-if="zoom !== null" type="button" class="botao botao--leve" @click="encaixar">Encaixar</button>
       </div>
     </div>
 
     <!-- Viewport: recorta o mundo. A câmera é o transform de .world. -->
-    <div :ref="setViewportEl" class="office-viewport flex-1 relative overflow-hidden bg-[#20283a]">
+    <div :ref="ligarViewport" class="office-viewport" :class="{ 'office--pausado': pausado }">
       <!-- SCALE aparece em UM lugar: este transform (escrito por useOffice). -->
       <div :ref="setWorldEl" class="office-world" :style="worldBox">
         <!-- Chão: retângulos em coordenadas de mundo, projetados pela matriz. -->
@@ -324,9 +384,15 @@ function actorStyle(p: OfficePessoa) {
             :style="actorStyle(p)"
           >
             <div class="actor__shadow"></div>
-            <!-- Área de hover do corpo: o ator inteiro tem a caixa do frame, com
-                 muito vazio transparente em volta, e segue sem eventos. -->
-            <div class="actor__hit"></div>
+            <!-- Área de toque do corpo: o ator inteiro tem a caixa do frame, com
+                 muito vazio transparente em volta, e segue sem eventos. O botão
+                 tem 44×44 px de tela e abre a sala de quem foi tocado. -->
+            <button
+              type="button"
+              class="actor__hit"
+              :aria-label="rotuloDoAtor(p)"
+              @click="salaDe.get(p.id) && emit('abrirSala', salaDe.get(p.id)!.id)"
+            ></button>
             <div data-billboard class="actor__billboard">
               <template v-if="sheetOf(p)">
                 <div class="actor__strip actor__strip--idle" :style="stripStyle(p, 'idle')"></div>
@@ -334,16 +400,61 @@ function actorStyle(p: OfficePessoa) {
               </template>
               <div v-else class="actor__emoji">{{ p.emoji }}</div>
             </div>
-            <span class="actor__name">{{ p.nome }} · {{ p.papel }}</span>
+            <span class="actor__name" aria-hidden="true">{{ p.nome }} · {{ p.papel }}</span>
             <span v-if="estadoDoAtor[p.id]" class="actor__estado" :data-semaforo="estadoDoAtor[p.id].semaforo">{{ estadoDoAtor[p.id].texto }}</span>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
+.mapa {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: var(--linha);
+  background: #8cb07a;
+  box-shadow: var(--sombra);
+}
+.mapa__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  padding: var(--esp-2) var(--esp-3);
+  border-bottom: var(--linha);
+  background: var(--superficie);
+  color: var(--texto);
+}
+.mapa__status { margin: 0; font-weight: 900; overflow-wrap: anywhere; }
+.mapa__zoom { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.mapa__escala { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.office-viewport {
+  position: relative;
+  height: min(62dvh, 40rem);
+  min-height: 18rem;
+  overflow: hidden;
+  background: #20283a;
+}
+
+/* Fora da tela ou com a aba no fundo: nem os ciclos parados em CSS gastam. */
+/* !important: o ciclo idle vem no style inline, e o shorthand dele diz `running`. */
+.office--pausado .actor__strip,
+.office--pausado .actor__emoji {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actor__strip--idle,
+  .actor__emoji {
+    animation: none !important;
+  }
+}
+
 .office-world {
   position: absolute;
   left: 0;
@@ -497,18 +608,29 @@ function actorStyle(p: OfficePessoa) {
  * profundidade do pintor, senão atravessariam mesas e paredes enquanto andam.
  * `!important` porque o z-index de profundidade é escrito no style pelo loop.
  */
-.actor:hover {
+.actor:hover,
+.actor:focus-within {
   z-index: 100001 !important;
 }
 
+/* 44×44 px de TELA em qualquer escala (o mundo é escalado inteiro). */
 .actor__hit {
+  --lado: calc(44px / var(--escala, 1));
   position: absolute;
   left: 50%;
   bottom: 0;
-  width: 28px;
-  height: 52px;
-  margin-left: -14px;
+  width: var(--lado);
+  height: var(--lado);
+  margin-left: calc(var(--lado) / -2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   pointer-events: auto;
+}
+.actor__hit:focus-visible {
+  outline: calc(3px / var(--escala, 1)) solid #ffd23f;
+  outline-offset: 0;
 }
 
 /* Elipse em degraus de 2px: um radial-gradient sairia com borda borrada. */
@@ -590,6 +712,7 @@ function actorStyle(p: OfficePessoa) {
   visibility: hidden;
 }
 .actor:hover .actor__name,
+.actor:focus-within .actor__name,
 .actor--focus .actor__name,
 .actor[data-ativo] .actor__name {
   visibility: visible;

@@ -1,12 +1,48 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura } from './crm-formato'
-import type { CrmEtapa, CrmLead, CrmVisao } from './types'
+import type { CrmEtapa, CrmLead, CrmProduto, CrmVisao } from './types'
 
-// "Funil": as 6 etapas lado a lado (no celular, uma coluna por vez com rolagem
-// horizontal). Estado sempre por texto, cor só reforça (RULES 3).
-const props = defineProps<{ leads: CrmLead[]; visao: CrmVisao; etapaEmFoco: CrmEtapa | null }>()
-const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null] }>()
+// "Funil": no desktop, as 6 etapas lado a lado. No celular (abaixo de 1024 px),
+// um produto por vez (segmentado Site / Organizar, o PRUMO), abas com as
+// etapas e a lista da etapa escolhida — seis colunas com rolagem lateral não
+// cabiam em 390 px. Estado sempre por texto, cor só reforça (RULES 3).
+const props = defineProps<{
+  leads: CrmLead[]
+  visao: CrmVisao
+  etapaEmFoco: CrmEtapa | null
+  /** O filtro de produto do CRM; no celular "todos" vira Site. */
+  produto: 'todos' | CrmProduto
+}>()
+const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto] }>()
+
+const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
+const celular = ref(mq?.matches ?? false)
+const aoMudarLargura = (e: MediaQueryListEvent) => { celular.value = e.matches }
+mq?.addEventListener('change', aoMudarLargura)
+onBeforeUnmount(() => mq?.removeEventListener('change', aoMudarLargura))
+
+const segmento = computed<CrmProduto>(() => (props.produto === 'prumo' ? 'prumo' : 'site'))
+const SEGMENTOS: Array<{ id: CrmProduto; rotulo: string }> = [
+  { id: 'site', rotulo: 'Site' },
+  { id: 'prumo', rotulo: 'Organizar' },
+]
+const leadsBase = computed(() => (celular.value ? props.leads.filter(l => l.produto === segmento.value) : props.leads))
+
+const etapaAtiva = ref<CrmEtapa>(props.etapaEmFoco ?? 'novo')
+watch(() => props.etapaEmFoco, e => { if (e) etapaAtiva.value = e })
+const etapasVisiveis = computed(() => (celular.value ? [etapaAtiva.value] : ETAPAS))
+
+/** Setas, Home e End movem entre as abas (padrão ARIA de abas, ativação automática). */
+function teclarNaAba(e: KeyboardEvent, i: number) {
+  const destino = e.key === 'ArrowRight' ? (i + 1) % ETAPAS.length
+    : e.key === 'ArrowLeft' ? (i - 1 + ETAPAS.length) % ETAPAS.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? ETAPAS.length - 1 : -1
+  if (destino < 0) return
+  e.preventDefault()
+  etapaAtiva.value = ETAPAS[destino]
+  document.getElementById(`crm-aba-${ETAPAS[destino]}`)?.focus()
+}
 
 const busca = ref('')
 const nicho = ref('')
@@ -16,14 +52,14 @@ const LIMITE = 30
 const limites = ref<Record<CrmEtapa, number>>(Object.fromEntries(ETAPAS.map(e => [e, LIMITE])) as Record<CrmEtapa, number>)
 
 const ordenar = (a: string, b: string) => a.localeCompare(b, 'pt-BR')
-const nichos = computed(() => [...new Set(props.leads.map(l => l.nicho).filter(Boolean))].sort(ordenar))
-const cidades = computed(() => [...new Set(props.leads.filter(l => !nicho.value || l.nicho === nicho.value).map(l => l.cidade).filter(Boolean))].sort(ordenar))
+const nichos = computed(() => [...new Set(leadsBase.value.map(l => l.nicho).filter(Boolean))].sort(ordenar))
+const cidades = computed(() => [...new Set(leadsBase.value.filter(l => !nicho.value || l.nicho === nicho.value).map(l => l.cidade).filter(Boolean))].sort(ordenar))
 watch(nicho, () => { if (cidade.value && !cidades.value.includes(cidade.value)) cidade.value = '' })
 
 const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const filtrados = computed(() => {
   const termo = normalizar(busca.value.trim())
-  return props.leads.filter(l => (!nicho.value || l.nicho === nicho.value) && (!cidade.value || l.cidade === cidade.value)
+  return leadsBase.value.filter(l => (!nicho.value || l.nicho === nicho.value) && (!cidade.value || l.cidade === cidade.value)
     && (!termo || normalizar(`${l.empresa} ${l.nicho} ${l.cidade}`).includes(termo)))
 })
 
@@ -63,10 +99,44 @@ const artefatos = (l: CrmLead) => {
       <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n" :value="n">{{ n }}</option></select></label>
       <label><span>Cidade</span><select v-model="cidade"><option value="">Todas</option><option v-for="c in cidades" :key="c" :value="c">{{ c }}</option></select></label>
     </form>
-    <p v-if="busca || nicho || cidade" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leads.length }} leads com este filtro.</p>
+    <p v-if="busca || nicho || cidade" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leadsBase.length }} leads com este filtro.</p>
 
-    <div class="crm-colunas">
-      <section v-for="etapa in ETAPAS" :id="`crm-coluna-${etapa}`" :key="etapa" class="crm-coluna" :class="[`is-${etapa}`, { 'is-foco': etapaEmFoco === etapa }]" :aria-labelledby="`crm-coluna-titulo-${etapa}`" tabindex="-1">
+    <template v-if="celular">
+      <div class="segmentado crm-segmento" role="group" aria-label="Produto">
+        <button v-for="s in SEGMENTOS" :key="s.id" type="button" :aria-pressed="segmento === s.id" @click="emit('produto', s.id)">
+          {{ s.rotulo }}<span class="ops-visually-hidden">{{ s.id === 'prumo' ? ' (PRUMO)' : ' antes da venda' }}</span>
+        </button>
+      </div>
+      <div class="crm-abas" role="tablist" aria-label="Etapas do funil">
+        <button
+          v-for="(etapa, i) in ETAPAS"
+          :id="`crm-aba-${etapa}`"
+          :key="etapa"
+          type="button"
+          role="tab"
+          :class="`is-${etapa}`"
+          :aria-selected="etapaAtiva === etapa"
+          :aria-controls="`crm-coluna-${etapa}`"
+          :tabindex="etapaAtiva === etapa ? 0 : -1"
+          @click="etapaAtiva = etapa"
+          @keydown="teclarNaAba($event, i)"
+        >
+          {{ ROTULO_DA_ETAPA[etapa] }} <strong>{{ porEtapa[etapa].length }}</strong>
+        </button>
+      </div>
+    </template>
+
+    <div class="crm-colunas" :class="{ 'crm-colunas--uma': celular }">
+      <section
+        v-for="etapa in etapasVisiveis"
+        :id="`crm-coluna-${etapa}`"
+        :key="etapa"
+        class="crm-coluna"
+        :class="[`is-${etapa}`, { 'is-foco': !celular && etapaEmFoco === etapa }]"
+        :role="celular ? 'tabpanel' : undefined"
+        :aria-labelledby="celular ? `crm-aba-${etapa}` : `crm-coluna-titulo-${etapa}`"
+        :tabindex="celular ? 0 : -1"
+      >
         <header class="crm-coluna__cabeca">
           <h2 :id="`crm-coluna-titulo-${etapa}`">{{ ROTULO_DA_ETAPA[etapa] }}</h2>
           <strong>{{ porEtapa[etapa].length }}</strong>

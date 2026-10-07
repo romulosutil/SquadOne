@@ -113,8 +113,18 @@ artefato "SquadOne Único", versão 2 de 06/10/2026):
    Até este passo, o botão "Agentes do SquadOne" (`OperationsHeader.vue`,
    `AccessPanel.vue`, `fluxos.ts`) e o `/squadone` ainda levam ao Easypanel, e
    o bot do Telegram ainda é webhook no Easypanel.
-5. **Casca mobile completa**: `App.vue` dividido, Pedir como folha, Hoje na
-   ordem da regra 13, escritório com Lista|Mapa.
+5. **Casca mobile completa** (feita em 07/10/2026): `App.vue` dividido em
+   casca + rotas (`src/casca/`, `src/rotas/`, o estado em
+   `src/agentes/estado.ts`), sem mudar contrato de API; a Central e o app são
+   UMA casca nos dois perfis (`RootApp` passa `{ perfil, agentes }`). Pedir
+   como folha no ＋ central, Hoje na ordem da regra 13 (no máximo 3 cartões,
+   próximos 3 da agenda, time com estado só com fonte, linha do funil, "resolve
+   sozinho" fechado), Agenda própria, escritório com Lista|Mapa (Mapa carregado
+   só quando aberto, escala inteira, toque de 44 px, rAF pausado fora de
+   vista), Funil do celular com Site/Organizar e abas de etapa, ficha do CRM em
+   folha cheia, barra lateral + Ctrl+K a partir de 1024 px. O CRM saiu do
+   `operations.css` para `src/operations/crm.css`, só com tokens (modo escuro
+   incluso); ficam no `operations.css`, claros, só os painéis de Mais.
 6. Organização das finanças e alertas de 70/90/100% (feito em 07/10/2026, ver
    "Organização das finanças"); 7. PRUMO como uma squad, com o Site antes da
    venda como sala (feito em 07/10/2026, ver "PRUMO como squad"); 8. o resto
@@ -305,16 +315,15 @@ Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe. `/squadone` redireciona ao app do Easypanel até a mudança
 da agenda para o Dell; depois, os agentes moram no mesmo app.
 
-A Central tem duas rotas, sem dependência adicional de roteador:
+Desde a casca mobile (07/10/2026) a Central são rotas da mesma casca do app
+(`src/App.vue`), sem dependência de roteador (`pushState` em `src/casca/rota.ts`):
 
-- `/` diz o que precisa do Rômulo agora e o que fazer com cada alerta
-  ("Precisa de você", do `status.json`), como a operação funciona (os fluxos
-  de `src/operations/fluxos.ts`, um por vez, e "Um dia"), a agenda de hoje e
-  os acessos (CRM, Agentes do SquadOne no Easypanel, Terminal, n8n, Hermes,
-  Syncthing); o detalhe de cada verificação fica fechado no fim. Esta home
-  vira "Hoje" (regra 13) na casca mobile: no máximo 3 cartões, próximos
-  compromissos, time, funil e "resolve sozinho" fechado, sem link para o
-  Easypanel;
+- `/` é a **Hoje** (regra 13): o que precisa do Rômulo agora, em no máximo 3
+  cartões (alertas do `status.json` com "o que fazer", e os cartões de decisão
+  dos agentes), os próximos compromissos, o time, a linha do funil e o que
+  resolve sozinho, fechado; sem link para o Easypanel. Como a operação
+  funciona (`src/operations/fluxos.ts`), os acessos e tudo que o Dell confere
+  ficam em `/mais`;
 - `/entrada/` abre a página da Entrada da Mel (texto e arquivos para o Hermes organizar; segredos
   vão para o cofre `age`). Não é da SPA: `server/entrada-proxy.ts` repassa três rotas fechadas ao
   serviço `deploy/dell/entrada/` em `127.0.0.1:9130`, com o mesmo porteiro de IP, e o item

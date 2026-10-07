@@ -7,9 +7,9 @@
  * Sem campo de horário: janela de agenda é global (Fase 3).
  */
 import { computed, reactive, ref } from 'vue'
+import Sheet from './Sheet.vue'
 import { LIMITES, type AlvoDeContratacao, type DadosDeContratacao, type PreenchimentoDeContratacao } from '../types'
 import { mensagemDeRedacao, rosterApi } from '../rosterApi'
-import { useFecharComEsc } from '../modal'
 
 const props = defineProps<{
   alvo: AlvoDeContratacao
@@ -19,12 +19,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ contratar: [dados: DadosDeContratacao]; fechar: [] }>()
-
-// Com envio em curso, nem overlay nem Esc fecham: o hire já pode estar gravado.
-const fechar = () => {
-  if (!props.enviando) emit('fechar')
-}
-useFecharComEsc(() => !props.enviando, fechar)
 
 /** O formato que o Gemini também segue (spec §5.3), mostrado como exemplo. */
 const PLACEHOLDER_ESCOPO =
@@ -117,107 +111,89 @@ const contratar = () => {
     emit('contratar', { alvo: 'integrante', nome: form.nome.trim(), papel: form.papel.trim(), escopo: form.escopo.trim() })
   }
 }
-
-const CAMPO =
-  'border-2 border-black px-2 py-1 text-sm font-bold normal-case outline-none focus:bg-[#ffdb58] disabled:opacity-50'
-const ROTULO = 'flex flex-col gap-1 text-xs font-black uppercase'
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="fechar">
-    <form
-      class="flex max-h-full w-full max-w-xl flex-col gap-3 overflow-y-auto border-4 border-black bg-white p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-      @submit.prevent="contratar"
-    >
-      <h2 class="font-black text-xl uppercase">🤝 {{ titulo }}</h2>
-
-      <label v-if="alvo.alvo === 'po'" :class="ROTULO">
+  <!-- Com envio em curso nada fecha a folha: o hire já pode estar gravado. -->
+  <Sheet :titulo="titulo" :bloqueada="enviando" @fechar="emit('fechar')">
+    <form id="form-contratar" class="folha-form" @submit.prevent="contratar">
+      <label v-if="alvo.alvo === 'po'" class="rotulo">
         Quem assume
-        <select v-model="form.integranteId" :disabled="enviando" :class="CAMPO">
+        <select v-model="form.integranteId" class="campo" :disabled="enviando" data-autofocus>
           <option value="">Pessoa nova</option>
           <option v-for="p in integrantes" :key="p.id" :value="p.id">Promover {{ p.nome }} · {{ p.papel }}</option>
         </select>
       </label>
 
       <template v-if="!promovendo">
-        <div class="flex flex-col gap-1 border-2 border-dashed border-black p-2">
-          <label :class="ROTULO">
+        <div class="quadro">
+          <label class="rotulo">
             Em uma frase, o que você precisa
             <textarea
               v-model="form.frase"
+              class="campo"
               rows="2"
               :maxlength="LIMITES.frase"
               :disabled="enviando"
               placeholder="alguém para cuidar do meu imposto de renda e das notas da PJ"
-              :class="CAMPO"
+              :data-autofocus="alvo.alvo === 'po' ? undefined : ''"
             ></textarea>
           </label>
-          <button
-            type="button"
-            :disabled="redigindo || enviando || !form.frase.trim()"
-            class="self-start border-4 border-black bg-[#bbf7d0] px-3 py-1 font-black text-xs uppercase disabled:opacity-50"
-            @click="redigir"
-          >
-            {{ redigindo ? 'Redigindo...' : '✨ Redigir com Gemini' }}
+          <button type="button" class="botao" :disabled="redigindo || enviando || !form.frase.trim()" @click="redigir">
+            {{ redigindo ? 'Redigindo…' : 'Redigir com Gemini' }}
           </button>
-          <p class="text-xs font-bold opacity-70">Opcional: você pode preencher tudo à mão.</p>
+          <p class="texto-2 texto-pequeno">Opcional: você pode preencher tudo à mão.</p>
         </div>
 
-        <p v-if="erroRedacao" class="border-2 border-black bg-[#ff9b71] px-2 py-1 text-xs font-bold">{{ erroRedacao }}</p>
-        <p v-if="avisoTruncado" class="border-2 border-black bg-[#ffdb58] px-2 py-1 text-xs font-bold">
+        <p v-if="erroRedacao" class="recado recado--erro" role="alert">{{ erroRedacao }}</p>
+        <p v-if="avisoTruncado" class="recado recado--atencao" role="status">
           O texto veio maior que o limite e foi cortado. Revise o fim.
         </p>
 
         <template v-if="alvo.alvo === 'dominio'">
-          <label :class="ROTULO">
+          <label class="rotulo">
             Nome do domínio
-            <input v-model="form.nomeDominio" :maxlength="LIMITES.dominioNome" :disabled="enviando" placeholder="Financeiro" :class="CAMPO" />
+            <input v-model="form.nomeDominio" class="campo" :maxlength="LIMITES.dominioNome" :disabled="enviando" placeholder="Financeiro" />
           </label>
-          <label :class="ROTULO">
-            Escopo do domínio (uma linha)
-            <input v-model="form.escopoDominio" :maxlength="LIMITES.dominioEscopo" :disabled="enviando" placeholder="contas, impostos e investimentos" :class="CAMPO" />
+          <label class="rotulo">
+            Escopo do domínio <small>(uma linha)</small>
+            <input v-model="form.escopoDominio" class="campo" :maxlength="LIMITES.dominioEscopo" :disabled="enviando" placeholder="contas, impostos e investimentos" />
           </label>
         </template>
 
-        <label :class="ROTULO">
-          {{ alvo.alvo === 'integrante' ? 'Nome (opcional)' : 'Nome do PO (opcional)' }}
-          <input v-model="form.nome" :maxlength="LIMITES.pessoaNome" :disabled="enviando" :class="CAMPO" />
+        <label class="rotulo">
+          {{ alvo.alvo === 'integrante' ? 'Nome' : 'Nome do PO' }} <small>(opcional)</small>
+          <input v-model="form.nome" class="campo" :maxlength="LIMITES.pessoaNome" :disabled="enviando" />
         </label>
-        <label :class="ROTULO">
+        <label class="rotulo">
           {{ alvo.alvo === 'integrante' ? 'Papel' : 'Papel do PO' }}
-          <input v-model="form.papel" :maxlength="LIMITES.papel" :disabled="enviando" placeholder="Contador PF" :class="CAMPO" />
+          <input v-model="form.papel" class="campo" :maxlength="LIMITES.papel" :disabled="enviando" placeholder="Contador PF" />
         </label>
-        <label :class="ROTULO">
+        <label class="rotulo">
           {{ alvo.alvo === 'integrante' ? 'Escopo (treino)' : 'Escopo do PO (treino)' }}
           <textarea
             v-model="form.escopo"
+            class="campo"
             rows="8"
             :maxlength="LIMITES.escopoPessoa"
             :disabled="enviando"
             :placeholder="PLACEHOLDER_ESCOPO"
-            :class="CAMPO"
           ></textarea>
-          <span class="self-end text-[10px]">{{ form.escopo.length }}/{{ LIMITES.escopoPessoa }}</span>
+          <span class="contador">{{ form.escopo.length }}/{{ LIMITES.escopoPessoa }}</span>
         </label>
       </template>
 
-      <p v-if="alvo.alvo === 'po'" class="text-xs font-bold opacity-70">
+      <p v-if="alvo.alvo === 'po'" class="texto-2 texto-pequeno">
         O PO atual vira integrante arquivado deste domínio. Os eventos dele continuam no Google.
       </p>
-      <p v-if="erro" class="border-2 border-black bg-[#ff9b71] px-2 py-1 text-xs font-bold">{{ erro }}</p>
-
-      <div class="flex justify-end gap-2">
-        <button type="button" :disabled="enviando" class="border-4 border-black bg-white px-3 py-1 font-black text-xs uppercase disabled:opacity-50" @click="emit('fechar')">
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          :disabled="!podeContratar"
-          class="border-4 border-black bg-[#ffdb58] px-3 py-1 font-black text-xs uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-        >
-          {{ enviando ? 'Contratando...' : alvo.alvo === 'po' ? 'Substituir' : 'Contratar' }}
-        </button>
-      </div>
+      <p v-if="erro" class="recado recado--erro" role="alert">{{ erro }}</p>
     </form>
-  </div>
+
+    <template #rodape>
+      <button type="button" class="botao" :disabled="enviando" @click="emit('fechar')">Cancelar</button>
+      <button type="submit" form="form-contratar" class="botao botao--primario" :disabled="!podeContratar">
+        {{ enviando ? 'Contratando…' : alvo.alvo === 'po' ? 'Substituir' : 'Contratar' }}
+      </button>
+    </template>
+  </Sheet>
 </template>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import Sheet from '../components/Sheet.vue'
 import CrmFicha from './CrmFicha.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
-import { ETAPAS, ROTULO_DA_ETAPA, dataHora, hora } from './crm-formato'
+import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
+import './crm.css'
 
 // CRM da Central (/crm): Site antes da venda + PRUMO num modelo só, com três
 // vistas — Hoje (padrão), Funil e a Ficha de um lead. Tudo vem do retrato que
@@ -22,7 +24,6 @@ const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
 const anuncio = ref('')
-let origemDaFicha: string | null = null
 let temporizador = 0
 let relogio = 0
 const atrasos: number[] = []
@@ -149,21 +150,17 @@ async function irParaEtapa(etapa: CrmEtapa) {
   coluna?.focus({ preventScroll: true })
 }
 
+// A ficha abre numa folha cheia por cima da lista (07/10/2026): a lista fica
+// onde estava, e fechar devolve o foco ao botão que abriu (o Sheet faz isso).
+// O endereço ganha ?lead=, então o "voltar" do celular fecha a folha.
 function abrirFicha(id: string) {
-  origemDaFicha = id
   leadId.value = id
   escreverEndereco()
-  window.scrollTo({ top: 0 })
 }
 
-async function fecharFicha() {
+function fecharFicha() {
   leadId.value = null
   escreverEndereco()
-  await nextTick()
-  // Foco volta para o botão que abriu a ficha (RULES 3).
-  const origem = origemDaFicha ? document.querySelector<HTMLElement>(`[data-lead="${CSS.escape(origemDaFicha)}"]`) : null
-  origem?.focus()
-  origem?.scrollIntoView({ block: 'center' })
 }
 </script>
 
@@ -175,11 +172,11 @@ async function fecharFicha() {
         <h1 id="crm-titulo">CRM</h1>
         <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
       </div>
-      <button class="ops-button ops-button--outline" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
+      <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
     </header>
     <p class="ops-visually-hidden" aria-live="polite">{{ anuncio }}</p>
 
-    <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="ops-button" type="button" @click="carregar(true)">Tentar de novo</button></div>
+    <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
     <template v-if="visao">
       <div v-if="visao.estado !== 'ok'" class="crm-aviso is-forte" role="status">
@@ -190,10 +187,10 @@ async function fecharFicha() {
         <strong>Retrato desatualizado.</strong> Os números são de {{ dataHora(visao.geradoEm) }}.
         <template v-if="visao.ultimaFalha"> O n8n não conseguiu ler as planilhas em {{ dataHora(visao.ultimaFalha.em) }}: {{ visao.ultimaFalha.erro }}</template>
       </div>
-      <p v-if="visao.colunasAusentes.length && !lead" class="crm-nota-pequena">Colunas que a planilha ainda não tem (o CRM trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
+      <p v-if="visao.colunasAusentes.length" class="crm-nota-pequena">Colunas que a planilha ainda não tem (o CRM trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
       <p v-if="visao.estado === 'ok' && !visao.pastasLidas" class="crm-nota-pequena">A pasta ~/auto-site não foi lida: sem conferência de pastas agora.</p>
 
-      <div v-if="!lead" class="crm-controles">
+      <div class="crm-controles" :class="{ 'crm-controles--funil': vista === 'funil' }">
         <nav class="crm-vistas" aria-label="Vistas do CRM">
           <a href="/crm" :aria-current="vista === 'hoje' ? 'page' : undefined" @click.prevent="trocarVista('hoje')">Hoje <span>{{ totalHoje }}</span></a>
           <a href="/crm?ver=funil" :aria-current="vista === 'funil' ? 'page' : undefined" @click.prevent="trocarVista('funil')">Funil <span>{{ leads.length }}</span></a>
@@ -203,7 +200,7 @@ async function fecharFicha() {
         </div>
       </div>
 
-      <ol v-if="!lead && visao.estado === 'ok'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
+      <ol v-if="visao.estado === 'ok'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
         <li v-for="etapa in ETAPAS" :key="etapa" :class="`is-${etapa}`">
           <button type="button" @click="irParaEtapa(etapa)">
             <strong>{{ contagens[etapa] }}</strong>
@@ -211,19 +208,22 @@ async function fecharFicha() {
           </button>
         </li>
       </ol>
-      <p v-if="!lead && visao.estado === 'ok' && visao.divergencias" class="crm-nota-pequena">
+      <p v-if="visao.estado === 'ok' && visao.divergencias" class="crm-nota-pequena">
         {{ visao.divergencias }} lead{{ visao.divergencias === 1 ? '' : 's' }} com divergência entre planilha e pasta (marcados no Funil).
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmFicha v-if="lead" :key="lead.id" :lead="lead" :visao="visao" @voltar="fecharFicha" @registrado="depoisDoRegistro" />
-      <div v-else-if="leadId" class="crm-aviso" role="status">
-        Este lead não está no retrato atual. <button class="ops-button" type="button" @click="fecharFicha">Voltar</button>
-      </div>
-      <CrmHoje v-else-if="vista === 'hoje'" :grupos="hoje" :leads="porId" @abrir="abrirFicha" />
-      <CrmFunil v-else :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" @abrir="abrirFicha" />
+      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" @abrir="abrirFicha" />
+      <CrmFunil v-else :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" @abrir="abrirFicha" @produto="trocarProduto" />
 
-      <footer v-if="visao.estado === 'ok' && !lead" class="crm-rodape">
+      <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
+        <div class="crm-na-folha">
+          <CrmFicha v-if="lead" :key="lead.id" :lead="lead" :visao="visao" @registrado="depoisDoRegistro" />
+          <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
+        </div>
+      </Sheet>
+
+      <footer v-if="visao.estado === 'ok'" class="crm-rodape">
         <span v-for="f in visao.fontes" :key="f.id">{{ f.nome }}: {{ f.linhas }} linha{{ f.linhas === 1 ? '' : 's' }}<template v-if="f.erro"> ({{ f.erro }})</template></span>
         <a v-if="visao.links.planilhaSite" :href="visao.links.planilhaSite" target="_blank" rel="noopener">Planilha do Site ↗</a>
         <a v-if="visao.links.planilhaPrumo" :href="visao.links.planilhaPrumo" target="_blank" rel="noopener">Planilha do PRUMO ↗</a>

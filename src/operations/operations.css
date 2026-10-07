@@ -17,8 +17,11 @@
   --ops-display: Inter, "Arial Black", Arial, sans-serif;
 }
 
+/* `.ops-escopo`: os painéis da Central dentro da casca (07/10/2026), com a
+   mesma base que tinham dentro de `.ops-shell`. */
 .ops-shell,
-.ops-dialog {
+.ops-dialog,
+.ops-escopo {
   color: var(--ops-ink);
   font-family: var(--ops-font);
   font-size: 1rem;
@@ -32,11 +35,15 @@
 }
 
 .ops-shell *,
-.ops-dialog * { box-sizing: border-box; }
+.ops-dialog *,
+.ops-escopo * { box-sizing: border-box; }
 
 .ops-shell h1,
 .ops-shell h2,
 .ops-shell h3,
+.ops-escopo h1,
+.ops-escopo h2,
+.ops-escopo h3,
 .ops-dialog h2 {
   margin: 0;
   font-family: var(--ops-display);
@@ -46,6 +53,8 @@
 
 .ops-shell button,
 .ops-shell a,
+.ops-escopo button,
+.ops-escopo a,
 .ops-dialog button,
 .ops-dialog input {
   font: inherit;
@@ -53,9 +62,12 @@
 
 .ops-shell button,
 .ops-shell a,
+.ops-escopo button,
+.ops-escopo a,
 .ops-dialog button { min-height: 44px; }
 
 .ops-shell :focus-visible,
+.ops-escopo :focus-visible,
 .ops-dialog :focus-visible,
 .ops-skip-link:focus-visible {
   outline: 4px solid #1e64d4;
@@ -1051,180 +1063,7 @@ html:has(.ops-shell),
   .pending a { grid-column: 1; grid-row: auto; justify-self: start; }
 }
 
-/* --- CRM (30/09/2026): Site antes da venda + PRUMO. Celular primeiro; cor só reforça o texto. --- */
-.crm {
-  --crm-novo: #fffdf6;
-  --crm-contatado: #cbdcff;
-  --crm-conversando: #ffdc59;
-  --crm-proposta: #ffc48a;
-  --crm-ganho: #b9f6d0;
-  --crm-perdido: #f2c4bb;
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 100rem;
-  min-width: 0;
-  margin: 0 auto;
-}
-.crm .is-novo { --crm-cor: var(--crm-novo); }
-.crm .is-contatado { --crm-cor: var(--crm-contatado); }
-.crm .is-conversando { --crm-cor: var(--crm-conversando); }
-.crm .is-proposta { --crm-cor: var(--crm-proposta); }
-.crm .is-ganho { --crm-cor: var(--crm-ganho); }
-.crm .is-perdido { --crm-cor: var(--crm-perdido); }
-
-.crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; padding: 1.1rem 1.25rem; border: var(--ops-line); background: var(--ops-paper-strong); box-shadow: var(--ops-shadow); }
-.crm-kicker { display: block; color: var(--ops-muted); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
-.crm-topo h1 { font-size: clamp(2.2rem, 7vw, 3.4rem); line-height: 0.95; }
-.crm-topo__fonte { margin: 0.4rem 0 0; color: var(--ops-muted); font-size: 0.85rem; }
-.crm-aviso,
-.crm-erro { margin: 0; padding: 0.8rem 1rem; border: 3px solid var(--ops-ink); background: #fff2a7; }
-.crm-aviso.is-forte,
-.crm-erro { background: #ffd9d2; }
-.crm-erro .ops-button { margin-left: 0.5rem; }
-.crm-nota-pequena { margin: 0; color: var(--ops-muted); font-size: 0.82rem; }
-.crm-muted { margin: 0; color: var(--ops-muted); font-size: 0.88rem; }
-
-.crm-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.crm-vistas { display: flex; border: var(--ops-line); background: var(--ops-paper-strong); box-shadow: 3px 3px 0 var(--ops-ink); }
-.crm-vistas a { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.1rem; color: var(--ops-ink); font-weight: 900; text-decoration: none; }
-.crm-vistas a + a { border-left: 3px solid var(--ops-ink); }
-.crm-vistas a[aria-current="page"] { background: var(--ops-ink); color: var(--ops-paper-strong); }
-.crm-vistas a span { min-width: 1.7rem; padding: 0 0.35rem; border: 2px solid currentColor; font-size: 0.78rem; text-align: center; }
-.crm-produtos { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.crm-produtos button { padding: 0.45rem 0.85rem; border: 2px solid var(--ops-ink); border-radius: 999px; background: var(--ops-paper-strong); color: var(--ops-ink); font-weight: 800; cursor: pointer; }
-.crm-produtos button[aria-pressed="true"] { background: var(--ops-yellow); box-shadow: 2px 2px 0 var(--ops-ink); }
-.crm-produtos button[aria-pressed="true"]::before { content: "✓ "; }
-
-.crm-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; border: var(--ops-line); background: var(--ops-ink); }
-.crm-resumo button { display: grid; width: 100%; height: 100%; justify-items: start; gap: 0.1rem; padding: 0.55rem 0.7rem; border: 0; background: var(--ops-paper-strong); box-shadow: inset 0 -7px 0 var(--crm-cor); color: var(--ops-ink); text-align: left; cursor: pointer; }
-.crm-resumo button:hover { background: var(--crm-cor); }
-.crm-resumo strong { font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: 950; line-height: 1; font-variant-numeric: tabular-nums; }
-.crm-resumo span { font-size: 0.8rem; font-weight: 800; }
-@media (min-width: 48rem) { .crm-resumo { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-
-.crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: 2px solid var(--ops-ink); background: var(--ops-paper-blue); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
-.crm-tag.is-prumo { background: var(--ops-blue); color: var(--ops-paper-strong); }
-
-/* Hoje */
-.crm-hoje { display: grid; gap: 1rem; }
-.crm-vazio { margin: 0; padding: 1.25rem; border: 3px dashed var(--ops-ink); background: var(--ops-paper-strong); }
-.crm-grupo { padding: 1rem 1.1rem; border: var(--ops-line); background: var(--ops-paper-strong); box-shadow: 3px 3px 0 var(--ops-ink); }
-.crm-grupo__cabeca { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.crm-grupo__cabeca h2 { font-size: 1.2rem; letter-spacing: -0.02em; }
-.crm-grupo__cabeca strong { min-width: 2.4rem; padding: 0.05rem 0.5rem; border: 3px solid var(--ops-ink); background: var(--ops-yellow); font-size: 1.1rem; text-align: center; }
-.crm-grupo.is-followup .crm-grupo__cabeca strong { background: var(--ops-coral); }
-.crm-grupo__explicacao { margin: 0.2rem 0 0.6rem; color: var(--ops-muted); font-size: 0.85rem; }
-.crm-lista { margin: 0; padding: 0; list-style: none; border-top: 2px solid var(--ops-ink); }
-.crm-item { display: grid; gap: 0.3rem; padding: 0.7rem 0; border-bottom: 1px solid rgb(17 19 15 / 25%); }
-.crm-item__quem { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; }
-.crm-item__empresa,
-.crm-cartao__abrir { padding: 0; border: 0; background: none; color: var(--ops-ink); text-align: left; cursor: pointer; }
-.crm-item__empresa { min-height: 44px; font-size: 1.05rem; font-weight: 900; text-decoration: underline; text-underline-offset: 3px; }
-.crm-item__acao { margin: 0; font-size: 0.92rem; }
-.crm-item__acao span { color: var(--ops-muted); }
-.crm-item__links,
-.crm-cartao__links { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; }
-.crm-item__links a,
-.crm-cartao__links a,
-.crm-ficha__links a { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.75rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); font-weight: 900; text-decoration: none; }
-.crm-item__links a:first-child,
-.crm-ficha__links a.is-principal { background: var(--ops-yellow); }
-.crm-item__links a:hover,
-.crm-cartao__links a:hover,
-.crm-ficha__links a:hover { background: var(--ops-mint); }
-.crm-mais { margin-top: 0.75rem; padding: 0.45rem 0.9rem; border: 2px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); font-weight: 900; cursor: pointer; }
-
-/* Funil */
-.crm-funil { display: grid; gap: 0.75rem; min-width: 0; }
-.crm-filtros { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
-@media (min-width: 48rem) { .crm-filtros { grid-template-columns: minmax(12rem, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 1fr); } }
-.crm-filtros label,
-.crm-form label { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
-.crm-form label small { font-weight: 700; letter-spacing: 0; text-transform: none; }
-.crm-filtros input,
-.crm-filtros select,
-.crm-form input,
-.crm-form textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: 3px solid var(--ops-ink); border-radius: 0; background: var(--ops-paper-strong); color: var(--ops-ink); font: inherit; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.crm-form textarea { min-height: 6rem; resize: vertical; }
-.crm-form input:disabled,
-.crm-form textarea:disabled { opacity: 0.6; }
-.crm-filtro-resumo { margin: 0; font-size: 0.85rem; font-weight: 800; }
-.crm-colunas { display: grid; grid-auto-columns: minmax(16.5rem, 86%); grid-auto-flow: column; gap: 0.9rem; min-width: 0; padding-bottom: 0.75rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; }
-@media (min-width: 48rem) { .crm-colunas { grid-auto-columns: minmax(17rem, 42%); } }
-@media (min-width: 110rem) { .crm-colunas { grid-auto-flow: row; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow-x: visible; } }
-.crm-coluna { display: flex; min-width: 0; flex-direction: column; gap: 0.6rem; padding: 0 0.7rem 0.8rem; border: var(--ops-line); background: var(--ops-paper); scroll-snap-align: start; }
-.crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.7rem; padding: 0.65rem 0.7rem; border-bottom: 3px solid var(--ops-ink); background: var(--crm-cor); }
-.crm-coluna__cabeca h2 { font-size: 1.15rem; letter-spacing: -0.02em; }
-.crm-coluna__cabeca strong { font-size: 1.5rem; font-weight: 950; font-variant-numeric: tabular-nums; }
-.crm-coluna__cabeca small { grid-column: 1 / -1; font-size: 0.74rem; font-weight: 700; }
-.crm-coluna__nota { margin: 0; color: var(--ops-muted); font-size: 0.8rem; }
-.crm-coluna__vazia { margin: 0; color: var(--ops-muted); font-size: 0.85rem; }
-.crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: 0.82rem; font-weight: 800; }
-.crm-check input { width: 1.2rem; height: 1.2rem; accent-color: var(--ops-ink); }
-.crm-cartoes { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
-.crm-cartao { display: grid; gap: 0.4rem; padding: 0.7rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); }
-.crm-cartao.tem-divergencia { border-style: dashed; }
-.crm-cartao__abrir { display: grid; gap: 0.1rem; min-height: 44px; }
-.crm-cartao__abrir strong { font-size: 1rem; line-height: 1.2; text-decoration: underline; text-underline-offset: 3px; }
-.crm-cartao__abrir small { color: var(--ops-muted); font-size: 0.78rem; }
-.crm-cartao__estado { margin: 0; font-size: 0.82rem; }
-.crm-cartao__artefatos { margin: 0; color: var(--ops-muted); font-size: 0.76rem; }
-.crm-cartao__links a { padding-inline: 0.6rem; font-size: 0.82rem; }
-.crm-marcos { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0; padding: 0; list-style: none; font-size: 0.72rem; }
-.crm-marcos li { padding: 0.1rem 0.4rem; border: 2px solid var(--ops-ink); background: var(--ops-paper); color: var(--ops-muted); }
-.crm-marcos li.is-feito { background: var(--ops-mint); color: var(--ops-ink); font-weight: 800; }
-.crm-marcos li.is-desconhecido { border-style: dashed; }
-.crm-sinais { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; }
-.crm-sinal { padding: 0.1rem 0.4rem; border: 2px solid var(--ops-ink); background: var(--ops-paper-strong); font-size: 0.72rem; font-weight: 900; }
-.crm-sinal.is-resposta { background: var(--ops-yellow); }
-.crm-sinal.is-followup { background: var(--ops-coral); }
-.crm-sinal.is-divergencia { border-style: dashed; background: #ffd9d2; }
-.crm-sinal.is-acervo { color: var(--ops-muted); font-weight: 700; }
-/* Tipo da resposta: o texto diz o tipo; a cor só reforça (RULES 3). */
-.crm-sinal.is-interesse, .crm-resposta.is-interesse strong { background: var(--ops-green); color: #fff; }
-.crm-sinal.is-negativa, .crm-resposta.is-negativa strong { background: #f5d0ca; color: #6b1e18; }
-.crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--ops-muted); font-weight: 700; }
-.crm-cartao__resposta { margin: 0.35rem 0 0; font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
-.crm-resposta { margin: 0 0 0.5rem; }
-.crm-resposta strong { padding: 0.1rem 0.4rem; border: 2px solid var(--ops-ink); }
-.crm-resposta__trecho { margin: 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--ops-ink); background: var(--ops-paper); overflow-wrap: anywhere; }
-
-/* Ficha */
-.crm-ficha { display: grid; gap: 1rem; width: 100%; max-width: 52rem; }
-.crm-voltar { justify-self: start; min-height: 44px; padding: 0.45rem 0.9rem; border: 3px solid var(--ops-ink); background: var(--ops-paper-strong); color: var(--ops-ink); font-weight: 900; cursor: pointer; }
-.crm-ficha__cabeca { padding: 1.1rem 1.25rem; border: var(--ops-line); background: var(--ops-paper-strong); box-shadow: var(--ops-shadow); }
-.crm-ficha__cabeca h2 { margin: 0.25rem 0 0.55rem; font-size: clamp(1.7rem, 6vw, 2.6rem); line-height: 1.05; overflow-wrap: anywhere; }
-.crm-ficha__etapa { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
-.crm-etapa { padding: 0.15rem 0.55rem; border: 3px solid var(--ops-ink); background: var(--crm-cor); font-weight: 950; }
-.crm-ficha__fonte,
-.crm-ficha__leitura { margin: 0.5rem 0 0; color: var(--ops-muted); font-size: 0.85rem; }
-.crm-divergencia { padding: 0.9rem 1rem; border: 3px dashed var(--ops-ink); background: #ffd9d2; }
-.crm-divergencia ul { margin: 0.4rem 0; padding-left: 1.2rem; }
-.crm-divergencia small { font-size: 0.8rem; }
-.crm-ficha__bloco { padding: 1rem 1.25rem; border: var(--ops-line); background: var(--ops-paper-strong); }
-.crm-ficha__bloco h3 { margin-bottom: 0.6rem; font-size: 1.1rem; letter-spacing: -0.02em; }
-.crm-ficha__bloco > p { margin: 0 0 0.6rem; }
-.crm-ficha__links { display: grid; gap: 0.5rem; }
-@media (min-width: 40rem) { .crm-ficha__links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.crm-proximo { display: grid; gap: 0.15rem; margin: 0 0 0.75rem; padding: 0.6rem 0.75rem; border: 2px solid var(--ops-ink); background: var(--ops-paper); }
-.crm-proximo.is-atrasado { background: #ffd9d2; }
-.crm-form { display: grid; gap: 0.6rem; }
-.crm-form__botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.crm-status { min-height: 1.2em; margin: 0; font-weight: 800; }
-.crm-tempo { margin: 0; padding: 0; border-left: 3px solid var(--ops-ink); list-style: none; }
-.crm-tempo li { position: relative; display: grid; grid-template-columns: 6.8rem minmax(0, 1fr); gap: 0.5rem; padding: 0.5rem 0 0.5rem 0.9rem; }
-.crm-tempo li::before { position: absolute; top: 0.8rem; left: -0.55rem; width: 0.8rem; height: 0.8rem; border: 2px solid var(--ops-ink); background: var(--ops-paper-strong); content: ""; }
-.crm-tempo li.is-manual::before { background: var(--ops-yellow); }
-.crm-tempo time { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.crm-tempo strong { display: block; }
-.crm-tempo p { margin: 0.15rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.crm-tempo small { color: var(--ops-muted); font-size: 0.75rem; }
-@media (max-width: 30rem) { .crm-tempo li { grid-template-columns: 1fr; gap: 0.1rem; } }
-.crm-artefatos { margin: 0 0 0.5rem; padding-left: 1.2rem; }
-.crm-rodape { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--ops-muted); font-size: 0.78rem; }
-.crm-rodape a { color: var(--ops-ink); font-weight: 800; }
-@media (prefers-reduced-motion: reduce) { .crm-colunas { scroll-behavior: auto; } }
+/* O CRM mora em crm.css (tokens, modo escuro) desde 07/10/2026. */
 
 /* --- Home (30/09/2026): Precisa de você, Como funciona, e o detalhe do Dell fechado no fim --- */
 .precisa,
