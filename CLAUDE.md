@@ -9,7 +9,7 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
-npm test         # tsx --test server/*.test.ts src/*.test.ts src/office/*.test.ts (node:test, sem framework extra)
+npm test         # tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts (node:test, sem framework extra)
 ```
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
@@ -26,6 +26,10 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/crm.test.ts`, `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
+os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
+`parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
+vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso) e `sync`, este com um
+SQLite num diretório temporário),
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` e
 `src/office/postos.test.ts`). O monitor do Dell tem os seus em Python:
@@ -85,6 +89,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
+  server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
+    tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
+    pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app) ou Central (perfil operations)
   src/operations/         Central de Operações (só perfil operations)
     OperationsApp.vue     home (/) e CRM (/crm); OperationsHeader.vue com o botão "Agentes do SquadOne" (app do Easypanel)
@@ -93,6 +100,9 @@ src/main.ts -> src/RootApp.vue  pergunta /api/runtime e escolhe App (perfil app)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AgendaPanel.vue, AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado)
     Crm*.vue, crm-formato.ts  CRM: Hoje, Funil e Ficha
+    financas/             Finanças: Visão (tenho, devo, gastei, todo mês) e Lançamentos; saúde e "dados até" em toda tela
+    BarraInferior.vue, MaisPanel.vue  casca mobile: barra Hoje · Funil · ＋Pedir (desabilitado) · Finanças · Mais
+  src/estilos/            tokens.css (paleta da Central + modo escuro), casca.css, design.md
 src/App.vue               orquestra a tela; dono do estado de roster, squad ativa e quests
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -324,6 +334,8 @@ Volume Docker do Easypanel montado em `/app/data`; no Dell, `~/.local/share/squa
 | `data/google-auth.json` | `refresh_token` cifrado em AES-256-GCM e o `scope` concedido (Calendar, e Tasks quando autorizado) |
 | `data/squad.v2.bak.json` | texto cru do roster v2, gravado uma vez pela migração; nunca sobrescrito |
 
+No Dell (perfil `operations`) há também `SQUADONE_OPERATIONS_DATA_DIR/financas.db` (SQLite só das finanças, 600, migrações numeradas) e a `financas.copia.db` que cada sincronização grava com `VACUUM INTO` para o cofre restic. Nada disso existe no Easypanel.
+
 **Migração.** `readRoster()` detecta a versão pela **forma** (`squads` → v3, `dominios` → v2, `members` → v1), grava o backup do texto cru, converte (v2 inteiro vira a squad `pessoal`, ids intactos) e escreve v3. Forma desconhecida ou conversão que não passa na validação lança `RosterIlegivel` (500) e **não grava** `squad.json`. Migração e semeadura rodam sob promessa única: no boot `/api/squad` e `/api/mochila` chegam juntos.
 
 **Rollback da Fase 1.** O código anterior não lê v3 (todo `/api/squad` vira 500). Para reverter, **nesta ordem**:
@@ -408,9 +420,10 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_DATA_DIR` | servidor | `squad.json`, `google-auth.json`, offset do Telegram; ausente = `./data`. No `operations` a agenda só liga com ela presente e fora do checkout (Dell: `~/.local/share/squadone`, caminho absoluto) |
 | `SQUADONE_ROSTER_CONGELADO` | servidor | `true` recusa toda escrita no roster (409 `rosterCongelado`): cutover e reserva fria |
 | `TELEGRAM_TRANSPORTE` | servidor | `webhook` (padrão) ou `polling`; no `operations` só `polling`; outro valor = `TelegramMalConfigurado` |
-| `SQUADONE_LOGINS_TAILSCALE` | servidor | só `operations`: logins aceitos no `Tailscale-User-Login`, por vírgula; com a agenda ligada, vazia fecha a tailnet |
+| `SQUADONE_LOGINS_TAILSCALE` | servidor | só `operations`: logins aceitos no `Tailscale-User-Login`, por vírgula; com a agenda ligada, vazia fecha a tailnet; vazia fecha `/api/financas/*` pela tailnet sempre |
 | `SQUADONE_AVISOS_FILA` | servidor | só `operations`: pasta da fila de avisos; ausente = `~/.local/share/avisos/fila` |
 | `DEADMAN_URL` | servidor | só `operations`: ping do healthchecks.io (https, sem query); ausente = sem sinal; ilegível = log e desligado |
+| `PLUGGY_CLIENT_ID` / `_SECRET` / `PLUGGY_ITEM_IDS` | servidor | só em `operations`, no EnvironmentFile `~/.config/squadone/financas.env` (600); ausentes = finanças sem leitura; um presente sem os outros = log de erro e Pluggy desligada. Nunca impressos |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 

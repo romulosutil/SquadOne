@@ -98,6 +98,7 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
+import { criarRotasDeFinancas, iniciarLeituraDiaria, prepararFinancas } from "./server/financas/rotas.ts";
 
 dotenv.config();
 
@@ -249,6 +250,17 @@ async function startServer() {
     }
   }
 
+  // A configuração da Central vem antes das travas: config ilegível derruba o
+  // boot antes de qualquer rota responder.
+  let operationsConfig: Awaited<ReturnType<typeof readOperationsConfig>> | null = null;
+  if (squadOneMode === "operations") {
+    const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
+    if (!configPath) {
+      throw new Error("SQUADONE_OPERATIONS_CONFIG é obrigatório no perfil operations.");
+    }
+    operationsConfig = await readOperationsConfig(configPath);
+  }
+
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
@@ -257,7 +269,8 @@ async function startServer() {
   // cada pedido, contra SQUADONE_LOGINS_TAILSCALE. Ligada sempre que a agenda
   // está aqui (lista vazia então FECHA a tailnet) ou que a lista existe. Sem a
   // agenda e sem lista, a Central segue como antes: só lê o Dell, e travar já
-  // derrubaria o celular no merge, antes do runbook.
+  // derrubaria o celular no merge, antes do runbook. As finanças fecham
+  // sozinhas nesse caso (ver criarRotasDeFinancas).
   const loginsDoTailscale = lerLoginsPermitidos();
   const identidadeLigada = squadOneMode === "operations" && (agendaAtiva || loginsDoTailscale.size > 0);
   if (identidadeLigada) {
@@ -286,12 +299,7 @@ async function startServer() {
   });
 
   const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
-  if (squadOneMode === "operations") {
-    const configPath = process.env.SQUADONE_OPERATIONS_CONFIG;
-    if (!configPath) {
-      throw new Error("SQUADONE_OPERATIONS_CONFIG é obrigatório no perfil operations.");
-    }
-    const operationsConfig = await readOperationsConfig(configPath);
+  if (operationsConfig) {
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
@@ -326,6 +334,12 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
     }));
+
+    // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
+    // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
+    const financas = await prepararFinancas(operationsDataDir);
+    app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale }));
+    iniciarLeituraDiaria(financas);
   } else {
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional
     // inexistente no EasyPanel. O perfil remoto falha fechado e explicitamente.

@@ -2,13 +2,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AccessPanel from './AccessPanel.vue'
 import AgendaPanel from './AgendaPanel.vue'
+import BarraInferior from './BarraInferior.vue'
 import ComoFuncionaPanel from './ComoFuncionaPanel.vue'
 import CrmPanel from './CrmPanel.vue'
 import DellConferePanel from './DellConferePanel.vue'
+import FinancasPanel from './financas/FinancasPanel.vue'
+import MaisPanel from './MaisPanel.vue'
 import OperationsHeader from './OperationsHeader.vue'
 import PrecisaDeVoce from './PrecisaDeVoce.vue'
 import type { OperationsOverview } from './types'
 import './operations.css'
+import '../estilos/tokens.css'
+import '../estilos/casca.css'
 
 // A home responde, nesta ordem (RULES 13): o que precisa de mim agora e o que
 // fazer com cada alerta, como a operação funciona, o que tem na agenda hoje e
@@ -22,6 +27,8 @@ if (window.location.pathname.replace(/\/$/, '') === '/projetos/producao-auto') w
 const currentPath = window.location.pathname.replace(/\/$/, '') || '/'
 const isHome = currentPath === '/'
 const isCrm = currentPath === '/crm'
+const isFinancas = currentPath === '/financas' || currentPath.startsWith('/financas/')
+const isMais = currentPath === '/mais'
 let refreshTimer = 0
 
 const load = async () => {
@@ -48,7 +55,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 
 <template>
   <a class="ops-skip-link" href="#main-content">Pular para o conteúdo</a>
-  <div class="ops-shell">
+  <div class="ops-shell" :class="{ 'ops-shell--tokens': isFinancas }">
     <OperationsHeader :display-name="overview?.displayName ?? ''" :falhas="falhas" :sem-leitura="!overview?.dell.geradoEm" :checked-at="overview?.checkedAt ?? ''" :loading="loading" :current-path="currentPath" @refresh="load" />
 
     <main id="main-content" class="ops-workspace" :class="{ 'ops-workspace--page': !isHome }" tabindex="-1">
@@ -62,7 +69,10 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
         <DellConferePanel :status="overview?.dell ?? null" />
       </template>
       <CrmPanel v-else-if="isCrm" />
+      <FinancasPanel v-else-if="isFinancas" :caminho="currentPath" />
+      <MaisPanel v-else-if="isMais" :overview="overview" />
       <section v-else class="ops-empty ops-not-found"><span aria-hidden="true">404</span><h2>Página não encontrada</h2><p>Este endereço não existe na Central local.</p><a class="ops-button ops-button--primary" href="/">Voltar para Hoje</a></section>
     </main>
+    <BarraInferior :caminho="currentPath" />
   </div>
 </template>
