@@ -196,6 +196,44 @@ class Gerador(unittest.TestCase):
         self.assertEqual(c["estado"], "ok")
 
 
+class FunilAprendizado(unittest.TestCase):
+    T = br("2026-10-08T10:00")
+
+    def avaliar(self, st, resultado="success", saiu=None):
+        return ds.avaliar_funil_aprendizado(st, resultado, saiu, self.T)
+
+    def st(self, **k):
+        return {"inicio": "2026-10-08T06:41:00-03:00", "fim": "2026-10-08T06:52:00-03:00", "licoes_novas": 2,
+                "pendentes": 0, "invalidas": 0, "desistidas": 0, "limite": False, "erro": None, **k}
+
+    def test_tabela(self):
+        casos = [
+            (self.st(), "ok", "2 lição(ões) nova(s)"),
+            (self.st(limite=True, pendentes=3), "ok", "limite de uso"),
+            (self.st(erro="retrato do CRM velho (2026-10-07T20:00:00Z)"), "falha", "retrato do CRM velho"),
+            (self.st(fim="2026-10-06T06:52:00-03:00"), "atencao", "não roda desde"),
+            (None, "atencao", "Ainda não rodou"),
+        ]
+        for st, estado, trecho in casos:
+            c = self.avaliar(st)
+            self.assertEqual(c["estado"], estado, st)
+            self.assertIn(trecho, c["detalhe"])
+
+    def test_systemd_caiu_depois_do_status(self):
+        self.assertEqual(self.avaliar(self.st(), "exit-code", br("2026-10-08T07:30"))["estado"], "falha")
+        self.assertEqual(self.avaliar(self.st(), "exit-code", br("2026-10-08T06:52"))["estado"], "ok")
+
+    def test_sem_timer_instalado_nao_ha_verificacao(self):
+        antes = ds.FUNIL_APRENDIZADO_TIMER
+        ds.FUNIL_APRENDIZADO_TIMER = Path(tempfile.gettempdir()) / "nao-existe-funil.timer"
+        self.addCleanup(setattr, ds, "FUNIL_APRENDIZADO_TIMER", antes)
+        self.assertEqual(ds.funil_aprendizado(), [])
+
+    def test_o_que_fazer(self):
+        c = ds.explicar(self.avaliar(self.st(erro="claude falhou (código 1)")))
+        self.assertIn("journalctl --user -u funil-aprendizado", c["o_que_fazer"])
+
+
 class PrumoMapa(unittest.TestCase):
     T = br("2026-10-07T10:00")
 

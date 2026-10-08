@@ -29,6 +29,7 @@
      "reiniciar": "dell-worker-healthwatch"},
     {"repo": "deploy/dell/prumo-mapa/*.py", "instalado": "~/.local/share/prumo-mapa/"},
     {"repo": "deploy/dell/prumo-mapa/archivo.woff2", "instalado": "~/.local/share/prumo-mapa/"},
+    {"repo": "deploy/dell/funil-aprendizado.py", "instalado": "~/.local/bin/funil-aprendizado"},
     {"repo": "deploy/dell/claude-ops/*.py", "instalado": "~/.local/share/claude-ops/"},
     {"repo": "deploy/dell/claude-ops/*.js", "instalado": "~/.local/share/claude-ops/"},
     {"repo": "deploy/dell/entrada/*.py", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},

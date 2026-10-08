@@ -1,0 +1,11 @@
+[Unit]
+Description=Site antes da venda — revisão das lições, segunda às 08:30
+
+[Timer]
+# Depois do "06 · Funil semanal" do n8n (segunda, 08:00, menos de 1 min).
+OnCalendar=Mon *-*-* 08:30:00
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
