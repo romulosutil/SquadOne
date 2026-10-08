@@ -1,0 +1,11 @@
+[Unit]
+Description=PRUMO — Raio-X dos leads prontos, às 11:15 e às 17:15
+
+[Timer]
+# Depois do gerador das 08:00 (que publica o Raio-X dos leads novos) e do Balcão das 09:10.
+OnCalendar=*-*-* 11,17:15:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

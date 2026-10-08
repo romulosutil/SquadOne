@@ -515,6 +515,11 @@ atualiza a planilha sozinho.
 O `place_id` é a chave: sem ele o n8n não acha a linha. Copie exatamente como
 está no `content.md`.
 
+Os campos `raio_x_*` e o arquivo `raio-x.html` da pasta não são seus: depois do
+seu deploy, o runner publica o Raio-X do PRUMO em `/raio-x` do mesmo projeto e
+grava esses campos no recibo (desde 08/10/2026). Não os escreva nem os copie
+para o palco do deploy.
+
 **7. Anotar** uma linha em `registro.md`: data, lead, slug, URL, e a decisão de
 design que você tomou pensando nesse negócio específico.
 

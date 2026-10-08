@@ -20,6 +20,7 @@ def carregar(auto: Path):
     os.environ["AUTO_DIR"] = str(auto)
     os.environ["SITE_FUNIL"] = str(auto / ".funil.json")  # nunca o retrato real do n8n
     os.environ["SITE_LEADS"] = str(auto / ".leads.json")  # nem a planilha real
+    os.environ["RAIO_X_BIN"] = str(auto / ".sem-raio-x")  # nem o raio-x instalado (faria deploy)
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -102,6 +103,30 @@ class Gerador(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertEqual(len(r["falhas"]), 2)
         self.assertEqual(r["concluidos"], [])
+
+    def test_raio_x_sai_depois_do_demo_validado_e_falha_nao_derruba_o_lead(self):
+        raio_x = self.auto / ".sem-raio-x"
+        raio_x.write_text("import os, sys\n"
+                          "open(os.path.join(os.environ['AUTO_DIR'], 'chamado-' + sys.argv[1]), 'w').close()\n"
+                          "sys.exit(1 if sys.argv[1] == 'd-bom' else 0)\n")
+        codigo, resumo = self.rodar(self.claude_padrao)
+        self.assertEqual(sorted(resumo["concluidos"]), ["b-bom", "d-bom"])  # o raio-x de d-bom falhou e o lead não
+        self.assertTrue((self.auto / "chamado-b-bom").exists())
+        self.assertTrue((self.auto / "chamado-d-bom").exists())
+        self.assertFalse((self.auto / "chamado-c-quebra").exists())
+        self.assertIn("Raio-X de d-bom não saiu", (self.auto / ".logs/execucao-d-bom.log").read_text())
+
+    def test_raio_x_que_explode_nao_vira_falha_do_lead(self):
+        self.m.subprocess.run, original = (lambda *a, **k: 1 / 0), self.m.subprocess.run
+        self.addCleanup(setattr, self.m.subprocess, "run", original)
+        (self.auto / ".sem-raio-x").write_text("")
+        codigo, resumo = self.rodar(self.claude_padrao)
+        self.assertEqual(sorted(resumo["concluidos"]), ["b-bom", "d-bom"])
+        self.assertIn("ZeroDivisionError", (self.auto / ".logs/execucao-b-bom.log").read_text())
+
+    def test_sem_raio_x_instalado_o_lead_conclui(self):
+        codigo, resumo = self.rodar(self.claude_padrao)
+        self.assertEqual(sorted(resumo["concluidos"]), ["b-bom", "d-bom"])
 
 
 class Descarte(unittest.TestCase):
@@ -216,8 +241,11 @@ class Descarte(unittest.TestCase):
         def run(cmd, cwd=None, **k):
             vistos.append(sorted(os.listdir(cwd)))
             return Saida()
+        # O módulo subprocess é o mesmo objeto aqui e no gerador: guardar o original ANTES de trocar
+        # (ler depois devolvia o falso e vazava para os testes seguintes).
+        original = self.m.subprocess.run
         self.m.subprocess.run = run
-        self.addCleanup(setattr, self.m.subprocess, "run", __import__("subprocess").run)
+        self.addCleanup(setattr, self.m.subprocess, "run", original)
         self.m.LOGS.mkdir(exist_ok=True)
         self.m.publicar_na_vercel = self.publicar_de_verdade  # com o subprocess falso
         self.assertTrue(self.m.publicar_na_vercel(pasta, self.auto / ".logs/x.log"))
