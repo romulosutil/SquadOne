@@ -49,6 +49,20 @@ describe("site-mensagem: espelho do JS do n8n", () => {
     }
   });
 
+  // Casos reais da rodada de 08/10/2026 que saíram com o artigo errado.
+  it("artigo: nome de pessoa e título feminino, como no JS", () => {
+    const casos: Array<[string, string]> = [
+      ["Advogada Camila Brito", "da"], ["AMANDA CAMILO ADVOCACIA", "da"], ["Dra. Juliana Suziele", "da"],
+      ["Izabella Crepaldi Advocacia", "da"], ["Karolinne Brito", "da"], ["Priscila Krieger Advogada", "da"],
+      ["Advogado Rafael Gustavo Goemann", "do"], ["Escritório W", "do"], ["Sistema Ar", "do"], ["Silva Advocacia", "do"],
+      ["Wandenson Desentupidora", "do"], ["Clínica Bem", "da"], ["", "do"],
+    ];
+    for (const [nome, esperado] of casos) {
+      assert.equal(artigoDe(nome), esperado, nome);
+      assert.equal(doN8n.artigoDe(nome), esperado, `n8n: ${nome}`);
+    }
+  });
+
   it("o follow-up de quem não recebeu o link pede licença; o de quem recebeu lembra o link", () => {
     assert.match(followupDe(CASOS[0][1]).texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. A demonstração de site da Dedetizadora Alfa ficou pronta/);
     assert.match(followupDe(CASOS[2][1]).texto, /Deu para ver o site da Pousada do Mar\?\nhttps:\/\/demo-mar\.vercel\.app\n\n/);

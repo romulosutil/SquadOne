@@ -76,7 +76,9 @@ const ler = (no, chave) => {
   if (falha) return { colunas: [], linhas: [], erro: String(falha.message ?? falha).slice(0, 300) };
   const colunas = [...new Set(itens.flatMap(i => Object.keys(i.json ?? {})))].filter(k => !FORA.has(norm(k)));
   const linhas = itens.map(i => i.json ?? {}).filter(l => txt(l[chave]))
-    .map(l => Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, 500)])));
+    // wa_me e wa_link levam a mensagem inteira codificada: cortados em 500, a fila de envio
+    // mostrava a primeira mensagem pela metade (26 de 39 em 08/10/2026).
+    .map(l => Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : 500)])));
   return { colunas, linhas };
 };
 const site = ler('Ler Leads', 'place_id');
