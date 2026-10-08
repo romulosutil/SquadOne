@@ -459,6 +459,46 @@ class ListaDePermissao(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.m.main()
 
+    def test_modo_premium_traz_referencias_imagem_e_laco_visual(self):
+        self.m.MODO_PREMIUM = True
+        try:
+            cmd = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
+            sistema = cmd[cmd.index("--append-system-prompt") + 1]
+            for trecho in ("MODO PREMIUM", "refero-aprender", "/tmp/gerador-x/refs", "REFERENCIAS.md", "CRITICA-N.md",
+                           "?qa=1", "aprendizados-refero.md", "feTurbulence", "bloco cinza liso", "MODO PERSONALIZADO",
+                           "CONCEITO.md", "REGRA ZERO: nada inventado", "?qa=teste", "Rua Horácio Santana 342"):
+                self.assertIn(trecho, sistema)
+            self.assertNotIn("REVISÃO DIRIGIDA", sistema)
+            self.m.NOTA_DA_REVISAO = "a seção X é invenção sem base"
+            self.m.BACKUP_EM_CURSO["lead-p"] = "_v3"
+            com_nota = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
+            sistema_nota = com_nota[com_nota.index("--append-system-prompt") + 1]
+            self.assertIn("REVISÃO DIRIGIDA", sistema_nota)
+            self.assertIn("a seção X é invenção sem base", sistema_nota)
+            self.assertIn("lead-p/_v3/", sistema_nota)
+            self.assertIn(str(self.auto / "_build/aprendizados-refero.md"), sistema)
+        finally:
+            self.m.MODO_PREMIUM = False
+            self.m.NOTA_DA_REVISAO = None
+            self.m.BACKUP_EM_CURSO.clear()
+        comum = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
+        self.assertNotIn("MODO PREMIUM", comum[comum.index("--append-system-prompt") + 1])
+
+    def test_premium_grava_versao_3_e_liga_o_modo_pelo_argumento(self):
+        self.publicado("lead-p")
+        vistos = []
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            vistos.append((personalizado, self.m.MODO_PREMIUM))
+            return self.novo_site(slug, "v2")
+
+        self.m.rodar_claude = claude
+        sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--refazer", "lead-p", "--premium"]
+        self.m.main()
+        self.assertEqual(vistos, [(True, True)])
+        self.assertEqual(json.loads((self.auto / "lead-p/personalizado.json").read_text())["versao"], 3)
+        self.m.MODO_PREMIUM = False
+
     def test_comando_personalizado_traz_o_roteiro_e_o_prompt_proprio(self):
         self.m.BACKUP_EM_CURSO["lead-r"] = "_v1"
         cmd = self.m.comando_do_claude("lead-r", Path("/tmp/x"), True)
