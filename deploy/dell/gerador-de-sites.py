@@ -579,7 +579,8 @@ def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
     saida = (r.stdout or "") + (r.stderr or "")
     with open(log_lead, "a", encoding="utf-8") as f:
         f.write(saida)
-    m = re.search(r"(?i)aliased:\s*(https://\S+)", saida)
+    # Até a CLI 5x era "Aliased: https://…"; a 59 escreve "▲ Aliased         https://…", sem os dois-pontos.
+    m = re.search(r"(?i)aliased:?\s+(https://\S+)", saida)
     if not m:
         log(f"Deploy sem linha 'Aliased:' na saída; recibo não escrito para {slug}.", "ERRO", log_lead)
         return False

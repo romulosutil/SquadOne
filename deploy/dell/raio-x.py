@@ -562,7 +562,9 @@ def deploy_na_vercel(arquivos: dict[str, bytes], projeto: str, log_lead: Path) -
             saida.write(r.stdout or "")
     if LIMITE_DE_DEPLOY.search(r.stdout or ""):
         raise LimiteDaVercel(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "limite de deploys")
-    m = re.search(r"(?i)aliased:\s*(https://\S+)", r.stdout or "")
+    # A CLI 59 escreve "▲ Aliased         https://…", sem os dois-pontos das versões anteriores
+    # (visto em 08/10/2026: os dois primeiros Raio-X subiram e a trava não achou a linha).
+    m = re.search(r"(?i)aliased:?\s+(https://\S+)", r.stdout or "")
     return m.group(1).rstrip(".,)") if r.returncode == 0 and m else ""
 
 

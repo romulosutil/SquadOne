@@ -236,7 +236,8 @@ class Descarte(unittest.TestCase):
         vistos = []
 
         class Saida:
-            stdout, stderr = "Aliased: https://demo-b-bom.vercel.app\n", ""
+            # Formato da Vercel CLI 59: sem os dois-pontos depois de "Aliased".
+            stdout, stderr = "▲ Aliased         https://demo-b-bom.vercel.app\n\n✓ Ready in 7s\n", ""
 
         def run(cmd, cwd=None, **k):
             vistos.append(sorted(os.listdir(cwd)))
