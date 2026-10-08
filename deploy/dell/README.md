@@ -657,6 +657,36 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   05/10/2026): o Caçador roda uma busca por dia, a mais atrasada, e o atraso
   das `PREFERIDAS` (advocacia, desde a migração abaixo) conta em dobro. Nunca
   rodada continua primeiro.
+- **Site no ar não vira pasta** (`claude-ops/site-cacador-site-no-ar.py`,
+  código do nó em `site-cacador-site-no-ar.js`, 07/10/2026): o "Checar site
+  próprio" do Caçador era um GET de 10 s na raiz do domínio, e 74 leads
+  ganharam o +40 de "site próprio fora do ar" assim; 22 terminaram em
+  `_descartados/` com o site respondendo (Baby School: o `www` deu timeout, a
+  raiz respondia com WordPress completo, e ela respondeu "hoje já temos uma
+  agência"). Agora o nó é um Code que testa o link do Google (Wix, Canva e
+  landing page moram no caminho) e a raiz em https e http, com e sem www,
+  seguindo redirecionamento e com User-Agent de navegador, em até 3 rodadas
+  espaçadas de 30 s. O IF "Site no ar?" manda quem tem conteúdo real (2 mil
+  caracteres de texto visível; não é estacionamento, "Hello world", página
+  padrão de hospedagem nem redirecionamento para rede social ou diretório) para
+  o "Linha descartada" **antes do Gemini e do gerador**, com o motivo e a URL
+  no `briefing` ("tem site: …"); crédito no rodapé ("Desenvolvido por <link>")
+  vira "tem site e agência (<domínio>)". O +40 só vem depois das 3 rodadas sem
+  nada. Responde mas não dá para ler (anti-robô, página só de JavaScript, menos
+  de 2 mil caracteres; com caminho, raiz que não cita o nome do negócio) fica
+  de fora sem planilha, como o site no ar ficava antes; link que só leva a
+  anúncio em diretório (`*.traveleto.com`) segue sem o +40, como quem não tem
+  site. Quem já está na planilha não muda. O que muda de comportamento: site
+  no ar passa a ir para a planilha (antes saía calado e era reconferido a cada
+  rodada da busca), então um site que cair depois não volta sozinho. Ensaio de
+  08/10/2026 nas 82 URLs que tinham ganhado o +40: das 22 que o gerador
+  descartou, 8 viram "tem site" e 10 ficam de fora; as outras 4 seguem fora do
+  ar (DNS sumiu). `--ensaiar URL[::Nome]` roda o código contra os sites de
+  verdade e mostra o estado de cada link testado, sem n8n nem planilha.
+  Aplicar (Rômulo de acordo): `cp ~/SquadOne/deploy/dell/claude-ops/site-cacador-site-no-ar.{py,js} ~/.local/share/claude-ops/ && cd ~/.local/share/claude-ops && python3 site-cacador-site-no-ar.py`
+  (guarda o fluxo anterior em `backups/cacador-<data>.json`). Voltar:
+  `python3 -c 'import json, sys; from n8n import api, put; put(json.load(open(sys.argv[1]))); api("POST", "/workflows/oow8TkxrAf4fVvTj/activate")' backups/cacador-<data>.json`
+  na mesma pasta.
 - **Resposta negativa não segura a busca** (05/10/2026): para a pausa, só conta
   resposta com `resposta_tipo` que não seja `negativa` nem `bot` (ou pasta em
   `_em-conversa/`). Antes, "não tenho interesse" mantinha pousada e eventos
@@ -676,8 +706,10 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   advocacia; B2B com "Pedir orçamento"; urgência com botão fixo). Rodar de novo
   não muda nada; `--testar` e `--testar-vivo` não gravam.
 - `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
-  `--testar-regra` e `python3 site-cacador-escolha.py --testar` rodam só o
-  código dos nós no node, sem n8n nem planilha.
+  `--testar-regra`, `python3 site-cacador-escolha.py --testar` e
+  `python3 site-cacador-site-no-ar.py --testar` (HTTP de mentira, mais o
+  `node --check` do código) rodam só o código dos nós no node, sem n8n nem
+  planilha.
 
 Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
