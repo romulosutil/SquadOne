@@ -2,8 +2,8 @@
 // codigo do Balcao (abordagem) e do Acompanhamento (follow-up): os dois falam
 // com o mesmo tom e montam o telefone do mesmo jeito.
 
-// Variacao A esta aprovada. B e C seguem null ate o Romulo escrever o texto;
-// enquanto forem null, todo lead sai na variacao A.
+// Variacao A esta aprovada e fica como controle. Variacao null nao sai: com B e C
+// null, todo lead sai na A.
 // 22/09/2026: saiu o {NOME_CONTATO}. Ele usava a primeira palavra do nome do
 // negocio ("Oi Clinica!", "Oi Academia!"), e a planilha nao tem o nome do dono.
 // 30/09/2026: toda mensagem abre dizendo quem escreve e por quem ("Me chamo
@@ -18,7 +18,20 @@
 // + apresentacao de agencia + link na primeira mensagem e o desenho de golpe e
 // de spam; pedir licenca transforma a primeira resposta num "sim" pequeno, e o
 // observador separa esse "sim" (interesse) do resto. {URL} nao entra na primeira.
-const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', null, null];
+// 08/10/2026 (plano PRUMO, secao 5 "Mensagens"): o Site antes da venda vira o
+// servico "Encontrado" do PRUMO. Medido ate 08/10 com a A: 108 envios, 18
+// respostas, 1 interesse, 0 propostas. A B troca o "encontrei voces" generico
+// por um fato que o dono confere na hora (a nota e o numero de avaliacoes do
+// Google, que o Cacador grava nas colunas nota e avaliacoes). Variacao com
+// {NOTA} ou {AVALIACOES} so entra para lead com nota boa (ver fatosDoGoogle);
+// sem ela, o lead sai na A. {O_A} e o artigo sem preposicao ("Vi a Clinica X").
+// A C oferece o Raio-X (a pagina <demo>/raio-x, deploy/dell/raio-x.py), nao o site.
+// So entra para lead cujo publicado.json tem raio_x_url e raio_x_pontos (ver raioXDe):
+// o raio-x.py so grava os dois com a pagina no ar e conferida. {PONTOS} vem de
+// raio_x_pontos ("1 ponto que faz", "2 pontos que fazem"): o plano dizia "3 pontos",
+// mas em 08/10 so 1 dos 88 demos tinha 3 (o Raio-X so mostra fato verificavel do
+// Places), e o numero fixo seria falso para quase todos.
+const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi {O_A} {NOME} no Google: nota {NOTA} com {AVALIACOES} avaliações, mas quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. Posso te mandar o link?', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e {PONTOS} cliente ir para o concorrente. É uma página só. Posso te mandar?'];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
 const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put together a demo website for you, on my own initiative. Can I send you the link so you can take a look? No strings attached.";
@@ -27,29 +40,80 @@ const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put toget
 // aprende comparando). A letra sai do place_id, nao da ordem da rodada: o Balcao remonta
 // o wa_link de hora em hora e um lead "pronto" nao pode trocar de A para B entre duas
 // rodadas. Entre as variacoes com texto; B e C null = todo lead em A. EUA = "EN".
+// 08/10/2026: `lead` e a linha da planilha (nota, avaliacoes). Variacao que cita a nota
+// so entra no sorteio com fatosDoGoogle(lead); sem eles o sorteio e so entre as outras
+// (hoje, so a A). A nota e as avaliacoes nao mudam depois que o Cacador grava a linha,
+// entao a letra continua estavel entre rodadas. O molde volta com {NOTA}/{AVALIACOES}
+// ja preenchidos; {ARTIGO}, {NOME} e {DETALHE} ficam para o preencher.
+// A C, do mesmo jeito, so com raioXDe(lead) ({PONTOS} preenchido aqui). O lead que o
+// Raio-X alcanca depois de ja estar "pronto" pode trocar de letra uma vez (de A/B para
+// C, se o sorteio cair nela): o Balcao grava a letra nova junto com o wa_link novo.
 const LETRAS = ['A', 'B', 'C'];
-function varianteDe(placeId, eua) {
+const NOTA_MINIMA_B = 4.3;
+const AVALIACOES_MINIMAS_B = 15;
+const citaNota = (t) => t.indexOf('{NOTA}') >= 0 || t.indexOf('{AVALIACOES}') >= 0;
+const citaRaioX = (t) => t.indexOf('{PONTOS}') >= 0;
+// { url, pontos: '2 pontos que fazem' } do recibo (publicado.json), ou null (sem C).
+function raioXDe(lead) {
+  const url = String((lead && lead.raio_x_url) || '').trim();
+  const n = numeroDaPlanilha(lead && lead.raio_x_pontos);
+  if (url.indexOf('https://') !== 0 || !(Number.isInteger(n) && n >= 1 && n <= 3)) return null;
+  return { url, pontos: n === 1 ? '1 ponto que faz' : n + ' pontos que fazem' };
+}
+function numeroDaPlanilha(v) {
+  // O Sheets devolve 4.9 (numero) ou '4.9' (texto); '4,9' vale o mesmo.
+  const t = String(v === undefined || v === null ? '' : v).trim().replace(',', '.');
+  return t && /^\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+}
+// { nota: '4,9', avaliacoes: '1.234' } para a mensagem, ou null (sem nota boa: sai a A).
+function fatosDoGoogle(lead) {
+  const nota = numeroDaPlanilha(lead && lead.nota);
+  const avaliacoes = numeroDaPlanilha(lead && lead.avaliacoes);
+  if (!(nota >= NOTA_MINIMA_B && nota <= 5) || !(Number.isInteger(avaliacoes) && avaliacoes >= AVALIACOES_MINIMAS_B)) return null;
+  return { nota: nota.toFixed(1).replace('.', ','), avaliacoes: String(avaliacoes).replace(/\B(?=(\d{3})+(?!\d))/g, '.') };
+}
+function varianteDe(placeId, eua, lead) {
   if (eua) return { letra: 'EN', molde: VARIACAO_EN };
-  const comTexto = VARIACOES.map((t, i) => (t ? i : -1)).filter(i => i >= 0);
+  const fatos = fatosDoGoogle(lead);
+  const raioX = raioXDe(lead);
+  const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t));
+  const comTexto = VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
   let h = 0;
   for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const i = comTexto[h % comTexto.length];
-  return { letra: LETRAS[i], molde: VARIACOES[i] };
+  let molde = VARIACOES[i];
+  if (fatos) molde = molde.split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes);
+  if (raioX) molde = molde.split('{PONTOS}').join(raioX.pontos);
+  return { letra: LETRAS[i], molde };
 }
 
 // A segunda mensagem: sai pelo aviso do Hermes e pela ficha do CRM quando a
 // resposta e de interesse. Diz o que acontece se gostarem e se nao gostarem.
-const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?';
-const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from your photos and Google reviews. If you like it, I can put it live under your own address; if not, I'll take it down, no problem. What do you think?";
+// 08/10/2026: termina com o preco do Encontrado e com "so pagam depois de ver
+// funcionando". Ate aqui terminava em "coloco no ar", sem preco: a conversa
+// travava no "quanto custa?" e nao separava curioso de comprador. O preco e o
+// do plano PRUMO (hipotese ate 08/11/2026); mudou, muda so esta linha e o espelho.
+// Em ingles sai sem numero: o preco em dolar ainda nao foi decidido.
+const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
+// Quem recebeu a C pediu o raio-x, nao o site: a segunda manda os dois links (o raio-x
+// primeiro) e o mesmo preco. {RAIO_X} vem da coluna raio_x_url, que o Balcao grava do
+// publicado.json; sem ela, a segunda e a de sempre. So em portugues (EUA nunca e C).
+const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 
 // 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
 // aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira
 // mensagem sem link e lembrado do pedido; quem ja recebeu o link (texto de
 // antes de 05/10, ver followupDe) e lembrado do link.
-const FOLLOWUP = 'Oi, tudo bem? Aqui é o Rômulo de novo. Montei uma demonstração de site {ARTIGO} {NOME} e queria te mostrar. Posso mandar o link?';
-const FOLLOWUP_EN = "Hi! It's Rômulo again. I put together a demo website for {NOME} and would love to show you. Can I send you the link?";
-const FOLLOWUP_COM_LINK = 'Oi, tudo bem? Aqui é o Rômulo de novo. Deu tempo de ver a demonstração de site {ARTIGO} {NOME}?\n{URL}\n\nSe quiserem, ajusto o que for preciso. O que acharam?';
-const FOLLOWUP_COM_LINK_EN = "Hi! It's Rômulo again. Did you get a chance to see the demo website I built for {NOME}?\n{URL}\n\nHappy to adjust anything. What do you think?";
+// 08/10/2026: textos do plano PRUMO. O sem link diz que o demo ficou pronto (e
+// quem escreve); o com link oferece mudar em um dia e apagar se nao for o
+// momento. O link continua numa linha so dele (30/09).
+const FOLLOWUP = 'Oi, aqui é o Rômulo de novo, do PRUMO. A demonstração de site {ARTIGO} {NOME} ficou pronta, com as fotos e as avaliações de vocês. Quer que eu mande o link?';
+const FOLLOWUP_EN = "Hi, it's Rômulo again, from PRUMO. The demo website for {NOME} is ready, with your photos and reviews. Would you like me to send the link?";
+const FOLLOWUP_COM_LINK = 'Oi, aqui é o Rômulo de novo. Deu para ver o site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. E se não for o momento, é só me dizer que eu apago.';
+const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
+// Quem recebeu a C (mensagem_variante) e lembrado do raio-x que ofereceu, nao do site.
+const FOLLOWUP_RAIO_X = 'Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?';
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.
@@ -59,6 +123,8 @@ const FEMININOS = ['clinica', 'academia', 'casa', 'barbearia', 'pizzaria', 'pada
 function semAcento(t) { return String(t || '').normalize('NFD').replace(/[^a-zA-Z0-9 ]/g, ''); }
 function primeiraPalavra(t) { return String(t || '').trim().split(' ')[0] || ''; }
 function artigoDe(nome) { return FEMININOS.indexOf(semAcento(primeiraPalavra(nome)).toLowerCase()) >= 0 ? 'da' : 'do'; }
+// O artigo sem a preposicao, para "Vi a Clinica X" / "Vi o Escritorio Y" (variacao B).
+function artigoSimplesDe(nome) { return artigoDe(nome) === 'da' ? 'a' : 'o'; }
 
 // Desde 18/09 o Cacador grava o telefone internacional do Google ("+55 31 3643-7155",
 // "+1 305-642-0504", "+351 21 ..."). Com "+", os digitos ja trazem o DDI.
@@ -81,6 +147,7 @@ function ehEua(telefone) { return telefone.indexOf('1') === 0 && telefone.length
 function preencher(molde, nome, url, detalhe) {
   return molde
     .split('{ARTIGO}').join(artigoDe(nome))
+    .split('{O_A}').join(artigoSimplesDe(nome))
     .split('{NOME}').join(nome)
     .split('{URL}').join(url)
     .split('{DETALHE}').join(detalhe || '');
@@ -161,13 +228,24 @@ function abrirNoWhatsApp(l, moldeBr, moldeEn) {
   return { numero, texto, link: numero ? 'https://wa.me/' + numero + '?text=' + encodeURIComponent(texto) : '' };
 }
 
-// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
-function followupDe(l) {
-  return linkJaFoi(l) ? abrirNoWhatsApp(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN) : abrirNoWhatsApp(l, FOLLOWUP, FOLLOWUP_EN);
+// A primeira mensagem foi a C (o raio-x)? A letra e a que o Balcao gravou no envio.
+const recebeuC = (l) => String(l.mensagem_variante || '').trim() === 'C';
+// O raio_x_url da linha, so se for https (vem do publicado.json pelo Balcao).
+function raioXDaLinha(l) {
+  const url = String(l.raio_x_url || '').trim();
+  return url.indexOf('https://') === 0 ? url : '';
 }
 
-// Segunda mensagem (o link), para quem respondeu com interesse.
+// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
+function followupDe(l) {
+  if (linkJaFoi(l)) return abrirNoWhatsApp(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN);
+  return abrirNoWhatsApp(l, recebeuC(l) ? FOLLOWUP_RAIO_X : FOLLOWUP, FOLLOWUP_EN);
+}
+
+// Segunda mensagem (o link), para quem respondeu com interesse. Quem recebeu a C ganha
+// o raio-x e o site; sem o raio_x_url na linha, sai a de sempre (o site).
 function segundaDe(l) {
-  return abrirNoWhatsApp(l, SEGUNDA, SEGUNDA_EN);
+  const raioX = recebeuC(l) ? raioXDaLinha(l) : '';
+  return abrirNoWhatsApp(l, raioX ? SEGUNDA_RAIO_X.split('{RAIO_X}').join(raioX) : SEGUNDA, SEGUNDA_EN);
 }
 

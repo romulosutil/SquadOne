@@ -95,6 +95,9 @@ export const COLUNAS_DO_SITE = {
   // "manual" quando saiu sem o clique no wa_link) e a versão do site ("padrão", "personalizado-v2"...).
   mensagemVariante: { nomes: ["mensagem_variante"] },
   siteVersao: { nomes: ["site_versao"] },
+  // O link do Raio-X (Balcão, 08/10/2026): a segunda mensagem de quem recebeu a variação C o manda.
+  // Sem a coluna, a segunda sai a do site, como antes: não é aviso na tela.
+  raioXUrl: { nomes: ["raio_x_url"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
@@ -752,7 +755,7 @@ function leadDoSite(linha: Linha, contexto: {
   // Depois do "sim": a primeira mensagem (desde 05/10/2026) pede licença e não leva o link.
   // Os textos são os do n8n (server/site-mensagem.ts espelha site-mensagem.js), em inglês nos EUA.
   const waMe = /wa\.me\/\d+/.test(c("waMe")) ? c("waMe") : whatsapp ? `https://wa.me/${whatsapp}` : "";
-  const mensagem = { nome: c("empresa"), siteUrl: site ?? "", waMe };
+  const mensagem = { nome: c("empresa"), siteUrl: site ?? "", waMe, variante: c("mensagemVariante"), raioXUrl: c("raioXUrl") };
   const segunda = emConversa && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
   // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
   const followup = followupHoje && waMe ? followupDe(mensagem).link || undefined : undefined;

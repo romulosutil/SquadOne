@@ -87,7 +87,9 @@ recibos.forEach((item, i) => {
   let letra = '';
   if (telefone) {
     const eua = ehEua(telefone);
-    const variante = varianteDe(pid, eua);
+    // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
+    // O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
+    const variante = varianteDe(pid, eua, { ...linha, raio_x_url: rec.raio_x_url, raio_x_pontos: rec.raio_x_pontos });
     letra = variante.letra;
     const mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
     waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
@@ -104,6 +106,9 @@ recibos.forEach((item, i) => {
     wa_me: waMe,
     wa_link: waMe ? LINKS + '/enviar?place_id=' + encodeURIComponent(pid) : waAtual,
     site_versao: siteVersao,
+    // 08/10/2026: o link do Raio-X vai para a planilha porque a segunda mensagem (aviso de
+    // interesse e ficha do CRM) e montada da linha, nao do recibo. Vazio sem Raio-X no ar.
+    raio_x_url: String(rec.raio_x_url || '').trim(),
     // A variacao que o wa_link leva, so enquanto o lead nao foi enviado: o clique marca
     // "enviado" e a letra fica; envio que o observador ve sem o clique vira "manual".
     ...(semSite ? {} : { mensagem_variante: letra }),

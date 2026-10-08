@@ -43,7 +43,7 @@ não têm a marca, que veio depois, e 11 deles saíam "padrão". A marca, quando
 
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
-     python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante e site_versao)
+     python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao e raio_x_url)
      python3 site-antes-da-venda.py --testar     (código do cruzamento no node, planilha de mentira, sem n8n)
      python3 site-antes-da-venda.py --testar-n8n (cópia do Balcão no n8n: recibos reais, planilha de
                                                   mentira, nada gravado; apaga a cópia no fim)
@@ -70,7 +70,9 @@ AQUI = Path(__file__).resolve().parent
 CORTE = "2026-09-29T00:00:00-03:00"
 LEADS_GID = "396728619"
 # Colunas que o Balcão grava desde 07/10/2026 (no fim da aba Leads; os fluxos escrevem pelo nome).
-COLUNAS_NOVAS = ["mensagem_variante", "site_versao"]
+# raio_x_url (08/10/2026): o link do Raio-X do publicado.json, para a segunda mensagem de quem
+# recebeu a variação C (o aviso de interesse e o CRM montam a segunda da linha, não do recibo).
+COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url"]
 
 # Onde mora o lead hoje: place_id -> "slug" (raiz) ou "_recusados/slug" etc.
 # Vem do diretório de cada publicado.json lido por "Ler recibos da pasta auto".
@@ -517,31 +519,60 @@ def testar() -> int:
             self.assertEqual(por["pid-b"][0]["status"], "pronto")
 
     class Variante(unittest.TestCase):
-        def letras(self, troca=None):
+        # 08/10/2026: a B cita a nota do Google e só entra para lead com nota 4,3+ e 15+ avaliações;
+        # a C (Raio-X) só com raio_x_url e raio_x_pontos no recibo (raio-x.py).
+        NOTA_BOA = {"nota": "4.9", "avaliacoes": "34"}
+        RAIO_X = {"raio_x_url": "https://demo-x.vercel.app/raio-x", "raio_x_pontos": 2}
+
+        def letras(self, troca=None, lead=None):
             codigo = codigo_js("site-mensagem.js")
             for de, para in (troca or {}).items():
                 codigo = codigo.replace(de, para)
             pids = [f"ChIJ{i:04d}x" for i in range(300)]
-            return rodar_js(codigo + "\nreturn " + json.dumps(pids) + ".map(p => [varianteDe(p, false).letra, varianteDe(p, false).letra]);", {})
+            l = json.dumps(lead)
+            return rodar_js(codigo + "\nreturn " + json.dumps(pids)
+                            + f".map(p => [varianteDe(p, false, {l}).letra, varianteDe(p, false, {l}).letra]);", {})
 
-        def test_hoje_so_a(self):
-            self.assertEqual({a for a, _ in self.letras()}, {"A"})
+        def test_sem_nota_boa_so_a(self):
+            for lead in (None, {}, {"nota": "4.2", "avaliacoes": "300"}, {"nota": 5, "avaliacoes": 14}, {"nota": "", "avaliacoes": ""}):
+                self.assertEqual({a for a, _ in self.letras(lead=lead)}, {"A"}, lead)
 
-        def test_com_b_e_c_divide_e_nao_muda_de_uma_rodada_para_outra(self):
-            res = self.letras({"null, null];": "'texto B {NOME}', 'texto C {NOME}'];"})
+        def test_com_nota_boa_divide_entre_a_e_b(self):
+            res = self.letras(lead=self.NOTA_BOA)
+            self.assertEqual({a for a, _ in res}, {"A", "B"})
+            self.assertTrue(min(sum(1 for a, _ in res if a == x) for x in "AB") > 100)  # ~150 cada
+
+        def test_com_raio_x_divide_e_nao_muda_de_uma_rodada_para_outra(self):
+            res = self.letras(lead={**self.NOTA_BOA, **self.RAIO_X})
             self.assertEqual({a for a, _ in res}, {"A", "B", "C"})
             self.assertTrue(all(a == b for a, b in res))
             self.assertTrue(min(sum(1 for a, _ in res if a == x) for x in "ABC") > 60)  # ~100 cada
+            self.assertEqual({a for a, _ in self.letras(lead=self.RAIO_X)}, {"A", "C"})  # sem nota: a B fica de fora
 
         def test_o_texto_casa_com_a_letra(self):
-            troca = {"null, null];": "'texto B {NOME}', 'texto C {NOME}'];"}
-            por = cruzar(troca=troca, planilha=[linha(f"pid-{i}", "pronto") for i in range(40)],
-                         recibos=[(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
+            inicio = {"A": "Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google",
+                      "B": "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi a Padaria ",
+                      "C": "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como a Padaria "}
+            # O Raio-X vem do recibo (publicado.json), a nota vem da linha da planilha.
+            por = cruzar(planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
+                         recibos=[(f"lead-{i}", {**recibo(f"pid-{i}", f"lead-{i}"), **self.RAIO_X}) for i in range(40)], marcas=[])
+            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B", "C"})
             for itens in por.values():
-                texto, letra = unquote(itens[0]["wa_me"]), itens[0]["mensagem_variante"]
-                self.assertEqual(texto.split("?text=")[1].startswith("texto "), letra in "BC", (letra, texto))
-                if letra != "A":
-                    self.assertTrue(texto.split("?text=")[1].startswith("texto " + letra))
+                texto, letra = unquote(itens[0]["wa_me"]).split("?text=")[1], itens[0]["mensagem_variante"]
+                self.assertTrue(texto.startswith(inicio[letra]), (letra, texto))
+                if letra == "B":
+                    self.assertIn("no Google: nota 4,9 com 34 avaliações, mas quem pesquisa", texto)
+                if letra == "C":
+                    self.assertIn("o que já está bom e 2 pontos que fazem cliente ir para o concorrente", texto)
+                    self.assertNotIn("https://", texto)  # o link do raio-x não vai na 1ª
+                self.assertNotIn("{", texto)
+                self.assertEqual(itens[0]["raio_x_url"], "https://demo-x.vercel.app/raio-x")
+
+        def test_sem_raio_x_no_recibo_a_coluna_fica_vazia_e_nao_sai_c(self):
+            por = cruzar(planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
+                         recibos=[(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
+            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B"})
+            self.assertEqual({i[0]["raio_x_url"] for i in por.values()}, {""})
 
     class PastaDoLead(unittest.TestCase):
         def test_copia_do_modo_personalizado_nao_e_a_pasta(self):
