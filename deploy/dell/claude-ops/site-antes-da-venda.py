@@ -517,31 +517,48 @@ def testar() -> int:
             self.assertEqual(por["pid-b"][0]["status"], "pronto")
 
     class Variante(unittest.TestCase):
-        def letras(self, troca=None):
+        # 08/10/2026: a B cita a nota do Google e só entra para lead com nota 4,3+ e 15+ avaliações.
+        NOTA_BOA = {"nota": "4.9", "avaliacoes": "34"}
+        # Para simular a C (Raio-X), que segue null até o Raio-X existir.
+        COM_C = {"null];": "'texto C {NOME}'];"}
+
+        def letras(self, troca=None, lead=None):
             codigo = codigo_js("site-mensagem.js")
             for de, para in (troca or {}).items():
                 codigo = codigo.replace(de, para)
             pids = [f"ChIJ{i:04d}x" for i in range(300)]
-            return rodar_js(codigo + "\nreturn " + json.dumps(pids) + ".map(p => [varianteDe(p, false).letra, varianteDe(p, false).letra]);", {})
+            l = json.dumps(lead)
+            return rodar_js(codigo + "\nreturn " + json.dumps(pids)
+                            + f".map(p => [varianteDe(p, false, {l}).letra, varianteDe(p, false, {l}).letra]);", {})
 
-        def test_hoje_so_a(self):
-            self.assertEqual({a for a, _ in self.letras()}, {"A"})
+        def test_sem_nota_boa_so_a(self):
+            for lead in (None, {}, {"nota": "4.2", "avaliacoes": "300"}, {"nota": 5, "avaliacoes": 14}, {"nota": "", "avaliacoes": ""}):
+                self.assertEqual({a for a, _ in self.letras(lead=lead)}, {"A"}, lead)
 
-        def test_com_b_e_c_divide_e_nao_muda_de_uma_rodada_para_outra(self):
-            res = self.letras({"null, null];": "'texto B {NOME}', 'texto C {NOME}'];"})
+        def test_com_nota_boa_divide_entre_a_e_b(self):
+            res = self.letras(lead=self.NOTA_BOA)
+            self.assertEqual({a for a, _ in res}, {"A", "B"})
+            self.assertTrue(min(sum(1 for a, _ in res if a == x) for x in "AB") > 100)  # ~150 cada
+
+        def test_com_c_divide_e_nao_muda_de_uma_rodada_para_outra(self):
+            res = self.letras(self.COM_C, self.NOTA_BOA)
             self.assertEqual({a for a, _ in res}, {"A", "B", "C"})
             self.assertTrue(all(a == b for a, b in res))
             self.assertTrue(min(sum(1 for a, _ in res if a == x) for x in "ABC") > 60)  # ~100 cada
+            self.assertEqual({a for a, _ in self.letras(self.COM_C)}, {"A", "C"})  # sem nota: a B fica de fora
 
         def test_o_texto_casa_com_a_letra(self):
-            troca = {"null, null];": "'texto B {NOME}', 'texto C {NOME}'];"}
-            por = cruzar(troca=troca, planilha=[linha(f"pid-{i}", "pronto") for i in range(40)],
+            inicio = {"A": "Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google",
+                      "B": "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi a Padaria ", "C": "texto C"}
+            por = cruzar(troca=self.COM_C, planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
                          recibos=[(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
+            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B", "C"})
             for itens in por.values():
-                texto, letra = unquote(itens[0]["wa_me"]), itens[0]["mensagem_variante"]
-                self.assertEqual(texto.split("?text=")[1].startswith("texto "), letra in "BC", (letra, texto))
-                if letra != "A":
-                    self.assertTrue(texto.split("?text=")[1].startswith("texto " + letra))
+                texto, letra = unquote(itens[0]["wa_me"]).split("?text=")[1], itens[0]["mensagem_variante"]
+                self.assertTrue(texto.startswith(inicio[letra]), (letra, texto))
+                if letra == "B":
+                    self.assertIn("no Google: nota 4,9 com 34 avaliações, mas quem pesquisa", texto)
+                self.assertNotIn("{", texto)
 
     class PastaDoLead(unittest.TestCase):
         def test_copia_do_modo_personalizado_nao_e_a_pasta(self):

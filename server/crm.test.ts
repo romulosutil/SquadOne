@@ -403,7 +403,7 @@ describe("CRM: lista Hoje e contagens", () => {
     const site = followup.find((i) => i.leadId === "site:followup")!;
     assert.equal(site.links[0].rotulo, "Mandar o follow-up");
     const texto = new URL(site.links[0].url).searchParams.get("text") ?? "";
-    assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo de novo\. Montei uma demonstração de site da Empresa followup/);
+    assert.match(texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. A demonstração de site da Empresa followup ficou pronta/);
     assert.equal(site.links[1].rotulo, "Abrir conversa no WhatsApp");
     assert.equal(lead(leads, "site:followup-ontem").links.followup, undefined, "fora do dia do follow-up não há link");
     assert.equal(followup.find((i) => i.leadId === "prumo:convite")!.links.some((l) => l.rotulo === "Mandar o follow-up"), false);

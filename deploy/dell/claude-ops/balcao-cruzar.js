@@ -87,7 +87,8 @@ recibos.forEach((item, i) => {
   let letra = '';
   if (telefone) {
     const eua = ehEua(telefone);
-    const variante = varianteDe(pid, eua);
+    // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
+    const variante = varianteDe(pid, eua, linha);
     letra = variante.letra;
     const mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
     waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);

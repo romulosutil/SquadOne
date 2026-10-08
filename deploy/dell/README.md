@@ -628,6 +628,18 @@ cd ~/.local/share/claude-ops && python3 fecha-ciclos.py --tailnet   # base no Le
 O Balcão remonta o `wa_link` dos leads `pronto` a cada hora
 (`balcao-cruzar.js`); os textos das mensagens ficam em `site-mensagem.js`.
 
+**Mensagens do PRUMO** (08/10/2026, plano PRUMO seção 5). A primeira mensagem
+tem duas variações: **A** (controle, "Encontrei vocês no Google…") e **B** (a
+nota e o número de avaliações do Google, das colunas `nota` e `avaliacoes` que
+o Caçador grava). A B só entra no sorteio do lead com nota **4,3 ou mais** e
+**15 avaliações ou mais**; sem os dois, o lead sai na A. Entre os que têm nota
+boa, metade A e metade B, pela letra do `place_id`. A **C** (Raio-X) segue
+`null` até o Raio-X existir. A segunda mensagem termina com o preço do
+Encontrado (R$ 990 + R$ 69/mês, pago depois de ver no ar; em inglês, sem
+número), e os dois follow-ups do 3º dia são os do plano. O CRM espelha a
+segunda e os follow-ups em `server/site-mensagem.ts` (teste compara com o JS).
+Ao comparar A e B no funil, lembre que a A também recebe os leads de nota baixa.
+
 **O que cada lead recebeu** (07/10/2026, para o funil aprender comparando). Duas
 colunas no fim da aba Leads, gravadas pelo Balcão (`python3
 site-antes-da-venda.py --colunas` cria; o `--balcao` também):
@@ -635,7 +647,8 @@ site-antes-da-venda.py --colunas` cria; o `--balcao` também):
 - `mensagem_variante`: a letra do texto que o `wa_link` leva (`A`, `B`, `C` de
   `VARIACOES`; `EN` nos EUA; vazio sem telefone). A letra sai do `place_id`, não
   da ordem da rodada, então um lead `pronto` não troca de variação entre duas
-  rodadas; com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
+  rodadas (nem com a B, porque a nota da linha não muda depois do Caçador);
+  com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
   `pronto`: o clique no `wa_link` marca `enviado` e a letra fica. Quando o envio
   aparece sem o clique (o observador vê `owner_sent`, a leitura ou a resposta de
   um lead ainda `novo`/`pronto`), o observador grava `manual`: o texto foi o que
