@@ -8,7 +8,9 @@ import type { CrmItemHoje, CrmLead } from './types'
 // e a mensagem à vista ANTES do toque — o toque no link rastreado já marca o
 // envio na planilha, então conferir depois é tarde. A folha não grava nada: o
 // envio é o clique no link do n8n, como na lista (RULES 10 e 11).
-const props = defineProps<{ itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos }>()
+// `aviso`: fora do expediente de quem recebe, com a taxa medida (resultados.ts, avisoDeHorario).
+// Só avisa: enviar continua possível, a decisão é do Rômulo.
+const props = defineProps<{ itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; aviso?: string | null }>()
 const emit = defineEmits<{ enviado: [leadId: string]; abrir: [leadId: string, origem: HTMLElement | null] }>()
 
 const nicho = ref<string | null>(null)
@@ -74,6 +76,7 @@ function escolherNicho(novo: string | null) {
 
 <template>
   <div class="crm-fila">
+    <p v-if="aviso" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} Os sites ficam aqui.</p>
     <div v-if="nichos.length > 1" class="crm-fila__nichos" role="group" aria-label="Nicho">
       <button type="button" :aria-pressed="nicho === null" @click="escolherNicho(null)">Todos <span>{{ total }}</span></button>
       <button v-for="n in nichos" :key="n.nicho" type="button" :aria-pressed="nicho === n.nicho" @click="escolherNicho(n.nicho)">

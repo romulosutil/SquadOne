@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { amostraPequena, chaveDe, enviadoNoPeriodo, porcento, resultados, resumoDaLinha } from './operations/resultados.ts'
+import {
+  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, faixaDoHorario, horaEmSP, noHorarioComercial, porcento, resultados, resumoDaLinha,
+} from './operations/resultados.ts'
 import type { CrmLead } from './operations/types.ts'
 
 const AGORA = Date.parse('2026-10-08T12:00:00Z')
@@ -58,5 +60,48 @@ describe('resultados do funil', () => {
     assert.equal(resumoDaLinha({ chave: 'x', enviados: 10, viram: 0, responderam: 2, interesse: 2, recusaram: 0, fecharam: 0 }),
       '2 responderam (20%) · 0 viram · 2 quiseram ver · 0 recusaram · 0 fecharam')
     assert.equal(amostraPequena({ chave: 'x', enviados: 9, viram: 0, responderam: 0, interesse: 0, recusaram: 0, fecharam: 0 }), true)
+  })
+})
+
+describe('horário do envio', () => {
+  const em = (iso: string) => Date.parse(iso)
+
+  it('hora e dia em São Paulo, qualquer que seja o fuso da máquina', () => {
+    assert.deepEqual(horaEmSP(em('2026-10-08T12:00:00Z')), { hora: 9, diaDaSemana: 4 })
+    assert.deepEqual(horaEmSP(em('2026-10-09T03:00:00Z')), { hora: 0, diaDaSemana: 5 })
+  })
+
+  it('expediente: seg–sex 8h–18h, sábado 8h–12h, domingo nunca', () => {
+    assert.equal(noHorarioComercial(em('2026-10-08T11:00:00Z')), true, 'quinta 8h')
+    assert.equal(noHorarioComercial(em('2026-10-08T21:00:00Z')), false, 'quinta 18h')
+    assert.equal(noHorarioComercial(em('2026-10-10T14:00:00Z')), true, 'sábado 11h')
+    assert.equal(noHorarioComercial(em('2026-10-10T16:00:00Z')), false, 'sábado 13h')
+    assert.equal(noHorarioComercial(em('2026-10-11T13:00:00Z')), false, 'domingo 10h')
+  })
+
+  it('faixas na ordem do dia, e o placar por horário segue essa ordem', () => {
+    assert.equal(faixaDoHorario(em('2026-10-08T12:00:00Z')), 'Manhã (8h–12h)')
+    assert.equal(faixaDoHorario(em('2026-10-08T22:00:00Z')), 'Noite (18h–21h)')
+    assert.equal(faixaDoHorario(em('2026-10-09T03:00:00Z')), 'Madrugada (21h–8h)')
+    const leads = [
+      lead('noite', { marcos: { enviado: '2026-10-07T22:00:00Z' } }),
+      lead('noite2', { marcos: { enviado: '2026-10-07T23:00:00Z' } }),
+      lead('manha', { marcos: { enviado: '2026-10-07T12:00:00Z' } }),
+    ]
+    assert.deepEqual(resultados(leads, 'horario', 'tudo', AGORA).linhas.map(l => l.chave), ['Manhã (8h–12h)', 'Noite (18h–21h)'])
+  })
+
+  it('aviso só fora do expediente, com a taxa medida dentro e fora; com pouca amostra, sem número', () => {
+    const dentro = Array.from({ length: 12 }, (_, i) => lead(`d${i}`, {
+      marcos: { enviado: '2026-10-07T13:00:00Z', ...(i < 3 ? { respondeu: '2026-10-07T15:00:00Z' } : {}) },
+    }))
+    const fora = Array.from({ length: 10 }, (_, i) => lead(`f${i}`, { marcos: { enviado: '2026-10-06T22:30:00Z' } }))
+    const madrugada = em('2026-10-08T04:10:00Z')
+    assert.equal(avisoDeHorario([...dentro, ...fora], em('2026-10-08T13:00:00Z')), null)
+    const aviso = avisoDeHorario([...dentro, ...fora], madrugada) ?? ''
+    assert.match(aviso, /Fora dele, 10 envios tiveram 0 respostas \(0%\); dentro, 25% responderam\.$/)
+    const pouco = avisoDeHorario([...dentro, ...fora.slice(0, 4)], madrugada) ?? ''
+    assert.match(pouco, /costuma ficar sem resposta\.$/)
+    assert.doesNotMatch(pouco, /%/)
   })
 })

@@ -13,6 +13,7 @@ const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: 
   { id: 'nicho', titulo: 'Por nicho', explicacao: 'Quem responde e quem fecha em cada busca.', soSite: false },
   { id: 'mensagem', titulo: 'Por mensagem', explicacao: 'A variação da primeira mensagem que o lead recebeu (desde 07/10).', soSite: true },
   { id: 'site', titulo: 'Por versão do site', explicacao: 'Padrão ou personalizado, e qual versão do modo personalizado (desde 07/10).', soSite: true },
+  { id: 'horario', titulo: 'Por horário do envio', explicacao: 'Hora de São Paulo em que a primeira mensagem saiu: quem recebe responde no expediente.', soSite: false },
 ]
 
 const temSite = computed(() => props.leads.some(l => l.produto === 'site'))
