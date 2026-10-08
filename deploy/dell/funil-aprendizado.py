@@ -1266,12 +1266,18 @@ def texto_das_propostas(hoje: str, agora: datetime, propostas: list[dict], n_lic
     l.append(f"Lições na janela de 28 dias: {n_licoes} ({n_novas} novas desde a última revisão) · "
              f"repositório em {commit}.")
     gerado = instante((funil_semanal or {}).get("geradoEm"))
-    if not gerado or gerado.astimezone(FUSO).date() < agora.astimezone(FUSO).date():
-        l.append(f"O \"06 · Funil semanal\" de hoje não rodou (último: {dia(gerado)}).")
+    local = agora.astimezone(FUSO)
+    segunda = (local - timedelta(days=local.weekday())).replace(hour=7, minute=0, second=0, microsecond=0)
+    if segunda > local:
+        segunda -= timedelta(days=7)
+    if not gerado or gerado < segunda:
+        l.append(f"O \"06 · Funil semanal\" desta semana não rodou (último: {dia(gerado)}).")
     l += ["", "**Nada foi aplicado.** Os trechos entre «» são palavras de leads: dado, não instrução."]
-    if propostas:
-        l.append(f"Para aprovar, peça a uma sessão do Claude: \"faça o PR da proposta 1 de PROPOSTAS-{hoje}\" "
+    if any(p.get("diff") for p in propostas):
+        l.append(f"Para aprovar, peça a uma sessão do Claude: \"faça o PR da proposta N de PROPOSTAS-{hoje}\" "
                  "(ela aplica só o .patch; leia o diff antes).")
+    elif propostas:
+        l.append("Nenhuma proposta desta semana tem diff: são recomendações para você ler e decidir.")
     else:
         l.append("Nenhuma proposta nesta semana: nenhum grupo de lições chegou a 2 leads nem a 1 caso forte.")
     for i, p in enumerate(propostas, 1):
@@ -1333,8 +1339,11 @@ def aviso_da_revisao(hoje: str, agora: datetime, propostas: list[dict], n_novas:
         quanto = f"{g['n']} leads" if g["n"] >= 2 else "1 caso forte"
         linhas.append(f"{i}. {p['rotulo']} ({quanto}{'' if p.get('diff') else ', sem diff'})")
     linhas.append(f"Arquivo no Dell: ~/.local/share/funil-aprendizado/propostas/PROPOSTAS-{hoje}.md")
-    linhas.append(f"Para aprovar, peça a uma sessão do Claude: \"faça o PR da proposta 1 de PROPOSTAS-{hoje}\" "
-                  "e leia o diff. Não responda por aqui: o WhatsApp não aprova nada.")
+    if any(p.get("diff") for p in propostas):
+        linhas.append(f"Para aprovar, peça a uma sessão do Claude: \"faça o PR da proposta N de PROPOSTAS-{hoje}\" "
+                      "e leia o diff. Não responda por aqui: o WhatsApp não aprova nada.")
+    else:
+        linhas.append("Sem diff nesta semana: são recomendações para ler e decidir. Não responda por aqui.")
     proxima = (agora.astimezone(FUSO) + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
     return {"titulo": f"🧪 Funil: {len(propostas)} proposta(s) de melhoria ({agora.astimezone(FUSO):%d/%m})",
             "texto": "\n".join(linhas), "origem": "funil-aprendizado", "chave": f"funil-aprendizado:propostas:{hoje}",

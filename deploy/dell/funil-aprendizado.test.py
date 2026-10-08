@@ -619,6 +619,7 @@ class Revisao(Base):
         self.assertEqual((aviso["origem"], aviso["prioridade"], aviso["chave"]),
                          ("funil-aprendizado", 3, "funil-aprendizado:propostas:2026-10-08"))
         self.assertIn("1. Triagem do gerador (qualificação) (2 leads)", aviso["texto"])
+        self.assertIn("faça o PR da proposta N de PROPOSTAS-2026-10-08", aviso["texto"])
         self.assertNotIn("resolvemos", aviso["texto"])  # nada de texto de lead no aviso
         self.assertNotIn("R$", json.dumps(aviso, ensure_ascii=False))
         self.assertIn("<<<ARQUIVO deploy/dell/auto-site/auto-site-CLAUDE.md>>>", duble.chamadas[0][1])
@@ -654,8 +655,21 @@ class Revisao(Base):
         self.assertIn("1 caso forte (confiança alta + palavras do lead: \"já temos uma agência\")", md)
         self.assertIn("Sem diff: recomendação ao Rômulo", md)
         self.assertEqual(duble.chamadas, [])
+        self.assertIn("são recomendações para você ler e decidir", md)
+        self.assertNotIn("faça o PR", md)
         [aviso] = self.avisos()
         self.assertIn("Recomendação ao Rômulo (1 caso forte, sem diff)", aviso["texto"])
+        self.assertNotIn("faça o PR", aviso["texto"])
+
+    def test_funil_semanal_desta_semana(self):
+        self.gravar(licao_pronta("ChIJdddddddddd01"))
+        quinta = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
+        (self.c.n8n / "site-funil.json").write_text(json.dumps({"geradoEm": "2026-10-05T11:00:47Z"}))
+        self.revisar(Duble(), agora=quinta)
+        self.assertNotIn("não rodou", self.propostas_md(quinta))
+        (self.c.n8n / "site-funil.json").write_text(json.dumps({"geradoEm": "2026-09-28T11:00:47Z"}))
+        self.revisar(Duble(), agora=quinta, refazer=True)
+        self.assertIn("\"06 · Funil semanal\" desta semana não rodou (último: 28/09/2026)", self.propostas_md(quinta))
 
     def test_forte_sem_palavras_do_lead_nao_basta(self):
         l = licao_pronta("ChIJdddddddddd01", confianca="alta", trecho="Obrigado pelo contato, mas não agora")
@@ -771,6 +785,14 @@ class Diffs(unittest.TestCase):
         self.assertIn("esperando vaga", motivo)
         if shutil.which("node"):
             self.assertIsNone(fa.conferir_variante_no_node(js_c, 2, "Olá {NOME}, it's me"))
+
+    @unittest.skipUnless(shutil.which("node"), "sem node")
+    def test_variante_no_site_mensagem_js_de_verdade(self):
+        real = (AQUI / "claude-ops" / "site-mensagem.js").read_text(encoding="utf-8")
+        texto = "Oi, tudo bem? Sou o Rômulo, de Vitória. Fiz uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso mandar?"
+        novo, letra, motivo = fa.inserir_variante(real, texto, AGORA, 2)
+        self.assertIsNotNone(novo, motivo)
+        self.assertIsNone(fa.conferir_variante_no_node(novo, "ABC".index(letra), texto))
 
     def test_validar_variante(self):
         self.assertEqual(fa.validar_variante("Oi {ARTIGO} {NOME}{DETALHE}, posso mandar?"), [])
