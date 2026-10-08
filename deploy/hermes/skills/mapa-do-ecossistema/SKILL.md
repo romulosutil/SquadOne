@@ -121,7 +121,6 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 | Fluxo | Gatilho | Papel |
 |---|---|---|
 | 00 · Avisar falha pelo Hermes | erro de qualquer fluxo | o Error Workflow único: falha vira aviso na fila |
-| PRUMO — Lead Scout (review-first) | 09h | rodízio segmento × cidade no Places, até 60 resultados por execução |
 | PRUMO — Clique em Enviar convite | webhook `convite` | marca a Etapa e abre o WhatsApp |
 | PRUMO — Diagnóstico do dono | a cada 1 h | fecha o Índice PRUMO e avisa por você |
 | 01 · Caçador | 06h | grava leads e pacotes para o gerador |
@@ -131,7 +130,11 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 | WhatsApp — conversa com lead | webhook | o observador chama quando um lead responde; marca sozinho |
 | Radar PNCP — coleta diária | 07:30 | só dispara a coleta; não espera o PNCP |
 
-`PRUMO — Preparar planilha` fica desligado de propósito (manual).
+`PRUMO — Preparar planilha` fica desligado de propósito (manual). `PRUMO — Lead
+Scout (review-first)` também, desde 08/10/2026: o convite frio a distribuidoras
+deu 57 convites, 21 respostas de robô e nenhum dono interessado, e o Organizado
+agora chega só pela CDL. O fluxo continua no n8n, inativo; os scripts
+`claude-ops/prumo-*.py` não o religam (`n8n.DESLIGADOS`). Não sugira religar.
 
 Links rastreados (`wa_link` do Site antes da venda, "Enviar convite" do
 PRUMO) passam pelo webhook do n8n: o clique marca o envio e abre o WhatsApp.
@@ -145,8 +148,13 @@ Follow-up e vencimento dos leads (desde 29/09/2026): o fluxo "05 · Acompanhamen
 `expirado` no 10º; vale para leads enviados a partir de 29/09. A resposta do
 lead preenche `respondeu_em` (mensagem 5 min ou mais depois do envio; antes
 disso é saudação automática do WhatsApp Business) e a pasta vai para
-`_em-conversa`. Toda segunda às 08h, "06 · Funil" manda o funil por nicho;
-não muda a aba Buscas sozinho.
+`_em-conversa`. Toda segunda às 08h, "06 · Funil" manda o funil por nicho e
+pausa sozinho na aba Buscas (`ativa` FALSE, com `pausada_em` e `pausa_motivo`):
+a busca (segmento × cidade) e o nicho inteiro com 20+ enviados sem sinal de
+compra (interesse, pedido de preço, proposta ou ganho; negativa e robô não
+contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois
+de 3 dias. O aviso diz quais nichos pararam e por quê; o gerador pula os leads
+novos do que pausou. Religar é o Rômulo pôr TRUE em `ativa`.
 
 Syncthing no Dell (sem aparelho pareado desde 04/10/2026, nenhuma pasta tem com quem sincronizar):
 
@@ -228,7 +236,7 @@ Para responder sobre agenda sem abrir código:
 4. **Saúde do Dell:** `dell-status` a cada minuto → `status.json` → Central
    `:9120`; se quebrou ou voltou → `hermes send` → WhatsApp. `status.json`
    com mais de 5 min: o próprio monitor parou.
-5. **PRUMO:** Lead Scout 09h → Places e planilha → clique em Enviar convite →
+5. **PRUMO:** prospect da CDL na planilha (o Lead Scout está desligado) → clique em Enviar convite →
    convite no WhatsApp → observador lê a resposta → Etapa avança na planilha.
    Pendências em `pend:prumo-*` do `status.json`.
 6. **Site antes da venda:** Caçador 06h → `auto-entrada` → `gerador-de-sites`

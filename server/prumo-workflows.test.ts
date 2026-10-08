@@ -68,6 +68,8 @@ const response = (companyRef: string, role: string, timestamp: string) => ({
 
 test('Lead Scout cria company_id e prepara convite somente após aceite', async () => {
   const workflow = await load('prumo-lead-scout.json')
+  // Desligado no n8n desde 08/10/2026 (convite frio sem retorno); o export acompanha.
+  assert.equal(workflow.active, false)
   const manualTrigger = findNode(workflow, 'Executar manualmente')
   const dailyTrigger = findNode(workflow, 'Agenda diária — 9h')
   const acceptanceTrigger = findNode(workflow, 'Sincronizar aceites — 5 min')

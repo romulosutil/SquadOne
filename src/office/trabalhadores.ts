@@ -46,15 +46,8 @@ export const TRABALHADORES: readonly TrabalhadorAutomatico[] = [
     quando: "06:00",
     verificacao: "fluxo:oow8TkxrAf4fVvTj",
   },
-  {
-    id: "lead-scout",
-    nome: "Lead Scout",
-    sala: "prumo--prospeccao",
-    faz: "rodízio de buscas no Places; o CNPJ descarta MEI, micro e redes; o resto vira linha em Prospects",
-    onde: "n8n, no Dell",
-    quando: "09:00",
-    verificacao: "fluxo:e02c6f43-17ce-430b-9238-0b997a7656ce",
-  },
+  // O Lead Scout do PRUMO (convite frio a distribuidoras) foi desligado no n8n em 08/10/2026:
+  // 57 convites, 21 respostas de robô, nenhum dono interessado. O Organizado chega pela CDL.
   {
     id: "gerador",
     nome: "Gerador",

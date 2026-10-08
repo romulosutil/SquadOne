@@ -168,7 +168,7 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
 | Sala (id) | Quem trabalha | Automáticos (catálogo) |
 |---|---|---|
 | Atendimento e proposta (`prumo--geral`, sala raiz) | todo contato com lead e dono: convite, abordagem com o site, follow-up, conversa, proposta, fechamento; e o do PRUMO sem outra sala | Balcão |
-| Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador, Lead Scout |
+| Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador (o Lead Scout foi desligado em 08/10/2026) |
 | Site antes da venda (`prumo--site-antes-da-venda`) | fazer, publicar, ajustar e pausar os sites (demo e de quem fechou) | gerador |
 | Organizar (`prumo--organizar`) | a consultoria: diagnóstico, Índice PRUMO, Mapa, entrevistas, recomendação, workshop | Diagnóstico, rascunho do Mapa (`prumo-mapa`) |
 
@@ -663,7 +663,10 @@ de revisão" tem uma aba de trabalho, **Prospects**, com uma coluna **Etapa**:
 Revisar → Convite enviado → Diagnóstico pronto → Concluído | Sem interesse.
 "Descartados" (só para não reavaliar) e a antiga "Leads" ficam ocultas.
 
-- **Lead Scout** (9h, rodízio de 80 buscas segmento × cidade): Google Places →
+- **Lead Scout** (desligado no n8n desde 08/10/2026: 57 convites frios a
+  distribuidoras, 21 respostas de robô, nenhum dono interessado; o Organizado
+  chega pela CDL e `n8n.DESLIGADOS` impede os `prumo-*.py` de religá-lo. Era:
+  9h, rodízio de 80 buscas segmento × cidade): Google Places →
   WhatsApp publicado no site → nota → Prospects (com o link "Enviar convite ↗")
   ou Descartados; cadastro repetido (mesmo WhatsApp) é descartado. Resumo da
   busca pelo Hermes.

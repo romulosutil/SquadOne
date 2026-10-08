@@ -675,6 +675,30 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   leads, sites, enviados, responderam, em conversa, recusados e concluídos.
   Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira
   pendência).
+- **Nicho sem sinal de compra é pausado** (08/10/2026, decisão do Rômulo:
+  "parar qualquer coisa que seja ruim de lead"). A regra mora em
+  `claude-ops/site-funil-regra.js` (funções puras, coladas no nó Funil) e vale
+  para a busca (segmento × cidade) e para o **nicho inteiro** (a coluna
+  `vertical` da aba Buscas, somando as cidades): 20+ enviados e nenhum sinal
+  de compra pausa. Sinal de compra = resposta `interesse` (o classificador já
+  põe "quanto custa?" ali), pedido de preço no `resposta_trecho` de resposta que
+  não é negativa nem robô, proposta aberta na aba CRM ou `status` `fechado`.
+  Negativa, exclusão, robô e neutra **não** são sinal: pousada chegou a 35
+  enviados, 8 respostas (6 negativas, 2 neutras) e nenhum interesse, e a regra
+  do silêncio não a pegava por causa das neutras. Nicho sem sinal pausa as
+  buscas ligadas dele, inclusive as que ainda não enviaram, e os leads `novo`
+  dele vão para `nao_gerar` mesmo sem busca dona. Uma busca do nicho religada
+  (TRUE em `ativa` com `pausada_em`) religa o nicho: as buscas novas dele não
+  caem na regra do nicho. Envio só conta para qualquer pausa depois de 3 dias
+  (o follow-up): em 08/10 os 13 envios de advocacia eram do mesmo dia, e o
+  silêncio pausaria "advogado" em Brasília com 5 mensagens de poucas horas.
+  Sinal de compra conta na hora. Sem a aba CRM lida, a regra do sinal fica
+  parada na semana e o aviso diz. O aviso de segunda lista os nichos sem sinal
+  ("pausado agora", "já estava pausado", "religado por você") com o porquê, e
+  o `site-funil.json` ganha `segmentos` (enviados, sinais, tipos de resposta).
+  Simular com as abas reais, sem gravar: `python3 site-acompanhamento.py
+  --simular`. Em 08/10/2026 a simulação deu só pousada (33 enviados maduros, 4
+  negativas, 2 neutras, 0 sinal), já pausada à mão na migração.
 - **Busca que não paga o site é pausada** (desde 05/10/2026; antes o funil só
   a listava como candidata e o Caçador seguia rodando): ativa, 5+ enviados e
   nenhuma resposta humana (`respondeu_em` a 5 min ou mais do envio, ou pasta
@@ -743,6 +767,13 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   `python3 site-cacador-site-no-ar.py --testar` (HTTP de mentira, mais o
   `node --check` do código) rodam só o código dos nós no node, sem n8n nem
   planilha.
+
+**Lead Scout desligado** (08/10/2026): o convite frio a distribuidoras deu 57
+convites, 21 respostas de robô e nenhum dono interessado; o Organizado chega
+pela CDL. O fluxo `e02c6f43-…` fica no n8n, inativo, e `n8n.DESLIGADOS`
+(`claude-ops/n8n.py`) faz o `POST /activate` dos `prumo-*.py` e do
+`fecha-ciclos.py` virar um aviso em vez de religá-lo. Religar: tirar o id de
+lá (PR), instalar e ativar no n8n.
 
 Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
@@ -1104,7 +1135,8 @@ de reserva do runner faz o mesmo).
 Também desde 05/10/2026 **lead de busca pausada não é gerado**: o "06 · Funil
 semanal" lista em `nao_gerar` (`~/.local/share/n8n-estado/site-funil.json`) os
 leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
-Rômulo; ver "Depois do envio"). O gerador os deixa na raiz, fora da fila
+Rômulo; ver "Depois do envio") e, desde 08/10/2026, os `novo` de nicho sem
+sinal de compra que nenhuma busca ligada reclama. O gerador os deixa na raiz, fora da fila
 (`--listar` mostra o motivo); religar a busca os devolve na segunda seguinte.
 Sem o arquivo, ou ilegível, a fila é a de sempre.
 

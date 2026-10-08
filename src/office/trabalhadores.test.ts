@@ -14,7 +14,6 @@ describe("catálogo dos trabalhadores automáticos", () => {
     const salaDe = Object.fromEntries(TRABALHADORES.map((t) => [t.nome, t.sala]));
     assert.deepEqual(salaDe, {
       Caçador: "prumo--prospeccao",
-      "Lead Scout": "prumo--prospeccao",
       Gerador: "prumo--site-antes-da-venda",
       Balcão: "prumo--geral",
       Diagnóstico: "prumo--organizar",
@@ -44,7 +43,8 @@ describe("catálogo dos trabalhadores automáticos", () => {
   });
 
   it("trabalhadoresDaSala filtra pelo id; sala sem ninguém ou desconhecida = lista vazia", () => {
-    assert.deepEqual(trabalhadoresDaSala("prumo--prospeccao").map((t) => t.nome), ["Caçador", "Lead Scout"]);
+    // O Lead Scout saiu em 08/10/2026 (desligado no n8n): fluxo inativo não aparece como trabalhador.
+    assert.deepEqual(trabalhadoresDaSala("prumo--prospeccao").map((t) => t.nome), ["Caçador"]);
     assert.deepEqual(trabalhadoresDaSala("prumo--organizar").map((t) => t.nome), ["Diagnóstico", "Rascunho do Mapa"]);
     assert.deepEqual(trabalhadoresDaSala("geral"), []);
     assert.deepEqual(trabalhadoresDaSala("nao-existe"), []);
