@@ -894,8 +894,16 @@ entrada/saída), dias na etapa e desde o último evento, **divergência**
 (planilha e pasta discordam depois de 2 h de folga: nota na ficha, nunca
 correção).
 
-**As três vistas** (celular primeiro; `?ver=funil`, `?produto=site|prumo`,
-`?lead=site:<place_id>`):
+**As vistas** (celular primeiro; `?ver=funil`, `?ver=resultados`,
+`?produto=site|prumo`, `?lead=site:<place_id>`):
+
+- **Resultados** (desde 08/10/2026): quem foi **enviado** no período (14 dias,
+  30 dias, tudo; pela data de envio) e o que rendeu, por nicho, pela variação
+  da primeira mensagem (`mensagem_variante`) e pela versão do site
+  (`site_versao`): respondeu (gente; robô não conta), viu (só com confirmação
+  de leitura), quis ver, recusou, fechou. Recusa só entre enviados (o acervo
+  de `_recusados/` não recebeu mensagem rastreada); menos de 10 enviados leva
+  o aviso "amostra pequena". Envios até 07/10 ficam em "Sem registro";
 
 - **Hoje** (padrão): próximos passos vencendo, follow-ups, respostas para
   responder, prospects para revisar, propostas esperando e sites prontos para
