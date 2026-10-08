@@ -37,6 +37,10 @@ pasta; recibo de dentro de `_descartados/` não vira "pronto", e uma cópia anti
 descartada não derruba o lead que tem recibo vivo. Reabrir um descartado é voltar a
 pasta para a raiz e pôr "novo" na planilha.
 
+Também em 08/10/2026: `site_versao` reconhece o modo personalizado pelo DOSSIE.md (só a
+etapa A dele o cria) quando falta o personalizado.json — os refeitos de 07/10 à tarde (v1)
+não têm a marca, que veio depois, e 11 deles saíam "padrão". A marca, quando existe, vence.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante e site_versao)
@@ -271,20 +275,26 @@ def balcao(erro):
         {"id": "marca-json", "name": "Ler o JSON da marca", "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1.1,
          "position": [880, 0], "alwaysOutputData": True, "onError": "continueRegularOutput",
          "parameters": {"operation": "fromJson", "destinationKey": "marca"}},
+        # Dossiês (08/10/2026): o DOSSIE.md só nasce no modo personalizado (etapa A). Os leads
+        # refeitos em 07/10 à tarde (v1) não têm personalizado.json, que veio depois: sem esta
+        # leitura, 11 deles saíam "padrão". Só o diretório importa; nenhum dossiê não para o Balcão.
+        {"id": "dossies", "name": "Ler dossiês do modo personalizado", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [1100, 0], "executeOnce": True, "alwaysOutputData": True,
+         "parameters": {"operation": "read", "fileSelector": "/home/node/.n8n-files/auto/**/DOSSIE.md", "options": {}}},
         # Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
         # gravou DESCARTAR.md, mas não escreve na planilha, e o lead ficava "novo" para sempre (14 em
         # 08/10). O place_id vem do content.md. Uma leitura só; nenhum descarte não para o Balcão.
         {"id": "descartes", "name": "Ler descartes do gerador", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-         "position": [1100, 0], "executeOnce": True, "alwaysOutputData": True,
+         "position": [1320, 0], "executeOnce": True, "alwaysOutputData": True,
          "parameters": {"operation": "read", "fileSelector": "/home/node/.n8n-files/auto/_descartados/*/content.md", "options": {}}},
         {"id": "descarte-texto", "name": "Ler o texto do descarte", "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1.1,
-         "position": [1320, 0], "alwaysOutputData": True, "onError": "continueRegularOutput",
+         "position": [1540, 0], "alwaysOutputData": True, "onError": "continueRegularOutput",
          "parameters": {"operation": "text", "destinationKey": "conteudo"}},
-        {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1540, 0],
+        {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1760, 0],
          "parameters": ler_planilha, "credentials": SHEETS, "executeOnce": True, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000},
-        {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1760, 0],
+        {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1980, 0],
          "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": codigo_js("site-mensagem.js", "balcao-cruzar.js")}},
-        {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1980, 0],
+        {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [2200, 0],
          "parameters": {**{k: v for k, v in ler_planilha.items() if k != "operation"}, "operation": "update",
                         "columns": {"mappingMode": "autoMapInputData", "matchingColumns": ["place_id"], "value": {}, "schema": colunas},
                         "options": {"cellFormat": "RAW", "handlingExtraData": "insertInNewColumn"}},
@@ -294,14 +304,14 @@ def balcao(erro):
     con = {a: {"main": [[{"node": b, "type": "main", "index": 0}]]} for a, b in zip(ordem, ordem[1:])}
     nos += [
         {"id": "pendencias", "name": "Pendências da esteira", "type": "n8n-nodes-base.code", "typeVersion": 2,
-         "position": [1760, 220], "parameters": {"mode": "runOnceForAllItems", "jsCode": pendencias}},
+         "position": [1980, 220], "parameters": {"mode": "runOnceForAllItems", "jsCode": pendencias}},
         {"id": "gravar-pendencias", "name": "Gravar pendências", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-         "position": [1980, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
+         "position": [2200, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
                                                  "fileName": "/home/node/.n8n-files/estado/site-antes-da-venda.json"}},
         {"id": "pastas", "name": "Pastas a mover", "type": "n8n-nodes-base.code", "typeVersion": 2,
-         "position": [1760, 440], "parameters": {"mode": "runOnceForAllItems", "jsCode": pastas}},
+         "position": [1980, 440], "parameters": {"mode": "runOnceForAllItems", "jsCode": pastas}},
         {"id": "gravar-pastas", "name": "Gravar pastas a mover", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-         "position": [1980, 440], "parameters": {"operation": "write", "dataPropertyName": "data",
+         "position": [2200, 440], "parameters": {"operation": "write", "dataPropertyName": "data",
                                                  "fileName": "/home/node/.n8n-files/estado/site-pastas.json"}},
     ]
     con["Ler a planilha"]["main"][0].append({"node": "Pendências da esteira", "type": "main", "index": 0})
@@ -423,10 +433,16 @@ def testar() -> int:
         linha("pid-z", "novo"),
     ]
 
-    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES):
+    # Pastas com DOSSIE.md: casa-f sem marca (v1 por inferência); padaria-a com a marca v2, que vence.
+    DOSSIES = ["casa-f", "padaria-a", "padaria-a/_v1"]
+
+    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES, dossies=DOSSIES):
         nos = {**nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos),
                **nos_de_arquivos("Ler marcas do modo personalizado", "Ler o JSON da marca", "marca", marcas),
-               **nos_de_arquivos("Ler descartes do gerador", "Ler o texto do descarte", "conteudo", descartes)}
+               **nos_de_arquivos("Ler descartes do gerador", "Ler o texto do descarte", "conteudo", descartes),
+               # Só o readWriteFile (o diretório basta); sem dossiê, o n8n entrega um item sem binário.
+               "Ler dossiês do modo personalizado": [{"json": {}, "binary": {"data": {"directory": AUTO_NO_N8N + p}}} for p in dossies]
+               or [{"json": {}}]}
         codigo = codigo_js("site-mensagem.js", "balcao-cruzar.js")
         for de, para in (troca or {}).items():
             codigo = codigo.replace(de, para)
@@ -473,6 +489,12 @@ def testar() -> int:
             # O n8n entrega um item vazio (alwaysOutputData) e a extração dele falha: tudo é padrão.
             por = cruzar(marcas=[("", None)])
             self.assertEqual(por["pid-a"][0]["site_versao"], "padrão")
+
+        def test_dossie_sem_marca_e_personalizado_v1_e_a_marca_vence(self):
+            por = cruzar()
+            self.assertEqual(por["pid-f"][0]["site_versao"], "personalizado-v1")
+            self.assertEqual(por["pid-a"][0]["site_versao"], "personalizado-v2")
+            self.assertEqual(cruzar(dossies=[])["pid-f"][0]["site_versao"], "padrão")
 
         def test_descarte_do_gerador_vira_descartado_so_quando_novo(self):
             por = cruzar()
@@ -553,11 +575,15 @@ def testar_n8n() -> int:
         if pid:
             recibos[pid] = rel
     personalizado = next((pid for pid, rel in recibos.items() if (auto / rel / "personalizado.json").is_file()), None)
-    padrao = next((pid for pid, rel in recibos.items() if not (auto / rel / "personalizado.json").is_file()), None)
+    # "Padrão" de verdade não tem dossiê; e um refeito em 07/10 (dossiê sem marca) tem de sair v1.
+    padrao = next((pid for pid, rel in recibos.items()
+                   if not (auto / rel / "personalizado.json").is_file() and not (auto / rel / "DOSSIE.md").is_file()), None)
     if not personalizado or not padrao:
-        print("faltam leads para o teste (um com personalizado.json e um sem)")
+        print("faltam leads para o teste (um com personalizado.json e um sem marca nem dossiê)")
         return 1
     versao = json.loads((auto / recibos[personalizado] / "personalizado.json").read_text(encoding="utf-8"))["versao"]
+    com_dossie = next((pid for pid, rel in recibos.items()
+                       if (auto / rel / "DOSSIE.md").is_file() and not (auto / rel / "personalizado.json").is_file()), None)
     # Um descarte real do gerador (pasta em _descartados/ com o place_id no content.md e sem recibo vivo).
     descartado = None
     for c in sorted(auto.glob("_descartados/*/content.md")):
@@ -571,6 +597,9 @@ def testar_n8n() -> int:
               "site_url": "https://x.vercel.app", "site_versao": "", "mensagem_variante": "manual"}]
     if descartado:
         falsa.append({"place_id": descartado, "nome": "Teste descartado", "telefone": "", "status": "novo", "site_url": ""})
+    if com_dossie:
+        falsa.append({"place_id": com_dossie, "nome": "Teste dossiê", "telefone": "+55 27 99988-7711", "status": "pronto",
+                      "site_url": "", "wa_me": "", "wa_link": "", "briefing": "", "site_versao": "", "mensagem_variante": ""})
     caminho = f"zz-teste-balcao-{int(time.time())}"
     wf = balcao(None)
     nos = []
@@ -616,9 +645,13 @@ def testar_n8n() -> int:
             ("enviado padrão: só a versão", b == [{"place_id": padrao, "site_versao": "padrão"}]),
             ("descartes lidos uma vez", len(rd["Ler descartes do gerador"]) == 1),
         ]
+        checagens.append(("dossiês lidos uma vez", len(rd["Ler dossiês do modo personalizado"]) == 1))
         if descartado:
             checagens.append(("descarte do gerador: novo vira descartado",
                               por.get(descartado, []) == [{"place_id": descartado, "status": "descartado"}]))
+        if com_dossie:
+            d = por.get(com_dossie, [])
+            checagens.append(("dossiê sem marca: personalizado-v1", bool(d) and d[0].get("site_versao") == "personalizado-v1"))
         ok = True
         for nome, certo in checagens:
             ok &= certo

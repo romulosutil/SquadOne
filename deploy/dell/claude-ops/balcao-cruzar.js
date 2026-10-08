@@ -29,7 +29,13 @@ $('Ler o JSON da marca').all().forEach((m, i) => {
   const dir = pastaDe(arquivosDasMarcas, m, i);
   if (dir && !ehCopia(dir) && Number.isInteger(v) && v > 0) versaoNaPasta[dir] = v;
 });
-const versaoDoSite = (dir) => (versaoNaPasta[dir] ? 'personalizado-v' + versaoNaPasta[dir] : 'padrão');
+// 08/10/2026: o DOSSIE.md só nasce no modo personalizado (etapa A do gerador). Os leads refeitos
+// em 07/10 à tarde (v1) não têm personalizado.json, que veio depois, e saíam "padrão": quem tem
+// dossiê e não tem marca é ao menos v1. A marca, quando existe, vence.
+const comDossie = new Set($('Ler dossiês do modo personalizado').all()
+  .map(d => String(d.binary?.data?.directory ?? '')).filter(dir => dir && !ehCopia(dir)));
+const versaoDoSite = (dir) => (versaoNaPasta[dir] ? 'personalizado-v' + versaoNaPasta[dir]
+  : comDossie.has(dir) ? 'personalizado-v1' : 'padrão');
 
 const porPlaceId = {};
 for (const linha of linhas) {
