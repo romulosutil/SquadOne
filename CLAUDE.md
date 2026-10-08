@@ -44,6 +44,7 @@ e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
 `src/operations-fila-de-envio.test.ts` (marcas de envio no navegador, a fila por nicho, pular),
 `src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados),
+`src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, e nenhum R$ fora do cardápio),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
@@ -133,6 +134,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
                           avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora
+    colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026);
+                          colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha
+                          (CrmColinha, CrmTrecho, CrmMomento, CrmObjecao). Esteira importada de server/site-mensagem.ts; R$ só do cardápio
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/auth/google.ts      invólucro fino sobre /api/auth/*
