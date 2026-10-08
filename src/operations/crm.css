@@ -104,6 +104,34 @@
 .crm-ficha__links a:hover { background: var(--ok-fundo); color: var(--texto); }
 .crm-mais { margin-top: 0.75rem; padding: 0.45rem 0.9rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: 900; cursor: pointer; }
 
+/* Fila de envio (08/10/2026): o que esta tela já abriu no WhatsApp sai do caminho
+   até a planilha confirmar; a folha "Enviar um por um" mostra um site por vez. */
+.crm-grupo__fila { margin: 0 0 0.6rem; }
+.crm-item.is-aberto .crm-item__empresa { color: var(--texto-2); }
+.crm-item.is-aberto .crm-item__links a:first-child,
+.crm-fila__ver a:first-child { background: var(--superficie); color: var(--texto); }
+.crm-item__aberto { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--ok-fundo); font-size: 0.85rem; }
+.crm-item__aberto.is-conferir { background: var(--atencao-fundo); }
+.crm-fila { display: grid; gap: 0.85rem; }
+/* Uma linha só, com rolagem lateral: em três linhas os nichos empurravam o envio para fora da tela do celular. */
+.crm-fila__nichos { display: flex; gap: 0.4rem; margin: 0 -0.25rem; padding: 0.25rem 0.25rem 0.4rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }
+.crm-fila__nichos button { flex: none; scroll-snap-align: start; white-space: nowrap; min-height: 44px; padding: 0.4rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font: inherit; font-weight: 800; cursor: pointer; }
+.crm-fila__nichos button span { color: var(--texto-2); font-weight: 700; }
+.crm-fila__nichos button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); }
+.crm-fila__nichos button[aria-pressed="true"] span { color: inherit; }
+.crm-fila__progresso { margin: 0; color: var(--texto-2); font-size: 0.88rem; font-weight: 800; }
+.crm-fila__cartao { display: grid; gap: 0.75rem; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
+.crm-fila__cartao h3 { margin: 0; font-size: 1.35rem; letter-spacing: -0.02em; }
+.crm-fila__detalhe { margin: 0; color: var(--texto-2); font-size: 0.92rem; }
+.crm-fila__mensagem { margin: 0; }
+.crm-fila__mensagem figcaption { font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2); }
+.crm-fila__mensagem blockquote { margin: 0.35rem 0 0; padding: 0.75rem 0.9rem; border-left: 6px solid var(--destaque); background: var(--superficie-2); font-size: 0.98rem; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.crm-fila__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.crm-fila__enviar { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 48px; padding: 0.55rem 1.1rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-weight: 900; text-decoration: none; }
+.crm-fila__enviar:hover { filter: brightness(0.95); }
+.crm-fila__aberto { margin: 0; padding: 0.7rem 0.85rem; border: var(--linha); background: var(--ok-fundo); }
+@media (max-width: 30rem) { .crm-fila__acoes > * { flex: 1 1 100%; } }
+
 /* Funil */
 .crm-funil { display: grid; gap: 0.75rem; min-width: 0; }
 .crm-filtros { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }

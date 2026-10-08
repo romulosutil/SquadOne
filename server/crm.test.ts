@@ -6,12 +6,14 @@ import { afterEach, describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
 import {
   CrmStore,
+  MAX_MENSAGEM_PRONTA,
   RegistroFalhou,
   RegistroIndisponivel,
   RegistroInvalido,
   configDoCrm,
   montarCrm,
   dataNaProximaAcao,
+  textoDoWaMe,
   validarRegistro,
   validarRetrato,
   type CrmLead,
@@ -183,6 +185,22 @@ describe("CRM: etapas do Site antes da venda", () => {
     assert.equal(pronto.links.acoes, `${WEBHOOK}/lead?id=pronto`);
     assert.equal(lead(leads, "site:followup").links.enviar, undefined);
     assert.match(lead(leads, "site:fila").links.planilha ?? "", /&range=A\d+$/);
+  });
+
+  it("fila de envio: a mensagem do wa_me vai só para quem está pronto com link de envio", () => {
+    const { leads } = visao();
+    assert.equal(lead(leads, "site:pronto").mensagemPronta, "oi");
+    assert.equal(lead(leads, "site:pronto-sem-pasta").mensagemPronta, undefined); // sem wa_link nem wa_me
+    assert.equal(lead(leads, "site:followup").mensagemPronta, undefined); // já enviado: a conversa é outra
+  });
+
+  it("textoDoWaMe: só wa.me ou api.whatsapp.com, texto decodificado e cortado", () => {
+    assert.equal(textoDoWaMe("https://wa.me/5527999990000?text=Oi%2C%20tudo%20bem%3F%0AAqui%20%C3%A9%20o%20R%C3%B4mulo."), "Oi, tudo bem?\nAqui é o Rômulo.");
+    assert.equal(textoDoWaMe("https://api.whatsapp.com/send?phone=5527999990000&text=oi"), "oi");
+    assert.equal(textoDoWaMe("https://golpe.exemplo/?text=oi"), undefined);
+    assert.equal(textoDoWaMe("https://wa.me/5527999990000"), undefined);
+    assert.equal(textoDoWaMe("não é url"), undefined);
+    assert.equal(textoDoWaMe(`https://wa.me/1?text=${"a".repeat(MAX_MENSAGEM_PRONTA + 50)}`)?.length, MAX_MENSAGEM_PRONTA);
   });
 
   it("aponta divergência entre planilha e pasta sem corrigir nada", () => {

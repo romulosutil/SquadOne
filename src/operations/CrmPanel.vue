@@ -2,9 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Sheet from '../components/Sheet.vue'
 import CrmFicha from './CrmFicha.vue'
+import CrmFilaDeEnvio from './CrmFilaDeEnvio.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
+import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
 
@@ -23,6 +25,8 @@ const vista = ref<Vista>('hoje')
 const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
+const filaAberta = ref(false)
+const envios = ref<EnviosAbertos>({})
 const anuncio = ref('')
 let temporizador = 0
 let relogio = 0
@@ -42,12 +46,14 @@ function lerEndereco() {
   const p = q.get('produto')
   produto.value = p === 'site' || p === 'prumo' ? p : 'todos'
   leadId.value = q.get('lead')
+  filaAberta.value = vista.value === 'hoje' && q.get('fila') === 'envio'
 }
 
 function escreverEndereco(substituir = false) {
   const q = new URLSearchParams()
   if (vista.value !== 'hoje') q.set('ver', vista.value)
   if (produto.value !== 'todos') q.set('produto', produto.value)
+  if (filaAberta.value) q.set('fila', 'envio')
   if (leadId.value) q.set('lead', leadId.value)
   const busca = q.toString()
   const url = `/crm${busca ? `?${busca}` : ''}`
@@ -70,6 +76,11 @@ async function carregar(anunciar = false) {
     if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
     visao.value = corpo
     lidoEm.value = new Date()
+    // Só um retrato legível diz quem ainda está pronto; sem ele, as marcas ficam.
+    if (corpo.estado === 'ok') {
+      const prontos = new Set<string>((corpo.leads ?? []).filter((l: CrmLead) => l.sinal === 'pronto').map((l: CrmLead) => l.id))
+      guardarEnvios(podarEnvios(envios.value, prontos, Date.now()))
+    }
     if (anunciar) anuncio.value = `CRM atualizado: ${corpo.leads?.length ?? 0} leads.`
   } catch (motivo) {
     erro.value = motivo instanceof Error ? motivo.message : String(motivo)
@@ -81,12 +92,33 @@ async function carregar(anunciar = false) {
 
 const aoMudarVisibilidade = () => { if (document.visibilityState === 'visible') carregar() }
 
+// ------------------------------------------------------------------ envios abertos nesta tela (fila-de-envio.ts)
+
+function armazenamento(): Storage | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function guardarEnvios(novos: EnviosAbertos) {
+  envios.value = novos
+  gravarEnvios(armazenamento(), novos)
+}
+
+function marcarAberto(id: string) {
+  guardarEnvios(marcarEnvio(envios.value, id, Date.now()))
+  anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: aberto no WhatsApp.`
+}
+
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).
 function depoisDoRegistro() {
   atrasos.push(window.setTimeout(() => carregar(), 5000), window.setTimeout(() => carregar(), 15000))
 }
 
 onMounted(async () => {
+  envios.value = lerEnvios(armazenamento(), Date.now())
   lerEndereco()
   escreverEndereco(true)
   window.addEventListener('popstate', aoVoltarNoNavegador)
@@ -113,6 +145,7 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
   itens: g.itens.filter(i => produto.value === 'todos' || porId.value.get(i.leadId)?.produto === produto.value),
 })))
 const totalHoje = computed(() => hoje.value.reduce((soma, g) => soma + g.itens.length, 0))
+const prontosParaEnviar = computed(() => hoje.value.find(g => g.id === 'enviar')?.itens ?? [])
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
@@ -130,6 +163,19 @@ const textoDoRetrato = computed(() => {
 function trocarVista(nova: Vista) {
   vista.value = nova
   leadId.value = null
+  filaAberta.value = false
+  escreverEndereco()
+}
+
+// "Enviar um por um" abre numa folha, como a ficha; ?fila=envio faz o "voltar"
+// do celular fechar a folha, e a ficha aberta de dentro dela empilha por cima.
+function abrirFila() {
+  filaAberta.value = true
+  escreverEndereco()
+}
+
+function fecharFila() {
+  filaAberta.value = false
   escreverEndereco()
 }
 
@@ -213,8 +259,14 @@ function fecharFicha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" @abrir="abrirFicha" />
+      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" />
       <CrmFunil v-else :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" @abrir="abrirFicha" @produto="trocarProduto" />
+
+      <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
+        <div class="crm-na-folha">
+          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" @enviado="marcarAberto" @abrir="abrirFicha" />
+        </div>
+      </Sheet>
 
       <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div class="crm-na-folha">

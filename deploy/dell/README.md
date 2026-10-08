@@ -900,7 +900,13 @@ correção).
 - **Hoje** (padrão): próximos passos vencendo, follow-ups, respostas para
   responder, prospects para revisar, propostas esperando e sites prontos para
   enviar, cada linha com a ação e o link que a resolve (`wa_link`, "Enviar
-  convite", conversa no WhatsApp, site);
+  convite", conversa no WhatsApp, site). Desde 08/10/2026 os sites prontos têm
+  **Enviar um por um** (`?fila=envio`): uma folha com um site por vez, o demo, a
+  mensagem que vai sair (o `?text=` do `wa_me`, lido antes do toque, porque o
+  toque no `wa_link` já marca o envio), filtro por nicho e "Pular por agora".
+  O toque fica lembrado no navegador por 30 min (`localStorage`, nunca na
+  planilha) e o lead vai para o fim da lista com a hora, até o retrato
+  confirmar; sem confirmação em 15 min, a linha pede para conferir a conversa;
 - **Funil**: as 6 colunas com contagem, resumo do funil no topo, filtros por
   produto, nicho, cidade e busca; cartão com nicho · cidade, subetapa, dias na
   etapa, marcos (enviado → leitura → resposta, com data) e links. Novo mostra o
