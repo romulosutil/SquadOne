@@ -14,17 +14,19 @@ import {
   MAX_NA_HOJE,
   estadoDaPessoa,
   estadoDaSquad,
+  pendenciaDeRespostas,
   pendenciasDaHoje,
   pendenciasDeFinancas,
   proximasQuests,
   resumoDoFunil,
   textoDaPendenciaDeFinancas,
+  textoDaPendenciaDeRespostas,
   type ContextoDoTime,
   type EstadoDasFinancasLido,
   type TimeLido,
 } from './hoje.ts'
 import type { Semaforo } from '../office/salaFinancas.ts'
-import type { DellCheck } from '../operations/types.ts'
+import type { CrmLead, CrmVisao, DellCheck } from '../operations/types.ts'
 import type { QuestCalendario } from '../types.ts'
 
 const DELL: Capacidades = { perfil: 'operations', agentes: true }
@@ -119,6 +121,51 @@ describe('pendenciasDaHoje', () => {
 
   it('sem leitura do Dell (Easypanel), só os cartões', () => {
     assert.deepEqual(pendenciasDaHoje(null, { trocas: [], ajustes: ['a'], crescimentos: [] }).map((x) => x.tipo), ['ajuste'])
+  })
+})
+
+describe('Hoje: leads que responderam e esperam você', () => {
+  const lead = (id: string, empresa: string, extra: Partial<CrmLead> = {}) =>
+    ({ id, empresa, produto: 'site', marcos: {}, ...extra }) as CrmLead
+  const visao = (ids: string[], leads: CrmLead[], estado: CrmVisao['estado'] = 'ok') =>
+    ({ estado, leads, hoje: [{ id: 'resposta', titulo: '', explicacao: '', itens: ids.map((leadId) => ({ leadId, acao: '', detalhe: '', links: [], ordem: 0 })) }] }) as unknown as CrmVisao
+  const leads = [
+    lead('site:a', 'Silva Advogados', { resposta: { tipo: 'neutra', trecho: 'quem é?' }, marcos: { respondeu: '2026-10-08T12:00:00Z' } }),
+    lead('site:b', 'Dedetizadora Alfa', { resposta: { tipo: 'interesse', trecho: 'pode mandar' } }),
+    lead('prumo:c', 'Distribuidora C', { produto: 'prumo', resposta: { tipo: 'bot', trecho: '' } }),
+  ]
+
+  it('do grupo "Respostas para responder" do CRM, destacando quem espera há mais tempo', () => {
+    const p = pendenciaDeRespostas(visao(['site:a', 'site:b', 'prumo:c'], leads))!
+    assert.deepEqual(p, {
+      chave: 'crm:respostas', tipo: 'respostas', quantos: 3, interesse: 1,
+      primeiro: { empresa: 'Silva Advogados', produto: 'site', trecho: 'quem é?', respondeuEm: '2026-10-08T12:00:00Z' },
+    })
+    assert.deepEqual(textoDaPendenciaDeRespostas(p), {
+      titulo: '3 leads responderam e esperam você',
+      detalhe: 'Silva Advogados: “quem é?” · 1 quer ver',
+    })
+  })
+
+  it('um só: o nome no título; robô não vira trecho', () => {
+    const p = pendenciaDeRespostas(visao(['prumo:c'], leads))!
+    assert.deepEqual(textoDaPendenciaDeRespostas(p), { titulo: 'Distribuidora C respondeu e espera você', detalhe: '' })
+  })
+
+  it('sem resposta esperando, sem retrato legível ou sem leitura: nenhum cartão', () => {
+    assert.equal(pendenciaDeRespostas(visao([], leads)), null)
+    assert.equal(pendenciaDeRespostas(visao(['site:a'], leads, 'sem-retrato')), null)
+    assert.equal(pendenciaDeRespostas(null), null)
+  })
+
+  it('entra depois dos cartões dos agentes e antes das finanças: resposta esfria em horas', () => {
+    const p = pendenciasDaHoje(
+      { falhas: [check('balcao', 'falha')], fila: [check('pend:x', 'atencao', 'pendencias')], olhar: [], sozinhos: [] },
+      { trocas: [], ajustes: ['a1'], crescimentos: [] },
+      { cartao: { pct: 95, semaforo: 'laranja', nome: 'Nubank' }, orcamento: null },
+      pendenciaDeRespostas(visao(['site:a'], leads))
+    )
+    assert.deepEqual(p.map((x) => x.chave), ['dell:balcao', 'ajuste:a1', 'crm:respostas', 'financas:cartao', 'dell:pend:x'])
   })
 })
 

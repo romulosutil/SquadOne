@@ -7,7 +7,7 @@
  * "ocioso" ou "trabalhando" inventado pela tela.
  */
 import type { AlertasDaHome } from '../operations/alertas'
-import type { CrmContagem, CrmEtapa, DellCheck } from '../operations/types'
+import type { CrmContagem, CrmEtapa, CrmProduto, CrmVisao, DellCheck } from '../operations/types'
 import type { EstadoDasFinancas, Semaforo } from '../office/salaFinancas'
 import type { QuestCalendario } from '../types'
 import { questTerminou } from '../mochila'
@@ -26,11 +26,25 @@ export type PendenciaDeFinancas = {
   dadosAte?: string | null
 }
 
+/**
+ * Leads que responderam e esperam o Rômulo (o grupo "Respostas para responder" do CRM).
+ * O destaque é o que espera há mais tempo, o primeiro da lista do servidor.
+ */
+export type PendenciaDeRespostas = {
+  chave: 'crm:respostas'
+  tipo: 'respostas'
+  quantos: number
+  /** Quantos disseram que querem ver (resposta classificada como interesse). */
+  interesse: number
+  primeiro: { empresa: string; produto: CrmProduto; trecho?: string; respondeuEm?: string }
+}
+
 export type Pendencia =
   | { chave: string; tipo: 'dell'; check: DellCheck }
   | { chave: string; tipo: 'troca'; id: string }
   | { chave: string; tipo: 'ajuste'; id: string }
   | { chave: string; tipo: 'crescimento'; id: string }
+  | PendenciaDeRespostas
   | PendenciaDeFinancas
 
 export interface CartoesDosAgentes {
@@ -74,19 +88,58 @@ export function textoDaPendenciaDeFinancas(p: PendenciaDeFinancas): string {
 }
 
 /**
+ * O cartão "responderam e esperam você" (08/10/2026), do retrato do CRM que a Hoje já lê.
+ * Até então a única chamada era o aviso do Hermes na hora da resposta: quem não respondia
+ * logo só via o lead de novo abrindo o CRM, e resposta de lead esfria em horas.
+ */
+export function pendenciaDeRespostas(visao: CrmVisao | null | undefined): PendenciaDeRespostas | null {
+  if (!visao || visao.estado !== 'ok') return null
+  const porId = new Map(visao.leads.map((l) => [l.id, l]))
+  const leads = (visao.hoje.find((g) => g.id === 'resposta')?.itens ?? [])
+    .map((i) => porId.get(i.leadId))
+    .filter((l): l is NonNullable<typeof l> => Boolean(l))
+  const primeiro = leads[0]
+  if (!primeiro) return null
+  const trecho = primeiro.resposta && primeiro.resposta.tipo !== 'bot' ? primeiro.resposta.trecho : ''
+  return {
+    chave: 'crm:respostas',
+    tipo: 'respostas',
+    quantos: leads.length,
+    interesse: leads.filter((l) => l.resposta?.tipo === 'interesse').length,
+    primeiro: {
+      empresa: primeiro.empresa,
+      produto: primeiro.produto,
+      ...(trecho ? { trecho } : {}),
+      ...(primeiro.marcos.respondeu ? { respondeuEm: primeiro.marcos.respondeu } : {}),
+    },
+  }
+}
+
+/** Título e linha do cartão: quem espera e o que disse; sem trecho, só o nome. */
+export function textoDaPendenciaDeRespostas(p: PendenciaDeRespostas): { titulo: string; detalhe: string } {
+  const titulo = p.quantos === 1 ? `${p.primeiro.empresa} respondeu e espera você` : `${p.quantos} leads responderam e esperam você`
+  const quem = p.quantos === 1 ? '' : `${p.primeiro.empresa}${p.primeiro.trecho ? ': ' : ''}`
+  const disse = p.primeiro.trecho ? `“${p.primeiro.trecho}”` : ''
+  const querem = p.interesse === 0 ? '' : p.interesse === 1 ? '1 quer ver' : `${p.interesse} querem ver`
+  return { titulo, detalhe: [`${quem}${disse}`, querem].filter(Boolean).join(' · ') }
+}
+
+/**
  * Tudo o que espera o Rômulo, do mais grave ao menos: falha do Dell (quebrado
  * agora), a demanda que nenhuma squad quis (não foi atendida), o ajuste e a
- * contratação propostos, o alerta de finanças em semáforo (≥ 90 %), a fila de
- * trabalho do CRM e o "vale olhar". Quem mostra corta em MAX_NA_HOJE; o resto
- * fica atrás de "ver todos".
+ * contratação propostos, os leads que responderam, o alerta de finanças em
+ * semáforo (≥ 90 %), a fila de trabalho do CRM e o "vale olhar". Quem mostra
+ * corta em MAX_NA_HOJE; o resto fica atrás de "ver todos".
  *
  * Finanças depois dos cartões dos agentes: o cartão de decisão some se a aba
- * recarregar (vive na memória dela), o semáforo das finanças continua lá.
+ * recarregar (vive na memória dela), o semáforo das finanças continua lá. As
+ * respostas de lead vêm antes das finanças: esfriam em horas, o semáforo dura o mês.
  */
 export function pendenciasDaHoje(
   alertas: AlertasDaHome | null,
   cartoes: CartoesDosAgentes,
-  financas: EstadoDasFinancasLido | null = null
+  financas: EstadoDasFinancasLido | null = null,
+  respostas: PendenciaDeRespostas | null = null
 ): Pendencia[] {
   const dell = (lista: DellCheck[] | undefined): Pendencia[] =>
     (lista ?? []).map((check) => ({ chave: `dell:${check.id}`, tipo: 'dell', check }))
@@ -95,6 +148,7 @@ export function pendenciasDaHoje(
     ...cartoes.trocas.map<Pendencia>((id) => ({ chave: `troca:${id}`, tipo: 'troca', id })),
     ...cartoes.ajustes.map<Pendencia>((id) => ({ chave: `ajuste:${id}`, tipo: 'ajuste', id })),
     ...cartoes.crescimentos.map<Pendencia>((id) => ({ chave: `crescimento:${id}`, tipo: 'crescimento', id })),
+    ...(respostas ? [respostas] : []),
     ...pendenciasDeFinancas(financas),
     ...dell(alertas?.fila),
     ...dell(alertas?.olhar),
