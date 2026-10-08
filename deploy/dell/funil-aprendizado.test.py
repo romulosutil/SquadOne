@@ -790,6 +790,14 @@ class Diffs(unittest.TestCase):
     def test_variante_no_site_mensagem_js_de_verdade(self):
         real = (AQUI / "claude-ops" / "site-mensagem.js").read_text(encoding="utf-8")
         texto = "Oi, tudo bem? Sou o Rômulo, de Vitória. Fiz uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso mandar?"
+        # Desde 08/10/2026 A, B e C têm texto (C = Raio-X): o arquivo real não tem vaga.
+        nada, _, motivo = fa.inserir_variante(real, texto, AGORA, 2)
+        if nada is None:
+            self.assertIn("esperando vaga", motivo)
+            # Com a C de volta a null (o pedaço do arquivo real que o funil lê), a proposta entra nela.
+            linha = next(l for l in real.splitlines() if l.startswith("const VARIACOES = ["))
+            ultima = linha.rindex(", '")
+            real = real.replace(linha, linha[:ultima] + ", null];")
         novo, letra, motivo = fa.inserir_variante(real, texto, AGORA, 2)
         self.assertIsNotNone(novo, motivo)
         self.assertIsNone(fa.conferir_variante_no_node(novo, "ABC".index(letra), texto))

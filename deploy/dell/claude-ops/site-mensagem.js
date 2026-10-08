@@ -25,9 +25,13 @@
 // Google, que o Cacador grava nas colunas nota e avaliacoes). Variacao com
 // {NOTA} ou {AVALIACOES} so entra para lead com nota boa (ver fatosDoGoogle);
 // sem ela, o lead sai na A. {O_A} e o artigo sem preposicao ("Vi a Clinica X").
-// A C (Raio-X: "fiz um raio-x de como a X aparece no Google") fica null ate o
-// Raio-X existir: a mensagem promete uma pagina que ainda nao e gerada.
-const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi {O_A} {NOME} no Google: nota {NOTA} com {AVALIACOES} avaliações, mas quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. Posso te mandar o link?', null];
+// A C oferece o Raio-X (a pagina <demo>/raio-x, deploy/dell/raio-x.py), nao o site.
+// So entra para lead cujo publicado.json tem raio_x_url e raio_x_pontos (ver raioXDe):
+// o raio-x.py so grava os dois com a pagina no ar e conferida. {PONTOS} vem de
+// raio_x_pontos ("1 ponto que faz", "2 pontos que fazem"): o plano dizia "3 pontos",
+// mas em 08/10 so 1 dos 88 demos tinha 3 (o Raio-X so mostra fato verificavel do
+// Places), e o numero fixo seria falso para quase todos.
+const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi {O_A} {NOME} no Google: nota {NOTA} com {AVALIACOES} avaliações, mas quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. Posso te mandar o link?', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e {PONTOS} cliente ir para o concorrente. É uma página só. Posso te mandar?'];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
 const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put together a demo website for you, on my own initiative. Can I send you the link so you can take a look? No strings attached.";
@@ -41,10 +45,21 @@ const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put toget
 // (hoje, so a A). A nota e as avaliacoes nao mudam depois que o Cacador grava a linha,
 // entao a letra continua estavel entre rodadas. O molde volta com {NOTA}/{AVALIACOES}
 // ja preenchidos; {ARTIGO}, {NOME} e {DETALHE} ficam para o preencher.
+// A C, do mesmo jeito, so com raioXDe(lead) ({PONTOS} preenchido aqui). O lead que o
+// Raio-X alcanca depois de ja estar "pronto" pode trocar de letra uma vez (de A/B para
+// C, se o sorteio cair nela): o Balcao grava a letra nova junto com o wa_link novo.
 const LETRAS = ['A', 'B', 'C'];
 const NOTA_MINIMA_B = 4.3;
 const AVALIACOES_MINIMAS_B = 15;
 const citaNota = (t) => t.indexOf('{NOTA}') >= 0 || t.indexOf('{AVALIACOES}') >= 0;
+const citaRaioX = (t) => t.indexOf('{PONTOS}') >= 0;
+// { url, pontos: '2 pontos que fazem' } do recibo (publicado.json), ou null (sem C).
+function raioXDe(lead) {
+  const url = String((lead && lead.raio_x_url) || '').trim();
+  const n = numeroDaPlanilha(lead && lead.raio_x_pontos);
+  if (url.indexOf('https://') !== 0 || !(Number.isInteger(n) && n >= 1 && n <= 3)) return null;
+  return { url, pontos: n === 1 ? '1 ponto que faz' : n + ' pontos que fazem' };
+}
 function numeroDaPlanilha(v) {
   // O Sheets devolve 4.9 (numero) ou '4.9' (texto); '4,9' vale o mesmo.
   const t = String(v === undefined || v === null ? '' : v).trim().replace(',', '.');
@@ -60,11 +75,15 @@ function fatosDoGoogle(lead) {
 function varianteDe(placeId, eua, lead) {
   if (eua) return { letra: 'EN', molde: VARIACAO_EN };
   const fatos = fatosDoGoogle(lead);
-  const comTexto = VARIACOES.map((t, i) => (t && (fatos || !citaNota(t)) ? i : -1)).filter(i => i >= 0);
+  const raioX = raioXDe(lead);
+  const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t));
+  const comTexto = VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
   let h = 0;
   for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const i = comTexto[h % comTexto.length];
-  const molde = fatos ? VARIACOES[i].split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes) : VARIACOES[i];
+  let molde = VARIACOES[i];
+  if (fatos) molde = molde.split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes);
+  if (raioX) molde = molde.split('{PONTOS}').join(raioX.pontos);
   return { letra: LETRAS[i], molde };
 }
 
@@ -77,6 +96,10 @@ function varianteDe(placeId, eua, lead) {
 // Em ingles sai sem numero: o preco em dolar ainda nao foi decidido.
 const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
+// Quem recebeu a C pediu o raio-x, nao o site: a segunda manda os dois links (o raio-x
+// primeiro) e o mesmo preco. {RAIO_X} vem da coluna raio_x_url, que o Balcao grava do
+// publicado.json; sem ela, a segunda e a de sempre. So em portugues (EUA nunca e C).
+const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 
 // 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
 // aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira
@@ -89,6 +112,8 @@ const FOLLOWUP = 'Oi, aqui é o Rômulo de novo, do PRUMO. A demonstração de s
 const FOLLOWUP_EN = "Hi, it's Rômulo again, from PRUMO. The demo website for {NOME} is ready, with your photos and reviews. Would you like me to send the link?";
 const FOLLOWUP_COM_LINK = 'Oi, aqui é o Rômulo de novo. Deu para ver o site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. E se não for o momento, é só me dizer que eu apago.';
 const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
+// Quem recebeu a C (mensagem_variante) e lembrado do raio-x que ofereceu, nao do site.
+const FOLLOWUP_RAIO_X = 'Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?';
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.
@@ -203,13 +228,24 @@ function abrirNoWhatsApp(l, moldeBr, moldeEn) {
   return { numero, texto, link: numero ? 'https://wa.me/' + numero + '?text=' + encodeURIComponent(texto) : '' };
 }
 
-// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
-function followupDe(l) {
-  return linkJaFoi(l) ? abrirNoWhatsApp(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN) : abrirNoWhatsApp(l, FOLLOWUP, FOLLOWUP_EN);
+// A primeira mensagem foi a C (o raio-x)? A letra e a que o Balcao gravou no envio.
+const recebeuC = (l) => String(l.mensagem_variante || '').trim() === 'C';
+// O raio_x_url da linha, so se for https (vem do publicado.json pelo Balcao).
+function raioXDaLinha(l) {
+  const url = String(l.raio_x_url || '').trim();
+  return url.indexOf('https://') === 0 ? url : '';
 }
 
-// Segunda mensagem (o link), para quem respondeu com interesse.
+// Follow-up pronto para abrir no WhatsApp do Romulo (wa.me com o texto).
+function followupDe(l) {
+  if (linkJaFoi(l)) return abrirNoWhatsApp(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN);
+  return abrirNoWhatsApp(l, recebeuC(l) ? FOLLOWUP_RAIO_X : FOLLOWUP, FOLLOWUP_EN);
+}
+
+// Segunda mensagem (o link), para quem respondeu com interesse. Quem recebeu a C ganha
+// o raio-x e o site; sem o raio_x_url na linha, sai a de sempre (o site).
 function segundaDe(l) {
-  return abrirNoWhatsApp(l, SEGUNDA, SEGUNDA_EN);
+  const raioX = recebeuC(l) ? raioXDaLinha(l) : '';
+  return abrirNoWhatsApp(l, raioX ? SEGUNDA_RAIO_X.split('{RAIO_X}').join(raioX) : SEGUNDA, SEGUNDA_EN);
 }
 

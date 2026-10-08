@@ -633,8 +633,15 @@ tem duas variações: **A** (controle, "Encontrei vocês no Google…") e **B** 
 nota e o número de avaliações do Google, das colunas `nota` e `avaliacoes` que
 o Caçador grava). A B só entra no sorteio do lead com nota **4,3 ou mais** e
 **15 avaliações ou mais**; sem os dois, o lead sai na A. Entre os que têm nota
-boa, metade A e metade B, pela letra do `place_id`. A **C** (Raio-X) segue
-`null` até o Raio-X existir. A segunda mensagem termina com o preço do
+boa, metade A e metade B, pela letra do `place_id`. A **C** oferece o Raio-X
+(`<demo>/raio-x`, `raio-x.py`) e só entra para o lead cujo `publicado.json` tem
+`raio_x_url` e `raio_x_pontos` (1 a 3): o texto diz quantos pontos a página
+mostra ("1 ponto que faz", "2 pontos que fazem"), nunca "3" fixo. O Balcão grava
+o `raio_x_url` na coluna de mesmo nome (o `--balcao` cria) porque a segunda
+mensagem e o follow-up são montados da linha: quem recebeu a C ganha o raio-x e
+o site na segunda, e o follow-up lembra o raio-x. Sem a coluna preenchida, a
+segunda é a do site. Um lead `pronto` que o Raio-X alcança pode trocar de letra
+uma vez. A segunda mensagem termina com o preço do
 Encontrado (R$ 990 + R$ 69/mês, pago depois de ver no ar; em inglês, sem
 número), e os dois follow-ups do 3º dia são os do plano. O CRM espelha a
 segunda e os follow-ups em `server/site-mensagem.ts` (teste compara com o JS).
