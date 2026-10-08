@@ -18,7 +18,7 @@ Três trabalhos ao mesmo tempo:
       (`personalizado.json` com versao < VERSAO_ALVO); quem nunca foi refeito vai primeiro;
    c) senão, espera o Caçador; sem Caçador e sem trabalho, termina.
 3. Limpeza (uma vez por dia, depois das 10h): `site-demos-limpeza --apagar`, que apaga o projeto
-   da Vercel de quem foi enviado há 10+ dias sem nenhuma interação (a regra é a do script).
+   da Vercel de quem está em Perdido no CRM há 2+ dias (a regra é a do script).
 
 Limite de uso do Claude: espera 30 min e tenta de novo, até MAX_LIMITES seguidas. Limite de
 deploys da Vercel (hobby: 100 por dia): espera 1 h. `~/auto-site/.parar-lote` encerra no fim da leva.

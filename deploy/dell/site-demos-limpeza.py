@@ -1,44 +1,47 @@
 #!/usr/bin/env python3
-"""Apaga na Vercel o demo de quem nunca interagiu (Dell, 07/10/2026).
+"""Apaga na Vercel o demo de quem está em Perdido no CRM (Dell, 07/10/2026; critério de 08/10/2026).
 
-Decisão do Rômulo (07/10/2026), a outra ponta do `site-demos-pausa`: lead que
-recebeu o demo, não respondeu, não fechou e não recusou, e já passou dos 10 dias
-do "expirado" (EXPIRA_DIAS, a regra do 05 · Acompanhamento), tem o projeto da
-Vercel APAGADO. Os projetos são o limite do plano (hobby): demo parado ocupa
-vaga que o gerador precisa.
+Decisão do Rômulo (08/10/2026): "quando um site entrar em perdido, faz sentido
+excluir ele do Vercel; já temos o backup dele no Dell". Antes (07/10) só saía o
+demo de quem nunca interagiu, 10 dias depois do envio. Os projetos são o limite
+do plano (hobby): demo de lead perdido ocupa vaga que o gerador precisa.
 
-Quem entra, tudo ao mesmo tempo (retrato da planilha que o fluxo 07 grava a
-cada hora, site-leads.json):
-- status `enviado` (ou `expirado`), com a pasta na raiz de ~/auto-site ou em
-  _concluidos/: lead em _recusados/, _em-conversa/ ou _fechados/ nunca entra;
-- sem `respondeu_em`, `fechado_em` nem `recusado_em` (recusar é interação: esses
-  o `site-demos-pausa` pausa, e pausar é reversível);
-- `enviado_em` + 10 dias já passou;
-- projeto `demo-*`, igual ao do publicado.json da pasta (a pasta é a prova, não só a planilha).
-Retrato com mais de 3 h não vale: uma resposta de hoje poderia estar de fora.
+Quem está em Perdido é o que o Funil mostra: o script lê a visão da Central
+(GET /api/operations/crm, no loopback) em vez de refazer as regras de etapa, que
+moram em server/crm.ts — recusou, sem resposta em 7 dias, parou de responder,
+sem contato fácil, descartado. Entra, tudo ao mesmo tempo:
+- lead do Site, etapa `perdido`, há FOLGA_DIAS dias ou mais (dá tempo de desfazer
+  um "Recusou" tocado errado ou de o lead responder no dia seguinte);
+- pasta na raiz de ~/auto-site, em _recusados/, _concluidos/, _em-conversa/ ou
+  _descartados/ (_fechados/ nunca: o demo é do cliente);
+- projeto `demo-*` no publicado.json da pasta (a pasta é a prova, não só o CRM),
+  ainda sem `apagado_em`.
+Visão sem retrato válido, sem as pastas lidas ou com o retrato com mais de 1 h
+não vale: uma resposta de agora poderia estar de fora.
 
 O que NÃO apaga: a pasta do lead em ~/auto-site (conteúdo, fotos, DESIGN.md)
-fica, para regerar ou republicar. Só ganha `apagado_em` no publicado.json, e o
-`site-demos-pausa` passa a ignorar o lead (projeto que não existe seria falha).
+fica, para regerar ou republicar. Só ganha `apagado_em` no publicado.json, o
+`site-demos-pausa` passa a ignorar o lead e o CRM tira o link do demo.
 
-Padrão = só LISTAR. O timer diário (09:50) lista e manda UM aviso quando aparece
-candidato novo; apagar é sempre ordem explícita:
+O timer diário (09:50) e o `lote-continuo` rodam `--apagar`: apagam sozinhos e
+mandam UM aviso com o que saiu. No máximo MAX_POR_RODADA por rodada (os mais
+antigos em Perdido primeiro): um erro de regra não leva a Vercel inteira de uma vez.
 
-    site-demos-limpeza                      lista quem entra e, se há novo, manda UM aviso (é o que o timer roda)
+    site-demos-limpeza                      lista quem entra e, se há novo, manda UM aviso
     site-demos-limpeza --simular            só lista, sem aviso e sem gravar estado
-    site-demos-limpeza --apagar             apaga todos os que entram
+    site-demos-limpeza --apagar             apaga os que entram (é o que o timer roda)
     site-demos-limpeza --apagar demo-a demo-b   apaga só esses (têm de estar entre os que entram)
-    site-demos-limpeza --dias 7             ensaio com outro prazo (só lista, nunca apaga)
     site-demos-limpeza --exclusao           lista os pedidos de exclusão ainda no ar (nada apaga)
-    site-demos-limpeza --exclusao demo-a    apaga o demo de quem PEDIU para apagar (07/10/2026)
+    site-demos-limpeza --exclusao demo-a    apaga já o demo de quem PEDIU para apagar, sem esperar a folga
 
 Pedido de exclusão (`--exclusao`, 07/10/2026): o lead respondeu pedindo para
 apagar o site ou o conteúdo ("se puder excluir esse conteúdo por gentileza",
 Baby School). O classificador do WhatsApp grava `resposta_tipo` "exclusao", marca
-o lead como recusado e o aviso pelo Hermes traz este comando; nada apaga sozinho
-(RULES 10). A regra de cima não serve: recusado nunca entra nela. Aqui entra só
-o projeto nomeado cujo lead, no retrato, tem `resposta_tipo` "exclusao", não
-está fechado e tem o publicado.json da pasta confirmando o projeto. A pasta fica.
+o lead como recusado e o aviso pelo Hermes traz este comando. Desde 08/10 o lead
+recusado sai também pela regra de cima, depois da folga; o comando é para apagar
+JÁ. Entra só o projeto nomeado cujo lead, no retrato da planilha (site-leads.json),
+tem `resposta_tipo` "exclusao", não está fechado e tem o publicado.json da pasta
+confirmando o projeto. A pasta fica.
 
 Token: o da Vercel CLI (auth.json), renovado pela própria CLI; nunca é impresso.
 Estado em ~/.local/state/site-demos-limpeza/ (avisados.json, historico.jsonl).
@@ -53,11 +56,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HOME = Path.home()
 AUTO = HOME / "auto-site"
+CENTRAL_CRM = "http://127.0.0.1:9120/api/operations/crm"  # a Central (squadone-operations), só loopback
 RETRATO = HOME / ".local/share/n8n-estado/site-leads.json"
 ESTADO = HOME / ".local/state/site-demos-limpeza/avisados.json"
 HISTORICO = ESTADO.with_name("historico.jsonl")
@@ -67,15 +71,19 @@ VERCEL_CLI = HOME / ".local/bin/vercel"
 TIME_VERCEL = "team_fgUUHtNBYtsrwTNGwn2gzxF2"  # romulodesigns
 API = "https://api.vercel.com"
 
-EXPIRA_DIAS = 10  # site-acompanhamento.py: expirado no 10º dia depois do envio
-RETRATO_VELHO = timedelta(hours=3)  # o fluxo 07 grava de hora em hora (:20)
+FOLGA_DIAS = 2  # dias em Perdido antes de apagar
+MAX_POR_RODADA = 60
+RETRATO_VELHO = timedelta(hours=3)  # site-leads.json (só o --exclusao): o fluxo 07 grava de hora em hora (:20)
+CRM_VELHO = timedelta(hours=1)  # o 08 · CRM relê as planilhas a cada 10 min
 MAX_NOMES = 25
 SP = timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
-STATUS_QUE_ENTRAM = ("enviado", "expirado")
-PASTAS_QUE_ENTRAM = ("", "_concluidos")  # raiz ou expirado; o resto está no jogo ou já recusou
+# Como o CRM diz o lugar da pasta -> o diretório em ~/auto-site. _fechados/ fica de fora de propósito.
+LUGARES_QUE_ENTRAM = {"raiz": "", "_recusados/": "_recusados", "_concluidos/": "_concluidos",
+                      "_em-conversa/": "_em-conversa", "_descartados/": "_descartados"}
+ROTULO_DA_PERDA = {"recusou": "recusou", "expirou": "sem resposta em 7 dias", "esfriou": "parou de responder",
+                   "sem-contato": "sem contato fácil", "descartado": "descartado"}
 # Pedido de exclusão: onde a pasta de quem pediu pode estar (recusado vai para _recusados/ pelo site-pastas).
 PASTAS_DA_EXCLUSAO = ("", "_recusados", "_em-conversa", "_concluidos")
-INTERACAO = ("respondeu_em", "fechado_em", "recusado_em")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9._-]{0,179}$")
 
 
@@ -86,42 +94,36 @@ def ler_json(p: Path):
         return None
 
 
-def dia_de(iso: str, hoje_tz=SP) -> date | None:
-    try:
-        t = datetime.fromisoformat(str(iso).strip().replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return (t if t.tzinfo else t.replace(tzinfo=hoje_tz)).astimezone(SP).date()
+def escolher(leads: list[dict], projeto_de, folga: int = FOLGA_DIAS) -> tuple[list[dict], list[tuple[str, str]]]:
+    """PURO: (quem entra, [(nome, por que não entrou)]) a partir dos leads do CRM.
 
-
-def escolher(leads: list[dict], hoje: date, dias: int = EXPIRA_DIAS) -> tuple[list[dict], list[tuple[str, str]]]:
-    """PURO: (quem entra, [(nome, por que não entrou)]) a partir das linhas do retrato."""
+    `projeto_de(pasta)` diz o projeto do publicado.json da pasta (None sem demo ou já apagado).
+    Só os perdidos do Site com demo no ar aparecem em `guardados`; o resto não é assunto daqui.
+    Quem entra vem do mais antigo em Perdido para o mais novo (é a ordem do corte por rodada).
+    """
     eleitos, guardados = [], []
     for l in leads:
-        nome = str(l.get("nome") or l.get("pasta") or "?")
-        if l.get("status") not in STATUS_QUE_ENTRAM:
-            guardados.append((nome, f"status {l.get('status')}"))
+        if l.get("produto") != "site" or l.get("etapa") != "perdido" or l.get("demoApagadoEm"):
             continue
-        pasta = str(l.get("pasta") or "")
-        topo, _, resto = pasta.rpartition("/")
-        if topo not in PASTAS_QUE_ENTRAM or not SLUG.match(resto or ""):
-            guardados.append((nome, f"pasta {pasta or '?'}"))
+        nome = str(l.get("empresa") or l.get("chave") or "?")
+        p = l.get("pasta") if isinstance(l.get("pasta"), dict) else {}
+        slug, lugar = str(p.get("slug") or ""), str(p.get("lugar") or "")
+        if not SLUG.match(slug):
+            continue  # sem pasta em ~/auto-site: não há demo para apagar
+        if lugar not in LUGARES_QUE_ENTRAM:
+            guardados.append((nome, f"pasta em {lugar or '?'}: fora dos lugares de quem perdeu"))
             continue
-        if any(l.get(c) for c in INTERACAO):
-            guardados.append((nome, "teve interação"))
-            continue
-        projeto = str(l.get("vercel_project") or "")
+        caminho = f"{LUGARES_QUE_ENTRAM[lugar]}/{slug}".lstrip("/")
+        projeto = str(projeto_de(caminho) or "")
         if not projeto.startswith("demo-"):
-            guardados.append((nome, f"projeto {projeto or '?'} não é demo-*"))
+            continue  # nunca publicado, ou já apagado
+        dias = l.get("diasNaEtapa")
+        if isinstance(dias, int) and dias < folga:
+            guardados.append((nome, f"em Perdido há {dias} dia(s); entra em {folga - dias}"))
             continue
-        enviado = dia_de(l.get("enviado_em", ""))
-        if enviado is None:
-            guardados.append((nome, "enviado_em ilegível"))
-            continue
-        if hoje < enviado + timedelta(days=dias):
-            guardados.append((nome, f"entra em {enviado + timedelta(days=dias):%d/%m}"))
-            continue
-        eleitos.append({"nome": nome, "projeto": projeto, "pasta": pasta, "enviado_em": enviado.isoformat()})
+        eleitos.append({"nome": nome, "projeto": projeto, "pasta": caminho, "motivo": str(l.get("motivoPerda") or ""),
+                        "desde": str(l.get("desde") or "")})
+    eleitos.sort(key=lambda e: (e["desde"] != "", e["desde"]))  # sem data (o acervo de 25/09) é o mais antigo
     return eleitos, guardados
 
 
@@ -165,8 +167,33 @@ def ler_retrato_com_hora() -> tuple[list[dict], datetime]:
     return [l for l in d.get("leads", []) if isinstance(l, dict)], gerado
 
 
-def ler_retrato() -> list[dict]:
-    return ler_retrato_com_hora()[0]
+def ler_crm(url: str = CENTRAL_CRM) -> list[dict]:
+    """Os leads como o Funil os mostra. Sem retrato bom, sem pastas lidas ou velho: erro (não apaga nada)."""
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            d = json.loads(r.read())
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"não consegui ler o CRM da Central ({url}): {e}") from None
+    if not isinstance(d, dict) or d.get("estado") != "ok":
+        raise RuntimeError(f"o CRM da Central está sem retrato válido ({(d or {}).get('estado')}): {(d or {}).get('mensagem') or ''}")
+    if not d.get("pastasLidas"):
+        raise RuntimeError("a Central não leu ~/auto-site agora: sem as pastas, não dá para conferir demo apagado")
+    try:
+        gerado = datetime.fromisoformat(str(d.get("geradoEm")).replace("Z", "+00:00"))
+    except ValueError:
+        raise RuntimeError("retrato do CRM sem data") from None
+    if datetime.now(timezone.utc) - gerado > CRM_VELHO:
+        raise RuntimeError(f"retrato do CRM velho ({gerado.astimezone(SP):%d/%m %H:%M}); o 08 · CRM relê a cada 10 min, "
+                           "uma resposta recente poderia estar de fora")
+    return [l for l in d.get("leads", []) if isinstance(l, dict)]
+
+
+def projeto_da_pasta(pasta: str) -> str | None:
+    """O projeto da Vercel do publicado.json da pasta; None sem recibo ou já apagado."""
+    r = ler_json(AUTO / pasta / "publicado.json")
+    if not isinstance(r, dict) or r.get("apagado_em"):
+        return None
+    return str(r.get("vercel_project") or "") or None
 
 
 def ja_apagado(pasta: str) -> bool:
@@ -213,7 +240,7 @@ def projeto_na_vercel(nome: str, chave: str) -> dict | None:
 def avisar(texto: str) -> None:
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     (FILA_AVISOS / f"site-demos-limpeza-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "🧹 Site antes da venda: demos sem interação", "texto": texto,
+        json.dumps({"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": texto,
                     "origem": "site-demos-limpeza"}, ensure_ascii=False), encoding="utf-8")
 
 
@@ -249,8 +276,8 @@ def apagar(alvos: list[dict], a_pedido: bool = False) -> int:
             marcar_apagado(e["pasta"])
             apagados.append(e)
             acao = "apagou" if info is not None else "ja_nao_existia"
-            anotar({"acao": acao + ("_a_pedido" if a_pedido else ""), "projeto": e["projeto"],
-                    "nome": e["nome"], "enviado_em": e["enviado_em"]})
+            anotar({"acao": acao + ("_a_pedido" if a_pedido else ""), "projeto": e["projeto"], "nome": e["nome"],
+                    **{k: e[k] for k in ("motivo", "desde", "enviado_em") if e.get(k)}})
             print(f"{'apagado' if info is not None else 'já não existia'}: {e['projeto']}")
         except RuntimeError as err:
             falhas.append(f"{e['nome']}: {err}")
@@ -261,9 +288,9 @@ def apagar(alvos: list[dict], a_pedido: bool = False) -> int:
                        "A pasta continua em ~/auto-site; se o pedido for de apagar tudo, apague a pasta à mão."]
             linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
         elif apagados:
-            linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel (enviado há {EXPIRA_DIAS}+ dias, sem nenhuma "
-                       "interação). A pasta continua em ~/auto-site."]
-            linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
+            linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel de leads em Perdido no CRM (há {FOLGA_DIAS}+ dias). "
+                       "A pasta continua em ~/auto-site: para mandar de novo, é republicar."]
+            linhas += [f"• {e['nome']} ({ROTULO_DA_PERDA.get(e.get('motivo', ''), 'perdido')})" for e in apagados[:MAX_NOMES]]
             if len(apagados) > MAX_NOMES:
                 linhas.append(f"• e mais {len(apagados) - MAX_NOMES} (lista em {HISTORICO})")
         if falhas:
@@ -303,41 +330,31 @@ def main(argv: list[str]) -> int:
             print("--exclusao leva só nomes de projeto demo-* (e nenhuma outra opção)")
             return 2
         return exclusao(nomes)
-    dias, quero_apagar, nomes, simular = EXPIRA_DIAS, False, [], False
-    i = 0
-    while i < len(argv):
-        a = argv[i]
+    quero_apagar, nomes, simular = False, [], False
+    for a in argv:
         if a == "--apagar":
             quero_apagar = True
         elif a == "--simular":
             simular = True  # lista sem mandar aviso nem gravar o que já foi avisado
-        elif a == "--dias" and i + 1 < len(argv):
-            i += 1
-            dias = int(argv[i])
         elif a.startswith("demo-"):
             nomes.append(a)
         else:
             print(__doc__)
             return 2
-        i += 1
-    if quero_apagar and dias != EXPIRA_DIAS:
-        print("--dias é só ensaio: apagar usa sempre o prazo de 10 dias")
-        return 2
     if nomes and not quero_apagar:
         print("nomes de projeto só com --apagar")
         return 2
+    if simular and quero_apagar:
+        print("--simular não apaga: escolha um dos dois")
+        return 2
 
-    hoje = datetime.now(SP).date()
-    leads = [l for l in ler_retrato() if not (l.get("pasta") and ja_apagado(str(l["pasta"])))]
-    eleitos, guardados = escolher(leads, hoje, dias)
-    print(f"{len(eleitos)} entram (enviado há {dias}+ dias, sem nenhuma interação)")
+    eleitos, guardados = escolher(ler_crm(), projeto_da_pasta)
+    print(f"{len(eleitos)} entram (em Perdido no CRM há {FOLGA_DIAS}+ dias, com o demo no ar)")
     for e in eleitos:
-        print(f"  {e['projeto']}  ({e['nome']}, enviado {e['enviado_em']})")
-    futuros = sorted(m for _, m in guardados if m.startswith("entra em"))
-    print(f"{len(guardados)} ficam de fora; {len(futuros)} deles ainda dentro do prazo")
-    pedidos = [l for l in leads if l.get("resposta_tipo") == "exclusao"]
-    if pedidos:
-        print(f"{len(pedidos)} pediram para apagar o demo (fora desta regra): site-demos-limpeza --exclusao lista os comandos")
+        print(f"  {e['projeto']}  ({e['nome']}, {ROTULO_DA_PERDA.get(e['motivo'], e['motivo'] or 'perdido')})")
+    print(f"{len(guardados)} perdido(s) com demo no ar ficam de fora:")
+    for nome, motivo in guardados:
+        print(f"  {nome}: {motivo}")
 
     if quero_apagar:
         if nomes:
@@ -346,14 +363,17 @@ def main(argv: list[str]) -> int:
                 print("não entram nos critérios, nada foi apagado: " + ", ".join(desconhecidos))
                 return 2
             eleitos = [e for e in eleitos if e["projeto"] in nomes]
+        if len(eleitos) > MAX_POR_RODADA:
+            print(f"{len(eleitos)} entram; apago os {MAX_POR_RODADA} mais antigos em Perdido nesta rodada, o resto na próxima")
+            eleitos = eleitos[:MAX_POR_RODADA]
         return apagar(eleitos)
 
-    if dias == EXPIRA_DIAS and eleitos and not simular:
+    if eleitos and not simular:
         avisados = ler_json(ESTADO) or {}
         novos = [e for e in eleitos if e["projeto"] not in (avisados.get("projetos") or [])]
         if novos:
-            linhas = [f"{len(eleitos)} demo(s) enviado(s) há {EXPIRA_DIAS}+ dias sem nenhuma interação. "
-                      "Nada foi apagado. Para apagar, no Dell: site-demos-limpeza --apagar",
+            linhas = [f"{len(eleitos)} demo(s) de leads em Perdido no CRM ainda no ar. Nada foi apagado agora; o timer das "
+                      "09:50 apaga. Para apagar já, no Dell: site-demos-limpeza --apagar",
                       "(ou só alguns: site-demos-limpeza --apagar demo-x demo-y)"]
             linhas += [f"• {e['nome']}" for e in eleitos[:MAX_NOMES]]
             if len(eleitos) > MAX_NOMES:

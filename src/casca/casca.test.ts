@@ -332,8 +332,8 @@ describe('resumoDoFunil', () => {
   const n = (total: number) => ({ total, site: total, prumo: 0 })
   it('só as etapas abertas, no singular e no plural', () => {
     assert.equal(
-      resumoDoFunil({ novo: n(3), contatado: n(1), conversando: n(2), proposta: n(1), ganho: n(9), perdido: n(40) }),
-      '3 novos · 1 contatado · 2 conversando · 1 em proposta'
+      resumoDoFunil({ novo: n(3), contato: n(1), proposta: n(1), ganho: n(9), perdido: n(40) }),
+      '3 novos · 1 em contato · 1 em proposta'
     )
     assert.equal(resumoDoFunil({ novo: n(0), ganho: n(2) }), 'Nenhum lead em aberto')
     assert.equal(resumoDoFunil(null), '')

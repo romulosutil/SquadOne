@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Testes do site-demos-limpeza: só a regra pura `escolher`, sem Vercel nem rede.
+"""Testes do site-demos-limpeza: as regras puras `escolher` e `escolher_exclusao` e o `main`
+com dublês no lugar da Central, do disco e da Vercel (nada aqui toca ~/auto-site nem a rede).
 
   python3 deploy/dell/site-demos-limpeza.test.py
 """
 import importlib.util
 import unittest
-from datetime import date
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
@@ -13,69 +13,119 @@ spec = importlib.util.spec_from_file_location("limpeza", AQUI / "site-demos-limp
 limpeza = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(limpeza)
 
-HOJE = date(2026, 10, 7)
 
-
-def lead(**kw):
-    base = {"nome": "Fulano", "status": "enviado", "pasta": "fulano", "vercel_project": "demo-fulano",
-            "enviado_em": "2026-09-25T16:15:53.000Z", "respondeu_em": "", "fechado_em": "", "recusado_em": ""}
+def perdido(**kw):
+    """Um lead como o GET /api/operations/crm devolve (só os campos que o script lê)."""
+    base = {"produto": "site", "chave": "ChIJfulano", "empresa": "Fulano", "etapa": "perdido", "motivoPerda": "expirou",
+            "desde": "2026-10-01T15:00:00.000Z", "diasNaEtapa": 3, "pasta": {"lugar": "raiz", "slug": "fulano"}}
     base.update(kw)
     return base
 
 
-def entra(**kw):
-    eleitos, guardados = limpeza.escolher([lead(**kw)], HOJE)
+DEMOS = {"fulano": "demo-fulano", "_recusados/fulano": "demo-fulano", "_concluidos/fulano": "demo-fulano",
+         "_em-conversa/fulano": "demo-fulano", "_descartados/fulano": "demo-fulano", "_fechados/fulano": "demo-fulano"}
+
+
+def entra(projetos=DEMOS, **kw):
+    eleitos, guardados = limpeza.escolher([perdido(**kw)], projetos.get)
     return bool(eleitos), (guardados[0][1] if guardados else "")
 
 
 class Escolher(unittest.TestCase):
-    def test_enviado_sem_interacao_ha_mais_de_10_dias_entra(self):
-        self.assertTrue(entra()[0])
+    def test_perdido_com_demo_no_ar_entra_com_a_pasta_certa(self):
+        eleitos, _ = limpeza.escolher([perdido()], DEMOS.get)
+        self.assertEqual([(e["projeto"], e["pasta"], e["motivo"]) for e in eleitos], [("demo-fulano", "fulano", "expirou")])
 
-    def test_expirado_na_pasta_concluidos_entra(self):
-        self.assertTrue(entra(status="expirado", pasta="_concluidos/fulano")[0])
+    def test_todo_motivo_de_perda_entra(self):
+        for motivo in ("recusou", "expirou", "esfriou", "sem-contato", "descartado"):
+            self.assertTrue(entra(motivoPerda=motivo)[0], motivo)
 
-    def test_prazo_e_inclusivo_no_10o_dia(self):
-        self.assertTrue(entra(enviado_em="2026-09-27T12:00:00.000Z")[0])
-        ok, motivo = entra(enviado_em="2026-09-28T12:00:00.000Z")
+    def test_so_perdido_do_site(self):
+        for kw in ({"etapa": "contato"}, {"etapa": "proposta"}, {"etapa": "ganho"}, {"produto": "prumo"}):
+            ok, motivo = entra(**kw)
+            self.assertFalse(ok, kw)
+            self.assertEqual(motivo, "", "o que não está perdido nem aparece entre os guardados")
+
+    def test_folga_de_dois_dias_em_perdido(self):
+        ok, motivo = entra(diasNaEtapa=1)
         self.assertFalse(ok)
-        self.assertIn("entra em 08/10", motivo)
+        self.assertIn("entra em 1", motivo)
+        self.assertTrue(entra(diasNaEtapa=2)[0])
+        self.assertTrue(entra(diasNaEtapa=None)[0], "sem data (acervo recusado à mão) é antigo")
 
-    def test_data_vale_no_fuso_de_sao_paulo(self):
-        # 28/09 00:30 UTC ainda é 27/09 em São Paulo: já completa 10 dias em 07/10.
-        self.assertTrue(entra(enviado_em="2026-09-28T00:30:00.000Z")[0])
-
-    def test_qualquer_interacao_veta(self):
-        for campo in ("respondeu_em", "fechado_em", "recusado_em"):
-            ok, motivo = entra(**{campo: "2026-10-01T10:00:00.000Z"})
-            self.assertFalse(ok, campo)
-            self.assertEqual(motivo, "teve interação")
-
-    def test_pastas_do_jogo_ou_recusadas_nunca_entram(self):
-        for pasta in ("_recusados/fulano", "_em-conversa/fulano", "_fechados/fulano", "_descartados/fulano"):
-            self.assertFalse(entra(pasta=pasta)[0], pasta)
-
-    def test_status_que_nao_e_enviado_ou_expirado_nao_entra(self):
-        for status in ("pronto", "recusado", "fechado", "novo"):
-            self.assertFalse(entra(status=status)[0], status)
-
-    def test_so_projeto_demo(self):
-        self.assertFalse(entra(vercel_project="squadone-app")[0])
-        self.assertFalse(entra(vercel_project="")[0])
-
-    def test_data_ilegivel_nao_entra(self):
-        ok, motivo = entra(enviado_em="ontem")
+    def test_lugares_de_quem_perdeu_entram_e_fechados_nunca(self):
+        for lugar in ("raiz", "_recusados/", "_concluidos/", "_em-conversa/", "_descartados/"):
+            self.assertTrue(entra(pasta={"lugar": lugar, "slug": "fulano"})[0], lugar)
+        ok, motivo = entra(pasta={"lugar": "_fechados/", "slug": "fulano"})
         self.assertFalse(ok)
-        self.assertEqual(motivo, "enviado_em ilegível")
+        self.assertIn("_fechados/", motivo)
 
-    def test_pasta_com_caminho_estranho_nao_entra(self):
-        self.assertFalse(entra(pasta="../fulano")[0])
-        self.assertFalse(entra(pasta="")[0])
+    def test_sem_pasta_sem_demo_ou_ja_apagado_nao_entra_nem_aparece(self):
+        for kw in ({"pasta": None}, {"pasta": {"lugar": "raiz", "slug": "../fulano"}}, {"demoApagadoEm": "2026-10-07T10:00:00Z"}):
+            self.assertEqual(entra(**kw), (False, ""), kw)
+        self.assertEqual(entra(projetos={}), (False, ""), "nunca publicado (ou o publicado.json já tem apagado_em)")
+        self.assertEqual(entra(projetos={"fulano": "squadone-app"}), (False, ""), "só projeto demo-*")
 
-    def test_pedido_de_exclusao_nao_entra_na_regra_de_quem_nao_interagiu(self):
-        # Quem pediu exclusão foi marcado recusado: só o --exclusao, pelo nome, apaga esse demo.
-        ok, _ = entra(status="recusado", pasta="_recusados/fulano", recusado_em="2026-10-07T10:00:00Z", resposta_tipo="exclusao")
-        self.assertFalse(ok)
+    def test_mais_antigo_em_perdido_primeiro_e_sem_data_antes_de_todos(self):
+        leads = [perdido(empresa="Novo", desde="2026-10-05T12:00:00Z", pasta={"lugar": "raiz", "slug": "novo"}),
+                 perdido(empresa="Velho", desde="2026-09-30T12:00:00Z", pasta={"lugar": "raiz", "slug": "velho"}),
+                 perdido(empresa="Acervo", desde=None, diasNaEtapa=None, pasta={"lugar": "_recusados/", "slug": "acervo"})]
+        eleitos, _ = limpeza.escolher(leads, lambda p: "demo-" + p.rsplit("/", 1)[-1])
+        self.assertEqual([e["nome"] for e in eleitos], ["Acervo", "Velho", "Novo"])
+
+
+class ComandoApagar(unittest.TestCase):
+    """main(['--apagar', ...]) com a Central, o disco e a Vercel dublados."""
+
+    def setUp(self):
+        self.originais = {n: getattr(limpeza, n) for n in ("ler_crm", "projeto_da_pasta", "apagar", "MAX_POR_RODADA")}
+        self.apagou = []
+        self.leads = [perdido(empresa=f"L{i}", desde=f"2026-09-{10 + i:02d}T12:00:00Z", pasta={"lugar": "raiz", "slug": f"l{i}"})
+                      for i in range(5)]
+        limpeza.ler_crm = lambda: self.leads
+        limpeza.projeto_da_pasta = lambda pasta: f"demo-{pasta}"
+        limpeza.apagar = lambda alvos, a_pedido=False: self.apagou.append([a["projeto"] for a in alvos]) or 0
+
+    def tearDown(self):
+        for n, f in self.originais.items():
+            setattr(limpeza, n, f)
+
+    def test_apaga_todos_os_que_entram(self):
+        self.assertEqual(limpeza.main(["--apagar"]), 0)
+        self.assertEqual(self.apagou, [[f"demo-l{i}" for i in range(5)]])
+
+    def test_teto_por_rodada_leva_os_mais_antigos(self):
+        limpeza.MAX_POR_RODADA = 2
+        limpeza.main(["--apagar"])
+        self.assertEqual(self.apagou, [["demo-l0", "demo-l1"]])
+
+    def test_so_os_nomeados_e_nada_se_um_nao_entra(self):
+        limpeza.main(["--apagar", "demo-l3"])
+        self.assertEqual(self.apagou, [["demo-l3"]])
+        self.assertEqual(limpeza.main(["--apagar", "demo-l3", "demo-outro"]), 2)
+        self.assertEqual(len(self.apagou), 1)
+
+    def test_simular_e_listar_nao_apagam(self):
+        limpeza.main(["--simular"])
+        self.assertEqual(limpeza.main(["--simular", "--apagar"]), 2)
+        self.assertEqual(limpeza.main(["demo-l1"]), 2)
+        self.assertEqual(self.apagou, [])
+
+    def test_central_fora_do_ar_nao_apaga(self):
+        def fora():
+            raise RuntimeError("não consegui ler o CRM da Central")
+        limpeza.ler_crm = fora
+        with self.assertRaises(RuntimeError):
+            limpeza.main(["--apagar"])
+        self.assertEqual(self.apagou, [])
+
+
+def lead(**kw):
+    """Uma linha do retrato da planilha (site-leads.json): é o que o --exclusao lê."""
+    base = {"nome": "Fulano", "status": "enviado", "pasta": "fulano", "vercel_project": "demo-fulano",
+            "enviado_em": "2026-09-25T16:15:53.000Z", "respondeu_em": "", "fechado_em": "", "recusado_em": ""}
+    base.update(kw)
+    return base
 
 
 def pedido(**kw):

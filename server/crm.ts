@@ -18,14 +18,16 @@ import { followupDe, segundaDe } from "./site-mensagem.ts";
 // Todas as regras de etapa moram aqui, em etapaDoSite e etapaDoPrumo, e os
 // nomes de coluna em COLUNAS_DO_SITE / COLUNAS_DO_PRUMO / COLUNAS_DO_REGISTRO.
 
-export const ETAPAS = ["novo", "contatado", "conversando", "proposta", "ganho", "perdido"] as const;
+// "Em contato" (08/10/2026) juntou Contatado e Conversando: a coluna de
+// Conversando passava dias vazia e a de Contatado acumulava quem não respondia
+// havia uma semana. Uma coluna, um critério: DIAS_SEM_RESPOSTA.
+export const ETAPAS = ["novo", "contato", "proposta", "ganho", "perdido"] as const;
 export type CrmEtapa = (typeof ETAPAS)[number];
 export type CrmProduto = "site" | "prumo";
 
 export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: "Novo",
-  contatado: "Contatado",
-  conversando: "Conversando",
+  contato: "Em contato",
   proposta: "Proposta",
   ganho: "Ganho",
   perdido: "Perdido",
@@ -36,7 +38,14 @@ export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = { site: "Site antes
 /** Follow-up, expiração e mudança automática de pasta só valem para envio a partir daqui (site-antes-da-venda.py). */
 export const CORTE_DO_ACOMPANHAMENTO = "2026-09-29T00:00:00-03:00";
 export const DIAS_ATE_FOLLOWUP = 3;
+/** A regra da PLANILHA: o 05 · Acompanhamento marca "expirado" no 10º dia e o site-pastas move a pasta. */
 export const DIAS_ATE_EXPIRAR = 10;
+/**
+ * A regra do CRM (08/10/2026, pedido do Rômulo: "7 ou 8 dias sem falar, é claro que não funcionou"):
+ * Em contato sem mensagem do lead há tantos dias — da última resposta, ou do envio se ele nunca
+ * respondeu — vai para Perdido. Vale para Site (acervo incluído) e PRUMO, antes da planilha expirar.
+ */
+export const DIAS_SEM_RESPOSTA = 7;
 /** Resposta "nova" para a lista Hoje quando não há colunas de última entrada/saída. */
 export const HORAS_DE_RESPOSTA_NOVA = 48;
 /** Retrato mais velho que isto aparece como desatualizado (o fluxo roda a cada 10 min). */
@@ -350,7 +359,10 @@ export interface CrmLead {
   etapa: CrmEtapa;
   sinal: CrmSinal;
   subEtapa: string;
-  motivoPerda?: "recusou" | "expirou" | "descartado" | "sem-interesse" | "sem-contato";
+  /** `expirou`: nunca respondeu em DIAS_SEM_RESPOSTA; `esfriou`: respondeu e parou de responder. */
+  motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato";
+  /** Só em Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
+  diasParaSair?: number;
   /** Valor cru da planilha (status do Site, Etapa do PRUMO), para conferência. */
   estadoNaPlanilha: string;
   desde?: string;
@@ -424,7 +436,7 @@ export interface CrmVisao {
   fontes: Array<{ id: "site" | "prumo" | "registros"; nome: string; linhas: number; erro?: string }>;
   colunasAusentes: string[];
   contagens: Record<CrmEtapa, CrmContagem>;
-  perdas: { recusou: number; expirou: number; descartado: number; semInteresse: number };
+  perdas: { recusou: number; expirou: number; esfriou: number; descartado: number; semInteresse: number };
   hoje: CrmGrupoHoje[];
   leads: CrmLead[];
   divergencias: number;
@@ -497,6 +509,43 @@ function comPerdaManual(calculada: EtapaCalculada, semContato: Registro | undefi
   return { etapa: "perdido", sinal: "sem-contato", subEtapa: "Perdido: sem contato fácil", desde: semContato.em, motivoPerda: "sem-contato" };
 }
 
+/** Quem já falou com a gente: a classificação do n8n e a pasta em _em-conversa/ contam como conversa. */
+const SINAIS_DE_CONVERSA: ReadonlySet<CrmSinal> = new Set(["respondeu", "em-conversa", "respondeu-prumo", "diagnostico"]);
+
+/**
+ * O prazo de Em contato (DIAS_SEM_RESPOSTA). `ultimoDoLead` é a última mensagem DELE (robô não conta);
+ * sem nenhuma, conta do envio. Um próximo passo registrado segura o lead: é o Rômulo dizendo que ainda
+ * vale. O lead que escreve de novo volta sozinho, porque a conta recomeça na mensagem nova.
+ */
+function comPrazoDoContato(calculada: EtapaCalculada, ultimoDoLead: number | undefined, enviado: number | undefined,
+  proximo: Registro | undefined, agora: number): EtapaCalculada & { diasParaSair?: number } {
+  const desde = ultimoDoLead ?? enviado;
+  if (calculada.etapa !== "contato" || proximo || desde === undefined) return calculada;
+  const passados = dias(desde, agora) ?? 0;
+  if (passados < DIAS_SEM_RESPOSTA) return { ...calculada, diasParaSair: DIAS_SEM_RESPOSTA - passados };
+  const saiu = desde + DIAS_SEM_RESPOSTA * DIA_MS;
+  return ultimoDoLead === undefined && !SINAIS_DE_CONVERSA.has(calculada.sinal)
+    ? { etapa: "perdido", sinal: "expirou", subEtapa: `Sem resposta em ${DIAS_SEM_RESPOSTA} dias`, desde: saiu, motivoPerda: "expirou" }
+    : { etapa: "perdido", sinal: "esfriou", subEtapa: `Parou de responder: ${DIAS_SEM_RESPOSTA} dias sem mensagem`, desde: saiu, motivoPerda: "esfriou" };
+}
+
+/** Perdido pelo tempo, sem desfecho de ninguém: volta com mensagem do lead, próximo passo ou proposta. */
+export const saiuPeloPrazo = (lead: Pick<CrmLead, "motivoPerda">) => lead.motivoPerda === "expirou" || lead.motivoPerda === "esfriou";
+
+/** A saída pelo prazo na linha do tempo da ficha: data calculada pela regra, não lida da planilha. */
+function eventoDoPrazo(calculada: EtapaCalculada): CrmEvento[] {
+  const rotulo = calculada.sinal === "expirou" ? `Saiu do funil: ${DIAS_SEM_RESPOSTA} dias sem resposta`
+    : calculada.sinal === "esfriou" ? `Saiu do funil: ${DIAS_SEM_RESPOSTA} dias sem mensagem depois de responder` : "";
+  return rotulo ? evento(calculada.sinal, rotulo, calculada.desde, `regra do CRM (${DIAS_SEM_RESPOSTA} dias sem mensagem do lead)`, { estimado: true }) : [];
+}
+
+/** A última mensagem do lead entre as datas da planilha; a classificação "bot" não é ele falando. */
+function ultimaDoLead(datas: Array<number | undefined>, resposta: CrmResposta | undefined): number | undefined {
+  const todas = [...datas, resposta && resposta.tipo !== "bot" ? instante(resposta.em ?? "") : undefined]
+    .filter((t): t is number => t !== undefined);
+  return todas.length ? Math.max(...todas) : undefined;
+}
+
 function eventosManuais(registros: Registro[]): CrmEvento[] {
   const rotulo: Record<CrmTipoDeRegistro, string> = {
     nota: "Nota",
@@ -550,7 +599,7 @@ const dias = (desde: number | undefined, agora: number) => (desde === undefined 
 export type CrmSinal =
   | "na-fila" | "publicado" | "pronto" | "enviado" | "viu" | "respondeu" | "em-conversa"
   | "revisar" | "sem-etapa" | "convite" | "convite-visto" | "respondeu-prumo" | "diagnostico"
-  | "proposta" | "fechou" | "concluido" | "recusou" | "recusou-pasta" | "expirou" | "descartado" | "sem-interesse" | "sem-contato" | "so-robo";
+  | "proposta" | "fechou" | "concluido" | "recusou" | "recusou-pasta" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato" | "so-robo";
 
 interface EtapaCalculada {
   etapa: CrmEtapa;
@@ -594,12 +643,14 @@ export function etapaDoSite(entrada: {
     return { etapa: "perdido", sinal: "recusou", subEtapa: `Recusou${noWhatsapp}`, desde: entrada.recusado, motivoPerda: "recusou" };
   }
   if (lugar === "_recusados") return { etapa: "perdido", sinal: "recusou-pasta", subEtapa: "Recusou (anotado na pasta _recusados/)", motivoPerda: "recusou" };
+  // A planilha expira no 10º dia, o CRM já tirou no 7º: mesma saída e mesma data, para o
+  // "desde" (e a folga da limpeza dos demos) não recomeçar quando o status chega.
   if (status === "expirado" && entrada.respondeu === undefined) {
     return {
       etapa: "perdido",
       sinal: "expirou",
-      subEtapa: `Expirou: ${DIAS_ATE_EXPIRAR} dias sem resposta`,
-      desde: entrada.enviado === undefined ? undefined : entrada.enviado + DIAS_ATE_EXPIRAR * DIA_MS,
+      subEtapa: `Sem resposta em ${DIAS_SEM_RESPOSTA} dias`,
+      desde: entrada.enviado === undefined ? undefined : entrada.enviado + DIAS_SEM_RESPOSTA * DIA_MS,
       motivoPerda: "expirou",
     };
   }
@@ -607,16 +658,16 @@ export function etapaDoSite(entrada: {
   // O gerador (ou uma sessão do Claude) descarta movendo a pasta, sem tocar na planilha: a divergência aparece na ficha.
   if (lugar === "_descartados") return { etapa: "perdido", sinal: "descartado", subEtapa: "Descartado (pasta _descartados/)", motivoPerda: "descartado" };
   if (entrada.proposta) return { etapa: "proposta", sinal: "proposta", subEtapa: "Proposta enviada", desde: dataDoDia(entrada.proposta.data) ?? entrada.proposta.em };
-  if (entrada.respondeu !== undefined) return { etapa: "conversando", sinal: "respondeu", subEtapa: subEtapaDaResposta(resposta), desde: entrada.respondeu };
+  if (entrada.respondeu !== undefined) return { etapa: "contato", sinal: "respondeu", subEtapa: subEtapaDaResposta(resposta), desde: entrada.respondeu };
   // Só robô respondeu (o n8n já apagou o respondeu_em): é contato sem conversa, mesmo com a pasta em _em-conversa/.
   if (resposta?.tipo === "bot" && (status === "enviado" || status === "expirado")) {
-    return { etapa: "contatado", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.enviado };
+    return { etapa: "contato", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.enviado };
   }
-  if (lugar === "_em-conversa") return { etapa: "conversando", sinal: "em-conversa", subEtapa: "Em conversa (pasta _em-conversa/)", desde: entrada.enviado };
+  if (lugar === "_em-conversa") return { etapa: "contato", sinal: "em-conversa", subEtapa: "Em conversa (pasta _em-conversa/)", desde: entrada.enviado };
   if (status === "enviado" || status === "expirado" || entrada.enviado !== undefined) {
     return entrada.visto !== undefined
-      ? { etapa: "contatado", sinal: "viu", subEtapa: "Viu, sem resposta", desde: entrada.enviado ?? entrada.visto }
-      : { etapa: "contatado", sinal: "enviado", subEtapa: "Enviado · leitura desconhecida", desde: entrada.enviado };
+      ? { etapa: "contato", sinal: "viu", subEtapa: "Viu, sem resposta", desde: entrada.enviado ?? entrada.visto }
+      : { etapa: "contato", sinal: "enviado", subEtapa: "Enviado · leitura desconhecida", desde: entrada.enviado };
   }
   if (status === "pronto") return { etapa: "novo", sinal: "pronto", subEtapa: "Pronto, não enviado", desde: entrada.publicadoEm ?? entrada.criado };
   if (entrada.publicado) return { etapa: "novo", sinal: "publicado", subEtapa: "Site publicado, falta o Balcão marcar pronto", desde: entrada.publicadoEm ?? entrada.criado };
@@ -652,15 +703,21 @@ function leadDoSite(linha: Linha, contexto: {
     ultimaSaida: instante(c("ultimaSaidaEm")),
   };
   const resposta = respostaDaLinha(c);
-  const calculada = comPerdaManual(etapaDoSite({ status, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta }), semContato);
+  // "expirado" é a regra de tempo da planilha, não decisão de ninguém: próximo passo ou proposta
+  // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato).
+  const statusDaEtapa = status === "expirado" && (proximo || proposta) ? "enviado" : status;
+  const calculada = comPrazoDoContato(
+    comPerdaManual(etapaDoSite({ status: statusDaEtapa, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta }), semContato),
+    ultimaDoLead([t.respondeu, t.ultimaEntrada], resposta), t.enviado, proximo, agora);
+  const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
   const diasDesdeEnvio = dias(t.enviado, agora);
-  const followupHoje = calculada.etapa === "contatado" && !acervo && diasDesdeEnvio !== undefined
-    && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_ATE_EXPIRAR
+  const followupHoje = calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined
+    && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
     && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
     && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS);
-  const respostaNova = calculada.etapa === "conversando" && (
+  const respostaNova = emConversa && (
     t.ultimaEntrada !== undefined && t.ultimaSaida !== undefined
       ? t.ultimaEntrada > t.ultimaSaida
       : t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000);
@@ -674,8 +731,9 @@ function leadDoSite(linha: Linha, contexto: {
     ...evento("respondeu", "Respondeu", t.respondeu, "planilha · respondeu_em"),
     ...eventoDaResposta(resposta, "planilha · resposta_tipo"),
     ...evento("followup", "Lembrete de follow-up (05 · Acompanhamento)", t.followup, "planilha · followup_em"),
+    ...eventoDoPrazo(calculada),
     ...(status === "expirado" && t.enviado !== undefined
-      ? evento("expirou", "Expirou sem resposta", t.enviado + DIAS_ATE_EXPIRAR * DIA_MS, "status expirado · data pela regra dos 10 dias", { estimado: true })
+      ? evento("expirou", "Planilha marcou expirado", t.enviado + DIAS_ATE_EXPIRAR * DIA_MS, "status expirado · data pela regra dos 10 dias", { estimado: true })
       : []),
     ...evento("recusou", "Recusou", t.recusado, "planilha · recusado_em"),
     ...evento("fechou", "Fechou", t.fechado, "planilha · fechado_em"),
@@ -695,7 +753,7 @@ function leadDoSite(linha: Linha, contexto: {
   // Os textos são os do n8n (server/site-mensagem.ts espelha site-mensagem.js), em inglês nos EUA.
   const waMe = /wa\.me\/\d+/.test(c("waMe")) ? c("waMe") : whatsapp ? `https://wa.me/${whatsapp}` : "";
   const mensagem = { nome: c("empresa"), siteUrl: site ?? "", waMe };
-  const segunda = calculada.etapa === "conversando" && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
+  const segunda = emConversa && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
   // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
   const followup = followupHoje && waMe ? followupDe(mensagem).link || undefined : undefined;
 
@@ -715,7 +773,7 @@ function leadDoSite(linha: Linha, contexto: {
     if (status === "descartado" && pasta?.artefatos.publicado && (lugar === "" || lugar === "_em-conversa")) {
       divergencias.push(`Planilha diz descartado, mas há site publicado (${nomeDoLugar(lugar)}).`);
     }
-    if (calculada.etapa === "conversando" && t.respondeu !== undefined && t.respondeu >= corte && lugar === "" && !recente(t.respondeu)) {
+    if ((emConversa || calculada.sinal === "esfriou") && t.respondeu !== undefined && t.respondeu >= corte && lugar === "" && !recente(t.respondeu)) {
       divergencias.push("Respondeu, mas a pasta continua na raiz (deveria estar em _em-conversa/).");
     }
     if (status === "expirado" && !acervo && t.respondeu === undefined && lugar === "" && t.enviado !== undefined
@@ -740,10 +798,11 @@ function leadDoSite(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: status || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
     ...(ultimo !== undefined ? { ultimoEvento: iso(ultimo), diasDesdeUltimoEvento: dias(ultimo, agora) } : {}),
-    leitura: leituraDe(t.enviado, t.visto, t.respondeu ?? (calculada.sinal === "em-conversa" ? agora : undefined), calculada.etapa === "contatado"),
+    leitura: leituraDe(t.enviado, t.visto, t.respondeu ?? (calculada.sinal === "em-conversa" ? agora : undefined), calculada.etapa === "contato"),
     marcos,
     followupHoje,
     respostaNova,
@@ -779,7 +838,7 @@ function leadDoSite(linha: Linha, contexto: {
 
 // ------------------------------------------------------------------ etapa do PRUMO
 
-/** PRUMO: a coluna Etapa manda; resposta no WhatsApp e diagnóstico levam a Conversando. */
+/** PRUMO: a coluna Etapa manda; convite, resposta no WhatsApp e diagnóstico ficam Em contato. */
 export function etapaDoPrumo(entrada: {
   etapa: string;
   encontrado?: number;
@@ -800,18 +859,18 @@ export function etapaDoPrumo(entrada: {
   }
   if (entrada.proposta) return { etapa: "proposta", sinal: "proposta", subEtapa: "Proposta enviada", desde: dataDoDia(entrada.proposta.data) ?? entrada.proposta.em };
   if (etapa === "diagnostico_pronto" || entrada.diagnostico !== undefined) {
-    return { etapa: "conversando", sinal: "diagnostico", subEtapa: "Formulário respondido · diagnóstico pronto", desde: entrada.diagnostico };
+    return { etapa: "contato", sinal: "diagnostico", subEtapa: "Formulário respondido · diagnóstico pronto", desde: entrada.diagnostico };
   }
   if (entrada.respondeu !== undefined) {
-    return { etapa: "conversando", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Respondeu no WhatsApp"), desde: entrada.respondeu };
+    return { etapa: "contato", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Respondeu no WhatsApp"), desde: entrada.respondeu };
   }
   if (resposta?.tipo === "bot" && (etapa === "convite_enviado" || entrada.convite !== undefined)) {
-    return { etapa: "contatado", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.convite };
+    return { etapa: "contato", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.convite };
   }
   if (etapa === "convite_enviado" || entrada.convite !== undefined) {
     return entrada.visto !== undefined
-      ? { etapa: "contatado", sinal: "convite-visto", subEtapa: "Viu o convite, sem resposta", desde: entrada.convite ?? entrada.visto }
-      : { etapa: "contatado", sinal: "convite", subEtapa: "Convite enviado · leitura desconhecida", desde: entrada.convite };
+      ? { etapa: "contato", sinal: "convite-visto", subEtapa: "Viu o convite, sem resposta", desde: entrada.convite ?? entrada.visto }
+      : { etapa: "contato", sinal: "convite", subEtapa: "Convite enviado · leitura desconhecida", desde: entrada.convite };
   }
   if (etapa === "revisar") return { etapa: "novo", sinal: "revisar", subEtapa: "Revisar", desde: entrada.encontrado };
   return { etapa: "novo", sinal: "sem-etapa", subEtapa: entrada.etapa ? `Etapa "${entrada.etapa}"` : "Sem etapa na planilha", desde: entrada.encontrado };
@@ -839,11 +898,13 @@ function leadDoPrumo(linha: Linha, contexto: {
   };
   const mapa = contexto.mapas.get(chave);
   const resposta = respostaDaLinha(c);
-  const calculada = comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato);
+  const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
+    ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora);
+  const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const diasDesdeConvite = dias(t.convite, agora);
-  const followupHoje = calculada.etapa === "contatado" && diasDesdeConvite !== undefined
-    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_ATE_EXPIRAR;
-  const respostaNova = calculada.etapa === "conversando" && t.respondeu !== undefined && t.diagnostico === undefined
+  const followupHoje = calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
+    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA;
+  const respostaNova = emConversa && t.respondeu !== undefined && t.diagnostico === undefined
     && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000;
   const eventos: CrmEvento[] = [
     ...evento("encontrado", "Encontrado pelo Lead Scout", t.encontrado, "planilha · Encontrado em"),
@@ -853,6 +914,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...eventoDaResposta(resposta, "planilha · Tipo da resposta"),
     ...evento("diagnostico", `Formulário respondido · diagnóstico pronto${c("indice") ? ` (Índice ${c("indice")})` : ""}`, t.diagnostico, "planilha · Diagnóstico em"),
     ...evento("mapa", "Mapa gerado (rascunho em ~/prumo-entregas)", instante(mapa?.geradoEm ?? ""), `pasta · ${mapa?.pasta ?? ""}`),
+    ...eventoDoPrazo(calculada),
     ...eventosManuais(registros),
   ].sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
   const whatsapp = numeroDoWhatsapp(c("whatsapp"));
@@ -871,10 +933,11 @@ function leadDoPrumo(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: c("etapa") || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
     ...(ultimo !== undefined ? { ultimoEvento: iso(ultimo), diasDesdeUltimoEvento: dias(ultimo, agora) } : {}),
-    leitura: leituraDe(t.convite, t.visto, t.respondeu ?? t.diagnostico, calculada.etapa === "contatado"),
+    leitura: leituraDe(t.convite, t.visto, t.respondeu ?? t.diagnostico, calculada.etapa === "contato"),
     marcos: { ...(iso(t.convite) ? { enviado: iso(t.convite) } : {}), ...(iso(t.visto) ? { visto: iso(t.visto) } : {}), ...(iso(t.respondeu) ? { respondeu: iso(t.respondeu) } : {}) },
     followupHoje,
     respostaNova,
@@ -887,7 +950,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
       ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/convite?id=${encodeURIComponent(chave)}` } : {}),
-      ...(calculada.etapa === "conversando" && t.diagnostico === undefined && webhook
+      ...(emConversa && t.diagnostico === undefined && webhook
         ? { segunda: `${webhook}/convite?id=${encodeURIComponent(chave)}&passo=diagnostico` } : {}),
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(planilha ? { planilha } : {}),
@@ -900,7 +963,7 @@ function leadDoPrumo(linha: Linha, contexto: {
 
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
-  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Contatados há ${DIAS_ATE_FOLLOWUP} dias ou mais sem resposta.` },
+  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta.` },
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Leads que escreveram por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "PRUMO na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
@@ -1018,7 +1081,7 @@ export function visaoSemRetrato(agora: Date, estado: "sem-retrato" | "retrato-in
     fontes: [],
     colunasAusentes: [],
     contagens: contagemVazia(),
-    perdas: { recusou: 0, expirou: 0, descartado: 0, semInteresse: 0 },
+    perdas: { recusou: 0, expirou: 0, esfriou: 0, descartado: 0, semInteresse: 0 },
     hoje: montarHoje([], agora.getTime()),
     leads: [],
     divergencias: 0,
@@ -1086,6 +1149,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     perdas: {
       recusou: leads.filter((l) => l.motivoPerda === "recusou").length,
       expirou: leads.filter((l) => l.motivoPerda === "expirou").length,
+      esfriou: leads.filter((l) => l.motivoPerda === "esfriou").length,
       descartado: leads.filter((l) => l.motivoPerda === "descartado").length,
       semInteresse: leads.filter((l) => l.motivoPerda === "sem-interesse").length,
     },
@@ -1305,7 +1369,8 @@ export class CrmStore {
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");
     if (registro.tipo === "sem_contato" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
     if (registro.tipo === "sem_contato_desfeito" && lead.motivoPerda !== "sem-contato") throw new RegistroInvalido("Este lead não foi perdido por falta de contato.");
-    if (registro.tipo === "proposta" && (lead.etapa === "ganho" || lead.etapa === "perdido")) {
+    // Quem saiu pelo prazo (expirou/esfriou) não teve desfecho: uma proposta o traz de volta.
+    if (registro.tipo === "proposta" && (lead.etapa === "ganho" || lead.etapa === "perdido") && !saiuPeloPrazo(lead)) {
       throw new RegistroInvalido("Lead já encerrado: desfaça o desfecho na página do lead antes.");
     }
     const segredo = await this.segredo();

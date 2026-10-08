@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura } from './crm-formato'
-import type { CrmEtapa, CrmLead, CrmProduto, CrmVisao } from './types'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDoPrazo } from './crm-formato'
+import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
-// "Funil": no desktop, as 6 etapas lado a lado. No celular (abaixo de 1024 px),
-// um produto por vez (segmentado Site / Organizar, o PRUMO), abas com as
-// etapas e a lista da etapa escolhida — seis colunas com rolagem lateral não
-// cabiam em 390 px. Estado sempre por texto, cor só reforça (RULES 3).
+// "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
+// encerrados (Ganho em cima de Perdido) —, sem rolagem lateral a partir de
+// 1280 px (08/10/2026: seis colunas de 15 rem ficavam espremidas). No celular
+// (abaixo de 1024 px), um produto por vez (segmentado Site / Organizar, o
+// PRUMO), abas com as etapas e a lista da etapa escolhida. Estado sempre por
+// texto, cor só reforça (RULES 3).
 const props = defineProps<{
   leads: CrmLead[]
   visao: CrmVisao
@@ -63,9 +65,14 @@ const filtrados = computed(() => {
     && (!termo || normalizar(`${l.empresa} ${l.nicho} ${l.cidade}`).includes(termo)))
 })
 
+// Em contato junta quem só recebeu e quem já respondeu: quem respondeu vem antes.
+const CONVERSA: ReadonlySet<CrmSinal> = new Set(['respondeu', 'em-conversa', 'respondeu-prumo', 'diagnostico'])
+const emConversa = (l: CrmLead) => l.etapa === 'contato' && CONVERSA.has(l.sinal)
+
 // Dentro da coluna: o que pede ação primeiro; etapas abertas do mais antigo
-// para o mais novo, encerradas do mais recente para o mais antigo.
-const peso = (l: CrmLead) => (l.respostaNova ? 0 : l.followupHoje ? 1 : l.proximoPasso ? 2 : l.links.enviar || l.links.convite ? 3 : l.divergencias.length ? 4 : 5)
+// (o mais perto de sair) para o mais novo, encerradas do mais recente para o mais antigo.
+const peso = (l: CrmLead) => (l.respostaNova ? 0 : l.followupHoje ? 1 : l.proximoPasso ? 2 : emConversa(l) ? 3
+  : l.links.enviar || l.links.convite ? 4 : l.divergencias.length ? 5 : 6)
 const porEtapa = computed(() => {
   const grupos = Object.fromEntries(ETAPAS.map(e => [e, [] as CrmLead[]])) as Record<CrmEtapa, CrmLead[]>
   for (const lead of filtrados.value) grupos[lead.etapa].push(lead)
@@ -78,13 +85,18 @@ const porEtapa = computed(() => {
   return grupos
 })
 const descartados = computed(() => porEtapa.value.perdido.filter(l => l.motivoPerda === 'descartado').length)
+/** "Recusou 90 · Sem resposta 12 · Descartado 750": só os motivos que têm alguém. */
+const perdasDaColuna = computed(() => (Object.keys(ROTULO_DA_PERDA) as Array<keyof typeof ROTULO_DA_PERDA>)
+  .map(m => [ROTULO_DA_PERDA[m], porEtapa.value.perdido.filter(l => l.motivoPerda === m).length] as const)
+  .filter(([, n]) => n).map(([rotulo, n]) => `${rotulo} ${n}`).join(' · '))
+const conversas = computed(() => porEtapa.value.contato.filter(emConversa).length)
 const cartoes = (etapa: CrmEtapa) => {
   const lista = etapa === 'perdido' && !mostrarDescartados.value ? porEtapa.value.perdido.filter(l => l.motivoPerda !== 'descartado') : porEtapa.value[etapa]
   return { lista: lista.slice(0, limites.value[etapa]), resto: Math.max(0, lista.length - limites.value[etapa]) }
 }
 const mais = (etapa: CrmEtapa) => { limites.value = { ...limites.value, [etapa]: limites.value[etapa] + LIMITE } }
 
-const temMarcos = (l: CrmLead) => ['contatado', 'conversando', 'proposta'].includes(l.etapa) || Boolean(l.marcos.enviado)
+const temMarcos = (l: CrmLead) => l.etapa === 'contato' || l.etapa === 'proposta' || Boolean(l.marcos.enviado)
 const artefatos = (l: CrmLead) => {
   const a = l.pasta?.artefatos
   if (!a || l.sinal !== 'na-fila') return ''
@@ -147,8 +159,12 @@ const artefatos = (l: CrmLead) => {
           Gerador de sites: {{ visao.gerador.estado === 'processando' ? 'gerando agora' : visao.gerador.estado === 'ocioso' ? 'ocioso' : visao.gerador.estado === 'atencao' ? 'precisa de atenção' : 'sem status' }}.
           {{ visao.gerador.detalhe }}{{ visao.gerador.pendentes !== undefined ? ` ${visao.gerador.pendentes} na fila.` : '' }}{{ visao.gerador.atualizadoEm ? ` (às ${hora(visao.gerador.atualizadoEm)})` : '' }}
         </p>
+        <p v-if="etapa === 'contato' && porEtapa.contato.length" class="crm-coluna__nota">
+          {{ conversas }} respondeu{{ conversas === 1 ? '' : 'ram' }} · {{ porEtapa.contato.length - conversas }} sem resposta.
+          Um próximo passo segura o lead aqui.
+        </p>
         <template v-if="etapa === 'perdido'">
-          <p class="crm-coluna__nota">Recusou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'recusou').length }} · Expirou {{ porEtapa.perdido.filter(l => l.motivoPerda === 'expirou').length }} · Sem interesse {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-interesse').length }} · Sem contato {{ porEtapa.perdido.filter(l => l.motivoPerda === 'sem-contato').length }} · Descartado {{ descartados }}</p>
+          <p v-if="perdasDaColuna" class="crm-coluna__nota">{{ perdasDaColuna }}</p>
           <label v-if="descartados" class="crm-check"><input v-model="mostrarDescartados" type="checkbox"> Mostrar os {{ descartados }} descartados antes do contato</label>
         </template>
 
@@ -167,13 +183,14 @@ const artefatos = (l: CrmLead) => {
               </ol>
               <p v-if="artefatos(lead)" class="crm-cartao__artefatos">{{ artefatos(lead) }}<template v-if="lead.pasta?.falha"> · falhou: {{ lead.pasta.falha }}</template></p>
               <p v-if="lead.resposta?.trecho && lead.etapa !== 'novo'" class="crm-cartao__resposta">“{{ lead.resposta.trecho }}”</p>
-              <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo" class="crm-sinais">
+              <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead)" class="crm-sinais">
                 <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
                 <span v-if="lead.followupHoje" class="crm-sinal is-followup">Follow-up hoje</span>
                 <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
+                <span v-if="textoDoPrazo(lead)" class="crm-sinal is-prazo" :class="{ 'is-amanha': lead.diasParaSair === 1 }">{{ textoDoPrazo(lead) }}</span>
                 <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
-                <span v-if="lead.acervo && lead.etapa === 'contatado'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
+                <span v-if="lead.acervo && lead.etapa === 'contato'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
               </p>
               <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.site" class="crm-cartao__links">
                 <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>

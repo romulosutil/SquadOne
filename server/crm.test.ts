@@ -137,15 +137,15 @@ const lead = (leads: CrmLead[], id: string) => {
 };
 
 describe("CRM: etapas do Site antes da venda", () => {
-  it("põe cada lead numa das 6 etapas pela planilha e usa a pasta só onde a esteira já usa", () => {
+  it("põe cada lead numa das 5 etapas pela planilha e usa a pasta só onde a esteira já usa", () => {
     const { leads } = visao();
     const etapa = (id: string) => { const l = lead(leads, `site:${id}`); return `${l.etapa}/${l.sinal}`; };
     assert.equal(leads.some((l) => l.chave === "TESTE"), false);
     assert.equal(etapa("fila"), "novo/na-fila");
     assert.equal(etapa("pronto"), "novo/pronto");
-    assert.equal(etapa("followup"), "contatado/enviado");
-    assert.equal(etapa("viu"), "contatado/viu");
-    assert.equal(etapa("respondeu"), "conversando/respondeu");
+    assert.equal(etapa("followup"), "contato/enviado");
+    assert.equal(etapa("viu"), "contato/viu");
+    assert.equal(etapa("respondeu"), "contato/respondeu");
     assert.equal(etapa("recusou-pasta"), "perdido/recusou-pasta");
     assert.equal(etapa("recusou"), "perdido/recusou");
     assert.equal(etapa("expirou"), "perdido/expirou");
@@ -153,7 +153,7 @@ describe("CRM: etapas do Site antes da venda", () => {
     assert.equal(etapa("descartado-pela-pasta"), "perdido/descartado");
     assert.equal(etapa("fechou-na-raiz"), "ganho/fechou");
     assert.equal(etapa("com-proposta"), "proposta/proposta");
-    assert.equal(etapa("proposta-desfeita"), "conversando/respondeu");
+    assert.equal(etapa("proposta-desfeita"), "contato/respondeu");
   });
 
   it("diz leitura desconhecida quando não há visto_em, nunca 'não viu'", () => {
@@ -219,7 +219,8 @@ describe("CRM: etapas do Site antes da venda", () => {
     const v = montarCrm(retrato(), { agora: AGORA });
     assert.equal(v.pastasLidas, false);
     assert.equal(v.divergencias, 0);
-    assert.equal(lead(v.leads, "site:recusou-pasta").etapa, "contatado");
+    // Sem a pasta a recusa não aparece: quem tira o lead do funil é a regra dos 7 dias.
+    assert.equal(`${lead(v.leads, "site:recusou-pasta").etapa}/${lead(v.leads, "site:recusou-pasta").sinal}`, "perdido/expirou");
   });
 
   it("mostra os artefatos da pasta só para quem está na fila do gerador", () => {
@@ -234,11 +235,11 @@ describe("CRM: etapas do PRUMO", () => {
     const { leads } = visao();
     const etapa = (id: string) => { const l = lead(leads, `prumo:${id}`); return `${l.etapa}/${l.sinal}`; };
     assert.equal(etapa("revisar"), "novo/revisar");
-    assert.equal(etapa("convite"), "contatado/convite");
-    assert.equal(etapa("leu"), "contatado/convite-visto");
+    assert.equal(etapa("convite"), "contato/convite");
+    assert.equal(etapa("leu"), "contato/convite-visto");
     assert.equal(lead(leads, "prumo:leu").leitura, "viu");
-    assert.equal(etapa("respondeu"), "conversando/respondeu-prumo");
-    assert.equal(etapa("diagnostico"), "conversando/diagnostico");
+    assert.equal(etapa("respondeu"), "contato/respondeu-prumo");
+    assert.equal(etapa("diagnostico"), "contato/diagnostico");
     assert.equal(etapa("sem-interesse"), "perdido/sem-interesse");
     assert.equal(etapa("concluido"), "ganho/concluido");
     assert.equal(lead(leads, "prumo:revisar").links.convite, `${WEBHOOK}/convite?id=revisar`);
@@ -256,7 +257,7 @@ describe("CRM: etapas do PRUMO", () => {
     const { leads } = montarCrm(base, { agora: AGORA });
     const perdido = lead(leads, "prumo:revisar");
     assert.equal(`${perdido.etapa}/${perdido.sinal}/${perdido.motivoPerda}`, "perdido/sem-contato/sem-contato");
-    assert.equal(lead(leads, "prumo:leu").etapa, "contatado");
+    assert.equal(lead(leads, "prumo:leu").etapa, "contato");
     assert.equal(lead(leads, "prumo:concluido").etapa, "ganho");
   });
 
@@ -304,13 +305,13 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     return montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads;
   }
 
-  it("só robô fica em Contatado, mesmo com resposta marcada antes; gente vai para Conversando com o tipo", () => {
+  it("só robô fica Em contato sem conversa, mesmo com resposta marcada antes; gente vem com o tipo", () => {
     const leads = comRespostas();
     const robo = lead(leads, "site:robo");
-    assert.equal(`${robo.etapa}/${robo.sinal}`, "contatado/so-robo");
+    assert.equal(`${robo.etapa}/${robo.sinal}`, "contato/so-robo");
     assert.deepEqual(robo.resposta, { tipo: "bot", trecho: "", em: dias(0.99) });
     const quer = lead(leads, "site:quer-ver");
-    assert.equal(`${quer.etapa}/${quer.subEtapa}`, "conversando/Respondeu: quer ver (interesse)");
+    assert.equal(`${quer.etapa}/${quer.subEtapa}`, "contato/Respondeu: quer ver (interesse)");
     assert.ok(quer.links.segunda?.startsWith("https://wa.me/5527999990009?text="));
     assert.ok(decodeURIComponent(quer.links.segunda!).includes("Aqui está: https://demo-quer-ver.vercel.app"));
     assert.ok(quer.eventos.some((e) => e.tipo === "resposta" && e.texto === "pode mandar"));
@@ -367,7 +368,7 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const leads = comRespostas();
     assert.equal(lead(leads, "prumo:robo").sinal, "so-robo");
     const quer = lead(leads, "prumo:quer");
-    assert.equal(quer.etapa, "conversando");
+    assert.equal(quer.etapa, "contato");
     assert.equal(quer.links.segunda, `${WEBHOOK}/convite?id=quer&passo=diagnostico`);
     const { hoje } = montarCrm((() => { const b = retrato(); b.fontes.prumo.linhas.push(linhaPrumo("quer", {
       Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "interesse", Resposta: "sou eu, pode falar",
@@ -411,9 +412,9 @@ describe("CRM: lista Hoje e contagens", () => {
   it("conta por etapa e produto e separa os motivos de perda", () => {
     const v = visao();
     assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1 });
-    assert.deepEqual(v.contagens.contatado, { total: 6, site: 4, prumo: 2 });
-    assert.deepEqual(v.contagens.perdido, { total: 6, site: 5, prumo: 1 });
-    assert.deepEqual(v.perdas, { recusou: 2, expirou: 1, descartado: 2, semInteresse: 1 });
+    assert.deepEqual(v.contagens.contato, { total: 10, site: 6, prumo: 4 });
+    assert.deepEqual(v.contagens.perdido, { total: 7, site: 6, prumo: 1 });
+    assert.deepEqual(v.perdas, { recusou: 2, expirou: 2, esfriou: 0, descartado: 2, semInteresse: 1 });
     assert.equal(v.geradoEm, "2026-10-02T14:55:00.000Z");
     assert.equal(JSON.stringify(v), JSON.stringify(visao()), "mesma entrada, mesma resposta (ETag estável)");
   });
@@ -422,6 +423,89 @@ describe("CRM: lista Hoje e contagens", () => {
     const base = retrato();
     base.fontes.site.colunas = base.fontes.site.colunas.filter((c) => c !== "visto_em" && c !== "fechado_em");
     assert.deepEqual(montarCrm(base, { agora: AGORA }).colunasAusentes, ["Leads: visto_em", "Leads: fechado_em"]);
+  });
+});
+
+describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
+  function comPrazo(extraSite: Array<Record<string, string>>, extraPrumo: Array<Record<string, string>> = [], registros: Array<Record<string, string>> = []) {
+    const base = retrato();
+    base.fontes.site.linhas.push(...extraSite);
+    base.fontes.prumo.linhas.push(...extraPrumo);
+    base.fontes.registros.linhas.push(...registros);
+    return montarCrm(base, { agora: AGORA, pastas: PASTAS });
+  }
+  const estado = (l: CrmLead) => `${l.etapa}/${l.sinal}/${l.motivoPerda ?? "-"}`;
+
+  it("sem resposta: fica até o 6º dia, sai no 7º com a data da regra", () => {
+    const { leads } = comPrazo([
+      linhaSite("seis-dias", { status: "enviado", enviado_em: dias(6) }),
+      linhaSite("sete-dias", { status: "enviado", enviado_em: dias(7), visto_em: dias(6) }),
+    ]);
+    const seis = lead(leads, "site:seis-dias");
+    assert.equal(estado(seis), "contato/enviado/-");
+    assert.equal(seis.diasParaSair, 1, "vai para Perdido amanhã");
+    const sete = lead(leads, "site:sete-dias");
+    assert.equal(estado(sete), "perdido/expirou/expirou");
+    assert.equal(sete.subEtapa, "Sem resposta em 7 dias");
+    assert.equal(sete.desde, dias(0));
+    assert.equal(sete.diasParaSair, undefined);
+    assert.equal(sete.followupHoje, false);
+    assert.ok(sete.eventos.some((e) => e.rotulo === "Saiu do funil: 7 dias sem resposta" && e.estimado));
+  });
+
+  it("respondeu e parou: conta da última mensagem do lead, e robô não conta", () => {
+    const { leads } = comPrazo([
+      linhaSite("parou", { status: "enviado", enviado_em: dias(10), respondeu_em: dias(8), resposta_tipo: "interesse", resposta_trecho: "pode mandar", resposta_em: dias(8) }),
+      linhaSite("voltou-a-falar", { status: "enviado", enviado_em: dias(10), respondeu_em: dias(9), resposta_tipo: "neutra", resposta_trecho: "quanto custa?", resposta_em: dias(2) }),
+      linhaSite("so-robo-velho", { status: "enviado", enviado_em: dias(8), resposta_tipo: "bot", resposta_em: dias(1) }),
+    ]);
+    const parou = lead(leads, "site:parou");
+    assert.equal(estado(parou), "perdido/esfriou/esfriou");
+    assert.equal(parou.subEtapa, "Parou de responder: 7 dias sem mensagem");
+    assert.equal(parou.links.segunda, undefined, "fora do funil não oferece a segunda mensagem");
+    assert.equal(estado(lead(leads, "site:voltou-a-falar")), "contato/respondeu/-");
+    assert.equal(lead(leads, "site:voltou-a-falar").diasParaSair, 5);
+    assert.equal(estado(lead(leads, "site:so-robo-velho")), "perdido/expirou/expirou", "resposta de robô não segura o lead");
+  });
+
+  it("próximo passo segura o lead, até o que a planilha já expirou; limpar o próximo passo solta", () => {
+    const { leads } = comPrazo([
+      linhaSite("segurado", { status: "enviado", enviado_em: dias(9) }),
+      linhaSite("expirado-segurado", { status: "expirado", enviado_em: dias(12) }),
+      linhaSite("solto", { status: "enviado", enviado_em: dias(9) }),
+    ], [], [
+      { em: dias(1), produto: "site", id: "segurado", tipo: "proximo_passo", texto: "Ligar na segunda", data: "2026-10-05" },
+      { em: dias(1), produto: "site", id: "expirado-segurado", tipo: "proximo_passo", texto: "Mandar áudio", data: "2026-10-03" },
+      { em: dias(2), produto: "site", id: "solto", tipo: "proximo_passo", texto: "Ligar", data: "2026-10-01" },
+      { em: dias(1), produto: "site", id: "solto", tipo: "proximo_passo", texto: "", data: "" },
+    ]);
+    assert.equal(estado(lead(leads, "site:segurado")), "contato/enviado/-");
+    assert.equal(lead(leads, "site:segurado").diasParaSair, undefined, "segurado não tem contagem");
+    assert.equal(estado(lead(leads, "site:expirado-segurado")), "contato/enviado/-");
+    assert.equal(lead(leads, "site:expirado-segurado").estadoNaPlanilha, "expirado", "a planilha continua dizendo o que diz");
+    assert.equal(estado(lead(leads, "site:solto")), "perdido/expirou/expirou");
+  });
+
+  it("vale para o PRUMO: convite sem resposta e diagnóstico parado", () => {
+    const { leads } = comPrazo([], [
+      linhaPrumo("convite-velho", { Etapa: "Convite enviado", "Convite enviado em": dias(7) }),
+      linhaPrumo("diagnostico-parado", { Etapa: "Diagnóstico pronto", "Convite enviado em": dias(12), "Diagnóstico em": dias(8) }),
+      linhaPrumo("diagnostico-recente", { Etapa: "Diagnóstico pronto", "Convite enviado em": dias(12), "Diagnóstico em": dias(3) }),
+    ]);
+    assert.equal(estado(lead(leads, "prumo:convite-velho")), "perdido/expirou/expirou");
+    assert.equal(estado(lead(leads, "prumo:diagnostico-parado")), "perdido/esfriou/esfriou");
+    assert.equal(estado(lead(leads, "prumo:diagnostico-recente")), "contato/diagnostico/-");
+    // O diagnóstico do retrato base tem próximo passo: fica.
+    assert.equal(lead(leads, "prumo:diagnostico").diasParaSair, undefined);
+  });
+
+  it("proposta e desfecho não entram na regra", () => {
+    const { leads } = comPrazo([
+      linhaSite("recusou-velho", { status: "recusado", enviado_em: dias(20), recusado_em: dias(15) }),
+      linhaSite("proposta-velha", { status: "enviado", enviado_em: dias(30), respondeu_em: dias(29) }),
+    ], [], [{ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "", data: "2026-09-12" }]);
+    assert.equal(estado(lead(leads, "site:recusou-velho")), "perdido/recusou/recusou");
+    assert.equal(estado(lead(leads, "site:proposta-velha")), "proposta/proposta/-");
   });
 });
 
@@ -490,5 +574,17 @@ describe("CRM: retrato e registro", () => {
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "nao-existe", tipo: "nota", texto: "a" }, AGORA), /não encontrado/);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "com-proposta", tipo: "proposta", texto: "" }, AGORA), /já está em Proposta/);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "respondeu", tipo: "proposta_desfeita", texto: "" }, AGORA), /não está em Proposta/);
+    await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "recusou", tipo: "proposta", texto: "" }, AGORA), /Lead já encerrado/);
+  });
+
+  it("quem saiu pela regra dos 7 dias ainda aceita proposta (não houve desfecho)", async () => {
+    const chamadas: string[] = [];
+    const fetcher = (async (_url: string, init: RequestInit) => {
+      chamadas.push(String(init.body));
+      return new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:01Z" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    // "acervo" (enviado em 20/09, sem resposta) está em Perdido por expirou.
+    await (await loja(retrato(), true, fetcher)).registrar({ produto: "site", id: "acervo", tipo: "proposta", texto: "" }, AGORA);
+    assert.equal(JSON.parse(chamadas[0]).tipo, "proposta");
   });
 });

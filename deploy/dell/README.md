@@ -784,6 +784,10 @@ código do retrato no node, sem n8n (o `--testar` roda ele antes). O resumo das 
 com o link para cada enviado sem resposta e cada lead em conversa (até 15 por
 grupo, os mais antigos primeiro).
 
+Desde 08/10/2026 a limpeza (abaixo) **apaga** o demo de todo lead em Perdido no
+CRM dois dias depois, então a pausa de 15 dias quase não chega a agir: fica
+para o que a limpeza não pega (Central fora do ar, lead fora do teto da rodada).
+
 **Pausa dos demos** (`site-demos-pausa`, todo dia às 09:40, depois do 05 e do
 Balcão): a pasta diz quem está fora (`_recusados/` = recusado, `_concluidos/` =
 expirado; `fechado` na planilha veta). Conta 15 dias desde `recusado_em` (ou
@@ -799,25 +803,35 @@ renovado pela CLI quando está para vencer; a API de pausa só aceita o id
 `prj_…`. Em 30/09/2026 os 74 leads de `_recusados/` (73 projetos) contam desde
 25/09 (ctime + balanço do `registro.md`): pausa em 10/10/2026.
 
-**Limpeza dos demos sem interação** (`site-demos-limpeza`, desde 07/10/2026, todo
-dia às 09:50): a outra ponta da pausa, só para quem **nunca interagiu**. A
-Vercel hobby limita projetos e demo parado ocupa a vaga do gerador, então
-`enviado`/`expirado` sem `respondeu_em`, `fechado_em` nem `recusado_em`, na raiz
-de `~/auto-site` ou em `_concluidos/`, com `enviado_em` + 10 dias já passado,
-tem o projeto `demo-*` **apagado** na Vercel (a pasta fica; o `publicado.json`
-ganha `apagado_em` e o `site-demos-pausa` passa a ignorá-lo; desde 08/10/2026
-o CRM também o lê: tira "Ver o demo" e a segunda mensagem, que levariam a um
-link morto, e diz na ficha e na lista Hoje para republicar antes). Recusado não entra
-(recusar é interação; esses seguem a pausa de 15 dias, que é reversível), nem
-`_em-conversa/`, `_fechados/` ou `_recusados/`. O retrato da planilha com mais
-de 3 h invalida a rodada: uma resposta de hoje poderia estar de fora. **O timer
-só lista e avisa** (um aviso quando aparece candidato novo); apagar é ordem sua:
+**Limpeza dos demos de leads perdidos** (`site-demos-limpeza`, desde 07/10/2026;
+critério de 08/10/2026, todo dia às 09:50 e uma vez por dia no `lote-continuo`).
+Decisão do Rômulo (08/10): lead que entrou em **Perdido** no CRM não fica com o
+demo no ar ("já temos o backup dele no Dell"); a Vercel hobby limita projetos e
+demo de lead perdido ocupa a vaga do gerador. O script não refaz as regras de
+etapa: lê a visão da Central (`GET http://127.0.0.1:9120/api/operations/crm`) e
+apaga o projeto `demo-*` de todo lead do Site em Perdido há **2 dias ou mais**
+(recusou, 7 dias sem mensagem do lead, parou de responder, sem contato fácil,
+descartado), com a pasta na raiz, em `_recusados/`, `_concluidos/`,
+`_em-conversa/` ou `_descartados/` (`_fechados/` nunca) e o `publicado.json`
+dela confirmando o projeto. A pasta fica; o `publicado.json` ganha `apagado_em`,
+o `site-demos-pausa` passa a ignorá-lo e o CRM tira "Ver o demo" e a segunda
+mensagem (levariam a um link morto) e diz na ficha para republicar antes. Os
+2 dias de folga são para desfazer um "Recusou" tocado errado ou para a resposta
+de amanhã. Central fora do ar, visão sem retrato válido, sem as pastas lidas ou
+com retrato de mais de 1 h = nada é apagado. No máximo **60 por rodada**, os
+mais antigos em Perdido primeiro: um erro de regra não leva a Vercel inteira de
+uma vez. **O timer apaga sozinho** (`--apagar`) e manda um aviso com o que saiu:
 
 ```bash
-site-demos-limpeza --simular             # quem entra e por que os outros não, sem aviso nem estado
-site-demos-limpeza --apagar              # apaga todos os que entram
+site-demos-limpeza --simular             # quem entra e por que os outros perdidos não, sem aviso nem estado
+site-demos-limpeza --apagar              # apaga os que entram (o timer e o lote-continuo)
 site-demos-limpeza --apagar demo-a demo-b   # só esses (têm de estar entre os que entram)
 ```
+
+Em 08/10/2026 a simulação contra a Central de então (antes da regra dos 7 dias
+chegar a ela) dava 88 demos, todos de quem recusou (o acervo de 25/09 incluso):
+o teto de 60 os leva em duas rodadas, junto com os que a regra dos 7 dias põe
+em Perdido.
 
 **Pedido de exclusão** (`--exclusao`, 07/10/2026). A regra acima não serve a
 quem pediu para apagar: o lead foi marcado `recusado`, e recusado nunca entra.
@@ -875,23 +889,35 @@ enviado; recibo de leitura → `visto_em` ou "Leu o convite em ..."; resposta �
 `expirado`; página do lead → `recusado`/`fechado`). As pastas espelham a
 planilha (`site-pastas`). A Central não tem etapa própria.
 
-**Ciclo de vida (as 6 etapas, iguais para os dois produtos).** Regras em
-`server/crm.ts` (`etapaDoSite`, `etapaDoPrumo`); nomes de coluna em
+**Ciclo de vida (as 5 etapas, iguais para os dois produtos).** Regras em
+`server/crm.ts` (`etapaDoSite`, `etapaDoPrumo`, `comPrazoDoContato`); nomes de coluna em
 `COLUNAS_DO_SITE`/`COLUNAS_DO_PRUMO` (coluna ausente = vazia, com aviso na tela).
 A primeira linha que casar, de cima para baixo, decide:
 
 | Etapa | Site antes da venda (aba Leads + pasta) | PRUMO (aba Prospects) |
 |---|---|---|
 | **Ganho** | `status` fechado | Etapa Concluído |
-| **Perdido** | `recusado`; pasta em `_recusados/` (recusa anotada à mão); `expirado` sem resposta; `descartado`; pasta em `_descartados/` | Etapa Sem interesse |
+| **Perdido** | `recusado`; pasta em `_recusados/` (recusa anotada à mão); `expirado` sem resposta; `descartado`; pasta em `_descartados/`; a regra dos 7 dias (abaixo) | Etapa Sem interesse; a regra dos 7 dias |
 | **Proposta** | "Proposta enviada" marcada na Central (aba CRM), até ser desfeita | idem |
-| **Conversando** | `respondeu_em`, ou pasta em `_em-conversa/` | "Respondeu no WhatsApp em ..." na Próxima ação; Etapa Diagnóstico pronto / `Diagnóstico em` (formulário respondido; Mapa, se houver, na linha do tempo) |
-| **Contatado** | `enviado` (ou `enviado_em`) sem resposta: "Viu" com `visto_em`, senão "leitura desconhecida" | Convite enviado: "Leu o convite em ..." ou "leitura desconhecida" |
+| **Em contato** | `enviado` (ou `enviado_em`): "Viu" com `visto_em`, senão "leitura desconhecida"; `respondeu_em`, ou pasta em `_em-conversa/` | Convite enviado ("Leu o convite em ..." ou "leitura desconhecida"); "Respondeu no WhatsApp em ..."; Etapa Diagnóstico pronto / `Diagnóstico em` (Mapa, se houver, na linha do tempo) |
 | **Novo** | `pronto` ("Pronto, não enviado"); `novo` com pasta na raiz ("Na fila do gerador", com os artefatos) | Etapa Revisar |
+
+**Em contato tem prazo (08/10/2026; eram Contatado e Conversando, e a segunda
+coluna passava dias vazia).** Sem mensagem do lead por `DIAS_SEM_RESPOSTA` (7)
+dias, contados da última mensagem dele (`respondeu_em`, `resposta_em` que não
+seja robô, `Diagnóstico em`) ou do envio/convite se nunca respondeu, o lead vai
+para Perdido: "Sem resposta em 7 dias" (`expirou`) ou "Parou de responder"
+(`esfriou`). Vale para o acervo e para o PRUMO, que não expiravam. O cartão
+mostra "Perdido em N dias". Um **próximo passo** registrado na ficha segura o
+lead (é o Rômulo dizendo que ainda vale) — inclusive o que a planilha já marcou
+`expirado` no 10º dia —; uma **proposta** também; e uma mensagem nova do lead o
+traz de volta sozinho. O CRM só calcula: a planilha continua com o status que
+tem (o 05 · Acompanhamento segue expirando no 10º dia). Quem sai pela regra
+cai na limpeza dos demos dois dias depois.
 
 "Entregue sem lido" é **não sei**, nunca "não viu": quem desliga a confirmação
 de leitura nunca aparece como lido; quem respondeu aparece como "leu
-(respondeu)". Sinais: **follow-up hoje** (Contatado há 3+ dias sem resposta;
+(respondeu)". Sinais: **follow-up hoje** (Em contato há 3 a 6 dias sem resposta;
 no Site só envio a partir de 29/09 e uma vez por lembrete do 05; desde
 08/10/2026 o link "Mandar o follow-up" abre o WhatsApp com o mesmo texto do
 aviso do 05, de `server/site-mensagem.ts`, espelho testado do

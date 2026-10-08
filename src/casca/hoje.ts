@@ -286,12 +286,11 @@ export function estadoDaPessoa(pessoaId: string, ctx: ContextoDaPessoa): { estad
 
 const ABERTAS: Array<[CrmEtapa, string, string]> = [
   ['novo', 'novo', 'novos'],
-  ['contatado', 'contatado', 'contatados'],
-  ['conversando', 'conversando', 'conversando'],
+  ['contato', 'em contato', 'em contato'],
   ['proposta', 'em proposta', 'em proposta'],
 ]
 
-/** "3 novos · 5 contatados · 2 conversando · 1 em proposta": só as etapas abertas, com número. */
+/** "3 novos · 7 em contato · 1 em proposta": só as etapas abertas, com número. */
 export function resumoDoFunil(contagens: Partial<Record<CrmEtapa, CrmContagem>> | null | undefined): string {
   if (!contagens) return ''
   const partes = ABERTAS.map(([etapa, um, varios]) => {

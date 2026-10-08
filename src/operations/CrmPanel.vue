@@ -253,7 +253,8 @@ function fecharFicha() {
         </div>
       </div>
 
-      <ol v-if="visao.estado === 'ok'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
+      <!-- No Funil cada coluna (ou aba, no celular) já traz o número: o resumo só repetiria. -->
+      <ol v-if="visao.estado === 'ok' && vista !== 'funil'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
         <li v-for="etapa in ETAPAS" :key="etapa" :class="`is-${etapa}`">
           <button type="button" @click="irParaEtapa(etapa)">
             <strong>{{ contagens[etapa] }}</strong>

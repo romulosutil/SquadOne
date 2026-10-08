@@ -1,11 +1,12 @@
 [Unit]
-Description=Site antes da venda — lista os demos enviados sem nenhuma interação (apagar é ordem explícita)
-After=network-online.target
+Description=Site antes da venda — apaga na Vercel o demo de quem está em Perdido no CRM (há 2+ dias)
+After=network-online.target squadone-operations.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-# Só lista e avisa; nunca apaga sozinho (site-demos-limpeza --apagar é à mão).
+# Desde 08/10/2026 apaga sozinho (decisão do Rômulo: lead perdido não fica no ar; a pasta fica no Dell).
+# Lê a visão da Central (127.0.0.1:9120): Central fora do ar = nada é apagado, tenta no dia seguinte.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 %h/.local/bin/site-demos-limpeza
-TimeoutStartSec=5min
+ExecStart=/usr/bin/python3 %h/.local/bin/site-demos-limpeza --apagar
+TimeoutStartSec=15min
