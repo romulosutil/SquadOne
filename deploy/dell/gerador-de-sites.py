@@ -112,6 +112,9 @@ LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # v1 = dossiê, conceito, redação e revisão (07/10/2026 à tarde); v2 = soma a etapa de
 # movimento de nível especialista (motor próprio em JS, scroll narrativo, interações autorais).
 VERSAO_PERSONALIZADO = 2
+# v3 = modo premium (referências do Refero a cada lead, imagem feita em código, laço de crítica visual).
+VERSAO_PREMIUM = 3
+MODO_PREMIUM = False  # ligado por `--premium` em main()
 PREFIXO_BACKUP = "_v"  # _v1, _v2...: cada refazer guarda a versão que estava no ar
 TENTATIVA_FALHA = "_tentativa-falha"
 BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
@@ -260,10 +263,30 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
 - No resumo final, diga qual foi o conceito e qual frase do site mais prova que ele foi feito para este negócio."""
 
 
+def instrucoes_premium(slug: str, rascunho: Path) -> str:
+    """Terceiro bloco (modo `--premium`, 08/10/2026). O Rômulo reprovou o primeiro site com movimento
+    (turbo): "muito fraco e MUITO distante do refero.design/web-apps". O diagnóstico: uma passada só,
+    fotos de celular como único material, referência de estilo sem relação com o negócio, e ninguém
+    olhando o resultado renderizado. Aqui o Claude aprende com o Refero INTEIRO a cada lead, constrói,
+    olha as próprias capturas ao lado das referências e reescreve, três vezes."""
+    lead = AUTO / slug
+    refs = rascunho / "refs"
+    qa = rascunho / "qa"
+    caderno = AUTO / "_build" / "aprendizados-refero.md"
+    return f"""MODO PREMIUM (pedido do Rômulo, 08/10/2026). O padrão de qualidade é o refero.design/web-apps: produtos reais de estúdios grandes, com direção de arte, imagem rica, tipografia e ritmo de produção. "Correto" e "criativo" não bastam: o site precisa parecer feito por um estúdio caro. A exigência é a mesma para uma desentupidora e para um escritório de advocacia; muda o mundo visual, não o nível. Estas etapas SOMAM às do modo personalizado, e a etapa R vem antes do `/design`:
+  R. APRENDER COM O REFERO, a cada lead (o exemplo são todos os exemplos). 1) Leia {caderno} se existir: são os princípios que os leads anteriores já extraíram; não repita o que ele já mostra. 2) Rode `python3 /home/romulo-sutil-corr-a/.local/bin/refero-aprender --saida {refs} --consulta "<termo em inglês do setor>" --consulta "<outro termo>" --consulta "<estilo desejado>" --max 30` com 3 a 5 consultas em inglês: o setor do negócio (ex.: "plumber", "law firm", "construction", "equipment rental"), o tipo de serviço (ex.: "local service", "emergency service", "consultancy"), e o ESTILO que o conceito pede (ex.: "editorial", "technical diagram", "dark product", "warm brand"). Sem resultado, tente outras consultas até ter pelo menos 15 imagens. 3) Leia (Read) TODAS as imagens da pasta, uma a uma, e olhe de verdade: grade, escala e contraste da tipografia, o que é imagem e o que é texto, como o hero usa a imagem, densidade, cor, profundidade, acabamento dos componentes. 4) Escolha as 6 mais úteis ao mundo visual deste negócio (não as mais bonitas em geral) e grave {lead}/REFERENCIAS.md: para cada uma, o site, o que ela faz que o seu rascunho de conceito não faz, e UMA decisão concreta que você vai tomar por causa dela (nunca "usar o estilo dela": copiar layout, texto ou marca de terceiros é proibido; aprenda o princípio). Termine com "Princípios deste lead": 5 linhas que valem para qualquer site futuro. 5) O `DESIGN.md` do passo 1.6.1 do CLAUDE.md deve vir de uma referência do MESMO MUNDO do negócio; um estilo de outro mundo (ex.: monografia industrial para um serviço de bairro) é erro.
+  G. IMAGEM E MATERIAL, o que mais separa um site de estúdio do nosso. As fotos do Google Places são de celular e pequenas: nunca as use grandes nem cruas. Use-as como PROVA (pequenas, tratadas: recorte intencional, duotone ou grão, moldura, legenda que diz o que mostram). O visual principal tem de ser FEITO POR VOCÊ, em código, com produção: ilustração e cena em SVG com gradientes, luz, sombra projetada, textura (feTurbulence para grão e papel, feDisplacementMap, máscaras), CSS 3D (perspective, transform-style, camadas em profundidade), canvas 2D ou WebGL simples quando o conceito pedir. Proibido: bloco cinza liso, caixa vazia, ícone de biblioteca no lugar de imagem, hero só com texto e cor. Cada seção tem um objeto visual com volume, material e luz. Tipografia: par de fontes com função clara (embutidas e subsetadas, regra do CLAUDE.md), escala modular, entrelinha e tracking ajustados por tamanho, números tabulares onde há número; um sistema de espaçamento de 8 px; no máximo 3 cores mais neutros, com uma cor de acento usada com disciplina.
+  V. LAÇO DE CRÍTICA VISUAL, três rodadas depois do HTML funcionando e antes do deploy. Em cada rodada: 1) o index.html aceita o parâmetro `?qa=1` (e `&p=0.0 a 1.0` para fixar o progresso da seção narrativa): com ele as entradas terminam na hora, o scroll narrativo fica no progresso pedido e nada espera tempo ou ponteiro; o Chrome headless do Dell não roda animação por tempo, então sem isso a captura sai vazia (já aconteceu). 2) Tire capturas no Chrome headless: `google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=8000 --window-size=1440,900 --screenshot={qa}/d1.png "file://{lead}/index.html?qa=1&p=0.3"` (mkdir -p {qa} antes), em pelo menos 5 posições e estados (hero, narrativa em 0.3 e 0.8, uma seção intermediária, o fecho) no desktop 1440x900 e no celular 390x844, salvas em {qa}/. 3) Leia (Read) as capturas LADO A LADO com 4 imagens da pasta {refs} que você escolheu e escreva {lead}/CRITICA-N.md (N = rodada) com os 8 piores defeitos desta rodada, em ordem, cada um com a referência que o mostra e a correção que você vai fazer; seja cruel: pergunte "um estúdio entregaria isto?", "onde o olho entra e para?", "o que está vazio, chapado ou genérico?", "o texto é legível a 390 px?", "o movimento tem propósito?". 4) Aplique TODAS as correções no index.html. A rodada 3 só termina quando um estúdio entregaria a página: se ainda houver bloco chapado, imagem crua, hierarquia fraca ou algo que lembre template, faça uma 4ª rodada. Reduced-motion e teclado continuam obrigatórios; o parâmetro `?qa` pode ficar (inofensivo).
+  W. APRENDIZADO PARA OS PRÓXIMOS. Ao final, leia {caderno} (se existir), acrescente uma seção "## {slug}" com os "Princípios deste lead" e os 3 defeitos que mais se repetiram nas suas críticas, e regrave o arquivo inteiro (Write) mantendo só as 40 seções mais recentes. Este caderno é o que faz o próximo lead começar melhor que este.
+- Tempo: este modo pode usar até 3 horas. Gaste na referência, na imagem e nas rodadas de crítica; é aqui que a cota rende. No resumo final diga o que mudou da rodada 1 para a última e qual referência mais pesou."""
+
+
 def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:
     instrucoes = instrucoes_da_execucao(slug, rascunho)
     if personalizado:
         instrucoes += "\n\n" + instrucoes_personalizado(slug, BACKUP_EM_CURSO.get(slug))
+        if MODO_PREMIUM:
+            instrucoes += "\n\n" + instrucoes_premium(slug, rascunho)
     cmd = [
         "claude", "-p", (PROMPT_PERSONALIZADO if personalizado else PROMPT).format(slug=slug),
         "--permission-mode", "dontAsk",
@@ -608,7 +631,7 @@ def marcar_personalizado(pasta: Path) -> None:
     (v2 = com a etapa de movimento de nível especialista). Nunca derruba o lead."""
     try:
         (pasta / "personalizado.json").write_text(json.dumps({
-            "versao": VERSAO_PERSONALIZADO, "modelo": os.environ.get("GERADOR_MODELO", "").strip() or "padrão",
+            "versao": VERSAO_PREMIUM if MODO_PREMIUM else VERSAO_PERSONALIZADO, "modelo": os.environ.get("GERADOR_MODELO", "").strip() or "padrão",
             "em": dt.datetime.now().astimezone().isoformat(timespec="seconds")}, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
@@ -752,6 +775,9 @@ def main() -> int:
     ap.add_argument("--listar", action="store_true", help="só mostra a fila, sem gerar nada")
     ap.add_argument("--refazer", nargs="+", metavar="SLUG",
                     help="modo personalizado: refaz estes leads (publicados e não enviados), na ordem dada")
+    ap.add_argument("--premium", action="store_true",
+                    help="modo premium: aprende com o Refero a cada lead, imagem feita em código e laço de crítica visual "
+                         "(implica --personalizado; use --timeout-min 180)")
     ap.add_argument("--personalizado", action="store_true",
                     default=os.environ.get("GERADOR_PERSONALIZADO", "").strip().lower() in ("1", "true", "sim"),
                     help="leads novos da fila também no modo personalizado (env GERADOR_PERSONALIZADO=1 liga sempre)")
@@ -788,7 +814,9 @@ def main() -> int:
     inicio_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     concluidos, falhas, descartados, sumidos = [], [], [], []
     tentados: set[str] = set()
-    personalizado = bool(a.refazer) or a.personalizado
+    global MODO_PREMIUM
+    MODO_PREMIUM = a.premium
+    personalizado = bool(a.refazer) or a.personalizado or a.premium
     erro = None
     if a.refazer:
         a.quantidade = max(a.quantidade, len(a.refazer))
