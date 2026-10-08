@@ -43,6 +43,7 @@ e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
 `src/operations-fila-de-envio.test.ts` (marcas de envio no navegador, a fila por nicho, pular),
+`src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
@@ -126,9 +127,10 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
-    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista) e Ficha (folha cheia)
+    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista), Resultados e Ficha (folha cheia)
     fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
+    resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem e versão do site, amostra pequena
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/auth/google.ts      invólucro fino sobre /api/auth/*

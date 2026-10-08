@@ -5,15 +5,17 @@ import CrmFicha from './CrmFicha.vue'
 import CrmFilaDeEnvio from './CrmFilaDeEnvio.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
+import CrmResultados from './CrmResultados.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
 
-// CRM da Central (/crm): Site antes da venda + PRUMO num modelo só, com três
-// vistas — Hoje (padrão), Funil e a Ficha de um lead. Tudo vem do retrato que
-// o n8n grava das planilhas (server/crm.ts); a Central não guarda etapa.
-type Vista = 'hoje' | 'funil'
+// CRM da Central (/crm): Site antes da venda + PRUMO num modelo só, com as
+// vistas Hoje (padrão), Funil e Resultados (08/10/2026) e a Ficha de um lead.
+// Tudo vem do retrato que o n8n grava das planilhas (server/crm.ts); a
+// Central não guarda etapa.
+type Vista = 'hoje' | 'funil' | 'resultados'
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = ref<CrmVisao | null>(null)
@@ -42,7 +44,8 @@ const PRODUTOS: Array<{ id: FiltroProduto; rotulo: string }> = [
 
 function lerEndereco() {
   const q = new URLSearchParams(window.location.search)
-  vista.value = q.get('ver') === 'funil' ? 'funil' : 'hoje'
+  const ver = q.get('ver')
+  vista.value = ver === 'funil' || ver === 'resultados' ? ver : 'hoje'
   const p = q.get('produto')
   produto.value = p === 'site' || p === 'prumo' ? p : 'todos'
   leadId.value = q.get('lead')
@@ -240,6 +243,7 @@ function fecharFicha() {
         <nav class="crm-vistas" aria-label="Vistas do CRM">
           <a href="/crm" :aria-current="vista === 'hoje' ? 'page' : undefined" @click.prevent="trocarVista('hoje')">Hoje <span>{{ totalHoje }}</span></a>
           <a href="/crm?ver=funil" :aria-current="vista === 'funil' ? 'page' : undefined" @click.prevent="trocarVista('funil')">Funil <span>{{ leads.length }}</span></a>
+          <a href="/crm?ver=resultados" :aria-current="vista === 'resultados' ? 'page' : undefined" @click.prevent="trocarVista('resultados')">Resultados</a>
         </nav>
         <div class="crm-produtos" role="group" aria-label="Produto">
           <button v-for="p in PRODUTOS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
@@ -260,6 +264,7 @@ function fecharFicha() {
       </p>
 
       <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" />
+      <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
       <CrmFunil v-else :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" @abrir="abrirFicha" @produto="trocarProduto" />
 
       <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
