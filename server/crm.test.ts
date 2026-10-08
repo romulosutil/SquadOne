@@ -320,6 +320,25 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(lead(leads, "site:tipo-estranho").resposta, undefined);
   });
 
+  it("demo apagado pelo site-demos-limpeza: sem link morto, com o aviso na ficha, na linha do tempo e na lista Hoje", () => {
+    const base = retrato();
+    base.fontes.site.linhas.push(linhaSite("voltou", { status: "enviado", enviado_em: dias(14), respondeu_em: dias(0.1),
+      site_url: "https://demo-voltou.vercel.app", wa_me: "https://wa.me/5527999990011?text=oi", resposta_tipo: "interesse",
+      resposta_trecho: "agora deu, pode mandar", resposta_em: dias(0.1) }));
+    const pastas = [...PASTAS, pasta("voltou", "_em-conversa", "voltou", true, { apagadoEm: dias(3) })];
+    const v = montarCrm(base, { agora: AGORA, pastas });
+    const voltou = lead(v.leads, "site:voltou");
+    assert.equal(voltou.demoApagadoEm, dias(3));
+    assert.equal(voltou.links.site, undefined, "o link antigo dá 404 na Vercel");
+    assert.equal(voltou.links.segunda, undefined, "sem demo, a segunda mensagem mandaria um link morto");
+    assert.ok(voltou.eventos.some((e) => e.tipo === "apagado" && e.em === dias(3)));
+    const item = v.hoje.find((g) => g.id === "resposta")!.itens.find((i) => i.leadId === "site:voltou")!;
+    assert.equal(item.acao, "Quer ver, mas o demo foi apagado: republicar antes de mandar o link");
+    assert.ok(!item.links.some((l) => l.rotulo === "Mandar o link do site"));
+    // Sem apagado_em, nada muda.
+    assert.equal(lead(comRespostas(), "site:quer-ver").demoApagadoEm, undefined);
+  });
+
   it("pedido para apagar o demo é uma recusa, com o tipo próprio e sem a segunda mensagem", () => {
     const apagar = lead(comRespostas(), "site:apagar");
     assert.equal(`${apagar.etapa}/${apagar.motivoPerda}/${apagar.subEtapa}`, "perdido/recusou/Recusou no WhatsApp (pediu para apagar o demo)");

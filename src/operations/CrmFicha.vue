@@ -122,6 +122,11 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-acoes">
       <h3 id="crm-ficha-acoes">Ações</h3>
+      <p v-if="lead.demoApagadoEm" class="crm-aviso" role="note">
+        <strong>Demo apagado da Vercel em {{ dataHora(lead.demoApagadoEm) }}</strong>, por 10 dias sem interação: o link antigo dá erro, e por isso
+        nem "Ver o demo" nem o link do site aparecem aqui. Para mandar de novo, publique a pasta{{ lead.pasta ? ` ${lead.pasta.slug}` : '' }} outra vez
+        (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
+      </p>
       <div class="crm-ficha__links">
         <a v-if="lead.links.enviar" class="is-principal" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar a primeira mensagem pelo WhatsApp (marca como enviado) ↗</a>
         <a v-if="lead.links.convite" class="is-principal" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite (marca como enviado) ↗</a>

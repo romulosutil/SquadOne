@@ -36,6 +36,8 @@ export interface PastaDoLead {
   nome?: string;
   siteUrl?: string;
   publicadoEm?: string;
+  /** `apagado_em` do recibo: o `site-demos-limpeza` apagou o projeto na Vercel e o link do demo morreu. */
+  apagadoEm?: string;
   artefatos: ArtefatosDaPasta;
   falhaMensagem?: string;
   alteradaEm: string;
@@ -148,6 +150,7 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     ...(textoLimpo(dados.nome, 120) ? { nome: textoLimpo(dados.nome, 120) } : {}),
     ...(urlHttp(dados.site_url) ? { siteUrl: urlHttp(dados.site_url) } : {}),
     ...(dataIso(dados.publicado_em) ? { publicadoEm: dataIso(dados.publicado_em) } : {}),
+    ...(dataIso(dados.apagado_em) ? { apagadoEm: dataIso(dados.apagado_em) } : {}),
     artefatos: {
       conteudo: temConteudo,
       fotos: fotos.total,

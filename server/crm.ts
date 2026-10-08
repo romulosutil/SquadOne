@@ -368,6 +368,8 @@ export interface CrmLead {
   acervo: boolean;
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
+  /** Site: o `site-demos-limpeza` apagou o projeto na Vercel; sem link de demo nem segunda mensagem até republicar. */
+  demoApagadoEm?: string;
   notas: number;
   /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
   resposta?: CrmResposta;
@@ -645,6 +647,7 @@ function leadDoSite(linha: Linha, contexto: {
     recusado: instante(c("recusadoEm")),
     fechado: instante(c("fechadoEm")),
     publicadoEm: instante(pasta?.publicadoEm ?? ""),
+    apagadoEm: instante(pasta?.apagadoEm ?? ""),
     ultimaEntrada: instante(c("ultimaEntradaEm")),
     ultimaSaida: instante(c("ultimaSaidaEm")),
   };
@@ -665,6 +668,7 @@ function leadDoSite(linha: Linha, contexto: {
   const eventos: CrmEvento[] = [
     ...evento("encontrado", "Lead encontrado pelo Caçador", t.criado, "planilha · criado_em"),
     ...evento("site", "Site publicado", t.publicadoEm, "pasta · publicado.json"),
+    ...evento("apagado", "Demo apagado da Vercel (sem interação)", t.apagadoEm, "pasta · publicado.json apagado_em"),
     ...evento("enviado", "Enviado pelo WhatsApp", t.enviado, "planilha · enviado_em"),
     ...evento("visto", "Viu a mensagem", t.visto, "planilha · visto_em"),
     ...evento("respondeu", "Respondeu", t.respondeu, "planilha · respondeu_em"),
@@ -683,7 +687,9 @@ function leadDoSite(linha: Linha, contexto: {
   const waLink = urlHttps(c("waLink"));
   const mensagemPronta = status === "pronto" && waLink ? textoDoWaMe(c("waMe")) : undefined;
   const planilha = contexto.links.planilhaSite && c("linha") ? `${contexto.links.planilhaSite}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaSite;
-  const site = urlHttps(c("site")) ?? pasta?.siteUrl;
+  // Demo apagado pelo site-demos-limpeza: o link dá 404 na Vercel. Sem ele, nem "Ver o demo" nem a
+  // segunda mensagem (o link do site) são oferecidos; a ficha diz o que aconteceu e como trazer de volta.
+  const site = t.apagadoEm !== undefined ? undefined : urlHttps(c("site")) ?? pasta?.siteUrl;
   const acoes = urlHttps(c("acoesLink")) ?? (webhook && (pasta || c("site")) ? `${webhook}/lead?id=${encodeURIComponent(chave)}` : undefined);
   // Depois do "sim": a primeira mensagem (desde 05/10/2026) pede licença e não leva o link.
   // Os textos são os do n8n (server/site-mensagem.ts espelha site-mensagem.js), em inglês nos EUA.
@@ -744,6 +750,7 @@ function leadDoSite(linha: Linha, contexto: {
     acervo,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
+    ...(t.apagadoEm !== undefined ? { demoApagadoEm: iso(t.apagadoEm) } : {}),
     notas,
     ...(resposta ? { resposta } : {}),
     ...(Object.keys(abordagem).length ? { abordagem } : {}),
@@ -944,7 +951,8 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
         ? [{ rotulo: lead.produto === "prumo" ? "Mandar o diagnóstico" : "Mandar o link do site", url: lead.links.segunda }] : [];
       itens.resposta.push({
         leadId: lead.id,
-        acao: r?.tipo === "interesse" ? (lead.produto === "prumo" ? "Quer saber mais: mandar o diagnóstico" : "Quer ver: mandar o link do site")
+        acao: r?.tipo === "interesse" ? (lead.produto === "prumo" ? "Quer saber mais: mandar o diagnóstico"
+          : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link" : "Quer ver: mandar o link do site")
           : "Responder no WhatsApp",
         detalhe: [
           Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",

@@ -26,7 +26,8 @@ async function fixture(): Promise<string> {
   await escrever(path.join(raiz, "publicado", "publicado.json"), JSON.stringify({
     place_id: "ChIJpub000001", nome: "Publicado", site_url: "https://demo-publicado.vercel.app", publicado_em: "2026-09-28T10:00:00-03:00",
   }));
-  await escrever(path.join(raiz, "_recusados", "recusou", "publicado.json"), JSON.stringify({ place_id: "ChIJrec000001", site_url: "javascript:alert(1)" }));
+  await escrever(path.join(raiz, "_recusados", "recusou", "publicado.json"), JSON.stringify({ place_id: "ChIJrec000001", site_url: "javascript:alert(1)",
+    apagado_em: "2026-10-07T22:47:31-03:00" }));
   await escrever(path.join(raiz, "_descartados", "descartado", "content.md"), "place_id:** ChIJdesc00001\n");
   // Pastas técnicas ficam de fora.
   await escrever(path.join(raiz, ".logs", "status.json"), JSON.stringify({ estado: "processando", lead: "na-fila", pendentes: 3 }));
@@ -60,6 +61,8 @@ describe("Pastas do Site antes da venda", () => {
     assert.equal(publicado.nome, "Publicado");
     assert.equal(publicado.publicadoEm, "2026-09-28T13:00:00.000Z");
     assert.equal(pastas.find((p) => p.slug === "recusou")!.siteUrl, undefined, "URL fora de http/https é descartada");
+    assert.equal(pastas.find((p) => p.slug === "recusou")!.apagadoEm, "2026-10-08T01:47:31.000Z", "site-demos-limpeza apagou o demo");
+    assert.equal(publicado.apagadoEm, undefined);
   });
 
   it("lê o estado do gerador pelo resumo que ele mesmo grava", async () => {
