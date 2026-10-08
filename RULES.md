@@ -83,8 +83,10 @@
     nunca podem ser inferidas pela interface.
 13. A home é **Hoje**, pensada primeiro para o celular, e responde nesta ordem:
     - **o que precisa do Rômulo agora**, em no máximo 3 cartões (falhas do
-      `dell-status` com `o_que_fazer`, cartões de decisão dos agentes, alerta
-      de finanças em semáforo); o resto fica atrás de "ver todos". Mais de 3
+      `dell-status` com `o_que_fazer`, cartões de decisão dos agentes, leads
+      que responderam e esperam resposta — do retrato do CRM, desde
+      08/10/2026, antes das finanças porque resposta de lead esfria em horas —,
+      alerta de finanças em semáforo); o resto fica atrás de "ver todos". Mais de 3
       numa tela de celular vira lista que ninguém lê, e o mais grave some no
       meio;
     - os **próximos compromissos**;

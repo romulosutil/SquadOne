@@ -16,6 +16,7 @@ import GrowthCard from '../components/GrowthCard.vue'
 import TrocaSquadCard from '../components/TrocaSquadCard.vue'
 import DellAlerta from '../casca/DellAlerta.vue'
 import FinancasAlerta from '../casca/FinancasAlerta.vue'
+import RespostasAlerta from '../casca/RespostasAlerta.vue'
 import ListaDeQuests from '../agentes/ListaDeQuests.vue'
 import { useAgentes } from '../agentes/estado'
 import { useOverview } from '../casca/overview'
@@ -24,6 +25,7 @@ import {
   MAX_NA_HOJE,
   ROTULO_DO_ESTADO_DA_SQUAD,
   estadoDaSquad,
+  pendenciaDeRespostas,
   pendenciasDaHoje,
   proximasQuests,
   resumoDoFunil,
@@ -94,7 +96,9 @@ const pendencias = computed(() =>
       ajustes: agentes.value ? ajustes.value.map((a) => a.id) : [],
       crescimentos: agentes.value ? sugestoesDeCrescimento.value.map((s) => s.id) : []
     },
-    ops.value ? financas.value : null
+    ops.value ? financas.value : null,
+    // Do mesmo retrato do CRM que a linha do funil lê (bloco 4): nenhuma leitura a mais.
+    ops.value ? pendenciaDeRespostas(funil.value) : null
   )
 )
 const verTodos = ref(false)
@@ -219,17 +223,22 @@ const linhaDoFunil = computed(() => {
 })
 const fonteDoFunil = computed(() => (funil.value?.geradoEm ? `planilhas lidas às ${hora(funil.value.geradoEm)}` : ''))
 
-// Finanças e time: no mount e a cada 5 min com a aba visível. A % muda com a
-// leitura diária da Pluggy ou um gasto anotado; o time, com o relógio.
+// Finanças, time e funil: no mount e a cada 5 min com a aba visível. A % muda com a
+// leitura diária da Pluggy ou um gasto anotado; o time, com o relógio; o funil, com o
+// retrato do n8n (10 min), e é dele que sai o cartão de quem respondeu: lido só no
+// mount, um lead que respondesse com a Hoje aberta não apareceria. O CRM responde 304
+// quando nada mudou.
 let releitura = 0
 function lerFontesDaHoje() {
-  if (ops.value) void lerFinancas()
+  if (ops.value) {
+    void lerFinancas()
+    void lerFunil()
+  }
   if (agentes.value) void lerTime()
 }
 
 onMounted(() => {
   relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
-  if (ops.value) void lerFunil()
   lerFontesDaHoje()
   releitura = window.setInterval(() => {
     if (document.visibilityState === 'visible') lerFontesDaHoje()
@@ -255,6 +264,7 @@ onBeforeUnmount(() => {
         <li v-for="p in mostradas" :key="p.chave">
           <DellAlerta v-if="p.tipo === 'dell'" :check="p.check" />
           <FinancasAlerta v-else-if="p.tipo === 'financas'" :pendencia="p" />
+          <RespostasAlerta v-else-if="p.tipo === 'respostas'" :pendencia="p" />
           <TrocaSquadCard
             v-else-if="p.tipo === 'troca' && troca(p.id)"
             :sugestao="troca(p.id)!"

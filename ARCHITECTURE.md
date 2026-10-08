@@ -466,8 +466,9 @@ Desde a casca mobile (07/10/2026) a Central são rotas da mesma casca do app
 (`src/App.vue`), sem dependência de roteador (`pushState` em `src/casca/rota.ts`):
 
 - `/` é a **Hoje** (regra 13): o que precisa do Rômulo agora, em no máximo 3
-  cartões (alertas do `status.json` com "o que fazer", e os cartões de decisão
-  dos agentes), os próximos compromissos, o time, a linha do funil e o que
+  cartões (alertas do `status.json` com "o que fazer", os cartões de decisão
+  dos agentes e, desde 08/10/2026, os leads que responderam e esperam
+  resposta, lidos do retrato do CRM), os próximos compromissos, o time, a linha do funil e o que
   resolve sozinho, fechado; sem link para o Easypanel. Como a operação
   funciona (`src/operations/fluxos.ts`), os acessos e tudo que o Dell confere
   ficam em `/mais`;
