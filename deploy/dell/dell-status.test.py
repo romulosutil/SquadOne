@@ -668,6 +668,22 @@ class Instalados(unittest.TestCase):
         self.assertEqual(c["detalhe"], "3 de 3 diferente(s) do repositório: fontes.toml, sumiu, SOUL.md")
         self.assertIn("(deploy/dell/sumiu.py): tire de lá", c["o_que_fazer"])
 
+    def test_como_fazer_o_site_versionado_com_outro_nome_e_444(self):
+        """08/10/2026: o ~/auto-site/CLAUDE.md vem de deploy/dell/auto-site/auto-site-CLAUDE.md
+        (nome diferente: um CLAUDE.md dentro do repo viraria instrução de toda sessão no SquadOne)."""
+        entrada = {"repo": "deploy/dell/auto-site/auto-site-CLAUDE.md", "instalado": "~/auto-site/CLAUDE.md", "modo": "444"}
+        self.escrever(self.repo, entrada["repo"], "regras v2")
+        [faltando] = ds.comparar_instalados([entrada], self.repo, self.home)
+        self.assertEqual((faltando["instalado"], faltando["estado"]), ("~/auto-site/CLAUDE.md", "faltando"))
+        self.assertEqual(ds.comando_instalar(faltando),
+                         "install -D -m 444 ~/SquadOne/deploy/dell/auto-site/auto-site-CLAUDE.md ~/auto-site/CLAUDE.md")
+        self.escrever(self.home, "auto-site/CLAUDE.md", "regras v1")
+        [diferente] = ds.comparar_instalados([entrada], self.repo, self.home)
+        self.assertEqual(diferente["estado"], "diferente")
+        self.escrever(self.home, "auto-site/CLAUDE.md", "regras v2")
+        [igual] = ds.comparar_instalados([entrada], self.repo, self.home)
+        self.assertEqual(igual["estado"], "igual")
+
     def test_manifesto_do_repo_e_valido(self):
         """O instalados.json de verdade: lê, e cada entrada sem curinga existe no repo."""
         manifesto = json.loads((AQUI / "instalados.json").read_text())
