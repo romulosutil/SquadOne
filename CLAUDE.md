@@ -23,7 +23,7 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/operations.test.ts`, `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
-`server/crm.test.ts`, `server/acesso.test.ts`,
+`server/crm.test.ts`, `server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho), `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 `server/roster-historico.test.ts`,
@@ -104,6 +104,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
+  server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS

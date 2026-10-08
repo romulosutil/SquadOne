@@ -117,7 +117,7 @@ export interface CrmLead {
   /** Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site. */
   abordagem?: { mensagem?: string; site?: string }
   eventos: CrmEvento[]
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string }
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string }
   pasta?: {
     lugar: string
     slug: string

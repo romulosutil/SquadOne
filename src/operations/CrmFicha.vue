@@ -126,6 +126,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <a v-if="lead.links.enviar" class="is-principal" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar a primeira mensagem pelo WhatsApp (marca como enviado) ↗</a>
         <a v-if="lead.links.convite" class="is-principal" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite (marca como enviado) ↗</a>
         <a v-if="lead.links.segunda" :class="{ 'is-principal': lead.resposta?.tipo === 'interesse' }" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico (link do formulário)' : 'Mandar o link do site (segunda mensagem)' }} ↗</a>
+        <a v-if="lead.links.followup" class="is-principal" :href="lead.links.followup" target="_blank" rel="noopener">Mandar o follow-up (texto pronto) ↗</a>
         <a v-if="lead.links.whatsapp" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp ↗</a>
         <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Ver o demo' : 'Ver o site da empresa' }} ↗</a>
         <a v-if="lead.links.acoes" :href="lead.links.acoes" target="_blank" rel="noopener">Recusou · Fechou · Desfazer (página do lead) ↗</a>

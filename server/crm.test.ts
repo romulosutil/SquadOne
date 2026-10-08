@@ -359,6 +359,18 @@ describe("CRM: lista Hoje e contagens", () => {
     assert.equal(enviar[1].acao, "Sem WhatsApp válido na planilha");
   });
 
+  it("follow-up do Site sai com o texto do 05 · Acompanhamento; o do PRUMO segue só com a conversa", () => {
+    const { hoje, leads } = visao();
+    const followup = hoje.find((g) => g.id === "followup")!.itens;
+    const site = followup.find((i) => i.leadId === "site:followup")!;
+    assert.equal(site.links[0].rotulo, "Mandar o follow-up");
+    const texto = new URL(site.links[0].url).searchParams.get("text") ?? "";
+    assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo de novo\. Montei uma demonstração de site da Empresa followup/);
+    assert.equal(site.links[1].rotulo, "Abrir conversa no WhatsApp");
+    assert.equal(lead(leads, "site:followup-ontem").links.followup, undefined, "fora do dia do follow-up não há link");
+    assert.equal(followup.find((i) => i.leadId === "prumo:convite")!.links.some((l) => l.rotulo === "Mandar o follow-up"), false);
+  });
+
   it("conta por etapa e produto e separa os motivos de perda", () => {
     const v = visao();
     assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1 });

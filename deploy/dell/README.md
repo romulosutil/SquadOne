@@ -888,7 +888,10 @@ A primeira linha que casar, de cima para baixo, decide:
 "Entregue sem lido" é **não sei**, nunca "não viu": quem desliga a confirmação
 de leitura nunca aparece como lido; quem respondeu aparece como "leu
 (respondeu)". Sinais: **follow-up hoje** (Contatado há 3+ dias sem resposta;
-no Site só envio a partir de 29/09 e uma vez por lembrete do 05), **resposta
+no Site só envio a partir de 29/09 e uma vez por lembrete do 05; desde
+08/10/2026 o link "Mandar o follow-up" abre o WhatsApp com o mesmo texto do
+aviso do 05, de `server/site-mensagem.ts`, espelho testado do
+`site-mensagem.js`), **resposta
 nova** (respondeu nas últimas 48 h; exato quando houver colunas de última
 entrada/saída), dias na etapa e desde o último evento, **divergência**
 (planilha e pasta discordam depois de 2 h de folga: nota na ficha, nunca
