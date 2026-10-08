@@ -18,12 +18,25 @@ SETTINGS_OK = {
     "timeSavedPerExecution", "availableInMCP",
 }
 
+# Fluxos desligados de propósito. Todo script prumo-*.py (e o fecha-ciclos --tailnet) termina
+# em POST /workflows/<id>/activate depois de trocar os nós: sem esta trava, ajustar o convite
+# religaria o Lead Scout calado. Religar = tirar daqui (PR) e ativar no n8n.
+DESLIGADOS = {
+    # 08/10/2026, decisão do Rômulo: 57 convites frios a distribuidoras, 21 respostas de robô,
+    # nenhum dono interessado. O Organizado agora chega só pela CDL. O fluxo fica no n8n, inativo.
+    "e02c6f43-17ce-430b-9238-0b997a7656ce": "PRUMO — Lead Scout (convite frio a distribuidoras)",
+}
+
 FILA_NO_CONTAINER = "/home/node/.n8n-files/avisos/"
 # Campo `origem` do aviso, em JavaScript, para os nós Code que montam o JSON da fila.
 ORIGEM_JS = "origem: ('n8n:' + $workflow.name).slice(0, 80)"
 
 
 def api(method, path, body=None):
+    partes = path.strip("/").split("/")
+    if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
+        print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
+        return {"active": False, "desligado": True}
     req = urllib.request.Request(
         URL + path, method=method,
         headers={"X-N8N-API-KEY": KEY, "Content-Type": "application/json"},

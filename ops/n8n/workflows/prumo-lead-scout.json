@@ -3,7 +3,7 @@
     "id": "e02c6f43-17ce-430b-9238-0b997a7656ce",
     "name": "PRUMO — Lead Scout (review-first)",
     "description": null,
-    "active": true,
+    "active": false,
     "nodes": [
       {
         "parameters": {},

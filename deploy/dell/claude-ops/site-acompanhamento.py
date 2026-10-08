@@ -11,6 +11,14 @@
   Hermes e estado/site-funil.json (sem "itens": o dell-status e o Hermes não o
   leem como pendência).
 
+Desde 08/10/2026 também pausa o que não tem sinal de compra (site-funil-regra.js): a
+busca (segmento × cidade) ou o nicho inteiro (coluna vertical da aba Buscas, todas as
+cidades) com 20+ enviados e nenhuma resposta "interesse", pedido de preço, proposta
+(aba CRM) ou ganho (status "fechado"). Negativa, exclusão, robô e neutra não são sinal:
+pousada chegou a 35 enviados, 8 respostas (6 negativas, 2 neutras) e nenhum interesse, e
+a regra do silêncio abaixo não a pegava. Sem a aba CRM lida, essa regra fica parada na
+semana (o aviso diz). O aviso de segunda lista os nichos sem sinal e por quê.
+
 Desde 05/10/2026 o funil pausa a busca que não paga o site: ativa, 5+
 enviados e nenhuma resposta humana (respondeu_em a 5 min ou mais do envio,
 RULES 17, ou pasta em _em-conversa) vira `ativa` FALSE na aba Buscas, com
@@ -33,6 +41,7 @@ Uso: python3 site-acompanhamento.py              colunas que faltam na aba Busca
      python3 site-acompanhamento.py --colunas    só acrescenta pausada_em e pausa_motivo na aba Buscas
      python3 site-acompanhamento.py --testar     roda cópias sem gravar nada (planilha de mentira no 05)
      python3 site-acompanhamento.py --testar-regra   a regra da pausa no node, sem n8n nem planilha
+     python3 site-acompanhamento.py --simular    cópia do 06 com as abas reais: o que pausaria, sem gravar nada
      python3 site-acompanhamento.py --resumo-backlog [--enviar]   o resumo do acervo (--enviar põe na fila)
 """
 import copy
@@ -71,6 +80,17 @@ def ler_aba(no_id, nome, gid, aba, pos):
             "parameters": {"resource": "sheet", "operation": "read",
                            "documentId": {"__rl": True, "mode": "id", "value": PLANILHA, "cachedResultName": "Leads — Site antes da venda"},
                            "sheetName": {"__rl": True, "mode": "id", "value": gid, "cachedResultName": aba}, "options": {}}}
+
+
+def ler_aba_crm(pos):
+    """A aba CRM (notas e propostas da Central, crm.py) pelo nome, como o "08 · CRM" a lê.
+    Falha vira item com `error`: o Funil roda sem a regra do sinal de compra e o aviso diz."""
+    return {"id": "crm", "name": "Ler aba CRM", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": pos,
+            "credentials": SHEETS, "executeOnce": True, "alwaysOutputData": True, "onError": "continueRegularOutput",
+            "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
+            "parameters": {"resource": "sheet", "operation": "read",
+                           "documentId": {"__rl": True, "mode": "id", "value": PLANILHA},
+                           "sheetName": {"__rl": True, "mode": "name", "value": "CRM"}, "options": {}}}
 
 
 def recibos(x=220):
@@ -180,25 +200,25 @@ def acompanhamento(erro):
 
 # ------------------------------------------------------------------ 06 · Funil semanal
 
-FUNIL = f"""// Funil por nicho (vertical + cidade) e buscas a pausar. Só calcula: quem grava a
-// pausa na aba Buscas é "Pausar na aba Buscas", com o que sai daqui.
+FUNIL = sv.codigo_js("site-funil-regra.js") + f"""
+// Funil por nicho (vertical + cidade) e buscas a pausar. Só calcula: quem grava a
+// pausa na aba Buscas é "Pausar na aba Buscas", com o que sai daqui. A regra da pausa
+// mora em site-funil-regra.js (decidirPausas), colado acima.
 {sv.PASTA_DO_LEAD_JS}
 const DIA = 24 * 60 * 60 * 1000;
 const agora = Date.now();
 const MIN_ENVIADOS = {MIN_ENVIADOS};
-const txt = (v) => String(v ?? '').trim();
-const norm = (t) => txt(t).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-// Radicais de 5 letras: "espaço para eventos" e "espaço de eventos" batem; palavras genéricas não contam.
-const GENERICAS = new Set(['para', 'clinica', 'loja', 'particular', 'medida', 'servicos', 'centro']);
-const radicais = (...t) => new Set(t.flatMap(x => norm(x).split(' ')).filter(p => p.length >= 4 && !GENERICAS.has(p)).map(p => p.slice(0, 5)));
-const cruza = (a, b) => [...a].some(r => b.has(r));
 const recente = (v) => {{ const t = Date.parse(txt(v)); return Number.isFinite(t) && agora - t <= 7 * DIA; }};
 
 const publicadoEm = {{}};
 for (const r of $('Ler o JSON do recibo').all()) if (r.json.recibo?.place_id) publicadoEm[r.json.recibo.place_id] = r.json.recibo.publicado_em;
 const leads = $('Ler a planilha').all().map(i => i.json).filter(l => txt(l.place_id) && !/^TESTE/.test(txt(l.place_id)));
+// Proposta mora na aba CRM (server/crm.ts). Sem ela lida, a regra do sinal de compra fica
+// parada nesta semana: uma proposta escondida pausaria um nicho que está vendendo.
+const crm = $('Ler aba CRM').all().map(i => i.json ?? {{}});
+const crmErro = crm.map(r => r.error).find(Boolean);
+const propostas = propostasAbertas(crmErro ? [] : crm);
 const topo = (l) => {{ const p = pasta[l.place_id] ?? ''; return p.includes('/') ? p.split('/')[0] : (p ? 'raiz' : ''); }};
-const enviado = (l) => ['enviado', 'expirado'].includes(txt(l.status)) || Boolean(txt(l.enviado_em));
 // Resposta humana (RULES 17): a 5 min ou mais do envio; antes pode ser a saudação
 // automática do WhatsApp Business. O observador já só grava assim; a conta de novo
 // cobre o preenchimento à mão. Só a data (sem hora), escrita à mão, vale como resposta.
@@ -250,8 +270,7 @@ const buscas = $input.all().map(i => i.json).filter(b => txt(b.query)).map(b => 
   for (const l of daRodada) conta[txt(l.cidade)] = (conta[txt(l.cidade)] ?? 0) + 1;
   const cidade = Object.entries(conta).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
   return {{ query: txt(b.query), vertical: txt(b.vertical), lat: txt(b.lat), lng: txt(b.lng),
-    ativa: ['true', 'verdadeiro', 'sim', 'x', '1'].includes(norm(b.ativa)), cidade, r, leads: [],
-    linha: b.row_number, pausada_em: txt(b.pausada_em) }};
+    ativa: ehVerdade(b.ativa), cidade, r, leads: [], linha: b.row_number, pausada_em: txt(b.pausada_em) }};
 }});
 for (const l of leads) {{
   const rl = radicais(l.vertical);
@@ -260,20 +279,9 @@ for (const l of leads) {{
   const dona = naCidade[0] ?? (candidatas.length === 1 && !candidatas[0].cidade ? candidatas[0] : null);
   if (dona) dona.leads.push(l);
 }}
-// Pausa: ativa, MIN_ENVIADOS+ enviados e nenhuma resposta que não seja recusa. Quem já tem
-// pausada_em e está ativa foi religada pelo Rômulo: a regra não pausa de novo.
-const nao_gerar = [];
-const porBusca = buscas.map(({{ r, leads: ls, ...b }}) => {{
-  const enviados = ls.filter(enviado).length, respostas = ls.filter(respondeu).length;
-  const pausar = b.ativa && !b.pausada_em && enviados >= MIN_ENVIADOS && respostas === 0;
-  const desligada = !b.ativa || pausar;
-  const rotulo = '"' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '');
-  // Lead novo de busca desligada: o gerador de sites não gasta uma sessão nele.
-  if (desligada) for (const l of ls) if (txt(l.status) === 'novo' && !txt(l.site_url))
-    nao_gerar.push({{ place_id: txt(l.place_id), nome: txt(l.nome), busca: rotulo }});
-  return {{ ...b, leads: ls.filter(l => txt(l.status) !== 'descartado').length, enviados, respostas,
-    candidata: pausar, pausar, ativa_depois: !desligada }};
-}});
+// Quem já tem pausada_em e está ativa foi religada pelo Rômulo: nenhuma regra pausa de novo.
+const decisao = decidirPausas(buscas, leads, propostas, {{ respondeu, minEnviados: MIN_ENVIADOS, agora, semSinalLigada: !crmErro }});
+const porBusca = decisao.buscas, nao_gerar = decisao.nao_gerar;
 
 const semana = {{
   leads: leads.filter(l => txt(l.status) !== 'descartado' && recente(l.criado_em)).length,
@@ -281,8 +289,10 @@ const semana = {{
   enviados: leads.filter(l => recente(l.enviado_em)).length,
   responderam: leads.filter(l => recente(l.respondeu_em)).length,
 }};
-const estado = {{ geradoEm: new Date().toISOString(), regra: {{ min_enviados: MIN_ENVIADOS, resposta_min: 5 }},
-  semana, totais: medir(leads), nichos, buscas: porBusca, nao_gerar }};
+const estado = {{ geradoEm: new Date().toISOString(),
+  regra: {{ min_enviados: MIN_ENVIADOS, resposta_min: 5, sem_sinal_max: SEM_SINAL_MAX, dias_para_responder: DIAS_PARA_RESPONDER }},
+  crm: crmErro ? {{ lido: false, erro: String(crmErro.message ?? crmErro).slice(0, 200) }} : {{ lido: true, propostas: propostas.size }},
+  semana, totais: medir(leads), nichos, segmentos: decisao.segmentos, buscas: porBusca, nao_gerar }};
 return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: 'site-funil.json' }} }} }}];"""
 
@@ -292,6 +302,11 @@ const linha = (m) => [m.leads, m.sites, m.enviados, m.responderam, m.em_conversa
 const nichos = f.nichos.filter(n => n.sites > 0);
 const pausadas = f.buscas.filter(b => b.pausar);
 const naoGerar = f.nao_gerar ?? [];
+// Nicho sem sinal de compra: o que pausou agora, o que já estava parado e o que o Rômulo religou.
+const semSinal = (f.segmentos ?? []).filter(s => s.sem_sinal);
+const situacao = (s) => s.religado ? 'religado por você, segue rodando'
+  : s.pausadas_agora ? 'pausado agora (' + s.pausadas_agora + ' busca(s))'
+  : s.buscas_ligadas ? 'segue com ' + s.buscas_ligadas + ' busca(s) ligada(s)' : 'já estava pausado';
 const texto = [
   'Últimos 7 dias: ' + f.semana.leads + ' leads, ' + f.semana.sites + ' sites, ' + f.semana.enviados + ' enviados, ' + f.semana.responderam + ' respostas.',
   '',
@@ -299,13 +314,19 @@ const texto = [
   ...nichos.map(n => '• ' + n.nicho + ': ' + linha(n)),
   '*Total:* ' + linha(f.totais),
   '',
+  ...(f.crm && !f.crm.lido ? ['A aba CRM não foi lida (' + f.crm.erro + '): a pausa por falta de sinal de compra ficou para a próxima segunda.', ''] : []),
+  semSinal.length
+    ? 'Nichos sem sinal de compra (' + f.regra.sem_sinal_max + '+ enviados e nenhum interesse, pedido de preço, proposta ou ganho; negativa e robô não contam):' + NL
+      + semSinal.map(s => '• ' + s.nicho + ': ' + s.porque + ', em ' + s.cidades + ' cidade(s). ' + situacao(s) + '.').join(NL)
+    : 'Nenhum nicho com ' + f.regra.sem_sinal_max + '+ enviados sem sinal de compra.',
+  '',
   pausadas.length
-    ? 'Buscas pausadas agora ({MIN_ENVIADOS}+ enviados, nenhum interesse; o Caçador não as roda mais):' + NL
+    ? 'Buscas pausadas agora (o Caçador não as roda mais):' + NL
       + pausadas.map(b => '• "' + b.query + '"' + (b.cidade ? ' em ' + b.cidade : '') + ' (' + b.lat + ', ' + b.lng + '): '
-        + b.enviados + ' enviados, nenhum interesse').join(NL)
+        + b.pausa_motivo).join(NL)
       + NL + 'Para religar, ponha TRUE em ativa na aba Buscas: com pausada_em preenchida a regra não pausa de novo.'
-    : 'Nenhuma busca ativa com {MIN_ENVIADOS}+ enviados sem interesse.',
-  ...(naoGerar.length ? ['', naoGerar.length + ' lead(s) novo(s) de busca desligada ficam fora da fila do gerador de sites.'] : []),
+    : 'Nenhuma busca pausada esta semana.',
+  ...(naoGerar.length ? ['', naoGerar.length + ' lead(s) novo(s) de busca ou nicho desligado ficam fora da fila do gerador de sites.'] : []),
   '',
   'Planilha: {LINK_PLANILHA}',
 ].join(NL);
@@ -317,8 +338,7 @@ return [{{ json: {{ titulo, texto }}, binary: {{ data: {{ data: Buffer.from(JSON
 BUSCAS_A_PAUSAR = """// Uma linha por busca pausada agora; sem nenhuma, "Pausar na aba Buscas" nem roda.
 const agora = $now.toFormat("yyyy-MM-dd'T'HH:mm");
 return $('Funil').first().json.buscas.filter(b => b.pausar && b.linha).map(b => ({ json: {
-  row_number: Number(b.linha), ativa: 'FALSE', pausada_em: agora,
-  pausa_motivo: b.enviados + ' enviados e nenhum interesse (funil semanal)',
+  row_number: Number(b.linha), ativa: 'FALSE', pausada_em: agora, pausa_motivo: b.pausa_motivo,
 } }));"""
 
 
@@ -349,6 +369,7 @@ def funil(erro):
                                                "triggerAtHour": 8, "triggerAtMinute": 0}]}}},
         *recibos(),
         ler_aba("planilha", "Ler a planilha", LEADS_GID, "Leads", [660, 0]),
+        ler_aba_crm([770, 200]),
         ler_aba("buscas", "Ler Buscas", BUSCAS_GID, "Buscas", [880, 0]),
         code("funil", "Funil", FUNIL, [1100, 0]),
         {"id": "gravar-funil", "name": "Gravar funil", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
@@ -359,7 +380,8 @@ def funil(erro):
         code("buscas-a-pausar", "Buscas a pausar", BUSCAS_A_PAUSAR, [1320, 360]),
         pausar_buscas(1540, 360),
     ]
-    con = em_fila(["Segunda 08:00", "Ler recibos da pasta auto", "Ler o JSON do recibo", "Ler a planilha", "Ler Buscas", "Funil"])
+    con = em_fila(["Segunda 08:00", "Ler recibos da pasta auto", "Ler o JSON do recibo", "Ler a planilha", "Ler aba CRM",
+                   "Ler Buscas", "Funil"])
     con["Funil"] = {"main": [[{"node": n, "type": "main", "index": 0}
                               for n in ("Gravar funil", "Montar aviso", "Buscas a pausar")]]}
     con["Montar aviso"] = {"main": [[{"node": "Avisar pelo Hermes", "type": "main", "index": 0}]]}
@@ -582,36 +604,161 @@ def testar_regra() -> int:
         + leads("aca", "academia", "Belo Horizonte", "2026-09-18T06:05:00-03:00", 5)
         + [{**leads("odo", "odontologia", "São Paulo", "2026-09-15T06:05:00-03:00", 1)[0], "status": "novo", "site_url": "", "enviado_em": ""}]
     )
-    dados = {"Ler o JSON do recibo": [], "Ler recibos da pasta auto": [], "Ler a planilha": planilha}
+    # Sem sinal de compra (08/10/2026). Cada busca roda num horário próprio para o lote dela
+    # cair só nela; `resp` é uma resposta humana (1 h depois do envio).
+    resp = {"respondeu_em": "2026-10-01T11:00:00-03:00"}
+    novo = {"status": "novo", "site_url": "", "enviado_em": ""}
+    buscas += [
+        # Nicho dedetização: Sorocaba sozinha passa de 20 sem sinal; Curitiba cai pelo nicho.
+        busca(20, "dedetizadora", "dedetização", "2026-10-02T06:00"),
+        busca(21, "dedetizadora", "dedetização", "2026-10-02T08:00"),
+        # Nicho camping: já parado em Paraty, religado em Ubatuba; Ilhabela (nunca rodou) segue.
+        busca(22, "camping", "camping", "2026-10-02T10:00", ativa="FALSE", pausada_em="2026-10-05T20:03"),
+        busca(23, "camping", "camping", "2026-10-02T12:00", pausada_em="2026-10-06T09:00"),
+        busca(24, "camping", "camping", ""),
+        # Cada um tem 21 enviados e um único sinal; engenharia tem uma proposta desfeita, que não vale.
+        busca(25, "empresa de reformas", "reformas", "2026-10-02T14:00"),
+        busca(26, "escritório de contabilidade", "contabilidade", "2026-10-02T16:00"),
+        busca(27, "usinagem", "usinagem", "2026-10-02T18:00"),
+        busca(28, "advogado", "advocacia", "2026-10-02T20:00"),
+        busca(29, "escritório de engenharia", "engenharia", "2026-10-02T22:00"),
+        # Advocacia em Brasília, 08/10/2026: 5 envios do mesmo dia, sem resposta. Ainda não é silêncio.
+        busca(30, "advogado trabalhista", "trabalhista", "2026-10-03T06:00"),
+    ]
+    ontem = datetime.fromtimestamp(time.time() - 86400, timezone.utc).isoformat()
+    planilha += (
+        # Neutras seguravam a busca pela regra do silêncio; para o sinal de compra não contam.
+        leads("ded", "dedetização", "Sorocaba", "2026-10-02T06:05:00-03:00", 16)
+        + leads("den", "dedetização", "Sorocaba", "2026-10-02T06:05:00-03:00", 3, **resp, resposta_tipo="neutra",
+                resposta_trecho="quem é você?")
+        + leads("deg", "dedetização", "Sorocaba", "2026-10-02T06:05:00-03:00", 1, **resp, resposta_tipo="negativa",
+                resposta_trecho="não temos interesse no valor")
+        + leads("dcu", "dedetização", "Curitiba", "2026-10-02T08:05:00-03:00", 2, **resp, resposta_tipo="neutra")
+        + [{**leads("dlo", "dedetização", "Londrina", "2026-10-07T06:05:00-03:00", 1)[0], **novo}]  # sem busca: cai pelo nicho
+        + leads("cap", "camping", "Paraty", "2026-10-02T10:05:00-03:00", 20)
+        + leads("cau", "camping", "Ubatuba", "2026-10-02T12:05:00-03:00", 2, **resp, resposta_tipo="bot")
+        + [{**leads("cil", "camping", "Ilhabela", "2026-10-07T06:05:00-03:00", 1)[0], **novo}]
+        + leads("ref", "reformas", "Jundiaí", "2026-10-02T14:05:00-03:00", 21)  # ref0 tem proposta aberta na aba CRM
+        + leads("con", "contabilidade", "Londrina", "2026-10-02T16:05:00-03:00", 20)
+        + [{**leads("cof", "contabilidade", "Londrina", "2026-10-02T16:05:00-03:00", 1)[0], "status": "fechado"}]
+        + leads("usi", "usinagem", "Caxias do Sul", "2026-10-02T18:05:00-03:00", 20)
+        + leads("usx", "usinagem", "Caxias do Sul", "2026-10-02T18:05:00-03:00", 1, **resp, resposta_tipo="interesse")
+        + leads("adv", "advocacia", "Brasília", "2026-10-02T20:05:00-03:00", 20, **resp, resposta_tipo="bot")
+        + leads("adp", "advocacia", "Brasília", "2026-10-02T20:05:00-03:00", 1, **resp, resposta_tipo="neutra",
+                resposta_trecho="Qual o preço?")
+        + leads("eng", "engenharia", "Curitiba", "2026-10-02T22:05:00-03:00", 21)
+        + leads("trb", "trabalhista", "Goiânia", "2026-10-03T06:05:00-03:00", 5, enviado_em=ontem)
+    )
+    crm = [
+        {"em": "2026-10-03T10:00:00Z", "produto": "site", "id": "ref0", "tipo": "proposta", "data": "2026-10-03"},
+        {"em": "2026-10-03T10:00:00Z", "produto": "site", "id": "eng0", "tipo": "proposta", "data": "2026-10-03"},
+        {"em": "2026-10-04T10:00:00Z", "produto": "site", "id": "eng0", "tipo": "proposta_desfeita"},
+        {"em": "2026-10-04T10:00:00Z", "produto": "prumo", "id": "eng1", "tipo": "proposta"},  # outro produto
+    ]
+    dados = {"Ler o JSON do recibo": [], "Ler recibos da pasta auto": [], "Ler a planilha": planilha, "Ler aba CRM": crm}
 
     class Regra(unittest.TestCase):
         @classmethod
         def setUpClass(cls):
             cls.f = rodar_no(FUNIL, dados, buscas)[0]
+            cls.por = {b["linha"]: b for b in cls.f["buscas"]}
+            cls.seg = {s["nicho"]: s for s in cls.f["segmentos"]}
             cls.pausas = rodar_no(BUSCAS_A_PAUSAR, {"Funil": cls.f}, [])
             cls.aviso = rodar_no(AVISO_FUNIL, {"Funil": cls.f}, [])[0]["texto"]
 
         def test_pausa_so_sem_resposta_humana(self):
-            por = {b["query"]: b for b in self.f["buscas"]}
-            self.assertTrue(por["vidraçaria"]["pausar"])
-            self.assertTrue(por["pousada"]["pausar"])  # resposta a 2 min do envio não conta
-            self.assertFalse(por["espaço para eventos"]["pausar"])  # 1 resposta humana
-            self.assertFalse(por["academia"]["pausar"])  # pausada_em + ativa: o Rômulo religou
-            self.assertFalse(por["clínica odontológica"]["pausar"])  # já desligada
-            self.assertTrue(por["buffet infantil"]["pausar"])  # só respostas negativas
-            self.assertEqual([p["row_number"] for p in self.pausas], [2, 3, 7])
+            por = self.por
+            self.assertEqual(por[2]["regra"], "silencio")  # vidraçaria
+            self.assertTrue(por[3]["pausar"])  # pousada: resposta a 2 min do envio não conta
+            self.assertFalse(por[4]["pausar"])  # eventos: 1 resposta humana
+            self.assertFalse(por[5]["pausar"])  # academia: pausada_em + ativa, o Rômulo religou
+            self.assertFalse(por[6]["pausar"])  # odontologia: já desligada
+            self.assertTrue(por[7]["pausar"])  # buffet: só respostas negativas
             self.assertEqual({p["ativa"] for p in self.pausas}, {"FALSE"})
-            self.assertTrue(all(p["pausada_em"] and "enviados e nenhum interesse" in p["pausa_motivo"] for p in self.pausas))
+            self.assertTrue(all(p["pausada_em"] and p["pausa_motivo"].endswith("(funil semanal)") for p in self.pausas))
+            self.assertIn("nenhuma resposta humana", por[2]["pausa_motivo"])
 
-        def test_nao_gerar_leva_os_novos_de_busca_desligada(self):
-            self.assertEqual(sorted(x["place_id"] for x in self.f["nao_gerar"]), ["odo0", "vidnovo0"])
+        def test_busca_e_nicho_sem_sinal_de_compra(self):
+            self.assertEqual(self.por[20]["regra"], "busca_sem_sinal")  # 20 enviados, 3 neutras e 1 negativa
+            self.assertIn("20 enviados; respostas: 3 neutras, 1 negativa", self.por[20]["pausa_motivo"])
+            self.assertEqual(self.por[21]["regra"], "nicho_sem_sinal")  # 2 enviados, mas o nicho tem 22
+            self.assertIn("nicho dedetizacao sem sinal de compra: 22 enviados", self.por[21]["pausa_motivo"])
+            self.assertIn("em 2 cidade(s)", self.por[21]["pausa_motivo"])
+            d = self.seg["dedetizacao"]
+            self.assertEqual((d["enviados"], d["sinais"], d["ruim"], d["pausadas_agora"]), (22, 0, True, 2))
 
-        def test_aviso_conta_as_pausas(self):
+        def test_cada_sinal_de_compra_segura_o_nicho(self):
+            for linha in (25, 26, 27, 28):  # proposta aberta, fechado, interesse, pedido de preço
+                self.assertFalse(self.por[linha]["pausar"], self.por[linha]["query"])
+                self.assertEqual(self.por[linha]["sinais"], 1, self.por[linha]["query"])
+            self.assertEqual(self.por[29]["regra"], "busca_sem_sinal")  # proposta desfeita não é sinal
+
+        def test_envio_de_menos_de_3_dias_nao_conta(self):
+            self.assertFalse(self.por[30]["pausar"])  # 5 envios de ontem, sem resposta
+            self.assertEqual(self.por[30]["enviados"], 0)
+
+        def test_negativa_e_robo_nao_sao_sinal(self):
+            self.assertEqual(self.seg["dedetizacao"]["tipos"], {"neutra": 5, "negativa": 1})  # "valor" na negativa
+            self.assertEqual(self.seg["advocacia"]["sinais"], 1)  # o preço, não os 20 robôs
+
+        def test_religar_e_o_que_ja_estava_parado(self):
+            c = self.seg["camping"]
+            self.assertTrue(c["sem_sinal"] and c["religado"])
+            self.assertFalse(c["ruim"])
+            self.assertFalse(self.por[22]["pausar"])  # já desligada
+            self.assertFalse(self.por[23]["pausar"])  # religada
+            self.assertFalse(self.por[24]["pausar"])  # nicho religado: a busca nova segue
+
+        def test_nao_gerar_leva_os_novos_de_busca_ou_nicho_desligado(self):
+            self.assertEqual(sorted(x["place_id"] for x in self.f["nao_gerar"]), ["dlo0", "odo0", "vidnovo0"])
+            self.assertEqual(next(x["busca"] for x in self.f["nao_gerar"] if x["place_id"] == "dlo0"), "nicho dedetizacao")
+
+        def test_linhas_gravadas(self):
+            self.assertEqual([p["row_number"] for p in self.pausas], [2, 3, 7, 20, 21, 29])
+
+        def test_aviso_diz_quais_nichos_e_por_que(self):
+            self.assertIn("Nichos sem sinal de compra (20+ enviados", self.aviso)
+            self.assertIn("• dedetizacao: 22 enviados; respostas: 5 neutras, 1 negativa, em 2 cidade(s). pausado agora (2 busca(s)).", self.aviso)
+            self.assertIn("• camping: 22 enviados; respostas: 2 robôs, em 2 cidade(s). religado por você", self.aviso)
             self.assertIn("Buscas pausadas agora", self.aviso)
             self.assertIn('"vidraçaria" em Joinville', self.aviso)
-            self.assertIn("2 lead(s) novo(s) de busca desligada", self.aviso)
+            self.assertIn("3 lead(s) novo(s) de busca ou nicho desligado", self.aviso)
 
-    r = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Regra))
+        def test_sem_a_aba_crm_so_vale_o_silencio(self):
+            f = rodar_no(FUNIL, {**dados, "Ler aba CRM": [{"error": {"message": "credencial caída"}}]}, buscas)[0]
+            por = {b["linha"]: b for b in f["buscas"]}
+            self.assertEqual(por[2]["regra"], "silencio")
+            self.assertFalse(any(b["regra"] in ("busca_sem_sinal", "nicho_sem_sinal") for b in f["buscas"]))
+            aviso = rodar_no(AVISO_FUNIL, {"Funil": f}, [])[0]["texto"]
+            self.assertIn("A aba CRM não foi lida (credencial caída)", aviso)
+
+    class Sinal(unittest.TestCase):
+        def test_tabela(self):
+            casos = [  # (lead, proposta aberta?, sinal)
+                ({"status": "fechado", "resposta_tipo": "negativa"}, False, "ganho"),
+                ({"resposta_tipo": "negativa"}, True, "proposta"),
+                ({"resposta_tipo": "Interesse"}, False, "interesse"),
+                ({"resposta_tipo": "neutra", "resposta_trecho": "Quanto custa?"}, False, "preço"),
+                ({"resposta_tipo": "", "resposta_trecho": "me passa um orçamento"}, False, "preço"),
+                ({"resposta_tipo": "neutra", "resposta_trecho": "quem é?"}, False, ""),
+                ({"resposta_tipo": "negativa", "resposta_trecho": "não tenho interesse, qual o valor disso?"}, False, ""),
+                ({"resposta_tipo": "bot", "resposta_trecho": "Veja nossos preços no catálogo"}, False, ""),
+                ({"resposta_tipo": "exclusao", "resposta_trecho": "apague, não quero orçamento"}, False, ""),
+                ({"resposta_tipo": "neutra", "resposta_trecho": "valorizamos seu contato"}, False, ""),
+            ]
+            js = sv.codigo_js("site-funil-regra.js") + "\nreturn " + json.dumps(
+                [{"json": {"l": {"place_id": "p", **l}, "p": p}} for l, p, _ in casos], ensure_ascii=False
+            ) + ".map(c => ({ json: { s: sinalDeCompra(c.json.l, new Set(c.json.p ? ['p'] : [])) } }));"
+            self.assertEqual([x["s"] for x in rodar_no(js, {}, [])], [s for _, _, s in casos])
+
+    class Trava(unittest.TestCase):
+        def test_fluxo_desligado_nao_e_religado(self):
+            import n8n
+            for wid in n8n.DESLIGADOS:
+                self.assertEqual(n8n.api("POST", f"/workflows/{wid}/activate"), {"active": False, "desligado": True})
+
+    carregar = unittest.defaultTestLoader.loadTestsFromTestCase
+    r = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite([carregar(c) for c in (Regra, Sinal, Trava)]))
     return 0 if r.wasSuccessful() else 1
 
 
@@ -639,6 +786,22 @@ if __name__ == "__main__":
         print(json.dumps({k: f.get(k) for k in ("semana", "totais", "buscas", "nao_gerar")}, ensure_ascii=False, indent=1))
         print("pausaria:", json.dumps(s.get("Buscas a pausar") or [], ensure_ascii=False))
         print((s.get("Montar aviso") or [{}])[0].get("texto"))
+    elif "--simular" in sys.argv:
+        s = testar(funil(erro), {"Gravar funil": noop("Gravar funil"), "Avisar pelo Hermes": noop("Avisar pelo Hermes"),
+                                 "Pausar na aba Buscas": noop("Pausar na aba Buscas")})
+        f = (s.get("Funil") or [{}])[0]
+        print("\naba CRM:", json.dumps(f.get("crm"), ensure_ascii=False))
+        print("\nSegmentos (enviados / sinais de compra):")
+        for x in f.get("segmentos") or []:
+            if x["enviados"]:
+                print(f"  {x['nicho']}: {x['porque']}; sinais {x['sinais']}; {x['cidades']} cidade(s); ligadas depois "
+                      f"{x['buscas_ligadas']}{' · SEM SINAL' if x['sem_sinal'] else ''}{' · religado' if x['religado'] else ''}")
+        print("\nPausaria agora:")
+        for b in f.get("buscas") or []:
+            if b["pausar"]:
+                print(f"  linha {b['linha']} \"{b['query']}\" {b['cidade'] or '(sem cidade)'} [{b['regra']}]: {b['pausa_motivo']}")
+        print("\nnao_gerar:", len(f.get("nao_gerar") or []), json.dumps(f.get("nao_gerar") or [], ensure_ascii=False))
+        print("\n" + str((s.get("Montar aviso") or [{}])[0].get("texto")))
     elif "--colunas" in sys.argv:
         colunas_buscas()
     else:

@@ -49,7 +49,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'Site antes da venda',
     frase: 'O Dell acha o negócio, faz o site e publica. Você aborda e marca o desfecho. Envio, leitura, resposta e follow-up se marcam sozinhos.',
     passos: [
-      { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. Desde 05/10: serviço que se procura no Google (advocacia, contabilidade, desentupidora, indústria, reformas); B2C de vitrine deu 0 interesse. O funil de segunda pausa a busca sem interesse.', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. Desde 05/10: serviço que se procura no Google (advocacia, contabilidade, desentupidora, indústria, reformas); B2C de vitrine deu 0 interesse. O funil de segunda pausa a busca e o nicho sem sinal de compra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'Caçador acha o lead', texto: 'n8n 01: Google Places + Gemini. Fica quem tem nota 60 ou mais e WhatsApp; vira linha "novo" na planilha.', onde: 'dell', quando: '06:00', verificacao: 'fluxo:oow8TkxrAf4fVvTj' },
       { titulo: 'A pasta do lead nasce', texto: 'auto-entrada cria ~/auto-site/<lead> com fotos e content.md.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Gerador faz e publica o site', texto: 'Claude (/lead-novo), até 4 por dia, 45 min cada; publica na Vercel como demo-<lead>. Com o Dell desligado às 08:00, roda quando ele liga.', onde: 'dell', quando: '08:00', verificacao: 'gerador', fila: 'pend:sites-fila' },
@@ -64,16 +64,16 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Marca o desfecho', texto: 'Na página do lead (link no CRM e na mensagem das 10:30): Recusou, Fechou ou Desfazer. Planilha e pasta mudam juntas.', onde: 'voce', quando: 'um toque', comVoce: true, verificacao: 'fluxo:Kf5IWNdEFFnuSOy2', link: CRM_SITE },
       { ramo: 'se recusou ou expirou', titulo: 'Demo pausado em 15 dias', texto: 'O site sai do ar na Vercel, sem apagar. Desfazer ou uma resposta nova põe de volta.', onde: 'dell', quando: '09:40' },
       { titulo: 'Conversa, proposta e fechamento', texto: 'Com você. A ficha do CRM guarda nota, próximo passo e "proposta enviada"; prumo-pdf faz o PDF da proposta.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_SITE },
-      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento, e pausa a busca com 5+ enviados e nenhuma resposta (o gerador pula os leads dela). Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0' },
+      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento. Pausa a busca (segmento × cidade) e o nicho inteiro com 20+ enviados sem sinal de compra (interesse, pedido de preço, proposta ou ganho; negativa e robô não contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois de 3 dias. O gerador pula os leads novos do que pausou, e o aviso diz quais nichos pararam e por quê. Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0' },
     ],
   },
   {
     id: 'prumo',
     grupo: 'Consultoria',
     nome: 'PRUMO · Organizar',
-    frase: 'Do prospect ao Mapa. O Dell acha, pontua e monta o rascunho; você revisa, convida e conduz.',
+    frase: 'Do prospect ao Mapa. O prospect chega pela CDL; o Dell pontua e monta o rascunho; você revisa, convida e conduz.',
     passos: [
-      { titulo: 'Lead Scout acha prospects', texto: 'n8n: rodízio de buscas no Places; o CNPJ na BrasilAPI descarta MEI, micro e redes.', onde: 'dell', quando: '09:00', verificacao: 'fluxo:e02c6f43-17ce-430b-9238-0b997a7656ce' },
+      { titulo: 'O prospect chega pela CDL', texto: 'Desde 08/10 o Organizado chega só pela CDL. O Lead Scout (convite frio a distribuidoras achadas no Places) está desligado no n8n: 57 convites, 21 respostas de robô e nenhum dono interessado. O fluxo continua lá, inativo.', onde: 'externo', quando: 'quando chegar' },
       { titulo: 'Revisa o prospect', texto: 'No CRM, em Hoje › Prospects para revisar: veja o site e o briefing do CNPJ.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-revisar', link: CRM_PRUMO },
       { titulo: 'Enviar convite', texto: 'O clique marca "Convite enviado" e abre o WhatsApp com a mensagem. Escrever direto ao dono também conta.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:GkgYmWZJ65a2e9XF' },
       { titulo: 'Leitura e resposta se marcam', texto: 'O observador anota "Leu o convite em…" e "Respondeu no WhatsApp em…" na planilha.', onde: 'dell', quando: 'na hora' },
@@ -224,7 +224,6 @@ export const UM_DIA: HoraDoDia[] = [
   {
     hora: '09:00',
     itens: [
-      { onde: 'dell', titulo: 'Lead Scout do PRUMO', nota: 'n8n' },
       { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'follow-up no 3º dia, expira no 10º' },
       { onde: 'dell', titulo: 'ASMR: conceito do dia', nota: 'Hermes' },
     ],
