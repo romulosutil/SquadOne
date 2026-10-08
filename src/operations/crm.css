@@ -11,8 +11,7 @@
 .crm,
 .crm-na-folha {
   --crm-novo: #fffdf6;
-  --crm-contatado: #cbdcff;
-  --crm-conversando: #ffdc59;
+  --crm-contato: #cbdcff;
   --crm-proposta: #ffc48a;
   --crm-ganho: #b9f6d0;
   --crm-perdido: #f2c4bb;
@@ -32,19 +31,20 @@
 .crm :focus-visible,
 .crm-na-folha :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 
-.crm { display: grid; gap: 1rem; width: 100%; max-width: 100rem; min-width: 0; margin: 0 auto; }
+/* minmax(0, 1fr): sem ele a trilha implícita (auto) crescia até o filho mais largo e
+   o CRM inteiro passava da tela do celular (o seletor de vistas tinha 402 px em 358). */
+.crm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; width: 100%; max-width: 100rem; min-width: 0; margin: 0 auto; }
 .crm-na-folha { display: grid; gap: 1rem; }
 
 .crm .is-novo, .crm-na-folha .is-novo { --crm-cor: var(--crm-novo); }
-.crm .is-contatado, .crm-na-folha .is-contatado { --crm-cor: var(--crm-contatado); }
-.crm .is-conversando, .crm-na-folha .is-conversando { --crm-cor: var(--crm-conversando); }
+.crm .is-contato, .crm-na-folha .is-contato { --crm-cor: var(--crm-contato); }
 .crm .is-proposta, .crm-na-folha .is-proposta { --crm-cor: var(--crm-proposta); }
 .crm .is-ganho, .crm-na-folha .is-ganho { --crm-cor: var(--crm-ganho); }
 .crm .is-perdido, .crm-na-folha .is-perdido { --crm-cor: var(--crm-perdido); }
 
-.crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; padding: 1.1rem 1.25rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
+.crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; padding: 0.85rem 1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
 .crm-kicker { display: block; color: var(--texto-2); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
-.crm-topo h1 { font-size: clamp(2.2rem, 7vw, 3.4rem); line-height: 0.95; }
+.crm-topo h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); line-height: 0.95; }
 .crm-topo__fonte { margin: 0.4rem 0 0; color: var(--texto-2); font-size: 0.85rem; }
 .crm-aviso,
 .crm-erro { margin: 0; padding: 0.8rem 1rem; border: var(--linha); background: var(--atencao-fundo); color: var(--texto); }
@@ -55,8 +55,12 @@
 .crm-muted { margin: 0; color: var(--texto-2); font-size: 0.88rem; }
 
 .crm-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.crm-vistas { display: flex; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
-.crm-vistas a { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.1rem; color: var(--texto); font-weight: 900; text-decoration: none; }
+.crm-vistas { display: flex; max-width: 100%; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
+.crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; color: var(--texto); font-weight: 900; text-decoration: none; white-space: nowrap; }
+@media (max-width: 30rem) {
+  .crm-vistas { width: 100%; }
+  .crm-vistas a { padding-inline: 0.5rem; font-size: 0.92rem; }
+}
 .crm-vistas a + a { border-left: var(--linha); }
 .crm-vistas a[aria-current="page"] { background: var(--texto); color: var(--superficie); }
 .crm-vistas a span { min-width: 1.7rem; padding: 0 0.35rem; border: 2px solid currentColor; font-size: 0.78rem; text-align: center; }
@@ -70,7 +74,7 @@
 .crm-resumo button:hover { background: var(--crm-cor); color: var(--cor-tinta); }
 .crm-resumo strong { font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: 950; line-height: 1; font-variant-numeric: tabular-nums; }
 .crm-resumo span { font-size: 0.8rem; font-weight: 800; }
-@media (min-width: 48rem) { .crm-resumo { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (min-width: 48rem) { .crm-resumo { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
 .crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .crm-tag.is-prumo { background: var(--barra-fundo); color: var(--cor-papel-forte); }
@@ -147,8 +151,13 @@
 
 /* Funil */
 .crm-funil { display: grid; gap: 0.75rem; min-width: 0; }
-.crm-filtros { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
-@media (min-width: 48rem) { .crm-filtros { grid-template-columns: minmax(12rem, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 1fr); } }
+/* No celular, Nicho e Cidade lado a lado: três campos empilhados empurravam o funil meia tela para baixo. */
+.crm-filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 0.6rem; }
+.crm-filtros label:first-child { grid-column: 1 / -1; }
+@media (min-width: 48rem) {
+  .crm-filtros { grid-template-columns: minmax(12rem, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 1fr); }
+  .crm-filtros label:first-child { grid-column: auto; }
+}
 .crm-filtros label,
 .crm-form label { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
 .crm-form label small { font-weight: 700; letter-spacing: 0; text-transform: none; }
@@ -160,11 +169,19 @@
 .crm-form input:disabled,
 .crm-form textarea:disabled { opacity: 0.6; }
 .crm-filtro-resumo { margin: 0; font-size: 0.85rem; font-weight: 800; }
-.crm-colunas { display: grid; grid-auto-columns: minmax(16.5rem, 86%); grid-auto-flow: column; gap: 0.9rem; min-width: 0; padding-bottom: 0.75rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; }
-@media (min-width: 48rem) { .crm-colunas { grid-auto-columns: minmax(17rem, 42%); } }
-@media (min-width: 110rem) { .crm-colunas { grid-auto-flow: row; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow-x: visible; } }
-.crm-coluna { display: flex; min-width: 0; flex-direction: column; gap: 0.6rem; padding: 0 0.7rem 0.8rem; border: var(--linha); background: var(--superficie-2); scroll-snap-align: start; }
-.crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.7rem; padding: 0.65rem 0.7rem; border-bottom: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); }
+/*
+ * Quadro do desktop (08/10/2026): Novo | Em contato | Proposta | Ganho em cima de Perdido.
+ * As quatro colunas cabem sem rolagem lateral a partir de ~1200 px com a barra lateral;
+ * entre 1024 e 1200 o quadro rola de lado em vez de espremer os cartões. No celular
+ * (.crm-colunas--uma) é uma etapa só.
+ */
+/* Proposta (marcada à mão, quase sempre poucos) fica mais estreita e dá a largura às outras. */
+.crm-colunas { display: grid; grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr) minmax(11rem, 0.7fr) minmax(14rem, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 0.6rem; min-width: 0; padding-bottom: 0.5rem; overflow-x: auto; overscroll-behavior-x: contain; }
+.crm-colunas > .crm-coluna { grid-row: 1 / span 2; }
+.crm-colunas > .crm-coluna.is-ganho { grid-column: 4; grid-row: 1; }
+.crm-colunas > .crm-coluna.is-perdido { grid-column: 4; grid-row: 2; }
+.crm-coluna { display: flex; min-width: 0; flex-direction: column; gap: 0.5rem; padding: 0 0.55rem 0.65rem; border: var(--linha); background: var(--superficie-2); }
+.crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.55rem; padding: 0.55rem 0.65rem; border-bottom: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); }
 .crm-coluna__cabeca h2 { font-size: 1.15rem; letter-spacing: -0.02em; }
 .crm-coluna__cabeca strong { font-size: 1.5rem; font-weight: 950; font-variant-numeric: tabular-nums; }
 .crm-coluna__cabeca small { grid-column: 1 / -1; font-size: 0.74rem; font-weight: 700; }
@@ -172,25 +189,29 @@
 .crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: 0.85rem; }
 .crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: 0.82rem; font-weight: 800; }
 .crm-check input { width: 1.2rem; height: 1.2rem; accent-color: var(--texto); }
-.crm-cartoes { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
-.crm-cartao { display: grid; gap: 0.4rem; padding: 0.7rem; border: var(--linha); background: var(--superficie); }
+.crm-cartoes { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.crm-cartao { display: grid; gap: 0.35rem; padding: 0.55rem 0.65rem; border: var(--linha); background: var(--superficie); }
 .crm-cartao.tem-divergencia { border-style: dashed; }
 .crm-cartao__abrir { display: grid; gap: 0.1rem; min-height: 44px; }
-.crm-cartao__abrir strong { font-size: 1rem; line-height: 1.2; text-decoration: underline; text-underline-offset: 3px; }
-.crm-cartao__abrir small { color: var(--texto-2); font-size: 0.78rem; }
-.crm-cartao__estado { margin: 0; font-size: 0.82rem; }
+.crm-cartao__abrir strong { font-size: 0.98rem; line-height: 1.2; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.crm-cartao__abrir small { color: var(--texto-2); font-size: 0.76rem; }
+.crm-cartao__estado { margin: 0; font-size: 0.8rem; line-height: 1.35; }
 .crm-cartao__artefatos { margin: 0; color: var(--texto-2); font-size: 0.76rem; }
-.crm-cartao__links a { padding-inline: 0.6rem; font-size: 0.82rem; }
-.crm-marcos { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0; padding: 0; list-style: none; font-size: 0.72rem; }
-.crm-marcos li { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto-2); }
-.crm-marcos li.is-feito { background: var(--ok-fundo); color: var(--texto); font-weight: 800; }
-.crm-marcos li.is-desconhecido { border-style: dashed; }
+.crm-cartao__links { gap: 0.35rem; }
+.crm-cartao__links a { padding: 0.25rem 0.5rem; font-size: 0.78rem; }
+/* Os três marcos numa linha de texto (eram três etiquetas com borda, uma por linha na coluna estreita). */
+.crm-marcos { display: flex; flex-wrap: wrap; gap: 0 0.35rem; margin: 0; padding: 0; list-style: none; color: var(--texto-2); font-size: 0.74rem; line-height: 1.4; }
+.crm-marcos li + li::before { margin-right: 0.35rem; content: "·"; }
+.crm-marcos li.is-feito { color: var(--texto); font-weight: 800; }
+.crm-marcos li.is-desconhecido { font-style: italic; }
 .crm-sinais { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; }
 .crm-sinal { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.72rem; font-weight: 900; }
 .crm-sinal.is-resposta { background: var(--destaque); color: var(--destaque-texto); }
 .crm-sinal.is-followup { background: var(--acento); color: var(--cor-tinta); }
 .crm-sinal.is-divergencia { border-style: dashed; background: var(--erro-fundo); }
 .crm-sinal.is-acervo { color: var(--texto-2); font-weight: 700; }
+.crm-sinal.is-prazo { border-style: dashed; color: var(--texto-2); font-weight: 800; }
+.crm-sinal.is-prazo.is-amanha { border-style: solid; background: var(--atencao-fundo); color: var(--texto); }
 /* Tipo da resposta: o texto diz o tipo; a cor só reforça (RULES 3). */
 .crm-sinal.is-interesse, .crm-resposta.is-interesse strong { background: var(--ok-fundo); color: var(--texto); }
 .crm-sinal.is-negativa, .crm-resposta.is-negativa strong,
@@ -241,8 +262,9 @@
 .crm-segmento button { min-height: 44px; flex: 1; border: 0; background: transparent; color: var(--texto); font-weight: 900; cursor: pointer; }
 .crm-segmento button + button { border-left: var(--linha); }
 .crm-segmento button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); }
-.crm-abas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.crm-abas button { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.3rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.85rem; font-weight: 800; cursor: pointer; }
+/* Cinco abas que quebram linha pelo tamanho do texto: num grid fixo "Em contato 100" não cabia. */
+.crm-abas { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.crm-abas button { display: flex; flex: 1 1 auto; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.85rem; font-weight: 800; white-space: nowrap; cursor: pointer; }
 .crm-abas button[aria-selected="true"] { background: var(--texto); color: var(--superficie); }
 .crm-colunas--uma { display: block; overflow: visible; padding-bottom: 0; }
 /* No celular quem escolhe o produto é o segmentado do Funil. */

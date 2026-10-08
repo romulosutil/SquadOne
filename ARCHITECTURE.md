@@ -512,8 +512,12 @@ espelham (`site-pastas`) e a Central só lê:
   grava `crm-falha.json` e deixa o retrato anterior valendo;
 - `server/crm.ts` junta esse retrato com as pastas (`server/auto-production.ts`,
   que agora só lê pastas, artefatos da fila do gerador e `.logs/status.json`) e
-  os Mapas de `~/prumo-entregas` e põe cada lead numa das 6 etapas (Novo,
-  Contatado, Conversando, Proposta, Ganho, Perdido) com a subetapa do produto.
+  os Mapas de `~/prumo-entregas` e põe cada lead numa das 5 etapas (Novo,
+  Em contato, Proposta, Ganho, Perdido) com a subetapa do produto. Desde
+  08/10/2026 Contatado e Conversando são Em contato, com prazo: 7 dias sem
+  mensagem do lead e ele vai para Perdido (próximo passo ou proposta seguram);
+  é cálculo do CRM, a planilha não muda. O `site-demos-limpeza` do Dell lê esta
+  visão e apaga na Vercel o demo de quem está em Perdido há 2+ dias.
   As regras ficam em `etapaDoSite`/`etapaDoPrumo` e os nomes de coluna em
   `COLUNAS_DO_*`; coluna ausente vira vazio e aviso na tela;
 - divergência entre planilha e pasta vira nota na ficha, nunca correção;

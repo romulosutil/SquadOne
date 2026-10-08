@@ -9,7 +9,7 @@ const AGORA = Date.parse('2026-10-08T12:00:00Z')
 const dias = (n: number) => new Date(AGORA - n * 864e5).toISOString()
 
 const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
-  id, produto: 'site', chave: id, empresa: id, nicho: 'advocacia', cidade: '', etapa: 'contatado', sinal: 'enviado', subEtapa: '',
+  id, produto: 'site', chave: id, empresa: id, nicho: 'advocacia', cidade: '', etapa: 'contato', sinal: 'enviado', subEtapa: '',
   estadoNaPlanilha: 'enviado', leitura: 'desconhecida', marcos: { enviado: dias(2) }, followupHoje: false, respostaNova: false,
   acervo: false, notas: 0, eventos: [], links: {}, divergencias: [], ...extra,
 })
@@ -17,7 +17,7 @@ const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
 describe('resultados do funil', () => {
   const leads = [
     lead('viu', { marcos: { enviado: dias(2), visto: dias(1) } }),
-    lead('quer', { etapa: 'conversando', marcos: { enviado: dias(3), respondeu: dias(2) }, resposta: { tipo: 'interesse', trecho: 'pode mandar' } }),
+    lead('quer', { etapa: 'contato', sinal: 'respondeu', marcos: { enviado: dias(3), respondeu: dias(2) }, resposta: { tipo: 'interesse', trecho: 'pode mandar' } }),
     lead('recusou', { nicho: 'dedetizadora', etapa: 'perdido', motivoPerda: 'recusou', marcos: { enviado: dias(5), respondeu: dias(4) },
       resposta: { tipo: 'negativa', trecho: 'não' }, abordagem: { mensagem: 'A', site: 'personalizado-v2' } }),
     lead('fechou', { etapa: 'ganho', marcos: { enviado: dias(20), respondeu: dias(19) }, abordagem: { mensagem: 'manual' } }),

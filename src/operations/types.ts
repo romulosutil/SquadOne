@@ -58,12 +58,12 @@ export interface OperationsOverview {
 }
 
 // CRM (Site antes da venda + PRUMO). Espelha server/crm.ts; a Central só lê.
-export type CrmEtapa = 'novo' | 'contatado' | 'conversando' | 'proposta' | 'ganho' | 'perdido'
+export type CrmEtapa = 'novo' | 'contato' | 'proposta' | 'ganho' | 'perdido'
 export type CrmProduto = 'site' | 'prumo'
 export type CrmSinal =
   | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
   | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
-  | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
   | 'so-robo'
 
 export type CrmTipoDeResposta = 'negativa' | 'exclusao' | 'interesse' | 'neutra' | 'bot'
@@ -99,7 +99,9 @@ export interface CrmLead {
   etapa: CrmEtapa
   sinal: CrmSinal
   subEtapa: string
-  motivoPerda?: 'recusou' | 'expirou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  /** Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
+  diasParaSair?: number
   estadoNaPlanilha: string
   desde?: string
   diasNaEtapa?: number
@@ -162,7 +164,7 @@ export interface CrmVisao {
   fontes: Array<{ id: 'site' | 'prumo' | 'registros'; nome: string; linhas: number; erro?: string }>
   colunasAusentes: string[]
   contagens: Record<CrmEtapa, CrmContagem>
-  perdas: { recusou: number; expirou: number; descartado: number; semInteresse: number }
+  perdas: { recusou: number; expirou: number; esfriou: number; descartado: number; semInteresse: number }
   hoje: CrmGrupoHoje[]
   leads: CrmLead[]
   divergencias: number

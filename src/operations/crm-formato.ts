@@ -2,12 +2,14 @@ import type { CrmEtapa, CrmLead, CrmProduto, CrmTipoDeResposta } from './types'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
-export const ETAPAS: CrmEtapa[] = ['novo', 'contatado', 'conversando', 'proposta', 'ganho', 'perdido']
+export const ETAPAS: CrmEtapa[] = ['novo', 'contato', 'proposta', 'ganho', 'perdido']
+
+/** O espelho de DIAS_SEM_RESPOSTA (server/crm.ts): só para os textos; quem decide é o servidor. */
+export const DIAS_SEM_RESPOSTA = 7
 
 export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: 'Novo',
-  contatado: 'Contatado',
-  conversando: 'Conversando',
+  contato: 'Em contato',
   proposta: 'Proposta',
   ganho: 'Ganho',
   perdido: 'Perdido',
@@ -15,11 +17,25 @@ export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
 
 export const DICA_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: 'Site na fila ou pronto; prospect para revisar',
-  contatado: 'Enviado ou convidado, sem resposta',
-  conversando: 'Respondeu, formulário ou diagnóstico',
+  contato: `Enviado ou respondeu; ${DIAS_SEM_RESPOSTA} dias sem mensagem do lead = Perdido`,
   proposta: 'Proposta enviada (marcada à mão)',
   ganho: 'Fechou',
-  perdido: 'Recusou, expirou, descartado ou sem interesse',
+  perdido: 'Recusou, sem resposta, parou de responder ou descartado',
+}
+
+export const ROTULO_DA_PERDA: Record<NonNullable<CrmLead['motivoPerda']>, string> = {
+  recusou: 'Recusou',
+  expirou: 'Sem resposta',
+  esfriou: 'Parou de responder',
+  'sem-interesse': 'Sem interesse',
+  'sem-contato': 'Sem contato',
+  descartado: 'Descartado',
+}
+
+/** "Perdido em 3 dias" para quem está Em contato; vazio quando um próximo passo segura o lead. */
+export function textoDoPrazo(lead: CrmLead): string {
+  if (lead.etapa !== 'contato' || lead.diasParaSair === undefined) return ''
+  return lead.diasParaSair <= 1 ? 'Perdido amanhã' : `Perdido em ${lead.diasParaSair} dias`
 }
 
 // O que o lead respondeu, classificado pelo n8n a partir do texto (05/10/2026).

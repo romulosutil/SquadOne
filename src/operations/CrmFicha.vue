@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
@@ -22,6 +22,8 @@ const mensagem = ref('')
 const erro = ref('')
 
 const aberto = computed(() => props.lead.etapa !== 'ganho' && props.lead.etapa !== 'perdido')
+// Perdido pelo tempo (regra dos 7 dias) não teve desfecho: a proposta ainda pode ser marcada, e o traz de volta.
+const saiuPeloPrazo = computed(() => props.lead.motivoPerda === 'expirou' || props.lead.motivoPerda === 'esfriou')
 const eventos = computed(() => [...props.lead.eventos].reverse())
 const hoje = hojeEmSP()
 const situacaoDoProximo = computed(() => {
@@ -93,6 +95,14 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <span class="crm-etapa" :class="`is-${lead.etapa}`">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
         <span>{{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</span>
       </p>
+      <p v-if="lead.diasParaSair !== undefined && lead.etapa === 'contato'" class="crm-ficha__fonte">
+        Sem mensagem do lead, vai para Perdido {{ lead.diasParaSair <= 1 ? 'amanhã' : `em ${lead.diasParaSair} dias` }}
+        (regra dos {{ DIAS_SEM_RESPOSTA }} dias). Um próximo passo segura o lead em Em contato.
+      </p>
+      <p v-else-if="saiuPeloPrazo" class="crm-ficha__fonte">
+        Saiu pela regra dos {{ DIAS_SEM_RESPOSTA }} dias sem mensagem do lead, sem desfecho de ninguém. Volta sozinho se ele escrever;
+        para trazer de volta agora, salve um próximo passo ou marque a proposta.
+      </p>
       <p class="crm-ficha__fonte">
         Na planilha: <strong>{{ lead.estadoNaPlanilha }}</strong>
         <template v-if="lead.pasta"> · pasta: {{ lead.pasta.lugar }}</template>
@@ -123,7 +133,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-acoes">
       <h3 id="crm-ficha-acoes">Ações</h3>
       <p v-if="lead.demoApagadoEm" class="crm-aviso" role="note">
-        <strong>Demo apagado da Vercel em {{ dataHora(lead.demoApagadoEm) }}</strong>, por 10 dias sem interação: o link antigo dá erro, e por isso
+        <strong>Demo apagado da Vercel em {{ dataHora(lead.demoApagadoEm) }}</strong> (o lead estava em Perdido): o link antigo dá erro, e por isso
         nem "Ver o demo" nem o link do site aparecem aqui. Para mandar de novo, publique a pasta{{ lead.pasta ? ` ${lead.pasta.slug}` : '' }} outra vez
         (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
       </p>
@@ -166,7 +176,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <p>Proposta enviada em {{ diaEscolhido(lead.proposta?.data) || dataCurta(lead.proposta?.em) }} (marcada à mão).</p>
         <button class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerProposta">{{ salvando === 'proposta_desfeita' ? 'Desfazendo…' : 'Desfazer proposta' }}</button>
       </template>
-      <form v-else-if="aberto" class="crm-form" @submit.prevent="marcarProposta">
+      <form v-else-if="aberto || saiuPeloPrazo" class="crm-form" @submit.prevent="marcarProposta">
         <label><span>Enviada em</span><input v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>
         <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar proposta enviada' }}</button></div>
       </form>

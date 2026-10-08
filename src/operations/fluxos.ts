@@ -93,7 +93,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Tudo se marca na planilha', texto: 'Cliques nos links, o que você escreve, leitura, resposta, follow-up e desfecho escrevem na planilha sozinhos.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom.', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P' },
       { titulo: 'Hoje', texto: 'Só o que depende de você: próximos passos, follow-ups, respostas, prospects, propostas e sites para enviar, cada um com o link que resolve.', onde: 'voce', quando: 'quando abrir', comVoce: true, link: { rotulo: 'Abrir o CRM', url: '/crm' } },
-      { titulo: 'Funil', texto: 'As 6 etapas (Novo, Contatado, Conversando, Proposta, Ganho, Perdido) com filtros por produto, nicho e cidade.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' } },
+      { titulo: 'Funil', texto: 'As 5 etapas (Novo, Em contato, Proposta, Ganho, Perdido) com filtros por produto, nicho e cidade. Em contato sai sozinho para Perdido depois de 7 dias sem mensagem do lead.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' } },
       { titulo: 'Ficha e registros', texto: 'Nota, próximo passo com data e "proposta enviada" vão para a aba CRM pelo n8n. Nada é enviado ao lead.', onde: 'voce', quando: 'você decide', comVoce: true },
       { titulo: 'Divergência vira nota', texto: 'Se a planilha e a pasta discordam por mais de 2 h, a ficha mostra. Nada é corrigido sozinho.', onde: 'dell', quando: 'a cada leitura' },
     ],

@@ -618,16 +618,19 @@ explica por que uma pasta some da raiz:
 - recusou / fechou / desfazer: botão na página do lead
   (`…/webhook/lead?id=<place_id>`); a pasta vai para `_recusados/` ou
   `_fechados/` na hora (ou volta, no Desfazer) e o `registro.md` ganha a linha;
-- recusado ou expirado há 15 dias: o demo é pausado na Vercel (nunca apagado);
-  quem volta tem o demo de volta no ar.
+- lead em Perdido no CRM há 2 dias (recusou, 7 dias sem mensagem dele, sem
+  contato, descartado): o demo é APAGADO na Vercel pelo `site-demos-limpeza`
+  (desde 08/10/2026); a pasta fica, com `apagado_em` no `publicado.json`.
+  Quem volta precisa do demo republicado a partir da pasta.
 
 Follow-up, expiração e mudança de pasta pela resposta valem só para envio (ou
 resposta) a partir de 29/09/2026. Lead em `_recusados/` ou `_fechados/` não
 recebe follow-up nem expira.
 
 O Rômulo acompanha tudo isso, junto com o PRUMO, no CRM da Central (`/crm`,
-também no celular pela tailnet): Novo, Contatado, Conversando, Proposta, Ganho,
-Perdido, com as regras em `~/SquadOne/deploy/dell/README.md` ("CRM"). A Central
+também no celular pela tailnet): Novo, Em contato, Proposta, Ganho, Perdido
+(Em contato sem mensagem do lead por 7 dias vai para Perdido), com as regras
+em `~/SquadOne/deploy/dell/README.md` ("CRM"). A Central
 só lê a planilha e as pastas; divergência entre as duas aparece lá como nota.
 Não é trabalho seu corrigir nenhuma das duas.
 
