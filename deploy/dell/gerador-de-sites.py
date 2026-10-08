@@ -109,7 +109,12 @@ PROMPT = (
 LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # Modo personalizado: o site anterior do lead fica aqui dentro (nunca sobe para a
 # Vercel: só index.html e og.jpg sobem) até o novo ser publicado e validado.
-V1 = "_v1"
+# v1 = dossiê, conceito, redação e revisão (07/10/2026 à tarde); v2 = soma a etapa de
+# movimento de nível especialista (motor próprio em JS, scroll narrativo, interações autorais).
+VERSAO_PERSONALIZADO = 2
+PREFIXO_BACKUP = "_v"  # _v1, _v2...: cada refazer guarda a versão que estava no ar
+TENTATIVA_FALHA = "_tentativa-falha"
+BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
 ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md")
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
 PROMPT_PERSONALIZADO = (
@@ -218,19 +223,38 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - No resumo final, diga se alguma negação fez falta ao site."""
 
 
-def instrucoes_personalizado(slug: str) -> str:
-    """Segundo bloco do --append-system-prompt no modo `--refazer`. Vem DEPOIS de
-    `instrucoes_da_execucao` e do CLAUDE.md: soma etapas, não troca nenhuma regra."""
+def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
+    """Segundo bloco do --append-system-prompt no modo personalizado. Vem DEPOIS de
+    `instrucoes_da_execucao` e do CLAUDE.md: soma etapas, não troca nenhuma regra.
+    `backup` = pasta `_vN/` do site anterior (refazer); None = lead novo."""
     lead = AUTO / slug
     cliches = "; ".join(f"\"{c}\"" for c in CLICHES)
+    if backup:
+        abertura = (f"- Isto é um REFAZER. O site anterior deste lead está em {lead}/{backup}/ (index.html, og.jpg, DESIGN.md; pode haver outras "
+                    f"versões em {lead}/_v*/). Leia-o uma vez só para saber o que NÃO repetir: outra estrutura de página, outra paleta, outro estilo, outra ideia, "
+                    "outro texto e outro movimento. Não copie nada dele. O `registro.md` já tem a linha do site anterior: isto é retrabalho pedido, a regra "
+                    "contra retrabalho não vale aqui; acrescente uma linha nova marcada \"Refeito (personalizado)\". Neste modo NÃO grave "
+                    f"{SINAL_DESCARTE}: o lead já passou pela triagem; faça o site.")
+    else:
+        abertura = ("- Este é um lead novo, feito já no modo personalizado: a triagem do CLAUDE.md (premissa \"sem site\", duplicado, rede) continua valendo e "
+                    f"o descarte segue pelo {SINAL_DESCARTE}. Passou na triagem, faça as etapas abaixo.")
     return f"""MODO PERSONALIZADO (pedido do Rômulo, 07/10/2026). Contexto: uma escola, ao ver o demo que fizemos, respondeu que o trabalho não parecia feito para ela. Um site que serviria a qualquer concorrente do ramo é o defeito a eliminar. O que sai daqui será enviado a um dono real: ele precisa se reconhecer na página.
-- Isto é um REFAZER. O site anterior deste lead está em {lead}/{V1}/ (index.html, og.jpg, DESIGN.md). Leia-o uma vez só para saber o que NÃO repetir: outra estrutura de página, outra paleta, outro estilo, outra ideia, outro texto. Não copie nada dele. O `registro.md` já tem a linha do site anterior: isto é retrabalho pedido, a regra contra retrabalho não vale aqui; acrescente uma linha nova marcada "Refeito (personalizado)". Neste modo NÃO grave {SINAL_DESCARTE}: o lead já passou pela triagem; faça o site.
-- Faça as etapas A a E, nesta ordem, ANTES do `/design` e do código (as cinco skills continuam rodando, e o resto do CLAUDE.md vale):
+{abertura}
+- Faça as etapas A a F, nesta ordem, ANTES do `/design` e do código (as cinco skills continuam rodando, e o resto do CLAUDE.md vale):
   A. DOSSIÊ. Grave {lead}/DOSSIE.md (uma página, em português) com o que você achou sobre ESTE negócio: quem é o dono ou os sócios (pelo nome, só se publicado), como e quando começou, bairro e cidade (o que o cliente daquela região vive e procura), o que os clientes realmente elogiam (3 trechos curtos e literais das avaliações do `content.md`, entre aspas), o vocabulário do próprio negócio (5 expressões que ele mesmo usa no Instagram, Facebook, Google ou site antigo), o que ele faz e o concorrente local não mostra, e o que se sabe da identidade visual real (logo, cores, fotos próprias). Fontes: `content.md`, as imagens de `Fotos/` e `Logotipo/`, perfil de Instagram e Facebook se existirem, e WebSearch pelo nome + cidade (ache o que o Google Places não tem: matérias, CNPJ/data de abertura, site antigo, redes). Cada afirmação do dossiê leva a fonte entre parênteses. O que não achar vira a linha "Lacuna: ..." — nunca preenchimento, nunca invenção.
   B. CONCEITO AUTORAL. Em {lead}/DOSSIE.md, uma seção "Conceito": uma ideia central em UMA frase que só serve a este negócio. Teste obrigatório: troque o nome por o de outro negócio do mesmo ramo e cidade; se a frase continuar verdadeira, ela é genérica, descarte e refaça. Depois diga qual ESTRUTURA de página nasce dessa ideia. Não parta do esquema "hero, serviços, depoimentos, contato": a ordem e o formato das seções vêm do conceito (um percurso, um dia de trabalho, uma linha do tempo, um mapa do bairro, perguntas que o cliente real faz...). Pode ser mais curta que o esquema padrão, nunca mais genérica.
   C. REDAÇÃO AUTORAL. Escreva você mesmo cada título, subtítulo, botão e microtexto na voz deste negócio, com especificidade: nomes, lugares, números verificáveis, momentos do atendimento, palavras do dossiê. Cada seção tem pelo menos uma frase que só caberia neste negócio. Proibido texto de gaveta: {cliches}, e qualquer variação. Nada inventado (número de anos, prêmio, equipe, certificação, cliente): só o que o dossiê prova. O hero abre com a ideia do conceito, não com o nome do serviço.
   D. IDENTIDADE E ASSINATURA. Cor, tipografia e o "momento de assinatura" do CLAUDE.md saem do dossiê (identidade real do negócio, do bairro, do ofício), não de um repertório fixo. Use as fotos reais onde elas provam algo e diga na legenda o que mostram.
-  E. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) o que o conceito prometeu e a página entregou ou não. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
+  E. MOVIMENTO DE NÍVEL ESPECIALISTA (pedido do Rômulo: todo site sai com movimento e com JavaScript de animação em nível especialista, sempre ligado ao conceito, nunca efeito solto). Antes de codar, rode as skills `animate` (leia ~/.claude/skills/animate/RECIPES.md), `animation-vocabulary` e `find-animation-opportunities`; ao final, `review-animations` e `improve-animations`. Código autoral em JS vanilla dentro do index.html (sem CDN nem biblioteca):
+    - MOTOR próprio: um único loop `requestAnimationFrame`, valores suavizados por lerp/amortecimento, molas (rigidez e amortecimento) e curvas cubic-bezier nomeadas; o scroll nativo nunca é sequestrado. Anime só `transform`, `opacity`, `clip-path` e filtros leves, nunca propriedades de layout; leia o layout num lote e escreva noutro (sem layout thrash); listeners `passive`; `IntersectionObserver` liga e desliga o que está fora da tela; `ResizeObserver` recalcula; tudo pausa com a aba oculta.
+    - NARRATIVA GUIADA PELO SCROLL: pelo menos UMA sequência cujo progresso 0-1 é o scroll da seção (seção "pinned" por `position: sticky`, não por JS), por exemplo um desenho SVG que se traça (`stroke-dashoffset` com `getTotalLength`), um objeto que se transforma, um percurso ou mapa que avança, peças que se montam em ordem.
+    - ENTRADA COREOGRAFADA: timeline do hero com orquestração (stagger com easing, revelação por máscara ou `clip-path`, texto dividido em linhas, palavras ou letras mantendo a acessibilidade com `aria-label` no pai e `aria-hidden` nas partes, contadores).
+    - PELO MENOS DUAS INTERAÇÕES AUTORAIS ligadas ao conceito (botão magnético com mola, elemento que segue o ponteiro com inércia, arrastar com física, seletor que reorganiza a página com FLIP: medir primeiro, medir último, inverter e tocar; tilt 3D; parallax por camadas). Use Pointer Events: em toque tem de funcionar por gesto, nunca depender de hover.
+    - Acabamento: estados de foco, pressionado e carregando com a mesma linguagem de mola; transições de estado coerentes.
+    - Desempenho e acessibilidade: 60 fps em celular médio; nada de trabalho pesado por frame; `will-change` só durante a animação. `prefers-reduced-motion: reduce` desliga o decorativo mas mantém conteúdo e função (a narrativa vira estática e legível); tudo que é interativo tem foco por teclado; nada que pisque. Sem JavaScript ativo, o conteúdo inteiro continua visível.
+    - Advocacia: o mesmo nível técnico, em tom contido e elegante (OAB sóbria): movimento que revela e organiza, sem exibição.
+    - Verificação: coloque um `window.onerror` temporário que escreve num elemento e leia com `--dump-dom`; tire capturas em 4 posições de scroll no desktop e no celular; confira o estado final com reduced-motion.
+  F. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) o que o conceito prometeu e a página entregou ou não; (4) "Movimento": o que anima, qual é a ideia por trás e o que cai com reduced-motion. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
 - Advocacia: o Provimento 205/2021 da OAB continua valendo (sem avaliações na página, sem promessa de resultado, sem preço, sem superlativo, sem captação). A personalização vem do que é público e permitido: como é o primeiro atendimento, as áreas explicadas pelo que o cliente daquela cidade enfrenta, o fórum e a comarca, a linguagem do próprio advogado em artigos e posts.
 - Tempo: este modo pode usar até o dobro do tempo de um lead comum. Gaste-o na pesquisa e na redação, não em efeitos.
 - No resumo final, diga qual foi o conceito e qual frase do site mais prova que ele foi feito para este negócio."""
@@ -239,7 +263,7 @@ def instrucoes_personalizado(slug: str) -> str:
 def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:
     instrucoes = instrucoes_da_execucao(slug, rascunho)
     if personalizado:
-        instrucoes += "\n\n" + instrucoes_personalizado(slug)
+        instrucoes += "\n\n" + instrucoes_personalizado(slug, BACKUP_EM_CURSO.get(slug))
     cmd = [
         "claude", "-p", (PROMPT_PERSONALIZADO if personalizado else PROMPT).format(slug=slug),
         "--permission-mode", "dontAsk",
@@ -579,49 +603,73 @@ def status_no_retrato(place_id: str | None) -> str | None:
         return None
 
 
+def marcar_personalizado(pasta: Path) -> None:
+    """`personalizado.json`: o lote contínuo só refaz quem tem versão menor que a atual
+    (v2 = com a etapa de movimento de nível especialista). Nunca derruba o lead."""
+    try:
+        (pasta / "personalizado.json").write_text(json.dumps({
+            "versao": VERSAO_PERSONALIZADO, "modelo": os.environ.get("GERADOR_MODELO", "").strip() or "padrão",
+            "em": dt.datetime.now().astimezone().isoformat(timespec="seconds")}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def backups_do_lead(pasta: Path) -> list[Path]:
+    """Pastas `_v1`, `_v2`... em ordem numérica."""
+    achados = [p for p in pasta.glob(f"{PREFIXO_BACKUP}[0-9]*") if p.is_dir() and p.name[len(PREFIXO_BACKUP):].isdigit()]
+    return sorted(achados, key=lambda p: int(p.name[len(PREFIXO_BACKUP):]))
+
+
 def preparar_refazer(pasta: Path, log_lead: Path) -> str | None:
-    """Põe o site publicado de um lead não enviado em `_v1/` e devolve o lead à
-    fila desta execução (sem index.html nem publicado.json). None = pronto; texto =
-    motivo de recusar (nada foi mexido)."""
+    """Põe o site publicado de um lead não enviado na próxima `_vN/` e devolve o lead
+    à fila desta execução (sem index.html nem publicado.json). None = pronto; texto =
+    motivo de recusar (nada foi mexido). Um refazer que morreu no meio (sem index.html
+    na pasta e uma `_vN/` com o site) é desfeito primeiro."""
     if not pasta.is_dir() or not (pasta / "content.md").is_file():
         return "sem pasta ou sem content.md na raiz"
+    if not (pasta / "index.html").exists() and backups_do_lead(pasta) and (backups_do_lead(pasta)[-1] / "index.html").is_file():
+        restaurar_v1(pasta, log_lead, backups_do_lead(pasta)[-1].name, "refazer anterior interrompido")
     if not (pasta / "publicado.json").is_file() or not (pasta / "index.html").is_file():
         return "não tem um demo publicado para refazer"
-    if (pasta / V1).exists():
-        return f"{V1}/ já existe (já foi refeito ou há restauração pendente)"
     status = status_no_retrato(place_id_do_lead(pasta))
     if status != "pronto":
         return f"status na planilha é {status!r}: só se refaz 'pronto' (não enviado)"
-    v1 = pasta / V1
-    v1.mkdir()
+    existentes = backups_do_lead(pasta)
+    numero = int(existentes[-1].name[len(PREFIXO_BACKUP):]) + 1 if existentes else 1
+    nome_backup = f"{PREFIXO_BACKUP}{numero}"
+    v = pasta / nome_backup
+    v.mkdir()
+    BACKUP_EM_CURSO[pasta.name] = nome_backup
     movidos = []
     try:
         for nome in ARQUIVOS_DO_SITE:
             if (pasta / nome).exists():
-                (pasta / nome).replace(v1 / nome)
+                (pasta / nome).replace(v / nome)
                 movidos.append(nome)
     except OSError as e:
-        restaurar_v1(pasta, log_lead)
+        restaurar_v1(pasta, log_lead, nome_backup, "não guardou o site anterior")
         return f"não consegui guardar o site anterior: {e}"
-    log(f"Refazer: site anterior de {pasta.name} guardado em {V1}/ ({', '.join(movidos)}).", arquivo=log_lead)
+    log(f"Refazer: site anterior de {pasta.name} guardado em {nome_backup}/ ({', '.join(movidos)}).", arquivo=log_lead)
     return None
 
 
-def restaurar_v1(pasta: Path, log_lead: Path) -> None:
+def restaurar_v1(pasta: Path, log_lead: Path, nome_backup: str | None = None, motivo: str = "refazer falhou") -> None:
     """Volta o site anterior (o demo antigo continua no ar); o que o refazer deixou
-    de novo fica em `_v2-tentativa/` para olhar depois."""
-    v1 = pasta / V1
-    if not v1.is_dir():
+    de novo fica em `_tentativa-falha/` para olhar depois."""
+    nome_backup = nome_backup or BACKUP_EM_CURSO.get(pasta.name)
+    v = pasta / nome_backup if nome_backup else None
+    if v is None or not v.is_dir():
         return
-    tentativa = pasta / "_v2-tentativa"
+    tentativa = pasta / TENTATIVA_FALHA
     tentativa.mkdir(exist_ok=True)
     for nome in ARQUIVOS_DO_SITE:
         if (pasta / nome).exists():
             (pasta / nome).replace(tentativa / nome)
-    for f in v1.iterdir():
+    for f in v.iterdir():
         f.replace(pasta / f.name)
-    v1.rmdir()
-    log(f"Refazer falhou: site anterior de {pasta.name} restaurado (a tentativa ficou em _v2-tentativa/).", "ERRO", log_lead)
+    v.rmdir()
+    BACKUP_EM_CURSO.pop(pasta.name, None)
+    log(f"{motivo}: site anterior de {pasta.name} restaurado (a tentativa ficou em {TENTATIVA_FALHA}/).", "ERRO", log_lead)
 
 
 def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tuple[bool, str]:
@@ -704,6 +752,9 @@ def main() -> int:
     ap.add_argument("--listar", action="store_true", help="só mostra a fila, sem gerar nada")
     ap.add_argument("--refazer", nargs="+", metavar="SLUG",
                     help="modo personalizado: refaz estes leads (publicados e não enviados), na ordem dada")
+    ap.add_argument("--personalizado", action="store_true",
+                    default=os.environ.get("GERADOR_PERSONALIZADO", "").strip().lower() in ("1", "true", "sim"),
+                    help="leads novos da fila também no modo personalizado (env GERADOR_PERSONALIZADO=1 liga sempre)")
     ap.add_argument("--teto-horas", type=float, default=4.0,
                     help="duração máxima da execução (TimeoutStartSec do serviço); mude junto com o systemd-run")
     a = ap.parse_args()
@@ -737,6 +788,7 @@ def main() -> int:
     inicio_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     concluidos, falhas, descartados, sumidos = [], [], [], []
     tentados: set[str] = set()
+    personalizado = bool(a.refazer) or a.personalizado
     erro = None
     if a.refazer:
         a.quantidade = max(a.quantidade, len(a.refazer))
@@ -776,7 +828,7 @@ def main() -> int:
                            "inicio": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                            "timeout_min": a.timeout_min, "pendentes": len(pendentes)})
             try:
-                ok, motivo = processar(lead, a.timeout_min, bool(a.refazer))
+                ok, motivo = processar(lead, a.timeout_min, personalizado)
             except Exception as e:  # noqa: BLE001 — um lead quebrado não derruba o lote
                 ok, motivo = False, f"erro no runner: {type(e).__name__}: {e}"
                 log(f"{lead.name}: {motivo}\n{traceback.format_exc().rstrip()}", "ERRO", log_lead)
@@ -789,6 +841,9 @@ def main() -> int:
                     break
                 continue
             if ok:
+                BACKUP_EM_CURSO.pop(lead.name, None)  # o novo está no ar; a _vN fica como histórico
+                if personalizado:
+                    marcar_personalizado(lead)
                 concluidos.append(lead.name)
                 log(f"Lead concluído: {lead.name}", "SUCESSO")
             elif not lead.is_dir():
@@ -813,6 +868,11 @@ def main() -> int:
     except SystemExit:
         erro = "execução interrompida (SIGTERM: systemctl stop ou teto do systemd)"
         log(erro, "ERRO")
+        # Refazer no meio: sem o novo publicado, o demo antigo volta para a pasta (o do ar nunca saiu).
+        for slug in list(BACKUP_EM_CURSO):
+            pasta = AUTO / slug
+            if pasta.is_dir() and not (pasta / "publicado.json").exists():
+                restaurar_v1(pasta, LOGS / f"execucao-{slug}.log", motivo="Refazer interrompido")
         raise
     finally:
         try:
