@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaLeitura } from './crm-formato'
+import { ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
@@ -98,6 +98,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <template v-if="lead.pasta"> · pasta: {{ lead.pasta.lugar }}</template>
         <template v-if="lead.diasDesdeUltimoEvento !== undefined"> · último evento {{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : `há ${lead.diasDesdeUltimoEvento} dia${lead.diasDesdeUltimoEvento === 1 ? '' : 's'}` }}</template>
       </p>
+      <p v-if="textoDaAbordagem(lead)" class="crm-ficha__fonte">Recebeu: {{ textoDaAbordagem(lead) }}</p>
       <p v-if="lead.leitura !== 'nao-se-aplica'" class="crm-ficha__leitura">
         {{ textoDaLeitura(lead) }}<template v-if="lead.leitura === 'desconhecida'">: sem confirmação de leitura registrada (pode ter lido; o WhatsApp dele pode não mandar recibo).</template>
       </p>

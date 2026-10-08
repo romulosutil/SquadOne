@@ -6,6 +6,10 @@
   é o caminho do operador do Dell, que envia pelo WhatsApp Web, e o lead vira
   "enviado" pelo observador quando a mensagem sai de verdade (owner_sent), nunca
   no clique. Assim um envio que falha depois do clique não deixa o lead marcado.
+  Limite conhecido (07/10/2026): o observador não sabe desse clique, então o
+  envio que vem depois grava mensagem_variante "manual", e não a letra do
+  Balcão. Até 07/10 nenhum clique usou `marcar=nao`; quem automatizar o envio
+  por esse caminho precisa deixar o rastro do clique para o observador.
 - "Clique em Enviar convite" (GET /webhook/convite?id=): marca o convite do PRUMO
   como enviado e redireciona para o WhatsApp/e-mail/formulário do lead.
 - Lead Scout: "Enviar convite" vira o link rastreado e a sincronização horária
@@ -97,7 +101,8 @@ def webhook_workflow(nome, caminho, webhook_id, planilha, gid, aba, coluna_chave
 
 DECIDIR_SITE = """const q = $('Clique (enviar)').first().json.query ?? {};
 const pid = String(q.place_id ?? '');
-// marcar=nao: só abre o WhatsApp. Quem marca "enviado" é o observador, quando a mensagem sai.
+// marcar=nao: só abre o WhatsApp. Quem marca "enviado" é o observador, quando a mensagem sai
+// (e grava mensagem_variante "manual": ele não sabe deste clique).
 const soAbrir = String(q.marcar ?? '') === 'nao';
 const l = $input.first()?.json ?? {};
 const achou = pid !== '' && l.place_id === pid;

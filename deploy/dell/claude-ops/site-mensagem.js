@@ -23,6 +23,20 @@ const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
 const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put together a demo website for you, on my own initiative. Can I send you the link so you can take a look? No strings attached.";
 
+// 07/10/2026: a variacao de cada lead vai para a coluna mensagem_variante (o funil so
+// aprende comparando). A letra sai do place_id, nao da ordem da rodada: o Balcao remonta
+// o wa_link de hora em hora e um lead "pronto" nao pode trocar de A para B entre duas
+// rodadas. Entre as variacoes com texto; B e C null = todo lead em A. EUA = "EN".
+const LETRAS = ['A', 'B', 'C'];
+function varianteDe(placeId, eua) {
+  if (eua) return { letra: 'EN', molde: VARIACAO_EN };
+  const comTexto = VARIACOES.map((t, i) => (t ? i : -1)).filter(i => i >= 0);
+  let h = 0;
+  for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const i = comTexto[h % comTexto.length];
+  return { letra: LETRAS[i], molde: VARIACOES[i] };
+}
+
 // A segunda mensagem: sai pelo aviso do Hermes e pela ficha do CRM quando a
 // resposta e de interesse. Diz o que acontece se gostarem e se nao gostarem.
 const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?';

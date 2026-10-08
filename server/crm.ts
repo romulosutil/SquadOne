@@ -81,6 +81,10 @@ export const COLUNAS_DO_SITE = {
   respostaTipo: { nomes: ["resposta_tipo"] },
   respostaTrecho: { nomes: ["resposta_trecho"] },
   respostaEm: { nomes: ["resposta_em"] },
+  // O que o lead recebeu (Balcão, 07/10/2026): a variação da primeira mensagem (A/B/C, EN, ou
+  // "manual" quando saiu sem o clique no wa_link) e a versão do site ("padrão", "personalizado-v2"...).
+  mensagemVariante: { nomes: ["mensagem_variante"] },
+  siteVersao: { nomes: ["site_versao"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
@@ -112,8 +116,10 @@ export const COLUNAS_DO_PRUMO = {
  */
 export const SEGUNDA_MENSAGEM_DO_SITE = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?";
 
-export const TIPOS_DE_RESPOSTA = ["negativa", "interesse", "neutra", "bot"] as const;
+/** "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa. */
+export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "neutra", "bot"] as const;
 export type CrmTipoDeResposta = (typeof TIPOS_DE_RESPOSTA)[number];
+const ehRecusa = (resposta: CrmResposta | undefined) => resposta?.tipo === "negativa" || resposta?.tipo === "exclusao";
 
 export interface CrmResposta {
   tipo: CrmTipoDeResposta;
@@ -124,6 +130,7 @@ export interface CrmResposta {
 
 export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   negativa: "Negativa",
+  exclusao: "Pediu para apagar",
   interesse: "Interesse",
   neutra: "Sem sim nem não",
   bot: "Só resposta automática",
@@ -350,6 +357,11 @@ export interface CrmLead {
   notas: number;
   /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
   resposta?: CrmResposta;
+  /**
+   * Site antes da venda, desde 07/10/2026: a variação da primeira mensagem (`mensagem_variante`:
+   * A/B/C, EN, ou "manual") e a versão do site (`site_versao`). Ausente quando a planilha não diz.
+   */
+  abordagem?: { mensagem?: string; site?: string };
   eventos: CrmEvento[];
   /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o diagnóstico). */
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string };
@@ -558,7 +570,8 @@ export function etapaDoSite(entrada: {
   const { status, lugar, resposta } = entrada;
   if (status === "fechado") return { etapa: "ganho", sinal: "fechou", subEtapa: "Fechou", desde: entrada.fechado };
   if (status === "recusado") {
-    const noWhatsapp = resposta?.tipo === "negativa" ? " no WhatsApp (resposta negativa)" : "";
+    const noWhatsapp = resposta?.tipo === "exclusao" ? " no WhatsApp (pediu para apagar o demo)"
+      : resposta?.tipo === "negativa" ? " no WhatsApp (resposta negativa)" : "";
     return { etapa: "perdido", sinal: "recusou", subEtapa: `Recusou${noWhatsapp}`, desde: entrada.recusado, motivoPerda: "recusou" };
   }
   if (lugar === "_recusados") return { etapa: "perdido", sinal: "recusou-pasta", subEtapa: "Recusou (anotado na pasta _recusados/)", motivoPerda: "recusou" };
@@ -655,7 +668,7 @@ function leadDoSite(linha: Linha, contexto: {
   const site = urlHttps(c("site")) ?? pasta?.siteUrl;
   const acoes = urlHttps(c("acoesLink")) ?? (webhook && (pasta || c("site")) ? `${webhook}/lead?id=${encodeURIComponent(chave)}` : undefined);
   // Depois do "sim": a primeira mensagem (desde 05/10/2026) pede licença e não leva o link.
-  const segunda = calculada.etapa === "conversando" && resposta?.tipo !== "negativa" && site && whatsapp
+  const segunda = calculada.etapa === "conversando" && !ehRecusa(resposta) && site && whatsapp
     ? `https://wa.me/${whatsapp}?text=${encodeURIComponent(SEGUNDA_MENSAGEM_DO_SITE.replace("{URL}", site))}` : undefined;
 
   const divergencias: string[] = [];
@@ -685,6 +698,7 @@ function leadDoSite(linha: Linha, contexto: {
   }
 
   const desde = calculada.desde;
+  const abordagem = { ...(c("mensagemVariante") ? { mensagem: c("mensagemVariante") } : {}), ...(c("siteVersao") ? { site: c("siteVersao") } : {}) };
   const marcos = { ...(iso(t.enviado) ? { enviado: iso(t.enviado) } : {}), ...(iso(t.visto) ? { visto: iso(t.visto) } : {}), ...(iso(t.respondeu) ? { respondeu: iso(t.respondeu) } : {}) };
   const ultimo = eventos.length ? Date.parse(eventos[eventos.length - 1].em) : undefined;
   return {
@@ -710,6 +724,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     notas,
     ...(resposta ? { resposta } : {}),
+    ...(Object.keys(abordagem).length ? { abordagem } : {}),
     eventos,
     links: {
       ...(site ? { site } : {}),
@@ -748,7 +763,8 @@ export function etapaDoPrumo(entrada: {
   const { resposta } = entrada;
   if (etapa === "concluido") return { etapa: "ganho", sinal: "concluido", subEtapa: "Concluído (Etapa na planilha)" };
   if (etapa === "sem_interesse") {
-    const noWhatsapp = resposta?.tipo === "negativa" ? " (resposta negativa no WhatsApp)" : "";
+    const noWhatsapp = resposta?.tipo === "exclusao" ? " (pediu exclusão no WhatsApp)"
+      : resposta?.tipo === "negativa" ? " (resposta negativa no WhatsApp)" : "";
     return { etapa: "perdido", sinal: "sem-interesse", subEtapa: `Sem interesse${noWhatsapp}`, motivoPerda: "sem-interesse" };
   }
   if (entrada.proposta) return { etapa: "proposta", sinal: "proposta", subEtapa: "Proposta enviada", desde: dataDoDia(entrada.proposta.data) ?? entrada.proposta.em };
