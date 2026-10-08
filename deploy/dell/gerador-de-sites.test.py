@@ -357,6 +357,8 @@ class ListaDePermissao(unittest.TestCase):
         self.assertTrue(visto["sem_site_antes"])
         self.assertEqual((self.auto / "lead-r/index.html").read_text(), "<html>v2</html>")
         self.assertEqual((self.auto / "lead-r/_v1/index.html").read_text(), "<html>v1</html>")
+        marca = json.loads((self.auto / "lead-r/personalizado.json").read_text())
+        self.assertEqual(marca["versao"], self.m.VERSAO_PERSONALIZADO)
 
     def test_refazer_que_falha_restaura_o_demo_antigo_sem_falha_log(self):
         self.publicado("lead-r")
@@ -372,7 +374,7 @@ class ListaDePermissao(unittest.TestCase):
         self.assertEqual((pasta / "index.html").read_text(), "<html>v1</html>")
         self.assertEqual((pasta / "publicado.json").read_text(), '{"site_url": "https://v1"}')
         self.assertFalse((pasta / "_v1").exists())
-        self.assertTrue((pasta / "_v2-tentativa").is_dir())
+        self.assertTrue((pasta / "_tentativa-falha").is_dir())
         self.assertFalse((pasta / "falha.log").exists())  # uma tentativa, sem castigo de fila
 
     def test_refazer_so_mexe_em_lead_nao_enviado(self):
@@ -389,13 +391,68 @@ class ListaDePermissao(unittest.TestCase):
                 self.assertEqual((self.auto / "lead-e/index.html").read_text(), "<html>v1</html>")
                 self.assertFalse((self.auto / "lead-e/_v1").exists())
 
-    def test_refazer_nao_repete_um_lead_ja_refeito(self):
+    def novo_site(self, slug, versao):
+        pasta = self.auto / slug
+        (pasta / "index.html").write_text(f"<html>{versao}</html>")
+        (pasta / "publicado.json").write_text('{"site_url": "https://' + versao + '"}')
+        return {"codigo": 0, "estourou": False, "limite": False, "minutos": 0}
+
+    def test_refazer_de_novo_guarda_cada_versao_em_seu_vN(self):
         self.publicado("lead-r")
-        (self.auto / "lead-r/_v1").mkdir()
-        chamado = []
-        codigo, r = self.refazer(lambda *a, **k: chamado.append(a), "lead-r")
-        self.assertEqual(chamado, [])
-        self.assertIn("já existe", r["falhas"][0])
+        self.refazer(lambda slug, l, t, p=False: self.novo_site(slug, "v2"), "lead-r")
+        codigo, r = self.refazer(lambda slug, l, t, p=False: self.novo_site(slug, "v3"), "lead-r")
+        self.assertEqual(r["concluidos"], ["lead-r"])
+        pasta = self.auto / "lead-r"
+        self.assertEqual((pasta / "index.html").read_text(), "<html>v3</html>")
+        self.assertEqual((pasta / "_v1/index.html").read_text(), "<html>v1</html>")  # a original segue
+        self.assertEqual((pasta / "_v2/index.html").read_text(), "<html>v2</html>")
+
+    def test_sigterm_no_meio_do_refazer_devolve_o_demo_antigo(self):
+        self.publicado("lead-r")
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            (self.auto / slug / "index.html").write_text("<html>meio")
+            raise SystemExit(143)
+
+        self.m.rodar_claude = claude
+        sys.argv = ["gerador-de-sites", "--refazer", "lead-r"]
+        with self.assertRaises(SystemExit):
+            self.m.main()
+        pasta = self.auto / "lead-r"
+        self.assertEqual((pasta / "index.html").read_text(), "<html>v1</html>")
+        self.assertTrue((pasta / "publicado.json").is_file())
+        self.assertEqual(self.m.backups_do_lead(pasta), [])
+
+    def test_refazer_desfaz_um_refazer_anterior_que_morreu(self):
+        self.publicado("lead-r")
+        pasta = self.auto / "lead-r"
+        (pasta / "_v1").mkdir()
+        for nome in ("index.html", "og.jpg", "publicado.json"):  # como se o runner tivesse morrido sem restaurar
+            (pasta / nome).replace(pasta / "_v1" / nome)
+        codigo, r = self.refazer(lambda slug, l, t, p=False: self.novo_site(slug, "v2"), "lead-r")
+        self.assertEqual(r["concluidos"], ["lead-r"])
+        self.assertEqual((pasta / "_v1/index.html").read_text(), "<html>v1</html>")
+
+    def test_fila_normal_em_modo_personalizado_recebe_a_flag(self):
+        (self.auto / "lead-n").mkdir()
+        (self.auto / "lead-n/content.md").write_text("# lead-n\nplace_id: n1\n")
+        vistos = []
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            vistos.append((slug, personalizado))
+            return self.novo_site(slug, "novo")
+
+        for argv, esperado in ((["--personalizado"], True), ([], None)):
+            for arquivo in ("publicado.json", "index.html"):  # index.html completo faria o runner pular o Claude
+                (self.auto / "lead-n" / arquivo).unlink(missing_ok=True)
+            vistos.clear()
+            self.m.rodar_claude = claude
+            sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--quantidade", "1", *argv]
+            self.m.main()
+            if esperado:
+                self.assertEqual(vistos, [("lead-n", True)])
+            else:  # sem a flag, a chamada é a de sempre (sem o 4º argumento)
+                self.assertEqual(vistos, [("lead-n", False)])
 
     def test_refazer_recusa_slug_com_caminho(self):
         sys.argv = ["gerador-de-sites", "--refazer", "../fora"]
@@ -403,11 +460,18 @@ class ListaDePermissao(unittest.TestCase):
             self.m.main()
 
     def test_comando_personalizado_traz_o_roteiro_e_o_prompt_proprio(self):
+        self.m.BACKUP_EM_CURSO["lead-r"] = "_v1"
         cmd = self.m.comando_do_claude("lead-r", Path("/tmp/x"), True)
         self.assertIn("MODO PERSONALIZADO", cmd[2])
         sistema = cmd[cmd.index("--append-system-prompt") + 1]
-        for trecho in ("DOSSIE.md", "REVISAO.md", "_v1/", "excelência", "Provimento 205/2021"):
+        for trecho in ("DOSSIE.md", "REVISAO.md", "_v1/", "REFAZER", "excelência", "Provimento 205/2021",
+                       "requestAnimationFrame", "MOVIMENTO DE NÍVEL ESPECIALISTA", "reduced-motion"):
             self.assertIn(trecho, sistema)
+        self.m.BACKUP_EM_CURSO.clear()
+        novo = self.m.comando_do_claude("lead-r", Path("/tmp/x"), True)
+        sistema_novo = novo[novo.index("--append-system-prompt") + 1]
+        self.assertIn("lead novo", sistema_novo)
+        self.assertNotIn("REFAZER", sistema_novo)
         # as instruções comuns (lista de permissão, deploy) continuam valendo
         self.assertIn("Passo 5 (publicar)", sistema)
         comum = self.m.comando_do_claude("lead-r", Path("/tmp/x"))
