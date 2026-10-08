@@ -9,5 +9,5 @@ Type=oneshot
 # gerador): no máximo 6 por rodada; o gerador já publica o dos leads novos na hora.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/python3 %h/.local/bin/raio-x --pendentes --max 6
-TimeoutStartSec=1h
+TimeoutStartSec=2h
 Nice=10

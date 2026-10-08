@@ -48,12 +48,12 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
-import hashlib
 import html
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -71,7 +71,8 @@ VERSAO = 1
 CAMINHO = "raio-x"
 MARCA = f'data-raio-x="{VERSAO}"'
 MAX_PONTOS = 3
-LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments")
+LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments"
+                              r"|maximum number of projects")
 PRECO = "R$ 990 + R$ 69/mês"
 
 
@@ -154,15 +155,33 @@ def nome_da_rede(url: str) -> str:
     return "uma página que não é de vocês"
 
 
-def erro_amigavel(motivo: str) -> str:
-    m = sem_acento(motivo).lower()
-    if "construcao" in m or "estacionado" in m or "padrao" in m or "maintenance" in m:
-        return "uma página em construção"
-    if "em branco" in m or "suspended" in m:
-        return "uma página em branco"
-    if "http 4" in m or "http 5" in m:
-        return "uma página de erro"
-    return "um endereço que não carrega"
+# Palavras que não distinguem um negócio: sozinhas, não provam que a página é dele.
+GENERICAS = {"advogado", "advogada", "advogados", "advocacia", "associados", "escritorio", "juridica", "juridico",
+             "consultoria", "pousada", "suites", "hotel", "hostel", "engenharia", "construtora", "construcoes", "reformas",
+             "servicos", "prestadora", "clinica", "odontologia", "estetica", "eventos", "espaco", "studio", "estudio",
+             "desentupidora", "dedetizadora", "locacao", "locacoes", "equipamentos", "obras", "trabalhista", "familia",
+             "consumidor", "bancario", "criminalista", "previdenciario", "automotiva", "buffet", "festas", "moveis",
+             "planejados", "vidracaria", "marcenaria", "refrigeracao", "ltda", "brasil", "centro", "grupo"}
+# Hospedagem e espaço de eventos: o Google não mostra horário comum para eles, e o argumento
+# do filtro "Aberto agora" não vale (revisão de 08/10/2026: os 17 casos eram desses ramos).
+SEM_HORARIO_COMUM = ("pousada", "hotel", "hostel", "chale", "camping", "evento", "buffet", "chacara", "sitio")
+
+
+def conferir_site(url: str, nome: str) -> str:
+    """Como está hoje o site que o Google mostrava fora do ar (o Caçador checou uma vez, e erra:
+    wixsite e páginas de reserva voltam). 'fora' = não respondeu 200; 'sem_nome' = respondeu,
+    mas sem nenhuma palavra própria do nome (domínio estacionado, página padrão); 'no_ar' =
+    respondeu com o nome, ou não dá para saber (aí o ponto sai: na dúvida, não se afirma)."""
+    codigo, corpo = baixar(url, timeout=20, navegador=True)
+    if codigo != 200:
+        return "fora"
+    rotulo = dominio(url).split(".")[0].lower()
+    texto = sem_acento(corpo.decode("utf-8", errors="replace")).lower()
+    texto = texto.replace(dominio(url).lower(), " ").replace(rotulo, " ")
+    palavras = [w for w in re.findall(r"[a-z0-9]{4,}", sem_acento(nome).lower()) if w not in GENERICAS]
+    if not palavras:
+        return "no_ar"
+    return "no_ar" if any(re.search(rf"\b{re.escape(w)}\b", texto) for w in palavras) else "sem_nome"
 
 
 def dominio(url: str) -> str:
@@ -178,9 +197,12 @@ def data_br(iso: str) -> str:
     return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else ""
 
 
-def diagnostico(dados: dict) -> dict:
+def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos_baixadas: int = 0) -> dict:
     """O que já está bom e os pontos de melhoria (no máximo 3, na ordem de peso).
-    Cada item é {'titulo', 'porque'} e só existe se o fato está no content.md."""
+    Cada item é {'titulo', 'porque'} e só existe se o fato está no content.md.
+    `site_hoje` = `conferir_site` do site que o Caçador viu fora do ar (None = não conferido:
+    o ponto não sai); `hoje` = a data dessa conferência; `fotos_baixadas` = arquivos em Fotos/
+    (sem nenhuma, "nenhuma foto é de vocês" poderia ser "o perfil não tem foto")."""
     c, sinais = dados["campos"], dados["sinais"]
     nota, n = dados["nota"], dados["avaliacoes"]
     cidade = c.get("Cidade", "").strip()
@@ -204,7 +226,7 @@ def diagnostico(dados: dict) -> dict:
                                "e é o que mais pesa quando alguém escolhe entre duas opções."})
     if telefone == "celular":
         bons.append({"titulo": "O telefone do perfil é celular",
-                     "porque": "Quem acha vocês toca no número e fala com uma pessoa, e dá para chamar no WhatsApp."})
+                     "porque": "Quem acha vocês no Google pode ligar ou mandar mensagem para o número que aparece ali."})
     if horario:
         bons.append({"titulo": "Horário de funcionamento preenchido",
                      "porque": "Quem procura sabe se vocês estão abertos antes de ligar, e aparece para quem usa o filtro "
@@ -219,11 +241,16 @@ def diagnostico(dados: dict) -> dict:
     pontos: list[dict] = []
     site = situacao_do_site(dados)
     onde = f"{vertical} em {cidade}" if vertical and cidade else (f"em {cidade}" if cidade else "o serviço de vocês")
-    if site and site["tipo"] == "morto":
+    quando = f" quando conferimos ({hoje})" if hoje else " quando conferimos"
+    if site and site["tipo"] == "morto" and site_hoje == "fora":
         pontos.append({"titulo": "O site que aparece no Google não abre",
-                       "porque": f"Quem toca em “Site” no perfil de vocês cai em {erro_amigavel(site['motivo'])} "
-                                 f"({dominio(site['url'])}). A pessoa volta para a busca, e o próximo resultado está "
-                                 "a um toque."})
+                       "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que não abriu"
+                                 f"{quando}. A pessoa volta para a busca, e o próximo resultado está a um toque."})
+    elif site and site["tipo"] == "morto" and site_hoje == "sem_nome":
+        pontos.append({"titulo": "O site do Google não leva a um site de vocês",
+                       "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que{quando} "
+                                 "mostrava uma página sem o nome de vocês. A pessoa volta para a busca, e o próximo "
+                                 "resultado está a um toque."})
     elif site and site["tipo"] == "rede":
         rede = nome_da_rede(site["url"])
         porque = ("Quem ainda está comparando quer ver o trabalho antes de chamar. Sem uma página com os serviços e as "
@@ -236,11 +263,10 @@ def diagnostico(dados: dict) -> dict:
         pontos.append({"titulo": "O perfil do Google não tem site",
                        "porque": f"Quem procura {onde} compara duas ou três opções. Sem site, vocês aparecem só com "
                                  "nome e nota, e quem mostra serviços e fotos leva o cliente."})
-    if telefone == "fixo":
-        pontos.append({"titulo": "O telefone do perfil é fixo",
-                       "porque": "Hoje quase todo mundo chama pelo WhatsApp. Com um fixo no Google, quem procura à noite "
-                                 "ou no fim de semana não tem como mandar mensagem, e chama outro."})
-    if horario is False:
+    # Telefone fixo não vira ponto: o Caçador só deixa passar fixo com WhatsApp publicado, então
+    # "não tem como mandar mensagem" seria falso em todos (revisão de 08/10/2026, 9 de 9).
+    sem_horario_comum = any(r in sem_acento(vertical).lower() for r in SEM_HORARIO_COMUM)
+    if horario is False and not sem_horario_comum:
         pontos.append({"titulo": "O horário de funcionamento não aparece no Google",
                        "porque": "Quem procura não sabe se vocês estão abertos, e quem usa o filtro “Aberto agora” nem vê "
                                  "vocês na lista."})
@@ -252,7 +278,7 @@ def diagnostico(dados: dict) -> dict:
         pontos.append({"titulo": "Ainda sem avaliações no Google" if n == 0 else f"Só {n} avaliaç{'ão' if n == 1 else 'ões'} no Google",
                        "porque": "Entre duas opções parecidas, o cliente confia em quem tem mais avaliações. Pedir na hora, "
                                  "a quem saiu satisfeito, é o jeito mais barato de crescer esse número."})
-    if fotos == 0:
+    if fotos == 0 and fotos_baixadas > 0:
         pontos.append({"titulo": "Nenhuma das primeiras fotos do perfil é de vocês",
                        "porque": "As fotos que o cliente vê primeiro foram publicadas por outras pessoas. É a primeira "
                                  "impressão do lugar, e vocês não escolheram."})
@@ -422,10 +448,15 @@ def ler_json(p: Path):
         return None
 
 
-def baixar(url: str, timeout: int = 30) -> tuple[int | str, bytes]:
+NAVEGADOR = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+def baixar(url: str, timeout: int = 30, navegador: bool = False) -> tuple[int | str, bytes]:
+    """GET (segue redirecionamento). `navegador`: o site do negócio, que pode recusar robô."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "prumo-raio-x"}), timeout=timeout) as r:
-            return r.status, r.read()
+        pedido = urllib.request.Request(url, headers={"User-Agent": NAVEGADOR if navegador else "prumo-raio-x"})
+        with urllib.request.urlopen(pedido, timeout=timeout) as r:
+            return r.status, r.read(3_000_000)
     except Exception as e:  # noqa: BLE001
         return getattr(e, "code", str(e)), b""
 
@@ -453,15 +484,18 @@ def montar(pasta: Path) -> tuple[dict, dict, str, dict]:
     except OSError:
         raise ValueError("sem content.md") from None
     dados = ler_content(texto)
-    diag = diagnostico(dados)
+    site = situacao_do_site(dados)
+    site_hoje = conferir_site(site["url"], dados["nome"]) if site and site["tipo"] == "morto" else None
+    fotos = sum(1 for f in (pasta / "Fotos").glob("*") if f.is_file()) if (pasta / "Fotos").is_dir() else 0
+    diag = diagnostico(dados, site_hoje, dt.date.today().strftime("%d/%m/%Y"), fotos)
     if not diag["pontos"]:
         raise ValueError("nenhum ponto de melhoria verificável no content.md")
     return dados, diag, pagina(dados, diag, recibo["site_url"], (pasta / "og.jpg").is_file(), fonte_css()), recibo
 
 
 def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
-    """Gera, publica e grava o recibo. (ok, mensagem). Nunca troca o demo: o index.html
-    da pasta tem de ser o que está no ar."""
+    """Gera, publica e grava o recibo. (ok, mensagem). Nunca troca o demo: o index.html e o
+    og.jpg da pasta têm de ser os que estão no ar, e são esses bytes conferidos que sobem."""
     slug = pasta.name
     log_lead = LOGS / f"execucao-{slug}.log"
     try:
@@ -472,19 +506,26 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     projeto = recibo.get("vercel_project") or f"demo-{slug}"
     if not re.fullmatch(r"demo-[a-z0-9][a-z0-9._-]{0,95}", projeto):
         return False, f"vercel_project inesperado: {projeto!r}"
-    local = (pasta / "index.html").read_bytes() if (pasta / "index.html").is_file() else b""
-    codigo, no_ar = baixar(site_url + "/")
-    if codigo != 200:
-        return False, f"o demo não responde ({site_url} -> {codigo})"
-    if not local or hashlib.sha256(local).digest() != hashlib.sha256(no_ar).digest():
-        return False, "o index.html da pasta não é o que está no ar; nada publicado (o Raio-X nunca troca o demo)"
-    (deploy or deploy_na_vercel)(pasta, projeto, pagina_html, log_lead)
+    arquivos: dict[str, bytes] = {}
+    for nome in ("index.html", "og.jpg"):
+        local = (pasta / nome).read_bytes() if (pasta / nome).is_file() else None
+        codigo, no_ar = baixar(f"{site_url}/{'' if nome == 'index.html' else nome}")
+        if nome == "index.html" and codigo != 200:
+            return False, f"o demo não responde ({site_url} -> {codigo})"
+        if (local is None) != (codigo != 200) or (local is not None and local != no_ar):
+            return False, f"o {nome} da pasta não é o que está no ar; nada publicado (o Raio-X nunca troca o demo)"
+        if local is not None:
+            arquivos[nome] = local
+    arquivos[f"{CAMINHO}/index.html"] = pagina_html.encode("utf-8")
+    alias = (deploy or deploy_na_vercel)(arquivos, projeto, log_lead)
+    if alias.rstrip("/") != site_url:
+        return False, f"o deploy respondeu outro endereço ({alias or 'sem linha Aliased:'}) em vez de {site_url}"
     url = f"{site_url}/{CAMINHO}"
     codigo, corpo = baixar(url)
-    if codigo != 200 or MARCA.encode() not in corpo:
-        return False, f"publicado, mas {url} não respondeu com o Raio-X ({codigo})"
+    if codigo != 200 or corpo != arquivos[f"{CAMINHO}/index.html"]:
+        return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
     codigo, corpo = baixar(site_url + "/")
-    if codigo != 200 or corpo != local:
+    if codigo != 200 or corpo != arquivos["index.html"]:
         return False, f"depois do deploy o demo mudou ou caiu ({codigo}); confira {site_url}"
     gravar_recibo(pasta / "publicado.json", {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                              "raio_x_versao": VERSAO, "raio_x_em": agora()})
@@ -496,24 +537,33 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     return True, url
 
 
-def deploy_na_vercel(pasta: Path, projeto: str, pagina_html: str, log_lead: Path) -> None:
-    """Mesmo palco do gerador (index.html + og.jpg), mais `raio-x/index.html`."""
-    with tempfile.TemporaryDirectory(prefix=f"raio-x-{pasta.name}-") as palco:
+def deploy_na_vercel(arquivos: dict[str, bytes], projeto: str, log_lead: Path) -> str:
+    """Sobe exatamente `arquivos` (os bytes conferidos com o que está no ar, mais o Raio-X) no
+    projeto já existente e devolve a URL da linha "Aliased:" ("" sem ela). Sem o link certo,
+    não há deploy: um `vercel deploy` numa pasta sem link criaria um projeto novo com o nome
+    do palco, e o hobby limita projetos."""
+    with tempfile.TemporaryDirectory(prefix="raio-x-palco-") as palco:
         p = Path(palco)
-        shutil.copy2(pasta / "index.html", p / "index.html")
-        if (pasta / "og.jpg").is_file():
-            shutil.copy2(pasta / "og.jpg", p / "og.jpg")
-        (p / CAMINHO).mkdir()
-        (p / CAMINHO / "index.html").write_text(pagina_html, encoding="utf-8")
+        for nome, conteudo in arquivos.items():
+            (p / nome).parent.mkdir(parents=True, exist_ok=True)
+            (p / nome).write_bytes(conteudo)
         log(f"Publicando o Raio-X em {projeto}...", log_lead)
         with open(log_lead, "a", encoding="utf-8") as saida:
-            subprocess.run(["vercel", "link", "--yes", "--project", projeto, "--scope", VERCEL_SCOPE],
-                           cwd=palco, stdout=saida, stderr=subprocess.STDOUT, timeout=300)
+            link = subprocess.run(["vercel", "link", "--yes", "--project", projeto, "--scope", VERCEL_SCOPE],
+                                  cwd=palco, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180)
+            saida.write(link.stdout or "")
+            ligado = ler_json(p / ".vercel/project.json") or {}
+            if link.returncode != 0 or not ligado.get("projectId") or ligado.get("projectName", projeto) != projeto:
+                if LIMITE_DE_DEPLOY.search(link.stdout or ""):
+                    raise LimiteDaVercel((link.stdout or "").strip().splitlines()[-1])
+                raise RuntimeError(f"vercel link não ligou o palco a {projeto} (código {link.returncode}); nada publicado")
             r = subprocess.run(["vercel", "deploy", "--prod", "--yes", "--scope", VERCEL_SCOPE],
-                               cwd=palco, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
+                               cwd=palco, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=300)
             saida.write(r.stdout or "")
-        if LIMITE_DE_DEPLOY.search(r.stdout or ""):
-            raise LimiteDaVercel(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "limite de deploys")
+    if LIMITE_DE_DEPLOY.search(r.stdout or ""):
+        raise LimiteDaVercel(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "limite de deploys")
+    m = re.search(r"(?i)aliased:\s*(https://\S+)", r.stdout or "")
+    return m.group(1).rstrip(".,)") if r.returncode == 0 and m else ""
 
 
 class LimiteDaVercel(Exception):
@@ -532,39 +582,70 @@ def status_no_retrato() -> dict[str, str] | None:
         return None
 
 
-def em_processamento() -> str | None:
-    """Lead que o gerador está gerando agora (não se mexe nele)."""
-    s = ler_json(LOGS / "status.json") or {}
-    return s.get("lead") if isinstance(s, dict) and s.get("estado") == "processando" else None
+def gerador_rodando() -> bool:
+    """A trava do gerador (`.logs/gerador.lock`, {host, pid, desde}). Enquanto ele roda, um refazer
+    pode trocar o demo de um lead `pronto` a qualquer momento, e um deploy do Raio-X por cima o
+    desfaria: o `--pendentes` espera. O gancho do próprio gerador roda dentro da trava, em série.
+    Trava deste host com o pid morto não conta (o gerador faz a mesma conta); ilegível conta."""
+    trava = LOGS / "gerador.lock"
+    if not trava.exists():
+        return False
+    dono = ler_json(trava)
+    if not isinstance(dono, dict):
+        return True
+    if dono.get("host") == socket.gethostname():
+        return Path(f"/proc/{dono.get('pid')}").exists()
+    return (dt.datetime.now().timestamp() - float(dono.get("desde") or 0)) < 6 * 3600
 
 
 def pendentes(maximo: int) -> list[Path]:
-    """Leads `pronto` na raiz com demo no ar e sem Raio-X da versão atual (ou com ele fora do ar)."""
+    """Leads `pronto` na raiz com demo no ar e sem Raio-X da versão atual (ou com ele fora do ar),
+    o publicado mais recente primeiro (o próximo a ser enviado). Quem não teria Raio-X (sem ponto,
+    demo apagado) não ocupa vaga."""
     status = status_no_retrato()
     if status is None:
         log("Sem retrato recente da planilha (site-leads.json); nada é pendente.")
         return []
-    ocupado = em_processamento()
-    saida = []
-    for p in sorted(AUTO.iterdir()):
-        if len(saida) >= maximo:
-            break
-        if not p.is_dir() or p.name.startswith((".", "_")) or p.name == ocupado:
+    if gerador_rodando():
+        log("O gerador está rodando (gerador.lock); os pendentes ficam para a próxima rodada.")
+        return []
+    candidatos = []
+    for p in AUTO.iterdir():
+        if not p.is_dir() or p.name.startswith((".", "_")):
             continue
         r = ler_json(p / "publicado.json")
         if not isinstance(r, dict) or r.get("apagado_em") or status.get(str(r.get("place_id"))) != "pronto":
             continue
-        if r.get("raio_x_url") and int(r.get("raio_x_versao") or 0) >= VERSAO:
-            codigo, corpo = baixar(r["raio_x_url"])
+        try:
+            versao = int(r.get("raio_x_versao") or 0)
+        except (TypeError, ValueError):
+            versao = 0
+        candidatos.append((str(r.get("publicado_em") or ""), p, r, versao))
+    saida = []
+    for _, p, r, versao in sorted(candidatos, key=lambda c: c[0], reverse=True):
+        if len(saida) >= maximo:
+            break
+        if r.get("raio_x_url") and versao >= VERSAO:
+            codigo, corpo = baixar(str(r["raio_x_url"]))
             if codigo == 200 and MARCA.encode() in corpo:
                 continue
+        try:
+            montar(p)
+        except ValueError as e:
+            log(f"{p.name}: sem Raio-X ({e}).")
+            continue
         saida.append(p)
     return saida
 
 
 def simular(pasta: Path) -> str:
     dados = ler_content((pasta / "content.md").read_text(encoding="utf-8", errors="replace"))
-    d = diagnostico(dados)
+    site = situacao_do_site(dados)
+    site_hoje = conferir_site(site["url"], dados["nome"]) if site and site["tipo"] == "morto" else None
+    fotos = sum(1 for f in (pasta / "Fotos").glob("*") if f.is_file()) if (pasta / "Fotos").is_dir() else 0
+    d = diagnostico(dados, site_hoje, dt.date.today().strftime("%d/%m/%Y"), fotos)
+    if site_hoje:
+        d["bons"] = d["bons"] + [{"titulo": f"(site antigo hoje: {site_hoje})", "porque": ""}]
     linhas = [f"{pasta.name}: {dados['nome']} · nota {dados['nota']} ({dados['avaliacoes']}) · lido em {d['lido_em']}"]
     linhas += [f"  bom: {b['titulo']}" for b in d["bons"]]
     linhas += [f"  ponto {i}: {p['titulo']}" for i, p in enumerate(d["pontos"], 1)]
@@ -687,22 +768,53 @@ def testar() -> int:
 
     class Diagnostico(unittest.TestCase):
         def test_lead_completo(self):
-            d = diagnostico(ler_content(CONTENT_EXEMPLO))
+            d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5)
             self.assertEqual([p["titulo"] for p in d["pontos"]],
                              ["O site que aparece no Google não abre", "Só 18 avaliações no Google"])
-            self.assertIn("uma página em construção (higorferreira.adv.br)", d["pontos"][0]["porque"])
+            self.assertIn("vai para higorferreira.adv.br, que não abriu quando conferimos (08/10/2026)",
+                          d["pontos"][0]["porque"])
             self.assertEqual(len(d["bons"]), 5)
+            self.assertEqual(d["bons"][0]["titulo"], "Nota 5,0 no Google")  # o 18 vira ponto, não bom
             self.assertEqual(d["lido_em"], "07/10/2026")
 
-        def test_fixo_sem_horario_sem_fotos_rede_social_no_maximo_tres(self):
+        def test_site_antigo_so_vira_ponto_conferido_hoje(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            titulos = lambda h: [p["titulo"] for p in diagnostico(dados, h, "08/10/2026")["pontos"]]  # noqa: E731
+            self.assertEqual(titulos(None), ["Só 18 avaliações no Google"])  # não conferido: não afirma
+            self.assertEqual(titulos("no_ar"), ["Só 18 avaliações no Google"])  # voltou: não afirma
+            self.assertEqual(titulos("sem_nome")[0], "O site do Google não leva a um site de vocês")
+
+        def test_conferir_site(self):
+            antes = globals()["baixar"]
+            try:
+                for resposta, esperado in (((404, b""), "fora"), (("timeout", b""), "fora"),
+                                           ((200, b"<title>higorferreira.adv.br is for sale</title>"), "sem_nome"),
+                                           ((200, b"<h1>Higor Ferreira Advocacia</h1>"), "no_ar"),
+                                           ((200, b"<h1>Pousada qualquer</h1>"), "no_ar")):
+                    globals()["baixar"] = lambda url, timeout=30, navegador=False, r=resposta: r
+                    nome = "Pousada Suites" if b"Pousada" in resposta[1] else "Higor Ferreira - Advogado"
+                    self.assertEqual(conferir_site("https://higorferreira.adv.br/", nome), esperado, resposta)
+            finally:
+                globals()["baixar"] = antes
+
+        def test_fixo_nao_vira_ponto_e_pousada_nao_tem_ponto_de_horario(self):
             t = CONTENT_EXEMPLO.replace("+55 62 99392-0412", "+55 27 3361-1234")
             t = t.replace("- **Site antigo, fora do ar:** https://higorferreira.adv.br/ (domínio expirado, estacionado ou em construção)\n",
                           "- **Link no Google (não é site próprio):** https://www.instagram.com/higor/\n")
             t = t.replace("- +5 horário preenchido no Google\n", "").replace("- +10 5 foto(s) enviadas pelo próprio negócio no Google\n", "")
-            d = diagnostico(ler_content(t))
+            d = diagnostico(ler_content(t), fotos_baixadas=3)
             self.assertEqual([p["titulo"] for p in d["pontos"]],
-                             ["O botão “Site” no Google leva para o Instagram", "O telefone do perfil é fixo",
-                              "O horário de funcionamento não aparece no Google"])
+                             ["O botão “Site” no Google leva para o Instagram",
+                              "O horário de funcionamento não aparece no Google", "Só 18 avaliações no Google"])
+            self.assertNotIn("fixo", json.dumps(d, ensure_ascii=False))
+            d = diagnostico(ler_content(t.replace("advocacia", "pousada")), fotos_baixadas=3)
+            self.assertNotIn("O horário de funcionamento não aparece no Google", [p["titulo"] for p in d["pontos"]])
+
+        def test_fotos_so_com_fotos_baixadas(self):
+            t = CONTENT_EXEMPLO.replace("- +10 5 foto(s) enviadas pelo próprio negócio no Google\n", "")
+            titulos = lambda n: [p["titulo"] for p in diagnostico(ler_content(t), "fora", "", n)["pontos"]]  # noqa: E731
+            self.assertNotIn("Nenhuma das primeiras fotos do perfil é de vocês", titulos(0))
+            self.assertIn("Nenhuma das primeiras fotos do perfil é de vocês", titulos(4))
 
         def test_sem_secao_de_sinais_nao_afirma_horario_fotos_nem_falta_de_site(self):
             t = CONTENT_EXEMPLO.split("## Por que este lead")[0].replace(
@@ -729,7 +841,7 @@ def testar() -> int:
         def test_identidade_preco_link_e_escape(self):
             t = CONTENT_EXEMPLO.replace("# Higor Ferreira - Advogado", "# Bar <b>&</b> Cia")
             dados = ler_content(t)
-            h = pagina(dados, diagnostico(dados), "https://demo-x.vercel.app/", True)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026"), "https://demo-x.vercel.app/", True)
             self.assertIn("Bar &lt;b&gt;&amp;&lt;/b&gt; Cia", h)
             self.assertNotIn("<b>&</b>", h)
             self.assertIn("R$ 990 + R$ 69/mês", h)
@@ -758,14 +870,17 @@ def testar() -> int:
             AUTO, LOGS = self.raiz, self.raiz / ".logs"
             LOGS.mkdir()
             self.pasta = self.raiz / "higor"
-            self.pasta.mkdir()
+            (self.pasta / "Fotos").mkdir(parents=True)
             (self.pasta / "content.md").write_text(CONTENT_EXEMPLO, encoding="utf-8")
             (self.pasta / "index.html").write_bytes(b"<html>demo</html>")
+            (self.pasta / "og.jpg").write_bytes(b"\xff\xd8og")
             (self.pasta / "publicado.json").write_text(json.dumps({
                 "place_id": "ChIJteste", "slug": "higor", "nome": "Higor", "site_url": "https://demo-higor.vercel.app",
                 "vercel_project": "demo-higor", "publicado_em": "2026-10-08T17:20:00-03:00"}), encoding="utf-8")
-            self.no_ar = {"https://demo-higor.vercel.app/": (200, b"<html>demo</html>")}
-            globals()["baixar"] = lambda url, timeout=30: self.no_ar.get(url, (404, b""))
+            self.no_ar = {"https://demo-higor.vercel.app/": (200, b"<html>demo</html>"),
+                          "https://demo-higor.vercel.app/og.jpg": (200, b"\xff\xd8og")}
+            self.subidos = []
+            globals()["baixar"] = lambda url, timeout=30, navegador=False: self.no_ar.get(url, (404, b""))
 
         def tearDown(self):
             global AUTO, LOGS
@@ -773,54 +888,83 @@ def testar() -> int:
             assert self.raiz.name.startswith("raio-x-teste-")
             shutil.rmtree(self.raiz)
 
-        def deploy(self, pasta, projeto, pagina_html, log_lead):
+        def deploy(self, arquivos, projeto, log_lead):
             self.assertEqual(projeto, "demo-higor")
-            self.no_ar["https://demo-higor.vercel.app/raio-x"] = (200, pagina_html.encode())
+            self.subidos.append(sorted(arquivos))
+            self.no_ar["https://demo-higor.vercel.app/raio-x"] = (200, arquivos["raio-x/index.html"])
+            return "https://demo-higor.vercel.app"
 
-        def test_publica_e_grava_os_campos_sem_perder_os_outros(self):
+        def recibo(self):
+            return json.loads((self.pasta / "publicado.json").read_text(encoding="utf-8"))
+
+        def test_publica_os_bytes_conferidos_e_grava_os_campos_sem_perder_os_outros(self):
             ok, msg = publicar(self.pasta, self.deploy)
             self.assertTrue(ok, msg)
-            r = json.loads((self.pasta / "publicado.json").read_text(encoding="utf-8"))
+            self.assertEqual(self.subidos, [["index.html", "og.jpg", "raio-x/index.html"]])
+            r = self.recibo()
             self.assertEqual((r["raio_x_url"], r["raio_x_pontos"], r["raio_x_versao"], r["place_id"], r["site_url"]),
                              ("https://demo-higor.vercel.app/raio-x", 2, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
-        def test_index_diferente_do_que_esta_no_ar_nao_publica(self):
-            self.no_ar["https://demo-higor.vercel.app/"] = (200, b"<html>outro</html>")
-            chamado = []
-            ok, msg = publicar(self.pasta, lambda *a: chamado.append(a))
-            self.assertFalse(ok)
-            self.assertEqual(chamado, [])
-            self.assertIn("não é o que está no ar", msg)
-            self.assertNotIn("raio_x_url", (self.pasta / "publicado.json").read_text(encoding="utf-8"))
+        def test_index_ou_og_diferente_do_que_esta_no_ar_nao_publica(self):
+            for url, corpo in (("https://demo-higor.vercel.app/", (200, b"<html>outro</html>")),
+                               ("https://demo-higor.vercel.app/og.jpg", (200, b"outra imagem")),
+                               ("https://demo-higor.vercel.app/og.jpg", (404, b""))):
+                guardado = self.no_ar[url]
+                self.no_ar[url] = corpo
+                ok, msg = publicar(self.pasta, lambda *a: self.fail("não podia publicar"))
+                self.assertFalse(ok)
+                self.assertIn("não é o que está no ar", msg)
+                self.no_ar[url] = guardado
+            self.assertNotIn("raio_x_url", self.recibo())
 
         def test_demo_apagado_nao_publica(self):
-            r = json.loads((self.pasta / "publicado.json").read_text(encoding="utf-8"))
+            r = self.recibo()
             r["apagado_em"] = "2026-10-08T10:05:08-03:00"
             (self.pasta / "publicado.json").write_text(json.dumps(r), encoding="utf-8")
             ok, msg = publicar(self.pasta, lambda *a: self.fail("não podia publicar"))
             self.assertFalse(ok)
             self.assertIn("apagado", msg)
 
-        def test_raio_x_que_nao_responde_nao_grava_o_campo(self):
-            ok, msg = publicar(self.pasta, lambda *a: None)
+        def test_raio_x_que_nao_responde_ou_e_antigo_nao_grava_o_campo(self):
+            ok, _ = publicar(self.pasta, lambda *a: "https://demo-higor.vercel.app")
             self.assertFalse(ok)
-            self.assertNotIn("raio_x_url", (self.pasta / "publicado.json").read_text(encoding="utf-8"))
+            self.no_ar["https://demo-higor.vercel.app/raio-x"] = (200, f"<body {MARCA}>versão anterior".encode())
+            ok, _ = publicar(self.pasta, lambda *a: "https://demo-higor.vercel.app")
+            self.assertFalse(ok)
+            self.assertNotIn("raio_x_url", self.recibo())
 
-        def test_pendentes_so_pronto_na_raiz_sem_raio_x(self):
+        def test_alias_diferente_nao_grava_o_campo(self):
+            def outro(arquivos, projeto, log_lead):
+                self.deploy(arquivos, projeto, log_lead)
+                return "https://demo-higor-abc123.vercel.app"
+            ok, msg = publicar(self.pasta, outro)
+            self.assertFalse(ok)
+            self.assertIn("outro endereço", msg)
+            self.assertNotIn("raio_x_url", self.recibo())
+
+        def test_pendentes_so_pronto_na_raiz_sem_raio_x_e_nunca_com_o_gerador_rodando(self):
             global SITE_LEADS
             antes = SITE_LEADS
             SITE_LEADS = self.raiz / "site-leads.json"
             try:
                 agora_iso = dt.datetime.now(dt.timezone.utc).isoformat()
                 SITE_LEADS.write_text(json.dumps({"geradoEm": agora_iso, "leads": [
-                    {"place_id": "ChIJteste", "status": "pronto"}, {"place_id": "ChIJenviado", "status": "enviado"}]}))
+                    {"place_id": "ChIJteste", "status": "pronto"}, {"place_id": "ChIJenviado", "status": "enviado"},
+                    {"place_id": "ChIJsemponto", "status": "pronto"}]}))
                 outra = self.raiz / "enviado"
                 outra.mkdir()
                 (outra / "publicado.json").write_text(json.dumps({"place_id": "ChIJenviado", "site_url": "https://x"}))
-                copia = self.raiz / "_recusados"
-                copia.mkdir()
-                self.assertEqual([p.name for p in pendentes(10)], ["higor"])
+                sem_ponto = self.raiz / "sem-ponto"  # sem content.md: nunca teria Raio-X, não ocupa vaga
+                sem_ponto.mkdir()
+                (sem_ponto / "publicado.json").write_text(json.dumps({
+                    "place_id": "ChIJsemponto", "site_url": "https://demo-s.vercel.app", "raio_x_versao": "x"}))
+                (self.raiz / "_recusados").mkdir()
+                self.assertEqual([p.name for p in pendentes(1)], ["higor"])
+                (LOGS / "gerador.lock").write_text(json.dumps({"host": socket.gethostname(), "pid": os.getpid(), "desde": 0}))
+                self.assertEqual(pendentes(10), [])  # o gerador (aqui, este processo) está vivo
+                (LOGS / "gerador.lock").write_text(json.dumps({"host": socket.gethostname(), "pid": 0, "desde": 0}))
+                self.assertEqual([p.name for p in pendentes(10)], ["higor"])  # trava de processo morto
                 ok, _ = publicar(self.pasta, self.deploy)
                 self.assertTrue(ok)
                 self.assertEqual(pendentes(10), [])

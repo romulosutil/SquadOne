@@ -1125,16 +1125,27 @@ primeira mensagem do Balcão.
   essa seção nada disso é afirmado. O que vem da busca do Gemini (WhatsApp
   "achado", Instagram "achado", "dono atende", o briefing) nunca entra. A página
   diz a data em que os dados foram lidos e leva ao perfil no Google Maps.
+- **O que a revisão de 08/10/2026 tirou, por ser falso em lead real:** telefone
+  fixo não é ponto (o Caçador só deixa passar fixo com WhatsApp publicado);
+  "site fora do ar" é conferido de novo na hora (o Caçador checa uma vez e erra:
+  wixsite e páginas de reserva voltam) e só vira ponto se não responde 200 ou
+  responde sem nenhuma palavra própria do nome (domínio estacionado); horário
+  não é ponto para pousada, hotel e espaço de eventos (o Google não mostra
+  horário comum para eles); "nenhuma foto é de vocês" só com fotos em `Fotos/`.
 - **Quantos pontos o dado sustenta, nunca inventados.** Em 08/10/2026, dos 88
-  demos no ar, 5 tinham 3 pontos verificáveis, 34 tinham 2, 47 tinham 1 e 2
-  nenhum (sem ponto não há Raio-X). O Caçador escolhe justamente perfis bons
-  (celular, horário, fotos, nota alta). Mais pontos dependem de o Caçador gravar
-  mais do Places (o horário de verdade, por exemplo).
-- **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` da pasta +
-  `raio-x/index.html`. Antes, o `index.html` da pasta é comparado byte a byte
-  com o que está no ar; se diferem, nada sobe (o Raio-X nunca troca o demo).
-  Depois, `/raio-x` tem de responder 200 com a marca `data-raio-x` e o demo tem de
-  continuar igual. Uma cópia fica em `<slug>/raio-x.html`.
+  demos no ar, só 5 tinham 3 pontos verificáveis; a maioria tem 1 ou 2, e sem
+  ponto não há Raio-X. O Caçador escolhe justamente perfis bons (celular,
+  horário, fotos, nota alta). Mais pontos dependem de o Caçador gravar mais do
+  Places (o horário de verdade, por exemplo). A página e o `raio_x_pontos` dizem
+  quantos são; a mensagem não pode prometer "3".
+- **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` +
+  `raio-x/index.html`. Antes, o `index.html` e o `og.jpg` da pasta são
+  comparados byte a byte com o que está no ar e são esses bytes que sobem; se
+  diferem, nada sobe (o Raio-X nunca troca o demo). O `vercel link` tem de ligar
+  o palco ao `vercel_project` do recibo (sem isso, `vercel deploy` criaria um
+  projeto novo) e a linha `Aliased:` tem de ser o `site_url`. Depois, `/raio-x`
+  tem de responder exatamente a página gerada e o demo tem de continuar igual.
+  Uma cópia fica em `<slug>/raio-x.html` (o refazer a guarda no `_vN/`).
 - **Recibo.** O `publicado.json` ganha (gravação atômica, os outros campos
   intactos) `raio_x_url` (a URL que o Balcão manda, `<site_url>/raio-x`),
   `raio_x_pontos` (1 a 3: quantos pontos a página mostra), `raio_x_versao` e
@@ -1143,8 +1154,10 @@ primeira mensagem do Balcão.
   (também no refazer, cujo deploy do Claude tira o `/raio-x` do ar); falha só
   vai ao log do lead. O `raio-x.timer` (11:15 e 17:15) roda `--pendentes --max 6`:
   leads `pronto` na raiz (retrato da planilha com até 26 h) sem Raio-X da versão
-  atual ou com ele fora do ar; pula o lead que o gerador está gerando e o demo
-  apagado. A saída do `vercel` vai para `.logs/execucao-<slug>.log`, onde o
+  atual ou com ele fora do ar, o publicado mais recente primeiro; quem não teria
+  Raio-X (sem ponto, demo apagado) não ocupa vaga. Com o gerador rodando
+  (`gerador.lock` de processo vivo) não faz nada: um refazer pode trocar o demo
+  de um lead `pronto` a qualquer momento. A saída do `vercel` vai para `.logs/execucao-<slug>.log`, onde o
   `lote-continuo` procura o limite de deploys; o próprio raio-x para no limite.
 
 ```bash

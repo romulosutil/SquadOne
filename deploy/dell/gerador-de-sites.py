@@ -119,7 +119,7 @@ NOTA_DA_REVISAO: str | None = None  # `--nota`: feedback do Rômulo que o refaze
 PREFIXO_BACKUP = "_v"  # _v1, _v2...: cada refazer guarda a versão que estava no ar
 TENTATIVA_FALHA = "_tentativa-falha"
 BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
-ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md")
+ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md", "raio-x.html")
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
 # Raio-X do PRUMO (08/10/2026, deploy/dell/raio-x.py): depois de cada demo validado, o runner
 # publica `/raio-x` no mesmo projeto. O deploy do Claude só leva index.html e og.jpg, então um
@@ -631,13 +631,13 @@ def publicar_raio_x(pasta: Path, log_lead: Path) -> None:
     try:
         with open(log_lead, "a", encoding="utf-8") as erros:
             r = subprocess.run([sys.executable, str(RAIO_X), pasta.name], stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL, stderr=erros, timeout=20 * 60,
+                               stdout=subprocess.DEVNULL, stderr=erros, timeout=10 * 60,
                                env={**os.environ, "AUTO_DIR": str(AUTO)})
         if r.returncode != 0:
             log(f"Raio-X de {pasta.name} não saiu (código {r.returncode}); o demo segue no ar. "
                 "O `raio-x --pendentes` tenta de novo.", "ERRO", log_lead)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        log(f"Raio-X de {pasta.name} não saiu: {e}", "ERRO", log_lead)
+    except Exception as e:  # noqa: BLE001 — o demo já está no ar: nada aqui vira falha do lead (nem restaura o _vN)
+        log(f"Raio-X de {pasta.name} não saiu: {type(e).__name__}: {e}", "ERRO", log_lead)
 
 
 def status_no_retrato(place_id: str | None) -> str | None:
