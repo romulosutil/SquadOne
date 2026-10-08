@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import CrmMomento from './CrmMomento.vue'
+import CrmObjecao from './CrmObjecao.vue'
+import { colinhaDoLead } from './colinha'
 import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
@@ -10,7 +13,8 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 const props = defineProps<{ lead: CrmLead; visao: CrmVisao }>()
 // Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
 // voltar do navegador, então a ficha não tem botão de voltar próprio.
-const emit = defineEmits<{ registrado: [] }>()
+// `colinha`: o CrmPanel troca para /crm?ver=colinha (fecha a folha, sem recarregar).
+const emit = defineEmits<{ registrado: []; colinha: [] }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
 const nota = ref('')
@@ -54,6 +58,16 @@ const situacaoDoProximo = computed(() => {
   return data < hoje ? 'atrasado' : data === hoje ? 'para hoje' : ''
 })
 const disponivel = computed(() => props.visao.registro.disponivel)
+// A colinha do momento deste lead (colinha.ts): sai da etapa e da última resposta,
+// com os textos já preenchidos com o nome, o artigo e o link do demo dele.
+const colinha = computed(() => colinhaDoLead(props.lead))
+
+// Ctrl/Cmd/Shift/meio abrem a página numa aba nova, como os links da casca (casca/rota.ts).
+function verColinha(e: MouseEvent) {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  e.preventDefault()
+  emit('colinha')
+}
 
 onMounted(async () => {
   await nextTick()
@@ -154,6 +168,15 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       </p>
       <blockquote v-if="lead.resposta.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
       <p v-else class="crm-muted">Só mensagem automática (saudação, horário, menu): ninguém respondeu ainda.</p>
+    </section>
+
+    <!-- Logo depois da resposta: é o que se lê para responder a ela. -->
+    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-colinha">
+      <h3 id="crm-ficha-colinha">Colinha</h3>
+      <p v-if="colinha.motivo" class="crm-colinha__motivo">{{ colinha.motivo }}</p>
+      <CrmObjecao v-for="o in colinha.objecoes" :key="o.id" :objecao="o" :lead="lead" :nivel="4" />
+      <CrmMomento v-for="m in colinha.momentos" :key="m.momento" :passo="m" :lead="lead" :nivel="4" />
+      <a class="crm-colinha__inteira" href="/crm?ver=colinha" @click="verColinha">Ver a colinha inteira <span aria-hidden="true">→</span></a>
     </section>
 
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-acoes">
