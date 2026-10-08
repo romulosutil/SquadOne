@@ -307,6 +307,25 @@ function numeroDoWhatsapp(...fontes: string[]): string | undefined {
   return undefined;
 }
 
+/** Limite do texto que a fila de envio mostra: a primeira mensagem tem ~300 caracteres. */
+export const MAX_MENSAGEM_PRONTA = 1000;
+
+/**
+ * O texto que o `wa_me` do Balcão põe no WhatsApp (`?text=`). A fila de envio da
+ * Central mostra a mensagem antes do toque: o clique no `wa_link` já marca o lead
+ * como enviado, então ler a mensagem depois do clique é tarde.
+ */
+export function textoDoWaMe(valor: string): string | undefined {
+  try {
+    const url = new URL(valor);
+    if (url.hostname !== "wa.me" && url.hostname !== "api.whatsapp.com") return undefined;
+    const t = (url.searchParams.get("text") ?? "").trim();
+    return t ? t.slice(0, MAX_MENSAGEM_PRONTA) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ------------------------------------------------------------------ modelo
 
 export type CrmOrigemDoEvento = "automático" | "manual";
@@ -362,6 +381,8 @@ export interface CrmLead {
    * A/B/C, EN, ou "manual") e a versão do site (`site_versao`). Ausente quando a planilha não diz.
    */
   abordagem?: { mensagem?: string; site?: string };
+  /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp (do `wa_me`). */
+  mensagemPronta?: string;
   eventos: CrmEvento[];
   /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o diagnóstico). */
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string };
@@ -664,6 +685,7 @@ function leadDoSite(linha: Linha, contexto: {
   const webhook = contexto.links.webhook;
   const whatsapp = numeroDoWhatsapp(c("waMe"));
   const waLink = urlHttps(c("waLink"));
+  const mensagemPronta = status === "pronto" && waLink ? textoDoWaMe(c("waMe")) : undefined;
   const planilha = contexto.links.planilhaSite && c("linha") ? `${contexto.links.planilhaSite}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaSite;
   const site = urlHttps(c("site")) ?? pasta?.siteUrl;
   const acoes = urlHttps(c("acoesLink")) ?? (webhook && (pasta || c("site")) ? `${webhook}/lead?id=${encodeURIComponent(chave)}` : undefined);
@@ -725,6 +747,7 @@ function leadDoSite(linha: Linha, contexto: {
     notas,
     ...(resposta ? { resposta } : {}),
     ...(Object.keys(abordagem).length ? { abordagem } : {}),
+    ...(mensagemPronta ? { mensagemPronta } : {}),
     eventos,
     links: {
       ...(site ? { site } : {}),

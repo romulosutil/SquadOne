@@ -116,6 +116,8 @@ export interface CrmLead {
   resposta?: CrmResposta
   /** Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site. */
   abordagem?: { mensagem?: string; site?: string }
+  /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
+  mensagemPronta?: string
   eventos: CrmEvento[]
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string }
   pasta?: {
@@ -129,11 +131,19 @@ export interface CrmLead {
 
 export type CrmGrupoHojeId = 'proximo' | 'followup' | 'resposta' | 'revisar' | 'proposta' | 'enviar'
 
+export interface CrmItemHoje {
+  leadId: string
+  acao: string
+  detalhe: string
+  links: CrmLink[]
+  ordem: number
+}
+
 export interface CrmGrupoHoje {
   id: CrmGrupoHojeId
   titulo: string
   explicacao: string
-  itens: Array<{ leadId: string; acao: string; detalhe: string; links: CrmLink[]; ordem: number }>
+  itens: CrmItemHoje[]
 }
 
 export interface CrmContagem {
