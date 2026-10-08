@@ -1,0 +1,13 @@
+[Unit]
+Description=PRUMO — Raio-X dos leads prontos que ainda não têm (ou perderam) a página /raio-x do demo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# vercel mora em ~/.local/bin. Cada Raio-X é um deploy (hobby: 100 por dia, divididos com o
+# gerador): no máximo 6 por rodada; o gerador já publica o dos leads novos na hora.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/.local/bin/raio-x --pendentes --max 6
+TimeoutStartSec=1h
+Nice=10

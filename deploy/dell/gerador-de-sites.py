@@ -121,6 +121,10 @@ TENTATIVA_FALHA = "_tentativa-falha"
 BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
 ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md")
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
+# Raio-X do PRUMO (08/10/2026, deploy/dell/raio-x.py): depois de cada demo validado, o runner
+# publica `/raio-x` no mesmo projeto. O deploy do Claude só leva index.html e og.jpg, então um
+# refazer apaga o Raio-X do ar e este gancho o devolve. Sem o binário, o demo segue sem ele.
+RAIO_X = Path(os.environ.get("RAIO_X_BIN", str(Path.home() / ".local/bin/raio-x")))
 PROMPT_PERSONALIZADO = (
     "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, conceito autoral, "
     "redação própria e revisão crítica antes de publicar), com mais movimento, usando as fotos e recursos extras; "
@@ -618,6 +622,24 @@ def validar(pasta: Path, log_lead: Path) -> bool:
     return codigo == 200
 
 
+def publicar_raio_x(pasta: Path, log_lead: Path) -> None:
+    """Nunca falha o lead: o demo já está no ar e validado. O raio-x escreve no log do
+    lead (inclusive a saída do vercel, onde o lote-continuo procura o limite de deploys)."""
+    if not RAIO_X.is_file():
+        log(f"Raio-X não publicado: {RAIO_X} não existe.", "ERRO", log_lead)
+        return
+    try:
+        with open(log_lead, "a", encoding="utf-8") as erros:
+            r = subprocess.run([sys.executable, str(RAIO_X), pasta.name], stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=erros, timeout=20 * 60,
+                               env={**os.environ, "AUTO_DIR": str(AUTO)})
+        if r.returncode != 0:
+            log(f"Raio-X de {pasta.name} não saiu (código {r.returncode}); o demo segue no ar. "
+                "O `raio-x --pendentes` tenta de novo.", "ERRO", log_lead)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"Raio-X de {pasta.name} não saiu: {e}", "ERRO", log_lead)
+
+
 def status_no_retrato(place_id: str | None) -> str | None:
     """Status do lead na planilha (retrato do fluxo 07, até 26 h); None = sem retrato ou lead fora dele."""
     try:
@@ -732,6 +754,7 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
         falha = pasta / "falha.log"
         if falha.exists():
             falha.unlink()
+        publicar_raio_x(pasta, log_lead)
         return True, ""
     if resultado["estourou"]:
         return False, f"Claude Code excedeu o timeout de {timeout_min} min"

@@ -1108,6 +1108,62 @@ Rômulo; ver "Depois do envio"). O gerador os deixa na raiz, fora da fila
 (`--listar` mostra o motivo); religar a busca os devolve na segunda seguinte.
 Sem o arquivo, ou ilegível, a fila é a de sempre.
 
+### Raio-X do PRUMO (`raio-x.*`, 08/10/2026)
+
+A porta de entrada do PRUMO (plano de 08/10/2026): uma página em `<site_url>/raio-x`,
+**no mesmo projeto `demo-<slug>`** (o hobby limita projetos), com como o negócio
+aparece no Google, o que já está bom, até 3 pontos que mandam cliente para o
+concorrente (cada um com o porquê em linguagem de dono), o link do demo e
+"R$ 990 + R$ 69/mês, paga depois de ver funcionando". Alimenta a variação C da
+primeira mensagem do Balcão.
+
+- **Feito por código, sem modelo.** A única fonte é o `content.md` do Caçador:
+  nota e avaliações, telefone (celular ou fixo, pela regra do nó "Pontuar"),
+  situação do site no Google (fora do ar, rede social, nenhum) e as linhas de
+  "Por que este lead" que vêm de campo do Places com regra exata (horário
+  preenchido, fotos com o nome do negócio, avaliação nos últimos 30 dias). Sem
+  essa seção nada disso é afirmado. O que vem da busca do Gemini (WhatsApp
+  "achado", Instagram "achado", "dono atende", o briefing) nunca entra. A página
+  diz a data em que os dados foram lidos e leva ao perfil no Google Maps.
+- **Quantos pontos o dado sustenta, nunca inventados.** Em 08/10/2026, dos 88
+  demos no ar, 5 tinham 3 pontos verificáveis, 34 tinham 2, 47 tinham 1 e 2
+  nenhum (sem ponto não há Raio-X). O Caçador escolhe justamente perfis bons
+  (celular, horário, fotos, nota alta). Mais pontos dependem de o Caçador gravar
+  mais do Places (o horário de verdade, por exemplo).
+- **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` da pasta +
+  `raio-x/index.html`. Antes, o `index.html` da pasta é comparado byte a byte
+  com o que está no ar; se diferem, nada sobe (o Raio-X nunca troca o demo).
+  Depois, `/raio-x` tem de responder 200 com a marca `data-raio-x` e o demo tem de
+  continuar igual. Uma cópia fica em `<slug>/raio-x.html`.
+- **Recibo.** O `publicado.json` ganha (gravação atômica, os outros campos
+  intactos) `raio_x_url` (a URL que o Balcão manda, `<site_url>/raio-x`),
+  `raio_x_pontos` (1 a 3: quantos pontos a página mostra), `raio_x_versao` e
+  `raio_x_em`. O Balcão já lê o recibo inteiro (`item.json.recibo`).
+- **Quando sai.** O gerador chama `raio-x <slug>` depois de cada demo validado
+  (também no refazer, cujo deploy do Claude tira o `/raio-x` do ar); falha só
+  vai ao log do lead. O `raio-x.timer` (11:15 e 17:15) roda `--pendentes --max 6`:
+  leads `pronto` na raiz (retrato da planilha com até 26 h) sem Raio-X da versão
+  atual ou com ele fora do ar; pula o lead que o gerador está gerando e o demo
+  apagado. A saída do `vercel` vai para `.logs/execucao-<slug>.log`, onde o
+  `lote-continuo` procura o limite de deploys; o próprio raio-x para no limite.
+
+```bash
+raio-x --simular higor-ferreira-advogado   # o diagnóstico, sem publicar nem gravar
+raio-x --html higor-ferreira-advogado --saida /tmp/x.html   # só a página
+raio-x higor-ferreira-advogado             # publica e grava o recibo
+raio-x --pendentes --simular               # quem o timer pegaria
+HOME=/tmp/home-teste python3 deploy/dell/raio-x.py --testar
+```
+
+Instalar (numa sessão no Dell):
+
+```bash
+install -m 755 deploy/dell/raio-x.py ~/.local/bin/raio-x
+install -m 755 deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+cp deploy/dell/raio-x.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now raio-x.timer
+```
+
 ### O como-fazer-o-site é versionado (`deploy/dell/auto-site/`, 08/10/2026)
 
 O processo que o Claude segue em cada lead mora em dois arquivos do
