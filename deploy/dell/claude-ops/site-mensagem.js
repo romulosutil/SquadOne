@@ -122,7 +122,18 @@ const FEMININOS = ['clinica', 'academia', 'casa', 'barbearia', 'pizzaria', 'pada
 
 function semAcento(t) { return String(t || '').normalize('NFD').replace(/[^a-zA-Z0-9 ]/g, ''); }
 function primeiraPalavra(t) { return String(t || '').trim().split(' ')[0] || ''; }
-function artigoDe(nome) { return FEMININOS.indexOf(semAcento(primeiraPalavra(nome)).toLowerCase()) >= 0 ? 'da' : 'do'; }
+// 08/10/2026: a primeira rodada com o nome na frase ("site do Advogada Camila Brito",
+// "Vi o AMANDA CAMILO ADVOCACIA") mostrou que nome de pessoa e titulo feminino eram
+// lidos como masculinos. Primeira palavra terminada em "a" e feminina, salvo as
+// palavras masculinas abaixo; mais "Dra." e os nomes femininos que nao terminam em "a".
+const TITULOS_FEMININOS = ['dra', 'doutora', 'advogada', 'arquiteta', 'psicologa', 'medica', 'odontologa', 'veterinaria', 'professora', 'corretora', 'engenheira'];
+const NOMES_FEMININOS = ['karolinne', 'karoline', 'caroline', 'carolline', 'raquel', 'isabel', 'beatriz', 'ines', 'ingrid', 'alice', 'aline', 'denise', 'elaine', 'simone', 'tatiane', 'viviane', 'cristiane', 'gisele', 'michele', 'michelle', 'daniele', 'danielle', 'jaqueline', 'eliane', 'luciane', 'rosane', 'solange', 'miriam', 'mirian', 'ester', 'ruth', 'lais', 'thais', 'tais', 'yasmin', 'evelyn', 'ellen', 'kelly', 'sueli', 'nathalie', 'camille', 'nicole', 'gabrielle', 'joyce', 'suelen', 'marlene', 'irene', 'jane', 'cleide', 'neide', 'iris', 'elis', 'deise', 'rose', 'liz', 'lis'];
+const MASCULINOS_EM_A = ['sistema', 'clima', 'programa', 'dia', 'mapa', 'planeta', 'problema', 'tema', 'cinema', 'poema', 'alfa', 'delta', 'omega', 'gama', 'beta', 'luca', 'joshua', 'nikita', 'garcia', 'costa', 'souza', 'sousa', 'silva', 'moura', 'rocha', 'vieira', 'pereira', 'oliveira', 'ferreira', 'correa', 'lima', 'cunha', 'mota', 'motta', 'nogueira', 'teixeira', 'siqueira', 'moreira', 'barbosa', 'cardoso'];
+function artigoDe(nome) {
+  const p = semAcento(primeiraPalavra(nome)).toLowerCase();
+  if (FEMININOS.indexOf(p) >= 0 || TITULOS_FEMININOS.indexOf(p) >= 0 || NOMES_FEMININOS.indexOf(p) >= 0) return 'da';
+  return p.length > 2 && p.slice(-1) === 'a' && MASCULINOS_EM_A.indexOf(p) < 0 ? 'da' : 'do';
+}
 // O artigo sem a preposicao, para "Vi a Clinica X" / "Vi o Escritorio Y" (variacao B).
 function artigoSimplesDe(nome) { return artigoDe(nome) === 'da' ? 'a' : 'o'; }
 

@@ -33,7 +33,23 @@ export const FEMININOS = ["clinica", "academia", "casa", "barbearia", "pizzaria"
 
 const semAcento = (t: string) => String(t || "").normalize("NFD").replace(/[^a-zA-Z0-9 ]/g, "");
 const primeiraPalavra = (t: string) => String(t || "").trim().split(" ")[0] || "";
-export const artigoDe = (nome: string) => (FEMININOS.includes(semAcento(primeiraPalavra(nome)).toLowerCase()) ? "da" : "do");
+/** Espelho das listas de 08/10/2026 do JS: títulos e nomes femininos; "…a" é feminino salvo estas. */
+export const TITULOS_FEMININOS = ["dra", "doutora", "advogada", "arquiteta", "psicologa", "medica", "odontologa", "veterinaria", "professora",
+  "corretora", "engenheira"];
+export const NOMES_FEMININOS = ["karolinne", "karoline", "caroline", "carolline", "raquel", "isabel", "beatriz", "ines", "ingrid", "alice",
+  "aline", "denise", "elaine", "simone", "tatiane", "viviane", "cristiane", "gisele", "michele", "michelle", "daniele", "danielle",
+  "jaqueline", "eliane", "luciane", "rosane", "solange", "miriam", "mirian", "ester", "ruth", "lais", "thais", "tais", "yasmin", "evelyn",
+  "ellen", "kelly", "sueli", "nathalie", "camille", "nicole", "gabrielle", "joyce", "suelen", "marlene", "irene", "jane", "cleide", "neide",
+  "iris", "elis", "deise", "rose", "liz", "lis"];
+export const MASCULINOS_EM_A = ["sistema", "clima", "programa", "dia", "mapa", "planeta", "problema", "tema", "cinema", "poema", "alfa",
+  "delta", "omega", "gama", "beta", "luca", "joshua", "nikita", "garcia", "costa", "souza", "sousa", "silva", "moura", "rocha", "vieira",
+  "pereira", "oliveira", "ferreira", "correa", "lima", "cunha", "mota", "motta", "nogueira", "teixeira", "siqueira", "moreira", "barbosa",
+  "cardoso"];
+export const artigoDe = (nome: string) => {
+  const p = semAcento(primeiraPalavra(nome)).toLowerCase();
+  if (FEMININOS.includes(p) || TITULOS_FEMININOS.includes(p) || NOMES_FEMININOS.includes(p)) return "da";
+  return p.length > 2 && p.endsWith("a") && !MASCULINOS_EM_A.includes(p) ? "da" : "do";
+};
 const ehEua = (numero: string) => numero.startsWith("1") && numero.length === 11;
 
 function preencher(molde: string, nome: string, url: string): string {
