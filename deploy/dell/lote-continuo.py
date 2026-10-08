@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,17 +47,21 @@ CLAUDE_OPS = HOME / ".local/share/claude-ops"
 RETRATO = HOME / ".local/share/n8n-estado/site-leads.json"
 CACADOR_ID = "oow8TkxrAf4fVvTj"  # "01 · Caçador" no n8n do Dell
 
-VERSAO_ALVO = 2
-TIMEOUT_MIN = 90          # por lead, no modo personalizado (pesquisa + redação + movimento)
-LEVA_NOVOS = 3            # leads novos por leva
-LEVA_REFAZER = 3          # demos refeitos por leva
+# GERADOR_PREMIUM=1 (ou `--premium`): todo lead, novo ou refeito, sai no modo premium (referências do Refero,
+# UX/UI, crítica visual). Os demos de versão menor são refeitos; leva de 1 lead, que reavalia a fila a cada site.
+PREMIUM = "--premium" in sys.argv[1:] or os.environ.get("GERADOR_PREMIUM", "").strip().lower() in ("1", "true", "sim")
+VERSAO_ALVO = 3 if PREMIUM else 2
+TIMEOUT_MIN = 180 if PREMIUM else 90   # por lead (o premium pesquisa, constrói e critica 3 vezes)
+LEVA_NOVOS = 1 if PREMIUM else 3       # leads novos por leva
+LEVA_REFAZER = 1 if PREMIUM else 3     # demos refeitos por leva
 CACADOR_VAZIAS = 5
 CACADOR_MAX = 80
 MAX_LIMITES = 16          # 16 x 30 min = 8 h de limite de uso seguidas
 ESPERA_LIMITE_S = 30 * 60
 ESPERA_DEPLOY_S = 60 * 60
 LIMITE_DE_USO = re.compile(r"Limite de uso do Claude")
-LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments")
+LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments"
+                              r"|api-projects|too many projects|project limit|maximum number of projects")
 SALVOS = re.compile(r"Salvar lead na planilha: \w+ itens=(\d+)")
 
 
@@ -166,12 +171,31 @@ def novo_no_log(desde: int) -> str:
 def rodar_leva(args: list[str], rotulo: str) -> tuple[bool, bool]:
     """Roda o gerador e devolve (bateu no limite de uso, bateu no limite de deploys)."""
     inicio = tamanho_log()
+    desde = time.time()
     log(f"Leva: {rotulo}")
     r = subprocess.run([sys.executable, str(RUNNER), *args], timeout=12 * 3600)
     texto = novo_no_log(inicio)
     concluidos = len(re.findall(r"Lead concluído:", texto))
     log(f"Leva terminou (exit {r.returncode}): {concluidos} concluído(s).")
+    # O erro da Vercel aparece no log do lead (o deploy roda dentro do Claude ou no runner), não no da fila.
+    texto += limite_nos_logs_dos_leads(desde)
     return bool(LIMITE_DE_USO.search(texto)), bool(LIMITE_DE_DEPLOY.search(texto))
+
+
+def limite_nos_logs_dos_leads(desde: float, logs: Path | None = None) -> str:
+    """Trechos dos logs de lead alterados depois de `desde` que casam com o limite de deploys/projetos da Vercel.
+    `logs` existe para o teste apontar para uma pasta temporária."""
+    achados = []
+    try:
+        for p in (logs or LOGS).glob("execucao-*.log"):
+            if p.name == "execucao-fila.log" or p.stat().st_mtime < desde:
+                continue
+            m = LIMITE_DE_DEPLOY.search(p.read_text(encoding="utf-8", errors="replace")[-20000:])
+            if m:
+                achados.append(f" {m.group(0)}")
+    except OSError:
+        pass
+    return "".join(achados)
 
 
 def limpar_antigos() -> None:
@@ -199,13 +223,14 @@ def main() -> int:
             limpar_antigos()
             ultima_limpeza = hoje
         novos = fila_nova()
+        modo = ["--premium"] if PREMIUM else []
         if novos:
-            uso, deploy = rodar_leva(["--personalizado", "--quantidade", str(LEVA_NOVOS), "--timeout-min", str(TIMEOUT_MIN),
+            uso, deploy = rodar_leva(["--personalizado", *modo, "--quantidade", str(LEVA_NOVOS), "--timeout-min", str(TIMEOUT_MIN),
                                       "--teto-horas", "8"], f"{novos} lead(s) novo(s) na fila")
         else:
             refazer = candidatos_refazer()[:LEVA_REFAZER]
             if refazer:
-                uso, deploy = rodar_leva(["--refazer", *refazer, "--timeout-min", str(TIMEOUT_MIN), "--teto-horas", "8"],
+                uso, deploy = rodar_leva(["--refazer", *refazer, *modo, "--timeout-min", str(TIMEOUT_MIN), "--teto-horas", "8"],
                                          "refazer " + ", ".join(refazer))
             elif cacador.is_alive():
                 time.sleep(180)
@@ -223,8 +248,10 @@ def main() -> int:
         else:
             limites = 0
         if deploy:
-            log(f"Limite de deploys da Vercel; espera {ESPERA_DEPLOY_S // 60} min.")
-            time.sleep(ESPERA_DEPLOY_S)
+            # Pedido do Rômulo (08/10/2026): seguir "até chegar ao limite da Vercel". Chegou: para e avisa;
+            # o limite de deploys do hobby zera em 24 h, o de projetos só com `site-demos-limpeza`.
+            log("Limite da Vercel (deploys por dia ou projetos); encerrando o lote.")
+            break
     limpar_antigos()
     log(f"Lote contínuo terminou. Fila nova: {fila_nova()}; a refazer: {len(candidatos_refazer())}.")
     return 0
@@ -276,6 +303,18 @@ def testar() -> int:
             self.assertTrue(LIMITE_DE_USO.search("[ERRO] Limite de uso do Claude: parando a lista de refazer."))
             self.assertTrue(LIMITE_DE_DEPLOY.search("Error: Resource is limited - try again in 24 hours (more than 100, code: api-deployments-free-per-day)"))
             self.assertFalse(LIMITE_DE_DEPLOY.search("Aliased: https://demo-x.vercel.app"))
+
+        def test_limite_da_vercel_no_log_do_lead_so_conta_se_for_desta_leva(self):
+            (self.raiz / "execucao-a.log").write_text("Error: Resource is limited - try again in 24 hours (api-deployments-free-per-day)")
+            (self.raiz / "execucao-b.log").write_text("Aliased: https://demo-b.vercel.app")
+            (self.raiz / "execucao-fila.log").write_text("api-deployments-free-per-day")  # o da fila não conta aqui
+            self.assertIn("Resource is limited", limite_nos_logs_dos_leads(0, self.raiz))
+            self.assertEqual(limite_nos_logs_dos_leads(time.time() + 3600, self.raiz), "")  # log velho: de outra leva
+            (self.raiz / "execucao-a.log").unlink()
+            self.assertEqual(limite_nos_logs_dos_leads(0, self.raiz), "")
+
+        def test_limite_de_projetos_tambem_para_o_lote(self):
+            self.assertTrue(LIMITE_DE_DEPLOY.search("Error: Your team has reached the maximum number of projects"))
 
         def test_conta_leads_salvos_do_cacador(self):
             saida = "  Salvar lead na planilha: success itens=4 \n  Salvar lead na planilha: success itens=0 \n"

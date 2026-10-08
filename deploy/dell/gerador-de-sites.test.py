@@ -465,11 +465,22 @@ class ListaDePermissao(unittest.TestCase):
             cmd = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
             sistema = cmd[cmd.index("--append-system-prompt") + 1]
             for trecho in ("MODO PREMIUM", "refero-aprender", "/tmp/gerador-x/refs", "REFERENCIAS.md", "CRITICA-N.md",
-                           "?qa=1", "aprendizados-refero.md", "feTurbulence", "bloco cinza liso", "MODO PERSONALIZADO"):
+                           "?qa=1", "aprendizados-refero.md", "feTurbulence", "bloco cinza liso", "MODO PERSONALIZADO",
+                           "CONCEITO.md", "REGRA ZERO: nada inventado", "?qa=teste", "Rua Horácio Santana 342"):
                 self.assertIn(trecho, sistema)
+            self.assertNotIn("REVISÃO DIRIGIDA", sistema)
+            self.m.NOTA_DA_REVISAO = "a seção X é invenção sem base"
+            self.m.BACKUP_EM_CURSO["lead-p"] = "_v3"
+            com_nota = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
+            sistema_nota = com_nota[com_nota.index("--append-system-prompt") + 1]
+            self.assertIn("REVISÃO DIRIGIDA", sistema_nota)
+            self.assertIn("a seção X é invenção sem base", sistema_nota)
+            self.assertIn("lead-p/_v3/", sistema_nota)
             self.assertIn(str(self.auto / "_build/aprendizados-refero.md"), sistema)
         finally:
             self.m.MODO_PREMIUM = False
+            self.m.NOTA_DA_REVISAO = None
+            self.m.BACKUP_EM_CURSO.clear()
         comum = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
         self.assertNotIn("MODO PREMIUM", comum[comum.index("--append-system-prompt") + 1])
 
