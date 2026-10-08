@@ -627,6 +627,36 @@ cd ~/.local/share/claude-ops && python3 fecha-ciclos.py --tailnet   # base no Le
 
 O Balcão remonta o `wa_link` dos leads `pronto` a cada hora
 (`balcao-cruzar.js`); os textos das mensagens ficam em `site-mensagem.js`.
+
+**O que cada lead recebeu** (07/10/2026, para o funil aprender comparando). Duas
+colunas no fim da aba Leads, gravadas pelo Balcão (`python3
+site-antes-da-venda.py --colunas` cria; o `--balcao` também):
+
+- `mensagem_variante`: a letra do texto que o `wa_link` leva (`A`, `B`, `C` de
+  `VARIACOES`; `EN` nos EUA; vazio sem telefone). A letra sai do `place_id`, não
+  da ordem da rodada, então um lead `pronto` não troca de variação entre duas
+  rodadas; com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
+  `pronto`: o clique no `wa_link` marca `enviado` e a letra fica. Quando o envio
+  aparece sem o clique (o observador vê `owner_sent`, a leitura ou a resposta de
+  um lead ainda `novo`/`pronto`), o observador grava `manual`: o texto foi o que
+  o Rômulo escreveu ou colou (o aviso "Site publicado" do Hermes sugere o texto
+  A sem o detalhe dos elogios, mas não dá para saber se ele editou). Limite: o
+  clique com `marcar=nao` (operador do Dell) não deixa rastro para o observador,
+  e esse envio também vira `manual`. Envios de antes de 07/10 ficam vazios.
+- `site_versao`: `padrão`, `personalizado-v1`, `personalizado-v2`... lida do
+  `personalizado.json` da pasta do lead (`gerador-de-sites.py`; sem o arquivo, o
+  site saiu no modo padrão). Gravada a cada hora para o lead `pronto` e, para o
+  resto, só quando a coluna ainda não diz a da pasta (lead enviado nunca é
+  refeito). As cópias `<slug>/_v1/` do modo personalizado têm `publicado.json` com
+  o mesmo `place_id` e são ignoradas (até 07/10 elas faziam o lead "morar" em
+  `slug/_v1` no retrato e nas contas do Balcão).
+
+```bash
+cd ~/.local/share/claude-ops
+python3 site-antes-da-venda.py --testar       # cruzamento no node, planilha de mentira, sem n8n
+python3 site-antes-da-venda.py --testar-n8n   # cópia do Balcão: recibos reais, planilha de mentira, nada gravado
+python3 site-antes-da-venda.py --balcao       # colunas que faltam + publica o Balcão
+```
 O texto do convite do PRUMO fica em `prumo-simples.py` (função `convite`) e é
 montado a cada clique; `python3 prumo-simples.py --convite` publica só esse
 fluxo, sem mexer na planilha, no Lead Scout nem na Pontuação. Desde 30/09/2026
@@ -688,7 +718,8 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   `python3 -c 'import json, sys; from n8n import api, put; put(json.load(open(sys.argv[1]))); api("POST", "/workflows/oow8TkxrAf4fVvTj/activate")' backups/cacador-<data>.json`
   na mesma pasta.
 - **Resposta negativa não segura a busca** (05/10/2026): para a pausa, só conta
-  resposta com `resposta_tipo` que não seja `negativa` nem `bot` (ou pasta em
+  resposta com `resposta_tipo` que não seja `negativa`, `exclusao` (desde
+  07/10/2026) nem `bot` (ou pasta em
   `_em-conversa/`). Antes, "não tenho interesse" mantinha pousada e eventos
   ativas.
 - **Migração de nicho** (`claude-ops/site-nichos.py`, 05/10/2026): 83 envios
@@ -742,7 +773,11 @@ planilha (colunas `status_anterior`, `recusado_em`, `fechado_em`,
 acrescentadas no fim da aba Leads) e o pacote do `site-pastas`, espera 2 s e
 volta para a página. A cada hora (:20) grava o retrato
 `n8n-estado/site-leads.json` (sem `itens`: não é pendência) e preenche a coluna
-`acoes_link` de quem tem site. O resumo das 10:30
+`acoes_link` de quem tem site. Desde 07/10/2026 cada lead do retrato leva também
+`resposta_tipo`, `mensagem_variante` e `site_versao` (o que recebeu e o que
+respondeu; ver "Links rastreados"), e `pasta` não cai mais na cópia `_v1/` do
+modo personalizado. `python3 site-lead-acoes.py --testar-retrato` confere o
+código do retrato no node, sem n8n (o `--testar` roda ele antes). O resumo das 10:30
 (`deploy/hermes/scripts/sites_e_pendencias.py`) lê esse retrato e põe uma linha
 com o link para cada enviado sem resposta e cada lead em conversa (até 15 por
 grupo, os mais antigos primeiro).
@@ -779,6 +814,25 @@ site-demos-limpeza --simular             # quem entra e por que os outros não, 
 site-demos-limpeza --apagar              # apaga todos os que entram
 site-demos-limpeza --apagar demo-a demo-b   # só esses (têm de estar entre os que entram)
 ```
+
+**Pedido de exclusão** (`--exclusao`, 07/10/2026). A regra acima não serve a
+quem pediu para apagar: o lead foi marcado `recusado`, e recusado nunca entra.
+O classificador do WhatsApp grava `resposta_tipo` `exclusao` e o aviso pelo
+Hermes traz o comando; **nada apaga sozinho** (RULES 10: mensagem recebida
+propõe). O comando confere o pedido no retrato, então só vale depois do
+próximo `:20` (o aviso diz a hora):
+
+```bash
+site-demos-limpeza --exclusao                  # lista os pedidos com o demo ainda no ar e o comando de cada um
+site-demos-limpeza --exclusao demo-baby-school # apaga esse demo (só pelo nome)
+```
+
+Só entra projeto `demo-*` de um lead com `resposta_tipo` `exclusao` no retrato
+(de até 3 h), que não está fechado, com a pasta na raiz, em `_recusados/`,
+`_em-conversa/` ou `_concluidos/` e o `publicado.json` dela confirmando o
+projeto. Um nome que não entra = nada é apagado. A pasta fica (o
+`publicado.json` ganha `apagado_em`); se o pedido for de apagar tudo, apague a
+pasta à mão. No histórico, `apagou_a_pedido`.
 
 Pelo `vercel project rm` à mão (pede confirmação; o `y` vem do `printf`):
 `printf 'y\n' | vercel project rm demo-x --scope romulodesigns`. Para trazer um
@@ -1118,6 +1172,26 @@ o n8n ainda subindo perdeu três respostas.
   `novo`/`pronto` → `enviado` (+ `enviado_em`); resposta a 5 min ou mais do
   envio → `respondeu_em` (`expirado` volta a `enviado`), e a pasta vai para
   `_em-conversa/` (ver "Pasta auto").
+
+Desde 07/10/2026, todo lead do Site que vira `enviado` por um desses três
+sinais (e não pelo clique no `wa_link`, que já marca `enviado`) ganha
+`mensagem_variante` `manual`: o texto não foi o da variação do Balcão (ver
+"Links rastreados").
+
+**O texto da resposta** (fluxo "WhatsApp — resposta de lead", 05/10/2026): o
+observador manda o que o lead escreveu e o Gemini classifica em `bot` (só
+mensagem automática: não é resposta), `negativa` (recusou: Site → `recusado`,
+como o botão Recusou; PRUMO → "Sem interesse"), `exclusao` (desde 07/10/2026:
+pediu para apagar o site ou o conteúdo, como a Baby School: "se puder excluir
+esse conteúdo por gentileza"), `interesse` (o aviso traz a segunda mensagem,
+com o link) ou `neutra`. Grava `resposta_tipo`, `resposta_trecho` e
+`resposta_em` e avisa o Rômulo pelo Hermes. `exclusao` conta como negativa no
+funil (sai da busca igual) e o aviso propõe apagar o demo com
+`site-demos-limpeza --exclusao demo-<slug>`, a partir do próximo retrato das
+`:20`; nada é apagado sozinho (RULES 10, ver "Página do lead e pausa dos
+demos"). No PRUMO, que não tem demo, vira "Sem interesse" com "Pediu exclusão
+no WhatsApp" na Próxima ação. Resposta de gente a quem ainda estava
+`novo`/`pronto` também grava `manual`.
 
 Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp

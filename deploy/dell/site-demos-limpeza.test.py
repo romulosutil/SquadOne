@@ -72,6 +72,83 @@ class Escolher(unittest.TestCase):
         self.assertFalse(entra(pasta="../fulano")[0])
         self.assertFalse(entra(pasta="")[0])
 
+    def test_pedido_de_exclusao_nao_entra_na_regra_de_quem_nao_interagiu(self):
+        # Quem pediu exclusão foi marcado recusado: só o --exclusao, pelo nome, apaga esse demo.
+        ok, _ = entra(status="recusado", pasta="_recusados/fulano", recusado_em="2026-10-07T10:00:00Z", resposta_tipo="exclusao")
+        self.assertFalse(ok)
+
+
+def pedido(**kw):
+    return lead(**{"status": "recusado", "pasta": "_recusados/fulano", "recusado_em": "2026-10-07T10:00:00Z",
+                   "respondeu_em": "2026-10-07T10:00:00Z", "resposta_tipo": "exclusao", **kw})
+
+
+class EscolherExclusao(unittest.TestCase):
+    def test_quem_pediu_entra_pelo_nome(self):
+        eleitos, recusas = limpeza.escolher_exclusao([pedido(), lead(nome="Outro", vercel_project="demo-outro")], ["demo-fulano"])
+        self.assertEqual(recusas, [])
+        self.assertEqual([(e["projeto"], e["pasta"]) for e in eleitos], [("demo-fulano", "_recusados/fulano")])
+
+    def test_pasta_na_raiz_tambem_entra(self):
+        # O site-pastas ainda não moveu (ou o lead estava pronto): o pedido vale do mesmo jeito.
+        eleitos, _ = limpeza.escolher_exclusao([pedido(pasta="fulano", status="recusado")], ["demo-fulano"])
+        self.assertEqual(len(eleitos), 1)
+
+    def test_sem_pedido_no_retrato_nao_apaga(self):
+        for tipo in ("negativa", "", "interesse"):
+            eleitos, recusas = limpeza.escolher_exclusao([pedido(resposta_tipo=tipo)], ["demo-fulano"])
+            self.assertEqual(eleitos, [], tipo)
+            self.assertIn("não pediu exclusão", recusas[0])
+
+    def test_fechado_nunca(self):
+        for kw in ({"status": "fechado"}, {"pasta": "_fechados/fulano"}):
+            eleitos, recusas = limpeza.escolher_exclusao([pedido(**kw)], ["demo-fulano"])
+            self.assertEqual(eleitos, [])
+            self.assertIn("fechado", recusas[0])
+
+    def test_projeto_desconhecido_repetido_ou_nao_demo(self):
+        self.assertIn("nenhum lead", limpeza.escolher_exclusao([pedido()], ["demo-outro"])[1][0])
+        self.assertIn("mais de um lead", limpeza.escolher_exclusao([pedido(), pedido(nome="Gêmeo")], ["demo-fulano"])[1][0])
+        self.assertIn("nenhum lead", limpeza.escolher_exclusao([pedido(vercel_project="squadone-app")], ["squadone-app"])[1][0])
+
+    def test_pasta_estranha(self):
+        self.assertEqual(limpeza.escolher_exclusao([pedido(pasta="a/b/fulano")], ["demo-fulano"])[0], [])
+        self.assertEqual(limpeza.escolher_exclusao([pedido(pasta="../fulano")], ["demo-fulano"])[0], [])
+
+
+class ComandoExclusao(unittest.TestCase):
+    """main(['--exclusao', ...]) sem disco, Vercel nem aviso: o retrato e o apagar são dublês."""
+
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.originais = {n: getattr(limpeza, n) for n in ("ler_retrato_com_hora", "ja_apagado", "apagar")}
+        self.apagou = []
+        self.leads = [pedido(), lead(nome="Outro", vercel_project="demo-outro", pasta="outro")]
+        limpeza.ler_retrato_com_hora = lambda: (self.leads, datetime(2026, 10, 7, 15, 20, tzinfo=timezone.utc))
+        limpeza.ja_apagado = lambda pasta: pasta == "outro"
+        limpeza.apagar = lambda alvos, a_pedido=False: self.apagou.append((alvos, a_pedido)) or 0
+
+    def tearDown(self):
+        for n, f in self.originais.items():
+            setattr(limpeza, n, f)
+
+    def test_apaga_so_o_pedido_e_marca_a_pedido(self):
+        self.assertEqual(limpeza.main(["--exclusao", "demo-fulano"]), 0)
+        self.assertEqual([([a["projeto"] for a in alvos], ap) for alvos, ap in self.apagou], [(["demo-fulano"], True)])
+
+    def test_um_nome_que_nao_entra_e_nada_e_apagado(self):
+        self.assertEqual(limpeza.main(["--exclusao", "demo-fulano", "demo-outro"]), 2)  # demo-outro já foi apagado
+        self.assertEqual(self.apagou, [])
+
+    def test_sem_nomes_so_lista(self):
+        self.assertEqual(limpeza.main(["--exclusao"]), 0)
+        self.assertEqual(self.apagou, [])
+
+    def test_nao_mistura_com_as_outras_opcoes(self):
+        self.assertEqual(limpeza.main(["--exclusao", "--apagar"]), 2)
+        self.assertEqual(limpeza.main(["--apagar", "--exclusao", "demo-fulano"]), 2)
+        self.assertEqual(self.apagou, [])
+
 
 if __name__ == "__main__":
     unittest.main()

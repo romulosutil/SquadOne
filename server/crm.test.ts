@@ -271,6 +271,11 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
       linhaSite("nao-quer", { status: "recusado", enviado_em: dias(2), respondeu_em: dias(1), recusado_em: dias(1),
         resposta_tipo: "negativa", resposta_trecho: "não temos interesse", resposta_em: dias(1) }),
       linhaSite("tipo-estranho", { status: "enviado", enviado_em: dias(1), resposta_tipo: "talvez" }),
+      // Baby School, 07/10/2026: recusou e pediu para apagar o demo.
+      linhaSite("apagar", { status: "recusado", enviado_em: dias(2), respondeu_em: dias(1), recusado_em: dias(1),
+        site_url: "https://demo-apagar.vercel.app", wa_me: "https://wa.me/5527999990010?text=oi",
+        resposta_tipo: "exclusao", resposta_trecho: "se puder excluir esse conteúdo por gentileza", resposta_em: dias(1),
+        mensagem_variante: "manual", site_versao: "personalizado-v2" }),
     );
     base.fontes.prumo.linhas.push(
       linhaPrumo("robo", { Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "bot",
@@ -295,6 +300,30 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(`${nao.etapa}/${nao.motivoPerda}/${nao.subEtapa}`, "perdido/recusou/Recusou no WhatsApp (resposta negativa)");
     assert.equal(nao.links.segunda, undefined);
     assert.equal(lead(leads, "site:tipo-estranho").resposta, undefined);
+  });
+
+  it("pedido para apagar o demo é uma recusa, com o tipo próprio e sem a segunda mensagem", () => {
+    const apagar = lead(comRespostas(), "site:apagar");
+    assert.equal(`${apagar.etapa}/${apagar.motivoPerda}/${apagar.subEtapa}`, "perdido/recusou/Recusou no WhatsApp (pediu para apagar o demo)");
+    assert.deepEqual(apagar.resposta, { tipo: "exclusao", trecho: "se puder excluir esse conteúdo por gentileza", em: dias(1) });
+    assert.equal(apagar.links.segunda, undefined);
+    assert.ok(apagar.eventos.some((e) => e.tipo === "resposta" && e.rotulo === "Resposta classificada: Pediu para apagar"));
+  });
+
+  it("PRUMO: pedido de exclusão fica em Sem interesse e diz por quê", () => {
+    const base = retrato();
+    base.fontes.prumo.linhas.push(linhaPrumo("apagar", { Etapa: "Sem interesse", "Tipo da resposta": "exclusao", Resposta: "apaguem meus dados" }));
+    const p = lead(montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads, "prumo:apagar");
+    assert.equal(`${p.etapa}/${p.subEtapa}`, "perdido/Sem interesse (pediu exclusão no WhatsApp)");
+  });
+
+  it("a ficha diz que mensagem e que versão do site o lead recebeu, só quando a planilha diz", () => {
+    const leads = comRespostas();
+    assert.deepEqual(lead(leads, "site:apagar").abordagem, { mensagem: "manual", site: "personalizado-v2" });
+    assert.equal(lead(leads, "site:nao-quer").abordagem, undefined);
+    const base = retrato();
+    base.fontes.site.linhas.push(linhaSite("so-versao", { status: "pronto", site_versao: "padrão" }));
+    assert.deepEqual(lead(montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads, "site:so-versao").abordagem, { site: "padrão" });
   });
 
   it("PRUMO: robô não é resposta; interesse leva ao botão do diagnóstico e ao Hoje", () => {

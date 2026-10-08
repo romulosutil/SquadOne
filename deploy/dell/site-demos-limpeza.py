@@ -29,6 +29,16 @@ candidato novo; apagar é sempre ordem explícita:
     site-demos-limpeza --apagar             apaga todos os que entram
     site-demos-limpeza --apagar demo-a demo-b   apaga só esses (têm de estar entre os que entram)
     site-demos-limpeza --dias 7             ensaio com outro prazo (só lista, nunca apaga)
+    site-demos-limpeza --exclusao           lista os pedidos de exclusão ainda no ar (nada apaga)
+    site-demos-limpeza --exclusao demo-a    apaga o demo de quem PEDIU para apagar (07/10/2026)
+
+Pedido de exclusão (`--exclusao`, 07/10/2026): o lead respondeu pedindo para
+apagar o site ou o conteúdo ("se puder excluir esse conteúdo por gentileza",
+Baby School). O classificador do WhatsApp grava `resposta_tipo` "exclusao", marca
+o lead como recusado e o aviso pelo Hermes traz este comando; nada apaga sozinho
+(RULES 10). A regra de cima não serve: recusado nunca entra nela. Aqui entra só
+o projeto nomeado cujo lead, no retrato, tem `resposta_tipo` "exclusao", não
+está fechado e tem o publicado.json da pasta confirmando o projeto. A pasta fica.
 
 Token: o da Vercel CLI (auth.json), renovado pela própria CLI; nunca é impresso.
 Estado em ~/.local/state/site-demos-limpeza/ (avisados.json, historico.jsonl).
@@ -63,6 +73,8 @@ MAX_NOMES = 25
 SP = timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
 STATUS_QUE_ENTRAM = ("enviado", "expirado")
 PASTAS_QUE_ENTRAM = ("", "_concluidos")  # raiz ou expirado; o resto está no jogo ou já recusou
+# Pedido de exclusão: onde a pasta de quem pediu pode estar (recusado vai para _recusados/ pelo site-pastas).
+PASTAS_DA_EXCLUSAO = ("", "_recusados", "_em-conversa", "_concluidos")
 INTERACAO = ("respondeu_em", "fechado_em", "recusado_em")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9._-]{0,179}$")
 
@@ -113,7 +125,33 @@ def escolher(leads: list[dict], hoje: date, dias: int = EXPIRA_DIAS) -> tuple[li
     return eleitos, guardados
 
 
-def ler_retrato() -> list[dict]:
+def escolher_exclusao(leads: list[dict], projetos: list[str]) -> tuple[list[dict], list[str]]:
+    """PURO: dos projetos nomeados, os que se apagam a pedido do lead, e por que cada um dos outros não."""
+    por_projeto: dict[str, list[dict]] = {}
+    for l in leads:
+        por_projeto.setdefault(str(l.get("vercel_project") or ""), []).append(l)
+    eleitos, recusas = [], []
+    for projeto in projetos:
+        achados = por_projeto.get(projeto, []) if projeto.startswith("demo-") else []
+        if len(achados) != 1:
+            recusas.append(f"{projeto}: {'nenhum lead' if not achados else 'mais de um lead'} com esse projeto no retrato")
+            continue
+        l = achados[0]
+        nome = str(l.get("nome") or l.get("pasta") or "?")
+        topo, _, resto = str(l.get("pasta") or "").rpartition("/")
+        tipo = str(l.get("resposta_tipo") or "")
+        if tipo != "exclusao":
+            recusas.append(f"{projeto} ({nome}): no retrato o lead não pediu exclusão (resposta_tipo {tipo or 'vazio'})")
+        elif l.get("status") == "fechado" or topo == "_fechados":
+            recusas.append(f"{projeto} ({nome}): lead fechado; o demo é dele")
+        elif topo not in PASTAS_DA_EXCLUSAO or not SLUG.match(resto or ""):
+            recusas.append(f"{projeto} ({nome}): pasta {l.get('pasta') or '?'} não é a de um lead")
+        else:
+            eleitos.append({"nome": nome, "projeto": projeto, "pasta": str(l["pasta"]), "enviado_em": str(l.get("enviado_em") or "")})
+    return eleitos, recusas
+
+
+def ler_retrato_com_hora() -> tuple[list[dict], datetime]:
     d = ler_json(RETRATO)
     if not isinstance(d, dict):
         raise RuntimeError("sem retrato da planilha (site-leads.json)")
@@ -124,7 +162,11 @@ def ler_retrato() -> list[dict]:
     if datetime.now(timezone.utc) - gerado > RETRATO_VELHO:
         raise RuntimeError(f"retrato da planilha velho ({gerado.astimezone(SP):%d/%m %H:%M}); uma resposta recente "
                            "poderia estar de fora. O fluxo 07 grava de hora em hora")
-    return [l for l in d.get("leads", []) if isinstance(l, dict)]
+    return [l for l in d.get("leads", []) if isinstance(l, dict)], gerado
+
+
+def ler_retrato() -> list[dict]:
+    return ler_retrato_com_hora()[0]
 
 
 def ja_apagado(pasta: str) -> bool:
@@ -192,7 +234,7 @@ def marcar_apagado(pasta: str) -> None:
     tmp.replace(recibo)
 
 
-def apagar(alvos: list[dict]) -> int:
+def apagar(alvos: list[dict], a_pedido: bool = False) -> int:
     chave = token()
     apagados, falhas = [], []
     for e in alvos:
@@ -206,14 +248,19 @@ def apagar(alvos: list[dict]) -> int:
                 vercel("DELETE", f"/v9/projects/{info['id']}", chave)  # a API apaga pelo id (prj_...)
             marcar_apagado(e["pasta"])
             apagados.append(e)
-            anotar({"acao": "apagou" if info is not None else "ja_nao_existia", "projeto": e["projeto"],
+            acao = "apagou" if info is not None else "ja_nao_existia"
+            anotar({"acao": acao + ("_a_pedido" if a_pedido else ""), "projeto": e["projeto"],
                     "nome": e["nome"], "enviado_em": e["enviado_em"]})
             print(f"{'apagado' if info is not None else 'já não existia'}: {e['projeto']}")
         except RuntimeError as err:
             falhas.append(f"{e['nome']}: {err}")
     if apagados or falhas:
         linhas = []
-        if apagados:
+        if apagados and a_pedido:
+            linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel a pedido do lead (pediu exclusão no WhatsApp). "
+                       "A pasta continua em ~/auto-site; se o pedido for de apagar tudo, apague a pasta à mão."]
+            linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
+        elif apagados:
             linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel (enviado há {EXPIRA_DIAS}+ dias, sem nenhuma "
                        "interação). A pasta continua em ~/auto-site."]
             linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
@@ -225,7 +272,37 @@ def apagar(alvos: list[dict]) -> int:
     return 1 if falhas else 0
 
 
+def exclusao(nomes: list[str]) -> int:
+    """Sem nomes, lista os pedidos de exclusão com o demo ainda no ar; com nomes, apaga os que o retrato confirma."""
+    leads, gerado = ler_retrato_com_hora()
+    vivos = [l for l in leads if not (l.get("pasta") and ja_apagado(str(l["pasta"])))]
+    if not nomes:
+        pedidos = [l for l in vivos if l.get("resposta_tipo") == "exclusao" and str(l.get("vercel_project") or "").startswith("demo-")]
+        print(f"{len(pedidos)} pedido(s) de exclusão com o demo no ar (retrato das {gerado.astimezone(SP):%H:%M})")
+        for l in pedidos:
+            print(f"  site-demos-limpeza --exclusao {l['vercel_project']}   ({l.get('nome') or l.get('pasta')})")
+        return 0
+    apagados_antes = {str(l.get("vercel_project")) for l in leads if l not in vivos}
+    eleitos, recusas = escolher_exclusao(vivos, [n for n in nomes if n not in apagados_antes])
+    recusas += [f"{n}: já foi apagado (apagado_em no publicado.json)" for n in nomes if n in apagados_antes]
+    if recusas:
+        print("Nada foi apagado:")
+        for r in recusas:
+            print(f"  {r}")
+        if any("não pediu exclusão" in r for r in recusas):
+            print(f"O retrato é das {gerado.astimezone(SP):%H:%M}; o fluxo 07 grava de hora em hora (:20). Pedido mais novo que "
+                  "isso aparece no próximo (ou agora: cd ~/.local/share/claude-ops && python3 site-lead-acoes.py --retrato-agora).")
+        return 2
+    return apagar(eleitos, a_pedido=True)
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--exclusao"]:
+        nomes = argv[1:]
+        if any(not n.startswith("demo-") for n in nomes):
+            print("--exclusao leva só nomes de projeto demo-* (e nenhuma outra opção)")
+            return 2
+        return exclusao(nomes)
     dias, quero_apagar, nomes, simular = EXPIRA_DIAS, False, [], False
     i = 0
     while i < len(argv):
@@ -258,6 +335,9 @@ def main(argv: list[str]) -> int:
         print(f"  {e['projeto']}  ({e['nome']}, enviado {e['enviado_em']})")
     futuros = sorted(m for _, m in guardados if m.startswith("entra em"))
     print(f"{len(guardados)} ficam de fora; {len(futuros)} deles ainda dentro do prazo")
+    pedidos = [l for l in leads if l.get("resposta_tipo") == "exclusao"]
+    if pedidos:
+        print(f"{len(pedidos)} pediram para apagar o demo (fora desta regra): site-demos-limpeza --exclusao lista os comandos")
 
     if quero_apagar:
         if nomes:

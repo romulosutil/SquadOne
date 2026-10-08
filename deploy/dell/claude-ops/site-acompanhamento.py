@@ -23,7 +23,8 @@ gerador de sites deixa fora da fila (gerador-de-sites.py).
 
 Na mesma data, depois da migração de nicho: resposta com `resposta_tipo`
 negativa ou bot não segura a busca. As 11 respostas até ali eram todas "não
-tenho interesse", e pousada e eventos seguiam ativas por causa delas.
+tenho interesse", e pousada e eventos seguiam ativas por causa delas. Desde
+07/10/2026 "exclusao" (pediu para apagar o demo) conta como negativa.
 
 O que foi enviado antes de 29/09/2026 é acervo: nada automático; o resumo único
 sai por `--resumo-backlog`.
@@ -211,9 +212,10 @@ const respondeuHumano = (l) => {{
 // Para a pausa, "não tenho interesse" e robô não pagam o site (migração de nicho de
 // 05/10/2026: 11 respostas em 83 envios, as 11 negativas, e pousada seguia rodando
 // porque a regra contava qualquer resposta). Vale interesse, neutra ("quem é?"),
-// resposta ainda sem tipo e conversa aberta à mão.
+// resposta ainda sem tipo e conversa aberta à mão. "exclusao" (pediu para apagar o demo,
+// 07/10/2026) é uma negativa para o funil.
 const respondeu = (l) => topo(l) === '_em-conversa'
-  || (respondeuHumano(l) && !['negativa', 'bot'].includes(txt(l.resposta_tipo).toLowerCase()));
+  || (respondeuHumano(l) && !['negativa', 'exclusao', 'bot'].includes(txt(l.resposta_tipo).toLowerCase()));
 const medir = (ls) => ({{
   leads: ls.filter(l => txt(l.status) !== 'descartado').length,
   descartados: ls.filter(l => txt(l.status) === 'descartado').length,
@@ -528,6 +530,8 @@ def rodar_no(codigo: str, dados: dict, entrada: list) -> list:
             "const $ = (n) => ({ all: () => (dados[n] ?? []).map(json => ({ json })), first: () => ({ json: dados[n] }) });\n"
             "const $input = { all: () => " + json.dumps(entrada, ensure_ascii=False) + ".map(json => ({ json })) };\n"
             "const $now = { toFormat: () => '2026-10-05T08:00' };\n"
+            # O aviso leva a origem (n8n.ORIGEM_JS, 06/10/2026), que lê o nome do fluxo.
+            "const $workflow = { name: '06 · Funil semanal (teste)' };\n"
             "const itens = (() => {\n" + codigo + "\n})();\n"
             "console.log(JSON.stringify(itens.map(i => i.json)));\n")
     with tempfile.TemporaryDirectory() as d:
@@ -572,6 +576,9 @@ def testar_regra() -> int:
         + leads("buf", "buffet infantil", "Ribeirão Preto", "2026-09-26T06:05:00-03:00", 4)
         + leads("bun", "buffet infantil", "Ribeirão Preto", "2026-09-26T06:05:00-03:00", 2,
                 respondeu_em="2026-10-01T12:00:00-03:00", resposta_tipo="negativa")
+        # Pediu para apagar o demo (07/10/2026): para o funil é negativa.
+        + leads("bux", "buffet infantil", "Ribeirão Preto", "2026-09-26T06:05:00-03:00", 1,
+                respondeu_em="2026-10-01T12:00:00-03:00", resposta_tipo="exclusao")
         + leads("aca", "academia", "Belo Horizonte", "2026-09-18T06:05:00-03:00", 5)
         + [{**leads("odo", "odontologia", "São Paulo", "2026-09-15T06:05:00-03:00", 1)[0], "status": "novo", "site_url": "", "enviado_em": ""}]
     )

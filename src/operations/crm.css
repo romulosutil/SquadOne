@@ -152,7 +152,8 @@
 .crm-sinal.is-acervo { color: var(--texto-2); font-weight: 700; }
 /* Tipo da resposta: o texto diz o tipo; a cor só reforça (RULES 3). */
 .crm-sinal.is-interesse, .crm-resposta.is-interesse strong { background: var(--ok-fundo); color: var(--texto); }
-.crm-sinal.is-negativa, .crm-resposta.is-negativa strong { background: var(--erro-fundo); color: var(--texto); }
+.crm-sinal.is-negativa, .crm-resposta.is-negativa strong,
+.crm-sinal.is-exclusao, .crm-resposta.is-exclusao strong { background: var(--erro-fundo); color: var(--texto); }
 .crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--texto-2); font-weight: 700; }
 .crm-cartao__resposta { margin: 0.35rem 0 0; font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
 .crm-resposta { margin: 0 0 0.5rem; }

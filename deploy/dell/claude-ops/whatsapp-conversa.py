@@ -20,7 +20,10 @@ um número das planilhas:
   clique no wa_link); "recusado"/"expirado" -> "enviado" + enviado_em de agora
   (acao "retomou": o acompanhamento conta de novo; a pasta não muda);
   "enviado"/"fechado": conversa normal, nada muda. PRUMO: Etapa "Revisar" ->
-  "Convite enviado" (como o clique em "Enviar convite").
+  "Convite enviado" (como o clique em "Enviar convite"). Desde 07/10/2026 o
+  lead que vira "enviado" aqui (por saida, lido ou entrada) ganha
+  mensagem_variante "manual": o clique no wa_link já marca "enviado", então o
+  texto não foi o da variação que o Balcão gravou.
 - "entrada": o lead escreveu. PRUMO: Etapa "Revisar" -> "Convite enviado";
   "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ..." só se a mensagem
   veio 5 min ou mais depois de "Convite enviado em" (desde 05/10/2026). Site
@@ -144,12 +147,16 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
   const vistoAntes = txt(l.visto_em);
   // O update grava todas as colunas mapeadas: o que não muda vai com o valor de antes.
   const base = { planilha: 'site', place_id: String(l.place_id), nome: txt(l.nome) || String(l.place_id), antes: status,
-    status, enviado_em: enviadoAntes, respondeu_em: respondeuAntes, visto_em: vistoAntes };
+    status, enviado_em: enviadoAntes, respondeu_em: respondeuAntes, visto_em: vistoAntes, mensagem_variante: txt(l.mensagem_variante) };
   // "novo" com site publicado: o Rômulo manda a demo assim que o Hermes avisa, antes de o Balcão passar.
   const aEnviar = status === 'novo' || status === 'pronto';
+  // 07/10/2026: lead que vira "enviado" aqui saiu sem o clique no wa_link (o clique já marca
+  // "enviado"). O texto foi o que o Rômulo escreveu ou colou, não a variação que o Balcão
+  // gravou em mensagem_variante: o funil não pode creditá-lo à variação.
+  const MANUAL = { mensagem_variante: 'manual' };
   if (direcao === 'saida') {
     // Enviado e fechado: conversa normal. Recusado/expirado: retomou, e o acompanhamento conta de novo.
-    if (aEnviar) saida.push({ json: { ...base, acao: 'abordou', status: 'enviado', enviado_em: em.toISOString() } });
+    if (aEnviar) saida.push({ json: { ...base, acao: 'abordou', status: 'enviado', enviado_em: em.toISOString(), ...MANUAL } });
     else if (status === 'recusado' || status === 'expirado') {
       saida.push({ json: { ...base, acao: 'retomou', status: 'enviado', enviado_em: em.toISOString() } });
     }
@@ -159,7 +166,7 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
     // Só a primeira leitura. Lido em novo/pronto prova um envio que passou batido.
     if (vistoAntes || !['novo', 'pronto', 'enviado', 'expirado', 'recusado'].includes(status)) continue;
     saida.push({ json: { ...base, acao: 'leu', visto_em: em.toISOString(),
-      ...(aEnviar ? { status: 'enviado', enviado_em: enviadoAntes || em.toISOString() } : {}) } });
+      ...(aEnviar ? { status: 'enviado', enviado_em: enviadoAntes || em.toISOString(), ...MANUAL } : {}) } });
     continue;
   }
   if (!['novo', 'pronto', 'enviado', 'expirado'].includes(status)) continue;
@@ -171,7 +178,8 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
   const respondeu = respondeuAntes || (longe ? em.toISOString() : '');
   const novoStatus = aEnviar || (status === 'expirado' && respondeu) ? 'enviado' : status;
   if (novoStatus === status && enviado === enviadoAntes && respondeu === respondeuAntes) continue;
-  saida.push({ json: { ...base, acao: 'respondeu', status: novoStatus, enviado_em: enviado, respondeu_em: respondeu } });
+  saida.push({ json: { ...base, acao: 'respondeu', status: novoStatus, enviado_em: enviado, respondeu_em: respondeu,
+    ...(aEnviar ? MANUAL : {}) } });
 }
 // Sempre um item, para a resposta ao observador sair; "nenhuma" não bate em nenhuma saída do switch.
 return saida.length ? saida : [{ json: { planilha: 'nenhuma' } }];"""
@@ -190,16 +198,25 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site']
 #             com follow-up e expiração de sempre. Nunca apaga uma classificação de gente.
 #   negativa  gente recusou: Site -> "recusado" (como o botão Recusou, com status_anterior e o pacote
 #             que leva a pasta para _recusados/); PRUMO -> Etapa "Sem interesse". Sai do funil.
+#   exclusao  (07/10/2026) gente pediu para apagar o site, o demo ou o conteúdo. Para o funil é uma
+#             negativa (sai igual); a mais, o aviso propõe apagar o demo com o comando
+#             `site-demos-limpeza --exclusao demo-<slug>`. Nada é apagado aqui: mensagem recebida
+#             propõe, não escreve (RULES 10); quem apaga é o Rômulo, rodando o comando. Caso que
+#             trouxe o tipo (Baby School, 07/10): "Na verdade hoje já temos uma agência, fiquei
+#             curioso mesmo para ver o resultado, de qualquer forma agradeço, se puder excluir esse
+#             conteúdo por gentileza".
 #   interesse gente quer ver: respondeu_em; o aviso traz o link da segunda mensagem (Site: o site;
 #             PRUMO: o diagnóstico).
 #   neutra    gente respondeu sem sim nem não: respondeu_em; continue a conversa.
 # Grava o tipo e o trecho na planilha (Site: resposta_tipo, resposta_trecho, resposta_em; PRUMO:
 # "Tipo da resposta", "Resposta", "Resposta em") e responde ao observador com o aviso de cada lead
 # (gente, não bot), que vai ao Rômulo pelo Hermes. O texto inteiro não é guardado: só o trecho.
+# Gente que responde a quem ainda estava "novo"/"pronto" prova um envio sem o clique no wa_link:
+# mensagem_variante "manual", como no fluxo da conversa.
 
 LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
 GEMINI_MODELO = "models/gemini-3.6-flash"  # o mesmo do Caçador
-TIPOS_HUMANOS = ("negativa", "interesse", "neutra")
+TIPOS_HUMANOS = ("negativa", "exclusao", "interesse", "neutra")
 COLUNAS_RESPOSTA_SITE = ["resposta_tipo", "resposta_trecho", "resposta_em"]
 COLUNAS_RESPOSTA_PRUMO = ["Tipo da resposta", "Resposta", "Resposta em"]
 
@@ -243,16 +260,20 @@ const prompt = !primeiro ? '' : [
   '- "bot": só mensagens automáticas (saudação ou ausência do WhatsApp Business, horário de atendimento, menu "digite 1",',
   '  "recebemos sua mensagem, em breve retornaremos", link de catálogo, cardápio ou agendamento), sem nenhuma frase escrita',
   '  por uma pessoa em resposta ao que o Rômulo disse. Mensagem que chega segundos depois do envio quase sempre é automática.',
+  '- "exclusao": uma pessoa pediu para apagar, excluir, remover ou tirar do ar o site, a demonstração, as fotos',
+  '  ou o conteúdo: "pode apagar", "se puder excluir esse conteúdo", "tira do ar", "não autorizo usar nossas fotos".',
+  '  Vale mesmo que agradeça, elogie ou também recuse ("já temos agência, agradeço, mas exclua por favor").',
   '- "negativa": uma pessoa recusou: "não tenho interesse", "já temos site", "não precisamos", "não, obrigado",',
-  '  pediu para não mandar mais, reclamou de spam, disse que é número errado, ou foi hostil.',
+  '  pediu para não mandar mais, reclamou de spam, disse que é número errado, ou foi hostil (sem pedir para apagar nada).',
   '- "interesse": uma pessoa quer ver ou saber mais: "pode mandar", "manda sim", "quanto custa?", "como funciona?",',
   '  "sou eu, pode falar", "gostei", ou aceitou.',
   '- "neutra": uma pessoa respondeu sem sim nem não ("quem é?", "do que se trata?", "vou passar para o dono", "ok"),',
   '  ou não dá para saber.',
   'Se houver mensagem automática e mensagem de pessoa, decida pela de pessoa; se a pessoa mudou de ideia, pela última.',
+  'Pedido para apagar ou excluir vence a recusa: é "exclusao", nunca "negativa".',
   '',
   'Responda só com JSON, sem texto em volta:',
-  '{"tipo": "bot|negativa|interesse|neutra", "trecho": "a frase da pessoa que decidiu, literal, até 160 caracteres (vazio se bot)", "motivo": "até 12 palavras"}',
+  '{"tipo": "bot|exclusao|negativa|interesse|neutra", "trecho": "a frase da pessoa que decidiu, literal, até 160 caracteres (vazio se bot)", "motivo": "até 12 palavras"}',
 ].join('\\n');
 return [{ json: { tem: achados.length > 0, achados, mensagens, prompt } }];"""
 
@@ -262,9 +283,18 @@ const g = $('Gemini: classificar resposta').first().json ?? {};
 const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
 let r = {};
 try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)); } catch (e) { r = {}; }
-const HUMANOS = ['negativa', 'interesse', 'neutra'];
+const HUMANOS = ['negativa', 'exclusao', 'interesse', 'neutra'];
 // Resposta ilegível do modelo: "neutra" (gente, sem decidir nada sozinho) em vez de tirar alguém do funil.
 const tipo = ['bot', ...HUMANOS].includes(r.tipo) ? r.tipo : 'neutra';
+// Pedido de exclusão: o demo só sai pelo comando do Rômulo (RULES 10). O comando confere o pedido no
+// retrato da planilha (site-leads.json), que o fluxo 07 grava de hora em hora aos :20.
+const RETRATO_DEPOIS = (() => {
+  const r = new Date(Date.now() + 60 * 1000);
+  const t = new Date(r);
+  t.setUTCMinutes(21, 0, 0);  // São Paulo é UTC-3 em hora cheia: :21 lá é :21 aqui
+  if (t <= r) t.setTime(t.getTime() + 60 * 60 * 1000);
+  return t.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+})();
 const txt = (v) => String(v ?? '').trim();
 const ultima = m.mensagens[m.mensagens.length - 1] ?? { em: new Date().toISOString(), texto: '' };
 const trecho = tipo === 'bot' ? '' : (txt(r.trecho) || ultima.texto).replace(/\\s+/g, ' ').slice(0, 200);
@@ -285,7 +315,8 @@ for (const a of m.achados) {
     const status = txt(l.status);
     const respondeuAntes = txt(l.respondeu_em);
     const item = { planilha: 'site', nome, tipo, place_id: String(l.place_id), status, status_anterior: txt(l.status_anterior),
-      recusado_em: txt(l.recusado_em), respondeu_em: respondeuAntes, resposta_tipo: tipo, resposta_trecho: trecho, resposta_em: ultima.em };
+      recusado_em: txt(l.recusado_em), respondeu_em: respondeuAntes, resposta_tipo: tipo, resposta_trecho: trecho, resposta_em: ultima.em,
+      mensagem_variante: txt(l.mensagem_variante) };
     if (tipo === 'bot') {
       // A regra dos 5 min pode ter marcado a saudação como resposta: só o respondeu_em desta conversa sai.
       const t = Date.parse(respondeuAntes);
@@ -293,12 +324,26 @@ for (const a of m.achados) {
     } else {
       item.respondeu_em = respondeuAntes || ultima.em;
       if (['novo', 'pronto', 'expirado'].includes(status)) item.status = 'enviado';
+      // Ainda "novo"/"pronto": o envio saiu sem o clique no wa_link (que já marca "enviado").
+      if (['novo', 'pronto'].includes(status)) item.mensagem_variante = 'manual';
     }
-    if (tipo === 'negativa' && status !== 'recusado') {
+    const recusar = () => Object.assign(item, {
       // Igual ao botão Recusou da página do lead: o Desfazer de lá devolve status_anterior.
-      Object.assign(item, { status: 'recusado', status_anterior: status === 'expirado' ? 'enviado' : status, recusado_em: agora,
-        pacote: { place_id: String(l.place_id), acao: 'recusou', nome, em: agora, status: 'recusado' } });
-      item.aviso = cab + 'Negativa: saiu do funil (Recusou). Se foi engano, desfaça na página do lead: ' + (txt(l.acoes_link) || 'planilha');
+      status: 'recusado', status_anterior: status === 'expirado' ? 'enviado' : status, recusado_em: agora,
+      pacote: { place_id: String(l.place_id), acao: 'recusou', nome, em: agora, status: 'recusado' } });
+    const desfazer = 'Se foi engano, desfaça na página do lead: ' + (txt(l.acoes_link) || 'planilha');
+    if (tipo === 'exclusao') {
+      // Conta como negativa; a mais, a proposta de apagar o demo (só pelo comando, nunca sozinho).
+      if (status !== 'recusado') recusar();
+      const projeto = txt(l.vercel_project);
+      item.aviso = cab + 'Pediu para apagar o demo' + (status !== 'recusado' ? ': saiu do funil (Recusou).' : '.') + ' Nada foi apagado. '
+        + (/^demo-[a-z0-9._-]+$/.test(projeto)
+          ? 'Para apagar, no Dell, a partir das ' + RETRATO_DEPOIS + ': site-demos-limpeza --exclusao ' + projeto
+          : 'A planilha não diz o projeto demo-* da Vercel: confira no publicado.json da pasta e apague à mão.')
+        + '\\n' + desfazer;
+    } else if (tipo === 'negativa' && status !== 'recusado') {
+      recusar();
+      item.aviso = cab + 'Negativa: saiu do funil (Recusou). ' + desfazer;
     } else if (tipo === 'interesse') {
       const s = segundaDe(l);
       item.aviso = cab + 'Interesse! Mande o link do site' + (s.link ? ': ' + s.link : ' (sem WhatsApp na linha).');
@@ -306,7 +351,7 @@ for (const a of m.achados) {
       const n = numeroDoLead(l);
       item.aviso = cab + 'Gente, sem sim nem não: continue a conversa' + (n ? ': https://wa.me/' + n : '.');
     }
-    if (status === 'recusado' && tipo !== 'negativa' && item.aviso) item.aviso += '\\n(Estava como Recusou; se mudou de ideia, desfaça na página do lead.)';
+    if (status === 'recusado' && !['negativa', 'exclusao'].includes(tipo) && item.aviso) item.aviso += '\\n(Estava como Recusou; se mudou de ideia, desfaça na página do lead.)';
     saida.push({ json: item });
   } else {
     const etapa = txt(l['Etapa']);
@@ -323,6 +368,11 @@ for (const a of m.achados) {
     } else if (tipo === 'negativa') {
       Object.assign(item, { 'Etapa': 'Sem interesse', 'Próxima ação': 'Recusou no WhatsApp em ' + quando + ': ' + aspas(trecho) });
       item.aviso = cab + 'Negativa: saiu do funil (Sem interesse). Se foi engano, volte a Etapa na planilha.';
+    } else if (tipo === 'exclusao') {
+      // O PRUMO não tem demo: sai do funil como a negativa, e o que for dele se apaga à mão.
+      Object.assign(item, { 'Etapa': 'Sem interesse',
+        'Próxima ação': 'Pediu exclusão no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Apague o que for dele (nada é apagado sozinho).' });
+      item.aviso = cab + 'Pediu para apagar os dados: saiu do funil (Sem interesse). Nada foi apagado; o que for dele está na planilha do PRUMO.';
     } else if (tipo === 'interesse') {
       item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. Mande o diagnóstico (botão na ficha do CRM).';
       item.aviso = cab + 'Interesse! Mande o diagnóstico: ' + diagnostico;
@@ -427,7 +477,8 @@ def telefones(auth):
 def montar_conversa(auth):
     marca_prumo = {"ID": "={{ $json.ID }}", "Etapa": "={{ $json['Etapa'] }}",
                    "Convite enviado em": "={{ $json['Convite enviado em'] }}", "Próxima ação": "={{ $json['Próxima ação'] }}"}
-    marca_site = {c: "={{ $json." + c + " }}" for c in ["place_id", "status", "enviado_em", "respondeu_em", "visto_em"]}
+    marca_site = {c: "={{ $json." + c + " }}" for c in ["place_id", "status", "enviado_em", "respondeu_em", "visto_em",
+                                                          "mensagem_variante"]}
     nos = [
         gatilho("evento", "Conversa no WhatsApp", "POST", "whatsapp-conversa", "7c1d2e3f-4a5b-4c6d-8e7f-a1b2c3d4e502", auth),
         ler("prumo", "Ler Prospects", PRUMO, PROSPECTS_GID, "Prospects", 220, 0),
@@ -489,7 +540,7 @@ def credencial_gemini():
 
 def montar_resposta(auth, gemini):
     marca_site = {c: "={{ $json." + c + " }}" for c in
-                  ["place_id", "status", "status_anterior", "recusado_em", "respondeu_em", *COLUNAS_RESPOSTA_SITE]}
+                  ["place_id", "status", "status_anterior", "recusado_em", "respondeu_em", *COLUNAS_RESPOSTA_SITE, "mensagem_variante"]}
     marca_prumo = {c: "={{ $json['" + c + "'] }}" for c in
                    ["ID", "Etapa", "Convite enviado em", "Próxima ação", *COLUNAS_RESPOSTA_PRUMO]}
     se_tem = {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
@@ -616,7 +667,7 @@ def testar() -> int:
 
     def site(status, **k):
         return {"place_id": "pid-1", "nome": "Padaria Teste", "wa_me": f"https://wa.me/55{LEAD}", "status": status,
-                "enviado_em": "", "respondeu_em": "", "visto_em": "", **k}
+                "enviado_em": "", "respondeu_em": "", "visto_em": "", "mensagem_variante": "A" if status == "pronto" else "", **k}
 
     def prumo(etapa, **k):
         return {"ID": "ID-1", "Empresa": "Oficina Teste", "WhatsApp": f"({LEAD[:2]}) {LEAD[2:]}", "Etapa": etapa,
@@ -636,12 +687,16 @@ def testar() -> int:
                 self.assertEqual((itens[0]["status"], itens[0]["enviado_em"], itens[0]["acao"]),
                                  ("enviado", "2026-09-30T13:00:00.000Z", "abordou"))
                 self.assertEqual(resp["marcados"], [{"planilha": "site", "nome": "Padaria Teste", "acao": "abordou", "antes": st}])
+                # Saiu sem o clique no wa_link (o clique já marca "enviado"): não é a variação A do Balcão.
+                self.assertEqual(itens[0]["mensagem_variante"], "manual")
 
         def test_site_recusado_e_expirado_voltam_a_enviado(self):
             for st in ("recusado", "expirado"):
-                itens, _ = decidir("saida", [site(st, enviado_em="2026-09-01T12:00:00Z", respondeu_em="2026-09-02T12:00:00Z")])
+                itens, _ = decidir("saida", [site(st, enviado_em="2026-09-01T12:00:00Z", respondeu_em="2026-09-02T12:00:00Z",
+                                                  mensagem_variante="A")])
                 self.assertEqual((itens[0]["status"], itens[0]["acao"], itens[0]["enviado_em"], itens[0]["respondeu_em"]),
                                  ("enviado", "retomou", "2026-09-30T13:00:00.000Z", "2026-09-02T12:00:00Z"))
+                self.assertEqual(itens[0]["mensagem_variante"], "A")  # a primeira mensagem continua sendo a que foi
 
         def test_conversa_normal_nao_muda_nada(self):
             for st in ("enviado", "fechado"):
@@ -665,15 +720,16 @@ def testar() -> int:
 
     class Lido(unittest.TestCase):
         def test_site_primeira_leitura(self):
-            itens, resp = decidir("lido", [site("enviado", enviado_em="2026-09-29T12:00:00Z")])
-            self.assertEqual((itens[0]["visto_em"], itens[0]["status"], itens[0]["acao"]),
-                             ("2026-09-30T13:00:00.000Z", "enviado", "leu"))
+            itens, resp = decidir("lido", [site("enviado", enviado_em="2026-09-29T12:00:00Z", mensagem_variante="A")])
+            self.assertEqual((itens[0]["visto_em"], itens[0]["status"], itens[0]["acao"], itens[0]["mensagem_variante"]),
+                             ("2026-09-30T13:00:00.000Z", "enviado", "leu", "A"))
             self.assertEqual(decidir("lido", [site("enviado", visto_em="2026-09-29T15:00:00Z")])[0], [])
             self.assertEqual(decidir("lido", [site("fechado")])[0], [])
 
         def test_site_lido_em_pronto_prova_o_envio(self):
             itens, _ = decidir("lido", [site("pronto")])
-            self.assertEqual((itens[0]["status"], itens[0]["enviado_em"]), ("enviado", "2026-09-30T13:00:00.000Z"))
+            self.assertEqual((itens[0]["status"], itens[0]["enviado_em"], itens[0]["mensagem_variante"]),
+                             ("enviado", "2026-09-30T13:00:00.000Z", "manual"))
 
         def test_prumo_leu_o_convite(self):
             itens, _ = decidir("lido", prumos=[prumo("Convite enviado", **{"Convite enviado em": "2026-09-29T12:00:00Z"})])
@@ -688,11 +744,11 @@ def testar() -> int:
 
         def test_saudacao_so_prova_o_envio(self):
             itens, _ = decidir("entrada", [site("pronto")])
-            self.assertEqual((itens[0]["status"], itens[0]["respondeu_em"]), ("enviado", ""))
+            self.assertEqual((itens[0]["status"], itens[0]["respondeu_em"], itens[0]["mensagem_variante"]), ("enviado", "", "manual"))
 
         def test_resposta_depois_de_5_min(self):
-            itens, _ = decidir("entrada", [site("enviado", enviado_em="2026-09-30T12:50:00Z")])
-            self.assertEqual(itens[0]["respondeu_em"], "2026-09-30T13:00:00.000Z")
+            itens, _ = decidir("entrada", [site("enviado", enviado_em="2026-09-30T12:50:00Z", mensagem_variante="A")])
+            self.assertEqual((itens[0]["respondeu_em"], itens[0]["mensagem_variante"]), ("2026-09-30T13:00:00.000Z", "A"))
             self.assertEqual(decidir("entrada", [site("enviado", enviado_em="2026-09-30T12:58:00Z")])[0], [])
 
         def test_recusado_nao_responde(self):
@@ -759,8 +815,56 @@ def testar() -> int:
             return montado, [i for i in r["itens"] if i.get("planilha") != "nenhuma"], r["resposta"]
 
         def lead_site(self, **k):
-            return {**site("enviado", enviado_em=self.ENVIO, site_url="https://demo-padaria.vercel.app",
-                           acoes_link="https://x/webhook/lead?id=pid-1", resposta_tipo="", status_anterior="", recusado_em=""), **k}
+            return {**site("enviado", enviado_em=self.ENVIO, site_url="https://demo-padaria.vercel.app", vercel_project="demo-padaria",
+                           acoes_link="https://x/webhook/lead?id=pid-1", resposta_tipo="", status_anterior="", recusado_em="",
+                           mensagem_variante="A"), **k}
+
+        BABY_SCHOOL = ("Na verdade hoje já temos uma agência, fiquei curioso mesmo para ver o resultado, de qualquer forma "
+                       "agradeço, se puder excluir esse conteúdo por gentileza")
+
+        def test_prompt_explica_a_exclusao(self):
+            montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:30:00Z", "texto": self.BABY_SCHOOL}], [self.lead_site()])
+            self.assertIn('"exclusao"', montado["prompt"])
+            self.assertIn("bot|exclusao|negativa|interesse|neutra", montado["prompt"])
+
+        def test_exclusao_sai_do_funil_e_so_propoe_apagar(self):
+            _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "se puder excluir esse conteúdo por gentileza"}',
+                                              [{"em": "2026-10-05T12:30:00Z", "texto": self.BABY_SCHOOL}], [self.lead_site()])
+            i = itens[0]
+            # Para o funil é a negativa: recusado, com o pacote que leva a pasta para _recusados/.
+            self.assertEqual((i["status"], i["status_anterior"], i["resposta_tipo"], i["mensagem_variante"]),
+                             ("recusado", "enviado", "exclusao", "A"))
+            self.assertEqual(i["pacote"]["acao"], "recusou")
+            aviso = resp["marcados"][0]["aviso"]
+            self.assertIn("Pediu para apagar o demo: saiu do funil (Recusou). Nada foi apagado.", aviso)
+            self.assertRegex(aviso, r"a partir das \d\d:21: site-demos-limpeza --exclusao demo-padaria")
+            self.assertIn("https://x/webhook/lead?id=pid-1", aviso)
+            self.assertNotIn("Estava como Recusou", aviso)
+
+        def test_exclusao_de_quem_ja_tinha_recusado_ainda_propoe_apagar(self):
+            lead = self.lead_site(status="recusado", status_anterior="enviado", recusado_em="2026-10-05T12:20:00Z", resposta_tipo="negativa")
+            _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "apaguem por favor"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "apaguem por favor"}], [lead])
+            self.assertEqual((itens[0]["status"], itens[0]["recusado_em"], itens[0]["resposta_tipo"]),
+                             ("recusado", "2026-10-05T12:20:00Z", "exclusao"))
+            self.assertNotIn("pacote", itens[0])  # a pasta já foi para _recusados/
+            self.assertIn("site-demos-limpeza --exclusao demo-padaria", resp["marcados"][0]["aviso"])
+
+        def test_exclusao_sem_projeto_na_planilha_nao_inventa_comando(self):
+            _, _, resp = self.classificar('{"tipo": "exclusao", "trecho": "exclua"}', [{"em": "2026-10-05T12:30:00Z", "texto": "exclua"}],
+                                          [self.lead_site(vercel_project="")])
+            self.assertNotIn("site-demos-limpeza", resp["marcados"][0]["aviso"])
+            self.assertIn("apague à mão", resp["marcados"][0]["aviso"])
+
+        def test_robo_nao_apaga_um_pedido_de_exclusao(self):
+            lead = self.lead_site(status="recusado", resposta_tipo="exclusao", respondeu_em="2026-10-05T12:30:00Z")
+            _, itens, resp = self.classificar('{"tipo": "bot"}', [{"em": "2026-10-05T13:00:00Z", "texto": "Olá!"}], [lead])
+            self.assertEqual((itens, resp), ([], {"ok": True, "marcados": []}))
+
+        def test_resposta_de_quem_estava_pronto_e_envio_manual(self):
+            _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "pode mandar"}', [{"em": "2026-10-05T12:40:00Z", "texto": "pode mandar"}],
+                                           [self.lead_site(status="pronto", enviado_em="")])
+            self.assertEqual((itens[0]["status"], itens[0]["mensagem_variante"]), ("enviado", "manual"))
 
         def test_prompt_tem_o_tempo_desde_o_envio_e_nao_e_lead_nao_chama_o_gemini(self):
             montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:00:08Z", "texto": "Olá! Em breve retornaremos."}],
@@ -825,6 +929,11 @@ def testar() -> int:
             self.assertIn("/convite?id=ID-1&passo=diagnostico", resp["marcados"][0]["aviso"])
             _, itens, _ = self.classificar('{"tipo": "negativa", "trecho": "não"}', [{"em": "2026-10-05T12:40:00Z", "texto": "não"}], prumos=[p])
             self.assertEqual((itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("Sem interesse", "negativa"))
+            _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "apaguem meus dados"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "apaguem meus dados"}], prumos=[p])
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("Sem interesse", "exclusao"))
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Pediu exclusão no WhatsApp em 05/10"))
+            self.assertIn("Nada foi apagado", resp["marcados"][0]["aviso"])
 
     class Saudacao(unittest.TestCase):
         def test_prumo_nao_conta_a_saudacao_como_resposta(self):

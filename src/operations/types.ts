@@ -66,7 +66,7 @@ export type CrmSinal =
   | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'descartado' | 'sem-interesse' | 'sem-contato'
   | 'so-robo'
 
-export type CrmTipoDeResposta = 'negativa' | 'interesse' | 'neutra' | 'bot'
+export type CrmTipoDeResposta = 'negativa' | 'exclusao' | 'interesse' | 'neutra' | 'bot'
 
 export interface CrmResposta {
   tipo: CrmTipoDeResposta
@@ -114,6 +114,8 @@ export interface CrmLead {
   proposta?: { em: string; data: string }
   notas: number
   resposta?: CrmResposta
+  /** Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site. */
+  abordagem?: { mensagem?: string; site?: string }
   eventos: CrmEvento[]
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string }
   pasta?: {

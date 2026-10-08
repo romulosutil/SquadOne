@@ -23,7 +23,10 @@ enviado a ninguém.
   datas, pasta, grupo e link de cada lead com site), que o resumo das 10:30
   (sites_e_pendencias.py) usa para pôr o link de cada lead e o site-demos-pausa
   usa para as datas; e a coluna acoes_link da planilha com o link de cada lead
-  que tem site (só grava as que faltam).
+  que tem site (só grava as que faltam). Desde 07/10/2026 o retrato leva também
+  resposta_tipo, mensagem_variante e site_versao (o funil compara o que cada
+  lead recebeu com o que respondeu; o site-demos-limpeza --exclusao confere o
+  pedido de exclusão nele).
 
 Links pela tailnet (tailscale serve /webhook), como o wa_link: abrem no celular
 com o Tailscale ligado.
@@ -33,7 +36,10 @@ Uso: python3 site-lead-acoes.py                 colunas que faltam + publica e a
      python3 site-lead-acoes.py --retrato-agora roda o retrato (e a coluna acoes_link) agora
      python3 site-lead-acoes.py --testar [--mostrar]
                                                 cópia com planilha de mentira, sem gravar nada:
-                                                confere cada botão e a página (sem credencial Google)
+                                                confere cada botão e a página (sem credencial Google),
+                                                depois de --testar-retrato
+     python3 site-lead-acoes.py --testar-retrato
+                                                só o código do retrato no node (sem n8n nem planilha)
      python3 site-lead-acoes.py --verificar [place_id_em_recusados]
                                                 id inexistente e um lead já em _recusados/
                                                 (recusou de novo = nada muda); não grava nada
@@ -191,11 +197,15 @@ RETRATO_JS = """// Retrato da planilha para o Dell: o resumo das 10:30 (link de 
 const linhas = $input.all().map(i => i.json).filter(l => txt(l.place_id) && !/^TESTE/.test(txt(l.place_id)));
 const grupoDe = (l, e) => e === 'conversa' ? 'conversa'
   : (e === 'enviado' && topoDe(txt(l.place_id)) === 'raiz' && !txt(l.respondeu_em) ? 'resposta' : '');
+// 07/10/2026: o que o lead recebeu e o que respondeu, para o funil comparar (mensagem_variante e
+// site_versao vêm do Balcão; resposta_tipo, do classificador do WhatsApp, e "exclusao" é o que o
+// site-demos-limpeza --exclusao confere antes de apagar um demo a pedido).
 const leads = linhas.filter(l => pasta[txt(l.place_id)] || txt(l.site_url)).map(l => {
   const pid = txt(l.place_id), estado = estadoDe(l);
   return { place_id: pid, nome: txt(l.nome), cidade: txt(l.cidade), status: txt(l.status), estado, grupo: grupoDe(l, estado),
     pasta: pasta[pid] ?? '', enviado_em: txt(l.enviado_em), respondeu_em: txt(l.respondeu_em), recusado_em: txt(l.recusado_em),
-    fechado_em: txt(l.fechado_em), site_url: txt(l.site_url), vercel_project: txt(l.vercel_project), link: linkDoLead(pid) };
+    fechado_em: txt(l.fechado_em), site_url: txt(l.site_url), vercel_project: txt(l.vercel_project), link: linkDoLead(pid),
+    resposta_tipo: txt(l.resposta_tipo), mensagem_variante: txt(l.mensagem_variante), site_versao: txt(l.site_versao) };
 });
 const retrato = { geradoEm: new Date().toISOString(), leads };
 return [{ json: { leads: leads.length }, binary: { data: { data: Buffer.from(JSON.stringify(retrato), 'utf8').toString('base64'),
@@ -352,25 +362,35 @@ def fluxo(erro):
 
 def colunas():
     """Acrescenta no fim do cabeçalho da aba Leads as colunas que faltam (todo fluxo escreve pelo nome)."""
-    from sheets_proxy import SheetsProxy
-    with SheetsProxy([PLANILHA]) as s:
-        meta = s.get(f"/v4/spreadsheets/{PLANILHA}?fields=sheets.properties")
-        props = next(x["properties"] for x in meta["sheets"] if str(x["properties"]["sheetId"]) == LEADS_GID)
-        cab = (s.get(f"/v4/spreadsheets/{PLANILHA}/values/" + quote("Leads!1:1")).get("values") or [[]])[0]
-        faltam = [c for c in COLUNAS_NOVAS if c not in cab]
-        if not faltam:
-            print("Leads: colunas já existem:", ", ".join(COLUNAS_NOVAS))
-            return
-        grade = props["gridProperties"]["columnCount"]
-        if len(cab) + len(faltam) > grade:
-            s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": [{"appendDimension": {
-                "sheetId": int(LEADS_GID), "dimension": "COLUMNS", "length": len(cab) + len(faltam) - grade}}]})
-        inicio = len(cab)
-        letra = lambda n: (letra(n // 26 - 1) if n >= 26 else "") + chr(ord("A") + n % 26)
-        faixa = f"Leads!{letra(inicio)}1:{letra(inicio + len(faltam) - 1)}1"
-        s.post(f"/v4/spreadsheets/{PLANILHA}/values:batchUpdate",
-               {"valueInputOption": "RAW", "data": [{"range": faixa, "values": [faltam]}]})
-        print(f"Leads: colunas novas em {faixa}:", ", ".join(faltam))
+    sv.acrescentar_colunas(PLANILHA, LEADS_GID, "Leads", COLUNAS_NOVAS)
+
+
+def testar_retrato() -> bool:
+    """Código do retrato no node (sem n8n nem planilha): campos novos de 07/10/2026 e a cópia _v1
+    do modo personalizado, que não é a pasta do lead."""
+    recibos = sv.nos_de_arquivos("Retrato: recibos da pasta auto", "Retrato: JSON dos recibos", "recibo", [
+        ("padaria", {"place_id": "pid-1"}), ("padaria/_v1", {"place_id": "pid-1"}), ("_recusados/escola", {"place_id": "pid-2"})])
+    planilha = [{"json": {"place_id": "pid-1", "nome": "Padaria", "status": "enviado", "enviado_em": "2026-10-07T12:00:00Z",
+                          "mensagem_variante": "manual", "site_versao": "personalizado-v2", "resposta_tipo": ""}},
+                {"json": {"place_id": "pid-2", "nome": "Escola", "status": "recusado", "recusado_em": "2026-10-07T13:00:00Z",
+                          "mensagem_variante": "A", "site_versao": "padrão", "resposta_tipo": "exclusao",
+                          "vercel_project": "demo-escola"}},
+                {"json": {"place_id": "TESTE-x", "site_url": "https://x"}}]
+    codigo = ESTADO_JS + "\n" + pasta_js("Retrato: recibos da pasta auto", "Retrato: JSON dos recibos") + "\n" + RETRATO_JS
+    item = sv.rodar_js(codigo, recibos, planilha)[0]
+    leads = {l["place_id"]: l for l in json.loads(__import__("base64").b64decode(item["binary"]["data"]["data"]))["leads"]}
+    esperado = {
+        "pid-1": {"pasta": "padaria", "grupo": "resposta", "mensagem_variante": "manual", "site_versao": "personalizado-v2", "resposta_tipo": ""},
+        "pid-2": {"pasta": "_recusados/escola", "estado": "recusado", "resposta_tipo": "exclusao", "mensagem_variante": "A",
+                  "site_versao": "padrão", "vercel_project": "demo-escola"},
+    }
+    ok = sorted(leads) == ["pid-1", "pid-2"]
+    for pid, campos in esperado.items():
+        obtido = {k: leads.get(pid, {}).get(k) for k in campos}
+        certo = obtido == campos
+        ok &= certo
+        print(f"{'ok ' if certo else 'ERRO'} retrato {pid}: {obtido}")
+    return ok
 
 
 def publicar(wf):
@@ -550,8 +570,10 @@ if __name__ == "__main__":
         colunas()
     elif "--retrato-agora" in sys.argv:
         sys.exit(0 if retrato_agora(sv.erro_wf()) else 1)
+    elif "--testar-retrato" in sys.argv:
+        sys.exit(0 if testar_retrato() else 1)
     elif "--testar" in sys.argv:
-        sys.exit(0 if testar(sv.erro_wf()) else 1)
+        sys.exit(0 if testar_retrato() & testar(sv.erro_wf()) else 1)
     elif "--verificar" in sys.argv:
         resto = [a for a in sys.argv[1:] if not a.startswith("--")]
         verificar(resto[0] if resto else "")

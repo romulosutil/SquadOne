@@ -25,6 +25,7 @@ export const DICA_DA_ETAPA: Record<CrmEtapa, string> = {
 // O que o lead respondeu, classificado pelo n8n a partir do texto (05/10/2026).
 export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   negativa: 'Negativa',
+  exclusao: 'Pediu para apagar',
   interesse: 'Interesse',
   neutra: 'Sem sim nem não',
   bot: 'Só robô',
@@ -84,6 +85,15 @@ export function onde(lead: CrmLead): string {
 }
 
 /** Leitura dita com honestidade: sem confirmação de leitura, é desconhecida (RULES 2 e 15). */
+// O que o lead do Site recebeu (07/10/2026): "Mensagem A · site personalizado-v2".
+export function textoDaAbordagem(lead: CrmLead): string {
+  const { mensagem, site } = lead.abordagem ?? {}
+  const msg = !mensagem ? '' : mensagem === 'manual' ? 'mensagem escrita à mão (sem o link do Balcão)'
+    : mensagem === 'EN' ? 'mensagem em inglês' : `mensagem ${mensagem}`
+  const partes = [msg, site ? `site ${site}` : ''].filter(Boolean)
+  return partes.length ? partes.join(' · ').replace(/^./, (c) => c.toUpperCase()) : ''
+}
+
 export function textoDaLeitura(lead: CrmLead): string {
   if (lead.leitura === 'viu') return `Viu ${dataCurta(lead.marcos.visto)}`
   if (lead.leitura === 'pela-resposta') return 'Leu (respondeu)'
