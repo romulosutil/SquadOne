@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { lerPastasDosLeads, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
+import { followupDe, segundaDe } from "./site-mensagem.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
 //
@@ -109,12 +110,6 @@ export const COLUNAS_DO_PRUMO = {
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
-/**
- * Segunda mensagem do Site antes da venda: o link, para quem respondeu à primeira (que pede
- * licença, sem link). Espelho de SEGUNDA em deploy/dell/claude-ops/site-mensagem.js; o aviso do
- * Hermes usa aquele, a ficha usa este. Mudou lá, mude aqui.
- */
-export const SEGUNDA_MENSAGEM_DO_SITE = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações de vocês no Google. Se gostarem, coloco no ar com o endereço de vocês; se não, eu apago, sem problema. O que acharam?";
 
 /** "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa. */
 export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "neutra", "bot"] as const;
@@ -385,7 +380,8 @@ export interface CrmLead {
   mensagemPronta?: string;
   eventos: CrmEvento[];
   /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o diagnóstico). */
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; planilha?: string };
+  /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento. */
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
   divergencias: string[];
 }
@@ -690,8 +686,12 @@ function leadDoSite(linha: Linha, contexto: {
   const site = urlHttps(c("site")) ?? pasta?.siteUrl;
   const acoes = urlHttps(c("acoesLink")) ?? (webhook && (pasta || c("site")) ? `${webhook}/lead?id=${encodeURIComponent(chave)}` : undefined);
   // Depois do "sim": a primeira mensagem (desde 05/10/2026) pede licença e não leva o link.
-  const segunda = calculada.etapa === "conversando" && !ehRecusa(resposta) && site && whatsapp
-    ? `https://wa.me/${whatsapp}?text=${encodeURIComponent(SEGUNDA_MENSAGEM_DO_SITE.replace("{URL}", site))}` : undefined;
+  // Os textos são os do n8n (server/site-mensagem.ts espelha site-mensagem.js), em inglês nos EUA.
+  const waMe = /wa\.me\/\d+/.test(c("waMe")) ? c("waMe") : whatsapp ? `https://wa.me/${whatsapp}` : "";
+  const mensagem = { nome: c("empresa"), siteUrl: site ?? "", waMe };
+  const segunda = calculada.etapa === "conversando" && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
+  // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
+  const followup = followupHoje && waMe ? followupDe(mensagem).link || undefined : undefined;
 
   const divergencias: string[] = [];
   if (contexto.pastasLidas) {
@@ -755,6 +755,7 @@ function leadDoSite(linha: Linha, contexto: {
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(acoes ? { acoes } : {}),
       ...(segunda ? { segunda } : {}),
+      ...(followup ? { followup } : {}),
       ...(planilha ? { planilha } : {}),
     },
     ...(pasta ? {
@@ -931,7 +932,8 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
         leadId: lead.id,
         acao: "Mandar follow-up",
         detalhe: `${textoDeDias(lead.diasNaEtapa, lead.produto === "prumo" ? "Convite enviado" : "Enviado")}, sem resposta · ${leitura(lead)}.`,
-        links: conversa,
+        // Com o texto pronto primeiro (o mesmo do aviso do 05); a conversa vazia fica de reserva.
+        links: lead.links.followup ? [{ rotulo: "Mandar o follow-up", url: lead.links.followup }, ...conversa] : conversa,
         ordem: Date.parse(lead.marcos.enviado ?? "") || 0,
       });
     }
