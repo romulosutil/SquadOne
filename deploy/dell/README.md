@@ -734,7 +734,9 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   e profissional liberal com escritório; o Pontuar dá +15 a esses ramos e não
   tira 10 de quem não posta no Instagram. O `~/auto-site/CLAUDE.md` ganhou a
   seção do gerador para eles (OAB sóbria, sem avaliações na página de
-  advocacia; B2B com "Pedir orçamento"; urgência com botão fixo). Rodar de novo
+  advocacia; B2B com "Pedir orçamento"; urgência com botão fixo); desde
+  08/10/2026 ela vive no arquivo versionado (`deploy/dell/auto-site/`, ver
+  "Gerador de sites") e o script não reescreve mais a cópia. Rodar de novo
   não muda nada; `--testar` e `--testar-vivo` não gravam.
 - `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
   `--testar-regra`, `python3 site-cacador-escolha.py --testar` e
@@ -1056,6 +1058,42 @@ leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
 Rômulo; ver "Depois do envio"). O gerador os deixa na raiz, fora da fila
 (`--listar` mostra o motivo); religar a busca os devolve na segunda seguinte.
 Sem o arquivo, ou ilegível, a fila é a de sempre.
+
+### O como-fazer-o-site é versionado (`deploy/dell/auto-site/`, 08/10/2026)
+
+O processo que o Claude segue em cada lead mora em dois arquivos do
+`~/auto-site`: o `CLAUDE.md` (triagem, direção visual, publicação; ~36 KB) e o
+comando `.claude/commands/lead-novo.md`. Até 07/10 eles existiam só no Dell e
+mudavam à mão, sem histórico nem como voltar — e mudar a forma de criar sites é
+exatamente o que as lições do funil vão propor. Desde 08/10/2026:
+
+- a fonte é o repositório: `deploy/dell/auto-site/auto-site-CLAUDE.md` →
+  `~/auto-site/CLAUDE.md` e `deploy/dell/auto-site/lead-novo.md` →
+  `~/auto-site/.claude/commands/lead-novo.md`, as duas no `instalados.json` em
+  modo **444**. O nome no repo não é `CLAUDE.md` de propósito: o Claude Code
+  carrega um `CLAUDE.md` aninhado como instrução, e toda sessão no SquadOne
+  passaria a receber "você produz index.html";
+- mudança só por PR. Depois do merge (o `atualizar-central` traz o clone em até
+  10 min, mas **não** instala cópias), numa sessão no Dell:
+  `install -D -m 444 ~/SquadOne/deploy/dell/auto-site/auto-site-CLAUDE.md ~/auto-site/CLAUDE.md`
+  e o mesmo para o `lead-novo.md` (o `dell-status --instalados` mostra os
+  comandos). Nada a reiniciar: cada lead é um `claude -p` novo, que relê os
+  arquivos; o lote contínuo pega a versão nova no lead seguinte;
+- voltar atrás = reverter o PR e reinstalar;
+- a cópia do Dell não é editada: o 444 barra Edit/Write e `>` por cima, a
+  lista de permissão do gerador já negava o `CLAUDE.md` e o `.claude/` ao
+  Claude, e o `site-nichos.py` pula a cópia versionada (era o único script que
+  reescrevia uma seção dele). O que escapar disso (`sed -i` troca o arquivo
+  por rename) o `dell-status` acusa como "diferente" em até 1 min;
+- nunca symlink: o `rclone sync` do espelho pula symlinks (a sentinela do
+  espelho é justamente o `CLAUDE.md`) e o Claude headless não lê `~/SquadOne`.
+
+A cópia versionada é a do Dell de 05/10/2026 (sha256 `7fa99464…` e
+`a101c085…`) com duas mudanças: o número de WhatsApp de um negócio citado num
+exemplo foi trocado por `<número do negócio>`, e o fim do arquivo diz que a
+regra nova vai no resumo final (execução automática) ou num PR (sessão com o
+Rômulo), não numa edição da cópia. As skills de `~/.claude/skills` e o
+`settings.local.json` (hooks do impeccable) continuam fora do repositório.
 
 ### Permissões do Claude (lista de permissão, desde 30/09/2026)
 

@@ -44,6 +44,10 @@ O que este script faz:
    lista, a partir de site-mensagem.js;
 4. ~/auto-site/CLAUDE.md: seção do gerador para os ramos novos (OAB sóbria,
    B2B com pedido de orçamento, urgência com botão fixo), entre marcadores.
+   Desde 08/10/2026 o CLAUDE.md é versionado (deploy/dell/auto-site/
+   auto-site-CLAUDE.md, instalado em 444) e a seção já está nele: este passo
+   pula a cópia versionada em vez de reescrevê-la, porque mudar o arquivo no
+   Dell faria a cópia divergir do repositório.
 
 A vez entre as buscas é do site-cacador-escolha.py (PREFERIDAS vazia desde
 esta data) e a pausa de quem não tem interesse, do site-acompanhamento.py.
@@ -67,6 +71,7 @@ CACADOR = "oow8TkxrAf4fVvTj"  # "01 · Caçador" no n8n do Dell
 PLANILHA = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o"  # "Leads — Site antes da venda"
 BACKUPS = Path.home() / ".local/share/claude-ops/backups"
 GERADOR = Path.home() / "auto-site/CLAUDE.md"
+MARCA_VERSIONADA = "<!-- Cópia instalada de ~/SquadOne/deploy/dell/auto-site/auto-site-CLAUDE.md."
 MOTIVO_PAUSA = "migração de nicho 05/10/2026: 0 interesse em 83 envios (B2C de vitrine)"
 
 # query, lat, lng, raio_m, vertical. Cidades médias: nas capitais quase todo
@@ -213,6 +218,11 @@ def plano_buscas(valores: list, agora: str) -> tuple:
     return pausas, novas
 
 
+def copia_versionada(texto: str) -> bool:
+    """O CLAUDE.md instalado a partir do repositório começa com esta marca (08/10/2026)."""
+    return texto.startswith(MARCA_VERSIONADA)
+
+
 def aplicar_gerador(texto: str) -> str:
     if INICIO_GERADOR in texto:
         ini, fim = texto.index(INICIO_GERADOR), texto.index(FIM_GERADOR) + len(FIM_GERADOR)
@@ -355,6 +365,14 @@ def testar() -> int:
             self.assertLess(uma.index("Ramos novos"), uma.index("### Regras do arquivo"))
             self.assertEqual(aplicar_gerador(uma), uma)
 
+        def test_copia_versionada_do_claude_md_e_reconhecida(self):
+            versionado = AQUI.parent / "auto-site" / "auto-site-CLAUDE.md"
+            if versionado.is_file():  # no repositório; a cópia instalada em claude-ops não tem o irmão
+                texto = versionado.read_text(encoding="utf-8")
+                self.assertTrue(copia_versionada(texto))
+                self.assertIn(INICIO_GERADOR, texto)  # a seção já está na cópia versionada
+            self.assertFalse(copia_versionada("# Workspace `auto`\n" + MARCA_VERSIONADA))
+
     r = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Nichos))
     return 0 if r.wasSuccessful() else 1
 
@@ -427,6 +445,9 @@ def main() -> int:
 
     if GERADOR.exists():
         texto = GERADOR.read_text(encoding="utf-8")
+        if copia_versionada(texto):
+            print("Gerador: ~/auto-site/CLAUDE.md é versionado (deploy/dell/auto-site/); mude por PR, nada gravado")
+            return 0
         novo_texto = aplicar_gerador(texto)
         if novo_texto != texto:
             BACKUPS.mkdir(parents=True, exist_ok=True)
