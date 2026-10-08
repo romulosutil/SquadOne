@@ -29,6 +29,14 @@ WhatsApp grava quando a mensagem saiu sem o clique no wa_link; e `site_versao`
 da pasta do lead (gerador-de-sites.py). As cópias `<slug>/_v1/` do modo
 personalizado têm publicado.json com o mesmo place_id e não são o lead.
 
+08/10/2026: o Balcão marca "descartado" o lead "novo" cuja pasta o gerador moveu para
+`_descartados/` (DESCARTAR.md: já tem site, rede, duplicado). O runner não escreve na
+planilha, e esses leads ficavam "novo" para sempre (14 naquele dia): o CRM apontava
+divergência e o funil semanal os contava como lead. O place_id sai do content.md da
+pasta; recibo de dentro de `_descartados/` não vira "pronto", e uma cópia antiga
+descartada não derruba o lead que tem recibo vivo. Reabrir um descartado é voltar a
+pasta para a raiz e pôr "novo" na planilha.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante e site_versao)
@@ -38,6 +46,7 @@ Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
 """
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -262,11 +271,20 @@ def balcao(erro):
         {"id": "marca-json", "name": "Ler o JSON da marca", "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1.1,
          "position": [880, 0], "alwaysOutputData": True, "onError": "continueRegularOutput",
          "parameters": {"operation": "fromJson", "destinationKey": "marca"}},
-        {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1100, 0],
+        # Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
+        # gravou DESCARTAR.md, mas não escreve na planilha, e o lead ficava "novo" para sempre (14 em
+        # 08/10). O place_id vem do content.md. Uma leitura só; nenhum descarte não para o Balcão.
+        {"id": "descartes", "name": "Ler descartes do gerador", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [1100, 0], "executeOnce": True, "alwaysOutputData": True,
+         "parameters": {"operation": "read", "fileSelector": "/home/node/.n8n-files/auto/_descartados/*/content.md", "options": {}}},
+        {"id": "descarte-texto", "name": "Ler o texto do descarte", "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1.1,
+         "position": [1320, 0], "alwaysOutputData": True, "onError": "continueRegularOutput",
+         "parameters": {"operation": "text", "destinationKey": "conteudo"}},
+        {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1540, 0],
          "parameters": ler_planilha, "credentials": SHEETS, "executeOnce": True, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000},
-        {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1320, 0],
+        {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1760, 0],
          "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": codigo_js("site-mensagem.js", "balcao-cruzar.js")}},
-        {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1540, 0],
+        {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1980, 0],
          "parameters": {**{k: v for k, v in ler_planilha.items() if k != "operation"}, "operation": "update",
                         "columns": {"mappingMode": "autoMapInputData", "matchingColumns": ["place_id"], "value": {}, "schema": colunas},
                         "options": {"cellFormat": "RAW", "handlingExtraData": "insertInNewColumn"}},
@@ -276,14 +294,14 @@ def balcao(erro):
     con = {a: {"main": [[{"node": b, "type": "main", "index": 0}]]} for a, b in zip(ordem, ordem[1:])}
     nos += [
         {"id": "pendencias", "name": "Pendências da esteira", "type": "n8n-nodes-base.code", "typeVersion": 2,
-         "position": [1320, 220], "parameters": {"mode": "runOnceForAllItems", "jsCode": pendencias}},
+         "position": [1760, 220], "parameters": {"mode": "runOnceForAllItems", "jsCode": pendencias}},
         {"id": "gravar-pendencias", "name": "Gravar pendências", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-         "position": [1540, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
+         "position": [1980, 220], "parameters": {"operation": "write", "dataPropertyName": "data",
                                                  "fileName": "/home/node/.n8n-files/estado/site-antes-da-venda.json"}},
         {"id": "pastas", "name": "Pastas a mover", "type": "n8n-nodes-base.code", "typeVersion": 2,
-         "position": [1320, 440], "parameters": {"mode": "runOnceForAllItems", "jsCode": pastas}},
+         "position": [1760, 440], "parameters": {"mode": "runOnceForAllItems", "jsCode": pastas}},
         {"id": "gravar-pastas", "name": "Gravar pastas a mover", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-         "position": [1540, 440], "parameters": {"operation": "write", "dataPropertyName": "data",
+         "position": [1980, 440], "parameters": {"operation": "write", "dataPropertyName": "data",
                                                  "fileName": "/home/node/.n8n-files/estado/site-pastas.json"}},
     ]
     con["Ler a planilha"]["main"][0].append({"node": "Pendências da esteira", "type": "main", "index": 0})
@@ -373,6 +391,16 @@ def testar() -> int:
         ("casa-f", recibo("pid-f", "casa-f")),
         ("bar-g", recibo("pid-g", "bar-g")),
         ("_recusados/escola-h", recibo("pid-h", "escola-h")),
+        # Pasta movida à mão para _descartados/ com recibo: não vira "pronto".
+        ("_descartados/bar-z", recibo("pid-z", "bar-z")),
+    ]
+    # content.md das pastas em _descartados/ (o place_id no formato do Caçador).
+    DESCARTES = [
+        ("_descartados/pousada-x", "# Pousada X\n\n- **place_id:** pid-x\n- **Status na planilha:** novo\n"),
+        ("_descartados/academia-y", "# Academia Y\n- **place_id:** pid-y\n"),
+        # Cópia antiga descartada de um lead que tem recibo na raiz: o lead está vivo.
+        ("_descartados/padaria-a--20261005", "# Padaria A\n- **place_id:** pid-a\n"),
+        ("_descartados/sem-id", "# Sem place_id aqui\n"),
     ]
     MARCAS = [("padaria-a", {"versao": 2, "modelo": "x"}), ("padaria-a/_v1", {"versao": 1}),
               ("_recusados/escola-h", {"versao": 1}), ("loja-d", None)]  # loja-d: arquivo ilegível
@@ -390,11 +418,15 @@ def testar() -> int:
         linha("pid-f", "pronto", telefone=""),
         linha("pid-g", "enviado"),
         linha("pid-h", "recusado", site_url="https://demo-escola-h.vercel.app"),
+        linha("pid-x", "novo"),
+        linha("pid-y", "pronto", site_url="https://demo-academia-y.vercel.app"),
+        linha("pid-z", "novo"),
     ]
 
-    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None):
+    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES):
         nos = {**nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos),
-               **nos_de_arquivos("Ler marcas do modo personalizado", "Ler o JSON da marca", "marca", marcas)}
+               **nos_de_arquivos("Ler marcas do modo personalizado", "Ler o JSON da marca", "marca", marcas),
+               **nos_de_arquivos("Ler descartes do gerador", "Ler o texto do descarte", "conteudo", descartes)}
         codigo = codigo_js("site-mensagem.js", "balcao-cruzar.js")
         for de, para in (troca or {}).items():
             codigo = codigo.replace(de, para)
@@ -441,6 +473,24 @@ def testar() -> int:
             # O n8n entrega um item vazio (alwaysOutputData) e a extração dele falha: tudo é padrão.
             por = cruzar(marcas=[("", None)])
             self.assertEqual(por["pid-a"][0]["site_versao"], "padrão")
+
+        def test_descarte_do_gerador_vira_descartado_so_quando_novo(self):
+            por = cruzar()
+            self.assertEqual(por["pid-x"], [{"place_id": "pid-x", "status": "descartado"}])
+            self.assertNotIn("pid-y", por, "pronto não volta atrás por uma pasta em _descartados/")
+
+        def test_copia_antiga_descartada_nao_derruba_o_lead_vivo(self):
+            a = cruzar()["pid-a"]
+            self.assertEqual([i.get("status") for i in a], ["pronto"])
+
+        def test_recibo_em_descartados_nao_vira_pronto(self):
+            self.assertNotIn("pid-z", cruzar())
+
+        def test_sem_nenhum_descarte(self):
+            # Glob sem arquivo: o n8n entrega um item vazio e a extração falha; nada muda.
+            por = cruzar(descartes=[("", None)])
+            self.assertNotIn("pid-x", por)
+            self.assertEqual(por["pid-b"][0]["status"], "pronto")
 
     class Variante(unittest.TestCase):
         def letras(self, troca=None):
@@ -508,10 +558,19 @@ def testar_n8n() -> int:
         print("faltam leads para o teste (um com personalizado.json e um sem)")
         return 1
     versao = json.loads((auto / recibos[personalizado] / "personalizado.json").read_text(encoding="utf-8"))["versao"]
+    # Um descarte real do gerador (pasta em _descartados/ com o place_id no content.md e sem recibo vivo).
+    descartado = None
+    for c in sorted(auto.glob("_descartados/*/content.md")):
+        m = re.search(r"(?i)place_id[:* \t]+([a-zA-Z0-9_-]+)", c.read_text(encoding="utf-8", errors="replace"))
+        if m and m.group(1) not in recibos:
+            descartado = m.group(1)
+            break
     falsa = [{"place_id": personalizado, "nome": "Teste personalizado", "telefone": "+55 27 99988-7766", "status": "pronto",
               "site_url": "", "wa_me": "", "wa_link": "", "briefing": "", "site_versao": "", "mensagem_variante": ""},
              {"place_id": padrao, "nome": "Teste padrão", "telefone": "+55 27 99988-7700", "status": "enviado",
               "site_url": "https://x.vercel.app", "site_versao": "", "mensagem_variante": "manual"}]
+    if descartado:
+        falsa.append({"place_id": descartado, "nome": "Teste descartado", "telefone": "", "status": "novo", "site_url": ""})
     caminho = f"zz-teste-balcao-{int(time.time())}"
     wf = balcao(None)
     nos = []
@@ -555,7 +614,11 @@ def testar_n8n() -> int:
             (f"pronto personalizado: personalizado-v{versao} e A",
              bool(a) and (a[0].get("site_versao"), a[0].get("mensagem_variante")) == (f"personalizado-v{versao}", "A")),
             ("enviado padrão: só a versão", b == [{"place_id": padrao, "site_versao": "padrão"}]),
+            ("descartes lidos uma vez", len(rd["Ler descartes do gerador"]) == 1),
         ]
+        if descartado:
+            checagens.append(("descarte do gerador: novo vira descartado",
+                              por.get(descartado, []) == [{"place_id": descartado, "status": "descartado"}]))
         ok = True
         for nome, certo in checagens:
             ok &= certo

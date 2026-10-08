@@ -15,6 +15,9 @@ const pastaDe = (arquivos, item, i) => String(arquivos[item.pairedItem?.item ?? 
 // 07/10/2026: o modo personalizado guarda o site anterior em <slug>/_v1/ (e o que falhou em
 // _tentativa-falha/), com o publicado.json junto e o mesmo place_id. Essa copia nao e o lead.
 const ehCopia = (dir) => String(dir).split('/').pop().startsWith('_');
+// 08/10/2026: pasta em _descartados/ é lead que o gerador tirou da esteira; recibo de lá nunca
+// vira "pronto" (o runner só descarta quem não tem publicado.json, mas uma pasta movida à mão pode ter).
+const emDescartados = (dir) => String(dir).split('/').includes('_descartados');
 
 // site_versao (07/10/2026): o personalizado.json da pasta do lead (gerador-de-sites.py,
 // marcar_personalizado) diz a versao do modo personalizado; sem ele, o site saiu no
@@ -35,12 +38,15 @@ for (const linha of linhas) {
 }
 
 const saida = [];
+// Lead com recibo fora de _descartados/: está vivo, mesmo que uma cópia antiga dele tenha sido descartada.
+const comRecibo = new Set();
 
 recibos.forEach((item, i) => {
   const rec = item.json.recibo || {};
   const pid = rec.place_id;
   const dir = pastaDe(arquivosDosRecibos, item, i);
-  if (!pid || ehCopia(dir)) return;
+  if (!pid || ehCopia(dir) || emDescartados(dir)) return;
+  comRecibo.add(pid);
 
   // Recibo sem linha correspondente: arquivo orfao, ignora em silencio.
   const linha = porPlaceId[pid];
@@ -97,5 +103,24 @@ recibos.forEach((item, i) => {
     ...(semSite ? {} : { mensagem_variante: letra }),
   } });
 });
+
+// Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
+// gravou DESCARTAR.md (já tem site, rede, duplicado), mas não escreve na planilha, e o lead
+// seguia "novo" para sempre: o CRM apontava divergência e o funil semanal o contava como lead.
+// Só "novo" (ou vazio) vira "descartado"; o que já andou (pronto, enviado, recusado...) não muda.
+// Reabrir um descartado é voltar a pasta para a raiz E pôr "novo" na planilha.
+const PLACE_ID = /place_id[:* \t]+([a-zA-Z0-9_-]+)/i;
+const arquivosDosDescartes = $('Ler descartes do gerador').all();
+const descartados = new Set();
+$('Ler o texto do descarte').all().forEach((d, i) => {
+  const m = PLACE_ID.exec(String(d.json?.conteudo ?? ''));
+  if (m && emDescartados(pastaDe(arquivosDosDescartes, d, i))) descartados.add(m[1]);
+});
+for (const pid of descartados) {
+  if (comRecibo.has(pid)) continue;
+  const linha = porPlaceId[pid];
+  const status = String(linha?.status ?? '').trim();
+  if (linha && (status === '' || status === 'novo')) saida.push({ json: { place_id: pid, status: 'descartado' } });
+}
 
 return saida;
