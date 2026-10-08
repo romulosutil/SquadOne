@@ -36,6 +36,43 @@ def recibo(numero, status, ts):
     return json.dumps({"event": "owner_receipt", "chatId": f"{numero}@s.whatsapp.net", "status": status, "ts": ts}) + "\n"
 
 
+class EntregaImediata(unittest.TestCase):
+    """O aviso gravado pede ao dell-status para esvaziar a fila já; sem o binário, nada acontece."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.antes = (ob.FILA_DE_AVISOS, ob.DELL_STATUS, ob.subprocess.run)
+        ob.FILA_DE_AVISOS = self.tmp / "fila"
+        self.chamadas = []
+        ob.subprocess.run = lambda *a, **k: self.chamadas.append(a[0])
+
+    def tearDown(self):
+        ob.FILA_DE_AVISOS, ob.DELL_STATUS, ob.subprocess.run = self.antes
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_aviso_gravado_manda_drenar(self):
+        ob.DELL_STATUS = self.tmp / "dell-status"
+        ob.DELL_STATUS.write_text("#!/bin/sh\n")
+        ob.avisar_pelo_hermes("X respondeu")
+        self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
+        self.assertEqual(len(self.chamadas), 1)
+        self.assertEqual(self.chamadas[0][-1], str(ob.DELL_STATUS))
+        self.assertIn("--drenar", self.chamadas[0][2])
+
+    def test_sem_dell_status_so_grava(self):
+        ob.DELL_STATUS = self.tmp / "nao-existe"
+        ob.avisar_pelo_hermes("X respondeu")
+        self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
+        self.assertEqual(self.chamadas, [])
+
+    def test_aviso_que_nao_grava_nao_pede_entrega(self):
+        ob.DELL_STATUS = self.tmp / "dell-status"
+        ob.DELL_STATUS.write_text("#!/bin/sh\n")
+        (self.tmp / "fila").write_text("é um arquivo, não uma pasta")
+        ob.avisar_pelo_hermes("X respondeu")
+        self.assertEqual(self.chamadas, [])
+
+
 class N8nDeMentira:
     def __init__(self):
         self.chamadas, self.respostas, self.falhar = [], [], None

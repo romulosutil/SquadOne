@@ -1286,6 +1286,8 @@ demos"). No PRUMO, que não tem demo, vira "Sem interesse" com "Pediu exclusão
 no WhatsApp" na Próxima ação. Resposta de gente a quem ainda estava
 `novo`/`pronto` também grava `manual`.
 
+**Quanto demora o aviso** (medido em 08/10/2026, um "Sim, sou a Jackeline" de PRUMO: a resposta entrou na planilha na hora, o aviso com o texto e o link saiu ~2 min 20 s depois): o observador espera `ESPERA_DA_CONVERSA_S` sem mensagem nova do lead antes de mandar ao n8n (era 90 s, agora 45 s), o n8n classifica com o Gemini (~10–20 s) e a fila de avisos só era esvaziada pelo timer do `dell-status` (até 1 min). Desde 08/10/2026 quem grava o aviso (`avisar_pelo_hermes`) também manda `dell-status --drenar` 6 s depois (a fila ignora arquivo com menos de 5 s); o timer continua valendo, então falha ali não perde aviso, e silêncio das 22h às 7h, teto por hora e chave de 24 h valem igual. A espera de 45 s é o preço do "Oi" + "não temos interesse" virar uma conversa só: quem escreve devagar pode gerar dois avisos. Depois do merge, reinstale o observador (`instalados.json`) e reinicie o serviço.
+
 Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp
 Business. Então a primeira mensagem só prova o envio, e o observador manda um
