@@ -72,6 +72,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import sys
 import time
 import urllib.error
@@ -105,7 +106,14 @@ RETENTAR_CONEXAO_S = 30
 ESPERAS_FALHA_S = (60, 240, 960, 3600)
 MAX_PENDENTES = 500
 # Sem mensagem nova do lead por este tempo, a conversa vai ao n8n para classificar.
-ESPERA_DA_CONVERSA_S = 90
+# 08/10/2026: era 90 s; medido, o aviso de um "sim" levava ~2 min 20 s do primeiro "Sim" ao WhatsApp,
+# 90 s deles só de espera. A saudação do WhatsApp Business e o "sim" de gente chegam em rajada de
+# poucos segundos; 45 s ainda junta as duas e a pessoa que escreve devagar vira, no máximo, dois avisos.
+ESPERA_DA_CONVERSA_S = 45
+# O dell-status só esvazia a fila de avisos a cada minuto; quem grava um aviso o manda esvaziar logo
+# (a fila ignora arquivo com menos de FRESCOR_S = 5 s, por isso a espera).
+DELL_STATUS = HOME / ".local/bin/dell-status"
+ESPERA_ANTES_DE_DRENAR_S = 6
 MAX_MENSAGENS_POR_CONVERSA = 20
 MOTIVO = "self_chat_mode_rejects_non_self"
 MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos", "squadone:respostas")
@@ -172,9 +180,28 @@ def avisar_pelo_hermes(texto: str) -> None:
     try:
         FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
         (FILA_DE_AVISOS / f"observador-{time.time_ns()}.json").write_text(
-            json.dumps({"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}, ensure_ascii=False))
+            json.dumps({"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         log("aviso não gravado:", e)
+        return
+    entregar_ja()
+
+
+def entregar_ja() -> None:
+    """Pede ao dell-status para esvaziar a fila já, em vez de esperar o próximo minuto (até 60 s).
+
+    Só adianta: o timer de 1 min continua esvaziando a fila, então falha aqui não perde aviso. A
+    drenagem tem flock (outra em andamento sai sem enviar), o silêncio das 22h às 7h, o teto por
+    hora e a chave de 24 h valem igual, e o subshell solta o processo para o laço não esperar.
+    """
+    if not DELL_STATUS.exists():
+        return
+    try:
+        subprocess.run(
+            ["/bin/sh", "-c", f'(sleep {ESPERA_ANTES_DE_DRENAR_S}; "$0" --drenar) >/dev/null 2>&1 &', str(DELL_STATUS)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        log("não consegui pedir a entrega imediata (o timer entrega no próximo minuto):", e)
 
 
 def posicao_salva() -> tuple[int, int, float] | None:

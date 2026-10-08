@@ -25,6 +25,28 @@ const aberto = computed(() => props.lead.etapa !== 'ganho' && props.lead.etapa !
 // Perdido pelo tempo (regra dos 7 dias) não teve desfecho: a proposta ainda pode ser marcada, e o traz de volta.
 const saiuPeloPrazo = computed(() => props.lead.motivoPerda === 'expirou' || props.lead.motivoPerda === 'esfriou')
 const eventos = computed(() => [...props.lead.eventos].reverse())
+// As ações que são o "próximo passo" do lead (convite, primeira mensagem, diagnóstico ou link do site
+// depois do "sim", follow-up do dia) ficam fixas no topo da folha, para não se perderem rolando a ficha.
+// Em "Ações" sobram as de apoio.
+interface AcaoDaFicha { chave: string; rotulo: string; href: string; principal: boolean }
+const acoes = computed<AcaoDaFicha[]>(() => {
+  const l = props.lead.links
+  const prumo = props.lead.produto === 'prumo'
+  const interesse = props.lead.resposta?.tipo === 'interesse'
+  const todas: Array<[string, string, string | undefined, boolean]> = [
+    ['enviar', 'Enviar a primeira mensagem pelo WhatsApp (marca como enviado)', l.enviar, true],
+    ['convite', 'Enviar convite (marca como enviado)', l.convite, true],
+    ['segunda', prumo ? 'Mandar o diagnóstico (link do formulário)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
+    ['followup', 'Mandar o follow-up (texto pronto)', l.followup, true],
+    ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
+    ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
+    ['acoes', 'Recusou · Fechou · Desfazer (página do lead)', l.acoes, false],
+    ['planilha', prumo ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
+  ]
+  return todas.flatMap(([chave, rotulo, href, principal]) => (href ? [{ chave, rotulo, href, principal }] : []))
+})
+const acoesFixas = computed(() => acoes.value.filter((a) => a.principal))
+const acoesDeApoio = computed(() => acoes.value.filter((a) => !a.principal))
 const hoje = hojeEmSP()
 const situacaoDoProximo = computed(() => {
   const data = props.lead.proximoPasso?.data
@@ -114,6 +136,10 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       </p>
     </header>
 
+    <div v-if="acoesFixas.length" class="crm-ficha__fixa" role="group" aria-label="Próximo passo">
+      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} ↗</a>
+    </div>
+
     <div v-if="lead.divergencias.length" class="crm-divergencia" role="note">
       <strong>Divergência entre planilha e pasta</strong>
       <ul><li v-for="d in lead.divergencias" :key="d">{{ d }}</li></ul>
@@ -137,15 +163,8 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         nem "Ver o demo" nem o link do site aparecem aqui. Para mandar de novo, publique a pasta{{ lead.pasta ? ` ${lead.pasta.slug}` : '' }} outra vez
         (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
       </p>
-      <div class="crm-ficha__links">
-        <a v-if="lead.links.enviar" class="is-principal" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar a primeira mensagem pelo WhatsApp (marca como enviado) ↗</a>
-        <a v-if="lead.links.convite" class="is-principal" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite (marca como enviado) ↗</a>
-        <a v-if="lead.links.segunda" :class="{ 'is-principal': lead.resposta?.tipo === 'interesse' }" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o diagnóstico (link do formulário)' : 'Mandar o link do site (segunda mensagem)' }} ↗</a>
-        <a v-if="lead.links.followup" class="is-principal" :href="lead.links.followup" target="_blank" rel="noopener">Mandar o follow-up (texto pronto) ↗</a>
-        <a v-if="lead.links.whatsapp" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp ↗</a>
-        <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Ver o demo' : 'Ver o site da empresa' }} ↗</a>
-        <a v-if="lead.links.acoes" :href="lead.links.acoes" target="_blank" rel="noopener">Recusou · Fechou · Desfazer (página do lead) ↗</a>
-        <a v-if="lead.links.planilha" :href="lead.links.planilha" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha' }} ↗</a>
+      <div v-if="acoesDeApoio.length" class="crm-ficha__links">
+        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} ↗</a>
       </div>
       <div class="crm-form__botoes">
         <button v-if="aberto" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
