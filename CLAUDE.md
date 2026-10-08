@@ -130,7 +130,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista), Resultados e Ficha (folha cheia)
     fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
-    resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem e versão do site, amostra pequena
+    resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
+                          avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/auth/google.ts      invólucro fino sobre /api/auth/*

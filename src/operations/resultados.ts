@@ -35,9 +35,41 @@ export interface LinhaDeResultado {
   fecharam: number
 }
 
-export type Criterio = 'nicho' | 'mensagem' | 'site'
+export type Criterio = 'nicho' | 'mensagem' | 'site' | 'horario'
 
 const DIA_MS = 24 * 60 * 60 * 1000
+const FUSO = 'America/Sao_Paulo'
+
+// ---------------------------------------------------------------- horário do envio (08/10/2026)
+// Medido até 08/10/2026: 26 envios depois das 18h tiveram 0 respostas de gente; das 8h às 18h,
+// 15 de 65 (23%). O horário vira critério do placar e um aviso na fila de envio, sempre com os
+// números do próprio retrato (nada fixo no código além da definição do expediente).
+
+const DIAS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+/** Hora (0–23) e dia da semana (0 = domingo) em São Paulo, qualquer que seja o fuso da máquina. */
+export function horaEmSP(ms: number): { hora: number; diaDaSemana: number } {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: FUSO, hour: 'numeric', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(ms))
+  const valor = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
+  return { hora: Number(valor('hour')) % 24, diaDaSemana: DIAS.indexOf(valor('weekday')) }
+}
+
+/** Expediente de quem recebe: segunda a sexta das 8h às 18h, sábado das 8h às 12h (São Paulo). */
+export function noHorarioComercial(ms: number): boolean {
+  const { hora, diaDaSemana } = horaEmSP(ms)
+  if (diaDaSemana === 0) return false
+  return hora >= 8 && hora < (diaDaSemana === 6 ? 12 : 18)
+}
+
+export const FAIXAS_DO_HORARIO = ['Manhã (8h–12h)', 'Almoço (12h–14h)', 'Tarde (14h–18h)', 'Noite (18h–21h)', 'Madrugada (21h–8h)'] as const
+
+export function faixaDoHorario(ms: number): (typeof FAIXAS_DO_HORARIO)[number] {
+  const { hora } = horaEmSP(ms)
+  if (hora >= 8 && hora < 12) return FAIXAS_DO_HORARIO[0]
+  if (hora >= 12 && hora < 14) return FAIXAS_DO_HORARIO[1]
+  if (hora >= 14 && hora < 18) return FAIXAS_DO_HORARIO[2]
+  if (hora >= 18 && hora < 21) return FAIXAS_DO_HORARIO[3]
+  return FAIXAS_DO_HORARIO[4]
+}
 
 export function enviadoNoPeriodo(lead: CrmLead, periodo: Periodo, agora: number): boolean {
   const t = Date.parse(lead.marcos.enviado ?? '')
@@ -48,6 +80,7 @@ export function enviadoNoPeriodo(lead: CrmLead, periodo: Periodo, agora: number)
 /** O rótulo do grupo do lead em cada critério. */
 export function chaveDe(lead: CrmLead, criterio: Criterio): string {
   if (criterio === 'nicho') return lead.nicho.trim() || 'Sem nicho'
+  if (criterio === 'horario') return faixaDoHorario(Date.parse(lead.marcos.enviado ?? ''))
   if (criterio === 'mensagem') {
     const m = lead.abordagem?.mensagem
     if (!m) return 'Sem registro (envios até 07/10)'
@@ -83,9 +116,31 @@ export function resultados(leads: CrmLead[], criterio: Criterio, periodo: Period
     const chave = chaveDe(l, criterio)
     grupos.set(chave, [...(grupos.get(chave) ?? []), l])
   }
+  // Horário na ordem do dia; o resto, do grupo com mais enviados para o com menos.
+  const ordemDaFaixa = (chave: string) => (FAIXAS_DO_HORARIO as readonly string[]).indexOf(chave)
   const linhas = [...grupos].map(([chave, ls]) => contar(chave, ls))
-    .sort((a, b) => b.enviados - a.enviados || a.chave.localeCompare(b.chave, 'pt-BR'))
+    .sort((a, b) => (criterio === 'horario' ? ordemDaFaixa(a.chave) - ordemDaFaixa(b.chave) : 0)
+      || b.enviados - a.enviados || a.chave.localeCompare(b.chave, 'pt-BR'))
   return { linhas, total: contar('Total', enviados) }
+}
+
+/**
+ * Aviso da fila de envio fora do expediente, com a taxa de resposta medida dentro e fora dele.
+ * `null` no horário comercial. Com pouco envio de um dos lados, o aviso não cita número
+ * (1 de 3 não é taxa).
+ */
+export function avisoDeHorario(leads: CrmLead[], agora: number): string | null {
+  if (noHorarioComercial(agora)) return null
+  const enviados = leads.filter(l => enviadoNoPeriodo(l, 'tudo', agora))
+  const dentro = contar('dentro', enviados.filter(l => noHorarioComercial(Date.parse(l.marcos.enviado ?? ''))))
+  const fora = contar('fora', enviados.filter(l => !noHorarioComercial(Date.parse(l.marcos.enviado ?? ''))))
+  const expediente = 'segunda a sexta das 8h às 18h, sábado até 12h'
+  if (amostraPequena(dentro) || amostraPequena(fora)) {
+    return `Agora é fora do expediente de quem recebe (${expediente}): mensagem de número desconhecido nessa hora costuma ficar sem resposta.`
+  }
+  return `Agora é fora do expediente de quem recebe (${expediente}). Fora dele, ${fora.enviados} envios tiveram `
+    + `${fora.responderam === 1 ? '1 resposta' : `${fora.responderam} respostas`} (${porcento(fora.responderam, fora.enviados)}); `
+    + `dentro, ${porcento(dentro.responderam, dentro.enviados)} responderam.`
 }
 
 /** "25%"; sem enviados não há taxa. Arredonda para inteiro: com amostras deste tamanho, casa decimal é ruído. */

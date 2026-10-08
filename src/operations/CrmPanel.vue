@@ -8,6 +8,7 @@ import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
+import { avisoDeHorario } from './resultados'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
 
@@ -149,6 +150,8 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
 })))
 const totalHoje = computed(() => hoje.value.reduce((soma, g) => soma + g.itens.length, 0))
 const prontosParaEnviar = computed(() => hoje.value.find(g => g.id === 'enviar')?.itens ?? [])
+// Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
+const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
@@ -269,7 +272,7 @@ function fecharFicha() {
 
       <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
         <div class="crm-na-folha">
-          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" @enviado="marcarAberto" @abrir="abrirFicha" />
+          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" @enviado="marcarAberto" @abrir="abrirFicha" />
         </div>
       </Sheet>
 

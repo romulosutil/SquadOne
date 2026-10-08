@@ -903,7 +903,12 @@ correção).
   (`site_versao`): respondeu (gente; robô não conta), viu (só com confirmação
   de leitura), quis ver, recusou, fechou. Recusa só entre enviados (o acervo
   de `_recusados/` não recebeu mensagem rastreada); menos de 10 enviados leva
-  o aviso "amostra pequena". Envios até 07/10 ficam em "Sem registro";
+  o aviso "amostra pequena". Envios até 07/10 ficam em "Sem registro".
+  Também por **horário do envio** (hora de São Paulo, na ordem do dia): até
+  08/10/2026, 26 envios depois das 18h tiveram 0 respostas e, das 8h às 18h,
+  15 de 65 (23%). Por isso a fila "Enviar um por um" avisa, fora do expediente
+  de quem recebe (seg–sex 8h–18h, sáb 8h–12h), com a taxa medida dentro e fora
+  dele; só avisa, enviar continua possível;
 
 - **Hoje** (padrão): próximos passos vencendo, follow-ups, respostas para
   responder, prospects para revisar, propostas esperando e sites prontos para
