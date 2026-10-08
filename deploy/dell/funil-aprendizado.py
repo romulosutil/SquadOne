@@ -206,8 +206,9 @@ class Caminhos:
                    fila=p("SQUADONE_AVISOS_FILA", ".local/share/avisos/fila"), repo=p("SQUADONE_REPO", "SquadOne"))
 
     def com_saida(self, saida: Path) -> "Caminhos":
-        """Teste de fumaça: tudo o que se grava vai para `saida`, nada para os arquivos reais."""
-        return replace(self, dados=saida, estado=saida / ".estado")
+        """Teste de fumaça: tudo o que se grava vai para `saida` — inclusive o aviso, que
+        não pode chegar ao WhatsApp —, nada para os arquivos reais."""
+        return replace(self, dados=saida, estado=saida / ".estado", fila=saida / "fila")
 
     crm = property(lambda s: s.n8n / "crm.json")
     site_leads = property(lambda s: s.n8n / "site-leads.json")
@@ -1522,6 +1523,7 @@ def main(argv: list[str] | None = None) -> int:
     c = Caminhos.de_home(Path.home())
     if a.saida:
         c = c.com_saida(Path(a.saida).expanduser())
+        c.fila.mkdir(parents=True, exist_ok=True)
     agora = instante(a.agora) if a.agora else datetime.now(timezone.utc)
     if agora is None:
         ap.error("--agora ilegível")

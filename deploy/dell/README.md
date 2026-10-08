@@ -1336,6 +1336,7 @@ funil-aprendizado coletar --listar                      # desfechos e contagens;
 set -a; . ~/.config/claude-ops/gerador.env; set +a
 funil-aprendizado testar-vivo --saida /tmp/funil-vivo   # 3 chamadas reais na Baby School; não grava nada
 funil-aprendizado coletar --saida /tmp/funil-fumaca --teto 2   # fumaça: grava só em /tmp
+funil-aprendizado revisar --saida /tmp/funil-fumaca            # idem, aviso em /tmp/funil-fumaca/fila
 systemctl --user daemon-reload && systemctl --user enable --now funil-aprendizado.timer funil-revisao.timer
 ```
 

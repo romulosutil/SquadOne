@@ -816,9 +816,9 @@ class Caminhos(unittest.TestCase):
         self.assertEqual((c.auto, c.licoes, c.fila), (Path("/h/auto-site"), Path("/h/.local/share/funil-aprendizado/licoes.jsonl"),
                                                        Path("/h/.local/share/avisos/fila")))
         s = c.com_saida(Path("/tmp/funil-fumaca"))
-        self.assertEqual((s.licoes, s.estado_coleta, s.auto),
+        self.assertEqual((s.licoes, s.estado_coleta, s.fila, s.auto, s.repo),
                          (Path("/tmp/funil-fumaca/licoes.jsonl"), Path("/tmp/funil-fumaca/.estado/coleta.json"),
-                          Path("/h/auto-site")))
+                          Path("/tmp/funil-fumaca/fila"), Path("/h/auto-site"), Path("/h/SquadOne")))
 
 
 if __name__ == "__main__":
