@@ -1,0 +1,17 @@
+[Unit]
+Description=Site antes da venda — lições das respostas dos leads (só propõe, nunca aplica)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# O mesmo login do Claude do gerador (CLAUDE_CODE_OAUTH_TOKEN, GERADOR_MODELO); FUNIL_MODELO,
+# se existir no arquivo, vale só aqui. Sem o arquivo a coleta grava o erro no status.
+EnvironmentFile=-%h/.config/claude-ops/gerador.env
+ExecStart=/usr/bin/python3 %h/.local/bin/funil-aprendizado coletar --teto 10
+# 10 lições x até 2 chamadas de 5 min, com o teto de 70 min do próprio script.
+TimeoutStartSec=90min
+Nice=10
+# Lições e propostas citam leads: 600/700.
+UMask=0077

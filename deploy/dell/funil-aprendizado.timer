@@ -1,0 +1,12 @@
+[Unit]
+Description=Site antes da venda — lições das respostas, todo dia às 06:40
+
+[Timer]
+# Antes do gerador (08:00) e da revisão de segunda (08:30): a assinatura do Claude
+# costuma estar livre, e a revisão já encontra as lições da véspera.
+OnCalendar=*-*-* 06:40:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

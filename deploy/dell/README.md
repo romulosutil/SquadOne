@@ -1251,6 +1251,97 @@ python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna
 python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
+## Lições do funil (`funil-aprendizado.*`, `funil-revisao.*`, 08/10/2026)
+
+Fase 1 da auto-melhoria do Site antes da venda: as respostas dos leads viram
+lições, e as lições que se repetem viram **propostas** de mudança na triagem,
+na mensagem e na forma de criar sites. Até 07/10 isso era feito à mão e sem
+conferência: a docstring do gerador registrou que a Baby School achou que o
+demo "não parecia feito para ela", mas o que ela escreveu foi "hoje já temos
+uma agência, fiquei curioso mesmo para ver o resultado" — o gargalo era a
+qualificação (WordPress no ar, descartado duas vezes pela triagem e reaberto à
+mão), não o site. **Nada é aplicado sozinho** (RULES 10): o Rômulo lê o
+arquivo de propostas e pede o PR a uma sessão do Claude.
+
+**Coleta** (`funil-aprendizado coletar`, todo dia às 06:40):
+
+- lê o `crm.json` (recusa retrato com mais de 3 h) e acha os desfechos com
+  **palavras do lead**: resposta negativa, neutra, interesse ou exclusão com
+  texto, e todo fechamento. Resposta sem texto ("marcada à mão…"), Recusou pelo
+  botão sem texto e silêncio (com ou sem leitura, 10 dias) viram só **contagem**
+  em `contagens.json`: sem palavras do lead o modelo especularia, e desde 05/10
+  o recibo azul é da 1ª mensagem, que vai sem link;
+- para cada desfecho novo, o script monta um dossiê com as fontes do lead
+  (resposta, colunas permitidas da planilha, `content.md`, `DOSSIE.md`,
+  `REVISAO.md`, `DESCARTAR.md`, as linhas dele no `registro.md`; nunca
+  `wa_me`/`wa_link`), troca telefone e e-mail por `[tel]`/`[email]` e rotula as
+  seções "Decisão do Rômulo" como decisão manual por cima da triagem;
+- o Claude roda **sem ferramenta nenhuma** (`--tools ""`, `--safe-mode`,
+  dontAsk com tudo negado, cwd fixo e vazio em `~/.local/state/funil-aprendizado/cwd`,
+  prompt pelo stdin) e devolve uma lição em JSON. Do `permissoes_do_claude`
+  do gerador vem o desenho, não o código: aquela lista abre escrita e Vercel;
+- a lição só é gravada se passar no validador: cada evidência é **literal** da
+  fonte declarada (comparada com o texto que o modelo viu), nenhum dado
+  pessoal, enums, `sem_sinal` sem mudança, e a regra de princípio "recusa de quem
+  diz que já tem fornecedor (site, agência…) não é etapa `site`". Recusada: uma
+  nova chamada com os motivos; duas rodadas recusadas e o desfecho é desistido
+  (a saída vai, redigida, para `rejeitadas.jsonl`);
+- chave da lição = `place_id` + hash do trecho: reclassificar o mesmo texto não
+  duplica, texto novo do mesmo lead é lição nova (e leva as anteriores como
+  contexto). Teto de 10 lições e 70 min por rodada; limite de uso do Claude
+  encerra a rodada sem contar tentativa;
+- lição: `{chave, place_id, slug, nicho, cidade, desfecho, desfecho_em,
+  mensagem_regime, mensagem_variante, site_versao, etapa (qualificacao |
+  mensagem | site | oferta | timing | sem_sinal), evidencia [{fonte, trecho}],
+  o_que_funcionou, hipotese, nao_se_conclui, mudanca_proposta {alvo (cacador |
+  mensagem | claude_md | gerador | decisao_manual), texto}, confianca (baixa |
+  media | alta)}`. `decisao_manual` é recomendação ao Rômulo, nunca diff.
+
+**Revisão** (`funil-aprendizado revisar`, segunda às 08:30, depois do "06 ·
+Funil semanal"):
+
+- lições dos últimos 28 dias, uma por lead, cujo desfecho ainda está na
+  planilha; grupo = (etapa, alvo). Vira proposta com **2 ou mais leads**
+  (confiança média/alta) ou **1 caso forte** (confiança alta + palavras do lead
+  que casam um sinal fixo da etapa, como "já temos uma agência"), e só se o
+  grupo tem lição ainda não citada. No máximo 3 por semana, 1 de mensagem;
+- para cada grupo o Claude (sem ferramentas) redige a troca a partir do arquivo
+  inteiro do `~/SquadOne`; o script confere que o trecho de antes aparece uma
+  vez, numa região permitida (no gerador, só `PROMPT*`, `CLICHES` e as
+  instruções; no Caçador, só `PREFERIDAS`), sem URL, comando nem R$, que o
+  Python alterado compila, e monta o diff. Mensagem nova entra como variante B
+  (senão C) em `VARIACOES`; proposta de site diz para subir a versão do site no
+  mesmo PR (a revisão nunca mexe em `VERSAO_*`);
+- grava `~/.local/share/funil-aprendizado/propostas/PROPOSTAS-<AAAA-MM-DD>.md`
+  (com o funil por `mensagem_variante` e `site_versao` tirado do `crm.json` e as
+  contagens) e `propostas/<data>/<n>.patch`, e manda **um** aviso (origem
+  `funil-aprendizado`, prioridade 3, rótulos fixos, nenhum texto de lead). Semana
+  sem proposta: só o arquivo, sem aviso. Erro inesperado: aviso P2 com o tipo
+  do erro;
+- aprovar: peça a uma sessão do Claude "faça o PR da proposta 1 de
+  PROPOSTAS-<data>"; ela aplica o `.patch`, e o arquivo diz como cada mudança
+  entra em vigor (install, `--balcao` ou `site-cacador-escolha.py`).
+
+O `dell-status` mostra "Lições do funil" (falha com `erro` na rodada ou unit
+caída; atenção sem rodada há 36 h) a partir do momento em que o timer está
+instalado. Testes: `python3 deploy/dell/funil-aprendizado.test.py` (raiz
+temporária, HOME isolado, Claude dublado; a Baby School é o caso fixo).
+
+Instalar (sessão no Dell) e conferir antes de ligar:
+
+```bash
+install -D -m 755 ~/SquadOne/deploy/dell/funil-aprendizado.py ~/.local/bin/funil-aprendizado
+cp ~/SquadOne/deploy/dell/funil-{aprendizado,revisao}.{service,timer} ~/.config/systemd/user/
+funil-aprendizado coletar --listar                      # desfechos e contagens; não chama nem grava
+set -a; . ~/.config/claude-ops/gerador.env; set +a
+funil-aprendizado testar-vivo --saida /tmp/funil-vivo   # 3 chamadas reais na Baby School; não grava nada
+funil-aprendizado coletar --saida /tmp/funil-fumaca --teto 2   # fumaça: grava só em /tmp
+systemctl --user daemon-reload && systemctl --user enable --now funil-aprendizado.timer funil-revisao.timer
+```
+
+Rode o `testar-vivo` de novo a cada `PROMPT_VERSAO` novo: as 3 respostas
+precisam validar, com etapa `qualificacao` e sem culpar a personalização.
+
 ## Radar PNCP
 
 Os arquivos não sensíveis do Compose do radar ficam em

@@ -1,0 +1,14 @@
+[Unit]
+Description=Site antes da venda — revisão semanal das lições (PROPOSTAS-<data>.md e um aviso; nunca aplica)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/.config/claude-ops/gerador.env
+ExecStart=/usr/bin/python3 %h/.local/bin/funil-aprendizado revisar
+# No máximo 3 propostas x 2 chamadas de 5 min.
+TimeoutStartSec=45min
+Nice=10
+UMask=0077

@@ -798,6 +798,50 @@ def gerador() -> list[dict]:
     return [check("gerador", "dados", nome, "ok", f"Execução de {quando}: {resumo}")]
 
 
+# ---------------------------------------------------------------- lições do funil
+
+FUNIL_APRENDIZADO = HOME / ".local/share/funil-aprendizado"
+FUNIL_APRENDIZADO_TIMER = HOME / ".config/systemd/user/funil-aprendizado.timer"
+
+
+def avaliar_funil_aprendizado(st: dict | None, resultado: str, saiu: datetime | None, t: datetime) -> dict:
+    """A coleta diária (funil-aprendizado.py, 08/10/2026) pelo status.json dela.
+    Falha: `erro` da rodada (Claude sem login, retrato do CRM velho) ou o systemd
+    registrando falha depois do último status; atenção: sem rodada há mais de 36 h.
+    Limite de uso não é falha: a rodada retoma no dia seguinte."""
+    nome, diario = "Lições do funil", "journalctl --user -u funil-aprendizado"
+    if not isinstance(st, dict):
+        return check("funil-aprendizado", "dados", nome, "atencao", "Ainda não rodou (sem status.json)")
+    fim = _quando(st.get("fim"))
+    quando = f"{fim.astimezone(FUSO_BR):%d/%m %H:%M}" if fim else "data desconhecida"
+    if resultado not in ("", "success") and saiu and (not fim or saiu - fim > timedelta(minutes=1)):
+        return check("funil-aprendizado", "dados", nome, "falha",
+                     f"A coleta caiu às {saiu.astimezone(FUSO_BR):%d/%m %H:%M} sem gravar status (systemd: {resultado}). "
+                     f"Veja {diario}")
+    if st.get("erro"):
+        return check("funil-aprendizado", "dados", nome, "falha", f"Rodada de {quando} parou: {st['erro']}"[:300])
+    if not fim or t - fim > timedelta(hours=36):
+        return check("funil-aprendizado", "dados", nome, "atencao", f"A coleta não roda desde {quando}. Veja {diario}")
+    resumo = (f"{st.get('licoes_novas', 0)} lição(ões) nova(s), {st.get('pendentes', 0)} pendente(s)"
+              + (", parou no limite de uso (retoma amanhã)" if st.get("limite") else "")
+              + (f", {st['desistidas']} saída(s) recusada(s) duas vezes" if st.get("desistidas") else ""))
+    return check("funil-aprendizado", "dados", nome, "ok", f"Rodada de {quando}: {resumo}")
+
+
+def funil_aprendizado() -> list[dict]:
+    if not FUNIL_APRENDIZADO_TIMER.exists():
+        return []  # ainda não instalado: nada a vigiar
+    try:
+        st = json.loads((FUNIL_APRENDIZADO / "status.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        st = None
+    try:
+        resultado, saiu = _unit_resultado("funil-aprendizado.service")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        resultado, saiu = "", None
+    return [avaliar_funil_aprendizado(st, resultado, saiu, agora())]
+
+
 # ---------------------------------------------------------------- rascunho do Mapa (PRUMO)
 
 MAPA_FILA = HOME / ".local/share/n8n-estado/mapa-fila"
@@ -1068,6 +1112,10 @@ O_QUE_FAZER = {
     "crons": ("O monitor não conseguiu ler as rotinas do Hermes. Peça ao Claude conferir ~/.hermes/cron/jobs.json.",
               False),
     "backup": ("O backup no Drive ainda não registrou nenhuma rodada. Se passar de um dia, peça ao Claude.", False),
+    "funil-aprendizado": ("A coleta das lições do funil parou: nada se perde (ela retoma de onde parou), mas a revisão "
+                          "de segunda fica sem lições novas. Se o erro fala em login, rode claude no terminal do Dell; "
+                          "se fala em retrato do CRM velho, o n8n parou de gravar o crm.json. Senão peça ao Claude: "
+                          "\"a coleta de lições do funil falhou\" (journalctl --user -u funil-aprendizado).", False),
 }
 
 
@@ -1531,8 +1579,8 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, prumo_mapa, pendencias, easypanel,
-               backup, fila_de_avisos, instalados):
+    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, funil_aprendizado, prumo_mapa, pendencias,
+               easypanel, backup, fila_de_avisos, instalados):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
