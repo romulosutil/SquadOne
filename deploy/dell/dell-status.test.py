@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
-agenda de cada um), as filas, o backup e o "o que fazer" de cada alerta. Tudo
+agenda de cada um), as filas, o backup, os arquivos instalados e o "o que fazer" de cada alerta. Tudo
 em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
 Hermes.
 
@@ -582,6 +582,102 @@ class WhatsApp(unittest.TestCase):
         sem_resposta = ds.avaliar_whatsapp(None, "Connection refused")
         self.assertEqual(sem_resposta["estado"], "falha")
         self.assertIn("pareamento", sem_resposta["o_que_fazer"])
+
+
+class Instalados(unittest.TestCase):
+    """O caso de 07/10/2026: o fix do observador estava no repo, a cópia em
+    ~/.local/bin era de antes, e os avisos foram recusados o dia todo."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.repo, self.home = self.tmp / "SquadOne", self.tmp / "home"
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def escrever(self, base: Path, rel: str, texto: str, mtime: float | None = None) -> Path:
+        p = base / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(texto)
+        if mtime is not None:
+            os.utime(p, (mtime, mtime))
+        return p
+
+    def test_tudo_igual(self):
+        self.escrever(self.repo, "deploy/dell/dell-status.py", "v2")
+        self.escrever(self.home, ".local/bin/dell-status", "v2")
+        itens = ds.comparar_instalados([{"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"}],
+                                       self.repo, self.home)
+        c = ds.avaliar_instalados(itens)
+        self.assertEqual((c["estado"], c["detalhe"]), ("ok", "1 arquivo(s) iguais ao repositório"))
+
+    def test_copia_velha_e_o_comando_que_reinstala(self):
+        self.escrever(self.repo, "deploy/dell/whatsapp-observador/observador.py", "com origem", mtime=2_000)
+        self.escrever(self.home, ".local/bin/whatsapp-observador", "sem origem", mtime=1_000)
+        entrada = {"repo": "deploy/dell/whatsapp-observador/observador.py",
+                   "instalado": "~/.local/bin/whatsapp-observador", "reiniciar": "whatsapp-observador"}
+        [item] = ds.comparar_instalados([entrada], self.repo, self.home)
+        self.assertEqual((item["estado"], item["mais_novo"]), ("diferente", False))
+        self.assertEqual(ds.comando_instalar(item),
+                         "install -D -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/observador.py "
+                         "~/.local/bin/whatsapp-observador && systemctl --user restart whatsapp-observador")
+        c = ds.avaliar_instalados([item])
+        self.assertEqual(c["estado"], "atencao")
+        self.assertEqual(c["detalhe"], "1 de 1 diferente(s) do repositório: whatsapp-observador")
+        self.assertIn("dell-status --instalados", c["o_que_fazer"])
+        self.assertNotIn("Cuidado", c["o_que_fazer"])
+
+    def test_copia_mais_nova_pede_comparacao(self):
+        self.escrever(self.repo, "deploy/dell/site-pastas.py", "repo", mtime=1_000)
+        self.escrever(self.home, ".local/bin/site-pastas", "mexido no Dell", mtime=2_000)
+        itens = ds.comparar_instalados([{"repo": "deploy/dell/site-pastas.py", "instalado": "~/.local/bin/site-pastas"}],
+                                       self.repo, self.home)
+        self.assertTrue(itens[0]["mais_novo"])
+        self.assertIn("Cuidado: site-pastas foi gravado no Dell depois", ds.avaliar_instalados(itens)["o_que_fazer"])
+
+    def test_curinga_so_cobre_o_que_esta_instalado(self):
+        for nome in ("crm.py", "aviso-origem.py", "n8n.test.py"):
+            self.escrever(self.repo, f"deploy/dell/claude-ops/{nome}", "x")
+        self.escrever(self.home, ".local/share/claude-ops/crm.py", "x")
+        self.escrever(self.repo, "deploy/dell/backup/backup-dell-cofre.timer", "t")
+        self.escrever(self.home, ".config/systemd/user/backup-dell-cofre.timer", "t velho")
+        itens = ds.comparar_instalados([
+            {"repo": "deploy/dell/claude-ops/*.py", "instalado": "~/.local/share/claude-ops/"},
+            {"repo": "deploy/dell/**/*.timer", "instalado": "~/.config/systemd/user/"},
+        ], self.repo, self.home)
+        self.assertEqual([(i["instalado"], i["estado"]) for i in itens],
+                         [("~/.local/share/claude-ops/crm.py", "igual"),
+                          ("~/.config/systemd/user/backup-dell-cofre.timer", "diferente")])
+        self.assertEqual(ds.comando_instalar(itens[1]),
+                         "install -D -m 644 ~/SquadOne/deploy/dell/backup/backup-dell-cofre.timer "
+                         "~/.config/systemd/user/backup-dell-cofre.timer && systemctl --user daemon-reload")
+
+    def test_faltando_sem_origem_e_hermes(self):
+        self.escrever(self.repo, "deploy/dell/backup/fontes.toml", "f")
+        self.escrever(self.repo, "deploy/hermes/SOUL.md", "alma nova")
+        self.escrever(self.home, ".hermes/SOUL.md", "alma velha")
+        itens = ds.comparar_instalados([
+            {"repo": "deploy/dell/backup/fontes.toml", "instalado": "~/.config/backup-dell/fontes.toml", "modo": "600"},
+            {"repo": "deploy/dell/sumiu.py", "instalado": "~/.local/bin/sumiu"},
+            {"repo": "deploy/hermes/SOUL.md", "instalado": "~/.hermes/SOUL.md", "via": "aplicar-hermes"},
+        ], self.repo, self.home)
+        self.assertEqual([i["estado"] for i in itens], ["faltando", "sem origem", "diferente"])
+        self.assertEqual(ds.comando_instalar(itens[0]),
+                         "install -D -m 600 ~/SquadOne/deploy/dell/backup/fontes.toml ~/.config/backup-dell/fontes.toml")
+        self.assertIsNone(ds.comando_instalar(itens[1]))
+        self.assertEqual(ds.comando_instalar(itens[2]), ds.APLICAR_HERMES)
+        c = ds.avaliar_instalados(itens)
+        self.assertEqual(c["detalhe"], "3 de 3 diferente(s) do repositório: fontes.toml, sumiu, SOUL.md")
+        self.assertIn("(deploy/dell/sumiu.py): tire de lá", c["o_que_fazer"])
+
+    def test_manifesto_do_repo_e_valido(self):
+        """O instalados.json de verdade: lê, e cada entrada sem curinga existe no repo."""
+        manifesto = json.loads((AQUI / "instalados.json").read_text())
+        raiz = AQUI.parent.parent
+        for e in manifesto["arquivos"]:
+            self.assertTrue(e["instalado"].startswith("~/"), e)
+            if not any(c in e["repo"] for c in "*?["):
+                self.assertTrue((raiz / e["repo"]).is_file(), e["repo"])
+            else:
+                self.assertTrue(list(raiz.glob(e["repo"])), e["repo"])
 
 
 if __name__ == "__main__":

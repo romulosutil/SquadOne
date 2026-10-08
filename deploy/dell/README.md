@@ -321,7 +321,7 @@ gravar aviso em nome de quem quisesse. O `2` (setgid) mantém o grupo nos
 arquivos novos.
 
 ```bash
-python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup e "o que fazer"
+python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados e "o que fazer"
 (cd deploy/dell/claude-ops && python3 aviso-origem.py --aplicar)   # antes do dell-status novo
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
 mkdir -p ~/.local/share/avisos/fila
@@ -330,6 +330,29 @@ cp deploy/dell/dell-status.service deploy/dell/dell-status.timer ~/.config/syste
 systemctl --user daemon-reload && systemctl --user enable --now dell-status.timer
 dell-status --stdout   # confere sem gravar nem avisar
 dell-status --drenar   # só esvazia a fila agora (com a mesma trava)
+```
+
+### Arquivos instalados (`instalados.json`, 07/10/2026)
+
+O `atualizar-central` só refaz a Central: o resto que roda no Dell (scripts em
+`~/.local/bin`, `claude-ops`, `prumo-mapa`, `entrada`, units do systemd, o que o
+`aplicar-hermes.py` copia) é uma **cópia** instalada à mão, e um merge não chega
+nela sozinho. Em 07/10/2026 o fix que pôs `origem` nos avisos do observador do
+WhatsApp estava na `main` desde 06/10, mas a cópia em `~/.local/bin` era de
+05/10: a fila recusou 8 avisos de respostas de leads e nenhum chegou ao
+WhatsApp.
+
+A verificação **Arquivos instalados** compara cada cópia listada em
+`deploy/dell/instalados.json` com o `~/SquadOne` (byte a byte, a cada minuto) e
+fica em atenção, sem aviso no WhatsApp, enquanto houver diferença. Quando a cópia
+foi gravada **depois** da versão do repo chegar ao clone, o texto pede para
+comparar antes: pode ser mudança feita direto no Dell que falta levar ao repo.
+O manifesto é lido do `~/SquadOne`, então acrescentar um arquivo nele não exige
+reinstalar o `dell-status`. **Script novo instalado fora do `~/SquadOne` entra
+no `instalados.json` no mesmo PR.**
+
+```bash
+dell-status --instalados   # o que está diferente do repo, com o comando que instala cada um
 ```
 
 ## Cópia do roster do Easypanel (`squad.json`)

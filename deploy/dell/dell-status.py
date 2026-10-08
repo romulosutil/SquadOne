@@ -1358,6 +1358,121 @@ def fila_de_avisos() -> list[dict]:
                                               else ""))]
 
 
+# ---------------------------------------------------------------- arquivos instalados
+
+REPO = HOME / "SquadOne"
+INSTALADOS = REPO / "deploy/dell/instalados.json"
+APLICAR_HERMES = "~/.hermes/hermes-agent/venv/bin/python ~/SquadOne/deploy/hermes/scripts/aplicar-hermes.py"
+
+
+def _til(p: Path, home: Path) -> str:
+    try:
+        return "~/" + p.relative_to(home).as_posix()
+    except ValueError:
+        return p.as_posix()
+
+
+def comparar_instalados(entradas: list[dict], repo: Path, home: Path) -> list[dict]:
+    """Cada cópia do instalados.json comparada byte a byte com o arquivo do
+    repo. Entrada com curinga vale só para o que está instalado (os testes e os
+    scripts de uso único ficam no repo); sem curinga, a cópia é obrigatória.
+    `mais_novo`: a cópia foi gravada depois de a versão do repo chegar ao
+    clone, então pode ter mudança feita direto no Dell que falta no repo."""
+    itens = []
+    for e in entradas:
+        padrao, alvo = e["repo"], e["instalado"]
+        destino = home / alvo[2:] if alvo.startswith("~/") else Path(alvo)
+        if any(c in padrao for c in "*?["):
+            pares = [(o, destino / o.name, False) for o in sorted(repo.glob(padrao)) if o.is_file()]
+        else:
+            origem = repo / padrao
+            pares = [(origem, destino / origem.name if alvo.endswith("/") else destino, True)]
+        for origem, copia, obrigatoria in pares:
+            item = {"repo": origem.relative_to(repo).as_posix(), "instalado": _til(copia, home), "entrada": e}
+            if not origem.is_file():
+                item["estado"] = "sem origem"
+            elif not copia.is_file():
+                if not obrigatoria:
+                    continue
+                item["estado"] = "faltando"
+            elif origem.read_bytes() == copia.read_bytes():
+                item["estado"] = "igual"
+            else:
+                item["estado"] = "diferente"
+                item["mais_novo"] = copia.stat().st_mtime > origem.stat().st_mtime
+            itens.append(item)
+    return itens
+
+
+def comando_instalar(item: dict) -> str | None:
+    """O comando que põe a versão do repo no lugar da cópia."""
+    e = item["entrada"]
+    if item["estado"] == "sem origem":
+        return None
+    if e.get("via") == "aplicar-hermes":
+        return APLICAR_HERMES
+    destino = item["instalado"]
+    modo = e.get("modo") or ("755" if destino.startswith("~/.local/bin/") else "644")
+    cmd = f"install -D -m {modo} ~/SquadOne/{item['repo']} {destino}"
+    if destino.startswith("~/.config/systemd/user/"):
+        cmd += " && systemctl --user daemon-reload"
+    if e.get("reiniciar"):
+        cmd += f" && systemctl --user restart {e['reiniciar']}"
+    return cmd
+
+
+def avaliar_instalados(itens: list[dict]) -> dict:
+    """Cópia diferente do repo é atenção, não falha: muitas vezes não muda nada
+    hoje, mas foi assim que os avisos do observador do WhatsApp sumiram em
+    07/10/2026 (o fix estava mergeado; a cópia era de antes)."""
+    nome = "Arquivos instalados"
+    fora = [i for i in itens if i["estado"] != "igual"]
+    if not fora:
+        return check("instalados", "servicos", nome, "ok", f"{len(itens)} arquivo(s) iguais ao repositório")
+    nomes = [i["instalado"].rsplit("/", 1)[-1] for i in fora]
+    detalhe = (f"{len(fora)} de {len(itens)} diferente(s) do repositório: " + ", ".join(nomes[:3])
+               + (f" e mais {len(nomes) - 3}" if len(nomes) > 3 else ""))
+    partes = ["O ~/SquadOne tem versão que não está instalada (ou a cópia mudou no Dell). "
+              "`dell-status --instalados` lista cada um com o comando que instala. "
+              "Peça ao Claude: \"arquivos instalados fora do repo\"."]
+    novos = [n for n, i in zip(nomes, fora) if i.get("mais_novo")]
+    if novos:
+        partes.append(f"Cuidado: {', '.join(novos)} foi gravado no Dell depois da versão do repo; compare antes "
+                      "de reinstalar, pode ser mudança que falta levar ao repo por PR.")
+    sem = [i["repo"] for i in fora if i["estado"] == "sem origem"]
+    if sem:
+        partes.append(f"O instalados.json cita o que não existe mais no repo ({', '.join(sem)}): tire de lá.")
+    return check("instalados", "servicos", nome, "atencao", detalhe, o_que_fazer=" ".join(partes))
+
+
+def ler_instalados() -> list[dict] | None:
+    if not INSTALADOS.is_file():
+        return None  # clone sem o manifesto (antes do merge): não há o que comparar
+    return comparar_instalados(json.loads(INSTALADOS.read_text())["arquivos"], REPO, HOME)
+
+
+def instalados() -> list[dict]:
+    itens = ler_instalados()
+    return [] if itens is None else [avaliar_instalados(itens)]
+
+
+def listar_instalados() -> None:
+    """`dell-status --instalados`: o que está fora do repo, com o comando."""
+    itens = ler_instalados() or []
+    fora = [i for i in itens if i["estado"] != "igual"]
+    print(f"{len(itens) - len(fora)} de {len(itens)} iguais ao repositório.")
+    vistos = set()
+    for i in fora:
+        marca = " (a cópia é mais nova que o repo: compare antes)" if i.get("mais_novo") else ""
+        print(f"\n{i['estado']}: {i['instalado']}{marca}\n  repo: ~/SquadOne/{i['repo']}")
+        cmd = comando_instalar(i)
+        if cmd and cmd not in vistos:
+            print(f"  instalar: {cmd}")
+            vistos.add(cmd)
+        elif cmd:
+            print("  instalar: o mesmo comando acima")
+
+
 def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime) -> dict:
     novo, quebrou, voltou, lembrar = {}, [], [], []
     for c in checks:
@@ -1406,14 +1521,18 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--stdout", action="store_true", help="só imprime; não grava nem avisa")
     p.add_argument("--drenar", action="store_true", help="só drena a fila de avisos (com flock)")
+    p.add_argument("--instalados", action="store_true", help="lista as cópias diferentes do repo, com o comando")
     a = p.parse_args()
     if a.drenar:
         print(json.dumps(drenar_fila(), ensure_ascii=False))
         return
+    if a.instalados:
+        listar_instalados()
+        return
     t = agora()
     checks = []
     for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, prumo_mapa, pendencias, easypanel,
-               backup, fila_de_avisos):
+               backup, fila_de_avisos, instalados):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
