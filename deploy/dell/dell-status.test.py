@@ -394,7 +394,7 @@ class OQueFazer(unittest.TestCase):
             {"id": "site-resposta", "nome": "Enviados esperando resposta", "quantidade": 12, "detalhe": "x"},
             {"id": "prumo-diagnostico", "nome": "Diagnósticos", "quantidade": 0, "detalhe": "x"}]}))
         r = {c["id"]: c for c in ds.pendencias()}
-        self.assertEqual(r["pend:site-enviar"]["acao"]["url"], "/crm?produto=site")
+        self.assertEqual(r["pend:site-enviar"]["acao"]["url"], "/crm?produto=site&fila=envio")
         self.assertNotIn("sozinho", r["pend:site-enviar"])
         self.assertTrue(r["pend:site-resposta"]["sozinho"])
         self.assertEqual(r["pend:prumo-diagnostico"]["estado"], "ok")

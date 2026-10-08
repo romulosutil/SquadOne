@@ -881,9 +881,10 @@ AUTO = HOME / "auto-site"
 FILAS = {
     "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00. Para adiantar um lead, rode /lead-novo "
                    "numa sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
-    "site-enviar": ("Abra o CRM em Hoje › Sites prontos para enviar: cada linha abre o WhatsApp com a mensagem "
-                    "pronta. Escrever direto ao número do lead também conta como envio.",
-                    ("Abrir no CRM", "/crm?produto=site"), False),
+    # 08/10/2026: o link abre direto a fila "Enviar um por um" do CRM (um site por vez, a mensagem antes do toque).
+    "site-enviar": ("Abra a fila Enviar um por um: um site por vez, com o demo e a mensagem; o toque abre o WhatsApp "
+                    "e marca o envio. Escrever direto ao número do lead também conta como envio.",
+                    ("Enviar um por um", "/crm?produto=site&fila=envio"), False),
     "site-resposta": ("Nada por enquanto: a resposta no WhatsApp marca sozinha. Sem resposta, o follow-up pronto "
                       "chega no 3º dia (09:00) e o lead expira no 10º.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
     "prumo-revisar": ("Abra o CRM em Hoje › Prospects para revisar: veja o site e, se fizer sentido, clique em "
