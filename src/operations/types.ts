@@ -112,6 +112,8 @@ export interface CrmLead {
   acervo: boolean
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }
+  /** Site: o `site-demos-limpeza` apagou o demo na Vercel; sem link de demo nem segunda mensagem até republicar. */
+  demoApagadoEm?: string
   notas: number
   resposta?: CrmResposta
   /** Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site. */

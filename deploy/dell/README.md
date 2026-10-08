@@ -803,7 +803,9 @@ Vercel hobby limita projetos e demo parado ocupa a vaga do gerador, então
 `enviado`/`expirado` sem `respondeu_em`, `fechado_em` nem `recusado_em`, na raiz
 de `~/auto-site` ou em `_concluidos/`, com `enviado_em` + 10 dias já passado,
 tem o projeto `demo-*` **apagado** na Vercel (a pasta fica; o `publicado.json`
-ganha `apagado_em` e o `site-demos-pausa` passa a ignorá-lo). Recusado não entra
+ganha `apagado_em` e o `site-demos-pausa` passa a ignorá-lo; desde 08/10/2026
+o CRM também o lê: tira "Ver o demo" e a segunda mensagem, que levariam a um
+link morto, e diz na ficha e na lista Hoje para republicar antes). Recusado não entra
 (recusar é interação; esses seguem a pausa de 15 dias, que é reversível), nem
 `_em-conversa/`, `_fechados/` ou `_recusados/`. O retrato da planilha com mais
 de 3 h invalida a rodada: uma resposta de hoje poderia estar de fora. **O timer
