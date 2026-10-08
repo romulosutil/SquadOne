@@ -487,8 +487,10 @@ def testar() -> int:
 
         def test_sem_nenhuma_marca(self):
             # O n8n entrega um item vazio (alwaysOutputData) e a extração dele falha: tudo é padrão.
-            por = cruzar(marcas=[("", None)])
+            por = cruzar(marcas=[("", None)], dossies=[])
             self.assertEqual(por["pid-a"][0]["site_versao"], "padrão")
+            # Sem marca, mas com dossiê: o refeito de 07/10 sai v1.
+            self.assertEqual(cruzar(marcas=[("", None)])["pid-a"][0]["site_versao"], "personalizado-v1")
 
         def test_dossie_sem_marca_e_personalizado_v1_e_a_marca_vence(self):
             por = cruzar()
