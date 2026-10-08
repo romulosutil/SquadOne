@@ -1033,7 +1033,12 @@ serviço FAILED, aviso no WhatsApp). Agora:
   `index.html` completo: lead descartado nunca vai para a Vercel;
 - pasta com `DESCARTAR.md` nunca entra na fila; se o movimento falhar, conta uma
   falha (atenção na Central) e o começo da próxima execução tenta de novo, sem
-  gastar o teto do dia. Gravar o arquivo à mão também descarta.
+  gastar o teto do dia. Gravar o arquivo à mão também descarta;
+- o runner não escreve na planilha: desde 08/10/2026 o **Balcão** (de hora em
+  hora) lê o `content.md` das pastas em `_descartados/` e marca **descartado**
+  quem ainda está `novo` (antes ficavam `novo` para sempre, e o CRM apontava
+  divergência). Reabrir um descartado é voltar a pasta para a raiz **e** pôr
+  `novo` na planilha.
 
 Também desde 05/10/2026 **o demo tem cartão de prévia**. O Rômulo manda só o
 link no WhatsApp, e o WhatsApp mostra o cartão (og:*) antes de o dono abrir;
