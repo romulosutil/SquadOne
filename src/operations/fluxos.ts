@@ -73,7 +73,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'PRUMO · Organizar',
     frase: 'Do prospect ao Mapa. O prospect chega pela CDL; o Dell pontua e monta o rascunho; você revisa, convida e conduz.',
     passos: [
-      { titulo: 'O prospect chega pela CDL', texto: 'Desde 08/10 o Organizado chega só pela CDL. O Lead Scout (convite frio a distribuidoras achadas no Places) está desligado no n8n: 57 convites, 21 respostas de robô e nenhum dono interessado. O fluxo continua lá, inativo.', onde: 'externo', quando: 'quando chegar' },
+      { titulo: 'O prospect chega pela CDL ou pelo Raio-X', texto: 'A empresa com equipe chega pela CDL ou pede o Mapa depois do Raio-X. O caminho é Raio-X, depois o Mapa (grátis) e, só depois dele, a Fonte (09/10). O Lead Scout (convite frio a distribuidoras achadas no Places) está desligado no n8n: 57 convites, 21 respostas de robô e nenhum dono interessado. O fluxo continua lá, inativo.', onde: 'externo', quando: 'quando chegar' },
       { titulo: 'Revisa o prospect', texto: 'No CRM, em Hoje › Prospects para revisar: veja o site e o briefing do CNPJ.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-revisar', link: CRM_PRUMO },
       { titulo: 'Enviar convite', texto: 'O clique marca "Convite enviado" e abre o WhatsApp com a mensagem. Escrever direto ao dono também conta.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:GkgYmWZJ65a2e9XF' },
       { titulo: 'Leitura e resposta se marcam', texto: 'O observador anota "Leu o convite em…" e "Respondeu no WhatsApp em…" na planilha.', onde: 'dell', quando: 'na hora' },

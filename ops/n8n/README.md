@@ -87,7 +87,8 @@ de canal e uma política de destinatário; enquanto isso, a coluna
 ## Disparos
 
 - **Desde 08/10/2026 o Lead Scout está inativo no n8n** (convite frio a
-  distribuidoras sem nenhum dono interessado; o Organizado chega pela CDL).
+  distribuidoras sem nenhum dono interessado; a empresa com equipe chega pela
+  CDL ao Mapa, grátis, e a Fonte só vem depois dele).
   O que segue descreve o fluxo quando ligado. Religar: tirar o id de
   `DESLIGADOS` em `deploy/dell/claude-ops/n8n.py` (PR) e ativar no n8n.
 - O **Lead Scout** descobre empresas diariamente às 9h (`America/Sao_Paulo`) e

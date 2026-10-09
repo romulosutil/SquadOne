@@ -3,8 +3,8 @@
 // saiu com o plano de 08/10/2026: o dono não preenche nada, o PRUMO mostra o que
 // já viu. Texto da "Segunda mensagem · C · empresa que já tem site" do roteiro
 // (prumo/03-captacao/roteiro-raio-x.md), na voz da empresa: lead do PRUMO quase
-// sempre já tem site, então não há preço de site aqui (Respondido e Organizado
-// são sob proposta, depois da conversa).
+// sempre já tem site, então não há preço de site aqui (Respondido e Fonte são
+// sob proposta: o Respondido depois da conversa, a Fonte depois do Mapa).
 // PURO: a colinha (src/) importa daqui.
 
 import { artigoDe } from "./site-mensagem.ts";
