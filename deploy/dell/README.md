@@ -1187,9 +1187,35 @@ primeira mensagem do Balcão.
 - **Quantos pontos o dado sustenta, nunca inventados.** Em 08/10/2026, dos 88
   demos no ar, só 5 tinham 3 pontos verificáveis; a maioria tem 1 ou 2, e sem
   ponto não há Raio-X. O Caçador escolhe justamente perfis bons (celular,
-  horário, fotos, nota alta). Mais pontos dependem de o Caçador gravar mais do
-  Places (o horário de verdade, por exemplo). A página e o `raio_x_pontos` dizem
+  horário, fotos, nota alta). A página e o `raio_x_pontos` dizem
   quantos são; a mensagem não pode prometer "3".
+- **Versão 2 (08/10/2026, "raso demais"): Places, avaliações, caminho do cliente.**
+  Com a chave do Google Places em `~/.config/prumo/places.env` (600, linha
+  `PLACES_API_KEY=`; `RAIO_X_CHAVE` troca o caminho), duas chamadas por lead,
+  guardadas em `<slug>/raio-x-places.json` por até 30 dias (o limite dos termos
+  do Google para conteúdo do Places; só os campos usados, sem coordenada nem
+  telefone): **Place Details** (nota e avaliações de hoje, horário, o link "Site"
+  que o perfil mostra agora e as até 5 avaliações que o Google mostra primeiro,
+  com o nome de quem escreveu) e **Text Search** "<tipo do perfil> em <cidade>"
+  (20 primeiros; tipo genérico como "Serviços" vira o ramo do Caçador). Daí: a
+  posição do lead na busca (ponto se fora dos 3 primeiros), quantos dos 5
+  primeiros mostram site próprio (entra no ponto do site), a mediana de
+  avaliações deles (ponto se o lead tem menos da metade), a nota comparada (o
+  que já está bom) e os temas das avaliações contados por palavra, só nas de 4 e
+  5 estrelas, com até 3 trechos de pessoas diferentes. A página ganha também o
+  perfil item por item (✓, ✕ ou "não conferido"), o caminho do cliente
+  (procura, compara, conhece, chama, espera) ligado às seções do próprio demo
+  (lidas do `index.html`: âncoras, WhatsApp, ligar, mapa), os dois serviços com
+  preço (Encontrado e Respondido e Acompanhado) e "como fizemos", com o que não
+  dá para conferir de fora (se o dono responde às avaliações: o Places não
+  entrega; tempo de resposta). Sem chave, ou com a API fora, essas seções não
+  aparecem e o resto sai como na versão 1. Assinatura: PRUMO, sem nome de pessoa.
+  Custo (tabela do Google de 2025; conferir no console): Place Details
+  Enterprise + Atmosphere US$ 25/1.000 e Text Search Enterprise US$ 35/1.000, cada
+  SKU com 1.000 pedidos grátis por mês; no ritmo de hoje (até 12 por dia pelo
+  timer, mais o gancho do gerador) fica dentro do grátis, e o cache impede pagar
+  duas vezes no mesmo mês. PageSpeed ficou de fora: o Caçador só deixa passar
+  quem não tem site próprio no ar, então não há site para medir.
 - **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` +
   `raio-x/index.html`. Antes, o `index.html` e o `og.jpg` da pasta são
   comparados byte a byte com o que está no ar e são esses bytes que sobem; se
@@ -1214,7 +1240,7 @@ primeira mensagem do Balcão.
 
 ```bash
 raio-x --simular higor-ferreira-advogado   # o diagnóstico, sem publicar nem gravar
-raio-x --html higor-ferreira-advogado --saida /tmp/x.html   # só a página
+raio-x --html higor-ferreira-advogado --saida /tmp/x.html   # só a página (chama o Places se o cache venceu)
 raio-x higor-ferreira-advogado             # publica e grava o recibo
 raio-x --pendentes --simular               # quem o timer pegaria
 HOME=/tmp/home-teste python3 deploy/dell/raio-x.py --testar
