@@ -33,7 +33,7 @@ const CASOS: { nome: string, etapa: CrmEtapa, tipo?: CrmTipoDeResposta, trecho?:
   { nome: 'novo: a primeira mensagem', etapa: 'novo', site: ['primeiro-contato'], prumo: ['primeiro-contato'] },
   { nome: 'contato sem resposta: o follow-up', etapa: 'contato', site: ['followup'], prumo: ['followup'] },
   { nome: 'contato só com o robô: o follow-up', etapa: 'contato', tipo: 'bot', trecho: 'Mensagem automática: em breve retornaremos.', site: ['followup'], prumo: ['followup'] },
-  { nome: 'contato com interesse: o próximo passo e a proposta', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'proposta'], prumo: ['mapa', 'proposta'] },
+  { nome: 'contato com interesse: o próximo passo e a proposta', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'proposta'], prumo: ['pode-mandar', 'mapa', 'proposta'] },
   { nome: 'contato neutro: seguir a conversa', etapa: 'contato', tipo: 'neutra', trecho: 'quem é você?', site: ['pode-mandar'], prumo: ['mapa'] },
   { nome: 'contato negativo: nenhum momento, só objeção', etapa: 'contato', tipo: 'negativa', trecho: 'Obrigado, mas já temos site', site: [], prumo: [] },
   { nome: 'contato com pedido de exclusão: nenhum momento', etapa: 'contato', tipo: 'exclusao', trecho: 'por favor não me mande mais', site: [], prumo: [] },
@@ -67,6 +67,16 @@ describe('o trecho de cada etapa e resposta', () => {
   it('a segunda mensagem da esteira aparece para o site com interesse e nunca para o prumo', () => {
     assert.ok(idsDosTrechos(lead('site', 'contato', 'interesse', 'pode mandar')).includes('segunda'))
     for (const c of CASOS) assert.ok(!idsDosTrechos(lead('prumo', c.etapa, c.tipo, c.trecho)).includes('segunda'), c.nome)
+  })
+
+  it('o prumo com interesse recebe o Raio-X, com o link quando ele existe e o marcador quando não', () => {
+    const sem = lead('prumo', 'contato', 'interesse', 'pode me enviar o link sim')
+    assert.equal(idsDosTrechos(sem)[0], 'segunda-prumo')
+    const trecho = colinhaDoLead(sem).momentos[0].trechos[0]
+    assert.ok(preencher(trecho.texto, sem).startsWith('Aqui está: [link do Raio-X]'))
+    const com = { ...sem, links: { raioX: 'https://raio-x-prumo.vercel.app/x' } }
+    assert.ok(preencher(trecho.texto, com).startsWith('Aqui está: https://raio-x-prumo.vercel.app/x'))
+    assert.deepEqual(precosNoTexto(preencher(trecho.texto, com)), [], 'sem preço no frio')
   })
 
   it('negativa com objeção reconhecida mostra ela primeiro', () => {
@@ -283,8 +293,8 @@ describe('integridade do conteúdo', () => {
     assert.deepEqual(faltam, [])
   })
 
-  it('placeholder só {NOME}, {ARTIGO} e {URL}; o resto é [colchete]', () => {
-    const permitidos = new Set(['{NOME}', '{ARTIGO}', '{URL}'])
+  it('placeholder só {NOME}, {ARTIGO}, {URL} e {RAIO_X}; o resto é [colchete]', () => {
+    const permitidos = new Set(['{NOME}', '{ARTIGO}', '{URL}', '{RAIO_X}'])
     for (const texto of TODOS_OS_TEXTOS) {
       for (const m of texto.match(/\{[A-Za-z_]+\}/g) ?? []) assert.ok(permitidos.has(m), `${m} em: ${texto}`)
     }

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { lerPastasDosLeads, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
+import { segundaDoPrumo } from "./prumo-mensagem.ts";
 import { followupDe, segundaDe } from "./site-mensagem.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
@@ -396,9 +397,10 @@ export interface CrmLead {
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp (do `wa_me`). */
   mensagemPronta?: string;
   eventos: CrmEvento[];
-  /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o diagnóstico). */
+  /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o Raio-X, só quando ele existe). */
   /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento. */
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string };
+  /** `raioX`: PRUMO, a página do Raio-X do lead (índice em ~/prumo-entregas/prumo-raio-x/leads.json). */
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
   divergencias: string[];
 }
@@ -465,11 +467,19 @@ export interface MapaDoPrumo {
   pasta: string;
 }
 
+/** Raio-X feito à mão para um lead do PRUMO (sem demo de site), publicado no projeto prumo-raio-x. */
+export interface RaioXDoPrumo {
+  prospectId: string;
+  url: string;
+  feitoEm: string;
+}
+
 export interface ContextoDoCrm {
   agora: Date;
   pastas?: PastaDoLead[];
   gerador?: GeradorDeSites;
   mapas?: MapaDoPrumo[];
+  raioX?: RaioXDoPrumo[];
   registroDisponivel?: { disponivel: boolean; motivo?: string };
   ultimaFalha?: { em: string; erro: string };
 }
@@ -884,6 +894,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   registros: Map<string, Registro[]>;
   links: CrmRetrato["links"];
   mapas: Map<string, MapaDoPrumo>;
+  raioX?: Map<string, RaioXDoPrumo>;
 }): CrmLead | null {
   const c = leitor(COLUNAS_DO_PRUMO, linha);
   const chave = c("id");
@@ -900,6 +911,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     diagnostico: instante(c("diagnosticoEm")),
   };
   const mapa = contexto.mapas.get(chave);
+  const raioX = contexto.raioX?.get(chave);
   const resposta = respostaDaLinha(c);
   const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
     ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora);
@@ -917,10 +929,13 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...eventoDaResposta(resposta, "planilha · Tipo da resposta"),
     ...evento("diagnostico", `Formulário respondido · diagnóstico pronto${c("indice") ? ` (Índice ${c("indice")})` : ""}`, t.diagnostico, "planilha · Diagnóstico em"),
     ...evento("mapa", "Mapa gerado (rascunho em ~/prumo-entregas)", instante(mapa?.geradoEm ?? ""), `pasta · ${mapa?.pasta ?? ""}`),
+    ...evento("raio-x", "Raio-X publicado", instante(raioX?.feitoEm ?? ""), "pasta · ~/prumo-entregas/prumo-raio-x/leads.json"),
     ...eventoDoPrazo(calculada),
     ...eventosManuais(registros),
   ].sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
   const whatsapp = numeroDoWhatsapp(c("whatsapp"));
+  const segunda = emConversa && t.diagnostico === undefined && !ehRecusa(resposta) && raioX && whatsapp
+    ? segundaDoPrumo(whatsapp, c("empresa") || chave, raioX.url) || undefined : undefined;
   const webhook = contexto.links.webhook;
   const planilha = contexto.links.planilhaPrumo && c("linha") ? `${contexto.links.planilhaPrumo}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaPrumo;
   const desde = calculada.desde;
@@ -953,8 +968,10 @@ function leadDoPrumo(linha: Linha, contexto: {
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
       ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/convite?id=${encodeURIComponent(chave)}` } : {}),
-      ...(emConversa && t.diagnostico === undefined && webhook
-        ? { segunda: `${webhook}/convite?id=${encodeURIComponent(chave)}&passo=diagnostico` } : {}),
+      ...(raioX ? { raioX: raioX.url } : {}),
+      // Desde 08/10/2026 o "sim" recebe o Raio-X, não o formulário de 16 perguntas (passo=diagnostico):
+      // sem Raio-X feito, não há segunda mensagem pronta, e a Hoje pede para fazê-lo.
+      ...(segunda ? { segunda } : {}),
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(planilha ? { planilha } : {}),
     },
@@ -1014,10 +1031,11 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       const t = Date.parse(lead.marcos.respondeu ?? "");
       const r = lead.resposta && lead.resposta.tipo !== "bot" ? lead.resposta : undefined;
       const segunda = lead.links.segunda
-        ? [{ rotulo: lead.produto === "prumo" ? "Mandar o diagnóstico" : "Mandar o link do site", url: lead.links.segunda }] : [];
+        ? [{ rotulo: lead.produto === "prumo" ? "Mandar o Raio-X" : "Mandar o link do site", url: lead.links.segunda }] : [];
       itens.resposta.push({
         leadId: lead.id,
-        acao: r?.tipo === "interesse" ? (lead.produto === "prumo" ? "Quer saber mais: mandar o diagnóstico"
+        acao: r?.tipo === "interesse" ? (lead.produto === "prumo"
+          ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
           : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link" : "Quer ver: mandar o link do site")
           : "Responder no WhatsApp",
         detalhe: [
@@ -1110,6 +1128,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   }
   const registros = registrosPorLead(retrato);
   const mapas = new Map((contexto.mapas ?? []).map((mapa) => [mapa.prospectId, mapa]));
+  const raioX = new Map((contexto.raioX ?? []).map((r) => [r.prospectId, r]));
   const idsDoSite = new Set<string>();
   const leads: CrmLead[] = [];
   for (const linha of retrato.fontes.site.linhas) {
@@ -1120,7 +1139,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   }
   const idsDoPrumo = new Set<string>();
   for (const linha of retrato.fontes.prumo.linhas) {
-    const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas });
+    const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas, raioX });
     if (!lead || idsDoPrumo.has(lead.chave)) continue;
     idsDoPrumo.add(lead.chave);
     leads.push(lead);
@@ -1281,6 +1300,31 @@ async function lerMapas(diretorio: string | undefined): Promise<MapaDoPrumo[]> {
   return mapas;
 }
 
+/**
+ * Os Raio-X do PRUMO feitos à mão (09/10/2026, primeiro: Roda Mais): `<entregas>/prumo-raio-x/leads.json`
+ * = { "<ID do prospect>": { "url": "https://...", "feito_em": "AAAA-MM-DD" } }. O arquivo fica fora do
+ * deploy (.vercelignore): os IDs não vão para a página pública. Ilegível ou ausente = nenhum Raio-X.
+ */
+async function lerRaioX(diretorio: string | undefined): Promise<RaioXDoPrumo[]> {
+  if (!diretorio) return [];
+  let dados: unknown;
+  try {
+    dados = JSON.parse(await fs.readFile(path.join(diretorio, "prumo-raio-x", "leads.json"), "utf8"));
+  } catch {
+    return [];
+  }
+  if (!dados || typeof dados !== "object" || Array.isArray(dados)) return [];
+  const saida: RaioXDoPrumo[] = [];
+  for (const [prospectId, valor] of Object.entries(dados as Record<string, unknown>).slice(0, 500)) {
+    const v = (valor && typeof valor === "object" ? valor : {}) as Record<string, unknown>;
+    const url = texto(v.url, 300);
+    const feitoEm = texto(v.feito_em, 64);
+    if (!/^[A-Za-z0-9_-]{3,200}$/.test(prospectId) || !urlHttps(url)) continue;
+    saida.push({ prospectId, url, feitoEm });
+  }
+  return saida;
+}
+
 export class CrmStore {
   constructor(readonly config: ConfigDoCrm, private readonly fetcher: typeof fetch = fetch) {}
 
@@ -1323,12 +1367,13 @@ export class CrmStore {
   }
 
   async visao(agora = new Date()): Promise<CrmVisao> {
-    const [leitura, mapas, registroDisponivel, ultimaFalha] = await Promise.all([
+    const [leitura, mapas, raioX, registroDisponivel, ultimaFalha] = await Promise.all([
       this.config.autoDirectory ? lerPastasDosLeads(this.config.autoDirectory).catch((error) => {
         console.error("[crm] Falha ao ler ~/auto-site:", error);
         return undefined;
       }) : Promise.resolve(undefined),
       lerMapas(this.config.entregasPrumo).catch(() => []),
+      lerRaioX(this.config.entregasPrumo),
       this.disponibilidade(),
       this.ultimaFalha(),
     ]);
@@ -1336,6 +1381,7 @@ export class CrmStore {
       agora,
       ...(leitura ? { pastas: leitura.pastas, gerador: leitura.gerador } : {}),
       mapas,
+      raioX,
       registroDisponivel,
       ...(ultimaFalha ? { ultimaFalha } : {}),
     };

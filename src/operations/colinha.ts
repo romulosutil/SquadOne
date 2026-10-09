@@ -13,6 +13,7 @@
 // finanças pessoais entra no CRM (RULES 24).
 
 import { FOLLOWUP, FOLLOWUP_COM_LINK, SEGUNDA, artigoDe } from '../../server/site-mensagem.ts'
+import { FOLLOWUP_PRUMO, SEGUNDA_PRUMO } from '../../server/prumo-mensagem.ts'
 import type { CrmEtapa, CrmProduto, CrmTipoDeResposta } from './types'
 
 // ------------------------------------------------------------------ tipos
@@ -196,9 +197,16 @@ export const ROTEIRO: PassoDoRoteiro[] = [
   {
     momento: 'pode-mandar',
     titulo: 'Depois do "pode mandar"',
-    objetivo: 'Mandar o link com o preço junto: quem continua a conversa depois do preço é comprador.',
+    objetivo: 'Mandar o link (o demo ou o Raio-X) no mesmo dia: quem continua a conversa depois dele é comprador.',
     servico: 'encontrado',
     trechos: [
+      {
+        id: 'segunda-prumo',
+        titulo: 'PRUMO · o Raio-X (empresa que já tem site)',
+        texto: SEGUNDA_PRUMO,
+        dica: 'Só com a página do Raio-X no ar (o botão "Mandar o Raio-X" da ficha já leva este texto). Sem preço: Respondido e Organizado são sob proposta, depois dos 20 minutos.',
+        produtos: PRUMO,
+      },
       {
         id: 'segunda',
         titulo: 'Segunda mensagem (a da esteira)',
@@ -244,6 +252,13 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         texto:
           'Oi [nome], aqui é o Rômulo de novo, do PRUMO. Ainda faz sentido a gente conversar 20 minutos sobre responder orçamento no mesmo dia? Se não for o momento, é só me dizer que eu não insisto.',
         dica: 'Um só, 3 dias depois do primeiro contato. Sem resposta, deixe quieto.',
+        produtos: PRUMO,
+      },
+      {
+        id: 'followup-prumo-raio-x',
+        titulo: 'PRUMO · Raio-X já enviado',
+        texto: FOLLOWUP_PRUMO,
+        dica: 'Um só, 3 dias depois do Raio-X. Sem resposta, deixe quieto.',
         produtos: PRUMO,
       },
     ],
@@ -467,13 +482,15 @@ export interface LeadDaColinha {
   etapa: CrmEtapa
   empresa: string
   resposta?: { tipo: CrmTipoDeResposta; trecho: string }
-  links: { whatsapp?: string; site?: string }
+  links: { whatsapp?: string; site?: string; raioX?: string }
 }
 
 /** Marcador que fica no texto quando o lead não tem demo: o Rômulo vê que falta. */
 export const SEM_LINK = '[link do demo]'
+/** O mesmo para o PRUMO: sem Raio-X publicado, a mensagem não sai pronta. */
+export const SEM_RAIO_X = '[link do Raio-X]'
 
-/** {NOME}, {ARTIGO} e {URL} com os dados do lead; sem lead (a página), os marcadores ficam. */
+/** {NOME}, {ARTIGO}, {URL} e {RAIO_X} com os dados do lead; sem lead (a página), os marcadores ficam. */
 export function preencher(texto: string, lead?: Pick<LeadDaColinha, 'empresa' | 'links'>): string {
   if (!lead) return texto
   const nome = lead.empresa.trim()
@@ -481,6 +498,7 @@ export function preencher(texto: string, lead?: Pick<LeadDaColinha, 'empresa' | 
     .split('{ARTIGO}').join(artigoDe(nome))
     .split('{NOME}').join(nome)
     .split('{URL}').join(lead.links.site?.trim() || SEM_LINK)
+    .split('{RAIO_X}').join(lead.links.raioX?.trim() || SEM_RAIO_X)
     .split('{DETALHE}').join('')
 }
 
@@ -550,7 +568,8 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
       break
     case 'contato':
       if (tipo === 'interesse') {
-        momentos = prumo ? ['mapa', 'proposta'] : ['pode-mandar', 'proposta']
+        // PRUMO: o "sim" recebe o Raio-X (08/10/2026); a conversa e a proposta vêm depois dele.
+        momentos = prumo ? ['pode-mandar', 'mapa', 'proposta'] : ['pode-mandar', 'proposta']
         motivo = 'Respondeu com interesse: mande o próximo passo e já fale de preço.'
       } else if (tipo === 'exclusao') {
         objecoes = [objecao('pode-apagar'), ...reconhecidas]

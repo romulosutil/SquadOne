@@ -474,7 +474,7 @@ return [{{ json: {{ chave: id, destino, marcar: achou && passo === 'convite' && 
                         PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
                         {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
                          "Próxima ação": "Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, "
-                                         "mande o diagnóstico pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só."})
+                                         "faça o Raio-X e mande pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só."})
 
 
 if __name__ == "__main__":

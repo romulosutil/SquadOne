@@ -112,7 +112,7 @@ const em = Number.isFinite(recebido.getTime()) ? recebido : new Date();
 const SAUDACAO_MS = 5 * 60 * 1000;
 const quando = em.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const txt = (v) => String(v ?? '').trim();
-const CONVITE = 'Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, mande o diagnóstico pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só.';
+const CONVITE = 'Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, faça o Raio-X e mande pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só.';
 const saida = [];
 for (const l of $('Ler Prospects').all().map(i => i.json)) {
   if (!alvo || !direcao || seguinte || chave(l['WhatsApp']) !== alvo) continue;
@@ -206,7 +206,7 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site']
 #             curioso mesmo para ver o resultado, de qualquer forma agradeço, se puder excluir esse
 #             conteúdo por gentileza".
 #   interesse gente quer ver: respondeu_em; o aviso traz o link da segunda mensagem (Site: o site;
-#             PRUMO: o diagnóstico).
+#             PRUMO: a ficha do CRM, para fazer e mandar o Raio-X).
 #   neutra    gente respondeu sem sim nem não: respondeu_em; continue a conversa.
 # Grava o tipo e o trecho na planilha (Site: resposta_tipo, resposta_trecho, resposta_em; PRUMO:
 # "Tipo da resposta", "Resposta", "Resposta em") e responde ao observador com o aviso de cada lead
@@ -215,6 +215,8 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site']
 # mensagem_variante "manual", como no fluxo da conversa.
 
 LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
+# A ficha do lead na Central (Serve da tailnet, porta 8443): o aviso de interesse do PRUMO leva para lá.
+CRM = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/crm"
 GEMINI_MODELO = "models/gemini-3.6-flash"  # o mesmo do Caçador
 TIPOS_HUMANOS = ("negativa", "exclusao", "interesse", "neutra")
 COLUNAS_RESPOSTA_SITE = ["resposta_tipo", "resposta_trecho", "resposta_em"]
@@ -358,7 +360,9 @@ for (const a of m.achados) {
     const item = { planilha: 'prumo', nome, tipo, ID: String(l['ID']), 'Etapa': etapa,
       'Convite enviado em': txt(l['Convite enviado em']), 'Próxima ação': txt(l['Próxima ação']),
       'Tipo da resposta': tipo, 'Resposta': trecho, 'Resposta em': ultima.em };
-    const diagnostico = '""" + LINKS + """/convite?id=' + encodeURIComponent(String(l['ID'])) + '&passo=diagnostico';
+    // 09/10/2026: o "sim" recebe o Raio-X (feito à mão, dados públicos), não o formulário de 16 perguntas
+    // (passo=diagnostico), que saiu com o plano de 08/10. O aviso leva à ficha, onde fica a mensagem pronta.
+    const ficha = '""" + CRM + """?ver=funil&lead=' + encodeURIComponent('prumo:' + String(l['ID']));
     if (etapa === 'Revisar') Object.assign(item, { 'Etapa': 'Convite enviado', 'Convite enviado em': item['Convite enviado em'] || primeiraEm });
     if (tipo === 'bot') {
       // O CRM lê "Respondeu no WhatsApp em ..." da Próxima ação: só a saudação, isso sai.
@@ -374,8 +378,8 @@ for (const a of m.achados) {
         'Próxima ação': 'Pediu exclusão no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Apague o que for dele (nada é apagado sozinho).' });
       item.aviso = cab + 'Pediu para apagar os dados: saiu do funil (Sem interesse). Nada foi apagado; o que for dele está na planilha do PRUMO.';
     } else if (tipo === 'interesse') {
-      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. Mande o diagnóstico (botão na ficha do CRM).';
-      item.aviso = cab + 'Interesse! Mande o diagnóstico: ' + diagnostico;
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. Faça o Raio-X e mande (botão na ficha do CRM).';
+      item.aviso = cab + 'Interesse! Faça o Raio-X e mande pela ficha: ' + ficha;
     } else {
       item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Continue a conversa.';
       item.aviso = cab + 'Gente, sem sim nem não: continue a conversa.';
@@ -926,7 +930,8 @@ def testar() -> int:
             _, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "sou eu, pode falar"}',
                                               [{"em": "2026-10-05T12:40:00Z", "texto": "sou eu, pode falar"}], prumos=[p])
             self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 05/10, 09:40 (interesse)"))
-            self.assertIn("/convite?id=ID-1&passo=diagnostico", resp["marcados"][0]["aviso"])
+            self.assertIn(":8443/crm?ver=funil&lead=prumo%3AID-1", resp["marcados"][0]["aviso"])
+            self.assertNotIn("passo=diagnostico", resp["marcados"][0]["aviso"])
             _, itens, _ = self.classificar('{"tipo": "negativa", "trecho": "não"}', [{"em": "2026-10-05T12:40:00Z", "texto": "não"}], prumos=[p])
             self.assertEqual((itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("Sem interesse", "negativa"))
             _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "apaguem meus dados"}',
