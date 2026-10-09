@@ -664,8 +664,8 @@ Revisar → Convite enviado → Diagnóstico pronto → Concluído | Sem interes
 "Descartados" (só para não reavaliar) e a antiga "Leads" ficam ocultas.
 
 - **Lead Scout** (desligado no n8n desde 08/10/2026: 57 convites frios a
-  distribuidoras, 21 respostas de robô, nenhum dono interessado; o Organizado
-  chega pela CDL e `n8n.DESLIGADOS` impede os `prumo-*.py` de religá-lo. Era:
+  distribuidoras, 21 respostas de robô, nenhum dono interessado; a empresa com
+  equipe chega pela CDL ao Mapa, grátis, e a Fonte só vem depois dele (09/10) e `n8n.DESLIGADOS` impede os `prumo-*.py` de religá-lo. Era:
   9h, rodízio de 80 buscas segmento × cidade): Google Places →
   WhatsApp publicado no site → nota → Prospects (com o link "Enviar convite ↗")
   ou Descartados; cadastro repetido (mesmo WhatsApp) é descartado. Resumo da

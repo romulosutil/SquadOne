@@ -132,8 +132,8 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 
 `PRUMO — Preparar planilha` fica desligado de propósito (manual). `PRUMO — Lead
 Scout (review-first)` também, desde 08/10/2026: o convite frio a distribuidoras
-deu 57 convites, 21 respostas de robô e nenhum dono interessado, e o Organizado
-agora chega só pela CDL. O fluxo continua no n8n, inativo; os scripts
+deu 57 convites, 21 respostas de robô e nenhum dono interessado, e a empresa com
+equipe agora chega só pela CDL, ao Mapa (grátis); a Fonte só vem depois dele. O fluxo continua no n8n, inativo; os scripts
 `claude-ops/prumo-*.py` não o religam (`n8n.DESLIGADOS`). Não sugira religar.
 
 Links rastreados (`wa_link` do Site antes da venda, "Enviar convite" do

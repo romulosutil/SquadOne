@@ -789,8 +789,8 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   planilha.
 
 **Lead Scout desligado** (08/10/2026): o convite frio a distribuidoras deu 57
-convites, 21 respostas de robô e nenhum dono interessado; o Organizado chega
-pela CDL. O fluxo `e02c6f43-…` fica no n8n, inativo, e `n8n.DESLIGADOS`
+convites, 21 respostas de robô e nenhum dono interessado; a empresa com equipe
+chega pela CDL ao Mapa, grátis, e a Fonte só vem depois dele (09/10). O fluxo `e02c6f43-…` fica no n8n, inativo, e `n8n.DESLIGADOS`
 (`claude-ops/n8n.py`) faz o `POST /activate` dos `prumo-*.py` e do
 `fecha-ciclos.py` virar um aviso em vez de religá-lo. Religar: tirar o id de
 lá (PR), instalar e ativar no n8n.
