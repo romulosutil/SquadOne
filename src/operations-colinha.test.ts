@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { FOLLOWUP, FOLLOWUP_COM_LINK, SEGUNDA, artigoDe } from '../server/site-mensagem.ts'
 import {
-  CARDAPIO, CDL, CLIENTE_FUNDADOR, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, colinhaDoLead, linkDoWhatsApp, objecoesNoTexto,
-  passo, precosNoTexto, preencher, type LeadDaColinha, type Momento, type Trecho,
+  CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, SOB_PROPOSTA, colinhaDoLead, linkDoWhatsApp,
+  objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher, type LeadDaColinha, type Momento, type Trecho,
 } from './operations/colinha.ts'
 import type { CrmEtapa, CrmProduto, CrmTipoDeResposta } from './operations/types.ts'
 
@@ -154,7 +154,8 @@ describe('a esteira vem de site-mensagem', () => {
 const textosDoTrecho = (t: Trecho) => [t.titulo, t.texto, t.dica ?? '']
 const TODOS_OS_TEXTOS: string[] = [
   ...CARDAPIO.flatMap((s) => Object.values(s).filter((v): v is string => typeof v === 'string')),
-  CLIENTE_FUNDADOR,
+  SOB_PROPOSTA,
+  FRASE_SOB_PROPOSTA,
   ...ROTEIRO.flatMap((p) => [p.titulo, p.objetivo, ...(p.perguntas ?? []), ...p.trechos.flatMap(textosDoTrecho)]),
   ...OBJECOES.flatMap((o) => [o.fala, ...textosDoTrecho(o.resposta)]),
   ...CDL.flatMap(textosDoTrecho),
@@ -189,6 +190,66 @@ describe('nenhum R$ fora do cardápio', () => {
     const imports = fonte.split('\n').filter((l) => /^\s*import\b|\bimport\(|\brequire\(/.test(l))
     assert.ok(imports.length > 0)
     for (const l of imports) assert.ok(!/financas/i.test(l), l)
+  })
+})
+
+// Decisão de 08/10/2026: Respondido, Mapa e Organizado são "sob proposta" para o
+// cliente (o valor só na proposta por escrito), e não há cliente fundador.
+describe('sob proposta e sem cliente fundador', () => {
+  const servico = (id: string) => CARDAPIO.find((s) => s.id === id)!
+
+  it('Respondido, Mapa e Organizado são sob proposta; Raio-X e Encontrado, não', () => {
+    assert.deepEqual(CARDAPIO.filter((s) => s.sobProposta).map((s) => s.id), ['respondido', 'mapa', 'organizado'])
+  })
+
+  it('o que se diz ao cliente de um serviço sob proposta não tem valor', () => {
+    assert.deepEqual(precosNoTexto(FRASE_SOB_PROPOSTA), [])
+    for (const s of CARDAPIO.filter((x) => x.sobProposta)) {
+      assert.equal(precoParaOCliente(s), SOB_PROPOSTA)
+      assert.deepEqual(precosNoTexto(precoParaOCliente(s)), [], s.id)
+    }
+  })
+
+  it('a base interna da proposta continua com o valor da tabela', () => {
+    assert.equal(precoDaTabela(servico('respondido')), 'R$ 2.400 + R$ 390/mês (só depois de uma conversa, nunca no WhatsApp frio)')
+    assert.equal(precoDaTabela(servico('mapa')), 'R$ 1.500 (abatido do projeto)')
+    assert.equal(precoDaTabela(servico('organizado')), 'R$ 6.500')
+  })
+
+  it('o Encontrado e o Raio-X dizem o preço ao cliente', () => {
+    assert.equal(precoParaOCliente(servico('encontrado')), 'R$ 990 + R$ 69/mês (paga só depois de ver no ar)')
+    assert.equal(precoParaOCliente(servico('raio-x')), 'grátis')
+  })
+
+  it('fora da proposta, nenhuma mensagem ao cliente cita o valor de um serviço sob proposta', () => {
+    const sobProposta = new Set(CARDAPIO.filter((s) => s.sobProposta).flatMap((s) => precosNoTexto(`${s.preco} ${s.mensal ?? ''}`)))
+    const mensagens = [
+      ...ROTEIRO.filter((p) => p.momento !== 'proposta').flatMap((p) => p.trechos),
+      ...OBJECOES.map((o) => o.resposta),
+      ...CDL,
+    ]
+    for (const t of mensagens) {
+      for (const p of precosNoTexto(t.texto)) assert.ok(!sobProposta.has(p), `${t.id} cita ${p}`)
+    }
+  })
+
+  it('não há cliente fundador nem desconto em troca de depoimento', () => {
+    assert.ok(!PRECOS_DO_CARDAPIO.includes('R$ 690'))
+    for (const texto of TODOS_OS_TEXTOS) {
+      assert.ok(!/cliente fundador|fundadores|vaga de fundador|R\$\s?690/i.test(texto), texto)
+    }
+    // Nenhuma mensagem ao cliente fala de depoimento (a dica pode dizer que não há).
+    const mensagens = [...ROTEIRO.flatMap((p) => p.trechos), ...OBJECOES.map((o) => o.resposta), ...CDL]
+    for (const t of mensagens) assert.ok(!/depoimento/i.test(t.texto), t.id)
+  })
+
+  it('"tá caro" não oferece desconto: valor, só pagar depois de ver no ar, menor ou mais tarde', () => {
+    const texto = OBJECOES.find((o) => o.id === 'ta-caro')!.resposta.texto
+    assert.deepEqual(precosNoTexto(texto), [])
+    assert.ok(!/desconto|pagam menos/i.test(texto))
+    assert.match(texto, /só pagam depois de ver/)
+    assert.match(texto, /parte menor/)
+    assert.match(texto, /mais para frente/)
   })
 })
 

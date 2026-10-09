@@ -24,8 +24,14 @@ export interface ServicoDoCardapio {
   nome: string
   /** O que o cliente recebe, dito como o Rômulo diria. */
   entrega: string
-  /** "grátis", "R$ 990", "R$ 1.500"… */
+  /** "grátis", "R$ 990", "R$ 1.500"… Nos serviços sob proposta é a base interna, nunca dita no frio. */
   preco: string
+  /**
+   * Para o cliente o preço é "sob proposta" (decisão de 08/10/2026): o valor sai
+   * por escrito, depois do Raio-X, ao lado do que ele encontrou. `preco` e
+   * `mensal` continuam aqui como base da proposta, só para o Rômulo.
+   */
+  sobProposta?: true
   /** "R$ 69/mês" quando há mensalidade. */
   mensal?: string
   /** "abatido do projeto", "paga só depois de ver no ar"… */
@@ -102,6 +108,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     preco: 'R$ 2.400',
     mensal: 'R$ 390/mês',
     condicao: 'só depois de uma conversa, nunca no WhatsApp frio',
+    sobProposta: true,
     paraQuem: 'Quem já tem site e perde cliente no WhatsApp: demora para responder, ninguém responde fora do horário, orçamento pedido que some.',
   },
   {
@@ -110,6 +117,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     entrega: 'Uma conversa de 45 minutos e acesso de leitura ao WhatsApp e às planilhas. Entrega os números: quantos chamam, quanto demoram para ter resposta, quantos fecham, quanto escapa por mês e o que fazer primeiro.',
     preco: 'R$ 1.500',
     condicao: 'abatido do projeto',
+    sobProposta: true,
     paraQuem: 'O dono que topou conversar e quer ver o tamanho do problema antes de decidir. Cada achado aponta para um serviço do cardápio.',
   },
   {
@@ -117,16 +125,33 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Organizado',
     entrega: 'A Fonte: como a empresa vende, compra, entrega e cobra, escrito e validado com o time (num Notion ou num agente com IA). As regras da casa saem da cabeça do dono.',
     preco: 'R$ 6.500',
+    sobProposta: true,
     paraQuem: 'Associados da CDL onde tudo depende do dono. Chega pela CDL, não pelo frio.',
   },
 ]
 
-/** Os 3 primeiros clientes de cada serviço: menos, em troca de depoimento em vídeo. */
-export const CLIENTE_FUNDADOR =
-  'Os 3 primeiros clientes de cada serviço pagam menos (o Encontrado, por exemplo, sai por R$ 690) em troca de um depoimento em vídeo e da permissão para usar o caso.'
+/** O preço de um serviço sob proposta, no cardápio (como o "grátis" do Raio-X). */
+export const SOB_PROPOSTA = 'sob proposta'
+
+/** O que dizer ao cliente que pergunta o preço de um serviço sob proposta: nenhum valor. */
+export const FRASE_SOB_PROPOSTA = 'O valor depende do que o Raio-X encontra na empresa de vocês e vai por escrito na proposta, em até 24 horas.'
+
+/** Valor + mensalidade + condição, como está na tabela. Num serviço sob proposta, é só para o Rômulo. */
+export function precoDaTabela(s: ServicoDoCardapio): string {
+  return [s.preco, s.mensal && `+ ${s.mensal}`, s.condicao && `(${s.condicao})`].filter(Boolean).join(' ')
+}
+
+/** O preço como se diz ao cliente: sob proposta, sem número; os outros, como na tabela. */
+export function precoParaOCliente(s: ServicoDoCardapio): string {
+  return s.sobProposta ? SOB_PROPOSTA : precoDaTabela(s)
+}
+
+// Sem cliente fundador (08/10/2026): o preço é o da tabela para todo cliente,
+// nada de desconto em troca de depoimento. O PRUMO é consultoria e não pede
+// favor ao cliente.
 
 /** Todo "R$" que a colinha pode mostrar. Fora desta lista, o teste falha. */
-export const PRECOS_DO_CARDAPIO: string[] = ['R$ 990', 'R$ 69', 'R$ 2.400', 'R$ 390', 'R$ 1.500', 'R$ 6.500', 'R$ 690']
+export const PRECOS_DO_CARDAPIO: string[] = ['R$ 990', 'R$ 69', 'R$ 2.400', 'R$ 390', 'R$ 1.500', 'R$ 6.500']
 
 const SITE: CrmProduto[] = ['site']
 const PRUMO: CrmProduto[] = ['prumo']
@@ -233,8 +258,8 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'mapa-convite',
         titulo: 'Convite para o Mapa',
         texto:
-          'Que bom! Antes de te propor qualquer coisa, quero entender como o cliente chega até vocês hoje. É uma conversa de 45 minutos, mais acesso só de leitura ao WhatsApp e às planilhas. No fim, vocês recebem em números quanto cliente escapa por mês e o que resolver primeiro. Custa R$ 1.500, e se a gente seguir com um projeto, esse valor sai do preço dele. Que dia fica bom?',
-        dica: 'Só depois de um sim ou de uma conversa, nunca no WhatsApp frio. O valor abatido é o que tira o peso do "pagar para ouvir".',
+          'Que bom! Antes de te propor qualquer coisa, quero entender como o cliente chega até vocês hoje. É uma conversa de 45 minutos, mais acesso só de leitura ao WhatsApp e às planilhas. No fim, vocês recebem em números quanto cliente escapa por mês e o que resolver primeiro. Te mando a proposta por escrito em até 24 horas, com o valor; se a gente seguir com um projeto, ele sai do preço do projeto. Que dia fica bom?',
+        dica: 'Só depois de um sim ou de uma conversa, nunca no WhatsApp frio. O Mapa é sob proposta: o valor (R$ 1.500) vai na proposta por escrito, não nesta mensagem. O abatimento é o que tira o peso do "pagar para ouvir".',
         produtos: TODOS,
       },
       {
@@ -308,7 +333,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Fechou o Encontrado',
         texto:
           'Fechado, obrigado pela confiança! Para colocar no ar preciso só de duas coisas: o endereço que vocês querem (por exemplo, nomedaempresa.com.br) e acesso ao perfil do Google, me adicionando como administrador. Em [dias] está no ar; vocês conferem e só então pagam.',
-        dica: 'Pagamento só depois de ver no ar. Cliente fundador? Combine o depoimento em vídeo agora.',
+        dica: 'Pagamento só depois de ver no ar, pelo preço da proposta. Nada de desconto em troca de depoimento.',
         produtos: SITE,
       },
       {
@@ -316,7 +341,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Fechou um projeto (Mapa, Respondido ou Organizado)',
         texto:
           'Fechado, obrigado pela confiança! Para começar, marco com vocês [dia e hora] e preciso de acesso de leitura ao WhatsApp e às planilhas. Te mando por aqui o que entra em cada semana, para vocês acompanharem.',
-        dica: 'Combine forma e data do pagamento por escrito. Cliente fundador? Combine o depoimento em vídeo e a permissão para contar o caso.',
+        dica: 'Combine forma e data do pagamento por escrito, pelo preço da proposta.',
         produtos: TODOS,
       },
     ],
@@ -399,8 +424,8 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-ta-caro',
       titulo: '"Tá caro"',
       texto:
-        'Entendo. Uma coisa que ajuda: os 3 primeiros clientes de cada serviço entram como fundadores e pagam menos. O Encontrado, por exemplo, sai por R$ 690 em vez de R$ 990 para colocar no ar. Em troca, vocês gravam um depoimento curto em vídeo e me deixam contar o caso. Quer entrar assim?',
-      dica: 'Confira se ainda há vaga de fundador (3 por serviço) antes de mandar; no Respondido e no Organizado, combine o desconto na conversa. Nada de prazo inventado para pressionar.',
+        'Entendo. O valor cobre o site no ar com o endereço de vocês, o perfil do Google revisado e o botão do WhatsApp, com domínio, hospedagem e ajustes incluídos. E vocês só pagam depois de ver tudo funcionando. Se agora não for o momento, dá para começar por uma parte menor ou retomar mais para frente. O que faz mais sentido para vocês?',
+      dica: 'O preço não muda: nada de desconto em troca de depoimento ou de favor, o PRUMO é consultoria e não pede ajuda. No Respondido ou no Organizado, troque a primeira frase pelo que entra no projeto e ofereça um trecho menor (o Mapa, ou só o Encontrado). Se escolherem mais tarde, combine a data e anote no CRM. Nada de prazo inventado para pressionar.',
       produtos: TODOS,
     },
   },
