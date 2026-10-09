@@ -32,7 +32,8 @@ processando em lote, siga pro próximo lead da fila.
 ## 2. Para cada lead
 
 Siga os passos do `CLAUDE.md` — ler `content.md` e as imagens de `Fotos/` e
-`Logotipo/`, marca real (Instagram, se tiver), escolher
+`Logotipo/`, marca real (Instagram, se tiver), metáfora e Atos (passo 1.5.1,
+grava o `CONCEITO.md`), escolher
 o estilo visual, `/design`, refino da direção (`/design-taste-frontend` →
 `/ui-ux-pro-max` → `/impeccable`), escrever, polir no código
 (`/emil-design-eng` → `/impeccable audit` + `polish`), publicar, recibo,
@@ -40,8 +41,20 @@ registro. As cinco skills rodam sempre, nessa ordem. `/design` e as três de
 refino vêm antes de qualquer linha de código; só a `/emil-design-eng` e o
 `audit`/`polish` rodam sobre o HTML pronto.
 
-Releia as restrições do `CLAUDE.md` antes de escrever o HTML. As sete que mais
+Releia as restrições do `CLAUDE.md` antes de escrever o HTML. As que mais
 escapam:
+
+- a página é uma história em cinco Atos guiada por uma metáfora do ofício
+  (passo 1.5.1), não o esquema "hero, serviços, diferenciais, contato"; a
+  metáfora mostra o cuidado, nunca o problema, e a navegação é ela
+- todo efeito de movimento tem linha na tabela "efeito → Ato → o que
+  significa" do `CONCEITO.md`; o que não significa nada sai. Cursor só com
+  `pointer: fine`, `prefers-reduced-motion` completo, título e foto do Ato I
+  visíveis sem esperar JS
+- orçamento de bytes medido antes do deploy (fim do Ato I ≤ 200 KB, arquivo
+  ≤ 450 KB, CSS ≤ 35 KB, JS ≤ 25 KB), fotos em WebP
+- nenhuma frase de medo, desconfiança, urgência artificial ou deboche do ramo;
+  experiência só com fonte (anos, nota, horário)
 
 - abra as fotos de `Fotos/` e `Logotipo/` (passo 1) antes de decidir estilo —
   não decida só pelo texto do `content.md`
@@ -79,8 +92,9 @@ escapam:
 Um parágrafo curto, sem tabela:
 
 - quantos leads entraram e quantos saíram publicados
-- para cada um, a URL e **uma frase** sobre a decisão de design que você tomou
-  pensando naquele negócio — não uma descrição do que a página tem
+- para cada um, a URL, a metáfora (família + instância) e **uma frase** sobre a
+  decisão de design que você tomou pensando naquele negócio — não uma
+  descrição do que a página tem
 - o que falhou, se falhou, e por quê
 
 Se algum lead ficou sem site, diga qual e o motivo real. Não arredonde.
