@@ -40,10 +40,11 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const todas: Array<[string, string, string | undefined, boolean]> = [
     ['enviar', 'Enviar a primeira mensagem pelo WhatsApp (marca como enviado)', l.enviar, true],
     ['convite', 'Enviar convite (marca como enviado)', l.convite, true],
-    ['segunda', prumo ? 'Mandar o diagnóstico (link do formulário)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
+    ['segunda', prumo ? 'Mandar o Raio-X (segunda mensagem)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
     ['followup', 'Mandar o follow-up (texto pronto)', l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
     ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
+    ['raioX', 'Ver o Raio-X', l.raioX, false],
     ['acoes', 'Recusou · Fechou · Desfazer (página do lead)', l.acoes, false],
     ['planilha', prumo ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
   ]

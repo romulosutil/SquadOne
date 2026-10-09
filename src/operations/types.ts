@@ -123,7 +123,7 @@ export interface CrmLead {
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
   mensagemPronta?: string
   eventos: CrmEvento[]
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string }
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string }
   pasta?: {
     lugar: string
     slug: string

@@ -305,6 +305,15 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     return montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads;
   }
 
+  /** O retrato base com um prospect que respondeu com interesse hoje (o que põe a resposta no Hoje). */
+  function comQuer(extra: Record<string, string> = {}) {
+    const base = retrato();
+    base.fontes.prumo.linhas.push(linhaPrumo("quer", {
+      Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "interesse", Resposta: "sou eu, pode falar",
+      "Próxima ação": "Respondeu no WhatsApp em 02/10, 11:00 (interesse): “sou eu”.", ...extra }));
+    return base;
+  }
+
   it("só robô fica Em contato sem conversa, mesmo com resposta marcada antes; gente vem com o tipo", () => {
     const leads = comRespostas();
     const robo = lead(leads, "site:robo");
@@ -364,20 +373,39 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.deepEqual(lead(montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads, "site:so-versao").abordagem, { site: "padrão" });
   });
 
-  it("PRUMO: robô não é resposta; interesse leva ao botão do diagnóstico e ao Hoje", () => {
+  it("PRUMO: robô não é resposta; interesse sem Raio-X pede para fazê-lo, nunca o formulário", () => {
     const leads = comRespostas();
     assert.equal(lead(leads, "prumo:robo").sinal, "so-robo");
     const quer = lead(leads, "prumo:quer");
     assert.equal(quer.etapa, "contato");
-    assert.equal(quer.links.segunda, `${WEBHOOK}/convite?id=quer&passo=diagnostico`);
-    const { hoje } = montarCrm((() => { const b = retrato(); b.fontes.prumo.linhas.push(linhaPrumo("quer", {
-      Etapa: "Convite enviado", "Convite enviado em": dias(1), "Tipo da resposta": "interesse", Resposta: "sou eu, pode falar",
-      "Próxima ação": "Respondeu no WhatsApp em 02/10, 11:00 (interesse): “sou eu”." })); return b; })(), { agora: AGORA, pastas: PASTAS });
+    assert.equal(quer.links.segunda, undefined, "o formulário de 16 perguntas saiu em 08/10/2026");
+    assert.equal(quer.links.raioX, undefined);
+    const { hoje } = montarCrm(comQuer(), { agora: AGORA, pastas: PASTAS });
     const item = hoje.flatMap((g) => g.itens).find((i) => i.leadId === "prumo:quer");
     assert.ok(item, "resposta de interesse não entrou no Hoje");
-    assert.equal(item.acao, "Quer saber mais: mandar o diagnóstico");
+    assert.equal(item.acao, "Quer saber mais: fazer o Raio-X e mandar");
     assert.ok(item.detalhe.includes("“sou eu, pode falar”"));
-    assert.equal(item.links[0].rotulo, "Mandar o diagnóstico");
+    assert.ok(!item.links.some((l) => l.url.includes("passo=diagnostico")));
+  });
+
+  it("PRUMO: com o Raio-X publicado, a segunda mensagem leva a página e entra no Hoje", () => {
+    const raioX = [{ prospectId: "quer", url: "https://raio-x-prumo.vercel.app/quer", feitoEm: "2026-10-02" }];
+    const { leads, hoje } = montarCrm(comQuer(), { agora: AGORA, pastas: PASTAS, raioX });
+    const quer = lead(leads, "prumo:quer");
+    assert.equal(quer.links.raioX, "https://raio-x-prumo.vercel.app/quer");
+    assert.ok(quer.links.segunda?.startsWith("https://wa.me/5511900000000?text="));
+    const texto = decodeURIComponent(quer.links.segunda!.split("?text=")[1]);
+    assert.ok(texto.startsWith("Aqui está: https://raio-x-prumo.vercel.app/quer"));
+    assert.ok(texto.includes("Prospect quer: o que já está bom"), texto);
+    assert.ok(!texto.includes("R$"), "lead do PRUMO não recebe preço no frio");
+    assert.ok(quer.eventos.some((e) => e.tipo === "raio-x"));
+    const item = hoje.flatMap((g) => g.itens).find((i) => i.leadId === "prumo:quer")!;
+    assert.equal(item.acao, "Quer saber mais: mandar o Raio-X");
+    assert.equal(item.links[0].rotulo, "Mandar o Raio-X");
+    // Recusa não recebe a segunda mensagem, mesmo com o Raio-X feito.
+    const nao = montarCrm(comQuer({ "Tipo da resposta": "negativa", Resposta: "não", Etapa: "Convite enviado" }),
+      { agora: AGORA, pastas: PASTAS, raioX });
+    assert.equal(lead(nao.leads, "prumo:quer").links.segunda, undefined);
   });
 });
 
