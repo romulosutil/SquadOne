@@ -3,7 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import CrmTrecho from './CrmTrecho.vue'
-import { CARDAPIO, CDL, CLIENTE_FUNDADOR, OBJECOES, ROTEIRO, type Trecho } from './colinha'
+import { CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, ROTEIRO, precoDaTabela, precoParaOCliente, type Trecho } from './colinha'
 import type { CrmProduto } from './types'
 
 // A colinha inteira (/crm?ver=colinha, 08/10/2026): tudo para consultar durante
@@ -50,10 +50,6 @@ async function irPara(id: string) {
   alvo.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
   alvo.focus({ preventScroll: true })
 }
-
-function preco(s: (typeof CARDAPIO)[number]) {
-  return [s.preco, s.mensal && `+ ${s.mensal}`, s.condicao && `(${s.condicao})`].filter(Boolean).join(' ')
-}
 </script>
 
 <template>
@@ -80,12 +76,16 @@ function preco(s: (typeof CARDAPIO)[number]) {
       <ul class="crm-colinha__cardapio">
         <li v-for="s in CARDAPIO" :key="s.id" class="crm-colinha__servico">
           <h3>{{ s.nome }}</h3>
-          <p class="crm-colinha__preco">{{ preco(s) }}</p>
+          <!-- Sob proposta: o cliente ouve a frase sem número; a base da proposta fica só para o Rômulo. -->
+          <p class="crm-colinha__preco">{{ precoParaOCliente(s) }}</p>
+          <template v-if="s.sobProposta">
+            <p><strong>Para o cliente:</strong> “{{ FRASE_SOB_PROPOSTA }}”</p>
+            <p class="crm-colinha__dica"><strong>Base da proposta (só para você):</strong> {{ precoDaTabela(s) }}</p>
+          </template>
           <p v-if="s.entrega">{{ s.entrega }}</p>
           <p v-if="s.paraQuem" class="crm-colinha__dica"><strong>Para quem:</strong> {{ s.paraQuem }}</p>
         </li>
       </ul>
-      <p v-if="CLIENTE_FUNDADOR" class="crm-colinha__fundador"><strong>Cliente fundador.</strong> {{ CLIENTE_FUNDADOR }}</p>
     </section>
 
     <section class="crm-colinha__secao" aria-labelledby="crm-colinha-roteiro">

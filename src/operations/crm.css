@@ -302,7 +302,6 @@
 .crm-colinha__servico h3 { font-size: 1.1rem; letter-spacing: -0.02em; }
 .crm-colinha__servico p { margin: 0; overflow-wrap: anywhere; }
 .crm-colinha__preco { font-weight: 900; font-variant-numeric: tabular-nums; }
-.crm-colinha__fundador { margin: 0; padding: 0.6rem 0.8rem; border: var(--linha-fina); background: var(--ok-fundo); }
 
 /* Momento e objeção: na página, separados por uma linha; na ficha, idem, sob o h3 "Colinha". */
 .crm-colinha__momento,
