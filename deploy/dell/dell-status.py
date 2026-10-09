@@ -46,7 +46,10 @@ SAIDA = HOME / ".local/share/squadone-operations/status.json"
 ESTADO = HOME / ".local/state/dell-status/estado.json"
 FILA = HOME / ".local/share/avisos/fila"
 HERMES = HOME / ".local/bin/hermes"
-DESTINO = os.environ.get("AVISOS_DESTINO", "whatsapp:Rômulo Sutil")
+# "whatsapp" = WHATSAPP_HOME_CHANNEL do .env do Hermes. Era "whatsapp:Rômulo Sutil", um nome do
+# diretório de canais preso ao chat da conta pareada: no chip novo (09/10/2026) mandaria do número
+# novo para o antigo. Trocar de chip agora é só o canal principal.
+DESTINO = os.environ.get("AVISOS_DESTINO", "whatsapp")
 N8N = "http://127.0.0.1:5679"
 N8N_EDITOR = "http://127.0.0.1:5679"
 PNCP_RUN = HOME / "licitacoes-automation/data/latest-run.json"
