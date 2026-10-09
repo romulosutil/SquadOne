@@ -264,6 +264,30 @@ class Descarte(unittest.TestCase):
         self.assertIn(f"{self.auto}/b-bom/DESCARTAR.md", texto)
         self.assertIn("não mova a pasta", texto)
 
+    def test_direcao_de_metafora_e_atos_em_todos_os_modos(self):
+        """08/10/2026: a direção do redesign do PRUMO vale para a fila comum, o personalizado e o premium."""
+        comum = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"))
+        self.assertIn("metáfora e Atos (passo 1.5.1", comum[2])
+        sistema = comum[comum.index("--append-system-prompt") + 1]
+        for trecho in (f"{self.auto}/b-bom/CONCEITO.md", "fim do Ato I", "--force-prefers-reduced-motion",
+                       "--blink-settings=scriptEnabled=false"):
+            self.assertIn(trecho, sistema)
+        self.assertNotIn("MODO PERSONALIZADO", sistema)
+        pers = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
+        self.assertIn("metáfora e Atos do passo 1.5.1", pers[2])
+        sistema_pers = pers[pers.index("--append-system-prompt") + 1]
+        for trecho in ("INSTÂNCIA da metáfora", "cinco Atos", "(pointer: fine)", "efeito → Ato → o que significa",
+                       "Não volte ao esquema"):
+            self.assertIn(trecho, sistema_pers)
+        self.m.MODO_PREMIUM = True
+        try:
+            prem = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
+        finally:
+            self.m.MODO_PREMIUM = False
+        sistema_prem = prem[prem.index("--append-system-prompt") + 1]
+        for trecho in ("Complete o", "CHECKLIST DOS ATOS", "(20) `window.onerror` vazio", "deboche do ramo"):
+            self.assertIn(trecho, sistema_prem)
+
 
 CLAUDE_FALSO = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -388,6 +412,20 @@ class ListaDePermissao(unittest.TestCase):
         self.assertEqual((self.auto / "lead-r/_v1/index.html").read_text(), "<html>v1</html>")
         marca = json.loads((self.auto / "lead-r/personalizado.json").read_text())
         self.assertEqual(marca["versao"], self.m.VERSAO_PERSONALIZADO)
+
+    def test_refazer_leva_o_conceito_anterior_para_o_v1(self):
+        """08/10/2026: deixado na pasta, o CONCEITO.md (metáfora e Atos) ancoraria o refazer na ideia velha."""
+        self.publicado("lead-r")
+        (self.auto / "lead-r/CONCEITO.md").write_text("metáfora v1")
+        visto = {}
+
+        def claude(slug, log_lead, timeout_min, personalizado=False):
+            visto["na_pasta"] = (self.auto / slug / "CONCEITO.md").exists()
+            return self.novo_site(slug, "v2")
+
+        self.refazer(claude, "lead-r")
+        self.assertFalse(visto["na_pasta"])
+        self.assertEqual((self.auto / "lead-r/_v1/CONCEITO.md").read_text(), "metáfora v1")
 
     def test_refazer_que_falha_restaura_o_demo_antigo_sem_falha_log(self):
         self.publicado("lead-r")

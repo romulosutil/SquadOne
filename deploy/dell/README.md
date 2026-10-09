@@ -1265,6 +1265,52 @@ regra nova vai no resumo final (execução automática) ou num PR (sessão com o
 Rômulo), não numa edição da cópia. As skills de `~/.claude/skills` e o
 `settings.local.json` (hooks do impeccable) continuam fora do repositório.
 
+### Direção dos sites: metáfora e Atos (08/10/2026)
+
+A direção do "redesign conceitual e de movimento" do site do PRUMO virou a dos
+demos, em todos os modos (fila comum, `--personalizado`, `--premium`). Leitura
+de cinco demos no ar em 08/10/2026: o fluxo comum saía em ordem de template
+(hero, serviços, diferenciais, orçamento, contato); quando havia ideia, ela
+morava num brinquedo isolado; os arquivos pesavam 440 a 905 KB (75-90% de foto
+em base64, a do hero terminando depois do byte 200 000); um hero esperava o JS
+para aparecer; efeito de cursor sem `pointer: fine`; e havia frase que soava
+como alarme ou deboche do ramo. O que mudou:
+
+- `auto-site-CLAUDE.md`, passo **1.5.1**: a metáfora vem do ofício (família
+  por nicho, com exemplos de advocacia, odontologia, climatização,
+  desentupidora, dedetizadora, reformas, escola infantil e estética
+  automotiva; instância pelo lead), representa o cuidado e nunca o problema, e
+  é a navegação. A página são **cinco Atos** (chegada, reconhecimento, como
+  funciona, prova, chamado), e o `<slug>/CONCEITO.md` traz a tabela "efeito →
+  Ato → o que significa": efeito sem linha não entra;
+- "Barra de excelência" 2.1: o vocabulário de movimento (esticamento por
+  velocidade, paralaxe 3D, transição líquida, magnetismo, máscara tipográfica,
+  levitação, lag elástico) com dose, teto e porquê; regras do motor; cursor só
+  com `pointer: fine`; `prefers-reduced-motion` completo;
+- "Regras do arquivo": orçamento de bytes (fim do Ato I ≤ 200 KB, arquivo ≤
+  450 KB, fontes ≤ 80 KB, hero ≤ 80 KB, CSS ≤ 35 KB, JS ≤ 25 KB), fotos em
+  WebP, Ato I visível sem JS; "Experiência sem inventar" e "Nada que gere medo
+  ou desconfiança";
+- `gerador-de-sites.py`: o prompt pede a direção; as instruções da execução
+  pedem o `CONCEITO.md`, o script de bytes e as capturas com
+  `--force-prefers-reduced-motion` e sem JS; o personalizado amarra o conceito
+  autoral aos Atos; o laço de crítica do premium responde a um checklist de 20
+  itens; o refazer guarda o `CONCEITO.md` anterior no `_vN/`.
+
+As versões (`VERSAO_PERSONALIZADO`, `VERSAO_PREMIUM`) não subiram: o
+`lote-continuo` refaz todo demo `pronto` com versão menor que a alvo, e subir
+agora refaria a fila inteira. Para medir a direção nova como versão no funil,
+suba-as num PR à parte, junto com o `VERSAO_ALVO` do `lote-continuo`, se
+quiser o refazer em massa.
+
+Instalar (numa sessão no Dell, depois do merge):
+
+```bash
+install -D -m 444 ~/SquadOne/deploy/dell/auto-site/auto-site-CLAUDE.md ~/auto-site/CLAUDE.md
+install -D -m 444 ~/SquadOne/deploy/dell/auto-site/lead-novo.md ~/auto-site/.claude/commands/lead-novo.md
+install -m 755 ~/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+```
+
 ### Permissões do Claude (lista de permissão, desde 30/09/2026)
 
 Até 29/09 o Claude rodava com `--dangerously-skip-permissions`: podia fazer
