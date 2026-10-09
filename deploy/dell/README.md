@@ -1069,8 +1069,12 @@ resposta completa de um prospect, grava um pacote em
 `prumo-mapa --fila`, que:
 
 - consolida pelo método de `~/prumo/05-entrega-mapa` (regra do MIN,
-  divergência dono × time, 6 blocos, Índice do Prumo X/18; a planilha segue
-  com o Índice /100 do fluxo, e o pacote leva os dois);
+  divergência dono × time, 6 blocos, Índice do Prumo X/18, que o documento
+  chama de **Nota de autonomia** desde 09/10/2026; a planilha segue com o
+  Índice /100 do fluxo, e o pacote leva os dois). A conta (IDs, rollup, MIN,
+  kit de fórmulas, arredondamento) é a do `calculo_prumo.py`, o mesmo módulo do
+  Raio-X; `python3 deploy/dell/prumo-mapa/calculo_prumo.test.py` confere a Vale
+  Norte (5,0/18, R$ 15.232/mês, R$ 182.784/ano);
 - grava `~/prumo-entregas/<AAAA-MM-DD>-<empresa>/` com `dados.json`, o HTML e
   o PDF (7 páginas A4, visual do exemplo Vale Norte, Archivo embutida);
 - avisa o Rômulo pela fila de avisos. Pacote ruim vai para
@@ -1096,7 +1100,7 @@ Substitui o "Chrome → Ctrl+P" e o `gerar-pdf.ps1`.
 
 ```bash
 mkdir -p ~/.local/share/prumo-mapa
-cp -r ~/SquadOne/deploy/dell/prumo-mapa/{prumo_mapa.py,prumo_pdf.py,modelo_mapa.py,archivo.woff2,exemplos} ~/.local/share/prumo-mapa/
+cp -r ~/SquadOne/deploy/dell/prumo-mapa/{prumo_mapa.py,prumo_pdf.py,modelo_mapa.py,calculo_prumo.py,archivo.woff2,exemplos} ~/.local/share/prumo-mapa/
 ln -sf ~/.local/share/prumo-mapa/prumo_mapa.py ~/.local/bin/prumo-mapa
 ln -sf ~/.local/share/prumo-mapa/prumo_pdf.py ~/.local/bin/prumo-pdf
 cp ~/SquadOne/deploy/dell/prumo-mapa/prumo-mapa.{path,service} ~/.config/systemd/user/
@@ -1254,6 +1258,23 @@ primeira mensagem do Balcão.
   (`gerador.lock` de processo vivo) não faz nada: um refazer pode trocar o demo
   de um lead `pronto` a qualquer momento. A saída do `vercel` vai para `.logs/execucao-<slug>.log`, onde o
   `lote-continuo` procura o limite de deploys; o próprio raio-x para no limite.
+- **Versão 3 (09/10/2026): Nota de presença e a conta aberta em R$.** Pelo
+  cálculo PRUMO (`prumo-mapa/calculo_prumo.py`, o mesmo módulo do Mapa; método
+  em `~/prumo/05-entrega-mapa/calculo-prumo.md`): seis blocos de 0 a 3 (aparece
+  na busca, nota, avaliações contra a mediana dos 5 primeiros, responde às
+  avaliações, perfil completo, site e WhatsApp), nota de 0 a 18 e a faixa. Bloco
+  sem dado sai "não medimos" e fica fora da conta (a nota é proporcional aos
+  medidos); "responde às avaliações" é sempre não medido, porque o Places não
+  entrega a resposta do dono. Com menos de 4 blocos medidos (sem a chave do
+  Places) a seção não aparece. Para o bloco do site, a página do botão "Site" é
+  lida na mesma conferência de sempre: meta viewport (celular) e link de
+  WhatsApp (sem link mas com a palavra no HTML = não conferido). Abaixo dos
+  blocos, até 3 cenários das distâncias medidas e o campo "Quanto vale um
+  cliente fechado?": a página faz "1 cliente a mais por mês × valor" e "× 12",
+  num JS inline gerado pelo módulo; sem valor, a conta fica com o espaço em
+  branco. Nenhum valor típico do ramo, nada se soma. Sem o
+  `calculo_prumo.py` instalado, o raio-x sai como na versão 2 (e fica na 2, sem
+  refazer ninguém) e avisa no log.
 
 ```bash
 raio-x --simular higor-ferreira-advogado   # o diagnóstico, sem publicar nem gravar
@@ -1261,11 +1282,13 @@ raio-x --html higor-ferreira-advogado --saida /tmp/x.html   # só a página (cha
 raio-x higor-ferreira-advogado             # publica e grava o recibo
 raio-x --pendentes --simular               # quem o timer pegaria
 HOME=/tmp/home-teste python3 deploy/dell/raio-x.py --testar
+python3 deploy/dell/prumo-mapa/calculo_prumo.test.py   # o método: limiares, Vale Norte, a calculadora (JS no node)
 ```
 
-Instalar (numa sessão no Dell):
+Instalar (numa sessão no Dell; o `calculo_prumo.py` antes do raio-x, que o importa):
 
 ```bash
+install -D -m 644 deploy/dell/prumo-mapa/calculo_prumo.py ~/.local/share/prumo-mapa/calculo_prumo.py
 install -m 755 deploy/dell/raio-x.py ~/.local/bin/raio-x
 install -m 755 deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
 cp deploy/dell/raio-x.{service,timer} ~/.config/systemd/user/

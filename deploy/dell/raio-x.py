@@ -42,6 +42,15 @@ responder mensagem) a página diz que não conferiu. A página também lê o pr�
 demo (o `index.html` que está no ar) para ligar cada passo do caminho do cliente a
 uma seção dele: botões de WhatsApp, ligar, mapa e as seções com âncora.
 
+Versão 3 (09/10/2026): a Nota de presença, de 0 a 18, pelo cálculo PRUMO
+(`prumo-mapa/calculo_prumo.py`; método em ~/prumo/05-entrega-mapa/calculo-prumo.md):
+seis blocos de 0 a 3 (aparece na busca, nota, avaliações, responde às avaliações,
+perfil completo, site e WhatsApp). Bloco sem dado sai "não medimos" e fica fora da
+conta; com menos de 4 medidos a seção não aparece. Junto, a conta aberta em R$: o dono
+digita quanto vale um cliente e a página faz "1 cliente a mais por mês × valor" (JS
+inline gerado pelo módulo), sempre como cenário. Para o bloco do site, a página do
+site do perfil é lida uma vez (viewport para celular, link de WhatsApp).
+
 Publicação: a Vercel troca o deployment inteiro, então o Raio-X sobe junto com o
 `index.html` e o `og.jpg` da pasta, no mesmo projeto `demo-<slug>` (sem projeto
 novo: o hobby limita projetos). Antes, o `index.html` da pasta é comparado byte a
@@ -82,6 +91,19 @@ import unicodedata
 import urllib.request
 from pathlib import Path
 
+# O cálculo PRUMO (Nota de presença e a calculadora) mora com o Mapa, em prumo-mapa/calculo_prumo.py:
+# no repo, ao lado deste arquivo; no Dell, na cópia instalada em ~/.local/share/prumo-mapa/ (a mesma
+# pasta de onde vem a fonte). Sem ele o Raio-X sai como na versão 2, sem a nota (e o main avisa no log).
+for _pasta in (Path(__file__).resolve().parent / "prumo-mapa",
+               Path(os.environ.get("RAIO_X_CALCULO", str(Path.home() / ".local/share/prumo-mapa")))):
+    if (_pasta / "calculo_prumo.py").is_file():
+        sys.path.insert(0, str(_pasta))
+        break
+try:
+    import calculo_prumo
+except ImportError:
+    calculo_prumo = None
+
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
@@ -90,7 +112,9 @@ VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 # Sobe quando o texto ou as regras mudam: `--pendentes` refaz quem está `pronto` com versão menor.
 # 2 (08/10/2026): concorrência da mesma busca, o que as avaliações dizem, o perfil item por item,
 # o caminho do cliente ligado às seções do demo e os dois serviços com preço.
-VERSAO = 2
+# 3 (09/10/2026): a Nota de presença (cálculo PRUMO, seis blocos de 0 a 3) e a conta aberta em R$.
+# Sem o calculo_prumo instalado a página é a da versão 2, e continua 2: nada de refazer à toa.
+VERSAO = 3 if calculo_prumo else 2
 CAMINHO = "raio-x"
 MARCA = f'data-raio-x="{VERSAO}"'
 MAX_PONTOS = 3
@@ -226,16 +250,39 @@ def conferir_site(url: str, nome: str) -> str:
     wixsite e páginas de reserva voltam). 'fora' = não respondeu 200; 'sem_nome' = respondeu,
     mas sem nenhuma palavra própria do nome (domínio estacionado, página padrão); 'no_ar' =
     respondeu com o nome, ou não dá para saber (aí o ponto sai: na dúvida, não se afirma)."""
+    return conferir_site_completo(url, nome)["estado"]
+
+
+def conferir_site_completo(url: str, nome: str) -> dict:
+    """`conferir_site` e, com o site no ar, o que a página diz de celular e WhatsApp
+    (`ler_pagina_do_site`), numa leitura só: {'estado', 'celular', 'whatsapp'}."""
     codigo, corpo = baixar(url, timeout=20, navegador=True)
     if codigo != 200:
-        return "fora"
+        return {"estado": "fora", "celular": None, "whatsapp": None}
+    bruto = corpo.decode("utf-8", errors="replace")
     rotulo = dominio(url).split(".")[0].lower()
-    texto = sem_acento(corpo.decode("utf-8", errors="replace")).lower()
+    texto = sem_acento(bruto).lower()
     texto = texto.replace(dominio(url).lower(), " ").replace(rotulo, " ")
     palavras = [w for w in re.findall(r"[a-z0-9]{4,}", sem_acento(nome).lower()) if w not in GENERICAS]
-    if not palavras:
-        return "no_ar"
-    return "no_ar" if any(re.search(rf"\b{re.escape(w)}\b", texto) for w in palavras) else "sem_nome"
+    estado = "no_ar" if not palavras or any(re.search(rf"\b{re.escape(w)}\b", texto) for w in palavras) else "sem_nome"
+    if estado != "no_ar":
+        return {"estado": estado, "celular": None, "whatsapp": None}
+    return {"estado": estado, **ler_pagina_do_site(bruto)}
+
+
+def ler_pagina_do_site(texto: str) -> dict:
+    """O HTML da página que o botão "Site" abre: {'celular': bool, 'whatsapp': True|False|None}.
+    Celular = tem a meta viewport com width=device-width (sem ela o celular desenha a página
+    na largura de computador). WhatsApp = link wa.me/api.whatsapp/whatsapp://; sem link mas
+    com a palavra no HTML (widget montado por script) = None: na dúvida, não se afirma falta."""
+    t = texto or ""
+    celular = any(re.search(r"name\s*=\s*[\"']?viewport", m, re.I) and re.search(r"width\s*=\s*device-width", m, re.I)
+                  for m in re.findall(r"<meta\b[^>]*>", t, re.I))
+    if re.search(r"(?i)(https?://(wa\.me|wa\.link|api\.whatsapp\.com|web\.whatsapp\.com/send)|whatsapp://)", t):
+        whatsapp = True
+    else:
+        whatsapp = None if re.search(r"(?i)whatsapp", t) else False
+    return {"celular": celular, "whatsapp": whatsapp}
 
 
 def dominio(url: str) -> str:
@@ -396,14 +443,16 @@ def ler_demo(texto: str) -> dict:
 
 
 def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos_baixadas: int = 0,
-                places: dict | None = None, demo: dict | None = None) -> dict:
+                places: dict | None = None, demo: dict | None = None, site_pagina: dict | None = None) -> dict:
     """O que já está bom e os pontos de melhoria (no máximo 3, na ordem de peso).
     Cada item é {'titulo', 'porque'} e só existe se o fato está no content.md ou no Places.
     `site_hoje` = `conferir_site` do site que o perfil mostra (None = não conferido:
     o ponto não sai); `hoje` = a data dessa conferência; `fotos_baixadas` = arquivos em Fotos/
     (sem nenhuma, "nenhuma foto é de vocês" poderia ser "o perfil não tem foto"); `places` =
     `ler_places` (None = sem chave ou a API falhou: nada de concorrência nem de avaliações);
-    `demo` = `ler_demo` do index.html que está no ar."""
+    `demo` = `ler_demo` do index.html que está no ar; `site_pagina` = celular e WhatsApp da
+    página do site do perfil (`ler_pagina_do_site`, só com ela no ar). Sai também `presenca`,
+    a Nota de presença do cálculo PRUMO (None sem o módulo)."""
     c, sinais = dados["campos"], dados["sinais"]
     detalhes = (places or {}).get("detalhes") or None
     nota, n = dados["nota"], dados["avaliacoes"]
@@ -538,14 +587,52 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
     # O número de avaliações não pode ser força e fraqueza na mesma página.
     if any("menos da metade" in p["titulo"] for p in pontos[:MAX_PONTOS]) and bons and bons[0]["titulo"].startswith("Nota "):
         bons[0] = dict(bons[0], titulo=f"Nota {numero(nota)} no Google")
-    return {"bons": bons, "pontos": pontos[:MAX_PONTOS], "lido_em": data_br(c.get("Criado em", "")),
+    diag = {"bons": bons, "pontos": pontos[:MAX_PONTOS], "lido_em": data_br(c.get("Criado em", "")),
             "maps": (detalhes or {}).get("maps") or c.get("Google Maps", ""), "cidade": cidade, "vertical": vertical,
             "nota": nota, "avaliacoes": n, "horario": horario, "fotos": fotos, "fotos_baixadas": fotos_baixadas,
             "telefone": telefone, "recente": recente, "site": site, "site_hoje": site_hoje, "hoje": hoje,
             "concorrencia": conc, "avaliacoes_lidas": avals, "demo": demo,
             "places_em": data_br((places or {}).get("lido_em", "")),
             "horario_resumo": resumo_do_horario((detalhes or {}).get("horario")),
-            "endereco": c.get("Endereço", "").strip()}
+            "endereco": c.get("Endereço", "").strip(),
+            "categoria": str((detalhes or {}).get("tipo") or "").strip(),
+            "tem_telefone": len(re.sub(r"\D", "", c.get("Telefone", ""))) >= 8,
+            "site_pagina": site_pagina if site_hoje == "no_ar" else None}
+    diag["presenca"] = calculo_prumo.nota_de_presenca(**entradas_da_presenca(diag)) if calculo_prumo else None
+    return diag
+
+
+def entradas_da_presenca(diag: dict) -> dict:
+    """O diagnóstico nos termos do cálculo PRUMO (calculo_prumo.nota_de_presenca). Item que o
+    Raio-X não conferiu vai como None: o módulo o deixa fora da conta, nunca como falta."""
+    conc = diag.get("concorrencia")
+    buscas = None
+    if conc:
+        buscas = [{"consulta": conc["consulta"], "posicao": conc["posicao"], "lidos": conc["lidos"],
+                   "concorrentes": [{"id": r.get("id"), "avaliacoes": r.get("avaliacoes")} for r in conc["outros"]]}]
+    sem_comum = any(r in sem_acento(diag.get("vertical", "")).lower() for r in SEM_HORARIO_COMUM)
+    h, f = diag.get("horario"), diag.get("fotos")
+    categoria = diag.get("categoria", "").lower()
+    site = diag.get("site")
+    perfil = {
+        "horario": "ok" if h else ("falta" if h is False and not sem_comum else None),
+        "fotos": "ok" if f else ("falta" if f == 0 and diag.get("fotos_baixadas") else None),
+        # Categoria genérica ("Serviços") pode ser só o limite da tabela de tipos do Places, não o
+        # perfil: não vira falta. Específica = em dia.
+        "categoria": "ok" if categoria and categoria not in TIPOS_GENERICOS else None,
+        "telefone": "ok" if diag.get("tem_telefone") else None,
+        "site": None if site is None else ("falta" if site["tipo"] == "nenhum" else "ok"),
+    }
+    s = None
+    if site is not None:
+        if site["tipo"] in ("nenhum", "rede"):
+            s = {"tipo": site["tipo"], "onde": nome_da_rede(site["url"]) if site["tipo"] == "rede" else ""}
+        else:  # próprio ou o antigo fora do ar: vale o que a conferência de hoje achou
+            pag = diag.get("site_pagina") or {}
+            s = {"tipo": "proprio", "estado": diag.get("site_hoje"), "celular": pag.get("celular"),
+                 "whatsapp": pag.get("whatsapp")}
+    return {"buscas": buscas, "nota": diag.get("nota"), "avaliacoes": diag.get("avaliacoes"), "respostas": None,
+            "perfil": perfil, "site": s}
 
 
 # ------------------------------------------------------------------ página (PURO)
@@ -692,7 +779,7 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
     partes += [
         '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E'
         '%3Crect width=%2216%22 height=%2216%22 fill=%22%231B1512%22/%3E%3Crect x=%227%22 y=%223%22 width=%222%22 height=%2210%22 fill=%22%23E0490F%22/%3E%3C/svg%3E">',
-        f"<style>{fonte}{CSS}</style></head>",
+        f"<style>{fonte}{CSS}{calculo_prumo.CSS_PRESENCA if calculo_prumo else ''}</style></head>",
         f'<body {MARCA}><main class="folha">',
         '<header class="topo"><div class="marca"><span class="fio"></span><span>PRU<span class="brasa">MO</span></span></div>'
         '<span class="miudo">Raio-X</span></header>',
@@ -718,6 +805,9 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
     if pontos:
         partes.append(f'<section class="pontos"><h2>{e(titulo_pontos)}</h2><ul class="lista">'
                       + "".join(item(f"{i:02d}", p) for i, p in enumerate(pontos, 1)) + "</ul></section>")
+    # A nota vem depois dos pontos: quem leu o que perde cliente vê a soma e quanto vale fechar a distância.
+    if calculo_prumo and diag.get("presenca"):
+        partes.append(calculo_prumo.bloco_html(diag["presenca"], nome))
     partes.append(secao_busca(diag, nome, e))
     partes.append(secao_avaliacoes(diag, e))
     linhas = checklist(diag)
@@ -974,6 +1064,9 @@ def secao_metodo(diag: dict, e) -> str:
         itens.append(f"O site {e(dominio(site['url']))}: abrimos o endereço em {e(diag.get('hoje') or 'hoje')}.")
     if (diag.get("demo") or {}).get("secoes"):
         itens.append("A demonstração: a página que montamos para vocês, no ar neste mesmo endereço.")
+    if (diag.get("presenca") or {}).get("nota") is not None:
+        itens.append("A Nota de presença: seis pontos de 0 a 3 pelo cálculo PRUMO, com as mesmas regras para todas as "
+                     "empresas. O que não medimos fica fora da conta, nunca vira zero.")
     itens.append("Não conferimos se vocês respondem às avaliações (o Google não entrega isso a sistemas de fora) "
                  "nem quanto tempo levam para responder uma mensagem.")
     return ('<section><h2>Como fizemos este Raio-X</h2><ul class="metodo">'
@@ -1166,13 +1259,15 @@ def diagnosticar(pasta: Path, dados: dict) -> dict:
     agora, as fotos baixadas e o demo que está no ar (o index.html da pasta, conferido no publicar)."""
     places = ler_places(pasta, dados, chave_places())
     site = situacao_do_site(dados, (places or {}).get("detalhes"))
-    site_hoje = conferir_site(site["url"], dados["nome"]) if site and site["tipo"] in ("morto", "proprio") else None
+    conferido = (conferir_site_completo(site["url"], dados["nome"]) if site and site["tipo"] in ("morto", "proprio")
+                 else None)
     fotos = sum(1 for f in (pasta / "Fotos").glob("*") if f.is_file()) if (pasta / "Fotos").is_dir() else 0
     try:
         demo = ler_demo((pasta / "index.html").read_text(encoding="utf-8", errors="replace"))
     except OSError:
         demo = None
-    return diagnostico(dados, site_hoje, dt.date.today().strftime("%d/%m/%Y"), fotos, places, demo)
+    return diagnostico(dados, conferido["estado"] if conferido else None, dt.date.today().strftime("%d/%m/%Y"), fotos,
+                       places, demo, conferido)
 
 
 def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
@@ -1336,6 +1431,11 @@ def simular(pasta: Path) -> str:
                   if av else "  avaliações lidas: nenhuma")
     linhas += [f"  bom: {b['titulo']}" for b in d["bons"]]
     linhas += [f"  ponto {i}: {p['titulo']}" for i, p in enumerate(d["pontos"], 1)]
+    pr = d.get("presenca")
+    if pr:
+        nota = "sem nota" if pr["nota"] is None else f"{numero(pr['nota'])}/18 ({pr['faixa']['rotulo']})"
+        linhas.append(f"  nota de presença: {nota}, {pr['medidos']} de 6 medidos: "
+                      + ", ".join(f"{b['chave']} {b['nota'] if b['medido'] else '-'}" for b in pr["blocos"]))
     return "\n".join(linhas)
 
 
@@ -1351,6 +1451,9 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.testar:
         return testar()
+    if calculo_prumo is None:
+        log("calculo_prumo.py não encontrado (nem em prumo-mapa/ ao lado nem em ~/.local/share/prumo-mapa/): "
+            "o Raio-X sai sem a Nota de presença. Instale: dell-status --instalados.")
     if a.html:
         dados, diag, pagina_html, _ = montar(AUTO / a.html)
         Path(a.saida or "raio-x.html").write_text(pagina_html, encoding="utf-8")
@@ -1713,7 +1816,8 @@ def testar() -> int:
             self.assertIn("Quem aparece quando procuram “advogado em Anápolis”", h)
             self.assertIn("Vocês aparecem em 7º lugar nesta busca.", h)
             self.assertIn("Beta &lt;script&gt;x&lt;/script&gt;", h)
-            self.assertNotIn("<script>", h)
+            self.assertNotIn("<script>x</script>", h)
+            self.assertEqual(h.count("<script>"), 1)  # só a calculadora da Nota de presença
             self.assertIn('href="https://www.google.com/maps/contrib/1"', h)
             self.assertNotIn("javascript:", h)
             self.assertIn("O que os clientes dizem", h)
@@ -1726,6 +1830,99 @@ def testar() -> int:
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(2)), "https://demo-x.vercel.app", True)
             self.assertIn('<li class="voces"><span class="pos">2º</span>', h)
             self.assertIn("site fora do ar", h)
+
+    class Presenca(unittest.TestCase):
+        """Versão 3: a Nota de presença a partir do diagnóstico. Os limiares de cada bloco são
+        testados no calculo_prumo.test.py; aqui, o que o Raio-X entrega ao módulo e mostra."""
+
+        def test_modulo_achado_no_repo(self):
+            self.assertIsNotNone(calculo_prumo, "prumo-mapa/calculo_prumo.py ao lado deste arquivo")
+            self.assertEqual(VERSAO, 3)
+
+        def test_nota_com_places_bloco_a_bloco(self):
+            d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
+            p = d["presenca"]
+            self.assertEqual({b["chave"]: b["nota"] for b in p["blocos"]},
+                             {"busca": 2, "nota": 3, "avaliacoes": 1, "respostas": None, "perfil": 3, "site": 0})
+            self.assertEqual((p["soma"], p["medidos"], p["nota"], p["faixa"]["chave"]), (9, 5, 10.8, "media"))
+            self.assertEqual(p["cenarios"][0], "Se o botão “Site” levasse a um site de vocês, que abre no celular "
+                                               "e tem botão de WhatsApp")
+            self.assertIn("Se as avaliações chegassem à mediana dos concorrentes (de 18 para 60)", p["cenarios"])
+            self.assertIn("Não medimos", p["blocos"][3]["linha"])
+
+        def test_site_no_ar_le_celular_e_whatsapp(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            pag = {"estado": "no_ar", "celular": True, "whatsapp": False}
+            site = diagnostico(dados, "no_ar", "08/10/2026", 5, places_exemplo(2), site_pagina=pag)["presenca"]["blocos"][5]
+            self.assertEqual((site["nota"], site["linha"]), (2, "O site de vocês abre, mas não tem botão de WhatsApp."))
+            # O que não abriu não tem celular nem WhatsApp para ler.
+            self.assertIsNone(diagnostico(dados, "fora", "", 5, places_exemplo(2), site_pagina=pag)["site_pagina"])
+
+        def test_sem_places_nao_ha_nota_e_a_pagina_nao_mostra(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            d = diagnostico(dados, "fora", "08/10/2026", 5)
+            p = d["presenca"]
+            self.assertEqual([b["chave"] for b in p["blocos"] if not b["medido"]], ["busca", "avaliacoes", "respostas"])
+            self.assertIsNone(p["nota"])
+            h = pagina(dados, d, "https://demo-x.vercel.app", True)
+            self.assertNotIn("Nota de presença", h)
+            self.assertNotIn("<script>", h)
+
+        def test_item_nao_conferido_nunca_vira_falta(self):
+            dados = ler_content(CONTENT_EXEMPLO.split("## Por que este lead")[0])  # sem horário nem fotos conferidos
+            p = places_exemplo(7)
+            p["detalhes"]["tipo"] = "Serviços"  # genérico: pode ser só a tabela do Places
+            p["detalhes"]["horario"] = None
+            perfil = entradas_da_presenca(diagnostico(dados, "fora", "", 0, p))["perfil"]
+            self.assertEqual(perfil, {"horario": "falta", "fotos": None, "categoria": None, "telefone": "ok",
+                                      "site": "ok"})
+            dados = ler_content(CONTENT_EXEMPLO.split("## Por que este lead")[0].replace("advocacia", "pousada"))
+            self.assertIsNone(entradas_da_presenca(diagnostico(dados, "fora", "", 0, p))["perfil"]["horario"])
+
+        def test_pagina_com_a_nota_e_a_calculadora(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
+            self.assertIn('<section class="presenca"><h2>Nota de presença</h2>', h)
+            self.assertIn("10,8<small>/18</small>", h)
+            self.assertIn("não medimos", h)
+            self.assertIn('<label for="prumo-valor">', h)
+            self.assertIn('inputmode="decimal"', h)
+            self.assertIn("1 cliente a mais por mês × R$ ___ = R$ ___ por mês", h)
+            self.assertLess(h.index("pontos que mandam cliente"), h.index("Nota de presença"))
+            self.assertLess(h.index("Nota de presença"), h.index("Quem aparece quando procuram"))
+            self.assertIn("A Nota de presença: seis pontos de 0 a 3", h)
+            self.assertNotIn("sem custo", h)
+            self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
+
+        def test_ler_pagina_do_site(self):
+            v = '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            self.assertEqual(ler_pagina_do_site(v + '<a href="https://wa.me/5511999">Zap</a>'),
+                             {"celular": True, "whatsapp": True})
+            self.assertEqual(ler_pagina_do_site("<meta content='width=device-width' name='viewport'>"
+                                                "<a href='https://api.whatsapp.com/send?phone=1'>"),
+                             {"celular": True, "whatsapp": True})
+            self.assertEqual(ler_pagina_do_site("<html><p>contato</p>"), {"celular": False, "whatsapp": False})
+            self.assertEqual(ler_pagina_do_site(v + '<script src="/whatsapp-widget.js"></script>'),
+                             {"celular": True, "whatsapp": None})  # widget por script: não se afirma falta
+            self.assertEqual(ler_pagina_do_site('<meta name="viewport" content="width=1024">'),
+                             {"celular": False, "whatsapp": False})
+
+        def test_conferir_site_completo_le_a_pagina_uma_vez(self):
+            antes = globals()["baixar"]
+            chamadas = []
+            pagina_ = (b'<meta name="viewport" content="width=device-width"><h1>Higor Ferreira Advocacia</h1>'
+                       b'<a href="https://wa.me/55">Zap</a>')
+            try:
+                for resposta, esperado in (((200, pagina_), {"estado": "no_ar", "celular": True, "whatsapp": True}),
+                                           ((200, b"<title>dominio a venda</title>"),
+                                            {"estado": "sem_nome", "celular": None, "whatsapp": None}),
+                                           ((404, b""), {"estado": "fora", "celular": None, "whatsapp": None})):
+                    globals()["baixar"] = lambda url, timeout=30, navegador=False, r=resposta: chamadas.append(url) or r
+                    self.assertEqual(conferir_site_completo("https://higorferreira.adv.br/", "Higor Ferreira - Advogado"),
+                                     esperado)
+                self.assertEqual(len(chamadas), 3)
+            finally:
+                globals()["baixar"] = antes
 
     class Places(unittest.TestCase):
         """Cache e chave numa raiz temporária própria; a rede é dublê."""
@@ -1915,7 +2112,7 @@ def testar() -> int:
                 SITE_LEADS = antes
 
     suite = unittest.TestSuite()
-    for c in (Leitura, Diagnostico, Pagina, Profundo, Places, Publicar):
+    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, Places, Publicar):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(c))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 

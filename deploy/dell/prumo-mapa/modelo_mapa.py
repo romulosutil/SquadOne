@@ -13,6 +13,8 @@ design system) e é contado.
 import html
 import re
 
+import calculo_prumo
+
 MARCA_RODAPE = "Rômulo Sutil Corrêa · Prumo · Espírito Santo"
 FONTE_PRAZO, FONTE_PRECO = "4 a 8 semanas", "R$ 6.500"  # negocio.md: os dois formatos
 POR_EXTENSO = {1: "A trava", 2: "As duas travas", 3: "As três travas", 4: "As quatro travas", 5: "As cinco travas"}
@@ -231,7 +233,7 @@ class Documento:
   </div>
   <div class="capa-datas">{"".join(f'<div><span class="miudo">{k}</span><b>{v}</b></div>' for k, v in cel)}</div>
   <div class="capa-indice quente">
-    <div><h2>Índice do Prumo</h2><p class="apoio">Quanto mais alto, menos a empresa depende de você para funcionar.</p></div>
+    <div><h2>Nota de autonomia</h2><p class="apoio">Quanto mais alto, menos a empresa depende de você para funcionar.</p></div>
     <div class="num">{indice(c["indice"])}<small>/18</small></div>
   </div>
   <div class="capa-rodape"><span>{" · ".join(fatos)}</span><span>Documento confidencial · Rômulo Sutil Corrêa</span></div>
@@ -253,8 +255,8 @@ class Documento:
   <h1 class="titulo">Resumo executivo</h1>
   <div class="indice-linha">
     <div class="num">{indice(c["indice"])}<small>/18</small></div>
-    <div class="lado"><span>Índice do Prumo</span><div class="barra">{barra(c["indice"], 18)}</div>
-      <div class="leitura">{self.txt(d.get("leitura_indice"), "leitura do Índice; as bandas ainda não foram definidas (pendências P3)")}</div></div>
+    <div class="lado"><span>Nota de autonomia</span><div class="barra">{barra(c["indice"], 18)}</div>
+      <div class="leitura">{self.txt(d.get("leitura_indice"), dica_leitura(c["indice"]))}</div></div>
   </div>
   <div class="blocos">{blocos}</div>
   <div class="kicker" style="margin-top:34px">Os três achados que mais pesam</div>
@@ -421,7 +423,7 @@ class Documento:
         if total is not None:
             soma = (f'<div><h2>{SOMANDO.get(len(travas), "Somando as travas")}</h2>'
 
-                    f'<p class="apoio">{brl(total * 12)} por ano. Este diagnóstico custou '
+                    f'<p class="apoio">{brl(calculo_prumo.anualizar(total))} por ano. Este diagnóstico custou '
                     f'{brl(preco) if preco not in (None, "") else self.ph("preço do Mapa")}.</p></div>'
                     f'<div class="num">{brl(total)}<span>/mês</span></div>')
         else:
@@ -549,32 +551,16 @@ def rico(x) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", e(x))
 
 
-def num(x):
-    """Número de um campo que o Rômulo preenche: aceita 12, 12.5, "12,5"; vazio = None."""
-    if x is None or x == "":
-        return None
-    if isinstance(x, bool):
-        raise ValueError(f"número esperado, veio {x!r}")
-    if isinstance(x, (int, float)):
-        return x
-    t = str(x).strip().replace("R$", "").replace("%", "").strip()
-    if re.fullmatch(r"\d{1,3}(\.\d{3})+(,\d+)?", t):
-        t = t.replace(".", "")
-    return float(t.replace(",", "."))
+# Número, milhar e R$ vêm do cálculo PRUMO: o documento e o Raio-X escrevem os valores igual.
+num, milhar, brl = calculo_prumo.num, calculo_prumo.milhar, calculo_prumo.brl
 
 
-def milhar(n: int) -> str:
-    return f"{n:,}".replace(",", ".")
-
-
-def brl(v) -> str:
-    v = num(v)
-    if v is None:
-        return "R$ ?"
-    if abs(v - round(v)) < 0.005:
-        return f"R$ {milhar(int(round(v)))}"
-    inteiro_, frac = f"{v:.2f}".split(".")
-    return f"R$ {milhar(int(inteiro_))},{frac}"
+def dica_leitura(nota) -> str:
+    """Pista do [PREENCHER] da leitura: a faixa do calculo-prumo.md, ainda proposta."""
+    f = calculo_prumo.faixa(nota, "autonomia")
+    if not f:
+        return "leitura da Nota de autonomia"
+    return f"leitura da Nota de autonomia; faixa proposta, a confirmar: {f['rotulo']} — {f['texto']}"
 
 
 def decimal(v, casas: int = 1) -> str:

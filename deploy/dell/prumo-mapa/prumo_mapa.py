@@ -39,8 +39,9 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 
+import calculo_prumo  # noqa: E402
+from calculo_prumo import consolidar, eh_coleta, eh_dono, nota_de, num, rollup  # noqa: E402,F401
 import modelo_mapa  # noqa: E402
-from modelo_mapa import num  # noqa: E402
 import prumo_pdf  # noqa: E402
 
 HOME = Path.home()
@@ -53,36 +54,10 @@ FILA_AVISOS = HOME / ".local/share/avisos/fila"
 
 # ------------------------------------------------------------------ o método
 
-# ID -> (área, camada, tema curto para o cliente). Temas a partir dos títulos
-# do roteiro-mapa-execucao.md.
-IDS = {
-    "AR1": ("A", "Regra", "Desconto"),
-    "AR2": ("A", "Regra", "Crédito para cliente novo"),
-    "AD1": ("A", "Dado", "Preço de tabela"),
-    "AM1": ("A", "Memória", "Exceções de preço"),
-    "BR1": ("B", "Regra", "Escolha de fornecedor"),
-    "BR2": ("B", "Regra", "Teto de compra"),
-    "BD1": ("B", "Dado", "Cadastro de fornecedor"),
-    "BM1": ("B", "Memória", "Troca de fornecedor"),
-    "CR1": ("C", "Regra", "Entrega para quem deve"),
-    "CR2": ("C", "Regra", "Régua de cobrança"),
-    "CD1": ("C", "Dado", "Quem está inadimplente"),
-    "CM1": ("C", "Memória", "Corte de cliente"),
-    "DR1": ("D", "Regra", "Substituto de função-chave"),
-    "DR2": ("D", "Regra", "Limites de decisão"),
-    "DD1": ("D", "Dado", "Quem faz o quê"),
-    "DM1": ("D", "Memória", "Decisões repetidas"),
-}
-
-# Rollup para a apresentação (roteiro, "Regra de consolidação").
-BLOCOS = [
-    ("vendemos", "Como vendemos", ["AR1", "AR2"]),
-    ("compramos", "Como compramos", ["BR1", "BR2"]),
-    ("entregamos", "Entrega e cobrança", ["CR1", "CR2"]),
-    ("quem", "Quem faz o quê", ["DR1", "DR2"]),
-    ("cadastros", "Cadastros oficiais", ["AD1", "BD1", "CD1", "DD1"]),
-    ("decisoes", "Decisões", ["AM1", "BM1", "CM1", "DM1"]),
-]
+# O método (os 16 IDs, o rollup nos 6 blocos, a regra do MIN e o kit de fórmulas) mora em
+# calculo_prumo.py, o mesmo que o Raio-X usa. Aqui ficam os nomes de sempre.
+IDS = calculo_prumo.IDS_AUTONOMIA
+BLOCOS = calculo_prumo.BLOCOS_AUTONOMIA
 
 # Aprofundamentos do roteiro que viram linha do mapa de dependência ou trava.
 DECISOES = {  # decisão que chega ao dono (mapa de dependência)
@@ -124,90 +99,14 @@ COMO_USAR = ("Rascunho do Mapa gerado do formulário. Campos null viram [PREENCH
              "ia | simplificada | ainda_nao. Um campo com false some do documento (ex.: nao_recomendado).")
 
 
-def eh_dono(sessao: dict) -> bool:
-    return str(sessao.get("papel") or "").strip().lower().startswith("dono")
-
-
-def eh_coleta(sessao: dict) -> bool:
-    return "coleta" in str(sessao.get("papel") or "").lower()
-
-
-def nota_de(valor) -> int | None:
-    """Resposta de uma sessão: {"resposta", "nota"} ou só a nota (0 a 3)."""
-    n = valor.get("nota") if isinstance(valor, dict) else valor
-    if isinstance(n, bool) or n is None:
-        return None
-    if not isinstance(n, (int, float)) or not 0 <= n <= 3 or int(n) != n:
-        raise ValueError(f"nota fora de 0 a 3: {n!r}")
-    return int(n)
-
-
-def consolidar(sessoes: list[dict]) -> dict:
-    """Regra do MIN por ID; divergência quando dono e time dão notas diferentes."""
-    por_id = {}
-    for s in sessoes:
-        for id_, valor in (s.get("respostas") or {}).items():
-            if id_ not in IDS:
-                raise ValueError(f"ID desconhecido na sessão {s.get('papel')!r}: {id_}")
-            n = nota_de(valor)
-            if n is None:
-                continue
-            resposta = valor.get("resposta", "") if isinstance(valor, dict) else ""
-            por_id.setdefault(id_, []).append({"papel": s.get("papel") or "?", "dono": eh_dono(s),
-                                               "nota": n, "resposta": resposta})
-    final, divergencias = {}, []
-    for id_ in IDS:
-        votos = por_id.get(id_)
-        if not votos:
-            continue
-        final[id_] = min(v["nota"] for v in votos)
-        dono = [v for v in votos if v["dono"]]
-        time_ = [v for v in votos if not v["dono"]]
-        if dono and time_ and any(v["nota"] != dono[0]["nota"] for v in time_):
-            menor = min(v["nota"] for v in time_)
-            divergencias.append({"id": id_, "tema": IDS[id_][2], "dono": dono[0],
-                                 "time": [v for v in time_ if v["nota"] == menor]})
-    return {"final": final, "votos": por_id, "divergencias": divergencias}
-
-
-def rollup(final: dict) -> tuple[list[dict], float | None]:
-    blocos = []
-    for chave, nome, ids in BLOCOS:
-        notas = [final[i] for i in ids if i in final]
-        blocos.append({"chave": chave, "nome": nome, "ids": ids,
-                       "nota": sum(notas) / len(notas) if notas else None, "faltam": [i for i in ids if i not in final]})
-    indice = sum(b["nota"] for b in blocos) if all(b["nota"] is not None for b in blocos) else None
-    return blocos, indice
-
-
 def valor_trava(t: dict, dados: dict) -> float | None:
-    """Kit de fórmulas de custo (framework-mapa.md). Mensal, em reais."""
-    if num(t.get("valor_mes")) is not None:
-        return num(t["valor_mes"])
-    f = t.get("formula")
-    if f == "tempo_dono":
-        n, m = num(t.get("por_semana")), num(t.get("minutos"))
-        vh = num(t.get("valor_hora")) or valor_hora_dono(dados)
-        return None if None in (n, m, vh) else n * m / 60 * 4.33 * vh
-    if f == "margem":
-        b, fr, tx = num(t.get("base_mes")), num(t.get("fracao_pct")), num(t.get("taxa_pct"))
-        return None if None in (b, fr, tx) else b * fr / 100 * tx / 100
-    if f == "retrabalho":
-        n = num(t.get("por_mes"))
-        if n is None and num(t.get("por_trimestre")) is not None:
-            n = num(t["por_trimestre"]) / 3
-        m, p = num(t.get("minutos")), num(t.get("pessoas"))
-        vh = num(t.get("valor_hora")) or num(dados.get("valor_hora_time"))
-        return None if None in (n, m, p, vh) else n * m / 60 * p * vh
-    return None
+    """Kit de fórmulas de custo (calculo_prumo). Mensal, em reais, sem arredondar."""
+    return calculo_prumo.valor_da_trava(t, valor_hora_dono(dados), num(dados.get("valor_hora_time")))
 
 
 def valor_hora_dono(dados: dict) -> float | None:
     """Pró-labore mensal ÷ 160 h, ou o valor perguntado direto."""
-    if num(dados.get("valor_hora_dono")) is not None:
-        return num(dados["valor_hora_dono"])
-    pl = num(dados.get("pro_labore_dono"))
-    return pl / 160 if pl is not None else None
+    return calculo_prumo.valor_hora(dados.get("pro_labore_dono"), dados.get("valor_hora_dono"))
 
 
 def calcular(dados: dict) -> dict:
@@ -220,12 +119,13 @@ def calcular(dados: dict) -> dict:
     travas = []
     for t in dados.get("travas") or []:
         v = valor_trava(t, dados)
-        travas.append({**t, "valor": round(v) if v is not None else None})
+        travas.append({**t, "valor": calculo_prumo.arredondar_real(v) if v is not None else None})
     # Ranqueadas por custo; as que ainda não têm conta vão para o fim.
     travas.sort(key=lambda t: (t["valor"] is None, -(t["valor"] or 0)))
     travas = travas[:5]
     completas = [t for t in travas if t["valor"] is not None]
-    total = sum(t["valor"] for t in completas) if completas and len(completas) == len(travas) else None
+    total = (calculo_prumo.total_mensal([t["valor"] for t in completas])
+             if completas and len(completas) == len(travas) else None)
     dep = []
     for linha in (dados.get("dependencia") or {}).get("linhas") or []:
         dep.append({**linha, "por_semana": num(linha.get("por_semana")), "minutos": num(linha.get("minutos"))})
