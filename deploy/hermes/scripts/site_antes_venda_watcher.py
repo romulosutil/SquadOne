@@ -133,7 +133,8 @@ def notify(lead_dir: Path, state_path: Path, dry_run: bool) -> bool:
             return True
         hermes_bin = Path.home() / ".local/bin/hermes"
         result = subprocess.run(
-            [str(hermes_bin), "send", "--to", "whatsapp:Rômulo Sutil", message],
+            # O canal principal (WHATSAPP_HOME_CHANNEL), não um nome preso ao chat da conta pareada.
+            [str(hermes_bin), "send", "--to", "whatsapp", message],
             capture_output=True,
             text=True,
             timeout=60,

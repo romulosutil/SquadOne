@@ -269,6 +269,23 @@ isso, menos ruído:
   com o gateway de pé. Vermelho; o aviso desse vermelho, claro, não chega pelo
   WhatsApp — aparece na Central, e o remédio é parear de novo.
 
+- **Trocar o chip (ou parear de novo)**, como em 09/10/2026: o número antigo
+  (…97780954) passou a levar 403 em laço desde as 11:01 e o Hermes foi pareado
+  no chip novo, **27 99976-2786** (conta "Prumo"). Passos: `systemctl --user stop
+  hermes-gateway`; mover (não apagar) `~/.hermes/whatsapp/session` para
+  `session.antiga-<número>-<data>`; num terminal interativo, `cd
+  ~/.hermes/hermes-agent/scripts/whatsapp-bridge && ~/.hermes/tools/node-*/bin/node
+  bridge.js --pair-only --session ~/.hermes/whatsapp/session` e ler o QR no
+  celular (Aparelhos conectados; o `515` depois da leitura é normal); trocar
+  `WHATSAPP_HOME_CHANNEL` no `~/.hermes/.env` pelo `me.lid` sem o `:N` do
+  `session/creds.json` novo; `systemctl --user restart hermes-gateway` e `hermes
+  send --to whatsapp "teste"`. `hermes whatsapp` faz o mesmo, mas apaga a sessão
+  antiga. Os avisos (`dell-status`, `AVISOS_DESTINO`) e o vigia do Site antes da
+  venda mandam para `whatsapp`, o canal principal: um nome como `whatsapp:Rômulo
+  Sutil` vem do diretório de canais e ficaria preso ao chat da conta antiga. Com
+  o chip novo, a conversa com o Hermes é o "Você" (mensagem para si mesmo) da
+  conta pareada, e o observador só vê as conversas desse número.
+
 ### Fila de avisos (06/10/2026)
 
 Um arquivo JSON por aviso em `~/.local/share/avisos/fila/`:
