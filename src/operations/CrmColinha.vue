@@ -3,7 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import CrmTrecho from './CrmTrecho.vue'
-import { CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, ROTEIRO, precoDaTabela, precoParaOCliente, type Trecho } from './colinha'
+import { CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, ROTEIRO, ROTULO_DA_ETAPA, ROTULO_DO_TIPO, precoDaTabela, precoParaOCliente, type Trecho } from './colinha'
 import type { CrmProduto } from './types'
 
 // A colinha inteira (/crm?ver=colinha, 08/10/2026): tudo para consultar durante
@@ -73,8 +73,11 @@ async function irPara(id: string) {
 
     <section class="crm-colinha__secao" aria-labelledby="crm-colinha-cardapio">
       <h2 id="crm-colinha-cardapio" tabindex="-1">Cardápio</h2>
+      <!-- A hierarquia de 09/10/2026: a ordem do cardápio é a do caminho, e cada oferta é de um tipo só. -->
+      <p class="crm-muted">Ver → arrumar → manter. O Raio-X é a porta de todos; o Mapa vem depois dele, só com empresa com equipe; a Fonte, só depois do Mapa.</p>
       <ul class="crm-colinha__cardapio">
         <li v-for="s in CARDAPIO" :key="s.id" class="crm-colinha__servico">
+          <span class="crm-kicker">{{ ROTULO_DA_ETAPA[s.etapa] }} · {{ ROTULO_DO_TIPO[s.tipo] }}</span>
           <h3>{{ s.nome }}</h3>
           <!-- Sob proposta: o cliente ouve a frase sem número; a base da proposta fica só para o Rômulo. -->
           <p class="crm-colinha__preco">{{ precoParaOCliente(s) }}</p>
@@ -102,7 +105,7 @@ async function irPara(id: string) {
 
     <section class="crm-colinha__secao" aria-labelledby="crm-colinha-cdl">
       <h2 id="crm-colinha-cdl" tabindex="-1">CDL</h2>
-      <p class="crm-muted">O que mandar à CDL (o Organizado chega por ela) e ao associado que vier dela.</p>
+      <p class="crm-muted">O que mandar à CDL (por ela o associado pode entrar direto no Mapa) e ao associado que vier dela.</p>
       <CrmTrecho v-for="t in cdl" :key="t.id" :trecho="t" :lead="lead" />
       <p v-if="!cdl.length" class="crm-muted">Nenhum texto para a CDL ainda{{ filtrado }}.</p>
     </section>

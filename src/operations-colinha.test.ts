@@ -3,13 +3,14 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { FOLLOWUP, FOLLOWUP_COM_LINK, SEGUNDA, artigoDe } from '../server/site-mensagem.ts'
 import {
-  CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, SOB_PROPOSTA, colinhaDoLead, linkDoWhatsApp,
-  objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher, type LeadDaColinha, type Momento, type Trecho,
+  CARDAPIO, CDL, ETAPAS_DA_OFERTA, FRASE_MAPA_E_GRATIS, FRASE_SOB_PROPOSTA, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, SOB_PROPOSTA,
+  colinhaDoLead, linkDoWhatsApp, objecao, objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher,
+  type LeadDaColinha, type Momento, type Trecho,
 } from './operations/colinha.ts'
 import type { CrmEtapa, CrmProduto, CrmTipoDeResposta } from './operations/types.ts'
 
 const PRODUTOS: CrmProduto[] = ['site', 'prumo']
-const MOMENTOS: Momento[] = ['primeiro-contato', 'pode-mandar', 'followup', 'mapa', 'proposta', 'fechamento']
+const MOMENTOS: Momento[] = ['primeiro-contato', 'pode-mandar', 'followup', 'convite-mapa', 'mapa', 'conversa', 'proposta', 'fechamento']
 
 const lead = (produto: CrmProduto, etapa: CrmEtapa, tipo?: CrmTipoDeResposta, trecho = ''): LeadDaColinha => ({
   produto, etapa, empresa: 'Clínica Sorriso', links: {}, resposta: tipo ? { tipo, trecho } : undefined,
@@ -33,8 +34,8 @@ const CASOS: { nome: string, etapa: CrmEtapa, tipo?: CrmTipoDeResposta, trecho?:
   { nome: 'novo: a primeira mensagem', etapa: 'novo', site: ['primeiro-contato'], prumo: ['primeiro-contato'] },
   { nome: 'contato sem resposta: o follow-up', etapa: 'contato', site: ['followup'], prumo: ['followup'] },
   { nome: 'contato só com o robô: o follow-up', etapa: 'contato', tipo: 'bot', trecho: 'Mensagem automática: em breve retornaremos.', site: ['followup'], prumo: ['followup'] },
-  { nome: 'contato com interesse: o próximo passo e a proposta', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'proposta'], prumo: ['pode-mandar', 'mapa', 'proposta'] },
-  { nome: 'contato neutro: seguir a conversa', etapa: 'contato', tipo: 'neutra', trecho: 'quem é você?', site: ['pode-mandar'], prumo: ['mapa'] },
+  { nome: 'contato com interesse: o próximo passo e a proposta', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'proposta'], prumo: ['pode-mandar', 'conversa', 'proposta'] },
+  { nome: 'contato neutro: seguir a conversa', etapa: 'contato', tipo: 'neutra', trecho: 'quem é você?', site: ['pode-mandar'], prumo: ['conversa'] },
   { nome: 'contato negativo: nenhum momento, só objeção', etapa: 'contato', tipo: 'negativa', trecho: 'Obrigado, mas já temos site', site: [], prumo: [] },
   { nome: 'contato com pedido de exclusão: nenhum momento', etapa: 'contato', tipo: 'exclusao', trecho: 'por favor não me mande mais', site: [], prumo: [] },
   { nome: 'proposta: proposta e fechamento', etapa: 'proposta', site: ['proposta', 'fechamento'], prumo: ['proposta', 'fechamento'] },
@@ -85,7 +86,8 @@ describe('o trecho de cada etapa e resposta', () => {
   })
 
   it('negativa sem objeção reconhecida mostra todas, para o Rômulo escolher', () => {
-    assert.deepEqual(idsDasObjecoes(lead('site', 'contato', 'negativa', 'não, obrigado')), OBJECOES.map((o) => o.id))
+    assert.deepEqual(idsDasObjecoes(lead('site', 'contato', 'negativa', 'não, obrigado')), OBJECOES.filter((o) => o.resposta.produtos.includes('site')).map((o) => o.id))
+    assert.deepEqual(idsDasObjecoes(lead('prumo', 'contato', 'negativa', 'não, obrigado')), OBJECOES.filter((o) => o.resposta.produtos.includes('prumo')).map((o) => o.id))
   })
 
   it('exclusão traz "pode apagar" primeiro, em contato e em perdido', () => {
@@ -184,7 +186,7 @@ describe('nenhum R$ fora do cardápio', () => {
 
   it('o preço de cada serviço está na lista do cardápio', () => {
     for (const s of CARDAPIO) {
-      if (s.preco.startsWith('R$')) assert.ok(PRECOS_DO_CARDAPIO.includes(s.preco), `${s.id}: ${s.preco}`)
+      for (const p of precosNoTexto(s.preco)) assert.ok(PRECOS_DO_CARDAPIO.includes(p), `${s.id}: ${p}`)
       for (const p of precosNoTexto(s.mensal ?? '')) assert.ok(PRECOS_DO_CARDAPIO.includes(p), `${s.id}: ${p}`)
     }
   })
@@ -203,13 +205,14 @@ describe('nenhum R$ fora do cardápio', () => {
   })
 })
 
-// Decisão de 08/10/2026: Respondido, Mapa e Organizado são "sob proposta" para o
-// cliente (o valor só na proposta por escrito), e não há cliente fundador.
+// Decisão de 08/10/2026, com a hierarquia de 09/10: Respondido, Fonte e Fonte em
+// dia são "sob proposta" para o cliente (o valor só na proposta por escrito); os
+// diagnósticos são grátis; não há cliente fundador.
 describe('sob proposta e sem cliente fundador', () => {
   const servico = (id: string) => CARDAPIO.find((s) => s.id === id)!
 
-  it('Respondido, Mapa e Organizado são sob proposta; Raio-X e Encontrado, não', () => {
-    assert.deepEqual(CARDAPIO.filter((s) => s.sobProposta).map((s) => s.id), ['respondido', 'mapa', 'organizado'])
+  it('Respondido, Fonte e Fonte em dia são sob proposta; Raio-X, Mapa e Encontrado, não', () => {
+    assert.deepEqual(CARDAPIO.filter((s) => s.sobProposta).map((s) => s.id), ['respondido', 'fonte', 'fonte-em-dia'])
   })
 
   it('o que se diz ao cliente de um serviço sob proposta não tem valor', () => {
@@ -222,13 +225,14 @@ describe('sob proposta e sem cliente fundador', () => {
 
   it('a base interna da proposta continua com o valor da tabela', () => {
     assert.equal(precoDaTabela(servico('respondido')), 'R$ 2.400 + R$ 390/mês (só depois de uma conversa, nunca no WhatsApp frio)')
-    assert.equal(precoDaTabela(servico('mapa')), 'R$ 1.500 (abatido do projeto)')
-    assert.equal(precoDaTabela(servico('organizado')), 'R$ 6.500')
+    assert.equal(precoDaTabela(servico('fonte')), 'R$ 6.500 (50/50, só depois do Mapa)')
+    assert.equal(precoDaTabela(servico('fonte-em-dia')), 'R$ 800/mês (opcional, mínimo de 6 meses)')
   })
 
-  it('o Encontrado e o Raio-X dizem o preço ao cliente', () => {
+  it('o Encontrado diz o preço ao cliente; os dois diagnósticos, "grátis"', () => {
     assert.equal(precoParaOCliente(servico('encontrado')), 'R$ 990 + R$ 69/mês (paga só depois de ver no ar)')
     assert.equal(precoParaOCliente(servico('raio-x')), 'grátis')
+    assert.equal(precoParaOCliente(servico('mapa')), 'grátis')
   })
 
   it('fora da proposta, nenhuma mensagem ao cliente cita o valor de um serviço sob proposta', () => {
@@ -260,6 +264,142 @@ describe('sob proposta e sem cliente fundador', () => {
     assert.match(texto, /só pagam depois de ver/)
     assert.match(texto, /parte menor/)
     assert.match(texto, /mais para frente/)
+  })
+})
+
+// Hierarquia de serviços de 09/10/2026 (prumo, 00-contexto/decisoes.md): ver →
+// arrumar → manter, o Mapa grátis só para empresa com equipe, a Fonte só depois dele.
+describe('hierarquia: ver, arrumar, manter', () => {
+  const servico = (id: string) => CARDAPIO.find((s) => s.id === id)!
+
+  it('o cardápio vem na ordem do caminho, cada oferta com o seu tipo', () => {
+    assert.deepEqual(CARDAPIO.map((s) => [s.id, s.etapa, s.tipo]), [
+      ['raio-x', 'ver', 'diagnostico'],
+      ['mapa', 'ver', 'diagnostico'],
+      ['encontrado', 'arrumar', 'produto'],
+      ['respondido', 'arrumar', 'produto'],
+      ['fonte', 'arrumar', 'projeto'],
+      ['fonte-em-dia', 'manter', 'mensalidade'],
+    ])
+    const ordem = CARDAPIO.map((s) => ETAPAS_DA_OFERTA.indexOf(s.etapa))
+    assert.deepEqual(ordem, [...ordem].sort((a, b) => a - b))
+  })
+
+  it('os preços são os da tabela', () => {
+    assert.deepEqual(CARDAPIO.map((s) => [s.id, s.preco, s.mensal ?? '']), [
+      ['raio-x', 'grátis', ''],
+      ['mapa', 'grátis', ''],
+      ['encontrado', 'R$ 990', 'R$ 69/mês'],
+      ['respondido', 'R$ 2.400', 'R$ 390/mês'],
+      ['fonte', 'R$ 6.500', ''],
+      ['fonte-em-dia', 'R$ 800/mês', ''],
+    ])
+    assert.match(servico('encontrado').condicao ?? '', /depois de ver no ar/)
+    assert.match(servico('respondido').condicao ?? '', /depois de uma conversa/)
+    assert.match(servico('fonte').condicao ?? '', /50\/50.*depois do Mapa/)
+  })
+
+  it('o Respondido tem antes e depois medidos', () => {
+    assert.match(servico('respondido').entrega, /Antes e depois medidos/)
+  })
+
+  it('o Mapa é só para empresa com equipe e não tem preço', () => {
+    const mapa = servico('mapa')
+    assert.match(mapa.paraQuem, /equipe/)
+    assert.match(mapa.entrega, /16 perguntas/)
+    assert.match(mapa.entrega, /45 minutos/)
+    assert.ok(!mapa.sobProposta && !mapa.mensal && !mapa.condicao)
+    assert.deepEqual(precosNoTexto(Object.values(mapa).join(' ')), [])
+  })
+
+  it('nada do Mapa cita valor: o convite, a devolutiva e as objeções dele', () => {
+    const doMapa = [
+      ...passo('convite-mapa').trechos, ...passo('mapa').trechos,
+      objecao('mapa-e-pago').resposta, objecao('sem-tempo').resposta,
+    ]
+    for (const t of doMapa) for (const x of textosDoTrecho(t)) assert.deepEqual(precosNoTexto(x), [], `${t.id}: ${x}`)
+    for (const p of passo('mapa').perguntas ?? []) assert.deepEqual(precosNoTexto(p), [], p)
+  })
+
+  it('"isso é pago?" responde com a frase da decisão', () => {
+    assert.equal(FRASE_MAPA_E_GRATIS, 'Não cobramos pelo Mapa. Cobramos se vocês quiserem construir a Fonte depois.')
+    assert.ok(objecao('mapa-e-pago').resposta.texto.startsWith(FRASE_MAPA_E_GRATIS))
+  })
+
+  it('saíram o Mapa do Cliente, o R$ 1.500, o abatimento, o Organizado e o Manter vivo', () => {
+    assert.ok(!PRECOS_DO_CARDAPIO.some((p) => p.includes('1.500')))
+    for (const texto of TODOS_OS_TEXTOS) {
+      assert.ok(!/Mapa do Cliente|1\.500|abatid|abatimento|organizado|Manter vivo/i.test(texto), texto)
+    }
+  })
+})
+
+describe('convite para o Mapa, depois do Raio-X', () => {
+  const RAIO_X = 'https://raio-x-prumo.vercel.app/sorriso'
+  const comRaioX = (produto: CrmProduto, tipo: CrmTipoDeResposta, equipe?: boolean): LeadDaColinha =>
+    ({ ...lead(produto, 'contato', tipo, 'gostei, pode mandar'), links: { raioX: RAIO_X }, ...(equipe === undefined ? {} : { equipe }) })
+
+  it('lead com equipe que gostou do Raio-X recebe o convite, antes da conversa e da proposta', () => {
+    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'interesse', true)), ['pode-mandar', 'convite-mapa', 'conversa', 'proposta'])
+    assert.ok(idsDosTrechos(comRaioX('prumo', 'interesse', true)).includes('mapa-convite'))
+  })
+
+  it('resposta neutra depois do Raio-X também convida', () => {
+    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'neutra', true)), ['convite-mapa', 'conversa'])
+  })
+
+  it('o convite vem com "isso é pago?" e "não tenho tempo" à mão', () => {
+    const ids = idsDasObjecoes(comRaioX('prumo', 'interesse', true))
+    assert.ok(ids.includes('mapa-e-pago') && ids.includes('sem-tempo'), ids.join(', '))
+  })
+
+  it('a objeção reconhecida no texto vem primeiro', () => {
+    const l = { ...comRaioX('prumo', 'neutra', true), resposta: { tipo: 'neutra' as const, trecho: 'Legal. Isso é pago?' } }
+    assert.equal(idsDasObjecoes(l)[0], 'mapa-e-pago')
+    const corrido = { ...l, resposta: { tipo: 'neutra' as const, trecho: 'Agora não dá, tô sem tempo' } }
+    assert.equal(idsDasObjecoes(corrido)[0], 'sem-tempo')
+  })
+
+  it('empresa pequena (sem equipe) não recebe o convite', () => {
+    assert.ok(!idsDosMomentos(comRaioX('prumo', 'interesse', false)).includes('convite-mapa'))
+    assert.ok(!idsDasObjecoes(comRaioX('prumo', 'interesse', false)).includes('mapa-e-pago'))
+  })
+
+  it('porte desconhecido: o convite aparece e a dica diz o filtro', () => {
+    assert.ok(idsDosMomentos(comRaioX('prumo', 'interesse')).includes('convite-mapa'))
+    assert.match(passo('convite-mapa').trechos[0].dica ?? '', /equipe/)
+  })
+
+  it('antes do Raio-X não há convite', () => {
+    assert.ok(!idsDosMomentos({ ...lead('prumo', 'contato', 'interesse', 'pode mandar'), equipe: true }).includes('convite-mapa'))
+  })
+
+  it('o Site antes da venda nunca recebe o convite', () => {
+    assert.ok(!idsDosMomentos(comRaioX('site', 'interesse', true)).includes('convite-mapa'))
+    assert.ok(!idsDasObjecoes(comRaioX('site', 'interesse', true)).includes('mapa-e-pago'))
+  })
+
+  it('a mensagem: 3 a 5 linhas, o Rômulo do PRUMO, o Raio-X, o link numa linha só, uma pergunta no fim, sem emoji nem preço', () => {
+    const texto = passo('convite-mapa').trechos.find((t) => t.id === 'mapa-convite')!.texto
+    const linhas = texto.split('\n').filter((l) => l.trim())
+    assert.ok(linhas.length >= 3 && linhas.length <= 5, `${linhas.length} linhas`)
+    assert.match(linhas[0], /Aqui é o Rômulo, do PRUMO/)
+    assert.match(texto, /Raio-X/)
+    assert.match(texto, /16 perguntas/)
+    assert.ok(linhas.includes('[link das 16 perguntas]'), 'o link sozinho numa linha')
+    assert.ok(linhas[linhas.length - 1].trim().endsWith('?'))
+    assert.equal(texto.split('?').length - 1, 1, 'uma pergunta só')
+    assert.ok(!/\p{Extended_Pictographic}/u.test(texto), 'sem emoji')
+    assert.deepEqual(precosNoTexto(texto), [])
+    const preenchido = preencher(texto, { empresa: 'Clínica Sorriso', links: { raioX: RAIO_X } })
+    assert.match(preenchido, /O Raio-X mostrou o lado de fora da Clínica Sorriso,/)
+  })
+
+  it('quem respondeu as 16 perguntas recebe a devolutiva do Mapa', () => {
+    const respondeu: LeadDaColinha = { ...lead('prumo', 'contato'), sinal: 'diagnostico' }
+    assert.deepEqual(idsDosMomentos(respondeu), ['mapa', 'proposta'])
+    assert.ok(idsDosTrechos(respondeu).includes('proposta-fonte'))
+    assert.ok(!idsDosMomentos({ ...lead('site', 'contato'), sinal: 'diagnostico' }).includes('mapa'))
   })
 })
 
