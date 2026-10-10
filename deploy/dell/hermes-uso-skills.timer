@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes — foto mensal do uso das skills, dia 1 às 06:00
+
+[Timer]
+OnCalendar=*-*-01 06:00:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
