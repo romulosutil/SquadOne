@@ -9,7 +9,8 @@ que está lá, e só isso; mudou a regra, muda o documento primeiro.
   - presença: os 6 blocos do Raio-X, com os limiares, e "não medido" quando falta o dado;
   - a conta aberta da calculadora do Raio-X, em Python e no JS que vai na página
     (gerado aqui, com as mesmas constantes);
-  - o bloco HTML da Nota de presença, no CSS do raio-x.py.
+  - o HTML da Nota de presença no Raio-X, no CSS do raio-x.py: a faixa na frente (com o fio de
+    prumo) e, no detalhe "Como fizemos", o "X de 18" com os blocos e a calculadora.
 
 PURO: sem rede, disco, relógio nem ambiente. Usado por raio-x.py e prumo_mapa.py; os
 dois rodam no Dell a partir da cópia em ~/.local/share/prumo-mapa/ (instalados.json).
@@ -612,16 +613,37 @@ def js_calculadora() -> str:
 
 # ------------------------------------------------------------------ o bloco HTML (Raio-X)
 
-# No CSS do raio-x.py (tokens --ferro-*, --brasa, --pedra-*); o visual é o do resumo do Mapa:
-# a nota grande com a barra de 18, uma barra por bloco e uma linha do que falta.
+# No CSS do raio-x.py (tokens --ferro-*, --brasa, --pedra-*). A nota mora em dois lugares da página
+# (três atos, 09/10/2026): na frente, só a faixa, numa régua de três com o fio de prumo da marca
+# (bloco_faixa_html); no detalhe "Como fizemos", o "X de 18", a régua de 0 a 18, um ponto por bloco e
+# a calculadora (bloco_html). O número não vai para a frente: quem decide lê a faixa, quem confere abre.
 CSS_PRESENCA = """
-.presenca .placar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 16px;margin-top:16px;
+.faixa-presenca{margin-top:12px;display:grid;gap:6px}
+.faixa-presenca .faixa-rotulo{font-size:clamp(30px,8vw,40px);line-height:1;font-weight:900;letter-spacing:-.02em;
+font-variation-settings:'wdth' 112,'wght' 900}
+.faixa-presenca .faixa-texto{font-size:15px;color:var(--ferro-600);max-width:56ch}
+/* overflow:hidden: o fio é uma camada da largura da régua, deslocada; sem o corte, empurraria a página para o lado. */
+.regua-faixas{position:relative;margin-top:-1px;padding-top:9px;overflow:hidden}
+.regua-faixas ol{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:0 3px}
+.regua-faixas li{border-top:12px solid var(--pedra-200);padding-top:8px;font-size:11px;line-height:1.2;
+letter-spacing:.05em;text-transform:uppercase;font-weight:700;color:var(--pedra-600)}
+.regua-faixas li.atual{border-top-color:var(--ferro-900);color:var(--ferro-900);font-weight:900}
+.regua-faixas .prumo-fio{position:absolute;left:0;top:0;width:100%;height:30px;pointer-events:none;
+transform:translateX(var(--pos))}
+.regua-faixas .prumo-fio::before{content:"";position:absolute;left:-2px;top:0;width:4px;height:100%;background:var(--brasa)}
+@media (prefers-reduced-motion:no-preference){
+.regua-faixas .prumo-fio{animation:prumo-assenta .8s cubic-bezier(.34,1.56,.64,1) .15s both}
+@keyframes prumo-assenta{from{transform:translateX(0);opacity:0}30%{opacity:1}to{transform:translateX(var(--pos));opacity:1}}}
+.presenca h3{font-size:20px;line-height:1.2;font-weight:800}
+.presenca .placar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 16px;margin-top:12px;
 border-top:2px solid var(--ferro-900);border-bottom:2px solid var(--ferro-900);padding:18px 0}
-.presenca .placar .num{font-size:64px;line-height:.85;font-weight:900;letter-spacing:-.03em;color:var(--oxido);
+.presenca .placar .num{font-size:56px;line-height:.85;font-weight:900;letter-spacing:-.03em;color:var(--oxido);
 font-variation-settings:'wdth' 118,'wght' 900;white-space:nowrap}
-.presenca .placar .num small{font-size:24px;color:var(--ferro-900);font-variation-settings:'wdth' 108,'wght' 800}
-.presenca .placar .lado{flex:1 1 200px;display:grid;gap:8px;min-width:0}
+.presenca .placar .num small{font-size:22px;color:var(--ferro-900);font-variation-settings:'wdth' 108,'wght' 800}
+.presenca .placar .lado{flex:1 1 200px;display:grid;gap:6px;min-width:0}
 .presenca .placar .faixa{font-size:13px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
+.presenca .placar .escala{display:flex;justify-content:space-between;font-size:12px;color:var(--pedra-600);
+font-variant-numeric:tabular-nums}
 .presenca .placar p{font-size:15px;color:var(--ferro-600)}
 .presenca .trilho{display:flex;height:14px;background:var(--pedra-200);border:2px solid var(--ferro-900)}
 .presenca .trilho i{display:block;background:var(--brasa)}
@@ -637,7 +659,7 @@ font-variation-settings:'wdth' 118,'wght' 900;white-space:nowrap}
 .presenca .regra{margin-top:16px;font-size:14px;color:var(--pedra-600)}
 .calculo{margin-top:28px;border:2px solid var(--ferro-900);border-left:6px solid var(--brasa);padding:20px 18px;
 display:grid;gap:12px}
-.calculo h3{font-size:20px;line-height:1.2;font-weight:800}
+.calculo h4{font-size:19px;line-height:1.2;font-weight:800}
 .calculo ul{list-style:none;display:grid;gap:6px}
 .calculo li{padding-left:14px;border-left:2px solid var(--pedra-400);color:var(--ferro-600);font-size:16px}
 .calculo label{font-weight:750;display:block}
@@ -656,19 +678,43 @@ def _barra(nota, maximo) -> str:
     return f'<span class="trilho" aria-hidden="true"><i style="width:{pct:.1f}%"></i></span>'
 
 
+def bloco_faixa_html(presenca: dict) -> str:
+    """A frente da página: a faixa ("Pouco visível", "Em construção", "Bem visível") e a frase dela,
+    numa régua de três em que o fio de prumo assenta uma vez (só CSS; parado com reduced-motion).
+    Sem o número de 0 a 18, que fica no detalhe (bloco_html). '' quando não há nota."""
+    if presenca.get("nota") is None:
+        return ""
+    e = lambda t: html.escape(str(t), quote=True)  # noqa: E731
+    f = presenca["faixa"]
+    i = [x["chave"] for x in FAIXAS].index(f["chave"])
+    itens = []
+    for k, x in enumerate(FAIXAS):
+        rotulo = x["presenca"][0]
+        itens.append(f'<li class="atual">{e(rotulo)}<span class="visualmente-oculto"> (vocês estão aqui)</span></li>'
+                     if k == i else f"<li>{e(rotulo)}</li>")
+    pos = (2 * i + 1) * 100 / (2 * len(FAIXAS))  # o meio da faixa, em % da régua
+    return (f'<div class="faixa-presenca faixa-{e(f["chave"])}"><span class="miudo">Presença no Google</span>'
+            f'<p class="faixa-rotulo">{e(f["rotulo"])}</p>'
+            f'<div class="regua-faixas"><ol aria-label="Faixas da presença no Google">{"".join(itens)}</ol>'
+            f'<span class="prumo-fio" style="--pos:{pos:.3f}%" aria-hidden="true"></span></div>'
+            f'<p class="faixa-texto">{e(f["texto"])}</p></div>')
+
+
 def bloco_html(presenca: dict, nome: str = "") -> str:
-    """A seção "Nota de presença" com a calculadora. '' quando não há nota (menos de
-    MIN_BLOCOS_MEDIDOS blocos medidos): sem nota, a página não mostra o bloco."""
+    """O detalhe da Nota de presença (em "Como fizemos"): o "X de 18" com a régua de 0 a 18, um ponto
+    por bloco e a calculadora. '' quando não há nota (menos de MIN_BLOCOS_MEDIDOS blocos medidos):
+    sem nota, a página não mostra o bloco."""
     if presenca.get("nota") is None:
         return ""
     e = lambda t: html.escape(str(t), quote=True)  # noqa: E731
     nota, f = presenca["nota"], presenca["faixa"]
     medidos = presenca["medidos"]
-    partes = ['<section class="presenca"><h2>Nota de presença</h2>',
+    partes = ['<div class="presenca"><h3>Nota de presença</h3>',
               '<p class="intro">Seis pontos que quem procura no Google confere antes de chamar, cada um de 0 a 3, '
               'pelo cálculo PRUMO.</p>',
-              f'<div class="placar"><span class="num">{e(decimal_br(nota))}<small>/18</small></span>'
+              f'<div class="placar"><span class="num">{e(decimal_br(nota))} <small>de {NOTA_MAXIMA}</small></span>'
               f'<div class="lado"><span class="faixa">{e(f["rotulo"])}</span>{_barra(nota, NOTA_MAXIMA)}'
+              f'<span class="escala" aria-hidden="true"><span>0</span><span>{NOTA_MAXIMA}</span></span>'
               f'<p>{e(f["texto"])}</p></div></div>',
               '<ul class="blocos">']
     for b in presenca["blocos"]:
@@ -687,7 +733,7 @@ def bloco_html(presenca: dict, nome: str = "") -> str:
     if presenca["cenarios"]:
         l1, l2 = frase_da_conta(None)
         n = CLIENTES_A_MAIS_POR_MES
-        partes += ['<div class="calculo"><h3>Quanto vale fechar essas distâncias</h3>',
+        partes += ['<div class="calculo"><h4>Quanto vale fechar essas distâncias</h4>',
                    f'<p>Se uma destas mudanças trouxesse {"1 cliente" if n == 1 else f"{n} clientes"} a mais por mês:</p><ul>',
                    "".join(f"<li>{e(c)}</li>" for c in presenca["cenarios"]), "</ul>",
                    '<div><label for="prumo-valor">Quanto vale, em média, um cliente fechado para vocês?</label>'
@@ -700,5 +746,5 @@ def bloco_html(presenca: dict, nome: str = "") -> str:
                    'aparelho, com o valor que vocês digitam, e ele não é enviado a ninguém. Os cenários não se somam: '
                    'é um cliente a mais, venha de onde vier. E é faturamento, não lucro.</p>',
                    f"<script>{js_calculadora()}</script></div>"]
-    partes.append("</section>")
+    partes.append("</div>")
     return "".join(partes)
