@@ -253,9 +253,15 @@ pelo Google:
   - arquivo inteiro: **450 KB**;
   - CSS **35 KB** e JS **25 KB** sem contar base64, legíveis e comentados
     (nada de minificar: um dev precisa conseguir continuar).
-  Meça com um script python3 no rascunho antes do deploy (bytes até o fim do
-  Ato I, total, CSS, JS, fontes e imagens) e corte o que passar: a imagem
-  feita em SVG custa pouco, a foto de celular esticada custa muito.
+  Meça antes do deploy com o gate numérico (11/10/2026):
+  `python3 ~/.local/bin/qa-numerico <slug>/index.html --capturas <pasta das capturas>`.
+  Ele mede estes tetos (o Ato I é a primeira `<section>` dentro de `<main>`),
+  `width`/`height` e `alt` das imagens, `prefers-reduced-motion`, contraste
+  AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion
+  (tira as duas capturas ele mesmo); código 1 = falhou, e cada FALHA diz o que
+  cortar. Rode até sair 0. Sem ele instalado, um script python3 no rascunho
+  faz a conta dos bytes. Corte o que passar: a imagem feita em SVG custa
+  pouco, a foto de celular esticada custa muito.
   Publicar outros arquivos não é saída: o Raio-X republica só `index.html` e
   `og.jpg`, e o que mais subisse sumiria no deploy dele.
 
@@ -596,7 +602,11 @@ ordem. Nenhuma troca o estilo do 1.6 nem a direção do passo 2 — aprofundam.
   deixou de ser suficiente sozinho.
 - **`/impeccable audit`** e depois **`/impeccable polish`** no `index.html` —
   captura desktop e celular juntos, corrige tudo num lote, no máximo mais uma
-  rodada de confirmação.
+  rodada de confirmação. As capturas de cada rodada viram **uma** imagem:
+  `python3 ~/.local/bin/folha-de-contato --saida <rascunho>/qa/folha-N.jpg --pasta <rascunho>/qa`
+  (nome da captura = rótulo: `m-ato1.png`, `d-ato3-p0.3.png`, `m-ato1-rm.png`),
+  e lê-se a folha, não as capturas uma a uma (cada imagem lida fica no
+  contexto até o fim do lead e pesa em toda chamada seguinte).
 - Feche com o pre-flight check (seção 14) da `/design-taste-frontend`.
 
 **5. Publicar** na Vercel: time `romulodesigns`, projeto `demo-<slug>`,
@@ -774,6 +784,7 @@ Ato III ou a resolução do Ato V: é onde a metáfora (passo 1.5.1) acontece.
       e legível; efeitos de cursor só com `pointer: fine`
 - [ ] Orçamento de bytes medido e dentro (fim do Ato I ≤ 200 KB, arquivo ≤
       450 KB, CSS ≤ 35 KB, JS ≤ 25 KB); título e foto do Ato I visíveis sem JS
+      — o `qa-numerico` saindo 0 cobre os dois
 
 ## Limites
 

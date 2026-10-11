@@ -52,7 +52,8 @@ escapam:
   `pointer: fine`, `prefers-reduced-motion` completo, título e foto do Ato I
   visíveis sem esperar JS
 - orçamento de bytes medido antes do deploy (fim do Ato I ≤ 200 KB, arquivo
-  ≤ 450 KB, CSS ≤ 35 KB, JS ≤ 25 KB), fotos em WebP
+  ≤ 450 KB, CSS ≤ 35 KB, JS ≤ 25 KB) pelo `qa-numerico`, fotos em WebP; as
+  capturas de cada rodada lidas numa folha de contato só
 - nenhuma frase de medo, desconfiança, urgência artificial ou deboche do ramo;
   experiência só com fonte (anos, nota, horário)
 
