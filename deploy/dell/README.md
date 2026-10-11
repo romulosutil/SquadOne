@@ -1428,6 +1428,15 @@ variável, variável de shell em caminho, `python3 - <<EOF` e `python3 -c` de
 várias linhas, `grep`/`sed` com `{n,m}` e `mkdir -p X && <usa X>` na mesma
 chamada. O Claude contorna com um script Python no rascunho.
 
+**Cache do Chrome headless (11/10/2026).** O Chrome sem `--user-data-dir` abre um perfil
+temporário em `~/.cache/google-chrome-headless/scoped_dir*` e só o apaga se sair sozinho. O
+`matar_grupo` e o timeout o matam à força, então cada captura do QA deixava ~3 MB: 34 GB em
+quatro dias (~14 GB por dia com o gerador ligado). Duas defesas: ao fim de cada lead,
+`limpar_cache_chrome()` apaga os `scoped_dir*` parados há mais de 10 min (nunca levanta; o
+teste usa `CHROME_HEADLESS_CACHE`, nunca o cache real); e o `refero-aprender` abre o Chrome
+com `--user-data-dir` num diretório temporário próprio (que cai no rascunho, pelo `TMPDIR`).
+Depois do merge, reinstale as duas cópias (`dell-status --instalados` diz o que está atrás).
+
 Teste de 30/09/2026 (3 leads, um por vez, pela lista): `pousada-valle-do-luar`
 publicou em 16 min, mas o Claude tentou `chrome` (nome do `CLAUDE.md`, que não
 existe no Dell), levou a negação como "Chrome proibido" e publicou sem captura

@@ -20,6 +20,7 @@
     {"repo": "deploy/dell/site-demos-pausa.py", "instalado": "~/.local/bin/site-demos-pausa"},
     {"repo": "deploy/dell/site-pastas.py", "instalado": "~/.local/bin/site-pastas"},
     {"repo": "deploy/dell/gerador-de-sites.py", "instalado": "~/.local/bin/gerador-de-sites"},
+    {"repo": "deploy/dell/refero-aprender.py", "instalado": "~/.local/bin/refero-aprender"},
     {"repo": "deploy/dell/lote-continuo.py", "instalado": "~/.local/bin/lote-continuo"},
     {"repo": "deploy/dell/raio-x.py", "instalado": "~/.local/bin/raio-x"},
     {"repo": "deploy/dell/auto-site/auto-site-CLAUDE.md", "instalado": "~/auto-site/CLAUDE.md", "modo": "444"},

@@ -21,6 +21,7 @@ import argparse
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -53,9 +54,13 @@ def nome_do_arquivo(indice: int, site: str) -> str:
 def abrir(url: str, espera_ms: int = 15000) -> str:
     for binario in CHROME:
         try:
-            r = subprocess.run([binario, "--headless=new", "--no-sandbox", "--disable-gpu",
-                                f"--virtual-time-budget={espera_ms}", "--dump-dom", url],
-                               capture_output=True, text=True, timeout=120)
+            # Perfil próprio e descartável: sem ele o Chrome usa ~/.cache/google-chrome-headless e, morto
+            # pelo timeout, deixa o perfil lá para sempre. O TMPDIR do gerador é o rascunho do lead.
+            with tempfile.TemporaryDirectory(prefix="refero-chrome-") as perfil:
+                r = subprocess.run([binario, "--headless=new", "--no-sandbox", "--disable-gpu",
+                                    f"--user-data-dir={perfil}",
+                                    f"--virtual-time-budget={espera_ms}", "--dump-dom", url],
+                                   capture_output=True, text=True, timeout=120)
             if r.stdout:
                 return r.stdout
         except (OSError, subprocess.TimeoutExpired):

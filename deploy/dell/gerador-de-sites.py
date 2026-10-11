@@ -89,6 +89,11 @@ SINAL_PARAR = AUTO / ".parar"
 # mover a pasta: a lista de permissão só abre a escrita dentro dela).
 SINAL_DESCARTE = "DESCARTAR.md"
 DESCARTADOS = AUTO / "_descartados"
+# O Chrome headless sem --user-data-dir abre um perfil temporário aqui (scoped_dir*) e só o apaga se
+# sair sozinho. Morto por SIGKILL ou timeout (matar_grupo), cada captura deixava ~3 MB: 34 GB em 4 dias.
+CACHE_CHROME = Path(os.environ.get("CHROME_HEADLESS_CACHE", str(Path.home() / ".cache" / "google-chrome-headless")))
+# Um Chrome vivo mexe no perfil dele o tempo todo; só o que está parado há mais que isto é lixo.
+IDADE_MIN_CACHE_CHROME_S = 600
 # Gravado pelo "06 · Funil semanal" (n8n, segunda 08:00); `nao_gerar` são os
 # leads `novo` de busca pausada.
 FUNIL = Path(os.environ.get("SITE_FUNIL", str(Path.home() / ".local/share/n8n-estado/site-funil.json")))
@@ -533,6 +538,28 @@ def matar_grupo(pid: int, sinal: int = signal.SIGTERM) -> None:
         pass
 
 
+def limpar_cache_chrome(pasta: Path | None = None, agora: float | None = None) -> int:
+    """Apaga os perfis temporários do Chrome headless parados há mais de IDADE_MIN_CACHE_CHROME_S.
+    Devolve quantos apagou. Nunca levanta: limpeza não pode derrubar o lead que acabou de ser gerado."""
+    pasta = CACHE_CHROME if pasta is None else pasta
+    agora = time.time() if agora is None else agora
+    apagados = 0
+    try:
+        perfis = list(pasta.glob("scoped_dir*"))
+    except OSError:
+        return 0
+    for perfil in perfis:
+        try:
+            if perfil.is_symlink() or not perfil.is_dir():
+                continue
+            if agora - perfil.stat().st_mtime > IDADE_MIN_CACHE_CHROME_S:
+                shutil.rmtree(perfil, ignore_errors=True)
+                apagados += 1
+        except OSError:
+            continue
+    return apagados
+
+
 def rodar_claude(slug: str, log_lead: Path, timeout_min: int, personalizado: bool = False) -> dict:
     # Rascunho do lead, fora de ~/auto-site (que o Syncthing e o backup espelham).
     # Caminho curto de propósito: o Chrome headless não sobe com socket em caminho longo.
@@ -565,6 +592,10 @@ def rodar_claude(slug: str, log_lead: Path, timeout_min: int, personalizado: boo
             negadas = registrar_saida_do_claude(saida.read().decode("utf-8", errors="replace"), log_lead)
     finally:
         shutil.rmtree(rascunho, ignore_errors=True)
+        # Depois do rascunho e do matar_grupo: o Chrome do QA já morreu e deixou o perfil dele para trás.
+        limpos = limpar_cache_chrome()
+        if limpos:
+            log(f"Cache do Chrome headless: {limpos} perfil(is) temporário(s) apagado(s).", arquivo=log_lead)
     texto = log_lead.read_text(encoding="utf-8", errors="replace")[-4000:]
     return {
         "codigo": codigo,
