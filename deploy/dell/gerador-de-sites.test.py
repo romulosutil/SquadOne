@@ -21,6 +21,7 @@ def carregar(auto: Path):
     os.environ["SITE_FUNIL"] = str(auto / ".funil.json")  # nunca o retrato real do n8n
     os.environ["SITE_LEADS"] = str(auto / ".leads.json")  # nem a planilha real
     os.environ["RAIO_X_BIN"] = str(auto / ".sem-raio-x")  # nem o raio-x instalado (faria deploy)
+    os.environ["CHROME_HEADLESS_CACHE"] = str(auto / ".sem-chrome")  # nem o cache real do Chrome da Mel
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -584,6 +585,29 @@ class ListaDePermissao(unittest.TestCase):
         comum = self.m.comando_do_claude("lead-r", Path("/tmp/x"))
         self.assertNotIn("MODO PERSONALIZADO", comum[2])
         self.assertNotIn("MODO PERSONALIZADO", comum[comum.index("--append-system-prompt") + 1])
+
+    def test_cache_do_chrome_so_perde_perfil_parado_e_so_scoped_dir(self):
+        """11/10/2026: 34 GB de scoped_dir* em ~/.cache; a limpeza não toca em Chrome vivo nem em outro nome."""
+        cache = self.auto / ".sem-chrome"
+        for nome in ("scoped_dirVelho", "scoped_dirOutro", "scoped_dirNovo", "Default"):
+            (cache / nome / "Default").mkdir(parents=True)
+            (cache / nome / "Default" / "Cookies").write_text("x")
+        (cache / "scoped_dirSolto").write_text("arquivo, não pasta")
+        agora = 1_000_000.0
+        for nome, idade in (("scoped_dirVelho", 3600), ("scoped_dirOutro", 601), ("scoped_dirNovo", 30), ("Default", 99999)):
+            os.utime(cache / nome, (agora - idade, agora - idade))
+        self.assertEqual(self.m.limpar_cache_chrome(cache, agora), 2)
+        self.assertEqual(sorted(p.name for p in cache.iterdir()), ["Default", "scoped_dirNovo", "scoped_dirSolto"])
+
+    def test_cache_do_chrome_ausente_nao_levanta(self):
+        self.assertEqual(self.m.limpar_cache_chrome(self.auto / "nao-existe"), 0)
+
+    def test_rodar_claude_limpa_o_cache_do_chrome_ao_fim(self):
+        cache = self.auto / ".sem-chrome"
+        (cache / "scoped_dirAntigo").mkdir(parents=True)
+        os.utime(cache / "scoped_dirAntigo", (1.0, 1.0))
+        r, _, _ = self.rodar_claude_falso("limite")
+        self.assertFalse((cache / "scoped_dirAntigo").exists())
 
     def test_saida_que_nao_e_json_vai_crua_e_limite_e_detectado(self):
         r, _, log = self.rodar_claude_falso("limite")
