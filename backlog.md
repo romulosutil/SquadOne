@@ -38,7 +38,7 @@ Atualizado em 12/09/2026. App OAuth do Google revisto em 30/09/2026. Objetivo da
 | Item | Situação |
 |---|---|
 | Refresh token expirava em 7 dias | Resolvido em 12/09/2026. App publicado: **Em produção**, tipo de usuário Externo. O prazo caiu. Conferido no console (Público-alvo) em 30/09/2026. |
-| Botão "Publicar app" desabilitado | Resolvido em 12/09/2026. Faltavam os três links da página Branding. Preenchidos, o botão liberou. Detalhes no CLAUDE.md, "O prazo de 7 dias". |
+| Botão "Publicar app" desabilitado | Resolvido em 12/09/2026. Faltavam os três links da página Branding. Preenchidos, o botão liberou. Detalhes em `docs/referencia/persistencia-e-acesso.md`, "O prazo de 7 dias". |
 | Links de política do Branding não levavam a uma política | Resolvido em 30/09/2026. Apontavam para a raiz do app no Easypanel, atrás do porteiro de IP. Agora: https://prumo-site-gray.vercel.app/privacidade e `/termos` (fonte em `romulosutil/prumo`, `02-site/`), com `prumo-site-gray.vercel.app` nos domínios autorizados. A página inicial do app continua a do Easypanel. |
 
 ---
