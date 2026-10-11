@@ -1,6 +1,8 @@
 # Scripts executados no Dell: sempre LF, senão o shebang e o systemd quebram.
 deploy/dell/** text eol=lf
 deploy/hermes/** text eol=lf
+# Shell do PC e do Dell (scripts/grafo.sh roda no Git Bash do Windows): com CRLF o bash quebra.
+scripts/*.sh text eol=lf
 # Fontes e imagens: binário, nunca normalizar fim de linha.
 *.woff2 binary
 *.png binary
