@@ -93,7 +93,7 @@ Unidades `systemctl --user`:
 | `auto-entrada.path` | ao chegar pacote | o n8n não cria pastas: materializa em `~/auto-site` os pacotes que o Caçador deixa |
 | `site-antes-venda-watcher.service` | contínuo | avisa pelo WhatsApp quando um lead é publicado |
 | `whatsapp-observador.service` | contínuo | lê o `bridge.log` da sua bridge (sem o conteúdo das mensagens); resposta de lead das planilhas avisa o n8n. Só vê **respostas** de leads, nunca o envio do Rômulo |
-| `pncp-catchup.timer` | 08h, persistente | refaz a coleta do PNCP se o n8n perdeu a das 07:30 |
+| `pncp-catchup.timer` | 08h, persistente (**desligado em 11/10/2026**) | refaz a coleta do PNCP se o n8n perdeu a das 07:30; `systemctl --user enable --now pncp-catchup.timer` volta |
 | `dell-worker-healthwatch.service` | contínuo | confere por HTTP os serviços do usuário |
 | `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central, que roda dele; falha vira aviso por você |
 | `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, os rascunhos do Mapa, 1x ao dia) |
@@ -128,7 +128,7 @@ Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 | 04 · Clique no wa_link | webhook `enviar` | marca o lead como enviado |
 | WhatsApp — números dos leads | webhook | entrega ao observador os telefones a vigiar |
 | WhatsApp — conversa com lead | webhook | o observador chama quando um lead responde; marca sozinho |
-| Radar PNCP — coleta diária | 07:30 | só dispara a coleta; não espera o PNCP |
+| Radar PNCP — coleta diária | 07:30 | só dispara a coleta; não espera o PNCP (pausa em 11/10/2026: ver Licitações abaixo) |
 
 `PRUMO — Preparar planilha` fica desligado de propósito (manual). `PRUMO — Lead
 Scout (review-first)` também, desde 08/10/2026: o convite frio a distribuidoras
@@ -250,7 +250,17 @@ Para responder sobre agenda sem abrir código:
    `journalctl --user -u gerador-de-sites -n 50` e o `falha.log` na pasta do
    lead (2 falhas tiram o lead da fila). Sem login do Claude o runner avisa e
    não toca na fila. Pendências em `pend:sites-fila`, `pend:site-*`.
-7. **Licitações:** n8n às 07:30 → `POST /collect` responde 202 com um
+7. **Licitações (pausado em 11/10/2026, ver "Pausado em 11/10/2026" em
+   `deploy/dell/README.md`):** a rotina do Hermes e o `pncp-catchup.timer` já
+   estão pausados; o fluxo `Radar PNCP — coleta diária` e o container
+   `licitacoes-automation-collector-1` seguem de pé até o n8n poder ser
+   reiniciado com folga. Não religue nem pare nada disso por conta própria, e
+   nunca pare o `licitacoes-automation-n8n-1`/`db` (são o n8n geral). Reverter:
+   `hermes cron resume f6e7da0f8558`, `systemctl --user enable --now
+   pncp-catchup.timer`; com o collector parado,
+   `docker update --restart=unless-stopped licitacoes-automation-collector-1 &&
+   docker start licitacoes-automation-collector-1`. Fluxo de antes da pausa:
+   n8n às 07:30 → `POST /collect` responde 202 com um
    `collection_id` → collector busca o PNCP em segundo plano → estado em
    `GET /collections/:id` e resultado em
    `~/licitacoes-automation/data/latest-run.json`. `pncp-catchup` às 08h cobre

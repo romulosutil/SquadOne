@@ -33,6 +33,9 @@ check_container() {
   state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || true)
   if [[ "$state" == running ]]; then
     ok "container $container em execução"
+  elif [[ "$state" == exited && "$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$container" 2>/dev/null)" == no ]]; then
+    # Parado de propósito (restart=no), como o collector do Radar PNCP desde a pausa de 11/10/2026.
+    ok "container $container parado de propósito (restart=no)"
   else
     fail "container $container ausente ou em estado ${state:-desconhecido}"
   fi

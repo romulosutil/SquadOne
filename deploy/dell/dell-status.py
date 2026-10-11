@@ -53,6 +53,9 @@ DESTINO = os.environ.get("AVISOS_DESTINO", "whatsapp")
 N8N = "http://127.0.0.1:5679"
 N8N_EDITOR = "http://127.0.0.1:5679"
 PNCP_RUN = HOME / "licitacoes-automation/data/latest-run.json"
+# Marca de "radar pausado de propósito" (11/10/2026): sem ela, a última coleta ficaria velha e o
+# Radar PNCP viraria amarelo para sempre. O conteúdo do arquivo é só a data/nota da pausa.
+PNCP_PAUSA = HOME / ".local/state/dell-status/pausa-pncp"
 CRON_JOBS = HOME / ".hermes/cron/jobs.json"
 LEMBRETE_FALHA_H = 12  # falha que continua é relembrada, não repetida a cada minuto
 # O aviso do WhatsApp é lido no celular: o link é o da tailnet, não o loopback.
@@ -522,6 +525,9 @@ def fluxos() -> list[dict]:
 # ---------------------------------------------------------------- dados
 
 def pncp() -> dict:
+    if PNCP_PAUSA.exists():
+        nota = PNCP_PAUSA.read_text().strip()[:60]
+        return check("pncp", "dados", "Radar PNCP", "ok", f"Pausado de propósito{f' ({nota})' if nota else ''}")
     try:
         d = json.loads(PNCP_RUN.read_text())
     except OSError:
