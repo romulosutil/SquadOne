@@ -542,6 +542,57 @@ def resumo_backlog():
     return {"titulo": "🗂️ Site antes da venda: acervo sem automação", "texto": texto, "origem": "site-acompanhamento"}
 
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em ../lib ao
+# lado desta pasta; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [AQUI.parent / "lib", Path.home() / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    --enviar volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o script: tenta a próxima
+            continue
+    return None
+
+
+def enviar_para_a_fila(aviso: dict) -> bool:
+    """O `--resumo-backlog --enviar`: põe o aviso pronto (titulo, texto, origem)
+    na fila do dell-status e diz o que aconteceu. True se entrou na fila.
+
+    Com a lib: grava atômico, nome sem colisão, pasta da fila ausente vira uma
+    mensagem (e não um traceback) e o texto do acervo, que pode passar de 4000
+    caracteres, é cortado com marca em vez de o dell-status recusar o arquivo."""
+    lib = lib_de_aviso()
+    if lib is None:
+        # Sem a lib instalada: o jeito de antes, sem mudar nada.
+        # (utf-8 explícito: antes dependia do locale; no Dell já era utf-8, o arquivo é o mesmo.)
+        (FILA / f"site-acervo-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+        print("\n-> na fila de avisos")
+        return True
+    aviso = dict(aviso)
+    if lib.VALOR_EM_REAIS.search(aviso["texto"]):
+        aviso["texto"] = lib.sem_valores(aviso["texto"])
+        print("\n(um valor em R$ do texto virou [valor]: a fila de avisos não leva valor)")
+    longo = len(aviso["texto"]) > lib.MAX_CARACTERES["texto"]
+    r = lib.gravar(aviso, fila=FILA, prefixo="site-acervo")
+    if not r.gravado:
+        print(f"\n-> NÃO entrou na fila de avisos ({r.estado}): {r.motivo}")
+        return False
+    print("\n-> na fila de avisos" + (f" (texto cortado em {lib.MAX_CARACTERES['texto']} caracteres; o resumo inteiro está acima)"
+                                       if longo else ""))
+    return True
+
+
 def rodar_no(codigo: str, dados: dict, entrada: list) -> list:
     """Roda o código de um nó Code no node do Dell: `$('Nó')` devolve `dados[nó]`
     (lista = .all(), objeto = .first()) e `$input.all()` devolve `entrada`."""
@@ -769,9 +820,8 @@ if __name__ == "__main__":
     if "--resumo-backlog" in sys.argv:
         aviso = resumo_backlog()
         print(aviso["titulo"], "\n" + aviso["texto"])
-        if "--enviar" in sys.argv:
-            (FILA / f"site-acervo-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False))
-            print("\n-> na fila de avisos")
+        if "--enviar" in sys.argv and not enviar_para_a_fila(aviso):
+            sys.exit(1)
     elif "--testar" in sys.argv:
         wf = acompanhamento(erro)
         # O corte real (hoje) deixaria tudo como acervo: no teste ele volta para 01/09.
