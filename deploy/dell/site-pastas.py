@@ -32,6 +32,7 @@ Uso: site-pastas [--listar]   (--listar mostra o que faria, sem mover nem apagar
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -87,10 +88,44 @@ def rotulo(topo: str) -> str:
     return f"`{topo}/`" if topo else "raiz"
 
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/ ao
+# lado deste arquivo; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
 def avisar(texto: str) -> None:
+    aviso = {"titulo": "🌐 Sites", "texto": texto, "origem": "site-pastas"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # Valida, grava atômico, não cria a pasta da fila e nunca levanta (quem
+        # chama está dentro de um `except`): o que não foi gravado vai ao journal.
+        # O texto leva a mensagem da exceção; se ela trouxer "R$" a lib recusaria
+        # o aviso inteiro, e perder o aviso é pior que mandá-lo sem o valor.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-pastas")
+        return
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    (FILA_AVISOS / f"site-pastas-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "🌐 Sites", "texto": texto, "origem": "site-pastas"}, ensure_ascii=False), encoding="utf-8")
+    (FILA_AVISOS / f"site-pastas-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
 
 
 def pedido_do_balcao(listar: bool) -> int | None:

@@ -20,7 +20,7 @@ passa, deixando a verificação vermelha. Ele **não** confere "R$" (só o
 | # | Onde | Nome do arquivo | Campos | Valida | Atômico | Cria a pasta | Erro de gravação |
 |---|---|---|---|---|---|---|---|
 | 1 | `deploy/dell/auto-entrada.py` `avisar` | `auto-entrada-{ns}.json` | titulo fixo, texto, origem | não | não (direto no `.json`) | sim (`mkdir`) | levanta, dentro do `except` do laço: derruba a rodada e os pacotes seguintes ficam parados. `write_text` sem `encoding` (locale). **Trocado neste PR** |
-| 2 | `deploy/dell/site-pastas.py` `avisar` | `site-pastas-{ns}.json` | titulo fixo, texto, origem | não | não | sim | levanta (chamado dentro de `except`) |
+| 2 | `deploy/dell/site-pastas.py` `avisar` | `site-pastas-{ns}.json` | titulo fixo, texto, origem | não | não | sim | levanta (chamado dentro de `except`). **Trocado em 11/10/2026** |
 | 3 | `deploy/dell/site-demos-pausa.py` `avisar` | `site-demos-pausa-{ns}.json` | titulo fixo, texto, origem | não (texto com até 25 nomes) | não | sim | levanta (um dos usos está dentro de `except RuntimeError`) |
 | 4 | `deploy/dell/site-demos-limpeza.py` `avisar` | `site-demos-limpeza-{ns}.json` | titulo fixo, texto, origem | não | não | sim | levanta |
 | 5 | `deploy/dell/gerador-de-sites.py` `avisar` | `gerador-{int(time.time())}.json`: **dois no mesmo segundo se sobrescrevem** | titulo fixo, texto, origem | não | não | sim | `except OSError` → log |
@@ -147,7 +147,7 @@ cópia anterior, ou apagar a lib (todos voltam ao jeito antigo de uma vez).
 
 | Ordem | Script | Risco | O que muda além da troca | Instalar / desfazer |
 |---|---|---|---|---|
-| 2 | `site-pastas.py` | baixo: só caminho de erro, oneshot por `.path` | nada | `install` da cópia; reverter cópia |
+| 2 | `site-pastas.py` | baixo: só caminho de erro, oneshot por `.path` | **Trocado (11/10/2026)**, com `site-pastas.test.py`. Único acréscimo: "R$" na mensagem da exceção vira `[valor]` (`sem_valores`, só quando há R$) em vez de a lib recusar, para o aviso de pacote ruim não se perder | `install -m 755 deploy/dell/site-pastas.py ~/.local/bin/site-pastas`; reverter a cópia (ou apagar a lib) |
 | 3 | `site-demos-limpeza.py` | baixo: 1 aviso por rodada diária; já tem `.test.py` | texto longo passa a ser cortado | idem |
 | 4 | `site-demos-pausa.py` | baixo: igual ao anterior | idem | idem |
 | 5 | `prumo-mapa/prumo_mapa.py` | médio: aviso de entrega ao cliente (Mapa pronto); texto com nome de empresa | usar `sem_valores` no nome? Não: recusa + journal é melhor que esconder. Caminho `../lib` | `install` em `~/.local/share/prumo-mapa/` |
