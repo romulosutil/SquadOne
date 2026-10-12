@@ -176,7 +176,6 @@ def servicos() -> list[dict]:
     ok, det = http_ok("http://127.0.0.1:8080/healthz")
     out.append(check("terminal", "servicos", "Terminal e IDE (code-server)", "ok" if ok else "falha",
                      "Respondendo" if ok else f"Sem resposta: {det}", "http://127.0.0.1:8080/"))
-    out.append(syncthing())
     out.append(whatsapp_sessao())
     return out
 
@@ -208,28 +207,6 @@ def whatsapp_sessao() -> dict:
         return avaliar_whatsapp(http_json(WHATSAPP_HEALTH, timeout=5))
     except Exception as e:  # noqa: BLE001 — qualquer erro vira "sem resposta"
         return avaliar_whatsapp(None, str(getattr(e, "reason", e)))
-
-
-def syncthing() -> dict:
-    cfg = HOME / ".local/state/syncthing/config.xml"
-    try:
-        txt = cfg.read_text()
-        key = txt.split("<apikey>", 1)[1].split("</apikey>", 1)[0].strip()
-        h = {"X-API-Key": key}
-        pastas = http_json("https://127.0.0.1:8384/rest/config/folders", h)
-        ruins = []
-        for p in pastas:
-            s = http_json(f"https://127.0.0.1:8384/rest/db/status?folder={p['id']}", h)
-            if s.get("state") == "error" or s.get("errors", 0) or s.get("pullErrors", 0):
-                ruins.append(p.get("label") or p["id"])
-        if ruins:
-            return check("syncthing", "servicos", "Syncthing", "falha",
-                         "Erro em: " + ", ".join(ruins), "http://127.0.0.1:8384/")
-        return check("syncthing", "servicos", "Syncthing", "ok",
-                     f"{len(pastas)} pastas sem erro", "http://127.0.0.1:8384/")
-    except Exception as e:  # noqa: BLE001
-        return check("syncthing", "servicos", "Syncthing", "falha", f"Sem resposta: {str(e)[:100]}",
-                     "http://127.0.0.1:8384/")
 
 
 # ---------------------------------------------------------------- religamentos do healthwatch
@@ -1502,8 +1479,6 @@ O_QUE_FAZER = {
             "continuar, peça ao Claude.", False),
     "terminal": ("O terminal do navegador (code-server) não responde. Só afeta o Terminal; peça ao Claude se "
                  "precisar dele.", False),
-    "syncthing": ("Sem o PC, o Syncthing não tem com quem sincronizar. Abra-o para ver qual pasta tem erro; se não "
-                  "souber o que é, pode esperar o PC novo.", False),
     "squadone-app": ("O SquadOne de agendas (Easypanel) não responde: demandas e lembretes param. Peça ao Claude "
                      "conferir o app no Easypanel.", False),
     "docker": ("O Docker não responde: o n8n e os projetos param. Peça ao Claude.", False),

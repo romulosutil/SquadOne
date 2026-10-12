@@ -2,7 +2,7 @@
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
 agenda de cada um), as filas, o backup, os arquivos instalados, os timers, os religamentos do
-healthwatch, a idade dos dados, as rotinas caladas, o tamanho do cache e o "o que fazer" de cada alerta. Tudo
+healthwatch, a ausência do Syncthing, a idade dos dados, as rotinas caladas, o tamanho do cache e o "o que fazer" de cada alerta. Tudo
 em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
 Hermes.
 
@@ -694,6 +694,31 @@ class WhatsApp(unittest.TestCase):
         sem_resposta = ds.avaliar_whatsapp(None, "Connection refused")
         self.assertEqual(sem_resposta["estado"], "falha")
         self.assertIn("pareamento", sem_resposta["o_que_fazer"])
+
+
+class SemSyncthing(unittest.TestCase):
+    """O Syncthing foi aposentado em 12/10/2026 (sem aparelho pareado desde 04/10): desligá-lo
+    não pode acender 'falha' no monitor, e a saída das verificações não ganha item no lugar."""
+
+    def test_servicos_nao_olha_o_syncthing_e_nao_inventa_item(self):
+        urls = []
+        originais = (ds.http_ok, ds.http_json, ds.unit_ativa)
+        ds.http_ok = lambda url, *a, **k: (urls.append(url), (True, "ok"))[1]
+        ds.http_json = lambda url, *a, **k: (urls.append(url), {"status": "connected"})[1]
+        ds.unit_ativa = lambda unit: True
+        try:
+            itens = ds.servicos()
+        finally:
+            ds.http_ok, ds.http_json, ds.unit_ativa = originais
+        self.assertEqual([c["id"] for c in itens],
+                         ["hermes", "hermes-navegador", "n8n", "terminal", "whatsapp-sessao"])
+        self.assertTrue(all(c["estado"] == "ok" for c in itens))
+        self.assertNotIn("syncthing", json.dumps(itens, ensure_ascii=False).lower())
+        self.assertFalse([u for u in urls if ":8384" in u], urls)
+
+    def test_nao_sobra_funcao_nem_texto(self):
+        self.assertFalse(hasattr(ds, "syncthing"))
+        self.assertNotIn("syncthing", ds.O_QUE_FAZER)
 
 
 def linha_do_journal(quando: str, msg, desde_o_boot_s: float = 3600) -> str:

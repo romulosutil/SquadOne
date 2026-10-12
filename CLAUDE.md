@@ -226,4 +226,4 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Local Windows Docker service is disabled by design. All containers run exclusively on the Dell.
 - Never search Windows paths for container binaries or Nginx executables.
 - From the PC, run container commands via `ssh mel "docker ..."` or `DOCKER_HOST="ssh://mel"`.
-- Container mounts map to `~/workspace/` on the Dell. Nothing is mirrored from the PC anymore (Syncthing has no paired device since 04/10/2026): code reaches the Dell through GitHub.
+- Container mounts map to `~/workspace/` on the Dell. Nothing is mirrored from the PC anymore (Syncthing has no paired device since 04/10/2026 and was retired on 12/10/2026; `~/Pessoal-dev` is a frozen replica): code reaches the Dell through GitHub.

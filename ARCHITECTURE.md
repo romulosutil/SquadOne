@@ -674,8 +674,10 @@ O repositório CORPORATIVO é espelhado em `~/Corporativo-dev` como somente
 leitura no Dell: era editado no PC e nada no Dell propaga de volta. Sem o PC,
 a pasta é o último retrato de 25/09/2026 e não recebe mais nada.
 
-O diretório `~/Pessoal-dev` no Dell é uma réplica Syncthing da pasta de
-desenvolvimento do PC, congelada em 25/09/2026. Ele serve para o Hermes
+O diretório `~/Pessoal-dev` no Dell é uma réplica da pasta de desenvolvimento
+do PC feita pelo Syncthing, congelada em 25/09/2026 (o Syncthing, sem aparelho
+pareado desde 04/10/2026, foi aposentado em 12/10/2026; o código chega à Mel
+pelo GitHub). Ele serve para o Hermes
 enxergar o trabalho, mas não é uma fronteira Git confiável: metadados `.git`
 podem estar incompletos. Operações de branch, commit, push e pull usam clones
 Git próprios no Dell (o checkout de origem no Windows se perdeu com o PC). O
