@@ -7,7 +7,9 @@
     "instalado: destino; terminado em / é uma pasta e o arquivo mantém o nome.",
     "modo: permissão do install (padrão 755 em ~/.local/bin, 644 no resto).",
     "reiniciar: unit que fica rodando e só relê o arquivo no boot.",
-    "via: 'aplicar-hermes' quando quem instala é o deploy/hermes/scripts/aplicar-hermes.py."
+    "via: 'aplicar-hermes' quando quem instala é o deploy/hermes/scripts/aplicar-hermes.py.",
+    "Units: tudo o que for .service/.timer/.path em deploy/dell/ já cai no curinga abaixo (inclui code-server, silmer-drive-sync e pncp-catchup); as do Hermes ficam em deploy/hermes/units/ e têm entrada própria.",
+    "~/licitacoes-automation não é checkout git: só compose, scripts e fluxo versionados; o .env nunca entra. Mudar compose/scripts pede 'docker compose up -d' (ou restart do collector) depois do install."
   ],
   "arquivos": [
     {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
@@ -45,6 +47,13 @@
     {"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"},
     {"repo": "deploy/dell/**/*.timer", "instalado": "~/.config/systemd/user/"},
     {"repo": "deploy/dell/**/*.path", "instalado": "~/.config/systemd/user/"},
+    {"repo": "deploy/dell/silmer/silmer-drive-sync.sh", "instalado": "~/.local/bin/silmer-drive-sync"},
+    {"repo": "deploy/dell/licitacoes-automation/docker-compose.yml", "instalado": "~/licitacoes-automation/docker-compose.yml"},
+    {"repo": "deploy/dell/licitacoes-automation/scripts/*.mjs", "instalado": "~/licitacoes-automation/scripts/"},
+    {"repo": "deploy/dell/licitacoes-automation/workflows/radar-pncp.json", "instalado": "~/licitacoes-automation/workflows/"},
+    {"repo": "deploy/hermes/units/hermes-gateway.service", "instalado": "~/.config/systemd/user/"},
+    {"repo": "deploy/hermes/units/hermes-dashboard.service", "instalado": "~/.config/systemd/user/"},
+    {"repo": "deploy/hermes/units/hermes-google-browser.service", "instalado": "~/.config/systemd/user/"},
     {"repo": "deploy/hermes/SOUL.md", "instalado": "~/.hermes/SOUL.md", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/skills/dell-operations-manager/SKILL.md",
      "instalado": "~/.hermes/skills/dell-operations-manager/SKILL.md", "via": "aplicar-hermes"},

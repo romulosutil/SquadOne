@@ -7,7 +7,8 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 
 Vem do design "Estrutura do SquadOne" (24/09/2026), conferido no Dell em
 25/09/2026, atualizado em 28/09/2026 com a perda do PC, em 29/09/2026 com o
-que entrou no Dell nesse dia e em 05/10/2026 com o PC novo. O mapa diz
+que entrou no Dell nesse dia, em 05/10/2026 com o PC novo e em 11/10/2026 com a
+auditoria da Mel (pausas, n8n geral, units versionadas). O mapa diz
 **onde procurar**; a verdade é a
 fonte viva (`systemctl --user`, n8n, `status.json`, `cron/jobs.json`). Mapa e
 fonte divergindo é notícia: diga qual divergência viu e deixe o Claude ou o Codex
@@ -19,7 +20,7 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 |---|---|
 | Claude e Codex | controlam e corrigem a partir do PC novo; o que instala e mexe no Dell roda numa sessão no Dell |
 | Hermes (você) | informa pelo WhatsApp |
-| n8n do Dell | gerencia os fluxos; todo fluxo termina respondendo a alguém |
+| n8n do Dell | gerencia os fluxos do PRUMO, do Site antes da venda, do CRM e do Radar PNCP; todo fluxo termina respondendo a alguém. Silmer e Food Helper **não** estão nele (ficam no n8n do Easypanel) |
 | SquadOne | gerencia as agendas |
 | Docker do Dell | serve os projetos |
 | GitHub | integra os agentes: a `main` é onde eles se encontram |
@@ -64,8 +65,10 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
   **reserva fria**: implanta sozinho, mas travado (`IPS_PERMITIDOS=127.0.0.1`),
   sem Telegram, sem vigia e com o roster congelado. A agenda mora no Dell.
 - O ntfy não existe mais: os lembretes vão pelo WhatsApp (por você).
-- **O n8n do Easypanel (Silmer, Food Helper) não é do Dell.** O monitor não o
-  confere e nada dele chega a você. Não diga que está saudável nem que
+- **O n8n do Easypanel é um segundo n8n, e é onde rodam os fluxos do Silmer e do
+  Food Helper; eles não rodam no n8n do Dell** (o n8n do Dell é o de PRUMO,
+  Site antes da venda, CRM e Radar PNCP). O monitor não confere o do Easypanel
+  e nada dele chega a você. Não diga que está saudável nem que
   quebrou: diga que não é coberto. Do Easypanel, o monitor só olha o
   `squadone-app` (verificação `squadone-app` do `status.json`).
 
@@ -81,7 +84,7 @@ não abre; no celular, só com o Tailscale ligado.
 |---|---|
 | 9120 | Central do SquadOne (`squadone-operations.service`, perfil operations: Central em `/`, app em `/squadone`, credencial do Google própria, separada da produção) |
 | 9119 | Hermes (painel e bridge do WhatsApp) |
-| 5679 | n8n (Docker, `~/licitacoes-automation`) |
+| 5679 | n8n geral da Mel (Docker, `~/licitacoes-automation`: PRUMO, Site antes da venda, CRM e Radar PNCP; não é o do Silmer nem o do Food Helper) |
 | 8080 | code-server |
 
 Unidades `systemctl --user`:
@@ -89,19 +92,24 @@ Unidades `systemctl --user`:
 | Unidade | Quando | O que faz |
 |---|---|---|
 | `dell-status.timer` | 1 min | grava o `status.json` da Central; avisa por você quando algo quebra, a cada 12 h enquanto continuar quebrado e quando volta; esvazia a fila de avisos. Suas rotinas: verificação `crons` (falha) e, desde 29/09/2026, uma `cron:<id>` por rotina, que acusa atraso de mais de 30 min |
-| `gerador-de-sites.timer` | 08h, persistente | até 4 leads por dia, 45 min cada, Claude Code + Vercel; de 24 a 28/09/2026 terminou entre 09:17 e 10:17. Dell desligado às 08h: roda quando voltar. Resumo em `~/auto-site/.logs/status.json`; desde 29/09/2026 a falha vira aviso por você pela verificação `gerador` do `dell-status`, e lead que o Claude descarta no meio não derruba mais a rodada |
+| `gerador-de-sites.timer` | 08h, persistente (pausado em 10/10/2026 por causa do limite do Claude; **religado em 11/10/2026**, próxima rodada 08:00) | até 4 leads por dia, 45 min cada, Claude Code + Vercel; de 24 a 28/09/2026 terminou entre 09:17 e 10:17. Dell desligado às 08h: roda quando voltar. Resumo em `~/auto-site/.logs/status.json`; desde 29/09/2026 a falha vira aviso por você pela verificação `gerador` do `dell-status`, e lead que o Claude descarta no meio não derruba mais a rodada |
 | `auto-entrada.path` | ao chegar pacote | o n8n não cria pastas: materializa em `~/auto-site` os pacotes que o Caçador deixa |
 | `site-antes-venda-watcher.service` | contínuo | avisa pelo WhatsApp quando um lead é publicado |
 | `whatsapp-observador.service` | contínuo | lê o `bridge.log` da sua bridge (sem o conteúdo das mensagens); resposta de lead das planilhas avisa o n8n. Só vê **respostas** de leads, nunca o envio do Rômulo |
-| `pncp-catchup.timer` | 08h, persistente (**desligado em 11/10/2026**) | refaz a coleta do PNCP se o n8n perdeu a das 07:30; `systemctl --user enable --now pncp-catchup.timer` volta |
+| `pncp-catchup.timer` | 08h, persistente (**desligado em 11/10/2026**, `disabled`) | refaz a coleta do PNCP se o n8n perdeu a das 07:30; `systemctl --user enable --now pncp-catchup.timer` volta |
 | `dell-worker-healthwatch.service` | contínuo | confere por HTTP os serviços do usuário |
 | `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central, que roda dele; falha vira aviso por você |
 | `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, os rascunhos do Mapa, 1x ao dia) |
 | `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
 
+| `silmer-drive-sync.timer` | a cada 5 min | `rclone bisync` de `~/Silmer` com o Drive (`gdrive-silmer:`); adia se algum arquivo mudou nos últimos 2 min. É só a pasta do Silmer: os fluxos dele não estão no n8n do Dell |
+| `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você (gateway do WhatsApp, painel em `127.0.0.1:9119` e o Chromium headless do acesso ao Google, porta de depuração 9222) |
+| `code-server.service` | contínuo | o IDE em `127.0.0.1:8080` (`~/workspace`) |
+
 O backup roda desde 29/09/2026 (primeiro espelho e primeiro cofre feitos à mão
 nesse dia, depois os timers). O kit de recuperação do cofre fica com o Rômulo.
-| `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você |
+As units desta tabela estão versionadas em `deploy/dell/` (e as do Hermes em
+`deploy/hermes/units/`) e entram no `instalados.json`.
 
 Suas rotinas que tocam o ecossistema (todas em `~/.hermes/cron/jobs.json`):
 
@@ -111,10 +119,24 @@ Suas rotinas que tocam o ecossistema (todas em `~/.hermes/cron/jobs.json`):
   que saía antes do gerador.
 - **Graphify — projetos**, 03:00, sem modelo: `~/SquadOne`, `~/prumo`,
   `~/auto-site` e `~/crm-silmer`; só falha vira mensagem.
+- **Pausadas desde 11/10/2026** (`paused` em `hermes cron list`; não retome por
+  conta própria, `hermes cron resume <id>` volta): **ASMR FULLBRINGER**
+  (briefing diário `d12b6431a2e6`; a revisão de 24/48h e a coleta também
+  estão pausadas) e **Radar diário de licitações** (`f6e7da0f8558`). Pausa não
+  é falha: não avise que sumiram.
 
 Docker Compose em `~/licitacoes-automation`: `n8n` (credenciais OAuth
 cifradas no próprio n8n), `db` (Postgres 17, banco do n8n) e `collector` do
-radar PNCP (grava o que coleta em `data/`, ao lado).
+radar PNCP (grava o que coleta em `data/`, ao lado). O `n8n` é o **geral da
+Mel** (PRUMO, Site antes da venda, CRM e Radar PNCP), por isso nunca se para
+por causa do radar. A pasta não é um checkout git: compose, scripts e o fluxo
+estão em `SquadOne/deploy/dell/licitacoes-automation/` e o `.env` fica só no Dell.
+
+Outros containers no `docker ps` da Mel em 11/10/2026 (Postgres/MySQL/Redis/MinIO
+de `p4f`, `iris`, `espectro`, `aladdin`, `crm-silmer`, mais `moneyprinterturbo`):
+uma parada dos ociosos está **em andamento em 11/10/2026**; o estado final
+não está confirmado neste mapa, confira com `docker ps`. Parar ou apagar é
+decisão do Rômulo, não sua.
 
 Fluxos do n8n (cada um é a verificação `fluxo:<id>` do `status.json`):
 
