@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import ssl
 import subprocess
@@ -1966,10 +1967,12 @@ def avaliar_timers(timers: list[dict], pausas: dict[str, str]) -> dict:
                               f"não, ligue: systemctl --user enable --now {x}."))
 
 
-def _estado_das_units(units: list[str]) -> dict[str, dict]:
+def _mostrar_units(units: list[str], props: list[str]) -> dict[str, dict]:
+    """`systemctl --user show` de várias units numa chamada só: Id → {prop: valor}."""
     if not units:
         return {}
-    r = subprocess.run(["systemctl", "--user", "show", "-p", "Id", "-p", "ActiveState", "-p", "UnitFileState", *units],
+    pedido = [x for p in ["Id", *props] for x in ("-p", p)]
+    r = subprocess.run(["systemctl", "--user", "show", *pedido, "--timestamp=unix", *units],
                        capture_output=True, text=True, timeout=10)
     out = {}
     for bloco in r.stdout.strip().split("\n\n"):
@@ -1977,6 +1980,10 @@ def _estado_das_units(units: list[str]) -> dict[str, dict]:
         if campos.get("Id"):
             out[campos["Id"]] = campos
     return out
+
+
+def _estado_das_units(units: list[str]) -> dict[str, dict]:
+    return _mostrar_units(units, ["ActiveState", "UnitFileState"])
 
 
 def timers_desligados() -> list[dict]:
@@ -1997,6 +2004,135 @@ def timers_desligados() -> list[dict]:
             except OSError:
                 continue
     return [avaliar_timers(timers, pausas)]
+
+
+# ---------------------------------------------------------------- units que caíram
+
+# Os jobs que saíram do cron do Hermes para timers do systemd (graphify-projetos,
+# sites-e-pendencias, entrada-organizar, 10–12/10/2026) avisam pela fila quando
+# falham, mas um processo morto por SIGKILL ou pelo limite de memória não grava
+# nada: só o systemd sabe que ele caiu. Esta verificação lê o que o systemd
+# registrou de cada .service que o repo instala (o mesmo instalados.json dos timers).
+# Quem já tem verificação própria que lê o Result fica de fora, para a mesma
+# queda não aparecer duas vezes.
+UNITS_COM_VERIFICACAO_PROPRIA = {"gerador-de-sites.service", "funil-aprendizado.service"}
+PROPS_DA_UNIT = ["LoadState", "ActiveState", "SubState", "Type", "Result", "ExecMainCode", "ExecMainStatus",
+                 "NRestarts", "StateChangeTimestamp"]
+CLD_EXITED = "1"  # ExecMainCode: 1 = saiu com código; 2 = morto por sinal; 3 = core dump
+
+
+def _nome_do_sinal(n: str | None) -> str:
+    try:
+        return signal.Signals(int(n)).name
+    except (TypeError, ValueError):
+        return f"sinal {n or '?'}"
+
+
+def _motivo_da_queda(resultado: str, codigo: str | None, status: str | None) -> str:
+    """O Result do systemd em português. `status` é o código de saída ou o número
+    do sinal, conforme `codigo` (ExecMainCode)."""
+    if resultado == "oom-kill":
+        return "morta por falta de memória (OOM)"
+    if resultado == "signal":
+        sinal = _nome_do_sinal(status)
+        return f"morta por {sinal}" + (" (costuma ser falta de memória)" if sinal == "SIGKILL" else "")
+    if resultado == "core-dump":
+        return f"quebrou com {_nome_do_sinal(status)} (core dump)"
+    if resultado == "exit-code":
+        return f"saiu com código {status}" if codigo == CLD_EXITED and status else "saiu com erro"
+    if resultado == "timeout":
+        return "passou do tempo limite e o systemd a matou"
+    if resultado == "start-limit-hit":
+        return "religou vezes demais e o systemd desistiu"
+    if resultado == "watchdog":
+        return "parou de responder ao watchdog"
+    return f"falhou ({resultado or 'sem motivo registrado'})"
+
+
+def _de_epoch(txt: str | None) -> datetime | None:
+    s = (txt or "").lstrip("@")
+    try:
+        return datetime.fromtimestamp(float(s), timezone.utc) if s else None
+    except ValueError:
+        return None
+
+
+def avaliar_unit(campos: dict) -> dict | None:
+    """Uma unit pelo `systemctl --user show`. None: não está carregada (não
+    instalada, ou mascarada de propósito), não é vermelho nem amarelo. Oneshot de
+    timer fica `inactive`/`success` entre as rodadas: é ok. O systemd zera o Result
+    no start, então a próxima rodada com sucesso apaga a queda sozinha."""
+    unit, carga = campos.get("Id", "?"), campos.get("LoadState", "")
+    if carga in ("", "not-found", "masked"):
+        return None
+    base = {"unit": unit, "tipo": campos.get("Type", ""), "quando": _de_epoch(campos.get("StateChangeTimestamp"))}
+    if carga != "loaded":
+        return {**base, "estado": "atencao", "motivo": f"o arquivo da unit não carrega ({carga})"}
+    resultado, ativo, sub = campos.get("Result", ""), campos.get("ActiveState", ""), campos.get("SubState", "")
+    if resultado in ("", "success") and ativo != "failed":
+        try:
+            religou = int(campos.get("NRestarts") or 0)
+        except ValueError:
+            religou = 0
+        return {**base, "estado": "ok", "religou": religou}
+    motivo = _motivo_da_queda(resultado, campos.get("ExecMainCode"), campos.get("ExecMainStatus"))
+    if sub == "auto-restart":
+        motivo += "; o systemd está religando"
+    return {**base, "estado": "atencao", "resultado": resultado, "motivo": motivo}
+
+
+def _quando_br(d: datetime, t: datetime) -> str:
+    local = d.astimezone(FUSO_BR)
+    return f"às {local:%H:%M}" if local.date() == t.astimezone(FUSO_BR).date() else f"às {local:%H:%M de %d/%m}"
+
+
+def avaliar_units(units: list[dict], t: datetime) -> dict:
+    """Junta as units num item só, como os timers: a Central não ganha trinta
+    linhas verdes. Queda é amarelo (não acorda ninguém pelo WhatsApp) e nunca
+    `sozinho`: a próxima rodada pode apagar o amarelo, mas não o motivo."""
+    nome = "Units do repositório"
+    caidas = [u for u in units if u["estado"] != "ok"]
+
+    def curto(n: str) -> str:
+        return n.removesuffix(".service")
+    if not caidas:
+        religadas = [u for u in units if u.get("religou")]
+        extra = ("; religada(s) pelo systemd desde o último start: "
+                 + ", ".join(f"{curto(u['unit'])} ({u['religou']}x)" for u in religadas)) if religadas else ""
+        return check("units", "servicos", nome, "ok", f"{len(units)} unit(s) sem queda registrada{extra}")
+    lista = ", ".join(f"{curto(u['unit'])} ({u['motivo']}" + (f", {_quando_br(u['quando'], t)}" if u.get("quando") else "")
+                      + ")" for u in caidas)
+    u = caidas[0]
+    diario = f"journalctl --user -u {u['unit']} -n 50"
+    partes = [f"O systemd registrou que {curto(u['unit'])} caiu ({u['motivo']}): o que ela faz parou no meio, e quem "
+              f"morre assim não consegue avisar. Veja o diário: {diario}."]
+    if u.get("resultado") == "oom-kill" or "SIGKILL" in u["motivo"]:
+        partes.append("Para ver se foi a memória: journalctl -k -g oom --since -2d (e o item Memória).")
+    if u.get("tipo") == "oneshot":
+        partes.append("A próxima rodada que terminar bem apaga o amarelo; para apagar antes, depois de entender: "
+                      f"systemctl --user reset-failed {u['unit']}.")
+    elif u.get("resultado"):
+        partes.append(f"Se ela não voltou: systemctl --user restart {u['unit']}.")
+    if len(caidas) > 1:
+        partes.append("As outras da lista: o mesmo journalctl, com o nome de cada uma.")
+    partes.append("Se não souber o que fazer, peça ao Claude: \"a unit caiu no Dell\".")
+    return check("units", "servicos", nome, "atencao", f"Caiu/caíram: {lista}"[:300], o_que_fazer=" ".join(partes))
+
+
+def _campos_das_units(units: list[str]) -> dict[str, dict]:
+    return _mostrar_units(units, PROPS_DA_UNIT)
+
+
+def units_que_cairam() -> list[dict]:
+    itens = ler_instalados()
+    if itens is None:
+        return []
+    nomes = sorted({i["instalado"].rsplit("/", 1)[-1] for i in itens
+                    if i["instalado"].startswith("~/.config/systemd/user/") and i["instalado"].endswith(".service")
+                    and i["estado"] in ("igual", "diferente")} - UNITS_COM_VERIFICACAO_PROPRIA)
+    campos = _campos_das_units(nomes)
+    avaliadas = [a for a in (avaliar_unit(campos[n]) for n in nomes if n in campos) if a]
+    return [avaliar_units(avaliadas, agora())] if avaliadas else []
 
 
 def listar_instalados() -> None:
@@ -2081,7 +2217,7 @@ def main() -> None:
     t = agora()
     checks = []
     for fn in (servicos, religamentos, containers, fluxos, maquina, pastas_que_crescem, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
-               easypanel, backup, fila_de_avisos, instalados, timers_desligados):
+               easypanel, backup, fila_de_avisos, instalados, timers_desligados, units_que_cairam):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
