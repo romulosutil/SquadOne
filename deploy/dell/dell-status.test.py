@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
-agenda de cada um), as filas, o backup, os arquivos instalados, os timers, os religamentos do
+agenda de cada um), as filas, o backup, os arquivos instalados, os timers, as units que caíram, os religamentos do
 healthwatch, a ausência do Syncthing, a idade dos dados, as rotinas caladas, o tamanho do cache e o "o que fazer" de cada alerta. Tudo
 em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
 Hermes.
@@ -1193,6 +1193,124 @@ class Instalados(unittest.TestCase):
                 self.assertTrue((raiz / e["repo"]).is_file(), e["repo"])
             else:
                 self.assertTrue(list(raiz.glob(e["repo"])), e["repo"])
+
+
+def unit(id_="graphify-projetos.service", carga="loaded", ativo="inactive", sub="dead", tipo="oneshot",
+         resultado="success", codigo="1", status="0", religou="0", quando="@1791784892") -> dict:
+    """Um bloco do `systemctl --user show` como o Dell devolve (12/10/2026)."""
+    return {"Id": id_, "LoadState": carga, "ActiveState": ativo, "SubState": sub, "Type": tipo, "Result": resultado,
+            "ExecMainCode": codigo, "ExecMainStatus": status, "NRestarts": religou, "StateChangeTimestamp": quando}
+
+
+class Units(unittest.TestCase):
+    """12/10/2026: os jobs que saíram do cron do Hermes para timers do systemd
+    avisam pela fila quando falham, mas morto por SIGKILL ou OOM não grava nada."""
+
+    T = br("2026-10-12T10:00")
+
+    def test_tabela_de_casos(self):
+        casos = [
+            # (campos, estado, trecho do motivo)
+            (unit(), "ok", None),  # oneshot de timer entre rodadas
+            (unit(codigo="0", quando=""), "ok", None),  # instalada e nunca rodou
+            (unit(id_="entrada.service", ativo="active", sub="running", tipo="simple", codigo="0"), "ok", None),
+            (unit(ativo="activating", sub="start"), "ok", None),  # rodando agora
+            (unit(ativo="failed", sub="failed", resultado="signal", codigo="2", status="9"), "atencao",
+             "morta por SIGKILL (costuma ser falta de memória)"),
+            (unit(ativo="failed", sub="failed", resultado="signal", codigo="2", status="15"), "atencao",
+             "morta por SIGTERM"),
+            (unit(ativo="failed", sub="failed", resultado="oom-kill", codigo="2", status="9"), "atencao",
+             "morta por falta de memória (OOM)"),
+            (unit(ativo="failed", sub="failed", resultado="timeout", codigo="2", status="15"), "atencao",
+             "passou do tempo limite"),
+            (unit(ativo="failed", sub="failed", resultado="exit-code", codigo="1", status="2"), "atencao",
+             "saiu com código 2"),
+            (unit(ativo="failed", sub="failed", resultado="core-dump", codigo="3", status="11"), "atencao",
+             "quebrou com SIGSEGV (core dump)"),
+            (unit(ativo="failed", sub="failed", resultado="start-limit-hit"), "atencao", "religou vezes demais"),
+            (unit(id_="entrada.service", ativo="activating", sub="auto-restart", tipo="simple", resultado="exit-code",
+                  codigo="1", status="1"), "atencao", "saiu com código 1; o systemd está religando"),
+            (unit(ativo="failed", sub="failed", resultado="algo-novo"), "atencao", "falhou (algo-novo)"),
+            (unit(carga="bad-setting"), "atencao", "o arquivo da unit não carrega (bad-setting)"),
+        ]
+        for campos, estado, motivo in casos:
+            with self.subTest(campos=campos):
+                a = ds.avaliar_unit(campos)
+                self.assertEqual(a["estado"], estado)
+                if motivo:
+                    self.assertIn(motivo, a["motivo"])
+
+    def test_nao_instalada_ou_mascarada_nao_acende(self):
+        for carga in ("not-found", "masked", ""):
+            self.assertIsNone(ds.avaliar_unit(unit(carga=carga, ativo="inactive", resultado="")), carga)
+
+    def test_tudo_bem_e_religadas(self):
+        us = [ds.avaliar_unit(unit()), ds.avaliar_unit(unit(id_="hermes-google-browser.service", ativo="active",
+                                                             sub="running", tipo="simple", religou="5"))]
+        c = ds.avaliar_units(us, self.T)
+        self.assertEqual((c["id"], c["estado"]), ("units", "ok"))
+        self.assertEqual(c["detalhe"], "2 unit(s) sem queda registrada; religada(s) pelo systemd desde o último "
+                                       "start: hermes-google-browser (5x)")
+
+    def test_sigkill_no_graphify(self):
+        morto = br("2026-10-12T03:12").timestamp()
+        us = [ds.avaliar_unit(unit(ativo="failed", sub="failed", resultado="signal", codigo="2", status="9",
+                                   quando=f"@{morto:.0f}")),
+              ds.avaliar_unit(unit(id_="sites-e-pendencias.service"))]
+        c = ds.avaliar_units(us, self.T)
+        self.assertEqual(c["estado"], "atencao")
+        self.assertNotIn("sozinho", c)
+        self.assertEqual(c["detalhe"], "Caiu/caíram: graphify-projetos (morta por SIGKILL (costuma ser falta de "
+                                       "memória), às 03:12)")
+        self.assertIn("journalctl --user -u graphify-projetos.service -n 50", c["o_que_fazer"])
+        self.assertIn("journalctl -k -g oom", c["o_que_fazer"])
+        self.assertIn("systemctl --user reset-failed graphify-projetos.service", c["o_que_fazer"])
+        self.assertIs(ds.explicar(c), c)  # o texto próprio não é trocado pelo genérico
+
+    def test_servico_que_fica_rodando_pede_restart_e_data_de_outro_dia(self):
+        ontem = br("2026-10-11T22:05").timestamp()
+        c = ds.avaliar_units([ds.avaliar_unit(unit(id_="entrada.service", ativo="failed", sub="failed", tipo="simple",
+                                                   resultado="oom-kill", codigo="2", status="9",
+                                                   quando=f"@{ontem:.0f}"))], self.T)
+        self.assertIn("(morta por falta de memória (OOM), às 22:05 de 11/10)", c["detalhe"])
+        self.assertIn("systemctl --user restart entrada.service", c["o_que_fazer"])
+        self.assertNotIn("reset-failed", c["o_que_fazer"])
+
+    def test_quais_units_entram(self):
+        """Só .service que o repo instala e está instalado; sem as que têm verificação própria."""
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        repo, home = tmp / "SquadOne", tmp / "home"
+        antes = {k: getattr(ds, k) for k in ("REPO", "INSTALADOS", "HOME", "_campos_das_units")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in antes.items()])
+        ds.REPO, ds.HOME = repo, home
+        ds.INSTALADOS = repo / "deploy/dell/instalados.json"
+        ds.INSTALADOS.parent.mkdir(parents=True)
+        ds.INSTALADOS.write_text(json.dumps({"arquivos": [
+            {"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"},
+            {"repo": "deploy/dell/**/*.timer", "instalado": "~/.config/systemd/user/"},
+            {"repo": "deploy/hermes/units/hermes-gateway.service", "instalado": "~/.config/systemd/user/"}]}))
+        for n in ("graphify-projetos.service", "graphify-projetos.timer", "gerador-de-sites.service",
+                  "nunca-instalada.service", "../hermes/units/hermes-gateway.service"):
+            p = repo / "deploy/dell" / n
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(n)
+            if not n.startswith("nunca"):
+                q = home / ".config/systemd/user" / Path(n).name
+                q.parent.mkdir(parents=True, exist_ok=True)
+                q.write_text(n)
+        pedidos = []
+
+        def campos(units):
+            pedidos.append(units)
+            return {u: unit(id_=u) for u in units}
+        ds._campos_das_units = campos
+        [c] = ds.units_que_cairam()
+        self.assertEqual(pedidos, [["graphify-projetos.service", "hermes-gateway.service"]])
+        self.assertEqual(c["detalhe"], "2 unit(s) sem queda registrada")
+        # O systemd não conhece nenhuma (sem daemon-reload): nada a mostrar, sem amarelo.
+        ds._campos_das_units = lambda units: {u: unit(id_=u, carga="not-found") for u in units}
+        self.assertEqual(ds.units_que_cairam(), [])
 
 
 if __name__ == "__main__":

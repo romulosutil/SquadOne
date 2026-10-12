@@ -344,6 +344,19 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   A marca `pausa-pncp` do Radar também vale para o `pncp-catchup.timer`. Marca de um timer
   que voltou a ligar não acende nada, mas aparece no detalhe ("marca de pausa sobrando")
   para ser apagada.
+- **Units do repositório** (`units`, grupo Serviços): o que o systemd registrou de cada
+  `.service` que o `instalados.json` leva a `~/.config/systemd/user/` e está instalado
+  (`systemctl --user show`: `Result`, `ActiveState`, `ExecMainStatus`). Os jobs que saíram
+  do cron do Hermes para timers (Graphify, Sites e pendências, Entrada, 10–12/10/2026)
+  avisam pela fila quando falham, mas um processo morto por SIGKILL ou pelo limite de
+  memória não grava nada. **Amarelo** com `Result` diferente de `success` ou
+  `ActiveState=failed` (`signal`, `oom-kill`, `timeout`, `exit-code`, `core-dump`...), com o
+  motivo, a hora e o `journalctl --user -u <unit> -n 50`; nunca "resolve sozinho". Oneshot
+  de timer `inactive`/`success` entre rodadas é ok, e a próxima rodada com sucesso apaga a
+  queda (o systemd zera o `Result` no start). Unit que o systemd não conhece (`not-found`,
+  `masked`) fica de fora. O `gerador-de-sites` e o `funil-aprendizado` também ficam: as
+  verificações deles já leem o `Result`. No verde, o detalhe cita quem o systemd religou
+  sozinho (`NRestarts`).
 - **Cache e ~/.local** (`pastas`, grupo Máquina): em 11/10/2026 o `~/.cache` tinha 34 GB de
   perfis temporários do Chrome headless do QA (`google-chrome-headless/scoped_dir*`) e o
   "Disco" seguia verde (500 GB, longe dos 85%). Mede `~/.cache` e `~/.local` com
