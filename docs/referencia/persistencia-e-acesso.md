@@ -106,5 +106,13 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_LUNA_TETO_DIA` | servidor | só `operations`: turnos observados pela sombra por dia (São Paulo); ausente = 10; ilegível ou ≤ 0 = log e sombra desligada |
 | `SQUADONE_LUNA_GUARDAR_DEMANDA` | servidor | só `operations`: `true` grava a demanda em claro no JSONL da sombra; padrão só o sha256 e o tamanho |
 | `SQUADONE_CODEX_BIN` | servidor | só `operations`: binário do `codex` para a sombra; ausente = `codex` no PATH; não encontrado = log uma vez e sombra desligada |
+| `OPENROUTER_API_KEY` | servidor | só `operations`, no EnvironmentFile `~/.config/squadone/jev.env` (600); **nunca no Easypanel, nunca impressa** (nenhum log, erro ou JSONL a repete). Só é lida com `SQUADONE_JEV_SOMBRA=true`; ausente ou fora do formato = `JevMalConfigurado`, log de erro e Jev desligado |
+| `SQUADONE_JEV_SOMBRA` | servidor | só `operations` com a agenda; **nunca no Easypanel**. `true` liga o Jev em sombra (ver `perfis-e-experimentos.md`); qualquer outro valor = desligado (padrão) |
+| `SQUADONE_JEV_MODELO` | servidor | só `operations`: id do modelo na OpenRouter; ausente = `typesafe/jev-1.13`; fora de `<provedor>/<modelo>` = log e desligado |
+| `SQUADONE_JEV_TETO_DIA` | servidor | só `operations`: chamadas ao Jev por dia (São Paulo); ausente = 50; ilegível ou ≤ 0 = log e desligado |
+| `SQUADONE_JEV_TETO_USD` | servidor | só `operations`: teto TOTAL de gasto em US$ (soma de `usage.cost` de todos os JSONL do Jev, contada no boot); ausente = 1; ilegível, ≤ 0 ou > 100 = log e desligado |
+| `SQUADONE_JEV_TIMEOUT_MS` | servidor | só `operations`: timeout de uma chamada (500–60000); ausente = 5000 |
+| `SQUADONE_JEV_GUARDAR_DEMANDA` | servidor | só `operations`: `true` grava a demanda (já mascarada) no JSONL do Jev; padrão só o sha256 e o tamanho |
+| `SQUADONE_JEV_ZDR` | servidor | só `operations`: `false` deixa de exigir retenção zero (só para teste); ausente = ZDR exigido em toda chamada; outro valor = log e desligado |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.

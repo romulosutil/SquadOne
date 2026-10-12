@@ -208,8 +208,8 @@
     estabelecimento diz onde o Rômulo esteve e com o quê gasta (farmácia,
     clínica), mais do que o valor. Pelo mesmo motivo, nenhum valor nem
     estabelecimento vai a log, journal, `status.json` ou aviso.
-    **Nada de finanças vai ao modelo sem pedido explícito** — Gemini, Luna ou
-    Hermes: categorizar é regra determinística, e a explicação com IA só roda
+    **Nada de finanças vai ao modelo sem pedido explícito** — Gemini, Luna,
+    Jev ou Hermes (o Jev nunca, nem a pedido: regra 27): categorizar é regra determinística, e a explicação com IA só roda
     quando o Rômulo pede e mostra antes o que vai sair. Finanças nunca entra no
     `systemInstruction` do turno, que leva o roster em toda chamada. O banco
     (`financas.db`, com os `-wal`/`-shm`) e o arquivo com a credencial da
@@ -242,3 +242,19 @@
     do `status.json`, na Central (regras 2 e 19). As salas são quem trabalha,
     não etapas do funil: as etapas continuam em `src/operations/fluxos.ts` e
     nas planilhas.
+27. **O Jev é medição até ser promovido.** O `typesafe/jev-1.13` (TypeSafe pela
+    OpenRouter, `server/openrouter-decisoes.ts`) só responde perguntas em
+    **sombra**, depois do turno, sem `await`: nada do que ele devolve decide
+    squad, sala, tipo ou contratação, nem volta ao Gemini, ao roster ou à UI.
+    Só no perfil `operations` com a agenda ligada; **nunca no Easypanel** (a
+    chave mora só em `~/.config/squadone/jev.env` no Dell, 600, e nenhum log,
+    erro ou registro a repete). **Finanças nunca vão ao Jev**, nem a pedido:
+    nem o texto de um gasto falado, nem valor em R$ numa demanda ou num escopo.
+    Todo envio sai com `provider.data_collection: "deny"` e ZDR exigido, e com o
+    texto passado por `mascararParaJev` (telefone, e-mail, CPF/CNPJ, URL com
+    identificador e segredo viram rótulos fixos). ZDR é a classificação da
+    OpenRouter: a TypeSafe não publica prazo de retenção, e o processamento é
+    nos EUA. A squad Pay4Fun foi liberada pelo Rômulo para ir a este terceiro
+    (11/10/2026); **respostas de leads não vão ao Jev** até ele aprovar. Virar
+    motor de qualquer decisão exige cumprir os critérios de promoção de
+    `docs/referencia/perfis-e-experimentos.md` e decisão explícita dele.

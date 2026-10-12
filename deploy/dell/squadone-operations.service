@@ -10,6 +10,9 @@ EnvironmentFile=%h/.config/squadone/operations.env
 # Credencial da Pluggy (PLUGGY_CLIENT_ID, _SECRET, _ITEM_IDS): 600, fora do repo,
 # do n8n e de data/; só este processo a lê. O "-" deixa a Central subir sem ela.
 EnvironmentFile=-%h/.config/squadone/financas.env
+# Jev em sombra (OPENROUTER_API_KEY e SQUADONE_JEV_*): 600, fora do repo; o
+# "-" deixa a Central subir sem ele, e sem SQUADONE_JEV_SOMBRA=true nada é lido.
+EnvironmentFile=-%h/.config/squadone/jev.env
 Environment=APP_URL=http://127.0.0.1:9120
 ExecStart=/usr/bin/npm start
 Restart=on-failure
