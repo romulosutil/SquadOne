@@ -46,6 +46,7 @@ import argparse
 import ast
 import difflib
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -1369,10 +1370,53 @@ def conferir_aviso(a: dict) -> None:
         raise ErroDoFunil("aviso com R$ ou dado pessoal")
 
 
-def gravar_aviso(fila: Path, aviso: dict) -> Path:
+def pastas_da_lib() -> list[Path]:
+    """Onde procurar a lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/
+    ao lado deste arquivo; no Dell, instalada em ~/.local/lib/mel/ (instalados.json). Primeiro
+    a do repo, para o teste nunca pegar uma cópia instalada. Calculado na chamada, não na
+    importação (ver o aviso sobre caminhos no topo)."""
+    return [Path(__file__).resolve().parent / "lib", Path.home() / ".local/lib/mel"]
+
+
+def lib_de_aviso(pastas: list[Path] | None = None):
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    gravar_aviso() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in (pastas if pastas is not None else pastas_da_lib()):
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
+def gravar_aviso(fila: Path, aviso: dict, pastas: list[Path] | None = None) -> Path:
     """Como o server/avisos.ts: arquivo oculto .tmp e rename. A pasta é do
-    dell-status (2770, grupo do n8n): ausente é erro, nunca criada aqui."""
+    dell-status (2770, grupo do n8n): ausente é erro, nunca criada aqui.
+
+    O que é regra DESTE script (R$ e dado pessoal, o teto sem cortar) fica no
+    conferir_aviso, que roda sempre e primeiro; a lib só grava (atômico, nome
+    único) e confere o schema da fila (link, 16 KB, ISO). O que a lib não gravar
+    vira ErroDoFunil, como a fila ausente sempre foi: a rodada registra a falha."""
     conferir_aviso(aviso)
+    lib = lib_de_aviso(pastas)
+    if lib is not None:
+        r = lib.gravar(aviso, fila=fila, prefixo="funil-aprendizado", cortar=False)
+        if r.estado == lib.FILA_AUSENTE:
+            raise ErroDoFunil(f"fila de avisos ausente ({fila})")
+        if not r.gravado:
+            raise ErroDoFunil(f"aviso não gravado ({r.estado}): {r.motivo}")
+        try:
+            os.chmod(r.arquivo, 0o660)  # o jeito antigo fixava 660 com qualquer umask (a lib deixa o umask valer)
+        except OSError:
+            pass
+        return r.arquivo
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
     if not fila.is_dir():
         raise ErroDoFunil(f"fila de avisos ausente ({fila})")
     nome = f"funil-aprendizado-{time.time_ns()}.json"
