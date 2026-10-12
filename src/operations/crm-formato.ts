@@ -103,10 +103,12 @@ export function onde(lead: CrmLead): string {
 /** Leitura dita com honestidade: sem confirmação de leitura, é desconhecida (RULES 2 e 15). */
 // O que o lead do Site recebeu (07/10/2026): "Mensagem A · site personalizado-v2".
 export function textoDaAbordagem(lead: CrmLead): string {
-  const { mensagem, site } = lead.abordagem ?? {}
+  const { mensagem, site, video } = lead.abordagem ?? {}
   const msg = !mensagem ? '' : mensagem === 'manual' ? 'mensagem escrita à mão (sem o link do Balcão)'
     : mensagem === 'EN' ? 'mensagem em inglês' : `mensagem ${mensagem}`
-  const partes = [msg, site ? `site ${site}` : ''].filter(Boolean)
+  // A/B do vídeo (ab-video.ts): só quando a coluna `braco_video` diz algo.
+  const comVideo = video === 'video' ? 'com vídeo (teste A/B)' : video === 'sem-video' ? 'sem vídeo (teste A/B)' : ''
+  const partes = [msg, site ? `site ${site}` : '', comVideo].filter(Boolean)
   return partes.length ? partes.join(' · ').replace(/^./, (c) => c.toUpperCase()) : ''
 }
 

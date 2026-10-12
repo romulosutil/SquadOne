@@ -120,8 +120,11 @@ export interface CrmLead {
   demoApagadoEm?: string
   notas: number
   resposta?: CrmResposta
-  /** Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site. */
-  abordagem?: { mensagem?: string; site?: string }
+  /**
+   * Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site.
+   * `video` (11/10/2026): o braço do A/B do vídeo (coluna `braco_video`; ausente = coluna vazia).
+   */
+  abordagem?: { mensagem?: string; site?: string; video?: 'video' | 'sem-video' }
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
   mensagemPronta?: string
   eventos: CrmEvento[]

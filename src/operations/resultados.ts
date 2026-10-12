@@ -35,7 +35,11 @@ export interface LinhaDeResultado {
   fecharam: number
 }
 
-export type Criterio = 'nicho' | 'mensagem' | 'site' | 'horario'
+/**
+ * `video` (11/10/2026): o A/B do vídeo no envio (ab-video.ts). Coluna `braco_video` vazia
+ * é "Sem vídeo"; a tela só mostra o critério dentro do bloco do A/B, e só com a coluna preenchida.
+ */
+export type Criterio = 'nicho' | 'mensagem' | 'site' | 'horario' | 'video'
 
 const DIA_MS = 24 * 60 * 60 * 1000
 const FUSO = 'America/Sao_Paulo'
@@ -81,6 +85,7 @@ export function enviadoNoPeriodo(lead: CrmLead, periodo: Periodo, agora: number)
 export function chaveDe(lead: CrmLead, criterio: Criterio): string {
   if (criterio === 'nicho') return lead.nicho.trim() || 'Sem nicho'
   if (criterio === 'horario') return faixaDoHorario(Date.parse(lead.marcos.enviado ?? ''))
+  if (criterio === 'video') return lead.abordagem?.video === 'video' ? 'Com vídeo' : 'Sem vídeo'
   if (criterio === 'mensagem') {
     const m = lead.abordagem?.mensagem
     if (!m) return 'Sem registro (envios até 07/10)'

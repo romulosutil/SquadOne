@@ -34,21 +34,47 @@ function validos(envios: EnviosAbertos, agora: number): EnviosAbertos {
     typeof id === 'string' && id && Number.isFinite(t) && t <= agora + 60_000 && agora - t < VALIDADE_DO_ENVIO_MS))
 }
 
-export function lerEnvios(storage: Guardador | null | undefined, agora: number): EnviosAbertos {
+function lerMarcas(storage: Guardador | null | undefined, chave: string, agora: number): EnviosAbertos {
   try {
-    const bruto = JSON.parse(storage?.getItem(CHAVE_DOS_ENVIOS) ?? '{}')
+    const bruto = JSON.parse(storage?.getItem(chave) ?? '{}')
     return bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? validos(bruto as EnviosAbertos, agora) : {}
   } catch {
     return {}
   }
 }
 
-export function gravarEnvios(storage: Guardador | null | undefined, envios: EnviosAbertos): void {
+function gravarMarcas(storage: Guardador | null | undefined, chave: string, marcas: EnviosAbertos): void {
   try {
-    storage?.setItem(CHAVE_DOS_ENVIOS, JSON.stringify(envios))
+    storage?.setItem(chave, JSON.stringify(marcas))
   } catch {
     // Sem storage: a marca vale até o próximo reload.
   }
+}
+
+export const lerEnvios = (storage: Guardador | null | undefined, agora: number) => lerMarcas(storage, CHAVE_DOS_ENVIOS, agora)
+export const gravarEnvios = (storage: Guardador | null | undefined, envios: EnviosAbertos) => gravarMarcas(storage, CHAVE_DOS_ENVIOS, envios)
+
+// ---------------------------------------------------------------- A/B do vídeo (11/10/2026, ab-video.ts)
+// O `wa.me?text=` não anexa mídia: no braço com vídeo, o vídeo sai à mão logo depois da
+// mensagem. "Vídeo enviado" é lembrado como o toque da fila (mesma validade de 30 min, só neste
+// navegador): serve para quem envia não esquecer nem mandar duas vezes, nunca vai à planilha.
+
+export const CHAVE_DOS_VIDEOS = 'squadone:crm:videos-enviados'
+export const lerVideos = (storage: Guardador | null | undefined, agora: number) => lerMarcas(storage, CHAVE_DOS_VIDEOS, agora)
+export const gravarVideos = (storage: Guardador | null | undefined, videos: EnviosAbertos) => gravarMarcas(storage, CHAVE_DOS_VIDEOS, videos)
+/** Mesma regra do toque: repetir não renova, o que vale é a primeira marca. */
+export const marcarVideo = marcarEnvio
+
+/** O passo extra do braço com vídeo; null fora dele (coluna `braco_video` vazia ou outro braço). */
+export function passoDoVideo(lead: CrmLead): string | null {
+  if (lead.abordagem?.video !== 'video') return null
+  return `Logo depois da mensagem, mande à mão o vídeo de 15 s do demo de ${lead.empresa}: o link do WhatsApp leva só o texto.`
+}
+
+/** `pendente`: braço com vídeo e ainda sem a marca de enviado; null fora do braço. */
+export function estadoDoVideo(lead: CrmLead, videos: EnviosAbertos): 'pendente' | 'enviado' | null {
+  if (lead.abordagem?.video !== 'video') return null
+  return lead.id in videos ? 'enviado' : 'pendente'
 }
 
 /** Repetir o toque não renova a marca: o que vale é a primeira vez que o WhatsApp abriu. */

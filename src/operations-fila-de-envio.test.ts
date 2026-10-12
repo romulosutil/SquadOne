@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  CHAVE_DOS_ENVIOS, CONFIRMACAO_ESPERADA_MS, VALIDADE_DO_ENVIO_MS, estadoDoEnvio, filaDeEnvio, gravarEnvios, lerEnvios,
-  marcarEnvio, nichosDaFila, ordemComPulados, ordenarComEnvios, podarEnvios, type Guardador,
+  CHAVE_DOS_ENVIOS, CHAVE_DOS_VIDEOS, CONFIRMACAO_ESPERADA_MS, VALIDADE_DO_ENVIO_MS, estadoDoEnvio, estadoDoVideo, filaDeEnvio, gravarEnvios,
+  gravarVideos, lerEnvios, lerVideos, marcarEnvio, marcarVideo, nichosDaFila, ordemComPulados, ordenarComEnvios, passoDoVideo, podarEnvios,
+  type Guardador,
 } from './operations/fila-de-envio.ts'
 import type { CrmItemHoje, CrmLead } from './operations/types.ts'
 
@@ -49,6 +50,35 @@ describe('marcas de envio no navegador', () => {
   it('passado o tempo de um retrato, o toque sem confirmação pede conferência', () => {
     assert.equal(estadoDoEnvio(AGORA - 60_000, AGORA), 'aguardando')
     assert.equal(estadoDoEnvio(AGORA - CONFIRMACAO_ESPERADA_MS, AGORA), 'conferir')
+  })
+})
+
+describe('A/B do vídeo na fila', () => {
+  const comVideo: CrmLead = { ...lead('site:v', 'advocacia'), empresa: 'Silva Advocacia', abordagem: { mensagem: 'A', video: 'video' } }
+  const semVideo: CrmLead = { ...lead('site:s', 'advocacia'), abordagem: { mensagem: 'A', video: 'sem-video' } }
+  const semColuna = lead('site:n', 'advocacia')
+
+  it('só o braço com vídeo ganha o passo "mande o vídeo", com o nome do lead', () => {
+    assert.match(passoDoVideo(comVideo) ?? '', /mande à mão o vídeo de 15 s do demo de Silva Advocacia/)
+    assert.equal(passoDoVideo(semVideo), null)
+    assert.equal(passoDoVideo(semColuna), null)
+  })
+
+  it('"vídeo enviado" é lembrado à parte do toque, 30 min, e repetir não renova', () => {
+    const s = memoria()
+    const videos = marcarVideo(marcarVideo({}, 'site:v', AGORA), 'site:v', AGORA + 60_000)
+    assert.deepEqual(videos, { 'site:v': AGORA })
+    gravarVideos(s, videos)
+    assert.equal(s.dados[CHAVE_DOS_ENVIOS], undefined, 'não mexe nas marcas de envio')
+    assert.deepEqual(lerVideos(s, AGORA + 60_000), { 'site:v': AGORA })
+    assert.deepEqual(lerVideos(s, AGORA + VALIDADE_DO_ENVIO_MS), {})
+    assert.deepEqual(JSON.parse(s.dados[CHAVE_DOS_VIDEOS]), { 'site:v': AGORA })
+  })
+
+  it('estado: pendente até marcar; fora do braço, nada', () => {
+    assert.equal(estadoDoVideo(comVideo, {}), 'pendente')
+    assert.equal(estadoDoVideo(comVideo, { 'site:v': AGORA }), 'enviado')
+    assert.equal(estadoDoVideo(semColuna, { 'site:n': AGORA }), null)
   })
 })
 
