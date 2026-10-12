@@ -76,6 +76,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/transcricao.ts   áudio do Telegram -> texto da demanda (uma chamada ao Gemini)
   server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
   server/luna-sombra.ts   Luna em sombra (desligada): prompt, leitura da saída e comparação PUROS; cola com fila, teto/dia, codex exec sem shell, JSONL 600
+  server/openrouter-decisoes.ts  transporte do Jev (OpenRouter /alpha/decisions): pedido, máscara, validação e erro PUROS; deny + ZDR, sem retry, chave nunca em log
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n

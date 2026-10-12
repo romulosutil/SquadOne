@@ -22,6 +22,11 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/luna-sombra.test.ts` (a saída da Luna como dado, a comparação com o
 Gemini, as flags do `codex exec --help`, e a cola — teto do dia, fila serial,
 cota, JSONL — com o `codex` dublado num diretório temporário),
+`server/openrouter-decisoes.test.ts` (o transporte do Jev com `fetch` dublê e
+chave inventada: `questions` é objeto, `provider` sempre com `data_collection:
+"deny"` e ZDR, a máscara de telefone/e-mail/CPF/CNPJ/URL/segredo, a resposta
+validada contra os rótulos enviados, 402/401 desligam até reiniciar, 429 sem
+retry, timeout, corpo sem `usage`, config ilegível e a chave nunca em erro nem log),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
 vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
