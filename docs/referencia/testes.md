@@ -11,7 +11,8 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/prompt-passos.test.ts`, `server/telegram.test.ts`,
 `server/telegram-entrada.test.ts`, `server/telegram-resposta.test.ts`,
 `server/telegram-bot.test.ts`, `server/avaliacoes-turno.test.ts`,
-`server/operations.test.ts`, `server/auto-production.test.ts`,
+`server/operations.test.ts` (inclui a config das ferramentas com e sem o Syncthing
+opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
 `server/crm.test.ts`, `server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho), `server/acesso.test.ts`,

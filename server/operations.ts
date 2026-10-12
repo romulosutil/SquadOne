@@ -9,8 +9,22 @@ import { lerStatusDoDell } from "./dell-status.ts";
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
 
+// Sem uma destas a Central não sobe: são o que o painel Mais → Acessos abre.
+export const OPERATION_REQUIRED_TOOL_IDS = ["hermes", "ide", "n8n", "remote"] as const;
+// O Syncthing foi aposentado em 12/10/2026 (nenhum aparelho pareado desde
+// 04/10). Fica opcional, e não removido, para a configuração do Dell que ainda
+// tem a entrada continuar válida no deploy; sem ela, a ferramenta some do
+// /overview e do painel em vez de aparecer como indisponível.
+export const OPERATION_OPTIONAL_TOOL_IDS = ["syncthing"] as const;
+// Ordem do /overview (a mesma de antes); o painel reordena pelo uso.
 export const OPERATION_TOOL_IDS = ["hermes", "ide", "syncthing", "n8n", "remote"] as const;
+export type OperationRequiredToolId = (typeof OPERATION_REQUIRED_TOOL_IDS)[number];
+export type OperationOptionalToolId = (typeof OPERATION_OPTIONAL_TOOL_IDS)[number];
 export type OperationToolId = (typeof OPERATION_TOOL_IDS)[number];
+
+function isOptionalTool(id: OperationToolId): id is OperationOptionalToolId {
+  return (OPERATION_OPTIONAL_TOOL_IDS as readonly string[]).includes(id);
+}
 
 export interface OperationToolConfig {
   label: string;
@@ -26,8 +40,12 @@ export interface OperationsConfig {
   autoDirectory?: string;
   /** Bloco "crm" de operations.json (caminhos do retrato e do registro); ausente = padrões do Dell. */
   crm?: unknown;
-  tools: Record<OperationToolId, OperationToolConfig>;
+  tools: OperationsTools;
 }
+
+export type OperationsTools =
+  & Record<OperationRequiredToolId, OperationToolConfig>
+  & Partial<Record<OperationOptionalToolId, OperationToolConfig>>;
 
 export interface OperationsProject {
   id: string;
@@ -117,9 +135,12 @@ export async function readOperationsConfig(filePath: string): Promise<Operations
   if (!raw.tools || typeof raw.tools !== "object") {
     throw new Error("Configuração de operações sem bloco 'tools'.");
   }
-  const tools = {} as Record<OperationToolId, OperationToolConfig>;
+  const tools = {} as OperationsTools;
   for (const id of OPERATION_TOOL_IDS) {
-    const input = raw.tools[id] as Partial<OperationToolConfig> | undefined;
+    const input = (raw.tools as Record<string, unknown>)[id] as Partial<OperationToolConfig> | null | undefined;
+    // Opcional ausente fica fora; presente, vale a mesma validação das
+    // obrigatórias (uma entrada quebrada é erro de digitação, não "desligada").
+    if (input == null && isOptionalTool(id)) continue;
     if (!input || typeof input.label !== "string" || typeof input.description !== "string") {
       throw new Error(`Configuração da ferramenta '${id}' está incompleta.`);
     }
@@ -421,7 +442,10 @@ export function createOperationsRouter(options: {
 
   router.get("/overview", async (_req, res) => {
     const [tools, agenda, dell] = await Promise.all([
-      Promise.all(OPERATION_TOOL_IDS.map((id) => checkTool(id, options.config.tools[id]))),
+      Promise.all(OPERATION_TOOL_IDS.flatMap((id) => {
+        const tool = options.config.tools[id];
+        return tool ? [checkTool(id, tool)] : [];
+      })),
       options.readAgenda().catch((error: unknown) => ({
         state: "unavailable" as const,
         events: [] as [],

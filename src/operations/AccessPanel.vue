@@ -5,7 +5,9 @@ import type { OperationTool } from './types'
 
 const props = defineProps<{ tools: OperationTool[] }>()
 
-// Ordem pelo uso: primeiro onde se trabalha, depois onde se acompanha.
+// Ordem pelo uso: primeiro onde se trabalha, depois onde se acompanha. Só
+// aparecem as ferramentas que vieram no /overview: o Syncthing (aposentado em
+// 12/10/2026, opcional) some quando sai da configuração, sem "Sem resposta".
 const ORDEM = ['ide', 'n8n', 'hermes', 'syncthing', 'remote'] as const
 const ICONE: Record<string, string> = { ide: '>_', n8n: 'n8n', hermes: 'H', syncthing: '⇄', remote: '☁', crm: 'CRM', agentes: 'S1' }
 const DICA: Record<string, string> = {

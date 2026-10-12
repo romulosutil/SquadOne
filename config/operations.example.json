@@ -15,14 +15,6 @@
       "launchUrl": "http://127.0.0.1:8080/",
       "healthUrl": "http://127.0.0.1:8080/healthz"
     },
-    "syncthing": {
-      "label": "Syncthing",
-      "description": "Arquivos locais",
-      "launchUrl": "http://127.0.0.1:8384/",
-      "healthUrl": "https://127.0.0.1:8384/rest/db/status?folder=seu-folder-id",
-      "healthKind": "syncthing",
-      "healthApiKeyFile": "/home/usuario/.local/state/syncthing/config.xml"
-    },
     "n8n": {
       "label": "n8n",
       "description": "Automações",
