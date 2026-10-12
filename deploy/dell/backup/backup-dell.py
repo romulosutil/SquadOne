@@ -37,6 +37,7 @@ import datetime as dt
 import fcntl
 import glob
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -160,17 +161,61 @@ def registrar(fid: str, **campos) -> None:
         tmp.replace(STATUS)
 
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em ../lib ao
+# lado desta pasta; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o backup: tenta a próxima
+            continue
+    return None
+
+
 def avisar(titulo: str, texto: str) -> None:
-    """Fila do dell-status. .tmp + rename: ele lê a pasta a cada minuto.
-    BACKUP_DELL_SEM_AVISO=1 cala o WhatsApp em testes com repositório local."""
+    """Fila do dell-status (pela lib de aviso: atômico, validado, sem criar a pasta).
+    BACKUP_DELL_SEM_AVISO=1 cala o WhatsApp em testes com repositório local.
+
+    NUNCA levanta: o aviso é o último passo do ensaio (e sai de dentro do
+    `except` dele), e o backup, o status.json e o código de saída não podem
+    depender de a fila estar gravável."""
     if os.environ.get("BACKUP_DELL_SEM_AVISO"):
         log(f"(aviso suprimido) {titulo}: {texto}")
         return
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    nome = FILA_AVISOS / f"backup-dell-{time.time_ns()}.json"
-    tmp = nome.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"titulo": titulo, "texto": texto, "origem": "backup-dell"}, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(nome)
+    aviso = {"titulo": titulo, "texto": texto, "origem": "backup-dell"}
+    try:
+        lib = lib_de_aviso()
+        if lib is not None:
+            # O texto leva a mensagem de uma exceção (restic, psql); se trouxer
+            # "R$" a lib recusaria o aviso, e perder o único sinal de ensaio
+            # ruim é pior que mandá-lo sem o valor.
+            for campo in ("titulo", "texto"):
+                if lib.VALOR_EM_REAIS.search(aviso[campo]):
+                    aviso[campo] = lib.sem_valores(aviso[campo])
+            r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="backup-dell")
+            if not r.gravado:  # a lib já escreveu a linha no stderr; aqui vai ao log do backup
+                log(f"aviso não gravado ({r.estado}): {r.motivo}")
+            return
+        # Sem a lib instalada: o jeito de antes (.tmp + rename), sem mudar o arquivo.
+        FILA_AVISOS.mkdir(parents=True, exist_ok=True)
+        nome = FILA_AVISOS / f"backup-dell-{time.time_ns()}.json"
+        tmp = nome.with_suffix(".tmp")
+        tmp.write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(nome)
+    except Exception as e:  # noqa: BLE001 — ver a docstring
+        log(f"aviso não gravado: {type(e).__name__}: {e}")
 
 
 class Ocupado(Exception):

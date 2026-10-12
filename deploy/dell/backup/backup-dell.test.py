@@ -7,9 +7,13 @@ numa pasta de estado temporária: não chama rclone e não toca o status.json do
   python3 deploy/dell/backup/backup-dell.test.py
 """
 import argparse
+import contextlib
 import datetime as dt
 import importlib.util
+import io
 import json
+import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -20,6 +24,13 @@ AQUI = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("backup_dell", AQUI / "backup-dell.py")
 bd = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bd)
+
+try:
+    _spec_ds = importlib.util.spec_from_file_location("dell_status_para_backup_dell", AQUI.parent / "dell-status.py")
+    ds = importlib.util.module_from_spec(_spec_ds)
+    _spec_ds.loader.exec_module(ds)
+except Exception:  # noqa: BLE001 — o dell-status não carrega fora do Dell
+    ds = None
 
 GERAL = {"remoto": "gdrive", "lixeira": "PRUMO/_lixeira", "lixeira_dias": 30, "banda": "off"}
 
@@ -182,6 +193,197 @@ class Espelho(unittest.TestCase):
         chk = [c for c in self.cmds if c[:2] == ["rclone", "check"]][0]
         self.assertEqual(chk[3], "gdrive-estrutura:")
         self.assertIn("--filter", chk)
+
+
+class AvisoPelaLib(unittest.TestCase):
+    """A troca do avisar() pela lib de aviso (11/10/2026): o aviso gravado pela
+    lib é IDÊNTICO, byte a byte, ao do jeito antigo; o dell-status aceita; sem a
+    lib volta ao antigo; e a fila ausente ou estragada nunca muda o resultado do
+    ensaio nem o código de saída. Nada aqui toca a fila, o estado ou o HOME reais."""
+
+    TITULO = "🗄️ Backup do Dell"
+    TEXTOS = [
+        "Ensaio de restauração ok: 2 banco(s) com tabelas, 9 tabelas e 120 linhas; n8n sobe e decifra as credenciais.",
+        "O ensaio de restauração falhou: restore: Fatal: unable to open repo. O cofre existe, mas não provei que ele refaz o Dell.",
+        "aspas \"duplas\", barra \\ e acento: ação, coração",
+        "duas\nlinhas e emoji 🌐",
+    ]
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp(prefix="backup-dell-teste-"))
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        nomes = ("FILA_AVISOS", "PASTAS_DA_LIB", "ESTADO", "STATUS", "TRAVA", "_ensaio", "lib_de_aviso")
+        antes = {k: getattr(bd, k) for k in nomes}
+        self.addCleanup(lambda: [setattr(bd, k, v) for k, v in antes.items()])
+        bd.FILA_AVISOS = self.d / "fila"
+        bd.ESTADO, bd.STATUS, bd.TRAVA = self.d / "estado", self.d / "estado" / "status.json", self.d / "estado" / "trava"
+        self.lib_do_repo = list(antes["PASTAS_DA_LIB"])
+        self.sem_aviso = os.environ.pop("BACKUP_DELL_SEM_AVISO", None)
+        self.addCleanup(lambda: os.environ.__setitem__("BACKUP_DELL_SEM_AVISO", self.sem_aviso) if self.sem_aviso else None)
+
+    def fila(self):
+        return sorted(bd.FILA_AVISOS.glob("*.json")) if bd.FILA_AVISOS.is_dir() else []
+
+    def avisar(self, titulo, texto):
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            bd.avisar(titulo, texto)
+        return saida.getvalue()
+
+    def gravado_pelo(self, jeito, titulo, texto):
+        shutil.rmtree(bd.FILA_AVISOS, ignore_errors=True)
+        bd.FILA_AVISOS.mkdir()
+        bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
+        self.avisar(titulo, texto)
+        arquivos = self.fila()
+        self.assertEqual(len(arquivos), 1, arquivos)
+        return arquivos[0].read_bytes()
+
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(bd.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib/aviso.py").resolve())
+
+    def test_aviso_identico_ao_jeito_antigo(self):
+        for titulo in (self.TITULO, "outro título"):
+            for texto in self.TEXTOS:
+                with self.subTest(titulo=titulo, texto=texto[:30]):
+                    self.assertEqual(self.gravado_pelo("lib", titulo, texto), self.gravado_pelo("antigo", titulo, texto))
+
+    def test_conteudo_fixado(self):
+        esperado = '{"titulo": "🗄️ Backup do Dell", "texto": "Ensaio de restauração ok: x.", "origem": "backup-dell"}'
+        self.assertEqual(self.gravado_pelo("lib", self.TITULO, "Ensaio de restauração ok: x."), esperado.encode("utf-8"))
+
+    def test_nome_e_atomicidade(self):
+        bd.FILA_AVISOS.mkdir()
+        self.avisar(self.TITULO, "x")
+        self.assertRegex(self.fila()[0].name, r"^backup-dell-\d+-[0-9a-f]{6}\.json$")
+        self.assertEqual([p for p in bd.FILA_AVISOS.iterdir() if not p.name.endswith(".json")], [])
+
+    def test_dois_avisos_seguidos_nao_se_sobrescrevem(self):
+        bd.FILA_AVISOS.mkdir()
+        for i in range(5):
+            self.avisar(self.TITULO, f"aviso {i}")
+        self.assertEqual(len(self.fila()), 5)
+
+    @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
+    def test_dell_status_aceita(self):
+        bd.FILA_AVISOS.mkdir()
+        for texto in self.TEXTOS:
+            self.avisar(self.TITULO, texto)
+        self.assertEqual(len(self.fila()), len(self.TEXTOS))
+        for arq in self.fila():
+            ds.validar_aviso(json.loads(arq.read_text(encoding="utf-8")))
+
+    def test_com_a_lib_a_fila_ausente_nao_e_criada_e_nao_levanta(self):
+        saida = self.avisar(self.TITULO, "x")
+        self.assertFalse(bd.FILA_AVISOS.exists())
+        self.assertIn("fila_ausente", saida)
+
+    def test_backup_dell_sem_aviso_nao_grava(self):
+        bd.FILA_AVISOS.mkdir()
+        for jeito in ("lib", "antigo"):  # a trava vem antes de qualquer gravação, com ou sem a lib
+            bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
+            os.environ["BACKUP_DELL_SEM_AVISO"] = "1"
+            try:
+                saida = self.avisar(self.TITULO, "Ensaio ok")
+            finally:
+                os.environ.pop("BACKUP_DELL_SEM_AVISO", None)
+            with self.subTest(jeito=jeito):
+                self.assertEqual(self.fila(), [])
+                self.assertIn("(aviso suprimido)", saida)
+
+    def test_valor_em_reais_na_excecao_nao_perde_o_aviso(self):
+        bd.FILA_AVISOS.mkdir()
+        self.avisar(self.TITULO, "O ensaio de restauração falhou: custo de R$ 12,50 estourou. O cofre existe.")
+        d = json.loads(self.fila()[0].read_text(encoding="utf-8"))
+        self.assertNotRegex(d["texto"], r"R\s*\$")
+        self.assertIn("[valor]", d["texto"])
+        self.assertIn("O cofre existe.", d["texto"])
+
+    def test_texto_sem_valor_nao_e_mexido(self):
+        bd.FILA_AVISOS.mkdir()
+        self.avisar(self.TITULO, "  dois  espaços  ")
+        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "  dois  espaços  ")
+
+    def test_sem_copia_volta_ao_jeito_antigo(self):
+        bd.PASTAS_DA_LIB = [self.d / "sem-lib"]
+        self.assertIsNone(bd.lib_de_aviso())
+        self.avisar(self.TITULO, "x")  # o antigo cria a pasta da fila
+        self.assertEqual(len(self.fila()), 1)
+        self.assertRegex(self.fila()[0].name, r"^backup-dell-\d+\.json$")
+        self.assertEqual([p for p in bd.FILA_AVISOS.iterdir() if not p.name.endswith(".json")], [])  # o .tmp foi renomeado
+
+    def test_copia_quebrada_volta_ao_jeito_antigo_e_cai_na_seguinte(self):
+        quebrada = self.d / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
+        bd.PASTAS_DA_LIB = [quebrada]
+        self.assertIsNone(bd.lib_de_aviso())
+        self.avisar(self.TITULO, "x")
+        self.assertEqual(len(self.fila()), 1)
+        bd.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
+        self.assertEqual(Path(bd.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib/aviso.py").resolve())
+
+    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
+        bd.PASTAS_DA_LIB = [self.d / "sem-lib"]
+        self.avisar(self.TITULO, "custa R$ 5")
+        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
+
+    # --- o aviso nunca muda o resultado do ensaio nem o código de saída -------
+
+    def ensaio(self, resultado):
+        """Roda ensaio() com o _ensaio dublê (devolve texto ou levanta)."""
+        def falso(c):
+            if isinstance(resultado, Exception):
+                raise resultado
+            return resultado
+        bd._ensaio = falso
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            return bd.ensaio({"cofre": {}}, argparse.Namespace())
+
+    def estado_do_ensaio(self):
+        return json.loads(bd.STATUS.read_text(encoding="utf-8"))["fontes"]["ensaio"]["estado"]
+
+    def test_ensaio_ok_com_a_fila_ausente_continua_0(self):
+        self.assertEqual(self.ensaio("det"), 0)
+        self.assertEqual(self.estado_do_ensaio(), "ok")
+        self.assertFalse(bd.FILA_AVISOS.exists())
+
+    def test_ensaio_que_falha_com_a_fila_ausente_continua_1(self):
+        self.assertEqual(self.ensaio(RuntimeError("restore: Fatal")), 1)
+        self.assertEqual(self.estado_do_ensaio(), "falha")
+
+    def test_ensaio_com_a_fila_estragada_nao_muda_o_codigo_de_saida(self):
+        # A "fila" é um arquivo: nem a lib nem o jeito antigo conseguem gravar.
+        bd.FILA_AVISOS.write_text("não sou pasta", encoding="utf-8")
+        for jeito in ("lib", "antigo"):
+            bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
+            with self.subTest(jeito=jeito):
+                self.assertEqual(self.ensaio("det"), 0)
+                self.assertEqual(self.estado_do_ensaio(), "ok")
+                self.assertEqual(self.ensaio(RuntimeError("x")), 1)
+                self.assertEqual(self.estado_do_ensaio(), "falha")
+
+    def test_ensaio_com_a_lib_que_levanta_nao_muda_o_codigo_de_saida(self):
+        class LibRuim:
+            VALOR_EM_REAIS = re.compile("R[$]")
+
+            @staticmethod
+            def gravar(*a, **k):
+                raise OSError("disco cheio")
+
+        bd.lib_de_aviso = lambda: LibRuim
+        self.assertEqual(self.ensaio("det"), 0)
+        self.assertEqual(self.ensaio(RuntimeError("x")), 1)
+
+    def test_ensaio_grava_os_dois_avisos_pela_lib(self):
+        bd.FILA_AVISOS.mkdir()
+        self.assertEqual(self.ensaio("det"), 0)
+        self.assertEqual(self.ensaio(RuntimeError("restore: Fatal")), 1)
+        textos = [json.loads(p.read_text(encoding="utf-8"))["texto"] for p in self.fila()]
+        self.assertEqual(len(textos), 2)
+        self.assertIn("Ensaio de restauração ok: det.", textos)
+        self.assertTrue(any(t.startswith("O ensaio de restauração falhou: restore: Fatal.") for t in textos))
 
 
 class Preparo(unittest.TestCase):
