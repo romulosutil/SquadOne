@@ -424,6 +424,20 @@ class TextoDoAviso(BaseDoAviso):
         self.assertEqual(gravado, texto)  # nada foi cortado pela lib
         self.assertNotIn("(cortado)", gravado)
 
+    def test_nomes_e_falhas_no_maximo_encolhem_ate_caber(self):
+        # 25 nomes de 100 caracteres com o motivo mais longo + 10 falhas de 200: só os tetos fixos passariam de 4000.
+        apagados = [{"nome": f"{i:02d} " + "N" * 97, "projeto": f"demo-{i}", "pasta": f"d{i}", "motivo": "expirou", "desde": ""}
+                    for i in range(73)]
+        falhas = [f"{i:02d} " + "F" * 400 for i in range(40)]
+        texto = limpeza.texto_do_aviso(apagados, falhas)
+        self.assertLessEqual(len(texto), 3900)
+        for trecho in ("Apaguei 73 demo(s)", "Não consegui (40):"):
+            self.assertIn(trecho, texto)
+        self.assertIn("• 00 NNN", texto)
+        self.assertIn("• 00 FFF", texto)
+        self.assertRegex(texto, r"• e mais \d+ \(lista em ")
+        self.assertRegex(texto, r"• e mais \d+ \(todas no journal")
+
     def test_linha_de_falha_muito_longa_e_encurtada_com_reticencias(self):
         texto = limpeza.texto_do_aviso([], ["Fulano: " + "x" * 1000])
         linha = texto.splitlines()[1]

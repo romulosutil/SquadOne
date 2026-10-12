@@ -79,6 +79,7 @@ CRM_VELHO = timedelta(hours=1)  # o 08 · CRM relê as planilhas a cada 10 min
 MAX_NOMES = 25
 MAX_FALHAS = 10  # no aviso; as outras vão ao journal (stdout)
 MAX_LINHA_FALHA = 200
+TETO_DO_TEXTO = 3900  # o texto do aviso vai até 4000 (deploy/dell/README.md, "Fila de avisos"), com folga
 SP =timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
 # Como o CRM diz o lugar da pasta -> o diretório em ~/auto-site. _fechados/ fica de fora de propósito.
 LUGARES_QUE_ENTRAM = {"raiz": "", "_recusados/": "_recusados", "_concluidos/": "_concluidos",
@@ -281,27 +282,36 @@ def avisar(texto: str) -> bool:
     return True
 
 
-def texto_do_aviso(apagados: list[dict], falhas: list[str], a_pedido: bool = False) -> str:
-    """O aviso de uma rodada de `apagar`. Até 25 nomes e 10 falhas (200 caracteres
-    cada), com "e mais N" no resto: o teto do aviso é 4000 caracteres e cortar seco
-    levaria o fim, que é onde está a lista do que NÃO deu certo."""
+def _montar_texto(apagados: list[dict], falhas: list[str], a_pedido: bool, max_nomes: int, max_falhas: int) -> str:
     linhas = []
     if apagados and a_pedido:
         linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel a pedido do lead (pediu exclusão no WhatsApp). "
                    "A pasta continua em ~/auto-site; se o pedido for de apagar tudo, apague a pasta à mão."]
-        linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
+        linhas += [f"• {e['nome']}" for e in apagados[:max_nomes]]
     elif apagados:
         linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel de leads em Perdido no CRM (há {FOLGA_DIAS}+ dias). "
                    "A pasta continua em ~/auto-site: para mandar de novo, é republicar."]
-        linhas += [f"• {e['nome']} ({ROTULO_DA_PERDA.get(e.get('motivo', ''), 'perdido')})" for e in apagados[:MAX_NOMES]]
-        if len(apagados) > MAX_NOMES:
-            linhas.append(f"• e mais {len(apagados) - MAX_NOMES} (lista em {HISTORICO})")
+        linhas += [f"• {e['nome']} ({ROTULO_DA_PERDA.get(e.get('motivo', ''), 'perdido')})" for e in apagados[:max_nomes]]
+        if len(apagados) > max_nomes:
+            linhas.append(f"• e mais {len(apagados) - max_nomes} (lista em {HISTORICO})")
     if falhas:
         linhas += ([""] if linhas else []) + [f"Não consegui ({len(falhas)}):"]
-        linhas += [f"• {f if len(f) <= MAX_LINHA_FALHA else f[:MAX_LINHA_FALHA - 1] + '…'}" for f in falhas[:MAX_FALHAS]]
-        if len(falhas) > MAX_FALHAS:
-            linhas.append(f"• e mais {len(falhas) - MAX_FALHAS} (todas no journal do site-demos-limpeza)")
+        linhas += [f"• {f if len(f) <= MAX_LINHA_FALHA else f[:MAX_LINHA_FALHA - 1] + '…'}" for f in falhas[:max_falhas]]
+        if len(falhas) > max_falhas:
+            linhas.append(f"• e mais {len(falhas) - max_falhas} (todas no journal do site-demos-limpeza)")
     return "\n".join(linhas)
+
+
+def texto_do_aviso(apagados: list[dict], falhas: list[str], a_pedido: bool = False) -> str:
+    """O aviso de uma rodada de `apagar`. Até 25 nomes e 10 falhas (200 caracteres
+    cada), com "e mais N" no resto; se ainda assim passar de TETO_DO_TEXTO, tenta com
+    menos nomes e menos falhas. O teto do aviso é 4000 caracteres e cortar seco
+    levaria o fim, que é onde está a lista do que NÃO deu certo."""
+    for max_nomes, max_falhas in ((MAX_NOMES, MAX_FALHAS), (15, 6), (8, 4), (4, 2), (2, 1)):
+        texto = _montar_texto(apagados, falhas, a_pedido, max_nomes, max_falhas)
+        if len(texto) <= TETO_DO_TEXTO:
+            break
+    return texto  # nomes enormes: o que passar de 4000 a lib corta, com a marca "(cortado)"
 
 
 def anotar(evento: dict) -> None:
