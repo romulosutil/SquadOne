@@ -409,12 +409,12 @@ instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"
 e 16 KB), corta com segurança o que passa do teto, grava `.tmp` oculto +
 rename com nome único, não cria a pasta e nunca levanta (devolve `gravado`,
 `recusado`, `fila_ausente` ou `falhou`; o que não gravou vai ao journal). Sem a
-lib instalada, o script volta ao jeito antigo. Por enquanto só o `auto-entrada`
-usa; o inventário das outras cópias e a ordem da troca (um PR por script) estão
+lib instalada, o script volta ao jeito antigo. Já gravam pela lib o
+`auto-entrada` e o `site-pastas`; o inventário das outras cópias e a ordem da troca (um PR por script) estão
 em `docs/superpowers/plans/2026-10-11-aviso-unico.md`.
 
 ```bash
-python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py
+python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py && python3 deploy/dell/site-pastas.test.py
 install -D -m 644 deploy/dell/lib/aviso.py ~/.local/lib/mel/aviso.py   # antes do script que a usa
 ```
 
