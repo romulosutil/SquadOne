@@ -65,6 +65,7 @@ Uso: python3 whatsapp-conversa.py            publica os dois fluxos e cria a col
      python3 whatsapp-conversa.py --testar-n8n  cópia do fluxo no n8n com planilhas de mentira, sem gravar
      python3 whatsapp-conversa.py --sem-jev     publica sem o ramo do Jev em sombra (ver "Jev em sombra")
      python3 whatsapp-conversa.py --jev-tabela  cria a Data Table jev_sombra_respostas, se faltar
+     python3 whatsapp-conversa.py --jev-exemplo imprime um item anônimo para testar o ramo do Jev no editor
 """
 import json
 import secrets
@@ -1591,6 +1592,14 @@ if __name__ == "__main__":
         sys.exit(0)
     if "--jev-tabela" in sys.argv:
         jev_tabela()
+        sys.exit(0)
+    if "--jev-exemplo" in sys.argv:
+        # Item de teste ANÔNIMO para fixar (pin) na saída de "Jev: mascarar e montar pedido" no editor e
+        # rodar só o ramo: confere credencial, Jev e tabela sem nenhuma resposta real de lead.
+        print(json.dumps(rodar_js(JEV_FUNCOES_JS + "\nconsole.log(JSON.stringify({ pedido: pedidoJev("
+                                  "mascarar('Não temos interesse, obrigado. Liga no (27) 3322-1100')),"
+                                  " registro: { lead_hash: 'teste', planilha: 'teste', n_mensagens: 1, resposta_em: '',"
+                                  " tipo_gemini: 'negativa' }, inicio_ms: null }));"), ensure_ascii=False, indent=2))
         sys.exit(0)
     auth = credencial()
     telefones(auth)

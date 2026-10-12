@@ -1816,6 +1816,8 @@ cd ~/.local/share/claude-ops
 python3 whatsapp-conversa.py --testar       # inclui a classe Jev (máscara, pedido, registro, isolamento)
 python3 jev-respostas-resumo.py --testar
 python3 whatsapp-conversa.py --jev-tabela   # cria a Data Table (o Rômulo roda; nada roda sozinho)
+python3 whatsapp-conversa.py --jev-exemplo  # item ANÔNIMO para fixar (pin) na saída de "Jev: mascarar e
+                                            # montar pedido" e rodar só o ramo no editor (lead_hash "teste")
 python3 jev-respostas-resumo.py                # resumo e veredito (GET na API do n8n)
 python3 jev-respostas-resumo.py --revisar      # linhas sem revisão, com o trecho do crm.json
 python3 jev-respostas-resumo.py --arquivo jev.csv   # se a chave da API não ler Data Tables: CSV baixado do editor
