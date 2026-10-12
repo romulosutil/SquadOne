@@ -839,6 +839,203 @@ class Diffs(unittest.TestCase):
         self.assertIsNone(novo)
 
 
+PROPOSTAS_DO_AVISO = [{"rotulo": "Triagem do gerador (qualificação)", "grupo": {"n": 2}, "diff": "x"},
+                      {"rotulo": "Recomendação ao Rômulo", "grupo": {"n": 1}, "diff": None}]
+FAKE_LIB = """
+from collections import namedtuple
+FILA_AUSENTE = "fila_ausente"
+class R(namedtuple("R", "estado motivo arquivo")):
+    gravado = property(lambda s: s.estado == "gravado")
+def gravar(aviso, fila=None, prefixo=None, cortar=True):
+    return R(ESTADO, "boom", None)
+"""
+
+
+class AvisoPelaLib(Base):
+    """A troca da gravação do aviso pela lib (deploy/dell/lib/aviso.py, 11/10/2026): o aviso gravado é
+    IDÊNTICO ao do jeito antigo, o dell-status o aceita, sem a lib volta ao antigo, e as regras que são
+    DESTE script (R$, dado pessoal, nada de cortar) continuam valendo com a lib. Quem recusa ou falha
+    continua sendo ErroDoFunil."""
+
+    def setUp(self):
+        super().setUp()
+        self.sem = [self.tmp / "sem-lib"]
+        self.avisos_reais = [
+            fa.aviso_da_revisao("2026-10-08", AGORA, PROPOSTAS_DO_AVISO, 3),
+            fa.aviso_da_revisao("2026-10-08", AGORA, PROPOSTAS_DO_AVISO[1:], 0),
+            fa.aviso_de_erro("2026-10-08", ValueError("trecho de lead")),
+            {"titulo": "sem chave", "texto": "uma\nduas \"aspas\" e ação", "origem": "funil-aprendizado", "prioridade": 0},
+            {"titulo": "com expira_em", "texto": "x", "origem": "funil-aprendizado", "prioridade": 3,
+             "expira_em": "2026-10-15T08:00:00-03:00", "link": "https://exemplo.com/a"},
+        ]
+
+    def fila(self):
+        return sorted(self.c.fila.glob("*.json"))
+
+    def gravado_pelo(self, jeito, aviso):
+        """O arquivo gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+        shutil.rmtree(self.c.fila, ignore_errors=True)
+        self.c.fila.mkdir()
+        destino = fa.gravar_aviso(self.c.fila, aviso, None if jeito == "lib" else self.sem)
+        self.assertEqual(self.fila(), [destino])
+        return destino.read_bytes()
+
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(fa.lib_de_aviso().__file__).resolve(), (AQUI / "lib" / "aviso.py").resolve())
+
+    def test_aviso_identico_ao_jeito_antigo(self):
+        for aviso in self.avisos_reais:
+            with self.subTest(titulo=aviso["titulo"]):
+                self.assertEqual(self.gravado_pelo("lib", aviso), self.gravado_pelo("antigo", aviso))
+
+    def test_nome_unico_sem_sobra_de_tmp(self):
+        for _ in range(3):
+            fa.gravar_aviso(self.c.fila, self.avisos_reais[2])
+        self.assertEqual(len(self.fila()), 3)
+        self.assertRegex(self.fila()[0].name, r"^funil-aprendizado-\d+-[0-9a-f]{6}\.json$")
+        self.assertEqual([p for p in self.c.fila.iterdir() if not p.name.endswith(".json")], [])
+
+    @unittest.skipUnless(POSIX, "modo de arquivo é do POSIX")
+    def test_modo_660_com_qualquer_umask(self):
+        antes = os.umask(0o022)  # o do systemd --user: a lib sozinha deixaria 640
+        try:
+            for jeito in ("lib", "antigo"):
+                self.gravado_pelo(jeito, self.avisos_reais[0])
+                self.assertEqual(self.fila()[0].stat().st_mode & 0o777, 0o660, jeito)
+        finally:
+            os.umask(antes)
+
+    @unittest.skipUnless(POSIX, "o dell-status importa fcntl")
+    def test_dell_status_aceita(self):
+        spec = importlib.util.spec_from_file_location("ds", AQUI / "dell-status.py")
+        ds = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ds)
+        for aviso in self.avisos_reais:
+            fa.gravar_aviso(self.c.fila, aviso)
+        self.assertEqual(len(self.fila()), len(self.avisos_reais))
+        for p in self.fila():
+            ds.validar_aviso(json.loads(p.read_text(encoding="utf-8")))
+
+    def test_r_cifrao_e_dado_pessoal_continuam_recusados_com_a_lib(self):
+        base = self.avisos_reais[3]
+        ruins = [{**base, "texto": "custa R$ 9"}, {**base, "titulo": "custa R$"}, {**base, "texto": "fale com ana@exemplo.com.br"},
+                 {**base, "texto": "ligue 27 99888-7777 hoje"}, {**base, "chave": "x R$"}]
+        for jeito, pastas in (("lib", None), ("antigo", self.sem)):
+            for aviso in ruins:
+                with self.subTest(jeito=jeito, aviso=aviso):
+                    # o conferir_aviso é deste script e vem antes da lib: a mensagem é a dele, nunca a da lib
+                    with self.assertRaisesRegex(fa.ErroDoFunil, "R\\$ ou dado pessoal"):
+                        fa.gravar_aviso(self.c.fila, aviso, pastas)
+        self.assertEqual(self.fila(), [])
+
+    def test_r_cifrao_em_minuscula_so_a_lib_pega(self):
+        # o conferir_aviso olha "R$" exato; a lib (RULES 24) olha qualquer caixa. Com ela fica mais estrito, e
+        # ainda ErroDoFunil; sem ela o aviso sai como sempre saiu.
+        aviso = {**self.avisos_reais[3], "titulo": "custa r$ 5"}
+        with self.assertRaisesRegex(fa.ErroDoFunil, r"aviso não gravado \(recusado\)"):
+            fa.gravar_aviso(self.c.fila, aviso)
+        self.assertEqual(self.fila(), [])
+        fa.gravar_aviso(self.c.fila, aviso, self.sem)
+        self.assertEqual(len(self.fila()), 1)
+
+    def test_formato_fora_do_que_o_script_aceita_continua_erro_sem_cortar(self):
+        base = self.avisos_reais[3]
+        ruins = [{**base, "titulo": "duas\nlinhas"}, {**base, "texto": "x" * 4001}, {**base, "titulo": "t" * 121},
+                 {**base, "prioridade": 4}, {**base, "expira_em": "amanhã"}, {**base, "campo_novo": 1},
+                 {k: v for k, v in base.items() if k != "prioridade"}]
+        for jeito, pastas in (("lib", None), ("antigo", self.sem)):
+            for aviso in ruins:
+                with self.subTest(jeito=jeito, aviso=str(aviso)[:60]):
+                    with self.assertRaises(fa.ErroDoFunil):
+                        fa.gravar_aviso(self.c.fila, aviso, pastas)
+        self.assertEqual(self.fila(), [])
+
+    def test_o_que_so_a_lib_confere_vira_erro_do_funil_e_nada_e_gravado(self):
+        base = self.avisos_reais[3]
+        # link e 16 KB o conferir_aviso nunca olhou; a lib recusa (cortar=False: não encurta o texto às escondidas)
+        for aviso in ({**base, "link": "ftp://exemplo.com/a"}, {**base, "texto": "\x01" * 4000}):
+            with self.subTest(aviso=str(aviso)[:60]):
+                with self.assertRaisesRegex(fa.ErroDoFunil, r"aviso não gravado \(recusado\)"):
+                    fa.gravar_aviso(self.c.fila, aviso)
+        self.assertEqual(self.fila(), [])
+
+    def test_fila_ausente_continua_erro_do_funil_e_nao_e_criada(self):
+        self.c.fila.rmdir()
+        for pastas in (None, self.sem):
+            with self.assertRaisesRegex(fa.ErroDoFunil, "fila de avisos ausente"):
+                fa.gravar_aviso(self.c.fila, self.avisos_reais[0], pastas)
+        self.assertFalse(self.c.fila.exists())
+
+    def test_fila_que_e_arquivo_e_erro_do_funil(self):
+        self.c.fila.rmdir()
+        self.c.fila.write_text("é um arquivo, não uma pasta")
+        for pastas in (None, self.sem):
+            with self.assertRaisesRegex(fa.ErroDoFunil, "fila de avisos ausente"):
+                fa.gravar_aviso(self.c.fila, self.avisos_reais[0], pastas)
+
+    def test_falha_de_gravacao_da_lib_vira_erro_do_funil(self):
+        falsa = self.tmp / "falsa"
+        falsa.mkdir()
+        (falsa / "aviso.py").write_text(FAKE_LIB.replace("ESTADO", '"falhou"'), encoding="utf-8")
+        with self.assertRaisesRegex(fa.ErroDoFunil, r"aviso não gravado \(falhou\): boom"):
+            fa.gravar_aviso(self.c.fila, self.avisos_reais[0], [falsa])
+        self.assertEqual(self.fila(), [])
+
+    def test_sem_a_lib_volta_ao_jeito_antigo(self):
+        self.assertIsNone(fa.lib_de_aviso(self.sem))
+        destino = fa.gravar_aviso(self.c.fila, self.avisos_reais[0], self.sem)
+        self.assertRegex(destino.name, r"^funil-aprendizado-\d+\.json$")
+        self.assertEqual(json.loads(destino.read_text(encoding="utf-8")), self.avisos_reais[0])
+
+    def test_copia_quebrada_volta_ao_antigo_e_cai_na_seguinte(self):
+        quebrada = self.tmp / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
+        self.assertIsNone(fa.lib_de_aviso([quebrada]))
+        fa.gravar_aviso(self.c.fila, self.avisos_reais[2], [quebrada])
+        self.assertEqual(len(self.fila()), 1)
+        (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
+        repo = fa.pastas_da_lib()[0]
+        self.assertEqual(Path(fa.lib_de_aviso([quebrada, repo]).__file__).resolve(), (AQUI / "lib" / "aviso.py").resolve())
+
+    def test_sem_a_do_repo_a_instalada_serve(self):
+        instalada = self.tmp / "mel"
+        instalada.mkdir()
+        shutil.copy(AQUI / "lib" / "aviso.py", instalada / "aviso.py")
+        self.assertEqual(Path(fa.lib_de_aviso(self.sem + [instalada]).__file__).resolve(), (instalada / "aviso.py").resolve())
+        self.assertEqual(fa.pastas_da_lib()[1], Path.home() / ".local/lib/mel")
+
+    def rodar_main_com_revisao_quebrada(self):
+        """main(['revisar']) com o revisar levantando: devolve a exceção que sobe. A fila e o resto vão por variável de ambiente."""
+        env = {"SQUADONE_AVISOS_FILA": self.c.fila, "FUNIL_APRENDIZADO_DIR": self.c.dados,
+               "FUNIL_APRENDIZADO_ESTADO": self.c.estado, "N8N_ESTADO": self.c.n8n}
+        for var, valor in env.items():
+            os.environ[var] = str(valor)
+            self.addCleanup(os.environ.pop, var, None)
+        antes = fa.revisar
+
+        def quebra(*a, **k):
+            raise RuntimeError("falha qualquer")
+        fa.revisar = quebra
+        self.addCleanup(setattr, fa, "revisar", antes)
+        with self.assertRaises(RuntimeError):
+            fa.main(["revisar", "--sem-claude", "--agora", "2026-10-08T10:00:00+00:00"])
+
+    def test_o_erro_da_revisao_sai_como_aviso_pela_lib(self):
+        self.rodar_main_com_revisao_quebrada()
+        [arquivo] = self.fila()
+        aviso = json.loads(arquivo.read_text(encoding="utf-8"))
+        self.assertEqual((aviso["titulo"], aviso["chave"], aviso["prioridade"]),
+                         ("🧪 Funil: a revisão das lições falhou", "funil-aprendizado:erro:2026-10-08", 2))
+        self.assertIn("Erro RuntimeError", aviso["texto"])
+        self.assertRegex(arquivo.name, r"^funil-aprendizado-\d+-[0-9a-f]{6}\.json$")
+
+    def test_o_erro_da_revisao_com_a_fila_ausente_continua_subindo_a_excecao_original(self):
+        self.c.fila.rmdir()
+        self.rodar_main_com_revisao_quebrada()  # o aviso de erro falha em silêncio; quem sobe é o RuntimeError
+        self.assertFalse(self.c.fila.exists())
+
+
 class Caminhos(unittest.TestCase):
     def test_nada_e_calculado_na_importacao_e_saida_desvia_tudo(self):
         self.assertFalse(any(isinstance(v, Path) for k, v in vars(fa).items() if k.isupper()))
