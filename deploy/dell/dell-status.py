@@ -1841,6 +1841,82 @@ def instalados() -> list[dict]:
     return [] if itens is None else [avaliar_instalados(itens)]
 
 
+# ---------------------------------------------------------------- timers desligados
+
+ESTADO_DIR = HOME / ".local/state/dell-status"
+# Marca de pausa que já existia antes desta verificação e vale também para o timer.
+PAUSA_DO_TIMER = {"pncp-catchup.timer": PNCP_PAUSA}
+
+
+def marcas_de_pausa(timer: str) -> list[Path]:
+    """`pausa-<timer sem .timer>` em ~/.local/state/dell-status/, e a marca antiga, se houver."""
+    return [ESTADO_DIR / f"pausa-{timer.removesuffix('.timer')}"] + ([PAUSA_DO_TIMER[timer]] if timer in PAUSA_DO_TIMER else [])
+
+
+def avaliar_timers(timers: list[dict], pausas: dict[str, str]) -> dict:
+    """Timer que o repo instala (deploy/dell/**/*.timer, pelo instalados.json) e
+    que está instalado tem de estar ligado. O gerador-de-sites.timer foi
+    desligado em 10/10/2026 de propósito e nada na Central dizia isso; um
+    desligado por engano ficaria igual. `timers`: {nome, ativo, arquivo}
+    (ActiveState == active; UnitFileState); `pausas`: timer → nota da marca."""
+    nome = "Timers do repositório"
+    desligados = [x for x in timers if not x["ativo"]]
+    sem_marca = [x for x in desligados if x["nome"] not in pausas]
+    pausados = [x for x in desligados if x["nome"] in pausas]
+    sobrando = [x["nome"] for x in timers if x["ativo"] and x["nome"] in pausas]
+
+    def curto(n: str) -> str:
+        return n.removesuffix(".timer")
+    extra = ""
+    if pausados:
+        extra += "; pausado(s) de propósito: " + ", ".join(
+            curto(x["nome"]) + (f" ({pausas[x['nome']]})" if pausas[x["nome"]] else "") for x in pausados)
+    if sobrando:
+        extra += f"; marca de pausa sobrando (o timer está ligado): {', '.join(map(curto, sobrando))}"
+    if not sem_marca:
+        return check("timers", "servicos", nome, "ok", f"{len(timers) - len(desligados)} de {len(timers)} ligado(s){extra}")
+    lista = ", ".join(f"{curto(x['nome'])} ({x['arquivo'] or 'sem estado'})" for x in sem_marca)
+    x = sem_marca[0]["nome"]
+    return check("timers", "servicos", nome, "atencao", f"Desligado(s) sem marca de pausa: {lista}{extra}",
+                 o_que_fazer=(f"O repositório instala {'estes timers' if len(sem_marca) > 1 else 'este timer'} e "
+                              "não está ligado: o que ele dispara não roda. Se foi de propósito, marque a pausa: "
+                              f"date +%d/%m/%Y > ~/.local/state/dell-status/pausa-{curto(x)} (o amarelo apaga). Se "
+                              f"não, ligue: systemctl --user enable --now {x}."))
+
+
+def _estado_das_units(units: list[str]) -> dict[str, dict]:
+    if not units:
+        return {}
+    r = subprocess.run(["systemctl", "--user", "show", "-p", "Id", "-p", "ActiveState", "-p", "UnitFileState", *units],
+                       capture_output=True, text=True, timeout=10)
+    out = {}
+    for bloco in r.stdout.strip().split("\n\n"):
+        campos = dict(l.split("=", 1) for l in bloco.splitlines() if "=" in l)
+        if campos.get("Id"):
+            out[campos["Id"]] = campos
+    return out
+
+
+def timers_desligados() -> list[dict]:
+    itens = ler_instalados()
+    if itens is None:
+        return []
+    nomes = sorted({i["instalado"].rsplit("/", 1)[-1] for i in itens
+                    if i["instalado"].endswith(".timer") and i["estado"] in ("igual", "diferente")})
+    estados = _estado_das_units(nomes)
+    timers = [{"nome": n, "ativo": (estados.get(n) or {}).get("ActiveState") == "active",
+               "arquivo": (estados.get(n) or {}).get("UnitFileState", "")} for n in nomes]
+    pausas = {}
+    for n in nomes:
+        for marca in marcas_de_pausa(n):
+            try:
+                pausas[n] = marca.read_text().strip()[:40]
+                break
+            except OSError:
+                continue
+    return [avaliar_timers(timers, pausas)]
+
+
 def listar_instalados() -> None:
     """`dell-status --instalados`: o que está fora do repo, com o comando."""
     itens = ler_instalados() or []
@@ -1923,7 +1999,7 @@ def main() -> None:
     t = agora()
     checks = []
     for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
-               easypanel, backup, fila_de_avisos, instalados):
+               easypanel, backup, fila_de_avisos, instalados, timers_desligados):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

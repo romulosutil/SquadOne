@@ -327,6 +327,23 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   (`no_agent`: Entrada, Graphify, Sites e pendências) e os ids listados em
   `~/.local/state/dell-status/silencio-esperado` (um por linha, `#` comenta), para um vigia
   que só fala quando há o que dizer.
+- **Timers do repositório** (`timers`, grupo Serviços): todo `.timer` de `deploy/dell/`
+  que o `instalados.json` leva a `~/.config/systemd/user/` **e está instalado** tem de
+  estar ligado (`ActiveState=active`). O `gerador-de-sites.timer` foi desligado de
+  propósito em 10/10/2026 e nada dizia isso; um desligado por engano ficaria igual.
+  Desligado **sem marca de pausa** é amarelo, com o comando que liga. Para pausar de
+  propósito, marque (o conteúdo é a nota que aparece no detalhe, por exemplo a data):
+
+  ```bash
+  systemctl --user disable --now gerador-de-sites.timer
+  date +%d/%m/%Y > ~/.local/state/dell-status/pausa-gerador-de-sites   # pausa-<timer sem .timer>
+  # para voltar: systemctl --user enable --now gerador-de-sites.timer
+  #              find ~/.local/state/dell-status -name pausa-gerador-de-sites -delete
+  ```
+
+  A marca `pausa-pncp` do Radar também vale para o `pncp-catchup.timer`. Marca de um timer
+  que voltou a ligar não acende nada, mas aparece no detalhe ("marca de pausa sobrando")
+  para ser apagada.
 
 ### Fila de avisos (06/10/2026)
 
@@ -1899,7 +1916,10 @@ parado com `restart=no` não é problema para o `dell-status` (a verificação
 `containers` ignora `exited` com política `no`) nem para o `dell-validate` (agora diz
 "parado de propósito"). Sem a marca do passo 5 o `Radar PNCP` em "Dados" viraria
 amarelo ("A coleta de hoje não aconteceu") a partir das 09:00 do dia seguinte e ficaria
-assim; com ela diz "Pausado de propósito (data)" e fica ok. Cuidado: o
+assim; com ela diz "Pausado de propósito (data)" e fica ok. A mesma marca apaga o
+amarelo de "Timers do repositório" pelo `pncp-catchup.timer` desligado no passo 2; até
+o passo 5, `date +%d/%m/%Y > ~/.local/state/dell-status/pausa-pncp-catchup` apaga só esse
+(sem esconder a coleta, que ainda roda). Cuidado: o
 `dell-worker-healthwatch` usa `docker compose up -d n8n` quando o n8n não existe, e
 isso sobe o `collector` de volta (`depends_on`); `docker restart` do n8n não.
 
