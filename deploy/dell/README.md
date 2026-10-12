@@ -304,6 +304,18 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   parar o gateway **de propósito** (trocar o chip), pare antes o healthwatch
   (`systemctl --user stop dell-worker-healthwatch`), senão ele religa a cada 30 s (09/10,
   16:06) — e religue-o depois.
+- **Idade dos dados** (`idade:<id>`, grupo Dados; lista `DADOS_COM_IDADE`): um arquivo que
+  uma rotina do Hermes deveria renovar. Hoje só **Métricas do ASMR**
+  (`~/.local/share/asmr-fullbringer/shorts-metrics.json`, renovado pela coleta
+  `79a04dbf2d81`), parado desde 05/10/2026 21:42 sem ninguém ver: a coleta rodava de hora
+  em hora e respondia "bloqueado" (feed público com erro e sem o navegador do Hermes). Com
+  a rotina **pausada** (`hermes cron pause`) é ok, "Coleta pausada de propósito em dd/mm"
+  (o estado de 11/10). Ativa, o dado vale 72 h (o portão `asmr_coleta_gate.py` só acorda
+  o modelo com Short de até 72 h no ar), contadas também desde que a rotina voltou da
+  pausa. Mais velho que isso: **vermelho** se o modelo rodou depois da última gravação
+  (saída com `## Response` em `~/.hermes/cron/output/<id>/`, 15 min depois da gravação) e
+  não gravou; **amarelo que resolve sozinho** se o portão nem precisou acordá-lo (não saiu
+  Short novo). Rotina que sumiu do Hermes é amarelo até alguém tirar o dado da lista.
 
 ### Fila de avisos (06/10/2026)
 

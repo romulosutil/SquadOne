@@ -763,6 +763,89 @@ class Religamentos(unittest.TestCase):
         self.assertIn("n8n 3x", c["detalhe"])
 
 
+SAIDA_BLOQUEADA = ("# Cron Job: ASMR FULLBRINGER — coleta de métricas\n\n**Job ID:** 79a04dbf2d81\n\n## Prompt\n\nx\n\n"
+                   "## Response\n\n*ASMR — coleta 11/10*\n*Canal:* bloqueado\n*Coletados:* 0 Shorts\n")
+SAIDA_PULADA = ("# Cron Job: ASMR FULLBRINGER — coleta de métricas\n\n**Job ID:** 79a04dbf2d81\n\n"
+                "Script gate returned `wakeAgent=false` — agent skipped.\n")
+
+
+class IdadeDosDados(unittest.TestCase):
+    """O shorts-metrics.json do ASMR parado desde 05/10/2026 21:42, com a coleta rodando."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="dell-status-idade-"))
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.antes = {k: getattr(ds, k) for k in ("CRON_JOBS", "HERMES_SAIDAS", "DADOS_COM_IDADE", "agora")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
+        self.addCleanup(ds.agendas_vistas.clear)
+        ds.CRON_JOBS = self.dir / "jobs.json"
+        ds.HERMES_SAIDAS = self.dir / "output"
+        self.metricas = self.dir / "shorts-metrics.json"
+        self.metricas.write_text("{}")
+        os.utime(self.metricas, (br("2026-10-05T21:42").timestamp(),) * 2)
+        ds.DADOS_COM_IDADE = [{**ds.DADOS_COM_IDADE[0], "arquivo": self.metricas}]
+
+    def coleta(self, **extra) -> dict:
+        return job("79a04dbf2d81", minutos=60, last_run="2026-10-11T15:42:58-03:00",
+                   name="ASMR FULLBRINGER — coleta de métricas", **extra)
+
+    def saida(self, quando: str, texto: str) -> None:
+        p = ds.HERMES_SAIDAS / "79a04dbf2d81" / (quando.replace(":", "-").replace("T", "_") + ".md")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(texto)
+        os.utime(p, (br(quando).timestamp(),) * 2)
+
+    def rodar(self, quando: str, *jobs) -> dict:
+        ds.CRON_JOBS.write_text(json.dumps({"jobs": list(jobs)}))
+        ds.agora = lambda: br(quando).astimezone(timezone.utc)
+        [c] = ds.idade_dos_dados()
+        return c
+
+    def test_pausada_de_proposito_e_ok_como_hoje_na_mel(self):
+        self.saida("2026-10-11T03:31:19", SAIDA_BLOQUEADA)
+        c = self.rodar("2026-10-11T21:45", self.coleta(enabled=False, state="paused",
+                                                         paused_at="2026-10-11T16:29:45-03:00"))
+        self.assertEqual((c["id"], c["estado"]), ("idade:asmr-metricas", "ok"))
+        self.assertEqual(c["detalhe"], "Coleta pausada de propósito em 11/10; dados de 05/10 21:42")
+
+    def test_coleta_que_roda_e_nao_grava_e_falha(self):
+        self.saida("2026-10-05T21:45:00", "x\n## Response\n\nok, gravado")  # a rodada que gravou: não conta
+        for h in ("00-28-22", "01-29-20", "02-30-15", "03-31-19"):
+            self.saida("2026-10-11T" + h.replace("-", ":"), SAIDA_BLOQUEADA)
+        self.saida("2026-10-11T04:32:00", SAIDA_PULADA)
+        c = self.rodar("2026-10-11T09:00", self.coleta())
+        self.assertEqual(c["estado"], "falha")
+        self.assertEqual(c["detalhe"], "Sem dado novo há 5 dia(s) (desde 05/10 21:42), e a coleta rodou 4 vez(es) "
+                                       "depois sem gravar")
+        self.assertIn("bloqueado", c["o_que_fazer"])
+
+    def test_sem_short_novo_resolve_sozinho(self):
+        self.saida("2026-10-11T04:32:00", SAIDA_PULADA)
+        c = self.rodar("2026-10-11T09:00", self.coleta())
+        self.assertEqual(c["estado"], "atencao")
+        self.assertTrue(c["sozinho"])
+        self.assertIn("Short", c["o_que_fazer"])
+
+    def test_dado_recente_e_ok(self):
+        self.saida("2026-10-08T10:00:00", SAIDA_BLOQUEADA)
+        c = self.rodar("2026-10-08T21:00", self.coleta())
+        self.assertEqual((c["estado"], c["detalhe"]), ("ok", "Atualizado em 05/10 21:42"))
+
+    def test_voltou_da_pausa_tem_72h_de_folga(self):
+        ds.agendas_vistas["79a04dbf2d81"] = {"assinatura": "x", "desde": "2026-10-20T10:00:00-03:00"}
+        self.saida("2026-10-20T11:00:00", SAIDA_BLOQUEADA)
+        self.assertEqual(self.rodar("2026-10-20T12:00", self.coleta())["estado"], "ok")
+        ds.agendas_vistas["79a04dbf2d81"] = {"assinatura": "x", "desde": "2026-10-20T10:00:00-03:00"}
+        c = self.rodar("2026-10-23T11:00", self.coleta())
+        self.assertEqual(c["estado"], "falha")
+        self.assertIn("rodou 1 vez(es)", c["detalhe"])
+
+    def test_rotina_apagada_pede_decisao(self):
+        c = self.rodar("2026-10-11T21:45", job("outra", "0 9 * * *"))
+        self.assertEqual(c["estado"], "atencao")
+        self.assertIn("não existe mais", c["detalhe"])
+
+
 class Instalados(unittest.TestCase):
     """O caso de 07/10/2026: o fix do observador estava no repo, a cópia em
     ~/.local/bin era de antes, e os avisos foram recusados o dia todo."""
