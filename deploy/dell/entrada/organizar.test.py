@@ -985,5 +985,263 @@ class Principal(Base):
             os.environ.pop("ENTRADA_RAIZ", None)
 
 
+# ------------------------------------------------------------------ o timer do systemd (11/10/2026)
+RAIZ_DO_REPO = Path(__file__).resolve().parents[3]
+
+
+def _carregar_dell_status():
+    """O validador da fila, do dell-status do repo. Carregado com um HOME de mentira: o módulo lê caminhos do HOME no
+    import e nada aqui pode tocar o Dell."""
+    home_antes = os.environ.get("HOME")
+    home = tempfile.mkdtemp(prefix="organizar-teste-ds-")
+    os.environ["HOME"] = home
+    try:
+        spec = importlib.util.spec_from_file_location("dell_status_para_organizar", RAIZ_DO_REPO / "deploy/dell/dell-status.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:  # noqa: BLE001 — sem fcntl (Windows)
+        return None
+    finally:
+        if home_antes is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = home_antes
+        shutil.rmtree(home, ignore_errors=True)
+
+
+import hashlib  # noqa: E402
+import importlib.util  # noqa: E402
+import signal  # noqa: E402
+from datetime import timedelta, timezone  # noqa: E402
+
+ds = _carregar_dell_status()
+BR = timezone(timedelta(hours=-3))
+AGORA = datetime(2026, 10, 11, 23, 10, tzinfo=BR)
+
+
+def calado(f, *a, **k):
+    """(resultado, stdout, stderr) sem sujar a saída do teste."""
+    import contextlib
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        r = f(*a, **k)
+    return r, out.getvalue(), err.getvalue()
+
+
+class PelaFila(Base):
+    """`organizar.py --fila` (o entrada-organizar.service): o que mudou vira UM aviso na fila do dell-status."""
+
+    def setUp(self):
+        super().setUp()
+        self.fila = self.tmp / "fila"
+        self.fila.mkdir()  # a pasta é do dell-status (2770): existe no Dell e a lib não a cria
+        os.environ.update({"SQUADONE_AVISOS_FILA": str(self.fila), "ENTRADA_RAIZ": str(self.tmp / "Entrada"),
+                           "COFRE_RAIZ": str(self.tmp / "Cofre"), "ENTRADA_ARQUIVO": str(self.arq),
+                           "ENTRADA_IDENTIDADE": str(self.tmp / "mel.txt")})
+        self.lib_do_repo = list(org.PASTAS_DA_LIB)
+        self.addCleanup(setattr, org, "PASTAS_DA_LIB", self.lib_do_repo)
+        self.addCleanup(lambda: [os.environ.pop(k, None) for k in (
+            "SQUADONE_AVISOS_FILA", "ENTRADA_RAIZ", "COFRE_RAIZ", "ENTRADA_ARQUIVO", "ENTRADA_IDENTIDADE")])
+
+    def avisos(self):
+        return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(self.fila.glob("*.json"))]
+
+    def um_item_organizado(self, nome="reuniao.txt", destino="reuniao-cliente.txt"):
+        self.enviar("Reunião com o cliente na terça.", rotulo="anotação", nome=nome)
+        it = self.ent.pendentes()[0]
+        self.responder([self.plano(it["id"], nome=destino)])
+        return it["id"]
+
+    def pela_fila(self):
+        return calado(org.principal_pela_fila, AGORA)
+
+    def trocar_rodar(self, f):
+        original = org.rodar
+        org.rodar = f
+        self.addCleanup(setattr, org, "rodar", original)
+
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(org.lib_de_aviso().__file__).resolve(), (RAIZ_DO_REPO / "deploy/dell/lib/aviso.py").resolve())
+
+    def test_o_validador_do_dell_status_carrega_no_linux(self):
+        if importlib.util.find_spec("fcntl") is not None:
+            self.assertIsNotNone(ds)
+
+    def test_organizado_vira_um_aviso_com_o_texto_que_o_job_imprimia(self):
+        item = self.um_item_organizado()
+        codigo, out, _ = calado(org.principal, ["--fila"])
+        self.assertEqual(codigo, 0)
+        avisos = self.avisos()
+        self.assertEqual(len(avisos), 1)
+        d = avisos[0]
+        impresso = out.split("entrada-organizar: aviso gravado na fila")[0].strip()  # o stdout é log: o mesmo texto
+        self.assertEqual(impresso, "📥 Entrada: 1 item(ns) organizado(s)\n• reuniao.txt → organizado/anotacoes/reuniao-cliente.txt")
+        self.assertEqual(d["titulo"], "📥 Entrada: 1 item(ns) organizado(s)")
+        self.assertEqual(f"{d['titulo']}\n{d['texto']}", impresso)  # chega ao WhatsApp exatamente o que o job imprimia
+        self.assertEqual(d["origem"], "entrada-organizar")
+        self.assertEqual(d["prioridade"], 2)
+        self.assertNotIn("expira_em", d)
+        lote = item + "\n\n" + impresso
+        self.assertEqual(d["chave"], "entrada:" + hashlib.sha1(lote.encode()).hexdigest()[:16])
+        self.assertTrue((self.ent.organizado / "anotacoes/reuniao-cliente.txt").is_file())
+        if ds is not None:
+            self.assertEqual(ds.mensagem_do_aviso(ds.validar_aviso(d)), impresso)
+
+    def test_sem_fila_imprime_como_o_job_do_hermes(self):
+        self.um_item_organizado()
+        codigo, out, _ = calado(org.principal)
+        self.assertEqual(codigo, 0)
+        self.assertEqual(out.strip(), "📥 Entrada: 1 item(ns) organizado(s)\n• reuniao.txt → organizado/anotacoes/reuniao-cliente.txt")
+        self.assertEqual(self.avisos(), [])
+
+    def test_fila_vazia_e_silencio(self):
+        codigo, out, _ = self.pela_fila()
+        self.assertEqual((codigo, out), (0, ""))
+        self.assertEqual(self.avisos(), [])
+        self.assertEqual(self.chamadas(), [])
+
+    def test_chave_pelo_lote_e_pelo_texto(self):
+        a = org.aviso_da_rodada("📥 Entrada: 1 item(ns) organizado(s)\n• a → b", {"ids": ["x1"]}, AGORA)["chave"]
+        self.assertEqual(a, org.aviso_da_rodada("📥 Entrada: 1 item(ns) organizado(s)\n• a → b", {"ids": ["x1"]}, AGORA)["chave"])
+        self.assertNotEqual(a, org.aviso_da_rodada("📥 Entrada: 1 item(ns) organizado(s)\n• a → b", {"ids": ["x2"]}, AGORA)["chave"])
+        self.assertNotEqual(a, org.aviso_da_rodada("⚠️ 1 item(ns) sem plano", {"ids": ["x1"]}, AGORA)["chave"])
+        self.assertRegex(a, r"^entrada:[0-9a-f]{16}$")
+
+    def test_o_lote_sao_os_itens_que_a_rodada_tocou(self):
+        item = self.um_item_organizado()
+        info = {}
+        org.rodar(self.ent, self.ex, info=info)
+        self.assertEqual(info["ids"], [item])
+
+    def test_pasta_do_agente_suja_sobe_para_p1_com_o_titulo_padrao(self):
+        self.enviar("uma nota")
+        (self.ent.raiz / ".agente").mkdir(exist_ok=True)
+        (self.ent.raiz / ".agente/lixo.txt").write_text("x")
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 0)
+        d = self.avisos()[0]
+        self.assertEqual((d["titulo"], d["prioridade"]), ("📥 Entrada", 1))
+        self.assertTrue(d["texto"].startswith("⚠️ Entrada: a pasta de trabalho do agente"))
+        if ds is not None:
+            ds.validar_aviso(d)
+        self.pela_fila()  # a marca segura: avisa uma vez só
+        self.assertEqual(len(self.avisos()), 1)
+
+    def test_erro_inesperado_vira_aviso_um_por_dia_e_a_unit_falha(self):
+        def quebra(*a, **k):
+            raise ValueError("/home/alguem/caminho")
+        self.trocar_rodar(quebra)
+        self.enviar("uma nota")
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        d = self.avisos()[0]
+        self.assertEqual(d["titulo"], "📥 Entrada")
+        self.assertEqual(d["texto"], "📥 Entrada: erro inesperado no organizador (ValueError). Itens seguem em chegou/.")
+        self.assertNotIn("/home/alguem", json.dumps(d))  # só o tipo, nunca o texto da exceção
+        self.assertEqual(d["chave"], "entrada:erro:2026-10-11:ValueError")
+        if ds is not None:
+            ds.validar_aviso(d)
+
+    def test_erro_fora_da_rodada_tambem_avisa(self):
+        original = org.entrada_mod.Entrada  # quebra antes da rodada, fora do `except` dela
+
+        def quebra(*a, **k):
+            raise PermissionError("sem acesso")
+        org.entrada_mod.Entrada = quebra
+        self.addCleanup(setattr, org.entrada_mod, "Entrada", original)
+        codigo, _, err = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        self.assertEqual(self.avisos()[0]["chave"], "entrada:erro:2026-10-11:PermissionError")
+        self.assertIn("Traceback", err)
+
+    def test_sigterm_vira_aviso(self):
+        antes = signal.getsignal(signal.SIGTERM)
+
+        def termina(*a, **k):
+            os.kill(os.getpid(), signal.SIGTERM)  # o que o systemd manda ao passar do TimeoutStartSec
+            return ""
+        self.trocar_rodar(termina)
+        self.enviar("uma nota")
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        d = self.avisos()[0]
+        self.assertIn("a rodada foi interrompida (SIGTERM)", d["texto"])
+        self.assertEqual(d["chave"], "entrada:erro:2026-10-11:SIGTERM")
+        self.assertIs(signal.getsignal(signal.SIGTERM), antes)
+
+    def test_fila_ausente_faz_a_unit_falhar_e_o_texto_fica_no_journal(self):
+        shutil.rmtree(self.fila)
+        self.um_item_organizado()
+        codigo, out, err = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        self.assertIn("📥 Entrada: 1 item(ns) organizado(s)", out)
+        self.assertIn("fila_ausente", err)
+        self.assertFalse(self.fila.exists())  # a lib não cria a pasta do dell-status
+
+    def test_sem_a_lib_grava_do_jeito_antigo_com_o_mesmo_conteudo(self):
+        self.um_item_organizado()
+        org.PASTAS_DA_LIB = [self.tmp / "sem-lib"]
+        self.assertIsNone(org.lib_de_aviso())
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 0)
+        arquivos = sorted(self.fila.glob("*.json"))
+        self.assertRegex(arquivos[0].name, r"^entrada-organizar-\d+\.json$")
+        d = self.avisos()[0]
+        self.assertEqual(d["titulo"], "📥 Entrada: 1 item(ns) organizado(s)")
+        if ds is not None:
+            ds.validar_aviso(d)
+
+    def test_copia_quebrada_cai_na_seguinte(self):
+        quebrada = self.tmp / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
+        org.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
+        self.assertEqual(Path(org.lib_de_aviso().__file__).resolve(), (RAIZ_DO_REPO / "deploy/dell/lib/aviso.py").resolve())
+        org.PASTAS_DA_LIB = [quebrada]
+        self.assertIsNone(org.lib_de_aviso())
+
+    def test_texto_longo_e_cortado_com_e_sem_a_lib(self):
+        saida = "📥 Entrada: 1 item(ns) organizado(s)\n" + "\n".join(f"• item-{i:04d}.txt → organizado/arquivo/x" for i in range(300))
+        for jeito in ("lib", "antigo"):
+            with self.subTest(jeito=jeito):
+                for p in self.fila.glob("*.json"):
+                    p.unlink()
+                org.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.tmp / "sem-lib"]
+                self.assertTrue(calado(org.gravar_aviso, org.aviso_da_rodada(saida, {"ids": ["x"]}, AGORA))[0])
+                d = self.avisos()[0]
+                self.assertLessEqual(len(d["texto"]), 4000)
+                self.assertTrue(d["texto"].endswith("… (cortado)"))
+                if ds is not None:
+                    ds.validar_aviso(d)
+
+
+class Units(unittest.TestCase):
+    def ler(self, nome):
+        return (RAIZ_DO_REPO / "deploy/dell" / nome).read_text(encoding="utf-8")
+
+    def test_service_roda_o_organizador_instalado_com_fila(self):
+        s = self.ler("entrada-organizar.service")
+        self.assertIn("ExecStart=/usr/bin/python3 %h/.local/lib/mel-entrada/organizar.py --fila\n", s)
+        self.assertIn("Environment=HERMES_HOME=%h/.hermes", s)
+        self.assertIn("Type=oneshot", s)
+
+    def test_timer_de_5_em_5_min(self):
+        t = self.ler("entrada-organizar.timer")
+        self.assertRegex(t, r"(?m)^OnCalendar=\*:0/5$")
+        self.assertNotIn("Persistent=true", t)
+        self.assertIn("WantedBy=timers.target", t)
+
+    def test_instalados_json_cobre_o_organizador_e_as_units(self):
+        inst = json.loads((RAIZ_DO_REPO / "deploy/dell/instalados.json").read_text(encoding="utf-8"))["arquivos"]
+        # Pelos curingas, do mesmo jeito que o dell-status os lê (comparar_instalados).
+        for arquivo, destino in (("deploy/dell/entrada/organizar.py", "~/.local/lib/mel-entrada/"),
+                                 ("deploy/dell/entrada-organizar.service", "~/.config/systemd/user/"),
+                                 ("deploy/dell/entrada-organizar.timer", "~/.config/systemd/user/")):
+            cobertas = [e for e in inst if any(c in e["repo"] for c in "*?[")
+                        and RAIZ_DO_REPO / arquivo in set(RAIZ_DO_REPO.glob(e["repo"])) and e["instalado"] == destino]
+            self.assertTrue(cobertas, arquivo)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

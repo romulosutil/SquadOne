@@ -1,0 +1,21 @@
+[Unit]
+Description=Entrada da Mel — o agente que organiza a fila (o que mudou vai para a fila de avisos)
+
+[Service]
+Type=oneshot
+# Era o job "Entrada — organizar" do Hermes (cbb21e966fce), que rodava ~/.hermes/scripts/entrada_organizar.py
+# (só chama organizar.principal()) pelo Python do Hermes, com cwd ~/.hermes, o PATH do gateway, HERMES_HOME e
+# umask 0002. O organizador chama `hermes -z` (~/.local/bin/hermes, pelo caminho absoluto) e `age` (/usr/bin), e
+# passa ao hermes só PATH, HOME, LANG, XDG_* e HERMES_HOME (ambiente_do_filho).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HERMES_HOME=%h/.hermes
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=%h/.hermes
+UMask=0002
+# --fila: o que mudou vira aviso na fila do dell-status; sem ele o organizador imprime, que é o jeito do job do
+# Hermes (a troca é reversível).
+ExecStart=/usr/bin/python3 %h/.local/lib/mel-entrada/organizar.py --fila
+# O mesmo teto do Hermes (1 h): até 5 chamadas ao modelo de 180 s cada, mais a limpeza das sessões. O SIGTERM vira
+# aviso no script.
+TimeoutStartSec=1h
+Nice=10

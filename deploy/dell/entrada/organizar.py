@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Job do Hermes (no_agent, a cada 5 min): o agente que organiza a fila da Entrada.
+"""O agente que organiza a fila da Entrada, a cada 5 min.
+
+Dois jeitos de rodar (11/10/2026, plano do aviso único):
+- `organizar.py --fila` (o entrada-organizar.service, pelo .timer de 5 em 5 min): o que mudou vira UM aviso na fila
+  do dell-status (`deploy/dell/lib/aviso.py`), com o silêncio das 22h às 7h, o teto por hora e a chave pelo hash dos
+  ids do lote e do texto (a mesma rodada repetida não duplica); o stdout é só log. Erro inesperado e SIGTERM viram
+  aviso no lugar do `failure_deliver` do Hermes, e a unit sai com erro;
+- `principal()` sem argumentos (o job `no_agent` do Hermes, via ~/.hermes/scripts/entrada_organizar.py): imprime, e o
+  Hermes entrega no WhatsApp na hora, como sempre foi. Fica para a troca ser reversível.
 
 Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio no WhatsApp). Com itens:
 
@@ -15,7 +23,7 @@ Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio 
    SESSÃO (com o texto do prompt) no state.db do Hermes, onde o Hermes do WhatsApp poderia achá-la:
    depois da chamada as sessões dessa pasta de trabalho são apagadas, uma por id;
 5. o executor valida cada plano contra a lista de permissão e executa, ou recusa;
-6. imprime só o que mudou (o Hermes entrega no WhatsApp).
+6. avisa só o que mudou (na fila de avisos, ou no stdout que o Hermes entrega).
 
 Falha do modelo, resposta estranha ou plano inválido: o item fica em chegou/ e tenta de novo; depois
 de 3 tentativas vira "sem-plano" e é avisado uma vez.
@@ -23,16 +31,21 @@ de 3 tentativas vira "sem-plano" e é avisado uma vez.
 from __future__ import annotations
 
 import fcntl
+import hashlib
+import importlib.util
 import json
 import os
 import re
 import secrets
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -381,8 +394,11 @@ def rodar_grupo(entrada, executor, grupo, pastas, chamar, feitos, sem_plano, avi
         _desistir_ou_repetir(entrada, it, motivo, sem_plano)
 
 
-def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=chamar_modelo) -> str:
-    """Uma rodada. Devolve o texto para o WhatsApp ('' = silêncio)."""
+def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=chamar_modelo,
+          info: dict | None = None) -> str:
+    """Uma rodada. Devolve o texto para o WhatsApp ('' = silêncio). `info`, se dado, recebe o lote: `ids` (os itens
+    que a rodada tocou, de onde sai a chave do aviso) e `pasta_suja` (o aviso que sobe de prioridade)."""
+    info = {} if info is None else info
     pendentes = entrada.pendentes()
     if not pendentes:
         return ""
@@ -393,6 +409,7 @@ def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=
         if marca.exists():
             return ""
         os.close(os.open(marca, os.O_WRONLY | os.O_CREAT, 0o600))
+        info.update(ids=sorted(i["id"] for i in pendentes), pasta_suja=True)
         return ("⚠️ Entrada: a pasta de trabalho do agente (~/Mel/Entrada/.agente) tem arquivos e precisa ficar vazia. "
                 "Nada foi enviado ao modelo e os itens seguem esperando.")
     marca.unlink(missing_ok=True)
@@ -407,7 +424,9 @@ def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=
         entrada.diario("sem-plano", id=it["id"], tentativas=it["tentativas"], motivo="tentativas esgotadas")
         sem_plano.append(it)
         pendentes.remove(it)
-    for grupo in formar_grupos(pendentes):
+    grupos = formar_grupos(pendentes)
+    info["ids"] = sorted({i["id"] for i in sem_plano} | {i["id"] for g in grupos for i in g})
+    for grupo in grupos:
         rodar_grupo(entrada, executor, grupo, pastas, chamar, feitos, sem_plano, avisos)
     saida: list[str] = []
     if feitos:
@@ -422,31 +441,151 @@ def rodar(entrada: entrada_mod.Entrada, executor: executor_mod.Executor, chamar=
     return "\n".join(saida)
 
 
-def principal() -> int:
+def _rodada(info: dict) -> tuple[int, str]:
+    """(código de saída, texto para o WhatsApp; '' = silêncio)."""
     home = Path.home()
     raiz = Path(os.environ.get("ENTRADA_RAIZ", home / "Mel/Entrada"))
     raiz_cofre = Path(os.environ.get("COFRE_RAIZ", home / "Mel/Cofre"))
     arquivo = Path(os.environ.get("ENTRADA_ARQUIVO", home / "Arquivo"))
     if not raiz.is_dir():
-        return 0
+        return 0, ""
     trava = os.open(raiz / ".organizar.lock", os.O_WRONLY | os.O_CREAT, 0o600)
     try:
         fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        return 0                                                   # outra rodada em andamento: silêncio
+        return 0, ""                                               # outra rodada em andamento: silêncio
     ident = Path(os.environ.get("ENTRADA_IDENTIDADE") or cofre_mod.identidade_padrao(home))
     cofre = cofre_mod.Cofre(raiz_cofre, ident) if raiz_cofre.is_dir() else None
     ent = entrada_mod.Entrada(raiz, cofre)
     ex = executor_mod.Executor(ent, arquivo)
     try:
-        saida = rodar(ent, ex)
+        return 0, rodar(ent, ex, info=info)
     except Exception as e:  # noqa: BLE001  (o texto da exceção pode ter caminho; só o tipo)
-        print(f"📥 Entrada: erro inesperado no organizador ({type(e).__name__}). Itens seguem em chegou/.")
+        info["erro"] = type(e).__name__
+        return 1, f"📥 Entrada: erro inesperado no organizador ({type(e).__name__}). Itens seguem em chegou/."
+
+
+# ------------------------------------------------------------------ fila de avisos
+# Formato em deploy/dell/README.md, "Fila de avisos". A lib (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em
+# deploy/dell/lib; no Dell, instalada em ~/.local/lib/mel/ (instalados.json). Primeiro a do repo, para o teste nunca
+# pegar uma cópia instalada; instalado em ~/.local/lib/mel-entrada, a primeira não existe e vale a segunda.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", Path.home() / ".local/lib/mel"]
+ORIGEM = "entrada-organizar"
+TITULO_PADRAO = "📥 Entrada"
+MAX_TEXTO_AVISO = 4000
+MARCA_DE_CORTE = "\n… (cortado)"
+
+
+class Interrompido(BaseException):
+    """SIGTERM no meio da rodada (o TimeoutStartSec do service, ou um `stop`). BaseException: atravessa os
+    `except Exception` da rodada (que transformariam a queda em "tentativa") e chega ao de topo, que avisa."""
+
+
+def _interromper(signum, _frame):
+    raise Interrompido(signal.Signals(signum).name)
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o aviso sai do jeito antigo (gravado
+    direto na fila, sem validar)."""
+    for pasta in PASTAS_DA_LIB:
+        arq = pasta / "aviso.py"
+        if not arq.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arq)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
+def fila_de_avisos() -> Path:
+    """A mesma regra da lib: $SQUADONE_AVISOS_FILA ou ~/.local/share/avisos/fila, lida a cada chamada."""
+    return Path(os.environ.get("SQUADONE_AVISOS_FILA") or Path.home() / ".local/share/avisos/fila")
+
+
+def titulo_e_texto(saida: str) -> tuple[str, str]:
+    """A primeira linha vira o título quando cabe e sobra texto: o dell-status entrega "titulo\\ntexto", então chega
+    exatamente o que o job antigo imprimia. Uma linha só (pasta suja, erro) vai com o título "📥 Entrada"."""
+    primeira, _, resto = saida.strip().partition("\n")
+    if resto.strip() and len(primeira.strip()) <= 120:
+        return primeira.strip(), resto.strip()
+    return TITULO_PADRAO, saida.strip()
+
+
+def aviso_da_rodada(saida: str, info: dict, agora: datetime) -> dict:
+    titulo, texto = titulo_e_texto(saida)
+    if info.get("erro"):
+        # A cada 5 min o mesmo erro cairia de novo: um aviso por dia e por tipo de erro.
+        chave = f"entrada:erro:{agora:%Y-%m-%d}:{info['erro']}"
+    else:
+        # Os ids sozinhos juntariam desfechos diferentes do mesmo lote (ex.: um aviso de sessão que sobrou e, duas
+        # rodadas depois, o "sem plano" do mesmo item); o texto sozinho juntaria lotes diferentes com o mesmo nome.
+        lote = "\n".join(info.get("ids") or []) + "\n\n" + saida.strip()
+        chave = "entrada:" + hashlib.sha1(lote.encode("utf-8")).hexdigest()[:16]
+    return {"titulo": titulo, "texto": texto, "origem": ORIGEM, "chave": chave,
+            "prioridade": 1 if info.get("pasta_suja") else 2}
+
+
+def gravar_aviso(aviso: dict) -> bool:
+    """Pela lib (valida, corta com marca, grava atômico, não cria a pasta da fila, nunca levanta); sem ela, do jeito
+    antigo, já com o mesmo corte."""
+    lib = lib_de_aviso()
+    if lib is not None:
+        if lib.VALOR_EM_REAIS.search(aviso["texto"]):
+            aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))   # "R$" faria a lib recusar o aviso inteiro
+        return lib.gravar(aviso, fila=fila_de_avisos(), prefixo=ORIGEM).gravado
+    if len(aviso["texto"]) > MAX_TEXTO_AVISO:
+        aviso = dict(aviso, texto=aviso["texto"][:MAX_TEXTO_AVISO - len(MARCA_DE_CORTE)].rstrip() + MARCA_DE_CORTE)
+    try:
+        fila = fila_de_avisos()
+        fila.mkdir(parents=True, exist_ok=True)
+        (fila / f"{ORIGEM}-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+        return True
+    except OSError as e:
+        print(f"aviso não gravado ({ORIGEM}): {e}", file=sys.stderr, flush=True)
+        return False
+
+
+def principal_pela_fila(agora=None) -> int:
+    """A rodada do service: o que mudou vai para a fila; o stdout é log. 1 = a rodada caiu, foi interrompida ou o
+    aviso não chegou à fila (a unit fica `failed`; o texto fica no journal)."""
+    info: dict = {}
+    anterior = signal.signal(signal.SIGTERM, _interromper)
+    try:
+        codigo, saida = _rodada(info)
+    except Interrompido as e:
+        info = {"erro": str(e)}
+        codigo, saida = 1, f"📥 Entrada: a rodada foi interrompida ({e}). Itens seguem em chegou/."
+    except Exception as e:  # noqa: BLE001 — era o failure_deliver do Hermes: o erro tem de chegar (só o tipo)
+        traceback.print_exc()
+        info = {"erro": type(e).__name__}
+        codigo, saida = 1, f"📥 Entrada: erro inesperado no organizador ({type(e).__name__}). Itens seguem em chegou/."
+    finally:
+        signal.signal(signal.SIGTERM, anterior)
+    if not saida:
+        return codigo
+    print(saida, flush=True)
+    if not gravar_aviso(aviso_da_rodada(saida, info, agora or datetime.now().astimezone())):
+        print("entrada-organizar: o aviso NÃO foi para a fila (motivo acima); o texto está aqui no journal",
+              file=sys.stderr, flush=True)
         return 1
+    print("entrada-organizar: aviso gravado na fila", flush=True)
+    return codigo
+
+
+def principal(argv: list[str] | None = None) -> int:
+    """Sem argumentos (o job do Hermes chama `principal()`): imprime, como sempre. Com `--fila`: o service."""
+    if "--fila" in (argv or []):
+        return principal_pela_fila()
+    codigo, saida = _rodada({})
     if saida:
         print(saida)
-    return 0
+    return codigo
 
 
 if __name__ == "__main__":
-    sys.exit(principal())
+    sys.exit(principal(sys.argv[1:]))

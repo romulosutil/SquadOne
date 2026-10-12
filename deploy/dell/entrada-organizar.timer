@@ -1,0 +1,12 @@
+[Unit]
+Description=Entrada da Mel — organizar a fila a cada 5 min
+
+[Timer]
+# De 5 em 5 min no relógio (:00, :05, ...), como o "every 5m" do job do Hermes que ele substitui. Rodada perdida com
+# o Dell desligado não importa (a seguinte pega a fila inteira): sem Persistent. Uma rodada que passe de 5 min
+# não acumula: o systemd não inicia o service de novo enquanto ele roda (e a trava do organizador cobre o resto).
+OnCalendar=*:0/5
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
