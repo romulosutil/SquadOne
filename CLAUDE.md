@@ -200,6 +200,7 @@ desconhecido derruba o boot. A Central é somente leitura para serviços. A Hoje
 máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
+Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o
 Dell acrescenta); a seed fica fora de `data/`. O browser nunca vê token do Google; `prompt=consent`

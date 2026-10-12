@@ -1,4 +1,6 @@
 export type OperationalState = 'healthy' | 'syncing' | 'unavailable' | 'unknown'
+// Espelha server/operations.ts. 'syncthing' é opcional (aposentado em
+// 12/10/2026): só vem em `tools` se a configuração do Dell ainda tiver a entrada.
 export type ToolId = 'hermes' | 'ide' | 'syncthing' | 'n8n' | 'remote'
 
 export interface OperationTool {
