@@ -129,18 +129,23 @@ com "pode mergear" explícito do Rômulo.
    conferir se está instalado (os sites e a consultoria aparecem em
    `G:\Meu Drive\PRUMO\`, **só leitura**: o que se edita ali o espelho da Mel
    desfaz). Apagar `auto (até 25-09)` quando o Rômulo decidir.
-4. **Syncthing:** a Mel não tem mais nenhum aparelho pareado (o `Rômulo`
-   antigo já saiu) e as 3 pastas dela (`auto-site`, `Pessoal-dev`,
-   `Corporativo-dev`) não sincronizam com ninguém. O PC tem o SyncTrayzor
-   instalado, sem par. Pela regra "código por Git, material pelo Drive" não há
-   o que parear; se um dia precisar editar sites no PC, use uma pasta à parte,
-   com o PC começando **vazio** e recebendo (nunca "Override changes" do lado
-   novo), e **nunca** sincronize `auto-site` (ressuscita leads na fila do
-   gerador).
-5. **Monitor:** a verificação `syncthing` do `dell-status` só olha erro de
-   pasta, não se o aparelho do outro lado está conectado. Sem aparelho pareado
-   não há o que olhar; se um dia parear, acrescentar "desconectado há mais de
-   24 h vira atenção".
+4. **Syncthing (aposentado em 12/10/2026):** a Mel não tem nenhum aparelho
+   pareado desde 04/10/2026 (o `Rômulo` antigo saiu) e as 3 pastas dela
+   (`auto-site`, `Pessoal-dev`, `Corporativo-dev`) não sincronizavam com
+   ninguém; o serviço foi desligado. A réplica `~/Pessoal-dev` está congelada
+   e o código chega à Mel pelo GitHub. O PC tem o SyncTrayzor instalado, sem
+   par: pode desinstalar. Pela regra "código por Git, material pelo Drive" não
+   há o que parear; se um dia precisar editar sites no PC, use uma pasta à
+   parte, com o PC começando **vazio** e recebendo (nunca "Override changes" do
+   lado novo), e **nunca** sincronize `auto-site` (ressuscita leads na fila do
+   gerador). Desligar: `ssh -t mel 'sudo systemctl disable --now
+   syncthing@romulo-sutil-corr-a'`; reverter: `ssh -t mel 'sudo systemctl enable
+   --now syncthing@romulo-sutil-corr-a'` (a config e as chaves em
+   `~/.local/state/syncthing` ficam intactas).
+5. **Monitor:** a verificação `syncthing` saiu do `dell-status` junto com o
+   serviço (desligado, ela viraria `falha` sem motivo). Se o Syncthing voltar
+   com um aparelho pareado, recoloque a verificação, incluindo "desconectado
+   há mais de 24 h vira atenção".
 6. **Documentação:** feita em 05/10 (`CLAUDE.md`, `ARCHITECTURE.md`,
    `deploy/dell/README.md`, `SOUL.md` e o mapa do Hermes, este arquivo e o
    `~/AGENTS.md` da Mel).

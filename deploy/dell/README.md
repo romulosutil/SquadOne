@@ -704,7 +704,10 @@ O n8n não cria diretórios. O Caçador grava pacotes
 `~/auto-site/<caminho>`. `~/auto-site` é a pasta de verdade. A esteira não lê
 o Drive: o espelho no Drive (`PRUMO/Sites antes da venda`, a cada hora) é feito
 pelo backup, só no sentido Dell → Drive (ver "Backup no Drive"). Até 25/09/2026
-o Syncthing a espelhava em `G:\Meu Drive\auto` pelo PC.
+o Syncthing a espelhava em `G:\Meu Drive\auto` pelo PC. O Syncthing foi
+aposentado em 12/10/2026 (sem aparelho pareado desde 04/10; o `dell-status` não o
+verifica mais); desligar: `ssh -t mel 'sudo systemctl disable --now
+syncthing@romulo-sutil-corr-a'`, reverter: `... enable --now ...`.
 
 ```bash
 install -m 755 deploy/dell/auto-entrada.py ~/.local/bin/auto-entrada
