@@ -55,7 +55,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Gerador faz e publica o site', texto: 'Claude (/lead-novo), até 4 por dia, 45 min cada; publica na Vercel como demo-<lead>. Com o Dell desligado às 08:00, roda quando ele liga.', onde: 'dell', quando: '08:00', verificacao: 'gerador', fila: 'pend:sites-fila' },
       { titulo: 'Hermes avisa "Site publicado"', texto: 'No WhatsApp, com o link do demo.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Balcão marca "pronto"', texto: 'n8n 03 lê o publicado.json, monta a mensagem e o link de envio.', onde: 'dell', quando: 'de hora em hora (:10)', verificacao: 'fluxo:wjuoIknp2qlWo0QI' },
-      { titulo: 'Sites e pendências no WhatsApp', texto: 'Uma mensagem do Hermes: os sites do dia, o que espera você e o link de cada lead enviado ou em conversa.', onde: 'dell', quando: '10:30' },
+      { titulo: 'Sites e pendências no WhatsApp', texto: 'Uma mensagem pela fila de avisos (o Hermes entrega): os sites do dia, o que espera você e o link de cada lead enviado ou em conversa.', onde: 'dell', quando: '10:30' },
       { titulo: 'Aborda o lead', texto: 'No CRM, em Hoje › Sites prontos para enviar: o botão abre o WhatsApp com a mensagem. Escrever direto ao número do lead também conta como envio.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:site-enviar', link: CRM_SITE },
       { titulo: 'Envio e leitura se marcam', texto: 'O observador do WhatsApp registra o envio e, quando o lead lê, o visto_em. Quem desliga a confirmação de leitura nunca aparece como lido: é "não sei", não "não viu".', onde: 'dell', quando: 'na hora', verificacao: 'fluxo:fd8gz4uDQkJtEd9W' },
       { titulo: 'Lead responde', texto: 'Mensagem 5 min ou mais depois do envio preenche respondeu_em e a pasta vai para _em-conversa. Antes disso é a saudação automática do WhatsApp Business.', onde: 'dell', quando: 'na hora', fila: 'pend:site-resposta' },
@@ -182,7 +182,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Commit e push na main', texto: 'GitHub romulosutil/*.', onde: 'nuvem', quando: 'fim da tarefa' },
       { titulo: 'Easypanel publica a reserva', texto: 'A cópia fria do SquadOne implanta sozinha, travada e sem Telegram: é a volta se o Dell morrer.', onde: 'nuvem', quando: 'no push', verificacao: 'squadone-app' },
       { titulo: 'A Central se atualiza', texto: 'atualizar-central confere a main e reconstrói só quando ela andou.', onde: 'dell', quando: 'a cada 10 min' },
-      { titulo: 'Grafo dos projetos', texto: 'O Hermes mantém um clone raso de cada repositório do GitHub e roda o graphify em todos. O PC puxa os grafos por SSH.', onde: 'dell', quando: '03:00' },
+      { titulo: 'Grafo dos projetos', texto: 'Um timer do Dell mantém um clone raso de cada repositório do GitHub e roda o graphify em todos. O PC puxa os grafos por SSH.', onde: 'dell', quando: '03:00' },
       { titulo: 'Central no celular', texto: 'Pela tailnet, com o Tailscale ligado no celular (porta 8443).', onde: 'voce', quando: 'quando quiser' },
     ],
   },
@@ -207,7 +207,7 @@ export interface HoraDoDia {
 }
 
 export const UM_DIA: HoraDoDia[] = [
-  { hora: '03:00', itens: [{ onde: 'dell', titulo: 'Grafo dos projetos', nota: 'Hermes · graphify' }] },
+  { hora: '03:00', itens: [{ onde: 'dell', titulo: 'Grafo dos projetos', nota: 'timer · graphify' }] },
   { hora: '03:30', itens: [{ onde: 'dell', titulo: 'Cofre cifrado do backup', nota: 'restic → Drive; desligado, roda ao ligar' }] },
   { hora: '06:00', itens: [{ onde: 'dell', titulo: 'Caçador', nota: 'Site antes da venda; perdido se o Dell estiver desligado' }] },
   { hora: '07:30', itens: [{ onde: 'dell', titulo: 'Coleta do radar PNCP', nota: 'n8n → collector' }] },

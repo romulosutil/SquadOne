@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Consulta o grafo do Graphify que mora no Dell, sem copiar nada para o PC.
-# O grafo é gerado pelo Hermes (job "Graphify — projetos", 03:00, só AST, sem
-# modelo); aqui só se lê. Nunca roda `graphify update` nem indexa.
+# O grafo é gerado no Dell (graphify-projetos.timer, 03:00, só AST, sem modelo;
+# até 11/10/2026 era o job "Graphify — projetos" do Hermes); aqui só se lê.
+# Nunca roda `graphify update` nem indexa.
 #
 #   scripts/grafo.sh query   SquadOne "como o turno chega ao Gemini" [orçamento]
 #   scripts/grafo.sh explain SquadOne "orchestrator.ts"

@@ -164,7 +164,14 @@ cópia anterior, ou apagar a lib (todos voltam ao jeito antigo de uma vez).
 Critério para seguir para o próximo: a cópia anterior instalada, uma semana sem
 `avisos-recusados/` novo vindo dela e o `Arquivos instalados` verde.
 
-## 5. Os três jobs `no_agent` do Hermes → timers do systemd (plano, nada executado)
+## 5. Os três jobs `no_agent` do Hermes → timers do systemd
+
+**Feito em 11/10/2026** (PRs #104, #105 e #107; units instaladas às 23:34 e os
+três jobs pausados no Hermes, não removidos). Falta: a verificação por unit no
+`dell-status` (item 2 abaixo, PR próprio) e, depois de uma semana estável,
+tirar o Graphify e o Sites do `ajustar_cron` do `aplicar-hermes.py` e remover os
+jobs pausados. Até lá, `aplicar-hermes.py` não roda; SOUL.md e as skills vão
+para o Dell com `install -m 644`.
 
 Hoje (lido de `~/.hermes/cron/jobs.json` em 11/10/2026):
 

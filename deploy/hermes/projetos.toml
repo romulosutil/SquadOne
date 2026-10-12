@@ -382,7 +382,7 @@ tipo = "espelho"
 dono = "Hermes"
 estado = "existe"
 grafo = true
-papel = "Um clone raso (--depth 1) por repositório do GitHub, mantido pelo Hermes (graphify_projetos.py, todo dia às 03:00) para o graphify. Ninguém edita. Atualiza com fetch + reset --hard, nunca merge, nunca clean -x. Repositório novo entra sozinho na noite seguinte."
+papel = "Um clone raso (--depth 1) por repositório do GitHub, mantido pelo graphify-projetos.timer (graphify_projetos.py, todo dia às 03:00; até 11/10/2026 pelo Hermes) para o graphify. Ninguém edita. Atualiza com fetch + reset --hard, nunca merge, nunca clean -x. Repositório novo entra sozinho na noite seguinte."
 observacao = "Fora daqui, porque já são clones vivos: SquadOne, prumo e crm-silmer. Ignora arquivados e forks. Fora do cofre do backup (é regenerável)."
 
 [[projeto]]
