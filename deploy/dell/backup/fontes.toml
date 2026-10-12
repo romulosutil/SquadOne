@@ -221,12 +221,14 @@ arquivos = ["~/.hermes/*.db", "~/.hermes/cron/*.db"]
 # e papéis: o iris tem sete bancos, o crm-silmer três). Usuário e senha vêm de
 # dentro do container. Dump que falha deixa o cofre em falha (backup-dell.py,
 # eh_critico). Prova da restauração: `backup-dell ensaio-dump <nome>`.
-[[cofre.preparo]]
-tipo = "postgres"
-nome = "aladdin-pg"
-compose = "~/workspace/infra-docker/aladdin/docker-compose.yml"
-servico = "db"
-
+# 11/10/2026: aladdin-pg, iris-minio e espectro-mysql saíram daqui porque os
+# containers (aladdin-postgres, iris-minio, espectro_mysql) foram PARADOS por
+# ociosos; `docker compose exec` em container parado deixaria o cofre em falha.
+# Dumps finais de segurança: Mel, ~/Arquivo/2026-10-11-containers-parados
+# (aladdin-postgres.sql, iris-postgres.sql, espectro_mysql.sql, iris-minio.tar,
+# restart-original.txt, SHA256SUMS). Para voltar: religar o container e recolocar
+# o bloco (está no histórico do Git deste arquivo, PR "para containers ociosos").
+# O iris-pg FICA: o iris-postgres segue ligado (o .env do Iris no PC aponta para ele).
 [[cofre.preparo]]
 tipo = "postgres"
 nome = "crm-silmer-pg"
@@ -244,22 +246,3 @@ tipo = "postgres"
 nome = "iris-pg"
 compose = "~/workspace/infra-docker/iris/docker-compose.yml"
 servico = "postgres"
-
-# Os objetos do MinIO do iris (bucket = pastas em /data). A imagem do MinIO não
-# tem tar: ele roda numa imagem que já está no Dell, com os volumes do serviço
-# montados só para leitura.
-[[cofre.preparo]]
-tipo = "pasta-do-container"
-nome = "iris-minio"
-compose = "~/workspace/infra-docker/iris/docker-compose.yml"
-servico = "minio"
-pasta = "/data"
-imagem = "postgres:17-alpine"
-critico = true
-
-# Todos os bancos menos os de sistema; o usuário do app o compose recria.
-[[cofre.preparo]]
-tipo = "mysql"
-nome = "espectro-mysql"
-compose = "~/workspace/infra-docker/espectro/docker-compose.yml"
-servico = "mysql"
