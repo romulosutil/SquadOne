@@ -62,7 +62,17 @@ recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
 antigo sem a lib, a fila ausente sem derrubar a rodada; na limpeza e na pausa
 também o texto do aviso do acervo inteiro dentro de 4000 caracteres e, na limpeza,
 o estado "avisado" só quando o aviso ficou na fila; a pausa roda o `main` inteiro
-com a Vercel dublada). Os de
+com a Vercel dublada). Os demais scripts trocados para a lib (12/10/2026) têm os
+seus, todos rodados à mão no Dell: `deploy/dell/prumo-mapa/prumo_mapa.test.py`
+(18; "R$" recusado com linha no journal, `[teste]` preservado, pacote ruim não
+derruba os outros), `deploy/dell/backup/backup-dell.test.py` (42, só no Dell por
+causa do `fcntl`; o código de saída do ensaio não muda com fila ausente, estragada ou
+lib que levanta), `deploy/dell/gerador-de-sites.test.py` (72; inclui o `main()` sem
+login), `deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
+ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
+022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
+(49; nada sobe o serviço nem lê o `bridge.log` real) e
+`deploy/hermes/scripts/patch_bridge_envios.test.py` (19). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório

@@ -409,13 +409,25 @@ instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"
 e 16 KB), corta com segurança o que passa do teto, grava `.tmp` oculto +
 rename com nome único, não cria a pasta e nunca levanta (devolve `gravado`,
 `recusado`, `fila_ausente` ou `falhou`; o que não gravou vai ao journal). Sem a
-lib instalada, o script volta ao jeito antigo. Já gravam pela lib o
-`auto-entrada`, o `site-pastas`, o `site-demos-limpeza` e o `site-demos-pausa`;
-o inventário das outras cópias e a ordem da troca (um PR por script) estão em
-`docs/superpowers/plans/2026-10-11-aviso-unico.md`.
+lib instalada, o script volta ao jeito antigo. Gravam pela lib (instalados em
+11 e 12/10/2026): `auto-entrada`, `site-pastas`, `site-demos-limpeza`,
+`site-demos-pausa`, `prumo-mapa` (aviso ao cliente: "R$" é recusado e vai ao
+journal, não escondido), `backup-dell` (o aviso do ensaio nunca muda o código de
+saída; `BACKUP_DELL_SEM_AVISO` continua calando antes de gravar), `gerador-de-sites`
+(o aviso nunca derruba um lead; a colisão de nome no mesmo segundo acabou),
+`site-acompanhamento --enviar` (fila ausente vira mensagem e saída 1),
+`funil-aprendizado` (o `conferir_aviso` de dado pessoal continua dele; a lib só
+grava e confere o schema, com modo 660), `whatsapp-observador` ("R$" de lead
+vira `[valor]` para a resposta não se perder; a lib é carregada a cada aviso, então
+uma cópia nova vale sem reiniciar) e `patch_bridge_envios` (roda do clone). Em aviso
+interno, "R$" vira `[valor]`; em aviso ao cliente, é recusado. Faltam o
+`graphify_projetos` e os 3 jobs sem agente do Hermes (ver o plano). O inventário das
+cópias e a ordem da troca estão em `docs/superpowers/plans/2026-10-11-aviso-unico.md`.
 
 ```bash
 python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py && python3 deploy/dell/site-pastas.test.py && python3 deploy/dell/site-demos-limpeza.test.py && python3 deploy/dell/site-demos-pausa.test.py
+python3 deploy/dell/prumo-mapa/prumo_mapa.test.py && python3 deploy/dell/backup/backup-dell.test.py && python3 deploy/dell/gerador-de-sites.test.py && python3 deploy/dell/claude-ops/site-acompanhamento.test.py
+python3 deploy/dell/funil-aprendizado.test.py && python3 deploy/dell/whatsapp-observador/observador.test.py && python3 deploy/hermes/scripts/patch_bridge_envios.test.py
 install -D -m 644 deploy/dell/lib/aviso.py ~/.local/lib/mel/aviso.py   # antes do script que a usa
 ```
 
