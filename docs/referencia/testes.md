@@ -55,12 +55,13 @@ linha do funil)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py`; a lib da fila de avisos,
 `python3 deploy/dell/lib/aviso.test.py` (formato igual ao do dell-status, cortes,
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
-`python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py`
-e `python3 deploy/dell/site-demos-limpeza.test.py` (aviso idêntico byte a byte ao
-jeito antigo, aceito pelo dell-status, o jeito antigo sem a lib, a fila ausente
-sem derrubar a rodada; no da limpeza também o texto do aviso do acervo inteiro
-dentro de 4000 caracteres e o estado "avisado" só quando o aviso ficou na fila).
-Os de
+`python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py`,
+`python3 deploy/dell/site-demos-limpeza.test.py` e `python3 deploy/dell/site-demos-pausa.test.py`
+(aviso idêntico byte a byte ao jeito antigo, aceito pelo dell-status, o jeito
+antigo sem a lib, a fila ausente sem derrubar a rodada; na limpeza e na pausa
+também o texto do aviso do acervo inteiro dentro de 4000 caracteres e, na limpeza,
+o estado "avisado" só quando o aviso ficou na fila; a pausa roda o `main` inteiro
+com a Vercel dublada). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório

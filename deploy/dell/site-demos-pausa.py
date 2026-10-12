@@ -37,6 +37,7 @@ Uso: site-demos-pausa            roda (timer diário, 09:40; o site-pastas tamb�
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -64,6 +65,9 @@ DIAS_ATE_PAUSAR = 15
 EXPIRA_DIAS = 10  # site-acompanhamento.py: expirado no 10º dia depois do envio
 RETRATO_VELHO = timedelta(hours=26)
 MAX_NOMES = 25  # no aviso; em 10/10/2026 o acervo inteiro (73) pausa de uma vez
+MAX_FALHAS = 10  # no aviso; a falha de cada projeto fica em `falha` no estado.json
+MAX_LINHA_FALHA = 200
+TETO_DO_TEXTO = 3900  # o texto do aviso vai até 4000 (deploy/dell/README.md, "Fila de avisos"), com folga
 SP = timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
 FORA = {"_recusados": "recusado", "_concluidos": "expirado"}
 LUGARES = ["", "_em-conversa", "_concluidos", "_recusados", "_fechados"]
@@ -211,10 +215,79 @@ def projeto(nome: str, chave: str) -> dict | None:
 
 # ---------------------------------------------------------------- rodada
 
-def avisar(texto: str) -> None:
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/ ao
+# lado deste arquivo; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
+def avisar(texto: str) -> bool:
+    """True quando o aviso ficou na fila. Com a lib nada levanta (fila ausente ou
+    aviso recusado voltam False e o motivo vai ao journal); sem ela, como antes:
+    ou grava, ou levanta."""
+    aviso = {"titulo": "⏸️ Site antes da venda: demos", "texto": texto, "origem": "site-demos-pausa"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # Os nomes vêm de planilha/CRM e as falhas da Vercel; se um deles trouxer
+        # "R$" a lib recusaria o aviso inteiro, e calar uma pausa é pior que
+        # mandá-lo sem o valor.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        return lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-demos-pausa").gravado
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    (FILA_AVISOS / f"site-demos-pausa-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "⏸️ Site antes da venda: demos", "texto": texto, "origem": "site-demos-pausa"}, ensure_ascii=False), encoding="utf-8")
+    (FILA_AVISOS / f"site-demos-pausa-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+    return True
+
+
+def _montar_texto(pausados: list[dict], voltaram: list[dict], falhas: list[str], max_nomes: int, max_falhas: int) -> str:
+    linhas = []
+    if pausados:
+        linhas += [f"Pausei {len(pausados)} demo(s) na Vercel (recusado ou expirado há {DIAS_ATE_PAUSAR}+ dias). "
+                   "Nada foi apagado; a pasta continua em ~/auto-site."]
+        linhas += [f"• {i['nome']} ({i['motivo']} desde {date.fromisoformat(i['desde']):%d/%m})" for i in pausados[:max_nomes]]
+        if len(pausados) > max_nomes:
+            linhas.append(f"• e mais {len(pausados) - max_nomes} (lista em {HISTORICO})")
+    if voltaram:
+        linhas += ([""] if linhas else []) + [f"De volta ao ar ({len(voltaram)}), o lead voltou:"]
+        linhas += [f"• {d.get('nome')}" for d in voltaram[:max_nomes]]
+        if len(voltaram) > max_nomes:
+            linhas.append(f"• e mais {len(voltaram) - max_nomes} (lista em {HISTORICO})")
+    if falhas:
+        linhas += ([""] if linhas else []) + [f"Não consegui ({len(falhas)}):"]
+        linhas += [f"• {f if len(f) <= MAX_LINHA_FALHA else f[:MAX_LINHA_FALHA - 1] + '…'}" for f in falhas[:max_falhas]]
+        if len(falhas) > max_falhas:
+            linhas.append(f"• e mais {len(falhas) - max_falhas} (cada uma em `falha` no {ESTADO})")
+    return "\n".join(linhas)
+
+
+def texto_do_aviso(pausados: list[dict], voltaram: list[dict], falhas: list[str]) -> str:
+    """O aviso de uma rodada. Até 25 nomes em cada lista e 10 falhas (200 caracteres
+    cada), com "e mais N" no resto; se ainda assim passar de TETO_DO_TEXTO, tenta com
+    menos nomes e menos falhas. O teto do aviso é 4000 caracteres e cortar seco
+    levaria o fim, que é onde está a lista do que NÃO deu certo."""
+    for max_nomes, max_falhas in ((MAX_NOMES, MAX_FALHAS), (15, 6), (8, 4), (4, 2), (2, 1)):
+        texto = _montar_texto(pausados, voltaram, falhas, max_nomes, max_falhas)
+        if len(texto) <= TETO_DO_TEXTO:
+            break
+    return texto  # nomes enormes: o que passar de 4000 a lib corta, com a marca "(cortado)"
 
 
 def anotar(evento: dict) -> None:
@@ -331,19 +404,7 @@ def main() -> int:
     print(f"pausados agora: {len(pausados)}; voltaram ao ar: {len(voltaram)}; falhas: {len(falhas)}; "
           f"contando os 15 dias: {contando}")
     if pausados or voltaram or falhas:
-        linhas = []
-        if pausados:
-            linhas += [f"Pausei {len(pausados)} demo(s) na Vercel (recusado ou expirado há {DIAS_ATE_PAUSAR}+ dias). "
-                       "Nada foi apagado; a pasta continua em ~/auto-site."]
-            linhas += [f"• {i['nome']} ({i['motivo']} desde {date.fromisoformat(i['desde']):%d/%m})" for i in pausados[:MAX_NOMES]]
-            if len(pausados) > MAX_NOMES:
-                linhas.append(f"• e mais {len(pausados) - MAX_NOMES} (lista em {HISTORICO})")
-        if voltaram:
-            linhas += ([""] if linhas else []) + [f"De volta ao ar ({len(voltaram)}), o lead voltou:"]
-            linhas += [f"• {d.get('nome')}" for d in voltaram]
-        if falhas:
-            linhas += ([""] if linhas else []) + [f"Não consegui ({len(falhas)}):"] + [f"• {f}" for f in falhas]
-        avisar("\n".join(linhas))
+        avisar(texto_do_aviso(pausados, voltaram, falhas))
     return 1 if falhas else 0
 
 
