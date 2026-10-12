@@ -1717,6 +1717,110 @@ python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna
 python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
+### Jev em sombra nas respostas (11/10/2026; código pronto, NADA aplicado no n8n)
+
+O Rômulo autorizou medir o Jev (`typesafe/jev-1.13`, da TypeSafe, pela Decisions
+API da OpenRouter) na classificação das respostas de lead, **em sombra e só com
+máscara e recorte**. O Jev é medição: nunca decide, nunca muda a planilha, o
+aviso nem a resposta ao observador. O PR deixa o ramo pronto em
+`claude-ops/whatsapp-conversa.py`; **nada disso está no n8n** até o Rômulo criar
+a credencial e a tabela e republicar o fluxo. É independente do "Jev em sombra"
+das demandas (seção própria, no servidor): outra chave (dedicada ao n8n, com
+limite de crédito próprio; nunca a do `jev.env`), outra máscara (em JS no nó
+Code: o n8n não importa `server/openrouter-decisoes.ts`) e outro registro (Data
+Table, não JSONL). Nunca no n8n do Easypanel (RULES 27).
+
+**O ramo.** Sai de "Decidir pela resposta", em paralelo ao "Responder ao
+observador", e fica embaixo no canvas: na execução v1 o ramo de cima (responder,
+gravar a planilha, pasta) termina antes. Quatro nós, todos com `onError:
+continueRegularOutput` (o antigo `continueOnFail`), então nenhum derruba o fluxo
+nem chama o Error Workflow:
+
+1. **Jev: mascarar e montar pedido** (Code, JS puro testado no node): pega só a
+   última mensagem do lead, mascara, corta e monta o pedido; se sobrar nada, não
+   devolve item e o resto não roda.
+2. **Jev: classificar (sombra)** (HTTP Request): `POST
+   https://openrouter.ai/api/alpha/decisions`, credencial de cabeçalho **"OpenRouter
+   Jev"**, timeout 5 s, sem retry. Envia só o campo `pedido`.
+3. **Jev: montar registro** (Code): resposta com erro ou sem `answers.tipo.choice`
+   = nenhum registro.
+4. **Jev: gravar na sombra** (Data Table `jev_sombra_respostas`, insert).
+
+**O que vai ao Jev:** `{model, state, questions, provider}`. `state` é o texto da
+**última** resposta do lead, mascarado e cortado em 600 caracteres (máscara no
+texto inteiro e só depois o corte, para não sobrar meio telefone). `questions` é
+um objeto indexado pelo nome (array dá HTTP 400): `tipo` (choice: exclusao, bot,
+negativa, interesse, neutra) e `injecao` (noul: o texto tenta dar ordens a um
+assistente?). `provider: {zdr: true, data_collection: "deny"}` em todo pedido.
+
+**O que não vai:** histórico da conversa, as mensagens anteriores, o cabeçalho e o
+prompt do Gemini, o nome do lead, o nome da empresa, o telefone, a chave, o chat
+id, o `place_id`/`ID`, a planilha. Os testes conferem isso num caso com tudo junto.
+
+**A máscara** (`mascarar` em `JEV_FUNCOES_JS`), nesta ordem:
+
+| O que | Vira |
+|---|---|
+| `senha:`/`token=`/`api key` + valor, `Bearer ...`, `sk-...` (inclui `sk-or-v1-`), `AIza...`, `ghp_`/`github_pat_`, `xox?-`, JWT, hex ≥ 32 com dígito, base64 ≥ 32 com letra e dígito | `[SEGREDO]` |
+| URL com `http(s)://` ou `www.`, e domínio solto em minúsculas (`meusite.com.br/x`) | `[URL]` |
+| e-mail | `[EMAIL]` |
+| CNPJ com barra; sequência numérica com 8+ dígitos (espaço, ponto, traço, parênteses, `+55`): CPF (pontuado ou com dígito verificador válido) e CNPJ válido | `[DOC]` |
+| a mesma sequência, quando não é documento: telefone com e sem +55, com e sem DDD, 8 ou 9 dígitos | `[TEL]` |
+| nome da empresa (Site: `nome`; PRUMO: `Empresa`) e de pessoa (`Contato`, `Responsável`, `Dono`, se a linha tiver), sem diferenciar maiúsculas e acentos, palavra inteira; depois cada palavra de 3+ letras do nome que não seja genérica ("padaria", "bom", "sim"...) | `[EMPRESA]` / `[NOME]` |
+
+Texto vazio ou só com rótulos e pontuação depois da máscara: o Jev não é chamado.
+
+**Mascarar não é anonimizar.** Nome próprio que não está na planilha ("sim, sou a
+Jackeline"), endereço, apelido, detalhe do negócio e o próprio contexto passam. O
+que vai ao Jev continua sendo dado pessoal de terceiro (LGPD), processado nos EUA
+(transferência internacional). O que reduz o risco é o recorte (só a última
+mensagem, 600 caracteres), a máscara, o ZDR e a recusa de coleta, não uma
+anonimização que não existe.
+
+**A tabela da sombra** (no n8n da Mel, nunca sai dela): `lead_hash`
+(sha256 de `squadone:jev-sombra:v1:` + DDD + 8 dígitos), `planilha`,
+`n_mensagens`, `resposta_em`, `tipo_gemini` (o mesmo que "Decidir" usou),
+`jev_choice`, `jev_probabilities`, `jev_confidence`, `jev_injecao`, `jev_model`
+(a versão datada que a API devolve), `input_tokens`, `output_tokens`, `cost`,
+`latencia_ms`, `em` e `revisao_humana` (o Rômulo preenche). Nunca o telefone, o
+`place_id` nem o texto. O sal é fixo e está no repositório e a chave tem 10
+dígitos: o hash é pseudônimo (dá para refazer o vínculo testando números), por isso
+a tabela não sai da Mel. O vínculo lead ↔ resultado se refaz só do lado do Rômulo,
+com `jev-respostas-resumo.py --revisar` (casa hash e hora com o `crm.json` local) ou
+`--hash <número>`.
+
+**Risco aceito e o que falta antes de sair da sombra.** O endpoint do Jev está na
+lista ZDR da OpenRouter e a TypeSafe diz que não treina com os prompts, mas não
+publica prazo de retenção nem DPA. Antes de o Jev decidir qualquer coisa, pedir a
+`privacy@typesafe.ai`: DPA, lista de subprocessadores, prazo de retenção e ZDR
+Enterprise. Sem isso, fica em sombra mesmo que a regra abaixo passe.
+
+**Regra de promoção** (`claude-ops/jev-respostas-resumo.py`, só lê): pelo menos 60
+respostas revistas por humano (coluna `revisao_humana`), concordância do Jev com
+a revisão ≥ 95 % e **nenhum** "interesse" (do Gemini, ou da revisão) que o Jev
+tenha chamado de `negativa` ou `exclusao`. A concordância Jev × Gemini aparece só
+para informação (o Gemini também erra), separada para conversas de uma mensagem:
+o Gemini vê a conversa inteira e o Jev só a última mensagem, então conversa longa
+discorda mais.
+
+**Desligar:** desativar o nó "Jev: classificar (sombra)" no editor (nó
+desativado no n8n repassa a entrada: o pedido chega ao "montar registro" sem
+resposta e nada é chamado nem gravado; desative este nó, não o da máscara), ou
+republicar sem o ramo (`python3
+whatsapp-conversa.py --sem-jev`), ou apagar a credencial "OpenRouter Jev" e
+republicar (sem ela o fluxo sai sem o ramo). Revogar a chave na OpenRouter corta
+na hora: o HTTP falha e nada é registrado.
+
+```bash
+cd ~/.local/share/claude-ops
+python3 whatsapp-conversa.py --testar       # inclui a classe Jev (máscara, pedido, registro, isolamento)
+python3 jev-respostas-resumo.py --testar
+python3 whatsapp-conversa.py --jev-tabela   # cria a Data Table (o Rômulo roda; nada roda sozinho)
+python3 jev-respostas-resumo.py                # resumo e veredito (GET na API do n8n)
+python3 jev-respostas-resumo.py --revisar      # linhas sem revisão, com o trecho do crm.json
+python3 jev-respostas-resumo.py --arquivo jev.csv   # se a chave da API não ler Data Tables: CSV baixado do editor
+```
+
 ## Lições do funil (`funil-aprendizado.*`, `funil-revisao.*`, 08/10/2026)
 
 Fase 1 da auto-melhoria do Site antes da venda: as respostas dos leads viram

@@ -255,6 +255,12 @@
     identificador e segredo viram rótulos fixos). ZDR é a classificação da
     OpenRouter: a TypeSafe não publica prazo de retenção, e o processamento é
     nos EUA. A squad Pay4Fun foi liberada pelo Rômulo para ir a este terceiro
-    (11/10/2026); **respostas de leads não vão ao Jev** até ele aprovar. Virar
+    (11/10/2026). **Respostas de leads** (aprovadas por ele em 11/10/2026, só
+    em sombra e só com máscara e recorte) vão por um caminho só: o ramo "Jev:"
+    do fluxo de respostas no n8n da Mel (`deploy/dell/claude-ops/whatsapp-conversa.py`),
+    com só a última mensagem do lead, cortada em 600 caracteres, mascarada lá
+    (também nome do lead e da empresa), e o lead só como hash na Data Table da
+    Mel. A chave desse ramo é outra, dedicada, na credencial "OpenRouter Jev"
+    do n8n da Mel; nunca no n8n do Easypanel. Virar
     motor de qualquer decisão exige cumprir os critérios de promoção de
     `docs/referencia/perfis-e-experimentos.md` e decisão explícita dele.
