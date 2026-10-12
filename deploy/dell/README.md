@@ -316,6 +316,17 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   (saída com `## Response` em `~/.hermes/cron/output/<id>/`, 15 min depois da gravação) e
   não gravou; **amarelo que resolve sozinho** se o portão nem precisou acordá-lo (não saiu
   Short novo). Rotina que sumiu do Hermes é amarelo até alguém tirar o dado da lista.
+- **Rotinas caladas** (`rotinas-caladas`, grupo Dados): "Rotina · …" só diz se a rodada
+  rodou; não diz se ela tinha algo a dizer. A revisão diária do ASMR respondeu `[SILENT]`
+  em todas as rodadas de 26/09 a 11/10 (o dado que ela lê tinha parado) e ficava verde.
+  Lê as saídas em `~/.hermes/cron/output/<id>/` (o Hermes guarda as 50 últimas) e conta
+  as respostas `[SILENT]` seguidas no fim (a seção `## Response`). Portão que pulou
+  (`wakeAgent=false`), script sem saída e erro não contam para nenhum lado. **Amarelo** com
+  5 ou mais seguidos cobrindo 3 dias ou mais. Ficam de fora as rotinas **pausadas** (as do
+  ASMR, o Radar e o "SquadOne — aprender", pausadas de propósito em 11/10), as só-script
+  (`no_agent`: Entrada, Graphify, Sites e pendências) e os ids listados em
+  `~/.local/state/dell-status/silencio-esperado` (um por linha, `#` comenta), para um vigia
+  que só fala quando há o que dizer.
 
 ### Fila de avisos (06/10/2026)
 
