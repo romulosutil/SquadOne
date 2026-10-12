@@ -2,11 +2,22 @@
 """Testes do observador do WhatsApp com linhas de log de mentira, n8n de mentira
 e relógio fixo. Nada é lido do Hermes nem gravado na planilha; números fictícios.
 
+A troca do avisar_pelo_hermes() pela lib de aviso (11/10/2026) tem as suas classes
+(AvisoPelaLib, SemLib, AvisoDeLead): o aviso gravado pela lib é IDÊNTICO, byte a
+byte, ao do jeito antigo, o dell-status o aceita, sem a lib o serviço volta ao
+antigo, a fila ausente não derruba o laço nem pede a entrega, e "R$" no trecho do
+lead vira [valor] em vez de a resposta do lead se perder. Nada sobe o serviço, lê o
+bridge.log do Hermes nem toca a fila real: a fila, o dell-status e o subprocess
+são dublês ou pastas temporárias.
+
   python3 deploy/dell/whatsapp-observador/observador.test.py
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -18,6 +29,13 @@ AQUI = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("observador", AQUI / "observador.py")
 ob = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ob)
+
+try:
+    _spec_ds = importlib.util.spec_from_file_location("dell_status_para_observador", AQUI.parent / "dell-status.py")
+    ds = importlib.util.module_from_spec(_spec_ds)
+    _spec_ds.loader.exec_module(ds)
+except Exception:  # noqa: BLE001 — sem fcntl (Windows)
+    ds = None
 
 LEAD, LEAD2, OUTRO = "5527999887766", "5511988776655", "5521977776666"
 CHAVE, CHAVE2 = ob.chave_do_numero(LEAD), ob.chave_do_numero(LEAD2)
@@ -53,6 +71,7 @@ class EntregaImediata(unittest.TestCase):
     def test_aviso_gravado_manda_drenar(self):
         ob.DELL_STATUS = self.tmp / "dell-status"
         ob.DELL_STATUS.write_text("#!/bin/sh\n")
+        ob.FILA_DE_AVISOS.mkdir()  # a lib de aviso não cria a pasta da fila
         ob.avisar_pelo_hermes("X respondeu")
         self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
         self.assertEqual(len(self.chamadas), 1)
@@ -61,6 +80,7 @@ class EntregaImediata(unittest.TestCase):
 
     def test_sem_dell_status_so_grava(self):
         ob.DELL_STATUS = self.tmp / "nao-existe"
+        ob.FILA_DE_AVISOS.mkdir()
         ob.avisar_pelo_hermes("X respondeu")
         self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
         self.assertEqual(self.chamadas, [])
@@ -344,6 +364,257 @@ class Respostas(Base):
         self.obs.fechar_conversas(todas=True)
         self.obs.mandar_conversas()
         self.assertEqual(sorted(c["chave"] for c in self.conversas()), sorted([CHAVE, CHAVE2]))
+
+
+# Textos como o serviço os monta: o aviso de abordagem, o do remendo que sumiu e o que
+# o n8n devolve com o trecho do que o lead escreveu.
+TEXTOS_DO_AVISO = [
+    ob.texto_do_lote([{"planilha": "site", "nome": "Padaria Açaí & Cia", "acao": "abordou", "hora": "09:59"}]),
+    ob.texto_do_lote([{"planilha": "site", "nome": "A", "acao": "abordou", "hora": "09:59"},
+                      {"planilha": "prumo", "nome": "B", "acao": "retomou", "antes": "pronto", "hora": "10:01"}]),
+    "A bridge do WhatsApp perdeu o remendo (provável `hermes update`). Para pôr de volta: " + ob.COMANDO_REMENDO,
+    "Padaria Teste (Site antes da venda) respondeu: \"pode mandar o link\" — ação, coração\nsegunda linha",
+    "dois  espaços  e  nada de moeda",
+]
+
+
+class BaseDoAviso(unittest.TestCase):
+    """A fila, o dell-status e o subprocess do módulo trocados por dublês, e a lib do repo na frente."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="obs-teste-"))
+        nomes = ("FILA_DE_AVISOS", "DELL_STATUS", "PASTAS_DA_LIB")
+        self.antes = {k: getattr(ob, k) for k in nomes}
+        self.run_antes = ob.subprocess.run
+        self.addCleanup(self.restaurar)
+        ob.FILA_DE_AVISOS = self.tmp / "fila"
+        ob.DELL_STATUS = self.tmp / "dell-status"
+        ob.DELL_STATUS.write_text("#!/bin/sh\n")
+        self.entregas = []
+        ob.subprocess.run = lambda *a, **k: self.entregas.append(a[0])
+        self.lib_do_repo = list(self.antes["PASTAS_DA_LIB"])
+
+    def restaurar(self):
+        for k, v in self.antes.items():
+            setattr(ob, k, v)
+        ob.subprocess.run = self.run_antes
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def fila(self):
+        return sorted(ob.FILA_DE_AVISOS.glob("*.json")) if ob.FILA_DE_AVISOS.is_dir() else []
+
+    def avisos(self):
+        return [json.loads(p.read_text(encoding="utf-8")) for p in self.fila()]
+
+    def sem_lib(self):
+        ob.PASTAS_DA_LIB = [self.tmp / "sem-lib"]
+
+    def avisar(self, texto):
+        """Roda o avisar_pelo_hermes e devolve o que ele escreveu no stdout (o log)."""
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(io.StringIO()):
+            ob.avisar_pelo_hermes(texto)
+        return saida.getvalue()
+
+    def gravado_pelo(self, jeito: str, texto: str) -> bytes:
+        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+        shutil.rmtree(ob.FILA_DE_AVISOS, ignore_errors=True)
+        ob.FILA_DE_AVISOS.mkdir()
+        ob.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.tmp / "sem-lib"]
+        self.avisar(texto)
+        self.assertEqual(len(self.fila()), 1, self.fila())
+        return self.fila()[0].read_bytes()
+
+
+class AvisoPelaLib(BaseDoAviso):
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(ob.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib" / "aviso.py").resolve())
+
+    def test_aviso_identico_ao_jeito_antigo(self):
+        for texto in TEXTOS_DO_AVISO:
+            with self.subTest(texto=texto):
+                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+
+    def test_conteudo_fixado(self):
+        esperado = '{"titulo": "📱 Observador do WhatsApp", "texto": "uma\\nduas", "origem": "whatsapp-observador"}'
+        self.assertEqual(self.gravado_pelo("lib", "uma\nduas"), esperado.encode("utf-8"))
+
+    def test_nome_e_atomicidade(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("x")
+        self.assertRegex(self.fila()[0].name, r"^observador-\d+-[0-9a-f]{6}\.json$")
+        self.assertEqual([p for p in ob.FILA_DE_AVISOS.iterdir() if not p.name.endswith(".json")], [])
+
+    @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
+    def test_dell_status_aceita(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        for texto in TEXTOS_DO_AVISO:
+            self.avisar(texto)
+        self.assertEqual(len(self.fila()), len(TEXTOS_DO_AVISO))
+        for aviso in self.avisos():
+            ds.validar_aviso(aviso)
+
+    def test_gravado_pede_a_entrega_imediata_uma_vez(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("X respondeu")
+        self.assertEqual(len(self.entregas), 1)
+        self.assertEqual(self.entregas[0][-1], str(ob.DELL_STATUS))
+        self.assertIn("--drenar", self.entregas[0][2])
+
+    def test_fila_ausente_nao_e_criada_nao_levanta_e_nao_pede_entrega(self):
+        saida = self.avisar("X respondeu")
+        self.assertFalse(ob.FILA_DE_AVISOS.exists())
+        self.assertEqual(self.entregas, [])
+        self.assertIn("aviso não gravado: fila_ausente", saida)
+
+    def test_fila_que_e_arquivo_nao_levanta_e_nao_pede_entrega(self):
+        ob.FILA_DE_AVISOS.write_text("é um arquivo, não uma pasta")
+        self.avisar("X respondeu")
+        self.assertEqual(self.entregas, [])
+
+    def test_aviso_recusado_nao_pede_entrega(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.assertIn("aviso não gravado: recusado", self.avisar("   "))
+        self.assertEqual((self.fila(), self.entregas), ([], []))
+
+    def test_valor_em_reais_no_trecho_do_lead_nao_perde_a_resposta(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("Padaria Teste respondeu: \"quanto custa? é R$ 50 por mês?\" (interesse)")
+        texto = self.avisos()[0]["texto"]
+        self.assertNotRegex(texto, r"R\s*\$")
+        self.assertIn("Padaria Teste respondeu:", texto)
+        self.assertIn("quanto custa? é [valor]", texto)
+        self.assertIn("por mês?", texto)
+        self.assertEqual(len(self.entregas), 1)  # gravou: manda esvaziar a fila
+
+    def test_variantes_de_r_cifrao_do_lead(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        for bruto in ("r$ 30", "R $30,00", "R$", "R\n$ 5"):
+            with self.subTest(bruto=bruto):
+                self.avisar(f"Lead disse: custa {bruto} certo?")
+        self.assertEqual(len(self.fila()), 4)
+        self.assertTrue(all("[valor]" in a["texto"] and not re.search(r"R\s*\$", a["texto"], re.I) for a in self.avisos()))
+
+    def test_texto_sem_valor_nao_e_mexido(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("  dois  espaços  ")
+        self.assertEqual(self.avisos()[0]["texto"], "  dois  espaços  ")
+
+    def test_texto_enorme_de_lead_e_cortado_e_o_aviso_sai(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("Padaria Teste respondeu: " + "blá " * 2000)
+        aviso = self.avisos()[0]
+        self.assertLessEqual(len(aviso["texto"]), 4000)
+        self.assertTrue(aviso["texto"].endswith("… (cortado)"))
+        self.assertTrue(aviso["texto"].startswith("Padaria Teste respondeu:"))
+        if ds is not None:
+            ds.validar_aviso(aviso)
+
+    def test_valor_e_texto_enorme_juntos(self):
+        ob.FILA_DE_AVISOS.mkdir()
+        self.avisar("Lead: R$ 10 " + "x" * 5000)
+        aviso = self.avisos()[0]
+        self.assertNotRegex(aviso["texto"], r"R\s*\$")
+        self.assertLessEqual(len(aviso["texto"]), 4000)
+
+
+class SemLib(BaseDoAviso):
+    def test_sem_copia_volta_ao_jeito_antigo(self):
+        self.sem_lib()
+        self.assertIsNone(ob.lib_de_aviso())
+        self.avisar("x")
+        self.assertEqual(len(self.fila()), 1)  # o antigo cria a pasta da fila
+        self.assertRegex(self.fila()[0].name, r"^observador-\d+\.json$")
+        self.assertEqual(len(self.entregas), 1)
+
+    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+        quebrada = self.tmp / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
+        ob.PASTAS_DA_LIB = [quebrada]
+        self.assertIsNone(ob.lib_de_aviso())
+        self.avisar("x")
+        self.assertEqual(len(self.fila()), 1)
+        self.assertEqual(len(self.entregas), 1)
+
+    def test_copia_quebrada_cai_na_seguinte(self):
+        quebrada = self.tmp / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
+        ob.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
+        self.assertEqual(Path(ob.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib" / "aviso.py").resolve())
+
+    def test_sem_a_do_repo_a_instalada_serve(self):
+        instalada = self.tmp / "mel"
+        instalada.mkdir()
+        shutil.copy(AQUI.parent / "lib" / "aviso.py", instalada / "aviso.py")
+        ob.PASTAS_DA_LIB = [self.tmp / "sem-lib", instalada]
+        self.assertEqual(Path(ob.lib_de_aviso().__file__).resolve(), (instalada / "aviso.py").resolve())
+
+    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
+        self.sem_lib()
+        self.avisar("custa R$ 5")
+        self.assertEqual(self.avisos()[0]["texto"], "custa R$ 5")
+
+    def test_sem_a_lib_o_oserror_e_logado_e_nao_pede_entrega(self):
+        self.sem_lib()
+        ob.FILA_DE_AVISOS.write_text("é um arquivo, não uma pasta")
+        saida = self.avisar("x")
+        self.assertIn("aviso não gravado:", saida)
+        self.assertEqual(self.entregas, [])
+
+
+class AvisoDeLead(BaseDoAviso):
+    """O caminho inteiro: o n8n devolve o aviso de uma resposta e o Observador o grava pela lib."""
+
+    def setUp(self):
+        super().setUp()
+        self.agora = T0
+        self.n8n = N8nDeMentira()
+        self.dir = Path(tempfile.mkdtemp(prefix="obs-teste-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.bridge = self.dir / "bridge.js"
+        self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n// >>> squadone:respostas\n")
+        self._sessao, ob.SESSAO_HERMES = ob.SESSAO_HERMES, self.dir
+        self.addCleanup(lambda: setattr(ob, "SESSAO_HERMES", self._sessao))
+        ob.FILA_DE_AVISOS.mkdir()
+        self.obs = ob.Observador({CHAVE}, chamar=self.n8n, avisar=ob.avisar_pelo_hermes,
+                                 relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado")
+
+    def passar(self, segundos):
+        self.agora += segundos
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.obs.tick()
+
+    def test_resposta_do_lead_com_valor_chega_na_fila_sem_o_valor(self):
+        with open(self.obs.pasta / "respostas.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"chave": CHAVE, "ts": T0, "texto": "quanto custa? R$ 50?"}, ensure_ascii=False) + "\n")
+        self.n8n.respostas.append({"ok": True, "marcados": [
+            {"planilha": "site", "tipo": "interesse", "aviso": "Padaria Teste respondeu: \"quanto custa? R$ 50?\""}]})
+        self.passar(1)
+        self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertEqual(len(self.avisos()), 1)
+        self.assertEqual(self.avisos()[0]["texto"], "Padaria Teste respondeu: \"quanto custa? [valor] ?\"")  # sem_valores deixa um espaço depois do [valor]
+        self.assertEqual(self.avisos()[0]["origem"], "whatsapp-observador")
+        self.assertEqual(len(self.entregas), 1)
+
+    def test_remendo_que_sumiu_avisa_uma_vez_pela_fila(self):
+        self.bridge.write_text("// bridge nova, sem remendo\n")
+        self.passar(ob.RELER_NUMEROS_S)
+        self.passar(ob.RELER_NUMEROS_S)
+        self.assertEqual(len(self.avisos()), 1)
+        self.assertIn(ob.COMANDO_REMENDO, self.avisos()[0]["texto"])
+        if ds is not None:
+            ds.validar_aviso(self.avisos()[0])
+
+    def test_fila_ausente_nao_derruba_o_laco(self):
+        shutil.rmtree(ob.FILA_DE_AVISOS)
+        self.bridge.write_text("// bridge nova, sem remendo\n")
+        self.passar(ob.RELER_NUMEROS_S)  # conferir_remendo -> avisar -> fila ausente: segue
+        self.passar(1)
+        self.assertTrue(self.obs.remendo_avisado)
+        self.assertFalse(ob.FILA_DE_AVISOS.exists())
+        self.assertEqual(self.entregas, [])
 
 
 class Seguir(unittest.TestCase):
