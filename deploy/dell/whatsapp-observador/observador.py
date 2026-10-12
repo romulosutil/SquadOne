@@ -68,6 +68,7 @@ mostra só DDD + 2 últimos dígitos, nunca o texto.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -176,11 +177,49 @@ def espera_da_falha(erro: Exception, seguidas: int) -> int:
     return RETENTAR_CONEXAO_S
 
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/ no nível
+# acima desta pasta; no Dell, instalada em ~/.local/lib/mel/ (instalados.json). Primeiro
+# a do repo, para o teste nunca pegar uma cópia instalada. Carregada a cada aviso (são
+# raros): uma cópia nova ou quebrada vale na hora, sem reiniciar o serviço.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar_pelo_hermes() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o serviço: tenta a próxima
+            continue
+    return None
+
+
 def avisar_pelo_hermes(texto: str) -> None:
+    aviso = {"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # O texto traz trecho do que o lead escreveu (e nome de empresa): "R$" aí é
+        # comum ("quanto custa? R$ 50 ?") e a lib recusaria o aviso inteiro, perdendo
+        # a resposta do lead. Melhor mandar sem o valor (RULES 24) do que não mandar.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        r = lib.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="observador")
+        if not r.gravado:
+            log("aviso não gravado:", r.estado, r.motivo)
+            return
+        entregar_ja()
+        return
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
     try:
         FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
-        (FILA_DE_AVISOS / f"observador-{time.time_ns()}.json").write_text(
-            json.dumps({"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}, ensure_ascii=False), encoding="utf-8")
+        (FILA_DE_AVISOS / f"observador-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         log("aviso não gravado:", e)
         return
