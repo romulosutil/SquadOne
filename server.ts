@@ -21,6 +21,7 @@ import {
 import { ModeloOcupado } from "./server/orchestrator.ts";
 import { haTurnoEmAndamento, rodarDemanda } from "./server/turno.ts";
 import { prepararSombra } from "./server/luna-sombra.ts";
+import { prepararJevSombra } from "./server/jev-sombra.ts";
 import { ErroCalendario, LeituraIncompleta, listarAgendaDoDia, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
@@ -208,6 +209,10 @@ async function startServer() {
   // do Dell conferido no boot; qualquer falta vira log e null — o turno roda
   // igual, com ou sem ela.
   const sombra = await prepararSombra(process.env, { dataDir, operations: squadOneMode === "operations", agendaAtiva });
+  // Jev em sombra (RULES 27): mede o roteamento da demanda, nunca decide. Só
+  // com SQUADONE_JEV_SOMBRA=true e a chave no jev.env, no operations com a
+  // agenda; config ilegível vira log e null, e o turno roda igual.
+  const jev = await prepararJevSombra(process.env, { dataDir, operations: squadOneMode === "operations", agendaAtiva });
 
   // O Traefik do Easypanel e o unico caminho ate aqui: sem isto o Express
   // reporta o IP do proxy em req.ip e o porteiro julgaria sempre o mesmo IP.
@@ -248,7 +253,7 @@ async function startServer() {
       chatsPermitidos: c.chatsPermitidos,
       // O bot não tem aba: sem prefixo, squadId ausente = primeira squad ativa +
       // redirecionamento automático; com `/p`, a squad do prefixo (telegram-entrada).
-      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }, sombra),
+      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }, { luna: sombra, jev }),
       enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
       digitando: (chatId) => avisarDigitando(c, chatId),
       transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
@@ -655,7 +660,7 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
-      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }, sombra);
+      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }, { luna: sombra, jev });
       // A avaliação observa um turno já terminado; nunca participa da execução,
       // da agenda ou do resultado principal. Falha posterior não pode induzir
       // retry de uma delegação que talvez já tenha criado eventos no Google.
