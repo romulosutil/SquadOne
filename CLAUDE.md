@@ -77,6 +77,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/avaliacoes-turno.ts  nota do usuário sobre um turno recém-entregue (desligada por padrão)
   server/luna-sombra.ts   Luna em sombra (desligada): prompt, leitura da saída e comparação PUROS; cola com fila, teto/dia, codex exec sem shell, JSONL 600
   server/openrouter-decisoes.ts  transporte do Jev (OpenRouter /alpha/decisions): pedido, máscara, validação e erro PUROS; deny + ZDR, sem retry, chave nunca em log
+  server/jev-sombra.ts    Jev em sombra (desligado, RULES 27): 4 perguntas por demanda e comparação com o Gemini PURAS; fila, teto/dia e de US$, JSONL 600; finanças nunca vão
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
@@ -156,7 +157,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Agenda no Dell, avisos, lembretes | `acesso`, `dados`, `avisos`, `lembretes`, `vigia`, `sinal-de-vida` | `agenda-no-dell.md` |
 | Bot do Telegram | `telegram*`, `transcricao`, `financas/gasto-falado` | `telegram.md` |
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
-| Perfis, avaliação de turno, Luna | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra` | `perfis-e-experimentos.md` |
+| Perfis, avaliação de turno, Luna, Jev | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 
@@ -197,7 +198,8 @@ O Escritório é só frontend e não grava nada; estado de pessoa só com fonte,
 **Perfis.** `SQUADONE_MODE`: `app` (Easypanel) ou `operations` (Dell, só loopback); valor
 desconhecido derruba o boot. A Central é somente leitura para serviços. A Hoje mostra no
 máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
-padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel.
+padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
+(RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o
 Dell acrescenta); a seed fica fora de `data/`. O browser nunca vê token do Google; `prompt=consent`

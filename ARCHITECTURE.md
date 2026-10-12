@@ -276,6 +276,43 @@ demanda ─► rodarTurno (Gemini) ─► capacidades ─► TurnoResult (como s
   conferir na conta ChatGPT que "Melhorar o modelo para todos" está
   desligado: sem isso o roster viraria dado de treino.
 
+### Jev em modo sombra (11/10/2026, desligado)
+
+O Jev (`typesafe/jev-1.13`) é o "modelo de decisão" da TypeSafe servido pela
+OpenRouter (`POST https://openrouter.ai/api/alpha/decisions`): não gera texto,
+recebe um `state` e perguntas e devolve probabilidades. **Medição até
+promoção** (regra 27): depois de cada demanda, sem `await`, ele responde quatro
+perguntas — squad, sala, agenda ou tarefa, pede contratação — e o servidor
+compara com o que o Gemini fez. Nada decide, nada volta ao turno. Detalhes,
+critérios de promoção e o registro em `docs/referencia/perfis-e-experimentos.md`,
+"Jev em sombra"; ligar e ler em `deploy/dell/README.md`, "Jev em sombra".
+
+```
+demanda ─► rodarDemanda ─► executarTurno (1 ou 2 turnos do Gemini) ─► TurnoResult (como sempre)
+              │ observarDemanda(roster, squad inicial/final, chamadas do último turno) — 1 por demanda
+              ▼ sem await, fora de turnosEmAndamento
+        server/jev-sombra.ts: finanças? → linha "pulada", nada sai
+              ├─► perguntasDoTurno (opções embaralhadas, ordem gravada)
+              ├─► server/openrouter-decisoes.ts: mascararParaJev → POST (deny + ZDR, timeout 5 s, sem retry)
+              ├─► compararComGemini: concorda | discorda | não comparável, por pergunta
+              └─► SQUADONE_DATA_DIR/jev-sombra/AAAA-MM.jsonl (600), tetos por dia e em US$
+```
+
+- **O que vai à OpenRouter/TypeSafe (EUA):** a demanda mascarada (telefone,
+  e-mail, CPF/CNPJ, URL com identificador e segredo viram rótulos) e, como
+  opções, id + nome + escopo das squads ativas e das salas da squad final.
+  Nada das pessoas, do treino, da agenda ou do Google.
+- **O que nunca vai:** finanças (regra 24: demanda que parece finanças nem sai;
+  sala de finanças só pelo nome; valor em dinheiro sai de todo escopo); a
+  resposta do Gemini; credenciais; respostas de leads (até o Rômulo aprovar).
+- **Retenção:** `data_collection: "deny"` e `zdr: true` em todo pedido. O
+  endpoint está na lista ZDR da OpenRouter, mas ZDR é classificação **dela**;
+  a TypeSafe não publica prazo de retenção. Risco aceito pelo Rômulo em
+  11/10/2026, com a Pay4Fun liberada para este terceiro.
+- **A chave** (`OPENROUTER_API_KEY`) mora só em `~/.config/squadone/jev.env`
+  (600) no Dell; nenhum erro, log ou JSONL a repete. 401/403/402 desligam o
+  Jev até reiniciar o processo. Nunca no Easypanel.
+
 ### Finanças (07/10/2026)
 
 Como está no código (perfil `operations`; instalação e conferência em

@@ -506,6 +506,52 @@ só no Gemini, só na Luna) e as 10 divergências mais recentes.
 parte (`rm -r ~/.local/share/squadone/luna-sombra`). Não há nada a desfazer no
 Google, no Telegram ou no roster: a sombra nunca escreveu neles.
 
+## Jev em sombra (desde 11/10/2026, desligado)
+
+Medição do roteamento de demandas pelo Jev (`typesafe/jev-1.13`, TypeSafe pela
+OpenRouter). Depois de cada demanda, sem `await`, o servidor pergunta ao Jev
+qual squad, qual sala, se é agenda ou tarefa e se pede contratação, compara com
+o Gemini e grava. Nada do que ele responde é executado (RULES 27). Desenho,
+retenção (ZDR é classificação da OpenRouter; a TypeSafe não publica prazo;
+processamento nos EUA) e critérios de promoção em
+`docs/referencia/perfis-e-experimentos.md`, "Jev em sombra".
+
+**Ligar** (numa sessão no Dell, depois do merge e do `atualizar-central`). O
+`~/.config/squadone/jev.env` (600) já tem a `OPENROUTER_API_KEY`, digitada
+pelo Rômulo; nada abaixo a lê nem a imprime:
+
+```bash
+F=~/.config/squadone/jev.env
+stat -c '%a' "$F"                                   # tem de dizer 600
+grep -q '^SQUADONE_JEV_SOMBRA=' "$F" \
+  && sed -i 's/^SQUADONE_JEV_SOMBRA=.*/SQUADONE_JEV_SOMBRA=true/' "$F" \
+  || echo 'SQUADONE_JEV_SOMBRA=true' >> "$F"
+# opcionais no mesmo arquivo: SQUADONE_JEV_TETO_DIA=50  SQUADONE_JEV_TETO_USD=1
+#   SQUADONE_JEV_TIMEOUT_MS=5000  SQUADONE_JEV_GUARDAR_DEMANDA=true (padrão: só sha256 + tamanho)
+cp ~/SquadOne/deploy/dell/squadone-operations.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user restart squadone-operations
+journalctl --user -u squadone-operations -n 80 --no-pager | grep '\[jev\]'
+```
+
+Ligado, o log diz `[jev] sombra ligada: typesafe/jev-1.13, teto 50/dia e US$ 1
+no total, timeout 5000 ms, ZDR exigido, US$ 0.00000 já gasto, registro em …`.
+`[jev] sombra desligada: …` diz o que está ilegível (nunca a chave);
+`[jev] desligado até reiniciar o processo: semCredito|credencial` é saldo ou
+chave. A unit nova só acrescenta `EnvironmentFile=-%h/.config/squadone/jev.env`.
+
+**Ler o resumo** (só lê):
+
+```bash
+cd ~/SquadOne && npx tsx scripts/jev-sombra-resumo.ts ~/.local/share/squadone/jev-sombra
+```
+
+**Desligar:** pôr `SQUADONE_JEV_SOMBRA=false` (ou apagar a linha) no
+`jev.env` e `systemctl --user restart squadone-operations`. **Reverter de vez:**
+apagar `~/.config/squadone/jev.env` e revogar a chave no painel da OpenRouter;
+o registro (`~/.local/share/squadone/jev-sombra`) fica até decisão à parte, e
+apagá-lo zera o contador do teto de gasto. Nada a desfazer no Google, no
+Telegram ou no roster.
+
 ## Finanças (`/financas`, desde 07/10/2026)
 
 Visão geral do que o Rômulo tem, deve e gasta, só no perfil `operations`.
