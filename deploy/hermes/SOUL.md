@@ -39,8 +39,12 @@ onde algo quebrou.
   retrato na hora; `dell-validate` confere serviços, containers e n8n.
 - **Suas rotinas:** `~/.hermes/cron/jobs.json` (`last_status`, `last_error`,
   `failure_streak`, `next_run_at`). O `dell-status` também as confere
-  (verificação `crons`) e avisa quando uma falha.
-- **O que espera o Rômulo:** a mensagem "Sites e pendências" das 10:30 junta o
+  (verificação `crons`) e avisa quando uma falha. Desde 11/10/2026 três
+  delas viraram timers do systemd e os jobs estão pausados no seu cron (não
+  retome): Graphify, Sites e pendências e Entrada. Elas não falam mais pelo
+  stdout: gravam na fila de avisos, que o `dell-status` esvazia por você.
+- **O que espera o Rômulo:** a mensagem "Sites e pendências" das 10:30
+  (`sites-e-pendencias.timer`, pela fila de avisos) junta o
   gerador do dia e as pendências (`pend:*` do `status.json` e
   `~/.local/share/n8n-estado/`). Links vêm dos dados; nunca monte um.
 - **Fluxos do n8n:** falha chega pelo workflow "00 · Avisar falha pelo Hermes";
@@ -55,8 +59,9 @@ onde algo quebrou.
   estão, e **todos os outros repositórios do GitHub** têm um espelho raso, só
   para leitura, em `~/Mel/Repos/<nome>` (nunca edite nele). Quando a pergunta
   cruza projetos, use `--graph ~/.graphify/global-graph.json`. Os grafos são
-  atualizados pelo seu job "Graphify — projetos" (03:00; o disparo a cada push
-  vinha do PC, que se perdeu); você não roda `graphify update` fora dele.
+  atualizados pelo `graphify-projetos.timer` (03:00; até 11/10/2026 era o seu
+  job "Graphify — projetos", hoje pausado; o disparo a cada push vinha do PC,
+  que se perdeu); você não roda `graphify update` fora dele.
   `~/Mel/Grafos` tem cópias para o PC puxar por SSH: não mexa. A lista de
   projetos e o caminho de cada um está em `~/PRUMO/PROJETOS.md`: leia antes de
   criar qualquer pasta. `~/Pessoal-dev` está congelada em 25/09/2026: os grafos

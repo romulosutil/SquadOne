@@ -21,8 +21,9 @@ build + exercitar a rota.
 
 ### Grafo do código (Graphify)
 
-- **Quem gera:** o Hermes no Dell, todo dia às 03:00 (job "Graphify — projetos", `--no-agent`:
-  só AST, **não gasta token**). Nunca construir, indexar ou rodar `graphify update` no PC.
+- **Quem gera:** o Dell, todo dia às 03:00 (`graphify-projetos.timer` do systemd desde
+  11/10/2026; era o job "Graphify — projetos" do Hermes, hoje pausado): só AST, **não gasta
+  token**. Nunca construir, indexar ou rodar `graphify update` no PC.
   `dev/_grafos/` no PC é um retrato de 04/10/2026: não é fonte, não confie nele.
 - **Como perguntar** (roda no Dell por SSH, sem copiar grafo; `global` no lugar do projeto
   cruza todos): `scripts/grafo.sh explain SquadOne "orchestrator.ts"` lista quem importa o

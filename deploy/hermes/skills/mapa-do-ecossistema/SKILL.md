@@ -57,9 +57,9 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 ### Nuvem: GitHub e Easypanel (projeto `aladdin`)
 
 - **GitHub** `romulosutil/SquadOne`: todo push em `main` dispara o build no
-  Easypanel (implantação automática desde 24/09/2026). O seu job "Graphify —
-  projetos" também rodava a cada push, chamado pelo pre-push do PC antigo;
-  hoje roda só às 03:00.
+  Easypanel (implantação automática desde 24/09/2026). O Graphify também
+  rodava a cada push, chamado pelo pre-push do PC antigo; hoje roda só às
+  03:00, pelo `graphify-projetos.timer`.
 - **`squadone-app`**: `https://aladdin-squadone-app.jicnzg.easypanel.host`,
   perfil `SQUADONE_MODE=app`. Desde a mudança da agenda para o Dell é
   **reserva fria**: implanta sozinho, mas travado (`IPS_PERMITIDOS=127.0.0.1`),
@@ -101,6 +101,9 @@ Unidades `systemctl --user`:
 | `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central, que roda dele; falha vira aviso por você |
 | `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, os rascunhos do Mapa, 1x ao dia) |
 | `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
+| `graphify-projetos.timer` | 03:00, persistente (desde 11/10/2026) | o Graphify sem modelo sobre `~/SquadOne`, `~/prumo`, `~/auto-site`, `~/crm-silmer` e os espelhos de `~/Mel/Repos`; teto de 1 h. Só falha vira aviso, pela fila (chega às 7h, depois do silêncio) |
+| `sites-e-pendencias.timer` | 10:30, persistente (desde 11/10/2026) | a mensagem "Sites e pendências" vira um aviso na fila (P1, uma por dia, vale até as 22h) |
+| `entrada-organizar.timer` | a cada 5 min, sem persistente (desde 11/10/2026) | organiza a fila da Entrada; o que mudou vira aviso na fila (entre 22h e 7h espera o silêncio acabar) |
 
 | `silmer-drive-sync.timer` | a cada 5 min | `rclone bisync` de `~/Silmer` com o Drive (`gdrive-silmer:`); adia se algum arquivo mudou nos últimos 2 min. É só a pasta do Silmer: os fluxos dele não estão no n8n do Dell |
 | `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você (gateway do WhatsApp, painel em `127.0.0.1:9119` e o Chromium headless do acesso ao Google, porta de depuração 9222) |
@@ -113,12 +116,17 @@ As units desta tabela estão versionadas em `deploy/dell/` (e as do Hermes em
 
 Suas rotinas que tocam o ecossistema (todas em `~/.hermes/cron/jobs.json`):
 
-- **Sites e pendências**, 10:30, sem modelo (`sites_e_pendencias.py`): o
-  resultado do gerador do dia e o que espera o Rômulo (pendências do n8n e do
-  `dell-status`), com os links que vêm nos dados. Troca o briefing das 08h,
-  que saía antes do gerador.
-- **Graphify — projetos**, 03:00, sem modelo: `~/SquadOne`, `~/prumo`,
-  `~/auto-site` e `~/crm-silmer`; só falha vira mensagem.
+- **Viraram timers do systemd** (tabela acima) e estão pausadas no seu cron:
+  **Sites e pendências — 10h30** (`18c55d8bbae7`), **Graphify — projetos**
+  (`d43aaa681519`) e **Entrada — organizar** (`cbb21e966fce`). Não retome:
+  com o timer ligado, os dois mandariam a mesma mensagem. Os scripts são os
+  mesmos (`sites_e_pendencias.py`, `graphify_projetos.py`, `organizar.py`);
+  pelo timer rodam com `--fila` e gravam na fila de avisos em vez de imprimir.
+  O `aplicar-hermes.py` ainda cria e reedita os dois primeiros: não rode até
+  ele deixar de fazer isso.
+- **Sites e pendências** junta o resultado do gerador do dia e o que espera
+  o Rômulo (pendências do n8n e do `dell-status`), com os links que vêm nos
+  dados. Troca o briefing das 08h, que saía antes do gerador.
 - **Pausadas desde 11/10/2026** (`paused` em `hermes cron list`; não retome por
   conta própria, `hermes cron resume <id>` volta): **ASMR FULLBRINGER**
   (briefing diário `d12b6431a2e6`; a revisão de 24/48h e a coleta também
@@ -250,10 +258,10 @@ Para responder sobre agenda sem abrir código:
    (os de fora não avisam)? Bloco de dia inteiro não avisa. O Dell inteiro
    sumiu: quem avisa é o healthchecks.io, não você.
 3. **Código:** push em `main` → GitHub → Easypanel implanta; o
-   `atualizar-central` puxa a `main` para o clone `~/SquadOne` e seu job
-   refaz o grafo dos clones às 03:00 (sem o pre-push do PC antigo, é o único
-   disparo). Falhou: seu job
-   "Graphify — projetos" em `cron/jobs.json`. Dois merges seguidos podem
+   `atualizar-central` puxa a `main` para o clone `~/SquadOne` e o
+   `graphify-projetos.timer` refaz o grafo dos clones às 03:00 (sem o pre-push
+   do PC antigo, é o único disparo). Falhou: aviso `graphify:falha:<data>` na
+   fila e `journalctl --user -u graphify-projetos -n 50`. Dois merges seguidos podem
    cancelar o primeiro build: se o app não mudou, peça ao Claude conferir as
    Implantações no Easypanel.
 4. **Saúde do Dell:** `dell-status` a cada minuto → `status.json` → Central
@@ -263,8 +271,8 @@ Para responder sobre agenda sem abrir código:
    convite no WhatsApp → observador lê a resposta → Etapa avança na planilha.
    Pendências em `pend:prumo-*` do `status.json`.
 6. **Site antes da venda:** Caçador 06h → `auto-entrada` → `gerador-de-sites`
-   08h → Vercel publica (`publicado.json`) → Balcão monta o link → 10:30 você
-   manda "Sites e pendências" → clique no wa_link marca enviado. O wa_link
+   08h → Vercel publica (`publicado.json`) → Balcão monta o link → 10:30 o
+   `sites-e-pendencias.timer` põe "Sites e pendências" na fila e você entrega → clique no wa_link marca enviado. O wa_link
    abre no celular só quando é o da tailnet (ver "Links rastreados"). O site
    aparece em até 1 h em `PRUMO/Sites antes da venda` no Drive (espelho do
    backup). Status: skill `site-antes-da-venda`. Falhou: verificação
