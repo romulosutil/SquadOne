@@ -28,6 +28,7 @@ Uso:
     prumo-mapa <arquivo> --sem-pdf    só o HTML
 """
 import copy
+import importlib.util
 import json
 import re
 import sys
@@ -260,12 +261,51 @@ def indice_txt(v) -> str:
 
 # ------------------------------------------------------------------ fila
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em ../lib; no
+# Dell, instalada em ~/.local/lib/mel/ (instalados.json). Primeiro a do repo,
+# para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [AQUI.parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
 def avisar(texto: str, teste: bool = False) -> None:
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     if teste:
         texto = "[teste] " + texto
+    aviso = {"titulo": "📊 PRUMO", "texto": texto, "origem": "prumo-mapa"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # Valida, grava atômico, não cria a pasta da fila e nunca levanta (o
+        # aviso de erro sai de dentro de um `except` e não pode derrubar os
+        # pacotes seguintes). O texto leva nome de empresa e a mensagem da
+        # exceção: se vier "R$", a lib recusa o aviso (RULES 24: nenhum valor
+        # sai num aviso) e NÃO o escondemos com [valor]; o que não foi gravado
+        # fica no journal, com o começo do texto para saber de qual Mapa era
+        # (o pacote e a pasta de entrega seguem no disco).
+        r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="prumo-mapa")
+        if not r.gravado:
+            print(f"prumo-mapa: aviso não entregue ({r.estado}): {texto.splitlines()[0][:160]}",
+                  file=sys.stderr, flush=True)
+        return
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
+    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
     arq = FILA_AVISOS / f"prumo-mapa-{time.time_ns()}.json"
-    arq.write_text(json.dumps({"titulo": "📊 PRUMO", "texto": texto, "origem": "prumo-mapa"}, ensure_ascii=False), encoding="utf-8")
+    arq.write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
 
 
 def ja_feito(resposta_id: str) -> Path | None:
