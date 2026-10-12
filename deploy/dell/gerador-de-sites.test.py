@@ -4,7 +4,9 @@ temporária, com `rodar_claude` e `validar` trocados por falsos.
 
   python3 deploy/dell/gerador-de-sites.test.py
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -15,8 +17,15 @@ from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
 
+try:
+    _spec_ds = importlib.util.spec_from_file_location("dell_status_para_gerador", AQUI / "dell-status.py")
+    ds = importlib.util.module_from_spec(_spec_ds)
+    _spec_ds.loader.exec_module(ds)
+except Exception:  # noqa: BLE001 — o dell-status não carrega fora do Dell (fcntl)
+    ds = None
 
-def carregar(auto: Path):
+
+def carregar(auto: Path, avisar_real: bool = False):
     os.environ["AUTO_DIR"] = str(auto)
     os.environ["SITE_FUNIL"] = str(auto / ".funil.json")  # nunca o retrato real do n8n
     os.environ["SITE_LEADS"] = str(auto / ".leads.json")  # nem a planilha real
@@ -29,7 +38,11 @@ def carregar(auto: Path):
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     m.shutil.which = lambda _: "/bin/true"
-    m.avisar = lambda texto: None  # nunca grava na fila de avisos real (viraria WhatsApp)
+    if avisar_real:
+        # Só a classe AvisoPelaLib: o avisar() de verdade, mas numa fila temporária (nunca a real).
+        m.FILA_AVISOS = auto / ".fila-de-avisos"
+    else:
+        m.avisar = lambda texto: None  # nunca grava na fila de avisos real (viraria WhatsApp)
     m.validar = lambda pasta, log_lead: (pasta / "publicado.json").is_file()
     return m
 
@@ -972,6 +985,161 @@ if {grava!r}:
         self.assertEqual(capturas["reduzido"], qa / "m-ato1-rm.png")
         self.assertIn("não gravou", capturas["erro_sem_js"])
         self.assertEqual(self.q.main([str(index), "--capturas", str(qa)]), 0)  # AVISO não reprova
+
+
+class AvisoPelaLib(unittest.TestCase):
+    """A troca do avisar() pela lib de aviso (11/10/2026): o aviso gravado pela
+    lib é IDÊNTICO, byte a byte, ao do jeito antigo; o dell-status aceita; sem a
+    lib volta ao antigo; e a fila ausente ou estragada nunca derruba a execução.
+    O avisar() é o de verdade, mas a fila é uma pasta temporária e o HOME também."""
+
+    TEXTOS = [
+        "O gerador de sites não rodou: o Claude não está logado no Dell. Grave o token em "
+        "~/.config/claude-ops/gerador.env (CLAUDE_CODE_OAUTH_TOKEN=...) e ele volta amanhã às 08h.",
+        "aspas \"duplas\", barra \\ e acento: ação, coração",
+        "duas\nlinhas e emoji 🌐",
+    ]
+
+    def setUp(self):
+        self.raiz = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.raiz, True)
+        self.auto = self.raiz / "auto-site"
+        self.auto.mkdir()
+        # Sem login e com o HOME de teste: o main() olha ~/.claude/.credentials.json.
+        for chave in ("HOME", "USERPROFILE", "CLAUDE_CODE_OAUTH_TOKEN"):
+            self.addCleanup(lambda c=chave, v=os.environ.get(chave): os.environ.pop(c, None) if v is None else os.environ.__setitem__(c, v))
+        os.environ["HOME"] = os.environ["USERPROFILE"] = str(self.raiz / "home")
+        os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+        self.m = carregar(self.auto, avisar_real=True)
+        self.m.FILA_AVISOS = self.raiz / "fila"
+        self.lib_do_repo = list(self.m.PASTAS_DA_LIB)
+
+    def fila(self):
+        return sorted(self.m.FILA_AVISOS.glob("*.json")) if self.m.FILA_AVISOS.is_dir() else []
+
+    def avisar(self, texto):
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            self.m.avisar(texto)
+        return saida.getvalue()
+
+    def gravado_pelo(self, jeito, texto):
+        shutil.rmtree(self.m.FILA_AVISOS, ignore_errors=True)
+        self.m.FILA_AVISOS.mkdir()
+        self.m.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        self.avisar(texto)
+        arquivos = self.fila()
+        self.assertEqual(len(arquivos), 1, arquivos)
+        return arquivos[0].read_bytes()
+
+    def sem_login(self):
+        """O main() que avisa: sem token, sem credencial e com o HOME vazio."""
+        sys.argv = ["gerador-de-sites"]
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            return self.m.main()
+
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(self.m.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
+
+    def test_aviso_identico_ao_jeito_antigo(self):
+        for texto in self.TEXTOS:
+            with self.subTest(texto=texto[:30]):
+                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+
+    def test_conteudo_fixado(self):
+        esperado = '{"titulo": "🌐 Gerador de sites", "texto": "duas\\nlinhas", "origem": "gerador-de-sites"}'
+        self.assertEqual(self.gravado_pelo("lib", "duas\nlinhas"), esperado.encode("utf-8"))
+
+    def test_nome_atomico_e_sem_colisao_no_mesmo_segundo(self):
+        self.m.FILA_AVISOS.mkdir()
+        for i in range(5):
+            self.avisar(f"aviso {i}")  # antes: gerador-<segundos>.json, e o 2º sobrescrevia o 1º
+        self.assertEqual(len(self.fila()), 5)
+        self.assertRegex(self.fila()[0].name, r"^gerador-\d+-[0-9a-f]{6}\.json$")
+        self.assertEqual([p for p in self.m.FILA_AVISOS.iterdir() if not p.name.endswith(".json")], [])
+
+    @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
+    def test_dell_status_aceita(self):
+        self.m.FILA_AVISOS.mkdir()
+        for texto in self.TEXTOS:
+            self.avisar(texto)
+        self.assertEqual(len(self.fila()), len(self.TEXTOS))
+        for arq in self.fila():
+            ds.validar_aviso(json.loads(arq.read_text(encoding="utf-8")))
+
+    def test_com_a_lib_a_fila_ausente_nao_e_criada_e_nao_levanta(self):
+        saida = self.avisar("x")
+        self.assertFalse(self.m.FILA_AVISOS.exists())
+        self.assertIn("Aviso não gravado (fila_ausente", saida)
+
+    def test_valor_em_reais_nao_perde_o_aviso(self):
+        self.m.FILA_AVISOS.mkdir()
+        self.avisar("custa R$ 12,50 por mês")
+        d = json.loads(self.fila()[0].read_text(encoding="utf-8"))
+        self.assertNotRegex(d["texto"], r"R\s*\$")
+        self.assertIn("[valor]", d["texto"])
+
+    def test_sem_copia_volta_ao_jeito_antigo(self):
+        self.m.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
+        self.assertIsNone(self.m.lib_de_aviso())
+        self.avisar("x")  # o antigo cria a pasta da fila
+        self.assertEqual(len(self.fila()), 1)
+        self.assertRegex(self.fila()[0].name, r"^gerador-\d+\.json$")
+
+    def test_copia_quebrada_volta_ao_jeito_antigo_e_cai_na_seguinte(self):
+        quebrada = self.raiz / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
+        self.m.PASTAS_DA_LIB = [quebrada]
+        self.assertIsNone(self.m.lib_de_aviso())
+        self.avisar("x")
+        self.assertEqual(len(self.fila()), 1)
+        self.m.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
+        self.assertEqual(Path(self.m.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
+
+    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
+        self.m.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
+        self.avisar("custa R$ 5")
+        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
+
+    # --- o caminho real: o main() sem login do Claude, antes de qualquer lead ----
+
+    def test_main_sem_login_avisa_e_sai_com_2(self):
+        self.m.FILA_AVISOS.mkdir()
+        self.assertEqual(self.sem_login(), 2)
+        avisos = [json.loads(p.read_text(encoding="utf-8")) for p in self.fila()]
+        self.assertEqual(len(avisos), 1)
+        self.assertEqual((avisos[0]["titulo"], avisos[0]["origem"]), ("🌐 Gerador de sites", "gerador-de-sites"))
+        self.assertIn("o Claude não está logado no Dell", avisos[0]["texto"])
+        status = json.loads((self.auto / ".logs/status.json").read_text(encoding="utf-8"))
+        self.assertEqual(status["ultimo_resumo"]["erro"], "Claude sem login no Dell")
+
+    def test_main_sem_login_com_a_fila_ausente_ou_estragada_continua_2(self):
+        for estrago in ("ausente", "arquivo"):
+            for jeito in ("lib", "antigo"):
+                with self.subTest(fila=estrago, jeito=jeito):
+                    shutil.rmtree(self.m.FILA_AVISOS, ignore_errors=True)
+                    if self.m.FILA_AVISOS.is_file():
+                        self.m.FILA_AVISOS.unlink()
+                    if estrago == "arquivo":
+                        self.m.FILA_AVISOS.write_text("não sou pasta", encoding="utf-8")
+                    self.m.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+                    self.assertEqual(self.sem_login(), 2)
+                    self.assertTrue((self.auto / ".logs/status.json").is_file())
+                    if estrago == "ausente" and jeito == "lib":
+                        self.assertFalse(self.m.FILA_AVISOS.exists())
+
+    def test_lib_que_levanta_nao_derruba_o_gerador(self):
+        class LibRuim:
+            VALOR_EM_REAIS = __import__("re").compile("R[$]")
+
+            @staticmethod
+            def gravar(*a, **k):
+                raise OSError("disco cheio")
+
+        self.m.lib_de_aviso = lambda: LibRuim
+        self.assertEqual(self.sem_login(), 2)
 
 
 if __name__ == "__main__":

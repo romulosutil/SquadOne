@@ -65,6 +65,7 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
+import importlib.util
 import json
 import os
 import re
@@ -423,15 +424,56 @@ def log(msg: str, nivel: str = "INFO", arquivo: Path | None = None) -> None:
             f.write(linha + "\n")
 
 
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/ ao
+# lado deste arquivo; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+FILA_AVISOS = Path.home() / ".local/share/avisos/fila"
+PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", Path.home() / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o gerador: tenta a próxima
+            continue
+    return None
+
+
 def avisar(texto: str) -> None:
-    """Aviso pelo WhatsApp: a fila que o dell-status repassa ao Hermes."""
+    """Aviso pelo WhatsApp: a fila que o dell-status repassa ao Hermes.
+
+    Nunca levanta: o gerador roda sozinho pelo timer e um aviso que não saiu
+    não pode derrubar a execução (nem um lead)."""
+    aviso = {"titulo": "🌐 Gerador de sites", "texto": texto, "origem": "gerador-de-sites"}
     try:
-        fila_de_avisos = Path.home() / ".local/share/avisos/fila"
-        fila_de_avisos.mkdir(parents=True, exist_ok=True)
-        (fila_de_avisos / f"gerador-{int(time.time())}.json").write_text(
-            json.dumps({"titulo": "🌐 Gerador de sites", "texto": texto, "origem": "gerador-de-sites"}, ensure_ascii=False), encoding="utf-8")
-    except OSError as e:
-        log(f"Aviso não gravado: {e}", "ERRO")
+        lib = lib_de_aviso()
+        if lib is not None:
+            # Valida, grava atômico, não cria a pasta da fila e dá um nome que
+            # nunca colide (o antigo usava só os segundos). Texto interno: se
+            # um dia trouxer "R$", sai com [valor] em vez de se perder.
+            if lib.VALOR_EM_REAIS.search(texto):
+                aviso["texto"] = lib.sem_valores(texto)
+            r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="gerador")
+            if not r.gravado:
+                log(f"Aviso não gravado ({r.estado}): {r.motivo}", "ERRO")
+            return
+        # Sem a lib instalada: o jeito de antes, sem mudar nada.
+        FILA_AVISOS.mkdir(parents=True, exist_ok=True)
+        (FILA_AVISOS / f"gerador-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001 — era só OSError; ver a docstring
+        try:
+            log(f"Aviso não gravado: {e}", "ERRO")
+        except Exception:  # noqa: BLE001 — nem o log (pasta .logs) derruba a execução por causa do aviso
+            pass
 
 
 def gravar_status(estado: dict) -> None:
