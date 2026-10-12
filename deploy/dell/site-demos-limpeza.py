@@ -48,6 +48,7 @@ Estado em ~/.local/state/site-demos-limpeza/ (avisados.json, historico.jsonl).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -76,7 +77,10 @@ MAX_POR_RODADA = 60
 RETRATO_VELHO = timedelta(hours=3)  # site-leads.json (só o --exclusao): o fluxo 07 grava de hora em hora (:20)
 CRM_VELHO = timedelta(hours=1)  # o 08 · CRM relê as planilhas a cada 10 min
 MAX_NOMES = 25
-SP = timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
+MAX_FALHAS = 10  # no aviso; as outras vão ao journal (stdout)
+MAX_LINHA_FALHA = 200
+TETO_DO_TEXTO = 3900  # o texto do aviso vai até 4000 (deploy/dell/README.md, "Fila de avisos"), com folga
+SP =timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 2019
 # Como o CRM diz o lugar da pasta -> o diretório em ~/auto-site. _fechados/ fica de fora de propósito.
 LUGARES_QUE_ENTRAM = {"raiz": "", "_recusados/": "_recusados", "_concluidos/": "_concluidos",
                       "_em-conversa/": "_em-conversa", "_descartados/": "_descartados"}
@@ -237,11 +241,77 @@ def projeto_na_vercel(nome: str, chave: str) -> dict | None:
 
 # ---------------------------------------------------------------- rodada
 
-def avisar(texto: str) -> None:
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em lib/ ao
+# lado deste arquivo; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
+def avisar(texto: str) -> bool:
+    """True quando o aviso ficou na fila. Com a lib nada levanta (fila ausente ou
+    aviso recusado voltam False e o motivo vai ao journal); sem ela, como antes:
+    ou grava, ou levanta."""
+    aviso = {"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": texto, "origem": "site-demos-limpeza"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # Os nomes vêm de planilha/CRM; se um deles trouxer "R$" a lib recusaria o
+        # aviso inteiro, e calar uma exclusão na Vercel é pior que mandá-lo sem o valor.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        return lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-demos-limpeza").gravado
+    # Sem a lib instalada: o jeito de antes, sem mudar nada.
     FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    (FILA_AVISOS / f"site-demos-limpeza-{time.time_ns()}.json").write_text(
-        json.dumps({"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": texto,
-                    "origem": "site-demos-limpeza"}, ensure_ascii=False), encoding="utf-8")
+    (FILA_AVISOS / f"site-demos-limpeza-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+    return True
+
+
+def _montar_texto(apagados: list[dict], falhas: list[str], a_pedido: bool, max_nomes: int, max_falhas: int) -> str:
+    linhas = []
+    if apagados and a_pedido:
+        linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel a pedido do lead (pediu exclusão no WhatsApp). "
+                   "A pasta continua em ~/auto-site; se o pedido for de apagar tudo, apague a pasta à mão."]
+        linhas += [f"• {e['nome']}" for e in apagados[:max_nomes]]
+    elif apagados:
+        linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel de leads em Perdido no CRM (há {FOLGA_DIAS}+ dias). "
+                   "A pasta continua em ~/auto-site: para mandar de novo, é republicar."]
+        linhas += [f"• {e['nome']} ({ROTULO_DA_PERDA.get(e.get('motivo', ''), 'perdido')})" for e in apagados[:max_nomes]]
+        if len(apagados) > max_nomes:
+            linhas.append(f"• e mais {len(apagados) - max_nomes} (lista em {HISTORICO})")
+    if falhas:
+        linhas += ([""] if linhas else []) + [f"Não consegui ({len(falhas)}):"]
+        linhas += [f"• {f if len(f) <= MAX_LINHA_FALHA else f[:MAX_LINHA_FALHA - 1] + '…'}" for f in falhas[:max_falhas]]
+        if len(falhas) > max_falhas:
+            linhas.append(f"• e mais {len(falhas) - max_falhas} (todas no journal do site-demos-limpeza)")
+    return "\n".join(linhas)
+
+
+def texto_do_aviso(apagados: list[dict], falhas: list[str], a_pedido: bool = False) -> str:
+    """O aviso de uma rodada de `apagar`. Até 25 nomes e 10 falhas (200 caracteres
+    cada), com "e mais N" no resto; se ainda assim passar de TETO_DO_TEXTO, tenta com
+    menos nomes e menos falhas. O teto do aviso é 4000 caracteres e cortar seco
+    levaria o fim, que é onde está a lista do que NÃO deu certo."""
+    for max_nomes, max_falhas in ((MAX_NOMES, MAX_FALHAS), (15, 6), (8, 4), (4, 2), (2, 1)):
+        texto = _montar_texto(apagados, falhas, a_pedido, max_nomes, max_falhas)
+        if len(texto) <= TETO_DO_TEXTO:
+            break
+    return texto  # nomes enormes: o que passar de 4000 a lib corta, com a marca "(cortado)"
 
 
 def anotar(evento: dict) -> None:
@@ -281,21 +351,10 @@ def apagar(alvos: list[dict], a_pedido: bool = False) -> int:
             print(f"{'apagado' if info is not None else 'já não existia'}: {e['projeto']}")
         except RuntimeError as err:
             falhas.append(f"{e['nome']}: {err}")
+    for f in falhas:
+        print(f"não consegui: {f}")  # o aviso mostra só as primeiras; aqui vão todas
     if apagados or falhas:
-        linhas = []
-        if apagados and a_pedido:
-            linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel a pedido do lead (pediu exclusão no WhatsApp). "
-                       "A pasta continua em ~/auto-site; se o pedido for de apagar tudo, apague a pasta à mão."]
-            linhas += [f"• {e['nome']}" for e in apagados[:MAX_NOMES]]
-        elif apagados:
-            linhas += [f"Apaguei {len(apagados)} demo(s) na Vercel de leads em Perdido no CRM (há {FOLGA_DIAS}+ dias). "
-                       "A pasta continua em ~/auto-site: para mandar de novo, é republicar."]
-            linhas += [f"• {e['nome']} ({ROTULO_DA_PERDA.get(e.get('motivo', ''), 'perdido')})" for e in apagados[:MAX_NOMES]]
-            if len(apagados) > MAX_NOMES:
-                linhas.append(f"• e mais {len(apagados) - MAX_NOMES} (lista em {HISTORICO})")
-        if falhas:
-            linhas += ([""] if linhas else []) + [f"Não consegui ({len(falhas)}):"] + [f"• {f}" for f in falhas]
-        avisar("\n".join(linhas))
+        avisar(texto_do_aviso(apagados, falhas, a_pedido))
     return 1 if falhas else 0
 
 
@@ -378,11 +437,13 @@ def main(argv: list[str]) -> int:
             linhas += [f"• {e['nome']}" for e in eleitos[:MAX_NOMES]]
             if len(eleitos) > MAX_NOMES:
                 linhas.append(f"• e mais {len(eleitos) - MAX_NOMES}")
-            avisar("\n".join(linhas))
-            ESTADO.parent.mkdir(parents=True, exist_ok=True)
-            tmp = ESTADO.with_suffix(".tmp")
-            tmp.write_text(json.dumps({"projetos": sorted(e["projeto"] for e in eleitos)}, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(ESTADO)
+            # Só marca como avisado o que ficou na fila: sem a lib, o aviso que não
+            # grava levanta (e o estado não é escrito); com ela, devolve False.
+            if avisar("\n".join(linhas)):
+                ESTADO.parent.mkdir(parents=True, exist_ok=True)
+                tmp = ESTADO.with_suffix(".tmp")
+                tmp.write_text(json.dumps({"projetos": sorted(e["projeto"] for e in eleitos)}, ensure_ascii=False), encoding="utf-8")
+                tmp.replace(ESTADO)
     return 0
 
 
