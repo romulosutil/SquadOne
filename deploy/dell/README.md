@@ -286,6 +286,25 @@ isso, menos ruído:
   o chip novo, a conversa com o Hermes é o "Você" (mensagem para si mesmo) da
   conta pareada, e o observador só vê as conversas desse número.
 
+### O que a auditoria de 11/10/2026 achou invisível
+
+Verificações que nasceram da auditoria da Mel: coisas que já tinham acontecido e a
+Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026.
+
+- **Religamentos do healthwatch** (`healthwatch`, grupo Serviços): lê o journal do
+  `dell-worker-healthwatch` (7 dias, `journalctl --user -o json`) e conta as linhas
+  `healthwatch: restarting …`/`starting …`. Nos 7 dias até 11/10 foram 16 do gateway do
+  Hermes e 2 do n8n, e nenhum aparecia. Religamento nos primeiros 10 min depois de o Dell
+  ligar não conta (os serviços ainda estão subindo; pelo relógio monotônico do journal,
+  que vale para os boots anteriores). Qualquer outro nas últimas 24 h é **amarelo**:
+  "resolve sozinho" com até 2 episódios (religamentos do mesmo serviço a até 5 min um do
+  outro são um episódio); sem o "sozinho" com 3 episódios ou mais, ou com 10 religamentos
+  num episódio (07/10 00:00: o gateway do Hermes ficou 6 min sem subir, 13 tentativas).
+  Nunca vermelho: o serviço que continua fora já é vermelho na verificação dele. Para
+  parar o gateway **de propósito** (trocar o chip), pare antes o healthwatch
+  (`systemctl --user stop dell-worker-healthwatch`), senão ele religa a cada 30 s (09/10,
+  16:06) — e religue-o depois.
+
 ### Fila de avisos (06/10/2026)
 
 Um arquivo JSON por aviso em `~/.local/share/avisos/fila/`:

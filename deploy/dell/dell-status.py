@@ -232,6 +232,111 @@ def syncthing() -> dict:
                      "http://127.0.0.1:8384/")
 
 
+# ---------------------------------------------------------------- religamentos do healthwatch
+
+HEALTHWATCH_UNIT = "dell-worker-healthwatch.service"
+# Logo depois de o Dell ligar os serviços ainda estão subindo e o healthwatch religa o que
+# não respondeu (06 e 07/10/2026: painel do Hermes e n8n segundos depois do boot). Normal.
+JANELA_DO_BOOT = timedelta(minutes=10)
+JANELA_RELIGOU = timedelta(hours=24)
+# Religamentos do mesmo serviço a até 5 min um do outro são um episódio só; 10 num episódio
+# é o serviço ficando minutos sem subir (07/10/2026 00:00: gateway do Hermes, 13 vezes em 6 min).
+EPISODIO = timedelta(minutes=5)
+LACO = 10
+RELIGOU = re.compile(r"^healthwatch: (?:restarting|starting) (.+)$")
+NOMES_NO_HEALTHWATCH = {"Hermes gateway": "gateway do Hermes", "Hermes": "painel do Hermes",
+                        "licitacoes n8n": "n8n", "licitacoes n8n compose service": "n8n (compose)",
+                        "Operations": "Central", "code-server": "code-server"}
+
+
+def ler_religamentos(dias: int = 7) -> list[dict]:
+    """O que o healthwatch religou, pelo journal da unit: {em, servico, no_boot}.
+    `no_boot` pelo relógio monotônico (desde o boot daquela linha), que vale
+    também para os boots anteriores."""
+    r = subprocess.run(["journalctl", "--user", "-u", HEALTHWATCH_UNIT, "--since", f"-{dias}d", "-o", "json",
+                        "--output-fields=MESSAGE", "--no-pager"], capture_output=True, text=True, timeout=20)
+    if r.returncode != 0:
+        raise RuntimeError(f"journalctl: {r.stderr.strip()[:100]}")
+    return religamentos_do_journal(r.stdout)
+
+
+def religamentos_do_journal(saida: str) -> list[dict]:
+    eventos = []
+    for linha in saida.splitlines():
+        try:
+            d = json.loads(linha)
+        except ValueError:
+            continue
+        msg = d.get("MESSAGE")
+        if isinstance(msg, list):  # o journald manda bytes quando a linha não é UTF-8
+            msg = bytes(msg).decode(errors="replace")
+        m = RELIGOU.match(str(msg or "").strip())
+        if not m:
+            continue
+        try:
+            em = datetime.fromtimestamp(int(d["__REALTIME_TIMESTAMP"]) / 1e6, timezone.utc)
+            no_boot = int(d.get("__MONOTONIC_TIMESTAMP", 0)) / 1e6 < JANELA_DO_BOOT.total_seconds()
+        except (KeyError, ValueError):
+            continue
+        eventos.append({"em": em, "servico": m.group(1).strip(), "no_boot": no_boot})
+    return eventos
+
+
+def _episodios(ems: list[datetime]) -> list[list[datetime]]:
+    grupos: list[list[datetime]] = []
+    for em in sorted(ems):
+        if grupos and em - grupos[-1][-1] <= EPISODIO:
+            grupos[-1].append(em)
+        else:
+            grupos.append([em])
+    return grupos
+
+
+def avaliar_religamentos(eventos: list[dict], t: datetime) -> dict:
+    """Religamento do healthwatch é um serviço que caiu e voltou sem ninguém ver:
+    nos 7 dias até 11/10/2026 foram 16 do gateway do Hermes e 2 do n8n, e a
+    Central não mostrava nenhum. Atenção por 24 h depois de um religamento fora
+    do boot; resolve sozinho se foram até 2 episódios curtos. Nunca vermelho: o
+    serviço que continua fora já é vermelho na própria verificação (Hermes, n8n…)."""
+    nome = "Religamentos do healthwatch"
+    eventos = [e for e in eventos if e["em"] <= t]
+    fora = [e for e in eventos if not e["no_boot"]]
+    no_boot = len(eventos) - len(fora)
+    semana = f"{len(fora)} em 7 dias" + (f" (mais {no_boot} logo depois de o Dell ligar)" if no_boot else "")
+    recentes = [e for e in fora if t - e["em"] <= JANELA_RELIGOU]
+    if not recentes:
+        return check("healthwatch", "servicos", nome, "ok", f"Nenhum serviço religado nas últimas 24 h; {semana}")
+    por_servico: dict[str, list[datetime]] = {}
+    for e in recentes:
+        por_servico.setdefault(NOMES_NO_HEALTHWATCH.get(e["servico"], e["servico"]), []).append(e["em"])
+    ordem = sorted(por_servico, key=lambda s: -len(por_servico[s]))
+    partes, episodios, laco = [], 0, None
+    for servico in ordem:
+        ems = por_servico[servico]
+        grupos = _episodios(ems)
+        episodios += len(grupos)
+        if laco is None and max(len(g) for g in grupos) >= LACO:
+            laco = servico
+        ini, fim = min(ems), max(ems)
+        quando = _hm(ini, t) if fim - ini < timedelta(minutes=1) else f"{_hm(ini, t)} a {_hm(fim, t)}"
+        partes.append(f"{servico} {len(ems)}x ({quando})")
+    detalhe = "Religou nas últimas 24 h: " + ", ".join(partes) + f"; {semana}"
+    if laco or episodios > 2:
+        motivo = (f"O {laco} ficou minutos sem subir e o healthwatch tentou de novo e de novo" if laco
+                  else f"O healthwatch teve de religar serviço {episodios} vezes em 24 h")
+        return check("healthwatch", "servicos", nome, "atencao", detalhe,
+                     o_que_fazer=(f"{motivo}. Confira se está ok em Serviços e peça ao Claude: \"o healthwatch "
+                                  f"religou o {laco or ordem[0]}\" (journalctl --user -u dell-worker-healthwatch). Se "
+                                  "foi você que parou o serviço (ex.: trocar o chip do WhatsApp), ignore: some em 24 h."))
+    return check("healthwatch", "servicos", nome, "atencao", detalhe, sozinho=True,
+                 o_que_fazer=(f"Nada: o {ordem[0]} caiu e o healthwatch o religou sozinho. Some em 24 h; se "
+                              "repetir, este aviso deixa de dizer \"nada\" e vale pedir ao Claude."))
+
+
+def religamentos() -> list[dict]:
+    return [avaliar_religamentos(ler_religamentos(), agora())]
+
+
 # ---------------------------------------------------------------- containers
 
 def containers() -> list[dict]:
@@ -1639,7 +1744,7 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, containers, fluxos, maquina, crons_hermes, gerador, funil_aprendizado, prumo_mapa, pendencias,
+    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, gerador, funil_aprendizado, prumo_mapa, pendencias,
                easypanel, backup, fila_de_avisos, instalados):
         try:
             checks += fn()
