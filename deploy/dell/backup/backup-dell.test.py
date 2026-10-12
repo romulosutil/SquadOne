@@ -263,9 +263,13 @@ class Preparo(unittest.TestCase):
     def test_manifesto_versionado_tem_um_dump_por_banco_docker(self):
         m = bd.ler_manifesto(AQUI / "fontes.toml")
         preparo = {p["nome"]: p for p in m["cofre"]["preparo"]}
-        for nome in ("n8n", "aladdin-pg", "crm-silmer-pg", "p4f-db", "iris-pg", "iris-minio", "espectro-mysql"):
+        # aladdin-pg, iris-minio e espectro-mysql saíram em 11/10/2026: os containers
+        # foram parados por ociosos (dumps finais em ~/Arquivo/2026-10-11-containers-parados).
+        for nome in ("n8n", "crm-silmer-pg", "p4f-db", "iris-pg"):
             self.assertIn(nome, preparo)
             self.assertTrue(bd.eh_critico(preparo[nome]) or nome == "n8n-home", nome)
+        for nome in ("aladdin-pg", "iris-minio", "espectro-mysql"):
+            self.assertNotIn(nome, preparo, nome)
         # O ensaio mensal acha o dump do n8n pelo banco, não "o primeiro postgres".
         n8n = [p for p in preparo.values() if p["tipo"] == "postgres" and p.get("banco") == "n8n"]
         self.assertEqual([p["nome"] for p in n8n], ["n8n"])

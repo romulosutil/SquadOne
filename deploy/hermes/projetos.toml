@@ -180,7 +180,7 @@ dono = "Rômulo"
 estado = "existe"
 grafo = false
 papel = "infra-docker (os bancos dos projetos), moneyprinterturbo e os agentes. Os containers dependem do caminho."
-observacao = "Não mexer em infra-docker sem ordem do Rômulo. Se entra no grafo, decidir na Fase 4."
+observacao = "Não mexer em infra-docker sem ordem do Rômulo. Se entra no grafo, decidir na Fase 4. Desde 11/10/2026 estão PARADOS (ociosos, restart=no) os containers aladdin-postgres, espectro_mysql, espectro_redis, iris-minio, moneyprinterturbo-api e moneyprinterturbo-webui; o iris-postgres (porta 5433, usado pelo .env do Iris no PC) segue ligado. Dumps finais e restart-original.txt em ~/Arquivo/2026-10-11-containers-parados. Para reverter: docker start <container> e docker update --restart=<política do restart-original.txt> <container> (religar o aladdin-postgres, o iris-minio e o espectro_mysql exige recolocar os blocos aladdin-pg, iris-minio e espectro-mysql no fontes.toml do backup)."
 
 [[projeto]]
 nome = "PRUMO"
