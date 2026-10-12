@@ -880,6 +880,79 @@ def acordou_o_modelo(texto: str) -> bool:
     return "\n## Response" in texto
 
 
+# ---------------------------------------------------------------- rotinas caladas
+
+# Rotina que pode passar dias em [SILENT] por natureza (um vigia que só fala quando há o que
+# dizer): um id por linha, "#" comenta. Sem o arquivo, toda rotina com modelo é cobrada.
+SILENCIO_ESPERADO = HOME / ".local/state/dell-status/silencio-esperado"
+CALADA_SEGUIDAS = 5
+CALADA_DIAS = 3
+
+
+def classificar_saida(texto: str) -> str | None:
+    """"silencio" quando o modelo respondeu só [SILENT]; "util" quando respondeu
+    outra coisa; None para o resto (portão que pulou, script sem saída, erro),
+    que não conta para nenhum dos lados."""
+    if not acordou_o_modelo(texto):
+        return None
+    resposta = texto.rsplit("\n## Response", 1)[1].strip()
+    return "silencio" if resposta.startswith("[SILENT]") else "util"
+
+
+def calada_desde(saidas: list[tuple[datetime, str | None]]) -> tuple[int, datetime | None]:
+    """Quantas respostas [SILENT] seguidas no fim, e a primeira delas."""
+    n, desde = 0, None
+    for em, classe in reversed(saidas):
+        if classe == "util":
+            break
+        if classe == "silencio":
+            n, desde = n + 1, em
+    return n, desde
+
+
+def avaliar_rotinas_caladas(rotinas: list[tuple[str, str, list[tuple[datetime, str | None]]]], esperados: set[str],
+                            t: datetime) -> dict:
+    """A revisão diária do ASMR respondeu [SILENT] em todas as rodadas de 02 a
+    11/10/2026 (o dado que ela lê tinha parado) e a Central dizia "Última rodada
+    ok". Amarelo com 5 ou mais [SILENT] seguidos cobrindo 3 dias ou mais, em
+    rotina ativa que usa o modelo; pausadas, só-script e as de
+    `silencio-esperado` ficam de fora."""
+    nome = "Rotinas caladas"
+    caladas, conferidas = [], 0
+    for jid, rnome, saidas in rotinas:
+        if jid in esperados:
+            continue
+        conferidas += 1
+        n, desde = calada_desde(saidas)
+        if n >= CALADA_SEGUIDAS and desde and t - desde >= timedelta(days=CALADA_DIAS):
+            caladas.append((jid, rnome, n, desde))
+    if not caladas:
+        return check("rotinas-caladas", "dados", nome, "ok",
+                     f"Nenhuma calada ({conferidas} rotina(s) com modelo conferida(s)"
+                     + (f", {len(esperados)} com silêncio esperado" if esperados else "") + ")")
+    partes = [f"{rnome}: {n} [SILENT] seguidos desde {desde.astimezone(FUSO_BR):%d/%m}" for _, rnome, n, desde in caladas]
+    jid, rnome = caladas[0][0], caladas[0][1]
+    return check("rotinas-caladas", "dados", nome, "atencao", "; ".join(partes)[:300],
+                 o_que_fazer=(f"A rotina roda, mas não tem nada a dizer há dias: costuma ser o dado que ela lê parado "
+                              "(no ASMR, \"Métricas do ASMR\" em Dados) ou um prompt que não serve mais. Peça ao Claude: \"a rotina "
+                              f"{rnome} só responde [SILENT]\". Se não serve mais, pause: hermes cron pause {jid}. Se "
+                              "calar é o normal dela, ponha o id em ~/.local/state/dell-status/silencio-esperado."))
+
+
+def rotinas_caladas() -> list[dict]:
+    try:
+        rotinas = rotinas_do_hermes()
+    except (OSError, ValueError):
+        return []  # "Rotinas do Hermes" já fica amarela com o jobs.json ilegível
+    try:
+        esperados = {l.split("#", 1)[0].strip() for l in SILENCIO_ESPERADO.read_text().splitlines()} - {""}
+    except OSError:
+        esperados = set()
+    lista = [(jid, j.get("name") or jid, [(em, classificar_saida(txt)) for em, txt in saidas_da_rotina(jid)])
+             for jid, j in rotinas.items() if rotina_ativa(j) and not j.get("no_agent")]
+    return [avaliar_rotinas_caladas(lista, esperados & set(rotinas), agora())]
+
+
 # ---------------------------------------------------------------- idade dos dados
 
 # Dado que uma rotina do Hermes deveria renovar. O shorts-metrics.json do ASMR parou em
@@ -1849,7 +1922,7 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, idade_dos_dados, gerador, funil_aprendizado, prumo_mapa, pendencias,
+    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
                easypanel, backup, fila_de_avisos, instalados):
         try:
             checks += fn()

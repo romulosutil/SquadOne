@@ -846,6 +846,83 @@ class IdadeDosDados(unittest.TestCase):
         self.assertIn("não existe mais", c["detalhe"])
 
 
+def resposta(texto: str) -> str:
+    return f"# Cron Job: x\n\n## Prompt\n\nSe não houver nada, responda exatamente `[SILENT]`.\n\n## Response\n\n{texto}\n"
+
+
+class RotinasCaladas(unittest.TestCase):
+    """A revisão diária do ASMR (b1fc67504adb): 4 respostas, depois [SILENT] todo dia."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="dell-status-caladas-"))
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.antes = {k: getattr(ds, k) for k in ("CRON_JOBS", "HERMES_SAIDAS", "SILENCIO_ESPERADO", "agora")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
+        ds.CRON_JOBS = self.dir / "jobs.json"
+        ds.HERMES_SAIDAS = self.dir / "output"
+        ds.SILENCIO_ESPERADO = self.dir / "silencio-esperado"
+        ds.agora = lambda: br("2026-10-11T21:45").astimezone(timezone.utc)
+        inicio = br("2026-09-22T09:31")
+        for i in range(20):  # 22/09 a 11/10: 4 boas, 10 [SILENT], 1 erro de cota, 5 [SILENT]
+            texto = (resposta("*ASMR — revisão*\n*Decisão:* manter") if i < 4 else
+                     "# Cron Job: x\n\n## Prompt\n\n[SILENT]\n\n## Error\n\nquota" if i == 14 else resposta("[SILENT]"))
+            self.saida("b1fc67504adb", inicio + timedelta(days=i), texto)
+        for i in range(30):  # script do Entrada, a cada 5 min: sempre "silent (empty output)"
+            self.saida("cbb21e966fce", br("2026-10-11T19:00") + timedelta(minutes=5 * i),
+                       "# Cron Job: Entrada\n\n**Mode:** no_agent (script)\n**Status:** silent (empty output)\n")
+
+    def saida(self, jid: str, em: datetime, texto: str) -> None:
+        p = ds.HERMES_SAIDAS / jid / f"{em:%Y-%m-%d_%H-%M-%S}.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(texto)
+        os.utime(p, (em.timestamp(),) * 2)
+
+    def rodar(self, *jobs) -> dict:
+        ds.CRON_JOBS.write_text(json.dumps({"jobs": list(jobs)}))
+        [c] = ds.rotinas_caladas()
+        return c
+
+    def revisao(self, **extra) -> dict:
+        return job("b1fc67504adb", "30 9 * * *", name="ASMR FULLBRINGER — revisão diária 24/48h", **extra)
+
+    def test_classificar(self):
+        self.assertEqual(ds.classificar_saida(resposta("[SILENT]")), "silencio")
+        self.assertEqual(ds.classificar_saida(resposta("*Sites* 3 prontos")), "util")
+        self.assertIsNone(ds.classificar_saida("Script gate returned `wakeAgent=false` — agent skipped."))
+        self.assertIsNone(ds.classificar_saida("**Status:** silent (empty output)"))
+        self.assertIsNone(ds.classificar_saida("## Prompt\n\n[SILENT]\n\n## Error\n\nquota"))
+
+    def test_revisao_calada_acende(self):
+        c = self.rodar(self.revisao(), job("cbb21e966fce", minutos=5, no_agent=True))
+        self.assertEqual(c["estado"], "atencao")
+        self.assertEqual(c["detalhe"], "ASMR FULLBRINGER — revisão diária 24/48h: 15 [SILENT] seguidos desde 26/09")
+        self.assertIn("hermes cron pause b1fc67504adb", c["o_que_fazer"])
+
+    def test_pausada_de_proposito_e_ok_como_hoje_na_mel(self):
+        pausados = [job(i, "0 9 * * *", enabled=False, state="paused")
+                    for i in ("d12b6431a2e6", "79a04dbf2d81", "f6e7da0f8558", "eb9282f96df6")]
+        c = self.rodar(self.revisao(enabled=False, state="paused"), *pausados,
+                       job("e77d281ae687", "30 8 * * 1"), job("cbb21e966fce", minutos=5, no_agent=True))
+        self.assertEqual((c["estado"], c["detalhe"]), ("ok", "Nenhuma calada (1 rotina(s) com modelo conferida(s))"))
+
+    def test_silencio_esperado(self):
+        ds.SILENCIO_ESPERADO.write_text("# vigias\nb1fc67504adb  # a revisão só fala com snapshot novo\n")
+        c = self.rodar(self.revisao())
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("1 com silêncio esperado", c["detalhe"])
+
+    def test_poucos_ou_recentes_nao_acendem(self):
+        for d in range(4):  # 4 [SILENT] em 4 dias: ainda não
+            self.saida("bbbb", br("2026-10-08T09:00") + timedelta(days=d), resposta("[SILENT]"))
+        self.assertEqual(self.rodar(job("bbbb", "0 9 * * *"))["estado"], "ok")
+        for h in range(6):  # 6 [SILENT] de hora em hora: menos de 3 dias, ainda não
+            self.saida("aaaa", br("2026-10-11T10:00") + timedelta(hours=h), resposta("[SILENT]"))
+        self.assertEqual(self.rodar(job("aaaa", minutos=60))["estado"], "ok")
+        self.saida("bbbb", br("2026-10-12T09:00"), resposta("[SILENT]"))  # o 5º, 4 dias depois do 1º
+        ds.agora = lambda: br("2026-10-12T10:00").astimezone(timezone.utc)
+        self.assertEqual(self.rodar(job("bbbb", "0 9 * * *"))["estado"], "atencao")
+
+
 class Instalados(unittest.TestCase):
     """O caso de 07/10/2026: o fix do observador estava no repo, a cópia em
     ~/.local/bin era de antes, e os avisos foram recusados o dia todo."""
