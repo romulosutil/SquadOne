@@ -304,7 +304,11 @@ demanda ─► rodarDemanda ─► executarTurno (1 ou 2 turnos do Gemini) ─�
   Nada das pessoas, do treino, da agenda ou do Google.
 - **O que nunca vai:** finanças (regra 24: demanda que parece finanças nem sai;
   sala de finanças só pelo nome; valor em dinheiro sai de todo escopo); a
-  resposta do Gemini; credenciais; respostas de leads (até o Rômulo aprovar).
+  resposta do Gemini; credenciais; respostas de leads (essas, aprovadas em
+  11/10/2026 só em sombra, vão por outro caminho: o ramo "Jev:" do fluxo de
+  respostas no n8n da Mel, `deploy/dell/claude-ops/whatsapp-conversa.py`, com
+  recorte e máscara próprios; ver `deploy/dell/README.md`, "Jev em sombra nas
+  respostas").
 - **Retenção:** `data_collection: "deny"` e `zdr: true` em todo pedido. O
   endpoint está na lista ZDR da OpenRouter, mas ZDR é classificação **dela**;
   a TypeSafe não publica prazo de retenção. Risco aceito pelo Rômulo em
