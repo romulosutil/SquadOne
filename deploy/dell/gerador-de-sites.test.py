@@ -22,6 +22,9 @@ def carregar(auto: Path):
     os.environ["SITE_LEADS"] = str(auto / ".leads.json")  # nem a planilha real
     os.environ["RAIO_X_BIN"] = str(auto / ".sem-raio-x")  # nem o raio-x instalado (faria deploy)
     os.environ["CHROME_HEADLESS_CACHE"] = str(auto / ".sem-chrome")  # nem o cache real do Chrome da Mel
+    # Nem as cópias instaladas da folha e do gate: cada teste diz se elas existem.
+    os.environ["FOLHA_DE_CONTATO_BIN"] = str(auto / ".sem-folha")
+    os.environ["QA_NUMERICO_BIN"] = str(auto / ".sem-qa")
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -613,6 +616,362 @@ class ListaDePermissao(unittest.TestCase):
         r, _, log = self.rodar_claude_falso("limite")
         self.assertEqual((r["codigo"], r["negadas"], r["limite"]), (1, 0, True))
         self.assertIn("usage limit reached", log)
+
+
+def modulo(nome: str):
+    spec = importlib.util.spec_from_file_location(nome.replace("-", "_"), AQUI / f"{nome}.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+try:
+    import PIL  # noqa: F401 — a Mel tem (é o do og.jpg); o PC de controle pode não ter
+    TEM_PIL = True
+except ImportError:
+    TEM_PIL = False
+
+
+def png_listrado(caminho: Path, largura: int = 390, altura: int = 844, liso: bool = False) -> None:
+    """PNG sem Pillow: listras (conteúdo) ou cor única (tela vazia)."""
+    import struct
+    import zlib
+    linhas = b""
+    for y in range(altura):
+        cor = b"\xf4\xef\xe6" if liso or (y // 40) % 2 else b"\x20\x20\x20"
+        linhas += b"\x00" + cor * largura
+    def bloco(tipo, dados):
+        return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", zlib.crc32(tipo + dados) & 0xFFFFFFFF)
+    caminho.write_bytes(b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", struct.pack(">IIBBBBB", largura, altura, 8, 2, 0, 0, 0))
+                        + bloco(b"IDAT", zlib.compress(linhas)) + bloco(b"IEND", b""))
+
+
+class QaComFolhaNasInstrucoes(unittest.TestCase):
+    """11/10/2026: capturas lidas numa folha só e gate numérico antes do deploy, só com as cópias instaladas."""
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        self.m = carregar(self.auto)
+        self.rascunho = Path("/tmp/gerador-x")
+
+    def instalar(self):
+        for nome in (".sem-folha", ".sem-qa"):
+            (self.auto / nome).write_text("# cópia instalada\n")
+
+    def sistema(self, personalizado=False, premium=False):
+        self.m.MODO_PREMIUM = premium
+        try:
+            cmd = self.m.comando_do_claude("b-bom", self.rascunho, personalizado)
+        finally:
+            self.m.MODO_PREMIUM = False
+        return cmd[cmd.index("--append-system-prompt") + 1]
+
+    def test_sem_as_copias_o_qa_e_o_de_antes(self):
+        """O gerador novo instalado antes dos dois scripts não pode mandar o Claude chamar o que não existe."""
+        for texto in (self.sistema(), self.sistema(True), self.sistema(True, True)):
+            self.assertNotIn("folha-de-contato", texto)
+            self.assertNotIn("qa-numerico", texto)
+            self.assertIn("grave no rascunho um script python3", texto)
+            self.assertIn("--blink-settings=scriptEnabled=false", texto)
+        self.assertIn("Leia (Read) as capturas LADO A LADO", self.sistema(True, True))
+
+    def test_com_as_copias_uma_imagem_por_rodada_e_gate(self):
+        self.instalar()
+        folha, qa = self.auto / ".sem-folha", self.auto / ".sem-qa"
+        comum = self.sistema()
+        for trecho in (f"python3 {folha} --saida /tmp/gerador-x/qa/folha-N.jpg --pasta /tmp/gerador-x/qa",
+                       f"python3 {qa} {self.auto}/b-bom/index.html --capturas /tmp/gerador-x/qa",
+                       "UMA imagem por rodada", "primeira `<section>` dentro de `<main>`", "fim do Ato I",
+                       "--force-prefers-reduced-motion", "--blink-settings=scriptEnabled=false", "não tente",
+                       "Código 1 = falhou", "Se o próprio gate quebrar", f"{self.auto}/b-bom/CONCEITO.md"):
+            self.assertIn(trecho, comum)
+        self.assertNotIn("grave no rascunho um script python3", comum)
+        self.assertIn("folha de contato só", self.sistema(True))
+        premium = self.sistema(True, True)
+        for trecho in (f"python3 {folha} --saida /tmp/gerador-x/qa/folha-N.jpg --pasta /tmp/gerador-x/qa --refs",
+                       f"(17) o gate `python3 {qa} {self.auto}/b-bom/index.html --capturas /tmp/gerador-x/qa` sai 0",
+                       "--screenshot=/tmp/gerador-x/qa/d-ato3-p0.3.png", "a m-ato1-semjs.png que o gate tira",
+                       "CHECKLIST DOS ATOS", "(20) `window.onerror` vazio"):
+            self.assertIn(trecho, premium)
+        for velho in ("Leia (Read) as capturas LADO A LADO", "o script de bytes passa", "/qa/d1.png"):
+            self.assertNotIn(velho, premium)
+
+    def test_lista_de_permissao_deixa_chamar_os_dois_por_caminho(self):
+        """O Claude chama `python3 <caminho instalado>` (como o refero-aprender): uma regra allow casa e nenhuma deny."""
+        import fnmatch
+        self.instalar()
+        p = self.m.permissoes_do_claude("b-bom", self.rascunho)["permissions"]
+        regras = lambda lista: [r[5:-1] for r in lista if r.startswith("Bash(")]
+        for cmd in (f"python3 {self.auto}/.sem-qa {self.auto}/b-bom/index.html --capturas /tmp/gerador-x/qa",
+                    f"python3 {self.auto}/.sem-folha --saida /tmp/gerador-x/qa/folha-1.jpg --pasta /tmp/gerador-x/qa"):
+            self.assertTrue(any(fnmatch.fnmatchcase(cmd, r) for r in regras(p["allow"])), cmd)
+            self.assertFalse(any(fnmatch.fnmatchcase(cmd, r) for r in regras(p["deny"])), cmd)
+
+
+class FolhaDeContato(unittest.TestCase):
+    def setUp(self):
+        self.f = modulo("folha-de-contato")
+        self.pasta = Path(tempfile.mkdtemp(prefix="folha-teste-"))
+        self.addCleanup(shutil.rmtree, self.pasta)
+
+    def test_rotulo_sai_do_nome(self):
+        d = self.f.descrever
+        self.assertEqual(d("m-ato1-rm.png", 390, 844), ("celular", "Ato I · celular 390×844 · reduced-motion"))
+        self.assertEqual(d("d-ato3-p0.3.png", 1440, 900), ("desktop", "Ato III · desktop 1440×900 · p=0.3"))
+        self.assertEqual(d("m-ato1-sem-js.png", 390, 844), ("celular", "Ato I · celular 390×844 · sem JS"))
+        self.assertEqual(d("captura.png", 390, 844), ("celular", "celular 390×844 · captura"))  # viewport pelo tamanho
+        self.assertEqual(d("01-linear.jpg", 800, 500, ref=True), ("ref", "REF · 01-linear"))
+
+    def test_folha_cabe_no_limite_e_celular_tem_o_dobro_da_escala(self):
+        itens = [("desktop", 1440, 900)] * 6 + [("celular", 390, 844)] * 8 + [("ref", 800, 520)] * 4
+        s, largura, altura, caixas = self.f.planejar(itens)
+        self.assertLessEqual(max(largura, altura), self.f.MAX_LADO)
+        self.assertLessEqual(largura * altura, self.f.MAX_PIXELS)
+        self.assertGreater(s, 0.15)
+        cel, desk = caixas[6], caixas[0]
+        self.assertAlmostEqual(cel[2] / 390, 2 * desk[2] / 1440, delta=0.02)
+        for i, (x, y, w, h) in enumerate(caixas):  # nada sai da folha e nada se sobrepõe
+            self.assertTrue(0 <= x and x + w <= largura and y + h <= altura)
+            for x2, y2, w2, h2 in caixas[i + 1:]:
+                self.assertTrue(x + w <= x2 or x2 + w2 <= x or y + h <= y2 or y2 + h2 <= y)
+
+    def test_poucas_capturas_saem_em_tamanho_real(self):
+        s, _, _, caixas = self.f.planejar([("celular", 390, 844), ("celular", 390, 844)])
+        self.assertEqual(caixas[0][2:], (390, 844))
+        self.assertEqual(self.f.planejar([("desktop", 1440, 900)])[0], 1.0)
+
+    def test_pasta_ignora_folhas_e_temporarios_em_ordem_natural(self):
+        for nome in ("m-ato10.png", "m-ato2.png", "folha-1.jpg", ".nova-m-ato1-rm.png", "_sem-js.html", "d-ato1.png"):
+            (self.pasta / nome).write_bytes(b"x")
+        self.assertEqual([p.name for p in self.f.capturas_da_pasta(self.pasta)], ["d-ato1.png", "m-ato2.png", "m-ato10.png"])
+
+    def test_sem_captura_e_codigo_2(self):
+        self.assertEqual(self.f.main(["--saida", str(self.pasta / "folha.jpg"), "--pasta", str(self.pasta)]), 2)
+        self.assertEqual(self.f.main(["--saida", str(self.pasta / "folha.jpg"), "--pasta", str(self.pasta / "nao")]), 2)
+
+    @unittest.skipUnless(TEM_PIL, "sem Pillow")
+    def test_monta_a_folha(self):
+        from PIL import Image
+        for nome in ("m-ato1.png", "m-ato1-rm.png", "m-ato3-p0.3.png"):
+            png_listrado(self.pasta / nome)
+        png_listrado(self.pasta / "d-ato1.png", 1440, 900)
+        ref = self.pasta / "refs"
+        ref.mkdir()
+        png_listrado(ref / "01-site.png", 800, 500)
+        saida = self.pasta / "folha-1.jpg"
+        self.assertEqual(self.f.main(["--saida", str(saida), "--pasta", str(self.pasta), "--refs", str(ref / "01-site.png")]), 0)
+        with Image.open(saida) as im:
+            self.assertLessEqual(max(im.size), self.f.MAX_LADO)
+        self.assertNotIn(saida, self.f.capturas_da_pasta(self.pasta))  # a próxima rodada não junta a folha
+
+
+HTML_BOM = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+:root{--papel:#f4efe6;--tinta:#1d1b18;--wa:#0b6b3a}
+body{background:var(--papel);color:var(--tinta)}
+.cta{background:var(--wa);color:#fff}
+.veu{background:rgba(255,255,255,.08);color:#f0f0f0}
+@font-face{font-family:"Fraunces";src:url(data:font/woff2;base64,AAAA) format("woff2")}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style></head><body><main>
+<section id="ato-1"><h1>Desentupidora</h1><img src="data:image/webp;base64,QUJD" alt="Fachada azul" width="800" height="600"></section>
+<section id="ato-2"><img src="data:image/webp;base64,QUJD" alt="Caminhão" width="400" height="300"></section>
+</main><script>
+const rm = matchMedia('(prefers-reduced-motion: reduce)'); requestAnimationFrame(() => {});
+</script></body></html>"""
+
+
+class QaNumerico(unittest.TestCase):
+    def setUp(self):
+        self.q = modulo("qa-numerico")
+        self.pasta = Path(tempfile.mkdtemp(prefix="qa-teste-"))
+        self.addCleanup(shutil.rmtree, self.pasta)
+
+    def estados(self, html, **k):
+        return {i.nome: (i.estado, i.texto) for i in self.q.avaliar(html, **k)}
+
+    def test_pagina_dentro_das_regras_passa(self):
+        r = self.estados(HTML_BOM)
+        self.assertEqual([n for n, (e, _) in r.items() if e != "OK"], [], r)
+        # body e .cta medidos; o véu translúcido (fundo desconhecido) fica sem medir
+        self.assertIn("2 par(es) conferido(s), 1 sem medir", r["Contraste AA (cor/fundo do CSS)"][1])
+
+    def test_ato1_e_a_primeira_section_do_main_com_aninhamento(self):
+        html = "<html><body><section>fora</section><main><section>a<section>b</section>c</section><section>d</section></main></body></html>"
+        inicio, fim = self.q.fim_do_ato1(html)
+        self.assertEqual(html[inicio:fim], "<section>a<section>b</section>c</section>")
+        com_comentario = "<html><body><main><!-- <section> --><script>'<section>'</script><section>x</section></main></body></html>"
+        i, f = self.q.fim_do_ato1(com_comentario)
+        self.assertEqual(com_comentario[i:f], "<section>x</section>")
+        self.assertIsNone(self.q.fim_do_ato1("<html><body><main><div>sem section</div></main></body></html>"))
+
+    def test_orcamento_de_bytes_diz_o_que_cortar(self):
+        foto = "A" * 230_000
+        html = HTML_BOM.replace('base64,QUJD" alt="Fachada', f'base64,{foto}" alt="Fachada')
+        r = self.estados(html)
+        estado, texto = r["Bytes até o fim do Ato I"]
+        self.assertEqual(estado, "FALHA")
+        self.assertIn("Corte antes do fim do Ato I: image/webp em base64 de 230.0 KB", texto)
+        self.assertEqual(r["Fotos embutidas"][0], "FALHA")  # hero > 80 KB
+        self.assertIn("foto do hero (Fachada azul)", r["Fotos embutidas"][1])
+        grande = HTML_BOM.replace("</main>", f'<section><img src="data:image/webp;base64,{"B" * 470_000}" alt="x" width="1" height="1"></section></main>')
+        self.assertEqual(self.estados(grande)["Arquivo inteiro"][0], "FALHA")
+        self.assertEqual(self.estados(grande)["Bytes até o fim do Ato I"][0], "OK")
+
+    def test_css_e_js_contam_sem_base64(self):
+        fonte_grande = HTML_BOM.replace("base64,AAAA", "base64," + "A" * 60_000)
+        r = self.estados(fonte_grande)
+        self.assertEqual(r["CSS sem base64"][0], "OK")  # a fonte embutida não conta como CSS
+        self.assertEqual(r["Fontes"][0], "OK")
+        css = HTML_BOM.replace("</style>", ".x{color:red}" * 3000 + "</style>")
+        self.assertEqual(self.estados(css)["CSS sem base64"][0], "FALHA")
+        js = HTML_BOM.replace("</script>", "// comentário longo\n" * 1500 + "</script>")
+        self.assertEqual(self.estados(js)["JS sem base64"][0], "FALHA")
+        ld = HTML_BOM.replace("</body>", '<script type="application/ld+json">' + "{}" * 20_000 + "</script></body>")
+        self.assertEqual(self.estados(ld)["JS sem base64"][0], "OK")  # dado estruturado não é JS
+
+    def test_fontes_familias_e_peso(self):
+        tres = HTML_BOM.replace("</style>", '@font-face{font-family:"A";src:url(data:font/woff2;base64,AA)}'
+                                '@font-face{font-family:B;src:url(data:font/woff2;base64,AA)}</style>')
+        self.assertIn("3 famílias", self.estados(tres)["Fontes"][1])
+        pesada = HTML_BOM.replace("base64,AAAA", "base64," + "A" * 90_000)
+        self.assertIn("pyftsubset", self.estados(pesada)["Fontes"][1])
+        externa = HTML_BOM.replace("</style>", '@font-face{font-family:"Fraunces";src:url(https://x/f.woff2)}</style>')
+        self.assertIn("fora do arquivo", self.estados(externa)["Fontes"][1])
+
+    def test_imagens_sem_dimensao_ou_sem_alt(self):
+        html = HTML_BOM.replace('alt="Caminhão" width="400" height="300"', 'alt="foto com width e height"')
+        r = self.estados(html)
+        self.assertEqual(r["Imagens com width e height"][0], "FALHA")  # texto do alt não vale como atributo
+        self.assertEqual(r["Alt das imagens"][0], "OK")
+        sem_alt = HTML_BOM.replace('alt="Caminhão" ', "")
+        self.assertEqual(self.estados(sem_alt)["Alt das imagens"][0], "FALHA")
+        vazio = HTML_BOM.replace('alt="Caminhão"', 'alt=""')
+        self.assertEqual(self.estados(vazio)["Alt das imagens"][0], "AVISO")
+        seis = HTML_BOM.replace("</main>", "".join(f'<img src="data:image/jpeg;base64,QQ" alt="f{i}" width="1" height="1">'
+                                                   for i in range(6)) + "</main>")
+        self.assertIn("fotos de conteúdo (máximo 5)", self.estados(seis)["Fotos embutidas"][1])
+
+    def test_reduced_motion_no_css_e_no_js_que_anima(self):
+        sem_css = HTML_BOM.replace("@media (prefers-reduced-motion: reduce){*{animation:none!important}}", "")
+        self.assertIn("nenhum @media", self.estados(sem_css)["prefers-reduced-motion"][1])
+        sem_js = HTML_BOM.replace("matchMedia('(prefers-reduced-motion: reduce)');", "1;")
+        self.assertIn("o JS anima", self.estados(sem_js)["prefers-reduced-motion"][1])
+
+    def test_contraste_aa(self):
+        q = self.q
+        self.assertAlmostEqual(q.contraste(q.cor("#fff"), q.cor("#000")), 21.0, places=1)
+        self.assertAlmostEqual(q.contraste(q.cor("#ffffff"), q.cor("#25D366")), 1.98, places=2)
+        self.assertEqual(q.cor("rgb(255 0 0 / 50%)"), (255, 0, 0, 0.5))
+        self.assertEqual(q.cor("hsl(0, 0%, 100%)"), (255, 255, 255, 1.0))
+        self.assertIsNone(q.cor("oklch(70% 0.1 200)"))
+        verde = HTML_BOM.replace("--wa:#0b6b3a", "--wa:#25D366")
+        estado, texto = self.estados(verde)["Contraste AA (cor/fundo do CSS)"]
+        self.assertEqual(estado, "FALHA")
+        self.assertIn(".cta #ffffff sobre #25d366 = 1.98:1", texto)
+        grande = verde.replace(".cta{background:var(--wa);color:#fff}", ".cta{background:var(--wa);color:#fff;font-size:28px}")
+        self.assertIn("mínimo 3:1", self.estados(grande)["Contraste AA (cor/fundo do CSS)"][1])
+        # véu translúcido (fundo desconhecido) e tema escuro ficam de fora
+        escuro = HTML_BOM.replace("</style>", "@media (prefers-color-scheme: dark){.x{color:#111;background:#000}}</style>")
+        self.assertEqual(self.estados(escuro)["Contraste AA (cor/fundo do CSS)"][0], "OK")
+        local = HTML_BOM.replace("</style>", ".tinta{--fg:#777;color:var(--fg);background:#888}</style>")
+        self.assertEqual(self.estados(local)["Contraste AA (cor/fundo do CSS)"][0], "FALHA")
+        aninhado = HTML_BOM.replace("</style>", ".card{padding:1rem; &:hover{color:#eee;background:#fff}}</style>")
+        self.assertIn(".card:hover", self.estados(aninhado)["Contraste AA (cor/fundo do CSS)"][1])
+
+    def test_visibilidade_por_histograma(self):
+        liso = [0] * 256
+        liso[240] = 1000
+        self.assertEqual(self.q.visibilidade(liso), (0.0, 0.0))
+        com_conteudo = [0] * 256
+        com_conteudo[240], com_conteudo[30] = 700, 300
+        desvio, parcela = self.q.visibilidade(com_conteudo)
+        self.assertGreater(desvio, self.q.DESVIO_MIN)
+        self.assertAlmostEqual(parcela, 0.3)
+        r = self.estados(HTML_BOM, capturas={}, histogramas={"sem_js": liso, "reduzido": com_conteudo})
+        self.assertEqual(r["Ato I visível sem JS"][0], "FALHA")
+        self.assertIn("html.js", r["Ato I visível sem JS"][1])
+        self.assertEqual(r["Ato I visível com reduced-motion"][0], "OK")
+        aviso = self.estados(HTML_BOM, capturas={"erro_sem_js": "Chrome não encontrado", "erro_reduzido": "x"})
+        self.assertEqual(aviso["Ato I visível sem JS"][0], "AVISO")  # o gate sem Chrome não reprova o site
+
+    def test_acha_so_as_capturas_do_ato1(self):
+        for nome in ("m-ato3-rm.png", "m-ato1-rm.png", "m-ato1-semjs.png", "folha-1-semjs.jpg", "m-ato10-semjs.png"):
+            (self.pasta / nome).write_bytes(b"x")
+        achadas = self.q.achar_capturas(self.pasta)
+        self.assertEqual({k: v.name for k, v in achadas.items()}, {"reduzido": "m-ato1-rm.png", "sem_js": "m-ato1-semjs.png"})
+
+    def test_copia_sem_js(self):
+        html = '<html><head><script>document.documentElement.classList.add("js")</script></head><body><noscript><p>oi</p></noscript></body></html>'
+        self.assertEqual(self.q.html_sem_js(html), "<html><head></head><body><p>oi</p></body></html>")
+
+    def test_codigos_de_saida(self):
+        bom, ruim = self.pasta / "bom.html", self.pasta / "ruim.html"
+        bom.write_text(HTML_BOM, encoding="utf-8")
+        ruim.write_text(HTML_BOM.replace('width="800" height="600"', ""), encoding="utf-8")
+        self.assertEqual(self.q.main([str(bom)]), 0)
+        self.assertEqual(self.q.main([str(ruim)]), 1)
+        self.assertEqual(self.q.main([str(self.pasta / "nao-existe.html")]), 2)
+
+    def chrome_falso(self, grava=True):
+        falso = self.pasta / "chrome-falso"
+        falso.write_text(f"""#!/usr/bin/env python3
+import json, os, sys
+sys.path.insert(0, {str(AQUI)!r})
+args = sys.argv[1:]
+with open({str(self.pasta / 'chamadas.jsonl')!r}, "a") as f:
+    f.write(json.dumps(args) + "\\n")
+perfil = next(a.split("=", 1)[1] for a in args if a.startswith("--user-data-dir="))
+os.makedirs(os.path.join(perfil, "Default"), exist_ok=True)  # o Chrome de verdade suja o perfil
+saida = next(a.split("=", 1)[1] for a in args if a.startswith("--screenshot="))
+if {grava!r}:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("t", {str(AQUI / 'gerador-de-sites.test.py')!r})
+    t = importlib.util.module_from_spec(spec); spec.loader.exec_module(t)
+    from pathlib import Path
+    t.png_listrado(Path(saida), liso="semjs" in saida)
+""", encoding="utf-8")
+        falso.chmod(0o755)
+        self.q.CHROMES = (str(falso),)
+        tmp = self.pasta / "tmp"
+        tmp.mkdir()
+        antes = os.environ.get("TMPDIR")
+        os.environ["TMPDIR"] = str(tmp)
+        self.q.tempfile.tempdir = None
+        self.addCleanup(lambda: (os.environ.pop("TMPDIR") if antes is None else os.environ.__setitem__("TMPDIR", antes),
+                                 setattr(self.q.tempfile, "tempdir", None)))
+        return tmp
+
+    @unittest.skipUnless(TEM_PIL and os.name == "posix", "sem Pillow ou fora do Linux")
+    def test_gate_tira_as_capturas_do_ato1_com_perfil_proprio(self):
+        tmp = self.chrome_falso()
+        index, qa = self.pasta / "index.html", self.pasta / "qa"
+        index.write_text(HTML_BOM, encoding="utf-8")
+        codigo = self.q.main([str(index), "--capturas", str(qa)])
+        chamadas = [json.loads(l) for l in (self.pasta / "chamadas.jsonl").read_text().splitlines()]
+        self.assertEqual(len(chamadas), 2)
+        sem_js, rm = chamadas
+        self.assertTrue(sem_js[-1].endswith("/qa/_sem-js.html"))
+        self.assertNotIn("<script", (qa / "_sem-js.html").read_text())
+        self.assertNotIn("--force-prefers-reduced-motion", sem_js)
+        self.assertIn("--force-prefers-reduced-motion", rm)
+        self.assertTrue(rm[-1].endswith("/index.html"))
+        self.assertIn("--window-size=390,844", rm)
+        self.assertEqual(list(tmp.iterdir()), [])  # o perfil temporário do Chrome não sobra
+        self.assertEqual(sorted(p.name for p in qa.iterdir()), ["_sem-js.html", "m-ato1-rm.png", "m-ato1-semjs.png"])
+        self.assertEqual(codigo, 1)  # o falso grava a sem JS lisa: Ato I invisível sem JS
+
+    @unittest.skipUnless(TEM_PIL and os.name == "posix", "sem Pillow ou fora do Linux")
+    def test_chrome_que_nao_grava_usa_a_captura_antiga_ou_avisa(self):
+        self.chrome_falso(grava=False)
+        index, qa = self.pasta / "index.html", self.pasta / "qa"
+        index.write_text(HTML_BOM, encoding="utf-8")
+        qa.mkdir()
+        png_listrado(qa / "m-ato1-rm.png")  # de uma rodada anterior
+        capturas = self.q.capturas_do_gate(index, HTML_BOM, qa)
+        self.assertEqual(capturas["reduzido"], qa / "m-ato1-rm.png")
+        self.assertIn("não gravou", capturas["erro_sem_js"])
+        self.assertEqual(self.q.main([str(index), "--capturas", str(qa)]), 0)  # AVISO não reprova
 
 
 if __name__ == "__main__":

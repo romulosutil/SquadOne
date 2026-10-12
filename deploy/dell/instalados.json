@@ -21,6 +21,8 @@
     {"repo": "deploy/dell/site-pastas.py", "instalado": "~/.local/bin/site-pastas"},
     {"repo": "deploy/dell/gerador-de-sites.py", "instalado": "~/.local/bin/gerador-de-sites"},
     {"repo": "deploy/dell/refero-aprender.py", "instalado": "~/.local/bin/refero-aprender"},
+    {"repo": "deploy/dell/folha-de-contato.py", "instalado": "~/.local/bin/folha-de-contato"},
+    {"repo": "deploy/dell/qa-numerico.py", "instalado": "~/.local/bin/qa-numerico"},
     {"repo": "deploy/dell/lote-continuo.py", "instalado": "~/.local/bin/lote-continuo"},
     {"repo": "deploy/dell/raio-x.py", "instalado": "~/.local/bin/raio-x"},
     {"repo": "deploy/dell/auto-site/auto-site-CLAUDE.md", "instalado": "~/auto-site/CLAUDE.md", "modo": "444"},

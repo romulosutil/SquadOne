@@ -1386,6 +1386,80 @@ install -D -m 444 ~/SquadOne/deploy/dell/auto-site/lead-novo.md ~/auto-site/.cla
 install -m 755 ~/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
 ```
 
+### QA com uma imagem por rodada: folha de contato e gate numérico (11/10/2026)
+
+A cota do Claude aperta, e o QA era o que mais lia imagem. Medido nas transcrições dos leads
+de 08-10/10/2026 (`~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/*.jsonl`, contando
+os `Read` de imagem por sessão, sem duplicar a mesma chamada):
+
+| modo | leads | capturas lidas | em chamadas | referências lidas | chamadas ao modelo | cache lido por lead |
+|---|---|---|---|---|---|---|
+| premium (lote contínuo) | 97 | 44 | 18 | 28 (em 5) | 136 | ~41 M tokens |
+| comum | 1 | 13 | 8 | 0 | 86 | ~15 M tokens |
+
+Cada chamada relê o contexto inteiro (~300 mil tokens no premium) e cada imagem lida fica nele
+até o fim. Além disso, todo lead escrevia o próprio script de bytes e descobria sozinho que o
+`--blink-settings=scriptEnabled=false` **não grava captura** no Chrome do Dell (154), fazendo à
+mão uma cópia sem `<script>`. Duas ferramentas, instaladas em `~/.local/bin` e chamadas pelo
+Claude com `python3 <caminho>` (o `Bash(python3 *)` da lista já cobre; o teste confere):
+
+- **`folha-de-contato`** (`deploy/dell/folha-de-contato.py`): junta as capturas de uma rodada
+  (`--pasta <rascunho>/qa`, menos `folha*` e ocultos) e, no premium, as 4 referências escolhidas
+  (`--refs`) numa imagem só, rotulada `#N Ato · viewport · modo` a partir do nome
+  (`m-ato1-rm.png`, `d-ato3-p0.3.png`). Celular no dobro da escala do desktop (até 100%), lado
+  longo até 2000 px: é o que o `Read` do Claude Code entrega sem reduzir (uma folha de 1266x2575
+  chegou como 983x2000). Imprime a legenda e a estimativa de tokens (~3,7 mil por folha cheia).
+- **`qa-numerico`** (`deploy/dell/qa-numerico.py`): o gate antes do deploy, com os tetos das
+  "Regras do arquivo" do `auto-site-CLAUDE.md` (fim do Ato I ≤ 200 KB, arquivo ≤ 450 KB, CSS ≤
+  35 KB e JS ≤ 25 KB sem base64, fontes ≤ 80 KB em até 2 famílias e sem url externa, hero ≤
+  80 KB, foto de conteúdo ≤ 60 KB e no máximo 5), `<img>` sem `width`/`height` ou sem `alt`,
+  `prefers-reduced-motion` no CSS (e no JS que usa `requestAnimationFrame`), contraste AA dos
+  pares cor/fundo declarados na mesma regra do CSS (tokens resolvidos; fundo translúcido,
+  gradiente e tema escuro ficam "sem medir") e o Ato I visível sem JS e com reduced-motion
+  (desvio da luminância ≥ 10 e ≥ 3% de pixels longe da cor dominante; demos reais dão 60-76 e
+  26-38%, tela lisa dá 0). Com `--capturas` ele mesmo tira, do `index.html` de agora, as duas
+  capturas 390x844 do Ato I (a sem JS de uma cópia sem `<script>`), com perfil temporário próprio
+  (nada em `~/.cache`). O Ato I é a primeira `<section>` dentro de `<main>`. Código 0 = passou,
+  1 = falhou (cada FALHA diz o que cortar), 2 = erro de uso; Chrome que falha vira AVISO, não
+  reprova. Nos 10 demos mais recentes, 8 passam; os 2 que falham excedem a regra de verdade
+  (3 famílias de fonte; JS de 25,5 KB).
+
+As instruções da execução (`instrucoes_da_execucao`, o "E" do personalizado e o "V" do premium)
+só mandam usar as duas se `~/.local/bin/folha-de-contato` e `~/.local/bin/qa-numerico`
+existirem (`ferramentas_de_qa()`); sem elas, o texto é o de antes. Assim, o gerador novo
+instalado sem os scripts não manda o Claude chamar o que não existe. O `auto-site-CLAUDE.md`
+(passo 4.5, "Regras do arquivo" e checklist) e o `lead-novo.md` citam as ferramentas.
+
+Estimativa por lead premium: das 44 capturas em 18 chamadas para 3-4 folhas em 3-4 chamadas
+(~42 mil tokens de imagem para ~15 mil), menos ~14 chamadas que releriam ~300 mil tokens de cache
+cada (~4 M dos ~41 M), mais os turnos do script de bytes e da descoberta do Chrome sem JS. As 28
+referências da etapa R continuam lidas uma a uma (é aprendizado, não QA); juntá-las em folhas
+é o próximo corte possível, se a qualidade aguentar.
+
+Instalar (numa sessão no Dell, depois do merge; os dois scripts **antes** do gerador):
+
+```bash
+install -m 755 ~/SquadOne/deploy/dell/folha-de-contato.py ~/.local/bin/folha-de-contato
+install -m 755 ~/SquadOne/deploy/dell/qa-numerico.py ~/.local/bin/qa-numerico
+install -m 755 ~/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
+install -D -m 444 ~/SquadOne/deploy/dell/auto-site/auto-site-CLAUDE.md ~/auto-site/CLAUDE.md
+install -D -m 444 ~/SquadOne/deploy/dell/auto-site/lead-novo.md ~/auto-site/.claude/commands/lead-novo.md
+dell-status --instalados   # nada atrás
+```
+
+Conferir sem gerar lead: `python3 ~/.local/bin/qa-numerico ~/auto-site/<slug>/index.html` (só
+lê) e, com capturas, `--capturas /tmp/qa-x` (escreve só lá; apague depois). Voltar atrás:
+apagar as duas cópias de `~/.local/bin` devolve o QA antigo no lead seguinte, sem reinstalar o
+gerador.
+
+Medir antes e depois (1 lead real, com aprovação do Rômulo): anote o último lead premium antes
+da instalação e o primeiro depois; para cada um, no `execucao-<slug>.log` está o id da sessão
+e os minutos ("Claude Code finalizado ... em N min"); na transcrição
+`~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/<sessão>.jsonl`, some o `usage` de cada
+mensagem do assistente **uma vez por `message.id`** (input, output, cache lido, cache criado) e
+conte os `Read` de `.png`/`.jpg` (capturas em `/tmp/gerador-*/qa/`, referências em `refs/`). A
+qualidade se confere no demo publicado e nos `CRITICA-N.md` da pasta do lead.
+
 ### Permissões do Claude (lista de permissão, desde 30/09/2026)
 
 Até 29/09 o Claude rodava com `--dangerously-skip-permissions`: podia fazer

@@ -137,6 +137,22 @@ SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n
 # publica `/raio-x` no mesmo projeto. O deploy do Claude só leva index.html e og.jpg, então um
 # refazer apaga o Raio-X do ar e este gancho o devolve. Sem o binário, o demo segue sem ele.
 RAIO_X = Path(os.environ.get("RAIO_X_BIN", str(Path.home() / ".local/bin/raio-x")))
+# QA com menos imagens (11/10/2026): nos 97 leads premium de 08-10/10 o Claude leu, em média, 44
+# capturas por lead (em 18 chamadas ao modelo, cada uma relendo ~300 mil tokens de contexto). A
+# folha de contato junta as capturas de uma rodada numa imagem só; o gate numérico mede antes do
+# deploy o que não precisa de olho (bytes, CLS, alt, contraste, reduced-motion, Ato I sem JS) e
+# tira ele mesmo as duas capturas do Ato I. As instruções só os citam se estiverem instalados:
+# o gerador novo com as cópias antigas segue o QA de antes, sem quebrar o lead.
+FOLHA_DE_CONTATO = Path(os.environ.get("FOLHA_DE_CONTATO_BIN", str(Path.home() / ".local/bin/folha-de-contato")))
+QA_NUMERICO = Path(os.environ.get("QA_NUMERICO_BIN", str(Path.home() / ".local/bin/qa-numerico")))
+
+
+def ferramentas_de_qa() -> bool:
+    return FOLHA_DE_CONTATO.is_file() and QA_NUMERICO.is_file()
+
+
+def pasta_de_capturas(rascunho: Path) -> Path:
+    return rascunho / "qa"
 PROMPT_PERSONALIZADO = (
     "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, conceito autoral, "
     "redação própria e revisão crítica antes de publicar), na direção de metáfora e Atos do passo 1.5.1 do CLAUDE.md, "
@@ -225,10 +241,16 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
     """Vai no --append-system-prompt: sem isto o Claude gasta turnos batendo nas
     negações (o roteiro de deploy do CLAUDE.md usa variável de shell, que o
     Claude Code nega em caminho)."""
-    lead, palco = AUTO / slug, palco_do_deploy(slug, rascunho)
+    lead, palco, qa = AUTO / slug, palco_do_deploy(slug, rascunho), pasta_de_capturas(rascunho)
+    if ferramentas_de_qa():
+        conferencias = f"""- Direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. O Ato I é a primeira `<section>` dentro de `<main>`: é até o fim dela que se mede o orçamento.
+- QA com UMA imagem por rodada. Grave as capturas em {qa}/ (mkdir -p {qa} numa chamada só), com nome `<viewport>-ato<N>[-<modo>].png`: viewport `d` (--window-size=1440,900) ou `m` (390,844); modo `rm` (--force-prefers-reduced-motion), `p0.3` (progresso da narrativa); ex.: {qa}/m-ato3-p0.3.png. A cada rodada regrave com os mesmos nomes. Não leia as capturas uma a uma: junte-as com `python3 {FOLHA_DE_CONTATO} --saida {qa}/folha-N.jpg --pasta {qa}` (N = rodada; ele imprime a legenda #1, #2... com Ato, viewport, modo e escala) e leia (Read) só a folha. Abra uma captura isolada apenas se a folha não deixar julgar um defeito concreto, no máximo uma por rodada.
+- Gate antes do deploy: `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}`. Ele mede o orçamento das "Regras do arquivo" (fim do Ato I, total, CSS e JS sem base64, fontes, fotos), width/height e alt das imagens, prefers-reduced-motion no CSS e no JS, contraste AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion; essas duas capturas ele mesmo tira do index.html de agora (m-ato1-semjs.png de uma cópia sem <script>: o `--blink-settings=scriptEnabled=false` não grava captura neste Chrome, não tente). Código 1 = falhou e cada FALHA diz o que cortar: corrija e rode o mesmo comando até sair 0 (não escreva um script de bytes seu). Só então og:image e deploy. Se o próprio gate quebrar (código 2 ou traceback), diga no resumo final e confira à mão: bytes com um script no rascunho e o Ato I numa cópia sem <script>."""
+    else:
+        conferencias = f"""- Direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. Antes do deploy, duas conferências: (a) grave no rascunho um script python3 que lê {lead}/index.html e imprime os bytes do começo do arquivo até o fim do Ato I, o total, o CSS e o JS sem base64, as fontes e cada imagem embutida, e falha acima do orçamento das "Regras do arquivo"; corte até passar. (b) Além das capturas normais, uma a 390x844 com `--force-prefers-reduced-motion` e outra com `--blink-settings=scriptEnabled=false` (sem JS): o Ato I tem de estar visível nas duas, e o `--dump-dom` com reduced-motion não pode ter conteúdo escondido esperando animação."""
     return f"""Execução automática do gerador de sites no Dell, com lista de permissão (modo dontAsk): o que não está na lista é negado na hora, sem pergunta. Não repita um comando negado; siga pelo caminho permitido.
 - A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
-- Direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. Antes do deploy, duas conferências: (a) grave no rascunho um script python3 que lê {lead}/index.html e imprime os bytes do começo do arquivo até o fim do Ato I, o total, o CSS e o JS sem base64, as fontes e cada imagem embutida, e falha acima do orçamento das "Regras do arquivo"; corte até passar. (b) Além das capturas normais, uma a 390x844 com `--force-prefers-reduced-motion` e outra com `--blink-settings=scriptEnabled=false` (sem JS): o Ato I tem de estar visível nas duas, e o `--dump-dom` com reduced-motion não pode ter conteúdo escondido esperando animação.
+{conferencias}
 - Escreva só em {lead}/, {AUTO}/registro.md, {AUTO}/_build/ e no rascunho {rascunho} (é o $TMPDIR: capturas, fontes, imagens e scripts temporários, palco do deploy). CLAUDE.md, .claude/ e .logs/ são só leitura.
 - No Bash, escreva caminhos literais: variável de shell em caminho ("$stage", "${{TMPDIR:-/tmp}}") e laço for/while com variável são negados. Python de mais de uma linha: grave o script no rascunho (Write) e rode `python3 <arquivo>`; heredoc (`python3 - <<EOF`) e `python3 -c` de várias linhas costumam ser negados. Pasta nova: mkdir -p numa chamada só dele, e só na chamada seguinte use a pasta (cd, > arquivo).
 - Descartar o lead (regras do CLAUDE.md: o negócio já tem site no ar, é rede/franquia com site, é duplicado ou já tem linha "— (não publicado)" no registro.md): não mova a pasta, mover para _descartados/ está fora da lista. Grave {lead}/{SINAL_DESCARTE} com o motivo (primeira linha: o motivo numa frase; depois as evidências: URLs testadas e o que o curl ou o DOM renderizado mostrou), anote a linha "— (não publicado)" no registro.md e termine sem index.html e sem publicado.json. O runner move a pasta para _descartados/ e conta como descarte, não como falha. Onde o CLAUDE.md manda mover para _descartados/, grave o {SINAL_DESCARTE}. Não grave {SINAL_DESCARTE} no caso "presença digital fraca ou nula" (lá o CLAUDE.md manda parar e devolver ao Rômulo, sem descartar).
@@ -251,6 +273,8 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
     `backup` = pasta `_vN/` do site anterior (refazer); None = lead novo."""
     lead = AUTO / slug
     cliches = "; ".join(f"\"{c}\"" for c in CLICHES)
+    verificacao = (" As capturas seguem os nomes das instruções da execução e são lidas numa folha de contato só "
+                   "(uma imagem por rodada), e o gate numérico roda antes do deploy." if ferramentas_de_qa() else "")
     if backup:
         abertura = (f"- Isto é um REFAZER. O site anterior deste lead está em {lead}/{backup}/ (index.html, og.jpg, DESIGN.md, CONCEITO.md se houver; pode haver outras "
                     f"versões em {lead}/_v*/). Leia-o uma vez só para saber o que NÃO repetir: outra paleta, outro estilo, outra instância da metáfora "
@@ -277,7 +301,7 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
     - Acabamento: estados de foco, pressionado e carregando com a mesma linguagem de mola; transições de estado coerentes.
     - Desempenho e acessibilidade: 60 fps em celular médio; nada de trabalho pesado por frame; `will-change` só durante a animação. `prefers-reduced-motion: reduce` desliga o decorativo mas mantém conteúdo e função (a narrativa vira estática e legível); tudo que é interativo tem foco por teclado; nada que pisque. Sem JavaScript ativo, o conteúdo inteiro continua visível.
     - Advocacia: o mesmo nível técnico, em tom contido e elegante (OAB sóbria): movimento que revela e organiza, sem exibição.
-    - Verificação: coloque um `window.onerror` temporário que escreve num elemento e leia com `--dump-dom`; tire capturas em 4 posições de scroll no desktop e no celular; confira o estado final com reduced-motion.
+    - Verificação: coloque um `window.onerror` temporário que escreve num elemento e leia com `--dump-dom`; tire capturas em 4 posições de scroll no desktop e no celular; confira o estado final com reduced-motion.{verificacao}
   F. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) o que o conceito prometeu e a página entregou ou não; (4) "Movimento": a tabela do CONCEITO.md conferida contra o código (efeito que sobrou sem significado sai do index.html) e o que cai com reduced-motion; (5) "Confiança": cada afirmação de experiência com a fonte, e nenhuma frase de medo, desconfiança ou urgência artificial. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
 - Advocacia: o Provimento 205/2021 da OAB continua valendo (sem avaliações na página, sem promessa de resultado, sem preço, sem superlativo, sem captação). A personalização vem do que é público e permitido: como é o primeiro atendimento, as áreas explicadas pelo que o cliente daquela cidade enfrenta, o fórum e a comarca, a linguagem do próprio advogado em artigos e posts.
 - Tempo: este modo pode usar até o dobro do tempo de um lead comum. Gaste-o na pesquisa e na redação, não em efeitos.
@@ -294,7 +318,7 @@ def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> st
     refs = rascunho / "refs"
     qa = rascunho / "qa"
     caderno = AUTO / "_build" / "aprendizados-refero.md"
-    return f"""MODO PREMIUM (pedido do Rômulo, 08/10/2026). O padrão de qualidade é o refero.design/web-apps: produtos reais de estúdios grandes, com direção de arte, imagem rica, tipografia e ritmo de produção. "Correto" e "criativo" não bastam: o site precisa parecer feito por um estúdio caro. A exigência é a mesma para uma desentupidora e para um escritório de advocacia; muda o mundo visual, não o nível. Estas etapas SOMAM às do modo personalizado, e a etapa R vem antes do `/design`:
+    texto = f"""MODO PREMIUM (pedido do Rômulo, 08/10/2026). O padrão de qualidade é o refero.design/web-apps: produtos reais de estúdios grandes, com direção de arte, imagem rica, tipografia e ritmo de produção. "Correto" e "criativo" não bastam: o site precisa parecer feito por um estúdio caro. A exigência é a mesma para uma desentupidora e para um escritório de advocacia; muda o mundo visual, não o nível. Estas etapas SOMAM às do modo personalizado, e a etapa R vem antes do `/design`:
   R. APRENDER COM O REFERO, a cada lead (o exemplo são todos os exemplos). 1) Leia {caderno} se existir: são os princípios que os leads anteriores já extraíram; não repita o que ele já mostra. 2) Rode `python3 /home/romulo-sutil-corr-a/.local/bin/refero-aprender --saida {refs} --consulta "<termo em inglês do setor>" --consulta "<outro termo>" --consulta "<estilo desejado>" --max 30` com 3 a 5 consultas em inglês: o setor do negócio (ex.: "plumber", "law firm", "construction", "equipment rental"), o tipo de serviço (ex.: "local service", "emergency service", "consultancy"), e o ESTILO que o conceito pede (ex.: "editorial", "technical diagram", "dark product", "warm brand"). Sem resultado, tente outras consultas até ter pelo menos 15 imagens. 3) Leia (Read) TODAS as imagens da pasta, uma a uma, e olhe de verdade: grade, escala e contraste da tipografia, o que é imagem e o que é texto, como o hero usa a imagem, densidade, cor, profundidade, acabamento dos componentes. 4) Escolha as 6 mais úteis ao mundo visual deste negócio (não as mais bonitas em geral) e grave {lead}/REFERENCIAS.md: para cada uma, o site, o que ela faz que o seu rascunho de conceito não faz, e UMA decisão concreta que você vai tomar por causa dela (nunca "usar o estilo dela": copiar layout, texto ou marca de terceiros é proibido; aprenda o princípio). Termine com "Princípios deste lead": 5 linhas que valem para qualquer site futuro. 5) O `DESIGN.md` do passo 1.6.1 do CLAUDE.md deve vir de uma referência do MESMO MUNDO do negócio; um estilo de outro mundo (ex.: monografia industrial para um serviço de bairro) é erro.
   G. IMAGEM E MATERIAL, o que mais separa um site de estúdio do nosso. As fotos do Google Places são de celular e pequenas: nunca as use grandes nem cruas. Use-as como PROVA (pequenas, tratadas: recorte intencional, duotone ou grão, moldura, legenda que diz o que mostram). O visual principal tem de ser FEITO POR VOCÊ, em código, com produção: ilustração e cena em SVG com gradientes, luz, sombra projetada, textura (feTurbulence para grão e papel, feDisplacementMap, máscaras), CSS 3D (perspective, transform-style, camadas em profundidade), canvas 2D ou WebGL simples quando o conceito pedir. Proibido: bloco cinza liso, caixa vazia, ícone de biblioteca no lugar de imagem, hero só com texto e cor. Cada seção tem um objeto visual com volume, material e luz. Tipografia: par de fontes com função clara (embutidas e subsetadas, regra do CLAUDE.md), escala modular, entrelinha e tracking ajustados por tamanho, números tabulares onde há número; um sistema de espaçamento de 8 px; no máximo 3 cores mais neutros, com uma cor de acento usada com disciplina.
   K. CONCEITO COMO SISTEMA (feedback do Rômulo sobre o turbo: "ainda não está bem conceitual"). A ideia central não é um tema nem um hero bonito: é a regra que decide TUDO. Complete o {lead}/CONCEITO.md do passo 1.5.1 do CLAUDE.md com: a ideia em uma frase; a METÁFORA VISUAL única que a carrega (a família do nicho e a instância deste lead: um objeto, um mapa, um instrumento, um documento, um percurso); e a tabela "como a ideia aparece em": estrutura da página (os cinco Atos, nomeados e ordenados pela metáfora: a ordem É a ideia), navegação (o índice dos Atos é a metáfora), cada interação (o gesto do visitante é a ideia acontecendo), a microcopy (o vocabulário vem da ideia), o movimento (o que se move e por quê), a cor e a tipografia (a ideia decide o material). Teste obrigatório: tire a ideia e a página deixa de fazer sentido? Se ela continua funcionando como um template com outro tema, o conceito é decoração: refaça. Cada seção responde a uma pergunta que o visitante realmente tem, na ordem em que ele a tem.
@@ -303,6 +327,22 @@ def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> st
   W. APRENDIZADO PARA OS PRÓXIMOS. Ao final, leia {caderno} (se existir), acrescente uma seção "## {slug}" com os "Princípios deste lead" e os 3 defeitos que mais se repetiram nas suas críticas, e regrave o arquivo inteiro (Write) mantendo só as 40 seções mais recentes. Este caderno é o que faz o próximo lead começar melhor que este.
 - Tempo: este modo pode usar até 3 horas. Gaste na referência, na imagem e nas rodadas de crítica; é aqui que a cota rende. No resumo final diga o que mudou da rodada 1 para a última e qual referência mais pesou.""" + (f"""
 - REVISÃO DIRIGIDA (feedback do Rômulo sobre a versão anterior deste lead, que está em {lead}/{BACKUP_EM_CURSO.get(slug, '_v1')}/): NÃO comece do zero. Copie o index.html (e o CONCEITO.md, se houver) dessa pasta de volta para {lead}/ (cp) e parta dele: mantenha o que o feedback não condena, refaça por inteiro o que ele condena (um trecho condenado não se remenda: repense a ideia dele, com base real, e reimplemente), e rode U e V sobre a página toda. O feedback, nas palavras dele: "{nota}" """ if nota else "")
+    if not ferramentas_de_qa():
+        return texto
+    # Laço V com a folha de contato e o gate (11/10/2026): cada rodada lia ~15 capturas e as 4
+    # referências uma a uma. Agora é uma imagem por rodada; as referências já foram lidas na etapa R.
+    for antes, depois in (
+        (f"--screenshot={qa}/d1.png", f"--screenshot={qa}/d-ato3-p0.3.png"),
+        (f"salvas em {qa}/, mais", f"salvas em {qa}/ com os nomes das instruções da execução (d-ato1.png, m-ato3-p0.8.png...), mais"),
+        (f"3) Leia (Read) as capturas LADO A LADO com 4 imagens da pasta {refs} que você escolheu e escreva",
+         f"3) Junte as capturas da rodada e as 4 imagens de {refs} que você escolheu numa folha: `python3 {FOLHA_DE_CONTATO} "
+         f"--saida {qa}/folha-N.jpg --pasta {qa} --refs <os 4 arquivos de {refs}>`, e leia (Read) só ela: UMA imagem por "
+         "rodada (as referências você já leu na etapa R; na folha elas ficam ao lado das capturas). Escreva"),
+        ("(17) o script de bytes passa", f"(17) o gate `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}` sai 0"),
+        ("(19) sem JS (`--blink-settings=scriptEnabled=false`)", "(19) sem JS (a m-ato1-semjs.png que o gate tira de uma cópia sem <script>)"),
+    ):
+        texto = texto.replace(antes, depois)
+    return texto
 
 
 def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:
