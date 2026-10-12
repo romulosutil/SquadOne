@@ -537,6 +537,64 @@ class FilaDeAvisos(unittest.TestCase):
             f.unlink()
         self.assertEqual(ds.fila_de_avisos()[0]["estado"], "ok")
 
+    def recusar_dois(self) -> list[str]:
+        self.gravar({"titulo": "A", "texto": "sem origem"}, nome="a.json")
+        self.gravar({"titulo": "B", "texto": "sem origem"}, nome="b.json")
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:00"))["recusados"], 2)
+        self.assertEqual(ds.fila_de_avisos()[0]["estado"], "falha")
+        return sorted(f.name for f in ds.FILA_RECUSADOS.glob("*.json"))
+
+    def test_visto_em_todos_apaga_o_vermelho_e_guarda_a_prova(self):
+        nomes = self.recusar_dois()
+        r = ds.visto_recusados(["todos"])
+        self.assertEqual((r["vistos"], r["inexistentes"]), (nomes, []))
+        c = ds.fila_de_avisos()[0]
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("2 recusado(s) já visto(s)", c["detalhe"])
+        vistos = ds.FILA_RECUSADOS / "vistos"
+        self.assertEqual(sorted(f.name for f in vistos.glob("*.json")), nomes)
+        # O motivo viaja junto com o arquivo.
+        for n in nomes:
+            self.assertIn("origem", (vistos / (n + ".motivo.txt")).read_text(encoding="utf-8"))
+        self.assertEqual(list(ds.FILA_RECUSADOS.glob("*.json")), [])
+        # Visto não reacende, e repetir o comando é inofensivo.
+        self.assertEqual(ds.visto_recusados(["todos"]), {"vistos": [], "inexistentes": []})
+        self.assertEqual(ds.fila_de_avisos()[0]["estado"], "ok")
+
+    def test_visto_por_nome_deixa_o_resto_vermelho_e_recusa_caminho_de_fora(self):
+        a, b = self.recusar_dois()
+        fora = self.dir / "fora.json"
+        fora.write_text("{}", encoding="utf-8")
+        r = ds.visto_recusados([a, "nao-existe.json", "../../fora.json", str(fora)])
+        self.assertEqual(r["vistos"], [a])
+        self.assertEqual(r["inexistentes"], ["nao-existe.json", "../../fora.json", str(fora)])
+        self.assertTrue(fora.exists())  # nada fora da pasta de recusados é tocado
+        c = ds.fila_de_avisos()[0]
+        self.assertEqual(c["estado"], "falha")
+        self.assertIn(b, c["detalhe"])
+        self.assertNotIn(a, c["detalhe"])
+        self.assertIn("--visto-recusados", c["o_que_fazer"])
+
+    def test_novo_recusado_depois_do_visto_volta_a_acender(self):
+        self.recusar_dois()
+        ds.visto_recusados(["todos"])
+        self.gravar({"titulo": "C", "texto": "sem origem"}, nome="c.json")
+        self.assertEqual(ds.drenar_fila(br("2026-10-06T10:05"))["recusados"], 1)
+        self.assertEqual(ds.fila_de_avisos()[0]["estado"], "falha")
+
+    def test_visto_com_o_mesmo_nome_nao_sobrescreve_o_anterior(self):
+        self.recusar_dois()
+        ds.visto_recusados(["todos"])
+        vistos = ds.FILA_RECUSADOS / "vistos"
+        antigo = next(vistos.glob("*.json"))
+        antigo_txt = antigo.read_text(encoding="utf-8")
+        # Um recusado novo com exatamente o mesmo nome de arquivo.
+        (ds.FILA_RECUSADOS / antigo.name).write_text('{"novo": 1}', encoding="utf-8")
+        ds.visto_recusados([antigo.name])
+        self.assertEqual(antigo.read_text(encoding="utf-8"), antigo_txt)
+        self.assertEqual((vistos / (antigo.name + ".1")).read_text(encoding="utf-8"), '{"novo": 1}')
+        self.assertEqual(ds.fila_de_avisos()[0]["estado"], "ok")
+
     def test_expirado_e_descartado_sem_enviar(self):
         velho = self.gravar(aviso(expira_em="2026-10-06T09:00:00-03:00"))
         self.gravar(aviso(titulo="Vale", expira_em="2026-10-06T11:00:00-03:00"))

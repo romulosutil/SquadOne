@@ -312,8 +312,17 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
 - **Fora do formato é recusado**: não vai ao WhatsApp. O arquivo e o motivo
   (`….motivo.txt`) ficam em `~/.local/state/dell-status/avisos-recusados/`, o
   journal registra, e a verificação **Fila de avisos** fica vermelha até alguém
-  corrigir quem gravou e apagar os arquivos. Antes um aviso ilegível virava um
+  corrigir quem gravou e dar o **visto**. Antes um aviso ilegível virava um
   "Aviso ilegível na fila" no WhatsApp.
+- **Visto (11/10/2026)**: `dell-status --visto-recusados todos` (ou um ou mais
+  nomes de arquivo, como estão em `avisos-recusados/`) move o `.json` e o
+  `.motivo.txt` para `~/.local/state/dell-status/avisos-recusados/vistos/` e o
+  vermelho apaga no minuto seguinte. Mover guarda a prova; o comando é
+  idempotente, nome inexistente (ou caminho) é listado em `inexistentes` com
+  saída 1 e nada fora da pasta é tocado. Um recusado **novo** acende de novo; a
+  verificação verde passa a dizer "N recusado(s) já visto(s)". Só dê o visto
+  depois de conferir que quem gravou já manda `origem` (senão o próximo aviso
+  dele é recusado e o alerta volta).
 - **Silêncio das 22h às 7h** (São Paulo): só P0 sai; o resto espera e sai às 7h.
 - **Teto de 20 envios por hora** (janela móvel). Quando a fila tem mais do que
   cabe, saem os de maior prioridade (e mais antigos) e o resto vai num

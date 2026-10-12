@@ -21,6 +21,7 @@ Somente biblioteca padrão. Uso:
   dell-status                 # verifica, grava status.json, avisa e drena a fila
   dell-status --stdout        # só imprime o JSON; não grava nem avisa
   dell-status --drenar        # só drena a fila (com flock), sem verificar nada
+  dell-status --visto-recusados todos|ARQUIVO...   # dá o visto em aviso recusado (apaga o vermelho)
 """
 from __future__ import annotations
 
@@ -1393,8 +1394,48 @@ def _drenar(t: datetime) -> dict:
     return r
 
 
+def visto_recusados(nomes: list[str]) -> dict:
+    """Dá o 'visto' em aviso recusado: o arquivo e o `.motivo.txt` vão para
+    FILA_RECUSADOS/vistos/ e a verificação "Fila de avisos" volta a ficar verde.
+
+    Sem isto o vermelho só apagava com `rm` à mão, e quem corrigia o fluxo
+    (06/10/2026) deixava o alerta aceso por dias, o que ensina a ignorar o
+    vermelho. Mover em vez de apagar guarda a prova do que foi recusado. `nomes`
+    são nomes de arquivo `.json` de FILA_RECUSADOS, ou ["todos"]; nome que não
+    está lá (inclusive caminho com barra) vai em `inexistentes` e nada é tocado
+    fora da pasta. Rodar de novo com o mesmo nome é inofensivo."""
+    existentes = {f.name: f for f in FILA_RECUSADOS.glob("*.json")} if FILA_RECUSADOS.is_dir() else {}
+    alvo = sorted(existentes) if nomes == ["todos"] else [n for n in nomes if n in existentes]
+    r: dict = {"vistos": [], "inexistentes": [] if nomes == ["todos"] else [n for n in nomes if n not in existentes]}
+    if not alvo:
+        return r
+    pasta = FILA_RECUSADOS / "vistos"
+    pasta.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for nome in alvo:
+        f = existentes[nome]
+        motivo = f.with_name(f.name + ".motivo.txt")
+        destino = pasta / nome
+        n = 1
+        while destino.exists() or destino.with_name(destino.name + ".motivo.txt").exists():
+            destino = pasta / f"{nome}.{n}"  # nunca sobrescreve um visto anterior
+            n += 1
+        try:
+            shutil.move(str(f), destino)
+            if motivo.exists():
+                shutil.move(str(motivo), destino.with_name(destino.name + ".motivo.txt"))
+        except OSError as e:
+            log(f"fila: não consegui dar o visto em {nome}: {e}")
+            r["inexistentes"].append(nome)
+            continue
+        r["vistos"].append(nome)
+        log(f"fila: visto {nome}")
+    return r
+
+
 def fila_de_avisos() -> list[dict]:
-    """Recusado não foi ao WhatsApp: vermelho até alguém ler o motivo e apagar."""
+    """Recusado não foi ao WhatsApp: vermelho até alguém ler o motivo e dar o
+    visto (`dell-status --visto-recusados`). Visto não reacende: a pasta
+    `vistos/` não entra na contagem."""
     recusados = sorted(FILA_RECUSADOS.glob("*.json")) if FILA_RECUSADOS.is_dir() else []
     pendentes = len(list(FILA.glob("*.json"))) if FILA.is_dir() else 0
     if recusados:
@@ -1404,10 +1445,13 @@ def fila_de_avisos() -> list[dict]:
                       o_que_fazer=("Algum script ou fluxo gravou um aviso fora do formato {titulo, texto, origem, …} "
                                    "e ele NÃO chegou no WhatsApp. O motivo está ao lado de cada arquivo em "
                                    "~/.local/state/dell-status/avisos-recusados/. Peça ao Claude: \"aviso recusado na "
-                                   "fila do dell-status\"; depois de corrigir quem gravou, apague os arquivos."))]
+                                   "fila do dell-status\". Depois de corrigir quem gravou (ou se já estava corrigido), "
+                                   "dê o visto: `dell-status --visto-recusados todos` (ou o nome do arquivo); "
+                                   "ele vai para vistos/ e o vermelho apaga."))]
+    vistos = len(list((FILA_RECUSADOS / "vistos").glob("*.json"))) if (FILA_RECUSADOS / "vistos").is_dir() else 0
     return [check("fila-avisos", "servicos", "Fila de avisos", "ok",
                   f"{pendentes} esperando" + (" (silêncio até as 7h; só P0 sai)" if em_silencio(agora()) and pendentes
-                                              else ""))]
+                                              else "") + (f"; {vistos} recusado(s) já visto(s)" if vistos else ""))]
 
 
 # ---------------------------------------------------------------- arquivos instalados
@@ -1574,7 +1618,13 @@ def main() -> None:
     p.add_argument("--stdout", action="store_true", help="só imprime; não grava nem avisa")
     p.add_argument("--drenar", action="store_true", help="só drena a fila de avisos (com flock)")
     p.add_argument("--instalados", action="store_true", help="lista as cópias diferentes do repo, com o comando")
+    p.add_argument("--visto-recusados", nargs="+", metavar="ARQUIVO|todos",
+                   help="dá o visto em aviso recusado (vai para avisos-recusados/vistos/): o vermelho apaga")
     a = p.parse_args()
+    if a.visto_recusados:
+        r = visto_recusados(a.visto_recusados)
+        print(json.dumps(r, ensure_ascii=False))
+        sys.exit(1 if r["inexistentes"] else 0)
     if a.drenar:
         print(json.dumps(drenar_fila(), ensure_ascii=False))
         return
