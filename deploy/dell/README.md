@@ -1777,6 +1777,30 @@ O `collector` só lê `scripts/collect-pncp.mjs` ao subir: mudou o script,
 `docker compose restart collector` (o n8n não precisa reiniciar). Testes sem
 rede: `node --test scripts/*.test.mjs`.
 
+### Pausado em 11/10/2026
+
+A frente de licitações estava subutilizada (auditoria da Mel de 11/10/2026) e foi
+pausada, não removida: nenhum dado, volume, imagem ou fluxo foi apagado. **O n8n
+(`licitacoes-automation-n8n-1`) e o `db` são o n8n geral da Mel (PRUMO, Site antes da
+venda, CRM): nunca pare nem reinicie por causa do radar.**
+
+| # | Passo | Comando (na Mel) | Como reverter | Estado |
+|---|---|---|---|---|
+| 1 | Rotina do Hermes "Radar diário de licitações" (`f6e7da0f8558`) | `hermes cron pause f6e7da0f8558` | `hermes cron resume f6e7da0f8558` | feito em 11/10/2026 |
+| 2 | Timer da repescagem | `systemctl --user disable --now pncp-catchup.timer` | `systemctl --user enable --now pncp-catchup.timer` | feito em 11/10/2026 |
+| 3 | Fluxo `Radar PNCP — coleta diária` (`c8d62107-67db-4a1e-b6a9-211f9d9ef0df`) | `docker exec licitacoes-automation-n8n-1 n8n unpublish:workflow --id=c8d62107-67db-4a1e-b6a9-211f9d9ef0df` **e depois** `docker restart licitacoes-automation-n8n-1` | `docker exec licitacoes-automation-n8n-1 n8n publish:workflow --id=c8d62107-67db-4a1e-b6a9-211f9d9ef0df` e o mesmo restart (ou ligar pelo editor, por túnel) | **pendente**: a chave de API do monitor (`N8N_API_KEY`) é só de leitura (`/deactivate` dá 403) e a CLI só vale com o n8n reiniciado; o restart derruba por ~30 s os webhooks de PRUMO/CRM/WhatsApp, por isso espera um momento aprovado |
+| 4 | Container `licitacoes-automation-collector-1` (33 MB) | `docker stop licitacoes-automation-collector-1 && docker update --restart=no licitacoes-automation-collector-1` | `docker update --restart=unless-stopped licitacoes-automation-collector-1 && docker start licitacoes-automation-collector-1` | **pendente, só depois do 3**: com o fluxo ativo e o collector parado, às 07:30 o fluxo falha, o `00 · Avisar falha` manda WhatsApp e o `fluxo:c8d62107…` fica vermelho |
+| 5 | Marca do monitor | `date +%d/%m/%Y > ~/.local/state/dell-status/pausa-pncp` | `find ~/.local/state/dell-status -name pausa-pncp -delete` | **pendente, junto do 4** (precisa do `dell-status` novo instalado: `dell-status --instalados`) |
+
+Ordem para concluir: 3 (com o restart), 4, 5. Reverter na ordem inversa. O container
+parado com `restart=no` não é problema para o `dell-status` (a verificação
+`containers` ignora `exited` com política `no`) nem para o `dell-validate` (agora diz
+"parado de propósito"). Sem a marca do passo 5 o `Radar PNCP` em "Dados" viraria
+amarelo ("A coleta de hoje não aconteceu") a partir das 09:00 do dia seguinte e ficaria
+assim; com ela diz "Pausado de propósito (data)" e fica ok. Cuidado: o
+`dell-worker-healthwatch` usa `docker compose up -d n8n` quando o n8n não existe, e
+isso sobe o `collector` de volta (`depends_on`); `docker restart` do n8n não.
+
 Desde 29/09/2026 a coleta das 07:30 não qualifica item cujo prazo de proposta
 encerra antes de coleta + 3 h: o resumo do Hermes chega às 08:00 e naquele dia
 trouxe um pregão que encerrava às 07:59. Esses itens saem da lista (o Hermes

@@ -460,6 +460,21 @@ class OQueFazer(unittest.TestCase):
         ds.agora = lambda: br("2026-09-30T11:00").astimezone(timezone.utc)
         self.assertEqual(ds.pncp()["estado"], "atencao")
 
+    def test_pncp_pausado_de_proposito_nao_acende(self):
+        ds.PNCP_RUN = self.dir / "latest-run.json"
+        ds.PNCP_RUN.write_text(json.dumps({"run_at": "2026-09-29T10:31:00Z", "status": "completed",
+                                           "counts": {"fetched": 1000, "qualified": 0}}))
+        ds.agora = lambda: br("2026-10-20T11:00").astimezone(timezone.utc)
+        ds.PNCP_PAUSA = self.dir / "pausa-pncp"
+        self.assertEqual(ds.pncp()["estado"], "atencao")  # sem a marca, coleta velha é amarelo
+        ds.PNCP_PAUSA.write_text("11/10/2026")
+        r = ds.pncp()
+        self.assertEqual(r["estado"], "ok")
+        self.assertIn("Pausado", r["detalhe"])
+        self.assertIn("11/10/2026", r["detalhe"])
+        ds.PNCP_PAUSA.unlink()  # voltou: a coleta velha volta a ser cobrada
+        self.assertEqual(ds.pncp()["estado"], "atencao")
+
 
 def aviso(**extra) -> dict:
     return {"titulo": "🌐 Sites", "texto": "2 sites prontos", "origem": "teste", **extra}
