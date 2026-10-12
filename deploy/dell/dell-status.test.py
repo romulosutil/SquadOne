@@ -695,6 +695,74 @@ class WhatsApp(unittest.TestCase):
         self.assertIn("pareamento", sem_resposta["o_que_fazer"])
 
 
+def linha_do_journal(quando: str, msg, desde_o_boot_s: float = 3600) -> str:
+    return json.dumps({"MESSAGE": msg, "__REALTIME_TIMESTAMP": str(int(br(quando).timestamp() * 1e6)),
+                       "__MONOTONIC_TIMESTAMP": str(int(desde_o_boot_s * 1e6))})
+
+
+class Religamentos(unittest.TestCase):
+    """O journal do dell-worker-healthwatch nos 7 dias até 11/10/2026, como estava na Mel."""
+
+    def journal(self) -> str:
+        linhas = [linha_do_journal("2026-10-06T23:02:07", "healthwatch: restarting Hermes", 4),
+                  linha_do_journal("2026-10-06T23:02:11", "healthwatch: restarting licitacoes n8n", 8),
+                  linha_do_journal("2026-10-06T23:02:12", "curl: (7) Failed to connect to 127.0.0.1 port 5679", 9)]
+        for i in range(13):  # 00:00:32 a 00:06:33, de 30 em 30 s
+            linhas.append(linha_do_journal(f"2026-10-07T00:{(32 + 30 * i) // 60:02d}:{(32 + 30 * i) % 60:02d}",
+                                           "healthwatch: restarting Hermes gateway", 3500 + 30 * i))
+        linhas += [linha_do_journal("2026-10-07T08:16:15", "healthwatch: restarting Hermes", 4),
+                   linha_do_journal("2026-10-07T08:16:18", "healthwatch: restarting licitacoes n8n", 7),
+                   linha_do_journal("2026-10-09T16:06:50", "healthwatch: restarting Hermes gateway", 200_000),
+                   linha_do_journal("2026-10-09T16:07:20", "healthwatch: restarting Hermes gateway", 200_030),
+                   linha_do_journal("2026-10-09T16:07:50", "healthwatch: restarting Hermes gateway", 200_060),
+                   "linha que não é json"]
+        return "\n".join(linhas)
+
+    def avaliar(self, quando: str) -> dict:
+        return ds.avaliar_religamentos(ds.religamentos_do_journal(self.journal()), br(quando).astimezone(timezone.utc))
+
+    def test_le_o_journal_e_separa_o_boot(self):
+        ev = ds.religamentos_do_journal(self.journal())
+        self.assertEqual(len(ev), 20)
+        self.assertEqual(sum(e["no_boot"] for e in ev), 4)
+        self.assertEqual({e["servico"] for e in ev}, {"Hermes", "licitacoes n8n", "Hermes gateway"})
+        bytes_ = ds.religamentos_do_journal(linha_do_journal("2026-10-07T00:00:00", list(b"healthwatch: restarting n8n\xff")))
+        self.assertEqual(bytes_[0]["servico"], "n8n�")
+
+    def test_hoje_na_mel_e_ok(self):
+        c = self.avaliar("2026-10-11T21:45")
+        self.assertEqual(c["estado"], "ok")
+        self.assertEqual(c["detalhe"], "Nenhum serviço religado nas últimas 24 h; 16 em 7 dias "
+                                       "(mais 4 logo depois de o Dell ligar)")
+
+    def test_o_boot_nao_acende(self):
+        c = self.avaliar("2026-10-06T23:30")
+        self.assertEqual(c["estado"], "ok")
+
+    def test_gateway_em_laco_a_meia_noite(self):
+        c = self.avaliar("2026-10-07T09:00")
+        self.assertEqual(c["estado"], "atencao")
+        self.assertNotIn("sozinho", c)
+        self.assertIn("gateway do Hermes 13x (00:00 a 00:06)", c["detalhe"])
+        self.assertIn("de novo e de novo", c["o_que_fazer"])
+        self.assertEqual(self.avaliar("2026-10-08T00:07")["estado"], "ok")  # passadas 24 h, apaga
+
+    def test_um_episodio_curto_resolve_sozinho(self):
+        c = self.avaliar("2026-10-09T17:00")
+        self.assertEqual(c["estado"], "atencao")
+        self.assertTrue(c["sozinho"])
+        self.assertIn("gateway do Hermes 3x (16:06 a 16:07)", c["detalhe"])
+
+    def test_tres_episodios_em_24h_pedem_olhar(self):
+        ev = [{"em": br(f"2026-10-09T{h:02d}:00").astimezone(timezone.utc), "servico": "licitacoes n8n",
+               "no_boot": False} for h in (2, 9, 15)]
+        c = ds.avaliar_religamentos(ev, br("2026-10-09T16:00").astimezone(timezone.utc))
+        self.assertEqual(c["estado"], "atencao")
+        self.assertNotIn("sozinho", c)
+        self.assertIn("3 vezes em 24 h", c["o_que_fazer"])
+        self.assertIn("n8n 3x", c["detalhe"])
+
+
 class Instalados(unittest.TestCase):
     """O caso de 07/10/2026: o fix do observador estava no repo, a cópia em
     ~/.local/bin era de antes, e os avisos foram recusados o dia todo."""
