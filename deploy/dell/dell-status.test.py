@@ -1023,6 +1023,51 @@ class Instalados(unittest.TestCase):
         [igual] = ds.comparar_instalados([entrada], self.repo, self.home)
         self.assertEqual(igual["estado"], "igual")
 
+    def test_timers_desligados(self):
+        """11/10/2026: o pncp-catchup.timer desligado (pausa do Radar) e, em 10/10, o gerador-de-sites."""
+        antes = {k: getattr(ds, k) for k in ("REPO", "INSTALADOS", "HOME", "ESTADO_DIR", "PNCP_PAUSA",
+                                             "PAUSA_DO_TIMER", "_estado_das_units")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in antes.items()])
+        ds.REPO, ds.HOME = self.repo, self.home
+        ds.INSTALADOS = self.escrever(self.repo, "deploy/dell/instalados.json", json.dumps({"arquivos": [
+            {"repo": "deploy/dell/**/*.timer", "instalado": "~/.config/systemd/user/"},
+            {"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"}]}))
+        for n in ("gerador-de-sites", "pncp-catchup", "dell-status", "nunca-instalado"):
+            self.escrever(self.repo, f"deploy/dell/{n}.timer", n)
+            self.escrever(self.repo, f"deploy/dell/{n}.service", n)
+            if n != "nunca-instalado":
+                self.escrever(self.home, f".config/systemd/user/{n}.timer", n)
+        ds.ESTADO_DIR = self.home / ".local/state/dell-status"
+        ds.PNCP_PAUSA = ds.ESTADO_DIR / "pausa-pncp"
+        ds.PAUSA_DO_TIMER = {"pncp-catchup.timer": ds.PNCP_PAUSA}
+        ligados = {"dell-status.timer", "gerador-de-sites.timer"}
+        pedidos = []
+
+        def estado(units):
+            pedidos.append(units)
+            return {u: {"Id": u, "ActiveState": "active" if u in ligados else "inactive",
+                        "UnitFileState": "enabled" if u in ligados else "disabled"} for u in units}
+        ds._estado_das_units = estado
+
+        [c] = ds.timers_desligados()  # como na Mel em 11/10/2026, antes da marca do Radar
+        self.assertEqual(pedidos, [["dell-status.timer", "gerador-de-sites.timer", "pncp-catchup.timer"]])
+        self.assertEqual((c["estado"], c["detalhe"]), ("atencao", "Desligado(s) sem marca de pausa: pncp-catchup (disabled)"))
+        self.assertIn("pausa-pncp-catchup", c["o_que_fazer"])
+        self.assertIn("systemctl --user enable --now pncp-catchup.timer", c["o_que_fazer"])
+        # A marca antiga do Radar (pausa-pncp) vale para o timer da repescagem.
+        self.escrever(self.home, ".local/state/dell-status/pausa-pncp", "11/10/2026\n")
+        [c] = ds.timers_desligados()
+        self.assertEqual((c["estado"], c["detalhe"]), ("ok", "2 de 3 ligado(s); pausado(s) de propósito: "
+                                                             "pncp-catchup (11/10/2026)"))
+        # 10/10: o gerador desligado sem marca acende; com a marca, não; religado, a marca sobra.
+        ligados.discard("gerador-de-sites.timer")
+        self.assertIn("gerador-de-sites (disabled)", ds.timers_desligados()[0]["detalhe"])
+        self.escrever(self.home, ".local/state/dell-status/pausa-gerador-de-sites", "")
+        self.assertEqual(ds.timers_desligados()[0]["estado"], "ok")
+        ligados.add("gerador-de-sites.timer")
+        self.assertIn("marca de pausa sobrando (o timer está ligado): gerador-de-sites",
+                      ds.timers_desligados()[0]["detalhe"])
+
     def test_manifesto_do_repo_e_valido(self):
         """O instalados.json de verdade: lê, e cada entrada sem curinga existe no repo."""
         manifesto = json.loads((AQUI / "instalados.json").read_text())
