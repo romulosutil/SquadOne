@@ -1383,6 +1383,113 @@ def maquina() -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------- pastas que crescem
+
+GB = 1_000_000_000
+# Em 11/10/2026 o ~/.cache tinha 34 GB de perfis temporários do Chrome headless do QA
+# (google-chrome-headless/scoped_dir*) e o disco, com 500 GB, nem chegava aos 85% do "Disco".
+# Os limites ficam com folga sobre o normal daquele dia (~/.cache 12 GB, ~/.local 3 GB).
+PASTAS_VIGIADAS = {"~/.cache": (HOME / ".cache", 25 * GB), "~/.local": (HOME / ".local", 15 * GB)}
+CRESCIMENTO_DIA = 2 * GB
+MEDIR_A_CADA = timedelta(hours=1)  # du a cada minuto seria desperdício
+GUARDAR_MEDIDAS = timedelta(days=8)
+TAMANHOS = HOME / ".local/state/dell-status/tamanhos.json"
+tamanhos_medidos: dict = {}  # preenchido por pastas_que_crescem(); main() grava (fora do --stdout)
+
+
+def _gb(n: float) -> str:
+    return f"{n / GB:.1f} GB"
+
+
+def medir_pasta(pasta: Path) -> dict:
+    """{total, maiores: [[nome, bytes] ×3]} por `du -x --max-depth=1`."""
+    r = subprocess.run(["du", "-x", "--max-depth=1", "--block-size=1", str(pasta)],
+                       capture_output=True, text=True, timeout=60)
+    total, filhas = None, []
+    for linha in r.stdout.splitlines():
+        n, _, caminho = linha.partition("\t")
+        if not n.isdigit():
+            continue
+        if Path(caminho) == pasta:
+            total = int(n)
+        else:
+            filhas.append([Path(caminho).name, int(n)])
+    if total is None:
+        raise RuntimeError(f"du {pasta}: {r.stderr.strip()[:80] or 'sem total'}")
+    return {"total": total, "maiores": sorted(filhas, key=lambda x: -x[1])[:3]}
+
+
+def medida_de_um_dia_atras(medidas: list[dict], t: datetime) -> dict | None:
+    """A medida mais perto de 24 h atrás, entre 20 e 48 h; None se não há."""
+    candidatas = [m for m in medidas if timedelta(hours=20) <= t - _quando(m["em"]) <= timedelta(hours=48)]
+    return min(candidatas, key=lambda m: abs(t - _quando(m["em"]) - timedelta(hours=24)), default=None)
+
+
+def avaliar_pastas(atual: dict, antes: dict | None, t: datetime) -> dict:
+    """`atual`/`antes`: {em, pastas: {rótulo: {total, maiores}}}. Amarelo acima do
+    limite absoluto da pasta ou crescendo mais de 2 GB por dia; nunca vermelho
+    (o disco cheio já é vermelho em "Disco")."""
+    nome = "Cache e ~/.local"
+    partes, problemas = [], []
+    horas = (_quando(atual["em"]) - _quando(antes["em"])).total_seconds() / 3600 if antes else 0
+    for rotulo, (_, limite) in PASTAS_VIGIADAS.items():
+        p = atual["pastas"].get(rotulo)
+        if not p:
+            continue
+        txt = f"{rotulo} {_gb(p['total'])}"
+        ritmo = None
+        if antes and horas and rotulo in antes["pastas"]:
+            ritmo = (p["total"] - antes["pastas"][rotulo]["total"]) * 24 / horas
+            txt += f" ({'+' if ritmo >= 0 else ''}{_gb(ritmo)}/dia)"
+        partes.append(txt)
+        maior = p["maiores"][0] if p["maiores"] else None
+        onde = f", o maior é {maior[0]} com {_gb(maior[1])}" if maior else ""
+        if p["total"] > limite:
+            problemas.append(f"{rotulo} passou de {_gb(limite)}{onde}")
+        elif ritmo is not None and ritmo > CRESCIMENTO_DIA:
+            problemas.append(f"{rotulo} cresce {_gb(ritmo)} por dia{onde}")
+    if atual.get("erro"):
+        problemas.append(f"não consegui medir {atual['erro']}")
+    detalhe = " · ".join(partes) + ("" if antes else " · crescimento: medindo (precisa de um dia)")
+    if not problemas:
+        return check("pastas", "maquina", nome, "ok", detalhe)
+    if len(problemas) == 1 and atual.get("erro"):
+        return check("pastas", "maquina", nome, "atencao", problemas[0][:300],
+                     o_que_fazer=("O du não conseguiu medir a pasta (tenta de novo em uma hora). Se diz timeout, a "
+                                  "pasta tem arquivos demais: peça ao Claude: \"o du do ~/.cache não termina\"."))
+    return check("pastas", "maquina", nome, "atencao", "; ".join(problemas) + f" ({detalhe})",
+                 o_que_fazer=("Alguma coisa está enchendo o cache. Em 11/10/2026 eram 34 GB de perfis temporários do "
+                              "Chrome headless do QA (~/.cache/google-chrome-headless/scoped_dir*). Peça ao Claude: \"o "
+                              "~/.cache está crescendo\" (du -xh --max-depth=2 ~/.cache | sort -h | tail). Não apague "
+                              "~/.config/google-chrome nem o perfil do navegador do Hermes."))
+
+
+def pastas_que_crescem() -> list[dict]:
+    t = agora()
+    try:
+        medidas = json.loads(TAMANHOS.read_text()).get("medidas", [])
+    except (OSError, ValueError, AttributeError):
+        medidas = []
+    ultima = medidas[-1] if medidas else None
+    if ultima and t - _quando(ultima["em"]) < MEDIR_A_CADA:
+        atual = ultima
+    else:
+        # A medida que falhou também é guardada: a próxima tentativa fica para daqui a uma hora,
+        # em vez de um du de até 60 s a cada minuto.
+        atual, erros = {"em": iso(t), "pastas": {}}, []
+        for rotulo, (pasta, _) in PASTAS_VIGIADAS.items():
+            try:
+                atual["pastas"][rotulo] = medir_pasta(pasta)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as e:
+                erros.append(f"{rotulo} ({str(e)[:60]})")
+        if erros:
+            atual["erro"] = ", ".join(erros)
+        medidas = [m for m in medidas if t - _quando(m["em"]) <= GUARDAR_MEDIDAS] + [atual]
+        tamanhos_medidos.clear()
+        tamanhos_medidos["medidas"] = medidas
+    return [avaliar_pastas(atual, medida_de_um_dia_atras(medidas, _quando(atual["em"])), t)]
+
+
 # ---------------------------------------------------------------- o que fazer
 
 # Para quem a verificação não trouxe o próprio texto: (o que fazer, resolve sozinho?).
@@ -1998,7 +2105,7 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
+    for fn in (servicos, religamentos, containers, fluxos, maquina, pastas_que_crescem, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
                easypanel, backup, fila_de_avisos, instalados, timers_desligados):
         try:
             checks += fn()
@@ -2026,6 +2133,8 @@ def main() -> None:
         gravar(AGENDAS, agendas_vistas)
     if fluxos_vistos:
         gravar(FLUXOS_VISTOS, fluxos_vistos)
+    if tamanhos_medidos:
+        gravar(TAMANHOS, tamanhos_medidos)
     drenar_fila()
 
 
