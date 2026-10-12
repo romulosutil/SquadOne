@@ -64,6 +64,7 @@
     {"repo": "deploy/hermes/scripts/graphify_projetos.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/scripts/asmr_coleta_gate.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
+    {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.local/bin/sites-e-pendencias"},
     {"repo": "deploy/hermes/scripts/site_antes_venda_watcher.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"}
   ]
 }

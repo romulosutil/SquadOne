@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Sites e pendências: a mensagem diária das 10:30 (job `no_agent` do Hermes).
+"""Sites e pendências: a mensagem diária das 10:30.
+
+Dois jeitos de rodar (11/10/2026, plano do aviso único):
+
+- `--fila` (o sites-e-pendencias.service, pelo .timer das 10:30): a mensagem
+  vira UM aviso na fila do dell-status (`deploy/dell/lib/aviso.py`), com a
+  chave do dia (`sites-e-pendencias:<data>`: rodar de novo no dia não manda
+  duas), prioridade 1 e validade até as 22:00; texto acima de 4000 caracteres
+  é cortado com marca. O stdout é só log (journal). Erro inesperado e SIGTERM
+  viram aviso no lugar do `failure_deliver` do Hermes, e a unit sai com erro.
+- sem `--fila` (o job `no_agent` do Hermes, como sempre foi): a mensagem sai no
+  stdout, que o Hermes entrega no WhatsApp. Fica para a troca ser reversível.
 
 Junta dois recados que seriam quase iguais: o briefing dos sites, que às 08h
 saía antes do gerador e nunca trazia os sites do dia, e a fila do que depende
@@ -23,12 +34,18 @@ Fontes, só leitura:
 Links saem dos dados; nada é montado aqui. A contagem de cada dia fica em
 ~/.local/share/sites-e-pendencias/contagens.json para mostrar a variação.
 
-Uso manual: sites_e_pendencias.py [--teste]   (--teste prefixa "[teste]" e não grava a contagem)
+Uso manual: sites_e_pendencias.py [--teste] [--fila]
+  --teste prefixa "[teste]", não grava a contagem e só imprime (nunca grava na fila)
 """
 
+import importlib.util
 import json
+import os
 import re
+import signal
 import sys
+import time
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -47,6 +64,22 @@ DIAS_GUARDADOS = 14
 RETRATO = N8N / "site-leads.json"
 # Uma linha por lead; passando disso, o resto está na coluna acoes_link da planilha.
 MAX_LEADS = 15
+
+# Fila de avisos do dell-status (formato em deploy/dell/README.md, "Fila de avisos").
+FILA = Path(os.environ.get("SQUADONE_AVISOS_FILA") or HOME / ".local/share/avisos/fila")
+ORIGEM = "sites-e-pendencias"
+TITULO_PADRAO = "🌐 Sites e pendências"
+# Prioridade 1: com o teto de 20 por hora estourado, o que sobra vira um resumo só
+# com o título; P1 sai antes dos P2/P3 (não protege se a hora já não tiver 2 vagas).
+PRIORIDADE = 1
+HORA_QUE_EXPIRA = 22         # a mensagem do dia não chega de madrugada nem no dia seguinte
+MAX_TEXTO_AVISO = 4000
+MARCA_DE_CORTE = "\n… (cortado)"
+
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em
+# deploy/dell/lib; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
+# Primeiro a do repo, para o teste nunca pegar uma cópia instalada.
+PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent.parent / "dell/lib", HOME / ".local/lib/mel"]
 
 agora = datetime.now().astimezone()
 hoje = agora.date()
@@ -236,8 +269,8 @@ def bloco_pendencias(antes: dict, contagens: dict, avisos: list) -> list:
     return linhas
 
 
-def main() -> int:
-    teste = "--teste" in sys.argv[1:]
+def mensagem_do_dia(teste: bool) -> tuple[str, dict]:
+    """(mensagem, contagens do dia)."""
     guardado = ler_json(CONTAGENS) or {}
     anteriores = sorted(d for d in guardado if d < hoje.isoformat())
     antes = guardado[anteriores[-1]] if anteriores else {}
@@ -249,16 +282,132 @@ def main() -> int:
     linhas += bloco_pendencias(antes, contagens, avisos)
     if avisos:
         linhas += [""] + avisos
-    print("\n".join(linhas).strip())
+    return "\n".join(linhas).strip(), contagens
 
+
+def guardar_contagens(contagens: dict) -> None:
+    guardado = ler_json(CONTAGENS) or {}
+    guardado[hoje.isoformat()] = contagens
+    for velho in sorted(guardado)[:-DIAS_GUARDADOS]:
+        guardado.pop(velho)
+    CONTAGENS.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONTAGENS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(guardado, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(CONTAGENS)
+
+
+# ------------------------------------------------------------- fila de avisos
+
+class Interrompido(BaseException):
+    """SIGTERM no meio da rodada (o TimeoutStartSec do service, ou um `stop`).
+    BaseException: atravessa os `except` do caminho e chega ao de topo, que avisa."""
+
+
+def _interromper(signum, _frame):
+    raise Interrompido(signal.Signals(signum).name)
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    aviso sai do jeito antigo (gravado direto na fila, sem validar)."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+            continue
+    return None
+
+
+def titulo_e_texto(mensagem: str, titulo_padrao: str = TITULO_PADRAO) -> tuple[str, str]:
+    """A primeira linha da mensagem vira o título quando cabe e sobra texto. O
+    dell-status entrega "titulo\\ntexto": chega o que o job antigo imprimia, só
+    sem a linha em branco depois do título."""
+    primeira, _, resto = mensagem.strip().partition("\n")
+    if resto.strip() and len(primeira.strip()) <= 120:
+        return primeira.strip(), resto.strip()
+    return titulo_padrao, mensagem.strip()
+
+
+def expira(quando: datetime) -> datetime:
+    return quando.replace(hour=HORA_QUE_EXPIRA, minute=0, second=0, microsecond=0)
+
+
+def montar_aviso(mensagem: str, quando: datetime, chave: str) -> dict:
+    titulo, texto = titulo_e_texto(mensagem)
+    return {"titulo": titulo, "texto": texto, "origem": ORIGEM, "chave": chave,
+            "prioridade": PRIORIDADE, "expira_em": expira(quando).isoformat(timespec="seconds")}
+
+
+def gravar_aviso(aviso: dict) -> bool:
+    """Pela lib (valida, corta acima de 4000 com "… (cortado)", grava atômico e
+    não cria a pasta da fila); sem ela, do jeito antigo, já com o mesmo corte."""
+    lib = lib_de_aviso()
+    if lib is not None:
+        if lib.VALOR_EM_REAIS.search(aviso["texto"]):
+            # O texto traz o que vem do n8n e da planilha; "R$" faria a lib recusar a mensagem inteira.
+            aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))
+        return lib.gravar(aviso, fila=FILA, prefixo=ORIGEM).gravado
+    if len(aviso["texto"]) > MAX_TEXTO_AVISO:
+        aviso = dict(aviso, texto=aviso["texto"][:MAX_TEXTO_AVISO - len(MARCA_DE_CORTE)].rstrip() + MARCA_DE_CORTE)
+    try:
+        FILA.mkdir(parents=True, exist_ok=True)
+        (FILA / f"{ORIGEM}-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+        return True
+    except OSError as e:
+        print(f"aviso não gravado ({ORIGEM}): {e}", file=sys.stderr, flush=True)
+        return False
+
+
+def rodar_pela_fila() -> int:
+    """A rodada do service: a mensagem vai para a fila; o stdout é log. 1 = a
+    rodada caiu ou o aviso não chegou à fila (a unit fica `failed`; o texto fica
+    no journal: `journalctl --user -u sites-e-pendencias`)."""
+    if agora >= expira(agora):
+        # Timer atrasado (Persistent=true com o Dell ligado depois das 22h): o
+        # aviso já nasceria vencido e o dell-status o descartaria.
+        print(f"sites-e-pendencias: depois das {HORA_QUE_EXPIRA}h; a mensagem de hoje não vai mais", flush=True)
+        return 0
+    anterior = signal.signal(signal.SIGTERM, _interromper)
+    codigo = 0
+    try:
+        mensagem, contagens = mensagem_do_dia(teste=False)
+        guardar_contagens(contagens)
+        aviso = montar_aviso(mensagem, agora, f"sites-e-pendencias:{hoje.isoformat()}")
+    except Interrompido as e:
+        codigo, mensagem = 1, f"foi interrompida ({e}): passou do teto do serviço ou ele foi parado"
+    except Exception as e:  # noqa: BLE001 — era o failure_deliver do Hermes: o erro tem de chegar
+        traceback.print_exc()
+        codigo, mensagem = 1, f"caiu com erro: {type(e).__name__}: {str(e)[:300]}"
+    finally:
+        signal.signal(signal.SIGTERM, anterior)
+    if codigo:
+        mensagem = (f"{TITULO_PADRAO} — {agora:%d/%m}\n\nA mensagem de hoje não saiu: a rodada {mensagem}. "
+                    "Detalhe: journalctl --user -u sites-e-pendencias.")
+        aviso = montar_aviso(mensagem, agora, f"sites-e-pendencias:falha:{hoje.isoformat()}")
+    print(mensagem, flush=True)
+    if not gravar_aviso(aviso):
+        print("sites-e-pendencias: o aviso NÃO foi para a fila (motivo acima); o texto está aqui no journal",
+              file=sys.stderr, flush=True)
+        return 1
+    print("sites-e-pendencias: aviso gravado na fila", flush=True)
+    return codigo
+
+
+def main(argv=None) -> int:
+    args = sys.argv[1:] if argv is None else list(argv)
+    teste = "--teste" in args
+    if "--fila" in args and not teste:
+        return rodar_pela_fila()
+    mensagem, contagens = mensagem_do_dia(teste)
+    print(mensagem)
     if not teste:
-        guardado[hoje.isoformat()] = contagens
-        for velho in sorted(guardado)[:-DIAS_GUARDADOS]:
-            guardado.pop(velho)
-        CONTAGENS.parent.mkdir(parents=True, exist_ok=True)
-        tmp = CONTAGENS.with_suffix(".tmp")
-        tmp.write_text(json.dumps(guardado, ensure_ascii=False, indent=1), encoding="utf-8")
-        tmp.replace(CONTAGENS)
+        guardar_contagens(contagens)
     return 0
 
 

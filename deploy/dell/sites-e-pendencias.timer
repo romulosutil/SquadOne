@@ -1,0 +1,12 @@
+[Unit]
+Description=Sites e pendências — a mensagem do dia às 10:30
+
+[Timer]
+# A mesma hora do job do Hermes que ele substitui: depois do gerador das 08:00 (de 24 a
+# 28/09/2026 ele terminou entre 09:17 e 10:17). Dell desligado às 10:30: roda quando ligar
+# (depois das 22h o script não manda mais a do dia).
+OnCalendar=*-*-* 10:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
