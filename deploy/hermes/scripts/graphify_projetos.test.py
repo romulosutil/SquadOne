@@ -649,6 +649,11 @@ class FalhaNaFila(Base):
 class Units(unittest.TestCase):
     """O service e o timer que substituem o job do Hermes."""
 
+    def test_o_validador_do_dell_status_carrega_no_linux(self):
+        # Sem isto, os testes que conferem o aviso contra o dell-status passariam calados.
+        if importlib.util.find_spec("fcntl") is not None:
+            self.assertIsNotNone(ds)
+
     def ler(self, nome):
         return (RAIZ / "deploy/dell" / nome).read_text(encoding="utf-8")
 
