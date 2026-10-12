@@ -846,6 +846,111 @@ def crons_hermes() -> list[dict]:
     return out
 
 
+HERMES_SAIDAS = HOME / ".hermes/cron/output"
+
+
+def rotinas_do_hermes() -> dict[str, dict]:
+    """jobs.json do Hermes por id (levanta se ilegível: quem chama decide)."""
+    d = json.loads(CRON_JOBS.read_text())
+    jobs = d.get("jobs", d) if isinstance(d, dict) else d
+    jobs = jobs.values() if isinstance(jobs, dict) else jobs
+    return {str(j.get("id") or j.get("name")): j for j in jobs}
+
+
+def rotina_ativa(j: dict) -> bool:
+    return bool(j.get("enabled", True)) and j.get("state") not in ("paused", "completed")
+
+
+def saidas_da_rotina(jid: str, ultimas: int = 50) -> list[tuple[datetime, str]]:
+    """As últimas saídas gravadas pelo Hermes em ~/.hermes/cron/output/<id>/
+    (um .md por rodada, nome com data e hora), da mais antiga para a mais nova."""
+    pasta = HERMES_SAIDAS / jid
+    out = []
+    for f in sorted(pasta.glob("*.md"))[-ultimas:] if pasta.is_dir() else []:
+        try:
+            out.append((datetime.fromtimestamp(f.stat().st_mtime, timezone.utc), f.read_text(errors="replace")))
+        except OSError:
+            continue
+    return out
+
+
+def acordou_o_modelo(texto: str) -> bool:
+    """A rodada chegou ao modelo e ele respondeu (seção "## Response"), em vez
+    de o portão pular ("wakeAgent=false"), o script calar ou a chamada dar erro."""
+    return "\n## Response" in texto
+
+
+# ---------------------------------------------------------------- idade dos dados
+
+# Dado que uma rotina do Hermes deveria renovar. O shorts-metrics.json do ASMR parou em
+# 05/10/2026 e ninguém viu: a coleta seguia rodando de hora em hora, "bloqueada" (feed público
+# com erro e sem navegador), e a revisão diária ficou [SILENT] por falta de snapshot novo.
+DADOS_COM_IDADE = [
+    {"id": "asmr-metricas", "nome": "Métricas do ASMR", "rotina": "79a04dbf2d81",
+     "arquivo": HOME / ".local/share/asmr-fullbringer/shorts-metrics.json",
+     # O portão da coleta (asmr_coleta_gate.py) só acorda com Short de até 72 h no ar.
+     "limite_h": 72,
+     "sem_rodar": ("Nada, se não saiu Short novo: a coleta só acorda o modelo com Short de até 72 h no ar. Se "
+                   "você publicou e não aparece, peça ao Claude: \"a coleta do ASMR não vê o Short novo\"."),
+     "rodou_sem_gravar": ("A coleta roda e não grava: leia a última resposta em ~/.hermes/cron/output/79a04dbf2d81/ "
+                          "(em 11/10/2026 dizia \"bloqueado\": feed público com erro e sem o navegador do Hermes). "
+                          "Confira \"Navegador do Hermes\" em Serviços e peça ao Claude: \"a coleta do ASMR não "
+                          "grava\". A revisão 24/48 h fica muda enquanto isso.")},
+]
+# A saída do Hermes é gravada no fim da rodada, minutos depois de a coleta gravar o arquivo.
+FOLGA_SAIDA = timedelta(minutes=15)
+
+
+def avaliar_idade_do_dado(dado: dict, gravado: datetime | None, rotina: dict | None, ativa_desde: datetime | None,
+                          acordou_depois: int, t: datetime) -> dict:
+    """Ok com a rotina pausada (de propósito: `hermes cron pause`) ou com o dado
+    mais novo que o limite, contado também desde que a rotina voltou da pausa.
+    Velho: vermelho se o modelo rodou depois da última gravação e não gravou
+    (a coleta está quebrada); amarelo que resolve sozinho se a rotina nem
+    precisou acordar o modelo."""
+    cid, nome = f"idade:{dado['id']}", dado["nome"]
+    quando = f"{gravado.astimezone(FUSO_BR):%d/%m %H:%M}" if gravado else "nunca"
+    if rotina is None:
+        return check(cid, "dados", nome, "atencao", f"A rotina {dado['rotina']} não existe mais no Hermes; dados de {quando}",
+                     o_que_fazer="Ninguém mais renova este dado. Se a coleta acabou de vez, peça ao Claude tirá-lo do "
+                                 "dell-status (DADOS_COM_IDADE); se não, a rotina precisa voltar ao Hermes.")
+    if not rotina_ativa(rotina):
+        pausa = _quando(rotina.get("paused_at"))
+        return check(cid, "dados", nome, "ok", "Coleta pausada de propósito"
+                     + (f" em {pausa.astimezone(FUSO_BR):%d/%m}" if pausa else "") + f"; dados de {quando}")
+    base = max(filter(None, (gravado, ativa_desde)), default=None)
+    if base and t - base <= timedelta(hours=dado["limite_h"]):
+        return check(cid, "dados", nome, "ok", f"Atualizado em {quando}")
+    desde = f"há {(t - gravado).days} dia(s) (desde {quando})" if gravado else "(nunca gravado)"
+    if acordou_depois:
+        return check(cid, "dados", nome, "falha",
+                     f"Sem dado novo {desde}, e a coleta rodou {acordou_depois} vez(es) depois sem gravar",
+                     o_que_fazer=dado["rodou_sem_gravar"])
+    return check(cid, "dados", nome, "atencao", f"Sem dado novo {desde}; a coleta não precisou rodar",
+                 o_que_fazer=dado["sem_rodar"], sozinho=True)
+
+
+def idade_dos_dados() -> list[dict]:
+    try:
+        rotinas = rotinas_do_hermes()
+    except (OSError, ValueError):
+        return []  # "Rotinas do Hermes" já fica amarela com o jobs.json ilegível
+    t, out = agora(), []
+    for dado in DADOS_COM_IDADE:
+        try:
+            gravado = datetime.fromtimestamp(dado["arquivo"].stat().st_mtime, timezone.utc)
+        except OSError:
+            gravado = None
+        rotina = rotinas.get(dado["rotina"])
+        # Quando a rotina voltou da pausa (ou mudou de agenda): crons_hermes() roda antes e anota.
+        ativa_desde = _quando((agendas_vistas.get(dado["rotina"]) or {}).get("desde"))
+        corte = max(filter(None, ((gravado + FOLGA_SAIDA) if gravado else None, ativa_desde)), default=None)
+        acordou = sum(1 for em, texto in saidas_da_rotina(dado["rotina"])
+                      if (not corte or em > corte) and acordou_o_modelo(texto)) if rotina else 0
+        out.append(avaliar_idade_do_dado(dado, gravado, rotina, ativa_desde, acordou, t))
+    return out
+
+
 # ---------------------------------------------------------------- gerador de sites
 
 GERADOR_LOGS = HOME / "auto-site/.logs"
@@ -1744,7 +1849,7 @@ def main() -> None:
         return
     t = agora()
     checks = []
-    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, gerador, funil_aprendizado, prumo_mapa, pendencias,
+    for fn in (servicos, religamentos, containers, fluxos, maquina, crons_hermes, idade_dos_dados, gerador, funil_aprendizado, prumo_mapa, pendencias,
                easypanel, backup, fila_de_avisos, instalados):
         try:
             checks += fn()
