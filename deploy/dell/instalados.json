@@ -8,12 +8,14 @@
     "modo: permissão do install (padrão 755 em ~/.local/bin, 644 no resto).",
     "reiniciar: unit que fica rodando e só relê o arquivo no boot.",
     "via: 'aplicar-hermes' quando quem instala é o deploy/hermes/scripts/aplicar-hermes.py.",
+    "deploy/dell/lib/aviso.py (a lib da fila de avisos) vai para ~/.local/lib/mel/ ANTES do script que passa a usá-la; sem ela o script volta ao jeito antigo (docs/superpowers/plans/2026-10-11-aviso-unico.md).",
     "Units: tudo o que for .service/.timer/.path em deploy/dell/ já cai no curinga abaixo (inclui code-server, silmer-drive-sync e pncp-catchup); as do Hermes ficam em deploy/hermes/units/ e têm entrada própria.",
     "~/licitacoes-automation não é checkout git: só compose, scripts e fluxo versionados; o .env nunca entra. Mudar compose/scripts pede 'docker compose up -d' (ou restart do collector) depois do install."
   ],
   "arquivos": [
     {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
     {"repo": "deploy/dell/atualizar-central.sh", "instalado": "~/.local/bin/atualizar-central"},
+    {"repo": "deploy/dell/lib/aviso.py", "instalado": "~/.local/lib/mel/"},
     {"repo": "deploy/dell/auto-entrada.py", "instalado": "~/.local/bin/auto-entrada"},
     {"repo": "deploy/dell/backup/backup-dell.py", "instalado": "~/.local/bin/backup-dell"},
     {"repo": "deploy/dell/backup/estrutura-coletar.py", "instalado": "~/.local/bin/estrutura-coletar"},

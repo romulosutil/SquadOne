@@ -335,6 +335,20 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
 - Hermes fora do ar: o aviso fica na fila e a drenagem para no primeiro envio
   que falha (cada tentativa leva até 2 min); tenta de novo no minuto seguinte.
 
+**Scripts Python gravam pela lib** `deploy/dell/lib/aviso.py` (11/10/2026),
+instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"
+e 16 KB), corta com segurança o que passa do teto, grava `.tmp` oculto +
+rename com nome único, não cria a pasta e nunca levanta (devolve `gravado`,
+`recusado`, `fila_ausente` ou `falhou`; o que não gravou vai ao journal). Sem a
+lib instalada, o script volta ao jeito antigo. Por enquanto só o `auto-entrada`
+usa; o inventário das outras cópias e a ordem da troca (um PR por script) estão
+em `docs/superpowers/plans/2026-10-11-aviso-unico.md`.
+
+```bash
+python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py
+install -D -m 644 deploy/dell/lib/aviso.py ~/.local/lib/mel/aviso.py   # antes do script que a usa
+```
+
 Os fluxos do n8n montam o aviso em nós Code (`claude-ops/n8n.py`,
 `aviso_nodes`, com `origem: 'n8n:' + $workflow.name`). Fluxos publicados antes
 de 06/10/2026 não mandam `origem`: `claude-ops/aviso-origem.py --aplicar` os
