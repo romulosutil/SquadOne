@@ -1,0 +1,20 @@
+[Unit]
+Description=Graphify — grafos de todos os projetos e diário do que mudou (falha vai para a fila de avisos)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Era o job "Graphify — projetos" do Hermes (d43aaa681519), que rodava o mesmo script pelo
+# Python do Hermes, com cwd ~/.hermes e o PATH do gateway. O script só usa a biblioteca padrão;
+# chama gh (~/.local/bin, login em ~/.config/gh), git (/usr/bin) e graphify
+# (~/.local/bin/graphify -> venv-hermes, resolvido pelo caminho absoluto no próprio script).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=%h/.hermes
+# --fila: a falha vira aviso na fila do dell-status (silêncio das 22h às 7h, chave de um dia);
+# sem ele o script imprime a falha, que é o jeito do job do Hermes (a troca é reversível).
+ExecStart=/usr/bin/python3 %h/.local/bin/graphify-projetos --fila
+# O mesmo teto do Hermes (1 h); o script para de abrir projeto aos 50 min (ORCAMENTO_S) e, se
+# ainda assim passar, o SIGTERM vira aviso no próprio script. O script já se dá nice 10.
+TimeoutStartSec=1h

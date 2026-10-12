@@ -1,0 +1,10 @@
+[Unit]
+Description=Graphify — grafos de todos os projetos, todo dia às 03:00
+
+[Timer]
+# A mesma hora do job do Hermes que ele substitui. Dell desligado às 03:00: roda quando ligar.
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

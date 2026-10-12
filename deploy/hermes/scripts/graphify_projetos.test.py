@@ -5,20 +5,48 @@ GitHub fora do ar, orçamento de tempo), a exportação para o PC e a varredura 
 duplicatas. Tudo numa home temporária e com `rodar` falso: sem rede, sem
 graphify e sem tocar no Dell.
 
+Desde 11/10/2026 também o modo `--fila` (o graphify-projetos.service): a falha
+vira aviso na fila que o dell-status aceita, com o conteúdo que o job antigo
+imprimia; erro inesperado e SIGTERM também avisam; sem a lib de aviso o script
+volta ao jeito antigo. O HOME vira um temporário ANTES do import, para nada
+cair na fila de verdade.
+
   python3 deploy/hermes/scripts/graphify_projetos.test.py
 """
+import atexit
+import contextlib
 import importlib.util
+import io
 import json
+import os
+import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+_HOME = tempfile.mkdtemp(prefix="graphify-teste-home-")
+os.environ["HOME"] = _HOME
+os.environ.pop("SQUADONE_AVISOS_FILA", None)
+atexit.register(shutil.rmtree, _HOME, True)
+
 AQUI = Path(__file__).resolve().parent
+RAIZ = AQUI.parent.parent.parent
 spec = importlib.util.spec_from_file_location("graphify_projetos", AQUI / "graphify_projetos.py")
 gp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gp)
+
+try:
+    _spec_ds = importlib.util.spec_from_file_location("dell_status_para_graphify", RAIZ / "deploy/dell/dell-status.py")
+    ds = importlib.util.module_from_spec(_spec_ds)
+    _spec_ds.loader.exec_module(ds)
+except Exception:  # noqa: BLE001 — sem fcntl (Windows)
+    ds = None
+
+BR = timezone(timedelta(hours=-3))
 
 
 def proj(nome, caminho, **extra):
@@ -111,6 +139,10 @@ class Base(unittest.TestCase):
         self.ctx = gp.Contexto(home=self.h, registro=self.reg, estado_dir=self.h / ".estado", fila=self.h / ".fila",
                                graphify="graphify", rodar=self.fake, verificador=AQUI / "projetos_verificar.py",
                                grafos_dir=self.h / "Mel/Grafos", espelhos_dir=self.h / "Mel/Repos")
+        # A pasta da fila é do dell-status (2770): existe no Dell e a lib não a cria.
+        (self.h / ".fila").mkdir()
+        self.lib_do_repo = list(gp.PASTAS_DA_LIB)
+        self.addCleanup(setattr, gp, "PASTAS_DA_LIB", self.lib_do_repo)
 
     def tearDown(self):
         shutil.rmtree(self.h, ignore_errors=True)
@@ -396,6 +428,255 @@ class Duplicatas(Base):
         gp.executar(self.ctx)
         for arq in self.fila():
             self.assertNotIn("está em 2 pastas", json.loads(arq.read_text())["texto"])
+
+
+def calado(f, *a, **k):
+    """(resultado, stdout, stderr) sem sujar a saída do teste."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        r = f(*a, **k)
+    return r, out.getvalue(), err.getvalue()
+
+
+class AvisoDeDuplicatasPelaLib(Base):
+    """A avisar_na_fila copiada virou a lib, com o mesmo aviso."""
+
+    def duplicata(self):
+        copia = self.h / "copia"
+        (copia / ".git").mkdir(parents=True, exist_ok=True)
+        self.fake.urls[str(copia)] = "https://github.com/o/SquadOne.git"
+
+    def gravado_pelo(self, jeito: str) -> tuple[str, bytes]:
+        """(nome, conteúdo) do aviso gravado com a lib ('lib') ou sem ela ('antigo'), do zero."""
+        shutil.rmtree(self.ctx.estado_dir, ignore_errors=True)
+        shutil.rmtree(self.ctx.fila, ignore_errors=True)
+        self.ctx.fila.mkdir()
+        gp.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.h / "sem-lib"]
+        calado(gp.executar, self.ctx)
+        arquivos = self.fila()
+        self.assertEqual(len(arquivos), 1, arquivos)
+        return arquivos[0].name, arquivos[0].read_bytes()
+
+    def test_a_lib_do_repo_e_a_que_carrega(self):
+        self.assertEqual(Path(gp.lib_de_aviso().__file__).resolve(), (RAIZ / "deploy/dell/lib/aviso.py").resolve())
+
+    def test_identico_ao_jeito_antigo_menos_a_quebra_de_linha_do_fim(self):
+        self.duplicata()
+        nome_antigo, antigo = self.gravado_pelo("antigo")
+        nome_novo, novo = self.gravado_pelo("lib")
+        self.assertEqual(novo + b"\n", antigo)
+        self.assertRegex(nome_antigo, r"^graphify-duplicatas-\d{14}-\d{6}\.json$")
+        self.assertRegex(nome_novo, r"^graphify-duplicatas-\d+-[0-9a-f]{6}\.json$")
+        d = json.loads(novo.decode("utf-8"))
+        self.assertEqual((d["titulo"], d["origem"]), ("Mel: pastas fora do registro ou repetidas", "hermes:graphify-projetos"))
+
+    @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
+    def test_dell_status_aceita(self):
+        self.duplicata()
+        ds.validar_aviso(json.loads(self.gravado_pelo("lib")[1].decode("utf-8")))
+
+    def test_lista_longa_e_cortada_em_vez_de_recusada(self):
+        avisos = [f"pasta-{i:03d} fora do registro, com uma explicação comprida o bastante" for i in range(120)]
+        estado = {}
+        gp.avisar_na_fila(self.ctx, estado, avisos, 0)
+        d = json.loads(self.fila()[0].read_text(encoding="utf-8"))
+        self.assertLessEqual(len(d["texto"]), 4000)
+        self.assertTrue(d["texto"].endswith("… (cortado)"))
+        if ds is not None:
+            ds.validar_aviso(d)
+
+    def test_fila_ausente_nao_levanta_e_avisa_na_noite_seguinte(self):
+        self.duplicata()
+        shutil.rmtree(self.ctx.fila)
+        texto, _, err = calado(gp.executar, self.ctx)
+        self.assertEqual(texto, "")
+        self.assertIn("fila_ausente", err)
+        self.assertFalse(self.ctx.fila.exists())  # a pasta é do dell-status: a lib não a cria
+        self.assertEqual(self.estado().get("avisos_vistos", []), [])  # não foi gravado: não conta como visto
+        self.ctx.fila.mkdir()
+        calado(gp.executar, self.ctx)
+        self.assertEqual(len(self.fila()), 1)
+
+    def test_sem_a_lib_cria_a_pasta_como_antes(self):
+        self.duplicata()
+        shutil.rmtree(self.ctx.fila)
+        gp.PASTAS_DA_LIB = [self.h / "sem-lib"]
+        calado(gp.executar, self.ctx)
+        self.assertEqual(len(self.fila()), 1)
+
+    def test_copia_quebrada_cai_na_seguinte(self):
+        quebrada = self.h / "quebrada"
+        quebrada.mkdir()
+        (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
+        gp.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
+        self.assertEqual(Path(gp.lib_de_aviso().__file__).resolve(), (RAIZ / "deploy/dell/lib/aviso.py").resolve())
+        gp.PASTAS_DA_LIB = [quebrada]
+        self.assertIsNone(gp.lib_de_aviso())
+
+
+class FalhaNaFila(Base):
+    """O modo --fila do graphify-projetos.service."""
+
+    AGORA = datetime(2026, 10, 11, 3, 40, tzinfo=BR)
+
+    def setUp(self):
+        super().setUp()
+        self.fake.repos = [r for r in self.fake.repos if r["name"] != "Grande"]  # sem aviso de duplicata
+
+    def falhas(self):
+        return sorted(self.ctx.fila.glob("graphify-falha-*.json"))
+
+    def pela_fila(self, agora=None):
+        return calado(gp.rodar_pela_fila, self.ctx, (), agora=lambda: agora or self.AGORA)
+
+    def zerar(self):
+        shutil.rmtree(self.ctx.estado_dir, ignore_errors=True)
+        for f in self.ctx.fila.glob("*.json"):
+            f.unlink()
+
+    def test_rodada_sem_falha_nao_avisa(self):
+        codigo, out, _ = self.pela_fila()
+        self.assertEqual(codigo, 0)
+        self.assertEqual(list(self.ctx.fila.iterdir()), [])
+        self.assertIn("nada para avisar", out)
+
+    def test_falha_vai_para_a_fila_com_o_conteudo_do_job_antigo(self):
+        self.fake.graphify_falha = {"novo"}
+        antigo, impresso, _ = calado(gp.main, [], self.ctx)  # o job do Hermes: stdout
+        self.assertEqual(antigo, 0)
+        self.assertEqual(self.falhas(), [])  # o modo antigo não grava a falha na fila
+        self.assertIn("erro de AST", impresso)
+        self.zerar()
+        codigo, out, _ = self.pela_fila()
+        self.assertEqual(codigo, 0)  # a rodada foi inteira; a falha de um projeto já está avisada
+        self.assertEqual(len(self.falhas()), 1)
+        d = json.loads(self.falhas()[0].read_text(encoding="utf-8"))
+        self.assertEqual(d["titulo"], "🧭 Operação — graphify")
+        self.assertEqual(d["origem"], "hermes:graphify-projetos")
+        self.assertEqual(d["chave"], "graphify:falha:2026-10-11")
+        self.assertEqual(d["prioridade"], 2)
+        self.assertEqual(d["expira_em"], "2026-10-12T03:00:00-03:00")  # a rodada seguinte
+        # O que chega ao WhatsApp é o que o job imprimia, sem a linha em branco depois do título.
+        self.assertEqual(f"{d['titulo']}\n{d['texto']}", impresso.strip().replace("\n\n", "\n", 1))
+        self.assertIn("erro de AST", out)  # o stdout é log
+        if ds is not None:
+            self.assertEqual(ds.mensagem_do_aviso(ds.validar_aviso(d)), impresso.strip().replace("\n\n", "\n", 1))
+
+    def test_main_com_fila(self):
+        self.fake.graphify_falha = {"novo"}
+        codigo, _, _ = calado(gp.main, ["--fila"], self.ctx)
+        self.assertEqual(codigo, 0)
+        self.assertEqual(len(self.falhas()), 1)
+
+    def test_erro_inesperado_vira_aviso_e_a_unit_falha(self):
+        def quebra(args, cwd, timeout=0):
+            raise RuntimeError("disco sumiu")
+        self.ctx.rodar = quebra
+        codigo, _, err = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        d = json.loads(self.falhas()[0].read_text(encoding="utf-8"))
+        self.assertIn("RuntimeError: disco sumiu", d["texto"])
+        self.assertIn("journalctl --user -u graphify-projetos", d["texto"])
+        self.assertIn("Traceback", err)  # o detalhe fica no journal
+        if ds is not None:
+            ds.validar_aviso(d)
+
+    def test_sigterm_do_timeout_vira_aviso(self):
+        antes = signal.getsignal(signal.SIGTERM)
+
+        def termina(args, cwd, timeout=0):
+            os.kill(os.getpid(), signal.SIGTERM)  # o que o systemd manda ao passar do TimeoutStartSec
+            return self.fake(args, cwd, timeout)
+        self.ctx.rodar = termina
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        d = json.loads(self.falhas()[0].read_text(encoding="utf-8"))
+        self.assertIn("interrompida (SIGTERM)", d["texto"])
+        self.assertIs(signal.getsignal(signal.SIGTERM), antes)  # o tratador some com a rodada
+
+    def test_aviso_que_nao_chega_a_fila_faz_a_unit_falhar(self):
+        self.fake.graphify_falha = {"novo"}
+        shutil.rmtree(self.ctx.fila)
+        codigo, out, err = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        self.assertIn("erro de AST", out)  # o texto fica no journal
+        self.assertIn("fila_ausente", err)
+
+    def test_sem_a_lib_grava_do_jeito_antigo_e_o_dell_status_aceita(self):
+        self.fake.graphify_falha = {"novo"}
+        gp.PASTAS_DA_LIB = [self.h / "sem-lib"]
+        codigo, _, _ = self.pela_fila()
+        self.assertEqual(codigo, 0)
+        arquivos = self.falhas()
+        self.assertEqual(len(arquivos), 1)
+        self.assertRegex(arquivos[0].name, r"^graphify-falha-\d+\.json$")
+        if ds is not None:
+            ds.validar_aviso(json.loads(arquivos[0].read_text(encoding="utf-8")))
+
+    def test_texto_longo_cortado_com_e_sem_a_lib(self):
+        msg = "🧭 Operação — graphify\n\nNão consegui atualizar o grafo de:\n" + "\n".join(
+            f"• projeto-{i:03d}: erro comprido de AST num arquivo qualquer" for i in range(200))
+        for jeito in ("lib", "antigo"):
+            with self.subTest(jeito=jeito):
+                for f in self.ctx.fila.glob("*.json"):
+                    f.unlink()
+                gp.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.h / "sem-lib"]
+                self.assertTrue(calado(gp.gravar_aviso, self.ctx.fila, gp.aviso_de_falha(msg, self.AGORA), "graphify-falha")[0])
+                d = json.loads(self.falhas()[0].read_text(encoding="utf-8"))
+                self.assertLessEqual(len(d["texto"]), 4000)
+                self.assertTrue(d["texto"].endswith("… (cortado)"))
+                self.assertTrue(d["texto"].startswith("Não consegui atualizar o grafo de:"))
+                if ds is not None:
+                    ds.validar_aviso(d)
+
+    def test_valor_em_reais_vira_marcador_em_vez_de_perder_o_aviso(self):
+        aviso = gp.aviso_de_falha("🧭 Operação — graphify\n\nerro: custa R$ 10", self.AGORA)
+        self.assertTrue(calado(gp.gravar_aviso, self.ctx.fila, aviso, "graphify-falha")[0])
+        self.assertNotRegex(json.loads(self.falhas()[0].read_text(encoding="utf-8"))["texto"], r"R\s*\$")
+
+    def test_proxima_rodada(self):
+        self.assertEqual(gp.proxima_rodada(datetime(2026, 10, 11, 1, 0, tzinfo=BR)), datetime(2026, 10, 11, 3, 0, tzinfo=BR))
+        self.assertEqual(gp.proxima_rodada(datetime(2026, 10, 11, 3, 0, tzinfo=BR)), datetime(2026, 10, 12, 3, 0, tzinfo=BR))
+        self.assertEqual(gp.proxima_rodada(datetime(2026, 10, 31, 22, 0, tzinfo=BR)), datetime(2026, 11, 1, 3, 0, tzinfo=BR))
+
+    def test_titulo_e_texto(self):
+        self.assertEqual(gp.titulo_e_texto("A\n\nb\nc"), ("A", "b\nc"))
+        self.assertEqual(gp.titulo_e_texto("só uma linha"), ("🧭 Operação — graphify", "só uma linha"))
+        longa = "x" * 130
+        self.assertEqual(gp.titulo_e_texto(longa + "\nresto"), ("🧭 Operação — graphify", longa + "\nresto"))
+
+
+class Units(unittest.TestCase):
+    """O service e o timer que substituem o job do Hermes."""
+
+    def ler(self, nome):
+        return (RAIZ / "deploy/dell" / nome).read_text(encoding="utf-8")
+
+    def test_service_roda_a_copia_instalada_com_fila(self):
+        s = self.ler("graphify-projetos.service")
+        self.assertIn("ExecStart=/usr/bin/python3 %h/.local/bin/graphify-projetos --fila\n", s)
+        self.assertIn("Environment=PATH=%h/.local/bin:", s)  # gh e graphify moram em ~/.local/bin
+        self.assertIn("TimeoutStartSec=1h", s)
+        self.assertIn("Type=oneshot", s)
+
+    def test_timer_na_hora_que_o_aviso_expira(self):
+        t = self.ler("graphify-projetos.timer")
+        m = re.search(r"^OnCalendar=\*-\*-\* (\d\d):00:00$", t, re.M)
+        self.assertEqual(int(m.group(1)), gp.HORA_DA_RODADA)
+        self.assertIn("Persistent=true", t)
+        self.assertIn("WantedBy=timers.target", t)
+
+    def test_instalados_json_leva_o_script_e_as_units(self):
+        inst = json.loads((RAIZ / "deploy/dell/instalados.json").read_text(encoding="utf-8"))["arquivos"]
+        pares = {(e["repo"], e["instalado"]) for e in inst}
+        self.assertIn(("deploy/hermes/scripts/graphify_projetos.py", "~/.local/bin/graphify-projetos"), pares)
+        self.assertIn(("deploy/hermes/scripts/run-graphify.sh", "~/workspace/scripts/run-graphify.sh"), pares)
+        # As units entram pelo curinga, do mesmo jeito que o dell-status o lê (comparar_instalados).
+        for unit in ("graphify-projetos.service", "graphify-projetos.timer"):
+            cobertas = [e for e in inst if any(c in e["repo"] for c in "*?[")
+                        and RAIZ / "deploy/dell" / unit in set(RAIZ.glob(e["repo"]))
+                        and e["instalado"] == "~/.config/systemd/user/"]
+            self.assertTrue(cobertas, unit)
 
 
 if __name__ == "__main__":
