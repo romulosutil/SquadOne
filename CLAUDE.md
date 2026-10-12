@@ -108,6 +108,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
                           avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora
+    ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
+                          só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,
                           cardápio na hierarquia de 09/10/2026: ver → arrumar → manter, Raio-X e Mapa grátis, Fonte só depois do Mapa);
                           colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha

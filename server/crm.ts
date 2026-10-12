@@ -99,6 +99,9 @@ export const COLUNAS_DO_SITE = {
   // O link do Raio-X (Balcão, 08/10/2026): a segunda mensagem de quem recebeu a variação C o manda.
   // Sem a coluna, a segunda sai a do site, como antes: não é aviso na tela.
   raioXUrl: { nomes: ["raio_x_url"] },
+  // O braço do A/B do vídeo no envio (11/10/2026, src/operations/ab-video.ts): "video" = mande o
+  // vídeo à mão depois da mensagem; vazia = sem vídeo. Preenchida à mão; sem a coluna, nada muda.
+  bracoVideo: { nomes: ["braco_video"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
@@ -169,6 +172,19 @@ export function normalizarCabecalho(nome: string): string {
 }
 
 type Linha = Record<string, string>;
+
+export type BracoVideo = "video" | "sem-video";
+
+/**
+ * A coluna `braco_video` como a planilha a tiver: "video", "vídeo", "com vídeo" = braço com vídeo;
+ * qualquer outro texto ("sem-video", "não") = braço sem vídeo marcado; vazia = ausente, que conta
+ * como sem vídeo (quem entra no teste: src/operations/ab-video.ts).
+ */
+export function bracoDaColuna(valor: string): BracoVideo | undefined {
+  const normalizado = normalizarCabecalho(valor);
+  if (!normalizado) return undefined;
+  return normalizado === "video" || normalizado === "com_video" ? "video" : "sem-video";
+}
 
 /** Acesso tolerante: cabeçalho renomeado, com acento ou ausente não derruba nada. */
 function leitor<T extends Record<string, Coluna>>(colunas: T, linha: Record<string, unknown>) {
@@ -393,7 +409,7 @@ export interface CrmLead {
    * Site antes da venda, desde 07/10/2026: a variação da primeira mensagem (`mensagem_variante`:
    * A/B/C, EN, ou "manual") e a versão do site (`site_versao`). Ausente quando a planilha não diz.
    */
-  abordagem?: { mensagem?: string; site?: string };
+  abordagem?: { mensagem?: string; site?: string; video?: BracoVideo };
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp (do `wa_me`). */
   mensagemPronta?: string;
   eventos: CrmEvento[];
@@ -797,7 +813,12 @@ function leadDoSite(linha: Linha, contexto: {
   }
 
   const desde = calculada.desde;
-  const abordagem = { ...(c("mensagemVariante") ? { mensagem: c("mensagemVariante") } : {}), ...(c("siteVersao") ? { site: c("siteVersao") } : {}) };
+  const video = bracoDaColuna(c("bracoVideo"));
+  const abordagem = {
+    ...(c("mensagemVariante") ? { mensagem: c("mensagemVariante") } : {}),
+    ...(c("siteVersao") ? { site: c("siteVersao") } : {}),
+    ...(video ? { video } : {}),
+  };
   const marcos = { ...(iso(t.enviado) ? { enviado: iso(t.enviado) } : {}), ...(iso(t.visto) ? { visto: iso(t.visto) } : {}), ...(iso(t.respondeu) ? { respondeu: iso(t.respondeu) } : {}) };
   const ultimo = eventos.length ? Date.parse(eventos[eventos.length - 1].em) : undefined;
   return {

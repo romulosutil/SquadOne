@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { hora } from './crm-formato'
-import { filaDeEnvio, nichosDaFila, ordemComPulados, type EnviosAbertos } from './fila-de-envio'
+import {
+  estadoDoVideo, filaDeEnvio, gravarVideos, lerVideos, marcarVideo, nichosDaFila, ordemComPulados, passoDoVideo, type EnviosAbertos,
+} from './fila-de-envio'
 import type { CrmItemHoje, CrmLead } from './types'
 
 // "Enviar um por um" (08/10/2026): os sites prontos, um de cada vez, com o demo
@@ -15,9 +17,23 @@ const emit = defineEmits<{ enviado: [leadId: string]; abrir: [leadId: string, or
 
 const nicho = ref<string | null>(null)
 const pulados = ref<string[]>([])
-/** O lead cujo WhatsApp acabou de abrir: o cartão fica até "Próximo". */
-const aberto = ref<{ leadId: string; em: number } | null>(null)
+/**
+ * O lead cujo WhatsApp acabou de abrir: o cartão fica até "Próximo". Guarda o item e o lead
+ * do momento do toque: no braço com vídeo, o cartão não some com o retrato novo enquanto o
+ * vídeo não for marcado (a planilha confirma o envio da mensagem, não o do vídeo).
+ */
+const aberto = ref<{ leadId: string; em: number; item: CrmItemHoje; lead: CrmLead } | null>(null)
 const titulo = ref<HTMLElement | null>(null)
+
+function armazenamento(): Storage | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+// A/B do vídeo (fila-de-envio.ts): marca só deste navegador, 30 min, nunca na planilha.
+const videos = ref<EnviosAbertos>(lerVideos(armazenamento(), Date.now()))
 
 const nichos = computed(() => nichosDaFila(props.itens, props.leads, props.envios))
 const fila = computed(() => ordemComPulados(filaDeEnvio(props.itens, props.leads, props.envios, nicho.value), pulados.value))
@@ -32,6 +48,7 @@ const atual = computed(() => {
     const lead = props.leads.get(a.leadId)
     const item = props.itens.find(i => i.leadId === a.leadId)
     if (lead && item) return { item, lead, enviar: lead.links.enviar ?? '', abertoEm: a.em as number | null }
+    if (estadoDoVideo(a.lead, videos.value) === 'pendente') return { item: a.item, lead: a.lead, enviar: '', abertoEm: a.em as number | null }
   }
   const primeiro = fila.value[0]
   return primeiro ? { ...primeiro, abertoEm: null as number | null } : null
@@ -42,15 +59,29 @@ async function focarCartao() {
   titulo.value?.focus()
 }
 
-// O link some depois do toque (o envio já foi marcado): o foco vai para "Próximo",
-// que entra na tela no lugar dele, em vez de cair no corpo da página.
+// O link some depois do toque (o envio já foi marcado): o foco vai para "Próximo"
+// (ou, no braço com vídeo, para "Vídeo enviado"), que entra na tela no lugar dele,
+// em vez de cair no corpo da página.
 const botaoProximo = ref<HTMLButtonElement | null>(null)
+const botaoVideo = ref<HTMLButtonElement | null>(null)
+
+const passo = computed(() => (atual.value ? passoDoVideo(atual.value.lead) : null))
+const video = computed(() => (atual.value ? estadoDoVideo(atual.value.lead, videos.value) : null))
 
 async function aoEnviar() {
   const a = atual.value
   if (!a) return
-  aberto.value = { leadId: a.item.leadId, em: Date.now() }
+  aberto.value = { leadId: a.item.leadId, em: Date.now(), item: a.item, lead: a.lead }
   emit('enviado', a.item.leadId)
+  await nextTick()
+  ;(botaoVideo.value ?? botaoProximo.value)?.focus()
+}
+
+async function videoEnviado() {
+  const a = atual.value
+  if (!a) return
+  videos.value = marcarVideo(videos.value, a.lead.id, Date.now())
+  gravarVideos(armazenamento(), videos.value)
   await nextTick()
   botaoProximo.value?.focus()
 }
@@ -94,6 +125,7 @@ function escolherNicho(novo: string | null) {
       <div class="crm-item__quem">
         <h3 :id="`crm-fila-${atual.item.leadId}`" ref="titulo" tabindex="-1">{{ atual.lead.empresa }}</h3>
         <span v-if="atual.lead.abordagem?.site" class="crm-tag">Site {{ atual.lead.abordagem.site }}</span>
+        <span v-if="passo" class="crm-tag">Com vídeo</span>
       </div>
       <p class="crm-fila__detalhe">{{ atual.item.detalhe }}</p>
       <div class="crm-item__links crm-fila__ver">
@@ -107,13 +139,21 @@ function escolherNicho(novo: string | null) {
         <p v-else class="crm-nota-pequena">O retrato não trouxe o texto: o WhatsApp abre com a mensagem que o Balcão montou.</p>
       </figure>
 
+      <!-- A/B do vídeo (ab-video.ts): o passo aparece antes do toque, para o vídeo estar à mão. -->
+      <p v-if="passo" class="crm-aviso" role="note"><strong>Braço com vídeo (teste A/B).</strong> {{ passo }}</p>
+
       <template v-if="atual.abertoEm !== null">
         <p class="crm-fila__aberto" role="status">
           <strong>Aberto no WhatsApp às {{ hora(new Date(atual.abertoEm).toISOString()) }}.</strong>
           Mande por lá. O toque já marcou como enviado; a planilha confirma no próximo retrato (até 10 min).
         </p>
+        <p v-if="video === 'enviado'" class="crm-fila__aberto" role="status">
+          <strong>Vídeo marcado como enviado às {{ hora(new Date(videos[atual.lead.id]).toISOString()) }}.</strong>
+          A marca fica só neste navegador; a medição do teste sai da planilha.
+        </p>
         <div class="crm-fila__acoes">
-          <button ref="botaoProximo" type="button" class="botao botao--primario" @click="proximo">{{ fila.length ? 'Próximo site' : 'Concluir' }} <span aria-hidden="true">→</span></button>
+          <button v-if="video === 'pendente'" ref="botaoVideo" type="button" class="botao botao--primario" @click="videoEnviado">Vídeo enviado</button>
+          <button ref="botaoProximo" type="button" class="botao" :class="{ 'botao--primario': video !== 'pendente' }" @click="proximo">{{ fila.length ? 'Próximo site' : 'Concluir' }} <span aria-hidden="true">→</span></button>
         </div>
       </template>
       <template v-else>

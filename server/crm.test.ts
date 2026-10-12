@@ -10,6 +10,7 @@ import {
   RegistroFalhou,
   RegistroIndisponivel,
   RegistroInvalido,
+  bracoDaColuna,
   configDoCrm,
   montarCrm,
   dataNaProximaAcao,
@@ -371,6 +372,23 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const base = retrato();
     base.fontes.site.linhas.push(linhaSite("so-versao", { status: "pronto", site_versao: "padrão" }));
     assert.deepEqual(lead(montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads, "site:so-versao").abordagem, { site: "padrão" });
+  });
+
+  it("A/B do vídeo: braco_video vira abordagem.video; vazia não muda nada, e a coluna ausente não é aviso", () => {
+    const base = retrato();
+    base.fontes.site.linhas.push(
+      linhaSite("com-video", { status: "pronto", mensagem_variante: "A", braco_video: "Vídeo" }),
+      linhaSite("sem-marcado", { status: "pronto", mensagem_variante: "A", braco_video: "sem-video" }),
+      linhaSite("vazia", { status: "pronto", mensagem_variante: "A", braco_video: "" }),
+    );
+    const visao = montarCrm(base, { agora: AGORA, pastas: PASTAS });
+    assert.deepEqual(lead(visao.leads, "site:com-video").abordagem, { mensagem: "A", video: "video" });
+    assert.deepEqual(lead(visao.leads, "site:sem-marcado").abordagem, { mensagem: "A", video: "sem-video" });
+    assert.deepEqual(lead(visao.leads, "site:vazia").abordagem, { mensagem: "A" });
+    assert.ok(!visao.colunasAusentes.some((c) => c.includes("braco_video")));
+    assert.equal(bracoDaColuna("com vídeo"), "video");
+    assert.equal(bracoDaColuna("  "), undefined);
+    assert.equal(bracoDaColuna("não"), "sem-video");
   });
 
   it("PRUMO: robô não é resposta; interesse sem Raio-X pede para fazê-lo, nunca o formulário", () => {
