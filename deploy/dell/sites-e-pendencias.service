@@ -1,0 +1,17 @@
+[Unit]
+Description=Sites e pendências — a mensagem diária das 10:30 (vai para a fila de avisos)
+
+[Service]
+Type=oneshot
+# Era o job "Sites e pendências — 10h30" do Hermes (18c55d8bbae7), que rodava o mesmo script
+# pelo Python do Hermes, com cwd ~/.hermes e o PATH do gateway. O script só lê arquivos do
+# Dell (biblioteca padrão, sem rede nem programa externo); o PATH fica pelo costume.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=%h/.hermes
+# --fila: a mensagem vira aviso na fila do dell-status (chave do dia, P1, vale até as 22h);
+# sem ele o script imprime a mensagem, que é o jeito do job do Hermes (a troca é reversível).
+ExecStart=/usr/bin/python3 %h/.local/bin/sites-e-pendencias --fila
+# A rodada leva menos de 1 s; o teto só pega um disco travado. O SIGTERM vira aviso no script.
+TimeoutStartSec=5min
+Nice=10
