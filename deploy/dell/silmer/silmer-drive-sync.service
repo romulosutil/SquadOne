@@ -1,0 +1,10 @@
+[Unit]
+Description=Bidirectional sync for Silmer with Google Drive
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+Environment=HOME=/home/romulo-sutil-corr-a
+Environment=RCLONE_CONFIG=/home/romulo-sutil-corr-a/.config/rclone/rclone.conf
+ExecStart=/home/romulo-sutil-corr-a/.local/bin/silmer-drive-sync
+TimeoutStartSec=30min

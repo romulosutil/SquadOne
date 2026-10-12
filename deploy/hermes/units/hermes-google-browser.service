@@ -1,0 +1,13 @@
+[Unit]
+Description=Persistent Chromium session for Hermes Google access
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/snap/bin/chromium --headless=new --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=%h/snap/chromium/common/hermes-chrome-debug --no-first-run --no-default-browser-check --disable-dev-shm-usage about:blank
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

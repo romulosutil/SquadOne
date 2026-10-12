@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Silmer Google Drive sync every five minutes
+
+[Timer]
+OnActiveSec=30s
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=silmer-drive-sync.service
+
+[Install]
+WantedBy=timers.target
