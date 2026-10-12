@@ -344,6 +344,16 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   A marca `pausa-pncp` do Radar também vale para o `pncp-catchup.timer`. Marca de um timer
   que voltou a ligar não acende nada, mas aparece no detalhe ("marca de pausa sobrando")
   para ser apagada.
+- **Cache e ~/.local** (`pastas`, grupo Máquina): em 11/10/2026 o `~/.cache` tinha 34 GB de
+  perfis temporários do Chrome headless do QA (`google-chrome-headless/scoped_dir*`) e o
+  "Disco" seguia verde (500 GB, longe dos 85%). Mede `~/.cache` e `~/.local` com
+  `du -x --max-depth=1` **uma vez por hora** (a medida e as 3 subpastas maiores ficam em
+  `~/.local/state/dell-status/tamanhos.json`, 8 dias). **Amarelo** com `~/.cache` acima de
+  25 GB ou `~/.local` acima de 15 GB (no dia: 12,2 e 2,7 GB), ou com qualquer uma crescendo
+  mais de 2 GB por dia (comparada com a medida mais perto de 24 h atrás, entre 20 e 48 h; a
+  primeira diz "crescimento: medindo"). O detalhe diz a subpasta maior. du que falha (60 s
+  de teto) é amarelo e só tenta de novo na hora seguinte. Nunca vermelho: disco cheio já é
+  vermelho em "Disco".
 
 ### Fila de avisos (06/10/2026)
 
@@ -420,7 +430,7 @@ gravar aviso em nome de quem quisesse. O `2` (setgid) mantém o grupo nos
 arquivos novos.
 
 ```bash
-python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados e "o que fazer"
+python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados, timers, healthwatch, idade dos dados, rotinas caladas, pastas e "o que fazer"
 (cd deploy/dell/claude-ops && python3 aviso-origem.py --aplicar)   # antes do dell-status novo
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
 mkdir -p ~/.local/share/avisos/fila

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
-agenda de cada um), as filas, o backup, os arquivos instalados e o "o que fazer" de cada alerta. Tudo
+agenda de cada um), as filas, o backup, os arquivos instalados, os timers, os religamentos do
+healthwatch, a idade dos dados, as rotinas caladas, o tamanho do cache e o "o que fazer" de cada alerta. Tudo
 em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
 Hermes.
 
@@ -921,6 +922,95 @@ class RotinasCaladas(unittest.TestCase):
         self.saida("bbbb", br("2026-10-12T09:00"), resposta("[SILENT]"))  # o 5º, 4 dias depois do 1º
         ds.agora = lambda: br("2026-10-12T10:00").astimezone(timezone.utc)
         self.assertEqual(self.rodar(job("bbbb", "0 9 * * *"))["estado"], "atencao")
+
+
+class PastasQueCrescem(unittest.TestCase):
+    """~/.cache e ~/.local: 12.2 GB e 2.7 GB na Mel em 11/10/2026, depois de apagar 34 GB de
+    perfis temporários do Chrome headless."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="dell-status-pastas-"))
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.antes = {k: getattr(ds, k) for k in ("TAMANHOS", "PASTAS_VIGIADAS", "medir_pasta", "agora")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
+        self.addCleanup(ds.tamanhos_medidos.clear)
+        ds.TAMANHOS = self.dir / "tamanhos.json"
+        ds.PASTAS_VIGIADAS = {"~/.cache": (self.dir / "cache", 25 * ds.GB), "~/.local": (self.dir / "local", 15 * ds.GB)}
+        self.tamanho = {"~/.cache": 12.2 * ds.GB, "~/.local": 2.7 * ds.GB}
+        self.medicoes = 0
+
+        def medir(pasta):
+            self.medicoes += 1
+            rotulo = "~/.cache" if pasta.name == "cache" else "~/.local"
+            if self.tamanho[rotulo] is None:
+                raise ds.subprocess.TimeoutExpired("du", 60)
+            maior = ["google-chrome-headless", self.tamanho[rotulo] - 9 * ds.GB] if self.tamanho[rotulo] > 20 * ds.GB \
+                else ["huggingface", 3.7 * ds.GB]
+            return {"total": int(self.tamanho[rotulo]), "maiores": [[maior[0], int(maior[1])]]}
+        ds.medir_pasta = medir
+
+    def rodar(self, quando: str) -> dict:
+        ds.agora = lambda: br(quando).astimezone(timezone.utc)
+        [c] = ds.pastas_que_crescem()
+        ds.gravar(ds.TAMANHOS, ds.tamanhos_medidos)  # o que main() faz fora do --stdout
+        return c
+
+    def test_hoje_na_mel_e_ok_e_mede_uma_vez_por_hora(self):
+        c = self.rodar("2026-10-11T21:45")
+        self.assertEqual((c["estado"], c["detalhe"]),
+                         ("ok", "~/.cache 12.2 GB · ~/.local 2.7 GB · crescimento: medindo (precisa de um dia)"))
+        self.assertEqual(self.medicoes, 2)
+        self.rodar("2026-10-11T22:30")
+        self.assertEqual(self.medicoes, 2)  # menos de uma hora: usa a medida guardada
+        self.rodar("2026-10-11T22:46")
+        self.assertEqual(self.medicoes, 4)
+
+    def test_cresce_mais_de_2_gb_por_dia(self):
+        self.rodar("2026-10-11T10:00")
+        self.tamanho["~/.cache"] = 13.0 * ds.GB
+        c = self.rodar("2026-10-12T10:00")
+        self.assertEqual(c["estado"], "ok")
+        self.assertIn("~/.cache 13.0 GB (+0.8 GB/dia)", c["detalhe"])
+        self.tamanho["~/.cache"] = 16.0 * ds.GB
+        c = self.rodar("2026-10-13T10:00")
+        self.assertEqual(c["estado"], "atencao")
+        self.assertTrue(c["detalhe"].startswith("~/.cache cresce 3.0 GB por dia, o maior é huggingface com 3.7 GB"))
+        self.assertIn("scoped_dir", c["o_que_fazer"])
+
+    def test_acima_do_limite_como_antes_da_limpeza(self):
+        self.tamanho["~/.cache"] = 46.2 * ds.GB
+        c = self.rodar("2026-10-11T10:00")
+        self.assertEqual(c["estado"], "atencao")
+        self.assertTrue(c["detalhe"].startswith("~/.cache passou de 25.0 GB, o maior é google-chrome-headless com 37.2 GB"))
+
+    def test_guarda_8_dias_e_compara_com_24_h_atras(self):
+        for d in range(12):
+            self.rodar(f"2026-10-{1 + d:02d}T10:00")
+        medidas = json.loads(ds.TAMANHOS.read_text())["medidas"]
+        self.assertEqual([m["em"][:10] for m in medidas][0], "2026-10-04")
+        self.assertEqual(len(medidas), 9)
+        t = br("2026-10-12T10:00").astimezone(timezone.utc)
+        self.assertEqual(ds.medida_de_um_dia_atras(medidas, t)["em"][:10], "2026-10-11")
+        self.assertIsNone(ds.medida_de_um_dia_atras(medidas[-1:], t))
+
+    def test_du_que_falha_espera_uma_hora(self):
+        self.tamanho["~/.cache"] = None
+        c = self.rodar("2026-10-11T10:00")
+        self.assertEqual(c["estado"], "atencao")
+        self.assertIn("não consegui medir ~/.cache", c["detalhe"])
+        self.assertIn("tenta de novo em uma hora", c["o_que_fazer"])
+        self.rodar("2026-10-11T10:01")
+        self.assertEqual(self.medicoes, 2)
+
+    def test_medir_pasta_de_verdade(self):
+        ds.medir_pasta = self.antes["medir_pasta"]
+        raiz = self.dir / "pasta"
+        for nome, kb in (("grande", 300), ("pequena", 10)):
+            (raiz / nome).mkdir(parents=True)
+            (raiz / nome / "f").write_bytes(b"x" * kb * 1024)
+        m = ds.medir_pasta(raiz)
+        self.assertGreaterEqual(m["total"], 310 * 1024)
+        self.assertEqual([n for n, _ in m["maiores"]], ["grande", "pequena"])
 
 
 class Instalados(unittest.TestCase):
