@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import re
@@ -265,13 +266,49 @@ def gravar(caminho: Path, texto: str) -> Path:
     return backup
 
 
-def avisar(texto: str) -> None:
+# A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026). Este script não é cópia
+# instalada: roda do clone (~/SquadOne/deploy/hermes/scripts), então a lib é a do
+# mesmo clone (deploy/dell/lib) e, na falta dela, a instalada em ~/.local/lib/mel.
+PASTAS_DA_LIB = [Path(__file__).resolve().parents[2] / "dell" / "lib", HOME / ".local/lib/mel"]
+
+
+def lib_de_aviso():
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
+    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    for pasta in PASTAS_DA_LIB:
+        arquivo = pasta / "aviso.py"
+        if not arquivo.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o remendo: tenta a próxima
+            continue
+    return None
+
+
+def avisar(texto: str) -> bool:
+    """True quando o aviso ficou na fila. Nunca levanta por erro de gravação: o
+    remendo já falhou e o retorno 2 do main precisa sair de qualquer jeito."""
+    aviso = {"titulo": "⚠️ Hermes (WhatsApp)", "texto": texto, "origem": "hermes:patch-bridge-envios"}
+    lib = lib_de_aviso()
+    if lib is not None:
+        # O texto leva a mensagem da exceção (node --check, caminho, âncora); se
+        # trouxer "R$" a lib recusaria o aviso, e calar a falha do remendo é pior
+        # que mandá-la sem o valor.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        return lib.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="bridge-envios").gravado  # o que não gravou a lib já pôs no stderr
+    # Sem a lib: o jeito de antes, sem mudar nada.
     try:
         FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
-        (FILA_DE_AVISOS / f"bridge-envios-{int(time.time())}.json").write_text(
-            json.dumps({"titulo": "⚠️ Hermes (WhatsApp)", "texto": texto, "origem": "hermes:patch-bridge-envios"}, ensure_ascii=False), encoding="utf-8")
+        (FILA_DE_AVISOS / f"bridge-envios-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+        return True
     except OSError as e:
         print("aviso não gravado:", e, file=sys.stderr)
+        return False
 
 
 def aplicar(caminho: Path, remover: bool = False) -> bool:
@@ -459,6 +496,7 @@ def testar(bridge: Path) -> int:
             r = subprocess.run([sys.executable, __file__, "--bridge", str(self.copia), "--verificar"], capture_output=True)
             self.assertEqual(r.returncode, 0)
             self.copia.write_text(self.copia.read_text().replace("if (!isSelfChat) {", "if (!ehSelf) {"))
+            (self.dir / ".local/share/avisos/fila").mkdir(parents=True)  # a lib de aviso não cria a pasta da fila
             r = subprocess.run([sys.executable, __file__, "--bridge", str(self.copia), "--avisar"], capture_output=True, env=env)
             self.assertEqual(r.returncode, 2)
             avisos = list((self.dir / ".local/share/avisos/fila").glob("*.json"))
