@@ -1490,6 +1490,10 @@ exatamente o que as lições do funil vão propor. Desde 08/10/2026:
   por rename) o `dell-status` acusa como "diferente" em até 1 min;
 - nunca symlink: o `rclone sync` do espelho pula symlinks (a sentinela do
   espelho é justamente o `CLAUDE.md`) e o Claude headless não lê `~/SquadOne`.
+- revisão de um demo feita fora do Dell (14/10/2026) chega em
+  `deploy/dell/auto-site/revisoes/<slug>/index.html`, fora do `instalados.json`:
+  copia-se uma vez para a pasta do lead e publica-se pelo passo 5, com o
+  `raio-x <slug>` logo depois (`revisoes/README.md`).
 
 A cópia versionada é a do Dell de 05/10/2026 (sha256 `7fa99464…` e
 `a101c085…`) com duas mudanças: o número de WhatsApp de um negócio citado num
