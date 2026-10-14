@@ -37,10 +37,12 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const l = props.lead.links
   const prumo = props.lead.produto === 'prumo'
   const interesse = props.lead.resposta?.tipo === 'interesse'
+  // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site.
+  const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)
   const todas: Array<[string, string, string | undefined, boolean]> = [
     ['enviar', 'Enviar a primeira mensagem pelo WhatsApp (marca como enviado)', l.enviar, true],
     ['convite', 'Enviar convite (marca como enviado)', l.convite, true],
-    ['segunda', prumo ? 'Mandar o Raio-X (segunda mensagem)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
+    ['segunda', prumo ? 'Mandar o Raio-X (segunda mensagem)' : recebeuC ? 'Mandar o raio-x e o demo (segunda mensagem)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
     ['followup', 'Mandar o follow-up (texto pronto)', l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
     ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],

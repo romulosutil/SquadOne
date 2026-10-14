@@ -415,7 +415,7 @@ export interface CrmLead {
   eventos: CrmEvento[];
   /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o Raio-X, só quando ele existe). */
   /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento. */
-  /** `raioX`: PRUMO, a página do Raio-X do lead (índice em ~/prumo-entregas/prumo-raio-x/leads.json). */
+  /** `raioX`: PRUMO, a página do Raio-X do lead (índice em ~/prumo-entregas/prumo-raio-x/leads.json); Site, o `<demo>/raio-x` da coluna raio_x_url. */
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
   divergencias: string[];
@@ -783,6 +783,8 @@ function leadDoSite(linha: Linha, contexto: {
   const waMe = /wa\.me\/\d+/.test(c("waMe")) ? c("waMe") : whatsapp ? `https://wa.me/${whatsapp}` : "";
   const mensagem = { nome: c("empresa"), siteUrl: site ?? "", waMe, variante: c("mensagemVariante"), raioXUrl: c("raioXUrl") };
   const segunda = emConversa && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
+  // O Raio-X do demo (<site>/raio-x): quem recebeu a C pediu ele; a ficha o mostra e a colinha o preenche.
+  const raioX = site ? urlHttps(c("raioXUrl")) : undefined;
   // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
   const followup = followupHoje && waMe ? followupDe(mensagem).link || undefined : undefined;
 
@@ -857,6 +859,7 @@ function leadDoSite(linha: Linha, contexto: {
       ...(segunda ? { segunda } : {}),
       ...(followup ? { followup } : {}),
       ...(planilha ? { planilha } : {}),
+      ...(raioX ? { raioX } : {}),
     },
     ...(pasta ? {
       pasta: {
@@ -1052,12 +1055,14 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       const t = Date.parse(lead.marcos.respondeu ?? "");
       const r = lead.resposta && lead.resposta.tipo !== "bot" ? lead.resposta : undefined;
       const segunda = lead.links.segunda
-        ? [{ rotulo: lead.produto === "prumo" ? "Mandar o Raio-X" : "Mandar o link do site", url: lead.links.segunda }] : [];
+        ? [{ rotulo: lead.produto === "prumo" ? "Mandar o Raio-X"
+          : lead.abordagem?.mensagem === "C" && lead.links.raioX ? "Mandar o raio-x e o demo" : "Mandar o link do site", url: lead.links.segunda }] : [];
       itens.resposta.push({
         leadId: lead.id,
         acao: r?.tipo === "interesse" ? (lead.produto === "prumo"
           ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
-          : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link" : "Quer ver: mandar o link do site")
+          : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
+          : lead.abordagem?.mensagem === "C" && lead.links.raioX ? "Quer ver o raio-x: mandar o raio-x e o demo" : "Quer ver: mandar o link do site")
           : "Responder no WhatsApp",
         detalhe: [
           Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",
