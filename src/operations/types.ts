@@ -131,8 +131,10 @@ export interface CrmLead {
    * Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site.
    * `video` (11/10/2026): o braço do A/B do vídeo (coluna `braco_video`; ausente = coluna vazia).
    * `regime` (14/10/2026): o texto da 1ª mensagem pela data do envio, à parte da letra.
+   * `elegiveis` (14/10/2026): as letras do sorteio (coluna `ab_elegiveis`: "A", "AB", "AC", "ABC");
+   * só os leads com ela entram no A/B estratificado (ab-mensagem.ts).
    */
-  abordagem?: { mensagem?: string; site?: string; video?: 'video' | 'sem-video'; regime?: CrmRegimeDaMensagem }
+  abordagem?: { mensagem?: string; site?: string; video?: 'video' | 'sem-video'; regime?: CrmRegimeDaMensagem; elegiveis?: string }
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
   mensagemPronta?: string
   eventos: CrmEvento[]

@@ -13,6 +13,7 @@ import {
   RegistroInvalido,
   acaoDoInteresseParado,
   bracoDaColuna,
+  elegiveisDaColuna,
   conferirEnvio,
   configDoCrm,
   followupJaEnviado,
@@ -454,6 +455,25 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(bracoDaColuna("com vídeo"), "video");
     assert.equal(bracoDaColuna("  "), undefined);
     assert.equal(bracoDaColuna("não"), "sem-video");
+  });
+
+  it("A/B estratificado: ab_elegiveis vira abordagem.elegiveis; ilegível ou ausente fica de fora, sem aviso", () => {
+    const base = retrato();
+    base.fontes.site.linhas.push(
+      linhaSite("abc", { status: "pronto", mensagem_variante: "C", ab_elegiveis: "ABC" }),
+      linhaSite("bagunca", { status: "pronto", mensagem_variante: "B", ab_elegiveis: " b a " }),
+      linhaSite("ruim", { status: "pronto", mensagem_variante: "A", ab_elegiveis: "AXB" }),
+      linhaSite("sem", { status: "pronto", mensagem_variante: "A" }),
+    );
+    const visao = montarCrm(base, { agora: AGORA, pastas: PASTAS });
+    assert.deepEqual(lead(visao.leads, "site:abc").abordagem, { mensagem: "C", elegiveis: "ABC" });
+    assert.deepEqual(lead(visao.leads, "site:bagunca").abordagem, { mensagem: "B", elegiveis: "AB" });
+    assert.deepEqual(lead(visao.leads, "site:ruim").abordagem, { mensagem: "A" });
+    assert.deepEqual(lead(visao.leads, "site:sem").abordagem, { mensagem: "A" });
+    assert.ok(!visao.colunasAusentes.some((c) => c.includes("ab_elegiveis")));
+    for (const [v, esperado] of [["AC", "AC"], ["cab", "ABC"], ["", undefined], ["manual", undefined], ["A, B", "AB"]] as const) {
+      assert.equal(elegiveisDaColuna(v), esperado, v);
+    }
   });
 
   it("PRUMO: robô não é resposta; interesse sem Raio-X pede para fazê-lo, nunca o formulário", () => {

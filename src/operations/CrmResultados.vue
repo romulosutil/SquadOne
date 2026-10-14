@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   DIAS_ATE_A_LEITURA, DIFERENCA_MINIMA_PP, ENVIOS_POR_BRACO, FRASE_DO_VEREDITO, REGRA_DE_PARADA, leituraDoAbVideo, textoDaDiferenca, textoDoP,
 } from './ab-video'
+import { ENVIOS_MINIMOS_POR_BRACO, leituraDoAbMensagem, textoDoFaltam } from './ab-mensagem'
 import { dataCurta, dataHora } from './crm-formato'
 import {
   AMOSTRA_MINIMA, INICIO_DAS_ANOTACOES, PERIODOS, amostraPequena, enviosAnotados, porcento, resultados, resumoDaLinha, textoDaSegunda, textoDoFollowup,
@@ -36,6 +37,11 @@ const anotados = computed(() => enviosAnotados(props.leads, periodo.value, props
 // Ignora o período: o teste é contado inteiro, uma vez, depois dos 7 dias.
 const ab = computed(() => leituraDoAbVideo(props.leads, props.agora))
 const bracos = computed(() => (ab.value ? [ab.value.comVideo, ab.value.semVideo] : []))
+
+// A/B estratificado da 1ª mensagem (14/10/2026, ab-mensagem.ts): só leads com ab_elegiveis, letra
+// comparada só entre quem podia receber as duas. Também ignora o período: o teste conta inteiro.
+const abMensagem = computed(() => leituraDoAbMensagem(props.leads, props.agora))
+const letraVenceu = (letra: string | null) => (letra ? `mensagem ${letra} ganhou` : 'não provado')
 
 const resumo = resumoDaLinha
 const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responderam / l.enviados) * 100) : 0}%`
@@ -132,23 +138,83 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
         </ul>
       </section>
 
-      <section v-for="secao in secoes" :key="secao.id" class="crm-grupo" :aria-labelledby="`crm-resultado-${secao.id}`">
-        <header class="crm-grupo__cabeca">
-          <h2 :id="`crm-resultado-${secao.id}`">{{ secao.titulo }}</h2>
-        </header>
-        <p class="crm-grupo__explicacao">{{ secao.explicacao }}</p>
-        <ul class="crm-lista">
-          <li v-for="linha in secao.linhas" :key="linha.chave" class="crm-resultado">
-            <div class="crm-resultado__cabeca">
-              <strong>{{ linha.chave }}</strong>
-              <span>{{ linha.enviados }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
-              <span v-if="amostraPequena(linha)" class="crm-tag">amostra pequena</span>
+      <template v-for="secao in secoes" :key="secao.id">
+        <section class="crm-grupo" :aria-labelledby="`crm-resultado-${secao.id}`">
+          <header class="crm-grupo__cabeca">
+            <h2 :id="`crm-resultado-${secao.id}`">{{ secao.titulo }}</h2>
+          </header>
+          <p class="crm-grupo__explicacao">{{ secao.explicacao }}</p>
+          <ul class="crm-lista">
+            <li v-for="linha in secao.linhas" :key="linha.chave" class="crm-resultado">
+              <div class="crm-resultado__cabeca">
+                <strong>{{ linha.chave }}</strong>
+                <span>{{ linha.enviados }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
+                <span v-if="amostraPequena(linha)" class="crm-tag">amostra pequena</span>
+              </div>
+              <div class="crm-resultado__barra" aria-hidden="true"><span :style="{ width: largura(linha) }" /></div>
+              <p class="crm-resultado__numeros">{{ resumo(linha) }}</p>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Logo depois do placar por mensagem: o placar mistura quem podia receber a B com quem não podia; este não. -->
+        <section v-if="secao.id === 'mensagem'" class="crm-grupo" aria-labelledby="crm-resultado-ab-mensagem">
+          <header class="crm-grupo__cabeca">
+            <h2 id="crm-resultado-ab-mensagem">A × B (mesmo sorteio, por nicho)</h2>
+          </header>
+          <p class="crm-grupo__explicacao">
+            Cada letra só é comparada entre leads que podiam receber as duas (coluna ab_elegiveis), com a letra equilibrada
+            dentro de cada nicho pelo Balcão. "Respondeu" é gente. Conta o teste inteiro, sem o período acima.
+            <template v-if="abMensagem.inicio">Só vale para envios sorteados desde {{ dataCurta(abMensagem.inicio) }}.</template>
+          </p>
+          <p v-if="!abMensagem.inicio" class="crm-vazio">
+            <strong>Nenhum envio sorteado ainda.</strong> Só vale para envios sorteados depois que o Balcão passou a gravar a
+            coluna ab_elegiveis (14/10/2026); os anteriores ficam fora.
+          </p>
+          <template v-else>
+            <div v-for="par in abMensagem.pares" :key="par.par" class="crm-resultados__par">
+              <h3 class="crm-resultado__numeros"><strong>{{ par.x.letra }} × {{ par.y.letra }}</strong></h3>
+              <ul class="crm-lista">
+                <li v-for="b in [par.x, par.y]" :key="b.letra" class="crm-resultado">
+                  <div class="crm-resultado__cabeca">
+                    <strong>Mensagem {{ b.letra }}</strong>
+                    <span>{{ b.enviados }} de {{ ENVIOS_MINIMOS_POR_BRACO }} enviado{{ b.enviados === 1 ? '' : 's' }}</span>
+                  </div>
+                  <p v-if="b.linha" class="crm-resultado__numeros">{{ resumo(b.linha) }}</p>
+                </li>
+              </ul>
+              <p v-if="par.estado === 'faltam'" class="crm-aviso" role="status">
+                <strong>{{ textoDoFaltam(par) }}</strong> A taxa só aparece com {{ ENVIOS_MINIMOS_POR_BRACO }} envios em cada braço:
+                olhar antes e parar quando "parece bom" inventa vencedor.
+              </p>
+              <div v-else-if="par.numeros" class="crm-resultados__total" role="status">
+                <p class="crm-resultado__numeros">
+                  Respondeu de gente: {{ par.x.letra }} <strong>{{ porcento(par.x.linha?.responderam ?? 0, par.x.enviados) }}</strong>,
+                  {{ par.y.letra }} <strong>{{ porcento(par.y.linha?.responderam ?? 0, par.y.enviados) }}</strong>
+                  · {{ textoDaDiferenca(par.numeros.diferencaPp) }} para a {{ par.x.letra }} · {{ textoDoP(par.numeros.p) }}
+                </p>
+                <p class="crm-resultado__numeros"><strong>Veredito: {{ letraVenceu(par.numeros.ganhou) }}.</strong></p>
+              </div>
+              <p v-if="par.porNicho.length" class="crm-nota-pequena">
+                Por nicho:
+                <template v-for="(n, i) in par.porNicho" :key="n.nicho">{{ i ? ' · ' : '' }}{{ n.nicho }} {{ par.x.letra }}
+                  {{ n.x.linha ? `${n.x.linha.responderam}/${n.x.enviados}` : n.x.enviados }}, {{ par.y.letra }}
+                  {{ n.y.linha ? `${n.y.linha.responderam}/${n.y.enviados}` : n.y.enviados }}</template>
+                {{ par.estado === 'lido' ? '(responderam/enviados)' : '(enviados)' }}.
+              </p>
             </div>
-            <div class="crm-resultado__barra" aria-hidden="true"><span :style="{ width: largura(linha) }" /></div>
-            <p class="crm-resultado__numeros">{{ resumo(linha) }}</p>
-          </li>
-        </ul>
-      </section>
+          </template>
+          <p v-if="abMensagem.semColuna || abMensagem.letraFora" class="crm-nota-pequena">
+            Fora do teste: {{ abMensagem.semColuna }} envio{{ abMensagem.semColuna === 1 ? '' : 's' }} sem ab_elegiveis
+            (o histórico: os envios sem letra e os sorteados só pelo hash, antes de 14/10/2026){{ abMensagem.letraFora ? `, e ${abMensagem.letraFora} com a letra trocada (escrita à mão)` : '' }}.
+            O follow-up (aviso do 05 · Acompanhamento) não é sorteado: o teste é da 1ª mensagem.
+          </p>
+          <p class="crm-nota-pequena">
+            Regra fixada antes de ler: uma letra ganha só com +{{ DIFERENCA_MINIMA_PP }} pontos e p &lt; 0,10 (Fisher exato
+            bilateral), com {{ ENVIOS_MINIMOS_POR_BRACO }}+ envios em cada braço; senão, não provado. Por nicho é para ver, não para declarar ganhador.
+          </p>
+        </section>
+      </template>
     </template>
   </div>
 </template>

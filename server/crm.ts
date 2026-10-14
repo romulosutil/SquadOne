@@ -102,6 +102,10 @@ export const COLUNAS_DO_SITE = {
   // O braço do A/B do vídeo no envio (11/10/2026, src/operations/ab-video.ts): "video" = mande o
   // vídeo à mão depois da mensagem; vazia = sem vídeo. Preenchida à mão; sem a coluna, nada muda.
   bracoVideo: { nomes: ["braco_video"] },
+  // As letras que o lead podia receber no sorteio (Balcão, 14/10/2026: "A", "AB", "AC", "ABC"). É o
+  // que diz com quem a letra pode ser comparada (src/operations/ab-mensagem.ts). Não é esperada:
+  // ausente, o lead fica fora do A/B estratificado e nada mais muda.
+  abElegiveis: { nomes: ["ab_elegiveis"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
@@ -214,6 +218,17 @@ export function bracoDaColuna(valor: string): BracoVideo | undefined {
   const normalizado = normalizarCabecalho(valor);
   if (!normalizado) return undefined;
   return normalizado === "video" || normalizado === "com_video" ? "video" : "sem-video";
+}
+
+/**
+ * A coluna `ab_elegiveis` como o Balcão a grava ("AB"), tolerante a caixa, espaço e ordem ("b a").
+ * O mesmo critério de `normalizarElegiveis` em site-mensagem.js: letra fora de A/B/C invalida a
+ * célula inteira (undefined), porque um conjunto adivinhado poria o lead no estrato errado.
+ */
+export function elegiveisDaColuna(valor: string): string | undefined {
+  const t = valor.toUpperCase().replace(/[^A-Z]/g, "");
+  if (!t || [...t].some((l) => !"ABC".includes(l))) return undefined;
+  return ["A", "B", "C"].filter((l) => t.includes(l)).join("");
 }
 
 /** Acesso tolerante: cabeçalho renomeado, com acento ou ausente não derruba nada. */
@@ -451,8 +466,9 @@ export interface CrmLead {
   /**
    * Site antes da venda, desde 07/10/2026: a variação da primeira mensagem (`mensagem_variante`:
    * A/B/C, EN, ou "manual") e a versão do site (`site_versao`). Ausente quando a planilha não diz.
+   * `elegiveis` (14/10/2026): as letras do sorteio (`ab_elegiveis`: "A", "AB", "AC", "ABC").
    */
-  abordagem?: { mensagem?: string; site?: string; video?: BracoVideo; regime?: CrmRegimeDaMensagem };
+  abordagem?: { mensagem?: string; site?: string; video?: BracoVideo; regime?: CrmRegimeDaMensagem; elegiveis?: string };
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp (do `wa_me`). */
   mensagemPronta?: string;
   eventos: CrmEvento[];
@@ -982,10 +998,12 @@ function leadDoSite(linha: Linha, contexto: {
   const desde = calculada.desde;
   const video = bracoDaColuna(c("bracoVideo"));
   const regime = regimeDaMensagem(t.enviado);
+  const elegiveis = elegiveisDaColuna(c("abElegiveis"));
   const abordagem = {
     ...(c("mensagemVariante") ? { mensagem: c("mensagemVariante") } : {}),
     ...(c("siteVersao") ? { site: c("siteVersao") } : {}),
     ...(video ? { video } : {}),
+    ...(elegiveis ? { elegiveis } : {}),
     // À parte da letra: a letra (desde 07/10) diz qual texto; o regime diz se o link ia na 1ª.
     ...(regime ? { regime } : {}),
   };
