@@ -1294,10 +1294,13 @@ Chrome headless passa, sem login. O desktop segue a composição do shot; o
 celular continua em até 6 telas. Saíram `auto-site/REFERENCIAS.md` e
 `auto-site/referencias/`. Exemplo aprovado (Jéssica Barbosa Advocacia, shot
 "Alden & Vale"): `auto-site/_exemplos/`, instalado em `~/auto-site/_exemplos/`
-(pasta com `_`: nenhuma varredura de fila entra nela). O Raio-X passou para a
-versão 5 (`raio-x.py`): o mesmo conteúdo numa folha de desktop (relatório anual
-"Monetone" do Dribbble), e o `--pendentes` refaz os `pronto` aos poucos (6 por
-rodada).
+(pasta com `_`: nenhuma varredura de fila entra nela). O Raio-X **não** segue
+o Dribbble: o padrão é o Raio-X aprovado do piloto CDL
+(https://prumo-piloto-cdl.vercel.app/raio-x, gerado pelo
+`04-venda/piloto-cdl/gerar.py` do repo `prumo`). Uma versão 5 do `raio-x.py`
+com outra cara entrou e saiu no mesmo dia (14/10/2026), antes de ser instalada:
+o Rômulo apontou que ela não coincidia com o aprovado. O Raio-X da Jéssica no ar
+saiu do `gerar.py`.
 
 **Clareza antes de conceito (13/10/2026).** A auditoria dos 54 demos no ar em
 13/10 achou cara de IA em quase todos (título-aforismo, menu I-II-III, campo de
