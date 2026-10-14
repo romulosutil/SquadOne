@@ -54,6 +54,58 @@ BUSCAS = [
     ("desentupidora", "-27.5954", "-48.5480", "12000", "desentupidora"),        # Florianópolis
     ("desentupidora", "-15.7939", "-47.8828", "12000", "desentupidora"),        # Brasília
     ("desentupidora", "-23.4205", "-51.9331", "12000", "desentupidora"),        # Maringá
+    # Brasil todo (14/10/2026, pedido do Rômulo: "muito focado no ES, ir para o Brasil todo"):
+    # os três ramos que renderam, nas capitais e polos que ainda não tinham busca, de todas as regiões.
+    ("advogado", "-23.5505", "-46.6333", "10000", "advocacia"),                 # São Paulo
+    ("advogado", "-22.9068", "-43.1729", "10000", "advocacia"),                 # Rio de Janeiro
+    ("advogado", "-19.9167", "-43.9345", "10000", "advocacia"),                 # Belo Horizonte
+    ("advogado", "-30.0346", "-51.2177", "10000", "advocacia"),                 # Porto Alegre
+    ("advogado", "-12.9714", "-38.5014", "10000", "advocacia"),                 # Salvador
+    ("advogado", "-3.7319", "-38.5267", "10000", "advocacia"),                  # Fortaleza
+    ("advogado", "-8.0476", "-34.8770", "10000", "advocacia"),                  # Recife
+    ("advogado", "-3.1190", "-60.0217", "10000", "advocacia"),                  # Manaus
+    ("advogado", "-1.4558", "-48.4902", "10000", "advocacia"),                  # Belém
+    ("advogado", "-20.4697", "-54.6201", "10000", "advocacia"),                 # Campo Grande
+    ("advogado", "-15.6014", "-56.0979", "10000", "advocacia"),                 # Cuiabá
+    ("advogado", "-5.7945", "-35.2110", "10000", "advocacia"),                  # Natal
+    ("advogado", "-7.1195", "-34.8450", "10000", "advocacia"),                  # João Pessoa
+    ("advogado", "-9.6498", "-35.7089", "10000", "advocacia"),                  # Maceió
+    ("advogado", "-5.0892", "-42.8019", "10000", "advocacia"),                  # Teresina
+    ("advogado", "-2.5307", "-44.3068", "10000", "advocacia"),                  # São Luís
+    ("advogado", "-10.9472", "-37.0731", "10000", "advocacia"),                 # Aracaju
+    ("advogado", "-8.7612", "-63.9004", "10000", "advocacia"),                  # Porto Velho
+    ("advogado", "-10.1689", "-48.3317", "10000", "advocacia"),                 # Palmas
+    ("dedetizadora", "-23.5505", "-46.6333", "12000", "dedetização"),           # São Paulo
+    ("dedetizadora", "-22.9068", "-43.1729", "12000", "dedetização"),           # Rio de Janeiro
+    ("dedetizadora", "-19.9167", "-43.9345", "12000", "dedetização"),           # Belo Horizonte
+    ("dedetizadora", "-30.0346", "-51.2177", "12000", "dedetização"),           # Porto Alegre
+    ("dedetizadora", "-12.9714", "-38.5014", "12000", "dedetização"),           # Salvador
+    ("dedetizadora", "-3.7319", "-38.5267", "12000", "dedetização"),            # Fortaleza
+    ("dedetizadora", "-8.0476", "-34.8770", "12000", "dedetização"),            # Recife
+    ("dedetizadora", "-3.1190", "-60.0217", "12000", "dedetização"),            # Manaus
+    ("dedetizadora", "-1.4558", "-48.4902", "12000", "dedetização"),            # Belém
+    ("dedetizadora", "-20.4697", "-54.6201", "12000", "dedetização"),           # Campo Grande
+    ("dedetizadora", "-15.6014", "-56.0979", "12000", "dedetização"),           # Cuiabá
+    ("dedetizadora", "-5.7945", "-35.2110", "12000", "dedetização"),            # Natal
+    ("dedetizadora", "-7.1195", "-34.8450", "12000", "dedetização"),            # João Pessoa
+    ("dedetizadora", "-9.6498", "-35.7089", "12000", "dedetização"),            # Maceió
+    ("dedetizadora", "-5.0892", "-42.8019", "12000", "dedetização"),            # Teresina
+    ("dedetizadora", "-2.5307", "-44.3068", "12000", "dedetização"),            # São Luís
+    ("dedetizadora", "-10.9472", "-37.0731", "12000", "dedetização"),           # Aracaju
+    ("desentupidora", "-23.5505", "-46.6333", "12000", "desentupidora"),        # São Paulo
+    ("desentupidora", "-22.9068", "-43.1729", "12000", "desentupidora"),        # Rio de Janeiro
+    ("desentupidora", "-19.9167", "-43.9345", "12000", "desentupidora"),        # Belo Horizonte
+    ("desentupidora", "-30.0346", "-51.2177", "12000", "desentupidora"),        # Porto Alegre
+    ("desentupidora", "-12.9714", "-38.5014", "12000", "desentupidora"),        # Salvador
+    ("desentupidora", "-3.7319", "-38.5267", "12000", "desentupidora"),         # Fortaleza
+    ("desentupidora", "-8.0476", "-34.8770", "12000", "desentupidora"),         # Recife
+    ("desentupidora", "-3.1190", "-60.0217", "12000", "desentupidora"),         # Manaus
+    ("desentupidora", "-1.4558", "-48.4902", "12000", "desentupidora"),         # Belém
+    ("desentupidora", "-20.4697", "-54.6201", "12000", "desentupidora"),        # Campo Grande
+    ("desentupidora", "-15.6014", "-56.0979", "12000", "desentupidora"),        # Cuiabá
+    ("desentupidora", "-5.7945", "-35.2110", "12000", "desentupidora"),         # Natal
+    ("desentupidora", "-7.1195", "-34.8450", "12000", "desentupidora"),         # João Pessoa
+    ("desentupidora", "-9.6498", "-35.7089", "12000", "desentupidora"),         # Maceió
 ]
 
 
