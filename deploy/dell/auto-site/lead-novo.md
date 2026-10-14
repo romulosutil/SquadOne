@@ -33,8 +33,8 @@ processando em lote, siga pro próximo lead da fila.
 
 Siga os passos do `CLAUDE.md` — ler `content.md` e as imagens de `Fotos/` e
 `Logotipo/`, marca real (Instagram, se tiver), as cinco perguntas (passo
-1.5.1, grava o `CONCEITO.md`), duas referências da biblioteca
-`REFERENCIAS.md` (passo 1.6), `/design`, refino da direção
+1.5.1, grava o `CONCEITO.md`), um shot do Dribbble para seguir (passo 1.6,
+`dribbble buscar` e `dribbble shot`), `/design`, refino da direção
 (`/design-taste-frontend` → `/ui-ux-pro-max` → `/impeccable`), escrever,
 polir no código (`/emil-design-eng` → `/impeccable audit` + `polish`),
 publicar, recibo, registro. As cinco skills rodam sempre, nessa ordem.
@@ -75,8 +75,9 @@ escapam (auditoria dos 54 demos no ar em 13/10/2026):
   placa, letreiro, fachada, jaleco, impresso. Na CLIN ODONTO CSCN o logo e o
   posicionamento inteiros estavam na placa da recepção, e o `content.md` não
   dizia nada
-- escolha as duas referências do passo 1.6 e capture-as antes do `/design` —
-  não pule direto pra skill sem essa decisão tomada
+- escolha o shot do Dribbble do passo 1.6 e leia os quadros dele antes do
+  `/design` — não pule direto pra skill sem essa decisão tomada; o desktop
+  segue a composição do shot, não é a coluna do celular esticada
 - `Logotipo/` não vazia não quer dizer logo aproveitável de cara — mas antes de
   descartar, tente extrair: recorte o logo isolado da foto (fundo, placa,
   fachada), teste se limpa em fundo sólido/transparente. Só ignore se a foto

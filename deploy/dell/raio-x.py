@@ -124,8 +124,11 @@ VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 # 3 (09/10/2026): a Nota de presença (cálculo PRUMO, seis blocos de 0 a 3) e a conta aberta em R$.
 # 4 (09/10/2026): três atos (veredito, por quê, o que fazer), o botão do WhatsApp do PRUMO e sem o
 # preço do Respondido; sai o caminho do cliente.
+# 5 (14/10/2026): o mesmo conteúdo numa folha de desktop de verdade (referência do Dribbble no CSS):
+# abertura em duas colunas, campo de brasa com a nota e a demonstração ao lado, as avaliações da
+# busca em barras e o fecho em duas metades. Aprovado pelo Rômulo no Raio-X da Jéssica Barbosa.
 # Sem o calculo_prumo instalado a página sai sem a nota e a versão fica 2: nada de refazer à toa.
-VERSAO = 4 if calculo_prumo else 2
+VERSAO = 5 if calculo_prumo else 2
 CAMINHO = "raio-x"
 MARCA = f'data-raio-x="{VERSAO}"'
 MAX_PONTOS = 3
@@ -651,64 +654,125 @@ def entradas_da_presenca(diag: dict) -> dict:
 # ------------------------------------------------------------------ página (PURO)
 
 CSS = """
-:root{--ferro-900:#1B1512;--ferro-800:#241D19;--ferro-600:#4A3E36;--brasa:#E0490F;--brasa-clara:#FF6A2B;
---oxido:#8A2B0C;--ocre:#E8A33D;--pedra-100:#E4DED6;--pedra-200:#CFC7BD;--pedra-400:#9A9089;--pedra-600:#6B625B;
-color-scheme:light}
+:root{--ferro-900:#1B1512;--ferro-800:#241D19;--ferro-700:#332A24;--ferro-600:#4A3E36;--brasa:#E0490F;
+--brasa-clara:#FF6A2B;--oxido:#8A2B0C;--ocre:#E8A33D;--sobre-brasa:#110B08;--pedra-100:#E4DED6;--pedra-200:#CFC7BD;
+--pedra-400:#9A9089;--pedra-600:#6B625B;--nota-claro:#5E564F;--lado:clamp(16px,3.2vw,40px);color-scheme:light}
 *{box-sizing:border-box;margin:0;padding:0;border-radius:0}
 html{background:var(--pedra-100);-webkit-text-size-adjust:100%}
 body{font-family:'Archivo','Arial Narrow','Helvetica Neue',Arial,sans-serif;font-size:17px;line-height:1.5;
-color:var(--ferro-900);background:var(--pedra-100)}
+color:var(--ferro-900);background:var(--pedra-100);overflow-x:hidden}
 a{color:inherit}
-.folha{max-width:760px;margin:0 auto;padding:20px 16px 48px}
-.topo{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ferro-900);
-padding-bottom:10px}
+img{display:block;max-width:100%;height:auto}
+/* Versão 5 (14/10/2026): a folha usa a largura do desktop. Composição do relatório anual "Monetone"
+   (Sebo, Dribbble 18889326): numeral gigante, abertura em duas colunas, campo de cor com a foto ao lado,
+   faixa escura com barras e o fecho em duas metades. As cores e a fonte continuam as do PRUMO. */
+.folha{max-width:1280px;margin:0 auto;padding:0 var(--lado) 56px}
+.topo{display:flex;align-items:center;gap:16px;border-bottom:2px solid var(--ferro-900);min-height:64px}
 .marca{display:flex;align-items:center;gap:7px;font-size:15px;letter-spacing:.02em;font-weight:900;
 font-variation-settings:'wdth' 118,'wght' 900}
 .marca .fio{width:2px;height:15px;background:var(--brasa);display:block}
+.topo .miudo{margin-right:auto}
+.topo-demo{display:none;align-items:center;min-height:44px;font-weight:750;text-decoration:underline;
+text-decoration-color:var(--brasa);text-decoration-thickness:2px;text-underline-offset:5px}
 .brasa{color:var(--brasa)}
-.miudo{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--pedra-600)}
-.kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--oxido);margin-top:24px}
-.ato{margin-top:64px}
-.ato.veredito{margin-top:0}
-.ato > .kicker:first-child{margin-top:0;display:flex;align-items:center;gap:8px}
+.miudo{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--nota-claro)}
+.kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--oxido)}
+.ato{margin-top:clamp(64px,9vw,128px)}
+.ato.veredito{margin-top:clamp(28px,5vw,64px)}
+.ato > .kicker:first-child{display:flex;align-items:center;gap:8px;margin-bottom:clamp(18px,2.4vw,28px)}
 .ato > .kicker:first-child::before{content:"";width:3px;height:16px;background:var(--brasa);display:block}
-.ato.veredito > .kicker:first-child{margin-top:20px}
-.veredito .lede{font-size:15px;margin-top:8px}
-.ato.veredito > .kicker:first-child::before{display:none}
-.ato > h2,.ato > div > h2{margin-top:10px}
-h1{font-size:clamp(34px,8vw,54px);line-height:.98;letter-spacing:-.025em;font-weight:800;margin-top:10px;
-font-variation-settings:'wdth' 108,'wght' 800;overflow-wrap:anywhere}
-.lede{color:var(--ferro-600);margin-top:12px;max-width:60ch}
-.nota{display:flex;align-items:flex-end;gap:16px;margin-top:16px;border-top:2px solid var(--ferro-900);
-border-bottom:2px solid var(--ferro-900);padding:12px 0}
-.nota .num{font-size:56px;line-height:.85;font-weight:900;letter-spacing:-.03em;font-variation-settings:'wdth' 118,'wght' 900}
-.nota .leitura{color:var(--ferro-600);font-size:15px}
-section{margin-top:44px}
-h2{font-size:clamp(24px,5vw,32px);line-height:1.08;font-weight:800;letter-spacing:-.015em;
-font-variation-settings:'wdth' 104,'wght' 800}
-.lista{list-style:none;margin-top:16px;border-top:1px solid var(--pedra-400)}
-.lista li{padding:16px 0;border-bottom:1px solid var(--pedra-400);display:grid;grid-template-columns:44px 1fr;gap:12px}
+h1{font-size:clamp(36px,5.6vw,80px);line-height:.95;letter-spacing:-.03em;font-weight:800;margin-top:12px;
+font-variation-settings:'wdth' 100,'wght' 800;overflow-wrap:break-word;max-width:18ch}
+/* nome do Google comprido ("Fulana Advocacia - Advogada Trabalhista e Previdenciarista"): letra menor, não sete linhas */
+h1.longo{font-size:clamp(30px,3.8vw,56px);max-width:24ch}
+h2{font-size:clamp(26px,3.4vw,44px);line-height:1.02;font-weight:800;letter-spacing:-.02em;
+font-variation-settings:'wdth' 100,'wght' 800}
+.lede{color:var(--ferro-600);max-width:44ch;font-size:clamp(16px,1.3vw,19px)}
+
+/* Ato 1 · a abertura em duas colunas, o campo de brasa com o numeral e a demonstração ao lado */
+.abertura{display:grid;gap:16px;align-items:end}
+.abertura .kicker{margin:0}
+.placa{display:grid;margin-top:clamp(24px,4vw,48px)}
+.campo{background:var(--brasa);color:var(--sobre-brasa);padding:clamp(22px,3.6vw,48px);display:grid;gap:clamp(18px,2.4vw,28px);
+align-content:space-between}
+.nota{display:grid;gap:clamp(18px,2.6vw,34px)}
+.nota .num{font-size:clamp(108px,16vw,232px);line-height:.78;font-weight:900;letter-spacing:-.05em;
+font-variation-settings:'wdth' 112,'wght' 900;font-variant-numeric:lining-nums}
+.nota .leitura{font-size:15px;line-height:1.35;font-weight:600}
+.nota .leitura br{display:none}
+.nota .leitura .sep::before{content:" · "}
+.campo .faixa-presenca{margin-top:0;border-top:2px solid rgba(20,15,12,.28);padding-top:16px}
+.campo .faixa-presenca .miudo,.campo .faixa-presenca .faixa-texto{color:var(--sobre-brasa)}
+.campo .regua-faixas li{border-top-color:rgba(20,15,12,.18);color:var(--sobre-brasa);font-weight:600}
+.campo .regua-faixas li.atual{border-top-color:var(--sobre-brasa);font-weight:900}
+.campo .regua-faixas .prumo-fio::before{background:var(--pedra-100)}
+.vitrine{display:none;position:relative;background:var(--ferro-900);text-decoration:none;overflow:hidden}
+.vitrine img{width:100%;height:100%;object-fit:cover;object-position:50% 30%}
+.vitrine span{position:absolute;left:0;right:0;bottom:0;padding:44px 22px 18px;color:var(--pedra-100);font-weight:750;
+background:linear-gradient(to top,rgba(17,11,8,.86),rgba(17,11,8,0))}
+.resumo{margin-top:clamp(8px,1vw,12px);display:grid;gap:clamp(8px,1vw,12px)}
+.resumo div{padding:18px 20px;display:grid;gap:4px;border:2px solid var(--ferro-900)}
+.resumo div + div{background:var(--ferro-900);color:var(--pedra-100)}
+.resumo .miudo{color:inherit;opacity:.8}
+.resumo strong{font-size:clamp(19px,1.6vw,22px);line-height:1.25;font-weight:750}
+
+/* Ato 2 · os pontos à direita do título; a faixa escura com as avaliações; os detalhes em duas colunas */
+.pontos{display:grid;gap:20px}
+.lista{list-style:none;border-top:2px solid var(--ferro-900)}
+.lista li{padding:18px 0;border-bottom:1px solid var(--pedra-400);display:grid;grid-template-columns:44px 1fr;gap:12px}
 .lista li > div{min-width:0}
-.lista .marcador{font-size:13px;font-weight:800;letter-spacing:.08em;padding-top:4px;color:var(--pedra-600)}
-.lista h3{font-size:19px;line-height:1.25;font-weight:750;font-variation-settings:'wght' 750}
-.lista p{color:var(--ferro-600);margin-top:4px;font-size:16px}
-.pontos .lista li{border-left:4px solid var(--brasa);padding-left:14px;grid-template-columns:52px 1fr}
-.pontos .lista .marcador{font-size:28px;line-height:1;color:var(--brasa);padding-top:0;font-weight:900;
-font-variation-settings:'wdth' 118,'wght' 900}
+.lista .marcador{font-size:13px;font-weight:800;letter-spacing:.08em;padding-top:4px;color:var(--nota-claro)}
+.lista h3{font-size:clamp(19px,1.7vw,23px);line-height:1.22;font-weight:750;font-variation-settings:'wght' 750}
+.lista p{color:var(--ferro-600);margin-top:6px;font-size:16px;max-width:62ch}
+.pontos .lista li{grid-template-columns:clamp(56px,6vw,96px) 1fr;padding:24px 0}
+.pontos .lista .marcador{font-size:clamp(34px,4.4vw,64px);line-height:.85;color:var(--brasa);padding-top:0;font-weight:900;
+letter-spacing:-.03em;font-variation-settings:'wdth' 112,'wght' 900}
 .bons .lista .marcador{color:var(--ferro-900)}
-.demo{display:grid;gap:16px}
-.demo img{display:block;width:100%;height:auto;border:2px solid var(--ferro-900);background:var(--pedra-200)}
+.placar-busca{background:var(--ferro-900);color:var(--pedra-100);margin:clamp(48px,6vw,80px) calc(50% - 50vw) 0;
+padding:clamp(40px,6vw,80px) calc(50vw - 50% + var(--lado))}
+.placar-busca .dentro{max-width:1200px;display:grid;gap:clamp(20px,3vw,40px)}
+.placar-busca h2{color:var(--pedra-100);max-width:24ch;font-size:clamp(24px,2.6vw,36px)}
+.placar-busca .intro{color:var(--pedra-200);margin-top:12px}
+.barras{list-style:none;display:grid;gap:14px}
+.barras li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:baseline}
+.barras .quem{font-weight:650;overflow-wrap:anywhere;color:var(--pedra-200)}
+.barras .conta{font-weight:900;font-variation-settings:'wdth' 112,'wght' 900;white-space:nowrap;font-variant-numeric:tabular-nums}
+.barras .barra{grid-column:1/-1;height:14px;background:var(--ferro-700)}
+.barras .barra span{display:block;height:100%;background:var(--pedra-400)}
+.barras li.voces .quem{color:var(--pedra-100)}
+.barras li.voces .conta{color:var(--brasa-clara)}
+.barras li.voces .barra span{background:var(--brasa)}
+.detalhes{margin-top:clamp(40px,5vw,72px);border-top:2px solid var(--ferro-900)}
+.detalhe{border-bottom:1px solid var(--pedra-400)}
+.detalhe > summary{list-style:none;cursor:pointer;min-height:56px;display:flex;align-items:center;
+justify-content:space-between;gap:12px;padding:14px 0;font-size:clamp(19px,1.6vw,22px);line-height:1.25;font-weight:750;
+font-variation-settings:'wght' 750}
+.detalhe > summary::-webkit-details-marker{display:none}
+.detalhe > summary::after{content:"+";flex:none;width:28px;text-align:center;font-size:28px;line-height:1;font-weight:700;
+color:var(--brasa)}
+.detalhe[open] > summary::after{content:"–"}
+.detalhe > summary:hover{color:var(--oxido)}
+.detalhe > summary:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
+.detalhe .corpo{padding:0 0 28px;max-width:860px}
+.detalhe .corpo > .intro:first-child{margin-top:0}
+.detalhe .corpo h3.sub{font-size:20px;line-height:1.2;font-weight:800;margin-top:28px}
+
+/* Ato 3 · a demonstração e a oferta, lado a lado no desktop */
+.fecho{display:grid;gap:clamp(8px,1vw,12px)}
+.demo{display:grid;gap:16px;align-content:start}
+.demo img{width:100%;height:auto;border:2px solid var(--ferro-900);background:var(--pedra-200)}
+.demo p{color:var(--ferro-600);max-width:52ch}
 .botao{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:12px 20px;
 background:var(--ferro-900);color:var(--pedra-100);text-decoration:none;font-weight:800;letter-spacing:.02em;
 border:2px solid var(--ferro-900)}
 .botao:hover{background:var(--brasa);border-color:var(--brasa);color:var(--ferro-900)}
 .botao:focus-visible{outline:3px solid var(--ocre);outline-offset:3px}
-.oferta{margin-top:32px;background:var(--ferro-900);color:var(--pedra-100);padding:28px 22px;display:grid;gap:12px}
-.oferta h2{color:var(--pedra-100);margin-top:0}
+.oferta{background:var(--ferro-900);color:var(--pedra-100);padding:clamp(28px,4vw,56px);display:grid;gap:14px;align-content:center}
+.oferta h2{color:var(--pedra-100)}
 .oferta .miudo{color:var(--pedra-400)}
-.oferta .preco{font-size:clamp(28px,7vw,40px);font-weight:900;line-height:1;color:var(--brasa-clara);
+.oferta .preco{white-space:nowrap;font-size:clamp(26px,2.9vw,42px);font-weight:900;line-height:1;color:var(--brasa-clara);letter-spacing:-.02em;
 font-variation-settings:'wdth' 112,'wght' 900}
-.oferta p{color:var(--pedra-200);max-width:56ch}
+.oferta p{color:var(--pedra-200);max-width:52ch}
 .oferta strong{color:var(--pedra-100)}
 .acoes{display:grid;gap:6px;margin-top:8px;justify-items:start}
 .botao-zap{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:56px;padding:14px 24px;
@@ -720,32 +784,13 @@ line-height:1.2;font-weight:800;letter-spacing:.01em;font-variation-settings:'wd
 text-decoration:underline;text-decoration-color:var(--brasa);text-decoration-thickness:2px;text-underline-offset:4px}
 .link-zap:hover{color:var(--brasa-clara)}
 .link-zap:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
-.detalhes{margin-top:36px;border-top:2px solid var(--ferro-900)}
-.detalhe{border-bottom:1px solid var(--pedra-400)}
-.detalhe > summary{list-style:none;cursor:pointer;min-height:56px;display:flex;align-items:center;
-justify-content:space-between;gap:12px;padding:12px 0;font-size:19px;line-height:1.25;font-weight:750;
-font-variation-settings:'wght' 750}
-.detalhe > summary::-webkit-details-marker{display:none}
-.detalhe > summary::after{content:"+";flex:none;width:28px;text-align:center;font-size:28px;line-height:1;font-weight:700;
-color:var(--brasa)}
-.detalhe[open] > summary::after{content:"–"}
-.detalhe > summary:hover{color:var(--oxido)}
-.detalhe > summary:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
-.detalhe .corpo{padding:0 0 28px}
-.detalhe .corpo > .intro:first-child{margin-top:0}
-.detalhe .corpo h3.sub{font-size:20px;line-height:1.2;font-weight:800;margin-top:28px}
 .barra-fixa{display:none}
-footer{margin-top:40px;border-top:2px solid var(--pedra-400);padding-top:12px;font-size:13px;color:var(--pedra-600);
-display:grid;gap:6px}
-.intro{color:var(--ferro-600);margin-top:10px;max-width:60ch}
-.resumo{margin-top:18px;display:grid;gap:0;border:2px solid var(--ferro-900)}
-.resumo div{padding:12px 14px;display:grid;gap:2px}
-.resumo div + div{border-top:2px solid var(--ferro-900);background:var(--ferro-900);color:var(--pedra-100)}
-.resumo .miudo{color:inherit;opacity:.8}
-.resumo strong{font-size:19px;line-height:1.25;font-weight:750}
+footer{margin-top:clamp(48px,6vw,80px);border-top:2px solid var(--ferro-900);padding-top:14px;font-size:13px;
+color:var(--nota-claro);display:grid;gap:6px}
+.intro{color:var(--ferro-600);margin-top:10px;max-width:62ch}
 .busca{list-style:none;margin-top:16px;border-top:2px solid var(--ferro-900)}
 .busca li{display:grid;grid-template-columns:36px 1fr;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--pedra-400)}
-.busca .pos{font-weight:900;font-size:20px;line-height:1.1;font-variation-settings:'wdth' 118,'wght' 900;color:var(--pedra-600)}
+.busca .pos{font-weight:900;font-size:20px;line-height:1.1;font-variation-settings:'wdth' 118,'wght' 900;color:var(--nota-claro)}
 .busca .quem{font-weight:700;overflow-wrap:anywhere}
 .busca .dados{grid-column:2;font-size:15px;color:var(--ferro-600)}
 .busca .sem{color:var(--oxido);font-weight:700}
@@ -759,7 +804,7 @@ padding-bottom:8px}
 .temas .barra span{display:block;height:100%;background:var(--brasa)}
 blockquote{margin-top:16px;border-left:4px solid var(--ferro-900);padding:4px 0 4px 14px}
 blockquote p{font-size:18px;line-height:1.4}
-blockquote cite{display:block;font-style:normal;font-size:14px;color:var(--pedra-600);margin-top:4px}
+blockquote cite{display:block;font-style:normal;font-size:14px;color:var(--nota-claro);margin-top:4px}
 .check{list-style:none;margin-top:16px;border-top:1px solid var(--pedra-400)}
 .check li{display:grid;grid-template-columns:28px 1fr;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--pedra-400)}
 .check .sinal{font-weight:900;font-size:18px;line-height:1.2}
@@ -770,8 +815,24 @@ blockquote cite{display:block;font-style:normal;font-size:14px;color:var(--pedra
 .metodo{list-style:none;margin-top:12px;display:grid;gap:8px;font-size:15px;color:var(--ferro-600)}
 .metodo li{padding-left:14px;border-left:2px solid var(--pedra-400)}
 .visualmente-oculto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-@media (min-width:640px){.resumo{grid-template-columns:1fr 1fr}.resumo div + div{border-top:0;border-left:2px solid var(--ferro-900)}
-.botao-zap{width:auto}}
+@media (min-width:640px){.resumo{grid-template-columns:1fr 1fr}.botao-zap{width:auto}}
+@media (min-width:900px){
+.topo-demo{display:inline-flex}
+.abertura{grid-template-columns:1.35fr 1fr;gap:48px}
+.placa{grid-template-columns:1fr 1.1fr}
+.placa.so-campo{grid-template-columns:1fr}
+.vitrine{display:block;min-height:100%}
+.pontos{grid-template-columns:5fr 7fr;gap:48px;align-items:start}
+.pontos h2{position:sticky;top:24px}
+.placar-busca .dentro{grid-template-columns:5fr 7fr;gap:48px;align-items:start}
+.detalhes{display:grid;grid-template-columns:5fr 7fr;column-gap:48px;border-top:0}
+.detalhes::before{content:"Para conferir";font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;
+color:var(--oxido);border-top:2px solid var(--ferro-900);padding-top:18px;grid-row:1 / span 9}
+.detalhes .detalhe{grid-column:2}
+.detalhes .detalhe:first-of-type{border-top:2px solid var(--ferro-900)}
+.fecho{grid-template-columns:1.15fr 1fr;align-items:stretch}
+.demo{border:2px solid var(--ferro-900);padding:clamp(24px,3vw,40px);align-content:space-between}
+}
 @media (max-width:719.98px){
 html.com-js body{padding-bottom:88px}
 html.com-js .barra-fixa{display:block;position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--ferro-900);
@@ -781,7 +842,9 @@ html.com-js .barra-fixa.visivel{transform:none;visibility:visible}
 .barra-fixa .botao-zap{width:100%;min-height:52px}}
 @media (prefers-reduced-motion:no-preference){.botao,.botao-zap{transition:background-color .15s ease,color .15s ease}
 .detalhe[open] > .corpo{animation:detalhe-abre .22s ease-out}
-@keyframes detalhe-abre{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}}
+@keyframes detalhe-abre{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.campo .nota .num{animation:numeral-entra .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes numeral-entra{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}}
 @media (max-width:719.98px) and (prefers-reduced-motion:no-preference){
 html.com-js .barra-fixa{transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s linear .32s}
 html.com-js .barra-fixa.visivel{transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s}}
@@ -869,23 +932,37 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
         f"<style>{fonte}{CSS}{calculo_prumo.CSS_PRESENCA if calculo_prumo else ''}</style></head>",
         f'<body {MARCA}><main class="folha">',
         '<header class="topo"><div class="marca"><span class="fio"></span><span>PRU<span class="brasa">MO</span></span></div>'
-        '<span class="miudo">Raio-X</span></header>',
+        '<span class="miudo">Raio-X</span>'
+        '<a class="topo-demo" href="/" data-evento="raiox-demo">A demonstração do site</a></header>',
     ]
 
-    # Ato 1 · Veredito: cabe na primeira tela do celular, sem rolar.
+    # Ato 1 · Veredito: a abertura em duas colunas e o campo de brasa com a nota; no desktop, a
+    # demonstração ao lado do campo. No celular cabe na primeira tela, sem a demonstração.
+    classe_h1 = ' class="longo"' if len(nome) > 36 else ""
+    sep = '<span class="sep"></span>'  # no celular, quebra de linha; no campo, " · " (CSS)
     ato1 = ['<section class="ato veredito" id="veredito" data-ato="veredito" aria-labelledby="t-veredito">',
-            '<p class="kicker">Como vocês aparecem no Google</p>', f'<h1 id="t-veredito">{e(nome)}</h1>']
+            '<div class="abertura"><div><p class="kicker">Como vocês aparecem no Google</p>',
+            f'<h1 id="t-veredito"{classe_h1}>{e(nome)}</h1></div>']
     if onde:
         ato1.append(f'<p class="lede">{e(onde)}. Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
     else:
         ato1.append('<p class="lede">Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
+    ato1.append("</div>")
     lido = diag.get("places_em") or diag["lido_em"]
+    campo = []
     if nota is not None and n:
-        ato1.append(f'<div class="nota"><span class="num">{e(numero(nota))}</span>'
-                    f'<span class="leitura">nota no Google<br>{e(n)} avaliaç{"ão" if n == 1 else "ões"}'
-                    f'{"<br>lida em " + e(lido) if lido else ""}</span></div>')
+        campo.append(f'<div class="nota"><span class="num">{e(numero(nota))}</span>'
+                     f'<span class="leitura">nota no Google<br>{sep}{e(n)} avaliaç{"ão" if n == 1 else "ões"}'
+                     f'{"<br>" + sep + "lida em " + e(lido) if lido else ""}</span></div>')
     if presenca:
-        ato1.append(calculo_prumo.bloco_faixa_html(presenca))
+        campo.append(calculo_prumo.bloco_faixa_html(presenca))
+    if campo:
+        ato1.append(f'<div class="placa{"" if tem_og else " so-campo"}"><div class="campo">' + "".join(campo) + "</div>")
+        if tem_og:
+            ato1.append(f'<a class="vitrine" href="/" data-evento="raiox-demo" aria-label="Abrir a demonstração do site de {e(nome)}">'
+                        '<img src="/og.jpg" width="1200" height="630" alt="" loading="lazy">'
+                        '<span>A demonstração que montamos para vocês →</span></a>')
+        ato1.append("</div>")
     if bons and pontos:
         ato1.append('<div class="resumo"><div><span class="miudo">O que segura cliente</span>'
                     f'<strong>{e(bons[0]["titulo"])}</strong></div><div><span class="miudo">O que perde cliente</span>'
@@ -899,6 +976,7 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
     if pontos:
         ato2.append(f'<div class="pontos"><h2>{e(titulo_pontos)}</h2><ul class="lista">'
                     + "".join(item(f"{i:02d}", p) for i, p in enumerate(pontos, 1)) + "</ul></div>")
+    ato2.append(placar_da_busca(diag, nome, e))
     ato2.append('<div class="detalhes">')
     if bons:
         ato2.append(detalhe("O que já está bom", '<ul class="lista">' + "".join(item("✓", b) for b in bons) + "</ul>",
@@ -924,7 +1002,7 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
     # Ato 3 · O que fazer: a demonstração, o preço do Encontrado e o WhatsApp do PRUMO.
     ato3 = ['<section class="ato o-que-fazer" id="o-que-fazer" data-ato="o-que-fazer" aria-labelledby="t-o-que-fazer">',
             '<p class="kicker" id="t-o-que-fazer">O que fazer</p>',
-            '<div class="demo"><h2>Montamos uma demonstração do site de vocês</h2>']
+            '<div class="fecho"><div class="demo"><h2>Montamos uma demonstração do site de vocês</h2>']
     if tem_og:
         ato3.append(f'<a href="/" data-evento="raiox-demo" aria-label="Abrir a demonstração do site de {e(nome)}">'
                     f'<img src="/og.jpg" width="1200" height="630" alt="Prévia da demonstração do site de {e(nome)}" loading="lazy"></a>')
@@ -938,7 +1016,7 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
                 'data-evento="raiox-whatsapp-site">Quero o site no ar</a>'
                 f'<a class="link-zap" href="{e(zap_respondido)}" target="_blank" rel="noopener" '
                 'data-evento="raiox-whatsapp-respondido">Quero conversar sobre o WhatsApp que responde</a></div></div>')
-    ato3.append("</section>")
+    ato3.append("</div></section>")
     partes.append("".join(ato3))
 
     rodape = ["<footer>"]
@@ -1009,6 +1087,31 @@ def checklist(diag: dict) -> list[dict]:
     if diag.get("endereco"):
         linhas.append({"estado": "ok", "item": "Endereço no mapa", "detalhe": "aparece no perfil"})
     return linhas
+
+
+def placar_da_busca(diag: dict, nome: str, e) -> str:
+    """A faixa escura do Ato 2 (versão 5): as avaliações de vocês ao lado das dos primeiros da mesma
+    busca, em barras. Avaliação é o dado que o dono reconhece e que ninguém compra; a ordem e o site
+    de cada um ficam no detalhe "Quem aparece antes de vocês na busca". '' sem a busca ou sem
+    avaliações de vocês."""
+    conc, n = diag.get("concorrencia"), diag.get("avaliacoes")
+    if not conc or not isinstance(n, int):
+        return ""
+    linhas = [{"nome": r.get("nome") or "", "n": r["avaliacoes"]} for r in conc["outros"]
+              if isinstance(r.get("avaliacoes"), int)]
+    if not linhas:
+        return ""
+    linhas = sorted(linhas + [{"nome": f"{nome} (vocês)", "n": n, "voces": True}], key=lambda r: -r["n"])
+    maior = max(r["n"] for r in linhas) or 1
+    marca_voces = ' class="voces"'
+    itens = "".join(
+        f'<li{marca_voces if r.get("voces") else ""}><span class="quem">{e(r["nome"])}</span>'
+        f'<span class="conta">{e(r["n"])}</span><span class="barra" aria-hidden="true">'
+        f'<span style="width:{max(1, round(100 * r["n"] / maior))}%"></span></span></li>' for r in linhas)
+    return (f'<div class="placar-busca"><div class="dentro"><div><h2>Avaliações no Google: vocês e quem aparece '
+            f'primeiro em “{e(conc["consulta"])}”</h2><p class="intro">Busca feita em {e(conc["lido_em"])}. '
+            'Quem compara olha a nota e quantas pessoas já foram atendidas.</p></div>'
+            f'<ol class="barras">{itens}</ol></div></div>')
 
 
 def secao_busca(diag: dict, nome: str, e) -> str:
@@ -1870,7 +1973,7 @@ def testar() -> int:
 
         def test_modulo_achado_no_repo(self):
             self.assertIsNotNone(calculo_prumo, "prumo-mapa/calculo_prumo.py ao lado deste arquivo")
-            self.assertEqual(VERSAO, 4)
+            self.assertEqual(VERSAO, 5)
 
         def test_nota_com_places_bloco_a_bloco(self):
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
@@ -1995,6 +2098,25 @@ def testar() -> int:
                            "Quero o site no ar", "Quero conversar sobre o WhatsApp que responde"):
                 self.assertIn(trecho, ato3)
             self.assertLess(ato3.index("Ver a demonstração"), ato3.index("Quero o site no ar"))
+
+        def test_versao_5_desktop_placa_placar_e_fecho(self):
+            h = self.h
+            atos = [h.index(f'data-ato="{a}"') for a in ("veredito", "por-que", "o-que-fazer")]
+            ato1, ato2, ato3 = h[atos[0]:atos[1]], h[atos[1]:atos[2]], h[atos[2]:]
+            # Ato 1: a nota dentro do campo de brasa, a demonstração ao lado (só desktop, pelo CSS).
+            self.assertLess(ato1.index('<div class="campo">'), ato1.index('class="nota"'))
+            self.assertIn('<a class="vitrine" href="/" data-evento="raiox-demo"', ato1)
+            # Ato 2: as avaliações da busca em barras, vocês marcados, antes dos detalhes.
+            self.assertIn('<div class="placar-busca">', ato2)
+            self.assertIn('<li class="voces"><span class="quem">Bar &amp; Cia &lt;Ltda&gt; (vocês)</span>', ato2)
+            self.assertLess(ato2.index("placar-busca"), ato2.index("<details"))
+            # Ato 3: demonstração e oferta lado a lado.
+            self.assertLess(ato3.index('<div class="fecho">'), ato3.index('<div class="demo">'))
+            # Sem a busca do Places, a faixa não aparece; sem og.jpg, a vitrine não aparece.
+            dados = ler_content(CONTENT_EXEMPLO)
+            h2 = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", False)
+            self.assertNotIn('<div class="placar-busca">', h2)
+            self.assertNotIn('class="vitrine"', h2)
 
         def test_detalhes_sao_details_fechados_na_ordem(self):
             h = self.h

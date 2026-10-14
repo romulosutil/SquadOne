@@ -111,13 +111,16 @@ TETO_MIN = 4 * 60 - 20
 # "Clareza antes de conceito" (13/10/2026). De 08 a 13/10 o prompt pedia "metáfora e Atos" e a
 # referência do Refero; a auditoria dos 54 demos no ar mostrou que isso virou o novo template e deu
 # cara de IA a todos (título-aforismo, menu I-II-III, formulário em 39 de 54, 11 telas de mediana).
-# Agora: as cinco perguntas do passo 1.5.1, a metáfora só no visual, e duas referências da biblioteca
-# curada (~/auto-site/REFERENCIAS.md, passo 1.6) no lugar do Refero, que é acervo de produto SaaS.
+# Agora: as cinco perguntas do passo 1.5.1 e a metáfora só no visual.
+# 14/10/2026: a referência vem do Dribbble, a cada lead (passo 1.6, `dribbble buscar` e `dribbble shot`),
+# no lugar da biblioteca fixa de 13/10 (REFERENCIAS.md, primeiras telas de celular): os demos estavam
+# "focados demais em mobile". O shot escolhido dá a composição do desktop; o celular continua em 6 telas.
+PASSO_DRIBBBLE = ("cumpra o passo 1.6: busque no Dribbble, escolha UM shot e siga a composição dele no desktop "
+                  "(1440 px) e no celular, e registre o shot")
 PROMPT = (
     "/lead-novo {slug} nas cinco perguntas do passo 1.5.1 do CLAUDE.md (título de uma frase com o ofício e o "
     "bairro ou a cidade, menu e seções com nome comum, até 6 telas de celular, nada da seção \"Cara de IA\"), "
-    "usando as fotos e recursos extras; cumpra o passo 1.6: leia a folha do nicho em referencias/ (REFERENCIAS.md), "
-    "escolha duas referências e registre-as"
+    "usando as fotos e recursos extras; " + PASSO_DRIBBBLE
 )
 LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # Modo personalizado: o site anterior do lead fica aqui dentro (nunca sobe para a
@@ -149,6 +152,8 @@ RAIO_X = Path(os.environ.get("RAIO_X_BIN", str(Path.home() / ".local/bin/raio-x"
 # o gerador novo com as cópias antigas segue o QA de antes, sem quebrar o lead.
 FOLHA_DE_CONTATO = Path(os.environ.get("FOLHA_DE_CONTATO_BIN", str(Path.home() / ".local/bin/folha-de-contato")))
 QA_NUMERICO = Path(os.environ.get("QA_NUMERICO_BIN", str(Path.home() / ".local/bin/qa-numerico")))
+# A referência do Dribbble (14/10/2026): busca e quadros do shot pelo Chrome headless, sem login.
+DRIBBBLE = Path(os.environ.get("DRIBBBLE_BIN", str(Path.home() / ".local/bin/dribbble")))
 
 
 def ferramentas_de_qa() -> bool:
@@ -160,9 +165,7 @@ def pasta_de_capturas(rascunho: Path) -> Path:
 PROMPT_PERSONALIZADO = (
     "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, redação própria e "
     "revisão crítica antes de publicar), nas cinco perguntas do passo 1.5.1 do CLAUDE.md, "
-    "usando as fotos e recursos extras; "
-    "cumpra o passo 1.6: leia a folha do nicho em referencias/ (REFERENCIAS.md), escolha duas referências "
-    "e registre-as"
+    "usando as fotos e recursos extras; " + PASSO_DRIBBBLE
 )
 # Frases que cabem em qualquer negócio do ramo: a revisão crítica as caça.
 CLICHES = ("qualidade e compromisso", "excelência", "soluções completas", "a melhor opção", "venha nos conhecer",
@@ -234,7 +237,7 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
     for nome in PROTEGIDOS:
         deny += [f"Bash(rm *{nome}*)", f"Bash(mv *{nome}*)"]
     deny.append("Bash(rm *_descartados*)")  # mover o lead para lá pode (regra do CLAUDE.md); apagar, não
-    for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/REFERENCIAS.md", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**",
+    for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/_exemplos/**", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**",
                  f"{home}/.claude/**"):
         deny += [f"Edit(/{alvo})", f"Write(/{alvo})"]
     deny += [f"Read(/{home}/{p})" for p in SEGREDOS]
@@ -253,14 +256,24 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - Gate antes do deploy: `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}`. Ele mede o orçamento das "Regras do arquivo" (fim do Ato I, total, CSS e JS sem base64, fontes, fotos), width/height e alt das imagens, prefers-reduced-motion no CSS e no JS, contraste AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion; e, desde 13/10/2026, o título, a cidade no Ato I, o menu, as frases de gaveta, campo de texto, código de teste publicado, o WhatsApp contra o content.md, e a página renderizada a 390 px (até 8 telas, rolagem lateral, toque de 40 px, texto de 12 px); as duas capturas do Ato I ele mesmo tira do index.html de agora (m-ato1-semjs.png de uma cópia sem <script>: o `--blink-settings=scriptEnabled=false` não grava captura neste Chrome, não tente). Código 1 = falhou e cada FALHA diz o que cortar: corrija e rode o mesmo comando até sair 0 (não escreva um script de bytes seu). Só então og:image e deploy. Se o próprio gate quebrar (código 2 ou traceback), diga no resumo final e confira à mão: bytes com um script no rascunho e o Ato I numa cópia sem <script>."""
     else:
         conferencias = f"""- As cinco perguntas (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. Antes do deploy, duas conferências: (a) grave no rascunho um script python3 que lê {lead}/index.html e imprime os bytes do começo do arquivo até o fim do Ato I, o total, o CSS e o JS sem base64, as fontes e cada imagem embutida, e falha acima do orçamento das "Regras do arquivo"; corte até passar. (b) Além das capturas normais, uma a 390x844 com `--force-prefers-reduced-motion` e outra com `--blink-settings=scriptEnabled=false` (sem JS): o Ato I tem de estar visível nas duas, e o `--dump-dom` com reduced-motion não pode ter conteúdo escondido esperando animação."""
+    if DRIBBBLE.is_file() and FOLHA_DE_CONTATO.is_file():
+        referencia = f"""- Referência do Dribbble (passo 1.6 do CLAUDE.md), antes do `/design`: `python3 {DRIBBBLE} buscar --saida {rascunho}/dribbble/busca --consulta "<ramo em inglês> website" --consulta "<ramo em inglês> landing page" --max 24` (ex.: "law firm", "plumber", "pest control", "accounting firm", "equipment rental"); depois `python3 {FOLHA_DE_CONTATO} --saida {rascunho}/dribbble/busca/folha.jpg --pasta {rascunho}/dribbble/busca` e leia só a folha. Escolha UM shot (o indice.txt dá o link) e rode `python3 {DRIBBBLE} shot <link> --saida {rascunho}/dribbble/shot`, junte com a folha-de-contato em {rascunho}/dribbble/shot/folha.jpg e leia. Sem resultado, troque a consulta; o Dribbble fora do ar não para o lead: siga com o exemplo aprovado em {AUTO}/_exemplos/ e diga no resumo final.
+- Desktop de verdade: a captura `d-` de cada seção a 1440x900 entra na folha de cada rodada, ao lado do shot (`--refs {rascunho}/dribbble/shot/quadro-01.jpg ...`). Uma coluna estreita de celular centralizada no desktop é defeito que bloqueia o deploy."""
+    else:
+        # Gerador novo instalado antes do `dribbble`: nada de mandar chamar o que não existe.
+        referencia = (f"- Referência do Dribbble (passo 1.6 do CLAUDE.md): o coletor não está instalado neste Dell; "
+                      f"siga a composição do exemplo aprovado em {AUTO}/_exemplos/ e diga no resumo final.\n"
+                      "- Desktop de verdade: capture cada seção também a 1440x900. Uma coluna estreita de celular "
+                      "centralizada no desktop é defeito que bloqueia o deploy.")
     return f"""Execução automática do gerador de sites no Dell, com lista de permissão (modo dontAsk): o que não está na lista é negado na hora, sem pergunta. Não repita um comando negado; siga pelo caminho permitido.
 - A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
+{referencia}
 {conferencias}
 - Escreva só em {lead}/, {AUTO}/registro.md, {AUTO}/_build/ e no rascunho {rascunho} (é o $TMPDIR: capturas, fontes, imagens e scripts temporários, palco do deploy). CLAUDE.md, .claude/ e .logs/ são só leitura.
 - No Bash, escreva caminhos literais: variável de shell em caminho ("$stage", "${{TMPDIR:-/tmp}}") e laço for/while com variável são negados. Python de mais de uma linha: grave o script no rascunho (Write) e rode `python3 <arquivo>`; heredoc (`python3 - <<EOF`) e `python3 -c` de várias linhas costumam ser negados. Pasta nova: mkdir -p numa chamada só dele, e só na chamada seguinte use a pasta (cd, > arquivo).
 - Descartar o lead (regras do CLAUDE.md: o negócio já tem site no ar, é rede/franquia com site, é duplicado ou já tem linha "— (não publicado)" no registro.md): não mova a pasta, mover para _descartados/ está fora da lista. Grave {lead}/{SINAL_DESCARTE} com o motivo (primeira linha: o motivo numa frase; depois as evidências: URLs testadas e o que o curl ou o DOM renderizado mostrou), anote a linha "— (não publicado)" no registro.md e termine sem index.html e sem publicado.json. O runner move a pasta para _descartados/ e conta como descarte, não como falha. Onde o CLAUDE.md manda mover para _descartados/, grave o {SINAL_DESCARTE}. Não grave {SINAL_DESCARTE} no caso "presença digital fraca ou nula" (lá o CLAUDE.md manda parar e devolver ao Rômulo, sem descartar).
 - rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
-- Para pesquisar (Instagram, as referências de {AUTO}/REFERENCIAS.md, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
+- Para pesquisar (Instagram, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom); o Dribbble, só pelo coletor do passo 1.6 (o curl leva 202 sem corpo).
 - Antes do deploy, tire do index.html o que só servia ao QA (`?qa`, classe `html.qa`, `#qa-resultado`, `window.onerror` de depuração): se precisar dele para capturar, use uma cópia no rascunho.
 - Prévia do link no WhatsApp: o Rômulo manda só o link, e o WhatsApp mostra o cartão de prévia (og:*) antes de o dono abrir o site. Sem og:image o cartão sai sem foto. Antes do passo 5: (a) gere {lead}/{IMAGEM_DA_PREVIA} com python3/PIL a partir da melhor foto real do negócio (a do hero), 1200x630, recorte centrado, JPEG qualidade ~80, menos de 300 KB; (b) no <head> do index.html ponha og:type website, og:locale (pt_BR no Brasil), og:title (nome do negócio + cidade), og:description (a promessa do hero, até 150 caracteres), og:image https://demo-{slug}.vercel.app/{IMAGEM_DA_PREVIA} com og:image:width 1200 e og:image:height 630, twitter:card summary_large_image, e um favicon SVG inline (data: URI com a inicial ou o símbolo da marca, na cor da marca). Só foto do próprio negócio (nunca a ilustrativa do Unsplash nem imagem de paciente); sem foto real, não gere a imagem nem o og:image e pule o cp dela. Se a linha "Aliased:" der outra URL, corrija o og:image para ela e publique de novo.
 - Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes comandos, um por chamada (outra forma de vercel é negada); além do index.html, sobe só a {IMAGEM_DA_PREVIA}:

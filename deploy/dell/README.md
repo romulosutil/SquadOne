@@ -1283,6 +1283,22 @@ cd ~/.local/share/claude-ops && python3 prumo-mapa-n8n.py --teste && python3 pru
 
 ## Gerador de sites (`gerador-de-sites.*`)
 
+**Um shot do Dribbble por lead (14/10/2026).** Pedido do Rômulo: os demos
+estavam "focados demais em mobile" (coluna de celular no meio da tela de
+1440 px), e a biblioteca fixa de 13/10 só tinha primeiras telas de celular.
+Agora o passo 1.6 do `auto-site-CLAUDE.md` busca no Dribbble a cada lead e a
+cada refazer: `dribbble buscar` (miniaturas dos populares + `indice.txt`) e
+`dribbble shot <link>` (as imagens do shot e, se for vídeo, 6 quadros pelo
+ffmpeg), lidos numa folha da `folha-de-contato`. O curl leva 202 sem corpo; o
+Chrome headless passa, sem login. O desktop segue a composição do shot; o
+celular continua em até 6 telas. Saíram `auto-site/REFERENCIAS.md` e
+`auto-site/referencias/`. Exemplo aprovado (Jéssica Barbosa Advocacia, shot
+"Alden & Vale"): `auto-site/_exemplos/`, instalado em `~/auto-site/_exemplos/`
+(pasta com `_`: nenhuma varredura de fila entra nela). O Raio-X passou para a
+versão 5 (`raio-x.py`): o mesmo conteúdo numa folha de desktop (relatório anual
+"Monetone" do Dribbble), e o `--pendentes` refaz os `pronto` aos poucos (6 por
+rodada).
+
 **Clareza antes de conceito (13/10/2026).** A auditoria dos 54 demos no ar em
 13/10 achou cara de IA em quase todos (título-aforismo, menu I-II-III, campo de
 texto em 39, vidro fosco em 34, 11 telas de mediana) e configuração errada
@@ -1292,9 +1308,8 @@ texto em 39, vidro fosco em 34, 11 telas de mediana) e configuração errada
 - `auto-site/auto-site-CLAUDE.md`: as cinco perguntas do visitante no lugar de
   "metáfora e Atos" (a metáfora fica só no visual), seção "Cara de IA",
   movimento sóbrio, um WhatsApp só e de fonte certa, e a biblioteca
-  `auto-site/REFERENCIAS.md` com as folhas `auto-site/referencias/<nicho>.jpg`
-  (3 sites reais por nicho, escolhidos entre ~400; instaladas em
-  `~/auto-site/`) no lugar do Refero, que é acervo de produto SaaS;
+  `auto-site/REFERENCIAS.md` (3 sites reais por nicho) no lugar do Refero, que
+  é acervo de produto SaaS (trocada pelo Dribbble em 14/10, acima);
 - `qa-numerico`: reprova título em duas frases, entre aspas ou sem ofício nem
   cidade, menu numerado, frase de gaveta, campo de texto, código de teste
   publicado e WhatsApp fora do `content.md`; mede a página a 390 px de verdade
