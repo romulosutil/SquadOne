@@ -95,6 +95,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -1441,11 +1442,11 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     if alias.rstrip("/") != site_url:
         return False, f"o deploy respondeu outro endereço ({alias or 'sem linha Aliased:'}) em vez de {site_url}"
     url = f"{site_url}/{CAMINHO}"
-    codigo, corpo = baixar(url)
-    if codigo != 200 or corpo != arquivos[f"{CAMINHO}/index.html"]:
+    codigo, igual = conferir_no_ar(url, arquivos[f"{CAMINHO}/index.html"])
+    if not igual:
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
-    codigo, corpo = baixar(site_url + "/")
-    if codigo != 200 or corpo != arquivos["index.html"]:
+    codigo, igual = conferir_no_ar(site_url + "/", arquivos["index.html"])
+    if not igual:
         return False, f"depois do deploy o demo mudou ou caiu ({codigo}); confira {site_url}"
     gravar_recibo(pasta / "publicado.json", {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                              "raio_x_versao": VERSAO, "raio_x_em": agora()})
@@ -1455,6 +1456,24 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         pass
     log(f"Raio-X no ar: {url} ({len(diag['pontos'])} ponto(s), {len(diag['bons'])} bom(ns)).", log_lead)
     return True, url
+
+
+# Logo depois do deploy a borda da Vercel ainda pode servir a versão anterior: em 14/10/2026 o Raio-X
+# da Jéssica Barbosa subiu certo, a conferência leu os bytes antigos e o recibo não foi gravado.
+# Antes de dar por falho, lê de novo depois destas esperas (em segundos, ~34 no total).
+ESPERA_DO_CDN = (0, 3, 6, 10, 15)
+
+
+def conferir_no_ar(url: str, esperado: bytes) -> tuple[int | str, bool]:
+    """(último código, se o que está no ar é byte a byte o `esperado`), com novas leituras nas esperas."""
+    codigo: int | str = ""
+    for espera in ESPERA_DO_CDN:
+        if espera:
+            time.sleep(espera)
+        codigo, corpo = baixar(url)
+        if codigo == 200 and corpo == esperado:
+            return codigo, True
+    return codigo, False
 
 
 def deploy_na_vercel(arquivos: dict[str, bytes], projeto: str, log_lead: Path) -> str:
@@ -2299,7 +2318,9 @@ def testar() -> int:
             global AUTO, LOGS
             self.raiz = Path(tempfile.mkdtemp(prefix="raio-x-teste-"))
             assert self.raiz.name.startswith("raio-x-teste-") and str(self.raiz).startswith(tempfile.gettempdir())
-            self.antes = (AUTO, LOGS, globals()["baixar"], globals()["chave_places"], globals()["pedir_places"])
+            self.antes = (AUTO, LOGS, globals()["baixar"], globals()["chave_places"], globals()["pedir_places"],
+                          globals()["ESPERA_DO_CDN"])
+            globals()["ESPERA_DO_CDN"] = (0, 0, 0)  # as releituras acontecem, sem esperar de verdade
             globals()["chave_places"] = lambda arquivo=None: None
             globals()["pedir_places"] = lambda *a, **k: self.fail("o teste não pode chamar o Places")
             AUTO, LOGS = self.raiz, self.raiz / ".logs"
@@ -2319,7 +2340,8 @@ def testar() -> int:
 
         def tearDown(self):
             global AUTO, LOGS
-            AUTO, LOGS, globals()["baixar"], globals()["chave_places"], globals()["pedir_places"] = self.antes
+            (AUTO, LOGS, globals()["baixar"], globals()["chave_places"], globals()["pedir_places"],
+             globals()["ESPERA_DO_CDN"]) = self.antes
             assert self.raiz.name.startswith("raio-x-teste-")
             shutil.rmtree(self.raiz)
 
@@ -2368,6 +2390,19 @@ def testar() -> int:
             ok, _ = publicar(self.pasta, lambda *a: "https://demo-higor.vercel.app")
             self.assertFalse(ok)
             self.assertNotIn("raio_x_url", self.recibo())
+
+        def test_borda_que_ainda_serve_o_antigo_e_relida_antes_de_falhar(self):
+            # 14/10/2026: a primeira leitura depois do deploy trouxe o Raio-X anterior; a segunda, o novo.
+            def deploy_lento(arquivos, projeto, log_lead):
+                novo = arquivos["raio-x/index.html"]
+                leituras = iter([(200, b"<body>Raio-X anterior</body>"), (200, novo)])
+                self.no_ar["https://demo-higor.vercel.app/raio-x"] = lambda: next(leituras, (200, novo))
+                return "https://demo-higor.vercel.app"
+            globals()["baixar"] = lambda url, timeout=30, navegador=False: (
+                self.no_ar[url]() if callable(self.no_ar.get(url)) else self.no_ar.get(url, (404, b"")))
+            ok, msg = publicar(self.pasta, deploy_lento)
+            self.assertTrue(ok, msg)
+            self.assertEqual(self.recibo()["raio_x_versao"], VERSAO)
 
         def test_alias_diferente_nao_grava_o_campo(self):
             def outro(arquivos, projeto, log_lead):
