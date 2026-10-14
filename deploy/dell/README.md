@@ -842,7 +842,9 @@ de **menos** leads já atribuídos na planilha (toda linha com letra A/B/C e
 antigo do `place_id`, os leads da rodada em ordem de `place_id` e somados um a
 um. A letra congela enquanto o `ab_elegiveis` salvo for o de agora; mudou o
 conjunto (Raio-X chegou ou sumiu) ou a linha não tem conjunto, sorteia de novo.
-Só lead `pronto` é reescrito: o que saiu nunca muda. O histórico (150 envios sem
+Só lead `pronto` é reescrito: o que saiu nunca muda. O lead sem demo (Raio-X
+avulso) tem o conjunto `C`, sem sorteio e fora dos pares; sem raio-x ou nos EUA
+não há mensagem (null) e ele não vira `pronto`. O histórico (150 envios sem
 letra e os sorteados pelo hash, sem `ab_elegiveis`) e o aviso do 05 ·
 Acompanhamento (follow-up) não entram no teste.
 

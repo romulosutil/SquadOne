@@ -51,7 +51,9 @@ pelo hash antigo, leads da rodada em ordem de place_id e somados um a um. Coluna
 `ab_elegiveis` ("A", "AB", "AC", "ABC"), gravada na mesma escrita de `mensagem_variante`.
 Congelamento: a letra fica enquanto o `ab_elegiveis` salvo for igual ao de agora e contiver a
 letra; mudou o conjunto (Raio-X chegou ou sumiu) ou a linha não tem conjunto (vazia, ou letra do
-sorteio antigo): sorteia de novo. Só "pronto" é reescrito, então o que saiu nunca muda. O aviso
+sorteio antigo): sorteia de novo. Só "pronto" é reescrito, então o que saiu nunca muda. O lead sem
+demo (Raio-X avulso, `sem_demo`) tem o conjunto "C", sem sorteio e fora dos pares; sem raio-x ou nos
+EUA a alocação devolve null (nenhuma mensagem), como o `varianteDe`. O aviso
 do 05 · Acompanhamento (follow-up) e o histórico (150 envios sem letra, mais os sorteados pelo
 hash antes disto, sem `ab_elegiveis`) não entram no teste; o CRM o lê em Resultados.
 
