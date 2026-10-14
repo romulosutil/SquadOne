@@ -1875,14 +1875,14 @@ def gerador_rodando() -> bool:
     return (dt.datetime.now().timestamp() - float(dono.get("desde") or 0)) < 6 * 3600
 
 
-def pendentes(maximo: int) -> list[Path]:
+def pendentes(maximo: int, simulando: bool = False) -> list[Path]:
     """Leads `pronto` na raiz com demo no ar e sem Raio-X da versão atual (ou com ele fora do ar),
     o publicado mais recente primeiro (o próximo a ser enviado). Quem não teria Raio-X (sem ponto,
     demo apagado) não ocupa vaga."""
     if gerador_rodando():
         log("O gerador está rodando (gerador.lock); os pendentes ficam para a próxima rodada.")
         return []
-    novos = novos_sem_demo(maximo) if sob_pedido() else []
+    novos = novos_sem_demo(maximo, gravar=not simulando) if sob_pedido() else []
     status = status_no_retrato()
     if status is None:
         log("Sem retrato recente da planilha (site-leads.json); só os leads novos, sem recibo, são pendentes.")
@@ -1932,10 +1932,19 @@ def do_brasil(dados: dict) -> bool:
     return pais in ("", "brasil", "brazil")
 
 
-def novos_sem_demo(maximo: int) -> list[Path]:
+def molde_instalado() -> bool:
+    return bool(calculo_prumo and modelo_raio_x and PRECOS and EXEMPLO)
+
+
+def novos_sem_demo(maximo: int, gravar: bool = True) -> list[Path]:
     """Demo sob pedido: leads da raiz que o Caçador trouxe e que ainda não têm recibo nenhum (nem demo nem
     Raio-X), o mais novo primeiro. Fora: descartado, de busca pausada, de fora do Brasil, e quem não chega ao
-    padrão do modelo (sem 3 pontos verificáveis: esse lead não é abordado, porque não há o que mostrar)."""
+    padrão do modelo (sem 3 pontos verificáveis: esse lead não é abordado, porque não há o que mostrar).
+    `gravar=False` (o --simular) não deixa o SEM_PADRAO nas pastas."""
+    if not molde_instalado():
+        # Sem o molde, todo lead daria "abaixo do padrão" e ficaria 30 dias de fora (14/10/2026: 32 marcados assim).
+        log("Sem o molde do Raio-X (calculo_prumo, modelo_raio_x, precos.json, exemplo-raio-x.json): nenhum lead novo.")
+        return []
     pausados = nao_gerar()
     candidatos = []
     validade = dt.timedelta(days=VALIDADE_CACHE_DIAS).total_seconds()
@@ -1962,11 +1971,12 @@ def novos_sem_demo(maximo: int) -> list[Path]:
             montar(p)
         except ValueError as e:
             log(f"{p.name}: sem Raio-X avulso ({e}).")
-            try:
-                (p / SEM_PADRAO).write_text(json.dumps({"motivo": str(e)[:500], "em": agora(), "versao": VERSAO},
-                                                       ensure_ascii=False), encoding="utf-8")
-            except OSError:
-                pass
+            if gravar:
+                try:
+                    (p / SEM_PADRAO).write_text(json.dumps({"motivo": str(e)[:500], "em": agora(), "versao": VERSAO},
+                                                           ensure_ascii=False), encoding="utf-8")
+                except OSError:
+                    pass
             continue
         saida.append(p)
     return saida
@@ -2023,7 +2033,7 @@ def main(argv: list[str]) -> int:
     # `_em-conversa/SLUG`: o gerador chama assim depois do demo pedido de quem já respondeu.
     if any(not re.fullmatch(r"(?:_[a-z-]{1,30}/)?[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.slugs):
         ap.error("SLUG é o nome da pasta na raiz de ~/auto-site (ou _em-conversa/SLUG)")
-    alvos = pendentes(a.max) if a.pendentes else [AUTO / s for s in a.slugs]
+    alvos = pendentes(a.max, a.simular) if a.pendentes else [AUTO / s for s in a.slugs]
     if a.simular:
         for p in alvos:
             try:
@@ -3008,6 +3018,19 @@ def testar() -> int:
             fora.mkdir()
             (fora / "content.md").write_text(CONTENT_EXEMPLO.replace("Brasil", "Estados Unidos"), encoding="utf-8")
             self.assertEqual([p.name for p in novos_sem_demo(10)], ["higor"])
+            # O --simular não marca ninguém (14/10/2026: a primeira simulação marcou 32 leads).
+            (fraco / SEM_PADRAO).unlink()
+            self.assertEqual([p.name for p in novos_sem_demo(10, gravar=False)], ["higor"])
+            self.assertFalse((fraco / SEM_PADRAO).exists())
+
+        def test_sem_o_molde_nenhum_lead_novo_e_ninguem_marcado(self):
+            global EXEMPLO
+            antes, EXEMPLO = EXEMPLO, None
+            try:
+                self.assertEqual(novos_sem_demo(10), [])
+                self.assertFalse((self.pasta / SEM_PADRAO).exists())
+            finally:
+                EXEMPLO = antes
 
         def test_nome_avulso_curto_e_sem_colisao(self):
             longo = "advogado-em-maringa-advocacia-beneton-atendimento-nacional-busca-e-apreensao-revisoes"
