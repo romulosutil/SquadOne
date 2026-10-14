@@ -1,5 +1,5 @@
 // Cruza os recibos (publicado.json) com a planilha e monta a abordagem.
-// Textos e utilitarios (VARIACOES, varianteDe, telefoneE164, detalheDoBriefing...) vem de
+// Textos e utilitarios (VARIACOES, alocarRodada, telefoneE164, detalheDoBriefing...) vem de
 // site-mensagem.js, que o site-antes-da-venda.py poe na frente deste codigo.
 
 // 29/09/2026: o link rastreado passa pela tailnet (tailscale serve /webhook ->
@@ -46,6 +46,9 @@ for (const linha of linhas) {
 const saida = [];
 // Lead com recibo fora de _descartados/: está vivo, mesmo que uma cópia antiga dele tenha sido descartada.
 const comRecibo = new Set();
+// 14/10/2026: a letra sai da alocação balanceada por nicho (alocarRodada, site-mensagem.js), que
+// precisa de todos os leads da rodada de uma vez: o laço junta, a alocação roda, e só então monta.
+const aMontar = [];
 
 recibos.forEach((item, i) => {
   const rec = item.json.recibo || {};
@@ -84,28 +87,46 @@ recibos.forEach((item, i) => {
   if (!siteUrl && !raioXUrl) return;
   // Enviado so com o raio-x: nada a preencher ate o demo sair (sem isto, uma escrita igual por hora).
   if (semSite && !siteUrl) return;
+  aMontar.push({ pid, rec, linha, status, waAtual, siteVersao, siteUrl, ehNovo, semSite });
+});
 
+// A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
+// O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
+// Sem site_url (demo sob pedido), sem_demo: so a C cabe, e sem raio-x nao ha mensagem (null).
+const leadDaVariante = (m) => ({ ...m.linha, raio_x_url: m.rec.raio_x_url, raio_x_pontos: m.rec.raio_x_pontos, sem_demo: !m.siteUrl });
+// Só quem grava a letra entra na alocação: o enviado sem site (semSite) só ganha o wa_me.
+const alocadas = alocarRodada(linhas.map(l => l.json), aMontar
+  .filter(m => !m.semSite && telefoneE164(m.linha.telefone))
+  .map(m => ({
+    placeId: m.pid, nicho: m.linha.vertical, eua: ehEua(telefoneE164(m.linha.telefone)), lead: leadDaVariante(m),
+    salva: { letra: m.linha.mensagem_variante, elegiveis: m.linha.ab_elegiveis },
+  })));
+
+for (const { pid, rec, linha, status, waAtual, siteVersao, siteUrl, ehNovo, semSite } of aMontar) {
   const nome = linha.nome || rec.nome || '';
   const telefone = telefoneE164(linha.telefone);
 
   let waLink = '';
   let letra = '';
+  let elegiveis = '';
   // Enviado que ganha o site agora (demo pedido depois do raio-x): a primeira mensagem ja foi, e o wa_me
   // guarda o que foi enviado. Remontar trocaria o registro por outro texto (o sorteio muda com o site).
   const manterWaMe = semSite && String(linha.wa_me || '').trim();
   if (telefone && !manterWaMe) {
     const eua = ehEua(telefone);
-    // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
-    // O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
-    const variante = varianteDe(pid, eua, { ...linha, raio_x_url: rec.raio_x_url, raio_x_pontos: rec.raio_x_pontos, sem_demo: !siteUrl });
+    // A alocacao ja decidiu quem grava letra (null = nenhuma mensagem possivel); o enviado sem site
+    // ficou fora dela e so ganha o wa_me, pelo sorteio de sempre.
+    const variante = Object.prototype.hasOwnProperty.call(alocadas, pid) ? alocadas[pid]
+      : varianteDe(pid, eua, leadDaVariante({ rec, linha, siteUrl }));
     if (variante) {
       letra = variante.letra;
+      elegiveis = variante.elegiveis || '';
       const mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
       waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
     }
   }
   // Sem demo e sem mensagem possivel (EUA, ou o raio-x sem pontos): o lead fica como esta, sem virar pronto.
-  if (!siteUrl && !waLink && !manterWaMe) return;
+  if (!siteUrl && !waLink && !manterWaMe) continue;
 
   // 23/09/2026: wa_link passa a ser o link rastreado do n8n do Dell. O clique
   // marca o lead como enviado e redireciona para o wa.me real, guardado em wa_me.
@@ -123,9 +144,11 @@ recibos.forEach((item, i) => {
     raio_x_url: String(rec.raio_x_url || '').trim(),
     // A variacao que o wa_link leva, so enquanto o lead nao foi enviado: o clique marca
     // "enviado" e a letra fica; envio que o observador ve sem o clique vira "manual".
-    ...(semSite ? {} : { mensagem_variante: letra }),
+    // ab_elegiveis (14/10/2026) vai na MESMA escrita: as letras do sorteio, que dizem com quem a
+    // letra pode ser comparada. Congela junto com a letra quando o lead sai de "pronto".
+    ...(semSite ? {} : { mensagem_variante: letra, ab_elegiveis: elegiveis }),
   } });
-});
+}
 
 // Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
 // gravou DESCARTAR.md (já tem site, rede, duplicado), mas não escreve na planilha, e o lead

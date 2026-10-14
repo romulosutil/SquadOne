@@ -41,9 +41,23 @@ Também em 08/10/2026: `site_versao` reconhece o modo personalizado pelo DOSSIE.
 etapa A dele o cria) quando falta o personalizado.json — os refeitos de 07/10 à tarde (v1)
 não têm a marca, que veio depois, e 11 deles saíam "padrão". A marca, quando existe, vence.
 
+14/10/2026: A/B estratificado por nicho. Medido até aqui: 221 envios, A 41 (24% responderam),
+B 25 (8%), C 5, Fisher A×B p = 0,11 e confundido (a B só é elegível com nota 4,3+ e 15+
+avaliações, a C só com Raio-X no ar, e o hash do place_id não equilibrava nada por nicho). A
+letra agora sai de `alocarRodada` (site-mensagem.js): dentro do estrato nicho (coluna
+`vertical`) × conjunto de letras elegíveis, a letra com MENOS leads já atribuídos na planilha
+(toda linha com letra A/B/C e `ab_elegiveis` válidos; "manual", "EN" e vazio não contam), empate
+pelo hash antigo, leads da rodada em ordem de place_id e somados um a um. Coluna nova
+`ab_elegiveis` ("A", "AB", "AC", "ABC"), gravada na mesma escrita de `mensagem_variante`.
+Congelamento: a letra fica enquanto o `ab_elegiveis` salvo for igual ao de agora e contiver a
+letra; mudou o conjunto (Raio-X chegou ou sumiu) ou a linha não tem conjunto (vazia, ou letra do
+sorteio antigo): sorteia de novo. Só "pronto" é reescrito, então o que saiu nunca muda. O aviso
+do 05 · Acompanhamento (follow-up) e o histórico (150 envios sem letra, mais os sorteados pelo
+hash antes disto, sem `ab_elegiveis`) não entram no teste; o CRM o lê em Resultados.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
-     python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao e raio_x_url)
+     python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao, raio_x_url e ab_elegiveis)
      python3 site-antes-da-venda.py --testar     (código do cruzamento no node, planilha de mentira, sem n8n)
      python3 site-antes-da-venda.py --testar-n8n (cópia do Balcão no n8n: recibos reais, planilha de
                                                   mentira, nada gravado; apaga a cópia no fim)
@@ -72,7 +86,9 @@ LEADS_GID = "396728619"
 # Colunas que o Balcão grava desde 07/10/2026 (no fim da aba Leads; os fluxos escrevem pelo nome).
 # raio_x_url (08/10/2026): o link do Raio-X do publicado.json, para a segunda mensagem de quem
 # recebeu a variação C (o aviso de interesse e o CRM montam a segunda da linha, não do recibo).
-COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url"]
+# ab_elegiveis (14/10/2026): as letras que o lead podia receber no sorteio ("A", "AB", "AC", "ABC"),
+# gravada junto com mensagem_variante; é ela que diz com quem a letra pode ser comparada no CRM.
+COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url", "ab_elegiveis"]
 
 # Onde mora o lead hoje: place_id -> "slug" (raiz) ou "_recusados/slug" etc.
 # Vem do diretório de cada publicado.json lido por "Ler recibos da pasta auto".
@@ -461,6 +477,7 @@ def testar() -> int:
             a = a[0]
             self.assertEqual((a["status"], a["site_versao"], a["mensagem_variante"], a["site_url"]),
                              ("pronto", "personalizado-v2", "A", "https://demo-padaria-a.vercel.app"))
+            self.assertEqual(a["ab_elegiveis"], "A")  # sem nota boa nem Raio-X: só a A, sem sorteio
             self.assertTrue(a["wa_link"].endswith("/enviar?place_id=pid-a"))
             self.assertIn("pão de queijo", unquote(a["wa_me"]))
 
@@ -477,15 +494,16 @@ def testar() -> int:
         def test_eua_e_sem_telefone(self):
             por = cruzar()
             e = por["pid-e"][0]
-            self.assertEqual(e["mensagem_variante"], "EN")
+            self.assertEqual((e["mensagem_variante"], e["ab_elegiveis"]), ("EN", ""))  # EUA fica fora do teste
             self.assertIn("Hi! This is", unquote(e["wa_me"]))
             f = por["pid-f"][0]
-            self.assertEqual((f["mensagem_variante"], f["wa_link"]), ("", ""))
+            self.assertEqual((f["mensagem_variante"], f["ab_elegiveis"], f["wa_link"]), ("", "", ""))
 
         def test_enviado_sem_site_nao_ganha_letra(self):
             g = cruzar()["pid-g"][0]
             self.assertEqual((g["status"], g["site_versao"]), ("enviado", "padrão"))
             self.assertNotIn("mensagem_variante", g)
+            self.assertNotIn("ab_elegiveis", g)
 
         def test_sem_nenhuma_marca(self):
             # O n8n entrega um item vazio (alwaysOutputData) e a extração dele falha: tudo é padrão.
@@ -557,6 +575,9 @@ def testar() -> int:
             por = cruzar(planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
                          recibos=[(f"lead-{i}", {**recibo(f"pid-{i}", f"lead-{i}"), **self.RAIO_X}) for i in range(40)], marcas=[])
             self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B", "C"})
+            self.assertEqual({i[0]["ab_elegiveis"] for i in por.values()}, {"ABC"})
+            letras = [i[0]["mensagem_variante"] for i in por.values()]
+            self.assertEqual(sorted(letras.count(x) for x in "ABC"), [13, 13, 14])  # 40 no mesmo estrato: alocação, não sorte
             for itens in por.values():
                 texto, letra = unquote(itens[0]["wa_me"]).split("?text=")[1], itens[0]["mensagem_variante"]
                 self.assertTrue(texto.startswith(inicio[letra]), (letra, texto))
@@ -573,6 +594,169 @@ def testar() -> int:
                          recibos=[(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
             self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B"})
             self.assertEqual({i[0]["raio_x_url"] for i in por.values()}, {""})
+            self.assertEqual({i[0]["ab_elegiveis"] for i in por.values()}, {"AB"})
+
+    class Alocacao(unittest.TestCase):
+        # 14/10/2026: A/B estratificado. A letra é a de menos leads no estrato nicho × letras elegíveis.
+        ABC = {"nota": "4.9", "avaliacoes": "34", "raio_x_url": "https://demo-x.vercel.app/raio-x", "raio_x_pontos": 2}
+        AB = {"nota": "4.9", "avaliacoes": "34"}
+
+        @staticmethod
+        def pedido(pid, nicho="advocacia", lead=None, salva=None, eua=False):
+            return {"placeId": pid, "nicho": nicho, "eua": eua, "lead": lead or {}, "salva": salva or {}}
+
+        @staticmethod
+        def alocar(linhas, pedidos):
+            return rodar_js(codigo_js("site-mensagem.js") + "\nreturn alocarRodada("
+                            + json.dumps(linhas, ensure_ascii=False) + ", " + json.dumps(pedidos, ensure_ascii=False) + ");", {})
+
+        @staticmethod
+        def contagem(res):
+            return {x: sum(1 for r in res.values() if r["letra"] == x) for x in "ABC"}
+
+        def test_trinta_leads_num_nicho_dividem_por_igual(self):
+            for n in (30, 31, 32):
+                res = self.alocar([], [self.pedido(f"ChIJ{i:04d}x", lead=self.ABC) for i in range(n)])
+                c = self.contagem(res)
+                self.assertLessEqual(max(c.values()) - min(c.values()), 1, (n, c))
+                self.assertEqual({r["elegiveis"] for r in res.values()}, {"ABC"})
+
+        def test_dois_nichos_sao_independentes(self):
+            # advocacia já tem A, A, B no estrato ABC: o próximo de lá vai para a C; contabilidade começa do zero.
+            linhas = [{"place_id": f"old-{i}", "vertical": "advocacia", "mensagem_variante": l, "ab_elegiveis": "ABC"}
+                      for i, l in enumerate("AAB")]
+            res = self.alocar(linhas, [self.pedido("novo-adv", lead=self.ABC),
+                                       self.pedido("novo-cont", nicho="contabilidade", lead=self.ABC)])
+            self.assertEqual(res["novo-adv"]["letra"], "C")
+            antiga = rodar_js(codigo_js("site-mensagem.js") + "\nreturn varianteDe('novo-cont', false, "
+                              + json.dumps(self.ABC) + ").letra;", {})
+            self.assertEqual(res["novo-cont"]["letra"], antiga, "estrato vazio: o desempate é o hash de sempre")
+            # Trinta em cada nicho, intercalados: cada um equilibrado por conta própria.
+            pedidos = [self.pedido(f"p{i:03d}", nicho=("advocacia", "contabilidade")[i % 2], lead=self.AB) for i in range(60)]
+            res = self.alocar([], pedidos)
+            for nicho in ("advocacia", "contabilidade"):
+                letras = [res[p["placeId"]]["letra"] for p in pedidos if p["nicho"] == nicho]
+                self.assertEqual((letras.count("A"), letras.count("B")), (15, 15), nicho)
+
+        def test_mesma_entrada_mesma_saida_em_qualquer_ordem(self):
+            pedidos = [self.pedido(f"ChIJ{i:04d}x", nicho=("a", "b", "")[i % 3], lead=(self.ABC, self.AB, {})[i % 3]) for i in range(40)]
+            linhas = [{"place_id": "x1", "vertical": "a", "mensagem_variante": "B", "ab_elegiveis": "ABC"}]
+            um = self.alocar(linhas, pedidos)
+            self.assertEqual(um, self.alocar(linhas, pedidos))
+            self.assertEqual(um, self.alocar(linhas, list(reversed(pedidos))))
+
+        def test_letra_salva_com_o_mesmo_conjunto_fica(self):
+            # O estrato tem 5 B e nenhuma A: um sorteio novo daria A, mas a letra salva continua.
+            linhas = [{"place_id": f"b{i}", "vertical": "advocacia", "mensagem_variante": "B", "ab_elegiveis": "AB"} for i in range(5)]
+            res = self.alocar(linhas, [self.pedido("ja", lead=self.AB, salva={"letra": "B", "elegiveis": "AB"})])
+            self.assertEqual((res["ja"]["letra"], res["ja"]["congelada"], res["ja"]["elegiveis"]), ("B", True, "AB"))
+            res = self.alocar(linhas, [self.pedido("novo", lead=self.AB)])
+            self.assertEqual((res["novo"]["letra"], res["novo"]["congelada"]), ("A", False))
+
+        def test_mudou_o_conjunto_sorteia_de_novo(self):
+            # Perdeu o Raio-X: a C salva não cabe mais, sorteia no estrato AB.
+            res = self.alocar([], [self.pedido("perdeu", lead=self.AB, salva={"letra": "C", "elegiveis": "ABC"})])
+            self.assertIn(res["perdeu"]["letra"], ("A", "B"))
+            self.assertEqual((res["perdeu"]["elegiveis"], res["perdeu"]["congelada"]), ("AB", False))
+            # Ganhou o Raio-X depois de "pronto": a A salva no AB vai a novo sorteio no ABC (a troca para C é possível).
+            linhas = [{"place_id": "x", "vertical": "advocacia", "mensagem_variante": l, "ab_elegiveis": "ABC"} for l in "AB"]
+            res = self.alocar(linhas, [self.pedido("ganhou", lead=self.ABC, salva={"letra": "A", "elegiveis": "AB"})])
+            self.assertEqual((res["ganhou"]["letra"], res["ganhou"]["elegiveis"]), ("C", "ABC"))
+            # Letra do sorteio antigo, sem ab_elegiveis: entra no sorteio novo.
+            res = self.alocar([], [self.pedido("antigo", lead=self.AB, salva={"letra": "B", "elegiveis": ""})])
+            self.assertFalse(res["antigo"]["congelada"])
+
+        def test_quem_vai_sortear_de_novo_nao_conta_a_propria_letra(self):
+            # A linha do próprio lead (C, ABC) estaria na contagem; ele perdeu o Raio-X e é sorteado de novo.
+            linhas = [{"place_id": "eu", "vertical": "advocacia", "mensagem_variante": "C", "ab_elegiveis": "ABC"},
+                      {"place_id": "outro", "vertical": "advocacia", "mensagem_variante": "A", "ab_elegiveis": "ABC"}]
+            res = self.alocar(linhas, [self.pedido("eu", lead=self.AB, salva={"letra": "C", "elegiveis": "ABC"}),
+                                       self.pedido("novo", lead=self.ABC)])
+            # No ABC só conta "outro" (A): o novo vai para B ou C, nunca A.
+            self.assertIn(res["novo"]["letra"], ("B", "C"))
+
+        def test_so_conta_letra_valida_do_sorteio(self):
+            # manual, EN, vazio, letra fora do conjunto e conjunto ilegível não contam; enviado e recusado contam.
+            linhas = [{"place_id": "m", "vertical": "advocacia", "mensagem_variante": "manual", "ab_elegiveis": "AB"},
+                      {"place_id": "e", "vertical": "advocacia", "mensagem_variante": "EN", "ab_elegiveis": "AB"},
+                      {"place_id": "v", "vertical": "advocacia", "mensagem_variante": "", "ab_elegiveis": "AB"},
+                      {"place_id": "f", "vertical": "advocacia", "mensagem_variante": "C", "ab_elegiveis": "AB"},
+                      {"place_id": "i", "vertical": "advocacia", "mensagem_variante": "A", "ab_elegiveis": "AXB"},
+                      {"place_id": "s1", "vertical": "advocacia", "mensagem_variante": "A", "ab_elegiveis": "AB", "status": "enviado"},
+                      {"place_id": "s2", "vertical": "advocacia", "mensagem_variante": "A", "ab_elegiveis": "ab", "status": "recusado"}]
+            res = self.alocar(linhas, [self.pedido("n1", lead=self.AB), self.pedido("n2", lead=self.AB)])
+            self.assertEqual((res["n1"]["letra"], res["n2"]["letra"]), ("B", "B"))  # A 2 × B 0: os dois novos vão para B
+
+        def test_eua_e_so_a(self):
+            res = self.alocar([], [self.pedido("us", lead=self.ABC, eua=True), self.pedido("so-a", lead={})])
+            self.assertEqual((res["us"]["letra"], res["us"]["elegiveis"]), ("EN", ""))
+            self.assertIn("Hi! This is", res["us"]["molde"])
+            self.assertEqual((res["so-a"]["letra"], res["so-a"]["elegiveis"]), ("A", "A"))
+
+        def test_sem_demo_so_a_c_sem_sorteio_ou_nenhuma_mensagem(self):
+            # Demo sob pedido (14/10/2026): A e B dizem "montei uma demonstração"; sem demo, só a C cabe.
+            linhas = [{"place_id": f"c{i}", "vertical": "advocacia", "mensagem_variante": "C", "ab_elegiveis": "C"} for i in range(3)]
+            res = self.alocar(linhas, [self.pedido("so-c", lead={**self.ABC, "sem_demo": True}),
+                                       self.pedido("sem-nada", lead={**self.AB, "sem_demo": True}),
+                                       self.pedido("us", lead={**self.ABC, "sem_demo": True}, eua=True)])
+            self.assertEqual((res["so-c"]["letra"], res["so-c"]["elegiveis"]), ("C", "C"))
+            self.assertIn("Fiz um raio-x", res["so-c"]["molde"])
+            self.assertIsNone(res["sem-nada"])  # sem raio-x: nenhuma mensagem possível
+            self.assertIsNone(res["us"])  # o raio-x é só em português
+            # O estrato "C" não mexe no ABC do mesmo nicho: o próximo com demo começa do zero.
+            com_demo = self.alocar(linhas, [self.pedido("novo", lead=self.ABC)])["novo"]
+            antiga = rodar_js(codigo_js("site-mensagem.js") + "\nreturn varianteDe('novo', false, " + json.dumps(self.ABC) + ").letra;", {})
+            self.assertEqual(com_demo["letra"], antiga)
+
+        def test_no_balcao_so_com_raio_x_grava_c_e_o_conjunto_c(self):
+            avulso = {"raio_x_url": "https://raio-x-prumo.vercel.app/lead", "raio_x_pontos": 3}
+            por = cruzar(planilha=[linha(f"pid-{i}", "novo", vertical="advocacia", **self.AB) for i in range(4)],
+                         recibos=[(f"lead-{i}", {"place_id": f"pid-{i}", "nome": f"lead-{i}", **avulso}) for i in range(4)], marcas=[])
+            self.assertEqual({(i[0]["mensagem_variante"], i[0]["ab_elegiveis"]) for i in por.values()}, {("C", "C")})
+            # Sem pontos válidos não há mensagem: o lead fica como está, sem letra nem conjunto.
+            por = cruzar(planilha=[linha("pid-x", "novo", **self.AB)],
+                         recibos=[("lead-x", {"place_id": "pid-x", "nome": "x", "raio_x_url": avulso["raio_x_url"]})], marcas=[])
+            self.assertNotIn("pid-x", por)
+
+        def test_nicho_vazio_e_um_estrato_so_e_grafia_nao_separa(self):
+            linhas = [{"place_id": "x1", "vertical": "", "mensagem_variante": "A", "ab_elegiveis": "AB"},
+                      {"place_id": "x2", "mensagem_variante": "A", "ab_elegiveis": "AB"},
+                      {"place_id": "x3", "vertical": "  ", "mensagem_variante": "A", "ab_elegiveis": "AB"}]
+            res = self.alocar(linhas, [self.pedido("n1", nicho=None, lead=self.AB), self.pedido("n2", nicho="", lead=self.AB),
+                                       self.pedido("n3", nicho=" ", lead=self.AB)])
+            self.assertEqual([res[p]["letra"] for p in ("n1", "n2", "n3")], ["B", "B", "B"])
+            linhas = [{"place_id": "y", "vertical": "Clínica Odontológica", "mensagem_variante": "A", "ab_elegiveis": "AB"}]
+            self.assertEqual(self.alocar(linhas, [self.pedido("n", nicho="clinica  odontologica ", lead=self.AB)])["n"]["letra"], "B")
+
+        def test_no_balcao_dois_da_mesma_rodada_e_o_enviado_conta(self):
+            recibos = [(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(2)]
+            novos = [linha(f"pid-{i}", "novo", vertical="advocacia", **self.AB) for i in range(2)]
+            # Estrato vazio: os dois novos da mesma rodada não caem na mesma letra.
+            por = cruzar(planilha=novos, recibos=recibos, marcas=[])
+            self.assertEqual(sorted(por[f"pid-{i}"][0]["mensagem_variante"] for i in range(2)), ["A", "B"])
+            self.assertEqual({por[f"pid-{i}"][0]["ab_elegiveis"] for i in range(2)}, {"AB"})
+            # Dois enviados com A no estrato (sem recibo: nada a gravar para eles) empurram os dois novos para B.
+            enviados = [linha(f"env-{i}", "enviado", vertical="advocacia", site_url="https://x", mensagem_variante="A",
+                              ab_elegiveis="AB", **self.AB) for i in range(2)]
+            por = cruzar(planilha=enviados + novos, recibos=recibos, marcas=[])
+            self.assertEqual([por[f"pid-{i}"][0]["mensagem_variante"] for i in range(2)], ["B", "B"])
+            self.assertFalse(any(p.startswith("env-") for p in por))
+
+        def test_no_balcao_pronto_com_conjunto_salvo_nao_muda_de_rodada_para_rodada(self):
+            planilha = [linha(f"pid-{i}", "novo", vertical="advocacia", **self.AB) for i in range(6)]
+            recibos = [(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(6)]
+            primeira = cruzar(planilha=planilha, recibos=recibos, marcas=[])
+            # A planilha depois da escrita: cada um "pronto" com a letra e o conjunto gravados.
+            gravada = [linha(f"pid-{i}", "pronto", vertical="advocacia", **self.AB,
+                             mensagem_variante=primeira[f"pid-{i}"][0]["mensagem_variante"],
+                             ab_elegiveis=primeira[f"pid-{i}"][0]["ab_elegiveis"]) for i in range(6)]
+            # Mais um lead novo no mesmo nicho não mexe nos que já estão prontos.
+            gravada.append(linha("pid-9", "novo", vertical="advocacia", **self.AB))
+            segunda = cruzar(planilha=gravada, recibos=recibos + [("lead-9", recibo("pid-9", "lead-9"))], marcas=[])
+            for i in range(6):
+                self.assertEqual(segunda[f"pid-{i}"][0]["mensagem_variante"], primeira[f"pid-{i}"][0]["mensagem_variante"])
+            letras = [primeira[f"pid-{i}"][0]["mensagem_variante"] for i in range(6)]
+            self.assertEqual((letras.count("A"), letras.count("B")), (3, 3))
 
     class SobPedido(unittest.TestCase):
         """14/10/2026: o recibo do Raio-X avulso (sem site_url) leva o lead a "pronto" só com a C."""
@@ -635,7 +819,7 @@ def testar() -> int:
             self.assertEqual((r["a"], r["c"]), (True, False))
 
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, PastaDoLead))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, Alocacao, PastaDoLead))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 

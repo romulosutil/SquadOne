@@ -48,6 +48,8 @@ const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put toget
 // A C, do mesmo jeito, so com raioXDe(lead) ({PONTOS} preenchido aqui). O lead que o
 // Raio-X alcanca depois de ja estar "pronto" pode trocar de letra uma vez (de A/B para
 // C, se o sorteio cair nela): o Balcao grava a letra nova junto com o wa_link novo.
+// 14/10/2026: o sorteio pelo hash deu lugar a alocarVariante (abaixo): a letra passa a ter
+// estado (a coluna mensagem_variante + ab_elegiveis), nao sai mais so do place_id.
 const LETRAS = ['A', 'B', 'C'];
 const NOTA_MINIMA_B = 4.3;
 const AVALIACOES_MINIMAS_B = 15;
@@ -76,21 +78,135 @@ function fatosDoGoogle(lead) {
 // dizem "montei uma demonstracao", e o demo so e feito depois do botao "Gerar demo"; a C oferece o
 // raio-x, que ja esta no ar. Sem raio-x, ou nos EUA (o raio-x e so em portugues), nao ha mensagem: null.
 // O lead que ja tem demo sorteia entre as mesmas de antes, entao a letra dele nao muda.
-function varianteDe(placeId, eua, lead) {
+// Os indices de VARIACOES que este lead pode receber (com texto e com os fatos que o texto cita).
+// Vazio = nenhuma mensagem possivel (sem demo e sem raio-x).
+function indicesElegiveis(lead) {
   const semDemo = Boolean(lead && lead.sem_demo);
-  if (eua) return semDemo ? null : { letra: 'EN', molde: VARIACAO_EN };
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
   const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t)) && (!semDemo || citaRaioX(t));
-  const comTexto = VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
-  if (!comTexto.length) return null;
-  let h = 0;
-  for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const i = comTexto[h % comTexto.length];
-  let molde = VARIACOES[i];
+  return VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
+}
+// O molde da letra com {NOTA}, {AVALIACOES} e {PONTOS} ja preenchidos.
+function moldeDaLetra(letra, lead) {
+  let molde = VARIACOES[LETRAS.indexOf(letra)];
+  const fatos = fatosDoGoogle(lead);
+  const raioX = raioXDe(lead);
   if (fatos) molde = molde.split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes);
   if (raioX) molde = molde.split('{PONTOS}').join(raioX.pontos);
-  return { letra: LETRAS[i], molde };
+  return molde;
+}
+// O hash de sempre (h * 31 + c): continua sendo o desempate da alocacao (14/10/2026).
+function hashDoPlaceId(placeId) {
+  let h = 0;
+  for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+}
+// O sorteio puro pelo hash (07/10 a 14/10/2026). O Balcao usa alocarVariante desde 14/10;
+// esta fica porque o espelho TS e os testes do texto de cada letra a usam.
+function varianteDe(placeId, eua, lead) {
+  if (eua) return lead && lead.sem_demo ? null : { letra: 'EN', molde: VARIACAO_EN };
+  const comTexto = indicesElegiveis(lead);
+  if (!comTexto.length) return null;
+  const letra = LETRAS[comTexto[hashDoPlaceId(placeId) % comTexto.length]];
+  return { letra, molde: moldeDaLetra(letra, lead) };
+}
+
+// ---------------------------------------------------------------- A/B estratificado (14/10/2026)
+// Medido em 14/10/2026: 221 envios, A 41 (24% responderam), B 25 (8%), C 5; Fisher A x B
+// p = 0,11, e confundido: a B so e elegivel com nota boa (fatosDoGoogle) e a C so com Raio-X
+// (raioXDe), e o hash nao equilibrava nada por nicho (so advocacia teve amostra nas duas, e la
+// deu empate). Para o teste valer:
+// 1. a letra so e comparada entre leads com o MESMO conjunto de letras elegiveis, que vai para
+//    a coluna ab_elegiveis ("A", "AB", "AC", "ABC") junto com mensagem_variante;
+// 2. dentro de cada estrato (nicho x conjunto), a letra nova e a que tem MENOS leads ja
+//    atribuidos (minimizacao), contando todas as linhas da planilha com letra e conjunto
+//    validos (pronto, enviado, tudo; "manual", "EN" e vazio nao contam). Empate: o hash do
+//    place_id entre as empatadas (com o estrato vazio, e a regra antiga).
+// Congelamento: a letra salva fica enquanto o conjunto salvo (ab_elegiveis) for igual ao de
+// agora e contiver a letra. Mudou o conjunto (o Raio-X saiu depois e a C entrou, ou o Raio-X
+// sumiu) ou a linha nao tem conjunto (vazia, ou letra do sorteio antigo sem ab_elegiveis):
+// sorteia de novo, no estrato novo. Isso so acontece enquanto o lead e "pronto": o Balcao nunca
+// reescreve a letra de quem ja foi enviado, entao o que saiu nunca muda.
+const ELEGIVEIS_VALIDOS = /^A?B?C?$/;
+// "ab", " A B " ou "BA" valem "AB"; vazio ou com outra letra, ''.
+function normalizarElegiveis(valor) {
+  const t = String(valor === undefined || valor === null ? '' : valor).toUpperCase().replace(/[^A-Z]/g, '');
+  const letras = LETRAS.filter(l => t.indexOf(l) >= 0).join('');
+  return letras && letras.length === new Set(t).size && ELEGIVEIS_VALIDOS.test(letras) ? letras : '';
+}
+// O conjunto de letras do lead agora ("A", "AB", "AC", "ABC").
+function elegiveisDe(lead) { return indicesElegiveis(lead).map(i => LETRAS[i]).join(''); }
+// Nicho da coluna vertical, sem caixa, acento nem espaco sobrando; vazio e um estrato so.
+function estratoDoNicho(nicho) {
+  const t = semAcento(String(nicho || '').normalize('NFC')).toLowerCase().replace(/\s+/g, ' ').trim();
+  return t || 'sem nicho';
+}
+function chaveDoEstrato(nicho, elegiveis) { return estratoDoNicho(nicho) + '|' + elegiveis; }
+// A letra salva continua? So com o mesmo conjunto de agora e a letra dentro dele.
+function letraCongelada(elegiveis, salva) {
+  const letra = String((salva && salva.letra) || '').trim();
+  return Boolean(elegiveis) && normalizarElegiveis(salva && salva.elegiveis) === elegiveis
+    && LETRAS.indexOf(letra) >= 0 && elegiveis.indexOf(letra) >= 0 ? letra : '';
+}
+// { '<nicho>|<conjunto>': { A, B, C } } das linhas da planilha (vertical, mensagem_variante,
+// ab_elegiveis), sem as de `ignorar` (place_ids que vao ser sorteados de novo nesta rodada).
+function contarSorteios(linhas, ignorar) {
+  const contagens = {};
+  for (const l of linhas || []) {
+    if (!l || (ignorar && ignorar.has(String(l.place_id || '')))) continue;
+    const elegiveis = normalizarElegiveis(l.ab_elegiveis);
+    const letra = letraCongelada(elegiveis, { letra: l.mensagem_variante, elegiveis });
+    if (!letra) continue;
+    const chave = chaveDoEstrato(l.vertical, elegiveis);
+    contagens[chave] = contagens[chave] || { A: 0, B: 0, C: 0 };
+    contagens[chave][letra]++;
+  }
+  return contagens;
+}
+// PURA. { placeId, nicho, eua, lead, salva: { letra, elegiveis }, contagens } ->
+// { letra, molde, elegiveis, chave, congelada }. Nao mexe em `contagens`: quem sorteia varios
+// leads soma a letra devolvida na chave devolvida (alocarRodada faz isso).
+// EUA: "EN" e conjunto vazio (fora do teste). Um elegivel so (so A; ou so C, do lead sem demo):
+// essa letra, sem sorteio. null = nenhuma mensagem possivel, como em varianteDe (sem demo e sem
+// raio-x, ou sem demo nos EUA): o Balcao nao grava letra nem wa_link.
+function alocarVariante(p) {
+  if (p.eua) return p.lead && p.lead.sem_demo ? null : { letra: 'EN', molde: VARIACAO_EN, elegiveis: '', chave: '', congelada: false };
+  const elegiveis = elegiveisDe(p.lead);
+  if (!elegiveis) return null;
+  const chave = chaveDoEstrato(p.nicho, elegiveis);
+  const salva = letraCongelada(elegiveis, p.salva);
+  let letra = salva;
+  if (!letra) {
+    const ja = (p.contagens && p.contagens[chave]) || {};
+    const candidatas = elegiveis.split('');
+    const menor = Math.min(...candidatas.map(l => ja[l] || 0));
+    const empatadas = candidatas.filter(l => (ja[l] || 0) === menor);
+    letra = empatadas[hashDoPlaceId(p.placeId) % empatadas.length];
+  }
+  return { letra, molde: moldeDaLetra(letra, p.lead), elegiveis, chave, congelada: Boolean(salva) };
+}
+// PURA. Uma rodada do Balcao: `linhas` = todas as linhas da aba Leads; `pedidos` = os leads que
+// vao levar letra agora ({ placeId, nicho, eua, lead, salva }). Sorteia em ordem de place_id
+// (estavel, nao depende da ordem da planilha nem dos recibos) e soma cada letra nova antes do
+// proximo, para dois leads da mesma rodada nao cairem juntos na mesma letra.
+// Devolve { [placeId]: resultado de alocarVariante }.
+function alocarRodada(linhas, pedidos) {
+  const ordenados = (pedidos || []).slice().sort((a, b) => (String(a.placeId) < String(b.placeId) ? -1 : String(a.placeId) > String(b.placeId) ? 1 : 0));
+  const sorteiam = new Set(ordenados
+    .filter(p => !p.eua && !letraCongelada(elegiveisDe(p.lead), p.salva))
+    .map(p => String(p.placeId)));
+  const contagens = contarSorteios(linhas, sorteiam);
+  const saida = {};
+  for (const p of ordenados) {
+    const r = alocarVariante({ ...p, contagens });
+    saida[p.placeId] = r;
+    if (r && !r.congelada && r.chave) {
+      contagens[r.chave] = contagens[r.chave] || { A: 0, B: 0, C: 0 };
+      contagens[r.chave][r.letra]++;
+    }
+  }
+  return saida;
 }
 
 // A segunda mensagem: sai pelo aviso do Hermes e pela ficha do CRM quando a

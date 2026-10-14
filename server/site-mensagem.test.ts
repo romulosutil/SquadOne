@@ -205,3 +205,80 @@ describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
     assert.equal(doN8n.varianteDe("ChIJ0001x", true, { nota: 5, avaliacoes: 100, raio_x_url: "https://x.vercel.app/raio-x", raio_x_pontos: 2 }).letra, "EN");
   });
 });
+
+// 14/10/2026: o Balcão usa a alocação balanceada por nicho × letras elegíveis. Os casos completos
+// estão em site-antes-da-venda.py --testar (rodam o mesmo JS); aqui, o essencial roda no npm test.
+describe("site-mensagem: A/B estratificado (alocarRodada)", () => {
+  type Resultado = { letra: string; elegiveis: string; congelada: boolean; molde: string };
+  type Pedido = { placeId: string; nicho?: string; eua?: boolean; lead?: Record<string, unknown>; salva?: { letra?: string; elegiveis?: string } };
+  const js = vm.runInNewContext(`${codigo}\n;({ alocarRodada, normalizarElegiveis, elegiveisDe, varianteDe })`, {}) as {
+    alocarRodada: (linhas: Array<Record<string, unknown>>, pedidos: Pedido[]) => Record<string, Resultado>;
+    normalizarElegiveis: (v: unknown) => string;
+    elegiveisDe: (lead: Record<string, unknown>) => string;
+    varianteDe: (placeId: string, eua: boolean, lead?: Record<string, unknown>) => { letra: string } | null;
+  };
+  const ABC = { nota: "4.9", avaliacoes: "34", raio_x_url: "https://demo-x.vercel.app/raio-x", raio_x_pontos: 2 };
+  const AB = { nota: "4.9", avaliacoes: "34" };
+  const conta = (r: Record<string, Resultado>) => ["A", "B", "C"].map((x) => Object.values(r).filter((v) => v.letra === x).length);
+
+  it("o conjunto elegível e a coluna normalizada", () => {
+    assert.equal(js.elegiveisDe({}), "A");
+    assert.equal(js.elegiveisDe(AB), "AB");
+    assert.equal(js.elegiveisDe({ raio_x_url: ABC.raio_x_url, raio_x_pontos: 1 }), "AC");
+    assert.equal(js.elegiveisDe(ABC), "ABC");
+    for (const [v, esperado] of [["ab", "AB"], [" B A ", "AB"], ["CBA", "ABC"], ["AXB", ""], ["", ""], [null, ""], ["manual", ""]] as const) {
+      assert.equal(js.normalizarElegiveis(v), esperado, String(v));
+    }
+  });
+
+  it("30 leads num nicho: as três letras com diferença de no máximo 1", () => {
+    const r = js.alocarRodada([], Array.from({ length: 30 }, (_, i) => ({ placeId: `p${i}`, nicho: "advocacia", lead: ABC })));
+    assert.deepEqual(conta(r), [10, 10, 10]);
+  });
+
+  it("a contagem vem da planilha (enviados contam; manual, EN e letra fora do conjunto não)", () => {
+    const linhas = [
+      { place_id: "e1", vertical: "Advocacia", mensagem_variante: "A", ab_elegiveis: "AB", status: "enviado" },
+      { place_id: "m", vertical: "advocacia", mensagem_variante: "manual", ab_elegiveis: "AB" },
+      { place_id: "en", vertical: "advocacia", mensagem_variante: "EN", ab_elegiveis: "AB" },
+      { place_id: "fora", vertical: "advocacia", mensagem_variante: "C", ab_elegiveis: "AB" },
+    ];
+    assert.equal(js.alocarRodada(linhas, [{ placeId: "novo", nicho: "advocacia ", lead: AB }]).novo.letra, "B");
+    // Outro nicho não sente a contagem de advocacia: estrato vazio = o hash de sempre.
+    assert.equal(js.alocarRodada(linhas, [{ placeId: "novo", nicho: "contabilidade", lead: AB }]).novo.letra, js.varianteDe("novo", false, AB)?.letra);
+  });
+
+  it("congela com o mesmo conjunto; sorteia de novo se o conjunto mudou ou não existe", () => {
+    const linhas = Array.from({ length: 4 }, (_, i) => ({ place_id: `b${i}`, vertical: "x", mensagem_variante: "B", ab_elegiveis: "AB" }));
+    const fica = js.alocarRodada(linhas, [{ placeId: "l", nicho: "x", lead: AB, salva: { letra: "B", elegiveis: "AB" } }]).l;
+    assert.deepEqual([fica.letra, fica.congelada], ["B", true]);
+    const antigo = js.alocarRodada(linhas, [{ placeId: "l", nicho: "x", lead: AB, salva: { letra: "B", elegiveis: "" } }]).l;
+    assert.deepEqual([antigo.letra, antigo.congelada], ["A", false]);
+    const perdeu = js.alocarRodada([], [{ placeId: "l", nicho: "x", lead: AB, salva: { letra: "C", elegiveis: "ABC" } }]).l;
+    assert.equal(perdeu.elegiveis, "AB");
+    assert.notEqual(perdeu.letra, "C");
+  });
+
+  it("sem demo (demo sob pedido): só a C, sem sorteio; sem raio-x ou nos EUA, nenhuma mensagem (null)", () => {
+    const r = js.alocarRodada([], [
+      { placeId: "c", nicho: "x", lead: { ...ABC, sem_demo: true } },
+      { placeId: "nada", nicho: "x", lead: { ...AB, sem_demo: true } },
+      { placeId: "us", eua: true, lead: { ...ABC, sem_demo: true } },
+    ]);
+    assert.deepEqual([r.c?.letra, r.c?.elegiveis, r.c?.congelada], ["C", "C", false]);
+    assert.equal(r.nada as Resultado | null, null);
+    assert.equal(r.us as Resultado | null, null);
+    assert.equal(js.elegiveisDe({ ...ABC, sem_demo: true }), "C");
+    assert.equal(js.elegiveisDe({ ...AB, sem_demo: true }), "");
+    assert.equal(js.varianteDe("nada", false, { ...AB, sem_demo: true }), null);
+  });
+
+  it("EUA fica em EN sem conjunto; só A não sorteia; nicho vazio é um estrato só", () => {
+    const r = js.alocarRodada([{ place_id: "v", vertical: "", mensagem_variante: "A", ab_elegiveis: "AB" }], [
+      { placeId: "us", eua: true, lead: ABC }, { placeId: "so-a", nicho: "x", lead: {} }, { placeId: "sem", lead: AB },
+    ]);
+    assert.deepEqual([r.us.letra, r.us.elegiveis], ["EN", ""]);
+    assert.deepEqual([r["so-a"].letra, r["so-a"].elegiveis], ["A", "A"]);
+    assert.equal(r.sem.letra, "B");
+  });
+});
