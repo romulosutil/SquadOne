@@ -20,7 +20,7 @@ import type { CrmEtapa, CrmProduto, CrmSinal, CrmTipoDeResposta } from './types'
 
 // ------------------------------------------------------------------ tipos
 
-export type IdDoServico = 'raio-x' | 'mapa' | 'encontrado' | 'respondido' | 'fonte' | 'fonte-em-dia'
+export type IdDoServico = 'raio-x' | 'mapa' | 'encontrado' | 'respondido' | 'anuncios' | 'redes' | 'fonte' | 'fonte-em-dia'
 
 /** As três etapas da oferta, nesta ordem (09/10/2026): ver o problema, arrumar, manter arrumado. */
 export type EtapaDaOferta = 'ver' | 'arrumar' | 'manter'
@@ -155,6 +155,26 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     paraQuem: 'Quem já tem site e perde cliente no WhatsApp: demora para responder, ninguém responde fora do horário, orçamento pedido que some.',
   },
   {
+    id: 'anuncios',
+    nome: 'Anúncios',
+    etapa: 'arrumar',
+    tipo: 'produto',
+    entrega: 'Criamos e cuidamos dos anúncios no Google ou no Instagram, e todo mês mostramos quantas pessoas chamaram por causa deles. A verba do anúncio vai direto para a plataforma, sem passar pelo PRUMO.',
+    preco: 'R$ 590/mês',
+    condicao: 'Google ou Instagram; R$ 390 a mais pelos dois; mínimo de 3 meses',
+    paraQuem: 'Quem já tem site e perfil do Google em dia e precisa de mais gente chamando: o Raio-X mostra poucas buscas ou pouca gente chegando. Depois do Raio-X, nunca no WhatsApp frio.',
+  },
+  {
+    id: 'redes',
+    nome: 'Redes sociais',
+    etapa: 'arrumar',
+    tipo: 'produto',
+    entrega: 'Instagram e Facebook em dia: 8 posts por mês e stories toda semana, feitos com as fotos e os serviços da empresa e publicados depois da aprovação do dono.',
+    preco: 'R$ 790/mês',
+    condicao: 'mínimo de 3 meses; depois, cancela quando quiser',
+    paraQuem: 'Quem tem perfil parado ou sem padrão e perde confiança de quem confere antes de chamar. Depois do Raio-X, quando ele mostra rede social abandonada.',
+  },
+  {
     id: 'fonte',
     nome: 'Fonte',
     etapa: 'arrumar',
@@ -202,7 +222,7 @@ export function precoParaOCliente(s: ServicoDoCardapio): string {
 // favor ao cliente.
 
 /** Todo "R$" que a colinha pode mostrar. Fora desta lista, o teste falha. */
-export const PRECOS_DO_CARDAPIO: string[] = ['R$ 690', 'R$ 39', 'R$ 2.400', 'R$ 290', 'R$ 1.500', 'R$ 190']
+export const PRECOS_DO_CARDAPIO: string[] = ['R$ 690', 'R$ 39', 'R$ 2.400', 'R$ 290', 'R$ 590', 'R$ 390', 'R$ 790', 'R$ 1.500', 'R$ 190']
 
 const SITE: CrmProduto[] = ['site']
 const PRUMO: CrmProduto[] = ['prumo']

@@ -306,6 +306,8 @@ describe('hierarquia: ver, arrumar, manter', () => {
       ['mapa', 'ver', 'diagnostico'],
       ['encontrado', 'arrumar', 'produto'],
       ['respondido', 'arrumar', 'produto'],
+      ['anuncios', 'arrumar', 'produto'],
+      ['redes', 'arrumar', 'produto'],
       ['fonte', 'arrumar', 'projeto'],
       ['fonte-em-dia', 'manter', 'mensalidade'],
     ])
@@ -319,6 +321,8 @@ describe('hierarquia: ver, arrumar, manter', () => {
       ['mapa', 'grátis', ''],
       ['encontrado', 'R$ 690', 'R$ 39/mês'],
       ['respondido', 'R$ 2.400', 'R$ 290/mês'],
+      ['anuncios', 'R$ 590/mês', ''],
+      ['redes', 'R$ 790/mês', ''],
       ['fonte', 'R$ 1.500', ''],
       ['fonte-em-dia', 'R$ 190/mês', ''],
     ])
