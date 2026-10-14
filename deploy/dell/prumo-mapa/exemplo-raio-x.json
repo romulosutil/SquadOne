@@ -1,0 +1,329 @@
+{
+ "_como_usar": "Raio-X feito à mão (piloto CDL). Empresa FICTÍCIA, com os números do slide 5 do pitch para a CDL. Para um associado de verdade: copie este arquivo, troque os dados pelo que foi conferido no Google, no site, no Instagram e na Biblioteca de Anúncios, ponha \"exemplo\": false e rode gerar.py. A nota de presença sai do cálculo PRUMO (05-entrega-mapa/calculo-prumo.md); nada aqui é somado à mão.",
+ "exemplo": true,
+ "nome": "Odonto Maré",
+ "ramo": "Clínica odontológica",
+ "cidade": "Guarapari",
+ "lido_em": "13/10/2026",
+ "equipe": "12 pessoas",
+ "google": {
+  "nota": 4.8,
+  "avaliacoes": 41,
+  "horario": "segunda a sexta, 8h às 19h · sábado, 8h às 12h",
+  "telefone": "celular",
+  "categoria": "Dentista",
+  "fotos_total": 6,
+  "fotos_da_empresa": 4,
+  "fotos_detalhe": "6 no perfil, 4 publicadas por vocês. Em dia, mas poucas: veja a comparação com os 3 primeiros"
+ },
+ "buscas": [
+  {
+   "consulta": "dentista em Guarapari",
+   "posicao": 6,
+   "lidos": 20,
+   "concorrentes": [
+    {
+     "id": "a",
+     "nome": "Clínica A",
+     "nota": 4.9,
+     "avaliacoes": 112,
+     "site": "proprio",
+     "anuncio": true
+    },
+    {
+     "id": "b",
+     "nome": "Clínica B",
+     "nota": 4.7,
+     "avaliacoes": 138,
+     "site": "proprio",
+     "anuncio": true
+    },
+    {
+     "id": "c",
+     "nome": "Clínica C",
+     "nota": 4.6,
+     "avaliacoes": 97,
+     "site": "proprio",
+     "anuncio": false
+    },
+    {
+     "id": "d",
+     "nome": "Consultório D",
+     "nota": 5.0,
+     "avaliacoes": 64,
+     "site": "rede",
+     "anuncio": false
+    },
+    {
+     "id": "e",
+     "nome": "Clínica E",
+     "nota": 4.5,
+     "avaliacoes": 121,
+     "site": "proprio",
+     "anuncio": false
+    }
+   ]
+  },
+  {
+   "consulta": "clínica odontológica em Guarapari",
+   "posicao": 5,
+   "lidos": 20,
+   "concorrentes": [
+    {
+     "id": "b",
+     "nome": "Clínica B",
+     "nota": 4.7,
+     "avaliacoes": 138
+    },
+    {
+     "id": "c",
+     "nome": "Clínica C",
+     "nota": 4.6,
+     "avaliacoes": 97
+    },
+    {
+     "id": "a",
+     "nome": "Clínica A",
+     "nota": 4.9,
+     "avaliacoes": 112
+    },
+    {
+     "id": "e",
+     "nome": "Clínica E",
+     "nota": 4.5,
+     "avaliacoes": 121
+    },
+    {
+     "id": "f",
+     "nome": "Clínica F",
+     "nota": 4.6,
+     "avaliacoes": 52
+    }
+   ]
+  },
+  {
+   "consulta": "implante dentário em Guarapari",
+   "posicao": 12,
+   "lidos": 20,
+   "concorrentes": [
+    {
+     "id": "g",
+     "nome": "Clínica G",
+     "nota": 4.4,
+     "avaliacoes": 88
+    },
+    {
+     "id": "a",
+     "nome": "Clínica A",
+     "nota": 4.9,
+     "avaliacoes": 112
+    },
+    {
+     "id": "b",
+     "nome": "Clínica B",
+     "nota": 4.7,
+     "avaliacoes": 138
+    },
+    {
+     "id": "h",
+     "nome": "Clínica H",
+     "nota": 4.8,
+     "avaliacoes": 73
+    },
+    {
+     "id": "c",
+     "nome": "Clínica C",
+     "nota": 4.6,
+     "avaliacoes": 97
+    }
+   ]
+  }
+ ],
+ "respostas": {
+  "lidas": 5,
+  "respondidas": 1
+ },
+ "perfil": {
+  "horario": "ok",
+  "fotos": "ok",
+  "categoria": "ok",
+  "telefone": "ok",
+  "site": "falta"
+ },
+ "site": {
+  "tipo": "nenhum"
+ },
+ "avaliacoes_recentes": [
+  {
+   "nota": 5,
+   "texto": "Atendimento muito atencioso desde a recepção. A doutora explicou cada etapa do tratamento com calma e mostrou o orçamento antes de começar.",
+   "autor": "Luciana M.",
+   "quando": "há 2 semanas"
+  },
+  {
+   "nota": 5,
+   "texto": "Profissionais excelentes e muito educados. Fiz canal e não senti nada. Recomendo!",
+   "autor": "Rafael S.",
+   "quando": "há 1 mês"
+  },
+  {
+   "nota": 5,
+   "texto": "Equipe acolhedora, clínica limpa e organizada. Meus filhos adoram vir.",
+   "autor": "Patrícia O.",
+   "quando": "há 1 mês"
+  },
+  {
+   "nota": 3,
+   "texto": "O tratamento foi bom, mas demorei dois dias para conseguir resposta no WhatsApp para remarcar.",
+   "autor": "Gustavo R.",
+   "quando": "há 2 meses"
+  },
+  {
+   "nota": 5,
+   "texto": "Bom atendimento e preço justo. Explicaram tudo direitinho sobre o clareamento.",
+   "autor": "Fernanda L.",
+   "quando": "há 3 meses"
+  }
+ ],
+ "bons": [
+  {
+   "titulo": "Nota 4,8, maior que a de 3 dos 5 primeiros da busca",
+   "porque": "Procuramos “dentista em Guarapari”: vocês têm 4,8; os outros vão de 4,5 a 5,0. Quem já foi atendido gostou, e é o que mais pesa quando alguém escolhe entre duas clínicas."
+  },
+  {
+   "titulo": "4 de 5 avaliações elogiam o atendimento",
+   "porque": "Nas avaliações que o Google mostra primeiro, quatro falam de atenção, cuidado e explicação clara. É o que o paciente novo lê antes de chamar."
+  },
+  {
+   "titulo": "Horário, telefone e categoria em dia no perfil",
+   "porque": "Quem procura sabe se vocês estão abertos, liga ou chama no WhatsApp com um toque e entende na hora que é dentista."
+  }
+ ],
+ "pontos": [
+  {
+   "titulo": "O perfil do Google não tem site",
+   "porque": "Quem procura dentista em Guarapari compara duas ou três clínicas antes de chamar. Os 3 primeiros da busca mostram site próprio, com tratamentos, fotos e botão de WhatsApp. Vocês aparecem só com nome e nota, e quem compara escolhe quem mostra mais."
+  },
+  {
+   "titulo": "41 avaliações, menos da metade do que os primeiros da busca têm",
+   "porque": "Entre duas clínicas com nota parecida, o paciente confia em quem tem mais avaliações. Os 3 primeiros de “dentista em Guarapari” têm 112 no meio da lista; contando as 8 clínicas das três buscas, 93. E só 1 das 5 avaliações mais recentes tem resposta de vocês: quem lê a reclamação do WhatsApp não vê o outro lado."
+  },
+  {
+   "titulo": "12º lugar em “implante dentário em Guarapari”",
+   "porque": "Implante é o tratamento de maior valor da clínica, e quem procura por ele hoje não chega em vocês sem rolar a lista. Em “dentista em Guarapari” vocês estão em 6º; em “clínica odontológica em Guarapari”, em 5º. Duas clínicas anunciam no Google para essa busca; vocês não."
+  }
+ ],
+ "comparacao": {
+  "busca": "dentista em Guarapari",
+  "linhas": [
+   {
+    "item": "Nota no Google",
+    "voces": "4,8",
+    "eles": "4,9 · 4,7 · 4,6",
+    "perde": false
+   },
+   {
+    "item": "Avaliações",
+    "voces": "41",
+    "eles": "112",
+    "nota_eles": "no meio dos 3",
+    "perde": true
+   },
+   {
+    "item": "Fotos no perfil",
+    "voces": "6",
+    "eles": "45",
+    "nota_eles": "no meio dos 3",
+    "perde": true
+   },
+   {
+    "item": "Site próprio",
+    "voces": "não",
+    "eles": "3 de 3",
+    "perde": true
+   },
+   {
+    "item": "Anúncio no Google ou no Instagram",
+    "voces": "não",
+    "eles": "2 de 3",
+    "perde": true
+   },
+   {
+    "item": "Responde às avaliações",
+    "voces": "1 de 5",
+    "eles": "—",
+    "nota_eles": "conferido só em vocês",
+    "perde": true
+   }
+  ],
+  "frase": "Quem compara, escolhe o outro."
+ },
+ "redes": [
+  {
+   "estado": "ok",
+   "item": "Instagram",
+   "detalhe": "1.180 seguidores. O link da bio leva direto ao WhatsApp da clínica."
+  },
+  {
+   "estado": "falta",
+   "item": "Instagram ativo",
+   "detalhe": "último post há 46 dias; 3 posts nos últimos 90 dias. Dois dos 3 primeiros da busca postam toda semana."
+  },
+  {
+   "estado": "falta",
+   "item": "Antes e depois",
+   "detalhe": "nenhum destaque com casos ou tratamentos. É o que quem procura implante e clareamento quer ver."
+  },
+  {
+   "estado": "falta",
+   "item": "Facebook",
+   "detalhe": "a página existe, mas o último post é de 2024."
+  }
+ ],
+ "anuncios": [
+  {
+   "estado": "falta",
+   "item": "Google",
+   "detalhe": "nenhum anúncio de vocês em “dentista em Guarapari” nem em “implante dentário em Guarapari”. Na busca de implante, dois anúncios aparecem acima do mapa."
+  },
+  {
+   "estado": "falta",
+   "item": "Instagram e Facebook",
+   "detalhe": "nenhum anúncio ativo na Biblioteca de Anúncios da Meta. Das 3 primeiras clínicas da busca, 2 têm anúncio rodando, de implante e de clareamento."
+  }
+ ],
+ "o_que_fazer": [
+  {
+   "n": "01",
+   "titulo": "Um site ligado ao botão “Site” do Google",
+   "texto": "Tratamentos, fotos da clínica, as avaliações e o botão de WhatsApp numa página que abre bem no celular. É o que fecha a distância para os 3 primeiros.",
+   "quem": "Um fornecedor de site de vocês, ou o PRUMO."
+  },
+  {
+   "n": "02",
+   "titulo": "Pedir avaliação na saída e responder todas",
+   "texto": "Um cartão no balcão com o QR do perfil e cinco minutos por dia para responder, inclusive as antigas. Dá para fazer sozinhos, sem contratar ninguém.",
+   "quem": "Vocês mesmos, a partir de amanhã."
+  },
+  {
+   "n": "03",
+   "titulo": "Aparecer para quem procura implante",
+   "texto": "Uma página só de implante no site e um anúncio no Google para “implante dentário em Guarapari”. É o tratamento de maior valor e a busca em que vocês estão mais longe.",
+   "quem": "Quem cuida dos anúncios de vocês, ou o PRUMO."
+  }
+ ],
+ "mapa_link": "https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform",
+ "servicos_motivo": {
+  "site": "No Raio-X: o perfil não tem site; os 3 primeiros têm.",
+  "trafego": "No Raio-X: 12º em “implante dentário em Guarapari”; 2 dos 3 primeiros anunciam.",
+  "redes": "No Raio-X: o último post é de 46 dias atrás.",
+  "produtos": "No Raio-X: uma avaliação recente reclama de dois dias sem resposta no WhatsApp."
+ },
+ "bons_fecho": "Vocês já têm o que é mais difícil de conseguir: paciente satisfeito. Falta mostrar isso a quem ainda não chegou.",
+ "mapa_exemplo_url": "/mapa",
+ "termos": {
+  "cliente": "paciente",
+  "clientes": "pacientes",
+  "empresa": "clínica"
+ }
+}

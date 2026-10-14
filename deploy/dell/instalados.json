@@ -42,6 +42,7 @@
     {"repo": "deploy/dell/prumo-mapa/calculo_prumo.py", "instalado": "~/.local/share/prumo-mapa/"},
     {"repo": "deploy/dell/prumo-mapa/archivo.woff2", "instalado": "~/.local/share/prumo-mapa/"},
     {"repo": "deploy/dell/prumo-mapa/precos.json", "instalado": "~/.local/share/prumo-mapa/"},
+    {"repo": "deploy/dell/prumo-mapa/exemplo-raio-x.json", "instalado": "~/.local/share/prumo-mapa/"},
     {"repo": "deploy/dell/funil-aprendizado.py", "instalado": "~/.local/bin/funil-aprendizado"},
     {"repo": "deploy/dell/hermes-uso-skills.py", "instalado": "~/.local/bin/hermes-uso-skills"},
     {"repo": "deploy/dell/claude-ops/*.py", "instalado": "~/.local/share/claude-ops/"},

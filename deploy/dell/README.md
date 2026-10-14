@@ -1547,9 +1547,11 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
     `04-venda/piloto-cdl/precos.json`: Site R$ 690 + R$ 39/mês, Anúncios,
     Redes e WhatsApp que responde). O motivo de cada serviço só sai quando há
     dado (site e anúncios sempre; WhatsApp com o horário; redes, não).
-  - **A trava do piloto** (`conferir_raio_x`, `conferir_pagina`): exatamente 3
-    buscas, 3 pontos com 150+ letras e um número, 3 bons, 3 coisas, 3
-    avaliações lidas, 4 linhas na comparação, nada de vocabulário interno.
+  - **A trava do piloto** (`conferir_raio_x`, `conferir_pagina`,
+    `conferir_esqueleto`): exatamente 3 buscas, 3 pontos com 150+ letras e um
+    número, 3 bons, 3 coisas, 3 avaliações lidas, 4 linhas na comparação, nada
+    de vocabulário interno, e os mesmos blocos, na mesma ordem, da página do
+    exemplo do piloto sem equipe (o JSON dele em `prumo-mapa/exemplo-raio-x.json`).
     Abaixo disso, `AbaixoDoPadrao` e não há Raio-X (o `--pendentes` passa para
     o próximo; o Raio-X da versão anterior, se existe, continua no ar). Lead
     com só 2 pontos verificáveis fica sem Raio-X novo.
@@ -1566,12 +1568,13 @@ python3 deploy/dell/prumo-mapa/calculo_prumo.test.py   # o método: limiares, Va
 ```
 
 Instalar (numa sessão no Dell, ou `dell-status --instalados`; o `calculo_prumo.py`,
-o `modelo_raio_x.py` e o `precos.json` antes do raio-x, que os importa):
+o `modelo_raio_x.py`, o `precos.json` e o `exemplo-raio-x.json` antes do raio-x, que os lê):
 
 ```bash
 install -D -m 644 deploy/dell/prumo-mapa/calculo_prumo.py ~/.local/share/prumo-mapa/calculo_prumo.py
 install -D -m 644 deploy/dell/prumo-mapa/modelo_raio_x.py ~/.local/share/prumo-mapa/modelo_raio_x.py
 install -D -m 644 deploy/dell/prumo-mapa/precos.json ~/.local/share/prumo-mapa/precos.json
+install -D -m 644 deploy/dell/prumo-mapa/exemplo-raio-x.json ~/.local/share/prumo-mapa/exemplo-raio-x.json
 install -m 755 deploy/dell/raio-x.py ~/.local/bin/raio-x
 install -m 755 deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
 cp deploy/dell/raio-x.{service,timer} ~/.config/systemd/user/

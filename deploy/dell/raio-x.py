@@ -132,6 +132,12 @@ try:
     PRECOS = json.loads((PASTA_PRUMO / "precos.json").read_text(encoding="utf-8")) if PASTA_PRUMO else None
 except (OSError, ValueError):
     PRECOS = None
+# O exemplo do piloto (raio-x-odonto-mare.json): a página dele, sem equipe, é o esqueleto que toda página
+# daqui tem de ter (os mesmos blocos, na mesma ordem; conferir_esqueleto do piloto).
+try:
+    EXEMPLO = json.loads((PASTA_PRUMO / "exemplo-raio-x.json").read_text(encoding="utf-8")) if PASTA_PRUMO else None
+except (OSError, ValueError):
+    EXEMPLO = None
 
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
@@ -1270,9 +1276,9 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool) -> str:
     """A página no modelo aprovado do piloto CDL (versão 5): o diagnóstico vira o raio-x.json do piloto
     (dados_do_modelo) e o modelo_raio_x desenha, com a mesma trava de qualidade. Abaixo do padrão,
     AbaixoDoPadrao com o que falta. A fonte embutida vem de FONTE (sem ela, a Arial Narrow)."""
-    if not (calculo_prumo and modelo_raio_x and PRECOS):
-        raise AbaixoDoPadrao("faltam calculo_prumo.py, modelo_raio_x.py ou precos.json em prumo-mapa/ "
-                             "(instale: dell-status --instalados)")
+    if not (calculo_prumo and modelo_raio_x and PRECOS and EXEMPLO):
+        raise AbaixoDoPadrao("faltam calculo_prumo.py, modelo_raio_x.py, precos.json ou exemplo-raio-x.json em "
+                             "prumo-mapa/ (instale: dell-status --instalados)")
     modelo = dados_do_modelo(dados, diag)
     erros = modelo_raio_x.conferir_raio_x(modelo, PRECOS, automatico=True)
     if erros:
@@ -1289,8 +1295,10 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool) -> str:
                    '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">',
                    '<meta name="twitter:card" content="summary_large_image">']
     modelo["cabeca"], modelo["corpo_attr"] = "".join(cabeca), MARCA
-    doc, _ = modelo_raio_x.raio_x(modelo, sys.modules[__name__], calculo_prumo, PRECOS)
-    erros = modelo_raio_x.conferir_pagina(doc)
+    rx = sys.modules[__name__]
+    doc, _ = modelo_raio_x.raio_x(modelo, rx, calculo_prumo, PRECOS)
+    molde, _ = modelo_raio_x.raio_x({**EXEMPLO, "mapa_link": ""}, rx, calculo_prumo, PRECOS)
+    erros = modelo_raio_x.conferir_pagina(doc) + modelo_raio_x.conferir_esqueleto(doc, molde)
     if erros:
         raise AbaixoDoPadrao("; ".join(erros))
     return doc
@@ -1785,8 +1793,8 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.testar:
         return testar()
-    if not (calculo_prumo and modelo_raio_x and PRECOS):
-        log("calculo_prumo.py, modelo_raio_x.py ou precos.json não encontrado (nem em prumo-mapa/ ao lado nem em "
+    if not (calculo_prumo and modelo_raio_x and PRECOS and EXEMPLO):
+        log("calculo_prumo.py, modelo_raio_x.py, precos.json ou exemplo-raio-x.json não encontrado (nem em prumo-mapa/ ao lado nem em "
             "~/.local/share/prumo-mapa/): nenhum Raio-X sai. Instale: dell-status --instalados.")
     if a.html:
         try:
@@ -2074,6 +2082,15 @@ def testar() -> int:
             self.assertNotIn("Responder as 16 perguntas", h)
             # O vocabulário interno e a fórmula da nota não aparecem (a trava do modelo).
             self.assertEqual(modelo_raio_x.conferir_pagina(h), [])
+
+        def test_mesmo_esqueleto_do_exemplo_do_piloto(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
+            molde, _ = modelo_raio_x.raio_x({**EXEMPLO, "mapa_link": ""}, sys.modules[__name__], calculo_prumo, PRECOS)
+            self.assertEqual(modelo_raio_x.conferir_esqueleto(h, molde), [])
+            # Um bloco a menos (a comparação vazia, por exemplo) e a página não sai.
+            sem = h.replace('<div class="comparacao">', '<div class="outra">')
+            self.assertIn("falta o bloco “div.comparacao”, que o exemplo tem", modelo_raio_x.conferir_esqueleto(sem, molde))
 
     class Profundo(unittest.TestCase):
         """Versão 2: Places, avaliações, demo e checklist (tudo PURO)."""

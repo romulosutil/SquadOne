@@ -8,7 +8,12 @@ a página sai byte a byte igual à do `gerar.py`; as chaves de GANCHOS (todas op
 automático precisa a mais, porque só lê o Google: o lede e o método dizem isso, o checklist do perfil
 marca "não conferido" e as avaliações são as que o Google mostra primeiro.
 
-Mudou aqui, muda no piloto (e o contrário): refaça o exemplo nos dois e compare.
+A trava também é a do piloto: `conferir_raio_x`, `conferir_pagina` e `conferir_esqueleto` (os mesmos blocos, na
+mesma ordem, da página do exemplo; o Dell guarda o JSON do exemplo em `exemplo-raio-x.json`).
+
+Este arquivo sai do `gerar.py` (copiado, com os ganchos): mudou o Raio-X lá, refaça este e rode o
+`conferir_squadone.py` do piloto, que exige os mesmos bytes nas duas vias. Refazer este arquivo:
+`python modelo_para_squadone.py gerar.py <este arquivo>`, no piloto.
 
 `rx` é o módulo do `raio-x.py` (CSS, JS_PAGINA, detalhe, secao_avaliacoes, temas_das_avaliacoes, numero,
 fonte_css, FONTE, FONTE_RANKING); `cp` é o `calculo_prumo`; `precos` é o `precos.json` do piloto.
@@ -136,7 +141,6 @@ text-decoration:underline;text-decoration-color:var(--brasa);text-decoration-thi
 .servicos-curto a:focus-visible,.link-escuro:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
 @media (min-width:640px){.servicos-curto li{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px}}
 /* A nota, sem a fórmula */
-.calculo h3{font-size:19px;line-height:1.2;font-weight:800}
 .faixas-nota{list-style:none;margin-top:14px;display:grid;gap:8px}
 .faixas-nota li{padding:10px 12px;border:2px solid var(--pedra-400)}
 .faixas-nota li.atual{border-color:var(--ferro-900);background:var(--pedra-200)}
@@ -149,7 +153,6 @@ text-decoration:underline;text-decoration-color:var(--brasa);text-decoration-thi
 .escapa strong{white-space:nowrap}
 h4.grupo{margin-top:20px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--pedra-600)}
 /* Mapa */
-.nota .num.reais{font-size:clamp(40px,12vw,56px);white-space:nowrap}
 .bloco h3.sub{font-size:20px;line-height:1.2;font-weight:800;margin-top:28px}
 .bloco .regras + .intro,.bloco h3.sub + .intro{margin-top:8px}
 .dinheiro{list-style:none;margin-top:16px;border-top:2px solid var(--ferro-900)}
@@ -233,7 +236,7 @@ line-height:1.35;max-width:440px}
 # A lista é fixa, não sai do conteúdo de cada página: assim todo lead leva o mesmo estilo.css.
 CSS_SEM_USO = (".presenca .placar .escala", ".presenca .blocos", ".presenca .blocos li", ".presenca .blocos .cab",
                ".presenca .blocos .cab span", ".presenca .blocos .cab b", ".presenca .blocos .trilho",
-               ".presenca .blocos .nm .cab b", ".presenca .blocos .nm .trilho", ".presenca .blocos p", ".calculo h4")
+               ".presenca .blocos .nm .cab b", ".presenca .blocos .nm .trilho", ".presenca .blocos p")
 
 
 def css_da_pagina(css: str) -> str:
@@ -244,6 +247,10 @@ def css_da_pagina(css: str) -> str:
         css, n = re.subn(r"(?:(?<=[{}\n])|^)" + re.escape(sel) + r"\{[^{}]*\}\n?", "", css)
         if not n:
             raise ValueError(f"CSS do SquadOne mudou: não achei “{sel}”")
+    # O título da calculadora aqui é h3 (lá era h4): a mesma regra, no mesmo lugar.
+    css, n = re.subn(r"(?<=[}\n])\.calculo h4\{", ".calculo h3{", css)
+    if n != 1:
+        raise ValueError("CSS do SquadOne mudou: não achei “.calculo h4”")
     return re.sub(r"@media[^{}]*\{\s*\}\n?", "", css)
 
 
@@ -577,8 +584,6 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
 
 # ------------------------------------------------------------------ o padrão (a trava de qualidade)
 
-# Todo Raio-X e todo Mapa saem no nível do exemplo da Odonto Maré, ou não saem. A conferência roda
-# antes de gerar (os JSON) e depois (o texto da página); qualquer item impede a página.
 PROIBIDAS = ("trava", "delegáv", "alçada", "mediana", "cálculo prumo", "de 0 a 3", "vale a pior",
              "mais baixa", "regra do min", "índice do prumo", "proporcional", "<<")
 
@@ -652,3 +657,81 @@ def conferir_pagina(doc: str) -> list[str]:
     texto = re.sub(r"<script.*?</script>|<style.*?</style>", " ", doc, flags=re.S)
     texto = html.unescape(re.sub(r"<[^>]+>", " ", texto)).lower()
     return [f"a página diz “{p}”: vocabulário interno, fórmula da nota ou campo do modelo" for p in PROIBIDAS if p in texto]
+
+
+# Campos do exemplo que um lead não tem: o aviso de exemplo, os links entre as páginas do exemplo e,
+# no Raio-X, o mapa_link (vazio é o Raio-X sem equipe, a outra variante do molde).
+SO_DO_EXEMPLO = {"_como_usar", "_conferir", "exemplo", "origem", "raio_x_url", "mapa_link", "mapa_exemplo_url", "versao"}
+# Vazio também é resposta: a busca em que a empresa não aparece entre as lidas não tem posição.
+PODEM_FICAR_VAZIOS = {"posicao"}
+
+
+def vazio(v) -> bool:
+    return v is None or v == "" or v == [] or v == {}
+
+
+def molde_raio_x(exemplo: dict, lead: dict) -> dict:
+    """Sem equipe (mapa_link vazio), o Raio-X não convida para o Mapa e não fala da equipe."""
+    return exemplo if lead.get("mapa_link") else {k: v for k, v in exemplo.items() if k != "equipe"}
+
+
+def conferir_campos(lead: dict, exemplo: dict, caminho: str = "") -> list[str]:
+    """Todo campo que o exemplo preenche, o lead preenche: um campo vazio é um parágrafo ou um bloco que
+    some da página sem erro nenhum. Nas listas, cada item do lead tem os campos que todos os itens do
+    exemplo têm."""
+    erros = []
+    for k, v in exemplo.items():
+        if k in SO_DO_EXEMPLO or k in PODEM_FICAR_VAZIOS or vazio(v):
+            continue
+        onde = f"{caminho}.{k}" if caminho else k
+        x = lead.get(k) if isinstance(lead, dict) else None
+        if vazio(x):
+            erros.append(f"{onde}: vazio, e o exemplo preenche (o bloco sumiria da página)")
+        elif isinstance(v, dict) and isinstance(x, dict):
+            erros += conferir_campos(x, v, onde)
+        elif isinstance(v, list) and isinstance(x, list) and v and all(isinstance(i, dict) for i in v):
+            comuns = {c for c in v[0] if c not in PODEM_FICAR_VAZIOS and all(not vazio(i.get(c)) for i in v)}
+            erros += [f"{onde}[{n}].{c}: vazio, e no exemplo todo item tem" for n, i in enumerate(x)
+                      if isinstance(i, dict) for c in sorted(comuns) if vazio(i.get(c))]
+    return erros
+
+
+# Classes que aparecem ou não conforme a empresa (o dado), e não conforme o modelo: ficam fora do esqueleto.
+CLASSES_DO_DADO = {"exemplo", "pior", "atual", "voces", "perde", "sem", "ok", "falta", "nc", "vive", "duvida", "nada",
+                   "principal", "selo", "nao", "link-escuro"}
+
+
+def esqueleto(doc: str) -> tuple[list[str], dict[str, int]]:
+    """Os blocos da página, em ordem: cada classe que o modelo usa uma vez só (o veredito, a régua, a
+    comparação, o convite do Mapa, a conversa…), e quantas seções e quantos detalhes abrem e fecham.
+    Listas (pontos, buscas, avaliações) variam de tamanho e não entram; o bloco que as contém, sim."""
+    marcas = []
+    for tag, attrs in re.findall(r"<([a-z0-9]+)\b([^>]*)>", doc):
+        m = re.search(r'\bclass="([^"]*)"', attrs)
+        marcas += [f"{tag}.{c}" for c in (m.group(1).split() if m else []) if c not in CLASSES_DO_DADO]
+    contagem = {"seções": len(re.findall(r"<section\b", doc)), "detalhes": len(re.findall(r"<details\b", doc))}
+    return marcas, contagem
+
+
+def conferir_esqueleto(doc: str, modelo: str) -> list[str]:
+    """A página de um lead tem os mesmos blocos, na mesma ordem, da página do exemplo, feita agora pelo
+    mesmo código. Um campo opcional esquecido no JSON (riscos, o que não recomendar, a comparação…)
+    sumiria com um bloco sem erro nenhum; aqui, para."""
+    ref, cont_ref = esqueleto(modelo)
+    unicos = [x for x in ref if ref.count(x) == 1]
+    seq, cont = esqueleto(doc)
+    seq = [x for x in seq if x in unicos]
+    erros = [f"{k}: o exemplo tem {cont_ref[k]}, esta página tem {cont[k]}" for k in cont_ref if cont[k] != cont_ref[k]]
+    faltam = [x for x in unicos if x not in seq]
+    sobram = sorted({x for x in seq if seq.count(x) > 1})
+    erros += [f"falta o bloco “{x}”, que o exemplo tem" for x in faltam]
+    erros += [f"o bloco “{x}” aparece mais de uma vez" for x in sobram]
+    if not (faltam or sobram) and seq != unicos:
+        i = next(k for k, (a, b) in enumerate(zip(seq, unicos)) if a != b)
+        erros.append(f"blocos fora da ordem do exemplo: “{seq[i]}” onde o exemplo tem “{unicos[i]}”")
+    return erros
+
+
+def barrar(nome: str, erros: list[str]) -> None:
+    if erros:
+        sys.exit(f"\n{nome}; nada foi gerado:\n  - " + "\n  - ".join(erros))
