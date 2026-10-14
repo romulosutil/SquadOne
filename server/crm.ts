@@ -18,13 +18,25 @@ import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvio
 //
 // Todas as regras de etapa moram aqui, em etapaDoSite e etapaDoPrumo, e os
 // nomes de coluna em COLUNAS_DO_SITE / COLUNAS_DO_PRUMO / COLUNAS_DO_REGISTRO.
+//
+// PRUMO como holding (14/10/2026, decisão do Rômulo): o PRUMO fica sob o SquadOne
+// e tudo o que ele prospecta fica sob o PRUMO, no mesmo funil: Site antes da
+// venda (auto-site), os serviços do PRUMO, o Iris (clínicas) e o CRM de
+// estamparia. As duas ofertas novas usam o contrato de colunas do Prospects
+// (COLUNAS_DO_PRUMO), cada uma na sua aba da planilha do PRUMO (Clínicas,
+// Estamparias), e a mesma regra de etapa (etapaDoPrumo).
 
 // "Em contato" (08/10/2026) juntou Contatado e Conversando: a coluna de
 // Conversando passava dias vazia e a de Contatado acumulava quem não respondia
 // havia uma semana. Uma coluna, um critério: DIAS_SEM_RESPOSTA.
 export const ETAPAS = ["novo", "contato", "proposta", "ganho", "perdido"] as const;
 export type CrmEtapa = (typeof ETAPAS)[number];
-export type CrmProduto = "site" | "prumo";
+export const PRODUTOS = ["site", "prumo", "iris", "estampa"] as const;
+export type CrmProduto = (typeof PRODUTOS)[number];
+/** As ofertas que saem de uma aba no formato do Prospects (Etapa, convite, WhatsApp publicado no site). */
+export const PRODUTOS_DE_PROSPECCAO = ["prumo", "iris", "estampa"] as const;
+export type CrmProdutoDeProspeccao = (typeof PRODUTOS_DE_PROSPECCAO)[number];
+export const ehProduto = (valor: unknown): valor is CrmProduto => (PRODUTOS as readonly unknown[]).includes(valor);
 
 export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: "Novo",
@@ -34,7 +46,21 @@ export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
   perdido: "Perdido",
 };
 
-export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = { site: "Site antes da venda", prumo: "PRUMO" };
+export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
+  site: "Site antes da venda",
+  prumo: "Serviços PRUMO",
+  iris: "Iris · Clínicas",
+  estampa: "CRM de estamparia",
+};
+
+/** De onde vem cada oferta de prospecção: aba, caminho do clique em "Enviar convite" e quem encontrou. */
+export const OFERTA_DE_PROSPECCAO: Record<CrmProdutoDeProspeccao, {
+  aba: string; convite: string; cacador: string; link: "planilhaPrumo" | "planilhaIris" | "planilhaEstampa";
+}> = {
+  prumo: { aba: "Prospects", convite: "convite", cacador: "Encontrado pelo Lead Scout", link: "planilhaPrumo" },
+  iris: { aba: "Clínicas", convite: "convite-iris", cacador: "Encontrado pelo Caçador do Iris", link: "planilhaIris" },
+  estampa: { aba: "Estamparias", convite: "convite-estampa", cacador: "Encontrado pelo Caçador de estamparias", link: "planilhaEstampa" },
+};
 
 /** Follow-up, expiração e mudança automática de pasta só valem para envio a partir daqui (site-antes-da-venda.py). */
 export const CORTE_DO_ACOMPANHAMENTO = "2026-09-29T00:00:00-03:00";
@@ -264,9 +290,12 @@ export interface CrmFonte {
 export interface CrmRetrato {
   versao: 1;
   geradoEm: string;
-  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaCrm?: string };
-  fontes: { site: CrmFonte; prumo: CrmFonte; registros: CrmFonte };
+  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string };
+  /** `iris` e `estampa` (14/10/2026): ausentes num retrato antigo, viram fonte vazia com o aviso. */
+  fontes: { site: CrmFonte; prumo: CrmFonte; iris: CrmFonte; estampa: CrmFonte; registros: CrmFonte };
 }
+
+const LINKS_DO_RETRATO = ["webhook", "planilhaSite", "planilhaPrumo", "planilhaIris", "planilhaEstampa", "planilhaCrm"] as const;
 
 export class RetratoInvalido extends Error {
   constructor(message: string) {
@@ -324,11 +353,13 @@ export function validarRetrato(valor: unknown): CrmRetrato {
   return {
     versao: 1,
     geradoEm: new Date(geradoEm).toISOString(),
-    links: Object.fromEntries(["webhook", "planilhaSite", "planilhaPrumo", "planilhaCrm"]
+    links: Object.fromEntries(LINKS_DO_RETRATO
       .map((nome) => [nome, linkLimpo(nome)]).filter(([, v]) => v)) as CrmRetrato["links"],
     fontes: {
       site: lerFonte(fontes.site, "site"),
       prumo: lerFonte(fontes.prumo, "prumo"),
+      iris: lerFonte(fontes.iris, "iris"),
+      estampa: lerFonte(fontes.estampa, "estampa"),
       registros: lerFonte(fontes.registros, "registros"),
     },
   };
@@ -500,11 +531,9 @@ export interface CrmGrupoHoje {
   itens: CrmItemHoje[];
 }
 
-export interface CrmContagem {
-  total: number;
-  site: number;
-  prumo: number;
-}
+export type CrmContagem = { total: number } & Record<CrmProduto, number>;
+
+export type CrmFonteId = CrmProduto | "registros";
 
 /**
  * Sem instante da leitura de propósito: a resposta só muda quando o retrato, as
@@ -517,7 +546,7 @@ export interface CrmVisao {
   mensagem?: string;
   geradoEm?: string;
   minutosAteVelho: number;
-  fontes: Array<{ id: "site" | "prumo" | "registros"; nome: string; linhas: number; erro?: string }>;
+  fontes: Array<{ id: CrmFonteId; nome: string; linhas: number; erro?: string }>;
   colunasAusentes: string[];
   contagens: Record<CrmEtapa, CrmContagem>;
   perdas: { recusou: number; expirou: number; esfriou: number; descartado: number; semInteresse: number };
@@ -570,7 +599,7 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
     const produto = c("produto");
     const tipo = c("tipo") as CrmTipoDeRegistro;
     const em = instante(c("em"));
-    if ((produto !== "site" && produto !== "prumo") || !c("id") || !TIPOS_DE_REGISTRO.includes(tipo) || em === undefined) continue;
+    if (!ehProduto(produto) || !c("id") || !TIPOS_DE_REGISTRO.includes(tipo) || em === undefined) continue;
     const chave = `${produto}:${c("id")}`;
     const lista = mapa.get(chave) ?? [];
     lista.push({ em, tipo, texto: texto(c("texto"), 1000), data: c("data") });
@@ -1091,6 +1120,11 @@ export function etapaDoPrumo(entrada: {
   if (entrada.respondeu !== undefined) {
     return { etapa: "contato", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Respondeu no WhatsApp"), desde: entrada.respondeu };
   }
+  // "Em conversa" (14/10/2026): nas abas do Iris e das estamparias a resposta ainda não é marcada
+  // pelo fluxo do WhatsApp; quem responde é marcado à mão na Etapa e conta como conversa.
+  if (etapa === "em_conversa") {
+    return { etapa: "contato", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Em conversa (Etapa na planilha)"), desde: entrada.convite };
+  }
   if (resposta?.tipo === "bot" && (etapa === "convite_enviado" || entrada.convite !== undefined)) {
     return { etapa: "contato", sinal: "so-robo", subEtapa: "Só resposta automática (robô), ninguém respondeu ainda", desde: entrada.convite };
   }
@@ -1103,18 +1137,25 @@ export function etapaDoPrumo(entrada: {
   return { etapa: "novo", sinal: "sem-etapa", subEtapa: entrada.etapa ? `Etapa "${entrada.etapa}"` : "Sem etapa na planilha", desde: entrada.encontrado };
 }
 
+/**
+ * Lead de uma aba no formato do Prospects: os serviços do PRUMO, o Iris e as estamparias. Mapa, Raio-X,
+ * a 2ª mensagem e o reenvio do só-robô têm texto aprovado só no PRUMO; nas ofertas novas a conversa
+ * segue à mão até existir texto delas (nada de inventar mensagem).
+ */
 function leadDoPrumo(linha: Linha, contexto: {
   agora: number;
   registros: Map<string, Registro[]>;
   links: CrmRetrato["links"];
   mapas: Map<string, MapaDoPrumo>;
   raioX?: Map<string, RaioXDoPrumo>;
-}): CrmLead | null {
+}, produto: CrmProdutoDeProspeccao = "prumo"): CrmLead | null {
   const c = leitor(COLUNAS_DO_PRUMO, linha);
   const chave = c("id");
   if (!chave) return null;
   const { agora } = contexto;
-  const registros = contexto.registros.get(`prumo:${chave}`) ?? [];
+  const oferta = OFERTA_DE_PROSPECCAO[produto];
+  const ehPrumo = produto === "prumo";
+  const registros = contexto.registros.get(`${produto}:${chave}`) ?? [];
   const { proposta, proximo, semContato, notas, segundas, followups } = manuais(registros);
   const convite = instante(c("conviteEm"));
   const t = {
@@ -1124,8 +1165,8 @@ function leadDoPrumo(linha: Linha, contexto: {
     respondeu: instante(c("respondeuEm")) ?? dataNaProximaAcao(c("proximaAcao"), "respondeu", convite, agora),
     diagnostico: instante(c("diagnosticoEm")),
   };
-  const mapa = contexto.mapas.get(chave);
-  const raioX = contexto.raioX?.get(chave);
+  const mapa = ehPrumo ? contexto.mapas.get(chave) : undefined;
+  const raioX = ehPrumo ? contexto.raioX?.get(chave) : undefined;
   const resposta = respostaDaLinha(c);
   const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
     ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora, followups);
@@ -1135,7 +1176,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   // Só-robô com número do Brasil: o follow-up vira o reenvio único, com o texto que pede quem cuida do
   // marketing (antes o follow-up do PRUMO só abria a conversa vazia). A planilha do PRUMO não tem a
   // última saída: o reenvio anotado é o que o tira.
-  const reenvioLink = calculada.sinal === "so-robo" && whatsapp ? reenvioDoPrumo(whatsapp, c("empresa") || chave) || undefined : undefined;
+  const reenvioLink = ehPrumo && calculada.sinal === "so-robo" && whatsapp ? reenvioDoPrumo(whatsapp, c("empresa") || chave) || undefined : undefined;
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo: false, enviado: t.convite, followups, agora })
     : calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
@@ -1147,7 +1188,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const respostaNova = emConversa && t.diagnostico === undefined && (parado !== null
     || (t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
   const eventos: CrmEvento[] = [
-    ...evento("encontrado", "Encontrado pelo Lead Scout", t.encontrado, "planilha · Encontrado em"),
+    ...evento("encontrado", oferta.cacador, t.encontrado, "planilha · Encontrado em"),
     ...evento("convite", "Convite enviado", t.convite, "planilha · Convite enviado em"),
     ...evento("visto", "Leu o convite", t.visto, instante(c("vistoEm")) !== undefined ? "planilha · visto_em" : "planilha · Próxima ação"),
     ...evento("respondeu", "Respondeu no WhatsApp", t.respondeu, instante(c("respondeuEm")) !== undefined ? "planilha · respondeu_em" : "planilha · Próxima ação"),
@@ -1161,12 +1202,13 @@ function leadDoPrumo(linha: Linha, contexto: {
   const segunda = emConversa && t.diagnostico === undefined && !ehRecusa(resposta) && raioX && whatsapp
     ? segundaDoPrumo(whatsapp, c("empresa") || chave, raioX.url) || undefined : undefined;
   const webhook = contexto.links.webhook;
-  const planilha = contexto.links.planilhaPrumo && c("linha") ? `${contexto.links.planilhaPrumo}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaPrumo;
+  const daAba = contexto.links[oferta.link];
+  const planilha = daAba && c("linha") ? `${daAba}&range=A${encodeURIComponent(c("linha"))}` : daAba;
   const desde = calculada.desde;
   const ultimo = eventos.length ? Date.parse(eventos[eventos.length - 1].em) : undefined;
   return {
-    id: `prumo:${chave}`,
-    produto: "prumo",
+    id: `${produto}:${chave}`,
+    produto,
     chave,
     empresa: c("empresa") || chave,
     nicho: c("nicho"),
@@ -1196,7 +1238,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     eventos,
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
-      ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/convite?id=${encodeURIComponent(chave)}` } : {}),
+      ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/${oferta.convite}?id=${encodeURIComponent(chave)}` } : {}),
       ...(raioX ? { raioX: raioX.url } : {}),
       // Desde 08/10/2026 o "sim" recebe o Raio-X, não o formulário de 16 perguntas (passo=diagnostico):
       // sem Raio-X feito, não há segunda mensagem pronta, e a Hoje pede para fazê-lo.
@@ -1216,7 +1258,7 @@ const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
   { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta; quem só ouviu o robô, já no dia seguinte, com um reenvio pedindo o responsável. Quem sai do funil antes vem primeiro.` },
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
-  { id: "revisar", titulo: "Prospects para revisar", explicacao: "PRUMO na Etapa Revisar: veja o site e decida o convite." },
+  { id: "revisar", titulo: "Prospects para revisar", explicacao: "Serviços PRUMO, Iris e estamparias na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
   { id: "enviar", titulo: "Sites prontos para enviar", explicacao: "O link marca o envio e abre o WhatsApp com a mensagem." },
 ];
@@ -1252,6 +1294,7 @@ export function oQueASegundaLeva(lead: Pick<CrmLead, "links" | "abordagem">): "s
 /** A ação do interesse parado há mais de HORAS_ATE_URGENTE: diz há quanto tempo e o que falta mandar. */
 export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | "abordagem" | "demoApagadoEm">, esperandoMs: number): string {
   const ha = `há ${tempoEsperando(esperandoMs)}`;
+  if (lead.produto === "iris" || lead.produto === "estampa") return `Quer saber mais ${ha} — combinar a demonstração`;
   if (lead.produto === "prumo") {
     return lead.links.segunda ? `Quer saber mais ${ha} — o Raio-X ainda não foi mandado`
       : `Quer saber mais ${ha} — o Raio-X ainda não foi feito nem mandado`;
@@ -1289,7 +1332,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       }
     }
     if (lead.followupHoje) {
-      const enviado = textoDeDias(lead.diasNaEtapa, lead.produto === "prumo" ? "Convite enviado" : "Enviado");
+      const enviado = textoDeDias(lead.diasNaEtapa, lead.produto === "site" ? "Enviado" : "Convite enviado");
       // O prazo dito no reenvio: é o que põe os de amanhã na frente (a ordem abaixo) e o que se perde sem ele.
       const prazo = lead.diasParaSair === undefined ? ""
         : ` Sem ele, vai para Perdido ${lead.diasParaSair <= 1 ? "amanhã" : `em ${lead.diasParaSair} dias`}.`;
@@ -1322,7 +1365,8 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       itens.resposta.push({
         leadId: lead.id,
         acao: urgente ? acaoDoInteresseParado(lead, agora - desde)
-          : r?.tipo === "interesse" ? (lead.produto === "prumo"
+          : r?.tipo === "interesse" ? (lead.produto === "iris" || lead.produto === "estampa" ? "Quer saber mais: combinar a demonstração"
+            : lead.produto === "prumo"
             ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
             : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
             : ACAO_DO_INTERESSE[oQueASegundaLeva(lead)])
@@ -1385,8 +1429,16 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
 // ------------------------------------------------------------------ visão
 
 function contagemVazia(): Record<CrmEtapa, CrmContagem> {
-  return Object.fromEntries(ETAPAS.map((etapa) => [etapa, { total: 0, site: 0, prumo: 0 }])) as Record<CrmEtapa, CrmContagem>;
+  return Object.fromEntries(ETAPAS.map((etapa) => [etapa, { total: 0, ...Object.fromEntries(PRODUTOS.map((p) => [p, 0])) }])) as Record<CrmEtapa, CrmContagem>;
 }
+
+const NOME_DA_FONTE: Record<CrmFonteId, string> = {
+  site: "Leads — Site antes da venda",
+  prumo: "PRUMO — Prospects",
+  iris: "PRUMO — Clínicas (Iris)",
+  estampa: "PRUMO — Estamparias (CRM de estamparia)",
+  registros: "Aba CRM (notas e próximos passos)",
+};
 
 export function visaoSemRetrato(agora: Date, estado: "sem-retrato" | "retrato-invalido", mensagem: string, contexto: Partial<ContextoDoCrm> = {}): CrmVisao {
   return {
@@ -1431,12 +1483,14 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     idsDoSite.add(lead.chave);
     leads.push(lead);
   }
-  const idsDoPrumo = new Set<string>();
-  for (const linha of retrato.fontes.prumo.linhas) {
-    const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas, raioX });
-    if (!lead || idsDoPrumo.has(lead.chave)) continue;
-    idsDoPrumo.add(lead.chave);
-    leads.push(lead);
+  for (const produto of PRODUTOS_DE_PROSPECCAO) {
+    const ids = new Set<string>();
+    for (const linha of retrato.fontes[produto].linhas) {
+      const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas, raioX }, produto);
+      if (!lead || ids.has(lead.chave)) continue;
+      ids.add(lead.chave);
+      leads.push(lead);
+    }
   }
   const contagens = contagemVazia();
   for (const lead of leads) {
@@ -1451,9 +1505,9 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     estado: "ok",
     geradoEm: retrato.geradoEm,
     minutosAteVelho: MINUTOS_ATE_RETRATO_VELHO,
-    fontes: (["site", "prumo", "registros"] as const).map((id) => ({
+    fontes: ([...PRODUTOS, "registros"] as const).map((id) => ({
       id,
-      nome: id === "site" ? "Leads — Site antes da venda" : id === "prumo" ? "PRUMO — Prospects" : "Aba CRM (notas e próximos passos)",
+      nome: NOME_DA_FONTE[id],
       linhas: retrato.fontes[id].linhas.length,
       ...(retrato.fontes[id].erro ? { erro: retrato.fontes[id].erro } : {}),
     })),
@@ -1519,7 +1573,7 @@ function hojeEmSP(agora: Date): string {
 export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntrada {
   const corpo = (entrada && typeof entrada === "object" ? entrada : {}) as Record<string, unknown>;
   const produto = corpo.produto;
-  if (produto !== "site" && produto !== "prumo") throw new RegistroInvalido("Produto inválido.");
+  if (!ehProduto(produto)) throw new RegistroInvalido("Produto inválido.");
   const id = typeof corpo.id === "string" ? corpo.id.trim() : "";
   if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) throw new RegistroInvalido("Lead inválido.");
   const tipo = corpo.tipo as CrmTipoDeRegistro;

@@ -4,7 +4,7 @@ import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
-import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
@@ -51,6 +51,8 @@ interface AcaoDaFicha { chave: string; rotulo: string; href: string; principal: 
 const acoes = computed<AcaoDaFicha[]>(() => {
   const l = props.lead.links
   const prumo = props.lead.produto === 'prumo'
+  // Iris e estamparias: o site é o da empresa e a Etapa muda na planilha, como no PRUMO.
+  const convite = ehConvite(props.lead.produto)
   const interesse = props.lead.resposta?.tipo === 'interesse'
   // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
   // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
@@ -66,10 +68,10 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['gerarDemo', 'Gerar demo (sai em uns 20 a 40 minutos; o aviso chega no WhatsApp)', l.gerarDemo, interesse],
     ['followup', `${rotuloDoFollowup(props.lead)} (${props.lead.reenvioDoRobo ? 'reenvio único, ' : ''}texto pronto)`, l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
-    ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
+    ['site', convite ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
     ['raioX', 'Ver o Raio-X', l.raioX, false],
     ['acoes', 'Recusou · Fechou · Desfazer (página do lead)', l.acoes, false],
-    ['planilha', prumo ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
+    ['planilha', convite ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
   ]
   return todas.flatMap(([chave, rotulo, href, principal]) => (href ? [{ chave, rotulo, href, principal }] : []))
     // Primeiro contato fora do expediente (envio, convite, reenvio do só-robô): some até o "Liberar"

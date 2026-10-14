@@ -57,8 +57,14 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   bot: 'Só robô',
 }
 
-export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site antes da venda', prumo: 'PRUMO' }
-export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO' }
+// PRUMO como holding (14/10/2026): as quatro ofertas são do PRUMO e dividem o mesmo funil.
+export const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa']
+export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
+  site: 'Site antes da venda', prumo: 'Serviços PRUMO', iris: 'Iris · Clínicas', estampa: 'CRM de estamparia',
+}
+export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'Organizar', iris: 'Iris', estampa: 'Estampa' }
+/** O primeiro contato: o Site manda o site pronto, as outras ofertas um convite para conversar. */
+export const ehConvite = (produto: CrmProduto) => produto !== 'site'
 
 const FUSO = 'America/Sao_Paulo'
 

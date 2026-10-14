@@ -1,0 +1,73 @@
+{
+  "_como": [
+    "Ofertas do PRUMO além da consultoria (14/10/2026, PRUMO como holding sob o SquadOne): Iris (clínicas) e CRM de estamparia.",
+    "Lido por prumo-ofertas.py (gera as abas, os caçadores e o clique do convite no n8n) e conferido por server/prumo-ofertas.test.ts contra o contrato de colunas do CRM (COLUNAS_DO_PRUMO em server/crm.ts).",
+    "Mudou busca, sinal ou texto: rode `python3 prumo-ofertas.py` no Dell (republica sem ligar o agendamento).",
+    "convite: o primeiro contato, em voz PRUMO ('nós'), sem o nome do Rômulo, sem R$, sem link e com uma pergunta só (o que o PRUMO aprendeu em 05/10). {OLA} vira Bom dia/Boa tarde/Boa noite, {NOME} o nome da empresa sem LTDA.",
+    "O texto do estampa não diz que o CRM já roda num cliente: o Silmer ainda está em homologação (plano de 13/10, B0/B1)."
+  ],
+  "colunas": ["ID", "Empresa", "Cidade", "Segmento", "WhatsApp", "Site", "Nota Google", "Etapa", "Enviar convite", "Prioridade", "Sinais",
+              "Próxima ação", "Google Maps", "Encontrado em", "Convite enviado em", "Respondeu em", "Tipo da resposta", "Resposta", "Resposta em"],
+  "ocultas": ["ID", "Google Maps", "Encontrado em", "Convite enviado em", "Respondeu em", "Tipo da resposta", "Resposta em"],
+  "etapas": ["Revisar", "Convite enviado", "Em conversa", "Concluído", "Sem interesse"],
+  "proxima_revisar": "Veja o site; se fizer sentido, clique em Enviar convite.",
+  "ofertas": {
+    "iris": {
+      "rotulo": "Iris · Clínicas",
+      "aba": "Clínicas",
+      "fluxo": "PRUMO · Iris — Caçador de clínicas",
+      "clique": "PRUMO · Iris — Clique em Enviar convite (marca enviado)",
+      "convite": "convite-iris",
+      "webhook_id": "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60101",
+      "empresa": "empresa",
+      "plural": "clínicas",
+      "teto_por_rodada": 15,
+      "segmento": "cl[ií]nica|terap|psic[oó]log|psicopedag|fonoaudi|neuro|autis|desenvolvimento infantil|\\baba\\b",
+      "fora": "odonto|dentist|est[eé]tica|laborat[oó]rio|hospital|veterin|farm[aá]cia|academia|pilates|spa\\b|massag",
+      "sinais": [
+        ["convênio", "conv[eê]nio|planos? de sa[uú]de|unimed|bradesco sa[uú]de|amil|sulam[eé]rica|hapvida"],
+        ["ABA", "\\baba\\b|an[aá]lise do comportamento"],
+        ["TEA", "autis|\\btea\\b|espectro autista"],
+        ["neuropsicologia", "neuropsic"],
+        ["fono", "fonoaudi"],
+        ["terapia ocupacional", "terapia ocupacional|terapeuta ocupacional|integra[cç][aã]o sensorial"],
+        ["psicopedagogia", "psicopedag"],
+        ["multidisciplinar", "multidisciplinar|interdisciplinar|multiprofissional|transdisciplinar"],
+        ["equipe no site", "nossa equipe|nossos profissionais|corpo cl[ií]nico|conhe[cç]a a equipe|nossos especialistas"]
+      ],
+      "nichos": ["clínica ABA autismo", "clínica multidisciplinar infantil", "clínica de neuropsicologia", "clínica de fonoaudiologia",
+                 "clínica de terapia ocupacional", "clínica de psicologia TCC"],
+      "cidades": ["Vitória ES", "Vila Velha ES", "Serra ES", "Cariacica ES", "Belo Horizonte MG", "Rio de Janeiro RJ", "São Paulo SP", "Campinas SP"],
+      "mensagem": "{OLA}! Aqui é do Prumo. Trabalhamos com o Iris, um sistema para clínicas de terapia em que as anotações de cada sessão viram o dossiê da reavaliação, pronto para o convênio.\n\nConsigo falar por aqui com quem coordena a {NOME}?",
+      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine a demonstração do dossiê (caso fictício, nunca dado de paciente). Sem resposta em 3 dias, um lembrete só."
+    },
+    "estampa": {
+      "rotulo": "CRM de estamparia",
+      "aba": "Estamparias",
+      "fluxo": "PRUMO · CRM de estamparia — Caçador de estamparias",
+      "clique": "PRUMO · CRM de estamparia — Clique em Enviar convite (marca enviado)",
+      "convite": "convite-estampa",
+      "webhook_id": "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60102",
+      "empresa": "estamparia",
+      "plural": "estamparias",
+      "teto_por_rodada": 15,
+      "segmento": "estampa|silk|serigraf|sublima|camiset|uniforme|confec|personaliza|bordad|\\bdtf\\b|malharia",
+      "fora": "gr[aá]fica r[aá]pida|copiadora|xerox|tatuag|tattoo|lavanderia|costureira|ajustes de roupa",
+      "sinais": [
+        ["silk", "silk|serigraf"],
+        ["sublimação", "sublima"],
+        ["DTF", "\\bdtf\\b"],
+        ["bordado", "bordad"],
+        ["uniformes", "uniforme"],
+        ["camisetas", "camiset|camisa personalizada"],
+        ["atende empresas", "pedido m[ií]nimo|atacado|para empresas|corporativ|brindes"],
+        ["eventos", "abad[aá]|formatura|interclasse|evento"],
+        ["pede orçamento", "or[cç]amento"]
+      ],
+      "nichos": ["estamparia", "camisetas personalizadas", "uniformes personalizados", "silk screen", "sublimação", "confecção sob encomenda"],
+      "cidades": ["Vitória ES", "Vila Velha ES", "Serra ES", "Cariacica ES", "Belo Horizonte MG", "Rio de Janeiro RJ", "São Paulo SP", "Campinas SP"],
+      "mensagem": "{OLA}! Aqui é do Prumo. Estamos conversando com estamparias sobre um jeito de organizar os pedidos que chegam pelo WhatsApp: arte, tamanhos e prazo numa ficha só, sem se perder na conversa.\n\nConsigo falar por aqui com o responsável pela {NOME}?",
+      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine uma conversa de 20 minutos sobre como os pedidos chegam hoje. Sem resposta em 3 dias, um lembrete só."
+    }
+  }
+}

@@ -59,9 +59,9 @@ export interface OperationsOverview {
   dell: DellStatus
 }
 
-// CRM (Site antes da venda + PRUMO). Espelha server/crm.ts; a Central só lê.
+// CRM do PRUMO (Site antes da venda, serviços PRUMO, Iris, CRM de estamparia). Espelha server/crm.ts; a Central só lê.
 export type CrmEtapa = 'novo' | 'contato' | 'proposta' | 'ganho' | 'perdido'
-export type CrmProduto = 'site' | 'prumo'
+export type CrmProduto = 'site' | 'prumo' | 'iris' | 'estampa'
 export type CrmSinal =
   | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
   | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
@@ -168,18 +168,14 @@ export interface CrmGrupoHoje {
   itens: CrmItemHoje[]
 }
 
-export interface CrmContagem {
-  total: number
-  site: number
-  prumo: number
-}
+export type CrmContagem = { total: number } & Record<CrmProduto, number>
 
 export interface CrmVisao {
   estado: 'ok' | 'sem-retrato' | 'retrato-invalido'
   mensagem?: string
   geradoEm?: string
   minutosAteVelho: number
-  fontes: Array<{ id: 'site' | 'prumo' | 'registros'; nome: string; linhas: number; erro?: string }>
+  fontes: Array<{ id: CrmProduto | 'registros'; nome: string; linhas: number; erro?: string }>
   colunasAusentes: string[]
   contagens: Record<CrmEtapa, CrmContagem>
   perdas: { recusou: number; expirou: number; esfriou: number; descartado: number; semInteresse: number }
@@ -190,7 +186,7 @@ export interface CrmVisao {
   pastasLidas: boolean
   gerador?: { estado: 'processando' | 'ocioso' | 'atencao' | 'desconhecido'; detalhe: string; atualizadoEm?: string; pendentes?: number }
   registro: { disponivel: boolean; motivo?: string }
-  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaCrm?: string }
+  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string }
   ultimaFalha?: { em: string; erro: string }
 }
 

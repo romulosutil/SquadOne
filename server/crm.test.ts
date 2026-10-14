@@ -512,6 +512,73 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
   });
 });
 
+describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
+  function comOfertas() {
+    const base = retrato();
+    base.links.planilhaIris = "https://docs.google.com/spreadsheets/d/prumo/edit#gid=3";
+    base.links.planilhaEstampa = "https://docs.google.com/spreadsheets/d/prumo/edit#gid=4";
+    const fonte = (aba: string, linhas: Array<Record<string, string>>) => ({ planilha: "PRUMO — Fila de revisão", aba, colunas: Object.keys(linhas[0]), linhas });
+    base.fontes.iris = fonte("Clínicas", [
+      linhaPrumo("clinica-nova", { Empresa: "Clínica Aprender", Segmento: "clínica ABA" }),
+      linhaPrumo("clinica-conversa", { Etapa: "Em conversa", "Convite enviado em": dias(2) }),
+      linhaPrumo("clinica-quer", { Etapa: "Convite enviado", "Convite enviado em": dias(1), respondeu_em: dias(0.5),
+        "Tipo da resposta": "interesse", Resposta: "pode explicar" }),
+    ]);
+    base.fontes.estampa = fonte("Estamparias", [
+      linhaPrumo("estampa-convite", { Etapa: "Convite enviado", "Convite enviado em": dias(4) }),
+      linhaPrumo("estampa-ganho", { Etapa: "Concluído" }),
+      // O mesmo ID numa aba e noutra são leads diferentes: cada oferta tem a sua chave.
+      linhaPrumo("revisar", { Etapa: "Sem interesse" }),
+    ]);
+    base.fontes.registros.linhas.push({ em: dias(0.2), produto: "iris", id: "clinica-quer", tipo: "nota", texto: "coordenadora atende à tarde", data: "" });
+    return montarCrm(base, { agora: AGORA, pastas: PASTAS,
+      // Raio-X e Mapa são do PRUMO: um prospectId igual numa aba nova não os herda.
+      raioX: [{ prospectId: "clinica-quer", url: "https://raio-x-prumo.vercel.app/x", feitoEm: "2026-10-01" }] });
+  }
+
+  it("cada aba vira leads do seu produto, com a regra de etapa do Prospects e o 'Em conversa' marcado à mão", () => {
+    const v = comOfertas();
+    const nova = lead(v.leads, "iris:clinica-nova");
+    assert.equal(nova.produto, "iris");
+    assert.equal(`${nova.etapa}/${nova.sinal}`, "novo/revisar");
+    assert.equal(nova.links.convite, `${WEBHOOK}/convite-iris?id=clinica-nova`);
+    assert.equal(nova.links.planilha, "https://docs.google.com/spreadsheets/d/prumo/edit#gid=3&range=A2");
+    assert.equal(nova.eventos[0].rotulo, "Encontrado pelo Caçador do Iris");
+    const conversa = lead(v.leads, "iris:clinica-conversa");
+    assert.equal(`${conversa.etapa}/${conversa.sinal}`, "contato/respondeu-prumo");
+    assert.equal(conversa.subEtapa, "Em conversa (Etapa na planilha)");
+    assert.equal(lead(v.leads, "estampa:estampa-ganho").etapa, "ganho");
+    assert.equal(lead(v.leads, "estampa:revisar").etapa, "perdido");
+    assert.equal(lead(v.leads, "prumo:revisar").etapa, "novo", "o lead do PRUMO com o mesmo ID não muda");
+    assert.deepEqual(v.contagens.ganho, { total: 3, site: 1, prumo: 1, iris: 0, estampa: 1 });
+  });
+
+  it("sem texto aprovado das ofertas novas: nada de Raio-X, 2ª mensagem nem reenvio; a Hoje pede a demonstração", () => {
+    const v = comOfertas();
+    const quer = lead(v.leads, "iris:clinica-quer");
+    assert.equal(quer.links.raioX, undefined);
+    assert.equal(quer.links.segunda, undefined);
+    assert.equal(quer.notas, 1, "o registro com produto iris chega ao lead");
+    const item = v.hoje.flatMap((g) => g.itens).find((i) => i.leadId === "iris:clinica-quer")!;
+    // Respondeu há 12 h e nada saiu depois: interesse parado, com o tempo de espera.
+    assert.equal(item.acao, "Quer saber mais há 12 h — combinar a demonstração");
+    assert.equal(item.urgente, true);
+    const followup = v.hoje.find((g) => g.id === "followup")!.itens.find((i) => i.leadId === "estampa:estampa-convite")!;
+    assert.match(followup.detalhe, /^Convite enviado há 4 dias, sem resposta/);
+    assert.equal(followup.links.some((l) => l.rotulo === "Mandar o follow-up"), false);
+    assert.ok(v.hoje.find((g) => g.id === "revisar")!.itens.some((i) => i.leadId === "iris:clinica-nova"));
+    assert.equal(acaoDoInteresseParado({ produto: "estampa", links: {}, abordagem: undefined, demoApagadoEm: undefined }, 5 * 3600_000),
+      "Quer saber mais há 5 h — combinar a demonstração");
+  });
+
+  it("registro aceita as quatro ofertas e recusa o resto", () => {
+    for (const produto of ["site", "prumo", "iris", "estampa"]) {
+      assert.equal(validarRegistro({ produto, id: "abc", tipo: "nota", texto: "a" }, AGORA).produto, produto);
+    }
+    assert.throws(() => validarRegistro({ produto: "silmer", id: "abc", tipo: "nota", texto: "a" }, AGORA), /Produto inválido/);
+  });
+});
+
 describe("CRM: lista Hoje e contagens", () => {
   it("ordena os grupos pelo que precisa do Rômulo hoje", () => {
     const { hoje } = visao();
@@ -542,12 +609,21 @@ describe("CRM: lista Hoje e contagens", () => {
 
   it("conta por etapa e produto e separa os motivos de perda", () => {
     const v = visao();
-    assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1 });
-    assert.deepEqual(v.contagens.contato, { total: 10, site: 6, prumo: 4 });
-    assert.deepEqual(v.contagens.perdido, { total: 7, site: 6, prumo: 1 });
+    assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1, iris: 0, estampa: 0 });
+    assert.deepEqual(v.contagens.contato, { total: 10, site: 6, prumo: 4, iris: 0, estampa: 0 });
+    assert.deepEqual(v.contagens.perdido, { total: 7, site: 6, prumo: 1, iris: 0, estampa: 0 });
     assert.deepEqual(v.perdas, { recusou: 2, expirou: 2, esfriou: 0, descartado: 2, semInteresse: 1 });
     assert.equal(v.geradoEm, "2026-10-02T14:55:00.000Z");
     assert.equal(JSON.stringify(v), JSON.stringify(visao()), "mesma entrada, mesma resposta (ETag estável)");
+  });
+
+  it("retrato antigo, sem as abas do Iris e das estamparias: fontes vazias com o aviso, o resto igual", () => {
+    const v = visao();
+    const fonte = (id: string) => v.fontes.find((f) => f.id === id)!;
+    assert.deepEqual(v.fontes.map((f) => f.id), ["site", "prumo", "iris", "estampa", "registros"]);
+    assert.equal(fonte("iris").linhas, 0);
+    assert.match(fonte("iris").erro ?? "", /iris ausente/);
+    assert.match(fonte("estampa").erro ?? "", /estampa ausente/);
   });
 
   it("avisa coluna esperada que ainda não existe na planilha", () => {

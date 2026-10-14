@@ -7,7 +7,7 @@ import CrmFilaDeEnvio from './CrmFilaDeEnvio.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
-import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
+import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import {
   AVISO_DE_FALHA_DA_ANOTACAO, anotar, corpoDaAnotacao, desanotar, gravarAnotados, lerAnotados, podarAnotados,
   type EnviosAnotados, type TipoDeEnvioAnotado,
@@ -49,10 +49,10 @@ let temporizador = 0
 let relogio = 0
 const atrasos: number[] = []
 
-const PRODUTOS: Array<{ id: FiltroProduto; rotulo: string }> = [
-  { id: 'todos', rotulo: 'Todos' },
-  { id: 'site', rotulo: 'Site antes da venda' },
-  { id: 'prumo', rotulo: 'PRUMO' },
+// As quatro ofertas do PRUMO (14/10/2026) dividem o funil; o filtro escolhe uma.
+const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
+  { id: 'todos', rotulo: 'Todas' },
+  ...PRODUTOS.map(id => ({ id, rotulo: ROTULO_DO_PRODUTO[id] })),
 ]
 
 // ------------------------------------------------------------------ endereço (?ver=&produto=&lead=)
@@ -62,7 +62,7 @@ function lerEndereco() {
   const ver = q.get('ver')
   vista.value = ver === 'funil' || ver === 'resultados' || ver === 'colinha' ? ver : 'hoje'
   const p = q.get('produto')
-  produto.value = p === 'site' || p === 'prumo' ? p : 'todos'
+  produto.value = PRODUTOS.find(id => id === p) ?? 'todos'
   leadId.value = q.get('lead')
   filaAberta.value = vista.value === 'hoje' && q.get('fila') === 'envio'
 }
@@ -240,7 +240,7 @@ function fecharFila() {
 function trocarProduto(novo: FiltroProduto) {
   produto.value = novo
   escreverEndereco(true)
-  anuncio.value = `Mostrando ${PRODUTOS.find(p => p.id === novo)?.rotulo}.`
+  anuncio.value = `Mostrando ${FILTROS.find(p => p.id === novo)?.rotulo}.`
 }
 
 async function irParaEtapa(etapa: CrmEtapa) {
@@ -280,8 +280,8 @@ async function abrirColinha() {
   <section class="crm" aria-labelledby="crm-titulo">
     <header class="crm-topo">
       <div>
-        <span class="crm-kicker">Site antes da venda + PRUMO</span>
-        <h1 id="crm-titulo">CRM</h1>
+        <span class="crm-kicker">SquadOne · PRUMO</span>
+        <h1 id="crm-titulo">CRM do PRUMO</h1>
         <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
       </div>
       <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
@@ -317,8 +317,8 @@ async function abrirColinha() {
         <a href="/crm?ver=resultados" :aria-current="vista === 'resultados' ? 'page' : undefined" @click.prevent="trocarVista('resultados')">Resultados</a>
         <a href="/crm?ver=colinha" :aria-current="vista === 'colinha' ? 'page' : undefined" @click.prevent="trocarVista('colinha')">Colinha</a>
       </nav>
-      <div class="crm-produtos" role="group" aria-label="Produto">
-        <button v-for="p in PRODUTOS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
+      <div class="crm-produtos" role="group" aria-label="Ofertas do PRUMO">
+        <button v-for="p in FILTROS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
       </div>
     </div>
 
@@ -364,6 +364,8 @@ async function abrirColinha() {
         <span v-for="f in visao.fontes" :key="f.id">{{ f.nome }}: {{ f.linhas }} linha{{ f.linhas === 1 ? '' : 's' }}<template v-if="f.erro"> ({{ f.erro }})</template></span>
         <a v-if="visao.links.planilhaSite" :href="visao.links.planilhaSite" target="_blank" rel="noopener">Planilha do Site ↗</a>
         <a v-if="visao.links.planilhaPrumo" :href="visao.links.planilhaPrumo" target="_blank" rel="noopener">Planilha do PRUMO ↗</a>
+        <a v-if="visao.links.planilhaIris" :href="visao.links.planilhaIris" target="_blank" rel="noopener">Aba Clínicas (Iris) ↗</a>
+        <a v-if="visao.links.planilhaEstampa" :href="visao.links.planilhaEstampa" target="_blank" rel="noopener">Aba Estamparias ↗</a>
       </footer>
     </template>
     <p v-else-if="carregando && vista !== 'colinha'" class="crm-muted" role="status">Lendo o CRM…</p>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, rotuloDaSegunda, rotuloDoFollowup, textoDaLeitura, textoDoPrazo } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, rotuloDaSegunda, rotuloDoFollowup, textoDaLeitura, textoDoPrazo } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
@@ -8,9 +8,9 @@ import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
 // encerrados (Ganho em cima de Perdido) —, sem rolagem lateral a partir de
 // 1280 px (08/10/2026: seis colunas de 15 rem ficavam espremidas). No celular
-// (abaixo de 1024 px), um produto por vez (segmentado Site / Organizar, o
-// PRUMO), abas com as etapas e a lista da etapa escolhida. Estado sempre por
-// texto, cor só reforça (RULES 3).
+// (abaixo de 1024 px), um produto por vez (segmentado Site / Organizar / Iris /
+// Estampa: as quatro ofertas do PRUMO), abas com as etapas e a lista da etapa
+// escolhida. Estado sempre por texto, cor só reforça (RULES 3).
 const props = defineProps<{
   leads: CrmLead[]
   visao: CrmVisao
@@ -38,11 +38,7 @@ const aoMudarLargura = (e: MediaQueryListEvent) => { celular.value = e.matches }
 mq?.addEventListener('change', aoMudarLargura)
 onBeforeUnmount(() => mq?.removeEventListener('change', aoMudarLargura))
 
-const segmento = computed<CrmProduto>(() => (props.produto === 'prumo' ? 'prumo' : 'site'))
-const SEGMENTOS: Array<{ id: CrmProduto; rotulo: string }> = [
-  { id: 'site', rotulo: 'Site' },
-  { id: 'prumo', rotulo: 'Organizar' },
-]
+const segmento = computed<CrmProduto>(() => (props.produto === 'todos' ? 'site' : props.produto))
 const leadsBase = computed(() => (celular.value ? props.leads.filter(l => l.produto === segmento.value) : props.leads))
 
 const etapaAtiva = ref<CrmEtapa>(props.etapaEmFoco ?? 'novo')
@@ -129,8 +125,8 @@ const artefatos = (l: CrmLead) => {
 
     <template v-if="celular">
       <div class="segmentado crm-segmento" role="group" aria-label="Produto">
-        <button v-for="s in SEGMENTOS" :key="s.id" type="button" :aria-pressed="segmento === s.id" @click="emit('produto', s.id)">
-          {{ s.rotulo }}<span class="so-leitor">{{ s.id === 'prumo' ? ' (PRUMO)' : ' antes da venda' }}</span>
+        <button v-for="p in PRODUTOS" :key="p" type="button" :aria-pressed="segmento === p" :aria-label="ROTULO_DO_PRODUTO[p]" @click="emit('produto', p)">
+          {{ SIGLA_DO_PRODUTO[p] }}
         </button>
       </div>
       <div class="crm-abas" role="tablist" aria-label="Etapas do funil">
@@ -191,7 +187,7 @@ const artefatos = (l: CrmLead) => {
               </button>
               <p class="crm-cartao__estado"><span class="crm-tag" :class="`is-${lead.produto}`">{{ SIGLA_DO_PRODUTO[lead.produto] }}</span> {{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</p>
               <ol v-if="temMarcos(lead)" class="crm-marcos" aria-label="Enviado, leitura e resposta">
-                <li :class="{ 'is-feito': lead.marcos.enviado }">{{ lead.marcos.enviado ? `${lead.produto === 'prumo' ? 'Convite' : 'Enviado'} ${dataCurta(lead.marcos.enviado)}` : 'Não enviado' }}</li>
+                <li :class="{ 'is-feito': lead.marcos.enviado }">{{ lead.marcos.enviado ? `${ehConvite(lead.produto) ? 'Convite' : 'Enviado'} ${dataCurta(lead.marcos.enviado)}` : 'Não enviado' }}</li>
                 <li :class="{ 'is-feito': lead.leitura === 'viu' || lead.leitura === 'pela-resposta', 'is-desconhecido': lead.leitura === 'desconhecida' }">{{ textoDaLeitura(lead) || 'Leitura —' }}</li>
                 <li :class="{ 'is-feito': lead.marcos.respondeu }">{{ lead.marcos.respondeu ? `Respondeu ${dataCurta(lead.marcos.respondeu)}` : 'Sem resposta' }}</li>
               </ol>

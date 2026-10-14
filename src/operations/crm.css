@@ -81,6 +81,8 @@
 
 .crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .crm-tag.is-prumo { background: var(--barra-fundo); color: var(--cor-papel-forte); }
+.crm-tag.is-iris { background: var(--acento); color: var(--cor-tinta); }
+.crm-tag.is-estampa { background: var(--texto); color: var(--superficie); }
 
 /* Hoje */
 .crm-hoje { display: grid; gap: 1rem; }

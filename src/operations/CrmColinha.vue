@@ -4,6 +4,7 @@ import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import CrmTrecho from './CrmTrecho.vue'
 import { CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, ROTEIRO, ROTULO_DA_ETAPA, ROTULO_DO_TIPO, precoDaTabela, precoParaOCliente, type Trecho } from './colinha'
+import { ROTULO_DO_PRODUTO } from './crm-formato'
 import type { CrmProduto } from './types'
 
 // A colinha inteira (/crm?ver=colinha, 08/10/2026): tudo para consultar durante
@@ -31,8 +32,7 @@ const momentos = computed(() => ROTEIRO.flatMap((p) => {
 }))
 const objecoes = computed(() => OBJECOES.filter((o) => serve(o.resposta)))
 const cdl = computed(() => CDL.filter(serve))
-const ROTULO: Record<CrmProduto, string> = { site: 'Site antes da venda', prumo: 'PRUMO' }
-const filtrado = computed(() => (props.produto === 'todos' ? '' : ` para ${ROTULO[props.produto]}`))
+const filtrado = computed(() => (props.produto === 'todos' ? '' : ` para ${ROTULO_DO_PRODUTO[props.produto]}`))
 
 const PARTES = [
   { id: 'crm-colinha-cardapio', rotulo: 'Cardápio' },
