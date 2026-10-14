@@ -2,16 +2,20 @@
 import { computed, ref } from 'vue'
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
 import { estadoDoEnvio, filaDeEnvio, ordenarComEnvios, type EnviosAbertos } from './fila-de-envio'
+import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead } from './types'
 
 // "Hoje": só o que depende do Rômulo, na ordem do servidor (server/crm.ts,
 // montarHoje). Cada linha é uma ação e o link que a resolve.
 // Em "Sites prontos para enviar", o que esta tela já abriu no WhatsApp vai para o
 // fim com a hora do toque até a planilha confirmar (fila-de-envio.ts).
-const props = defineProps<{ grupos: CrmGrupoHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; agora: number }>()
+// `aviso`/`liberados` (trava-de-horario.ts): fora do expediente os links que ENVIAM a primeira
+// mensagem (envio do Site, convite do PRUMO) saem da linha e dão lugar a um "Liberar".
+const props = defineProps<{ grupos: CrmGrupoHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; agora: number; aviso?: string | null; liberados: EnviosLiberados }>()
 const emit = defineEmits<{
   abrir: [leadId: string, origem: HTMLElement | null]
   enviado: [leadId: string]
+  liberar: [leadId: string]
   fila: []
 }>()
 
@@ -40,9 +44,16 @@ const horaDoToque = (item: CrmItemHoje) => {
   return t === undefined ? '' : hora(new Date(t).toISOString())
 }
 const ehEnvio = (item: CrmItemHoje, url: string) => url === props.leads.get(item.leadId)?.links.enviar
+const ehPrimeiroContato = (item: CrmItemHoje, url: string) => ehEnvio(item, url) || url === props.leads.get(item.leadId)?.links.convite
+const travado = (item: CrmItemHoje) =>
+  envioTravado(props.aviso, props.liberados, item.leadId) && item.links.some(l => ehPrimeiroContato(item, l.url))
+const haTravados = computed(() => props.grupos.some(g => g.itens.some(travado)))
 // Já aberto: o link de envio some (o toque já marcou na planilha) e fica o resto.
-const links = (grupo: CrmGrupoHoje, item: CrmItemHoje) =>
-  grupo.id === 'enviar' && abertoEm(item) !== undefined ? item.links.filter(l => !ehEnvio(item, l.url)) : item.links
+// Travado: o link de primeiro contato some até o "Liberar", o resto (demo, conversa) segue à mão.
+const links = (grupo: CrmGrupoHoje, item: CrmItemHoje) => {
+  const sem = grupo.id === 'enviar' && abertoEm(item) !== undefined ? item.links.filter(l => !ehEnvio(item, l.url)) : item.links
+  return travado(item) ? sem.filter(l => !ehPrimeiroContato(item, l.url)) : sem
+}
 function aoTocar(item: CrmItemHoje, url: string) {
   if (ehEnvio(item, url)) emit('enviado', item.leadId)
 }
@@ -50,7 +61,8 @@ function aoTocar(item: CrmItemHoje, url: string) {
 
 <template>
   <div class="crm-hoje">
-    <p v-if="!total" class="crm-vazio"><strong>Nada esperando você hoje.</strong> Nenhum follow-up, resposta, prospect, proposta ou site pronto neste filtro.</p>
+    <p v-if="aviso && haTravados" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} Os envios de primeiro contato ficam travados até você liberar.</p>
+    <p v-if="!total"class="crm-vazio"><strong>Nada esperando você hoje.</strong> Nenhum follow-up, resposta, prospect, proposta ou site pronto neste filtro.</p>
     <section v-for="grupo in visiveis" :key="grupo.id" class="crm-grupo" :class="`is-${grupo.id}`" :aria-labelledby="`crm-grupo-${grupo.id}`">
       <header class="crm-grupo__cabeca">
         <h2 :id="`crm-grupo-${grupo.id}`">{{ grupo.titulo }}</h2>
@@ -74,7 +86,8 @@ function aoTocar(item: CrmItemHoje, url: string) {
             <template v-if="estado(item) === 'aguardando'">Aberto no WhatsApp às {{ horaDoToque(item) }} nesta tela. A planilha confirma no próximo retrato.</template>
             <template v-else>Aberto às {{ horaDoToque(item) }} e a planilha ainda não confirmou: veja na conversa se a mensagem saiu.</template>
           </p>
-          <div v-if="links(grupo, item).length" class="crm-item__links">
+          <div v-if="links(grupo, item).length || travado(item)" class="crm-item__links">
+            <button v-if="travado(item)" type="button" class="botao botao--leve" @click="emit('liberar', item.leadId)">{{ ROTULO_DE_LIBERAR }}</button>
             <a v-for="link in links(grupo, item)" :key="link.url" :href="link.url" target="_blank" rel="noopener" @click="aoTocar(item, link.url)">{{ link.rotulo }} <span aria-hidden="true">↗</span></a>
           </div>
         </li>

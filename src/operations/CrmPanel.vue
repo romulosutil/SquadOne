@@ -10,6 +10,7 @@ import CrmResultados from './CrmResultados.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import { avisoDeHorario } from './resultados'
+import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
 
@@ -32,6 +33,9 @@ const leadId = ref<string | null>(null)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
 const filaAberta = ref(false)
 const envios = ref<EnviosAbertos>({})
+// Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts):
+// só em memória, de propósito. Recarregou a página ou voltou o expediente, o ciclo recomeça.
+const liberados = ref<EnviosLiberados>(new Set())
 const anuncio = ref('')
 let temporizador = 0
 let relogio = 0
@@ -116,6 +120,11 @@ function guardarEnvios(novos: EnviosAbertos) {
 function marcarAberto(id: string) {
   guardarEnvios(marcarEnvio(envios.value, id, Date.now()))
   anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: aberto no WhatsApp.`
+}
+
+function liberar(id: string) {
+  liberados.value = liberarEnvio(liberados.value, id)
+  anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: envio liberado fora do expediente.`
 }
 
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).
@@ -284,13 +293,13 @@ async function abrirColinha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" />
+      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" />
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
-      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" @abrir="abrirFicha" @produto="trocarProduto" />
+      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" />
 
       <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
         <div class="crm-na-folha">
-          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" @enviado="marcarAberto" @abrir="abrirFicha" />
+          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" :liberados="liberados" @enviado="marcarAberto" @abrir="abrirFicha" @liberar="liberar" />
         </div>
       </Sheet>
 

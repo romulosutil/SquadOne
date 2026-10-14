@@ -4,6 +4,7 @@ import { hora } from './crm-formato'
 import {
   estadoDoVideo, filaDeEnvio, gravarVideos, lerVideos, marcarVideo, nichosDaFila, ordemComPulados, passoDoVideo, type EnviosAbertos,
 } from './fila-de-envio'
+import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { CrmItemHoje, CrmLead } from './types'
 
 // "Enviar um por um" (08/10/2026): os sites prontos, um de cada vez, com o demo
@@ -11,9 +12,11 @@ import type { CrmItemHoje, CrmLead } from './types'
 // envio na planilha, então conferir depois é tarde. A folha não grava nada: o
 // envio é o clique no link do n8n, como na lista (RULES 10 e 11).
 // `aviso`: fora do expediente de quem recebe, com a taxa medida (resultados.ts, avisoDeHorario).
-// Só avisa: enviar continua possível, a decisão é do Rômulo.
-const props = defineProps<{ itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; aviso?: string | null }>()
-const emit = defineEmits<{ enviado: [leadId: string]; abrir: [leadId: string, origem: HTMLElement | null] }>()
+// Desde 14/10/2026 o aviso também TRAVA: fora do expediente o link de envio só aparece depois do
+// "Liberar" daquele lead (trava-de-horario.ts). Enviar continua possível, a decisão é do Rômulo,
+// mas deixou de ser um toque distraído: depois das 18h, 0 de 29 envios tiveram resposta.
+const props = defineProps<{ itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; aviso?: string | null; liberados: EnviosLiberados }>()
+const emit = defineEmits<{ enviado: [leadId: string]; abrir: [leadId: string, origem: HTMLElement | null]; liberar: [leadId: string] }>()
 
 const nicho = ref<string | null>(null)
 const pulados = ref<string[]>([])
@@ -77,6 +80,18 @@ async function aoEnviar() {
   ;(botaoVideo.value ?? botaoProximo.value)?.focus()
 }
 
+const travado = computed(() => (atual.value ? envioTravado(props.aviso, props.liberados, atual.value.item.leadId) : false))
+const linkDeEnviar = ref<HTMLAnchorElement | null>(null)
+
+// O botão que destrava some e dá lugar ao link: o foco acompanha, em vez de cair no corpo da página.
+async function liberarAtual() {
+  const a = atual.value
+  if (!a) return
+  emit('liberar', a.item.leadId)
+  await nextTick()
+  linkDeEnviar.value?.focus()
+}
+
 async function videoEnviado() {
   const a = atual.value
   if (!a) return
@@ -107,7 +122,7 @@ function escolherNicho(novo: string | null) {
 
 <template>
   <div class="crm-fila">
-    <p v-if="aviso" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} Os sites ficam aqui.</p>
+    <p v-if="aviso" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} Os sites ficam aqui; o envio fica travado até você liberar.</p>
     <div v-if="nichos.length > 1" class="crm-fila__nichos" role="group" aria-label="Nicho">
       <button type="button" :aria-pressed="nicho === null" @click="escolherNicho(null)">Todos <span>{{ total }}</span></button>
       <button v-for="n in nichos" :key="n.nicho" type="button" :aria-pressed="nicho === n.nicho" @click="escolherNicho(n.nicho)">
@@ -158,10 +173,11 @@ function escolherNicho(novo: string | null) {
       </template>
       <template v-else>
         <div class="crm-fila__acoes">
-          <a class="crm-fila__enviar" :href="atual.enviar" target="_blank" rel="noopener" @click="aoEnviar">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
+          <button v-if="travado" type="button" class="botao" @click="liberarAtual">{{ ROTULO_DE_LIBERAR }}</button>
+          <a v-else ref="linkDeEnviar" class="crm-fila__enviar" :href="atual.enviar" target="_blank" rel="noopener" @click="aoEnviar">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
           <button v-if="fila.length > 1" type="button" class="botao" @click="pular">Pular por agora</button>
         </div>
-        <p class="crm-nota-pequena">O toque marca o lead como enviado na planilha, como o link da lista.</p>
+        <p class="crm-nota-pequena">{{ travado ? 'Liberar só destrava o link; nada é enviado nem marcado.' : 'O toque marca o lead como enviado na planilha, como o link da lista.' }}</p>
       </template>
     </article>
 

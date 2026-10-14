@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDoPrazo } from './crm-formato'
+import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
@@ -15,8 +16,12 @@ const props = defineProps<{
   etapaEmFoco: CrmEtapa | null
   /** O filtro de produto do CRM; no celular "todos" vira Site. */
   produto: 'todos' | CrmProduto
+  /** Fora do expediente (trava-de-horario.ts): o envio de primeiro contato espera o "Liberar". */
+  aviso?: string | null
+  liberados: EnviosLiberados
 }>()
-const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto] }>()
+const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto]; liberar: [leadId: string] }>()
+const travado = (l: CrmLead) => envioTravado(props.aviso, props.liberados, l.id) && Boolean(l.links.enviar || l.links.convite)
 
 const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
 const celular = ref(mq?.matches ?? false)
@@ -194,8 +199,9 @@ const artefatos = (l: CrmLead) => {
               </p>
               <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.site" class="crm-cartao__links">
                 <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o Raio-X' : lead.abordagem?.mensagem === 'C' && lead.links.raioX ? 'Mandar o raio-x e o demo' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
-                <a v-if="lead.links.enviar" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.convite" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <button v-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
+                <a v-if="lead.links.enviar && !travado(lead)" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.convite && !travado(lead)" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
                 <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
               </p>
             </article>
