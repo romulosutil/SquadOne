@@ -11,9 +11,28 @@
  * (com a taxa medida) fora dele. Um critério só, para o aviso e a trava nunca discordarem.
  * A liberação vive só na tela aberta (memória, nunca localStorage): voltou o expediente ou
  * recarregou a página, o ciclo recomeça.
+ *
+ * O que trava (linksDePrimeiroContato): só a primeira abordagem — o envio do Site, o convite do
+ * PRUMO e, desde 14/10/2026, o reenvio do só-robô, que é uma primeira abordagem de verdade (a
+ * mensagem anterior só chegou ao robô). O follow-up de quem viu e não respondeu, a 2ª mensagem e
+ * a conversa não travam: são resposta a quem já recebeu algo, não um frio fora de hora.
  */
+import type { CrmLead } from './types'
 
 export type EnviosLiberados = ReadonlySet<string>
+
+type LeadDaTrava = Pick<CrmLead, 'links' | 'reenvioDoRobo'>
+
+/** Os links deste lead que a trava segura fora do expediente. */
+export function linksDePrimeiroContato(lead: LeadDaTrava): string[] {
+  return [lead.links.enviar, lead.links.convite, lead.reenvioDoRobo ? lead.links.followup : undefined]
+    .filter((url): url is string => Boolean(url))
+}
+
+/** Este link é de primeiro contato (e, portanto, travável)? */
+export function ehPrimeiroContato(lead: LeadDaTrava | undefined, url: string): boolean {
+  return Boolean(lead && url) && linksDePrimeiroContato(lead!).includes(url)
+}
 
 /** O envio deste lead está travado? Só fora do expediente (`aviso` presente) e enquanto não liberado. */
 export function envioTravado(aviso: string | null | undefined, liberados: EnviosLiberados, leadId: string): boolean {

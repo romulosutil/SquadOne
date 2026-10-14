@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { avisoDeHorario } from './operations/resultados.ts'
-import { envioTravado, liberarEnvio } from './operations/trava-de-horario.ts'
+import { rotuloDoFollowup } from './operations/crm-formato.ts'
+import { ehPrimeiroContato, envioTravado, liberarEnvio, linksDePrimeiroContato } from './operations/trava-de-horario.ts'
 import type { CrmLead } from './operations/types.ts'
 
 const AVISO = 'Agora é fora do expediente de quem recebe.'
@@ -24,6 +25,34 @@ describe('trava de horário do envio', () => {
     assert.deepEqual([...depois].sort(), ['a', 'b'])
     assert.notEqual(antes, depois)
     assert.deepEqual([...liberarEnvio(depois, 'b')].sort(), ['a', 'b'], 'liberar de novo é inofensivo')
+  })
+
+  // 14/10/2026: o reenvio do só-robô é uma primeira abordagem (a anterior só chegou ao robô) e
+  // trava como o envio e o convite; o follow-up de quem viu e não respondeu, a 2ª mensagem e a conversa, não.
+  it('o que trava: envio, convite e o reenvio do só-robô; o follow-up de sempre, não', () => {
+    const links = { enviar: 'https://x/enviar', convite: 'https://x/convite', followup: 'https://wa.me/1?text=fu', segunda: 'https://wa.me/1?text=2', whatsapp: 'https://wa.me/1' }
+    const casos: Array<[string, Pick<CrmLead, 'links' | 'reenvioDoRobo'>, string[]]> = [
+      ['pronto do Site', { links: { enviar: links.enviar, site: 'https://demo' } }, [links.enviar]],
+      ['prospect a convidar', { links: { convite: links.convite } }, [links.convite]],
+      ['follow-up de quem viu e não respondeu', { links: { followup: links.followup, whatsapp: links.whatsapp } }, []],
+      ['reenvio do só-robô', { links: { followup: links.followup, whatsapp: links.whatsapp }, reenvioDoRobo: true }, [links.followup]],
+      ['2ª mensagem', { links: { segunda: links.segunda, whatsapp: links.whatsapp } }, []],
+    ]
+    for (const [nome, lead, esperado] of casos) {
+      assert.deepEqual(linksDePrimeiroContato(lead), esperado, nome)
+      for (const url of Object.values(links)) assert.equal(ehPrimeiroContato(lead, url), esperado.includes(url), `${nome}: ${url}`)
+    }
+    assert.equal(ehPrimeiroContato(undefined, links.enviar), false, 'lead que sumiu do retrato não trava nada')
+    assert.equal(ehPrimeiroContato({ links: {} }, ''), false)
+    // Fora do expediente: trava o reenvio, não o follow-up de sempre, para o mesmo lead.
+    const fora = (lead: Pick<CrmLead, 'links' | 'reenvioDoRobo'>) => envioTravado(AVISO, new Set(), 'a') && ehPrimeiroContato(lead, links.followup)
+    assert.equal(fora({ links: { followup: links.followup }, reenvioDoRobo: true }), true)
+    assert.equal(fora({ links: { followup: links.followup } }), false)
+  })
+
+  it('o rótulo do link de follow-up: "Pedir o responsável" só no reenvio do só-robô', () => {
+    assert.equal(rotuloDoFollowup({ reenvioDoRobo: true }), 'Pedir o responsável')
+    assert.equal(rotuloDoFollowup({}), 'Mandar o follow-up')
   })
 
   it('acompanha o relógio de São Paulo: 19h trava, 10h de quarta não', () => {

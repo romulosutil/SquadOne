@@ -4,8 +4,8 @@ import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
-import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, hora, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
-import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
@@ -13,8 +13,8 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 // n8n (POST /api/operations/crm/registro); o toque na 2ª mensagem e no follow-up também
 // anota o envio por essa rota, pelo CrmPanel (14/10/2026). Recusou/Fechou/Desfazer ficam na
 // página do lead do n8n (fluxo 07); a Etapa do PRUMO muda na planilha.
-// `aviso`/`liberados` (trava-de-horario.ts): fora do expediente, enviar a primeira mensagem e o
-// convite esperam o "Liberar" deste lead, como na Hoje e no Funil.
+// `aviso`/`liberados` (trava-de-horario.ts): fora do expediente, enviar a primeira mensagem, o
+// convite e o reenvio do só-robô esperam o "Liberar" deste lead, como na Hoje e no Funil.
 // `anotados`/`falhaDaAnotacao` (anotacao-de-envio.ts): o toque na 2ª mensagem ou no follow-up anota
 // o envio pelo CrmPanel, em segundo plano; a ficha mostra a marca ou o pedido de anotar à mão.
 const props = defineProps<{
@@ -57,7 +57,7 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['enviar', 'Enviar a primeira mensagem pelo WhatsApp (marca como enviado)', l.enviar, true],
     ['convite', 'Enviar convite (marca como enviado)', l.convite, true],
     ['segunda', prumo ? 'Mandar o Raio-X (segunda mensagem)' : recebeuC ? 'Mandar o raio-x e o demo (segunda mensagem)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
-    ['followup', 'Mandar o follow-up (texto pronto)', l.followup, true],
+    ['followup', `${rotuloDoFollowup(props.lead)} (${props.lead.reenvioDoRobo ? 'reenvio único, ' : ''}texto pronto)`, l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
     ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
     ['raioX', 'Ver o Raio-X', l.raioX, false],
@@ -65,10 +65,11 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['planilha', prumo ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
   ]
   return todas.flatMap(([chave, rotulo, href, principal]) => (href ? [{ chave, rotulo, href, principal }] : []))
-    // Primeiro contato fora do expediente: some até o "Liberar" (o botão entra no lugar, no topo).
-    .filter((a) => !(travado.value && (a.chave === 'enviar' || a.chave === 'convite')))
+    // Primeiro contato fora do expediente (envio, convite, reenvio do só-robô): some até o "Liberar"
+    // (o botão entra no lugar, no topo).
+    .filter((a) => !(travado.value && ehPrimeiroContato(props.lead, a.href)))
 })
-const travado = computed(() => envioTravado(props.aviso, props.liberados, props.lead.id) && Boolean(props.lead.links.enviar || props.lead.links.convite))
+const travado = computed(() => envioTravado(props.aviso, props.liberados, props.lead.id) && linksDePrimeiroContato(props.lead).length > 0)
 /** Os links que anotam o envio ao serem tocados. */
 const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
 function aoTocar(chave: string) {

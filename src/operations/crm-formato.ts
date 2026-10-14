@@ -1,6 +1,15 @@
+import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO } from '../../server/site-mensagem.ts'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
+
+/**
+ * O rótulo do link de follow-up: "Pedir o responsável" quando é o reenvio do só-robô (14/10/2026).
+ * O texto vem de server/site-mensagem.ts, o mesmo que a Hoje do servidor usa: um lugar só.
+ */
+export function rotuloDoFollowup(lead: Pick<CrmLead, 'reenvioDoRobo'>): string {
+  return lead.reenvioDoRobo ? ROTULO_DO_REENVIO : ROTULO_DO_FOLLOWUP
+}
 
 export const ETAPAS: CrmEtapa[] = ['novo', 'contato', 'proposta', 'ganho', 'perdido']
 

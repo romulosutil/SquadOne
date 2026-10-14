@@ -113,6 +113,8 @@ export interface CrmLead {
   /** `segundaEnviada`/`followupEnviado` (14/10/2026): o último envio anotado na aba CRM. */
   marcos: { enviado?: string; visto?: string; respondeu?: string; segundaEnviada?: string; followupEnviado?: string }
   followupHoje: boolean
+  /** O follow-up de hoje é o reenvio único do só-robô (14/10/2026): pede o responsável e trava fora do expediente. */
+  reenvioDoRobo?: true
   respostaNova: boolean
   /** Disse que quer ver e a 2ª mensagem ainda não saiu: fica na Hoje sem o limite de 48 h. */
   interesseParado?: { desde?: string }
