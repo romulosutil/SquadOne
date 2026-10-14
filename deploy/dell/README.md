@@ -1355,7 +1355,8 @@ A porta de entrada do PRUMO (plano de 08/10/2026): uma página em `<site_url>/ra
 aparece no Google, o que já está bom, até 3 pontos que mandam cliente para o
 concorrente (cada um com o porquê em linguagem de dono), o link do demo e
 "R$ 990 + R$ 69/mês, paga depois de ver funcionando". Alimenta a variação C da
-primeira mensagem do Balcão.
+primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três atos
+(veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO.
 
 - **Feito por código, sem modelo.** A única fonte é o `content.md` do Caçador:
   nota e avaliações, telefone (celular ou fixo, pela regra do nó "Pontuar"),
@@ -1442,6 +1443,25 @@ primeira mensagem do Balcão.
   branco. Nenhum valor típico do ramo, nada se soma. Sem o
   `calculo_prumo.py` instalado, o raio-x sai como na versão 2 (e fica na 2, sem
   refazer ninguém) e avisa no log.
+- **Versão 4 (PR #74, no ar desde 14/10/2026): três atos.** O teste de
+  usabilidade e a análise de funil de 09/10 mostraram que o dono decide no
+  Raio-X, e a página tinha 13 blocos, a nota só no 6º e nenhum botão no fim.
+  *Veredito* (cabe na primeira tela a 390×844): nome, nota e avaliações do
+  Google, a faixa da Nota de presença (Pouco visível, Em construção, Bem
+  visível; o "X de 18" sai da frente, `calculo_prumo.bloco_faixa_html`) e o que
+  segura e o que perde cliente. *Por quê*: os pontos abertos; o resto em
+  `<details>` fechados (o que já está bom, quem aparece antes na busca, o que os
+  clientes dizem, o perfil item por item e "Como fizemos", com o "X de 18" e a
+  calculadora). *O que fazer*: a demonstração, o Encontrado com preço e "só
+  pagam depois de ver funcionando", o botão **Quero o site no ar** (WhatsApp do
+  PRUMO, `WHATSAPP_PRUMO`, com o nome da empresa na mensagem) e "Quero conversar
+  sobre o WhatsApp que responde", **sem preço**: o Respondido só na conversa.
+  No celular, uma barra fixa com o botão quando o terceiro ato entra na tela.
+  Saem o caminho do cliente e o bloco com os dois serviços e o preço do
+  Respondido. Medição sem cookie preparada e desligada (`URL_EVENTOS` vazia).
+  Com a versão 4 instalada, o `--pendentes` refaz quem está `pronto` na versão 3
+  (até 6 por rodada, um deploy cada); lead já `enviado` só muda com
+  `raio-x <slug>` à mão, e a URL (`<site_url>/raio-x`) não muda.
 
 ```bash
 raio-x --simular higor-ferreira-advogado   # o diagnóstico, sem publicar nem gravar
