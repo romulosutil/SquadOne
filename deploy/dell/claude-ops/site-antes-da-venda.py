@@ -911,8 +911,12 @@ def testar_n8n() -> int:
             ("execução sem erro", e["status"] == "success"),
             ("marcas lidas uma vez", marcas == 1),
             ("pronto personalizado: um item", len(a) == 1),
-            (f"pronto personalizado: personalizado-v{versao} e A",
-             bool(a) and (a[0].get("site_versao"), a[0].get("mensagem_variante")) == (f"personalizado-v{versao}", "A")),
+            # A linha de mentira não tem nota (a B não entra); a C entra se o recibo REAL do lead tiver
+            # Raio-X. Por isso a letra é A ou C (14/10/2026: o teste exigia A e reprovava quando o lead
+            # escolhido ganhou Raio-X), e `ab_elegiveis` tem que dizer o mesmo conjunto do sorteio.
+            (f"pronto personalizado: personalizado-v{versao}, letra e ab_elegiveis",
+             bool(a) and a[0].get("site_versao") == f"personalizado-v{versao}"
+             and (a[0].get("mensagem_variante"), a[0].get("ab_elegiveis")) in {("A", "A"), ("A", "AC"), ("C", "AC")}),
             ("enviado padrão: só a versão", b == [{"place_id": padrao, "site_versao": "padrão"}]),
             ("descartes lidos uma vez", len(rd["Ler descartes do gerador"]) == 1),
         ]
