@@ -374,9 +374,12 @@ def tirar_para_reavaliar(oferta, desde):
             cab = v[0] if v else []
             linhas = [(i, dict(zip(cab, l + [""] * (len(cab) - len(l))))) for i, l in enumerate(v[1:], start=1)]
             fora = [(i, d) for i, d in linhas if str(d.get("Encontrado em", ""))[:10] >= desde and sai(d)]
-            for i, _ in sorted(fora, key=lambda x: -x[0]):
+            # Um pedido só, de baixo para cima (o índice de cima não muda): uma escrita por linha estourou a
+            # cota de escritas por minuto do Sheets em 14/10/2026.
+            if fora:
                 s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": [{"deleteDimension": {"range": {
-                    "sheetId": abas[aba], "dimension": "ROWS", "startIndex": i, "endIndex": i + 1}}}]})
+                    "sheetId": abas[aba], "dimension": "ROWS", "startIndex": i, "endIndex": i + 1}}}
+                    for i, _ in sorted(fora, key=lambda x: -x[0])]})
             print(f"{aba}: {len(fora)} linha(s) de {o['rotulo']} desde {desde} tiradas para reavaliar")
 
 
