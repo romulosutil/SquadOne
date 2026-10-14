@@ -15,7 +15,10 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
-`server/crm.test.ts`, `server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho), `server/acesso.test.ts`,
+`server/crm.test.ts` (inclui, desde 14/10/2026, o loop fechado: interesse parado além de 48 h que só some
+com a 2ª mensagem anotada depois da resposta, `followup_enviado` que apaga o follow-up do dia, o regime da
+mensagem pelas mesmas datas de corte do `funil-aprendizado.py`, a validação do envio por etapa e a
+idempotência de 2 min com `fetch` dublê: clique duplo, toques simultâneos e retrato já refeito), `server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho), `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 `server/roster-historico.test.ts`,
@@ -45,7 +48,10 @@ e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `src/ajuste-do-usuario.test.ts`,
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
 `src/operations-fila-de-envio.test.ts` (marcas de envio no navegador, a fila por nicho, pular, o passo e a marca "vídeo enviado" do A/B),
-`src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados),
+`src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados;
+sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena),
+`src/operations-anotacao-de-envio.test.ts` (a anotação do toque na 2ª mensagem e no follow-up: qual link anota, o primeiro
+toque vale, storage que lança, poda quando o retrato confirma, anotados no fim do grupo da Hoje),
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não),
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
@@ -53,7 +59,7 @@ e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
-linha do funil)). O monitor do Dell tem os seus em Python:
+linha do funil, o cartão de respostas com o interesse parado na frente)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py`; a lib da fila de avisos,
 `python3 deploy/dell/lib/aviso.test.py` (formato igual ao do dell-status, cortes,
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,

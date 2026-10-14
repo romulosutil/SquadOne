@@ -1162,6 +1162,23 @@ entrada/saída), dias na etapa e desde o último evento, **divergência**
 (planilha e pasta discordam depois de 2 h de folga: nota na ficha, nunca
 correção).
 
+**Loop fechado (14/10/2026).** Dos 221 envios, 5 de interesse e 0 propostas:
+"Manda aí" e "Pode sim" de 08–09/10 saíram da Hoje em 48 h sem o CRM saber se
+o link foi mandado, e os 65 lembretes de follow-up não diziam se algum saiu.
+Agora o toque em "Mandar o link" (2ª mensagem) e em "Mandar o follow-up", na
+Hoje, no Funil ou na Ficha, abre o WhatsApp como antes e, em segundo plano,
+anota `segunda_enviada`/`followup_enviado` na aba CRM (idempotente por 2 min;
+se falhar, a tela pede "anote à mão"). **Interesse parado** (resposta
+classificada `interesse` sem 2ª mensagem anotada depois dela, ou sem
+`ultima_saida_em` posterior) fica em "Respostas para responder" sem o limite
+de 48 h, na frente e o mais antigo primeiro; passadas 2 h, a ação diz "Quer ver
+há N dias — o link ainda não foi mandado". Sai com a 2ª mensagem ou com a saída
+normal da etapa (recusa, proposta, ganho, regra dos 7 dias). O follow-up
+anotado depois do envio apaga o "follow-up hoje". O **regime** da 1ª mensagem
+(`curta_com_link` até 29/09, `prumo_com_link` 30/09–04/10, `duas_mensagens`
+desde 05/10, a regra de `regime_da_mensagem` do `funil-aprendizado.py`) vai em
+`abordagem.regime`, à parte da letra.
+
 **As vistas** (celular primeiro; `?ver=funil`, `?ver=resultados`,
 `?produto=site|prumo`, `?lead=site:<place_id>`):
 
@@ -1171,7 +1188,10 @@ correção).
   (`site_versao`): respondeu (gente; robô não conta), viu (só com confirmação
   de leitura), quis ver, recusou, fechou. Recusa só entre enviados (o acervo
   de `_recusados/` não recebeu mensagem rastreada); menos de 10 enviados leva
-  o aviso "amostra pequena". Envios até 07/10 ficam em "Sem registro".
+  o aviso "amostra pequena". Envios sem a letra (até 07/10) entram pelo regime
+  da data ("Com link na 1ª mensagem", "Pedido de licença, sem link"); sem data,
+  "Sem registro". Desde 14/10/2026, também o follow-up anotado e quantos
+  responderam depois dele, e a 2ª mensagem anotada entre quem quis ver.
   Também por **horário do envio** (hora de São Paulo, na ordem do dia): até
   08/10/2026, 26 envios depois das 18h tiveram 0 respostas e, das 8h às 18h,
   15 de 65 (23%). Por isso a fila "Enviar um por um" avisa, fora do expediente
@@ -1198,7 +1218,8 @@ correção).
   manual: aba CRM), ações (Recusou/Fechou/Desfazer na página do lead do fluxo
   07; no PRUMO, a linha na planilha para mudar a Etapa) e os três registros
   manuais: **nota**, **próximo passo + data** e **proposta enviada** (e
-  desfazer).
+  desfazer); os envios anotados ao tocar no link aparecem como "2ª mensagem
+  enviada" e "Follow-up enviado".
 
 **Caminho dos dados.** O fluxo `08 · CRM: retrato e registros (Site antes da
 venda + PRUMO)` (id `AsjxktRCqRJSmj9P`) lê Leads, Prospects e a aba **CRM**

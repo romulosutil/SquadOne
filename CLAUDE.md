@@ -108,8 +108,12 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
-                          avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora
-    trava-de-horario.ts   PURO (14/10/2026): o aviso também TRAVA o link de primeiro contato (fila, Hoje, Funil) até o
+                          avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora;
+                          sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois
+    anotacao-de-envio.ts  PURO (14/10/2026): o toque em "Mandar o link"/"Mandar o follow-up" (Hoje, Funil, Ficha) anota
+                          segunda_enviada/followup_enviado na aba CRM em segundo plano; marca local até o retrato confirmar
+                          (10 min); falha = "anote à mão", o WhatsApp abre igual. Interesse parado não some da Hoje (server/crm.ts)
+    trava-de-horario.ts   PURO (14/10/2026): o aviso também TRAVA o link de primeiro contato (fila, Hoje, Funil, Ficha) até o
                           "Liberar" daquele lead, só em memória (depois das 18h: 0 de 29 envios com resposta)
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
