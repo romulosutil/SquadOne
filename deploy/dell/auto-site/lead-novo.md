@@ -32,28 +32,37 @@ processando em lote, siga pro próximo lead da fila.
 ## 2. Para cada lead
 
 Siga os passos do `CLAUDE.md` — ler `content.md` e as imagens de `Fotos/` e
-`Logotipo/`, marca real (Instagram, se tiver), metáfora e Atos (passo 1.5.1,
-grava o `CONCEITO.md`), escolher
-o estilo visual, `/design`, refino da direção (`/design-taste-frontend` →
-`/ui-ux-pro-max` → `/impeccable`), escrever, polir no código
-(`/emil-design-eng` → `/impeccable audit` + `polish`), publicar, recibo,
-registro. As cinco skills rodam sempre, nessa ordem. `/design` e as três de
-refino vêm antes de qualquer linha de código; só a `/emil-design-eng` e o
-`audit`/`polish` rodam sobre o HTML pronto.
+`Logotipo/`, marca real (Instagram, se tiver), as cinco perguntas (passo
+1.5.1, grava o `CONCEITO.md`), duas referências da biblioteca
+`REFERENCIAS.md` (passo 1.6), `/design`, refino da direção
+(`/design-taste-frontend` → `/ui-ux-pro-max` → `/impeccable`), escrever,
+polir no código (`/emil-design-eng` → `/impeccable audit` + `polish`),
+publicar, recibo, registro. As cinco skills rodam sempre, nessa ordem.
+`/design` e as três de refino vêm antes de qualquer linha de código; só a
+`/emil-design-eng` e o `audit`/`polish` rodam sobre o HTML pronto.
 
 Releia as restrições do `CLAUDE.md` antes de escrever o HTML. As que mais
-escapam:
+escapam (auditoria dos 54 demos no ar em 13/10/2026):
 
-- a página é uma história em cinco Atos guiada por uma metáfora do ofício
-  (passo 1.5.1), não o esquema "hero, serviços, diferenciais, contato"; a
-  metáfora mostra o cuidado, nunca o problema, e a navegação é ela
-- todo efeito de movimento tem linha na tabela "efeito → Ato → o que
-  significa" do `CONCEITO.md`; o que não significa nada sai. Cursor só com
-  `pointer: fine`, `prefers-reduced-motion` completo, título e foto do Ato I
-  visíveis sem esperar JS
-- orçamento de bytes medido antes do deploy (fim do Ato I ≤ 200 KB, arquivo
-  ≤ 450 KB, CSS ≤ 35 KB, JS ≤ 25 KB) pelo `qa-numerico`, fotos em WebP; as
-  capturas de cada rodada lidas numa folha de contato só
+- o título é **uma frase** com o ofício e o bairro ou a cidade ("Desentupidora
+  24 horas no Jardim Tatiana, em Votorantim"); nada de duas frases de efeito,
+  aspas ou título que não diz o que a empresa faz
+- menu e seções com nome comum (Serviços, Como funciona, Avaliações, Onde
+  fica, Contato); nunca I, II, III, nunca o nome da metáfora. A metáfora, se
+  houver, fica só no visual
+- até 6 telas de celular; seção que não responde a uma das cinco perguntas sai
+- nenhum campo de texto, quiz, teste ou brinquedo: um botão de WhatsApp por
+  serviço, com a mensagem pronta, é toda a interação
+- nada da seção "Cara de IA" do `CLAUDE.md`: polaroide inclinada, bilhete
+  manuscrito, letra gigante, objeto 3D em SVG, vidro fosco, frase de gaveta
+- um WhatsApp só: o telefone do Google, ou o "achado na busca" depois de
+  conferido, com a fonte no `registro.md`
+- o código do modo de captura (`?qa`, `html.qa`, `#qa-resultado`) não vai no
+  arquivo publicado
+- captura de celular só com `qa-numerico --celular` (com `--window-size` o
+  Chrome desenha a página com ~500 px)
+- orçamento de bytes e o resto medidos pelo `qa-numerico` antes do deploy, até
+  sair 0; as capturas de cada rodada lidas numa folha de contato só
 - nenhuma frase de medo, desconfiança, urgência artificial ou deboche do ramo;
   experiência só com fonte (anos, nota, horário)
 
@@ -66,7 +75,7 @@ escapam:
   placa, letreiro, fachada, jaleco, impresso. Na CLIN ODONTO CSCN o logo e o
   posicionamento inteiros estavam na placa da recepção, e o `content.md` não
   dizia nada
-- escolha **um** estilo de frontend da lista do passo 1.6 antes do `/design` —
+- escolha as duas referências do passo 1.6 e capture-as antes do `/design` —
   não pule direto pra skill sem essa decisão tomada
 - `Logotipo/` não vazia não quer dizer logo aproveitável de cara — mas antes de
   descartar, tente extrair: recorte o logo isolado da foto (fundo, placa,
@@ -80,20 +89,21 @@ escapam:
   vier vazia ou só com imagem proibida, use foto ilustrativa grátis do Unsplash
   (gente sorrindo em contexto de casa/família, nunca consultório de banco de
   imagem), com crédito no rodapé e comentário pedindo as fotos reais ao dono.
-  Site só com tipografia e forma não fecha o passo 4
+  Site só com tipografia e forma não fecha o passo 4, e objeto desenhado em
+  código não substitui foto
 - avaliação do Google **nunca** vira depoimento entre aspas
 - nada de conteúdo inventado — serviço, tempo de mercado, selo, número
 - nenhuma skill passa por cima do `CLAUDE.md`: a stack React/Tailwind/Motion da
   `/design-taste-frontend` não vale (arquivo único, sem CDN), e o `/impeccable`
   não entrevista, não abre página de escolha nem rola direção nova — a direção
-  já está fixada no passo 1.6 e no `/design`
+  já está fixada nos passos 1.5.1 e 1.6 e no `/design`
 
 ## 3. Ao terminar
 
 Um parágrafo curto, sem tabela:
 
 - quantos leads entraram e quantos saíram publicados
-- para cada um, a URL, a metáfora (família + instância) e **uma frase** sobre a
+- para cada um, a URL, o título, as duas referências e **uma frase** sobre a
   decisão de design que você tomou pensando naquele negócio — não uma
   descrição do que a página tem
 - o que falhou, se falhou, e por quê

@@ -167,11 +167,22 @@ Um `index.html` dentro da pasta do lead. Landing page de conversão para uma
 PME que **hoje não tem site nenhum** — o dono nunca se viu na internet, e essa
 página é a primeira vez.
 
-Desde 08/10/2026 a página não é uma pilha de seções: é uma história curta em
-**cinco Atos**, guiada por **uma metáfora do ofício** do negócio, com movimento
-que sempre quer dizer alguma coisa (passo 1.5.1 e "Barra de excelência"). O
-negócio tem de parecer experiente e confiável, nunca amador, e nenhuma frase
-pode gerar medo ou desconfiança.
+**Clareza antes de conceito (13/10/2026).** A página responde, em ordem e com
+palavras simples, às cinco perguntas de quem chega pelo Google (passo 1.5.1):
+o que é e onde fica, se resolve o meu caso, como funciona, se dá para confiar,
+como eu chamo. Cabe em até **6 telas de celular**. O negócio tem de parecer
+experiente e confiável, nunca amador, e nenhuma frase pode gerar medo ou
+desconfiança.
+
+*Por que mudou:* de 08 a 13/10/2026 a direção foi "metáfora do ofício e cinco
+Atos". A auditoria dos 54 demos no ar em 13/10 mostrou que ela virou o novo
+template e deu cara de IA a todos: título em frase de efeito que não diz o
+ofício ("A água desce. Depois, a gente confere."), menu com o nome da
+metáfora ou só com I, II, III ("Portão · Lista · Corredor"), campo de texto e
+caixinhas de marcar em 39 dos 54, brinquedos ("faça o teste das oito placas"),
+polaroides inclinadas com bilhete, vidro fosco em 34, e páginas com 11 telas
+de mediana. A metáfora continua permitida, mas **só no visual** (cor, imagem,
+um detalhe de movimento); título, menu, texto e estrutura são diretos.
 
 ### Regionalidade (escopo ampliado em 16/09/2026)
 
@@ -235,6 +246,18 @@ pelo Google:
 - **CTA principal: WhatsApp** (Brasil), com o telefone real do `content.md`.
   Fora do Brasil, o canal que o mercado local usa (ver Regionalidade). O `href`
   real (`https://wa.me/...`) está no HTML de todo CTA, não só no JS.
+  **Um número só, e de fonte certa (13/10/2026):** o telefone do Google
+  (`Telefone:` do `content.md`) quando é celular. O "WhatsApp achado na busca"
+  só entra depois de conferido no Instagram, no Facebook, na foto da fachada ou
+  no cartão do próprio negócio, com a fonte anotada no `registro.md`; sem
+  conferência, use o telefone do Google (fixo vira "Ligar", e o WhatsApp sai).
+  Em 13/10 dois demos tinham dois números de WhatsApp diferentes e quatro
+  tinham um WhatsApp que não batia com o telefone: o cliente do dono chamaria
+  o número errado.
+- **Nada de código de teste no arquivo publicado.** O modo de captura
+  (`?qa=1`, classe `html.qa`, `#qa-resultado`, `window.onerror` de
+  depuração) mora numa cópia no rascunho, nunca no `index.html` que sobe. Em
+  13/10 29 dos 54 demos levavam esse código.
 - **Sem JavaScript, tudo visível.** Estado inicial escondido só sob uma classe
   que o JS põe (`html.js`); o título e a foto do Ato I nunca começam com
   `opacity: 0` nem esperam script: a entrada deles é CSS puro, começa no
@@ -258,8 +281,13 @@ pelo Google:
   Ele mede estes tetos (o Ato I é a primeira `<section>` dentro de `<main>`),
   `width`/`height` e `alt` das imagens, `prefers-reduced-motion`, contraste
   AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion
-  (tira as duas capturas ele mesmo); código 1 = falhou, e cada FALHA diz o que
-  cortar. Rode até sair 0. Sem ele instalado, um script python3 no rascunho
+  (tira as duas capturas ele mesmo). Desde 13/10/2026 também reprova o título
+  em duas frases de efeito, entre aspas ou sem o ofício nem a cidade, a cidade
+  fora do Ato I, menu numerado, frase da lista de gaveta, campo de texto para o
+  visitante, código de teste publicado e WhatsApp fora do `content.md`; e mede
+  a página renderizada a 390 px: mais de 8 telas, rolagem lateral, link ou
+  botão abaixo de 40 px e texto abaixo de 12 px reprovam. Código 1 = falhou, e
+  cada FALHA diz o que cortar. Rode até sair 0. Sem ele instalado, um script python3 no rascunho
   faz a conta dos bytes. Corte o que passar: a imagem feita em SVG custa
   pouco, a foto de celular esticada custa muito.
   Publicar outros arquivos não é saída: o Raio-X republica só `index.html` e
@@ -323,7 +351,7 @@ Como entrar no arquivo, já que continua sendo um HTML só:
 - `width` e `height` sempre, para a página não pular enquanto carrega.
 - `decoding="async"` em tudo que não é a foto do Ato I. `loading="lazy"` não
   economiza nada numa imagem `data:` (os bytes já vieram no HTML): o que conta é
-  o orçamento. Nos Atos abaixo da dobra, `content-visibility: auto` com
+  o orçamento. Nas seções abaixo da dobra, `content-visibility: auto` com
   `contain-intrinsic-size` adianta a primeira pintura.
 - `alt` descritivo no idioma da página, dizendo o que se vê.
 - **Ajuste a proporção do painel à foto, não a foto ao painel.** Cortar uma
@@ -349,6 +377,52 @@ Como entrar no arquivo, já que continua sendo um HTML só:
   neutra ("A pia parou") e logo vem a solução. Em 08/10/2026 havia título que
   soava como "você foi lesado" num demo de advocacia e uma seção que ria do
   "Ligue agora!!!" num de desentupidora: os dois saem com esta regra.
+
+### Cara de IA (13/10/2026)
+
+Tudo abaixo apareceu em dezenas dos 54 demos auditados em 13/10/2026 e é o
+que faz o dono (e o cliente dele) perceber na hora que a página foi gerada.
+Nada disto entra:
+
+- **Título-aforismo.** Duas frases curtas em contraste ("Primeiro a pergunta.
+  Depois a parede.", "Barata não espera. Escorpião também não."), frase de
+  efeito que não diz o ofício ("Do mesmo lado da mesa.", "Aqui estamos."),
+  título entre aspas, palavra em itálico de destaque no fim do título serifado.
+  O título é **uma frase** com o que a empresa faz e onde, nas palavras de
+  quem procura: "Desentupidora 24 horas em Votorantim", "Advogada
+  previdenciária no Setor Oeste, em Goiânia", "Aluguel de betoneira e andaime
+  em Aparecida de Goiânia". O jeito do dono entra no subtítulo, com fato.
+- **Menu que não diz para onde leva.** Algarismo romano (I, II, III), número
+  sozinho, nome da metáfora ("Portão · Lista · Corredor", "Ralo · Conferida").
+  Rótulo é a palavra que o cliente usaria: Serviços, Áreas, Como funciona,
+  Avaliações, Onde fica, Contato.
+- **Especificidade de efeito.** Endereço e número usados como poesia ("O
+  Fórum fica no 689. A conversa começa no 1980."). Fato entra como fato: rua,
+  bairro, horário, nota, frota, ano de abertura com fonte.
+- **Formulário e brinquedo.** Campo de texto, caixa "conte com as suas
+  palavras", teste, quiz, contador "Respondidas: 0 de 5", arrastar um quadrado,
+  seletor que monta a mensagem. O WhatsApp é o formulário: um botão por
+  serviço, cada um com a mensagem pronta, é toda a interação que a página
+  precisa.
+- **Decoração de gerador.** Polaroide ou cartão inclinado com bilhete
+  manuscrito, nota adesiva "Instagram, set. 2026", letra gigante desenhada em
+  código, objeto 3D feito em SVG no lugar de foto, vidro fosco
+  (`backdrop-filter`), rótulo em caixa alta espaçada em cima de todo título,
+  índice de progresso no topo.
+- **Frases de gaveta.** "Sem complicação", "sem rodeios", "explicado com
+  clareza", "de verdade", "a gente cuida", "do mesmo lado", "jornada",
+  "atendimento humanizado", "cuidado e firmeza", "de ponta a ponta", "sua
+  história" e as demais da lista do gate (`FRASES_PROIBIDAS` no
+  `qa-numerico`).
+- **Página comprida.** Mais de 6 telas no celular. Se uma seção não responde a
+  uma das cinco perguntas do passo 1.5.1, ela sai.
+- **O esqueleto de template novo.** Vários sites reais refeitos em 2026 (e
+  algumas das referências, mais abaixo da primeira tela) já têm a cara de IA
+  seguinte: sobretítulo espaçado com pino ou ponto ("CAMPINAS · FAMILIAR DESDE
+  2010") em cima do título, uma palavra do título em outra cor, faixa de
+  números ("+500 clientes · 4,9 · 24 h"), checklist de vantagens com ✓ e
+  cards numerados 01, 02, 03. Também não entra: trocar um vício por outro não
+  resolve.
 
 ### Experiência sem inventar
 
@@ -430,162 +504,103 @@ do site. Se eu tivesse parado no texto do `content.md`, o site sairia no azul
 clínico genérico que a própria biblioteca da `/ui-ux-pro-max` recomenda para
 "clínica médica" (`#0891B2`). A marca estava na parede, não no arquivo.
 
-**1.5.1. Metáfora e Atos.** Antes do estilo e do `/design` (08/10/2026, direção
-"redesign conceitual e de movimento" do Rômulo). Os demos até ali tinham duas
-falhas: o fluxo comum saía de template (hero, serviços, diferenciais,
-orçamento, contato) e, quando havia ideia, ela morava num brinquedo (arrastar
-uma cláusula, girar uma maquete) com a página em ordem de template em volta. O
-visitante precisava aprender o brinquedo antes de entender o negócio.
+**1.5.1. As cinco perguntas.** A estrutura da página (13/10/2026). São as
+perguntas de quem chega pelo Google, na ordem em que as tem, cada uma numa
+seção com nome comum. A primeira `<section>` dentro de `<main>` continua
+sendo o "Ato I" que o gate mede; o visitante nunca vê "Ato", número de seção
+nem índice de progresso.
 
-*A metáfora* é o instrumento, documento ou percurso que o próprio ofício usa
-para mostrar ao cliente que o trabalho está sob controle. Ela representa o
-cuidado e a ordem, **nunca o problema**. Duas camadas: a família vem do nicho
-(tabela abaixo, ponto de partida) e a instância vem do lead (a cor da fachada,
-a frota, a esquina, o vocabulário do dono, achados no passo 1.5). Família sem
-instância é template; instância sem família é enfeite. Teste, e um "não"
-derruba a metáfora: vem do ofício (não de banco de imagem: balança, dente
-brilhando, floco de neve)? Dá nome e ordem aos cinco Atos e serve de índice?
-Mostra controle, não o problema? Lê em 3 segundos num celular? Parada (com
-reduced-motion) ainda conta a história? Trocando o nome por o de um
-concorrente da mesma cidade, algo fica falso?
+1. **Chegada: "é isto, é perto?"** Um `<h1>` de uma frase com o ofício e o
+   bairro ou a cidade, nas palavras de quem procura ("Desentupidora 24 horas
+   no Jardim Tatiana, em Votorantim"). Abaixo, o fato que distingue este
+   negócio, com fonte (quem atende, a frota, o horário, desde quando pelo
+   CNPJ), a nota e o número de avaliações do Google, o botão do WhatsApp (e
+   "Ligar", em urgência) e uma foto real. Tudo na primeira tela do celular.
+2. **Serviços: "resolve o meu caso?"** O que o negócio faz, tirado do
+   `content.md`, do Instagram e das fotos, escrito como o cliente descreve o
+   problema. Cada item pode ter o seu botão de WhatsApp com a mensagem pronta;
+   é a única interação da página. Sem campo de texto, sem caixa de marcar.
+3. **Como funciona: "como vai ser?"** Horário, região atendida, como é o
+   primeiro contato, o que mandar ou levar. Três ou quatro passos curtos.
+4. **Prova: "dá para confiar?"** Fotos reais legendadas, a nota, o que os
+   clientes elogiam (parafraseado, sem aspas), tempo de mercado só com fonte.
+   Advocacia e saúde: sem avaliações (regra dos conselhos, ver "Ramos novos").
+5. **Contato: "como eu chamo?"** WhatsApp, telefone, endereço com o link do
+   Maps, horário; rodapé com dados reais.
 
-| Nicho | Família da metáfora | A navegação é | O movimento que diz algo | Nunca |
-|---|---|---|---|---|
-| Advocacia | a pasta do caso, organizada | separadores numerados de I a V | folhas que se assentam (`sticky`), marca-texto que acompanha o título; esticamento ≤ 1,5% | balança, martelo, frase de "você foi lesado", R$ |
-| Odontologia | o caminho da consulta, da recepção à luz da janela | um caminho com cinco paradas | a luz da página clareia com o scroll; paralaxe suave nas fotos da recepção | dente 3D, instrumento, boca, antes e depois |
-| Climatização e refrigeração | a curva que desce de 34° a 23° | um visor de termostato com o grau de cada Ato | a cor esfria com o scroll; linhas de ar esticam com a velocidade; ar frio descendo entre Atos | "faz mal à saúde", fungo, floco de clip-art |
-| Desentupidora | o fluxo que volta a correr | uma linha de tubulação limpa que atravessa a página | a linha corre com o scroll; transição líquida (água limpa) entre Atos | esgoto, sujeira, rir do ramo |
-| Dedetizadora | a casa protegida, cômodo por cômodo | a planta baixa; cada Ato acende um cômodo | o traço da barreira fecha o perímetro com o scroll | inseto grande, infestação, "transmitem doenças" |
-| Reformas e marcenaria | da planta ao acabamento | uma régua com as etapas (medir, desenhar, executar, acabar, entregar) | linhas de projeto que se desenham e ganham material (a planta vira a foto por máscara); peças que se encaixam com inércia | "obra que nunca termina", "fuja do amador" |
-| Escola infantil | um dia na escola, do portão à saída | um sol que atravessa o céu | lento e leve: a luz muda com o dia, levitação suave na rotina | rosto de criança identificável, "vagas acabando" |
-| Estética automotiva | a passada de polimento | as etapas do detalhamento | um reflexo atravessa os títulos (máscara) e estica com a velocidade, como o brilho na lataria | "seu carro está desvalorizando" |
+Sempre: barra de WhatsApp fixa no celular depois que a primeira tela sai de
+vista. **No máximo 6 telas de celular** (o gate avisa acima de 6 e reprova acima de 8). Uma seção
+a mais só entra se responder a uma pergunta real deste negócio (por exemplo
+"Atende condomínio?" numa dedetizadora que emite laudo); se ela não responde a
+pergunta nenhuma, sai.
 
-Outro nicho: aplique a regra e o teste; contabilidade, por exemplo, pode ser "o
-ano fiscal do cliente, mês a mês", indústria "a peça do desenho à entrega".
+**A metáfora, se houver, fica só no visual.** A ideia de 08/10/2026 (a pasta
+do caso na advocacia, a linha da tubulação na desentupidora, a régua de
+etapas na reforma) pode inspirar a cor, uma imagem ou **um** detalhe de
+movimento, por exemplo a linha que acompanha a lista de serviços. Nunca o
+título, o menu, o nome das seções nem a estrutura. Metáfora que precisa de
+explicação sai.
 
-*Os cinco Atos* são as perguntas que o visitante tem, na ordem em que as tem, do
-"achei no Google" ao "chamei no WhatsApp". A metáfora dá o nome e a forma de
-cada um. Um Ato pode ser curto, nenhum falta (em urgência o I já traz o
-chamado do V). Só entra dado com fonte (ver "Experiência sem inventar").
+Grave `<slug>/CONCEITO.md` (nunca sobe para a Vercel), curto: o título e por
+quê; o fato que distingue este negócio, com a fonte; as duas referências do
+passo 1.6 e o princípio que vai aplicar de cada uma; e cada efeito de
+movimento com o que ele significa. Efeito sem linha não entra.
 
-- **I. Chegada — "é isto, é de verdade, é perto?"** Nome, o ofício nas palavras
-  do cliente, bairro e cidade, nota e quantidade de avaliações do Google, uma
-  foto real, WhatsApp (e ligar, em urgência), "aberto agora" pelo horário real.
-  Movimento: entrada em CSS puro, título revelado linha a linha por máscara,
-  paralaxe 3D curta na foto; a metáfora aparece como cenário. Por quê:
-  confirmar em 3 s que é o negócio certo, sem o LCP esperar JS.
-- **II. Reconhecimento — "eles resolvem o meu caso?"** Os serviços do
-  `content.md`, do Instagram e das fotos, escritos como o problema que o
-  cliente descreve. Movimento: o item tocado levita, os outros recuam, e a
-  escolha já monta a mensagem do WhatsApp. Por quê: quem se reconhece já
-  começou o contato.
-- **III. Como funciona — "como vai ser, sem surpresa?"** Horário, região, como
-  é o primeiro contato, o que mandar ou levar. Movimento: a sequência presa ao
-  scroll (`position: sticky` + progresso 0-1), onde a metáfora acontece (a
-  linha corre, a curva desce, as folhas se assentam). Por quê: a incerteza é a
-  maior barreira para chamar um desconhecido.
-- **IV. Prova — "dá para confiar?"** Fotos reais tratadas e legendadas, nota,
-  o que os clientes elogiam (sem aspas), tempo de mercado só com fonte.
-  Movimento: paralaxe de profundidade nas fotos, contador da nota uma vez.
-  Por quê: confiança vem de evidência, não de adjetivo.
-- **V. Chamado — "como eu falo, agora?"** WhatsApp com a mensagem pronta,
-  telefone, endereço com o link do Maps, horário. Movimento: a metáfora se
-  resolve (a linha chega, a curva chega a 23°, a pasta fecha), transição
-  líquida para a cor do fecho, botão magnético. Por quê: o contato é o último
-  passo natural da história, não um pedido.
+**1.6. Referências da biblioteca.** Antes do `/design`. Abra
+`~/auto-site/REFERENCIAS.md`: sites reais de serviço local, 3 por nicho,
+escolhidos entre cerca de 400 e aprovados pelo Rômulo (13/10/2026). Ela
+substitui o Refero, cujo acervo é de produtos SaaS e ensinava gramática de
+aplicativo a uma desentupidora de bairro. Leia a folha do nicho do lead
+(`~/auto-site/referencias/<nicho>.jpg`, a primeira tela das 3 no celular,
+numa imagem só) e escolha **duas**. Para ver mais de uma delas, capture ao
+vivo e leia numa folha:
 
-Sempre: barra de WhatsApp fixa no celular depois que o Ato I sai da tela (o
-contato a no máximo dois toques de qualquer ponto), e o índice dos Atos, que é
-a metáfora, com o Ato atual marcado. Quem ignorar todos os efeitos e só rolar
-entende o negócio e chega ao WhatsApp.
+```
+python3 ~/.local/bin/qa-numerico --celular https://<site>/ <rascunho>/refs/<site>.png --rm
+python3 ~/.local/bin/folha-de-contato --saida <rascunho>/refs/folha.jpg --pasta <rascunho>/refs
+```
 
-Grave `<slug>/CONCEITO.md` (nunca sobe para a Vercel) com: a metáfora em uma
-frase (família + instância), os cinco Atos com o nome que a metáfora dá a cada
-um e o que entra neles (com a fonte de cada dado), e a tabela **efeito → Ato →
-o que significa** com cada efeito de movimento que vai para o código. Efeito
-sem linha nessa tabela não entra. O estilo do passo 1.6 é a pele dessa
-metáfora: escolha o que a serve.
+Aprenda o princípio que a biblioteca anota para cada uma (o que a primeira
+tela faz, como a foto é usada, como se chega ao contato); nunca copie layout,
+texto, marca, foto ou ícone. Site que mudou, saiu do ar ou pede verificação
+de robô: fique com a folha.
 
-**1.6. Escolher o estilo visual.** Antes do `/design` — nunca depois, nunca
-junto com o código. Com o que saiu dos passos 1 e 1.5 (o que o negócio é, o
-que quer parecer, a marca real se tiver Instagram), escolha **um** destes
-estilos de frontend pra guiar a direção. Não misture vários: o negócio pede
-um, não uma colagem.
+**O estilo sai da marca real (passo 1.5) e das referências**, não de um
+catálogo de estilos. Antes de decidir, olhe as últimas 5 linhas do
+`registro.md` e não repita a cor dominante nem o par de fontes de nenhum dos
+últimos 5 do mesmo nicho (11 demos de advocacia seguidos saíram em serif com
+itálico sobre creme ou azul-marinho).
 
-- Bento Grid (Estrutura Modular)
-- Neo-Brutalismo
-- Glassmorphism & Liquid Glass
-- Minimalismo Moderno (Raw & Clean UI)
-- Neumorfismo e Claymorphism
-- Material Design (Google)
-- Fluent Design (Microsoft)
-- Flat UI (Design Plano)
-- Soft UI
-- Spatial UI (Design Espacial)
-- Maximalismo Visual
+Antes do `/design`, diga em uma frase: o título, as duas referências (nome e
+URL) e o princípio de cada uma. No passo 7, registre também
+`Referências: <nome> — <URL>; <nome> — <URL>; aplicado: <princípios>`.
 
-Diga qual escolheu e por quê, numa frase, antes de seguir pro `/design`. Esse
-estilo é o insumo que entra no passo 2 — não uma opção a mais dentro dele, nem
-nas skills de refino do passo 3.
-
-**Antes de escolher, olhe as últimas 5 linhas do `registro.md`.** Anote qual
-estilo e qual cor dominante cada um usou. Não repita o estilo nem a paleta de
-nenhum dos últimos 5 — e se dois leads seguidos forem do mesmo segmento
-(duas academias, duas clínicas, dois estúdios de pilates), o estilo do
-segundo tem que ser diferente do primeiro sem exceção. Minimalismo Moderno
-já se repetiu 4 vezes em 15/09/2026 (Estúdio Marília, Soma Guarapari,
-Orthosanti, CLIN ODONTO CSCN) — é o estilo "seguro", e por isso é o que mais
-tende a virar prateleira. Se ele for realmente o que a marca pede, diga por
-quê nessa mesma frase; se for só o caminho de menor risco, escolha outro.
-
-**1.6.1. Referência real no Refero.** Depois de olhar o `registro.md` e antes
-de fixar a direção, pesquise em `https://styles.refero.design/` e selecione
-**uma** referência de produto compatível com o setor, o público, o tom e o
-estilo escolhidos. Abra a aba `DESIGN.md`, copie o arquivo completo e salve
-em `<slug>/DESIGN.md`. Esse arquivo é referência local e obrigatória para os
-passos 2–4; nunca grave um `DESIGN.md` na raiz de `auto`, pois cada lead tem
-sua própria direção.
-
-**Marca primeiro, Refero depois.** O `DESIGN.md` empresta gramática visual
-(hierarquia, densidade, tipografia, escala, superfícies, componentes, motion,
-do's e don'ts), não a identidade da empresa de origem. Adapte as cores à
-marca real e às fotos do lead. Nunca copie ou mencione nome, logo, produto,
-copy, avaliações, imagens, ícones proprietários, fluxos ou provas sociais da
-referência. Continue obedecendo arquivo único, CSS/JS inline, sem CDN e sem
-framework. Se a referência pedir fontes externas ou recursos que não cabem
-nesse contrato, use uma alternativa local ou system font de efeito equivalente.
-
-Antes do `/design`, diga em uma frase: a metáfora (1.5.1), estilo escolhido,
-referência Refero (nome + URL) e o princípio visual aproveitado. O `/design` e
-as skills de refino trabalham dentro dos cinco Atos e da metáfora; nenhuma
-delas volta ao esquema "hero, serviços, depoimentos, contato". No passo 7, registre também
-`Refero: <nome> — <URL>; aplicado: <princípios>; adaptado: <decisões de marca>`.
-
-**2. `/design`** — é aqui que a ideia do site nasce, já dentro do estilo
-escolhido no passo 1.6. Direção visual, estrutura, hierarquia, o que vai em
+**2. `/design`** — é aqui que a ideia do site nasce, a partir da marca real e
+das referências do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
 cada seção e por quê. Isto roda **antes de qualquer linha de HTML** — não é
 uma consulta opcional, é o passo que impede o site de sair genérico. Se você
 chegou ao código sem ter rodado isto, parou e voltou.
 
 **3. Refinar a direção — antes de qualquer linha de HTML.** Três skills, nesta
-ordem. Nenhuma troca o estilo do 1.6 nem a direção do passo 2 — aprofundam.
+ordem. Nenhuma troca a estrutura do 1.5.1 nem a direção do passo 2 —
+aprofundam. Nenhuma traz de volta o que a seção "Cara de IA" proíbe.
 
 - **3.1 `/design-taste-frontend`** — o filtro anti-genérico. Escreva a
   "Design Read" de uma linha (tipo de página, público, linguagem), defina os
   três dials (variância, movimento, densidade) e passe a direção do passo 2
-  contra a lista de AI tells (seção 9). O que for padrão de template sai
-  aqui, antes de virar código.
+  contra a lista de AI tells (seção 9) e contra a seção "Cara de IA" deste
+  arquivo. O que for padrão de template sai aqui, antes de virar código.
 - **3.2 `/ui-ux-pro-max`** — transforma a direção já filtrada em sistema:
   paleta com contraste checado, par tipográfico, espaçamento, guidelines de UX
   do tipo de negócio. É o que leva a ideia a página de produção.
 - **3.3 `/impeccable`** — modo **Persuade** (landing que converte). A direção
-  vem fixada dos passos 1.6–3.2: é brief pinado, então **não** rola mundo
+  vem fixada dos passos 1.5.1–3.2: é brief pinado, então **não** rola mundo
   visual novo (`new-work`), não abre `serve-question`, não roda `init` nem
   `shape` com entrevista — o `content.md` é a verdade de produto. Rode o
   `impeccable context` — ele vai avisar `NO_PRODUCT_MD` e
   `PRODUCT_INIT_REQUIRED`; é esperado, ignore. Não escreva PRODUCT.md nem
-  crie um DESIGN.md novo: use o `<slug>/DESIGN.md` copiado do Refero no passo
-  1.6.1. Leia `reference/craft-floor.md` imediatamente antes do passo 4: o
+  DESIGN.md: a direção está no `<slug>/CONCEITO.md` e nas referências do
+  passo 1.6. Leia `reference/craft-floor.md` imediatamente antes do passo 4: o
   piso de qualidade e as proibições (inclusive as fontes padrão de IA) valem
   para o HTML que vai ser escrito.
 
@@ -597,14 +612,18 @@ ordem. Nenhuma troca o estilo do 1.6 nem a direção do passo 2 — aprofundam.
   pergunta concreta; sem pergunta ela só devolve a saudação. Revisa o que o
   dono sente com o dedo: estado de toque dos botões, easing e duração,
   transição de entrada, nada animando de `scale(0)`, `prefers-reduced-motion`.
-  Aplique a tabela Before/After. Use o checklist de motion da seção
-  "Barra de excelência" abaixo — "um único momento de movimento, resto quieto"
-  deixou de ser suficiente sozinho.
+  Aplique a tabela Before/After. O movimento segue a seção 2 da "Barra de
+  excelência": pouco, sóbrio e com motivo.
 - **`/impeccable audit`** e depois **`/impeccable polish`** no `index.html` —
   captura desktop e celular juntos, corrige tudo num lote, no máximo mais uma
-  rodada de confirmação. As capturas de cada rodada viram **uma** imagem:
+  rodada de confirmação. **Captura de celular só com o gate** (13/10/2026):
+  `python3 ~/.local/bin/qa-numerico --celular "file://<lead>/index.html#<id da seção>" <rascunho>/qa/m-<seção>.png`
+  (`--rm` para reduced-motion). Com `google-chrome --window-size=390,844` a
+  página é desenhada com ~500 px de largura e cortada: parecia celular e era
+  tablet. Desktop continua com `--window-size=1440,900`. As capturas de cada
+  rodada viram **uma** imagem:
   `python3 ~/.local/bin/folha-de-contato --saida <rascunho>/qa/folha-N.jpg --pasta <rascunho>/qa`
-  (nome da captura = rótulo: `m-ato1.png`, `d-ato3-p0.3.png`, `m-ato1-rm.png`),
+  (nome da captura = rótulo: `m-chegada.png`, `d-servicos.png`, `m-chegada-rm.png`),
   e lê-se a folha, não as capturas uma a uma (cada imagem lida fica no
   contexto até o fim do lead e pesa em toda chamada seguinte).
 - Feche com o pre-flight check (seção 14) da `/design-taste-frontend`.
@@ -677,114 +696,79 @@ seu deploy, o runner publica o Raio-X do PRUMO em `/raio-x` do mesmo projeto e
 grava esses campos no recibo (desde 08/10/2026). Não os escreva nem os copie
 para o palco do deploy.
 
-**7. Anotar** uma linha em `registro.md`: data, lead, slug, URL, a metáfora
-(família + instância) e a decisão de design que você tomou pensando nesse
+**7. Anotar** uma linha em `registro.md`: data, lead, slug, URL, o título, as
+referências do passo 1.6 e a decisão de design que você tomou pensando nesse
 negócio específico.
 
 ## Barra de excelência — por que cada site precisa valer o investimento
 
-Site "correto" não basta. Para quem nunca teve site, essa página é a
-primeira impressão dele na internet, e o Rômulo está vendendo isso como
-investimento — tem que parecer caro, não genérico. Isso não é opinião, é
-checklist, e roda antes de fechar o passo 4.5.
+Site "correto" não basta. Para quem nunca teve site, essa página é a primeira
+impressão dele na internet, e o Rômulo está vendendo isso como investimento:
+tem de parecer feito por um bom estúdio para **este** negócio. Desde
+13/10/2026 isso quer dizer o contrário do que parecia em 08/10: um bom site de
+serviço local é claro, curto, com foto real e tipografia bem resolvida, e o
+capricho está no acabamento, não em efeito. Isto é checklist e roda antes de
+fechar o passo 4.5.
 
-### 1. Não repita estilo nem paleta (regra já no passo 1.6)
+### 1. Não repita a cor nem o par de fontes (regra no passo 1.6)
 
-Consulte o `registro.md` antes de escolher. Ver seção 1.6 acima.
+Consulte o `registro.md` antes de escolher. Ver passo 1.6 acima.
 
-### 2. Movimento é vocabulário mínimo, não um efeito isolado
+### 2. Movimento: pouco, sóbrio e com motivo
 
-Muitos leads publicados até aqui saíram com "um único momento de movimento,
-resto quieto" — foi escolha certa de sobriedade caso a caso, mas virou
-padrão por repetição, e padrão é o que faz o conjunto parecer estático. A
-partir de agora, todo `index.html` sai do passo 4.5 com **todos** estes,
-não só um:
+O padrão é uma entrada curta do título e da foto da primeira tela (CSS puro,
+fade e translateY de até 12 px, até 600 ms) e o retorno de toque nos botões.
+Fora isso, **no máximo um** efeito ligado ao negócio, com linha no
+`CONCEITO.md` (por exemplo a linha da tubulação que acompanha a lista de
+serviços). Scroll-reveal é opcional e, se entrar, é discreto (opacidade, sem
+deslocamento grande) e nunca esconde o que já está na tela.
 
-- **Entrada da hero** animada (fade + translateY curto — nunca pop abrupto,
-  nunca `scale(0)`).
-- **Scroll-reveal** nas seções abaixo da hero: `IntersectionObserver`,
-  fade + translateY de 20-30px, dispara uma vez, JS vanilla inline (cabe na
-  regra de arquivo único).
-- **Stagger** em qualquer grupo de 3+ itens da mesma natureza (cards de
-  serviço, lista de diferenciais, grade de fotos): delay incremental de
-  60-100ms entre eles. Itens do mesmo grupo não aparecem todos juntos.
-- **Hover/tap com profundidade real**: sombra que cresce e/ou scale sutil
-  (1.02-1.03), nunca só troca de cor. Gateado por `@media (hover: hover)`
-  para não travar em toque (achado real do CLIN ODONTO CSCN, linha 29 do
-  `registro.md`).
-- **`prefers-reduced-motion: reduce`** desligando tudo isso — sem exceção,
-  regra de acessibilidade do próprio `/emil-design-eng`, não opcional.
+Fora de uso desde 13/10/2026, porque eram a assinatura dos demos que pareciam
+gerados: esticamento por velocidade, paralaxe 3D, transição líquida entre
+seções, magnetismo no cursor, título revelado por máscara linha a linha,
+inércia e lag elástico, sequência presa ao scroll, contadores animados.
 
-Isto é piso, não teto. Se a marca pede mais (a academia com letreiro que
-acende, a porta que se escreve, a engrenagem que engata — já aconteceram),
-o piso continua valendo por baixo do momento de assinatura da seção 3.
+Regras do motor, se houver JS de movimento: anime só `transform` e
+`opacity`; listeners `passive`; a rolagem nunca é sequestrada; efeito de
+cursor só com `matchMedia('(hover: hover) and (pointer: fine)')`; hover
+gateado por `@media (hover: hover)` (achado do CLIN ODONTO CSCN, linha 29 do
+`registro.md`). `prefers-reduced-motion: reduce` desliga tudo, sem exceção, e
+o conteúdo continua o mesmo.
 
-### 2.1 Vocabulário dos Atos: cada efeito com o seu porquê (08/10/2026)
+### 3. Um detalhe que só este negócio tem
 
-Acima do piso, o movimento vem deste vocabulário, e só quando a tabela
-"efeito → Ato → o que significa" do `CONCEITO.md` (passo 1.5.1) diz por quê.
-Efeito bonito sem significado é carga cognitiva: sai.
-
-| Efeito | Como | Significa | Dose e limites |
-|---|---|---|---|
-| Esticamento por velocidade | `skewY`/`scaleY` proporcional à velocidade da rolagem, amortecido por mola, zero quando parado | a matéria tem peso; a página responde ao gesto | até 3% (1,5% em advocacia e saúde); só em imagem e nas linhas da metáfora, nunca em texto corrido |
-| Paralaxe 3D real | `perspective` no contêiner, 2-3 camadas com `translateZ`, movidas pelo scroll (e pelo ponteiro, com `pointer: fine`) | existe um lugar e um objeto de verdade | no máximo 3 camadas; nunca `background-attachment: fixed` (quebra no iOS) |
-| Transição líquida entre Atos | `clip-path` (elipse, polígono) ou máscara SVG ligada ao progresso da fronteira; a cor do Ato seguinte escorre para dentro | é uma história só, não blocos | uma por fronteira; com reduced-motion vira corte seco |
-| Magnetismo no cursor | o CTA principal puxa o ponteiro num raio de 80-120 px, até 8 px de deslocamento, volta com mola | a página quer que você chame, sem gritar | só `(hover: hover) and (pointer: fine)`; um ou dois elementos por página |
-| Tipografia dinâmica com máscara | título revelado por linha (`overflow: clip` + translate) ou preenchido por gradiente ligado ao scroll (marca-texto, reflexo) | o olho entra pelo título certo | texto inteiro no DOM, legível sem JS; `aria-label` no pai e `aria-hidden` nas partes |
-| Estado vivo e levitação | o item escolhido sobe 4 px com sombra; "aberto agora" respira | o que está ligado ou disponível se destaca | levitação contínua só no que é estado real |
-| Inércia e lag elástico | rótulos, números e ícones seguem o scroll com lerp 0,08-0,12 | hierarquia: o principal chega primeiro | atraso de até 24 px; nunca no texto que se lê |
-
-Tetos: no máximo 3 tipos de efeito por Ato, uma sequência presa ao scroll por
-página, dois elementos magnéticos. Regras do motor (JS vanilla inline): um
-único laço `requestAnimationFrame` com molas e lerp, parado quando nada se move
-e com a aba oculta; listeners `passive`; anime só `transform`, `opacity` e
-`clip-path`; leia o layout num lote, cacheado por `ResizeObserver`;
-`IntersectionObserver` liga e desliga o que está fora da tela; a rolagem nunca
-é sequestrada (nada de `preventDefault` em wheel/touch, nada de "smooth
-scroll" por JS). Efeito de cursor só com
-`matchMedia('(hover: hover) and (pointer: fine)')`, escutando a mudança; no
-toque, o equivalente é um gesto (arrastar) ou nada. Com
-`prefers-reduced-motion: reduce` (lido no CSS e no JS, escutando a mudança) a
-sequência presa ao scroll vira as etapas empilhadas e legíveis, e paralaxe,
-esticamento, magnetismo, lag e transições somem: o conteúdo é o mesmo.
-
-### 3. Pelo menos um "momento de assinatura" por site
-
-Uma decisão visual que não sairia de um gerador genérico — porque nasceu
-da marca real deste negócio específico, não de um padrão de template.
-Exemplos que já aconteceram e funcionaram: o mural da recepção redesenhado
-em SVG que se desenha ao entrar na tela (Studio TRG), a assinatura manuscrita
-que atravessa a costura da porta (Estúdio Marília), a engrenagem da marca
-que engata ao carregar (GB Sports), a vértebra que acende em relevo dourado
-(Bless Pilates). Se ao terminar o site você não consegue apontar em uma
-frase qual foi essa decisão, falta — volte no passo 1.5/1.6 e procure de
-novo na marca real, não invente algo genérico só para preencher o item.
-Desde 08/10/2026 o lugar natural do momento de assinatura é a sequência do
-Ato III ou a resolução do Ato V: é onde a metáfora (passo 1.5.1) acontece.
+Uma decisão que não sairia de um gerador: vem da marca real ou do lugar real,
+não de um enfeite. A foto da frota na frente da base com a rua na legenda, o
+verde exato da placa da recepção, o logo redesenhado limpo a partir da foto da
+fachada, o horário de plantão escrito do jeito que o dono escreve no
+Instagram. Exemplos de antes que funcionaram pela mesma razão: o mural da
+recepção redesenhado em SVG (Studio TRG), a assinatura manuscrita da dona
+(Estúdio Marília). Se ao terminar você não consegue apontar esse detalhe em
+uma frase, volte ao passo 1.5 e procure de novo na marca real. Não serve:
+objeto 3D, letra gigante, polaroide inclinada, brinquedo.
 
 ### 4. Checklist de saída do passo 4.5
 
-- [ ] Estilo (1.6) diferente dos últimos 5 leads no `registro.md`
-- [ ] Paleta dominante diferente dos últimos 5 leads
-- [ ] Hero animado, scroll-reveal, stagger, hover com profundidade,
-      `prefers-reduced-motion` — todos presentes, nessa ordem de checagem
-- [ ] Pelo menos 1 momento de assinatura identificável e citável em uma frase
-- [ ] `/emil-design-eng` e `/impeccable polish` rodaram **depois** do motion
-      estar no código, não antes — senão o polish audita uma página ainda
-      estática
-- [ ] A metáfora passa no teste do 1.5.1 e a navegação é ela; os cinco Atos
-      estão na ordem das perguntas do visitante
-- [ ] No celular, em 3 s no Ato I: o que é, onde é e como chamar; de qualquer
-      ponto, o WhatsApp a até dois toques
-- [ ] Todo efeito tem linha na tabela do `CONCEITO.md`; nenhum sobra
-- [ ] Nenhuma frase de medo, desconfiança, urgência artificial ou deboche do
-      ramo; toda afirmação de experiência tem fonte
-- [ ] Captura a 390×844 com `--force-prefers-reduced-motion`: página completa
-      e legível; efeitos de cursor só com `pointer: fine`
-- [ ] Orçamento de bytes medido e dentro (fim do Ato I ≤ 200 KB, arquivo ≤
-      450 KB, CSS ≤ 35 KB, JS ≤ 25 KB); título e foto do Ato I visíveis sem JS
-      — o `qa-numerico` saindo 0 cobre os dois
+- [ ] Cor dominante e par de fontes diferentes dos últimos 5 do mesmo nicho
+      no `registro.md`
+- [ ] Título de uma frase com o ofício e o bairro ou a cidade; no celular, em
+      3 s na primeira tela: o que é, onde é e como chamar
+- [ ] As cinco perguntas do passo 1.5.1, com nomes comuns no menu e nas
+      seções; nenhum "Ato", número romano ou nome de metáfora à vista
+- [ ] Até 6 telas de celular; nenhuma seção que não responda a uma pergunta
+- [ ] Nenhum campo de texto, quiz ou brinquedo; de qualquer ponto, o WhatsApp
+      a até dois toques
+- [ ] Nada da seção "Cara de IA"; nenhuma frase de medo, desconfiança,
+      urgência artificial ou deboche do ramo; toda afirmação de experiência
+      tem fonte
+- [ ] Um WhatsApp só, do telefone do Google ou conferido (ver "Regras do
+      arquivo")
+- [ ] O detalhe da seção 3, citável em uma frase
+- [ ] Todo efeito tem linha no `CONCEITO.md`; nenhum sobra
+- [ ] Capturas de celular feitas com `qa-numerico --celular` (e uma com
+      `--rm`): página completa e legível
+- [ ] O `qa-numerico` saindo 0: bytes, imagens, contraste, título, menu,
+      frases, campos, código de teste, WhatsApp, altura, toque e texto miúdo
 
 ## Limites
 

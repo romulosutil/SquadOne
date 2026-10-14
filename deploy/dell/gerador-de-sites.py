@@ -108,14 +108,16 @@ MAX_FALHAS = 2
 # TimeoutStartSec=4h no .service: não começa lead que pode estourar o teto (com
 # folga para o deploy do último), senão o systemd mata a execução no meio.
 TETO_MIN = 4 * 60 - 20
-# "Metáfora e Atos" (08/10/2026): a direção do redesign conceitual do site do PRUMO virou a dos
-# demos. Antes o prompt pedia só "mais movimento", e o fluxo comum saía em ordem de template com
-# efeito sem significado; o passo 1.5.1 do CLAUDE.md diz como escolher a metáfora e montar os Atos.
+# "Clareza antes de conceito" (13/10/2026). De 08 a 13/10 o prompt pedia "metáfora e Atos" e a
+# referência do Refero; a auditoria dos 54 demos no ar mostrou que isso virou o novo template e deu
+# cara de IA a todos (título-aforismo, menu I-II-III, formulário em 39 de 54, 11 telas de mediana).
+# Agora: as cinco perguntas do passo 1.5.1, a metáfora só no visual, e duas referências da biblioteca
+# curada (~/auto-site/REFERENCIAS.md, passo 1.6) no lugar do Refero, que é acervo de produto SaaS.
 PROMPT = (
-    "/lead-novo {slug} na direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md: uma metáfora do ofício que "
-    "dita a navegação, cinco Atos do Google ao WhatsApp, movimento só com significado), usando as fotos e recursos "
-    "extras; cumpra o passo 1.6.1: selecione uma referencia em styles.refero.design, copie o DESIGN.md para a "
-    "pasta do lead e registre a referencia"
+    "/lead-novo {slug} nas cinco perguntas do passo 1.5.1 do CLAUDE.md (título de uma frase com o ofício e o "
+    "bairro ou a cidade, menu e seções com nome comum, até 6 telas de celular, nada da seção \"Cara de IA\"), "
+    "usando as fotos e recursos extras; cumpra o passo 1.6: leia a folha do nicho em referencias/ (REFERENCIAS.md), "
+    "escolha duas referências e registre-as"
 )
 LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # Modo personalizado: o site anterior do lead fica aqui dentro (nunca sobe para a
@@ -124,6 +126,7 @@ LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # movimento de nível especialista (motor próprio em JS, scroll narrativo, interações autorais).
 VERSAO_PERSONALIZADO = 2
 # v3 = modo premium (referências do Refero a cada lead, imagem feita em código, laço de crítica visual).
+# PREMIUM_DESLIGADO: desde 13/10/2026 o `--premium` só roda com GERADOR_PREMIUM_LIGADO=1 (ver main()).
 VERSAO_PREMIUM = 3
 MODO_PREMIUM = False  # ligado por `--premium` em main()
 NOTA_DA_REVISAO: str | None = None  # `--nota`: feedback do Rômulo que o refazer premium deve aplicar sobre a versão anterior
@@ -155,11 +158,11 @@ def ferramentas_de_qa() -> bool:
 def pasta_de_capturas(rascunho: Path) -> Path:
     return rascunho / "qa"
 PROMPT_PERSONALIZADO = (
-    "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, conceito autoral, "
-    "redação própria e revisão crítica antes de publicar), na direção de metáfora e Atos do passo 1.5.1 do CLAUDE.md, "
+    "/lead-novo {slug} no MODO PERSONALIZADO descrito nas instruções da execução (dossiê, redação própria e "
+    "revisão crítica antes de publicar), nas cinco perguntas do passo 1.5.1 do CLAUDE.md, "
     "usando as fotos e recursos extras; "
-    "cumpra o passo 1.6.1: selecione uma referencia em styles.refero.design, copie o DESIGN.md para a pasta do lead "
-    "e registre a referencia"
+    "cumpra o passo 1.6: leia a folha do nicho em referencias/ (REFERENCIAS.md), escolha duas referências "
+    "e registre-as"
 )
 # Frases que cabem em qualquer negócio do ramo: a revisão crítica as caça.
 CLICHES = ("qualidade e compromisso", "excelência", "soluções completas", "a melhor opção", "venha nos conhecer",
@@ -170,7 +173,7 @@ CLICHES = ("qualidade e compromisso", "excelência", "soluções completas", "a 
 # Lista de permissão do Claude headless. Saiu das transcrições dos leads de
 # 24-30/09/2026 (~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/): o
 # /lead-novo processa imagem e fonte em python3, tira captura no Chrome
-# headless, confere domínio com curl, lê Instagram/Refero/site do negócio e
+# headless, confere domínio com curl, lê Instagram/referências/site do negócio e
 # publica com o vercel. Programas liberados com qualquer argumento; os comandos de
 # arquivo (mkdir, cp, mv, sed...) o próprio Claude Code só aceita dentro de
 # ~/auto-site e do rascunho do lead.
@@ -231,7 +234,8 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
     for nome in PROTEGIDOS:
         deny += [f"Bash(rm *{nome}*)", f"Bash(mv *{nome}*)"]
     deny.append("Bash(rm *_descartados*)")  # mover o lead para lá pode (regra do CLAUDE.md); apagar, não
-    for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**", f"{home}/.claude/**"):
+    for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/REFERENCIAS.md", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**",
+                 f"{home}/.claude/**"):
         deny += [f"Edit(/{alvo})", f"Write(/{alvo})"]
     deny += [f"Read(/{home}/{p})" for p in SEGREDOS]
     deny.append("mcp__*")
@@ -244,11 +248,11 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
     Claude Code nega em caminho)."""
     lead, palco, qa = AUTO / slug, palco_do_deploy(slug, rascunho), pasta_de_capturas(rascunho)
     if ferramentas_de_qa():
-        conferencias = f"""- Direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. O Ato I é a primeira `<section>` dentro de `<main>`: é até o fim dela que se mede o orçamento.
-- QA com UMA imagem por rodada. Grave as capturas em {qa}/ (mkdir -p {qa} numa chamada só), com nome `<viewport>-ato<N>[-<modo>].png`: viewport `d` (--window-size=1440,900) ou `m` (390,844); modo `rm` (--force-prefers-reduced-motion), `p0.3` (progresso da narrativa); ex.: {qa}/m-ato3-p0.3.png. A cada rodada regrave com os mesmos nomes. Não leia as capturas uma a uma: junte-as com `python3 {FOLHA_DE_CONTATO} --saida {qa}/folha-N.jpg --pasta {qa}` (N = rodada; ele imprime a legenda #1, #2... com Ato, viewport, modo e escala) e leia (Read) só a folha. Abra uma captura isolada apenas se a folha não deixar julgar um defeito concreto, no máximo uma por rodada.
-- Gate antes do deploy: `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}`. Ele mede o orçamento das "Regras do arquivo" (fim do Ato I, total, CSS e JS sem base64, fontes, fotos), width/height e alt das imagens, prefers-reduced-motion no CSS e no JS, contraste AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion; essas duas capturas ele mesmo tira do index.html de agora (m-ato1-semjs.png de uma cópia sem <script>: o `--blink-settings=scriptEnabled=false` não grava captura neste Chrome, não tente). Código 1 = falhou e cada FALHA diz o que cortar: corrija e rode o mesmo comando até sair 0 (não escreva um script de bytes seu). Só então og:image e deploy. Se o próprio gate quebrar (código 2 ou traceback), diga no resumo final e confira à mão: bytes com um script no rascunho e o Ato I numa cópia sem <script>."""
+        conferencias = f"""- As cinco perguntas (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. A primeira `<section>` dentro de `<main>` (a chegada) é o "Ato I" do gate: é até o fim dela que se mede o orçamento.
+- QA com UMA imagem por rodada. Grave as capturas em {qa}/ (mkdir -p {qa} numa chamada só), com nome `<viewport>-<seção>[-<modo>].png`: viewport `d` (google-chrome --window-size=1440,900) ou `m`; modo `rm` (reduced-motion); ex.: {qa}/m-servicos.png. Captura de celular SÓ com `python3 {QA_NUMERICO} --celular "file://{lead}/index.html#<id da seção>" {qa}/m-<seção>.png` (`--rm` para reduced-motion): com --window-size=390,844 o Chrome desenha a página com ~500 px e corta, e a "captura de celular" era de tablet. A cada rodada regrave com os mesmos nomes. Não leia as capturas uma a uma: junte-as com `python3 {FOLHA_DE_CONTATO} --saida {qa}/folha-N.jpg --pasta {qa}` (N = rodada; ele imprime a legenda #1, #2... com Ato, viewport, modo e escala) e leia (Read) só a folha. Abra uma captura isolada apenas se a folha não deixar julgar um defeito concreto, no máximo uma por rodada.
+- Gate antes do deploy: `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}`. Ele mede o orçamento das "Regras do arquivo" (fim do Ato I, total, CSS e JS sem base64, fontes, fotos), width/height e alt das imagens, prefers-reduced-motion no CSS e no JS, contraste AA dos pares cor/fundo do CSS e o Ato I visível sem JS e com reduced-motion; e, desde 13/10/2026, o título, a cidade no Ato I, o menu, as frases de gaveta, campo de texto, código de teste publicado, o WhatsApp contra o content.md, e a página renderizada a 390 px (até 8 telas, rolagem lateral, toque de 40 px, texto de 12 px); as duas capturas do Ato I ele mesmo tira do index.html de agora (m-ato1-semjs.png de uma cópia sem <script>: o `--blink-settings=scriptEnabled=false` não grava captura neste Chrome, não tente). Código 1 = falhou e cada FALHA diz o que cortar: corrija e rode o mesmo comando até sair 0 (não escreva um script de bytes seu). Só então og:image e deploy. Se o próprio gate quebrar (código 2 ou traceback), diga no resumo final e confira à mão: bytes com um script no rascunho e o Ato I numa cópia sem <script>."""
     else:
-        conferencias = f"""- Direção de metáfora e Atos (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. Antes do deploy, duas conferências: (a) grave no rascunho um script python3 que lê {lead}/index.html e imprime os bytes do começo do arquivo até o fim do Ato I, o total, o CSS e o JS sem base64, as fontes e cada imagem embutida, e falha acima do orçamento das "Regras do arquivo"; corte até passar. (b) Além das capturas normais, uma a 390x844 com `--force-prefers-reduced-motion` e outra com `--blink-settings=scriptEnabled=false` (sem JS): o Ato I tem de estar visível nas duas, e o `--dump-dom` com reduced-motion não pode ter conteúdo escondido esperando animação."""
+        conferencias = f"""- As cinco perguntas (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. Antes do deploy, duas conferências: (a) grave no rascunho um script python3 que lê {lead}/index.html e imprime os bytes do começo do arquivo até o fim do Ato I, o total, o CSS e o JS sem base64, as fontes e cada imagem embutida, e falha acima do orçamento das "Regras do arquivo"; corte até passar. (b) Além das capturas normais, uma a 390x844 com `--force-prefers-reduced-motion` e outra com `--blink-settings=scriptEnabled=false` (sem JS): o Ato I tem de estar visível nas duas, e o `--dump-dom` com reduced-motion não pode ter conteúdo escondido esperando animação."""
     return f"""Execução automática do gerador de sites no Dell, com lista de permissão (modo dontAsk): o que não está na lista é negado na hora, sem pergunta. Não repita um comando negado; siga pelo caminho permitido.
 - A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
 {conferencias}
@@ -256,7 +260,8 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - No Bash, escreva caminhos literais: variável de shell em caminho ("$stage", "${{TMPDIR:-/tmp}}") e laço for/while com variável são negados. Python de mais de uma linha: grave o script no rascunho (Write) e rode `python3 <arquivo>`; heredoc (`python3 - <<EOF`) e `python3 -c` de várias linhas costumam ser negados. Pasta nova: mkdir -p numa chamada só dele, e só na chamada seguinte use a pasta (cd, > arquivo).
 - Descartar o lead (regras do CLAUDE.md: o negócio já tem site no ar, é rede/franquia com site, é duplicado ou já tem linha "— (não publicado)" no registro.md): não mova a pasta, mover para _descartados/ está fora da lista. Grave {lead}/{SINAL_DESCARTE} com o motivo (primeira linha: o motivo numa frase; depois as evidências: URLs testadas e o que o curl ou o DOM renderizado mostrou), anote a linha "— (não publicado)" no registro.md e termine sem index.html e sem publicado.json. O runner move a pasta para _descartados/ e conta como descarte, não como falha. Onde o CLAUDE.md manda mover para _descartados/, grave o {SINAL_DESCARTE}. Não grave {SINAL_DESCARTE} no caso "presença digital fraca ou nula" (lá o CLAUDE.md manda parar e devolver ao Rômulo, sem descartar).
 - rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
-- Para pesquisar (Instagram, Refero, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
+- Para pesquisar (Instagram, as referências de {AUTO}/REFERENCIAS.md, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom).
+- Antes do deploy, tire do index.html o que só servia ao QA (`?qa`, classe `html.qa`, `#qa-resultado`, `window.onerror` de depuração): se precisar dele para capturar, use uma cópia no rascunho.
 - Prévia do link no WhatsApp: o Rômulo manda só o link, e o WhatsApp mostra o cartão de prévia (og:*) antes de o dono abrir o site. Sem og:image o cartão sai sem foto. Antes do passo 5: (a) gere {lead}/{IMAGEM_DA_PREVIA} com python3/PIL a partir da melhor foto real do negócio (a do hero), 1200x630, recorte centrado, JPEG qualidade ~80, menos de 300 KB; (b) no <head> do index.html ponha og:type website, og:locale (pt_BR no Brasil), og:title (nome do negócio + cidade), og:description (a promessa do hero, até 150 caracteres), og:image https://demo-{slug}.vercel.app/{IMAGEM_DA_PREVIA} com og:image:width 1200 e og:image:height 630, twitter:card summary_large_image, e um favicon SVG inline (data: URI com a inicial ou o símbolo da marca, na cor da marca). Só foto do próprio negócio (nunca a ilustrativa do Unsplash nem imagem de paciente); sem foto real, não gere a imagem nem o og:image e pule o cp dela. Se a linha "Aliased:" der outra URL, corrija o og:image para ela e publique de novo.
 - Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes comandos, um por chamada (outra forma de vercel é negada); além do index.html, sobe só a {IMAGEM_DA_PREVIA}:
   mkdir -p {palco}
@@ -290,23 +295,14 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
 {abertura}
 - Faça as etapas A a F, nesta ordem, ANTES do `/design` e do código (as cinco skills continuam rodando, e o resto do CLAUDE.md vale):
   A. DOSSIÊ. Grave {lead}/DOSSIE.md (uma página, em português) com o que você achou sobre ESTE negócio: quem é o dono ou os sócios (pelo nome, só se publicado), como e quando começou, bairro e cidade (o que o cliente daquela região vive e procura), o que os clientes realmente elogiam (3 trechos curtos e literais das avaliações do `content.md`, entre aspas), o vocabulário do próprio negócio (5 expressões que ele mesmo usa no Instagram, Facebook, Google ou site antigo), o que ele faz e o concorrente local não mostra, e o que se sabe da identidade visual real (logo, cores, fotos próprias). Fontes: `content.md`, as imagens de `Fotos/` e `Logotipo/`, perfil de Instagram e Facebook se existirem, e WebSearch pelo nome + cidade (ache o que o Google Places não tem: matérias, CNPJ/data de abertura, site antigo, redes). Cada afirmação do dossiê leva a fonte entre parênteses. O que não achar vira a linha "Lacuna: ..." — nunca preenchimento, nunca invenção.
-  B. CONCEITO AUTORAL. Em {lead}/DOSSIE.md, uma seção "Conceito": uma ideia central em UMA frase que só serve a este negócio. Teste obrigatório: troque o nome por o de outro negócio do mesmo ramo e cidade; se a frase continuar verdadeira, ela é genérica, descarte e refaça. O conceito é a INSTÂNCIA da metáfora do passo 1.5.1 do CLAUDE.md (a família vem do nicho, a instância vem deste dossiê) e a ESTRUTURA são os cinco Atos de lá, as perguntas do visitante na ordem em que ele as tem: o conceito dá o nome, a cena e a forma de cada Ato e desenha a navegação. Não volte ao esquema "hero, serviços, depoimentos, contato". Um Ato pode ser curto, nenhum falta; nunca mais genérico. Passe a metáfora, os Atos e a tabela de movimento para {lead}/CONCEITO.md.
-  C. REDAÇÃO AUTORAL. Escreva você mesmo cada título, subtítulo, botão e microtexto na voz deste negócio, com especificidade: nomes, lugares, números verificáveis, momentos do atendimento, palavras do dossiê. Cada seção tem pelo menos uma frase que só caberia neste negócio. Proibido texto de gaveta: {cliches}, e qualquer variação. Nada inventado (número de anos, prêmio, equipe, certificação, cliente): só o que o dossiê prova. O hero abre com a ideia do conceito, não com o nome do serviço.
-  D. IDENTIDADE E ASSINATURA. Cor, tipografia e o "momento de assinatura" do CLAUDE.md saem do dossiê (identidade real do negócio, do bairro, do ofício), não de um repertório fixo. Use as fotos reais onde elas provam algo e diga na legenda o que mostram.
-  E. MOVIMENTO DE NÍVEL ESPECIALISTA (pedido do Rômulo: todo site sai com movimento e com JavaScript de animação em nível especialista, sempre ligado ao conceito, nunca efeito solto). Antes de codar, rode as skills `animate` (leia ~/.claude/skills/animate/RECIPES.md), `animation-vocabulary` e `find-animation-opportunities`; ao final, `review-animations` e `improve-animations`. Código autoral em JS vanilla dentro do index.html (sem CDN nem biblioteca):
-    - VOCABULÁRIO: o da seção 2.1 da "Barra de excelência" do CLAUDE.md (esticamento por velocidade, paralaxe 3D real, transição líquida entre Atos, magnetismo, tipografia com máscara, levitação de estado, inércia e lag elástico), com as doses e os tetos de lá. Cada efeito tem linha na tabela "efeito → Ato → o que significa" do CONCEITO.md; sem linha, não entra. A metáfora vive na página inteira (navegação, transições, sequência do Ato III), não num brinquedo isolado: quem não interagir com nada entende o negócio só rolando.
-    - MOTOR próprio: um único loop `requestAnimationFrame`, valores suavizados por lerp/amortecimento, molas (rigidez e amortecimento) e curvas cubic-bezier nomeadas; o scroll nativo nunca é sequestrado. Anime só `transform`, `opacity`, `clip-path` e filtros leves, nunca propriedades de layout; leia o layout num lote e escreva noutro (sem layout thrash); listeners `passive`; `IntersectionObserver` liga e desliga o que está fora da tela; `ResizeObserver` recalcula; tudo pausa com a aba oculta.
-    - NARRATIVA GUIADA PELO SCROLL: pelo menos UMA sequência cujo progresso 0-1 é o scroll da seção (seção "pinned" por `position: sticky`, não por JS), por exemplo um desenho SVG que se traça (`stroke-dashoffset` com `getTotalLength`), um objeto que se transforma, um percurso ou mapa que avança, peças que se montam em ordem.
-    - ENTRADA COREOGRAFADA: timeline do hero com orquestração (stagger com easing, revelação por máscara ou `clip-path`, texto dividido em linhas, palavras ou letras mantendo a acessibilidade com `aria-label` no pai e `aria-hidden` nas partes, contadores).
-    - PELO MENOS DUAS INTERAÇÕES AUTORAIS ligadas ao conceito (botão magnético com mola, elemento que segue o ponteiro com inércia, arrastar com física, seletor que reorganiza a página com FLIP: medir primeiro, medir último, inverter e tocar; tilt 3D; parallax por camadas). Use Pointer Events: em toque tem de funcionar por gesto, nunca depender de hover. O que segue o cursor (magnetismo, tilt, inércia de ponteiro) só liga com `matchMedia('(hover: hover) and (pointer: fine)')`. Nenhuma interação é condição para entender o negócio ou chegar ao WhatsApp.
-    - Acabamento: estados de foco, pressionado e carregando com a mesma linguagem de mola; transições de estado coerentes.
-    - Desempenho e acessibilidade: 60 fps em celular médio; nada de trabalho pesado por frame; `will-change` só durante a animação. `prefers-reduced-motion: reduce` desliga o decorativo mas mantém conteúdo e função (a narrativa vira estática e legível); tudo que é interativo tem foco por teclado; nada que pisque. Sem JavaScript ativo, o conteúdo inteiro continua visível.
-    - Advocacia: o mesmo nível técnico, em tom contido e elegante (OAB sóbria): movimento que revela e organiza, sem exibição.
-    - Verificação: coloque um `window.onerror` temporário que escreve num elemento e leia com `--dump-dom`; tire capturas em 4 posições de scroll no desktop e no celular; confira o estado final com reduced-motion.{verificacao}
-  F. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) o que o conceito prometeu e a página entregou ou não; (4) "Movimento": a tabela do CONCEITO.md conferida contra o código (efeito que sobrou sem significado sai do index.html) e o que cai com reduced-motion; (5) "Confiança": cada afirmação de experiência com a fonte, e nenhuma frase de medo, desconfiança ou urgência artificial. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
+  B. O QUE SÓ ESTE NEGÓCIO TEM. Em {lead}/DOSSIE.md, uma seção "O que distingue": UMA frase com o fato que só este negócio tem (quem atende, a frota, o bairro, a especialidade, desde quando pelo CNPJ), com a fonte. Teste obrigatório: troque o nome por o de outro negócio do mesmo ramo e cidade; se a frase continuar verdadeira, ela é genérica: pesquise mais. Esse fato vai para o subtítulo da chegada e para a seção de prova. A ESTRUTURA são as cinco perguntas do passo 1.5.1 do CLAUDE.md, com nome comum no menu e nas seções; a metáfora, se houver, fica só no visual. Passe o título, o fato e as referências para {lead}/CONCEITO.md.
+  C. REDAÇÃO PRÓPRIA. Escreva você mesmo cada título, subtítulo, botão e microtexto na voz deste negócio, com fatos: nomes, bairro, horário, serviços, nota, palavras do dossiê. Fato entra como fato, nunca como frase de efeito: endereço e número não viram poesia. Proibido texto de gaveta: {cliches}, as frases da seção "Cara de IA" do CLAUDE.md e qualquer variação. Nada inventado (número de anos, prêmio, equipe, certificação, cliente): só o que o dossiê prova. O título da chegada é UMA frase com o ofício e o bairro ou a cidade, nas palavras de quem procura; nunca duas frases de efeito, nunca entre aspas.
+  D. IDENTIDADE. Cor, tipografia e o detalhe da seção 3 da "Barra de excelência" saem do dossiê (identidade real do negócio, do bairro, do ofício) e das referências do passo 1.6, não de um repertório fixo. Use as fotos reais onde elas provam algo e diga na legenda o que mostram.
+  E. MOVIMENTO SÓBRIO (13/10/2026; até ali esta etapa pedia "movimento de nível especialista" e duas interações autorais, e foi a maior fonte da cara de IA dos demos). Siga a seção 2 da "Barra de excelência" do CLAUDE.md: entrada curta da primeira tela em CSS, retorno de toque nos botões e no máximo UM efeito ligado ao negócio, com linha no CONCEITO.md. Nenhuma interação além dos botões de WhatsApp por serviço: sem campo de texto, quiz, seletor que monta mensagem, arrastar ou tilt. Sem JavaScript ativo, o conteúdo inteiro continua visível; com reduced-motion, nada se move.
+  F. REVISÃO CRÍTICA, depois do HTML pronto e antes do QA e do deploy. Releia a página inteira como se fosse o dono. Grave {lead}/REVISAO.md com: (1) três coisas que ele reconheceria como dele, citando o trecho; (2) cada frase que serviria a qualquer concorrente (procure os clichês acima e as promessas vagas) e a versão reescrita, JÁ aplicada no index.html; (3) se as cinco perguntas estão respondidas, em até 6 telas; (4) "Movimento": a tabela do CONCEITO.md conferida contra o código (efeito que sobrou sem significado sai do index.html) e o que cai com reduced-motion; (5) "Confiança": cada afirmação de experiência com a fonte, e nenhuma frase de medo, desconfiança ou urgência artificial; (6) "Cara de IA": a seção do CLAUDE.md item por item, com o que você tirou. Se menos de três coisas forem dele, volte à etapa A com mais pesquisa. Só então QA, og:image, deploy e registro.
 - Advocacia: o Provimento 205/2021 da OAB continua valendo (sem avaliações na página, sem promessa de resultado, sem preço, sem superlativo, sem captação). A personalização vem do que é público e permitido: como é o primeiro atendimento, as áreas explicadas pelo que o cliente daquela cidade enfrenta, o fórum e a comarca, a linguagem do próprio advogado em artigos e posts.
 - Tempo: este modo pode usar até o dobro do tempo de um lead comum. Gaste-o na pesquisa e na redação, não em efeitos.
-- No resumo final, diga qual foi o conceito e qual frase do site mais prova que ele foi feito para este negócio."""
+- No resumo final, diga qual foi o fato que distingue este negócio e qual frase do site mais prova que ele foi feito para ele."""
 
 
 def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> str:
@@ -928,7 +924,8 @@ def main() -> int:
     ap.add_argument("--refazer", nargs="+", metavar="SLUG",
                     help="modo personalizado: refaz estes leads (publicados e não enviados), na ordem dada")
     ap.add_argument("--premium", action="store_true",
-                    help="modo premium: aprende com o Refero a cada lead, imagem feita em código e laço de crítica visual "
+                    help="DESLIGADO desde 13/10/2026 (religa com GERADOR_PREMIUM_LIGADO=1). Modo premium: aprende com o "
+                         "Refero a cada lead, imagem feita em código e laço de crítica visual "
                          "(implica --personalizado; use --timeout-min 180)")
     ap.add_argument("--personalizado", action="store_true",
                     default=os.environ.get("GERADOR_PERSONALIZADO", "").strip().lower() in ("1", "true", "sim"),
@@ -939,6 +936,12 @@ def main() -> int:
     a = ap.parse_args()
     if a.refazer and not all(re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.refazer):
         ap.error("--refazer espera slugs de pasta (minúsculas, números, ponto, hífen e sublinhado)")
+    # Premium desligado em 13/10/2026 (decisão do Rômulo): Refero a cada lead, imagem feita em código e duas
+    # interações autorais eram a maior fonte da cara de IA dos demos, e cada lead levava até 3 h. O código
+    # fica; GERADOR_PREMIUM_LIGADO=1 no gerador.env religa.
+    if a.premium and os.environ.get("GERADOR_PREMIUM_LIGADO", "").strip().lower() not in ("1", "true", "sim"):
+        ap.error("o modo premium está desligado desde 13/10/2026 (ver PREMIUM_DESLIGADO no gerador-de-sites.py); "
+                 "rode sem --premium, ou ponha GERADOR_PREMIUM_LIGADO=1 no gerador.env para religar")
 
     if a.listar:
         pausados = nao_gerar()
