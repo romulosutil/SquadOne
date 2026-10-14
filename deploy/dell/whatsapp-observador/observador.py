@@ -118,7 +118,8 @@ ESPERA_ANTES_DE_DRENAR_S = 6
 MAX_MENSAGENS_POR_CONVERSA = 20
 MOTIVO = "self_chat_mode_rejects_non_self"
 MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos", "squadone:respostas")
-ROTULO = {"site": "Site antes da venda", "prumo": "PRUMO"}
+# iris/estampa (14/10/2026): as abas Clínicas e Estamparias do PRUMO (whatsapp-conversa.py, OFERTAS).
+ROTULO = {"site": "Site antes da venda", "prumo": "PRUMO", "iris": "Iris · Clínicas", "estampa": "CRM de estamparia"}
 FEITO = {"entrada": "respondeu", "saida": "recebeu mensagem sua", "lido": "leu"}
 COMANDO_REMENDO = "python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --reiniciar"
 

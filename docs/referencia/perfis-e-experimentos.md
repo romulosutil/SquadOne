@@ -37,11 +37,19 @@ o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM 
   prospect. O clique em Enviar convite (`/webhook/convite-iris` e `/convite-estampa`) abre o WhatsApp com o convite
   da oferta (voz PRUMO, sem nome, R$ nem link) e marca "Convite enviado".
 - **CRM** (`server/crm.ts`): produtos `iris` e `estampa` lidos dessas abas pelo 08 · CRM (`crm.py`), com a regra
-  `etapaDoPrumo` e a Etapa "Em conversa" marcada à mão (o observador do WhatsApp e a classificação de resposta
-  ainda só leem Leads e Prospects). Raio-X, Mapa, 2ª mensagem e reenvio do só-robô seguem só do PRUMO: nas ofertas
+  `etapaDoPrumo`. Raio-X, Mapa, 2ª mensagem e reenvio do só-robô seguem só do PRUMO: nas ofertas
   novas não há texto aprovado, e a Hoje pede "combinar a demonstração". Aba ausente ou ilegível não segura o
   retrato: vira fonte com erro. O filtro do CRM e o segmentado do celular mostram as quatro (Site, Organizar,
   Iris, Estampa).
+- **WhatsApp** (`deploy/dell/claude-ops/whatsapp-conversa.py`, abas e convites tirados do `prumo-ofertas.json`):
+  os três fluxos do observador (números, conversa, resposta classificada) leem também Clínicas e Estamparias,
+  pelo nome da aba e tolerantes (aba que não lê é pulada, sem segurar Site e Prospects), com as regras do
+  Prospects: o envio do Rômulo vale o clique em Enviar convite, a leitura vira "Leu o convite em ...", e a
+  resposta a 5 min ou mais do convite grava "Respondeu em" e a Próxima ação. A classificação do Gemini grava
+  Tipo da resposta, Resposta e Resposta em; gente (interesse ou neutra) passa a Etapa a **"Em conversa"**
+  sozinha (antes era à mão), robô apaga o "Respondeu em" daquela conversa, negativa ou exclusão vai a "Sem
+  interesse". O aviso do interesse pede combinar a demonstração (nunca Raio-X) e leva à ficha
+  (`lead=iris:<ID>` / `estampa:<ID>`). O Jev em sombra recebe essas respostas como as do Prospects (mascaradas).
 
 ## A/B do vídeo no envio do Site (11/10/2026; medição pronta, nada ligado)
 

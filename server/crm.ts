@@ -1120,8 +1120,8 @@ export function etapaDoPrumo(entrada: {
   if (entrada.respondeu !== undefined) {
     return { etapa: "contato", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Respondeu no WhatsApp"), desde: entrada.respondeu };
   }
-  // "Em conversa" (14/10/2026): nas abas do Iris e das estamparias a resposta ainda não é marcada
-  // pelo fluxo do WhatsApp; quem responde é marcado à mão na Etapa e conta como conversa.
+  // "Em conversa" (14/10/2026): nas abas do Iris e das estamparias, quem responde de gente vai a esta
+  // Etapa (pela classificação do WhatsApp, whatsapp-conversa.py, ou à mão) e conta como conversa.
   if (etapa === "em_conversa") {
     return { etapa: "contato", sinal: "respondeu-prumo", subEtapa: subEtapaDaResposta(resposta, "Em conversa (Etapa na planilha)"), desde: entrada.convite };
   }

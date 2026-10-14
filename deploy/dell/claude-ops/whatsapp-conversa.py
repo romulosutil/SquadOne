@@ -13,6 +13,14 @@ um número das planilhas:
   depois de ler as planilhas e antes de gravar (o observador usa "marcados"
   para avisar "você abordou ..."; um erro na gravação vira aviso de falha).
 
+"PRUMO" abaixo vale também para as ofertas do PRUMO (14/10/2026, PRUMO como
+holding): as abas Clínicas (Iris, planilha "iris") e Estamparias (CRM de
+estamparia, "estampa") da mesma planilha, com o contrato do Prospects. Nelas a
+resposta também grava "Respondeu em" (apagado se a classificação disser robô),
+gente que responde passa a Etapa "Em conversa" (antes marcada à mão) e o
+interesse pede combinar a demonstração, não o Raio-X. Abas e convites em
+prumo-ofertas.json; aba que não lê é pulada, sem segurar Site e Prospects.
+
 `direcao`:
 - "saida" (30/09/2026): o Rômulo escreveu (linha owner_sent da bridge,
   remendada por deploy/hermes/scripts/patch_bridge_envios.py). Site antes da
@@ -83,6 +91,30 @@ SEGREDO = Path.home() / ".config/claude-ops/whatsapp-observador-segredo"
 CREDENCIAL = "Observador WhatsApp"
 COLUNAS_NOVAS = ["visto_em"]
 
+# Ofertas do PRUMO além da consultoria (14/10/2026, PRUMO como holding; prumo-ofertas.py): abas Clínicas
+# (Iris) e Estamparias (CRM de estamparia) na planilha do PRUMO, com o contrato de colunas do Prospects
+# mais "Respondeu em". Lidas pelo NOME da aba (o gid nasceu no Dell, como no 08 · CRM) e tolerantes: aba
+# que falta ou não lê vira item com "error" e é pulada, sem segurar o Site e o Prospects. Até 14/10 quem
+# respondia ao convite delas era marcado à mão ("Em conversa" na Etapa).
+OFERTAS_CFG = json.loads((Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["ofertas"]
+# O que a conversa precisa de cada oferta além do JSON: o convite resumido para o Gemini (sem dado de
+# ninguém) e o passo de quem respondeu com interesse, o mesmo que a Próxima ação do convite pede.
+CONVERSA_DAS_OFERTAS = {
+    "iris": {"o_que_foi": "Um convite de uma empresa (Prumo) que oferece o Iris, um sistema para clínicas de terapia em que as "
+                          "anotações das sessões viram o dossiê da reavaliação para o convênio, perguntando se consegue falar com "
+                          "quem coordena a clínica.",
+             "interesse": "Combine a demonstração do dossiê (caso fictício, nunca dado de paciente)."},
+    "estampa": {"o_que_foi": "Um convite de uma empresa (Prumo) sobre um jeito de organizar os pedidos de uma estamparia que chegam "
+                             "pelo WhatsApp (arte, tamanhos e prazo numa ficha só), perguntando se consegue falar com o responsável.",
+                "interesse": "Combine uma conversa de 20 minutos sobre como os pedidos chegam hoje."},
+}
+OFERTAS = [{"planilha": k, "aba": o["aba"], "no": "Ler " + o["aba"], "marcar": "Marcar em " + o["aba"], "rotulo": o["rotulo"],
+            "convite": o["proxima_enviado"], **CONVERSA_DAS_OFERTAS[k]} for k, o in OFERTAS_CFG.items()]
+# O que o fluxo marca (o "planilha" de cada item); "nenhuma" e o resto não batem em saída nenhuma do switch.
+PLANILHAS = ["prumo", "site", *(o["planilha"] for o in OFERTAS)]
+COLUNAS_MARCA_PRUMO = ["ID", "Etapa", "Convite enviado em", "Próxima ação"]
+COLUNAS_MARCA_OFERTA = [*COLUNAS_MARCA_PRUMO, "Respondeu em"]
+
 # Mesma regra do observador (observador.py, chave_do_numero).
 CHAVE_JS = """const chave = (bruto) => {
   let d = String(bruto ?? '').replace(/\\D/g, '');
@@ -90,11 +122,14 @@ CHAVE_JS = """const chave = (bruto) => {
   if (d.length < 10 || d.length > 11) return '';
   return d.slice(0, 2) + d.slice(-8);
 };
-const numeroDoSite = (l) => String(l.wa_me ?? '').match(/wa\\.me\\/(\\d+)/)?.[1] ?? l.telefone ?? '';"""
+const numeroDoSite = (l) => String(l.wa_me ?? '').match(/wa\\.me\\/(\\d+)/)?.[1] ?? l.telefone ?? '';
+const OFERTAS = """ + json.dumps(OFERTAS, ensure_ascii=False) + """;
+// Leitura tolerante (ofertas): o item com "error" de uma aba que não leu não é lead.
+const linhasDe = (no) => { try { return $(no).all().map(i => i.json ?? {}).filter(l => !l.error); } catch (e) { return []; } };"""
 
 # Site: "recusado" entra no filtro para o envio do Rômulo poder retomar a conversa (30/09/2026).
 MONTAR_JS = CHAVE_JS + """
-const prumo = $('Ler Prospects').all().map(i => i.json)
+const prumo = [{ no: 'Ler Prospects' }, ...OFERTAS].flatMap(f => linhasDe(f.no))
   .filter(l => !['Concluído', 'Sem interesse'].includes(String(l['Etapa'] ?? '').trim()))
   .map(l => chave(l['WhatsApp']));
 const site = $('Ler Leads do site').all().map(i => i.json)
@@ -117,17 +152,24 @@ const quando = em.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: 
 const txt = (v) => String(v ?? '').trim();
 const CONVITE = 'Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, faça o Raio-X e mande pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só.';
 const saida = [];
-for (const l of $('Ler Prospects').all().map(i => i.json)) {
+// Prospects e as abas das ofertas (14/10/2026): a mesma regra. A oferta tem a coluna "Respondeu em",
+// que o CRM lê antes da Próxima ação, e o seu próprio texto de convite (prumo-ofertas.json).
+for (const f of [{ planilha: 'prumo', no: 'Ler Prospects', convite: CONVITE }, ...OFERTAS]) for (const l of linhasDe(f.no)) {
   if (!alvo || !direcao || seguinte || chave(l['WhatsApp']) !== alvo) continue;
   const etapa = txt(l['Etapa']);
-  const base = { planilha: 'prumo', ID: String(l['ID']), nome: txt(l['Empresa']) || String(l['ID']), antes: etapa };
+  const oferta = f.planilha !== 'prumo';
+  // O update grava todas as colunas mapeadas: "Respondeu em" vai sempre, com o valor de antes quando não muda.
+  const respondeuAntes = txt(l['Respondeu em']);
+  const base = { planilha: f.planilha, ID: String(l['ID']), nome: txt(l['Empresa']) || String(l['ID']), antes: etapa,
+    ...(oferta ? { 'Respondeu em': respondeuAntes } : {}) };
+  const respondeu = oferta ? { 'Respondeu em': respondeuAntes || em.toISOString() } : {};
   if (direcao === 'saida' && etapa === 'Revisar') {
     // O Rômulo escreveu ao prospect: vale o clique em "Enviar convite".
-    saida.push({ json: { ...base, acao: 'abordou', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(), 'Próxima ação': CONVITE } });
+    saida.push({ json: { ...base, acao: 'abordou', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(), 'Próxima ação': f.convite } });
   } else if (direcao === 'entrada' && etapa === 'Revisar') {
     // Resposta prova que o contato aconteceu, mesmo sem o link rastreado.
     saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': 'Convite enviado', 'Convite enviado em': em.toISOString(),
-      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
+      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.', ...respondeu } });
   } else if (direcao === 'entrada' && etapa === 'Convite enviado') {
     // 05/10/2026: a regra dos 5 min do Site vale aqui também. Até então toda saudação automática
     // virava "Respondeu no WhatsApp" (05/10: pares de "respostas" no mesmo minuto do lote de convites).
@@ -135,11 +177,12 @@ for (const l of $('Ler Prospects').all().map(i => i.json)) {
     if (Number.isFinite(desde) && em.getTime() - desde < SAUDACAO_MS) continue;
     // Reescreve a data do convite com ela mesma: o update grava todas as colunas mapeadas.
     saida.push({ json: { ...base, acao: 'respondeu', 'Etapa': etapa, 'Convite enviado em': String(l['Convite enviado em'] ?? ''),
-      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.' } });
+      'Próxima ação': 'Respondeu no WhatsApp em ' + quando + '. Continue a conversa.', ...respondeu } });
   } else if (direcao === 'lido' && etapa === 'Convite enviado' && !/^(Respondeu|Leu)/.test(txt(l['Próxima ação']))) {
     // Primeira leitura depois do convite; "Respondeu" vale mais e não é sobrescrito.
     saida.push({ json: { ...base, acao: 'leu', 'Etapa': etapa, 'Convite enviado em': String(l['Convite enviado em'] ?? ''),
-      'Próxima ação': 'Leu o convite em ' + quando + '. Sem resposta em 3 dias, ofereça fazer por telefone.' } });
+      'Próxima ação': 'Leu o convite em ' + quando + '. Sem resposta em 3 dias, '
+        + (oferta ? 'um lembrete só.' : 'ofereça fazer por telefone.') } });
   }
 }
 for (const l of $('Ler Leads do site').all().map(i => i.json)) {
@@ -188,7 +231,7 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
 return saida.length ? saida : [{ json: { planilha: 'nenhuma' } }];"""
 
 # Resposta ao observador (expressão do nó "Responder ao observador").
-RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site'].includes(i.json.planilha))"
+RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => " + json.dumps(PLANILHAS) + ".includes(i.json.planilha))"
                ".map(i => ({ planilha: i.json.planilha, nome: i.json.nome, acao: i.json.acao, antes: i.json.antes })) }")
 
 
@@ -232,9 +275,9 @@ const txt = (v) => String(v ?? '').trim();
 const mensagens = (Array.isArray(ev.mensagens) ? ev.mensagens : [])
   .map(m => ({ em: txt(m?.em), texto: txt(m?.texto).slice(0, 1000) })).filter(m => m.texto).slice(0, 20);
 const achados = [];
-for (const l of $('Ler Prospects').all().map(i => i.json)) {
+for (const f of [{ planilha: 'prumo', no: 'Ler Prospects' }, ...OFERTAS]) for (const l of linhasDe(f.no)) {
   if (alvo && mensagens.length && chave(l['WhatsApp']) === alvo && txt(l['Etapa']) !== 'Concluído') {
-    achados.push({ planilha: 'prumo', linha: l, enviado: txt(l['Convite enviado em']) });
+    achados.push({ planilha: f.planilha, linha: l, enviado: txt(l['Convite enviado em']) });
   }
 }
 for (const l of $('Ler Leads do site').all().map(i => i.json)) {
@@ -246,6 +289,7 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
 const O_QUE_FOI = {
   site: 'Uma mensagem oferecendo um site de demonstração que ele montou de graça para o negócio, perguntando se pode mandar o link.',
   prumo: 'Um convite de uma consultoria (Prumo) que ajuda donos de empresa a passar decisões do dia a dia para a equipe, perguntando se consegue falar com o responsável.',
+  ...Object.fromEntries(OFERTAS.map(o => [o.planilha, o.o_que_foi])),
 };
 const primeiro = achados[0];
 const desde = Date.parse(primeiro?.enviado ?? '');
@@ -306,7 +350,8 @@ const trecho = tipo === 'bot' ? '' : (txt(r.trecho) || ultima.texto).replace(/\\
 const agora = new Date().toISOString();
 const primeiraEm = m.mensagens[0]?.em || ultima.em;
 const quando = new Date(ultima.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-const ROTULO = { site: 'Site antes da venda', prumo: 'PRUMO' };
+const ROTULO = { site: 'Site antes da venda', prumo: 'PRUMO', ...Object.fromEntries(OFERTAS.map(o => [o.planilha, o.rotulo])) };
+const OFERTA = Object.fromEntries(OFERTAS.map(o => [o.planilha, o]));
 const aspas = (t) => '\\u201c' + t + '\\u201d';
 const saida = [];
 for (const a of m.achados) {
@@ -363,19 +408,32 @@ for (const a of m.achados) {
     if (status === 'recusado' && !['negativa', 'exclusao'].includes(tipo) && item.aviso) item.aviso += '\\n(Estava como Recusou; se mudou de ideia, desfaça na página do lead.)';
     saida.push({ json: item });
   } else {
+    // PRUMO (Prospects) e as ofertas (Clínicas, Estamparias: 14/10/2026), com o mesmo contrato de colunas.
+    const oferta = OFERTA[a.planilha];
     const etapa = txt(l['Etapa']);
-    const item = { planilha: 'prumo', nome, tipo, ID: String(l['ID']), 'Etapa': etapa,
+    const respondeuAntes = txt(l['Respondeu em']);
+    const item = { planilha: a.planilha, nome, tipo, ID: String(l['ID']), 'Etapa': etapa,
       'Convite enviado em': txt(l['Convite enviado em']), 'Próxima ação': txt(l['Próxima ação']),
-      'Tipo da resposta': tipo, 'Resposta': trecho, 'Resposta em': ultima.em };
+      'Tipo da resposta': tipo, 'Resposta': trecho, 'Resposta em': ultima.em,
+      ...(oferta ? { 'Respondeu em': respondeuAntes } : {}) };
     // 09/10/2026: o "sim" recebe o Raio-X (feito à mão, dados públicos), não o formulário de 16 perguntas
     // (passo=diagnostico), que saiu com o plano de 08/10. O aviso leva à ficha, onde fica a mensagem pronta.
-    const ficha = '""" + CRM + """?ver=funil&lead=' + encodeURIComponent('prumo:' + String(l['ID']));
+    const ficha = '""" + CRM + """?ver=funil&lead=' + encodeURIComponent(a.planilha + ':' + String(l['ID']));
     if (etapa === 'Revisar') Object.assign(item, { 'Etapa': 'Convite enviado', 'Convite enviado em': item['Convite enviado em'] || primeiraEm });
+    if (oferta && tipo !== 'bot') {
+      // Gente respondeu: a oferta ganha "Respondeu em" (a regra dos 5 min pode já ter posto) e, se ainda
+      // estava no convite, a Etapa "Em conversa", que até 14/10 era marcada à mão. A negativa sai abaixo.
+      item['Respondeu em'] = respondeuAntes || ultima.em;
+      if (item['Etapa'] === 'Convite enviado') item['Etapa'] = 'Em conversa';
+    }
     if (tipo === 'bot') {
       // O CRM lê "Respondeu no WhatsApp em ..." da Próxima ação: só a saudação, isso sai.
       if (/^Respondeu/.test(item['Próxima ação']) && !HUMANOS.includes(tipoAntes)) {
         item['Próxima ação'] = 'Só resposta automática em ' + quando + '. Sem resposta de gente em 3 dias, um lembrete só.';
       }
+      // Na oferta o CRM lê antes "Respondeu em": a da saudação (desta conversa) sai, como o respondeu_em do Site.
+      const t = Date.parse(respondeuAntes);
+      if (oferta && Number.isFinite(t) && t >= Date.parse(primeiraEm) - 10 * 60 * 1000) item['Respondeu em'] = '';
     } else if (tipo === 'negativa') {
       Object.assign(item, { 'Etapa': 'Sem interesse', 'Próxima ação': 'Recusou no WhatsApp em ' + quando + ': ' + aspas(trecho) });
       item.aviso = cab + 'Negativa: saiu do funil (Sem interesse). Se foi engano, volte a Etapa na planilha.';
@@ -383,10 +441,13 @@ for (const a of m.achados) {
       // O PRUMO não tem demo: sai do funil como a negativa, e o que for dele se apaga à mão.
       Object.assign(item, { 'Etapa': 'Sem interesse',
         'Próxima ação': 'Pediu exclusão no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Apague o que for dele (nada é apagado sozinho).' });
-      item.aviso = cab + 'Pediu para apagar os dados: saiu do funil (Sem interesse). Nada foi apagado; o que for dele está na planilha do PRUMO.';
+      item.aviso = cab + 'Pediu para apagar os dados: saiu do funil (Sem interesse). Nada foi apagado; o que for dele está na planilha do PRUMO'
+        + (oferta ? ' (aba ' + oferta.aba + ').' : '.');
     } else if (tipo === 'interesse') {
-      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. Faça o Raio-X e mande (botão na ficha do CRM).';
-      item.aviso = cab + 'Interesse! Faça o Raio-X e mande pela ficha: ' + ficha;
+      // Ofertas: sem Raio-X nem texto de 2º passo aprovado; o passo é combinar a demonstração (prumo-ofertas.json).
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. '
+        + (oferta ? oferta.interesse : 'Faça o Raio-X e mande (botão na ficha do CRM).');
+      item.aviso = cab + (oferta ? 'Interesse! ' + oferta.interesse + ' Ficha: ' : 'Interesse! Faça o Raio-X e mande pela ficha: ') + ficha;
     } else {
       item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Continue a conversa.';
       item.aviso = cab + 'Gente, sem sim nem não: continue a conversa.';
@@ -396,7 +457,7 @@ for (const a of m.achados) {
 }
 return saida.length ? saida : [{ json: { planilha: 'nenhuma' } }];"""
 
-RESPOSTA_CLASSIFICADA_JS = ("{ ok: true, marcados: $input.all().filter(i => ['prumo', 'site'].includes(i.json.planilha))"
+RESPOSTA_CLASSIFICADA_JS = ("{ ok: true, marcados: $input.all().filter(i => " + json.dumps(PLANILHAS) + ".includes(i.json.planilha))"
                             ".map(i => ({ planilha: i.json.planilha, nome: i.json.nome, tipo: i.json.tipo,"
                             " ...(i.json.aviso ? { aviso: i.json.aviso } : {}) })) }")
 
@@ -682,6 +743,46 @@ def ler(no_id, nome, planilha, gid, aba, x, y):
             "parameters": {"resource": "sheet", "operation": "read", **doc(planilha, gid, aba), "options": {}}}
 
 
+def doc_pelo_nome(planilha, aba):
+    return {"documentId": {"__rl": True, "mode": "id", "value": planilha},
+            "sheetName": {"__rl": True, "mode": "name", "value": aba}}
+
+
+def ler_ofertas(x, y):
+    """Uma leitura por aba de oferta, pelo nome. Tolerante (onError): a falha vira item com "error", que
+    o código pula (linhasDe), e o Site e o Prospects seguem marcando."""
+    return [{"id": "ler-" + o["planilha"], "name": o["no"], "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
+             "position": [x + 220 * k, y], "credentials": SHEETS, "alwaysOutputData": True, "executeOnce": True,
+             "onError": "continueRegularOutput", "retryOnFail": True, "maxTries": 3,
+             "parameters": {"resource": "sheet", "operation": "read", **doc_pelo_nome(PRUMO, o["aba"]), "options": {}}}
+            for k, o in enumerate(OFERTAS)]
+
+
+def encadear(con, nomes):
+    """Liga cada nó ao seguinte pela saída 0."""
+    for de, para in zip(nomes, nomes[1:]):
+        con[de] = {"main": [[{"node": para, "type": "main", "index": 0}]]}
+    return con
+
+
+def regra(valor, saida):
+    return {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2}, "combinator": "and",
+                           "conditions": [{"leftValue": "={{ $json.planilha }}", "rightValue": valor, "operator": {"type": "string", "operation": "equals"}}]},
+            "renameOutput": True, "outputKey": saida}
+
+
+def marcar_ofertas(colunas, x, y):
+    """Gravação em cada aba de oferta, pelo ID, como o "Marcar no PRUMO"."""
+    marca = {c: "={{ $json['" + c + "'] }}" for c in colunas}
+    return [{"id": "marcar-" + o["planilha"], "name": o["marcar"], "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
+             "position": [x, y + 100 * k], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
+             "parameters": {"resource": "sheet", "operation": "update", **doc_pelo_nome(PRUMO, o["aba"]),
+                            "columns": {"mappingMode": "defineBelow", "matchingColumns": ["ID"], "value": marca,
+                                        "schema": schema(list(marca), "ID")},
+                            "options": {"cellFormat": "RAW"}}}
+            for k, o in enumerate(OFERTAS)]
+
+
 def credencial():
     """Credencial de header do webhook. O segredo nasce aqui, uma vez, e nunca é impresso."""
     from n8n import api
@@ -726,21 +827,24 @@ def publicar(wf):
 
 
 def telefones(auth):
+    publicar(montar_telefones(auth))
+
+
+def montar_telefones(auth):
+    leitores = ["Ler Prospects", "Ler Leads do site", *(o["no"] for o in OFERTAS)]
     nos = [
         gatilho("pedir", "Observador pede os números", "GET", "whatsapp-telefones", "7c1d2e3f-4a5b-4c6d-8e7f-a1b2c3d4e501", auth),
         ler("prumo", "Ler Prospects", PRUMO, PROSPECTS_GID, "Prospects", 220, 0),
         ler("site", "Ler Leads do site", SITE, LEADS_GID, "Leads", 440, 0),
-        {"id": "montar", "name": "Montar chaves", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 0],
+        *ler_ofertas(440, -200),
+        {"id": "montar", "name": "Montar chaves", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660 + 220 * len(OFERTAS), 0],
          "parameters": {"mode": "runOnceForAllItems", "jsCode": MONTAR_JS}},
-        responder("resp", "Responder", "={{ $json }}", 880, 0),
+        responder("resp", "Responder", "={{ $json }}", 880 + 220 * len(OFERTAS), 0),
     ]
-    con = {"Observador pede os números": {"main": [[{"node": "Ler Prospects", "type": "main", "index": 0}]]},
-           "Ler Prospects": {"main": [[{"node": "Ler Leads do site", "type": "main", "index": 0}]]},
-           "Ler Leads do site": {"main": [[{"node": "Montar chaves", "type": "main", "index": 0}]]},
-           "Montar chaves": {"main": [[{"node": "Responder", "type": "main", "index": 0}]]}}
+    con = encadear({}, ["Observador pede os números", *leitores, "Montar chaves", "Responder"])
     # Roda a cada 10 min só para devolver números: guardar cada execução é ruído.
-    publicar({"name": "WhatsApp — números dos leads (para o observador)", "nodes": nos, "connections": con,
-              "settings": {"saveDataSuccessExecution": "none"}})
+    return {"name": "WhatsApp — números dos leads (para o observador)", "nodes": nos, "connections": con,
+            "settings": {"saveDataSuccessExecution": "none"}}
 
 
 def montar_conversa(auth):
@@ -748,24 +852,22 @@ def montar_conversa(auth):
                    "Convite enviado em": "={{ $json['Convite enviado em'] }}", "Próxima ação": "={{ $json['Próxima ação'] }}"}
     marca_site = {c: "={{ $json." + c + " }}" for c in ["place_id", "status", "enviado_em", "respondeu_em", "visto_em",
                                                           "mensagem_variante"]}
+    leitores = ["Ler Prospects", "Ler Leads do site", *(o["no"] for o in OFERTAS)]
+    dx = 220 * len(OFERTAS)
     nos = [
         gatilho("evento", "Conversa no WhatsApp", "POST", "whatsapp-conversa", "7c1d2e3f-4a5b-4c6d-8e7f-a1b2c3d4e502", auth),
         ler("prumo", "Ler Prospects", PRUMO, PROSPECTS_GID, "Prospects", 220, 0),
         ler("site", "Ler Leads do site", SITE, LEADS_GID, "Leads", 440, 0),
-        {"id": "decidir", "name": "Decidir", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 0],
+        *ler_ofertas(440, -200),
+        {"id": "decidir", "name": "Decidir", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660 + dx, 0],
          "parameters": {"mode": "runOnceForAllItems", "jsCode": DECIDIR_JS}},
         # Responde depois de ler e antes de gravar: o observador recebe o que vai mudar (para o aviso
         # "você abordou"); leitura que falha volta como erro e o observador tenta de novo mais tarde.
-        responder("ok", "Responder ao observador", "={{ " + RESPOSTA_JS + " }}", 880, 0),
-        {"id": "qual", "name": "Qual planilha?", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1100, 0],
-         "parameters": {"rules": {"values": [
-             {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2}, "combinator": "and",
-                             "conditions": [{"leftValue": "={{ $json.planilha }}", "rightValue": "prumo", "operator": {"type": "string", "operation": "equals"}}]},
-              "renameOutput": True, "outputKey": "PRUMO"},
-             {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2}, "combinator": "and",
-                             "conditions": [{"leftValue": "={{ $json.planilha }}", "rightValue": "site", "operator": {"type": "string", "operation": "equals"}}]},
-              "renameOutput": True, "outputKey": "Site"}]}, "options": {}}},
-        {"id": "marcar-prumo", "name": "Marcar no PRUMO", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1320, -100],
+        responder("ok", "Responder ao observador", "={{ " + RESPOSTA_JS + " }}", 880 + dx, 0),
+        {"id": "qual", "name": "Qual planilha?", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1100 + dx, 0],
+         "parameters": {"rules": {"values": [regra("prumo", "PRUMO"), regra("site", "Site"),
+                                             *(regra(o["planilha"], o["aba"]) for o in OFERTAS)]}, "options": {}}},
+        {"id": "marcar-prumo", "name": "Marcar no PRUMO", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1320 + dx, -100],
          "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
          "parameters": {"resource": "sheet", "operation": "update", **doc(PRUMO, PROSPECTS_GID, "Prospects"),
                         "columns": {"mappingMode": "defineBelow", "matchingColumns": ["ID"], "value": marca_prumo,
@@ -773,19 +875,16 @@ def montar_conversa(auth):
                         "options": {"cellFormat": "RAW"}}},
         # visto_em só é gravado se a coluna existir (--colunas); sem ela, o n8n ignora o campo.
         {"id": "marcar-site", "name": "Marcar no Site antes da venda", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
-         "position": [1320, 100], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
+         "position": [1320 + dx, 100], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
          "parameters": {"resource": "sheet", "operation": "update", **doc(SITE, LEADS_GID, "Leads"),
                         "columns": {"mappingMode": "defineBelow", "matchingColumns": ["place_id"], "value": marca_site,
                                     "schema": schema(list(marca_site), "place_id")},
                         "options": {"cellFormat": "RAW"}}},
+        *marcar_ofertas(COLUNAS_MARCA_OFERTA, 1320 + dx, 200),
     ]
-    con = {"Conversa no WhatsApp": {"main": [[{"node": "Ler Prospects", "type": "main", "index": 0}]]},
-           "Ler Prospects": {"main": [[{"node": "Ler Leads do site", "type": "main", "index": 0}]]},
-           "Ler Leads do site": {"main": [[{"node": "Decidir", "type": "main", "index": 0}]]},
-           "Decidir": {"main": [[{"node": "Responder ao observador", "type": "main", "index": 0}]]},
-           "Responder ao observador": {"main": [[{"node": "Qual planilha?", "type": "main", "index": 0}]]},
-           "Qual planilha?": {"main": [[{"node": "Marcar no PRUMO", "type": "main", "index": 0}],
-                                       [{"node": "Marcar no Site antes da venda", "type": "main", "index": 0}]]}}
+    con = encadear({}, ["Conversa no WhatsApp", *leitores, "Decidir", "Responder ao observador", "Qual planilha?"])
+    con["Qual planilha?"] = {"main": [[{"node": n, "type": "main", "index": 0}] for n in
+                                      ["Marcar no PRUMO", "Marcar no Site antes da venda", *(o["marcar"] for o in OFERTAS)]]}
     return {"name": "WhatsApp — conversa com lead (marca sozinho)", "nodes": nos, "connections": con}
 
 
@@ -818,14 +917,11 @@ def montar_resposta(auth, gemini, jev=None):
                              "combinator": "and", "conditions": [{"id": "tem", "leftValue": "={{ $json.tem }}", "rightValue": "",
                                                                   "operator": {"type": "boolean", "operation": "true", "singleValue": True}}]},
               "options": {}}
-    regra = lambda valor, saida: {
-        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2}, "combinator": "and",
-                       "conditions": [{"leftValue": "={{ $json.planilha }}", "rightValue": valor, "operator": {"type": "string", "operation": "equals"}}]},
-        "renameOutput": True, "outputKey": saida}
     nos = [
         gatilho("evento", "Resposta no WhatsApp", "POST", "whatsapp-resposta", "7c1d2e3f-4a5b-4c6d-8e7f-a1b2c3d4e503", auth),
         ler("prumo", "Ler Prospects", PRUMO, PROSPECTS_GID, "Prospects", 220, 0),
         ler("site", "Ler Leads do site", SITE, LEADS_GID, "Leads", 440, 0),
+        *ler_ofertas(440, -300),
         {"id": "montar", "name": "Montar pergunta", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 0],
          "parameters": {"mode": "runOnceForAllItems", "jsCode": MONTAR_RESPOSTA_JS}},
         {"id": "tem", "name": "É de um lead?", "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [880, 0],
@@ -846,7 +942,9 @@ def montar_resposta(auth, gemini, jev=None):
         # observador tenta de novo; gravação que falha vira aviso de falha (Error Workflow).
         responder("ok", "Responder ao observador", "={{ " + RESPOSTA_CLASSIFICADA_JS + " }}", 1540, -100),
         {"id": "qual", "name": "Qual planilha?", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1760, -100],
-         "parameters": {"rules": {"values": [regra("prumo", "PRUMO"), regra("site", "Site")]}, "options": {}}},
+         "parameters": {"rules": {"values": [regra("prumo", "PRUMO"), regra("site", "Site"),
+                                             *(regra(o["planilha"], o["aba"]) for o in OFERTAS)]}, "options": {}}},
+        *marcar_ofertas(["ID", "Etapa", "Convite enviado em", "Próxima ação", *COLUNAS_RESPOSTA_PRUMO, "Respondeu em"], 1980, -400),
         {"id": "marcar-prumo", "name": "Marcar no PRUMO", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
          "position": [1980, -200], "credentials": SHEETS, "retryOnFail": True, "maxTries": 3,
          "parameters": {"resource": "sheet", "operation": "update", **doc(PRUMO, PROSPECTS_GID, "Prospects"),
@@ -866,9 +964,8 @@ def montar_resposta(auth, gemini, jev=None):
          "parameters": {"operation": "write", "dataPropertyName": "data",
                         "fileName": "={{ '/home/node/.n8n-files/estado/site-acoes/' + $json.nome }}"}},
     ]
-    con = {"Resposta no WhatsApp": {"main": [[{"node": "Ler Prospects", "type": "main", "index": 0}]]},
-           "Ler Prospects": {"main": [[{"node": "Ler Leads do site", "type": "main", "index": 0}]]},
-           "Ler Leads do site": {"main": [[{"node": "Montar pergunta", "type": "main", "index": 0}]]},
+    con = encadear({}, ["Resposta no WhatsApp", "Ler Prospects", "Ler Leads do site", *(o["no"] for o in OFERTAS), "Montar pergunta"])
+    con.update({
            "Montar pergunta": {"main": [[{"node": "É de um lead?", "type": "main", "index": 0}]]},
            "É de um lead?": {"main": [[{"node": "Gemini: classificar resposta", "type": "main", "index": 0}],
                                       [{"node": "Responder: não é lead", "type": "main", "index": 0}]]},
@@ -877,8 +974,9 @@ def montar_resposta(auth, gemini, jev=None):
            "Responder ao observador": {"main": [[{"node": "Qual planilha?", "type": "main", "index": 0}]]},
            "Qual planilha?": {"main": [[{"node": "Marcar no PRUMO", "type": "main", "index": 0}],
                                        [{"node": "Marcar no Site antes da venda", "type": "main", "index": 0},
-                                        {"node": "Pacote da pasta (recusou)", "type": "main", "index": 0}]]},
-           "Pacote da pasta (recusou)": {"main": [[{"node": "Pedir a mudança de pasta", "type": "main", "index": 0}]]}}
+                                        {"node": "Pacote da pasta (recusou)", "type": "main", "index": 0}],
+                                       *([{"node": o["marcar"], "type": "main", "index": 0}] for o in OFERTAS)]},
+           "Pacote da pasta (recusou)": {"main": [[{"node": "Pedir a mudança de pasta", "type": "main", "index": 0}]]}})
     if jev:
         nos += nos_do_jev(jev)
         # A saída de "Decidir" vai inteira aos dois; o ramo de sempre é o primeiro da lista e o de cima.
@@ -1008,9 +1106,9 @@ def testar() -> int:
         return {"ID": "ID-1", "Empresa": "Oficina Teste", "WhatsApp": f"({LEAD[:2]}) {LEAD[2:]}", "Etapa": etapa,
                 "Convite enviado em": "", "Próxima ação": "", **k}
 
-    def decidir(direcao, sites=(), prumos=(), chave=LEAD, **ev):
+    def decidir(direcao, sites=(), prumos=(), chave=LEAD, ofertas=None, **ev):
         dados = {"Conversa no WhatsApp": {"body": {"chave": chave, "direcao": direcao, "em": AGORA, **ev}},
-                 "Ler Prospects": list(prumos), "Ler Leads do site": list(sites)}
+                 "Ler Prospects": list(prumos), "Ler Leads do site": list(sites), **(ofertas or {})}
         r = rodar_no(DECIDIR_JS, dados)
         return [i for i in r["itens"] if i.get("planilha") != "nenhuma"], r["resposta"]
 
@@ -1139,9 +1237,9 @@ def testar() -> int:
 
         ENVIO = "2026-10-05T12:00:00Z"
 
-        def classificar(self, gemini, mensagens, sites=(), prumos=(), chave=LEAD):
+        def classificar(self, gemini, mensagens, sites=(), prumos=(), chave=LEAD, ofertas=None):
             dados = {"Resposta no WhatsApp": {"body": {"chave": chave, "mensagens": mensagens}},
-                     "Ler Prospects": list(prumos), "Ler Leads do site": list(sites)}
+                     "Ler Prospects": list(prumos), "Ler Leads do site": list(sites), **(ofertas or {})}
             montado = rodar_no(MONTAR_RESPOSTA_JS, dados)["itens"][0]
             if not montado["tem"]:
                 return montado, [], {"ok": True, "marcados": []}
@@ -1518,8 +1616,164 @@ def testar() -> int:
             # Sem a credencial, o fluxo publicado é o de sempre.
             self.assertNotIn("Jev", json.dumps(montar_resposta(None, self.GEMINI_AUTH), ensure_ascii=False))
 
+    class Ofertas(unittest.TestCase):
+        """Iris e estamparias (14/10/2026): as abas Clínicas e Estamparias marcadas como o Prospects."""
+
+        ENVIO = "2026-10-05T12:00:00Z"
+        GEMINI_AUTH = {"googlePalmApi": {"id": "g", "name": "Google Gemini (Dell)"}}
+        IRIS = next(o for o in OFERTAS if o["planilha"] == "iris")
+        ESTAMPA = next(o for o in OFERTAS if o["planilha"] == "estampa")
+
+        def linha(self, etapa, **k):
+            return {"ID": "OF-1", "Empresa": "Clínica Teste", "WhatsApp": f"({LEAD[:2]}) {LEAD[2:]}", "Etapa": etapa,
+                    "Convite enviado em": "", "Próxima ação": "", "Respondeu em": "", "Tipo da resposta": "", **k}
+
+        def na(self, oferta, *linhas):
+            return {oferta["no"]: list(linhas)}
+
+        def test_ofertas_sao_as_do_json(self):
+            cfg = json.loads((Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["ofertas"]
+            self.assertEqual(set(CONVERSA_DAS_OFERTAS), set(cfg))
+            self.assertEqual({o["planilha"]: o["aba"] for o in OFERTAS}, {"iris": "Clínicas", "estampa": "Estamparias"})
+            self.assertEqual(PLANILHAS, ["prumo", "site", *cfg])
+
+        def test_numeros_incluem_as_ofertas_e_pulam_aba_que_nao_leu(self):
+            dados = {"Ler Prospects": [], "Ler Leads do site": [],
+                     **self.na(self.IRIS, self.linha("Convite enviado"), self.linha("Sem interesse", WhatsApp="11 91111-2222")),
+                     **self.na(self.ESTAMPA, {"error": {"message": "aba não encontrada"}})}
+            r = rodar_no(MONTAR_JS, dados)["itens"][0]
+            self.assertEqual(r["chaves"], [LEAD[:2] + LEAD[-8:]])
+
+        def test_saida_em_revisar_vira_convite_com_o_texto_da_oferta(self):
+            for oferta in (self.IRIS, self.ESTAMPA):
+                itens, resp = decidir("saida", ofertas=self.na(oferta, self.linha("Revisar")))
+                i = itens[0]
+                self.assertEqual((i["planilha"], i["acao"], i["Etapa"], i["Convite enviado em"], i["Respondeu em"]),
+                                 (oferta["planilha"], "abordou", "Convite enviado", "2026-09-30T13:00:00.000Z", ""))
+                self.assertEqual(i["Próxima ação"], OFERTAS_CFG[oferta["planilha"]]["proxima_enviado"])
+                self.assertEqual(resp["marcados"], [{"planilha": oferta["planilha"], "nome": "Clínica Teste", "acao": "abordou", "antes": "Revisar"}])
+
+        def test_resposta_marca_respondeu_em_com_a_regra_dos_5_min(self):
+            convite = self.linha("Convite enviado", **{"Convite enviado em": "2026-09-30T12:50:00Z"})
+            itens, _ = decidir("entrada", ofertas=self.na(self.IRIS, convite))
+            self.assertEqual((itens[0]["Respondeu em"], itens[0]["Etapa"]), ("2026-09-30T13:00:00.000Z", "Convite enviado"))
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 30/09"))
+            # Saudação (2 min depois do convite) e segundo aviso: nada.
+            cedo = self.linha("Convite enviado", **{"Convite enviado em": "2026-09-30T12:58:00Z"})
+            self.assertEqual(decidir("entrada", ofertas=self.na(self.IRIS, cedo))[0], [])
+            self.assertEqual(decidir("entrada", ofertas=self.na(self.IRIS, convite), seguinte=True)[0], [])
+            # "Respondeu em" já marcado fica o de antes.
+            antes = self.linha("Convite enviado", **{"Convite enviado em": "2026-09-30T12:00:00Z", "Respondeu em": "2026-09-30T12:30:00Z"})
+            self.assertEqual(decidir("entrada", ofertas=self.na(self.IRIS, antes))[0][0]["Respondeu em"], "2026-09-30T12:30:00Z")
+            # Em conversa (marcado à mão ou pela classificação): a conversa segue, nada muda.
+            self.assertEqual(decidir("entrada", ofertas=self.na(self.IRIS, self.linha("Em conversa")))[0], [])
+
+        def test_leitura_do_convite(self):
+            convite = self.linha("Convite enviado", **{"Convite enviado em": "2026-09-29T12:00:00Z"})
+            itens, resp = decidir("lido", ofertas=self.na(self.ESTAMPA, convite))
+            self.assertEqual(itens[0]["Próxima ação"], "Leu o convite em 30/09, 10:00. Sem resposta em 3 dias, um lembrete só.")
+            self.assertEqual((itens[0]["Respondeu em"], itens[0]["Convite enviado em"]), ("", "2026-09-29T12:00:00Z"))
+            self.assertEqual(resp["marcados"][0]["acao"], "leu")
+
+        def test_aba_que_nao_leu_nao_derruba_site_nem_prumo(self):
+            erro = {o["no"]: [{"error": {"message": "aba não encontrada"}}] for o in OFERTAS}
+            itens, _ = decidir("saida", [site("pronto")], [prumo("Revisar")], ofertas=erro)
+            self.assertEqual(sorted(i["planilha"] for i in itens), ["prumo", "site"])
+
+        def classificar(self, gemini, texto, linha, oferta=None, em="2026-10-05T12:40:00Z"):
+            return Classifica.classificar(self, gemini, [{"em": em, "texto": texto}], ofertas=self.na(oferta or self.IRIS, linha))
+
+        def test_interesse_vira_em_conversa_com_o_passo_da_oferta(self):
+            linha = self.linha("Convite enviado", **{"Convite enviado em": self.ENVIO})
+            montado, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "pode sim, como funciona?"}', "pode sim, como funciona?", linha)
+            self.assertIn("Iris, um sistema para clínicas de terapia", montado["prompt"])
+            i = itens[0]
+            self.assertEqual((i["planilha"], i["Etapa"], i["Respondeu em"], i["Tipo da resposta"], i["Resposta"], i["Resposta em"]),
+                             ("iris", "Em conversa", "2026-10-05T12:40:00Z", "interesse", "pode sim, como funciona?", "2026-10-05T12:40:00Z"))
+            self.assertTrue(i["Próxima ação"].startswith("Respondeu no WhatsApp em 05/10, 09:40 (interesse)"))
+            self.assertIn(self.IRIS["interesse"], i["Próxima ação"])
+            self.assertNotIn("Raio-X", i["Próxima ação"])
+            aviso = resp["marcados"][0]["aviso"]
+            self.assertIn("Clínica Teste (Iris · Clínicas) respondeu", aviso)
+            self.assertIn(":8443/crm?ver=funil&lead=iris%3AOF-1", aviso)
+            self.assertNotIn("Raio-X", aviso)
+            # Estamparias: o próprio passo e o próprio convite no prompt.
+            montado, itens, resp = self.classificar('{"tipo": "neutra", "trecho": "quem é?"}', "quem é?", linha, self.ESTAMPA)
+            self.assertIn("estamparia", montado["prompt"])
+            self.assertEqual((itens[0]["planilha"], itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("estampa", "Em conversa", "neutra"))
+            self.assertIn("(CRM de estamparia) respondeu", resp["marcados"][0]["aviso"])
+
+        def test_revisar_que_responde_vai_direto_a_em_conversa(self):
+            _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "manda"}', "manda", self.linha("Revisar"))
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Convite enviado em"]), ("Em conversa", "2026-10-05T12:40:00Z"))
+
+        def test_robo_apaga_o_respondeu_em_da_saudacao_e_nao_muda_a_etapa(self):
+            linha = self.linha("Convite enviado", **{"Convite enviado em": self.ENVIO, "Respondeu em": "2026-10-05T12:06:00Z",
+                                                     "Próxima ação": "Respondeu no WhatsApp em 05/10, 09:06. Continue a conversa."})
+            _, itens, resp = self.classificar('{"tipo": "bot"}', "Olá! Em breve retornaremos.", linha, em="2026-10-05T12:06:00Z")
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Respondeu em"], itens[0]["Tipo da resposta"]), ("Convite enviado", "", "bot"))
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Só resposta automática em 05/10"))
+            self.assertNotIn("aviso", resp["marcados"][0])
+            # Resposta de gente já classificada não é apagada por um robô.
+            gente = self.linha("Em conversa", **{"Tipo da resposta": "interesse", "Respondeu em": "2026-10-05T12:30:00Z"})
+            _, itens, resp = self.classificar('{"tipo": "bot"}', "Olá!", gente, em="2026-10-05T13:00:00Z")
+            self.assertEqual((itens, resp), ([], {"ok": True, "marcados": []}))
+
+        def test_negativa_e_exclusao_saem_do_funil(self):
+            linha = self.linha("Convite enviado", **{"Convite enviado em": self.ENVIO})
+            _, itens, resp = self.classificar('{"tipo": "negativa", "trecho": "não temos interesse"}', "não temos interesse", linha)
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Respondeu em"], itens[0]["Tipo da resposta"]),
+                             ("Sem interesse", "2026-10-05T12:40:00Z", "negativa"))
+            self.assertIn("saiu do funil (Sem interesse)", resp["marcados"][0]["aviso"])
+            _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "apaguem"}', "apaguem", linha, self.ESTAMPA)
+            self.assertEqual((itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("Sem interesse", "exclusao"))
+            self.assertIn("(aba Estamparias)", resp["marcados"][0]["aviso"])
+
+        def test_fiacao_dos_tres_fluxos(self):
+            for wf in (montar_telefones(None), montar_conversa(None), montar_resposta(None, self.GEMINI_AUTH)):
+                nos = {n["name"]: n for n in wf["nodes"]}
+                for o in OFERTAS:
+                    leitor = nos[o["no"]]
+                    self.assertEqual(leitor["parameters"]["sheetName"], {"__rl": True, "mode": "name", "value": o["aba"]}, wf["name"])
+                    self.assertEqual(leitor["parameters"]["documentId"]["value"], PRUMO)
+                    self.assertEqual((leitor["parameters"]["operation"], leitor["onError"]), ("read", "continueRegularOutput"))
+                # Os leitores vêm em cadeia antes do código que decide.
+                passo, ordem = wf["nodes"][0]["name"], []
+                while passo in wf["connections"] and not passo.startswith(("Montar", "Decidir")):
+                    passo = wf["connections"][passo]["main"][0][0]["node"]
+                    ordem.append(passo)
+                self.assertEqual(ordem[:-1], ["Ler Prospects", "Ler Leads do site", *(o["no"] for o in OFERTAS)], wf["name"])
+                if "Qual planilha?" not in nos:
+                    continue
+                regras = [r["conditions"]["conditions"][0]["rightValue"] for r in nos["Qual planilha?"]["parameters"]["rules"]["values"]]
+                self.assertEqual(regras, PLANILHAS, wf["name"])
+                saidas = wf["connections"]["Qual planilha?"]["main"]
+                for k, o in enumerate(OFERTAS, start=2):
+                    self.assertEqual([d["node"] for d in saidas[k]], [o["marcar"]], wf["name"])
+                    marca = nos[o["marcar"]]["parameters"]
+                    self.assertEqual((marca["operation"], marca["sheetName"]["value"], marca["columns"]["matchingColumns"]),
+                                     ("update", o["aba"], ["ID"]))
+                    self.assertIn("Respondeu em", marca["columns"]["value"])
+                    if "resposta" in wf["name"]:
+                        self.assertLessEqual(set(COLUNAS_RESPOSTA_PRUMO), set(marca["columns"]["value"]))
+                    # Toda coluna gravada existe no contrato das abas.
+                    self.assertLessEqual(set(marca["columns"]["value"]), set(json.loads(
+                        (Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["colunas"]))
+
+        def test_jev_registra_a_oferta_sem_o_nome_dela(self):
+            linha = self.linha("Convite enviado", **{"Convite enviado em": self.ENVIO})
+            mensagens = [{"em": "2026-10-05T12:30:00Z", "texto": "Aqui é da Clínica Teste, não temos interesse"}]
+            evento = {"body": {"chave": LEAD, "mensagens": mensagens}}
+            dados = {"Resposta no WhatsApp": evento, "Ler Prospects": [], "Ler Leads do site": [], **self.na(self.IRIS, linha)}
+            montado = rodar_no(MONTAR_RESPOSTA_JS, dados)["itens"][0]
+            dados2 = {"Montar pergunta": montado, "Gemini: classificar resposta": {"content": {"parts": [{"text": '{"tipo": "negativa"}'}]}},
+                      "Resposta no WhatsApp": evento}
+            pedido = rodar_no_jev(JEV_PEDIDO_JS, dados2, [])
+            self.assertEqual(pedido[0]["pedido"]["state"], "Aqui é da [EMPRESA], não temos interesse")
+            self.assertEqual(pedido[0]["registro"]["planilha"], "iris")
+
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Envio, Lido, Resposta, Numeros, Classifica, Saudacao, Jev))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Envio, Lido, Resposta, Numeros, Classifica, Saudacao, Jev, Ofertas))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
@@ -1531,11 +1785,16 @@ def testar_n8n() -> int:
     import urllib.request
     import uuid
     from n8n import api
-    lead, outro = "27999887766", "11900001111"  # fictícios
+    lead, outro, clinica = "27999887766", "11900001111", "27988776655"  # fictícios
     prospects = [{"ID": "ID-T", "Empresa": "Oficina Teste", "WhatsApp": lead, "Etapa": "Revisar",
                   "Convite enviado em": "", "Próxima ação": ""}]
     leads = [{"place_id": "pid-T", "nome": "Padaria Teste", "wa_me": f"https://wa.me/55{lead}", "status": "enviado",
               "enviado_em": "2026-09-29T12:00:00Z", "respondeu_em": "", "visto_em": ""}]
+    # Primeira oferta com uma clínica de mentira; as outras como aba que não leu (item com "error", onError).
+    ofertas = {o["no"]: ([{"ID": "IRIS-T", "Empresa": "Clínica Teste", "WhatsApp": clinica, "Etapa": "Convite enviado",
+                           "Convite enviado em": "2026-09-29T12:00:00Z", "Próxima ação": "", "Respondeu em": ""}] if k == 0
+                         else [{"error": {"message": "aba de teste não encontrada"}}])
+               for k, o in enumerate(OFERTAS)}
     caminho = f"whatsapp-conversa-teste-{int(time.time())}"
     wf = montar_conversa(None)
     for n in wf["nodes"]:
@@ -1543,10 +1802,10 @@ def testar_n8n() -> int:
             n.pop("credentials", None)
             n["webhookId"] = str(uuid.uuid4())
             n["parameters"] = {**n["parameters"], "path": caminho, "authentication": "none"}
-        elif n["name"] in ("Ler Prospects", "Ler Leads do site"):
-            linhas = prospects if n["name"] == "Ler Prospects" else leads
+        elif n["name"].startswith("Ler "):
+            linhas = {"Ler Prospects": prospects, "Ler Leads do site": leads, **ofertas}[n["name"]]
             n.update(type="n8n-nodes-base.code", typeVersion=2,
-                     parameters={"mode": "runOnceForAllItems", "jsCode": "return " + json.dumps(linhas) + ".map(json => ({ json }));"})
+                     parameters={"mode": "runOnceForAllItems", "jsCode": "return " + json.dumps(linhas, ensure_ascii=False) + ".map(json => ({ json }));"})
             n.pop("credentials", None)
         elif n["name"].startswith("Marcar"):
             n.update(type="n8n-nodes-base.noOp", typeVersion=1, parameters={})
@@ -1562,6 +1821,10 @@ def testar_n8n() -> int:
         ({"chave": lead, "direcao": "entrada", "em": "2026-09-30T10:10:00-0300"},
          [{"planilha": "prumo", "nome": "Oficina Teste", "acao": "respondeu", "antes": "Revisar"},
           {"planilha": "site", "nome": "Padaria Teste", "acao": "respondeu", "antes": "enviado"}]),
+        ({"chave": clinica, "direcao": "lido", "em": "2026-09-30T10:15:00-0300"},
+         [{"planilha": OFERTAS[0]["planilha"], "nome": "Clínica Teste", "acao": "leu", "antes": "Convite enviado"}]),
+        ({"chave": clinica, "direcao": "entrada", "em": "2026-09-30T10:20:00-0300"},
+         [{"planilha": OFERTAS[0]["planilha"], "nome": "Clínica Teste", "acao": "respondeu", "antes": "Convite enviado"}]),
     ]
     ok = True
     try:

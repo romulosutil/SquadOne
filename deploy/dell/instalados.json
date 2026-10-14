@@ -47,6 +47,7 @@
     {"repo": "deploy/dell/hermes-uso-skills.py", "instalado": "~/.local/bin/hermes-uso-skills"},
     {"repo": "deploy/dell/claude-ops/*.py", "instalado": "~/.local/share/claude-ops/"},
     {"repo": "deploy/dell/claude-ops/*.js", "instalado": "~/.local/share/claude-ops/"},
+    {"repo": "deploy/dell/claude-ops/prumo-ofertas.json", "instalado": "~/.local/share/claude-ops/"},
     {"repo": "deploy/dell/entrada/*.py", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
     {"repo": "deploy/dell/entrada/pagina.html", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
     {"repo": "deploy/dell/entrada/bin/cofre", "instalado": "~/.local/bin/cofre"},
