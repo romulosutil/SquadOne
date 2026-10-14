@@ -34,6 +34,7 @@ def carregar(auto: Path, avisar_real: bool = False):
     # Nem as cópias instaladas da folha e do gate: cada teste diz se elas existem.
     os.environ["FOLHA_DE_CONTATO_BIN"] = str(auto / ".sem-folha")
     os.environ["QA_NUMERICO_BIN"] = str(auto / ".sem-qa")
+    os.environ["DRIBBBLE_BIN"] = str(auto / ".sem-dribbble")
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -282,21 +283,26 @@ class Descarte(unittest.TestCase):
         self.assertIn("não mova a pasta", texto)
 
     def test_clareza_e_referencias_em_todos_os_modos(self):
-        """13/10/2026: as cinco perguntas e a biblioteca de referências valem para a fila comum e o personalizado;
-        a metáfora e os Atos (08/10) e o Refero saíram dos prompts."""
+        """13/10/2026: as cinco perguntas valem para a fila comum e o personalizado; a metáfora e os Atos
+        (08/10) e o Refero saíram dos prompts. 14/10/2026: a referência é um shot do Dribbble por lead,
+        no lugar da biblioteca fixa (REFERENCIAS.md), e o desktop entra na folha ao lado dele."""
         comum = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"))
-        for trecho in ("cinco perguntas do passo 1.5.1", "título de uma frase", "Cara de IA", "REFERENCIAS.md",
-                       "folha do nicho em referencias/"):
+        for trecho in ("cinco perguntas do passo 1.5.1", "título de uma frase", "Cara de IA", "Dribbble",
+                       "UM shot", "1440 px"):
             self.assertIn(trecho, comum[2])
         self.assertNotIn("refero", comum[2].lower())
+        self.assertNotIn("REFERENCIAS.md", comum[2])
         sistema = comum[comum.index("--append-system-prompt") + 1]
         for trecho in (f"{self.auto}/b-bom/CONCEITO.md", "fim do Ato I", "--force-prefers-reduced-motion",
-                       "--blink-settings=scriptEnabled=false", f"{self.auto}/REFERENCIAS.md", "#qa-resultado"):
+                       "--blink-settings=scriptEnabled=false", "#qa-resultado", "Dribbble",
+                       f"{self.auto}/_exemplos/", "Desktop de verdade"):
             self.assertIn(trecho, sistema)
+        self.assertNotIn("REFERENCIAS.md", sistema)
         self.assertNotIn("MODO PERSONALIZADO", sistema)
         self.assertNotIn("Refero", sistema)
         pers = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
         self.assertIn("cinco perguntas do passo 1.5.1", pers[2])
+        self.assertIn("Dribbble", pers[2])
         self.assertNotIn("refero", pers[2].lower())
         sistema_pers = pers[pers.index("--append-system-prompt") + 1]
         for trecho in ("O QUE SÓ ESTE NEGÓCIO TEM", "cinco perguntas do passo 1.5.1", "MOVIMENTO SÓBRIO",
@@ -692,7 +698,7 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
         self.rascunho = Path("/tmp/gerador-x")
 
     def instalar(self):
-        for nome in (".sem-folha", ".sem-qa"):
+        for nome in (".sem-folha", ".sem-qa", ".sem-dribbble"):
             (self.auto / nome).write_text("# cópia instalada\n")
 
     def sistema(self, personalizado=False, premium=False):
@@ -711,6 +717,22 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
             self.assertIn("grave no rascunho um script python3", texto)
             self.assertIn("--blink-settings=scriptEnabled=false", texto)
         self.assertIn("Leia (Read) as capturas LADO A LADO", self.sistema(True, True))
+
+    def test_dribbble_so_quando_instalado(self):
+        """14/10/2026: com o coletor instalado, os comandos de busca e de shot; sem ele, o exemplo aprovado
+        e nenhuma chamada ao que não existe. O desktop entra nos dois casos."""
+        sem = self.sistema()
+        self.assertNotIn(".sem-dribbble", sem)
+        self.assertIn(f"{self.auto}/_exemplos/", sem)
+        self.assertIn("Desktop de verdade", sem)
+        self.instalar()
+        com = self.sistema()
+        dr = self.auto / ".sem-dribbble"
+        r = self.rascunho
+        for trecho in (f"python3 {dr} buscar --saida {r}/dribbble/busca --consulta",
+                       f"python3 {dr} shot <link> --saida {r}/dribbble/shot",
+                       f"--refs {r}/dribbble/shot/quadro-01.jpg", "Desktop de verdade", "UM shot"):
+            self.assertIn(trecho, com)
 
     def test_com_as_copias_uma_imagem_por_rodada_e_gate(self):
         self.instalar()

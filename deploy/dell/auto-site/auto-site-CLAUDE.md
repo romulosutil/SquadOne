@@ -240,9 +240,14 @@ pelo Google:
   objeto de configuração, nada de placeholder de API, nada de marcação de
   componente. Só HTML bem escrito, semântico, que um dev consegue pegar e
   continuar no dia em que o cliente quiser mais.
-- **Impecável no celular.** É lá que o dono vai abrir o link: pelo WhatsApp,
-  num celular médio (CPU lenta, 4G). Projete em 390×844 primeiro; nada depende
-  de hover, alvo de toque de 44 px, nada passa de 390 px na horizontal.
+- **Celular primeiro no CSS, desktop de verdade no desenho (14/10/2026).** O
+  dono abre o link pelo WhatsApp, num celular médio (CPU lenta, 4G): o CSS
+  começa em 390×844, nada depende de hover, alvo de toque de 44 px, nada passa
+  de 390 px na horizontal, até 6 telas. Mas o cliente dele procura também no
+  computador, e o Rômulo apresenta no notebook: a composição do desktop vem do
+  shot do Dribbble (passo 1.6) e é desenhada para 1440 px, com painéis, grade
+  em colunas e foto grande ao lado do texto. Uma coluna estreita de celular
+  centralizada numa tela de 1440 px é defeito, não estilo.
 - **CTA principal: WhatsApp** (Brasil), com o telefone real do `content.md`.
   Fora do Brasil, o canal que o mercado local usa (ver Regionalidade). O `href`
   real (`https://wa.me/...`) está no HTML de todo CTA, não só no JS.
@@ -542,41 +547,70 @@ título, o menu, o nome das seções nem a estrutura. Metáfora que precisa de
 explicação sai.
 
 Grave `<slug>/CONCEITO.md` (nunca sobe para a Vercel), curto: o título e por
-quê; o fato que distingue este negócio, com a fonte; as duas referências do
-passo 1.6 e o princípio que vai aplicar de cada uma; e cada efeito de
+quê; o fato que distingue este negócio, com a fonte; o shot do passo 1.6 (título,
+URL) e o que você tirou dele para o desktop e para o celular; e cada efeito de
 movimento com o que ele significa. Efeito sem linha não entra.
 
-**1.6. Referências da biblioteca.** Antes do `/design`. Abra
-`~/auto-site/REFERENCIAS.md`: sites reais de serviço local, 3 por nicho,
-escolhidos entre cerca de 400 e aprovados pelo Rômulo (13/10/2026). Ela
-substitui o Refero, cujo acervo é de produtos SaaS e ensinava gramática de
-aplicativo a uma desentupidora de bairro. Leia a folha do nicho do lead
-(`~/auto-site/referencias/<nicho>.jpg`, a primeira tela das 3 no celular,
-numa imagem só) e escolha **duas**. Para ver mais de uma delas, capture ao
-vivo e leia numa folha:
+**1.6. Um design do Dribbble para seguir (14/10/2026).** Antes do `/design`,
+**a cada lead e a cada pedido de melhorar um site**. Substitui a biblioteca
+fixa de 13/10 (`REFERENCIAS.md`, só primeiras telas de celular de sites de
+bairro) e o Refero (acervo de SaaS). Motivo, nas palavras do Rômulo: os sites
+estavam "focados demais em mobile". O Dribbble mostra composição de desktop de
+verdade, e é dela que o site precisa.
 
 ```
-python3 ~/.local/bin/qa-numerico --celular https://<site>/ <rascunho>/refs/<site>.png --rm
-python3 ~/.local/bin/folha-de-contato --saida <rascunho>/refs/folha.jpg --pasta <rascunho>/refs
+python3 ~/.local/bin/dribbble buscar --saida <rascunho>/dribbble/busca --consulta "<ramo em inglês> website" --consulta "<ramo em inglês> landing page" --max 24
+python3 ~/.local/bin/folha-de-contato --saida <rascunho>/dribbble/busca/folha.jpg --pasta <rascunho>/dribbble/busca
+python3 ~/.local/bin/dribbble shot <link do shot escolhido> --saida <rascunho>/dribbble/shot
+python3 ~/.local/bin/folha-de-contato --saida <rascunho>/dribbble/shot/folha.jpg --pasta <rascunho>/dribbble/shot
 ```
 
-Aprenda o princípio que a biblioteca anota para cada uma (o que a primeira
-tela faz, como a foto é usada, como se chega ao contato); nunca copie layout,
-texto, marca, foto ou ícone. Site que mudou, saiu do ar ou pede verificação
-de robô: fique com a folha.
+A busca é a dos populares (`/search/shots/popular?q=`), em inglês: "law firm",
+"plumber", "pest control", "accounting firm", "equipment rental", "dumpster
+rental", "home renovation". O `indice.txt` liga cada miniatura ao link do shot.
+O `shot` baixa as imagens e, quando o shot é vídeo, tira 6 quadros dele com o
+ffmpeg: é a página inteira do design, não só a capa. O curl leva 202 sem corpo
+(desafio anti-robô); o Chrome headless passa, sem login.
 
-**O estilo sai da marca real (passo 1.5) e das referências**, não de um
-catálogo de estilos. Antes de decidir, olhe as últimas 5 linhas do
-`registro.md` e não repita a cor dominante nem o par de fontes de nenhum dos
-últimos 5 do mesmo nicho (11 demos de advocacia seguidos saíram em serif com
-itálico sobre creme ou azul-marinho).
+Escolha **um** shot e siga-o. Critérios, nesta ordem:
 
-Antes do `/design`, diga em uma frase: o título, as duas referências (nome e
-URL) e o princípio de cada uma. No passo 7, registre também
-`Referências: <nome> — <URL>; <nome> — <URL>; aplicado: <princípios>`.
+1. **Serve às cinco perguntas** do passo 1.5.1 (dá para pôr o ofício e a cidade
+   no título, um botão de WhatsApp em cada seção, prova e contato).
+2. **Combina com o negócio**: sóbrio para advocacia e contabilidade, direto e
+   de alto contraste para urgência, técnico para indústria. Nada de cliché do
+   ramo (balança, estátua da Justiça, martelo, terno em banco de imagem).
+3. **Tem composição de desktop**: painéis, grade, foto grande ao lado do texto,
+   ritmo entre seções. Shot só de celular, de aplicativo ou de dashboard não
+   serve.
+
+Do shot vêm a **composição** (como o hero divide texto e foto, a grade, os
+painéis, o espaçamento, a escala da tipografia, o fecho) e o **tom** (peso da
+letra, raio, contraste). Da **marca real** (passo 1.5) vêm as cores e o detalhe
+que só este negócio tem. Nunca copie texto, logo, foto, ícone ou marca do
+shot; e o que a seção "Cara de IA" proíbe continua proibido mesmo se o shot
+tiver (rótulo em caixa alta espaçada, cards numerados 01-02-03, faixa de
+números).
+
+O **exemplo aprovado** está em `~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/`
+(`index.html` e `CONCEITO.md`; no ar em
+https://demo-jessica-barbosa-advocacia-advo.vercel.app). O shot foi o "Alden &
+Vale" (https://dribbble.com/shots/27806443), e o Rômulo aprovou em 14/10/2026:
+"acertou no design!". É o piso de qualidade, não um molde: o próximo lead
+segue o shot dele. Dribbble fora do ar ou sem resultado depois de trocar a
+consulta não para o lead: siga a composição do exemplo e diga no resumo final.
+
+**O estilo sai da marca real (passo 1.5) e do shot**, não de um catálogo de
+estilos. Antes de decidir, olhe as últimas 5 linhas do `registro.md` e não
+repita a cor dominante nem o par de fontes de nenhum dos últimos 5 do mesmo
+nicho (11 demos de advocacia seguidos saíram em serif com itálico sobre creme
+ou azul-marinho).
+
+Antes do `/design`, diga em uma frase: o título, o shot (título e URL) e o que
+ele decide no desktop. No passo 7, registre também
+`Dribbble: <título> — <URL>; aplicado: <o que veio dele>`.
 
 **2. `/design`** — é aqui que a ideia do site nasce, a partir da marca real e
-das referências do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
+do shot do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
 cada seção e por quê. Isto roda **antes de qualquer linha de HTML** — não é
 uma consulta opcional, é o passo que impede o site de sair genérico. Se você
 chegou ao código sem ter rodado isto, parou e voltou.
@@ -696,9 +730,19 @@ seu deploy, o runner publica o Raio-X do PRUMO em `/raio-x` do mesmo projeto e
 grava esses campos no recibo (desde 08/10/2026). Não os escreva nem os copie
 para o palco do deploy.
 
-**7. Anotar** uma linha em `registro.md`: data, lead, slug, URL, o título, as
-referências do passo 1.6 e a decisão de design que você tomou pensando nesse
-negócio específico.
+**7. Anotar** uma linha em `registro.md`: data, lead, slug, URL, o título, o
+shot do Dribbble do passo 1.6 (título e URL) e a decisão de design que você
+tomou pensando nesse negócio específico.
+
+## Pedido de melhorar o design de um site
+
+Quando o Rômulo pede para melhorar um demo que já está no ar, é o mesmo
+processo, do passo 1 ao 7, pelo refazer do runner
+(`gerador-de-sites --refazer <slug> --nota "<o que ele disse>"`): o site
+anterior vai para `<slug>/_vN/`, e o passo 1.6 busca um shot novo no Dribbble.
+Não reaproveite o shot nem a estrutura do site anterior: a nota do Rômulo diz o
+que não funcionou. O Raio-X volta ao ar sozinho depois do deploy (o gancho do
+runner).
 
 ## Barra de excelência — por que cada site precisa valer o investimento
 
@@ -767,6 +811,9 @@ objeto 3D, letra gigante, polaroide inclinada, brinquedo.
 - [ ] Todo efeito tem linha no `CONCEITO.md`; nenhum sobra
 - [ ] Capturas de celular feitas com `qa-numerico --celular` (e uma com
       `--rm`): página completa e legível
+- [ ] Capturas de desktop a 1440×900 de cada seção, na mesma folha que os
+      quadros do shot do Dribbble (`folha-de-contato --refs`): a composição
+      segue o shot, e nenhuma seção é uma coluna de celular no meio da tela
 - [ ] O `qa-numerico` saindo 0: bytes, imagens, contraste, título, menu,
       frases, campos, código de teste, WhatsApp, altura, toque e texto miúdo
 
@@ -834,6 +881,8 @@ Ele é designer de produto. As decisões de direção visual que se repetem — 
 funcionou, o que soou falso, o padrão que vale reaproveitar — voltam para este
 arquivo como regra. Se você descobrir algo que deveria valer para todo lead,
 não aplique calado no próximo nem edite este arquivo: desde 08/10/2026 ele é
-versionado no SquadOne (`deploy/dell/auto-site/auto-site-CLAUDE.md`) e só muda
-por PR. Na execução automática, escreva a regra proposta no resumo final (o
-runner grava no log do lead); numa sessão com o Rômulo, proponha o PR.
+versionado no SquadOne (`deploy/dell/auto-site/auto-site-CLAUDE.md`). Na
+execução automática, escreva a regra proposta no resumo final (o runner grava
+no log do lead); numa sessão com o Rômulo, mude o arquivo no SquadOne e faça
+merge direto na `main`, sem PR (autorizado por ele em 14/10/2026: "não é um
+produto"), e reinstale no Dell.
