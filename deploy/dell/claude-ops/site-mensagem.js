@@ -72,12 +72,18 @@ function fatosDoGoogle(lead) {
   if (!(nota >= NOTA_MINIMA_B && nota <= 5) || !(Number.isInteger(avaliacoes) && avaliacoes >= AVALIACOES_MINIMAS_B)) return null;
   return { nota: nota.toFixed(1).replace('.', ','), avaliacoes: String(avaliacoes).replace(/\B(?=(\d{3})+(?!\d))/g, '.') };
 }
+// 14/10/2026 (demo sob pedido): lead sem demo (lead.sem_demo, recibo sem site_url) so recebe a C. A e B
+// dizem "montei uma demonstracao", e o demo so e feito depois do botao "Gerar demo"; a C oferece o
+// raio-x, que ja esta no ar. Sem raio-x, ou nos EUA (o raio-x e so em portugues), nao ha mensagem: null.
+// O lead que ja tem demo sorteia entre as mesmas de antes, entao a letra dele nao muda.
 function varianteDe(placeId, eua, lead) {
-  if (eua) return { letra: 'EN', molde: VARIACAO_EN };
+  const semDemo = Boolean(lead && lead.sem_demo);
+  if (eua) return semDemo ? null : { letra: 'EN', molde: VARIACAO_EN };
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
-  const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t));
+  const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t)) && (!semDemo || citaRaioX(t));
   const comTexto = VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
+  if (!comTexto.length) return null;
   let h = 0;
   for (const ch of String(placeId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const i = comTexto[h % comTexto.length];
@@ -100,6 +106,12 @@ const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews 
 // primeiro) e o mesmo preco. {RAIO_X} vem da coluna raio_x_url, que o Balcao grava do
 // publicado.json; sem ela, a segunda e a de sempre. So em portugues (EUA nunca e C).
 const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+// 14/10/2026 (demo sob pedido): o raio-x avulso (raio-x-prumo.vercel.app) e de quem ainda nao tem demo.
+// A segunda leva so o raio-x e oferece a demonstracao, sem preco (o preco vai com o demo); quando o
+// Romulo toca "Gerar demo" e o demo sai, a proxima mensagem e a do demo, com o preco de sempre.
+const RAIO_X_AVULSO = 'https://raio-x-prumo.vercel.app/';
+const SEGUNDA_RAIO_X_SEM_DEMO = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz cliente ir para o concorrente.\n\nSe quiserem, monto também uma demonstração do site de vocês, com as fotos e as avaliações que já têm. É sem compromisso.\n\nO que acharam?';
+const DEMO_DEPOIS_DO_RAIO_X = 'Aqui está a demonstração do site {ARTIGO} {NOME}: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 
 // 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
 // aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira
@@ -255,8 +267,16 @@ function followupDe(l) {
 
 // Segunda mensagem (o link), para quem respondeu com interesse. Quem recebeu a C ganha
 // o raio-x e o site; sem o raio_x_url na linha, sai a de sempre (o site).
+// 14/10/2026: com o raio-x avulso (demo sob pedido), sem demo a segunda e so o raio-x; com o demo
+// (feito depois, pelo botao), e a mensagem do demo. Sem raio-x nem demo, nao ha o que mandar ('').
 function segundaDe(l) {
   const raioX = recebeuC(l) ? raioXDaLinha(l) : '';
+  const site = String(l.site_url || '').trim();
+  if (raioX && raioX.indexOf(RAIO_X_AVULSO) === 0) {
+    return site ? abrirNoWhatsApp(l, DEMO_DEPOIS_DO_RAIO_X, SEGUNDA_EN)
+      : abrirNoWhatsApp(l, SEGUNDA_RAIO_X_SEM_DEMO.split('{RAIO_X}').join(raioX), SEGUNDA_EN);
+  }
+  if (!site) return { numero: numeroDoLead(l), texto: '', link: '' };
   return abrirNoWhatsApp(l, raioX ? SEGUNDA_RAIO_X.split('{RAIO_X}').join(raioX) : SEGUNDA, SEGUNDA_EN);
 }
 

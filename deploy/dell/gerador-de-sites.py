@@ -58,6 +58,16 @@ fila só desta execução e manda o Claude pesquisar o negócio (dossiê), defin
 conceito que só serve àquele negócio, escrever o texto à mão e se revisar como o
 dono antes de publicar. Falhou ou estourou o tempo: o `_v1/` volta para o lugar
 e o demo antigo segue no ar. Uma tentativa por lead, sem `falha.log`.
+
+Demo sob pedido (14/10/2026, decisão do Rômulo): de ~230 demos publicados, 7 viraram
+conversa, e cada um custava ~18 min de Claude. Com `~/auto-site/.demo-sob-pedido`, a
+fila não gera mais lead novo do Brasil: ele recebe só o Raio-X (raio-x.py, sem modelo,
+em raio-x-prumo.vercel.app) e o demo sai quando o Rômulo toca "Gerar demo" na página do
+lead. O site-pastas grava `PEDIDO-DEMO.json` na pasta (na raiz ou em `_em-conversa/`) e
+acorda o `gerador-de-sites-pedido.service` (`--pedidos`). Pedido é personalizado, não é
+descartado pela triagem (o lead já conversa) e tem uma tentativa por toque: falhou, o
+pedido sai e o aviso diz para tocar de novo. Lead fora do Brasil segue na fila de
+sempre (o Raio-X é só em português). Sem o arquivo, tudo como antes.
 """
 
 from __future__ import annotations
@@ -154,6 +164,26 @@ FOLHA_DE_CONTATO = Path(os.environ.get("FOLHA_DE_CONTATO_BIN", str(Path.home() /
 QA_NUMERICO = Path(os.environ.get("QA_NUMERICO_BIN", str(Path.home() / ".local/bin/qa-numerico")))
 # A referência do Dribbble (14/10/2026): busca e quadros do shot pelo Chrome headless, sem login.
 DRIBBBLE = Path(os.environ.get("DRIBBBLE_BIN", str(Path.home() / ".local/bin/dribbble")))
+# Demo sob pedido (14/10/2026; ver a docstring). O marcador liga o modo; o pedido mora na pasta do lead.
+SOB_PEDIDO = AUTO / ".demo-sob-pedido"
+PEDIDO_DEMO = "PEDIDO-DEMO.json"
+# O publicado.json que o raio-x avulso grava (sem site_url) sai da frente enquanto o Claude trabalha: ele
+# grava o dele no passo 5 e, vendo um recibo, trataria o lead como já publicado. Volta mesclado no fim.
+RECIBO_DO_RAIO_X = ".publicado-raio-x.json"
+# Quem pede demo já respondeu, e quem respondeu foi para _em-conversa/ (site-pastas, de hora em hora).
+LUGARES_DO_PEDIDO = ("", "_em-conversa", "_concluidos")
+LUGAR_DO_LEAD: dict[str, Path] = {}  # slug -> pasta fora da raiz (pedido em _em-conversa/...)
+PEDIDOS_EM_CURSO: set[str] = set()  # slugs cujo recibo do Raio-X está guardado à parte
+PAIS = re.compile(r"(?im)^\W*pa[ií]s:?\W*\s*([^\n]+)$")
+
+
+def sob_pedido() -> bool:
+    return SOB_PEDIDO.exists()
+
+
+def pasta_do_lead(slug: str) -> Path:
+    """A pasta do lead: a raiz, salvo pedido de demo de quem já foi para `_em-conversa/`."""
+    return LUGAR_DO_LEAD.get(slug, AUTO / slug)
 
 
 def ferramentas_de_qa() -> bool:
@@ -214,7 +244,7 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
     """Settings (`--settings`) de um lead: escreve só na pasta dele, no registro.md,
     em `_build/` e no rascunho; rm só na pasta dele e no rascunho; vercel só no
     projeto demo-<slug>, a partir do palco. Caminho absoluto em regra = `//caminho`."""
-    lead, palco, home = AUTO / slug, palco_do_deploy(slug, rascunho), Path.home()
+    lead, palco, home = pasta_do_lead(slug), palco_do_deploy(slug, rascunho), Path.home()
     allow = [f"Bash({p})" for p in PROGRAMAS_LIVRES] + [f"Bash({p} *)" for p in PROGRAMAS_LIVRES]
     for alvo in (str(rascunho), str(lead), slug):
         allow += [f"Bash(rm {opcao}{alvo}/*)" for opcao in ("", "-f ", "-r ", "-rf ")]
@@ -235,6 +265,8 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
         deny += [f"Bash(curl {opcao}*)", f"Bash(curl * {opcao}*)"]
     deny += ["Bash(curl *file:*)", "Bash(curl * -o ~*)", "Bash(curl * -o /home/*)", "Bash(curl * --output*)"]
     for nome in PROTEGIDOS:
+        if nome in lead.relative_to(AUTO).parts:
+            continue  # pedido de demo em _em-conversa/: todo caminho do lead tem o nome; mover a pasta continua fora da lista
         deny += [f"Bash(rm *{nome}*)", f"Bash(mv *{nome}*)"]
     deny.append("Bash(rm *_descartados*)")  # mover o lead para lá pode (regra do CLAUDE.md); apagar, não
     for alvo in (f"{AUTO}/CLAUDE.md", f"{AUTO}/_exemplos/**", f"{AUTO}/.claude/**", f"{AUTO}/.logs/**",
@@ -249,7 +281,7 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
     """Vai no --append-system-prompt: sem isto o Claude gasta turnos batendo nas
     negações (o roteiro de deploy do CLAUDE.md usa variável de shell, que o
     Claude Code nega em caminho)."""
-    lead, palco, qa = AUTO / slug, palco_do_deploy(slug, rascunho), pasta_de_capturas(rascunho)
+    lead, palco, qa = pasta_do_lead(slug), palco_do_deploy(slug, rascunho), pasta_de_capturas(rascunho)
     if ferramentas_de_qa():
         conferencias = f"""- As cinco perguntas (passo 1.5.1 do CLAUDE.md): grave {lead}/CONCEITO.md antes do `/design`. A primeira `<section>` dentro de `<main>` (a chegada) é o "Ato I" do gate: é até o fim dela que se mede o orçamento.
 - QA com UMA imagem por rodada. Grave as capturas em {qa}/ (mkdir -p {qa} numa chamada só), com nome `<viewport>-<seção>[-<modo>].png`: viewport `d` (google-chrome --window-size=1440,900) ou `m`; modo `rm` (reduced-motion); ex.: {qa}/m-servicos.png. Captura de celular SÓ com `python3 {QA_NUMERICO} --celular "file://{lead}/index.html#<id da seção>" {qa}/m-<seção>.png` (`--rm` para reduced-motion): com --window-size=390,844 o Chrome desenha a página com ~500 px e corta, e a "captura de celular" era de tablet. A cada rodada regrave com os mesmos nomes. Não leia as capturas uma a uma: junte-as com `python3 {FOLHA_DE_CONTATO} --saida {qa}/folha-N.jpg --pasta {qa}` (N = rodada; ele imprime a legenda #1, #2... com Ato, viewport, modo e escala) e leia (Read) só a folha. Abra uma captura isolada apenas se a folha não deixar julgar um defeito concreto, no máximo uma por rodada.
@@ -290,7 +322,7 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
     """Segundo bloco do --append-system-prompt no modo personalizado. Vem DEPOIS de
     `instrucoes_da_execucao` e do CLAUDE.md: soma etapas, não troca nenhuma regra.
     `backup` = pasta `_vN/` do site anterior (refazer); None = lead novo."""
-    lead = AUTO / slug
+    lead = pasta_do_lead(slug)
     cliches = "; ".join(f"\"{c}\"" for c in CLICHES)
     verificacao = (" As capturas seguem os nomes das instruções da execução e são lidas numa folha de contato só "
                    "(uma imagem por rodada), e o gate numérico roda antes do deploy." if ferramentas_de_qa() else "")
@@ -324,7 +356,7 @@ def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> st
     fotos de celular como único material, referência de estilo sem relação com o negócio, e ninguém
     olhando o resultado renderizado. Aqui o Claude aprende com o Refero INTEIRO a cada lead, constrói,
     olha as próprias capturas ao lado das referências e reescreve, três vezes."""
-    lead = AUTO / slug
+    lead = pasta_do_lead(slug)
     refs = rascunho / "refs"
     qa = rascunho / "qa"
     caderno = AUTO / "_build" / "aprendizados-refero.md"
@@ -355,14 +387,29 @@ def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> st
     return texto
 
 
+def instrucoes_pedido(slug: str) -> str:
+    """Último bloco quando o demo foi pedido (demo sob pedido, 14/10/2026): o dono já recebeu o Raio-X,
+    respondeu, e o Rômulo pediu o site. A triagem do CLAUDE.md não se aplica e a pasta pode estar fora da raiz."""
+    lead = pasta_do_lead(slug)
+    return f"""DEMO PEDIDO (14/10/2026). Este lead NÃO é da fila: o dono recebeu o Raio-X do PRUMO, respondeu no WhatsApp, e o Rômulo pediu a demonstração do site pelo botão "Gerar demo". Por isso:
+- A pasta é {lead}/{" (em _em-conversa/ porque o lead respondeu; é a pasta certa, não a mova)" if lead.parent != AUTO else ""}. Escreva só nela, como num lead da fila.
+- Não grave {SINAL_DESCARTE} e não pare na triagem (site no ar, rede, duplicado, linha no registro.md, presença digital fraca): o lead já conversa e pediu; faça o site. Se ele já tiver um site, faça a demonstração do jeito que o site dele deveria ser e diga isso no resumo final.
+- Não há publicado.json na pasta durante o seu trabalho (o runner guardou o do Raio-X à parte e o devolve mesclado): grave o seu no passo 5 normalmente.
+- Seja rápido sem baixar a barra: o Rômulo está com a conversa aberta esperando o link."""
+
+
 def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:
     instrucoes = instrucoes_da_execucao(slug, rascunho)
     if personalizado:
         instrucoes += "\n\n" + instrucoes_personalizado(slug, BACKUP_EM_CURSO.get(slug))
         if MODO_PREMIUM:
             instrucoes += "\n\n" + instrucoes_premium(slug, rascunho, NOTA_DA_REVISAO)
+    if slug in PEDIDOS_EM_CURSO:
+        instrucoes += "\n\n" + instrucoes_pedido(slug)
     cmd = [
-        "claude", "-p", (PROMPT_PERSONALIZADO if personalizado else PROMPT).format(slug=slug),
+        # O /lead-novo acha a pasta pelo nome relativo à raiz (cwd): `_em-conversa/<slug>` num pedido de quem respondeu.
+        "claude", "-p", (PROMPT_PERSONALIZADO if personalizado else PROMPT).format(
+            slug=pasta_do_lead(slug).relative_to(AUTO).as_posix()),
         "--permission-mode", "dontAsk",
         "--settings", json.dumps(permissoes_do_claude(slug, rascunho), ensure_ascii=False, separators=(",", ":")),
         "--append-system-prompt", instrucoes,
@@ -550,9 +597,114 @@ def candidatos_da_fila() -> list[Path]:
     return [p for _, _, p in sorted(leads)]
 
 
+def do_brasil(pasta: Path) -> bool:
+    """Pelo "País:" do content.md; sem a linha, Brasil (o Caçador só a omite em lead antigo do Brasil)."""
+    try:
+        m = PAIS.search((pasta / "content.md").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return True
+    return not m or m.group(1).strip().strip("*").strip().lower() in ("brasil", "brazil", "br")
+
+
+def ler_recibo(caminho: Path) -> dict:
+    try:
+        d = json.loads(caminho.read_text(encoding="utf-8-sig"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def tem_demo(pasta: Path) -> bool:
+    return str(ler_recibo(pasta / "publicado.json").get("site_url") or "").startswith(("http://", "https://"))
+
+
+def pedidos() -> list[Path]:
+    """Pastas com PEDIDO-DEMO.json e sem demo, na raiz ou onde mora quem respondeu, pedido mais antigo
+    primeiro. Registra em LUGAR_DO_LEAD as que não estão na raiz."""
+    achados = []
+    for topo in LUGARES_DO_PEDIDO:
+        base = AUTO / topo if topo else AUTO
+        if not base.is_dir():
+            continue
+        for p in base.iterdir():
+            try:
+                if (not p.is_dir() or p.name.startswith((".", "_")) or not (p / PEDIDO_DEMO).is_file()
+                        or not (p / "content.md").is_file() or tem_demo(p)):
+                    continue
+                achados.append(((p / PEDIDO_DEMO).stat().st_mtime, p.name, p))
+            except OSError:
+                continue
+    saida = []
+    for _, slug, p in sorted(achados):
+        if slug in {q.name for q in saida}:
+            continue  # o mesmo slug em dois lugares: fica o pedido mais antigo
+        if p.parent != AUTO:
+            LUGAR_DO_LEAD[slug] = p
+        saida.append(p)
+    return saida
+
+
 def fila() -> list[Path]:
+    """Pedidos de demo primeiro; depois a fila de sempre. Sob pedido, a fila de sempre só leva lead de fora
+    do Brasil: os outros esperam o Raio-X (raio-x --pendentes) e o toque do Rômulo."""
     pausados = nao_gerar()
-    return [p for p in candidatos_da_fila() if fora_da_fila(p, pausados) is None]
+    comuns = [p for p in candidatos_da_fila() if fora_da_fila(p, pausados) is None]
+    if sob_pedido():
+        comuns = [p for p in comuns if not do_brasil(p)]
+    pedidos_ = pedidos()
+    vistos = {p.name for p in pedidos_}
+    return pedidos_ + [p for p in comuns if p.name not in vistos]
+
+
+def guardar_recibo_do_raio_x(pasta: Path, log_lead: Path) -> None:
+    """Pedido de demo: o publicado.json do Raio-X avulso (sem site_url) vai para RECIBO_DO_RAIO_X enquanto o
+    Claude trabalha. Um guardado de uma execução interrompida não é sobrescrito."""
+    PEDIDOS_EM_CURSO.add(pasta.name)
+    recibo, guardado = pasta / "publicado.json", pasta / RECIBO_DO_RAIO_X
+    if recibo.is_file() and not tem_demo(pasta) and not guardado.exists():
+        recibo.replace(guardado)
+        log(f"Pedido de demo: recibo do Raio-X guardado em {RECIBO_DO_RAIO_X} durante a geração.", arquivo=log_lead)
+
+
+def devolver_recibo_do_raio_x(pasta: Path, log_lead: Path) -> None:
+    """Desfaz o guardar: sem publicado.json novo, o do Raio-X volta; com ele (o demo saiu), os dois se mesclam
+    e os campos do demo vencem. Idempotente; nunca levanta (roda também no caminho de erro)."""
+    guardado, recibo = pasta / RECIBO_DO_RAIO_X, pasta / "publicado.json"
+    try:
+        if not guardado.is_file():
+            return
+        novo = ler_recibo(recibo)
+        if not recibo.exists():
+            guardado.replace(recibo)
+            log("Pedido de demo: o recibo do Raio-X voltou para publicado.json (sem demo novo).", arquivo=log_lead)
+            return
+        if not novo:
+            log("Pedido de demo: publicado.json novo ilegível; o do Raio-X ficou em " + RECIBO_DO_RAIO_X, "ERRO", log_lead)
+            return
+        tmp = pasta / ".publicado.json.pedido.tmp"
+        tmp.write_text(json.dumps({**ler_recibo(guardado), **novo}, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(recibo)
+        guardado.unlink()
+        log("Pedido de demo: publicado.json do demo mesclado com o do Raio-X.", arquivo=log_lead)
+    except OSError as e:
+        log(f"Pedido de demo: recibo do Raio-X não devolvido ({e}); confira {guardado}.", "ERRO", log_lead)
+
+
+def encerrar_pedido(pasta: Path, ok: bool, motivo: str, log_lead: Path) -> None:
+    """Uma tentativa por toque: o pedido sai, dê certo ou não, e o aviso diz o que fazer."""
+    devolver_recibo_do_raio_x(pasta, log_lead)
+    PEDIDOS_EM_CURSO.discard(pasta.name)
+    LUGAR_DO_LEAD.pop(pasta.name, None)
+    try:
+        (pasta / PEDIDO_DEMO).unlink(missing_ok=True)
+    except OSError:
+        pass
+    r = ler_recibo(pasta / "publicado.json")
+    nome = str(r.get("nome") or pasta.name)
+    if ok:
+        avisar(f"Demo de {nome} no ar: {r.get('site_url')}. Mande o link pela ficha do lead no CRM.")
+    else:
+        avisar(f"O demo pedido de {nome} não saiu: {motivo}. Toque \"Gerar demo\" de novo para outra tentativa.")
 
 
 def paradeiro(pasta: Path) -> Path | None:
@@ -764,7 +916,8 @@ def publicar_raio_x(pasta: Path, log_lead: Path) -> None:
         return
     try:
         with open(log_lead, "a", encoding="utf-8") as erros:
-            r = subprocess.run([sys.executable, str(RAIO_X), pasta.name], stdin=subprocess.DEVNULL,
+            # Relativo à raiz: um pedido de demo de quem respondeu está em _em-conversa/.
+            r = subprocess.run([sys.executable, str(RAIO_X), pasta.relative_to(AUTO).as_posix()], stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=erros, timeout=10 * 60,
                                env={**os.environ, "AUTO_DIR": str(AUTO)})
         if r.returncode != 0:
@@ -860,6 +1013,10 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
     log_lead = LOGS / f"execucao-{slug}.log"
     indice = pasta / "index.html"
     resultado = {"codigo": 0, "estourou": False, "limite": False}
+    pedido = (pasta / PEDIDO_DEMO).is_file()
+    if pedido:
+        personalizado = True  # o demo pedido é o melhor que o gerador faz: o dono já está na conversa
+        guardar_recibo_do_raio_x(pasta, log_lead)
     if html_completo(indice):
         log(f"Checkpoint: index.html completo para {slug}. Pulando o Claude e indo direto ao deploy.", arquivo=log_lead)
     else:
@@ -874,6 +1031,12 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
             arquivo=log_lead)
         if not pasta.is_dir():
             return False, "a pasta do lead saiu da raiz durante a geração"
+        if pedido and (pasta / SINAL_DESCARTE).is_file():
+            # Quem pediu não se descarta (as instruções dizem isso); o sinal vira registro e o lead segue.
+            motivo_descarte = motivo_do_descarte(pasta)
+            (pasta / SINAL_DESCARTE).replace(pasta / "DESCARTAR.ignorado.md")
+            log(f"Pedido de demo: o Claude quis descartar ({motivo_descarte}); ignorado, quem pediu não se descarta.",
+                "ERRO", log_lead)
         # Antes do deploy: lead descartado nunca é publicado, mesmo com index.html completo.
         if (pasta / SINAL_DESCARTE).is_file() and not (pasta / "publicado.json").exists():
             if descartar_pelo_sinal(pasta, log_lead):
@@ -888,6 +1051,10 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
         falha = pasta / "falha.log"
         if falha.exists():
             falha.unlink()
+        if pedido:
+            # Antes do raio-x: é o raio_x_url avulso no recibo que o faz republicar a página dele (agora com o
+            # link do demo) em vez de pôr um /raio-x novo dentro do demo.
+            devolver_recibo_do_raio_x(pasta, log_lead)
         publicar_raio_x(pasta, log_lead)
         return True, ""
     if resultado["estourou"]:
@@ -899,7 +1066,7 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
     return False, "index.html não foi gerado; publicado.json ou validação HTTP 200 falhou"
 
 
-def tomar_trava() -> bool:
+def tomar_trava(calado: bool = False) -> bool:
     LOGS.mkdir(parents=True, exist_ok=True)
     if TRAVA.exists():
         try:
@@ -908,7 +1075,9 @@ def tomar_trava() -> bool:
             mesmo_host_morto = dono.get("host") == socket.gethostname() and not Path(f"/proc/{dono.get('pid')}").exists()
             # Trava de outro host (o PC) só vale por 6 h: runner que morreu sem apagar não bloqueia para sempre.
             if not mesmo_host_morto and idade_h < 6:
-                log(f"Outra execução em andamento ({dono.get('host')}, pid {dono.get('pid')}); saindo.", "ERRO")
+                if not calado:
+                    log(f"Outra execução em andamento ({dono.get('host')}, pid {dono.get('pid')}); "
+                        + ("o pedido de demo espera ela acabar." if calado is None else "saindo."), "ERRO")
                 return False
         except (OSError, ValueError):
             pass
@@ -946,6 +1115,9 @@ def main() -> int:
     ap.add_argument("--nota", help="com --refazer --premium: feedback a aplicar sobre a versão anterior (parte dela, não do zero)")
     ap.add_argument("--teto-horas", type=float, default=4.0,
                     help="duração máxima da execução (TimeoutStartSec do serviço); mude junto com o systemd-run")
+    ap.add_argument("--pedidos", action="store_true",
+                    help="só os demos pedidos pelo botão \"Gerar demo\" (PEDIDO-DEMO.json); espera a trava de uma "
+                         "execução em andamento em vez de sair")
     a = ap.parse_args()
     if a.refazer and not all(re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.refazer):
         ap.error("--refazer espera slugs de pasta (minúsculas, números, ponto, hífen e sublinhado)")
@@ -958,8 +1130,12 @@ def main() -> int:
 
     if a.listar:
         pausados = nao_gerar()
+        for p in pedidos():
+            print(f"{p.relative_to(AUTO).as_posix()}  (demo pedido)")
         for p in candidatos_da_fila():
             motivo = fora_da_fila(p, pausados)
+            if motivo is None and sob_pedido() and do_brasil(p):
+                motivo = f"demo sob pedido ({SOB_PEDIDO.name}): espera o Raio-X e o botão Gerar demo"
             print(p.name if motivo is None else f"{p.name}  (fora da fila: {motivo})")
         return 0
     for binario in ("claude", "vercel"):
@@ -975,7 +1151,23 @@ def main() -> int:
                "~/.config/claude-ops/gerador.env (CLAUDE_CODE_OAUTH_TOKEN=...) e ele volta amanhã às 08h.")
         gravar_status(resumo_de_erro("Claude sem login no Dell"))
         return 2
-    if not tomar_trava():
+    if a.pedidos and not pedidos():
+        log("Nenhum demo pedido (PEDIDO-DEMO.json) sem demo; nada a fazer.")
+        return 0
+    # O pedido chega a qualquer hora; se a fila das 08:00 ou um refazer estiver rodando, espera ele acabar
+    # (a fila de sempre também pega os pedidos, então pode nem sobrar nada).
+    espera_ate = time.monotonic() + (a.teto_horas * 3600 if a.pedidos else 0)
+    tentativa = 0
+    while not tomar_trava(calado=(None if a.pedidos and tentativa == 0 else a.pedidos)):
+        if time.monotonic() >= espera_ate:
+            if a.pedidos:
+                log(f"O pedido de demo esperou {a.teto_horas:g} h pela trava e desistiu; o próximo toque ou a fila das 08:00 o pega.", "ERRO")
+            return 0
+        tentativa += 1
+        time.sleep(60)
+    if a.pedidos and not pedidos():
+        TRAVA.unlink(missing_ok=True)
+        log("Os demos pedidos já saíram na execução que segurava a trava.")
         return 0
     # systemctl stop / teto do systemd: sair pelo finally, que grava o resumo e solta a trava.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
@@ -1007,7 +1199,8 @@ def main() -> int:
             if (time.monotonic() - inicio) / 60 + a.timeout_min > a.teto_horas * 60 - 20:
                 log(f"Sem tempo para mais um lead antes do teto de {a.teto_horas:g} h do systemd; o resto fica para a próxima execução.")
                 break
-            pendentes = [AUTO / s for s in a.refazer if s not in tentados] if a.refazer else fila()
+            pendentes = ([AUTO / s for s in a.refazer if s not in tentados] if a.refazer
+                         else [p for p in pedidos() if p.name not in tentados] if a.pedidos else fila())
             if not pendentes:
                 log("Lista de refazer concluída." if a.refazer else "Fila vazia.")
                 break
@@ -1026,11 +1219,23 @@ def main() -> int:
             gravar_status({"host": socket.gethostname(), "estado": "processando", "lead": lead.name,
                            "inicio": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                            "timeout_min": a.timeout_min, "pendentes": len(pendentes)})
+            eh_pedido = (lead / PEDIDO_DEMO).is_file()
             try:
                 ok, motivo = processar(lead, a.timeout_min, personalizado)
             except Exception as e:  # noqa: BLE001 — um lead quebrado não derruba o lote
                 ok, motivo = False, f"erro no runner: {type(e).__name__}: {e}"
                 log(f"{lead.name}: {motivo}\n{traceback.format_exc().rstrip()}", "ERRO", log_lead)
+            if eh_pedido and lead.is_dir():
+                # Uma tentativa por toque, sem falha.log: o pedido sai e o aviso diz se o demo está no ar.
+                encerrar_pedido(lead, ok, motivo, log_lead)
+                if ok:
+                    marcar_personalizado(lead)  # o Balcão lê a versão do site daqui
+                (concluidos if ok else falhas).append(lead.name if ok else f"{lead.name}: {motivo}")
+                log(f"Demo pedido {'concluído' if ok else 'não saiu'}: {lead.name}", "SUCESSO" if ok else "ERRO")
+                if not ok and motivo.startswith("limite de uso"):
+                    log("Limite de uso do Claude: parando a execução.", "ERRO")
+                    break
+                continue
             if a.refazer and not ok and lead.is_dir():
                 # Uma tentativa por lead: o demo antigo volta e segue no ar; sem falha.log.
                 restaurar_v1(lead, log_lead)
@@ -1072,6 +1277,9 @@ def main() -> int:
             pasta = AUTO / slug
             if pasta.is_dir() and not (pasta / "publicado.json").exists():
                 restaurar_v1(pasta, LOGS / f"execucao-{slug}.log", motivo="Refazer interrompido")
+        # Pedido no meio: o recibo do Raio-X volta (o pedido fica, e a próxima execução tenta de novo).
+        for slug in list(PEDIDOS_EM_CURSO):
+            devolver_recibo_do_raio_x(pasta_do_lead(slug), LOGS / f"execucao-{slug}.log")
         raise
     finally:
         try:

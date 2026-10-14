@@ -38,6 +38,11 @@ export interface PastaDoLead {
   publicadoEm?: string;
   /** `apagado_em` do recibo: o `site-demos-limpeza` apagou o projeto na Vercel e o link do demo morreu. */
   apagadoEm?: string;
+  /** `raio_x_url`/`raio_x_em` do recibo. Sem `siteUrl`, é o Raio-X avulso de quem ainda não tem demo (14/10/2026). */
+  raioXUrl?: string;
+  raioXEm?: string;
+  /** Demo sob pedido: o botão "Gerar demo" gravou PEDIDO-DEMO.json e o gerador ainda não terminou. */
+  demoPedidoEm?: string;
   artefatos: ArtefatosDaPasta;
   falhaMensagem?: string;
   alteradaEm: string;
@@ -143,6 +148,17 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     ? (await lerTextoOuNada(path.join(diretorio, "falha.log"), 4096))?.split(/\r?\n/).map((linha) => linha.trim()).find(Boolean)?.slice(0, 240)
     : undefined;
   const estado = await fs.stat(diretorio);
+  // O pedido do botão "Gerar demo" (site-pastas): a data dele; ilegível, a do arquivo.
+  let demoPedidoEm: string | undefined;
+  if (porNome.get("pedido-demo.json")?.isFile()) {
+    const arquivo = path.join(diretorio, porNome.get("pedido-demo.json")!.name);
+    try {
+      demoPedidoEm = dataIso(JSON.parse((await lerTextoOuNada(arquivo, 4096)) ?? "{}").em);
+    } catch {
+      demoPedidoEm = undefined;
+    }
+    demoPedidoEm ??= (await fs.stat(arquivo)).mtime.toISOString();
+  }
   return {
     slug,
     lugar,
@@ -151,6 +167,9 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     ...(urlHttp(dados.site_url) ? { siteUrl: urlHttp(dados.site_url) } : {}),
     ...(dataIso(dados.publicado_em) ? { publicadoEm: dataIso(dados.publicado_em) } : {}),
     ...(dataIso(dados.apagado_em) ? { apagadoEm: dataIso(dados.apagado_em) } : {}),
+    ...(urlHttp(dados.raio_x_url) ? { raioXUrl: urlHttp(dados.raio_x_url) } : {}),
+    ...(dataIso(dados.raio_x_em) ? { raioXEm: dataIso(dados.raio_x_em) } : {}),
+    ...(demoPedidoEm && !urlHttp(dados.site_url) ? { demoPedidoEm } : {}),
     artefatos: {
       conteudo: temConteudo,
       fotos: fotos.total,

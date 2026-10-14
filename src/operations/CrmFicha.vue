@@ -7,6 +7,7 @@ import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotad
 import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
+import { raioXAvulso } from '../../server/site-mensagem.ts'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
 // (nota, próximo passo, proposta, sem contato fácil) e todas vão para a aba CRM da planilha pelo
@@ -51,12 +52,18 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const l = props.lead.links
   const prumo = props.lead.produto === 'prumo'
   const interesse = props.lead.resposta?.tipo === 'interesse'
-  // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site.
+  // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
+  // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
   const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)
+  const segunda = prumo ? 'Mandar o Raio-X (segunda mensagem)'
+    : !recebeuC ? 'Mandar o link do site (segunda mensagem)'
+    : !raioXAvulso(l.raioX) ? 'Mandar o raio-x e o demo (segunda mensagem)'
+    : l.site ? 'Mandar o demo (com o preço)' : 'Mandar o raio-x (segunda mensagem)'
   const todas: Array<[string, string, string | undefined, boolean]> = [
     ['enviar', 'Enviar a primeira mensagem pelo WhatsApp (marca como enviado)', l.enviar, true],
     ['convite', 'Enviar convite (marca como enviado)', l.convite, true],
-    ['segunda', prumo ? 'Mandar o Raio-X (segunda mensagem)' : recebeuC ? 'Mandar o raio-x e o demo (segunda mensagem)' : 'Mandar o link do site (segunda mensagem)', l.segunda, interesse],
+    ['segunda', segunda, l.segunda, interesse],
+    ['gerarDemo', 'Gerar demo (sai em uns 20 a 40 minutos; o aviso chega no WhatsApp)', l.gerarDemo, interesse],
     ['followup', `${rotuloDoFollowup(props.lead)} (${props.lead.reenvioDoRobo ? 'reenvio único, ' : ''}texto pronto)`, l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
     ['site', prumo ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
@@ -217,6 +224,10 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-acoes">
       <h3 id="crm-ficha-acoes">Ações</h3>
+      <p v-if="lead.demoPedidoEm" class="crm-aviso" role="note">
+        <strong>Demo pedido em {{ dataHora(lead.demoPedidoEm) }}.</strong> O gerador está fazendo o site; quando ele estiver no ar, chega o aviso
+        no WhatsApp e "Mandar o demo" aparece aqui.
+      </p>
       <p v-if="lead.demoApagadoEm" class="crm-aviso" role="note">
         <strong>Demo apagado da Vercel em {{ dataHora(lead.demoApagadoEm) }}</strong> (o lead estava em Perdido): o link antigo dá erro, e por isso
         nem "Ver o demo" nem o link do site aparecem aqui. Para mandar de novo, publique a pasta{{ lead.pasta ? ` ${lead.pasta.slug}` : '' }} outra vez

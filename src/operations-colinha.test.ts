@@ -85,6 +85,19 @@ describe('o trecho de cada etapa e resposta', () => {
     assert.ok(preencher(colinhaDoLead(semLink).momentos[0].trechos[0].texto, semLink).includes('[link do Raio-X]'))
   })
 
+  // 14/10/2026 (demo sob pedido): o Raio-X avulso vai sozinho; o demo, só depois do botão "Gerar demo".
+  it('Raio-X avulso: sem demo, só o raio-x (sem preço); com o demo pedido, a mensagem do demo', () => {
+    const c = { ...lead('site', 'contato', 'interesse', 'Sim'), empresa: 'Clínica Nova', abordagem: { mensagem: 'C' },
+      links: { raioX: 'https://raio-x-prumo.vercel.app/clinica-nova' } }
+    assert.deepEqual(idsDosTrechos(c).filter((id) => id.startsWith('segunda') || id.startsWith('demo')), ['segunda-raio-x-sem-demo', 'segunda-preco'])
+    const sem = preencher(colinhaDoLead(c).momentos[0].trechos[0].texto, c)
+    assert.ok(sem.startsWith('Aqui está o raio-x: https://raio-x-prumo.vercel.app/clinica-nova'), sem)
+    assert.ok(!sem.includes('[link do demo]') && !sem.includes('R$'), sem)
+    const comDemo = { ...c, links: { ...c.links, site: 'https://demo-nova.vercel.app' } }
+    assert.ok(idsDosTrechos(comDemo).includes('demo-depois-do-raio-x'))
+    assert.ok(!idsDosTrechos(comDemo).includes('segunda-raio-x'))
+  })
+
   it('o follow-up de quem recebeu a C lembra o raio-x; o de quem recebeu A ou B, o site', () => {
     const c = { ...lead('site', 'contato'), empresa: 'Jéssica Barbosa Advocacia', abordagem: { mensagem: 'C' } }
     assert.deepEqual(idsDosTrechos(c), ['followup-raio-x'])

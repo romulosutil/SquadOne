@@ -33,6 +33,12 @@ const CASOS: Array<[string, LeadDaMensagem]> = [
     variante: "C", raioXUrl: "" }],
   ["variação B (a segunda é a de sempre)", { nome: "Oficina Boa", siteUrl: "https://demo-boa.vercel.app", waMe: "https://wa.me/5527999990007?text=oi",
     variante: "B", raioXUrl: "https://demo-boa.vercel.app/raio-x" }],
+  // Demo sob pedido (14/10/2026): o Raio-X avulso, antes e depois do botão "Gerar demo".
+  ["C com o Raio-X avulso, sem demo", { nome: "Clínica Nova", siteUrl: "", waMe: "https://wa.me/5527999990008?text=oi",
+    variante: "C", raioXUrl: "https://raio-x-prumo.vercel.app/clinica-nova" }],
+  ["C com o Raio-X avulso e o demo pedido depois", { nome: "Clínica Nova", siteUrl: "https://demo-nova.vercel.app",
+    waMe: "https://wa.me/5527999990008?text=oi", variante: "C", raioXUrl: "https://raio-x-prumo.vercel.app/clinica-nova" }],
+  ["sem demo e sem raio-x", { nome: "Ninguém", siteUrl: "", waMe: "https://wa.me/5527999990009?text=oi", variante: "A", raioXUrl: "" }],
 ];
 
 describe("site-mensagem: espelho do JS do n8n", () => {

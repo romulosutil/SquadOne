@@ -123,6 +123,8 @@ export interface CrmLead {
   proposta?: { em: string; data: string }
   /** Site: o `site-demos-limpeza` apagou o demo na Vercel; sem link de demo nem segunda mensagem até republicar. */
   demoApagadoEm?: string
+  /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
+  demoPedidoEm?: string
   notas: number
   resposta?: CrmResposta
   /**
@@ -134,7 +136,8 @@ export interface CrmLead {
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
   mensagemPronta?: string
   eventos: CrmEvento[]
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string }
+  /** `gerarDemo`: Site sem demo (demo sob pedido), o toque que pede o demo na página do lead. */
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string; gerarDemo?: string }
   pasta?: {
     lugar: string
     slug: string

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, rotuloDoFollowup, textoDaLeitura, textoDoPrazo } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, rotuloDaSegunda, rotuloDoFollowup, textoDaLeitura, textoDoPrazo } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
@@ -210,7 +210,8 @@ const artefatos = (l: CrmLead) => {
               </p>
               <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.followup || lead.links.site" class="crm-cartao__links">
                 <!-- O toque abre o WhatsApp e anota o envio em segundo plano (CrmPanel, anotarEnvio). -->
-                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ lead.produto === 'prumo' ? 'Mandar o Raio-X' : lead.abordagem?.mensagem === 'C' && lead.links.raioX ? 'Mandar o raio-x e o demo' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ rotuloDaSegunda(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.gerarDemo && lead.resposta?.tipo === 'interesse'" :href="lead.links.gerarDemo" target="_blank" rel="noopener">Gerar demo <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
                 <a v-if="lead.links.followup && !linkTravado(lead, lead.links.followup)" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado')">{{ rotuloDoFollowup(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
                 <button v-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
                 <a v-if="lead.links.enviar && !linkTravado(lead, lead.links.enviar)" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>

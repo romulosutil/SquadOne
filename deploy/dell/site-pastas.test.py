@@ -251,5 +251,47 @@ class BotoesDaPagina(Base):
         self.assertRegex(self.fila()[0].name, r"^site-pastas-\d+\.json$")
 
 
+class PedirDemo(BotoesDaPagina):
+    """O toque "Gerar demo" (14/10/2026): grava o pedido na pasta, onde ela estiver, e acorda o gerador."""
+
+    def setUp(self):
+        super().setUp()
+        self.so_raio_x = sp.AUTO / "_em-conversa" / "ciclano"
+        self.so_raio_x.mkdir(parents=True)
+        (self.so_raio_x / "publicado.json").write_text(json.dumps(
+            {"place_id": "P2", "nome": "Ciclano", "raio_x_url": "https://raio-x-prumo.vercel.app/ciclano"}), encoding="utf-8")
+
+    def test_pedido_gravado_na_pasta_sem_mover(self):
+        self.pacote("1.json", {"place_id": "P2", "acao": "gerar_demo", "nome": "Ciclano", "em": "2026-10-14T15:00:00-03:00"})
+        self.assertEqual(self.rodar(), 0)  # nada movido
+        pedido = json.loads((self.so_raio_x / sp.PEDIDO_DEMO).read_text(encoding="utf-8"))
+        self.assertEqual((pedido["place_id"], pedido["em"]), ("P2", "2026-10-14T15:00:00-03:00"))
+        self.assertTrue(self.so_raio_x.is_dir())
+        self.assertIn(["systemctl", "--user", "start", "--no-block", "gerador-de-sites-pedido.service"], self.systemctl)
+        self.assertIn("**Demo pedido.**", sp.REGISTRO.read_text(encoding="utf-8"))
+        self.assertEqual(list(sp.ACOES.iterdir()), [])
+
+    def test_repetir_o_toque_nao_pede_de_novo(self):
+        self.pacote("1.json", {"place_id": "P2", "acao": "gerar_demo"})
+        self.rodar()
+        self.systemctl.clear()
+        self.pacote("2.json", {"place_id": "P2", "acao": "gerar_demo"})
+        self.rodar()
+        self.assertEqual(self.systemctl, [])
+        self.assertEqual(sp.REGISTRO.read_text(encoding="utf-8").count("**Demo pedido.**"), 1)
+
+    def test_lead_com_demo_ou_recusado_nao_pede(self):
+        self.pacote("1.json", {"place_id": "P1", "acao": "gerar_demo"})  # fulano já tem site_url
+        self.rodar()
+        self.assertFalse((sp.AUTO / "fulano" / sp.PEDIDO_DEMO).exists())
+        recusado = sp.AUTO / "_recusados" / "beltrano"
+        recusado.mkdir(parents=True)
+        (recusado / "publicado.json").write_text(json.dumps({"place_id": "P3"}), encoding="utf-8")
+        self.pacote("2.json", {"place_id": "P3", "acao": "gerar_demo"})
+        self.rodar()
+        self.assertFalse((recusado / sp.PEDIDO_DEMO).exists())
+        self.assertEqual(self.systemctl, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

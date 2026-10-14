@@ -213,6 +213,11 @@ def limpar_antigos() -> None:
 
 
 def main() -> int:
+    if (AUTO / ".demo-sob-pedido").exists():
+        # Demo sob pedido (14/10/2026): o demo só sai pelo botão "Gerar demo"; gerar leads novos e refazer os não
+        # enviados é justamente o gasto que o modo corta. Tirar o arquivo devolve o lote.
+        log("Demo sob pedido ligado (~/auto-site/.demo-sob-pedido): o lote contínuo não gera nem refaz nada. Saindo.")
+        return 0
     log("Lote contínuo iniciado.")
     if PREMIUM_PEDIDO_E_DESLIGADO:
         log("Premium pedido, mas desligado desde 13/10/2026: o lote segue no modo personalizado.")

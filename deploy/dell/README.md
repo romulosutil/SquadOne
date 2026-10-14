@@ -1304,6 +1304,41 @@ cd ~/.local/share/claude-ops && python3 prumo-mapa-n8n.py --teste && python3 pru
 
 ## Gerador de sites (`gerador-de-sites.*`)
 
+**Demo sob pedido (14/10/2026).** Ideia do Rômulo: de ~230 demos publicados, 7 viraram
+conversa e nenhum fechou, e cada demo custava ~18 min de Claude (~100 chamadas). Com o
+arquivo `~/auto-site/.demo-sob-pedido`, nada é gerado antes da resposta:
+
+1. O Caçador cria a pasta, como sempre. O `raio-x.timer` (11:15 e 17:15) faz o **Raio-X
+   avulso** dos leads novos do Brasil (só código e Places, sem modelo) e o publica em
+   `raio-x-prumo.vercel.app/<nome>`, no projeto `prumo-raio-x` (o mesmo dos feitos à mão;
+   ver "Raio-X do PRUMO"). O recibo nasce **sem `site_url`**: é assim que toda a esteira
+   sabe que ainda não há demo. Lead abaixo do padrão do modelo (sem 3 pontos) ganha
+   `raio-x-sem-padrao.json` e não é abordado.
+2. O Balcão marca `pronto` com a variação **C** ("Fiz um raio-x..."). A e B dizem "montei
+   uma demonstração" e ficam só para quem já tem demo. Lead dos EUA não tem Raio-X (é só em
+   português) e segue na fila de sempre do gerador.
+3. Ele responde: a segunda mensagem é só o raio-x, oferecendo a demonstração, sem preço
+   (`SEGUNDA_RAIO_X_SEM_DEMO`).
+4. Ele quer o site: **"Gerar demo"** na ficha do CRM (ou na página do lead, fluxo 07). O
+   `site-pastas` grava `PEDIDO-DEMO.json` na pasta, onde ela estiver (quem respondeu está em
+   `_em-conversa/`), e acorda o `gerador-de-sites-pedido.service` (`--pedidos`), que espera
+   a trava de uma execução em andamento. O pedido sai personalizado, sem triagem (o lead já
+   conversa), com o recibo do Raio-X guardado à parte durante a geração e mesclado no fim.
+   Uma tentativa por toque: falhou, o pedido sai e o aviso diz para tocar de novo.
+5. O demo no ar: aviso no WhatsApp, o Raio-X avulso é republicado citando o endereço do
+   demo, e a ficha oferece "Mandar o demo" (`DEMO_DEPOIS_DO_RAIO_X`, com o preço).
+
+Sob pedido, a fila das 08:00 só leva lead de fora do Brasil e os pedidos; o `lote-continuo`
+não roda (sai na hora). Desligar: `rm ~/auto-site/.demo-sob-pedido`, e tudo volta a ser
+como antes (os recibos avulsos já publicados continuam valendo).
+
+```bash
+touch ~/auto-site/.demo-sob-pedido              # liga
+python3 ~/.local/bin/gerador-de-sites --listar   # mostra os pedidos e quem espera o Raio-X
+raio-x --pendentes --simular                     # os leads novos que o timer pegaria
+systemctl --user start gerador-de-sites-pedido.service   # roda os pedidos já gravados
+```
+
 **Um shot do Dribbble por lead (14/10/2026).** Pedido do Rômulo: os demos
 estavam "focados demais em mobile" (coluna de celular no meio da tela de
 1440 px), e a biblioteca fixa de 13/10 só tinha primeiras telas de celular.

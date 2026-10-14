@@ -78,22 +78,34 @@ recibos.forEach((item, i) => {
   }
 
   const siteUrl = rec.site_url || linha.site_url || '';
-  if (!siteUrl) return;
+  // 14/10/2026 (demo sob pedido): o recibo do Raio-X avulso nao tem site_url; o lead vira "pronto" com o
+  // raio-x e recebe a C. O site_url chega depois, quando o Romulo toca "Gerar demo" e o gerador publica.
+  const raioXUrl = String(rec.raio_x_url || '').trim();
+  if (!siteUrl && !raioXUrl) return;
+  // Enviado so com o raio-x: nada a preencher ate o demo sair (sem isto, uma escrita igual por hora).
+  if (semSite && !siteUrl) return;
 
   const nome = linha.nome || rec.nome || '';
   const telefone = telefoneE164(linha.telefone);
 
   let waLink = '';
   let letra = '';
-  if (telefone) {
+  // Enviado que ganha o site agora (demo pedido depois do raio-x): a primeira mensagem ja foi, e o wa_me
+  // guarda o que foi enviado. Remontar trocaria o registro por outro texto (o sorteio muda com o site).
+  const manterWaMe = semSite && String(linha.wa_me || '').trim();
+  if (telefone && !manterWaMe) {
     const eua = ehEua(telefone);
     // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
     // O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
-    const variante = varianteDe(pid, eua, { ...linha, raio_x_url: rec.raio_x_url, raio_x_pontos: rec.raio_x_pontos });
-    letra = variante.letra;
-    const mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
-    waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
+    const variante = varianteDe(pid, eua, { ...linha, raio_x_url: rec.raio_x_url, raio_x_pontos: rec.raio_x_pontos, sem_demo: !siteUrl });
+    if (variante) {
+      letra = variante.letra;
+      const mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
+      waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
+    }
   }
+  // Sem demo e sem mensagem possivel (EUA, ou o raio-x sem pontos): o lead fica como esta, sem virar pronto.
+  if (!siteUrl && !waLink && !manterWaMe) return;
 
   // 23/09/2026: wa_link passa a ser o link rastreado do n8n do Dell. O clique
   // marca o lead como enviado e redireciona para o wa.me real, guardado em wa_me.

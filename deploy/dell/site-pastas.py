@@ -24,6 +24,10 @@ aqui, e o site-pastas.path dispara este script quando qualquer um aparece:
    "**Fechou.**", "**Recusa desfeita.**"...) e acorda o site-demos-pausa, que
    põe de volta no ar o demo de quem voltou. Pacote lido é apagado (o gatilho é
    "diretório não vazio"); pacote ilegível vai para ~/.local/share/site-acoes-erro/.
+   - gerar_demo (14/10/2026, demo sob pedido): o lead recebeu só o Raio-X e o
+     Rômulo pediu o demo. Não move nada: grava PEDIDO-DEMO.json na pasta (onde ela
+     estiver) e acorda o gerador-de-sites-pedido.service. Lead que já tem demo
+     (site_url no publicado.json) ou pedido aberto: nada muda.
 
 Sempre: só mexe na pasta se o publicado.json dela tem o mesmo place_id e nunca
 sobrescreve destino. _descartados/ nunca entra.
@@ -60,6 +64,10 @@ LUGARES = ["", "_em-conversa", "_concluidos", "_recusados", "_fechados"]
 DESTINO_DA_ACAO = {"recusou": "_recusados", "fechou": "_fechados"}
 REGISTRO_DA_ACAO = {"recusou": "**Recusou.**", "fechou": "**Fechou.**"}
 DESFEITO = {"_recusados": "**Recusa desfeita.**", "_fechados": "**Fechamento desfeito.**"}
+# Demo sob pedido (14/10/2026): o gerador-de-sites --pedidos lê este arquivo na pasta do lead.
+PEDIDO_DEMO = "PEDIDO-DEMO.json"
+# Recusado ou fechado não pede demo: quem recusou não quer, quem fechou já está no projeto.
+SEM_PEDIDO = {"_recusados", "_fechados"}
 
 
 def separar(relativo: str) -> tuple[str, str] | None:
@@ -208,12 +216,14 @@ def uma_acao(pacote: dict, pilha: dict, listar: bool) -> str:
     """Aplica um pacote. Devolve o que aconteceu (para o log); levanta ValueError se o pacote não vale."""
     pid, acao = str(pacote.get("place_id") or ""), str(pacote.get("acao") or "")
     nome = str(pacote.get("nome") or pid)
-    if not pid or acao not in ("recusou", "fechou", "desfazer"):
+    if not pid or acao not in ("recusou", "fechou", "desfazer", "gerar_demo"):
         raise ValueError(f"pacote sem place_id ou com ação desconhecida: {acao!r}")
     achada = achar_pasta(pid)
     if not achada:
         return f"{nome}: sem pasta publicada (nada a mover)"
     topo, origem = achada
+    if acao == "gerar_demo":
+        return pedir_demo(topo, origem, nome, pacote, listar)
     historico = pilha.get(pid) or []
     if acao == "desfazer":
         if historico:
@@ -256,6 +266,27 @@ def uma_acao(pacote: dict, pilha: dict, listar: bool) -> str:
     return f"movida {origem.relative_to(AUTO)} -> {destino.relative_to(AUTO)} ({nome}: {acao})"
 
 
+def pedir_demo(topo: str, pasta: Path, nome: str, pacote: dict, listar: bool) -> str:
+    """O toque "Gerar demo": grava o pedido na pasta, sem movê-la. O resultado começa com
+    "pedido" só quando um pedido novo foi gravado (é o que acorda o gerador)."""
+    if str(recibo(pasta).get("site_url") or "").startswith("https://"):
+        return f"{nome}: já tem demo ({recibo(pasta)['site_url']}); nada pedido"
+    if topo in SEM_PEDIDO:
+        return f"{nome}: pasta em {rotulo(topo)}; demo não é pedido para quem recusou ou fechou"
+    if (pasta / PEDIDO_DEMO).exists():
+        return f"{nome}: o demo já foi pedido ({rotulo(topo)}); o gerador está nele"
+    if listar:
+        return f"pediria o demo de {pasta.relative_to(AUTO)} ({nome})"
+    em = str(pacote.get("em") or datetime.now().astimezone().isoformat())
+    tmp = pasta / f".{PEDIDO_DEMO}.tmp"
+    tmp.write_text(json.dumps({"place_id": pacote.get("place_id"), "em": em, "origem": "botão Gerar demo"},
+                              ensure_ascii=False), encoding="utf-8")
+    tmp.replace(pasta / PEDIDO_DEMO)
+    anotar_registro(pasta, nome, f"**Demo pedido.** Rômulo pediu pelo link do lead em {datetime.now():%d/%m %H:%M}; "
+                                 "o gerador faz o site agora. Nada foi enviado ao lead.")
+    return f"pedido o demo de {pasta.relative_to(AUTO)} ({nome})"
+
+
 def ler_pacote(arq: Path):
     """O gatilho pode chegar entre o n8n criar o arquivo e terminar de gravar: pacote novo e ilegível ganha 3 s."""
     for _ in range(3):
@@ -271,7 +302,7 @@ def ler_pacote(arq: Path):
 def botoes_da_pagina(listar: bool) -> int:
     if not ACOES.is_dir():
         return 0
-    pilha, movidas = ler_pilha(), 0
+    pilha, movidas, pedidos = ler_pilha(), 0, 0
     for arq in sorted(ACOES.glob("*.json")):
         try:
             pacote = ler_pacote(arq)
@@ -283,6 +314,7 @@ def botoes_da_pagina(listar: bool) -> int:
                 continue
             gravar_pilha(pilha)
             movidas += resultado.startswith("movida")
+            pedidos += resultado.startswith("pedido")
             arq.unlink()
         except (OSError, ValueError, KeyError) as e:
             print(f"pacote {arq.name} recusado: {e}")
@@ -295,6 +327,10 @@ def botoes_da_pagina(listar: bool) -> int:
     if movidas:
         # Quem voltou (Desfazer) tem o demo de volta no ar sem esperar a rodada diária.
         subprocess.run(["systemctl", "--user", "start", "--no-block", "site-demos-pausa.service"],
+                       capture_output=True, timeout=30, check=False)
+    if pedidos:
+        # O gerador espera a trava de uma execução em andamento; --no-block: o n8n não fica preso nisto.
+        subprocess.run(["systemctl", "--user", "start", "--no-block", "gerador-de-sites-pedido.service"],
                        capture_output=True, timeout=30, check=False)
     return movidas
 

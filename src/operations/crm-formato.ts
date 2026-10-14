@@ -1,5 +1,6 @@
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO } from '../../server/site-mensagem.ts'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
+import { raioXAvulso } from '../../server/site-mensagem.ts'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
@@ -117,6 +118,17 @@ export const ROTULO_DO_REGIME: Record<CrmRegimeDaMensagem, string> = {
   curta_com_link: 'Com link na 1ª mensagem (curta, até 29/09)',
   prumo_com_link: 'Com link na 1ª mensagem (30/09 a 04/10)',
   duas_mensagens: 'Pedido de licença, sem link',
+}
+
+/**
+ * O rótulo curto do link da segunda mensagem (Funil). Espelha `oQueASegundaLeva` (server/crm.ts): com o Raio-X
+ * avulso (demo sob pedido, 14/10/2026), só o raio-x antes do demo e só o demo depois do botão "Gerar demo".
+ */
+export function rotuloDaSegunda(lead: Pick<CrmLead, 'produto' | 'abordagem' | 'links'>): string {
+  if (lead.produto === 'prumo') return 'Mandar o Raio-X'
+  if (lead.abordagem?.mensagem !== 'C' || !lead.links.raioX) return 'Mandar o link'
+  if (!raioXAvulso(lead.links.raioX)) return 'Mandar o raio-x e o demo'
+  return lead.links.site ? 'Mandar o demo' : 'Mandar o raio-x'
 }
 
 /** Leitura dita com honestidade: sem confirmação de leitura, é desconhecida (RULES 2 e 15). */

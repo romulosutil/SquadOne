@@ -574,6 +574,58 @@ def testar() -> int:
             self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "B"})
             self.assertEqual({i[0]["raio_x_url"] for i in por.values()}, {""})
 
+    class SobPedido(unittest.TestCase):
+        """14/10/2026: o recibo do Raio-X avulso (sem site_url) leva o lead a "pronto" só com a C."""
+        AVULSO = {"raio_x_url": "https://raio-x-prumo.vercel.app/lead", "raio_x_pontos": 3, "raio_x_projeto": "prumo-raio-x"}
+
+        def so_raio_x(self, pid, slug):
+            return {"place_id": pid, "nome": slug, "slug": slug, **self.AVULSO}
+
+        def test_novo_so_com_raio_x_vira_pronto_sempre_com_a_c(self):
+            por = cruzar(planilha=[linha(f"pid-{i}", "novo", nota="4.9", avaliacoes="34") for i in range(40)],
+                         recibos=[(f"lead-{i}", self.so_raio_x(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
+            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"C"})
+            for itens in por.values():
+                item = itens[0]
+                self.assertEqual((item["status"], item["site_url"], item["raio_x_url"]), ("pronto", "", self.AVULSO["raio_x_url"]))
+                texto = unquote(item["wa_me"]).split("?text=")[1]
+                self.assertIn("Fiz um raio-x", texto)
+                self.assertNotIn("demonstração", texto)
+
+        def test_eua_sem_demo_nao_vira_pronto(self):
+            por = cruzar(planilha=[linha("pid-e", "novo", telefone="+1 305-642-0504")],
+                         recibos=[("dental-e", self.so_raio_x("pid-e", "dental-e"))], marcas=[])
+            self.assertNotIn("pid-e", por)
+
+        def test_enviado_so_com_raio_x_nao_e_reescrito_toda_hora(self):
+            wa = "https://wa.me/5527999887766?text=Fiz%20um%20raio-x"
+            por = cruzar(planilha=[linha("pid-c", "enviado", wa_me=wa, mensagem_variante="C")],
+                         recibos=[("_em-conversa/clinica-c", self.so_raio_x("pid-c", "clinica-c"))], marcas=[])
+            self.assertNotIn("pid-c", por)
+
+        def test_demo_pedido_depois_ganha_o_site_sem_trocar_a_primeira_mensagem(self):
+            wa = "https://wa.me/5527999887766?text=Fiz%20um%20raio-x"
+            rec = {**self.so_raio_x("pid-c", "clinica-c"), "site_url": "https://demo-clinica-c.vercel.app", "vercel_project": "demo-clinica-c"}
+            c = cruzar(planilha=[linha("pid-c", "enviado", wa_me=wa, mensagem_variante="C")],
+                       recibos=[("_em-conversa/clinica-c", rec)], marcas=[])["pid-c"][0]
+            self.assertEqual((c["status"], c["site_url"], c["wa_me"], c["raio_x_url"]),
+                             ("enviado", "https://demo-clinica-c.vercel.app", wa, self.AVULSO["raio_x_url"]))
+            self.assertNotIn("mensagem_variante", c)
+
+        def test_segunda_mensagem_sem_demo_e_depois_do_demo(self):
+            l = {"nome": "Clínica C", "wa_me": "https://wa.me/5527999887766?text=x", "mensagem_variante": "C",
+                 "raio_x_url": self.AVULSO["raio_x_url"], "site_url": ""}
+            com = {**l, "site_url": "https://demo-clinica-c.vercel.app"}
+            r = rodar_js(codigo_js("site-mensagem.js") + "\nreturn [segundaDe(" + json.dumps(l) + "), segundaDe("
+                         + json.dumps(com) + "), segundaDe(" + json.dumps({**l, "mensagem_variante": "A"}) + ")];", {})
+            sem, depois, nada = r
+            self.assertTrue(sem["texto"].startswith("Aqui está o raio-x: https://raio-x-prumo.vercel.app/lead"))
+            self.assertIn("monto também uma demonstração", sem["texto"])
+            self.assertNotIn("R$", sem["texto"])
+            self.assertTrue(depois["texto"].startswith("Aqui está a demonstração do site da Clínica C: https://demo-clinica-c"))
+            self.assertIn("R$ 690", depois["texto"])
+            self.assertEqual(nada["link"], "")  # sem raio-x da C e sem demo: não há o que mandar
+
     class PastaDoLead(unittest.TestCase):
         def test_copia_do_modo_personalizado_nao_e_a_pasta(self):
             nos = nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", RECIBOS)
@@ -583,7 +635,7 @@ def testar() -> int:
             self.assertEqual((r["a"], r["c"]), (True, False))
 
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, PastaDoLead))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, PastaDoLead))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 

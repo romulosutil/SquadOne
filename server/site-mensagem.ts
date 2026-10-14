@@ -23,7 +23,12 @@ export const FOLLOWUP_COM_LINK = "Oi, aqui é o Rômulo de novo. Deu para ver o 
 export const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
 // Quem recebeu a variação C (o Raio-X) é lembrado do raio-x e ganha os dois links na segunda.
 export const SEGUNDA_RAIO_X = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
-export const FOLLOWUP_RAIO_X = "Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?";
+// 14/10/2026 (demo sob pedido): o Raio-X avulso (raio-x-prumo.vercel.app) é de quem ainda não tem demo. A segunda
+// leva só o raio-x e oferece a demonstração, sem preço; depois do botão "Gerar demo", vem a do demo, com o preço.
+export const RAIO_X_AVULSO = "https://raio-x-prumo.vercel.app/";
+export const SEGUNDA_RAIO_X_SEM_DEMO = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz cliente ir para o concorrente.\n\nSe quiserem, monto também uma demonstração do site de vocês, com as fotos e as avaliações que já têm. É sem compromisso.\n\nO que acharam?";
+export const DEMO_DEPOIS_DO_RAIO_X = "Aqui está a demonstração do site {ARTIGO} {NOME}: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
+export const FOLLOWUP_RAIO_X ="Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?";
 
 // Reenvio do só-robô (14/10/2026). SÓ DO CRM, sem par no site-mensagem.js: o teste de espelho
 // não o cobre de propósito, e o aviso do n8n (05 · Acompanhamento, 3º dia) continua com o
@@ -128,8 +133,19 @@ export function reenvioDoRoboDe(l: LeadDaMensagem): { numero: string; texto: str
   return { numero, texto, link: `https://wa.me/${numero}?text=${encodeURIComponent(texto)}` };
 }
 
-/** Segunda mensagem: o link, para quem respondeu à primeira (que pede licença, sem link). Quem recebeu a C ganha o raio-x e o site. */
+/** O Raio-X da linha é o avulso (demo sob pedido), e não o `<demo>/raio-x`? */
+export const raioXAvulso = (url: string | undefined) => (url ?? "").trim().startsWith(RAIO_X_AVULSO);
+
+/**
+ * Segunda mensagem: o link, para quem respondeu à primeira (que pede licença, sem link). Quem recebeu a C ganha o raio-x e o site.
+ * Com o Raio-X avulso: sem demo, só o raio-x (oferecendo o demo); com o demo pedido depois, a mensagem do demo. Sem nada: link vazio.
+ */
 export function segundaDe(l: LeadDaMensagem) {
   const raioX = recebeuC(l) && (l.raioXUrl ?? "").trim().startsWith("https://") ? (l.raioXUrl ?? "").trim() : "";
+  const site = l.siteUrl.trim();
+  if (raioX && raioXAvulso(raioX)) {
+    return site ? abrir(l, DEMO_DEPOIS_DO_RAIO_X, SEGUNDA_EN) : abrir(l, SEGUNDA_RAIO_X_SEM_DEMO.split("{RAIO_X}").join(raioX), SEGUNDA_EN);
+  }
+  if (!site) return { numero: numeroDe(l.waMe), texto: "", link: "" };
   return abrir(l, raioX ? SEGUNDA_RAIO_X.split("{RAIO_X}").join(raioX) : SEGUNDA, SEGUNDA_EN);
 }

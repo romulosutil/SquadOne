@@ -18,12 +18,14 @@ opcional e o `/overview` num servidor de saúde dublê em loopback), `server/aut
 `server/crm.test.ts` (inclui, desde 14/10/2026, o loop fechado: interesse parado além de 48 h que só some
 com a 2ª mensagem anotada depois da resposta, `followup_enviado` que apaga o follow-up do dia, o regime da
 mensagem pelas mesmas datas de corte do `funil-aprendizado.py`, a validação do envio por etapa e a
-idempotência de 2 min com `fetch` dublê: clique duplo, toques simultâneos e retrato já refeito; e o reenvio do
+idempotência de 2 min com `fetch` dublê: clique duplo, toques simultâneos e retrato já refeito; o reenvio do
 só-robô: elegível do dia seguinte ao envio pelo calendário de São Paulo ao 6º dia, fora do dia do `followup_em`,
 some com o `followup_enviado`, EUA e Site sem demo no follow-up de sempre, ação e rótulo na Hoje com quem sai
-antes na frente, e o prazo que recomeça no reenvio só para o só-robô, inclusive com a planilha já "expirado"),
-`server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho; o reenvio do
-só-robô, que é só do CRM: artigo e nome, a versão do raio-x para quem recebeu a C, sem R$/saudação/"ontem", EUA sem reenvio),
+antes na frente, e o prazo que recomeça no reenvio só para o só-robô, inclusive com a planilha já "expirado"; e o
+demo sob pedido: Raio-X avulso sem demo, só o raio-x na segunda, o "Gerar demo" até o pedido e a mensagem do demo depois),
+`server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho, também nos casos do
+Raio-X avulso; o reenvio do só-robô, que é só do CRM: artigo e nome, a versão do raio-x para quem recebeu a C, sem
+R$/saudação/"ontem", EUA sem reenvio),
 `server/prumo-mensagem.test.ts` (o reenvio do só-robô do PRUMO: nome como o dono escreve, artigo, só número 55), `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
@@ -61,7 +63,7 @@ toque vale, storage que lança, poda quando o retrato confirma, anotados no fim 
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;
 o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-up de sempre nem a 2ª mensagem; o rótulo "Pedir o responsável"),
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
-`src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
+`src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
@@ -81,8 +83,14 @@ seus, todos rodados à mão no Dell: `deploy/dell/prumo-mapa/prumo_mapa.test.py`
 (18; "R$" recusado com linha no journal, `[teste]` preservado, pacote ruim não
 derruba os outros), `deploy/dell/backup/backup-dell.test.py` (42, só no Dell por
 causa do `fcntl`; o código de saída do ensaio não muda com fila ausente, estragada ou
-lib que levanta), `deploy/dell/gerador-de-sites.test.py` (72; inclui o `main()` sem
-login), `deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
+lib que levanta), `deploy/dell/gerador-de-sites.test.py` (93; inclui o `main()` sem
+login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead de fora do Brasil, o pedido gerado em
+`_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
+(61; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
+endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos), o `site-pastas.test.py` (o toque "Gerar
+demo" grava o pedido sem mover a pasta), o `site-antes-da-venda.py --testar` (o Balcão com o recibo só do Raio-X: só a C,
+EUA fica de fora, o enviado não é regravado toda hora, o demo pedido depois não troca a primeira mensagem),
+`deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
 ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
 (49; nada sobe o serviço nem lê o `bridge.log` real) e

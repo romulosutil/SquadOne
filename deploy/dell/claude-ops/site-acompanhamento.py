@@ -134,7 +134,7 @@ for (const l of $input.all().map(i => i.json)) {{
   const dias = hoje - diaSP(enviado);
   const followup = String(l.followup_em ?? '').trim();
   const base = {{ place_id: String(l.place_id), nome: String(l.nome ?? ''), cidade: String(l.cidade ?? ''),
-    site_url: String(l.site_url ?? ''), telefone: String(l.telefone ?? ''), dias }};
+    site_url: String(l.site_url ?? ''), raio_x_url: String(l.raio_x_url ?? ''), telefone: String(l.telefone ?? ''), dias }};
   if (dias >= {EXPIRA_DIAS}) {{
     saida.push({{ json: {{ ...base, acao: 'expirar', status: 'expirado', followup_em: followup }} }});
   }} else if (dias >= {FOLLOWUP_DIAS} && !followup) {{
@@ -150,9 +150,11 @@ const arquivo = (titulo, texto) => ({ json: { titulo, texto }, binary: { data: {
   data: Buffer.from(JSON.stringify({ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'aviso.json' } } });
 const itens = $('Decidir').all().map(i => i.json);
 const onde = (l) => l.nome + (l.cidade ? ' (' + l.cidade + ')' : '');
+// 14/10/2026 (demo sob pedido): quem recebeu só o Raio-X não tem site_url; o aviso mostra o Raio-X.
+const pagina = (l) => l.site_url ? 'Site: ' + l.site_url : 'Raio-X: ' + (l.raio_x_url || '—');
 const saida = itens.filter(l => l.acao === 'followup').map(l => arquivo('🔁 Site antes da venda: follow-up', [
   '*' + onde(l) + '* não respondeu em ' + l.dias + ' dias.',
-  'Site: ' + l.site_url,
+  pagina(l),
   l.link ? 'WhatsApp com a mensagem pronta: ' + l.link : 'Sem WhatsApp válido na planilha (telefone: ' + (l.telefone || '—') + ').',
   '',
   'Mensagem:',
@@ -163,7 +165,7 @@ const saida = itens.filter(l => l.acao === 'followup').map(l => arquivo('🔁 Si
 const expirados = itens.filter(l => l.acao === 'expirar');
 if (expirados.length) saida.push(arquivo('⏳ Site antes da venda: expirados', [
   expirados.length + ' lead(s) sem resposta em 10 dias viraram "expirado"; a pasta vai para _concluidos/ na próxima hora:',
-  ...expirados.map(l => '• ' + onde(l) + ': ' + l.site_url),
+  ...expirados.map(l => '• ' + onde(l) + ': ' + (l.site_url || l.raio_x_url)),
   '',
   'Se algum respondeu, preencha respondeu_em: a pasta vai para _em-conversa/.',
 ].join(NL)));

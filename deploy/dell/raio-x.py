@@ -80,8 +80,19 @@ e `raio_x_em`. O Balcão lê o `publicado.json` inteiro (`recibo`); um refazer d
 gerador escreve recibo novo, sem esses campos, e o gancho do gerador publica o
 Raio-X de novo.
 
-Uso: raio-x SLUG...               gera e publica o Raio-X destes leads (pasta na raiz)
-     raio-x --pendentes [--max N] leads `pronto` na raiz sem Raio-X atual ou com ele fora do ar
+Avulso (demo sob pedido, 14/10/2026): com `~/auto-site/.demo-sob-pedido`, o lead novo do Brasil
+não ganha demo antes do contato (de ~230 demos, 7 viraram conversa). O Raio-X sai sozinho, em
+`raio-x-prumo.vercel.app/<nome>` (projeto `prumo-raio-x`, o mesmo dos Raio-X feitos à mão, pasta
+`~/prumo-entregas/prumo-raio-x` com `cleanUrls`; cada deploy sobe a pasta inteira, então nenhuma
+página já enviada sai do ar). O recibo nasce: `publicado.json` SEM `site_url` (= ainda sem demo),
+com `place_id`, `raio_x_*` e `raio_x_projeto: "prumo-raio-x"`, e é ele que leva o lead ao Balcão.
+A página oferece a demonstração em vez de apontar para ela; quando o demo sai (botão "Gerar demo",
+gerador-de-sites --pedidos), o gerador chama o raio-x de novo e a página passa a citar o endereço
+do demo. Recibo com `raio_x_projeto` avulso nunca vira `/raio-x` dentro do demo.
+
+Uso: raio-x SLUG...               gera e publica o Raio-X destes leads (pasta na raiz, ou `_em-conversa/SLUG`)
+     raio-x --pendentes [--max N] leads `pronto` na raiz sem Raio-X atual ou com ele fora do ar (sob pedido,
+                                  também os novos sem recibo)
      raio-x --simular SLUG...     mostra o diagnóstico, sem publicar nem gravar
      raio-x --html SLUG --saida F grava só a página em F (prévia, sem publicar)
      raio-x --testar              testes (raiz temporária; nada toca ~/auto-site nem a rede)
@@ -144,6 +155,17 @@ LOGS = AUTO / ".logs"
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
 FONTE = Path(os.environ.get("RAIO_X_FONTE", str(Path.home() / ".local/share/prumo-mapa/archivo.woff2")))
 VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
+# Avulso (demo sob pedido, 14/10/2026; ver a docstring).
+SOB_PEDIDO = ".demo-sob-pedido"  # na raiz de AUTO (lido na hora: o teste troca o AUTO)
+AVULSO_PASTA = Path(os.environ.get("RAIO_X_AVULSO_PASTA", str(Path.home() / "prumo-entregas/prumo-raio-x")))
+AVULSO_URL = os.environ.get("RAIO_X_AVULSO_URL", "https://raio-x-prumo.vercel.app").rstrip("/")
+AVULSO_PROJETO = "prumo-raio-x"
+TRAVA_AVULSO = "raio-x-avulso.lock"  # em LOGS; dois deploys da mesma pasta ao mesmo tempo: o segundo apagaria a página do primeiro
+TAMANHO_DO_NOME = 60  # o endereço vai na mensagem: o slug do Caçador passa de 100 letras
+FUNIL = Path(os.environ.get("SITE_FUNIL", str(Path.home() / ".local/share/n8n-estado/site-funil.json")))
+# Lead novo abaixo do padrão do modelo (sem 3 pontos...): não é abordado, e a pasta ganha este arquivo com o
+# motivo para o --pendentes não refazer a conta toda rodada (vale o mesmo prazo do cache do Places).
+SEM_PADRAO = "raio-x-sem-padrao.json"
 # Sobe quando o texto ou as regras mudam: `--pendentes` refaz quem está `pronto` com versão menor.
 # 2 (08/10/2026): concorrência da mesma busca, o que as avaliações dizem, o perfil item por item,
 # o caminho do cliente ligado às seções do demo e os dois serviços com preço.
@@ -895,9 +917,25 @@ def comparacao_com_os_3(diag: dict) -> dict | None:
             "linhas": [{k: v for k, v in l.items() if k != "falta"} for l in linhas], "frase": frase}
 
 
+def onde_esta_o_demo(diag: dict) -> tuple[str, str]:
+    """(frase do site no ar, frase do site novo): onde está a demonstração. O Raio-X dentro do demo diz "neste
+    mesmo endereço"; o avulso (demo sob pedido) cita o endereço do demo quando ele existe e, antes disso,
+    oferece montá-lo, porque não existe demo para mostrar."""
+    if not diag.get("avulso"):
+        return ("a demonstração que fizemos para vocês, na página inicial deste endereço, já mostra como fica.",
+                "A demonstração já está pronta: é a página inicial deste mesmo endereço.")
+    if diag.get("demo_url"):
+        onde = dominio(diag["demo_url"])
+        return (f"a demonstração que fizemos para vocês, em {onde}, já mostra como fica.",
+                f"A demonstração já está pronta, em {onde}.")
+    return ("se quiserem ver como fica, montamos uma demonstração para vocês, sem compromisso.",
+            "Se quiserem ver antes, montamos uma demonstração com as fotos e as avaliações de vocês, sem compromisso.")
+
+
 def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
     """A coisa a fazer que resolve o ponto, com quem faz. `ordem`: o que vocês fazem hoje vem antes."""
     chave = p["chave"]
+    demo_no_ar, demo_novo = onde_esta_o_demo(diag)
     if chave == "busca":
         oab = " Sem promessa de resultado, como o Provimento 205/2021 da OAB pede." if any(
             r in sem_acento(diag.get("vertical", "")).lower() for r in ("advoc", "advog")) else ""
@@ -908,8 +946,7 @@ def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
     if chave == "site" and diag.get("site_hoje") == "no_ar":
         return {"ordem": 2, "titulo": "Deixar o site pronto para o celular, com botão de WhatsApp",
                 "texto": "Quem chega pelo Google está no celular e quer chamar na hora. Um botão de WhatsApp com a "
-                         "mensagem começada e a página no tamanho da tela resolvem; a demonstração que fizemos para "
-                         "vocês, na página inicial deste endereço, já mostra como fica.",
+                         "mensagem começada e a página no tamanho da tela resolvem; " + demo_no_ar,
                 "quem": "Quem cuida do site de vocês, ou o PRUMO."}
     if chave == "site":
         tipo = (site or {}).get("tipo")
@@ -918,8 +955,7 @@ def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
                   else "Um site no lugar da página que não abre")
         return {"ordem": 2, "titulo": titulo,
                 "texto": "Os serviços, as fotos, como é a primeira conversa e o botão de WhatsApp, numa página que abre "
-                         "bem no celular e fica no botão “Site” do Google. A demonstração já está pronta: é a página "
-                         "inicial deste mesmo endereço.",
+                         "bem no celular e fica no botão “Site” do Google. " + demo_novo,
                 "quem": "Um fornecedor de site de vocês, ou o PRUMO."}
     if chave == "avaliacoes":
         med = p.get("alvo") or (diag.get("concorrencia") or {}).get("mediana_avaliacoes")
@@ -1033,8 +1069,12 @@ def dados_do_modelo(dados: dict, diag: dict) -> dict:
         motivos["site"] = "No Raio-X: o site do perfil não abriu quando conferimos."
     elif hoje_site == "sem_nome":
         motivos["site"] = "No Raio-X: o site do perfil abria uma página sem o nome de vocês."
-    else:
+    elif not diag.get("avulso"):
         motivos["site"] = "No Raio-X: a demonstração do site já está pronta, neste mesmo endereço."
+    elif diag.get("demo_url"):
+        motivos["site"] = f"No Raio-X: a demonstração do site já está pronta, em {dominio(diag['demo_url'])}."
+    else:
+        motivos["site"] = "No Raio-X: montamos a demonstração do site de vocês, sem compromisso, se quiserem ver."
     if buscas:
         notas = [calculo_prumo.nota_da_posicao(b["posicao"]) for b in buscas] if calculo_prumo else [0] * len(buscas)
         pior = buscas[notas.index(min(notas))]
@@ -1575,24 +1615,44 @@ def gravar_recibo(recibo_path: Path, extra: dict) -> None:
     tmp.replace(recibo_path)
 
 
+def sob_pedido() -> bool:
+    return (AUTO / SOB_PEDIDO).exists()
+
+
+def eh_avulso(recibo: dict | None) -> bool:
+    """O Raio-X deste lead mora no projeto avulso (e não em `/raio-x` do demo)?"""
+    return isinstance(recibo, dict) and recibo.get("raio_x_projeto") == AVULSO_PROJETO
+
+
+def site_do_recibo(recibo: dict | None) -> str:
+    s = str((recibo or {}).get("site_url") or "").strip() if isinstance(recibo, dict) else ""
+    return s if s.startswith("https://") and not (recibo or {}).get("apagado_em") else ""
+
+
 def montar(pasta: Path) -> tuple[dict, dict, str, dict]:
-    """(dados, diagnóstico, html, recibo) de um lead; ValueError com o motivo se não dá."""
+    """(dados, diagnóstico, html, recibo) de um lead; ValueError com o motivo se não dá. Sem demo (recibo sem
+    site_url), só no modo avulso: demo sob pedido ligado ou um Raio-X avulso já publicado."""
     recibo = ler_json(pasta / "publicado.json")
-    if not isinstance(recibo, dict) or not str(recibo.get("site_url", "")).startswith("https://"):
-        raise ValueError("sem publicado.json com site_url")
-    if recibo.get("apagado_em"):
-        raise ValueError(f"demo apagado da Vercel em {recibo['apagado_em']}")
+    recibo = recibo if isinstance(recibo, dict) else {}
+    site = site_do_recibo(recibo)
+    avulso = eh_avulso(recibo) or (not recibo.get("site_url") and sob_pedido())
+    if not avulso:
+        if not str(recibo.get("site_url", "")).startswith("https://"):
+            raise ValueError("sem publicado.json com site_url")
+        if recibo.get("apagado_em"):
+            raise ValueError(f"demo apagado da Vercel em {recibo['apagado_em']}")
     try:
         texto = (pasta / "content.md").read_text(encoding="utf-8", errors="replace")
     except OSError:
         raise ValueError("sem content.md") from None
     dados = ler_content(texto)
     diag = diagnosticar(pasta, dados)
+    diag["avulso"], diag["demo_url"] = avulso, site or None
     if not diag["pontos"]:
         raise ValueError("nenhum ponto de melhoria verificável no content.md nem no Places")
     # A trava do modelo (AbaixoDoPadrao é um ValueError): sem 3 pontos, 3 bons, 3 avaliações, 3 buscas...,
-    # não há Raio-X, e o --pendentes passa para o próximo.
-    return dados, diag, pagina(dados, diag, recibo["site_url"], (pasta / "og.jpg").is_file()), recibo
+    # não há Raio-X, e o --pendentes passa para o próximo. O avulso usa o og.jpg do demo, quando há demo.
+    return dados, diag, pagina(dados, diag, site, bool(site) and (pasta / "og.jpg").is_file()), recibo
 
 
 def diagnosticar(pasta: Path, dados: dict) -> dict:
@@ -1620,6 +1680,8 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         dados, diag, pagina_html, recibo = montar(pasta)
     except ValueError as e:
         return False, str(e)
+    if diag.get("avulso"):
+        return publicar_avulso(pasta, dados, diag, pagina_html, recibo, deploy)
     site_url = recibo["site_url"].rstrip("/")
     projeto = recibo.get("vercel_project") or f"demo-{slug}"
     if not re.fullmatch(r"demo-[a-z0-9][a-z0-9._-]{0,95}", projeto):
@@ -1653,6 +1715,101 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         pass
     log(f"Raio-X no ar: {url} ({len(diag['pontos'])} ponto(s), {len(diag['bons'])} bom(ns)).", log_lead)
     return True, url
+
+
+def nome_avulso(slug: str, recibo: dict) -> str:
+    """O nome da página avulsa (raio-x-prumo.vercel.app/<nome>): o de antes, se já foi publicada (o link pode
+    ter ido na mensagem); senão o slug cortado num hífen, com sufixo se o arquivo já é de outro lead."""
+    antes = str(recibo.get("raio_x_url") or "")
+    if eh_avulso(recibo) and antes.startswith(AVULSO_URL + "/"):
+        nome = antes[len(AVULSO_URL) + 1:].strip("/")
+        if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", nome):
+            return nome
+    nome = slug if len(slug) <= TAMANHO_DO_NOME else slug[:TAMANHO_DO_NOME].rsplit("-", 1)[0]
+    nome = re.sub(r"[^a-z0-9-]+", "-", nome).strip("-") or "lead"
+    candidato, n = nome, 2
+    while (AVULSO_PASTA / f"{candidato}.html").exists():
+        candidato, n = f"{nome}-{n}", n + 1
+    return candidato
+
+
+def gravar_recibo_avulso(pasta: Path, dados: dict, extra: dict) -> None:
+    """Como gravar_recibo, mas cria o publicado.json quando o lead ainda não tem demo (o recibo do Raio-X
+    avulso é o que leva o lead ao Balcão). Sem site_url: é assim que o resto da esteira sabe que não há demo."""
+    caminho = pasta / "publicado.json"
+    r = ler_json(caminho) if caminho.exists() else {}
+    if not isinstance(r, dict):
+        raise ValueError("publicado.json ilegível")
+    pid = dados["campos"].get("place_id", "")
+    if not r:
+        r = {"place_id": pid, "slug": pasta.name, "nome": dados["nome"] or pasta.name}
+    elif pid and r.get("place_id") and r["place_id"] != pid:
+        raise ValueError(f"o place_id do publicado.json ({r['place_id']}) não é o do content.md ({pid})")
+    r.update(extra)
+    tmp = caminho.with_name(".publicado.json.raio-x.tmp")
+    tmp.write_text(json.dumps(r, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(caminho)
+
+
+def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, recibo: dict, deploy=None) -> tuple[bool, str]:
+    """O Raio-X sem demo (ou do lead cujo demo saiu depois): uma página na pasta do projeto avulso e um deploy
+    da pasta inteira. Só grava o recibo depois de a página responder exatamente com estes bytes."""
+    import fcntl  # só no Dell: o teste roda no Linux; no Windows este caminho nunca roda
+    slug = pasta.name
+    log_lead = LOGS / f"execucao-{slug}.log"
+    if not dados["campos"].get("place_id"):
+        return False, "sem place_id no content.md (o Balcão não acharia a linha)"
+    if not (AVULSO_PASTA / ".vercel/project.json").is_file():
+        return False, f"{AVULSO_PASTA} não está ligada a um projeto da Vercel (vercel link --project {AVULSO_PROJETO})"
+    LOGS.mkdir(parents=True, exist_ok=True)
+    with open(LOGS / TRAVA_AVULSO, "w") as trava:
+        fcntl.flock(trava, fcntl.LOCK_EX)
+        nome = nome_avulso(slug, recibo)
+        alvo = AVULSO_PASTA / f"{nome}.html"
+        corpo = pagina_html.encode("utf-8")
+        anterior = alvo.read_bytes() if alvo.exists() else None
+        alvo.write_bytes(corpo)
+        try:
+            (deploy or deploy_da_pasta)(AVULSO_PASTA, log_lead)
+        except Exception:
+            # Nada subiu (ou não se sabe): a pasta volta ao que está no ar, para o próximo deploy não levar meia página.
+            if anterior is None:
+                alvo.unlink(missing_ok=True)
+            else:
+                alvo.write_bytes(anterior)
+            raise
+    url = f"{AVULSO_URL}/{nome}"
+    codigo, no_ar = baixar(url)
+    if codigo != 200 or no_ar != corpo:
+        return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
+    gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]), "raio_x_versao": VERSAO,
+                                        "raio_x_em": agora(), "raio_x_projeto": AVULSO_PROJETO})
+    try:
+        (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")
+    except OSError:
+        pass
+    log(f"Raio-X avulso no ar: {url} ({len(diag['pontos'])} ponto(s), {len(diag['bons'])} bom(ns)"
+        + (f", com o demo {diag['demo_url']}" if diag.get("demo_url") else ", sem demo: demo sob pedido") + ").", log_lead)
+    return True, url
+
+
+def deploy_da_pasta(pasta: Path, log_lead: Path) -> str:
+    """`vercel deploy --prod` da pasta do projeto avulso (já ligada; o link é conferido antes). Devolve a URL
+    da linha "Aliased:" ("" sem ela); a conferência que vale é o GET da página, no publicar_avulso."""
+    ligado = ler_json(pasta / ".vercel/project.json") or {}
+    if ligado.get("projectName") != AVULSO_PROJETO:
+        raise RuntimeError(f"{pasta} está ligada a {ligado.get('projectName')!r}, não a {AVULSO_PROJETO}; nada publicado")
+    log(f"Publicando a pasta do Raio-X avulso ({AVULSO_PROJETO})...", log_lead)
+    r = subprocess.run(["vercel", "deploy", "--prod", "--yes", "--scope", VERCEL_SCOPE], cwd=pasta,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=300)
+    with open(log_lead, "a", encoding="utf-8") as saida:
+        saida.write(r.stdout or "")
+    if LIMITE_DE_DEPLOY.search(r.stdout or ""):
+        raise LimiteDaVercel(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "limite de deploys")
+    if r.returncode != 0:
+        raise RuntimeError(f"vercel deploy saiu com código {r.returncode}")
+    m = re.search(r"(?i)aliased:?\s+(https://\S+)", r.stdout or "")
+    return m.group(1).rstrip(".,)") if m else ""
 
 
 def deploy_na_vercel(arquivos: dict[str, bytes], projeto: str, log_lead: Path) -> str:
@@ -1722,13 +1879,15 @@ def pendentes(maximo: int) -> list[Path]:
     """Leads `pronto` na raiz com demo no ar e sem Raio-X da versão atual (ou com ele fora do ar),
     o publicado mais recente primeiro (o próximo a ser enviado). Quem não teria Raio-X (sem ponto,
     demo apagado) não ocupa vaga."""
-    status = status_no_retrato()
-    if status is None:
-        log("Sem retrato recente da planilha (site-leads.json); nada é pendente.")
-        return []
     if gerador_rodando():
         log("O gerador está rodando (gerador.lock); os pendentes ficam para a próxima rodada.")
         return []
+    novos = novos_sem_demo(maximo) if sob_pedido() else []
+    status = status_no_retrato()
+    if status is None:
+        log("Sem retrato recente da planilha (site-leads.json); só os leads novos, sem recibo, são pendentes.")
+        return novos
+    maximo -= len(novos)
     candidatos = []
     for p in AUTO.iterdir():
         if not p.is_dir() or p.name.startswith((".", "_")):
@@ -1753,6 +1912,61 @@ def pendentes(maximo: int) -> list[Path]:
             montar(p)
         except ValueError as e:
             log(f"{p.name}: sem Raio-X ({e}).")
+            continue
+        saida.append(p)
+    return novos + saida
+
+
+def nao_gerar() -> set[str]:
+    """place_id dos leads de busca pausada (06 · Funil semanal), como no gerador. Sem arquivo: nenhum."""
+    d = ler_json(FUNIL)
+    try:
+        return {str(x["place_id"]) for x in d.get("nao_gerar") or [] if isinstance(x, dict) and x.get("place_id")}
+    except (AttributeError, TypeError):
+        return set()
+
+
+def do_brasil(dados: dict) -> bool:
+    """O Raio-X é só em português: lead de fora segue com o demo da fila de sempre (gerador)."""
+    pais = sem_acento(dados["campos"].get("País", "")).strip().lower()
+    return pais in ("", "brasil", "brazil")
+
+
+def novos_sem_demo(maximo: int) -> list[Path]:
+    """Demo sob pedido: leads da raiz que o Caçador trouxe e que ainda não têm recibo nenhum (nem demo nem
+    Raio-X), o mais novo primeiro. Fora: descartado, de busca pausada, de fora do Brasil, e quem não chega ao
+    padrão do modelo (sem 3 pontos verificáveis: esse lead não é abordado, porque não há o que mostrar)."""
+    pausados = nao_gerar()
+    candidatos = []
+    validade = dt.timedelta(days=VALIDADE_CACHE_DIAS).total_seconds()
+    for p in AUTO.iterdir():
+        try:
+            if (not p.is_dir() or p.name.startswith((".", "_")) or not (p / "content.md").is_file()
+                    or (p / "publicado.json").exists() or (p / "DESCARTAR.md").exists()):
+                continue
+            # Abaixo do padrão há pouco: com o Places em cache, o resultado seria o mesmo; tenta de novo quando ele vence.
+            recusa = p / SEM_PADRAO
+            if recusa.exists() and dt.datetime.now().timestamp() - recusa.stat().st_mtime < validade:
+                continue
+            candidatos.append(((p / "content.md").stat().st_mtime, p))
+        except OSError:
+            continue
+    saida = []
+    for _, p in sorted(candidatos, key=lambda c: c[0], reverse=True):
+        if len(saida) >= maximo:
+            break
+        dados = ler_content((p / "content.md").read_text(encoding="utf-8", errors="replace"))
+        if not do_brasil(dados) or dados["campos"].get("place_id") in pausados:
+            continue
+        try:
+            montar(p)
+        except ValueError as e:
+            log(f"{p.name}: sem Raio-X avulso ({e}).")
+            try:
+                (p / SEM_PADRAO).write_text(json.dumps({"motivo": str(e)[:500], "em": agora(), "versao": VERSAO},
+                                                       ensure_ascii=False), encoding="utf-8")
+            except OSError:
+                pass
             continue
         saida.append(p)
     return saida
@@ -1806,8 +2020,9 @@ def main(argv: list[str]) -> int:
         Path(a.saida or "raio-x.html").write_text(pagina_html, encoding="utf-8")
         print(simular(AUTO / a.html))
         return 0
-    if any(not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.slugs):
-        ap.error("SLUG é o nome da pasta na raiz de ~/auto-site")
+    # `_em-conversa/SLUG`: o gerador chama assim depois do demo pedido de quem já respondeu.
+    if any(not re.fullmatch(r"(?:_[a-z-]{1,30}/)?[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.slugs):
+        ap.error("SLUG é o nome da pasta na raiz de ~/auto-site (ou _em-conversa/SLUG)")
     alvos = pendentes(a.max) if a.pendentes else [AUTO / s for s in a.slugs]
     if a.simular:
         for p in alvos:
@@ -2711,8 +2926,107 @@ def testar() -> int:
             finally:
                 SITE_LEADS = antes
 
+    class Avulso(Publicar):
+        """Demo sob pedido (14/10/2026): sem demo, o Raio-X vai para o projeto avulso e cria o recibo."""
+
+        def setUp(self):
+            super().setUp()
+            global AVULSO_PASTA, FUNIL
+            self.antes_avulso = (AVULSO_PASTA, FUNIL)
+            AVULSO_PASTA, FUNIL = self.raiz / "prumo-raio-x", self.raiz / "funil.json"
+            (AVULSO_PASTA / ".vercel").mkdir(parents=True)
+            (AVULSO_PASTA / ".vercel/project.json").write_text(json.dumps({"projectName": AVULSO_PROJETO}))
+            (AVULSO_PASTA / "roda-mais.html").write_text("feito à mão")
+            (self.pasta / "publicado.json").unlink()
+            (self.pasta / "index.html").unlink()
+            (self.pasta / "og.jpg").unlink()
+            (self.raiz / SOB_PEDIDO).write_text("")
+            self.deploys = []
+
+        def tearDown(self):
+            global AVULSO_PASTA, FUNIL
+            AVULSO_PASTA, FUNIL = self.antes_avulso
+            super().tearDown()
+
+        def deploy_avulso(self, pasta, log_lead):
+            self.assertEqual(pasta, AVULSO_PASTA)
+            self.deploys.append(sorted(p.name for p in pasta.glob("*.html")))
+            for f in pasta.glob("*.html"):
+                self.no_ar[f"{AVULSO_URL}/{f.stem}"] = (200, f.read_bytes())
+            return AVULSO_URL
+
+        def test_sem_demo_publica_avulso_e_cria_o_recibo_sem_site_url(self):
+            ok, url = publicar(self.pasta, self.deploy_avulso)
+            self.assertTrue(ok, url)
+            self.assertEqual(url, f"{AVULSO_URL}/higor")
+            self.assertEqual(self.deploys, [["higor.html", "roda-mais.html"]])  # a página feita à mão continua no deploy
+            r = self.recibo()
+            self.assertEqual((r["place_id"], r["raio_x_url"], r["raio_x_pontos"], r["raio_x_projeto"]),
+                             ("ChIJteste", url, 3, AVULSO_PROJETO))
+            self.assertNotIn("site_url", r)
+            h = (AVULSO_PASTA / "higor.html").read_text(encoding="utf-8")
+            self.assertNotIn("neste mesmo endereço", h)
+            self.assertNotIn("og:image", h)
+
+        def test_depois_do_demo_republica_no_mesmo_endereco_citando_o_demo(self):
+            publicar(self.pasta, self.deploy_avulso)
+            r = self.recibo()
+            r.update({"site_url": "https://demo-higor.vercel.app", "vercel_project": "demo-higor"})
+            (self.pasta / "publicado.json").write_text(json.dumps(r), encoding="utf-8")
+            (self.raiz / SOB_PEDIDO).unlink()  # o recibo avulso basta, com o modo desligado
+            ok, url = publicar(self.pasta, self.deploy_avulso)
+            self.assertTrue(ok, url)
+            self.assertEqual(url, f"{AVULSO_URL}/higor")
+            self.assertIn("demo-higor.vercel.app", (AVULSO_PASTA / "higor.html").read_text(encoding="utf-8"))
+            self.assertEqual(self.recibo()["site_url"], "https://demo-higor.vercel.app")
+
+        def test_deploy_que_falha_tira_a_pagina_da_pasta(self):
+            def quebra(pasta, log_lead):
+                raise RuntimeError("vercel fora")
+            with self.assertRaises(RuntimeError):
+                publicar(self.pasta, quebra)
+            self.assertFalse((AVULSO_PASTA / "higor.html").exists())
+            self.assertFalse((self.pasta / "publicado.json").exists())
+
+        def test_sem_o_modo_lead_sem_demo_nao_tem_raio_x(self):
+            (self.raiz / SOB_PEDIDO).unlink()
+            ok, msg = publicar(self.pasta, lambda *a: self.fail("não podia publicar"))
+            self.assertFalse(ok)
+            self.assertIn("site_url", msg)
+
+        def test_novos_sem_demo_pula_pausado_estrangeiro_e_abaixo_do_padrao(self):
+            self.assertEqual([p.name for p in novos_sem_demo(10)], ["higor"])
+            FUNIL.write_text(json.dumps({"nao_gerar": [{"place_id": "ChIJteste"}]}))
+            self.assertEqual(novos_sem_demo(10), [])
+            FUNIL.unlink()
+            fraco = self.raiz / "fraco"  # sem o cache do Places: abaixo do padrão
+            fraco.mkdir()
+            (fraco / "content.md").write_text(CONTENT_EXEMPLO.replace("ChIJteste", "ChIJfraco"), encoding="utf-8")
+            self.assertEqual([p.name for p in novos_sem_demo(10)], ["higor"])
+            self.assertTrue((fraco / SEM_PADRAO).is_file())
+            fora = self.raiz / "fora"
+            fora.mkdir()
+            (fora / "content.md").write_text(CONTENT_EXEMPLO.replace("Brasil", "Estados Unidos"), encoding="utf-8")
+            self.assertEqual([p.name for p in novos_sem_demo(10)], ["higor"])
+
+        def test_nome_avulso_curto_e_sem_colisao(self):
+            longo = "advogado-em-maringa-advocacia-beneton-atendimento-nacional-busca-e-apreensao-revisoes"
+            self.assertLessEqual(len(nome_avulso(longo, {})), TAMANHO_DO_NOME)
+            self.assertFalse(nome_avulso(longo, {}).endswith("-"))
+            self.assertEqual(nome_avulso("roda-mais", {}), "roda-mais-2")
+            self.assertEqual(nome_avulso("x", {"raio_x_projeto": AVULSO_PROJETO, "raio_x_url": f"{AVULSO_URL}/roda-mais"}),
+                             "roda-mais")
+
+        # Herdados do Publicar que supõem demo: não valem aqui.
+        test_publica_os_bytes_conferidos_e_grava_os_campos_sem_perder_os_outros = None
+        test_index_ou_og_diferente_do_que_esta_no_ar_nao_publica = None
+        test_demo_apagado_nao_publica = None
+        test_raio_x_que_nao_responde_ou_e_antigo_nao_grava_o_campo = None
+        test_alias_diferente_nao_grava_o_campo = None
+        test_pendentes_so_pronto_na_raiz_sem_raio_x_e_nunca_com_o_gerador_rodando = None
+
     suite = unittest.TestSuite()
-    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar):
+    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar, Avulso):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(c))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 

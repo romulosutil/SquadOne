@@ -1194,8 +1194,8 @@ AUTO = HOME / "auto-site"
 
 # O que o Rômulo faz com cada fila e onde (rota da Central). sozinho = a fila anda sem ele.
 FILAS = {
-    "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00. Para adiantar um lead, rode /lead-novo "
-                   "numa sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00 (com o demo sob pedido, o raio-x.timer faz o "
+                   "Raio-X às 11:15 e 17:15). Para adiantar um lead, rode /lead-novo numa sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
     # 08/10/2026: o link abre direto a fila "Enviar um por um" do CRM (um site por vez, a mensagem antes do toque).
     "site-enviar": ("Abra a fila Enviar um por um: um site por vez, com o demo e a mensagem; o toque abre o WhatsApp "
                     "e marca o envio. Escrever direto ao número do lead também conta como envio.",
@@ -1223,8 +1223,15 @@ def pendencias() -> list[dict]:
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
-    out.append(_fila("sites-fila", "Sites na fila do gerador", len(fila),
-                     f"{len(fila)} lead(s) com pasta e sem site publicado"))
+    if (AUTO / ".demo-sob-pedido").exists():
+        # Demo sob pedido (14/10/2026): sem recibo = esperando o Raio-X (raio-x.timer, 11:15 e 17:15); quem ficou abaixo
+        # do padrão do modelo (raio-x-sem-padrao.json) não é abordado e sai da conta.
+        fila = [d for d in fila if not (d / "raio-x-sem-padrao.json").is_file()]
+        out.append(_fila("sites-fila", "Leads esperando o Raio-X", len(fila),
+                         f"{len(fila)} lead(s) com pasta e sem Raio-X (demo sob pedido: o site só sai pelo botão Gerar demo)"))
+    else:
+        out.append(_fila("sites-fila", "Sites na fila do gerador", len(fila),
+                         f"{len(fila)} lead(s) com pasta e sem site publicado"))
     for arq in sorted(ESTADO_N8N.glob("*.json")) if ESTADO_N8N.is_dir() else []:
         try:
             d = json.loads(arq.read_text())

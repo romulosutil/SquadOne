@@ -1,0 +1,15 @@
+[Unit]
+Description=Site antes da venda — o demo pedido pelo botão "Gerar demo" (Claude Code + Vercel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Sem timer: o site-pastas acorda este serviço quando grava um PEDIDO-DEMO.json (demo sob pedido,
+# 14/10/2026). Mesmo ambiente do gerador-de-sites.service.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/.config/claude-ops/gerador.env
+# --teto-horas 4: até 4 h esperando a trava de uma execução em andamento e, depois, até 4 h gerando.
+ExecStart=/usr/bin/python3 %h/.local/bin/gerador-de-sites --pedidos --timeout-min 45 --teto-horas 4
+TimeoutStartSec=8h
+Nice=10

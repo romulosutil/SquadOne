@@ -91,7 +91,11 @@ const estadoDe = (l) => {{
   if (s === 'expirado') return 'expirado';
   if (topo === '_em-conversa' || (s === 'enviado' && txt(l.respondeu_em))) return 'conversa';
   return s || 'novo';
-}};"""
+}};
+// 14/10/2026 (demo sob pedido): o lead que recebeu só o Raio-X (sem site_url) e tem pasta pode pedir o
+// demo; quem recusou, fechou ou foi descartado, não. O site-pastas confere de novo (e ignora repetição).
+const podeGerarDemo = (l) => !txt(l.site_url) && Boolean(pasta[txt(l.place_id)])
+  && !['recusado', 'fechado', 'descartado'].includes(estadoDe(l));"""
 
 PAGINA_JS = """// Página do lead: estado atual e os botões. Nada aqui grava.
 const q = $('Abrir a página do lead').first().json.query ?? {};
@@ -111,7 +115,7 @@ main{max-width:30rem;margin:0 auto;padding:1.25rem 1rem 2.5rem}h1{font-size:1.35
 .aviso{border-radius:12px;padding:.7rem .9rem;margin:0 0 .9rem;background:var(--cartao);border:1px solid var(--linha)}
 .botoes{display:grid;gap:.6rem;margin-top:1rem}
 .b{display:block;text-align:center;text-decoration:none;font-weight:650;font-size:1.05rem;padding:.95rem 1rem;border-radius:12px;border:2px solid currentColor}
-.b.recusou{color:var(--recusou)}.b.fechou{color:var(--fechou)}.b.desfazer{color:var(--neutro);font-weight:550}
+.b.recusou{color:var(--recusou)}.b.fechou{color:var(--fechou)}.b.desfazer{color:var(--neutro);font-weight:550}.b.gerar_demo{color:var(--neutro)}
 .b.atual{opacity:.45;pointer-events:none}.b:active{transform:translateY(1px)}`;
 const pagina = (titulo, corpo) => '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
   + '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
@@ -128,7 +132,7 @@ const DESCRICAO = {
   expirado: '<b>Expirou</b>: 10 dias sem resposta' + (txt(l.enviado_em) ? ' (enviado' + em(l.enviado_em) + ')' : ''),
   conversa: '<b>Em conversa</b>' + (txt(l.respondeu_em) ? ': respondeu' + em(l.respondeu_em) : ''),
   enviado: '<b>Enviado</b>' + em(l.enviado_em) + ', esperando resposta',
-  pronto: '<b>Site pronto</b>, ainda não enviado',
+  pronto: txt(l.site_url) ? '<b>Site pronto</b>, ainda não enviado' : '<b>Raio-X pronto</b>, ainda não enviado',
   novo: '<b>Sem site</b> ainda',
   descartado: '<b>Descartado</b>',
 };
@@ -136,18 +140,21 @@ const AVISO = {
   recusou: 'Marcado: recusou. A pasta foi para _recusados/.',
   fechou: 'Marcado: fechou. A pasta foi para _fechados/.',
   desfazer: 'Desfeito: o lead voltou ao estado de antes.',
+  gerar_demo: 'Demo pedido: o gerador começou agora (uns 20 a 40 minutos). O aviso chega quando estiver no ar.',
   igual: 'Já estava assim: nada mudou.',
   invalido: 'Botão desconhecido: nada mudou.',
 };
 const acao = (a) => LINKS + '/lead-acao?id=' + encodeURIComponent(pid) + '&acao=' + a;
 const botao = (a, rotulo, atual) => '<a class="b ' + a + (atual ? ' atual' : '') + '" href="' + acao(a) + '">' + (atual ? '✓ ' : '') + rotulo + '</a>';
-const site = txt(l.site_url);
+const site = txt(l.site_url), raioX = txt(l.raio_x_url);
 const corpo = (AVISO[feito] ? '<p class="aviso">' + AVISO[feito] + '</p>' : '')
   + '<h1>' + esc(l.nome || pid) + '</h1>'
-  + '<p class="sub">' + [esc(l.cidade), site ? '<a href="' + esc(site) + '">abrir o demo</a>' : ''].filter(Boolean).join(' · ') + '</p>'
+  + '<p class="sub">' + [esc(l.cidade), site ? '<a href="' + esc(site) + '">abrir o demo</a>' : '',
+    raioX ? '<a href="' + esc(raioX) + '">abrir o raio-x</a>' : ''].filter(Boolean).join(' · ') + '</p>'
   + '<div class="cartao"><p class="estado">' + (DESCRICAO[estado] ?? esc(estado)) + '</p>'
   + '<p class="nota">Pasta: ' + (topo ? (topo === 'raiz' ? 'raiz' : topo + '/') : 'sem site publicado') + '</p>'
-  + '<div class="botoes">' + botao('recusou', 'Recusou', estado === 'recusado') + botao('fechou', 'Fechou', estado === 'fechado')
+  + '<div class="botoes">' + (podeGerarDemo(l) ? botao('gerar_demo', 'Gerar demo', feito === 'gerar_demo') : '')
+  + botao('recusou', 'Recusou', estado === 'recusado') + botao('fechou', 'Fechou', estado === 'fechado')
   + (['recusado', 'fechado'].includes(estado) ? botao('desfazer', 'Desfazer', false) : '') + '</div></div>'
   + '<p class="nota">Nada é enviado ao lead: os botões só mudam a planilha e a pasta. Recusado ou expirado há 15 dias, '
   + 'o demo é pausado na Vercel (nada é apagado); Desfazer põe de volta no ar.</p>';
@@ -160,12 +167,15 @@ const l = $input.all().map(i => i.json).find(r => pid && txt(r.place_id) === pid
 const volta = (feito) => linkDoLead(pid) + '&feito=' + feito;
 const nada = (feito) => [{ json: { resultado: feito, planilha: false, pasta: false, destino: volta(feito) } }];
 if (!l) return nada('desconhecido');
-if (!['recusou', 'fechou', 'desfazer'].includes(acao)) return nada('invalido');
+if (!['recusou', 'fechou', 'desfazer', 'gerar_demo'].includes(acao)) return nada('invalido');
 const agora = new Date().toISOString();
 const s = txt(l.status), estado = estadoDe(l);
 const linha = { place_id: pid, status: s, status_anterior: txt(l.status_anterior), recusado_em: txt(l.recusado_em), fechado_em: txt(l.fechado_em) };
 let planilha = false, moverPasta = false;
-if (acao === 'recusou' && estado !== 'recusado') {
+if (acao === 'gerar_demo') {
+  // Não muda a planilha: o pacote vai ao site-pastas, que grava o PEDIDO-DEMO.json e acorda o gerador.
+  moverPasta = podeGerarDemo(l);
+} else if (acao === 'recusou' && estado !== 'recusado') {
   // status_anterior guarda o que o Desfazer devolve.
   Object.assign(linha, { status: 'recusado', status_anterior: s, recusado_em: agora });
   planilha = moverPasta = true;
@@ -474,6 +484,10 @@ def testar(erro):
         (linha(r2, status="pronto"), "recusou", ("igual", False, False, "pronto")),
         (linha(r2, status="pronto"), "desfazer", ("desfazer", False, True, "pronto")),
         (linha(r2, status="pronto"), "fechou", ("fechou", True, True, "fechado")),
+        # Demo sob pedido (14/10/2026): sem site_url, o toque vira pacote; com demo ou recusado, nada.
+        (linha(r1, site_url=""), "gerar_demo", ("gerar_demo", False, True, "enviado")),
+        (linha(r1), "gerar_demo", ("igual", False, False, "enviado")),
+        (linha(r2, site_url="", status="recusado"), "gerar_demo", ("igual", False, False, "recusado")),
         ({"place_id": "outro"}, "recusou", ("desconhecido", False, False, None)),
     ]
     wf = fluxo(erro)

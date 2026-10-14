@@ -105,6 +105,8 @@ def leads_publicados() -> list[dict]:
             r = ler_json(recibo) or {}
             if r.get("apagado_em"):  # site-demos-limpeza apagou o projeto: pausar daria "não existe"
                 continue
+            if r.get("raio_x_projeto") == "prumo-raio-x" and not str(r.get("site_url") or "").strip():
+                continue  # demo sob pedido (14/10/2026): o recibo só do Raio-X avulso não tem projeto demo-* para pausar
             projeto = str(r.get("vercel_project") or f"demo-{pasta.name}")
             leads.append({"place_id": str(r.get("place_id") or ""), "slug": pasta.name, "topo": topo,
                           "pasta": pasta, "nome": str(r.get("nome") or pasta.name), "projeto": projeto})

@@ -1352,5 +1352,101 @@ class AvisoPelaLib(unittest.TestCase):
         self.assertEqual(self.sem_login(), 2)
 
 
+class DemoSobPedido(unittest.TestCase):
+    """14/10/2026: com ~/auto-site/.demo-sob-pedido a fila não gera lead novo do Brasil; o demo sai quando o
+    botão "Gerar demo" grava PEDIDO-DEMO.json na pasta (que pode estar em _em-conversa/)."""
+
+    RAIO_X = {"place_id": "pid-c", "slug": "c-respondeu", "nome": "C Respondeu",
+              "raio_x_url": "https://raio-x-prumo.vercel.app/c-respondeu", "raio_x_pontos": 3, "raio_x_projeto": "prumo-raio-x"}
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "teste"
+        self.m = carregar(self.auto)
+        self.avisos = []
+        self.m.avisar = self.avisos.append
+        (self.auto / ".demo-sob-pedido").write_text("")
+        for i, (slug, pais) in enumerate([("a-novo-br", "Brasil"), ("b-novo-eua", "Estados Unidos")]):
+            (self.auto / slug).mkdir()
+            (self.auto / slug / "content.md").write_text(f"# {slug}\n- **País:** {pais}\n- **place_id:** pid-{slug}\n")
+            os.utime(self.auto / slug / "content.md", (1000 + i, 1000 + i))
+        self.pedido = self.auto / "_em-conversa" / "c-respondeu"
+        self.pedido.mkdir(parents=True)
+        (self.pedido / "content.md").write_text("# C Respondeu\n- **País:** Brasil\n- **place_id:** pid-c\n")
+        (self.pedido / "publicado.json").write_text(json.dumps(self.RAIO_X))
+        (self.pedido / "PEDIDO-DEMO.json").write_text('{"place_id": "pid-c"}')
+        self.vistos = []
+
+    def rodar(self, claude, *args):
+        self.m.rodar_claude = claude
+        sys.argv = ["gerador-de-sites", "--timeout-min", "1", *args]
+        codigo = self.m.main()
+        return codigo, json.loads((self.auto / ".logs/status.json").read_text())["ultimo_resumo"]
+
+    def claude(self, slug, log_lead, timeout_min, personalizado=False):
+        pasta = self.m.pasta_do_lead(slug)
+        # O Claude do pedido não vê o recibo do Raio-X (veria um lead "já publicado").
+        self.vistos.append((slug, personalizado, (pasta / "publicado.json").exists(), self.m.comando_do_claude(slug, Path("/tmp/r"), personalizado)))
+        (pasta / "index.html").write_text("<html></html>")
+        (pasta / "publicado.json").write_text(json.dumps({"place_id": f"pid-{slug}", "site_url": "https://demo-x.vercel.app",
+                                                          "vercel_project": "demo-x", "slug": slug}))
+        return {"codigo": 0, "estourou": False, "limite": False, "minutos": 0}
+
+    def test_fila_sob_pedido_so_tem_o_pedido_e_o_de_fora_do_brasil(self):
+        self.assertEqual([p.relative_to(self.auto).as_posix() for p in self.m.fila()], ["_em-conversa/c-respondeu", "b-novo-eua"])
+        (self.auto / ".demo-sob-pedido").unlink()
+        self.assertEqual([p.name for p in self.m.fila()], ["c-respondeu", "a-novo-br", "b-novo-eua"])
+
+    def test_pedido_gera_em_em_conversa_e_mescla_o_recibo(self):
+        codigo, r = self.rodar(self.claude, "--pedidos")
+        self.assertEqual(codigo, 0)
+        self.assertEqual(r["concluidos"], ["c-respondeu"])
+        slug, personalizado, via_recibo, cmd = self.vistos[0]
+        self.assertEqual((slug, personalizado, via_recibo), ("c-respondeu", True, False))
+        self.assertIn("/lead-novo _em-conversa/c-respondeu ", cmd[2])
+        self.assertIn("DEMO PEDIDO", cmd[cmd.index("--append-system-prompt") + 1])
+        recibo = json.loads((self.pedido / "publicado.json").read_text())
+        self.assertEqual((recibo["site_url"], recibo["raio_x_url"], recibo["raio_x_pontos"], recibo["place_id"]),
+                         ("https://demo-x.vercel.app", self.RAIO_X["raio_x_url"], 3, "pid-c-respondeu"))
+        self.assertFalse((self.pedido / "PEDIDO-DEMO.json").exists())
+        self.assertFalse((self.pedido / ".publicado-raio-x.json").exists())
+        self.assertTrue((self.pedido / "personalizado.json").is_file())
+        self.assertIn("no ar: https://demo-x.vercel.app", self.avisos[0])
+        self.assertEqual(len(self.vistos), 1)  # --pedidos não toca na fila de sempre (nem no lead dos EUA)
+
+    def test_permissoes_do_pedido_nao_negam_o_proprio_caminho(self):
+        self.m.pedidos()
+        deny = self.m.permissoes_do_claude("c-respondeu", Path("/tmp/r"))["permissions"]["deny"]
+        self.assertNotIn("Bash(rm *_em-conversa*)", deny)
+        self.assertIn("Bash(mv *_recusados*)", deny)
+        self.assertIn("Bash(rm *publicado.json*)", deny)
+
+    def test_pedido_que_falha_devolve_o_recibo_e_sai(self):
+        def falha(slug, log_lead, timeout_min, personalizado=False):
+            return {"codigo": 1, "estourou": False, "limite": False, "minutos": 0}
+        codigo, r = self.rodar(falha, "--pedidos")
+        self.assertEqual(len(r["falhas"]), 1)
+        self.assertEqual(json.loads((self.pedido / "publicado.json").read_text()), self.RAIO_X)
+        self.assertFalse((self.pedido / "PEDIDO-DEMO.json").exists())  # uma tentativa por toque
+        self.assertFalse((self.pedido / "falha.log").exists())
+        self.assertIn("Gerar demo", self.avisos[0])
+
+    def test_descartar_do_claude_e_ignorado_no_pedido(self):
+        def quer_descartar(slug, log_lead, timeout_min, personalizado=False):
+            (self.m.pasta_do_lead(slug) / "DESCARTAR.md").write_text("Já tem site no ar\n")
+            return self.claude(slug, log_lead, timeout_min, personalizado)
+        codigo, r = self.rodar(quer_descartar, "--pedidos")
+        self.assertEqual(r["concluidos"], ["c-respondeu"])
+        self.assertTrue(self.pedido.is_dir())
+        self.assertTrue((self.pedido / "DESCARTAR.ignorado.md").is_file())
+
+    def test_sem_pedido_o_pedidos_nao_faz_nada(self):
+        (self.pedido / "PEDIDO-DEMO.json").unlink()
+        self.m.rodar_claude = lambda *a, **k: self.fail("rodou o Claude sem pedido")
+        sys.argv = ["gerador-de-sites", "--pedidos"]
+        self.assertEqual(self.m.main(), 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

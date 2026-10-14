@@ -358,6 +358,43 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(lead(comRespostas(), "site:quer-ver").links.raioX, undefined, "sem a coluna, sem o link");
   });
 
+  // 14/10/2026 (demo sob pedido): o lead recebeu a C com o Raio-X avulso e ainda não tem demo.
+  it("Raio-X avulso sem demo: a segunda leva só o raio-x, e o Gerar demo aparece até o pedido; depois, a do demo", () => {
+    const AVULSO = "https://raio-x-prumo.vercel.app/so-raio-x";
+    const base = retrato();
+    base.fontes.site.linhas.push(linhaSite("so-raio-x", { status: "enviado", enviado_em: dias(1), respondeu_em: dias(0.1),
+      raio_x_url: AVULSO, mensagem_variante: "C", wa_me: "https://wa.me/5516999990012?text=oi",
+      resposta_tipo: "interesse", resposta_trecho: "pode mandar", resposta_em: dias(0.1) }));
+    const semDemo = pasta("so-raio-x", "_em-conversa", "so-raio-x", true, { siteUrl: undefined, publicadoEm: undefined, raioXUrl: AVULSO, raioXEm: dias(2) });
+    const v = montarCrm(base, { agora: AGORA, pastas: [...PASTAS, semDemo] });
+    const l = lead(v.leads, "site:so-raio-x");
+    assert.equal(l.links.site, undefined);
+    assert.equal(l.links.raioX, AVULSO);
+    const texto = decodeURIComponent(l.links.segunda!.split("?text=")[1]);
+    assert.ok(texto.startsWith(`Aqui está o raio-x: ${AVULSO}`), texto);
+    assert.ok(texto.includes("monto também uma demonstração") && !texto.includes("R$"), texto);
+    assert.equal(l.links.gerarDemo, `${WEBHOOK}/lead-acao?id=so-raio-x&acao=gerar_demo`);
+    assert.ok(l.eventos.some((e) => e.tipo === "raio-x" && e.em === dias(2)));
+    const item = v.hoje.find((g) => g.id === "resposta")!.itens.find((i) => i.leadId === "site:so-raio-x")!;
+    assert.equal(item.acao, "Quer ver o raio-x há 2 h — o raio-x ainda não foi mandado");
+    assert.deepEqual(item.links.slice(0, 2).map((x) => x.rotulo), ["Mandar o raio-x", "Gerar demo"]);
+
+    // Tocou "Gerar demo": o botão some e a ficha diz que o gerador está nele.
+    const pedido = montarCrm(base, { agora: AGORA, pastas: [...PASTAS, { ...semDemo, demoPedidoEm: dias(0.05) }] });
+    const p = lead(pedido.leads, "site:so-raio-x");
+    assert.equal(p.links.gerarDemo, undefined);
+    assert.equal(p.demoPedidoEm, dias(0.05));
+    assert.ok(p.eventos.some((e) => e.tipo === "demo-pedido"));
+
+    // O demo saiu: a segunda é a do demo, com o preço.
+    const comDemo = montarCrm(base, { agora: AGORA, pastas: [...PASTAS, { ...semDemo, siteUrl: "https://demo-so-raio-x.vercel.app/" }] });
+    const d = lead(comDemo.leads, "site:so-raio-x");
+    assert.equal(d.links.gerarDemo, undefined);
+    const doDemo = decodeURIComponent(d.links.segunda!.split("?text=")[1]);
+    assert.ok(doDemo.startsWith("Aqui está a demonstração do site da Empresa so-raio-x: https://demo-so-raio-x.vercel.app"), doDemo);
+    assert.ok(doDemo.includes("R$ 690"), doDemo);
+  });
+
   it("demo apagado pelo site-demos-limpeza: sem link morto, com o aviso na ficha, na linha do tempo e na lista Hoje", () => {
     const base = retrato();
     base.fontes.site.linhas.push(linhaSite("voltou", { status: "enviado", enviado_em: dias(14), respondeu_em: dias(0.1),

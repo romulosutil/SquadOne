@@ -351,7 +351,11 @@ for (const a of m.achados) {
       item.aviso = cab + 'Negativa: saiu do funil (Recusou). ' + desfazer;
     } else if (tipo === 'interesse') {
       const s = segundaDe(l);
-      item.aviso = cab + 'Interesse! Mande o link do site' + (s.link ? ': ' + s.link : ' (sem WhatsApp na linha).');
+      // 14/10/2026 (demo sob pedido): sem demo, a segunda é o raio-x avulso; o demo sai pelo "Gerar demo" da ficha.
+      const so = s.texto.indexOf('Aqui está o raio-x') === 0 && !txt(l.site_url);
+      item.aviso = cab + (so ? 'Interesse! Mande o raio-x' : 'Interesse! Mande o link do site')
+        + (s.link ? ': ' + s.link : (s.numero ? ' (sem demo nem raio-x na linha).' : ' (sem WhatsApp na linha).'))
+        + (so ? ' Se ele quiser o site, toque "Gerar demo" na ficha do CRM.' : '');
     } else if (tipo === 'neutra') {
       const n = numeroDoLead(l);
       item.aviso = cab + 'Gente, sem sim nem não: continue a conversa' + (n ? ': https://wa.me/' + n : '.');

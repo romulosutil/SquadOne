@@ -14,7 +14,9 @@
 // Os únicos "R$" daqui são os preços do cardápio (o teste confere): nada de
 // finanças pessoais entra no CRM (RULES 24).
 
-import { FOLLOWUP, FOLLOWUP_COM_LINK, FOLLOWUP_RAIO_X, SEGUNDA, SEGUNDA_RAIO_X, artigoDe } from '../../server/site-mensagem.ts'
+import {
+  DEMO_DEPOIS_DO_RAIO_X, FOLLOWUP, FOLLOWUP_COM_LINK, FOLLOWUP_RAIO_X, SEGUNDA, SEGUNDA_RAIO_X, SEGUNDA_RAIO_X_SEM_DEMO, artigoDe, raioXAvulso,
+} from '../../server/site-mensagem.ts'
 import { FOLLOWUP_PRUMO, SEGUNDA_PRUMO } from '../../server/prumo-mensagem.ts'
 import type { CrmEtapa, CrmProduto, CrmSinal, CrmTipoDeResposta } from './types'
 
@@ -72,6 +74,12 @@ export interface Trecho {
    * quem não recebeu; ausente, para todos. Quem pediu o raio-x não pode receber o texto do site.
    */
   raioX?: boolean
+  /**
+   * Quem recebeu a C, pelo lugar do demo (demo sob pedido, 14/10/2026): `junto` = o Raio-X dentro do demo (antes de
+   * 14/10); `sem` = o Raio-X avulso, ainda sem demo; `depois` = o avulso e o demo feito pelo botão "Gerar demo".
+   * Ausente, para todos.
+   */
+  demo?: 'junto' | 'sem' | 'depois'
   /** Para quais produtos do CRM o trecho serve. */
   produtos: CrmProduto[]
 }
@@ -288,6 +296,27 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         dica: 'Pediu o raio-x, então ele vai primeiro; o demo vem junto, já com o preço. Não mande só o link do site: não foi o que ele aceitou receber.',
         produtos: SITE,
         raioX: true,
+        demo: 'junto',
+      },
+      {
+        id: 'segunda-raio-x-sem-demo',
+        titulo: 'Segunda mensagem · recebeu a C: o raio-x (o demo ainda não existe)',
+        texto: SEGUNDA_RAIO_X_SEM_DEMO,
+        esteira: true,
+        dica: 'Demo sob pedido: o raio-x vai sozinho e oferece a demonstração, sem preço. Se ele quiser ver o site, toque "Gerar demo" na ficha: sai em uns 20 a 40 minutos e o aviso chega no WhatsApp.',
+        produtos: SITE,
+        raioX: true,
+        demo: 'sem',
+      },
+      {
+        id: 'demo-depois-do-raio-x',
+        titulo: 'Depois do raio-x: o demo pedido',
+        texto: DEMO_DEPOIS_DO_RAIO_X,
+        esteira: true,
+        dica: 'O demo que você pediu pelo botão já está no ar. Este texto leva o preço do Encontrado.',
+        produtos: SITE,
+        raioX: true,
+        demo: 'depois',
       },
       {
         id: 'segunda',
@@ -718,9 +747,13 @@ export interface ColinhaDoLead {
 // Recebeu a C = foi convidado para o raio-x (o mesmo recebeuC de server/site-mensagem.ts). Sem o
 // link na planilha, o texto mostra "[link do Raio-X]": melhor o Rômulo ver que falta que mandar o site.
 const recebeuRaioX = (lead: LeadDaColinha) => lead.produto === 'site' && (lead.abordagem?.mensagem ?? '').trim() === 'C'
+// Onde está o demo de quem recebeu a C (Trecho.demo): o Raio-X avulso é de quem não tinha demo no contato.
+const lugarDoDemo = (lead: LeadDaColinha): Trecho['demo'] =>
+  !raioXAvulso(lead.links.raioX) ? 'junto' : lead.links.site?.trim() ? 'depois' : 'sem'
 const doLead = (p: PassoDoRoteiro, lead: LeadDaColinha): PassoDoRoteiro => ({
   ...p,
-  trechos: p.trechos.filter((t) => t.produtos.includes(lead.produto) && (t.raioX === undefined || t.raioX === recebeuRaioX(lead))),
+  trechos: p.trechos.filter((t) => t.produtos.includes(lead.produto) && (t.raioX === undefined || t.raioX === recebeuRaioX(lead))
+    && (t.demo === undefined || !recebeuRaioX(lead) || t.demo === lugarDoDemo(lead))),
 })
 const temConteudo = (p: PassoDoRoteiro) => p.trechos.length > 0 || (p.perguntas?.length ?? 0) > 0
 
