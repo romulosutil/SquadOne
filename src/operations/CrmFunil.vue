@@ -165,7 +165,8 @@ const artefatos = (l: CrmLead) => {
           <small>{{ DICA_DA_ETAPA[etapa] }}</small>
         </header>
 
-        <p v-if="etapa === 'novo' && visao.gerador" class="crm-coluna__nota">
+        <!-- O gerador é do Site: no filtro de outra oferta a nota só confundiria. -->
+        <p v-if="etapa === 'novo' && visao.gerador && (produto === 'todos' || produto === 'site')" class="crm-coluna__nota">
           Gerador de sites: {{ visao.gerador.estado === 'processando' ? 'gerando agora' : visao.gerador.estado === 'ocioso' ? 'ocioso' : visao.gerador.estado === 'atencao' ? 'precisa de atenção' : 'sem status' }}.
           {{ visao.gerador.detalhe }}{{ visao.gerador.pendentes !== undefined ? ` ${visao.gerador.pendentes} na fila.` : '' }}{{ visao.gerador.atualizadoEm ? ` (às ${hora(visao.gerador.atualizadoEm)})` : '' }}
         </p>
