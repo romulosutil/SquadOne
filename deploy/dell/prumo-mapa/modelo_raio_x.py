@@ -151,7 +151,9 @@ text-decoration:underline;text-decoration-color:var(--brasa);text-decoration-thi
 .escapa{margin-top:18px;border-left:6px solid var(--brasa);background:var(--pedra-200);padding:14px 16px;display:grid;gap:4px}
 .escapa p{font-size:17px;line-height:1.45;color:var(--ferro-900)}
 .escapa strong{white-space:nowrap}
-h4.grupo{margin-top:20px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--pedra-600)}
+.cartao .link-demo{justify-self:start;min-height:44px;display:inline-flex;align-items:center;font-weight:800;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.cartao .link-demo:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
+.plano-nao h3{color:var(--ferro-600)}
 /* Mapa */
 .bloco h3.sub{font-size:20px;line-height:1.2;font-weight:800;margin-top:28px}
 .bloco .regras + .intro,.bloco h3.sub + .intro{margin-top:8px}
@@ -675,6 +677,17 @@ def molde_raio_x(exemplo: dict, lead: dict) -> dict:
     return exemplo if lead.get("mapa_link") else {k: v for k, v in exemplo.items() if k != "equipe"}
 
 
+def molde_mapa(exemplo: dict, lead: dict) -> dict:
+    """No Mapa, a equipe pode ficar vazia: o formulário não pergunta quantas pessoas são, e uma página com
+    "equipe a confirmar" fala mal da empresa para o dono (Roda Mais, 14/10). Vazia, a página não fala dela.
+    Os riscos também, quando as respostas não trazem nenhum dado em R$: aí o riscos_motivo (60+ letras) diz
+    que dado faltou, e o bloco "Fora dessa soma" fica, com o motivo no lugar dos valores."""
+    fora = {"equipe"}
+    if not lead.get("riscos") and len(str(lead.get("riscos_motivo") or "")) >= 60:
+        fora.add("riscos")
+    return {k: v for k, v in exemplo.items() if k not in fora}
+
+
 def conferir_campos(lead: dict, exemplo: dict, caminho: str = "") -> list[str]:
     """Todo campo que o exemplo preenche, o lead preenche: um campo vazio é um parágrafo ou um bloco que
     some da página sem erro nenhum. Nas listas, cada item do lead tem os campos que todos os itens do
@@ -698,7 +711,7 @@ def conferir_campos(lead: dict, exemplo: dict, caminho: str = "") -> list[str]:
 
 # Classes que aparecem ou não conforme a empresa (o dado), e não conforme o modelo: ficam fora do esqueleto.
 CLASSES_DO_DADO = {"exemplo", "pior", "atual", "voces", "perde", "sem", "ok", "falta", "nc", "vive", "duvida", "nada",
-                   "principal", "selo", "nao", "link-escuro",
+                   "principal", "selo", "nao", "link-escuro", "leve", "plano-nao", "link-demo",
                    # a faixa da presença ("Pouco visível", "Em construção", "Bem visível"): o exemplo é "media",
                    # e um lead em outra faixa barrava sem motivo (Gaius Engenharia, 14/10/2026)
                    "faixa-baixa", "faixa-media", "faixa-alta"}
