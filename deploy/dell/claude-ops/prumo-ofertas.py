@@ -50,8 +50,38 @@ SITE, LEADS_GID = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o", "396728619"
 SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sheets account"}}
 PLACES = {"httpHeaderAuth": {"id": "v7aU1q4PRbTSOYZu", "name": "Google Maps API Key — PRUMO"}}
 WEBHOOK = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
+# Telefone desde 14/10/2026: sem ele, quem não tem site perdia o único contato (e o celular do Google
+# é o WhatsApp "não confirmado" de quem não publica link nenhum).
 CAMPOS_DO_PLACES = ("places.id,places.displayName,places.addressComponents,places.websiteUri,places.rating,places.userRatingCount,"
-                    "places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken")
+                    "places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,places.nationalPhoneNumber,"
+                    "places.internationalPhoneNumber,nextPageToken")
+
+
+def _letra(n):
+    """Letra da coluna n (1 = A, 27 = AA)."""
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def garantir_cabecalho(s, aba, propriedades, colunas):
+    """Cabeçalho vazio: grava. Cabeçalho que é começo do contrato: acrescenta o que falta no fim (colunas
+    novas entram sempre no fim). Qualquer outro: para sem mudar nada. Alarga a grade se precisar."""
+    cab = (s.get(f"/v4/spreadsheets/{PLANILHA}/values/" + quote(f"{aba}!1:1")).get("values") or [[]])[0]
+    if cab and cab != colunas[:len(cab)]:
+        raise SystemExit(f"aba {aba} tem outro cabeçalho: {cab}. Nada foi mudado.")
+    if len(cab) >= len(colunas):
+        return False
+    falta = len(colunas) - propriedades.get("gridProperties", {}).get("columnCount", 0)
+    if falta > 0:
+        s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": [{"appendDimension": {
+            "sheetId": propriedades["sheetId"], "dimension": "COLUMNS", "length": falta}}]})
+    s.post(f"/v4/spreadsheets/{PLANILHA}/values:batchUpdate", {"valueInputOption": "RAW", "data": [
+        {"range": f"{aba}!{_letra(len(cab) + 1)}1:{_letra(len(colunas))}1", "values": [colunas[len(cab):]]}]})
+    print(f"aba {aba}: cabeçalho {'gravado' if not cab else 'completado com ' + ', '.join(colunas[len(cab):])}")
+    return True
 
 
 def _modulo(nome, arquivo):
@@ -67,7 +97,6 @@ def planilha():
     """Cria as abas que faltam e aplica cabeçalho, lista da Etapa e colunas ocultas. Nunca mexe em linha."""
     from sheets_proxy import SheetsProxy
     colunas = CONFIG["colunas"]
-    ultima = chr(ord("A") + len(colunas) - 1)
     with SheetsProxy([PLANILHA]) as s:
         abas = {a["properties"]["title"]: a["properties"] for a in
                 s.get(f"/v4/spreadsheets/{PLANILHA}?fields=sheets.properties")["sheets"]}
@@ -82,12 +111,7 @@ def planilha():
         for oferta, o in CONFIG["ofertas"].items():
             aba, gid = o["aba"], abas[o["aba"]]["sheetId"]
             gids[oferta] = gid
-            cab = (s.get(f"/v4/spreadsheets/{PLANILHA}/values/" + quote(f"{aba}!1:1")).get("values") or [[]])[0]
-            if cab and cab[:len(colunas)] != colunas:
-                raise SystemExit(f"aba {aba} já tem outro cabeçalho: {cab}. Nada foi mudado.")
-            if not cab:
-                s.post(f"/v4/spreadsheets/{PLANILHA}/values:batchUpdate",
-                       {"valueInputOption": "RAW", "data": [{"range": f"{aba}!A1:{ultima}1", "values": [colunas]}]})
+            garantir_cabecalho(s, aba, abas[aba], colunas)
             col = colunas.index
             cabecalho = {"backgroundColor": {"red": 0.08, "green": 0.25, "blue": 0.21}, "horizontalAlignment": "CENTER",
                          "verticalAlignment": "MIDDLE", "wrapStrategy": "WRAP",
@@ -110,10 +134,11 @@ def planilha():
                                                           "properties": {"pixelSize": px}, "fields": "pixelSize"}})
             s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": req})
             print(f"aba {aba}: pronta (gid {gid}){' — criada agora' if aba in faltam else ''}")
-        descartados = abas.get("Descartados", {}).get("sheetId")
-        if descartados is None:
+        if "Descartados" not in abas:
             raise SystemExit("aba Descartados não existe na planilha do PRUMO (prumo-simples.py a cria).")
-        return gids, descartados
+        # Descartados ganhou site, telefone, Maps, tipo e busca (14/10/2026): sem eles não dava para resgatar ninguém.
+        garantir_cabecalho(s, "Descartados", abas["Descartados"], CONFIG["descartados"])
+        return gids, abas["Descartados"]["sheetId"]
 
 
 # ------------------------------------------------------------------ nós
@@ -157,37 +182,55 @@ def liga(con, de, para, saida=0):
     main[saida].append({"node": para, "type": "main", "index": 0})
 
 
-def escolher_js(o):
-    buscas = [{"nicho": n, "cidade": c} for c in o["cidades"] for n in o["nichos"]]
+def buscas_de(o):
+    """Nicho × cidade, o nicho na frente: o melhor nicho passa por todas as cidades antes do segundo."""
+    return [{"nicho": n, "cidade": c, "query": f"{n} em {c}"} for n in o["nichos"] for c in o["cidades"]]
+
+
+def escolher_js(o, leitura_propria):
     return "\n".join([
-        "// Uma busca nicho × cidade por rodada, em rodízio pelo dia (hora de São Paulo). A ordem é a do",
-        "// plano: as cidades do ES primeiro e, em cada cidade, os nichos na ordem do ICP.",
-        "// Para mudar a lista: prumo-ofertas.json e `python3 prumo-ofertas.py`.",
-        "const BUSCAS = " + json.dumps(buscas, ensure_ascii=False) + ";",
-        "const dia = Math.floor((Date.now() - 3 * 3600e3) / 864e5);",
-        "const b = BUSCAS[dia % BUSCAS.length];",
-        "return [{ json: { ...b, query: b.nicho + ' em ' + b.cidade, indice: dia % BUSCAS.length, total: BUSCAS.length } }];",
+        "// A busca da vez é a usada há mais tempo (14/10/2026): o rodízio pelo dia repetia a mesma busca",
+        "// numa segunda rodada à mão no mesmo dia, e a ordem errada punha a melhor busca do Iris por último.",
+        "// Quando cada busca rodou sai da coluna Busca da aba e de Descartados (Encontrado em); nunca rodou",
+        "// vem primeiro, na ordem de prumo-ofertas.json (nicho na frente). Para mudar: o JSON e republicar.",
+        "const BUSCAS = " + json.dumps(buscas_de(o), ensure_ascii=False) + ";",
+        "const ROTULO = " + json.dumps(o["rotulo"] + ":", ensure_ascii=False) + ";",
+        "const ultima = new Map();",
+        "const ler = (no) => { try { return $(no).all().map((i) => i.json ?? {}); } catch (e) { return []; } };",
+        f"for (const l of [...ler({json.dumps(leitura_propria, ensure_ascii=False)}), ...ler('Ler Descartados').filter((d) => String(d['Motivo'] ?? '').startsWith(ROTULO))]) {{",
+        "  const q = String(l['Busca'] ?? '').trim();",
+        "  const t = Date.parse(l['Encontrado em'] ?? '');",
+        "  if (q && Number.isFinite(t)) ultima.set(q, Math.max(ultima.get(q) ?? 0, t));",
+        "}",
+        "let b = BUSCAS[0];",
+        "for (const x of BUSCAS) if ((ultima.get(x.query) ?? -1) < (ultima.get(b.query) ?? -1)) b = x;",
+        "return [{ json: { ...b, rodadas: ultima.size, total: BUSCAS.length } }];",
     ])
 
 
 def triar_js(oferta, o, leitores):
     cfg = {"rotulo": o["rotulo"], "plural": o["plural"], "segmento": o["segmento"], "fora": o["fora"], "clientes": CONFIG["clientes"], "sinais": o["sinais"],
+           "perfil": o["perfil"], "perfil_motivo": o["perfil_motivo"], "fora_sem_perfil": o["fora_sem_perfil"],
+           "fora_sem_perfil_motivo": o["fora_sem_perfil_motivo"], "solo": o.get("solo", ""), "instituicao": o.get("instituicao", ""),
            "teto_por_rodada": o["teto_por_rodada"], "proxima_revisar": CONFIG["proxima_revisar"], "leitores": leitores,
            "convite_url": f"{WEBHOOK}/{o['convite']}?id="}
     return TRIAR.replace("__CONFIG__", json.dumps(cfg, ensure_ascii=False))
 
 
-def cacador(oferta, gids, descartados, erro):
+def cacador(oferta, gids, descartados, erro, busca_fixa=None):
+    """O fluxo do caçador. `busca_fixa` (só para --rodar/--reavaliar, numa cópia temporária) troca o rodízio por uma busca."""
     o = CONFIG["ofertas"][oferta]
     outras = [(k, v) for k, v in CONFIG["ofertas"].items() if k != oferta]
     leitura_propria = f"Ler {o['aba']}"
     leitores = [leitura_propria, *[f"Ler {v['aba']}" for _, v in outras], "Ler Descartados", "Ler Prospects", "Ler Leads do Site"]
-    x = 440
+    escolher = escolher_js(o, leitura_propria) if not busca_fixa else (
+        "return [{ json: " + json.dumps({"nicho": busca_fixa.split(" em ")[0], "cidade": busca_fixa.split(" em ")[-1],
+                                         "query": busca_fixa}, ensure_ascii=False) + " }];")
+    x = 220
     nos = [
         {"id": "manual", "name": "Executar manualmente", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, -100], "parameters": {}},
         {"id": "agenda", "name": "Dias úteis às 9h", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 100],
          "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 9 * * 1-5"}]}}},
-        code("escolher", "Escolher a busca", escolher_js(o), [220, 0]),
         ler(leitura_propria, PLANILHA, [x, 0], gid=gids[oferta], tolerante=False),
     ]
     for k, v in outras:
@@ -197,6 +240,9 @@ def cacador(oferta, gids, descartados, erro):
                                    ("Ler Leads do Site", SITE, LEADS_GID)):
         x += 220
         nos.append(ler(nome, planilha_id, [x, 0], gid=gid))
+    x += 220
+    # Depois das leituras: a escolha da busca olha quando cada uma rodou (coluna Busca).
+    nos.append(code("escolher", "Escolher a busca", escolher, [x, 0]))
     x += 220
     nos += [
         {"id": "places", "name": "Buscar no Google Places", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [x, 0],
@@ -220,18 +266,23 @@ def cacador(oferta, gids, descartados, erro):
                                        "conditions": [{"id": "c", "leftValue": "={{ $json._tipo }}", "rightValue": "prospect",
                                                        "operator": {"type": "string", "operation": "equals"}}]}, "options": {}}},
         anexar("gravar-prospect", f"Gravar na aba {o['aba']}", gids[oferta], CONFIG["colunas"], [x + 660, -120]),
-        anexar("gravar-descarte", "Gravar em Descartados", descartados, ["ID", "Empresa", "Cidade", "Segmento", "Motivo", "Encontrado em"], [x + 660, 120]),
+        anexar("gravar-descarte", "Gravar em Descartados", descartados, CONFIG["descartados"], [x + 660, 120]),
     ]
+    # O aviso conta também o que ficou para a próxima vez que a busca rodar (site fora do ar, teto da rodada).
     texto = ("itens.length ? " + json.dumps(f"Caçador ({o['rotulo']}): ", ensure_ascii=False)
              + " + itens.length + (itens.length === 1 ? ' empresa nova' : ' empresas novas') + ' para revisar ('"
-             + " + $('Escolher a busca').first().json.query + ').' + NL"
+             + " + $('Escolher a busca').first().json.query + ').'"
+             + " + (() => { const r = $('Triar e checar sites').first().json; const f = [];"
+             + " if (r._cortados) f.push(r._cortados + ' passaram do teto da rodada');"
+             + " if (r._adiados) f.push(r._adiados + ' com site fora do ar agora');"
+             + " return f.length ? ' Ficaram para a próxima vez desta busca: ' + f.join(' e ') + '.' : ''; })() + NL"
              + " + 'Na Central: CRM do PRUMO, Hoje, Prospects para revisar. Nada foi enviado a ninguém.' : ''")
     am, ag = aviso_nodes("Aviso", x + 880, -120, texto, "📊 PRUMO", agregado=True)
     nos += [am, ag]
     con = {}
-    liga(con, "Executar manualmente", "Escolher a busca")
-    liga(con, "Dias úteis às 9h", "Escolher a busca")
-    cadeia = ["Escolher a busca", *leitores, "Buscar no Google Places", "Triar e checar sites", "É prospect?"]
+    liga(con, "Executar manualmente", leitura_propria)
+    liga(con, "Dias úteis às 9h", leitura_propria)
+    cadeia = [*leitores, "Escolher a busca", "Buscar no Google Places", "Triar e checar sites", "É prospect?"]
     for a, b in zip(cadeia, cadeia[1:]):
         liga(con, a, b)
     liga(con, "É prospect?", f"Gravar na aba {o['aba']}", 0)
@@ -297,19 +348,67 @@ def ids_dos_cacadores():
     return {nomes[w["name"]]: w["id"] for w in api("GET", "/workflows?limit=250")["data"] if w["name"] in nomes}
 
 
+def rodar_busca(oferta, busca, gids, descartados, erro):
+    """Roda o caçador numa busca escolhida, numa cópia temporária (o publicado não muda). Efeito real."""
+    from n8n import api
+    wf = cacador(oferta, gids, descartados, erro, busca_fixa=busca)
+    t = api("POST", "/workflows", {"name": f"ZZ busca escolhida: {wf['name']} (apagar)", "nodes": wf["nodes"],
+                                   "connections": wf["connections"], "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo"}})
+    try:
+        return _modulo("rodar_agora", "rodar-agora.py").main(t["id"])
+    finally:
+        api("DELETE", f"/workflows/{t['id']}")
+
+
+def tirar_para_reavaliar(oferta, desde):
+    """Tira da aba da oferta o que ainda está em Revisar, sem convite, achado a partir de `desde`
+    (AAAA-MM-DD), e de Descartados os descartes da oferta desde então: a próxima rodada decide de novo,
+    com as regras atuais. Linha com convite enviado ou Etapa mudada à mão nunca sai."""
+    from sheets_proxy import SheetsProxy
+    o = CONFIG["ofertas"][oferta]
+    with SheetsProxy([PLANILHA]) as s:
+        abas = {a["properties"]["title"]: a["properties"]["sheetId"] for a in s.get(f"/v4/spreadsheets/{PLANILHA}?fields=sheets.properties")["sheets"]}
+        for aba, sai in ((o["aba"], lambda d: d.get("Etapa") == "Revisar" and not d.get("Convite enviado em")),
+                         ("Descartados", lambda d: str(d.get("Motivo", "")).startswith(o["rotulo"] + ":"))):
+            v = s.get(f"/v4/spreadsheets/{PLANILHA}/values/" + quote(f"{aba}!A1:Z3000")).get("values", [])
+            cab = v[0] if v else []
+            linhas = [(i, dict(zip(cab, l + [""] * (len(cab) - len(l))))) for i, l in enumerate(v[1:], start=1)]
+            fora = [(i, d) for i, d in linhas if str(d.get("Encontrado em", ""))[:10] >= desde and sai(d)]
+            for i, _ in sorted(fora, key=lambda x: -x[0]):
+                s.post(f"/v4/spreadsheets/{PLANILHA}:batchUpdate", {"requests": [{"deleteDimension": {"range": {
+                    "sheetId": abas[aba], "dimension": "ROWS", "startIndex": i, "endIndex": i + 1}}}]})
+            print(f"{aba}: {len(fora)} linha(s) de {o['rotulo']} desde {desde} tiradas para reavaliar")
+
+
 if __name__ == "__main__":
     if "--codigo" in sys.argv:
         o = CONFIG["ofertas"]["iris"]
         print(triar_js("iris", o, ["Ler Clínicas"]))
-        print(escolher_js(o))
+        print(escolher_js(o, "Ler Clínicas"))
         print(decidir_js(o, 0))
         sys.exit(0)
-    if "--rodar" in sys.argv:
+    if "--rodar" in sys.argv and "--busca" not in sys.argv:
         oferta = sys.argv[sys.argv.index("--rodar") + 1]
         wid = ids_dos_cacadores().get(oferta) or sys.exit(f"caçador de {oferta} não publicado: rode sem --rodar antes.")
         sys.exit(0 if _modulo("rodar_agora", "rodar-agora.py").main(wid) else 1)
     from n8n import api
     erro = next(w["id"] for w in api("GET", "/workflows?limit=250")["data"] if w["name"] == "00 · Avisar falha pelo Hermes")
+    if "--rodar" in sys.argv or "--reavaliar" in sys.argv:
+        # --rodar <oferta> --busca "<nicho> em <cidade>": uma busca escolhida, numa cópia temporária.
+        # --reavaliar <oferta> AAAA-MM-DD "<busca>" ["<busca>"...]: tira o que ainda está em Revisar e os
+        # descartes desde a data, e roda essas buscas de novo com as regras atuais.
+        gids, descartados = planilha()
+        if "--reavaliar" in sys.argv:
+            i = sys.argv.index("--reavaliar")
+            oferta, desde, buscas = sys.argv[i + 1], sys.argv[i + 2], sys.argv[i + 3:]
+            tirar_para_reavaliar(oferta, desde)
+        else:
+            oferta, buscas = sys.argv[sys.argv.index("--rodar") + 1], [sys.argv[sys.argv.index("--busca") + 1]]
+        ok = True
+        for busca in buscas:
+            print("==", oferta, "·", busca)
+            ok = rodar_busca(oferta, busca, gids, descartados, erro) and ok
+        sys.exit(0 if ok else 1)
     gids, descartados = planilha()
     for oferta in CONFIG["ofertas"]:
         publicar_cacador(cacador(oferta, gids, descartados, erro))

@@ -69,6 +69,7 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['followup', `${rotuloDoFollowup(props.lead)} (${props.lead.reenvioDoRobo ? 'reenvio único, ' : ''}texto pronto)`, l.followup, true],
     ['whatsapp', 'Abrir conversa no WhatsApp', l.whatsapp, false],
     ['site', convite ? 'Ver o site da empresa' : 'Ver o demo', l.site, false],
+    ['maps', 'Ver no Google Maps', l.maps, false],
     ['raioX', 'Ver o Raio-X', l.raioX, false],
     ['acoes', 'Recusou · Fechou · Desfazer (página do lead)', l.acoes, false],
     ['planilha', convite ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
@@ -171,6 +172,13 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       <p class="crm-ficha__etapa">
         <span class="crm-etapa" :class="`is-${lead.etapa}`">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
         <span>{{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</span>
+      </p>
+      <!-- Triagem do caçador (Iris, estamparias): por que entrou e de onde veio o WhatsApp. -->
+      <p v-if="lead.triagem" class="crm-ficha__fonte">
+        <template v-if="lead.triagem.prioridade !== undefined">Prioridade {{ lead.triagem.prioridade }}. </template>
+        <template v-if="lead.triagem.nota">Nota no Google {{ lead.triagem.nota }}. </template>
+        <template v-if="lead.triagem.sinais">Sinais: {{ lead.triagem.sinais }}. </template>
+        <template v-if="lead.triagem.origemWhatsapp">WhatsApp: {{ lead.triagem.origemWhatsapp }}.</template>
       </p>
       <p v-if="lead.diasParaSair !== undefined && lead.etapa === 'contato'" class="crm-ficha__fonte">
         Sem mensagem do lead, vai para Perdido {{ lead.diasParaSair <= 1 ? 'amanhã' : `em ${lead.diasParaSair} dias` }}

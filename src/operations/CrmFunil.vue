@@ -89,6 +89,8 @@ const porEtapa = computed(() => {
   for (const etapa of ETAPAS) {
     const encerrada = etapa === 'ganho' || etapa === 'perdido'
     grupos[etapa].sort((a, b) => peso(a) - peso(b)
+      // Prospects do Iris e das estamparias: a maior Prioridade do caçador primeiro (14/10/2026).
+      || (b.triagem?.prioridade ?? -1) - (a.triagem?.prioridade ?? -1)
       || (encerrada ? -1 : 1) * ((Date.parse(a.desde ?? '') || 0) - (Date.parse(b.desde ?? '') || 0))
       || ordenar(a.empresa, b.empresa))
   }
@@ -194,13 +196,15 @@ const artefatos = (l: CrmLead) => {
               </ol>
               <p v-if="artefatos(lead)" class="crm-cartao__artefatos">{{ artefatos(lead) }}<template v-if="lead.pasta?.falha"> · falhou: {{ lead.pasta.falha }}</template></p>
               <p v-if="lead.resposta?.trecho && lead.etapa !== 'novo'" class="crm-cartao__resposta">“{{ lead.resposta.trecho }}”</p>
-              <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead)" class="crm-sinais">
+              <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead) || (lead.etapa === 'novo' && lead.triagem)" class="crm-sinais">
                 <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
                 <span v-if="lead.followupHoje && !anotado(lead, 'followup_enviado')" class="crm-sinal is-followup">{{ lead.reenvioDoRobo ? 'Reenvio hoje (só robô)' : 'Follow-up hoje' }}</span>
                 <span v-if="anotado(lead, 'followup_enviado')" class="crm-sinal">Follow-up anotado</span>
                 <span v-if="anotado(lead, 'segunda_enviada')" class="crm-sinal">2ª mensagem anotada</span>
                 <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
+                <span v-if="lead.etapa === 'novo' && lead.triagem?.prioridade !== undefined" class="crm-sinal">Prioridade {{ lead.triagem.prioridade }}</span>
+                <span v-if="lead.etapa === 'novo' && lead.triagem?.origemWhatsapp?.startsWith('não confirmado')" class="crm-sinal is-prazo">WhatsApp não confirmado</span>
                 <span v-if="textoDoPrazo(lead)" class="crm-sinal is-prazo" :class="{ 'is-amanha': lead.diasParaSair === 1 }">{{ textoDoPrazo(lead) }}</span>
                 <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
                 <span v-if="lead.acervo && lead.etapa === 'contato'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>

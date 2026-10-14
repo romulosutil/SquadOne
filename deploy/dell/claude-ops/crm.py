@@ -86,7 +86,9 @@ MONTAR_JS = """// Retrato para a Central (server/crm.ts decide as etapas). Linha
 // menos colunas pesadas e contato cru: o link do WhatsApp sai de wa_me (Site) e WhatsApp (PRUMO).
 const txt = (v) => String(v ?? '').trim();
 const norm = (k) => String(k).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-const FORA = new Set(['briefing', 'endereco', 'telefone', 'instagram', 'maps_url', 'google_maps', 'nota_google', 'nota', 'avaliacoes', 'content_md']);
+// Google Maps e Nota Google entram desde 14/10/2026: a revisão dos prospects (Iris, estamparias, PRUMO)
+// mostra a nota e abre o Maps. O telefone do Google segue fora (contato cru; o WhatsApp vem na coluna dele).
+const FORA = new Set(['briefing', 'endereco', 'telefone', 'telefone_no_google', 'instagram', 'maps_url', 'nota', 'avaliacoes', 'content_md']);
 const ler = (no, chave) => {
   let itens;
   try { itens = $(no).all(); } catch (e) { return { colunas: [], linhas: [], erro: 'o nó "' + no + '" não rodou' }; }

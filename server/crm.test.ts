@@ -571,6 +571,28 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
       "Quer saber mais há 5 h — combinar a demonstração");
   });
 
+  it("Prospects para revisar: a maior Prioridade do caçador primeiro, com sinais, nota, Maps e o WhatsApp não confirmado dito", () => {
+    const base = retrato();
+    const linhas = [
+      linhaPrumo("baixa", { Prioridade: "40", Sinais: "TEA", "Origem do WhatsApp": "link no site", "Encontrado em": dias(9) }),
+      linhaPrumo("alta", { Prioridade: "96", Sinais: "convênio · ABA", "Nota Google": "5 (43)", "Google Maps": "https://maps.google.com/?cid=1",
+        "Origem do WhatsApp": "link no site", "Encontrado em": dias(1) }),
+      linhaPrumo("sem-zap", { Prioridade: "42", "Origem do WhatsApp": "não confirmado: celular do Google", "Encontrado em": dias(2) }),
+    ];
+    base.fontes.iris = { planilha: "PRUMO — Fila de revisão", aba: "Clínicas", colunas: Object.keys(linhas[0]), linhas };
+    const v = montarCrm(base, { agora: AGORA, pastas: PASTAS });
+    const revisar = v.hoje.find((g) => g.id === "revisar")!.itens;
+    assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:sem-zap", "iris:baixa", "prumo:revisar"], "PRUMO sem Prioridade vem depois");
+    const alta = revisar[0];
+    assert.match(alta.detalhe, /Prioridade 96 · nota 5 \(43\) · convênio · ABA\./);
+    assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Enviar convite (marca como enviado)"]);
+    assert.equal(lead(v.leads, "iris:alta").links.maps, "https://maps.google.com/?cid=1");
+    const semZap = revisar[1];
+    assert.equal(semZap.acao, "Conferir o WhatsApp e decidir o convite");
+    assert.match(semZap.detalhe, /WhatsApp não confirmado/);
+    assert.equal(lead(v.leads, "prumo:revisar").triagem, undefined, "o Prospects não tem triagem");
+  });
+
   it("registro aceita as quatro ofertas e recusa o resto", () => {
     for (const produto of ["site", "prumo", "iris", "estampa"]) {
       assert.equal(validarRegistro({ produto, id: "abc", tipo: "nota", texto: "a" }, AGORA).produto, produto);

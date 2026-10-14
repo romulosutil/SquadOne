@@ -125,6 +125,8 @@ export interface CrmLead {
   demoApagadoEm?: string
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
   demoPedidoEm?: string
+  /** Caçadores do Iris e das estamparias (14/10/2026): Prioridade, sinais do site, nota do Google e de onde veio o WhatsApp. */
+  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string }
   notas: number
   resposta?: CrmResposta
   /**
@@ -139,7 +141,7 @@ export interface CrmLead {
   mensagemPronta?: string
   eventos: CrmEvento[]
   /** `gerarDemo`: Site sem demo (demo sob pedido), o toque que pede o demo na página do lead. */
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string; gerarDemo?: string }
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string; gerarDemo?: string; maps?: string }
   pasta?: {
     lugar: string
     slug: string

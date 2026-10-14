@@ -149,6 +149,13 @@ export const COLUNAS_DO_PRUMO = {
   vistoEm: { nomes: ["visto_em", "lido_em"] },
   respondeuEm: { nomes: ["respondeu_em"] },
   diagnosticoEm: { nomes: ["diagnostico_em"] },
+  // Caçadores do Iris e das estamparias (14/10/2026): ordenam e explicam a revisão. Ausentes no
+  // Prospects, que não as tem: nada muda para o PRUMO.
+  prioridade: { nomes: ["prioridade"] },
+  sinais: { nomes: ["sinais"] },
+  origemWhatsapp: { nomes: ["origem_do_whatsapp"] },
+  nota: { nomes: ["nota_google"] },
+  maps: { nomes: ["google_maps"] },
   indice: { nomes: ["indice_prumo"] },
   respostaTipo: { nomes: ["tipo_da_resposta"] },
   respostaTrecho: { nomes: ["resposta"] },
@@ -491,6 +498,12 @@ export interface CrmLead {
   demoApagadoEm?: string;
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
   demoPedidoEm?: string;
+  /**
+   * Caçadores do Iris e das estamparias (14/10/2026): Prioridade (0 a 100, ordena a revisão), os sinais
+   * achados no site, a nota do Google e de onde veio o WhatsApp ("não confirmado: celular do Google" pede
+   * conferência antes do convite). Ausentes nos outros produtos.
+   */
+  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string };
   notas: number;
   /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
   resposta?: CrmResposta;
@@ -507,7 +520,7 @@ export interface CrmLead {
   /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento; no só-robô (Site e PRUMO), o reenvio (`reenvioDoRobo`). */
   /** `raioX`: PRUMO, a página do Raio-X do lead (índice em ~/prumo-entregas/prumo-raio-x/leads.json); Site, o `<demo>/raio-x` da coluna raio_x_url, ou o avulso (raio-x-prumo.vercel.app) de quem ainda não tem demo. */
   /** `gerarDemo`: Site sem demo (demo sob pedido), o toque que pede o demo (07 · Lead, acao=gerar_demo). */
-  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string; gerarDemo?: string };
+  links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string; gerarDemo?: string; maps?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
   divergencias: string[];
 }
@@ -1202,6 +1215,14 @@ function leadDoPrumo(linha: Linha, contexto: {
   const segunda = emConversa && t.diagnostico === undefined && !ehRecusa(resposta) && raioX && whatsapp
     ? segundaDoPrumo(whatsapp, c("empresa") || chave, raioX.url) || undefined : undefined;
   const webhook = contexto.links.webhook;
+  const prioridade = Number.parseInt(c("prioridade"), 10);
+  const triagemBruta = {
+    ...(Number.isFinite(prioridade) ? { prioridade } : {}),
+    ...(c("sinais") ? { sinais: c("sinais") } : {}),
+    ...(c("nota") ? { nota: c("nota") } : {}),
+    ...(c("origemWhatsapp") ? { origemWhatsapp: c("origemWhatsapp") } : {}),
+  };
+  const triagem = Object.keys(triagemBruta).length ? triagemBruta : undefined;
   const daAba = contexto.links[oferta.link];
   const planilha = daAba && c("linha") ? `${daAba}&range=A${encodeURIComponent(c("linha"))}` : daAba;
   const desde = calculada.desde;
@@ -1235,9 +1256,11 @@ function leadDoPrumo(linha: Linha, contexto: {
     // O regime é a regra do Site pela data; no PRUMO vai pelo convite só como dado (a tela de
     // Resultados por mensagem é do Site, e a ficha do PRUMO não o mostra).
     ...(regimeDaMensagem(t.convite) ? { abordagem: { regime: regimeDaMensagem(t.convite) } } : {}),
+    ...(triagem ? { triagem } : {}),
     eventos,
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
+      ...(urlHttps(c("maps")) ? { maps: urlHttps(c("maps")) } : {}),
       ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/${oferta.convite}?id=${encodeURIComponent(chave)}` } : {}),
       ...(raioX ? { raioX: raioX.url } : {}),
       // Desde 08/10/2026 o "sim" recebe o Raio-X, não o formulário de 16 perguntas (passo=diagnostico):
@@ -1385,15 +1408,24 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       });
     }
     if (lead.sinal === "revisar") {
+      const tr = lead.triagem;
+      const naoConfirmado = (tr?.origemWhatsapp ?? "").startsWith("não confirmado");
       itens.revisar.push({
         leadId: lead.id,
-        acao: "Ver o site e decidir o convite",
-        detalhe: `${lead.nicho || "Sem segmento"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "encontrado") || "sem data"}.`,
+        acao: naoConfirmado ? "Conferir o WhatsApp e decidir o convite" : "Ver o site e decidir o convite",
+        detalhe: [
+          `${lead.nicho || "Sem segmento"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "encontrado") || "sem data"}.`,
+          // A triagem do caçador (Iris, estamparias): o que fez a empresa entrar e quão na frente ela vem.
+          ...(tr?.prioridade !== undefined ? [`Prioridade ${tr.prioridade}${tr.nota ? ` · nota ${tr.nota}` : ""}${tr.sinais ? ` · ${tr.sinais}` : ""}.`] : []),
+          ...(naoConfirmado ? ["WhatsApp não confirmado (é o celular do Google): confira no Instagram ou no Maps antes do convite."] : []),
+        ].join(" "),
         links: [
           ...(lead.links.site ? [{ rotulo: "Ver o site da empresa", url: lead.links.site }] : []),
+          ...(lead.links.maps ? [{ rotulo: "Ver no Google Maps", url: lead.links.maps }] : []),
           ...(lead.links.convite ? [{ rotulo: "Enviar convite (marca como enviado)", url: lead.links.convite }] : []),
         ],
-        ordem: Date.parse(lead.desde ?? "") || 0,
+        // Maior Prioridade primeiro (14/10/2026); sem Prioridade (PRUMO), depois, pela data como antes.
+        ordem: (tr?.prioridade === undefined ? 1000 : 100 - tr.prioridade) * 1e13 + (Date.parse(lead.desde ?? "") || 0),
       });
     }
     if (lead.etapa === "proposta") {
