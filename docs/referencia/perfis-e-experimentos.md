@@ -41,6 +41,21 @@ o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM 
   novas não há texto aprovado, e a Hoje pede "combinar a demonstração". Aba ausente ou ilegível não segura o
   retrato: vira fonte com erro. O filtro do CRM e o segmentado do celular mostram as quatro (Site, Organizar,
   Iris, Estampa).
+- **Filtro dos caçadores, revisto no mesmo dia** (análise de 14/10/2026 e decisão do Rômulo; regra em
+  `prumo-ofertas-triar.js`, config em `prumo-ofertas.json`). A regra do PRUMO de "só WhatsApp publicado no site"
+  jogava fora metade de cada busca, inclusive as melhores clínicas de ABA, que só têm Instagram. Agora o WhatsApp
+  vale do link cadastrado como site no Google, do link no site (celular **ou fixo**: WhatsApp Business roda em
+  fixo), do botão do site, de link encurtado e do número no texto; sem nada disso, o **celular do Google** entra
+  como "não confirmado" (prioridade menor; a Hoje pede para conferir antes do convite). O perfil é exigido no
+  nome, no tipo do Google ou no site: Iris só com público infantil/TEA ("multidisciplinar" sozinho deixava entrar
+  reabilitação de adulto; fisioterapia, medicina do trabalho e órgão público fora; profissional sozinho marcado),
+  estamparia só com roupa (caneca, brinde e fornecedor fora). A busca da vez é a usada há mais tempo (coluna Busca),
+  com as frases que rendem no Places na frente ("terapia ABA" e "clínica de autismo" trazem 20+; "clínica ABA
+  autismo" trazia 3). Descartados guarda site, telefone, Maps, tipo e busca, para resgatar à mão; colunas novas
+  entram sempre no fim. `--rodar <oferta> --busca "..."` roda uma busca escolhida numa cópia temporária;
+  `--reavaliar <oferta> AAAA-MM-DD "busca"` tira o que ainda está em Revisar sem convite e os descartes desde a data
+  e refaz a busca com as regras atuais (usado em 14/10 nas duas buscas da 1ª rodada: 15 clínicas e 15 estamparias).
+  No CRM, Prospects para revisar vem pela Prioridade, com sinais, nota e Maps.
 - **WhatsApp** (`deploy/dell/claude-ops/whatsapp-conversa.py`, abas e convites tirados do `prumo-ofertas.json`):
   os três fluxos do observador (números, conversa, resposta classificada) leem também Clínicas e Estamparias,
   pelo nome da aba e tolerantes (aba que não lê é pulada, sem segurar Site e Prospects), com as regras do
