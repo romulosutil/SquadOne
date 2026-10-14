@@ -1161,8 +1161,11 @@ def resumir_detalhes(d: dict) -> dict:
 
 # Tipos do Google que não dizem o que o negócio faz (visto em 08/10/2026: desentupidora e locação
 # de equipamentos vêm como "Serviços"); com eles a busca usa o ramo que o Caçador procurou.
+# 14/10/2026: "Consultoria" também. Uma advogada trabalhista de Ribeirão Preto com essa categoria
+# no perfil foi comparada com consultorias bancárias e de RH ("consultoria em Ribeirão Preto"),
+# e o ponto "fora dos 20 primeiros" saiu de uma busca que cliente dela não faz.
 TIPOS_GENERICOS = {"serviços", "serviço", "empresa", "estabelecimento", "loja", "ponto de interesse", "escritório",
-                   "prestador de serviços", "escritório corporativo", "comércio"}
+                   "prestador de serviços", "escritório corporativo", "comércio", "consultoria", "consultor"}
 
 
 def consulta_da_busca(tipo: str, vertical: str, cidade: str) -> str:
@@ -1776,6 +1779,7 @@ def testar() -> int:
         def test_consulta_usa_o_ramo_quando_o_tipo_do_google_e_generico(self):
             self.assertEqual(consulta_da_busca("Advogado", "advocacia", "Anápolis"), "advogado em Anápolis")
             self.assertEqual(consulta_da_busca("Serviços", "desentupidora", "Goiânia"), "desentupidora em Goiânia")
+            self.assertEqual(consulta_da_busca("Consultoria", "advocacia", "Ribeirão Preto"), "advocacia em Ribeirão Preto")
             self.assertEqual(consulta_da_busca("", "locação de equipamentos", "Goiânia"), "locação de equipamentos em Goiânia")
             self.assertEqual(consulta_da_busca("Advogado", "advocacia", ""), "")
 

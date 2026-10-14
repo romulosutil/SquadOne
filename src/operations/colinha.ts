@@ -14,7 +14,7 @@
 // Os únicos "R$" daqui são os preços do cardápio (o teste confere): nada de
 // finanças pessoais entra no CRM (RULES 24).
 
-import { FOLLOWUP, FOLLOWUP_COM_LINK, SEGUNDA, artigoDe } from '../../server/site-mensagem.ts'
+import { FOLLOWUP, FOLLOWUP_COM_LINK, FOLLOWUP_RAIO_X, SEGUNDA, SEGUNDA_RAIO_X, artigoDe } from '../../server/site-mensagem.ts'
 import { FOLLOWUP_PRUMO, SEGUNDA_PRUMO } from '../../server/prumo-mensagem.ts'
 import type { CrmEtapa, CrmProduto, CrmSinal, CrmTipoDeResposta } from './types'
 
@@ -62,11 +62,16 @@ export interface ServicoDoCardapio {
 export interface Trecho {
   id: string
   titulo: string
-  /** Mensagem para mandar; {NOME}, {ARTIGO} e {URL} são preenchidos com o lead. */
+  /** Mensagem para mandar; {NOME}, {ARTIGO}, {O_A}, {URL} e {RAIO_X} são preenchidos com o lead. */
   texto: string
   dica?: string
   /** Vem da esteira automática (server/site-mensagem.ts): o n8n manda o mesmo texto. */
   esteira?: boolean
+  /**
+   * Site antes da venda: `true` só para quem recebeu a variação C (o raio-x), `false` só para
+   * quem não recebeu; ausente, para todos. Quem pediu o raio-x não pode receber o texto do site.
+   */
+  raioX?: boolean
   /** Para quais produtos do CRM o trecho serve. */
   produtos: CrmProduto[]
 }
@@ -111,7 +116,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Raio-X',
     etapa: 'ver',
     tipo: 'diagnostico',
-    entrega: 'Uma página feita pelo PRUMO, só com dados públicos: como a empresa aparece no Google, o que já está bom, 3 coisas que mandam cliente para o concorrente e, quando faz sentido, a demonstração do site. O dono não preenche nada.',
+    entrega: 'Uma página feita pelo PRUMO, só com dados públicos: como a empresa aparece no Google, o que já está bom, até 3 coisas que mandam cliente para o concorrente (só as que o dado confirma) e, quando faz sentido, a demonstração do site. O dono não preenche nada.',
     preco: 'grátis',
     paraQuem: 'Todo lead, antes do primeiro contato: é a porta de entrada de todos. Funciona também com quem já tem site.',
   },
@@ -206,7 +211,7 @@ const TODOS: CrmProduto[] = ['site', 'prumo']
 // Os textos com fonte no plano (primeira B e C, primeiro contato pela CDL,
 // objeções "já temos site", "já temos agência", "pode apagar", CDL) estão
 // literais; o resto segue o mesmo tom. Colchetes ([nota], [nome da CDL]…) o
-// Rômulo completa à mão: só {NOME}, {ARTIGO}, {URL} e {RAIO_X} são preenchidos
+// Rômulo completa à mão: só {NOME}, {ARTIGO}, {O_A}, {URL} e {RAIO_X} são preenchidos
 // pela colinha.
 // A ordem é a da conversa: ver (Raio-X, Mapa) antes de arrumar (conversa,
 // proposta, fechamento).
@@ -228,8 +233,8 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-c',
         titulo: 'Primeira mensagem · C · Raio-X',
         texto:
-          'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como a {NOME} aparece para quem procura no Google: o que já está bom e 3 pontos que fazem cliente ir para o concorrente. É uma página só. Posso te mandar?',
-        dica: 'A partir da semana 2. Oferece um diagnóstico, não um site: funciona também com quem já tem site.',
+          'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e [N] pontos que fazem cliente ir para o concorrente. É uma página só. Posso te mandar?',
+        dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na segunda mensagem.',
         produtos: SITE,
       },
       {
@@ -256,19 +261,29 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         produtos: PRUMO,
       },
       {
+        id: 'segunda-raio-x',
+        titulo: 'Segunda mensagem · recebeu a C: o raio-x e o demo',
+        texto: SEGUNDA_RAIO_X,
+        esteira: true,
+        dica: 'Pediu o raio-x, então ele vai primeiro; o demo vem junto, já com o preço. Não mande só o link do site: não foi o que ele aceitou receber.',
+        produtos: SITE,
+        raioX: true,
+      },
+      {
         id: 'segunda',
         titulo: 'Segunda mensagem (a da esteira)',
         texto: SEGUNDA,
         esteira: true,
-        dica: 'A esteira manda sem o preço. Mandando à mão, junte o trecho de preço logo abaixo.',
+        dica: 'Já leva o preço do Encontrado.',
         produtos: SITE,
+        raioX: false,
       },
       {
         id: 'segunda-preco',
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
           'Se gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando.',
-        dica: 'O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
+        dica: 'A segunda mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
         produtos: SITE,
       },
     ],
@@ -285,6 +300,16 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         esteira: true,
         dica: 'O n8n já manda este no 3º dia: confira a conversa antes de mandar de novo.',
         produtos: SITE,
+        raioX: false,
+      },
+      {
+        id: 'followup-raio-x',
+        titulo: 'Recebeu a C: lembra o raio-x',
+        texto: FOLLOWUP_RAIO_X,
+        esteira: true,
+        dica: 'Quem recebeu a C foi convidado para o raio-x, não para o site: o lembrete é do raio-x.',
+        produtos: SITE,
+        raioX: true,
       },
       {
         id: 'followup-com-link',
@@ -293,6 +318,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         esteira: true,
         dica: 'Um follow-up só. Sem resposta depois dele, deixe quieto.',
         produtos: SITE,
+        raioX: false,
       },
       {
         id: 'followup-prumo',
@@ -603,6 +629,8 @@ export interface LeadDaColinha {
   empresa: string
   resposta?: { tipo: CrmTipoDeResposta; trecho: string }
   links: { whatsapp?: string; site?: string; raioX?: string }
+  /** Site: a variação da primeira mensagem (`mensagem: 'C'` = recebeu o raio-x). */
+  abordagem?: { mensagem?: string }
   /**
    * A empresa tem equipe (umas 8 pessoas ou mais)? Decide o convite para o Mapa.
    * O CRM ainda não sabe (a planilha não tem porte): ausente, o convite aparece e
@@ -616,12 +644,13 @@ export const SEM_LINK = '[link do demo]'
 /** O mesmo para o PRUMO: sem Raio-X publicado, a mensagem não sai pronta. */
 export const SEM_RAIO_X = '[link do Raio-X]'
 
-/** {NOME}, {ARTIGO}, {URL} e {RAIO_X} com os dados do lead; sem lead (a página), os marcadores ficam. */
+/** {NOME}, {ARTIGO}, {O_A}, {URL} e {RAIO_X} com os dados do lead; sem lead (a página), os marcadores ficam. */
 export function preencher(texto: string, lead?: Pick<LeadDaColinha, 'empresa' | 'links'>): string {
   if (!lead) return texto
   const nome = lead.empresa.trim()
   return texto
     .split('{ARTIGO}').join(artigoDe(nome))
+    .split('{O_A}').join(artigoDe(nome) === 'da' ? 'a' : 'o')
     .split('{NOME}').join(nome)
     .split('{URL}').join(lead.links.site?.trim() || SEM_LINK)
     .split('{RAIO_X}').join(lead.links.raioX?.trim() || SEM_RAIO_X)
@@ -666,7 +695,13 @@ export interface ColinhaDoLead {
   momentos: PassoDoRoteiro[]
 }
 
-const doProduto = (p: PassoDoRoteiro, produto: CrmProduto): PassoDoRoteiro => ({ ...p, trechos: p.trechos.filter((t) => t.produtos.includes(produto)) })
+// Recebeu a C = foi convidado para o raio-x (o mesmo recebeuC de server/site-mensagem.ts). Sem o
+// link na planilha, o texto mostra "[link do Raio-X]": melhor o Rômulo ver que falta que mandar o site.
+const recebeuRaioX = (lead: LeadDaColinha) => lead.produto === 'site' && (lead.abordagem?.mensagem ?? '').trim() === 'C'
+const doLead = (p: PassoDoRoteiro, lead: LeadDaColinha): PassoDoRoteiro => ({
+  ...p,
+  trechos: p.trechos.filter((t) => t.produtos.includes(lead.produto) && (t.raioX === undefined || t.raioX === recebeuRaioX(lead))),
+})
 const temConteudo = (p: PassoDoRoteiro) => p.trechos.length > 0 || (p.perguntas?.length ?? 0) > 0
 
 function unicas(lista: Objecao[]): Objecao[] {
@@ -742,6 +777,6 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
   return {
     motivo,
     objecoes: unicas(objecoes).filter((o) => o.resposta.produtos.includes(lead.produto)),
-    momentos: momentos.map((m) => doProduto(passo(m), lead.produto)).filter(temConteudo),
+    momentos: momentos.map((m) => doLead(passo(m), lead)).filter(temConteudo),
   }
 }

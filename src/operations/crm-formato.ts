@@ -105,7 +105,7 @@ export function onde(lead: CrmLead): string {
 export function textoDaAbordagem(lead: CrmLead): string {
   const { mensagem, site, video } = lead.abordagem ?? {}
   const msg = !mensagem ? '' : mensagem === 'manual' ? 'mensagem escrita à mão (sem o link do Balcão)'
-    : mensagem === 'EN' ? 'mensagem em inglês' : `mensagem ${mensagem}`
+    : mensagem === 'EN' ? 'mensagem em inglês' : mensagem === 'C' ? 'mensagem C (oferece o raio-x)' : `mensagem ${mensagem}`
   // A/B do vídeo (ab-video.ts): só quando a coluna `braco_video` diz algo.
   const comVideo = video === 'video' ? 'com vídeo (teste A/B)' : video === 'sem-video' ? 'sem vídeo (teste A/B)' : ''
   const partes = [msg, site ? `site ${site}` : '', comVideo].filter(Boolean)

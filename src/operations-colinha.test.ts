@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
-import { FOLLOWUP, FOLLOWUP_COM_LINK, SEGUNDA, artigoDe } from '../server/site-mensagem.ts'
+import { FOLLOWUP, FOLLOWUP_COM_LINK, FOLLOWUP_RAIO_X, SEGUNDA, SEGUNDA_RAIO_X, artigoDe } from '../server/site-mensagem.ts'
 import {
   CARDAPIO, CDL, ETAPAS_DA_OFERTA, FRASE_MAPA_E_GRATIS, FRASE_SOB_PROPOSTA, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, SOB_PROPOSTA,
   colinhaDoLead, linkDoWhatsApp, objecao, objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher,
@@ -68,6 +68,34 @@ describe('o trecho de cada etapa e resposta', () => {
   it('a segunda mensagem da esteira aparece para o site com interesse e nunca para o prumo', () => {
     assert.ok(idsDosTrechos(lead('site', 'contato', 'interesse', 'pode mandar')).includes('segunda'))
     for (const c of CASOS) assert.ok(!idsDosTrechos(lead('prumo', c.etapa, c.tipo, c.trecho)).includes('segunda'), c.nome)
+  })
+
+  // 14/10/2026: lead do Site que recebeu a C (o raio-x) respondeu "sim" e a colinha oferecia só o site.
+  it('o site que recebeu a C ganha o raio-x e o demo, nunca só o site', () => {
+    const c = { ...lead('site', 'contato', 'interesse', 'Sim'), empresa: 'Jéssica Barbosa Advocacia', abordagem: { mensagem: 'C' },
+      links: { site: 'https://demo-x.vercel.app', raioX: 'https://demo-x.vercel.app/raio-x' } }
+    const ids = idsDosTrechos(c)
+    assert.ok(ids.includes('segunda-raio-x'))
+    assert.ok(!ids.includes('segunda'))
+    const texto = preencher(colinhaDoLead(c).momentos[0].trechos[0].texto, c)
+    assert.ok(texto.startsWith('Aqui está o raio-x: https://demo-x.vercel.app/raio-x'), texto)
+    assert.ok(texto.includes('https://demo-x.vercel.app\n'), 'o demo vai junto')
+    // Sem o link do raio-x na planilha, o marcador aparece em vez de cair no texto do site.
+    const semLink = { ...c, links: { site: c.links.site } }
+    assert.ok(preencher(colinhaDoLead(semLink).momentos[0].trechos[0].texto, semLink).includes('[link do Raio-X]'))
+  })
+
+  it('o follow-up de quem recebeu a C lembra o raio-x; o de quem recebeu A ou B, o site', () => {
+    const c = { ...lead('site', 'contato'), empresa: 'Jéssica Barbosa Advocacia', abordagem: { mensagem: 'C' } }
+    assert.deepEqual(idsDosTrechos(c), ['followup-raio-x'])
+    assert.ok(preencher(FOLLOWUP_RAIO_X, c).includes('como a Jéssica Barbosa Advocacia aparece'))
+    assert.deepEqual(idsDosTrechos({ ...c, abordagem: { mensagem: 'A' } }), ['followup-sem-link', 'followup-com-link'])
+    assert.deepEqual(idsDosTrechos(lead('site', 'contato')), ['followup-sem-link', 'followup-com-link'])
+  })
+
+  it('a primeira mensagem C não promete 3 pontos', () => {
+    const t = ROTEIRO.flatMap((p) => p.trechos).find((x) => x.id === 'primeira-c')!
+    assert.ok(!/\b3 pontos/.test(t.texto), t.texto)
   })
 
   it('o prumo com interesse recebe o Raio-X, com o link quando ele existe e o marcador quando não', () => {
@@ -152,7 +180,8 @@ describe('preenchimento', () => {
 
 describe('a esteira vem de site-mensagem', () => {
   const trechos = ROTEIRO.flatMap((p) => p.trechos)
-  for (const [id, texto] of [['segunda', SEGUNDA], ['followup-sem-link', FOLLOWUP], ['followup-com-link', FOLLOWUP_COM_LINK]] as const) {
+  for (const [id, texto] of [['segunda', SEGUNDA], ['segunda-raio-x', SEGUNDA_RAIO_X], ['followup-sem-link', FOLLOWUP],
+    ['followup-com-link', FOLLOWUP_COM_LINK], ['followup-raio-x', FOLLOWUP_RAIO_X]] as const) {
     it(`${id} é o mesmo texto que o n8n manda`, () => {
       const t = trechos.find((x) => x.id === id)
       assert.ok(t, `falta o trecho ${id}`)
@@ -433,8 +462,8 @@ describe('integridade do conteúdo', () => {
     assert.deepEqual(faltam, [])
   })
 
-  it('placeholder só {NOME}, {ARTIGO}, {URL} e {RAIO_X}; o resto é [colchete]', () => {
-    const permitidos = new Set(['{NOME}', '{ARTIGO}', '{URL}', '{RAIO_X}'])
+  it('placeholder só {NOME}, {ARTIGO}, {O_A}, {URL} e {RAIO_X}; o resto é [colchete]', () => {
+    const permitidos = new Set(['{NOME}', '{ARTIGO}', '{O_A}', '{URL}', '{RAIO_X}'])
     for (const texto of TODOS_OS_TEXTOS) {
       for (const m of texto.match(/\{[A-Za-z_]+\}/g) ?? []) assert.ok(permitidos.has(m), `${m} em: ${texto}`)
     }

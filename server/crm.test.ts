@@ -331,6 +331,23 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(lead(leads, "site:tipo-estranho").resposta, undefined);
   });
 
+  // 14/10/2026 (Jéssica Barbosa): recebeu a C, disse "sim"; a ficha tem de levar o raio-x, não só o site.
+  it("quem recebeu a C ganha o raio-x e o demo na segunda, e a ficha mostra o raio-x", () => {
+    const base = retrato();
+    base.fontes.site.linhas.push(linhaSite("quer-raio-x", { status: "enviado", enviado_em: dias(1), respondeu_em: dias(0.1),
+      site_url: "https://demo-c.vercel.app", raio_x_url: "https://demo-c.vercel.app/raio-x", mensagem_variante: "C",
+      wa_me: "https://wa.me/5516999990011?text=oi", resposta_tipo: "interesse", resposta_trecho: "Sim", resposta_em: dias(0.1) }));
+    const { leads, hoje } = montarCrm(base, { agora: AGORA, pastas: PASTAS });
+    const c = lead(leads, "site:quer-raio-x");
+    assert.equal(c.links.raioX, "https://demo-c.vercel.app/raio-x");
+    const texto = decodeURIComponent(c.links.segunda!.split("?text=")[1]);
+    assert.ok(texto.startsWith("Aqui está o raio-x: https://demo-c.vercel.app/raio-x"), texto);
+    assert.ok(texto.includes("está aqui:\nhttps://demo-c.vercel.app"), texto);
+    const item = hoje.find((g) => g.id === "resposta")?.itens.find((i) => i.leadId === "site:quer-raio-x");
+    assert.equal(item?.acao, "Quer ver o raio-x: mandar o raio-x e o demo");
+    assert.equal(lead(comRespostas(), "site:quer-ver").links.raioX, undefined, "sem a coluna, sem o link");
+  });
+
   it("demo apagado pelo site-demos-limpeza: sem link morto, com o aviso na ficha, na linha do tempo e na lista Hoje", () => {
     const base = retrato();
     base.fontes.site.linhas.push(linhaSite("voltou", { status: "enviado", enviado_em: dias(14), respondeu_em: dias(0.1),
