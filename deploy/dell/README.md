@@ -817,29 +817,44 @@ tem duas variações: **A** (controle, "Encontrei vocês no Google…") e **B** 
 nota e o número de avaliações do Google, das colunas `nota` e `avaliacoes` que
 o Caçador grava). A B só entra no sorteio do lead com nota **4,3 ou mais** e
 **15 avaliações ou mais**; sem os dois, o lead sai na A. Entre os que têm nota
-boa, metade A e metade B, pela letra do `place_id`. A **C** oferece o Raio-X
+boa, metade A e metade B (desde 14/10/2026 por alocação balanceada no nicho, ver
+abaixo; até então, pela letra do `place_id`). A **C** oferece o Raio-X
 (`<demo>/raio-x`, `raio-x.py`) e só entra para o lead cujo `publicado.json` tem
 `raio_x_url` e `raio_x_pontos` (1 a 3): o texto diz quantos pontos a página
 mostra ("1 ponto que faz", "2 pontos que fazem"), nunca "3" fixo. O Balcão grava
 o `raio_x_url` na coluna de mesmo nome (o `--balcao` cria) porque a segunda
 mensagem e o follow-up são montados da linha: quem recebeu a C ganha o raio-x e
 o site na segunda, e o follow-up lembra o raio-x. Sem a coluna preenchida, a
-segunda é a do site. Um lead `pronto` que o Raio-X alcança pode trocar de letra
-uma vez. A segunda mensagem termina com o preço do
+segunda é a do site. Um lead `pronto` que o Raio-X alcança é sorteado de novo
+no conjunto com a C (pode ir para a C). A segunda mensagem termina com o preço do
 Encontrado (R$ 690 + R$ 39/mês, pago depois de ver no ar; em inglês, sem
 número), e os dois follow-ups do 3º dia são os do plano. O CRM espelha a
 segunda e os follow-ups em `server/site-mensagem.ts` (teste compara com o JS).
-Ao comparar A e B no funil, lembre que a A também recebe os leads de nota baixa.
+Ao comparar A e B no funil, lembre que a A também recebe os leads de nota baixa:
+por isso, desde 14/10/2026, o CRM compara as letras no bloco "A × B (mesmo
+sorteio, por nicho)" de Resultados, só entre leads com o mesmo conjunto elegível.
 
-**O que cada lead recebeu** (07/10/2026, para o funil aprender comparando). Duas
-colunas no fim da aba Leads, gravadas pelo Balcão (`python3
+**A/B estratificado** (14/10/2026; desenho completo em
+`docs/referencia/perfis-e-experimentos.md`). A letra sai de `alocarRodada`
+(`site-mensagem.js`): no estrato nicho (coluna `vertical`) × letras elegíveis, a
+de **menos** leads já atribuídos na planilha (toda linha com letra A/B/C e
+`ab_elegiveis` válidos; `manual`, `EN` e vazio não contam), empate pelo hash
+antigo do `place_id`, os leads da rodada em ordem de `place_id` e somados um a
+um. A letra congela enquanto o `ab_elegiveis` salvo for o de agora; mudou o
+conjunto (Raio-X chegou ou sumiu) ou a linha não tem conjunto, sorteia de novo.
+Só lead `pronto` é reescrito: o que saiu nunca muda. O histórico (150 envios sem
+letra e os sorteados pelo hash, sem `ab_elegiveis`) e o aviso do 05 ·
+Acompanhamento (follow-up) não entram no teste.
+
+**O que cada lead recebeu** (07/10/2026, para o funil aprender comparando).
+Colunas no fim da aba Leads, gravadas pelo Balcão (`python3
 site-antes-da-venda.py --colunas` cria; o `--balcao` também):
 
 - `mensagem_variante`: a letra do texto que o `wa_link` leva (`A`, `B`, `C` de
-  `VARIACOES`; `EN` nos EUA; vazio sem telefone). A letra sai do `place_id`, não
-  da ordem da rodada, então um lead `pronto` não troca de variação entre duas
-  rodadas (nem com a B, porque a nota da linha não muda depois do Caçador);
-  com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
+  `VARIACOES`; `EN` nos EUA; vazio sem telefone). Até 14/10/2026 a letra saía do
+  `place_id`; desde então sai da alocação balanceada acima e fica guardada na
+  própria coluna, então um lead `pronto` não troca de variação entre duas
+  rodadas enquanto o conjunto não mudar; com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
   `pronto`: o clique no `wa_link` marca `enviado` e a letra fica. Quando o envio
   aparece sem o clique (o observador vê `owner_sent`, a leitura ou a resposta de
   um lead ainda `novo`/`pronto`), o observador grava `manual`: o texto foi o que
@@ -854,6 +869,11 @@ site-antes-da-venda.py --colunas` cria; o `--balcao` também):
   refeito). As cópias `<slug>/_v1/` do modo personalizado têm `publicado.json` com
   o mesmo `place_id` e são ignoradas (até 07/10 elas faziam o lead "morar" em
   `slug/_v1` no retrato e nas contas do Balcão).
+- `ab_elegiveis` (14/10/2026): as letras que o lead podia receber no sorteio
+  (`A`, `AB`, `AC`, `ABC`), gravada na mesma escrita de `mensagem_variante`
+  enquanto o lead está `pronto` e congelada com ela depois do envio; vazia nos
+  EUA e sem telefone. É ela que diz com quem a letra pode ser comparada; o CRM a
+  lê como `abordagem.elegiveis`. Linhas de antes ficam vazias (fora do teste).
 
 ```bash
 cd ~/.local/share/claude-ops

@@ -22,10 +22,13 @@ idempotência de 2 min com `fetch` dublê: clique duplo, toques simultâneos e r
 só-robô: elegível do dia seguinte ao envio pelo calendário de São Paulo ao 6º dia, fora do dia do `followup_em`,
 some com o `followup_enviado`, EUA e Site sem demo no follow-up de sempre, ação e rótulo na Hoje com quem sai
 antes na frente, e o prazo que recomeça no reenvio só para o só-robô, inclusive com a planilha já "expirado"; e o
-demo sob pedido: Raio-X avulso sem demo, só o raio-x na segunda, o "Gerar demo" até o pedido e a mensagem do demo depois),
+demo sob pedido: Raio-X avulso sem demo, só o raio-x na segunda, o "Gerar demo" até o pedido e a mensagem do demo depois;
+e a coluna `ab_elegiveis` lida como `abordagem.elegiveis`, normalizada, ilegível ou ausente sem aviso),
 `server/site-mensagem.test.ts` (roda o `site-mensagem.js` do n8n num `vm` e compara com o espelho, também nos casos do
 Raio-X avulso; o reenvio do só-robô, que é só do CRM: artigo e nome, a versão do raio-x para quem recebeu a C, sem
-R$/saudação/"ontem", EUA sem reenvio),
+R$/saudação/"ontem", EUA sem reenvio; desde 14/10/2026 o essencial do A/B estratificado (`alocarRodada`): conjunto
+elegível, 30 leads em 10/10/10, contagem vinda da planilha sem manual/EN, congelamento e novo sorteio, sem demo só a C
+ou nenhuma mensagem, EUA, só A e nicho vazio; os casos completos estão no `site-antes-da-venda.py --testar`),
 `server/prumo-mensagem.test.ts` (o reenvio do só-robô do PRUMO: nome como o dono escreve, artigo, só número 55), `server/acesso.test.ts`,
 `server/avisos.test.ts`, `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
@@ -63,6 +66,7 @@ toque vale, storage que lança, poda quando o retrato confirma, anotados no fim 
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;
 o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-up de sempre nem a 2ª mensagem; o rótulo "Pedir o responsável"),
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
+`src/operations-ab-mensagem.test.ts` (A/B estratificado da 1ª mensagem, 14/10/2026: sem `ab_elegiveis` o bloco fica vazio e o histórico é contado como fora; 29 × 31 só "faltam", sem taxa nem respostas; 30 × 30 com taxa, Fisher e veredito; +20 pontos e p < 0,10 nos dois sentidos; robô não conta; só entre quem podia receber as duas letras; estrato por nicho),
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
@@ -88,8 +92,13 @@ login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead d
 `_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
 (61; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
 endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos), o `site-pastas.test.py` (o toque "Gerar
-demo" grava o pedido sem mover a pasta), o `site-antes-da-venda.py --testar` (o Balcão com o recibo só do Raio-X: só a C,
-EUA fica de fora, o enviado não é regravado toda hora, o demo pedido depois não troca a primeira mensagem),
+demo" grava o pedido sem mover a pasta), o `site-antes-da-venda.py --testar` (35; o Balcão com o recibo só do Raio-X:
+só a C, EUA fica de fora, o enviado não é regravado toda hora, o demo pedido depois não troca a primeira mensagem; e,
+desde 14/10/2026, a alocação balanceada: 30 leads divididos com diferença ≤ 1, dois nichos independentes, mesma saída
+em qualquer ordem, congelamento, novo sorteio quando o conjunto muda, a própria letra fora da contagem, só letra válida
+conta, sem demo só a C (conjunto "C") ou nenhuma mensagem, EUA, nicho vazio e grafia do nicho, dois leads da mesma
+rodada e um pronto que não muda de rodada para rodada; importa o `n8n.py`, que lê a chave em `~/.config/claude-ops`:
+fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária com uma chave falsa),
 `deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
 ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`

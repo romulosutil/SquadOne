@@ -120,6 +120,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
+    ab-mensagem.ts        PURO (14/10/2026): A/B estratificado da 1ª mensagem em Resultados ("A × B (mesmo sorteio, por nicho)"):
+                          só enviados com ab_elegiveis contendo as duas letras, por nicho; nada de taxa antes de 30 por braço,
+                          Fisher de ab-video.ts, "ganhou" só com +20 pontos e p < 0,10. Quem sorteia é o Balcão (alocarRodada,
+                          site-mensagem.js: menos atribuídos no nicho × conjunto, congela com o mesmo conjunto); o histórico
+                          (150 envios sem letra e os do hash) e o follow-up do 05 · Acompanhamento ficam fora
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,
                           cardápio na hierarquia de 09/10/2026: ver → arrumar → manter, Raio-X e Mapa grátis, Fonte só depois do Mapa);
                           colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha
@@ -213,6 +218,10 @@ máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **de
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
+A/B da 1ª mensagem do Site (14/10/2026): a letra só se compara entre leads com o mesmo conjunto
+elegível (coluna `ab_elegiveis`, gravada pelo Balcão com a letra) e é equilibrada por nicho; sem
+30 envios por braço não há taxa, e o que já foi enviado nunca troca de letra. O histórico sem a
+coluna e o follow-up do 05 · Acompanhamento não entram (detalhes em `perfis-e-experimentos.md`).
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o
 Dell acrescenta); a seed fica fora de `data/`. O browser nunca vê token do Google; `prompt=consent`
