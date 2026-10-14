@@ -82,7 +82,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
-  server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM
+  server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM;
+                          o reenvio do só-robô (REENVIO_ROBO*, "Pedir o responsável") é só do CRM, sem par no JS nem inglês
+  server/prumo-mensagem.ts PURO: 2ª mensagem (o Raio-X) e reenvio do só-robô do PRUMO (só número 55)
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
@@ -114,7 +116,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           segunda_enviada/followup_enviado na aba CRM em segundo plano; marca local até o retrato confirmar
                           (10 min); falha = "anote à mão", o WhatsApp abre igual. Interesse parado não some da Hoje (server/crm.ts)
     trava-de-horario.ts   PURO (14/10/2026): o aviso também TRAVA o link de primeiro contato (fila, Hoje, Funil, Ficha) até o
-                          "Liberar" daquele lead, só em memória (depois das 18h: 0 de 29 envios com resposta)
+                          "Liberar" daquele lead, só em memória (depois das 18h: 0 de 29 envios com resposta);
+                          primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,

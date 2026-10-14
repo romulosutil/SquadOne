@@ -571,7 +571,17 @@ espelham (`site-pastas`) e a Central só lê:
   2 min, só para a etapa certa). A 2ª mensagem anotada depois da resposta tira
   o interesse parado da Hoje (antes ele sumia em 48 h sem o CRM saber se o
   link saiu) e o follow-up anotado apaga o "follow-up hoje"; os dois alimentam
-  o Resultados. A única memória da Central é a de 2 min contra o clique duplo.
+  o Resultados. A única memória da Central é a de 2 min contra o clique duplo;
+- desde 14/10/2026 o lead em que só a resposta automática do WhatsApp Business
+  respondeu (`so-robo`, Site e PRUMO) ganha um reenvio único no mesmo grupo
+  "Follow-up para mandar": do dia seguinte ao envio (calendário de São Paulo)
+  até o último antes do prazo, sem depender do dia do `followup_em` do n8n, com
+  o texto que pede o responsável (`reenvioDoRoboHoje`, `REENVIO_ROBO*` em
+  `site-mensagem.ts`/`prumo-mensagem.ts`, só do CRM; EUA e Site sem demo ficam
+  com o follow-up de sempre). O `followup_enviado` o tira e recomeça a contagem
+  dos 7 dias no reenvio (só para o só-robô; o reenvio anotado também suspende o
+  "expirado" da planilha). Fora do expediente ele trava como o envio e o convite;
+  o aviso do 05 · Acompanhamento continua com o texto antigo.
 
 `GET /api/operations/crm` não leva o instante da leitura: a resposta só muda
 com o retrato, as pastas ou o dia, e o ETag do Express devolve 304 ao celular.
