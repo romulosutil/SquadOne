@@ -17,6 +17,32 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 - **A Central é somente leitura** para serviços (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura. O estado do Dell vem só do `status.json` do monitor.
 - **Ferramentas de Mais → Acessos** (bloco `tools` do arquivo de `SQUADONE_OPERATIONS_CONFIG`, lido só no boot): `hermes`, `ide`, `n8n` e `remote` são obrigatórias; faltando uma, a Central não sobe ("Configuração da ferramenta '<id>' está incompleta"). **`syncthing` é opcional desde 12/10/2026**, quando o Syncthing da Mel foi aposentado (nenhum aparelho pareado desde 04/10): ausente, some do `/overview` e do painel (nada de "Sem resposta agora"); presente, vale como antes, com a mesma validação e o health de `healthKind: "syncthing"`, e uma entrada presente mas incompleta continua sendo erro. O `config/operations.example.json` já vem sem ela. Para tirar da Mel, **só depois** do deploy desta versão (na anterior, sem a entrada, a Central não sobe): apagar o bloco `"syncthing"` de `~/.config/squadone/operations.json` (JSON válido, sem vírgula sobrando) e `systemctl --user restart squadone-operations` com nenhum turno em andamento (`/api/runtime` com `ocupado: false`).
 
+## PRUMO como holding: quatro ofertas num funil (14/10/2026)
+
+Decisão do Rômulo: o **PRUMO fica sob o SquadOne** (é a squad `prumo`), e tudo o que o PRUMO prospecta fica
+**sob o PRUMO**: o Site antes da venda (auto-site), os serviços do PRUMO (Raio-X, Mapa, Fonte: o "Organizar"),
+o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM da Silmer). Plano em
+`docs/superpowers/plans/2026-10-13-prumo-holding.md`.
+
+- **Roster de produção** (pelo ✎/API, não Git): a squad PRUMO ganhou as salas `prumo--iris` (PO Helena,
+  Comercial do Iris) e `prumo--estamparias` (PO Otávio, Comercial do CRM de estamparia); a Prospecção passou a
+  cuidar só de Site e Organizar, e o escopo da squad diz que ela é a holding das quatro ofertas.
+- **n8n** (gerador `deploy/dell/claude-ops/prumo-ofertas.py`, config em `prumo-ofertas.json`, triagem em
+  `prumo-ofertas-triar.js`): abas **Clínicas** e **Estamparias** na planilha do PRUMO, com o contrato de colunas do
+  Prospects; "PRUMO · Iris — Caçador de clínicas" e "PRUMO · CRM de estamparia — Caçador de estamparias"
+  (Places → site da empresa → WhatsApp publicado e celular → dedupe por place_id e WhatsApp contra todos os
+  funis → até 15 por rodada em Revisar, descarte com motivo em Descartados, aviso pelo Hermes). **Nasceram
+  desligados**: rodam à mão (`python3 prumo-ofertas.py --rodar iris|estampa`) até o Rômulo ligar o agendamento
+  (dias úteis, 9h) no n8n. Republicar não liga nada. Cliente do PRUMO (`clientes`, hoje a Silmer) nunca vira
+  prospect. O clique em Enviar convite (`/webhook/convite-iris` e `/convite-estampa`) abre o WhatsApp com o convite
+  da oferta (voz PRUMO, sem nome, R$ nem link) e marca "Convite enviado".
+- **CRM** (`server/crm.ts`): produtos `iris` e `estampa` lidos dessas abas pelo 08 · CRM (`crm.py`), com a regra
+  `etapaDoPrumo` e a Etapa "Em conversa" marcada à mão (o observador do WhatsApp e a classificação de resposta
+  ainda só leem Leads e Prospects). Raio-X, Mapa, 2ª mensagem e reenvio do só-robô seguem só do PRUMO: nas ofertas
+  novas não há texto aprovado, e a Hoje pede "combinar a demonstração". Aba ausente ou ilegível não segura o
+  retrato: vira fonte com erro. O filtro do CRM e o segmentado do celular mostram as quatro (Site, Organizar,
+  Iris, Estampa).
+
 ## A/B do vídeo no envio do Site (11/10/2026; medição pronta, nada ligado)
 
 Pergunta: mensagem + link rende mais "respondeu de gente" com um vídeo de ~15 s do demo logo depois? O código só **mede**: nada envia, grava planilha ou escolhe lead. Sem a coluna preenchida, nenhuma tela muda.

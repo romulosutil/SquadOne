@@ -1,7 +1,15 @@
 # PRUMO como holding: dois fluxos novos, Iris e CRM de estamparia (plano de 13/10/2026)
 
-Status: **proposta, nada implementado.** Fica acima de `2026-10-11-operacao-iris.md`, que
+Status: **em andamento desde 14/10/2026.** Fica acima de `2026-10-11-operacao-iris.md`, que
 continua valendo como detalhe da operação do Iris (§5 abaixo só registra o que mudou nele).
+
+Feito em 14/10/2026 (pedido do Rômulo: "o PRUMO é subordinado ao SquadOne; os serviços do PRUMO, o Iris e o
+CRM de estamparia, ao PRUMO"; detalhes em `docs/referencia/perfis-e-experimentos.md`): caçadores do Iris e das
+estamparias no n8n (desligados, uma rodada manual cada: 10 clínicas e 7 estamparias para revisar), abas Clínicas
+e Estamparias, clique do convite de cada oferta, as duas ofertas no funil do CRM ao lado de Site e PRUMO, salas
+Iris e Estamparias na squad PRUMO. Em vez do registro de ofertas do §6, as ofertas novas reusam o contrato e a
+regra do Prospects (`OFERTA_DE_PROSPECCAO` em `server/crm.ts`). Falta: observador do WhatsApp e classificação de
+resposta lendo as abas novas, mensagens de 2º passo e colinha das ofertas, decisões 1 a 6 do §4.
 
 ## 1. O desenho, em uma frase
 

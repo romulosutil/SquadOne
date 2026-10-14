@@ -41,12 +41,17 @@ export interface FluxoDaOperacao {
 
 const CRM_SITE = { rotulo: 'Abrir no CRM', url: '/crm?produto=site' }
 const CRM_PRUMO = { rotulo: 'Abrir no CRM', url: '/crm?produto=prumo' }
+const CRM_IRIS = { rotulo: 'Abrir no CRM', url: '/crm?produto=iris' }
+const CRM_ESTAMPA = { rotulo: 'Abrir no CRM', url: '/crm?produto=estampa' }
 
+// PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne, e as quatro ofertas
+// (Site antes da venda, os serviços do PRUMO, Iris e CRM de estamparia) ficam sob o
+// PRUMO, no mesmo CRM. Os fluxos delas formam o grupo "PRUMO".
 export const FLUXOS: FluxoDaOperacao[] = [
   {
     id: 'site',
-    grupo: 'Vender mais',
-    nome: 'Site antes da venda',
+    grupo: 'PRUMO',
+    nome: 'PRUMO · Site antes da venda',
     frase: 'O Dell acha o negócio, faz o site e publica. Você aborda e marca o desfecho. Envio, leitura, resposta e follow-up se marcam sozinhos.',
     passos: [
       { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. Desde 05/10: serviço que se procura no Google (advocacia, contabilidade, desentupidora, indústria, reformas); B2C de vitrine deu 0 interesse. O funil de segunda pausa a busca e o nicho sem sinal de compra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
@@ -69,7 +74,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
   },
   {
     id: 'prumo',
-    grupo: 'Consultoria',
+    grupo: 'PRUMO',
     nome: 'PRUMO · Organizar',
     frase: 'Do prospect ao Mapa. O prospect chega pela CDL; o Dell pontua e monta o rascunho; você revisa, convida e conduz.',
     passos: [
@@ -85,15 +90,44 @@ export const FLUXOS: FluxoDaOperacao[] = [
     ],
   },
   {
+    id: 'iris',
+    grupo: 'PRUMO',
+    nome: 'PRUMO · Iris',
+    frase: 'Clínicas de terapia para o Iris. O Dell acha a clínica com WhatsApp no site; você revisa, convida em nome do PRUMO e conduz até o teste.',
+    passos: [
+      { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: ABA/TEA, multidisciplinar infantil, neuropsicologia, fono, TO e TCC; ES primeiro, depois BH, Rio, São Paulo e Campinas. Uma busca por rodada, em rodízio.', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Nasceu desligado: roda à mão até você ligar o agendamento (dias úteis, 9h).', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:QRVkAhJBvBxt9mx8' },
+      { titulo: 'Revisa a clínica', texto: 'No CRM, em Hoje › Prospects para revisar (filtro Iris · Clínicas): veja o site e decida. Sem interesse na Etapa tira a clínica da fila.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
+      { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite em nome do PRUMO (sem preço e sem link) e marca "Convite enviado".', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:mfyO1YAhBrXxe5Mb' },
+      { titulo: 'Resposta', texto: 'O observador do WhatsApp ainda não lê a aba Clínicas: quem responder, marque "Em conversa" na Etapa.', onde: 'voce', quando: 'quando responder', comVoce: true, link: CRM_IRIS },
+      { ramo: 'se não responder', titulo: 'Um lembrete só', texto: 'No 3º dia o CRM põe o convite em Follow-up para mandar; no 7º sem resposta, vai para Perdido.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
+      { titulo: 'Demonstração e teste', texto: 'Demonstração do dossiê com caso fictício (nunca dado de paciente), cadastro da clínica no Iris e "proposta enviada" na ficha do CRM. Clínica pagando: Concluído na Etapa.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
+    ],
+  },
+  {
+    id: 'estampa',
+    grupo: 'PRUMO',
+    nome: 'PRUMO · Estamparias',
+    frase: 'Estamparias para o CRM de estamparia (white-label do CRM da Silmer). Primeiro provar que alguém quer: conversa, não venda.',
+    passos: [
+      { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: estamparia, camisetas e uniformes personalizados, silk, sublimação e confecção sob encomenda; ES primeiro. A Silmer, cliente do PRUMO, nunca entra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
+      { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Nasceu desligado.', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:6pIzCCmktXAUGOdf' },
+      { titulo: 'Revisa a estamparia', texto: 'No CRM, em Hoje › Prospects para revisar (filtro CRM de estamparia). O plano pede 8 a 10 escolhidas à mão antes de ligar o agendamento.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_ESTAMPA },
+      { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite (organizar os pedidos que chegam pelo WhatsApp) e marca "Convite enviado". O texto não diz que o CRM já roda num cliente: a Silmer ainda está em homologação.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:rNp1Upq53IFIuRwT' },
+      { titulo: 'Resposta e conversa', texto: 'Quem responder, marque "Em conversa": 20 minutos sobre como os pedidos chegam hoje. Meta do piloto: 2 conversas em 4 semanas; sem isso, pausa.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_ESTAMPA },
+      { titulo: 'Só depois: instalar', texto: 'Uma instalação por cliente, depois do CRM da Silmer estável por 30 dias, com contrato e DPA (plano de 13/10, B1 e B2).', onde: 'voce', quando: 'depois do piloto', comVoce: true },
+    ],
+  },
+  {
     id: 'crm',
-    grupo: 'Vender mais',
-    nome: 'CRM',
-    frase: 'Quem viu, quem respondeu e quem recusou, nos dois produtos. A planilha é a verdade; o CRM só lê e anota.',
+    grupo: 'PRUMO',
+    nome: 'CRM do PRUMO',
+    frase: 'Quem viu, quem respondeu e quem recusou, nas quatro ofertas do PRUMO. A planilha é a verdade; o CRM só lê e anota.',
     passos: [
       { titulo: 'Tudo se marca na planilha', texto: 'Cliques nos links, o que você escreve, leitura, resposta, follow-up e desfecho escrevem na planilha sozinhos.', onde: 'dell', quando: 'na hora' },
-      { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom.', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P' },
+      { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects, Clínicas, Estamparias e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom (Clínicas e Estamparias não seguram o retrato: viram aviso).', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P' },
       { titulo: 'Hoje', texto: 'Só o que depende de você: próximos passos, follow-ups, respostas, prospects, propostas e sites para enviar, cada um com o link que resolve.', onde: 'voce', quando: 'quando abrir', comVoce: true, link: { rotulo: 'Abrir o CRM', url: '/crm' } },
-      { titulo: 'Funil', texto: 'As 5 etapas (Novo, Em contato, Proposta, Ganho, Perdido) com filtros por produto, nicho e cidade. Em contato sai sozinho para Perdido depois de 7 dias sem mensagem do lead.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' } },
+      { titulo: 'Funil', texto: 'As 5 etapas (Novo, Em contato, Proposta, Ganho, Perdido) com filtros por oferta (Site, Organizar, Iris, Estampa), nicho e cidade. Em contato sai sozinho para Perdido depois de 7 dias sem mensagem do lead.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' } },
       { titulo: 'Ficha e registros', texto: 'Nota, próximo passo com data e "proposta enviada" vão para a aba CRM pelo n8n. Nada é enviado ao lead.', onde: 'voce', quando: 'você decide', comVoce: true },
       { titulo: 'Divergência vira nota', texto: 'Se a planilha e a pasta discordam por mais de 2 h, a ficha mostra. Nada é corrigido sozinho.', onde: 'dell', quando: 'a cada leitura' },
     ],

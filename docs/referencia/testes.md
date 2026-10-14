@@ -14,6 +14,10 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/operations.test.ts` (inclui a config das ferramentas com e sem o Syncthing
 opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts`,
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
+`server/prumo-ofertas.test.ts` (14/10/2026: contrato entre `deploy/dell/claude-ops/prumo-ofertas.json`, o que
+os caçadores do Iris e das estamparias gravam, e o CRM: aba e caminho do convite iguais aos de
+`OFERTA_DE_PROSPECCAO`, cabeçalho com toda coluna que o CRM lê, cada Etapa da lista com lugar no funil, convite
+sem nome, R$, link nem segunda pergunta, cliente do PRUMO e não-cliente-final fora),
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
 `server/crm.test.ts` (inclui, desde 14/10/2026, o loop fechado: interesse parado além de 48 h que só some
 com a 2ª mensagem anotada depois da resposta, `followup_enviado` que apaga o follow-up do dia, o regime da

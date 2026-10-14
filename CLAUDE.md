@@ -81,7 +81,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/jev-sombra.ts    Jev em sombra (desligado, RULES 27): 4 perguntas por demanda e comparação com o Gemini PURAS; fila, teto/dia e de US$, JSONL 600; finanças nunca vão
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
-  server/crm.ts           Central: CRM (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n
+  server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
+                          quatro ofertas no mesmo funil: Site antes da venda, serviços PRUMO, Iris, CRM de estamparia (14/10/2026)
   server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM;
                           o reenvio do só-robô (REENVIO_ROBO*, "Pedir o responsável") é só do CRM, sem par no JS nem inglês
   server/prumo-mensagem.ts PURO: 2ª mensagem (o Raio-X) e reenvio do só-robô do PRUMO (só número 55)
@@ -218,6 +219,10 @@ máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **de
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
+PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
+CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o
+contrato do Prospects (`OFERTA_DE_PROSPECCAO`); os caçadores delas (`deploy/dell/claude-ops/prumo-ofertas.py`)
+nasceram desligados e republicar não os liga; cliente do PRUMO (a Silmer) nunca vira prospect.
 A/B da 1ª mensagem do Site (14/10/2026): a letra só se compara entre leads com o mesmo conjunto
 elegível (coluna `ab_elegiveis`, gravada pelo Balcão com a letra) e é equilibrada por nicho; sem
 30 envios por braço não há taxa, e o que já foi enviado nunca troca de letra. O histórico sem a
