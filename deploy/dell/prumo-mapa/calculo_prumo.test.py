@@ -329,9 +329,12 @@ class BlocoHtml(unittest.TestCase):
         self.h = cp.bloco_html(self.p, "Fulano")
 
     def test_visual_do_resumo_do_mapa(self):
-        self.assertIn('<section class="presenca"><h2>Nota de presença</h2>', self.h)
-        self.assertIn("<small>/18</small>", self.h)
+        # No Raio-X o bloco vai dentro do detalhe "Como fizemos": h3, não seção própria.
+        self.assertTrue(self.h.startswith('<div class="presenca"><h3>Nota de presença</h3>'))
+        self.assertNotIn("<section", self.h)
+        self.assertIn("12,0 <small>de 18</small>", self.h)
         self.assertEqual(self.h.count('class="trilho"'), 7)  # a nota e um por bloco
+        self.assertIn('<span class="escala" aria-hidden="true"><span>0</span><span>18</span></span>', self.h)
         self.assertIn("1 de 3", self.h)
 
     def test_campo_acessivel_e_conta_em_branco(self):
@@ -353,6 +356,58 @@ class BlocoHtml(unittest.TestCase):
 
     def test_um_script_so(self):
         self.assertEqual(self.h.count("<script>"), 1)
+
+
+class FaixaNaFrente(unittest.TestCase):
+    """A frente do Raio-X: a faixa e a frase dela, sem o número de 0 a 18, e o fio de prumo."""
+
+    POUCO = ([busca(None)], 3.9, 5, None, {**PERFIL_OK, "horario": "falta", "fotos": "falta", "site": "falta"},
+             {"tipo": "nenhum"})
+    MEIO = ([busca(7)], 5.0, 18, None, PERFIL_OK, {"tipo": "rede", "onde": "o Instagram"})
+    BEM = ([busca(1)], 4.8, 90, None, PERFIL_OK, SITE_OK)
+
+    def faixa(self, args):
+        p = cp.nota_de_presenca(*args)
+        return p, cp.bloco_faixa_html(p)
+
+    def test_as_tres_faixas_com_a_frase_e_o_fio_no_meio_da_faixa(self):
+        casos = []
+        for args in (self.POUCO, self.MEIO, self.BEM):
+            p, h = self.faixa(args)
+            casos.append((p["faixa"]["chave"], p["faixa"]["rotulo"], h))
+        self.assertEqual([c[:2] for c in casos], [("baixa", "Pouco visível"), ("media", "Em construção"),
+                                                  ("alta", "Bem visível")])
+        for (chave, rotulo, h), pos in zip(casos, ("16.667%", "50.000%", "83.333%")):
+            self.assertIn(f'<p class="faixa-rotulo">{rotulo}</p>', h)
+            self.assertIn(f'<li class="atual">{rotulo}<span class="visualmente-oculto"> (vocês estão aqui)</span></li>', h)
+            self.assertEqual(h.count("<li"), 3)
+            self.assertIn(f'style="--pos:{pos}"', h)
+            self.assertIn('class="prumo-fio"', h)
+            self.assertIn(f'<p class="faixa-texto">{cp.html.escape(cp.faixa({"baixa": 1, "media": 10, "alta": 15}[chave], "presenca")["texto"])}</p>', h)
+
+    def test_sem_numero_na_frente(self):
+        p, h = self.faixa(self.MEIO)
+        self.assertNotIn("18", h)
+        self.assertNotIn(cp.decimal_br(p["nota"]), h)
+        self.assertNotIn("<script", h)
+
+    def test_sem_nota_sem_faixa(self):
+        self.assertEqual(cp.bloco_faixa_html(cp.nota_de_presenca(None, 5.0, 18, None, PERFIL_OK, None)), "")
+
+    def test_fio_so_transform_e_opacity_e_parado_com_reduced_motion(self):
+        css = cp.CSS_PRESENCA
+        self.assertIn("cubic-bezier(.34,1.56,.64,1)", css)  # a mola, com overshoot
+        self.assertIn(".8s", css)
+        bloco = css[css.index("@media (prefers-reduced-motion:no-preference)"):]
+        bloco = bloco[:bloco.index("}}}") + 3]
+        self.assertIn("@keyframes prumo-assenta", bloco)
+        quadros = bloco[bloco.index("@keyframes"):]
+        props = set(re.findall(r"([a-z-]+):", re.sub(r"@keyframes [\w-]+", "", quadros)))
+        self.assertEqual(props, {"transform", "opacity"})
+        # Fora do media query o fio já está assentado (sem animação nenhuma com reduced-motion).
+        fora = css.replace(bloco, "")
+        self.assertNotIn("animation", fora)
+        self.assertIn("transform:translateX(var(--pos))", fora)
 
 
 if __name__ == "__main__":

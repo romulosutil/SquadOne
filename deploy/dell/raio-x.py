@@ -39,8 +39,8 @@ Google para conteúdo do Places):
 Sem a chave, ou com a API fora, essas seções simplesmente não aparecem. O que o
 Places não entrega (se o dono responde às avaliações, quanto tempo leva para
 responder mensagem) a página diz que não conferiu. A página também lê o próprio
-demo (o `index.html` que está no ar) para ligar cada passo do caminho do cliente a
-uma seção dele: botões de WhatsApp, ligar, mapa e as seções com âncora.
+demo (o `index.html` que está no ar): as seções com âncora e os botões de WhatsApp,
+ligar e mapa.
 
 Versão 3 (09/10/2026): a Nota de presença, de 0 a 18, pelo cálculo PRUMO
 (`prumo-mapa/calculo_prumo.py`; método em ~/prumo/05-entrega-mapa/calculo-prumo.md):
@@ -50,6 +50,14 @@ conta; com menos de 4 medidos a seção não aparece. Junto, a conta aberta em R
 digita quanto vale um cliente e a página faz "1 cliente a mais por mês × valor" (JS
 inline gerado pelo módulo), sempre como cenário. Para o bloco do site, a página do
 site do perfil é lida uma vez (viewport para celular, link de WhatsApp).
+
+Versão 4 (09/10/2026, teste de usabilidade e funil): a página em três atos. Veredito, na
+primeira tela do celular: nome, nota do Google, a faixa da Nota de presença (sem o "X de 18")
+e o que segura e o que perde cliente. Por quê: os pontos abertos e o resto em detalhes
+fechados (`<details>`, sem JS), com o "X de 18" e a calculadora em "Como fizemos". O que
+fazer: a demonstração, o Encontrado com preço e o botão para o WhatsApp do PRUMO (no
+celular, também numa barra fixa). O preço do Respondido só na conversa. Medição sem cookie
+preparada e desligada (URL_EVENTOS vazia no JS da página).
 
 Publicação: a Vercel troca o deployment inteiro, então o Raio-X sobe junto com o
 `index.html` e o `og.jpg` da pasta, no mesmo projeto `demo-<slug>` (sem projeto
@@ -88,6 +96,7 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -113,8 +122,10 @@ VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 # 2 (08/10/2026): concorrência da mesma busca, o que as avaliações dizem, o perfil item por item,
 # o caminho do cliente ligado às seções do demo e os dois serviços com preço.
 # 3 (09/10/2026): a Nota de presença (cálculo PRUMO, seis blocos de 0 a 3) e a conta aberta em R$.
-# Sem o calculo_prumo instalado a página é a da versão 2, e continua 2: nada de refazer à toa.
-VERSAO = 3 if calculo_prumo else 2
+# 4 (09/10/2026): três atos (veredito, por quê, o que fazer), o botão do WhatsApp do PRUMO e sem o
+# preço do Respondido; sai o caminho do cliente.
+# Sem o calculo_prumo instalado a página sai sem a nota e a versão fica 2: nada de refazer à toa.
+VERSAO = 4 if calculo_prumo else 2
 CAMINHO = "raio-x"
 MARCA = f'data-raio-x="{VERSAO}"'
 MAX_PONTOS = 3
@@ -122,7 +133,9 @@ MAX_BONS = 5
 LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments"
                               r"|maximum number of projects")
 PRECO = "R$ 990 + R$ 69/mês"
-PRECO_RESPONDIDO = "R$ 2.400 + R$ 390/mês"
+# O preço do Respondido não vai na página: só se fala na conversa (decisões de 08 e 09/10/2026).
+# O WhatsApp do PRUMO (chip novo de 09/10/2026) é o destino dos dois botões do fim da página.
+WHATSAPP_PRUMO = "5527999762786"
 
 # Google Places (New), opcional: sem a chave o Raio-X sai só com o content.md, como na versão 1.
 # A chave fica num arquivo (600) fora do repositório, linha PLACES_API_KEY= (ou GOOGLE_MAPS_API_KEY=);
@@ -654,13 +667,21 @@ font-variation-settings:'wdth' 118,'wght' 900}
 .marca .fio{width:2px;height:15px;background:var(--brasa);display:block}
 .brasa{color:var(--brasa)}
 .miudo{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--pedra-600)}
-.kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--oxido);margin-top:36px}
+.kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--oxido);margin-top:24px}
+.ato{margin-top:64px}
+.ato.veredito{margin-top:0}
+.ato > .kicker:first-child{margin-top:0;display:flex;align-items:center;gap:8px}
+.ato > .kicker:first-child::before{content:"";width:3px;height:16px;background:var(--brasa);display:block}
+.ato.veredito > .kicker:first-child{margin-top:20px}
+.veredito .lede{font-size:15px;margin-top:8px}
+.ato.veredito > .kicker:first-child::before{display:none}
+.ato > h2,.ato > div > h2{margin-top:10px}
 h1{font-size:clamp(34px,8vw,54px);line-height:.98;letter-spacing:-.025em;font-weight:800;margin-top:10px;
 font-variation-settings:'wdth' 108,'wght' 800;overflow-wrap:anywhere}
 .lede{color:var(--ferro-600);margin-top:12px;max-width:60ch}
-.nota{display:flex;align-items:flex-end;gap:16px;margin-top:28px;border-top:2px solid var(--ferro-900);
-border-bottom:2px solid var(--ferro-900);padding:18px 0}
-.nota .num{font-size:64px;line-height:.85;font-weight:900;letter-spacing:-.03em;font-variation-settings:'wdth' 118,'wght' 900}
+.nota{display:flex;align-items:flex-end;gap:16px;margin-top:16px;border-top:2px solid var(--ferro-900);
+border-bottom:2px solid var(--ferro-900);padding:12px 0}
+.nota .num{font-size:56px;line-height:.85;font-weight:900;letter-spacing:-.03em;font-variation-settings:'wdth' 118,'wght' 900}
 .nota .leitura{color:var(--ferro-600);font-size:15px}
 section{margin-top:44px}
 h2{font-size:clamp(24px,5vw,32px);line-height:1.08;font-weight:800;letter-spacing:-.015em;
@@ -682,17 +703,43 @@ background:var(--ferro-900);color:var(--pedra-100);text-decoration:none;font-wei
 border:2px solid var(--ferro-900)}
 .botao:hover{background:var(--brasa);border-color:var(--brasa);color:var(--ferro-900)}
 .botao:focus-visible{outline:3px solid var(--ocre);outline-offset:3px}
-.escura{background:var(--ferro-900);color:var(--pedra-100);padding:28px 22px;display:grid;gap:12px}
-.escura h2{color:var(--pedra-100)}
-.escura .preco{font-size:clamp(28px,7vw,40px);font-weight:900;line-height:1;color:var(--brasa-clara);
+.oferta{margin-top:32px;background:var(--ferro-900);color:var(--pedra-100);padding:28px 22px;display:grid;gap:12px}
+.oferta h2{color:var(--pedra-100);margin-top:0}
+.oferta .miudo{color:var(--pedra-400)}
+.oferta .preco{font-size:clamp(28px,7vw,40px);font-weight:900;line-height:1;color:var(--brasa-clara);
 font-variation-settings:'wdth' 112,'wght' 900}
-.escura p{color:var(--pedra-200);max-width:56ch}
-.escura strong{color:var(--pedra-100)}
+.oferta p{color:var(--pedra-200);max-width:56ch}
+.oferta strong{color:var(--pedra-100)}
+.acoes{display:grid;gap:6px;margin-top:8px;justify-items:start}
+.botao-zap{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:56px;padding:14px 24px;
+background:var(--brasa);color:var(--ferro-900);border:2px solid var(--brasa);text-decoration:none;font-size:19px;
+line-height:1.2;font-weight:800;letter-spacing:.01em;font-variation-settings:'wdth' 108,'wght' 800}
+.botao-zap:hover{background:var(--brasa-clara);border-color:var(--brasa-clara)}
+.botao-zap:focus-visible{outline:3px solid var(--ocre);outline-offset:3px}
+.link-zap{display:inline-flex;align-items:center;min-height:44px;color:var(--pedra-100);font-weight:700;
+text-decoration:underline;text-decoration-color:var(--brasa);text-decoration-thickness:2px;text-underline-offset:4px}
+.link-zap:hover{color:var(--brasa-clara)}
+.link-zap:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
+.detalhes{margin-top:36px;border-top:2px solid var(--ferro-900)}
+.detalhe{border-bottom:1px solid var(--pedra-400)}
+.detalhe > summary{list-style:none;cursor:pointer;min-height:56px;display:flex;align-items:center;
+justify-content:space-between;gap:12px;padding:12px 0;font-size:19px;line-height:1.25;font-weight:750;
+font-variation-settings:'wght' 750}
+.detalhe > summary::-webkit-details-marker{display:none}
+.detalhe > summary::after{content:"+";flex:none;width:28px;text-align:center;font-size:28px;line-height:1;font-weight:700;
+color:var(--brasa)}
+.detalhe[open] > summary::after{content:"–"}
+.detalhe > summary:hover{color:var(--oxido)}
+.detalhe > summary:focus-visible{outline:3px solid var(--ocre);outline-offset:2px}
+.detalhe .corpo{padding:0 0 28px}
+.detalhe .corpo > .intro:first-child{margin-top:0}
+.detalhe .corpo h3.sub{font-size:20px;line-height:1.2;font-weight:800;margin-top:28px}
+.barra-fixa{display:none}
 footer{margin-top:40px;border-top:2px solid var(--pedra-400);padding-top:12px;font-size:13px;color:var(--pedra-600);
 display:grid;gap:6px}
 .intro{color:var(--ferro-600);margin-top:10px;max-width:60ch}
-.resumo{margin-top:28px;display:grid;gap:0;border:2px solid var(--ferro-900)}
-.resumo div{padding:14px 16px;display:grid;gap:2px}
+.resumo{margin-top:18px;display:grid;gap:0;border:2px solid var(--ferro-900)}
+.resumo div{padding:12px 14px;display:grid;gap:2px}
 .resumo div + div{border-top:2px solid var(--ferro-900);background:var(--ferro-900);color:var(--pedra-100)}
 .resumo .miudo{color:inherit;opacity:.8}
 .resumo strong{font-size:19px;line-height:1.25;font-weight:750}
@@ -720,25 +767,46 @@ blockquote cite{display:block;font-style:normal;font-size:14px;color:var(--pedra
 .check .falta .sinal{color:var(--brasa)}
 .check .nc .sinal{color:var(--pedra-400)}
 .check .det{grid-column:2;font-size:15px;color:var(--ferro-600)}
-.jornada{list-style:none;margin-top:16px;counter-reset:passo}
-.jornada > li{border-top:2px solid var(--ferro-900);padding:14px 0 18px;display:grid;gap:8px}
-.jornada h3{font-size:19px;line-height:1.25;font-weight:750}
-.jornada h3 span{color:var(--brasa);margin-right:8px}
-.jornada .hoje,.jornada .nodemo{display:grid;grid-template-columns:76px 1fr;gap:10px;font-size:16px;color:var(--ferro-600)}
-.jornada .rotulo{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;padding-top:3px;color:var(--pedra-600)}
-.jornada .nodemo .rotulo{color:var(--oxido)}
-.jornada ul{list-style:none;display:grid;gap:4px}
-.jornada ul a{color:var(--ferro-900);text-decoration-color:var(--brasa);text-underline-offset:3px}
-.servicos{display:grid;gap:18px}
-.servico{border-top:1px solid var(--ferro-600);padding-top:14px;display:grid;gap:6px}
-.servico h3{font-size:20px;font-weight:800;color:var(--pedra-100)}
 .metodo{list-style:none;margin-top:12px;display:grid;gap:8px;font-size:15px;color:var(--ferro-600)}
 .metodo li{padding-left:14px;border-left:2px solid var(--pedra-400)}
 .visualmente-oculto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (min-width:640px){.resumo{grid-template-columns:1fr 1fr}.resumo div + div{border-top:0;border-left:2px solid var(--ferro-900)}
-.servicos{grid-template-columns:1fr 1fr}}
-@media (prefers-reduced-motion:no-preference){.botao{transition:background-color .15s ease,color .15s ease}}
+.botao-zap{width:auto}}
+@media (max-width:719.98px){
+html.com-js body{padding-bottom:88px}
+html.com-js .barra-fixa{display:block;position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--ferro-900);
+border-top:2px solid var(--brasa);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+transform:translateY(100%);visibility:hidden}
+html.com-js .barra-fixa.visivel{transform:none;visibility:visible}
+.barra-fixa .botao-zap{width:100%;min-height:52px}}
+@media (prefers-reduced-motion:no-preference){.botao,.botao-zap{transition:background-color .15s ease,color .15s ease}
+.detalhe[open] > .corpo{animation:detalhe-abre .22s ease-out}
+@keyframes detalhe-abre{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}}
+@media (max-width:719.98px) and (prefers-reduced-motion:no-preference){
+html.com-js .barra-fixa{transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s linear .32s}
+html.com-js .barra-fixa.visivel{transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s}}
 """
+
+# O único JS da página fora da calculadora: a barra fixa do celular (aparece quando o "O que fazer"
+# entra na tela) e a medição sem cookie, preparada e desligada. Sem JS, a barra não aparece e o
+# botão do fim continua lá; com URL_EVENTOS vazia, nada é enviado a ninguém.
+JS_PAGINA = """(function(){
+// Fica vazia até existir o webhook de eventos no n8n do Dell. Vazia, nada sai desta página.
+const URL_EVENTOS = '';
+// Só o nome do evento, o caminho e a hora: nada de cookie, localStorage ou identificador.
+function evento(e){if(!URL_EVENTOS||!navigator.sendBeacon)return;
+try{navigator.sendBeacon(URL_EVENTOS,JSON.stringify({e:e,p:location.pathname,t:Date.now()}))}catch(_){}}
+document.documentElement.classList.add('com-js');
+addEventListener('load',function(){evento('raiox-aberto')});
+document.addEventListener('click',function(ev){
+const a=ev.target&&ev.target.closest?ev.target.closest('[data-evento]'):null;if(a)evento(a.getAttribute('data-evento'))});
+const ato=document.getElementById('o-que-fazer'),barra=document.querySelector('.barra-fixa');
+if(!ato||!('IntersectionObserver' in window))return;
+const olho=new IntersectionObserver(function(itens){
+if(!itens.some(function(i){return i.isIntersecting}))return;
+olho.disconnect();if(barra)barra.classList.add('visivel');evento('raiox-o-que-fazer')});
+olho.observe(ato);
+})();"""
 
 
 def fonte_css(caminho: Path = FONTE) -> str:
@@ -751,7 +819,23 @@ def fonte_css(caminho: Path = FONTE) -> str:
             + ") format('woff2');font-weight:100 900;font-stretch:62% 125%;font-display:swap}")
 
 
+def link_whatsapp(texto: str) -> str:
+    """O wa.me do PRUMO com a mensagem já começada (codificada; o nome do lead vai dentro dela)."""
+    return f"https://wa.me/{WHATSAPP_PRUMO}?text=" + urllib.parse.quote(texto, safe="")
+
+
+def detalhe(titulo: str, corpo: str, classe: str = "") -> str:
+    """Um `<details>` fechado: abre no toque, sem JS, e o leitor de tela anuncia aberto/fechado.
+    Corpo vazio = detalhe ausente (seção que não existe para este lead não aparece)."""
+    if not corpo:
+        return ""
+    return (f'<details class="detalhe{" " + classe if classe else ""}"><summary>{html.escape(titulo)}</summary>'
+            f'<div class="corpo">{corpo}</div></details>')
+
+
 def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = "") -> str:
+    """A página em três atos (versão 4): veredito (a primeira tela do celular), por quê (os pontos
+    abertos e o resto em detalhes fechados) e o que fazer (demonstração, preço e o WhatsApp)."""
     e = lambda t: html.escape(str(t), quote=True)  # noqa: E731
     nome = dados["nome"] or "a empresa"
     nota, n = diag.get("nota", dados["nota"]), diag.get("avaliacoes", dados["avaliacoes"])
@@ -762,6 +846,9 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
                      f"{'mandam' if len(pontos) > 1 else 'manda'} cliente para o concorrente")
     item = lambda i, x: (f'<li><span class="marcador">{e(i)}</span><div><h3>{e(x["titulo"])}</h3>'  # noqa: E731
                          f'<p>{e(x["porque"])}</p></div></li>')
+    presenca = diag.get("presenca") if calculo_prumo else None
+    zap_site = link_whatsapp(f"Olá, PRUMO. Vi o Raio-X da {nome} e quero o site no ar.")
+    zap_respondido = link_whatsapp(f"Olá, PRUMO. Vi o Raio-X da {nome} e quero conversar sobre o WhatsApp que responde.")
     partes = [
         "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\">",
         '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -783,80 +870,89 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = ""
         f'<body {MARCA}><main class="folha">',
         '<header class="topo"><div class="marca"><span class="fio"></span><span>PRU<span class="brasa">MO</span></span></div>'
         '<span class="miudo">Raio-X</span></header>',
-        '<p class="kicker">Como vocês aparecem no Google</p>',
-        f"<h1>{e(nome)}</h1>",
     ]
+
+    # Ato 1 · Veredito: cabe na primeira tela do celular, sem rolar.
+    ato1 = ['<section class="ato veredito" id="veredito" data-ato="veredito" aria-labelledby="t-veredito">',
+            '<p class="kicker">Como vocês aparecem no Google</p>', f'<h1 id="t-veredito">{e(nome)}</h1>']
     if onde:
-        partes.append(f'<p class="lede">{e(onde)}. Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
+        ato1.append(f'<p class="lede">{e(onde)}. Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
     else:
-        partes.append('<p class="lede">Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
+        ato1.append('<p class="lede">Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
     lido = diag.get("places_em") or diag["lido_em"]
     if nota is not None and n:
-        partes.append(f'<div class="nota"><span class="num">{e(numero(nota))}</span>'
-                      f'<span class="leitura">nota no Google<br>{e(n)} avaliaç{"ão" if n == 1 else "ões"}'
-                      f'{"<br>lida em " + e(lido) if lido else ""}</span></div>')
+        ato1.append(f'<div class="nota"><span class="num">{e(numero(nota))}</span>'
+                    f'<span class="leitura">nota no Google<br>{e(n)} avaliaç{"ão" if n == 1 else "ões"}'
+                    f'{"<br>lida em " + e(lido) if lido else ""}</span></div>')
+    if presenca:
+        ato1.append(calculo_prumo.bloco_faixa_html(presenca))
     if bons and pontos:
-        partes.append('<div class="resumo"><div><span class="miudo">O que segura cliente</span>'
-                      f'<strong>{e(bons[0]["titulo"])}</strong></div><div><span class="miudo">O que perde cliente</span>'
-                      f'<strong>{e(pontos[0]["titulo"])}</strong></div></div>')
-    if bons:
-        partes.append('<section class="bons"><h2>O que já está bom</h2><ul class="lista">'
-                      + "".join(item("✓", b) for b in bons) + "</ul></section>")
+        ato1.append('<div class="resumo"><div><span class="miudo">O que segura cliente</span>'
+                    f'<strong>{e(bons[0]["titulo"])}</strong></div><div><span class="miudo">O que perde cliente</span>'
+                    f'<strong>{e(pontos[0]["titulo"])}</strong></div></div>')
+    ato1.append("</section>")
+    partes.append("".join(x for x in ato1 if x))
+
+    # Ato 2 · Por quê: os pontos abertos; o resto em detalhes fechados, para quem quer conferir.
+    ato2 = ['<section class="ato por-que" id="por-que" data-ato="por-que" aria-labelledby="t-por-que">',
+            '<p class="kicker" id="t-por-que">Por quê</p>']
     if pontos:
-        partes.append(f'<section class="pontos"><h2>{e(titulo_pontos)}</h2><ul class="lista">'
-                      + "".join(item(f"{i:02d}", p) for i, p in enumerate(pontos, 1)) + "</ul></section>")
-    # A nota vem depois dos pontos: quem leu o que perde cliente vê a soma e quanto vale fechar a distância.
-    if calculo_prumo and diag.get("presenca"):
-        partes.append(calculo_prumo.bloco_html(diag["presenca"], nome))
-    partes.append(secao_busca(diag, nome, e))
-    partes.append(secao_avaliacoes(diag, e))
+        ato2.append(f'<div class="pontos"><h2>{e(titulo_pontos)}</h2><ul class="lista">'
+                    + "".join(item(f"{i:02d}", p) for i, p in enumerate(pontos, 1)) + "</ul></div>")
+    ato2.append('<div class="detalhes">')
+    if bons:
+        ato2.append(detalhe("O que já está bom", '<ul class="lista">' + "".join(item("✓", b) for b in bons) + "</ul>",
+                            "bons"))
+    ato2.append(detalhe("Quem aparece antes de vocês na busca", secao_busca(diag, nome, e)))
+    ato2.append(detalhe("O que os clientes dizem", secao_avaliacoes(diag, e)))
     linhas = checklist(diag)
     if linhas:
         sinal = {"ok": "✓", "falta": "✕", "nc": "–"}
-        partes.append('<section><h2>O perfil no Google, item por item</h2>'
-                      '<p class="intro">O que o cliente encontra quando abre o perfil de vocês no Google Maps.</p><ul class="check">'
-                      + "".join(f'<li class="{x["estado"]}"><span class="sinal" aria-hidden="true">{sinal[x["estado"]]}</span>'
-                                f'<span><span class="visualmente-oculto">{e({"ok": "Em dia: ", "falta": "Falta: ", "nc": "Não conferido: "}[x["estado"]])}</span>'
-                                f'{e(x["item"])}</span><span class="det">{e(x["detalhe"])}</span></li>' for x in linhas)
-                      + "</ul></section>")
-    passos = jornada(diag)
-    if passos:
-        corpo = []
-        for i, p in enumerate(passos, 1):
-            bloco = [f'<li><h3><span>{i:02d}</span>{e(p["titulo"])}</h3>',
-                     f'<div class="hoje"><span class="rotulo">Hoje</span><span>{e(p["hoje"])}</span></div>']
-            if p["demo"]:
-                itens = "".join(f'<li><a href="{e(h)}">{e(t)}</a></li>' if h else f"<li>{e(t)}</li>" for t, h in p["demo"])
-                bloco.append(f'<div class="nodemo"><span class="rotulo">{e(p["rotulo"])}</span><ul>{itens}</ul></div>')
-            bloco.append("</li>")
-            corpo.append("".join(bloco))
-        partes.append('<section><h2>O caminho do cliente até vocês</h2>'
-                      '<p class="intro">Do Google até a primeira conversa: onde o caminho de hoje perde gente e o que '
-                      'a demonstração que montamos já resolve.</p><ol class="jornada">' + "".join(corpo) + "</ol></section>")
-    demo = ['<section class="demo"><h2>Montamos uma demonstração do site de vocês</h2>']
+        ato2.append(detalhe("O perfil no Google, item por item",
+                            '<p class="intro">O que o cliente encontra quando abre o perfil de vocês no Google Maps.</p><ul class="check">'
+                            + "".join(f'<li class="{x["estado"]}"><span class="sinal" aria-hidden="true">{sinal[x["estado"]]}</span>'
+                                      f'<span><span class="visualmente-oculto">{e({"ok": "Em dia: ", "falta": "Falta: ", "nc": "Não conferido: "}[x["estado"]])}</span>'
+                                      f'{e(x["item"])}</span><span class="det">{e(x["detalhe"])}</span></li>' for x in linhas)
+                            + "</ul>"))
+    nota_html = calculo_prumo.bloco_html(presenca, nome) if presenca else ""
+    ato2.append(detalhe("Como fizemos este Raio-X",
+                        nota_html + ('<h3 class="sub">De onde vem cada dado</h3>' if nota_html else "")
+                        + secao_metodo(diag, e)))
+    ato2.append("</div></section>")
+    partes.append("".join(x for x in ato2 if x))
+
+    # Ato 3 · O que fazer: a demonstração, o preço do Encontrado e o WhatsApp do PRUMO.
+    ato3 = ['<section class="ato o-que-fazer" id="o-que-fazer" data-ato="o-que-fazer" aria-labelledby="t-o-que-fazer">',
+            '<p class="kicker" id="t-o-que-fazer">O que fazer</p>',
+            '<div class="demo"><h2>Montamos uma demonstração do site de vocês</h2>']
     if tem_og:
-        demo.append(f'<a href="/" aria-label="Abrir a demonstração do site de {e(nome)}">'
+        ato3.append(f'<a href="/" data-evento="raiox-demo" aria-label="Abrir a demonstração do site de {e(nome)}">'
                     f'<img src="/og.jpg" width="1200" height="630" alt="Prévia da demonstração do site de {e(nome)}" loading="lazy"></a>')
-    demo.append('<p>Com o nome, o contato e o jeito de vocês. Abre no celular do mesmo jeito que o cliente veria.</p>'
-                '<p><a class="botao" href="/">Ver a demonstração</a></p></section>')
-    partes += demo
-    partes.append('<section class="escura"><h2>O próximo passo</h2><div class="servicos">'
-                  '<div class="servico"><h3>Encontrado</h3>'
-                  f'<p class="preco">{e(PRECO)}</p>'
-                  '<p>Esta demonstração no ar, com o endereço de vocês e ligada ao botão “Site” do Google. Hospedagem e '
-                  'ajustes incluídos. <strong>Vocês só pagam depois de ver funcionando.</strong></p></div>'
-                  '<div class="servico"><h3>Respondido e Acompanhado</h3>'
-                  f'<p class="preco">{e(PRECO_RESPONDIDO)}</p>'
-                  '<p>O WhatsApp de vocês responde quem chama, tira as dúvidas de sempre e agenda.</p></div>'
-                  '</div><p>Para conversar sobre qualquer um dos dois, é só responder a mensagem no WhatsApp.</p></section>')
-    partes.append(secao_metodo(diag, e))
+    ato3.append('<p>Com o nome, o contato e o jeito de vocês. Abre no celular do mesmo jeito que o cliente veria.</p>'
+                '<p><a class="botao" href="/" data-evento="raiox-demo">Ver a demonstração</a></p></div>')
+    ato3.append('<div class="oferta"><span class="miudo">Para colocar no ar</span><h2>Encontrado</h2>'
+                f'<p class="preco">{e(PRECO)}</p>'
+                '<p>Esta demonstração no ar, com o endereço de vocês e ligada ao botão “Site” do Google. Hospedagem e '
+                'ajustes incluídos. <strong>Vocês só pagam depois de ver funcionando.</strong></p>'
+                f'<div class="acoes"><a class="botao-zap" href="{e(zap_site)}" target="_blank" rel="noopener" '
+                'data-evento="raiox-whatsapp-site">Quero o site no ar</a>'
+                f'<a class="link-zap" href="{e(zap_respondido)}" target="_blank" rel="noopener" '
+                'data-evento="raiox-whatsapp-respondido">Quero conversar sobre o WhatsApp que responde</a></div></div>')
+    ato3.append("</section>")
+    partes.append("".join(ato3))
+
     rodape = ["<footer>"]
     rodape.append(f"<span>Dados públicos do Google Maps{', lidos em ' + e(lido) if lido else ''}."
                   + (f' <a href="{e(diag["maps"])}" rel="noopener">Ver o perfil no Google Maps</a>.' if diag["maps"].startswith("https://") else "")
                   + "</span>")
     rodape.append('<span>PRUMO · <a href="https://prumo.services" rel="noopener">prumo.services</a></span></footer>')
-    partes += rodape
-    partes.append("</main></body></html>\n")
+    partes.append("".join(rodape))
+    partes.append("</main>")
+    # A barra do celular: o mesmo botão, fixa no rodapé depois que o "O que fazer" aparece (JS_PAGINA).
+    partes.append(f'<div class="barra-fixa"><a class="botao-zap" href="{e(zap_site)}" target="_blank" rel="noopener" '
+                  'data-evento="raiox-whatsapp-site">Quero o site no ar</a></div>')
+    partes.append(f"<script>{JS_PAGINA}</script>")
+    partes.append("</body></html>\n")
     return "\n".join(p for p in partes if p)
 
 
@@ -915,66 +1011,8 @@ def checklist(diag: dict) -> list[dict]:
     return linhas
 
 
-def jornada(diag: dict) -> list[dict]:
-    """O caminho do cliente: procura, compara, conhece, chama, espera. Cada passo diz o que está
-    acontecendo hoje (só fato) e o que a demonstração já resolve (lido do index.html dela)."""
-    conc, site, hoje, demo = diag.get("concorrencia"), diag.get("site"), diag.get("site_hoje"), diag.get("demo") or {}
-    nota, n = diag.get("nota"), diag.get("avaliacoes")
-    passos = []
-    if conc:
-        hoje_busca = (f"Em “{conc['consulta']}”, vocês aparecem em {conc['posicao']}º lugar." if conc["posicao"]
-                      else f"Em “{conc['consulta']}”, vocês não aparecem entre os {conc['lidos']} primeiros.")
-    else:
-        hoje_busca = "Não medimos a posição de vocês na busca."
-    passos.append({"titulo": "Procura no Google", "hoje": hoje_busca, "rotulo": "Com o site",
-                   "demo": [("O botão “Site” do perfil passa a levar para uma página de vocês.", None)]})
-    vistos = []
-    if nota is not None and n:
-        vistos.append(f"nota {numero(nota)} com {n} avaliações")
-    if diag.get("fotos"):
-        vistos.append(f"{diag['fotos']} fotos de vocês")
-    if diag.get("horario"):
-        vistos.append("o horário")
-    passos.append({"titulo": "Abre o perfil e compara",
-                   "hoje": ("Vê " + ", ".join(vistos) + ".") if vistos else "Vê o nome e o endereço.",
-                   "rotulo": "", "demo": []})
-    if site is None:
-        hoje_site = "Não conferimos para onde leva o botão “Site”."
-    elif site["tipo"] == "nenhum":
-        hoje_site = "Não há botão “Site” no perfil: para saber mais, a pessoa precisa ligar ou procurar outro."
-    elif site["tipo"] == "rede":
-        hoje_site = f"O botão “Site” leva para {nome_da_rede(site['url'])}."
-    elif hoje == "fora":
-        hoje_site = f"O botão “Site” leva para {dominio(site['url'])}, que não abriu quando conferimos."
-    elif hoje == "sem_nome":
-        hoje_site = f"O botão “Site” leva para {dominio(site['url'])}, uma página sem o nome de vocês."
-    else:
-        hoje_site = f"O botão “Site” leva para {dominio(site['url'])}."
-    secoes = [(s["titulo"] if len(s["titulo"]) <= 80 else s["titulo"][:79].rsplit(" ", 1)[0] + "…", f"/#{s['id']}")
-              for s in (demo.get("secoes") or [])[:6]]
-    passos.append({"titulo": "Toca em “Site” para conhecer o trabalho", "hoje": hoje_site, "rotulo": "No demo", "demo": secoes})
-    tel = diag.get("telefone")
-    hoje_chama = ("O número do perfil é celular: dá para ligar ou mandar mensagem." if tel == "celular"
-                  else "O número do perfil é fixo." if tel == "fixo" else "Liga para o número do perfil.")
-    chama = []
-    if demo.get("whatsapp"):
-        k = demo["whatsapp"]
-        chama.append((f"Botão de WhatsApp em {k} ponto{'s' if k > 1 else ''} da página"
-                      + (", com a mensagem já começada." if demo.get("whatsapp_com_texto") else "."), None))
-    if demo.get("telefone"):
-        chama.append(("Tocar no número liga direto.", None))
-    if demo.get("mapa"):
-        chama.append(("O endereço abre no Google Maps.", None))
-    passos.append({"titulo": "Chama", "hoje": hoje_chama, "rotulo": "No demo", "demo": chama})
-    passos.append({"titulo": "Espera a resposta",
-                   "hoje": "De fora não dá para ver quanto tempo vocês levam para responder, nem quantas mensagens "
-                           "ficam para depois.",
-                   "rotulo": "Com o PRUMO",
-                   "demo": [("O Respondido e Acompanhado responde quem chama, tira as dúvidas de sempre e agenda.", None)]})
-    return passos
-
-
 def secao_busca(diag: dict, nome: str, e) -> str:
+    """O corpo do detalhe "Quem aparece antes de vocês na busca"; '' sem a busca do Places."""
     conc = diag.get("concorrencia")
     if not conc:
         return ""
@@ -1005,18 +1043,18 @@ def secao_busca(diag: dict, nome: str, e) -> str:
         f'<p class="intro">Vocês aparecem em {e(conc["posicao"])}º lugar nesta busca.</p>' if conc["posicao"]
         else f'<p class="intro">Vocês não apareceram entre os {e(conc["lidos"])} primeiros desta busca.</p>')
     k, m = conc["com_site"], len(conc["outros"])
-    return (f'<section><h2>Quem aparece quando procuram “{e(conc["consulta"])}”</h2>'
-            f'<p class="intro">Fizemos a busca no Google em {e(conc["lido_em"])}. Dos {m} primeiros que não são vocês, '
-            f'{e(k)} mostra{"m" if k != 1 else ""} site próprio no perfil.</p>'
-            f'<ol class="busca">{"".join(linhas)}</ol>{fora}</section>')
+    return (f'<p class="intro">Procuramos “{e(conc["consulta"])}” no Google em {e(conc["lido_em"])}. Dos {m} primeiros '
+            f'que não são vocês, {e(k)} mostra{"m" if k != 1 else ""} site próprio no perfil.</p>'
+            f'<ol class="busca">{"".join(linhas)}</ol>{fora}')
 
 
 def secao_avaliacoes(diag: dict, e) -> str:
+    """O corpo do detalhe "O que os clientes dizem"; '' sem avaliações lidas."""
     av = diag.get("avaliacoes_lidas")
     if not av or not av["total"]:
         return ""
     total = av["total"]
-    partes = [f'<section><h2>O que os clientes dizem</h2><p class="intro">Lemos as {total} avaliações que o Google '
+    partes = [f'<p class="intro">Lemos as {total} avaliações que o Google '
               f'mostra primeiro no perfil de vocês e contamos do que elas falam.'
               + (f" {av['criticas']} delas {'tem' if av['criticas'] == 1 else 'têm'} nota 3 ou menos." if av["criticas"] else "")
               + "</p>"]
@@ -1040,11 +1078,11 @@ def secao_avaliacoes(diag: dict, e) -> str:
         estrelas = f", {t['nota']} estrelas" if t.get("nota") else ""
         quando = f", {e(t['quando'])}" if t.get("quando") else ""
         partes.append(f'<blockquote><p>“{e(t["trecho"])}”</p><cite>{autor}{e(estrelas)}{quando}, no Google</cite></blockquote>')
-    partes.append("</section>")
     return "".join(partes)
 
 
 def secao_metodo(diag: dict, e) -> str:
+    """A lista de onde vem cada dado, no detalhe "Como fizemos este Raio-X" (depois da Nota de presença)."""
     itens = []
     if diag.get("places_em"):
         itens.append(f"Nota, avaliações, horário e site do perfil: lidos do Google em {e(diag['places_em'])}.")
@@ -1069,8 +1107,7 @@ def secao_metodo(diag: dict, e) -> str:
                      "empresas. O que não medimos fica fora da conta, nunca vira zero.")
     itens.append("Não conferimos se vocês respondem às avaliações (o Google não entrega isso a sistemas de fora) "
                  "nem quanto tempo levam para responder uma mensagem.")
-    return ('<section><h2>Como fizemos este Raio-X</h2><ul class="metodo">'
-            + "".join(f"<li>{i}</li>" for i in itens) + "</ul></section>")
+    return '<ul class="metodo">' + "".join(f"<li>{i}</li>" for i in itens) + "</ul>"
 
 
 # ------------------------------------------------------------------ publicação (efeitos)
@@ -1694,20 +1731,23 @@ def testar() -> int:
             h = pagina(dados, diagnostico(dados), "https://demo-x.vercel.app", False)
             self.assertNotIn("og.jpg", h)
 
-        def test_empresa_sem_nome_de_pessoa_e_dois_servicos_com_preco(self):
+        def test_empresa_sem_nome_de_pessoa_e_so_o_preco_do_encontrado(self):
             dados = ler_content(CONTENT_EXEMPLO)
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", True)
             self.assertNotIn("Rômulo", h)
-            self.assertIn("R$ 2.400 + R$ 390/mês", h)
-            self.assertIn("Respondido e Acompanhado", h)
+            # O preço do Respondido só se fala na conversa (08 e 09/10/2026).
+            self.assertNotIn("2.400", h)
+            self.assertNotIn("390/mês", h)
+            self.assertNotIn("Respondido e Acompanhado", h)
+            self.assertNotIn("é só responder a mensagem", h)
             self.assertIn("Não conferimos se vocês respondem às avaliações", h)
-            # Sem Places: nada de concorrência nem de avaliações, e a busca não é afirmada.
-            self.assertNotIn("Quem aparece quando procuram", h)
+            # Sem Places: nada de concorrência nem de avaliações (detalhe ausente, não vazio).
+            self.assertNotIn("Quem aparece antes de vocês na busca", h)
             self.assertNotIn("O que os clientes dizem", h)
-            self.assertIn("Não medimos a posição de vocês na busca.", h)
+            self.assertNotIn("O caminho do cliente", h)
 
     class Profundo(unittest.TestCase):
-        """Versão 2: Places, avaliações, demo, checklist e caminho do cliente (tudo PURO)."""
+        """Versão 2: Places, avaliações, demo e checklist (tudo PURO)."""
 
         def test_temas_contam_so_o_que_se_leu_e_nota_baixa_nao_vira_elogio(self):
             av = temas_das_avaliacoes(places_exemplo()["detalhes"]["textos"])
@@ -1802,31 +1842,20 @@ def testar() -> int:
             self.assertEqual(itens["Horário de funcionamento"]["detalhe"], "aberto 5 dias por semana")
             self.assertEqual(itens["Avaliações"]["estado"], "falta")
 
-        def test_jornada_liga_os_passos_as_secoes_do_demo(self):
-            dados = ler_content(CONTENT_EXEMPLO)
-            passos = jornada(diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7), ler_demo(DEMO_EXEMPLO)))
-            self.assertEqual([p["titulo"] for p in passos], ["Procura no Google", "Abre o perfil e compara",
-                                                            "Toca em “Site” para conhecer o trabalho", "Chama",
-                                                            "Espera a resposta"])
-            self.assertIn("7º lugar", passos[0]["hoje"])
-            self.assertIn(("Os papéis que chegam & ficam", "/#papeis"), passos[2]["demo"])
-            self.assertIn("com a mensagem já começada", passos[3]["demo"][0][0])
-            self.assertIn("não abriu", passos[2]["hoje"])
-
         def test_pagina_completa_escapa_e_so_linka_https(self):
             dados = ler_content(CONTENT_EXEMPLO)
             diag = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7), ler_demo(DEMO_EXEMPLO))
             h = pagina(dados, diag, "https://demo-x.vercel.app", True)
-            self.assertIn("Quem aparece quando procuram “advogado em Anápolis”", h)
+            self.assertIn("<summary>Quem aparece antes de vocês na busca</summary>", h)
+            self.assertIn("Procuramos “advogado em Anápolis” no Google em 08/10/2026", h)
             self.assertIn("Vocês aparecem em 7º lugar nesta busca.", h)
             self.assertIn("Beta &lt;script&gt;x&lt;/script&gt;", h)
             self.assertNotIn("<script>x</script>", h)
-            self.assertEqual(h.count("<script>"), 1)  # só a calculadora da Nota de presença
+            self.assertEqual(h.count("<script>"), 2)  # a calculadora da Nota de presença e a barra/medição
             self.assertIn('href="https://www.google.com/maps/contrib/1"', h)
             self.assertNotIn("javascript:", h)
             self.assertIn("O que os clientes dizem", h)
             self.assertIn("3 de 5", h)
-            self.assertIn('href="/#papeis"', h)
             self.assertIn("3 pontos que mandam cliente para o concorrente", h)
             self.assertIn("lida em 08/10/2026", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
@@ -1841,7 +1870,7 @@ def testar() -> int:
 
         def test_modulo_achado_no_repo(self):
             self.assertIsNotNone(calculo_prumo, "prumo-mapa/calculo_prumo.py ao lado deste arquivo")
-            self.assertEqual(VERSAO, 3)
+            self.assertEqual(VERSAO, 4)
 
         def test_nota_com_places_bloco_a_bloco(self):
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
@@ -1870,7 +1899,9 @@ def testar() -> int:
             self.assertIsNone(p["nota"])
             h = pagina(dados, d, "https://demo-x.vercel.app", True)
             self.assertNotIn("Nota de presença", h)
-            self.assertNotIn("<script>", h)
+            self.assertNotIn('class="faixa-presenca', h)
+            self.assertNotIn('id="prumo-valor"', h)
+            self.assertEqual(h.count("<script>"), 1)  # só a barra/medição
 
         def test_item_nao_conferido_nunca_vira_falta(self):
             dados = ler_content(CONTENT_EXEMPLO.split("## Por que este lead")[0])  # sem horário nem fotos conferidos
@@ -1886,15 +1917,24 @@ def testar() -> int:
         def test_pagina_com_a_nota_e_a_calculadora(self):
             dados = ler_content(CONTENT_EXEMPLO)
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
-            self.assertIn('<section class="presenca"><h2>Nota de presença</h2>', h)
-            self.assertIn("10,8<small>/18</small>", h)
+            self.assertIn('<div class="presenca"><h3>Nota de presença</h3>', h)
+            self.assertIn("10,8 <small>de 18</small>", h)
             self.assertIn("não medimos", h)
             self.assertIn('<label for="prumo-valor">', h)
             self.assertIn('inputmode="decimal"', h)
             self.assertIn("1 cliente a mais por mês × R$ ___ = R$ ___ por mês", h)
-            self.assertLess(h.index("pontos que mandam cliente"), h.index("Nota de presença"))
-            self.assertLess(h.index("Nota de presença"), h.index("Quem aparece quando procuram"))
-            self.assertIn("A Nota de presença: seis pontos de 0 a 3", h)
+            # Na frente, só a faixa ("Em construção") e a frase dela; o "X de 18" fica em "Como fizemos".
+            ato1 = h[h.index('data-ato="veredito"'):h.index('data-ato="por-que"')]
+            self.assertIn('<p class="faixa-rotulo">Em construção</p>', ato1)
+            self.assertIn("Vocês aparecem, mas quem compara ainda vê lacunas", ato1)
+            self.assertIn('class="prumo-fio"', ato1)
+            self.assertNotIn("de 18", ato1)
+            self.assertNotIn("10,8", ato1)
+            como = h[h.index("<summary>Como fizemos este Raio-X</summary>"):]
+            self.assertIn("10,8 <small>de 18</small>", como)
+            self.assertLess(como.index("Nota de presença"), como.index("A Nota de presença: seis pontos de 0 a 3"))
+            self.assertLess(h.index("pontos que mandam cliente"), h.index("<summary>Quem aparece antes"))
+            self.assertLess(h.index("<summary>Quem aparece antes"), h.index('<div class="presenca">'))
             self.assertNotIn("sem custo", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
 
@@ -1927,6 +1967,137 @@ def testar() -> int:
                 self.assertEqual(len(chamadas), 3)
             finally:
                 globals()["baixar"] = antes
+
+    class TresAtos(unittest.TestCase):
+        """Versão 4: veredito, por quê e o que fazer; o WhatsApp do PRUMO; sem o preço do Respondido."""
+
+        def setUp(self):
+            dados = ler_content(CONTENT_EXEMPLO.replace("# Higor Ferreira - Advogado", "# Bar & Cia <Ltda>"))
+            self.diag = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7), ler_demo(DEMO_EXEMPLO))
+            self.dados = dados
+            self.h = pagina(dados, self.diag, "https://demo-x.vercel.app", True)
+
+        def test_os_tres_atos_na_ordem(self):
+            h = self.h
+            atos = [h.index(f'data-ato="{a}"') for a in ("veredito", "por-que", "o-que-fazer")]
+            self.assertEqual(atos, sorted(atos))
+            self.assertEqual(h.count("data-ato="), 3)
+            ato1, ato2, ato3 = h[atos[0]:atos[1]], h[atos[1]:atos[2]], h[atos[2]:]
+            # Ato 1: nome, nota do Google, a faixa e as duas linhas do resumo.
+            for trecho in ("Como vocês aparecem no Google", "Bar &amp; Cia &lt;Ltda&gt;", 'class="nota"',
+                           "faixa-presenca", "O que segura cliente", "O que perde cliente"):
+                self.assertIn(trecho, ato1)
+            # Ato 2: os pontos abertos, antes de qualquer detalhe.
+            self.assertIn("3 pontos que mandam cliente para o concorrente", ato2)
+            self.assertLess(ato2.index("pontos que mandam"), ato2.index("<details"))
+            # Ato 3: demonstração, Encontrado com preço e os botões.
+            for trecho in ("Ver a demonstração", "Encontrado", PRECO, "Vocês só pagam depois de ver funcionando",
+                           "Quero o site no ar", "Quero conversar sobre o WhatsApp que responde"):
+                self.assertIn(trecho, ato3)
+            self.assertLess(ato3.index("Ver a demonstração"), ato3.index("Quero o site no ar"))
+
+        def test_detalhes_sao_details_fechados_na_ordem(self):
+            h = self.h
+            titulos = re.findall(r"<details class=\"detalhe[^\"]*\"><summary>([^<]+)</summary>", h)
+            self.assertEqual(titulos, ["O que já está bom", "Quem aparece antes de vocês na busca", "O que os clientes dizem",
+                                       "O perfil no Google, item por item", "Como fizemos este Raio-X"])
+            self.assertEqual(h.count("<details"), 5)
+            self.assertEqual(h.count("</details>"), 5)
+            self.assertNotIn("<details open", h)  # fechados por padrão
+            self.assertNotIn("<section><h2>O que já está bom", h)
+
+        def test_secao_ausente_e_detalhe_ausente(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", True)
+            titulos = re.findall(r"<summary>([^<]+)</summary>", h)
+            self.assertEqual(titulos, ["O que já está bom", "O perfil no Google, item por item", "Como fizemos este Raio-X"])
+            self.assertNotIn("<summary></summary>", h)
+
+        def test_botao_do_whatsapp_com_o_numero_novo_e_o_nome_na_mensagem(self):
+            h = self.h
+            texto = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero o site no ar."
+            esperado = "https://wa.me/5527999762786?text=" + urllib.parse.quote(texto, safe="")
+            self.assertIn(f'href="{html.escape(esperado)}"', h)
+            self.assertNotIn("<Ltda>", h)  # o nome vai codificado no link e escapado no texto
+            self.assertEqual(h.count(html.escape(esperado)), 2)  # o botão do Ato 3 e a barra do celular
+            m = re.search(r'<a class="botao-zap" href="([^"]+)" target="_blank" rel="noopener" '
+                          r'data-evento="raiox-whatsapp-site">Quero o site no ar</a>', h)
+            self.assertTrue(m)
+            self.assertEqual(urllib.parse.unquote(html.unescape(m.group(1)).split("?text=")[1]), texto)
+            resp = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero conversar sobre o WhatsApp que responde."
+            self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
+            self.assertIn('data-evento="raiox-whatsapp-respondido"', h)
+            for velho in ("5527997780954", "27997780954", "99778-0954", "997780954"):
+                self.assertNotIn(velho, h)
+
+        def test_sem_preco_do_respondido_nem_caminho_do_cliente(self):
+            h = self.h
+            self.assertNotIn("2.400", h)
+            self.assertNotIn("390/mês", h)
+            self.assertNotIn("O caminho do cliente", h)
+            self.assertNotIn("O próximo passo", h)
+            self.assertNotIn('class="escura"', h)
+            self.assertNotIn("PRECO_RESPONDIDO", globals())
+
+        def test_barra_fixa_e_medicao_desligada_sem_cookie(self):
+            h = self.h
+            self.assertIn('<div class="barra-fixa">', h)
+            self.assertLess(h.index("</main>"), h.index('<div class="barra-fixa">'))
+            self.assertIn(".barra-fixa{display:none}", h)  # sem JS a barra não aparece
+            self.assertIn("html.com-js body{padding-bottom:88px}", h)  # não cobre o fim da página
+            self.assertIn("@media (max-width:719.98px)", h)
+            js = JS_PAGINA
+            self.assertIn("const URL_EVENTOS = '';", js)
+            self.assertIn("if(!URL_EVENTOS||!navigator.sendBeacon)return;", js)
+            for ev in ("raiox-aberto", "raiox-o-que-fazer"):
+                self.assertIn(f"'{ev}'", js)
+            for ev in ("raiox-demo", "raiox-whatsapp-site", "raiox-whatsapp-respondido"):
+                self.assertIn(f'data-evento="{ev}"', h)
+            self.assertIn("IntersectionObserver", js)
+            self.assertIn("{e:e,p:location.pathname,t:Date.now()}", js)
+            codigo = re.sub(r"//[^\n]*", "", js)  # o comentário diz o que não se faz; o código não faz
+            for proibido in ("cookie", "localStorage", "sessionStorage", "indexedDB"):
+                self.assertNotIn(proibido, codigo)
+
+        def test_movimento_so_transform_opacity_e_nada_com_reduced_motion(self):
+            css = CSS
+            self.assertIn("animation:detalhe-abre .22s", css)
+            self.assertIn("from{opacity:0;transform:translateY(-6px)}", css)
+            self.assertIn("transition:transform .32s", css)
+            # Toda animação e transição moram dentro de um prefers-reduced-motion:no-preference.
+            sem_movimento = re.sub(r"@media \([^{]*prefers-reduced-motion:no-preference\)\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}",
+                                   "", css)
+            self.assertNotIn("animation", sem_movimento)
+            self.assertNotIn("transition", sem_movimento)
+
+        def test_alvos_de_toque(self):
+            self.assertIn(".detalhe > summary{list-style:none;cursor:pointer;min-height:56px", CSS)
+            self.assertIn("min-height:56px", CSS[CSS.index(".botao-zap{"):])
+            self.assertIn("min-height:44px", CSS[CSS.index(".link-zap{"):])
+
+        def test_html_balanceado(self):
+            from html.parser import HTMLParser
+            vazias = {"meta", "link", "img", "br", "input", "hr", "source"}
+
+            class Contador(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.pilha, self.erros = [], []
+
+                def handle_starttag(self, tag, attrs):
+                    if tag not in vazias:
+                        self.pilha.append(tag)
+
+                def handle_endtag(self, tag):
+                    if not self.pilha or self.pilha[-1] != tag:
+                        self.erros.append((tag, list(self.pilha[-3:])))
+                    else:
+                        self.pilha.pop()
+
+            for diag in (self.diag, diagnostico(self.dados, "fora", "08/10/2026", 5)):
+                c = Contador()
+                c.feed(pagina(self.dados, diag, "https://demo-x.vercel.app", True))
+                self.assertEqual((c.erros, c.pilha), ([], []))
 
     class Places(unittest.TestCase):
         """Cache e chave numa raiz temporária própria; a rede é dublê."""
@@ -2116,7 +2287,7 @@ def testar() -> int:
                 SITE_LEADS = antes
 
     suite = unittest.TestSuite()
-    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, Places, Publicar):
+    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(c))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
