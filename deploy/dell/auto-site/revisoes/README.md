@@ -18,7 +18,7 @@ cp ~/auto-site/"$slug"/index.html ~/auto-site/"$slug"/index.antes-revisao.html
 cp ~/SquadOne/deploy/dell/auto-site/revisoes/"$slug"/index.html ~/auto-site/"$slug"/index.html
 python3 ~/.local/bin/qa-numerico ~/auto-site/"$slug"/index.html --capturas /tmp/qa-"$slug"
 # deploy do passo 5 do auto-site-CLAUDE.md (staging com index.html e og.jpg); ele tira o /raio-x do ar
-raio-x "$slug"    # devolve o /raio-x (compara o index.html da pasta com o que acabou de subir)
+raio-x "$slug"    # devolve o /raio-x, já na versão de três atos (compara o index.html da pasta com o que acabou de subir)
 ```
 
 Depois, uma linha no `~/auto-site/registro.md` com a data e o que a revisão mudou.
