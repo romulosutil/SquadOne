@@ -164,8 +164,38 @@ export const COLUNAS_DO_REGISTRO = {
   data: { nomes: ["data"] },
 } satisfies Record<string, Coluna>;
 
-export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito"] as const;
+/**
+ * `segunda_enviada` e `followup_enviado` (14/10/2026): o toque em "Mandar o link" e em "Mandar o
+ * follow-up" anota o envio. Sem isso o CRM não sabia se a 2ª mensagem saiu (o interesse sumia da Hoje
+ * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
+ */
+export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
+  "segunda_enviada", "followup_enviado"] as const;
 export type CrmTipoDeRegistro = (typeof TIPOS_DE_REGISTRO)[number];
+/** Os registros que o toque num link de envio faz sozinho: um clique duplo não pode virar dois envios. */
+export const TIPOS_DE_ENVIO: ReadonlySet<CrmTipoDeRegistro> = new Set(["segunda_enviada", "followup_enviado"]);
+/** O mesmo envio anotado de novo dentro disto é o mesmo toque (clique duplo, aba duplicada), não um envio novo. */
+export const JANELA_DE_REPETICAO_MS = 2 * 60 * 1000;
+/** Passado isto do "quero ver", a 2ª mensagem que não saiu vira urgência na Hoje. */
+export const HORAS_ATE_URGENTE = 2;
+
+/**
+ * O texto da 1ª mensagem pela data do envio, a mesma regra de `regime_da_mensagem` em
+ * deploy/dell/funil-aprendizado.py (site-mensagem.js no git): até 29/09 a curta com link,
+ * de 30/09 a 04/10 a do PRUMO com link, desde 05/10 o pedido de licença sem link (o link vai na 2ª).
+ * Datas de São Paulo. Envios sem `mensagem_variante` (150 de 221 em 14/10/2026) só têm isto.
+ */
+export const REGIMES_DA_MENSAGEM = ["curta_com_link", "prumo_com_link", "duas_mensagens"] as const;
+export type CrmRegimeDaMensagem = (typeof REGIMES_DA_MENSAGEM)[number];
+const CORTE_PRUMO_COM_LINK = Date.parse("2026-09-30T00:00:00-03:00");
+const CORTE_DUAS_MENSAGENS = Date.parse("2026-10-05T00:00:00-03:00");
+
+export function regimeDaMensagem(enviado: number | undefined): CrmRegimeDaMensagem | undefined {
+  if (enviado === undefined) return undefined;
+  if (enviado >= CORTE_DUAS_MENSAGENS) return "duas_mensagens";
+  if (enviado >= CORTE_PRUMO_COM_LINK) return "prumo_com_link";
+  return "curta_com_link";
+}
 
 export function normalizarCabecalho(nome: string): string {
   return nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -394,9 +424,15 @@ export interface CrmLead {
    * Sem nenhuma das duas é "desconhecida", nunca "não viu" (RULES 2 e 15).
    */
   leitura: "viu" | "pela-resposta" | "desconhecida" | "nao-se-aplica";
-  marcos: { enviado?: string; visto?: string; respondeu?: string };
+  /** `segundaEnviada`/`followupEnviado`: o último envio anotado na aba CRM (o toque no link da Central). */
+  marcos: { enviado?: string; visto?: string; respondeu?: string; segundaEnviada?: string; followupEnviado?: string };
   followupHoje: boolean;
   respostaNova: boolean;
+  /**
+   * Disse que quer ver e a 2ª mensagem ainda não saiu (14/10/2026): fica em `respostaNova` sem o
+   * limite de 48 h. `desde` é a resposta de interesse (ausente quando a planilha não dá a data).
+   */
+  interesseParado?: { desde?: string };
   acervo: boolean;
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
@@ -409,7 +445,7 @@ export interface CrmLead {
    * Site antes da venda, desde 07/10/2026: a variação da primeira mensagem (`mensagem_variante`:
    * A/B/C, EN, ou "manual") e a versão do site (`site_versao`). Ausente quando a planilha não diz.
    */
-  abordagem?: { mensagem?: string; site?: string; video?: BracoVideo };
+  abordagem?: { mensagem?: string; site?: string; video?: BracoVideo; regime?: CrmRegimeDaMensagem };
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp (do `wa_me`). */
   mensagemPronta?: string;
   eventos: CrmEvento[];
@@ -429,6 +465,8 @@ export interface CrmItemHoje {
   detalhe: string;
   links: CrmLink[];
   ordem: number;
+  /** Interesse parado há mais de HORAS_ATE_URGENTE: a tela destaca. */
+  urgente?: boolean;
 }
 
 export interface CrmGrupoHoje {
@@ -446,7 +484,8 @@ export interface CrmContagem {
 
 /**
  * Sem instante da leitura de propósito: a resposta só muda quando o retrato, as
- * pastas ou o dia mudam, e o ETag do Express devolve 304 ao celular no resto.
+ * pastas ou o dia mudam (e, com interesse parado na Hoje, a hora do "há N h"), e o
+ * ETag do Express devolve 304 ao celular no resto.
  * A idade do retrato é calculada na tela a partir de geradoEm.
  */
 export interface CrmVisao {
@@ -529,7 +568,41 @@ function manuais(registros: Registro[]) {
     if (r.tipo === "proposta_desfeita") proposta = undefined;
     if (r.tipo === "proximo_passo") proximo = r.texto ? r : undefined;
   }
-  return { proposta, proximo, semContato, notas: registros.filter((r) => r.tipo === "nota").length };
+  return {
+    proposta, proximo, semContato, notas: registros.filter((r) => r.tipo === "nota").length,
+    // Instantes dos envios anotados, em ordem: quem decide se valem é a regra de cada um (depois de quê).
+    segundas: registros.filter((r) => r.tipo === "segunda_enviada").map((r) => r.em),
+    followups: registros.filter((r) => r.tipo === "followup_enviado").map((r) => r.em),
+  };
+}
+
+/**
+ * "Interesse parado nunca some" (14/10/2026). Com 48 h de janela, "Manda aí" e "Pode sim" de 08–09/10
+ * saíram da Hoje sem o CRM saber se o link foi mandado. Quem disse que quer ver fica até a 2ª mensagem
+ * sair DEPOIS da resposta: anotada na Central (`segunda_enviada`) ou, quando a planilha trouxer a coluna,
+ * `ultima_saida_em`. A saída normal da etapa (recusa, proposta, ganho, Perdido pelos 7 dias) também
+ * tira, porque `conversa` só vale em Em contato. `null` = não está parado; `{ desde }` = parado desde.
+ */
+export function interesseParado(entrada: {
+  conversa: boolean;
+  resposta?: CrmResposta;
+  respondeu?: number;
+  segundas: number[];
+  ultimaSaida?: number;
+}): { desde?: number } | null {
+  if (!entrada.conversa || entrada.resposta?.tipo !== "interesse") return null;
+  const desde = instante(entrada.resposta.em ?? "") ?? entrada.respondeu;
+  // Sem a data da resposta, qualquer 2ª mensagem anotada vale: é melhor sumir com o link mandado
+  // do que ficar para sempre por falta de data.
+  const depois = (t: number) => desde === undefined || t > desde;
+  if (entrada.segundas.some(depois)) return null;
+  if (entrada.ultimaSaida !== undefined && desde !== undefined && entrada.ultimaSaida > desde) return null;
+  return desde === undefined ? {} : { desde };
+}
+
+/** O follow-up anotado depois do envio (ou do convite) apaga o "follow-up hoje": já foi. */
+export function followupJaEnviado(followups: number[], enviado: number | undefined): boolean {
+  return followups.some((t) => enviado === undefined || t > enviado);
 }
 
 /** "Sem contato fácil" marcado à mão: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
@@ -583,13 +656,15 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     proposta_desfeita: "Proposta desfeita",
     sem_contato: "Perdido: sem contato fácil",
     sem_contato_desfeito: "Perda por falta de contato desfeita",
+    segunda_enviada: "2ª mensagem enviada",
+    followup_enviado: "Follow-up enviado",
   };
   return registros.map((r) => ({
     tipo: r.tipo,
     rotulo: rotulo[r.tipo],
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
-    fonte: "aba CRM (registrado na Central)",
+    fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
     ...(r.tipo === "proximo_passo"
       ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : "Próximo passo limpo" }
       : r.tipo === "proposta" && r.data
@@ -618,6 +693,17 @@ function leituraDe(enviado: number | undefined, visto: number | undefined, respo
   if (visto !== undefined) return "viu";
   if (resposta !== undefined) return "pela-resposta";
   return enviado !== undefined || contatado ? "desconhecida" : "nao-se-aplica";
+}
+
+/** Marcos do cartão e dos Resultados; os envios anotados entram pelo último de cada tipo. */
+function marcosDoLead(enviado: number | undefined, visto: number | undefined, respondeu: number | undefined,
+  segundas: number[], followups: number[]): CrmLead["marcos"] {
+  const ultimo = (lista: number[]) => (lista.length ? lista[lista.length - 1] : undefined);
+  const pares: Array<[keyof CrmLead["marcos"], number | undefined]> = [
+    ["enviado", enviado], ["visto", visto], ["respondeu", respondeu],
+    ["segundaEnviada", ultimo(segundas)], ["followupEnviado", ultimo(followups)],
+  ];
+  return Object.fromEntries(pares.filter(([, t]) => t !== undefined).map(([chave, t]) => [chave, iso(t)]));
 }
 
 const dias = (desde: number | undefined, agora: number) => (desde === undefined ? undefined : Math.max(0, diaSP(agora) - diaSP(desde)));
@@ -717,7 +803,7 @@ function leadDoSite(linha: Linha, contexto: {
   const status = c("status").toLowerCase();
   const pasta = contexto.pastaPorId.get(chave);
   const registros = contexto.registros.get(`site:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas } = manuais(registros);
+  const { proposta, proximo, semContato, notas, segundas, followups } = manuais(registros);
   const t = {
     criado: instante(c("criadoEm")),
     enviado: instante(c("enviadoEm")),
@@ -745,11 +831,13 @@ function leadDoSite(linha: Linha, contexto: {
   const followupHoje = calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined
     && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
     && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
-    && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS);
-  const respostaNova = emConversa && (
+    && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
+    && !followupJaEnviado(followups, t.enviado);
+  const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: t.ultimaSaida });
+  const respostaNova = emConversa && (parado !== null || (
     t.ultimaEntrada !== undefined && t.ultimaSaida !== undefined
       ? t.ultimaEntrada > t.ultimaSaida
-      : t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000);
+      : t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
 
   const eventos: CrmEvento[] = [
     ...evento("encontrado", "Lead encontrado pelo Caçador", t.criado, "planilha · criado_em"),
@@ -816,12 +904,15 @@ function leadDoSite(linha: Linha, contexto: {
 
   const desde = calculada.desde;
   const video = bracoDaColuna(c("bracoVideo"));
+  const regime = regimeDaMensagem(t.enviado);
   const abordagem = {
     ...(c("mensagemVariante") ? { mensagem: c("mensagemVariante") } : {}),
     ...(c("siteVersao") ? { site: c("siteVersao") } : {}),
     ...(video ? { video } : {}),
+    // À parte da letra: a letra (desde 07/10) diz qual texto; o regime diz se o link ia na 1ª.
+    ...(regime ? { regime } : {}),
   };
-  const marcos = { ...(iso(t.enviado) ? { enviado: iso(t.enviado) } : {}), ...(iso(t.visto) ? { visto: iso(t.visto) } : {}), ...(iso(t.respondeu) ? { respondeu: iso(t.respondeu) } : {}) };
+  const marcos = marcosDoLead(t.enviado, t.visto, t.respondeu, segundas, followups);
   const ultimo = eventos.length ? Date.parse(eventos[eventos.length - 1].em) : undefined;
   return {
     id: `site:${chave}`,
@@ -842,6 +933,7 @@ function leadDoSite(linha: Linha, contexto: {
     marcos,
     followupHoje,
     respostaNova,
+    ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
     acervo,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
@@ -925,7 +1017,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   if (!chave) return null;
   const { agora } = contexto;
   const registros = contexto.registros.get(`prumo:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas } = manuais(registros);
+  const { proposta, proximo, semContato, notas, segundas, followups } = manuais(registros);
   const convite = instante(c("conviteEm"));
   const t = {
     encontrado: instante(c("encontradoEm")),
@@ -942,9 +1034,12 @@ function leadDoPrumo(linha: Linha, contexto: {
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const diasDesdeConvite = dias(t.convite, agora);
   const followupHoje = calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
-    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA;
-  const respostaNova = emConversa && t.respondeu !== undefined && t.diagnostico === undefined
-    && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000;
+    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA
+    && !followupJaEnviado(followups, t.convite);
+  // Com o formulário respondido (diagnóstico) a conversa já andou: não há mais 2ª mensagem a esperar.
+  const parado = interesseParado({ conversa: emConversa && t.diagnostico === undefined, resposta, respondeu: t.respondeu, segundas });
+  const respostaNova = emConversa && t.diagnostico === undefined && (parado !== null
+    || (t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
   const eventos: CrmEvento[] = [
     ...evento("encontrado", "Encontrado pelo Lead Scout", t.encontrado, "planilha · Encontrado em"),
     ...evento("convite", "Convite enviado", t.convite, "planilha · Convite enviado em"),
@@ -980,14 +1075,18 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
     ...(ultimo !== undefined ? { ultimoEvento: iso(ultimo), diasDesdeUltimoEvento: dias(ultimo, agora) } : {}),
     leitura: leituraDe(t.convite, t.visto, t.respondeu ?? t.diagnostico, calculada.etapa === "contato"),
-    marcos: { ...(iso(t.convite) ? { enviado: iso(t.convite) } : {}), ...(iso(t.visto) ? { visto: iso(t.visto) } : {}), ...(iso(t.respondeu) ? { respondeu: iso(t.respondeu) } : {}) },
+    marcos: marcosDoLead(t.convite, t.visto, t.respondeu, segundas, followups),
     followupHoje,
     respostaNova,
+    ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
     acervo: false,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     notas,
     ...(resposta ? { resposta } : {}),
+    // O regime é a regra do Site pela data; no PRUMO vai pelo convite só como dado (a tela de
+    // Resultados por mensagem é do Site, e a ficha do PRUMO não o mostra).
+    ...(regimeDaMensagem(t.convite) ? { abordagem: { regime: regimeDaMensagem(t.convite) } } : {}),
     eventos,
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
@@ -1008,7 +1107,7 @@ function leadDoPrumo(linha: Linha, contexto: {
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
   { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta.` },
-  { id: "resposta", titulo: "Respostas para responder", explicacao: "Leads que escreveram por último." },
+  { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "PRUMO na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
   { id: "enviar", titulo: "Sites prontos para enviar", explicacao: "O link marca o envio e abre o WhatsApp com a mensagem." },
@@ -1019,6 +1118,26 @@ function textoDeDias(n: number | undefined, prefixo: string): string {
   if (n === 0) return `${prefixo} hoje`;
   if (n === 1) return `${prefixo} ontem`;
   return `${prefixo} há ${n} dias`;
+}
+
+/** "3 h", "1 dia", "5 dias": quanto o interesse está esperando, pelo relógio (não pelo calendário). */
+export function tempoEsperando(ms: number): string {
+  const horas = Math.floor(ms / (60 * 60 * 1000));
+  if (horas < 24) return `${Math.max(1, horas)} h`;
+  const n = Math.floor(ms / DIA_MS);
+  return n === 1 ? "1 dia" : `${n} dias`;
+}
+
+/** A ação do interesse parado há mais de HORAS_ATE_URGENTE: diz há quanto tempo e o que falta mandar. */
+export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | "abordagem" | "demoApagadoEm">, esperandoMs: number): string {
+  const ha = `há ${tempoEsperando(esperandoMs)}`;
+  if (lead.produto === "prumo") {
+    return lead.links.segunda ? `Quer saber mais ${ha} — o Raio-X ainda não foi mandado`
+      : `Quer saber mais ${ha} — o Raio-X ainda não foi feito nem mandado`;
+  }
+  if (lead.demoApagadoEm) return `Quer ver ${ha}, mas o demo foi apagado: republicar e mandar o link`;
+  if (lead.abordagem?.mensagem === "C" && lead.links.raioX) return `Quer ver o raio-x ${ha} — o raio-x e o demo ainda não foram mandados`;
+  return `Quer ver ${ha} — o link ainda não foi mandado`;
 }
 
 function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
@@ -1057,19 +1176,28 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       const segunda = lead.links.segunda
         ? [{ rotulo: lead.produto === "prumo" ? "Mandar o Raio-X"
           : lead.abordagem?.mensagem === "C" && lead.links.raioX ? "Mandar o raio-x e o demo" : "Mandar o link do site", url: lead.links.segunda }] : [];
+      const parado = lead.interesseParado;
+      const desde = Date.parse(parado?.desde ?? "");
+      const urgente = parado !== undefined && Number.isFinite(desde) && agora - desde >= HORAS_ATE_URGENTE * 60 * 60 * 1000;
       itens.resposta.push({
         leadId: lead.id,
-        acao: r?.tipo === "interesse" ? (lead.produto === "prumo"
-          ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
-          : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
-          : lead.abordagem?.mensagem === "C" && lead.links.raioX ? "Quer ver o raio-x: mandar o raio-x e o demo" : "Quer ver: mandar o link do site")
-          : "Responder no WhatsApp",
+        acao: urgente ? acaoDoInteresseParado(lead, agora - desde)
+          : r?.tipo === "interesse" ? (lead.produto === "prumo"
+            ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
+            : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
+            : lead.abordagem?.mensagem === "C" && lead.links.raioX ? "Quer ver o raio-x: mandar o raio-x e o demo" : "Quer ver: mandar o link do site")
+            : "Responder no WhatsApp",
         detalhe: [
           Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",
           ...(r?.trecho ? [`“${r.trecho}”`] : []),
+          // A regra dos 7 dias continua valendo para o interesse parado: dizer quanto falta é o empurrão.
+          ...(parado && lead.diasParaSair !== undefined
+            ? [`Sem mensagem dele, vai para Perdido ${lead.diasParaSair <= 1 ? "amanhã" : `em ${lead.diasParaSair} dias`}.`] : []),
         ].join(" "),
         links: r?.tipo === "interesse" ? [...segunda, ...conversa] : [...conversa, ...segunda],
-        ordem: Number.isFinite(t) ? t : 0,
+        // Interesse parado na frente, o que espera há mais tempo primeiro; depois as demais respostas.
+        ordem: (parado ? 0 : 1e13) + (parado && Number.isFinite(desde) ? desde : Number.isFinite(t) ? t : 0),
+        ...(urgente ? { urgente: true } : {}),
       });
     }
     if (lead.sinal === "revisar") {
@@ -1266,7 +1394,7 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (data && !Number.isFinite(Date.parse(`${data}T12:00:00-03:00`))) throw new RegistroInvalido("Data inválida.");
   if (tipo === "proximo_passo" && textoSeguro && !data) throw new RegistroInvalido("Informe a data do próximo passo.");
   if (tipo === "proposta" && !data) data = hojeEmSP(agora);
-  if (tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito") data = "";
+  if (tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito" || TIPOS_DE_ENVIO.has(tipo)) data = "";
   return { produto, id, tipo, texto: textoSeguro, data };
 }
 
@@ -1351,7 +1479,44 @@ async function lerRaioX(diretorio: string | undefined): Promise<RaioXDoPrumo[]> 
   return saida;
 }
 
+export interface RespostaDoRegistro {
+  ok: true;
+  em: string;
+  /** O mesmo envio já tinha sido anotado há menos de JANELA_DE_REPETICAO_MS: nada foi gravado de novo. */
+  repetido?: true;
+}
+
+/** Em contato e já falou com a gente: onde a 2ª mensagem faz sentido (o mesmo critério do cálculo). */
+const emConversaNoLead = (lead: Pick<CrmLead, "etapa" | "sinal">) => lead.etapa === "contato" && SINAIS_DE_CONVERSA.has(lead.sinal);
+
+/**
+ * Regras de quando cada envio pode ser anotado. PURA: lança RegistroInvalido com o motivo.
+ * A 2ª mensagem só existe depois de uma resposta (Em contato, em conversa); o follow-up só para
+ * quem está Em contato e nunca respondeu. Lead encerrado não recebe nenhum dos dois.
+ */
+export function conferirEnvio(tipo: CrmTipoDeRegistro, lead: Pick<CrmLead, "etapa" | "sinal">): void {
+  if (!TIPOS_DE_ENVIO.has(tipo)) return;
+  if (lead.etapa === "ganho" || lead.etapa === "perdido") throw new RegistroInvalido("Este lead já está encerrado.");
+  if (tipo === "segunda_enviada" && !emConversaNoLead(lead)) throw new RegistroInvalido("A 2ª mensagem só vale para quem já respondeu (Em contato, em conversa).");
+  if (tipo === "followup_enviado" && (lead.etapa !== "contato" || emConversaNoLead(lead))) {
+    throw new RegistroInvalido("O follow-up só vale para quem está Em contato e ainda não respondeu.");
+  }
+}
+
+/** O mesmo envio no retrato há pouco (o n8n já refez o retrato depois do primeiro toque)? */
+export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipoDeRegistro, agora: number): string | undefined {
+  if (!TIPOS_DE_ENVIO.has(tipo)) return undefined;
+  return lead.eventos.find((e) => e.tipo === tipo && e.origem === "manual" && Math.abs(agora - Date.parse(e.em)) < JANELA_DE_REPETICAO_MS)?.em;
+}
+
 export class CrmStore {
+  /**
+   * Envios anotados por este processo há pouco, por produto:id:tipo. O retrato leva segundos para
+   * refletir o registro e um clique duplo chega antes: sem isto, um toque viraria dois envios na
+   * planilha e o Resultados contaria follow-up em dobro. Só memória: depois de reiniciar, vale o retrato.
+   */
+  private readonly enviosRecentes = new Map<string, { em: number; resposta: Promise<RespostaDoRegistro> }>();
+
   constructor(readonly config: ConfigDoCrm, private readonly fetcher: typeof fetch = fetch) {}
 
   private async segredo(): Promise<string | undefined> {
@@ -1434,12 +1599,35 @@ export class CrmStore {
     }
   }
 
-  /** Nota, próximo passo ou proposta: vai para a aba CRM da planilha pelo n8n. A Central não guarda nada. */
-  async registrar(entrada: unknown, agora = new Date()): Promise<{ ok: true; em: string }> {
+  /**
+   * Nota, próximo passo, proposta ou envio anotado: vai para a aba CRM da planilha pelo n8n. A Central
+   * não guarda nada além da memória curta de envios recentes (idempotência do clique duplo).
+   */
+  async registrar(entrada: unknown, agora = new Date()): Promise<RespostaDoRegistro> {
     const registro = validarRegistro(entrada, agora);
+    if (!TIPOS_DE_ENVIO.has(registro.tipo)) return this.gravar(registro, agora);
+    const chave = `${registro.produto}:${registro.id}:${registro.tipo}`;
+    for (const [k, v] of this.enviosRecentes) if (agora.getTime() - v.em >= JANELA_DE_REPETICAO_MS) this.enviosRecentes.delete(k);
+    const recente = this.enviosRecentes.get(chave);
+    // O segundo toque espera o primeiro: se ele falhar, falha igual (é o mesmo envio) e sai da memória.
+    if (recente) return { ...(await recente.resposta), repetido: true };
+    const resposta = this.gravar(registro, agora);
+    this.enviosRecentes.set(chave, { em: agora.getTime(), resposta });
+    try {
+      return await resposta;
+    } catch (error) {
+      this.enviosRecentes.delete(chave);
+      throw error;
+    }
+  }
+
+  private async gravar(registro: CrmRegistroEntrada, agora: Date): Promise<RespostaDoRegistro> {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
+    const jaNoRetrato = envioRecenteNoLead(lead, registro.tipo, agora.getTime());
+    if (jaNoRetrato) return { ok: true, em: jaNoRetrato, repetido: true };
+    conferirEnvio(registro.tipo, lead);
     if (registro.tipo === "proposta" && lead.etapa === "proposta") throw new RegistroInvalido("Este lead já está em Proposta.");
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");
     if (registro.tipo === "sem_contato" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");

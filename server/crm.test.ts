@@ -10,8 +10,14 @@ import {
   RegistroFalhou,
   RegistroIndisponivel,
   RegistroInvalido,
+  acaoDoInteresseParado,
   bracoDaColuna,
+  conferirEnvio,
   configDoCrm,
+  followupJaEnviado,
+  interesseParado,
+  regimeDaMensagem,
+  tempoEsperando,
   montarCrm,
   dataNaProximaAcao,
   textoDoWaMe,
@@ -344,7 +350,9 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.ok(texto.startsWith("Aqui está o raio-x: https://demo-c.vercel.app/raio-x"), texto);
     assert.ok(texto.includes("está aqui:\nhttps://demo-c.vercel.app"), texto);
     const item = hoje.find((g) => g.id === "resposta")?.itens.find((i) => i.leadId === "site:quer-raio-x");
-    assert.equal(item?.acao, "Quer ver o raio-x: mandar o raio-x e o demo");
+    // Respondeu há 2,4 h e o link não saiu: o interesse parado vira urgência (14/10/2026).
+    assert.equal(item?.acao, "Quer ver o raio-x há 2 h — o raio-x e o demo ainda não foram mandados");
+    assert.equal(item?.urgente, true);
     assert.equal(lead(comRespostas(), "site:quer-ver").links.raioX, undefined, "sem a coluna, sem o link");
   });
 
@@ -361,7 +369,7 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(voltou.links.segunda, undefined, "sem demo, a segunda mensagem mandaria um link morto");
     assert.ok(voltou.eventos.some((e) => e.tipo === "apagado" && e.em === dias(3)));
     const item = v.hoje.find((g) => g.id === "resposta")!.itens.find((i) => i.leadId === "site:voltou")!;
-    assert.equal(item.acao, "Quer ver, mas o demo foi apagado: republicar antes de mandar o link");
+    assert.equal(item.acao, "Quer ver há 2 h, mas o demo foi apagado: republicar e mandar o link");
     assert.ok(!item.links.some((l) => l.rotulo === "Mandar o link do site"));
     // Sem apagado_em, nada muda.
     assert.equal(lead(comRespostas(), "site:quer-ver").demoApagadoEm, undefined);
@@ -384,8 +392,9 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
 
   it("a ficha diz que mensagem e que versão do site o lead recebeu, só quando a planilha diz", () => {
     const leads = comRespostas();
-    assert.deepEqual(lead(leads, "site:apagar").abordagem, { mensagem: "manual", site: "personalizado-v2" });
-    assert.equal(lead(leads, "site:nao-quer").abordagem, undefined);
+    // Enviados em 30/09: o regime (pela data) vem junto, à parte da letra.
+    assert.deepEqual(lead(leads, "site:apagar").abordagem, { mensagem: "manual", site: "personalizado-v2", regime: "prumo_com_link" });
+    assert.deepEqual(lead(leads, "site:nao-quer").abordagem, { regime: "prumo_com_link" });
     const base = retrato();
     base.fontes.site.linhas.push(linhaSite("so-versao", { status: "pronto", site_versao: "padrão" }));
     assert.deepEqual(lead(montarCrm(base, { agora: AGORA, pastas: PASTAS }).leads, "site:so-versao").abordagem, { site: "padrão" });
@@ -572,6 +581,168 @@ describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
   });
 });
 
+describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)", () => {
+  function com(extraSite: Array<Record<string, string>>, extraPrumo: Array<Record<string, string>> = [], registros: Array<Record<string, string>> = []) {
+    const base = retrato();
+    base.fontes.site.linhas.push(...extraSite);
+    base.fontes.prumo.linhas.push(...extraPrumo);
+    base.fontes.registros.linhas.push(...registros);
+    return montarCrm(base, { agora: AGORA, pastas: PASTAS });
+  }
+  // "Manda aí" (locação) e "Pode sim" (marido de aluguel): responderam e o CRM perdeu de vista em 48 h.
+  const quer = (id: string, respondeu: number, extra: Record<string, string> = {}) => linhaSite(id, {
+    status: "enviado", enviado_em: dias(respondeu + 1), respondeu_em: dias(respondeu), site_url: `https://demo-${id}.vercel.app`,
+    wa_me: "https://wa.me/5527999990020?text=oi", resposta_tipo: "interesse", resposta_trecho: "Manda aí", resposta_em: dias(respondeu), ...extra,
+  });
+  const resposta = (v: ReturnType<typeof com>) => v.hoje.find((g) => g.id === "resposta")!.itens;
+
+  it("interesse parado passa das 48 h e continua na Hoje, na frente, o mais antigo primeiro, com urgência", () => {
+    const v = com([
+      quer("manda-ai", 5),
+      quer("pode-sim", 3, { resposta_trecho: "Pode sim" }),
+      linhaSite("neutro-velho", { status: "enviado", enviado_em: dias(5), respondeu_em: dias(4), resposta_tipo: "neutra", resposta_trecho: "quem é?", resposta_em: dias(4) }),
+    ]);
+    const mandaAi = lead(v.leads, "site:manda-ai");
+    assert.equal(mandaAi.respostaNova, true, "5 dias depois, o interesse ainda espera o link");
+    assert.deepEqual(mandaAi.interesseParado, { desde: dias(5) });
+    assert.equal(lead(v.leads, "site:neutro-velho").respostaNova, false, "as outras respostas seguem com a janela de 48 h");
+    assert.equal(lead(v.leads, "site:neutro-velho").interesseParado, undefined);
+    const itens = resposta(v);
+    assert.deepEqual(itens.map((i) => i.leadId), ["site:manda-ai", "site:pode-sim", "site:respondeu", "prumo:respondeu"]);
+    assert.equal(itens[0].acao, "Quer ver há 5 dias — o link ainda não foi mandado");
+    assert.equal(itens[0].urgente, true);
+    assert.equal(itens[0].links[0].rotulo, "Mandar o link do site");
+    assert.match(itens[0].detalhe, /“Manda aí” Sem mensagem dele, vai para Perdido em 2 dias\.$/);
+    assert.equal(itens[2].urgente, undefined);
+  });
+
+  it("menos de 2 h depois do 'quero ver': o texto de sempre, sem urgência", () => {
+    const v = com([quer("agora-ha-pouco", 0.05)]);
+    const item = resposta(v).find((i) => i.leadId === "site:agora-ha-pouco")!;
+    assert.equal(item.acao, "Quer ver: mandar o link do site");
+    assert.equal(item.urgente, undefined);
+  });
+
+  it("some depois da 2ª mensagem anotada DEPOIS da resposta; anotada antes não conta", () => {
+    const v = com([quer("mandado", 5), quer("mandado-antes", 5)], [], [
+      { em: dias(4.5), produto: "site", id: "mandado", tipo: "segunda_enviada", texto: "", data: "" },
+      { em: dias(5.5), produto: "site", id: "mandado-antes", tipo: "segunda_enviada", texto: "", data: "" },
+    ]);
+    const mandado = lead(v.leads, "site:mandado");
+    assert.equal(mandado.respostaNova, false);
+    assert.equal(mandado.interesseParado, undefined);
+    assert.equal(mandado.marcos.segundaEnviada, dias(4.5));
+    const evento = mandado.eventos.find((e) => e.tipo === "segunda_enviada")!;
+    assert.equal(`${evento.rotulo}/${evento.origem}`, "2ª mensagem enviada/manual");
+    assert.equal(lead(v.leads, "site:mandado-antes").respostaNova, true);
+    assert.ok(!resposta(v).some((i) => i.leadId === "site:mandado"));
+  });
+
+  it("ultima_saida_em depois da resposta também conta como a 2ª mensagem", () => {
+    const v = com([quer("saiu", 5, { ultima_saida_em: dias(4) })]);
+    assert.equal(lead(v.leads, "site:saiu").interesseParado, undefined);
+  });
+
+  it("a saída normal da etapa tira o interesse parado: 7 dias sem mensagem do lead, proposta", () => {
+    const v = com([quer("velho", 8), quer("com-proposta-nova", 5)], [], [
+      { em: dias(1), produto: "site", id: "com-proposta-nova", tipo: "proposta", texto: "", data: "2026-10-01" },
+    ]);
+    assert.equal(`${lead(v.leads, "site:velho").etapa}/${lead(v.leads, "site:velho").respostaNova}`, "perdido/false");
+    assert.equal(lead(v.leads, "site:com-proposta-nova").respostaNova, false);
+  });
+
+  it("PRUMO: interesse parado até o Raio-X sair; com o formulário respondido, a conversa já andou", () => {
+    const prumo = (id: string, extra: Record<string, string> = {}) => linhaPrumo(id, {
+      Etapa: "Convite enviado", "Convite enviado em": dias(6), "Respondeu em": dias(4), "Tipo da resposta": "interesse", Resposta: "pode falar", ...extra });
+    const v = com([], [prumo("p-parado"), prumo("p-mandado"), prumo("p-diagnostico", { "Diagnóstico em": dias(1) })], [
+      { em: dias(3), produto: "prumo", id: "p-mandado", tipo: "segunda_enviada", texto: "", data: "" },
+    ]);
+    assert.equal(lead(v.leads, "prumo:p-parado").respostaNova, true);
+    assert.equal(resposta(v).find((i) => i.leadId === "prumo:p-parado")!.acao, "Quer saber mais há 4 dias — o Raio-X ainda não foi feito nem mandado");
+    assert.equal(lead(v.leads, "prumo:p-mandado").respostaNova, false);
+    assert.equal(lead(v.leads, "prumo:p-diagnostico").respostaNova, false);
+  });
+
+  it("follow-up anotado depois do envio apaga o follow-up de hoje (Site e PRUMO); anotado antes, não", () => {
+    const v = com([linhaSite("fu-velho", { status: "enviado", enviado_em: dias(3) })], [], [
+      { em: dias(0.5), produto: "site", id: "followup", tipo: "followup_enviado", texto: "", data: "" },
+      { em: dias(4), produto: "site", id: "fu-velho", tipo: "followup_enviado", texto: "", data: "" },
+      { em: dias(0.2), produto: "prumo", id: "convite", tipo: "followup_enviado", texto: "", data: "" },
+    ]);
+    const feito = lead(v.leads, "site:followup");
+    assert.equal(feito.followupHoje, false);
+    assert.equal(feito.links.followup, undefined);
+    assert.equal(feito.marcos.followupEnviado, dias(0.5));
+    assert.ok(feito.eventos.some((e) => e.tipo === "followup_enviado" && e.rotulo === "Follow-up enviado"));
+    assert.equal(lead(v.leads, "site:fu-velho").followupHoje, true);
+    assert.equal(lead(v.leads, "prumo:convite").followupHoje, false);
+    assert.deepEqual(v.hoje.find((g) => g.id === "followup")!.itens.map((i) => i.leadId), ["site:fu-velho"]);
+  });
+
+  it("interesseParado e followupJaEnviado em tabela", () => {
+    const r = (tipo: "interesse" | "neutra", em?: string) => ({ tipo, trecho: "", ...(em ? { em } : {}) });
+    const t = (n: number) => Date.parse(dias(n));
+    assert.deepEqual(interesseParado({ conversa: true, resposta: r("interesse", dias(3)), segundas: [] }), { desde: t(3) });
+    assert.equal(interesseParado({ conversa: false, resposta: r("interesse", dias(3)), segundas: [] }), null);
+    assert.equal(interesseParado({ conversa: true, resposta: r("neutra", dias(3)), segundas: [] }), null);
+    assert.equal(interesseParado({ conversa: true, resposta: r("interesse", dias(3)), segundas: [t(2)] }), null);
+    assert.deepEqual(interesseParado({ conversa: true, resposta: r("interesse"), respondeu: t(3), segundas: [t(4)] }), { desde: t(3) });
+    assert.equal(interesseParado({ conversa: true, resposta: r("interesse"), segundas: [t(9)] }), null, "sem data, qualquer 2ª mensagem vale");
+    assert.deepEqual(interesseParado({ conversa: true, resposta: r("interesse"), segundas: [] }), {});
+    assert.equal(followupJaEnviado([], t(3)), false);
+    assert.equal(followupJaEnviado([t(4)], t(3)), false);
+    assert.equal(followupJaEnviado([t(4), t(1)], t(3)), true);
+  });
+
+  it("regime da mensagem pela data do envio, a mesma regra do funil-aprendizado.py", () => {
+    const casos: Array<[string | undefined, string | undefined]> = [
+      ["2026-09-29T20:00:00-03:00", "curta_com_link"],
+      ["2026-09-30T08:00:00-03:00", "prumo_com_link"],
+      ["2026-10-04T23:00:00-03:00", "prumo_com_link"],
+      ["2026-10-05T01:00:00-03:00", "duas_mensagens"],
+      ["2026-10-05T02:00:00Z", "prumo_com_link"], // 23h do dia 04 em São Paulo
+      [undefined, undefined],
+    ];
+    for (const [em, esperado] of casos) assert.equal(regimeDaMensagem(em ? Date.parse(em) : undefined), esperado, String(em));
+    const v = com([linhaSite("com-letra", { status: "enviado", enviado_em: dias(1), mensagem_variante: "B" })],
+      [linhaPrumo("p-convite", { Etapa: "Convite enviado", "Convite enviado em": "2026-09-25T12:00:00Z" })]);
+    assert.deepEqual(lead(v.leads, "site:com-letra").abordagem, { mensagem: "B", regime: "prumo_com_link" }, "a letra continua; o regime vem à parte");
+    assert.deepEqual(lead(v.leads, "prumo:p-convite").abordagem, { regime: "curta_com_link" });
+    assert.equal(lead(v.leads, "site:pronto").abordagem, undefined, "sem envio, sem regime");
+  });
+
+  it("tempo esperando e a ação do interesse parado", () => {
+    assert.deepEqual([0.5, 2.5, 23.9, 24, 49].map((h) => tempoEsperando(h * 3600_000)), ["1 h", "2 h", "23 h", "1 dia", "2 dias"]);
+    const site = { produto: "site" as const, links: {}, abordagem: undefined, demoApagadoEm: undefined };
+    assert.equal(acaoDoInteresseParado(site, 3 * 3600_000), "Quer ver há 3 h — o link ainda não foi mandado");
+    assert.equal(acaoDoInteresseParado({ ...site, produto: "prumo", links: { segunda: "https://wa.me/1" } }, 3 * 3600_000),
+      "Quer saber mais há 3 h — o Raio-X ainda não foi mandado");
+  });
+
+  it("conferirEnvio: 2ª mensagem só em conversa, follow-up só sem resposta, nada para encerrado", () => {
+    const casos: Array<[string, string, string, boolean]> = [
+      ["segunda_enviada", "contato", "respondeu", true],
+      ["segunda_enviada", "contato", "respondeu-prumo", true],
+      ["segunda_enviada", "contato", "enviado", false],
+      ["segunda_enviada", "proposta", "proposta", false],
+      ["segunda_enviada", "perdido", "esfriou", false],
+      ["followup_enviado", "contato", "enviado", true],
+      ["followup_enviado", "contato", "convite-visto", true],
+      ["followup_enviado", "contato", "so-robo", true],
+      ["followup_enviado", "contato", "respondeu", false],
+      ["followup_enviado", "novo", "pronto", false],
+      ["followup_enviado", "ganho", "fechou", false],
+      ["nota", "perdido", "recusou", true],
+    ];
+    for (const [tipo, etapa, sinal, aceita] of casos) {
+      const chamar = () => conferirEnvio(tipo as never, { etapa: etapa as never, sinal: sinal as never });
+      if (aceita) assert.doesNotThrow(chamar, `${tipo} ${etapa}/${sinal}`);
+      else assert.throws(chamar, RegistroInvalido, `${tipo} ${etapa}/${sinal}`);
+    }
+    assert.equal(validarRegistro({ produto: "site", id: "abc", tipo: "segunda_enviada", data: "2026-10-01" }, AGORA).data, "", "envio não leva data");
+  });
+});
+
 describe("CRM: retrato e registro", () => {
   const temporarios: string[] = [];
   afterEach(async () => {
@@ -638,6 +809,56 @@ describe("CRM: retrato e registro", () => {
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "com-proposta", tipo: "proposta", texto: "" }, AGORA), /já está em Proposta/);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "respondeu", tipo: "proposta_desfeita", texto: "" }, AGORA), /não está em Proposta/);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "recusou", tipo: "proposta", texto: "" }, AGORA), /Lead já encerrado/);
+  });
+
+  it("envio anotado é idempotente por 2 min: clique duplo, toques simultâneos e o retrato já refeito", async () => {
+    let chamadas = 0;
+    const fetcher = (async () => {
+      chamadas++;
+      await new Promise((r) => setTimeout(r, 5));
+      return new Response(JSON.stringify({ ok: true, em: `2026-10-02T15:00:0${chamadas}Z` }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const store = await loja(retrato(), true, fetcher);
+    const segunda = { produto: "site", id: "respondeu", tipo: "segunda_enviada" };
+    const [a, b] = await Promise.all([store.registrar(segunda, AGORA), store.registrar(segunda, AGORA)]);
+    assert.equal(chamadas, 1, "dois toques ao mesmo tempo, um envio");
+    assert.deepEqual(a, { ok: true, em: "2026-10-02T15:00:01Z" });
+    assert.deepEqual(b, { ok: true, em: "2026-10-02T15:00:01Z", repetido: true });
+    const umMinuto = new Date(AGORA.getTime() + 60_000);
+    assert.equal((await store.registrar(segunda, umMinuto)).repetido, true);
+    assert.equal(chamadas, 1);
+    await store.registrar({ produto: "site", id: "followup", tipo: "followup_enviado" }, umMinuto);
+    assert.equal(chamadas, 2, "outro tipo é outro envio");
+    await store.registrar(segunda, new Date(AGORA.getTime() + 3 * 60_000));
+    assert.equal(chamadas, 3, "depois da janela, é envio novo");
+    // Nota não tem a trava: duas notas iguais podem ser de propósito.
+    await store.registrar({ produto: "site", id: "respondeu", tipo: "nota", texto: "a" }, AGORA);
+    await store.registrar({ produto: "site", id: "respondeu", tipo: "nota", texto: "a" }, AGORA);
+    assert.equal(chamadas, 5);
+
+    // Outro processo (ou reinício): o retrato já tem o envio de 30 s atrás.
+    const base = retrato();
+    base.fontes.registros.linhas.push({ em: new Date(AGORA.getTime() - 30_000).toISOString(), produto: "site", id: "respondeu", tipo: "segunda_enviada", texto: "", data: "" });
+    let outras = 0;
+    const contar = (async () => { outras++; return new Response(JSON.stringify({ ok: true }), { status: 200 }); }) as unknown as typeof fetch;
+    const r = await (await loja(base, true, contar)).registrar(segunda, AGORA);
+    assert.equal(outras, 0);
+    assert.equal(r.repetido, true);
+  });
+
+  it("envio anotado: falha não fica na memória, e a validação por etapa vale", async () => {
+    let falhar = true;
+    const fetcher = (async () => (falhar ? new Response("{}", { status: 502 })
+      : new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:05Z" }), { status: 200 }))) as unknown as typeof fetch;
+    const store = await loja(retrato(), true, fetcher);
+    const followup = { produto: "site", id: "followup", tipo: "followup_enviado" };
+    await assert.rejects(store.registrar(followup, AGORA), RegistroFalhou);
+    falhar = false;
+    assert.deepEqual(await store.registrar(followup, AGORA), { ok: true, em: "2026-10-02T15:00:05Z" }, "a tentativa seguinte grava");
+    await assert.rejects(store.registrar({ produto: "site", id: "followup", tipo: "segunda_enviada" }, AGORA), /só vale para quem já respondeu/);
+    await assert.rejects(store.registrar({ produto: "site", id: "respondeu", tipo: "followup_enviado" }, AGORA), /ainda não respondeu/);
+    await assert.rejects(store.registrar({ produto: "site", id: "recusou", tipo: "segunda_enviada" }, AGORA), /encerrado/);
+    await assert.rejects(store.registrar({ produto: "site", id: "nao-existe", tipo: "followup_enviado" }, AGORA), /não encontrado/);
   });
 
   it("quem saiu pela regra dos 7 dias ainda aceita proposta (não houve desfecho)", async () => {
