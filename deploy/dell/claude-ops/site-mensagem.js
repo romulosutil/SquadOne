@@ -94,12 +94,12 @@ function varianteDe(placeId, eua, lead) {
 // travava no "quanto custa?" e nao separava curioso de comprador. O preco e o
 // do plano PRUMO (hipotese ate 08/11/2026); mudou, muda so esta linha e o espelho.
 // Em ingles sai sem numero: o preco em dolar ainda nao foi decidido.
-const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
 // Quem recebeu a C pediu o raio-x, nao o site: a segunda manda os dois links (o raio-x
 // primeiro) e o mesmo preco. {RAIO_X} vem da coluna raio_x_url, que o Balcao grava do
 // publicado.json; sem ela, a segunda e a de sempre. So em portugues (EUA nunca e C).
-const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
 
 // 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
 // aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira

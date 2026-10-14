@@ -42,7 +42,7 @@ export interface ServicoDoCardapio {
   tipo: TipoDeOferta
   /** O que o cliente recebe, dito como o Rômulo diria. */
   entrega: string
-  /** "grátis", "R$ 990", "R$ 800/mês"… Nos serviços sob proposta é a base interna, nunca dita no frio. */
+  /** "grátis", "R$ 690", "R$ 190/mês"… Nos serviços sob proposta é a base interna, nunca dita no frio. */
   preco: string
   /**
    * Para o cliente o preço é "sob proposta" (decisão de 08/10/2026): o valor sai
@@ -50,7 +50,7 @@ export interface ServicoDoCardapio {
    * `mensal` continuam aqui como base da proposta, só para o Rômulo.
    */
   sobProposta?: true
-  /** "R$ 69/mês" quando há mensalidade. */
+  /** "R$ 39/mês" quando há mensalidade. */
   mensal?: string
   /** "paga só depois de ver no ar", "só depois do Mapa"… */
   condicao?: string
@@ -135,8 +135,8 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     etapa: 'arrumar',
     tipo: 'produto',
     entrega: 'Site no ar com o endereço da empresa, perfil do Google revisado e botão de WhatsApp. A mensalidade cobre domínio, hospedagem e ajustes.',
-    preco: 'R$ 990',
-    mensal: 'R$ 69/mês',
+    preco: 'R$ 690',
+    mensal: 'R$ 39/mês',
     condicao: 'paga só depois de ver no ar',
     paraQuem: 'Quem não tem site, ou tem um que ninguém acha no Google. É o que o demo e a segunda mensagem vendem.',
   },
@@ -149,7 +149,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     // prova do produto: medida antes de ligar e de novo em 30 dias, sem preço à parte.
     entrega: 'WhatsApp que responde na hora, faz as primeiras perguntas e marca horário; retorno automático de orçamento parado; painel simples de quem chamou e de quem fechou. Antes e depois medidos: contamos o WhatsApp antes de ligar e mostramos a diferença em 30 dias.',
     preco: 'R$ 2.400',
-    mensal: 'R$ 390/mês',
+    mensal: 'R$ 290/mês',
     condicao: 'só depois de uma conversa, nunca no WhatsApp frio',
     sobProposta: true,
     paraQuem: 'Quem já tem site e perde cliente no WhatsApp: demora para responder, ninguém responde fora do horário, orçamento pedido que some.',
@@ -159,9 +159,9 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Fonte',
     etapa: 'arrumar',
     tipo: 'projeto',
-    entrega: 'A construção, de 4 a 8 semanas. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para um Notion ou um agente com IA que o time consulta.',
-    preco: 'R$ 6.500',
-    condicao: '50/50, só depois do Mapa',
+    entrega: 'A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para um Notion ou um agente com IA que o time consulta.',
+    preco: 'R$ 1.500',
+    condicao: 'a partir de, 50/50, só depois do Mapa',
     sobProposta: true,
     paraQuem: 'Empresa com equipe que fez o Mapa e onde tudo depende do dono. Chega pelo Mapa (e a CDL leva até ele), nunca pelo frio.',
   },
@@ -171,8 +171,8 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     etapa: 'manter',
     tipo: 'mensalidade',
     entrega: 'Revisão mensal da Fonte, atualização das regras, leitura dos números e uma conversa de 45 minutos.',
-    preco: 'R$ 800/mês',
-    condicao: 'opcional, mínimo de 6 meses',
+    preco: 'R$ 190/mês',
+    condicao: 'opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes',
     sobProposta: true,
     paraQuem: 'Quem construiu a Fonte e quer mantê-la em dia. Opcional: nunca condição para fechar a Fonte.',
   },
@@ -202,7 +202,7 @@ export function precoParaOCliente(s: ServicoDoCardapio): string {
 // favor ao cliente.
 
 /** Todo "R$" que a colinha pode mostrar. Fora desta lista, o teste falha. */
-export const PRECOS_DO_CARDAPIO: string[] = ['R$ 990', 'R$ 69', 'R$ 2.400', 'R$ 390', 'R$ 6.500', 'R$ 800']
+export const PRECOS_DO_CARDAPIO: string[] = ['R$ 690', 'R$ 39', 'R$ 2.400', 'R$ 290', 'R$ 1.500', 'R$ 190']
 
 const SITE: CrmProduto[] = ['site']
 const PRUMO: CrmProduto[] = ['prumo']
@@ -282,7 +282,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'segunda-preco',
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
-          'Se gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando.',
+          'Se gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando.',
         dica: 'A segunda mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
         produtos: SITE,
       },
@@ -424,7 +424,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-encontrado',
         titulo: 'Encontrado (depois do "gostei")',
         texto:
-          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 990 para colocar no ar e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Posso começar?',
+          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 para colocar no ar e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Posso começar?',
         dica: 'Até 24 h depois do "gostei". Pediram mudança no demo? Faça antes de cobrar.',
         produtos: SITE,
       },
@@ -432,7 +432,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-respondido',
         titulo: 'Respondido e Acompanhado (depois de uma conversa)',
         texto:
-          'Como conversamos: hoje [o maior vazamento, com o número]. A proposta: o WhatsApp de vocês passa a responder na hora, até fora do horário, faz as primeiras perguntas e marca horário; quem pediu orçamento e sumiu recebe retorno sem vocês precisarem lembrar; e vocês veem num painel simples quem chamou e quem fechou. Antes de ligar, contamos como o WhatsApp está hoje e, em 30 dias, mostramos a diferença. São R$ 2.400 para montar e R$ 390 por mês. Se fizer sentido, começo [dia].',
+          'Como conversamos: hoje [o maior vazamento, com o número]. A proposta: o WhatsApp de vocês passa a responder na hora, até fora do horário, faz as primeiras perguntas e marca horário; quem pediu orçamento e sumiu recebe retorno sem vocês precisarem lembrar; e vocês veem num painel simples quem chamou e quem fechou. Antes de ligar, contamos como o WhatsApp está hoje e, em 30 dias, mostramos a diferença. O valor parte de R$ 2.400 para montar, mais R$ 290 por mês, e fecha por escrito antes de começar. Se fizer sentido, começo [dia].',
         dica: 'Só depois de uma conversa, nunca no WhatsApp frio. O "antes" são os números da conversa de 20 minutos; confira de novo antes de ligar.',
         produtos: TODOS,
       },
@@ -440,8 +440,8 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-fonte',
         titulo: 'Fonte (depois do Mapa)',
         texto:
-          'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. Assim o orçamento sai no mesmo dia sem você aprovar cada preço. São R$ 6.500 pelo projeto inteiro, metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
-        dica: 'Só depois do Mapa, em até 24 h da devolutiva. A Fonte em dia (R$ 800/mês, opcional, mínimo de 6 meses) entra no fim como opção, nunca como condição.',
+          'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. Assim o orçamento sai no mesmo dia sem você aprovar cada preço. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
+        dica: 'Só depois do Mapa, em até 24 h da devolutiva. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
         produtos: PRUMO,
       },
     ],
@@ -517,7 +517,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-quanto-custa',
       titulo: '"Quanto custa?"',
       texto:
-        'Para colocar esse site no ar com o endereço de vocês: R$ 990, e depois R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Quer que eu coloque?',
+        'Para colocar esse site no ar com o endereço de vocês: R$ 690, e depois R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Quer que eu coloque?',
       dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito em até 24 horas. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
       produtos: TODOS,
     },
@@ -680,7 +680,7 @@ export const passo = (momento: Momento): PassoDoRoteiro => ROTEIRO.find((p) => p
 
 /** Todo "R$ …" de um texto, como aparece ("R$ 2.400"). */
 export function precosNoTexto(texto: string): string[] {
-  // Milhar só em grupos de 3: "[\d.]*" engolia o ponto final ("R$ 990." no fim da frase).
+  // Milhar só em grupos de 3: "[\d.]*" engolia o ponto final ("R$ 690." no fim da frase).
   return texto.match(/R\$\s?\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) ?? []
 }
 

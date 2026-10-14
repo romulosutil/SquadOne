@@ -210,7 +210,7 @@ describe('nenhum R$ fora do cardápio', () => {
   })
 
   it('o ponto final da frase não entra no valor', () => {
-    assert.deepEqual(precosNoTexto('Fica R$ 990. Depois, R$ 69/mês.'), ['R$ 990', 'R$ 69'])
+    assert.deepEqual(precosNoTexto('Fica R$ 690. Depois, R$ 39/mês.'), ['R$ 690', 'R$ 39'])
   })
 
   it('o preço de cada serviço está na lista do cardápio', () => {
@@ -253,13 +253,13 @@ describe('sob proposta e sem cliente fundador', () => {
   })
 
   it('a base interna da proposta continua com o valor da tabela', () => {
-    assert.equal(precoDaTabela(servico('respondido')), 'R$ 2.400 + R$ 390/mês (só depois de uma conversa, nunca no WhatsApp frio)')
-    assert.equal(precoDaTabela(servico('fonte')), 'R$ 6.500 (50/50, só depois do Mapa)')
-    assert.equal(precoDaTabela(servico('fonte-em-dia')), 'R$ 800/mês (opcional, mínimo de 6 meses)')
+    assert.equal(precoDaTabela(servico('respondido')), 'R$ 2.400 + R$ 290/mês (só depois de uma conversa, nunca no WhatsApp frio)')
+    assert.equal(precoDaTabela(servico('fonte')), 'R$ 1.500 (a partir de, 50/50, só depois do Mapa)')
+    assert.equal(precoDaTabela(servico('fonte-em-dia')), 'R$ 190/mês (opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes)')
   })
 
   it('o Encontrado diz o preço ao cliente; os dois diagnósticos, "grátis"', () => {
-    assert.equal(precoParaOCliente(servico('encontrado')), 'R$ 990 + R$ 69/mês (paga só depois de ver no ar)')
+    assert.equal(precoParaOCliente(servico('encontrado')), 'R$ 690 + R$ 39/mês (paga só depois de ver no ar)')
     assert.equal(precoParaOCliente(servico('raio-x')), 'grátis')
     assert.equal(precoParaOCliente(servico('mapa')), 'grátis')
   })
@@ -277,9 +277,8 @@ describe('sob proposta e sem cliente fundador', () => {
   })
 
   it('não há cliente fundador nem desconto em troca de depoimento', () => {
-    assert.ok(!PRECOS_DO_CARDAPIO.includes('R$ 690'))
     for (const texto of TODOS_OS_TEXTOS) {
-      assert.ok(!/cliente fundador|fundadores|vaga de fundador|R\$\s?690/i.test(texto), texto)
+      assert.ok(!/cliente fundador|fundadores|vaga de fundador/i.test(texto), texto)
     }
     // Nenhuma mensagem ao cliente fala de depoimento (a dica pode dizer que não há).
     const mensagens = [...ROTEIRO.flatMap((p) => p.trechos), ...OBJECOES.map((o) => o.resposta), ...CDL]
@@ -318,10 +317,10 @@ describe('hierarquia: ver, arrumar, manter', () => {
     assert.deepEqual(CARDAPIO.map((s) => [s.id, s.preco, s.mensal ?? '']), [
       ['raio-x', 'grátis', ''],
       ['mapa', 'grátis', ''],
-      ['encontrado', 'R$ 990', 'R$ 69/mês'],
-      ['respondido', 'R$ 2.400', 'R$ 390/mês'],
-      ['fonte', 'R$ 6.500', ''],
-      ['fonte-em-dia', 'R$ 800/mês', ''],
+      ['encontrado', 'R$ 690', 'R$ 39/mês'],
+      ['respondido', 'R$ 2.400', 'R$ 290/mês'],
+      ['fonte', 'R$ 1.500', ''],
+      ['fonte-em-dia', 'R$ 190/mês', ''],
     ])
     assert.match(servico('encontrado').condicao ?? '', /depois de ver no ar/)
     assert.match(servico('respondido').condicao ?? '', /depois de uma conversa/)
@@ -355,10 +354,10 @@ describe('hierarquia: ver, arrumar, manter', () => {
     assert.ok(objecao('mapa-e-pago').resposta.texto.startsWith(FRASE_MAPA_E_GRATIS))
   })
 
-  it('saíram o Mapa do Cliente, o R$ 1.500, o abatimento, o Organizado e o Manter vivo', () => {
-    assert.ok(!PRECOS_DO_CARDAPIO.some((p) => p.includes('1.500')))
+  // O R$ 1.500 do Mapa do Cliente saiu, mas voltou em 14/10/2026 como o preço de entrada da Fonte.
+  it('saíram o Mapa do Cliente, o abatimento, o Organizado e o Manter vivo', () => {
     for (const texto of TODOS_OS_TEXTOS) {
-      assert.ok(!/Mapa do Cliente|1\.500|abatid|abatimento|organizado|Manter vivo/i.test(texto), texto)
+      assert.ok(!/Mapa do Cliente|abatid|abatimento|organizado|Manter vivo/i.test(texto), texto)
     }
   })
 })

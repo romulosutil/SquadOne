@@ -15,14 +15,14 @@
 // (em inglês, sem número: o preço em dólar não foi decidido); os follow-ups dizem que o demo
 // ficou pronto e oferecem mudar em um dia. A primeira mensagem (variações A/B/C) não mora aqui:
 // o CRM nunca a monta, só lê o `wa_me` que o Balcão gravou.
-export const SEGUNDA = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
+export const SEGUNDA = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
 export const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
 export const FOLLOWUP = "Oi, aqui é o Rômulo de novo, do PRUMO. A demonstração de site {ARTIGO} {NOME} ficou pronta, com as fotos e as avaliações de vocês. Quer que eu mande o link?";
 export const FOLLOWUP_EN = "Hi, it's Rômulo again, from PRUMO. The demo website for {NOME} is ready, with your photos and reviews. Would you like me to send the link?";
 export const FOLLOWUP_COM_LINK = "Oi, aqui é o Rômulo de novo. Deu para ver o site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. E se não for o momento, é só me dizer que eu apago.";
 export const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
 // Quem recebeu a variação C (o Raio-X) é lembrado do raio-x e ganha os dois links na segunda.
-export const SEGUNDA_RAIO_X = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 990 e R$ 69 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
+export const SEGUNDA_RAIO_X = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
 export const FOLLOWUP_RAIO_X = "Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?";
 
 /** Nomes que pedem artigo feminino (a mesma lista de `FEMININOS` do JS). */

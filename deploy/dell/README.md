@@ -826,7 +826,7 @@ mensagem e o follow-up são montados da linha: quem recebeu a C ganha o raio-x e
 o site na segunda, e o follow-up lembra o raio-x. Sem a coluna preenchida, a
 segunda é a do site. Um lead `pronto` que o Raio-X alcança pode trocar de letra
 uma vez. A segunda mensagem termina com o preço do
-Encontrado (R$ 990 + R$ 69/mês, pago depois de ver no ar; em inglês, sem
+Encontrado (R$ 690 + R$ 39/mês, pago depois de ver no ar; em inglês, sem
 número), e os dois follow-ups do 3º dia são os do plano. O CRM espelha a
 segunda e os follow-ups em `server/site-mensagem.ts` (teste compara com o JS).
 Ao comparar A e B no funil, lembre que a A também recebe os leads de nota baixa.
@@ -1398,7 +1398,7 @@ A porta de entrada do PRUMO (plano de 08/10/2026): uma página em `<site_url>/ra
 **no mesmo projeto `demo-<slug>`** (o hobby limita projetos), com como o negócio
 aparece no Google, o que já está bom, até 3 pontos que mandam cliente para o
 concorrente (cada um com o porquê em linguagem de dono), o link do demo e
-"R$ 990 + R$ 69/mês, paga depois de ver funcionando". Alimenta a variação C da
+"R$ 690 + R$ 39/mês, paga depois de ver funcionando". Alimenta a variação C da
 primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três atos
 (veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO; desde a versão 5,
 é o Raio-X aprovado do piloto CDL, com o preço do `precos.json` do piloto (abaixo).

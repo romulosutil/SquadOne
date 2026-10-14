@@ -73,10 +73,10 @@ describe("site-mensagem: espelho do JS do n8n", () => {
   it("a segunda leva o preço e o pagar depois de ver; em inglês, sem preço", () => {
     const br = segundaDe(CASOS[0][1]).texto;
     assert.match(br, /^Aqui está: https:\/\/demo-alfa\.vercel\.app\n\n/);
-    assert.match(br, /R\$ 990 e R\$ 69 por mês/);
+    assert.match(br, /R\$ 690 e R\$ 39 por mês/);
     assert.match(br, /só pagam depois de ver funcionando/);
     // O wa.me leva o texto codificado: o "$" vira %24 no link, e o WhatsApp o decodifica.
-    assert.ok(segundaDe(CASOS[0][1]).link.includes("R%24%20990"));
+    assert.ok(segundaDe(CASOS[0][1]).link.includes("R%24%20690"));
     const en = segundaDe(CASOS[3][1]).texto;
     assert.match(en, /only pay after you see it working/);
     assert.doesNotMatch(en, /R\$|US\$|\$/);
@@ -87,7 +87,7 @@ describe("site-mensagem: espelho do JS do n8n", () => {
     const segunda = segundaDe(c).texto;
     assert.match(segunda, /^Aqui está o raio-x: https:\/\/demo-sorriso\.vercel\.app\/raio-x\n\n/);
     assert.match(segunda, /está aqui:\nhttps:\/\/demo-sorriso\.vercel\.app\n\n/);
-    assert.match(segunda, /R\$ 990 e R\$ 69 por mês/);
+    assert.match(segunda, /R\$ 690 e R\$ 39 por mês/);
     assert.match(followupDe(c).texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. O raio-x de como a Clínica Sorriso aparece no Google ficou pronto/);
     // Sem o link do Raio-X na linha, a segunda é a do site; o follow-up continua o do raio-x.
     const semUrl = CASOS.find(([n]) => n === "variação C sem o raio_x_url na linha")![1];
