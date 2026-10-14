@@ -4,7 +4,10 @@ import {
   DIAS_ATE_A_LEITURA, DIFERENCA_MINIMA_PP, ENVIOS_POR_BRACO, FRASE_DO_VEREDITO, REGRA_DE_PARADA, leituraDoAbVideo, textoDaDiferenca, textoDoP,
 } from './ab-video'
 import { dataCurta, dataHora } from './crm-formato'
-import { AMOSTRA_MINIMA, PERIODOS, amostraPequena, porcento, resultados, resumoDaLinha, type Criterio, type LinhaDeResultado, type Periodo } from './resultados'
+import {
+  AMOSTRA_MINIMA, INICIO_DAS_ANOTACOES, PERIODOS, amostraPequena, enviosAnotados, porcento, resultados, resumoDaLinha, textoDaSegunda, textoDoFollowup,
+  type Criterio, type LinhaDeResultado, type Periodo,
+} from './resultados'
 import type { CrmLead } from './types'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
@@ -15,7 +18,7 @@ const props = defineProps<{ leads: CrmLead[]; agora: number }>()
 const periodo = ref<Periodo>('30')
 const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: boolean }> = [
   { id: 'nicho', titulo: 'Por nicho', explicacao: 'Quem responde e quem fecha em cada busca.', soSite: false },
-  { id: 'mensagem', titulo: 'Por mensagem', explicacao: 'A variação da primeira mensagem que o lead recebeu (desde 07/10).', soSite: true },
+  { id: 'mensagem', titulo: 'Por mensagem', explicacao: 'A variação da primeira mensagem que o lead recebeu (letra desde 07/10). Sem a letra, o regime pela data: com o link na 1ª mensagem até 04/10, pedido de licença sem link desde 05/10.', soSite: true },
   { id: 'site', titulo: 'Por versão do site', explicacao: 'Padrão ou personalizado, e qual versão do modo personalizado (desde 07/10).', soSite: true },
   { id: 'horario', titulo: 'Por horário do envio', explicacao: 'Hora de São Paulo em que a primeira mensagem saiu: quem recebe responde no expediente.', soSite: false },
 ]
@@ -26,6 +29,8 @@ const secoes = computed(() => SECOES.filter(s => !s.soSite || temSite.value).map
   ...resultados(s.soSite ? props.leads.filter(l => l.produto === 'site') : props.leads, s.id, periodo.value, props.agora),
 })))
 const total = computed(() => resultados(props.leads, 'nicho', periodo.value, props.agora).total)
+// Follow-up e 2ª mensagem anotados ao tocar no link (14/10/2026): o "follow-up funciona?" com número.
+const anotados = computed(() => enviosAnotados(props.leads, periodo.value, props.agora))
 
 // A/B do vídeo (11/10/2026, ab-video.ts): só existe com a coluna `braco_video` preenchida.
 // Ignora o período: o teste é contado inteiro, uma vez, depois dos 7 dias.
@@ -103,6 +108,29 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       <p class="crm-resultados__total" aria-live="polite">
         <strong>{{ total.enviados }} enviado{{ total.enviados === 1 ? '' : 's' }}</strong> · {{ resumo(total) }}
       </p>
+
+      <section class="crm-grupo" aria-labelledby="crm-resultado-anotados">
+        <header class="crm-grupo__cabeca">
+          <h2 id="crm-resultado-anotados">Follow-up e 2ª mensagem</h2>
+        </header>
+        <p class="crm-grupo__explicacao">
+          Anotados ao tocar em "Mandar o follow-up" e "Mandar o link" na Central, desde {{ INICIO_DAS_ANOTACOES }}; antes disso
+          nenhum envio deixou rastro. "Respondeu depois" é gente escrevendo depois do follow-up.
+        </p>
+        <ul class="crm-lista">
+          <li class="crm-resultado">
+            <div class="crm-resultado__cabeca">
+              <strong>Follow-up</strong>
+              <span v-if="anotados.followups && anotados.followups < AMOSTRA_MINIMA" class="crm-tag">amostra pequena</span>
+            </div>
+            <p class="crm-resultado__numeros">{{ textoDoFollowup(anotados) }}</p>
+          </li>
+          <li class="crm-resultado">
+            <div class="crm-resultado__cabeca"><strong>2ª mensagem</strong></div>
+            <p class="crm-resultado__numeros">{{ textoDaSegunda(anotados) }}</p>
+          </li>
+        </ul>
+      </section>
 
       <section v-for="secao in secoes" :key="secao.id" class="crm-grupo" :aria-labelledby="`crm-resultado-${secao.id}`">
         <header class="crm-grupo__cabeca">

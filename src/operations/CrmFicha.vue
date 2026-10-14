@@ -3,18 +3,32 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
-import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, hojeEmSP, hora, onde, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 
 // Ficha de um lead. As únicas escritas da Central são as três deste arquivo
 // (nota, próximo passo, proposta, sem contato fácil) e todas vão para a aba CRM da planilha pelo
-// n8n (POST /api/operations/crm/registro). Recusou/Fechou/Desfazer ficam na
+// n8n (POST /api/operations/crm/registro); o toque na 2ª mensagem e no follow-up também
+// anota o envio por essa rota, pelo CrmPanel (14/10/2026). Recusou/Fechou/Desfazer ficam na
 // página do lead do n8n (fluxo 07); a Etapa do PRUMO muda na planilha.
-const props = defineProps<{ lead: CrmLead; visao: CrmVisao }>()
+// `aviso`/`liberados` (trava-de-horario.ts): fora do expediente, enviar a primeira mensagem e o
+// convite esperam o "Liberar" deste lead, como na Hoje e no Funil.
+// `anotados`/`falhaDaAnotacao` (anotacao-de-envio.ts): o toque na 2ª mensagem ou no follow-up anota
+// o envio pelo CrmPanel, em segundo plano; a ficha mostra a marca ou o pedido de anotar à mão.
+const props = defineProps<{
+  lead: CrmLead
+  visao: CrmVisao
+  aviso?: string | null
+  liberados: EnviosLiberados
+  anotados: EnviosAnotados
+  falhaDaAnotacao?: string
+}>()
 // Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
 // voltar do navegador, então a ficha não tem botão de voltar próprio.
 // `colinha`: o CrmPanel troca para /crm?ver=colinha (fecha a folha, sem recarregar).
-const emit = defineEmits<{ registrado: []; colinha: [] }>()
+const emit = defineEmits<{ registrado: []; colinha: []; liberar: [leadId: string]; anotar: [leadId: string, tipo: TipoDeEnvioAnotado] }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
 const nota = ref('')
@@ -51,7 +65,21 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['planilha', prumo ? 'Abrir na planilha (mudar a Etapa)' : 'Abrir a linha na planilha', l.planilha, false],
   ]
   return todas.flatMap(([chave, rotulo, href, principal]) => (href ? [{ chave, rotulo, href, principal }] : []))
+    // Primeiro contato fora do expediente: some até o "Liberar" (o botão entra no lugar, no topo).
+    .filter((a) => !(travado.value && (a.chave === 'enviar' || a.chave === 'convite')))
 })
+const travado = computed(() => envioTravado(props.aviso, props.liberados, props.lead.id) && Boolean(props.lead.links.enviar || props.lead.links.convite))
+/** Os links que anotam o envio ao serem tocados. */
+const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
+function aoTocar(chave: string) {
+  const tipo = TIPO_DA_ACAO[chave]
+  if (tipo) emit('anotar', props.lead.id, tipo)
+}
+/** "2ª mensagem anotada às 14:02 · Follow-up anotado às 14:05", enquanto o retrato não confirma. */
+const anotacoes = computed(() => (['segunda_enviada', 'followup_enviado'] as const).flatMap((tipo) => {
+  const t = anotadoEm(props.anotados, props.lead.id, tipo)
+  return t === undefined ? [] : [textoDaAnotacao(tipo, hora(new Date(t).toISOString()))]
+}).join(' · '))
 const acoesFixas = computed(() => acoes.value.filter((a) => a.principal))
 const acoesDeApoio = computed(() => acoes.value.filter((a) => !a.principal))
 const hoje = hojeEmSP()
@@ -153,9 +181,13 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
       </p>
     </header>
 
-    <div v-if="acoesFixas.length" class="crm-ficha__fixa" role="group" aria-label="Próximo passo">
-      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} ↗</a>
+    <div v-if="acoesFixas.length || travado" class="crm-ficha__fixa" role="group" aria-label="Próximo passo">
+      <button v-if="travado" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
+      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave)">{{ a.rotulo }} ↗</a>
     </div>
+    <p v-if="travado" class="crm-ficha__fonte">{{ aviso }}</p>
+    <p class="crm-ficha__fonte" role="status" aria-live="polite">{{ anotacoes ? `${anotacoes} nesta tela; a planilha confirma no próximo retrato.` : '' }}</p>
+    <p v-if="falhaDaAnotacao" class="crm-erro" role="alert">{{ falhaDaAnotacao }}</p>
 
     <div v-if="lead.divergencias.length" class="crm-divergencia" role="note">
       <strong>Divergência entre planilha e pasta</strong>
@@ -190,7 +222,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
       </p>
       <div v-if="acoesDeApoio.length" class="crm-ficha__links">
-        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} ↗</a>
+        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave)">{{ a.rotulo }} ↗</a>
       </div>
       <div class="crm-form__botoes">
         <button v-if="aberto" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>

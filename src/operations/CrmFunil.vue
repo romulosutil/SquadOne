@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDoPrazo } from './crm-formato'
 import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
+import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
@@ -19,8 +20,14 @@ const props = defineProps<{
   /** Fora do expediente (trava-de-horario.ts): o envio de primeiro contato espera o "Liberar". */
   aviso?: string | null
   liberados: EnviosLiberados
+  /** Envios anotados nesta tela (anotacao-de-envio.ts), até o retrato confirmar. */
+  anotados: EnviosAnotados
 }>()
-const emit = defineEmits<{ abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto]; liberar: [leadId: string] }>()
+const emit = defineEmits<{
+  abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto]; liberar: [leadId: string]
+  anotar: [leadId: string, tipo: TipoDeEnvioAnotado]
+}>()
+const anotado = (l: CrmLead, tipo: TipoDeEnvioAnotado) => anotadoEm(props.anotados, l.id, tipo) !== undefined
 const travado = (l: CrmLead) => envioTravado(props.aviso, props.liberados, l.id) && Boolean(l.links.enviar || l.links.convite)
 
 const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
@@ -191,14 +198,18 @@ const artefatos = (l: CrmLead) => {
               <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead)" class="crm-sinais">
                 <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
-                <span v-if="lead.followupHoje" class="crm-sinal is-followup">Follow-up hoje</span>
+                <span v-if="lead.followupHoje && !anotado(lead, 'followup_enviado')" class="crm-sinal is-followup">Follow-up hoje</span>
+                <span v-if="anotado(lead, 'followup_enviado')" class="crm-sinal">Follow-up anotado</span>
+                <span v-if="anotado(lead, 'segunda_enviada')" class="crm-sinal">2ª mensagem anotada</span>
                 <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
                 <span v-if="textoDoPrazo(lead)" class="crm-sinal is-prazo" :class="{ 'is-amanha': lead.diasParaSair === 1 }">{{ textoDoPrazo(lead) }}</span>
                 <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
                 <span v-if="lead.acervo && lead.etapa === 'contato'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
               </p>
-              <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.site" class="crm-cartao__links">
-                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener">{{ lead.produto === 'prumo' ? 'Mandar o Raio-X' : lead.abordagem?.mensagem === 'C' && lead.links.raioX ? 'Mandar o raio-x e o demo' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+              <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.followup || lead.links.site" class="crm-cartao__links">
+                <!-- O toque abre o WhatsApp e anota o envio em segundo plano (CrmPanel, anotarEnvio). -->
+                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ lead.produto === 'prumo' ? 'Mandar o Raio-X' : lead.abordagem?.mensagem === 'C' && lead.links.raioX ? 'Mandar o raio-x e o demo' : 'Mandar o link' }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.followup" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado')">Mandar o follow-up <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
                 <button v-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
                 <a v-if="lead.links.enviar && !travado(lead)" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
                 <a v-if="lead.links.convite && !travado(lead)" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>

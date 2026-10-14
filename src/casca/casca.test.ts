@@ -152,6 +152,23 @@ describe('Hoje: leads que responderam e esperam você', () => {
     assert.deepEqual(textoDaPendenciaDeRespostas(p), { titulo: 'Distribuidora C respondeu e espera você', detalhe: '' })
   })
 
+  // 14/10/2026: o servidor põe o interesse parado na frente; o cartão destaca ele e conta quantos esperam o link.
+  it('interesse parado: o primeiro é quem espera o link há mais tempo, e o detalhe diz quantos ainda estão sem ele', () => {
+    const parados = [
+      lead('site:p', 'Locação Sol', { resposta: { tipo: 'interesse', trecho: 'Manda aí' }, interesseParado: { desde: '2026-10-08T12:00:00Z' }, marcos: { respondeu: '2026-10-08T12:00:00Z' } }),
+      lead('site:q', 'Marido de Aluguel', { resposta: { tipo: 'interesse', trecho: 'Pode sim' }, interesseParado: {} }),
+      ...leads,
+    ]
+    const p = pendenciaDeRespostas(visao(['site:p', 'site:q', 'site:a', 'site:b'], parados))!
+    assert.equal(p.parados, 2)
+    assert.equal(p.primeiro.empresa, 'Locação Sol')
+    assert.deepEqual(textoDaPendenciaDeRespostas(p), {
+      titulo: '4 leads responderam e esperam você',
+      detalhe: 'Locação Sol: “Manda aí” · 3 querem ver · 2 ainda sem o link',
+    })
+    assert.equal('parados' in pendenciaDeRespostas(visao(['site:a', 'site:b'], leads))!, false, 'sem parado, sem o campo')
+  })
+
   it('sem resposta esperando, sem retrato legível ou sem leitura: nenhum cartão', () => {
     assert.equal(pendenciaDeRespostas(visao([], leads)), null)
     assert.equal(pendenciaDeRespostas(visao(['site:a'], leads, 'sem-retrato')), null)

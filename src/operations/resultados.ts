@@ -15,6 +15,7 @@
  * - linha com menos de AMOSTRA_MINIMA enviados ganha o aviso de amostra
  *   pequena: 1 de 3 não é 33%.
  */
+import { ROTULO_DO_REGIME } from './crm-formato'
 import type { CrmLead } from './types'
 
 export type Periodo = '14' | '30' | 'tudo'
@@ -88,7 +89,9 @@ export function chaveDe(lead: CrmLead, criterio: Criterio): string {
   if (criterio === 'video') return lead.abordagem?.video === 'video' ? 'Com vídeo' : 'Sem vídeo'
   if (criterio === 'mensagem') {
     const m = lead.abordagem?.mensagem
-    if (!m) return 'Sem registro (envios até 07/10)'
+    // Sem a letra (150 de 221 envios em 14/10/2026), o regime pela data separa quem recebeu o link
+    // na 1ª mensagem de quem recebeu o pedido de licença: "Sem registro" juntava os dois.
+    if (!m) return lead.abordagem?.regime ? ROTULO_DO_REGIME[lead.abordagem.regime] : 'Sem registro (envios até 07/10)'
     if (m === 'manual') return 'Escrita à mão'
     if (m === 'EN') return 'Em inglês'
     return `Mensagem ${m}`
@@ -166,4 +169,64 @@ export function resumoDaLinha(l: LinhaDeResultado): string {
     flexao(l.recusaram, 'recusou', 'recusaram'),
     flexao(l.fecharam, 'fechou', 'fecharam'),
   ].join(' · ')
+}
+
+// ---------------------------------------------------------------- envios anotados (14/10/2026)
+// O follow-up do 3º dia gerava lembretes (65 até 14/10) sem o CRM saber se algum saiu, e a 2ª
+// mensagem também não deixava rastro: "follow-up funciona?" não tinha número. Desde 14/10 o toque
+// no link da Central anota o envio (aba CRM); antes disso não há dado, e a tela diz isso.
+
+/** O "desde quando" das anotações: antes do loop fechado, nenhum envio foi anotado. */
+export const INICIO_DAS_ANOTACOES = '14/10/2026'
+
+export interface EnviosAnotadosNoPeriodo {
+  /** Enviados no período que tiveram o follow-up anotado. */
+  followups: number
+  /** Desses, quantos responderam (gente, não robô) DEPOIS do follow-up. */
+  responderamDepois: number
+  /** Enviados no período que disseram que querem ver. */
+  quiseramVer: number
+  /** Desses, quantos tiveram a 2ª mensagem anotada. */
+  segundas: number
+}
+
+/** A última mensagem de gente do lead: `respondeu_em` ou a resposta classificada (robô não conta). */
+function ultimaRespostaDeGente(lead: CrmLead): number | undefined {
+  const datas = [Date.parse(lead.marcos.respondeu ?? ''),
+    lead.resposta && lead.resposta.tipo !== 'bot' ? Date.parse(lead.resposta.em ?? '') : NaN].filter(Number.isFinite)
+  return datas.length ? Math.max(...datas) : undefined
+}
+
+export function enviosAnotados(leads: CrmLead[], periodo: Periodo, agora: number): EnviosAnotadosNoPeriodo {
+  const saida: EnviosAnotadosNoPeriodo = { followups: 0, responderamDepois: 0, quiseramVer: 0, segundas: 0 }
+  for (const l of leads) {
+    if (!enviadoNoPeriodo(l, periodo, agora)) continue
+    const followup = Date.parse(l.marcos.followupEnviado ?? '')
+    if (Number.isFinite(followup)) {
+      saida.followups++
+      const resposta = ultimaRespostaDeGente(l)
+      if (resposta !== undefined && resposta > followup) saida.responderamDepois++
+    }
+    if (l.resposta?.tipo === 'interesse') {
+      saida.quiseramVer++
+      if (l.marcos.segundaEnviada) saida.segundas++
+    }
+  }
+  return saida
+}
+
+/**
+ * "Follow-up anotado em 12: 2 responderam depois (17%), amostra pequena". Com menos de
+ * AMOSTRA_MINIMA follow-ups, a taxa sai com o aviso (1 de 3 não é 33%); sem nenhum, nada de taxa.
+ */
+export function textoDoFollowup(a: EnviosAnotadosNoPeriodo): string {
+  if (!a.followups) return `Nenhum follow-up anotado neste período (a anotação começou em ${INICIO_DAS_ANOTACOES}).`
+  const taxa = `${flexao(a.responderamDepois, 'respondeu', 'responderam')} depois (${porcento(a.responderamDepois, a.followups)})`
+  return `Follow-up anotado em ${a.followups}: ${taxa}${a.followups < AMOSTRA_MINIMA ? ', amostra pequena' : ''}.`
+}
+
+/** "2ª mensagem anotada para 3 de 5 que quiseram ver." */
+export function textoDaSegunda(a: EnviosAnotadosNoPeriodo): string {
+  if (!a.quiseramVer) return 'Ninguém disse que quer ver neste período.'
+  return `2ª mensagem anotada para ${a.segundas} de ${a.quiseramVer} que ${a.quiseramVer === 1 ? 'quis' : 'quiseram'} ver.`
 }

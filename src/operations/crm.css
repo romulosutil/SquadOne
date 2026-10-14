@@ -119,6 +119,10 @@
 .crm-fila__ver a:first-child { background: var(--superficie); color: var(--texto); }
 .crm-item__aberto { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--ok-fundo); font-size: 0.85rem; }
 .crm-item__aberto.is-conferir { background: var(--atencao-fundo); }
+/* Interesse parado há mais de 2 h (14/10/2026): o texto da ação já diz "há N dias"; a borda só reforça (RULES 3). */
+.crm-item.is-urgente { border-left: 4px solid var(--acento); padding-left: 0.6rem; }
+.crm-item.is-urgente .crm-item__acao strong { color: var(--texto); }
+.crm-anotacao-falhou { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .crm-fila { display: grid; gap: 0.85rem; }
 /* Uma linha só, com rolagem lateral: em três linhas os nichos empurravam o envio para fora da tela do celular. */
 .crm-fila__nichos { display: flex; gap: 0.4rem; margin: 0 -0.25rem; padding: 0.25rem 0.25rem 0.4rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }

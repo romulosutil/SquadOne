@@ -110,9 +110,12 @@ export interface CrmLead {
   ultimoEvento?: string
   diasDesdeUltimoEvento?: number
   leitura: 'viu' | 'pela-resposta' | 'desconhecida' | 'nao-se-aplica'
-  marcos: { enviado?: string; visto?: string; respondeu?: string }
+  /** `segundaEnviada`/`followupEnviado` (14/10/2026): o último envio anotado na aba CRM. */
+  marcos: { enviado?: string; visto?: string; respondeu?: string; segundaEnviada?: string; followupEnviado?: string }
   followupHoje: boolean
   respostaNova: boolean
+  /** Disse que quer ver e a 2ª mensagem ainda não saiu: fica na Hoje sem o limite de 48 h. */
+  interesseParado?: { desde?: string }
   acervo: boolean
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }
@@ -123,8 +126,9 @@ export interface CrmLead {
   /**
    * Site antes da venda: variação da primeira mensagem (A/B/C, EN, manual) e versão do site.
    * `video` (11/10/2026): o braço do A/B do vídeo (coluna `braco_video`; ausente = coluna vazia).
+   * `regime` (14/10/2026): o texto da 1ª mensagem pela data do envio, à parte da letra.
    */
-  abordagem?: { mensagem?: string; site?: string; video?: 'video' | 'sem-video' }
+  abordagem?: { mensagem?: string; site?: string; video?: 'video' | 'sem-video'; regime?: CrmRegimeDaMensagem }
   /** Só em `pronto` com link de envio: a primeira mensagem, como vai sair no WhatsApp. */
   mensagemPronta?: string
   eventos: CrmEvento[]
@@ -146,6 +150,8 @@ export interface CrmItemHoje {
   detalhe: string
   links: CrmLink[]
   ordem: number
+  /** Interesse parado há mais de 2 h: a tela destaca. */
+  urgente?: boolean
 }
 
 export interface CrmGrupoHoje {
@@ -182,3 +188,7 @@ export interface CrmVisao {
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
+  | 'segunda_enviada' | 'followup_enviado'
+
+/** Espelho de REGIMES_DA_MENSAGEM (server/crm.ts): até 29/09, 30/09–04/10, desde 05/10. */
+export type CrmRegimeDaMensagem = 'curta_com_link' | 'prumo_com_link' | 'duas_mensagens'

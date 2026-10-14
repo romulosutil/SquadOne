@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, faixaDoHorario, horaEmSP, noHorarioComercial, porcento, resultados, resumoDaLinha,
+  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, enviosAnotados, faixaDoHorario, horaEmSP, noHorarioComercial, porcento, resultados,
+  resumoDaLinha, textoDaSegunda, textoDoFollowup,
 } from './operations/resultados.ts'
 import type { CrmLead } from './operations/types.ts'
 
@@ -50,6 +51,53 @@ describe('resultados do funil', () => {
     assert.equal(chaveDe(leads[2], 'site'), 'Site personalizado-v2')
     assert.equal(chaveDe(lead('x', { abordagem: { mensagem: 'EN' } }), 'mensagem'), 'Em inglês')
     assert.equal(chaveDe(lead('y', { nicho: '  ' }), 'nicho'), 'Sem nicho')
+  })
+
+  it('por mensagem, sem letra: o regime pela data separa link na 1ª de pedido de licença; a letra continua mandando', () => {
+    const casos: Array<[CrmLead['abordagem'], string]> = [
+      [{ regime: 'curta_com_link' }, 'Com link na 1ª mensagem (curta, até 29/09)'],
+      [{ regime: 'prumo_com_link' }, 'Com link na 1ª mensagem (30/09 a 04/10)'],
+      [{ regime: 'duas_mensagens' }, 'Pedido de licença, sem link'],
+      [{ mensagem: 'A', regime: 'duas_mensagens' }, 'Mensagem A'],
+      [{ mensagem: 'manual', regime: 'duas_mensagens' }, 'Escrita à mão'],
+      [undefined, 'Sem registro (envios até 07/10)'],
+    ]
+    for (const [abordagem, esperado] of casos) assert.equal(chaveDe(lead('r', abordagem ? { abordagem } : {}), 'mensagem'), esperado)
+    const leads = [
+      lead('l1', { abordagem: { regime: 'prumo_com_link' } }), lead('l2', { abordagem: { regime: 'prumo_com_link' } }),
+      lead('l3', { abordagem: { regime: 'duas_mensagens' }, marcos: { enviado: dias(1), respondeu: dias(0.5) } }),
+      lead('l4', { abordagem: { mensagem: 'B', regime: 'duas_mensagens' } }),
+    ]
+    assert.deepEqual(resultados(leads, 'mensagem', 'tudo', AGORA).linhas.map(l => `${l.chave}:${l.enviados}:${l.responderam}`),
+      ['Com link na 1ª mensagem (30/09 a 04/10):2:0', 'Mensagem B:1:0', 'Pedido de licença, sem link:1:1'])
+  })
+})
+
+describe('follow-up e 2ª mensagem anotados (14/10/2026)', () => {
+  const fu = (id: string, followup: number, extra: Partial<CrmLead> = {}) =>
+    lead(id, { ...extra, marcos: { enviado: dias(5), followupEnviado: dias(followup), ...extra.marcos } })
+  const leads = [
+    fu('respondeu-depois', 2, { marcos: { respondeu: dias(1) } }),
+    fu('respondeu-antes', 2, { marcos: { respondeu: dias(3) } }),
+    fu('classificada-depois', 2, { resposta: { tipo: 'neutra', trecho: 'quanto?', em: dias(1) } }),
+    fu('robo-depois', 2, { resposta: { tipo: 'bot', trecho: '', em: dias(1) } }),
+    fu('calado', 2),
+    lead('quer-com-link', { marcos: { enviado: dias(3), respondeu: dias(2), segundaEnviada: dias(1) }, resposta: { tipo: 'interesse', trecho: 'manda' } }),
+    lead('quer-sem-link', { marcos: { enviado: dias(3), respondeu: dias(2) }, resposta: { tipo: 'interesse', trecho: 'pode sim' } }),
+    lead('fora-do-periodo', { marcos: { enviado: dias(40), followupEnviado: dias(37) } }),
+  ]
+
+  it('conta follow-ups do período e quem respondeu (gente) depois; 2ª mensagem entre quem quis ver', () => {
+    assert.deepEqual(enviosAnotados(leads, '30', AGORA), { followups: 5, responderamDepois: 2, quiseramVer: 2, segundas: 1 })
+    assert.equal(enviosAnotados(leads, 'tudo', AGORA).followups, 6)
+  })
+
+  it('texto com a taxa e o aviso de amostra pequena; sem anotação, diz desde quando existe', () => {
+    assert.equal(textoDoFollowup(enviosAnotados(leads, '30', AGORA)), 'Follow-up anotado em 5: 2 responderam depois (40%), amostra pequena.')
+    assert.equal(textoDoFollowup({ followups: 10, responderamDepois: 1, quiseramVer: 0, segundas: 0 }), 'Follow-up anotado em 10: 1 respondeu depois (10%).')
+    assert.match(textoDoFollowup({ followups: 0, responderamDepois: 0, quiseramVer: 0, segundas: 0 }), /^Nenhum follow-up anotado neste período \(a anotação começou em 14\/10\/2026\)\.$/)
+    assert.equal(textoDaSegunda({ followups: 0, responderamDepois: 0, quiseramVer: 2, segundas: 1 }), '2ª mensagem anotada para 1 de 2 que quiseram ver.')
+    assert.equal(textoDaSegunda({ followups: 0, responderamDepois: 0, quiseramVer: 0, segundas: 0 }), 'Ninguém disse que quer ver neste período.')
   })
 
   it('texto: plural certo, porcentagem inteira e sem taxa quando não há envio', () => {

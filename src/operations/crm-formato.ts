@@ -1,4 +1,4 @@
-import type { CrmEtapa, CrmLead, CrmProduto, CrmTipoDeResposta } from './types'
+import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
@@ -100,11 +100,24 @@ export function onde(lead: CrmLead): string {
   return [lead.nicho, lead.cidade].filter(Boolean).join(' · ') || 'Sem nicho e cidade'
 }
 
+/**
+ * O texto da 1ª mensagem pela data do envio (regimeDaMensagem em server/crm.ts, a regra do
+ * funil-aprendizado.py). Até 04/10 o link ia na 1ª; desde 05/10 ela pede licença e o link vai na 2ª.
+ */
+export const ROTULO_DO_REGIME: Record<CrmRegimeDaMensagem, string> = {
+  curta_com_link: 'Com link na 1ª mensagem (curta, até 29/09)',
+  prumo_com_link: 'Com link na 1ª mensagem (30/09 a 04/10)',
+  duas_mensagens: 'Pedido de licença, sem link',
+}
+
 /** Leitura dita com honestidade: sem confirmação de leitura, é desconhecida (RULES 2 e 15). */
 // O que o lead do Site recebeu (07/10/2026): "Mensagem A · site personalizado-v2".
+// Sem a letra (envios até 07/10), o regime pela data diz ao menos se o link ia na 1ª. Só no Site:
+// o regime é a regra do texto do Site, e no PRUMO seria palpite sobre o convite.
 export function textoDaAbordagem(lead: CrmLead): string {
-  const { mensagem, site, video } = lead.abordagem ?? {}
-  const msg = !mensagem ? '' : mensagem === 'manual' ? 'mensagem escrita à mão (sem o link do Balcão)'
+  const { mensagem, site, video, regime } = lead.abordagem ?? {}
+  const msg = !mensagem ? (regime && lead.produto === 'site' ? ROTULO_DO_REGIME[regime].toLowerCase() : '')
+    : mensagem === 'manual' ? 'mensagem escrita à mão (sem o link do Balcão)'
     : mensagem === 'EN' ? 'mensagem em inglês' : mensagem === 'C' ? 'mensagem C (oferece o raio-x)' : `mensagem ${mensagem}`
   // A/B do vídeo (ab-video.ts): só quando a coluna `braco_video` diz algo.
   const comVideo = video === 'video' ? 'com vídeo (teste A/B)' : video === 'sem-video' ? 'sem vídeo (teste A/B)' : ''

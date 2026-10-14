@@ -36,6 +36,11 @@ export type PendenciaDeRespostas = {
   quantos: number
   /** Quantos disseram que querem ver (resposta classificada como interesse). */
   interesse: number
+  /**
+   * Desses, quantos ainda esperam a 2ª mensagem (interesse parado, 14/10/2026). Ausente quando
+   * nenhum: o servidor já os põe na frente, então o `primeiro` é o que espera o link há mais tempo.
+   */
+  parados?: number
   primeiro: { empresa: string; produto: CrmProduto; trecho?: string; respondeuEm?: string }
 }
 
@@ -101,11 +106,13 @@ export function pendenciaDeRespostas(visao: CrmVisao | null | undefined): Penden
   const primeiro = leads[0]
   if (!primeiro) return null
   const trecho = primeiro.resposta && primeiro.resposta.tipo !== 'bot' ? primeiro.resposta.trecho : ''
+  const parados = leads.filter((l) => l.interesseParado).length
   return {
     chave: 'crm:respostas',
     tipo: 'respostas',
     quantos: leads.length,
     interesse: leads.filter((l) => l.resposta?.tipo === 'interesse').length,
+    ...(parados ? { parados } : {}),
     primeiro: {
       empresa: primeiro.empresa,
       produto: primeiro.produto,
@@ -121,7 +128,9 @@ export function textoDaPendenciaDeRespostas(p: PendenciaDeRespostas): { titulo: 
   const quem = p.quantos === 1 ? '' : `${p.primeiro.empresa}${p.primeiro.trecho ? ': ' : ''}`
   const disse = p.primeiro.trecho ? `“${p.primeiro.trecho}”` : ''
   const querem = p.interesse === 0 ? '' : p.interesse === 1 ? '1 quer ver' : `${p.interesse} querem ver`
-  return { titulo, detalhe: [`${quem}${disse}`, querem].filter(Boolean).join(' · ') }
+  // Interesse parado é o que mais esfria: dizer quantos ainda não receberam o link.
+  const semLink = !p.parados ? '' : p.parados === 1 ? '1 ainda sem o link' : `${p.parados} ainda sem o link`
+  return { titulo, detalhe: [`${quem}${disse}`, querem, semLink].filter(Boolean).join(' · ') }
 }
 
 /**

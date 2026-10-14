@@ -8,6 +8,10 @@ import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
 import { ETAPAS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
+import {
+  AVISO_DE_FALHA_DA_ANOTACAO, anotar, corpoDaAnotacao, desanotar, gravarAnotados, lerAnotados, podarAnotados,
+  type EnviosAnotados, type TipoDeEnvioAnotado,
+} from './anotacao-de-envio'
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
@@ -36,6 +40,10 @@ const envios = ref<EnviosAbertos>({})
 // Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts):
 // só em memória, de propósito. Recarregou a página ou voltou o expediente, o ciclo recomeça.
 const liberados = ref<EnviosLiberados>(new Set())
+// O toque em "Mandar o link"/"Mandar o follow-up" anota o envio (anotacao-de-envio.ts); a marca
+// local vale até o retrato confirmar. A falha não segura o WhatsApp: vira o aviso discreto abaixo.
+const anotados = ref<EnviosAnotados>({})
+const falhaDaAnotacao = ref<{ leadId: string; texto: string } | null>(null)
 const anuncio = ref('')
 let temporizador = 0
 let relogio = 0
@@ -90,6 +98,7 @@ async function carregar(anunciar = false) {
     if (corpo.estado === 'ok') {
       const prontos = new Set<string>((corpo.leads ?? []).filter((l: CrmLead) => l.sinal === 'pronto').map((l: CrmLead) => l.id))
       guardarEnvios(podarEnvios(envios.value, prontos, Date.now()))
+      guardarAnotados(podarAnotados(anotados.value, new Map((corpo.leads ?? []).map((l: CrmLead) => [l.id, l] as [string, CrmLead])), Date.now()))
     }
     if (anunciar) anuncio.value = `CRM atualizado: ${corpo.leads?.length ?? 0} leads.`
   } catch (motivo) {
@@ -132,8 +141,40 @@ function depoisDoRegistro() {
   atrasos.push(window.setTimeout(() => carregar(), 5000), window.setTimeout(() => carregar(), 15000))
 }
 
+// ------------------------------------------------------------------ envios anotados (anotacao-de-envio.ts)
+
+function guardarAnotados(novos: EnviosAnotados) {
+  anotados.value = novos
+  gravarAnotados(armazenamento(), novos)
+}
+
+/**
+ * O link já abriu o WhatsApp (é um <a target=_blank> comum); aqui só se anota, em segundo plano.
+ * Falha (rede, n8n, validação) não desfaz nada no WhatsApp: tira a marca e pede a anotação à mão.
+ */
+async function anotarEnvio(id: string, tipo: TipoDeEnvioAnotado) {
+  const lead = porId.value.get(id)
+  if (!lead) return
+  guardarAnotados(anotar(anotados.value, id, tipo, Date.now()))
+  if (falhaDaAnotacao.value?.leadId === id) falhaDaAnotacao.value = null
+  try {
+    const resposta = await fetch('/api/operations/crm/registro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpoDaAnotacao(lead, tipo)),
+    })
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`)
+    anuncio.value = `${lead.empresa}: ${tipo === 'segunda_enviada' ? '2ª mensagem' : 'follow-up'} anotado.`
+    depoisDoRegistro()
+  } catch {
+    guardarAnotados(desanotar(anotados.value, id, tipo))
+    falhaDaAnotacao.value = { leadId: id, texto: `${lead.empresa}: ${AVISO_DE_FALHA_DA_ANOTACAO}` }
+  }
+}
+
 onMounted(async () => {
   envios.value = lerEnvios(armazenamento(), Date.now())
+  anotados.value = lerAnotados(armazenamento(), Date.now())
   lerEndereco()
   escreverEndereco(true)
   window.addEventListener('popstate', aoVoltarNoNavegador)
@@ -246,6 +287,11 @@ async function abrirColinha() {
       <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
+    <!-- Discreto de propósito: o WhatsApp já abriu; falta só a anotação, que dá para fazer na ficha (nota). -->
+    <p v-if="falhaDaAnotacao" class="crm-nota-pequena crm-anotacao-falhou" role="alert">
+      {{ falhaDaAnotacao.texto }}
+      <button type="button" class="crm-mais" @click="falhaDaAnotacao = null">Entendi</button>
+    </p>
 
     <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
@@ -293,9 +339,9 @@ async function abrirColinha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" />
+      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" />
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
-      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" />
+      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" />
 
       <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
         <div class="crm-na-folha">
@@ -305,7 +351,11 @@ async function abrirColinha() {
 
       <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div class="crm-na-folha">
-          <CrmFicha v-if="lead" :key="lead.id" :lead="lead" :visao="visao" @registrado="depoisDoRegistro" @colinha="abrirColinha" />
+          <CrmFicha
+            v-if="lead" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados"
+            :falha-da-anotacao="falhaDaAnotacao?.leadId === lead.id ? falhaDaAnotacao.texto : ''"
+            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio"
+          />
           <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
         </div>
       </Sheet>
