@@ -8,7 +8,7 @@
  * português, e o "Follow-up para mandar" abria a conversa VAZIA: o texto só
  * existia no aviso do WhatsApp do 3º dia. `server/site-mensagem.test.ts` roda
  * o JS de verdade e compara: mudou um texto lá, o teste daqui falha até o
- * espelho mudar junto.
+ * espelho mudar junto. Exceção: o reenvio do só-robô (REENVIO_ROBO*) é só do CRM.
  */
 
 // 08/10/2026 (plano PRUMO): a segunda termina com o preço do Encontrado, pago depois de ver no ar
@@ -24,6 +24,25 @@ export const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chanc
 // Quem recebeu a variação C (o Raio-X) é lembrado do raio-x e ganha os dois links na segunda.
 export const SEGUNDA_RAIO_X = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
 export const FOLLOWUP_RAIO_X = "Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?";
+
+// Reenvio do só-robô (14/10/2026). SÓ DO CRM, sem par no site-mensagem.js: o teste de espelho
+// não o cobre de propósito, e o aviso do n8n (05 · Acompanhamento, 3º dia) continua com o
+// FOLLOWUP de sempre para este lead (conhecido, fica de fora). Quando só a resposta automática
+// do WhatsApp Business respondeu, a 1ª mensagem chegou a um robô e o dono nunca a viu: o
+// follow-up que pergunta "quer que eu mande o link?" não leva a nada. Este pede a pessoa certa.
+// Sem "bom dia/boa tarde" (a hora varia), sem "ontem" (pode ter sido há dias), sem preço, e
+// sem inglês: número dos EUA não recebe o reenvio (reenvioDoRoboDe devolve null).
+export const REENVIO_ROBO = "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para {O_A} {NOME}, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? Posso mandar o link direto para a pessoa, é sem compromisso.";
+// Quem recebeu a C foi convidado para o raio-x, não para o site: o reenvio fala do que ele recebeu.
+export const REENVIO_ROBO_RAIO_X = "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre um raio-x de como {O_A} {NOME} aparece no Google, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? Posso mandar direto para a pessoa, é sem compromisso.";
+
+/**
+ * O que a Central diz no lugar de "Mandar o follow-up" quando o follow-up é o reenvio do só-robô
+ * (server/crm.ts monta a Hoje; a Ficha e o Funil leem daqui por src/operations/crm-formato.ts).
+ * Mora aqui porque é o único módulo puro que o servidor e a tela já importam.
+ */
+export const ROTULO_DO_REENVIO = "Pedir o responsável";
+export const ROTULO_DO_FOLLOWUP = "Mandar o follow-up";
 
 /** Nomes que pedem artigo feminino (a mesma lista de `FEMININOS` do JS). */
 export const FEMININOS = ["clinica", "academia", "casa", "barbearia", "pizzaria", "padaria", "oficina", "loja", "escola", "pousada",
@@ -96,6 +115,17 @@ function abrir(l: LeadDaMensagem, moldeBr: string, moldeEn: string): { numero: s
 export function followupDe(l: LeadDaMensagem) {
   if (linkJaFoi(l)) return abrir(l, FOLLOWUP_COM_LINK, FOLLOWUP_COM_LINK_EN);
   return abrir(l, recebeuC(l) ? FOLLOWUP_RAIO_X : FOLLOWUP, FOLLOWUP_EN);
+}
+
+/**
+ * Reenvio do só-robô: o pedido da pessoa certa, em português. `null` sem número no `wa_me` ou com
+ * número dos EUA: aí o follow-up de sempre (FOLLOWUP_EN) continua valendo.
+ */
+export function reenvioDoRoboDe(l: LeadDaMensagem): { numero: string; texto: string; link: string } | null {
+  const numero = numeroDe(l.waMe);
+  if (!numero || ehEua(numero)) return null;
+  const texto = preencher(recebeuC(l) ? REENVIO_ROBO_RAIO_X : REENVIO_ROBO, l.nome.trim(), l.siteUrl.trim());
+  return { numero, texto, link: `https://wa.me/${numero}?text=${encodeURIComponent(texto)}` };
 }
 
 /** Segunda mensagem: o link, para quem respondeu à primeira (que pede licença, sem link). Quem recebeu a C ganha o raio-x e o site. */

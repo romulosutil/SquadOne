@@ -15,6 +15,22 @@ export const SEGUNDA_PRUMO =
 export const FOLLOWUP_PRUMO =
   "Oi, aqui é o Rômulo de novo, do PRUMO. Deu para ver o Raio-X {ARTIGO} {NOME}?\n{RAIO_X}\n\nSe fizer sentido, em 20 minutos mostramos como resolver o primeiro ponto. E se não for o momento, é só me dizer.";
 
+// Reenvio do só-robô (14/10/2026): o convite chegou à resposta automática do WhatsApp Business e
+// ninguém de verdade o viu. Em vez do follow-up do Raio-X (que nem existe para quem não respondeu),
+// pede a pessoa certa. Sem "bom dia/boa tarde" (a hora varia), sem "ontem" (pode ter sido há dias),
+// sem preço. Só do CRM: o n8n não manda este texto.
+export const REENVIO_ROBO_PRUMO =
+  "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui, mas acho que só chegou o atendimento automático. Pode me indicar quem cuida do marketing e do comercial {ARTIGO} {NOME}? É coisa rápida.";
+
+/**
+ * wa.me com o reenvio do só-robô; vazio sem número do Brasil. O texto é só em português: o
+ * número precisa do 55 na frente (o CRM já o põe nos de 10 e 11 dígitos), o que deixa os EUA de fora.
+ */
+export function reenvioDoPrumo(whatsapp: string, empresa: string): string {
+  if (!/^55\d{10,11}$/.test(whatsapp)) return "";
+  return `https://wa.me/${whatsapp}?text=${encodeURIComponent(preencherPrumo(REENVIO_ROBO_PRUMO, empresa, ""))}`;
+}
+
 /** Nome como o dono escreve: sem Ltda/ME e fora da caixa alta ("roda mais distribuidora" -> "Roda Mais Distribuidora"). */
 export function nomeDaEmpresa(bruto: string): string {
   let nome = bruto.trim();

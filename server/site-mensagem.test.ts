@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import vm from "node:vm";
-import { artigoDe, followupDe, segundaDe, type LeadDaMensagem } from "./site-mensagem.ts";
+import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, artigoDe, followupDe, reenvioDoRoboDe, segundaDe, type LeadDaMensagem } from "./site-mensagem.ts";
 
 // A fonte é o JS que o n8n usa: roda ele aqui, numa caixa sem nada, e compara.
 // Mudou um texto ou a lista de femininos lá, este teste falha até o espelho mudar junto.
@@ -95,6 +95,46 @@ describe("site-mensagem: espelho do JS do n8n", () => {
     assert.match(followupDe(semUrl).texto, /raio-x de como o Escritório Lima/);
     // B com raio_x_url: a segunda é a do site.
     assert.match(segundaDe(CASOS.find(([n]) => n.startsWith("variação B"))![1]).texto, /^Aqui está: https:\/\/demo-boa/);
+  });
+});
+
+describe("site-mensagem: reenvio do só-robô (só do CRM, 14/10/2026)", () => {
+  const texto = (l: LeadDaMensagem) => reenvioDoRoboDe(l)?.texto ?? "";
+
+  it("pede a pessoa certa, com o artigo e o nome certos", () => {
+    assert.equal(texto(CASOS[0][1]), "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre uma demonstração de site que montei " +
+      "para a Dedetizadora Alfa, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? " +
+      "Posso mandar o link direto para a pessoa, é sem compromisso.");
+    assert.match(texto(CASOS[1][1]), /montei para o Escritório Silva & Prado, mas/);
+    const r = reenvioDoRoboDe(CASOS[0][1])!;
+    assert.equal(r.numero, "5527999990001");
+    assert.equal(r.link, `https://wa.me/5527999990001?text=${encodeURIComponent(r.texto)}`);
+  });
+
+  it("quem recebeu a C ouve do raio-x, não do site", () => {
+    const c = CASOS.find(([n]) => n === "variação C com o Raio-X")![1];
+    assert.match(texto(c), /sobre um raio-x de como a Clínica Sorriso aparece no Google, mas acho que só chegou o atendimento automático\./);
+    assert.doesNotMatch(texto(c), /demonstração/);
+  });
+
+  it("sem preço, sem saudação de hora, sem 'ontem', e sem link nem placeholder", () => {
+    for (const [, lead] of CASOS) {
+      const t = texto(lead);
+      if (!t) continue;
+      assert.doesNotMatch(t, /R\$|bom dia|boa tarde|boa noite|ontem|https?:|\{/i, t);
+    }
+  });
+
+  it("EUA e sem número: sem reenvio (fica o follow-up de sempre, em inglês)", () => {
+    assert.equal(reenvioDoRoboDe(CASOS[3][1]), null);
+    assert.equal(reenvioDoRoboDe(CASOS[4][1]), null);
+    assert.match(followupDe(CASOS[3][1]).texto, /^Hi, it's Rômulo again/);
+  });
+
+  it("o JS do n8n não tem o reenvio: o espelho continua só com o que o n8n manda", () => {
+    assert.ok(!codigo.includes("atendimento automático"));
+    assert.equal(ROTULO_DO_REENVIO, "Pedir o responsável");
+    assert.equal(ROTULO_DO_FOLLOWUP, "Mandar o follow-up");
   });
 });
 
