@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
 import {
+  ACAO_DO_REENVIO,
   CrmStore,
   MAX_MENSAGEM_PRONTA,
   RegistroFalhou,
@@ -16,6 +17,7 @@ import {
   configDoCrm,
   followupJaEnviado,
   interesseParado,
+  reenvioDoRoboHoje,
   regimeDaMensagem,
   tempoEsperando,
   montarCrm,
@@ -740,6 +742,152 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
       else assert.throws(chamar, RegistroInvalido, `${tipo} ${etapa}/${sinal}`);
     }
     assert.equal(validarRegistro({ produto: "site", id: "abc", tipo: "segunda_enviada", data: "2026-10-01" }, AGORA).data, "", "envio não leva data");
+  });
+});
+
+describe("CRM: reenvio do só-robô (14/10/2026)", () => {
+  // Uma semana depois do AGORA dos outros testes (09/10, 12:00 em São Paulo): com o AGORA de 02/10,
+  // quem foi enviado há 4 dias ou mais cai antes do corte do acompanhamento (acervo). Só as linhas de cada teste.
+  const AGORA_R = new Date(AGORA.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const d = (n: number) => new Date(AGORA_R.getTime() - n * 24 * 60 * 60 * 1000).toISOString();
+  function com(extraSite: Array<Record<string, string>>, extraPrumo: Array<Record<string, string>> = [], registros: Array<Record<string, string>> = []) {
+    const base = retrato();
+    base.fontes.site.linhas = extraSite;
+    base.fontes.prumo.linhas = extraPrumo;
+    base.fontes.registros.linhas = registros;
+    return montarCrm(base, { agora: AGORA_R, pastas: [] });
+  }
+  // Sem robô, para comparar: o follow-up de sempre.
+  const gente = (id: string, enviado: string, extra: Record<string, string> = {}) => linhaSite(id, {
+    status: "enviado", enviado_em: enviado, wa_me: "https://wa.me/5527999990031?text=oi", ...extra });
+  // Só a resposta automática do WhatsApp Business: classificada "bot", sem respondeu_em.
+  const robo = (id: string, enviado: string, extra: Record<string, string> = {}) => linhaSite(id, {
+    status: "enviado", enviado_em: enviado, resposta_tipo: "bot", resposta_em: enviado, site_url: `https://demo-${id}.vercel.app`,
+    wa_me: "https://wa.me/5527999990030?text=oi", ...extra,
+  });
+  const proboPrumo = (id: string, convite: string) => linhaPrumo(id, { Etapa: "Convite enviado", "Convite enviado em": convite, "Tipo da resposta": "bot" });
+  const fu = (produto: string, id: string, em: string) => ({ em, produto, id, tipo: "followup_enviado", texto: "", data: "" });
+  const estado = (l: CrmLead) => `${l.etapa}/${l.sinal}/${l.motivoPerda ?? "-"}`;
+
+  it("elegibilidade em tabela: do dia seguinte (calendário de São Paulo) ao último antes do prazo, uma vez só", () => {
+    const agora = AGORA.getTime(); // 02/10, 12:00 em São Paulo
+    const t = (iso: string) => Date.parse(iso);
+    const base = { etapa: "contato" as const, sinal: "so-robo" as const, acervo: false, followups: [] as number[], agora };
+    const casos: Array<[string, Partial<Parameters<typeof reenvioDoRoboHoje>[0]>, boolean]> = [
+      ["enviado ontem às 12h26: menos de 24 h, mas outro dia", { enviado: t("2026-10-01T15:26:00Z") }, true],
+      ["enviado ontem às 23h30", { enviado: t("2026-10-02T02:30:00Z") }, true],
+      ["enviado hoje à 0h30: mesmo dia", { enviado: t("2026-10-02T03:30:00Z") }, false],
+      ["enviado hoje de manhã", { enviado: Date.parse(dias(0.1)) }, false],
+      ["6º dia: o último", { enviado: Date.parse(dias(6)) }, true],
+      ["7º dia: já saiu pelo prazo", { enviado: Date.parse(dias(7)) }, false],
+      ["reenvio anotado depois do envio", { enviado: Date.parse(dias(3)), followups: [Date.parse(dias(1))] }, false],
+      ["anotação de antes do envio não conta", { enviado: Date.parse(dias(3)), followups: [Date.parse(dias(4))] }, true],
+      ["saída no mesmo dia do envio é a 1ª mensagem", { enviado: Date.parse(dias(3)), ultimaSaida: Date.parse(dias(3)) + 600_000 }, true],
+      ["saída em outro dia: alguém já escreveu à mão", { enviado: Date.parse(dias(3)), ultimaSaida: Date.parse(dias(2)) }, false],
+      ["acervo", { enviado: Date.parse(dias(3)), acervo: true }, false],
+      ["não é só-robô", { enviado: Date.parse(dias(3)), sinal: "enviado" }, false],
+      ["fora de Em contato", { enviado: Date.parse(dias(3)), etapa: "perdido" }, false],
+      ["sem data de envio", {}, false],
+    ];
+    for (const [nome, extra, esperado] of casos) assert.equal(reenvioDoRoboHoje({ ...base, ...extra }), esperado, nome);
+  });
+
+  it("Site: entra no dia seguinte, sem esperar o 3º dia nem o dia do followup_em do n8n, com o texto que pede o responsável", () => {
+    const v = com([
+      robo("robo-1", d(1)),
+      robo("robo-lembrete-ontem", d(4), { followup_em: d(1) }),
+      robo("robo-hoje", d(0.1)),
+      gente("gente-lembrete-ontem", d(4), { followup_em: d(1) }),
+    ]);
+    const um = lead(v.leads, "site:robo-1");
+    assert.equal(`${um.followupHoje}/${um.reenvioDoRobo}`, "true/true");
+    const texto = new URL(um.links.followup!).searchParams.get("text") ?? "";
+    assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo, do PRUMO\. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para a Empresa robo-1, mas acho que só chegou o atendimento automático\./);
+    assert.ok(um.links.followup!.startsWith("https://wa.me/5527999990030?text="));
+    assert.equal(lead(v.leads, "site:robo-lembrete-ontem").followupHoje, true, "o lembrete do 05 foi ontem, o reenvio continua");
+    assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, false, "sem robô, o follow-up continua preso ao dia do lembrete");
+    const hoje = lead(v.leads, "site:robo-hoje");
+    assert.equal(`${hoje.followupHoje}/${hoje.reenvioDoRobo}/${hoje.links.followup}`, "false/undefined/undefined", "no mesmo dia do envio, não");
+  });
+
+  it("some com o followup_enviado depois do envio", () => {
+    const v = com([robo("robo-feito", d(2))], [], [fu("site", "robo-feito", d(1))]);
+    const feito = lead(v.leads, "site:robo-feito");
+    assert.equal(`${feito.followupHoje}/${feito.reenvioDoRobo}/${feito.links.followup}`, "false/undefined/undefined");
+    assert.ok(!v.hoje.find((g) => g.id === "followup")!.itens.some((i) => i.leadId === "site:robo-feito"));
+  });
+
+  it("EUA e Site sem demo: sem reenvio, o follow-up de sempre (dia do lembrete e 3º dia)", () => {
+    const eua = "https://wa.me/13055550100?text=hi";
+    const v = com([
+      robo("robo-eua", d(4), { wa_me: eua, followup_em: d(0) }),
+      robo("robo-eua-cedo", d(1), { wa_me: eua }),
+      robo("robo-sem-demo", d(1), { site_url: "" }),
+    ]);
+    const e = lead(v.leads, "site:robo-eua");
+    assert.equal(`${e.followupHoje}/${e.reenvioDoRobo}`, "true/undefined");
+    assert.match(new URL(e.links.followup!).searchParams.get("text") ?? "", /^Hi, it's Rômulo again/);
+    assert.equal(lead(v.leads, "site:robo-eua-cedo").followupHoje, false);
+    assert.equal(lead(v.leads, "site:robo-sem-demo").followupHoje, false, "sem demo, o texto ofereceria um link que não existe");
+  });
+
+  it("PRUMO: o reenvio ganha texto (antes, só a conversa vazia); o follow-up de quem viu continua sem", () => {
+    const v = com([], [proboPrumo("p-robo", d(1)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3) })]);
+    const p = lead(v.leads, "prumo:p-robo");
+    assert.equal(`${p.followupHoje}/${p.reenvioDoRobo}`, "true/true");
+    assert.equal(new URL(p.links.followup!).searchParams.get("text"),
+      "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui, mas acho que só chegou o atendimento automático. " +
+      "Pode me indicar quem cuida do marketing e do comercial do Prospect p-robo? É coisa rápida.");
+    assert.equal(`${lead(v.leads, "prumo:convite").followupHoje}/${lead(v.leads, "prumo:convite").links.followup}`, "true/undefined");
+    const feito = com([], [proboPrumo("p-robo", d(1))], [fu("prumo", "p-robo", d(0.5))]);
+    assert.equal(lead(feito.leads, "prumo:p-robo").followupHoje, false);
+  });
+
+  it("Hoje: ação e rótulo próprios, o prazo dito, e quem sai antes na frente", () => {
+    const v = com([robo("robo-1", d(1)), gente("followup", d(3)), robo("robo-6", d(6))],
+      [proboPrumo("p-robo", d(2)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3) })]);
+    const followup = v.hoje.find((g) => g.id === "followup")!.itens;
+    assert.deepEqual(followup.map((i) => i.leadId), ["site:robo-6", "site:followup", "prumo:convite", "prumo:p-robo", "site:robo-1"]);
+    const seis = followup[0];
+    assert.equal(seis.acao, ACAO_DO_REENVIO);
+    assert.equal(seis.detalhe, "Enviado há 6 dias; só a resposta automática respondeu. Sem ele, vai para Perdido amanhã. Reenvio único: depois dele, o prazo de 7 dias recomeça.");
+    assert.equal(seis.links[0].rotulo, "Pedir o responsável");
+    assert.equal(seis.links[1].rotulo, "Abrir conversa no WhatsApp");
+    const normal = followup.find((i) => i.leadId === "site:followup")!;
+    assert.equal(`${normal.acao}/${normal.links[0].rotulo}`, "Mandar follow-up/Mandar o follow-up", "sem robô, nada muda");
+  });
+
+  it("o prazo recomeça no reenvio, só para o só-robô", () => {
+    const v = com([
+      robo("reenviado-no-6", d(6)),
+      robo("sem-reenvio-6", d(6)),
+      robo("reenviado-velho", d(8)),
+      robo("reenvio-venceu", d(12)),
+      robo("planilha-expirou", d(11), { status: "expirado" }),
+      linhaSite("gente-com-fu", { status: "enviado", enviado_em: d(6) }),
+      linhaSite("gente-com-fu-7", { status: "enviado", enviado_em: d(7) }),
+    ], [proboPrumo("p-reenviado", d(8))], [
+      fu("site", "reenviado-no-6", d(0.5)),
+      fu("site", "reenviado-velho", d(2)),
+      fu("site", "reenvio-venceu", d(7.5)),
+      fu("site", "planilha-expirou", d(5)),
+      fu("site", "gente-com-fu", d(2)),
+      fu("site", "gente-com-fu-7", d(3)),
+      fu("prumo", "p-reenviado", d(3)),
+    ]);
+    const l = (id: string) => lead(v.leads, id);
+    assert.equal(l("site:reenviado-no-6").diasParaSair, 7, "reenviado hoje: 7 dias inteiros para alguém responder");
+    assert.equal(l("site:sem-reenvio-6").diasParaSair, 1);
+    assert.equal(`${estado(l("site:reenviado-velho"))}/${l("site:reenviado-velho").diasParaSair}`, "contato/so-robo/-/5");
+    const venceu = l("site:reenvio-venceu");
+    assert.equal(estado(venceu), "perdido/expirou/expirou");
+    assert.equal(venceu.desde, new Date(Date.parse(d(7.5)) + 7 * 24 * 60 * 60 * 1000).toISOString(), "sai 7 dias depois do reenvio");
+    const expirou = l("site:planilha-expirou");
+    assert.equal(`${estado(expirou)}/${expirou.diasParaSair}/${expirou.estadoNaPlanilha}`, "contato/so-robo/-/2/expirado",
+      "a planilha conta 10 dias do envio; o reenvio a suspende, como o próximo passo");
+    assert.equal(l("site:gente-com-fu").diasParaSair, 1, "follow-up de quem não é só-robô não mexe no prazo");
+    assert.equal(estado(l("site:gente-com-fu-7")), "perdido/expirou/expirou");
+    assert.equal(`${estado(l("prumo:p-reenviado"))}/${l("prumo:p-reenviado").diasParaSair}`, "contato/so-robo/-/4");
   });
 });
 

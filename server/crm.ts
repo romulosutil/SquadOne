@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { lerPastasDosLeads, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
-import { segundaDoPrumo } from "./prumo-mensagem.ts";
-import { followupDe, segundaDe } from "./site-mensagem.ts";
+import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
+import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
 //
@@ -427,6 +427,11 @@ export interface CrmLead {
   /** `segundaEnviada`/`followupEnviado`: o último envio anotado na aba CRM (o toque no link da Central). */
   marcos: { enviado?: string; visto?: string; respondeu?: string; segundaEnviada?: string; followupEnviado?: string };
   followupHoje: boolean;
+  /**
+   * O follow-up de hoje é o reenvio único do só-robô (14/10/2026): `links.followup` leva o pedido da
+   * pessoa certa, não o follow-up do 3º dia, e fora do expediente fica travado como um primeiro contato.
+   */
+  reenvioDoRobo?: true;
   respostaNova: boolean;
   /**
    * Disse que quer ver e a 2ª mensagem ainda não saiu (14/10/2026): fica em `respostaNova` sem o
@@ -450,7 +455,7 @@ export interface CrmLead {
   mensagemPronta?: string;
   eventos: CrmEvento[];
   /** `segunda`: a mensagem depois do "sim" (Site: o link do site; PRUMO: o Raio-X, só quando ele existe). */
-  /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento. */
+  /** `followup`: Site, só no dia do follow-up, o wa.me com o texto do aviso do 05 · Acompanhamento; no só-robô (Site e PRUMO), o reenvio (`reenvioDoRobo`). */
   /** `raioX`: PRUMO, a página do Raio-X do lead (índice em ~/prumo-entregas/prumo-raio-x/leads.json); Site, o `<demo>/raio-x` da coluna raio_x_url. */
   links: { site?: string; enviar?: string; whatsapp?: string; acoes?: string; convite?: string; segunda?: string; followup?: string; planilha?: string; raioX?: string };
   pasta?: { lugar: string; slug: string; artefatos?: PastaDoLead["artefatos"]; falha?: string };
@@ -605,6 +610,40 @@ export function followupJaEnviado(followups: number[], enviado: number | undefin
   return followups.some((t) => enviado === undefined || t > enviado);
 }
 
+/**
+ * O reenvio do só-robô entra hoje no "Follow-up para mandar"? (14/10/2026)
+ *
+ * Medido em 14/10/2026: 19 leads em Em contato em que só a resposta automática do WhatsApp
+ * Business respondeu. A 1ª mensagem chegou a um robô e ninguém de verdade a viu, e o único caminho
+ * até eles era o follow-up do 3º dia, que só aparecia no DIA em que o n8n gravou `followup_em`
+ * (quem passou do dia sumia e expirava sem nunca ter sido recontatado) e perguntava "quer que eu
+ * mande o link?" a um robô. Aqui o lead ganha UM reenvio, pedindo a pessoa certa:
+ * - a partir do dia seguinte ao envio, pelo calendário de São Paulo (enviado 14/10 às 12h26 ->
+ *   15/10), sem esperar os 3 dias: não há conversa a respeitar, só um recado que não chegou;
+ * - até o último dia antes de sair pelo prazo, sem depender do `followup_em` do n8n;
+ * - uma vez só: o `followup_enviado` anotado depois do envio o tira (e recomeça o prazo,
+ *   comPrazoDoContato); saída nossa em outro dia que não o do envio (`ultima_saida_em`) também,
+ *   porque alguém já escreveu de novo à mão. A do próprio dia é a 1ª mensagem: o `enviado_em`
+ *   é o clique no link, e a mensagem sai minutos depois.
+ * Acervo (envio antes do corte) fica de fora, como no follow-up de sempre.
+ */
+export function reenvioDoRoboHoje(entrada: {
+  etapa: CrmEtapa;
+  sinal: CrmSinal;
+  acervo: boolean;
+  enviado?: number;
+  followups: number[];
+  ultimaSaida?: number;
+  agora: number;
+}): boolean {
+  const { enviado } = entrada;
+  if (entrada.etapa !== "contato" || entrada.sinal !== "so-robo" || entrada.acervo || enviado === undefined) return false;
+  const passados = diaSP(entrada.agora) - diaSP(enviado);
+  if (passados < 1 || passados >= DIAS_SEM_RESPOSTA) return false;
+  if (entrada.ultimaSaida !== undefined && diaSP(entrada.ultimaSaida) > diaSP(enviado)) return false;
+  return !followupJaEnviado(entrada.followups, enviado);
+}
+
 /** "Sem contato fácil" marcado à mão: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
 function comPerdaManual(calculada: EtapaCalculada, semContato: Registro | undefined): EtapaCalculada {
   if (!semContato || calculada.etapa === "ganho" || calculada.etapa === "perdido") return calculada;
@@ -618,10 +657,16 @@ const SINAIS_DE_CONVERSA: ReadonlySet<CrmSinal> = new Set(["respondeu", "em-conv
  * O prazo de Em contato (DIAS_SEM_RESPOSTA). `ultimoDoLead` é a última mensagem DELE (robô não conta);
  * sem nenhuma, conta do envio. Um próximo passo registrado segura o lead: é o Rômulo dizendo que ainda
  * vale. O lead que escreve de novo volta sozinho, porque a conta recomeça na mensagem nova.
+ *
+ * Só-robô com o reenvio anotado (`followups` depois do envio, 14/10/2026): a conta recomeça no
+ * reenvio. A 1ª mensagem não chegou a ninguém, então o prazo de resposta de gente só começa quando
+ * o pedido da pessoa certa sai; contado do envio, um reenvio no 6º dia deixaria 1 dia para alguém
+ * responder. Só para o só-robô: o follow-up de quem viu e não respondeu não muda a expiração.
  */
 function comPrazoDoContato(calculada: EtapaCalculada, ultimoDoLead: number | undefined, enviado: number | undefined,
-  proximo: Registro | undefined, agora: number): EtapaCalculada & { diasParaSair?: number } {
-  const desde = ultimoDoLead ?? enviado;
+  proximo: Registro | undefined, agora: number, followups: number[] = []): EtapaCalculada & { diasParaSair?: number } {
+  const reenvios = calculada.sinal === "so-robo" && enviado !== undefined ? followups.filter((t) => t > enviado) : [];
+  const desde = reenvios.length ? Math.max(ultimoDoLead ?? enviado ?? 0, ...reenvios) : ultimoDoLead ?? enviado;
   if (calculada.etapa !== "contato" || proximo || desde === undefined) return calculada;
   const passados = dias(desde, agora) ?? 0;
   if (passados < DIAS_SEM_RESPOSTA) return { ...calculada, diasParaSair: DIAS_SEM_RESPOSTA - passados };
@@ -819,20 +864,17 @@ function leadDoSite(linha: Linha, contexto: {
   };
   const resposta = respostaDaLinha(c);
   // "expirado" é a regra de tempo da planilha, não decisão de ninguém: próximo passo ou proposta
-  // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato).
-  const statusDaEtapa = status === "expirado" && (proximo || proposta) ? "enviado" : status;
+  // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato). O reenvio
+  // do só-robô anotado também: o prazo recomeça nele, e a planilha, que conta 10 dias do ENVIO,
+  // cortaria antes (um reenvio no 6º dia ficaria com 4 dias em vez de 7).
+  const reenviado = resposta?.tipo === "bot" && t.respondeu === undefined && t.enviado !== undefined && followupJaEnviado(followups, t.enviado);
+  const statusDaEtapa = status === "expirado" && (proximo || proposta || reenviado) ? "enviado" : status;
   const calculada = comPrazoDoContato(
     comPerdaManual(etapaDoSite({ status: statusDaEtapa, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta }), semContato),
-    ultimaDoLead([t.respondeu, t.ultimaEntrada], resposta), t.enviado, proximo, agora);
+    ultimaDoLead([t.respondeu, t.ultimaEntrada], resposta), t.enviado, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
-  const diasDesdeEnvio = dias(t.enviado, agora);
-  const followupHoje = calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined
-    && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
-    && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
-    && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
-    && !followupJaEnviado(followups, t.enviado);
   const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: t.ultimaSaida });
   const respostaNova = emConversa && (parado !== null || (
     t.ultimaEntrada !== undefined && t.ultimaSaida !== undefined
@@ -873,8 +915,21 @@ function leadDoSite(linha: Linha, contexto: {
   const segunda = emConversa && !ehRecusa(resposta) && site && whatsapp ? segundaDe(mensagem).link || undefined : undefined;
   // O Raio-X do demo (<site>/raio-x): quem recebeu a C pediu ele; a ficha o mostra e a colinha o preenche.
   const raioX = site ? urlHttps(c("raioXUrl")) : undefined;
+  // Só-robô com número do Brasil e demo no ar: o follow-up vira o reenvio único (reenvioDoRoboHoje),
+  // com o pedido da pessoa certa. Sem demo, o texto ofereceria um link que não existe; nos EUA não há
+  // texto em inglês: os dois seguem o follow-up de sempre.
+  const reenvioLink = calculada.sinal === "so-robo" && site ? reenvioDoRoboDe(mensagem)?.link : undefined;
+  const diasDesdeEnvio = dias(t.enviado, agora);
+  const followupHoje = reenvioLink
+    ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo, enviado: t.enviado, followups, ultimaSaida: t.ultimaSaida, agora })
+    : calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined
+      && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
+      && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
+      && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
+      && !followupJaEnviado(followups, t.enviado);
+  const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
-  const followup = followupHoje && waMe ? followupDe(mensagem).link || undefined : undefined;
+  const followup = !followupHoje ? undefined : reenvioDoRobo ? reenvioLink : waMe ? followupDe(mensagem).link || undefined : undefined;
 
   const divergencias: string[] = [];
   if (contexto.pastasLidas) {
@@ -932,6 +987,7 @@ function leadDoSite(linha: Linha, contexto: {
     leitura: leituraDe(t.enviado, t.visto, t.respondeu ?? (calculada.sinal === "em-conversa" ? agora : undefined), calculada.etapa === "contato"),
     marcos,
     followupHoje,
+    ...(reenvioDoRobo ? { reenvioDoRobo: true as const } : {}),
     respostaNova,
     ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
     acervo,
@@ -1030,12 +1086,20 @@ function leadDoPrumo(linha: Linha, contexto: {
   const raioX = contexto.raioX?.get(chave);
   const resposta = respostaDaLinha(c);
   const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
-    ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora);
+    ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const diasDesdeConvite = dias(t.convite, agora);
-  const followupHoje = calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
-    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA
-    && !followupJaEnviado(followups, t.convite);
+  const whatsapp = numeroDoWhatsapp(c("whatsapp"));
+  // Só-robô com número do Brasil: o follow-up vira o reenvio único, com o texto que pede quem cuida do
+  // marketing (antes o follow-up do PRUMO só abria a conversa vazia). A planilha do PRUMO não tem a
+  // última saída: o reenvio anotado é o que o tira.
+  const reenvioLink = calculada.sinal === "so-robo" && whatsapp ? reenvioDoPrumo(whatsapp, c("empresa") || chave) || undefined : undefined;
+  const followupHoje = reenvioLink
+    ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo: false, enviado: t.convite, followups, agora })
+    : calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
+      && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA
+      && !followupJaEnviado(followups, t.convite);
+  const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // Com o formulário respondido (diagnóstico) a conversa já andou: não há mais 2ª mensagem a esperar.
   const parado = interesseParado({ conversa: emConversa && t.diagnostico === undefined, resposta, respondeu: t.respondeu, segundas });
   const respostaNova = emConversa && t.diagnostico === undefined && (parado !== null
@@ -1052,7 +1116,6 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...eventoDoPrazo(calculada),
     ...eventosManuais(registros),
   ].sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
-  const whatsapp = numeroDoWhatsapp(c("whatsapp"));
   const segunda = emConversa && t.diagnostico === undefined && !ehRecusa(resposta) && raioX && whatsapp
     ? segundaDoPrumo(whatsapp, c("empresa") || chave, raioX.url) || undefined : undefined;
   const webhook = contexto.links.webhook;
@@ -1077,6 +1140,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     leitura: leituraDe(t.convite, t.visto, t.respondeu ?? t.diagnostico, calculada.etapa === "contato"),
     marcos: marcosDoLead(t.convite, t.visto, t.respondeu, segundas, followups),
     followupHoje,
+    ...(reenvioDoRobo ? { reenvioDoRobo: true as const } : {}),
     respostaNova,
     ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
     acervo: false,
@@ -1095,6 +1159,8 @@ function leadDoPrumo(linha: Linha, contexto: {
       // Desde 08/10/2026 o "sim" recebe o Raio-X, não o formulário de 16 perguntas (passo=diagnostico):
       // sem Raio-X feito, não há segunda mensagem pronta, e a Hoje pede para fazê-lo.
       ...(segunda ? { segunda } : {}),
+      // Só o reenvio do só-robô tem texto pronto no PRUMO; o follow-up de quem viu segue na conversa vazia.
+      ...(reenvioDoRobo && reenvioLink ? { followup: reenvioLink } : {}),
       ...(whatsapp ? { whatsapp: `https://wa.me/${whatsapp}` } : {}),
       ...(planilha ? { planilha } : {}),
     },
@@ -1106,12 +1172,15 @@ function leadDoPrumo(linha: Linha, contexto: {
 
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
-  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta.` },
+  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta; quem só ouviu o robô, já no dia seguinte, com um reenvio pedindo o responsável. Quem sai do funil antes vem primeiro.` },
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "PRUMO na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
   { id: "enviar", titulo: "Sites prontos para enviar", explicacao: "O link marca o envio e abre o WhatsApp com a mensagem." },
 ];
+
+/** A ação da Hoje para o reenvio do só-robô (o rótulo do link é ROTULO_DO_REENVIO, de site-mensagem.ts). */
+export const ACAO_DO_REENVIO = "Só o robô respondeu: pedir quem cuida disso";
 
 function textoDeDias(n: number | undefined, prefixo: string): string {
   if (n === undefined) return "";
@@ -1161,13 +1230,22 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       }
     }
     if (lead.followupHoje) {
+      const enviado = textoDeDias(lead.diasNaEtapa, lead.produto === "prumo" ? "Convite enviado" : "Enviado");
+      // O prazo dito no reenvio: é o que põe os de amanhã na frente (a ordem abaixo) e o que se perde sem ele.
+      const prazo = lead.diasParaSair === undefined ? ""
+        : ` Sem ele, vai para Perdido ${lead.diasParaSair <= 1 ? "amanhã" : `em ${lead.diasParaSair} dias`}.`;
       itens.followup.push({
         leadId: lead.id,
-        acao: "Mandar follow-up",
-        detalhe: `${textoDeDias(lead.diasNaEtapa, lead.produto === "prumo" ? "Convite enviado" : "Enviado")}, sem resposta · ${leitura(lead)}.`,
-        // Com o texto pronto primeiro (o mesmo do aviso do 05); a conversa vazia fica de reserva.
-        links: lead.links.followup ? [{ rotulo: "Mandar o follow-up", url: lead.links.followup }, ...conversa] : conversa,
-        ordem: Date.parse(lead.marcos.enviado ?? "") || 0,
+        acao: lead.reenvioDoRobo ? ACAO_DO_REENVIO : "Mandar follow-up",
+        detalhe: lead.reenvioDoRobo
+          ? `${enviado}; só a resposta automática respondeu.${prazo} Reenvio único: depois dele, o prazo de ${DIAS_SEM_RESPOSTA} dias recomeça.`
+          : `${enviado}, sem resposta · ${leitura(lead)}.`,
+        // Com o texto pronto primeiro (o mesmo do aviso do 05, ou o reenvio); a conversa vazia fica de reserva.
+        links: lead.links.followup
+          ? [{ rotulo: lead.reenvioDoRobo ? ROTULO_DO_REENVIO : ROTULO_DO_FOLLOWUP, url: lead.links.followup }, ...conversa] : conversa,
+        // Quem sai do funil antes vem primeiro (os só-robô de 08/10 que expiram amanhã na frente); no
+        // mesmo prazo, o envio mais antigo. Sem prazo (segurado por próximo passo), por último.
+        ordem: (lead.diasParaSair ?? DIAS_SEM_RESPOSTA) * 1e13 + (Date.parse(lead.marcos.enviado ?? "") || 0),
       });
     }
     if (lead.respostaNova) {
