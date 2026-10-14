@@ -20,6 +20,7 @@ const norm = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const re = (fonte) => new RegExp(norm(fonte), 'i');
 const SEGMENTO = re(CONFIG.segmento);
 const FORA = re(CONFIG.fora);
+const CLIENTES = re(CONFIG.clientes);
 const SINAIS = CONFIG.sinais.map(([rotulo, fonte]) => [rotulo, re(fonte)]);
 
 // ------------------------------------------------------------------ quem já foi visto
@@ -91,6 +92,7 @@ async function checar(p) {
   const tipo = p.primaryTypeDisplayName?.text ?? '';
   const site = String(p.websiteUri ?? '').trim();
   const base = { p, nome, tipo, site };
+  if (CLIENTES.test(norm(nome + ' ' + host(site)))) return { ...base, descarte: 'Já é cliente do PRUMO: não abordar' };
   if (p.businessStatus && p.businessStatus !== 'OPERATIONAL') return { ...base, descarte: 'Fechada no Google' };
   if (FORA.test(norm(nome + ' ' + tipo))) return { ...base, descarte: 'Fora do perfil (' + (tipo || 'ramo') + ')' };
   if (!site || SOCIAL.test(host(site))) return { ...base, descarte: 'Sem site próprio (o WhatsApp precisa estar publicado no site)' };

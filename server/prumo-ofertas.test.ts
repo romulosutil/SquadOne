@@ -10,6 +10,7 @@ const CONFIG = JSON.parse(fs.readFileSync(new URL("../deploy/dell/claude-ops/pru
   colunas: string[];
   ocultas: string[];
   etapas: string[];
+  clientes: string;
   ofertas: Record<string, { aba: string; convite: string; mensagem: string; nichos: string[]; cidades: string[]; sinais: [string, string][]; segmento: string; fora: string }>;
 };
 
@@ -52,6 +53,17 @@ describe("prumo-ofertas.json × CRM", () => {
       assert.doesNotMatch(o.mensagem, /R\$|r[oô]mulo|fundador|desconto|gr[aá]tis|https?:|www\./i, id);
       assert.equal((o.mensagem.match(/\?/g) ?? []).length, 1, `${id}: uma pergunta só`);
     }
+  });
+
+  it("cliente do PRUMO nunca vira prospect, e o que não é cliente final fica fora (achados da 1ª rodada, 14/10/2026)", () => {
+    const clientes = new RegExp(CONFIG.clientes, "i");
+    assert.ok(clientes.test("silmer camisetas"));
+    assert.ok(clientes.test("silmer.com.br"));
+    const fora = (id: string, nome: string) => new RegExp(CONFIG.ofertas[id].fora, "i").test(nome);
+    assert.ok(fora("iris", "saude ocupacional unimed vitoria"));
+    assert.ok(fora("estampa", "newtech vitoria - produtos para sublimacao, transfer e papeis"));
+    assert.ok(!fora("estampa", "estamparia vitoria | uniformes personalizados"));
+    assert.ok(!fora("iris", "vidah kids - clinica de neuropsiquiatria, desenvolvimento infantil e autismo"));
   });
 
   it("buscas e padrões são válidos", () => {

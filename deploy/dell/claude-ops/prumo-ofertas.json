@@ -10,6 +10,8 @@
               "Próxima ação", "Google Maps", "Encontrado em", "Convite enviado em", "Respondeu em", "Tipo da resposta", "Resposta", "Resposta em"],
   "ocultas": ["ID", "Google Maps", "Encontrado em", "Convite enviado em", "Respondeu em", "Tipo da resposta", "Resposta em"],
   "etapas": ["Revisar", "Convite enviado", "Em conversa", "Concluído", "Sem interesse"],
+  "_clientes": "Quem já é cliente do PRUMO nunca vira prospect (nome ou domínio do site). A Silmer apareceu na 1ª rodada das estamparias, 14/10/2026.",
+  "clientes": "silmer",
   "proxima_revisar": "Veja o site; se fizer sentido, clique em Enviar convite.",
   "ofertas": {
     "iris": {
@@ -23,7 +25,7 @@
       "plural": "clínicas",
       "teto_por_rodada": 15,
       "segmento": "cl[ií]nica|terap|psic[oó]log|psicopedag|fonoaudi|neuro|autis|desenvolvimento infantil|\\baba\\b",
-      "fora": "odonto|dentist|est[eé]tica|laborat[oó]rio|hospital|veterin|farm[aá]cia|academia|pilates|spa\\b|massag",
+      "fora": "odonto|dentist|est[eé]tica|laborat[oó]rio|hospital|veterin|farm[aá]cia|academia|pilates|spa\\b|massag|sa[uú]de ocupacional|medicina do trabalho",
       "sinais": [
         ["convênio", "conv[eê]nio|planos? de sa[uú]de|unimed|bradesco sa[uú]de|amil|sulam[eé]rica|hapvida"],
         ["ABA", "\\baba\\b|an[aá]lise do comportamento"],
@@ -52,7 +54,7 @@
       "plural": "estamparias",
       "teto_por_rodada": 15,
       "segmento": "estampa|silk|serigraf|sublima|camiset|uniforme|confec|personaliza|bordad|\\bdtf\\b|malharia",
-      "fora": "gr[aá]fica r[aá]pida|copiadora|xerox|tatuag|tattoo|lavanderia|costureira|ajustes de roupa",
+      "fora": "gr[aá]fica r[aá]pida|copiadora|xerox|tatuag|tattoo|lavanderia|costureira|ajustes de roupa|produtos para sublima|insumos|papel transfer|papeis|pap[eé]is",
       "sinais": [
         ["silk", "silk|serigraf"],
         ["sublimação", "sublima"],

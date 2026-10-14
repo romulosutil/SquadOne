@@ -171,7 +171,7 @@ def escolher_js(o):
 
 
 def triar_js(oferta, o, leitores):
-    cfg = {"rotulo": o["rotulo"], "plural": o["plural"], "segmento": o["segmento"], "fora": o["fora"], "sinais": o["sinais"],
+    cfg = {"rotulo": o["rotulo"], "plural": o["plural"], "segmento": o["segmento"], "fora": o["fora"], "clientes": CONFIG["clientes"], "sinais": o["sinais"],
            "teto_por_rodada": o["teto_por_rodada"], "proxima_revisar": CONFIG["proxima_revisar"], "leitores": leitores,
            "convite_url": f"{WEBHOOK}/{o['convite']}?id="}
     return TRIAR.replace("__CONFIG__", json.dumps(cfg, ensure_ascii=False))
