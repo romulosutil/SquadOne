@@ -743,7 +743,8 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
                        f"python3 {qa} --celular \"file://{self.auto}/b-bom/index.html#<id da seção>\"",
                        "o WhatsApp contra o content.md",
                        "UMA imagem por rodada", "primeira `<section>` dentro de `<main>`", "fim do Ato I",
-                       "--force-prefers-reduced-motion", "--blink-settings=scriptEnabled=false", "não tente",
+                       # 13/10/2026: o reduced-motion é o `--rm` do qa-numerico, não mais a flag do Chrome.
+                       "`--rm` para reduced-motion", "--blink-settings=scriptEnabled=false", "não tente",
                        "Código 1 = falhou", "Se o próprio gate quebrar", f"{self.auto}/b-bom/CONCEITO.md"):
             self.assertIn(trecho, comum)
         self.assertNotIn("grave no rascunho um script python3", comum)
