@@ -1300,7 +1300,9 @@ o Dribbble: o padrão é o Raio-X aprovado do piloto CDL
 `04-venda/piloto-cdl/gerar.py` do repo `prumo`). Uma versão 5 do `raio-x.py`
 com outra cara entrou e saiu no mesmo dia (14/10/2026), antes de ser instalada:
 o Rômulo apontou que ela não coincidia com o aprovado. O Raio-X da Jéssica no ar
-saiu do `gerar.py`.
+saiu do `gerar.py`. No mesmo dia o `raio-x.py` passou a desenhar com o molde do
+`gerar.py` (`prumo-mapa/modelo_raio_x.py`): é a versão 5 de verdade, descrita
+em "Raio-X do PRUMO".
 
 **Clareza antes de conceito (13/10/2026).** A auditoria dos 54 demos no ar em
 13/10 achou cara de IA em quase todos (título-aforismo, menu I-II-III, campo de
@@ -1398,7 +1400,8 @@ aparece no Google, o que já está bom, até 3 pontos que mandam cliente para o
 concorrente (cada um com o porquê em linguagem de dono), o link do demo e
 "R$ 990 + R$ 69/mês, paga depois de ver funcionando". Alimenta a variação C da
 primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três atos
-(veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO.
+(veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO; desde a versão 5,
+é o Raio-X aprovado do piloto CDL, com o preço do `precos.json` do piloto (abaixo).
 
 - **Feito por código, sem modelo.** A única fonte é o `content.md` do Caçador:
   nota e avaliações, telefone (celular ou fixo, pela regra do nó "Pontuar"),
@@ -1504,6 +1507,54 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
   Com a versão 4 instalada, o `--pendentes` refaz quem está `pronto` na versão 3
   (até 6 por rodada, um deploy cada); lead já `enviado` só muda com
   `raio-x <slug>` à mão, e a URL (`<site_url>/raio-x`) não muda.
+- **Versão 5 (14/10/2026): o modelo aprovado do piloto CDL.** O Raio-X da
+  Jéssica Barbosa feito pelo Dell não coincidia com o aprovado
+  (prumo-piloto-cdl.vercel.app/raio-x, `gerar.py` do repo `prumo`). Agora o
+  `raio-x.py` só junta os dados e o desenho é o do piloto, no
+  `prumo-mapa/modelo_raio_x.py`: o diagnóstico vira um JSON no esquema de
+  `modelos/raio-x.json` do piloto (`dados_do_modelo`) e o módulo desenha. Com um
+  JSON feito à mão, o módulo dá a página do `gerar.py` byte a byte (conferido no
+  exemplo da Odonto Maré e na Jéssica); o que o automático precisa a mais são
+  ganchos opcionais (`GANCHOS`: o lede e o método dizem que só se leu o Google;
+  as avaliações são "as que o Google mostra primeiro"; o checklist do perfil
+  marca "não conferido"). O que entra:
+  - **Três buscas** (`consultas_das_buscas`, escolhidas antes de ver o
+    resultado): o termo do ramo, a área achada no nome ou no tipo do Google com
+    o serviço de valor dela ("advogado previdenciário" e "advogado INSS"), ou,
+    sem área, o outro jeito de pedir ("escritório de advocacia") e "melhor
+    advogado". Ramo fora da tabela `RAMOS`: o termo, "melhor <termo>" e o termo
+    no bairro (`addressComponents`). Quatro chamadas ao Places por lead em vez
+    de duas (US$ 35/1.000 cada busca; o cache de 30 dias continua); o cache da
+    versão 1 (uma busca) não vale e é pedido de novo. As buscas pedem também
+    `regularOpeningHours`, para comparar o horário.
+  - **"Vocês e os 3 primeiros"** da primeira busca: nota, avaliações (o número
+    do meio dos 3), site próprio e horário, só linhas com o dado dos dois
+    lados, e a frase que fecha ("A nota está no nível dos 3 primeiros. A
+    diferença está…").
+  - **3 pontos, 3 coisas que estão boas e "3 coisas, nesta ordem"**, cada coisa
+    com quem faz ("Vocês mesmos, hoje.", "Um fornecedor de site de vocês, ou o
+    PRUMO."). Os pontos na ordem do aprovado: a busca, o site, a nota, as
+    avaliações (abaixo da metade dos 5 primeiros ou, mais leve, abaixo do meio
+    dos 3), o horário e as fotos; cada um com um número que o dono confere.
+  - **Redes sociais e Anúncios** aparecem, marcados "não conferido": o Dell não
+    abre Instagram, Biblioteca de Anúncios da Meta nem a página de resultados
+    do Google. Também não confere se o dono responde às avaliações (o Places não
+    entrega), então a linha "Responde às avaliações" e a frase das respostas
+    não aparecem. Nada disso é inventado.
+  - **O fim:** sem equipe conhecida (o Places não diz quantas pessoas), não há
+    convite para o Mapa; vêm os quatro serviços do piloto com preço e botão
+    ("Se quiserem que o PRUMO faça"), de `prumo-mapa/precos.json` (cópia do
+    `04-venda/piloto-cdl/precos.json`: Site R$ 690 + R$ 39/mês, Anúncios,
+    Redes e WhatsApp que responde). O motivo de cada serviço só sai quando há
+    dado (site e anúncios sempre; WhatsApp com o horário; redes, não).
+  - **A trava do piloto** (`conferir_raio_x`, `conferir_pagina`): exatamente 3
+    buscas, 3 pontos com 150+ letras e um número, 3 bons, 3 coisas, 3
+    avaliações lidas, 4 linhas na comparação, nada de vocabulário interno.
+    Abaixo disso, `AbaixoDoPadrao` e não há Raio-X (o `--pendentes` passa para
+    o próximo; o Raio-X da versão anterior, se existe, continua no ar). Lead
+    com só 2 pontos verificáveis fica sem Raio-X novo.
+  Com a versão 5 instalada, o `--pendentes` refaz aos poucos quem está
+  `pronto` (até 6 por rodada).
 
 ```bash
 raio-x --simular higor-ferreira-advogado   # o diagnóstico, sem publicar nem gravar
@@ -1514,10 +1565,13 @@ HOME=/tmp/home-teste python3 deploy/dell/raio-x.py --testar
 python3 deploy/dell/prumo-mapa/calculo_prumo.test.py   # o método: limiares, Vale Norte, a calculadora (JS no node)
 ```
 
-Instalar (numa sessão no Dell; o `calculo_prumo.py` antes do raio-x, que o importa):
+Instalar (numa sessão no Dell, ou `dell-status --instalados`; o `calculo_prumo.py`,
+o `modelo_raio_x.py` e o `precos.json` antes do raio-x, que os importa):
 
 ```bash
 install -D -m 644 deploy/dell/prumo-mapa/calculo_prumo.py ~/.local/share/prumo-mapa/calculo_prumo.py
+install -D -m 644 deploy/dell/prumo-mapa/modelo_raio_x.py ~/.local/share/prumo-mapa/modelo_raio_x.py
+install -D -m 644 deploy/dell/prumo-mapa/precos.json ~/.local/share/prumo-mapa/precos.json
 install -m 755 deploy/dell/raio-x.py ~/.local/bin/raio-x
 install -m 755 deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-de-sites
 cp deploy/dell/raio-x.{service,timer} ~/.config/systemd/user/

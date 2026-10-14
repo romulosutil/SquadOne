@@ -1,0 +1,102 @@
+{
+ "_como_usar": "Preços do piloto CDL (13/10/2026). Uma fonte só para o Raio-X, o Mapa e o pitch: gerar.py lê daqui. Site e Fonte (a partir de R$ 1.500) são os prometidos ao Aguinaldo; o resto é a primeira tabela, revista pelas personas (O Caixa: meta de R$ 100/h do Rômulo). Fonte em 5 opções desde 13/10 (Caderno no Gemini e Chat próprio entraram depois do pitch; preços aprovados pelo Rômulo em 13/10). Manutenção opcional de R$ 190/mês em todas.",
+ "whatsapp": "5527999762786",
+ "servicos": [
+  {
+   "chave": "site",
+   "nome": "Site",
+   "preco": "R$ 690",
+   "mensal": "+ R$ 39 por mês",
+   "linha": "Site no ar com o endereço de vocês, ligado ao botão “Site” do Google e ao WhatsApp. Domínio, hospedagem e um ajuste por mês incluídos.",
+   "garantia": "Vocês só pagam depois de ver no ar.",
+   "botao": "Quero o site no ar"
+  },
+  {
+   "chave": "trafego",
+   "nome": "Anúncios",
+   "preco": "R$ 590 por mês",
+   "mensal": "no Google ou no Instagram · R$ 390 a mais pelos dois",
+   "linha": "Criamos e cuidamos dos anúncios, e todo mês mostramos quantas pessoas chamaram por causa deles. Mínimo de 3 meses.",
+   "garantia": "O dinheiro do anúncio vai direto para o Google ou o Instagram, sem passar pelo PRUMO.",
+   "botao": "Quero anunciar"
+  },
+  {
+   "chave": "redes",
+   "nome": "Redes sociais",
+   "preco": "R$ 790 por mês",
+   "mensal": "Instagram e Facebook",
+   "linha": "8 posts por mês e stories toda semana, feitos com as fotos e os serviços de vocês e publicados depois da sua aprovação.",
+   "garantia": "Mínimo de 3 meses; depois, cancela quando quiser.",
+   "botao": "Quero as redes em dia"
+  },
+  {
+   "chave": "produtos",
+   "nome": "WhatsApp que responde",
+   "preco": "a partir de R$ 2.400",
+   "mensal": "+ R$ 290 por mês",
+   "linha": "Um robô no WhatsApp da empresa que responde o cliente na hora, marca horário e lembra quem sumiu. Também fazemos sistema de clientes e aplicativo, com orçamento fechado.",
+   "garantia": "Valor fechado por escrito antes de começar.",
+   "botao": "Quero conversar sobre isso"
+  }
+ ],
+ "fonte": {
+  "preco": "a partir de R$ 1.500",
+  "opcoes": [
+   {
+    "chave": "drive",
+    "nome": "Pasta no Google Drive",
+    "preco": "R$ 1.500",
+    "linha": "As regras da empresa em documentos e planilhas, um por assunto, com um índice na frente. Bom para quem já usa Google no dia a dia.",
+    "grupo": "leitura"
+   },
+   {
+    "chave": "notion",
+    "nome": "Manual no Notion",
+    "preco": "R$ 1.500",
+    "linha": "Um manual da empresa com busca, uma página por assunto, que abre bem no celular. Mais fácil de achar do que numa pasta.",
+    "grupo": "leitura"
+   },
+   {
+    "chave": "gemini",
+    "nome": "Caderno no Gemini",
+    "preco": "R$ 1.500",
+    "grupo": "pergunta",
+    "linha": "As regras num caderno do Gemini, a inteligência artificial do Google. O time pergunta em português, pelo celular ou pelo computador, e a resposta vem com o trecho da regra de onde saiu.",
+    "n8n": "Fica na conta Google de vocês: nós montamos o caderno e vocês ficam donos dele. Bom para quem já usa Google no dia a dia."
+   },
+   {
+    "chave": "robo",
+    "nome": "Robô no WhatsApp",
+    "preco": "R$ 2.400",
+    "linha": "O time pergunta no WhatsApp e o robô responde com as regras, guardadas no Drive ou no Notion. O que não está escrito, ele pergunta a você e guarda a resposta.",
+    "n8n": "Ele roda num fluxo de automação do n8n, na conta de vocês: nós indicamos e montamos o fluxo, e vocês ficam donos dele. O uso da inteligência artificial é pago direto ao fornecedor dela, com o valor estimado antes de começar.",
+    "grupo": "pergunta"
+   },
+   {
+    "chave": "chat",
+    "nome": "Chat próprio da empresa",
+    "preco": "R$ 2.400",
+    "grupo": "pergunta",
+    "linha": "Um chat com o nome e as cores da empresa, para o time conversar com as regras. Cada resposta mostra de qual regra saiu: um toque e o documento abre ao lado.",
+    "n8n": "Roda numa plataforma de inteligência artificial que nós indicamos e configuramos. Dados pessoais (CPF, telefone, endereço) são mascarados antes de chegar à IA. A assinatura da plataforma é à parte, com o valor fechado antes de começar."
+   }
+  ],
+  "inclui": [
+   "até 6 assuntos de regras e até 15 pessoas usando (assunto a mais: R$ 400)",
+   "pronta em 2 semanas, contadas da conversa sobre as regras",
+   "30 dias de ajustes e dúvidas do time, pelo WhatsApp",
+   "50% no começo e 50% na entrega"
+  ],
+  "meta": "No robô: o WhatsApp pode levar até 20 dias para liberar o número (é a Meta, dona do WhatsApp, quem aprova). Acompanhamos até liberar, sem custo a mais.",
+  "prazo": "2 semanas",
+  "botao": "Quero a Fonte",
+  "grupos": {
+   "leitura": "Para consultar",
+   "pergunta": "Para perguntar e receber a resposta"
+  },
+  "manutencao": {
+   "preco": "R$ 190 por mês",
+   "texto": "Manutenção, opcional, em qualquer opção: R$ 190 por mês para incluir, mudar ou tirar regras e dados, até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser. Assunto novo inteiro continua R$ 400."
+  }
+ }
+}

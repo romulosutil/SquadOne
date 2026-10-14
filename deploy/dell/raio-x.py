@@ -59,6 +59,14 @@ fazer: a demonstração, o Encontrado com preço e o botão para o WhatsApp do P
 celular, também numa barra fixa). O preço do Respondido só na conversa. Medição sem cookie
 preparada e desligada (URL_EVENTOS vazia no JS da página).
 
+Versão 5 (14/10/2026): o Raio-X aprovado do piloto CDL (prumo, `04-venda/piloto-cdl/gerar.py`, no ar em
+prumo-piloto-cdl.vercel.app/raio-x). Este arquivo junta os dados; o desenho e a trava de qualidade são os do
+piloto, em `prumo-mapa/modelo_raio_x.py`, que recebe o JSON do esquema do piloto (`dados_do_modelo`). Três
+buscas (`consultas_das_buscas`), a comparação com os 3 primeiros, 3 pontos, 3 coisas boas e "3 coisas, nesta
+ordem" com quem faz; redes e anúncios marcados "não conferido" (o Dell não os abre); sem equipe conhecida,
+termina nos quatro serviços com o preço de `prumo-mapa/precos.json`. Abaixo do padrão do piloto
+(AbaixoDoPadrao), não há página.
+
 Publicação: a Vercel troca o deployment inteiro, então o Raio-X sobe junto com o
 `index.html` e o `og.jpg` da pasta, no mesmo projeto `demo-<slug>` (sem projeto
 novo: o hobby limita projetos). Antes, o `index.html` da pasta é comparado byte a
@@ -103,15 +111,27 @@ from pathlib import Path
 # O cálculo PRUMO (Nota de presença e a calculadora) mora com o Mapa, em prumo-mapa/calculo_prumo.py:
 # no repo, ao lado deste arquivo; no Dell, na cópia instalada em ~/.local/share/prumo-mapa/ (a mesma
 # pasta de onde vem a fonte). Sem ele o Raio-X sai como na versão 2, sem a nota (e o main avisa no log).
+# Desde a versão 5, da mesma pasta vêm também o molde da página (modelo_raio_x.py, o do piloto CDL) e os
+# preços (precos.json, os mesmos do piloto). Sem os três, não há Raio-X (o main avisa no log).
+PASTA_PRUMO = None
 for _pasta in (Path(__file__).resolve().parent / "prumo-mapa",
                Path(os.environ.get("RAIO_X_CALCULO", str(Path.home() / ".local/share/prumo-mapa")))):
     if (_pasta / "calculo_prumo.py").is_file():
         sys.path.insert(0, str(_pasta))
+        PASTA_PRUMO = _pasta
         break
 try:
     import calculo_prumo
 except ImportError:
     calculo_prumo = None
+try:
+    import modelo_raio_x
+except ImportError:
+    modelo_raio_x = None
+try:
+    PRECOS = json.loads((PASTA_PRUMO / "precos.json").read_text(encoding="utf-8")) if PASTA_PRUMO else None
+except (OSError, ValueError):
+    PRECOS = None
 
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
@@ -124,17 +144,17 @@ VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 # 3 (09/10/2026): a Nota de presença (cálculo PRUMO, seis blocos de 0 a 3) e a conta aberta em R$.
 # 4 (09/10/2026): três atos (veredito, por quê, o que fazer), o botão do WhatsApp do PRUMO e sem o
 # preço do Respondido; sai o caminho do cliente.
-# Sem o calculo_prumo instalado a página sai sem a nota e a versão fica 2: nada de refazer à toa.
-VERSAO = 4 if calculo_prumo else 2
+# 5 (14/10/2026): o modelo aprovado do piloto CDL (modelo_raio_x.py): três buscas, a comparação com os
+# 3 primeiros, "3 coisas, nesta ordem" com quem faz, redes e anúncios (marcados "não conferido") e os
+# quatro serviços com preço. Abaixo do padrão do piloto (3 pontos, 3 bons, 3 avaliações...), não sai.
+VERSAO = 5
 CAMINHO = "raio-x"
 MARCA = f'data-raio-x="{VERSAO}"'
-MAX_PONTOS = 3
-MAX_BONS = 5
+MAX_PONTOS = 3  # o modelo pede exatamente 3 pontos, 3 coisas que estão boas e 3 coisas a fazer
+MAX_BONS = 3
 LIMITE_DE_DEPLOY = re.compile(r"(?i)api-deployments-free-per-day|Resource is limited|too many deployments"
                               r"|maximum number of projects")
-PRECO = "R$ 990 + R$ 69/mês"
-# O preço do Respondido não vai na página: só se fala na conversa (decisões de 08 e 09/10/2026).
-# O WhatsApp do PRUMO (chip novo de 09/10/2026) é o destino dos dois botões do fim da página.
+# O WhatsApp do PRUMO (chip novo de 09/10/2026), o destino dos botões do fim da página (o mesmo do precos.json).
 WHATSAPP_PRUMO = "5527999762786"
 
 # Google Places (New), opcional: sem a chave o Raio-X sai só com o content.md, como na versão 1.
@@ -144,11 +164,13 @@ PLACES_ENV = Path(os.environ.get("RAIO_X_CHAVE", str(Path.home() / ".config/prum
 PLACES_URL = "https://places.googleapis.com/v1"
 # Detalhes: Place Details Enterprise + Atmosphere (as avaliações puxam o SKU mais caro).
 CAMPOS_DETALHES = ("id,displayName,rating,userRatingCount,reviews,regularOpeningHours,websiteUri,businessStatus,"
-                   "primaryTypeDisplayName,googleMapsUri")
-# Concorrência: Text Search Enterprise (nota, avaliações e site; sem avaliações dos outros).
+                   "primaryTypeDisplayName,googleMapsUri,addressComponents")
+# Concorrência: Text Search Enterprise (nota, avaliações, site e se mostram horário; sem avaliações dos outros).
+# Três buscas por lead desde a versão 5 (consultas_das_buscas).
 CAMPOS_BUSCA = ("places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,"
-                "places.businessStatus")
+                "places.businessStatus,places.regularOpeningHours")
 CACHE_PLACES = "raio-x-places.json"
+VERSAO_CACHE = 2  # 1 = uma busca ("busca"); 2 = três ("buscas"), com o horário dos concorrentes
 # Os termos do Google Maps Platform só deixam guardar conteúdo do Places por até 30 dias.
 VALIDADE_CACHE_DIAS = 30
 TAMANHO_DA_BUSCA = 20  # o máximo de uma página; o Text Search cobra por pedido, não por resultado
@@ -417,21 +439,33 @@ def mediana(valores: list[float]) -> float | None:
 
 
 def concorrencia(places: dict | None, place_id: str) -> dict | None:
-    """Quem aparece na mesma busca: {'consulta', 'lido_em', 'posicao' (1.. ou None), 'lidos',
+    """A primeira busca (a do termo do ramo): {'consulta', 'lido_em', 'posicao' (1.. ou None), 'lidos',
     'outros' (os CONCORRENTES primeiros que não são o lead nem fecharam), 'com_site', 'mediana_avaliacoes'}."""
-    busca = (places or {}).get("busca") or {}
-    resultados = [r for r in busca.get("resultados") or [] if isinstance(r, dict)]
-    if not busca.get("consulta") or not resultados:
-        return None
-    posicao = next((i for i, r in enumerate(resultados, 1) if r.get("id") == place_id), None)
-    outros = [dict(r, pos=i) for i, r in enumerate(resultados, 1) if r.get("id") != place_id
-              and r.get("status") in (None, "", "OPERATIONAL")][:CONCORRENTES]
-    if not outros:
-        return None
-    return {"consulta": busca["consulta"], "lido_em": data_br((places or {}).get("lido_em", "")), "posicao": posicao,
-            "lidos": len(resultados), "outros": outros,
-            "com_site": sum(1 for r in outros if tipo_de_link(r.get("site", "")) == "proprio"),
-            "mediana_avaliacoes": mediana([r["avaliacoes"] for r in outros if isinstance(r.get("avaliacoes"), int)])}
+    todas = buscas_lidas(places, place_id)
+    return todas[0] if todas else None
+
+
+def buscas_lidas(places: dict | None, place_id: str) -> list[dict]:
+    """As buscas do cache, cada uma como `concorrencia` (o cache da versão 1 tem uma só, em "busca")."""
+    p = places or {}
+    brutas = p.get("buscas") if isinstance(p.get("buscas"), list) else [p.get("busca")]
+    saida = []
+    for busca in brutas:
+        busca = busca if isinstance(busca, dict) else {}
+        resultados = [r for r in busca.get("resultados") or [] if isinstance(r, dict)]
+        if not busca.get("consulta") or not resultados:
+            continue
+        posicao = next((i for i, r in enumerate(resultados, 1) if r.get("id") == place_id), None)
+        outros = [dict(r, pos=i) for i, r in enumerate(resultados, 1) if r.get("id") != place_id
+                  and r.get("status") in (None, "", "OPERATIONAL")][:CONCORRENTES]
+        if not outros:
+            continue
+        saida.append({"consulta": busca["consulta"], "lido_em": data_br(p.get("lido_em", "")), "posicao": posicao,
+                      "lidos": len(resultados), "outros": outros,
+                      "com_site": sum(1 for r in outros if tipo_de_link(r.get("site", "")) == "proprio"),
+                      "mediana_avaliacoes": mediana([r["avaliacoes"] for r in outros
+                                                     if isinstance(r.get("avaliacoes"), int)])})
+    return saida
 
 
 def ler_demo(texto: str) -> dict:
@@ -486,70 +520,57 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
                 fotos = int(m.group(1))
     recente = None if sinais is None else next((s for s in sinais if s.startswith("avaliação nos últimos 30 dias")), None)
 
-    bons: list[dict] = []
-    if nota is not None and n and nota >= 4.5 and n >= 5:
-        # Com poucas avaliações o número vira ponto de melhoria logo abaixo: aqui só a nota.
-        bons.append({"titulo": f"Nota {numero(nota)} com {n} avaliações" if n >= 20 else f"Nota {numero(nota)} no Google",
-                     "porque": "Quem compara no Google vê que quem já foi atendido gostou. É o que vocês têm de mais forte, "
-                               "e é o que mais pesa quando alguém escolhe entre duas opções."})
-    if telefone == "celular":
-        bons.append({"titulo": "O telefone do perfil é celular",
-                     "porque": "Quem acha vocês no Google pode ligar ou mandar mensagem para o número que aparece ali."})
-    if horario:
-        bons.append({"titulo": "Horário de funcionamento preenchido",
-                     "porque": "Quem procura sabe se vocês estão abertos antes de ligar, e aparece para quem usa o filtro "
-                               "“Aberto agora”."})
-    if fotos:
-        bons.append({"titulo": f"{fotos} foto{'s' if fotos > 1 else ''} publicada{'s' if fotos > 1 else ''} por vocês",
-                     "porque": "O cliente vê o lugar do jeito que vocês escolheram mostrar."})
-    if recente:
-        bons.append({"titulo": "Avaliação nova nos últimos 30 dias",
-                     "porque": "O perfil está vivo: quem procura vê que tem gente sendo atendida agora."})
-
-    conc = concorrencia(places, c.get("place_id", "")) if places else None
+    buscas = buscas_lidas(places, c.get("place_id", "")) if places else []
+    conc = buscas[0] if buscas else None
     avals = temas_das_avaliacoes((detalhes or {}).get("textos") or []) if detalhes else None
-    basicos = len(bons)
-    if conc and nota is not None and nota >= 4.5:
-        notas = [r["nota"] for r in conc["outros"] if isinstance(r.get("nota"), (int, float))]
-        abaixo = sum(1 for x in notas if x < nota)
-        if notas and abaixo * 2 >= len(notas):
-            bons.append({"titulo": f"Nota maior que a de {abaixo} dos {len(conc['outros'])} primeiros da busca",
-                         "porque": f"Procuramos “{conc['consulta']}” no Google: vocês têm {numero(nota)}; os outros vão de "
-                                   f"{numero(min(notas))} a {numero(max(notas))}. Quem compara vê isso primeiro."})
-    if conc and n and conc["mediana_avaliacoes"] is not None and n > conc["mediana_avaliacoes"]:
-        bons.append({"titulo": f"Mais avaliações que a maioria dos {len(conc['outros'])} primeiros da busca",
-                     "porque": f"Vocês têm {n}; no meio da lista, os outros têm {int(conc['mediana_avaliacoes'])}. "
-                               "Avaliação é prova de que tem gente sendo atendida, e ela não se compra."})
-    if avals and avals["temas"] and avals["temas"][0]["n"] >= 2:
-        t = avals["temas"][0]
-        bons.append({"titulo": f"{t['n']} de {avals['total']} avaliações {t['frase']}",
-                     "porque": "Contamos nas avaliações que o Google mostra primeiro no perfil. É o que o cliente novo "
-                               "lê antes de chamar, e é o que a página de vocês deve mostrar."})
-    # A página mostra até MAX_BONS: o que vem da comparação e das avaliações vale mais que celular,
-    # horário e fotos (que o checklist do perfil já mostra), então sobe para logo depois da nota.
-    extras = bons[basicos:][::-1]  # o tema das avaliações primeiro, depois as comparações com a busca
-    cabeca = 1 if basicos and bons[0]["titulo"].startswith("Nota ") else 0
-    bons = bons[:cabeca] + extras + bons[cabeca:basicos]
-
-    pontos: list[dict] = []
     site = situacao_do_site(dados, detalhes)
-    onde = f"{vertical} em {cidade}" if vertical and cidade else (f"em {cidade}" if cidade else "o serviço de vocês")
+    top3 = conc["outros"][:3] if conc else []
+    med = conc["mediana_avaliacoes"] if conc else None
+    sem_horario_comum = any(r in sem_acento(vertical).lower() for r in SEM_HORARIO_COMUM)
     quando = f" quando conferimos ({hoje})" if hoje else " quando conferimos"
-    # Na mesma busca, quantos dos primeiros mostram site próprio: o fato que dá peso ao ponto do site.
+
+    # Os pontos que mandam cliente para o concorrente, na ordem de peso do modelo aprovado (a busca, o
+    # site, a nota, as avaliações, o perfil). Cada um com um número que o dono confere e a ação que o
+    # resolve (vira "3 coisas, nesta ordem"). Só existe o que está no content.md ou no Places.
+    pontos: list[dict] = []
+    fora_do_topo = [b for b in buscas if b["posicao"] is None or b["posicao"] > 3]
+    if fora_do_topo:
+        b = fora_do_topo[0]
+        frase = (f"Quem procura “{b['consulta']}” no Google vê {b['posicao'] - 1} "
+                 f"{'outro resultado' if b['posicao'] == 2 else 'outros resultados'} antes de vocês."
+                 if b["posicao"] else
+                 f"Quem procura “{b['consulta']}” no Google não acha vocês entre os {b['lidos']} primeiros resultados.")
+        resto = [x for x in buscas if x is not b]
+        if resto and not b["posicao"] and all(not x["posicao"] and x["lidos"] == b["lidos"] for x in resto):
+            consultas = [f"“{x['consulta']}”" for x in resto]
+            frase += f" Em {juntar(consultas)}, também não."
+        elif resto:
+            outras = "; ".join(f"em “{x['consulta']}”, " + (f"vocês estão em {x['posicao']}º" if x["posicao"]
+                                                             else f"não estão entre os {x['lidos']} primeiros")
+                               for x in resto)
+            frase += " " + outras[0].upper() + outras[1:] + "."
+        pontos.append({"chave": "busca", "consulta": b["consulta"],
+                       "titulo": (f"{b['posicao']}º lugar em “{b['consulta']}”" if b["posicao"]
+                                  else f"Fora dos {b['lidos']} primeiros em “{b['consulta']}”"),
+                       "porque": frase + " O Google ordena a busca local por relevância, distância e destaque, e o "
+                                         "destaque leva em conta o que existe sobre o negócio na internet, como site e "
+                                         "avaliações."})
+    # Na mesma busca, quantos dos 3 primeiros mostram site próprio: o fato que dá peso ao ponto do site.
     vizinhos = ""
-    if conc:
-        k, m = conc["com_site"], len(conc["outros"])
-        vizinhos = (f" Na busca “{conc['consulta']}”, {k} dos {m} primeiros mostram site próprio no perfil." if k
-                    else f" Na busca “{conc['consulta']}”, nenhum dos {m} primeiros mostra site próprio: quem tiver "
-                         "um sai na frente.")
+    if top3:
+        k = sum(1 for r in top3 if tipo_de_link(r.get("site", "")) == "proprio")
+        vizinhos = (f" Na busca “{conc['consulta']}”, {'os 3' if k == 3 else f'{k} dos 3'} primeiros mostra"
+                    f"{'m' if k > 1 else ''} site próprio no perfil." if k
+                    else f" Na busca “{conc['consulta']}”, nenhum dos 3 primeiros mostra site próprio: quem tiver um "
+                         "sai na frente.")
     if site and site["tipo"] in ("morto", "proprio") and site_hoje == "fora":
-        pontos.append({"titulo": "O site que aparece no Google não abre",
+        pontos.append({"chave": "site", "titulo": "O site que aparece no Google não abre",
                        "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que não abriu"
                                  f"{quando}. A pessoa volta para a busca, e o próximo resultado está a um toque." + vizinhos})
     elif site and site["tipo"] in ("morto", "proprio") and site_hoje == "sem_nome":
-        pontos.append({"titulo": "O site do Google não leva a um site de vocês",
-                       "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que{quando} "
-                                 "mostrava uma página sem o nome de vocês. A pessoa volta para a busca, e o próximo "
+        pontos.append({"chave": "site", "titulo": "O site do Google não leva a um site de vocês",
+                       "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que abria uma "
+                                 f"página sem o nome de vocês{quando}. A pessoa volta para a busca, e o próximo "
                                  "resultado está a um toque." + vizinhos})
     elif site and site["tipo"] == "rede":
         rede = nome_da_rede(site["url"])
@@ -558,55 +579,131 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
         if rede in ("o Instagram", "o Facebook", "o TikTok"):
             porque = ("Quem está comparando quer ver os serviços, as fotos e como chamar numa página só. Na rede social "
                       "isso fica espalhado entre posts, e muita gente desiste ali.")
-        pontos.append({"titulo": f"O botão “Site” no Google leva para {rede}", "porque": porque + vizinhos})
+        pontos.append({"chave": "site", "titulo": f"O botão “Site” no Google leva para {rede}", "porque": porque + vizinhos})
     elif site and site["tipo"] == "nenhum":
-        pontos.append({"titulo": "O perfil do Google não tem site",
+        onde = f"{vertical} em {cidade}" if vertical and cidade else (f"em {cidade}" if cidade else "o serviço de vocês")
+        pontos.append({"chave": "site", "titulo": "O perfil do Google não tem site",
                        "porque": f"Quem procura {onde} compara duas ou três opções. Sem site, vocês aparecem só com "
                                  "nome e nota, e quem mostra serviços e fotos leva o cliente." + vizinhos})
-    if conc and (conc["posicao"] is None or conc["posicao"] > 3):
-        onde_aparece = (f"Vocês não aparecem entre os {conc['lidos']} primeiros" if conc["posicao"] is None
-                        else f"Vocês aparecem em {conc['posicao']}º lugar")
-        pontos.append({"titulo": (f"Fora dos {conc['lidos']} primeiros em “{conc['consulta']}”" if conc["posicao"] is None
-                                  else f"{conc['posicao']}º lugar em “{conc['consulta']}”"),
-                       "porque": f"{onde_aparece} quando se procura “{conc['consulta']}” (busca de {conc['lido_em']}). "
-                                 "O Google diz que ordena a busca local por relevância, distância e destaque, e que o "
-                                 "destaque leva em conta o que existe sobre o negócio na internet, como site e avaliações."})
-    # Telefone fixo não vira ponto: o Caçador só deixa passar fixo com WhatsApp publicado, então
-    # "não tem como mandar mensagem" seria falso em todos (revisão de 08/10/2026, 9 de 9).
-    sem_horario_comum = any(r in sem_acento(vertical).lower() for r in SEM_HORARIO_COMUM)
-    if horario is False and not sem_horario_comum:
-        pontos.append({"titulo": "O horário de funcionamento não aparece no Google",
-                       "porque": "Quem procura não sabe se vocês estão abertos, e quem usa o filtro “Aberto agora” nem vê "
-                                 "vocês na lista."})
+    notas3 = [r["nota"] for r in top3 if isinstance(r.get("nota"), (int, float))]
     if nota is not None and nota < 4.3:
-        pontos.append({"titulo": f"Nota {numero(nota)} no Google",
+        pontos.append({"chave": "nota", "titulo": f"Nota {numero(nota)} no Google",
                        "porque": "Na lista do Google a nota é a primeira coisa que se compara. Responder às avaliações e "
-                                 "pedir avaliação a quem saiu satisfeito é o que mais mexe nesse número."})
-    med = conc["mediana_avaliacoes"] if conc else None
+                                 "pedir avaliação a quem saiu satisfeito é o que mais mexe nesse número."
+                                 + (f" Os 3 primeiros de “{conc['consulta']}” têm {juntar([numero(x) for x in notas3])}."
+                                    if len(notas3) == 3 else "")})
     comparacao = (f" Na busca “{conc['consulta']}”, os {len(conc['outros'])} primeiros têm, no meio da lista, "
                   f"{int(med)} avaliações." if conc and med is not None else "")
     if n is not None and n < 20:
-        pontos.append({"titulo": "Ainda sem avaliações no Google" if n == 0 else f"Só {n} avaliaç{'ão' if n == 1 else 'ões'} no Google",
-                       "porque": "Entre duas opções parecidas, o cliente confia em quem tem mais avaliações. Pedir na hora, "
-                                 "a quem saiu satisfeito, é o jeito mais barato de crescer esse número." + comparacao})
+        pontos.append({"chave": "avaliacoes",
+                       "titulo": "Ainda sem avaliações no Google" if n == 0 else f"Só {n} avaliaç{'ão' if n == 1 else 'ões'} no Google",
+                       "porque": f"Entre duas opções parecidas, o cliente confia em quem tem mais avaliações, e vocês têm {n}."
+                                 + comparacao + " Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de "
+                                 "crescer esse número."})
     elif n is not None and med is not None and n * 2 < med:
-        pontos.append({"titulo": f"{n} avaliações, menos da metade do que os primeiros da busca têm",
+        pontos.append({"chave": "avaliacoes", "titulo": f"{n} avaliações, menos da metade do que os primeiros da busca têm",
                        "porque": "Entre duas opções parecidas, o cliente confia em quem tem mais avaliações." + comparacao
                                  + " Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de encurtar a distância."})
+    # Telefone fixo não vira ponto: o Caçador só deixa passar fixo com WhatsApp publicado, então
+    # "não tem como mandar mensagem" seria falso em todos (revisão de 08/10/2026, 9 de 9).
+    if horario is False and not sem_horario_comum:
+        h3 = [r for r in top3 if isinstance(r.get("horario"), bool)]
+        k = sum(1 for r in h3 if r["horario"])
+        pontos.append({"chave": "horario", "titulo": "O horário de funcionamento não aparece no Google",
+                       "porque": "Quem procura não sabe se vocês estão abertos, e quem usa o filtro “Aberto agora” nem vê "
+                                 "vocês na lista."
+                                 + (f" Na busca “{conc['consulta']}”, {k} dos 3 primeiros mostram o horário."
+                                    if len(h3) == 3 and k else "")
+                                 + " Preencher leva 5 minutos no Perfil da Empresa do Google."})
+    pag = site_pagina or {}
+    if site and site["tipo"] in ("morto", "proprio") and site_hoje == "no_ar" and False in (pag.get("celular"),
+                                                                                           pag.get("whatsapp")):
+        faltas = [t for t, v in (("não está pronto para celular", pag.get("celular")),
+                                 ("não tem botão de WhatsApp", pag.get("whatsapp"))) if v is False]
+        pontos.append({"chave": "site", "titulo": f"O site de vocês {juntar(faltas)}",
+                       "porque": f"Quem toca em “Site” no perfil vai para {dominio(site['url'])}, que abriu{quando}, mas "
+                                 f"{juntar(faltas)}. Quase todo mundo que chega pelo Google está no celular e quer "
+                                 "chamar na hora; se não dá, volta para a busca." + vizinhos})
+    avs3 = [r["avaliacoes"] for r in top3 if isinstance(r.get("avaliacoes"), int)]
+    if (n and len(avs3) == 3 and n < (mediana(avs3) or 0)
+            and not any(p["chave"] == "avaliacoes" for p in pontos)):
+        pontos.append({"chave": "avaliacoes", "alvo": int(mediana(avs3)),
+                       "titulo": f"{n} avaliações, menos que os 3 primeiros da busca",
+                       "porque": f"Na busca “{conc['consulta']}”, os 3 primeiros têm {juntar([str(x) for x in avs3])} "
+                                 "avaliações. Entre duas opções com nota parecida, o cliente escolhe quem tem mais gente "
+                                 "dizendo que deu certo. Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de "
+                                 "encurtar a distância."})
     if fotos == 0 and fotos_baixadas > 0:
-        pontos.append({"titulo": "Nenhuma das primeiras fotos do perfil é de vocês",
-                       "porque": "As fotos que o cliente vê primeiro foram publicadas por outras pessoas. É a primeira "
-                                 "impressão do lugar, e vocês não escolheram."})
-    # O número de avaliações não pode ser força e fraqueza na mesma página.
-    if any("menos da metade" in p["titulo"] for p in pontos[:MAX_PONTOS]) and bons and bons[0]["titulo"].startswith("Nota "):
-        bons[0] = dict(bons[0], titulo=f"Nota {numero(nota)} no Google")
-    diag = {"bons": bons, "pontos": pontos[:MAX_PONTOS], "lido_em": data_br(c.get("Criado em", "")),
+        pontos.append({"chave": "fotos", "titulo": "Nenhuma das primeiras fotos do perfil é de vocês",
+                       "porque": "Das primeiras fotos que o Google mostra no perfil, 0 foram publicadas por vocês: quem "
+                                 "publicou foram outras pessoas. É a primeira impressão do lugar, e vocês não escolheram "
+                                 "qual é."})
+    pontos = pontos[:MAX_PONTOS]
+
+    # O que já está bom: cada um com o porquê em números quando a busca dá.
+    bons: list[dict] = []
+    avaliacoes_ponto = any(p["chave"] == "avaliacoes" for p in pontos)
+    if nota is not None and n and nota >= 4.5 and n >= 5:
+        titulo = f"Nota {numero(nota)} com {n} avaliações" if n >= 20 and not avaliacoes_ponto else f"Nota {numero(nota)} no Google"
+        notas5 = [r["nota"] for r in (conc["outros"] if conc else []) if isinstance(r.get("nota"), (int, float))]
+        if len(notas5) >= 3 and nota >= min(notas5):
+            porque = (f"Os {len(notas5)} primeiros de “{conc['consulta']}” têm entre {numero(min(notas5))} e "
+                      f"{numero(max(notas5))}. A nota de vocês está " + ("acima de todos" if nota > max(notas5)
+                                                                         else "no mesmo nível")
+                      + ", e é a primeira coisa que alguém olha quando compara duas opções.")
+        else:
+            porque = ("Quem compara no Google vê que quem já foi atendido gostou. É o que vocês têm de mais forte, e é o "
+                      "que mais pesa quando alguém escolhe entre duas opções.")
+        bons.append({"titulo": titulo, "porque": porque})
+    no_topo = [b for b in buscas if b["posicao"] and b["posicao"] <= 3]
+    if no_topo:
+        b = no_topo[0]
+        bons.append({"titulo": f"{b['posicao']}º lugar em “{b['consulta']}”",
+                     "porque": f"Quem procura “{b['consulta']}” vê vocês entre os 3 primeiros, os que o Google mostra antes "
+                               "de “Mais empresas”. É o lugar que mais recebe toque."})
+    if avals and avals["temas"] and avals["temas"][0]["n"] >= 2:
+        t = avals["temas"][0]
+        bons.append({"titulo": f"{t['n']} de {avals['total']} avaliações {t['frase']}",
+                     "porque": "Contamos nas avaliações que o Google mostra primeiro no perfil. É o que o cliente novo "
+                               "lê antes de chamar, e é o que a página de vocês deve mostrar."})
+    if conc and n and med is not None and n > med:
+        bons.append({"titulo": f"Mais avaliações que a maioria dos {len(conc['outros'])} primeiros da busca",
+                     "porque": f"Vocês têm {n}; no meio da lista, os outros têm {int(med)}. "
+                               "Avaliação é prova de que tem gente sendo atendida, e ela não se compra."})
+    if site and site["tipo"] in ("morto", "proprio") and site_hoje == "no_ar":
+        pag = site_pagina or {}
+        extra = ("pronto para celular e com botão de WhatsApp" if pag.get("celular") and pag.get("whatsapp")
+                 else "pronto para celular" if pag.get("celular") else "com botão de WhatsApp" if pag.get("whatsapp") else "")
+        bons.append({"titulo": "O botão “Site” leva a um site de vocês",
+                     "porque": f"Quem toca em “Site” no perfil vai para {dominio(site['url'])}, que abriu{quando}"
+                               + (f", {extra}" if extra else "") + ". Quem está comparando vê o trabalho antes de chamar."})
+    if telefone == "celular":
+        bons.append({"titulo": "O telefone do perfil é celular",
+                     "porque": "Quem acha vocês no Google pode ligar ou mandar mensagem para o número que aparece ali, "
+                               "sem procurar outro contato."})
+    if horario:
+        bons.append({"titulo": "Horário de funcionamento preenchido",
+                     "porque": "Quem procura sabe se vocês estão abertos antes de ligar, e aparece para quem usa o filtro "
+                               "“Aberto agora”."})
+    if fotos:
+        bons.append({"titulo": f"{fotos} foto{'s' if fotos > 1 else ''} publicada{'s' if fotos > 1 else ''} por vocês",
+                     "porque": "O cliente vê o lugar do jeito que vocês escolheram mostrar. Foto do lugar e do trabalho "
+                               "passa confiança antes da primeira conversa."})
+    if recente:
+        bons.append({"titulo": "Avaliação nova nos últimos 30 dias",
+                     "porque": "O perfil está vivo: quem procura vê que tem gente sendo atendida agora, e não um perfil "
+                               "parado há anos."})
+    bons = bons[:MAX_BONS]
+
+    diag = {"bons": bons, "pontos": pontos, "lido_em": data_br(c.get("Criado em", "")),
             "maps": (detalhes or {}).get("maps") or c.get("Google Maps", ""), "cidade": cidade, "vertical": vertical,
             "nota": nota, "avaliacoes": n, "horario": horario, "fotos": fotos, "fotos_baixadas": fotos_baixadas,
             "telefone": telefone, "recente": recente, "site": site, "site_hoje": site_hoje, "hoje": hoje,
-            "concorrencia": conc, "avaliacoes_lidas": avals, "demo": demo,
+            "concorrencia": conc, "buscas": buscas, "avaliacoes_lidas": avals, "demo": demo,
+            "avaliacoes_textos": (detalhes or {}).get("textos") or [],
             "places_em": data_br((places or {}).get("lido_em", "")),
             "horario_resumo": resumo_do_horario((detalhes or {}).get("horario")),
+            "horario_dias": (detalhes or {}).get("horario"),
             "endereco": c.get("Endereço", "").strip(),
             "categoria": str((detalhes or {}).get("tipo") or "").strip(),
             "tem_telefone": len(re.sub(r"\D", "", c.get("Telefone", ""))) >= 8,
@@ -618,11 +715,10 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
 def entradas_da_presenca(diag: dict) -> dict:
     """O diagnóstico nos termos do cálculo PRUMO (calculo_prumo.nota_de_presenca). Item que o
     Raio-X não conferiu vai como None: o módulo o deixa fora da conta, nunca como falta."""
-    conc = diag.get("concorrencia")
-    buscas = None
-    if conc:
-        buscas = [{"consulta": conc["consulta"], "posicao": conc["posicao"], "lidos": conc["lidos"],
-                   "concorrentes": [{"id": r.get("id"), "avaliacoes": r.get("avaliacoes")} for r in conc["outros"]]}]
+    todas = diag.get("buscas") or ([diag["concorrencia"]] if diag.get("concorrencia") else [])
+    buscas = [{"consulta": b["consulta"], "posicao": b["posicao"], "lidos": b["lidos"],
+               "concorrentes": [{"id": r.get("id"), "avaliacoes": r.get("avaliacoes")} for r in b["outros"]]}
+              for b in todas] or None
     sem_comum = any(r in sem_acento(diag.get("vertical", "")).lower() for r in SEM_HORARIO_COMUM)
     h, f = diag.get("horario"), diag.get("fotos")
     categoria = diag.get("categoria", "").lower()
@@ -646,6 +742,344 @@ def entradas_da_presenca(diag: dict) -> dict:
                  "whatsapp": pag.get("whatsapp")}
     return {"buscas": buscas, "nota": diag.get("nota"), "avaliacoes": diag.get("avaliacoes"), "respostas": None,
             "perfil": perfil, "site": s}
+
+
+# ------------------------------------------------------------------ o JSON do modelo aprovado (PURO)
+
+def juntar(itens: list[str]) -> str:
+    itens = [i for i in itens if i]
+    return itens[0] if len(itens) == 1 else ", ".join(itens[:-1]) + " e " + itens[-1] if itens else ""
+
+
+DIAS = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
+
+
+def _hora(h: str, m: str) -> str:
+    return f"{int(h)}h" + ("" if m == "00" else m)
+
+
+def horario_legivel(dias: list[str] | None) -> str:
+    """'segunda a sexta, 8h às 18h; sábado, 8h às 12h' a partir do weekdayDescriptions do Places (de
+    segunda a domingo, em pt-BR). Dias fechados ficam fora; o que não dá para ler cai no resumo
+    ('aberto 6 dias por semana'). '' sem horário."""
+    if not dias:
+        return ""
+    if len(dias) != 7:
+        return resumo_do_horario(dias)
+    if all("24 horas" in d.lower() for d in dias):
+        return "aberto 24 horas, todos os dias"
+    faixas = []
+    for d in dias:
+        texto = d.split(":", 1)[1].strip() if ":" in d else ""
+        if "fechad" in sem_acento(texto).lower():
+            faixas.append(None)
+            continue
+        if "24 horas" in texto.lower():
+            faixas.append("24 horas")
+            continue
+        pares = re.findall(r"(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})", texto)
+        if not pares:
+            return resumo_do_horario(dias)
+        faixas.append(" e ".join(f"{_hora(a, b)} às {_hora(c, d_)}" for a, b, c, d_ in pares))
+    grupos: list[list] = []
+    for i, f in enumerate(faixas):
+        if f is None:
+            continue
+        if grupos and grupos[-1][1] == i - 1 and grupos[-1][2] == f:
+            grupos[-1][1] = i
+        else:
+            grupos.append([i, i, f])
+    partes = []
+    for a, b, f in grupos:
+        dias_txt = DIAS[a] if a == b else f"{DIAS[a]} e {DIAS[b]}" if b == a + 1 else f"{DIAS[a]} a {DIAS[b]}"
+        partes.append(f"{dias_txt}, {f}")
+    return "; ".join(partes) or resumo_do_horario(dias)
+
+
+def fecha_as(dias: list[str] | None) -> str:
+    """A hora em que o atendimento acaba nos dias úteis ('18h'), se for a mesma de segunda a sexta; '' se não dá."""
+    fins = set()
+    for d in (dias or [])[:5]:
+        pares = re.findall(r"(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})", d)
+        if not pares:
+            return ""
+        fins.add(_hora(*pares[-1][2:]))
+    return fins.pop() if len(fins) == 1 and len(dias or []) == 7 else ""
+
+
+# Palavras do ramo na página: "paciente" em saúde, "escritório" em advocacia.
+TERMOS_DO_RAMO = (
+    (("odonto", "dentist", "clinica", "fisio", "psicolog", "nutri", "medic", "saude"),
+     {"cliente": "paciente", "clientes": "pacientes", "empresa": "clínica"}),
+    (("advoc", "advog", "juridic", "contab", "contador", "arquitet", "engenhar"),
+     {"cliente": "cliente", "clientes": "clientes", "empresa": "escritório"}),
+)
+
+
+def termos_do_ramo(vertical: str, tipo: str = "") -> dict:
+    v = sem_acento(f"{vertical} {tipo}").lower()
+    for raizes, termos in TERMOS_DO_RAMO:
+        if any(r in v for r in raizes):
+            return dict(termos)
+    return {"cliente": "cliente", "clientes": "clientes", "empresa": "empresa"}
+
+
+def lugar(b: dict) -> str:
+    return f"{b['posicao']}º lugar" if b["posicao"] else f"fora dos {b['lidos']} primeiros"
+
+
+def _mediana_inteira(valores: list[int]) -> int | None:
+    m = mediana(valores)
+    return None if m is None else int(round(m))
+
+
+def comparacao_com_os_3(diag: dict) -> dict | None:
+    """'Vocês e os 3 primeiros' da primeira busca: só linhas com o dado dos dois lados."""
+    conc = diag.get("concorrencia")
+    top3 = (conc or {}).get("outros", [])[:3]
+    if len(top3) < 3:
+        return None
+    nota, n = diag.get("nota"), diag.get("avaliacoes")
+    linhas = []
+    notas = [r.get("nota") for r in top3]
+    if nota is not None and all(isinstance(x, (int, float)) for x in notas):
+        linhas.append({"item": "Nota no Google", "voces": numero(nota), "eles": " · ".join(numero(x) for x in notas),
+                       "perde": nota < (mediana(notas) or 0), "falta": "na nota"})
+    avs = [r.get("avaliacoes") for r in top3]
+    if n is not None and all(isinstance(x, int) for x in avs):
+        med = _mediana_inteira(avs)
+        linhas.append({"item": "Avaliações", "voces": str(n), "eles": str(med), "nota_eles": "no meio dos 3",
+                       "perde": n < med, "falta": "nas avaliações"})
+    site, hoje = diag.get("site"), diag.get("site_hoje")
+    voces_site = None
+    if site and site["tipo"] in ("nenhum", "rede"):
+        voces_site = "não"
+    elif site and hoje == "no_ar":
+        voces_site = "sim"
+    elif site and hoje == "fora":
+        voces_site = "não abre"
+    elif site and hoje == "sem_nome":
+        voces_site = "não"  # abre, mas sem o nome de vocês: não é um site de vocês
+    if voces_site:
+        k = sum(1 for r in top3 if tipo_de_link(r.get("site", "")) == "proprio")
+        linhas.append({"item": "Site próprio", "voces": voces_site, "eles": f"{k} de 3", "nota_eles": "com link no perfil",
+                       "perde": voces_site != "sim" and k > 0, "falta": "no site"})
+    sem_comum = any(r in sem_acento(diag.get("vertical", "")).lower() for r in SEM_HORARIO_COMUM)
+    h3 = [r.get("horario") for r in top3]
+    if isinstance(diag.get("horario"), bool) and not sem_comum and all(isinstance(x, bool) for x in h3):
+        k = sum(1 for x in h3 if x)
+        linhas.append({"item": "Horário no perfil", "voces": "sim" if diag["horario"] else "não", "eles": f"{k} de 3",
+                       "perde": not diag["horario"] and k > 0, "falta": "no horário do perfil"})
+    if len(linhas) < 4:
+        pos3 = [r["pos"] for r in top3]
+        # A célula não quebra linha: "fora dos 20" não cabe no celular; o número vai na nota miúda.
+        linhas.append({"item": "Lugar nesta busca", "voces": f"{conc['posicao']}º" if conc["posicao"] else "fora",
+                       "eles": " · ".join(f"{p}º" for p in pos3),
+                       **({} if conc["posicao"] else {"nota_eles": f"vocês: fora dos {conc['lidos']} primeiros"}),
+                       "perde": not conc["posicao"] or conc["posicao"] > max(pos3), "falta": "no lugar na busca"})
+    perdas = [l["falta"] for l in linhas if l["perde"]]
+    nota_perde = any(l["perde"] for l in linhas if l["item"] == "Nota no Google")
+    if nota_perde:
+        frase = "A primeira coisa que o cliente compara, a nota, está abaixo dos 3 primeiros."
+    elif perdas:
+        frase = f"A nota está no nível dos 3 primeiros. A diferença está {juntar(perdas)}."
+    else:
+        frase = "Vocês estão no nível dos 3 primeiros em tudo o que o cliente compara aqui."
+    return {"busca": conc["consulta"],
+            "linhas": [{k: v for k, v in l.items() if k != "falta"} for l in linhas], "frase": frase}
+
+
+def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
+    """A coisa a fazer que resolve o ponto, com quem faz. `ordem`: o que vocês fazem hoje vem antes."""
+    chave = p["chave"]
+    if chave == "busca":
+        oab = " Sem promessa de resultado, como o Provimento 205/2021 da OAB pede." if any(
+            r in sem_acento(diag.get("vertical", "")).lower() for r in ("advoc", "advog")) else ""
+        return {"ordem": 3, "titulo": f"Anunciar para quem procura “{p['consulta']}”",
+                "texto": f"Um anúncio no Google para “{p['consulta']}”, levando ao site. O anúncio aparece acima da lista "
+                         "do mapa desde o primeiro dia; o lugar na lista sobe com o tempo, com site e avaliações." + oab,
+                "quem": "Quem cuida dos anúncios de vocês, ou o PRUMO."}
+    if chave == "site" and diag.get("site_hoje") == "no_ar":
+        return {"ordem": 2, "titulo": "Deixar o site pronto para o celular, com botão de WhatsApp",
+                "texto": "Quem chega pelo Google está no celular e quer chamar na hora. Um botão de WhatsApp com a "
+                         "mensagem começada e a página no tamanho da tela resolvem; a demonstração que fizemos para "
+                         "vocês, na página inicial deste endereço, já mostra como fica.",
+                "quem": "Quem cuida do site de vocês, ou o PRUMO."}
+    if chave == "site":
+        tipo = (site or {}).get("tipo")
+        titulo = ("Um site no botão “Site” do perfil" if tipo == "nenhum"
+                  else f"Um site de vocês no lugar de {nome_da_rede(site['url'])}" if tipo == "rede"
+                  else "Um site no lugar da página que não abre")
+        return {"ordem": 2, "titulo": titulo,
+                "texto": "Os serviços, as fotos, como é a primeira conversa e o botão de WhatsApp, numa página que abre "
+                         "bem no celular e fica no botão “Site” do Google. A demonstração já está pronta: é a página "
+                         "inicial deste mesmo endereço.",
+                "quem": "Um fornecedor de site de vocês, ou o PRUMO."}
+    if chave == "avaliacoes":
+        med = p.get("alvo") or (diag.get("concorrencia") or {}).get("mediana_avaliacoes")
+        alvo = (f"chegar perto das {int(med)} avaliações que os primeiros da busca têm" if med
+                else "passar das 20 avaliações, quando o número começa a pesar na escolha")
+        return {"ordem": 1, "titulo": "Pedir avaliação a quem saiu satisfeito",
+                "texto": f"No fim de cada atendimento, mandar o link do perfil pelo WhatsApp e pedir uma avaliação. É o "
+                         f"jeito mais barato de {alvo}.",
+                "quem": "Vocês mesmos, a partir de hoje."}
+    if chave == "nota":
+        return {"ordem": 1, "titulo": "Responder às avaliações, a começar pelas críticas",
+                "texto": "Uma resposta curta e educada a cada avaliação, sem discutir, mostra a quem lê que do outro lado "
+                         "tem gente cuidando. E pedir avaliação a quem saiu satisfeito é o que mais sobe a nota.",
+                "quem": "Vocês mesmos, esta semana."}
+    if chave == "horario":
+        return {"ordem": 0, "titulo": "Preencher o horário no perfil do Google",
+                "texto": "São 5 minutos no Perfil da Empresa do Google. Com o horário, vocês aparecem para quem usa o "
+                         "filtro “Aberto agora”, e o cliente sabe quando chamar.",
+                "quem": "Vocês mesmos, hoje."}
+    return {"ordem": 1, "titulo": "Publicar fotos do lugar e do trabalho",
+            "texto": "Fotos da fachada, da equipe e do trabalho pronto, publicadas pelo próprio perfil, passam a ser as "
+                     "que o cliente vê primeiro. Dá para fazer do celular, no Perfil da Empresa do Google.",
+            "quem": "Vocês mesmos, esta semana."}
+
+
+def perfil_linhas(diag: dict) -> list[dict]:
+    """Os 5 itens do perfil do modelo aprovado, cada detalhe tirado dos dados; 'nc' = não conferido."""
+    linhas = []
+    h = diag.get("horario")
+    sem_comum = any(r in sem_acento(diag.get("vertical", "")).lower() for r in SEM_HORARIO_COMUM)
+    if h:
+        linhas.append({"estado": "ok", "item": "Horário de funcionamento",
+                       "detalhe": horario_legivel(diag.get("horario_dias")) or diag.get("horario_resumo") or "preenchido"})
+    elif h is False:
+        linhas.append({"estado": "nc" if sem_comum else "falta", "item": "Horário de funcionamento",
+                       "detalhe": "o Google não mostra horário comum para este ramo" if sem_comum
+                       else "não aparece; quem usa o filtro “Aberto agora” não vê vocês"})
+    else:
+        linhas.append({"estado": "nc", "item": "Horário de funcionamento", "detalhe": "não conferido"})
+    tel = diag.get("telefone")
+    if tel:
+        linhas.append({"estado": "ok", "item": "Telefone",
+                       "detalhe": "celular: dá para ligar ou mandar mensagem" if tel == "celular" else "fixo"})
+    else:
+        linhas.append({"estado": "ok" if diag.get("tem_telefone") else "nc", "item": "Telefone",
+                       "detalhe": "aparece no perfil" if diag.get("tem_telefone") else "não conferido"})
+    f = diag.get("fotos")
+    if f:
+        linhas.append({"estado": "ok", "item": "Fotos", "detalhe": f"{f} das primeiras publicada{'s' if f > 1 else ''} por vocês"})
+    elif f == 0 and diag.get("fotos_baixadas"):
+        linhas.append({"estado": "falta", "item": "Fotos", "detalhe": "as primeiras foram publicadas por outras pessoas"})
+    else:
+        linhas.append({"estado": "nc", "item": "Fotos", "detalhe": "não conferido"})
+    cat = diag.get("categoria", "")
+    if cat and cat.lower() not in TIPOS_GENERICOS:
+        linhas.append({"estado": "ok", "item": "Categoria", "detalhe": cat})
+    else:
+        linhas.append({"estado": "nc", "item": "Categoria",
+                       "detalhe": f"“{cat}”: uma categoria geral; não conferimos qual delas ajudaria mais na busca" if cat
+                       else "não conferido"})
+    site, hoje = diag.get("site"), diag.get("site_hoje")
+    if site is None:
+        linhas.append({"estado": "nc", "item": "Botão “Site”", "detalhe": "não conferido"})
+    elif site["tipo"] == "nenhum":
+        linhas.append({"estado": "falta", "item": "Botão “Site”", "detalhe": "o perfil não tem"})
+    elif site["tipo"] == "rede":
+        linhas.append({"estado": "falta", "item": "Botão “Site”", "detalhe": f"leva para {nome_da_rede(site['url'])}"})
+    elif hoje == "no_ar":
+        linhas.append({"estado": "ok", "item": "Botão “Site”", "detalhe": f"leva a {dominio(site['url'])}, que abriu quando conferimos"})
+    elif hoje in ("fora", "sem_nome"):
+        linhas.append({"estado": "falta", "item": "Botão “Site”",
+                       "detalhe": f"existe, mas {dominio(site['url'])} "
+                                  + ("não abriu" if hoje == "fora" else "abria uma página sem o nome de vocês")
+                                  + (f" em {diag['hoje']}" if diag.get("hoje") else "")})
+    else:
+        linhas.append({"estado": "nc", "item": "Botão “Site”", "detalhe": f"leva a {dominio(site['url'])}; não conseguimos abrir"})
+    return linhas
+
+
+def dados_do_modelo(dados: dict, diag: dict) -> dict:
+    """O diagnóstico no esquema do raio-x.json do piloto (modelos/raio-x.json), para o modelo_raio_x.
+    Só entra o que o Raio-X automático conferiu: sem respostas às avaliações, sem redes nem anúncios
+    (as duas seções saem marcadas "não conferido"), sem equipe (então sem o convite do Mapa)."""
+    nome = dados["nome"] or "a empresa"
+    lido = diag.get("places_em") or diag["lido_em"]
+    site = diag.get("site")
+    entradas = entradas_da_presenca(diag)
+    termos = termos_do_ramo(diag.get("vertical", ""), diag.get("categoria", ""))
+    cat = diag.get("categoria", "")
+    ramo = cat if cat and cat.lower() not in TIPOS_GENERICOS else (diag.get("vertical") or "").capitalize()
+    buscas = [{"consulta": b["consulta"], "posicao": b["posicao"], "lidos": b["lidos"],
+               "concorrentes": [{"id": r.get("id"), "pos": r["pos"], "nome": r.get("nome") or "", "nota": r.get("nota"),
+                                 "avaliacoes": r.get("avaliacoes"), "site": tipo_de_link(r.get("site", ""))}
+                                for r in b["outros"]]} for b in diag.get("buscas") or []]
+    for b in buscas:  # o molde escreve "X de nota" e "N avaliações": sem número, o concorrente não entra
+        b["concorrentes"] = [c for c in b["concorrentes"] if isinstance(c["nota"], (int, float))
+                             and isinstance(c["avaliacoes"], int)]
+    acoes = sorted((acao_do_ponto(p, diag, site) for p in diag["pontos"]), key=lambda a: a["ordem"])
+    avals = (diag.get("avaliacoes_lidas") or {}).get("total") or 0
+    hoje_site = diag.get("site_hoje")
+    site_rotulo = ({"nenhum": "sem site", "rede": "site: rede social"}.get((site or {}).get("tipo", ""))
+                   or {"fora": "site fora do ar", "sem_nome": "site sem o nome de vocês", "no_ar": "site próprio"}.get(
+                       hoje_site or "", "site não conferido"))
+    # Os motivos dos serviços: só o que o Raio-X mostrou. Sem dado (redes), sem motivo.
+    motivos = {}
+    if site and site["tipo"] == "nenhum":
+        motivos["site"] = "No Raio-X: o perfil do Google não tem site."
+    elif site and site["tipo"] == "rede":
+        motivos["site"] = f"No Raio-X: o botão “Site” do Google leva para {nome_da_rede(site['url'])}."
+    elif hoje_site == "fora":
+        motivos["site"] = "No Raio-X: o site do perfil não abriu quando conferimos."
+    elif hoje_site == "sem_nome":
+        motivos["site"] = "No Raio-X: o site do perfil abria uma página sem o nome de vocês."
+    else:
+        motivos["site"] = "No Raio-X: a demonstração do site já está pronta, neste mesmo endereço."
+    if buscas:
+        notas = [calculo_prumo.nota_da_posicao(b["posicao"]) for b in buscas] if calculo_prumo else [0] * len(buscas)
+        pior = buscas[notas.index(min(notas))]
+        motivos["trafego"] = (f"No Raio-X: {lugar(pior)} em “{pior['consulta']}”." if not pior["posicao"] or pior["posicao"] > 3
+                              else f"No Raio-X: vocês estão entre os 3 primeiros nas {len(buscas)} buscas.")
+    fim = fecha_as(diag.get("horario_dias"))
+    if fim:
+        motivos["produtos"] = f"No Raio-X: o atendimento do perfil acaba às {fim}; o robô responde depois disso."
+    redes = []
+    if site and site["tipo"] == "rede" and nome_da_rede(site["url"]) in ("o Instagram", "o Facebook", "o TikTok"):
+        rede = nome_da_rede(site["url"])[2:]
+        redes.append({"estado": "ok", "item": f"{rede} no perfil do Google", "detalhe": "o botão “Site” leva até ele."})
+    redes.append({"estado": "nc", "item": "Instagram e Facebook",
+                  "detalhe": "não conferidos neste Raio-X, que lê só o Google. Seguidores e posts ficam para a conversa."})
+    anuncios = [{"estado": "nc", "item": "Google",
+                 "detalhe": "não conferido: os anúncios mudam a cada busca, e este Raio-X lê só a lista do mapa."},
+                {"estado": "nc", "item": "Instagram e Facebook", "detalhe": "não conferido neste Raio-X."}]
+    lidos = sorted({b["lidos"] for b in buscas})
+    quantos = (f"os {lidos[0]} primeiros resultados de cada uma" if len(lidos) == 1
+               else f"pelo menos os {lidos[0]} primeiros resultados de cada uma") if lidos else ""
+    metodo = [f"Nota, avaliações, horário e categoria: lidos no perfil do Google em {lido}."]
+    if diag.get("fotos") is not None and diag.get("lido_em"):
+        metodo.append(f"As fotos: contadas quando o PRUMO encontrou vocês no Google, em {diag['lido_em']}.")
+    if buscas:
+        metodo.append(f"As buscas: {len(buscas)}, na lista de lugares do Google, em {lido}; lemos {quantos}. {{como_ordena}}.")
+    if avals:
+        metodo.append(f"As avaliações: as {avals} que o Google mostra primeiro no perfil, lidas uma a uma. Se vocês "
+                      "respondem a elas não conferimos: o Google não entrega as respostas a sistemas de fora.")
+    if site and site["tipo"] in ("morto", "proprio") and hoje_site:
+        metodo.append(f"O site {dominio(site['url'])}: abrimos o endereço em {diag.get('hoje') or lido}.")
+    metodo += ["As redes e os anúncios: não conferidos neste Raio-X, que lê só o Google. Na conversa, olhamos com vocês.",
+               "Não conferimos quanto tempo vocês levam para responder uma mensagem: isso só se vê por dentro."]
+    return {
+        "exemplo": False, "nome": nome, "ramo": ramo, "cidade": diag.get("cidade") or "", "lido_em": lido, "equipe": "",
+        "google": {"nota": diag.get("nota"), "avaliacoes": diag.get("avaliacoes")},
+        "buscas": buscas, "respostas": None,
+        "perfil": entradas["perfil"], "site": entradas["site"] or {"tipo": None},
+        "avaliacoes_recentes": [a for a in ((diag.get("avaliacoes_textos") or [])) if isinstance(a, dict)],
+        "bons": [{"titulo": b["titulo"], "porque": b["porque"]} for b in diag["bons"]],
+        "pontos": [{"titulo": p["titulo"], "porque": p["porque"]} for p in diag["pontos"]],
+        "comparacao": comparacao_com_os_3(diag) or {"busca": "", "linhas": [], "frase": ""},
+        "redes": redes, "anuncios": anuncios,
+        "o_que_fazer": [{"n": f"{i:02d}", "titulo": a["titulo"], "texto": a["texto"], "quem": a["quem"]}
+                        for i, a in enumerate(acoes, 1)],
+        "mapa_link": "", "mapa_exemplo_url": "", "servicos_motivo": motivos, "termos": termos,
+        # os ganchos do modelo_raio_x (GANCHOS): o automático só lê o Google
+        "lede": "Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.",
+        "descricao": f"Como {nome} aparece para quem procura no Google: a busca, as avaliações, o perfil, o site e os "
+                     "concorrentes.",
+        "perfil_linhas": perfil_linhas(diag), "metodo": metodo, "avaliacoes_ordem": "google", "site_rotulo": site_rotulo,
+    }
 
 
 # ------------------------------------------------------------------ página (PURO)
@@ -819,11 +1253,6 @@ def fonte_css(caminho: Path = FONTE) -> str:
             + ") format('woff2');font-weight:100 900;font-stretch:62% 125%;font-display:swap}")
 
 
-def link_whatsapp(texto: str) -> str:
-    """O wa.me do PRUMO com a mensagem já começada (codificada; o nome do lead vai dentro dela)."""
-    return f"https://wa.me/{WHATSAPP_PRUMO}?text=" + urllib.parse.quote(texto, safe="")
-
-
 def detalhe(titulo: str, corpo: str, classe: str = "") -> str:
     """Um `<details>` fechado: abre no toque, sem JS, e o leitor de tela anuncia aberto/fechado.
     Corpo vazio = detalhe ausente (seção que não existe para este lead não aparece)."""
@@ -833,219 +1262,38 @@ def detalhe(titulo: str, corpo: str, classe: str = "") -> str:
             f'<div class="corpo">{corpo}</div></details>')
 
 
-def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool, fonte: str = "") -> str:
-    """A página em três atos (versão 4): veredito (a primeira tela do celular), por quê (os pontos
-    abertos e o resto em detalhes fechados) e o que fazer (demonstração, preço e o WhatsApp)."""
+class AbaixoDoPadrao(ValueError):
+    """A página não chega ao padrão do modelo aprovado (a trava do piloto): não sai."""
+
+
+def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool) -> str:
+    """A página no modelo aprovado do piloto CDL (versão 5): o diagnóstico vira o raio-x.json do piloto
+    (dados_do_modelo) e o modelo_raio_x desenha, com a mesma trava de qualidade. Abaixo do padrão,
+    AbaixoDoPadrao com o que falta. A fonte embutida vem de FONTE (sem ela, a Arial Narrow)."""
+    if not (calculo_prumo and modelo_raio_x and PRECOS):
+        raise AbaixoDoPadrao("faltam calculo_prumo.py, modelo_raio_x.py ou precos.json em prumo-mapa/ "
+                             "(instale: dell-status --instalados)")
+    modelo = dados_do_modelo(dados, diag)
+    erros = modelo_raio_x.conferir_raio_x(modelo, PRECOS, automatico=True)
+    if erros:
+        raise AbaixoDoPadrao("abaixo do padrão do modelo: " + "; ".join(erros))
     e = lambda t: html.escape(str(t), quote=True)  # noqa: E731
-    nome = dados["nome"] or "a empresa"
-    nota, n = diag.get("nota", dados["nota"]), diag.get("avaliacoes", dados["avaliacoes"])
-    pontos, bons = diag["pontos"], diag["bons"][:MAX_BONS]
+    nome = modelo["nome"]
     base = site_url.rstrip("/")
-    onde = " · ".join(x for x in (diag["vertical"].capitalize(), diag["cidade"]) if x)
-    titulo_pontos = (f"{len(pontos)} ponto{'s' if len(pontos) > 1 else ''} que "
-                     f"{'mandam' if len(pontos) > 1 else 'manda'} cliente para o concorrente")
-    item = lambda i, x: (f'<li><span class="marcador">{e(i)}</span><div><h3>{e(x["titulo"])}</h3>'  # noqa: E731
-                         f'<p>{e(x["porque"])}</p></div></li>')
-    presenca = diag.get("presenca") if calculo_prumo else None
-    zap_site = link_whatsapp(f"Olá, PRUMO. Vi o Raio-X da {nome} e quero o site no ar.")
-    zap_respondido = link_whatsapp(f"Olá, PRUMO. Vi o Raio-X da {nome} e quero conversar sobre o WhatsApp que responde.")
-    partes = [
-        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\">",
-        '<meta name="viewport" content="width=device-width,initial-scale=1">',
-        '<meta name="robots" content="noindex,nofollow">',
-        f"<title>Raio-X · {e(nome)}</title>",
-        f'<meta name="description" content="Como {e(nome)} aparece para quem procura no Google: o que já está bom e o que manda cliente para o concorrente.">',
-        '<meta property="og:type" content="website"><meta property="og:locale" content="pt_BR">',
-        f'<meta property="og:title" content="Raio-X · {e(nome)}">',
-        '<meta property="og:description" content="Como vocês aparecem para quem procura no Google, feito pelo PRUMO só com dados públicos.">',
-    ]
+    cabeca = ['<meta property="og:type" content="website"><meta property="og:locale" content="pt_BR">',
+              f'<meta property="og:title" content="Raio-X · {e(nome)}">',
+              '<meta property="og:description" content="Como vocês aparecem para quem procura no Google, feito pelo PRUMO '
+              'só com dados públicos.">']
     if tem_og:
-        partes += [f'<meta property="og:image" content="{e(base)}/og.jpg">',
+        cabeca += [f'<meta property="og:image" content="{e(base)}/og.jpg">',
                    '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">',
                    '<meta name="twitter:card" content="summary_large_image">']
-    partes += [
-        '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E'
-        '%3Crect width=%2216%22 height=%2216%22 fill=%22%231B1512%22/%3E%3Crect x=%227%22 y=%223%22 width=%222%22 height=%2210%22 fill=%22%23E0490F%22/%3E%3C/svg%3E">',
-        f"<style>{fonte}{CSS}{calculo_prumo.CSS_PRESENCA if calculo_prumo else ''}</style></head>",
-        f'<body {MARCA}><main class="folha">',
-        '<header class="topo"><div class="marca"><span class="fio"></span><span>PRU<span class="brasa">MO</span></span></div>'
-        '<span class="miudo">Raio-X</span></header>',
-    ]
-
-    # Ato 1 · Veredito: cabe na primeira tela do celular, sem rolar.
-    ato1 = ['<section class="ato veredito" id="veredito" data-ato="veredito" aria-labelledby="t-veredito">',
-            '<p class="kicker">Como vocês aparecem no Google</p>', f'<h1 id="t-veredito">{e(nome)}</h1>']
-    if onde:
-        ato1.append(f'<p class="lede">{e(onde)}. Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
-    else:
-        ato1.append('<p class="lede">Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.</p>')
-    lido = diag.get("places_em") or diag["lido_em"]
-    if nota is not None and n:
-        ato1.append(f'<div class="nota"><span class="num">{e(numero(nota))}</span>'
-                    f'<span class="leitura">nota no Google<br>{e(n)} avaliaç{"ão" if n == 1 else "ões"}'
-                    f'{"<br>lida em " + e(lido) if lido else ""}</span></div>')
-    if presenca:
-        ato1.append(calculo_prumo.bloco_faixa_html(presenca))
-    if bons and pontos:
-        ato1.append('<div class="resumo"><div><span class="miudo">O que segura cliente</span>'
-                    f'<strong>{e(bons[0]["titulo"])}</strong></div><div><span class="miudo">O que perde cliente</span>'
-                    f'<strong>{e(pontos[0]["titulo"])}</strong></div></div>')
-    ato1.append("</section>")
-    partes.append("".join(x for x in ato1 if x))
-
-    # Ato 2 · Por quê: os pontos abertos; o resto em detalhes fechados, para quem quer conferir.
-    ato2 = ['<section class="ato por-que" id="por-que" data-ato="por-que" aria-labelledby="t-por-que">',
-            '<p class="kicker" id="t-por-que">Por quê</p>']
-    if pontos:
-        ato2.append(f'<div class="pontos"><h2>{e(titulo_pontos)}</h2><ul class="lista">'
-                    + "".join(item(f"{i:02d}", p) for i, p in enumerate(pontos, 1)) + "</ul></div>")
-    ato2.append('<div class="detalhes">')
-    if bons:
-        ato2.append(detalhe("O que já está bom", '<ul class="lista">' + "".join(item("✓", b) for b in bons) + "</ul>",
-                            "bons"))
-    ato2.append(detalhe("Quem aparece antes de vocês na busca", secao_busca(diag, nome, e)))
-    ato2.append(detalhe("O que os clientes dizem", secao_avaliacoes(diag, e)))
-    linhas = checklist(diag)
-    if linhas:
-        sinal = {"ok": "✓", "falta": "✕", "nc": "–"}
-        ato2.append(detalhe("O perfil no Google, item por item",
-                            '<p class="intro">O que o cliente encontra quando abre o perfil de vocês no Google Maps.</p><ul class="check">'
-                            + "".join(f'<li class="{x["estado"]}"><span class="sinal" aria-hidden="true">{sinal[x["estado"]]}</span>'
-                                      f'<span><span class="visualmente-oculto">{e({"ok": "Em dia: ", "falta": "Falta: ", "nc": "Não conferido: "}[x["estado"]])}</span>'
-                                      f'{e(x["item"])}</span><span class="det">{e(x["detalhe"])}</span></li>' for x in linhas)
-                            + "</ul>"))
-    nota_html = calculo_prumo.bloco_html(presenca, nome) if presenca else ""
-    ato2.append(detalhe("Como fizemos este Raio-X",
-                        nota_html + ('<h3 class="sub">De onde vem cada dado</h3>' if nota_html else "")
-                        + secao_metodo(diag, e)))
-    ato2.append("</div></section>")
-    partes.append("".join(x for x in ato2 if x))
-
-    # Ato 3 · O que fazer: a demonstração, o preço do Encontrado e o WhatsApp do PRUMO.
-    ato3 = ['<section class="ato o-que-fazer" id="o-que-fazer" data-ato="o-que-fazer" aria-labelledby="t-o-que-fazer">',
-            '<p class="kicker" id="t-o-que-fazer">O que fazer</p>',
-            '<div class="demo"><h2>Montamos uma demonstração do site de vocês</h2>']
-    if tem_og:
-        ato3.append(f'<a href="/" data-evento="raiox-demo" aria-label="Abrir a demonstração do site de {e(nome)}">'
-                    f'<img src="/og.jpg" width="1200" height="630" alt="Prévia da demonstração do site de {e(nome)}" loading="lazy"></a>')
-    ato3.append('<p>Com o nome, o contato e o jeito de vocês. Abre no celular do mesmo jeito que o cliente veria.</p>'
-                '<p><a class="botao" href="/" data-evento="raiox-demo">Ver a demonstração</a></p></div>')
-    ato3.append('<div class="oferta"><span class="miudo">Para colocar no ar</span><h2>Encontrado</h2>'
-                f'<p class="preco">{e(PRECO)}</p>'
-                '<p>Esta demonstração no ar, com o endereço de vocês e ligada ao botão “Site” do Google. Hospedagem e '
-                'ajustes incluídos. <strong>Vocês só pagam depois de ver funcionando.</strong></p>'
-                f'<div class="acoes"><a class="botao-zap" href="{e(zap_site)}" target="_blank" rel="noopener" '
-                'data-evento="raiox-whatsapp-site">Quero o site no ar</a>'
-                f'<a class="link-zap" href="{e(zap_respondido)}" target="_blank" rel="noopener" '
-                'data-evento="raiox-whatsapp-respondido">Quero conversar sobre o WhatsApp que responde</a></div></div>')
-    ato3.append("</section>")
-    partes.append("".join(ato3))
-
-    rodape = ["<footer>"]
-    rodape.append(f"<span>Dados públicos do Google Maps{', lidos em ' + e(lido) if lido else ''}."
-                  + (f' <a href="{e(diag["maps"])}" rel="noopener">Ver o perfil no Google Maps</a>.' if diag["maps"].startswith("https://") else "")
-                  + "</span>")
-    rodape.append('<span>PRUMO · <a href="https://prumo.services" rel="noopener">prumo.services</a></span></footer>')
-    partes.append("".join(rodape))
-    partes.append("</main>")
-    # A barra do celular: o mesmo botão, fixa no rodapé depois que o "O que fazer" aparece (JS_PAGINA).
-    partes.append(f'<div class="barra-fixa"><a class="botao-zap" href="{e(zap_site)}" target="_blank" rel="noopener" '
-                  'data-evento="raiox-whatsapp-site">Quero o site no ar</a></div>')
-    partes.append(f"<script>{JS_PAGINA}</script>")
-    partes.append("</body></html>\n")
-    return "\n".join(p for p in partes if p)
-
-
-def checklist(diag: dict) -> list[dict]:
-    """O perfil item por item: {'estado': 'ok'|'falta'|'nc', 'item', 'detalhe'}. 'nc' = não conferido
-    (o dado não existe para este lead); nada é marcado 'falta' sem o fato."""
-    linhas = []
-    nota, n = diag.get("nota"), diag.get("avaliacoes")
-    if nota is not None and n:
-        linhas.append({"estado": "ok" if nota >= 4.3 else "falta", "item": "Nota",
-                       "detalhe": f"{numero(nota)} de 5"})
-    if n is not None:
-        linhas.append({"estado": "ok" if n >= 20 else "falta", "item": "Avaliações",
-                       "detalhe": f"{n} no total" + ("" if n >= 20 else "; entre duas opções, pesa quem tem mais")})
-    if diag.get("recente"):
-        linhas.append({"estado": "ok", "item": "Avaliação recente", "detalhe": "há avaliação dos últimos 30 dias"})
-    tel = diag.get("telefone")
-    if tel:
-        linhas.append({"estado": "ok", "item": "Telefone",
-                       "detalhe": "celular: dá para ligar ou mandar mensagem" if tel == "celular" else "fixo"})
-    h = diag.get("horario")
-    sem_comum = any(r in sem_acento(diag.get("vertical", "")).lower() for r in SEM_HORARIO_COMUM)
-    if h:
-        linhas.append({"estado": "ok", "item": "Horário de funcionamento",
-                       "detalhe": diag.get("horario_resumo") or "preenchido"})
-    elif h is False:
-        linhas.append({"estado": "nc" if sem_comum else "falta", "item": "Horário de funcionamento",
-                       "detalhe": "o Google não mostra horário comum para este ramo" if sem_comum
-                       else "não aparece; quem usa o filtro “Aberto agora” não vê vocês"})
-    else:
-        linhas.append({"estado": "nc", "item": "Horário de funcionamento", "detalhe": "não conferido"})
-    f = diag.get("fotos")
-    if f:
-        linhas.append({"estado": "ok", "item": "Fotos", "detalhe": f"{f} publicada{'s' if f > 1 else ''} por vocês entre as primeiras"})
-    elif f == 0 and diag.get("fotos_baixadas"):
-        linhas.append({"estado": "falta", "item": "Fotos", "detalhe": "as primeiras foram publicadas por outras pessoas"})
-    else:
-        linhas.append({"estado": "nc", "item": "Fotos", "detalhe": "não conferido"})
-    site, hoje = diag.get("site"), diag.get("site_hoje")
-    if site is None:
-        linhas.append({"estado": "nc", "item": "Site", "detalhe": "não conferido"})
-    elif site["tipo"] == "nenhum":
-        linhas.append({"estado": "falta", "item": "Site", "detalhe": "o perfil não tem"})
-    elif site["tipo"] == "rede":
-        linhas.append({"estado": "falta", "item": "Site", "detalhe": f"o botão leva para {nome_da_rede(site['url'])}"})
-    elif hoje == "no_ar":
-        linhas.append({"estado": "ok", "item": "Site", "detalhe": f"{dominio(site['url'])} abriu quando conferimos"})
-    elif hoje in ("fora", "sem_nome"):
-        linhas.append({"estado": "falta", "item": "Site",
-                       "detalhe": f"{dominio(site['url'])} " + ("não abriu" if hoje == "fora" else "mostrava uma página sem o nome de vocês")
-                                  + (f" em {diag['hoje']}" if diag.get("hoje") else "")})
-    else:
-        linhas.append({"estado": "nc", "item": "Site", "detalhe": "não conferido"})
-    if diag.get("endereco"):
-        linhas.append({"estado": "ok", "item": "Endereço no mapa", "detalhe": "aparece no perfil"})
-    return linhas
-
-
-def secao_busca(diag: dict, nome: str, e) -> str:
-    """O corpo do detalhe "Quem aparece antes de vocês na busca"; '' sem a busca do Places."""
-    conc = diag.get("concorrencia")
-    if not conc:
-        return ""
-    linhas = []
-    voces_dentro = conc["posicao"] is not None and conc["posicao"] <= max(r["pos"] for r in conc["outros"])
-    site = diag.get("site") or {}
-    rotulo_site = {"nenhum": "sem site", "rede": "site: rede social"}.get(site.get("tipo", ""), "")
-    if site.get("tipo") in ("morto", "proprio"):
-        rotulo_site = {"fora": "site fora do ar", "sem_nome": "site sem o nome de vocês", "no_ar": "site próprio"}.get(
-            diag.get("site_hoje") or "", "site não conferido")
-    nota, n = diag.get("nota"), diag.get("avaliacoes")
-    voces = {"pos": conc["posicao"], "nome": f"{nome} (vocês)", "nota": nota, "avaliacoes": n, "voces": True,
-             "rotulo": rotulo_site}
-    todos = sorted(conc["outros"] + ([voces] if voces_dentro else []), key=lambda r: r["pos"])
-    for r in todos:
-        if r.get("voces"):
-            rot = r["rotulo"]
-        else:
-            t = tipo_de_link(r.get("site", ""))
-            rot = {"proprio": "site próprio", "rede": "site: rede social", "nenhum": "sem site"}[t]
-        nota_txt = f"{numero(r['nota'])} de nota" if isinstance(r.get("nota"), (int, float)) else "sem nota"
-        aval = f"{r['avaliacoes']} avaliações" if isinstance(r.get("avaliacoes"), int) else "sem avaliações"
-        classe = ' class="voces"' if r.get("voces") else ""
-        sem = ' class="sem"' if rot in ("sem site", "site fora do ar", "site sem o nome de vocês", "site: rede social") else ""
-        linhas.append(f'<li{classe}><span class="pos">{e(r["pos"])}º</span><span class="quem">{e(r.get("nome") or "")}</span>'
-                      f'<span class="dados">{e(nota_txt)} · {e(aval)} · <span{sem}>{e(rot)}</span></span></li>')
-    fora = "" if voces_dentro else (
-        f'<p class="intro">Vocês aparecem em {e(conc["posicao"])}º lugar nesta busca.</p>' if conc["posicao"]
-        else f'<p class="intro">Vocês não apareceram entre os {e(conc["lidos"])} primeiros desta busca.</p>')
-    k, m = conc["com_site"], len(conc["outros"])
-    return (f'<p class="intro">Procuramos “{e(conc["consulta"])}” no Google em {e(conc["lido_em"])}. Dos {m} primeiros '
-            f'que não são vocês, {e(k)} mostra{"m" if k != 1 else ""} site próprio no perfil.</p>'
-            f'<ol class="busca">{"".join(linhas)}</ol>{fora}')
+    modelo["cabeca"], modelo["corpo_attr"] = "".join(cabeca), MARCA
+    doc, _ = modelo_raio_x.raio_x(modelo, sys.modules[__name__], calculo_prumo, PRECOS)
+    erros = modelo_raio_x.conferir_pagina(doc)
+    if erros:
+        raise AbaixoDoPadrao("; ".join(erros))
+    return doc
 
 
 def secao_avaliacoes(diag: dict, e) -> str:
@@ -1079,35 +1327,6 @@ def secao_avaliacoes(diag: dict, e) -> str:
         quando = f", {e(t['quando'])}" if t.get("quando") else ""
         partes.append(f'<blockquote><p>“{e(t["trecho"])}”</p><cite>{autor}{e(estrelas)}{quando}, no Google</cite></blockquote>')
     return "".join(partes)
-
-
-def secao_metodo(diag: dict, e) -> str:
-    """A lista de onde vem cada dado, no detalhe "Como fizemos este Raio-X" (depois da Nota de presença)."""
-    itens = []
-    if diag.get("places_em"):
-        itens.append(f"Nota, avaliações, horário e site do perfil: lidos do Google em {e(diag['places_em'])}.")
-    elif diag.get("lido_em"):
-        itens.append(f"Nota, avaliações, horário, fotos e site do perfil: lidos do Google em {e(diag['lido_em'])}.")
-    conc = diag.get("concorrencia")
-    if conc:
-        itens.append(f"A busca “{e(conc['consulta'])}”: feita em {e(conc['lido_em'])}. A ordem muda um pouco de pessoa "
-                     "para pessoa, porque o Google leva em conta onde cada um está. "
-                     f'<a href="{e(FONTE_RANKING)}" rel="noopener">Como o Google ordena a busca local</a>.')
-    av = diag.get("avaliacoes_lidas")
-    if av and av["total"]:
-        itens.append(f"As avaliações: as {av['total']} que o Google mostra primeiro, com o nome de quem escreveu. "
-                     "Contamos as palavras; não demos nota a ninguém.")
-    site = diag.get("site")
-    if site and site["tipo"] in ("morto", "proprio") and diag.get("site_hoje"):
-        itens.append(f"O site {e(dominio(site['url']))}: abrimos o endereço em {e(diag.get('hoje') or 'hoje')}.")
-    if (diag.get("demo") or {}).get("secoes"):
-        itens.append("A demonstração: a página que montamos para vocês, no ar neste mesmo endereço.")
-    if (diag.get("presenca") or {}).get("nota") is not None:
-        itens.append("A Nota de presença: seis pontos de 0 a 3 pelo cálculo PRUMO, com as mesmas regras para todas as "
-                     "empresas. O que não medimos fica fora da conta, nunca vira zero.")
-    itens.append("Não conferimos se vocês respondem às avaliações (o Google não entrega isso a sistemas de fora) "
-                 "nem quanto tempo levam para responder uma mensagem.")
-    return '<ul class="metodo">' + "".join(f"<li>{i}</li>" for i in itens) + "</ul>"
 
 
 # ------------------------------------------------------------------ publicação (efeitos)
@@ -1193,7 +1412,9 @@ def resumir_detalhes(d: dict) -> dict:
     return {"nome": _texto(d.get("displayName")), "nota": d.get("rating"), "avaliacoes": d.get("userRatingCount"),
             "tipo": _texto(d.get("primaryTypeDisplayName")), "site": str(d.get("websiteUri") or ""),
             "horario": list((d.get("regularOpeningHours") or {}).get("weekdayDescriptions") or []) or None,
-            "status": str(d.get("businessStatus") or ""), "maps": str(d.get("googleMapsUri") or ""), "textos": textos}
+            "status": str(d.get("businessStatus") or ""), "maps": str(d.get("googleMapsUri") or ""), "textos": textos,
+            "bairro": next((str(c.get("longText") or "") for c in d.get("addressComponents") or []
+                            if isinstance(c, dict) and {"sublocality_level_1", "sublocality"} & set(c.get("types") or [])), "")}
 
 
 # Tipos do Google que não dizem o que o negócio faz (visto em 08/10/2026: desentupidora e locação
@@ -1213,10 +1434,73 @@ def consulta_da_busca(tipo: str, vertical: str, cidade: str) -> str:
     return f"{termo} em {cidade.strip()}" if termo and cidade.strip() else ""
 
 
+# As três buscas do modelo aprovado: a do termo do ramo, a da área (ou o outro jeito de pedir o mesmo) e a de um
+# serviço que vale mais (ou "melhor ..."). Escolhidas antes de ver o resultado, pelo ramo do Caçador, pelo tipo
+# do Google e por palavras do nome; nunca por quem aparece. (raízes do ramo, termo do cliente, outro jeito de
+# pedir, [(raízes no nome ou no tipo, a busca da área, a do serviço de valor)])
+RAMOS = (
+    (("advoc", "advog", "juridic"), "advogado", "escritório de advocacia", (
+        (("trabalhist",), "advogado trabalhista", "advogado acidente de trabalho"),
+        (("previdenc", "inss", "aposentad"), "advogado previdenciário", "advogado INSS"),
+        (("famil", "divorc"), "advogado de família", "advogado divórcio"),
+        (("criminal", "penal"), "advogado criminalista", "advogado criminal"),
+        (("consumid",), "advogado do consumidor", "advogado contra banco"),
+        (("bancari",), "advogado bancário", "advogado revisão de financiamento"),
+        (("imobiliar", "usucapi"), "advogado imobiliário", "advogado usucapião"),
+        (("tributar",), "advogado tributário", "advogado para empresas"),
+        (("empresarial",), "advogado empresarial", "advogado para empresas"))),
+    (("odonto", "dentist", "dental"), "dentista", "clínica odontológica", (
+        (("ortodon",), "ortodontista", "aparelho ortodôntico"),
+        (("implant",), "implante dentário", "prótese protocolo"))),
+    (("contab", "contador"), "contador", "escritório de contabilidade", ()),
+    (("pilates",), "pilates", "estúdio de pilates", ()),
+    (("escola infantil", "bercario", "educacao infantil"), "escola infantil", "berçário", ()),
+    (("estetic",), "clínica de estética", "estética facial", ()),
+    (("fisioter",), "fisioterapia", "clínica de fisioterapia", ()),
+    (("psicolog",), "psicólogo", "terapia", ()),
+    (("nutri",), "nutricionista", "consulta com nutricionista", ()),
+    (("veterin",), "veterinário", "clínica veterinária", ()),
+    (("arquitet",), "arquiteto", "escritório de arquitetura", ()),
+    (("desentup",), "desentupidora", "desentupimento", ()),
+    (("dedetiz",), "dedetizadora", "dedetização", ()),
+    (("refrigera", "ar condicionado"), "conserto de ar condicionado", "instalação de ar condicionado", ()),
+    (("marcenar", "planejad"), "móveis planejados", "marcenaria", ()),
+    (("vidrac",), "vidraçaria", "box de vidro", ()),
+)
+
+
+def consultas_das_buscas(tipo: str, vertical: str, cidade: str, nome: str = "", bairro: str = "") -> list[str]:
+    """As três buscas (sem repetir): a do termo do ramo, a da área achada no nome ou no tipo (ou o outro
+    jeito de pedir o mesmo serviço) e a do serviço de valor da área (ou "melhor <termo>"). Ramo fora de
+    RAMOS: a de `consulta_da_busca`, "melhor <termo>" e o termo no bairro (sem bairro, só duas)."""
+    cidade = (cidade or "").strip()
+    if not cidade:
+        return []
+    texto = sem_acento(f"{vertical} {tipo}").lower()
+    em = lambda termo: f"{termo} em {cidade}"  # noqa: E731
+    ramo = next((r for r in RAMOS if any(x in texto for x in r[0])), None)
+    if ramo:
+        _, termo, outro, areas = ramo
+        pistas = sem_acento(f"{nome} {tipo}").lower()
+        area = next((a for a in areas if any(x in pistas for x in a[0])), None)
+        lista = [em(termo)] + ([em(area[1]), em(area[2])] if area else [em(outro), em(f"melhor {termo}")])
+    else:
+        primeira = consulta_da_busca(tipo, vertical, cidade)
+        if not primeira:
+            return []
+        termo = primeira[: -len(f" em {cidade}")]
+        lista = [primeira, em(f"melhor {termo}")] + ([f"{termo} em {bairro.strip()}, {cidade}"] if bairro.strip() else [])
+    saida: list[str] = []
+    for c in lista:
+        if c.lower() not in [x.lower() for x in saida]:
+            saida.append(c)
+    return saida[:3]
+
+
 def ler_places(pasta: Path, dados: dict, chave: str | None, hoje: dt.datetime | None = None, pedir=None) -> dict | None:
-    """Detalhes do lead + a busca da concorrência, guardados em <pasta>/raio-x-places.json por até
-    VALIDADE_CACHE_DIAS (um refazer do Raio-X no mesmo mês não paga de novo). Duas chamadas por lead:
-    Place Details (Enterprise + Atmosphere) e Text Search (Enterprise). None sem chave ou sem detalhes."""
+    """Detalhes do lead + as três buscas da concorrência, guardados em <pasta>/raio-x-places.json por até
+    VALIDADE_CACHE_DIAS (um refazer do Raio-X no mesmo mês não paga de novo). Quatro chamadas por lead:
+    Place Details (Enterprise + Atmosphere) e três Text Search (Enterprise). None sem chave ou sem detalhes."""
     pedir = pedir or pedir_places
     agora_ = hoje or dt.datetime.now().astimezone()
     pid = dados["campos"].get("place_id", "").strip()
@@ -1225,12 +1509,16 @@ def ler_places(pasta: Path, dados: dict, chave: str | None, hoje: dt.datetime | 
     cache = pasta / CACHE_PLACES
     guardado = ler_json(cache)
     if isinstance(guardado, dict) and guardado.get("place_id") == pid and guardado.get("detalhes"):
-        # A regra da consulta pode mudar entre versões: busca guardada com outra consulta não vale.
-        esperada = consulta_da_busca(str(guardado["detalhes"].get("tipo") or ""), dados["campos"].get("Vertical", ""),
-                                     dados["campos"].get("Cidade", ""))
+        # A regra das consultas pode mudar entre versões: buscas guardadas com outras consultas não valem
+        # (o cache da versão 1, de uma busca só, também não).
+        g = guardado["detalhes"]
+        esperadas = consultas_das_buscas(str(g.get("tipo") or ""), dados["campos"].get("Vertical", ""),
+                                         dados["campos"].get("Cidade", ""), dados["nome"], str(g.get("bairro") or ""))
         try:
             lido = dt.datetime.fromisoformat(str(guardado["lido_em"]))
-            if (agora_ - lido).days < VALIDADE_CACHE_DIAS and (guardado.get("busca") or {}).get("consulta", "") == esperada:
+            feitas = [b.get("consulta") for b in guardado.get("buscas") or [] if isinstance(b, dict)]
+            if ((agora_ - lido).days < VALIDADE_CACHE_DIAS and guardado.get("versao") == VERSAO_CACHE
+                    and feitas == esperadas):
                 return guardado
         except (KeyError, ValueError, TypeError):
             pass
@@ -1241,21 +1529,24 @@ def ler_places(pasta: Path, dados: dict, chave: str | None, hoje: dt.datetime | 
         log(f"{pasta.name}: Places Details respondeu {codigo}; Raio-X sem concorrência nem avaliações.")
         return None
     detalhes = resumir_detalhes(d)
-    consulta = consulta_da_busca(detalhes["tipo"], dados["campos"].get("Vertical", ""), dados["campos"].get("Cidade", ""))
-    busca = None
-    if consulta:
+    buscas = []
+    for consulta in consultas_das_buscas(detalhes["tipo"], dados["campos"].get("Vertical", ""),
+                                         dados["campos"].get("Cidade", ""), dados["nome"], detalhes["bairro"]):
         codigo, b = pedir("places:searchText", CAMPOS_BUSCA, chave,
                           {"textQuery": consulta, "languageCode": "pt-BR", "regionCode": "BR",
                            "pageSize": TAMANHO_DA_BUSCA})
         if codigo == 200 and isinstance(b, dict):
-            busca = {"consulta": consulta, "resultados": [
+            # Sem regularOpeningHours na resposta = o perfil não mostra horário (o campo foi pedido).
+            buscas.append({"consulta": consulta, "resultados": [
                 {"id": p.get("id"), "nome": _texto(p.get("displayName")), "nota": p.get("rating"),
                  "avaliacoes": p.get("userRatingCount"), "site": str(p.get("websiteUri") or ""),
-                 "status": str(p.get("businessStatus") or "")} for p in (b.get("places") or [])[:TAMANHO_DA_BUSCA]]}
+                 "status": str(p.get("businessStatus") or ""),
+                 "horario": bool((p.get("regularOpeningHours") or {}).get("weekdayDescriptions"))}
+                for p in (b.get("places") or [])[:TAMANHO_DA_BUSCA]]})
         else:
-            log(f"{pasta.name}: Places Text Search respondeu {codigo}; Raio-X sem concorrência.")
-    saida = {"versao": 1, "place_id": pid, "lido_em": agora_.isoformat(timespec="seconds"), "detalhes": detalhes,
-             "busca": busca}
+            log(f"{pasta.name}: Places Text Search respondeu {codigo} em “{consulta}”; essa busca fica de fora.")
+    saida = {"versao": VERSAO_CACHE, "place_id": pid, "lido_em": agora_.isoformat(timespec="seconds"),
+             "detalhes": detalhes, "buscas": buscas}
     try:
         tmp = cache.with_name("." + CACHE_PLACES + ".tmp")
         tmp.write_text(json.dumps(saida, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -1291,7 +1582,9 @@ def montar(pasta: Path) -> tuple[dict, dict, str, dict]:
     diag = diagnosticar(pasta, dados)
     if not diag["pontos"]:
         raise ValueError("nenhum ponto de melhoria verificável no content.md nem no Places")
-    return dados, diag, pagina(dados, diag, recibo["site_url"], (pasta / "og.jpg").is_file(), fonte_css()), recibo
+    # A trava do modelo (AbaixoDoPadrao é um ValueError): sem 3 pontos, 3 bons, 3 avaliações, 3 buscas...,
+    # não há Raio-X, e o --pendentes passa para o próximo.
+    return dados, diag, pagina(dados, diag, recibo["site_url"], (pasta / "og.jpg").is_file()), recibo
 
 
 def diagnosticar(pasta: Path, dados: dict) -> dict:
@@ -1463,9 +1756,10 @@ def simular(pasta: Path) -> str:
     linhas = [f"{pasta.name}: {dados['nome']} · nota {d['nota']} ({d['avaliacoes']}) · lido em {d['places_em'] or d['lido_em']}"]
     if d["site_hoje"]:
         linhas.append(f"  site do perfil hoje: {d['site_hoje']}")
-    conc = d["concorrencia"]
-    linhas.append(f"  busca: “{conc['consulta']}”, posição {conc['posicao']}, {conc['com_site']} de {len(conc['outros'])} com site"
-                  if conc else "  busca: sem dados (sem chave do Places ou a API falhou)")
+    for conc in d["buscas"]:
+        linhas.append(f"  busca: “{conc['consulta']}”, posição {conc['posicao']}, {conc['com_site']} de {len(conc['outros'])} com site")
+    if not d["buscas"]:
+        linhas.append("  busca: sem dados (sem chave do Places ou a API falhou)")
     av = d["avaliacoes_lidas"]
     linhas.append(f"  avaliações lidas: {av['total']}, temas: " + ", ".join(f"{t['tema']} {t['n']}" for t in av["temas"])
                   if av else "  avaliações lidas: nenhuma")
@@ -1491,11 +1785,16 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.testar:
         return testar()
-    if calculo_prumo is None:
-        log("calculo_prumo.py não encontrado (nem em prumo-mapa/ ao lado nem em ~/.local/share/prumo-mapa/): "
-            "o Raio-X sai sem a Nota de presença. Instale: dell-status --instalados.")
+    if not (calculo_prumo and modelo_raio_x and PRECOS):
+        log("calculo_prumo.py, modelo_raio_x.py ou precos.json não encontrado (nem em prumo-mapa/ ao lado nem em "
+            "~/.local/share/prumo-mapa/): nenhum Raio-X sai. Instale: dell-status --instalados.")
     if a.html:
-        dados, diag, pagina_html, _ = montar(AUTO / a.html)
+        try:
+            dados, diag, pagina_html, _ = montar(AUTO / a.html)
+        except ValueError as e:  # AbaixoDoPadrao diz o que falta
+            print(simular(AUTO / a.html))
+            print(f"sem página: {e}")
+            return 1
         Path(a.saida or "raio-x.html").write_text(pagina_html, encoding="utf-8")
         print(simular(AUTO / a.html))
         return 0
@@ -1574,18 +1873,21 @@ Elogiam: atencioso. Reclamam: nada.
 """
 
 
-def places_exemplo(posicao: int | None = 7) -> dict:
-    """Um raio-x-places.json de mentira (formato do cache), com o lead na `posicao` da busca."""
+def places_exemplo(posicao: int | None = 7, outras: tuple = (3, 9)) -> dict:
+    """Um raio-x-places.json de mentira (formato do cache, versão 2), com o lead na `posicao` da primeira busca
+    e em `outras` nas outras duas (as consultas de consultas_das_buscas para o CONTENT_EXEMPLO)."""
     nomes = ["Alfa Advocacia", "Beta <script>x</script>", "Gama Advogados", "Delta Jurídico", "Épsilon Adv",
              "Zeta Advocacia", "Eta Advogados", "Teta Adv", "Iota Advocacia"]
     sites = ["https://alfa.adv.br", "", "https://www.instagram.com/gama", "https://delta.com.br", "", "https://zeta.adv.br",
              "", "", ""]
-    resultados = [{"id": f"ChIJoutro{i}", "nome": n, "nota": 4.6 + (i % 4) / 10, "avaliacoes": 40 + 10 * i,
-                   "site": s, "status": "OPERATIONAL"} for i, (n, s) in enumerate(zip(nomes, sites))]
-    resultados[3]["status"] = "CLOSED_PERMANENTLY"
-    if posicao:
-        resultados.insert(posicao - 1, {"id": "ChIJteste", "nome": "Higor", "nota": 5, "avaliacoes": 18,
-                                        "site": "https://higorferreira.adv.br/", "status": "OPERATIONAL"})
+    def busca(consulta, pos):
+        resultados = [{"id": f"ChIJoutro{i}", "nome": n, "nota": 4.6 + (i % 4) / 10, "avaliacoes": 40 + 10 * i,
+                       "site": s, "status": "OPERATIONAL", "horario": i != 1} for i, (n, s) in enumerate(zip(nomes, sites))]
+        resultados[3]["status"] = "CLOSED_PERMANENTLY"
+        if pos:
+            resultados.insert(pos - 1, {"id": "ChIJteste", "nome": "Higor", "nota": 5, "avaliacoes": 18,
+                                        "site": "https://higorferreira.adv.br/", "status": "OPERATIONAL", "horario": True})
+        return {"consulta": consulta, "resultados": resultados}
     textos = [
         {"nota": 5, "texto": "Excelente profissional, muito atencioso. Explicou cada etapa do processo com clareza e paciência.",
          "autor": "Ana P.", "autor_uri": "https://www.google.com/maps/contrib/1", "quando": "há 2 meses"},
@@ -1598,14 +1900,15 @@ def places_exemplo(posicao: int | None = 7) -> dict:
         {"nota": 2, "texto": "Demorou para resolver e o atendimento atencioso prometido não veio.",
          "autor": "Edu", "autor_uri": "", "quando": "há 1 ano"},
     ]
-    return {"versao": 1, "place_id": "ChIJteste", "lido_em": "2026-10-08T10:00:00-03:00",
+    return {"versao": 2, "place_id": "ChIJteste", "lido_em": "2026-10-08T10:00:00-03:00",
             "detalhes": {"nome": "Higor", "nota": 5, "avaliacoes": 18, "tipo": "Advogado",
                          "site": "https://higorferreira.adv.br/", "status": "OPERATIONAL",
                          "horario": ["segunda-feira: 08:00–18:30", "terça-feira: 08:00–18:30", "quarta-feira: 08:00–18:30",
                                      "quinta-feira: 08:00–18:30", "sexta-feira: 08:00–18:30", "sábado: Fechado",
                                      "domingo: Fechado"],
-                         "maps": "https://maps.google.com/?cid=1", "textos": textos},
-            "busca": {"consulta": "advogado em Anápolis", "resultados": resultados}}
+                         "maps": "https://maps.google.com/?cid=1", "textos": textos, "bairro": "Centro"},
+            "buscas": [busca("advogado em Anápolis", posicao), busca("escritório de advocacia em Anápolis", outras[0]),
+                       busca("melhor advogado em Anápolis", outras[1])]}
 
 
 DEMO_EXEMPLO = """<html><body><header id="topo"><h1>Higor</h1></header>
@@ -1645,8 +1948,8 @@ def testar() -> int:
                              ["O site que aparece no Google não abre", "Só 18 avaliações no Google"])
             self.assertIn("vai para higorferreira.adv.br, que não abriu quando conferimos (08/10/2026)",
                           d["pontos"][0]["porque"])
-            self.assertEqual(len(d["bons"]), 5)
-            self.assertEqual(d["bons"][0]["titulo"], "Nota 5,0 no Google")  # o 18 vira ponto, não bom
+            self.assertEqual([b["titulo"] for b in d["bons"]],  # o 18 vira ponto, não bom; no máximo 3
+                             ["Nota 5,0 no Google", "O telefone do perfil é celular", "Horário de funcionamento preenchido"])
             self.assertEqual(d["lido_em"], "07/10/2026")
 
         def test_site_antigo_so_vira_ponto_conferido_hoje(self):
@@ -1676,8 +1979,8 @@ def testar() -> int:
             t = t.replace("- +5 horário preenchido no Google\n", "").replace("- +10 5 foto(s) enviadas pelo próprio negócio no Google\n", "")
             d = diagnostico(ler_content(t), fotos_baixadas=3)
             self.assertEqual([p["titulo"] for p in d["pontos"]],
-                             ["O botão “Site” no Google leva para o Instagram",
-                              "O horário de funcionamento não aparece no Google", "Só 18 avaliações no Google"])
+                             ["O botão “Site” no Google leva para o Instagram", "Só 18 avaliações no Google",
+                              "O horário de funcionamento não aparece no Google"])
             self.assertNotIn("fixo", json.dumps(d["pontos"], ensure_ascii=False))
             d = diagnostico(ler_content(t.replace("advocacia", "pousada")), fotos_baixadas=3)
             self.assertNotIn("O horário de funcionamento não aparece no Google", [p["titulo"] for p in d["pontos"]])
@@ -1710,41 +2013,67 @@ def testar() -> int:
             self.assertNotIn("5562993920412", textos)
 
     class Pagina(unittest.TestCase):
+        """Versão 5: o modelo aprovado do piloto CDL (modelo_raio_x), só com o que foi conferido."""
+
         def test_identidade_preco_link_e_escape(self):
             t = CONTENT_EXEMPLO.replace("# Higor Ferreira - Advogado", "# Bar <b>&</b> Cia")
             dados = ler_content(t)
-            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026"), "https://demo-x.vercel.app/", True)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app/", True)
             self.assertIn("Bar &lt;b&gt;&amp;&lt;/b&gt; Cia", h)
             self.assertNotIn("<b>&</b>", h)
-            self.assertIn("R$ 990 + R$ 69/mês", h)
-            self.assertIn("só pagam depois de ver funcionando", h)
-            self.assertIn('href="/"', h)
             self.assertIn("https://demo-x.vercel.app/og.jpg", h)
-            self.assertIn(MARCA, h)
-            self.assertIn("2 pontos que mandam cliente para o concorrente", h)
-            self.assertIn("lidos em 07/10/2026", h)
+            self.assertIn(f"<body {MARCA}>", h)
+            self.assertIn("3 pontos que mandam cliente para o concorrente", h)
+            self.assertIn("lidos em 08/10/2026", h)
+            for s in PRECOS["servicos"]:  # os quatro serviços, com o preço do precos.json
+                self.assertIn(f"<h3>{html.escape(s['nome'])}</h3><p class=\"preco\">{html.escape(s['preco'])}", h)
+            self.assertIn("Se quiserem que o PRUMO faça", h)
+            self.assertNotIn("R$ 990", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
             self.assertTrue(h.rstrip().endswith("</html>"))
 
         def test_sem_og_nao_aponta_imagem(self):
             dados = ler_content(CONTENT_EXEMPLO)
-            h = pagina(dados, diagnostico(dados), "https://demo-x.vercel.app", False)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", False)
             self.assertNotIn("og.jpg", h)
+            self.assertIn('<meta property="og:title"', h)
 
-        def test_empresa_sem_nome_de_pessoa_e_so_o_preco_do_encontrado(self):
+        def test_abaixo_do_padrao_nao_sai(self):
             dados = ler_content(CONTENT_EXEMPLO)
-            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", True)
-            self.assertNotIn("Rômulo", h)
-            # O preço do Respondido só se fala na conversa (08 e 09/10/2026).
-            self.assertNotIn("2.400", h)
-            self.assertNotIn("390/mês", h)
-            self.assertNotIn("Respondido e Acompanhado", h)
-            self.assertNotIn("é só responder a mensagem", h)
-            self.assertIn("Não conferimos se vocês respondem às avaliações", h)
-            # Sem Places: nada de concorrência nem de avaliações (detalhe ausente, não vazio).
-            self.assertNotIn("Quem aparece antes de vocês na busca", h)
-            self.assertNotIn("O que os clientes dizem", h)
-            self.assertNotIn("O caminho do cliente", h)
+            with self.assertRaises(AbaixoDoPadrao) as erro:  # sem o Places: sem buscas, comparação nem avaliações
+                pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", True)
+            self.assertIn("buscas: exatamente 3, tem 0", str(erro.exception))
+            p = places_exemplo(2, (1, 2))  # entre os 3 primeiros nas três buscas e o site no ar: 2 pontos só
+            p["detalhes"]["avaliacoes"] = 25
+            with self.assertRaises(AbaixoDoPadrao) as erro:
+                pagina(dados, diagnostico(dados, "no_ar", "08/10/2026", 5, p), "https://demo-x.vercel.app", True)
+            self.assertIn("pontos: exatamente 3", str(erro.exception))
+            self.assertTrue(issubclass(AbaixoDoPadrao, ValueError))  # o montar e o --pendentes já tratam ValueError
+
+        def test_so_afirma_o_que_conferiu(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
+            self.assertIn("Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.", h)
+            self.assertNotIn("nas redes e nos anúncios, sem pedir", h)
+            # As avaliações: as que o Google mostra primeiro, nas duas frases (e não "as mais recentes").
+            self.assertIn("Lemos as 5 avaliações que o Google mostra primeiro no perfil de vocês", h)
+            self.assertIn("As avaliações: as 5 que o Google mostra primeiro no perfil", h)
+            self.assertNotIn("mais recentes", h)
+            # Respostas às avaliações, redes e anúncios: não conferidos, nunca inventados.
+            self.assertNotIn("têm resposta de vocês", h)
+            self.assertNotIn("Responde às avaliações</td>", h)
+            redes = h[h.index("<summary>Redes sociais</summary>"):h.index("<summary>Anúncios</summary>")]
+            anuncios = h[h.index("<summary>Anúncios</summary>"):h.index("<summary>A nota e de onde vem cada dado</summary>")]
+            for trecho in (redes, anuncios):
+                self.assertIn('<li class="nc">', trecho)
+                self.assertNotIn('<li class="ok">', trecho)
+                self.assertNotIn('<li class="falta">', trecho)
+            self.assertIn("As redes e os anúncios: não conferidos neste Raio-X", h)
+            # Sem equipe conhecida: sem o convite do Mapa.
+            self.assertNotIn('<div class="mapa-convite"', h)
+            self.assertNotIn("Responder as 16 perguntas", h)
+            # O vocabulário interno e a fórmula da nota não aparecem (a trava do modelo).
+            self.assertEqual(modelo_raio_x.conferir_pagina(h), [])
 
     class Profundo(unittest.TestCase):
         """Versão 2: Places, avaliações, demo e checklist (tudo PURO)."""
@@ -1776,33 +2105,49 @@ def testar() -> int:
             self.assertEqual(c["com_site"], 2)  # alfa e zeta; o instagram não é site próprio, delta fechou
             self.assertIsNone(concorrencia(places_exemplo(None), "ChIJteste")["posicao"])
             self.assertIsNone(concorrencia({"busca": None}, "ChIJteste"))
+            self.assertEqual([b["posicao"] for b in buscas_lidas(places_exemplo(7, (3, None)), "ChIJteste")], [7, 3, None])
+            self.assertEqual(len(buscas_lidas({"busca": places_exemplo()["buscas"][0]}, "ChIJteste")), 1)  # cache v1
             self.assertIsNone(concorrencia(None, "ChIJteste"))
 
         def test_diagnostico_com_places_compara_com_a_busca(self):
             dados = ler_content(CONTENT_EXEMPLO)
-            d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7))
+            d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7, (3, None)))
             titulos = [p["titulo"] for p in d["pontos"]]
-            self.assertEqual(titulos, ["O site que aparece no Google não abre", "7º lugar em “advogado em Anápolis”",
+            self.assertEqual(titulos, ["7º lugar em “advogado em Anápolis”", "O site que aparece no Google não abre",
                                        "Só 18 avaliações no Google"])
-            self.assertIn("2 dos 5 primeiros mostram site próprio", d["pontos"][0]["porque"])
+            self.assertIn("vê 6 outros resultados antes de vocês", d["pontos"][0]["porque"])
+            self.assertIn("Em “escritório de advocacia em Anápolis”, vocês estão em 3º; em “melhor advogado em Anápolis”, "
+                          "não estão entre os 9 primeiros.", d["pontos"][0]["porque"])
+            self.assertIn("relevância, distância e destaque", d["pontos"][0]["porque"])
+            self.assertIn("1 dos 3 primeiros mostra site próprio", d["pontos"][1]["porque"])
             self.assertIn("no meio da lista, 60 avaliações", d["pontos"][2]["porque"])
-            self.assertIn("relevância, distância e destaque", d["pontos"][1]["porque"])
-            bons = [b["titulo"] for b in d["bons"]]
-            self.assertIn("Nota maior que a de 5 dos 5 primeiros da busca", bons)
-            self.assertIn("3 de 5 avaliações elogiam o atendimento", bons)
+            self.assertEqual([b["titulo"] for b in d["bons"]],
+                             ["Nota 5,0 no Google", "3º lugar em “escritório de advocacia em Anápolis”",
+                              "3 de 5 avaliações elogiam o atendimento"])
+            self.assertIn("Os 5 primeiros de “advogado em Anápolis” têm entre 4,6 e 4,8. A nota de vocês está acima de todos",
+                          d["bons"][0]["porque"])
             self.assertEqual(d["horario_resumo"], "aberto 5 dias por semana")
-            # Entre os 3 primeiros não há ponto de posição; com muitas avaliações, comparação só abaixo da metade.
-            d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(2))
+            # Entre os 3 primeiros nas três buscas não há ponto de posição.
+            d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(2, (1, 3)))
             self.assertFalse(any("lugar" in p["titulo"] for p in d["pontos"]))
+            # Fora nas três: uma frase só para as outras duas.
+            d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(None, (None, None)))
+            self.assertIn("Em “escritório de advocacia em Anápolis” e “melhor advogado em Anápolis”, também não.",
+                          d["pontos"][0]["porque"])
 
         def test_avaliacoes_abaixo_da_metade_da_busca_viram_ponto_mesmo_acima_de_20(self):
-            p = places_exemplo(2)
+            p = places_exemplo(2, (1, 2))
             p["detalhes"]["avaliacoes"] = 29
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "no_ar", "08/10/2026", 5, p)
             self.assertIn("29 avaliações, menos da metade do que os primeiros da busca têm", [x["titulo"] for x in d["pontos"]])
+            # Acima da metade dos 5, abaixo do meio dos 3 primeiros: o ponto mais leve, com os 3 números.
             p["detalhes"]["avaliacoes"] = 30
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "no_ar", "08/10/2026", 5, p)
-            self.assertEqual(d["pontos"], [])  # site no ar, 2º lugar, 30 é metade de 60: nada a apontar
+            self.assertEqual([x["titulo"] for x in d["pontos"]], ["30 avaliações, menos que os 3 primeiros da busca"])
+            self.assertIn("os 3 primeiros têm 40, 50 e 60 avaliações", d["pontos"][0]["porque"])
+            p["detalhes"]["avaliacoes"] = 61
+            d = diagnostico(ler_content(CONTENT_EXEMPLO), "no_ar", "08/10/2026", 5, p)
+            self.assertEqual(d["pontos"], [])  # site no ar, entre os 3 nas buscas, mais avaliações: nada a apontar
 
         def test_site_do_perfil_de_hoje_vale_mais_que_o_do_cacador(self):
             dados = ler_content(CONTENT_EXEMPLO)
@@ -1823,6 +2168,35 @@ def testar() -> int:
             self.assertEqual(consulta_da_busca("", "locação de equipamentos", "Goiânia"), "locação de equipamentos em Goiânia")
             self.assertEqual(consulta_da_busca("Advogado", "advocacia", ""), "")
 
+        def test_tres_buscas_escolhidas_antes_de_ver_o_resultado(self):
+            self.assertEqual(consultas_das_buscas("Advogado", "advocacia", "Anápolis", "Higor Ferreira - Advogado"),
+                             ["advogado em Anápolis", "escritório de advocacia em Anápolis", "melhor advogado em Anápolis"])
+            # A área sai do nome (ou do tipo): a busca da área e a do serviço de valor dela.
+            self.assertEqual(consultas_das_buscas("Consultoria", "advocacia", "Ribeirão Preto", "Silva Advocacia Previdenciária"),
+                             ["advogado em Ribeirão Preto", "advogado previdenciário em Ribeirão Preto",
+                              "advogado INSS em Ribeirão Preto"])
+            self.assertEqual(consultas_das_buscas("Dentista", "odontologia", "Vitória", "OrtoVix Ortodontia")[1:],
+                             ["ortodontista em Vitória", "aparelho ortodôntico em Vitória"])
+            # Ramo fora da tabela: o termo, "melhor" e o bairro; sem bairro, só duas (e a trava barra a página).
+            self.assertEqual(consultas_das_buscas("Serviços", "locação de equipamentos", "Goiânia", "X", "Setor Bueno"),
+                             ["locação de equipamentos em Goiânia", "melhor locação de equipamentos em Goiânia",
+                              "locação de equipamentos em Setor Bueno, Goiânia"])
+            self.assertEqual(len(consultas_das_buscas("Serviços", "locação de equipamentos", "Goiânia")), 2)
+            self.assertEqual(consultas_das_buscas("Advogado", "advocacia", ""), [])
+
+        def test_horario_legivel_e_fim_do_atendimento(self):
+            dias = places_exemplo()["detalhes"]["horario"]
+            self.assertEqual(horario_legivel(dias), "segunda a sexta, 8h às 18h30")
+            self.assertEqual(fecha_as(dias), "18h30")
+            dias = [f"{d}: 08:00–12:00, 14:00–18:00" for d in ("segunda-feira", "terça-feira", "quarta-feira",
+                                                                  "quinta-feira", "sexta-feira")]
+            self.assertEqual(horario_legivel(dias + ["sábado: 08:00–12:00", "domingo: Fechado"]),
+                             "segunda a sexta, 8h às 12h e 14h às 18h; sábado, 8h às 12h")
+            self.assertEqual(horario_legivel(["segunda-feira: Atendimento 24 horas"] * 7), "aberto 24 horas, todos os dias")
+            self.assertEqual(horario_legivel(["segunda-feira: com hora marcada"] * 7), "aberto 7 dias por semana")
+            self.assertEqual(fecha_as(["x: 24 horas"] * 7), "")
+            self.assertEqual(horario_legivel(None), "")
+
         def test_ler_demo(self):
             d = ler_demo(DEMO_EXEMPLO)
             self.assertEqual(d["secoes"], [{"id": "topo", "titulo": "Você já leu o seu contrato inteiro?"},
@@ -1831,24 +2205,56 @@ def testar() -> int:
             self.assertEqual((d["whatsapp"], d["whatsapp_com_texto"], d["telefone"], d["mapa"]), (2, True, True, True))
             self.assertEqual(ler_demo("")["secoes"], [])
 
-        def test_checklist_so_marca_falta_com_o_fato(self):
+        def test_perfil_so_marca_falta_com_o_fato(self):
             dados = ler_content(CONTENT_EXEMPLO.split("## Por que este lead")[0])
-            itens = {x["item"]: x["estado"] for x in checklist(diagnostico(dados))}
-            self.assertEqual((itens["Horário de funcionamento"], itens["Fotos"], itens["Site"]), ("nc", "nc", "nc"))
+            itens = {x["item"]: x["estado"] for x in perfil_linhas(diagnostico(dados))}
+            self.assertEqual(list(itens), ["Horário de funcionamento", "Telefone", "Fotos", "Categoria", "Botão “Site”"])
+            self.assertEqual((itens["Horário de funcionamento"], itens["Fotos"], itens["Botão “Site”"]), ("nc", "nc", "nc"))
             dados = ler_content(CONTENT_EXEMPLO)
-            itens = {x["item"]: x for x in checklist(diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo()))}
-            self.assertEqual(itens["Site"]["estado"], "falta")
-            self.assertIn("não abriu em 08/10/2026", itens["Site"]["detalhe"])
-            self.assertEqual(itens["Horário de funcionamento"]["detalhe"], "aberto 5 dias por semana")
-            self.assertEqual(itens["Avaliações"]["estado"], "falta")
+            itens = {x["item"]: x for x in perfil_linhas(diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo()))}
+            self.assertEqual(itens["Botão “Site”"]["estado"], "falta")
+            self.assertIn("higorferreira.adv.br não abriu em 08/10/2026", itens["Botão “Site”"]["detalhe"])
+            self.assertEqual(itens["Horário de funcionamento"]["detalhe"], "segunda a sexta, 8h às 18h30")
+            self.assertEqual((itens["Categoria"]["estado"], itens["Categoria"]["detalhe"]), ("ok", "Advogado"))
+            p = places_exemplo()
+            p["detalhes"]["tipo"] = "Consultoria"  # genérica: pode ser só a tabela do Places, não vira falta
+            itens = {x["item"]: x for x in perfil_linhas(diagnostico(dados, "fora", "08/10/2026", 5, p))}
+            self.assertEqual(itens["Categoria"]["estado"], "nc")
+
+        def test_comparacao_com_os_3_primeiros(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            c = comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)))
+            self.assertEqual(c["busca"], "advogado em Anápolis")
+            self.assertEqual([(l["item"], l["voces"], l["eles"], l["perde"]) for l in c["linhas"]],
+                             [("Nota no Google", "5,0", "4,6 · 4,7 · 4,8", False), ("Avaliações", "18", "50", True),
+                              ("Site próprio", "não abre", "1 de 3", True), ("Horário no perfil", "sim", "2 de 3", False)])
+            self.assertEqual(c["frase"], "A nota está no nível dos 3 primeiros. A diferença está nas avaliações e no site.")
+            self.assertIsNone(comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5)))
+
+        def test_o_que_fazer_resolve_cada_ponto_com_quem_faz(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            diag = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7))
+            m = dados_do_modelo(dados, diag)
+            self.assertEqual([(x["n"], x["titulo"], x["quem"]) for x in m["o_que_fazer"]],
+                             [("01", "Pedir avaliação a quem saiu satisfeito", "Vocês mesmos, a partir de hoje."),
+                              ("02", "Um site no lugar da página que não abre", "Um fornecedor de site de vocês, ou o PRUMO."),
+                              ("03", "Anunciar para quem procura “advogado em Anápolis”",
+                               "Quem cuida dos anúncios de vocês, ou o PRUMO.")])
+            self.assertIn("Provimento 205/2021 da OAB", m["o_que_fazer"][2]["texto"])  # advocacia: sem promessa
+            self.assertEqual(m["servicos_motivo"], {
+                "site": "No Raio-X: o site do perfil não abriu quando conferimos.",
+                "trafego": "No Raio-X: 7º lugar em “advogado em Anápolis”.",
+                "produtos": "No Raio-X: o atendimento do perfil acaba às 18h30; o robô responde depois disso."})
+            self.assertEqual(modelo_raio_x.conferir_raio_x(m, PRECOS, automatico=True), [])
 
         def test_pagina_completa_escapa_e_so_linka_https(self):
             dados = ler_content(CONTENT_EXEMPLO)
             diag = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7), ler_demo(DEMO_EXEMPLO))
             h = pagina(dados, diag, "https://demo-x.vercel.app", True)
-            self.assertIn("<summary>Quem aparece antes de vocês na busca</summary>", h)
-            self.assertIn("Procuramos “advogado em Anápolis” no Google em 08/10/2026", h)
-            self.assertIn("Vocês aparecem em 7º lugar nesta busca.", h)
+            self.assertIn("<summary>A busca, em detalhe</summary>", h)
+            self.assertIn("Fizemos 3 buscas que um cliente faria, escolhidas antes de ver o resultado, em 08/10/2026.", h)
+            self.assertIn('<li class=voces><span class="pos">7º</span>', h)  # logo depois do 6º: entra na lista
+            self.assertIn("site fora do ar", h)
             self.assertIn("Beta &lt;script&gt;x&lt;/script&gt;", h)
             self.assertNotIn("<script>x</script>", h)
             self.assertEqual(h.count("<script>"), 2)  # a calculadora da Nota de presença e a barra/medição
@@ -1856,13 +2262,11 @@ def testar() -> int:
             self.assertNotIn("javascript:", h)
             self.assertIn("O que os clientes dizem", h)
             self.assertIn("3 de 5", h)
-            self.assertIn("3 pontos que mandam cliente para o concorrente", h)
             self.assertIn("lida em 08/10/2026", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
-            # Com o lead entre os 5 primeiros, ele entra na lista, marcado.
-            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(2)), "https://demo-x.vercel.app", True)
-            self.assertIn('<li class="voces"><span class="pos">2º</span>', h)
-            self.assertIn("site fora do ar", h)
+            # O 4º fechou: a lista pula do 3º para o 5º, sem renumerar.
+            self.assertIn('<span class="pos">3º</span><span class="quem">Gama Advogados</span>', h)
+            self.assertIn('<span class="pos">5º</span><span class="quem">Épsilon Adv</span>', h)
 
     class Presenca(unittest.TestCase):
         """Versão 3: a Nota de presença a partir do diagnóstico. Os limiares de cada bloco são
@@ -1870,7 +2274,10 @@ def testar() -> int:
 
         def test_modulo_achado_no_repo(self):
             self.assertIsNotNone(calculo_prumo, "prumo-mapa/calculo_prumo.py ao lado deste arquivo")
-            self.assertEqual(VERSAO, 4)
+            self.assertIsNotNone(modelo_raio_x, "prumo-mapa/modelo_raio_x.py ao lado deste arquivo")
+            self.assertEqual(PRECOS["whatsapp"], WHATSAPP_PRUMO)
+            self.assertEqual([s["chave"] for s in PRECOS["servicos"]], ["site", "trafego", "redes", "produtos"])
+            self.assertEqual(VERSAO, 5)
 
         def test_nota_com_places_bloco_a_bloco(self):
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
@@ -1897,11 +2304,8 @@ def testar() -> int:
             p = d["presenca"]
             self.assertEqual([b["chave"] for b in p["blocos"] if not b["medido"]], ["busca", "avaliacoes", "respostas"])
             self.assertIsNone(p["nota"])
-            h = pagina(dados, d, "https://demo-x.vercel.app", True)
-            self.assertNotIn("Nota de presença", h)
-            self.assertNotIn('class="faixa-presenca', h)
-            self.assertNotIn('id="prumo-valor"', h)
-            self.assertEqual(h.count("<script>"), 1)  # só a barra/medição
+            with self.assertRaises(AbaixoDoPadrao):  # e sem as buscas a página nem sai
+                pagina(dados, d, "https://demo-x.vercel.app", True)
 
         def test_item_nao_conferido_nunca_vira_falta(self):
             dados = ler_content(CONTENT_EXEMPLO.split("## Por que este lead")[0])  # sem horário nem fotos conferidos
@@ -1917,26 +2321,22 @@ def testar() -> int:
         def test_pagina_com_a_nota_e_a_calculadora(self):
             dados = ler_content(CONTENT_EXEMPLO)
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
-            self.assertIn('<div class="presenca"><h3>Nota de presença</h3>', h)
-            self.assertIn("10,8 <small>de 18</small>", h)
-            self.assertIn("não medimos", h)
             self.assertIn('<label for="prumo-valor">', h)
             self.assertIn('inputmode="decimal"', h)
             self.assertIn("1 cliente a mais por mês × R$ ___ = R$ ___ por mês", h)
-            # Na frente, só a faixa ("Em construção") e a frase dela; o "X de 18" fica em "Como fizemos".
-            ato1 = h[h.index('data-ato="veredito"'):h.index('data-ato="por-que"')]
+            # Na frente, a faixa e a nota com o link para o que ela quer dizer; a explicação, sem a fórmula, embaixo.
+            ato1 = h[h.index('id="veredito"'):h.index('id="por-que"')]
             self.assertIn('<p class="faixa-rotulo">Em construção</p>', ato1)
-            self.assertIn("Vocês aparecem, mas quem compara ainda vê lacunas", ato1)
             self.assertIn('class="prumo-fio"', ato1)
-            self.assertNotIn("de 18", ato1)
-            self.assertNotIn("10,8", ato1)
-            como = h[h.index("<summary>Como fizemos este Raio-X</summary>"):]
-            self.assertIn("10,8 <small>de 18</small>", como)
-            self.assertLess(como.index("Nota de presença"), como.index("A Nota de presença: seis pontos de 0 a 3"))
-            self.assertLess(h.index("pontos que mandam cliente"), h.index("<summary>Quem aparece antes"))
-            self.assertLess(h.index("<summary>Quem aparece antes"), h.index('<div class="presenca">'))
-            self.assertNotIn("sem custo", h)
-            self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
+            self.assertIn("Nota de presença: <strong>10,8 de 18</strong>", ato1)
+            self.assertIn('href="#a-nota"', ato1)
+            nota = h[h.index('<details class="detalhe" id="a-nota">'):]
+            self.assertIn("Nota de presença: 10,8 de 18", nota)
+            self.assertIn("A fórmula é nossa", nota)
+            self.assertLess(nota.index("Nota de presença"), nota.index("De onde vem cada dado"))
+            for formula in ("de 0 a 3", "mediana", "proporcional", "cálculo PRUMO"):
+                self.assertNotIn(formula, h)
+            self.assertLess(h.index("pontos que mandam cliente"), h.index("<summary>A busca, em detalhe"))
 
         def test_ler_pagina_do_site(self):
             v = '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -1969,7 +2369,7 @@ def testar() -> int:
                 globals()["baixar"] = antes
 
     class TresAtos(unittest.TestCase):
-        """Versão 4: veredito, por quê e o que fazer; o WhatsApp do PRUMO; sem o preço do Respondido."""
+        """Os três atos do modelo aprovado: veredito, por quê e o que fazer; o WhatsApp do PRUMO."""
 
         def setUp(self):
             dados = ler_content(CONTENT_EXEMPLO.replace("# Higor Ferreira - Advogado", "# Bar & Cia <Ltda>"))
@@ -1979,65 +2379,56 @@ def testar() -> int:
 
         def test_os_tres_atos_na_ordem(self):
             h = self.h
-            atos = [h.index(f'data-ato="{a}"') for a in ("veredito", "por-que", "o-que-fazer")]
+            atos = [h.index(f'id="{a}"') for a in ("veredito", "por-que", "o-que-fazer")]
             self.assertEqual(atos, sorted(atos))
-            self.assertEqual(h.count("data-ato="), 3)
             ato1, ato2, ato3 = h[atos[0]:atos[1]], h[atos[1]:atos[2]], h[atos[2]:]
-            # Ato 1: nome, nota do Google, a faixa e as duas linhas do resumo.
-            for trecho in ("Como vocês aparecem no Google", "Bar &amp; Cia &lt;Ltda&gt;", 'class="nota"',
+            for trecho in ("Como vocês aparecem para quem procura", "Bar &amp; Cia &lt;Ltda&gt;", 'class="nota"',
                            "faixa-presenca", "O que segura cliente", "O que perde cliente"):
                 self.assertIn(trecho, ato1)
-            # Ato 2: os pontos abertos, antes de qualquer detalhe.
+            # Ato 2: os pontos abertos e a comparação com os 3 primeiros, antes de qualquer detalhe.
             self.assertIn("3 pontos que mandam cliente para o concorrente", ato2)
-            self.assertLess(ato2.index("pontos que mandam"), ato2.index("<details"))
-            # Ato 3: demonstração, Encontrado com preço e os botões.
-            for trecho in ("Ver a demonstração", "Encontrado", PRECO, "Vocês só pagam depois de ver funcionando",
-                           "Quero o site no ar", "Quero conversar sobre o WhatsApp que responde"):
-                self.assertIn(trecho, ato3)
-            self.assertLess(ato3.index("Ver a demonstração"), ato3.index("Quero o site no ar"))
+            self.assertIn("Vocês e os 3 primeiros em “advogado em Anápolis”", ato2)
+            self.assertIn('<p class="frase">', ato2)
+            self.assertLess(ato2.index("pontos que mandam"), ato2.index("Vocês e os 3 primeiros"))
+            self.assertLess(ato2.index("Vocês e os 3 primeiros"), ato2.index("<details"))
+            # Ato 3: 3 coisas com quem faz, e os quatro serviços com preço e botão.
+            self.assertIn("3 coisas, nesta ordem", ato3)
+            self.assertEqual(ato3.count('<p class="quem">'), 3)
+            self.assertIn("Se quiserem que o PRUMO faça", ato3)
+            self.assertEqual(ato3.count('<article class="cartao'), 4)
+            self.assertIn("Vocês só pagam depois de ver no ar.", ato3)
 
         def test_detalhes_sao_details_fechados_na_ordem(self):
             h = self.h
-            titulos = re.findall(r"<details class=\"detalhe[^\"]*\"><summary>([^<]+)</summary>", h)
-            self.assertEqual(titulos, ["O que já está bom", "Quem aparece antes de vocês na busca", "O que os clientes dizem",
-                                       "O perfil no Google, item por item", "Como fizemos este Raio-X"])
-            self.assertEqual(h.count("<details"), 5)
-            self.assertEqual(h.count("</details>"), 5)
+            titulos = re.findall(r"<details class=\"detalhe[^\"]*\"(?: id=\"a-nota\")?><summary>([^<]+)</summary>", h)
+            self.assertEqual(titulos, ["O que já está bom", "A busca, em detalhe", "O que os clientes dizem",
+                                       "O perfil no Google, item por item", "Redes sociais", "Anúncios",
+                                       "A nota e de onde vem cada dado"])
+            self.assertEqual(h.count("<details"), 7)
+            self.assertEqual(h.count("</details>"), 7)
             self.assertNotIn("<details open", h)  # fechados por padrão
-            self.assertNotIn("<section><h2>O que já está bom", h)
-
-        def test_secao_ausente_e_detalhe_ausente(self):
-            dados = ler_content(CONTENT_EXEMPLO)
-            h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5), "https://demo-x.vercel.app", True)
-            titulos = re.findall(r"<summary>([^<]+)</summary>", h)
-            self.assertEqual(titulos, ["O que já está bom", "O perfil no Google, item por item", "Como fizemos este Raio-X"])
-            self.assertNotIn("<summary></summary>", h)
 
         def test_botao_do_whatsapp_com_o_numero_novo_e_o_nome_na_mensagem(self):
             h = self.h
-            texto = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero o site no ar."
+            texto = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de site."
             esperado = "https://wa.me/5527999762786?text=" + urllib.parse.quote(texto, safe="")
             self.assertIn(f'href="{html.escape(esperado)}"', h)
             self.assertNotIn("<Ltda>", h)  # o nome vai codificado no link e escapado no texto
-            self.assertEqual(h.count(html.escape(esperado)), 2)  # o botão do Ato 3 e a barra do celular
-            m = re.search(r'<a class="botao-zap" href="([^"]+)" target="_blank" rel="noopener" '
-                          r'data-evento="raiox-whatsapp-site">Quero o site no ar</a>', h)
-            self.assertTrue(m)
-            self.assertEqual(urllib.parse.unquote(html.unescape(m.group(1)).split("?text=")[1]), texto)
-            resp = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero conversar sobre o WhatsApp que responde."
-            self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
-            self.assertIn('data-evento="raiox-whatsapp-respondido"', h)
+            self.assertEqual(h.count(html.escape(esperado)), 2)  # o cartão do site e a barra do celular
+            for servico in ("anúncios", "redes sociais", "whatsapp que responde"):
+                resp = f"Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de {servico}."
+                self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
             for velho in ("5527997780954", "27997780954", "99778-0954", "997780954"):
                 self.assertNotIn(velho, h)
 
-        def test_sem_preco_do_respondido_nem_caminho_do_cliente(self):
+        def test_precos_do_precos_json_e_nada_da_versao_4(self):
             h = self.h
-            self.assertNotIn("2.400", h)
-            self.assertNotIn("390/mês", h)
-            self.assertNotIn("O caminho do cliente", h)
-            self.assertNotIn("O próximo passo", h)
-            self.assertNotIn('class="escura"', h)
-            self.assertNotIn("PRECO_RESPONDIDO", globals())
+            for s in PRECOS["servicos"]:
+                self.assertIn(html.escape(s["preco"]), h)
+                self.assertIn(html.escape(s["botao"]), h)
+            self.assertIn("Preços de outubro de 2026.", h)
+            for velho in ("R$ 990", "Encontrado", "O caminho do cliente", "Montamos uma demonstração", "data-ato="):
+                self.assertNotIn(velho, h)
 
         def test_barra_fixa_e_medicao_desligada_sem_cookie(self):
             h = self.h
@@ -2051,8 +2442,6 @@ def testar() -> int:
             self.assertIn("if(!URL_EVENTOS||!navigator.sendBeacon)return;", js)
             for ev in ("raiox-aberto", "raiox-o-que-fazer"):
                 self.assertIn(f"'{ev}'", js)
-            for ev in ("raiox-demo", "raiox-whatsapp-site", "raiox-whatsapp-respondido"):
-                self.assertIn(f'data-evento="{ev}"', h)
             self.assertIn("IntersectionObserver", js)
             self.assertIn("{e:e,p:location.pathname,t:Date.now()}", js)
             codigo = re.sub(r"//[^\n]*", "", js)  # o comentário diz o que não se faz; o código não faz
@@ -2094,7 +2483,7 @@ def testar() -> int:
                     else:
                         self.pilha.pop()
 
-            for diag in (self.diag, diagnostico(self.dados, "fora", "08/10/2026", 5)):
+            for diag in (self.diag, diagnostico(self.dados, "sem_nome", "08/10/2026", 5, places_exemplo(None, (None, 2)))):
                 c = Contador()
                 c.feed(pagina(self.dados, diag, "https://demo-x.vercel.app", True))
                 self.assertEqual((c.erros, c.pilha), ([], []))
@@ -2118,32 +2507,48 @@ def testar() -> int:
                 return 200, {"displayName": {"text": "Higor"}, "rating": 5, "userRatingCount": 19,
                              "primaryTypeDisplayName": {"text": "Advogado"}, "websiteUri": "https://higorferreira.adv.br/",
                              "regularOpeningHours": {"weekdayDescriptions": ["segunda-feira: 08:00–18:00"]},
+                             "addressComponents": [{"longText": "Jundiaí", "types": ["sublocality_level_1", "sublocality"]},
+                                                   {"longText": "Anápolis", "types": ["administrative_area_level_2"]}],
                              "reviews": [{"rating": 5, "text": {"text": "Muito atencioso."},
                                           "authorAttribution": {"displayName": "Ana", "uri": "https://x"},
                                           "relativePublishTimeDescription": "há 1 mês"}],
                              "location": {"latitude": -16.3, "longitude": -48.9}, "nationalPhoneNumber": "(62) 9"}
             return 200, {"places": [{"id": "ChIJteste", "displayName": {"text": "Higor"}, "rating": 5, "userRatingCount": 19},
                                     {"id": "ChIJa", "displayName": {"text": "A"}, "rating": 4.5, "userRatingCount": 9,
-                                     "websiteUri": "https://a.com", "businessStatus": "OPERATIONAL"}]}
+                                     "websiteUri": "https://a.com", "businessStatus": "OPERATIONAL",
+                                     "regularOpeningHours": {"weekdayDescriptions": ["segunda-feira: Fechado"]}}]}
 
-        def test_duas_chamadas_cache_sem_a_chave_e_sem_dado_a_mais(self):
+        def test_quatro_chamadas_cache_sem_a_chave_e_sem_dado_a_mais(self):
             agora_ = dt.datetime(2026, 10, 8, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=-3)))
             p = ler_places(self.raiz, self.dados, "CHAVE-SECRETA", agora_, self.pedir)
-            self.assertEqual(len(self.chamadas), 2)
+            self.assertEqual(len(self.chamadas), 4)
             self.assertTrue(self.chamadas[0][0].startswith("places/ChIJteste?"))
             self.assertEqual(self.chamadas[0][1], CAMPOS_DETALHES)
-            self.assertEqual(self.chamadas[1][2]["textQuery"], "advogado em Anápolis")
+            self.assertEqual([c[2]["textQuery"] for c in self.chamadas[1:]],
+                             ["advogado em Anápolis", "escritório de advocacia em Anápolis", "melhor advogado em Anápolis"])
+            self.assertTrue(all(c[1] == CAMPOS_BUSCA and "regularOpeningHours" in c[1] for c in self.chamadas[1:]))
             self.assertEqual(p["detalhes"]["avaliacoes"], 19)
+            self.assertEqual(p["detalhes"]["bairro"], "Jundiaí")
+            self.assertEqual([r["horario"] for r in p["buscas"][0]["resultados"]], [False, True])
             guardado = (self.raiz / CACHE_PLACES).read_text(encoding="utf-8")
             self.assertNotIn("CHAVE-SECRETA", guardado)
             self.assertNotIn("latitude", guardado)
             self.assertNotIn("(62) 9", guardado)
             # Dentro de 30 dias o cache vale, até sem chave; depois, pede de novo.
             self.assertEqual(ler_places(self.raiz, self.dados, None, agora_ + dt.timedelta(days=29), self.pedir), p)
-            self.assertEqual(len(self.chamadas), 2)
+            self.assertEqual(len(self.chamadas), 4)
             self.assertIsNone(ler_places(self.raiz, self.dados, None, agora_ + dt.timedelta(days=31), self.pedir))
             ler_places(self.raiz, self.dados, "CHAVE-SECRETA", agora_ + dt.timedelta(days=31), self.pedir)
-            self.assertEqual(len(self.chamadas), 4)
+            self.assertEqual(len(self.chamadas), 8)
+
+        def test_cache_da_versao_4_com_uma_busca_so_nao_vale(self):
+            agora_ = dt.datetime(2026, 10, 8, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=-3)))
+            velho = places_exemplo()
+            velho["versao"], velho["busca"] = 1, velho.pop("buscas")[0]
+            (self.raiz / CACHE_PLACES).write_text(json.dumps(velho), encoding="utf-8")
+            self.assertIsNone(ler_places(self.raiz, self.dados, None, agora_, self.pedir))
+            p = ler_places(self.raiz, self.dados, "k", agora_, self.pedir)
+            self.assertEqual((p["versao"], len(p["buscas"])), (VERSAO_CACHE, 3))
 
         def test_sem_chave_ou_com_a_api_fora_nao_ha_places(self):
             self.assertIsNone(ler_places(self.raiz, self.dados, None, pedir=self.pedir))
@@ -2154,7 +2559,7 @@ def testar() -> int:
             def meio(caminho, campos, chave, corpo=None):
                 return self.pedir(caminho, campos, chave, corpo) if caminho.startswith("places/") else (500, None)
             p = ler_places(self.raiz, self.dados, "k", pedir=meio)
-            self.assertIsNone(p["busca"])
+            self.assertEqual(p["buscas"], [])
             self.assertIsNone(concorrencia(p, "ChIJteste"))
 
         def test_chave_do_arquivo(self):
@@ -2187,6 +2592,9 @@ def testar() -> int:
             (self.pasta / "content.md").write_text(CONTENT_EXEMPLO, encoding="utf-8")
             (self.pasta / "index.html").write_bytes(b"<html>demo</html>")
             (self.pasta / "og.jpg").write_bytes(b"\xff\xd8og")
+            # O Places já lido (cache de hoje na pasta): sem ele, a página fica abaixo do padrão e não sai.
+            cache = dict(places_exemplo(7), lido_em=dt.datetime.now().astimezone().isoformat(timespec="seconds"))
+            (self.pasta / CACHE_PLACES).write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
             (self.pasta / "publicado.json").write_text(json.dumps({
                 "place_id": "ChIJteste", "slug": "higor", "nome": "Higor", "site_url": "https://demo-higor.vercel.app",
                 "vercel_project": "demo-higor", "publicado_em": "2026-10-08T17:20:00-03:00"}), encoding="utf-8")
@@ -2216,7 +2624,7 @@ def testar() -> int:
             self.assertEqual(self.subidos, [["index.html", "og.jpg", "raio-x/index.html"]])
             r = self.recibo()
             self.assertEqual((r["raio_x_url"], r["raio_x_pontos"], r["raio_x_versao"], r["place_id"], r["site_url"]),
-                             ("https://demo-higor.vercel.app/raio-x", 2, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
+                             ("https://demo-higor.vercel.app/raio-x", 3, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
         def test_index_ou_og_diferente_do_que_esta_no_ar_nao_publica(self):
