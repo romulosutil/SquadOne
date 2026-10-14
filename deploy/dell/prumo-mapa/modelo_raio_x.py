@@ -698,7 +698,10 @@ def conferir_campos(lead: dict, exemplo: dict, caminho: str = "") -> list[str]:
 
 # Classes que aparecem ou não conforme a empresa (o dado), e não conforme o modelo: ficam fora do esqueleto.
 CLASSES_DO_DADO = {"exemplo", "pior", "atual", "voces", "perde", "sem", "ok", "falta", "nc", "vive", "duvida", "nada",
-                   "principal", "selo", "nao", "link-escuro"}
+                   "principal", "selo", "nao", "link-escuro",
+                   # a faixa da presença ("Pouco visível", "Em construção", "Bem visível"): o exemplo é "media",
+                   # e um lead em outra faixa barrava sem motivo (Gaius Engenharia, 14/10/2026)
+                   "faixa-baixa", "faixa-media", "faixa-alta"}
 
 
 def esqueleto(doc: str) -> tuple[list[str], dict[str, int]]:

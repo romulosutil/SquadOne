@@ -2316,6 +2316,9 @@ def testar() -> int:
             # Um bloco a menos (a comparação vazia, por exemplo) e a página não sai.
             sem = h.replace('<div class="comparacao">', '<div class="outra">')
             self.assertIn("falta o bloco “div.comparacao”, que o exemplo tem", modelo_raio_x.conferir_esqueleto(sem, molde))
+            # A faixa é dado: o exemplo está em "Em construção", e um lead "Pouco visível" sai igual.
+            baixa = h.replace("faixa-presenca faixa-media", "faixa-presenca faixa-baixa")
+            self.assertEqual(modelo_raio_x.conferir_esqueleto(baixa, molde), [])
 
     class Profundo(unittest.TestCase):
         """Versão 2: Places, avaliações, demo e checklist (tudo PURO)."""
