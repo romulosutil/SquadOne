@@ -281,21 +281,30 @@ class Descarte(unittest.TestCase):
         self.assertIn(f"{self.auto}/b-bom/DESCARTAR.md", texto)
         self.assertIn("não mova a pasta", texto)
 
-    def test_direcao_de_metafora_e_atos_em_todos_os_modos(self):
-        """08/10/2026: a direção do redesign do PRUMO vale para a fila comum, o personalizado e o premium."""
+    def test_clareza_e_referencias_em_todos_os_modos(self):
+        """13/10/2026: as cinco perguntas e a biblioteca de referências valem para a fila comum e o personalizado;
+        a metáfora e os Atos (08/10) e o Refero saíram dos prompts."""
         comum = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"))
-        self.assertIn("metáfora e Atos (passo 1.5.1", comum[2])
+        for trecho in ("cinco perguntas do passo 1.5.1", "título de uma frase", "Cara de IA", "REFERENCIAS.md",
+                       "folha do nicho em referencias/"):
+            self.assertIn(trecho, comum[2])
+        self.assertNotIn("refero", comum[2].lower())
         sistema = comum[comum.index("--append-system-prompt") + 1]
         for trecho in (f"{self.auto}/b-bom/CONCEITO.md", "fim do Ato I", "--force-prefers-reduced-motion",
-                       "--blink-settings=scriptEnabled=false"):
+                       "--blink-settings=scriptEnabled=false", f"{self.auto}/REFERENCIAS.md", "#qa-resultado"):
             self.assertIn(trecho, sistema)
         self.assertNotIn("MODO PERSONALIZADO", sistema)
+        self.assertNotIn("Refero", sistema)
         pers = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
-        self.assertIn("metáfora e Atos do passo 1.5.1", pers[2])
+        self.assertIn("cinco perguntas do passo 1.5.1", pers[2])
+        self.assertNotIn("refero", pers[2].lower())
         sistema_pers = pers[pers.index("--append-system-prompt") + 1]
-        for trecho in ("INSTÂNCIA da metáfora", "cinco Atos", "(pointer: fine)", "efeito → Ato → o que significa",
-                       "Não volte ao esquema"):
+        for trecho in ("O QUE SÓ ESTE NEGÓCIO TEM", "cinco perguntas do passo 1.5.1", "MOVIMENTO SÓBRIO",
+                       "UMA frase com o ofício", "\"Cara de IA\"", "a metáfora, se houver, fica só no visual"):
             self.assertIn(trecho, sistema_pers)
+        for velho in ("INSTÂNCIA da metáfora", "MOVIMENTO DE NÍVEL ESPECIALISTA", "PELO MENOS DUAS INTERAÇÕES",
+                      "window.onerror` temporário", "O hero abre com a ideia do conceito"):
+            self.assertNotIn(velho, sistema_pers)
         self.m.MODO_PREMIUM = True
         try:
             prem = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
@@ -578,10 +587,24 @@ class ListaDePermissao(unittest.TestCase):
 
         self.m.rodar_claude = claude
         sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--refazer", "lead-p", "--premium"]
+        os.environ["GERADOR_PREMIUM_LIGADO"] = "1"  # desligado desde 13/10/2026; o religar continua funcionando
+        self.addCleanup(os.environ.pop, "GERADOR_PREMIUM_LIGADO", None)
         self.m.main()
         self.assertEqual(vistos, [(True, True)])
         self.assertEqual(json.loads((self.auto / "lead-p/personalizado.json").read_text())["versao"], 3)
         self.m.MODO_PREMIUM = False
+
+    def test_premium_desligado_recusa_sem_o_religar(self):
+        """13/10/2026: --premium sem GERADOR_PREMIUM_LIGADO=1 sai com erro de uso, antes de tocar em lead."""
+        self.publicado("lead-p")
+        self.m.rodar_claude = lambda *a, **k: self.fail("não podia rodar o Claude")
+        os.environ.pop("GERADOR_PREMIUM_LIGADO", None)
+        sys.argv = ["gerador-de-sites", "--refazer", "lead-p", "--premium"]
+        with contextlib.redirect_stderr(io.StringIO()) as erro, self.assertRaises(SystemExit) as saida:
+            self.m.main()
+        self.assertEqual(saida.exception.code, 2)
+        self.assertIn("premium está desligado desde 13/10/2026", erro.getvalue())
+        self.assertFalse((self.auto / "lead-p/_v1").exists())
 
     def test_comando_personalizado_traz_o_roteiro_e_o_prompt_proprio(self):
         self.m.BACKUP_EM_CURSO["lead-r"] = "_v1"
@@ -589,7 +612,7 @@ class ListaDePermissao(unittest.TestCase):
         self.assertIn("MODO PERSONALIZADO", cmd[2])
         sistema = cmd[cmd.index("--append-system-prompt") + 1]
         for trecho in ("DOSSIE.md", "REVISAO.md", "_v1/", "REFAZER", "excelência", "Provimento 205/2021",
-                       "requestAnimationFrame", "MOVIMENTO DE NÍVEL ESPECIALISTA", "reduced-motion"):
+                       "MOVIMENTO SÓBRIO", "reduced-motion", "(6) \"Cara de IA\""):
             self.assertIn(trecho, sistema)
         self.m.BACKUP_EM_CURSO.clear()
         novo = self.m.comando_do_claude("lead-r", Path("/tmp/x"), True)
@@ -695,6 +718,8 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
         comum = self.sistema()
         for trecho in (f"python3 {folha} --saida /tmp/gerador-x/qa/folha-N.jpg --pasta /tmp/gerador-x/qa",
                        f"python3 {qa} {self.auto}/b-bom/index.html --capturas /tmp/gerador-x/qa",
+                       f"python3 {qa} --celular \"file://{self.auto}/b-bom/index.html#<id da seção>\"",
+                       "o WhatsApp contra o content.md",
                        "UMA imagem por rodada", "primeira `<section>` dentro de `<main>`", "fim do Ato I",
                        "--force-prefers-reduced-motion", "--blink-settings=scriptEnabled=false", "não tente",
                        "Código 1 = falhou", "Se o próprio gate quebrar", f"{self.auto}/b-bom/CONCEITO.md"):
@@ -936,6 +961,10 @@ with open({str(self.pasta / 'chamadas.jsonl')!r}, "a") as f:
     f.write(json.dumps(args) + "\\n")
 perfil = next(a.split("=", 1)[1] for a in args if a.startswith("--user-data-dir="))
 os.makedirs(os.path.join(perfil, "Default"), exist_ok=True)  # o Chrome de verdade suja o perfil
+if "--dump-dom" in args:  # a medida da página (moldura) e a sonda da largura da janela
+    print('<html><body><pre id="qa-medidas">{{"largura": 390, "altura": 4200, "rolagem": 390, "alvos": [], '
+          '"miudos": 0}}</pre><pre id="qa-largura">500</pre></body></html>')
+    sys.exit(0)
 saida = next(a.split("=", 1)[1] for a in args if a.startswith("--screenshot="))
 if {grava!r}:
     import importlib.util
@@ -960,18 +989,29 @@ if {grava!r}:
         tmp = self.chrome_falso()
         index, qa = self.pasta / "index.html", self.pasta / "qa"
         index.write_text(HTML_BOM, encoding="utf-8")
-        codigo = self.q.main([str(index), "--capturas", str(qa)])
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            codigo = self.q.main([str(index), "--capturas", str(qa)])
         chamadas = [json.loads(l) for l in (self.pasta / "chamadas.jsonl").read_text().splitlines()]
-        self.assertEqual(len(chamadas), 2)
-        sem_js, rm = chamadas
-        self.assertTrue(sem_js[-1].endswith("/qa/_sem-js.html"))
+        self.assertEqual(len(chamadas), 4)  # duas capturas do Ato I, a medida e a sonda da largura
+        sem_js, rm, medida, sonda = chamadas
+        # 13/10/2026: a captura é de uma moldura com a página num iframe de 390x844, não da janela.
+        self.assertTrue(sem_js[-1].endswith("/qa/.moldura-m-ato1-semjs.html"))
         self.assertNotIn("<script", (qa / "_sem-js.html").read_text())
         self.assertNotIn("--force-prefers-reduced-motion", sem_js)
         self.assertIn("--force-prefers-reduced-motion", rm)
-        self.assertTrue(rm[-1].endswith("/index.html"))
-        self.assertIn("--window-size=390,844", rm)
+        self.assertIn("--window-size=600,844", rm)
+        self.assertTrue(medida[-1].endswith("/qa/_medida-moldura.html"))
+        self.assertIn("--dump-dom", medida)
+        self.assertIn("--window-size=390,844", sonda)
         self.assertEqual(list(tmp.iterdir()), [])  # o perfil temporário do Chrome não sobra
-        self.assertEqual(sorted(p.name for p in qa.iterdir()), ["_sem-js.html", "m-ato1-rm.png", "m-ato1-semjs.png"])
+        self.assertEqual(sorted(p.name for p in qa.iterdir()),  # e a moldura das capturas também não
+                         ["_largura.html", "_medida-moldura.html", "_medida.html", "_sem-js.html",
+                          "m-ato1-rm.png", "m-ato1-semjs.png"])
+        self.assertIn("<iframe", (qa / "_medida-moldura.html").read_text())
+        texto = saida.getvalue()
+        self.assertIn("OK     Altura no celular: 4200 px = 5.0 telas", texto)
+        self.assertIn("AVISO  Largura das capturas: o Chrome com --window-size=390,844 abre com 500 px", texto)
         self.assertEqual(codigo, 1)  # o falso grava a sem JS lisa: Ato I invisível sem JS
 
     @unittest.skipUnless(TEM_PIL and os.name == "posix", "sem Pillow ou fora do Linux")
@@ -985,6 +1025,153 @@ if {grava!r}:
         self.assertEqual(capturas["reduzido"], qa / "m-ato1-rm.png")
         self.assertIn("não gravou", capturas["erro_sem_js"])
         self.assertEqual(self.q.main([str(index), "--capturas", str(qa)]), 0)  # AVISO não reprova
+
+
+CONTENT_QA = """# Romitec Desentupidora
+
+- **Vertical:** desentupidora
+- **Cidade:** Votorantim
+- **País:** Brasil
+- **Telefone:** +55 15 99623-7873
+- **WhatsApp achado na busca do Caçador:** +5515991438550 (confirmar à mão antes de publicar)
+- **place_id:** ChIJx
+"""
+
+
+def pagina(h1="Desentupidora 24 horas em Votorantim", menu="", corpo="", wa="5515996237873", css=""):
+    links = f'<a href="https://wa.me/{wa}?text=Ol%C3%A1">Chamar no WhatsApp</a>' if wa else ""
+    return HTML_BOM.replace("</style>", css + "</style>").replace(
+        "<body><main>", f"<body><header><nav>{menu}</nav></header><main>").replace(
+        "<h1>Desentupidora</h1>", f"<h1>{h1}</h1><p>Jardim Tatiana, Votorantim.</p>{links}{corpo}")
+
+
+class QaCaraDeIa(unittest.TestCase):
+    """13/10/2026: o que a auditoria dos 54 demos no ar achou de "cara de IA" e de configuração."""
+
+    def setUp(self):
+        self.q = modulo("qa-numerico")
+        self.content = self.q.ler_content(CONTENT_QA)
+
+    def estados(self, html, content="padrão", medidas=None):
+        content = self.content if content == "padrão" else content
+        return {i.nome: (i.estado, i.texto) for i in self.q.avaliar(html, content=content, medidas=medidas)}
+
+    def test_ler_content(self):
+        c = self.content
+        self.assertEqual((c["nome"], c["vertical"], c["cidade"], c["pais"]),
+                         ("Romitec Desentupidora", "desentupidora", "Votorantim", "Brasil"))
+        self.assertEqual(self.q.digitos(c["telefone"]), "5515996237873")
+        self.assertFalse(c["whatsapp_confirmado"])
+
+    def test_pagina_clara_passa(self):
+        r = self.estados(pagina(menu='<a href="#servicos">Serviços</a><a href="#onde">Onde fica</a>'))
+        self.assertEqual([n for n, (e, _) in r.items() if e != "OK"], [], r)
+
+    def test_titulo_em_duas_frases_entre_aspas_ou_sem_oficio(self):
+        self.assertIn("duas frases de efeito", self.estados(pagina("A água desce. Depois, a gente confere."))["Título (h1)"][1])
+        self.assertIn("entre aspas", self.estados(pagina("“Sei o valor de cada dia.”"))["Título (h1)"][1])
+        estado, texto = self.estados(pagina("Uma vida inteira não cabe numa folha só"))["Título (h1)"]
+        self.assertEqual(estado, "FALHA")
+        self.assertIn("não diz o ofício nem a cidade", texto)
+        self.assertEqual(self.estados(pagina("Desentupidora 24 horas"))["Título (h1)"][0], "OK")  # o ofício basta
+        self.assertEqual(self.estados(pagina("Atendemos em Votorantim"))["Título (h1)"][0], "OK")  # a cidade também
+        self.assertEqual(self.estados(pagina("Uma vida inteira"), content=None)["Título (h1)"][0], "OK")  # sem content.md
+        sem = self.estados(HTML_BOM.replace("<h1>Desentupidora</h1>", "<p>x</p>"), content=None)
+        self.assertEqual(sem["Título (h1)"][0], "FALHA")
+
+    def test_cidade_no_ato1(self):
+        html = pagina("Desentupidora 24 horas").replace("<p>Jardim Tatiana, Votorantim.</p>", "")
+        self.assertEqual(self.estados(html)["Cidade no Ato I"][0], "FALHA")
+        self.assertEqual(self.estados(pagina("Desentupidora 24 horas"))["Cidade no Ato I"][0], "OK")
+
+    def test_menu_numerado_reprova_e_metafora_avisa(self):
+        r = self.estados(pagina(menu='<a href="#a">I Sentar</a><a href="#b">II</a><a href="#c">III</a>'))
+        self.assertEqual(r["Menu"][0], "FALHA")
+        self.assertIn("I Sentar", r["Menu"][1])
+        r = self.estados(pagina(menu='<a href="#a">Ralo</a><a href="#b">Conferida</a><a href="#c">Onde fica</a>'))
+        self.assertEqual(r["Menu"][0], "AVISO")
+        self.assertIn("Conferida", r["Menu"][1])
+        self.assertNotIn("Onde fica", r["Menu"][1])
+        # palavra do ofício e o nome da empresa são rótulos claros
+        r = self.estados(pagina(menu='<a href="#a">Romitec</a><a href="#b">Esgoto e caixa de gordura</a>'))
+        self.assertEqual(r["Menu"][0], "OK", r["Menu"])
+
+    def test_frases_de_gaveta(self):
+        r = self.estados(pagina(corpo="<p>Atendimento humanizado, explicado com clareza.</p>"))
+        self.assertEqual(r["Frases de gaveta"][0], "FALHA")
+        self.assertIn("atendimento humanizado", r["Frases de gaveta"][1])
+        self.assertIn("explicado com clareza", r["Frases de gaveta"][1])
+        # frase escondida em script ou comentário não conta
+        r = self.estados(pagina(corpo="<!-- sem complicação --><script>'jornada'</script>"))
+        self.assertEqual(r["Frases de gaveta"][0], "OK")
+
+    def test_campo_de_texto_reprova_e_caixas_demais_avisam(self):
+        r = self.estados(pagina(corpo="<textarea></textarea>"))
+        self.assertEqual(r["Campos para o visitante"][0], "FALHA")
+        r = self.estados(pagina(corpo='<input type="text" name="rua">'))
+        self.assertEqual(r["Campos para o visitante"][0], "FALHA")
+        caixas = "".join(f'<input type="checkbox" id="c{i}">' for i in range(9))
+        self.assertEqual(self.estados(pagina(corpo=caixas))["Campos para o visitante"][0], "AVISO")
+        self.assertEqual(self.estados(pagina(corpo='<input type="hidden" value="x">'))["Campos para o visitante"][0], "OK")
+
+    def test_codigo_de_teste_publicado(self):
+        r = self.estados(pagina(corpo='<pre id="qa-resultado"></pre>', css="html.qa *{transition:none}"))
+        self.assertEqual(r["Código de teste publicado"][0], "FALHA")
+        self.assertIn("#qa-resultado", r["Código de teste publicado"][1])
+        self.assertIn("html.qa", r["Código de teste publicado"][1])
+
+    def test_vidro_fosco_avisa(self):
+        self.assertEqual(self.estados(pagina(css=".topo{backdrop-filter:blur(8px)}"))["Vidro fosco"][0], "AVISO")
+
+    def test_whatsapp_confere_com_o_content(self):
+        self.assertEqual(self.estados(pagina())["WhatsApp"], ("OK", "5515996237873"))
+        estado, texto = self.estados(pagina(wa="5511999990000"))["WhatsApp"]
+        self.assertEqual(estado, "FALHA")
+        self.assertIn("não está no content.md", texto)
+        self.assertEqual(self.estados(pagina(wa="5515991438550"))["WhatsApp"][0], "AVISO")  # só o achado na busca
+        dois = pagina(corpo='<a href="https://wa.me/5515991438550">outro</a>')
+        self.assertIn("2 números diferentes", self.estados(dois)["WhatsApp"][1])
+        self.assertEqual(self.estados(pagina(wa=""))["WhatsApp"][0], "FALHA")
+        fora = self.q.ler_content(CONTENT_QA.replace("Brasil", "Estados Unidos"))
+        self.assertNotIn("WhatsApp", self.estados(pagina(wa=""), content=fora))
+
+    def test_mesmo_numero(self):
+        self.assertTrue(self.q.mesmo_numero("+55 (15) 99623-7873", "15996237873"))
+        self.assertTrue(self.q.mesmo_numero("5515996237873", "551596237873"))  # celular antigo, sem o nono dígito
+        self.assertFalse(self.q.mesmo_numero("5515996237873", "5515991438550"))
+        self.assertFalse(self.q.mesmo_numero("", "5515991438550"))
+
+    def test_checagens_renderizadas(self):
+        boas = {"largura": 390, "altura": 5000, "rolagem": 390, "alvos": [], "miudos": 2, "janela": 390}
+        r = self.estados(pagina(), medidas=boas)
+        for nome in ("Altura no celular", "Rolagem lateral", "Alvos de toque", "Texto miúdo"):
+            self.assertEqual(r[nome][0], "OK", (nome, r[nome]))
+        self.assertNotIn("Largura das capturas", r)
+        ruins = {"largura": 390, "altura": 9300, "rolagem": 420, "alvos": ["Voltar ao topo 91x22"], "miudos": 7,
+                 "janela": 500}
+        r = self.estados(pagina(), medidas=ruins)
+        self.assertEqual(r["Altura no celular"][0], "FALHA")
+        self.assertIn("11.0 telas (teto 8)", r["Altura no celular"][1])
+        self.assertEqual(self.estados(pagina(), medidas={**boas, "altura": 6500})["Altura no celular"][0], "AVISO")
+        self.assertEqual(r["Rolagem lateral"][0], "FALHA")
+        self.assertIn("Voltar ao topo 91x22", r["Alvos de toque"][1])
+        self.assertEqual(r["Texto miúdo"][0], "FALHA")
+        self.assertEqual(r["Largura das capturas"][0], "AVISO")
+        self.assertEqual(self.estados(pagina(), medidas={**boas, "altura": 5500})["Altura no celular"][0], "AVISO")
+        erro = self.estados(pagina(), medidas={"erro": "Chrome não encontrado"})
+        self.assertEqual(erro["Página no celular"][0], "AVISO")
+
+    def test_copia_de_medida_e_leitura(self):
+        copia = self.q.html_para_medir(HTML_BOM)
+        self.assertIn("parent.postMessage('qa-medidas:'", copia)
+        self.assertLess(copia.index("postMessage"), copia.index("</body>"))
+        self.assertIn("< 40", copia)  # ALVO_MIN no lugar do marcador
+        dom = '<pre id="qa-medidas">{"largura":390,"altura":4000,"rolagem":390,"alvos":["a &amp; b 30x20"],"miudos":0}</pre>'
+        self.assertEqual(self.q.ler_medidas(dom)["alvos"], ["a & b 30x20"])
+        self.assertIsNone(self.q.ler_medidas("<html></html>"))
+        moldura = self.q.moldura_celular('file:///x/index.html?qa=1&p=0.3"')
+        self.assertIn('width="390" height="844"', moldura)
+        self.assertIn("&amp;p=0.3&quot;", moldura)
 
 
 class AvisoPelaLib(unittest.TestCase):

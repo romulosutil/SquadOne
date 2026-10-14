@@ -1283,6 +1283,30 @@ cd ~/.local/share/claude-ops && python3 prumo-mapa-n8n.py --teste && python3 pru
 
 ## Gerador de sites (`gerador-de-sites.*`)
 
+**Clareza antes de conceito (13/10/2026).** A auditoria dos 54 demos no ar em
+13/10 achou cara de IA em quase todos (título-aforismo, menu I-II-III, campo de
+texto em 39, vidro fosco em 34, 11 telas de mediana) e configuração errada
+(código do modo `?qa` publicado em 29, WhatsApp com número fora do
+`content.md` em 4, 19 acima de 450 KB). O que mudou:
+
+- `auto-site/auto-site-CLAUDE.md`: as cinco perguntas do visitante no lugar de
+  "metáfora e Atos" (a metáfora fica só no visual), seção "Cara de IA",
+  movimento sóbrio, um WhatsApp só e de fonte certa, e a biblioteca
+  `auto-site/REFERENCIAS.md` com as folhas `auto-site/referencias/<nicho>.jpg`
+  (3 sites reais por nicho, escolhidos entre ~400; instaladas em
+  `~/auto-site/`) no lugar do Refero, que é acervo de produto SaaS;
+- `qa-numerico`: reprova título em duas frases, entre aspas ou sem ofício nem
+  cidade, menu numerado, frase de gaveta, campo de texto, código de teste
+  publicado e WhatsApp fora do `content.md`; mede a página a 390 px de verdade
+  (iframe numa moldura) e reprova mais de 8 telas, rolagem lateral, toque
+  abaixo de 40 px e texto abaixo de 12 px. As capturas do Ato I passaram para a
+  moldura: com `--window-size=390,844` o Chrome desenhava a página com ~500 px
+  (medido no Chrome do Windows; o gate avisa a largura real da janela do Dell
+  em "Largura das capturas"). `qa-numerico --celular URL SAIDA.png` tira uma
+  captura de celular de verdade;
+- modo premium desligado (`--premium` só com `GERADOR_PREMIUM_LIGADO=1` no
+  `gerador.env`; o `lote-continuo` segue no personalizado).
+
 Desde 23/09/2026 a fila do "Site antes da venda" é gerada no Dell, não no PC:
 a tarefa `EsteiraLeads08h` do PC só rodava com ele ligado às 08h e não gerava
 nada desde 17/09 (ficou desativada e se perdeu com o PC em 25/09/2026). O

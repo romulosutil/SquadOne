@@ -50,6 +50,11 @@ CACADOR_ID = "oow8TkxrAf4fVvTj"  # "01 · Caçador" no n8n do Dell
 # GERADOR_PREMIUM=1 (ou `--premium`): todo lead, novo ou refeito, sai no modo premium (referências do Refero,
 # UX/UI, crítica visual). Os demos de versão menor são refeitos; leva de 1 lead, que reavalia a fila a cada site.
 PREMIUM = "--premium" in sys.argv[1:] or os.environ.get("GERADOR_PREMIUM", "").strip().lower() in ("1", "true", "sim")
+# Desligado em 13/10/2026 (ver PREMIUM_DESLIGADO no gerador-de-sites.py): pedido sem o GERADOR_PREMIUM_LIGADO=1,
+# o lote segue no personalizado em vez de mandar ao gerador um --premium que ele recusa.
+PREMIUM_PEDIDO_E_DESLIGADO = PREMIUM and os.environ.get("GERADOR_PREMIUM_LIGADO", "").strip().lower() not in ("1", "true", "sim")
+if PREMIUM_PEDIDO_E_DESLIGADO:
+    PREMIUM = False
 VERSAO_ALVO = 3 if PREMIUM else 2
 TIMEOUT_MIN = 180 if PREMIUM else 90   # por lead (o premium pesquisa, constrói e critica 3 vezes)
 LEVA_NOVOS = 1 if PREMIUM else 3       # leads novos por leva
@@ -209,6 +214,8 @@ def limpar_antigos() -> None:
 
 def main() -> int:
     log("Lote contínuo iniciado.")
+    if PREMIUM_PEDIDO_E_DESLIGADO:
+        log("Premium pedido, mas desligado desde 13/10/2026: o lote segue no modo personalizado.")
     cacador = Cacador()
     cacador.start()
     ultima_limpeza = None
