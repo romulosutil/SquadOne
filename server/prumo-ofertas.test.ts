@@ -103,6 +103,8 @@ describe("prumo-ofertas.json × CRM", () => {
     for (const bom of ["Clínica Felice - Terapias ABA- Autismo (TEA)", "Clínica Multidisciplinar Infantil", "Protea Neurodesenvolvimento"]) {
       assert.ok(casa(iris.perfil, bom), bom);
     }
+    // "Multidisciplinar" sozinho não é perfil: a reabilitação de adulto também se diz assim (reavaliação de 14/10/2026).
+    assert.ok(!casa(iris.perfil, "Rehabili: equipe multidisciplinar de reabilitação"));
     for (const fisio of ["Clínica da Mão & Reabilitação", "IFESP - Instituto de Fisioterapia e Especialidades"]) {
       assert.ok(!casa(iris.perfil, fisio) && casa(iris.fora_sem_perfil, fisio), fisio);
     }
