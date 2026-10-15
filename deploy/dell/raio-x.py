@@ -63,8 +63,9 @@ Versão 5 (14/10/2026): o Raio-X aprovado do piloto CDL (prumo, `04-venda/piloto
 prumo-piloto-cdl.vercel.app/raio-x). Este arquivo junta os dados; o desenho e a trava de qualidade são os do
 piloto, em `prumo-mapa/modelo_raio_x.py`, que recebe o JSON do esquema do piloto (`dados_do_modelo`). Três
 buscas (`consultas_das_buscas`), a comparação com os 3 primeiros, 3 pontos, 3 coisas boas e "3 coisas, nesta
-ordem" com quem faz; redes e anúncios marcados "não conferido" (o Dell não os abre); sem equipe conhecida,
-termina nos quatro serviços com o preço de `prumo-mapa/precos.json`. Abaixo do padrão do piloto
+ordem" com quem faz; redes e anúncios marcados "não conferido" (o Dell não os abre). Desde 15/10/2026 todo
+Raio-X daqui termina no convite para o Mapa (a variante "com equipe" do molde, `MAPA_LINK`), com os quatro
+serviços sem preço: o Raio-X precisa dizer que o Mapa existe (pedido do Rômulo). Abaixo do padrão do piloto
 (AbaixoDoPadrao), não há página.
 
 Publicação: a Vercel troca o deployment inteiro, então o Raio-X sobe junto com o
@@ -143,12 +144,17 @@ try:
     PRECOS = json.loads((PASTA_PRUMO / "precos.json").read_text(encoding="utf-8")) if PASTA_PRUMO else None
 except (OSError, ValueError):
     PRECOS = None
-# O exemplo do piloto (raio-x-odonto-mare.json): a página dele, sem equipe, é o esqueleto que toda página
-# daqui tem de ter (os mesmos blocos, na mesma ordem; conferir_esqueleto do piloto).
+# O exemplo do piloto (raio-x-odonto-mare.json): a página dele, com o convite do Mapa, é o esqueleto que toda
+# página daqui tem de ter (os mesmos blocos, na mesma ordem; conferir_esqueleto do piloto).
 try:
     EXEMPLO = json.loads((PASTA_PRUMO / "exemplo-raio-x.json").read_text(encoding="utf-8")) if PASTA_PRUMO else None
 except (OSError, ValueError):
     EXEMPLO = None
+
+# Todo Raio-X convida para o Mapa (15/10/2026): o formulário das 16 perguntas é o do exemplo, e o Mapa de
+# exemplo vai com o endereço completo (num lead, o modelo recusa o "/mapa" relativo).
+MAPA_LINK = (EXEMPLO or {}).get("mapa_link") or ""
+MAPA_EXEMPLO_URL = "https://prumo-piloto-cdl.vercel.app/mapa"
 
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
@@ -1051,7 +1057,8 @@ def perfil_linhas(diag: dict) -> list[dict]:
 def dados_do_modelo(dados: dict, diag: dict) -> dict:
     """O diagnóstico no esquema do raio-x.json do piloto (modelos/raio-x.json), para o modelo_raio_x.
     Só entra o que o Raio-X automático conferiu: sem respostas às avaliações, sem redes nem anúncios
-    (as duas seções saem marcadas "não conferido"), sem equipe (então sem o convite do Mapa)."""
+    (as duas seções saem marcadas "não conferido"). Sem equipe conhecida, mas com o convite do Mapa (15/10/2026):
+    o texto do convite diz "com equipe" quando `equipe` está vazia."""
     nome = dados["nome"] or "a empresa"
     lido = diag.get("places_em") or diag["lido_em"]
     site = diag.get("site")
@@ -1132,7 +1139,7 @@ def dados_do_modelo(dados: dict, diag: dict) -> dict:
         "redes": redes, "anuncios": anuncios,
         "o_que_fazer": [{"n": f"{i:02d}", "titulo": a["titulo"], "texto": a["texto"], "quem": a["quem"]}
                         for i, a in enumerate(acoes, 1)],
-        "mapa_link": "", "mapa_exemplo_url": "", "servicos_motivo": motivos, "termos": termos,
+        "mapa_link": MAPA_LINK, "mapa_exemplo_url": MAPA_EXEMPLO_URL, "servicos_motivo": motivos, "termos": termos,
         # os ganchos do modelo_raio_x (GANCHOS): o automático só lê o Google
         "lede": "Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.",
         "descricao": f"Como {nome} aparece para quem procura no Google: a busca, as avaliações, o perfil, o site e os "
@@ -1350,7 +1357,7 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool) -> str:
     modelo["cabeca"], modelo["corpo_attr"] = "".join(cabeca), MARCA
     rx = sys.modules[__name__]
     doc, _ = modelo_raio_x.raio_x(modelo, rx, calculo_prumo, PRECOS)
-    molde, _ = modelo_raio_x.raio_x({**EXEMPLO, "mapa_link": ""}, rx, calculo_prumo, PRECOS)
+    molde, _ = modelo_raio_x.raio_x(EXEMPLO, rx, calculo_prumo, PRECOS)
     erros = modelo_raio_x.conferir_pagina(doc) + modelo_raio_x.conferir_esqueleto(doc, molde)
     if erros:
         raise AbaixoDoPadrao("; ".join(erros))
@@ -2271,9 +2278,10 @@ def testar() -> int:
             self.assertIn(f"<body {MARCA}>", h)
             self.assertIn("3 pontos que mandam cliente para o concorrente", h)
             self.assertIn("lidos em 08/10/2026", h)
-            for s in PRECOS["servicos"]:  # os quatro serviços, com o preço do precos.json
-                self.assertIn(f"<h3>{html.escape(s['nome'])}</h3><p class=\"preco\">{html.escape(s['preco'])}", h)
-            self.assertIn("Se quiserem que o PRUMO faça", h)
+            for s in PRECOS["servicos"]:  # os quatro serviços, sem o preço: os preços vêm no fim do Mapa
+                self.assertIn(f">{html.escape(s['nome'])}<", h[h.index('class="servicos-curto"'):])
+                self.assertNotIn(html.escape(s["preco"]), h)
+            self.assertIn("Os preços vêm no fim do Mapa.", h)
             self.assertNotIn("R$ 990", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
             self.assertTrue(h.rstrip().endswith("</html>"))
@@ -2315,16 +2323,20 @@ def testar() -> int:
                 self.assertNotIn('<li class="ok">', trecho)
                 self.assertNotIn('<li class="falta">', trecho)
             self.assertIn("As redes e os anúncios: não conferidos neste Raio-X", h)
-            # Sem equipe conhecida: sem o convite do Mapa.
-            self.assertNotIn('<div class="mapa-convite"', h)
-            self.assertNotIn("Responder as 16 perguntas", h)
+            # O convite do Mapa em todo Raio-X (15/10/2026): o formulário, o Mapa de exemplo e nenhum preço.
+            self.assertIn('<div class="mapa-convite"', h)
+            self.assertIn(f'href="{MAPA_LINK}"', h)
+            self.assertIn('href="https://prumo-piloto-cdl.vercel.app/mapa"', h)
+            self.assertIn("Responder as 16 perguntas do Mapa", h)
+            for s in PRECOS["servicos"]:  # o único R$ da página é o da calculadora
+                self.assertNotIn(html.escape(s["preco"]), h)
             # O vocabulário interno e a fórmula da nota não aparecem (a trava do modelo).
             self.assertEqual(modelo_raio_x.conferir_pagina(h), [])
 
         def test_mesmo_esqueleto_do_exemplo_do_piloto(self):
             dados = ler_content(CONTENT_EXEMPLO)
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
-            molde, _ = modelo_raio_x.raio_x({**EXEMPLO, "mapa_link": ""}, sys.modules[__name__], calculo_prumo, PRECOS)
+            molde, _ = modelo_raio_x.raio_x(EXEMPLO, sys.modules[__name__], calculo_prumo, PRECOS)
             self.assertEqual(modelo_raio_x.conferir_esqueleto(h, molde), [])
             # Um bloco a menos (a comparação vazia, por exemplo) e a página não sai.
             sem = h.replace('<div class="comparacao">', '<div class="outra">')
@@ -2661,12 +2673,13 @@ def testar() -> int:
             self.assertIn('<p class="frase">', ato2)
             self.assertLess(ato2.index("pontos que mandam"), ato2.index("Vocês e os 3 primeiros"))
             self.assertLess(ato2.index("Vocês e os 3 primeiros"), ato2.index("<details"))
-            # Ato 3: 3 coisas com quem faz, e os quatro serviços com preço e botão.
+            # Ato 3: 3 coisas com quem faz, o convite do Mapa e os quatro serviços sem preço, cada um com o link.
             self.assertIn("3 coisas, nesta ordem", ato3)
             self.assertEqual(ato3.count('<p class="quem">'), 3)
-            self.assertIn("Se quiserem que o PRUMO faça", ato3)
-            self.assertEqual(ato3.count('<article class="cartao'), 4)
-            self.assertIn("Vocês só pagam depois de ver no ar.", ato3)
+            self.assertIn("Agora, o olhar por dentro: o Mapa", ato3)
+            self.assertLess(ato3.index('class="mapa-convite"'), ato3.index('class="servicos-curto"'))
+            self.assertEqual(ato3.count('href="https://wa.me/'), 4)
+            self.assertNotIn('<article class="cartao', ato3)
 
         def test_detalhes_sao_details_fechados_na_ordem(self):
             h = self.h
@@ -2684,19 +2697,18 @@ def testar() -> int:
             esperado = "https://wa.me/5527999762786?text=" + urllib.parse.quote(texto, safe="")
             self.assertIn(f'href="{html.escape(esperado)}"', h)
             self.assertNotIn("<Ltda>", h)  # o nome vai codificado no link e escapado no texto
-            self.assertEqual(h.count(html.escape(esperado)), 2)  # o cartão do site e a barra do celular
+            self.assertEqual(h.count(html.escape(esperado)), 1)  # a lista dos serviços; a barra do celular vai ao Mapa
             for servico in ("anúncios", "redes sociais", "whatsapp que responde"):
                 resp = f"Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de {servico}."
                 self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
             for velho in ("5527997780954", "27997780954", "99778-0954", "997780954"):
                 self.assertNotIn(velho, h)
 
-        def test_precos_do_precos_json_e_nada_da_versao_4(self):
+        def test_sem_preco_e_nada_da_versao_4(self):
             h = self.h
-            for s in PRECOS["servicos"]:
-                self.assertIn(html.escape(s["preco"]), h)
-                self.assertIn(html.escape(s["botao"]), h)
-            self.assertIn("Preços de outubro de 2026.", h)
+            for s in PRECOS["servicos"]:  # com o Mapa, quem dá o preço é o Mapa (15/10/2026)
+                self.assertNotIn(html.escape(s["preco"]), h)
+            self.assertNotIn("Preços de outubro de 2026.", h)
             for velho in ("R$ 990", "Encontrado", "O caminho do cliente", "Montamos uma demonstração", "data-ato="):
                 self.assertNotIn(velho, h)
 

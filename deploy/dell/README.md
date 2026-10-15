@@ -1490,7 +1490,7 @@ concorrente (cada um com o porquê em linguagem de dono), o link do demo e
 "R$ 690 + R$ 39/mês, paga depois de ver funcionando". Alimenta a variação C da
 primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três atos
 (veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO; desde a versão 5,
-é o Raio-X aprovado do piloto CDL, com o preço do `precos.json` do piloto (abaixo).
+é o Raio-X aprovado do piloto CDL; desde 15/10/2026, termina no convite para o Mapa (abaixo).
 
 - **Feito por código, sem modelo.** A única fonte é o `content.md` do Caçador:
   nota e avaliações, telefone (celular ou fixo, pela regra do nó "Pontuar"),
@@ -1630,17 +1630,22 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
     do Google. Também não confere se o dono responde às avaliações (o Places não
     entrega), então a linha "Responde às avaliações" e a frase das respostas
     não aparecem. Nada disso é inventado.
-  - **O fim:** sem equipe conhecida (o Places não diz quantas pessoas), não há
-    convite para o Mapa; vêm os quatro serviços do piloto com preço e botão
-    ("Se quiserem que o PRUMO faça"), de `prumo-mapa/precos.json` (cópia do
-    `04-venda/piloto-cdl/precos.json`: Site R$ 690 + R$ 39/mês, Anúncios,
-    Redes e WhatsApp que responde). O motivo de cada serviço só sai quando há
-    dado (site e anúncios sempre; WhatsApp com o horário; redes, não).
+  - **O fim: o convite para o Mapa, em todo Raio-X (15/10/2026).** Pedido do
+    Rômulo: o Raio-X precisa dizer que o Mapa existe. É a variante "com equipe"
+    do molde do piloto: "Agora, o olhar por dentro: o Mapa", o botão para as 16
+    perguntas (o formulário do exemplo, `MAPA_LINK`), o link do Mapa de exemplo
+    (prumo-piloto-cdl.vercel.app/mapa) e a barra do celular indo ao Mapa. Os
+    quatro serviços vêm abaixo, sem preço ("Os preços vêm no fim do Mapa"), cada
+    um com o link do WhatsApp. O Places não diz quantas pessoas são, então o
+    convite fala de "equipe" sem número. O motivo de cada serviço só sai quando
+    há dado (site e anúncios sempre; WhatsApp com o horário; redes, não). Até
+    15/10, sem equipe conhecida, não havia convite e os serviços vinham com o
+    preço do `prumo-mapa/precos.json`.
   - **A trava do piloto** (`conferir_raio_x`, `conferir_pagina`,
     `conferir_esqueleto`): exatamente 3 buscas, 3 pontos com 150+ letras e um
     número, 3 bons, 3 coisas, 3 avaliações lidas, 4 linhas na comparação, nada
     de vocabulário interno, e os mesmos blocos, na mesma ordem, da página do
-    exemplo do piloto sem equipe (o JSON dele em `prumo-mapa/exemplo-raio-x.json`).
+    exemplo do piloto com o convite do Mapa (o JSON dele em `prumo-mapa/exemplo-raio-x.json`).
     Abaixo disso, `AbaixoDoPadrao` e não há Raio-X (o `--pendentes` passa para
     o próximo; o Raio-X da versão anterior, se existe, continua no ar). Lead
     com só 2 pontos verificáveis fica sem Raio-X novo.
