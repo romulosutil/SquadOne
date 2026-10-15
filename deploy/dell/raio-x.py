@@ -155,6 +155,20 @@ except (OSError, ValueError):
 # exemplo vai com o endereço completo (num lead, o modelo recusa o "/mapa" relativo).
 MAPA_LINK = (EXEMPLO or {}).get("mapa_link") or ""
 MAPA_EXEMPLO_URL = "https://prumo-piloto-cdl.vercel.app/mapa"
+# A pergunta "Empresa" do formulário (obrigatória). O fluxo n8n "Diagnóstico do dono" casa a resposta pelo
+# "<ID>::<Nome>": num lead do Dell, o ID é o place_id, achado no retrato da planilha (site-leads.json).
+MAPA_ENTRADA_EMPRESA = "entry.171063854"
+
+
+def mapa_link_do_lead(dados: dict) -> str:
+    """O link do formulário do Mapa com a Empresa já preenchida (`<place_id>::<nome>`). Sem place_id,
+    o link simples: a resposta chega e o fluxo avisa que não achou a empresa."""
+    pid = (dados.get("campos") or {}).get("place_id", "").strip()
+    if not MAPA_LINK or not pid:
+        return MAPA_LINK
+    valor = f"{pid}::{(dados.get('nome') or '').strip()}"
+    return (MAPA_LINK + ("&" if "?" in MAPA_LINK else "?") + "usp=pp_url&"
+            + MAPA_ENTRADA_EMPRESA + "=" + urllib.parse.quote(valor, safe=""))
 
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
@@ -1139,7 +1153,7 @@ def dados_do_modelo(dados: dict, diag: dict) -> dict:
         "redes": redes, "anuncios": anuncios,
         "o_que_fazer": [{"n": f"{i:02d}", "titulo": a["titulo"], "texto": a["texto"], "quem": a["quem"]}
                         for i, a in enumerate(acoes, 1)],
-        "mapa_link": MAPA_LINK, "mapa_exemplo_url": MAPA_EXEMPLO_URL, "servicos_motivo": motivos, "termos": termos,
+        "mapa_link": mapa_link_do_lead(dados), "mapa_exemplo_url": MAPA_EXEMPLO_URL, "servicos_motivo": motivos, "termos": termos,
         # os ganchos do modelo_raio_x (GANCHOS): o automático só lê o Google
         "lede": "Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.",
         "descricao": f"Como {nome} aparece para quem procura no Google: a busca, as avaliações, o perfil, o site e os "
@@ -2325,7 +2339,11 @@ def testar() -> int:
             self.assertIn("As redes e os anúncios: não conferidos neste Raio-X", h)
             # O convite do Mapa em todo Raio-X (15/10/2026): o formulário, o Mapa de exemplo e nenhum preço.
             self.assertIn('<div class="mapa-convite"', h)
-            self.assertIn(f'href="{MAPA_LINK}"', h)
+            # O formulário já vem com a Empresa preenchida (place_id::nome), que o n8n casa com o lead.
+            preenchido = MAPA_LINK + "?usp=pp_url&entry.171063854=ChIJteste%3A%3AHigor%20Ferreira%20-%20Advogado"
+            self.assertEqual(h.count(f'href="{html.escape(preenchido)}"'), 2)  # o botão e a barra fixa
+            self.assertNotIn(f'href="{MAPA_LINK}"', h)
+            self.assertEqual(mapa_link_do_lead({"nome": "X", "campos": {}}), MAPA_LINK)  # sem place_id: o simples
             self.assertIn('href="https://prumo-piloto-cdl.vercel.app/mapa"', h)
             self.assertIn("Responder as 16 perguntas do Mapa", h)
             for s in PRECOS["servicos"]:  # o único R$ da página é o da calculadora
