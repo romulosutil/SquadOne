@@ -43,6 +43,11 @@ def negrito(t: str) -> str:
     return m.group(1) if m else t
 
 
+def avaliacoes(n) -> str:
+    """"1 avaliação", "12 avaliações"."""
+    return f"{e(n)} avaliaç{'ão' if n == 1 else 'ões'}"
+
+
 def brl(v: int) -> str:
     return "R$ " + f"{v:,}".replace(",", ".")
 
@@ -428,7 +433,7 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
           '<p class="kicker">Como vocês aparecem para quem procura</p>', f'<h1 id="t-veredito">{e(nome)}</h1>',
           f'<p class="lede">{e(dados["ramo"])} · {e(dados["cidade"])}. {e(dados.get("lede") or LEDE)}</p>',
           f'<div class="nota"><span class="num">{e(rx.numero(g["nota"]))}</span><span class="leitura">nota no Google<br>'
-          f'{e(g["avaliacoes"])} avaliações<br>lida em {e(dados["lido_em"])}</span></div>',
+          f'{avaliacoes(g["avaliacoes"])}<br>lida em {e(dados["lido_em"])}</span></div>',
           cp.bloco_faixa_html(presenca),
           (f'<p class="nota-pe">Nota de presença: <strong>{e(num(presenca["nota"]))} de 18</strong> · '
            '<a class="link-escuro" href="#a-nota" onclick="document.getElementById(\'a-nota\').open=true">'
@@ -460,7 +465,7 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
         sem = ' class="sem"' if rot != "site próprio" else ""
         lista_busca.append(f'<li{" class=voces" if x.get("voces") else ""}><span class="pos">{i}º</span>'
                            f'<span class="quem">{e(x["nome"])}</span><span class="dados">{e(rx.numero(x["nota"]))} de nota · '
-                           f'{e(x["avaliacoes"])} avaliações · <span{sem}>{e(rot)}</span></span></li>')
+                           f'{avaliacoes(x["avaliacoes"])} · <span{sem}>{e(rot)}</span></span></li>')
     notas_busca = [cp.nota_da_posicao(b["posicao"]) for b in dados["buscas"]]
     pior = notas_busca.index(min(notas_busca))
     resumo_buscas = "".join(
