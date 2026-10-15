@@ -471,7 +471,10 @@ def testar(erro):
     """Cópia com planilha de mentira (linhas de leads reais da pasta) e sem gravar nada: página e botões."""
     auto = Path.home() / "auto-site"
     rec = lambda p: json.loads((auto / p / "publicado.json").read_text(encoding="utf-8"))
-    raiz = next(p.parent.name for p in sorted(auto.glob("*/publicado.json")))
+    # Desde o demo sob pedido (14/10/2026) a raiz tem recibo só de Raio-X, sem site_url: os cenários
+    # abaixo contam com o demo no ar, então o lead de exemplo é o primeiro que tem um.
+    raiz = next(p.parent.name for p in sorted(auto.glob("*/publicado.json"))
+                if str(rec(p.parent.name).get("site_url") or "").startswith("https://"))
     recusado = next(p.parent.name for p in sorted(auto.glob("_recusados/*/publicado.json")))
     r1, r2 = rec(raiz), rec(f"_recusados/{recusado}")
     linha = lambda r, **k: {"place_id": r["place_id"], "nome": r["nome"] + " [teste]", "cidade": "Cidade", "site_url": r["site_url"],
