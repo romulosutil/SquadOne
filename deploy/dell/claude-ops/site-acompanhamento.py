@@ -2,7 +2,8 @@
 
 - "05 · Acompanhamento" (todo dia, 09:00): lead "enviado" sem respondeu_em,
   enviado a partir de 29/09/2026 e com a pasta ainda na raiz de ~/auto-site:
-  no 3º dia, um aviso ao Rômulo com o follow-up pronto (wa.me com o texto, mesmo
+  no 3º dia, se ele LEU (visto_em; desde 15/10/2026, depois da restrição do WhatsApp),
+  um aviso ao Rômulo com o follow-up pronto (wa.me com o texto, mesmo
   tom da variação A do Balcão, em site-mensagem.js) e followup_em na planilha;
   no 10º dia, status "expirado" (a pasta vai para _concluidos/ pelo site-pastas
   na hora seguinte, depois que o Balcão listar).
@@ -133,11 +134,14 @@ for (const l of $input.all().map(i => i.json)) {{
   if (!naRaiz(l.place_id)) continue;
   const dias = hoje - diaSP(enviado);
   const followup = String(l.followup_em ?? '').trim();
+  // 15/10/2026: follow-up só para quem LEU a primeira (visto_em, gravado pelo observador). Insistir
+  // com quem nem abriu é o que mais vira denúncia de spam; a expiração do 10º dia continua para todos.
+  const leu = String(l.visto_em || l.lido_em || '').trim() !== '';
   const base = {{ place_id: String(l.place_id), nome: String(l.nome ?? ''), cidade: String(l.cidade ?? ''),
     site_url: String(l.site_url ?? ''), raio_x_url: String(l.raio_x_url ?? ''), telefone: String(l.telefone ?? ''), dias }};
   if (dias >= {EXPIRA_DIAS}) {{
     saida.push({{ json: {{ ...base, acao: 'expirar', status: 'expirado', followup_em: followup }} }});
-  }} else if (dias >= {FOLLOWUP_DIAS} && !followup) {{
+  }} else if (dias >= {FOLLOWUP_DIAS} && !followup && leu) {{
     const f = followupDe(l);
     saida.push({{ json: {{ ...base, acao: 'followup', status: 'enviado', followup_em: new Date().toISOString(), link: f.link, texto: f.texto }} }});
   }}
@@ -464,16 +468,18 @@ def recibos_na_raiz(n):
 def cenario_acompanhamento():
     agora = datetime.now(timezone.utc)
     dia = lambda d: datetime.fromtimestamp(agora.timestamp() - d * 86400, timezone.utc).isoformat()
-    r = recibos_na_raiz(4)
+    r = recibos_na_raiz(5)
     base = lambda rec, **k: {"place_id": rec["place_id"], "nome": rec["nome"] + " [teste]", "cidade": "Cidade", "telefone": "(19) 99000-0000",
                              "site_url": rec["site_url"], "status": "enviado", "respondeu_em": "", "followup_em": "", **k}
     linhas = [
-        base(r[0], enviado_em=dia(3.2)),                                  # follow-up
+        base(r[0], enviado_em=dia(3.2), visto_em=dia(3)),                 # follow-up (leu)
         base(r[1], enviado_em=dia(10.5), followup_em=dia(7)),             # expira
         base(r[2], enviado_em=dia(4), respondeu_em=dia(3)),               # respondeu: nada
         base(r[3], enviado_em="2026-08-20T10:00:00Z"),                    # acervo (antes do corte do teste): nada
         {"place_id": "SEM-PASTA", "nome": "Sem pasta [teste]", "status": "enviado", "enviado_em": dia(5)},  # sem recibo: nada
     ]
+    if len(r) > 4:
+        linhas.append(base(r[4], enviado_em=dia(3.2)))                    # não leu (15/10/2026): nada
     return linhas
 
 

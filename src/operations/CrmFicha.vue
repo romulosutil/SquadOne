@@ -6,6 +6,7 @@ import { colinhaDoLead } from './colinha'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
+import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 
@@ -25,11 +26,15 @@ const props = defineProps<{
   liberados: EnviosLiberados
   anotados: EnviosAnotados
   falhaDaAnotacao?: string
+  /** Trava de ritmo (trava-de-ritmo.ts): segurando, os links de primeiro contato somem sem "Liberar". */
+  ritmo: EstadoDoRitmo
 }>()
 // Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
 // voltar do navegador, então a ficha não tem botão de voltar próprio.
 // `colinha`: o CrmPanel troca para /crm?ver=colinha (fecha a folha, sem recarregar).
-const emit = defineEmits<{ registrado: []; colinha: []; liberar: [leadId: string]; anotar: [leadId: string, tipo: TipoDeEnvioAnotado] }>()
+const emit = defineEmits<{
+  registrado: []; colinha: []; liberar: [leadId: string]; anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
+}>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
 const nota = ref('')
@@ -77,14 +82,18 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   return todas.flatMap(([chave, rotulo, href, principal]) => (href ? [{ chave, rotulo, href, principal }] : []))
     // Primeiro contato fora do expediente (envio, convite, reenvio do só-robô): some até o "Liberar"
     // (o botão entra no lugar, no topo).
-    .filter((a) => !(travado.value && ehPrimeiroContato(props.lead, a.href)))
+    // Com a trava de ritmo segurando, some também, e sem "Liberar" (o texto diz até quando).
+    .filter((a) => !((travado.value || segurado.value) && ehPrimeiroContato(props.lead, a.href)))
 })
-const travado = computed(() => envioTravado(props.aviso, props.liberados, props.lead.id) && linksDePrimeiroContato(props.lead).length > 0)
+const temPrimeiroContato = computed(() => linksDePrimeiroContato(props.lead).length > 0)
+const segurado = computed(() => props.ritmo.motivo !== null && temPrimeiroContato.value)
+const travado = computed(() => !segurado.value && envioTravado(props.aviso, props.liberados, props.lead.id) && temPrimeiroContato.value)
 /** Os links que anotam o envio ao serem tocados. */
 const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
-function aoTocar(chave: string) {
+function aoTocar(chave: string, href: string) {
   const tipo = TIPO_DA_ACAO[chave]
   if (tipo) emit('anotar', props.lead.id, tipo)
+  if (ehPrimeiroContato(props.lead, href)) emit('primeiro', props.lead.id)
 }
 /** "2ª mensagem anotada às 14:02 · Follow-up anotado às 14:05", enquanto o retrato não confirma. */
 const anotacoes = computed(() => (['segunda_enviada', 'followup_enviado'] as const).flatMap((tipo) => {
@@ -201,9 +210,10 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 
     <div v-if="acoesFixas.length || travado" class="crm-ficha__fixa" role="group" aria-label="Próximo passo">
       <button v-if="travado" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave)">{{ a.rotulo }} ↗</a>
+      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} ↗</a>
     </div>
     <p v-if="travado" class="crm-ficha__fonte">{{ aviso }}</p>
+    <p v-if="segurado" class="crm-ficha__fonte" role="status">{{ textoDoRitmo(ritmo) }}</p>
     <p class="crm-ficha__fonte" role="status" aria-live="polite">{{ anotacoes ? `${anotacoes} nesta tela; a planilha confirma no próximo retrato.` : '' }}</p>
     <p v-if="falhaDaAnotacao" class="crm-erro" role="alert">{{ falhaDaAnotacao }}</p>
 
@@ -244,7 +254,7 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
       </p>
       <div v-if="acoesDeApoio.length" class="crm-ficha__links">
-        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave)">{{ a.rotulo }} ↗</a>
+        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} ↗</a>
       </div>
       <div class="crm-form__botoes">
         <button v-if="aberto" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>

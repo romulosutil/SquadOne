@@ -1,7 +1,17 @@
 # Envio pelo WhatsApp sem cair no antispam (15/10/2026)
 
-> Plano escrito no dia do bloqueio de 24 h no número pessoal do Rômulo. Nada aplicado:
-> é para decidir no dia 16, perto das 08h. Os números vêm do `GET /api/operations/crm` da Mel.
+> Plano escrito no dia do bloqueio de 24 h no número pessoal do Rômulo. Os números vêm do
+> `GET /api/operations/crm` da Mel.
+>
+> **Fase 1 feita no mesmo dia** (`src/operations/trava-de-ritmo.ts`, `server/crm.ts`,
+> `site-acompanhamento.py`), com duas diferenças do texto abaixo, achadas nos dados:
+> - A prioridade do "WhatsApp do site" vale só no Revisar (Iris e estamparias, coluna
+>   `origem_do_whatsapp`). Os leads do Site são empresas **sem** site (é o produto): o número
+>   deles é sempre o do Google, e a planilha não guarda nada que separe um do outro.
+> - Com o follow-up só para quem leu, não existe mais "follow-up sem leitura" para contar no
+>   teto; o que conta é envio, convite e o reenvio do só-robô (os mesmos da trava de horário).
+>
+> Fases 2 e 3 continuam como decisão do Rômulo.
 
 ## O que aconteceu (medido)
 

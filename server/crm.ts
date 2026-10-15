@@ -1000,9 +1000,11 @@ function leadDoSite(linha: Linha, contexto: {
   const recebeuA = c("mensagemVariante") === "A";
   const reenvioLink = calculada.sinal === "so-robo" && (site || avulso || recebeuA) ? reenvioDoRoboDe(mensagem)?.link : undefined;
   const diasDesdeEnvio = dias(t.enviado, agora);
+  // Follow-up só para quem LEU (15/10/2026, o mesmo no PRUMO e no 05 · Acompanhamento): a segunda mensagem a quem nem
+  // abriu a primeira é a que mais vira denúncia de spam. O reenvio do só-robô fica: o robô respondeu.
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo, enviado: t.enviado, followups, ultimaSaida: t.ultimaSaida, agora })
-    : calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined
+    : calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined && t.visto !== undefined
       && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
       && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
       && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
@@ -1201,7 +1203,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const reenvioLink = ehPrumo && calculada.sinal === "so-robo" && whatsapp ? reenvioDoPrumo(whatsapp, c("empresa") || chave) || undefined : undefined;
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo: false, enviado: t.convite, followups, agora })
-    : calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
+    : calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined && t.visto !== undefined
       && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA
       && !followupJaEnviado(followups, t.convite);
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
@@ -1288,7 +1290,7 @@ function leadDoPrumo(linha: Linha, contexto: {
 
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
-  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, sem resposta; quem só ouviu o robô, já no dia seguinte, com um reenvio pedindo o responsável. Quem sai do funil antes vem primeiro.` },
+  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias, leu e não respondeu (quem nem leu não recebe: insistir com quem não abriu vira denúncia de spam); quem só ouviu o robô, já no dia seguinte, com um reenvio pedindo o responsável. Quem sai do funil antes vem primeiro.` },
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "Serviços PRUMO, Iris e estamparias na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
@@ -1438,7 +1440,10 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
           ...(lead.links.convite ? [{ rotulo: "Enviar convite (marca como enviado)", url: lead.links.convite }] : []),
         ],
         // Maior Prioridade primeiro (14/10/2026); sem Prioridade (PRUMO), depois, pela data como antes.
-        ordem: (tr?.prioridade === undefined ? 1000 : 100 - tr.prioridade) * 1e13 + (Date.parse(lead.desde ?? "") || 0),
+        // 15/10/2026 (trava de ritmo): o WhatsApp publicado pela empresa vem antes de qualquer "não
+        // confirmado" (o celular do Google, muitas vezes o pessoal do dono, que é quem mais denuncia).
+        // Com o teto do dia baixo, os convites vão primeiro para quem escolheu o WhatsApp como canal.
+        ordem: (tr?.prioridade === undefined ? 1000 : (naoConfirmado ? 200 : 100) - tr.prioridade) * 1e13 + (Date.parse(lead.desde ?? "") || 0),
       });
     }
     if (lead.etapa === "proposta") {

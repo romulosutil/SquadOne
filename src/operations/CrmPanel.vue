@@ -15,6 +15,9 @@ import {
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
+import {
+  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, type EstadoDoRitmo, type PrimeirosContatos,
+} from './trava-de-ritmo'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
 
@@ -40,6 +43,9 @@ const envios = ref<EnviosAbertos>({})
 // Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts):
 // só em memória, de propósito. Recarregou a página ou voltou o expediente, o ciclo recomeça.
 const liberados = ref<EnviosLiberados>(new Set())
+// Trava de ritmo (trava-de-ritmo.ts, 15/10/2026): os toques de primeiro contato desta tela, até o
+// retrato confirmar. Sem "Liberar": o que ela segura é a pressa de esvaziar a fila.
+const primeiros = ref<PrimeirosContatos>({})
 // O toque em "Mandar o link"/"Mandar o follow-up" anota o envio (anotacao-de-envio.ts); a marca
 // local vale até o retrato confirmar. A falha não segura o WhatsApp: vira o aviso discreto abaixo.
 const anotados = ref<EnviosAnotados>({})
@@ -131,6 +137,14 @@ function marcarAberto(id: string) {
   anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: aberto no WhatsApp.`
 }
 
+// Qualquer toque num link de primeiro contato (Hoje, Funil, Ficha, fila). O relógio anda na hora:
+// sem isso a trava esperaria o próximo tique de 30 s e daria para tocar o seguinte.
+function marcarPrimeiroContato(id: string) {
+  primeiros.value = marcarPrimeiro(primeiros.value, id, Date.now())
+  gravarPrimeiros(armazenamento(), primeiros.value)
+  agora.value = Date.now()
+}
+
 function liberar(id: string) {
   liberados.value = liberarEnvio(liberados.value, id)
   anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: envio liberado fora do expediente.`
@@ -175,6 +189,7 @@ async function anotarEnvio(id: string, tipo: TipoDeEnvioAnotado) {
 onMounted(async () => {
   envios.value = lerEnvios(armazenamento(), Date.now())
   anotados.value = lerAnotados(armazenamento(), Date.now())
+  primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   lerEndereco()
   escreverEndereco(true)
   window.addEventListener('popstate', aoVoltarNoNavegador)
@@ -204,6 +219,8 @@ const totalHoje = computed(() => hoje.value.reduce((soma, g) => soma + g.itens.l
 const prontosParaEnviar = computed(() => hoje.value.find(g => g.id === 'enviar')?.itens ?? [])
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
+// Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
+const ritmo = computed<EstadoDoRitmo>(() => ritmoDoEnvio(instantesDePrimeiroContato(visao.value?.leads ?? [], primeiros.value), agora.value))
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
@@ -339,22 +356,22 @@ async function abrirColinha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" />
+      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
-      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" />
+      <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
 
       <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Primeiro contato para enviar" @fechar="fecharFila">
         <div class="crm-na-folha">
-          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" :liberados="liberados" @enviado="marcarAberto" @abrir="abrirFicha" @liberar="liberar" />
+          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" @enviado="marcarAberto" @abrir="abrirFicha" @liberar="liberar" @primeiro="marcarPrimeiroContato" />
         </div>
       </Sheet>
 
       <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div class="crm-na-folha">
           <CrmFicha
-            v-if="lead" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados"
+            v-if="lead" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
             :falha-da-anotacao="falhaDaAnotacao?.leadId === lead.id ? falhaDaAnotacao.texto : ''"
-            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio"
+            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
           />
           <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
         </div>

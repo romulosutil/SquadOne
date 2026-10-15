@@ -5,6 +5,7 @@ import {
   estadoDoVideo, filaDeEnvio, gravarVideos, lerVideos, marcarVideo, nichosDaFila, ordemComPulados, passoDoVideo, type EnviosAbertos,
 } from './fila-de-envio'
 import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
+import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmItemHoje, CrmLead } from './types'
 
 // "Enviar um por um" (08/10/2026): os sites prontos, um de cada vez, com o demo
@@ -15,8 +16,15 @@ import type { CrmItemHoje, CrmLead } from './types'
 // Desde 14/10/2026 o aviso também TRAVA: fora do expediente o link de envio só aparece depois do
 // "Liberar" daquele lead (trava-de-horario.ts). Enviar continua possível, a decisão é do Rômulo,
 // mas deixou de ser um toque distraído: depois das 18h, 0 de 29 envios tiveram resposta.
-const props = defineProps<{ itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; aviso?: string | null; liberados: EnviosLiberados }>()
-const emit = defineEmits<{ enviado: [leadId: string]; abrir: [leadId: string, origem: HTMLElement | null]; liberar: [leadId: string] }>()
+// `ritmo` (trava-de-ritmo.ts, 15/10/2026): em 15/10 esta fila esvaziou 25 sites em 25 minutos e o
+// WhatsApp restringiu a conta por 24 h. Agora o link só aparece com o intervalo, a hora e o dia
+// livres; no lugar dele, até quando esperar. O cartão, o demo e a mensagem seguem à vista.
+const props = defineProps<{
+  itens: CrmItemHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; aviso?: string | null; liberados: EnviosLiberados; ritmo: EstadoDoRitmo
+}>()
+const emit = defineEmits<{
+  enviado: [leadId: string]; abrir: [leadId: string, origem: HTMLElement | null]; liberar: [leadId: string]; primeiro: [leadId: string]
+}>()
 
 const nicho = ref<string | null>(null)
 const pulados = ref<string[]>([])
@@ -76,11 +84,13 @@ async function aoEnviar() {
   if (!a) return
   aberto.value = { leadId: a.item.leadId, em: Date.now(), item: a.item, lead: a.lead }
   emit('enviado', a.item.leadId)
+  emit('primeiro', a.item.leadId)
   await nextTick()
   ;(botaoVideo.value ?? botaoProximo.value)?.focus()
 }
 
-const travado = computed(() => (atual.value ? envioTravado(props.aviso, props.liberados, atual.value.item.leadId) : false))
+const segurado = computed(() => props.ritmo.motivo !== null)
+const travado = computed(() => (atual.value && !segurado.value ? envioTravado(props.aviso, props.liberados, atual.value.item.leadId) : false))
 const linkDeEnviar = ref<HTMLAnchorElement | null>(null)
 
 // O botão que destrava some e dá lugar ao link: o foco acompanha, em vez de cair no corpo da página.
@@ -134,6 +144,7 @@ function escolherNicho(novo: string | null) {
       <template v-if="fila.length">{{ fila.length }} site{{ fila.length === 1 ? '' : 's' }} para enviar{{ nicho ? ` em ${nicho}` : '' }}</template>
       <template v-else>Nada mais para enviar{{ nicho ? ` em ${nicho}` : '' }}</template>
       <template v-if="abertosNestaTela"> · {{ abertosNestaTela }} aberto{{ abertosNestaTela === 1 ? '' : 's' }} nesta tela, esperando a planilha confirmar</template>
+      · {{ ritmo.enviadosHoje }} de {{ ritmo.teto }} primeiros contatos hoje
     </p>
 
     <article v-if="atual" class="crm-fila__cartao" :aria-labelledby="`crm-fila-${atual.item.leadId}`">
@@ -172,12 +183,13 @@ function escolherNicho(novo: string | null) {
         </div>
       </template>
       <template v-else>
+        <p v-if="segurado" class="crm-aviso" role="status"><strong>Ainda não.</strong> {{ textoDoRitmo(ritmo) }}</p>
         <div class="crm-fila__acoes">
           <button v-if="travado" type="button" class="botao" @click="liberarAtual">{{ ROTULO_DE_LIBERAR }}</button>
-          <a v-else ref="linkDeEnviar" class="crm-fila__enviar" :href="atual.enviar" target="_blank" rel="noopener" @click="aoEnviar">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
+          <a v-else-if="!segurado" ref="linkDeEnviar" class="crm-fila__enviar" :href="atual.enviar" target="_blank" rel="noopener" @click="aoEnviar">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
           <button v-if="fila.length > 1" type="button" class="botao" @click="pular">Pular por agora</button>
         </div>
-        <p class="crm-nota-pequena">{{ travado ? 'Liberar só destrava o link; nada é enviado nem marcado.' : 'O toque marca o lead como enviado na planilha, como o link da lista.' }}</p>
+        <p v-if="!segurado" class="crm-nota-pequena">{{ travado ? 'Liberar só destrava o link; nada é enviado nem marcado.' : 'O toque marca o lead como enviado na planilha, como o link da lista.' }}</p>
       </template>
     </article>
 

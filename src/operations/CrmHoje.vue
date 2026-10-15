@@ -4,6 +4,7 @@ import { anotadoEm, ordenarComAnotados, textoDaAnotacao, tipoDoGrupo, tipoDoLink
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
 import { estadoDoEnvio, filaDeEnvio, ordenarComEnvios, type EnviosAbertos } from './fila-de-envio'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, type EnviosLiberados } from './trava-de-horario'
+import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead } from './types'
 
 // "Hoje": só o que depende do Rômulo, na ordem do servidor (server/crm.ts,
@@ -14,15 +15,18 @@ import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead } from './types
 // mensagem (envio do Site, convite do PRUMO, reenvio do só-robô) saem da linha e dão lugar a um "Liberar".
 // `anotados` (anotacao-de-envio.ts): o toque em "Mandar o link"/"Mandar o follow-up" anota o envio;
 // até o retrato confirmar, a linha diz a hora e vai para o fim do grupo.
+// `ritmo` (trava-de-ritmo.ts, 15/10/2026): com o intervalo, a hora ou o dia cheios, os mesmos links
+// de primeiro contato somem de todas as linhas, sem "Liberar"; o aviso no topo diz até quando.
 const props = defineProps<{
   grupos: CrmGrupoHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; agora: number; aviso?: string | null; liberados: EnviosLiberados
-  anotados: EnviosAnotados
+  anotados: EnviosAnotados; ritmo: EstadoDoRitmo
 }>()
 const emit = defineEmits<{
   abrir: [leadId: string, origem: HTMLElement | null]
   enviado: [leadId: string]
   liberar: [leadId: string]
   anotar: [leadId: string, tipo: TipoDeEnvioAnotado]
+  primeiro: [leadId: string]
   fila: []
 }>()
 
@@ -60,17 +64,22 @@ const horaDoToque = (item: CrmItemHoje) => {
 const ehEnvio = (item: CrmItemHoje, url: string) => url === props.leads.get(item.leadId)?.links.enviar
 // Envio do Site, convite do PRUMO e o reenvio do só-robô (trava-de-horario.ts, linksDePrimeiroContato).
 const primeiroContato = (item: CrmItemHoje, url: string) => ehPrimeiroContato(props.leads.get(item.leadId), url)
+const temPrimeiroContato = (item: CrmItemHoje) => item.links.some(l => primeiroContato(item, l.url))
+const segurado = computed(() => props.ritmo.motivo !== null)
+// Com o ritmo segurando, o "Liberar" do horário não destravaria nada: sai também.
 const travado = (item: CrmItemHoje) =>
-  envioTravado(props.aviso, props.liberados, item.leadId) && item.links.some(l => primeiroContato(item, l.url))
+  !segurado.value && envioTravado(props.aviso, props.liberados, item.leadId) && temPrimeiroContato(item)
 const haTravados = computed(() => props.grupos.some(g => g.itens.some(travado)))
+const haSegurados = computed(() => segurado.value && props.grupos.some(g => g.itens.some(temPrimeiroContato)))
 // Já aberto: o link de envio some (o toque já marcou na planilha) e fica o resto.
-// Travado: o link de primeiro contato some até o "Liberar", o resto (demo, conversa) segue à mão.
+// Travado ou segurado: o link de primeiro contato some, o resto (demo, conversa) segue à mão.
 const links = (grupo: CrmGrupoHoje, item: CrmItemHoje) => {
   const sem = grupo.id === 'enviar' && abertoEm(item) !== undefined ? item.links.filter(l => !ehEnvio(item, l.url)) : item.links
-  return travado(item) ? sem.filter(l => !primeiroContato(item, l.url)) : sem
+  return travado(item) || segurado.value ? sem.filter(l => !primeiroContato(item, l.url)) : sem
 }
 function aoTocar(item: CrmItemHoje, url: string) {
   if (ehEnvio(item, url)) emit('enviado', item.leadId)
+  if (primeiroContato(item, url)) emit('primeiro', item.leadId)
   // O link abre o WhatsApp sozinho (target=_blank); a anotação vai em paralelo, sem segurar nada.
   const tipo = tipoDoLink(props.leads.get(item.leadId), url)
   if (tipo) emit('anotar', item.leadId, tipo)
@@ -80,6 +89,7 @@ function aoTocar(item: CrmItemHoje, url: string) {
 <template>
   <div class="crm-hoje">
     <p v-if="aviso && haTravados" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} Os envios de primeiro contato ficam travados até você liberar.</p>
+    <p v-if="haSegurados" class="crm-aviso" role="status"><strong>Devagar com os primeiros contatos.</strong> {{ textoDoRitmo(ritmo) }}</p>
     <p v-if="!total" class="crm-vazio"><strong>Nada esperando você hoje.</strong> Nenhum follow-up, resposta, prospect, proposta ou site pronto neste filtro.</p>
     <section v-for="grupo in visiveis" :key="grupo.id" class="crm-grupo" :class="`is-${grupo.id}`" :aria-labelledby="`crm-grupo-${grupo.id}`">
       <header class="crm-grupo__cabeca">

@@ -72,7 +72,9 @@ function retrato(): CrmRetrato {
           linhaSite("fila", { status: "novo" }),
           linhaSite("pronto", { status: "pronto", site_url: "https://demo-pronto.vercel.app", wa_link: `${WEBHOOK}/enviar?place_id=pronto`, wa_me: "https://wa.me/5527999990000?text=oi" }),
           linhaSite("pronto-sem-pasta", { status: "pronto", site_url: "https://demo-x.vercel.app" }),
-          linhaSite("followup", { status: "enviado", enviado_em: dias(3), wa_me: "https://wa.me/5527999990001?text=oi" }),
+          // Leu (15/10/2026: follow-up só para quem leu); "nao-leu" é o mesmo sem a leitura.
+          linhaSite("followup", { status: "enviado", enviado_em: dias(3), visto_em: dias(2.5), wa_me: "https://wa.me/5527999990001?text=oi" }),
+          linhaSite("nao-leu", { status: "enviado", enviado_em: dias(3), wa_me: "https://wa.me/5527999990002?text=oi" }),
           linhaSite("followup-ontem", { status: "enviado", enviado_em: dias(4), followup_em: dias(1) }),
           linhaSite("viu", { status: "enviado", enviado_em: dias(1), visto_em: dias(0.9) }),
           linhaSite("respondeu", { status: "enviado", enviado_em: dias(2), respondeu_em: dias(1) }),
@@ -92,7 +94,8 @@ function retrato(): CrmRetrato {
         planilha: "PRUMO — Fila de revisão", aba: "Prospects",
         linhas: [
           linhaPrumo("revisar"),
-          linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": dias(3) }),
+          linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": dias(3), "Visto em": dias(2.5) }),
+          linhaPrumo("convite-nao-leu", { Etapa: "Convite enviado", "Convite enviado em": dias(3) }),
           linhaPrumo("leu", { Etapa: "Convite enviado", "Convite enviado em": dias(1), "Próxima ação": "Leu o convite em 02/10, 08:00. Sem resposta em 3 dias, ofereça fazer por telefone." }),
           linhaPrumo("respondeu", { Etapa: "Convite enviado", "Convite enviado em": dias(2), "Próxima ação": "Respondeu no WhatsApp em 01/10, 16:30. Continue a conversa." }),
           linhaPrumo("diagnostico", { Etapa: "Diagnóstico pronto", "Convite enviado em": dias(4), "Diagnóstico em": dias(1), "Índice PRUMO": "62" }),
@@ -121,6 +124,7 @@ const PASTAS: PastaDoLead[] = [
   pasta("fila", "", "fila", false),
   pasta("pronto", "", "pronto"),
   pasta("followup", "", "followup"),
+  pasta("nao-leu", "", "nao-leu"),
   pasta("followup-ontem", "", "followup-ontem"),
   pasta("viu", "", "viu"),
   pasta("respondeu", "_em-conversa", "respondeu"),
@@ -153,7 +157,8 @@ describe("CRM: etapas do Site antes da venda", () => {
     assert.equal(leads.some((l) => l.chave === "TESTE"), false);
     assert.equal(etapa("fila"), "novo/na-fila");
     assert.equal(etapa("pronto"), "novo/pronto");
-    assert.equal(etapa("followup"), "contato/enviado");
+    assert.equal(etapa("followup"), "contato/viu");
+    assert.equal(etapa("nao-leu"), "contato/enviado");
     assert.equal(etapa("viu"), "contato/viu");
     assert.equal(etapa("respondeu"), "contato/respondeu");
     assert.equal(etapa("recusou-pasta"), "perdido/recusou-pasta");
@@ -168,8 +173,8 @@ describe("CRM: etapas do Site antes da venda", () => {
 
   it("diz leitura desconhecida quando não há visto_em, nunca 'não viu'", () => {
     const { leads } = visao();
-    assert.equal(lead(leads, "site:followup").leitura, "desconhecida");
-    assert.equal(lead(leads, "site:followup").subEtapa, "Enviado · leitura desconhecida");
+    assert.equal(lead(leads, "site:nao-leu").leitura, "desconhecida");
+    assert.equal(lead(leads, "site:nao-leu").subEtapa, "Enviado · leitura desconhecida");
     assert.equal(lead(leads, "site:viu").leitura, "viu");
     assert.equal(lead(leads, "site:pronto").leitura, "nao-se-aplica");
     assert.deepEqual(Object.keys(lead(leads, "site:viu").marcos), ["enviado", "visto"]);
@@ -185,6 +190,11 @@ describe("CRM: etapas do Site antes da venda", () => {
     assert.equal(lead(leads, "site:acervo").followupHoje, false);
     assert.equal(lead(leads, "site:acervo").acervo, true);
     assert.equal(lead(leads, "site:viu").followupHoje, false);
+    // 15/10/2026: insistir com quem nem abriu a primeira mensagem é o que mais vira denúncia de spam.
+    assert.equal(lead(leads, "site:nao-leu").followupHoje, false, "no 3º dia, mas não leu: sem follow-up");
+    assert.equal(lead(leads, "site:nao-leu").links.followup, undefined);
+    assert.equal(lead(leads, "prumo:convite").followupHoje, true, "PRUMO: leu o convite");
+    assert.equal(lead(leads, "prumo:convite-nao-leu").followupHoje, false, "PRUMO: não leu o convite");
   });
 
   it("links: wa_link só para quem está pronto, página do lead pela tailnet e conversa sem o texto", () => {
@@ -245,7 +255,8 @@ describe("CRM: etapas do PRUMO", () => {
     const { leads } = visao();
     const etapa = (id: string) => { const l = lead(leads, `prumo:${id}`); return `${l.etapa}/${l.sinal}`; };
     assert.equal(etapa("revisar"), "novo/revisar");
-    assert.equal(etapa("convite"), "contato/convite");
+    assert.equal(etapa("convite"), "contato/convite-visto");
+    assert.equal(etapa("convite-nao-leu"), "contato/convite");
     assert.equal(etapa("leu"), "contato/convite-visto");
     assert.equal(lead(leads, "prumo:leu").leitura, "viu");
     assert.equal(etapa("respondeu"), "contato/respondeu-prumo");
@@ -558,7 +569,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
         "Tipo da resposta": "interesse", Resposta: "pode explicar" }),
     ]);
     base.fontes.estampa = fonte("Estamparias", [
-      linhaPrumo("estampa-convite", { Etapa: "Convite enviado", "Convite enviado em": dias(4) }),
+      linhaPrumo("estampa-convite", { Etapa: "Convite enviado", "Convite enviado em": dias(4), "Visto em": dias(3.5) }),
       linhaPrumo("estampa-ganho", { Etapa: "Concluído" }),
       // O mesmo ID numa aba e noutra são leads diferentes: cada oferta tem a sua chave.
       linhaPrumo("revisar", { Etapa: "Sem interesse" }),
@@ -615,12 +626,13 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     base.fontes.iris = { planilha: "PRUMO — Fila de revisão", aba: "Clínicas", colunas: Object.keys(linhas[0]), linhas };
     const v = montarCrm(base, { agora: AGORA, pastas: PASTAS });
     const revisar = v.hoje.find((g) => g.id === "revisar")!.itens;
-    assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:sem-zap", "iris:baixa", "prumo:revisar"], "PRUMO sem Prioridade vem depois");
+    // 15/10/2026: o WhatsApp não confirmado (42) vem depois de todo confirmado, mesmo de Prioridade menor (40).
+    assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:baixa", "iris:sem-zap", "prumo:revisar"], "PRUMO sem Prioridade vem depois");
     const alta = revisar[0];
     assert.match(alta.detalhe, /Prioridade 96 · nota 5 \(43\) · convênio · ABA\./);
     assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Enviar convite (marca como enviado)"]);
     assert.equal(lead(v.leads, "iris:alta").links.maps, "https://maps.google.com/?cid=1");
-    const semZap = revisar[1];
+    const semZap = revisar[2];
     assert.equal(semZap.acao, "Conferir o WhatsApp e decidir o convite");
     assert.match(semZap.detalhe, /WhatsApp não confirmado/);
     assert.equal(lead(v.leads, "prumo:revisar").triagem, undefined, "o Prospects não tem triagem");
@@ -665,7 +677,7 @@ describe("CRM: lista Hoje e contagens", () => {
   it("conta por etapa e produto e separa os motivos de perda", () => {
     const v = visao();
     assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1, iris: 0, estampa: 0 });
-    assert.deepEqual(v.contagens.contato, { total: 10, site: 6, prumo: 4, iris: 0, estampa: 0 });
+    assert.deepEqual(v.contagens.contato, { total: 12, site: 7, prumo: 5, iris: 0, estampa: 0 });
     assert.deepEqual(v.contagens.perdido, { total: 7, site: 6, prumo: 1, iris: 0, estampa: 0 });
     assert.deepEqual(v.perdas, { recusou: 2, expirou: 2, esfriou: 0, descartado: 2, semInteresse: 1 });
     assert.equal(v.geradoEm, "2026-10-02T14:55:00.000Z");
@@ -854,7 +866,7 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
   });
 
   it("follow-up anotado depois do envio apaga o follow-up de hoje (Site e PRUMO); anotado antes, não", () => {
-    const v = com([linhaSite("fu-velho", { status: "enviado", enviado_em: dias(3) })], [], [
+    const v = com([linhaSite("fu-velho", { status: "enviado", enviado_em: dias(3), visto_em: dias(2) })], [], [
       { em: dias(0.5), produto: "site", id: "followup", tipo: "followup_enviado", texto: "", data: "" },
       { em: dias(4), produto: "site", id: "fu-velho", tipo: "followup_enviado", texto: "", data: "" },
       { em: dias(0.2), produto: "prumo", id: "convite", tipo: "followup_enviado", texto: "", data: "" },
@@ -1011,7 +1023,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
   it("EUA e Site sem demo: sem reenvio, o follow-up de sempre (dia do lembrete e 3º dia)", () => {
     const eua = "https://wa.me/13055550100?text=hi";
     const v = com([
-      robo("robo-eua", d(4), { wa_me: eua, followup_em: d(0) }),
+      robo("robo-eua", d(4), { wa_me: eua, followup_em: d(0), visto_em: d(3.5) }),
       robo("robo-eua-cedo", d(1), { wa_me: eua }),
       robo("robo-sem-demo", d(1), { site_url: "" }),
     ]);
@@ -1023,7 +1035,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
   });
 
   it("PRUMO: o reenvio ganha texto (antes, só a conversa vazia); o follow-up de quem viu continua sem", () => {
-    const v = com([], [proboPrumo("p-robo", d(1)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3) })]);
+    const v = com([], [proboPrumo("p-robo", d(1)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3), "Visto em": d(2.5) })]);
     const p = lead(v.leads, "prumo:p-robo");
     assert.equal(`${p.followupHoje}/${p.reenvioDoRobo}`, "true/true");
     assert.equal(new URL(p.links.followup!).searchParams.get("text"),
@@ -1035,8 +1047,8 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
   });
 
   it("Hoje: ação e rótulo próprios, o prazo dito, e quem sai antes na frente", () => {
-    const v = com([robo("robo-1", d(1)), gente("followup", d(3)), robo("robo-6", d(6))],
-      [proboPrumo("p-robo", d(2)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3) })]);
+    const v = com([robo("robo-1", d(1)), gente("followup", d(3), { visto_em: d(2.5) }), robo("robo-6", d(6))],
+      [proboPrumo("p-robo", d(2)), linhaPrumo("convite", { Etapa: "Convite enviado", "Convite enviado em": d(3), "Visto em": d(2.5) })]);
     const followup = v.hoje.find((g) => g.id === "followup")!.itens;
     assert.deepEqual(followup.map((i) => i.leadId), ["site:robo-6", "site:followup", "prumo:convite", "prumo:p-robo", "site:robo-1"]);
     const seis = followup[0];

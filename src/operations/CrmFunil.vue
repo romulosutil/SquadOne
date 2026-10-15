@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { DICA_DA_ETAPA, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, rotuloDaSegunda, rotuloDoFollowup, textoDaLeitura, textoDoPrazo } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
+import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
@@ -22,15 +23,22 @@ const props = defineProps<{
   liberados: EnviosLiberados
   /** Envios anotados nesta tela (anotacao-de-envio.ts), até o retrato confirmar. */
   anotados: EnviosAnotados
+  /** Trava de ritmo (trava-de-ritmo.ts): com ela segurando, nenhum link de primeiro contato, sem "Liberar". */
+  ritmo: EstadoDoRitmo
 }>()
 const emit = defineEmits<{
   abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto]; liberar: [leadId: string]
-  anotar: [leadId: string, tipo: TipoDeEnvioAnotado]
+  anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
 }>()
 const anotado = (l: CrmLead, tipo: TipoDeEnvioAnotado) => anotadoEm(props.anotados, l.id, tipo) !== undefined
+const segurado = computed(() => props.ritmo.motivo !== null)
 // Envio, convite e o reenvio do só-robô travam fora do expediente; o follow-up de sempre, não.
-const travado = (l: CrmLead) => envioTravado(props.aviso, props.liberados, l.id) && linksDePrimeiroContato(l).length > 0
-const linkTravado = (l: CrmLead, url: string | undefined) => Boolean(url) && travado(l) && ehPrimeiroContato(l, url!)
+const travado = (l: CrmLead) => !segurado.value && envioTravado(props.aviso, props.liberados, l.id) && linksDePrimeiroContato(l).length > 0
+const linkTravado = (l: CrmLead, url: string | undefined) => Boolean(url) && (segurado.value || travado(l)) && ehPrimeiroContato(l, url!)
+const haSegurados = computed(() => segurado.value && props.leads.some(l => linksDePrimeiroContato(l).length > 0))
+function aoTocarPrimeiro(l: CrmLead, url: string) {
+  if (ehPrimeiroContato(l, url)) emit('primeiro', l.id)
+}
 
 const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
 const celular = ref(mq?.matches ?? false)
@@ -118,6 +126,7 @@ const artefatos = (l: CrmLead) => {
 
 <template>
   <div class="crm-funil">
+    <p v-if="haSegurados" class="crm-aviso" role="status"><strong>Devagar com os primeiros contatos.</strong> {{ textoDoRitmo(ritmo) }}</p>
     <form class="crm-filtros" role="search" @submit.prevent>
       <label><span>Buscar</span><input v-model="busca" type="search" placeholder="Empresa, nicho ou cidade" autocomplete="off"></label>
       <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n" :value="n">{{ n }}</option></select></label>
@@ -213,10 +222,10 @@ const artefatos = (l: CrmLead) => {
                 <!-- O toque abre o WhatsApp e anota o envio em segundo plano (CrmPanel, anotarEnvio). -->
                 <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ rotuloDaSegunda(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
                 <a v-if="lead.links.gerarDemo && lead.resposta?.tipo === 'interesse'" :href="lead.links.gerarDemo" target="_blank" rel="noopener">Gerar demo <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
-                <a v-if="lead.links.followup && !linkTravado(lead, lead.links.followup)" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado')">{{ rotuloDoFollowup(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
+                <a v-if="lead.links.followup && !linkTravado(lead, lead.links.followup)" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado'); aoTocarPrimeiro(lead, lead.links.followup)">{{ rotuloDoFollowup(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
                 <button v-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
-                <a v-if="lead.links.enviar && !linkTravado(lead, lead.links.enviar)" :href="lead.links.enviar" target="_blank" rel="noopener">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.convite && !linkTravado(lead, lead.links.convite)" :href="lead.links.convite" target="_blank" rel="noopener">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.enviar && !linkTravado(lead, lead.links.enviar)" :href="lead.links.enviar" target="_blank" rel="noopener" @click="emit('primeiro', lead.id)">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
+                <a v-if="lead.links.convite && !linkTravado(lead, lead.links.convite)" :href="lead.links.convite" target="_blank" rel="noopener" @click="emit('primeiro', lead.id)">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
                 <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
               </p>
             </article>
