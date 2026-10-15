@@ -855,7 +855,7 @@ export function etapaDoSite(entrada: {
   publicadoEm?: number;
   proposta?: Registro;
   resposta?: CrmResposta;
-  /** O recibo é só o do Raio-X avulso (demo sob pedido): "publicado" é o Raio-X, não um site. */
+  /** Ainda sem demo (demo sob pedido, ou a mensagem A sem demo de 15/10/2026): "publicado" é o Raio-X, não um site. */
   semDemo?: boolean;
 }): EtapaCalculada {
   const { status, lugar, resposta } = entrada;
@@ -892,7 +892,10 @@ export function etapaDoSite(entrada: {
       ? { etapa: "contato", sinal: "viu", subEtapa: "Viu, sem resposta", desde: entrada.enviado ?? entrada.visto }
       : { etapa: "contato", sinal: "enviado", subEtapa: "Enviado · leitura desconhecida", desde: entrada.enviado };
   }
-  if (status === "pronto") return { etapa: "novo", sinal: "pronto", subEtapa: "Pronto, não enviado", desde: entrada.publicadoEm ?? entrada.criado };
+  if (status === "pronto") {
+    return { etapa: "novo", sinal: "pronto", subEtapa: entrada.semDemo ? "Pronto, não enviado · sem demo (gere quando ele pedir)" : "Pronto, não enviado",
+      desde: entrada.publicadoEm ?? entrada.criado };
+  }
   if (entrada.publicado) {
     return { etapa: "novo", sinal: "publicado", subEtapa: `${entrada.semDemo ? "Raio-X" : "Site"} publicado, falta o Balcão marcar pronto`,
       desde: entrada.publicadoEm ?? entrada.criado };
@@ -939,7 +942,7 @@ function leadDoSite(linha: Linha, contexto: {
   const statusDaEtapa = status === "expirado" && (proximo || proposta || reenviado) ? "enviado" : status;
   const calculada = comPrazoDoContato(
     comPerdaManual(etapaDoSite({ status: statusDaEtapa, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta,
-      publicadoEm: t.publicadoEm ?? t.raioXEm, semDemo: Boolean(pasta?.artefatos.publicado && !pasta.siteUrl) }), semContato),
+      publicadoEm: t.publicadoEm ?? t.raioXEm, semDemo: !urlHttps(c("site")) && !pasta?.siteUrl }), semContato),
     ultimaDoLead([t.respondeu, t.ultimaEntrada], resposta), t.enviado, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
@@ -992,8 +995,10 @@ function leadDoSite(linha: Linha, contexto: {
   // Só-robô com número do Brasil e demo no ar: o follow-up vira o reenvio único (reenvioDoRoboHoje),
   // com o pedido da pessoa certa. Sem demo, o texto ofereceria um link que não existe; nos EUA não há
   // texto em inglês: os dois seguem o follow-up de sempre. O Raio-X avulso (demo sob pedido) vale como
-  // o "link": quem o recebeu ganha o reenvio do raio-x, que não promete demo.
-  const reenvioLink = calculada.sinal === "so-robo" && (site || avulso) ? reenvioDoRoboDe(mensagem)?.link : undefined;
+  // o "link": quem o recebeu ganha o reenvio do raio-x, que não promete demo. Quem recebeu a A sem demo
+  // (15/10/2026) também: a primeira mensagem já disse que a demonstração existe, e o reenvio só a repete.
+  const recebeuA = c("mensagemVariante") === "A";
+  const reenvioLink = calculada.sinal === "so-robo" && (site || avulso || recebeuA) ? reenvioDoRoboDe(mensagem)?.link : undefined;
   const diasDesdeEnvio = dias(t.enviado, agora);
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo, enviado: t.enviado, followups, ultimaSaida: t.ultimaSaida, agora })
@@ -1003,9 +1008,13 @@ function leadDoSite(linha: Linha, contexto: {
       && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
       && !followupJaEnviado(followups, t.enviado);
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
-  // O toque que pede o demo: lead sem demo, com pasta, que não recusou nem fechou, e sem pedido aberto.
+  // O toque que pede o demo: lead que nunca teve demo, com pasta, que não recusou nem fechou, e sem pedido aberto.
+  // 15/10/2026: sem exigir o Raio-X avulso nem o publicado.json: quem recebeu a A sem demo (gerador que falhou,
+  // fila antiga) também pede por aqui; o site-pastas acha a pasta pelo content.md. Demo apagado não entra
+  // (o caminho é republicar, não gerar outro).
   const demoPedido = pasta?.demoPedidoEm;
-  const gerarDemo = !site && pasta?.artefatos.publicado && !demoPedido && webhook && avulso
+  const nuncaTeveDemo = !urlHttps(c("site")) && !pasta?.siteUrl && t.apagadoEm === undefined;
+  const gerarDemo = nuncaTeveDemo && pasta && !demoPedido && webhook
     && !["recusado", "fechado", "descartado"].includes(status) && pasta.lugar !== "_recusados" && !ehRecusa(resposta)
     ? `${webhook}/lead-acao?id=${encodeURIComponent(chave)}&acao=gerar_demo` : undefined;
   // O follow-up do dia, com o texto do aviso do 05 · Acompanhamento: antes a lista Hoje abria a conversa vazia.
@@ -1283,7 +1292,7 @@ const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "Serviços PRUMO, Iris e estamparias na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
-  { id: "enviar", titulo: "Sites prontos para enviar", explicacao: "O link marca o envio e abre o WhatsApp com a mensagem." },
+  { id: "enviar", titulo: "Primeiro contato para enviar", explicacao: "O botão abre o WhatsApp com a primeira mensagem e marca o envio. Sem demo, você gera quando o lead pedir." },
 ];
 
 /** A ação da Hoje para o reenvio do só-robô (o rótulo do link é ROTULO_DO_REENVIO, de site-mensagem.ts). */
@@ -1308,8 +1317,9 @@ export function tempoEsperando(ms: number): string {
  * O que a segunda mensagem do Site leva, para o rótulo: o link do site, o raio-x e o demo (Raio-X dentro do demo), ou,
  * com o Raio-X avulso (demo sob pedido, 14/10/2026), só o raio-x antes do demo e só o demo depois do botão "Gerar demo".
  */
-export function oQueASegundaLeva(lead: Pick<CrmLead, "links" | "abordagem">): "site" | "raio-x e demo" | "raio-x" | "demo" {
-  if (lead.abordagem?.mensagem !== "C" || !lead.links.raioX) return "site";
+export function oQueASegundaLeva(lead: Pick<CrmLead, "links" | "abordagem">): "site" | "raio-x e demo" | "raio-x" | "demo" | "sem demo" {
+  // 15/10/2026: recebeu a A sem demo (ou o raio-x avulso sem ser a C): primeiro o "Gerar demo".
+  if (lead.abordagem?.mensagem !== "C" || !lead.links.raioX) return lead.links.site || lead.links.segunda ? "site" : "sem demo";
   if (!raioXAvulso(lead.links.raioX)) return "raio-x e demo";
   return lead.links.site ? "demo" : "raio-x";
 }
@@ -1327,12 +1337,15 @@ export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | 
   if (leva === "raio-x e demo") return `Quer ver o raio-x ${ha} — o raio-x e o demo ainda não foram mandados`;
   if (leva === "raio-x") return `Quer ver o raio-x ${ha} — o raio-x ainda não foi mandado`;
   if (leva === "demo") return `Pediu o site ${ha} — o demo está pronto e ainda não foi mandado`;
+  if (leva === "sem demo") return `Quer ver ${ha} — o demo ainda não foi gerado`;
   return `Quer ver ${ha} — o link ainda não foi mandado`;
 }
 
-const ROTULO_DA_SEGUNDA = { site: "Mandar o link do site", "raio-x e demo": "Mandar o raio-x e o demo", "raio-x": "Mandar o raio-x", demo: "Mandar o demo" };
+const ROTULO_DA_SEGUNDA = { site: "Mandar o link do site", "raio-x e demo": "Mandar o raio-x e o demo", "raio-x": "Mandar o raio-x", demo: "Mandar o demo",
+  "sem demo": "Mandar o link do site" };
 const ACAO_DO_INTERESSE = { site: "Quer ver: mandar o link do site", "raio-x e demo": "Quer ver o raio-x: mandar o raio-x e o demo",
-  "raio-x": "Quer ver o raio-x: mandar o raio-x", demo: "Quer o site: mandar o demo" };
+  "raio-x": "Quer ver o raio-x: mandar o raio-x", demo: "Quer o site: mandar o demo",
+  "sem demo": "Quer ver: gerar o demo (o link sai quando ele ficar pronto)" };
 
 function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
   const itens: Record<CrmGrupoHojeId, CrmItemHoje[]> = { proximo: [], followup: [], resposta: [], revisar: [], proposta: [], enviar: [] };
@@ -1441,8 +1454,9 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
     if (lead.sinal === "pronto") {
       itens.enviar.push({
         leadId: lead.id,
-        acao: lead.links.enviar ? "Enviar o site pelo WhatsApp" : "Sem WhatsApp válido na planilha",
-        detalhe: `${lead.nicho || "Sem nicho"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "pronto") || "sem data"}.`,
+        acao: lead.links.enviar ? "Mandar a primeira mensagem" : "Sem WhatsApp válido na planilha",
+        detalhe: `${lead.nicho || "Sem nicho"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "pronto") || "sem data"}.`
+          + (lead.links.site ? "" : " Ainda sem demo: gere quando ele pedir."),
         links: [
           ...(lead.links.enviar ? [{ rotulo: "Enviar pelo WhatsApp (marca como enviado)", url: lead.links.enviar }] : []),
           ...(lead.links.site ? [{ rotulo: "Ver o demo", url: lead.links.site }] : []),

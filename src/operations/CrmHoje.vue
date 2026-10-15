@@ -8,7 +8,7 @@ import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead } from './types
 
 // "Hoje": só o que depende do Rômulo, na ordem do servidor (server/crm.ts,
 // montarHoje). Cada linha é uma ação e o link que a resolve.
-// Em "Sites prontos para enviar", o que esta tela já abriu no WhatsApp vai para o
+// Em "Primeiro contato para enviar", o que esta tela já abriu no WhatsApp vai para o
 // fim com a hora do toque até a planilha confirmar (fila-de-envio.ts).
 // `aviso`/`liberados` (trava-de-horario.ts): fora do expediente os links que ENVIAM a primeira
 // mensagem (envio do Site, convite do PRUMO, reenvio do só-robô) saem da linha e dão lugar a um "Liberar".

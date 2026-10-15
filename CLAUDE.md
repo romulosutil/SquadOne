@@ -227,6 +227,9 @@ A/B da 1ª mensagem do Site (14/10/2026): a letra só se compara entre leads com
 elegível (coluna `ab_elegiveis`, gravada pelo Balcão com a letra) e é equilibrada por nicho; sem
 30 envios por braço não há taxa, e o que já foi enviado nunca troca de letra. O histórico sem a
 coluna e o follow-up do 05 · Acompanhamento não entram (detalhes em `perfis-e-experimentos.md`).
+Mensagem A sem demo (15/10/2026, decisão do Rômulo): a A vale para lead sem demo, inclusive sem recibo
+nenhum (o Balcão marca `pronto`); quem responde "quero ver" ganha o "Gerar demo", e o demo sai depois.
+Todos os textos das mensagens seguem um guia só, no topo das `VARIACOES` em `site-mensagem.js`.
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o
 Dell acrescenta); a seed fica fora de `data/`. O browser nunca vê token do Google; `prompt=consent`

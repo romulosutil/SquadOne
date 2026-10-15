@@ -124,7 +124,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Raio-X',
     etapa: 'ver',
     tipo: 'diagnostico',
-    entrega: 'Uma página feita pelo PRUMO, só com dados públicos: como a empresa aparece no Google, o que já está bom, até 3 coisas que mandam cliente para o concorrente (só as que o dado confirma) e, quando faz sentido, a demonstração do site. O dono não preenche nada.',
+    entrega: 'Uma página feita pelo Prumo, só com dados públicos: como a empresa aparece no Google, o que já está bom, até 3 coisas que mandam cliente para o concorrente (só as que o dado confirma) e, quando faz sentido, a demonstração do site. O dono não preenche nada.',
     preco: 'grátis',
     paraQuem: 'Todo lead, antes do primeiro contato: é a porta de entrada de todos. Funciona também com quem já tem site.',
   },
@@ -167,7 +167,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Anúncios',
     etapa: 'arrumar',
     tipo: 'produto',
-    entrega: 'Criamos e cuidamos dos anúncios no Google ou no Instagram, e todo mês mostramos quantas pessoas chamaram por causa deles. A verba do anúncio vai direto para a plataforma, sem passar pelo PRUMO.',
+    entrega: 'Criamos e cuidamos dos anúncios no Google ou no Instagram, e todo mês mostramos quantas pessoas chamaram por causa deles. A verba do anúncio vai direto para a plataforma, sem passar pelo Prumo.',
     preco: 'R$ 590/mês',
     condicao: 'Google ou Instagram; R$ 390 a mais pelos dois; mínimo de 3 meses',
     paraQuem: 'Quem já tem site e perfil do Google em dia e precisa de mais gente chamando: o Raio-X mostra poucas buscas ou pouca gente chegando. Depois do Raio-X, nunca no WhatsApp frio.',
@@ -253,7 +253,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-b',
         titulo: 'Primeira mensagem · B · observação concreta',
         texto:
-          'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi a {NOME} no Google: nota [nota] com [avaliações] avaliações, mas quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. Posso te mandar o link?',
+          'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google: nota [nota] em [avaliações] avaliações. Só que quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.',
         dica: 'Troca o "encontrei vocês" genérico por um fato que o dono confere na hora. Sem nota boa (abaixo de 4,3 ou menos de 15 avaliações), sai a A.',
         produtos: SITE,
       },
@@ -261,7 +261,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-c',
         titulo: 'Primeira mensagem · C · Raio-X',
         texto:
-          'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e [N] pontos que fazem cliente ir para o concorrente. É uma página só. Posso te mandar?',
+          'Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e [N] pontos que fazem o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? É sem compromisso.',
         dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na segunda mensagem.',
         produtos: SITE,
       },
@@ -269,7 +269,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-cdl',
         titulo: 'CDL · primeiro contato com o associado',
         texto:
-          'Oi [nome], aqui é o Rômulo, do PRUMO, parceiro da [nome da CDL]. Ajudo donos de [segmento] a responder orçamento no mesmo dia sem precisar aprovar cada preço. Posso te mostrar em 20 minutos como funciona?',
+          'Oi [nome], aqui é o Rômulo, do Prumo, parceiro da [nome da CDL]. Ajudo donos de [segmento] a responder orçamento no mesmo dia sem precisar aprovar cada preço. Posso te mostrar em 20 minutos como funciona?',
         dica: 'Só use "parceiro" depois de a CDL aceitar. Pela CDL a empresa pode entrar direto no Mapa: se nos 20 minutos ela mostrar que tem equipe (umas 8 pessoas ou mais), mande o convite para o Mapa.',
         produtos: PRUMO,
       },
@@ -331,7 +331,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'segunda-preco',
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
-          'Se gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando.',
+          'Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.',
         dica: 'A segunda mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
         produtos: SITE,
       },
@@ -373,7 +373,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'followup-prumo',
         titulo: 'PRUMO · sem resposta',
         texto:
-          'Oi [nome], aqui é o Rômulo de novo, do PRUMO. Ainda faz sentido a gente conversar 20 minutos sobre responder orçamento no mesmo dia? Se não for o momento, é só me dizer que eu não insisto.',
+          'Oi [nome], é o Rômulo de novo, do Prumo. Ainda faz sentido a gente conversar 20 minutos sobre responder orçamento no mesmo dia? Se não for o momento, é só dizer.',
         dica: 'Um só, 3 dias depois do primeiro contato. Sem resposta, deixe quieto.',
         produtos: PRUMO,
       },
@@ -399,7 +399,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Convite para o Mapa',
         // Uma linha por ideia e o link sozinho numa linha: no WhatsApp ele fica tocável e não se mistura ao texto.
         texto: [
-          'Oi, [nome]. Aqui é o Rômulo, do PRUMO. O Raio-X mostrou o lado de fora {ARTIGO} {NOME}, do jeito que o cliente vê no Google.',
+          'Oi, [nome]. Aqui é o Rômulo, do Prumo. O raio-x mostrou o lado de fora {ARTIGO} {NOME}, do jeito que o cliente vê no Google.',
           'O Mapa mostra o de dentro: o que hoje só anda com você, onde a informação mora e o que arrumar primeiro. Vocês recebem um documento e uma conversa de 45 minutos sobre ele, sem custo.',
           'São 16 perguntas, uns 10 minutos, sem nenhum dado financeiro:',
           '[link das 16 perguntas]',
@@ -420,7 +420,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'mapa-pronto',
         titulo: 'O Mapa ficou pronto',
         texto:
-          'Oi [nome], aqui é o Rômulo, do PRUMO. O Mapa {ARTIGO} {NOME} ficou pronto: Índice do Prumo [X] de 18. O que mais pesa hoje: [o que só anda com você]. Podemos conversar 45 minutos [dia] para eu te mostrar o documento inteiro e o que fazer primeiro?',
+          'Oi [nome], aqui é o Rômulo, do Prumo. O Mapa {ARTIGO} {NOME} ficou pronto: Índice do Prumo [X] de 18. O que mais pesa hoje: [o que só anda com você]. Podemos conversar 45 minutos [dia] para eu te mostrar o documento inteiro e o que fazer primeiro?',
         dica: 'Até 3 dias úteis depois das 16 perguntas. Abra com o Índice e o maior achado. O documento é do dono, contrate ou não; nenhum preço nesta mensagem.',
         produtos: PRUMO,
       },
@@ -473,7 +473,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-encontrado',
         titulo: 'Encontrado (depois do "gostei")',
         texto:
-          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 para colocar no ar e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Posso começar?',
+          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
         dica: 'Até 24 h depois do "gostei". Pediram mudança no demo? Faça antes de cobrar.',
         produtos: SITE,
       },
@@ -566,7 +566,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-quanto-custa',
       titulo: '"Quanto custa?"',
       texto:
-        'Para colocar esse site no ar com o endereço de vocês: R$ 690, e depois R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Quer que eu coloque?',
+        'Para colocar o site no ar com o endereço de vocês: R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Quer que eu coloque?',
       dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito em até 24 horas. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
       produtos: TODOS,
     },
@@ -645,7 +645,7 @@ export const CDL: Trecho[] = [
     id: 'cdl-conversa',
     titulo: 'CDL · pedir uma conversa',
     texto:
-      'Olá, tudo bem? Aqui é o Rômulo, fundador do PRUMO, aqui do Espírito Santo. Ajudo empresas de serviço a não perder cliente entre o Google, o WhatsApp e o orçamento: site, resposta na hora e retorno de orçamento parado. Gostaria de oferecer aos associados um raio-x gratuito de como cada empresa aparece para quem procura no Google. Com quem posso conversar sobre isso?',
+      'Olá, tudo bem? Aqui é o Rômulo, fundador do Prumo, aqui do Espírito Santo. Ajudo empresas de serviço a não perder cliente entre o Google, o WhatsApp e o orçamento: site, resposta na hora e retorno de orçamento parado. Gostaria de oferecer aos associados um raio-x gratuito de como cada empresa aparece para quem procura no Google. Com quem posso conversar sobre isso?',
     dica: 'O raio-x grátis é o que a CDL ganha para oferecer; você ganha o selo de confiança e a lista de associados.',
     produtos: PRUMO,
   },
@@ -661,7 +661,7 @@ export const CDL: Trecho[] = [
     id: 'cdl-associado',
     titulo: 'Associado que veio pela CDL',
     texto:
-      'Oi [nome], aqui é o Rômulo, do PRUMO, parceiro da [nome da CDL]. A CDL está oferecendo aos associados um raio-x grátis de como a empresa aparece para quem procura no Google: o que já está bom e 3 pontos que fazem cliente ir para o concorrente. É uma página só, vocês não preenchem nada. Posso fazer o de vocês?',
+      'Oi [nome], aqui é o Rômulo, do Prumo, parceiro da [nome da CDL]. A CDL está oferecendo aos associados um raio-x grátis de como a empresa aparece para quem procura no Google: o que já está bom e 3 pontos que fazem o cliente ir para o concorrente. É uma página só, vocês não preenchem nada. Posso fazer o de vocês?',
     dica: 'Do raio-x, a conversa segue para o Mapa (empresa com equipe) ou para os produtos (Encontrado, Respondido).',
     produtos: PRUMO,
   },

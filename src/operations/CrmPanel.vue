@@ -343,7 +343,7 @@ async function abrirColinha() {
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
       <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" />
 
-      <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Sites prontos para enviar" @fechar="fecharFila">
+      <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Primeiro contato para enviar" @fechar="fecharFila">
         <div class="crm-na-folha">
           <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" :liberados="liberados" @enviado="marcarAberto" @abrir="abrirFicha" @liberar="liberar" />
         </div>

@@ -332,7 +332,7 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const quer = lead(leads, "site:quer-ver");
     assert.equal(`${quer.etapa}/${quer.subEtapa}`, "contato/Respondeu: quer ver (interesse)");
     assert.ok(quer.links.segunda?.startsWith("https://wa.me/5527999990009?text="));
-    assert.ok(decodeURIComponent(quer.links.segunda!).includes("Aqui está: https://demo-quer-ver.vercel.app"));
+    assert.ok(decodeURIComponent(quer.links.segunda!).includes("Aqui está a demonstração de site da Empresa quer-ver:\nhttps://demo-quer-ver.vercel.app"));
     assert.ok(quer.eventos.some((e) => e.tipo === "resposta" && e.texto === "pode mandar"));
     const nao = lead(leads, "site:nao-quer");
     assert.equal(`${nao.etapa}/${nao.motivoPerda}/${nao.subEtapa}`, "perdido/recusou/Recusou no WhatsApp (resposta negativa)");
@@ -350,8 +350,8 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const c = lead(leads, "site:quer-raio-x");
     assert.equal(c.links.raioX, "https://demo-c.vercel.app/raio-x");
     const texto = decodeURIComponent(c.links.segunda!.split("?text=")[1]);
-    assert.ok(texto.startsWith("Aqui está o raio-x: https://demo-c.vercel.app/raio-x"), texto);
-    assert.ok(texto.includes("está aqui:\nhttps://demo-c.vercel.app"), texto);
+    assert.ok(texto.startsWith("Aqui está o raio-x da Empresa quer-raio-x:\nhttps://demo-c.vercel.app/raio-x"), texto);
+    assert.ok(texto.includes("que vocês já têm:\nhttps://demo-c.vercel.app"), texto);
     const item = hoje.find((g) => g.id === "resposta")?.itens.find((i) => i.leadId === "site:quer-raio-x");
     // Respondeu há 2,4 h e o link não saiu: o interesse parado vira urgência (14/10/2026).
     assert.equal(item?.acao, "Quer ver o raio-x há 2 h — o raio-x e o demo ainda não foram mandados");
@@ -372,8 +372,8 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(l.links.site, undefined);
     assert.equal(l.links.raioX, AVULSO);
     const texto = decodeURIComponent(l.links.segunda!.split("?text=")[1]);
-    assert.ok(texto.startsWith(`Aqui está o raio-x: ${AVULSO}`), texto);
-    assert.ok(texto.includes("monto também uma demonstração") && !texto.includes("R$"), texto);
+    assert.ok(texto.startsWith(`Aqui está o raio-x da Empresa so-raio-x:\n${AVULSO}`), texto);
+    assert.ok(texto.includes("também monto uma demonstração de site") && !texto.includes("R$"), texto);
     assert.equal(l.links.gerarDemo, `${WEBHOOK}/lead-acao?id=so-raio-x&acao=gerar_demo`);
     assert.ok(l.eventos.some((e) => e.tipo === "raio-x" && e.em === dias(2)));
     const item = v.hoje.find((g) => g.id === "resposta")!.itens.find((i) => i.leadId === "site:so-raio-x")!;
@@ -392,8 +392,41 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const d = lead(comDemo.leads, "site:so-raio-x");
     assert.equal(d.links.gerarDemo, undefined);
     const doDemo = decodeURIComponent(d.links.segunda!.split("?text=")[1]);
-    assert.ok(doDemo.startsWith("Aqui está a demonstração do site da Empresa so-raio-x: https://demo-so-raio-x.vercel.app"), doDemo);
+    assert.ok(doDemo.startsWith("Aqui está a demonstração de site da Empresa so-raio-x:\nhttps://demo-so-raio-x.vercel.app"), doDemo);
     assert.ok(doDemo.includes("R$ 690"), doDemo);
+  });
+
+  // 15/10/2026: a A vale sem demo. O lead que o gerador não fez (sem publicado.json) vira "pronto" com a A.
+  it("mensagem A sem demo: pronto com aviso de sem demo, e quem quer ver ganha o Gerar demo, sem segunda", () => {
+    const base = retrato();
+    const WA = `https://wa.me/5542999990013?text=${encodeURIComponent("Oi, tudo bem? Aqui é o Rômulo.")}`;
+    base.fontes.site.linhas.push(
+      linhaSite("a-sem-demo", { status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=a-sem-demo`, wa_me: WA, mensagem_variante: "A" }),
+      linhaSite("a-quer-ver", { status: "enviado", enviado_em: dias(1), respondeu_em: dias(0.1), mensagem_variante: "A",
+        wa_me: WA, resposta_tipo: "interesse", resposta_trecho: "pode mandar", resposta_em: dias(0.1) }));
+    const naFila = (slug: string) => pasta(slug, "", slug, false, { falhaMensagem: "index.html não foi gerado" });
+    const v = montarCrm(base, { agora: AGORA, pastas: [...PASTAS, naFila("a-sem-demo"), naFila("a-quer-ver")] });
+    const pronto = lead(v.leads, "site:a-sem-demo");
+    assert.equal(pronto.subEtapa, "Pronto, não enviado · sem demo (gere quando ele pedir)");
+    assert.equal(pronto.mensagemPronta, "Oi, tudo bem? Aqui é o Rômulo.");
+    const enviar = v.hoje.find((g) => g.id === "enviar")!;
+    assert.equal(enviar.titulo, "Primeiro contato para enviar");
+    const item = enviar.itens.find((i) => i.leadId === "site:a-sem-demo")!;
+    assert.equal(item.acao, "Mandar a primeira mensagem");
+    assert.ok(item.detalhe.endsWith("Ainda sem demo: gere quando ele pedir."), item.detalhe);
+    assert.deepEqual(item.links.map((x) => x.rotulo), ["Enviar pelo WhatsApp (marca como enviado)"]);
+
+    const querVer = lead(v.leads, "site:a-quer-ver");
+    assert.equal(querVer.links.segunda, undefined, "sem demo, não há link para mandar");
+    assert.equal(querVer.links.gerarDemo, `${WEBHOOK}/lead-acao?id=a-quer-ver&acao=gerar_demo`);
+    const resposta = v.hoje.find((g) => g.id === "resposta")!.itens.find((i) => i.leadId === "site:a-quer-ver")!;
+    assert.equal(resposta.acao, "Quer ver há 2 h — o demo ainda não foi gerado");
+    assert.equal(resposta.links[0].rotulo, "Gerar demo");
+
+    // Com demo, nada de "sem demo" nem de Gerar demo.
+    const comDemo = montarCrm(base, { agora: AGORA, pastas: [...PASTAS, pasta("a-sem-demo", "", "a-sem-demo"), pasta("a-quer-ver", "_em-conversa", "a-quer-ver")] });
+    assert.equal(lead(comDemo.leads, "site:a-sem-demo").subEtapa, "Pronto, não enviado");
+    assert.equal(lead(comDemo.leads, "site:a-quer-ver").links.gerarDemo, undefined);
   });
 
   it("demo apagado pelo site-demos-limpeza: sem link morto, com o aviso na ficha, na linha do tempo e na lista Hoje", () => {
@@ -498,8 +531,8 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(quer.links.raioX, "https://raio-x-prumo.vercel.app/quer");
     assert.ok(quer.links.segunda?.startsWith("https://wa.me/5511900000000?text="));
     const texto = decodeURIComponent(quer.links.segunda!.split("?text=")[1]);
-    assert.ok(texto.startsWith("Aqui está: https://raio-x-prumo.vercel.app/quer"));
-    assert.ok(texto.includes("Prospect quer: o que já está bom"), texto);
+    assert.ok(texto.startsWith("Aqui está o raio-x do Prospect quer:\nhttps://raio-x-prumo.vercel.app/quer"), texto);
+    assert.ok(texto.includes("sobre vocês no Google: o que já está bom"), texto);
     assert.ok(!texto.includes("R$"), "lead do PRUMO não recebe preço no frio");
     assert.ok(quer.eventos.some((e) => e.tipo === "raio-x"));
     const item = hoje.flatMap((g) => g.itens).find((i) => i.leadId === "prumo:quer")!;
@@ -623,7 +656,7 @@ describe("CRM: lista Hoje e contagens", () => {
     const site = followup.find((i) => i.leadId === "site:followup")!;
     assert.equal(site.links[0].rotulo, "Mandar o follow-up");
     const texto = new URL(site.links[0].url).searchParams.get("text") ?? "";
-    assert.match(texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. A demonstração de site da Empresa followup ficou pronta/);
+    assert.match(texto, /^Oi, é o Rômulo de novo\. A demonstração de site da Empresa followup está pronta/);
     assert.equal(site.links[1].rotulo, "Abrir conversa no WhatsApp");
     assert.equal(lead(leads, "site:followup-ontem").links.followup, undefined, "fora do dia do follow-up não há link");
     assert.equal(followup.find((i) => i.leadId === "prumo:convite")!.links.some((l) => l.rotulo === "Mandar o follow-up"), false);
@@ -871,7 +904,10 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
   it("tempo esperando e a ação do interesse parado", () => {
     assert.deepEqual([0.5, 2.5, 23.9, 24, 49].map((h) => tempoEsperando(h * 3600_000)), ["1 h", "2 h", "23 h", "1 dia", "2 dias"]);
     const site = { produto: "site" as const, links: {}, abordagem: undefined, demoApagadoEm: undefined };
-    assert.equal(acaoDoInteresseParado(site, 3 * 3600_000), "Quer ver há 3 h — o link ainda não foi mandado");
+    assert.equal(acaoDoInteresseParado({ ...site, links: { site: "https://demo.vercel.app" } }, 3 * 3600_000),
+      "Quer ver há 3 h — o link ainda não foi mandado");
+    // 15/10/2026: recebeu a A sem demo: o que falta é gerar o demo.
+    assert.equal(acaoDoInteresseParado(site, 3 * 3600_000), "Quer ver há 3 h — o demo ainda não foi gerado");
     assert.equal(acaoDoInteresseParado({ ...site, produto: "prumo", links: { segunda: "https://wa.me/1" } }, 3 * 3600_000),
       "Quer saber mais há 3 h — o Raio-X ainda não foi mandado");
   });
@@ -957,7 +993,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
     const um = lead(v.leads, "site:robo-1");
     assert.equal(`${um.followupHoje}/${um.reenvioDoRobo}`, "true/true");
     const texto = new URL(um.links.followup!).searchParams.get("text") ?? "";
-    assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo, do PRUMO\. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para a Empresa robo-1, mas acho que só chegou o atendimento automático\./);
+    assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo\. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para a Empresa robo-1, mas acho que só chegou a resposta automática\./);
     assert.ok(um.links.followup!.startsWith("https://wa.me/5527999990030?text="));
     assert.equal(lead(v.leads, "site:robo-lembrete-ontem").followupHoje, true, "o lembrete do 05 foi ontem, o reenvio continua");
     assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, false, "sem robô, o follow-up continua preso ao dia do lembrete");
@@ -991,8 +1027,8 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
     const p = lead(v.leads, "prumo:p-robo");
     assert.equal(`${p.followupHoje}/${p.reenvioDoRobo}`, "true/true");
     assert.equal(new URL(p.links.followup!).searchParams.get("text"),
-      "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui, mas acho que só chegou o atendimento automático. " +
-      "Pode me indicar quem cuida do marketing e do comercial do Prospect p-robo? É coisa rápida.");
+      "Oi, tudo bem? Aqui é o Rômulo, do Prumo. Mandei uma mensagem por aqui, mas acho que só chegou a resposta automática. " +
+      "Quem cuida do marketing e do comercial do Prospect p-robo? É coisa rápida.");
     assert.equal(`${lead(v.leads, "prumo:convite").followupHoje}/${lead(v.leads, "prumo:convite").links.followup}`, "true/undefined");
     const feito = com([], [proboPrumo("p-robo", d(1))], [fu("prumo", "p-robo", d(0.5))]);
     assert.equal(lead(feito.leads, "prumo:p-robo").followupHoje, false);

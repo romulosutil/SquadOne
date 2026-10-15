@@ -46,6 +46,8 @@ for (const linha of linhas) {
 const saida = [];
 // Lead com recibo fora de _descartados/: está vivo, mesmo que uma cópia antiga dele tenha sido descartada.
 const comRecibo = new Set();
+// Qualquer recibo, até cópia ou descartado: quem tem um não é o "lead sem recibo" da A sem demo (abaixo).
+const algumRecibo = new Set();
 // 14/10/2026: a letra sai da alocação balanceada por nicho (alocarRodada, site-mensagem.js), que
 // precisa de todos os leads da rodada de uma vez: o laço junta, a alocação roda, e só então monta.
 const aMontar = [];
@@ -54,6 +56,7 @@ recibos.forEach((item, i) => {
   const rec = item.json.recibo || {};
   const pid = rec.place_id;
   const dir = pastaDe(arquivosDosRecibos, item, i);
+  if (pid) algumRecibo.add(pid);
   if (!pid || ehCopia(dir) || emDescartados(dir)) return;
   comRecibo.add(pid);
 
@@ -83,16 +86,43 @@ recibos.forEach((item, i) => {
   const siteUrl = rec.site_url || linha.site_url || '';
   // 14/10/2026 (demo sob pedido): o recibo do Raio-X avulso nao tem site_url; o lead vira "pronto" com o
   // raio-x e recebe a C. O site_url chega depois, quando o Romulo toca "Gerar demo" e o gerador publica.
-  const raioXUrl = String(rec.raio_x_url || '').trim();
-  if (!siteUrl && !raioXUrl) return;
+  // 15/10/2026: recibo sem site e sem raio-x tambem segue: a A vale sem demo (site-mensagem.js).
   // Enviado so com o raio-x: nada a preencher ate o demo sair (sem isto, uma escrita igual por hora).
   if (semSite && !siteUrl) return;
   aMontar.push({ pid, rec, linha, status, waAtual, siteVersao, siteUrl, ehNovo, semSite });
 });
 
+// Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
+// gravou DESCARTAR.md (já tem site, rede, duplicado), mas não escreve na planilha, e o lead
+// seguia "novo" para sempre: o CRM apontava divergência e o funil semanal o contava como lead.
+// Só "novo" (ou vazio) vira "descartado"; o que já andou (pronto, enviado, recusado...) não muda.
+// Reabrir um descartado é voltar a pasta para a raiz E pôr "novo" na planilha.
+const PLACE_ID = /place_id[:* \t]+([a-zA-Z0-9_-]+)/i;
+const arquivosDosDescartes = $('Ler descartes do gerador').all();
+const descartados = new Set();
+$('Ler o texto do descarte').all().forEach((d, i) => {
+  const m = PLACE_ID.exec(String(d.json?.conteudo ?? ''));
+  if (m && emDescartados(pastaDe(arquivosDosDescartes, d, i))) descartados.add(m[1]);
+});
+
+// 15/10/2026 (decisao do Romulo): lead sem recibo nenhum (na fila do gerador, gerador que falhou, raio-x
+// sem padrao) ficava "novo" sem mensagem. Agora recebe a A, que vale sem demo; se responder, o demo sai
+// pelo "Gerar demo". Só "novo"/vazio vira "pronto", e o "pronto" sem recibo é remontado a cada rodada
+// como os outros. Sem telefone do Brasil não há mensagem (EUA seguem a fila do gerador).
+for (const linha of linhas.map(l => l.json)) {
+  const pid = String(linha.place_id || '').trim();
+  const status = String(linha.status || '').trim();
+  if (!pid || /^TESTE/i.test(pid) || algumRecibo.has(pid) || descartados.has(pid)) continue;
+  if (!['', 'novo', 'pronto'].includes(status)) continue;
+  const telefone = telefoneE164(linha.telefone);
+  if (!telefone || ehEua(telefone)) continue;
+  aMontar.push({ pid, rec: {}, linha, status, waAtual: String(linha.wa_link || '').trim(), siteVersao: '', siteUrl: '',
+    ehNovo: status !== 'pronto', semSite: false });
+}
+
 // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
 // O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
-// Sem site_url (demo sob pedido), sem_demo: so a C cabe, e sem raio-x nao ha mensagem (null).
+// Sem site_url (demo sob pedido ou sem recibo), sem_demo: A ou C (a C so com raio-x); nos EUA, nenhuma (null).
 const leadDaVariante = (m) => ({ ...m.linha, raio_x_url: m.rec.raio_x_url, raio_x_pontos: m.rec.raio_x_pontos, sem_demo: !m.siteUrl });
 // Só quem grava a letra entra na alocação: o enviado sem site (semSite) só ganha o wa_me.
 const alocadas = alocarRodada(linhas.map(l => l.json), aMontar
@@ -150,18 +180,7 @@ for (const { pid, rec, linha, status, waAtual, siteVersao, siteUrl, ehNovo, semS
   } });
 }
 
-// Descartes do gerador (08/10/2026): o runner move para _descartados/ o lead em que o Claude
-// gravou DESCARTAR.md (já tem site, rede, duplicado), mas não escreve na planilha, e o lead
-// seguia "novo" para sempre: o CRM apontava divergência e o funil semanal o contava como lead.
-// Só "novo" (ou vazio) vira "descartado"; o que já andou (pronto, enviado, recusado...) não muda.
-// Reabrir um descartado é voltar a pasta para a raiz E pôr "novo" na planilha.
-const PLACE_ID = /place_id[:* \t]+([a-zA-Z0-9_-]+)/i;
-const arquivosDosDescartes = $('Ler descartes do gerador').all();
-const descartados = new Set();
-$('Ler o texto do descarte').all().forEach((d, i) => {
-  const m = PLACE_ID.exec(String(d.json?.conteudo ?? ''));
-  if (m && emDescartados(pastaDe(arquivosDosDescartes, d, i))) descartados.add(m[1]);
-});
+// Os descartes (lidos antes da alocação) que ainda estão "novo" na planilha.
 for (const pid of descartados) {
   if (comRecibo.has(pid)) continue;
   const linha = porPlaceId[pid];

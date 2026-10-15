@@ -57,6 +57,12 @@ EUA a alocação devolve null (nenhuma mensagem), como o `varianteDe`. O aviso
 do 05 · Acompanhamento (follow-up) e o histórico (150 envios sem letra, mais os sorteados pelo
 hash antes disto, sem `ab_elegiveis`) não entram no teste; o CRM o lê em Resultados.
 
+15/10/2026 (decisão do Rômulo): a A vale sem demo. O lead sem demo cabe em A ou C (a C só com raio-x;
+a B continua só com demo), e o lead do Brasil sem recibo nenhum ("novo" na fila do gerador, gerador que
+falhou, Raio-X sem padrão) também vira "pronto" com a A; se responder, o demo sai pelo "Gerar demo". Fora:
+EUA (seguem a fila do gerador), sem telefone, quem tem qualquer recibo (até cópia ou descartado) e os
+descartes do gerador. Os textos foram revistos no mesmo dia (guia no site-mensagem.js).
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao, raio_x_url e ab_elegiveis)
@@ -246,7 +252,7 @@ def balcao(erro):
         "const planilha = 'https://docs.google.com/spreadsheets/d/" + PLANILHA + "/edit#gid=396728619';",
         "const conta = (f) => linhas.filter(f).length;",
         "const estado = { geradoEm: new Date().toISOString(), itens: [",
-        "  { id: 'site-enviar', nome: 'Sites prontos para enviar', quantidade: conta(l => String(l.status).trim() === 'pronto'),",
+        "  { id: 'site-enviar', nome: 'Primeiro contato para enviar', quantidade: conta(l => String(l.status).trim() === 'pronto'),",
         "    detalhe: 'Clique no wa_link do lead: abre o WhatsApp com a mensagem e marca como enviado.', link: planilha },",
         "  // Pasta fora da raiz (_recusados, _em-conversa) já tem destino: não espera mais nada.",
         "  { id: 'site-resposta', nome: 'Enviados esperando resposta',",
@@ -497,7 +503,7 @@ def testar() -> int:
             por = cruzar()
             e = por["pid-e"][0]
             self.assertEqual((e["mensagem_variante"], e["ab_elegiveis"]), ("EN", ""))  # EUA fica fora do teste
-            self.assertIn("Hi! This is", unquote(e["wa_me"]))
+            self.assertIn("Hi, how are you? This is Rômulo.", unquote(e["wa_me"]))
             f = por["pid-f"][0]
             self.assertEqual((f["mensagem_variante"], f["ab_elegiveis"], f["wa_link"]), ("", "", ""))
 
@@ -535,7 +541,7 @@ def testar() -> int:
         def test_sem_nenhum_descarte(self):
             # Glob sem arquivo: o n8n entrega um item vazio e a extração falha; nada muda.
             por = cruzar(descartes=[("", None)])
-            self.assertNotIn("pid-x", por)
+            self.assertNotIn("descartado", [i["status"] for i in por.get("pid-x", []) if "status" in i])
             self.assertEqual(por["pid-b"][0]["status"], "pronto")
 
     class Variante(unittest.TestCase):
@@ -571,8 +577,8 @@ def testar() -> int:
 
         def test_o_texto_casa_com_a_letra(self):
             inicio = {"A": "Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google",
-                      "B": "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi a Padaria ",
-                      "C": "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como a Padaria "}
+                      "B": "Oi, tudo bem? Aqui é o Rômulo. Vi a Padaria ",
+                      "C": "Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como a Padaria "}
             # O Raio-X vem do recibo (publicado.json), a nota vem da linha da planilha.
             por = cruzar(planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
                          recibos=[(f"lead-{i}", {**recibo(f"pid-{i}", f"lead-{i}"), **self.RAIO_X}) for i in range(40)], marcas=[])
@@ -584,9 +590,9 @@ def testar() -> int:
                 texto, letra = unquote(itens[0]["wa_me"]).split("?text=")[1], itens[0]["mensagem_variante"]
                 self.assertTrue(texto.startswith(inicio[letra]), (letra, texto))
                 if letra == "B":
-                    self.assertIn("no Google: nota 4,9 com 34 avaliações, mas quem pesquisa", texto)
+                    self.assertIn("no Google: nota 4,9 em 34 avaliações. Só que quem pesquisa", texto)
                 if letra == "C":
-                    self.assertIn("o que já está bom e 2 pontos que fazem cliente ir para o concorrente", texto)
+                    self.assertIn("o que já está bom e 2 pontos que fazem o cliente ir para o concorrente", texto)
                     self.assertNotIn("https://", texto)  # o link do raio-x não vai na 1ª
                 self.assertNotIn("{", texto)
                 self.assertEqual(itens[0]["raio_x_url"], "https://demo-x.vercel.app/raio-x")
@@ -692,33 +698,36 @@ def testar() -> int:
         def test_eua_e_so_a(self):
             res = self.alocar([], [self.pedido("us", lead=self.ABC, eua=True), self.pedido("so-a", lead={})])
             self.assertEqual((res["us"]["letra"], res["us"]["elegiveis"]), ("EN", ""))
-            self.assertIn("Hi! This is", res["us"]["molde"])
+            self.assertIn("Hi, how are you? This is Rômulo.", res["us"]["molde"])
             self.assertEqual((res["so-a"]["letra"], res["so-a"]["elegiveis"]), ("A", "A"))
 
-        def test_sem_demo_so_a_c_sem_sorteio_ou_nenhuma_mensagem(self):
-            # Demo sob pedido (14/10/2026): A e B dizem "montei uma demonstração"; sem demo, só a C cabe.
-            linhas = [{"place_id": f"c{i}", "vertical": "advocacia", "mensagem_variante": "C", "ab_elegiveis": "C"} for i in range(3)]
-            res = self.alocar(linhas, [self.pedido("so-c", lead={**self.ABC, "sem_demo": True}),
-                                       self.pedido("sem-nada", lead={**self.AB, "sem_demo": True}),
+        def test_sem_demo_a_ou_c_nunca_b(self):
+            # 15/10/2026: sem demo, a A também vale (decisão do Rômulo); a B continua só com demo.
+            linhas = [{"place_id": f"c{i}", "vertical": "advocacia", "mensagem_variante": "C", "ab_elegiveis": "AC"} for i in range(3)]
+            res = self.alocar(linhas, [self.pedido("com-raio-x", lead={**self.ABC, "sem_demo": True}),
+                                       self.pedido("sem-raio-x", lead={**self.AB, "sem_demo": True}),
                                        self.pedido("us", lead={**self.ABC, "sem_demo": True}, eua=True)])
-            self.assertEqual((res["so-c"]["letra"], res["so-c"]["elegiveis"]), ("C", "C"))
-            self.assertIn("Fiz um raio-x", res["so-c"]["molde"])
-            self.assertIsNone(res["sem-nada"])  # sem raio-x: nenhuma mensagem possível
-            self.assertIsNone(res["us"])  # o raio-x é só em português
-            # O estrato "C" não mexe no ABC do mesmo nicho: o próximo com demo começa do zero.
+            # O estrato AC já tem 3 C: o novo vai para a A.
+            self.assertEqual((res["com-raio-x"]["letra"], res["com-raio-x"]["elegiveis"]), ("A", "AC"))
+            self.assertIn("montei, por conta própria, uma demonstração", res["com-raio-x"]["molde"])
+            self.assertEqual((res["sem-raio-x"]["letra"], res["sem-raio-x"]["elegiveis"]), ("A", "A"))
+            self.assertIsNone(res["us"])  # fora do Brasil, sem demo, segue a fila do gerador
+            # O estrato "AC" não mexe no ABC do mesmo nicho: o próximo com demo começa do zero.
             com_demo = self.alocar(linhas, [self.pedido("novo", lead=self.ABC)])["novo"]
             antiga = rodar_js(codigo_js("site-mensagem.js") + "\nreturn varianteDe('novo', false, " + json.dumps(self.ABC) + ").letra;", {})
             self.assertEqual(com_demo["letra"], antiga)
 
-        def test_no_balcao_so_com_raio_x_grava_c_e_o_conjunto_c(self):
+        def test_no_balcao_so_com_raio_x_sorteia_entre_a_e_c(self):
             avulso = {"raio_x_url": "https://raio-x-prumo.vercel.app/lead", "raio_x_pontos": 3}
             por = cruzar(planilha=[linha(f"pid-{i}", "novo", vertical="advocacia", **self.AB) for i in range(4)],
                          recibos=[(f"lead-{i}", {"place_id": f"pid-{i}", "nome": f"lead-{i}", **avulso}) for i in range(4)], marcas=[])
-            self.assertEqual({(i[0]["mensagem_variante"], i[0]["ab_elegiveis"]) for i in por.values()}, {("C", "C")})
-            # Sem pontos válidos não há mensagem: o lead fica como está, sem letra nem conjunto.
+            self.assertEqual(sorted((i[0]["mensagem_variante"], i[0]["ab_elegiveis"]) for i in por.values()),
+                             [("A", "AC"), ("A", "AC"), ("C", "AC"), ("C", "AC")])
+            # Sem pontos válidos a C não cabe: sai a A, sem demo.
             por = cruzar(planilha=[linha("pid-x", "novo", **self.AB)],
                          recibos=[("lead-x", {"place_id": "pid-x", "nome": "x", "raio_x_url": avulso["raio_x_url"]})], marcas=[])
-            self.assertNotIn("pid-x", por)
+            self.assertEqual((por["pid-x"][0]["status"], por["pid-x"][0]["mensagem_variante"], por["pid-x"][0]["ab_elegiveis"]),
+                             ("pronto", "A", "A"))
 
         def test_nicho_vazio_e_um_estrato_so_e_grafia_nao_separa(self):
             linhas = [{"place_id": "x1", "vertical": "", "mensagem_variante": "A", "ab_elegiveis": "AB"},
@@ -767,16 +776,41 @@ def testar() -> int:
         def so_raio_x(self, pid, slug):
             return {"place_id": pid, "nome": slug, "slug": slug, **self.AVULSO}
 
-        def test_novo_so_com_raio_x_vira_pronto_sempre_com_a_c(self):
+        def test_novo_so_com_raio_x_vira_pronto_com_a_ou_c_nunca_b(self):
             por = cruzar(planilha=[linha(f"pid-{i}", "novo", nota="4.9", avaliacoes="34") for i in range(40)],
                          recibos=[(f"lead-{i}", self.so_raio_x(f"pid-{i}", f"lead-{i}")) for i in range(40)], marcas=[])
-            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"C"})
+            self.assertEqual({i[0]["mensagem_variante"] for i in por.values()}, {"A", "C"})
             for itens in por.values():
                 item = itens[0]
                 self.assertEqual((item["status"], item["site_url"], item["raio_x_url"]), ("pronto", "", self.AVULSO["raio_x_url"]))
                 texto = unquote(item["wa_me"]).split("?text=")[1]
-                self.assertIn("Fiz um raio-x", texto)
-                self.assertNotIn("demonstração", texto)
+                self.assertIn("Fiz, por conta própria, um raio-x" if item["mensagem_variante"] == "C" else "montei, por conta própria", texto)
+
+        def test_lead_sem_recibo_vira_pronto_com_a(self):
+            # 15/10/2026: na fila do gerador (ou o gerador falhou), sem recibo nenhum: sai a A, sem demo.
+            planilha = [linha("pid-n", "novo", briefing="**Elogiam:** a eficiência contra cupins e escorpiões."),
+                        linha("pid-p", "pronto", mensagem_variante="A", ab_elegiveis="A"),
+                        linha("pid-us", "novo", telefone="+1 305-642-0504"), linha("pid-sem", "novo", telefone=""),
+                        linha("pid-env", "enviado"), linha("pid-x", "novo"), linha("TESTE-1", "novo")]
+            por = cruzar(planilha=planilha, recibos=[], marcas=[])
+            n = por["pid-n"][0]
+            self.assertEqual((n["status"], n["site_url"], n["mensagem_variante"], n["ab_elegiveis"], n["site_versao"]),
+                             ("pronto", "", "A", "A", ""))
+            self.assertTrue(n["wa_link"].endswith("/enviar?place_id=pid-n"))
+            self.assertEqual(unquote(n["wa_me"]).split("?text=")[1],
+                             "Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma "
+                             "demonstração de site da Padaria pid-n, destacando o que os clientes mais elogiam: a eficiência "
+                             "contra cupins e escorpiões. Posso te mandar o link para dar uma olhada? É sem compromisso.")
+            self.assertEqual((por["pid-p"][0]["status"], por["pid-p"][0]["mensagem_variante"]), ("pronto", "A"))
+            # EUA, sem telefone, já enviado, descartado e linha de teste: nada.
+            for pid in ("pid-us", "pid-sem", "pid-env", "TESTE-1"):
+                self.assertNotIn(pid, por)
+            self.assertEqual(por["pid-x"], [{"place_id": "pid-x", "status": "descartado"}])
+
+        def test_recibo_descartado_ou_copia_nao_e_lead_sem_recibo(self):
+            por = cruzar(planilha=[linha("pid-z", "novo")], recibos=[("_descartados/bar-z", recibo("pid-z", "bar-z"))],
+                         marcas=[], descartes=[("", None)])
+            self.assertNotIn("pid-z", por)
 
         def test_eua_sem_demo_nao_vira_pronto(self):
             por = cruzar(planilha=[linha("pid-e", "novo", telefone="+1 305-642-0504")],
@@ -805,10 +839,10 @@ def testar() -> int:
             r = rodar_js(codigo_js("site-mensagem.js") + "\nreturn [segundaDe(" + json.dumps(l) + "), segundaDe("
                          + json.dumps(com) + "), segundaDe(" + json.dumps({**l, "mensagem_variante": "A"}) + ")];", {})
             sem, depois, nada = r
-            self.assertTrue(sem["texto"].startswith("Aqui está o raio-x: https://raio-x-prumo.vercel.app/lead"))
-            self.assertIn("monto também uma demonstração", sem["texto"])
+            self.assertTrue(sem["texto"].startswith("Aqui está o raio-x da Clínica C:\nhttps://raio-x-prumo.vercel.app/lead"))
+            self.assertIn("também monto uma demonstração de site", sem["texto"])
             self.assertNotIn("R$", sem["texto"])
-            self.assertTrue(depois["texto"].startswith("Aqui está a demonstração do site da Clínica C: https://demo-clinica-c"))
+            self.assertTrue(depois["texto"].startswith("Aqui está a demonstração de site da Clínica C:\nhttps://demo-clinica-c"))
             self.assertIn("R$ 690", depois["texto"])
             self.assertEqual(nada["link"], "")  # sem raio-x da C e sem demo: não há o que mandar
 

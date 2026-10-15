@@ -3,7 +3,7 @@
  *
  * O toque no `wa_link` marca o lead como enviado no n8n e abre o WhatsApp, mas o
  * retrato da planilha só muda no próximo ciclo do `08 · CRM` (até 10 min). Até
- * lá o lead seguia em "Sites prontos para enviar" como se nada tivesse
+ * lá o lead seguia em "Primeiro contato para enviar" como se nada tivesse
  * acontecido: com 35 prontos, quem enviava em sequência perdia onde estava e
  * podia mandar duas vezes para o mesmo número. Por isso a tela lembra o toque,
  * só neste navegador e por pouco tempo: é conveniência de quem envia, nunca
@@ -96,7 +96,7 @@ export function estadoDoEnvio(abertoEm: number, agora: number): 'aguardando' | '
   return agora - abertoEm >= CONFIRMACAO_ESPERADA_MS ? 'conferir' : 'aguardando'
 }
 
-/** Os itens de "Sites prontos para enviar" com os já abertos no fim, cada parte na ordem do servidor. */
+/** Os itens de "Primeiro contato para enviar" com os já abertos no fim, cada parte na ordem do servidor. */
 export function ordenarComEnvios(itens: CrmItemHoje[], envios: EnviosAbertos): CrmItemHoje[] {
   return [...itens.filter(i => !(i.leadId in envios)), ...itens.filter(i => i.leadId in envios)]
 }

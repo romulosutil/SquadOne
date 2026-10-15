@@ -31,10 +31,22 @@
 // raio_x_pontos ("1 ponto que faz", "2 pontos que fazem"): o plano dizia "3 pontos",
 // mas em 08/10 so 1 dos 88 demos tinha 3 (o Raio-X so mostra fato verificavel do
 // Places), e o numero fixo seria falso para quase todos.
-const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi {O_A} {NOME} no Google: nota {NOTA} com {AVALIACOES} avaliações, mas quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. Posso te mandar o link?', 'Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e {PONTOS} cliente ir para o concorrente. É uma página só. Posso te mandar?'];
+// 15/10/2026 (revisao de texto pedida pelo Romulo: as mensagens estavam diferentes entre si).
+// A A ficou como ele ditou; as outras seguem o mesmo guia, para a conversa soar de uma pessoa so:
+// - quem fala: "Oi, tudo bem? Aqui e o Romulo." no primeiro contato e no reenvio (que chega a
+//   outra pessoa); "Oi, e o Romulo de novo." no follow-up. Sem "do PRUMO" no Site: a A nao o tem,
+//   e com ele so na B e na C o A/B media a apresentacao junto com o gancho;
+// - nomes que o lead entende: "demonstracao de site" (nunca "demo") e "raio-x" em minusculas;
+// - o mesmo pedido no fim de toda primeira mensagem e follow-up: "Posso te mandar o link para dar
+//   uma olhada? E sem compromisso.";
+// - o link sempre sozinho na linha de baixo de quem ele e ("Aqui esta o raio-x da X:" e, na linha seguinte, o link);
+// - preco legivel: "R$ 690 uma vez e R$ 39 por mes" (antes "R$ 690 e R$ 39 por mes", que lia
+//   como dois valores do mesmo mes);
+// - a saida facil igual em todas: "Se nao for o momento, e so dizer que eu apago."; uma pergunta so.
+const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google: nota {NOTA} em {AVALIACOES} avaliações. Só que quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e {PONTOS} o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? É sem compromisso.'];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
-const VARIACAO_EN = "Hi! This is Rômulo. I found {NOME} on Google and put together a demo website for you, on my own initiative. Can I send you the link so you can take a look? No strings attached.";
+const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google and, on my own initiative, put together a demo website for you. Can I send you the link so you can take a look? No strings attached.';
 
 // 07/10/2026: a variacao de cada lead vai para a coluna mensagem_variante (o funil so
 // aprende comparando). A letra sai do place_id, nao da ordem da rodada: o Balcao remonta
@@ -74,18 +86,22 @@ function fatosDoGoogle(lead) {
   if (!(nota >= NOTA_MINIMA_B && nota <= 5) || !(Number.isInteger(avaliacoes) && avaliacoes >= AVALIACOES_MINIMAS_B)) return null;
   return { nota: nota.toFixed(1).replace('.', ','), avaliacoes: String(avaliacoes).replace(/\B(?=(\d{3})+(?!\d))/g, '.') };
 }
-// 14/10/2026 (demo sob pedido): lead sem demo (lead.sem_demo, recibo sem site_url) so recebe a C. A e B
-// dizem "montei uma demonstracao", e o demo so e feito depois do botao "Gerar demo"; a C oferece o
-// raio-x, que ja esta no ar. Sem raio-x, ou nos EUA (o raio-x e so em portugues), nao ha mensagem: null.
+// 14/10/2026 (demo sob pedido): lead sem demo (lead.sem_demo, recibo sem site_url) so recebia a C, porque
+// A e B dizem "montei uma demonstracao" e o demo so e feito depois do botao "Gerar demo".
+// 15/10/2026 (decisao do Romulo): a A tambem vale sem demo. Lead parado sem mensagem (gerador que
+// falhou, raio-x sem padrao, fila antiga) recebe a A, e quem responder ganha o demo pelo "Gerar demo"
+// (uns 20 a 40 minutos). A B continua so com demo. Nos EUA, sem demo, nao ha mensagem (null): o lead
+// de fora segue a fila de sempre do gerador e recebe a EN quando o demo sai.
 // O lead que ja tem demo sorteia entre as mesmas de antes, entao a letra dele nao muda.
 // Os indices de VARIACOES que este lead pode receber (com texto e com os fatos que o texto cita).
-// Vazio = nenhuma mensagem possivel (sem demo e sem raio-x).
+const LETRAS_SEM_DEMO = ['A', 'C'];
 function indicesElegiveis(lead) {
   const semDemo = Boolean(lead && lead.sem_demo);
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
-  const cabe = (t) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t)) && (!semDemo || citaRaioX(t));
-  return VARIACOES.map((t, i) => (cabe(t) ? i : -1)).filter(i => i >= 0);
+  const cabe = (t, i) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t))
+    && (!semDemo || LETRAS_SEM_DEMO.indexOf(LETRAS[i]) >= 0);
+  return VARIACOES.map((t, i) => (cabe(t, i) ? i : -1)).filter(i => i >= 0);
 }
 // O molde da letra com {NOTA}, {AVALIACOES} e {PONTOS} ja preenchidos.
 function moldeDaLetra(letra, lead) {
@@ -216,18 +232,19 @@ function alocarRodada(linhas, pedidos) {
 // travava no "quanto custa?" e nao separava curioso de comprador. O preco e o
 // do plano PRUMO (hipotese ate 08/11/2026); mudou, muda so esta linha e o espelho.
 // Em ingles sai sem numero: o preco em dolar ainda nao foi decidido.
-const SEGUNDA = 'Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
-const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
+const SEGUNDA = 'Aqui está a demonstração de site {ARTIGO} {NOME}:\n{URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?';
+const SEGUNDA_EN = "Here is the demo website for {NOME}:\n{URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working.\n\nIf now isn't the right time, just let me know and I'll take it down.\n\nWhat do you think?";
 // Quem recebeu a C pediu o raio-x, nao o site: a segunda manda os dois links (o raio-x
 // primeiro) e o mesmo preco. {RAIO_X} vem da coluna raio_x_url, que o Balcao grava do
 // publicado.json; sem ela, a segunda e a de sempre. So em portugues (EUA nunca e C).
-const SEGUNDA_RAIO_X = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+const SEGUNDA_RAIO_X = 'Aqui está o raio-x {ARTIGO} {NOME}:\n{RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz o cliente ir para o concorrente.\n\nTambém montei uma demonstração de site, com as fotos e as avaliações que vocês já têm:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?';
 // 14/10/2026 (demo sob pedido): o raio-x avulso (raio-x-prumo.vercel.app) e de quem ainda nao tem demo.
 // A segunda leva so o raio-x e oferece a demonstracao, sem preco (o preco vai com o demo); quando o
 // Romulo toca "Gerar demo" e o demo sai, a proxima mensagem e a do demo, com o preco de sempre.
 const RAIO_X_AVULSO = 'https://raio-x-prumo.vercel.app/';
-const SEGUNDA_RAIO_X_SEM_DEMO = 'Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz cliente ir para o concorrente.\n\nSe quiserem, monto também uma demonstração do site de vocês, com as fotos e as avaliações que já têm. É sem compromisso.\n\nO que acharam?';
-const DEMO_DEPOIS_DO_RAIO_X = 'Aqui está a demonstração do site {ARTIGO} {NOME}: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?';
+const SEGUNDA_RAIO_X_SEM_DEMO = 'Aqui está o raio-x {ARTIGO} {NOME}:\n{RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz o cliente ir para o concorrente.\n\nSe quiserem, também monto uma demonstração de site com as fotos e as avaliações que vocês já têm. É sem compromisso.\n\nO que acharam?';
+// 15/10/2026: o mesmo texto da segunda (o demo que ele pediu depois do raio-x e o de quem recebeu a A).
+const DEMO_DEPOIS_DO_RAIO_X = SEGUNDA;
 
 // 29/09/2026: follow-up de 3 dias sem resposta. Vai pelo Acompanhamento como
 // aviso ao Romulo; quem envia e ele. 05/10/2026: quem recebeu a primeira
@@ -236,12 +253,12 @@ const DEMO_DEPOIS_DO_RAIO_X = 'Aqui está a demonstração do site {ARTIGO} {NOM
 // 08/10/2026: textos do plano PRUMO. O sem link diz que o demo ficou pronto (e
 // quem escreve); o com link oferece mudar em um dia e apagar se nao for o
 // momento. O link continua numa linha so dele (30/09).
-const FOLLOWUP = 'Oi, aqui é o Rômulo de novo, do PRUMO. A demonstração de site {ARTIGO} {NOME} ficou pronta, com as fotos e as avaliações de vocês. Quer que eu mande o link?';
-const FOLLOWUP_EN = "Hi, it's Rômulo again, from PRUMO. The demo website for {NOME} is ready, with your photos and reviews. Would you like me to send the link?";
-const FOLLOWUP_COM_LINK = 'Oi, aqui é o Rômulo de novo. Deu para ver o site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. E se não for o momento, é só me dizer que eu apago.';
-const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
+const FOLLOWUP = 'Oi, é o Rômulo de novo. A demonstração de site {ARTIGO} {NOME} está pronta, com as fotos e as avaliações de vocês. Posso te mandar o link para dar uma olhada? É sem compromisso.';
+const FOLLOWUP_EN = "Hi, it's Rômulo again. The demo website for {NOME} is ready, with your photos and reviews. Can I send you the link so you can take a look? No strings attached.";
+const FOLLOWUP_COM_LINK = 'Oi, é o Rômulo de novo. Deu para ver a demonstração de site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. Se não for o momento, é só dizer que eu apago.';
+const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the demo website for {NOME}?\n{URL}\n\nIf anything isn't quite right, I'll change it within a day. If now isn't the right time, just let me know and I'll take it down.";
 // Quem recebeu a C (mensagem_variante) e lembrado do raio-x que ofereceu, nao do site.
-const FOLLOWUP_RAIO_X = 'Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?';
+const FOLLOWUP_RAIO_X = 'Oi, é o Rômulo de novo. O raio-x de como {O_A} {NOME} aparece no Google está pronto: o que já está bom e o que faz o cliente ir para o concorrente. Posso te mandar o link para dar uma olhada? É sem compromisso.';
 
 // Nomes que pedem artigo feminino. Lista simples de proposito: e facil de
 // estender, e o Romulo le a mensagem antes de enviar.

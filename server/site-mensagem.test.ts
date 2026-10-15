@@ -70,17 +70,19 @@ describe("site-mensagem: espelho do JS do n8n", () => {
   });
 
   it("o follow-up de quem não recebeu o link pede licença; o de quem recebeu lembra o link", () => {
-    assert.match(followupDe(CASOS[0][1]).texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. A demonstração de site da Dedetizadora Alfa ficou pronta/);
-    assert.match(followupDe(CASOS[2][1]).texto, /Deu para ver o site da Pousada do Mar\?\nhttps:\/\/demo-mar\.vercel\.app\n\n/);
-    assert.match(followupDe(CASOS[3][1]).texto, /^Hi, it's Rômulo again, from PRUMO\./);
+    assert.equal(followupDe(CASOS[0][1]).texto, "Oi, é o Rômulo de novo. A demonstração de site da Dedetizadora Alfa está pronta, " +
+      "com as fotos e as avaliações de vocês. Posso te mandar o link para dar uma olhada? É sem compromisso.");
+    assert.match(followupDe(CASOS[2][1]).texto, /Deu para ver a demonstração de site da Pousada do Mar\?\nhttps:\/\/demo-mar\.vercel\.app\n\n/);
+    assert.match(followupDe(CASOS[3][1]).texto, /^Hi, it's Rômulo again\. The demo website for Latin Dental is ready/);
     assert.equal(followupDe(CASOS[4][1]).link, "");
   });
 
   it("a segunda leva o preço e o pagar depois de ver; em inglês, sem preço", () => {
     const br = segundaDe(CASOS[0][1]).texto;
-    assert.match(br, /^Aqui está: https:\/\/demo-alfa\.vercel\.app\n\n/);
-    assert.match(br, /R\$ 690 e R\$ 39 por mês/);
-    assert.match(br, /só pagam depois de ver funcionando/);
+    assert.equal(br, "Aqui está a demonstração de site da Dedetizadora Alfa:\nhttps://demo-alfa.vercel.app\n\n" +
+      "Fiz com as fotos e as avaliações que vocês já têm no Google.\n\n" +
+      "Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes " +
+      "incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?");
     // O wa.me leva o texto codificado: o "$" vira %24 no link, e o WhatsApp o decodifica.
     assert.ok(segundaDe(CASOS[0][1]).link.includes("R%24%20690"));
     const en = segundaDe(CASOS[3][1]).texto;
@@ -91,16 +93,16 @@ describe("site-mensagem: espelho do JS do n8n", () => {
   it("quem recebeu a C ganha o raio-x e o site na segunda, e o follow-up lembra o raio-x", () => {
     const c = CASOS.find(([n]) => n === "variação C com o Raio-X")![1];
     const segunda = segundaDe(c).texto;
-    assert.match(segunda, /^Aqui está o raio-x: https:\/\/demo-sorriso\.vercel\.app\/raio-x\n\n/);
-    assert.match(segunda, /está aqui:\nhttps:\/\/demo-sorriso\.vercel\.app\n\n/);
-    assert.match(segunda, /R\$ 690 e R\$ 39 por mês/);
-    assert.match(followupDe(c).texto, /^Oi, aqui é o Rômulo de novo, do PRUMO\. O raio-x de como a Clínica Sorriso aparece no Google ficou pronto/);
+    assert.match(segunda, /^Aqui está o raio-x da Clínica Sorriso:\nhttps:\/\/demo-sorriso\.vercel\.app\/raio-x\n\n/);
+    assert.match(segunda, /que vocês já têm:\nhttps:\/\/demo-sorriso\.vercel\.app\n\n/);
+    assert.match(segunda, /R\$ 690 uma vez e R\$ 39 por mês/);
+    assert.match(followupDe(c).texto, /^Oi, é o Rômulo de novo\. O raio-x de como a Clínica Sorriso aparece no Google está pronto/);
     // Sem o link do Raio-X na linha, a segunda é a do site; o follow-up continua o do raio-x.
     const semUrl = CASOS.find(([n]) => n === "variação C sem o raio_x_url na linha")![1];
-    assert.match(segundaDe(semUrl).texto, /^Aqui está: https:\/\/demo-lima\.vercel\.app\n\n/);
+    assert.match(segundaDe(semUrl).texto, /^Aqui está a demonstração de site do Escritório Lima:\nhttps:\/\/demo-lima\.vercel\.app\n\n/);
     assert.match(followupDe(semUrl).texto, /raio-x de como o Escritório Lima/);
     // B com raio_x_url: a segunda é a do site.
-    assert.match(segundaDe(CASOS.find(([n]) => n.startsWith("variação B"))![1]).texto, /^Aqui está: https:\/\/demo-boa/);
+    assert.match(segundaDe(CASOS.find(([n]) => n.startsWith("variação B"))![1]).texto, /^Aqui está a demonstração de site da Oficina Boa:\nhttps:\/\/demo-boa/);
   });
 });
 
@@ -108,9 +110,9 @@ describe("site-mensagem: reenvio do só-robô (só do CRM, 14/10/2026)", () => {
   const texto = (l: LeadDaMensagem) => reenvioDoRoboDe(l)?.texto ?? "";
 
   it("pede a pessoa certa, com o artigo e o nome certos", () => {
-    assert.equal(texto(CASOS[0][1]), "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre uma demonstração de site que montei " +
-      "para a Dedetizadora Alfa, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? " +
-      "Posso mandar o link direto para a pessoa, é sem compromisso.");
+    assert.equal(texto(CASOS[0][1]), "Oi, tudo bem? Aqui é o Rômulo. Mandei uma mensagem por aqui sobre uma demonstração de site que montei " +
+      "para a Dedetizadora Alfa, mas acho que só chegou a resposta automática. Quem cuida do site ou do marketing de vocês? " +
+      "Posso mandar o link direto para essa pessoa. É sem compromisso.");
     assert.match(texto(CASOS[1][1]), /montei para o Escritório Silva & Prado, mas/);
     const r = reenvioDoRoboDe(CASOS[0][1])!;
     assert.equal(r.numero, "5527999990001");
@@ -119,7 +121,7 @@ describe("site-mensagem: reenvio do só-robô (só do CRM, 14/10/2026)", () => {
 
   it("quem recebeu a C ouve do raio-x, não do site", () => {
     const c = CASOS.find(([n]) => n === "variação C com o Raio-X")![1];
-    assert.match(texto(c), /sobre um raio-x de como a Clínica Sorriso aparece no Google, mas acho que só chegou o atendimento automático\./);
+    assert.match(texto(c), /sobre um raio-x de como a Clínica Sorriso aparece no Google, mas acho que só chegou a resposta automática\./);
     assert.doesNotMatch(texto(c), /demonstração/);
   });
 
@@ -138,7 +140,7 @@ describe("site-mensagem: reenvio do só-robô (só do CRM, 14/10/2026)", () => {
   });
 
   it("o JS do n8n não tem o reenvio: o espelho continua só com o que o n8n manda", () => {
-    assert.ok(!codigo.includes("atendimento automático"));
+    assert.ok(!codigo.includes("só chegou a resposta automática"));
     assert.equal(ROTULO_DO_REENVIO, "Pedir o responsável");
     assert.equal(ROTULO_DO_FOLLOWUP, "Mandar o follow-up");
   });
@@ -168,11 +170,11 @@ describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
     const pidB = pids.find((p) => doN8n.varianteDe(p, false, { nota: 5, avaliacoes: 1234 }).letra === "B")!;
     const b = doN8n.varianteDe(pidB, false, { nota: 5, avaliacoes: 1234 });
     assert.equal(doN8n.preencher(b.molde, "Clínica Bem Estar", "https://x", ""),
-      "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Vi a Clínica Bem Estar no Google: nota 5,0 com 1.234 avaliações, mas quem pesquisa " +
-      "não encontra um site de vocês e acaba indo para quem tem. Montei uma demonstração com as fotos e as avaliações que vocês já têm. " +
-      "Posso te mandar o link?");
+      "Oi, tudo bem? Aqui é o Rômulo. Vi a Clínica Bem Estar no Google: nota 5,0 em 1.234 avaliações. Só que quem pesquisa " +
+      "não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos " +
+      "e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.");
     const b2 = doN8n.varianteDe(pidB, false, { nota: "4.8", avaliacoes: "40" });
-    assert.match(doN8n.preencher(b2.molde, "Escritório Silva", "https://x", ""), /Vi o Escritório Silva no Google: nota 4,8 com 40 avaliações/);
+    assert.match(doN8n.preencher(b2.molde, "Escritório Silva", "https://x", ""), /Vi o Escritório Silva no Google: nota 4,8 em 40 avaliações\./);
     const pidA = pids.find((p) => doN8n.varianteDe(p, false, { nota: 5, avaliacoes: 40 }).letra === "A")!;
     assert.match(doN8n.preencher(doN8n.varianteDe(pidA, false, { nota: 5, avaliacoes: 40 }).molde, "Clínica X", "https://x", ""),
       /^Oi, tudo bem\? Aqui é o Rômulo\. Encontrei vocês no Google/);
@@ -194,10 +196,11 @@ describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
     const lead = (n: number) => ({ raio_x_url: "https://demo-x.vercel.app/raio-x", raio_x_pontos: n });
     const pidC = pids.find((p) => doN8n.varianteDe(p, false, lead(1)).letra === "C")!;
     assert.equal(doN8n.preencher(doN8n.varianteDe(pidC, false, lead(1)).molde, "Clínica Bem Estar", "https://demo-x.vercel.app", ""),
-      "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Fiz um raio-x de como a Clínica Bem Estar aparece para quem procura no Google: " +
-      "o que já está bom e 1 ponto que faz cliente ir para o concorrente. É uma página só. Posso te mandar?");
+      "Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como a Clínica Bem Estar aparece para quem procura no Google: " +
+      "o que já está bom e 1 ponto que faz o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? " +
+      "É sem compromisso.");
     const dois = doN8n.preencher(doN8n.varianteDe(pidC, false, lead(2)).molde, "Escritório Lima", "https://demo-x.vercel.app", "");
-    assert.match(dois, /como o Escritório Lima aparece .* e 2 pontos que fazem cliente ir para o concorrente\./);
+    assert.match(dois, /como o Escritório Lima aparece .* e 2 pontos que fazem o cliente ir para o concorrente\./);
     assert.doesNotMatch(dois, /https?:|\{/);
   });
 
@@ -259,18 +262,22 @@ describe("site-mensagem: A/B estratificado (alocarRodada)", () => {
     assert.notEqual(perdeu.letra, "C");
   });
 
-  it("sem demo (demo sob pedido): só a C, sem sorteio; sem raio-x ou nos EUA, nenhuma mensagem (null)", () => {
+  // 15/10/2026 (decisão do Rômulo): a A vale sem demo; a B, não. Nos EUA, sem demo, nada (fila do gerador).
+  it("sem demo: A ou C (a C só com raio-x), nunca B; nos EUA, nenhuma mensagem (null)", () => {
     const r = js.alocarRodada([], [
       { placeId: "c", nicho: "x", lead: { ...ABC, sem_demo: true } },
-      { placeId: "nada", nicho: "x", lead: { ...AB, sem_demo: true } },
+      { placeId: "so-a", nicho: "x", lead: { ...AB, sem_demo: true } },
       { placeId: "us", eua: true, lead: { ...ABC, sem_demo: true } },
     ]);
-    assert.deepEqual([r.c?.letra, r.c?.elegiveis, r.c?.congelada], ["C", "C", false]);
-    assert.equal(r.nada as Resultado | null, null);
+    assert.deepEqual([r.c?.elegiveis, r.c?.congelada], ["AC", false]);
+    assert.ok(["A", "C"].includes(r.c!.letra));
+    assert.deepEqual([r["so-a"]?.letra, r["so-a"]?.elegiveis], ["A", "A"]);
+    assert.match(r["so-a"]!.molde, /^Oi, tudo bem\? Aqui é o Rômulo\. Encontrei vocês no Google e montei, por conta própria/);
     assert.equal(r.us as Resultado | null, null);
-    assert.equal(js.elegiveisDe({ ...ABC, sem_demo: true }), "C");
-    assert.equal(js.elegiveisDe({ ...AB, sem_demo: true }), "");
-    assert.equal(js.varianteDe("nada", false, { ...AB, sem_demo: true }), null);
+    assert.equal(js.elegiveisDe({ ...ABC, sem_demo: true }), "AC");
+    assert.equal(js.elegiveisDe({ ...AB, sem_demo: true }), "A");
+    assert.equal(js.elegiveisDe({ sem_demo: true }), "A");
+    assert.equal(js.varianteDe("so-a", false, { ...AB, sem_demo: true })?.letra, "A");
   });
 
   it("EUA fica em EN sem conjunto; só A não sorteia; nicho vazio é um estrato só", () => {

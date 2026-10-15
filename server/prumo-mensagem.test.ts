@@ -8,8 +8,8 @@ const texto = (link: string) => new URL(link).searchParams.get("text") ?? "";
 describe("prumo-mensagem: reenvio do só-robô", () => {
   it("pede quem cuida do marketing e do comercial, com o nome como o dono escreve e o artigo certo", () => {
     assert.equal(texto(reenvioDoPrumo("5511900000000", "RODA MAIS DISTRIBUIDORA LTDA")),
-      "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui, mas acho que só chegou o atendimento automático. " +
-      "Pode me indicar quem cuida do marketing e do comercial da Roda Mais Distribuidora? É coisa rápida.");
+      "Oi, tudo bem? Aqui é o Rômulo, do Prumo. Mandei uma mensagem por aqui, mas acho que só chegou a resposta automática. " +
+      "Quem cuida do marketing e do comercial da Roda Mais Distribuidora? É coisa rápida.");
     assert.match(texto(reenvioDoPrumo("5511900000000", "Escritório Lima")), /comercial do Escritório Lima\? É coisa rápida\.$/);
     assert.ok(reenvioDoPrumo("551190000000", "X").startsWith("https://wa.me/551190000000?text="), "fixo de 10 dígitos com 55");
   });

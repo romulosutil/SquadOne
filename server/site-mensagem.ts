@@ -11,24 +11,27 @@
  * espelho mudar junto. Exceção: o reenvio do só-robô (REENVIO_ROBO*) é só do CRM.
  */
 
+// 15/10/2026: textos revistos com um guia só (quem fala, "demonstração de site", "raio-x", o link
+// sozinho na linha, o preço "uma vez e por mês", a mesma saída fácil); o guia mora no JS, junto das
+// VARIACOES. A DEMO_DEPOIS_DO_RAIO_X virou a própria SEGUNDA (os dois textos só diferiam no começo).
 // 08/10/2026 (plano PRUMO): a segunda termina com o preço do Encontrado, pago depois de ver no ar
 // (em inglês, sem número: o preço em dólar não foi decidido); os follow-ups dizem que o demo
 // ficou pronto e oferecem mudar em um dia. A primeira mensagem (variações A/B/C) não mora aqui:
 // o CRM nunca a monta, só lê o `wa_me` que o Balcão gravou.
-export const SEGUNDA = "Aqui está: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
-export const SEGUNDA_EN = "Here it is: {URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working. If now isn't the right time, I'll take it down, no problem.\n\nWhat do you think?";
-export const FOLLOWUP = "Oi, aqui é o Rômulo de novo, do PRUMO. A demonstração de site {ARTIGO} {NOME} ficou pronta, com as fotos e as avaliações de vocês. Quer que eu mande o link?";
-export const FOLLOWUP_EN = "Hi, it's Rômulo again, from PRUMO. The demo website for {NOME} is ready, with your photos and reviews. Would you like me to send the link?";
-export const FOLLOWUP_COM_LINK = "Oi, aqui é o Rômulo de novo. Deu para ver o site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. E se não for o momento, é só me dizer que eu apago.";
-export const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the website for {NOME}?\n{URL}\n\nIf anything isn't quite right for you, I'll change it within a day. And if now isn't the right time, just let me know and I'll take it down.";
+export const SEGUNDA = "Aqui está a demonstração de site {ARTIGO} {NOME}:\n{URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?";
+export const SEGUNDA_EN = "Here is the demo website for {NOME}:\n{URL}\n\nI built it from the photos and reviews you already have on Google.\n\nIf you like it, I'll put it live under your own address, with domain, hosting and edits included. You only pay after you see it working.\n\nIf now isn't the right time, just let me know and I'll take it down.\n\nWhat do you think?";
+export const FOLLOWUP = "Oi, é o Rômulo de novo. A demonstração de site {ARTIGO} {NOME} está pronta, com as fotos e as avaliações de vocês. Posso te mandar o link para dar uma olhada? É sem compromisso.";
+export const FOLLOWUP_EN = "Hi, it's Rômulo again. The demo website for {NOME} is ready, with your photos and reviews. Can I send you the link so you can take a look? No strings attached.";
+export const FOLLOWUP_COM_LINK = "Oi, é o Rômulo de novo. Deu para ver a demonstração de site {ARTIGO} {NOME}?\n{URL}\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia. Se não for o momento, é só dizer que eu apago.";
+export const FOLLOWUP_COM_LINK_EN = "Hi, it's Rômulo again. Did you get a chance to see the demo website for {NOME}?\n{URL}\n\nIf anything isn't quite right, I'll change it within a day. If now isn't the right time, just let me know and I'll take it down.";
 // Quem recebeu a variação C (o Raio-X) é lembrado do raio-x e ganha os dois links na segunda.
-export const SEGUNDA_RAIO_X = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google. A demonstração do site, com as fotos e as avaliações que vocês já têm, está aqui:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
+export const SEGUNDA_RAIO_X = "Aqui está o raio-x {ARTIGO} {NOME}:\n{RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz o cliente ir para o concorrente.\n\nTambém montei uma demonstração de site, com as fotos e as avaliações que vocês já têm:\n{URL}\n\nSe gostarem, coloco o site no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?";
 // 14/10/2026 (demo sob pedido): o Raio-X avulso (raio-x-prumo.vercel.app) é de quem ainda não tem demo. A segunda
 // leva só o raio-x e oferece a demonstração, sem preço; depois do botão "Gerar demo", vem a do demo, com o preço.
 export const RAIO_X_AVULSO = "https://raio-x-prumo.vercel.app/";
-export const SEGUNDA_RAIO_X_SEM_DEMO = "Aqui está o raio-x: {RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz cliente ir para o concorrente.\n\nSe quiserem, monto também uma demonstração do site de vocês, com as fotos e as avaliações que já têm. É sem compromisso.\n\nO que acharam?";
-export const DEMO_DEPOIS_DO_RAIO_X = "Aqui está a demonstração do site {ARTIGO} {NOME}: {URL}\n\nFiz com as fotos e as avaliações que vocês já têm no Google.\n\nSe gostarem, coloco no ar com o endereço de vocês: R$ 690 e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver funcionando. Se não for o momento, eu apago, sem problema.\n\nO que acharam?";
-export const FOLLOWUP_RAIO_X ="Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x de como {O_A} {NOME} aparece no Google ficou pronto: o que já está bom e o que faz cliente ir para o concorrente. Quer que eu mande?";
+export const SEGUNDA_RAIO_X_SEM_DEMO = "Aqui está o raio-x {ARTIGO} {NOME}:\n{RAIO_X}\n\nFiz só com o que está público no Google: o que já está bom e o que faz o cliente ir para o concorrente.\n\nSe quiserem, também monto uma demonstração de site com as fotos e as avaliações que vocês já têm. É sem compromisso.\n\nO que acharam?";
+export const DEMO_DEPOIS_DO_RAIO_X = SEGUNDA;
+export const FOLLOWUP_RAIO_X = "Oi, é o Rômulo de novo. O raio-x de como {O_A} {NOME} aparece no Google está pronto: o que já está bom e o que faz o cliente ir para o concorrente. Posso te mandar o link para dar uma olhada? É sem compromisso.";
 
 // Reenvio do só-robô (14/10/2026). SÓ DO CRM, sem par no site-mensagem.js: o teste de espelho
 // não o cobre de propósito, e o aviso do n8n (05 · Acompanhamento, 3º dia) continua com o
@@ -37,9 +40,9 @@ export const FOLLOWUP_RAIO_X ="Oi, aqui é o Rômulo de novo, do PRUMO. O raio-x
 // follow-up que pergunta "quer que eu mande o link?" não leva a nada. Este pede a pessoa certa.
 // Sem "bom dia/boa tarde" (a hora varia), sem "ontem" (pode ter sido há dias), sem preço, e
 // sem inglês: número dos EUA não recebe o reenvio (reenvioDoRoboDe devolve null).
-export const REENVIO_ROBO = "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para {O_A} {NOME}, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? Posso mandar o link direto para a pessoa, é sem compromisso.";
+export const REENVIO_ROBO = "Oi, tudo bem? Aqui é o Rômulo. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para {O_A} {NOME}, mas acho que só chegou a resposta automática. Quem cuida do site ou do marketing de vocês? Posso mandar o link direto para essa pessoa. É sem compromisso.";
 // Quem recebeu a C foi convidado para o raio-x, não para o site: o reenvio fala do que ele recebeu.
-export const REENVIO_ROBO_RAIO_X = "Oi, tudo bem? Aqui é o Rômulo, do PRUMO. Mandei uma mensagem por aqui sobre um raio-x de como {O_A} {NOME} aparece no Google, mas acho que só chegou o atendimento automático. Quem cuida do site ou do marketing por aí? Posso mandar direto para a pessoa, é sem compromisso.";
+export const REENVIO_ROBO_RAIO_X = "Oi, tudo bem? Aqui é o Rômulo. Mandei uma mensagem por aqui sobre um raio-x de como {O_A} {NOME} aparece no Google, mas acho que só chegou a resposta automática. Quem cuida do site ou do marketing de vocês? Posso mandar o link direto para essa pessoa. É sem compromisso.";
 
 /**
  * O que a Central diz no lugar de "Mandar o follow-up" quando o follow-up é o reenvio do só-robô

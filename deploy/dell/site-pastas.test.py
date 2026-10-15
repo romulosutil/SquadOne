@@ -292,6 +292,29 @@ class PedirDemo(BotoesDaPagina):
         self.assertFalse((recusado / sp.PEDIDO_DEMO).exists())
         self.assertEqual(self.systemctl, [])
 
+    def test_lead_sem_recibo_acha_a_pasta_pelo_content_md(self):
+        # 15/10/2026: recebeu a A sem demo e nunca teve publicado.json (o gerador falhou).
+        falhou = sp.AUTO / "sarah-advocacia"
+        falhou.mkdir(parents=True)
+        (falhou / "content.md").write_text("# Sarah Advocacia\n\n- **place_id:** P9\n", encoding="utf-8")
+        outro = sp.AUTO / "outro"
+        outro.mkdir()
+        (outro / "content.md").write_text("# Outro\n- **place_id:** P99\n", encoding="utf-8")
+        self.pacote("1.json", {"place_id": "P9", "acao": "gerar_demo", "nome": "Sarah"})
+        self.rodar()
+        self.assertTrue((falhou / sp.PEDIDO_DEMO).is_file())
+        self.assertFalse((outro / sp.PEDIDO_DEMO).exists())
+        self.assertIn(["systemctl", "--user", "start", "--no-block", "gerador-de-sites-pedido.service"], self.systemctl)
+
+    def test_sem_recibo_so_vale_para_o_gerar_demo(self):
+        pasta = sp.AUTO / "sem-recibo"
+        pasta.mkdir(parents=True)
+        (pasta / "content.md").write_text("- **place_id:** P8\n", encoding="utf-8")
+        self.pacote("1.json", {"place_id": "P8", "acao": "recusou"})
+        self.rodar()
+        self.assertTrue(pasta.is_dir())
+        self.assertFalse((sp.AUTO / "_recusados" / "sem-recibo").exists())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

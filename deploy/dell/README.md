@@ -1336,9 +1336,19 @@ arquivo `~/auto-site/.demo-sob-pedido`, nada é gerado antes da resposta:
    ver "Raio-X do PRUMO"). O recibo nasce **sem `site_url`**: é assim que toda a esteira
    sabe que ainda não há demo. Lead abaixo do padrão do modelo (sem 3 pontos) ganha
    `raio-x-sem-padrao.json` e não é abordado.
-2. O Balcão marca `pronto` com a variação **C** ("Fiz um raio-x..."). A e B dizem "montei
-   uma demonstração" e ficam só para quem já tem demo. Lead dos EUA não tem Raio-X (é só em
-   português) e segue na fila de sempre do gerador.
+2. O Balcão marca `pronto` com a variação **A** ou **C** (conjunto `AC`, sorteio balanceado).
+   Até 14/10 só a C ia sem demo, porque a A diz "montei uma demonstração"; desde 15/10/2026,
+   por decisão do Rômulo, a A também vai, e o demo é feito se o lead responder (passo 4). A B
+   continua só para quem já tem demo. Lead dos EUA não tem Raio-X (é só em português) e segue
+   na fila de sempre do gerador.
+
+   **A sem demo para quem não tem recibo nenhum (15/10/2026).** Lead do Brasil `novo` (ou
+   `pronto`) sem `publicado.json` (gerador que falhou, fila antiga, Raio-X sem padrão) também
+   vira `pronto` com a A, conjunto `A`, sem `site_url`. Fora: EUA, sem telefone, o que tem
+   qualquer recibo (até cópia ou descartado) e o descarte do gerador. No CRM a sub-etapa diz
+   "sem demo (gere quando ele pedir)", e quem responde "quero ver" ganha só o **Gerar demo**
+   (não há segunda mensagem até o demo sair). O `site-pastas` acha a pasta desse lead pelo
+   `place_id` do `content.md`, e o fluxo 07 manda o pedido mesmo sem recibo conhecido.
 3. Ele responde: a segunda mensagem é só o raio-x, oferecendo a demonstração, sem preço
    (`SEGUNDA_RAIO_X_SEM_DEMO`).
 4. Ele quer o site: **"Gerar demo"** na ficha do CRM (ou na página do lead, fluxo 07). O
@@ -1348,7 +1358,8 @@ arquivo `~/auto-site/.demo-sob-pedido`, nada é gerado antes da resposta:
    conversa), com o recibo do Raio-X guardado à parte durante a geração e mesclado no fim.
    Uma tentativa por toque: falhou, o pedido sai e o aviso diz para tocar de novo.
 5. O demo no ar: aviso no WhatsApp, o Raio-X avulso é republicado citando o endereço do
-   demo, e a ficha oferece "Mandar o demo" (`DEMO_DEPOIS_DO_RAIO_X`, com o preço).
+   demo, e a ficha oferece "Mandar o demo" (`DEMO_DEPOIS_DO_RAIO_X`, com o preço; desde 15/10
+   é o mesmo texto da `SEGUNDA`).
 
 Sob pedido, a fila das 08:00 só leva lead de fora do Brasil e os pedidos; o `lote-continuo`
 não roda (sai na hora). Desligar: `rm ~/auto-site/.demo-sob-pedido`, e tudo volta a ser

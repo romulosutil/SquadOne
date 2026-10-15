@@ -28,9 +28,12 @@ aqui, e o site-pastas.path dispara este script quando qualquer um aparece:
      Rômulo pediu o demo. Não move nada: grava PEDIDO-DEMO.json na pasta (onde ela
      estiver) e acorda o gerador-de-sites-pedido.service. Lead que já tem demo
      (site_url no publicado.json) ou pedido aberto: nada muda.
+     15/10/2026: o lead que recebeu a mensagem A sem demo pode não ter publicado.json
+     nenhum (gerador que falhou, fila antiga); só para o gerar_demo, a pasta dele é
+     achada pelo place_id do content.md (o formato do Caçador, "- **place_id:** ...").
 
-Sempre: só mexe na pasta se o publicado.json dela tem o mesmo place_id e nunca
-sobrescreve destino. _descartados/ nunca entra.
+Sempre: só mexe na pasta se o publicado.json dela tem o mesmo place_id (no gerar_demo
+sem recibo, o content.md) e nunca sobrescreve destino. _descartados/ nunca entra.
 
 Uso: site-pastas [--listar]   (--listar mostra o que faria, sem mover nem apagar pacote)
 """
@@ -186,6 +189,26 @@ def achar_pasta(place_id: str) -> tuple[str, Path] | None:
     return None
 
 
+PLACE_ID_DO_CONTENT = re.compile(r"place_id[:* \t]+([a-zA-Z0-9_-]+)", re.I)
+
+
+def achar_pasta_sem_recibo(place_id: str) -> tuple[str, Path] | None:
+    """(topo, pasta) do lead SEM publicado.json cujo content.md tem este place_id (gerar_demo, 15/10/2026)."""
+    for topo in LUGARES:
+        base = AUTO / topo
+        for content in sorted(base.glob("*/content.md")) if base.is_dir() else []:
+            pasta = content.parent
+            if pasta.name.startswith((".", "_")) or not SLUG.match(pasta.name) or (pasta / "publicado.json").exists():
+                continue
+            try:
+                m = PLACE_ID_DO_CONTENT.search(content.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            if m and m.group(1) == place_id:
+                return topo, pasta
+    return None
+
+
 def ler_pilha() -> dict:
     try:
         d = json.loads(PILHA.read_text(encoding="utf-8"))
@@ -218,7 +241,7 @@ def uma_acao(pacote: dict, pilha: dict, listar: bool) -> str:
     nome = str(pacote.get("nome") or pid)
     if not pid or acao not in ("recusou", "fechou", "desfazer", "gerar_demo"):
         raise ValueError(f"pacote sem place_id ou com ação desconhecida: {acao!r}")
-    achada = achar_pasta(pid)
+    achada = achar_pasta(pid) or (achar_pasta_sem_recibo(pid) if acao == "gerar_demo" else None)
     if not achada:
         return f"{nome}: sem pasta publicada (nada a mover)"
     topo, origem = achada

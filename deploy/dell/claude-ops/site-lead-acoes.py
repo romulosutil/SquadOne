@@ -92,9 +92,11 @@ const estadoDe = (l) => {{
   if (topo === '_em-conversa' || (s === 'enviado' && txt(l.respondeu_em))) return 'conversa';
   return s || 'novo';
 }};
-// 14/10/2026 (demo sob pedido): o lead que recebeu só o Raio-X (sem site_url) e tem pasta pode pedir o
-// demo; quem recusou, fechou ou foi descartado, não. O site-pastas confere de novo (e ignora repetição).
-const podeGerarDemo = (l) => !txt(l.site_url) && Boolean(pasta[txt(l.place_id)])
+// 14/10/2026 (demo sob pedido): o lead sem demo (sem site_url) pode pedir o demo; quem recusou, fechou ou
+// foi descartado, não. O site-pastas confere de novo (e ignora repetição).
+// 15/10/2026: sem exigir publicado.json. O lead que recebeu a A sem demo (gerador que falhou, fila antiga)
+// não tem recibo nenhum; o site-pastas acha a pasta dele pelo place_id do content.md.
+const podeGerarDemo = (l) => !txt(l.site_url) && Boolean(txt(l.place_id))
   && !['recusado', 'fechado', 'descartado'].includes(estadoDe(l));"""
 
 PAGINA_JS = """// Página do lead: estado atual e os botões. Nada aqui grava.
@@ -132,7 +134,7 @@ const DESCRICAO = {
   expirado: '<b>Expirou</b>: 10 dias sem resposta' + (txt(l.enviado_em) ? ' (enviado' + em(l.enviado_em) + ')' : ''),
   conversa: '<b>Em conversa</b>' + (txt(l.respondeu_em) ? ': respondeu' + em(l.respondeu_em) : ''),
   enviado: '<b>Enviado</b>' + em(l.enviado_em) + ', esperando resposta',
-  pronto: txt(l.site_url) ? '<b>Site pronto</b>, ainda não enviado' : '<b>Raio-X pronto</b>, ainda não enviado',
+  pronto: txt(l.site_url) ? '<b>Site pronto</b>, ainda não enviado' : '<b>Primeira mensagem pronta</b>, ainda sem demo',
   novo: '<b>Sem site</b> ainda',
   descartado: '<b>Descartado</b>',
 };
@@ -193,7 +195,9 @@ if (acao === 'gerar_demo') {
   moverPasta = true;
 }
 const resultado = planilha || moverPasta ? acao : 'igual';
-return [{ json: { resultado, planilha, pasta: moverPasta && Boolean(pasta[pid]), linha, destino: volta(resultado),
+// O pedido de demo vai mesmo sem recibo conhecido: o site-pastas procura a pasta pelo content.md.
+const pacoteVai = moverPasta && (acao === 'gerar_demo' || Boolean(pasta[pid]));
+return [{ json: { resultado, planilha, pasta: pacoteVai, linha, destino: volta(resultado),
   pacote: { place_id: pid, acao, nome: txt(l.nome), em: agora, status: linha.status } } }];"""
 
 PACOTE_JS = """// Pacote para o site-pastas do Dell (o n8n não move diretórios).
@@ -488,6 +492,8 @@ def testar(erro):
         (linha(r1, site_url=""), "gerar_demo", ("gerar_demo", False, True, "enviado")),
         (linha(r1), "gerar_demo", ("igual", False, False, "enviado")),
         (linha(r2, site_url="", status="recusado"), "gerar_demo", ("igual", False, False, "recusado")),
+        # 15/10/2026: lead sem recibo (recebeu a A sem demo): o pacote vai, e o site-pastas acha a pasta pelo content.md.
+        ({**linha(r1, site_url="", status="pronto"), "place_id": "zz-sem-recibo"}, "gerar_demo", ("gerar_demo", False, True, "pronto")),
         ({"place_id": "outro"}, "recusou", ("desconhecido", False, False, None)),
     ]
     wf = fluxo(erro)

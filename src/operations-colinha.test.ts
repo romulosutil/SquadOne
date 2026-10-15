@@ -78,7 +78,7 @@ describe('o trecho de cada etapa e resposta', () => {
     assert.ok(ids.includes('segunda-raio-x'))
     assert.ok(!ids.includes('segunda'))
     const texto = preencher(colinhaDoLead(c).momentos[0].trechos[0].texto, c)
-    assert.ok(texto.startsWith('Aqui está o raio-x: https://demo-x.vercel.app/raio-x'), texto)
+    assert.ok(texto.startsWith('Aqui está o raio-x da Jéssica Barbosa Advocacia:\nhttps://demo-x.vercel.app/raio-x\n'), texto)
     assert.ok(texto.includes('https://demo-x.vercel.app\n'), 'o demo vai junto')
     // Sem o link do raio-x na planilha, o marcador aparece em vez de cair no texto do site.
     const semLink = { ...c, links: { site: c.links.site } }
@@ -91,7 +91,7 @@ describe('o trecho de cada etapa e resposta', () => {
       links: { raioX: 'https://raio-x-prumo.vercel.app/clinica-nova' } }
     assert.deepEqual(idsDosTrechos(c).filter((id) => id.startsWith('segunda') || id.startsWith('demo')), ['segunda-raio-x-sem-demo', 'segunda-preco'])
     const sem = preencher(colinhaDoLead(c).momentos[0].trechos[0].texto, c)
-    assert.ok(sem.startsWith('Aqui está o raio-x: https://raio-x-prumo.vercel.app/clinica-nova'), sem)
+    assert.ok(sem.startsWith('Aqui está o raio-x da Clínica Nova:\nhttps://raio-x-prumo.vercel.app/clinica-nova\n'), sem)
     assert.ok(!sem.includes('[link do demo]') && !sem.includes('R$'), sem)
     const comDemo = { ...c, links: { ...c.links, site: 'https://demo-nova.vercel.app' } }
     assert.ok(idsDosTrechos(comDemo).includes('demo-depois-do-raio-x'))
@@ -115,9 +115,9 @@ describe('o trecho de cada etapa e resposta', () => {
     const sem = lead('prumo', 'contato', 'interesse', 'pode me enviar o link sim')
     assert.equal(idsDosTrechos(sem)[0], 'segunda-prumo')
     const trecho = colinhaDoLead(sem).momentos[0].trechos[0]
-    assert.ok(preencher(trecho.texto, sem).startsWith('Aqui está: [link do Raio-X]'))
+    assert.match(preencher(trecho.texto, sem), /^Aqui está o raio-x d[oa] .+:\n\[link do Raio-X\]\n/)
     const com = { ...sem, links: { raioX: 'https://raio-x-prumo.vercel.app/x' } }
-    assert.ok(preencher(trecho.texto, com).startsWith('Aqui está: https://raio-x-prumo.vercel.app/x'))
+    assert.match(preencher(trecho.texto, com), /^Aqui está o raio-x d[oa] .+:\nhttps:\/\/raio-x-prumo\.vercel\.app\/x\n/)
     assert.deepEqual(precosNoTexto(preencher(trecho.texto, com)), [], 'sem preço no frio')
   })
 
@@ -424,12 +424,12 @@ describe('convite para o Mapa, depois do Raio-X', () => {
     assert.ok(!idsDasObjecoes(comRaioX('site', 'interesse', true)).includes('mapa-e-pago'))
   })
 
-  it('a mensagem: 3 a 5 linhas, o Rômulo do PRUMO, o Raio-X, o link numa linha só, uma pergunta no fim, sem emoji nem preço', () => {
+  it('a mensagem: 3 a 5 linhas, o Rômulo do Prumo, o raio-x, o link numa linha só, uma pergunta no fim, sem emoji nem preço', () => {
     const texto = passo('convite-mapa').trechos.find((t) => t.id === 'mapa-convite')!.texto
     const linhas = texto.split('\n').filter((l) => l.trim())
     assert.ok(linhas.length >= 3 && linhas.length <= 5, `${linhas.length} linhas`)
-    assert.match(linhas[0], /Aqui é o Rômulo, do PRUMO/)
-    assert.match(texto, /Raio-X/)
+    assert.match(linhas[0], /Aqui é o Rômulo, do Prumo/)
+    assert.match(texto, /raio-x/)
     assert.match(texto, /16 perguntas/)
     assert.ok(linhas.includes('[link das 16 perguntas]'), 'o link sozinho numa linha')
     assert.ok(linhas[linhas.length - 1].trim().endsWith('?'))
@@ -437,7 +437,7 @@ describe('convite para o Mapa, depois do Raio-X', () => {
     assert.ok(!/\p{Extended_Pictographic}/u.test(texto), 'sem emoji')
     assert.deepEqual(precosNoTexto(texto), [])
     const preenchido = preencher(texto, { empresa: 'Clínica Sorriso', links: { raioX: RAIO_X } })
-    assert.match(preenchido, /O Raio-X mostrou o lado de fora da Clínica Sorriso,/)
+    assert.match(preenchido, /O raio-x mostrou o lado de fora da Clínica Sorriso,/)
   })
 
   it('quem respondeu as 16 perguntas recebe a devolutiva do Mapa', () => {
