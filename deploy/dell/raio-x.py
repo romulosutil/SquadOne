@@ -861,10 +861,23 @@ def _mediana_inteira(valores: list[int]) -> int | None:
     return None if m is None else int(round(m))
 
 
+def completar_pelas_outras_buscas(r: dict, buscas: list[dict]) -> dict:
+    """O Places às vezes devolve um concorrente sem nota ou sem avaliações numa busca e com elas noutra
+    (15/10/2026, Verde + Prestadora: 5,0 e 85 nas duas outras, nada na primeira). O mesmo place_id
+    completa o que faltou; sem ele em busca nenhuma, a falta continua e a linha sai."""
+    r = dict(r)
+    for chave, tipo in (("nota", (int, float)), ("avaliacoes", int)):
+        if isinstance(r.get(chave), tipo):
+            continue
+        r[chave] = next((o[chave] for b in buscas for o in b.get("outros", [])
+                         if o.get("id") and o.get("id") == r.get("id") and isinstance(o.get(chave), tipo)), r.get(chave))
+    return r
+
+
 def comparacao_com_os_3(diag: dict) -> dict | None:
     """'Vocês e os 3 primeiros' da primeira busca: só linhas com o dado dos dois lados."""
     conc = diag.get("concorrencia")
-    top3 = (conc or {}).get("outros", [])[:3]
+    top3 = [completar_pelas_outras_buscas(r, diag.get("buscas") or []) for r in (conc or {}).get("outros", [])[:3]]
     if len(top3) < 3:
         return None
     nota, n = diag.get("nota"), diag.get("avaliacoes")
@@ -2475,6 +2488,18 @@ def testar() -> int:
                               ("Site próprio", "não abre", "1 de 3", True), ("Horário no perfil", "sim", "2 de 3", False)])
             self.assertEqual(c["frase"], "A nota está no nível dos 3 primeiros. A diferença está nas avaliações e no site.")
             self.assertIsNone(comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5)))
+
+        def test_comparacao_completa_o_concorrente_pelas_outras_buscas(self):
+            dados = ler_content(CONTENT_EXEMPLO)
+            completo = comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)))
+            p = places_exemplo(7)
+            p["buscas"][0]["resultados"][0].update(nota=None, avaliacoes=None)  # o 1º sem nota só na primeira busca
+            self.assertEqual(comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5, p)), completo)
+            for b in p["buscas"]:  # sem nota em busca nenhuma: as duas linhas saem, nada é inventado
+                b["resultados"][0].update(nota=None, avaliacoes=None)
+            itens = [l["item"] for l in comparacao_com_os_3(diagnostico(dados, "fora", "08/10/2026", 5, p))["linhas"]]
+            self.assertNotIn("Nota no Google", itens)
+            self.assertNotIn("Avaliações", itens)
 
         def test_o_que_fazer_resolve_cada_ponto_com_quem_faz(self):
             dados = ler_content(CONTENT_EXEMPLO)
