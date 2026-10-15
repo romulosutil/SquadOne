@@ -1273,7 +1273,7 @@ curl -s http://127.0.0.1:9120/api/operations/crm | head -c 300
 Pendência P3 de `~/prumo` (29/09/2026): diagnóstico pronto vira o rascunho do
 Mapa, sem montar à mão. O fluxo "PRUMO — Diagnóstico do dono" tem um ramo
 `Mapa: ...` (aplicado por `claude-ops/prumo-mapa-n8n.py`) que, para cada
-resposta completa de um prospect, grava um pacote em
+resposta completa de um prospect ou de um lead do Raio-X, grava um pacote em
 `~/.local/share/n8n-estado/mapa-fila/`, uma vez por resposta (memória em
 `n8n-estado/prumo-mapa-feitos.json`). `prumo-mapa.path` dispara
 `prumo-mapa --fila`, que:
@@ -1319,8 +1319,19 @@ cp ~/SquadOne/deploy/dell/claude-ops/prumo-mapa-n8n.py ~/.local/share/claude-ops
 cd ~/.local/share/claude-ops && python3 prumo-mapa-n8n.py --teste && python3 prumo-mapa-n8n.py
 ```
 
-`prumo-mapa-n8n.py --teste` ensaia o ramo numa cópia temporária do fluxo
-(prospects e respostas de exemplo, fila e memória de teste, sem planilha).
+**Lead do Raio-X (15/10/2026).** O convite do Mapa de cada Raio-X do Dell
+leva o formulário com a Empresa preenchida (`entry.171063854` =
+`<place_id>::<nome>`, `mapa_link_do_lead` no `raio-x.py`). O fluxo procura o
+ID que não é prospect no retrato da planilha do Balcão
+(`n8n-estado/site-leads.json`, de hora em hora aos :20; tem todo lead com
+Raio-X publicado). Achado, a resposta completa vira pacote (cidade do retrato,
+segmento vazio, `lead_do_site: true`) e o "Calcular diagnóstico" não manda o
+aviso de "fora dos prospects" (trecho marcado `[mapa-leads-do-site]`). Nada
+escreve na planilha de prospects: ela continua só do funil B2B.
+
+`prumo-mapa-n8n.py --teste` ensaia o ramo e o "Calcular diagnóstico" numa
+cópia temporária do fluxo (prospects, retrato e respostas de exemplo, com um
+lead do Raio-X; fila `mapa-teste/`, memória e retrato de teste, sem planilha).
 `prumo-simples.py` recria o fluxo sem o ramo: depois dele, rode
 `prumo-mapa-n8n.py` de novo.
 
@@ -1633,7 +1644,8 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
   - **O fim: o convite para o Mapa, em todo Raio-X (15/10/2026).** Pedido do
     Rômulo: o Raio-X precisa dizer que o Mapa existe. É a variante "com equipe"
     do molde do piloto: "Agora, o olhar por dentro: o Mapa", o botão para as 16
-    perguntas (o formulário do exemplo, `MAPA_LINK`), o link do Mapa de exemplo
+    perguntas (o formulário do exemplo, `MAPA_LINK`, com a Empresa preenchida
+    `<place_id>::<nome>` para o n8n achar o lead; ver "Mapa do PRUMO"), o link do Mapa de exemplo
     (prumo-piloto-cdl.vercel.app/mapa) e a barra do celular indo ao Mapa. Os
     quatro serviços vêm abaixo, sem preço ("Os preços vêm no fim do Mapa"), cada
     um com o link do WhatsApp. O Places não diz quantas pessoas são, então o

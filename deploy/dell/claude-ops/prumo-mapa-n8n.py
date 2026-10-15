@@ -283,6 +283,8 @@ def teste() -> None:
     fila_host, feitos_host = estado / "mapa-teste", estado / "prumo-mapa-feitos-teste.json"
     leads_host = estado / "site-leads-teste.json"
     fila_host.mkdir(exist_ok=True)
+    for a in fila_host.glob("*.json"):  # os pacotes do ensaio anterior (ficam para conferir até o próximo)
+        a.unlink()
     feitos_host.unlink(missing_ok=True)
     wf_real = api("GET", f"/workflows/{PONTUACAO}")
     perg = perguntas(wf_real)
