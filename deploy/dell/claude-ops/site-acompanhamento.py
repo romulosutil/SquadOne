@@ -470,7 +470,8 @@ def cenario_acompanhamento():
     dia = lambda d: datetime.fromtimestamp(agora.timestamp() - d * 86400, timezone.utc).isoformat()
     r = recibos_na_raiz(5)
     base = lambda rec, **k: {"place_id": rec["place_id"], "nome": rec["nome"] + " [teste]", "cidade": "Cidade", "telefone": "(19) 99000-0000",
-                             "site_url": rec["site_url"], "status": "enviado", "respondeu_em": "", "followup_em": "", **k}
+                             # Recibo do Raio-X avulso (demo sob pedido, 14/10/2026) não tem site_url.
+                             "site_url": rec.get("site_url", ""), "status": "enviado", "respondeu_em": "", "followup_em": "", **k}
     linhas = [
         base(r[0], enviado_em=dia(3.2), visto_em=dia(3)),                 # follow-up (leu)
         base(r[1], enviado_em=dia(10.5), followup_em=dia(7)),             # expira
