@@ -1600,7 +1600,7 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
   calculadora). *O que fazer*: a demonstração, o Encontrado com preço e "só
   pagam depois de ver funcionando", o botão **Quero o site no ar** (WhatsApp do
   PRUMO, `WHATSAPP_PRUMO`, com o nome da empresa na mensagem) e "Quero conversar
-  sobre o WhatsApp que responde", **sem preço**: o Respondido só na conversa.
+  sobre produtos digitais", **sem preço**: o Respondido só na conversa.
   No celular, uma barra fixa com o botão quando o terceiro ato entra na tela.
   Saem o caminho do cliente e o bloco com os dois serviços e o preço do
   Respondido. Medição sem cookie preparada e desligada (`URL_EVENTOS` vazia).
