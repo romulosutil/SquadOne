@@ -14,7 +14,8 @@ Revisão humana: na Data Table, coluna `revisao_humana`, escreva o tipo certo da
 negativa, interesse ou neutra). `--revisar` lista as linhas ainda sem revisão com o id e o trecho.
 
 Regra de promoção (o Jev só sai da sombra se TUDO valer):
-  1. pelo menos 60 respostas revistas por humano;
+  1. pelo menos 60 LEADS com resposta revista por humano (um lead que respondeu várias vezes conta uma vez, pela
+     linha mais recente; a Data Table tem uma linha por execução);
   2. concordância do Jev com a revisão humana >= 95 % nessas respostas;
   3. NENHUM "interesse" (do Gemini, em qualquer linha, ou da revisão humana) que o Jev tenha chamado de
      negativa ou exclusao: perder um lead que quer ver é o erro que não se aceita.
@@ -23,7 +24,8 @@ porque o Gemini também erra. Promover exige ainda o DPA da TypeSafe (ver deploy
 
 Uso: python3 jev-respostas-resumo.py                    resumo, lendo a tabela pelo n8n
      python3 jev-respostas-resumo.py --arquivo X.csv      resumo de um CSV/JSON exportado da Data Table
-     python3 jev-respostas-resumo.py --revisar            linhas sem revisão, com o trecho (do crm.json)
+     python3 jev-respostas-resumo.py --revisar            linhas sem revisão, das mais úteis às menos (perigosas, divergentes,
+                                                          pouca confiança, resto), com o trecho (do crm.json: prumo, iris, estampa)
      python3 jev-respostas-resumo.py --hash 27999887766   hash de um número (para achar o lead na tabela)
      python3 jev-respostas-resumo.py --testar
 """
@@ -127,16 +129,34 @@ def trechos_do_retrato(retrato: dict) -> dict:
         h, t = hash_do_lead(m.group(1) if m else l.get("telefone")), instante(l.get("resposta_em"))
         if h and t is not None:
             achados[(h, t)] = str(l.get("resposta_trecho") or "")
-    for l in fontes.get("prumo", {}).get("linhas", []):
-        h, t = hash_do_lead(l.get("WhatsApp")), instante(l.get("Resposta em"))
-        if h and t is not None:
-            achados[(h, t)] = str(l.get("Resposta") or "")
+    # PRUMO, Iris e estamparias têm o mesmo contrato de colunas (Prospects, OFERTA_DE_PROSPECCAO em server/crm.ts);
+    # ler só "prumo" deixava a resposta de uma clínica ou de uma estamparia sempre "fora do retrato".
+    for fonte in ("prumo", "iris", "estampa"):
+        for l in fontes.get(fonte, {}).get("linhas", []):
+            h, t = hash_do_lead(l.get("WhatsApp")), instante(l.get("Resposta em"))
+            if h and t is not None:
+                achados[(h, t)] = str(l.get("Resposta") or "")
     return achados
+
+
+def um_por_lead(linhas: list[dict]) -> list[dict]:
+    """A Data Table tem uma linha por execução do fluxo, e um lead que responde várias vezes gera várias linhas
+    (27 leads viraram 40 linhas em 15/10/2026). Contar linhas faria 60 revisões valerem bem menos de 60 leads:
+    fica a linha mais recente de cada lead. Linha sem hash (não deveria ocorrer) conta sozinha."""
+    escolhida: dict = {}
+    for i, l in enumerate(linhas):
+        chave = l["lead_hash"] or f"sem-hash-{i}"
+        quando = instante(l["resposta_em"]) or instante(l["em"]) or 0.0
+        if chave not in escolhida or quando >= escolhida[chave][0]:
+            escolhida[chave] = (quando, l)
+    return [l for _, l in escolhida.values()]
 
 
 def resumir(linhas: list[dict]) -> dict:
     validas = [l for l in linhas if l["jev_choice"]]
-    revistas = [l for l in validas if l["revisao_humana"] in TIPOS]
+    # A regra de promoção conta LEADS revistos, não linhas; o "perigoso" abaixo continua olhando todas as linhas
+    # (um interesse perdido numa linha antiga ainda é um interesse perdido).
+    revistas = um_por_lead([l for l in validas if l["revisao_humana"] in TIPOS])
     pct = lambda a, b: (a / b) if b else None
     perigosos = [l for l in validas if l["jev_choice"] in PERIGOSOS
                  and (l["tipo_gemini"] == "interesse" or l["revisao_humana"] == "interesse")]
@@ -166,7 +186,7 @@ def resumir(linhas: list[dict]) -> dict:
 def veredito(r: dict) -> tuple[bool, list[str]]:
     faltas = []
     if r["revistas"] < MIN_REVISTAS:
-        faltas.append(f"só {r['revistas']} de {MIN_REVISTAS} respostas revistas por humano")
+        faltas.append(f"só {r['revistas']} de {MIN_REVISTAS} leads com resposta revista por humano")
     if r["jev_x_humano"] is None or r["jev_x_humano"] < MIN_CONCORDANCIA:
         faltas.append("concordância Jev x humano abaixo de 95 %" if r["jev_x_humano"] is not None
                       else "sem revisão humana, não há concordância")
@@ -180,7 +200,7 @@ def formatar(r: dict) -> str:
     tipos = sorted({t for linha in r["matriz"].values() for t in linha} | set(r["matriz"]))
     l = [f"Sombra do Jev: {r['linhas']} respostas classificadas pelos dois",
          f"  Jev x Gemini (todas): {p(r['jev_x_gemini'])}   só conversas de 1 mensagem: {p(r['uma_mensagem_jev_x_gemini'])}",
-         f"  Revistas por humano: {r['revistas']}   Jev x humano: {p(r['jev_x_humano'])}   Gemini x humano: {p(r['gemini_x_humano'])}",
+         f"  Leads revistos por humano: {r['revistas']}   Jev x humano: {p(r['jev_x_humano'])}   Gemini x humano: {p(r['gemini_x_humano'])}",
          f"  Injeção (noul >= 0,5): {r['injecao']}   custo: US$ {r['custo']:.5f}   latência p50/p95: "
          f"{r['latencia_p50'] or '—'}/{r['latencia_p95'] or '—'} ms   modelos: {', '.join(r['modelos']) or '—'}",
          "", "Gemini (linha) x Jev (coluna):", "  " + "".ljust(10) + "".join(t[:9].ljust(10) for t in tipos)]
@@ -193,16 +213,50 @@ def formatar(r: dict) -> str:
     return "\n".join(l)
 
 
+GRUPOS_DA_REVISAO = (
+    "1. Perigosas: o Gemini viu interesse e o Jev chamou de negativa/exclusao (é o que barra a promoção)",
+    "2. Divergem: Gemini e Jev discordam (uma delas está errada; a mais confiante do Jev primeiro)",
+    "3. Concordam, mas o Jev tem pouca confiança (< 0,5)",
+    "4. Concordam com confiança (conferir por amostra)",
+)
+
+
+def grupo_da_revisao(x: dict) -> int:
+    """0..3, o índice em GRUPOS_DA_REVISAO. Ordem de utilidade da revisão: o que pode barrar vem antes do que diverge,
+    e só depois entra o que os dois acham igual."""
+    if x["tipo_gemini"] == "interesse" and x["jev_choice"] in PERIGOSOS:
+        return 0
+    if x["tipo_gemini"] != x["jev_choice"]:
+        return 1
+    if x["jev_confidence"] is not None and x["jev_confidence"] < 0.5:
+        return 2
+    return 3
+
+
 def para_revisar(linhas: list[dict], trechos: dict) -> str:
-    l = ["Linhas sem revisao_humana (escreva o tipo certo na Data Table, pelo id):"]
-    for x in linhas:
-        if not x["jev_choice"] or x["revisao_humana"] in TIPOS:
-            continue
+    pendentes = [x for x in linhas if x["jev_choice"] and x["revisao_humana"] not in TIPOS]
+    por_lead: dict = {}
+    for x in pendentes:
+        por_lead[x["lead_hash"]] = por_lead.get(x["lead_hash"], 0) + 1
+    # Dentro do grupo: divergências pela confiança do Jev decrescente, o resto pela crescente; id como desempate.
+    def chave(x):
+        g, c = grupo_da_revisao(x), x["jev_confidence"] if x["jev_confidence"] is not None else 0.0
+        return (g, -c if g <= 1 else c, int(x["id"]) if x["id"].isdigit() else 0)
+    l = ["Linhas sem revisao_humana (escreva o tipo certo na Data Table, pelo id), das mais úteis às menos:",
+         "  Revisar só as divergências deixa a concordância medida mais baixa do que a real: é a estimativa conservadora.",
+         "  A regra de promoção conta LEADS revistos, não linhas."]
+    atual = None
+    for x in sorted(pendentes, key=chave):
+        g = grupo_da_revisao(x)
+        if g != atual:
+            atual = g
+            l.append(f"\n{GRUPOS_DA_REVISAO[g]}")
         t = instante(x["resposta_em"])
         trecho = trechos.get((x["lead_hash"], t)) if t is not None else None
         aviso = "" if (x["n_mensagens"] or 0) <= 1 else f" ({int(x['n_mensagens'])} mensagens: o Jev viu só a última)"
+        repetido = f" [lead com {por_lead[x['lead_hash']]} linhas a revisar]" if x["lead_hash"] and por_lead[x["lead_hash"]] > 1 else ""
         l.append(f"  id {x['id']}  Gemini {x['tipo_gemini']:<9}  Jev {x['jev_choice']:<9}"
-                 f"({'—' if x['jev_confidence'] is None else round(x['jev_confidence'], 2)}){aviso}\n"
+                 f"({'—' if x['jev_confidence'] is None else round(x['jev_confidence'], 2)}){aviso}{repetido}\n"
                  f"      {json.dumps(trecho, ensure_ascii=False) if trecho is not None else '(trecho fora do retrato: confira no WhatsApp)'}")
     return "\n".join(l)
 
@@ -307,6 +361,52 @@ def testar() -> int:
                 self.assertEqual(chave_do_numero(n), "2799887766")
             self.assertEqual(hash_do_lead("27999887766"), hashlib.sha256(b"squadone:jev-sombra:v1:2799887766").hexdigest())
             self.assertEqual(hash_do_lead("12345"), "")
+
+        def test_trecho_de_iris_e_estampa(self):
+            retrato = {"fontes": {
+                "iris": {"linhas": [{"WhatsApp": "(27) 99988-7766", "Resposta em": "2026-10-14T10:00:00Z", "Resposta": "pode sim"}]},
+                "estampa": {"linhas": [{"WhatsApp": "(11) 98888-7777", "Resposta em": "2026-10-14T11:00:00Z", "Resposta": "quem é?"}]}}}
+            trechos = trechos_do_retrato(retrato)
+            linhas = [linha(1, "interesse", "interesse", lead_hash=hash_do_lead("27999887766"), resposta_em="2026-10-14T10:00:00Z"),
+                      linha(2, "neutra", "neutra", lead_hash=hash_do_lead("11988887777"), resposta_em="2026-10-14T11:00:00Z")]
+            texto = para_revisar(linhas, trechos)
+            self.assertIn('"pode sim"', texto)
+            self.assertIn('"quem é?"', texto)
+            self.assertNotIn("trecho fora do retrato", texto)
+
+        def test_revisao_ordena_perigosas_divergentes_pouca_confianca_e_resto(self):
+            texto = para_revisar([
+                linha(1, "neutra", "neutra", jev_confidence=0.9),
+                linha(2, "neutra", "neutra", jev_confidence=0.3),
+                linha(3, "bot", "interesse", jev_confidence=0.6),
+                linha(4, "bot", "interesse", jev_confidence=0.9),
+                linha(5, "interesse", "negativa", jev_confidence=0.7),
+                linha(6, "bot", "bot", "bot"),  # já revista: fora
+            ], {})
+            ordem = [int(m) for m in re.findall(r"  id (\d+) ", texto)]
+            self.assertEqual(ordem, [5, 4, 3, 2, 1])
+            self.assertLess(texto.index("1. Perigosas"), texto.index("2. Divergem"))
+            self.assertLess(texto.index("2. Divergem"), texto.index("3. Concordam, mas"))
+            self.assertLess(texto.index("3. Concordam, mas"), texto.index("4. Concordam com"))
+
+        def test_revisao_avisa_lead_com_varias_linhas(self):
+            texto = para_revisar([linha(1, "bot", "bot", lead_hash="mesmo"), linha(2, "bot", "neutra", lead_hash="mesmo"),
+                                  linha(3, "bot", "bot", lead_hash="outro")], {})
+            self.assertEqual(texto.count("lead com 2 linhas a revisar"), 2)
+
+        def test_regra_conta_leads_e_nao_linhas(self):
+            # 40 linhas revistas, mas só 20 leads: não chega a 60 nem a 40.
+            linhas_ = [linha(i, "neutra", "neutra", "neutra", lead_hash=f"lead{i // 2}", resposta_em=f"2026-10-14T10:{i % 60:02d}:00Z")
+                       for i in range(40)]
+            self.assertEqual(resumir(linhas_)["revistas"], 20)
+            # Do mesmo lead vale a linha mais recente: aqui a antiga discordava do humano, a nova concorda.
+            antiga = linha(1, "bot", "neutra", "bot", lead_hash="L", resposta_em="2026-10-10T10:00:00Z")
+            nova = linha(2, "bot", "bot", "bot", lead_hash="L", resposta_em="2026-10-14T10:00:00Z")
+            r = resumir([antiga, nova])
+            self.assertEqual((r["revistas"], r["jev_x_humano"]), (1, 1.0))
+            # Interesse perdido numa linha antiga ainda barra, mesmo que a linha mais recente do lead esteja certa.
+            perdida = linha("x", "interesse", "negativa", "interesse", lead_hash="L", resposta_em="2026-10-10T10:00:00Z")
+            self.assertEqual(resumir([perdida, nova])["perigosos"], ["x"])
 
         def test_trecho_casa_hash_e_hora(self):
             retrato = {"fontes": {

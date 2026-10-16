@@ -246,12 +246,18 @@ export interface ItemDaComparacao {
 
 export type ComparacaoComGemini = Partial<Record<NomeDaPergunta, ItemDaComparacao>>;
 
-/** PURO. Cada pergunta respondida contra o que o Gemini fez. */
+/**
+ * PURO. Cada pergunta respondida contra o que o Gemini fez. Com `trocaSugerida`
+ * (o teto de um salto: o Gemini ainda achava que a squad era outra), a squad
+ * "final" e o domínio dela são uma escolha que o próprio Gemini descartou:
+ * ficam como não comparáveis em vez de contar como acerto ou erro do Jev.
+ */
 export function compararComGemini(respostas: Partial<Record<NomeDaPergunta, RespostaCompacta>>, gemini: ResumoDoGemini): ComparacaoComGemini {
   const out: ComparacaoComGemini = {};
   const item = (r: RespostaCompacta, g: string | null, p = r.p): ItemDaComparacao => ({ jev: r.c, p, gemini: g, concorda: g === null ? null : r.c === g });
-  if (respostas.squad) out.squad = item(respostas.squad, gemini.squad);
-  if (respostas.dominio) out.dominio = item(respostas.dominio, gemini.dominio);
+  const semGabarito = (i: ItemDaComparacao): ItemDaComparacao => (gemini.trocaSugerida ? { ...i, concorda: null } : i);
+  if (respostas.squad) out.squad = semGabarito(item(respostas.squad, gemini.squad));
+  if (respostas.dominio) out.dominio = semGabarito(item(respostas.dominio, gemini.dominio));
   if (respostas.natureza) out.natureza = item(respostas.natureza, gemini.natureza);
   if (respostas.pede_contratacao) {
     const r = respostas.pede_contratacao;
@@ -414,7 +420,8 @@ function preparar(obs: ObservacaoDeDemanda, deps: DepsDoJevSombra, quando: Date)
     dominiosAtivos(squadFinal).map((d) => ({ id: d.id, nome: d.nome, escopo: d.escopo })),
     deps.aleatorio,
   );
-  const state = mascararParaJev(obs.demanda.trim().slice(0, MAX_STATE));
+  // Máscara ANTES do corte: cortar primeiro podia partir um telefone ou CPF ao meio e deixá-lo sem máscara.
+  const state = mascararParaJev(obs.demanda.trim()).slice(0, MAX_STATE);
   return {
     quando,
     state,

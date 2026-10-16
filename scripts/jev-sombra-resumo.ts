@@ -103,6 +103,12 @@ for (const pergunta of ["squad", "dominio", "natureza", "pede_contratacao"] as c
     `  ${pergunta.padEnd(17)} ${String(p.concordam).padStart(4)}/${String(p.comparaveis).padEnd(4)} ${pct(p.concordam, p.comparaveis).padStart(6)} · discordâncias com p ≥ 0,90: ${p.discordanciasConfiantes}`,
   );
 }
+// A pergunta de domínio usa as salas da squad FINAL DO GEMINI: se o Jev escolheu outra squad, comparar a sala
+// é comparar duas coisas diferentes. Só conta onde as duas squads são a mesma.
+{
+  const p = placar(respondidas.filter((r) => r.comparacao?.squad?.concorda === true), "dominio");
+  console.log(`    domínio, só onde a squad concordou: ${p.concordam}/${p.comparaveis} ${pct(p.concordam, p.comparaveis)}`);
+}
 for (const [rotulo, filtro] of [["squad escolhida pelo usuário", true], ["squad não escolhida (bot sem prefixo)", false]] as const) {
   const p = placar(respondidas.filter((r) => r.squadExplicita === filtro), "squad");
   console.log(`    squad, ${rotulo}: ${p.concordam}/${p.comparaveis} ${pct(p.concordam, p.comparaveis)}`);
@@ -112,6 +118,21 @@ const redirecionadas = registros.filter((r) => r.redirecionado).length;
 console.log(`\nRedirecionamentos de squad (o Gemini mudou de squad): ${redirecionadas}/${total} (${pct(redirecionadas, total)})`);
 const pRedir = placar(respondidas.filter((r) => r.redirecionado), "squad");
 console.log(`  Jev concordou com o destino em ${pRedir.concordam}/${pRedir.comparaveis} (${pct(pRedir.concordam, pRedir.comparaveis)})`);
+
+// Ganho líquido: o Gemini também erra o palpite inicial, então "concordar com ele" não é acertar. Aqui o gabarito
+// é a squad onde o turno terminou. Antecipou = o Gemini precisou redirecionar e o Jev já tinha apontado o destino;
+// induzido = não houve redirecionamento e o Jev apontou outra squad (levaria a um erro). Sem texto guardado não dá
+// para dizer quem tinha razão: é a melhor medida possível só com os campos gravados.
+{
+  const comSquad = respondidas.filter((r) => r.respostas?.squad && !r.gemini?.trocaSugerida);
+  const antecipados = comSquad.filter((r) => r.redirecionado && r.respostas!.squad!.c === r.squadFinal).length;
+  const ficouNaInicial = comSquad.filter((r) => r.redirecionado && r.respostas!.squad!.c === r.squadInicial).length;
+  const induzidos = comSquad.filter((r) => !r.redirecionado && r.respostas!.squad!.c !== r.squadFinal).length;
+  const saldo = antecipados - induzidos;
+  console.log(
+    `  Ganho líquido de squad (${comSquad.length} demandas sem troca sugerida): ${antecipados} redirecionamento(s) antecipado(s), ${ficouNaInicial} em que o Jev ficou na squad inicial, ${induzidos} erro(s) induzido(s) → saldo ${saldo > 0 ? "+" : ""}${saldo}`,
+  );
+}
 
 const latencias = registros.map((r) => r.latenciaMs).filter((n) => Number.isFinite(n));
 const p50 = percentil(latencias, 0.5);

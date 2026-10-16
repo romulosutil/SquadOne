@@ -198,6 +198,20 @@ describe("compararComGemini", () => {
     const semDominio = compararComGemini({ dominio: { c: "x", p: 0.5 } }, { ...gemini, dominio: null });
     assert.equal(semDominio.dominio!.concorda, null);
   });
+  it("troca sugerida: squad e domínio ficam não comparáveis, o resto segue", () => {
+    const c = compararComGemini(
+      {
+        squad: { c: "pessoal", p: 0.8 },
+        dominio: { c: "pay4fun--geral", p: 0.6 },
+        natureza: { c: "agenda", p: 0.97 },
+      },
+      { ...gemini, trocaSugerida: true },
+    );
+    assert.equal(c.squad!.concorda, null);
+    assert.equal(c.squad!.gemini, "pay4fun");
+    assert.equal(c.dominio!.concorda, null);
+    assert.equal(c.natureza!.concorda, true);
+  });
 });
 
 // --- A cola, com o fetch dublado ------------------------------------------------
@@ -314,6 +328,17 @@ describe("criarJevSombra (fila, tetos, arquivo)", () => {
     if (process.platform !== "win32") {
       assert.equal((await fs.stat(path.join(dir, `${diaLocal(AGORA).slice(0, 7)}.jsonl`))).mode & 0o777, 0o600);
     }
+  });
+
+  it("a máscara vem antes do corte: telefone na fronteira dos 2000 caracteres não vaza pela metade", async () => {
+    const dir = await tmp();
+    const duble = jevDuble({ escolhas: { squad: "pay4fun", dominio: "pay4fun--geral", natureza: "agenda" } });
+    const s = sombra(dir, duble);
+    s.observarDemanda(obs({ demanda: `${"x".repeat(1990)} (11) 98765-4321 depois` }));
+    await s.aguardar();
+    const [corpo] = duble.corpos;
+    assert.ok(corpo.state.length <= 2000);
+    assert.ok(!/\d{3}/.test(corpo.state), `sobrou pedaço do número: ${corpo.state.slice(-30)}`);
   });
 
   it("a demanda (mascarada) só com guardarDemanda", async () => {

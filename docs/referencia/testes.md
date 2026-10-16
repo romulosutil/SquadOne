@@ -51,6 +51,7 @@ validada contra os rótulos enviados, 402/401 desligam até reiniciar, 429 sem
 retry, timeout, corpo sem `usage`, config ilegível e a chave nunca em erro nem log),
 `server/jev-sombra.test.ts` (as quatro perguntas com a ordem embaralhada e gravada,
 nada de finanças nas opções nem na demanda, o resumo do Gemini e a comparação, e a
+troca sugerida sem gabarito, a máscara antes do corte de 2000 caracteres, e a
 cola com `fetch` dublê num diretório temporário: fila serial, teto do dia que
 sobrevive a reinício, teto total de gasto, JSONL 600, 402 desliga, observação
 sem `await` que não segura o turno, falha que nunca lança, e null fora do `operations`),
