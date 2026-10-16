@@ -80,10 +80,12 @@ async function aoTocar(a: AcaoDeVenda) {
   if (!lead) return
   try {
     const r = await fetch('/api/operations/crm/registro', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpoDaAnotacao(lead, a.anota)),
+      // A proposta vai sem data: o servidor grava a de hoje (São Paulo), como o formulário da Ficha.
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(a.anota === 'proposta' ? { produto: lead.produto, id: lead.chave, tipo: 'proposta', texto: '', data: '' } : corpoDaAnotacao(lead, a.anota)),
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    status.value = `${a.empresa}: envio anotado no CRM.`
+    status.value = a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.` : `${a.empresa}: envio anotado no CRM.`
     emit('registrado')
   } catch {
     status.value = `${a.empresa}: não consegui anotar o envio — anote na ficha.`
@@ -108,7 +110,7 @@ async function copiar(texto: string) {
 }
 
 const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
-  responder: 'Responder', combinado: 'Combinado', 'depois-do-link': 'Depois do link', proposta: 'Proposta', followup: 'Follow-up', primeiro: 'Primeiro contato',
+  responder: 'Responder', 'mandar-proposta': 'Mandar a proposta', combinado: 'Combinado', 'depois-do-link': 'Depois do link', proposta: 'Proposta', followup: 'Follow-up', primeiro: 'Primeiro contato',
 }
 </script>
 

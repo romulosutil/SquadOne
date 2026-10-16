@@ -2,7 +2,8 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CrmCopiloto from './CrmCopiloto.vue'
 import CrmJornada from './CrmJornada.vue'
-import { copilotoServe } from './copiloto'
+import { copilotoServe, type SugestaoDoCopiloto } from './copiloto'
+import { cabeProposta, gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { copilotoLigado } from './copiloto-ligado'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
@@ -59,7 +60,7 @@ const salvando = ref<CrmTipoDeRegistro | null>(null)
 const mensagem = ref('')
 const erro = ref('')
 // De onde saiu o último registro: a confirmação aparece perto do botão tocado, não no outro canto da ficha.
-const origem = ref<'proximo' | 'anotar'>('anotar')
+const origem = ref<'proximo' | 'anotar' | 'acao'>('anotar')
 
 const hoje = hojeEmSP()
 const aberto = computed(() => props.lead.etapa !== 'ganho' && props.lead.etapa !== 'perdido')
@@ -97,6 +98,32 @@ const prazo = computed(() => {
   return q < hoje ? { texto: `Era para ${diaDaSemana(q)}`, atrasado: true } : { texto: `Para ${diaDaSemana(q)}`, atrasado: false }
 })
 
+// ------------------------------------------------------------ mandar a proposta (mandar-proposta.ts)
+
+// Gostou depois do link: a proposta é o passo de hoje (primário). Só entre o link e a proposta, sem o
+// "gostei" visto pelo n8n (a conversa andou por telefone?): fica ao lado, como secundária.
+const gostou = computed(() => gostouDepoisDoLink(props.lead))
+const cabe = computed(() => gostou.value || cabeProposta(props.lead))
+// A sugestão guardada do copiloto (GET, nunca chama o modelo): dela saem os itens; os preços, do cardápio.
+const sugestaoGuardada = ref<SugestaoDoCopiloto | null>(null)
+async function lerSugestaoGuardada() {
+  sugestaoGuardada.value = null
+  if (!comCopiloto.value || !cabe.value) return
+  const id = props.lead.id
+  try {
+    const r = await fetch(`/api/operations/crm/copiloto/sugestao?${new URLSearchParams({ produto: props.lead.produto, id })}`)
+    const dados = await r.json().catch(() => ({}))
+    if (r.ok && props.lead.id === id) sugestaoGuardada.value = dados.sugestao?.sugestao ?? null
+  } catch {
+    // Sem a sugestão, sai o texto base da colinha.
+  }
+}
+watch([comCopiloto, () => props.lead.id, cabe], () => { void lerSugestaoGuardada() }, { immediate: true })
+const proposta = computed(() => (cabe.value ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
+function aoTerSugestao(s: SugestaoDoCopiloto | null) {
+  if (cabe.value) sugestaoGuardada.value = s
+}
+
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
 // demo depois do "sim", follow-up). `anota`: tocar já anota o envio, e a ficha avisa isso uma vez.
 interface AcaoDaFicha { chave: string; rotulo: string; href: string; principal: boolean; anota: boolean }
@@ -114,6 +141,8 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     : !raioXAvulso(l.raioX) ? 'Mandar o raio-x e o demo'
     : l.site ? 'Mandar o demo com o preço' : 'Mandar o raio-x'
   const todas: Array<[string, string, string | undefined, boolean, boolean]> = [
+    // Primeiro da lista quando ele gostou: o link da 2ª mensagem ainda pode estar na planilha, e o passo já é outro.
+    ['proposta', 'Mandar a proposta', gostou.value ? proposta.value?.url : undefined, true, true],
     ['enviar', 'Enviar a primeira mensagem', l.enviar, true, true],
     ['convite', 'Enviar o convite', l.convite, true, true],
     ['segunda', segunda, l.segunda, interesse, true],
@@ -144,10 +173,14 @@ const primaria = computed<AcaoDaFicha | undefined>(() => {
   const conversa = aberto.value ? acoes.value.find((a) => a.chave === 'whatsapp') : undefined
   return conversa && { ...conversa, rotulo: 'Abrir a conversa no WhatsApp' }
 })
-const secundarias = computed(() => doPasso.value.slice(1))
+const propostaAoLado = computed<AcaoDaFicha | undefined>(() =>
+  !gostou.value && proposta.value ? { chave: 'proposta', rotulo: 'Mandar a proposta', href: proposta.value.url, principal: false, anota: true } : undefined)
+const secundarias = computed(() => [...doPasso.value.slice(1), ...(propostaAoLado.value ? [propostaAoLado.value] : [])])
 const apoio = computed(() => acoes.value.filter((a) => !a.principal && a.chave !== primaria.value?.chave))
+const comProposta = computed(() => primaria.value?.chave === 'proposta' || secundarias.value.some((a) => a.chave === 'proposta'))
 const dicaDaAcao = computed(() => [
-  doPasso.value.some((a) => a.anota) ? 'Tocar já anota o envio.' : '',
+  doPasso.value.some((a) => a.anota && a.chave !== 'proposta') ? 'Tocar já anota o envio.' : '',
+  comProposta.value ? 'Mandar a proposta abre o WhatsApp com ela e já a marca enviada hoje no CRM.' : '',
   props.lead.reenvioDoRobo && doPasso.value.some((a) => a.chave === 'followup') ? 'Reenvio único, pedindo o responsável.' : '',
   doPasso.value.some((a) => a.chave === 'gerarDemo') ? 'O demo sai em 20 a 40 min; o aviso chega no WhatsApp.' : '',
 ].filter(Boolean).join(' '))
@@ -155,6 +188,9 @@ const dicaDaAcao = computed(() => [
 /** Os links que anotam o envio ao serem tocados. */
 const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
 function aoTocar(chave: string, href: string) {
+  // O toque abre o WhatsApp (o <a> segue normal) e anota a proposta com a data de hoje: o envio e a marca
+  // eram dois gestos, e só o primeiro acontecia. A planilha confirma no próximo retrato (RULES 11).
+  if (chave === 'proposta') { void registrar('proposta', '', hoje, 'Proposta anotada com a data de hoje.', 'acao'); return }
   // Plus (15/10/2026): o link de envio não passa pelo n8n, então o toque é que anota a primeira mensagem.
   const tipo = chave === 'enviar' && props.lead.produto === 'plus' ? 'plus_enviado' : TIPO_DA_ACAO[chave]
   if (tipo) emit('anotar', props.lead.id, tipo)
@@ -276,7 +312,7 @@ watch(() => props.lead.id, () => {
 
 // ------------------------------------------------------------ gravar na planilha
 
-async function registrar(tipo: CrmTipoDeRegistro, texto: string, data: string, feito: string, de: 'proximo' | 'anotar' = 'anotar') {
+async function registrar(tipo: CrmTipoDeRegistro, texto: string, data: string, feito: string, de: 'proximo' | 'anotar' | 'acao' = 'anotar') {
   salvando.value = tipo
   origem.value = de
   mensagem.value = ''
@@ -376,9 +412,16 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
          sticky só anda dentro do pai: dentro da seção "Agora", soltaria assim que ela saísse da tela. -->
     <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
     <figure v-if="rascunho" class="crm-ficha__rascunho">
-      <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)</figcaption>
+      <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primaria?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base da colinha.' }}</template></figcaption>
       <blockquote>{{ rascunho }}</blockquote>
+      <p v-if="primaria?.chave === 'proposta' && proposta?.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
     </figure>
+    <!-- Proposta ao lado (sem o "gostei" registrado): o texto também à vista antes do toque, dobrado. -->
+    <details v-if="propostaAoLado && proposta" class="dobra crm-ficha__rascunho">
+      <summary>Proposta que vai sair <span class="crm-muted">({{ proposta.origem === 'copiloto' ? 'itens do copiloto, preços do cardápio' : 'texto base da colinha' }})</span></summary>
+      <blockquote>{{ proposta.texto }}</blockquote>
+      <p v-if="proposta.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
+    </details>
 
     <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
       <a class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
@@ -387,6 +430,10 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
 
     <div class="crm-ficha__status">
       <p v-if="dicaDaAcao" class="crm-muted">{{ dicaDaAcao }}</p>
+      <template v-if="origem === 'acao'">
+        <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
+        <p v-if="erro" class="crm-erro" role="alert">{{ erro }}. Marque à mão em Anotar, Proposta.</p>
+      </template>
 
       <!-- Os avisos num lugar só, um por linha, com a palavra antes da cor. -->
       <ul v-if="temAvisos" class="crm-ficha__avisos">
@@ -481,7 +528,7 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
     </template>
 
     <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
-    <CrmCopiloto v-else-if="abaDeVenda === 'copiloto'" :lead="lead" />
+    <CrmCopiloto v-else-if="abaDeVenda === 'copiloto'" :lead="lead" @sugestao="aoTerSugestao" />
     </section>
 
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-anotar">

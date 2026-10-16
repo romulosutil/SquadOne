@@ -336,6 +336,8 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 /* A mensagem do primário, legível antes do toque (16/10/2026). Colada ao "Agora", como a ação fixa. */
 .crm-ficha > .crm-ficha__rascunho { margin-top: var(--esp-3); }
 .crm-ficha__rascunho { display: grid; gap: var(--esp-1); }
+/* O texto base da colinha traz colchetes ([dia]): a palavra antes da cor, como nos avisos. */
+.crm-ficha__completar { margin: 0; padding-left: var(--esp-3); border-left: var(--faixa) solid var(--acento); }
 .crm-ficha__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14em; overflow: auto; }
 /* A conversa: o lead à esquerda, você à direita, como no WhatsApp; a hora embaixo, pequena. */
 .crm-conversa { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }

@@ -166,7 +166,7 @@ revisar", "a Hoje não está entregando valor" e "automatize o envio da primeira
 às 17h30". Decisão dele no mesmo dia, entre as opções: **semi-automático** (nada sai ao lead sem o toque dele; a
 Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora) e **a rampa 10/20/30 por dia mantida**.
 
-- **A fila** (`src/operations/proxima-venda.ts`, PURA): uma ação por vez, na ordem responder → combinado → "o que
+- **A fila** (`src/operations/proxima-venda.ts`, PURA): uma ação por vez, na ordem responder → mandar a proposta → combinado → "o que
   achou?" (20–72 h depois do link, sem resposta dele) → proposta sem retorno → follow-up → primeiro contato (só com a
   trava de ritmo e o expediente livres, no máximo um na fila). Cada ação traz o porquê (o `detalhe` da Hoje do CRM),
   a tática do momento e a mensagem pronta (o `?text=` do wa.me, ou a primeira mensagem do Balcão).
@@ -181,6 +181,18 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   primeiro contato na trava antes de o retrato ver. Estado em `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor.json` (600).
   Pelo Telegram e não pela fila do Hermes (exceção de 16/10/2026 à RULES 20): precisa de botões e sairia pelo mesmo
   número que fala com os leads.
+- **"Mandar a proposta" em um toque** (`src/operations/mandar-proposta.ts`, PURO; 16/10/2026): o diagnóstico mostrou 0
+  propostas para 3 "quero ver" atendidos, porque a proposta era um formulário no fim da Ficha e ninguém marcava. Agora, quando
+  a última resposta é de interesse **depois do link** (a 2ª mensagem; "gostei", ou o "quanto fica" que o n8n deixa como neutra e a
+  colinha reconhece), a Ficha tem o primário **"Mandar a proposta"** e a fila ganha o tipo `mandar-proposta` logo depois do
+  "responder" (substitui o "responder" desse lead). Entre o link e a proposta sem esse "gostei" (passos 2ª mensagem, conversa e
+  Mapa), o botão fica ao lado, como secundário. O toque abre o wa.me com o texto e anota `proposta` (POST
+  `/api/operations/crm/registro`, data de hoje); nada sai sem o toque, e a planilha confirma no retrato (RULES 11). O texto: os
+  itens da sugestão **guardada** do copiloto (a Ficha só lê, nunca pede ao modelo) com nome, entrega e preço do cardápio ("a
+  partir de" nos serviços sob proposta, sem a `condicao`, que mistura nota interna); sem copiloto ou sem item pago, o texto base da
+  colinha (Encontrado; Fonte depois do Mapa; Respondido no resto do PRUMO), cujos colchetes a Ficha pede para completar. Um "R$"
+  fora de `PRECOS_DO_CARDAPIO` some com o botão. Iris e estamparias ficam de fora (sem cardápio). A fila e o Telegram usam o texto
+  da colinha; o do copiloto só na Ficha.
 - **"Por que não está vendendo"** (`por-que-nao-vende.ts`, `PorQueNaoVende.vue`): o funil dos 30 dias em degraus (enviados,
   leram com recibo, responderam, "quero ver", próximo passo, proposta, ganho) contra referências de prospecção por
   mensagem (60/15/30/100/40/25 %), com o degrau mais abaixo marcado (só com 3+ na base) e o que fazer nele.

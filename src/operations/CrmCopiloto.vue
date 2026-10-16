@@ -11,6 +11,8 @@ import type { CrmLead } from './types'
 // envio continua à mão pelo WhatsApp. A Ficha só monta este bloco com o copiloto ligado e o
 // lead entre o "respondeu" e a proposta (copilotoServe).
 const props = defineProps<{ lead: CrmLead }>()
+// A Ficha monta o "Mandar a proposta" com os itens da sugestão (mandar-proposta.ts): sabe da nova sem reler.
+const emit = defineEmits<{ sugestao: [s: SugestaoDoCopiloto | null] }>()
 
 interface SugestaoNaFicha {
   hashDoDossie: string
@@ -43,6 +45,7 @@ async function lerGuardada() {
     const r = await fetch(`/api/operations/crm/copiloto/sugestao?${q}`)
     const dados = await r.json().catch(() => ({}))
     sugestao.value = r.ok ? (dados.sugestao ?? null) : null
+    emit('sugestao', sugestao.value?.sugestao ?? null)
     if (!r.ok && r.status !== 409) erro.value = dados.error ?? 'Não consegui ler a sugestão guardada.'
   } catch {
     sugestao.value = null
@@ -71,6 +74,7 @@ async function pedir(forcar: boolean) {
       return
     }
     sugestao.value = dados
+    emit('sugestao', dados.sugestao ?? null)
     anuncio.value = 'Sugestão pronta.'
   } catch {
     erro.value = 'Sem conexão com a Central.'

@@ -7,6 +7,9 @@
  *  1. Responder quem respondeu. A chance de qualificar cai muito depois da primeira hora
  *     (speed-to-lead); um "sim, quero ver" parado dois dias é a venda que mais se perde. Em
  *     16/10/2026 havia dois "pode sim" de 14/10 sem o link: é o porquê de não vender.
+ *  1b. Mandar a proposta (mandar-proposta.ts) a quem gostou depois do link ("gostei", "quanto
+ *     fica"). Substitui o "responder" desse lead: a resposta certa ao "gostei" é a proposta, e o
+ *     toque abre o WhatsApp com ela e já anota `proposta` (eram 0 propostas para 3 "quero ver").
  *  2. Cumprir o combinado na data: confiança é o que fecha serviço.
  *  2b. "O que achou?" um dia depois do link (o demo ou o Raio-X), quando ele não escreveu mais. A
  *     simulação de 16/10/2026 achou o furo: depois da 2ª mensagem nenhum passo pedia nada, e o
@@ -23,9 +26,13 @@
  * do número que é também o do Hermes).
  */
 import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
+import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 
-export type TipoDeVenda = 'responder' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'primeiro'
+export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'primeiro'
+
+/** O que o toque em "Enviei" grava na aba CRM: um envio, ou a proposta (o servidor põe a data de hoje). */
+export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta'
 
 export interface AcaoDeVenda {
   /** `leadId|tipo`: o mesmo lead pode ter um combinado e uma resposta; cada um é um aviso. */
@@ -47,7 +54,7 @@ export interface AcaoDeVenda {
   /** O link que abre o WhatsApp (com o texto, quando há). */
   link?: { rotulo: string; url: string }
   /** O envio que o toque em "Enviei" anota; ausente quando o próprio link já marca (o do n8n). */
-  anota?: TipoDeEnvioAnotado
+  anota?: AnotacaoDeVenda
   /** Primeiro contato: conta na trava de ritmo. */
   primeiroContato: boolean
   /** Disse que quer ver, ou combinado atrasado: a tela destaca. */
@@ -101,6 +108,32 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
   }
 }
 
+/**
+ * Gostou depois do link: a proposta pronta (o texto base da colinha; o do copiloto só na Ficha,
+ * que lê a sugestão guardada). Sem WhatsApp ou sem texto, null: o lead segue no "responder".
+ */
+function acaoMandarProposta(lead: CrmLead): AcaoDeVenda | null {
+  if (!gostouDepoisDoLink(lead)) return null
+  const proposta = propostaDeUmToque(lead)
+  if (!proposta) return null
+  return {
+    chave: `${lead.id}|mandar-proposta`,
+    leadId: lead.id,
+    empresa: lead.empresa,
+    produto: lead.produto,
+    tipo: 'mandar-proposta',
+    titulo: titulo('mandar-proposta', lead),
+    contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
+    porque: lead.resposta?.trecho ? `Depois do link ele escreveu: "${lead.resposta.trecho}".` : 'Ele gostou depois do link.',
+    tatica: tatica('mandar-proposta', lead),
+    rascunho: proposta.texto,
+    link: { rotulo: 'Mandar a proposta', url: proposta.url },
+    anota: 'proposta',
+    primeiroContato: false,
+    quente: true,
+  }
+}
+
 const ORDEM_DOS_GRUPOS: Array<[CrmGrupoHojeId, TipoDeVenda]> = [
   ['resposta', 'responder'],
   ['proximo', 'combinado'],
@@ -129,6 +162,8 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
       if (lead.resposta?.tipo === 'interesse') return 'Ele disse sim: mande agora. Cada hora de espera esfria o "quero ver"; depois do link, pergunte o que achou em vez de esperar.'
       if (lead.resposta?.tipo === 'neutra') return 'Resposta aberta: responda curto, tire a dúvida e devolva uma pergunta de sim ou não que leve ao "quero ver".'
       return 'Responda no mesmo dia, curto, e termine com uma pergunta que ele consiga responder com uma palavra.'
+    case 'mandar-proposta':
+      return 'Ele gostou: a resposta é a proposta, hoje (em até 24 h do "gostei"). O que entra, quanto custa e quando começa; tocar já anota a proposta no CRM.'
     case 'combinado':
       return 'Você combinou: cumprir na data é o que faz confiar. Lembre o que ele disse da última vez e proponha o próximo passo com dia e hora.'
     case 'depois-do-link':
@@ -147,6 +182,7 @@ function titulo(tipo: TipoDeVenda, lead: CrmLead): string {
   const nome = lead.empresa
   switch (tipo) {
     case 'responder': return lead.resposta?.tipo === 'interesse' ? `${nome} disse sim: mande o próximo passo` : `Responda a ${nome}`
+    case 'mandar-proposta': return `${nome} gostou: mande a proposta`
     case 'combinado': return `Combinado com ${nome}`
     case 'depois-do-link': return `Pergunte a ${nome} o que achou`
     case 'proposta': return `Pergunte a ${nome} o que faltou na proposta`
@@ -208,13 +244,23 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     const a = acaoDepoisDoLink(l, ctx.agora)
     return a ? [a] : []
   })
+  const propostas = visao.leads.flatMap((l) => {
+    const a = acaoMandarProposta(l)
+    return a ? [a] : []
+  })
+  const comProposta = new Set(propostas.map((a) => a.leadId))
   for (const [grupo, tipo] of ORDEM_DOS_GRUPOS) {
+    if (grupo === 'proximo') {
+      for (const a of propostas) if (!vistas.has(a.chave)) { vistas.add(a.chave); fila.push(a) }
+    }
     if (grupo === 'proposta') {
       for (const a of depoisDoLink) if (!vistas.has(a.chave)) { vistas.add(a.chave); fila.push(a) }
     }
     for (const item of grupos.get(grupo)?.itens ?? []) {
       const lead = porId.get(item.leadId)
       if (!lead) continue
+      // Quem gostou depois do link já tem a proposta na fila: "responder" seria o mesmo toque, sem a marca.
+      if (tipo === 'responder' && comProposta.has(lead.id)) continue
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
       if (acao.primeiroContato) {
@@ -232,6 +278,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
 export function resumoDaFila(fila: readonly AcaoDeVenda[]): string {
   const NOMES: Record<TipoDeVenda, [string, string]> = {
     responder: ['resposta', 'respostas'],
+    'mandar-proposta': ['proposta para mandar', 'propostas para mandar'],
     combinado: ['combinado', 'combinados'],
     'depois-do-link': ['"o que achou?"', '"o que achou?"'],
     proposta: ['proposta sem retorno', 'propostas sem retorno'],

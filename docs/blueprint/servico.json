@@ -81,7 +81,7 @@
 
         { "id": "SITE-7-E1", "passo": "SITE-7", "faixa": "E", "nome": "Preço e o site no ar", "quem": "cliente", "resumo": "R$ 690 uma vez e R$ 39 por mês. Depois, o site com o domínio dele.", "momento": true },
         { "id": "SITE-7-C1", "passo": "SITE-7", "faixa": "C", "nome": "Aceita, recusa ou some", "quem": "cliente", "resumo": "Fecha, diz não, ou para de responder." },
-        { "id": "SITE-7-P1", "passo": "SITE-7", "faixa": "P", "nome": "Proposta e desfecho", "quem": "você", "resumo": "Proposta marcada à mão na Ficha; Fechou e Recusou na página do lead (07).", "arquivos": ["src/operations/CrmFicha.vue", "deploy/dell/claude-ops/site-lead-acoes.py"], "dor": ["Proposta marcada à mão: esquecida, o lead some do funil"] },
+        { "id": "SITE-7-P1", "passo": "SITE-7", "faixa": "P", "nome": "Proposta e desfecho", "quem": "você", "resumo": "\"Mandar a proposta\" em um toque depois do \"gostei\": abre o WhatsApp com a proposta e já a marca no CRM (16/10/2026); Fechou e Recusou na página do lead (07).", "arquivos": ["src/operations/CrmFicha.vue", "src/operations/mandar-proposta.ts", "src/operations/proxima-venda.ts", "deploy/dell/claude-ops/site-lead-acoes.py"], "seguranca": ["Nada sai sem o toque; \"R$\" fora do cardápio tira o botão"] },
         { "id": "SITE-7-B1", "passo": "SITE-7", "faixa": "B", "nome": "Regra dos 7 dias", "quem": "robô", "resumo": "Sem mensagem do lead por 7 dias, vai para Perdido; um próximo passo salvo segura.", "arquivos": ["server/crm.ts"] },
         { "id": "SITE-7-B2", "passo": "SITE-7", "faixa": "B", "nome": "Pausa e limpeza dos demos", "quem": "robô", "resumo": "Demo pausado 15 dias depois da recusa; demo de lead Perdido sai da Vercel.", "arquivos": ["deploy/dell/site-demos-pausa.py", "deploy/dell/site-demos-limpeza.py"] },
         { "id": "SITE-7-A1", "passo": "SITE-7", "faixa": "A", "nome": "Lições do funil", "quem": "robô", "resumo": "Às 06:40 lê o CRM e propõe lições; o modelo roda sem ferramentas.", "arquivos": ["deploy/dell/funil-aprendizado.py"], "metrica": ["Ganho e perdido por nicho e por letra"] }
@@ -96,7 +96,7 @@
         ["SITE-7-C1", "SITE-7-P1"], ["SITE-7-B1", "SITE-7-B2"], ["SITE-7-B1", "SITE-7-A1"]
       ],
       "melhorias": [
-        "Proposta e desfecho ainda são marcados à mão (SITE-7-P1): o observador poderia sugerir \"Recusou\" quando a resposta é negativa.",
+        "O desfecho ainda é marcado à mão (SITE-7-P1): o observador poderia sugerir \"Recusou\" quando a resposta é negativa.",
         "O follow-up pode sair duplicado entre o n8n e o toque na Ficha (SITE-6-P1)."
       ]
     },
@@ -139,7 +139,7 @@
 
         { "id": "PRUMO-5-E1", "passo": "PRUMO-5", "faixa": "E", "nome": "Proposta sob medida", "quem": "cliente", "resumo": "Fonte e serviços \"sob proposta\" para o cliente." },
         { "id": "PRUMO-5-C1", "passo": "PRUMO-5", "faixa": "C", "nome": "Contrata ou adia", "quem": "cliente", "resumo": "Fecha a Fonte, um serviço avulso ou nada por enquanto." },
-        { "id": "PRUMO-5-P1", "passo": "PRUMO-5", "faixa": "P", "nome": "Proposta pelo copiloto", "quem": "você", "resumo": "Rascunho com os preços do cardápio; Rômulo revisa e manda.", "arquivos": ["src/operations/CrmCopiloto.vue", "server/copiloto.ts"], "seguranca": ["O modelo escolhe itens; os preços vêm do cardápio, nunca dele"] },
+        { "id": "PRUMO-5-P1", "passo": "PRUMO-5", "faixa": "P", "nome": "Proposta pelo copiloto", "quem": "você", "resumo": "Rascunho com os preços do cardápio; \"Mandar a proposta\" abre o WhatsApp com ele e marca a proposta.", "arquivos": ["src/operations/CrmCopiloto.vue", "server/copiloto.ts", "src/operations/mandar-proposta.ts"], "seguranca": ["O modelo escolhe itens; os preços vêm do cardápio, nunca dele"] },
         { "id": "PRUMO-5-B1", "passo": "PRUMO-5", "faixa": "B", "nome": "Etapa muda na planilha", "quem": "você", "resumo": "No PRUMO a Etapa é da planilha; a Central só lê." }
       ],
       "ligacoes": [

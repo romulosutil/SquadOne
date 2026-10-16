@@ -101,6 +101,12 @@ o "o que achou?" de 20 h a 72 h depois do link; a proposta sem reenviar o preço
 E o vendedor (`server/vendedor.ts`): expediente seg–sex 08:00–17:30, um aviso por vez, 30 min sem toque vira pulado, o
 "quero ver" fura a espera, o "Enviei" de primeiro contato conta na trava antes do retrato, o texto e os botões do Telegram
 (callback ≤ 64 bytes). E o "por que não está vendendo" (`por-que-nao-vende.ts`): o gargalo depois do "gostei"),
+`server/mandar-proposta.test.ts` (16/10/2026, o "Mandar a proposta" em um toque: tabela de respostas pelo retrato de verdade
+(`montarCrm`): "gostei" e "quanto fica" depois do link entram na fila, anotam `proposta` e tiram o "responder" do mesmo lead;
+interesse antes do link, neutra sem preço, negativa, sem link e proposta já marcada não entram; entra antes do combinado. O
+texto em tabela: Site pela colinha, PRUMO pelos itens do copiloto com "a partir de" e sem a nota interna nem o Raio-X grátis,
+só grátis cai na colinha, Fonte com colchetes, Iris e lead sem WhatsApp sem botão; nenhum "R$" fora do cardápio, item por
+item; e quando a Ficha oferece a proposta como primário ou ao lado),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts` (o catálogo único, 15/10/2026: nasce dos passos de `fluxos.ts`
 com o `quando` e a verificação deles, a sala de cada trabalhador em tabela, os caçadores do Iris e das Estamparias, o Plus sem robô,
 o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo do servidor importando catálogo, fluxos ou operação),
