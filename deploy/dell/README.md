@@ -2128,6 +2128,13 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
   isso o `whatsapp-observador-prumo` roda com `OBSERVADOR_SILENCIO_S=0` (log parado à noite não é erro).
 - **Mensagem enviada pela API** (quando houver resposta automática) também chega como `fromMe:true` e conta como
   `saida`: marca o lead como `enviado` com a letra `manual`, igual a uma mensagem digitada.
+- **Na Central: "WhatsApp do PRUMO (Evolution)"** (`dell-status`, grupo Serviços; só aparece onde existe
+  `~/workspace/evolution/docker-compose.yml`). Confere os três containers (`evolution-api-1`, `-postgres-1`, `-redis-1`),
+  as units `evolution-adaptador` e `whatsapp-observador-prumo` e o `GET /saude` do adaptador (com o segredo, lido só dentro
+  do coletor; timeouts de 2 a 3 s). Sem a marca `conectou`, o máximo é **atenção** ("QR não lido"; o observador do PRUMO
+  desligado é o esperado). Com a marca: número `desconectado` = **falha** ("o número do PRUMO caiu: reconectar lendo o
+  QR"), peça fora ou `/saude` mudo = falha, adaptador sem `lista_de_leads` = atenção. O resultado nunca leva segredo,
+  chave da API, telefone nem texto de conversa.
 
 **Estado em 16/10/2026 (instalado na Mel, nada conectado a número nenhum):**
 

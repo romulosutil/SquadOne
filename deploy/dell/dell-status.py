@@ -2142,6 +2142,140 @@ def units_que_cairam() -> list[dict]:
     return [avaliar_units(avaliadas, agora())] if avaliadas else []
 
 
+# ---------------------------------------------------------------- WhatsApp do PRUMO (Evolution)
+
+# A pilha do número só do PRUMO (16/10/2026; deploy/dell/README.md, "Observador do número do
+# PRUMO"). O adaptador falha fechado: sem a lista de leads (que o observador do PRUMO cria) ele
+# não grava nada, e um número que caiu não avisa ninguém além dele mesmo. Esta verificação é o
+# segundo par de olhos. O caminho do compose é o que decide se ela existe: sem ele a máquina não
+# tem a pilha, e acusar o que nunca foi instalado seria ruído.
+EVOLUTION_COMPOSE = HOME / "workspace/evolution/docker-compose.yml"
+EVOLUTION_CONTAINERS = ["evolution-api-1", "evolution-postgres-1", "evolution-redis-1"]
+EVOLUTION_ADAPTADOR = "evolution-adaptador"
+EVOLUTION_OBSERVADOR = "whatsapp-observador-prumo"
+EVOLUTION_SAUDE = "http://172.28.77.1:9131/saude"
+EVOLUTION_SEGREDO = HOME / ".config/claude-ops/evolution-adaptador-segredo"
+EVOLUTION_CONECTOU = HOME / ".local/state/whatsapp-observador-prumo/conectou"
+EVOLUTION_NOME = "WhatsApp do PRUMO (Evolution)"
+EVOLUTION_ID = "whatsapp-prumo"
+# Curtos de propósito: se o Docker ou o adaptador travarem, o monitor (que roda a cada minuto) não pode esperar.
+EVOLUTION_TIMEOUT_DOCKER = 3
+EVOLUTION_TIMEOUT_SYSTEMD = 2
+EVOLUTION_TIMEOUT_HTTP = 3
+
+
+def avaliar_whatsapp_prumo(d: dict) -> dict:
+    """PURA. `d`: `containers` {nome: estado do Docker ou None}, `units` {nome: ativa?},
+    `saude` (JSON do GET /saude do adaptador, ou None se não respondeu) e `conectou` (a marca
+    que o adaptador grava na primeira conexão). Nunca recebe segredo, chave nem telefone.
+
+    "conectou" separa dois mundos: antes do primeiro QR tudo é espera (amarelo suave, nunca
+    vermelho, e o observador do PRUMO desligado é o estado esperado); depois, qualquer peça
+    fora faz o número ficar mudo para o CRM, e isso é vermelho."""
+    conectou = d.get("conectou") is True
+    containers, units = d.get("containers") or {}, d.get("units") or {}
+    saude = d.get("saude") if isinstance(d.get("saude"), dict) else None
+
+    def check_(estado: str, detalhe: str, o_que_fazer: str | None = None) -> dict:
+        return check(EVOLUTION_ID, "servicos", EVOLUTION_NOME, estado, detalhe, o_que_fazer=o_que_fazer)
+
+    if conectou and saude is not None and saude.get("desconectado") is True:
+        return check_("falha", "O número do PRUMO caiu: a Evolution perdeu a conexão com o WhatsApp",
+                      "O número do PRUMO caiu: reconectar lendo o QR de novo no celular do número. Os leads que "
+                      "responderem enquanto isso não chegam ao CRM. O comando que pede o QR está em "
+                      "deploy/dell/README.md, seção \"Observador do número do PRUMO\" (o QR vale poucos "
+                      "segundos). Se não souber, peça ao Claude: \"o número do PRUMO caiu\".")
+
+    fora = [n for n in EVOLUTION_CONTAINERS if containers.get(n) != "running"]
+    # Antes do QR o observador fica desligado de propósito; só conta como peça fora depois.
+    paradas = [u for u in (EVOLUTION_ADAPTADOR, EVOLUTION_OBSERVADOR)
+               if units.get(u) is not True and (conectou or u != EVOLUTION_OBSERVADOR)]
+    problemas = []
+    if fora:
+        problemas.append("container(s) parado(s) ou ausente(s): " + ", ".join(fora))
+    if paradas:
+        problemas.append("unit(s) fora do ar: " + ", ".join(paradas))
+    if saude is None:
+        problemas.append("o /saude do adaptador não respondeu (ou recusou o segredo)")
+    if problemas:
+        passos = []
+        if fora:
+            passos.append("suba a pilha: cd ~/workspace/evolution && docker compose up -d")
+        if paradas:
+            passos.append("religue: systemctl --user restart " + " ".join(paradas))
+        if saude is None and not paradas and not fora:
+            passos.append("veja o diário: journalctl --user -u evolution-adaptador -n 50")
+        extra = (" Enquanto isso as respostas dos leads deste número não chegam ao CRM." if conectou
+                 else " O número ainda não foi pareado, então nada se perde por enquanto.")
+        return check_("falha" if conectou else "atencao", "; ".join(problemas),
+                      "A pilha do WhatsApp do PRUMO tem peça fora do ar." + extra + " Para resolver: "
+                      + "; ".join(passos + ["se não funcionar, peça ao Claude: \"a Evolution do PRUMO caiu\""]) + ".")
+
+    if not conectou:
+        return check_("atencao", "Pilha no ar, mas o número ainda não foi pareado (QR não lido)",
+                      "Nada quebrou: falta ler o QR no celular do número novo e depois ligar o observador do PRUMO "
+                      "(systemctl --user enable --now whatsapp-observador-prumo). O passo a passo está em "
+                      "deploy/dell/README.md, seção \"Observador do número do PRUMO\" (\"O que falta, na ordem\"). "
+                      "O amarelo some quando o número conectar.")
+    if saude.get("lista_de_leads") is not True:
+        return check_("atencao", "Número conectado, mas o adaptador está sem a lista de leads: não grava nenhuma resposta",
+                      "O adaptador só grava quem está na lista de leads, e quem a cria é o whatsapp-observador-prumo "
+                      "ao ler o n8n. Veja se ele leu: journalctl --user -u whatsapp-observador-prumo -n 50 (o n8n "
+                      "precisa estar no ar). Se não resolver, peça ao Claude: \"o observador do PRUMO não acha leads\".")
+    return check_("ok", f"{len(EVOLUTION_CONTAINERS)} containers, adaptador e observador no ar, número conectado")
+
+
+def _evolution_containers() -> dict:
+    """Estado do Docker de cada container da pilha; sem resposta do Docker, todos None."""
+    try:
+        r = subprocess.run(["docker", "ps", "-a", "--filter", "name=evolution-", "--format", "{{.Names}}\t{{.State}}"],
+                           capture_output=True, text=True, timeout=EVOLUTION_TIMEOUT_DOCKER)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if r.returncode != 0:
+        return {}
+    estados = dict(l.split("\t", 1) for l in r.stdout.splitlines() if "\t" in l)
+    return {n: estados.get(n) for n in EVOLUTION_CONTAINERS}
+
+
+def _evolution_units() -> dict:
+    """`is-active` das duas units numa chamada só (uma linha por unit, na ordem pedida)."""
+    nomes = [EVOLUTION_ADAPTADOR, EVOLUTION_OBSERVADOR]
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", *nomes], capture_output=True, text=True,
+                           timeout=EVOLUTION_TIMEOUT_SYSTEMD)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    linhas = r.stdout.split()
+    return {n: (len(linhas) == len(nomes) and linhas[i] == "active") for i, n in enumerate(nomes)}
+
+
+def _evolution_saude() -> dict | None:
+    """GET /saude com o segredo. O segredo só existe dentro desta função e qualquer erro (arquivo
+    ausente, rede, 401, JSON ruim) vira None: o texto do erro nunca sai daqui."""
+    try:
+        segredo = EVOLUTION_SEGREDO.read_text().strip()
+        if not segredo:
+            return None
+        resposta = http_json(EVOLUTION_SAUDE, headers={"X-Adaptador": segredo}, timeout=EVOLUTION_TIMEOUT_HTTP)
+        return resposta if isinstance(resposta, dict) else None
+    except Exception:  # noqa: BLE001 — a mensagem poderia ecoar o cabeçalho; descartamos de propósito
+        return None
+
+
+def whatsapp_prumo() -> list[dict]:
+    if not EVOLUTION_COMPOSE.is_file():
+        return []  # pilha não instalada nesta máquina: a verificação não existe
+    try:
+        return [avaliar_whatsapp_prumo({"containers": _evolution_containers(), "units": _evolution_units(),
+                                        "saude": _evolution_saude(), "conectou": EVOLUTION_CONECTOU.is_file()})]
+    except Exception:  # noqa: BLE001 — texto genérico: nada do que foi lido pode vazar para o status.json
+        return [check(EVOLUTION_ID, "servicos", EVOLUTION_NOME, "atencao",
+                      "Não consegui conferir a pilha do WhatsApp do PRUMO agora",
+                      o_que_fazer="O monitor não conseguiu ler o estado (Docker, systemd ou adaptador). Se continuar, "
+                                  "peça ao Claude: \"a verificação do WhatsApp do PRUMO não acha a pilha\".")]
+
+
 def listar_instalados() -> None:
     """`dell-status --instalados`: o que está fora do repo, com o comando."""
     itens = ler_instalados() or []
@@ -2224,7 +2358,7 @@ def main() -> None:
     t = agora()
     checks = []
     for fn in (servicos, religamentos, containers, fluxos, maquina, pastas_que_crescem, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
-               easypanel, backup, fila_de_avisos, instalados, timers_desligados, units_que_cairam):
+               easypanel, backup, fila_de_avisos, instalados, timers_desligados, units_que_cairam, whatsapp_prumo):
         try:
             checks += fn()
         except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras

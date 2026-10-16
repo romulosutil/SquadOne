@@ -9,11 +9,15 @@ Hermes.
   python3 deploy/dell/dell-status.test.py
 """
 import importlib.util
+import inspect
 import json
 import os
 import shutil
+import subprocess
 import tempfile
+import types
 import unittest
+from unittest import mock
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1311,6 +1315,223 @@ class Units(unittest.TestCase):
         # O systemd não conhece nenhuma (sem daemon-reload): nada a mostrar, sem amarelo.
         ds._campos_das_units = lambda units: {u: unit(id_=u, carga="not-found") for u in units}
         self.assertEqual(ds.units_que_cairam(), [])
+
+
+SEGREDO_FALSO = "segredo-falso-do-teste-0123456789"
+
+
+def pilha(**mudancas) -> dict:
+    """Tudo no ar e o número já conectado; cada caso muda só o que o interessa."""
+    base = {"containers": {n: "running" for n in ds.EVOLUTION_CONTAINERS},
+            "units": {ds.EVOLUTION_ADAPTADOR: True, ds.EVOLUTION_OBSERVADOR: True},
+            "saude": {"ok": True, "desconectado": False, "lista_de_leads": True, "ultimo_evento": 1760000000,
+                      "eventos": 4, "ignorados": 1, "recibos": {}},
+            "conectou": True}
+    base.update(mudancas)
+    return base
+
+
+def variar(**mudancas) -> dict:
+    d = pilha()
+    d["containers"] = {**d["containers"], **mudancas.get("containers", {})}
+    d["units"] = {**d["units"], **mudancas.get("units", {})}
+    d["saude"] = mudancas["saude"] if "saude" in mudancas else {**d["saude"], **mudancas.get("campos", {})}
+    d["conectou"] = mudancas.get("conectou", True)
+    return d
+
+
+class WhatsAppPrumo(unittest.TestCase):
+    """A pilha da Evolution para o número só do PRUMO (16/10/2026). A função de avaliação é pura;
+    o coletor lê Docker, systemd e o /saude do adaptador, e aqui tudo isso é dublê."""
+
+    def test_tabela_de_casos(self):
+        casos = [
+            ("tudo certo", variar(), "ok", "3 containers, adaptador e observador no ar, número conectado"),
+            ("o número caiu", variar(campos={"desconectado": True}), "falha", "O número do PRUMO caiu"),
+            ("caiu mesmo com o resto fora do ar", variar(campos={"desconectado": True},
+                                                      units={ds.EVOLUTION_OBSERVADOR: False}), "falha",
+             "O número do PRUMO caiu"),
+            ("nunca pareou, observador desligado de propósito",
+             variar(conectou=False, units={ds.EVOLUTION_OBSERVADOR: False}, campos={"lista_de_leads": False}),
+             "atencao", "ainda não foi pareado (QR não lido)"),
+            ("nunca pareou e o close do QR vira desconectado", variar(conectou=False, campos={"desconectado": True}),
+             "atencao", "ainda não foi pareado"),
+            ("container parado depois de conectar", variar(containers={"evolution-redis-1": "exited"}), "falha",
+             "evolution-redis-1"),
+            ("container ausente depois de conectar", variar(containers={"evolution-postgres-1": None}), "falha",
+             "evolution-postgres-1"),
+            ("container parado antes do QR é só amarelo", variar(conectou=False, containers={"evolution-api-1": "exited"}),
+             "atencao", "evolution-api-1"),
+            ("Docker sem resposta", {**variar(), "containers": {}}, "falha", "evolution-api-1"),
+            ("adaptador parado", variar(units={ds.EVOLUTION_ADAPTADOR: False}), "falha", "evolution-adaptador"),
+            ("observador parado depois de conectar", variar(units={ds.EVOLUTION_OBSERVADOR: False}), "falha",
+             "whatsapp-observador-prumo"),
+            ("adaptador parado antes do QR", variar(conectou=False, units={ds.EVOLUTION_ADAPTADOR: False}),
+             "atencao", "evolution-adaptador"),
+            ("systemd sem resposta", {**variar(), "units": {}}, "falha", "unit(s) fora do ar"),
+            ("/saude sem resposta", variar(saude=None), "falha", "/saude"),
+            ("/saude sem resposta antes do QR", variar(conectou=False, saude=None), "atencao", "/saude"),
+            ("/saude que não é objeto", {**variar(), "saude": ["x"]}, "falha", "/saude"),
+            ("sem a lista de leads", variar(campos={"lista_de_leads": False}), "atencao", "sem a lista de leads"),
+            ("lista de leads ausente da resposta", variar(saude={"ok": True, "desconectado": False}), "atencao",
+             "sem a lista de leads"),
+        ]
+        for nome, dados, estado, trecho in casos:
+            with self.subTest(nome):
+                c = ds.avaliar_whatsapp_prumo(dados)
+                self.assertEqual((c["id"], c["grupo"], c["nome"]), ("whatsapp-prumo", "servicos", "WhatsApp do PRUMO (Evolution)"))
+                self.assertEqual(c["estado"], estado, c["detalhe"])
+                self.assertIn(trecho, c["detalhe"])
+                if estado == "ok":
+                    self.assertNotIn("o_que_fazer", c)
+                else:
+                    self.assertTrue(c["o_que_fazer"])
+                    self.assertLess(len(c["o_que_fazer"]), 600)
+
+    def test_numero_caido_diz_como_pedir_o_qr(self):
+        c = ds.avaliar_whatsapp_prumo(variar(campos={"desconectado": True}))
+        self.assertIn("reconectar lendo o QR", c["o_que_fazer"])
+        self.assertIn("deploy/dell/README.md", c["o_que_fazer"])
+        self.assertIn("Observador do número do PRUMO", c["o_que_fazer"])
+
+    def test_antes_do_qr_nunca_e_falha(self):
+        """Todas as combinações de peça fora, sem a marca `conectou`: no máximo atenção."""
+        for fora in ({"containers": {}}, {"units": {}}, {"saude": None}, {"containers": {}, "units": {}, "saude": None}):
+            with self.subTest(fora):
+                c = ds.avaliar_whatsapp_prumo({**variar(conectou=False), **fora})
+                self.assertEqual(c["estado"], "atencao")
+
+    def test_o_que_fazer_nomeia_o_conserto(self):
+        c = ds.avaliar_whatsapp_prumo(variar(containers={"evolution-api-1": "exited"}))
+        self.assertIn("docker compose up -d", c["o_que_fazer"])
+        c = ds.avaliar_whatsapp_prumo(variar(units={ds.EVOLUTION_ADAPTADOR: False}))
+        self.assertIn("systemctl --user restart evolution-adaptador", c["o_que_fazer"])
+        c = ds.avaliar_whatsapp_prumo(variar(campos={"lista_de_leads": False}))
+        self.assertIn("whatsapp-observador-prumo", c["o_que_fazer"])
+
+    def test_nada_do_que_a_saude_traz_vai_para_o_status(self):
+        """Mesmo que o /saude venha com segredo, chave ou telefone de brinde, só o veredito sai."""
+        veneno = {"segredo": SEGREDO_FALSO, "apikey": "chave-falsa-da-api", "telefone": "5511999990000"}
+        for campos in ({}, {"desconectado": True}, {"lista_de_leads": False}):
+            for conectou in (True, False):
+                with self.subTest(campos=campos, conectou=conectou):
+                    texto = json.dumps(ds.avaliar_whatsapp_prumo(variar(conectou=conectou, campos={**veneno, **campos})))
+                    for x in (*veneno.values(), "551199999"):
+                        self.assertNotIn(x, texto)
+
+    def test_o_que_fazer_do_monitor_nao_sobrescreve_o_da_verificacao(self):
+        c = ds.explicar(ds.avaliar_whatsapp_prumo(variar(campos={"desconectado": True})))
+        self.assertIn("reconectar lendo o QR", c["o_que_fazer"])
+
+    # ---- o coletor, com dublês
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        for nome, valor in (("EVOLUTION_COMPOSE", self.tmp / "workspace/evolution/docker-compose.yml"),
+                            ("EVOLUTION_CONECTOU", self.tmp / "estado/conectou"),
+                            ("EVOLUTION_SEGREDO", self.tmp / "config/segredo")):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def instalar_pilha(self):
+        ds.EVOLUTION_COMPOSE.parent.mkdir(parents=True)
+        ds.EVOLUTION_COMPOSE.write_text("services: {}\n")
+
+    def dubles(self, containers=None, units=None, saude=None):
+        for nome, valor in (("_evolution_containers", containers), ("_evolution_units", units),
+                            ("_evolution_saude", saude)):
+            p = mock.patch.object(ds, nome, return_value=valor)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_sem_o_compose_a_verificacao_nao_aparece_e_nada_e_lido(self):
+        explode = mock.Mock(side_effect=AssertionError("não devia ler nada"))
+        with mock.patch.object(ds, "_evolution_containers", explode), mock.patch.object(ds, "_evolution_units", explode), \
+                mock.patch.object(ds, "_evolution_saude", explode):
+            self.assertEqual(ds.whatsapp_prumo(), [])
+        explode.assert_not_called()
+
+    def test_com_o_compose_junta_as_tres_leituras(self):
+        self.instalar_pilha()
+        d = pilha()
+        self.dubles(d["containers"], d["units"], d["saude"])
+        [c] = ds.whatsapp_prumo()
+        self.assertEqual(c["estado"], "atencao")  # a marca `conectou` ainda não existe
+        self.assertIn("QR não lido", c["detalhe"])
+        ds.EVOLUTION_CONECTOU.parent.mkdir(parents=True)
+        ds.EVOLUTION_CONECTOU.write_text("")
+        [c] = ds.whatsapp_prumo()
+        self.assertEqual((c["estado"], c["detalhe"]),
+                         ("ok", "3 containers, adaptador e observador no ar, número conectado"))
+
+    def test_leitura_que_levanta_vira_atencao_generica(self):
+        self.instalar_pilha()
+        self.dubles({}, {}, None)
+        with mock.patch.object(ds, "_evolution_units", side_effect=RuntimeError(f"X-Adaptador: {SEGREDO_FALSO} 5511999990000")):
+            [c] = ds.whatsapp_prumo()
+        self.assertEqual(c["estado"], "atencao")
+        self.assertEqual(c["detalhe"], "Não consegui conferir a pilha do WhatsApp do PRUMO agora")
+        texto = json.dumps(c)
+        self.assertNotIn(SEGREDO_FALSO, texto)
+        self.assertNotIn("5511999990000", texto)
+
+    def test_saude_manda_o_segredo_no_cabecalho_e_com_timeout_curto(self):
+        ds.EVOLUTION_SEGREDO.parent.mkdir(parents=True)
+        ds.EVOLUTION_SEGREDO.write_text(SEGREDO_FALSO + "\n")
+        with mock.patch.object(ds, "http_json", return_value={"ok": True, "desconectado": False}) as http:
+            self.assertEqual(ds._evolution_saude(), {"ok": True, "desconectado": False})
+        (url,), kw = http.call_args
+        self.assertEqual(url, "http://172.28.77.1:9131/saude")
+        self.assertEqual(kw["headers"], {"X-Adaptador": SEGREDO_FALSO})
+        self.assertLessEqual(kw["timeout"], 3)
+
+    def test_saude_nunca_levanta_nem_repassa_o_erro(self):
+        ds.EVOLUTION_SEGREDO.parent.mkdir(parents=True)
+        ds.EVOLUTION_SEGREDO.write_text(SEGREDO_FALSO)
+        for erro in (OSError(f"recusado {SEGREDO_FALSO}"), TimeoutError("lento"), ValueError("json ruim")):
+            with self.subTest(type(erro).__name__), mock.patch.object(ds, "http_json", side_effect=erro):
+                self.assertIsNone(ds._evolution_saude())
+        with mock.patch.object(ds, "http_json", return_value=["não é objeto"]):
+            self.assertIsNone(ds._evolution_saude())
+
+    def test_saude_sem_segredo_nem_tenta_a_rede(self):
+        with mock.patch.object(ds, "http_json") as http:
+            self.assertIsNone(ds._evolution_saude())  # arquivo ausente
+            ds.EVOLUTION_SEGREDO.parent.mkdir(parents=True)
+            ds.EVOLUTION_SEGREDO.write_text("  \n")
+            self.assertIsNone(ds._evolution_saude())  # arquivo vazio
+        http.assert_not_called()
+
+    def test_docker_ps(self):
+        saida = types.SimpleNamespace(returncode=0, stdout="evolution-api-1\trunning\nevolution-redis-1\texited\noutro\tx\n")
+        with mock.patch.object(ds.subprocess, "run", return_value=saida) as run:
+            self.assertEqual(ds._evolution_containers(), {"evolution-api-1": "running", "evolution-postgres-1": None,
+                                                          "evolution-redis-1": "exited"})
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 3)
+        self.assertEqual(run.call_args.args[0][:3], ["docker", "ps", "-a"])
+        for erro in (subprocess.TimeoutExpired("docker", 3), FileNotFoundError("docker")):
+            with self.subTest(type(erro).__name__), mock.patch.object(ds.subprocess, "run", side_effect=erro):
+                self.assertEqual(ds._evolution_containers(), {})
+        with mock.patch.object(ds.subprocess, "run", return_value=types.SimpleNamespace(returncode=1, stdout="")):
+            self.assertEqual(ds._evolution_containers(), {})
+
+    def test_systemctl_is_active(self):
+        def roda(stdout):
+            return mock.patch.object(ds.subprocess, "run", return_value=types.SimpleNamespace(returncode=3, stdout=stdout))
+        with roda("active\ninactive\n") as run:
+            self.assertEqual(ds._evolution_units(), {"evolution-adaptador": True, "whatsapp-observador-prumo": False})
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 3)
+        with roda("failed\nactive\n"):
+            self.assertEqual(ds._evolution_units(), {"evolution-adaptador": False, "whatsapp-observador-prumo": True})
+        with roda(""):  # systemd mudo: nenhuma conta como ativa
+            self.assertEqual(ds._evolution_units(), {"evolution-adaptador": False, "whatsapp-observador-prumo": False})
+        with mock.patch.object(ds.subprocess, "run", side_effect=subprocess.TimeoutExpired("systemctl", 2)):
+            self.assertEqual(ds._evolution_units(), {})
+
+    def test_esta_na_lista_de_verificacoes_do_main(self):
+        self.assertIn("whatsapp_prumo", inspect.getsource(ds.main))
 
 
 if __name__ == "__main__":

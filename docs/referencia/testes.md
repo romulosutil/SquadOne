@@ -101,7 +101,9 @@ ausente ou vencido, robô sem verificação ou fora do retrato),
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
 linha do funil, o cartão de respostas com o interesse parado na frente)). O monitor do Dell tem os seus em Python:
-`python3 deploy/dell/dell-status.test.py`; a lib da fila de avisos,
+`python3 deploy/dell/dell-status.test.py` (115, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
+"WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
+segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês); a lib da fila de avisos,
 `python3 deploy/dell/lib/aviso.test.py` (formato igual ao do dell-status, cortes,
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
 `python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py`,
