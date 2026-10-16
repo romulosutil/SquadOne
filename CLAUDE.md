@@ -197,6 +197,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
 | Perfis, avaliação de turno, Luna, Jev, copiloto | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
+| WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (o Hermes fica só no número pessoal) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 

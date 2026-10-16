@@ -11,7 +11,23 @@
 > - Com o follow-up só para quem leu, não existe mais "follow-up sem leitura" para contar no
 >   teto; o que conta é envio, convite e o reenvio do só-robô (os mesmos da trava de horário).
 >
-> Fases 2 e 3 continuam como decisão do Rômulo.
+> **Fase 2 feita em 16/10/2026** (número do PRUMO conectado; o ensaio do recibo de leitura passou):
+> - **Gateway:** Evolution API **v2.3.7** em Docker na Mel (`deploy/dell/evolution/`), instância `prumo`
+>   (Baileys), só leitura. Foi a escolha entre WA-AKG, WAHA Core e Evolution: a Evolution permite trocar
+>   para a Cloud API oficial sem refazer a integração (Fase 3). A 2.4.x ficou de fora porque exige ativação
+>   com e-mail e telefone do dono e manda heartbeats com o IP do servidor à fundação; a 2.3.7 não.
+> - **Estrutura:** o Hermes continua só no número pessoal (modo conversa-comigo, canal dos avisos, sessão
+>   única); o número do PRUMO é da Evolution. `evolution-adaptador.py` traduz o webhook para o formato da
+>   bridge e uma segunda instância do `observador.py` fala com o n8n. Nada de contrato mudou.
+> - **O que isso NÃO muda:** o primeiro contato continua sendo um toque seu, com as travas de horário e de
+>   ritmo. Nenhum código envia mensagem pelo gateway. Detalhes e comandos: `deploy/dell/README.md`, seção
+>   "Observador do número do PRUMO (Evolution API)".
+> - **Descoberto no ensaio:** o recibo de leitura chega só com o `@lid` e o `keyId`, sem telefone; o adaptador
+>   resolve pelo id da mensagem enviada (em memória, só de lead).
+> - O número novo já tinha histórico (mais de 1000 conversas), então `inicioDoNumero` (16/10) é conservador:
+>   a rampa 10/20/30 por dia vale mesmo assim.
+>
+> Fase 3 (Cloud API com opt-in, ou e-mail/formulário como primeiro toque) continua como decisão do Rômulo.
 
 ## O que aconteceu (medido)
 
