@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -511,6 +512,11 @@ export interface CrmLead {
    * limite de 48 h. `desde` é a resposta de interesse (ausente quando a planilha não dá a data).
    */
   interesseParado?: { desde?: string };
+  /**
+   * A conversa guardada pelo observador (16/10/2026), resumida: quem falou por último, o quê, e se o
+   * link já saiu. Ausente = nenhuma mensagem guardada (antes de 16/10, ou ninguém escreveu desde então).
+   */
+  conversa?: ResumoDaConversa;
   acervo: boolean;
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
@@ -647,7 +653,31 @@ export interface ContextoDoCrm {
   plus?: PlusLido;
   registroDisponivel?: { disponivel: boolean; motivo?: string };
   ultimaFalha?: { em: string; erro: string };
+  /** As conversas guardadas pelo observador, pela chave do número (conversa-do-lead.ts). */
+  conversas?: Map<string, MensagemDaConversa[]>;
 }
+
+/**
+ * A conversa de um lead e o que ela muda nos envios anotados (16/10/2026). `links`: o que conta como
+ * "mandou o link". Sem conversa guardada, tudo fica como a planilha e a aba CRM dizem.
+ */
+function conversaDoLead(conversas: ContextoDoCrm["conversas"], numero: string | undefined, links: ReadonlyArray<string | undefined>,
+  segundasAnotadas: number[], agora: number) {
+  const mensagens = numero ? conversas?.get(chaveDoNumero(numero)) : undefined;
+  const resumo = resumirConversa(mensagens, links);
+  const saidas = (mensagens ?? []).filter((m) => m.direcao === "saida").map((m) => Date.parse(m.em));
+  return {
+    resumo,
+    segundas: enviosComAConversa(segundasAnotadas, resumo, saidas, agora),
+    ultimaEntrada: instante(resumo?.ultimaEntrada ?? ""),
+    ultimaSaida: instante(resumo?.ultimaSaida ?? ""),
+  };
+}
+
+const maior = (...xs: Array<number | undefined>) => {
+  const v = xs.filter((x): x is number => x !== undefined);
+  return v.length ? Math.max(...v) : undefined;
+};
 
 function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
   const mapa = new Map<string, Registro[]>();
@@ -958,6 +988,7 @@ function leadDoSite(linha: Linha, contexto: {
   registros: Map<string, Registro[]>;
   links: CrmRetrato["links"];
   pastasLidas: boolean;
+  conversas?: ContextoDoCrm["conversas"];
 }): CrmLead | null {
   const c = leitor(COLUNAS_DO_SITE, linha);
   const chave = c("id");
@@ -966,7 +997,12 @@ function leadDoSite(linha: Linha, contexto: {
   const status = c("status").toLowerCase();
   const pasta = contexto.pastaPorId.get(chave);
   const registros = contexto.registros.get(`site:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas, followups } = manuais(registros);
+  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups } = manuais(registros);
+  // A conversa de verdade (16/10/2026): o link visto numa mensagem nossa é a 2ª mensagem, mesmo
+  // mandado à mão; o toque que abriu o WhatsApp e não virou mensagem não é.
+  const conv = conversaDoLead(contexto.conversas, numeroDoWhatsapp(c("waMe")), [urlHttps(c("site")), pasta?.siteUrl, urlHttps(c("raioXUrl"))],
+    segundasAnotadas, agora);
+  const segundas = conv.segundas;
   const t = {
     criado: instante(c("criadoEm")),
     enviado: instante(c("enviadoEm")),
@@ -979,9 +1015,12 @@ function leadDoSite(linha: Linha, contexto: {
     apagadoEm: instante(pasta?.apagadoEm ?? ""),
     raioXEm: instante(pasta?.raioXEm ?? ""),
     demoPedido: instante(pasta?.demoPedidoEm ?? ""),
-    ultimaEntrada: instante(c("ultimaEntradaEm")),
-    ultimaSaida: instante(c("ultimaSaidaEm")),
+    ultimaEntrada: maior(instante(c("ultimaEntradaEm")), conv.ultimaEntrada),
+    ultimaSaida: maior(instante(c("ultimaSaidaEm")), conv.ultimaSaida),
   };
+  // Para o interesse parado só vale a coluna da planilha (ou o link visto, já em `segundas`): um
+  // "vou pedir o link ao time" na conversa é mensagem nossa, mas o link continua por mandar.
+  const saidaDaPlanilha = instante(c("ultimaSaidaEm"));
   const resposta = respostaDaLinha(c);
   // "expirado" é a regra de tempo da planilha, não decisão de ninguém: próximo passo ou proposta
   // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato). O reenvio
@@ -996,14 +1035,20 @@ function leadDoSite(linha: Linha, contexto: {
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
-  const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: t.ultimaSaida });
+  const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: saidaDaPlanilha });
   // Achado da simulação das jornadas (16/10/2026): depois da 2ª mensagem anotada, quem escreveu por
   // último foi o Rômulo, mas o "respondeu há menos de 48 h" mantinha o lead em "Respostas para
   // responder", e a Hoje pedia de novo o que já tinha saído. A 2ª anotada depois da resposta encerra a vez.
+  // Com a conversa guardada, qualquer mensagem nossa depois da última dele também (menos no interesse
+  // parado: aí só o link encerra).
   const ultimaSegunda = segundas.length ? Math.max(...segundas) : undefined;
-  const ultimaDele = Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0);
-  const falouPorUltimo = ultimaSegunda !== undefined && ultimaSegunda > ultimaDele;
-  const respostaNova = emConversa && !falouPorUltimo && (parado !== null || (
+  const ultimaDele = Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0, conv.ultimaEntrada ?? 0);
+  const falouPorUltimo = (ultimaSegunda !== undefined && ultimaSegunda > ultimaDele)
+    || (parado === null && conv.ultimaSaida !== undefined && conv.ultimaSaida > ultimaDele);
+  // Ele escreveu de novo depois da nossa última (a conversa sabe): é resposta nova, sem o limite de 48 h.
+  const escreveuDepois = conv.ultimaEntrada !== undefined && conv.ultimaEntrada > (conv.ultimaSaida ?? 0)
+    && conv.ultimaEntrada > (t.enviado ?? 0) + 5 * 60_000;
+  const respostaNova = emConversa && !falouPorUltimo && (parado !== null || escreveuDepois || (
     t.ultimaEntrada !== undefined && t.ultimaSaida !== undefined
       ? t.ultimaEntrada > t.ultimaSaida
       : t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
@@ -1138,6 +1183,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...(reenvioDoRobo ? { reenvioDoRobo: true as const } : {}),
     respostaNova,
     ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
+    ...(conv.resumo ? { conversa: conv.resumo } : {}),
     acervo,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
@@ -1228,6 +1274,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   links: CrmRetrato["links"];
   mapas: Map<string, MapaDoPrumo>;
   raioX?: Map<string, RaioXDoPrumo>;
+  conversas?: ContextoDoCrm["conversas"];
 }, produto: CrmProdutoDeProspeccao = "prumo"): CrmLead | null {
   const c = leitor(COLUNAS_DO_PRUMO, linha);
   const chave = c("id");
@@ -1236,7 +1283,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const oferta = OFERTA_DE_PROSPECCAO[produto];
   const ehPrumo = produto === "prumo";
   const registros = contexto.registros.get(`${produto}:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas, followups } = manuais(registros);
+  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups } = manuais(registros);
   const convite = instante(c("conviteEm"));
   const t = {
     encontrado: instante(c("encontradoEm")),
@@ -1247,9 +1294,12 @@ function leadDoPrumo(linha: Linha, contexto: {
   };
   const mapa = ehPrumo ? contexto.mapas.get(chave) : undefined;
   const raioX = ehPrumo ? contexto.raioX?.get(chave) : undefined;
+  // A conversa de verdade (16/10/2026), como no Site: o Raio-X visto numa mensagem nossa é a 2ª mensagem.
+  const conv = conversaDoLead(contexto.conversas, numeroDoWhatsapp(c("whatsapp")), [raioX?.url], segundasAnotadas, agora);
+  const segundas = conv.segundas;
   const resposta = respostaDaLinha(c);
   const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
-    ultimaDoLead([t.respondeu, t.diagnostico], resposta), t.convite, proximo, agora, followups);
+    ultimaDoLead([t.respondeu, t.diagnostico, conv.ultimaEntrada], resposta), t.convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const diasDesdeConvite = dias(t.convite, agora);
   const whatsapp = numeroDoWhatsapp(c("whatsapp"));
@@ -1267,8 +1317,13 @@ function leadDoPrumo(linha: Linha, contexto: {
   const parado = interesseParado({ conversa: emConversa && t.diagnostico === undefined, resposta, respondeu: t.respondeu, segundas });
   // Como no Site (16/10/2026): o Raio-X anotado depois da última resposta é a vez dele, não a sua.
   const ultimaSegunda = segundas.length ? Math.max(...segundas) : undefined;
-  const falouPorUltimo = ultimaSegunda !== undefined && ultimaSegunda > Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0);
-  const respostaNova = emConversa && t.diagnostico === undefined && !falouPorUltimo && (parado !== null
+  const ultimaDele = Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0, conv.ultimaEntrada ?? 0);
+  const falouPorUltimo = (ultimaSegunda !== undefined && ultimaSegunda > ultimaDele)
+    || (parado === null && conv.ultimaSaida !== undefined && conv.ultimaSaida > ultimaDele);
+  // Ele escreveu de novo depois da nossa última (a conversa sabe): é resposta nova, sem o limite de 48 h.
+  const escreveuDepois = conv.ultimaEntrada !== undefined && conv.ultimaEntrada > (conv.ultimaSaida ?? 0)
+    && conv.ultimaEntrada > (t.convite ?? 0) + 5 * 60_000;
+  const respostaNova = emConversa && t.diagnostico === undefined && !falouPorUltimo && (parado !== null || escreveuDepois
     || (t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
   const eventos: CrmEvento[] = [
     ...evento("encontrado", oferta.cacador, t.encontrado, "planilha · Encontrado em"),
@@ -1319,6 +1374,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...(reenvioDoRobo ? { reenvioDoRobo: true as const } : {}),
     respostaNova,
     ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
+    ...(conv.resumo ? { conversa: conv.resumo } : {}),
     acervo: false,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
@@ -1360,10 +1416,13 @@ export const ROTULO_DA_OFERTA: Record<OfertaDoPlus, string> = { site: "Site", pr
  * `plus_respondeu` a "respondeu"; dali valem as regras de sempre (follow-up no 3º dia, 7 dias sem mensagem vira
  * Perdido, proposta, próximo passo, sem contato). O toque no link de envio anota o `plus_enviado` sozinho.
  */
-function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<string, Registro[]>; geradoEm?: number }): CrmLead {
+function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<string, Registro[]>; geradoEm?: number; conversas?: ContextoDoCrm["conversas"] }): CrmLead {
   const { agora } = contexto;
   const registros = contexto.registros.get(`plus:${plus.id}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
+  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
+  // Plus: a conversa só informa (o estado sai dos registros); o site do lead conta como link.
+  const conv = conversaDoLead(contexto.conversas, plus.whatsapp, [plus.site], segundasAnotadas, agora);
+  const segundas = conv.segundas;
   const convite = enviadoPlus;
   const respondeu = respondeuPlus.length ? respondeuPlus[respondeuPlus.length - 1] : undefined;
   const base: EtapaCalculada = proposta || convite !== undefined || respondeu !== undefined
@@ -1404,6 +1463,7 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
     marcos: marcosDoLead(convite, undefined, respondeu, segundas, followups),
     followupHoje,
     respostaNova,
+    ...(conv.resumo ? { conversa: conv.resumo } : {}),
     acervo: false,
     ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
@@ -1682,7 +1742,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   const idsDoSite = new Set<string>();
   const leads: CrmLead[] = [];
   for (const linha of retrato.fontes.site.linhas) {
-    const lead = leadDoSite(linha, { agora, pastaPorId, registros, links: retrato.links, pastasLidas });
+    const lead = leadDoSite(linha, { agora, pastaPorId, registros, links: retrato.links, pastasLidas, conversas: contexto.conversas });
     if (!lead || idsDoSite.has(lead.chave)) continue;
     idsDoSite.add(lead.chave);
     leads.push(lead);
@@ -1692,12 +1752,12 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   for (const plus of contexto.plus?.leads ?? []) {
     if (idsDoPlus.has(plus.id)) continue;
     idsDoPlus.add(plus.id);
-    leads.push(leadDoPlus(plus, { agora, registros, ...(geradoPlus !== undefined ? { geradoEm: geradoPlus } : {}) }));
+    leads.push(leadDoPlus(plus, { agora, registros, conversas: contexto.conversas, ...(geradoPlus !== undefined ? { geradoEm: geradoPlus } : {}) }));
   }
   for (const produto of PRODUTOS_DE_PROSPECCAO) {
     const ids = new Set<string>();
     for (const linha of retrato.fontes[produto].linhas) {
-      const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas, raioX }, produto);
+      const lead = leadDoPrumo(linha, { agora, registros, links: retrato.links, mapas, raioX, conversas: contexto.conversas }, produto);
       if (!lead || ids.has(lead.chave)) continue;
       ids.add(lead.chave);
       leads.push(lead);
@@ -1809,6 +1869,8 @@ export interface ConfigDoCrm {
   segredoArquivo?: string;
   autoDirectory?: string;
   entregasPrumo?: string;
+  /** A pasta das conversas que o observador grava (WHATSAPP_CONVERSAS_DIR); ausente = a visão sem conversa. */
+  conversas?: string;
 }
 
 function ehLoopback(url: URL): boolean {
@@ -1831,6 +1893,7 @@ export function configDoCrm(bruto: unknown, autoDirectory?: string, home = os.ho
     segredoArquivo: caminho(entrada.segredoArquivo, path.join(home, ".config/claude-ops/crm-segredo")),
     ...(autoDirectory ? { autoDirectory } : {}),
     entregasPrumo: caminho(entrada.entregasPrumo, path.join(home, "prumo-entregas")),
+    conversas: caminho(entrada.conversas, pastaDasConversas(process.env, home)),
   };
 }
 
@@ -2013,7 +2076,7 @@ export class CrmStore {
   }
 
   async visao(agora = new Date()): Promise<CrmVisao> {
-    const [leitura, mapas, raioX, plus, registroDisponivel, ultimaFalha] = await Promise.all([
+    const [leitura, mapas, raioX, plus, registroDisponivel, ultimaFalha, conversas] = await Promise.all([
       this.config.autoDirectory ? lerPastasDosLeads(this.config.autoDirectory).catch((error) => {
         console.error("[crm] Falha ao ler ~/auto-site:", error);
         return undefined;
@@ -2023,6 +2086,11 @@ export class CrmStore {
       lerPlus(this.config.entregasPrumo),
       this.disponibilidade(),
       this.ultimaFalha(),
+      // A conversa dos leads (16/10/2026): sem ela, a visão segue só com a planilha.
+      (this.config.conversas ? lerConversas(this.config.conversas) : Promise.resolve(undefined)).catch((error) => {
+        console.error("[crm] Falha ao ler as conversas do WhatsApp:", error);
+        return undefined;
+      }),
     ]);
     const contexto: ContextoDoCrm = {
       agora,
@@ -2032,6 +2100,7 @@ export class CrmStore {
       plus,
       registroDisponivel,
       ...(ultimaFalha ? { ultimaFalha } : {}),
+      ...(conversas ? { conversas } : {}),
     };
     let bruto = await this.lerRetrato();
     if (bruto === null) {

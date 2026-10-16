@@ -91,6 +91,17 @@ export interface CrmLink {
   url: string
 }
 
+/** Espelha ResumoDaConversa de server/conversa-do-lead.ts. */
+export interface CrmResumoDaConversa {
+  /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
+  desde: string
+  mensagens: number
+  ultima: { direcao: 'entrada' | 'saida', em: string, trecho: string }
+  ultimaEntrada?: string
+  ultimaSaida?: string
+  linkEm?: string
+}
+
 /** Os pontos que o Raio-X calcula (deploy/dell/raio-x.py, `achados`); espelha server/auto-production.ts. */
 export type IdDoAchado =
   | 'posicao-na-busca' | 'sem-site' | 'site-fora-do-ar' | 'site-sem-nome' | 'site-e-rede-social'
@@ -146,6 +157,11 @@ export interface CrmLead {
   respostaNova: boolean
   /** Disse que quer ver e a 2ª mensagem ainda não saiu: fica na Hoje sem o limite de 48 h. */
   interesseParado?: { desde?: string }
+  /**
+   * A conversa guardada pelo observador, resumida (16/10/2026, server/conversa-do-lead.ts): quem falou
+   * por último, o quê, e quando o link saiu numa mensagem nossa. Ausente = nada guardado deste lead.
+   */
+  conversa?: CrmResumoDaConversa
   acervo: boolean
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }

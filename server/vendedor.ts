@@ -24,7 +24,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda } from "../src/operations/proxima-venda.ts";
+import { esperaOCopiloto, filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from "../src/operations/proxima-venda.ts";
 import { instantesDePrimeiroContato, ritmoDoEnvio } from "../src/operations/trava-de-ritmo.ts";
 import type { CrmVisao } from "../src/operations/types.ts";
 import type { Botao } from "./telegram.ts";
@@ -33,6 +33,11 @@ import { dadosDaVenda } from "./telegram-entrada.ts";
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 export const MAX_AVISOS_POR_DIA = 40;
 export const INTERVALO_DO_VENDEDOR_MS = 60_000;
+/**
+ * Quanto o aviso espera a mensagem do copiloto (que leu a conversa) antes de sair com o texto pronto
+ * da esteira: uma geração do codex leva de 30 s a 2 min; mais que isso, a pressa do "quero ver" vence.
+ */
+export const ESPERA_DO_COPILOTO_MS = 4 * 60_000;
 
 export interface AvisoAberto {
   chave: string;
@@ -79,18 +84,20 @@ export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
 }
 
 export type Decisao =
-  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" }
+  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" | "esperando-copiloto" }
   | { tipo: "avisar"; acao: AcaoDeVenda; depois: AcaoDeVenda[] };
 
 /**
  * O que fazer agora. Também limpa o estado: aviso aberto cuja ação saiu da fila (o retrato
- * confirmou) fecha; aberto há mais de 30 min sem toque vira pulado.
+ * confirmou) fecha; aberto há mais de 30 min sem toque vira pulado. `sugestoes`: as do copiloto que
+ * valem para a conversa de agora (leadId -> mensagem); entram no lugar do texto pronto.
  */
-export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number): { decisao: Decisao; estado: EstadoDoVendedor } {
+export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number,
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>): { decisao: Decisao; estado: EstadoDoVendedor } {
   const estado: EstadoDoVendedor = { ...estadoLido, abertos: [...estadoLido.abertos], pulados: [...estadoLido.pulados] };
   if (!noExpedienteDeVenda(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado };
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], estado.primeiros), agora);
-  const fila = filaDeVenda(visao, { primeiroLiberado: ritmo.motivo === null, agora }, new Set(estado.pulados));
+  const fila = filaDeVenda(visao, { primeiroLiberado: ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}) }, new Set(estado.pulados));
   const naFila = new Set(fila.map((a) => a.chave));
   estado.abertos = estado.abertos.filter((a) => {
     if (!naFila.has(a.chave)) return false;
@@ -121,12 +128,16 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[]):
     acao.contexto,
     "",
     acao.porque,
+    ...(acao.conversa ? ["", `💬 ${acao.conversa}`] : []),
     "",
     `Como: ${acao.tatica}`,
   ];
   if (acao.rascunho) {
     const r = acao.rascunho.length > MAX_RASCUNHO ? `${acao.rascunho.slice(0, MAX_RASCUNHO)}…` : acao.rascunho;
-    linhas.push("", "Mensagem pronta (revise antes de enviar):", "――――", r, "――――");
+    const titulo = acao.copiloto
+      ? `Sugestão do copiloto, que leu a conversa (revise antes de enviar):${acao.copiloto.porque ? `\n${acao.copiloto.porque}` : ""}`
+      : "Mensagem pronta (revise antes de enviar):";
+    linhas.push("", titulo, "――――", r, "――――");
   } else {
     linhas.push("", "Sem texto pronto: escreva à mão (a colinha da ficha ajuda).");
   }
@@ -153,6 +164,14 @@ export interface DepsDoVendedor {
   arquivoDeEstado: string;
   origemCentral?: string;
   agora(): number;
+  /**
+   * O copiloto (opcional, 16/10/2026): as sugestões que valem para a conversa de agora e o pedido de
+   * uma, em segundo plano, para o lead do próximo aviso. `pedir` = true: está gerando (vale esperar).
+   */
+  copiloto?: {
+    prontas(visao: CrmVisao): Promise<ReadonlyMap<string, SugestaoDeVenda>>;
+    pedir(leadId: string, visao: CrmVisao): Promise<boolean>;
+  };
 }
 
 export interface Vendedor {
@@ -165,6 +184,8 @@ export interface Vendedor {
 
 export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   let relogio: ReturnType<typeof setInterval> | null = null;
+  // chave da ação -> desde quando o aviso espera a sugestão do copiloto (só em memória: reiniciar zera).
+  const esperandoCopiloto = new Map<string, number>();
   // Uma volta ou um toque por vez: os dois leem e gravam o mesmo estado.
   let fila: Promise<unknown> = Promise.resolve();
   const emSerie = <T>(f: () => Promise<T>): Promise<T> => {
@@ -196,8 +217,20 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     }
     const visao = await deps.lerVisao();
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
-    const { decisao, estado } = decidir(visao, lido, agora);
+    const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
+    const { decisao, estado } = decidir(visao, lido, agora, sugestoes);
+    if (decisao.tipo === "avisar" && deps.copiloto && esperaOCopiloto(decisao.acao)) {
+      // A mensagem certa vem de quem leu a conversa: pede ao copiloto e segura o aviso uns minutos.
+      const gerando = await deps.copiloto.pedir(decisao.acao.leadId, visao).catch(() => false);
+      const desde = esperandoCopiloto.get(decisao.acao.chave) ?? agora;
+      if (gerando && agora - desde < ESPERA_DO_COPILOTO_MS) {
+        esperandoCopiloto.set(decisao.acao.chave, desde);
+        await gravarEstado(estado);
+        return { tipo: "nada", motivo: "esperando-copiloto" };
+      }
+    }
     if (decisao.tipo === "avisar") {
+      esperandoCopiloto.delete(decisao.acao.chave);
       const token = randomBytes(6).toString("hex");
       const texto = textoDoAviso(decisao.acao, decisao.depois);
       await deps.enviar(texto, botoesDoAviso(decisao.acao, token, deps.origemCentral));

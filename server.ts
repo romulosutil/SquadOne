@@ -51,7 +51,7 @@ import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
-import { lerConversa } from "./server/conversa-do-lead.ts";
+import { lerConversaDoNumero } from "./server/conversa-do-lead.ts";
 import { descreverHistorico } from "./server/roster-historico.ts";
 import { criarLeitorDoTime } from "./server/time.ts";
 import {
@@ -103,7 +103,7 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
-import { lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
+import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
@@ -352,8 +352,14 @@ async function startServer() {
       dataDir: operationsDataDir,
       operations: true,
       ai,
-      fontes: { visao: () => crm.visao(), raioX: (lead) => lerRaioXDoDisco(lead, crm.config), conversa: (lead) => lerConversa(lead.chave) },
+      // A conversa mora pela chave do NÚMERO (até 16/10/2026 ia pela chave da planilha e nunca achava).
+      fontes: { visao: () => crm.visao(), raioX: (lead) => lerRaioXDoDisco(lead, crm.config), conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas) },
     });
+    // O copiloto sozinho (16/10/2026): quando um lead escreve, a sugestão fica pronta sem ninguém pedir.
+    if (copiloto && (process.env.SQUADONE_COPILOTO_AUTOMATICO ?? "").trim() !== "false") {
+      iniciarCopilotoAutomatico(copiloto, () => crm.visao());
+      console.log("[copiloto] automático ligado: lê a conversa e sugere quando a vez é sua (SQUADONE_COPILOTO_AUTOMATICO=false desliga).");
+    }
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
       try {
@@ -393,8 +399,22 @@ async function startServer() {
         console.error("[vendedor] SQUADONE_VENDEDOR=true sem o bot do Telegram: desligado.");
       } else {
         const c = configDeTelegram;
+        const cop = copiloto;
         vendedorDoProcesso = criarVendedor({
           lerVisao: () => crm.visao(),
+          // A mensagem do copiloto (que leu a conversa) entra no aviso no lugar do texto pronto.
+          ...(cop ? {
+            copiloto: {
+              prontas: async (v) => new Map([...(await cop.prontas(v.leads))].map(([id, s]) =>
+                [id, { mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando }] as const)),
+              pedir: async (leadId, v) => {
+                const lead = v.leads.find((l) => l.id === leadId);
+                if (!lead) return false;
+                const r = await cop.automatica(lead);
+                return r.estado === "gerando" || r.estado === "na-fila";
+              },
+            },
+          } : {}),
           enviar: async (texto, botoes) => {
             for (const chat of c.chatsPermitidos) await enviarMensagem(c, chat, texto, undefined, botoes);
           },

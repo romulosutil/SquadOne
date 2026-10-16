@@ -59,6 +59,20 @@ export interface AcaoDeVenda {
   primeiroContato: boolean
   /** Disse que quer ver, ou combinado atrasado: a tela destaca. */
   quente: boolean
+  /**
+   * O que a conversa guardada mostra (16/10/2026): "Última mensagem: ele, há 2 h: “…”", ou o aviso de
+   * que a Central não tem a conversa e é preciso conferir no WhatsApp antes de mandar.
+   */
+  conversa?: string
+  /** A mensagem é a do copiloto, que leu a conversa; `padrao` guarda o texto pronto da esteira. */
+  copiloto?: { porque: string, quando: string, padrao?: string }
+}
+
+/** A sugestão do copiloto para um lead, já conferida contra o dossiê de agora (server/copiloto.ts). */
+export interface SugestaoDeVenda {
+  mensagem: string
+  porque: string
+  quando: string
 }
 
 export interface ContextoDaVenda {
@@ -66,6 +80,41 @@ export interface ContextoDaVenda {
   primeiroLiberado: boolean
   /** Relógio (ms) para o "o que achou?"; ausente, esse passo não entra. */
   agora?: number
+  /** leadId -> a sugestão do copiloto, quando há uma para a conversa de agora. */
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>
+}
+
+/** Os passos em que a mensagem do copiloto (que leu a conversa) vale mais que o texto pronto da esteira. */
+const COM_COPILOTO: ReadonlySet<TipoDeVenda> = new Set(['responder', 'combinado', 'depois-do-link', 'proposta', 'followup'])
+
+/** A ação ganharia com a mensagem do copiloto e ainda está com o texto pronto da esteira. */
+export function esperaOCopiloto(acao: AcaoDeVenda): boolean {
+  return !acao.primeiroContato && !acao.copiloto && COM_COPILOTO.has(acao.tipo)
+}
+
+function haQuanto(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000))
+  if (min < 60) return `há ${min} min`
+  const h = Math.round(min / 60)
+  if (h < 48) return `há ${h} h`
+  return `há ${Math.round(h / 24)} dias`
+}
+
+/**
+ * PURO. Uma linha sobre a conversa, para quem vai mandar não repetir o que já saiu: a última
+ * mensagem (de quem, quando, o quê) ou, sem conversa guardada, o pedido de conferir antes.
+ */
+export function linhaDaConversa(lead: Pick<CrmLead, 'conversa' | 'etapa'>, agora: number | undefined): string | undefined {
+  const c = lead.conversa
+  if (!c) {
+    return lead.etapa === 'contato' || lead.etapa === 'proposta'
+      ? 'A Central não tem esta conversa guardada: confira no WhatsApp o que já saiu antes de mandar.'
+      : undefined
+  }
+  const quem = c.ultima.direcao === 'entrada' ? 'ele' : 'você'
+  const quando = agora === undefined ? '' : `, ${haQuanto(agora - Date.parse(c.ultima.em))}`
+  const texto = c.ultima.trecho ? `: “${c.ultima.trecho}”` : ' (texto não guardado)'
+  return `Última mensagem: ${quem}${quando}${texto}`
 }
 
 /** O "o que achou?" vale de 20 h a 72 h depois do link: antes é cobrança, depois esfriou (é follow-up). */
@@ -86,8 +135,11 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
   if (!Number.isFinite(segunda)) return null
   const desde = agora - segunda
   if (desde < JANELA_DO_DEPOIS_DO_LINK.deMs || desde > JANELA_DO_DEPOIS_DO_LINK.ateMs) return null
-  const dele = Math.max(Date.parse(lead.marcos.respondeu ?? '') || 0, Date.parse(lead.resposta?.em ?? '') || 0)
+  const dele = Math.max(Date.parse(lead.marcos.respondeu ?? '') || 0, Date.parse(lead.resposta?.em ?? '') || 0,
+    Date.parse(lead.conversa?.ultimaEntrada ?? '') || 0)
   if (dele > segunda) return null
+  // Já escrevemos de novo depois do link (a conversa sabe): a pergunta já foi feita, à mão.
+  if ((Date.parse(lead.conversa?.ultimaSaida ?? '') || 0) > segunda + 10 * 60_000) return null
   const texto = PERGUNTA_DEPOIS_DO_LINK[lead.produto](lead.empresa)
   const url = `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(texto)}`
   const horas = Math.round(desde / 3600_000)
@@ -210,8 +262,10 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
   const rascunho = (link && textoDoLink(link.url)) ?? (tipo === 'primeiro' ? lead.mensagemPronta : undefined)
   const anota = anotaDoLink(lead, link?.url)
   const lugar = [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · ')
+  // Cada mensagem nova dele é uma vez nova de responder (o vendedor avisa de novo, a tela não a dá por feita).
+  const vez = tipo === 'responder' && lead.conversa?.ultimaEntrada ? `|${lead.conversa.ultimaEntrada}` : ''
   return {
-    chave: `${lead.id}|${tipo}`,
+    chave: `${lead.id}|${tipo}${vez}`,
     leadId: lead.id,
     empresa: lead.empresa,
     produto: lead.produto,
@@ -271,7 +325,31 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       fila.push(acao)
     }
   }
-  return [...fila.filter((a) => !pulados.has(a.chave)), ...fila.filter((a) => pulados.has(a.chave))]
+  const conscientes = fila.map((a) => comAConversa(a, porId.get(a.leadId), ctx))
+  return [...conscientes.filter((a) => !pulados.has(a.chave)), ...conscientes.filter((a) => pulados.has(a.chave))]
+}
+
+/**
+ * A ação com o que a conversa sabe (16/10/2026, "ainda não está consciente do que está acontecendo"):
+ * a linha da última mensagem e, quando o copiloto já leu a conversa de agora, a mensagem dele no
+ * lugar do texto pronto da esteira (que fica em `copiloto.padrao`). A mensagem do copiloto não anota
+ * envio sozinha: se levar o link, a conversa mostra e o CRM conta.
+ */
+function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: ContextoDaVenda): AcaoDeVenda {
+  if (!lead || acao.primeiroContato) return acao
+  const conversa = linhaDaConversa(lead, ctx.agora)
+  const sugestao = COM_COPILOTO.has(acao.tipo) ? ctx.sugestoes?.get(lead.id) : undefined
+  const comLinha = conversa ? { ...acao, conversa } : acao
+  if (!sugestao?.mensagem.trim() || !lead.links.whatsapp) return comLinha
+  const url = `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(sugestao.mensagem)}`
+  const comSugestao: AcaoDeVenda = {
+    ...comLinha,
+    rascunho: sugestao.mensagem,
+    link: { rotulo: 'Abrir no WhatsApp com a mensagem', url },
+    copiloto: { porque: sugestao.porque, quando: sugestao.quando, ...(acao.rascunho ? { padrao: acao.rascunho } : {}) },
+  }
+  delete comSugestao.anota
+  return comSugestao
 }
 
 /** "3 respostas · 2 follow-ups · 1 primeiro contato": o que vem depois da primeira. */

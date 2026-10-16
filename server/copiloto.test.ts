@@ -159,6 +159,35 @@ describe("copiloto: a cola", () => {
   });
 });
 
+describe("copiloto: sozinho (16/10/2026)", () => {
+  it("automática: começa em segundo plano, depois fica pronta sem chamar o modelo de novo", async () => {
+    const { copiloto, provedor, leads } = await montar();
+    assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "gerando" });
+    // A Ficha pedindo junto pega a mesma geração (uma só por lead).
+    await copiloto.sugerir("site", "ChIJabc");
+    const pronta = await copiloto.automatica(leads[0]);
+    assert.equal(pronta.estado, "pronta");
+    assert.equal(provedor.prompts.length, 1);
+    const prontas = await copiloto.prontas(leads);
+    assert.match(prontas.get("ChIJabc")?.sugestao.mensagem ?? "", /Encontrado/);
+  });
+
+  it("falhou: não tenta de novo o mesmo dossiê (nada de laço gastando o teto)", async () => {
+    const { copiloto, provedor, leads } = await montar({ respostas: [{ ok: false, motivo: "timeout", detalhe: "lento" }] });
+    assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "gerando" });
+    await copiloto.sugerir("site", "ChIJabc").catch(() => undefined);
+    assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "sem" });
+    assert.equal(provedor.prompts.length, 1);
+  });
+
+  it("fora do trecho do copiloto (ainda não respondeu) não gera", async () => {
+    const lead = leadCrm({ sinal: "enviado", respostaNova: false, resposta: undefined });
+    const { copiloto, provedor } = await montar({ leads: [lead] });
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "sem" });
+    assert.equal(provedor.prompts.length, 0);
+  });
+});
+
 describe("copiloto: provedores", () => {
   it("codex: execFile com stdin, sandbox read-only, resposta pelo arquivo (apagado depois)", async () => {
     const dir = await temp();

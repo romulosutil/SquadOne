@@ -52,6 +52,19 @@ export function lerLinhasDaConversa(conteudo: string, max = MAX_MENSAGENS_NA_FIC
   return mensagens.slice(-max);
 }
 
+/**
+ * A chave do arquivo é a do NÚMERO, não a da planilha: DDD + últimos 8 dígitos (a regra do
+ * observador, `chave_do_numero`; o WhatsApp guarda celular antigo sem o 9, a planilha às vezes com).
+ * Até 16/10/2026 a Central procurava o arquivo pelo place_id/ID do lead e nunca achava nada: a Ficha,
+ * o copiloto e a Próxima venda trabalhavam sem a conversa. '' = número ilegível.
+ */
+export function chaveDoNumero(bruto: string | undefined): string {
+  let d = String(bruto ?? "").replace(/\D/g, "");
+  if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
+  if (d.length < 10 || d.length > 11) return "";
+  return d.slice(0, 2) + d.slice(-8);
+}
+
 /** null = sem arquivo (o observador ainda não viu mensagem deste lead desde que passou a guardar). */
 export async function lerConversa(chave: string, pasta = pastaDasConversas()): Promise<MensagemDaConversa[] | null> {
   const nome = nomeDoArquivo(chave);
@@ -62,4 +75,114 @@ export async function lerConversa(chave: string, pasta = pastaDasConversas()): P
     if (err?.code === "ENOENT") return null;
     throw err;
   }
+}
+
+/** A conversa do lead pelo link/número do WhatsApp dele (`https://wa.me/55...`); null = sem número ou sem arquivo. */
+export async function lerConversaDoNumero(whatsapp: string | undefined, pasta = pastaDasConversas()): Promise<MensagemDaConversa[] | null> {
+  const chave = chaveDoNumero(whatsapp);
+  return chave ? lerConversa(chave, pasta) : null;
+}
+
+const MAX_CONVERSAS = 3000;
+
+/**
+ * Todas as conversas guardadas, pela chave do número: a visão do CRM cruza com cada lead. São poucos
+ * arquivos pequenos (só leads, podados pelo observador). Pasta ausente = mapa vazio; arquivo ilegível
+ * é pulado.
+ */
+export async function lerConversas(pasta = pastaDasConversas()): Promise<Map<string, MensagemDaConversa[]>> {
+  const mapa = new Map<string, MensagemDaConversa[]>();
+  let nomes: string[];
+  try {
+    nomes = (await fs.readdir(pasta)).filter((n) => n.endsWith(".jsonl") && !n.startsWith("."));
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return mapa;
+    throw err;
+  }
+  await Promise.all(nomes.slice(0, MAX_CONVERSAS).map(async (nome) => {
+    try {
+      const mensagens = lerLinhasDaConversa(await fs.readFile(path.join(pasta, nome), "utf8"));
+      if (mensagens.length) mapa.set(nome.slice(0, -".jsonl".length), mensagens);
+    } catch {
+      // um arquivo torto não derruba a visão
+    }
+  }));
+  return mapa;
+}
+
+// ---------------------------------------------------------------- o resumo (PURO)
+
+export interface ResumoDaConversa {
+  /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
+  desde: string;
+  mensagens: number;
+  ultima: { direcao: "entrada" | "saida"; em: string; trecho: string };
+  ultimaEntrada?: string;
+  ultimaSaida?: string;
+  /** A última mensagem nossa que levou o link do lead (demo, site ou Raio-X): a 2ª mensagem de verdade. */
+  linkEm?: string;
+}
+
+const MAX_TRECHO = 280;
+
+/** "https://demo-x.vercel.app/" -> "demo-x.vercel.app"; o caminho fica quando há ("raio-x-prumo.vercel.app/roda-mais"). */
+function alvoDoLink(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const caminho = u.pathname.replace(/\/+$/, "");
+    return `${u.hostname}${caminho}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * PURO. O que a conversa diz do momento: quem falou por último, o quê, e se o link já saiu.
+ * `links`: as URLs que contam como "mandou o link" (o demo, o site, o Raio-X do lead). Uma linha de
+ * saída sem texto (bridge antiga) conta como mensagem nossa, nunca como link.
+ */
+export function resumirConversa(mensagens: readonly MensagemDaConversa[] | null | undefined, links: ReadonlyArray<string | undefined> = []): ResumoDaConversa | null {
+  if (!mensagens?.length) return null;
+  const alvos = links.map((l) => (l ? alvoDoLink(l) : null)).filter((a): a is string => Boolean(a));
+  let ultimaEntrada: string | undefined;
+  let ultimaSaida: string | undefined;
+  let linkEm: string | undefined;
+  for (const m of mensagens) {
+    if (m.direcao === "entrada") ultimaEntrada = m.em;
+    else {
+      ultimaSaida = m.em;
+      const texto = m.texto.toLowerCase();
+      if (alvos.some((a) => texto.includes(a))) linkEm = m.em;
+    }
+  }
+  const ultima = mensagens[mensagens.length - 1];
+  const trecho = ultima.texto.replace(/\s+/g, " ").trim();
+  return {
+    desde: mensagens[0].em,
+    mensagens: mensagens.length,
+    ultima: { direcao: ultima.direcao, em: ultima.em, trecho: trecho.length > MAX_TRECHO ? `${trecho.slice(0, MAX_TRECHO - 1)}…` : trecho },
+    ...(ultimaEntrada ? { ultimaEntrada } : {}),
+    ...(ultimaSaida ? { ultimaSaida } : {}),
+    ...(linkEm ? { linkEm } : {}),
+  };
+}
+
+/** Quanto tempo um toque em "Mandar o link" vale sem a conversa mostrar a mensagem (o observador lê com atraso). */
+export const FOLGA_DO_TOQUE_MS = 30 * 60_000;
+
+/**
+ * PURO. Os envios anotados (toque no link da Central) contra a conversa guardada. O toque abre o
+ * WhatsApp, mas nem sempre vira envio (16/10/2026: o "Mandar o link" da Kulniski abriu o WhatsApp
+ * com o link que já tinha saído dois dias antes, e não foi mandado). Com a conversa cobrindo o
+ * instante do toque, só vale o toque com uma mensagem nossa perto dele; o link visto na conversa
+ * entra como envio. Toque recente (FOLGA_DO_TOQUE_MS) ou de antes da conversa guardada vale como era.
+ */
+export function enviosComAConversa(anotados: readonly number[], conversa: ResumoDaConversa | null, saidas: readonly number[], agora: number): number[] {
+  if (!conversa) return [...anotados];
+  const desde = Date.parse(conversa.desde);
+  const valem = anotados.filter((t) => t < desde || agora - t < FOLGA_DO_TOQUE_MS
+    || saidas.some((s) => s >= t - 10 * 60_000 && s <= t + FOLGA_DO_TOQUE_MS));
+  const link = conversa.linkEm ? Date.parse(conversa.linkEm) : NaN;
+  if (Number.isFinite(link) && !valem.some((t) => Math.abs(t - link) <= FOLGA_DO_TOQUE_MS)) valem.push(link);
+  return valem.sort((a, b) => a - b);
 }

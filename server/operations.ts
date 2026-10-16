@@ -5,7 +5,7 @@ import path from "node:path";
 import express from "express";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
-import { lerConversa } from "./conversa-do-lead.ts";
+import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -547,7 +547,9 @@ export function createOperationsRouter(options: {
       return;
     }
     try {
-      const mensagens = await lerConversa(id);
+      // O arquivo tem o nome do NÚMERO (o observador não conhece a planilha): o lead diz qual é.
+      const lead = options.crm ? (await options.crm.visao()).leads.find((l) => l.chave === id) : undefined;
+      const mensagens = lead ? await lerConversaDoNumero(lead.links.whatsapp, options.crm?.config.conversas) : null;
       res.setHeader("Cache-Control", "no-store");
       res.json(mensagens === null ? { guardada: false, mensagens: [] } : { guardada: true, mensagens });
     } catch (error) {
@@ -605,6 +607,19 @@ export function createOperationsRouter(options: {
     }
     try {
       res.json(await options.copiloto.estado());
+    } catch (error) {
+      responderErroDoCopiloto(res, error);
+    }
+  });
+
+  // As sugestões que o copiloto já fez sozinho e ainda valem para a conversa de agora (16/10/2026):
+  // a Próxima venda põe a dele no lugar do texto pronto. Só lê o que está guardado: nunca chama o modelo.
+  router.get("/crm/copiloto/prontas", async (_req, res) => {
+    if (!options.copiloto || !options.crm) return void res.json({ sugestoes: {} });
+    try {
+      const prontas = await options.copiloto.prontas((await options.crm.visao()).leads);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ sugestoes: Object.fromEntries([...prontas].map(([id, s]) => [id, { mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando }])) });
     } catch (error) {
       responderErroDoCopiloto(res, error);
     }

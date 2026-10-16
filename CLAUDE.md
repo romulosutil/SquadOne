@@ -79,11 +79,13 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/luna-sombra.ts   Luna em sombra (desligada): prompt, leitura da saída e comparação PUROS; cola com fila, teto/dia, codex exec sem shell, JSONL 600
   server/openrouter-decisoes.ts  transporte do Jev (OpenRouter /alpha/decisions): pedido, máscara, validação e erro PUROS; deny + ZDR, sem retry, chave nunca em log
   server/jev-sombra.ts    Jev em sombra (desligado, RULES 27): 4 perguntas por demanda e comparação com o Gemini PURAS; fila, teto/dia e de US$, JSONL 600; finanças nunca vão
-  server/copiloto.ts      copiloto do PRUMO (desligado, só operations): provedor trocável (codex | gemini), sugestão guardada pelo hash do dossiê, teto/dia, JSONL 600, Raio-X do disco
+  server/copiloto.ts      copiloto do PRUMO (desligado, só operations): provedor trocável (codex | gemini), sugestão guardada pelo hash do dossiê, teto/dia, JSONL 600, Raio-X do disco;
+                          automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
-                          um aviso por vez com a mensagem pronta e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
-  server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl);
-                          GET /api/operations/crm/conversa?id=; leitura PURA das linhas
+                          um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
+                          últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
+                          venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;

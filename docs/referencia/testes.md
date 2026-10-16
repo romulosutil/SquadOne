@@ -93,6 +93,12 @@ nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança)
 `src/operations-jornada.test.ts` (a jornada do cliente, 15/10/2026: o passo atual pelo retrato, o caminho de cada funil (PRUMO com os dois trilhos, Site sem Mapa, Iris e estamparias no caminho curto, Plus pela oferta), o estado de cada passo (outro trilho "depois", fecho "sem registro"), o próximo passo (o salvo à mão manda; depois do Raio-X, o Mapa e o site), a oferta por lead (Raio-X antes de tudo, Encontrado para quem não tem site, Mapa só com equipe, "já temos site"; e a oferta
 sob medida: a tabela de casos em que o que o Raio-X achou ordena as ofertas e entra no porquê com o número, e o porte do CNPJ põe o Mapa agora), a vista por passo com o parado só quando espera você, nenhum R$ e o guia `jornada-do-cliente.md` igual ao gerado),
 `src/operations-copiloto.test.ts` (o dossiê e a leitura da saída do copiloto, 15/10/2026: onde ele vale (do respondeu à proposta), a máscara de telefone/e-mail/wa.me, o texto do Raio-X sem script nem tags, o dossiê com jornada, oferta, objeção da colinha, histórico mascarado, Iris sem cardápio e Plus pelo funil; os preços que a mensagem pode ter (só Encontrado, Anúncios e Redes, com e sem "R$"); recusas classificadas (JSON, formato, id inventado, preço sob proposta) e avisos (não oferecer, oferta própria, grátis na proposta, número fora do dossiê); o rascunho da proposta com preço do cardápio),
+`server/conversa-consciente.test.ts` (16/10/2026, a Próxima venda consciente da conversa, com o caso da Kulniski: a
+chave do arquivo pelo número; o resumo (link do demo numa mensagem nossa, saída sem texto nunca é link); o toque que não
+virou mensagem não conta e o link visto entra; o "o que achou?" no lugar de mandar o link de novo; "vou pedir o link" não
+encerra o "quero ver"; sem conversa, o cartão pede para conferir; mensagem nova dele é uma vez nova; a sugestão do
+copiloto no lugar do texto pronto sem anotar envio; quem o automático lê primeiro; o vendedor esperando o copiloto até 4
+min e saindo com a mensagem dele quando está pronta; diretório temporário próprio),
 `server/jornadas-de-venda.test.ts` (16/10/2026, a simulação das jornadas: um lead do Site passa pelo retrato de verdade
 (`montarCrm`) do pronto ao "quero ver", e a fila de venda (`proxima-venda.ts`) diz o que fazer em cada passo: primeira
 mensagem com o texto do Balcão e só com a trava de ritmo livre; nada para quem não leu; follow-up de quem leu; o "quero ver"

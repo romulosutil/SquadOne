@@ -290,6 +290,13 @@ export interface DepsDoCopiloto {
   log?: Logger;
 }
 
+/** O copiloto sozinho para um lead: a sugestão pronta, gerando, esperando a vez, ou nada a fazer. */
+export type EstadoAutomatico =
+  | { estado: "pronta"; sugestao: SugestaoNaFicha }
+  | { estado: "gerando" }
+  | { estado: "na-fila" }
+  | { estado: "sem" };
+
 export interface Copiloto {
   estado(): Promise<EstadoDoCopiloto>;
   /** A sugestão guardada para o dossiê de agora, sem chamar o modelo; null = nenhuma. */
@@ -297,6 +304,14 @@ export interface Copiloto {
   /** Guardada se o dossiê não mudou (e `forcar` não veio); senão, uma geração nova. */
   sugerir(produto: CrmProduto, id: string, forcar?: boolean): Promise<SugestaoNaFicha>;
   copiou(produto: CrmProduto, id: string, hashDoDossie: string, oQue: "mensagem" | "proposta"): Promise<void>;
+  /**
+   * Sem ninguém pedir (16/10/2026, "consciente das conversas de forma autônoma"): a sugestão guardada
+   * se ainda vale para a conversa de agora; senão começa uma geração em segundo plano (uma por vez na
+   * Central) e diz "gerando". Falha ou teto do dia viram "sem" até o dossiê mudar: não tenta em laço.
+   */
+  automatica(lead: CrmLead): Promise<EstadoAutomatico>;
+  /** leadId -> sugestão, dos leads dados que têm uma guardada para o dossiê de agora (sem chamar o modelo). */
+  prontas(leads: readonly CrmLead[]): Promise<Map<string, SugestaoNaFicha>>;
 }
 
 const chaveDoLead = (produto: string, id: string) => `${produto}:${id}`;
@@ -344,6 +359,11 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     const { leads } = await deps.fontes.visao();
     const lead = leads.find((l) => l.produto === produto && l.id === id);
     if (!lead) throw new LeadForaDoCrm();
+    return dossieDoLead(lead);
+  }
+
+  async function dossieDoLead(lead: CrmLead): Promise<{ lead: CrmLead; dossie: DossieDoLead; passo: IdDoPasso }> {
+    const { produto, id } = lead;
     const passo = passoAtual(lead);
     if (!copilotoServe(lead)) throw new PassoSemCopiloto(passo);
     let html: string | null = null;
@@ -376,8 +396,8 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     raioX: dossie.raioX.situacao,
   });
 
-  async function gerar(produto: CrmProduto, id: string, forcar: boolean): Promise<SugestaoNaFicha> {
-    const { dossie, passo } = await dossieDe(produto, id);
+  async function gerar(produto: CrmProduto, id: string, forcar: boolean, doLead?: CrmLead): Promise<SugestaoNaFicha> {
+    const { dossie, passo } = doLead ? await dossieDoLead(doLead) : await dossieDe(produto, id);
     const hash = hashDoDossie(dossie);
     const chave = chaveDoLead(produto, id);
     const anterior = (await carregar()).get(chave);
@@ -412,6 +432,19 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     return naFicha(registro, dossie, false);
   }
 
+  function sugerir(produto: CrmProduto, id: string, forcar = false, doLead?: CrmLead): Promise<SugestaoNaFicha> {
+    // Clique duplo, ou duas abas, ou a Ficha e o automático juntos: uma geração só por lead.
+    const chave = chaveDoLead(produto, id);
+    const corrente = emAndamento.get(chave);
+    if (corrente) return corrente;
+    const p = gerar(produto, id, forcar, doLead).finally(() => emAndamento.delete(chave));
+    emAndamento.set(chave, p);
+    return p;
+  }
+
+  // O automático não tenta de novo o mesmo dossiê que falhou (ou que bateu no teto): chave -> hash.
+  const semAutomatico = new Map<string, string>();
+
   return {
     async estado() {
       const c = await contadorDoDia();
@@ -422,19 +455,88 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
       const anterior = (await carregar()).get(chaveDoLead(produto, id));
       return anterior && anterior.hashDoDossie === hashDoDossie(dossie) ? naFicha(anterior, dossie, true) : null;
     },
-    sugerir(produto, id, forcar = false) {
-      // Clique duplo, ou duas abas: uma geração só por lead.
-      const chave = chaveDoLead(produto, id);
-      const corrente = emAndamento.get(chave);
-      if (corrente) return corrente;
-      const p = gerar(produto, id, forcar).finally(() => emAndamento.delete(chave));
-      emAndamento.set(chave, p);
-      return p;
+    sugerir: (produto, id, forcar = false) => sugerir(produto, id, forcar),
+    async automatica(lead) {
+      if (!copilotoServe(lead)) return { estado: "sem" };
+      const chave = chaveDoLead(lead.produto, lead.id);
+      if (emAndamento.has(chave)) return { estado: "gerando" };
+      const { dossie } = await dossieDoLead(lead);
+      const hash = hashDoDossie(dossie);
+      const anterior = (await carregar()).get(chave);
+      if (anterior?.hashDoDossie === hash) return { estado: "pronta", sugestao: naFicha(anterior, dossie, true) };
+      if (semAutomatico.get(chave) === hash) return { estado: "sem" };
+      // Uma geração por vez na Central: o codex roda no Dell, e dez de uma vez travariam a máquina.
+      if (emAndamento.size) return { estado: "na-fila" };
+      void sugerir(lead.produto, lead.id, false, lead).catch((error) => {
+        semAutomatico.set(chave, hash);
+        log.warn(`[copiloto] automático sem sugestão para ${chave}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      return { estado: "gerando" };
+    },
+    async prontas(leads) {
+      const mapa = new Map<string, SugestaoNaFicha>();
+      const guardadas = await carregar();
+      for (const lead of leads) {
+        const anterior = guardadas.get(chaveDoLead(lead.produto, lead.id));
+        if (!anterior?.sugestao || !copilotoServe(lead)) continue;
+        try {
+          const { dossie } = await dossieDoLead(lead);
+          if (anterior.hashDoDossie === hashDoDossie(dossie)) mapa.set(lead.id, naFicha(anterior, dossie, true));
+        } catch {
+          // um lead torto não tira as sugestões dos outros
+        }
+      }
+      return mapa;
     },
     async copiou(produto, id, hash, oQue) {
       await gravar({ tipo: "copiou", quando: agora().toISOString(), lead: chaveDoLead(produto, id), hashDoDossie: hash.slice(0, 64), oQue });
     },
   };
+}
+
+// --- O automático -------------------------------------------------------------------
+
+export const INTERVALO_DO_AUTOMATICO_MS = 60_000;
+
+/**
+ * Quem o copiloto lê sozinho: os leads em que a vez é do Rômulo (resposta nova, interesse parado ou
+ * ele escreveu por último na conversa guardada) e no trecho em que o copiloto vale. PURO.
+ */
+export function leadsDoAutomatico(leads: readonly CrmLead[]): CrmLead[] {
+  const vez = (l: CrmLead) => l.respostaNova || (l.etapa === "contato" && l.conversa?.ultima.direcao === "entrada");
+  // A mensagem mais nova primeiro: é a conversa que está acontecendo agora.
+  const recente = (l: CrmLead) => Date.parse(l.conversa?.ultimaEntrada ?? l.resposta?.em ?? l.marcos.respondeu ?? "") || 0;
+  return leads.filter((l) => vez(l) && copilotoServe(l)).sort((a, b) => recente(b) - recente(a));
+}
+
+/**
+ * O laço do automático (16/10/2026, pedido do Rômulo: "consciente das conversas de forma autônoma e
+ * sugira as melhores mensagens imediatamente"). A cada minuto relê o CRM e pede ao copiloto a
+ * sugestão do primeiro lead cuja vez é do Rômulo e que ainda não tem uma para a conversa de agora.
+ * Uma geração por vez; o teto do dia vale igual. Nada é enviado: a sugestão aparece na Próxima venda
+ * e no aviso do vendedor. `SQUADONE_COPILOTO_AUTOMATICO=false` desliga.
+ */
+export function iniciarCopilotoAutomatico(copiloto: Copiloto, lerVisao: () => Promise<Pick<CrmVisao, "leads">>, log: Logger = console,
+  intervaloMs = INTERVALO_DO_AUTOMATICO_MS): () => void {
+  let ocupado = false;
+  const volta = async () => {
+    if (ocupado) return;
+    ocupado = true;
+    try {
+      for (const lead of leadsDoAutomatico((await lerVisao()).leads)) {
+        const r = await copiloto.automatica(lead);
+        // Começou (ou já há uma na Central): a próxima volta segue a fila.
+        if (r.estado === "gerando" || r.estado === "na-fila") break;
+      }
+    } catch (error) {
+      log.warn(`[copiloto] automático: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      ocupado = false;
+    }
+  };
+  const relogio = setInterval(() => { void volta(); }, intervaloMs);
+  void volta();
+  return () => clearInterval(relogio);
 }
 
 // --- O Raio-X no disco --------------------------------------------------------------

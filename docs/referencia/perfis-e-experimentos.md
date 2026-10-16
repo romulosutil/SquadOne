@@ -149,9 +149,9 @@ Medição, não motor, como a Luna: o Jev (`typesafe/jev-1.13`, TypeSafe, pela D
 Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do interesse até a proposta (regra: proposta em até 24 h depois de cada "gostei"). Decisão da conversa com o Rômulo: **canal × cérebro**. O Hermes segue como secretário e ponte do WhatsApp (só lê e avisa); o cérebro da venda mora no SquadOne, com o provedor trocável (o ChatGPT pelo codex hoje, o Gemini, ou outro amanhã).
 
 - **O que faz:** na Ficha de um lead nos passos **Respondeu, Viu o Raio-X, Conversa, Mapa respondido ou Proposta** (`PASSOS_DO_COPILOTO`, de `jornada.ts`), o bloco **"Sugestão do copiloto"** (`CrmCopiloto.vue`, antes da Colinha) tem "Pedir sugestão". Volta a **próxima mensagem** (botão Copiar), **o que oferecer e por quê** e o **rascunho dos itens da proposta** (botão Copiar o rascunho, no formato da proposta-modelo do prumo). **Nunca envia nada**: o envio continua à mão pelo WhatsApp, e copiar não marca envio.
-- **Pedido, não automático:** com poucos interesses, gerar para todo lead a cada retrato seria gasto. A sugestão fica **guardada pelo hash do dossiê** (relida do JSONL do mês quando a Central reinicia); lead sem mudança devolve a mesma, "Gerar de novo" força. Uma geração por lead de cada vez (clique duplo).
+- **Pedido, e desde 16/10/2026 também automático** só para quem está com a vez (ver "O copiloto sozinho" abaixo): gerar para todo lead a cada retrato seria gasto. A sugestão fica **guardada pelo hash do dossiê** (relida do JSONL do mês quando a Central reinicia); lead sem mudança devolve a mesma, "Gerar de novo" força. Uma geração por lead de cada vez (clique duplo).
 - **O dossiê** (`montarDossie`, PURO em `src/operations/copiloto.ts`): empresa, nicho, cidade, funil (o Plus pelo da oferta), etapa e dias no passo; passo, próximo passo e oferta (agora, depois, **não oferecer**, a confirmar) de `jornada.ts`; a última resposta classificada; os 12 últimos eventos com as **notas da Ficha**; objeções reconhecidas com a resposta pronta da colinha; o **texto do Raio-X** (`raio-x.html` sem tags, até 4000 caracteres: Site na pasta do lead em `~/auto-site/<lugar>/<slug>/`, PRUMO e o avulso em `~/prumo-entregas/prumo-raio-x/<slug>.html`); o cardápio com o preço **como se diz ao cliente** ("sob proposta"). Iris e estamparias levam só as ofertas próprias. **Telefone, e-mail e wa.me saem** de tudo antes do prompt.
-- **Limite da fase 1:** o observador do WhatsApp **não guarda a conversa**. Só o trecho classificado da última resposta chega à planilha, e as mensagens do Rômulo nem passam por ele. A "conversa" do dossiê é esse trecho mais as notas da Ficha. Guardar a conversa inteira (fase 2) é uma decisão de privacidade do Rômulo.
+- **Limite da fase 1 (superado em 16/10/2026):** o observador não guardava a conversa, e o dossiê tinha só o trecho classificado e as notas da Ficha. Desde 16/10 ele guarda (as duas direções), e o dossiê leva as 20 últimas mensagens, mascaradas.
 - **A saída é dado** (`lerSaidaDoCopiloto`): só JSON `{mensagem, porque, ofertas[{id,porque}], proposta{itens[{id,porque}], observacao}, falta_saber[]}`. **Recusa** (vira falha 502 classificada, não fica guardada): vazio, não-JSON, fora do formato, id fora do cardápio e das ofertas próprias, e **preço proibido na mensagem**: só passam os "R$" dos serviços com preço aberto (Encontrado, Anúncios, Redes: `PRECOS_ABERTOS`); Respondido, Fonte e Fonte em dia nunca (sob proposta, 08/10/2026), nem com "reais" por extenso. **Avisos** (a sugestão passa, a Ficha mostra "Confira antes de mandar"): oferta que a jornada manda não oferecer, oferta própria × cardápio trocados, Raio-X/Mapa na proposta (saem: são grátis), e **número da mensagem que não está no dossiê** (a regra "sem inventar fato"). Os preços do rascunho da proposta saem de `colinha.ts`, nunca do modelo.
 - **Provedor** (`ProvedorDoCopiloto`, `server/copiloto.ts`): `codex` (padrão: o ChatGPT pelo login do Codex no Dell, como a Luna: `execFile` sem shell, prompt por stdin, ambiente limpo, `--sandbox read-only`, resposta por arquivo em `copiloto/cwd`, `codex exec --help` conferido no boot; sem `SQUADONE_COPILOTO_MODELO`, o modelo padrão da conta) ou `gemini` (o cliente do servidor, `responseMimeType: application/json`, com o retry e os modelos reserva do `gerarComRetry`). O que vai ao provedor: o dossiê acima (nome da empresa e o que o lead escreveu, sem telefone): para o codex, é a OpenAI; para o Gemini, o Google (que já classifica a resposta no n8n).
 - **Env:** `SQUADONE_COPILOTO=true` liga (padrão desligado); `SQUADONE_COPILOTO_PROVEDOR` = `codex` | `gemini`; `SQUADONE_COPILOTO_TETO_DIA` (20, conta a tentativa, zera à meia-noite de São Paulo, sobrevive a reinício); `SQUADONE_COPILOTO_MODELO` (opcional); `SQUADONE_CODEX_BIN` (o mesmo da Luna). Valor ilegível = log de erro e desligado. **Só no `operations`** com o CRM configurado; no Easypanel a env é ignorada com log. Nada de finanças pessoais (RULES 24): o CRM não tem nenhuma.
@@ -199,6 +199,31 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
 - **A conversa na Ficha** (`server/conversa-do-lead.ts`): o observador passou a gravar as mensagens dos leads em
   `WHATSAPP_CONVERSAS_DIR` (padrão `~/.local/share/whatsapp-conversas/<chave>.jsonl`); a Ficha mostra a conversa e o
   Hermes lê pelo skill `conversa-do-lead`. Antes, só o trecho classificado chegava ao CRM.
+- **Consciente da conversa** (16/10/2026, "essa ideia está muito boa, mas ainda não está consciente do que está
+  acontecendo"; o caso: a Kulniski disse "pode sim" em 14/10, o link e o preço saíram à mão minutos depois, e dois dias
+  depois o cartão dizia "o link ainda não foi mandado" e oferecia a mesma mensagem). Três coisas:
+  - **A chave do arquivo é a do número** (`chaveDoNumero`: DDD + 8 últimos dígitos, a regra do observador). Até aqui a
+    Central procurava pelo id da planilha e nunca achava: a Ficha e o copiloto trabalhavam sem conversa.
+  - **O CRM lê todas as conversas** a cada visão (`lerConversas`, `crm.conversas` na config, padrão a pasta acima) e
+    resume cada uma no lead (`lead.conversa`: última mensagem, de quem, trecho; `linkEm`, a última mensagem nossa que
+    levou o demo, o site ou o Raio-X). O link visto na conversa vale como a 2ª mensagem, mesmo mandado à mão; o toque em
+    "Mandar o link" que não tem mensagem nossa perto (até 30 min depois) não vale, salvo se for de antes da conversa
+    guardada ou de menos de 30 min (o observador lê com atraso). Mensagem nossa depois da última dele encerra a vez de
+    responder (menos no "quero ver": aí só o link); mensagem dele depois da nossa volta a ser resposta nova, sem o
+    limite de 48 h, e cada uma é uma vez nova (`leadId|responder|<instante>`).
+  - **A Próxima venda e o aviso mostram a última mensagem** ("Última mensagem: você, há 2 dias: “…”") e, sem conversa
+    guardada, pedem para conferir no WhatsApp antes de mandar.
+- **O copiloto sozinho** (16/10/2026, "preciso que o Hermes, o Jev ou o Gemini, quem quer que seja, esteja consciente das
+  conversas de forma autônoma e sugira as melhores mensagens imediatamente"): quem sugere é o copiloto (o cérebro da venda,
+  provedor `codex` ou `gemini`); o Hermes segue só como ponte, e o Jev só mede. Com o copiloto ligado,
+  `iniciarCopilotoAutomatico` relê o CRM a cada minuto e, para o lead mais recente cuja vez é do Rômulo (`respostaNova`,
+  ou ele escreveu por último) e que ainda não tem sugestão para a conversa de agora, gera uma em segundo plano. Uma
+  geração por vez na Central; o teto do dia vale igual; o dossiê que falhou não é tentado de novo até mudar. O dossiê agora
+  leva a conversa de verdade e o link do demo (`demo`), e o prompt manda não repetir o que já saiu. `GET
+  /api/operations/crm/copiloto/prontas` devolve as sugestões que valem (só lê); a Próxima venda e o vendedor põem a
+  mensagem do copiloto no lugar do texto pronto (o texto padrão fica em "Ver o texto padrão da esteira"), sem anotar
+  envio sozinha. O vendedor segura o aviso até 4 min (`ESPERA_DO_COPILOTO_MS`) enquanto o copiloto escreve. Nada é
+  enviado ao lead: continua semi-automático. `SQUADONE_COPILOTO_AUTOMATICO=false` volta ao só-sob-pedido.
 
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 

@@ -11,7 +11,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { corpoDaAnotacao } from './anotacao-de-envio'
-import { filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda } from './proxima-venda'
+import { filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from './proxima-venda'
 import { gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, textoDoRitmo, type PrimeirosContatos } from './trava-de-ritmo'
 import type { CrmVisao } from './types'
 
@@ -28,6 +28,20 @@ const verFila = ref(false)
 const copiado = ref(false)
 const tocado = ref<string | null>(null)
 const status = ref('')
+/** As sugestões que o copiloto fez sozinho para a conversa de agora (leadId -> mensagem). */
+const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
+const verPadrao = ref(false)
+
+async function lerSugestoes() {
+  try {
+    const r = await fetch('/api/operations/crm/copiloto/prontas', { cache: 'no-store' })
+    if (!r.ok) return
+    const corpo = await r.json() as { sugestoes?: Record<string, SugestaoDeVenda> }
+    sugestoes.value = new Map(Object.entries(corpo.sugestoes ?? {}))
+  } catch {
+    // sem copiloto: a fila segue com o texto pronto da esteira
+  }
+}
 
 function armazenamento(): Storage | null {
   try { return window.localStorage } catch { return null }
@@ -46,7 +60,11 @@ function gravarResolvidas() {
 onMounted(() => {
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   lerResolvidas()
-  relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
+  void lerSugestoes()
+  relogio = window.setInterval(() => {
+    agora.value = Date.now()
+    void lerSugestoes()
+  }, 30_000)
 })
 onBeforeUnmount(() => window.clearInterval(relogio))
 
@@ -55,7 +73,8 @@ const expediente = computed(() => noExpedienteDeVenda(agora.value))
 const pulados = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => r.pulou).map(([k]) => k)))
 const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => !r.pulou).map(([k]) => k)))
 const fila = computed<AcaoDeVenda[]>(() =>
-  filaDeVenda(props.visao?.estado === 'ok' ? props.visao : null, { primeiroLiberado: ritmo.value.motivo === null && expediente.value, agora: agora.value }, pulados.value)
+  filaDeVenda(props.visao?.estado === 'ok' ? props.visao : null,
+    { primeiroLiberado: ritmo.value.motivo === null && expediente.value, agora: agora.value, sugestoes: sugestoes.value }, pulados.value)
     .filter((a) => !feitos.value.has(a.chave)))
 const atual = computed(() => fila.value[0] ?? null)
 const depois = computed(() => fila.value.slice(1))
@@ -133,11 +152,21 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
         </p>
         <h2 id="venda-titulo">{{ atual.titulo }}</h2>
         <p class="venda__porque">{{ atual.porque }}</p>
+        <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
         <p class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
 
         <figure v-if="atual.rascunho" class="venda__rascunho">
-          <figcaption class="texto-2 texto-pequeno">Mensagem pronta (revise antes de enviar)</figcaption>
+          <figcaption class="texto-2 texto-pequeno">
+            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
+            <template v-else>Mensagem pronta (revise antes de enviar)</template>
+          </figcaption>
           <blockquote>{{ atual.rascunho }}</blockquote>
+          <template v-if="atual.copiloto?.padrao">
+            <button type="button" class="botao botao--leve venda__padrao" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
+              {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
+            </button>
+            <blockquote v-if="verPadrao" class="is-padrao">{{ atual.copiloto.padrao }}</blockquote>
+          </template>
         </figure>
         <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. A colinha da ficha ajuda.</p>
 
@@ -183,6 +212,10 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__atual { display: grid; gap: var(--esp-3); min-width: 0; }
 .venda__tipo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
 .venda__porque { color: var(--texto); }
+.venda__conversa { padding: var(--esp-2) var(--esp-3); border-left: var(--faixa) solid var(--borda); border-radius: var(--raio-controle); background: var(--superficie-2); overflow-wrap: anywhere; }
+.venda__conversa.is-sem { background: var(--atencao-fundo); }
+.venda__padrao { justify-self: start; }
+.venda__rascunho blockquote.is-padrao { border-left-color: var(--borda); background: var(--superficie-2); }
 .venda__tatica { padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); }
 .venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }
 .venda__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16em; overflow: auto; }
