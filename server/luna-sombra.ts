@@ -32,7 +32,7 @@ export const TETO_DIA_PADRAO = 10;
  */
 export const FLAGS_DO_CODEX = ["--model", "--sandbox", "--skip-git-repo-check", "--output-last-message"] as const;
 /** Erro de cota do codex: para até o dia seguinte, sem insistir numa conta esgotada. */
-const COTA_ESGOTADA = /quota|usage limit|rate limit|too many requests|\b429\b|insufficient_quota|plan limit/i;
+export const COTA_ESGOTADA = /quota|usage limit|rate limit|too many requests|\b429\b|insufficient_quota|plan limit/i;
 
 // --- Prompt ------------------------------------------------------------------
 

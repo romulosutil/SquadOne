@@ -101,6 +101,7 @@ import {
   type AgendaSummary,
 } from "./server/operations.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
+import { lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
@@ -337,6 +338,14 @@ async function startServer() {
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
     const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
+    // Copiloto do PRUMO (fase 1, em sombra): sugere a próxima mensagem e a proposta na Ficha,
+    // nunca envia. Só com SQUADONE_COPILOTO=true; provedor ilegível ou ausente vira log e null.
+    const copiloto = await prepararCopiloto(process.env, {
+      dataDir: operationsDataDir,
+      operations: true,
+      ai,
+      fontes: { visao: () => crm.visao(), raioX: (lead) => lerRaioXDoDisco(lead, crm.config) },
+    });
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
       try {
@@ -364,6 +373,7 @@ async function startServer() {
       store: operationsStore,
       readings,
       crm,
+      copiloto,
       readAgenda,
       dataDir: operationsDataDir,
     }));
@@ -382,6 +392,8 @@ async function startServer() {
     if (explicacaoIaLigada()) console.log("[financas] explicação com IA ligada (só a pedido, com prévia).");
     iniciarLeituraDiaria(financas);
   } else {
+    // O copiloto nunca roda no Easypanel: com a env ligada, só o log diz que foi ignorada.
+    await prepararCopiloto(process.env, { dataDir, operations: false });
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional
     // inexistente no EasyPanel. O perfil remoto falha fechado e explicitamente.
     app.use("/api/operations", (_req, res) => {

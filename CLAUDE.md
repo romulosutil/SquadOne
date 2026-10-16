@@ -79,6 +79,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/luna-sombra.ts   Luna em sombra (desligada): prompt, leitura da saída e comparação PUROS; cola com fila, teto/dia, codex exec sem shell, JSONL 600
   server/openrouter-decisoes.ts  transporte do Jev (OpenRouter /alpha/decisions): pedido, máscara, validação e erro PUROS; deny + ZDR, sem retry, chave nunca em log
   server/jev-sombra.ts    Jev em sombra (desligado, RULES 27): 4 perguntas por demanda e comparação com o Gemini PURAS; fila, teto/dia e de US$, JSONL 600; finanças nunca vão
+  server/copiloto.ts      copiloto do PRUMO (desligado, só operations): provedor trocável (codex | gemini), sugestão guardada pelo hash do dossiê, teto/dia, JSONL 600, Raio-X do disco
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
@@ -135,6 +136,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           Fisher de ab-video.ts, "ganhou" só com +20 pontos e p < 0,10. Quem sorteia é o Balcão (alocarRodada,
                           site-mensagem.js: menos atribuídos no nicho × conjunto, congela com o mesmo conjunto); o histórico
                           (150 envios sem letra e os do hash) e o follow-up do 05 · Acompanhamento ficam fora
+    copiloto.ts           PURO (15/10/2026): dossiê do lead do "respondeu" à proposta (jornada, colinha, Raio-X, notas; sem telefone),
+                          prompt, leitura da saída (id só do cardápio, "R$" só dos preços abertos, número fora do dossiê = aviso)
+                          e o rascunho da proposta com preço do cardápio; CrmCopiloto.vue na Ficha só copia, nunca envia
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,
                           cardápio na hierarquia de 09/10/2026: ver → arrumar → manter, Raio-X e Mapa grátis, Fonte só depois do Mapa);
                           colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha
@@ -191,7 +195,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Agenda no Dell, avisos, lembretes | `acesso`, `dados`, `avisos`, `lembretes`, `vigia`, `sinal-de-vida` | `agenda-no-dell.md` |
 | Bot do Telegram | `telegram*`, `transcricao`, `financas/gasto-falado` | `telegram.md` |
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
-| Perfis, avaliação de turno, Luna, Jev | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes` | `perfis-e-experimentos.md` |
+| Perfis, avaliação de turno, Luna, Jev, copiloto | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
@@ -235,6 +239,8 @@ desconhecido derruba o boot. A Central é somente leitura para serviços. A Hoje
 máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
+O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
+na Ficha a próxima mensagem e a proposta, nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o

@@ -57,6 +57,12 @@ troca sugerida sem gabarito, a máscara antes do corte de 2000 caracteres, e a
 cola com `fetch` dublê num diretório temporário: fila serial, teto do dia que
 sobrevive a reinício, teto total de gasto, JSONL 600, 402 desliga, observação
 sem `await` que não segura o turno, falha que nunca lança, e null fora do `operations`),
+`server/copiloto.test.ts` (o copiloto do PRUMO, 15/10/2026, com provedor dublê num diretório temporário: a sugestão
+guardada pelo hash do dossiê e relida do JSONL depois de reiniciar, forçar e dossiê novo geram de novo, clique duplo
+vira uma geração, teto do dia que conta a tentativa e sobrevive a reinício, preço sob proposta vira falha que não fica
+guardada, lead fora do CRM e passo sem copiloto, a cópia registrada; o codex por `execFile` com stdin, read-only e o
+arquivo da resposta apagado, cota/timeout/sem mensagem; o Gemini pedindo JSON; config ilegível lança, null fora do
+`operations` e com o codex que não confere; o caminho do Raio-X sem `..`),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
 vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
@@ -83,6 +89,7 @@ só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança)
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
 `src/operations-jornada.test.ts` (a jornada do cliente, 15/10/2026: o passo atual pelo retrato, o caminho de cada funil (PRUMO com os dois trilhos, Site sem Mapa, Iris e estamparias no caminho curto, Plus pela oferta), o estado de cada passo (outro trilho "depois", fecho "sem registro"), o próximo passo (o salvo à mão manda; depois do Raio-X, o Mapa e o site), a oferta por lead (Raio-X antes de tudo, Encontrado para quem não tem site, Mapa só com equipe, "já temos site"; e a oferta
 sob medida: a tabela de casos em que o que o Raio-X achou ordena as ofertas e entra no porquê com o número, e o porte do CNPJ põe o Mapa agora), a vista por passo com o parado só quando espera você, nenhum R$ e o guia `jornada-do-cliente.md` igual ao gerado),
+`src/operations-copiloto.test.ts` (o dossiê e a leitura da saída do copiloto, 15/10/2026: onde ele vale (do respondeu à proposta), a máscara de telefone/e-mail/wa.me, o texto do Raio-X sem script nem tags, o dossiê com jornada, oferta, objeção da colinha, histórico mascarado, Iris sem cardápio e Plus pelo funil; os preços que a mensagem pode ter (só Encontrado, Anúncios e Redes, com e sem "R$"); recusas classificadas (JSON, formato, id inventado, preço sob proposta) e avisos (não oferecer, oferta própria, grátis na proposta, número fora do dossiê); o rascunho da proposta com preço do cardápio),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts` (o catálogo único, 15/10/2026: nasce dos passos de `fluxos.ts`
 com o `quando` e a verificação deles, a sala de cada trabalhador em tabela, os caçadores do Iris e das Estamparias, o Plus sem robô,
 o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo do servidor importando catálogo, fluxos ou operação),

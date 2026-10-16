@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import CrmCopiloto from './CrmCopiloto.vue'
 import CrmJornada from './CrmJornada.vue'
+import { copilotoServe } from './copiloto'
+import { copilotoLigado } from './copiloto-ligado'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
@@ -38,6 +41,9 @@ const emit = defineEmits<{
 }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
+// Copiloto (fase 1, em sombra): só pede sugestão e conta as cópias; não escreve na planilha.
+const comCopiloto = ref(false)
+copilotoLigado().then((ligado) => { comCopiloto.value = ligado })
 const nota = ref('')
 const proximoTexto = ref('')
 const proximoData = ref('')
@@ -250,6 +256,9 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       <blockquote v-if="lead.resposta.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
       <p v-else class="crm-muted">Só mensagem automática (saudação, horário, menu): ninguém respondeu ainda.</p>
     </section>
+
+    <!-- Do "respondeu" à proposta, com o copiloto ligado: a sugestão vem antes da colinha. -->
+    <CrmCopiloto v-if="comCopiloto && copilotoServe(lead)" :lead="lead" />
 
     <!-- Logo depois da resposta: é o que se lê para responder a ela. -->
     <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-colinha">

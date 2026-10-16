@@ -365,6 +365,11 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-jornada__oferta.is-nao, .crm-jornada__oferta.is-depois { color: var(--texto-2); }
 .crm-jornada__oferta.is-confirmar { padding: 0.5rem 0.75rem; border: var(--linha-fina); background: var(--atencao-fundo); }
 
+/* Sugestão do copiloto (CrmCopiloto.vue): reaproveita o cartão da colinha e as listas da jornada. */
+.crm-copiloto { display: grid; gap: 0.6rem; }
+.crm-copiloto h3 .crm-tag { margin-left: 0.4rem; vertical-align: middle; }
+.crm-copiloto__avisos { margin: 0; padding: 0.4rem 0.6rem 0.4rem 1.6rem; border: var(--linha-fina); background: var(--atencao-fundo); font-size: 0.85rem; display: grid; gap: 0.2rem; }
+
 /* Vista Jornada (CrmJornadaVista.vue): um bloco por passo, na ordem da jornada; parado com palavra. */
 .crm-jornada-vista { display: grid; gap: 0.75rem; }
 .crm-jornada-vista__passos { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }

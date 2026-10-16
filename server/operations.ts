@@ -4,6 +4,10 @@ import https from "node:https";
 import path from "node:path";
 import express from "express";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
+import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
+import type { CrmProduto } from "../src/operations/types.ts";
+
+const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
 import { lerStatusDoDell } from "./dell-status.ts";
 
 export type SquadOneMode = "app" | "operations";
@@ -435,6 +439,8 @@ export function createOperationsRouter(options: {
   store: OperationsProjectStore;
   readings: HermesReadingsStore;
   crm?: CrmStore;
+  /** Copiloto do PRUMO (server/copiloto.ts): null/ausente = desligado, e a Ficha esconde o bloco. */
+  copiloto?: Copiloto | null;
   readAgenda: () => Promise<AgendaSummary>;
   dataDir: string;
 }): express.Router {
@@ -550,6 +556,77 @@ export function createOperationsRouter(options: {
         console.error("[operations] Falha ao registrar no CRM:", error);
         res.status(500).json({ error: "Não foi possível registrar agora." });
       }
+    }
+  });
+
+  // Copiloto do PRUMO (fase 1, em sombra): sugere, nunca envia. O lead sai da visão do CRM no
+  // servidor, nunca do corpo do pedido; o navegador só diz qual (produto + id).
+  const leadDoPedido = (fonte: Record<string, unknown>): { produto: CrmProduto; id: string } | null => {
+    const produto = typeof fonte.produto === "string" ? fonte.produto : "";
+    const id = typeof fonte.id === "string" ? fonte.id.trim() : "";
+    return PRODUTOS_DO_CRM.includes(produto as CrmProduto) && /^[A-Za-z0-9_:.-]{1,200}$/.test(id) ? { produto: produto as CrmProduto, id } : null;
+  };
+  const responderErroDoCopiloto = (res: express.Response, error: unknown) => {
+    if (error instanceof LeadForaDoCrm) res.status(404).json({ error: error.message });
+    else if (error instanceof PassoSemCopiloto) res.status(409).json({ error: error.message, passo: error.passo });
+    else if (error instanceof TetoDoCopiloto) res.status(429).json({ error: error.message, teto: true });
+    else if (error instanceof CopilotoFalhou) {
+      console.warn(`[copiloto] falhou: ${error.motivo}: ${error.detalhe}`);
+      res.status(502).json({ error: error.message, falha: { motivo: error.motivo, detalhe: error.detalhe } });
+    } else {
+      console.error("[copiloto] erro inesperado:", error);
+      res.status(500).json({ error: "O copiloto não respondeu agora." });
+    }
+  };
+
+  router.get("/crm/copiloto", async (_req, res) => {
+    if (!options.copiloto) {
+      res.json({ ligado: false });
+      return;
+    }
+    try {
+      res.json(await options.copiloto.estado());
+    } catch (error) {
+      responderErroDoCopiloto(res, error);
+    }
+  });
+
+  router.get("/crm/copiloto/sugestao", async (req, res) => {
+    const alvo = leadDoPedido(req.query as Record<string, unknown>);
+    if (!options.copiloto) return void res.status(503).json({ error: "O copiloto está desligado nesta Central." });
+    if (!alvo) return void res.status(400).json({ error: "Diga o produto e o id do lead." });
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ sugestao: await options.copiloto.ler(alvo.produto, alvo.id) });
+    } catch (error) {
+      responderErroDoCopiloto(res, error);
+    }
+  });
+
+  router.post("/crm/copiloto/sugestao", async (req, res) => {
+    const corpo = (req.body ?? {}) as Record<string, unknown>;
+    const alvo = leadDoPedido(corpo);
+    if (!options.copiloto) return void res.status(503).json({ error: "O copiloto está desligado nesta Central." });
+    if (!alvo) return void res.status(400).json({ error: "Diga o produto e o id do lead." });
+    try {
+      res.json(await options.copiloto.sugerir(alvo.produto, alvo.id, corpo.forcar === true));
+    } catch (error) {
+      responderErroDoCopiloto(res, error);
+    }
+  });
+
+  router.post("/crm/copiloto/copiou", async (req, res) => {
+    const corpo = (req.body ?? {}) as Record<string, unknown>;
+    const alvo = leadDoPedido(corpo);
+    const hash = typeof corpo.hash === "string" && /^[a-f0-9]{8,64}$/.test(corpo.hash) ? corpo.hash : "";
+    const oQue = corpo.oQue === "mensagem" || corpo.oQue === "proposta" ? corpo.oQue : null;
+    if (!options.copiloto) return void res.status(503).json({ error: "O copiloto está desligado nesta Central." });
+    if (!alvo || !hash || !oQue) return void res.status(400).json({ error: "Pedido de cópia incompleto." });
+    try {
+      await options.copiloto.copiou(alvo.produto, alvo.id, hash, oQue);
+      res.status(204).end();
+    } catch (error) {
+      responderErroDoCopiloto(res, error);
     }
   });
 
