@@ -29,6 +29,77 @@ export interface ArtefatosDaPasta {
   falha: boolean;
 }
 
+/**
+ * O que o Raio-X achou, na ordem de peso da página (deploy/dell/raio-x.py, `achados`, desde 15/10/2026).
+ * São os ids que o diagnóstico calcula; id que não está aqui é descartado na leitura.
+ */
+export const IDS_DOS_ACHADOS = [
+  "posicao-na-busca", "sem-site", "site-fora-do-ar", "site-sem-nome", "site-e-rede-social",
+  "site-sem-celular-ou-whatsapp", "nota-baixa", "poucas-avaliacoes", "sem-horario", "fotos-de-terceiros",
+] as const;
+export type IdDoAchado = (typeof IDS_DOS_ACHADOS)[number];
+
+/** Um ponto do Raio-X com os números que o sustentam. Número que o Raio-X não leu fica ausente, nunca 0. */
+export interface AchadoDoRaioX {
+  id: IdDoAchado;
+  /** A busca de onde vêm a posição e a comparação ("dentista em Anápolis"). */
+  consulta?: string;
+  /** posicao-na-busca: o lugar do lead (ausente = fora dos `lidos` primeiros). */
+  posicao?: number;
+  lidos?: number;
+  nota?: number;
+  notasDoTopo?: number[];
+  avaliacoes?: number;
+  /** As avaliações no meio da lista dos primeiros da busca (a mediana). */
+  medianaDaBusca?: number;
+  avaliacoesDoTopo?: number[];
+  /** site-e-rede-social: "o Instagram", "o Facebook"... */
+  rede?: string;
+  dominio?: string;
+  celular?: boolean;
+  whatsapp?: boolean;
+  /** Dos `topoLidos` primeiros da busca, quantos mostram site próprio no perfil. */
+  topoComSite?: number;
+  topoLidos?: number;
+}
+
+const numeroOuNada = (v: unknown, maximo = 1e7) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= maximo ? v : undefined);
+const numerosOuNada = (v: unknown, maximo?: number) => {
+  if (!Array.isArray(v) || !v.length || v.length > 10) return undefined;
+  const n = v.map((x) => numeroOuNada(x, maximo));
+  return n.every((x) => x !== undefined) ? (n as number[]) : undefined;
+};
+const simOuNao = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+
+/** `raio_x_achados` do recibo (ou do leads.json do Raio-X à mão), validado. Vazio ou ilegível = ausente. */
+export function achadosDoRecibo(valor: unknown): AchadoDoRaioX[] | undefined {
+  if (!Array.isArray(valor)) return undefined;
+  const ids: readonly string[] = IDS_DOS_ACHADOS;
+  const saida: AchadoDoRaioX[] = [];
+  for (const item of valor.slice(0, 10)) {
+    const v = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    if (typeof v.id !== "string" || !ids.includes(v.id)) continue;
+    const campos: Omit<AchadoDoRaioX, "id"> = {
+      consulta: textoLimpo(v.consulta, 120),
+      posicao: numeroOuNada(v.posicao, 1000),
+      lidos: numeroOuNada(v.lidos, 1000),
+      nota: numeroOuNada(v.nota, 5),
+      notasDoTopo: numerosOuNada(v.notas_do_topo, 5),
+      avaliacoes: numeroOuNada(v.avaliacoes),
+      medianaDaBusca: numeroOuNada(v.mediana_da_busca),
+      avaliacoesDoTopo: numerosOuNada(v.avaliacoes_do_topo),
+      rede: textoLimpo(v.rede, 40),
+      dominio: textoLimpo(v.dominio, 120),
+      celular: simOuNao(v.celular),
+      whatsapp: simOuNao(v.whatsapp),
+      topoComSite: numeroOuNada(v.topo_com_site, 100),
+      topoLidos: numeroOuNada(v.topo_lidos, 100),
+    };
+    saida.push({ id: v.id as IdDoAchado, ...Object.fromEntries(Object.entries(campos).filter(([, x]) => x !== undefined)) });
+  }
+  return saida.length ? saida : undefined;
+}
+
 export interface PastaDoLead {
   slug: string;
   lugar: LugarDaPasta;
@@ -41,6 +112,8 @@ export interface PastaDoLead {
   /** `raio_x_url`/`raio_x_em` do recibo. Sem `siteUrl`, é o Raio-X avulso de quem ainda não tem demo (14/10/2026). */
   raioXUrl?: string;
   raioXEm?: string;
+  /** `raio_x_achados` do recibo (15/10/2026): os pontos da página em dado. Raio-X mais antigo não tem. */
+  raioXAchados?: AchadoDoRaioX[];
   /** Demo sob pedido: o botão "Gerar demo" gravou PEDIDO-DEMO.json e o gerador ainda não terminou. */
   demoPedidoEm?: string;
   artefatos: ArtefatosDaPasta;
@@ -169,6 +242,7 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     ...(dataIso(dados.apagado_em) ? { apagadoEm: dataIso(dados.apagado_em) } : {}),
     ...(urlHttp(dados.raio_x_url) ? { raioXUrl: urlHttp(dados.raio_x_url) } : {}),
     ...(dataIso(dados.raio_x_em) ? { raioXEm: dataIso(dados.raio_x_em) } : {}),
+    ...(achadosDoRecibo(dados.raio_x_achados) ? { raioXAchados: achadosDoRecibo(dados.raio_x_achados) } : {}),
     ...(demoPedidoEm && !urlHttp(dados.site_url) ? { demoPedidoEm } : {}),
     artefatos: {
       conteudo: temConteudo,

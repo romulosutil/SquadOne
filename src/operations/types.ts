@@ -91,6 +91,34 @@ export interface CrmLink {
   url: string
 }
 
+/** Os pontos que o Raio-X calcula (deploy/dell/raio-x.py, `achados`); espelha server/auto-production.ts. */
+export type IdDoAchado =
+  | 'posicao-na-busca' | 'sem-site' | 'site-fora-do-ar' | 'site-sem-nome' | 'site-e-rede-social'
+  | 'site-sem-celular-ou-whatsapp' | 'nota-baixa' | 'poucas-avaliacoes' | 'sem-horario' | 'fotos-de-terceiros'
+
+/** Um ponto do Raio-X com os números que o sustentam. Número que o Raio-X não leu fica ausente, nunca 0. */
+export interface AchadoDoRaioX {
+  id: IdDoAchado
+  /** A busca de onde vêm a posição e a comparação. */
+  consulta?: string
+  /** posicao-na-busca: o lugar do lead (ausente = fora dos `lidos` primeiros). */
+  posicao?: number
+  lidos?: number
+  nota?: number
+  notasDoTopo?: number[]
+  avaliacoes?: number
+  /** As avaliações no meio da lista dos primeiros da busca. */
+  medianaDaBusca?: number
+  avaliacoesDoTopo?: number[]
+  rede?: string
+  dominio?: string
+  celular?: boolean
+  whatsapp?: boolean
+  /** Dos `topoLidos` primeiros da busca, quantos mostram site próprio. */
+  topoComSite?: number
+  topoLidos?: number
+}
+
 export interface CrmLead {
   id: string
   produto: CrmProduto
@@ -129,6 +157,12 @@ export interface CrmLead {
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string }
   /** Plus (15/10/2026): os leads do Catálogo de Negócios Maçônicos. A oferta é o fluxo que o lead recebe. */
   plus?: { oferta: 'site' | 'prumo' | 'iris' | 'estampa'; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] }
+  /** O que o Raio-X publicado achou (15/10/2026), na ordem de peso da página. Raio-X mais antigo não tem. */
+  achados?: AchadoDoRaioX[]
+  /** PRUMO: a classe da Receita pelo CNPJ do site (filtro de porte do Lead Scout). Ausente = não conferido. */
+  porte?: 'EPP' | 'DEMAIS'
+  /** PRUMO: tem equipe (o alvo do Mapa)? `true` só com o porte conferido; nunca `false` por falta de dado. */
+  equipe?: boolean
   notas: number
   resposta?: CrmResposta
   /**

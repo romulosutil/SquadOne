@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { lerPastasDosLeads } from "./auto-production.ts";
+import { achadosDoRecibo, lerPastasDosLeads } from "./auto-production.ts";
 
 const temporarios: string[] = [];
 
@@ -25,6 +25,7 @@ async function fixture(): Promise<string> {
   await escrever(path.join(raiz, "publicado", "index.html"), "<!doctype html>");
   await escrever(path.join(raiz, "publicado", "publicado.json"), JSON.stringify({
     place_id: "ChIJpub000001", nome: "Publicado", site_url: "https://demo-publicado.vercel.app", publicado_em: "2026-09-28T10:00:00-03:00",
+    raio_x_achados: [{ id: "poucas-avaliacoes", avaliacoes: 12, consulta: "pilates em Guarapari", mediana_da_busca: 80 }],
   }));
   await escrever(path.join(raiz, "_recusados", "recusou", "publicado.json"), JSON.stringify({ place_id: "ChIJrec000001", site_url: "javascript:alert(1)",
     apagado_em: "2026-10-07T22:47:31-03:00" }));
@@ -63,6 +64,25 @@ describe("Pastas do Site antes da venda", () => {
     assert.equal(pastas.find((p) => p.slug === "recusou")!.siteUrl, undefined, "URL fora de http/https é descartada");
     assert.equal(pastas.find((p) => p.slug === "recusou")!.apagadoEm, "2026-10-08T01:47:31.000Z", "site-demos-limpeza apagou o demo");
     assert.equal(publicado.apagadoEm, undefined);
+    assert.deepEqual(publicado.raioXAchados, [{ id: "poucas-avaliacoes", avaliacoes: 12, consulta: "pilates em Guarapari", medianaDaBusca: 80 }]);
+    assert.equal(fila.raioXAchados, undefined, "Raio-X sem achados (ou antes de 15/10/2026): ausente");
+  });
+
+  it("os achados do Raio-X: só ids conhecidos e números que fazem sentido", () => {
+    assert.deepEqual(achadosDoRecibo([
+      { id: "posicao-na-busca", consulta: "x", posicao: null, lidos: 20 },
+      { id: "inventado", nota: 3 },
+      { id: "nota-baixa", nota: 9, notas_do_topo: [4.8, "5"] },
+      { id: "site-sem-celular-ou-whatsapp", dominio: "a.com.br", celular: false, whatsapp: "não" },
+      "lixo",
+    ]), [
+      { id: "posicao-na-busca", consulta: "x", lidos: 20 },
+      { id: "nota-baixa" },
+      { id: "site-sem-celular-ou-whatsapp", dominio: "a.com.br", celular: false },
+    ]);
+    assert.equal(achadosDoRecibo([]), undefined);
+    assert.equal(achadosDoRecibo({ id: "sem-site" }), undefined);
+    assert.equal(achadosDoRecibo([{ id: "inventado" }]), undefined);
   });
 
   it("lê o estado do gerador pelo resumo que ele mesmo grava", async () => {

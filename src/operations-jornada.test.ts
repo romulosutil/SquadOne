@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { CARDAPIO } from './operations/colinha.ts'
 import {
-  OFERTAS_PROPRIAS, PASSOS, REGRAS_DA_OFERTA, caminhoDoLead, funilDoLead, guiaDaJornada, jornadaDoLead, ofertaDoLead, painelDaJornada, passoAtual, proximoDaJornada,
+  OFERTAS_PROPRIAS, OFERTA_DO_ACHADO, PASSOS, REGRAS_DA_OFERTA, caminhoDoLead, fraseDoAchado, funilDoLead, guiaDaJornada, jornadaDoLead, ofertaDoLead,
+  painelDaJornada, passoAtual, proximoDaJornada,
   type IdDaOferta, type IdDoPasso, type LeadDaJornada,
 } from './operations/jornada.ts'
+import type { AchadoDoRaioX } from './operations/types.ts'
 
 const lead = (extra: Partial<LeadDaJornada> = {}): LeadDaJornada => ({
   produto: 'site', etapa: 'novo', sinal: 'na-fila', marcos: {}, links: {}, followupHoje: false, ...extra,
@@ -139,12 +141,133 @@ describe('jornada: o que oferecer', () => {
     assert.ok(!ids(o.agora).includes('encontrado'))
     assert.ok(ids(o.agora).includes('respondido'))
   })
+  it('o porte pelo CNPJ põe o Mapa agora e diz de onde veio', () => {
+    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'prumo', porte: 'EPP', equipe: true }))
+    assert.ok(ids(o.agora).includes('mapa'))
+    assert.match(o.agora.find((x) => x.id === 'mapa')!.porque, /porte EPP pelo CNPJ/)
+    assert.ok(!o.aConfirmar.some((t) => t.startsWith('Porte')))
+  })
   it('Iris e estamparias: a oferta própria, sem Raio-X', () => {
     assert.deepEqual(ids(ofertaDoLead(lead({ produto: 'iris' })).agora), ['iris'])
     assert.deepEqual(ids(ofertaDoLead(lead({ produto: 'estampa' })).agora), ['crm-estamparia'])
   })
   it('perdido: nada agora', () => {
     assert.deepEqual(ofertaDoLead(lead({ etapa: 'perdido', sinal: 'recusou' })).agora, [])
+  })
+})
+
+describe('jornada: a oferta sob medida, pelo que o Raio-X achou', () => {
+  const viu = { etapa: 'contato', sinal: 'respondeu-prumo', marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } } as const
+  const busca = 'dentista em Anápolis'
+  const A = {
+    fora: { id: 'posicao-na-busca', consulta: busca, lidos: 20 },
+    setimo: { id: 'posicao-na-busca', consulta: busca, posicao: 7, lidos: 20 },
+    semSite: { id: 'sem-site', consulta: busca, topoLidos: 3, topoComSite: 2 },
+    siteFora: { id: 'site-fora-do-ar', dominio: 'clinica.com.br' },
+    rede: { id: 'site-e-rede-social', rede: 'o Instagram' },
+    nota: { id: 'nota-baixa', nota: 4.1, consulta: busca, notasDoTopo: [4.8, 4.9, 5] },
+    avaliacoes: { id: 'poucas-avaliacoes', avaliacoes: 12, consulta: busca, medianaDaBusca: 80, avaliacoesDoTopo: [60, 80, 120] },
+    horario: { id: 'sem-horario' },
+  } satisfies Record<string, AchadoDoRaioX>
+
+  const CASOS: {
+    nome: string
+    lead: LeadDaJornada
+    agora: IdDaOferta[]
+    /** O começo da lista `depois` (o resto não importa ao caso). */
+    depois?: IdDaOferta[]
+    /** Trechos que o porquê da oferta tem de citar. */
+    cita?: Partial<Record<IdDaOferta, RegExp>>
+  }[] = [
+    {
+      nome: 'Site, sem site no perfil e poucas avaliações: Encontrado agora; Respondido o primeiro depois, com o número',
+      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', achados: [A.semSite, A.avaliacoes] }),
+      agora: ['encontrado'],
+      depois: ['respondido', 'anuncios', 'redes'],
+      cita: {
+        encontrado: /Raio-X: o perfil do Google não tem site, e 2 dos 3 primeiros de “dentista em Anápolis” mostram site próprio\./,
+        respondido: /Com o site no ar\. Raio-X: 12 avaliações contra 80 no meio dos primeiros de “dentista em Anápolis”\./,
+      },
+    },
+    {
+      nome: 'Site fora do topo e com o botão “Site” na rede: Anúncios esperam o Encontrado',
+      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', achados: [A.fora, A.rede] }),
+      agora: ['encontrado'],
+      depois: ['anuncios', 'respondido', 'redes'],
+      cita: { encontrado: /leva para o Instagram/, anuncios: /^Depois do site e do perfil em dia\. Raio-X: fora dos 20 primeiros em “dentista em Anápolis”\./ },
+    },
+    {
+      nome: 'PRUMO com site no ar, nota baixa: Respondido agora com a nota; nada de pergunta sobre o site',
+      lead: lead({ ...viu, produto: 'prumo', achados: [A.nota] }),
+      agora: ['respondido'],
+      cita: { respondido: /Raio-X: nota 4,1 no Google, contra 4,8, 4,9 e 5 dos 3 primeiros/ },
+    },
+    {
+      nome: 'PRUMO no 7º lugar e com o site fora do ar: o Encontrado entra agora e passa à frente do Respondido',
+      lead: lead({ ...viu, produto: 'prumo', achados: [A.setimo, A.siteFora, A.avaliacoes] }),
+      agora: ['encontrado', 'respondido'],
+      depois: ['anuncios'],
+      cita: { encontrado: /o site do perfil \(clinica\.com\.br\) não abre/, anuncios: /7º lugar em “dentista em Anápolis”/ },
+    },
+    {
+      nome: 'PRUMO só fora do topo (site e perfil em dia): Anúncios agora, à frente do Respondido',
+      lead: lead({ ...viu, produto: 'prumo', achados: [A.fora] }),
+      agora: ['anuncios', 'respondido'],
+      cita: { anuncios: /^Raio-X: fora dos 20 primeiros/ },
+    },
+    {
+      nome: 'PRUMO com equipe pelo CNPJ e ponto de perfil: o Encontrado, o Respondido e o Mapa juntos',
+      lead: lead({ ...viu, produto: 'prumo', porte: 'DEMAIS', equipe: true, achados: [A.horario] }),
+      agora: ['encontrado', 'respondido', 'mapa'],
+      cita: { encontrado: /o horário de funcionamento não aparece no Google/, mapa: /porte DEMAIS pelo CNPJ/ },
+    },
+    {
+      nome: '"já temos site", mas o Raio-X achou o site fora do ar: mostra o ponto, sem insistir no Encontrado',
+      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', resposta: { tipo: 'negativa', trecho: 'Obrigado, mas já temos site' }, achados: [A.siteFora] }),
+      agora: ['respondido'],
+      depois: ['encontrado'],
+      cita: { encontrado: /^Disse que já tem site, mas o Raio-X achou um ponto nele\. Raio-X: o site do perfil \(clinica\.com\.br\) não abre/ },
+    },
+    {
+      nome: 'antes de ver o Raio-X: só ele agora, e o depois já vem na ordem do que ele achou',
+      lead: lead({ produto: 'prumo', etapa: 'contato', sinal: 'respondeu-prumo', achados: [A.fora, A.avaliacoes] }),
+      agora: ['raio-x'],
+      depois: ['anuncios', 'respondido'],
+      cita: { respondido: /^Depois do Raio-X\. Raio-X: 12 avaliações/ },
+    },
+  ]
+  for (const c of CASOS) {
+    it(c.nome, () => {
+      const o = ofertaDoLead(c.lead)
+      assert.deepEqual(ids(o.agora), c.agora)
+      if (c.depois) assert.deepEqual(ids(o.depois).slice(0, c.depois.length), c.depois)
+      for (const [id, padrao] of Object.entries(c.cita ?? {})) {
+        const oferta = [...o.agora, ...o.depois].find((x) => x.id === id)
+        assert.ok(oferta, `${id} não está na oferta`)
+        assert.match(oferta.porque, padrao!)
+      }
+    })
+  }
+
+  it('com os achados no CRM, não pergunta se o site aparece no Google; sem eles, manda abrir o Raio-X', () => {
+    const com = ofertaDoLead(lead({ ...viu, produto: 'prumo', links: { raioX: 'https://raio-x-prumo.vercel.app/x' }, achados: [A.nota] }))
+    assert.deepEqual(com.aConfirmar.filter((t) => !t.startsWith('Porte')), [])
+    const sem = ofertaDoLead(lead({ ...viu, produto: 'prumo', links: { raioX: 'https://raio-x-prumo.vercel.app/x' } }))
+    assert.ok(sem.aConfirmar.some((t) => t.includes('abra o Raio-X')))
+    assert.ok(sem.aConfirmar.some((t) => t.startsWith('O site atual aparece')))
+  })
+
+  it('a frase de cada ponto só diz o número que veio', () => {
+    assert.equal(fraseDoAchado({ id: 'poucas-avaliacoes', avaliacoes: 1 }), '1 avaliação no Google')
+    assert.equal(fraseDoAchado({ id: 'poucas-avaliacoes', avaliacoes: 0 }), 'nenhuma avaliação no Google')
+    assert.equal(fraseDoAchado({ id: 'posicao-na-busca', consulta: busca }), 'fora dos primeiros em “dentista em Anápolis”')
+    assert.equal(fraseDoAchado({ id: 'sem-site', consulta: busca, topoLidos: 3, topoComSite: 0 }), 'o perfil do Google não tem site')
+    assert.equal(fraseDoAchado({ id: 'site-sem-celular-ou-whatsapp', dominio: 'x.com.br', celular: false, whatsapp: false }),
+      'o site (x.com.br) não está pronto para celular e não tem botão de WhatsApp')
+  })
+
+  it('todo ponto que o Raio-X calcula tem um serviço do cardápio', () => {
+    for (const [achado, servico] of Object.entries(OFERTA_DO_ACHADO)) assert.ok(CARDAPIO.some((s) => s.id === servico), achado)
   })
 })
 

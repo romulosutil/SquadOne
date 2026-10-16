@@ -554,6 +554,25 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
       { agora: AGORA, pastas: PASTAS, raioX });
     assert.equal(lead(nao.leads, "prumo:quer").links.segunda, undefined);
   });
+
+  it("oferta sob medida (15/10/2026): os achados do Raio-X e o porte pelo CNPJ chegam ao lead, sem chute", () => {
+    const base = comQuer({ porte: "EPP" });
+    base.fontes.prumo.linhas.push(linhaPrumo("sem-cnpj", { porte: "" }), linhaPrumo("micro", { porte: "micro" }));
+    const achados = [{ id: "nota-baixa" as const, nota: 4.1 }];
+    const raioX = [{ prospectId: "quer", url: "https://raio-x-prumo.vercel.app/quer", feitoEm: "2026-10-02", achados }];
+    const pastas = PASTAS.map((p) => (p.slug === "respondeu" ? { ...p, raioXAchados: [{ id: "sem-site" as const }] } : p));
+    const { leads } = montarCrm(base, { agora: AGORA, pastas, raioX });
+    const quer = lead(leads, "prumo:quer");
+    assert.equal(quer.porte, "EPP");
+    assert.equal(quer.equipe, true);
+    assert.deepEqual(quer.achados, achados);
+    for (const id of ["prumo:sem-cnpj", "prumo:micro", "prumo:revisar"]) {
+      assert.equal(lead(leads, id).equipe, undefined, `${id}: sem porte conferido, a equipe fica ausente (nunca false)`);
+      assert.equal(lead(leads, id).porte, undefined);
+    }
+    assert.deepEqual(lead(leads, "site:respondeu").achados, [{ id: "sem-site" }]);
+    assert.equal(lead(leads, "site:viu").achados, undefined);
+  });
 });
 
 describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {

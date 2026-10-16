@@ -13,7 +13,7 @@
 // "A oferta" e "Jornada do cliente"): mudou lá, mude aqui e refaça o guia.
 
 import { CARDAPIO, objecoesNoTexto, type IdDoServico, type ServicoDoCardapio } from './colinha'
-import type { CrmLead, CrmProduto } from './types'
+import type { AchadoDoRaioX, CrmLead, CrmProduto, IdDoAchado } from './types'
 
 // ------------------------------------------------------------------ etapas
 
@@ -222,16 +222,13 @@ export const servicoDoCardapio = (id: IdDoServico): ServicoDoCardapio => CARDAPI
 
 // ------------------------------------------------------------------ o lead na jornada
 
-/** O pedaço do CrmLead que a jornada lê (o teste monta à mão). */
+/**
+ * O pedaço do CrmLead que a jornada lê (o teste monta à mão). `equipe` decide o trilho de dentro:
+ * `true` só com o porte conferido pelo CNPJ (EPP ou DEMAIS); ausente, o Mapa aparece "a confirmar";
+ * `false` o tira. `achados` (o que o Raio-X achou) ordena e explica a oferta.
+ */
 export type LeadDaJornada = Pick<CrmLead, 'produto' | 'etapa' | 'sinal' | 'marcos' | 'links' | 'followupHoje'>
-  & Partial<Pick<CrmLead, 'resposta' | 'proposta' | 'proximoPasso' | 'plus' | 'diasParaSair' | 'interesseParado'>>
-  & {
-    /**
-     * A empresa tem equipe (umas 8 pessoas ou mais)? Decide o trilho de dentro. O CRM ainda não sabe
-     * (a planilha não tem porte): ausente, o Mapa aparece "a confirmar"; `false` o tira.
-     */
-    equipe?: boolean
-  }
+  & Partial<Pick<CrmLead, 'resposta' | 'proposta' | 'proximoPasso' | 'plus' | 'diasParaSair' | 'interesseParado' | 'achados' | 'porte' | 'equipe'>>
 
 /** O funil em que o lead anda: o Plus segue o da oferta dele. */
 export type Funil = Exclude<CrmProduto, 'plus'>
@@ -424,14 +421,72 @@ export interface OfertaDoLead {
 export const REGRAS_DA_OFERTA: string[] = [
   'O Raio-X (grátis) é a porta de todo lead, com ou sem site. Até ele ver o Raio-X, não se oferece mais nada.',
   'Depois do Raio-X há dois trilhos, e eles se somam: por fora (Encontrado, Respondido e Acompanhado, Anúncios, Redes) e por dentro (Mapa → Fonte → Manutenção). Um lead com equipe pode fazer o Mapa e, ao mesmo tempo, querer o site.',
+  'O que o Raio-X achou decide a ordem e o porquê: a oferta que resolve o ponto de mais peso vem primeiro, citando o número ("Raio-X: 12 avaliações contra 60 no meio dos primeiros de “dentista em Anápolis”"). Sem os achados no CRM (Raio-X anterior a 15/10/2026 ou feito à mão sem eles), vale a ordem de sempre e o Raio-X aberto decide.',
+  'Ponto de site ou de perfil (sem site, site fora do ar ou sem o nome deles, botão “Site” levando para rede social, site sem celular ou WhatsApp, horário que não aparece, fotos que não são deles) → Encontrado. Nota baixa ou poucas avaliações → Respondido e Acompanhado (cliente respondido e acompanhado é o que vira avaliação). Fora do topo da busca → Anúncios, só com site e perfil em dia; antes, o Encontrado.',
   'Sem site (Site antes da venda, Plus com oferta "site"): o Encontrado vem logo depois do Raio-X; é o que o demo e a 2ª mensagem vendem, e paga só depois de ver no ar.',
-  'Com site (serviços PRUMO, Plus com oferta "prumo"): Respondido e Acompanhado, Anúncios ou Redes, conforme o que o Raio-X mostrou. O Encontrado só se o site atual não aparece no Google ou ele pedir um novo.',
-  'O Mapa (grátis) só para empresa com umas 8 pessoas ou mais, depois do Raio-X (ou direto pela CDL). Sem saber o porte, confirme antes de convidar.',
+  'Com site (serviços PRUMO, Plus com oferta "prumo"): Respondido e Acompanhado, Anúncios ou Redes, conforme o que o Raio-X mostrou. O Encontrado só se o Raio-X achou um ponto de site ou de perfil, ou ele pedir um novo.',
+  'O Mapa (grátis) só para empresa com umas 8 pessoas ou mais, depois do Raio-X (ou direto pela CDL). O porte vem do CNPJ do site (EPP ou DEMAIS, o alvo do filtro de porte do Lead Scout); sem ele, confirme antes de convidar.',
   'A Fonte só existe depois do Mapa; a Manutenção, só depois da Fonte e dos 30 dias de ajustes.',
   'Respondido e Acompanhado, Fonte e Manutenção não têm preço no frio: saem por escrito na proposta, em até 24 h.',
-  'Disse "já temos site": não insista no Encontrado; o Raio-X mostra o resto do caminho (WhatsApp, avaliações).',
+  'Disse "já temos site": não insista no Encontrado; o Raio-X mostra o resto do caminho (WhatsApp, avaliações). Se o Raio-X achou um ponto no site dele, mostre o ponto e deixe o Encontrado para quando ele quiser arrumar.',
   'Iris e CRM de estamparia são ofertas próprias, fora do cardápio: não se misturam com Raio-X nem Mapa.',
 ]
+
+/** O serviço que resolve cada ponto do Raio-X (a regra 4 acima, em código). */
+export const OFERTA_DO_ACHADO: Record<IdDoAchado, IdDoServico> = {
+  'sem-site': 'encontrado',
+  'site-fora-do-ar': 'encontrado',
+  'site-sem-nome': 'encontrado',
+  'site-e-rede-social': 'encontrado',
+  'site-sem-celular-ou-whatsapp': 'encontrado',
+  'sem-horario': 'encontrado',
+  'fotos-de-terceiros': 'encontrado',
+  'nota-baixa': 'respondido',
+  'poucas-avaliacoes': 'respondido',
+  'posicao-na-busca': 'anuncios',
+}
+
+const numero = (x: number) => String(x).replace('.', ',')
+const lista = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}`)
+
+/** O ponto do Raio-X numa frase curta, com os números que ele traz (o que falta não é dito). */
+export function fraseDoAchado(a: AchadoDoRaioX): string {
+  const busca = a.consulta ? `“${a.consulta}”` : 'a busca'
+  const dominio = a.dominio ? ` (${a.dominio})` : ''
+  const topo = a.topoLidos && a.topoComSite
+    ? `, e ${a.topoComSite} dos ${a.topoLidos} primeiros de ${busca} mostra${a.topoComSite > 1 ? 'm' : ''} site próprio` : ''
+  switch (a.id) {
+    case 'posicao-na-busca':
+      if (a.posicao) return `${a.posicao}º lugar em ${busca}`
+      return a.lidos ? `fora dos ${a.lidos} primeiros em ${busca}` : `fora dos primeiros em ${busca}`
+    case 'sem-site': return `o perfil do Google não tem site${topo}`
+    case 'site-fora-do-ar': return `o site do perfil${dominio} não abre${topo}`
+    case 'site-sem-nome': return `o site do perfil${dominio} não leva a um site deles`
+    case 'site-e-rede-social': return `o botão “Site” do Google leva para ${a.rede ?? 'uma rede social'}`
+    case 'site-sem-celular-ou-whatsapp': {
+      const faltas = [a.celular === false ? 'não está pronto para celular' : '', a.whatsapp === false ? 'não tem botão de WhatsApp' : ''].filter(Boolean)
+      return `o site${dominio} ${faltas.length ? lista(faltas) : 'não serve a quem chega pelo celular'}`
+    }
+    case 'nota-baixa':
+      return `nota ${a.nota !== undefined ? numero(a.nota) : 'baixa'} no Google`
+        + (a.notasDoTopo ? `, contra ${lista(a.notasDoTopo.map(numero))} dos 3 primeiros de ${busca}` : '')
+    case 'poucas-avaliacoes': {
+      const n = a.avaliacoes === undefined ? 'poucas avaliações' : a.avaliacoes === 0 ? 'nenhuma avaliação' : `${a.avaliacoes} avaliaç${a.avaliacoes === 1 ? 'ão' : 'ões'}`
+      if (a.medianaDaBusca !== undefined) return `${n} contra ${a.medianaDaBusca} no meio dos primeiros de ${busca}`
+      if (a.avaliacoesDoTopo) return `${n} contra ${lista(a.avaliacoesDoTopo.map(String))} dos 3 primeiros de ${busca}`
+      return `${n} no Google`
+    }
+    case 'sem-horario': return 'o horário de funcionamento não aparece no Google'
+    case 'fotos-de-terceiros': return 'nenhuma das primeiras fotos do perfil é deles'
+  }
+}
+
+/** O que cada serviço faz pelo ponto que o Raio-X achou (vai depois do "Raio-X: …"). */
+const RESOLVE: Partial<Record<IdDoServico, string>> = {
+  encontrado: 'O Encontrado resolve: site no ar com o endereço deles no perfil, perfil do Google revisado e botão de WhatsApp (paga só depois de ver no ar).',
+  respondido: 'Cliente respondido na hora e acompanhado depois é o que vira avaliação: Respondido e Acompanhado.',
+  anuncios: 'Anúncios põem a empresa no alto da busca enquanto o perfil sobe.',
+}
 
 /** O que oferecer a este lead agora, depois e não oferecer, com o motivo de cada um. */
 export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
@@ -453,37 +508,78 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
   const viuRaioX = Boolean(lead.marcos.segundaEnviada) || !antesDoRaioX.includes(passoAtual(lead))
   const comSite = funil === 'prumo'
   const disseQueTemSite = objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'ja-tem-site')
+  const semSite = !comSite && !disseQueTemSite
   const mapaRespondido = lead.sinal === 'diagnostico'
+
+  // O que o Raio-X achou, por serviço. A página já vem na ordem de peso: o primeiro achado de cada serviço dá a ordem.
+  const achados = lead.achados ?? []
+  const doRaioX = (s: IdDoServico) => {
+    const deste = achados.filter((a) => OFERTA_DO_ACHADO[a.id] === s)
+    return deste.length ? `Raio-X: ${deste.map(fraseDoAchado).join('; ')}.` : ''
+  }
+  const achou = (s: IdDoServico) => achados.some((a) => OFERTA_DO_ACHADO[a.id] === s)
+  const pesoNoRaioX = (id: IdDaOferta) => {
+    const i = achados.findIndex((a) => OFERTA_DO_ACHADO[a.id] === id)
+    return i < 0 ? achados.length : i
+  }
 
   // 1. A porta.
   if (!viuRaioX) r.agora.push({ id: 'raio-x', porque: 'Ainda não viu o Raio-X: é a porta de todo lead, grátis.' })
 
-  // 2. Por fora.
-  const fora: OfertaSugerida[] = []
-  if (!comSite && !disseQueTemSite) {
-    fora.push({ id: 'encontrado', porque: 'Não tem site: o demo e a 2ª mensagem vendem o Encontrado (paga só depois de ver no ar).' })
+  // 2. Por fora. `agora`: entra assim que ele vê o Raio-X.
+  const fora: Array<OfertaSugerida & { agora: boolean }> = []
+  if (semSite) {
+    fora.push({ id: 'encontrado', agora: true, porque: achou('encontrado') ? `${doRaioX('encontrado')} ${RESOLVE.encontrado}` : 'Não tem site: o demo e a 2ª mensagem vendem o Encontrado (paga só depois de ver no ar).' })
+    fora.push({ id: 'respondido', agora: false, porque: achou('respondido') ? `Com o site no ar. ${doRaioX('respondido')} ${RESOLVE.respondido}` : 'Com o site no ar, se ele perde cliente no WhatsApp (demora, fora do horário, orçamento que some).' })
   } else {
-    fora.push({ id: 'respondido', porque: disseQueTemSite ? 'Disse que já tem site: o resto do caminho é o WhatsApp.' : 'Já tem site: o próximo trecho é quem chama no WhatsApp ser respondido.' })
+    fora.push({
+      id: 'respondido',
+      agora: true,
+      porque: achou('respondido') ? `${doRaioX('respondido')} ${RESOLVE.respondido}`
+        : disseQueTemSite ? 'Disse que já tem site: o resto do caminho é o WhatsApp.' : 'Já tem site: o próximo trecho é quem chama no WhatsApp ser respondido.',
+    })
+    if (!achou('encontrado')) fora.push({ id: 'encontrado', agora: false, porque: 'Só se o site atual não aparece no Google ou ele pedir um novo.' })
+    else if (disseQueTemSite) fora.push({ id: 'encontrado', agora: false, porque: `Disse que já tem site, mas o Raio-X achou um ponto nele. ${doRaioX('encontrado')} Mostre o ponto; o Encontrado só se ele quiser arrumar.` })
+    else fora.push({ id: 'encontrado', agora: true, porque: `${doRaioX('encontrado')} ${RESOLVE.encontrado}` })
   }
-  ;(viuRaioX ? r.agora : r.depois).push(...fora.map((o) => (viuRaioX ? o : { ...o, porque: `Depois do Raio-X. ${o.porque}` })))
-  if (!comSite && !disseQueTemSite) r.depois.push({ id: 'respondido', porque: 'Com o site no ar, se ele perde cliente no WhatsApp (demora, fora do horário, orçamento que some).' })
-  if (comSite || disseQueTemSite) r.depois.push({ id: 'encontrado', porque: 'Só se o site atual não aparece no Google ou ele pedir um novo.' })
-  r.depois.push({ id: 'anuncios', porque: 'Com site e perfil do Google em dia, se o Raio-X mostra pouca gente chegando.' })
-  r.depois.push({ id: 'redes', porque: 'Se o Raio-X mostra rede social parada.' })
+  // Anúncios só com site e perfil em dia: com ponto de site ou de perfil, o Encontrado vem antes.
+  const sitePorArrumar = semSite || achou('encontrado')
+  fora.push(achou('anuncios')
+    ? { id: 'anuncios', agora: !sitePorArrumar, porque: `${sitePorArrumar ? 'Depois do site e do perfil em dia. ' : ''}${doRaioX('anuncios')} ${RESOLVE.anuncios}` }
+    : { id: 'anuncios', agora: false, porque: 'Com site e perfil do Google em dia, se o Raio-X mostra pouca gente chegando.' })
+  fora.push({ id: 'redes', agora: false, porque: 'Se a rede social está parada (o Raio-X automático não confere as redes).' })
+  // Os de agora primeiro; em cada grupo, o do ponto de mais peso no Raio-X; empate, a ordem acima.
+  const ordenados = fora.map((o, i) => ({ o, i }))
+    .sort((a, b) => Number(b.o.agora) - Number(a.o.agora) || pesoNoRaioX(a.o.id) - pesoNoRaioX(b.o.id) || a.i - b.i)
+  for (const { o: { agora, ...oferta } } of ordenados) {
+    if (agora && viuRaioX) r.agora.push(oferta)
+    else r.depois.push(agora ? { ...oferta, porque: `Depois do Raio-X. ${oferta.porque}` } : oferta)
+  }
 
   // 3. Por dentro.
   if (mapaRespondido) {
     r.agora.push({ id: 'fonte', porque: 'Respondeu o Mapa: depois da devolutiva, a proposta da Fonte.' })
     r.depois.push({ id: 'fonte-em-dia', porque: 'Depois da Fonte e dos 30 dias de ajustes (opcional).' })
   } else if (funil === 'prumo' && lead.equipe !== false) {
-    const mapa: OfertaSugerida = { id: 'mapa', porque: 'Empresa com equipe: o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.' }
-    ;(viuRaioX && lead.equipe === true ? r.agora : r.depois).push(viuRaioX ? mapa : { ...mapa, porque: `Depois do Raio-X. ${mapa.porque}` })
-    if (lead.equipe === undefined) r.aConfirmar.push('Porte: a empresa tem umas 8 pessoas ou mais? Decide o convite para o Mapa.')
+    const comEquipe = lead.equipe === true
+    const mapa: OfertaSugerida = {
+      id: 'mapa',
+      porque: comEquipe
+        ? `Empresa com equipe (${lead.porte ? `porte ${lead.porte} pelo CNPJ, o alvo do Mapa` : 'confirmada'}): o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.`
+        : 'Se tiver equipe (umas 8 pessoas ou mais): o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.',
+    }
+    ;(viuRaioX && comEquipe ? r.agora : r.depois).push(viuRaioX ? mapa : { ...mapa, porque: `Depois do Raio-X. ${mapa.porque}` })
+    if (!comEquipe) r.aConfirmar.push('Porte: a empresa tem umas 8 pessoas ou mais? O CNPJ do site não deu o porte, e é ele que decide o convite para o Mapa.')
     r.depois.push({ id: 'fonte', porque: 'Só depois do Mapa.' })
   } else {
     r.naoAgora.push({ id: 'mapa', porque: funil === 'site' ? 'Site antes da venda: empresa pequena, o Mapa não tem para onde levar.' : 'Empresa sem equipe: a Fonte não se paga.' })
   }
-  if (comSite && !disseQueTemSite) r.aConfirmar.push('O site atual aparece no Google? Se não, o Encontrado entra.')
+
+  // 4. O que falta saber.
+  if (!achados.length && lead.links.raioX) {
+    r.aConfirmar.push('O que o Raio-X achou não está no CRM (Raio-X anterior a 15/10/2026 ou feito à mão): abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
+  }
+  if (comSite && !disseQueTemSite && !achados.length) r.aConfirmar.push('O site atual aparece no Google? Se não, o Encontrado entra.')
   return r
 }
 

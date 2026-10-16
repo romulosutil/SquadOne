@@ -76,8 +76,9 @@ Cada Raio-X custa um deploy (hobby: 100 por dia, divididos com o gerador); a sa�
 vai para o log do lead, onde o `lote-continuo` procura o limite.
 
 Recibo: o `publicado.json` do lead ganha `raio_x_url` (a URL que o Balcão manda),
-`raio_x_pontos` (quantos pontos de melhoria a página mostra, 1 a 3), `raio_x_versao`
-e `raio_x_em`. O Balcão lê o `publicado.json` inteiro (`recibo`); um refazer do
+`raio_x_pontos` (quantos pontos de melhoria a página mostra, 1 a 3), `raio_x_achados`
+(15/10/2026: os mesmos pontos em dado, `achados`: id e os números que o sustentam, para a Central
+escolher a oferta do lead), `raio_x_versao` e `raio_x_em`. O Balcão lê o `publicado.json` inteiro (`recibo`); um refazer do
 gerador escreve recibo novo, sem esses campos, e o gancho do gerador publica o
 Raio-X de novo.
 
@@ -600,7 +601,7 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
                                                              else f"não estão entre os {x['lidos']} primeiros")
                                for x in resto)
             frase += " " + outras[0].upper() + outras[1:] + "."
-        pontos.append({"chave": "busca", "consulta": b["consulta"],
+        pontos.append({"chave": "busca", "id": "posicao-na-busca", "consulta": b["consulta"],
                        "titulo": (f"{b['posicao']}º lugar em “{b['consulta']}”" if b["posicao"]
                                   else f"Fora dos {b['lidos']} primeiros em “{b['consulta']}”"),
                        "porque": frase + " O Google ordena a busca local por relevância, distância e destaque, e o "
@@ -615,11 +616,11 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
                     else f" Na busca “{conc['consulta']}”, nenhum dos 3 primeiros mostra site próprio: quem tiver um "
                          "sai na frente.")
     if site and site["tipo"] in ("morto", "proprio") and site_hoje == "fora":
-        pontos.append({"chave": "site", "titulo": "O site que aparece no Google não abre",
+        pontos.append({"chave": "site", "id": "site-fora-do-ar", "titulo": "O site que aparece no Google não abre",
                        "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que não abriu"
                                  f"{quando}. A pessoa volta para a busca, e o próximo resultado está a um toque." + vizinhos})
     elif site and site["tipo"] in ("morto", "proprio") and site_hoje == "sem_nome":
-        pontos.append({"chave": "site", "titulo": "O site do Google não leva a um site de vocês",
+        pontos.append({"chave": "site", "id": "site-sem-nome", "titulo": "O site do Google não leva a um site de vocês",
                        "porque": f"Quem toca em “Site” no perfil de vocês vai para {dominio(site['url'])}, que abria uma "
                                  f"página sem o nome de vocês{quando}. A pessoa volta para a busca, e o próximo "
                                  "resultado está a um toque." + vizinhos})
@@ -630,15 +631,15 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
         if rede in ("o Instagram", "o Facebook", "o TikTok"):
             porque = ("Quem está comparando quer ver os serviços, as fotos e como chamar numa página só. Na rede social "
                       "isso fica espalhado entre posts, e muita gente desiste ali.")
-        pontos.append({"chave": "site", "titulo": f"O botão “Site” no Google leva para {rede}", "porque": porque + vizinhos})
+        pontos.append({"chave": "site", "id": "site-e-rede-social", "titulo": f"O botão “Site” no Google leva para {rede}", "porque": porque + vizinhos})
     elif site and site["tipo"] == "nenhum":
         onde = f"{vertical} em {cidade}" if vertical and cidade else (f"em {cidade}" if cidade else "o serviço de vocês")
-        pontos.append({"chave": "site", "titulo": "O perfil do Google não tem site",
+        pontos.append({"chave": "site", "id": "sem-site", "titulo": "O perfil do Google não tem site",
                        "porque": f"Quem procura {onde} compara duas ou três opções. Sem site, vocês aparecem só com "
                                  "nome e nota, e quem mostra serviços e fotos leva o cliente." + vizinhos})
     notas3 = [r["nota"] for r in top3 if isinstance(r.get("nota"), (int, float))]
     if nota is not None and nota < 4.3:
-        pontos.append({"chave": "nota", "titulo": f"Nota {numero(nota)} no Google",
+        pontos.append({"chave": "nota", "id": "nota-baixa", "titulo": f"Nota {numero(nota)} no Google",
                        "porque": "Na lista do Google a nota é a primeira coisa que se compara. Responder às avaliações e "
                                  "pedir avaliação a quem saiu satisfeito é o que mais mexe nesse número."
                                  + (f" Os 3 primeiros de “{conc['consulta']}” têm {juntar([numero(x) for x in notas3])}."
@@ -646,13 +647,13 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
     comparacao = (f" Na busca “{conc['consulta']}”, os {len(conc['outros'])} primeiros têm, no meio da lista, "
                   f"{int(med)} avaliações." if conc and med is not None else "")
     if n is not None and n < 20:
-        pontos.append({"chave": "avaliacoes",
+        pontos.append({"chave": "avaliacoes", "id": "poucas-avaliacoes",
                        "titulo": "Ainda sem avaliações no Google" if n == 0 else f"Só {n} avaliaç{'ão' if n == 1 else 'ões'} no Google",
                        "porque": f"Entre duas opções parecidas, o cliente confia em quem tem mais avaliações, e vocês têm {n}."
                                  + comparacao + " Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de "
                                  "crescer esse número."})
     elif n is not None and med is not None and n * 2 < med:
-        pontos.append({"chave": "avaliacoes", "titulo": f"{n} avaliações, menos da metade do que os primeiros da busca têm",
+        pontos.append({"chave": "avaliacoes", "id": "poucas-avaliacoes", "titulo": f"{n} avaliações, menos da metade do que os primeiros da busca têm",
                        "porque": "Entre duas opções parecidas, o cliente confia em quem tem mais avaliações." + comparacao
                                  + " Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de encurtar a distância."})
     # Telefone fixo não vira ponto: o Caçador só deixa passar fixo com WhatsApp publicado, então
@@ -660,7 +661,7 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
     if horario is False and not sem_horario_comum:
         h3 = [r for r in top3 if isinstance(r.get("horario"), bool)]
         k = sum(1 for r in h3 if r["horario"])
-        pontos.append({"chave": "horario", "titulo": "O horário de funcionamento não aparece no Google",
+        pontos.append({"chave": "horario", "id": "sem-horario", "titulo": "O horário de funcionamento não aparece no Google",
                        "porque": "Quem procura não sabe se vocês estão abertos, e quem usa o filtro “Aberto agora” nem vê "
                                  "vocês na lista."
                                  + (f" Na busca “{conc['consulta']}”, {k} dos 3 primeiros mostram o horário."
@@ -671,21 +672,21 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
                                                                                            pag.get("whatsapp")):
         faltas = [t for t, v in (("não está pronto para celular", pag.get("celular")),
                                  ("não tem botão de WhatsApp", pag.get("whatsapp"))) if v is False]
-        pontos.append({"chave": "site", "titulo": f"O site de vocês {juntar(faltas)}",
+        pontos.append({"chave": "site", "id": "site-sem-celular-ou-whatsapp", "titulo": f"O site de vocês {juntar(faltas)}",
                        "porque": f"Quem toca em “Site” no perfil vai para {dominio(site['url'])}, que abriu{quando}, mas "
                                  f"{juntar(faltas)}. Quase todo mundo que chega pelo Google está no celular e quer "
                                  "chamar na hora; se não dá, volta para a busca." + vizinhos})
     avs3 = [r["avaliacoes"] for r in top3 if isinstance(r.get("avaliacoes"), int)]
     if (n and len(avs3) == 3 and n < (mediana(avs3) or 0)
             and not any(p["chave"] == "avaliacoes" for p in pontos)):
-        pontos.append({"chave": "avaliacoes", "alvo": int(mediana(avs3)),
+        pontos.append({"chave": "avaliacoes", "id": "poucas-avaliacoes", "alvo": int(mediana(avs3)),
                        "titulo": f"{n} avaliações, menos que os 3 primeiros da busca",
                        "porque": f"Na busca “{conc['consulta']}”, os 3 primeiros têm {juntar([str(x) for x in avs3])} "
                                  "avaliações. Entre duas opções com nota parecida, o cliente escolhe quem tem mais gente "
                                  "dizendo que deu certo. Pedir na hora, a quem saiu satisfeito, é o jeito mais barato de "
                                  "encurtar a distância."})
     if fotos == 0 and fotos_baixadas > 0:
-        pontos.append({"chave": "fotos", "titulo": "Nenhuma das primeiras fotos do perfil é de vocês",
+        pontos.append({"chave": "fotos", "id": "fotos-de-terceiros", "titulo": "Nenhuma das primeiras fotos do perfil é de vocês",
                        "porque": "Das primeiras fotos que o Google mostra no perfil, 0 foram publicadas por vocês: quem "
                                  "publicou foram outras pessoas. É a primeira impressão do lugar, e vocês não escolheram "
                                  "qual é."})
@@ -793,6 +794,47 @@ def entradas_da_presenca(diag: dict) -> dict:
                  "whatsapp": pag.get("whatsapp")}
     return {"buscas": buscas, "nota": diag.get("nota"), "avaliacoes": diag.get("avaliacoes"), "respostas": None,
             "perfil": perfil, "site": s}
+
+
+def achados(diag: dict) -> list[dict]:
+    """Os pontos da página em dado, para o recibo (`raio_x_achados`, 15/10/2026): o id de cada um e os
+    números que o sustentam. A Central escolhe a oferta do lead por eles (src/operations/jornada.ts) e
+    cita o número no porquê. São os mesmos pontos que a página mostra, na mesma ordem (a de peso);
+    número que o Raio-X não leu fica fora, nunca vira 0. PURO."""
+    conc = diag.get("concorrencia")
+    top3 = (conc or {}).get("outros", [])[:3]
+    site = diag.get("site") or {}
+    pag = diag.get("site_pagina") or {}
+    saida = []
+    for p in diag.get("pontos") or []:
+        a: dict = {"id": p["id"]}
+        if p["id"] == "posicao-na-busca":
+            b = next((x for x in diag.get("buscas") or [] if x["consulta"] == p["consulta"]), None)
+            a.update(consulta=p["consulta"], posicao=(b or {}).get("posicao"), lidos=(b or {}).get("lidos"))
+        elif p["id"] == "nota-baixa":
+            notas = [r["nota"] for r in top3 if isinstance(r.get("nota"), (int, float))]
+            a["nota"] = diag.get("nota")
+            if len(notas) == 3:
+                a.update(consulta=conc["consulta"], notas_do_topo=notas)
+        elif p["id"] == "poucas-avaliacoes":
+            avs = [r["avaliacoes"] for r in top3 if isinstance(r.get("avaliacoes"), int)]
+            a["avaliacoes"] = diag.get("avaliacoes")
+            if conc and conc.get("mediana_avaliacoes") is not None:
+                a.update(consulta=conc["consulta"], mediana_da_busca=int(conc["mediana_avaliacoes"]))
+            if len(avs) == 3:
+                a.update(consulta=conc["consulta"], avaliacoes_do_topo=avs)
+        elif p["chave"] == "site":
+            if site.get("url") and p["id"] == "site-e-rede-social":
+                a["rede"] = nome_da_rede(site["url"])
+            elif site.get("url") and p["id"] != "sem-site":
+                a["dominio"] = dominio(site["url"])
+            if p["id"] == "site-sem-celular-ou-whatsapp":
+                a.update(celular=pag.get("celular"), whatsapp=pag.get("whatsapp"))
+            if top3:  # quantos dos primeiros da busca mostram site próprio (o "vizinhos" do porquê)
+                a.update(consulta=conc["consulta"], topo_lidos=len(top3),
+                         topo_com_site=sum(1 for r in top3 if tipo_de_link(r.get("site", "")) == "proprio"))
+        saida.append({k: v for k, v in a.items() if v is not None})
+    return saida
 
 
 # ------------------------------------------------------------------ o JSON do modelo aprovado (PURO)
@@ -1745,7 +1787,8 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     if codigo != 200 or corpo != arquivos["index.html"]:
         return False, f"depois do deploy o demo mudou ou caiu ({codigo}); confira {site_url}"
     gravar_recibo(pasta / "publicado.json", {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
-                                             "raio_x_versao": VERSAO, "raio_x_em": agora()})
+                                             "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
+                                             "raio_x_em": agora()})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")  # cópia local, para o backup e para conferir
     except OSError:
@@ -1819,7 +1862,8 @@ def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, reci
     codigo, no_ar = baixar(url)
     if codigo != 200 or no_ar != corpo:
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
-    gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]), "raio_x_versao": VERSAO,
+    gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
+                                        "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
                                         "raio_x_em": agora(), "raio_x_projeto": AVULSO_PROJETO})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")
@@ -2275,6 +2319,24 @@ def testar() -> int:
             d = diagnostico(ler_content(t))
             self.assertEqual([p["titulo"] for p in d["pontos"]], ["O perfil do Google não tem site", "Nota 4,1 no Google"])
             self.assertIn("advocacia em Anápolis", d["pontos"][0]["porque"])
+
+        def test_achados_sao_os_pontos_em_dado(self):
+            # O recibo leva os mesmos pontos, na mesma ordem, com os números (a Central cita no porquê da oferta).
+            d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
+            self.assertEqual(achados(d), [
+                {"id": "posicao-na-busca", "consulta": "advogado em Anápolis", "posicao": 7, "lidos": 10},
+                {"id": "site-fora-do-ar", "dominio": "higorferreira.adv.br", "consulta": "advogado em Anápolis",
+                 "topo_lidos": 3, "topo_com_site": 1},
+                {"id": "poucas-avaliacoes", "avaliacoes": 18, "consulta": "advogado em Anápolis", "mediana_da_busca": 60,
+                 "avaliacoes_do_topo": [40, 50, 60]}])
+            # Sem o Places: só o que o content.md dá, e nenhum número inventado (sem busca, nada de topo).
+            t = CONTENT_EXEMPLO.replace(
+                "- **Site antigo, fora do ar:** https://higorferreira.adv.br/ (domínio expirado, estacionado ou em construção)\n", "")
+            self.assertEqual(achados(diagnostico(ler_content(t.replace("5 (18 avaliações)", "4.1 (120 avaliações)")))),
+                             [{"id": "sem-site"}, {"id": "nota-baixa", "nota": 4.1}])
+            # Todo ponto que o diagnóstico pode dar tem id (a Central só entende os ids conhecidos).
+            t = t.replace("- +5 horário preenchido no Google\n", "").replace("- +10 5 foto(s) enviadas pelo próprio negócio no Google\n", "")
+            self.assertTrue(all(p.get("id") for p in diagnostico(ler_content(t), fotos_baixadas=3)["pontos"]))
 
         def test_nada_do_gemini_entra(self):
             d = diagnostico(ler_content(CONTENT_EXEMPLO))
@@ -2928,6 +2990,8 @@ def testar() -> int:
             r = self.recibo()
             self.assertEqual((r["raio_x_url"], r["raio_x_pontos"], r["raio_x_versao"], r["place_id"], r["site_url"]),
                              ("https://demo-higor.vercel.app/raio-x", 3, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
+            self.assertEqual(len(r["raio_x_achados"]), 3)
+            self.assertTrue(all(a.get("id") for a in r["raio_x_achados"]))
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
         def test_leva_de_novo_os_arquivos_do_seo_do_demo(self):

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { lerPastasDosLeads, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
+import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
@@ -166,9 +166,23 @@ export const COLUNAS_DO_PRUMO = {
   respostaTipo: { nomes: ["tipo_da_resposta"] },
   respostaTrecho: { nomes: ["resposta"] },
   respostaEm: { nomes: ["resposta_em"] },
+  // Porte pelo CNPJ (15/10/2026): o 08 · CRM tira "EPP" ou "DEMAIS" do Briefing que o filtro de porte do
+  // Lead Scout grava (claude-ops/prumo-porte-cnpj.js) e manda só isso (o Briefing inteiro fica fora do
+  // retrato). Vazia = porte não conferido. Retrato antigo, sem a coluna: igual a vazia.
+  porte: { nomes: ["porte"] },
   linha: { nomes: ["row_number"] },
 } satisfies Record<string, Coluna>;
 
+/**
+ * As classes da Receita que o filtro de porte deixa passar (claude-ops/prumo-porte-cnpj.js: "Alvo: PME
+ * de 8 a 40 pessoas, que já fatura (EPP ou DEMAIS)"; MEI e microempresa vão para Descartados).
+ */
+export type PorteDoCnpj = "EPP" | "DEMAIS";
+
+export function porteDaColuna(valor: string): PorteDoCnpj | undefined {
+  const v = valor.trim().toUpperCase();
+  return v === "EPP" || v === "DEMAIS" ? v : undefined;
+}
 
 /** "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa. */
 export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "neutra", "bot"] as const;
@@ -512,6 +526,19 @@ export interface CrmLead {
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string };
   /** Plus (15/10/2026): a oferta que o lead recebe e o que o catálogo diz dele. O site, quando há, vai em `links.site`. */
   plus?: { oferta: OfertaDoPlus; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] };
+  /**
+   * O que o Raio-X publicado achou (15/10/2026), na ordem de peso da página: Site, do `raio_x_achados`
+   * do publicado.json; PRUMO, do leads.json do Raio-X à mão, quando ele traz `achados`. Raio-X mais
+   * antigo não tem: ausente, a oferta segue a regra geral (src/operations/jornada.ts).
+   */
+  achados?: AchadoDoRaioX[];
+  /** PRUMO: a classe da Receita pelo CNPJ do site (coluna `porte` do retrato). Ausente = não conferido. */
+  porte?: PorteDoCnpj;
+  /**
+   * PRUMO: a empresa tem equipe (o alvo do Mapa)? `true` só com o porte conferido pelo CNPJ (EPP ou
+   * DEMAIS, o alvo do filtro de porte). Nunca `false` por falta de dado: sem porte, ausente.
+   */
+  equipe?: boolean;
   notas: number;
   /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
   resposta?: CrmResposta;
@@ -601,6 +628,8 @@ export interface RaioXDoPrumo {
   prospectId: string;
   url: string;
   feitoEm: string;
+  /** `achados` do leads.json, no formato do recibo do raio-x.py (`raio_x_achados`), quando quem fez à mão os anotou. */
+  achados?: AchadoDoRaioX[];
 }
 
 /** Os leads Plus como o arquivo os traz, mais a data em que o catálogo foi importado. */
@@ -1108,6 +1137,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     ...(t.apagadoEm !== undefined ? { demoApagadoEm: iso(t.apagadoEm) } : {}),
     ...(demoPedido ? { demoPedidoEm: demoPedido } : {}),
+    ...(pasta?.raioXAchados ? { achados: pasta.raioXAchados } : {}),
     notas,
     ...(resposta ? { resposta } : {}),
     ...(Object.keys(abordagem).length ? { abordagem } : {}),
@@ -1254,6 +1284,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     ...(c("origemWhatsapp") ? { origemWhatsapp: c("origemWhatsapp") } : {}),
   };
   const triagem = Object.keys(triagemBruta).length ? triagemBruta : undefined;
+  const porte = ehPrumo ? porteDaColuna(c("porte")) : undefined;
   const daAba = contexto.links[oferta.link];
   const planilha = daAba && c("linha") ? `${daAba}&range=A${encodeURIComponent(c("linha"))}` : daAba;
   const desde = calculada.desde;
@@ -1288,6 +1319,8 @@ function leadDoPrumo(linha: Linha, contexto: {
     // Resultados por mensagem é do Site, e a ficha do PRUMO não o mostra).
     ...(regimeDaMensagem(t.convite) ? { abordagem: { regime: regimeDaMensagem(t.convite) } } : {}),
     ...(triagem ? { triagem } : {}),
+    ...(raioX?.achados ? { achados: raioX.achados } : {}),
+    ...(porte ? { porte, equipe: true } : {}),
     eventos,
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
@@ -1819,7 +1852,8 @@ async function lerMapas(diretorio: string | undefined): Promise<MapaDoPrumo[]> {
 
 /**
  * Os Raio-X do PRUMO feitos à mão (09/10/2026, primeiro: Roda Mais): `<entregas>/prumo-raio-x/leads.json`
- * = { "<ID do prospect>": { "url": "https://...", "feito_em": "AAAA-MM-DD" } }. O arquivo fica fora do
+ * = { "<ID do prospect>": { "url": "https://...", "feito_em": "AAAA-MM-DD", "achados"?: [...] } } (`achados`, opcional,
+ * no formato do `raio_x_achados` do raio-x.py: a Ficha usa para a oferta). O arquivo fica fora do
  * deploy (.vercelignore): os IDs não vão para a página pública. Ilegível ou ausente = nenhum Raio-X.
  */
 async function lerRaioX(diretorio: string | undefined): Promise<RaioXDoPrumo[]> {
@@ -1837,7 +1871,8 @@ async function lerRaioX(diretorio: string | undefined): Promise<RaioXDoPrumo[]> 
     const url = texto(v.url, 300);
     const feitoEm = texto(v.feito_em, 64);
     if (!/^[A-Za-z0-9_-]{3,200}$/.test(prospectId) || !urlHttps(url)) continue;
-    saida.push({ prospectId, url, feitoEm });
+    const achados = achadosDoRecibo(v.achados);
+    saida.push({ prospectId, url, feitoEm, ...(achados ? { achados } : {}) });
   }
   return saida;
 }

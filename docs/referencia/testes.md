@@ -12,14 +12,16 @@ Os testes são pontuais — só as regras puras que dá para fixar em tabela de 
 `server/telegram-entrada.test.ts`, `server/telegram-resposta.test.ts`,
 `server/telegram-bot.test.ts`, `server/avaliacoes-turno.test.ts`,
 `server/operations.test.ts` (inclui a config das ferramentas com e sem o Syncthing
-opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts`,
+opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts` (desde 15/10/2026,
+os achados do Raio-X no recibo: só ids conhecidos e números com sentido),
 `server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
 `server/prumo-ofertas.test.ts` (14/10/2026: contrato entre `deploy/dell/claude-ops/prumo-ofertas.json`, o que
 os caçadores do Iris e das estamparias gravam, e o CRM: aba e caminho do convite iguais aos de
 `OFERTA_DE_PROSPECCAO`, cabeçalho com toda coluna que o CRM lê, cada Etapa da lista com lugar no funil, convite
 sem nome, R$, link nem segunda pergunta, cliente do PRUMO e não-cliente-final fora),
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
-`server/crm.test.ts` (inclui, desde 15/10/2026, o follow-up só para quem leu, no Site e no PRUMO, e o Revisar com o
+`server/crm.test.ts` (inclui, desde 15/10/2026, os achados do Raio-X e o porte pelo CNPJ no lead, com `equipe` só
+quando o porte foi conferido, e o follow-up só para quem leu, no Site e no PRUMO, e o Revisar com o
 WhatsApp não confirmado depois de todo confirmado; desde 14/10/2026, o loop fechado: interesse parado além de 48 h que só some
 com a 2ª mensagem anotada depois da resposta, `followup_enviado` que apaga o follow-up do dia, o regime da
 mensagem pelas mesmas datas de corte do `funil-aprendizado.py`, a validação do envio por etapa e a
@@ -79,7 +81,8 @@ só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança)
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
 `src/operations-ab-mensagem.test.ts` (A/B estratificado da 1ª mensagem, 14/10/2026: sem `ab_elegiveis` o bloco fica vazio e o histórico é contado como fora; 29 × 31 só "faltam", sem taxa nem respostas; 30 × 30 com taxa, Fisher e veredito; +20 pontos e p < 0,10 nos dois sentidos; robô não conta; só entre quem podia receber as duas letras; estrato por nicho),
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
-`src/operations-jornada.test.ts` (a jornada do cliente, 15/10/2026: o passo atual pelo retrato, o caminho de cada funil (PRUMO com os dois trilhos, Site sem Mapa, Iris e estamparias no caminho curto, Plus pela oferta), o estado de cada passo (outro trilho "depois", fecho "sem registro"), o próximo passo (o salvo à mão manda; depois do Raio-X, o Mapa e o site), a oferta por lead (Raio-X antes de tudo, Encontrado para quem não tem site, Mapa só com equipe, "já temos site"), a vista por passo com o parado só quando espera você, nenhum R$ e o guia `jornada-do-cliente.md` igual ao gerado),
+`src/operations-jornada.test.ts` (a jornada do cliente, 15/10/2026: o passo atual pelo retrato, o caminho de cada funil (PRUMO com os dois trilhos, Site sem Mapa, Iris e estamparias no caminho curto, Plus pela oferta), o estado de cada passo (outro trilho "depois", fecho "sem registro"), o próximo passo (o salvo à mão manda; depois do Raio-X, o Mapa e o site), a oferta por lead (Raio-X antes de tudo, Encontrado para quem não tem site, Mapa só com equipe, "já temos site"; e a oferta
+sob medida: a tabela de casos em que o que o Raio-X achou ordena as ofertas e entra no porquê com o número, e o porte do CNPJ põe o Mapa agora), a vista por passo com o parado só quando espera você, nenhum R$ e o guia `jornada-do-cliente.md` igual ao gerado),
 `src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o

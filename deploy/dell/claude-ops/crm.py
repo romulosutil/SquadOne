@@ -91,7 +91,16 @@ const norm = (k) => String(k).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
 // Google Maps e Nota Google entram desde 14/10/2026: a revisão dos prospects (Iris, estamparias, PRUMO)
 // mostra a nota e abre o Maps. O telefone do Google segue fora (contato cru; o WhatsApp vem na coluna dele).
 const FORA = new Set(['briefing', 'endereco', 'telefone', 'telefone_no_google', 'instagram', 'maps_url', 'nota', 'avaliacoes', 'content_md']);
-const ler = (no, chave) => {
+// Porte pelo CNPJ (15/10/2026): o Briefing fica fora (texto longo), mas a classe da Receita que o filtro de
+// porte do Lead Scout grava no começo dele ("CNPJ 12.345.678/0001-90 · EPP · capital ...", prumo-porte-cnpj.js)
+// vai sozinha na coluna porte: "EPP", "DEMAIS" ou vazia (não conferido). server/crm.ts decide o resto.
+const porteDoBriefing = (l) => {
+  const partes = txt(l['Briefing']).split(' · ');
+  if (!partes[0].startsWith('CNPJ ')) return '';
+  return partes[1] === 'EPP' ? 'EPP' : partes[1] === 'porte DEMAIS' ? 'DEMAIS' : '';
+};
+// `extra`: colunas calculadas da linha crua (antes de tirar as de FORA).
+const ler = (no, chave, extra) => {
   let itens;
   try { itens = $(no).all(); } catch (e) { return { colunas: [], linhas: [], erro: 'o nó "' + no + '" não rodou' }; }
   const falha = itens.map(i => i.json && i.json.error).find(Boolean);
@@ -100,11 +109,12 @@ const ler = (no, chave) => {
   const linhas = itens.map(i => i.json ?? {}).filter(l => txt(l[chave]))
     // wa_me e wa_link levam a mensagem inteira codificada: cortados em 500, a fila de envio
     // mostrava a primeira mensagem pela metade (26 de 39 em 08/10/2026).
-    .map(l => Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : 500)])));
-  return { colunas, linhas };
+    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : 500)])),
+      ...(extra ? extra(l) : {}) }));
+  return { colunas: extra ? [...colunas, ...Object.keys(extra({}))] : colunas, linhas };
 };
 const site = ler('Ler Leads', 'place_id');
-const prumo = ler('Ler Prospects', 'ID');
+const prumo = ler('Ler Prospects', 'ID', (l) => ({ porte: porteDoBriefing(l) }));
 // Iris e estamparias (14/10/2026): aba que falha vira fonte com erro, sem segurar o retrato.
 const iris = ler('Ler Clínicas', 'ID');
 const estampa = ler('Ler Estamparias', 'ID');
@@ -112,7 +122,7 @@ const registros = ler('Ler aba CRM', 'id');
 const agora = new Date().toISOString();
 const arquivo = (nome, dados) => [{ json: { arquivo: nome, site: site.linhas.length, prumo: prumo.linhas.length, iris: iris.linhas.length,
   estampa: estampa.linhas.length, registros: registros.linhas.length,
-  erro: dados.erro ?? '' }, binary: { data: { data: Buffer.from(JSON.stringify(dados), 'utf8').toString('base64'),
+  porte: prumo.linhas.filter(l => l.porte).length, erro: dados.erro ?? '' }, binary: { data: { data: Buffer.from(JSON.stringify(dados), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: nome } } }];
 // Sem Leads ou sem Prospects o retrato ficaria vazio: o anterior continua valendo e a Central mostra a falha.
 if (site.erro || prumo.erro) {
@@ -347,7 +357,7 @@ def linhas_de_mentira():
              "enviado_em": e, "respondeu_em": "", "visto_em": "", "wa_me": "", "wa_link": ""}
             for i, (s, e) in enumerate([("pronto", ""), ("enviado", "2026-09-29T12:00:00Z"), ("descartado", "")])]
     prumo = [{"row_number": "2", "ID": "teste-prumo-1", "Empresa": "Prospect teste", "WhatsApp": "(00) 0000-0000",
-              "Etapa": "Revisar", "Briefing": "texto longo", "Nota Google": "4,5 (10)"}]
+              "Etapa": "Revisar", "Briefing": "CNPJ 11.222.333/0001-81 · EPP · capital R$ 100 mil", "Nota Google": "4,5 (10)"}]
     crm = [{"em": "2026-09-30T12:00:00Z", "produto": "site", "id": "TESTE-SITE-1", "empresa": "Loja teste 1", "tipo": "nota",
             "texto": "nota de teste", "data": "", "origem": "Central"}]
     return site, prumo, crm
@@ -413,9 +423,10 @@ def testar(erro, auth):
         status, saidas = ultima_execucao(antes)
         m = (saidas.get("Montar retrato") or [{}])[0]
         conferir(f"execução {status}, arquivo {m.get('arquivo')}, site={m.get('site')} prumo={m.get('prumo')} iris={m.get('iris')}"
-                 f" estampa={m.get('estampa')} registros={m.get('registros')}",
+                 f" estampa={m.get('estampa')} registros={m.get('registros')} porte={m.get('porte')}",
                  status == "success" and m.get("arquivo") == "crm.json"
-                 and (m.get("site"), m.get("prumo"), m.get("iris"), m.get("estampa"), m.get("registros")) == (3, 1, 1, 0, 1))
+                 and (m.get("site"), m.get("prumo"), m.get("iris"), m.get("estampa"), m.get("registros"), m.get("porte"))
+                 == (3, 1, 1, 0, 1, 1))
 
         antes = ultimo_id()
         post(f"{LOCAL}/zz-teste-crm-atualizar", {"falhar": True}, chave)
