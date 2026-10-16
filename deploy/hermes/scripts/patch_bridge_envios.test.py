@@ -241,5 +241,56 @@ class NoMain(Base):
         self.assertRegex(self.fila()[0].name, r"^bridge-envios-\d+\.json$")
 
 
+@unittest.skipIf(patch.node() is None, "sem node: o bloco JS só roda no `--testar` do Dell")
+class TextoDoQueODonoEscreve(unittest.TestCase):
+    """16/10/2026: o bloco `squadone:envios` grava o texto do que o dono escreve a um LEAD em
+    enviadas.jsonl (para a conversa do lead em disco) e põe o id no owner_sent. Roda o bloco de
+    verdade no node, com a bridge de mentira; pasta própria `bridge-teste-*` no HOME do teste."""
+
+    def test_so_lead_so_fora_do_log_e_com_id(self):
+        casa = Path(tempfile.mkdtemp(prefix="bridge-teste-envios-"))
+        self.addCleanup(shutil.rmtree, casa, ignore_errors=True)
+        pasta = casa / ".local/state/whatsapp-observador"
+        sessao = casa / "sessao"
+        pasta.mkdir(parents=True)
+        sessao.mkdir()
+        (pasta / "leads.json").write_text(json.dumps(["2788887777", "1144445555"]))
+        (sessao / "lid-mapping-999_reverse.json").write_text(json.dumps("5511944445555"))
+        lead, amigo = "5527988887777@s.whatsapp.net", "5521911112222@s.whatsapp.net"
+        casos = [  # [chatId, senderAltId, id, message, ts]
+            [lead, "", "A", {"conversation": "Oi! Vi o seu anúncio"}, 1790770000],
+            [amigo, "", "B", {"conversation": "conversa pessoal"}, 1790770001],          # fora da lista
+            ["999@lid", "", "C", {"extendedTextMessage": {"text": "segue o link"}}, 1790770002],  # lid -> mapa
+            ["555@lid", lead, "D", {"imageMessage": {"caption": "o Raio-X"}}, 1790770003],  # lid -> senderAltId
+            [lead, "", "ECO1", {"conversation": "eco do Hermes"}, 1790770004],             # eco: nada
+            [lead, "", "E", {"reactionMessage": {"text": "x"}}, 1790770005],               # reação: nada
+        ]
+        bloco = "\n".join("    " + l for l in patch.ENVIOS.split("\n"))
+        prog = ("import path from 'path';\nconst saida = [];\nconst writeJsonLine = (p) => saida.push(p);\n"
+                f"process.env.HOME = {json.dumps(str(casa))};\nconst SESSION_DIR = {json.dumps(str(sessao))};\n"
+                "const getMessageContent = (m) => m.message;\n"
+                "const jidNormalizedUser = (j) => String(j).replace(/:\\d+@/, '@');\n"
+                "const recentlySentIds = new Set(['ECO1']);\n"
+                f"for (const [chatId, senderAltId, id, message, ts] of {json.dumps(casos)}) {{\n"
+                "  const msg = { key: { id }, message, messageTimestamp: ts };\n  (() => {\n" + bloco + "\n  })();\n}\n"
+                "console.log(JSON.stringify(saida));\n")
+        log = patch.rodar_js(prog)
+        # O log ganha o id, nunca o texto (o amigo também aparece no log, como sempre: o observador filtra).
+        self.assertEqual([l["id"] for l in log], ["A", "B", "C", "D"])
+        self.assertTrue(all(set(l) == {"event", "chatId", "ts", "id"} for l in log))
+        self.assertNotIn("anúncio", json.dumps(log, ensure_ascii=False))
+        linhas = [json.loads(l) for l in (pasta / "enviadas.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(linhas, [
+            {"chave": "2788887777", "ts": 1790770000, "texto": "Oi! Vi o seu anúncio", "id": "A"},
+            {"chave": "1144445555", "ts": 1790770002, "texto": "segue o link", "id": "C"},
+            {"chave": "2788887777", "ts": 1790770003, "texto": "[imagem] o Raio-X", "id": "D"},
+        ])
+        # Sem leads.json: nada é gravado (falha fechada).
+        (pasta / "enviadas.jsonl").unlink()
+        (pasta / "leads.json").unlink()
+        patch.rodar_js(prog.replace("globalThis.squadoneLeads", "globalThis.squadoneLeads2"))
+        self.assertFalse((pasta / "enviadas.jsonl").exists())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

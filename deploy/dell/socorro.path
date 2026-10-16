@@ -1,0 +1,9 @@
+[Unit]
+Description=Pedido de socorro do dell-status (verificação que acabou de entrar em falha)
+
+[Path]
+DirectoryNotEmpty=%h/.local/state/socorro/pedidos
+MakeDirectory=yes
+
+[Install]
+WantedBy=default.target

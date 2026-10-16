@@ -68,6 +68,22 @@
     WhatsApp é proibido, porque daria a decisão ao Hermes (regra 20).
     Sincronizar uma fonte (Pluggy, retrato do CRM, `status.json`) não é escrita
     de domínio: é cópia local do que a fonte já diz, e corrige-se na fonte.
+    **Exceção, 16/10/2026 (pedido do Rômulo: "as falhas têm que disparar o
+    Hermes para resolver"):** o `socorro` do Dell (`deploy/dell/socorro.py`,
+    disparado pelo `dell-status` quando uma verificação ENTRA em falha) pode
+    executar sozinho só o que está na lista fechada `REMEDIOS` daquele
+    arquivo: `systemctl --user restart` de hermes-gateway, hermes-dashboard,
+    hermes-google-browser, code-server, evolution-adaptador,
+    whatsapp-observador e whatsapp-observador-prumo; `docker restart` do
+    container do n8n (o mesmo do healthwatch) e `docker start` dos três
+    containers da Evolution. No máximo 2 tentativas por verificação a cada 6 h.
+    O Hermes entra só para **diagnosticar** (`hermes -z` sem terminal, arquivo
+    nem mensagens, no máximo 1 vez por verificação a cada 6 h e 6 por dia) e
+    pode escolher um remédio, que só vale se estiver na mesma lista; o resto
+    vira um pedido pronto para o Claude Code no aviso. Nada além disso:
+    nenhuma escrita de domínio, configuração, credencial, fluxo, compose,
+    apagar ou editar arquivo. O "Quebrou" sai igual; `~/.config/socorro/desligado`
+    (`socorro --desligar`) desliga tudo. Mexer na lista é mudar esta regra.
 11. O CRM (`/crm`, desde 30/09/2026 no lugar da Produção Auto) não tem etapa
     própria: a fonte da verdade são as planilhas (Leads do Site antes da venda,
     Prospects do PRUMO), lidas pelo retrato que o n8n grava em

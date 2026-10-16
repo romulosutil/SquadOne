@@ -17,6 +17,10 @@ containers (n8n, collector) e os scripts do Dell gravam, para que um fluxo
 sempre "responda a alguém" sem abrir rede nem firewall entre container e host.
 Formato, teto, silêncio e deduplicação: ver "fila de avisos" abaixo.
 
+Desde 16/10/2026, a verificação que ENTRA em falha também vira um pedido para o `socorro`
+(deploy/dell/socorro.py, outro processo, pelo socorro.path): remédio só da lista branca, diagnóstico
+do Hermes e um aviso com o resultado. O "Quebrou" continua saindo daqui, na hora. Ver "socorro" abaixo.
+
 Somente biblioteca padrão. Uso:
   dell-status                 # verifica, grava status.json, avisa e drena a fila
   dell-status --stdout        # só imprime o JSON; não grava nem avisa
@@ -2293,7 +2297,45 @@ def listar_instalados() -> None:
             print("  instalar: o mesmo comando acima")
 
 
-def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime) -> dict:
+# ---------------------------------------------------------------- socorro (16/10/2026)
+#
+# Pedido do Rômulo: "as falhas têm que disparar o Hermes para resolver". Quando uma verificação ENTRA
+# em falha, grava um pedido para o `socorro` (deploy/dell/socorro.py), que o `socorro.path` sobe em
+# outro processo: remédio só da lista branca (religar unit/container), depois o diagnóstico do Hermes,
+# e um aviso com o resultado. Aqui só se grava um arquivo: o laço de 1 min nunca espera o socorro, e o
+# "Quebrou" sai do mesmo jeito (com uma linha dizendo que o socorro foi chamado).
+
+SOCORRO = HOME / ".local/bin/socorro"
+SOCORRO_PEDIDOS = HOME / ".local/state/socorro/pedidos"
+SOCORRO_DESLIGADO = HOME / ".config/socorro/desligado"
+LINHA_DO_SOCORRO = "Socorro: vou tentar resolver sozinho (só religar o que é seguro) e mando o resultado em seguida."
+
+
+def socorro_desligado() -> bool:
+    return os.environ.get("SOCORRO_DESLIGADO", "").strip() not in ("", "0") or SOCORRO_DESLIGADO.exists()
+
+
+def pedir_socorro(checks: list[dict], estado_ant: dict, t: datetime) -> set[str]:
+    """Os ids para os quais o socorro foi chamado (só os que acabaram de entrar em falha). Desligado,
+    não instalado ou erro ao gravar: nenhum, e nada muda no aviso."""
+    novos = [c for c in checks if c["estado"] == "falha" and estado_ant.get(c["id"], {}).get("estado") != "falha"]
+    if not novos or socorro_desligado() or not SOCORRO.exists():
+        return set()
+    pedido = {"em": iso(t), "checks": [{k: c[k] for k in ("id", "grupo", "nome", "detalhe", "o_que_fazer") if c.get(k)}
+                                        for c in novos]}
+    try:
+        SOCORRO_PEDIDOS.mkdir(parents=True, exist_ok=True)
+        nome = f"pedido-{time.time_ns()}.json"
+        tmp = SOCORRO_PEDIDOS.parent / f".{nome}.tmp"  # fora da pasta: o path unit só vê o arquivo pronto
+        tmp.write_text(json.dumps(pedido, ensure_ascii=False))
+        tmp.replace(SOCORRO_PEDIDOS / nome)
+    except OSError as e:
+        log(f"socorro: pedido não gravado: {e}")
+        return set()
+    return {c["id"] for c in novos}
+
+
+def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro: set[str] | frozenset = frozenset()) -> dict:
     novo, quebrou, voltou, lembrar = {}, [], [], []
     for c in checks:
         ant = estado_ant.get(c["id"], {})
@@ -2315,7 +2357,7 @@ def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime) -> dict
 
     linhas = []
     if quebrou:
-        linhas += ["Quebrou:"] + [item(c) for c in quebrou]
+        linhas += ["Quebrou:"] + [item(c) + (f"\n  {LINHA_DO_SOCORRO}" if c["id"] in socorro else "") for c in quebrou]
     if lembrar:
         linhas += ["Continua fora:"] + [item(c) for c in lembrar]
     if voltou:
@@ -2376,7 +2418,12 @@ def main() -> None:
         estado_ant = json.loads(ESTADO.read_text())
     except (OSError, ValueError):
         estado_ant = {}
-    estado = avisar_transicoes(checks, estado_ant, t)
+    try:
+        socorro = pedir_socorro(checks, estado_ant, t)
+    except Exception as e:  # noqa: BLE001 — o socorro nunca cala o "Quebrou"
+        log(f"socorro: {type(e).__name__}: {e}")
+        socorro = set()
+    estado = avisar_transicoes(checks, estado_ant, t, socorro)
     for c in checks:
         c["desde"] = estado[c["id"]]["desde"]
     gravar(ESTADO, estado)

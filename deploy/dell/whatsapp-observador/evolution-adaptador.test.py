@@ -28,6 +28,9 @@ def carregar(nome, arquivo):
 
 
 ev = carregar("evolution_adaptador", "evolution-adaptador.py")
+# A conversa dos leads em disco nunca cai na pasta de verdade: o padrão do módulo aponta para um temporário.
+_CONVERSAS_TESTE = tempfile.mkdtemp(prefix="conversas-teste-")
+os.environ["WHATSAPP_CONVERSAS_DIR"] = _CONVERSAS_TESTE
 ob = carregar("observador", "observador.py")
 
 LEAD, LEAD2, OUTRO = "5527999887766", "5511988776655", "5521977776666"
@@ -130,13 +133,21 @@ class Traducao(unittest.TestCase):
         t = self.tr(upsert(LEAD, "Sim, quero ver"))
         self.assertEqual(t.linhas, [{"event": "ignored", "reason": ev.MOTIVO, "chatId": f"{LEAD}@s.whatsapp.net",
                                      "senderId": f"{LEAD}@s.whatsapp.net"}])
-        self.assertEqual(t.respostas, [{"chave": CHAVE, "ts": int(T0) - 5, "texto": "Sim, quero ver"}])
+        self.assertEqual(t.respostas, [{"chave": CHAVE, "ts": int(T0) - 5, "texto": "Sim, quero ver", "id": "A1"}])
+        self.assertEqual(t.enviadas, ())
 
     def test_o_prumo_escreveu_vira_owner_sent_sem_texto(self):
         t = self.tr(upsert(LEAD, "olá, tudo bem?", de_mim=True, ts=T0 - 30))
-        self.assertEqual(t.linhas, [{"event": "owner_sent", "chatId": f"{LEAD}@s.whatsapp.net", "ts": int(T0) - 30}])
+        self.assertEqual(t.linhas, [{"event": "owner_sent", "chatId": f"{LEAD}@s.whatsapp.net", "ts": int(T0) - 30,
+                                     "id": "A1"}])
         self.assertEqual(t.respostas, [])
         self.assertNotIn("olá", json.dumps(t.linhas))
+        # O texto vai só para o enviadas.jsonl (a conversa do lead em disco), com o mesmo id.
+        self.assertEqual(t.enviadas, ({"chave": CHAVE, "ts": int(T0) - 30, "texto": "olá, tudo bem?", "id": "A1"},))
+
+    def test_enviada_a_quem_nao_e_lead_nao_deixa_texto(self):
+        t = self.tr(upsert(OUTRO, "conversa pessoal", de_mim=True))
+        self.assertEqual((t.linhas, t.respostas, t.enviadas), ([], [], ()))
 
     def test_lead_leu_vira_owner_receipt(self):
         for corpo in (atualizacao(LEAD), atualizacao(LEAD, via_key=True), atualizacao(LEAD, "PLAYED"), atualizacao(LEAD, 4)):
@@ -736,8 +747,10 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         self.chamadas = []
         self.agora = T0
+        self.conversas = self.dir / "conversas"
         self.obs = ob.Observador(set(LEADS), chamar=self.n8n, avisar=lambda t: None, relogio=lambda: self.agora,
-                                 pasta=self.dir, bridge_js=self.dir / "nao-existe.js")
+                                 pasta=self.dir, bridge_js=self.dir / "nao-existe.js",
+                                 conversas=ob.Conversas(self.conversas, "prumo", relogio=lambda: self.agora))
         # leads.json foi gravado pelo próprio observador no __init__: é o que o adaptador lê.
         self.g = ev.Gravador(self.dir)
         self.adaptador = ev.Adaptador(self.g, relogio=lambda: self.agora, avisar=lambda t: None)
@@ -768,6 +781,25 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.alimentar(upsert(OUTRO, "oi", id_="1"))
         self.alimentar(upsert(OUTRO, "olá", de_mim=True, id_="2"))
         self.assertEqual(self.chamadas, [])
+        self.obs.tick()
+        self.assertFalse(self.conversas.exists() and list(self.conversas.glob("*.jsonl")))
+
+    def test_a_conversa_do_lead_fica_em_disco_nas_duas_direcoes(self):
+        self.alimentar(upsert(LEAD, "olá, vi seu anúncio", de_mim=True, id_="1", ts=T0 - 600))
+        self.alimentar(atualizacao(LEAD))  # recibo de leitura não é linha
+        self.alimentar(upsert(LEAD, "Sim, quero ver", id_="2", ts=T0 - 5))
+        self.obs.tick()
+        # A Evolution reentrega e o mesmo chip chega pela bridge: o mesmo id não vira segunda linha.
+        (self.dir / "respostas.jsonl").write_text(json.dumps({"chave": CHAVE, "ts": int(T0) - 5, "texto": "Sim, quero ver",
+                                                              "id": "2"}) + "\n")
+        self.obs.tick()
+        linhas = [json.loads(l) for l in (self.conversas / f"{CHAVE}.jsonl").read_text().splitlines()]
+        self.assertEqual(linhas, [
+            {"em": ob.iso_utc(T0 - 5), "direcao": "entrada", "texto": "Sim, quero ver", "origem": "prumo", "id": "2"},
+            {"em": ob.iso_utc(T0 - 600), "direcao": "saida", "texto": "olá, vi seu anúncio", "origem": "prumo", "id": "1"},
+        ])
+        self.assertNotIn(LEAD[-8:], (self.conversas / f"{CHAVE}.jsonl").read_text())  # nenhum número na linha
+        self.assertFalse((self.dir / "enviadas.jsonl").exists())  # o observador apagou depois de ler
 
     def test_o_texto_chega_para_classificar(self):
         self.alimentar(upsert(LEAD, "Oi", id_="1"))
@@ -815,4 +847,7 @@ class ComOObservadorDeVerdade(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=1)
+    try:
+        unittest.main(verbosity=1)
+    finally:
+        shutil.rmtree(_CONVERSAS_TESTE, ignore_errors=True)

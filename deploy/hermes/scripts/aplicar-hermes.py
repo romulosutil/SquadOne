@@ -283,7 +283,8 @@ def ajustar_graphify_fora_do_hermes() -> None:
 
 def main() -> None:
     copiar(AQUI / "SOUL.md", HERMES / "SOUL.md")
-    for nome in ("dell-operations-manager", "mapa-do-ecossistema"):
+    # conversa-do-lead (16/10/2026): ler a conversa gravada pelo observador e dizer o passo da jornada.
+    for nome in ("dell-operations-manager", "mapa-do-ecossistema", "conversa-do-lead"):
         skill = f"skills/{nome}/SKILL.md"
         copiar(AQUI / skill, HERMES / skill)
     for script in ("graphify_projetos.py", "asmr_coleta_gate.py", "sites_e_pendencias.py", "site_antes_venda_watcher.py"):

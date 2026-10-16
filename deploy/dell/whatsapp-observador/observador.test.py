@@ -26,6 +26,9 @@ import urllib.error
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
+# A conversa dos leads em disco (16/10/2026) nunca cai na pasta de verdade: o padrão do módulo é um temporário.
+_CONVERSAS_TESTE = tempfile.mkdtemp(prefix="conversas-teste-")
+os.environ["WHATSAPP_CONVERSAS_DIR"] = _CONVERSAS_TESTE
 spec = importlib.util.spec_from_file_location("observador", AQUI / "observador.py")
 ob = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ob)
@@ -115,8 +118,10 @@ class Base(unittest.TestCase):
         self.bridge = self.dir / "bridge.js"
         self.bridge.write_text("// >>> squadone:envios\n// >>> squadone:recibos\n// >>> squadone:respostas\n")
         self._sessao, ob.SESSAO_HERMES = ob.SESSAO_HERMES, self.dir
+        self.pasta_conversas = self.dir / "conversas"
         self.obs = ob.Observador({CHAVE, CHAVE2}, chamar=self.n8n, avisar=self.avisos.append,
-                                 relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado")
+                                 relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado",
+                                 conversas=ob.Conversas(self.pasta_conversas, "pessoal", relogio=lambda: self.agora))
 
     def tearDown(self):
         ob.SESSAO_HERMES = self._sessao
@@ -647,5 +652,126 @@ class Seguir(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class ConversaEmDisco(Base):
+    """A conversa de cada lead em WHATSAPP_CONVERSAS_DIR/<chave>.jsonl (contrato lido pela Central)."""
+
+    def gravar(self, nome, *linhas):
+        with open(self.obs.pasta / f"{nome}.jsonl", "a", encoding="utf-8") as f:
+            for l in linhas:
+                f.write(json.dumps(l, ensure_ascii=False) + "\n")
+
+    def linhas(self, chave=CHAVE):
+        arquivo = self.pasta_conversas / f"{chave}.jsonl"
+        return [json.loads(l) for l in arquivo.read_text(encoding="utf-8").splitlines()] if arquivo.exists() else []
+
+    def test_entrada_e_saida_com_texto_id_e_hora_utc(self):
+        self.gravar("respostas", {"chave": CHAVE, "ts": T0 - 60, "texto": "Sim, quero ver", "id": "M1"})
+        self.gravar("enviadas", {"chave": CHAVE, "ts": T0 - 30, "texto": "Oi! Segue o link", "id": "M2"})
+        self.passar(1)
+        self.assertEqual(self.linhas(), [
+            {"em": "2026-09-30T12:59:00Z", "direcao": "entrada", "texto": "Sim, quero ver", "origem": "pessoal", "id": "M1"},
+            {"em": "2026-09-30T12:59:30Z", "direcao": "saida", "texto": "Oi! Segue o link", "origem": "pessoal", "id": "M2"},
+        ])
+        self.assertFalse((self.obs.pasta / "enviadas.jsonl").exists())  # lido e apagado
+        # A enviada não vai ao n8n (o envio já foi marcado pela linha owner_sent do log).
+        self.assertFalse([c for c in self.n8n.chamadas if c[1] == "whatsapp-conversa"])
+
+    def test_mesmo_id_nao_entra_duas_vezes(self):
+        msg = {"chave": CHAVE, "ts": T0, "texto": "oi", "id": "M1"}
+        self.gravar("respostas", msg)
+        self.passar(1)
+        self.gravar("respostas", msg)  # reinício, replay ou o mesmo chip pelo outro observador
+        self.passar(1)
+        outro = ob.Conversas(self.pasta_conversas, "prumo", relogio=lambda: self.agora)
+        self.assertFalse(outro.anexar(CHAVE, "entrada", T0, "oi", "M1"))
+        self.assertEqual(len(self.linhas()), 1)
+
+    def test_sem_id_deduplica_por_direcao_hora_e_texto(self):
+        c = self.obs.conversa
+        self.assertTrue(c.anexar(CHAVE, "saida", T0, ""))
+        self.assertFalse(c.anexar(CHAVE, "saida", T0, ""))
+        self.assertTrue(c.anexar(CHAVE, "saida", T0 + 60, ""))
+        self.assertTrue(c.anexar(CHAVE, "entrada", T0, "ok", "X"))
+        self.assertFalse(c.anexar(CHAVE, "entrada", T0, "ok"))  # a mesma, por outro caminho sem id
+        self.assertEqual(len(self.linhas()), 3)
+
+    def test_quem_nao_e_lead_nao_tem_conversa(self):
+        self.gravar("respostas", {"chave": ob.chave_do_numero(OUTRO), "ts": T0, "texto": "conversa pessoal", "id": "P1"})
+        self.gravar("enviadas", {"chave": ob.chave_do_numero(OUTRO), "ts": T0, "texto": "oi mãe", "id": "P2"})
+        self.obs.linha(enviada(OUTRO, T0))
+        self.passar(1)
+        self.assertFalse(self.pasta_conversas.exists() and list(self.pasta_conversas.glob("*.jsonl")))
+
+    def test_owner_sent_sem_id_da_bridge_antiga_vira_saida_sem_texto(self):
+        self.obs.linha(enviada(LEAD, T0 - 100))
+        self.obs.linha(enviada(LEAD, T0 - 100))  # replay do log: não duplica
+        self.assertEqual(self.linhas(), [{"em": ob.iso_utc(T0 - 100), "direcao": "saida", "texto": "", "origem": "pessoal"}])
+
+    def test_owner_sent_com_id_espera_o_texto_do_enviadas(self):
+        linha = json.dumps({"event": "owner_sent", "chatId": f"{LEAD}@s.whatsapp.net", "ts": T0 - 100, "id": "M9"}) + "\n"
+        self.obs.linha(linha)
+        self.assertEqual(self.linhas(), [])
+        self.assertEqual([c[2]["direcao"] for c in self.n8n.chamadas if c[1] == "whatsapp-conversa"], ["saida"])  # n8n igual
+
+    def test_recibo_de_leitura_nao_e_linha(self):
+        self.obs.linha(recibo(LEAD, "lido", T0))
+        self.assertEqual(self.linhas(), [])
+
+    def test_texto_cortado_em_2000_e_sem_numero_na_linha(self):
+        self.obs.conversa.anexar(CHAVE, "entrada", T0, "a" * 5000, "L")
+        linha = self.linhas()[0]
+        self.assertEqual(len(linha["texto"]), 2000)
+        self.assertEqual(set(linha), {"em", "direcao", "texto", "origem", "id"})
+
+    def test_nome_do_arquivo_e_saneado(self):
+        self.assertEqual(ob.nome_da_conversa("27/../99887766 x"), "27_.._99887766_x")
+        self.assertEqual(ob.nome_da_conversa("site:abc.DEF-1_2"), "site:abc.DEF-1_2")
+        self.assertEqual(len(ob.nome_da_conversa("9" * 500)), 200)
+        for ruim in ("", None, "..", "."):
+            self.assertEqual(ob.nome_da_conversa(ruim), "")
+            self.assertFalse(self.obs.conversa.anexar(ruim, "entrada", T0, "x"))
+
+    def test_poda_o_que_passou_de_120_dias_uma_vez_por_dia(self):
+        c = ob.Conversas(self.pasta_conversas, "pessoal", relogio=lambda: self.agora)
+        self.agora = T0 - 200 * 86400
+        c.anexar(CHAVE, "entrada", self.agora, "velha", "V")
+        self.agora = T0
+        c.anexar(CHAVE, "entrada", T0 - 10 * 86400, "recente", "R")  # primeira escrita do dia: poda
+        self.assertEqual([l["texto"] for l in self.linhas()], ["recente"])
+        # No mesmo dia não relê nem regrava para podar.
+        with (self.pasta_conversas / f"{CHAVE}.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"em": "2020-01-01T00:00:00Z", "direcao": "entrada", "texto": "antiga", "origem": "x"}) + "\n")
+        c.anexar(CHAVE, "saida", T0, "nova", "N")
+        self.assertEqual([l["texto"] for l in self.linhas()], ["recente", "antiga", "nova"])
+        self.agora = T0 + 86400 + 1
+        c.anexar(CHAVE, "saida", self.agora, "amanhã", "A")
+        self.assertEqual([l["texto"] for l in self.linhas()], ["recente", "nova", "amanhã"])
+
+    def test_falha_ao_gravar_nao_derruba_o_fluxo(self):
+        self.pasta_conversas.parent.mkdir(parents=True, exist_ok=True)
+        self.pasta_conversas.write_text("é um arquivo, não uma pasta")
+        self.gravar("respostas", {"chave": CHAVE, "ts": T0, "texto": "Sim", "id": "F1"})
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.passar(1)
+            self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertIn("conversa não gravada", saida.getvalue())
+        self.assertNotIn("Sim", saida.getvalue())  # o journal não leva o texto
+        # A classificação seguiu igual.
+        self.assertEqual(len([c for c in self.n8n.chamadas if c[1] == "whatsapp-resposta"]), 1)
+
+    @unittest.skipIf(os.name == "nt", "permissões POSIX")
+    def test_pasta_700_e_arquivo_600(self):
+        self.obs.conversa.anexar(CHAVE, "entrada", T0, "oi", "P")
+        self.assertEqual(self.pasta_conversas.stat().st_mode & 0o777, 0o700)
+        self.assertEqual((self.pasta_conversas / f"{CHAVE}.jsonl").stat().st_mode & 0o777, 0o600)
+
+    def test_padrao_da_pasta_e_da_origem(self):
+        self.assertEqual(str(ob.CONVERSAS), _CONVERSAS_TESTE)  # o teste nunca toca a pasta de verdade
+        self.assertIn(ob.ORIGEM, ("pessoal", "prumo"))
+
+
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    try:
+        unittest.main(verbosity=2)
+    finally:
+        shutil.rmtree(_CONVERSAS_TESTE, ignore_errors=True)

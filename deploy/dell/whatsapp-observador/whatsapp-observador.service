@@ -3,6 +3,8 @@ Description=Observador do WhatsApp — conversa com lead marca a planilha (lê o
 After=hermes-gateway.service
 
 [Service]
+# A conversa dos leads vai para ~/.local/share/whatsapp-conversas (WHATSAPP_CONVERSAS_DIR), com origem "pessoal".
+Environment=OBSERVADOR_ORIGEM=pessoal
 ExecStart=/usr/bin/python3 %h/.local/bin/whatsapp-observador
 Restart=always
 RestartSec=15

@@ -8,8 +8,14 @@ Este remendo acrescenta três coisas, só leitura passiva (nada é enviado a
 ninguém). As duas primeiras vão ao bridge.log sem conteúdo:
 
 - `squadone:envios`: quando o dono escreve numa conversa 1:1 que não é a dele
-  mesmo, uma linha `{"event":"owner_sent","chatId","ts"}`. Eco do próprio Hermes
-  (recentlySentIds), reação, edição, apagar e voto em enquete não contam.
+  mesmo, uma linha `{"event":"owner_sent","chatId","ts","id"}` (o id da mensagem
+  desde 16/10/2026). Eco do próprio Hermes (recentlySentIds), reação, edição,
+  apagar e voto em enquete não contam. Desde 16/10/2026 (pedido do Rômulo: o
+  "em contato" precisa da conversa inteira para decidir a próxima mensagem),
+  quando o número é de LEAD (`leads.json`), o TEXTO vai, até 2000 caracteres, para
+  `~/.local/state/whatsapp-observador/enviadas.jsonl` (600) como
+  `{"chave","ts","texto","id"}`; o observador o põe na conversa do lead
+  (`~/.local/share/whatsapp-conversas/`) e apaga. Nunca no bridge.log.
 - `squadone:recibos`: quando uma mensagem do dono numa conversa 1:1 chega ou é
   lida, `{"event":"owner_receipt","chatId","status":"entregue"|"lido","ts"}`
   (3 = entregue; 4 lido e 5 ouviu = lido). No máximo uma linha por chat e
@@ -19,7 +25,7 @@ ninguém). As duas primeiras vão ao bridge.log sem conteúdo:
   resposta é negativa, robô ou interesse): o TEXTO do que um lead escreveu, até
   1000 caracteres (mídia vira "[áudio]", "[imagem] legenda"...), em
   ~/.local/state/whatsapp-observador/respostas.jsonl (600) como
-  `{"chave", "ts", "texto"}`. Só para número que está em `leads.json` da mesma
+  `{"chave", "ts", "texto", "id"}` (o id desde 16/10/2026). Só para número que está em `leads.json` da mesma
   pasta, a lista que o observador grava a partir das planilhas; sem a lista,
   nada. Amigos, família e clientes não são leads e não têm nada gravado. O
   observador repassa ao n8n e apaga o arquivo.
@@ -71,14 +77,55 @@ INICIO, FIM = "// >>> squadone:", "// <<< squadone:"
 
 # Envio: dentro do `if (!isSelfChat) {` do modo self-chat (grupo e status já saíram antes).
 ENVIOS = """// >>> squadone:envios (SquadOne deploy/hermes/scripts/patch_bridge_envios.py)
-// O dono escreveu numa conversa 1:1: só o chat e a hora vão para o log, nunca o conteúdo.
+// O dono escreveu numa conversa 1:1: só o chat, a hora e o id da mensagem vão para o log, nunca o conteúdo.
 // Eco do Hermes (recentlySentIds), reação, edição, apagar e voto não contam como envio.
+// 16/10/2026: o TEXTO do que o dono escreveu a um LEAD (número em leads.json) vai para enviadas.jsonl (600),
+// para a conversa do lead em disco (o observador lê e apaga). Número fora da lista: nada é gravado.
 try {
   const naoEEnvio = ['protocolMessage', 'reactionMessage', 'encReactionMessage', 'pollUpdateMessage', 'editedMessage',
     'keepInChatMessage', 'pinInChatMessage', 'senderKeyDistributionMessage', 'messageContextInfo'];
   const tipos = Object.keys(getMessageContent(msg) || {}).filter((k) => !naoEEnvio.includes(k));
   if (/@(s\\.whatsapp\\.net|lid)$/.test(chatId) && tipos.length && !recentlySentIds.has(msg.key.id)) {
-    writeJsonLine({ event: 'owner_sent', chatId: jidNormalizedUser(chatId), ts: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000) });
+    const ts = Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000);
+    const id = String(msg.key?.id || '');
+    writeJsonLine({ event: 'owner_sent', chatId: jidNormalizedUser(chatId), ts, ...(id ? { id } : {}) });
+    try {
+      const fs = process.getBuiltinModule('fs');
+      const pasta = path.join(process.env.HOME || '~', '.local', 'state', 'whatsapp-observador');
+      const lista = path.join(pasta, 'leads.json');
+      const st = fs.statSync(lista, { throwIfNoEntry: false });
+      const cache = globalThis.squadoneLeads ??= { mtime: -1, chaves: new Set() };
+      if (st && st.mtimeMs !== cache.mtime) {
+        cache.chaves = new Set(JSON.parse(fs.readFileSync(lista, 'utf8')));
+        cache.mtime = st.mtimeMs;
+      }
+      const usuario = (j) => String(j || '').replace(/[:@].*/, '');
+      let tel = '';
+      if (/@s\\.whatsapp\\.net$/.test(chatId)) tel = usuario(chatId);
+      else if (String(senderAltId || '').endsWith('@s.whatsapp.net')) tel = usuario(senderAltId);
+      else if (/@lid$/.test(chatId)) {
+        try { tel = String(JSON.parse(fs.readFileSync(path.join(SESSION_DIR, `lid-mapping-${usuario(chatId)}_reverse.json`), 'utf8'))); } catch {}
+      }
+      let d = tel.replace(/\\D/g, '');
+      if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+      const chave = d.length >= 10 && d.length <= 11 ? d.slice(0, 2) + d.slice(-8) : '';
+      if (st && chave && cache.chaves.has(chave)) {
+        const c = getMessageContent(msg) || {};
+        const legenda = (m) => String(m?.caption || '').trim();
+        const texto = String(
+          c.conversation ?? c.extendedTextMessage?.text
+          ?? (c.imageMessage ? ('[imagem] ' + legenda(c.imageMessage)).trim()
+            : c.videoMessage ? ('[vídeo] ' + legenda(c.videoMessage)).trim()
+            : c.audioMessage ? '[áudio]'
+            : c.documentMessage ? ('[documento] ' + String(c.documentMessage.fileName || '')).trim()
+            : c.stickerMessage ? '[figurinha]'
+            : c.contactMessage || c.contactsArrayMessage ? '[contato]'
+            : c.locationMessage ? '[localização]' : '')
+        ).slice(0, 2000);
+        fs.appendFileSync(path.join(pasta, 'enviadas.jsonl'),
+          JSON.stringify({ chave, ts, texto, ...(id ? { id } : {}) }) + '\\n', { mode: 0o600 });
+      }
+    } catch {}
   }
 } catch {}
 // <<< squadone:envios"""
@@ -154,8 +201,10 @@ try {
         : c.locationMessage ? '[localização]' : '')
     ).slice(0, 1000);
     if (texto) {
+      // id (16/10/2026): a conversa do lead em disco deduplica por ele (o mesmo chip também chega pela Evolution).
+      const id = String(msg.key?.id || '');
       fs.appendFileSync(path.join(pasta, 'respostas.jsonl'),
-        JSON.stringify({ chave, ts: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000), texto }) + '\\n',
+        JSON.stringify({ chave, ts: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000), texto, ...(id ? { id } : {}) }) + '\\n',
         { mode: 0o600 });
     }
   }
@@ -520,10 +569,11 @@ def testar(bridge: Path) -> int:
             saida = rodar_js(TESTE_ENVIOS.replace("CASOS", json.dumps(casos)).replace("BLOCO", bloco))
             self.assertEqual([s["chatId"] for s in saida],
                              ["5527988887777@s.whatsapp.net", "123456789@lid", "5527988887777@s.whatsapp.net"])
-            self.assertEqual(saida[0], {"event": "owner_sent", "chatId": "5527988887777@s.whatsapp.net", "ts": 1790770000})
+            self.assertEqual(saida[0], {"event": "owner_sent", "chatId": "5527988887777@s.whatsapp.net", "ts": 1790770000,
+                                        "id": "A"})
             self.assertEqual(saida[2]["ts"], 7)
             self.assertGreater(saida[1]["ts"], 1700000000)  # sem messageTimestamp: agora
-            self.assertTrue(all(set(s) == {"event", "chatId", "ts"} for s in saida))
+            self.assertTrue(all(set(s) == {"event", "chatId", "ts", "id"} for s in saida))  # o id, nunca o texto
 
         def test_recibos(self):
             lead, eu, eu_lid = "5527988887777@s.whatsapp.net", "5527999990000@s.whatsapp.net", "11112222@lid"

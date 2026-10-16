@@ -297,6 +297,58 @@ isso, menos ruído:
   o chip novo, a conversa com o Hermes é o "Você" (mensagem para si mesmo) da
   conta pareada, e o observador só vê as conversas desse número.
 
+### Socorro: a falha nova tenta se resolver (`socorro.*`, 16/10/2026)
+
+Pedido do Rômulo: "as falhas têm que disparar o Hermes para resolver". Exceção limitada da RULES 10
+(e do SOUL do Hermes), com a lista fechada em `REMEDIOS` do `socorro.py`:
+
+```
+dell-status (1 min) --falha NOVA--> ~/.local/state/socorro/pedidos/pedido-*.json   ("Quebrou" sai igual, + 1 linha)
+socorro.path (DirectoryNotEmpty) --> socorro.service (oneshot, outro processo; o laço de 1 min não espera)
+  1. espera 60 s e reconfere (dell-status --stdout): voltou sozinho (healthwatch) = fim, sem aviso
+  2. remédio da lista branca (no máximo 2 por verificação a cada 6 h), espera 90 s, reconfere
+  3. continua fora: UMA chamada `hermes -z -t todo -s mapa-do-ecossistema` com a leitura já coletada
+     (journal, systemctl status, docker ps/logs; telefone e token mascarados); 1 por verificação a cada
+     6 h, 6 por dia, 5 min. O Hermes devolve JSON: diagnóstico, um remédio OPCIONAL (só vale se estiver
+     na lista; quem executa é o socorro, com o mesmo teto) e o pedido pronto para o Claude Code
+  4. um aviso pela fila (lib/aviso.py, "🛟 Socorro do Dell"): "resolvido sozinho, <remédio>" (P2) ou
+     "continua fora ... Hermes: ... Peça ao Claude: ..." (P1)
+```
+
+- **A lista branca** (o único que muda estado): `systemctl --user restart` de `hermes-gateway`,
+  `hermes-dashboard`, `hermes-google-browser`, `code-server`, `evolution-adaptador`,
+  `whatsapp-observador`, `whatsapp-observador-prumo`; `docker restart licitacoes-automation-n8n-1` (o
+  mesmo do healthwatch) e `docker start` dos três containers da Evolution. Remédio automático por
+  verificação: `hermes` (gateway parado ou painel), `hermes-navegador`, `terminal`, `n8n` e o container
+  dele, `whatsapp-sessao` só quando a bridge não responde (sessão desconectada pede QR, não remédio),
+  `whatsapp-prumo` só para unit ou container fora (número caído pede QR) e `container:evolution-*`. O
+  resto (fluxos, rotinas, gerador, disco, PNCP, backup, fila de avisos...) vai direto ao diagnóstico.
+- **Por que `-t todo`:** o `hermes -z` aprova sozinho qualquer ferramenta que tiver; sem terminal,
+  arquivo, navegador nem mensagens, ele não muda nada nem fala com ninguém. A leitura é coletada pelo
+  socorro, por uma tabela fixa só de leitura. `SOCORRO_HERMES_TOOLSETS` e `SOCORRO_HERMES_SKILLS` mudam
+  isso (drop-in da unit); dar `terminal` ao Hermes tira a garantia: não faça sem decidir com o Rômulo.
+- **Chave:** `socorro --desligar "motivo"` (cria `~/.config/socorro/desligado`) ou `SOCORRO_DESLIGADO=1`.
+  Desligado, o dell-status não grava pedido (o "Quebrou" sai sem a linha do socorro) e o socorro descarta
+  o que houver. `socorro --ligar` volta.
+- **Ver:** `socorro --estado` (chave, tentativas e Hermes nas últimas 24 h, a lista branca), `socorro
+  --simular ID --detalhe "..."` (que remédio seria usado e se o teto deixa; não age), `journalctl --user
+  -u socorro` (cada passo; nunca o texto de conversa). Uso de modelo do último Hermes:
+  `~/.local/state/socorro/ultimo-uso-do-hermes.json`.
+
+Instalar (sessão no Dell, depois do merge e do `git pull` do `~/SquadOne`; nesta ordem, para o "Quebrou"
+nunca prometer um socorro que não vai rodar):
+
+```bash
+install -m 644 ~/SquadOne/deploy/dell/socorro.service ~/SquadOne/deploy/dell/socorro.path ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now socorro.path
+install -m 755 ~/SquadOne/deploy/dell/socorro.py ~/.local/bin/socorro
+install -m 755 ~/SquadOne/deploy/dell/dell-status.py ~/.local/bin/dell-status     # vale no próximo minuto
+python3 ~/SquadOne/deploy/dell/socorro.test.py && python3 ~/SquadOne/deploy/dell/dell-status.test.py
+socorro --estado
+# Ensaio (opcional): o navegador do Hermes não está no healthwatch, então só o socorro o religa.
+systemctl --user stop hermes-google-browser   # em ~1 min: "Quebrou" com a linha do socorro; ~3 min: "resolvido sozinho"
+```
+
 ### O que a auditoria de 11/10/2026 achou invisível
 
 Verificações que nasceram da auditoria da Mel: coisas que já tinham acontecido e a
@@ -2069,8 +2121,50 @@ não virar resposta. Para reprocessar um trecho, pare o serviço e ponha em
 
 Privacidade: desde 30/09/2026 o `bridge.log` guarda também os números para quem
 o Rômulo escreve e de quem leu o que ele mandou, nunca o conteúdo; o observador
-só manda ao n8n os que são lead (DDD + 8 dígitos) e não grava nada além da
-posição no log. Risco de banimento: o remendo só registra, no Dell, eventos que
+só manda ao n8n os que são lead (DDD + 8 dígitos) e, até 16/10/2026, não
+gravava nada além da posição no log (ver a conversa do lead, abaixo).
+
+**A conversa do lead em disco (16/10/2026).** Pedido do Rômulo: o "em contato"
+não mostrava o que estava acontecendo, e a etapa era adivinhada pelo trecho de 200
+caracteres da planilha. Agora as duas instâncias do observador gravam cada
+mensagem de **lead**, nas duas direções, em
+`~/.local/share/whatsapp-conversas/<chave>.jsonl` (`WHATSAPP_CONVERSAS_DIR`;
+pasta 700, arquivo 600; `<chave>` = a mesma DDD + 8 dígitos que vai ao n8n). Uma
+linha por mensagem: `{"em" (UTC ISO), "direcao": "entrada"|"saida", "texto" (até
+2000), "origem": "pessoal"|"prumo", "id"?}`; recibo de leitura não é linha. É o
+contrato que a Central lê (Ficha do CRM) e que o Hermes lê pela skill
+`conversa-do-lead`; ninguém envia nada a lead a partir dele (RULES 17).
+
+- **De onde vem cada direção.** `entrada`: o `respostas.jsonl` (o texto que a
+  bridge e o adaptador já gravavam), agora com o `id` da mensagem. `saida`: um
+  arquivo novo, `enviadas.jsonl` na mesma pasta de estado, que o remendo
+  `squadone:envios` da bridge e o `evolution-adaptador` gravam **só para lead**
+  (`{"chave","ts","texto","id"}`); o observador lê, grava na conversa e apaga, e
+  não manda ao n8n (o envio já é marcado pela linha `owner_sent`, que passa a levar
+  o `id`). Bridge com o remendo antigo (`owner_sent` sem `id`): a saída entra com
+  `texto` vazio.
+- **Deduplicação.** Desde 16/10 o Hermes e a Evolution estão no MESMO chip: a
+  mesma mensagem chega pelas duas instâncias, com o mesmo id. Por isso a
+  deduplicação lê o arquivo (sob flock em `.trava` na pasta), não a memória do
+  processo; sem id, vale direção + hora + texto. Um reinício que relê o log não
+  duplica.
+- **Poda e falha.** Uma vez por dia por arquivo, na primeira escrita, sai o que
+  passou de 120 dias. Erro ao gravar vai ao journal (sem o texto) e o resto do
+  observador segue igual.
+- **Instalar** (depois do merge e do `git pull`, nesta ordem: o observador antes,
+  para ninguém gravar `enviadas.jsonl` sem leitor):
+
+```bash
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
+cp ~/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador.service \
+   ~/SquadOne/deploy/dell/whatsapp-observador/whatsapp-observador-prumo.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user restart whatsapp-observador whatsapp-observador-prumo
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.py ~/.local/bin/ && systemctl --user restart evolution-adaptador
+python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --testar       # numa cópia
+~/.hermes/hermes-agent/venv/bin/python ~/SquadOne/deploy/hermes/scripts/aplicar-hermes.py   # SOUL, skill conversa-do-lead, remendo e restart do gateway
+python3 ~/SquadOne/deploy/dell/whatsapp-observador/observador.test.py && python3 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.test.py
+ls -la ~/.local/share/whatsapp-conversas/    # aparece com a primeira mensagem de lead
+``` Risco de banimento: o remendo só registra, no Dell, eventos que
 o aparelho conectado já recebe; não envia, não marca como lido e não muda
 presença. O risco de usar um cliente não oficial (Baileys) já existia antes.
 

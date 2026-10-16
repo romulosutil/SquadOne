@@ -14,6 +14,7 @@
   ],
   "arquivos": [
     {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
+    {"repo": "deploy/dell/socorro.py", "instalado": "~/.local/bin/socorro"},
     {"repo": "deploy/dell/atualizar-central.sh", "instalado": "~/.local/bin/atualizar-central"},
     {"repo": "deploy/dell/lib/aviso.py", "instalado": "~/.local/lib/mel/"},
     {"repo": "deploy/dell/auto-entrada.py", "instalado": "~/.local/bin/auto-entrada"},
@@ -73,6 +74,8 @@
      "instalado": "~/.hermes/skills/dell-operations-manager/SKILL.md", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/skills/mapa-do-ecossistema/SKILL.md",
      "instalado": "~/.hermes/skills/mapa-do-ecossistema/SKILL.md", "via": "aplicar-hermes"},
+    {"repo": "deploy/hermes/skills/conversa-do-lead/SKILL.md",
+     "instalado": "~/.hermes/skills/conversa-do-lead/SKILL.md", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/scripts/graphify_projetos.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/scripts/graphify_projetos.py", "instalado": "~/.local/bin/graphify-projetos"},
     {"repo": "deploy/hermes/scripts/run-graphify.sh", "instalado": "~/workspace/scripts/run-graphify.sh", "modo": "755"},

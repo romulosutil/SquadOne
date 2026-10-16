@@ -11,8 +11,11 @@ da bridge, o que o observador espera, numa pasta só do PRUMO:
     {"event":"ignored","reason":"self_chat_mode_rejects_non_self","chatId":"<tel>@s.whatsapp.net"}   o lead escreveu
     {"event":"owner_sent","chatId":...,"ts":...}                                                      o PRUMO escreveu
     {"event":"owner_receipt","chatId":...,"status":"lido","ts":...}                                   o lead leu
-- `respostas.jsonl`: {"chave","ts","texto"} do que um lead escreveu (a mesma convenção do remendo
-  `squadone:respostas`: mídia vira "[áudio]", "[imagem] legenda"...).
+- `respostas.jsonl`: {"chave","ts","texto","id"?} do que um lead escreveu (a mesma convenção do remendo
+  `squadone:respostas`: mídia vira "[áudio]", "[imagem] legenda"...);
+- `enviadas.jsonl` (16/10/2026): {"chave","ts","texto","id"?} do que o PRUMO escreveu a um lead, só para a
+  conversa do lead em disco (o observador grava em WHATSAPP_CONVERSAS_DIR e apaga este arquivo). O
+  `owner_sent` do log ganha o `id` da mensagem, nunca o texto.
 
 Uma SEGUNDA instância do observador (`whatsapp-observador-prumo.service`, o mesmo `observador.py`
 com `OBSERVADOR_LOG`/`OBSERVADOR_POSICAO` apontando para esta pasta) lê esses arquivos e fala com o
@@ -362,6 +365,9 @@ class Traducao(NamedTuple):
     ignorados: dict   # motivo -> quantos
     conexao: str      # 'open' | 'close' | 'connecting' | ''
     resumos: tuple = ()  # resumo_seguro() de cada item de mensagem, para o journal
+    # dicts para o enviadas.jsonl (16/10/2026): o texto que o PRUMO escreveu a um LEAD, para a conversa do
+    # lead em disco (observador, WHATSAPP_CONVERSAS_DIR). O evolution.log segue sem texto.
+    enviadas: tuple = ()
 
 
 def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instancia: str = "",
@@ -372,6 +378,7 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
     sem ela, nada é gravado."""
     linhas: list = []
     respostas: list = []
+    enviadas: list = []
     ignorados: dict = {}
     conexao = ""
     vistos = vistos if vistos is not None else Recentes()
@@ -444,7 +451,9 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
                 pular("envio_sem_conteudo")
                 continue
             ts = hora_do_evento(item.get("messageTimestamp"), agora)
-            linhas.append({"event": "owner_sent", "chatId": jid, "ts": int(ts)})
+            # O id (16/10/2026) diz ao observador que o texto vem no enviadas.jsonl; não é conteúdo.
+            linhas.append({"event": "owner_sent", "chatId": jid, "ts": int(ts), **({"id": str(id_msg)} if id_msg else {})})
+            enviadas.append({"chave": chave, "ts": int(ts), "texto": texto, **({"id": str(id_msg)} if id_msg else {})})
         elif de_mim is False:
             if vazia:
                 pular("recebida_sem_conteudo")
@@ -457,7 +466,8 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
                 # a Evolution entrega horas depois (reconexão) viraria resposta de gente. O texto segue, com a hora certa.
                 pular("entrada_atrasada")
             if texto:
-                respostas.append({"chave": chave, "ts": int(ts), "texto": texto})
+                # id (16/10/2026): a conversa do lead em disco deduplica por ele (o mesmo chip chega pela bridge).
+                respostas.append({"chave": chave, "ts": int(ts), "texto": texto, **({"id": str(id_msg)} if id_msg else {})})
         else:
             pular("sem_fromMe")
             continue
@@ -465,7 +475,7 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
         # antes da mensagem decifrada, com o mesmo id, não pode engolir a resposta de verdade.
         if id_msg:
             vistos.add(id_msg)
-    return Traducao(linhas, respostas, ignorados, conexao, tuple(resumos))
+    return Traducao(linhas, respostas, ignorados, conexao, tuple(resumos), tuple(enviadas))
 
 
 # ------------------------------------------------------------------ arquivos
@@ -538,18 +548,20 @@ class Gravador:
                 # ensure_ascii: U+2028, U+2029 e NEL passariam crus pelo json.dumps e o splitlines() do observador
                 # quebraria a linha ao meio (o texto do lead se perderia).
                 self._anexar(caminho, "".join(json.dumps(l, ensure_ascii=True) + "\n" for l in t.linhas))
-            if t.respostas:
-                arquivo = self.pasta / "respostas.jsonl"
+            for nome, itens in (("respostas.jsonl", t.respostas), ("enviadas.jsonl", t.enviadas)):
+                if not itens:
+                    continue
+                arquivo = self.pasta / nome
                 try:
                     cheio = arquivo.stat().st_size > self.limite_respostas
                 except OSError:
                     cheio = False
                 if cheio:
                     # Ninguém está consumindo: texto de lead não fica acumulando em disco.
-                    self.respostas_descartadas += len(t.respostas)
-                    return
+                    self.respostas_descartadas += len(itens)
+                    continue
                 # O observador troca o nome do arquivo para ler; abrir a cada escrita recria sem perder linha.
-                self._anexar(arquivo, "".join(json.dumps(r, ensure_ascii=True) + "\n" for r in t.respostas))
+                self._anexar(arquivo, "".join(json.dumps(r, ensure_ascii=True) + "\n" for r in itens))
 
 
 # ------------------------------------------------------------------ aviso

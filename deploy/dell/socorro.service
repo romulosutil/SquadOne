@@ -1,0 +1,11 @@
+[Unit]
+Description=Socorro do Dell: falha nova tenta remédio da lista branca, depois diagnóstico do Hermes (16/10/2026)
+
+[Service]
+Type=oneshot
+# Sobe pelo socorro.path quando o dell-status grava um pedido. Pior caso: 60 s + remédio + 90 s + Hermes (5 min)
+# + remédio + 90 s + três reconferências: bem abaixo do teto.
+ExecStart=/usr/bin/python3 %h/.local/bin/socorro
+TimeoutStartSec=30min
+# O hermes -z roda dentro desta unit (com os servidores MCP que a config dele sobe): folga de memória.
+MemoryMax=1G

@@ -8,8 +8,10 @@ Hermes.
 
   python3 deploy/dell/dell-status.test.py
 """
+import contextlib
 import importlib.util
 import inspect
+import io
 import json
 import os
 import shutil
@@ -1532,6 +1534,86 @@ class WhatsAppPrumo(unittest.TestCase):
 
     def test_esta_na_lista_de_verificacoes_do_main(self):
         self.assertIn("whatsapp_prumo", inspect.getsource(ds.main))
+
+
+class Socorro(unittest.TestCase):
+    """16/10/2026: falha NOVA grava um pedido para o socorro (outro processo) e o "Quebrou" ganha uma linha.
+    Pasta temporária no lugar de ~/.local; o envio pelo Hermes é dublê."""
+
+    T = datetime(2026, 10, 16, 15, 0, tzinfo=timezone.utc)
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-socorro-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.bin = self.dir / "bin/socorro"
+        self.bin.parent.mkdir()
+        self.bin.write_text("#!/bin/sh\n")
+        for nome, valor in (("SOCORRO", self.bin), ("SOCORRO_PEDIDOS", self.dir / "estado/pedidos"),
+                            ("SOCORRO_DESLIGADO", self.dir / "config/desligado")):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+        env = mock.patch.dict(os.environ, {"SOCORRO_DESLIGADO": ""})
+        env.start()
+        self.addCleanup(env.stop)
+        self.enviadas = []
+        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.enviadas.append(m) or True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def checks(self, estado="falha"):
+        return [ds.check("n8n", "servicos", "n8n", estado, "Sem resposta: timed out", o_que_fazer="Peça ao Claude."),
+                ds.check("disco", "maquina", "Disco", "ok", "40% usado")]
+
+    def pedidos(self):
+        return [json.loads(f.read_text()) for f in sorted((self.dir / "estado/pedidos").glob("*.json"))]
+
+    def test_falha_nova_grava_um_pedido_e_o_quebrou_diz(self):
+        ids = ds.pedir_socorro(self.checks(), {"n8n": {"estado": "ok"}}, self.T)
+        self.assertEqual(ids, {"n8n"})
+        (p,) = self.pedidos()
+        self.assertEqual(p["checks"], [{"id": "n8n", "grupo": "servicos", "nome": "n8n", "detalhe": "Sem resposta: timed out",
+                                        "o_que_fazer": "Peça ao Claude."}])
+        self.assertEqual(list((self.dir / "estado").glob(".*.tmp")), [])
+        ds.avisar_transicoes(self.checks(), {"n8n": {"estado": "ok"}}, self.T, ids)
+        self.assertIn("Quebrou:", self.enviadas[0])
+        self.assertIn(ds.LINHA_DO_SOCORRO, self.enviadas[0])
+
+    def test_falha_que_continua_nao_pede_de_novo(self):
+        self.assertEqual(ds.pedir_socorro(self.checks(), {"n8n": {"estado": "falha"}}, self.T), set())
+        self.assertEqual(self.pedidos(), [])
+
+    def test_ok_e_atencao_nao_pedem(self):
+        self.assertEqual(ds.pedir_socorro(self.checks("atencao"), {}, self.T), set())
+
+    def test_desligado_pela_marca_ou_pelo_ambiente_nao_pede_e_o_quebrou_fica_igual(self):
+        (self.dir / "config").mkdir()
+        (self.dir / "config/desligado").write_text("")
+        self.assertEqual(ds.pedir_socorro(self.checks(), {}, self.T), set())
+        (self.dir / "config/desligado").unlink()
+        with mock.patch.dict(os.environ, {"SOCORRO_DESLIGADO": "1"}):
+            self.assertEqual(ds.pedir_socorro(self.checks(), {}, self.T), set())
+        self.assertEqual(self.pedidos(), [])
+        ds.avisar_transicoes(self.checks(), {}, self.T, set())
+        self.assertIn("Quebrou:", self.enviadas[0])
+        self.assertNotIn("Socorro", self.enviadas[0])
+
+    def test_sem_o_socorro_instalado_nao_pede(self):
+        self.bin.unlink()
+        self.assertEqual(ds.pedir_socorro(self.checks(), {}, self.T), set())
+
+    def test_erro_ao_gravar_nao_derruba(self):
+        (self.dir / "estado").write_text("é um arquivo")
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ds.pedir_socorro(self.checks(), {}, self.T), set())
+
+    def test_avisar_transicoes_sem_socorro_e_o_de_antes(self):
+        ds.avisar_transicoes(self.checks(), {}, self.T)
+        self.assertNotIn("Socorro", self.enviadas[0])
+
+    def test_main_pede_o_socorro_antes_de_avisar(self):
+        fonte = inspect.getsource(ds.main)
+        self.assertLess(fonte.index("pedir_socorro"), fonte.index("avisar_transicoes"))
 
 
 if __name__ == "__main__":

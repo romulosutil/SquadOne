@@ -61,10 +61,27 @@ aceito: reiniciar o serviço com uma conversa ainda juntando perde a
 classificação dela (o SIGTERM tenta mandar antes de sair), e a marcação de
 "respondeu" pelo log continua valendo.
 
-Privacidade: o bridge.log não tem conteúdo; texto só de quem é lead, e só até
-o n8n receber. Só o número de quem é lead sai daqui (DDD + 8 últimos dígitos).
-Grupos, canais, listas de transmissão e status são ignorados. O log do serviço
-mostra só DDD + 2 últimos dígitos, nunca o texto.
+Conversa do lead em disco (16/10/2026, pedido do Rômulo: "o 'em contato' não tem
+visão clara do que tá acontecendo"; o Jev ou o Hermes precisam LER a conversa para
+decidir a próxima mensagem, em vez de adivinhar a etapa pelo trecho de 200
+caracteres da planilha). Além do que vai ao n8n, cada mensagem de LEAD vira uma
+linha em WHATSAPP_CONVERSAS_DIR/<chave>.jsonl (pasta 700, arquivo 600):
+{"em" (UTC), "direcao": "entrada"|"saida", "texto" (até 2000), "origem", "id"?}.
+"entrada" vem do respostas.jsonl (o texto que o lead escreveu); "saida", do
+enviadas.jsonl (o texto que o Rômulo escreveu a um lead: remendo `squadone:envios`
+da bridge e o evolution-adaptador) ou, com a bridge antiga (owner_sent sem id),
+uma linha com texto vazio. Recibo de leitura não é linha. Deduplica pelo id da
+mensagem lendo o arquivo (os dois observadores veem o MESMO chip desde 16/10, e
+um reinício relê o log), poda o que passou de 120 dias uma vez por dia por
+arquivo e nunca derruba o fluxo: falha de gravação vai ao journal e segue.
+A Central lê esses arquivos (/crm, Ficha) e o Hermes também (skill
+`conversa-do-lead`); ninguém envia nada a lead a partir deles (RULES 17).
+
+Privacidade: o bridge.log não tem conteúdo; texto só de quem é lead. Só o número
+de quem é lead sai daqui (DDD + 8 últimos dígitos), e a linha da conversa não
+leva número nenhum (a chave é o nome do arquivo). Grupos, canais, listas de
+transmissão e status são ignorados. O log do serviço mostra só DDD + 2 últimos
+dígitos, nunca o texto.
 """
 from __future__ import annotations
 
@@ -79,7 +96,14 @@ import time
 import urllib.error
 import urllib.request
 from collections import deque
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+
+try:  # no Dell sempre existe; no PC (testes) não: a trava vira no-op
+    import fcntl
+except ImportError:  # pragma: no cover — Windows
+    fcntl = None
 
 HOME = Path.home()
 LOG_DA_BRIDGE = Path(os.environ.get("OBSERVADOR_LOG", HOME / ".hermes/whatsapp/bridge.log"))
@@ -122,6 +146,13 @@ MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos", "squadone:respostas"
 ROTULO = {"site": "Site antes da venda", "prumo": "PRUMO", "iris": "Iris · Clínicas", "estampa": "CRM de estamparia"}
 FEITO = {"entrada": "respondeu", "saida": "recebeu mensagem sua", "lido": "leu"}
 COMANDO_REMENDO = "python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --reiniciar"
+# Conversa do lead em disco (contrato lido pela Central: não mude sem mudar o server).
+CONVERSAS = Path(os.environ.get("WHATSAPP_CONVERSAS_DIR") or HOME / ".local/share/whatsapp-conversas")
+# Quem gravou a linha: o número pessoal (bridge do Hermes) ou o do PRUMO (Evolution).
+ORIGEM = (os.environ.get("OBSERVADOR_ORIGEM") or "").strip() or ("prumo" if "prumo" in str(LOG_DA_BRIDGE) else "pessoal")
+GUARDAR_CONVERSA_S = 120 * 86400
+PODAR_A_CADA_S = 86400
+MAX_TEXTO_NA_CONVERSA = 2000
 
 
 def log(*a):
@@ -335,13 +366,142 @@ def texto_do_lote(lote: list[dict]) -> str:
     return f"Registrado: você abordou {len(lote)} leads:\n" + "\n".join(f"• {item(a)}" for a in lote)
 
 
+# ------------------------------------------------------------------ conversa do lead em disco
+
+def nome_da_conversa(chave) -> str:
+    """O nome do arquivo (sem .jsonl): a chave com só [A-Za-z0-9_:.-], até 200. '' = não grava."""
+    nome = re.sub(r"[^A-Za-z0-9_:.-]", "_", str(chave or ""))[:200]
+    return "" if nome.strip(".") == "" else nome
+
+
+def iso_utc(instante: float) -> str:
+    return datetime.fromtimestamp(instante, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _instante_iso(txt) -> float | None:
+    try:
+        return datetime.fromisoformat(str(txt).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+class Conversas:
+    """WHATSAPP_CONVERSAS_DIR/<chave>.jsonl: uma linha por mensagem de lead, nas duas direções.
+
+    Os dois observadores (número pessoal e PRUMO) gravam na mesma pasta e, desde 16/10/2026,
+    veem o mesmo chip: a mesma mensagem chega pelos dois, com o mesmo id. Por isso a deduplicação
+    lê o ARQUIVO (sob flock numa trava da pasta), e não uma memória do processo; o arquivo de um
+    lead é pequeno (120 dias de conversa). Linha sem id (bridge antiga) deduplica por direção,
+    hora e texto. `anexar` nunca levanta: a conversa é um extra, a marcação da planilha não pode
+    parar por ela."""
+
+    def __init__(self, pasta: Path = CONVERSAS, origem: str = ORIGEM, relogio=time.time):
+        self.pasta, self.origem, self.relogio = Path(pasta), origem, relogio
+        self.podado: dict[str, float] = {}  # nome -> quando foi podado (uma vez por dia por arquivo)
+
+    def anexar(self, chave: str, direcao: str, quando: float, texto: str = "", id_msg=None) -> bool:
+        """True se a linha foi gravada; False se já estava lá, se a chave/direção não serve ou se falhou."""
+        try:
+            return self._anexar(chave, direcao, quando, texto, id_msg)
+        except Exception as e:  # noqa: BLE001 — nunca derruba o laço do observador
+            log(f"conversa não gravada ({mascarar(str(chave))}): {type(e).__name__}: {e}"[:300])
+            return False
+
+    @contextmanager
+    def _trava(self):
+        if fcntl is None:
+            yield
+            return
+        fd = os.open(self.pasta / ".trava", os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)  # fechar solta o flock
+
+    def _anexar(self, chave, direcao, quando, texto, id_msg) -> bool:
+        nome = nome_da_conversa(chave)
+        if not nome or direcao not in ("entrada", "saida"):
+            return False
+        self.pasta.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            os.chmod(self.pasta, 0o700)
+        except OSError:
+            pass
+        linha = {"em": iso_utc(quando), "direcao": direcao, "texto": str(texto or "")[:MAX_TEXTO_NA_CONVERSA],
+                 "origem": self.origem}
+        if id_msg:
+            linha["id"] = str(id_msg)[:200]
+        arquivo = self.pasta / f"{nome}.jsonl"
+        with self._trava():
+            existentes = self._ler(arquivo)
+            if any(self._mesma(linha, e) for e in existentes):
+                return False
+            if self.relogio() - self.podado.get(nome, 0.0) >= PODAR_A_CADA_S:
+                self.podado[nome] = self.relogio()
+                self._podar(arquivo, existentes)
+            # ensure_ascii: U+2028/U+2029 no texto do lead não quebram a linha para quem lê com splitlines().
+            dados = (json.dumps(linha, ensure_ascii=True) + "\n").encode("utf-8")
+            fd = os.open(arquivo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                os.write(fd, dados)  # uma escrita por linha, com O_APPEND
+            finally:
+                os.close(fd)
+        return True
+
+    @staticmethod
+    def _ler(arquivo: Path) -> list[dict]:
+        try:
+            bruto = arquivo.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            return []
+        linhas = []
+        for texto in bruto.splitlines():
+            try:
+                d = json.loads(texto)
+            except ValueError:
+                continue
+            if isinstance(d, dict):
+                linhas.append(d)
+        return linhas
+
+    @staticmethod
+    def _mesma(nova: dict, velha: dict) -> bool:
+        if nova.get("id") and velha.get("id"):
+            return nova["id"] == velha["id"]
+        # Um dos lados sem id (bridge antiga, ou a mesma mensagem por outro caminho): direção, hora e texto.
+        return all(nova.get(k) == velha.get(k) for k in ("direcao", "em", "texto"))
+
+    def _podar(self, arquivo: Path, existentes: list[dict]) -> None:
+        """Tira o que passou de 120 dias (e linha ilegível); troca atômica, 600. Nada a tirar = não regrava."""
+        if not existentes and not arquivo.exists():
+            return
+        limite = self.relogio() - GUARDAR_CONVERSA_S
+        ficam = [e for e in existentes if (t := _instante_iso(e.get("em"))) is not None and t >= limite]
+        try:
+            total = sum(1 for l in arquivo.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip())
+        except FileNotFoundError:
+            return
+        if len(ficam) == total:
+            return
+        tmp = arquivo.with_name(f".{arquivo.name}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write("".join(json.dumps(e, ensure_ascii=True) + "\n" for e in ficam).encode("utf-8"))
+        os.replace(tmp, arquivo)
+        existentes[:] = ficam
+
+
 class Observador:
     """O que o leitor lembra entre linhas. `chamar`, `avisar` e `relogio` entram de fora nos testes."""
 
     def __init__(self, chaves: set[str], chamar=http, avisar=avisar_pelo_hermes, relogio=time.time,
-                 telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None):
+                 telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None,
+                 conversas: "Conversas | Path | None" = None):
         agora = relogio()
         self.chaves = chaves
+        # A conversa de cada lead em disco (ver o topo); os testes passam uma pasta temporária.
+        self.conversa = conversas if isinstance(conversas, Conversas) else Conversas(conversas or CONVERSAS, relogio=relogio)
         # leads.json (para a bridge) e respostas.jsonl (da bridge) moram junto da posição.
         self.pasta = pasta or POSICAO.parent
         # chave -> {"mensagens": [{"em", "texto"}], "ultima": instante}: juntando até a conversa parar.
@@ -401,6 +561,10 @@ class Observador:
         chave = chave_do_numero(self.telefone(str(ev.get("chatId") or "")))
         if not chave or chave not in self.chaves:
             return
+        if tipo == "saida" and not ev.get("id"):
+            # Bridge sem o remendo de 16/10 (owner_sent sem id, e nenhum enviadas.jsonl): a conversa ganha a
+            # linha sem texto. Com o id, quem grava a saída é ler_enviadas(), com o texto.
+            self.conversa.anexar(chave, "saida", quando, "")
         evento = {"chave": chave, "direcao": tipo, "em": iso(quando)}
         if tipo == "entrada":
             antes = self.respostas.get(chave)
@@ -489,19 +653,41 @@ class Observador:
         except OSError as e:
             log("lista de leads não gravada para a bridge:", e)
 
-    def ler_respostas(self) -> None:
-        """Tira o respostas.jsonl do caminho (a bridge abre o arquivo a cada linha e cria outro),
-        lê e apaga. Um .lendo que sobrou de uma parada no meio é lido primeiro."""
-        arquivo, lendo = self.pasta / "respostas.jsonl", self.pasta / "respostas.lendo.jsonl"
+    def _tirar_e_ler(self, nome: str) -> list[str]:
+        """Tira <nome>.jsonl do caminho (a bridge abre o arquivo a cada linha e cria outro), lê e apaga.
+        Um <nome>.lendo.jsonl que sobrou de uma parada no meio é lido primeiro."""
+        arquivo, lendo = self.pasta / f"{nome}.jsonl", self.pasta / f"{nome}.lendo.jsonl"
         try:
             if not lendo.exists():
                 if not arquivo.exists() or arquivo.stat().st_size == 0:
-                    return
+                    return []
                 arquivo.replace(lendo)
             linhas = lendo.read_text(encoding="utf-8", errors="replace").splitlines()
             lendo.unlink()
         except OSError as e:
-            log("respostas não lidas:", e)
+            log(f"{nome} não lidas:", e)
+            return []
+        return linhas
+
+    def ler_enviadas(self) -> None:
+        """enviadas.jsonl ({chave, ts, texto, id}: o que o Rômulo escreveu a um lead, do remendo da bridge
+        ou do evolution-adaptador) vira a linha "saida" da conversa. Não vai ao n8n: o envio já foi
+        marcado pela linha owner_sent do log."""
+        agora = self.relogio()
+        for texto in self._tirar_e_ler("enviadas"):
+            try:
+                r = json.loads(texto)
+                chave, msg = str(r["chave"]), str(r.get("texto") or "").strip()
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+            if chave not in self.chaves:
+                continue
+            self.conversa.anexar(chave, "saida", self._hora_vista(r.get("ts"), agora), msg, r.get("id"))
+
+    def ler_respostas(self) -> None:
+        """Lê o respostas.jsonl da bridge (ver _tirar_e_ler) e junta as mensagens de cada lead."""
+        linhas = self._tirar_e_ler("respostas")
+        if not linhas:
             return
         agora = self.relogio()
         for texto in linhas:
@@ -514,6 +700,7 @@ class Observador:
             if chave not in self.chaves or not msg:
                 continue
             quando = self._hora_vista(r.get("ts"), agora)
+            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"))
             c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora})
             if len(c["mensagens"]) < MAX_MENSAGENS_POR_CONVERSA:
                 c["mensagens"].append({"em": iso(quando), "texto": msg[:1000]})
@@ -555,6 +742,7 @@ class Observador:
         if self.pendentes:
             self.esvaziar()
         self.ler_respostas()
+        self.ler_enviadas()
         self.fechar_conversas()
         if self.conversas_prontas:
             self.mandar_conversas()
@@ -610,12 +798,13 @@ def main() -> int:
             time.sleep(espera)
     onde: dict = {}
     obs = Observador(chaves)
-    log(f"acompanhando {LOG_DA_BRIDGE}")
+    log(f"acompanhando {LOG_DA_BRIDGE}; conversas dos leads em {obs.conversa.pasta} (origem {obs.conversa.origem})")
     try:
         return acompanhar(obs, onde)
     finally:
         obs.avisar_lote()  # parar o serviço não engole o aviso
         obs.ler_respostas()  # nem a conversa que ainda estava juntando
+        obs.ler_enviadas()
         obs.fechar_conversas(todas=True)
         obs.mandar_conversas()
         if pos := obs.posicao_segura(onde):

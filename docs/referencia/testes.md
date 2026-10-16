@@ -122,9 +122,14 @@ de fora; todo `var(--x)` da página é definido nela; a fonte é a Inter servida
 `src/blueprint/servico.test.ts` (16/10/2026: o service blueprint `docs/blueprint/servico.json` tem as cinco
 faixas e as três linhas, códigos únicos e no formato `SITE-3-B2`, todo passo com a ação do cliente, ligações
 para cartões que existem e todo arquivo citado presente no repositório)). O monitor do Dell tem os seus em Python:
-`python3 deploy/dell/dell-status.test.py` (115, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
+`python3 deploy/dell/dell-status.test.py` (123, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
 "WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
-segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês); a lib da fila de avisos,
+segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês; e o pedido
+ao socorro: só falha nova grava, desligado ou não instalado não grava e o "Quebrou" fica igual), o socorro,
+`python3 deploy/dell/socorro.test.py` (27, roda no PC e no Dell, 16/10/2026: a lista branca por verificação e detalhe,
+todo remédio é restart/start e nada mais, a leitura só lê, os tetos de 2 remédios e 1 Hermes por verificação a cada
+6 h e 6 Hermes por dia, a chave de desligar, remédio do Hermes fora da lista nunca roda, telefone e token mascarados
+no prompt e no aviso, e o atendimento inteiro com systemctl, docker, reconferência e Hermes dublês); a lib da fila de avisos,
 `python3 deploy/dell/lib/aviso.test.py` (formato igual ao do dell-status, cortes,
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
 `python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py`,
@@ -159,11 +164,15 @@ fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária
 `deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
 ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(49; nada sobe o serviço nem lê o `bridge.log` real),
-`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (81; webhooks de mentira, pasta temporária e HTTP no
+(62; nada sobe o serviço nem lê o `bridge.log` real; desde 16/10/2026 a conversa do lead em disco: entrada e saída com
+id e hora UTC, o mesmo id não entra duas vezes nem pelo outro observador, quem não é lead não tem arquivo, recibo não é
+linha, texto em 2000, nome saneado, poda de 120 dias uma vez por dia, falha ao gravar não derruba a classificação, e
+a pasta padrão aponta para um temporário antes do import),
+`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (83; webhooks de mentira, pasta temporária e HTTP no
 loopback em porta efêmera; o último grupo faz o `observador.py` de verdade ler o que o adaptador escreveu, com o n8n
-de mentira) e
-`deploy/hermes/scripts/patch_bridge_envios.test.py` (19). Os de
+de mentira, inclusive a conversa do lead nas duas direções) e
+`deploy/hermes/scripts/patch_bridge_envios.test.py` (20; desde 16/10/2026 roda no node o bloco `squadone:envios`: o
+texto do que o dono escreve só a lead vai para `enviadas.jsonl`, o log ganha o id e nunca o texto). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
 com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório
