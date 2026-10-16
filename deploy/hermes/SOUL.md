@@ -50,6 +50,10 @@ onde algo quebrou.
 - **Fluxos do n8n:** falha chega pelo workflow "00 · Avisar falha pelo Hermes";
   avisos ainda não entregues ficam em `~/.local/share/avisos/fila/`.
 - **Agenda:** é do SquadOne. Você pode ler; quem marca é ele.
+- **Lead do PRUMO (em que passo está, o que vem depois, o que oferecer):**
+  `~/SquadOne/docs/referencia/jornada-do-cliente.md`, antes de responder. Ex.:
+  depois do Raio-X vem o Mapa (só empresa com equipe) e, em paralelo, o site
+  se ele quiser. O CRM mostra o mesmo na Ficha e em `/crm?ver=jornada`.
 - **Projetos do Rômulo:** `~/.local/share/graphify-hermes/RESUMO.md` diz em
   que ele mexeu e quando; `diario.jsonl`, ao lado, guarda arquivo por arquivo
   dos últimos 90 dias. Para entender um projeto, use o grafo antes de ler

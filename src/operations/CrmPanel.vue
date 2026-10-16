@@ -6,6 +6,7 @@ import CrmFicha from './CrmFicha.vue'
 import CrmFilaDeEnvio from './CrmFilaDeEnvio.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
+import CrmJornadaVista from './CrmJornadaVista.vue'
 import CrmResultados from './CrmResultados.vue'
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import {
@@ -26,7 +27,8 @@ import './crm.css'
 // Tudo vem do retrato que o n8n grava das planilhas (server/crm.ts); a
 // Central não guarda etapa. A Colinha (?ver=colinha) é a exceção: texto
 // estático (colinha.ts), que aparece mesmo com o CRM fora do ar.
-type Vista = 'hoje' | 'funil' | 'resultados' | 'colinha'
+// Jornada (?ver=jornada, 15/10/2026): os leads por passo da jornada (jornada.ts), com quem espera quem.
+type Vista = 'hoje' | 'funil' | 'jornada' | 'resultados' | 'colinha'
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = ref<CrmVisao | null>(null)
@@ -66,7 +68,7 @@ const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
 function lerEndereco() {
   const q = new URLSearchParams(window.location.search)
   const ver = q.get('ver')
-  vista.value = ver === 'funil' || ver === 'resultados' || ver === 'colinha' ? ver : 'hoje'
+  vista.value = ver === 'funil' || ver === 'jornada' || ver === 'resultados' || ver === 'colinha' ? ver : 'hoje'
   const p = q.get('produto')
   produto.value = PRODUTOS.find(id => id === p) ?? 'todos'
   leadId.value = q.get('lead')
@@ -331,6 +333,7 @@ async function abrirColinha() {
       <nav class="crm-vistas" aria-label="Vistas do CRM">
         <a href="/crm" :aria-current="vista === 'hoje' ? 'page' : undefined" @click.prevent="trocarVista('hoje')">Hoje <span v-if="visao">{{ totalHoje }}</span></a>
         <a href="/crm?ver=funil" :aria-current="vista === 'funil' ? 'page' : undefined" @click.prevent="trocarVista('funil')">Funil <span v-if="visao">{{ leads.length }}</span></a>
+        <a href="/crm?ver=jornada" :aria-current="vista === 'jornada' ? 'page' : undefined" @click.prevent="trocarVista('jornada')">Jornada</a>
         <a href="/crm?ver=resultados" :aria-current="vista === 'resultados' ? 'page' : undefined" @click.prevent="trocarVista('resultados')">Resultados</a>
         <a href="/crm?ver=colinha" :aria-current="vista === 'colinha' ? 'page' : undefined" @click.prevent="trocarVista('colinha')">Colinha</a>
       </nav>
@@ -357,6 +360,7 @@ async function abrirColinha() {
       </p>
 
       <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
+      <CrmJornadaVista v-else-if="vista === 'jornada'" :leads="leads" @abrir="abrirFicha" />
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
       <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
 

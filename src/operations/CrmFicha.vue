@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import CrmJornada from './CrmJornada.vue'
 import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
@@ -236,6 +237,9 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       <ul><li v-for="d in lead.divergencias" :key="d">{{ d }}</li></ul>
       <small>A Central não corrige nada: vale a planilha. Confira a planilha ou a pasta.</small>
     </div>
+
+    <!-- Primeiro o mapa: em que passo está, o que fazer e o que oferecer (jornada.ts). -->
+    <CrmJornada :lead="lead" />
 
     <section v-if="lead.resposta" class="crm-ficha__bloco" aria-labelledby="crm-ficha-resposta">
       <h3 id="crm-ficha-resposta">O que respondeu</h3>

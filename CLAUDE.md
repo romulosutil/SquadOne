@@ -140,6 +140,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           (CrmColinha, CrmTrecho, CrmMomento, CrmObjecao). Esteira importada de server/site-mensagem.ts; R$ só do cardápio;
                           Respondido, Fonte e Fonte em dia "sob proposta" para o cliente (o valor fica como base interna);
                           sem cliente fundador nem desconto em troca de depoimento (08/10/2026)
+    jornada.ts            PURO (15/10/2026): a jornada do cliente do PRUMO, um passo por vez (quem faz, quando entra, o que tira,
+                          prazo, parado depois de N dias), os dois trilhos combináveis (por fora: Encontrado/Respondido/Anúncios/Redes;
+                          por dentro: Mapa → Fonte, só equipe) e a oferta por lead (agora, depois, não oferecer, a confirmar).
+                          Bloco "Jornada" na Ficha (CrmJornada) e /crm?ver=jornada (CrmJornadaVista); gera
+                          docs/referencia/jornada-do-cliente.md (scripts/jornada-guia.ts; o teste falha se ficar para trás)
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/auth/google.ts      invólucro fino sobre /api/auth/*
@@ -185,6 +190,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
 | Perfis, avaliação de turno, Luna, Jev | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
+| Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 
 **Agenda e turno.** O modelo decide a intenção (tipo, duração ou esforço, prazo); o servidor
