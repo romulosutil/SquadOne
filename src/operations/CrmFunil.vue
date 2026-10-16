@@ -5,7 +5,7 @@ import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroCont
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import {
-  ETAPAS_ABERTAS, SENTIDO_INICIAL, gravarVistaDoFunil, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDoProximoPasso,
+  SENTIDO_INICIAL, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDoProximoPasso,
   type FiltroDeEtapa, type OrdemDaLista, type Sentido, type VistaDoFunil,
 } from './funil-lista'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
@@ -134,7 +134,9 @@ const filtroDeEtapa = ref<FiltroDeEtapa>(props.etapaEmFoco ?? 'abertas')
 watch(() => props.etapaEmFoco, e => { if (e) filtroDeEtapa.value = e })
 const FILTROS_DE_ETAPA: FiltroDeEtapa[] = ['abertas', ...ETAPAS]
 const rotuloDoFiltro = (f: FiltroDeEtapa) => (f === 'abertas' ? 'Abertas' : ROTULO_DA_ETAPA[f])
-const daEtapa = (f: FiltroDeEtapa) => (f === 'abertas' ? ETAPAS_ABERTAS.flatMap(e => porEtapa.value[e])
+// Uma vez por mudança do funil: daEtapa('abertas') também conta o botão, e reordenar ~2000 leads a cada render pesa.
+const abertas = computed(() => juntarAbertas(porEtapa.value, peso))
+const daEtapa = (f: FiltroDeEtapa) => (f === 'abertas' ? abertas.value
   : f === 'perdido' && !mostrarDescartados.value ? porEtapa.value.perdido.filter(l => l.motivoPerda !== 'descartado') : porEtapa.value[f])
 const ordem = ref<OrdemDaLista>('acao')
 const sentido = ref<Sentido>('asc')

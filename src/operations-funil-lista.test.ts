@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  CHAVE_DA_VISTA_DO_FUNIL, gravarVistaDoFunil, lerVistaDoFunil, naEtapa, ordenarLista, sinalMaisForte, textoDoProximoPasso,
+  CHAVE_DA_VISTA_DO_FUNIL, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, naEtapa, ordenarLista, sinalMaisForte, textoDoProximoPasso,
   type Guardador,
 } from './operations/funil-lista.ts'
 import type { CrmLead } from './operations/types.ts'
@@ -10,6 +10,19 @@ const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
   id, produto: 'site', chave: id, empresa: id, nicho: '', cidade: '', etapa: 'contato', sinal: 'enviado', subEtapa: '',
   estadoNaPlanilha: 'enviado', leitura: 'desconhecida', marcos: {}, followupHoje: false, respostaNova: false, acervo: false,
   notas: 0, eventos: [], links: {}, divergencias: [], ...extra,
+})
+
+describe('juntarAbertas', () => {
+  it('a ação vale entre etapas: a resposta de Em contato vem antes dos prospects do Novo (16/10/2026)', () => {
+    const peso = (l: CrmLead) => (l.respostaNova ? 0 : l.followupHoje ? 1 : 6)
+    const porEtapa = {
+      novo: [lead('n1', { etapa: 'novo', triagem: { prioridade: 100 } }), lead('n2', { etapa: 'novo' })],
+      contato: [lead('c1', { followupHoje: true }), lead('c2'), lead('c3', { respostaNova: true })],
+      proposta: [lead('p1', { etapa: 'proposta' })],
+      ganho: [], perdido: [],
+    }
+    assert.deepEqual(juntarAbertas(porEtapa, peso).map((l) => l.id), ['c3', 'c1', 'p1', 'c2', 'n1', 'n2'])
+  })
 })
 
 describe('sinalMaisForte', () => {

@@ -42,6 +42,18 @@ export type FiltroDeEtapa = 'abertas' | CrmEtapa
 export const ETAPAS_ABERTAS: readonly CrmEtapa[] = ['novo', 'contato', 'proposta']
 export const naEtapa = (filtro: FiltroDeEtapa, etapa: CrmEtapa) => (filtro === 'abertas' ? ETAPAS_ABERTAS.includes(etapa) : filtro === etapa)
 
+/**
+ * "Abertas" numa lista só, na ordem da ação. Concatenadas etapa a etapa, os ~1900 prospects do Novo
+ * (Revisar, Prioridade 100) vinham antes de quem respondeu e do follow-up do dia, que estão em Em
+ * contato: a Lista abria com nada para fazer (visto na Central em 16/10/2026). Aqui o `peso` (o mesmo
+ * do quadro: resposta nova, follow-up, próximo passo...) vale entre etapas; no empate, Proposta, Em
+ * contato e Novo, nessa ordem; dentro da etapa fica a ordem que o quadro já deu (o sort é estável).
+ */
+export const ORDEM_DAS_ABERTAS: readonly CrmEtapa[] = ['proposta', 'contato', 'novo']
+export function juntarAbertas(porEtapa: Readonly<Record<CrmEtapa, readonly CrmLead[]>>, peso: (lead: CrmLead) => number): CrmLead[] {
+  return ORDEM_DAS_ABERTAS.flatMap((e) => porEtapa[e]).sort((a, b) => peso(a) - peso(b))
+}
+
 /** A classe é a mesma do cartão (.crm-sinal.is-…, BP-SINAL), para a cor dizer o mesmo nas duas vistas. */
 export interface SinalDaLinha { texto: string; classe: string }
 
