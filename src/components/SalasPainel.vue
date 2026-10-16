@@ -82,7 +82,7 @@ const automaticos = (d: Dominio) => trabalhadoresDaSala(d.id)
 <style>
 .salas { display: grid; gap: var(--esp-4); }
 .automaticos { display: grid; gap: var(--esp-1); }
-.automaticos h4 { margin: 0; font-size: 0.78rem; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+.automaticos h4 { margin: 0; font-size: 0.78rem; font-weight: var(--peso-forte); letter-spacing: 0.04em; text-transform: uppercase; }
 .automaticos ul { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
 .automaticos li { display: grid; gap: 0.1rem; font-size: 0.88rem; }
 .automaticos small { overflow-wrap: anywhere; }

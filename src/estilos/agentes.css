@@ -17,7 +17,7 @@
 .cartao--decisao { border-left-width: 8px; border-left-color: var(--acento); }
 .cartao--ajuste { border-left-width: 8px; border-left-color: var(--positivo); }
 .cartao--falha { border-left-width: 8px; border-left-color: var(--negativo); }
-.cartao h3 { margin: 0; font-size: 1.05rem; font-weight: 900; line-height: 1.25; overflow-wrap: anywhere; }
+.cartao h3 { margin: 0; font-size: 1.05rem; font-weight: var(--peso-forte); line-height: 1.25; overflow-wrap: anywhere; }
 .cartao p { margin: 0; overflow-wrap: anywhere; }
 
 .selos { display: flex; flex-wrap: wrap; gap: var(--esp-1); }
@@ -30,7 +30,7 @@
   background: var(--superficie-2);
   color: var(--texto);
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   letter-spacing: 0.03em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
@@ -60,7 +60,7 @@
   color: var(--texto);
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   text-decoration: none;
   cursor: pointer;
   box-shadow: var(--sombra-pequena);
@@ -84,17 +84,17 @@
   color: var(--texto);
   font: inherit;
   font-size: 1rem; /* 16 px: o iOS não dá zoom no foco */
-  font-weight: 600;
+  font-weight: var(--peso-texto);
 }
 textarea.campo { resize: vertical; line-height: 1.4; }
 .campo:disabled { opacity: 0.6; }
-.rotulo { display: grid; gap: var(--esp-1); font-size: 0.8rem; font-weight: 900; }
-.rotulo small { color: var(--texto-2); font-weight: 700; }
+.rotulo { display: grid; gap: var(--esp-1); font-size: 0.8rem; font-weight: var(--peso-forte); }
+.rotulo small { color: var(--texto-2); font-weight: var(--peso-medio); }
 .contador { justify-self: end; color: var(--texto-2); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 
 .quadro { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 2px dashed var(--borda); }
 
-.recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); font-size: 0.9rem; font-weight: 700; }
+.recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); font-size: 0.9rem; font-weight: var(--peso-medio); }
 .recado--erro { background: var(--erro-fundo); }
 .recado--atencao { background: var(--atencao-fundo); }
 .recado--ok { background: var(--ok-fundo); }
@@ -114,7 +114,7 @@ textarea.campo { resize: vertical; line-height: 1.4; }
   color: var(--texto);
   font: inherit;
   font-size: 0.88rem;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   cursor: pointer;
 }
 .segmentado button + button { border-left: var(--linha); }
@@ -124,7 +124,7 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 .segmentado--auto { width: fit-content; max-width: 100%; }
 
 /* Estado de agente: sempre com palavra; o ponto só reforça. */
-.estado { display: inline-flex; align-items: center; gap: var(--esp-1); font-size: 0.78rem; font-weight: 900; }
+.estado { display: inline-flex; align-items: center; gap: var(--esp-1); font-size: 0.78rem; font-weight: var(--peso-forte); }
 .estado::before { content: ""; width: 0.6rem; height: 0.6rem; flex-shrink: 0; border: 2px solid var(--borda); background: var(--superficie-2); }
 .estado.is-atendendo::before, .estado.is-em_bloco::before { background: var(--destaque); }
 .estado.is-com_agenda::before, .estado.is-proximo::before, .estado.is-responsavel::before { background: var(--positivo); }

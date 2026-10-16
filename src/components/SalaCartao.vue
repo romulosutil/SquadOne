@@ -124,7 +124,7 @@ const estadoDe = (p: Pessoa) => props.estados[p.id] ?? { estado: 'sem_sinal' as 
 .sala { display: grid; gap: var(--esp-3); padding: var(--esp-4); border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
 .sala__topo { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--esp-2); }
 .sala__nome { display: grid; gap: var(--esp-1); min-width: 0; flex: 1 1 12rem; }
-.sala__nome h3 { margin: 0; font-size: 1.1rem; font-weight: 950; overflow-wrap: anywhere; }
+.sala__nome h3 { margin: 0; font-size: 1.1rem; font-weight: var(--peso-titulo); overflow-wrap: anywhere; }
 .sala__nome p { margin: 0; overflow-wrap: anywhere; }
 .sala__pessoas { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .pessoa { display: grid; gap: var(--esp-2); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }

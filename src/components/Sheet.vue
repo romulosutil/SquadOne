@@ -243,7 +243,7 @@ html.com-folha { overflow: hidden; }
   border-bottom: var(--linha-fina);
 }
 .folha__titulos { min-width: 0; }
-.folha__topo h2 { margin: 0; font-size: 1.35rem; font-weight: 950; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.folha__topo h2 { margin: 0; font-size: 1.35rem; font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .folha__topo p { margin: var(--esp-1) 0 0; color: var(--texto-2); font-size: 0.85rem; }
 
 .folha__fechar {
@@ -255,7 +255,7 @@ html.com-folha { overflow: hidden; }
   background: var(--superficie-2);
   color: var(--texto);
   font: inherit;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   cursor: pointer;
 }
 .folha__fechar:disabled { opacity: 0.6; cursor: not-allowed; }

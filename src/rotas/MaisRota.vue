@@ -57,10 +57,10 @@ const links = computed(() => [
 <style>
 .mais { display: grid; gap: var(--esp-4); width: 100%; max-width: 56rem; margin: 0 auto; }
 .mais__bloco { display: grid; gap: var(--esp-3); padding: var(--esp-4); border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); color: var(--texto); }
-.mais__bloco h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: 950; letter-spacing: -0.03em; }
+.mais__bloco h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
 .mais__links { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .mais__links a { display: grid; gap: 0.1rem; min-height: 44px; padding: var(--esp-3) var(--esp-4); border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); text-decoration: none; }
 .mais__links a:hover { background: var(--destaque); color: var(--destaque-texto); }
-.mais__links small { color: inherit; opacity: 0.8; font-weight: 700; }
+.mais__links small { color: inherit; opacity: 0.8; font-weight: var(--peso-medio); }
 .mais__ops { display: grid; gap: var(--esp-4); }
 </style>

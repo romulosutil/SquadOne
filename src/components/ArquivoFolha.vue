@@ -75,9 +75,9 @@ const data = (iso?: string) => (iso ? new Date(iso).toLocaleDateString() : '')
 
 <style>
 .arquivo-grupo { display: grid; gap: var(--esp-2); }
-.arquivo-grupo h3 { margin: 0; font-size: 0.85rem; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+.arquivo-grupo h3 { margin: 0; font-size: 0.85rem; font-weight: var(--peso-forte); letter-spacing: 0.04em; text-transform: uppercase; }
 .arquivo-grupo ul { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .arquivo-grupo li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-2); align-items: center; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); }
-.arquivo-grupo li span { overflow-wrap: anywhere; font-weight: 700; }
+.arquivo-grupo li span { overflow-wrap: anywhere; font-weight: var(--peso-medio); }
 .arquivo-grupo li .recado { grid-column: 1 / -1; }
 </style>

@@ -429,9 +429,9 @@ function actorStyle(p: OfficePessoa) {
   background: var(--superficie);
   color: var(--texto);
 }
-.mapa__status { margin: 0; font-weight: 900; overflow-wrap: anywhere; }
+.mapa__status { margin: 0; font-weight: var(--peso-forte); overflow-wrap: anywhere; }
 .mapa__zoom { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
-.mapa__escala { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mapa__escala { font-size: 0.8rem; font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
 
 .office-viewport {
   position: relative;
@@ -582,7 +582,7 @@ function actorStyle(p: OfficePessoa) {
   transform: translate(-50%, -6px);
   font-size: 9px;
   line-height: 1;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   letter-spacing: 0.04em;
   white-space: nowrap;
   text-transform: uppercase;
@@ -701,7 +701,7 @@ function actorStyle(p: OfficePessoa) {
   transform: translateX(-50%);
   font-size: 8px;
   line-height: 1;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   white-space: nowrap;
   color: #000;
   background: #fff;
@@ -727,7 +727,7 @@ function actorStyle(p: OfficePessoa) {
   transform: translateX(-50%);
   font-size: 8px;
   line-height: 1;
-  font-weight: 900;
+  font-weight: var(--peso-forte);
   white-space: nowrap;
   color: #000;
   background: #f4f0e6;

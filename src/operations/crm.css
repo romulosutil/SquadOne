@@ -18,12 +18,12 @@
   color: var(--texto);
   font-family: var(--fonte);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: var(--peso-texto);
   line-height: 1.5;
 }
 .crm *, .crm-na-folha * { box-sizing: border-box; }
 .crm :is(h1, h2, h3),
-.crm-na-folha :is(h1, h2, h3) { margin: 0; font-weight: 950; letter-spacing: -0.04em; }
+.crm-na-folha :is(h1, h2, h3) { margin: 0; font-weight: var(--peso-titulo); letter-spacing: -0.04em; }
 .crm :is(button, a, input, select, textarea),
 .crm-na-folha :is(button, a, input, select, textarea) { font: inherit; }
 .crm :is(button, a),
@@ -43,7 +43,7 @@
 .crm .is-perdido, .crm-na-folha .is-perdido { --crm-cor: var(--crm-perdido); }
 
 .crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; padding: 0.85rem 1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
-.crm-kicker { display: block; color: var(--texto-2); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+.crm-kicker { display: block; color: var(--texto-2); font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.12em; text-transform: uppercase; }
 .crm-topo h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); line-height: 0.95; }
 .crm-topo__fonte { margin: 0.4rem 0 0; color: var(--texto-2); font-size: 0.85rem; }
 .crm-aviso,
@@ -56,7 +56,7 @@
 
 .crm-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .crm-vistas { display: flex; max-width: 100%; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
-.crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; color: var(--texto); font-weight: 900; text-decoration: none; white-space: nowrap; }
+.crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
 .crm-vistas a + a { border-left: var(--linha); }
 /* Com a Colinha são quatro vistas, ~385 px numa linha: no celular viram 2 × 2, e a
    linha entre elas é o fundo aparecendo no vão (como no .crm-resumo). */
@@ -68,18 +68,18 @@
 .crm-vistas a[aria-current="page"] { background: var(--texto); color: var(--superficie); }
 .crm-vistas a span { min-width: 1.7rem; padding: 0 0.35rem; border: 2px solid currentColor; font-size: 0.78rem; text-align: center; }
 .crm-produtos { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.crm-produtos button { padding: 0.45rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font-weight: 800; cursor: pointer; }
+.crm-produtos button { padding: 0.45rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font-weight: var(--peso-medio); cursor: pointer; }
 .crm-produtos button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); }
 .crm-produtos button[aria-pressed="true"]::before { content: "✓ "; }
 
 .crm-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; border: var(--linha); background: var(--borda); }
 .crm-resumo button { display: grid; width: 100%; height: 100%; justify-items: start; gap: 0.1rem; padding: 0.55rem 0.7rem; border: 0; background: var(--superficie); box-shadow: inset 0 -7px 0 var(--crm-cor); color: var(--texto); text-align: left; cursor: pointer; }
 .crm-resumo button:hover { background: var(--crm-cor); color: var(--cor-tinta); }
-.crm-resumo strong { font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: 950; line-height: 1; font-variant-numeric: tabular-nums; }
-.crm-resumo span { font-size: 0.8rem; font-weight: 800; }
+.crm-resumo strong { font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: var(--peso-titulo); line-height: 1; font-variant-numeric: tabular-nums; }
+.crm-resumo span { font-size: 0.8rem; font-weight: var(--peso-medio); }
 @media (min-width: 48rem) { .crm-resumo { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
-.crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.66rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .crm-tag.is-prumo { background: var(--barra-fundo); color: var(--cor-papel-forte); }
 .crm-tag.is-iris { background: var(--acento); color: var(--cor-tinta); }
 .crm-tag.is-estampa { background: var(--texto); color: var(--superficie); }
@@ -98,20 +98,20 @@
 .crm-item__quem { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; }
 .crm-item__empresa,
 .crm-cartao__abrir { padding: 0; border: 0; background: none; color: var(--texto); text-align: left; cursor: pointer; }
-.crm-item__empresa { min-height: 44px; font-size: 1.05rem; font-weight: 900; text-decoration: underline; text-underline-offset: 3px; }
+.crm-item__empresa { min-height: 44px; font-size: 1.05rem; font-weight: var(--peso-forte); text-decoration: underline; text-underline-offset: 3px; }
 .crm-item__acao { margin: 0; font-size: 0.92rem; }
 .crm-item__acao span { color: var(--texto-2); }
 .crm-item__links,
 .crm-cartao__links { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; }
 .crm-item__links a,
 .crm-cartao__links a,
-.crm-ficha__links a { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.75rem; border: var(--linha); background: var(--superficie); color: var(--texto); font-weight: 900; text-decoration: none; }
+.crm-ficha__links a { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.75rem; border: var(--linha); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; }
 .crm-item__links a:first-child,
 .crm-ficha__links a.is-principal { background: var(--destaque); color: var(--destaque-texto); }
 .crm-item__links a:hover,
 .crm-cartao__links a:hover,
 .crm-ficha__links a:hover { background: var(--ok-fundo); color: var(--texto); }
-.crm-mais { margin-top: 0.75rem; padding: 0.45rem 0.9rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: 900; cursor: pointer; }
+.crm-mais { margin-top: 0.75rem; padding: 0.45rem 0.9rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); cursor: pointer; }
 
 /* Fila de envio (08/10/2026): o que esta tela já abriu no WhatsApp sai do caminho
    até a planilha confirmar; a folha "Enviar um por um" mostra um site por vez. */
@@ -128,19 +128,19 @@
 .crm-fila { display: grid; gap: 0.85rem; }
 /* Uma linha só, com rolagem lateral: em três linhas os nichos empurravam o envio para fora da tela do celular. */
 .crm-fila__nichos { display: flex; gap: 0.4rem; margin: 0 -0.25rem; padding: 0.25rem 0.25rem 0.4rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }
-.crm-fila__nichos button { flex: none; scroll-snap-align: start; white-space: nowrap; min-height: 44px; padding: 0.4rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font: inherit; font-weight: 800; cursor: pointer; }
-.crm-fila__nichos button span { color: var(--texto-2); font-weight: 700; }
+.crm-fila__nichos button { flex: none; scroll-snap-align: start; white-space: nowrap; min-height: 44px; padding: 0.4rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font: inherit; font-weight: var(--peso-medio); cursor: pointer; }
+.crm-fila__nichos button span { color: var(--texto-2); font-weight: var(--peso-medio); }
 .crm-fila__nichos button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); }
 .crm-fila__nichos button[aria-pressed="true"] span { color: inherit; }
-.crm-fila__progresso { margin: 0; color: var(--texto-2); font-size: 0.88rem; font-weight: 800; }
+.crm-fila__progresso { margin: 0; color: var(--texto-2); font-size: 0.88rem; font-weight: var(--peso-medio); }
 .crm-fila__cartao { display: grid; gap: 0.75rem; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
 .crm-fila__cartao h3 { margin: 0; font-size: 1.35rem; letter-spacing: -0.02em; }
 .crm-fila__detalhe { margin: 0; color: var(--texto-2); font-size: 0.92rem; }
 .crm-fila__mensagem { margin: 0; }
-.crm-fila__mensagem figcaption { font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2); }
+.crm-fila__mensagem figcaption { font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2); }
 .crm-fila__mensagem blockquote { margin: 0.35rem 0 0; padding: 0.75rem 0.9rem; border-left: 6px solid var(--destaque); background: var(--superficie-2); font-size: 0.98rem; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .crm-fila__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.crm-fila__enviar { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 48px; padding: 0.55rem 1.1rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-weight: 900; text-decoration: none; }
+.crm-fila__enviar { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 48px; padding: 0.55rem 1.1rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-weight: var(--peso-forte); text-decoration: none; }
 .crm-fila__enviar:hover { filter: brightness(0.95); }
 .crm-fila__aberto { margin: 0; padding: 0.7rem 0.85rem; border: var(--linha); background: var(--ok-fundo); }
 @media (max-width: 30rem) { .crm-fila__acoes > * { flex: 1 1 100%; } }
@@ -153,7 +153,7 @@
 .crm-resultado { display: grid; gap: 0.35rem; padding: 0.7rem 0; border-bottom: 1px solid color-mix(in srgb, var(--borda) 35%, transparent); }
 .crm-resultado__cabeca { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; }
 .crm-resultado__cabeca strong { font-size: 1.02rem; }
-.crm-resultado__cabeca span:not(.crm-tag) { color: var(--texto-2); font-size: 0.85rem; font-weight: 800; }
+.crm-resultado__cabeca span:not(.crm-tag) { color: var(--texto-2); font-size: 0.85rem; font-weight: var(--peso-medio); }
 .crm-resultado__barra { height: 0.55rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-resultado__barra span { display: block; height: 100%; background: var(--destaque); }
 .crm-resultado__numeros { margin: 0; font-size: 0.88rem; }
@@ -174,16 +174,16 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
   .crm-filtros label:first-child { grid-column: auto; }
 }
 .crm-filtros label,
-.crm-form label { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
-.crm-form label small { font-weight: 700; letter-spacing: 0; text-transform: none; }
+.crm-form label { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+.crm-form label small { font-weight: var(--peso-medio); letter-spacing: 0; text-transform: none; }
 .crm-filtros input,
 .crm-filtros select,
 .crm-form input,
-.crm-form textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.crm-form textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: var(--peso-texto); letter-spacing: 0; text-transform: none; }
 .crm-form textarea { min-height: 6rem; resize: vertical; }
 .crm-form input:disabled,
 .crm-form textarea:disabled { opacity: 0.6; }
-.crm-filtro-resumo { margin: 0; font-size: 0.85rem; font-weight: 800; }
+.crm-filtro-resumo { margin: 0; font-size: 0.85rem; font-weight: var(--peso-medio); }
 /*
  * Quadro do desktop (08/10/2026): Novo | Em contato | Proposta | Ganho em cima de Perdido.
  * As quatro colunas cabem sem rolagem lateral a partir de ~1200 px com a barra lateral;
@@ -198,11 +198,11 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-coluna { display: flex; min-width: 0; flex-direction: column; gap: 0.5rem; padding: 0 0.55rem 0.65rem; border: var(--linha); background: var(--superficie-2); }
 .crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.55rem; padding: 0.55rem 0.65rem; border-bottom: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); }
 .crm-coluna__cabeca h2 { font-size: 1.15rem; letter-spacing: -0.02em; }
-.crm-coluna__cabeca strong { font-size: 1.5rem; font-weight: 950; font-variant-numeric: tabular-nums; }
-.crm-coluna__cabeca small { grid-column: 1 / -1; font-size: 0.74rem; font-weight: 700; }
+.crm-coluna__cabeca strong { font-size: 1.5rem; font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
+.crm-coluna__cabeca small { grid-column: 1 / -1; font-size: 0.74rem; font-weight: var(--peso-medio); }
 .crm-coluna__nota { margin: 0; color: var(--texto-2); font-size: 0.8rem; }
 .crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: 0.85rem; }
-.crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: 0.82rem; font-weight: 800; }
+.crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: 0.82rem; font-weight: var(--peso-medio); }
 .crm-check input { width: 1.2rem; height: 1.2rem; accent-color: var(--texto); }
 .crm-cartoes { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .crm-cartao { display: grid; gap: 0.35rem; padding: 0.55rem 0.65rem; border: var(--linha); background: var(--superficie); }
@@ -217,21 +217,21 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 /* Os três marcos numa linha de texto (eram três etiquetas com borda, uma por linha na coluna estreita). */
 .crm-marcos { display: flex; flex-wrap: wrap; gap: 0 0.35rem; margin: 0; padding: 0; list-style: none; color: var(--texto-2); font-size: 0.74rem; line-height: 1.4; }
 .crm-marcos li + li::before { margin-right: 0.35rem; content: "·"; }
-.crm-marcos li.is-feito { color: var(--texto); font-weight: 800; }
+.crm-marcos li.is-feito { color: var(--texto); font-weight: var(--peso-medio); }
 .crm-marcos li.is-desconhecido { font-style: italic; }
 .crm-sinais { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; }
-.crm-sinal { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.72rem; font-weight: 900; }
+.crm-sinal { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.72rem; font-weight: var(--peso-forte); }
 .crm-sinal.is-resposta { background: var(--destaque); color: var(--destaque-texto); }
 .crm-sinal.is-followup { background: var(--acento); color: var(--cor-tinta); }
 .crm-sinal.is-divergencia { border-style: dashed; background: var(--erro-fundo); }
-.crm-sinal.is-acervo { color: var(--texto-2); font-weight: 700; }
-.crm-sinal.is-prazo { border-style: dashed; color: var(--texto-2); font-weight: 800; }
+.crm-sinal.is-acervo { color: var(--texto-2); font-weight: var(--peso-medio); }
+.crm-sinal.is-prazo { border-style: dashed; color: var(--texto-2); font-weight: var(--peso-medio); }
 .crm-sinal.is-prazo.is-amanha { border-style: solid; background: var(--atencao-fundo); color: var(--texto); }
 /* Tipo da resposta: o texto diz o tipo; a cor só reforça (RULES 3). */
 .crm-sinal.is-interesse, .crm-resposta.is-interesse strong { background: var(--ok-fundo); color: var(--texto); }
 .crm-sinal.is-negativa, .crm-resposta.is-negativa strong,
 .crm-sinal.is-exclusao, .crm-resposta.is-exclusao strong { background: var(--erro-fundo); color: var(--texto); }
-.crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--texto-2); font-weight: 700; }
+.crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--texto-2); font-weight: var(--peso-medio); }
 .crm-cartao__resposta { margin: 0.35rem 0 0; font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
 .crm-resposta { margin: 0 0 0.5rem; }
 .crm-resposta strong { padding: 0.1rem 0.4rem; border: var(--linha-fina); }
@@ -243,7 +243,7 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-ficha__cabeca { padding: 1.1rem 1.25rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
 .crm-ficha__cabeca h2 { margin: 0.25rem 0 0.55rem; font-size: clamp(1.7rem, 6vw, 2.6rem); line-height: 1.05; overflow-wrap: anywhere; }
 .crm-ficha__etapa { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
-.crm-etapa { padding: 0.15rem 0.55rem; border: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); font-weight: 950; }
+.crm-etapa { padding: 0.15rem 0.55rem; border: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); font-weight: var(--peso-titulo); }
 .crm-ficha__fonte,
 .crm-ficha__leitura { margin: 0.5rem 0 0; color: var(--texto-2); font-size: 0.85rem; }
 .crm-divergencia { padding: 0.9rem 1rem; border: 3px dashed var(--borda); background: var(--erro-fundo); }
@@ -255,36 +255,36 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-ficha__links { display: grid; gap: 0.5rem; }
 /* Próximo passo do lead, preso ao topo da folha enquanto se rola a ficha. */
 .crm-ficha__fixa { position: sticky; top: 0; z-index: 2; display: grid; gap: 0.5rem; padding: 0.5rem 0; background: var(--superficie); }
-.crm-ficha__fixa a { display: flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.75rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); font-weight: 900; text-decoration: none; }
+.crm-ficha__fixa a { display: flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.75rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-forte); text-decoration: none; }
 @media (min-width: 40rem) { .crm-ficha__fixa { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); } }
 @media (min-width: 40rem) { .crm-ficha__links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .crm-proximo { display: grid; gap: 0.15rem; margin: 0 0 0.75rem; padding: 0.6rem 0.75rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-proximo.is-atrasado { background: var(--erro-fundo); }
 .crm-form { display: grid; gap: 0.6rem; }
 .crm-form__botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.crm-status { min-height: 1.2em; margin: 0; font-weight: 800; }
+.crm-status { min-height: 1.2em; margin: 0; font-weight: var(--peso-medio); }
 .crm-tempo { margin: 0; padding: 0; border-left: var(--linha); list-style: none; }
 .crm-tempo li { position: relative; display: grid; grid-template-columns: 6.8rem minmax(0, 1fr); gap: 0.5rem; padding: 0.5rem 0 0.5rem 0.9rem; }
 .crm-tempo li::before { position: absolute; top: 0.8rem; left: -0.55rem; width: 0.8rem; height: 0.8rem; border: var(--linha-fina); background: var(--superficie); content: ""; }
 .crm-tempo li.is-manual::before { background: var(--destaque); }
-.crm-tempo time { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.crm-tempo time { font-size: 0.8rem; font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
 .crm-tempo strong { display: block; }
 .crm-tempo p { margin: 0.15rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .crm-tempo small { color: var(--texto-2); font-size: 0.75rem; }
 @media (max-width: 30rem) { .crm-tempo li { grid-template-columns: 1fr; gap: 0.1rem; } }
 .crm-artefatos { margin: 0 0 0.5rem; padding-left: 1.2rem; }
 .crm-rodape { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--texto-2); font-size: 0.78rem; }
-.crm-rodape a { color: var(--texto); font-weight: 800; }
+.crm-rodape a { color: var(--texto); font-weight: var(--peso-medio); }
 @media (prefers-reduced-motion: reduce) { .crm-colunas { scroll-behavior: auto; } }
 
 /* Funil no celular (07/10/2026): Site / Organizar, abas de etapa e a lista de uma. */
 .crm-segmento { display: flex; border: var(--linha); background: var(--superficie); }
-.crm-segmento button { min-height: 44px; flex: 1; border: 0; background: transparent; color: var(--texto); font-weight: 900; cursor: pointer; }
+.crm-segmento button { min-height: 44px; flex: 1; border: 0; background: transparent; color: var(--texto); font-weight: var(--peso-forte); cursor: pointer; }
 .crm-segmento button + button { border-left: var(--linha); }
 .crm-segmento button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); }
 /* Cinco abas que quebram linha pelo tamanho do texto: num grid fixo "Em contato 100" não cabia. */
 .crm-abas { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.crm-abas button { display: flex; flex: 1 1 auto; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.85rem; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.crm-abas button { display: flex; flex: 1 1 auto; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.85rem; font-weight: var(--peso-medio); white-space: nowrap; cursor: pointer; }
 .crm-abas button[aria-selected="true"] { background: var(--texto); color: var(--superficie); }
 .crm-colunas--uma { display: block; overflow: visible; padding-bottom: 0; }
 /* No celular quem escolhe o produto é o segmentado do Funil. */
@@ -298,11 +298,11 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-colinha__topo { display: grid; gap: 0.6rem; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
 .crm-colinha__topo h2 { font-size: clamp(1.6rem, 6vw, 2.2rem); line-height: 1; }
 .crm-colinha__indice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.crm-colinha__indice a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 44px; padding: 0.4rem 0.8rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-weight: 900; text-decoration: none; }
+.crm-colinha__indice a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 44px; padding: 0.4rem 0.8rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; }
 .crm-colinha__indice a:hover { background: var(--destaque); color: var(--destaque-texto); }
-.crm-colinha__campo { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
-.crm-colinha__campo small { font-weight: 700; letter-spacing: 0; text-transform: none; }
-.crm-colinha__campo input { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.crm-colinha__campo { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+.crm-colinha__campo small { font-weight: var(--peso-medio); letter-spacing: 0; text-transform: none; }
+.crm-colinha__campo input { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: var(--peso-texto); letter-spacing: 0; text-transform: none; }
 .crm-colinha__secao { display: grid; gap: 0.85rem; min-width: 0; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
 .crm-colinha__secao > h2 { font-size: 1.4rem; letter-spacing: -0.02em; }
 .crm-colinha [tabindex="-1"]:focus { outline: none; }
@@ -313,24 +313,24 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-colinha__servico { display: grid; align-content: start; gap: 0.3rem; padding: 0.75rem 0.85rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-colinha__servico h3 { font-size: 1.1rem; letter-spacing: -0.02em; }
 .crm-colinha__servico p { margin: 0; overflow-wrap: anywhere; }
-.crm-colinha__preco { font-weight: 900; font-variant-numeric: tabular-nums; }
+.crm-colinha__preco { font-weight: var(--peso-forte); font-variant-numeric: tabular-nums; }
 
 /* Momento e objeção: na página, separados por uma linha; na ficha, idem, sob o h3 "Colinha". */
 .crm-colinha__momento,
 .crm-colinha__objecao { display: grid; gap: 0.55rem; min-width: 0; padding-top: 0.75rem; border-top: var(--linha-fina); }
 .crm-colinha__momento :is(h3, h4),
-.crm-colinha__objecao :is(h3, h4) { margin: 0; font-size: 1.1rem; font-weight: 950; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.crm-colinha__objecao :is(h3, h4) { margin: 0; font-size: 1.1rem; font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .crm-colinha__objetivo,
 .crm-colinha__vende { margin: 0; font-size: 0.92rem; }
 .crm-colinha__vende { color: var(--texto-2); }
 .crm-colinha__vende strong { color: var(--texto); }
-.crm-colinha__rotulo { margin: 0; color: var(--texto-2); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
+.crm-colinha__rotulo { margin: 0; color: var(--texto-2); font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
 .crm-colinha__perguntas { display: grid; gap: 0.3rem; margin: 0; padding-left: 1.4rem; overflow-wrap: anywhere; }
 
 .crm-colinha__trecho { display: grid; gap: 0.5rem; min-width: 0; padding: 0.75rem 0.85rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-colinha__trecho-cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0; overflow-wrap: anywhere; }
 .crm-colinha__texto { margin: 0; padding: 0.7rem 0.85rem; border-left: 6px solid var(--destaque); background: var(--superficie); font-size: 0.98rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-.crm-colinha__marca { padding: 0 0.15em; border: 1px dashed currentColor; background: var(--atencao-fundo); color: var(--texto); font-weight: 900; }
+.crm-colinha__marca { padding: 0 0.15em; border: 1px dashed currentColor; background: var(--atencao-fundo); color: var(--texto); font-weight: var(--peso-forte); }
 .crm-colinha__pendente { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--atencao-fundo); font-size: 0.82rem; }
 .crm-colinha__dica { margin: 0; color: var(--texto-2); font-size: 0.82rem; overflow-wrap: anywhere; }
 /* Lado a lado enquanto couberem; no celular estreito, um por linha. */
@@ -339,7 +339,7 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 @media (min-width: 40rem) { .crm-colinha__botoes > * { flex: 0 1 auto; } }
 
 /* Na ficha */
-.crm-colinha__motivo { margin: 0 0 0.6rem; padding: 0.5rem 0.75rem; border: var(--linha-fina); background: var(--superficie-2); font-weight: 800; }
+.crm-colinha__motivo { margin: 0 0 0.6rem; padding: 0.5rem 0.75rem; border: var(--linha-fina); background: var(--superficie-2); font-weight: var(--peso-medio); }
 .crm-ficha__bloco .crm-colinha__momento,
 .crm-ficha__bloco .crm-colinha__objecao { margin-bottom: 0.75rem; }
-.crm-colinha__inteira { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; color: var(--texto); font-weight: 900; text-underline-offset: 3px; }
+.crm-colinha__inteira { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; color: var(--texto); font-weight: var(--peso-forte); text-underline-offset: 3px; }

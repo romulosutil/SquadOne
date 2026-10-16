@@ -199,15 +199,15 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
 <style>
 .escritorio { display: grid; gap: var(--esp-4); width: 100%; max-width: 72rem; margin: 0 auto; color: var(--texto); }
 .escritorio__topo { display: grid; gap: var(--esp-1); }
-.escritorio h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: 950; letter-spacing: -0.03em; }
+.escritorio h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
 .escritorio p { margin: 0; }
 .escritorio__barra { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3); }
-.escritorio__status { font-weight: 900; }
+.escritorio__status { font-weight: var(--peso-forte); }
 /* A borda é o semáforo; o texto já diz a %, a cor nunca é a única pista. */
 .escritorio__financas { padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); border-left-width: 8px; background: var(--superficie); }
 .escritorio__financas[data-semaforo='verde'] { border-left-color: var(--positivo); }
 .escritorio__financas[data-semaforo='amarelo'] { border-left-color: var(--destaque); }
 .escritorio__financas[data-semaforo='laranja'] { border-left-color: var(--acento); }
 .escritorio__financas[data-semaforo='vermelho'] { border-left-color: var(--negativo); background: var(--erro-fundo); }
-.escritorio__financas a { color: inherit; font-weight: 900; }
+.escritorio__financas a { color: inherit; font-weight: var(--peso-forte); }
 </style>

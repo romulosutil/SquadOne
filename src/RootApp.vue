@@ -56,7 +56,7 @@ onMounted(async () => {
   place-items: center;
   background: #f4f0e6;
   color: #151914;
-  font: 800 1rem/1.5 system-ui, sans-serif;
+  font: 600 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 .runtime-warning {
@@ -68,7 +68,7 @@ onMounted(async () => {
   background: #ffcf5c;
   color: #151914;
   padding: 0.75rem 1rem;
-  font-weight: 800;
+  font-weight: var(--peso-medio);
   box-shadow: 4px 4px 0 #151914;
 }
 </style>

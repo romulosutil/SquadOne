@@ -6,6 +6,31 @@
  * Desde 07/10/2026 TODA tela usa estes nomes (casca, agentes, Finanças, CRM em
  * crm.css, painéis de Mais em mais.css): o operations.css e as --ops-* saíram.
  */
+
+/*
+ * Inter variável hospedada no próprio app (15/10/2026). Até aqui a --fonte
+ * dizia "Inter" sem carregar nada, e no Windows (sem a Inter instalada) a
+ * Central inteira saía em Arial Black. Só os cortes latim e latim estendido:
+ * o português cabe neles e o resto do alfabeto não justifica o download.
+ * Arquivos de @fontsource-variable/inter 5.3.0 (wght, normal); licença OFL ao lado.
+ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fontes/inter-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fontes/inter-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Paleta */
   --cor-tinta: #11130f;
@@ -53,7 +78,17 @@
   --esp-3: 0.75rem;
   --esp-4: 1rem;
   --esp-6: 1.5rem;
-  --fonte: Inter, "Arial Black", Arial, sans-serif;
+  /* Sem Arial Black no fallback: enquanto a Inter baixa (swap), a pilha do
+     sistema tem a mesma métrica aproximada e não engrossa a tela inteira. */
+  --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  /* Pesos: a hierarquia sai daqui, não de 900/950 espalhados (a Inter vai até
+     900, então 950 nunca existiu de fato). Texto corrido e campos em
+     --peso-texto; rótulo e apoio em --peso-medio; nome, valor e botão em
+     --peso-forte; título e total grande em --peso-titulo. */
+  --peso-texto: 450;
+  --peso-medio: 600;
+  --peso-forte: 700;
+  --peso-titulo: 800;
   --tamanho-barra-inferior: 4rem;
 
   color-scheme: light;
