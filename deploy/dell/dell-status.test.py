@@ -425,6 +425,13 @@ class OQueFazer(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="dell-status-oqf-"))
         self.addCleanup(shutil.rmtree, self.dir)
+        # Sem isto o Radar lia a marca de pausa de verdade do Dell (~/.local/state/dell-status/pausa-pncp,
+        # gravada em 11/10/2026) e a coleta velha dava "ok": o teste passava ou falhava conforme a máquina.
+        # Os testes daqui também trocam o relógio e os caminhos do módulo; devolve tudo no fim.
+        antes = {k: getattr(ds, k) for k in ("agora", "PNCP_RUN", "PNCP_PAUSA")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in antes.items()])
+        ds.PNCP_RUN = self.dir / "latest-run.json"
+        ds.PNCP_PAUSA = self.dir / "pausa-pncp"
 
     def test_todo_alerta_diz_o_que_fazer(self):
         for cid in ("hermes", "n8n", "disco", "dns", "container:x", "gerador", "monitor", "erro:fluxos", "novo"):
@@ -476,7 +483,6 @@ class OQueFazer(unittest.TestCase):
         ds.PNCP_RUN.write_text(json.dumps({"run_at": "2026-09-29T10:31:00Z", "status": "completed",
                                            "counts": {"fetched": 1000, "qualified": 0}}))
         ds.agora = lambda: br("2026-10-20T11:00").astimezone(timezone.utc)
-        ds.PNCP_PAUSA = self.dir / "pausa-pncp"
         self.assertEqual(ds.pncp()["estado"], "atencao")  # sem a marca, coleta velha é amarelo
         ds.PNCP_PAUSA.write_text("11/10/2026")
         r = ds.pncp()
