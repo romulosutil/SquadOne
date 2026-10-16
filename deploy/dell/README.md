@@ -2087,7 +2087,7 @@ formato da bridge, o que o observador já sabe ler:
 
 ```
 Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.jsonl
-                                (127.0.0.1:9131)            |
+                                (172.28.77.1:9131)         |
                        whatsapp-observador-prumo (o MESMO observador.py) --> n8n (whatsapp-conversa / -resposta)
 ```
 
@@ -2116,6 +2116,19 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
   anterior ao reinício não resolve (conta em `lid_sem_telefone`). O journal tem `evento: ...` com fromMe, estado
   do recibo e só o domínio dos ids (nenhum número, nome ou texto), as primeiras 60 por execução, e `GET /saude` tem o
   contador `recibos` por estado. Ensaio: `journalctl --user -u evolution-adaptador | grep -E "forma nova|evento:"`.
+- **Endurecimento (revisão adversarial de 16/10/2026, 12 achados, os acionáveis corrigidos com teste):** só conta
+  como conversa 1:1 o `remoteJid` em `@lid`/`@s.whatsapp.net` (em grupo e status o `participantAlt` é o remetente);
+  reação/apagar/edição dentro de mensagem temporária é ruído; o id só é lembrado depois de produzir saída (um
+  placeholder cifrado não engole a mensagem decifrada); mensagem recebida com mais de 10 min não gera a linha de
+  "respondeu" (o texto segue, com a hora certa); `respostas.jsonl` e `evolution.log` saem com `ensure_ascii` (U+2028,
+  U+2029 e NEL quebravam o `splitlines()` do observador); `leads.json` com mais de 30 min vale como ausente
+  (falha fechada se o observador do PRUMO parou) e `respostas.jsonl` tem teto de 2 MB; o servidor tem tempo de 10 s
+  por conexão, teto de 32 conexões e recusa `Content-Length` negativo; nomes de campo que parecem id não vão ao
+  journal; `receber` roda sob trava. `GET /saude` ganhou `rejeitados` (401/400/413) e `respostas_descartadas`: um
+  segredo trocado só de um lado aparece ali e numa linha do journal por minuto. **Aceito, não corrigido:** as
+  janelas de microssegundos entre a troca de nome do `respostas.jsonl` e a rotação do log (a rotação só ocorre a
+  cada ~50 mil linhas) e os eventos que a Evolution emitir nos ≤15 s do boot em que o bind em 172.28.77.1 ainda falha
+  (o `Restart` tenta de novo a cada 15 s; a Evolution não reentrega).
 - **Modo ensaio (`EVOLUTION_ENSAIO=1`, desligado por padrão).** Para provar a resolução do recibo com um telefone que
   **não é lead**, o adaptador passa a lembrar também de quem não é lead (só em memória, com o mesmo teto). Prova sem
   usar número de ninguém: o recibo deixa de cair em `lid_sem_telefone` e passa a `nao_e_lead` em `GET /saude`. Liga por

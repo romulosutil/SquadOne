@@ -352,6 +352,201 @@ class RecibosEmLid(unittest.TestCase):
         self.assertIn("status=READDROP ", ev.resumo_seguro("MESSAGES_UPDATE", item) + " ")
 
 
+class AchadosDaRevisao(unittest.TestCase):
+    """Cada caso vem da revisão adversarial de 16/10/2026 e foi reproduzido antes de ser corrigido."""
+
+    def tr(self, corpo, leads=LEADS, vistos=None, mapas=None):
+        return ev.traduzir(corpo, leads, T0, vistos if vistos is not None else ev.Recentes(), "", mapas)
+
+    def test_grupo_e_status_com_participante_lead_nao_viram_conversa(self):
+        for dominio in ("g.us", "broadcast", "newsletter"):
+            corpo = upsert("120363000000", "mensagem no grupo", dominio=dominio, participantAlt=f"{LEAD}@s.whatsapp.net")
+            corpo["data"]["participantAlt"] = f"{LEAD}@s.whatsapp.net"
+            t = self.tr(corpo)
+            self.assertEqual((t.linhas, t.respostas, t.ignorados), ([], [], {"nao_e_conversa_1a1": 1}), dominio)
+
+    def test_reacao_dentro_de_mensagem_temporaria_continua_sendo_reacao(self):
+        for msg in ({"ephemeralMessage": {"message": {"reactionMessage": {"text": "👍"}}}},
+                    {"viewOnceMessageV2": {"message": {"protocolMessage": {"type": 0}}}},
+                    {"messageContextInfo": {"deviceListMetadata": {}}}, {}):
+            for de_mim in (True, False):
+                corpo = upsert(LEAD, de_mim=de_mim, id_=f"E{de_mim}{len(str(msg))}")
+                corpo["data"]["message"] = msg
+                t = self.tr(corpo)
+                self.assertEqual((t.linhas, t.respostas), ([], []), (msg, de_mim))
+        self.assertFalse(ev.sem_conversa({"ephemeralMessage": {"message": {"conversation": "oi"}}}))
+        self.assertFalse(ev.sem_conversa({"audioMessage": {}}))
+
+    def test_placeholder_sem_conteudo_nao_engole_a_mensagem_decifrada_do_mesmo_id(self):
+        vistos = ev.Recentes()
+        vazio = upsert(LEAD, id_="MESMO")
+        vazio["data"]["message"] = None
+        a = self.tr(vazio, vistos=vistos)
+        b = self.tr(upsert(LEAD, "Sim, quero", id_="MESMO"), vistos=vistos)
+        self.assertEqual(a.ignorados, {"recebida_sem_conteudo": 1})
+        self.assertEqual(b.respostas[0]["texto"], "Sim, quero")
+        c = self.tr(upsert(LEAD, "Sim, quero", id_="MESMO"), vistos=vistos)  # a reentrega de verdade segue valendo
+        self.assertEqual(c.ignorados, {"reentrega": 1})
+
+    def test_mensagem_que_a_evolution_entrega_horas_depois_nao_vira_resposta_de_agora(self):
+        t = self.tr(upsert(LEAD, "Olá! Em que posso ajudar?", ts=T0 - 3 * 3600))
+        self.assertEqual(t.linhas, [])
+        self.assertEqual(t.ignorados, {"entrada_atrasada": 1})
+        self.assertEqual(t.respostas[0]["ts"], int(T0) - 3 * 3600)  # o texto segue, com a hora certa
+        recente = self.tr(upsert(LEAD, "oi", id_="NOVA", ts=T0 - 120))
+        self.assertEqual(len(recente.linhas), 1)
+
+    def test_o_que_o_prumo_enviou_continua_valendo_mesmo_atrasado(self):
+        self.assertEqual(self.tr(upsert(LEAD, "olá", de_mim=True, ts=T0 - 3 * 3600)).linhas[0]["ts"], int(T0) - 3 * 3600)
+
+    def test_forma_nao_leva_telefone_como_nome_de_campo(self):
+        f = ev.forma({"id": "x@g.us", "presences": {f"{OUTRO}@s.whatsapp.net": {"lastKnownPresence": "composing"},
+                                                      f"{LEAD}@lid": {"x": 1}}})
+        texto = json.dumps(f)
+        for vazou in (OUTRO, LEAD, "@s.whatsapp.net", "@lid"):
+            self.assertNotIn(vazou, texto)
+        self.assertEqual(f["presences"], {"<chave>": {"x": "int"}})  # dois JIDs viram o mesmo nome neutro
+        self.assertEqual(f["id"], "str")
+
+    def test_recibo_com_numero_malformado_nao_derruba_o_lote(self):
+        for ruim in (float("nan"), float("inf"), -float("inf")):
+            self.assertEqual(ev.estado_do_recibo(ruim), "")
+        corpo = atualizacao(LEAD)
+        corpo["data"]["status"] = float("nan")
+        self.assertEqual(self.tr(corpo).ignorados, {"recibo_sem_estado": 1})
+
+    def test_recebimentos_simultaneos_do_mesmo_id_produzem_uma_linha_so(self):
+        dir_ = Path(tempfile.mkdtemp(prefix="evolution-teste-"))
+        self.addCleanup(shutil.rmtree, dir_, ignore_errors=True)
+        g = ev.Gravador(dir_)
+        (dir_ / "leads.json").write_text(json.dumps(sorted(LEADS)))
+        a = ev.Adaptador(g, relogio=lambda: T0, avisar=lambda t: None)
+        saida = []
+        corpo = upsert(LEAD, "oi", id_="CONCORRENTE")
+        fios = [threading.Thread(target=lambda: saida.append(len(a.receber(corpo).linhas))) for _ in range(12)]
+        for f in fios:
+            f.start()
+        for f in fios:
+            f.join()
+        self.assertEqual(sum(saida), 1)
+        self.assertEqual(len((dir_ / "evolution.log").read_text().splitlines()), 1)
+
+
+class GravadorEndurecido(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="evolution-teste-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+
+    def test_lista_de_leads_velha_vale_como_ausente(self):
+        relogio = [T0]
+        g = ev.Gravador(self.dir, relogio=lambda: relogio[0])
+        arquivo = self.dir / "leads.json"
+        arquivo.write_text(json.dumps([CHAVE]))
+        os.utime(arquivo, (T0, T0))
+        self.assertEqual(g.leads(), {CHAVE})
+        relogio[0] = T0 + ev.LEADS_VELHOS_S - 5
+        self.assertEqual(g.leads(), {CHAVE})
+        relogio[0] = T0 + ev.LEADS_VELHOS_S + 5  # o observador do PRUMO parou
+        self.assertIsNone(g.leads())
+        os.utime(arquivo, (relogio[0], relogio[0]))  # ele voltou e regravou
+        self.assertEqual(g.leads(), {CHAVE})
+
+    def test_respostas_que_ninguem_consome_tem_teto(self):
+        g = ev.Gravador(self.dir, limite_respostas=300)
+        v = ev.Recentes()
+        for i in range(12):
+            g.escrever(ev.traduzir(upsert(LEAD, "texto " + "x" * 40, id_=f"r{i}"), LEADS, T0, v))
+        self.assertLess((self.dir / "respostas.jsonl").stat().st_size, 600)
+        self.assertGreater(g.respostas_descartadas, 0)
+        self.assertEqual(len((self.dir / "evolution.log").read_text().splitlines()), 12)  # o log de eventos segue
+
+    def test_separadores_de_linha_do_unicode_nao_partem_a_resposta(self):
+        g = ev.Gravador(self.dir)
+        g.escrever(ev.traduzir(upsert(LEAD, "primeira segunda terceira\x85quarta", id_="U1"), LEADS, T0))
+        bruto = (self.dir / "respostas.jsonl").read_text(encoding="utf-8")
+        self.assertEqual(len(bruto.splitlines()), 1)
+        self.assertEqual(json.loads(bruto)["texto"], "primeira segunda terceira\x85quarta")
+
+
+class ServidorEndurecido(unittest.TestCase):
+    SEGREDO = "segredo-de-teste"
+
+    def subir(self, maximo=32, tempo=10):
+        self.dir = Path(tempfile.mkdtemp(prefix="evolution-teste-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        (self.dir / "leads.json").write_text(json.dumps(sorted(LEADS)))
+        anterior = ev.TEMPO_DA_CONEXAO_S
+        ev.TEMPO_DA_CONEXAO_S = tempo
+        self.addCleanup(setattr, ev, "TEMPO_DA_CONEXAO_S", anterior)
+        self.adaptador = ev.Adaptador(ev.Gravador(self.dir), avisar=lambda t: None)
+        self.servidor = ev.criar_servidor(self.adaptador, self.SEGREDO, porta=0, maximo=maximo)
+        self.porta = self.servidor.server_address[1]
+        threading.Thread(target=self.servidor.serve_forever, daemon=True).start()
+        self.addCleanup(self.servidor.server_close)
+        self.addCleanup(self.servidor.shutdown)
+
+    def cru(self, bytes_):
+        import socket
+        s = socket.create_connection(("127.0.0.1", self.porta), timeout=5)
+        self.addCleanup(s.close)
+        s.sendall(bytes_)
+        return s
+
+    def test_content_length_negativo_nao_prende_a_thread(self):
+        self.subir()
+        s = self.cru(f"POST /evolution HTTP/1.1\r\nX-Adaptador: {self.SEGREDO}\r\nContent-Length: -1\r\n\r\n".encode())
+        self.assertIn(b" 400 ", s.recv(200).split(b"\r\n")[0])
+
+    def test_cabecalho_que_nao_termina_e_cortado(self):
+        self.subir(tempo=1)
+        s = self.cru(b"POST /evolution HTTP/1.1\r\nContent-Le")  # nunca termina o cabeçalho
+        s.settimeout(4)
+        self.assertEqual(s.recv(100), b"")  # o servidor fechou a conexão
+
+    def test_corpo_prometido_e_nunca_enviado_e_cortado(self):
+        self.subir(tempo=1)
+        s = self.cru(f"POST /evolution HTTP/1.1\r\nX-Adaptador: errado\r\nContent-Length: 5000\r\n\r\n".encode())
+        s.settimeout(4)
+        resposta = b""
+        try:
+            while True:
+                pedaco = s.recv(200)
+                if not pedaco:
+                    break
+                resposta += pedaco
+        except OSError:
+            pass
+        self.assertLessEqual(len(resposta), 400)  # não ficou pendurado: terminou dentro do prazo
+
+    def test_teto_de_conexoes_simultaneas(self):
+        self.subir(maximo=2, tempo=5)
+        presas = [self.cru(b"POST /evolution HTTP/1.1\r\nContent-Le") for _ in range(2)]
+        import socket
+        terceira = socket.create_connection(("127.0.0.1", self.porta), timeout=5)
+        self.addCleanup(terceira.close)
+        terceira.settimeout(3)
+        try:
+            self.assertEqual(terceira.recv(100), b"")  # fechada na hora, sem thread
+        except ConnectionError:
+            pass
+        self.assertEqual(len(presas), 2)
+
+    def test_pedidos_recusados_aparecem_no_saude(self):
+        self.subir()
+        import urllib.request
+        req = urllib.request.Request(f"http://127.0.0.1:{self.porta}/saude", headers={"X-Adaptador": "errado"})
+        for _ in range(3):
+            try:
+                urllib.request.urlopen(req, timeout=5).close()
+            except urllib.error.HTTPError as e:
+                e.close()
+        req = urllib.request.Request(f"http://127.0.0.1:{self.porta}/saude", headers={"X-Adaptador": self.SEGREDO})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            saude = json.loads(r.read())
+        self.assertEqual(saude["rejeitados"], {"401": 3})
+        self.assertEqual(saude["respostas_descartadas"], 0)
+
+
 class Arquivos(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="evolution-teste-"))
@@ -588,13 +783,23 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.assertFalse((self.dir / "respostas.jsonl").exists())  # o observador apagou depois de ler
 
     def test_saudacao_automatica_segue_a_regra_dos_5_minutos(self):
-        self.alimentar(upsert(LEAD, "Olá! Em que posso ajudar?", id_="1"))
+        self.alimentar(upsert(LEAD, "Olá! Em que posso ajudar?", id_="1", ts=self.agora - 1))
         self.agora += 60
-        self.alimentar(upsert(LEAD, "outra", id_="2"))  # dentro dos 5 min: sem segundo aviso
+        self.alimentar(upsert(LEAD, "outra", id_="2", ts=self.agora - 1))  # dentro dos 5 min: sem segundo aviso
         self.agora += 600
-        self.alimentar(upsert(LEAD, "sou eu mesmo", id_="3"))
+        self.alimentar(upsert(LEAD, "sou eu mesmo", id_="3", ts=self.agora - 1))
         eventos = [c[1] for c in self.chamadas if c[0] == "whatsapp-conversa"]
         self.assertEqual([bool(e.get("seguinte")) for e in eventos], [False, True])
+
+    def test_texto_com_separadores_do_unicode_chega_inteiro_ao_n8n(self):
+        self.alimentar(upsert(LEAD, "primeira segunda", id_="U1", ts=self.agora - 1))
+        self.alimentar(upsert(LEAD, "com\x85nel", id_="U2", ts=self.agora - 1))
+        self.obs.ler_respostas()
+        self.agora += ob.ESPERA_DA_CONVERSA_S + 1
+        self.obs.fechar_conversas()
+        self.obs.mandar_conversas()
+        enviadas = [c[1] for c in self.chamadas if c[0] == "whatsapp-resposta"]
+        self.assertEqual([m["texto"] for m in enviadas[0]["mensagens"]], ["primeira segunda", "com\x85nel"])
 
     def test_enviado_e_lido_em_lid_chegam_ao_n8n_como_saida_e_lido(self):
         self.alimentar(upsert_lid(LEAD, "MSG1"))

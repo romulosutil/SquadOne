@@ -81,6 +81,13 @@ MAX_TEXTO = 1000
 VISTOS_MAX = 2000
 FORMAS_MAX = 200
 RESUMOS_MAX = 60  # linhas "evento: ..." no journal por execução (só fromMe, estado e domínios; ver resumo_seguro)
+# Mensagem recebida mais velha que isto não vira a linha "ignored" (que o observador lê como "agora").
+ATRASO_MAX_S = 10 * 60
+# O observador regrava leads.json a cada 10 min; mais velho que isto, ele parou: falha fechada outra vez.
+LEADS_VELHOS_S = 30 * 60
+LIMITE_RESPOSTAS = 2 * 1024 * 1024  # respostas.jsonl que ninguém consome não cresce sem fim
+MAX_CONEXOES = 32
+TEMPO_DA_CONEXAO_S = 10
 
 
 def log(*a):
@@ -166,6 +173,10 @@ def jid_da_conversa(item: dict, mapas: "Mapas | None" = None) -> tuple[str, str,
     principal = chave.get("remoteJid") or item.get("remoteJid") or ""
     if not isinstance(principal, str) or not principal:
         return "", "sem_chat", ""
+    # Os campos alternativos só valem para conversa 1:1. Em grupo ou status o participantAlt é o REMETENTE,
+    # e a mensagem não foi escrita a nós: sem esta trava, o lead que fala num grupo viraria "respondeu".
+    if principal.partition("@")[2] not in ("lid", "s.whatsapp.net", "c.us"):
+        return "", "nao_e_conversa_1a1", ""
     candidatos = [principal] + [onde.get(c) for onde in (chave, item)
                                 for c in ("remoteJidAlt", "senderPn", "participantAlt")]
     lid = next((u for c in candidatos if (u := _usuario_lid(c))), "")
@@ -220,6 +231,21 @@ def _legenda(m) -> str:
     return str(m.get("caption") or "").strip() if isinstance(m, dict) else ""
 
 
+def sem_conversa(mensagem, profundidade: int = 0) -> bool:
+    """True quando a mensagem não é conversa: ausente, ruído (reação, apagar, edição, voto) ou só
+    metadado. Abre os embrulhos (mensagem temporária, visualização única): uma reação dentro de uma
+    ephemeralMessage continua sendo reação."""
+    if not isinstance(mensagem, dict) or profundidade > 3:
+        return True
+    if any(k in mensagem for k in RUIDO):
+        return True
+    for embrulho in EMBRULHOS:
+        interno = mensagem.get(embrulho)
+        if isinstance(interno, dict):
+            return sem_conversa(interno.get("message"), profundidade + 1)
+    return not (set(mensagem) - {"messageContextInfo", "senderKeyDistributionMessage"})
+
+
 def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     """O texto como a bridge do Hermes grava (mesma convenção de mídia). '' = nada a guardar
     (reação, edição, protocolo, mensagem sem conteúdo)."""
@@ -268,7 +294,10 @@ def estado_do_recibo(valor) -> str:
     if isinstance(valor, bool):
         return ""
     if isinstance(valor, (int, float)):
-        return {3: "entregue", 4: "lido", 5: "lido"}.get(int(valor), "")
+        try:
+            return {3: "entregue", 4: "lido", 5: "lido"}.get(int(valor), "")
+        except (ValueError, OverflowError):  # NaN e infinito de um payload malformado
+            return ""
     nome = re.sub(r"[^A-Z_]", "", str(valor or "").upper())
     if nome in ("READ", "PLAYED"):
         return "lido"
@@ -277,13 +306,20 @@ def estado_do_recibo(valor) -> str:
     return ""
 
 
+def _nome_seguro(nome) -> str:
+    """Nome de campo que pode ir ao journal: o que parece id (tem @, 6 dígitos seguidos ou é longo) vira <chave>."""
+    s = str(nome)
+    return "<chave>" if "@" in s or re.search(r"\d{6,}", s) or len(s) > 48 else s
+
+
 def forma(valor, profundidade: int = 0):
     """A estrutura de um JSON sem nenhum valor: só nomes de campo e tipos. Vai ao journal para
     descobrir o formato real de um evento sem registrar conteúdo de conversa."""
     if profundidade > 5:
         return "..."
     if isinstance(valor, dict):
-        return {k: forma(valor[k], profundidade + 1) for k in sorted(valor)[:40]}
+        # Há eventos cujo dict é indexado por JID (presences): o NOME do campo seria um telefone.
+        return {_nome_seguro(k): forma(valor[k], profundidade + 1) for k in sorted(valor, key=str)[:40]}
     if isinstance(valor, list):
         return [forma(valor[0], profundidade + 1)] if valor else []
     return type(valor).__name__ if valor is not None else "null"
@@ -397,30 +433,38 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
 
         # MESSAGES_UPSERT / SEND_MESSAGE
         id_msg = chave_msg.get("id") or item.get("id") or item.get("messageId")
-        if id_msg:
-            if id_msg in vistos:
-                pular("reentrega")
-                continue
-            vistos.add(id_msg)
+        if id_msg and id_msg in vistos:
+            pular("reentrega")
+            continue
         mensagem = item.get("message")
         texto = texto_da_mensagem(mensagem)
-        sem_conversa = not isinstance(mensagem, dict) or any(k in mensagem for k in RUIDO)
+        vazia = sem_conversa(mensagem)
         if de_mim is True:
-            if sem_conversa:
+            if vazia:
                 pular("envio_sem_conteudo")
                 continue
             ts = hora_do_evento(item.get("messageTimestamp"), agora)
             linhas.append({"event": "owner_sent", "chatId": jid, "ts": int(ts)})
         elif de_mim is False:
-            if sem_conversa:
+            if vazia:
                 pular("recebida_sem_conteudo")
                 continue
-            linhas.append({"event": "ignored", "reason": MOTIVO, "chatId": jid, "senderId": jid})
+            ts = hora_do_evento(item.get("messageTimestamp"), agora)
+            if agora - ts <= ATRASO_MAX_S:
+                linhas.append({"event": "ignored", "reason": MOTIVO, "chatId": jid, "senderId": jid})
+            else:
+                # A linha da bridge não leva hora: o observador a leria como "agora". Uma saudação automática que
+                # a Evolution entrega horas depois (reconexão) viraria resposta de gente. O texto segue, com a hora certa.
+                pular("entrada_atrasada")
             if texto:
-                respostas.append({"chave": chave, "ts": int(hora_do_evento(item.get("messageTimestamp"), agora)),
-                                  "texto": texto})
+                respostas.append({"chave": chave, "ts": int(ts), "texto": texto})
         else:
             pular("sem_fromMe")
+            continue
+        # O id só é lembrado quando algo foi produzido: um placeholder sem conteúdo (ainda cifrado) que chega
+        # antes da mensagem decifrada, com o mesmo id, não pode engolir a resposta de verdade.
+        if id_msg:
+            vistos.add(id_msg)
     return Traducao(linhas, respostas, ignorados, conexao, tuple(resumos))
 
 
@@ -429,9 +473,13 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
 class Gravador:
     """A pasta do PRUMO: lê leads.json (do observador) e escreve evolution.log e respostas.jsonl."""
 
-    def __init__(self, pasta: Path = PASTA, limite_log: int = LIMITE_LOG):
+    def __init__(self, pasta: Path = PASTA, limite_log: int = LIMITE_LOG, relogio=time.time,
+                 limite_respostas: int = LIMITE_RESPOSTAS):
         self.pasta = pasta
         self.limite_log = limite_log
+        self.limite_respostas = limite_respostas
+        self.relogio = relogio
+        self.respostas_descartadas = 0
         self.trava = threading.Lock()
         self._leads: set[str] | None = None
         self._leads_mtime: float | None = None
@@ -450,10 +498,16 @@ class Gravador:
         return (self.pasta / "conectou").exists()
 
     def leads(self) -> set[str] | None:
-        """leads.json relido só quando muda; ausente ou ilegível = None (falha fechada)."""
+        """leads.json relido só quando muda; ausente, ilegível ou VELHO = None (falha fechada).
+
+        Velho = o observador do PRUMO parou de regravar (ele o faz a cada 10 min): sem ele ninguém consome o
+        texto, e a lista deixada para trás não pode seguir autorizando a gravação de conversa de gente."""
         arquivo = self.pasta / "leads.json"
         try:
             mtime = arquivo.stat().st_mtime
+            if self.relogio() - mtime > LEADS_VELHOS_S:
+                self._leads, self._leads_mtime = None, None
+                return None
             if mtime != self._leads_mtime:
                 lista = json.loads(arquivo.read_text(encoding="utf-8"))
                 if not isinstance(lista, list):
@@ -481,11 +535,21 @@ class Gravador:
                         caminho.replace(self.pasta / "evolution.log.1")  # o observador vê o arquivo novo e lê dele
                 except OSError:
                     pass
-                self._anexar(caminho, "".join(json.dumps(l, ensure_ascii=False) + "\n" for l in t.linhas))
+                # ensure_ascii: U+2028, U+2029 e NEL passariam crus pelo json.dumps e o splitlines() do observador
+                # quebraria a linha ao meio (o texto do lead se perderia).
+                self._anexar(caminho, "".join(json.dumps(l, ensure_ascii=True) + "\n" for l in t.linhas))
             if t.respostas:
+                arquivo = self.pasta / "respostas.jsonl"
+                try:
+                    cheio = arquivo.stat().st_size > self.limite_respostas
+                except OSError:
+                    cheio = False
+                if cheio:
+                    # Ninguém está consumindo: texto de lead não fica acumulando em disco.
+                    self.respostas_descartadas += len(t.respostas)
+                    return
                 # O observador troca o nome do arquivo para ler; abrir a cada escrita recria sem perder linha.
-                self._anexar(self.pasta / "respostas.jsonl",
-                             "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in t.respostas))
+                self._anexar(arquivo, "".join(json.dumps(r, ensure_ascii=True) + "\n" for r in t.respostas))
 
 
 # ------------------------------------------------------------------ aviso
@@ -536,8 +600,26 @@ class Adaptador:
         self.contadores: dict = {"eventos": {}, "linhas": 0, "respostas": 0, "ignorados": {}, "recibos": {}}
         self.ultimo_evento: float | None = None
         self.desconectado_avisado = False
+        # Cada pedido roda numa thread; Recentes, Mapas e os contadores não são seguros para duas ao mesmo tempo.
+        self.trava = threading.Lock()
+        self.rejeitados: dict[str, int] = {}
+        self._rejeicao_logada = 0.0
+
+    def rejeitar(self, codigo: int) -> None:
+        """Conta um pedido recusado (401, 400, 413). Um segredo trocado só de um lado zera o pipeline sem
+        nenhum outro sinal, então o contador vai ao /saude e uma linha ao journal, no máximo uma por minuto."""
+        with self.trava:
+            self.rejeitados[str(codigo)] = self.rejeitados.get(str(codigo), 0) + 1
+            agora = self.relogio()
+            if agora - self._rejeicao_logada >= 60:
+                self._rejeicao_logada = agora
+                log(f"pedido recusado ({codigo}); total por código: {self.rejeitados}")
 
     def receber(self, corpo) -> Traducao:
+        with self.trava:
+            return self._receber(corpo)
+
+    def _receber(self, corpo) -> Traducao:
         agora = self.relogio()
         evento = normalizar_evento(corpo.get("event")) if isinstance(corpo, dict) else "?"
         self.contadores["eventos"][evento] = self.contadores["eventos"].get(evento, 0) + 1
@@ -587,19 +669,25 @@ class Adaptador:
         log(f"forma nova de {evento}: {estrutura[:900]}")
 
     def saude(self) -> dict:
-        return {"ok": True, "instancia": self.instancia or None, "ultimo_evento": self.ultimo_evento,
-                "desconectado": self.desconectado_avisado, "lista_de_leads": self.gravador.leads() is not None,
-                **self.contadores}
+        with self.trava:
+            return {"ok": True, "instancia": self.instancia or None, "ultimo_evento": self.ultimo_evento,
+                    "desconectado": self.desconectado_avisado, "lista_de_leads": self.gravador.leads() is not None,
+                    "rejeitados": dict(self.rejeitados), "respostas_descartadas": self.gravador.respostas_descartadas,
+                    **self.contadores}
 
 
 def fazer_handler(adaptador: Adaptador, segredo: str):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        # Cabeçalho ou corpo que não termina de chegar não pode prender a thread para sempre.
+        timeout = TEMPO_DA_CONEXAO_S
 
         def log_message(self, *a):  # o journal já tem o que importa; nada de caminho nem IP
             pass
 
         def _responder(self, codigo: int, corpo: dict) -> None:
+            if codigo in (400, 401, 413):
+                adaptador.rejeitar(codigo)
             dados = json.dumps(corpo).encode()
             self.send_response(codigo)
             self.send_header("Content-Type", "application/json")
@@ -626,7 +714,10 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
             except ValueError:
                 return
             if 0 < n <= 65536:
-                self.rfile.read(n)
+                try:
+                    self.rfile.read(n)
+                except OSError:  # tempo esgotado: o cliente prometeu um corpo e não mandou
+                    self.close_connection = True
 
         def do_POST(self):
             # O segredo vem antes de tratar o corpo (um corpo pequeno só é descartado).
@@ -640,12 +731,17 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
                 tamanho = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 return self._responder(400, {"erro": "tamanho"})
+            if tamanho < 0:
+                # rfile.read(-1) leria até o cliente fechar: prenderia a thread.
+                self.close_connection = True
+                return self._responder(400, {"erro": "tamanho"})
             if tamanho > LIMITE_CORPO:
                 self.close_connection = True
                 return self._responder(413, {"erro": "grande"})
             try:
                 corpo = json.loads(self.rfile.read(tamanho) or b"null")
-            except ValueError:
+            except (ValueError, OSError):
+                self.close_connection = True
                 return self._responder(400, {"erro": "json"})
             try:
                 t = adaptador.receber(corpo)
@@ -657,8 +753,39 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
     return Handler
 
 
-def criar_servidor(adaptador: Adaptador, segredo: str, porta: int = PORTA, endereco: str = ENDERECO) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((endereco, porta), fazer_handler(adaptador, segredo))
+class ServidorLimitado(ThreadingHTTPServer):
+    """ThreadingHTTPServer com teto de conexões simultâneas: passou do teto, a conexão é fechada na hora.
+    Sem isso, um cliente da rede do compose abriria threads até o MemoryMax matar o serviço."""
+    daemon_threads = True
+
+    def __init__(self, *args, maximo: int = MAX_CONEXOES, **kwargs):
+        self._vagas = threading.BoundedSemaphore(maximo)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._vagas.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._vagas.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._vagas.release()
+
+    def handle_error(self, request, client_address):
+        # O padrão imprime o traceback inteiro de cada conexão cortada (reset, tempo esgotado): uma linha basta.
+        log("conexão encerrada com erro:", type(sys.exc_info()[1]).__name__)
+
+
+def criar_servidor(adaptador: Adaptador, segredo: str, porta: int = PORTA, endereco: str = ENDERECO,
+                   maximo: int = MAX_CONEXOES) -> ThreadingHTTPServer:
+    return ServidorLimitado((endereco, porta), fazer_handler(adaptador, segredo), maximo=maximo)
 
 
 def main() -> int:
