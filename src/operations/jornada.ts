@@ -500,14 +500,21 @@ export interface PassoDoPainel<L> {
   passo: PassoDaJornada
   leads: LeadNoPasso<L>[]
   parados: number
+  /** Estoque antes do primeiro contato: a vista mostra só os primeiros. */
+  fila: boolean
 }
 
 export interface PainelDaJornada<L> {
   passos: PassoDoPainel<L>[]
-  /** Quantos leads abertos estão esperando cada um. */
+  /** Quantos leads em andamento (da primeira mensagem em diante) esperam cada um. */
   porQuem: Record<QuemFaz, number>
+  /** Achados e Raio-X prontos: o estoque antes do primeiro contato (são centenas; não é conversa esperando ninguém). */
+  naFila: number
   parados: number
 }
+
+/** O estoque antes do primeiro contato: conta à parte do "com você". */
+const NA_FILA: IdDoPasso[] = ['achado', 'raio-x']
 
 /**
  * Os leads por passo, na ordem da jornada: os parados primeiro, depois os há mais tempo no
@@ -515,7 +522,8 @@ export interface PainelDaJornada<L> {
  */
 export function painelDaJornada<L extends LeadDaJornada & Pick<CrmLead, 'diasNaEtapa'>>(leads: L[]): PainelDaJornada<L> {
   const porQuem: Record<QuemFaz, number> = { robô: 0, você: 0, 'o dono': 0 }
-  const passos = PASSOS.map<PassoDoPainel<L>>((passo) => ({ passo, leads: [], parados: 0 }))
+  let naFila = 0
+  const passos = PASSOS.map<PassoDoPainel<L>>((passo) => ({ passo, leads: [], parados: 0, fila: NA_FILA.includes(passo.id) }))
   for (const lead of leads) {
     const id = passoAtual(lead)
     const alvo = passos.find((p) => p.passo.id === id)!
@@ -523,10 +531,11 @@ export function painelDaJornada<L extends LeadDaJornada & Pick<CrmLead, 'diasNaE
     const parado = proximo.quem === 'você' && alvo.passo.paradoApos !== undefined && (lead.diasNaEtapa ?? 0) >= alvo.passo.paradoApos
     alvo.leads.push({ lead, proximo, parado })
     if (parado) alvo.parados += 1
-    if (id !== 'ganho' && id !== 'perdido') porQuem[proximo.quem] += 1
+    if (NA_FILA.includes(id)) naFila += 1
+    else if (id !== 'ganho' && id !== 'perdido') porQuem[proximo.quem] += 1
   }
   for (const p of passos) p.leads.sort((a, b) => Number(b.parado) - Number(a.parado) || (b.lead.diasNaEtapa ?? 0) - (a.lead.diasNaEtapa ?? 0))
-  return { passos, porQuem, parados: passos.reduce((n, p) => n + p.parados, 0) }
+  return { passos, porQuem, naFila, parados: passos.reduce((n, p) => n + p.parados, 0) }
 }
 
 // ------------------------------------------------------------------ o guia dos agentes

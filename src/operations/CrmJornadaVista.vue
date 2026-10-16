@@ -12,6 +12,8 @@ const emit = defineEmits<{ abrir: [id: string] }>()
 const painel = computed(() => painelDaJornada(props.leads))
 const abertos = computed(() => painel.value.passos.filter((p) => p.passo.id !== 'ganho' && p.passo.id !== 'perdido'))
 const fechados = computed(() => painel.value.passos.filter((p) => p.passo.id === 'ganho' || p.passo.id === 'perdido'))
+// Os passos de fila têm centenas de leads: só os primeiros (os mais antigos) aqui, o resto no Funil.
+const LIMITE_DA_FILA = 5
 const dias = (n?: number) => (n === undefined ? '' : n === 0 ? 'hoje' : `${n} dia${n === 1 ? '' : 's'}`)
 </script>
 
@@ -19,7 +21,8 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? 'hoje' : `${n} di
   <section class="crm-jornada-vista" aria-labelledby="crm-jornada-titulo">
     <h2 id="crm-jornada-titulo" tabindex="-1">Jornada</h2>
     <p class="crm-muted">
-      Cada lead no passo em que está, com o que ele espera. Com você: {{ painel.porQuem['você'] }} ·
+      Cada lead no passo em que está, com o que ele espera. Na fila do primeiro contato: {{ painel.naFila }} ·
+      em andamento com você: {{ painel.porQuem['você'] }} ·
       com o robô: {{ painel.porQuem['robô'] }} · esperando o dono: {{ painel.porQuem['o dono'] }}<template v-if="painel.parados">
       · <strong>{{ painel.parados }} parado{{ painel.parados === 1 ? '' : 's' }} com você</strong></template>.
       A ordem e as regras estão no guia <code>docs/referencia/jornada-do-cliente.md</code>.
@@ -34,7 +37,7 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? 'hoje' : `${n} di
           <small class="crm-muted">Sai daqui: {{ p.passo.sai }}</small>
         </header>
         <ul v-if="p.leads.length">
-          <li v-for="item in p.leads" :key="item.lead.id" :class="{ 'is-parado': item.parado }">
+          <li v-for="item in p.fila ? p.leads.slice(0, LIMITE_DA_FILA) : p.leads" :key="item.lead.id" :class="{ 'is-parado': item.parado }">
             <button type="button" @click="emit('abrir', item.lead.id)">
               <strong>{{ item.lead.empresa }}</strong>
               <span class="crm-muted">{{ ROTULO_DO_PRODUTO[item.lead.produto] }} · {{ item.lead.nicho }}<template v-if="item.lead.diasNaEtapa !== undefined"> · {{ dias(item.lead.diasNaEtapa) }} no passo</template></span>
@@ -42,6 +45,7 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? 'hoje' : `${n} di
             </button>
           </li>
         </ul>
+        <p v-if="p.fila && p.leads.length > LIMITE_DA_FILA" class="crm-muted">E mais {{ p.leads.length - LIMITE_DA_FILA }} (a lista inteira fica no Funil).</p>
       </li>
     </ol>
 

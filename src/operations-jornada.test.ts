@@ -162,7 +162,9 @@ describe('jornada: a vista do funil inteiro', () => {
     assert.equal(resposta.parados, 1)
     // Esperar a resposta do dono há 5 dias não é "parado com você".
     assert.equal(p.passos.find((x) => x.passo.id === 'primeiro-contato')!.parados, 0)
-    assert.deepEqual(p.porQuem, { robô: 1, você: 1, 'o dono': 1 })
+    // O achado é estoque (naFila), não conversa esperando alguém.
+    assert.deepEqual(p.porQuem, { robô: 0, você: 1, 'o dono': 1 })
+    assert.equal(p.naFila, 1)
     assert.equal(p.parados, 1)
   })
 })
