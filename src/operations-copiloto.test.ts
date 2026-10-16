@@ -81,6 +81,12 @@ describe('copiloto: o dossiê', () => {
     assert.equal(d.historico[0].texto, 'nota 4')
     assert.equal(d.historico[11].texto, 'Ligar no [telefone] amanhã')
   })
+  it('os achados do Raio-X e o porte do CNPJ entram com os números', () => {
+    const d = montarDossie(lead({ produto: 'prumo', porte: 'EPP', achados: [{ id: 'poucas-avaliacoes', avaliacoes: 12 } as any] }))
+    assert.equal(d.lead.porte, 'EPP')
+    assert.deepEqual(d.raioX.achados, [{ id: 'poucas-avaliacoes', avaliacoes: 12 }])
+    assert.equal(montarDossie(lead()).raioX.achados, undefined)
+  })
   it('sem Raio-X no disco: só o link, ou nada', () => {
     assert.equal(montarDossie(lead({ links: { raioX: 'https://raio-x-prumo.vercel.app/estrela' } })).raioX.situacao, 'só o link')
     assert.equal(montarDossie(lead()).raioX.situacao, 'sem Raio-X')

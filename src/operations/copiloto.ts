@@ -21,7 +21,7 @@ import {
   OFERTAS_PROPRIAS, REGRAS_DA_OFERTA, funilDoLead, nomeDaOferta, ofertaDoLead, passoAtual, passoDaJornada, proximoDaJornada,
   type Funil, type IdDaOferta, type IdDoPasso, type LeadDaJornada, type ProximoDaJornada,
 } from './jornada'
-import type { CrmLead, CrmTipoDeResposta } from './types'
+import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
 
 // ------------------------------------------------------------------ onde o copiloto vale
 
@@ -92,6 +92,8 @@ export interface DossieDoLead {
     etapaNoCrm: string
     diasNoPasso?: number
     leitura?: string
+    /** Classe da Receita pelo CNPJ (EPP ou DEMAIS); ausente = não conferido. */
+    porte?: string
   }
   passo: { id: IdDoPasso, nome: string, quandoEstaAqui: string, oQueTiraDaqui: string, prazo?: string }
   proximo: ProximoDaJornada
@@ -107,7 +109,8 @@ export interface DossieDoLead {
   historico: Array<{ em: string, oQue: string, texto?: string }>
   proposta?: { em: string, data: string }
   objecoes: Array<{ fala: string, respostaPronta: string }>
-  raioX: { url?: string, texto?: string, situacao: 'com texto' | 'só o link' | 'sem Raio-X' }
+  /** `achados`: os pontos que o raio-x.py calculou, com os números (oferta sob medida, 15/10/2026). */
+  raioX: { url?: string, texto?: string, achados?: AchadoDoRaioX[], situacao: 'com texto' | 'só o link' | 'sem Raio-X' }
   cardapio: ItemDoCardapioNoDossie[]
   ofertasProprias: Array<{ id: IdDaOferta, nome: string, entrega: string, paraQuem: string }>
 }
@@ -153,6 +156,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
       etapaNoCrm: lead.subEtapa,
       ...(lead.diasNaEtapa !== undefined ? { diasNoPasso: lead.diasNaEtapa } : {}),
       ...(lead.leitura ? { leitura: lead.leitura } : {}),
+      ...(lead.porte ? { porte: lead.porte } : {}),
     },
     passo: { id: atual.id, nome: atual.nome, quandoEstaAqui: atual.entra, oQueTiraDaqui: atual.sai, ...(atual.prazo ? { prazo: atual.prazo } : {}) },
     proximo: proximoDaJornada(lead),
@@ -169,6 +173,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     raioX: {
       ...(urlRaioX ? { url: urlRaioX } : {}),
       ...(textoRaioX ? { texto: textoRaioX } : {}),
+      ...(lead.achados?.length ? { achados: lead.achados } : {}),
       situacao: textoRaioX ? 'com texto' : urlRaioX ? 'só o link' : 'sem Raio-X',
     },
     // Iris e estamparias não usam o cardápio (jornada.ts, regra 9): mandar o cardápio só confundiria.
