@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
  * Hoje (/), celular primeiro, nesta ordem (RULES 13):
+ *  0. no Dell (16/10/2026, "a Hoje não está entregando valor"): a próxima venda, uma ação por vez
+ *     com a mensagem pronta (ProximaVenda), e o porquê de não vender (PorQueNaoVende), que
+ *     substituiu a linha do funil e o cartão "N responderam" (a resposta agora é a própria venda);
  *  1. o que precisa do Rômulo agora, no máximo 3 cartões (falhas do Dell,
  *     cartões de decisão dos agentes, finanças em laranja/vermelho, fila e
  *     "vale olhar"); o resto atrás de "ver todos";
@@ -18,6 +21,8 @@ import DellAlerta from '../casca/DellAlerta.vue'
 import FinancasAlerta from '../casca/FinancasAlerta.vue'
 import RespostasAlerta from '../casca/RespostasAlerta.vue'
 import ListaDeQuests from '../agentes/ListaDeQuests.vue'
+import PorQueNaoVende from '../operations/PorQueNaoVende.vue'
+import ProximaVenda from '../operations/ProximaVenda.vue'
 import { useAgentes } from '../agentes/estado'
 import { useOverview } from '../casca/overview'
 import { navegar } from '../casca/rota'
@@ -28,7 +33,6 @@ import {
   pendenciaDeRespostas,
   pendenciasDaHoje,
   proximasQuests,
-  resumoDoFunil,
   type EstadoDasFinancasLido,
   type TimeLido
 } from '../casca/hoje'
@@ -97,8 +101,8 @@ const pendencias = computed(() =>
       crescimentos: agentes.value ? sugestoesDeCrescimento.value.map((s) => s.id) : []
     },
     ops.value ? financas.value : null,
-    // Do mesmo retrato do CRM que a linha do funil lê (bloco 4): nenhuma leitura a mais.
-    ops.value ? pendenciaDeRespostas(funil.value) : null
+    // No Dell a resposta de lead é o cartão "Próxima venda" (bloco 0): aqui só repetiria.
+    ops.value ? null : pendenciaDeRespostas(funil.value)
   )
 )
 const verTodos = ref(false)
@@ -215,12 +219,11 @@ async function lerFunil() {
     erroFunil.value = e instanceof Error ? e.message : String(e)
   }
 }
-const linhaDoFunil = computed(() => {
-  if (erroFunil.value) return `Funil indisponível: ${erroFunil.value}`
-  if (!funil.value) return 'Lendo o funil…'
-  if (funil.value.estado !== 'ok') return funil.value.estado === 'sem-retrato' ? 'Ainda sem retrato das planilhas.' : 'Retrato das planilhas ilegível.'
-  return resumoDoFunil(funil.value.contagens)
-})
+// A anotação de um envio feito pela Próxima venda: o n8n refaz o retrato em uns 5 s.
+const atrasos: number[] = []
+function agendarReleitura() {
+  atrasos.push(window.setTimeout(() => void lerFunil(), 5000), window.setTimeout(() => void lerFunil(), 15000))
+}
 const fonteDoFunil = computed(() => (funil.value?.geradoEm ? `planilhas lidas às ${hora(funil.value.geradoEm)}` : ''))
 
 // Finanças, time e funil: no mount e a cada 5 min com a aba visível. A % muda com a
@@ -247,15 +250,24 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.clearInterval(relogio)
   window.clearInterval(releitura)
+  atrasos.forEach((id) => window.clearTimeout(id))
 })
 </script>
 
 <template>
   <div class="hoje">
+    <!-- 0. Vender: a próxima ação com a mensagem pronta, e onde o funil perde. -->
+    <template v-if="ops">
+      <h1 class="so-leitor">Hoje</h1>
+      <ProximaVenda :visao="funil" :erro="erroFunil" @registrado="agendarReleitura" />
+      <PorQueNaoVende v-if="funil?.estado === 'ok'" :leads="funil.leads" :agora="agora" />
+    </template>
+
     <!-- 1. O que precisa de você -->
     <section class="hoje__bloco hoje__precisa" :class="`is-${tom}`" aria-labelledby="hoje-precisa">
       <div class="hoje__cabeca" role="status" aria-live="polite">
-        <h1 id="hoje-precisa">{{ titulo }}</h1>
+        <!-- No Dell o título da página é a venda; o estado do Dell vira um bloco de apoio. -->
+        <component :is="ops ? 'h2' : 'h1'" id="hoje-precisa">{{ titulo }}</component>
         <p v-if="subtitulo" class="texto-2 texto-pequeno">{{ subtitulo }}</p>
       </div>
       <p v-if="emComum" class="recado recado--atencao"><strong>{{ emComum.quantas }} falhas, um gesto só:</strong> {{ emComum.texto }}</p>
@@ -351,8 +363,8 @@ onBeforeUnmount(() => {
       </template>
     </section>
 
-    <!-- 3. Time -->
-    <section class="hoje__bloco" aria-labelledby="hoje-time">
+    <!-- 3. Time (só com os agentes neste processo: sem eles era um bloco que dizia "sem sinal"). -->
+    <section v-if="agentes" class="hoje__bloco" aria-labelledby="hoje-time">
       <div class="hoje__cabeca hoje__cabeca--linha">
         <h2 id="hoje-time">Time</h2>
         <a v-if="agentes" class="hoje__mais" href="/squadone">Abrir o escritório</a>
@@ -378,12 +390,8 @@ onBeforeUnmount(() => {
       </ul>
     </section>
 
-    <!-- 4. Funil -->
-    <a v-if="ops" class="hoje__bloco hoje__funil" href="/crm">
-      <span class="hoje__funil-rotulo">Funil</span>
-      <strong>{{ linhaDoFunil }}</strong>
-      <small v-if="fonteDoFunil" class="texto-2">{{ fonteDoFunil }} · abrir o CRM</small>
-    </a>
+    <!-- 4. A linha do funil saiu (16/10/2026): o "Por que não está vendendo" (bloco 0) a substitui. -->
+    <p v-if="ops && fonteDoFunil" class="texto-2 texto-pequeno hoje__fonte">{{ fonteDoFunil }} · <a href="/crm">abrir o CRM</a></p>
 
     <!-- 5. O que resolve sozinho, fechado: está aqui para conferir, não para interromper. -->
     <details v-if="alertas?.sozinhos.length" class="hoje__bloco hoje__sozinhos">
@@ -409,6 +417,7 @@ onBeforeUnmount(() => {
 .hoje__cabeca { display: grid; gap: var(--esp-1); }
 .hoje__cabeca--linha { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
 .hoje h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.05; letter-spacing: -0.02em; }
+.hoje #hoje-precisa { margin: 0; }
 .hoje h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .hoje p { margin: 0; }
 .hoje__precisa.is-falha { border-left-width: var(--faixa-forte); border-left-color: var(--negativo); }
@@ -425,10 +434,8 @@ onBeforeUnmount(() => {
 .hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: var(--tam-nome); }
 .hoje__estado { display: grid; gap: var(--esp-0); }
 .hoje__bloco-agora { font-weight: var(--peso-medio); overflow-wrap: anywhere; }
-.hoje__funil { gap: var(--esp-1); color: var(--texto); text-decoration: none; }
-.hoje__funil:hover { background: var(--hover); }
-.hoje__funil-rotulo { font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
-.hoje__funil strong { font-size: var(--tam-nome); font-variant-numeric: tabular-nums; }
+.hoje__fonte { margin: 0; text-align: center; }
+.hoje__fonte a { color: var(--texto-2); }
 .hoje__sozinhos summary { min-height: var(--toque); display: flex; align-items: center; font-weight: var(--peso-forte); cursor: pointer; }
 .hoje__sozinhos ul { display: grid; gap: var(--esp-2); margin: var(--esp-3) 0 0; padding: 0; list-style: none; }
 .hoje__sozinhos li { display: grid; gap: var(--esp-1); padding: var(--esp-2) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }

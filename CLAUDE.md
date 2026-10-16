@@ -80,6 +80,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/openrouter-decisoes.ts  transporte do Jev (OpenRouter /alpha/decisions): pedido, máscara, validação e erro PUROS; deny + ZDR, sem retry, chave nunca em log
   server/jev-sombra.ts    Jev em sombra (desligado, RULES 27): 4 perguntas por demanda e comparação com o Gemini PURAS; fila, teto/dia e de US$, JSONL 600; finanças nunca vão
   server/copiloto.ts      copiloto do PRUMO (desligado, só operations): provedor trocável (codex | gemini), sugestão guardada pelo hash do dossiê, teto/dia, JSONL 600, Raio-X do disco
+  server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
+                          um aviso por vez com a mensagem pronta e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl);
+                          GET /api/operations/crm/conversa?id=; leitura PURA das linhas
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
@@ -113,6 +117,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
     Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista), Resultados e Ficha (folha cheia)
+    proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
+                          (responder > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
+                          primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem pronta;
+                          ProximaVenda.vue é o 1º cartão da Hoje e da aba "A fazer" do CRM; o vendedor do Telegram usa a mesma fila
+    por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue, na Hoje)
     fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;

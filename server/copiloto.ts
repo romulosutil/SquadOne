@@ -15,6 +15,7 @@ import {
 } from "../src/operations/copiloto.ts";
 import { passoAtual, type IdDoPasso } from "../src/operations/jornada.ts";
 import type { CrmLead, CrmProduto, CrmVisao } from "../src/operations/types.ts";
+import type { MensagemParaODossie } from "../src/operations/copiloto.ts";
 import { arquivoDoMes, COTA_ESGOTADA, conferirCodex, diaLocal, executarCodex, type ExecutorDoCodex, type Logger } from "./luna-sombra.ts";
 import { gerarComRetry, MODEL, ModeloOcupado } from "./orchestrator.ts";
 
@@ -275,6 +276,8 @@ export interface FontesDoCopiloto {
   visao: () => Promise<Pick<CrmVisao, "leads">>;
   /** O HTML do Raio-X do lead, se houver no disco; null = sem. */
   raioX: (lead: CrmLead) => Promise<string | null>;
+  /** As mensagens guardadas pelo observador (server/conversa-do-lead.ts); null = sem. Opcional nos testes. */
+  conversa?: (lead: CrmLead) => Promise<MensagemParaODossie[] | null>;
 }
 
 export interface DepsDoCopiloto {
@@ -349,7 +352,17 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     } catch (error) {
       log.warn(`[copiloto] Raio-X ilegível para ${chaveDoLead(produto, id)}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    const dossie = montarDossie(lead as LeadDoCopiloto, html ? { textoDoRaioX: textoDoRaioX(html) } : {});
+    // A conversa guardada pelo observador (16/10/2026): sem ela, só o trecho da última resposta.
+    let conversa: Awaited<ReturnType<NonNullable<FontesDoCopiloto["conversa"]>>> = null;
+    try {
+      conversa = (await deps.fontes.conversa?.(lead)) ?? null;
+    } catch (error) {
+      log.warn(`[copiloto] conversa ilegível para ${chaveDoLead(produto, id)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const dossie = montarDossie(lead as LeadDoCopiloto, {
+      ...(html ? { textoDoRaioX: textoDoRaioX(html) } : {}),
+      ...(conversa?.length ? { conversa } : {}),
+    });
     return { lead, dossie, passo };
   }
 

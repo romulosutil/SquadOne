@@ -8,6 +8,7 @@ import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import CrmJornadaVista from './CrmJornadaVista.vue'
 import CrmResultados from './CrmResultados.vue'
+import ProximaVenda from './ProximaVenda.vue'
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import {
   AVISO_DE_FALHA_DA_ANOTACAO, anotar, corpoDaAnotacao, desanotar, gravarAnotados, lerAnotados, podarAnotados,
@@ -237,6 +238,16 @@ const textoDoRetrato = computed(() => {
 
 // ------------------------------------------------------------------ navegação
 
+// As abas dizem a tarefa, e a linha embaixo diz para que serve a aba aberta.
+const VISTAS: Array<{ id: Vista; rotulo: string; href: string; dica: string }> = [
+  { id: 'hoje', rotulo: 'A fazer', href: '/crm', dica: 'A próxima venda e tudo que espera você hoje, na ordem de quem está mais perto de comprar.' },
+  { id: 'funil', rotulo: 'Funil', href: '/crm?ver=funil', dica: 'Todos os leads por etapa (ou por passo da jornada). Toque num lead para abrir a ficha.' },
+  { id: 'resultados', rotulo: 'Números', href: '/crm?ver=resultados', dica: 'O que funcionou: envios, respostas e interesse por nicho, mensagem e horário.' },
+  { id: 'colinha', rotulo: 'Roteiro', href: '/crm?ver=colinha', dica: 'O roteiro de venda: o que dizer em cada momento, objeções e preços do cardápio.' },
+]
+// A Jornada é um modo do Funil: a aba Funil fica acesa nela.
+const vistaDaAba = computed<Vista>(() => (vista.value === 'jornada' ? 'funil' : vista.value))
+
 function trocarVista(nova: Vista) {
   vista.value = nova
   leadId.value = null
@@ -330,13 +341,18 @@ async function abrirColinha() {
 
     <!-- Fora do v-if do retrato: com o CRM fora do ar, ainda se chega à Colinha. As contagens só com retrato. -->
     <div v-if="visao || vista === 'colinha' || erro" class="crm-controles" :class="{ 'crm-controles--funil': vista === 'funil' }">
+      <!-- Quatro vistas com nome de tarefa (16/10/2026): "Jornada", "Resultados" e "Colinha" eram
+           nomes internos, perdidos ao lado de Hoje e Funil. A Jornada virou um modo do Funil. -->
       <nav class="crm-vistas" aria-label="Vistas do CRM">
-        <a href="/crm" :aria-current="vista === 'hoje' ? 'page' : undefined" @click.prevent="trocarVista('hoje')">Hoje <span v-if="visao">{{ totalHoje }}</span></a>
-        <a href="/crm?ver=funil" :aria-current="vista === 'funil' ? 'page' : undefined" @click.prevent="trocarVista('funil')">Funil <span v-if="visao">{{ leads.length }}</span></a>
-        <a href="/crm?ver=jornada" :aria-current="vista === 'jornada' ? 'page' : undefined" @click.prevent="trocarVista('jornada')">Jornada</a>
-        <a href="/crm?ver=resultados" :aria-current="vista === 'resultados' ? 'page' : undefined" @click.prevent="trocarVista('resultados')">Resultados</a>
-        <a href="/crm?ver=colinha" :aria-current="vista === 'colinha' ? 'page' : undefined" @click.prevent="trocarVista('colinha')">Colinha</a>
+        <a v-for="v in VISTAS" :key="v.id" :href="v.href" :aria-current="vistaDaAba === v.id ? 'page' : undefined" @click.prevent="trocarVista(v.id)">
+          {{ v.rotulo }} <span v-if="visao && v.id === 'hoje'">{{ totalHoje }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
+        </a>
       </nav>
+      <p class="crm-vistas__dica">{{ VISTAS.find((v) => v.id === vistaDaAba)?.dica }}</p>
+      <div v-if="vistaDaAba === 'funil'" class="segmentado crm-modo-do-funil" role="group" aria-label="Como ver o funil">
+        <button type="button" :aria-pressed="vista === 'funil'" @click="trocarVista('funil')">Por etapa</button>
+        <button type="button" :aria-pressed="vista === 'jornada'" @click="trocarVista('jornada')">Por passo da jornada</button>
+      </div>
       <div class="crm-produtos" role="group" aria-label="Ofertas do PRUMO">
         <button v-for="p in FILTROS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
       </div>
@@ -359,7 +375,8 @@ async function abrirColinha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <CrmHoje v-if="vista === 'hoje'" :grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
+      <ProximaVenda v-if="vista === 'hoje' && visao.estado === 'ok'" :visao="visao" @registrado="depoisDoRegistro" />
+      <CrmHoje v-if="vista === 'hoje'":grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
       <CrmJornadaVista v-else-if="vista === 'jornada'" :leads="leads" @abrir="abrirFicha" />
       <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
       <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />

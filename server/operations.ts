@@ -5,6 +5,7 @@ import path from "node:path";
 import express from "express";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
+import { lerConversa } from "./conversa-do-lead.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -534,6 +535,24 @@ export function createOperationsRouter(options: {
     } catch (error) {
       console.error("[operations] Falha ao ler o CRM:", error);
       res.status(500).json({ error: "Não foi possível ler o CRM agora." });
+    }
+  });
+
+  // A conversa do lead no WhatsApp (16/10/2026), como o observador gravou: só leitura, só leads.
+  // `id` é a chave da planilha (a mesma do registro), nunca o telefone.
+  router.get("/crm/conversa", async (req, res) => {
+    const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+    if (!/^[A-Za-z0-9_:.-]{1,200}$/.test(id)) {
+      res.status(400).json({ error: "id inválido." });
+      return;
+    }
+    try {
+      const mensagens = await lerConversa(id);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(mensagens === null ? { guardada: false, mensagens: [] } : { guardada: true, mensagens });
+    } catch (error) {
+      console.error("[operations] Falha ao ler a conversa do lead:", error);
+      res.status(500).json({ error: "Não foi possível ler a conversa agora." });
     }
   });
 

@@ -63,7 +63,7 @@
 .crm-vistas { display: flex; max-width: 100%; overflow: hidden; border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); }
 .crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: var(--esp-2); padding: var(--esp-2) var(--esp-4); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
 .crm-vistas a + a { border-left: var(--linha); }
-/* Com a Colinha são quatro vistas, ~385 px numa linha: no celular viram 2 × 2, e a
+/* Quatro vistas (A fazer, Funil, Números, Roteiro), ~385 px numa linha: no celular viram 2 × 2, e a
    linha entre elas é o fundo aparecendo no vão (como no .crm-resumo). */
 @media (max-width: 30rem) {
   .crm-vistas { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--linha-espessura); background: var(--borda); }
@@ -71,6 +71,9 @@
   .crm-vistas a + a { border-left: 0; }
 }
 .crm-vistas a[aria-current="page"] { background: var(--destaque); color: var(--destaque-texto); }
+/* Para que serve a aba aberta, numa linha (16/10/2026): o nome sozinho não explicava. */
+.crm-vistas__dica { order: 3; flex-basis: 100%; margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-modo-do-funil { order: 4; }
 .crm-vistas a span { min-width: 1.7rem; padding: 0 var(--esp-2); border: 1px solid currentColor; border-radius: var(--raio-selo); font-size: var(--tam-mini); text-align: center; }
 .crm-produtos { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
 .crm-produtos button { padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); border-radius: var(--raio-pilula); background: var(--superficie); color: var(--texto); font-weight: var(--peso-medio); cursor: pointer; }
@@ -330,6 +333,17 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-ficha__fixa::before { position: absolute; right: 0; bottom: 100%; left: 0; height: var(--esp-4); background: var(--superficie); content: ""; }
 .crm-ficha__fixa .botao { flex: 1 1 100%; justify-content: space-between; min-height: var(--toque-grande); padding-block: var(--esp-2); font-size: var(--tam-texto); text-align: left; }
 @media (min-width: 40rem) { .crm-ficha__fixa .botao { flex: 0 1 auto; gap: var(--esp-3); } }
+/* A mensagem do primário, legível antes do toque (16/10/2026). Colada ao "Agora", como a ação fixa. */
+.crm-ficha > .crm-ficha__rascunho { margin-top: var(--esp-3); }
+.crm-ficha__rascunho { display: grid; gap: var(--esp-1); }
+.crm-ficha__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14em; overflow: auto; }
+/* A conversa: o lead à esquerda, você à direita, como no WhatsApp; a hora embaixo, pequena. */
+.crm-conversa { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.crm-conversa li { display: grid; gap: var(--esp-0); max-width: 85%; padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); }
+.crm-conversa li.is-saida { justify-self: end; background: var(--ok-fundo); }
+.crm-conversa li.crm-muted { max-width: none; padding: 0; background: none; }
+.crm-conversa p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-conversa time { font-size: var(--tam-mini); }
 .crm-ficha__status { display: grid; gap: var(--esp-2); }
 /* Avisos: um por linha, com a faixa à esquerda pelo tom; a frase diz o que é (RULES 3). */
 .crm-ficha__avisos { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }

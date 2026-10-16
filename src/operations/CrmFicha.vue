@@ -14,6 +14,7 @@ import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroCont
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
+import { textoDoLink } from './proxima-venda'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo,
 // proposta, sem contato fácil, e no Plus o envio e a resposta) e todas vão para a aba CRM da
@@ -204,8 +205,51 @@ const contagemDasOutras = computed(() => outrasOfertas.value.reduce((n, g) => n 
 // A colinha do momento deste lead (colinha.ts): sai da etapa e da última resposta,
 // com os textos já preenchidos com o nome, o artigo e o link do demo dele.
 const colinha = computed(() => colinhaDoLead(props.lead))
-// Aberta quando o passo é escrever à mão; com um link de texto pronto no primário, ela é consulta.
-const colinhaAberta = computed(() => aberto.value && !doPasso.value.some((a) => a.anota))
+
+// "Como vender": abre no copiloto quando ele serve (do "respondeu" à proposta), no roteiro quando o
+// passo é escrever à mão, e na oferta no resto.
+type AbaDeVenda = 'oferta' | 'roteiro' | 'copiloto'
+const ABAS_DE_VENDA = computed<Array<{ id: AbaDeVenda; rotulo: string }>>(() => [
+  { id: 'oferta', rotulo: 'O que oferecer' },
+  { id: 'roteiro', rotulo: 'O que dizer' },
+  ...(comCopiloto.value && copilotoServe(props.lead) ? [{ id: 'copiloto' as const, rotulo: 'Copiloto' }] : []),
+])
+const abaInicial = (): AbaDeVenda =>
+  comCopiloto.value && copilotoServe(props.lead) ? 'copiloto' : aberto.value && !doPasso.value.some((a) => a.anota) ? 'roteiro' : 'oferta'
+const abaDeVenda = ref<AbaDeVenda>(abaInicial())
+watch(comCopiloto, () => { abaDeVenda.value = abaInicial() })
+
+// A mensagem do primário (o texto do wa.me, ou a primeira mensagem do Balcão no link do n8n).
+const rascunho = computed(() => {
+  const p = primaria.value
+  if (!p) return ''
+  return textoDoLink(p.href) ?? (p.chave === 'enviar' ? props.lead.mensagemPronta ?? '' : '')
+})
+
+// ------------------------------------------------------------ a conversa (o observador, 16/10/2026)
+
+const conversaTodas = ref<Array<{ em: string; direcao: 'entrada' | 'saida'; texto: string }>>([])
+const conversaGuardada = ref<boolean | null>(null)
+const conversaErro = ref('')
+const conversaInteira = ref(false)
+const MAX_NA_FICHA = 12
+const conversa = computed(() => (conversaInteira.value ? conversaTodas.value : conversaTodas.value.slice(-MAX_NA_FICHA)))
+const conversaCortada = computed(() => conversa.value.length < conversaTodas.value.length)
+async function lerConversa() {
+  conversaTodas.value = []
+  conversaGuardada.value = null
+  conversaErro.value = ''
+  conversaInteira.value = false
+  try {
+    const r = await fetch(`/api/operations/crm/conversa?id=${encodeURIComponent(props.lead.chave)}`, { cache: 'no-store' })
+    const corpo = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(corpo.error ?? `HTTP ${r.status}`)
+    conversaGuardada.value = Boolean(corpo.guardada)
+    conversaTodas.value = Array.isArray(corpo.mensagens) ? corpo.mensagens : []
+  } catch (e) {
+    conversaErro.value = `Não consegui ler a conversa: ${e instanceof Error ? e.message : String(e)}`
+  }
+}
 
 // Ctrl/Cmd/Shift/meio abrem a página numa aba nova, como os links da casca (casca/rota.ts).
 function verColinha(e: MouseEvent) {
@@ -215,10 +259,13 @@ function verColinha(e: MouseEvent) {
 }
 
 onMounted(async () => {
+  void lerConversa()
   await nextTick()
   titulo.value?.focus()
 })
 watch(() => props.lead.id, () => {
+  void lerConversa()
+  abaDeVenda.value = abaInicial()
   nota.value = ''
   proximoTexto.value = ''
   proximoData.value = ''
@@ -298,7 +345,6 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         <span class="crm-etapa" :class="`is-${lead.etapa}`">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
         <span>{{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}<template v-if="lead.leitura === 'viu'"> · leu</template><template v-else-if="lead.leitura === 'pela-resposta'"> · leu e respondeu</template></span>
       </p>
-      <CrmJornada :lead="lead" />
     </header>
 
     <section class="crm-ficha__agora" aria-labelledby="crm-ficha-agora">
@@ -328,6 +374,12 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
 
     <!-- Preso ao topo da folha enquanto se rola: é a ação de hoje. Filho direto da ficha, porque o
          sticky só anda dentro do pai: dentro da seção "Agora", soltaria assim que ela saísse da tela. -->
+    <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
+    <figure v-if="rascunho" class="crm-ficha__rascunho">
+      <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)</figcaption>
+      <blockquote>{{ rascunho }}</blockquote>
+    </figure>
+
     <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
       <a class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
       <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
@@ -371,18 +423,37 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       </details>
     </div>
 
-    <section v-if="lead.resposta" class="crm-ficha__secao" aria-labelledby="crm-ficha-resposta">
-      <h3 id="crm-ficha-resposta">Resposta</h3>
-      <p class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
+    <!-- A conversa de verdade (16/10/2026), como o observador guardou; sem ela, a última resposta classificada. -->
+    <section v-if="lead.resposta || conversa.length" class="crm-ficha__secao" aria-labelledby="crm-ficha-conversa">
+      <h3 id="crm-ficha-conversa">Conversa</h3>
+      <p v-if="lead.resposta" class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
         <strong>{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</strong>{{ lead.resposta.em ? ` ${quandoFoi(lead.resposta.em)}` : '' }}
       </p>
-      <blockquote v-if="lead.resposta.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
-      <p v-else class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
+      <ol v-if="conversa.length" class="crm-conversa" aria-label="Mensagens, da mais antiga para a mais nova">
+        <li v-if="conversaCortada" class="crm-muted"><button type="button" class="crm-mais" @click="conversaInteira = true">Ver as {{ conversaTodas.length - conversa.length }} mensagens anteriores</button></li>
+        <li v-for="(m, i) in conversa" :key="`${m.em}-${i}`" :class="`is-${m.direcao}`">
+          <span class="so-leitor">{{ m.direcao === 'entrada' ? `${lead.empresa} escreveu` : 'Você escreveu' }}</span>
+          <p>{{ m.texto || (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
+          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}</time>
+        </li>
+      </ol>
+      <template v-else>
+        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
+        <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
+        <p class="crm-muted">{{ conversaGuardada === false ? 'A conversa inteira aparece aqui a partir das próximas mensagens: o observador passou a guardar em 16/10/2026.' : conversaErro || '' }}</p>
+      </template>
     </section>
 
-    <!-- Uma lista simples: o nome e, embaixo, o porquê. "Confirmar" é uma checklist curta. -->
-    <section v-if="oferta.agora.length || oferta.aConfirmar.length || outrasOfertas.length" class="crm-ficha__secao" aria-labelledby="crm-ficha-oferta">
-      <h3 id="crm-ficha-oferta">O que oferecer</h3>
+    <!-- Como vender (16/10/2026): oferta, roteiro e copiloto eram três blocos seguidos; viraram
+         uma seção com três abas, abrindo na que o momento pede. -->
+    <section class="crm-ficha__secao" aria-labelledby="crm-ficha-vender">
+      <h3 id="crm-ficha-vender">Como vender</h3>
+      <div class="segmentado" role="group" aria-label="Como vender este lead">
+        <button v-for="a in ABAS_DE_VENDA" :key="a.id" type="button" :aria-pressed="abaDeVenda === a.id" @click="abaDeVenda = a.id">{{ a.rotulo }}</button>
+      </div>
+
+    <template v-if="abaDeVenda === 'oferta'">
+      <p v-if="!oferta.agora.length && !oferta.aConfirmar.length && !outrasOfertas.length" class="crm-muted">Sem oferta calculada para este lead.</p>
       <ul v-if="oferta.agora.length" class="crm-ficha__ofertas">
         <li v-for="o in oferta.agora" :key="o.id"><strong>{{ nomeDaOferta(o.id) }}</strong><span>{{ o.porque }}</span></li>
       </ul>
@@ -399,19 +470,19 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
           </ul>
         </template>
       </details>
-    </section>
+    </template>
 
-    <!-- Colinha e copiloto: abertos quando o passo é escrever à mão; senão, dobrados com o título à vista. -->
-    <details class="dobra crm-ficha__secao" :open="colinhaAberta">
-      <summary>Colinha<span v-if="colinha.momentos[0]" class="crm-muted">{{ colinha.momentos[0].titulo }}</span></summary>
+    <template v-else-if="abaDeVenda === 'roteiro'">
+      <p v-if="colinha.momentos[0]" class="crm-ficha__rotulo">{{ colinha.momentos[0].titulo }}</p>
       <p v-if="colinha.motivo" class="crm-colinha__motivo">{{ colinha.motivo }}</p>
       <CrmObjecao v-for="o in colinha.objecoes" :key="o.id" :objecao="o" :lead="lead" :nivel="4" />
       <CrmMomento v-for="m in colinha.momentos" :key="m.momento" :passo="m" :lead="lead" :nivel="4" />
-      <a class="crm-colinha__inteira" href="/crm?ver=colinha" @click="verColinha">Ver a colinha inteira <span aria-hidden="true">→</span></a>
-    </details>
+      <a class="crm-colinha__inteira" href="/crm?ver=colinha" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
+    </template>
 
     <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
-    <CrmCopiloto v-if="comCopiloto && copilotoServe(lead)" :lead="lead" />
+    <CrmCopiloto v-else-if="abaDeVenda === 'copiloto'" :lead="lead" />
+    </section>
 
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-anotar">
       <h3 id="crm-ficha-anotar">Anotar</h3>
@@ -451,6 +522,8 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
 
     <!-- Consulta: de onde veio e o que já aconteceu. Fechado, com a contagem à vista. -->
     <div class="crm-ficha__secao crm-ficha__consulta">
+      <!-- A jornada saiu do topo (16/10/2026): o "Agora" já diz o passo; aqui fica o mapa inteiro. -->
+      <CrmJornada :lead="lead" />
       <details class="dobra">
         <summary>Sobre o lead</summary>
         <!-- Triagem do caçador (Iris, estamparias): por que entrou e de onde veio o WhatsApp. -->

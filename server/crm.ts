@@ -997,7 +997,13 @@ function leadDoSite(linha: Linha, contexto: {
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
   const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: t.ultimaSaida });
-  const respostaNova = emConversa && (parado !== null || (
+  // Achado da simulação das jornadas (16/10/2026): depois da 2ª mensagem anotada, quem escreveu por
+  // último foi o Rômulo, mas o "respondeu há menos de 48 h" mantinha o lead em "Respostas para
+  // responder", e a Hoje pedia de novo o que já tinha saído. A 2ª anotada depois da resposta encerra a vez.
+  const ultimaSegunda = segundas.length ? Math.max(...segundas) : undefined;
+  const ultimaDele = Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0);
+  const falouPorUltimo = ultimaSegunda !== undefined && ultimaSegunda > ultimaDele;
+  const respostaNova = emConversa && !falouPorUltimo && (parado !== null || (
     t.ultimaEntrada !== undefined && t.ultimaSaida !== undefined
       ? t.ultimaEntrada > t.ultimaSaida
       : t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
@@ -1259,7 +1265,10 @@ function leadDoPrumo(linha: Linha, contexto: {
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // Com o formulário respondido (diagnóstico) a conversa já andou: não há mais 2ª mensagem a esperar.
   const parado = interesseParado({ conversa: emConversa && t.diagnostico === undefined, resposta, respondeu: t.respondeu, segundas });
-  const respostaNova = emConversa && t.diagnostico === undefined && (parado !== null
+  // Como no Site (16/10/2026): o Raio-X anotado depois da última resposta é a vez dele, não a sua.
+  const ultimaSegunda = segundas.length ? Math.max(...segundas) : undefined;
+  const falouPorUltimo = ultimaSegunda !== undefined && ultimaSegunda > Math.max(t.respondeu ?? 0, instante(resposta?.em ?? "") ?? 0);
+  const respostaNova = emConversa && t.diagnostico === undefined && !falouPorUltimo && (parado !== null
     || (t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
   const eventos: CrmEvento[] = [
     ...evento("encontrado", oferta.cacador, t.encontrado, "planilha · Encontrado em"),

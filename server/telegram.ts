@@ -160,21 +160,26 @@ export async function enviarMensagem(
   chatId: number,
   texto: string,
   responderA?: number,
-  botoes?: Botao[],
+  botoes?: Botao[] | Botao[][],
 ): Promise<void> {
+  // Uma fila de botões (o formato antigo) ou várias linhas (o aviso de venda, 16/10/2026).
+  const linhas: Botao[][] = !botoes?.length ? [] : Array.isArray(botoes[0]) ? (botoes as Botao[][]) : [botoes as Botao[]];
   await chamar(c, "sendMessage", {
     chat_id: chatId,
     text: texto,
     ...(responderA ? { reply_parameters: { message_id: responderA, allow_sending_without_reply: true } } : {}),
-    ...(botoes?.length ? { reply_markup: { inline_keyboard: [botoes.map((b) => ({ text: b.texto, callback_data: b.dados }))] } } : {}),
+    ...(linhas.length
+      ? { reply_markup: { inline_keyboard: linhas.map((l) => l.map((b) => ("url" in b ? { text: b.texto, url: b.url } : { text: b.texto, callback_data: b.dados }))) } }
+      : {}),
   });
 }
 
-/** Um botão inline: `dados` volta no `callback_query` (máx. 64 bytes). */
-export interface Botao {
-  texto: string;
-  dados: string;
-}
+/**
+ * Um botão inline: `dados` volta no `callback_query` (máx. 64 bytes); `url` abre o link
+ * (o WhatsApp com a mensagem pronta, a ficha na tailnet) sem passar pelo bot.
+ */
+export type BotaoDeDados = { texto: string; dados: string };
+export type Botao = BotaoDeDados | { texto: string; url: string };
 
 /** Tira o "carregando" do botão tocado; o texto aparece como aviso curto no topo do chat. */
 export async function responderBotao(c: ConfigDeTelegram, callbackId: string, texto: string): Promise<void> {

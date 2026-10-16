@@ -50,6 +50,8 @@ import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/si
 import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
+import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
+import { lerConversa } from "./server/conversa-do-lead.ts";
 import { descreverHistorico } from "./server/roster-historico.ts";
 import { criarLeitorDoTime } from "./server/time.ts";
 import {
@@ -244,6 +246,7 @@ async function startServer() {
   // As finanças abrem mais abaixo, com a Central; o bot (criado antes) as acha
   // por aqui quando chega um "gastei 30 no mercado".
   let financasDoProcesso: EstadoDasFinancas | null = null;
+  let vendedorDoProcesso: Vendedor | null = null;
   // Fila de avisos do Dell (regra 20): lembretes da vigia e alertas de finanças.
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
@@ -277,6 +280,11 @@ async function startServer() {
               if (r.novo) depoisDeEscrever(banco, financasDoProcesso!.avisador);
               return r.categoria;
             }
+          : undefined,
+      // O vendedor (server/vendedor.ts) nasce com a Central, mais abaixo; o toque o acha por aqui.
+      tocarVenda:
+        squadOneMode === "operations"
+          ? async (token, acao) => (vendedorDoProcesso ? vendedorDoProcesso.tocar(token, acao) : { curto: "O vendedor está desligado." })
           : undefined,
     }));
     if (c.transporte === "webhook") {
@@ -344,7 +352,7 @@ async function startServer() {
       dataDir: operationsDataDir,
       operations: true,
       ai,
-      fontes: { visao: () => crm.visao(), raioX: (lead) => lerRaioXDoDisco(lead, crm.config) },
+      fontes: { visao: () => crm.visao(), raioX: (lead) => lerRaioXDoDisco(lead, crm.config), conversa: (lead) => lerConversa(lead.chave) },
     });
     const readAgenda = async (): Promise<AgendaSummary> => {
       if (!(await estaConectado())) return { state: "disconnected", events: [] };
@@ -377,6 +385,26 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
     }));
+
+    // O vendedor (16/10/2026): "Envie para X" no Telegram, seg–sex 08:00–17:30, um por vez, com a
+    // mensagem pronta. Só com SQUADONE_VENDEDOR=true e o bot ligado; nunca envia nada ao lead.
+    if ((process.env.SQUADONE_VENDEDOR ?? "").trim() === "true") {
+      if (!configDeTelegram) {
+        console.error("[vendedor] SQUADONE_VENDEDOR=true sem o bot do Telegram: desligado.");
+      } else {
+        const c = configDeTelegram;
+        vendedorDoProcesso = criarVendedor({
+          lerVisao: () => crm.visao(),
+          enviar: async (texto, botoes) => {
+            for (const chat of c.chatsPermitidos) await enviarMensagem(c, chat, texto, undefined, botoes);
+          },
+          registrar: async (corpo) => { await crm.registrar(corpo); },
+          arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
+          origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,
+          agora: () => Date.now(),
+        });
+      }
+    }
 
     // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
     // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
@@ -891,6 +919,7 @@ async function startServer() {
     // Depois do listen: a primeira varredura não disputa o boot do Vite.
     vigia?.iniciar();
     sinal?.iniciar();
+    vendedorDoProcesso?.iniciar();
 
     // Polling (Dell): busca as mensagens; nunca registra webhook.
     if (configDeTelegram?.transporte === "polling" && botDoTelegram) {

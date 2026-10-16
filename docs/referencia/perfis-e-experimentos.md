@@ -159,6 +159,35 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 - **Medição:** `<SQUADONE_OPERATIONS_DATA_DIR>/copiloto/<AAAA-MM>.jsonl` (600, pasta 700): `{tipo:"sugestao", quando, lead "produto:id", passo, provedor, hashDoDossie, duracaoMs, sugestao|falha, avisos}` e `{tipo:"copiou", quando, lead, hashDoDossie, oQue}`. Daqui a 30 dias responde quantas sugestões o Rômulo usou e se o tempo do "gostei" até a proposta caiu. Sair da sombra (gerar sozinho, mandar pelo WhatsApp) é decisão do Rômulo.
 - **Ligar na Mel:** `SQUADONE_COPILOTO=true` no ambiente do serviço da Central e reiniciar; o log do boot diz `[copiloto] ligado: …` ou o motivo de não ligar.
 
+## Próxima venda e o vendedor do Telegram (16/10/2026)
+
+Pedido do Rômulo: "podia ser mais proativo, um aviso 'Envie mensagem para xpto' com tudo já organizado, só pra eu
+revisar", "a Hoje não está entregando valor" e "automatize o envio da primeira mensagem, de segunda a sexta, das 8h
+às 17h30". Decisão dele no mesmo dia, entre as opções: **semi-automático** (nada sai ao lead sem o toque dele; a
+Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora) e **a rampa 10/20/30 por dia mantida**.
+
+- **A fila** (`src/operations/proxima-venda.ts`, PURA): uma ação por vez, na ordem responder → combinado → "o que
+  achou?" (20–72 h depois do link, sem resposta dele) → proposta sem retorno → follow-up → primeiro contato (só com a
+  trava de ritmo e o expediente livres, no máximo um na fila). Cada ação traz o porquê (o `detalhe` da Hoje do CRM),
+  a tática do momento e a mensagem pronta (o `?text=` do wa.me, ou a primeira mensagem do Balcão).
+- **Na tela:** `ProximaVenda.vue` é o primeiro cartão da Hoje (Dell) e da aba "A fazer" do CRM. O toque no link anota
+  como no CRM (2ª mensagem, follow-up, Plus) e conta o primeiro contato na trava; "Enviei, próxima" e "Pular" só mexem
+  na tela (localStorage do dia).
+- **No Telegram** (`server/vendedor.ts`): `SQUADONE_VENDEDOR=true` no `operations` com o bot ligado. A cada minuto, de seg
+  a sex das 08:00 às 17:30 (`EXPEDIENTE_DE_VENDA`), manda a próxima ação com "Abrir no WhatsApp com a mensagem" (botão de
+  URL), "✓ Enviei" e "Pular" (callback `v:<token>:e|p`) e, com `SQUADONE_ORIGEM_CENTRAL`
+  (`https://<máquina>.ts.net:8443`), "Ver a ficha". Um aviso aberto por vez; 30 min sem toque vira pulado; um "quero
+  ver" novo fura a espera; teto de 40 avisos/dia. "Enviei" anota no CRM o que o link não marca sozinho e conta o
+  primeiro contato na trava antes de o retrato ver. Estado em `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor.json` (600).
+  Pelo Telegram e não pela fila do Hermes (exceção de 16/10/2026 à RULES 20): precisa de botões e sairia pelo mesmo
+  número que fala com os leads.
+- **"Por que não está vendendo"** (`por-que-nao-vende.ts`, `PorQueNaoVende.vue`): o funil dos 30 dias em degraus (enviados,
+  leram com recibo, responderam, "quero ver", próximo passo, proposta, ganho) contra referências de prospecção por
+  mensagem (60/15/30/100/40/25 %), com o degrau mais abaixo marcado (só com 3+ na base) e o que fazer nele.
+- **A conversa na Ficha** (`server/conversa-do-lead.ts`): o observador passou a gravar as mensagens dos leads em
+  `WHATSAPP_CONVERSAS_DIR` (padrão `~/.local/share/whatsapp-conversas/<chave>.jsonl`); a Ficha mostra a conversa e o
+  Hermes lê pelo skill `conversa-do-lead`. Antes, só o trecho classificado chegava ao CRM.
+
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 
 Pedido do Rômulo (já foi maçom e tem o catálogo do macons.org): os melhores leads num filtro próprio, "Plus", que podem ser de qualquer

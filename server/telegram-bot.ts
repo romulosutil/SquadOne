@@ -3,7 +3,7 @@ import type { Modo } from "./capabilities.ts";
 import type { TurnoResult } from "./orchestrator.ts";
 import type { FormatoDeData } from "../src/contribuicao.ts";
 import { lerGastoFalado, textoDoGastoAnotado, type GastoFalado } from "./financas/gasto-falado.ts";
-import { segredoConfere, type Botao } from "./telegram.ts";
+import { segredoConfere, type BotaoDeDados as Botao } from "./telegram.ts";
 import {
   criarMemoriaDeUpdates,
   dadosDoBotao,
@@ -69,6 +69,11 @@ export interface DepsDoBot {
    * mensagem (`tg:<chat>:<mensagem>`): reentregue, não duplica.
    */
   anotarGasto?(gasto: GastoFalado, origem: string, quando: Date): Promise<string>;
+  /**
+   * "Enviei"/"Pular" num aviso de venda (server/vendedor.ts). Ausente = vendedor desligado.
+   * `curto` vai no topo do chat; `texto`, quando vem, substitui a mensagem (e tira os botões).
+   */
+  tocarVenda?(token: string, acao: "enviei" | "pular"): Promise<{ curto: string; texto?: string }>;
 }
 
 export const TEXTO_FINANCAS_FORA = "As finanças não estão neste servidor: anote o gasto pelo app.";
@@ -281,6 +286,20 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
           console.error("[telegram] botão falhou:", err),
         );
         return;
+      case "venda": {
+        // Enviei/Pular de um aviso de venda: o vendedor anota (se for o caso) e manda a próxima.
+        const { chatId, mensagemId, callbackId, acao, token } = entrada;
+        (async () => {
+          if (!deps.tocarVenda) {
+            await deps.responderBotao(callbackId, "O vendedor não está ligado neste servidor.");
+            return;
+          }
+          const r = await deps.tocarVenda(token, acao);
+          await deps.responderBotao(callbackId, r.curto).catch(falhouAoEnviar);
+          if (r.texto) await deps.editar(chatId, mensagemId, r.texto).catch(falhouAoEnviar);
+        })().catch((err) => console.error("[telegram] botão de venda falhou:", err));
+        return;
+      }
       case "audio": {
         const { chatId, mensagemId, fileId, mime, modo, squadId } = entrada;
         const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => {
