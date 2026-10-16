@@ -6,9 +6,11 @@
 <style>
 /* Mesma linguagem do app (src/estilos/tokens.css e design.md, "Neobrutalismo saudável", main aec37b2):
    Inter, tinta sobre papel, amarelo para o escolhido, um nível de contorno de 2 px (cartão, campo,
-   botão, painel), canto 16/10/6 px, sombra dura só no "Copiar para a conversa" (o primário).
-   A partir de 60 rem: quadro da NN/g (uma coluna por passo, uma linha por faixa) e painel à direita.
-   Abaixo: lista por passo, e o cartão abre numa folha que sobe de baixo. Só um dos dois no DOM. */
+   botão, painel), canto 16/10/6 px, sombra dura só no primário de cada vista.
+   Quatro vistas (16/10/2026, versão 2): Jornadas (o quadro da NN/g por serviço, painel à direita a partir
+   de 60 rem, lista e folha no celular), Lado a lado (as etapas comuns da venda em linhas, um serviço por
+   coluna), Otimizações (a matriz impacto × esforço e a triagem, guardada no banco do Artifact) e Telas
+   (o inventário da Central com veredito, e o glossário). Os estados usam os pastéis fixos do app. */
 :root {
   --cor-tinta: #11130f;
   --cor-papel: #f4f0e6;
@@ -16,6 +18,7 @@
   --cor-papel-azul: #dce3ff;
   --cor-amarelo: #ffdc59;
   --cor-coral: #ff966f;
+  --cor-menta: #b9f6d0;
   --cor-apagado: #565c55;
 
   --fundo: var(--cor-papel-azul);
@@ -31,14 +34,19 @@
   --foco: #1e64d4;
   --hover: var(--superficie-2);
   --veu: rgba(17, 19, 15, 0.45);
-
   --realce: #fff3c4;
+
+  /* Pastéis fixos nos dois temas (as etapas do funil no app); sobre eles o texto é sempre a tinta. */
+  --etapa-contato: #cbdcff;
+  --etapa-proposta: #ffc48a;
+  --etapa-ganho: var(--cor-menta);
+  --etapa-perdido: #f2c4bb;
+
   --linha: 2px solid var(--borda);
   --linha-fina: 1px solid var(--borda);
   --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
   --sombra: 4px 4px 0 var(--borda);
   --sombra-pequena: 2px 2px 0 var(--borda);
-  /* Por dentro sempre menor que por fora: folha 16, cartão e controle 10, selo 6. */
   --raio-bloco: 16px;
   --raio-controle: 10px;
   --raio-selo: 6px;
@@ -85,52 +93,69 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--fonte); font-size: var(--tam-texto); font-weight: var(--peso-texto); line-height: 1.5; }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, p, ul, dl, dd { margin: 0; }
 h1, h2, h3 { text-wrap: balance; }
 :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 ::selection { background: var(--destaque); color: var(--destaque-texto); }
-.codigo { white-space: nowrap; }
+.codigo { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Casca: no quadro, a tela inteira é do app e só o quadro rola; na lista, a página rola. */
+/* Casca: no quadro, a tela inteira é do app e só o palco rola; na lista, a página rola. */
 .app.quadro { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; }
 .topo { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--esp-4) var(--esp-6); padding: var(--esp-4); border-bottom: var(--linha); background: var(--superficie); }
 .topo h1 { font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.05; }
 .topo p { margin-top: var(--esp-1); color: var(--texto-2); font-size: var(--tam-apoio); max-width: 40rem; }
-.controles { flex: 1 1 22rem; justify-content: end; display: flex; flex-wrap: wrap; align-items: end; gap: var(--esp-3); }
+.controles { flex: 1 1 22rem; display: flex; flex-wrap: wrap; justify-content: end; align-items: end; gap: var(--esp-3); }
+.filtros { display: contents; }
+.app:not([data-vista="jornadas"]) .filtros { display: none; }
 
 .segmentado { display: inline-flex; overflow: hidden; border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); }
 .segmentado button { min-height: var(--toque); padding: 0 var(--esp-4); border: 0; background: none; font-weight: var(--peso-forte); cursor: pointer; }
 .segmentado button + button { border-left: var(--linha); }
 .app.lista .segmentado { flex: 1 1 100%; }
-.app.lista .segmentado button { flex: 1; }
+.app.lista .segmentado button { flex: 1; padding: 0 var(--esp-2); font-size: var(--tam-apoio); }
 .segmentado button:hover { background: var(--hover); }
 .segmentado button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); }
+.segmentado button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .campo { flex: 1 1 10rem; display: grid; gap: var(--esp-1); font-size: var(--tam-apoio); font-weight: var(--peso-medio); color: var(--texto-2); }
-.campo input, .campo select { min-height: var(--toque); padding: 0 var(--esp-3); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); font-size: var(--tam-texto); font-weight: var(--peso-texto); }
-.campo input, .campo select { width: 100%; }
-.app.quadro .campo { flex: 0 1 14rem; }
+.campo input, .campo select, .campo textarea { width: 100%; min-height: var(--toque); padding: 0 var(--esp-3); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); font-size: var(--tam-texto); font-weight: var(--peso-texto); }
+.campo textarea { min-height: 4.5rem; padding: var(--esp-2) var(--esp-3); resize: vertical; line-height: 1.4; }
+.app.quadro .filtros .campo { flex: 0 1 14rem; }
 .resultado { flex-basis: 100%; font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .resultado:empty { display: none; }
 
 .corpo { display: grid; grid-template-columns: minmax(0, 1fr) 25rem; min-height: 0; }
-.app.lista .corpo { display: block; }
+.app:not([data-vista="jornadas"]) .corpo, .app.lista .corpo { display: block; }
+.app.quadro:not([data-vista="jornadas"]) .corpo { overflow: auto; }
 .palco { min-width: 0; min-height: 0; overflow: auto; }
-.app.lista .palco { overflow: visible; padding: var(--esp-4); display: grid; gap: var(--respiro-pilha); }
+.app.lista .palco, .app:not([data-vista="jornadas"]) .palco { overflow: visible; }
+.app.lista .palco { padding: var(--esp-4); display: grid; gap: var(--respiro-pilha); }
 #intro { padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+
+/* Vistas em documento (Lado a lado, Otimizações, Telas): uma coluna larga, a página rola. */
+.doc { display: grid; gap: var(--respiro-pilha); width: 100%; max-width: 84rem; margin: 0 auto; padding: var(--esp-4) 0 var(--esp-8); }
+.app.quadro .doc { padding-inline: var(--esp-4); }
+.doc__cabeca { display: grid; gap: var(--esp-2); max-width: 46rem; }
+.doc__cabeca h2 { font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.15; }
+.doc__cabeca p { color: var(--texto-2); }
+.bloco { display: grid; gap: var(--esp-3); padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); min-width: 0; }
+.bloco > h3 { font-size: var(--tam-nome); font-weight: var(--peso-titulo); }
+.nota-rodape { color: var(--texto-2); font-size: var(--tam-mini); }
 
 /* Cartão do blueprint: igual em todas as faixas; a faixa e a linha é que dizem onde ele está. */
 .cartao { display: grid; gap: var(--esp-1); width: 100%; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); text-align: left; cursor: pointer; transition: opacity 160ms; }
 .cartao:hover { background: var(--hover); }
 .cartao__nome { font-weight: var(--peso-forte); line-height: 1.3; }
 .cartao__codigo { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-medio); }
-/* Escolhido é amarelo, sem sombra: a sombra é do primário (BP-R2). */
+.cartao__selos { display: flex; flex-wrap: wrap; gap: var(--esp-1); }
 .cartao.escolhido { background: var(--destaque); color: var(--destaque-texto); }
 .cartao.escolhido .cartao__codigo { color: var(--destaque-texto); }
 .cartao.apagado { opacity: 0.4; }
 .app.lista .cartao.apagado { display: none; }
 .selo { justify-self: start; padding: 0 var(--esp-2); border-radius: var(--raio-selo); background: var(--acento); color: var(--sobre-pastel); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+.selo.ot { background: var(--etapa-contato); letter-spacing: 0; text-transform: none; }
+.selo.mao { background: var(--superficie-2); color: var(--texto); letter-spacing: 0; text-transform: none; border: var(--linha-fina); }
 @media (prefers-reduced-motion: reduce) { .cartao { transition: none; } }
 
 /* Quadro */
@@ -139,12 +164,13 @@ h1, h2, h3 { text-wrap: balance; }
 .faixa b { font-size: var(--tam-apoio); font-weight: var(--peso-forte); line-height: 1.2; }
 .faixa span { color: var(--texto-2); font-size: var(--tam-mini); line-height: 1.3; }
 .celula { position: relative; z-index: 1; display: grid; align-content: start; gap: var(--esp-2); padding: var(--esp-3) 0; min-width: 0; }
-/* Cabeçalho dos passos fica no topo ao rolar para baixo: sem ele, nas faixas de baixo não se sabe de que passo é a coluna. */
 .passo { position: sticky; top: 0; z-index: 3; display: grid; align-content: end; gap: var(--esp-1); padding: var(--esp-3) 0; border-bottom: var(--linha); background: var(--fundo); }
 .faixa.canto { top: 0; z-index: 4; }
 .passo__nome { display: flex; align-items: start; gap: var(--esp-2); font-weight: var(--peso-titulo); line-height: 1.2; }
 .n { display: inline-grid; flex: none; place-items: center; min-width: 1.75rem; height: 1.75rem; border-radius: var(--raio-selo); background: var(--texto); color: var(--superficie); font-size: var(--tam-apoio); font-weight: var(--peso-forte); font-variant-numeric: tabular-nums; }
 .passo__quando { color: var(--texto-2); font-size: var(--tam-apoio); }
+.passo__etapa { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+.passo.alvo .passo__nome { text-decoration: underline 3px var(--destaque); text-underline-offset: 4px; }
 .linha { grid-column: 1 / -1; border-top: 2px dashed var(--borda); margin: var(--esp-2) 0; }
 .linha.visibilidade { border-top: var(--linha); }
 .linha span { position: sticky; left: 0; z-index: 2; display: inline-block; transform: translateY(-55%); padding: 0 var(--esp-2) 0 0; background: var(--fundo); color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
@@ -163,7 +189,7 @@ svg.setas path.apagada { opacity: 0.1; }
 
 /* Painel (quadro) e folha (lista) mostram o mesmo conteúdo. */
 .painel { min-width: 0; overflow-y: auto; border-left: var(--linha); background: var(--superficie); padding: var(--respiro-bloco); }
-.app.lista .painel { display: none; }
+.app.lista .painel, .app:not([data-vista="jornadas"]) .painel { display: none; }
 .detalhe { display: grid; align-content: start; gap: var(--respiro-bloco); }
 .detalhe h2 { font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.15; }
 .detalhe__meta { color: var(--texto-2); font-size: var(--tam-apoio); }
@@ -177,7 +203,6 @@ svg.setas path.apagada { opacity: 0.1; }
 .arquivos li { font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 .ficha { display: grid; grid-template-columns: max-content 1fr; gap: var(--esp-2) var(--esp-3); }
 .ficha dt { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); padding-top: 0.1em; }
-/* O "o que fazer aqui" em zona de realce: fundo, não outra caixa (BP-R1). */
 .dica { padding: var(--respiro-interno); border-radius: var(--raio-controle); background: var(--realce); font-size: var(--tam-apoio); }
 .dobra summary { min-height: var(--toque); display: flex; align-items: center; font-size: var(--tam-apoio); font-weight: var(--peso-forte); cursor: pointer; }
 .dobra ul { padding-left: var(--esp-5); display: grid; gap: var(--esp-1); }
@@ -194,11 +219,105 @@ svg.setas path.apagada { opacity: 0.1; }
 .primario { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra); }
 .primario:hover { filter: brightness(0.95); }
 .primario:active { transform: translate(2px, 2px); box-shadow: var(--sombra-pequena); }
+.primario:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
 .secundario { background: var(--superficie); color: var(--texto); }
 .secundario:hover { background: var(--hover); }
+.link { padding: 0; border: 0; background: none; color: var(--texto); font-weight: var(--peso-forte); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left; }
 .aviso { font-size: var(--tam-apoio); color: var(--texto-2); }
 .aviso:empty { display: none; }
 .recurso { width: 100%; min-height: 8rem; font-size: var(--tam-apoio); }
+
+/* Estado da triagem e veredito: pastel com o nome escrito (cor nunca sozinha). */
+.estado { display: inline-flex; align-items: center; min-height: 1.5rem; padding: 0 var(--esp-2); border: var(--linha-fina); border-radius: var(--raio-selo); background: var(--superficie); color: var(--texto); font-size: var(--tam-mini); font-weight: var(--peso-forte); white-space: nowrap; }
+[data-estado="fazer"] { --cor-estado: var(--destaque); }
+[data-estado="depois"] { --cor-estado: var(--etapa-contato); }
+[data-estado="feita"] { --cor-estado: var(--etapa-ganho); }
+[data-estado="descartar"] { --cor-estado: var(--etapa-perdido); }
+[data-veredito="fundir"] { --cor-estado: var(--etapa-proposta); }
+[data-veredito="cortar"] { --cor-estado: var(--etapa-perdido); }
+[data-veredito="renomear"], [data-veredito="mover"] { --cor-estado: var(--etapa-contato); }
+.estado[data-estado]:not([data-estado="aberta"]), .estado[data-veredito]:not([data-veredito="manter"]), .ot-chip[data-estado]:not([data-estado="aberta"]) { background: var(--cor-estado); color: var(--sobre-pastel); border-color: var(--sobre-pastel); }
+
+/* Lado a lado */
+.lado { display: grid; gap: 0; border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); overflow: hidden; }
+.lado__linha { display: grid; grid-template-columns: minmax(10rem, 14rem) repeat(3, minmax(0, 1fr)); border-top: var(--linha); }
+.lado__linha:first-child { border-top: 0; }
+.lado__linha > * { padding: var(--esp-3) var(--esp-4); min-width: 0; }
+.lado__linha > * + * { border-left: var(--divisor); }
+.lado__cabeca { background: var(--superficie-2); }
+.lado__cabeca b { display: block; font-weight: var(--peso-titulo); }
+.lado__cabeca span { color: var(--texto-2); font-size: var(--tam-apoio); }
+.lado__etapa { display: grid; align-content: start; gap: var(--esp-2); background: var(--superficie-2); }
+.lado__etapa b { font-weight: var(--peso-titulo); font-size: var(--tam-nome); line-height: 1.2; }
+.lado__etapa > span { color: var(--texto-2); font-size: var(--tam-apoio); }
+.degraus { display: grid; gap: var(--esp-1); padding: 0; list-style: none; }
+.degraus li { display: grid; grid-template-columns: 2.75rem 1fr; gap: var(--esp-2); align-items: baseline; font-size: var(--tam-apoio); }
+.degraus strong { font-size: var(--tam-nome); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; text-align: right; }
+.degraus small { display: block; color: var(--texto-2); font-size: var(--tam-mini); }
+.degraus li.gargalo strong { color: var(--texto); text-decoration: underline 3px var(--acento); text-underline-offset: 3px; }
+.lado__celula { display: grid; align-content: start; gap: var(--esp-3); }
+.lado__servico { display: none; font-size: var(--tam-mini); font-weight: var(--peso-forte); color: var(--texto-2); letter-spacing: 0.06em; text-transform: uppercase; }
+.lado__passo { display: grid; gap: var(--esp-1); }
+.lado__toques { color: var(--texto-2); font-size: var(--tam-apoio); }
+.vazio { color: var(--texto-2); font-size: var(--tam-apoio); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--esp-1); }
+.ot-chip { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 var(--esp-2); border: var(--linha); border-radius: var(--raio-selo); background: var(--superficie); color: var(--texto); font-size: var(--tam-mini); font-weight: var(--peso-forte); cursor: pointer; white-space: nowrap; }
+.ot-chip:hover { filter: brightness(0.95); }
+@media (max-width: 59.99rem) {
+  .lado { border: 0; border-radius: 0; background: none; gap: var(--respiro-pilha); overflow: visible; }
+  .lado__linha { grid-template-columns: 1fr; border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); overflow: hidden; }
+  .lado__linha.lado__topo { display: none; }
+  .lado__linha > * + * { border-left: 0; border-top: var(--divisor); }
+  .lado__servico { display: block; }
+}
+
+/* Otimizações */
+.resumo-estados { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.matriz { display: grid; grid-template-columns: 5.5rem repeat(3, minmax(0, 1fr)); gap: var(--esp-2); }
+.matriz__eixo { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; align-self: center; }
+.matriz__cel { display: flex; flex-wrap: wrap; align-content: start; gap: var(--esp-1); min-height: 3.25rem; padding: var(--esp-2); border-radius: var(--raio-controle); background: var(--superficie-2); }
+.matriz__cel.rapido { background: var(--realce); }
+.filtros-ot { display: flex; flex-wrap: wrap; align-items: end; gap: var(--esp-3); }
+.filtros-ot .campo { flex: 0 1 13rem; }
+.lista-ot { display: grid; gap: var(--esp-3); }
+.ot { border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+.ot > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--esp-1) var(--esp-3); align-items: center; padding: var(--esp-3) var(--esp-4); min-height: var(--toque); cursor: pointer; list-style: none; }
+.ot > summary::-webkit-details-marker { display: none; }
+.ot > summary:hover { background: var(--hover); border-radius: var(--raio-bloco); }
+.ot__codigo { font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
+.ot__titulo { font-weight: var(--peso-forte); line-height: 1.3; }
+.ot__meta { grid-column: 2 / -1; color: var(--texto-2); font-size: var(--tam-apoio); }
+.ot__corpo { display: grid; gap: var(--esp-4); padding: 0 var(--esp-4) var(--esp-4); }
+.ot__texto { display: grid; gap: var(--esp-3); max-width: 46rem; }
+.ot__texto h4 { margin: 0; font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.ot__texto p { margin: 0; }
+.ot__triagem { display: grid; gap: var(--esp-3); padding: var(--respiro-interno); border-radius: var(--raio-controle); background: var(--realce); }
+.ot__triagem .segmentado { justify-self: start; max-width: 100%; }
+.ot.alvo { outline: 3px solid var(--foco); outline-offset: 2px; }
+.ot[hidden] { display: none; }
+
+/* Telas */
+.lista-telas { display: grid; gap: var(--esp-2); }
+.tela { display: grid; grid-template-columns: 5rem minmax(9rem, 13rem) minmax(0, 1fr) 7rem; gap: var(--esp-2) var(--esp-4); align-items: start; padding: var(--esp-3) var(--esp-4); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); }
+.tela__nome b { display: block; line-height: 1.3; }
+.tela__nome small { color: var(--texto-2); font-size: var(--tam-mini); overflow-wrap: anywhere; }
+.tela__texto { display: grid; gap: var(--esp-1); font-size: var(--tam-apoio); }
+.tela__texto p:last-child { color: var(--texto-2); }
+.tela .estado { justify-self: end; }
+.tela.alvo { outline: 3px solid var(--foco); outline-offset: 2px; }
+@media (max-width: 47.99rem) {
+  .tela { grid-template-columns: 1fr auto; }
+  .tela__nome { grid-column: 1; grid-row: 1; }
+  .tela .estado { grid-column: 2; grid-row: 1; }
+  .tela .codigo { grid-column: 1 / -1; grid-row: 2; color: var(--texto-2); font-size: var(--tam-mini); }
+  .tela__texto { grid-column: 1 / -1; }
+}
+.rolagem { overflow-x: auto; }
+table.glossario { width: 100%; min-width: 36rem; border-collapse: collapse; font-size: var(--tam-apoio); }
+.glossario th, .glossario td { padding: var(--esp-2) var(--esp-3); text-align: left; vertical-align: top; border-bottom: var(--divisor); }
+.glossario th { font-size: var(--tam-mini); color: var(--texto-2); letter-spacing: 0.06em; text-transform: uppercase; }
+.glossario td:first-child { font-weight: var(--peso-forte); white-space: nowrap; }
+.glossario td:nth-child(2) { color: var(--texto-2); }
 
 dialog.folha { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 0; border: 0; border-top: var(--linha); border-radius: var(--raio-bloco) var(--raio-bloco) 0 0; background: var(--superficie); color: var(--texto); }
 dialog.folha::backdrop { background: var(--veu); }
@@ -207,17 +326,20 @@ dialog.folha::backdrop { background: var(--veu); }
 .erro { padding: var(--esp-6) var(--esp-4); }
 </style>
 
-<div class="app lista" id="app">
+<div class="app lista" id="app" data-vista="jornadas">
   <header class="topo">
     <div>
       <h1>Service blueprint</h1>
-      <p>Cada serviço do SquadOne passo a passo, do que o cliente vê ao que roda por trás.</p>
+      <p>Cada serviço do SquadOne passo a passo, do que o cliente recebe ao que roda por trás. Compare as jornadas, veja as telas e decida o que otimizar.</p>
     </div>
     <div class="controles">
-      <div class="segmentado" id="servicos" role="group" aria-label="Serviço"></div>
-      <label class="campo" for="busca">Buscar<input id="busca" type="search" placeholder="vercel, SITE-4" autocomplete="off"></label>
-      <label class="campo" for="destacar">Destacar<select id="destacar"></select></label>
-      <p class="resultado" id="resultado" role="status"></p>
+      <div class="segmentado" id="vistas" role="group" aria-label="Vista"></div>
+      <div class="filtros">
+        <div class="segmentado" id="servicos" role="group" aria-label="Serviço"></div>
+        <label class="campo" for="busca">Buscar<input id="busca" type="search" placeholder="vercel, SITE-4, OT-02" autocomplete="off"></label>
+        <label class="campo" for="destacar">Destacar<select id="destacar"></select></label>
+        <p class="resultado" id="resultado" role="status"></p>
+      </div>
     </div>
   </header>
   <div class="corpo">
@@ -237,18 +359,93 @@ dialog.folha::backdrop { background: var(--veu); }
   const ABAIXO = new Set(['B', 'A'])
   const CLASSE_DA_LINHA = { C: 'interacao', P: 'visibilidade', B: 'interna' }
   const ROTULO_QUEM = { cliente: 'cliente', 'você': 'Rômulo', 'robô': 'robô', terceiro: 'terceiro' }
-  // O nome completo vai no painel; no seletor, uma palavra cabe nos três a 390 px.
-  const NOME_CURTO = { SITE: 'Site', PRUMO: 'PRUMO', AGENDA: 'Agenda' }
-  const MARCA_NO_PLURAL = { momento: 'Momentos da verdade', dor: 'Pontos de dor', metrica: 'Com métrica', opcao: 'Opções de projeto', seguranca: 'Segurança' }
+  const NOME_CURTO = { SITE: 'Site', PRUMO: 'PRUMO', OFERTAS: 'Ofertas', AGENDA: 'Agenda' }
+  const VISTAS = [['jornadas', 'Jornadas'], ['lado', 'Lado a lado'], ['otimizacoes', 'Otimizar'], ['telas', 'Telas']]
+  const MARCA_NO_PLURAL = { momento: 'Momentos da verdade', dor: 'Pontos de dor', metrica: 'Com métrica', opcao: 'Decisões de projeto', seguranca: 'Segurança', manual: 'Toques do Rômulo', otimizacao: 'Com otimização' }
+  // Triagem: "aberta" é a ausência de decisão; o resto é o que o Rômulo marca e o Claude lê.
+  const ESTADOS = [['aberta', 'Em aberto'], ['fazer', 'Fazer'], ['depois', 'Depois'], ['descartar', 'Não fazer'], ['feita', 'Feita']]
+  const NOME_ESTADO = Object.fromEntries(ESTADOS)
+  const PESO_IMPACTO = { alto: 0, 'médio': 1, baixo: 2 }
+  const PESO_ESFORCO = { pequeno: 0, 'médio': 1, grande: 2 }
+  const NOME_VEREDITO = { manter: 'Manter', fundir: 'Fundir', cortar: 'Cortar', renomear: 'Renomear', mover: 'Mover' }
   const largo = matchMedia('(min-width: 60rem)')
 
   const app = $('#app'), palco = $('#palco'), painel = $('#painel'), folha = $('#folha'), folhaCorpo = $('#folha-corpo')
   const busca = $('#busca'), destacar = $('#destacar'), resultado = $('#resultado')
-  let mapa = null, bp = null, escolhido = null, abridor = null
+  let mapa = null, bp = null, escolhido = null, abridor = null, vista = 'jornadas'
   const porId = new Map()
+  const todosCartoes = new Map()
+  const otsDoCartao = new Map()
+  // Filtros das vistas de documento: só nesta visita.
+  const filtroOt = { estado: '', tipo: '' }
+  let filtroTela = ''
 
-  const marcasDe = (c) => [c.momento ? 'momento' : null, ...['dor', 'metrica', 'opcao', 'seguranca'].filter((m) => c[m]?.length)].filter(Boolean)
+  // ---------------------------------------------------------------- decisões (banco do Artifact)
+  let db = null, bancoEstado = 'conectando'
+  const decisoes = {}
+  const filas = new Map()
+  const notaTimers = new Map()
+  const decisao = (id) => decisoes[id] ?? { status: 'aberta', nota: '' }
+
+  function ligarBanco() {
+    const c = window.claude
+    if (!c?.use) { bancoEstado = 'sem'; pintarDecisoes(); return }
+    c.use('db').then((d) => {
+      if (!d) { bancoEstado = 'sem'; pintarDecisoes(); return }
+      db = d
+      bancoEstado = 'ok'
+      d.collection('decisoes').onSnapshot((snap) => {
+        for (const k of Object.keys(decisoes)) delete decisoes[k]
+        for (const doc of snap.docs) decisoes[doc.id] = doc.data()
+        pintarDecisoes()
+      }, () => { bancoEstado = 'sem'; pintarDecisoes() })
+      pintarDecisoes()
+    }).catch(() => { bancoEstado = 'sem'; pintarDecisoes() })
+  }
+
+  // Uma escrita por vez por documento, como o banco pede.
+  function gravar(id, mudanca) {
+    if (!db) return
+    const novo = { ...decisao(id), ...mudanca, atualizado: new Date().toISOString() }
+    decisoes[id] = novo
+    pintarDecisoes()
+    const anterior = filas.get(id) ?? Promise.resolve()
+    const p = anterior.then(() => db.doc('decisoes/' + id).set(novo)).catch((e) => {
+      if (e?.code === 'invalid_argument' || e?.code === 'not_granted') bancoEstado = 'leitura'
+      const aviso = $(`[data-aviso-ot="${id}"]`)
+      if (aviso) aviso.textContent = bancoEstado === 'leitura' ? 'Esta visão só lê: a decisão não foi guardada.' : 'Não deu para guardar agora. Tente de novo em instantes.'
+      pintarDecisoes()
+    })
+    filas.set(id, p)
+  }
+
+  // ---------------------------------------------------------------- índices
+  const marcasDe = (c) => [
+    c.momento ? 'momento' : null,
+    ...['dor', 'metrica', 'opcao', 'seguranca'].filter((m) => c[m]?.length),
+    c.quem === 'você' ? 'manual' : null,
+    otsDoCartao.get(c.id)?.length ? 'otimizacao' : null,
+  ].filter(Boolean)
   const quem = (c) => ROTULO_QUEM[c.quem] ?? c.quem
+  const ot = (id) => mapa.otimizacoes.find((o) => o.id === id)
+  const tela = (id) => mapa.telas.find((t) => t.id === id)
+  const bpDoCartao = (id) => mapa.blueprints.find((b) => b.cartoes.some((c) => c.id === id))
+  const etapa = (id) => mapa.etapas.find((e) => e.id === id)
+
+  function indexar() {
+    for (const b of mapa.blueprints) for (const c of b.cartoes) todosCartoes.set(c.id, c)
+    for (const o of mapa.otimizacoes) for (const c of o.cartoes ?? []) otsDoCartao.set(c, [...(otsDoCartao.get(c) ?? []), o.id])
+  }
+
+  // ---------------------------------------------------------------- casca
+  function montarVistas() {
+    $('#vistas').replaceChildren(...VISTAS.map(([id, nome]) => {
+      const bt = document.createElement('button')
+      bt.type = 'button'; bt.textContent = nome; bt.dataset.id = id
+      bt.onclick = () => irPara(id)
+      return bt
+    }))
+  }
 
   function montarServicos() {
     $('#servicos').replaceChildren(...mapa.blueprints.map((b) => {
@@ -259,16 +456,45 @@ dialog.folha::backdrop { background: var(--veu); }
     }))
   }
 
-  // A contagem fica na própria opção: diz quanto há antes de escolher, sem uma fileira de números à parte.
   function montarDestaque() {
     const antes = destacar.value
     const contar = (m) => bp.cartoes.filter((c) => marcasDe(c).includes(m)).length
-    destacar.innerHTML = '<option value="">Nada</option>' + Object.keys(mapa.marcas)
-      .map((m) => `<option value="${m}">${esc(MARCA_NO_PLURAL[m] ?? mapa.marcas[m])} (${contar(m)})</option>`).join('')
+    destacar.innerHTML = '<option value="">Nada</option>' + Object.keys(MARCA_NO_PLURAL)
+      .map((m) => `<option value="${m}">${esc(MARCA_NO_PLURAL[m])} (${contar(m)})</option>`).join('')
     destacar.value = antes
   }
 
-  function abrir(id, cartao) {
+  function trocarVista(v) {
+    vista = v
+    app.dataset.vista = v
+    for (const b of document.querySelectorAll('#vistas button')) b.setAttribute('aria-pressed', String(b.dataset.id === v))
+    if (folha.open) folha.close()
+  }
+
+  function layout() {
+    app.classList.toggle('quadro', largo.matches)
+    app.classList.toggle('lista', !largo.matches)
+  }
+
+  // Um destino por código: vista, serviço, cartão, otimização ou tela.
+  function irPara(alvo) {
+    if (!alvo) alvo = 'jornadas'
+    if (alvo === 'lado') return mostrarLado()
+    if (alvo === 'otimizacoes') return mostrarOtimizacoes()
+    if (alvo === 'telas') return mostrarTelas()
+    if (/^OT-\d+$/.test(alvo) && ot(alvo)) return mostrarOtimizacoes(alvo)
+    if (/^TELA-\d+$/.test(alvo) && tela(alvo)) return mostrarTelas(alvo)
+    const doCartao = bpDoCartao(alvo)
+    if (doCartao) return abrir(doCartao.id, alvo)
+    const doPasso = mapa.blueprints.find((b) => b.passos.some((p) => p.id === alvo))
+    if (doPasso) return abrir(doPasso.id, undefined, alvo)
+    abrir(mapa.blueprints.some((b) => b.id === alvo) ? alvo : (bp?.id ?? mapa.blueprints[0].id))
+  }
+
+  // ---------------------------------------------------------------- Jornadas
+  function abrir(id, cartao, passoAlvo) {
+    trocarVista('jornadas')
+    layout()
     bp = mapa.blueprints.find((b) => b.id === id) ?? mapa.blueprints[0]
     porId.clear()
     for (const c of bp.cartoes) porId.set(c.id, c)
@@ -277,36 +503,56 @@ dialog.folha::backdrop { background: var(--veu); }
     montarDestaque()
     desenhar()
     if (cartao && porId.has(cartao)) escolher(cartao, true)
-    else { mostrarInicio(); marcarHash(bp.id) }
+    else {
+      mostrarInicio(); marcarHash(passoAlvo ?? bp.id)
+      if (passoAlvo) {
+        const alvo = $(`[data-passo="${CSS.escape(passoAlvo)}"]`, palco)
+        if (alvo) { alvo.classList.add('alvo'); requestAnimationFrame(() => alvo.scrollIntoView({ block: 'start', inline: 'center', behavior: suave() })) }
+      }
+    }
   }
 
+  const suave = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
+
   function cartaoHtml(c) {
+    const ots = otsDoCartao.get(c.id) ?? []
+    const selos = [
+      c.momento ? '<span class="selo">Momento da verdade</span>' : '',
+      ots.length ? `<span class="selo ot">${esc(ots.join(' · '))}</span>` : '',
+    ].join('')
     return `<button type="button" class="cartao" data-id="${esc(c.id)}">
       <span class="cartao__nome">${esc(c.nome)}</span>
       <span class="cartao__codigo codigo">${esc(c.id)}${c.quem === 'cliente' ? '' : ` · ${esc(quem(c))}`}</span>
-      ${c.momento ? '<span class="selo">Momento da verdade</span>' : ''}</button>`
+      ${selos ? `<span class="cartao__selos">${selos}</span>` : ''}</button>`
   }
 
   function inicioHtml() {
+    const maos = bp.cartoes.filter((c) => c.quem === 'você').length
+    const comOt = new Set(bp.cartoes.flatMap((c) => otsDoCartao.get(c.id) ?? []))
     return `<div class="detalhe">
       <div class="detalhe__topo"><h2>${esc(bp.nome)}</h2></div>
-      <dl class="ficha"><dt>Cliente</dt><dd>${esc(bp.cliente)}</dd><dt>Objetivo</dt><dd>${esc(bp.objetivo)}</dd></dl>
-      <p class="dica">Toque num cartão para ver onde ele mora no código, o que medir e o que pode dar errado. Para falar de um cartão com um agente, cite o código dele (<span class="codigo">SITE-3-B2</span>) ou copie o contexto.</p>
+      <dl class="ficha"><dt>Cliente</dt><dd>${esc(bp.cliente)}</dd><dt>Objetivo</dt><dd>${esc(bp.objetivo)}</dd>
+        <dt>Toques</dt><dd>${maos} cartões são trabalho do Rômulo</dd>
+        ${comOt.size ? `<dt>Otimizar</dt><dd><span class="chips">${[...comOt].map(otChip).join('')}</span></dd>` : ''}</dl>
+      <p class="dica">Toque num cartão para ver onde ele mora no código, o que medir, o que pode dar errado e o que dá para otimizar. Para falar de um cartão com um agente, cite o código (<span class="codigo">SITE-3-B2</span>) ou copie o contexto.</p>
       ${bp.melhorias?.length ? `<details class="dobra"${largo.matches ? ' open' : ''}><summary>Melhorias em aberto (${bp.melhorias.length})</summary><ul>${bp.melhorias.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></details>` : ''}
       <p class="fonte">Fonte: docs/blueprint/servico.json · versão ${esc(mapa.versao)} · ${esc(mapa.atualizado)}</p>
     </div>`
   }
 
   function desenhar() {
-    app.classList.toggle('quadro', largo.matches)
-    app.classList.toggle('lista', !largo.matches)
     if (largo.matches) desenharQuadro(); else desenharLista()
+  }
+
+  function cabecaDoPasso(p, i) {
+    const e = etapa(p.etapa)
+    return `<span class="passo__nome"><span class="n">${i + 1}</span>${esc(p.nome)}</span><span class="passo__quando">${esc(p.tempo || '')}</span>${e ? `<span class="passo__etapa">${esc(e.nome)}</span>` : ''}`
   }
 
   function desenharQuadro() {
     const n = bp.passos.length
     const partes = ['<div class="faixa canto"><b>Passos</b><span>em ordem de tempo</span></div>']
-    bp.passos.forEach((p, i) => partes.push(`<div class="passo"><span class="passo__nome"><span class="n">${i + 1}</span>${esc(p.nome)}</span><span class="passo__quando">${esc(p.tempo || '')}</span></div>`))
+    bp.passos.forEach((p, i) => partes.push(`<div class="passo" data-passo="${esc(p.id)}">${cabecaDoPasso(p, i)}</div>`))
     for (const f of mapa.faixas) {
       partes.push(`<div class="faixa"><b>${esc(f.nome)}</b><span>${esc(f.sub)}</span></div>`)
       for (const p of bp.passos) partes.push(`<div class="celula">${bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id).map(cartaoHtml).join('')}</div>`)
@@ -330,12 +576,13 @@ dialog.folha::backdrop { background: var(--veu); }
         const cs = bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id)
         if (!cs.length) continue
         if (ABAIXO.has(f.id) && !passouDaLinha) { passouDaLinha = true; grupos.push('<p class="linha-lista">Daqui para baixo o cliente não vê</p>') }
-        grupos.push(`<div class="grupo" data-grupo><h3>${esc(f.nome)}</h3>${cs.map(cartaoHtml).join('')}</div>`)
+        grupos.push(`<div class="grupo" data-grupo data-faixa="${f.id}"><h3>${esc(f.nome)}</h3>${cs.map(cartaoHtml).join('')}</div>`)
       }
-      return `<section class="etapa" data-etapa><div class="etapa__cabeca"><h2><span class="n">${i + 1}</span>${esc(p.nome)}</h2><span class="passo__quando">${esc(p.tempo || '')}</span></div>${grupos.join('')}</section>`
+      return `<section class="etapa" data-etapa data-passo="${esc(p.id)}"><div class="etapa__cabeca"><h2><span class="n">${i + 1}</span>${esc(p.nome)}</h2><span class="passo__quando">${esc(p.tempo || '')}</span>${etapa(p.etapa) ? `<span class="passo__etapa">${esc(etapa(p.etapa).nome)}</span>` : ''}</div>${grupos.join('')}</section>`
     })
     palco.innerHTML = `<section id="intro">${inicioHtml()}</section>${etapas.join('')}`
     ligarCartoes()
+    ligarOtChips(palco)
     pintar()
   }
 
@@ -343,7 +590,6 @@ dialog.folha::backdrop { background: var(--veu); }
     for (const b of palco.querySelectorAll('.cartao')) b.onclick = () => escolher(b.dataset.id)
   }
 
-  // Setas em cotovelo: na mesma coluna, reta; entre colunas, pela lateral.
   function setas() {
     const grade = $('#grade'), g = grade && $('svg.setas g', grade)
     if (!g) return
@@ -369,12 +615,12 @@ dialog.folha::backdrop { background: var(--veu); }
   function casa(c, q, marca) {
     if (marca && !marcasDe(c).includes(marca)) return false
     if (!q) return true
-    return [c.id, c.nome, c.resumo, quem(c), ...(c.arquivos || []), ...(c.dor || []), ...(c.metrica || []), ...(c.opcao || []), ...(c.seguranca || []), ...(c.melhorias || [])]
+    return [c.id, c.nome, c.resumo, quem(c), ...(c.arquivos || []), ...(c.dor || []), ...(c.metrica || []), ...(c.opcao || []), ...(c.seguranca || []), ...(c.melhorias || []), ...(otsDoCartao.get(c.id) ?? [])]
       .some((s) => String(s).toLowerCase().includes(q))
   }
 
   function pintar() {
-    if (!bp) return
+    if (!bp || vista !== 'jornadas') return
     const q = busca.value.trim().toLowerCase(), marca = destacar.value
     const perto = new Set()
     if (escolhido) { perto.add(escolhido); for (const [de, para] of bp.ligacoes) { if (de === escolhido) perto.add(para); if (para === escolhido) perto.add(de) } }
@@ -383,16 +629,14 @@ dialog.folha::backdrop { background: var(--veu); }
       const c = porId.get(e.dataset.id), bate = casa(c, q, marca)
       if (bate) achados++
       e.classList.toggle('escolhido', c.id === escolhido)
-      // Na lista, o escolhido abre numa folha por cima: apagar os outros só esconderia a lista.
       e.classList.toggle('apagado', !bate || (largo.matches && escolhido && !perto.has(c.id)))
     }
     if (!largo.matches) {
       for (const g of palco.querySelectorAll('[data-grupo]')) g.hidden = !g.querySelector('.cartao:not(.apagado)')
       for (const s of palco.querySelectorAll('[data-etapa]')) {
-        const vazio = !s.querySelector('.cartao:not(.apagado)')
-        s.hidden = vazio
+        s.hidden = !s.querySelector('.cartao:not(.apagado)')
         const linha = $('.linha-lista', s)
-        if (linha) linha.hidden = ![...s.querySelectorAll('[data-grupo]')].some((g) => !g.hidden && ABAIXO.has(mapa.faixas.find((f) => f.nome === $('h3', g).textContent)?.id))
+        if (linha) linha.hidden = ![...s.querySelectorAll('[data-grupo]')].some((g) => !g.hidden && ABAIXO.has(g.dataset.faixa))
       }
     }
     for (const p of palco.querySelectorAll('svg.setas path[data-de]')) {
@@ -409,12 +653,23 @@ dialog.folha::backdrop { background: var(--veu); }
     return itens?.length ? `<section class="secao"><h3>${titulo}</h3><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></section>` : ''
   }
 
+  function otChip(id) {
+    const d = decisao(id)
+    return `<button type="button" class="ot-chip" data-ot="${esc(id)}" data-estado="${esc(d.status)}" title="${esc(ot(id)?.titulo)} · ${esc(NOME_ESTADO[d.status])}">${esc(id)}</button>`
+  }
+
+  function ligarOtChips(raiz) {
+    for (const b of raiz.querySelectorAll('[data-ot]')) b.onclick = () => irPara(b.dataset.ot)
+  }
+
   function detalheHtml(c) {
     const passo = bp.passos.find((p) => p.id === c.passo)
     const faixa = mapa.faixas.find((f) => f.id === c.faixa)
     const viz = (outro, rumo) => `<li><button type="button" data-ir="${esc(outro)}"><span>${rumo} ${esc(porId.get(outro)?.nome ?? outro)}</span><small class="codigo">${esc(outro)}</small></button></li>`
     const vem = bp.ligacoes.filter(([, p]) => p === c.id).map(([d]) => viz(d, 'Vem de:'))
     const vai = bp.ligacoes.filter(([de]) => de === c.id).map(([, p]) => viz(p, 'Leva a:'))
+    const ots = otsDoCartao.get(c.id) ?? []
+    const telas = mapa.telas.filter((t) => t.cartoes?.includes(c.id))
     return `<div class="detalhe">
       <div class="detalhe__topo">
         <p class="detalhe__meta"><span class="codigo">${esc(c.id)}</span> · ${esc(faixa?.nome)} · passo ${bp.passos.indexOf(passo) + 1}, ${esc(passo?.nome)} · ${esc(quem(c))}</p>
@@ -423,8 +678,10 @@ dialog.folha::backdrop { background: var(--veu); }
         <p>${esc(c.resumo)}</p>
       </div>
       <div class="acao"><button class="primario" type="button" data-copiar>Copiar para a conversa</button><p class="aviso" role="status"></p></div>
+      ${ots.length ? `<section class="secao"><h3>Otimizações</h3><ul class="vizinhos">${ots.map((id) => `<li><button type="button" data-ot="${esc(id)}"><span>${esc(ot(id).titulo)}</span><small><span class="estado" data-estado="${esc(decisao(id).status)}">${esc(NOME_ESTADO[decisao(id).status])}</span> <span class="codigo">${esc(id)}</span></small></button></li>`).join('')}</ul></section>` : ''}
       ${c.arquivos?.length ? `<section class="secao"><h3>Onde mora</h3><ul class="arquivos">${c.arquivos.map((a) => `<li class="codigo">${esc(a)}</li>`).join('')}</ul></section>` : ''}
-      ${lista('Pontos de dor', c.dor)}${lista('Métricas', c.metrica)}${lista('Opções de projeto', c.opcao)}${lista('Segurança', c.seguranca)}${lista('Melhorias', c.melhorias)}
+      ${telas.length ? `<section class="secao"><h3>Aparece nas telas</h3><ul class="vizinhos">${telas.map((t) => `<li><button type="button" data-tela="${esc(t.id)}"><span>${esc(t.nome)}</span><small class="codigo">${esc(t.id)}</small></button></li>`).join('')}</ul></section>` : ''}
+      ${lista('Pontos de dor', c.dor)}${lista('Métricas', c.metrica)}${lista('Decisões de projeto', c.opcao)}${lista('Segurança', c.seguranca)}${lista('Melhorias', c.melhorias)}
       ${vem.length || vai.length ? `<section class="secao"><h3>Ligações</h3><ul class="vizinhos">${vem.join('')}${vai.join('')}</ul></section>` : ''}
       ${largo.matches ? `<div><button class="secundario" type="button" data-voltar>Voltar a ${esc(NOME_CURTO[bp.id] ?? bp.id)}</button></div>` : ''}
     </div>`
@@ -437,38 +694,41 @@ dialog.folha::backdrop { background: var(--veu); }
     const saem = bp.ligacoes.filter(([de]) => de === c.id).map(([, para]) => `- → ${para} (${nome(para)})`)
     const chegam = bp.ligacoes.filter(([, para]) => para === c.id).map(([de]) => `- ← ${de} (${nome(de)})`)
     const bloco = (t, xs) => (xs?.length ? `\n${t}:\n${xs.map((x) => `- ${x}`).join('\n')}` : '')
+    const ots = (otsDoCartao.get(c.id) ?? []).map((id) => `${id} ${ot(id).titulo} (${NOME_ESTADO[decisao(id).status]})`)
     return [
       `Service blueprint do SquadOne · ${c.id} · ${c.nome}`,
       `Serviço ${bp.id} (${bp.nome}), passo ${passo?.id} "${passo?.nome}" (${passo?.tempo ?? ''}), faixa ${faixa?.nome}. Quem: ${quem(c)}.${c.momento ? ' Momento da verdade.' : ''}`,
       `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}, ${mapa.atualizado}).`,
       '', c.resumo,
       c.arquivos?.length ? `\nArquivos: ${c.arquivos.join(', ')}` : '',
-      bloco('Pontos de dor', c.dor), bloco('Métricas', c.metrica), bloco('Opções de projeto', c.opcao), bloco('Segurança', c.seguranca), bloco('Melhorias', c.melhorias),
+      bloco('Pontos de dor', c.dor), bloco('Métricas', c.metrica), bloco('Decisões de projeto', c.opcao), bloco('Segurança', c.seguranca), bloco('Melhorias', c.melhorias), bloco('Otimizações', ots),
       saem.length ? `\nLeva a:\n${saem.join('\n')}` : '', chegam.length ? `\nVem de:\n${chegam.join('\n')}` : '',
     ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
   }
 
   async function copiar(texto, botao, aviso) {
+    const rotulo = botao.textContent
     try {
       await navigator.clipboard.writeText(texto)
       botao.textContent = 'Copiado'
       aviso.textContent = 'Cole na conversa com o agente.'
-      setTimeout(() => { botao.textContent = 'Copiar para a conversa'; aviso.textContent = '' }, 2500)
+      setTimeout(() => { botao.textContent = rotulo; aviso.textContent = '' }, 2500)
     } catch {
-      // Algumas visões do app recusam a área de transferência: o texto fica selecionado para o Ctrl+C.
       aviso.textContent = 'Não deu para copiar sozinho. O texto está selecionado abaixo: use Ctrl+C.'
       let ta = aviso.parentElement.nextElementSibling
-      if (!ta?.matches('textarea')) { ta = document.createElement('textarea'); ta.className = 'recurso'; ta.readOnly = true; aviso.parentElement.after(ta) }
+      if (!ta?.matches('textarea.recurso')) { ta = document.createElement('textarea'); ta.className = 'recurso'; ta.readOnly = true; aviso.parentElement.after(ta) }
       ta.value = texto; ta.focus(); ta.select()
     }
   }
 
   function mostrarInicio() {
-    if (largo.matches) { painel.innerHTML = inicioHtml(); painel.scrollTop = 0 }
+    if (largo.matches) { painel.innerHTML = inicioHtml(); painel.scrollTop = 0; ligarOtChips(painel) }
   }
 
   function ligarDetalhe(raiz, c) {
     for (const b of raiz.querySelectorAll('[data-ir]')) b.onclick = () => escolher(b.dataset.ir, true)
+    for (const b of raiz.querySelectorAll('[data-tela]')) b.onclick = () => irPara(b.dataset.tela)
+    ligarOtChips(raiz)
     $('[data-copiar]', raiz).onclick = (e) => copiar(contextoDoCartao(c), e.currentTarget, $('.aviso', raiz))
     const voltar = $('[data-voltar]', raiz)
     if (voltar) voltar.onclick = limpar
@@ -481,7 +741,7 @@ dialog.folha::backdrop { background: var(--veu); }
     escolhido = id
     if (largo.matches) {
       painel.innerHTML = detalheHtml(c); painel.scrollTop = 0; ligarDetalhe(painel, c)
-      if (rolar) $(`.cartao[data-id="${CSS.escape(id)}"]`, palco)?.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      if (rolar) $(`.cartao[data-id="${CSS.escape(id)}"]`, palco)?.scrollIntoView({ block: 'center', inline: 'center', behavior: suave() })
     } else {
       if (!folha.open) { abridor = document.activeElement; folha.showModal() }
       folhaCorpo.innerHTML = detalheHtml(c); folha.scrollTop = 0; ligarDetalhe(folhaCorpo, c)
@@ -496,35 +756,255 @@ dialog.folha::backdrop { background: var(--veu); }
     mostrarInicio(); pintar(); marcarHash(bp.id)
   }
 
+  // ---------------------------------------------------------------- Lado a lado
+  const VENDA = () => mapa.blueprints.filter((b) => b.id !== 'AGENDA')
+
+  function mostrarLado() {
+    trocarVista('lado'); layout()
+    const bps = VENDA()
+    const num = mapa.numeros
+    const topo = `<div class="lado__linha lado__topo"><div class="lado__cabeca"><b>Etapa</b><span>com o funil de ${esc(num.periodo)}</span></div>${bps.map((b) => `<div class="lado__cabeca"><b>${esc(b.nome)}</b><span>${esc(b.cliente)}</span></div>`).join('')}</div>`
+    const linhas = mapa.etapas.map((e) => {
+      const degraus = num.etapas[e.id] ?? []
+      const cabeca = `<div class="lado__etapa"><b>${esc(e.nome)}</b><span>${esc(e.pergunta)}</span>
+        ${degraus.length ? `<ul class="degraus">${degraus.map((d) => `<li class="${d.gargalo ? 'gargalo' : ''}"><strong>${d.n}</strong><span>${esc(d.rotulo)}${d.taxa ? `<small>${esc(d.taxa)} · referência ${esc(d.ref)}</small>` : ''}${d.gargalo ? '<small><span class="selo">Gargalo</span></small>' : ''}</span></li>`).join('')}</ul>` : ''}</div>`
+      const celulas = bps.map((b) => {
+        const passos = b.passos.filter((p) => p.etapa === e.id)
+        const corpo = passos.length ? passos.map((p) => {
+          const cs = b.cartoes.filter((c) => c.passo === p.id)
+          const maos = cs.filter((c) => c.quem === 'você' && c.faixa !== 'C').length
+          const robos = cs.filter((c) => c.quem === 'robô').length
+          const ots = [...new Set(cs.flatMap((c) => otsDoCartao.get(c.id) ?? []))]
+          return `<div class="lado__passo"><button type="button" class="link" data-passo-ir="${esc(p.id)}"><span class="codigo">${esc(p.id)}</span> · ${esc(p.nome)}</button>
+            <span class="lado__toques">${maos ? `${maos} ${maos === 1 ? 'toque' : 'toques'} do Rômulo` : 'sem toque do Rômulo'} · ${robos} ${robos === 1 ? 'robô' : 'robôs'}</span>
+            ${ots.length ? `<span class="chips">${ots.map(otChip).join('')}</span>` : ''}</div>`
+        }).join('') : '<span class="vazio">Não mapeado nesta jornada.</span>'
+        return `<div class="lado__celula"><span class="lado__servico">${esc(b.nome)}</span>${corpo}</div>`
+      }).join('')
+      return `<section class="lado__linha" aria-label="${esc(e.nome)}">${cabeca}${celulas}</section>`
+    }).join('')
+    palco.innerHTML = `<div class="doc">
+      <div class="doc__cabeca"><h2>As vendas lado a lado</h2>
+        <p>As mesmas sete etapas em cada oferta. Onde a linha se repete com peças diferentes, há o que unificar; onde há "toque do Rômulo", há trabalho à mão; o degrau marcado é onde o dinheiro escapa.</p></div>
+      <div class="lado">${topo}${linhas}</div>
+      <p class="nota-rodape">Números: ${esc(num.periodo)}, retrato de ${esc(num.retrato)}. Fonte: ${esc(num.fonte)}. A Agenda pessoal não é venda e fica de fora desta vista.</p>
+    </div>`
+    for (const b of palco.querySelectorAll('[data-passo-ir]')) b.onclick = () => irPara(b.dataset.passoIr)
+    ligarOtChips(palco)
+    palco.scrollTop = 0; app.querySelector('.corpo').scrollTop = 0
+    marcarHash('lado')
+  }
+
+  // ---------------------------------------------------------------- Otimizações
+  function ordenadas() {
+    return [...mapa.otimizacoes].sort((a, b) => (PESO_IMPACTO[a.impacto] - PESO_IMPACTO[b.impacto]) || (PESO_ESFORCO[a.esforco] - PESO_ESFORCO[b.esforco]) || a.id.localeCompare(b.id))
+  }
+
+  function triagemHtml(o) {
+    const d = decisao(o.id)
+    return `<div class="ot__triagem">
+      <div class="segmentado" role="group" aria-label="Decisão sobre ${esc(o.id)}">${ESTADOS.map(([v, n]) => `<button type="button" data-decidir="${esc(o.id)}" data-valor="${v}" aria-pressed="${d.status === v}">${esc(n)}</button>`).join('')}</div>
+      <label class="campo" for="nota-${esc(o.id)}">Nota para o Claude<textarea id="nota-${esc(o.id)}" data-nota="${esc(o.id)}" placeholder="O que muda, o que manter, quando fazer">${esc(d.nota ?? '')}</textarea></label>
+      <div class="acao"><button class="secundario" type="button" data-copiar-ot="${esc(o.id)}">Copiar para a conversa</button><p class="aviso" role="status" data-aviso-ot="${esc(o.id)}"></p></div>
+    </div>`
+  }
+
+  function otHtml(o) {
+    const d = decisao(o.id)
+    const cartoes = (o.cartoes ?? []).map((id) => `<button type="button" class="ot-chip" data-ir-cartao="${esc(id)}" title="${esc(todosCartoes.get(id)?.nome)}">${esc(id)}</button>`).join('')
+    const telas = (o.telas ?? []).map((id) => `<button type="button" class="ot-chip" data-ir-tela="${esc(id)}" title="${esc(tela(id)?.nome)}">${esc(tela(id)?.nome)}</button>`).join('')
+    return `<details class="ot" id="${esc(o.id)}" data-ot-item="${esc(o.id)}" data-tipo="${esc(o.tipo)}">
+      <summary><span class="ot__codigo">${esc(o.id)}</span><span class="ot__titulo">${esc(o.titulo)}</span><span class="estado" data-estado="${esc(d.status)}" data-estado-de="${esc(o.id)}">${esc(NOME_ESTADO[d.status])}</span>
+        <span class="ot__meta">${esc(mapa.tiposDeOtimizacao[o.tipo])} · impacto ${esc(o.impacto)} · esforço ${esc(o.esforco)}</span></summary>
+      <div class="ot__corpo">
+        <div class="ot__texto"><h4>Por quê</h4><p>${esc(o.porque)}</p><h4>Proposta</h4><p>${esc(o.proposta)}</p></div>
+        ${cartoes ? `<div class="ot__texto"><h4>Cartões</h4><span class="chips">${cartoes}</span></div>` : ''}
+        ${telas ? `<div class="ot__texto"><h4>Telas</h4><span class="chips">${telas}</span></div>` : ''}
+        ${triagemHtml(o)}
+      </div></details>`
+  }
+
+  function matrizHtml() {
+    const imp = ['alto', 'médio', 'baixo'], esf = ['pequeno', 'médio', 'grande']
+    const cel = (i, e) => {
+      const os = mapa.otimizacoes.filter((o) => o.impacto === i && o.esforco === e)
+      return `<div class="matriz__cel${i === 'alto' && e === 'pequeno' ? ' rapido' : ''}" aria-label="impacto ${i}, esforço ${e}">${os.map((o) => otChip(o.id)).join('')}</div>`
+    }
+    return `<div class="matriz" role="group" aria-label="Impacto por esforço">
+      <span></span>${esf.map((e) => `<span class="matriz__eixo">Esforço ${e}</span>`).join('')}
+      ${imp.map((i) => `<span class="matriz__eixo">Impacto ${i}</span>${esf.map((e) => cel(i, e)).join('')}`).join('')}
+    </div>`
+  }
+
+  function mostrarOtimizacoes(alvo) {
+    trocarVista('otimizacoes'); layout()
+    const tipos = Object.entries(mapa.tiposDeOtimizacao)
+    palco.innerHTML = `<div class="doc">
+      <div class="doc__cabeca"><h2>O que otimizar</h2>
+        <p>${mapa.otimizacoes.length} propostas, achadas navegando as jornadas e as telas. Marque cada uma; a decisão e a nota ficam guardadas aqui, e o Claude as lê quando você pedir para seguir com as marcadas.</p></div>
+      <section class="bloco"><h3>Impacto × esforço</h3>${matrizHtml()}<p class="nota-rodape">O canto amarelo é ganho rápido: impacto alto, esforço pequeno. A cor de cada código é a decisão.</p></section>
+      <section class="bloco">
+        <div class="filtros-ot">
+          <label class="campo" for="filtro-estado">Decisão<select id="filtro-estado"><option value="">Todas</option>${ESTADOS.map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join('')}</select></label>
+          <label class="campo" for="filtro-tipo">Tipo<select id="filtro-tipo"><option value="">Todos</option>${tipos.map(([v, n]) => `<option value="${v}">${esc(n)}</option>`).join('')}</select></label>
+          <div class="acao"><button class="primario" type="button" id="copiar-fazer">Copiar as marcadas Fazer</button><p class="aviso" role="status"></p></div>
+        </div>
+        <p class="aviso" id="banco-aviso"></p>
+        <div class="resumo-estados" id="resumo-estados"></div>
+      </section>
+      <div class="lista-ot" id="lista-ot">${ordenadas().map(otHtml).join('')}</div>
+    </div>`
+    $('#filtro-estado').value = filtroOt.estado; $('#filtro-tipo').value = filtroOt.tipo
+    $('#filtro-estado').onchange = (e) => { filtroOt.estado = e.target.value; filtrarOts() }
+    $('#filtro-tipo').onchange = (e) => { filtroOt.tipo = e.target.value; filtrarOts() }
+    $('#copiar-fazer').onclick = (e) => copiar(textoDasFazer(), e.currentTarget, e.currentTarget.nextElementSibling)
+    for (const b of palco.querySelectorAll('[data-ot]')) b.onclick = () => abrirOt(b.dataset.ot)
+    for (const b of palco.querySelectorAll('[data-ir-cartao]')) b.onclick = () => irPara(b.dataset.irCartao)
+    for (const b of palco.querySelectorAll('[data-ir-tela]')) b.onclick = () => irPara(b.dataset.irTela)
+    for (const b of palco.querySelectorAll('[data-decidir]')) b.onclick = () => { if (db && bancoEstado === 'ok') gravar(b.dataset.decidir, { status: b.dataset.valor }) }
+    for (const t of palco.querySelectorAll('[data-nota]')) t.oninput = () => {
+      const id = t.dataset.nota
+      clearTimeout(notaTimers.get(id))
+      notaTimers.set(id, setTimeout(() => { if (db && bancoEstado === 'ok' && t.value !== (decisao(id).nota ?? '')) gravar(id, { nota: t.value }) }, 900))
+    }
+    for (const b of palco.querySelectorAll('[data-copiar-ot]')) b.onclick = (e) => copiar(textoDaOt(ot(b.dataset.copiarOt)), e.currentTarget, e.currentTarget.nextElementSibling)
+    filtrarOts()
+    pintarDecisoes()
+    if (alvo) abrirOt(alvo)
+    else { palco.scrollTop = 0; app.querySelector('.corpo').scrollTop = 0; marcarHash('otimizacoes') }
+  }
+
+  function abrirOt(id) {
+    const el = $(`[data-ot-item="${CSS.escape(id)}"]`, palco)
+    if (!el) return
+    if (el.hidden) { filtroOt.estado = ''; filtroOt.tipo = ''; $('#filtro-estado').value = ''; $('#filtro-tipo').value = ''; filtrarOts() }
+    for (const o of palco.querySelectorAll('.ot.alvo')) o.classList.remove('alvo')
+    el.open = true; el.classList.add('alvo')
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: suave() }))
+    marcarHash(id)
+  }
+
+  function filtrarOts() {
+    for (const el of palco.querySelectorAll('[data-ot-item]')) {
+      const id = el.dataset.otItem
+      el.hidden = Boolean((filtroOt.estado && decisao(id).status !== filtroOt.estado) || (filtroOt.tipo && el.dataset.tipo !== filtroOt.tipo))
+    }
+  }
+
+  // Repinta só o que muda com a decisão: o texto que está sendo digitado não é tocado.
+  function pintarDecisoes() {
+    for (const el of document.querySelectorAll('.ot-chip[data-ot]')) el.dataset.estado = decisao(el.dataset.ot).status
+    for (const el of document.querySelectorAll('[data-estado-de]')) { const s = decisao(el.dataset.estadoDe).status; el.dataset.estado = s; el.textContent = NOME_ESTADO[s] }
+    const podeDecidir = Boolean(db) && bancoEstado === 'ok'
+    for (const b of document.querySelectorAll('[data-decidir]')) { b.setAttribute('aria-pressed', String(decisao(b.dataset.decidir).status === b.dataset.valor)); b.disabled = !podeDecidir }
+    for (const t of document.querySelectorAll('[data-nota]')) {
+      t.disabled = !podeDecidir
+      if (document.activeElement !== t) t.value = decisao(t.dataset.nota).nota ?? ''
+    }
+    const aviso = $('#banco-aviso')
+    if (aviso) aviso.textContent = bancoEstado === 'conectando' ? 'Conectando à triagem guardada…'
+      : bancoEstado === 'ok' ? ''
+      : bancoEstado === 'leitura' ? 'Esta visão só lê a triagem: abra pela sua conta do claude.ai para decidir.'
+      : 'A triagem só fica guardada quando a página abre no claude.ai. Aqui dá para ler e copiar.'
+    const resumo = $('#resumo-estados')
+    if (resumo) resumo.innerHTML = ESTADOS.map(([v, n]) => `<span class="estado" data-estado="${v}">${esc(n)}: ${mapa.otimizacoes.filter((o) => decisao(o.id).status === v).length}</span>`).join('')
+    const fazer = $('#copiar-fazer')
+    if (fazer) { const n = mapa.otimizacoes.filter((o) => decisao(o.id).status === 'fazer').length; fazer.textContent = `Copiar as marcadas Fazer (${n})`; fazer.disabled = n === 0 }
+    if (vista === 'otimizacoes' && (filtroOt.estado)) filtrarOts()
+  }
+
+  function textoDaOt(o, curto) {
+    const d = decisao(o.id)
+    const cartoes = (o.cartoes ?? []).map((id) => { const c = todosCartoes.get(id); return `- ${id} ${c?.nome ?? ''}${c?.arquivos?.length ? ` (${c.arquivos.join(', ')})` : ''}` })
+    const telas = (o.telas ?? []).map((id) => { const t = tela(id); return `- ${id} ${t?.nome ?? ''} (${t?.rota ?? ''})` })
+    return [
+      `${o.id} · ${o.titulo} (${mapa.tiposDeOtimizacao[o.tipo]}; impacto ${o.impacto}, esforço ${o.esforco}). Decisão: ${NOME_ESTADO[d.status]}.`,
+      `Por quê: ${o.porque}`,
+      `Proposta: ${o.proposta}`,
+      d.nota?.trim() ? `Nota do Rômulo: ${d.nota.trim()}` : '',
+      cartoes.length ? `Cartões:\n${cartoes.join('\n')}` : '',
+      telas.length ? `Telas:\n${telas.join('\n')}` : '',
+      curto ? '' : `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}, ${mapa.atualizado}); a decisão está no banco do Artifact, coleção "decisoes".`,
+    ].filter(Boolean).join('\n')
+  }
+
+  function textoDasFazer() {
+    const os = ordenadas().filter((o) => decisao(o.id).status === 'fazer')
+    return [`Service blueprint do SquadOne: ${os.length} otimizações marcadas "Fazer". Planeje e faça na ordem abaixo (impacto, depois esforço).`, '', ...os.map((o) => textoDaOt(o, true) + '\n'), `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}, ${mapa.atualizado}).`].join('\n')
+  }
+
+  // ---------------------------------------------------------------- Telas
+  function mostrarTelas(alvo) {
+    trocarVista('telas'); layout()
+    const contagem = (v) => mapa.telas.filter((t) => t.veredito === v).length
+    palco.innerHTML = `<div class="doc">
+      <div class="doc__cabeca"><h2>As telas da Central</h2>
+        <p>${mapa.telas.length} telas e pedaços de tela, com o que cada uma serve e o veredito: manter, fundir com outra, cortar, renomear ou mover de lugar. O veredito é proposta; a decisão é na otimização citada.</p></div>
+      <section class="bloco"><div class="filtros-ot"><label class="campo" for="filtro-veredito">Veredito<select id="filtro-veredito"><option value="">Todos (${mapa.telas.length})</option>${Object.entries(NOME_VEREDITO).map(([v, n]) => `<option value="${v}">${esc(n)} (${contagem(v)})</option>`).join('')}</select></label></div>
+        <div class="lista-telas" id="lista-telas">${mapa.telas.map(telaHtml).join('')}</div></section>
+      <section class="bloco"><h3>Glossário: um nome por coisa</h3>
+        <div class="rolagem"><table class="glossario"><thead><tr><th>Coisa</th><th>Hoje se chama</th><th>Passa a ser</th></tr></thead><tbody>${mapa.glossario.map((g) => `<tr><td>${esc(g.termo)}</td><td>${esc(g.antes)}</td><td>${esc(g.agora)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="nota-rodape">Os nomes desta página já seguem o glossário. No app, a troca é a ${otChip('OT-12')}.</p></section>
+    </div>`
+    $('#filtro-veredito').value = filtroTela
+    $('#filtro-veredito').onchange = (e) => { filtroTela = e.target.value; for (const el of palco.querySelectorAll('[data-tela-item]')) el.hidden = Boolean(filtroTela && el.dataset.veredito !== filtroTela) }
+    $('#filtro-veredito').onchange({ target: $('#filtro-veredito') })
+    ligarOtChips(palco)
+    for (const b of palco.querySelectorAll('[data-ir-cartao]')) b.onclick = () => irPara(b.dataset.irCartao)
+    pintarDecisoes()
+    if (alvo) {
+      const el = $(`[data-tela-item="${CSS.escape(alvo)}"]`, palco)
+      if (el) { el.hidden = false; el.classList.add('alvo'); requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: suave() })) }
+      marcarHash(alvo)
+    } else { palco.scrollTop = 0; app.querySelector('.corpo').scrollTop = 0; marcarHash('telas') }
+  }
+
+  function telaHtml(t) {
+    const cartoes = (t.cartoes ?? []).map((id) => `<button type="button" class="ot-chip" data-ir-cartao="${esc(id)}" title="${esc(todosCartoes.get(id)?.nome)}">${esc(id)}</button>`).join('')
+    return `<article class="tela" data-tela-item="${esc(t.id)}" data-veredito="${esc(t.veredito)}">
+      <span class="codigo">${esc(t.id)}</span>
+      <div class="tela__nome"><b>${esc(t.nome)}</b><small class="codigo">${esc(t.rota)} · ${esc(t.perfil)}</small></div>
+      <div class="tela__texto"><p>${esc(t.serve)}</p><p>${esc(t.nota)}</p>
+        ${cartoes || t.otimizacoes?.length ? `<span class="chips">${(t.otimizacoes ?? []).map(otChip).join('')}${cartoes}</span>` : ''}</div>
+      <span class="estado" data-veredito="${esc(t.veredito)}">${esc(NOME_VEREDITO[t.veredito])}</span>
+    </article>`
+  }
+
+  // ---------------------------------------------------------------- eventos
   function marcarHash(id) { try { history.replaceState(null, '', '#' + id) } catch {} }
 
-  const observador = new ResizeObserver(() => { if (bp && largo.matches) setas() })
+  const observador = new ResizeObserver(() => { if (bp && largo.matches && vista === 'jornadas') setas() })
   $('#fechar').onclick = () => folha.close()
   folha.addEventListener('close', () => {
-    if (largo.matches) return
+    if (largo.matches || vista !== 'jornadas') return
     escolhido = null; pintar(); marcarHash(bp.id)
     abridor?.focus?.()
   })
   folha.addEventListener('click', (e) => { if (e.target === folha) folha.close() })
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && largo.matches && escolhido && !e.target.matches('input, select')) limpar() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && vista === 'jornadas' && largo.matches && escolhido && !e.target.matches('input, select, textarea')) limpar() })
   busca.addEventListener('input', pintar)
   destacar.addEventListener('change', pintar)
   largo.addEventListener('change', () => {
-    if (!bp) return
+    if (!mapa) return
+    layout()
+    if (vista !== 'jornadas') return
     const atual = escolhido
     if (folha.open) folha.close()
     escolhido = null
     desenhar()
     if (atual) escolher(atual); else mostrarInicio()
   })
-  document.fonts?.ready.then(() => { if (bp && largo.matches) setas() })
+  window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h) irPara(h) })
+  document.fonts?.ready.then(() => { if (bp && largo.matches && vista === 'jornadas') setas() })
 
   fetch('servico.json').then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }).then((dados) => {
     mapa = dados
+    indexar()
+    montarVistas()
     montarServicos()
-    const alvo = location.hash.slice(1)
-    const doCartao = mapa.blueprints.find((b) => b.cartoes.some((c) => c.id === alvo))
-    abrir(doCartao?.id ?? alvo, doCartao ? alvo : undefined)
+    bp = mapa.blueprints[0]
+    irPara(location.hash.slice(1))
+    ligarBanco()
   }).catch((e) => {
     palco.innerHTML = `<div class="erro detalhe"><h2>O blueprint não carregou</h2><p>O arquivo servico.json não veio (${esc(e.message)}). Ele precisa estar publicado ao lado desta página; republique os dois juntos.</p></div>`
   })

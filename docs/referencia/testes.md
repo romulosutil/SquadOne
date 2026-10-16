@@ -133,7 +133,9 @@ de ler o CSS do app, tem os mesmos valores do `tokens.css`, claro e escuro; nenh
 de fora; todo `var(--x)` da página é definido nela; a fonte é a Inter servida pela própria Entrada) e
 `src/blueprint/servico.test.ts` (16/10/2026: o service blueprint `docs/blueprint/servico.json` tem as cinco
 faixas e as três linhas, códigos únicos e no formato `SITE-3-B2`, todo passo com a ação do cliente, ligações
-para cartões que existem e todo arquivo citado presente no repositório)). O monitor do Dell tem os seus em Python:
+para cartões que existem e todo arquivo citado presente no repositório; versão 2: todo passo de venda numa etapa
+comum, otimizações `OT-nn` e telas `TELA-nn` em sequência, com tipo, impacto, esforço e veredito conhecidos e
+apontando para cartões e telas que existem, números do funil com data e fonte)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py` (123, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
 "WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
 segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês; e o pedido

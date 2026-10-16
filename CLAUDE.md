@@ -221,7 +221,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
-| Service blueprint (Site, PRUMO, Agenda: cliente, palco, bastidor, apoio; códigos `SITE-3-B2`) | `docs/blueprint/servico.json` (fonte), `servico.html` (Artifact) | `docs/blueprint/README.md`; atualize o cartão no mesmo commit em que o passo muda (o teste confere códigos e arquivos) |
+| Service blueprint (Site, PRUMO, Ofertas, Agenda; códigos `SITE-3-B2`; desde 16/10 de uso: Lado a lado, Telas `TELA-nn` e otimizações `OT-nn` com a triagem do Rômulo no banco do Artifact) | `docs/blueprint/servico.json` (fonte), `servico.html` (Artifact) | `docs/blueprint/README.md`; atualize o cartão no mesmo commit em que o passo muda (o teste confere códigos e arquivos); antes de atacar uma OT, leia a decisão dela (`ArtifactData list decisoes`) |
 
 **Agenda e turno.** O modelo decide a intenção (tipo, duração ou esforço, prazo); o servidor
 escolhe o horário. `alocador.ts` é PURO (sem `fetch`, relógio, env ou import): mantenha.
