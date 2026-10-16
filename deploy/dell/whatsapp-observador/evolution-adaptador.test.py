@@ -240,6 +240,118 @@ class Traducao(unittest.TestCase):
         self.assertEqual(self.tr({"event": "CONNECTION_UPDATE", "data": {"state": "?"}}).conexao, "")
 
 
+LID = "207678898962522"
+
+
+def upsert_lid(numero, id_, de_mim=True, texto="oi", alt=True):
+    """Como a Evolution 2.3.7 mandou no ensaio de 16/10/2026: remoteJid em @lid, o telefone em remoteJidAlt."""
+    key = {"remoteJid": f"{LID}@lid", "fromMe": de_mim, "id": id_, "participant": "", "addressingMode": "lid"}
+    if alt:
+        key["remoteJidAlt"] = f"{numero}@s.whatsapp.net"
+    return {"event": "messages.upsert", "instance": "prumo",
+            "data": {"instanceId": "x", "key": key, "message": {"conversation": texto}, "messageType": "conversation",
+                     "messageTimestamp": int(T0 - 5), "pushName": "Fulana", "source": "android", "status": "SERVER_ACK"}}
+
+
+def recibo_lid(key_id, status="READ", de_mim=True, lid=LID):
+    """O MESSAGES_UPDATE do ensaio: só remoteJid em @lid e o keyId, sem telefone."""
+    return {"event": "messages.update", "instance": "prumo",
+            "data": {"fromMe": de_mim, "instanceId": "x", "keyId": key_id, "remoteJid": f"{lid}@lid", "status": status}}
+
+
+class RecibosEmLid(unittest.TestCase):
+    """O recibo de leitura da Evolution não traz telefone: o adaptador lembra, só de lead, de onde veio o id."""
+
+    def setUp(self):
+        self.mapas, self.vistos = ev.Mapas(), ev.Recentes()
+
+    def tr(self, corpo, leads=LEADS):
+        return ev.traduzir(corpo, leads, T0, self.vistos, "", self.mapas)
+
+    def test_recibo_resolve_pelo_id_da_mensagem_enviada(self):
+        enviado = self.tr(upsert_lid(LEAD, "MSG1"))
+        self.assertEqual(enviado.linhas[0]["event"], "owner_sent")
+        self.assertEqual(enviado.linhas[0]["chatId"], f"{LEAD}@s.whatsapp.net")
+        lido = self.tr(recibo_lid("MSG1"))
+        self.assertEqual(lido.linhas, [{"event": "owner_receipt", "chatId": f"{LEAD}@s.whatsapp.net", "status": "lido",
+                                        "ts": int(T0)}])
+
+    def test_recibo_resolve_pelo_lid_quando_o_id_e_outro(self):
+        self.tr(upsert_lid(LEAD, "MSG1"))
+        lido = self.tr(recibo_lid("OUTRA-MSG-QUE-NAO-VIMOS"))
+        self.assertEqual([l["event"] for l in lido.linhas], ["owner_receipt"])
+
+    def test_recibo_sem_nada_aprendido_continua_descartado(self):
+        t = self.tr(recibo_lid("MSG-DESCONHECIDA", lid="999111222"))
+        self.assertEqual((t.linhas, t.ignorados), ([], {"lid_sem_telefone": 1}))
+
+    def test_so_o_que_e_de_lead_e_lembrado(self):
+        self.tr(upsert_lid(OUTRO, "MSG9"))  # OUTRO não é lead
+        self.assertEqual((self.mapas.lid, self.mapas.msg), ({}, {}))
+        t = self.tr(recibo_lid("MSG9"))
+        self.assertEqual(t.ignorados, {"lid_sem_telefone": 1})
+
+    def test_modo_ensaio_resolve_o_recibo_de_quem_nao_e_lead(self):
+        # Prova a resolução sem usar o número de ninguém: o recibo deixa de ser lid_sem_telefone e vira nao_e_lead.
+        self.mapas = ev.Mapas(todos=True)
+        self.tr(upsert_lid(OUTRO, "MSG9"))
+        t = self.tr(recibo_lid("MSG9"))
+        self.assertEqual((t.linhas, t.ignorados), ([], {"nao_e_lead": 1}))
+        self.assertFalse(ev.Mapas().todos)  # desligado por padrão
+
+    def test_recibo_do_que_o_lead_mandou_nao_conta(self):
+        self.tr(upsert_lid(LEAD, "MSG1"))
+        t = self.tr(recibo_lid("MSG1", de_mim=False))
+        self.assertEqual((t.linhas, t.ignorados), ([], {"recibo_de_entrada": 1}))
+
+    def test_so_o_estado_lido_vale(self):
+        self.tr(upsert_lid(LEAD, "MSG1"))
+        for status, motivo in (("DELIVERY_ACK", "recibo_entregue"), ("SERVER_ACK", "recibo_sem_estado")):
+            t = self.tr(recibo_lid("MSG1", status))
+            self.assertEqual((t.linhas, t.ignorados), ([], {motivo: 1}), status)
+        self.assertEqual(len(self.tr(recibo_lid("MSG1", "PLAYED")).linhas), 1)
+
+    def test_resposta_do_lead_em_lid_com_alt_vira_entrada_e_texto(self):
+        t = self.tr(upsert_lid(LEAD, "IN1", de_mim=False, texto="Sim, quero ver"))
+        self.assertEqual([l["event"] for l in t.linhas], ["ignored"])
+        self.assertEqual(t.respostas[0]["texto"], "Sim, quero ver")
+
+    def test_o_proprio_lid_que_ja_veio_com_alt_resolve_a_entrada_sem_alt(self):
+        self.tr(upsert_lid(LEAD, "MSG1"))
+        t = self.tr(upsert_lid(LEAD, "IN2", de_mim=False, texto="olá", alt=False))
+        self.assertEqual(t.respostas[0]["chave"], CHAVE)
+
+    def test_telefone_no_remotejid_e_lid_no_alt_tambem_ensina(self):
+        corpo = upsert(LEAD, "oi", de_mim=True, id_="MSG5", remoteJidAlt=f"{LID}@lid")
+        self.tr(corpo)
+        self.assertEqual(self.mapas.lid.get(LID), f"{LEAD}@s.whatsapp.net")
+        self.assertEqual(len(self.tr(recibo_lid("MSG5")).linhas), 1)
+
+    def test_mapas_tem_teto(self):
+        m = ev.Mapas(maximo=3)
+        for i in range(10):
+            m.guardar(f"lid{i}", f"id{i}", f"{LEAD}@s.whatsapp.net")
+        self.assertEqual((len(m.lid), len(m.msg)), (3, 3))
+        self.assertIn("id9", m.msg)
+        self.assertNotIn("id0", m.msg)
+
+    def test_resumo_seguro_nao_leva_numero_nome_nem_texto(self):
+        corpo = upsert_lid(LEAD, "MSG1", texto="segredo do cliente")
+        resumo = ev.resumo_seguro("MESSAGES_UPSERT", corpo["data"])
+        for vazou in (LEAD, LID, "segredo", "Fulana", "MSG1", CHAVE):
+            self.assertNotIn(vazou, resumo)
+        self.assertIn("fromMe=True", resumo)
+        self.assertIn("chat=lid", resumo)
+        self.assertIn("alt=s.whatsapp.net", resumo)
+        r2 = ev.resumo_seguro("MESSAGES_UPDATE", recibo_lid("MSG1")["data"])
+        self.assertIn("status=READ", r2)
+        self.assertNotIn(LID, r2)
+
+    def test_resumo_seguro_filtra_status_estranho(self):
+        item = {"remoteJid": f"{LEAD}@s.whatsapp.net", "status": "READ; DROP", "fromMe": True}
+        self.assertIn("status=READDROP ", ev.resumo_seguro("MESSAGES_UPDATE", item) + " ")
+
+
 class Arquivos(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="evolution-teste-"))
@@ -483,6 +595,12 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.alimentar(upsert(LEAD, "sou eu mesmo", id_="3"))
         eventos = [c[1] for c in self.chamadas if c[0] == "whatsapp-conversa"]
         self.assertEqual([bool(e.get("seguinte")) for e in eventos], [False, True])
+
+    def test_enviado_e_lido_em_lid_chegam_ao_n8n_como_saida_e_lido(self):
+        self.alimentar(upsert_lid(LEAD, "MSG1"))
+        self.alimentar(recibo_lid("MSG1"))
+        eventos = [c[1] for c in self.chamadas if c[0] == "whatsapp-conversa"]
+        self.assertEqual([(e["chave"], e["direcao"]) for e in eventos], [(CHAVE, "saida"), (CHAVE, "lido")])
 
     def test_silencio_do_log_e_desligavel(self):
         self.assertTrue(ob.silencio_suspeito(T0 + 7 * 3600, T0, False, limite=6 * 3600))

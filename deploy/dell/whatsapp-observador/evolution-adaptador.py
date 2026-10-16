@@ -80,6 +80,7 @@ LIMITE_LOG = 5 * 1024 * 1024
 MAX_TEXTO = 1000
 VISTOS_MAX = 2000
 FORMAS_MAX = 200
+RESUMOS_MAX = 60  # linhas "evento: ..." no journal por execução (só fromMe, estado e domínios; ver resumo_seguro)
 
 
 def log(*a):
@@ -120,24 +121,80 @@ def jid_de_telefone(jid) -> str:
     return f"{digitos}@s.whatsapp.net"
 
 
-def jid_da_conversa(item: dict) -> tuple[str, str]:
-    """(jid com telefone, motivo do descarte). O remoteJid manda; o @lid só vale se vier um alternativo."""
+def _usuario_lid(jid) -> str:
+    return jid.partition("@")[0].split(":")[0] if isinstance(jid, str) and jid.endswith("@lid") else ""
+
+
+class Mapas:
+    """O que um evento ensina para o seguinte, só de LEAD e só em memória (some ao reiniciar):
+
+    - `lid`: usuário do @lid -> jid com telefone. A Evolution manda o recibo de leitura
+      (MESSAGES_UPDATE) só com o @lid, sem o telefone; o mesmo @lid já veio com `remoteJidAlt`
+      numa mensagem antes.
+    - `msg`: id da mensagem -> jid com telefone. O recibo traz o `keyId` da mensagem que foi lida.
+    Teto de entradas: as mais antigas saem primeiro."""
+
+    def __init__(self, maximo: int = 5000, todos: bool = False):
+        self.lid: dict[str, str] = {}
+        self.msg: dict[str, str] = {}
+        self.maximo = maximo
+        # Modo ensaio (EVOLUTION_ENSAIO=1, só para provar a resolução com um telefone que não é lead):
+        # também lembra de quem não é lead. Em memória, com o mesmo teto. Desligado por padrão.
+        self.todos = todos
+
+    def guardar(self, lid: str, id_msg: str, jid: str) -> None:
+        for mapa, k in ((self.lid, lid), (self.msg, id_msg)):
+            if not k:
+                continue
+            mapa.pop(k, None)
+            mapa[k] = jid
+            while len(mapa) > self.maximo:
+                mapa.pop(next(iter(mapa)))
+
+
+def _id_da_mensagem(item: dict) -> str:
+    chave = item.get("key") if isinstance(item.get("key"), dict) else {}
+    bruto = item.get("keyId") or chave.get("id") or item.get("messageId") or item.get("id") or ""
+    return bruto if isinstance(bruto, str) else ""
+
+
+def jid_da_conversa(item: dict, mapas: "Mapas | None" = None) -> tuple[str, str, str]:
+    """(jid com telefone, motivo do descarte, usuário @lid visto). O telefone sai do remoteJid ou, nos
+    campos alternativos, de remoteJidAlt/senderPn/participantAlt; um @lid sozinho (recibo de leitura)
+    só vale se `mapas` já aprendeu o telefone dele ou da mensagem."""
     chave = item.get("key") if isinstance(item.get("key"), dict) else {}
     principal = chave.get("remoteJid") or item.get("remoteJid") or ""
     if not isinstance(principal, str) or not principal:
-        return "", "sem_chat"
-    jid = jid_de_telefone(principal)
+        return "", "sem_chat", ""
+    candidatos = [principal] + [onde.get(c) for onde in (chave, item)
+                                for c in ("remoteJidAlt", "senderPn", "participantAlt")]
+    lid = next((u for c in candidatos if (u := _usuario_lid(c))), "")
+    jid = next((j for c in candidatos if (j := jid_de_telefone(c))), "")
     if jid:
-        return jid, ""
+        return jid, "", lid
     dominio = principal.partition("@")[2]
     if dominio == "lid":
-        for onde in (chave, item):
-            for campo in ("remoteJidAlt", "senderPn", "participantAlt"):
-                jid = jid_de_telefone(onde.get(campo))
-                if jid:
-                    return jid, ""
-        return "", "lid_sem_telefone"
-    return "", "nao_e_conversa_1a1"
+        if mapas is not None:
+            achado = mapas.lid.get(lid) or mapas.msg.get(_id_da_mensagem(item))
+            if achado:
+                return achado, "", lid
+        return "", "lid_sem_telefone", lid
+    return "", "nao_e_conversa_1a1", lid
+
+
+def resumo_seguro(evento: str, item: dict) -> str:
+    """Uma linha para o journal com só o que não identifica ninguém: fromMe, o estado do recibo, o
+    DOMÍNIO dos ids (s.whatsapp.net, lid, g.us) e se há id de mensagem. Nenhum número, nome ou texto."""
+    chave = item.get("key") if isinstance(item.get("key"), dict) else {}
+
+    def dominio(j) -> str:
+        return j.partition("@")[2][:20] if isinstance(j, str) and "@" in j else "-"
+    alt = next((c for onde in (chave, item) for k in ("remoteJidAlt", "senderPn", "participantAlt")
+                if (c := onde.get(k))), "")
+    status = re.sub(r"[^A-Z0-9_]", "", str(item.get("status", chave.get("status", "")) or "").upper())[:16] or "-"
+    de_mim = chave.get("fromMe", item.get("fromMe"))
+    return (f"{evento} fromMe={de_mim} status={status} chat={dominio(chave.get('remoteJid') or item.get('remoteJid'))} "
+            f"alt={dominio(alt)} id={'sim' if _id_da_mensagem(item) else 'nao'}")
 
 
 def hora_do_evento(ts, agora: float) -> float:
@@ -268,9 +325,11 @@ class Traducao(NamedTuple):
     respostas: list   # dicts para o respostas.jsonl
     ignorados: dict   # motivo -> quantos
     conexao: str      # 'open' | 'close' | 'connecting' | ''
+    resumos: tuple = ()  # resumo_seguro() de cada item de mensagem, para o journal
 
 
-def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instancia: str = "") -> Traducao:
+def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instancia: str = "",
+             mapas: Mapas | None = None) -> Traducao:
     """Um webhook da Evolution -> o que escrever. PURO: sem arquivo, rede nem relógio.
 
     `leads` é o conjunto de chaves (DDD + 8 dígitos) de leads, ou None quando a lista não existe:
@@ -306,17 +365,23 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
         pular("sem_lista_de_leads")
         return Traducao(linhas, respostas, ignorados, conexao)
 
+    resumos: list = []
     for item in itens_de(data):
-        jid, motivo = jid_da_conversa(item)
+        resumos.append(resumo_seguro(evento, item))
+        jid, motivo, lid = jid_da_conversa(item, mapas)
         if not jid:
             pular(motivo)
             continue
         chave = chave_do_numero(jid.partition("@")[0])
-        if not chave or chave not in leads:
-            pular("nao_e_lead")
-            continue
+        e_lead = bool(chave and chave in leads)
         chave_msg = item.get("key") if isinstance(item.get("key"), dict) else {}
         de_mim = chave_msg.get("fromMe", item.get("fromMe"))
+        if mapas is not None and (e_lead or mapas.todos):
+            # Só de lead: o @lid -> telefone, e o id de cada mensagem NOSSA (é o que o recibo de leitura cita).
+            mapas.guardar(lid, _id_da_mensagem(item) if evento != "MESSAGES_UPDATE" and de_mim is True else "", jid)
+        if not e_lead:
+            pular("nao_e_lead")
+            continue
 
         if evento == "MESSAGES_UPDATE":
             estado = estado_do_recibo(item.get("status", chave_msg.get("status")))
@@ -356,7 +421,7 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
                                   "texto": texto})
         else:
             pular("sem_fromMe")
-    return Traducao(linhas, respostas, ignorados, conexao)
+    return Traducao(linhas, respostas, ignorados, conexao, tuple(resumos))
 
 
 # ------------------------------------------------------------------ arquivos
@@ -465,8 +530,10 @@ class Adaptador:
                  instancia: str = INSTANCIA):
         self.gravador, self.relogio, self.avisar, self.instancia = gravador, relogio, avisar, instancia
         self.vistos = Recentes()
+        self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1")
         self.formas: dict[str, int] = {}
-        self.contadores: dict = {"eventos": {}, "linhas": 0, "respostas": 0, "ignorados": {}}
+        self.resumos_logados = 0
+        self.contadores: dict = {"eventos": {}, "linhas": 0, "respostas": 0, "ignorados": {}, "recibos": {}}
         self.ultimo_evento: float | None = None
         self.desconectado_avisado = False
 
@@ -476,8 +543,16 @@ class Adaptador:
         self.contadores["eventos"][evento] = self.contadores["eventos"].get(evento, 0) + 1
         self.ultimo_evento = agora
         self._registrar_forma(corpo, evento)
-        t = traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia)
+        t = traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia, self.mapas)
         self.gravador.escrever(t)
+        for resumo in t.resumos:
+            # Os primeiros ficam no journal (ensaio do formato real); depois só o contador de recibos.
+            if self.resumos_logados < RESUMOS_MAX:
+                self.resumos_logados += 1
+                log("evento:", resumo)
+            m = re.search(r" status=([A-Z0-9_]+) ", resumo)
+            if resumo.startswith("MESSAGES_UPDATE") and m:
+                self.contadores["recibos"][m.group(1)] = self.contadores["recibos"].get(m.group(1), 0) + 1
         self.contadores["linhas"] += len(t.linhas)
         self.contadores["respostas"] += len(t.respostas)
         for motivo, n in t.ignorados.items():
@@ -543,11 +618,23 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
                 return self._responder(200, adaptador.saude())
             self._responder(404, {"erro": "rota"})
 
+        def _descartar_corpo(self) -> None:
+            """Esvazia um corpo pequeno sem olhar o conteúdo, para o fechamento da conexão não virar um
+            reset TCP que o cliente lê como erro em vez de 401/404. Corpo grande não é lido."""
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return
+            if 0 < n <= 65536:
+                self.rfile.read(n)
+
         def do_POST(self):
-            # O segredo vem antes de ler o corpo.
+            # O segredo vem antes de tratar o corpo (um corpo pequeno só é descartado).
             if not self._autorizado():
+                self._descartar_corpo()
                 return self._responder(401, {"erro": "segredo"})
             if not self.path.split("?")[0].startswith("/evolution"):
+                self._descartar_corpo()
                 return self._responder(404, {"erro": "rota"})
             try:
                 tamanho = int(self.headers.get("Content-Length") or 0)

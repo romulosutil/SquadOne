@@ -82,7 +82,9 @@ services:
       TELEMETRY: "false"
       TELEMETRY_ENABLED: "false"
       LANGUAGE: pt-BR
-      LOG_LEVEL: ERROR,WARN,INFO
+      # Para diagnosticar webhook, ponha EVOLUTION_LOG_LEVEL=ERROR,WARN,INFO,DEBUG,WEBHOOKS no .env e recrie a api.
+      # Esses níveis podem registrar o corpo das mensagens: volte ao padrão logo depois.
+      LOG_LEVEL: ${EVOLUTION_LOG_LEVEL:-ERROR,WARN,INFO}
       LOG_COLOR: "false"
       CONFIG_SESSION_PHONE_CLIENT: PRUMO
       CONFIG_SESSION_PHONE_NAME: Chrome

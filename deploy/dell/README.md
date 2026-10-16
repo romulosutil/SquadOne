@@ -2102,14 +2102,23 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
 - **Privacidade.** Só entra no log e no `respostas.jsonl` quem está em `leads.json` (a lista que o próprio
   observador grava a cada leitura do n8n). Sem a lista, nada é gravado. O log não tem texto. O journal mostra
   DDD + 2 últimos dígitos. O webhook exige o header `X-Adaptador` (tempo constante, antes de ler o corpo).
-- **Ainda não confirmado: o payload de `MESSAGES_UPDATE`.** Não achei payload publicado para o recibo de
-  leitura. O parser aceita `status` em texto ou número e `fromMe` em `data` ou em `data.key`, e o journal registra
-  **uma vez cada forma nova** de evento (só nomes de campo e tipos, nenhum valor): `journalctl --user -u
-  evolution-adaptador | grep "forma nova"`. É o ensaio de um dia com o número novo: mande uma mensagem a um
-  telefone seu, deixe-o ler e confira `owner_receipt` em `evolution.log` e `GET /saude` (contador `ignorados`:
-  `recibo_sem_fromMe` ou `recibo_sem_estado` mostram o que falta ajustar).
-- **LID.** `remoteJid` em `@lid` só vale com `remoteJidAlt`/`senderPn`; sem eles o evento conta em
-  `lid_sem_telefone` e some. Nada é adivinhado.
+- **Formato real do recibo de leitura (visto em 16/10/2026, Evolution 2.3.7).** `MESSAGES_UPDATE` chega como
+  `{fromMe, instanceId, keyId, remoteJid, status}`: **só o `@lid` no `remoteJid`, sem telefone**. O `MESSAGES_UPSERT`
+  de uma mensagem chega com `key.{addressingMode, fromMe, id, participant, remoteJid, remoteJidAlt}`: com
+  `addressingMode: "lid"` o `remoteJid` é o `@lid` e o telefone vem em `remoteJidAlt`. Por isso o adaptador
+  **lembra, só de lead e só em memória**, o `@lid` -> telefone e o id de cada mensagem nossa -> telefone
+  (`Mapas`), e resolve o recibo pelo `keyId` ou pelo `@lid`. Reiniciar o adaptador esquece: um recibo de mensagem
+  anterior ao reinício não resolve (conta em `lid_sem_telefone`). O journal tem `evento: ...` com fromMe, estado
+  do recibo e só o domínio dos ids (nenhum número, nome ou texto), as primeiras 60 por execução, e `GET /saude` tem o
+  contador `recibos` por estado. Ensaio: `journalctl --user -u evolution-adaptador | grep -E "forma nova|evento:"`.
+- **Modo ensaio (`EVOLUTION_ENSAIO=1`, desligado por padrão).** Para provar a resolução do recibo com um telefone que
+  **não é lead**, o adaptador passa a lembrar também de quem não é lead (só em memória, com o mesmo teto). Prova sem
+  usar número de ninguém: o recibo deixa de cair em `lid_sem_telefone` e passa a `nao_e_lead` em `GET /saude`. Liga por
+  drop-in e **apague ao terminar**: `~/.config/systemd/user/evolution-adaptador.service.d/ensaio.conf` com
+  `[Service]` / `Environment=EVOLUTION_ENSAIO=1`, depois `systemctl --user daemon-reload && systemctl --user restart
+  evolution-adaptador`.
+- **LID.** `remoteJid` em `@lid` vale com `remoteJidAlt`/`senderPn`/`participantAlt` ou com o que `Mapas` já
+  aprendeu; senão o evento conta em `lid_sem_telefone` e some. Nada é adivinhado.
 - **Queda do número.** `CONNECTION_UPDATE` com `close` vira UM aviso pelo Hermes até a conexão voltar. Por
   isso o `whatsapp-observador-prumo` roda com `OBSERVADOR_SILENCIO_S=0` (log parado à noite não é erro).
 - **Mensagem enviada pela API** (quando houver resposta automática) também chega como `fromMe:true` e conta como
