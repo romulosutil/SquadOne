@@ -3,6 +3,11 @@ Description=Adaptador da Evolution API — o webhook do número do PRUMO vira o 
 After=network.target
 
 [Service]
+# Escuta só no endereço do host na rede do compose da Evolution (deploy/dell/evolution): é o único
+# caminho do container até aqui. Se a rede ainda não existe (boot antes do Docker), o bind falha e o
+# Restart tenta de novo.
+Environment=EVOLUTION_ENDERECO=172.28.77.1
+Environment=EVOLUTION_INSTANCIA=prumo
 ExecStart=/usr/bin/python3 %h/.local/bin/evolution-adaptador.py
 Restart=always
 RestartSec=15

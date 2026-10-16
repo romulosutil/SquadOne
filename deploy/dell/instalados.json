@@ -40,6 +40,7 @@
      "reiniciar": "whatsapp-observador"},
     {"repo": "deploy/dell/whatsapp-observador/evolution-adaptador.p?", "instalado": "~/.local/bin/",
      "reiniciar": "evolution-adaptador"},
+    {"repo": "deploy/dell/evolution/docker-compose.yml", "instalado": "~/workspace/evolution/"},
     {"repo": "deploy/dell/dell-worker-healthwatch.sh", "instalado": "~/.local/bin/dell-worker-healthwatch.sh",
      "reiniciar": "dell-worker-healthwatch"},
     {"repo": "deploy/dell/prumo-mapa/*.py", "instalado": "~/.local/share/prumo-mapa/"},

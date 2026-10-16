@@ -1,0 +1,100 @@
+# Evolution API para o número do PRUMO (16/10/2026). Roda só na Mel, em ~/workspace/evolution/.
+# Os segredos ficam no .env ao lado (600, fora do Git); modelo em .env.example.
+#
+# O que este compose decide, e por quê:
+# - Porta só no loopback (127.0.0.1:8081): a API de gerência nunca sai da Mel. O único caminho de
+#   dentro para fora é o webhook, que vai ao evolution-adaptador no endereço do host NESTA rede.
+# - Rede com sub-rede fixa (172.28.77.0/24, host em 172.28.77.1): é nesse endereço que o adaptador
+#   escuta (EVOLUTION_ENDERECO na unit), então só um container desta rede o alcança.
+# - Postgres e Redis próprios, sem porta publicada: nada de reaproveitar o banco de outro projeto.
+# - Nada de conteúdo de conversa em disco: DATABASE_SAVE_* de mensagens, contatos e chats desligados.
+#   O que a Evolution guarda é a sessão (para não pedir o QR de novo) e a instância. O texto de quem é
+#   lead passa pelo adaptador e vai ao n8n; o de quem não é nunca é gravado por nós.
+# - Telemetria desligada.
+# - Imagem fixada (EVOLUTION_TAG). A 2.3.7 é de dez/2025 e o WhatsApp muda o protocolo com frequência:
+#   se o QR não conectar, o primeiro suspeito é a versão.
+name: evolution
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_SENHA:?defina EVOLUTION_DB_SENHA no .env}
+      POSTGRES_DB: evolution
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [rede]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Só cache: sem persistência.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [rede]
+
+  api:
+    image: evoapicloud/evolution-api:${EVOLUTION_TAG:-2.4.0-rc2}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: http://127.0.0.1:8081
+      AUTHENTICATION_API_KEY: ${EVOLUTION_APIKEY:?defina EVOLUTION_APIKEY no .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_SENHA}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_prumo
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      RABBITMQ_ENABLED: "false"
+      SQS_ENABLED: "false"
+      S3_ENABLED: "false"
+      DEL_INSTANCE: "false"
+      TELEMETRY: "false"
+      TELEMETRY_ENABLED: "false"
+      LANGUAGE: pt-BR
+      LOG_LEVEL: ERROR,WARN,INFO
+      LOG_COLOR: "false"
+      CONFIG_SESSION_PHONE_CLIENT: PRUMO
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: "30"
+    volumes:
+      - instances:/evolution/instances
+    networks: [rede]
+
+networks:
+  rede:
+    ipam:
+      config:
+        - subnet: 172.28.77.0/24
+          gateway: 172.28.77.1
+
+volumes:
+  pgdata:
+  instances:
