@@ -163,6 +163,11 @@
     - **O resultado do turno e os botões respondem no Telegram**, na mesma
       conversa: é a resposta a um gesto do Rômulo, os botões inline só existem
       lá, e no WhatsApp a resposta dele cairia na IA do Hermes.
+    - **Exceção de 16/10/2026 (pedido do Rômulo): o aviso de venda do vendedor
+      sai pelo Telegram** (`server/vendedor.ts`, `SQUADONE_VENDEDOR=true`): seg a
+      sex, 08:00–17:30, um por vez, teto de 40 por dia. Precisa de botões (abrir o
+      WhatsApp com a mensagem, "Enviei", "Pular") e, pela fila, sairia pelo mesmo
+      número que fala com os leads. Nunca envia nada ao lead (regra 17).
     - **Toda saída proativa vai pelo WhatsApp do Hermes, pela fila com schema
       e teto** (`~/.local/share/avisos/fila`, drenada pelo `dell-status`:
       formato fechado com `origem` obrigatória, até 20 envios por hora com o
