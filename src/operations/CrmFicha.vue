@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CrmCopiloto from './CrmCopiloto.vue'
 import CrmJornada from './CrmJornada.vue'
-import { copilotoServe, type SugestaoDoCopiloto } from './copiloto'
+import { copilotoServe, type MomentoDaConversa, type SugestaoDoCopiloto } from './copiloto'
 import { cabeProposta, gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { copilotoLigado } from './copiloto-ligado'
 import CrmMomento from './CrmMomento.vue'
@@ -106,14 +106,21 @@ const gostou = computed(() => gostouDepoisDoLink(props.lead))
 const cabe = computed(() => gostou.value || cabeProposta(props.lead))
 // A sugestão guardada do copiloto (GET, nunca chama o modelo): dela saem os itens; os preços, do cardápio.
 const sugestaoGuardada = ref<SugestaoDoCopiloto | null>(null)
+// Quem está do outro lado, na leitura do copiloto (16/10/2026): com a recepção ou o robô, o "Agora" da
+// jornada ("marcar a conversa e mandar a proposta") é o passo errado; vale o do copiloto.
+const momento = ref<MomentoDaConversa | null>(null)
 async function lerSugestaoGuardada() {
   sugestaoGuardada.value = null
-  if (!comCopiloto.value || !cabe.value) return
+  momento.value = null
+  if (!comCopiloto.value) return
   const id = props.lead.id
   try {
     const r = await fetch(`/api/operations/crm/copiloto/sugestao?${new URLSearchParams({ produto: props.lead.produto, id })}`)
     const dados = await r.json().catch(() => ({}))
-    if (r.ok && props.lead.id === id) sugestaoGuardada.value = dados.sugestao?.sugestao ?? null
+    if (!r.ok || props.lead.id !== id) return
+    const s: SugestaoDoCopiloto | null = dados.sugestao?.sugestao ?? null
+    momento.value = s?.momento ?? null
+    if (cabe.value) sugestaoGuardada.value = s
   } catch {
     // Sem a sugestão, sai o texto base da colinha.
   }
@@ -121,8 +128,14 @@ async function lerSugestaoGuardada() {
 watch([comCopiloto, () => props.lead.id, cabe], () => { void lerSugestaoGuardada() }, { immediate: true })
 const proposta = computed(() => (cabe.value ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
 function aoTerSugestao(s: SugestaoDoCopiloto | null) {
+  momento.value = s?.momento ?? null
   if (cabe.value) sugestaoGuardada.value = s
 }
+/** O passo do copiloto vence o da jornada quando quem respondeu não decide. */
+const passoDoCopiloto = computed(() => {
+  const m = momento.value
+  return m && m.quem !== 'decisor' && m.passo ? m : null
+})
 
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
 // demo depois do "sim", follow-up). `anota`: tocar já anota o envio, e a ficha avisa isso uma vez.
@@ -386,7 +399,11 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
     <section class="crm-ficha__agora" aria-labelledby="crm-ficha-agora">
       <h3 id="crm-ficha-agora" class="crm-ficha__rotulo">Agora, {{ QUEM[proximo.quem] }}</h3>
       <template v-if="!editando">
-        <p class="crm-ficha__acao">{{ proximo.acao }}</p>
+        <template v-if="passoDoCopiloto && !proximo.marcadoAMao">
+          <p class="crm-ficha__acao">{{ passoDoCopiloto.passo }}</p>
+          <p class="crm-ficha__prazo">Leitura do copiloto: {{ passoDoCopiloto.leitura }}</p>
+        </template>
+        <p v-else class="crm-ficha__acao">{{ proximo.acao }}</p>
         <p class="crm-ficha__prazo">
           <template v-if="prazo.texto">{{ prazo.texto }}</template>
           <span v-if="prazo.atrasado" class="selo selo--erro">atrasado</span>

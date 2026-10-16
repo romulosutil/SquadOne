@@ -457,7 +457,7 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     },
     sugerir: (produto, id, forcar = false) => sugerir(produto, id, forcar),
     async automatica(lead) {
-      if (!copilotoServe(lead)) return { estado: "sem" };
+      if (!copilotoServe(lead) || !conversaDaVez(lead)) return { estado: "sem" };
       const chave = chaveDoLead(lead.produto, lead.id);
       if (emAndamento.has(chave)) return { estado: "gerando" };
       const { dossie } = await dossieDoLead(lead);
@@ -478,7 +478,8 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
       const guardadas = await carregar();
       for (const lead of leads) {
         const anterior = guardadas.get(chaveDoLead(lead.produto, lead.id));
-        if (!anterior?.sugestao || !copilotoServe(lead)) continue;
+        // Na Próxima venda e no Telegram só a sugestão de quem leu a conversa e responde à última dele.
+        if (!anterior?.sugestao || !copilotoServe(lead) || !conversaDaVez(lead)) continue;
         try {
           const { dossie } = await dossieDoLead(lead);
           if (anterior.hashDoDossie === hashDoDossie(dossie)) mapa.set(lead.id, naFicha(anterior, dossie, true));
@@ -496,6 +497,11 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
 
 // --- O automático -------------------------------------------------------------------
 
+/** A conversa está guardada e quem escreveu por último foi o lead: dá para ler o momento e responder. */
+export function conversaDaVez(lead: Pick<CrmLead, "conversa">): boolean {
+  return lead.conversa?.ultima.direcao === "entrada";
+}
+
 export const INTERVALO_DO_AUTOMATICO_MS = 60_000;
 
 /**
@@ -503,7 +509,9 @@ export const INTERVALO_DO_AUTOMATICO_MS = 60_000;
  * ele escreveu por último na conversa guardada) e no trecho em que o copiloto vale. PURO.
  */
 export function leadsDoAutomatico(leads: readonly CrmLead[]): CrmLead[] {
-  const vez = (l: CrmLead) => l.respostaNova || (l.etapa === "contato" && l.conversa?.ultima.direcao === "entrada");
+  // Só com a conversa guardada e a última mensagem DELE (16/10/2026): sem ela o copiloto sugeria às cegas
+  // ("Sua última mensagem não apareceu para mim", o Raio-X para quem já o tinha recebido com o demo e o preço).
+  const vez = (l: CrmLead) => conversaDaVez(l) && (l.respostaNova || l.etapa === "contato" || l.etapa === "proposta");
   // A mensagem mais nova primeiro: é a conversa que está acontecendo agora.
   const recente = (l: CrmLead) => Date.parse(l.conversa?.ultimaEntrada ?? l.resposta?.em ?? l.marcos.respondeu ?? "") || 0;
   return leads.filter((l) => vez(l) && copilotoServe(l)).sort((a, b) => recente(b) - recente(a));

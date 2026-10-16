@@ -224,6 +224,18 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   mensagem do copiloto no lugar do texto pronto (o texto padrão fica em "Ver o texto padrão da esteira"), sem anotar
   envio sozinha. O vendedor segura o aviso até 4 min (`ESPERA_DO_COPILOTO_MS`) enquanto o copiloto escreve. Nada é
   enviado ao lead: continua semi-automático. `SQUADONE_COPILOTO_AUTOMATICO=false` volta ao só-sob-pedido.
+- **Quem está respondendo** (16/10/2026, a Conecta Kids e a Gaius). Três correções do mesmo dia:
+  - **Sem conversa, sem sugestão automática**: o automático (e o que a Próxima venda e o Telegram mostram) só vale com
+    a conversa guardada e a última mensagem DELE (`conversaDaVez`). Às cegas ele sugeriu "sua última mensagem não
+    apareceu para mim" e mandar de novo o Raio-X que já tinha saído com o demo e o preço. Na Ficha, pedir continua livre.
+  - **O adaptador lê mensagem de empresa** (`texto_de_empresa` em `evolution-adaptador.py`): menu de botões
+    (`buttonsMessage`), texto com assinatura (`templateMessage`), `interactiveMessage` e listas viram texto (corpo,
+    "— rodapé" e "[opções: …]"). Antes o observador sabia que "alguém respondeu", nunca o quê.
+  - **O copiloto diz quem responde** (`momento`: `decisor` | `recepcao` | `robo` | `nao_sei`, com a leitura e o passo).
+    Robô e recepção não decidem: a mensagem desfaz o engano ("não sou paciente") e pede quem coordena; os itens da
+    proposta saem e preço vira aviso. A Próxima venda e o Telegram trocam o título ("quem respondeu foi a recepção") e
+    o "Como" pelo passo do copiloto; na Ficha, o "Agora" mostra o passo e a leitura dele quando quem respondeu não
+    decide (o passo marcado à mão continua valendo).
 
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 

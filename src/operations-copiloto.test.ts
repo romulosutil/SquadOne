@@ -153,6 +153,25 @@ describe('copiloto: a leitura da saída', () => {
   it('aceita cerca de código e texto em volta', () => {
     assert.equal(lerSaidaDoCopiloto(`Aqui está:\n\`\`\`json\n${saida()}\n\`\`\``, dossie).ok, true)
   })
+  it('lê quem responde; recepção não leva proposta e o preço vira aviso (a Conecta Kids, 16/10/2026)', () => {
+    const momento = { quem: 'recepcao', leitura: 'É a recepção, tratando você como paciente.', passo: 'Peça quem coordena.' }
+    const r = lerSaidaDoCopiloto(saida({ momento }), dossie)
+    assert.equal(r.ok, true)
+    if (r.ok !== true) return
+    assert.deepEqual(r.sugestao.momento, momento)
+    assert.deepEqual(r.sugestao.proposta.itens, [])
+    assert.ok(r.avisos.some((a) => /não decide/.test(a)))
+    assert.ok(r.avisos.some((a) => /preço para quem não decide/.test(a)))
+    // Momento fora do formato não derruba a sugestão: só some.
+    const torto = lerSaidaDoCopiloto(saida({ momento: { quem: 'gerente', leitura: 'x' } }), dossie)
+    assert.equal(torto.ok === true && torto.sugestao.momento, undefined)
+  })
+  it('o prompt ensina a ler robô, recepção e quem decide, e não repetir quem falou por último', () => {
+    const p = promptDoCopiloto(dossie)
+    assert.match(p, /"recepcao"/)
+    assert.match(p, /desfaz o engano/)
+    assert.match(p, /"momento":\{"quem"/)
+  })
   const RECUSAS: Array<{ nome: string, texto: string, motivo: string }> = [
     { nome: 'vazio', texto: '  ', motivo: 'vazio' },
     { nome: 'não é JSON', texto: 'Mande o site para ele.', motivo: 'json_invalido' },

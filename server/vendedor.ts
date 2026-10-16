@@ -129,8 +129,9 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[]):
     "",
     acao.porque,
     ...(acao.conversa ? ["", `💬 ${acao.conversa}`] : []),
+    ...(acao.copiloto?.momento ? ["", `🧭 Leitura do copiloto: ${acao.copiloto.momento.leitura}`] : []),
     "",
-    `Como: ${acao.tatica}`,
+    `${acao.copiloto?.momento?.passo ? "Agora" : "Como"}: ${acao.tatica}`,
   ];
   if (acao.rascunho) {
     const r = acao.rascunho.length > MAX_RASCUNHO ? `${acao.rascunho.slice(0, MAX_RASCUNHO)}…` : acao.rascunho;

@@ -96,6 +96,26 @@ class Textos(unittest.TestCase):
         for msg, esperado in casos:
             self.assertEqual(ev.texto_da_mensagem(msg), esperado, msg)
 
+    def test_mensagens_de_empresa(self):
+        # 16/10/2026, Conecta Kids (API oficial da Meta): o menu de botões e a recepcionista com assinatura.
+        menu = {"buttonsMessage": {"contentText": "Olá! Eu sou a Conecta. Por este canal, você pode:", "headerType": 1,
+                                   "buttons": [{"buttonId": "1", "buttonText": {"displayText": "1º Atendimento"}, "type": 1},
+                                               {"buttonId": "2", "buttonText": {"displayText": "Já sou Paciente"}, "type": 1}]},
+                "messageContextInfo": {"deviceListMetadata": {}}}
+        self.assertEqual(ev.texto_da_mensagem(menu),
+                         "Olá! Eu sou a Conecta. Por este canal, você pode:\n[opções: 1º Atendimento | Já sou Paciente]")
+        modelo = {"templateMessage": {"hydratedTemplate": {"hydratedContentText": "Aqui é a Bruna. Informe o nome e a idade do paciente.",
+                                                           "hydratedFooterText": "Clínica Conecta Kids"}},
+                  "messageContextInfo": {}}
+        self.assertEqual(ev.texto_da_mensagem(modelo), "Aqui é a Bruna. Informe o nome e a idade do paciente.\n— Clínica Conecta Kids")
+        interativo = {"interactiveMessage": {"body": {"text": "Escolha uma opção"}, "footer": {"text": "Loja X"},
+                                             "nativeFlowMessage": {"buttons": [{"name": "quick_reply", "buttonParamsJson": "{}"}]}}}
+        self.assertEqual(ev.texto_da_mensagem(interativo), "Escolha uma opção\n— Loja X")
+        lista = {"listMessage": {"title": "Horários", "description": "Escolha o dia", "buttonText": "Ver",
+                                 "sections": [{"rows": [{"title": "Segunda"}]}]}}
+        self.assertIn("Escolha o dia", ev.texto_da_mensagem(lista))
+        self.assertEqual(ev.texto_da_mensagem({"templateMessage": {"hydratedTemplate": {}}}), "")
+
     def test_embrulhos_abrem_e_ruido_some(self):
         self.assertEqual(ev.texto_da_mensagem({"ephemeralMessage": {"message": {"conversation": "oi"}}}), "oi")
         self.assertEqual(ev.texto_da_mensagem({"viewOnceMessageV2": {"message": {"imageMessage": {"caption": "k"}}}}), "[imagem] k")

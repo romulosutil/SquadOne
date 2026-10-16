@@ -249,6 +249,63 @@ def sem_conversa(mensagem, profundidade: int = 0) -> bool:
     return not (set(mensagem) - {"messageContextInfo", "senderKeyDistributionMessage"})
 
 
+# Mensagens de empresa (16/10/2026): clínicas e lojas com a API oficial da Meta mandam menu de botões, texto
+# com rodapé (a assinatura do atendente) e listas em formatos que não são "conversation". Sem ler esses, o
+# observador sabia que "alguém respondeu" e nunca o quê: a Conecta Kids (Iris) mandou o menu, o "você será
+# transferido" e a recepcionista pedindo "nome e idade do paciente", e só o do meio virou texto.
+FORMATOS_DE_EMPRESA = ("buttonsMessage", "templateMessage", "interactiveMessage", "listMessage",
+                       "highlyStructuredMessage", "interactiveResponseMessage", "richResponseMessage")
+# Os campos de texto desses formatos, na ordem em que viram texto (o corpo antes do rodapé e das opções).
+CAMPOS_DE_CORPO = ("hydratedTitleText", "title", "text", "contentText", "hydratedContentText", "description", "body")
+CAMPOS_DE_RODAPE = ("footerText", "hydratedFooterText", "footer")
+CAMPOS_DE_OPCAO = ("displayText", "buttonText")
+
+
+def _textos(no, campos, profundidade: int = 0, pular=()) -> list[str]:
+    """Os textos dos `campos` em qualquer ponto de `no` (até 6 níveis), na ordem do documento, sem repetir.
+    `pular`: campos em que não se entra (o rodapé não é corpo)."""
+    achados: list[str] = []
+    if profundidade > 6:
+        return achados
+    if isinstance(no, dict):
+        for k, v in no.items():
+            if k in pular:
+                continue
+            if k in campos and isinstance(v, str) and v.strip():
+                achados.append(v.strip())
+            elif k in campos and isinstance(v, dict) and isinstance(v.get("text"), str) and v["text"].strip():
+                achados.append(v["text"].strip())  # interactiveMessage: {"body": {"text": ...}}
+            elif isinstance(v, (dict, list)):
+                achados.extend(_textos(v, campos, profundidade + 1, pular))
+    elif isinstance(no, list):
+        for v in no[:20]:
+            achados.extend(_textos(v, campos, profundidade + 1, pular))
+    vistos: list[str] = []
+    for t in achados:
+        if t not in vistos:
+            vistos.append(t)
+    return vistos
+
+
+def texto_de_empresa(mensagem) -> str:
+    """O texto de uma mensagem de empresa: o corpo, o rodapé (a assinatura) e as opções de botão/lista.
+    '' quando não é um desses formatos ou não traz texto."""
+    blocos = [mensagem.get(k) for k in FORMATOS_DE_EMPRESA if isinstance(mensagem.get(k), dict)]
+    if not blocos:
+        return ""
+    corpo, rodape, opcoes = [], [], []
+    for b in blocos:
+        corpo += [t for t in _textos(b, CAMPOS_DE_CORPO, pular=CAMPOS_DE_RODAPE + CAMPOS_DE_OPCAO) if t not in corpo]
+        rodape += [t for t in _textos(b, CAMPOS_DE_RODAPE) if t not in rodape]
+        opcoes += [t for t in _textos(b, CAMPOS_DE_OPCAO) if t not in opcoes]
+    partes = ["\n".join(corpo)] if corpo else []
+    if rodape:
+        partes.append("— " + " · ".join(rodape))
+    if opcoes:
+        partes.append("[opções: " + " | ".join(opcoes[:10]) + "]")
+    return "\n".join(partes).strip()
+
+
 def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     """O texto como a bridge do Hermes grava (mesma convenção de mídia). '' = nada a guardar
     (reação, edição, protocolo, mensagem sem conteúdo)."""
@@ -272,6 +329,9 @@ def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     ):
         if isinstance(bruto, str) and bruto.strip():
             return bruto.strip()[:MAX_TEXTO]
+    de_empresa = texto_de_empresa(mensagem)
+    if de_empresa:
+        return de_empresa[:MAX_TEXTO]
     if "imageMessage" in mensagem:
         texto = f"[imagem] {_legenda(mensagem['imageMessage'])}"
     elif "videoMessage" in mensagem:

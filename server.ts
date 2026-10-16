@@ -406,7 +406,8 @@ async function startServer() {
           ...(cop ? {
             copiloto: {
               prontas: async (v) => new Map([...(await cop.prontas(v.leads))].map(([id, s]) =>
-                [id, { mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando }] as const)),
+                [id, { mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando,
+                  ...(s.sugestao.momento ? { momento: s.sugestao.momento } : {}) }] as const)),
               pedir: async (leadId, v) => {
                 const lead = v.leads.find((l) => l.id === leadId);
                 if (!lead) return false;

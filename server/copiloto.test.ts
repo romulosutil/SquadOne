@@ -160,8 +160,24 @@ describe("copiloto: a cola", () => {
 });
 
 describe("copiloto: sozinho (16/10/2026)", () => {
-  it("automática: começa em segundo plano, depois fica pronta sem chamar o modelo de novo", async () => {
+  // A conversa guardada com a última mensagem dele: sem isso o automático não lê nada (sugeria às cegas).
+  const comConversa = (extra: Partial<CrmLead> = {}) => leadCrm({
+    conversa: { desde: "2026-10-14T12:00:00Z", mensagens: 2, ultima: { direcao: "entrada", em: "2026-10-14T13:00:00Z", trecho: "pode mandar" },
+      ultimaEntrada: "2026-10-14T13:00:00Z", ultimaSaida: "2026-10-14T12:00:00Z" },
+    ...extra,
+  });
+
+  it("sem a conversa guardada, ou com a última mensagem nossa, não sugere sozinho", async () => {
     const { copiloto, provedor, leads } = await montar();
+    assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "sem" });
+    const nossa = comConversa();
+    nossa.conversa!.ultima = { direcao: "saida", em: "2026-10-14T14:00:00Z", trecho: "Gostou?" };
+    assert.deepEqual(await copiloto.automatica(nossa), { estado: "sem" });
+    assert.equal(provedor.prompts.length, 0);
+  });
+
+  it("automática: começa em segundo plano, depois fica pronta sem chamar o modelo de novo", async () => {
+    const { copiloto, provedor, leads } = await montar({ leads: [comConversa()] });
     assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "gerando" });
     // A Ficha pedindo junto pega a mesma geração (uma só por lead).
     await copiloto.sugerir("site", "ChIJabc");
@@ -173,7 +189,7 @@ describe("copiloto: sozinho (16/10/2026)", () => {
   });
 
   it("falhou: não tenta de novo o mesmo dossiê (nada de laço gastando o teto)", async () => {
-    const { copiloto, provedor, leads } = await montar({ respostas: [{ ok: false, motivo: "timeout", detalhe: "lento" }] });
+    const { copiloto, provedor, leads } = await montar({ leads: [comConversa()], respostas: [{ ok: false, motivo: "timeout", detalhe: "lento" }] });
     assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "gerando" });
     await copiloto.sugerir("site", "ChIJabc").catch(() => undefined);
     assert.deepEqual(await copiloto.automatica(leads[0]), { estado: "sem" });
@@ -181,7 +197,7 @@ describe("copiloto: sozinho (16/10/2026)", () => {
   });
 
   it("fora do trecho do copiloto (ainda não respondeu) não gera", async () => {
-    const lead = leadCrm({ sinal: "enviado", respostaNova: false, resposta: undefined });
+    const lead = comConversa({ sinal: "enviado", respostaNova: false, resposta: undefined });
     const { copiloto, provedor } = await montar({ leads: [lead] });
     assert.deepEqual(await copiloto.automatica(lead), { estado: "sem" });
     assert.equal(provedor.prompts.length, 0);

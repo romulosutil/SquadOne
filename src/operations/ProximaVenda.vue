@@ -153,7 +153,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
         <h2 id="venda-titulo">{{ atual.titulo }}</h2>
         <p class="venda__porque">{{ atual.porque }}</p>
         <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
-        <p class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
+        <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
+        <p class="venda__tatica"><strong>{{ atual.copiloto?.momento?.passo ? 'Agora:' : 'Como:' }}</strong> {{ atual.tatica }}</p>
 
         <figure v-if="atual.rascunho" class="venda__rascunho">
           <figcaption class="texto-2 texto-pequeno">

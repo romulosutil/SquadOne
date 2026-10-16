@@ -159,11 +159,25 @@ describe("Próxima venda com a conversa", () => {
 });
 
 describe("o copiloto sozinho", () => {
-  it("lê quem está com a vez, a conversa mais nova primeiro", () => {
-    const vez = visaoCom(SIM, KULNISKI.slice(0, 3)).leads[0] as unknown as CrmLead;
+  it("lê só quem escreveu por último na conversa guardada, a mais nova primeiro", () => {
+    const vez = visaoCom(SIM, KULNISKI.slice(0, 2)).leads[0] as unknown as CrmLead;
+    assert.equal(vez.conversa?.ultima.direcao, "entrada");
     const novo = { ...vez, id: "site:N", conversa: { ...vez.conversa!, ultimaEntrada: horas(0.5) } };
-    const semVez = { ...vez, id: "site:X", respostaNova: false, conversa: { ...vez.conversa!, ultima: { ...vez.conversa!.ultima, direcao: "saida" as const } } };
-    assert.deepEqual(leadsDoAutomatico([vez, semVez, novo]).map((l) => l.id), ["site:N", "site:K"]);
+    // A última é nossa ("vou pedir o link"): o copiloto não fala por cima dela.
+    const nossa = visaoCom(SIM, KULNISKI.slice(0, 3)).leads[0] as unknown as CrmLead;
+    const semConversa = visaoCom(SIM).leads[0] as unknown as CrmLead;
+    assert.deepEqual(leadsDoAutomatico([vez, { ...nossa, id: "site:X" }, { ...semConversa, id: "site:Y" }, novo]).map((l) => l.id), ["site:N", "site:K"]);
+  });
+
+  it("quem respondeu foi a recepção: o título e o passo são os do copiloto, não 'mande o próximo passo'", () => {
+    const v = visaoCom(SIM, KULNISKI.slice(0, 2));
+    const momento = { quem: "recepcao" as const, leitura: "É a recepção, tratando você como paciente.", passo: "Desfaça o engano e peça quem coordena." };
+    const sugestoes = new Map([["site:K", { mensagem: "Oi! Não sou paciente: sou o Rômulo, do Prumo. Quem coordena a clínica?", porque: "recepção", quando: horas(0.1), momento }]]);
+    const [a] = filaDeVenda(v, { ...CTX, sugestoes });
+    assert.match(a.titulo, /quem respondeu foi a recepção/);
+    assert.equal(a.quente, false);
+    assert.equal(a.tatica, "Desfaça o engano e peça quem coordena.");
+    assert.equal(a.copiloto?.momento?.quem, "recepcao");
   });
 
   it("o vendedor segura o aviso enquanto o copiloto escreve, e sai com o texto pronto depois da espera", async () => {

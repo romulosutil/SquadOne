@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { itensDaProposta, textoDaProposta, type SugestaoDoCopiloto } from './copiloto'
+import { itensDaProposta, textoDaProposta, type QuemResponde, type SugestaoDoCopiloto } from './copiloto'
 import { nomeDaOferta } from './jornada'
 import { dataHora } from './crm-formato'
 import type { CrmLead } from './types'
@@ -22,6 +22,11 @@ interface SugestaoNaFicha {
   avisos: string[]
   guardada: boolean
   raioX: 'com texto' | 'só o link' | 'sem Raio-X'
+}
+
+/** Quem está do outro lado, na leitura do copiloto (16/10/2026): robô e recepção não decidem a compra. */
+const QUEM: Record<QuemResponde, string> = {
+  decisor: 'Quem decide', recepcao: 'A recepção (não decide)', robo: 'O atendimento automático', nao_sei: 'Não dá para saber ainda',
 }
 
 const sugestao = ref<SugestaoNaFicha | null>(null)
@@ -136,6 +141,11 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
 
     <template v-if="sugestao">
       <div class="crm-copiloto__parte">
+        <template v-if="sugestao.sugestao.momento">
+          <h4 class="crm-ficha__rotulo">Quem está respondendo</h4>
+          <p class="crm-colinha__dica"><strong>{{ QUEM[sugestao.sugestao.momento.quem] }}.</strong> {{ sugestao.sugestao.momento.leitura }}</p>
+          <p v-if="sugestao.sugestao.momento.passo" class="crm-colinha__dica"><strong>Agora:</strong> {{ sugestao.sugestao.momento.passo }}</p>
+        </template>
         <h4 class="crm-ficha__rotulo">Próxima mensagem</h4>
         <blockquote ref="mensagemEl" class="crm-colinha__texto">{{ sugestao.sugestao.mensagem }}</blockquote>
         <p v-if="sugestao.sugestao.porque" class="crm-colinha__dica">{{ sugestao.sugestao.porque }}</p>

@@ -65,7 +65,14 @@ export interface AcaoDeVenda {
    */
   conversa?: string
   /** A mensagem é a do copiloto, que leu a conversa; `padrao` guarda o texto pronto da esteira. */
-  copiloto?: { porque: string, quando: string, padrao?: string }
+  copiloto?: { porque: string, quando: string, padrao?: string, momento?: MomentoDaVenda }
+}
+
+/** Quem está do outro lado e o que fazer, na leitura do copiloto (espelha MomentoDaConversa de copiloto.ts). */
+export interface MomentoDaVenda {
+  quem: 'decisor' | 'recepcao' | 'robo' | 'nao_sei'
+  leitura: string
+  passo: string
 }
 
 /** A sugestão do copiloto para um lead, já conferida contra o dossiê de agora (server/copiloto.ts). */
@@ -73,6 +80,13 @@ export interface SugestaoDeVenda {
   mensagem: string
   porque: string
   quando: string
+  momento?: MomentoDaVenda
+}
+
+const TITULO_DE_QUEM: Partial<Record<MomentoDaVenda['quem'], (empresa: string) => string>> = {
+  recepcao: (e) => `${e}: quem respondeu foi a recepção, não quem decide`,
+  robo: (e) => `${e}: só o atendimento automático respondeu`,
+  nao_sei: (e) => `${e}: descubra com quem está falando`,
 }
 
 export interface ContextoDaVenda {
@@ -342,11 +356,17 @@ function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: Context
   const comLinha = conversa ? { ...acao, conversa } : acao
   if (!sugestao?.mensagem.trim() || !lead.links.whatsapp) return comLinha
   const url = `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(sugestao.mensagem)}`
+  // A leitura de quem respondeu manda no título e no "como": com a recepção ou o robô, o passo não é
+  // o da jornada (link, proposta), é chegar a quem decide.
+  const m = sugestao.momento
+  const titulo = m ? TITULO_DE_QUEM[m.quem]?.(lead.empresa) : undefined
   const comSugestao: AcaoDeVenda = {
     ...comLinha,
+    ...(titulo ? { titulo, quente: false } : {}),
+    ...(m?.passo ? { tatica: m.passo } : {}),
     rascunho: sugestao.mensagem,
     link: { rotulo: 'Abrir no WhatsApp com a mensagem', url },
-    copiloto: { porque: sugestao.porque, quando: sugestao.quando, ...(acao.rascunho ? { padrao: acao.rascunho } : {}) },
+    copiloto: { porque: sugestao.porque, quando: sugestao.quando, ...(acao.rascunho ? { padrao: acao.rascunho } : {}), ...(m ? { momento: m } : {}) },
   }
   delete comSugestao.anota
   return comSugestao

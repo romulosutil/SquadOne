@@ -619,7 +619,9 @@ export function createOperationsRouter(options: {
     try {
       const prontas = await options.copiloto.prontas((await options.crm.visao()).leads);
       res.setHeader("Cache-Control", "no-store");
-      res.json({ sugestoes: Object.fromEntries([...prontas].map(([id, s]) => [id, { mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando }])) });
+      res.json({ sugestoes: Object.fromEntries([...prontas].map(([id, s]) => [id, {
+        mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando, ...(s.sugestao.momento ? { momento: s.sugestao.momento } : {}),
+      }])) });
     } catch (error) {
       responderErroDoCopiloto(res, error);
     }
