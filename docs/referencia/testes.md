@@ -136,7 +136,10 @@ fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária
 `deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
 ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(49; nada sobe o serviço nem lê o `bridge.log` real) e
+(49; nada sobe o serviço nem lê o `bridge.log` real),
+`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (48; webhooks de mentira, pasta temporária e HTTP no
+loopback em porta efêmera; o último grupo faz o `observador.py` de verdade ler o que o adaptador escreveu, com o n8n
+de mentira) e
 `deploy/hermes/scripts/patch_bridge_envios.test.py` (19). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar

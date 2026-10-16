@@ -1,0 +1,20 @@
+[Unit]
+Description=Observador do WhatsApp do número do PRUMO — lê o log do evolution-adaptador (o mesmo observador.py)
+After=evolution-adaptador.service
+
+[Service]
+# A mesma cópia do observador que serve o número pessoal, com a pasta e o log do PRUMO.
+# Sem bridge do Hermes aqui: o caminho abaixo não existe de propósito (o aviso de "remendo
+# perdido" só vale para a bridge), e o silêncio do log fica desligado (a noite quieta não é erro;
+# a queda do número é avisada pelo adaptador).
+Environment=OBSERVADOR_LOG=%h/.local/state/whatsapp-observador-prumo/evolution.log
+Environment=OBSERVADOR_POSICAO=%h/.local/state/whatsapp-observador-prumo/posicao.json
+Environment=OBSERVADOR_BRIDGE=%h/.local/state/whatsapp-observador-prumo/sem-bridge.js
+Environment=OBSERVADOR_SILENCIO_S=0
+ExecStart=/usr/bin/python3 %h/.local/bin/whatsapp-observador
+Restart=always
+RestartSec=15
+MemoryMax=100M
+
+[Install]
+WantedBy=default.target

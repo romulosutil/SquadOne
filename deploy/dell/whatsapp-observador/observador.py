@@ -101,7 +101,7 @@ JANELA_LIDO_S = 6 * 3600
 LOTE_AVISO_S = 5 * 60
 GRAVAR_POSICAO_S = 10
 # Log parado por mais que isto com o Hermes no ar = algo mudou na bridge.
-SILENCIO_SUSPEITO_S = 6 * 3600
+SILENCIO_SUSPEITO_S = int(os.environ.get("OBSERVADOR_SILENCIO_S", 6 * 3600))  # 0 desliga (número do PRUMO, ver abaixo)
 # n8n fora do ar: tenta logo. Fluxo que roda e falha vira aviso a cada tentativa: espera cada vez mais.
 RETENTAR_CONEXAO_S = 30
 ESPERAS_FALHA_S = (60, 240, 960, 3600)
@@ -242,6 +242,14 @@ def entregar_ja() -> None:
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
     except (OSError, subprocess.SubprocessError) as e:
         log("não consegui pedir a entrega imediata (o timer entrega no próximo minuto):", e)
+
+
+def silencio_suspeito(agora: float, ultima_linha: float, ja_avisado: bool, limite: int | None = None) -> bool:
+    """Log parado além do limite e ainda sem aviso. Limite 0 desliga: o log do número do PRUMO
+    (`evolution-adaptador.py`) fica horas quieto à noite sem que nada esteja errado, e a
+    desconexão dele é avisada pelo próprio adaptador."""
+    limite = SILENCIO_SUSPEITO_S if limite is None else limite
+    return limite > 0 and not ja_avisado and agora - ultima_linha > limite
 
 
 def posicao_salva() -> tuple[int, int, float] | None:
@@ -626,7 +634,7 @@ def acompanhar(obs: Observador, onde: dict) -> int:
             gravado, gravado_em = pos, agora
             salvar_posicao(*pos)
         if linha is None:
-            if agora - ultima_linha > SILENCIO_SUSPEITO_S and not silencio_avisado:
+            if silencio_suspeito(agora, ultima_linha, silencio_avisado):
                 obs.avisar("O log da bridge do WhatsApp está parado há 6 h: as conversas com leads podem não "
                            "estar marcando a planilha (Hermes fora do ar ou mudança na bridge).")
                 silencio_avisado = True

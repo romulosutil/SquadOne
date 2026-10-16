@@ -1,0 +1,12 @@
+[Unit]
+Description=Adaptador da Evolution API — o webhook do número do PRUMO vira o log que o observador lê
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/bin/evolution-adaptador.py
+Restart=always
+RestartSec=15
+MemoryMax=100M
+
+[Install]
+WantedBy=default.target

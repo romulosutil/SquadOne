@@ -2076,6 +2076,71 @@ python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna
 python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
+### Observador do número do PRUMO (Evolution API; 16/10/2026, código pronto, NADA instalado)
+
+Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
+prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no
+WhatsApp Business, e esse número não tem bridge. O gateway é a **Evolution API**
+(Apache 2.0, em Docker no Dell, conexão Baileys; a mesma API troca para a Cloud API oficial
+se um dia houver opt-in). O `evolution-adaptador.py` recebe o webhook dela e escreve, no
+formato da bridge, o que o observador já sabe ler:
+
+```
+Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.jsonl
+                                (127.0.0.1:9131)            |
+                       whatsapp-observador-prumo (o MESMO observador.py) --> n8n (whatsapp-conversa / -resposta)
+```
+
+- **Só leitura.** O adaptador nunca envia, marca como lido nem chama a Evolution. Nada em
+  `observador.py` (fora do silêncio do log, ver abaixo), `whatsapp-conversa.py` ou no n8n muda de
+  contrato; o número pessoal e o Hermes seguem como estão. A pasta é própria:
+  `~/.local/state/whatsapp-observador-prumo/` (`evolution.log`, `respostas.jsonl`, `leads.json`, `posicao.json`).
+- **Mapa de eventos.** `MESSAGES_UPSERT` com `fromMe:false` = `entrada` (e o texto, só de lead, em
+  `respostas.jsonl`); `fromMe:true` = `owner_sent`; `MESSAGES_UPDATE` com status `READ`/`PLAYED` (ou 4/5)
+  sobre mensagem `fromMe:true` = `owner_receipt` lido; `DELIVERY_ACK` fica só nos contadores (como o "entregue"
+  da bridge). Reação, edição, apagar, grupo, canal, status e quem não é lead não deixam rastro.
+- **Privacidade.** Só entra no log e no `respostas.jsonl` quem está em `leads.json` (a lista que o próprio
+  observador grava a cada leitura do n8n). Sem a lista, nada é gravado. O log não tem texto. O journal mostra
+  DDD + 2 últimos dígitos. O webhook exige o header `X-Adaptador` (tempo constante, antes de ler o corpo).
+- **Ainda não confirmado: o payload de `MESSAGES_UPDATE`.** Não achei payload publicado para o recibo de
+  leitura. O parser aceita `status` em texto ou número e `fromMe` em `data` ou em `data.key`, e o journal registra
+  **uma vez cada forma nova** de evento (só nomes de campo e tipos, nenhum valor): `journalctl --user -u
+  evolution-adaptador | grep "forma nova"`. É o ensaio de um dia com o número novo: mande uma mensagem a um
+  telefone seu, deixe-o ler e confira `owner_receipt` em `evolution.log` e `GET /saude` (contador `ignorados`:
+  `recibo_sem_fromMe` ou `recibo_sem_estado` mostram o que falta ajustar).
+- **LID.** `remoteJid` em `@lid` só vale com `remoteJidAlt`/`senderPn`; sem eles o evento conta em
+  `lid_sem_telefone` e some. Nada é adivinhado.
+- **Queda do número.** `CONNECTION_UPDATE` com `close` vira UM aviso pelo Hermes até a conexão voltar. Por
+  isso o `whatsapp-observador-prumo` roda com `OBSERVADOR_SILENCIO_S=0` (log parado à noite não é erro).
+- **Mensagem enviada pela API** (quando houver resposta automática) também chega como `fromMe:true` e conta como
+  `saida`: marca o lead como `enviado` com a letra `manual`, igual a uma mensagem digitada.
+
+Instalar (nada disso foi feito; precisa do número novo, da Evolution no ar e do QR lido):
+
+```bash
+# 1. segredo do webhook (o mesmo valor vai no header da Evolution)
+openssl rand -hex 24 > ~/.config/claude-ops/evolution-adaptador-segredo && chmod 600 ~/.config/claude-ops/evolution-adaptador-segredo
+# 2. adaptador e as duas units (o observador já está instalado)
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.py ~/.local/bin/evolution-adaptador.py
+cp ~/SquadOne/deploy/dell/whatsapp-observador/{evolution-adaptador,whatsapp-observador-prumo}.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now evolution-adaptador
+# 3. depois de o adaptador criar a pasta e o n8n responder, o segundo observador
+systemctl --user enable --now whatsapp-observador-prumo
+# 4. na Evolution (instância "prumo"): webhook só para estes eventos
+curl -s -X POST "$EVOLUTION_URL/webhook/set/prumo" -H "apikey: $EVOLUTION_APIKEY" -H 'Content-Type: application/json' \
+  -d '{"webhook":{"enabled":true,"url":"http://127.0.0.1:9131/evolution","events":["MESSAGES_UPSERT","MESSAGES_UPDATE","CONNECTION_UPDATE"],"headers":{"X-Adaptador":"<o segredo>"}}}'
+python3 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.test.py
+```
+
+Se a Evolution roda em container e o adaptador no host, `127.0.0.1` do container não é o host: ponha em
+`EVOLUTION_ENDERECO` (`Environment=` na unit) o endereço do host na ponte do Docker (`172.17.0.1` no padrão;
+`docker network inspect bridge` confirma) e use esse endereço na URL do webhook. Nunca `0.0.0.0`: o adaptador só
+deve ser alcançável pelo container. Decida isso no dia da instalação. Depois de atualizar o
+`observador.py`, reinicie as **duas** instâncias (`instalados.json` só reinicia a do número pessoal):
+`systemctl --user restart whatsapp-observador whatsapp-observador-prumo`. A entrada do adaptador em
+`instalados.json` usa curinga de propósito (`evolution-adaptador.p?`): só passa a ser comparada depois de instalada,
+então o `dell-status` não acusa "faltando" antes da instalação.
+
 ### Jev em sombra nas respostas (11/10/2026; código pronto, NADA aplicado no n8n)
 
 O Rômulo autorizou medir o Jev (`typesafe/jev-1.13`, da TypeSafe, pela Decisions

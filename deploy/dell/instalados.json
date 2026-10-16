@@ -38,6 +38,8 @@
     {"repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md", "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md", "modo": "444"},
     {"repo": "deploy/dell/whatsapp-observador/observador.py", "instalado": "~/.local/bin/whatsapp-observador",
      "reiniciar": "whatsapp-observador"},
+    {"repo": "deploy/dell/whatsapp-observador/evolution-adaptador.p?", "instalado": "~/.local/bin/",
+     "reiniciar": "evolution-adaptador"},
     {"repo": "deploy/dell/dell-worker-healthwatch.sh", "instalado": "~/.local/bin/dell-worker-healthwatch.sh",
      "reiniciar": "dell-worker-healthwatch"},
     {"repo": "deploy/dell/prumo-mapa/*.py", "instalado": "~/.local/share/prumo-mapa/"},
