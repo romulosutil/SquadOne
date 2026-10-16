@@ -32,8 +32,12 @@ o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM 
   Prospects; "PRUMO · Iris — Caçador de clínicas" e "PRUMO · CRM de estamparia — Caçador de estamparias"
   (Places → site da empresa → WhatsApp publicado e celular → dedupe por place_id e WhatsApp contra todos os
   funis → até 15 por rodada em Revisar, descarte com motivo em Descartados, aviso pelo Hermes). **Nasceram
-  desligados**: rodam à mão (`python3 prumo-ofertas.py --rodar iris|estampa`) até o Rômulo ligar o agendamento
-  (dias úteis, 9h) no n8n. Republicar não liga nada. Cliente do PRUMO (`clientes`, hoje a Silmer) nunca vira
+  desligados** e rodavam à mão (`python3 prumo-ofertas.py --rodar iris|estampa`); **o Rômulo ligou o agendamento
+  em 16/10/2026** ("pode automatizar"): dias úteis às 9h, até 15 por rodada em Revisar, nada é enviado (o convite
+  segue sendo um toque dele), primeira rodada agendada na segunda, 19/10, às 9h. Liga e desliga por
+  `python3 prumo-ofertas.py --ativar|--desativar [iris|estampa]` e confere por `--estado`, sempre a partir de
+  `~/.local/share/claude-ops` (`prumo-ofertas.py`, `prumo-ofertas-triar.js` e `prumo-ofertas.json` instalados lá).
+  Republicar (sem flags) troca os nós e **não** muda o estado ligado/desligado; confira com `--estado`. Cliente do PRUMO (`clientes`, hoje a Silmer) nunca vira
   prospect. O clique em Enviar convite (`/webhook/convite-iris` e `/convite-estampa`) abre o WhatsApp com o convite
   da oferta (voz PRUMO, sem nome, R$ nem link) e marca "Convite enviado".
 - **CRM** (`server/crm.ts`): produtos `iris` e `estampa` lidos dessas abas pelo 08 · CRM (`crm.py`), com a regra

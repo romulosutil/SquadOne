@@ -15,8 +15,9 @@
 > **27 99976-2786**, o MESMO em que o Hermes está pareado desde 09/10 (conta "Prumo"); eu havia comparado só com o
 > número antigo (…0954) e anunciei "número separado" por engano. A parte técnica (gateway, adaptador, observador,
 > recibos, monitor) funciona, mas **a separação entre prospecção e Hermes não existe**: restrição ou banimento deste
-> número derruba os dois. Falta um segundo número (decisão do Rômulo) e, antes disso, parear o Hermes de novo (a
-> bridge está "Logged out" desde 15/10 08:32). O texto abaixo foi escrito antes da correção; onde diz "número do
+> número derruba os dois. O Hermes foi pareado de novo em 16/10 12:02 (estava "Logged out" desde 15/10 08:32). **Decisão do Rômulo no
+> mesmo dia: não haverá segundo número**; o risco compartilhado fica coberto pelas travas de horário e de ritmo. A
+> Fase 3 (Cloud API / e-mail como primeiro toque) segue como opção futura. O texto abaixo foi escrito antes da correção; onde diz "número do
 > PRUMO" ou "Hermes só no pessoal", leia "o número da Evolution" e "ainda não separados".
 >
 > **Fase 2 feita em 16/10/2026** (número do PRUMO conectado; o ensaio do recibo de leitura passou):

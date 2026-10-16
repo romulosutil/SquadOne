@@ -2097,9 +2097,11 @@ python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Go
 > esse número for restrito ou banido, o Hermes cai junto, como em 15/10. A bridge do Hermes estava
 > **"Logged out" de 15/10 às 08:32 até 16/10 às 12:02**; **foi pareada de novo em 16/10 às 12:02** neste mesmo
 > número (a Evolution e o Hermes convivem como aparelhos conectados), com a sessão antiga em
-> `session.antiga-5527999762786-20261016`. Segue pendente a separação: um segundo número para a prospecção
-> (decisão do dono): desconectar a instância `prumo` (`DELETE /instance/logout/prumo`) e ler um QR novo no celular
-> dele. Onde este texto diz "número novo" ou "número só do PRUMO", leia "o número da Evolution".
+> `session.antiga-5527999762786-20261016` (o Rômulo a apagou depois). **Decisão do Rômulo em 16/10/2026: não haverá
+> segundo número.** A Evolution e o Hermes ficam neste chip, e a proteção é a trava de horário mais a trava de ritmo
+> (4 min entre primeiros contatos, 8 por hora, 10/20/30 por dia, follow-up só de quem leu). Se um dia mudar:
+> `DELETE /instance/logout/prumo` e um QR novo no celular do outro número. Onde este texto diz "número novo" ou
+> "número só do PRUMO", leia "o número da Evolution".
 
 Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
 prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no

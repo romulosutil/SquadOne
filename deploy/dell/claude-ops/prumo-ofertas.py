@@ -29,6 +29,9 @@ no mesmo funil (server/crm.ts, OFERTA_DE_PROSPECCAO).
 Uso: python3 prumo-ofertas.py              abas + caçadores (desligados) + cliques
      python3 prumo-ofertas.py --rodar iris  roda o caçador agora (efeito real: grava na planilha e avisa)
      python3 prumo-ofertas.py --codigo      só imprime o código dos nós Code (para node --check)
+     python3 prumo-ofertas.py --estado      mostra se cada caçador está ligado
+     python3 prumo-ofertas.py --ativar [iris|estampa]   liga o agendamento (dias úteis, 9h); --desativar desliga
+                                            (16/10/2026: ligados pelo Rômulo, "pode automatizar")
 """
 import importlib.util
 import json
@@ -342,6 +345,32 @@ def publicar_cacador(wf):
     return wid
 
 
+def estado_dos_cacadores(argv):
+    """`--estado` lista; `--ativar [iris|estampa ...]` liga o agendamento (dias úteis, 9h) e `--desativar`
+    desliga; sem nome, vale para as duas ofertas. Autorizado pelo Rômulo em 16/10/2026 ("pode automatizar").
+    Os caçadores só enchem a aba em Revisar (até o teto por rodada) e avisam pelo Hermes: nada é enviado
+    a ninguém, o convite continua sendo um toque dele. Republicar (`prumo-ofertas.py` sem flags) troca os
+    nós e preserva o estado ligado/desligado, mas confira com --estado depois."""
+    from n8n import api
+    ofertas = list(CONFIG["ofertas"])
+    pedidas = [a for a in argv if a in ofertas] or ofertas
+    ids = ids_dos_cacadores()
+    ligar = "--ativar" in argv
+    mudar = ligar or "--desativar" in argv
+    for oferta in pedidas:
+        wid = ids.get(oferta)
+        if not wid:
+            print(f"{oferta}: caçador não publicado (rode prumo-ofertas.py sem flags antes)")
+            return 1
+        if mudar:
+            api("POST", f"/workflows/{wid}/{'activate' if ligar else 'deactivate'}")
+    por_id = {w["id"]: w for w in api("GET", "/workflows?limit=250")["data"]}
+    for oferta in pedidas:
+        w = por_id[ids[oferta]]
+        print(f"{oferta}: {w['name']} -> {'LIGADO (dias úteis, 9h)' if w['active'] else 'desligado'}")
+    return 0 if all(por_id[ids[o]]["active"] == ligar for o in pedidas) or not mudar else 1
+
+
 def ids_dos_cacadores():
     from n8n import api
     nomes = {o["fluxo"]: k for k, o in CONFIG["ofertas"].items()}
@@ -394,6 +423,8 @@ if __name__ == "__main__":
         oferta = sys.argv[sys.argv.index("--rodar") + 1]
         wid = ids_dos_cacadores().get(oferta) or sys.exit(f"caçador de {oferta} não publicado: rode sem --rodar antes.")
         sys.exit(0 if _modulo("rodar_agora", "rodar-agora.py").main(wid) else 1)
+    if "--ativar" in sys.argv or "--desativar" in sys.argv or "--estado" in sys.argv:
+        sys.exit(estado_dos_cacadores(sys.argv[1:]))
     from n8n import api
     erro = next(w["id"] for w in api("GET", "/workflows?limit=250")["data"] if w["name"] == "00 · Avisar falha pelo Hermes")
     if "--rodar" in sys.argv or "--reavaliar" in sys.argv:

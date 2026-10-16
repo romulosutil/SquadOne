@@ -197,7 +197,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
 | Perfis, avaliação de turno, Luna, Jev, copiloto | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
-| WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (ATENÇÃO: a Evolution está no MESMO número do Hermes, 27 99976-2786; a separação de números ainda não existe) |
+| WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 
@@ -246,7 +246,9 @@ Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): 
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o
 contrato do Prospects (`OFERTA_DE_PROSPECCAO`); os caçadores delas (`deploy/dell/claude-ops/prumo-ofertas.py`)
-nasceram desligados e republicar não os liga; cliente do PRUMO (a Silmer) nunca vira prospect.
+nasceram desligados e foram **ligados em 16/10/2026** pelo Rômulo (dias úteis, 9h; só enchem a aba em Revisar e
+avisam, nada é enviado; `python3 prumo-ofertas.py --estado|--ativar|--desativar`, a partir de
+`~/.local/share/claude-ops`); cliente do PRUMO (a Silmer) nunca vira prospect.
 A/B da 1ª mensagem do Site (14/10/2026): a letra só se compara entre leads com o mesmo conjunto
 elegível (coluna `ab_elegiveis`, gravada pelo Balcão com a letra) e é equilibrada por nicho; sem
 30 envios por braço não há taxa, e o que já foi enviado nunca troca de letra. O histórico sem a
