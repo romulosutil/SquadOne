@@ -269,6 +269,17 @@ isso, menos ruído:
   com o gateway de pé. Vermelho; o aviso desse vermelho, claro, não chega pelo
   WhatsApp — aparece na Central, e o remédio é parear de novo.
 
+- **Parear de novo no MESMO número (16/10/2026, sem terminal interativo):** `systemctl --user stop hermes-gateway`;
+  `mv ~/.hermes/whatsapp/session ~/.hermes/whatsapp/session.antiga-<número>-<data>` e `mkdir -m 700` uma `session` nova;
+  `cd ~/.hermes/hermes-agent/scripts/whatsapp-bridge && setsid nohup ~/.hermes/tools/node-*/bin/node bridge.js
+  --pair-only --pair-json --session ~/.hermes/whatsapp/session > /tmp/hermes-pair/saida.jsonl &`. Com `--pair-json` a
+  bridge escreve uma linha JSON por evento e o texto bruto do QR em `{"event":"qr","qr":"..."}`; dá para desenhar o QR
+  como imagem (a matriz sai do `qrcode-terminal/vendor/QRCode`) em vez de depender do terminal. Terminou em
+  `{"event":"connected"}`. Como a conta é a mesma, o `me.lid` não muda e o `WHATSAPP_HOME_CHANNEL` fica; depois
+  `systemctl --user start hermes-gateway`, `curl 127.0.0.1:3000/health` (`status: connected`) e `hermes send --to
+  whatsapp "teste"`. Apague o `/tmp/hermes-pair` (tem o texto do QR). O aviso `link-preview-js` no `bridge.log`
+  é antigo e inofensivo (sem prévia de link).
+
 - **Trocar o chip (ou parear de novo)**, como em 09/10/2026: o número antigo
   (…97780954) passou a levar 403 em laço desde as 11:01 e o Hermes foi pareado
   no chip novo, **27 99976-2786** (conta "Prumo"). Passos: `systemctl --user stop
@@ -2083,12 +2094,12 @@ python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Go
 > (ver "Trocar o chip", acima; o `creds.json` do Hermes e o `ownerJid` da Evolution terminam em …86 e batem nos
 > 8 últimos dígitos). Durante a instalação eu comparei o número só com o antigo (…0954) e anunciei, errado, "um
 > número separado". Então **o objetivo de separar a prospecção do número do Hermes (Fase 2) NÃO foi atingido**: se
-> esse número for restrito ou banido, o Hermes cai junto, como em 15/10. Além disso a bridge do Hermes está
-> **"Logged out" desde 15/10 às 08:32** (o `dell-status` mostra "Sessão do WhatsApp" em falha): nenhum aviso pelo
-> WhatsApp chega. Duas saídas, decisão do dono: (a) parear o Hermes de novo neste número (a Evolution e o Hermes
-> convivem como aparelhos conectados) e tratar a separação como pendente até haver um segundo número; (b) um
-> segundo número para a prospecção: desconectar a instância `prumo` (`DELETE /instance/logout/prumo`) e ler um QR
-> novo no celular dele. Onde este texto diz "número novo" ou "número só do PRUMO", leia "o número da Evolution".
+> esse número for restrito ou banido, o Hermes cai junto, como em 15/10. A bridge do Hermes estava
+> **"Logged out" de 15/10 às 08:32 até 16/10 às 12:02**; **foi pareada de novo em 16/10 às 12:02** neste mesmo
+> número (a Evolution e o Hermes convivem como aparelhos conectados), com a sessão antiga em
+> `session.antiga-5527999762786-20261016`. Segue pendente a separação: um segundo número para a prospecção
+> (decisão do dono): desconectar a instância `prumo` (`DELETE /instance/logout/prumo`) e ler um QR novo no celular
+> dele. Onde este texto diz "número novo" ou "número só do PRUMO", leia "o número da Evolution".
 
 Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
 prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no
