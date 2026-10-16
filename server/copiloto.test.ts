@@ -250,6 +250,12 @@ describe("copiloto: o Raio-X no disco", () => {
       [path.join("/a", "_em-conversa", "estrela", "raio-x.html"), path.join("/e", "prumo-raio-x", "estrela.html")],
     );
   });
+  it("o lugar como a visão do CRM entrega: \"_em-conversa/\" e \"raiz\"", () => {
+    const raizes = { autoDirectory: "/a" };
+    assert.deepEqual(caminhosDoRaioX({ pasta: { lugar: "_em-conversa/", slug: "estrela" }, links: {} }, raizes), [path.join("/a", "_em-conversa", "estrela", "raio-x.html")]);
+    assert.deepEqual(caminhosDoRaioX({ pasta: { lugar: "raiz", slug: "estrela" }, links: {} }, raizes), [path.join("/a", "estrela", "raio-x.html")]);
+    assert.deepEqual(caminhosDoRaioX({ pasta: { lugar: "../", slug: "estrela" }, links: {} }, raizes), []);
+  });
   it("slug ou lugar com ../ não vira caminho; link de outro domínio também não", () => {
     const raizes = { autoDirectory: "/a", entregasPrumo: "/e" };
     assert.deepEqual(caminhosDoRaioX({ pasta: { lugar: "..", slug: "x" }, links: { raioX: "https://raio-x-prumo.vercel.app/..%2Fsegredo" } }, raizes), []);

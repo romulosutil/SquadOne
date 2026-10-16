@@ -440,8 +440,11 @@ export function caminhosDoRaioX(
   const caminhos: string[] = [];
   // Os lugares começam com "_" (_em-conversa, _concluidos); ".." nunca passa.
   const seguro = (t: string) => /^[a-z0-9_][a-z0-9._-]{0,200}$/i.test(t) && !t.includes("..");
-  if (raizes.autoDirectory && lead.pasta && seguro(lead.pasta.slug) && (lead.pasta.lugar === "" || seguro(lead.pasta.lugar))) {
-    caminhos.push(path.join(raizes.autoDirectory, lead.pasta.lugar, lead.pasta.slug, "raio-x.html"));
+  // A visão do CRM entrega o lugar formatado para a tela (crm.ts: "raiz" ou "_em-conversa/"); sem
+  // desfazer isso, nenhum lead em _em-conversa (justo os que responderam) tinha o Raio-X lido (15/10/2026).
+  const lugar = lead.pasta ? (lead.pasta.lugar === "raiz" ? "" : lead.pasta.lugar.replace(/\/$/, "")) : "";
+  if (raizes.autoDirectory && lead.pasta && seguro(lead.pasta.slug) && (lugar === "" || seguro(lugar))) {
+    caminhos.push(path.join(raizes.autoDirectory, lugar, lead.pasta.slug, "raio-x.html"));
   }
   const url = lead.links.raioX?.trim();
   if (raizes.entregasPrumo && url) {
