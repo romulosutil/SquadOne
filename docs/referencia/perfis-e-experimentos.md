@@ -161,6 +161,16 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 
 ## Próxima venda e o vendedor do Telegram (16/10/2026)
 
+> **Depois do blueprint (16/10/2026, OT-02 e OT-09).** Uma janela de horário só: `EXPEDIENTE_DE_VENDA` e
+> `noExpedienteDeVenda` moraram para `trava-de-horario.ts` (a Próxima venda reexporta) e o `avisoDeHorario` das telas do
+> CRM passou a usá-la, então o sábado de manhã e o 17h30–18h deixaram de passar sem "Liberar". A Próxima venda ganhou o
+> mesmo "Liberar" por lead (só com o ritmo livre, `podeMandarPrimeiroContato`), e o trecho do Roteiro na Ficha não abre o
+> WhatsApp de quem ainda espera a primeira mensagem (`aindaSemPrimeiroContato`). Medida: o vendedor grava cada aviso e o que
+> houve com ele (`avisado`, `enviei`, `pulou`, `expirou`, `saiu`, com a espera) em
+> `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor-historico.jsonl` (600, poda em 180 dias); `GET /api/operations/crm/vendedor` devolve
+> o resumo dos 30 dias, e Números abre com "Depois do sim" (`velocidade.ts`, PURO: do "quero ver" ao link, do link à
+> proposta, mediana, quantos em até 2 h e quem espera agora).
+
 Pedido do Rômulo: "podia ser mais proativo, um aviso 'Envie mensagem para xpto' com tudo já organizado, só pra eu
 revisar", "a Hoje não está entregando valor" e "automatize o envio da primeira mensagem, de segunda a sexta, das 8h
 às 17h30". Decisão dele no mesmo dia, entre as opções: **semi-automático** (nada sai ao lead sem o toque dele; a

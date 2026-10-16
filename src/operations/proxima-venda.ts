@@ -27,6 +27,7 @@
  */
 import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
+import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 
 export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'primeiro'
@@ -92,6 +93,12 @@ const TITULO_DE_QUEM: Partial<Record<MomentoDaVenda['quem'], (empresa: string) =
 export interface ContextoDaVenda {
   /** A trava de ritmo e o expediente deixam sair um primeiro contato agora. */
   primeiroLiberado: boolean
+  /**
+   * Fora do expediente, os leads que o Rômulo liberou à mão (o "Liberar" da trava de horário, a
+   * mesma regra das telas do CRM). Só vale com `ritmoLivre`: o ritmo não se libera.
+   */
+  liberados?: ReadonlySet<string>
+  ritmoLivre?: boolean
   /** Relógio (ms) para o "o que achou?"; ausente, esse passo não entra. */
   agora?: number
   /** leadId -> a sugestão do copiloto, quando há uma para a conversa de agora. */
@@ -332,7 +339,9 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
       if (acao.primeiroContato) {
-        if (!ctx.primeiroLiberado || primeiros >= 1) continue
+        const pode = ctx.primeiroLiberado
+          || podeMandarPrimeiroContato({ noExpediente: false, liberado: Boolean(ctx.liberados?.has(lead.id)), ritmoLivre: Boolean(ctx.ritmoLivre) })
+        if (!pode || primeiros >= 1) continue
         primeiros++
       }
       vistas.add(acao.chave)
@@ -390,19 +399,6 @@ export function resumoDaFila(fila: readonly AcaoDeVenda[]): string {
 
 // ---------------------------------------------------------------- expediente de venda
 
-/**
- * Seg a sex, 08:00 às 17:30 de São Paulo (pedido de 16/10/2026). O aviso do Telegram só sai
- * dentro dele; a Hoje mostra a fila sempre, mas primeiro contato fora dele espera.
- */
-export const EXPEDIENTE_DE_VENDA = { dias: [1, 2, 3, 4, 5], inicioMin: 8 * 60, fimMin: 17 * 60 + 30 } as const
-
-/** São Paulo é UTC−3 o ano todo desde 2019 (o mesmo atalho de server/crm.ts). */
-function relogioSP(agora: number): { dia: number; minutos: number } {
-  const d = new Date(agora - 3 * 3600_000)
-  return { dia: d.getUTCDay(), minutos: d.getUTCHours() * 60 + d.getUTCMinutes() }
-}
-
-export function noExpedienteDeVenda(agora: number): boolean {
-  const { dia, minutos } = relogioSP(agora)
-  return (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
-}
+// A regra mora na trava de horário (uma só para toda tela, OT-02); daqui só se reexporta, porque o
+// vendedor do servidor e os testes a importam deste módulo.
+export { EXPEDIENTE_DE_VENDA, noExpedienteDeVenda } from './trava-de-horario'

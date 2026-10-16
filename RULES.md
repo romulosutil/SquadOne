@@ -177,6 +177,15 @@
       número é o pessoal, o mesmo que fala com leads: rajada é o que costuma
       dar banimento, e um ponto único é o único jeito de o teto valer para
       todos. Cartão que pede decisão leva só o link da tailnet (regra 10).
+    - **Exceção de 16/10/2026 (escolha do Rômulo, OT-14 do blueprint): o aviso
+      pessoal do SquadOne sai pelo Telegram.** O lembrete da agenda (vigia) e o
+      alerta de finanças (70/90/100%) vão pelo bot ao chat do dono
+      (`publicarAvisoPessoal` em `server/avisos.ts`), sem som das 22h às 7h, com o
+      mesmo schema e sem R$; só se o bot estiver desligado ou falhar caem na fila
+      acima. O motivo: o WhatsApp do Hermes é o número que fala com os leads e
+      levou restrição de 24 h em 15/10, e cada aviso pessoal era uma mensagem a
+      mais na conta dele. O P0 segue nos dois canais; as falhas do `dell-status`
+      seguem na fila. `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz.
     - **P0 é espelhado no Telegram** (`sendMessage` do bot ao chat do dono). A
       sessão do WhatsApp não é oficial e cai (135 quedas em 7 dias, medido em
       05/10/2026); a Bot API é oficial. Só P0, porque P0 também fura o

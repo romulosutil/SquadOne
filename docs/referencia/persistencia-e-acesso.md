@@ -101,6 +101,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `TELEGRAM_TRANSPORTE` | servidor | `webhook` (padrão) ou `polling`; no `operations` só `polling`; outro valor = `TelegramMalConfigurado` |
 | `SQUADONE_LOGINS_TAILSCALE` | servidor | só `operations`: logins aceitos no `Tailscale-User-Login`, por vírgula; com a agenda ligada, vazia fecha a tailnet; vazia fecha `/api/financas/*` pela tailnet sempre |
 | `SQUADONE_AVISOS_FILA` | servidor | só `operations`: pasta da fila de avisos; ausente = `~/.local/share/avisos/fila` |
+| `SQUADONE_LEMBRETES_PELO_TELEGRAM` | servidor | só `operations` (16/10/2026, OT-14): lembrete da agenda e alerta de finanças pelo bot do Telegram, fila do WhatsApp só de reserva; `false` volta tudo à fila; qualquer outro valor ou ausente = Telegram |
 | `DEADMAN_URL` | servidor | só `operations`: ping do healthchecks.io (https, sem query); ausente = sem sinal; ilegível = log e desligado |
 | `SQUADONE_FINANCAS_IA` | servidor | só `operations`: `true` liga o "Explicar este mês" das finanças (prévia literal, envio com o hash dela); qualquer outro valor = rotas em 404 e sem botão. Ligar só com a chave do Gemini em projeto com faturamento — confirmado pelo usuário em 07/10/2026; nunca no Easypanel |
 | `PLUGGY_CLIENT_ID` / `_SECRET` / `PLUGGY_ITEM_IDS` | servidor | só em `operations`, no EnvironmentFile `~/.config/squadone/financas.env` (600); ausentes = finanças sem leitura; um presente sem os outros = log de erro e Pluggy desligada. Nunca impressos |

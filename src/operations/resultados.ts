@@ -17,6 +17,7 @@
  */
 import { ROTULO_DO_REGIME } from './crm-formato'
 import type { CrmLead } from './types'
+import { noExpedienteDeVenda, TEXTO_DO_EXPEDIENTE } from './trava-de-horario'
 
 export type Periodo = '14' | '30' | 'tudo'
 export const PERIODOS: Array<{ id: Periodo; rotulo: string }> = [
@@ -138,11 +139,13 @@ export function resultados(leads: CrmLead[], criterio: Criterio, periodo: Period
  * (1 de 3 não é taxa).
  */
 export function avisoDeHorario(leads: CrmLead[], agora: number): string | null {
-  if (noHorarioComercial(agora)) return null
+  // O expediente de venda (trava-de-horario.ts), o mesmo da Próxima venda e do Telegram (OT-02):
+  // a janela que trava é a mesma que a taxa mede.
+  if (noExpedienteDeVenda(agora)) return null
   const enviados = leads.filter(l => enviadoNoPeriodo(l, 'tudo', agora))
-  const dentro = contar('dentro', enviados.filter(l => noHorarioComercial(Date.parse(l.marcos.enviado ?? ''))))
-  const fora = contar('fora', enviados.filter(l => !noHorarioComercial(Date.parse(l.marcos.enviado ?? ''))))
-  const expediente = 'segunda a sexta das 8h às 18h, sábado até 12h'
+  const dentro = contar('dentro', enviados.filter(l => noExpedienteDeVenda(Date.parse(l.marcos.enviado ?? ''))))
+  const fora = contar('fora', enviados.filter(l => !noExpedienteDeVenda(Date.parse(l.marcos.enviado ?? ''))))
+  const expediente = TEXTO_DO_EXPEDIENTE
   if (amostraPequena(dentro) || amostraPequena(fora)) {
     return `Agora é fora do expediente de quem recebe (${expediente}): mensagem de número desconhecido nessa hora costuma ficar sem resposta.`
   }

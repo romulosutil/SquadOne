@@ -39,7 +39,8 @@ elegível, 30 leads em 10/10/10, contagem vinda da planilha sem manual/EN, conge
 ou nenhuma mensagem, EUA, só A e nicho vazio; os casos completos estão no `site-antes-da-venda.py --testar`),
 `server/prumo-mensagem.test.ts` (o reenvio do só-robô do PRUMO: nome como o dono escreve, artigo, só número 55),
 `server/plus.test.ts` (filtro Plus: leitura do PDF em colunas, telefone, oferta e dedupe, mensagem maçônica com o artigo certo, funil só pelos registros, Hoje limitada, `lerPlus` e gravação em diretório temporário), `server/acesso.test.ts`,
-`server/avisos.test.ts`, `server/telegram-polling.test.ts`,
+`server/avisos.test.ts` (desde 16/10/2026 também o aviso pessoal pelo Telegram, OT-14: não grava na fila, sem som das 22h às 7h,
+fila de reserva com o bot fora, P0 nos dois canais, R$ recusado antes de sair, a variável só desliga com `false`), `server/telegram-polling.test.ts`,
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 `server/roster-historico.test.ts`,
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
@@ -80,7 +81,11 @@ sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu d
 `src/operations-anotacao-de-envio.test.ts` (a anotação do toque na 2ª mensagem e no follow-up: qual link anota, o primeiro
 toque vale, storage que lança, poda quando o retrato confirma, anotados no fim do grupo da Hoje),
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;
-o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-up de sempre nem a 2ª mensagem; o rótulo "Pedir o responsável"),
+o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-up de sempre nem a 2ª mensagem; o rótulo "Pedir o responsável";
+desde 16/10/2026, OT-02: a janela única seg–sex 8h–17h30 em tabela (17h45 e sábado agora travam), a Próxima venda usa a mesma função,
+"pode mandar" = expediente ou liberado e sempre com o ritmo livre, e o trecho do Roteiro sem WhatsApp antes do primeiro contato),
+`src/operations-velocidade.test.ts` (16/10/2026, OT-09: do "quero ver" ao link pela 2ª anotada ou pelo link visto na conversa, link antes do
+interesse não conta, do link à proposta, perdido não espera e fora dos 30 dias não entra, mediana e duração legível),
 `src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
 10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
@@ -103,7 +108,9 @@ min e saindo com a mensagem dele quando está pronta; diretório temporário pr�
 (`montarCrm`) do pronto ao "quero ver", e a fila de venda (`proxima-venda.ts`) diz o que fazer em cada passo: primeira
 mensagem com o texto do Balcão e só com a trava de ritmo livre; nada para quem não leu; follow-up de quem leu; o "quero ver"
 quente com o link do demo; depois da 2ª anotada, ele sai das respostas (achado da simulação, corrigido em `server/crm.ts`);
-o "o que achou?" de 20 h a 72 h depois do link; a proposta sem reenviar o preço; o reenvio do só-robô como primeiro contato.
+o "o que achou?" de 20 h a 72 h depois do link; a proposta sem reenviar o preço; o reenvio do só-robô como primeiro contato;
+fora do expediente só o lead liberado entra na fila, e nunca com o ritmo travado (OT-02); o histórico do vendedor: "expirou" e "saiu" de
+um aviso que fecha sem toque, o resumo dos 30 dias com os "quero ver" à parte e a leitura que pula linha cortada (OT-09).
 E o vendedor (`server/vendedor.ts`): expediente seg–sex 08:00–17:30, um aviso por vez, 30 min sem toque vira pulado, o
 "quero ver" fura a espera, o "Enviei" de primeiro contato conta na trava antes do retrato, o texto e os botões do Telegram
 (callback ≤ 64 bytes). E o "por que não está vendendo" (`por-que-nao-vende.ts`): o gargalo depois do "gostei"),

@@ -161,12 +161,15 @@ export async function enviarMensagem(
   texto: string,
   responderA?: number,
   botoes?: Botao[] | Botao[][],
+  /** `silencioso`: chega sem som (o lembrete das 22h às 7h, OT-14). */
+  opcoes?: { silencioso?: boolean },
 ): Promise<void> {
   // Uma fila de botões (o formato antigo) ou várias linhas (o aviso de venda, 16/10/2026).
   const linhas: Botao[][] = !botoes?.length ? [] : Array.isArray(botoes[0]) ? (botoes as Botao[][]) : [botoes as Botao[]];
   await chamar(c, "sendMessage", {
     chat_id: chatId,
     text: texto,
+    ...(opcoes?.silencioso ? { disable_notification: true } : {}),
     ...(responderA ? { reply_parameters: { message_id: responderA, allow_sending_without_reply: true } } : {}),
     ...(linhas.length
       ? { reply_markup: { inline_keyboard: linhas.map((l) => l.map((b) => ("url" in b ? { text: b.texto, url: b.url } : { text: b.texto, callback_data: b.dados }))) } }

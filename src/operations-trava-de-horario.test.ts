@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { avisoDeHorario } from './operations/resultados.ts'
 import { rotuloDoFollowup } from './operations/crm-formato.ts'
-import { ehPrimeiroContato, envioTravado, liberarEnvio, linksDePrimeiroContato } from './operations/trava-de-horario.ts'
+import { aindaSemPrimeiroContato, ehPrimeiroContato, envioTravado, liberarEnvio, linksDePrimeiroContato, noExpedienteDeVenda, podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
+import { noExpedienteDeVenda as daFila } from './operations/proxima-venda.ts'
 import type { CrmLead } from './operations/types.ts'
 
 const AVISO = 'Agora é fora do expediente de quem recebe.'
@@ -63,5 +64,51 @@ describe('trava de horário do envio', () => {
     assert.equal(envioTravado(avisoDeHorario(leads, as19h), new Set(), 'a'), true)
     assert.equal(envioTravado(avisoDeHorario(leads, as10h), new Set(), 'a'), false)
     assert.equal(envioTravado(avisoDeHorario(leads, domingo), new Set(), 'a'), true)
+  })
+})
+
+// OT-02 (16/10/2026): uma janela só para o aviso das telas do CRM, a Próxima venda e o Telegram.
+describe('uma regra de horário em todo envio', () => {
+  const sp = (iso: string) => Date.parse(iso)
+  it('a janela é a do vendedor: seg a sex, 8h às 17h30 de São Paulo', () => {
+    const casos: Array<[string, boolean, string]> = [
+      ['2026-10-14T11:00:00Z', true, 'quarta 8h'],
+      ['2026-10-14T20:29:00Z', true, 'quarta 17h29'],
+      ['2026-10-14T20:30:00Z', false, 'quarta 17h30'],
+      ['2026-10-14T20:45:00Z', false, 'quarta 17h45: antes travava só às 18h'],
+      ['2026-10-17T13:00:00Z', false, 'sábado 10h: antes o sábado de manhã passava'],
+      ['2026-10-18T13:00:00Z', false, 'domingo'],
+    ]
+    for (const [iso, esperado, nome] of casos) assert.equal(noExpedienteDeVenda(sp(iso)), esperado, nome)
+    assert.equal(daFila, noExpedienteDeVenda, 'a Próxima venda e o vendedor usam a mesma função')
+    assert.equal(noExpedienteDeVenda(Number.NaN), false, 'data ilegível não é expediente')
+  })
+
+  it('o aviso das telas do CRM aparece exatamente fora da janela', () => {
+    assert.equal(avisoDeHorario([], sp('2026-10-14T20:29:00Z')), null)
+    assert.match(avisoDeHorario([], sp('2026-10-14T20:45:00Z')) ?? '', /segunda a sexta, das 8h às 17h30/)
+    assert.notEqual(avisoDeHorario([], sp('2026-10-17T13:00:00Z')), null, 'sábado trava')
+  })
+
+  it('pode mandar: expediente ou liberado, e sempre com o ritmo livre', () => {
+    const casos: Array<[boolean, boolean, boolean, boolean]> = [
+      // noExpediente, liberado, ritmoLivre -> pode
+      [true, false, true, true],
+      [false, true, true, true],
+      [false, false, true, false],
+      [true, true, false, false],
+      [false, true, false, false],
+    ]
+    for (const [noExpediente, liberado, ritmoLivre, pode] of casos) {
+      assert.equal(podeMandarPrimeiroContato({ noExpediente, liberado, ritmoLivre }), pode, JSON.stringify({ noExpediente, liberado, ritmoLivre }))
+    }
+  })
+
+  it('o trecho do Roteiro não abre o WhatsApp de quem ainda espera a primeira mensagem', () => {
+    assert.equal(aindaSemPrimeiroContato(undefined), false, 'sem lead (a página do Roteiro) não há o que travar')
+    assert.equal(aindaSemPrimeiroContato({ links: { whatsapp: 'https://wa.me/55', enviar: 'https://x/enviar' } }), true)
+    assert.equal(aindaSemPrimeiroContato({ links: { whatsapp: 'https://wa.me/55', convite: 'https://x/convite' } }), true)
+    assert.equal(aindaSemPrimeiroContato({ links: { whatsapp: 'https://wa.me/55', followup: 'https://x/f' }, reenvioDoRobo: true }), true, 'o reenvio do só-robô é primeira abordagem')
+    assert.equal(aindaSemPrimeiroContato({ links: { whatsapp: 'https://wa.me/55', followup: 'https://x/f' } }), false, 'em conversa: o trecho é resposta')
   })
 })

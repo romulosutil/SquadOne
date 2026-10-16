@@ -12,8 +12,11 @@ import {
   avisoDeCartao,
   avisoParaArquivo,
   AvisoInvalido,
+  avisosPessoaisPeloTelegram,
   gravarAvisoNaFila,
+  noSilencio,
   publicarAviso,
+  publicarAvisoPessoal,
   semValores,
   validarAviso,
   type Aviso,
@@ -114,6 +117,57 @@ describe("gravarAvisoNaFila", () => {
     const agora = new Date("2026-10-07T12:00:00Z");
     await Promise.all([gravarAvisoNaFila(dir, base, agora), gravarAvisoNaFila(dir, base, agora)]);
     assert.equal((await fs.readdir(dir)).length, 2);
+  });
+});
+
+// OT-14 (16/10/2026): lembrete e alerta de finanças pelo Telegram, fora do número de vendas.
+describe("publicarAvisoPessoal", () => {
+  type Envio = { texto: string; silencioso?: boolean };
+  const telegram = (enviados: Envio[]) => async (texto: string, o?: { silencioso?: boolean }) => { enviados.push({ texto, silencioso: o?.silencioso }); };
+  const as15h = () => new Date("2026-10-16T18:00:00Z");
+  const as23h = () => new Date("2026-10-17T02:00:00Z");
+
+  it("vai pelo Telegram e não grava na fila do WhatsApp", async () => {
+    const dir = await fila();
+    const enviados: Envio[] = [];
+    const r = await publicarAvisoPessoal(base, { fila: dir, telegram: telegram(enviados), agora: as15h, log: silencio });
+    assert.equal(r.canal, "telegram");
+    assert.deepEqual(enviados, [{ texto: `${base.titulo}\n${base.texto}`, silencioso: false }]);
+    assert.equal((await fs.readdir(dir)).length, 0);
+  });
+
+  it("das 22h às 7h chega sem som", async () => {
+    const enviados: Envio[] = [];
+    await publicarAvisoPessoal(base, { fila: await fila(), telegram: telegram(enviados), agora: as23h, log: silencio });
+    assert.equal(enviados[0].silencioso, true);
+    assert.equal(noSilencio(new Date("2026-10-16T09:59:00Z")), true, "06:59");
+    assert.equal(noSilencio(new Date("2026-10-16T10:00:00Z")), false, "07:00");
+    assert.equal(noSilencio(new Date("2026-10-17T00:59:00Z")), false, "21:59");
+  });
+
+  it("Telegram falhou ou desligado: o lembrete não se perde, vai pela fila", async () => {
+    const dir = await fila();
+    const r = await publicarAvisoPessoal(base, { fila: dir, telegram: async () => { throw new Error("fora"); }, agora: as15h, log: silencio });
+    assert.equal(r.canal, "fila");
+    assert.equal((await fs.readdir(dir)).length, 1);
+    const semBot = await publicarAvisoPessoal(base, { fila: dir, agora: as15h, log: silencio });
+    assert.equal(semBot.canal, "fila");
+  });
+
+  it("P0 segue nos dois canais; R$ continua recusado antes de sair", async () => {
+    const dir = await fila();
+    const enviados: Envio[] = [];
+    await publicarAvisoPessoal({ ...base, prioridade: 0 }, { fila: dir, telegram: telegram(enviados), agora: as15h, log: silencio });
+    assert.equal(enviados.length, 1);
+    assert.equal((await fs.readdir(dir)).length, 1);
+    await assert.rejects(publicarAvisoPessoal({ ...base, texto: "Pagar R$ 300" }, { fila: dir, telegram: telegram(enviados), log: silencio }), AvisoInvalido);
+    assert.equal(enviados.length, 1);
+  });
+
+  it("a variável só desliga com false", () => {
+    assert.equal(avisosPessoaisPeloTelegram({}), true);
+    assert.equal(avisosPessoaisPeloTelegram({ SQUADONE_LEMBRETES_PELO_TELEGRAM: "FALSE" }), false);
+    assert.equal(avisosPessoaisPeloTelegram({ SQUADONE_LEMBRETES_PELO_TELEGRAM: "true" }), true);
   });
 });
 

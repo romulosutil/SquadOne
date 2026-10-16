@@ -61,7 +61,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
   server/calendar.ts      leitura/escrita no Google Calendar (listar, GET/PATCH/POST de um evento)
-  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 também no Telegram, cartões, sem R$
+  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 também no Telegram, cartões, sem R$;
+                          lembrete e alerta de finanças pelo Telegram, fila só de reserva (publicarAvisoPessoal, OT-14)
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
   server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
   server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min
@@ -129,6 +130,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue, na Hoje)
     fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
                           lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
+    velocidade.ts         PURO (16/10/2026, OT-09): Números abre com "Depois do sim": do "quero ver" ao link e do link à proposta
+                          (mediana, quantos em até 2 h, quem espera agora); o vendedor do Telegram mede em vendedor-historico.jsonl
+                          (GET /api/operations/crm/vendedor)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
                           avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora;
                           sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois
@@ -140,6 +144,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           (10 min); falha = "anote à mão", o WhatsApp abre igual. Interesse parado não some da Hoje (server/crm.ts)
     trava-de-horario.ts   PURO (14/10/2026): o aviso também TRAVA o link de primeiro contato (fila, Hoje, Funil, Ficha) até o
                           "Liberar" daquele lead, só em memória (depois das 18h: 0 de 29 envios com resposta);
+                          desde 16/10 (OT-02) é a janela única de envio (EXPEDIENTE_DE_VENDA, seg–sex 8h–17h30) para o CRM, a
+                          Próxima venda (que ganhou o "Liberar") e o Telegram; o trecho do Roteiro não abre o WhatsApp antes do 1º contato;
                           primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     trava-de-ritmo.ts     PURO (15/10/2026, depois da restrição de 24 h do WhatsApp por 25 envios em 25 min): primeiro contato
                           no máximo 1 a cada 4 min, 8 por hora e 10/20/30 por dia (sobe por semana desde inicioDoNumero),
@@ -240,7 +246,8 @@ checkout; no Dell nunca semeia o roster (`RosterAusente`). `SQUADONE_ROSTER_CONG
 recusa escrita (409). Acesso: identidade do Tailscale Serve em todo pedido e escrita só da
 mesma origem (curl local de escrita precisa de `-H 'Origin: http://127.0.0.1:9120'`). OAuth do
 Google só pelo loopback. Avisos: schema da fila do Dell, gravação atômica, nenhum "R$" passa,
-P0 também vai ao Telegram. Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
+P0 também vai ao Telegram; lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
+fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz). Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
 para o futuro; só o `operations` roda vigia (dois processos duplicariam cada aviso).
 `POST /api/avisos/varrer` simula sem gravar.
 

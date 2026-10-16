@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { linkDoWhatsApp, preencher, type LeadDaColinha, type Trecho } from './colinha'
+import { aindaSemPrimeiroContato } from './trava-de-horario'
 
 // Um texto pronto da colinha (08/10/2026), o mesmo cartão na ficha do lead e em
 // /crm?ver=colinha. Com `lead`, os marcadores viram o nome, o artigo e o link do
@@ -32,8 +33,11 @@ const temColchetes = computed(() => /\[[^\]\n]+\]/.test(texto.value))
 const temChaves = computed(() => /\{[A-Z]+\}/.test(texto.value))
 // A dica que já fala do n8n diz o mesmo que o aviso geral da esteira: um dos dois basta.
 const avisoDaEsteira = computed(() => Boolean(props.trecho.esteira) && !/n8n|esteira/i.test(props.trecho.dica ?? ''))
+// Lead que ainda não recebeu a primeira abordagem: abrir o WhatsApp daqui seria um primeiro contato
+// por fora das travas de horário e de ritmo (OT-02, 16/10/2026). Fica o Copiar; o envio é o botão da Ficha.
+const antesDoPrimeiro = computed(() => aindaSemPrimeiroContato(props.lead))
 // Só com número: a página (sem lead) não tem para quem abrir.
-const whatsapp = computed(() => (temTexto.value ? linkDoWhatsApp(props.lead?.links.whatsapp, texto.value) : ''))
+const whatsapp = computed(() => (temTexto.value && !antesDoPrimeiro.value ? linkDoWhatsApp(props.lead?.links.whatsapp, texto.value) : ''))
 
 function mostrar(novo: typeof estado.value, falado: string, ms: number) {
   window.clearTimeout(temporizador)
@@ -90,6 +94,7 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
         <!-- Secundário: o wa.me só existe na Ficha, e lá o primário é a ação de agora (um por tela). -->
         <a v-if="whatsapp" class="botao" :href="whatsapp" target="_blank" rel="noopener">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
       </div>
+      <p v-if="antesDoPrimeiro && lead?.links.whatsapp" class="crm-colinha__dica">Ele ainda não recebeu a primeira mensagem: mande pelo botão de envio da ficha, que respeita o horário e o ritmo.</p>
       <span class="so-leitor" role="status">{{ anuncio }}</span>
     </template>
     <p v-else class="crm-muted">Ainda sem texto pronto.</p>

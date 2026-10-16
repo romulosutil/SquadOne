@@ -49,6 +49,9 @@ export interface AvisoAberto {
   produto: AcaoDeVenda["produto"];
   /** O texto da mensagem do Telegram, para o toque editar sem reler a fila. */
   texto: string;
+  /** Para o histórico (OT-09): que passo era e se era um "quero ver". Ausente em estado antigo. */
+  tipo?: AcaoDeVenda["tipo"];
+  quente?: boolean;
 }
 
 export interface EstadoDoVendedor {
@@ -117,6 +120,124 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   return { decisao: { tipo: "avisar", acao: proxima, depois: fila.filter((a) => a.chave !== proxima.chave) }, estado };
 }
 
+// ---------------------------------------------------------------- o histórico (OT-09)
+
+/**
+ * Medir o vendedor (16/10/2026, OT-09 do blueprint): o estado do dia some à meia-noite, então "a
+ * proatividade acelerou a resposta?" não tinha número. Cada aviso e o que aconteceu com ele vira uma
+ * linha em `vendedor-historico.jsonl` (600, ao lado do vendedor.json): sem texto, sem telefone, só
+ * a chave da ação, o passo e os instantes. Poda em 180 dias, na gravação.
+ */
+export type EventoDoVendedor = {
+  em: number;
+  evento: "avisado" | "enviei" | "pulou" | "expirou" | "saiu";
+  chave: string;
+  tipo?: AcaoDeVenda["tipo"];
+  quente?: boolean;
+  /** Do aviso ao toque (enviei/pulou) ou ao fim (expirou/saiu), em ms. */
+  esperaMs?: number;
+};
+
+export const DIAS_DO_HISTORICO = 180;
+
+export interface ResumoDoVendedor {
+  dias: number;
+  avisos: number;
+  enviei: number;
+  pulou: number;
+  /** 30 min sem toque: vale como pular. */
+  expirou: number;
+  /** Saiu da fila antes do toque (o retrato confirmou o envio, ou a ação deixou de valer). */
+  saiu: number;
+  /** Do aviso ao "Enviei", em minutos (mediana). */
+  medianaAteEnvieiMin: number | null;
+  /** Só os "quero ver" (quente): quantos e a mediana até o "Enviei". */
+  quentes: { avisos: number; enviei: number; medianaAteEnvieiMin: number | null };
+}
+
+const medianaDe = (v: number[]): number | null => {
+  if (!v.length) return null;
+  const o = [...v].sort((a, b) => a - b);
+  const m = Math.floor(o.length / 2);
+  return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2;
+};
+
+/** PURO: o resumo dos últimos `dias`. */
+export function resumoDoVendedor(eventos: readonly EventoDoVendedor[], agora: number, dias = 30): ResumoDoVendedor {
+  const recentes = eventos.filter((e) => e.em >= agora - dias * 86_400_000 && e.em <= agora);
+  const de = (t: EventoDoVendedor["evento"]) => recentes.filter((e) => e.evento === t);
+  const minutos = (es: EventoDoVendedor[]) => medianaDe(es.flatMap((e) => (Number.isFinite(e.esperaMs) ? [Number(e.esperaMs) / 60_000] : [])));
+  const enviei = de("enviei");
+  return {
+    dias,
+    avisos: de("avisado").length,
+    enviei: enviei.length,
+    pulou: de("pulou").length,
+    expirou: de("expirou").length,
+    saiu: de("saiu").length,
+    medianaAteEnvieiMin: minutos(enviei),
+    quentes: {
+      avisos: de("avisado").filter((e) => e.quente).length,
+      enviei: enviei.filter((e) => e.quente).length,
+      medianaAteEnvieiMin: minutos(enviei.filter((e) => e.quente)),
+    },
+  };
+}
+
+/** PURO: os avisos que fecharam numa volta sem toque (o retrato confirmou, ou 30 min sem toque). */
+export function fechadosNaVolta(antes: EstadoDoVendedor, depois: EstadoDoVendedor, agora: number): EventoDoVendedor[] {
+  const ficaram = new Set(depois.abertos.map((a) => a.token));
+  const jaPulados = new Set(antes.pulados);
+  return antes.abertos.filter((a) => !ficaram.has(a.token)).map((a) => ({
+    em: agora,
+    evento: depois.pulados.includes(a.chave) && !jaPulados.has(a.chave) ? "expirou" as const : "saiu" as const,
+    chave: a.chave,
+    ...(a.tipo ? { tipo: a.tipo } : {}),
+    ...(a.quente ? { quente: true } : {}),
+    esperaMs: agora - a.em,
+  }));
+}
+
+/** Lê o histórico; linha ilegível é pulada (um arquivo cortado não zera a medida). */
+export async function lerHistoricoDoVendedor(arquivo: string): Promise<EventoDoVendedor[]> {
+  let bruto: string;
+  try {
+    bruto = await fs.readFile(arquivo, "utf8");
+  } catch {
+    return [];
+  }
+  const eventos: EventoDoVendedor[] = [];
+  for (const linha of bruto.split("\n")) {
+    if (!linha.trim()) continue;
+    try {
+      const e = JSON.parse(linha);
+      if (e && Number.isFinite(e.em) && typeof e.evento === "string" && typeof e.chave === "string") eventos.push(e);
+    } catch { /* linha cortada */ }
+  }
+  return eventos;
+}
+
+async function anotarNoHistorico(arquivo: string | undefined, eventos: EventoDoVendedor[], agora: number): Promise<void> {
+  if (!arquivo || !eventos.length) return;
+  try {
+    await fs.mkdir(path.dirname(arquivo), { recursive: true });
+    const antigos = await lerHistoricoDoVendedor(arquivo);
+    const limite = agora - DIAS_DO_HISTORICO * 86_400_000;
+    const podar = antigos.length > 0 && antigos[0].em < limite;
+    if (podar) {
+      const tmp = `${arquivo}.tmp`;
+      const ficam = [...antigos.filter((e) => e.em >= limite), ...eventos];
+      await fs.writeFile(tmp, ficam.map((e) => JSON.stringify(e)).join("\n") + "\n", { mode: 0o600 });
+      await fs.rename(tmp, arquivo);
+    } else {
+      await fs.appendFile(arquivo, eventos.map((e) => JSON.stringify(e)).join("\n") + "\n", { mode: 0o600 });
+    }
+  } catch (err) {
+    // Medir nunca derruba o vendedor.
+    console.warn(`[vendedor] histórico não gravado: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // ---------------------------------------------------------------- o texto do Telegram
 
 const MAX_RASCUNHO = 2500;
@@ -163,6 +284,8 @@ export interface DepsDoVendedor {
   /** POST do registro na aba CRM (o mesmo da Ficha): só para o que o link não marca sozinho. */
   registrar(corpo: { produto: string; id: string; tipo: string; texto: ""; data: "" }): Promise<void>;
   arquivoDeEstado: string;
+  /** O histórico de avisos e toques (OT-09). Ausente: não mede. */
+  arquivoDeHistorico?: string;
   origemCentral?: string;
   agora(): number;
   /**
@@ -220,6 +343,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
     const { decisao, estado } = decidir(visao, lido, agora, sugestoes);
+    const historico = fechadosNaVolta(lido, estado, agora);
     if (decisao.tipo === "avisar" && deps.copiloto && esperaOCopiloto(decisao.acao)) {
       // A mensagem certa vem de quem leu a conversa: pede ao copiloto e segura o aviso uns minutos.
       const gerando = await deps.copiloto.pedir(decisao.acao.leadId, visao).catch(() => false);
@@ -227,6 +351,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       if (gerando && agora - desde < ESPERA_DO_COPILOTO_MS) {
         esperandoCopiloto.set(decisao.acao.chave, desde);
         await gravarEstado(estado);
+        await anotarNoHistorico(deps.arquivoDeHistorico, historico, agora);
         return { tipo: "nada", motivo: "esperando-copiloto" };
       }
     }
@@ -239,9 +364,12 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       estado.abertos.push({
         chave: decisao.acao.chave, token, em: agora, leadId: decisao.acao.leadId, primeiroContato: decisao.acao.primeiroContato,
         produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}),
+        tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}),
       });
+      historico.push({ em: agora, evento: "avisado", chave: decisao.acao.chave, tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}) });
     }
     await gravarEstado(estado);
+    await anotarNoHistorico(deps.arquivoDeHistorico, historico, agora);
     return decisao;
   }
 
@@ -271,6 +399,10 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       }
     }
     await gravarEstado(estado);
+    await anotarNoHistorico(deps.arquivoDeHistorico, [{
+      em: agora, evento: acao === "pular" ? "pulou" : "enviei", chave: aberto.chave, esperaMs: agora - aberto.em,
+      ...(aberto.tipo ? { tipo: aberto.tipo } : {}), ...(aberto.quente ? { quente: true } : {}),
+    }], agora);
     // A próxima vem já, sem esperar o minuto do laço.
     setTimeout(() => { void emSerie(voltaSemFila).catch(registrarFalha); }, 1500);
     return { curto: acao === "pular" ? "Pulado. Mandando a próxima." : "Anotado. Mandando a próxima.", texto: `${aberto.texto}\n\n${rodape}` };

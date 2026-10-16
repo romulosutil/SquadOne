@@ -156,8 +156,11 @@ export function textoDoAviso(a: Aviso): string {
 export interface DepsDePublicacao {
   /** Pasta da fila (`~/.local/share/avisos/fila`). */
   fila: string;
-  /** sendMessage do bot ao chat do dono. Ausente = bot desligado: P0 só na fila. */
-  telegram?: (texto: string) => Promise<void>;
+  /**
+   * sendMessage do bot ao chat do dono. Ausente = bot desligado: P0 só na fila. `silencioso` chega
+   * sem som (o `disable_notification` da Bot API).
+   */
+  telegram?: (texto: string, opcoes?: { silencioso?: boolean }) => Promise<void>;
   agora?: () => Date;
   log?: { error: (...a: unknown[]) => void };
 }
@@ -195,6 +198,51 @@ export async function publicarAviso(aviso: Aviso, deps: DepsDePublicacao): Promi
   }
   if (falhaDaFila) throw falhaDaFila;
   return { arquivo, telegram };
+}
+
+/**
+ * Aviso pessoal pelo Telegram (16/10/2026, OT-14 do blueprint; exceção da regra 20 escolhida pelo
+ * Rômulo): o lembrete da agenda e o alerta de finanças saíam pelo WhatsApp do Hermes, que é o mesmo
+ * número que fala com os leads e levou restrição de 24 h em 15/10. Cada aviso pessoal era uma
+ * mensagem a mais na conta desse número. Agora:
+ * - vai pelo bot do Telegram (Bot API oficial, sem risco para o número de vendas);
+ * - das 22h às 7h de São Paulo chega sem som (o silêncio que a fila já fazia);
+ * - Telegram desligado ou com falha: cai na fila de sempre, para o lembrete nunca se perder;
+ * - a validação é a mesma da fila (schema e nenhum R$, regra 24).
+ * O P0 segue por `publicarAviso` (os dois canais).
+ */
+export function noSilencio(agora: Date): boolean {
+  const hora = new Date(agora.getTime() - 3 * 3600_000).getUTCHours();
+  return hora >= 22 || hora < 7;
+}
+
+export interface ResultadoDoPessoal {
+  canal: "telegram" | "fila";
+  arquivo: string | null;
+}
+
+export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao): Promise<ResultadoDoPessoal> {
+  validarAviso(aviso);
+  if (aviso.prioridade === 0) {
+    const r = await publicarAviso(aviso, deps);
+    return { canal: "fila", arquivo: r.arquivo };
+  }
+  const log = deps.log ?? console;
+  if (deps.telegram) {
+    try {
+      await deps.telegram(textoDoAviso(aviso), { silencioso: noSilencio(deps.agora?.() ?? new Date()) });
+      return { canal: "telegram", arquivo: null };
+    } catch (err) {
+      log.error(`[avisos] Telegram falhou, o aviso vai pela fila: ${(err as Error)?.message ?? err}`);
+    }
+  }
+  const arquivo = await gravarAvisoNaFila(deps.fila, aviso, deps.agora?.() ?? new Date());
+  return { canal: "fila", arquivo };
+}
+
+/** `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` volta lembretes e alertas de finanças à fila do WhatsApp. */
+export function avisosPessoaisPeloTelegram(env: NodeJS.ProcessEnv): boolean {
+  return (env.SQUADONE_LEMBRETES_PELO_TELEGRAM ?? "").trim().toLowerCase() !== "false";
 }
 
 /**

@@ -6,6 +6,7 @@ import express from "express";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
+import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -625,6 +626,14 @@ export function createOperationsRouter(options: {
     } catch (error) {
       responderErroDoCopiloto(res, error);
     }
+  });
+
+  // A medida do vendedor (16/10/2026, OT-09): avisos do Telegram e o que virou "Enviei", dos últimos
+  // 30 dias. Só lê o histórico; sem vendedor ligado (ou antes do primeiro aviso) vem tudo zero.
+  router.get("/crm/vendedor", async (_req, res) => {
+    const eventos = await lerHistoricoDoVendedor(path.join(options.dataDir, "vendedor-historico.jsonl"));
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ resumo: resumoDoVendedor(eventos, Date.now()), desde: eventos[0]?.em ?? null });
   });
 
   router.get("/crm/copiloto/sugestao", async (req, res) => {

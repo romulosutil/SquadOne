@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
 import { montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
-import { decidir, estadoNovo, textoDoAviso, botoesDoAviso, ESPERA_DO_AVISO_MS } from "./vendedor.ts";
+import { decidir, estadoNovo, textoDoAviso, botoesDoAviso, ESPERA_DO_AVISO_MS, fechadosNaVolta, lerHistoricoDoVendedor, resumoDoVendedor, type AvisoAberto } from "./vendedor.ts";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { filaDeVenda, noExpedienteDeVenda } from "../src/operations/proxima-venda.ts";
 import { diagnosticoDeVenda } from "../src/operations/por-que-nao-vende.ts";
 import { montarDossie } from "../src/operations/copiloto.ts";
@@ -62,6 +65,15 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
   it("pronto com a trava de ritmo segurando: nenhum primeiro contato na fila", () => {
     const v = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
     assert.deepEqual(filaDeVenda(v, { primeiroLiberado: false }), []);
+  });
+
+  // OT-02 (16/10/2026): fora do expediente, o "Liberar" daquele lead vale também na fila; o ritmo, não.
+  it("fora do expediente: só o lead liberado entra, e só com o ritmo livre", () => {
+    const v = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
+    const id = v.leads[0].id;
+    assert.deepEqual(filaDeVenda(v, { primeiroLiberado: false, ritmoLivre: true, liberados: new Set(["outro"]) }), []);
+    assert.equal(filaDeVenda(v, { primeiroLiberado: false, ritmoLivre: true, liberados: new Set([id]) })[0]?.tipo, "primeiro");
+    assert.deepEqual(filaDeVenda(v, { primeiroLiberado: false, ritmoLivre: false, liberados: new Set([id]) }), [], "o ritmo não se libera");
   });
 
   it("enviado ontem, sem leitura: nada a fazer (insistir com quem não abriu vira denúncia)", () => {
@@ -228,5 +240,48 @@ describe("por que não está vendendo", () => {
     assert.equal(d.degraus.find((g) => g.id === "enviados")?.n, 40);
     assert.equal(d.degraus.find((g) => g.id === "interesse")?.n, 4);
     assert.equal(d.gargalo?.degrau, "proposta");
+  });
+});
+
+// OT-09 (16/10/2026): o histórico do vendedor, para medir se a proatividade acelerou.
+describe("histórico do vendedor", () => {
+  const T = AGORA.getTime();
+  const aberto = (chave: string, em: number, extra: Partial<AvisoAberto> = {}): AvisoAberto =>
+    ({ chave, token: `t-${chave}`, em, leadId: "site:L", primeiroContato: false, produto: "site", texto: "", ...extra });
+
+  it("aviso que fecha sem toque: 30 min vira 'expirou', sumir da fila vira 'saiu'", () => {
+    const antes = { ...estadoNovo(T), abertos: [aberto("a|responder", T - 31 * 60_000, { tipo: "responder", quente: true }), aberto("b|followup", T - 5 * 60_000)] };
+    const depois = { ...antes, abertos: [], pulados: ["a|responder"] };
+    const ev = fechadosNaVolta(antes, depois, T);
+    assert.deepEqual(ev.map((e) => [e.chave, e.evento]), [["a|responder", "expirou"], ["b|followup", "saiu"]]);
+    assert.equal(ev[0].quente, true);
+    assert.equal(ev[0].esperaMs, 31 * 60_000);
+  });
+
+  it("resumo dos 30 dias: avisos, 'Enviei' e a mediana até o toque, e os 'quero ver' à parte", () => {
+    const min = 60_000;
+    const r = resumoDoVendedor([
+      { em: T - 40 * 86_400_000, evento: "avisado", chave: "velho" },
+      { em: T - 3 * 3600_000, evento: "avisado", chave: "a", quente: true },
+      { em: T - 3 * 3600_000 + 4 * min, evento: "enviei", chave: "a", quente: true, esperaMs: 4 * min },
+      { em: T - 2 * 3600_000, evento: "avisado", chave: "b" },
+      { em: T - 2 * 3600_000 + 20 * min, evento: "enviei", chave: "b", esperaMs: 20 * min },
+      { em: T - 3600_000, evento: "avisado", chave: "c" },
+      { em: T - 3600_000 + 30 * min, evento: "expirou", chave: "c", esperaMs: 30 * min },
+    ], T);
+    assert.equal(r.avisos, 3, "o de 40 dias fica fora");
+    assert.equal(r.enviei, 2);
+    assert.equal(r.expirou, 1);
+    assert.equal(r.medianaAteEnvieiMin, 12);
+    assert.deepEqual(r.quentes, { avisos: 1, enviei: 1, medianaAteEnvieiMin: 4 });
+  });
+
+  it("lê o histórico pulando linha cortada; arquivo ausente é lista vazia", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "squadone-vendedor-"));
+    const arquivo = join(dir, "vendedor-historico.jsonl");
+    assert.deepEqual(await lerHistoricoDoVendedor(arquivo), []);
+    await writeFile(arquivo, `${JSON.stringify({ em: T, evento: "avisado", chave: "a" })}\n{"em":\n`);
+    assert.deepEqual((await lerHistoricoDoVendedor(arquivo)).map((e) => e.chave), ["a"]);
+    await rm(dir, { recursive: true, force: true });
   });
 });

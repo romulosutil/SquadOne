@@ -8,10 +8,16 @@
  * (anotacao-de-envio.ts) e conta o primeiro contato na trava de ritmo (trava-de-ritmo.ts, mesma
  * chave de localStorage do CRM, então as duas telas somam). "Enviei, próxima" e "Pular" só mexem
  * nesta tela: o funil continua sendo a planilha (RULES 11).
+ *
+ * Fora do expediente, o primeiro contato espera como nas telas do CRM (OT-02, 16/10/2026): a mesma
+ * janela (trava-de-horario.ts), o mesmo aviso com a taxa medida e o mesmo "Liberar" por lead, só
+ * nesta visita (memória, nunca localStorage). O ritmo continua sem "Liberar".
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { corpoDaAnotacao } from './anotacao-de-envio'
 import { filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from './proxima-venda'
+import { avisoDeHorario } from './resultados'
+import { liberarEnvio, ROTULO_DE_LIBERAR, type EnviosLiberados } from './trava-de-horario'
 import { gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, textoDoRitmo, type PrimeirosContatos } from './trava-de-ritmo'
 import type { CrmVisao } from './types'
 
@@ -31,6 +37,8 @@ const status = ref('')
 /** As sugestões que o copiloto fez sozinho para a conversa de agora (leadId -> mensagem). */
 const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
+/** Leads liberados fora do expediente nesta visita (o "Liberar" da trava de horário). */
+const liberados = ref<EnviosLiberados>(new Set())
 
 async function lerSugestoes() {
   try {
@@ -72,17 +80,31 @@ const ritmo = computed(() => ritmoDoEnvio(instantesDePrimeiroContato(props.visao
 const expediente = computed(() => noExpedienteDeVenda(agora.value))
 const pulados = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => r.pulou).map(([k]) => k)))
 const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => !r.pulou).map(([k]) => k)))
+const ritmoLivre = computed(() => ritmo.value.motivo === null)
 const fila = computed<AcaoDeVenda[]>(() =>
   filaDeVenda(props.visao?.estado === 'ok' ? props.visao : null,
-    { primeiroLiberado: ritmo.value.motivo === null && expediente.value, agora: agora.value, sugestoes: sugestoes.value }, pulados.value)
+    { primeiroLiberado: ritmoLivre.value && expediente.value, liberados: liberados.value, ritmoLivre: ritmoLivre.value, agora: agora.value, sugestoes: sugestoes.value }, pulados.value)
     .filter((a) => !feitos.value.has(a.chave)))
+/**
+ * Fora do expediente e com o ritmo livre: o primeiro contato que sairia agora, para o "Liberar"
+ * dizer de quem é (a fila calculada como se o expediente estivesse aberto).
+ */
+const candidatoForaDoExpediente = computed<AcaoDeVenda | null>(() => {
+  if (expediente.value || !ritmoLivre.value || props.visao?.estado !== 'ok') return null
+  const comoSeAberto = filaDeVenda(props.visao, { primeiroLiberado: true, agora: agora.value }, pulados.value)
+  return comoSeAberto.find((a) => a.primeiroContato && !feitos.value.has(a.chave) && !liberados.value.has(a.leadId)) ?? null
+})
+function liberar(a: AcaoDeVenda) {
+  liberados.value = liberarEnvio(liberados.value, a.leadId)
+  status.value = `${a.empresa}: liberado fora do expediente nesta visita.`
+}
 const atual = computed(() => fila.value[0] ?? null)
 const depois = computed(() => fila.value.slice(1))
 /** Primeiros contatos prontos que a trava ou o relógio seguram agora. */
 const esperando = computed(() => (props.visao?.hoje.find((g) => g.id === 'enviar')?.itens.length ?? 0))
 const motivoDaEspera = computed(() => {
   if (!esperando.value) return ''
-  if (!expediente.value) return `${esperando.value} primeiros contatos prontos: saem de seg a sex, das 8h às 17h30.`
+  if (!expediente.value) return `${esperando.value} primeiros contatos prontos. ${avisoDeHorario(props.visao?.leads ?? [], agora.value) ?? ''}`.trim()
   if (ritmo.value.motivo) return `${esperando.value} primeiros contatos prontos. ${textoDoRitmo(ritmo.value)}`
   return ''
 })
@@ -200,6 +222,9 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     </template>
 
     <p v-if="motivoDaEspera" class="texto-2 texto-pequeno">{{ motivoDaEspera }}</p>
+    <p v-if="candidatoForaDoExpediente" class="venda__botoes">
+      <button type="button" class="botao botao--leve" @click="liberar(candidatoForaDoExpediente)">{{ ROTULO_DE_LIBERAR }}: {{ candidatoForaDoExpediente.empresa }}</button>
+    </p>
     <p class="so-leitor" role="status" aria-live="polite">{{ status }}</p>
   </section>
 </template>

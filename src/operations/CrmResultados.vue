@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   DIAS_ATE_A_LEITURA, DIFERENCA_MINIMA_PP, ENVIOS_POR_BRACO, FRASE_DO_VEREDITO, REGRA_DE_PARADA, leituraDoAbVideo, textoDaDiferenca, textoDoP,
 } from './ab-video'
@@ -10,6 +10,7 @@ import {
   type Criterio, type LinhaDeResultado, type Periodo,
 } from './resultados'
 import type { CrmLead } from './types'
+import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
 // rendeu, contado só sobre quem foi enviado no período. Só leitura: os números
@@ -42,6 +43,24 @@ const bracos = computed(() => (ab.value ? [ab.value.comVideo, ab.value.semVideo]
 // comparada só entre quem podia receber as duas. Também ignora o período: o teste conta inteiro.
 const abMensagem = computed(() => leituraDoAbMensagem(props.leads, props.agora))
 const letraVenceu = (letra: string | null) => (letra ? `mensagem ${letra} ganhou` : 'não provado')
+
+// Depois do "sim" (16/10/2026, OT-09): onde o funil perde, com tempo e não só contagem. Sempre os
+// últimos 30 dias, como o "Por que não está vendendo"; o período acima vale para os envios.
+const velocidade = computed(() => velocidadeDaVenda(props.leads, props.agora))
+const textoDaMedida = (m: Medida) => !m.feitos.length
+  ? 'nenhum ainda'
+  : `${m.feitos.length} · mediana de ${duracao(m.medianaHoras ?? 0)} · ${m.rapidos} em até ${LIMITE_DA_RESPOSTA_RAPIDA_H} h`
+const textoDaEspera = (m: Medida) => m.esperando.slice(0, 3).map((e) => `${e.empresa} (${duracao(e.horas)})`).join(', ')
+
+interface ResumoDoVendedor { avisos: number; enviei: number; pulou: number; expirou: number; saiu: number; medianaAteEnvieiMin: number | null; quentes: { avisos: number; enviei: number; medianaAteEnvieiMin: number | null } }
+const vendedor = ref<ResumoDoVendedor | null>(null)
+onMounted(async () => {
+  try {
+    const r = await fetch('/api/operations/crm/vendedor', { cache: 'no-store' })
+    if (r.ok) vendedor.value = (await r.json() as { resumo: ResumoDoVendedor }).resumo
+  } catch { /* sem a medida: o bloco diz que não há */ }
+})
+const minutos = (m: number | null) => (m === null ? '—' : duracao(m / 60))
 
 const resumo = resumoDaLinha
 const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responderam / l.enviados) * 100) : 0}%`
@@ -106,6 +125,46 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
         Regra fixada antes do teste: vídeo ganha só com +{{ DIFERENCA_MINIMA_PP }} pontos e p &lt; 0,10 (Fisher exato bilateral);
         senão, não provado. {{ REGRA_DE_PARADA }}
       </p>
+    </section>
+
+    <section class="crm-grupo" aria-labelledby="crm-resultado-velocidade">
+      <header class="crm-grupo__cabeca">
+        <h2 id="crm-resultado-velocidade">Depois do "sim"</h2>
+      </header>
+      <p class="crm-grupo__explicacao">
+        Quanto tempo a venda espera em cada passo, nos últimos {{ velocidade.dias }} dias. A chance de fechar cai rápido depois do
+        interesse: a meta é o link em até {{ LIMITE_DA_RESPOSTA_RAPIDA_H }} h.
+      </p>
+      <ul class="crm-lista">
+        <li class="crm-resultado">
+          <div class="crm-resultado__cabeca"><strong>Do "quero ver" ao link</strong></div>
+          <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.queroVerAoLink) }}</p>
+          <p v-if="velocidade.queroVerAoLink.esperando.length" class="crm-nota-pequena">
+            Esperando o link agora: {{ textoDaEspera(velocidade.queroVerAoLink) }}
+          </p>
+        </li>
+        <li class="crm-resultado">
+          <div class="crm-resultado__cabeca"><strong>Do link à proposta</strong></div>
+          <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.linkAProposta) }}</p>
+          <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
+            Viram o link e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
+          </p>
+        </li>
+        <li class="crm-resultado">
+          <div class="crm-resultado__cabeca"><strong>Vendedor no Telegram</strong></div>
+          <p v-if="!vendedor || !vendedor.avisos" class="crm-resultado__numeros">Nenhum aviso medido ainda (a medida começou em 16/10/2026).</p>
+          <template v-else>
+            <p class="crm-resultado__numeros">
+              {{ vendedor.avisos }} avisos · {{ vendedor.enviei }} viraram "Enviei" ({{ porcento(vendedor.enviei, vendedor.avisos) }}) ·
+              mediana de {{ minutos(vendedor.medianaAteEnvieiMin) }} até o toque
+            </p>
+            <p class="crm-nota-pequena">
+              {{ vendedor.pulou }} pulados, {{ vendedor.expirou }} sem toque em 30 min, {{ vendedor.saiu }} resolvidos por fora.
+              <template v-if="vendedor.quentes.avisos">"Quero ver": {{ vendedor.quentes.enviei }} de {{ vendedor.quentes.avisos }}, mediana de {{ minutos(vendedor.quentes.medianaAteEnvieiMin) }}.</template>
+            </p>
+          </template>
+        </li>
+      </ul>
     </section>
 
     <p v-if="!total.enviados" class="crm-vazio"><strong>Nenhum envio neste período.</strong> Os números aparecem quando sair o primeiro site.</p>

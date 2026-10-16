@@ -43,7 +43,7 @@ import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./se
 import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { publicarAviso, type Aviso } from "./server/avisos.ts";
+import { avisosPessoaisPeloTelegram, publicarAviso, publicarAvisoPessoal, type Aviso } from "./server/avisos.ts";
 import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
 import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
 import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
@@ -247,8 +247,20 @@ async function startServer() {
   // por aqui quando chega um "gastei 30 no mercado".
   let financasDoProcesso: EstadoDasFinancas | null = null;
   let vendedorDoProcesso: Vendedor | null = null;
-  // Fila de avisos do Dell (regra 20): lembretes da vigia e alertas de finanças.
+  // Fila de avisos do Dell (regra 20): o P0 e a reserva dos avisos pessoais.
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
+  // O bot ao chat do dono: espelho do P0 e, desde 16/10/2026 (OT-14, exceção da regra 20), o canal
+  // dos lembretes da agenda e dos alertas de finanças, para tirá-los do número que fala com os leads.
+  const telegramDoDono = configDeTelegram
+    ? async (texto: string, opcoes?: { silencioso?: boolean }) => {
+        for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes);
+      }
+    : undefined;
+  const pessoalPeloTelegram = avisosPessoaisPeloTelegram(process.env);
+  const publicarPessoal = (aviso: Aviso) =>
+    pessoalPeloTelegram
+      ? publicarAvisoPessoal(aviso, { fila: filaDeAvisos, telegram: telegramDoDono })
+      : publicarAviso(aviso, { fila: filaDeAvisos, telegram: telegramDoDono });
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
@@ -421,6 +433,7 @@ async function startServer() {
           },
           registrar: async (corpo) => { await crm.registrar(corpo); },
           arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
+          arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,
           agora: () => Date.now(),
         });
@@ -430,10 +443,10 @@ async function startServer() {
 
     // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
     // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
-    // Os alertas de 70/90/100% vão à mesma fila de avisos da vigia (só % e
-    // semáforo, RULES 24); nenhum é P0, então nada vai ao Telegram.
+    // Os alertas de 70/90/100% (só % e semáforo, RULES 24) são aviso pessoal:
+    // vão pelo Telegram, com a fila do WhatsApp de reserva (OT-14, 16/10/2026).
     const financas = await prepararFinancas(operationsDataDir, process.env, {
-      publicar: (aviso) => publicarAviso(aviso, { fila: filaDeAvisos }),
+      publicar: publicarPessoal,
     });
     financasDoProcesso = financas;
     // "Explicar este mês" só com SQUADONE_FINANCAS_IA=true (RULES 24): o
@@ -781,15 +794,10 @@ async function startServer() {
   });
 
   // --- Lembretes: a vigia ------------------------------------------------
-  // Só no Dell (operations com a agenda): a vigia publica na fila de avisos, que
-  // o dell-status drena para o WhatsApp do Hermes; P0 também vai ao Telegram. O
-  // Easypanel (app) não roda vigia (regra 25): dois processos varrendo a mesma
-  // agenda mandariam cada lembrete duas vezes.
-  const telegramDoDono = configDeTelegram
-    ? async (texto: string) => {
-        for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto);
-      }
-    : undefined;
+  // Só no Dell (operations com a agenda). Desde 16/10/2026 (OT-14) o lembrete
+  // vai pelo Telegram e cai na fila do WhatsApp só se o bot falhar; com
+  // SQUADONE_LEMBRETES_PELO_TELEGRAM=false volta à fila. O Easypanel (app) não
+  // roda vigia (regra 25): dois processos mandariam cada lembrete duas vezes.
   const vigia: Vigia | null =
     squadOneMode === "operations" && agendaAtiva
       ? criarVigia({
@@ -798,7 +806,7 @@ async function startServer() {
           obterToken: tokenValido,
           listar: listarQuestsDaJanela,
           enviar: async (a: Aviso) => {
-            await publicarAviso(a, { fila: filaDeAvisos, telegram: telegramDoDono });
+            await publicarPessoal(a);
           },
         })
       : null;
