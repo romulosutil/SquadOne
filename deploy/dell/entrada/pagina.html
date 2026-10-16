@@ -50,9 +50,9 @@
     --foco: #1e64d4;
     --hover: var(--superficie-2);
 
-    --linha-espessura: 3px;
+    --linha-espessura: 2px;
     --linha: var(--linha-espessura) solid var(--borda);
-    --linha-fina: 2px solid var(--borda);
+    --linha-fina: 1px solid var(--borda);
     --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
     --faixa: 6px;
     --faixa-forte: 8px;
@@ -141,7 +141,7 @@
   .campo-grupo { display: grid; gap: var(--esp-1); }
   .rotulo { font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
   .dica { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
-  .campo { width: 100%; min-width: 0; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina);
+  .campo { width: 100%; min-width: 0; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha);
            background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
   textarea.campo { min-height: 9rem; resize: vertical; line-height: 1.4; }
   .campo[aria-invalid="true"] { border-color: var(--negativo); }
