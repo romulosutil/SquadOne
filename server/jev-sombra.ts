@@ -56,7 +56,9 @@ export interface PerguntasDoTurno {
 
 /** Descrição de uma opção. Escopo longo vira só o começo: o Jev decide pela intenção. */
 export const MAX_DESCRICAO = 400;
-const PARECE_FINANCAS_NO_NOME = /finan/i;
+// "Contas" (pessoal--contas: boletos, assinaturas, vencimentos) é finanças para a RULES 27 por decisão do Rômulo
+// (15/10/2026). `\bcontas\b` pega o nome "Contas" e o id "pessoal--contas" ("-" é fronteira de palavra).
+const PARECE_FINANCAS_NO_NOME = /finan|\bcontas\b/i;
 
 /**
  * PURO. Nome + escopo, SEM texto financeiro: um domínio de finanças entra só

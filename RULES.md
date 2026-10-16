@@ -249,7 +249,14 @@
     Só no perfil `operations` com a agenda ligada; **nunca no Easypanel** (a
     chave mora só em `~/.config/squadone/jev.env` no Dell, 600, e nenhum log,
     erro ou registro a repete). **Finanças nunca vão ao Jev**, nem a pedido:
-    nem o texto de um gasto falado, nem valor em R$ numa demanda ou num escopo.
+    nem o texto de um gasto falado, nem valor em R$ numa demanda ou num escopo,
+    nem demanda de salário, dívida, imposto e afins, nem demanda que o Gemini
+    manda para a sala Contas (boletos, assinaturas, vencimentos), que é
+    finanças para esta regra por decisão dele (15/10/2026). A demanda, já
+    mascarada, passa a ficar em claro no JSONL da sombra
+    (`SQUADONE_JEV_GUARDAR_DEMANDA=true` na Mel desde 15/10/2026, decisão dele,
+    para dar para dizer quem acertou nas divergências; arquivo 600 que não sai
+    da Mel; finanças continuam fora e nunca chegam ao arquivo).
     Todo envio sai com `provider.data_collection: "deny"` e ZDR exigido, e com o
     texto passado por `mascararParaJev` (telefone, e-mail, CPF/CNPJ, URL com
     identificador e segredo viram rótulos fixos). ZDR é a classificação da

@@ -367,6 +367,22 @@ describe("criarJevSombra (fila, tetos, arquivo)", () => {
     assert.ok(!JSON.stringify(linhas).includes("mercado"));
   });
 
+  it("a sala Contas é finanças: demanda que o Gemini mandou para lá nem sai, e a sala entra nas opções só pelo nome", async () => {
+    const contas = dominio("pessoal--contas", "Contas", "boletos, assinaturas e vencimentos", "con");
+    const comContas: Roster = { ...ROSTER, squads: [{ ...PESSOAL, dominios: [...PESSOAL.dominios, contas] }, PAY4FUN, PRUMO, ARQUIVADA] };
+    const dir = await tmp();
+    const duble = jevDuble();
+    const s = sombra(dir, duble);
+    s.observarDemanda(obs({ roster: comContas, squadInicial: comContas.squads[0], redirecionadoPara: null, demanda: "renovar o seguro do carro", chamadas: [{ name: "criar_tarefa", args: { responsavel_id: "con" } }] }));
+    s.observarDemanda(obs({ roster: comContas, squadInicial: comContas.squads[0], redirecionadoPara: null, demanda: "ligar para o dentista", chamadas: [{ name: "criar_tarefa", args: { responsavel_id: "dra" } }] }));
+    await s.aguardar();
+    assert.equal(duble.corpos.length, 1);
+    assert.deepEqual((await linhasDe(dir)).map((l) => ("pulada" in l ? l.pulada : "chamada")), ["financas", "chamada"]);
+    const criteria = (duble.corpos[0].questions as any).dominio.criteria;
+    assert.equal(criteria["pessoal--contas"], "Contas");
+    assert.ok(!JSON.stringify(duble.corpos[0]).includes("boletos"));
+  });
+
   it("a fila é serial: uma chamada por vez", async () => {
     const dir = await tmp();
     const duble = jevDuble({ demoraMs: 15 });
