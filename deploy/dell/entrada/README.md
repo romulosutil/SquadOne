@@ -123,6 +123,7 @@ D=<clone no commit do merge>/deploy/dell/entrada
 install -d -m 755 ~/.local/lib/mel-entrada
 for f in segredos cofre entrada executor servidor organizar cofre_cli; do install -m 644 $D/$f.py ~/.local/lib/mel-entrada/; done
 install -m 644 $D/pagina.html ~/.local/lib/mel-entrada/
+install -m 644 <clone>/src/estilos/fontes/inter-latin-wght-normal.woff2 ~/.local/lib/mel-entrada/   # a Inter do app (16/10/2026); sem ela, fonte do sistema
 install -m 755 $D/bin/cofre ~/.local/bin/cofre
 install -m 644 $D/bin/entrada_organizar.py ~/.hermes/scripts/entrada_organizar.py
 install -m 644 $D/entrada.service ~/.config/systemd/user/entrada.service

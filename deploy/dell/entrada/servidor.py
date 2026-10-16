@@ -49,11 +49,16 @@ TAILNET_V6 = ipaddress.ip_network("fd7a:115c:a1e0::/48")
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 SIMULTANEOS = 3
 CONEXOES = 32
-ROTAS_CONHECIDAS = {"/", "/api/estado", "/healthz", "/api/enviar"}
+ROTAS_CONHECIDAS = {"/", "/api/estado", "/healthz", "/api/enviar", "/inter.woff2"}
 # A página é aberta pela Central (menu "Entrada", server/entrada-proxy.ts): no Dell em 127.0.0.1:9120 e pela tailnet
 # em :8443. Essas são as únicas origens (além da própria porta) que podem escrever; qualquer outro site/porta não.
 PORTAS_TAILNET = {8443, 9120}
 PAGINA = Path(__file__).with_name("pagina.html")
+# A Inter do app (src/estilos/fontes, só o corte latim: o português cabe nele), instalada ao lado da página.
+# Servida daqui porque a CSP é default-src 'none': nem a fonte do sistema nem a de um CDN entrariam, e sem
+# ela a Entrada sai em Segoe/Arial no Windows, com cara de outro app. Sem o arquivo, a página cai na pilha
+# do sistema e nada quebra.
+FONTE = Path(__file__).with_name("inter-latin-wght-normal.woff2")
 
 
 def ip_permitido(txt: str) -> bool:
@@ -141,6 +146,7 @@ class Servidor:
         self.logar = logar or (lambda linha: print(linha, file=sys.stderr, flush=True))
         self.livres = threading.BoundedSemaphore(SIMULTANEOS)
         self.pagina = PAGINA.read_text(encoding="utf-8")
+        self.fonte = FONTE.read_bytes() if FONTE.is_file() else None
         self.limite_conexoes = limite_conexoes
         self.portas_tailnet = set(portas_tailnet if portas_tailnet is not None else PORTAS_TAILNET)
         self.reler_nome_a_cada_s = reler_nome_a_cada_s
@@ -203,15 +209,15 @@ class Servidor:
                 srv.logar(f"{self.command} {caminho} {status}{(' ' + extra) if extra else ''}")
 
             # ----- respostas
-            def _cabecalhos_comuns(self, nonce=None):
+            def _cabecalhos_comuns(self, nonce=None, cache="no-store"):
                 self._com_cabecalhos = True
-                self.send_header("Cache-Control", "no-store")
+                self.send_header("Cache-Control", cache)
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.send_header("X-Frame-Options", "DENY")
                 csp = "default-src 'none'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
                 if nonce:
-                    csp += f"; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'"
+                    csp += f"; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; font-src 'self'"
                 self.send_header("Content-Security-Policy", csp)
 
             def end_headers(self):               # também as páginas de erro padrão (501...) saem com CSP e no-store
@@ -305,6 +311,15 @@ class Servidor:
                     self._log(200)
                 elif caminho == "/api/estado":
                     self._json(200, srv.estado())
+                elif caminho == "/inter.woff2" and srv.fonte is not None:
+                    # Arquivo fixo, nada do pedido entra nele: pode ficar um dia no cache do navegador.
+                    self.send_response(200)
+                    self.send_header("Content-Type", "font/woff2")
+                    self.send_header("Content-Length", str(len(srv.fonte)))
+                    self._cabecalhos_comuns(cache="public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(srv.fonte)
+                    self._log(200)
                 elif caminho == "/healthz":
                     self._json(200, {"ok": True})
                 else:

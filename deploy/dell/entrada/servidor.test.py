@@ -93,16 +93,27 @@ class Pagina(Base):
         s, h, b = self.req("GET", "/")
         self.assertEqual(s, 200)
         html = b.decode()
-        for rotulo in ("Guardar no cofre (segredo)", "Organizar", "Só guardar (sem IA)"):
+        for rotulo in ("Guardar no cofre", "Organizar", "Só guardar", 'data-acao="cofre"', 'data-acao="organizar"',
+                       'data-acao="guardar"', "X-Com-Cofre"):
             self.assertIn(rotulo, html)
         self.assertNotIn("__NONCE__", html)
         nonce = h["Content-Security-Policy"].split("script-src 'nonce-")[1].split("'")[0]
         self.assertIn(f'nonce="{nonce}"', html)
         self.assertIn("default-src 'none'", h["Content-Security-Policy"])
+        self.assertIn("font-src 'self'", h["Content-Security-Policy"])
         self.assertEqual(h["Cache-Control"], "no-store")
         self.assertEqual(h["X-Frame-Options"], "DENY")
         self.assertNotIn("innerHTML", html, "nada do servidor pode virar HTML")
         self.assertNotIn('style="', html, "CSP com nonce bloqueia style inline")
+
+    def test_fonte_sai_quando_instalada_e_some_sem_ela(self):
+        self.srv.fonte = b"wOF2" + b"\0" * 20
+        s, h, b = self.req("GET", "/inter.woff2")
+        self.assertEqual((s, h["Content-Type"], b[:4]), (200, "font/woff2", b"wOF2"))
+        self.assertIn("max-age", h["Cache-Control"])
+        self.assertIn("default-src 'none'", h["Content-Security-Policy"])
+        self.srv.fonte = None
+        self.assertEqual(self.req("GET", "/inter.woff2")[0], 404)
 
     def test_nonce_muda_a_cada_pedido(self):
         n = {self.req("GET", "/")[1]["Content-Security-Policy"] for _ in range(3)}

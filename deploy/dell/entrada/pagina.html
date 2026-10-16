@@ -6,77 +6,278 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Entrada da Mel</title>
 <style nonce="__NONCE__">
-  :root { color-scheme: light dark; --fundo:#f6f7f9; --card:#fff; --texto:#15181d; --suave:#5a6270; --borda:#c9ced6;
-          --cofre:#8a1c1c; --cofre-fundo:#fdf0f0; --acao:#134e9e; --neutro:#3d4655; --ok:#176b3a; --erro:#a11d1d; --aviso:#8a5a00; }
+  /*
+   * Tokens: CÓPIA de src/estilos/tokens.css (só os que esta página usa), com os mesmos nomes e valores.
+   * A página não pode ler o CSS do app: a CSP é default-src 'none' e o Vite dá nome com hash a cada build.
+   * server/entrada-pagina.test.ts falha quando um valor daqui diverge de lá: mudou o token no app, mude aqui.
+   * Regras de uso em src/estilos/design.md.
+   */
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    /* Relativo: na Central é /entrada/inter.woff2 (repasse), direto é /inter.woff2. Só o corte latim. */
+    src: url("inter.woff2") format("woff2");
+  }
+
+  :root {
+    --cor-tinta: #11130f;
+    --cor-papel: #f4f0e6;
+    --cor-papel-forte: #fffdf6;
+    --cor-papel-azul: #dce3ff;
+    --cor-amarelo: #ffdc59;
+    --cor-coral: #ff966f;
+    --cor-menta: #b9f6d0;
+    --cor-verde: #167a4c;
+    --cor-perigo: #c92f3f;
+    --cor-apagado: #565c55;
+
+    --fundo: var(--cor-papel-azul);
+    --superficie: var(--cor-papel-forte);
+    --superficie-2: var(--cor-papel);
+    --texto: var(--cor-tinta);
+    --texto-2: var(--cor-apagado);
+    --borda: var(--cor-tinta);
+    --destaque: var(--cor-amarelo);
+    --destaque-texto: var(--cor-tinta);
+    --acento: var(--cor-coral);
+    --positivo: var(--cor-verde);
+    --negativo: var(--cor-perigo);
+    --ok-fundo: var(--cor-menta);
+    --atencao-fundo: #fff2a7;
+    --erro-fundo: #ffd9d2;
+    --foco: #1e64d4;
+    --hover: var(--superficie-2);
+
+    --linha-espessura: 3px;
+    --linha: var(--linha-espessura) solid var(--borda);
+    --linha-fina: 2px solid var(--borda);
+    --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
+    --faixa: 6px;
+    --faixa-forte: 8px;
+    --sombra-pequena: 2px 2px 0 var(--borda);
+
+    --toque: 44px;
+    --toque-grande: 48px;
+    --duracao: 160ms;
+
+    --esp-0: 0.125rem;
+    --esp-1: 0.25rem;
+    --esp-2: 0.5rem;
+    --esp-3: 0.75rem;
+    --esp-4: 1rem;
+    --esp-5: 1.25rem;
+    --esp-6: 1.5rem;
+    --esp-8: 2rem;
+    --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --peso-texto: 450;
+    --peso-medio: 600;
+    --peso-forte: 700;
+    --peso-titulo: 800;
+    --tam-mini: 0.75rem;
+    --tam-apoio: 0.875rem;
+    --tam-texto: 1rem;
+    --tam-nome: 1.125rem;
+    --tam-titulo: clamp(1.75rem, 6vw, 2.5rem);
+
+    color-scheme: light;
+  }
+
   @media (prefers-color-scheme: dark) {
-    :root { --fundo:#0f1217; --card:#181d25; --texto:#e8ebf0; --suave:#9aa3b2; --borda:#38404d;
-            --cofre:#ff9b9b; --cofre-fundo:#2b1717; --acao:#8fb8ff; --neutro:#b8c0cc; --ok:#6fd49a; --erro:#ff8c8c; --aviso:#f0c070; } }
+    :root:not([data-theme="light"]) {
+      --fundo: #10131a;
+      --superficie: #1b202a;
+      --superficie-2: #242a36;
+      --texto: #f1ede2;
+      --texto-2: #aab2c0;
+      --borda: #8792a7;
+      --destaque: var(--cor-amarelo);
+      --destaque-texto: var(--cor-tinta);
+      --acento: var(--cor-coral);
+      --positivo: #6fdc9a;
+      --negativo: #ff8a80;
+      --ok-fundo: #1d4532;
+      --atencao-fundo: #4a4016;
+      --erro-fundo: #561f27;
+      --foco: #8ab4ff;
+      --sombra-pequena: 2px 2px 0 #000;
+      color-scheme: dark;
+    }
+  }
+
+  /* ---------- página */
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--fundo); color:var(--texto); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  main { max-width:640px; margin:0 auto; padding:16px; }
-  h1 { font-size:1.35rem; margin:8px 0 4px; }
-  p.sub { color:var(--suave); margin:0 0 16px; }
-  .card { background:var(--card); border:1px solid var(--borda); border-radius:12px; padding:16px; margin-bottom:16px; }
-  label { display:block; font-weight:600; margin:12px 0 4px; }
-  label:first-child { margin-top:0; }
-  textarea, input[type=text] { width:100%; font:inherit; color:inherit; background:transparent; border:1px solid var(--borda); border-radius:8px; padding:10px; }
-  textarea { min-height:140px; resize:vertical; }
-  input[type=file] { width:100%; font:inherit; padding:8px 0; }
-  [hidden] { display:none !important; }
-  .dica { color:var(--suave); font-size:.9rem; margin:4px 0 0; }
-  .leve { font-weight:400; }
-  .h2 { font-size:1rem; margin:0 0 4px; }
-  button { display:block; width:100%; min-height:48px; margin-top:12px; padding:10px 14px; font:inherit; font-weight:600; text-align:left;
-           border-radius:10px; border:2px solid currentColor; background:transparent; cursor:pointer; }
-  button small { display:block; font-weight:400; color:var(--suave); }
-  button:disabled { opacity:.5; cursor:progress; }
-  button:focus-visible, textarea:focus-visible, input:focus-visible { outline:3px solid var(--acao); outline-offset:2px; }
-  #b-cofre { color:var(--cofre); background:var(--cofre-fundo); }
-  #b-organizar { color:var(--acao); }
-  #b-guardar { color:var(--neutro); }
-  #b-redigir { color:var(--cofre); border-style:dashed; }
-  .aviso { border-left:4px solid var(--aviso); padding:8px 12px; background:transparent; color:var(--aviso); margin:0 0 12px; }
-  ul#resultado { list-style:none; margin:0; padding:0; }
-  ul#resultado li { border-left:4px solid var(--borda); padding:6px 10px; margin:8px 0; word-break:break-word; }
-  li.ok { border-color:var(--ok); } li.erro { border-color:var(--erro); } li.info { border-color:var(--aviso); }
-  .volta { margin:4px 0 0; } .volta a { color:var(--acao); }
-  footer { color:var(--suave); font-size:.85rem; margin:8px 0 24px; }
+  [hidden] { display: none !important; }
+  html { background: var(--fundo); overflow-x: clip; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--fonte);
+         font-size: var(--tam-texto); font-weight: var(--peso-texto); line-height: 1.5; }
+  main { max-width: 40rem; margin: 0 auto; padding: var(--esp-4) var(--esp-4) var(--esp-8); }
+  :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+  .so-leitor { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+               clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  .volta { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto);
+           font-size: var(--tam-apoio); font-weight: var(--peso-forte); text-underline-offset: 3px; }
+  h1 { margin: var(--esp-1) 0 var(--esp-1); font-size: var(--tam-titulo); font-weight: var(--peso-titulo);
+       letter-spacing: -0.02em; line-height: 1.1; }
+  .sub { margin: 0 0 var(--esp-4); color: var(--texto-2); }
+
+  /* Um bloco por assunto, 3 px por fora, sem sombra (a sombra fica só no botão primário). */
+  .bloco { display: grid; gap: var(--esp-4); margin: 0 0 var(--esp-4); padding: var(--esp-4);
+           background: var(--superficie); border: var(--linha); }
+
+  /* Segmentado: Comum | Segredo. Rádio de verdade (setas trocam), o escolhido em --destaque. */
+  .segmentado { display: flex; margin: 0; padding: 0; border: var(--linha); background: var(--superficie); min-width: 0; }
+  .segmentado label { position: relative; flex: 1; display: flex; }
+  .segmentado input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .segmentado span { flex: 1; display: flex; min-height: var(--toque); align-items: center; justify-content: center;
+                     padding: 0 var(--esp-2); font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+  .segmentado label + label span { border-left: var(--linha); }
+  .segmentado input:checked + span { background: var(--destaque); color: var(--destaque-texto); }
+  .segmentado input:not(:checked):hover + span { background: var(--hover); }
+  .segmentado input:focus-visible + span { outline: 3px solid var(--foco); outline-offset: -3px; }
+
+  .campo-grupo { display: grid; gap: var(--esp-1); }
+  .rotulo { font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+  .dica { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+  .campo { width: 100%; min-width: 0; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina);
+           background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
+  textarea.campo { min-height: 9rem; resize: vertical; line-height: 1.4; }
+  .campo[aria-invalid="true"] { border-color: var(--negativo); }
+  .erro-campo { margin: 0; color: var(--negativo); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+
+  /* Onde soltar arquivos: tracejado = "pode soltar aqui" (como o .quadro do app). */
+  .soltar { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-3); align-items: center; padding: var(--esp-3);
+            border: 2px dashed var(--borda); color: var(--texto-2); font-size: var(--tam-apoio);
+            transition: background var(--duracao) ease-out; }
+  .soltar.is-sobre { background: var(--atencao-fundo); color: var(--texto); }
+  #arquivos:focus-visible + .botao { outline: 3px solid var(--foco); outline-offset: 2px; }
+  .arquivos { list-style: none; margin: 0; padding: 0; font-size: var(--tam-apoio); }
+  .arquivos li { display: flex; gap: var(--esp-2); align-items: center; min-height: var(--toque); border-bottom: var(--divisor); }
+  .arquivos .nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--peso-medio); }
+  .arquivos .tam { color: var(--texto-2); font-variant-numeric: tabular-nums; }
+  .arquivos .grande { color: var(--negativo); font-weight: var(--peso-forte); }
+
+  details.dobra { font-size: var(--tam-apoio); color: var(--texto-2); }
+  .dobra > summary { display: inline-flex; min-height: var(--toque); align-items: center; gap: var(--esp-1);
+                     color: var(--texto); font-weight: var(--peso-forte); list-style: none; cursor: pointer; }
+  .dobra > summary::-webkit-details-marker { display: none; }
+  .dobra > summary::before { content: "▸"; display: inline-block; width: 1em; color: var(--texto-2);
+                             transition: transform var(--duracao) ease-out; }
+  .dobra[open] > summary::before { transform: rotate(90deg); }
+  .dobra > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .dobra p { margin: 0 0 var(--esp-2); }
+
+  .botao { display: inline-flex; min-width: var(--toque); min-height: var(--toque); align-items: center; justify-content: center;
+           padding: 0 var(--esp-4); border: var(--linha); background: var(--superficie); color: var(--texto);
+           font: inherit; font-size: var(--tam-apoio); font-weight: var(--peso-forte); cursor: pointer; }
+  .botao:hover:not(:disabled) { background: var(--hover); }
+  .botao:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
+  .botao:disabled { opacity: 0.55; cursor: progress; box-shadow: none; }
+  .botao--primario { min-height: var(--toque-grande); background: var(--destaque); color: var(--destaque-texto);
+                     font-size: var(--tam-texto); box-shadow: var(--sombra-pequena); }
+  .botao--primario:hover:not(:disabled) { background: var(--destaque); filter: brightness(0.95); }
+  .botao--leve { min-height: var(--toque); padding: 0 var(--esp-3); border: var(--linha-fina); }
+
+  .acoes { display: flex; flex-wrap: wrap; gap: var(--esp-3); align-items: center; }
+  .acoes .botao--primario { flex: 1 1 12rem; }
+  .acoes .botao:not(.botao--primario) { flex: 0 1 auto; min-height: var(--toque-grande); }
+  @media (min-width: 40rem) { .acoes .botao--primario { flex: 0 1 auto; padding: 0 var(--esp-8); } }
+
+  /* O filtro barrou: a decisão aparece solta, com a faixa do cartão de decisão do app. */
+  .decisao { border-left: var(--faixa-forte) solid var(--acento); }
+  .decisao h2, .resultado h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-titulo); letter-spacing: -0.01em; }
+  .decisao .botao { justify-self: start; }
+
+  .avisos { display: grid; gap: var(--esp-2); margin: 0 0 var(--esp-4); }
+  .recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--atencao-fundo);
+            font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+
+  .resultado ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
+  .resultado li { padding: var(--esp-1) var(--esp-3); border-left: var(--faixa) solid var(--borda); word-break: break-word;
+                  font-size: var(--tam-apoio); }
+  .resultado li.ok { border-color: var(--positivo); }
+  .resultado li.erro { border-color: var(--negativo); }
+  .resultado li.info { border-color: var(--texto-2); color: var(--texto-2); }
+
+  .estado { margin: 0; color: var(--texto-2); font-size: var(--tam-mini); font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) { .dobra > summary::before, .soltar { transition: none; } }
 </style>
 </head>
 <body>
 <main>
-  <p class="volta" id="volta" hidden><a href="/">← Voltar à Central</a></p>
+  <a class="volta" id="volta" href="/" hidden>← Central</a>
   <h1>Entrada da Mel</h1>
-  <p class="sub">Mande um texto ou arquivos. Esta página só abre pela sua tailnet e nunca mostra segredo de volta.</p>
+  <p class="sub">Cole um texto ou solte arquivos.</p>
 
-  <div id="avisos"></div>
+  <div class="avisos" id="avisos"></div>
 
-  <form class="card" id="form" autocomplete="off" novalidate>
-    <label for="texto">Texto</label>
-    <textarea id="texto" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Escreva ou cole aqui"></textarea>
+  <form class="bloco" id="form" autocomplete="off" novalidate>
+    <fieldset class="segmentado">
+      <legend class="so-leitor">O que é</legend>
+      <label><input type="radio" name="modo" value="comum" checked><span>Comum</span></label>
+      <label><input type="radio" name="modo" value="cofre"><span>Segredo</span></label>
+    </fieldset>
 
-    <label for="arquivos">Arquivos</label>
-    <input id="arquivos" type="file" multiple>
-    <p class="dica">O filtro de segredos procura o que tem <em>forma</em> de segredo (palavra como senha ou token seguida de valor, chaves conhecidas, textos aleatórios). Não é infalível e não lê o que está dentro de arquivo compactado, cifrado ou imagem. <strong>Segredo de verdade vai sempre pelo cofre.</strong></p>
+    <!-- Modo comum: uma frase sobre o filtro; o como funciona fica dobrado. -->
+    <details class="dobra" id="sobre-filtro">
+      <summary>Senha ou chave? Use Segredo.</summary>
+      <p>O filtro barra o que tem <em>forma</em> de segredo (palavra como senha ou token seguida de valor, chaves conhecidas, texto aleatório), mas não é infalível e não lê arquivo compactado, cifrado ou imagem.</p>
+      <p>O Hermes só vê um trecho, com o que parece segredo escondido. Nada de segredo volta para esta tela, e ela só abre pela sua tailnet.</p>
+    </details>
 
-    <label for="rotulo">Rótulo <span class="dica leve">(o que é isto? Obrigatório no cofre. Aparece na lista; o valor, nunca.)</span></label>
-    <input id="rotulo" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="ex.: senha do banco do cliente X">
+    <!-- Modo cofre: o rótulo só existe aqui, onde é obrigatório. -->
+    <p class="dica" id="sobre-cofre" hidden>Cifra na hora, nunca vai a modelo e não volta para esta tela.</p>
+    <div class="campo-grupo" id="grupo-rotulo" hidden>
+      <label class="rotulo" for="rotulo">O que é</label>
+      <input class="campo" id="rotulo" type="text" maxlength="120" autocomplete="off" spellcheck="false"
+             placeholder="ex.: senha do banco X" aria-describedby="rotulo-dica rotulo-erro">
+      <p class="dica" id="rotulo-dica">Aparece na lista do cofre; o valor, nunca.</p>
+      <p class="erro-campo" id="rotulo-erro" hidden>Diga o que é para achar depois.</p>
+    </div>
 
-    <button type="button" id="b-cofre" data-acao="cofre">Guardar no cofre (segredo)
-      <small>Cifra na hora, nunca vai a modelo nenhum e não aparece de volta aqui.</small></button>
-    <button type="button" id="b-organizar" data-acao="organizar">Organizar
-      <small>O Hermes arruma em até 5 minutos e só vê um trecho com o que parece segredo escondido. Se o filtro achar segredo, bloqueia e pede o cofre.</small></button>
-    <button type="button" id="b-guardar" data-acao="guardar">Só guardar (sem IA)
-      <small>Vai para a pasta “chegou”, sem ninguém organizar. Também bloqueia se o filtro achar segredo.</small></button>
-    <button type="button" id="b-redigir" hidden>Guardar os segredos no cofre e organizar só o resto
-      <small>Vale para texto de até 5 MB e até 20 segredos. Cada um vira {{SEGREDO:id}} no texto que segue.</small></button>
+    <div class="campo-grupo">
+      <label class="rotulo" for="texto">Texto</label>
+      <textarea class="campo" id="texto" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+                placeholder="Escreva ou cole aqui"></textarea>
+    </div>
+
+    <div class="campo-grupo">
+      <div class="soltar" id="soltar">
+        <input id="arquivos" class="so-leitor" type="file" multiple>
+        <label class="botao botao--leve" for="arquivos">Escolher arquivos</label>
+        <span id="soltar-dica">ou solte aqui</span>
+      </div>
+      <ul class="arquivos" id="lista-arquivos" aria-live="polite" hidden></ul>
+    </div>
+
+    <p class="erro-campo" id="erro-form" role="alert" hidden></p>
+
+    <div class="acoes" id="acoes-comum">
+      <button type="button" class="botao botao--primario" data-acao="organizar">Organizar</button>
+      <button type="button" class="botao" data-acao="guardar">Só guardar</button>
+    </div>
+    <p class="dica" id="dica-comum">O Hermes organiza em até 5 min. “Só guardar” deixa em chegou, sem IA.</p>
+    <div class="acoes" id="acoes-cofre" hidden>
+      <button type="button" class="botao botao--primario" data-acao="cofre">Guardar no cofre</button>
+    </div>
   </form>
 
-  <section class="card" aria-labelledby="t-res">
-    <h2 id="t-res" class="h2">Resultado</h2>
+  <!-- Só quando o filtro barrou um "Organizar" e o servidor diz que dá para redigir. -->
+  <section class="bloco decisao" id="redigir" aria-labelledby="t-redigir" hidden>
+    <h2 id="t-redigir">Achei o que parece segredo</h2>
+    <p class="dica">Os segredos vão para o cofre e cada um vira {{SEGREDO:id}} no texto que segue. Até 20, em texto de até 5 MB.</p>
+    <button type="button" class="botao" id="b-redigir">Separar e organizar</button>
+  </section>
+
+  <section class="bloco resultado" id="resultado-bloco" aria-labelledby="t-res" hidden>
+    <h2 id="t-res">Resultado</h2>
     <ul id="resultado" aria-live="polite"></ul>
   </section>
-  <footer id="rodape"></footer>
+
+  <p class="estado" id="estado"></p>
 </main>
 
 <script nonce="__NONCE__">
@@ -84,14 +285,58 @@
   const $ = (id) => document.getElementById(id);
   const botoes = [...document.querySelectorAll('button')];
   let limite = 200 * 1024 * 1024;
+  let escolhidos = [];                   // os arquivos ficam aqui (não no input) para dar para tirar um por um
 
-  function linha(tipo, texto) {
-    const li = document.createElement('li');
+  const modo = () => document.querySelector('input[name=modo]:checked').value;
+  const mb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+  function linha(tipo, texto, li) {
+    li = li || document.createElement('li');
     li.className = tipo;
     li.textContent = texto;               // textContent: nada do servidor vira HTML
-    $('resultado').prepend(li);
+    if (!li.parentNode) $('resultado').prepend(li);
+    $('resultado-bloco').hidden = false;  // o Resultado só existe depois do primeiro envio
+    return li;
   }
-  function travar(sim) { botoes.forEach((b) => { b.disabled = sim; }); }
+  function travar(sim, clicado) {
+    botoes.forEach((b) => { b.disabled = sim; });
+    $('form').setAttribute('aria-busy', sim ? 'true' : 'false');
+    if (clicado) {
+      if (sim) { clicado.dataset.rotulo = clicado.textContent; clicado.textContent = 'Enviando…'; }
+      else if (clicado.dataset.rotulo) clicado.textContent = clicado.dataset.rotulo;
+    }
+  }
+  function erroForm(texto) { $('erro-form').textContent = texto || ''; $('erro-form').hidden = !texto; }
+  function erroRotulo(sim) {
+    $('rotulo-erro').hidden = !sim;
+    if (sim) $('rotulo').setAttribute('aria-invalid', 'true'); else $('rotulo').removeAttribute('aria-invalid');
+  }
+
+  function aplicarModo() {
+    const cofre = modo() === 'cofre';
+    $('grupo-rotulo').hidden = !cofre; $('sobre-cofre').hidden = !cofre; $('acoes-cofre').hidden = !cofre;
+    $('sobre-filtro').hidden = cofre; $('acoes-comum').hidden = cofre; $('dica-comum').hidden = cofre;
+    $('redigir').hidden = true; erroForm(''); erroRotulo(false);
+  }
+
+  function desenharArquivos() {
+    const ul = $('lista-arquivos');
+    ul.replaceChildren(...escolhidos.map((f, i) => {
+      const li = document.createElement('li');
+      const nome = document.createElement('span'); nome.className = 'nome'; nome.textContent = f.name; nome.title = f.name;
+      const tam = document.createElement('span');
+      if (f.size > limite) { tam.className = 'grande'; tam.textContent = `${mb(f.size)}, grande demais`; }
+      else { tam.className = 'tam'; tam.textContent = mb(f.size); }
+      const tirar = document.createElement('button');
+      tirar.type = 'button'; tirar.className = 'botao botao--leve'; tirar.textContent = 'Tirar';
+      tirar.setAttribute('aria-label', `Tirar ${f.name}`);
+      tirar.addEventListener('click', () => { escolhidos.splice(i, 1); desenharArquivos(); $('arquivos').focus(); });
+      li.append(nome, tam, tirar);
+      return li;
+    }));
+    ul.hidden = escolhidos.length === 0;
+  }
+  function juntar(lista) { escolhidos = escolhidos.concat([...lista]); erroForm(''); desenharArquivos(); }
 
   async function estado() {
     try {
@@ -99,10 +344,14 @@
       const e = await r.json();
       if (e.limite_mb) limite = e.limite_mb * 1024 * 1024;
       $('avisos').replaceChildren(...(e.avisos || []).map((t) => {
-        const p = document.createElement('p'); p.className = 'aviso'; p.textContent = t; return p; }));
-      const c = e.cofre ? `Cofre: ${e.cofre.itens} item(ns), ${e.cofre.destinatarios} destinatário(s). ` : '';
-      $('rodape').textContent = `${c}Na fila do Hermes: ${e.pendentes}. Limite: ${e.limite_mb} MB por envio.`;
-    } catch (_) { $('rodape').textContent = 'Não consegui ler o estado.'; }
+        const p = document.createElement('p'); p.className = 'recado'; p.textContent = t; return p; }));
+      const partes = [`Fila do Hermes: ${e.pendentes}`];
+      if (e.cofre) partes.push(`cofre: ${e.cofre.itens} ${e.cofre.itens === 1 ? 'item' : 'itens'}` + (e.cofre.destinatarios ? '' : ' (sem chave)'));
+      partes.push(`até ${e.limite_mb} MB por envio`);
+      $('estado').textContent = partes.join(' · ');
+      $('soltar-dica').textContent = `ou solte aqui (até ${e.limite_mb} MB cada)`;
+      desenharArquivos();
+    } catch (_) { $('estado').textContent = 'Não consegui ler o estado.'; }
   }
 
   async function enviarUm(acao, corpo, nome, rotulo, comCofre) {
@@ -116,16 +365,18 @@
     } catch (_) { return { ok: false, mensagem: 'Falha de rede. Nada foi guardado.' }; }
   }
 
-  async function enviar(acao, comCofre) {
+  async function enviar(acao, comCofre, clicado) {
     const texto = $('texto').value;
-    const arquivos = [...$('arquivos').files];
-    const rotulo = $('rotulo').value.trim();
-    if (!texto.trim() && !arquivos.length) { linha('erro', 'Escreva um texto ou escolha um arquivo.'); return; }
-    if (acao === 'cofre' && !rotulo) { linha('erro', 'Dê um rótulo: o que é isto? (aparece na lista; o valor não).'); $('rotulo').focus(); return; }
-    travar(true); $('b-redigir').hidden = true;
+    const arquivos = escolhidos.slice();
+    // O rótulo só vale no cofre (e no redigir, que nasce do modo comum, vai vazio: o servidor nomeia).
+    const rotulo = acao === 'cofre' ? $('rotulo').value.trim() : '';
+    erroForm(''); erroRotulo(false);
+    if (!texto.trim() && !arquivos.length) { erroForm('Escreva um texto ou escolha um arquivo.'); $('texto').focus(); return; }
+    if (acao === 'cofre' && !rotulo) { erroRotulo(true); $('rotulo').focus(); return; }
+    travar(true, clicado); $('redigir').hidden = true;
     const itens = [];
-    if (texto.trim()) itens.push({ corpo: new Blob([texto], { type: 'text/plain' }), nome: null, nomeShow: 'texto' });
-    arquivos.forEach((f) => itens.push({ corpo: f, nome: f.name, nomeShow: f.name }));
+    if (texto.trim()) itens.push({ corpo: new Blob([texto], { type: 'text/plain' }), nome: null, nomeShow: 'texto', texto: true });
+    arquivos.forEach((f) => itens.push({ corpo: f, nome: f.name, nomeShow: f.name, arquivo: f }));
     let tudoOk = true, podeRedigir = false;
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i];
@@ -134,28 +385,45 @@
         linha('erro', `${it.nomeShow}: grande demais (limite de ${Math.round(limite / 1048576)} MB por envio). Nada foi enviado.`);
         continue;
       }
-      linha('info', `Enviando ${i + 1} de ${itens.length}: ${it.nomeShow}…`);
+      const li = linha('info', `Enviando ${i + 1} de ${itens.length}: ${it.nomeShow}…`);
       const r = await enviarUm(acao, it.corpo, it.nome, rotulo, comCofre);
       if (r.ok) {
-        linha('ok', `${it.nomeShow}: ${r.mensagem}` + (r.aviso ? ` ⚠ ${r.aviso}` : ''));
+        linha('ok', `${it.nomeShow}: ${r.mensagem}` + (r.aviso ? ` ⚠ ${r.aviso}` : ''), li);
+        // O que já foi sai da tela na hora: o próximo clique (o "separar e organizar", por exemplo) não reenvia.
+        if (it.texto) $('texto').value = '';
+        if (it.arquivo) escolhidos = escolhidos.filter((f) => f !== it.arquivo);
       } else {
         tudoOk = false;
         if (r.bloqueado && r.pode_redigir && acao === 'organizar') podeRedigir = true;
         const onde = r.regras && r.regras.length ? ` (${r.regras.join(', ')}${r.linhas && r.linhas.length ? '; linha ' + r.linhas.join(', ') : ''})` : '';
-        linha('erro', `${it.nomeShow}: ${r.mensagem}${onde}`);
+        linha('erro', `${it.nomeShow}: ${r.mensagem}${onde}`, li);
       }
     }
-    if (tudoOk) {                        // limpa da tela o que acabou de ser tratado
-      $('texto').value = ''; $('arquivos').value = '';
-      if (acao === 'cofre') $('rotulo').value = '';
-    }
-    $('b-redigir').hidden = !podeRedigir;
-    travar(false); estado();
+    desenharArquivos();
+    if (tudoOk && acao === 'cofre') $('rotulo').value = '';
+    $('redigir').hidden = !podeRedigir;
+    travar(false, clicado); estado();
   }
 
-  document.querySelectorAll('button[data-acao]').forEach((b) => b.addEventListener('click', () => enviar(b.dataset.acao, false)));
-  $('b-redigir').addEventListener('click', () => enviar('organizar', true));
+  // Enter no rótulo (envio implícito do formulário) e Ctrl/⌘+Enter no texto fazem a ação primária do modo,
+  // nunca um envio nativo do <form> (a CSP form-action 'none' o barraria e o texto se perderia).
+  const primaria = () => document.querySelector(modo() === 'cofre' ? 'button[data-acao=cofre]' : 'button[data-acao=organizar]');
+  $('form').addEventListener('submit', (ev) => { ev.preventDefault(); if (!primaria().disabled) primaria().click(); });
+  $('texto').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); $('form').requestSubmit(); }
+  });
+  document.querySelectorAll('input[name=modo]').forEach((r) => r.addEventListener('change', aplicarModo));
+  document.querySelectorAll('button[data-acao]').forEach((b) => b.addEventListener('click', () => enviar(b.dataset.acao, false, b)));
+  $('b-redigir').addEventListener('click', (ev) => enviar('organizar', true, ev.currentTarget));
+  $('rotulo').addEventListener('input', () => erroRotulo(false));
+  $('texto').addEventListener('input', () => erroForm(''));
+  $('arquivos').addEventListener('change', (ev) => { juntar(ev.target.files); ev.target.value = ''; });
+  const soltar = $('soltar');
+  ['dragenter', 'dragover'].forEach((t) => soltar.addEventListener(t, (ev) => { ev.preventDefault(); soltar.classList.add('is-sobre'); }));
+  ['dragleave', 'drop'].forEach((t) => soltar.addEventListener(t, () => soltar.classList.remove('is-sobre')));
+  soltar.addEventListener('drop', (ev) => { ev.preventDefault(); if (ev.dataTransfer && ev.dataTransfer.files.length) juntar(ev.dataTransfer.files); });
   if (location.pathname.startsWith('/entrada')) $('volta').hidden = false;   // aberta pela Central: mostra o caminho de volta
+  aplicarModo();
   estado();
 })();
 </script>

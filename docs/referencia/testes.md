@@ -107,7 +107,10 @@ linha do funil, o cartão de respostas com o interesse parado na frente; desde 1
 `src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; o pedido de mudança;
 códigos `BP-` únicos; e as regras de homogeneidade sobre todo `.css` e `<style>` de `src/`: nada de rem/px
 solto em padding, margin, gap e font-size, nem peso numérico, e todo `var(--x)` definido. Exceção só com
-motivo, em `EXCECOES` no próprio teste: hoje só o `GameMap.vue`, pela geometria do mapa) e
+motivo, em `EXCECOES` no próprio teste: hoje só o `GameMap.vue`, pela geometria do mapa),
+`server/entrada-pagina.test.ts` (16/10/2026: a cópia dos tokens na página da Entrada da Mel, que a CSP impede
+de ler o CSS do app, tem os mesmos valores do `tokens.css`, claro e escuro; nenhum token que muda no escuro fica
+de fora; todo `var(--x)` da página é definido nela; a fonte é a Inter servida pela própria Entrada) e
 `src/blueprint/servico.test.ts` (16/10/2026: o service blueprint `docs/blueprint/servico.json` tem as cinco
 faixas e as três linhas, códigos únicos e no formato `SITE-3-B2`, todo passo com a ação do cliente, ligações
 para cartões que existem e todo arquivo citado presente no repositório)). O monitor do Dell tem os seus em Python:

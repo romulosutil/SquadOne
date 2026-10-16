@@ -55,6 +55,7 @@
     {"repo": "deploy/dell/claude-ops/prumo-ofertas.json", "instalado": "~/.local/share/claude-ops/"},
     {"repo": "deploy/dell/entrada/*.py", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
     {"repo": "deploy/dell/entrada/pagina.html", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
+    {"repo": "src/estilos/fontes/inter-latin-wght-normal.woff2", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
     {"repo": "deploy/dell/entrada/bin/cofre", "instalado": "~/.local/bin/cofre"},
     {"repo": "deploy/dell/entrada/bin/entrada_organizar.py", "instalado": "~/.hermes/scripts/entrada_organizar.py"},
     {"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"},

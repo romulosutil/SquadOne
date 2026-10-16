@@ -88,6 +88,8 @@ describe("Repasse da Entrada pela Central", () => {
     assert.equal(rotaPermitida("GET", "/"), "ok");
     assert.equal(rotaPermitida("GET", "/api/estado"), "ok");
     assert.equal(rotaPermitida("POST", "/api/enviar"), "ok");
+    assert.equal(rotaPermitida("GET", "/inter.woff2"), "ok");
+    assert.equal(rotaPermitida("POST", "/inter.woff2"), "metodo");
     assert.equal(rotaPermitida("GET", "/api/enviar"), "metodo");
     assert.equal(rotaPermitida("POST", "/"), "metodo");
     for (const c of ["/healthz", "/../x", "/api", "/api/estado/", "//", "/api/outra", ""]) assert.equal(rotaPermitida("GET", c), "nao", c);

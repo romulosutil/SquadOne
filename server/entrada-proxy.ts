@@ -34,6 +34,8 @@ const ROTAS: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/"],
   ["GET", "/api/estado"],
   ["POST", "/api/enviar"],
+  // A Inter que a página usa (16/10/2026): a CSP da Entrada só aceita fonte da mesma origem.
+  ["GET", "/inter.woff2"],
 ];
 
 // Só estes cabeçalhos do navegador seguem (lista de permissão: Cookie, Authorization etc. nunca vão).
