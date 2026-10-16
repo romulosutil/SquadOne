@@ -403,6 +403,7 @@ async function startServer() {
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,
           agora: () => Date.now(),
         });
+        console.log("[vendedor] ligado: um aviso por vez no Telegram, seg–sex 08:00–17:30; nunca envia ao lead.");
       }
     }
 

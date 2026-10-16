@@ -218,7 +218,9 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
   ...g,
   itens: g.itens.filter(i => produto.value === 'todos' || porId.value.get(i.leadId)?.produto === produto.value),
 })))
-const totalHoje = computed(() => hoje.value.reduce((soma, g) => soma + g.itens.length, 0))
+// O número da aba "A fazer" conta o que pede mensagem: os prospects para revisar (1.400+ em 16/10/2026)
+// são triagem e afogavam o número ("A fazer 1603").
+const totalHoje = computed(() => hoje.value.filter(g => g.id !== 'revisar').reduce((soma, g) => soma + g.itens.length, 0))
 const prontosParaEnviar = computed(() => hoje.value.find(g => g.id === 'enviar')?.itens ?? [])
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))

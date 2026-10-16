@@ -48,7 +48,8 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
 .nao-vende__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
 .nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--negativo); border-radius: var(--raio-controle); background: var(--erro-fundo); }
 .nao-vende__degraus { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
-.nao-vende__degraus li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-0) var(--esp-2); align-items: center; padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); }
+/* Coluna da direita com largura fixa: com `auto`, cada linha tinha uma barra de tamanho diferente. */
+.nao-vende__degraus li { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: var(--esp-0) var(--esp-2); align-items: center; padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); }
 .nao-vende__degraus li.is-gargalo { background: var(--erro-fundo); }
 .nao-vende__rotulo { grid-column: 1; }
 .nao-vende__n { grid-column: 2; grid-row: 1; font-variant-numeric: tabular-nums; }

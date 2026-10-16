@@ -125,9 +125,10 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
 <template>
   <!-- Dobrado (16/10/2026): é ajuda, não o passo; o resumo diz se já há sugestão guardada. Dentro, listas e
        a mensagem em citação, sem caixa: a folha é o único contorno. -->
-  <details class="dobra crm-ficha__secao crm-copiloto" :aria-busy="estado === 'gerando'">
+  <!-- Desde 16/10/2026 mora na aba "Copiloto" de "Como vender": aberto, porque escolher a aba já é o pedido. -->
+  <details class="dobra crm-copiloto" open :aria-busy="estado === 'gerando'">
     <summary>Sugestão do copiloto <span class="crm-tag">em teste</span><span v-if="sugestao" class="crm-muted">pronta</span></summary>
-    <p class="crm-muted">Lê o lead, o Raio-X, a resposta e as suas notas. Não envia nada: confira, copie e mande.</p>
+    <p class="crm-muted">Lê o lead, a conversa guardada, o Raio-X, a resposta e as suas notas. Não envia nada: confira, copie e mande.</p>
 
     <template v-if="sugestao">
       <div class="crm-copiloto__parte">
