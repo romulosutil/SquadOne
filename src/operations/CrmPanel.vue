@@ -178,7 +178,7 @@ async function anotarEnvio(id: string, tipo: TipoDeEnvioAnotado) {
       body: JSON.stringify(corpoDaAnotacao(lead, tipo)),
     })
     if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`)
-    anuncio.value = `${lead.empresa}: ${tipo === 'segunda_enviada' ? '2ª mensagem' : 'follow-up'} anotado.`
+    anuncio.value = `${lead.empresa}: ${tipo === 'segunda_enviada' ? '2ª mensagem anotada' : tipo === 'plus_enviado' ? 'primeira mensagem anotada' : 'follow-up anotado'}.`
     depoisDoRegistro()
   } catch {
     guardarAnotados(desanotar(anotados.value, id, tipo))

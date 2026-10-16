@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { lerPastasDosLeads, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
+import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
+import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
 
@@ -31,7 +33,10 @@ import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvio
 // havia uma semana. Uma coluna, um critério: DIAS_SEM_RESPOSTA.
 export const ETAPAS = ["novo", "contato", "proposta", "ganho", "perdido"] as const;
 export type CrmEtapa = (typeof ETAPAS)[number];
-export const PRODUTOS = ["site", "prumo", "iris", "estampa"] as const;
+// "plus" (15/10/2026): os leads do Catálogo de Negócios Maçônicos, abordados com a saudação da Ordem. Não é
+// uma quinta oferta: cada um carrega a oferta que recebe (site, prumo, iris, estampa) em `plus.oferta`. Vem de
+// um arquivo (plus/leads.json), não de planilha; o estado dele sai só dos registros da aba CRM.
+export const PRODUTOS = ["site", "prumo", "iris", "estampa", "plus"] as const;
 export type CrmProduto = (typeof PRODUTOS)[number];
 /** As ofertas que saem de uma aba no formato do Prospects (Etapa, convite, WhatsApp publicado no site). */
 export const PRODUTOS_DE_PROSPECCAO = ["prumo", "iris", "estampa"] as const;
@@ -51,6 +56,7 @@ export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
   prumo: "Serviços PRUMO",
   iris: "Iris · Clínicas",
   estampa: "CRM de estamparia",
+  plus: "Plus",
 };
 
 /** De onde vem cada oferta de prospecção: aba, caminho do clique em "Enviar convite" e quem encontrou. */
@@ -207,10 +213,10 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
-  "segunda_enviada", "followup_enviado"] as const;
+  "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu"] as const;
 export type CrmTipoDeRegistro = (typeof TIPOS_DE_REGISTRO)[number];
 /** Os registros que o toque num link de envio faz sozinho: um clique duplo não pode virar dois envios. */
-export const TIPOS_DE_ENVIO: ReadonlySet<CrmTipoDeRegistro> = new Set(["segunda_enviada", "followup_enviado"]);
+export const TIPOS_DE_ENVIO: ReadonlySet<CrmTipoDeRegistro> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado"]);
 /** O mesmo envio anotado de novo dentro disto é o mesmo toque (clique duplo, aba duplicada), não um envio novo. */
 export const JANELA_DE_REPETICAO_MS = 2 * 60 * 1000;
 /** Passado isto do "quero ver", a 2ª mensagem que não saiu vira urgência na Hoje. */
@@ -504,6 +510,8 @@ export interface CrmLead {
    * conferência antes do convite). Ausentes nos outros produtos.
    */
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string };
+  /** Plus (15/10/2026): a oferta que o lead recebe e o que o catálogo diz dele. O site, quando há, vai em `links.site`. */
+  plus?: { oferta: OfertaDoPlus; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] };
   notas: number;
   /** A última resposta classificada (só com o fluxo de 05/10/2026; antes disso, ausente). */
   resposta?: CrmResposta;
@@ -595,12 +603,19 @@ export interface RaioXDoPrumo {
   feitoEm: string;
 }
 
+/** Os leads Plus como o arquivo os traz, mais a data em que o catálogo foi importado. */
+export interface PlusLido {
+  geradoEm?: string;
+  leads: LeadPlus[];
+}
+
 export interface ContextoDoCrm {
   agora: Date;
   pastas?: PastaDoLead[];
   gerador?: GeradorDeSites;
   mapas?: MapaDoPrumo[];
   raioX?: RaioXDoPrumo[];
+  plus?: PlusLido;
   registroDisponivel?: { disponivel: boolean; motivo?: string };
   ultimaFalha?: { em: string; erro: string };
 }
@@ -639,6 +654,9 @@ function manuais(registros: Registro[]) {
     // Instantes dos envios anotados, em ordem: quem decide se valem é a regra de cada um (depois de quê).
     segundas: registros.filter((r) => r.tipo === "segunda_enviada").map((r) => r.em),
     followups: registros.filter((r) => r.tipo === "followup_enviado").map((r) => r.em),
+    // Plus: a planilha não conhece esses leads, então o envio e a resposta só existem aqui (aba CRM).
+    enviadoPlus: registros.find((r) => r.tipo === "plus_enviado")?.em,
+    respondeuPlus: registros.filter((r) => r.tipo === "plus_respondeu").map((r) => r.em),
   };
 }
 
@@ -764,6 +782,8 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     sem_contato_desfeito: "Perda por falta de contato desfeita",
     segunda_enviada: "2ª mensagem enviada",
     followup_enviado: "Follow-up enviado",
+    plus_enviado: "Primeira mensagem enviada",
+    plus_respondeu: "Respondeu no WhatsApp (anotado à mão)",
   };
   return registros.map((r) => ({
     tipo: r.tipo,
@@ -1286,6 +1306,86 @@ function leadDoPrumo(linha: Linha, contexto: {
   };
 }
 
+// ------------------------------------------------------------------ Plus
+
+/** Quantos Plus novos a Hoje mostra de uma vez: o ritmo do WhatsApp (RULES) é de poucos por dia, e 300 itens escondem o resto. */
+export const LIMITE_DO_PLUS_NA_HOJE = 10;
+export const ROTULO_DA_OFERTA: Record<OfertaDoPlus, string> = { site: "Site", prumo: "Serviços PRUMO", iris: "Iris", estampa: "Estamparia" };
+
+/**
+ * Lead Plus (15/10/2026). Sem planilha: o catálogo é um arquivo, e o estado sai só dos registros da aba CRM.
+ * Novo = "pronto" (entra em "Primeiro contato para enviar"); `plus_enviado` o leva a Em contato e
+ * `plus_respondeu` a "respondeu"; dali valem as regras de sempre (follow-up no 3º dia, 7 dias sem mensagem vira
+ * Perdido, proposta, próximo passo, sem contato). O toque no link de envio anota o `plus_enviado` sozinho.
+ */
+function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<string, Registro[]>; geradoEm?: number }): CrmLead {
+  const { agora } = contexto;
+  const registros = contexto.registros.get(`plus:${plus.id}`) ?? [];
+  const { proposta, proximo, semContato, notas, segundas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
+  const convite = enviadoPlus;
+  const respondeu = respondeuPlus.length ? respondeuPlus[respondeuPlus.length - 1] : undefined;
+  const base: EtapaCalculada = proposta || convite !== undefined || respondeu !== undefined
+    ? etapaDoPrumo({ etapa: convite !== undefined ? "convite_enviado" : "", convite, respondeu, proposta })
+    : { etapa: "novo", sinal: "pronto", subEtapa: "Pronto para enviar", desde: contexto.geradoEm };
+  const calculada = comPrazoDoContato(comPerdaManual(base, semContato), respondeu, convite, proximo, agora, followups);
+  const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
+  const diasDesdeConvite = dias(convite, agora);
+  const followupHoje = calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
+    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA && !followupJaEnviado(followups, convite);
+  const respostaNova = emConversa && respondeu !== undefined && agora - respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000;
+  const primeira = primeiraDoPlus(plus);
+  const lembrete = followupDoPlus(plus);
+  const desde = calculada.desde;
+  const eventos: CrmEvento[] = [
+    ...evento("encontrado", "No Catálogo de Negócios Maçônicos", contexto.geradoEm, "arquivo plus/leads.json"),
+    ...eventoDoPrazo(calculada),
+    ...eventosManuais(registros),
+  ].sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
+  const ultimo = eventos.length ? Date.parse(eventos[eventos.length - 1].em) : undefined;
+  const pronto = calculada.sinal === "pronto";
+  return {
+    id: `plus:${plus.id}`,
+    produto: "plus",
+    chave: plus.id,
+    empresa: plus.empresa,
+    nicho: plus.nicho,
+    cidade: plus.uf ? `${plus.cidade} - ${plus.uf}` : plus.cidade,
+    etapa: calculada.etapa,
+    sinal: calculada.sinal,
+    subEtapa: calculada.subEtapa,
+    ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
+    estadoNaPlanilha: "(Plus: sem planilha)",
+    ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
+    ...(ultimo !== undefined ? { ultimoEvento: iso(ultimo), diasDesdeUltimoEvento: dias(ultimo, agora) } : {}),
+    leitura: leituraDe(convite, undefined, respondeu, calculada.etapa === "contato"),
+    marcos: marcosDoLead(convite, undefined, respondeu, segundas, followups),
+    followupHoje,
+    respostaNova,
+    acervo: false,
+    ...(proximo ? { proximoPasso: { texto: proximo.texto, data: proximo.data, registradoEm: new Date(proximo.em).toISOString() } } : {}),
+    ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
+    notas,
+    plus: {
+      oferta: plus.oferta,
+      fixo: plus.fixo,
+      descricao: plus.descricao,
+      ...(plus.instagram ? { instagram: plus.instagram } : {}),
+      ...(plus.tambem?.length ? { tambem: plus.tambem } : {}),
+    },
+    ...(pronto && primeira.link ? { mensagemPronta: primeira.texto } : {}),
+    eventos,
+    links: {
+      ...(pronto && primeira.link ? { enviar: primeira.link } : {}),
+      ...(followupHoje && lembrete.link ? { followup: lembrete.link } : {}),
+      ...(plus.site ? { site: plus.site } : {}),
+      ...(plus.whatsapp ? { whatsapp: `https://wa.me/${plus.whatsapp}` } : {}),
+      maps: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${plus.empresa} ${plus.cidade} ${plus.uf}`.trim())}`,
+    },
+    divergencias: [],
+  };
+}
+
 // ------------------------------------------------------------------ Hoje
 
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
@@ -1457,20 +1557,30 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       });
     }
     if (lead.sinal === "pronto") {
+      // Plus: saudação maçônica, sem demo a gerar. O fixo pede conferir o número antes (o WhatsApp Business roda em fixo, mas não é certo).
+      const ehPlus = lead.produto === "plus" && lead.plus;
       itens.enviar.push({
         leadId: lead.id,
-        acao: lead.links.enviar ? "Mandar a primeira mensagem" : "Sem WhatsApp válido na planilha",
+        acao: lead.links.enviar ? (ehPlus ? "Plus: mandar a primeira mensagem" : "Mandar a primeira mensagem") : "Sem WhatsApp válido na planilha",
         detalhe: `${lead.nicho || "Sem nicho"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "pronto") || "sem data"}.`
-          + (lead.links.site ? "" : " Ainda sem demo: gere quando ele pedir."),
+          + (ehPlus
+            ? ` Oferta: ${ROTULO_DA_OFERTA[lead.plus!.oferta]}.${lead.plus!.fixo ? " Telefone fixo: confira se tem WhatsApp." : ""}`
+            : lead.links.site ? "" : " Ainda sem demo: gere quando ele pedir."),
         links: [
           ...(lead.links.enviar ? [{ rotulo: "Enviar pelo WhatsApp (marca como enviado)", url: lead.links.enviar }] : []),
           ...(lead.links.site ? [{ rotulo: "Ver o demo", url: lead.links.site }] : []),
         ],
         // Quem dá para enviar com um toque vem antes; dentro de cada parte, o mais antigo primeiro.
-        ordem: (lead.links.enviar ? 0 : 1e13) + (Date.parse(lead.desde ?? "") || 0),
+        // O Plus vem na frente (são os melhores leads); dentro dele, o fixo por último.
+        ordem: lead.produto === "plus" ? (lead.plus?.fixo ? -5e12 : -1e13) + (Date.parse(lead.desde ?? "") || 0)
+          : (lead.links.enviar ? 0 : 1e13) + (Date.parse(lead.desde ?? "") || 0),
       });
     }
   }
+  // Só os primeiros Plus: o resto está no filtro Plus e no Funil.
+  const ehDoPlus = new Set(leads.filter((l) => l.produto === "plus").map((l) => l.id));
+  let plusNaHoje = 0;
+  itens.enviar = itens.enviar.sort((a, b) => a.ordem - b.ordem).filter((i) => !ehDoPlus.has(i.leadId) || ++plusNaHoje <= LIMITE_DO_PLUS_NA_HOJE);
   return GRUPOS_DE_HOJE.map((grupo) => ({
     ...grupo,
     itens: itens[grupo.id].sort((a, b) => a.ordem - b.ordem),
@@ -1488,6 +1598,7 @@ const NOME_DA_FONTE: Record<CrmFonteId, string> = {
   prumo: "PRUMO — Prospects",
   iris: "PRUMO — Clínicas (Iris)",
   estampa: "PRUMO — Estamparias (CRM de estamparia)",
+  plus: "Plus — Catálogo de Negócios Maçônicos",
   registros: "Aba CRM (notas e próximos passos)",
 };
 
@@ -1534,6 +1645,13 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     idsDoSite.add(lead.chave);
     leads.push(lead);
   }
+  const idsDoPlus = new Set<string>();
+  const geradoPlus = instante(contexto.plus?.geradoEm ?? "");
+  for (const plus of contexto.plus?.leads ?? []) {
+    if (idsDoPlus.has(plus.id)) continue;
+    idsDoPlus.add(plus.id);
+    leads.push(leadDoPlus(plus, { agora, registros, ...(geradoPlus !== undefined ? { geradoEm: geradoPlus } : {}) }));
+  }
   for (const produto of PRODUTOS_DE_PROSPECCAO) {
     const ids = new Set<string>();
     for (const linha of retrato.fontes[produto].linhas) {
@@ -1559,8 +1677,8 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     fontes: ([...PRODUTOS, "registros"] as const).map((id) => ({
       id,
       nome: NOME_DA_FONTE[id],
-      linhas: retrato.fontes[id].linhas.length,
-      ...(retrato.fontes[id].erro ? { erro: retrato.fontes[id].erro } : {}),
+      linhas: id === "plus" ? idsDoPlus.size : retrato.fontes[id].linhas.length,
+      ...(id !== "plus" && retrato.fontes[id].erro ? { erro: retrato.fontes[id].erro } : {}),
     })),
     colunasAusentes: [
       ...colunasAusentes(COLUNAS_DO_SITE, retrato.fontes.site.colunas, "Leads"),
@@ -1724,6 +1842,53 @@ async function lerRaioX(diretorio: string | undefined): Promise<RaioXDoPrumo[]> 
   return saida;
 }
 
+/**
+ * Os leads Plus (15/10/2026): `<entregas>/plus/leads.json`, gerado por scripts/plus-importar.ts a partir do
+ * catálogo em PDF. Fica fora do repositório (nomes e telefones de terceiros). Ausente ou ilegível = filtro Plus vazio.
+ */
+export async function lerPlus(diretorio: string | undefined): Promise<PlusLido> {
+  if (!diretorio) return { leads: [] };
+  let dados: unknown;
+  let modificado: string | undefined;
+  const arquivo = path.join(diretorio, "plus", "leads.json");
+  try {
+    dados = JSON.parse(await fs.readFile(arquivo, "utf8"));
+    modificado = (await fs.stat(arquivo)).mtime.toISOString();
+  } catch {
+    return { leads: [] };
+  }
+  const bruto = (dados && typeof dados === "object" ? dados : {}) as Record<string, unknown>;
+  const importado = texto(bruto.geradoEm, 64);
+  const lista = Array.isArray(bruto.leads) ? bruto.leads : [];
+  const ofertas: readonly string[] = ["site", "prumo", "iris", "estampa"];
+  const leads: LeadPlus[] = [];
+  for (const item of lista.slice(0, 2000)) {
+    const v = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const id = texto(v.id, 200);
+    const whatsapp = texto(v.whatsapp, 20).replace(/\D/g, "");
+    const oferta = texto(v.oferta, 20);
+    if (!/^[A-Za-z0-9_-]{3,200}$/.test(id) || !/^55\d{10,11}$/.test(whatsapp) || !ofertas.includes(oferta)) continue;
+    const site = urlHttps(v.site);
+    const instagram = texto(v.instagram, 60).replace(/[^A-Za-z0-9._]/g, "");
+    const tambem = Array.isArray(v.tambem) ? v.tambem.map((n) => texto(n, 120)).filter(Boolean).slice(0, 5) : [];
+    leads.push({
+      id,
+      empresa: texto(v.empresa, 160) || id,
+      nicho: texto(v.nicho, 60),
+      cidade: texto(v.cidade, 80),
+      uf: texto(v.uf, 2).toUpperCase(),
+      whatsapp,
+      fixo: v.fixo === true,
+      ...(site ? { site } : {}),
+      ...(instagram ? { instagram } : {}),
+      oferta: oferta as OfertaDoPlus,
+      descricao: texto(v.descricao, 300),
+      ...(tambem.length ? { tambem } : {}),
+    });
+  }
+  return { geradoEm: Number.isFinite(Date.parse(importado)) ? new Date(importado).toISOString() : modificado, leads };
+}
+
 export interface RespostaDoRegistro {
   ok: true;
   em: string;
@@ -1742,6 +1907,7 @@ const emConversaNoLead = (lead: Pick<CrmLead, "etapa" | "sinal">) => lead.etapa 
 export function conferirEnvio(tipo: CrmTipoDeRegistro, lead: Pick<CrmLead, "etapa" | "sinal">): void {
   if (!TIPOS_DE_ENVIO.has(tipo)) return;
   if (lead.etapa === "ganho" || lead.etapa === "perdido") throw new RegistroInvalido("Este lead já está encerrado.");
+  if (tipo === "plus_enviado" && lead.sinal !== "pronto") throw new RegistroInvalido("Este lead Plus já recebeu a primeira mensagem.");
   if (tipo === "segunda_enviada" && !emConversaNoLead(lead)) throw new RegistroInvalido("A 2ª mensagem só vale para quem já respondeu (Em contato, em conversa).");
   if (tipo === "followup_enviado" && (lead.etapa !== "contato" || emConversaNoLead(lead))) {
     throw new RegistroInvalido("O follow-up só vale para quem está Em contato e ainda não respondeu.");
@@ -1803,13 +1969,14 @@ export class CrmStore {
   }
 
   async visao(agora = new Date()): Promise<CrmVisao> {
-    const [leitura, mapas, raioX, registroDisponivel, ultimaFalha] = await Promise.all([
+    const [leitura, mapas, raioX, plus, registroDisponivel, ultimaFalha] = await Promise.all([
       this.config.autoDirectory ? lerPastasDosLeads(this.config.autoDirectory).catch((error) => {
         console.error("[crm] Falha ao ler ~/auto-site:", error);
         return undefined;
       }) : Promise.resolve(undefined),
       lerMapas(this.config.entregasPrumo).catch(() => []),
       lerRaioX(this.config.entregasPrumo),
+      lerPlus(this.config.entregasPrumo),
       this.disponibilidade(),
       this.ultimaFalha(),
     ]);
@@ -1818,6 +1985,7 @@ export class CrmStore {
       ...(leitura ? { pastas: leitura.pastas, gerador: leitura.gerador } : {}),
       mapas,
       raioX,
+      plus,
       registroDisponivel,
       ...(ultimaFalha ? { ultimaFalha } : {}),
     };
@@ -1872,6 +2040,10 @@ export class CrmStore {
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
     const jaNoRetrato = envioRecenteNoLead(lead, registro.tipo, agora.getTime());
     if (jaNoRetrato) return { ok: true, em: jaNoRetrato, repetido: true };
+    if ((registro.tipo === "plus_enviado" || registro.tipo === "plus_respondeu") && lead.produto !== "plus") {
+      throw new RegistroInvalido("Este registro é só dos leads do Plus.");
+    }
+    if (registro.tipo === "plus_respondeu" && lead.etapa !== "contato") throw new RegistroInvalido("Só quem está Em contato pode ter respondido.");
     conferirEnvio(registro.tipo, lead);
     if (registro.tipo === "proposta" && lead.etapa === "proposta") throw new RegistroInvalido("Este lead já está em Proposta.");
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");

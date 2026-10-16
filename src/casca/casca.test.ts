@@ -346,7 +346,7 @@ describe('estado do time, só com fonte', () => {
 })
 
 describe('resumoDoFunil', () => {
-  const n = (total: number) => ({ total, site: total, prumo: 0, iris: 0, estampa: 0 })
+  const n = (total: number) => ({ total, site: total, prumo: 0, iris: 0, estampa: 0, plus: 0 })
   it('só as etapas abertas, no singular e no plural', () => {
     assert.equal(
       resumoDoFunil({ novo: n(3), contato: n(1), proposta: n(1), ganho: n(9), perdido: n(40) }),

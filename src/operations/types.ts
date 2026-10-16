@@ -61,7 +61,7 @@ export interface OperationsOverview {
 
 // CRM do PRUMO (Site antes da venda, serviços PRUMO, Iris, CRM de estamparia). Espelha server/crm.ts; a Central só lê.
 export type CrmEtapa = 'novo' | 'contato' | 'proposta' | 'ganho' | 'perdido'
-export type CrmProduto = 'site' | 'prumo' | 'iris' | 'estampa'
+export type CrmProduto = 'site' | 'prumo' | 'iris' | 'estampa' | 'plus'
 export type CrmSinal =
   | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
   | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
@@ -127,6 +127,8 @@ export interface CrmLead {
   demoPedidoEm?: string
   /** Caçadores do Iris e das estamparias (14/10/2026): Prioridade, sinais do site, nota do Google e de onde veio o WhatsApp. */
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string }
+  /** Plus (15/10/2026): os leads do Catálogo de Negócios Maçônicos. A oferta é o fluxo que o lead recebe. */
+  plus?: { oferta: 'site' | 'prumo' | 'iris' | 'estampa'; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] }
   notas: number
   resposta?: CrmResposta
   /**
@@ -193,7 +195,7 @@ export interface CrmVisao {
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
-  | 'segunda_enviada' | 'followup_enviado'
+  | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu'
 
 /** Espelho de REGIMES_DA_MENSAGEM (server/crm.ts): até 29/09, 30/09–04/10, desde 05/10. */
 export type CrmRegimeDaMensagem = 'curta_com_link' | 'prumo_com_link' | 'duas_mensagens'

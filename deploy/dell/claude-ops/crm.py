@@ -27,7 +27,9 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
   texto, data, origem} com tipo nota | proximo_passo | proposta |
   proposta_desfeita | sem_contato | sem_contato_desfeito | segunda_enviada |
   followup_enviado (14/10/2026: o toque em "Mandar o link"/"Mandar o follow-up"
-  na Central anota o envio), responde {ok} e refaz o retrato na hora. Nada vai
+  na Central anota o envio) | plus_enviado | plus_respondeu (15/10/2026: o filtro
+  Plus, produto "plus", não tem planilha: o estado dele sai só destas linhas),
+  responde {ok} e refaz o retrato na hora. Nada vai
   para lead nenhum.
 
 Segredo: ~/.config/claude-ops/crm-segredo (600), nasce aqui e nunca é impresso;
@@ -135,9 +137,9 @@ VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confer
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
-  'segunda_enviada', 'followup_enviado'];
+  'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
-if (!['site', 'prumo', 'iris', 'estampa'].includes(b.produto)) return recusa('Produto inválido.');
+if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(b.produto)) return recusa('Produto inválido.');
 const id = txt(b.id, 200);
 if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) return recusa('Lead inválido.');
 if (!TIPOS.includes(b.tipo)) return recusa('Tipo de registro inválido.');

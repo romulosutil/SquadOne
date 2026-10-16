@@ -137,3 +137,24 @@ Medição, não motor, como a Luna: o Jev (`typesafe/jev-1.13`, TypeSafe, pela D
 - **Risco aceito:** endpoint na lista ZDR da OpenRouter e a TypeSafe diz que não treina com os prompts, mas não há DPA nem prazo de retenção publicado. Antes de sair da sombra: pedir a `privacy@typesafe.ai` DPA, subprocessadores, prazo de retenção e ZDR Enterprise.
 - **Regra de promoção** (`jev-respostas-resumo.py`, só lê): ≥ 60 respostas revistas por humano, concordância do Jev com a revisão ≥ 95 % e nenhum "interesse" (do Gemini ou da revisão) que o Jev tenha chamado de negativa ou exclusão. Passar na regra não basta sem o DPA.
 - **Desligar:** desativar o nó "Jev: classificar (sombra)" no editor, ou republicar com `--sem-jev`, ou apagar a credencial e republicar; revogar a chave na OpenRouter corta na hora.
+
+## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
+
+Pedido do Rômulo (já foi maçom e tem o catálogo do macons.org): os melhores leads num filtro próprio, "Plus", que podem ser de qualquer
+um dos quatro fluxos e abrem com a saudação da Ordem.
+
+- **Importar:** `npx tsx scripts/plus-importar.ts "<catalogo.pdf>" <saida>/leads.json --relatorio`. Lê o PDF com o pdfjs (grade de 3 colunas, cidade
+  do cabeçalho mais próximo acima, carregada de uma página para a outra), normaliza o telefone (zero de operadora, 55, fixo de 10 dígitos), junta
+  o mesmo WhatsApp num lead só (`tambem` guarda os outros nomes) e deixa de fora marca de montadora, banco, token e livro. Quem não tem telefone
+  legível vai para `semTelefone` no mesmo arquivo (não entra no CRM). Em 15/10/2026: 440 cartões, 310 leads (265 site, 38 prumo, 3 iris, 4 estampa),
+  97 sem telefone, 6 fora, 14 fixos. O arquivo vai para `~/prumo-entregas/plus/leads.json` no Dell e **nunca entra no git**.
+- **Oferta (`plus.oferta`):** roupa (camiseta, silk, uniforme, bordado) = `estampa` (caneca e brinde não: é o mesmo recorte do caçador de estamparias);
+  psicologia/psicanálise/fono/terapia = `iris`; tem site próprio (Instagram e linktree não contam) = `prumo`; o resto = `site`.
+- **Mensagem (`server/plus-mensagem.ts`):** "Meu Ir.'., tudo bem? Me chamo Rômulo e encontrei {a/o empresa} no Catálogo de Negócios Maçônicos." + o pedido da
+  oferta + a saída fácil + "T.F.A.". Segue o guia dos outros textos (sem preço, sem link, sem dar como pronto o que não existe; as ofertas só
+  são prometidas depois do sim). Nome longo ou com título ("Advogado - Regularização de Imóveis…") vira "o seu negócio".
+- **Estado:** só pelos registros da aba CRM (produto `plus`): o toque em "Enviar pelo WhatsApp" anota `plus_enviado` (Hoje, Funil e Ficha; "Já enviei
+  por fora" na Ficha cobre o envio feito de outro jeito) e a Ficha tem "Respondeu no WhatsApp: anotar" (`plus_respondeu`, de novo a cada resposta para
+  recomeçar os 7 dias). O n8n `08 · CRM` aceita `plus` e os dois tipos desde a republicação do `crm.py`.
+- **Ritmo:** a Hoje mostra só os 10 primeiros Plus (o fixo por último) e a trava de horário vale como nos outros primeiros contatos. Plus fica fora de
+  "Enviar um por um", porque a fila não anota o envio.

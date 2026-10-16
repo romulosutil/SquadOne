@@ -86,6 +86,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM;
                           o reenvio do só-robô (REENVIO_ROBO*, "Pedir o responsável") é só do CRM, sem par no JS nem inglês
   server/prumo-mensagem.ts PURO: 2ª mensagem (o Raio-X) e reenvio do só-robô do PRUMO (só número 55)
+  server/plus-catalogo.ts PURO: o PDF do Catálogo de Negócios Maçônicos (itens posicionados) -> leads Plus (oferta, nicho, dedupe por WhatsApp);
+                          scripts/plus-importar.ts abre o PDF e grava ~/prumo-entregas/plus/leads.json (fora do repo: telefones de terceiros)
+  server/plus-mensagem.ts PURO: 1ª mensagem e follow-up do Plus, com a saudação maçônica ("Meu Ir.'., tudo bem? Me chamo Rômulo… T.F.A.")
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
@@ -235,6 +238,14 @@ coluna e o follow-up do 05 · Acompanhamento não entram (detalhes em `perfis-e-
 Mensagem A sem demo (15/10/2026, decisão do Rômulo): a A vale para lead sem demo, inclusive sem recibo
 nenhum (o Balcão marca `pronto`); quem responde "quero ver" ganha o "Gerar demo", e o demo sai depois.
 Todos os textos das mensagens seguem um guia só, no topo das `VARIACOES` em `site-mensagem.js`.
+
+Plus (15/10/2026, pedido do Rômulo): quinto filtro do CRM (`produto: "plus"`) com os melhores leads, vindos do Catálogo de
+Negócios Maçônicos. Não é uma quinta oferta: cada lead leva `plus.oferta` (site = sem site; prumo = com site; iris = psicologia/terapia;
+estampa = roupa) e recebe o texto dela, sempre aberto pela saudação da Ordem. Sem planilha: `lerPlus` lê `plus/leads.json` e o estado
+sai só dos registros da aba CRM (`plus_enviado`, anotado pelo toque no link de envio; `plus_respondeu`, à mão na Ficha); depois valem
+follow-up do 3º dia, 7 dias sem mensagem = Perdido, proposta e sem contato como nos outros funis. A Hoje mostra só os 10 primeiros Plus
+(`LIMITE_DO_PLUS_NA_HOJE`; o ritmo do WhatsApp é de poucos por dia), na frente dos do Site; "Enviar um por um" não os inclui. Detalhes em
+`docs/referencia/perfis-e-experimentos.md`.
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o
 Dell acrescenta); a seed fica fora de `data/`. O browser nunca vê token do Google; `prompt=consent`

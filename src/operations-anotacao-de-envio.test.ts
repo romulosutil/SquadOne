@@ -19,12 +19,22 @@ function storage(inicial: Record<string, string> = {}) {
 describe('anotação do envio (2ª mensagem e follow-up)', () => {
   it('o link diz qual envio é, pelo lead; conversa e demo não anotam nada', () => {
     const links = { segunda: 'https://wa.me/1?text=link', followup: 'https://wa.me/1?text=fu', whatsapp: 'https://wa.me/1', site: 'https://demo' }
-    assert.equal(tipoDoLink({ links }, links.segunda), 'segunda_enviada')
-    assert.equal(tipoDoLink({ links }, links.followup), 'followup_enviado')
-    assert.equal(tipoDoLink({ links }, links.whatsapp), null)
-    assert.equal(tipoDoLink({ links }, links.site), null)
+    const produto = 'site' as const
+    assert.equal(tipoDoLink({ links, produto }, links.segunda), 'segunda_enviada')
+    assert.equal(tipoDoLink({ links, produto }, links.followup), 'followup_enviado')
+    assert.equal(tipoDoLink({ links, produto }, links.whatsapp), null)
+    assert.equal(tipoDoLink({ links, produto }, links.site), null)
     assert.equal(tipoDoLink(undefined, links.segunda), null)
-    assert.equal(tipoDoLink({ links: {} }, ''), null, 'link ausente não casa com url vazia')
+    assert.equal(tipoDoLink({ links: {}, produto }, ''), null, 'link ausente não casa com url vazia')
+  })
+
+  it('Plus: só o toque no link de envio anota a primeira mensagem; no Site o Balcão é quem marca', () => {
+    const links = { enviar: 'https://wa.me/5511999999999?text=oi', whatsapp: 'https://wa.me/5511999999999' }
+    assert.equal(tipoDoLink({ links, produto: 'plus' }, links.enviar), 'plus_enviado')
+    assert.equal(tipoDoLink({ links, produto: 'plus' }, links.whatsapp), null)
+    assert.equal(tipoDoLink({ links, produto: 'site' }, links.enviar), null)
+    assert.equal(tipoDoGrupo('enviar'), null, 'o envio do Plus tem o próprio aviso na Hoje (fila-de-envio), não o do grupo')
+    assert.equal(textoDaAnotacao('plus_enviado', '14:02'), 'Envio anotado às 14:02')
   })
 
   it('anotar: o primeiro toque vale, repetir não renova, desanotar tira só aquele', () => {

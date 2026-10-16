@@ -119,7 +119,8 @@ export function filaDeEnvio(itens: CrmItemHoje[], leads: ReadonlyMap<string, Crm
   for (const item of itens) {
     const lead = leads.get(item.leadId)
     const enviar = lead?.links.enviar
-    if (!lead || !enviar || item.leadId in envios) continue
+    // Plus fica fora: o toque dele anota o envio na aba CRM (anotacao-de-envio.ts), coisa que a fila não faz.
+    if (!lead || !enviar || lead.produto === 'plus' || item.leadId in envios) continue
     if (nicho !== null && nichoDe(lead) !== nicho) continue
     fila.push({ item, lead, enviar })
   }

@@ -4,7 +4,7 @@ import CrmMomento from './CrmMomento.vue'
 import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
-import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataCurta, dataHora, diaEscolhido, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaLeitura } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
@@ -91,12 +91,13 @@ const travado = computed(() => !segurado.value && envioTravado(props.aviso, prop
 /** Os links que anotam o envio ao serem tocados. */
 const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
 function aoTocar(chave: string, href: string) {
-  const tipo = TIPO_DA_ACAO[chave]
+  // Plus (15/10/2026): o link de envio não passa pelo n8n, então o toque é que anota a primeira mensagem.
+  const tipo = chave === 'enviar' && props.lead.produto === 'plus' ? 'plus_enviado' : TIPO_DA_ACAO[chave]
   if (tipo) emit('anotar', props.lead.id, tipo)
   if (ehPrimeiroContato(props.lead, href)) emit('primeiro', props.lead.id)
 }
 /** "2ª mensagem anotada às 14:02 · Follow-up anotado às 14:05", enquanto o retrato não confirma. */
-const anotacoes = computed(() => (['segunda_enviada', 'followup_enviado'] as const).flatMap((tipo) => {
+const anotacoes = computed(() => (['segunda_enviada', 'followup_enviado', 'plus_enviado'] as const).flatMap((tipo) => {
   const t = anotadoEm(props.anotados, props.lead.id, tipo)
   return t === undefined ? [] : [textoDaAnotacao(tipo, hora(new Date(t).toISOString()))]
 }).join(' · '))
@@ -171,6 +172,11 @@ const marcarProposta = () => registrar('proposta', '', propostaData.value || hoj
 const desfazerProposta = () => registrar('proposta_desfeita', '', '', 'Proposta desfeita.')
 const marcarSemContato = () => registrar('sem_contato', '', '', 'Lead marcado como perdido.')
 const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perda desfeita.')
+// Plus: a planilha não conhece o lead, então o envio feito por fora e a resposta se anotam aqui.
+const ehPlus = computed(() => props.lead.produto === 'plus')
+const plusEmConversa = computed(() => props.lead.sinal === 'respondeu-prumo')
+const marcarEnviadoPlus = () => registrar('plus_enviado', '', '', 'Envio anotado.')
+const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta anotada.')
 </script>
 
 <template>
@@ -197,12 +203,20 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         Saiu pela regra dos {{ DIAS_SEM_RESPOSTA }} dias sem mensagem do lead, sem desfecho de ninguém. Volta sozinho se ele escrever;
         para trazer de volta agora, salve um próximo passo ou marque a proposta.
       </p>
-      <p class="crm-ficha__fonte">
+      <p v-if="!lead.plus" class="crm-ficha__fonte">
         Na planilha: <strong>{{ lead.estadoNaPlanilha }}</strong>
         <template v-if="lead.pasta"> · pasta: {{ lead.pasta.lugar }}</template>
         <template v-if="lead.diasDesdeUltimoEvento !== undefined"> · último evento {{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : `há ${lead.diasDesdeUltimoEvento} dia${lead.diasDesdeUltimoEvento === 1 ? '' : 's'}` }}</template>
       </p>
       <p v-if="textoDaAbordagem(lead)" class="crm-ficha__fonte">Recebeu: {{ textoDaAbordagem(lead) }}</p>
+      <!-- Plus: veio do Catálogo de Negócios Maçônicos e abre com a saudação da Ordem. -->
+      <p v-if="lead.plus" class="crm-ficha__fonte">
+        Plus · recebe a oferta <strong>{{ ROTULO_DA_OFERTA_DO_PLUS[lead.plus.oferta] }}</strong>. {{ lead.plus.descricao }}
+        <template v-if="lead.plus.instagram"> Instagram: <a :href="`https://instagram.com/${lead.plus.instagram}`" target="_blank" rel="noopener">@{{ lead.plus.instagram }}</a>.</template>
+        <template v-if="lead.plus.tambem?.length"> Mesmo WhatsApp: {{ lead.plus.tambem.join(', ') }}.</template>
+        <template v-if="lead.plus.fixo"> Telefone fixo: confira se tem WhatsApp antes de enviar.</template>
+      </p>
+      <p v-if="lead.mensagemPronta" class="crm-ficha__fonte">Primeira mensagem: “{{ lead.mensagemPronta }}”</p>
       <p v-if="lead.leitura !== 'nao-se-aplica'" class="crm-ficha__leitura">
         {{ textoDaLeitura(lead) }}<template v-if="lead.leitura === 'desconhecida'">: sem confirmação de leitura registrada (pode ter lido; o WhatsApp dele pode não mandar recibo).</template>
       </p>
@@ -257,6 +271,8 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
         <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} ↗</a>
       </div>
       <div class="crm-form__botoes">
+        <button v-if="ehPlus && lead.sinal === 'pronto'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarEnviadoPlus">{{ salvando === 'plus_enviado' ? 'Anotando…' : 'Já enviei por fora: anotar o envio' }}</button>
+        <button v-if="ehPlus && lead.etapa === 'contato'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarRespondeuPlus">{{ salvando === 'plus_respondeu' ? 'Anotando…' : plusEmConversa ? 'Respondeu de novo: anotar' : 'Respondeu no WhatsApp: anotar' }}</button>
         <button v-if="aberto" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
         <button v-else-if="lead.motivoPerda === 'sem-contato'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer perda por falta de contato' }}</button>
       </div>

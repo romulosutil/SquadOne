@@ -58,13 +58,15 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
 }
 
 // PRUMO como holding (14/10/2026): as quatro ofertas são do PRUMO e dividem o mesmo funil.
-export const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa']
+export const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa', 'plus']
 export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
-  site: 'Site antes da venda', prumo: 'Serviços PRUMO', iris: 'Iris · Clínicas', estampa: 'CRM de estamparia',
+  site: 'Site antes da venda', prumo: 'Serviços PRUMO', iris: 'Iris · Clínicas', estampa: 'CRM de estamparia', plus: 'Plus',
 }
-export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'Organizar', iris: 'Iris', estampa: 'Estampa' }
+export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'Organizar', iris: 'Iris', estampa: 'Estampa', plus: 'Plus' }
+/** Plus (15/10/2026): a oferta que o lead recebe, na ordem em que o filtro a mostra. */
+export const ROTULO_DA_OFERTA_DO_PLUS = { site: 'Site', prumo: 'Serviços PRUMO', iris: 'Iris', estampa: 'Estamparia' } as const
 /** O primeiro contato: o Site manda o site pronto, as outras ofertas um convite para conversar. */
-export const ehConvite = (produto: CrmProduto) => produto !== 'site'
+export const ehConvite = (produto: CrmProduto) => produto !== 'site' && produto !== 'plus'
 
 const FUSO = 'America/Sao_Paulo'
 

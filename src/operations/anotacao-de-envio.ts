@@ -14,7 +14,7 @@
  */
 import type { CrmItemHoje, CrmLead, CrmProduto } from './types'
 
-export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado'
+export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_enviado'
 
 export const CHAVE_DAS_ANOTACOES = 'squadone:crm:envios-anotados'
 /** O ciclo do retrato é de 10 min: passado isto, quem diz se o envio foi anotado é a planilha. */
@@ -35,7 +35,7 @@ export interface Guardador {
 
 export const chaveDaAnotacao = (leadId: string, tipo: TipoDeEnvioAnotado) => `${leadId}|${tipo}`
 
-const TIPOS: readonly TipoDeEnvioAnotado[] = ['segunda_enviada', 'followup_enviado']
+const TIPOS: readonly TipoDeEnvioAnotado[] = ['segunda_enviada', 'followup_enviado', 'plus_enviado']
 
 function validas(anotados: EnviosAnotados, agora: number): EnviosAnotados {
   return Object.fromEntries(Object.entries(anotados).filter(([chave, t]) =>
@@ -60,8 +60,10 @@ export function gravarAnotados(storage: Guardador | null | undefined, anotados: 
 }
 
 /** Qual envio este link faz, pelo lead: a 2ª mensagem, o follow-up, ou nenhum (conversa, demo...). */
-export function tipoDoLink(lead: Pick<CrmLead, 'links'> | undefined, url: string): TipoDeEnvioAnotado | null {
+export function tipoDoLink(lead: Pick<CrmLead, 'links' | 'produto'> | undefined, url: string): TipoDeEnvioAnotado | null {
   if (!lead || !url) return null
+  // Plus (15/10/2026): o link de envio não passa pelo Balcão do n8n, então o toque é que anota a primeira mensagem.
+  if (lead.produto === 'plus' && url === lead.links.enviar) return 'plus_enviado'
   if (url === lead.links.segunda) return 'segunda_enviada'
   if (url === lead.links.followup) return 'followup_enviado'
   return null
@@ -93,7 +95,7 @@ export function podarAnotados(anotados: EnviosAnotados, leads: ReadonlyMap<strin
     const [leadId, tipo] = chave.split('|') as [string, TipoDeEnvioAnotado]
     const lead = leads.get(leadId)
     if (!lead) return false
-    const marco = Date.parse((tipo === 'segunda_enviada' ? lead.marcos.segundaEnviada : lead.marcos.followupEnviado) ?? '')
+    const marco = Date.parse((tipo === 'segunda_enviada' ? lead.marcos.segundaEnviada : tipo === 'plus_enviado' ? lead.marcos.enviado : lead.marcos.followupEnviado) ?? '')
     return !(Number.isFinite(marco) && marco >= t - FOLGA_DA_CONFIRMACAO_MS)
   }))
 }
@@ -118,5 +120,5 @@ export function corpoDaAnotacao(lead: Pick<CrmLead, 'produto' | 'chave'>, tipo: 
 
 /** "2ª mensagem anotada às 14:02" / "Follow-up anotado às 14:02", com a hora já formatada por quem chama. */
 export function textoDaAnotacao(tipo: TipoDeEnvioAnotado, hora: string): string {
-  return tipo === 'segunda_enviada' ? `2ª mensagem anotada às ${hora}` : `Follow-up anotado às ${hora}`
+  return tipo === 'segunda_enviada' ? `2ª mensagem anotada às ${hora}` : tipo === 'plus_enviado' ? `Envio anotado às ${hora}` : `Follow-up anotado às ${hora}`
 }
