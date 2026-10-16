@@ -30,6 +30,7 @@ export const CATALOGO: readonly PecaDoCatalogo[] = [
   { id: 'BP-SINAL', nome: 'Sinal do funil', classe: '.crm-sinal.is-…', onde: 'operations/crm.css', regra: 'Uma palavra sobre o lead (Resposta, Follow-up, Divergência). Tracejado = incerto.' },
   { id: 'BP-TRECHO', nome: 'Texto pronto', classe: '<CrmTrecho>', onde: 'operations/CrmTrecho.vue', regra: 'Copiar e Abrir no WhatsApp. Marcador por preencher fica realçado e escrito por extenso.' },
   { id: 'BP-FOLHA', nome: 'Folha', classe: '<Sheet>', onde: 'components/Sheet.vue', regra: 'Tudo que abre por cima. Título sempre, "Fechar" com texto, ação principal no rodapé.' },
+  { id: 'BP-TABELA', nome: 'Tabela do desktop', classe: '.fin-tabela, .crm-tabela', onde: 'operations/financas/financas.css, operations/crm.css', regra: 'Só a partir de 64 rem; abaixo, a lista de sempre. Cabeçalho preso, zebra no lugar do divisor, número à direita, linha de 44 px, uma linha por item.' },
   { id: 'BP-FICHA', nome: 'Ficha do lead', classe: '<CrmFicha>', onde: 'operations/CrmFicha.vue', regra: 'Na ordem da decisão: o que disse → onde está → como responder → anotar → histórico.' },
 ]
 

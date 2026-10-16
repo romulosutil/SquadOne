@@ -205,6 +205,48 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-check { display: flex; align-items: center; gap: var(--esp-2); min-height: var(--toque); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .crm-check input { width: 1.2rem; height: 1.2rem; accent-color: var(--texto); }
+/*
+ * Lista do desktop (16/10/2026, BP-TABELA): uma linha por lead, 44 px, sem quebra. O que não
+ * cabe numa linha é cortado com reticências e fica inteiro no title e na Ficha. Zebra no lugar
+ * do divisor; cabeçalho preso ao rolar. A ação usa o link do cartão (.crm-cartao__links).
+ */
+.crm-lista-funil { display: grid; gap: var(--esp-3); min-width: 0; }
+.segmentado.crm-funil__vista button { min-width: 6rem; padding: 0 var(--esp-4); }
+/* Entre 64 e 80 rem (com a barra lateral) as colunas não cabem: a tabela rola de lado, como o quadro.
+   Só nessa faixa, porque o contêiner com overflow prende o cabeçalho a ele e o sticky deixa de andar. */
+@media (max-width: 79.99rem) {
+  .crm-tabela-rolagem { position: relative; overflow-x: auto; overscroll-behavior-x: contain; }
+  .crm-tabela { min-width: 62rem; }
+}
+/* Layout fixo: com o automático, um nome comprido esticava a coluna e as reticências não entravam. */
+.crm-tabela { width: 100%; border: var(--linha); border-collapse: collapse; table-layout: fixed; background: var(--superficie); font-size: var(--tam-apoio); }
+.crm-tabela__c-lead { width: 22%; }
+.crm-tabela__c-oferta { width: 7.75rem; }
+.crm-tabela__c-etapa { width: 8.5rem; }
+.crm-tabela__c-data { width: 6.5rem; }
+.crm-tabela__c-passo { width: auto; }
+.crm-tabela__c-sinal { width: 9.5rem; }
+.crm-tabela__c-acao { width: 11rem; }
+.crm-tabela th { position: sticky; top: 0; z-index: var(--camada-fixa); padding: var(--esp-2) var(--esp-2); border-bottom: var(--linha-fina); background: var(--superficie); color: var(--texto-2); font-weight: var(--peso-medio); text-align: left; white-space: nowrap; }
+.crm-tabela td { height: var(--toque); padding: var(--esp-0) var(--esp-2); line-height: 1.25; overflow: hidden; vertical-align: middle; text-overflow: ellipsis; white-space: nowrap; }
+.crm-tabela td small { display: block; overflow: hidden; color: var(--texto-2); font-size: var(--tam-mini); text-overflow: ellipsis; }
+.crm-tabela tbody tr { cursor: pointer; }
+.crm-tabela tbody tr:nth-child(even) td { background: var(--zebra); }
+.crm-tabela tbody tr:hover td { background: var(--hover); }
+.crm-tabela tr.tem-divergencia td:first-child { box-shadow: inset var(--faixa) 0 0 var(--erro-fundo); }
+.crm-tabela__ordenar { display: inline-flex; align-items: center; gap: var(--esp-1); min-height: var(--toque); margin: calc(-1 * var(--esp-2)) 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.crm-tabela th[aria-sort="ascending"], .crm-tabela th[aria-sort="descending"] { color: var(--texto); font-weight: var(--peso-forte); }
+.crm-tabela__ordenar:hover { text-decoration: underline; text-underline-offset: 3px; }
+.crm-tabela__abrir { display: grid; max-width: 100%; padding: 0; border: 0; background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.crm-tabela__abrir strong { overflow: hidden; font-size: var(--tam-texto); text-decoration: underline; text-underline-offset: 3px; text-overflow: ellipsis; }
+.crm-tabela .crm-etapa { font-size: var(--tam-mini); }
+/* Selo e etapa com o texto em cima de uma linha secundária: sem o respiro vertical, cabem nos 44 px. */
+.crm-tabela .crm-tag, .crm-tabela .crm-etapa { padding-block: 0; line-height: 1.25; }
+.crm-tabela__data { font-variant-numeric: tabular-nums; }
+.crm-tabela td.crm-tabela__lead, .crm-tabela td.crm-tabela__acao { padding-block: 0; }
+.crm-tabela td.crm-tabela__acao { cursor: auto; }
+.crm-tabela__acao .crm-cartao__links { flex-wrap: nowrap; }
+
 .crm-cartoes { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .crm-cartao { display: grid; gap: var(--esp-2); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie); }
 .crm-cartao.tem-divergencia { border-style: dashed; }

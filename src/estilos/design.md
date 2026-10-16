@@ -35,6 +35,7 @@ tamanho. Tokens em `tokens.css`.
 | `--faixa`, `--faixa-forte` | 6 e 8 px: a faixa à esquerda que diz o tipo (citação, mensagem, cartão de decisão) |
 | `--raio-pilula` | o único raio do sistema (filtros de produto e de nicho); o resto é canto vivo |
 | `--hover` | fundo de hover do comum (`--superficie-2`); nunca cor de estado |
+| `--zebra` | linha par de tabela (BP-TABELA): meio caminho até `--superficie-2`, para o hover aparecer por cima |
 | `--etapa-*`, `--sobre-pastel` | os pastéis das etapas do funil, fixos nos dois temas, e a tinta por cima |
 | `--largura-leitura`, `--camada-*`, `--duracao` | medida máxima de leitura; ordem de empilhamento; duração de movimento |
 | `--fonte` | Inter variável, hospedada em `fontes/` (nunca depender da instalada) |
@@ -110,6 +111,21 @@ na conversa. Para pedir mudança visual, cite o código `BP-` e, se for de token
 | `.segmentado` | 2 a 4 opções curtas numa linha (Lista/Mapa, Site/Organizar, Próximo passo/Proposta/Nota) |
 | `.escolhas` | rótulo longo ou número variável de opções; quebra linha, não estica (só abaixo de 30 rem) |
 | `details.dobra` | consulta: fechada por padrão, aberta sozinha só quando há falha dentro |
+
+## Tabela no desktop (BP-TABELA, 16/10/2026)
+
+Lista com muitos itens que se comparam entre si (Lançamentos, a Lista do Funil) vira `<table>` a
+partir de 64 rem; abaixo, a lista de sempre, e só uma das duas no DOM (`matchMedia`).
+
+- Cabeçalho `position: sticky`, em `--texto-2` e `--peso-medio`; a coluna ordenada fica em `--texto`
+  e `aria-sort` diz o sentido. Ordenar é um `<button>` dentro do `<th>`.
+- Linha de `--toque` (44 px), uma linha por item: o que não cabe leva reticências e fica inteiro na
+  Ficha ou no editor. Layout fixo (`table-layout: fixed` + `<colgroup>`) quando há texto comprido.
+- `--zebra` no lugar do divisor entre linhas; `--divisor` só entre grupos (os dias dos Lançamentos).
+  Hover em `--hover`, nunca cor de estado.
+- Número à direita em `tabular-nums`, com sinal e cor como na lista.
+- O nome (ou a descrição) é o `<button>` que abre; clicar na linha faz o mesmo. Editor é uma linha
+  com `colspan`, logo abaixo. Uma ação por linha, no estilo do link do cartão.
 
 ## Navegação
 

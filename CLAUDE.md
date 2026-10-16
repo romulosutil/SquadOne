@@ -118,6 +118,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
                           avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora;
                           sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois
+    funil-lista.ts        PURO (16/10/2026): a Lista do Funil no desktop (Quadro | Lista, BP-TABELA): um sinal por linha, o mais
+                          forte (Resposta nova > Follow-up hoje > Perdido amanhã > Divergência > resto), ordem por último toque e
+                          próximo passo. Os Lançamentos também viram <table> a partir de 64 rem (FinEditorDeLancamento.vue)
     anotacao-de-envio.ts  PURO (14/10/2026): o toque em "Mandar o link"/"Mandar o follow-up" (Hoje, Funil, Ficha) anota
                           segunda_enviada/followup_enviado na aba CRM em segundo plano; marca local até o retrato confirmar
                           (10 min); falha = "anote à mão", o WhatsApp abre igual. Interesse parado não some da Hoje (server/crm.ts)

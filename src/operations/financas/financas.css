@@ -126,6 +126,28 @@
 .fin-editor .fin-marca { display: flex; align-items: center; gap: var(--esp-2); min-height: var(--toque); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .fin-editor .fin-marca input { width: 1.2rem; height: 1.2rem; }
 
+/* Tabela de lançamentos (16/10/2026, só a partir de 64 rem; abaixo, a lista de cima). BP-TABELA:
+   cabeçalho preso ao rolar, zebra no lugar do divisor, valor à direita em tabular-nums, linha de 44 px,
+   o dia só na primeira linha do grupo e um divisor entre os dias. O editor é uma linha com colspan. */
+.fin-tabela { width: 100%; border-collapse: collapse; font-size: var(--tam-apoio); }
+.fin-tabela th { position: sticky; top: 0; z-index: var(--camada-fixa); padding: var(--esp-2) var(--esp-3); border-bottom: var(--linha-fina); background: var(--superficie); color: var(--texto-2); font-weight: var(--peso-medio); text-align: left; white-space: nowrap; }
+.fin-tabela td { height: var(--toque); padding: var(--esp-1) var(--esp-3); vertical-align: middle; overflow-wrap: anywhere; }
+.fin-tabela tbody + tbody { border-top: var(--divisor); }
+.fin-tabela tr.is-par td { background: var(--zebra); }
+.fin-tabela tbody tr:not(.fin-tabela__editor) { cursor: pointer; }
+.fin-tabela tbody tr:not(.fin-tabela__editor):hover td { background: var(--hover); }
+.fin-tabela tr.is-aberto td { background: var(--superficie-2); }
+.fin-tabela small { display: block; color: var(--texto-2); font-size: var(--tam-mini); }
+.fin-tabela small.fin-tabela__regra { display: inline; }
+.fin-tabela__data { width: 1%; color: var(--texto-2); font-weight: var(--peso-medio); white-space: nowrap; }
+.fin-tabela__valor, .fin-tabela th.fin-tabela__valor { width: 1%; text-align: right; white-space: nowrap; }
+.fin-tabela td.fin-tabela__valor { font-size: var(--tam-texto); }
+.fin-tabela__abrir { padding: 0; border: 0; background: none; color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-medio); text-align: left; cursor: pointer; }
+.fin-tabela tr:hover .fin-tabela__abrir { text-decoration: underline; text-underline-offset: 3px; }
+.fin-tabela__editor td { height: auto; padding: 0 var(--esp-3) var(--esp-2); background: var(--superficie-2); }
+.fin-tabela__editor .fin-editor { grid-template-columns: minmax(12rem, 20rem) minmax(0, 1fr); align-items: end; margin: 0; }
+.fin-tabela__editor .fin-editor > :not(label) { grid-column: 1 / -1; }
+
 .fin-barra { position: relative; display: block; height: 0.7rem; border: var(--linha-fina); background: var(--superficie); overflow: hidden; }
 .fin-barra i { position: absolute; inset: 0 auto 0 0; background: var(--acento); }
 .fin-barra--dupla { height: 0.9rem; }

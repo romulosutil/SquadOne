@@ -67,6 +67,8 @@
   --foco: #1e64d4;
   /* Hover nunca em cor de estado (design.md): o comum escurece para a superfície 2. */
   --hover: var(--superficie-2);
+  /* Zebra de tabela (16/10/2026): meio caminho até a superfície 2, para o hover ainda aparecer por cima. */
+  --zebra: color-mix(in srgb, var(--superficie-2) 50%, var(--superficie));
 
   /* Etapas do funil: pastéis fixos nos dois temas; sobre eles o texto é sempre a tinta. */
   --etapa-novo: var(--cor-papel-forte);
