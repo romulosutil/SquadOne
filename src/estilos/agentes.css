@@ -2,21 +2,71 @@
  * Peças dos agentes (cartões, botões, campos) na casca mobile (07/10/2026).
  * Só tokens (tokens.css): o modo escuro vem de graça. Toque mínimo de 44 px,
  * estado sempre com palavra (design.md).
+ *
+ * 16/10/2026, neobrutalismo saudável: um nível de contorno por tela (.bloco); dentro
+ * dele, fundo (.zona) ou divisor, nunca outra caixa com borda; sombra só no primário.
  */
+
+/* Bloco (BP-BLOCO): o único nível de contorno de uma tela ou folha. Sem sombra: ela fica
+   para o botão primário, que assim é a única coisa que salta. */
+.bloco {
+  display: grid;
+  gap: var(--respiro-interno);
+  min-width: 0;
+  padding: var(--respiro-bloco);
+  border: var(--linha);
+  border-radius: var(--raio-bloco);
+  background: var(--superficie);
+  color: var(--texto);
+}
+.bloco > :is(h2, h3, p) { margin: 0; }
+
+/* Zona (BP-ZONA): agrupa dentro de um bloco por fundo, não por borda. O realce é o
+   "o que fazer agora"; os de estado repetem o semáforo do recado. */
+.zona {
+  display: grid;
+  gap: var(--esp-2);
+  min-width: 0;
+  padding: var(--esp-3) var(--esp-4);
+  border: 0;
+  border-radius: var(--raio-controle);
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+.zona > :is(h3, h4, p) { margin: 0; }
+.zona--realce { background: var(--realce); }
+.zona--ok { background: var(--ok-fundo); }
+.zona--atencao { background: var(--atencao-fundo); }
+.zona--erro { background: var(--erro-fundo); }
+
+/* Número protagonista (total, contagem): grande e tabular, com o rótulo colado. */
+.numero-grande { margin: 0; font-size: var(--tam-numero); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; }
 
 .cartao {
   display: grid;
   gap: var(--esp-2);
   min-width: 0;
-  padding: var(--esp-4);
+  padding: var(--respiro-bloco);
   border: var(--linha);
+  border-radius: var(--raio-bloco);
   background: var(--superficie);
   color: var(--texto);
-  box-shadow: var(--sombra);
 }
-.cartao--decisao { border-left-width: 8px; border-left-color: var(--acento); }
-.cartao--ajuste { border-left-width: 8px; border-left-color: var(--positivo); }
-.cartao--falha { border-left-width: 8px; border-left-color: var(--negativo); }
+.cartao--decisao { border-left-width: var(--faixa-forte); border-left-color: var(--acento); }
+.cartao--ajuste { border-left-width: var(--faixa-forte); border-left-color: var(--positivo); }
+.cartao--falha { border-left-width: var(--faixa-forte); border-left-color: var(--negativo); }
+/* Cartão dentro de bloco vira zona: sem borda nem sombra; a faixa do tipo continua, por
+   sombra interna, para o canto arredondado não entortar a faixa. Era o "cartão sobre cartão". */
+:is(.bloco, .zona, .hoje__bloco) .cartao {
+  padding: var(--esp-3) var(--esp-4);
+  border: 0;
+  border-radius: var(--raio-controle);
+  background: var(--superficie-2);
+  box-shadow: none;
+}
+:is(.bloco, .zona, .hoje__bloco) .cartao--decisao { box-shadow: inset var(--faixa) 0 0 var(--acento); }
+:is(.bloco, .zona, .hoje__bloco) .cartao--ajuste { box-shadow: inset var(--faixa) 0 0 var(--positivo); }
+:is(.bloco, .zona, .hoje__bloco) .cartao--falha { box-shadow: inset var(--faixa) 0 0 var(--negativo); }
 .cartao h3 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); line-height: 1.25; overflow-wrap: anywhere; }
 .cartao p { margin: 0; overflow-wrap: anywhere; }
 
@@ -27,6 +77,7 @@
   align-items: center;
   padding: var(--esp-0) var(--esp-2);
   border: var(--linha-fina);
+  border-radius: var(--raio-selo);
   background: var(--superficie-2);
   color: var(--texto);
   font-size: var(--tam-mini);
@@ -44,8 +95,62 @@
 .texto-2 { color: var(--texto-2); }
 .texto-pequeno { font-size: var(--tam-apoio); }
 
-.acoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+/* Topo alinhado: o "Mais ações" abre para baixo sem empurrar o primário ao lado. */
+.acoes { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--esp-2); }
 .acoes--fim { justify-content: flex-end; }
+
+/* Mais ações (BP-MAIS-ACOES): o que não é o primário nem o único secundário do bloco.
+   Lista vertical com divisor dentro de um <details> (teclado e leitor de tela de graça),
+   nunca uma fileira de botões iguais disputando o olho. */
+.mais-acoes { min-width: 0; }
+.mais-acoes > summary {
+  display: inline-flex;
+  min-height: var(--toque);
+  align-items: center;
+  gap: var(--esp-2);
+  padding: 0 var(--esp-4);
+  border-radius: var(--raio-controle);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font-size: var(--tam-apoio);
+  font-weight: var(--peso-forte);
+  list-style: none;
+  cursor: pointer;
+}
+.mais-acoes > summary::-webkit-details-marker { display: none; }
+.mais-acoes > summary::after { content: "▾"; color: var(--texto-2); }
+.mais-acoes[open] > summary::after { content: "▴"; }
+.mais-acoes > summary:hover { filter: brightness(0.96); }
+.mais-acoes[open] > .lista-acoes { margin-top: var(--esp-2); }
+.lista-acoes {
+  display: grid;
+  margin: 0;
+  padding: 0 var(--esp-4);
+  border-radius: var(--raio-controle);
+  background: var(--superficie-2);
+  list-style: none;
+}
+.lista-acoes > li + li { border-top: var(--divisor); }
+.lista-acoes :is(a, button) {
+  display: flex;
+  width: 100%;
+  min-height: var(--toque);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-weight: var(--peso-medio);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.lista-acoes :is(a, button)::after { content: "›"; color: var(--texto-2); font-weight: var(--peso-forte); }
+.lista-acoes :is(a, button):hover { text-decoration: underline; text-underline-offset: 3px; }
+.lista-acoes :is(a, button):disabled { opacity: 0.55; cursor: not-allowed; }
 
 .botao {
   display: inline-flex;
@@ -56,6 +161,7 @@
   gap: var(--esp-1);
   padding: 0 var(--esp-4);
   border: var(--linha);
+  border-radius: var(--raio-controle);
   background: var(--superficie);
   color: var(--texto);
   font: inherit;
@@ -63,15 +169,18 @@
   font-weight: var(--peso-forte);
   text-decoration: none;
   cursor: pointer;
-  box-shadow: var(--sombra-pequena);
 }
+/* Três degraus (UX Patterns, "Button"): primário amarelo com sombra, um por tela ou folha;
+   secundário só com contorno; leve (terciário) só com fundo. Antes todo botão tinha sombra
+   e o primário não se destacava de nada. */
 .botao:hover:not(:disabled) { background: var(--hover); }
-.botao:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
+.botao:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 .botao:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
-.botao--primario { background: var(--destaque); color: var(--destaque-texto); }
+.botao--primario { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra); }
 .botao--primario:hover:not(:disabled) { background: var(--destaque); filter: brightness(0.95); }
 .botao--perigo { border-color: var(--negativo); color: var(--negativo); }
-.botao--leve { border-width: 2px; box-shadow: none; padding: 0 var(--esp-3); }
+.botao--leve { border-color: transparent; background: var(--superficie-2); padding: 0 var(--esp-3); }
+.botao--leve:hover:not(:disabled) { background: var(--superficie-2); filter: brightness(0.95); }
 .botao--largo { width: 100%; }
 
 .campo {
@@ -79,7 +188,8 @@
   min-width: 0;
   min-height: var(--toque);
   padding: var(--esp-2) var(--esp-3);
-  border: var(--linha-fina);
+  border: var(--linha);
+  border-radius: var(--raio-controle);
   background: var(--superficie);
   color: var(--texto);
   font: inherit;
@@ -92,15 +202,16 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 .rotulo small { color: var(--texto-2); font-weight: var(--peso-medio); }
 .contador { justify-self: end; color: var(--texto-2); font-size: var(--tam-mini); font-variant-numeric: tabular-nums; }
 
-.quadro { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 2px dashed var(--borda); }
+.quadro { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: var(--linha-espessura) dashed var(--borda); border-radius: var(--raio-controle); }
 
-.recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+/* Recado: frase de estado dentro de um bloco. Fundo, sem borda: é uma zona, não outra caixa. */
+.recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--superficie-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .recado--erro { background: var(--erro-fundo); }
 .recado--atencao { background: var(--atencao-fundo); }
 .recado--ok { background: var(--ok-fundo); }
 
 /* Segmentado (Auto/Foco/Baixa, Lista/Mapa, Site/Organizar): 44 px por botão. */
-.segmentado { display: flex; width: 100%; border: var(--linha); background: var(--superficie); }
+.segmentado { display: flex; width: 100%; border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); overflow: hidden; }
 .segmentado button {
   display: flex;
   min-width: 0;
@@ -122,6 +233,8 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 .segmentado button[aria-selected="true"] { background: var(--destaque); color: var(--destaque-texto); }
 .segmentado button:disabled { opacity: 0.55; cursor: not-allowed; }
 .segmentado--auto { width: fit-content; max-width: 100%; }
+/* O overflow do canto arredondado cortaria o anel de fora: o foco entra para dentro do botão. */
+.segmentado button:focus-visible { outline-offset: -5px; }
 
 /* Escolhas (16/10/2026): como o segmentado, mas quebra linha. Para opções de rótulo longo ou
    em número variável (as variantes de um texto da colinha). Escolhido em --destaque. */
@@ -130,8 +243,10 @@ textarea.campo { resize: vertical; line-height: 1.4; }
   min-height: var(--toque);
   /* Não estica: na segunda linha, dois botões viravam faixas de meia tela. No celular estreito, sim. */
   flex: 0 1 auto;
-  padding: var(--esp-1) var(--esp-3);
-  border: var(--linha-fina);
+  padding: var(--esp-1) var(--esp-4);
+  /* Chip em pílula, como os filtros das referências: lê como escolha, não como ação. */
+  border: var(--linha);
+  border-radius: var(--raio-pilula);
   background: var(--superficie);
   color: var(--texto);
   font: inherit;
@@ -171,7 +286,7 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 
 /* Estado de agente: sempre com palavra; o ponto só reforça. */
 .estado { display: inline-flex; align-items: center; gap: var(--esp-1); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
-.estado::before { content: ""; width: 0.6rem; height: 0.6rem; flex-shrink: 0; border: 2px solid var(--borda); background: var(--superficie-2); }
+.estado::before { content: ""; width: 0.6rem; height: 0.6rem; flex-shrink: 0; border: var(--linha); border-radius: 50%; background: var(--superficie-2); }
 .estado.is-atendendo::before, .estado.is-em_bloco::before { background: var(--destaque); }
 .estado.is-com_agenda::before, .estado.is-proximo::before, .estado.is-responsavel::before { background: var(--positivo); }
 .estado.is-livre::before { background: var(--ok-fundo); }

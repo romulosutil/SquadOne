@@ -23,8 +23,12 @@ tamanho. Tokens em `tokens.css`.
 | `--fundo` | fundo da página |
 | `--superficie`, `--superficie-2` | cartão; cartão dentro de cartão, faixa |
 | `--texto`, `--texto-2` | texto; texto secundário (datas, fontes) |
-| `--borda`, `--linha`, `--linha-fina` | contorno: ver "Força em ação e estado" abaixo |
-| `--sombra`, `--sombra-pequena` | sombra dura, deslocada; nada de desfoque; uma por pilha |
+| `--borda`, `--linha`, `--linha-fina` | contorno de 2 px (bloco, botão, campo) e de 1 px (selo, chip, amostra): ver "Neobrutalismo saudável" |
+| `--sombra`, `--sombra-pequena` | sombra dura, deslocada, sem desfoque: só no botão primário e na folha por cima |
+| `--raio-bloco`, `--raio-controle`, `--raio-selo`, `--raio-pilula` | 16, 10 e 6 px e a pílula: bloco e folha; botão, campo e zona; selo; chip |
+| `--respiro-bloco`, `--respiro-pilha`, `--respiro-interno` | padding do bloco, distância entre blocos e entre peças de dentro (20/24/12 no celular, 24/32/16 no desktop) |
+| `--realce` | fundo pastel do "o que fazer agora" dentro de um bloco (`.zona--realce`) |
+| `--tam-numero` | o número protagonista de um bloco (`.numero-grande`) |
 | `--destaque` + `--destaque-texto` | seleção atual, ação primária |
 | `--positivo`, `--negativo` | entrada/saída de dinheiro (com sinal) |
 | `--ok-fundo`, `--atencao-fundo`, `--erro-fundo` | semáforo das conexões e avisos |
@@ -33,7 +37,6 @@ tamanho. Tokens em `tokens.css`.
 | `--toque`, `--toque-grande` | 44 px (mínimo de tudo que se toca) e 48 px (o envio principal) |
 | `--divisor` | 1 px a 35% de `--borda`, entre linhas de lista |
 | `--faixa`, `--faixa-forte` | 6 e 8 px: a faixa à esquerda que diz o tipo (citação, mensagem, cartão de decisão) |
-| `--raio-pilula` | o único raio do sistema (filtros de produto e de nicho); o resto é canto vivo |
 | `--hover` | fundo de hover do comum (`--superficie-2`); nunca cor de estado |
 | `--zebra` | linha par de tabela (BP-TABELA): meio caminho até `--superficie-2`, para o hover aparecer por cima |
 | `--etapa-*`, `--sobre-pastel` | os pastéis das etapas do funil, fixos nos dois temas, e a tinta por cima |
@@ -57,18 +60,53 @@ Tracking: `-0.02em` no `--tam-secao` e no `--tam-titulo`; `-0.01em` (ou 0) do
 `--tam-nome` para baixo. A Inter a 800 já é compacta: mais apertado que isso
 encosta as letras.
 
+## Neobrutalismo saudável (16/10/2026)
+
+Mesmo depois da auditoria de 15/10, o app cansava: caixa dentro de caixa (a Ficha tinha folha >
+bloco > cartão > selo, quatro contornos), 3 px e sombra em todo bloco, cinco botões iguais em
+fileira. As referências que o Rômulo mandou (Dribbble: fintech e saúde mental em neobrutalismo)
+mantêm a tinta e a sombra dura, mas usam pouco: canto arredondado médio, contorno de 2 px, pastel
+como fundo de seção inteira, muito respiro, número grande e **uma** coisa que salta por tela.
+Fundamento de interação no UX Patterns ("Button": um primário por tela, hierarquia
+primário/secundário/terciário; "Card Grid": não fazer todo painel parecer igualmente importante).
+
+### As quatro regras de composição (BP-R1 a BP-R4)
+
+1. **Um nível de contorno (BP-R1).** Numa tela ou folha, só o bloco (`.bloco`, `.hoje__bloco`,
+   `.fin-bloco`, `.crm-ficha__bloco`...) tem borda. Dentro dele, agrupe com **fundo**
+   (`.zona`, `.zona--realce`, `.recado`) ou com **divisor** (`--divisor`), nunca com outra
+   caixa de borda. A folha (Sheet) conta como a tela: dentro dela, blocos; dentro dos blocos,
+   zonas. `.cartao` dentro de `.bloco`, `.zona` ou `.hoje__bloco` já sai achatado (sem borda
+   nem sombra, faixa do tipo por sombra interna).
+2. **Um primário por tela ou folha (BP-R2).** Amarelo com `--sombra`: a ação que resolve o motivo
+   de estar ali. Numa lista (cada cartão com a sua ação), a ação da linha é secundária ou link; o
+   primário da tela é um só. Botões em três degraus: `.botao--primario` (amarelo + sombra),
+   `.botao` (contorno, sem sombra), `.botao--leve` (só fundo, terciário).
+3. **Secundárias agrupadas (BP-R3).** À vista, o primário e no máximo **um** secundário. Três
+   ações ou mais: as outras vão para `details.mais-acoes > ul.lista-acoes` (lista vertical com
+   divisor e seta), nunca uma fileira de botões iguais. Só não esconda ali o que é o motivo da
+   tela (UX Patterns: "don't hide important actions behind dropdown menus").
+4. **Respiro antes de borda (BP-R4).** Separe primeiro por espaço (`--respiro-pilha` entre
+   blocos, maior que `--respiro-interno` dentro), depois por fundo, por linha por último.
+
 ### Força em ação e estado, calma em leitura
 
-- **3 px** (`--linha`) só no contorno externo de um bloco de tela
-  (`.hoje__bloco`, `.fin-bloco`, `.crm-topo`, `.crm-coluna`, `.crm-ficha__cabeca`)
-  e em botão ou link de ação.
-- **2 px** (`--linha-fina`) em cartão de lista (`.crm-cartao`, `.crm-grupo`,
-  `.crm-ficha__bloco`, `.crm-colinha__secao`), campo e selo.
+- **2 px** (`--linha`) no contorno do bloco de tela e da folha, em botão, campo e segmentado.
+  Nada de 3 px: era o que fazia tudo gritar igual.
+- **1 px** (`--linha-fina`) só em peça pequena: selo, chip, amostra. Cartão de lista dentro de
+  bloco não ganha `--linha-fina`: não tem borda nenhuma (BP-R1).
 - **1 px a 35%** de `--borda` entre linhas de uma lista (`.crm-item`,
-  `.fin-linhas`). Nada de borda em volta de cada linha.
-- **Sombra** só no que se toca ou no que está por cima (botão, folha, cabeça da
-  tela, cartão de decisão solto). Uma por pilha: o `.cartao` dentro de
-  `.hoje__bloco` e os `.fin-bloco` não têm; cartão de lista também não.
+  `.fin-linhas`, `.lista-acoes`). Nada de borda em volta de cada linha.
+- **Raio**: `--raio-bloco` (16) no bloco e na folha, `--raio-controle` (10) em botão, campo,
+  segmentado e zona, `--raio-selo` (6) em selo, `--raio-pilula` em chip e `.escolhas`. Por dentro
+  sempre menor que por fora. Só por token: o teste barra px solto em `border-radius`.
+- **Sombra** só no botão primário e no que está por cima (folha no desktop, aviso, o pedido
+  preso do /design-system). Bloco de tela, cabeça de tela e cartão não têm. Só por token: o teste
+  barra sombra deslocada solta (`inset`, a faixa do tipo, passa).
+- **Pastel** como fundo de seção inteira, não como caixa: `--realce` para o "o que fazer agora",
+  `--ok-fundo`/`--atencao-fundo`/`--erro-fundo` para estado, `--superficie-2` para o neutro.
+- **Número grande**: o número que importa no bloco em `.numero-grande` (`--tam-numero`), com o
+  rótulo colado; um por bloco.
 - **Caixa alta espaçada** só em selo e pílula de estado (`.selo`, `.crm-tag`,
   `.fin-pilula`: uma ou duas palavras). Rótulo de campo, kicker e título de
   bloco em caixa normal.
@@ -92,7 +130,10 @@ inteiro daquela aba até recarregar, e "Copiar pedido" devolve o bloco de CSS e 
 na conversa. Para pedir mudança visual, cite o código `BP-` e, se for de token, cole o pedido.
 
 `src/blueprint/blueprint.test.ts` barra o que foge da escala em qualquer `.css` ou `<style>` de
-`src/`: rem/px solto em espaço e em `font-size`, peso numérico, e `var(--x)` que não existe.
+`src/`: rem/px solto em espaço e em `font-size`, peso numérico, px solto em `border-radius`
+(16/10/2026), sombra deslocada que não é `--sombra`/`--sombra-pequena` (16/10/2026) e `var(--x)`
+que não existe. Exceção só com motivo escrito no teste (`EXCECOES`, `EXCECOES_DE_REGRA`). As regras
+de composição (BP-R1 a BP-R4) não dá para conferir por CSS: são revisão, com o código na mão.
 
 ## Uma decisão por vez (16/10/2026)
 
@@ -109,8 +150,17 @@ na conversa. Para pedir mudança visual, cite o código `BP-` e, se for de token
 | Classe | Quando |
 |---|---|
 | `.segmentado` | 2 a 4 opções curtas numa linha (Lista/Mapa, Site/Organizar, Próximo passo/Proposta/Nota) |
-| `.escolhas` | rótulo longo ou número variável de opções; quebra linha, não estica (só abaixo de 30 rem) |
+| `.escolhas` | chips em pílula: rótulo longo ou número variável de opções; quebra linha, não estica (só abaixo de 30 rem) |
 | `details.dobra` | consulta: fechada por padrão, aberta sozinha só quando há falha dentro |
+| `details.mais-acoes` | ações secundárias além da primeira (BP-R3): lista com divisor, não fileira |
+
+### Componentes de composição
+
+| Classe | Quando |
+|---|---|
+| `.bloco` | o contorno de uma seção da tela ou da folha (BP-BLOCO); `--respiro-bloco` por dentro |
+| `.zona`, `.zona--realce` | agrupar dentro do bloco por fundo (BP-ZONA); o realce é o próximo passo, um por bloco |
+| `.numero-grande` | o número protagonista do bloco (BP-NUMERO) |
 
 ## Tabela no desktop (BP-TABELA, 16/10/2026)
 
@@ -142,16 +192,18 @@ partir de 64 rem; abaixo, a lista de sempre, e só uma das duas no DOM (`matchMe
 ## Folha (Sheet)
 
 Tudo que abre por cima é uma folha (`components/Sheet.vue`): sobe de baixo no
-celular, com alça, e vira diálogo no meio da tela a partir de 48 rem. Título
-sempre; botão **Fechar** com texto (nunca só ✕); ação principal no rodapé, à
-direita. Esc fecha, o foco fica preso dentro e volta a quem abriu. Durante um
+celular, com alça e canto `--raio-bloco` em cima, e vira diálogo no meio da tela a partir de
+48 rem (o único lugar, com o botão primário, que leva `--sombra`). A folha é o contorno: dentro
+dela, blocos sem sombra e, dentro deles, zonas (BP-R1). Título sempre; botão **Fechar** com
+texto (nunca só ✕); ação principal no rodapé, à direita, e só uma (BP-R2). Esc fecha, o foco fica preso dentro e volta a quem abriu. Durante um
 envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 
 ## Agentes
 
 - **Cartão de decisão** (contratação, troca de squad): `.cartao--decisao`,
   faixa `--acento` à esquerda; ajuste de tempo em `--positivo`; falha do Dell
-  em `--negativo`. Selo em caixa alta com a palavra, nunca só a cor.
+  em `--negativo`. Selo em caixa alta com a palavra, nunca só a cor. Solto, tem contorno e
+  `--raio-bloco`; dentro de bloco vira zona (sem borda, faixa por sombra interna).
 - **Estado de agente** (`.estado`): ponto + palavra. Sem fonte é "Sem sinal",
   com o ponto tracejado e o texto em `--texto-2` — nunca "ocioso" inventado.
 - **Segmentado** (Auto/Foco/Baixa, Lista/Mapa, Site/Organizar): 44 px por
@@ -159,8 +211,8 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 
 ## Componentes de finanças
 
-- **Bloco**: `--superficie`, `--linha`, sem sombra (ela fica no `.fin-topo`), título curto em cima
-  ("Tenho", "Devo", "Gastei") e o total grande logo abaixo.
+- **Bloco**: `--superficie`, `--linha`, `--raio-bloco`, sem sombra, título curto em cima
+  ("Tenho", "Devo", "Gastei") e o total em `.numero-grande` logo abaixo.
 - **Barra de proporção**: largura em %, sempre com o número ao lado; nunca a
   barra sozinha.
 - **Semáforo de conexão**: pílula com a palavra (OK, Atualizando, Atenção,

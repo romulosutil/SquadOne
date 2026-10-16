@@ -212,10 +212,12 @@ html.com-folha { overflow: hidden; }
   width: 100%;
   max-height: 92dvh;
   flex-direction: column;
-  border-top: var(--linha);
+  /* Celular: sobe da borda de baixo, então contorno nos três lados de cima e canto só em cima. */
+  border: var(--linha);
+  border-bottom: 0;
   background: var(--superficie);
   color: var(--texto);
-  box-shadow: 0 -4px 0 var(--borda);
+  border-radius: var(--raio-bloco) var(--raio-bloco) 0 0;
   outline: none;
   animation: folha-sobe 160ms ease-out;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -231,7 +233,7 @@ html.com-folha { overflow: hidden; }
   cursor: grab;
   touch-action: none;
 }
-.folha__alca span { width: 3rem; height: 0.3rem; background: var(--texto-2); }
+.folha__alca span { width: 3rem; height: 0.3rem; border-radius: var(--raio-pilula); background: var(--texto-2); }
 
 .folha__topo {
   display: flex;
@@ -240,7 +242,7 @@ html.com-folha { overflow: hidden; }
   justify-content: space-between;
   gap: var(--esp-3);
   padding: 0 var(--esp-4) var(--esp-3);
-  border-bottom: var(--linha-fina);
+  border-bottom: var(--divisor);
 }
 .folha__titulos { min-width: 0; }
 .folha__topo h2 { margin: 0; font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
@@ -251,8 +253,9 @@ html.com-folha { overflow: hidden; }
   min-width: var(--toque);
   min-height: var(--toque);
   padding: 0 var(--esp-3);
-  border: var(--linha-fina);
-  background: var(--superficie-2);
+  border: var(--linha);
+  border-radius: var(--raio-controle);
+  background: var(--superficie);
   color: var(--texto);
   font: inherit;
   font-weight: var(--peso-forte);
@@ -277,7 +280,7 @@ html.com-folha { overflow: hidden; }
   justify-content: flex-end;
   gap: var(--esp-2);
   padding: var(--esp-3) var(--esp-4);
-  border-top: var(--linha-fina);
+  border-top: var(--divisor);
   background: var(--superficie-2);
 }
 
@@ -290,6 +293,8 @@ html.com-folha { overflow: hidden; }
     width: min(100%, 38rem);
     max-height: min(90dvh, 52rem);
     border: var(--linha);
+    border-radius: var(--raio-bloco);
+    overflow: hidden;
     box-shadow: var(--sombra);
     padding-bottom: 0;
   }

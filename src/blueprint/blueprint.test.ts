@@ -4,9 +4,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import {
   contraste, cssDoArquivo, desviosDaEscala, grupoDoToken, lerRgb, lerTokens, nivelWcag, pedidoDeMudanca,
-  PARES_DE_CONTRASTE, variaveisDefinidas, variaveisUsadas,
+  PARES_DE_CONTRASTE, variaveisDefinidas, variaveisUsadas, type Desvio,
 } from './tokens'
-import { CATALOGO } from './catalogo'
+import { CATALOGO, PRINCIPIOS, REGRAS_DE_COMPOSICAO } from './catalogo'
 
 const RAIZ = join(import.meta.dirname, '..')
 const TOKENS = readFileSync(join(RAIZ, 'estilos', 'tokens.css'), 'utf8')
@@ -41,8 +41,8 @@ describe('lerTokens', () => {
 
   it('agrupa pelo prefixo', () => {
     assert.deepEqual(
-      ['--cor-amarelo', '--esp-3', '--tam-nome', '--peso-forte', '--linha-fina', '--toque', '--camada-folha', '--etapa-ganho', '--fonte', '--hover'].map(grupoDoToken),
-      ['paleta', 'espaco', 'tamanho', 'peso', 'forma', 'toque', 'layout', 'etapas', 'fonte', 'semanticos'],
+      ['--cor-amarelo', '--esp-3', '--tam-nome', '--peso-forte', '--linha-fina', '--toque', '--camada-folha', '--etapa-ganho', '--fonte', '--hover', '--respiro-bloco', '--raio-bloco', '--realce'].map(grupoDoToken),
+      ['paleta', 'espaco', 'tamanho', 'peso', 'forma', 'toque', 'layout', 'etapas', 'fonte', 'semanticos', 'respiro', 'forma', 'semanticos'],
     )
   })
 
@@ -97,8 +97,8 @@ describe('pedidoDeMudanca', () => {
 })
 
 describe('catálogo', () => {
-  it('os códigos são únicos e no formato BP-XXX', () => {
-    const ids = CATALOGO.map((c) => c.id)
+  it('os códigos (peças, princípios e regras) são únicos e no formato BP-XXX', () => {
+    const ids = [...CATALOGO, ...PRINCIPIOS, ...REGRAS_DE_COMPOSICAO].map((c) => c.id)
     assert.equal(new Set(ids).size, ids.length)
     assert.ok(ids.every((id) => /^BP-[A-Z0-9-]+$/.test(id)), ids.join(' '))
   })
@@ -109,15 +109,40 @@ const EXCECOES: Record<string, string> = {
   // Mapa isométrico: tamanhos em px casam com os sprites e a grade de tiles, não com o texto.
   'components/GameMap.vue': 'geometria do mapa',
 }
+// Exceção de uma regra só, num arquivo, também com o motivo.
+const EXCECOES_DE_REGRA: Record<string, Partial<Record<Desvio['regra'], string>>> = {
+  // Aviso do runtime: aparece antes (ou no lugar) da casca, com cores fixas de propósito.
+  'RootApp.vue': { sombra: 'aviso do runtime fora da casca' },
+  // "Como funciona": a sombra coral marca o passo em destaque do fluxo. Sai quando Mais
+  // passar pela regra de 16/10/2026 (um primário por tela).
+  'operations/mais.css': { sombra: 'passo em destaque do Como funciona' },
+}
 
 describe('homogeneidade dos estilos', () => {
   const arquivos = estilos().filter((a) => !a.arquivo.endsWith('estilos/tokens.css'))
 
-  it('nenhum rem/px solto em espaço, tamanho de fonte ou peso fora dos tokens', () => {
+  it('nenhum rem/px solto em espaço, tamanho de fonte, peso, raio ou sombra fora dos tokens', () => {
     const desvios = arquivos
       .filter((a) => !EXCECOES[a.arquivo])
-      .flatMap((a) => desviosDaEscala(a.css).map((d) => `${a.arquivo}: [${d.regra}] ${d.declaracao}`))
+      .flatMap((a) => desviosDaEscala(a.css)
+        .filter((d) => !EXCECOES_DE_REGRA[a.arquivo]?.[d.regra])
+        .map((d) => `${a.arquivo}: [${d.regra}] ${d.declaracao}`))
     assert.deepEqual(desvios, [])
+  })
+
+  it('o detector de raio e sombra deixa passar token, %, inset e none', () => {
+    const css = '.a { border-radius: 8px; box-shadow: 3px 3px 0 #000 } .b { border-radius: var(--raio-bloco); border-top-left-radius: 50%; box-shadow: var(--sombra) } '
+      + '.c { box-shadow: inset var(--faixa) 0 0 var(--acento), none; border-radius: 0 } .d { border-bottom-right-radius: 0.5rem; box-shadow: var(--sombra), 0 0 0 2px red }'
+    assert.deepEqual(desviosDaEscala(css).map((d) => d.regra), ['raio', 'raio', 'sombra', 'sombra'])
+  })
+
+  it('a sombra dura deslocada só existe nos dois tokens, e o raio nos quatro', () => {
+    const tokens = lerTokens(TOKENS)
+    assert.deepEqual(tokens.filter((t) => t.nome.startsWith('--sombra')).map((t) => t.nome), ['--sombra', '--sombra-pequena'])
+    assert.deepEqual(tokens.filter((t) => t.nome.startsWith('--raio')).map((t) => t.nome), ['--raio-bloco', '--raio-controle', '--raio-selo', '--raio-pilula'])
+    // Por dentro menor que por fora: o canto do controle acompanha o do bloco.
+    const px = (n: string) => Number.parseFloat(tokens.find((t) => t.nome === n)!.valor)
+    assert.ok(px('--raio-bloco') > px('--raio-controle') && px('--raio-controle') > px('--raio-selo'))
   })
 
   it('todo var(--x) usado existe em tokens.css ou no próprio arquivo', () => {

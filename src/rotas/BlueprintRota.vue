@@ -18,7 +18,7 @@ import Sheet from '../components/Sheet.vue'
 import CrmFicha from '../operations/CrmFicha.vue'
 import CrmTrecho from '../operations/CrmTrecho.vue'
 import '../operations/crm.css'
-import { ANATOMIA_DA_FICHA, CATALOGO, PRINCIPIOS } from '../blueprint/catalogo'
+import { ANATOMIA_DA_FICHA, CATALOGO, PRINCIPIOS, REGRAS_DE_COMPOSICAO } from '../blueprint/catalogo'
 import { LEAD_DE_EXEMPLO } from '../blueprint/exemplo'
 import {
   GRUPOS, PARES_DE_CONTRASTE, contraste, lerRgb, lerTokens, nivelWcag, pedidoDeMudanca,
@@ -156,6 +156,7 @@ const escolhaDeExemplo = ref(0)
 
 const secoes = [
   { id: 'bp-principios', rotulo: 'Princípios' },
+  { id: 'bp-composicao', rotulo: 'Composição' },
   { id: 'bp-tokens', rotulo: 'Tokens' },
   { id: 'bp-contraste', rotulo: 'Contraste' },
   { id: 'bp-componentes', rotulo: 'Componentes' },
@@ -212,6 +213,61 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
       </ol>
     </section>
 
+    <!-- Composição (16/10/2026): as regras do neobrutalismo saudável lado a lado com o erro que
+         elas impedem. O "assim não" é desenhado à mão (bp-errado): com as classes de verdade, o
+         cartão dentro do bloco já sairia achatado e não mostraria o problema. -->
+    <section id="bp-composicao" class="bp-bloco" aria-labelledby="bp-composicao-titulo">
+      <h2 id="bp-composicao-titulo">Composição</h2>
+      <p class="texto-2 texto-pequeno">
+        Quatro regras que valem em toda tela e folha (design.md, "Neobrutalismo saudável"). O teste do blueprint confere raio e sombra;
+        o resto é revisão.
+      </p>
+      <ol class="bp-regras">
+        <li v-for="r in REGRAS_DE_COMPOSICAO" :key="r.id">
+          <span class="selo">{{ r.id }}</span>
+          <strong>{{ r.titulo }}</strong>
+          <span class="texto-2">{{ r.texto }}</span>
+        </li>
+      </ol>
+      <div class="bp-compara">
+        <figure class="bp-compara__lado">
+          <figcaption><span class="selo selo--erro">assim não</span> caixa em caixa, cinco botões iguais</figcaption>
+          <div class="bp-errado" aria-hidden="true">
+            <strong>Mapa respondido</strong>
+            <div class="bp-errado__caixa">
+              <span class="texto-pequeno">Próximo passo · com você</span>
+              <div class="bp-errado__caixa">Mandar o follow-up e oferecer os 20 minutos.</div>
+            </div>
+            <div class="bp-errado__fileira">
+              <span v-for="b in ['WhatsApp', 'Demo', 'Maps', 'Planilha', 'Copiar']" :key="b" class="bp-errado__botao">{{ b }}</span>
+            </div>
+          </div>
+        </figure>
+        <figure class="bp-compara__lado">
+          <figcaption><span class="selo selo--ok">assim</span> um contorno, fundo pastel, um primário</figcaption>
+          <section class="bloco" aria-label="Exemplo de composição certa">
+            <h3>Mapa respondido</h3>
+            <div class="zona zona--realce">
+              <span class="texto-2 texto-pequeno">Próximo passo · com você</span>
+              <strong>Mandar o follow-up e oferecer os 20 minutos.</strong>
+            </div>
+            <div class="acoes">
+              <button class="botao botao--primario" type="button">Abrir no WhatsApp</button>
+              <details class="mais-acoes">
+                <summary>Mais ações</summary>
+                <ul class="lista-acoes">
+                  <li><button type="button">Ver o demo</button></li>
+                  <li><button type="button">Abrir no Maps</button></li>
+                  <li><button type="button">Abrir a planilha</button></li>
+                  <li><button type="button">Copiar o texto</button></li>
+                </ul>
+              </details>
+            </div>
+          </section>
+        </figure>
+      </div>
+    </section>
+
     <section id="bp-tokens" class="bp-bloco" aria-labelledby="bp-tokens-titulo">
       <h2 id="bp-tokens-titulo">Tokens <span class="texto-2 bp-contagem">{{ tokens.length }} em src/estilos/tokens.css</span></h2>
       <div class="bp-filtros">
@@ -231,7 +287,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
           <li v-for="t in g.tokens" :key="t.nome" :class="{ 'is-editado': editados[t.nome] !== undefined }">
             <div class="bp-amostra" :class="`is-${g.id}`" aria-hidden="true">
               <span v-if="ehCor(g.id)" class="bp-amostra__cor" :style="{ background: `var(${t.nome})` }" />
-              <span v-else-if="g.id === 'espaco'" class="bp-amostra__barra" :style="{ width: `var(${t.nome})` }" />
+              <span v-else-if="g.id === 'espaco' || g.id === 'respiro'" class="bp-amostra__barra" :style="{ width: `var(${t.nome})` }" />
               <span v-else-if="g.id === 'tamanho'" :style="{ fontSize: `var(${t.nome})` }">Aa</span>
               <span v-else-if="g.id === 'peso'" :style="{ fontWeight: `var(${t.nome})` }">Aa</span>
               <span v-else-if="g.id === 'fonte'" :style="{ fontFamily: `var(${t.nome})` }">Aa</span>
@@ -286,12 +342,43 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
             <span class="texto-2 texto-pequeno">{{ c.regra }} <span class="bp-onde">({{ c.onde }})</span></span>
           </header>
           <div class="bp-peca__vivo">
-            <div v-if="c.id === 'BP-BOTAO'" class="acoes">
-              <button class="botao botao--primario" type="button">Salvar nota</button>
-              <button class="botao" type="button">Limpar</button>
-              <button class="botao botao--leve" type="button">Ver no Maps ↗</button>
-              <button class="botao botao--perigo" type="button">Arquivar</button>
-              <button class="botao" type="button" disabled>Aguarde…</button>
+            <section v-if="c.id === 'BP-BLOCO'" class="bloco" aria-label="Exemplo de bloco">
+              <h3>Follow-up para mandar</h3>
+              <p class="texto-2 texto-pequeno">Em contato há 3 a 6 dias. Quem leu e não respondeu vem primeiro.</p>
+            </section>
+            <div v-else-if="c.id === 'BP-ZONA'" class="bp-pilha bp-pilha--larga">
+              <div class="zona zona--realce">
+                <span class="texto-2 texto-pequeno">Próximo passo · com você</span>
+                <strong>Mandar o follow-up e oferecer os 20 minutos.</strong>
+              </div>
+              <div class="zona"><span class="texto-pequeno">Neutro: agrupa o que é consulta.</span></div>
+            </div>
+            <div v-else-if="c.id === 'BP-BOTAO'" class="bp-pilha">
+              <div class="acoes">
+                <button class="botao botao--primario" type="button">Salvar nota</button>
+                <button class="botao" type="button">Limpar</button>
+                <button class="botao botao--leve" type="button">Ver no Maps ↗</button>
+              </div>
+              <div class="acoes">
+                <button class="botao botao--perigo" type="button">Arquivar</button>
+                <button class="botao" type="button" disabled>Aguarde…</button>
+              </div>
+            </div>
+            <div v-else-if="c.id === 'BP-MAIS-ACOES'" class="acoes">
+              <button class="botao botao--primario" type="button">Abrir conversa no WhatsApp</button>
+              <details class="mais-acoes">
+                <summary>Mais ações</summary>
+                <ul class="lista-acoes">
+                  <li><a href="#bp-componentes">Ver o demo</a></li>
+                  <li><a href="#bp-componentes">Abrir no Maps</a></li>
+                  <li><a href="#bp-componentes">Abrir a planilha</a></li>
+                </ul>
+              </details>
+            </div>
+            <div v-else-if="c.id === 'BP-NUMERO'" class="bp-numero">
+              <span class="texto-2 texto-pequeno">Em contato</span>
+              <p class="numero-grande">1.610</p>
+              <span class="texto-2 texto-pequeno">12 com follow-up hoje</span>
             </div>
             <div v-else-if="c.id === 'BP-SEGMENTADO'" class="segmentado" role="group" aria-label="Exemplo de segmentado">
               <button v-for="o in ['Lista', 'Mapa']" :key="o" type="button" :aria-pressed="segmentoDeExemplo === o" @click="segmentoDeExemplo = o">{{ o }}</button>
@@ -375,32 +462,47 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
 </template>
 
 <style>
-.bp { display: grid; gap: var(--esp-4); width: 100%; max-width: 72rem; margin: 0 auto; color: var(--texto); }
+/* A página segue a regra que mostra (16/10/2026): cada seção é um bloco (um contorno), sem
+   sombra; dentro, as peças se separam por divisor e o palco dos exemplos é fundo, não caixa.
+   Só o pedido de mudança, preso por cima ao rolar, leva sombra. */
+.bp { display: grid; gap: var(--respiro-pilha); width: 100%; max-width: 72rem; margin: 0 auto; color: var(--texto); }
 .bp code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 .bp-sonda { position: absolute; width: 0; height: 0; overflow: hidden; }
 .bp-kicker { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .bp-topo,
-.bp-bloco { display: grid; gap: var(--esp-3); min-width: 0; padding: var(--esp-4); border: var(--linha); background: var(--superficie); }
-.bp-topo { box-shadow: var(--sombra); }
+.bp-bloco { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
 .bp-topo h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.05; }
 .bp-bloco h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--esp-2); margin: 0; font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; }
 .bp-bloco h3 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
+.bp-bloco > p { margin: 0; }
 .bp-apoio { margin: 0; max-width: var(--largura-leitura); color: var(--texto-2); }
 .bp-contagem { font-size: var(--tam-apoio); font-weight: var(--peso-medio); letter-spacing: 0; }
 .bp-topo__linha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3); }
 .bp-indice { display: flex; flex-wrap: wrap; gap: var(--esp-1) var(--esp-3); }
 .bp-indice a { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); text-underline-offset: 3px; }
 
-.bp-pedido { position: sticky; top: 0; z-index: var(--camada-fixa); border-color: var(--borda); box-shadow: var(--sombra); }
+.bp-pedido { position: sticky; top: 0; z-index: var(--camada-fixa); box-shadow: var(--sombra); }
 .bp-pedido__texto { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: var(--tam-apoio); }
 .bp-pedido p { margin: 0; }
 
-.bp-principios { display: grid; gap: var(--esp-3); margin: 0; padding: 0; list-style: none; }
-@media (min-width: 48rem) { .bp-principios { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.bp-principios li { display: grid; align-content: start; justify-items: start; gap: var(--esp-1); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
+.bp-principios,
+.bp-regras { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 48rem) { .bp-principios, .bp-regras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bp-principios li,
+.bp-regras li { display: grid; align-content: start; justify-items: start; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }
+
+.bp-compara { display: grid; gap: var(--respiro-interno); }
+@media (min-width: 48rem) { .bp-compara { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bp-compara__lado { display: grid; align-content: start; gap: var(--esp-2); min-width: 0; margin: 0; padding: var(--esp-4); border-radius: var(--raio-controle); background: var(--fundo); }
+.bp-compara__lado figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
+/* O erro desenhado à mão: é o app de antes (3 px, canto vivo, sombra em tudo, caixa em caixa). */
+.bp-errado { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 3px solid var(--borda); background: var(--superficie); box-shadow: var(--sombra); }
+.bp-errado__caixa { display: grid; gap: var(--esp-1); padding: var(--esp-2); border: 2px solid var(--borda); }
+.bp-errado__fileira { display: flex; flex-wrap: wrap; gap: var(--esp-1); }
+.bp-errado__botao { padding: var(--esp-1) var(--esp-2); border: 3px solid var(--borda); background: var(--superficie); font-size: var(--tam-apoio); font-weight: var(--peso-forte); box-shadow: var(--sombra-pequena); }
 
 .bp-filtros { max-width: 24rem; }
-.bp-grupo { display: grid; gap: var(--esp-2); padding-top: var(--esp-3); border-top: var(--linha-fina); }
+.bp-grupo { display: grid; gap: var(--esp-2); padding-top: var(--esp-4); border-top: var(--divisor); }
 .bp-grupo p { margin: 0; }
 .bp-tokens { display: grid; margin: 0; padding: 0; list-style: none; }
 .bp-tokens li { display: grid; grid-template-columns: 4rem minmax(0, 1fr); align-items: center; gap: var(--esp-2) var(--esp-3); padding: var(--esp-2) 0; border-bottom: var(--divisor); }
@@ -413,29 +515,32 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
 .bp-valor .campo { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: var(--tam-apoio); }
 .bp-token { display: grid; gap: var(--esp-0); min-width: 0; }
 .bp-amostra { display: grid; min-height: var(--toque); place-items: center start; color: var(--texto); }
-.bp-amostra__cor { width: 3rem; height: 2rem; border: var(--linha-fina); }
-.bp-amostra__barra { height: 1rem; background: var(--destaque); border: 1px solid var(--borda); }
-.bp-amostra__toque { display: block; max-width: 4rem; max-height: 4rem; border: 2px dashed var(--borda); }
+.bp-amostra__cor { width: 3rem; height: 2rem; border: var(--linha-fina); border-radius: var(--raio-selo); }
+.bp-amostra__barra { height: 1rem; border: var(--linha-fina); border-radius: var(--raio-selo); background: var(--destaque); }
+.bp-amostra__toque { display: block; max-width: 4rem; max-height: 4rem; border: var(--linha-espessura) dashed var(--borda); border-radius: var(--raio-controle); }
 .bp-amostra__forma { display: block; width: 3rem; height: 2rem; background: var(--superficie-2); }
 
 .bp-contraste { display: grid; margin: 0; padding: 0; list-style: none; }
 .bp-contraste li { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; align-items: center; gap: var(--esp-3); padding: var(--esp-2) 0; border-bottom: var(--divisor); }
 .bp-contraste li.is-falha { box-shadow: inset var(--faixa) 0 0 var(--negativo); padding-left: var(--esp-3); }
-.bp-contraste__amostra { display: grid; width: 3rem; height: 2.5rem; place-items: center; border: var(--linha-fina); font-weight: var(--peso-forte); }
+.bp-contraste__amostra { display: grid; width: 3rem; height: 2.5rem; place-items: center; border: var(--linha-fina); border-radius: var(--raio-selo); font-weight: var(--peso-forte); }
 .bp-contraste__par { display: grid; gap: var(--esp-0); min-width: 0; }
 .bp-contraste__nota { display: flex; align-items: center; gap: var(--esp-2); font-variant-numeric: tabular-nums; }
 
-.bp-pecas { display: grid; gap: var(--esp-3); }
+/* Peças separadas por divisor, não por caixa; o palco é o fundo da página, onde elas moram. */
+.bp-pecas { display: grid; gap: 0 var(--respiro-bloco); }
 @media (min-width: 64rem) { .bp-pecas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.bp-peca { display: grid; align-content: start; gap: var(--esp-3); min-width: 0; padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie); }
+.bp-peca { display: grid; align-content: start; gap: var(--esp-3); min-width: 0; padding: var(--respiro-interno) 0 var(--respiro-bloco); border-top: var(--divisor); }
 .bp-peca > header { display: grid; justify-items: start; gap: var(--esp-1); }
-.bp-peca__vivo { min-width: 0; padding: var(--esp-3); border: 2px dashed color-mix(in srgb, var(--borda) 50%, transparent); background: var(--fundo); }
+.bp-peca__vivo { min-width: 0; padding: var(--esp-4); border-radius: var(--raio-controle); background: var(--fundo); }
 .bp-onde { font-style: italic; }
 .bp-pilha { display: grid; gap: var(--esp-2); justify-items: start; }
+.bp-pilha--larga { justify-items: stretch; }
 .bp-linha { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.bp-numero { display: grid; gap: var(--esp-1); }
 
 .bp-anatomia { display: grid; margin: 0; padding: 0; list-style: none; counter-reset: none; }
 .bp-anatomia li { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-items: start; gap: var(--esp-0) var(--esp-3); padding: var(--esp-2) 0; border-bottom: var(--divisor); }
 .bp-anatomia li > :not(.bp-anatomia__n) { grid-column: 2; justify-self: start; }
-.bp-anatomia__n { grid-row: span 3; display: grid; width: 2rem; height: 2rem; place-items: center; border: var(--linha-fina); background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
+.bp-anatomia__n { grid-row: span 3; display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: var(--raio-pilula); background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
 </style>

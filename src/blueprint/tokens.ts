@@ -12,7 +12,7 @@
  */
 
 export type GrupoDeToken =
-  | 'paleta' | 'semanticos' | 'etapas' | 'forma' | 'toque' | 'layout' | 'espaco' | 'fonte' | 'peso' | 'tamanho'
+  | 'paleta' | 'semanticos' | 'etapas' | 'forma' | 'toque' | 'layout' | 'espaco' | 'respiro' | 'fonte' | 'peso' | 'tamanho'
 
 export interface Token {
   nome: string
@@ -31,8 +31,9 @@ export const GRUPOS: ReadonlyArray<{ id: GrupoDeToken; titulo: string; uso: stri
   { id: 'etapas', titulo: 'Etapas do funil', uso: 'Pastéis fixos nos dois temas; o texto sobre eles é sempre a tinta.' },
   { id: 'tamanho', titulo: 'Tamanhos de texto', uso: 'Seis degraus. Nada de rem solto em font-size.' },
   { id: 'peso', titulo: 'Pesos', uso: 'A hierarquia sai daqui. Nada de número solto em font-weight.' },
-  { id: 'espaco', titulo: 'Espaço', uso: 'Oito degraus. Nada de rem solto em padding, margin ou gap.' },
-  { id: 'forma', titulo: 'Forma', uso: 'Linha, divisor, faixa, sombra e o único raio.' },
+  { id: 'espaco', titulo: 'Espaço', uso: 'Dez degraus. Nada de rem solto em padding, margin ou gap.' },
+  { id: 'respiro', titulo: 'Respiro', uso: 'A densidade da tela: padding de bloco, distância entre blocos e dentro deles. O desktop abre um degrau.' },
+  { id: 'forma', titulo: 'Forma', uso: 'Contorno de 2 px, divisor, faixa, sombra (só no primário) e o raio. Nada de px solto em border-radius nem sombra solta.' },
   { id: 'toque', titulo: 'Toque', uso: 'Altura mínima do que se toca.' },
   { id: 'layout', titulo: 'Layout, camadas e movimento', uso: 'Larguras, ordem de empilhamento e duração.' },
   { id: 'fonte', titulo: 'Fonte', uso: 'Inter variável, hospedada no app.' },
@@ -42,6 +43,7 @@ export function grupoDoToken(nome: string): GrupoDeToken {
   if (nome.startsWith('--cor-')) return 'paleta'
   if (nome.startsWith('--etapa-') || nome === '--sobre-pastel') return 'etapas'
   if (nome.startsWith('--esp-')) return 'espaco'
+  if (nome.startsWith('--respiro-')) return 'respiro'
   if (nome.startsWith('--tam-')) return 'tamanho'
   if (nome.startsWith('--peso-')) return 'peso'
   if (nome === '--fonte') return 'fonte'
@@ -172,6 +174,8 @@ export const PARES_DE_CONTRASTE: readonly ParDeContraste[] = [
   { texto: '--texto', fundo: '--ok-fundo', uso: 'recado e selo de OK', minimo: 4.5 },
   { texto: '--texto', fundo: '--atencao-fundo', uso: 'recado e selo de atenção', minimo: 4.5 },
   { texto: '--texto', fundo: '--erro-fundo', uso: 'recado e selo de erro', minimo: 4.5 },
+  { texto: '--texto', fundo: '--realce', uso: 'zona do que fazer agora', minimo: 4.5 },
+  { texto: '--texto-2', fundo: '--realce', uso: 'apoio na zona de realce', minimo: 4.5 },
   { texto: '--positivo', fundo: '--superficie', uso: 'valor de entrada', minimo: 4.5 },
   { texto: '--negativo', fundo: '--superficie', uso: 'valor de saída', minimo: 4.5 },
   { texto: '--barra-texto', fundo: '--barra-fundo', uso: 'barra inferior e trilho', minimo: 4.5 },
@@ -222,13 +226,14 @@ function semComentarios(css: string): string {
 }
 
 export interface Desvio {
-  regra: 'espaco' | 'tamanho' | 'peso'
+  regra: 'espaco' | 'tamanho' | 'peso' | 'raio' | 'sombra'
   declaracao: string
 }
 
 /**
  * O que foge da escala: rem ou px solto em padding, margin e gap; rem ou px em font-size;
- * número em font-weight. `0`, `auto`, `em`, `%`, `vw`, `env()` e os tokens passam.
+ * número em font-weight; px ou rem em border-radius; sombra deslocada que não é token.
+ * `0`, `auto`, `em`, `%`, `vw`, `env()` e os tokens passam.
  */
 export function desviosDaEscala(css: string): Desvio[] {
   const out: Desvio[] = []
@@ -244,7 +249,31 @@ export function desviosDaEscala(css: string): Desvio[] {
   for (const m of limpo.matchAll(/(?<![\w-])font-weight\s*:\s*([^;}]+)/g)) {
     if (/^\s*\d+\s*$/.test(m[1])) out.push({ regra: 'peso', declaracao: `font-weight: ${m[1].trim()}` })
   }
+  // Raio (16/10/2026): só por token. `0` e `%` (o ponto redondo) passam.
+  for (const m of limpo.matchAll(/(?<![\w-])(border(?:-[a-z]+)*-radius)\s*:\s*([^;}]+)/g)) {
+    if (/(?<![\w.-])\d*\.?\d+(rem|px|em)\b/.test(m[2])) out.push({ regra: 'raio', declaracao: `${m[1]}: ${m[2].trim()}` })
+  }
+  // Sombra (16/10/2026): a dura deslocada é só --sombra e --sombra-pequena, para ela continuar
+  // rara (o primário e a folha). Sombra interna (`inset`, a faixa do tipo) e `none` passam.
+  for (const m of limpo.matchAll(/(?<![\w-])box-shadow\s*:\s*([^;}]+)/g)) {
+    const soltas = camadasDaSombra(m[1]).filter((c) => !/^(none|inset\b|var\(--sombra(-pequena)?\)$)/.test(c))
+    if (soltas.length) out.push({ regra: 'sombra', declaracao: `box-shadow: ${m[1].trim()}` })
+  }
   return out
+}
+
+/** As camadas de um box-shadow, separadas pelas vírgulas de fora dos parênteses. */
+function camadasDaSombra(valor: string): string[] {
+  const out: string[] = []
+  let profundidade = 0
+  let atual = ''
+  for (const c of valor.replace(/!important/, '')) {
+    if (c === '(') profundidade++
+    else if (c === ')') profundidade--
+    if (c === ',' && profundidade === 0) { out.push(atual.trim()); atual = '' } else atual += c
+  }
+  out.push(atual.trim())
+  return out.filter(Boolean)
 }
 
 /** As variáveis lidas com var(--x) e as definidas com --x: no mesmo texto. */

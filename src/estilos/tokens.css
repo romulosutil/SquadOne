@@ -78,18 +78,32 @@
   --etapa-perdido: #f2c4bb;
   --sobre-pastel: var(--cor-tinta);
 
-  /* Forma */
-  --linha-espessura: 3px;
+  /* Fundo do "o que fazer agora" dentro de um bloco (16/10/2026): pastel no lugar de outra
+     caixa com borda (design.md, "Neobrutalismo saudável"). */
+  --realce: #fff3c4;
+
+  /* Forma (16/10/2026, neobrutalismo saudável): contorno de 2 px e canto arredondado.
+     Os 3 px em todo bloco e botão, mais a sombra em toda cabeça, eram a bagunça: tudo gritava igual. */
+  --linha-espessura: 2px;
+  /* O único nível de contorno de uma tela ou folha: bloco, botão, campo, segmentado. */
   --linha: var(--linha-espessura) solid var(--borda);
-  --linha-fina: 2px solid var(--borda);
+  /* Contorno de apoio: selo, chip, amostra. Nunca caixa dentro de bloco (essa vira .zona). */
+  --linha-fina: 1px solid var(--borda);
   /* Divisor entre linhas de uma lista: 1 px a 35% (design.md, "calma em leitura"). */
   --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
   /* Faixa à esquerda que diz o tipo (citação, mensagem, cartão de decisão). */
   --faixa: 6px;
   --faixa-forte: 8px;
+  /* Sombra dura só no que se toca e é o primário (um por tela), e na folha que está por cima. */
   --sombra: 4px 4px 0 var(--borda);
+  /* Primário compacto (o ＋Pedir da barra, ação dentro de lista densa). */
   --sombra-pequena: 2px 2px 0 var(--borda);
-  /* Pílula: o único raio do sistema (filtros de produto e de nicho). O resto é canto vivo. */
+  /* Raio (16/10/2026): três degraus e a pílula. Por dentro sempre menor que por fora,
+     para o canto de dentro acompanhar o de fora. Nada de px solto em border-radius (o teste confere). */
+  --raio-bloco: 16px;
+  --raio-controle: 10px;
+  --raio-selo: 6px;
+  /* Chip de filtro e .escolhas. */
   --raio-pilula: 999px;
 
   /* Toque (design.md: mínimo de 44 px; o envio principal ganha 48). */
@@ -118,6 +132,11 @@
   --esp-8: 2rem;
   --esp-12: 3rem;
   --esp-16: 4rem;
+  /* Respiro (16/10/2026): a densidade de tela num lugar só. Padding de bloco, distância
+     entre blocos e entre peças dentro de um bloco; o desktop abre um degrau (media abaixo). */
+  --respiro-bloco: var(--esp-5);
+  --respiro-pilha: var(--esp-6);
+  --respiro-interno: var(--esp-3);
   /* Sem Arial Black no fallback: enquanto a Inter baixa (swap), a pilha do
      sistema tem a mesma métrica aproximada e não engrossa a tela inteira. */
   --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -138,9 +157,19 @@
   --tam-nome: 1.125rem;
   --tam-secao: 1.375rem;
   --tam-titulo: clamp(1.75rem, 6vw, 2.5rem);
+  /* Número protagonista (total, contagem, saldo): maior que o título, como nas referências. */
+  --tam-numero: clamp(2.25rem, 9vw, 3.5rem);
   --tamanho-barra-inferior: 4rem;
 
   color-scheme: light;
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --respiro-bloco: var(--esp-6);
+    --respiro-pilha: var(--esp-8);
+    --respiro-interno: var(--esp-4);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -158,6 +187,7 @@
     --negativo: #ff8a80;
     --ok-fundo: #1d4532;
     --atencao-fundo: #4a4016;
+    --realce: #2f2a12;
     --erro-fundo: #561f27;
     --barra-fundo: #0b0e14;
     --barra-texto: #c3cad8;
@@ -182,6 +212,7 @@
   --negativo: #ff8a80;
   --ok-fundo: #1d4532;
   --atencao-fundo: #4a4016;
+  --realce: #2f2a12;
   --erro-fundo: #561f27;
   --barra-fundo: #0b0e14;
   --barra-texto: #c3cad8;

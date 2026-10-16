@@ -402,38 +402,36 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-.hoje { display: grid; gap: var(--esp-4); width: 100%; max-width: 56rem; margin: 0 auto; }
-.hoje__bloco { display: grid; gap: var(--esp-3); min-width: 0; padding: var(--esp-4); border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); color: var(--texto); }
-/* Uma sombra por pilha: o bloco já tem a dele (e os 3 px); o cartão de dentro fica em 2 px,
-   sem sombra, com a faixa colorida que diz o tipo (RULES 3). */
-.hoje__bloco .cartao { box-shadow: none; border-width: 2px; }
-.hoje__bloco :is(.cartao--decisao, .cartao--ajuste, .cartao--falha) { border-left-width: 8px; }
+.hoje { display: grid; gap: var(--respiro-pilha); width: 100%; max-width: 56rem; margin: 0 auto; }
+.hoje__bloco { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); color: var(--texto); }
+/* Um nível de contorno (design.md, 16/10/2026): o bloco tem a borda e nenhuma sombra; o cartão
+   de dentro vira zona (fundo, sem borda) com a faixa que diz o tipo, em agentes.css (RULES 3). */
 .hoje__cabeca { display: grid; gap: var(--esp-1); }
 .hoje__cabeca--linha { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
 .hoje h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.05; letter-spacing: -0.02em; }
 .hoje h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .hoje p { margin: 0; }
-.hoje__precisa.is-falha { border-left-width: 10px; border-left-color: var(--negativo); }
-.hoje__precisa.is-atencao { border-left-width: 10px; border-left-color: var(--destaque); }
-.hoje__precisa.is-ok { border-left-width: 10px; border-left-color: var(--positivo); }
+.hoje__precisa.is-falha { border-left-width: var(--faixa-forte); border-left-color: var(--negativo); }
+.hoje__precisa.is-atencao { border-left-width: var(--faixa-forte); border-left-color: var(--destaque); }
+.hoje__precisa.is-ok { border-left-width: var(--faixa-forte); border-left-color: var(--positivo); }
 .hoje__cartoes { display: grid; gap: var(--esp-3); margin: 0; padding: 0; list-style: none; }
 .hoje__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
 .hoje__dia { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
-.hoje__dia li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--esp-2); min-height: var(--toque); align-items: center; border-top: var(--linha-fina); }
+.hoje__dia li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--esp-2); min-height: var(--toque); align-items: center; border-top: var(--divisor); }
 .hoje__dia a { color: var(--texto); overflow-wrap: anywhere; }
 .hoje__time { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
-.hoje__time li { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
+.hoje__time li { display: grid; gap: var(--esp-2); padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }
 .hoje__squad { display: grid; gap: var(--esp-0); }
 .hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: var(--tam-nome); }
 .hoje__estado { display: grid; gap: var(--esp-0); }
 .hoje__bloco-agora { font-weight: var(--peso-medio); overflow-wrap: anywhere; }
 .hoje__funil { gap: var(--esp-1); color: var(--texto); text-decoration: none; }
-.hoje__funil:hover { background: var(--superficie-2); }
+.hoje__funil:hover { background: var(--hover); }
 .hoje__funil-rotulo { font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .hoje__funil strong { font-size: var(--tam-nome); font-variant-numeric: tabular-nums; }
 .hoje__sozinhos summary { min-height: var(--toque); display: flex; align-items: center; font-weight: var(--peso-forte); cursor: pointer; }
 .hoje__sozinhos ul { display: grid; gap: var(--esp-2); margin: var(--esp-3) 0 0; padding: 0; list-style: none; }
-.hoje__sozinhos li { display: grid; gap: var(--esp-1); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); }
+.hoje__sozinhos li { display: grid; gap: var(--esp-1); padding: var(--esp-2) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }
 @media (min-width: 40rem) {
   .hoje__time li { grid-template-columns: minmax(10rem, 0.8fr) minmax(0, 1.4fr) auto; align-items: center; }
 }
