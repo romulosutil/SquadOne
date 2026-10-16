@@ -40,9 +40,10 @@ Código publicado não muda nem se reaproveita: conversas e outros agentes citam
 ## A página
 
 `servico.html` usa a linguagem do app (16/10/2026): Inter, os tokens de `src/estilos/tokens.css`
-copiados no `:root` dela (o Artifact não lê o repositório), amarelo para o cartão escolhido, 2 px
-no cartão e sombra dura só no botão principal e no escolhido. Se um token do app mudar, copie o
-valor novo para lá. A partir de 60 rem é o quadro (passos em colunas, faixas em linhas, painel à
+copiados no `:root` dela (o Artifact não lê o repositório) e as regras BP-R1 a BP-R4 do
+`design.md`: um nível de contorno de 2 px (cartão, campo, botão, painel), canto 16/10/6 px,
+amarelo no cartão escolhido, sombra dura só no "Copiar para a conversa" e a dica em zona de
+realce. Se um token do app mudar, copie o valor novo para lá. A partir de 60 rem é o quadro (passos em colunas, faixas em linhas, painel à
 direita); abaixo, uma lista por passo, e o cartão abre numa folha. Uma ação só por cartão:
 "Copiar para a conversa", que leva código, arquivos, marcas e ligações; o resto se cita pelo código.
 
