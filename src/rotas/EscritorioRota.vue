@@ -187,7 +187,9 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         <!-- No Mapa o estado fica no cabeçalho dele, junto da escala. -->
         <p v-if="vista === 'lista'" class="escritorio__status" role="status">{{ status }}</p>
       </div>
-      <p v-if="vista === 'lista' && estadoDaSalaFinancas" class="escritorio__financas" :data-semaforo="estadoDaSalaFinancas.semaforo">
+      <!-- salasDeFinancas.length: o estado lido fica da squad anterior ao trocar de andar (Pessoal → PRUMO
+           derrubava a tela inteira lendo salasDeFinancas[0].nome). -->
+      <p v-if="vista === 'lista' && estadoDaSalaFinancas && salasDeFinancas.length" class="escritorio__financas" :data-semaforo="estadoDaSalaFinancas.semaforo">
         <b>Sala {{ salasDeFinancas[0].nome }}:</b> {{ estadoDaSalaFinancas.texto }} <a href="/financas">ver Finanças</a>
       </p>
 
