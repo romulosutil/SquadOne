@@ -52,11 +52,12 @@
 
     --linha-espessura: 2px;
     --linha: var(--linha-espessura) solid var(--borda);
-    --linha-fina: 1px solid var(--borda);
     --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
     --faixa: 6px;
     --faixa-forte: 8px;
-    --sombra-pequena: 2px 2px 0 var(--borda);
+    --sombra: 4px 4px 0 var(--borda);
+    --raio-bloco: 16px;
+    --raio-controle: 10px;
 
     --toque: 44px;
     --toque-grande: 48px;
@@ -101,7 +102,7 @@
       --atencao-fundo: #4a4016;
       --erro-fundo: #561f27;
       --foco: #8ab4ff;
-      --sombra-pequena: 2px 2px 0 #000;
+      --sombra: 4px 4px 0 #000;
       color-scheme: dark;
     }
   }
@@ -123,12 +124,13 @@
        letter-spacing: -0.02em; line-height: 1.1; }
   .sub { margin: 0 0 var(--esp-4); color: var(--texto-2); }
 
-  /* Um bloco por assunto, 3 px por fora, sem sombra (a sombra fica só no botão primário). */
+  /* Um bloco por assunto: --linha e --raio-bloco por fora, sem sombra (a sombra fica só no botão primário). */
   .bloco { display: grid; gap: var(--esp-4); margin: 0 0 var(--esp-4); padding: var(--esp-4);
-           background: var(--superficie); border: var(--linha); }
+           background: var(--superficie); border: var(--linha); border-radius: var(--raio-bloco); }
 
   /* Segmentado: Comum | Segredo. Rádio de verdade (setas trocam), o escolhido em --destaque. */
-  .segmentado { display: flex; margin: 0; padding: 0; border: var(--linha); background: var(--superficie); min-width: 0; }
+  .segmentado { display: flex; margin: 0; padding: 0; border: var(--linha); border-radius: var(--raio-controle);
+                background: var(--superficie); min-width: 0; overflow: hidden; }
   .segmentado label { position: relative; flex: 1; display: flex; }
   .segmentado input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
   .segmentado span { flex: 1; display: flex; min-height: var(--toque); align-items: center; justify-content: center;
@@ -136,20 +138,20 @@
   .segmentado label + label span { border-left: var(--linha); }
   .segmentado input:checked + span { background: var(--destaque); color: var(--destaque-texto); }
   .segmentado input:not(:checked):hover + span { background: var(--hover); }
-  .segmentado input:focus-visible + span { outline: 3px solid var(--foco); outline-offset: -3px; }
+  .segmentado input:focus-visible + span { outline: 3px solid var(--foco); outline-offset: -5px; }
 
   .campo-grupo { display: grid; gap: var(--esp-1); }
   .rotulo { font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
   .dica { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
   .campo { width: 100%; min-width: 0; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha);
-           background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
+           border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
   textarea.campo { min-height: 9rem; resize: vertical; line-height: 1.4; }
   .campo[aria-invalid="true"] { border-color: var(--negativo); }
   .erro-campo { margin: 0; color: var(--negativo); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 
   /* Onde soltar arquivos: tracejado = "pode soltar aqui" (como o .quadro do app). */
   .soltar { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-3); align-items: center; padding: var(--esp-3);
-            border: 2px dashed var(--borda); color: var(--texto-2); font-size: var(--tam-apoio);
+            border: var(--linha-espessura) dashed var(--borda); border-radius: var(--raio-controle); color: var(--texto-2); font-size: var(--tam-apoio);
             transition: background var(--duracao) ease-out; }
   .soltar.is-sobre { background: var(--atencao-fundo); color: var(--texto); }
   #arquivos:focus-visible + .botao { outline: 3px solid var(--foco); outline-offset: 2px; }
@@ -170,15 +172,17 @@
   .dobra p { margin: 0 0 var(--esp-2); }
 
   .botao { display: inline-flex; min-width: var(--toque); min-height: var(--toque); align-items: center; justify-content: center;
-           padding: 0 var(--esp-4); border: var(--linha); background: var(--superficie); color: var(--texto);
+           padding: 0 var(--esp-4); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto);
            font: inherit; font-size: var(--tam-apoio); font-weight: var(--peso-forte); cursor: pointer; }
   .botao:hover:not(:disabled) { background: var(--hover); }
   .botao:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
   .botao:disabled { opacity: 0.55; cursor: progress; box-shadow: none; }
   .botao--primario { min-height: var(--toque-grande); background: var(--destaque); color: var(--destaque-texto);
-                     font-size: var(--tam-texto); box-shadow: var(--sombra-pequena); }
+                     font-size: var(--tam-texto); box-shadow: var(--sombra); }
   .botao--primario:hover:not(:disabled) { background: var(--destaque); filter: brightness(0.95); }
-  .botao--leve { min-height: var(--toque); padding: 0 var(--esp-3); border: var(--linha-fina); }
+  /* Leve (Escolher arquivos, Tirar): sem contorno, fundo da superfície 2, como o .botao--leve do app. */
+  .botao--leve { min-height: var(--toque); padding: 0 var(--esp-3); border-color: transparent; background: var(--superficie-2); }
+  .botao--leve:hover:not(:disabled) { background: var(--superficie-2); filter: brightness(0.95); }
 
   .acoes { display: flex; flex-wrap: wrap; gap: var(--esp-3); align-items: center; }
   .acoes .botao--primario { flex: 1 1 12rem; }
@@ -191,7 +195,8 @@
   .decisao .botao { justify-self: start; }
 
   .avisos { display: grid; gap: var(--esp-2); margin: 0 0 var(--esp-4); }
-  .recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--atencao-fundo);
+  /* Recado: zona de fundo, sem borda (como o .recado--atencao do app). */
+  .recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--atencao-fundo);
             font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 
   .resultado ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
