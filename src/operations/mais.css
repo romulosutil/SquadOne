@@ -6,7 +6,7 @@
 
 .painel {
   min-width: 0;
-  padding: clamp(1.25rem, 2vw, 2rem);
+  padding: clamp(var(--esp-5), 2vw, var(--esp-8));
   border: var(--linha);
   background: var(--superficie);
   color: var(--texto);
@@ -17,7 +17,7 @@
 }
 .painel *, .painel *::before, .painel *::after { box-sizing: border-box; }
 .painel :is(h2, h3) { margin: 0; font-weight: var(--peso-titulo); letter-spacing: -0.04em; }
-.painel :is(button, a) { min-height: 44px; font: inherit; }
+.painel :is(button, a) { min-height: var(--toque); font: inherit; }
 .painel :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 
 /* Ponto de estado: sempre ao lado da palavra. */
@@ -27,54 +27,54 @@
 
 /* ------------------------------------------------------------ Acessos */
 
-.access h2 { font-size: 1.6rem; }
-.access ul { display: grid; gap: 0.6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
-.access a { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; gap: 0.9rem; align-items: center; padding: 0.7rem 0.9rem; border: var(--linha); background: var(--superficie); color: var(--texto); text-decoration: none; }
+.access h2 { font-size: var(--tam-titulo); }
+.access ul { display: grid; gap: var(--esp-3); margin: var(--esp-4) 0 0; padding: 0; list-style: none; }
+.access a { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; gap: var(--esp-4); align-items: center; padding: var(--esp-3) var(--esp-4); border: var(--linha); background: var(--superficie); color: var(--texto); text-decoration: none; }
 .access a:hover { background: var(--destaque); color: var(--destaque-texto); }
 .access a:hover small { color: inherit; }
-.access strong { display: block; font-size: 1.05rem; }
-.access small { display: block; color: var(--texto-2); font-size: 0.82rem; }
-.access__icone { display: grid; place-items: center; width: 3rem; height: 3rem; border: var(--linha); background: var(--barra-fundo); color: var(--cor-papel-forte); font-size: 0.85rem; font-weight: var(--peso-titulo); }
+.access strong { display: block; font-size: var(--tam-nome); }
+.access small { display: block; color: var(--texto-2); font-size: var(--tam-apoio); }
+.access__icone { display: grid; place-items: center; width: 3rem; height: 3rem; border: var(--linha); background: var(--barra-fundo); color: var(--cor-papel-forte); font-size: var(--tam-apoio); font-weight: var(--peso-titulo); }
 
 /* ------------------------------------------------------------ Como funciona */
 
-.como { display: grid; gap: 1rem; }
-.como__topo h2 { font-size: 1.6rem; }
-.como__topo p { margin: 0.25rem 0 0; color: var(--texto-2); }
-.como__abas { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.como__abas button { display: grid; justify-items: start; gap: 0.05rem; min-height: 44px; padding: 0.45rem 0.75rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); line-height: 1.2; text-align: left; cursor: pointer; }
-.como__abas button small { color: var(--texto-2); font-size: 0.68rem; font-weight: var(--peso-medio); }
+.como { display: grid; gap: var(--esp-4); }
+.como__topo h2 { font-size: var(--tam-titulo); }
+.como__topo p { margin: var(--esp-1) 0 0; color: var(--texto-2); }
+.como__abas { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.como__abas button { display: grid; justify-items: start; gap: var(--esp-0); min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); line-height: 1.2; text-align: left; cursor: pointer; }
+.como__abas button small { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-medio); }
 .como__abas button:hover { background: var(--destaque); color: var(--destaque-texto); }
 .como__abas button:hover small { color: inherit; }
 .como__abas button[aria-selected="true"] { background: var(--texto); color: var(--superficie); box-shadow: 3px 3px 0 var(--acento); }
 .como__abas button[aria-selected="true"] small { color: inherit; opacity: 0.8; }
-.como__painel { display: grid; gap: 0.9rem; min-width: 0; }
-.como__frase { max-width: 72ch; margin: 0; font-size: 1.05rem; }
-.como__legenda { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
-.como__legenda span { padding: 0.15rem 0.55rem; border: var(--linha-fina); background: var(--superficie); font-size: 0.75rem; font-weight: var(--peso-forte); }
+.como__painel { display: grid; gap: var(--esp-4); min-width: 0; }
+.como__frase { max-width: 72ch; margin: 0; font-size: var(--tam-nome); }
+.como__legenda { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin: 0; }
+.como__legenda span { padding: var(--esp-0) var(--esp-2); border: var(--linha-fina); background: var(--superficie); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
 .como__legenda .is-voce { background: var(--destaque); color: var(--destaque-texto); }
 
 .como__trilha { display: grid; margin: 0; padding: 0; list-style: none; }
-.como__passo { position: relative; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0.4rem; }
+.como__passo { position: relative; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: var(--esp-2); }
 .como__passo::before { position: absolute; top: 0; bottom: 0; left: calc(1rem - 1px); width: 2px; background: var(--borda); content: ''; }
 .como__passo:first-child::before { top: 1.4rem; }
 .como__passo:last-child::before { bottom: calc(100% - 1.4rem); }
 /* Onde roda: Dell (verde), você (destaque), nuvem (acento), externo (neutro). */
-.como__no { position: relative; z-index: 1; justify-self: center; width: 1rem; height: 1rem; margin-top: 1rem; border: 2px solid var(--borda); border-radius: 50%; background: var(--ok-fundo); }
+.como__no { position: relative; z-index: 1; justify-self: center; width: 1rem; height: 1rem; margin-top: var(--esp-4); border: 2px solid var(--borda); border-radius: 50%; background: var(--ok-fundo); }
 .como__no.is-voce { background: var(--destaque); }
 .como__no.is-nuvem { background: var(--acento); }
 .como__no.is-externo { background: var(--superficie-2); border-style: dashed; }
-.como__caixa { display: grid; gap: 0.35rem; min-width: 0; margin: 0.35rem 0; padding: 0.75rem 0.9rem; border: var(--linha-fina); background: var(--superficie); }
+.como__caixa { display: grid; gap: var(--esp-2); min-width: 0; margin: var(--esp-2) 0; padding: var(--esp-3) var(--esp-4); border: var(--linha-fina); background: var(--superficie); }
 .como__passo.is-voce .como__caixa { border-width: 3px; background: var(--atencao-fundo); }
-.como__passo.is-ramo .como__caixa { margin-left: 1.25rem; border-style: dashed; }
+.como__passo.is-ramo .como__caixa { margin-left: var(--esp-5); border-style: dashed; }
 /* O passo do robô que se tocou no Escritório (?fluxo=&passo=). A borda grossa e a sombra marcam; o aria-current diz. */
 .como__passo.is-alvo .como__caixa { border: var(--linha); box-shadow: var(--sombra); }
 .como__passo.is-alvo:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-.como__caixa h3 { font-size: 1rem; letter-spacing: -0.01em; }
-.como__caixa p { margin: 0; font-size: 0.9rem; overflow-wrap: anywhere; }
-.como__caixa .como__ramo { color: var(--texto-2); font-size: 0.75rem; font-weight: var(--peso-forte); }
-.como__marcas { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.como__marca { padding: 0.05rem 0.45rem; border: 1px solid var(--borda); background: var(--superficie-2); color: var(--texto); font-size: 0.72rem; font-weight: var(--peso-medio); white-space: nowrap; }
+.como__caixa h3 { font-size: var(--tam-texto); letter-spacing: -0.01em; }
+.como__caixa p { margin: 0; font-size: var(--tam-apoio); overflow-wrap: anywhere; }
+.como__caixa .como__ramo { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
+.como__marcas { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.como__marca { padding: var(--esp-0) var(--esp-2); border: 1px solid var(--borda); background: var(--superficie-2); color: var(--texto); font-size: var(--tam-mini); font-weight: var(--peso-medio); white-space: nowrap; }
 .como__marca.is-voce,
 .como__marca.is-com-voce { background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-titulo); }
 .como__marca.is-dell { background: var(--ok-fundo); }
@@ -83,36 +83,36 @@
 .como__marca.is-atencao { background: var(--atencao-fundo); font-weight: var(--peso-titulo); }
 .como__marca.is-sozinho { background: var(--fundo); }
 .como__marca.is-fila { background: var(--texto); color: var(--superficie); font-weight: var(--peso-titulo); }
-.como__link { justify-self: start; display: inline-flex; align-items: center; margin-top: 0.2rem; padding: 0.35rem 0.75rem; border: var(--linha-fina); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-size: 0.85rem; font-weight: var(--peso-forte); text-decoration: none; }
+.como__link { justify-self: start; display: inline-flex; align-items: center; margin-top: var(--esp-1); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-size: var(--tam-apoio); font-weight: var(--peso-forte); text-decoration: none; }
 .como__link:hover { background: var(--superficie); color: var(--texto); }
 
-.como__aviso { max-width: 72ch; margin: 0; padding: 0.75rem 0.9rem; border: 2px dashed var(--borda); background: var(--atencao-fundo); font-size: 0.92rem; }
+.como__aviso { max-width: 72ch; margin: 0; padding: var(--esp-3) var(--esp-4); border: 2px dashed var(--borda); background: var(--atencao-fundo); font-size: var(--tam-apoio); }
 .como__dia { display: grid; margin: 0; padding: 0; list-style: none; }
-.como__dia > li { display: grid; grid-template-columns: 3.6rem minmax(0, 1fr); gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--borda); }
+.como__dia > li { display: grid; grid-template-columns: 3.6rem minmax(0, 1fr); gap: var(--esp-3); padding: var(--esp-3) 0; border-top: 1px solid var(--borda); }
 .como__dia time { font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
-.como__dia ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
-.como__dia ul li { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.como__dia ul { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.como__dia ul li { display: flex; align-items: baseline; gap: var(--esp-2); min-width: 0; }
 .como__no.is-mini { flex: none; width: 0.7rem; height: 0.7rem; margin: 0; }
-.como__dia small { color: var(--texto-2); font-size: 0.82rem; }
-.como__sempre-titulo { font-size: 1.1rem; }
-.como__sempre { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 0.6rem; margin: 0; }
-.como__sempre div { padding: 0.6rem 0.8rem; border: var(--linha-fina); background: var(--superficie-2); }
-.como__sempre dt { font-size: 0.75rem; font-weight: var(--peso-titulo); letter-spacing: 0.06em; text-transform: uppercase; }
-.como__sempre dd { margin: 0.15rem 0 0; font-size: 0.88rem; }
+.como__dia small { color: var(--texto-2); font-size: var(--tam-apoio); }
+.como__sempre-titulo { font-size: var(--tam-nome); }
+.como__sempre { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--esp-3); margin: 0; }
+.como__sempre div { padding: var(--esp-3) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
+.como__sempre dt { font-size: var(--tam-mini); font-weight: var(--peso-titulo); letter-spacing: 0.06em; text-transform: uppercase; }
+.como__sempre dd { margin: var(--esp-0) 0 0; font-size: var(--tam-apoio); }
 
 /* ------------------------------------------------------------ Tudo que o Dell confere */
 
-.dell-confere summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; min-height: 44px; cursor: pointer; list-style: none; }
+.dell-confere summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--esp-1) var(--esp-4); min-height: var(--toque); cursor: pointer; list-style: none; }
 .dell-confere summary::-webkit-details-marker { display: none; }
-.dell-confere summary h2 { font-size: 1.3rem; }
-.dell-confere summary span { color: var(--texto-2); font-size: 0.85rem; font-weight: var(--peso-medio); text-decoration: underline; }
-.dell-confere__grupo { margin-top: 1rem; }
-.dell-confere__grupo h3 { font-size: 1rem; letter-spacing: 0; }
-.dell-confere__grupo ul { display: grid; gap: 0; margin: 0.4rem 0 0; padding: 0; list-style: none; border-top: var(--linha-fina); }
-.dell-confere__grupo li { display: grid; grid-template-columns: auto minmax(8rem, 16rem) minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid color-mix(in srgb, var(--borda) 35%, transparent); }
-.dell-confere__grupo li small { color: var(--texto-2); font-size: 0.85rem; overflow-wrap: anywhere; }
+.dell-confere summary h2 { font-size: var(--tam-secao); }
+.dell-confere summary span { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); text-decoration: underline; }
+.dell-confere__grupo { margin-top: var(--esp-4); }
+.dell-confere__grupo h3 { font-size: var(--tam-texto); letter-spacing: 0; }
+.dell-confere__grupo ul { display: grid; gap: 0; margin: var(--esp-2) 0 0; padding: 0; list-style: none; border-top: var(--linha-fina); }
+.dell-confere__grupo li { display: grid; grid-template-columns: auto minmax(8rem, 16rem) minmax(0, 1fr) auto; gap: var(--esp-3); align-items: center; padding: var(--esp-2) 0; border-bottom: var(--divisor); }
+.dell-confere__grupo li small { color: var(--texto-2); font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 .dell-confere__estado { color: var(--texto); font-weight: var(--peso-forte); }
-.dell-confere li a { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
+.dell-confere li a { display: inline-flex; align-items: center; gap: var(--esp-1); padding: var(--esp-0) var(--esp-3); border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
 .dell-confere li a:hover { background: var(--destaque); color: var(--destaque-texto); }
 
 @media (max-width: 48rem) {
@@ -124,10 +124,10 @@
 
 @media (max-width: 42rem) {
   /* As abas dos fluxos rolam de lado dentro do bloco (a página não). */
-  .como__abas { flex-wrap: nowrap; overflow-x: auto; margin-inline: -0.25rem; padding: 0.25rem 0.25rem 0.5rem; scroll-snap-type: x proximity; }
+  .como__abas { flex-wrap: nowrap; overflow-x: auto; margin-inline: calc(-1 * var(--esp-1)); padding: var(--esp-1) var(--esp-1) var(--esp-2); scroll-snap-type: x proximity; }
   .como__abas button { flex: none; scroll-snap-align: start; }
-  .como__passo.is-ramo .como__caixa { margin-left: 0.6rem; }
-  .como__dia > li { grid-template-columns: 3rem minmax(0, 1fr); gap: 0.5rem; }
+  .como__passo.is-ramo .como__caixa { margin-left: var(--esp-3); }
+  .como__dia > li { grid-template-columns: 3rem minmax(0, 1fr); gap: var(--esp-2); }
 }
 
 @media (prefers-reduced-motion: reduce) {

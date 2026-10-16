@@ -182,6 +182,17 @@ const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perd
 // Plus: a planilha não conhece o lead, então o envio feito por fora e a resposta se anotam aqui.
 const ehPlus = computed(() => props.lead.produto === 'plus')
 const plusEmConversa = computed(() => props.lead.sinal === 'respondeu-prumo')
+// Um formulário por vez no bloco Anotar. Abre no que o momento pede: a proposta quando ela já
+// existe (para desfazer), senão o próximo passo, que é o que segura o lead em Em contato.
+type Formulario = 'proximo' | 'proposta' | 'nota'
+const FORMULARIOS: Array<{ id: Formulario; rotulo: string }> = [
+  { id: 'proximo', rotulo: 'Próximo passo' },
+  { id: 'proposta', rotulo: 'Proposta' },
+  { id: 'nota', rotulo: 'Nota' },
+]
+const formularioInicial = (): Formulario => (props.lead.etapa === 'proposta' ? 'proposta' : 'proximo')
+const formulario = ref<Formulario>(formularioInicial())
+watch(() => props.lead.id, () => { formulario.value = formularioInicial() })
 const marcarEnviadoPlus = () => registrar('plus_enviado', '', '', 'Envio anotado.')
 const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta anotada.')
 </script>
@@ -195,13 +206,7 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         <span class="crm-etapa" :class="`is-${lead.etapa}`">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
         <span>{{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</span>
       </p>
-      <!-- Triagem do caçador (Iris, estamparias): por que entrou e de onde veio o WhatsApp. -->
-      <p v-if="lead.triagem" class="crm-ficha__fonte">
-        <template v-if="lead.triagem.prioridade !== undefined">Prioridade {{ lead.triagem.prioridade }}. </template>
-        <template v-if="lead.triagem.nota">Nota no Google {{ lead.triagem.nota }}. </template>
-        <template v-if="lead.triagem.sinais">Sinais: {{ lead.triagem.sinais }}. </template>
-        <template v-if="lead.triagem.origemWhatsapp">WhatsApp: {{ lead.triagem.origemWhatsapp }}.</template>
-      </p>
+      <!-- À vista só o que muda a decisão de agora (prazo, leitura, telefone fixo); o resto fica em "Sobre o lead". -->
       <p v-if="lead.diasParaSair !== undefined && lead.etapa === 'contato'" class="crm-ficha__fonte">
         Sem mensagem do lead, vai para Perdido {{ lead.diasParaSair <= 1 ? 'amanhã' : `em ${lead.diasParaSair} dias` }}
         (regra dos {{ DIAS_SEM_RESPOSTA }} dias). Um próximo passo segura o lead em Em contato.
@@ -210,32 +215,45 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         Saiu pela regra dos {{ DIAS_SEM_RESPOSTA }} dias sem mensagem do lead, sem desfecho de ninguém. Volta sozinho se ele escrever;
         para trazer de volta agora, salve um próximo passo ou marque a proposta.
       </p>
-      <p v-if="!lead.plus" class="crm-ficha__fonte">
-        Na planilha: <strong>{{ lead.estadoNaPlanilha }}</strong>
-        <template v-if="lead.pasta"> · pasta: {{ lead.pasta.lugar }}</template>
-        <template v-if="lead.diasDesdeUltimoEvento !== undefined"> · último evento {{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : `há ${lead.diasDesdeUltimoEvento} dia${lead.diasDesdeUltimoEvento === 1 ? '' : 's'}` }}</template>
-      </p>
-      <p v-if="textoDaAbordagem(lead)" class="crm-ficha__fonte">Recebeu: {{ textoDaAbordagem(lead) }}</p>
-      <!-- Plus: veio do Catálogo de Negócios Maçônicos e abre com a saudação da Ordem. -->
-      <p v-if="lead.plus" class="crm-ficha__fonte">
-        Plus · recebe a oferta <strong>{{ ROTULO_DA_OFERTA_DO_PLUS[lead.plus.oferta] }}</strong>. {{ lead.plus.descricao }}
-        <template v-if="lead.plus.instagram"> Instagram: <a :href="`https://instagram.com/${lead.plus.instagram}`" target="_blank" rel="noopener">@{{ lead.plus.instagram }}</a>.</template>
-        <template v-if="lead.plus.tambem?.length"> Mesmo WhatsApp: {{ lead.plus.tambem.join(', ') }}.</template>
-        <template v-if="lead.plus.fixo"> Telefone fixo: confira se tem WhatsApp antes de enviar.</template>
-      </p>
-      <p v-if="lead.mensagemPronta" class="crm-ficha__fonte">Primeira mensagem: “{{ lead.mensagemPronta }}”</p>
-      <p v-if="lead.leitura !== 'nao-se-aplica'" class="crm-ficha__leitura">
-        {{ textoDaLeitura(lead) }}<template v-if="lead.leitura === 'desconhecida'">: sem confirmação de leitura registrada (pode ter lido; o WhatsApp dele pode não mandar recibo).</template>
-      </p>
+      <p v-if="lead.leitura !== 'nao-se-aplica'" class="crm-ficha__leitura">{{ textoDaLeitura(lead) }}</p>
+      <p v-if="lead.plus?.fixo" class="recado recado--atencao">Telefone fixo: confira se tem WhatsApp antes de enviar.</p>
+
+      <!-- Sempre tem conteúdo: a linha da planilha (fora do Plus) ou a do Plus. -->
+      <details class="dobra crm-ficha__detalhes">
+        <summary>Sobre o lead</summary>
+        <!-- Triagem do caçador (Iris, estamparias): por que entrou e de onde veio o WhatsApp. -->
+        <p v-if="lead.triagem" class="crm-ficha__fonte">
+          <template v-if="lead.triagem.prioridade !== undefined">Prioridade {{ lead.triagem.prioridade }}. </template>
+          <template v-if="lead.triagem.nota">Nota no Google {{ lead.triagem.nota }}. </template>
+          <template v-if="lead.triagem.sinais">Sinais: {{ lead.triagem.sinais }}. </template>
+          <template v-if="lead.triagem.origemWhatsapp">WhatsApp: {{ lead.triagem.origemWhatsapp }}.</template>
+        </p>
+        <p v-if="!lead.plus" class="crm-ficha__fonte">
+          Na planilha: <strong>{{ lead.estadoNaPlanilha }}</strong>
+          <template v-if="lead.pasta"> · pasta: {{ lead.pasta.lugar }}</template>
+          <template v-if="lead.diasDesdeUltimoEvento !== undefined"> · último evento {{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : `há ${lead.diasDesdeUltimoEvento} dia${lead.diasDesdeUltimoEvento === 1 ? '' : 's'}` }}</template>
+        </p>
+        <p v-if="textoDaAbordagem(lead)" class="crm-ficha__fonte">Recebeu: {{ textoDaAbordagem(lead) }}</p>
+        <!-- Plus: veio do Catálogo de Negócios Maçônicos e abre com a saudação da Ordem. -->
+        <p v-if="lead.plus" class="crm-ficha__fonte">
+          Plus · recebe a oferta <strong>{{ ROTULO_DA_OFERTA_DO_PLUS[lead.plus.oferta] }}</strong>. {{ lead.plus.descricao }}
+          <template v-if="lead.plus.instagram"> Instagram: <a :href="`https://instagram.com/${lead.plus.instagram}`" target="_blank" rel="noopener">@{{ lead.plus.instagram }}</a>.</template>
+          <template v-if="lead.plus.tambem?.length"> Mesmo WhatsApp: {{ lead.plus.tambem.join(', ') }}.</template>
+        </p>
+        <p v-if="lead.mensagemPronta" class="crm-ficha__fonte">Primeira mensagem: “{{ lead.mensagemPronta }}”</p>
+        <p v-if="lead.leitura === 'desconhecida'" class="crm-ficha__fonte">
+          Leitura: sem confirmação registrada (pode ter lido; o WhatsApp dele pode não mandar recibo).
+        </p>
+      </details>
     </header>
 
     <div v-if="acoesFixas.length || travado" class="crm-ficha__fixa" role="group" aria-label="Próximo passo">
       <button v-if="travado" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-      <a v-for="a in acoesFixas" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} ↗</a>
+      <a v-for="a in acoesFixas" :key="a.chave" class="botao botao--primario" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
     </div>
     <p v-if="travado" class="crm-ficha__fonte">{{ aviso }}</p>
     <p v-if="segurado" class="crm-ficha__fonte" role="status">{{ textoDoRitmo(ritmo) }}</p>
-    <p class="crm-ficha__fonte" role="status" aria-live="polite">{{ anotacoes ? `${anotacoes} nesta tela; a planilha confirma no próximo retrato.` : '' }}</p>
+    <p class="crm-ficha__fonte crm-ficha__anuncio" role="status" aria-live="polite">{{ anotacoes ? `${anotacoes} nesta tela; a planilha confirma no próximo retrato.` : '' }}</p>
     <p v-if="falhaDaAnotacao" class="crm-erro" role="alert">{{ falhaDaAnotacao }}</p>
 
     <div v-if="lead.divergencias.length" class="crm-divergencia" role="note">
@@ -244,9 +262,9 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       <small>A Central não corrige nada: vale a planilha. Confira a planilha ou a pasta.</small>
     </div>
 
-    <!-- Primeiro o mapa: em que passo está, o que fazer e o que oferecer (jornada.ts). -->
-    <CrmJornada :lead="lead" />
-
+    <!-- A ordem da ficha é a da decisão (16/10/2026): o que ele disse → em que passo está e o que fazer
+         (jornada.ts) → como responder (colinha) → anotar → histórico. A resposta vem antes do mapa porque
+         é ela que muda o passo; são duas linhas, não empurram a jornada para baixo. -->
     <section v-if="lead.resposta" class="crm-ficha__bloco" aria-labelledby="crm-ficha-resposta">
       <h3 id="crm-ficha-resposta">O que respondeu</h3>
       <p class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
@@ -256,6 +274,8 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       <blockquote v-if="lead.resposta.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
       <p v-else class="crm-muted">Só mensagem automática (saudação, horário, menu): ninguém respondeu ainda.</p>
     </section>
+
+    <CrmJornada :lead="lead" />
 
     <!-- Do "respondeu" à proposta, com o copiloto ligado: a sugestão vem antes da colinha. -->
     <CrmCopiloto v-if="comCopiloto && copilotoServe(lead)" :lead="lead" />
@@ -281,7 +301,7 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         (<code>vercel link</code> + <code>vercel deploy</code>, como o passo 5 do gerador).
       </p>
       <div v-if="acoesDeApoio.length" class="crm-ficha__links">
-        <a v-for="a in acoesDeApoio" :key="a.chave" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} ↗</a>
+        <a v-for="a in acoesDeApoio" :key="a.chave" class="botao botao--leve" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
       </div>
       <div class="crm-form__botoes">
         <button v-if="ehPlus && lead.sinal === 'pronto'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarEnviadoPlus">{{ salvando === 'plus_enviado' ? 'Anotando…' : 'Já enviei por fora: anotar o envio' }}</button>
@@ -291,50 +311,57 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       </div>
     </section>
 
-    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-proximo">
-      <h3 id="crm-ficha-proximo">Próximo passo</h3>
+    <!-- Anotar (16/10/2026): eram três blocos seguidos (Próximo passo, Proposta, Nova nota), cada um com
+         o seu formulário à mostra. Agora um bloco só e um formulário por vez; o próximo passo salvo
+         continua à vista em cima, porque é estado, não formulário. -->
+    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-anotar">
+      <h3 id="crm-ficha-anotar">Anotar</h3>
       <p v-if="lead.proximoPasso" class="crm-proximo" :class="{ 'is-atrasado': situacaoDoProximo === 'atrasado' }">
+        <span class="crm-kicker">Próximo passo salvo</span>
         <strong>{{ lead.proximoPasso.texto }}</strong>
         <span>para {{ diaEscolhido(lead.proximoPasso.data) }}<template v-if="situacaoDoProximo"> ({{ situacaoDoProximo }})</template></span>
       </p>
-      <p v-else class="crm-muted">Nenhum próximo passo marcado.</p>
-      <form class="crm-form" @submit.prevent="salvarProximo">
+      <p v-if="lead.etapa === 'proposta'" class="crm-proximo">
+        <span class="crm-kicker">Proposta</span>
+        <strong>Enviada em {{ diaEscolhido(lead.proposta?.data) || dataCurta(lead.proposta?.em) }}</strong>
+        <span>marcada à mão</span>
+      </p>
+      <div class="segmentado" role="group" aria-label="O que anotar">
+        <button v-for="f in FORMULARIOS" :key="f.id" type="button" :aria-pressed="formulario === f.id" @click="formulario = f.id">{{ f.rotulo }}</button>
+      </div>
+
+      <form v-if="formulario === 'proximo'" class="crm-form" @submit.prevent="salvarProximo">
         <label><span>O que fazer</span><input v-model="proximoTexto" type="text" maxlength="200" :disabled="!disponivel" placeholder="Ex.: ligar para combinar a conversa"></label>
         <label><span>Quando</span><input v-model="proximoData" type="date" :min="hoje" :disabled="!disponivel"></label>
         <div class="crm-form__botoes">
           <button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proximo_passo' ? 'Salvando…' : 'Salvar próximo passo' }}</button>
-          <button v-if="lead.proximoPasso" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="limparProximo">Limpar</button>
+          <button v-if="lead.proximoPasso" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="limparProximo">Limpar o salvo</button>
         </div>
       </form>
-    </section>
 
-    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-proposta">
-      <h3 id="crm-ficha-proposta">Proposta</h3>
-      <template v-if="lead.etapa === 'proposta'">
-        <p>Proposta enviada em {{ diaEscolhido(lead.proposta?.data) || dataCurta(lead.proposta?.em) }} (marcada à mão).</p>
-        <button class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerProposta">{{ salvando === 'proposta_desfeita' ? 'Desfazendo…' : 'Desfazer proposta' }}</button>
+      <template v-else-if="formulario === 'proposta'">
+        <div v-if="lead.etapa === 'proposta'" class="crm-form__botoes">
+          <button class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerProposta">{{ salvando === 'proposta_desfeita' ? 'Desfazendo…' : 'Desfazer proposta' }}</button>
+        </div>
+        <form v-else-if="aberto || saiuPeloPrazo" class="crm-form" @submit.prevent="marcarProposta">
+          <label><span>Enviada em</span><input v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>
+          <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar proposta enviada' }}</button></div>
+        </form>
+        <p v-else class="crm-muted">Lead encerrado ({{ ROTULO_DA_ETAPA[lead.etapa] }}). Para reabrir, use Desfazer na página do lead.</p>
       </template>
-      <form v-else-if="aberto || saiuPeloPrazo" class="crm-form" @submit.prevent="marcarProposta">
-        <label><span>Enviada em</span><input v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>
-        <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar proposta enviada' }}</button></div>
-      </form>
-      <p v-else class="crm-muted">Lead encerrado ({{ ROTULO_DA_ETAPA[lead.etapa] }}). Para reabrir, use Desfazer na página do lead.</p>
-    </section>
 
-    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-nota">
-      <h3 id="crm-ficha-nota">Nova nota</h3>
-      <form class="crm-form" @submit.prevent="salvarNota">
+      <form v-else class="crm-form" @submit.prevent="salvarNota">
         <label><span>Nota <small>({{ lead.notas }} já registrada{{ lead.notas === 1 ? '' : 's' }})</small></span><textarea v-model="nota" rows="3" maxlength="1000" :disabled="!disponivel" placeholder="O que ele disse, o que ficou combinado…" /></label>
         <div class="crm-form__botoes"><button class="botao botao--primario" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'nota' ? 'Salvando…' : 'Salvar nota' }}</button></div>
       </form>
+
+      <p v-if="!disponivel" class="crm-aviso">Registro indisponível: {{ visao.registro.motivo }}</p>
+      <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
+      <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
     </section>
 
-    <p v-if="!disponivel" class="crm-aviso">Registro indisponível: {{ visao.registro.motivo }}</p>
-    <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
-    <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
-
-    <section class="crm-ficha__bloco" aria-labelledby="crm-ficha-tempo">
-      <h3 id="crm-ficha-tempo">Linha do tempo</h3>
+    <details class="dobra crm-ficha__bloco">
+      <summary>Linha do tempo <span class="crm-muted">({{ eventos.length }})</span></summary>
       <ol v-if="eventos.length" class="crm-tempo">
         <li v-for="(evento, i) in eventos" :key="`${evento.tipo}-${evento.em}-${i}`" :class="`is-${evento.origem === 'manual' ? 'manual' : 'auto'}`">
           <time :datetime="evento.em">{{ dataHora(evento.em) }}</time>
@@ -346,10 +373,10 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         </li>
       </ol>
       <p v-else class="crm-muted">Nenhum evento com data na planilha.</p>
-    </section>
+    </details>
 
-    <section v-if="lead.pasta?.artefatos" class="crm-ficha__bloco" aria-labelledby="crm-ficha-pasta">
-      <h3 id="crm-ficha-pasta">Na fila do gerador</h3>
+    <details v-if="lead.pasta?.artefatos" class="dobra crm-ficha__bloco" :open="Boolean(lead.pasta.falha)">
+      <summary>Na fila do gerador<template v-if="lead.pasta.falha"> <span class="selo selo--erro">falhou</span></template></summary>
       <ul class="crm-artefatos">
         <li>{{ lead.pasta.artefatos.conteudo ? '✓ content.md' : '× sem content.md' }}</li>
         <li>{{ lead.pasta.artefatos.fotos ? `✓ ${lead.pasta.artefatos.fotos} foto(s)` : '× sem fotos' }}</li>
@@ -358,6 +385,6 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         <li v-if="lead.pasta.falha">! falha.log: {{ lead.pasta.falha }}</li>
       </ul>
       <small class="crm-muted">Pasta ~/auto-site/{{ lead.pasta.lugar === 'raiz' ? '' : lead.pasta.lugar }}{{ lead.pasta.slug }}/. A Central só lê: não confirma publicação.</small>
-    </section>
+    </details>
   </article>
 </template>

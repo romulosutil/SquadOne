@@ -248,7 +248,7 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
 <style>
 .escritorio { display: grid; gap: var(--esp-4); width: 100%; max-width: 72rem; margin: 0 auto; color: var(--texto); }
 .escritorio__topo { display: grid; gap: var(--esp-1); }
-.escritorio h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
+.escritorio h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
 .escritorio p { margin: 0; }
 .escritorio__barra { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3); }
 .escritorio__status { font-weight: var(--peso-forte); }

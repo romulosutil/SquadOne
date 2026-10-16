@@ -24,6 +24,7 @@ import AgendaRota from './rotas/AgendaRota.vue'
 import EscritorioRota from './rotas/EscritorioRota.vue'
 import HojeRota from './rotas/HojeRota.vue'
 import MaisRota from './rotas/MaisRota.vue'
+import BlueprintRota from './rotas/BlueprintRota.vue'
 import CrmPanel from './operations/CrmPanel.vue'
 import FinancasPanel from './operations/financas/FinancasPanel.vue'
 import { useAgentes } from './agentes/estado'
@@ -169,6 +170,7 @@ const {
         <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
         <EscritorioRota v-else-if="rota === 'escritorio'" />
         <MaisRota v-else-if="rota === 'mais'" :capacidades="capacidades" />
+        <BlueprintRota v-else-if="rota === 'blueprint'" />
         <section v-else class="nao-encontrada">
           <h1>Página não encontrada</h1>
           <p>Este endereço não existe {{ ops ? 'no SquadOne do Dell' : 'neste SquadOne' }}.</p>

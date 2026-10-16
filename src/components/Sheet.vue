@@ -243,13 +243,13 @@ html.com-folha { overflow: hidden; }
   border-bottom: var(--linha-fina);
 }
 .folha__titulos { min-width: 0; }
-.folha__topo h2 { margin: 0; font-size: 1.35rem; font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
-.folha__topo p { margin: var(--esp-1) 0 0; color: var(--texto-2); font-size: 0.85rem; }
+.folha__topo h2 { margin: 0; font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.folha__topo p { margin: var(--esp-1) 0 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 
 .folha__fechar {
   flex-shrink: 0;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--toque);
+  min-height: var(--toque);
   padding: 0 var(--esp-3);
   border: var(--linha-fina);
   background: var(--superficie-2);

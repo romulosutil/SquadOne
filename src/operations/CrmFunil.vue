@@ -135,7 +135,7 @@ const artefatos = (l: CrmLead) => {
     <p v-if="busca || nicho || cidade" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leadsBase.length }} leads com este filtro.</p>
 
     <template v-if="celular">
-      <div class="segmentado crm-segmento" role="group" aria-label="Produto">
+      <div class="segmentado" role="group" aria-label="Produto">
         <button v-for="p in PRODUTOS" :key="p" type="button" :aria-pressed="segmento === p" :aria-label="ROTULO_DO_PRODUTO[p]" @click="emit('produto', p)">
           {{ SIGLA_DO_PRODUTO[p] }}
         </button>

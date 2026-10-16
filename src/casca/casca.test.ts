@@ -88,6 +88,15 @@ describe('ehLinkDaCasca', () => {
   })
 })
 
+describe('blueprint', () => {
+  it('existe nos dois perfis, acende o Mais e entra pelo Ctrl+K, nunca na barra', () => {
+    assert.equal(rotaDaCasca('/blueprint', DELL_SEM_AGENDA), 'blueprint')
+    assert.equal(destinoAtual('/blueprint/', DELL), 'mais')
+    assert.ok(comandosDaPaleta(DELL_SEM_AGENDA, [], null).some((c) => c.id === 'ir:blueprint'))
+    assert.ok(!destinosDaBarra(DELL).some((d) => d.href === '/blueprint'))
+  })
+})
+
 describe('paleta', () => {
   it('sem agentes só navega; com agentes oferece pedir e trocar para as outras squads', () => {
     assert.ok(comandosDaPaleta(DELL_SEM_AGENDA, [], null).every((c) => c.acao.tipo === 'ir'))

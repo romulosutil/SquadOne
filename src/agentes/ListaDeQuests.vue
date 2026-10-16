@@ -105,10 +105,10 @@ const prazoDoBloco = (quest: QuestCalendario) => {
   background: var(--superficie);
 }
 .quest__corpo { display: grid; gap: var(--esp-1); min-width: 0; }
-.quest__titulo { margin: 0; font-size: 1rem; font-weight: var(--peso-forte); line-height: 1.25; overflow-wrap: anywhere; }
+.quest__titulo { margin: 0; font-size: var(--tam-texto); font-weight: var(--peso-forte); line-height: 1.25; overflow-wrap: anywhere; }
 .quest__titulo a { color: var(--texto); text-decoration: underline; text-underline-offset: 3px; }
 .quest__quando { margin: 0; font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
-.quest__tipo { margin: 0; color: var(--texto-2); font-size: 0.85rem; }
+.quest__tipo { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 @media (min-width: 40rem) {
   .quest { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 }

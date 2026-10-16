@@ -417,21 +417,21 @@ onBeforeUnmount(() => {
 .hoje__precisa.is-atencao { border-left-width: 10px; border-left-color: var(--destaque); }
 .hoje__precisa.is-ok { border-left-width: 10px; border-left-color: var(--positivo); }
 .hoje__cartoes { display: grid; gap: var(--esp-3); margin: 0; padding: 0; list-style: none; }
-.hoje__mais { display: inline-flex; min-height: 44px; align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
+.hoje__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
 .hoje__dia { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
-.hoje__dia li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--esp-2); min-height: 44px; align-items: center; border-top: var(--linha-fina); }
+.hoje__dia li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--esp-2); min-height: var(--toque); align-items: center; border-top: var(--linha-fina); }
 .hoje__dia a { color: var(--texto); overflow-wrap: anywhere; }
 .hoje__time { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .hoje__time li { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
-.hoje__squad { display: grid; gap: 0.1rem; }
+.hoje__squad { display: grid; gap: var(--esp-0); }
 .hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: var(--tam-nome); }
-.hoje__estado { display: grid; gap: 0.1rem; }
+.hoje__estado { display: grid; gap: var(--esp-0); }
 .hoje__bloco-agora { font-weight: var(--peso-medio); overflow-wrap: anywhere; }
 .hoje__funil { gap: var(--esp-1); color: var(--texto); text-decoration: none; }
 .hoje__funil:hover { background: var(--superficie-2); }
 .hoje__funil-rotulo { font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .hoje__funil strong { font-size: var(--tam-nome); font-variant-numeric: tabular-nums; }
-.hoje__sozinhos summary { min-height: 44px; display: flex; align-items: center; font-weight: var(--peso-forte); cursor: pointer; }
+.hoje__sozinhos summary { min-height: var(--toque); display: flex; align-items: center; font-weight: var(--peso-forte); cursor: pointer; }
 .hoje__sozinhos ul { display: grid; gap: var(--esp-2); margin: var(--esp-3) 0 0; padding: 0; list-style: none; }
 .hoje__sozinhos li { display: grid; gap: var(--esp-1); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); }
 @media (min-width: 40rem) {

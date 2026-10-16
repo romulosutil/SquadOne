@@ -65,19 +65,57 @@
   --barra-ativo: var(--cor-amarelo);
   --barra-ativo-texto: var(--cor-tinta);
   --foco: #1e64d4;
+  /* Hover nunca em cor de estado (design.md): o comum escurece para a superfície 2. */
+  --hover: var(--superficie-2);
+
+  /* Etapas do funil: pastéis fixos nos dois temas; sobre eles o texto é sempre a tinta. */
+  --etapa-novo: var(--cor-papel-forte);
+  --etapa-contato: #cbdcff;
+  --etapa-proposta: #ffc48a;
+  --etapa-ganho: var(--cor-menta);
+  --etapa-perdido: #f2c4bb;
+  --sobre-pastel: var(--cor-tinta);
 
   /* Forma */
-  --linha: 3px solid var(--borda);
+  --linha-espessura: 3px;
+  --linha: var(--linha-espessura) solid var(--borda);
   --linha-fina: 2px solid var(--borda);
+  /* Divisor entre linhas de uma lista: 1 px a 35% (design.md, "calma em leitura"). */
+  --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
+  /* Faixa à esquerda que diz o tipo (citação, mensagem, cartão de decisão). */
+  --faixa: 6px;
+  --faixa-forte: 8px;
   --sombra: 4px 4px 0 var(--borda);
   --sombra-pequena: 2px 2px 0 var(--borda);
+  /* Pílula: o único raio do sistema (filtros de produto e de nicho). O resto é canto vivo. */
+  --raio-pilula: 999px;
 
-  /* Espaço (múltiplos de 4 px) e tipo */
+  /* Toque (design.md: mínimo de 44 px; o envio principal ganha 48). */
+  --toque: 44px;
+  --toque-grande: 48px;
+
+  /* Medida de leitura: a ficha e as folhas não passam disso, para a linha não cansar. */
+  --largura-leitura: 52rem;
+  /* Camadas: o que fica por cima de quê. */
+  --camada-fixa: 2;
+  --camada-barra: 40;
+  --camada-folha: 80;
+  --camada-pular: 100;
+  /* Movimento: curto, e nenhum com prefers-reduced-motion (Sheet). */
+  --duracao: 160ms;
+
+  /* Espaço (16/10/2026): oito degraus, múltiplos de 2 e 4 px. Nada de rem solto em
+     padding, margin ou gap (o teste src/blueprint/blueprint.test.ts confere). */
+  --esp-0: 0.125rem;
   --esp-1: 0.25rem;
   --esp-2: 0.5rem;
   --esp-3: 0.75rem;
   --esp-4: 1rem;
+  --esp-5: 1.25rem;
   --esp-6: 1.5rem;
+  --esp-8: 2rem;
+  --esp-12: 3rem;
+  --esp-16: 4rem;
   /* Sem Arial Black no fallback: enquanto a Inter baixa (swap), a pilha do
      sistema tem a mesma métrica aproximada e não engrossa a tela inteira. */
   --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;

@@ -29,7 +29,14 @@ tamanho. Tokens em `tokens.css`.
 | `--positivo`, `--negativo` | entrada/saída de dinheiro (com sinal) |
 | `--ok-fundo`, `--atencao-fundo`, `--erro-fundo` | semáforo das conexões e avisos |
 | `--barra-*` | barra inferior (celular) e trilho lateral |
-| `--esp-1…6` | espaço, múltiplos de 4 px |
+| `--esp-0…16` | espaço: 0 (2 px), 1, 2, 3, 4, 5, 6, 8, 12, 16 (× 4 px). Nada de rem solto em padding, margin ou gap |
+| `--toque`, `--toque-grande` | 44 px (mínimo de tudo que se toca) e 48 px (o envio principal) |
+| `--divisor` | 1 px a 35% de `--borda`, entre linhas de lista |
+| `--faixa`, `--faixa-forte` | 6 e 8 px: a faixa à esquerda que diz o tipo (citação, mensagem, cartão de decisão) |
+| `--raio-pilula` | o único raio do sistema (filtros de produto e de nicho); o resto é canto vivo |
+| `--hover` | fundo de hover do comum (`--superficie-2`); nunca cor de estado |
+| `--etapa-*`, `--sobre-pastel` | os pastéis das etapas do funil, fixos nos dois temas, e a tinta por cima |
+| `--largura-leitura`, `--camada-*`, `--duracao` | medida máxima de leitura; ordem de empilhamento; duração de movimento |
 | `--fonte` | Inter variável, hospedada em `fontes/` (nunca depender da instalada) |
 | `--peso-texto`, `--peso-medio`, `--peso-forte`, `--peso-titulo` | 450 texto e campos; 600 rótulo e apoio; 700 nome, valor e botão; 800 título e total. Nada de número solto |
 | `--tam-mini…--tam-titulo` | seis tamanhos (tabela abaixo). Nada de rem solto em `font-size` |
@@ -73,6 +80,36 @@ tabela no desktop): `docs/auditoria-de-design-2026-10-15.md`.
 
 Modo escuro: `prefers-color-scheme: dark`, a não ser que `<html data-theme="light">`;
 `data-theme="dark"` força. Só os semânticos mudam; a paleta fica.
+
+## Blueprint (/blueprint) e a regra do teste
+
+Desde 16/10/2026 o design system é uma página do próprio app: `/blueprint` (Mais ou Ctrl+K).
+Ela lê este `tokens.css` cru, mostra cada token com amostra, valor claro e escuro e o comentário
+de cima; mede o contraste dos pares que as telas usam no tema da hora; e traz cada componente vivo
+com um código fixo (`BP-BOTAO`, `BP-ESCOLHAS`, `BP-FICHA`...). Mudar um valor ali muda o app
+inteiro daquela aba até recarregar, e "Copiar pedido" devolve o bloco de CSS e o porquê, para colar
+na conversa. Para pedir mudança visual, cite o código `BP-` e, se for de token, cole o pedido.
+
+`src/blueprint/blueprint.test.ts` barra o que foge da escala em qualquer `.css` ou `<style>` de
+`src/`: rem/px solto em espaço e em `font-size`, peso numérico, e `var(--x)` que não existe.
+
+## Uma decisão por vez (16/10/2026)
+
+- **Selecionado é amarelo.** Aba atual, opção escolhida e ação primária em `--destaque`; nada de
+  seleção invertida (texto sobre fundo escuro) num lugar e amarela no outro.
+- **Variantes, uma por vez.** Dois ou mais textos do mesmo momento (as variantes da colinha)
+  ficam em `.escolhas` e só o escolhido aparece. Formulários do mesmo bloco, idem (o "Anotar" da Ficha).
+- **Consulta dobrada.** O que não muda a decisão de agora (detalhes do lead, linha do tempo, ofertas
+  de depois) fica num `details.dobra`, com o título e a contagem à vista.
+- **Um aviso, não dois.** Se a dica já diz a regra, o aviso genérico não se repete embaixo.
+
+### Componentes de escolha
+
+| Classe | Quando |
+|---|---|
+| `.segmentado` | 2 a 4 opções curtas numa linha (Lista/Mapa, Site/Organizar, Próximo passo/Proposta/Nota) |
+| `.escolhas` | rótulo longo ou número variável de opções; quebra linha, não estica (só abaixo de 30 rem) |
+| `details.dobra` | consulta: fechada por padrão, aberta sozinha só quando há falha dentro |
 
 ## Navegação
 

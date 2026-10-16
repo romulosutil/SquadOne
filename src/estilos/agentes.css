@@ -25,7 +25,7 @@
   display: inline-flex;
   max-width: 100%;
   align-items: center;
-  padding: 0.1rem 0.5rem;
+  padding: var(--esp-0) var(--esp-2);
   border: var(--linha-fina);
   background: var(--superficie-2);
   color: var(--texto);
@@ -49,8 +49,8 @@
 
 .botao {
   display: inline-flex;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--toque);
+  min-height: var(--toque);
   align-items: center;
   justify-content: center;
   gap: var(--esp-1);
@@ -65,7 +65,7 @@
   cursor: pointer;
   box-shadow: var(--sombra-pequena);
 }
-.botao:hover:not(:disabled) { background: var(--superficie-2); }
+.botao:hover:not(:disabled) { background: var(--hover); }
 .botao:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: none; }
 .botao:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
 .botao--primario { background: var(--destaque); color: var(--destaque-texto); }
@@ -77,7 +77,7 @@
 .campo {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--toque);
   padding: var(--esp-2) var(--esp-3);
   border: var(--linha-fina);
   background: var(--superficie);
@@ -104,7 +104,7 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 .segmentado button {
   display: flex;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--toque);
   flex: 1;
   align-items: center;
   justify-content: center;
@@ -122,6 +122,52 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 .segmentado button[aria-selected="true"] { background: var(--destaque); color: var(--destaque-texto); }
 .segmentado button:disabled { opacity: 0.55; cursor: not-allowed; }
 .segmentado--auto { width: fit-content; max-width: 100%; }
+
+/* Escolhas (16/10/2026): como o segmentado, mas quebra linha. Para opções de rótulo longo ou
+   em número variável (as variantes de um texto da colinha). Escolhido em --destaque. */
+.escolhas { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.escolhas button {
+  min-height: var(--toque);
+  /* Não estica: na segunda linha, dois botões viravam faixas de meia tela. No celular estreito, sim. */
+  flex: 0 1 auto;
+  padding: var(--esp-1) var(--esp-3);
+  border: var(--linha-fina);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--tam-apoio);
+  font-weight: var(--peso-medio);
+  text-align: center;
+  cursor: pointer;
+}
+.escolhas button:hover:not([aria-pressed="true"]) { background: var(--hover); }
+@media (max-width: 30rem) { .escolhas button { flex-grow: 1; } }
+.escolhas button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-forte); }
+
+/* Dobra (16/10/2026): o que é consulta, não decisão (detalhes do lead, linha do tempo, ofertas
+   de depois) fica fechado com o título e a contagem à vista. <details> nativo: teclado e leitor
+   de tela de graça. */
+.dobra > summary {
+  display: flex;
+  min-height: var(--toque);
+  align-items: center;
+  gap: var(--esp-2);
+  font-weight: var(--peso-forte);
+  list-style: none;
+  cursor: pointer;
+}
+.dobra > summary::-webkit-details-marker { display: none; }
+.dobra > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: var(--texto-2);
+  transition: transform var(--duracao) ease-out;
+}
+.dobra[open] > summary::before { transform: rotate(90deg); }
+.dobra[open] > summary { margin-bottom: var(--esp-2); }
+.dobra > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .dobra > summary::before { transition: none; } }
 
 /* Estado de agente: sempre com palavra; o ponto só reforça. */
 .estado { display: inline-flex; align-items: center; gap: var(--esp-1); font-size: var(--tam-mini); font-weight: var(--peso-forte); }

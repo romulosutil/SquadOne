@@ -141,10 +141,10 @@ const desconectar = () => {
 <style>
 .agenda { display: grid; gap: var(--esp-4); width: 100%; max-width: 56rem; margin: 0 auto; color: var(--texto); }
 .agenda__topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--esp-3); }
-.agenda h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
+.agenda h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.03em; }
 .agenda p { margin: 0; }
 .agenda__conexao, .agenda__ajustes { display: grid; gap: var(--esp-2); }
 .agenda__dia { display: grid; gap: var(--esp-2); }
-.agenda__dia h2 { margin: 0; font-size: 0.95rem; font-weight: var(--peso-titulo); letter-spacing: 0.05em; text-transform: uppercase; }
+.agenda__dia h2 { margin: 0; font-size: var(--tam-texto); font-weight: var(--peso-titulo); letter-spacing: 0.05em; text-transform: uppercase; }
 .agenda a { color: var(--texto); }
 </style>

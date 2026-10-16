@@ -16,7 +16,7 @@ export interface Capacidades {
   agentes: boolean
 }
 
-export type RotaId = 'hoje' | 'agenda' | 'funil' | 'financas' | 'escritorio' | 'mais' | 'nao-encontrada'
+export type RotaId = 'hoje' | 'agenda' | 'funil' | 'financas' | 'escritorio' | 'mais' | 'blueprint' | 'nao-encontrada'
 
 export interface Destino {
   id: Exclude<RotaId, 'nao-encontrada'> | 'entrada'
@@ -47,6 +47,9 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
   const caminho = normalizarCaminho(caminhoCru)
   if (caminho === '/') return 'hoje'
   if (caminho === '/mais') return 'mais'
+  // Blueprint do design (16/10/2026): os tokens e os componentes vivos, nos dois perfis. Fora da barra e
+  // do trilho (é ferramenta de quem mexe no app, não destino do dia); entra pelo Mais e pelo Ctrl+K.
+  if (caminho === '/blueprint') return 'blueprint'
   if (caminho === '/agenda') return c.agentes ? 'agenda' : 'nao-encontrada'
   if (comeca(caminho, '/squadone')) return c.agentes ? 'escritorio' : 'nao-encontrada'
   if (c.perfil !== 'operations') return 'nao-encontrada'
@@ -84,6 +87,8 @@ export function destinosDaBarra(c: Capacidades): Destino[] {
 /** O destino que leva `aria-current="page"`; null quando o caminho é de outro lugar. */
 export function destinoAtual(caminhoCru: string, c: Capacidades): Destino['id'] | null {
   const rota = rotaDaCasca(caminhoCru, c)
+  // O blueprint mora dentro do Mais: é ele que fica aceso na barra.
+  if (rota === 'blueprint') return 'mais'
   return rota === 'nao-encontrada' ? null : rota
 }
 
@@ -130,6 +135,7 @@ export function comandosDaPaleta(
     dica: d.href,
     acao: { tipo: 'ir', href: d.href },
   }))
+  ir.push({ id: 'ir:blueprint', rotulo: 'Ir para o Blueprint do design', dica: '/blueprint', acao: { tipo: 'ir', href: '/blueprint' } })
   if (!c.agentes) return ir
   return [
     { id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } },

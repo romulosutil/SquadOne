@@ -9,7 +9,7 @@ npm run dev      # tsx server.ts — Express + Vite em middleware mode, porta 30
 npm run build    # vite build + esbuild do server para dist/server.cjs
 npm start        # node dist/server.cjs — o que roda em produção
 npx vue-tsc --noEmit   # typecheck (o script `lint` chama isto)
-npm test         # tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts src/casca/*.test.ts (node:test, sem framework extra)
+npm test         # tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts src/casca/*.test.ts src/blueprint/*.test.ts (node:test, sem framework extra)
 ```
 
 Os testes são pontuais: só as regras puras que dá para fixar em tabela de casos, em
@@ -152,6 +152,10 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           docs/referencia/jornada-do-cliente.md (scripts/jornada-guia.ts; o teste falha se ficar para trás)
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
+  src/blueprint/          (16/10/2026) tokens.ts (PURO: lê o tokens.css cru, contraste WCAG, pedido de mudança, regras de
+                          homogeneidade que o teste aplica a todo CSS de src/), catalogo.ts (códigos BP-… das peças e a
+                          anatomia da Ficha), exemplo.ts (lead inventado); a página é src/rotas/BlueprintRota.vue (/blueprint,
+                          nos dois perfis, pelo Mais e pelo Ctrl+K). Para mudar o visual, comece por ela e cite o código BP-
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
   src/mochila.ts          sem Vue: "Bloco i/N" e intervalo de dia inteiro, derivados da lista

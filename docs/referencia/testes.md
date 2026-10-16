@@ -100,7 +100,11 @@ ausente ou vencido, robô sem verificação ou fora do retrato),
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
-linha do funil, o cartão de respostas com o interesse parado na frente)). O monitor do Dell tem os seus em Python:
+linha do funil, o cartão de respostas com o interesse parado na frente; desde 16/10/2026 o `/blueprint`) e
+`src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; o pedido de mudança;
+códigos `BP-` únicos; e as regras de homogeneidade sobre todo `.css` e `<style>` de `src/`: nada de rem/px
+solto em padding, margin, gap e font-size, nem peso numérico, e todo `var(--x)` definido. Exceção só com
+motivo, em `EXCECOES` no próprio teste: hoje só o `GameMap.vue`, pela geometria do mapa)). O monitor do Dell tem os seus em Python:
 `python3 deploy/dell/dell-status.test.py` (115, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
 "WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
 segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês); a lib da fila de avisos,

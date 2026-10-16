@@ -23,6 +23,8 @@ const grupos = computed<Array<{ id: string; titulo: string; itens: OfertaSugerid
   { id: 'depois', titulo: 'Depois', itens: oferta.value.depois },
   { id: 'nao', titulo: 'Não oferecer', itens: oferta.value.naoAgora },
 ].filter((g) => g.itens.length))
+const agora = computed(() => grupos.value.filter((g) => g.id === 'agora'))
+const adiante = computed(() => grupos.value.filter((g) => g.id !== 'agora'))
 </script>
 
 <template>
@@ -49,7 +51,7 @@ const grupos = computed<Array<{ id: string; titulo: string; itens: OfertaSugerid
       <small class="crm-muted">O que tira o lead daqui: {{ atual.sai }}</small>
     </div>
 
-    <div v-for="g in grupos" :key="g.id" class="crm-jornada__oferta" :class="`is-${g.id}`">
+    <div v-for="g in agora" :key="g.id" class="crm-jornada__oferta" :class="`is-${g.id}`">
       <h4>{{ g.titulo }}</h4>
       <ul>
         <li v-for="o in g.itens" :key="o.id"><strong>{{ nomeDaOferta(o.id) }}</strong> — {{ o.porque }}</li>
@@ -59,5 +61,15 @@ const grupos = computed<Array<{ id: string; titulo: string; itens: OfertaSugerid
       <h4>Confirmar antes de oferecer</h4>
       <ul><li v-for="t in oferta.aConfirmar" :key="t">{{ t }}</li></ul>
     </div>
+    <!-- "Depois" e "Não oferecer" não mudam a conversa de agora: ficam dobrados, com a contagem à vista. -->
+    <details v-if="adiante.length" class="dobra">
+      <summary>Outras ofertas <span class="crm-muted">({{ adiante.reduce((n, g) => n + g.itens.length, 0) }})</span></summary>
+      <div v-for="g in adiante" :key="g.id" class="crm-jornada__oferta" :class="`is-${g.id}`">
+        <h4>{{ g.titulo }}</h4>
+        <ul>
+          <li v-for="o in g.itens" :key="o.id"><strong>{{ nomeDaOferta(o.id) }}</strong> — {{ o.porque }}</li>
+        </ul>
+      </div>
+    </details>
   </section>
 </template>

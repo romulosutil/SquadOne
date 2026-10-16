@@ -73,7 +73,7 @@ function aoTeclar(e: KeyboardEvent) {
 
 <style>
 .paleta { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
-.paleta__item { display: grid; gap: 0.1rem; min-height: 44px; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie); cursor: pointer; }
+.paleta__item { display: grid; gap: var(--esp-0); min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie); cursor: pointer; }
 .paleta__item small { color: var(--texto-2); }
 .paleta__item[aria-selected="true"] { background: var(--destaque); color: var(--destaque-texto); }
 .paleta__item[aria-selected="true"] small { color: inherit; }

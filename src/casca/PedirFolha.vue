@@ -171,17 +171,17 @@ const ROTULO_DO_MODO: Record<Modo, string> = { auto: 'Auto', foco: 'Foco', baixa
 
 <style>
 .pedir { display: grid; gap: var(--esp-3); }
-.pedir__squad { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: 0.8rem; font-weight: var(--peso-forte); }
+.pedir__squad { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
 .pedir__chip {
-  min-height: 44px;
+  min-height: var(--toque);
   max-width: 100%;
   padding: 0 var(--esp-3);
   border: var(--linha-fina);
-  border-radius: 999px;
+  border-radius: var(--raio-pilula);
   background: var(--destaque);
   color: var(--destaque-texto);
   font: inherit;
-  font-size: 1rem;
+  font-size: var(--tam-texto);
   font-weight: var(--peso-forte);
 }
 .pedir__linha { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
@@ -189,7 +189,7 @@ const ROTULO_DO_MODO: Record<Modo, string> = { auto: 'Auto', foco: 'Foco', baixa
 .pedir__mic { flex: 0 0 auto; }
 .pedir__mic[aria-pressed="true"] { background: var(--erro-fundo); }
 .pedir__resultado { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
-.pedir__resultado h3 { margin: 0; font-size: 1rem; font-weight: var(--peso-forte); }
+.pedir__resultado h3 { margin: 0; font-size: var(--tam-texto); font-weight: var(--peso-forte); }
 .pedir__linhas, .pedir__problemas { display: grid; gap: var(--esp-1); margin: 0; padding: 0 0 0 var(--esp-4); }
 .pedir__problemas { padding: 0; list-style: none; }
 </style>

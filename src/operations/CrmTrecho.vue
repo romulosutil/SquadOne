@@ -13,6 +13,8 @@ const props = defineProps<{
   lead?: Pick<LeadDaColinha, 'empresa' | 'links'>
   /** Troca o título do trecho: na objeção, o título repetiria a fala que já é o cabeçalho. */
   titulo?: string
+  /** Entre variantes (CrmMomento), o botão escolhido já diz o título: aqui ele fica só para o leitor de tela. */
+  tituloOculto?: boolean
 }>()
 
 const idTitulo = useId()
@@ -28,6 +30,8 @@ const MARCADOR = /(\{[A-Z]+\}|\[[^\]\n]+\])/
 const partes = computed(() => texto.value.split(MARCADOR))
 const temColchetes = computed(() => /\[[^\]\n]+\]/.test(texto.value))
 const temChaves = computed(() => /\{[A-Z]+\}/.test(texto.value))
+// A dica que já fala do n8n diz o mesmo que o aviso geral da esteira: um dos dois basta.
+const avisoDaEsteira = computed(() => Boolean(props.trecho.esteira) && !/n8n|esteira/i.test(props.trecho.dica ?? ''))
 // Só com número: a página (sem lead) não tem para quem abrir.
 const whatsapp = computed(() => (temTexto.value ? linkDoWhatsApp(props.lead?.links.whatsapp, texto.value) : ''))
 
@@ -73,7 +77,7 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
 <template>
   <article class="crm-colinha__trecho" :aria-labelledby="idTitulo">
     <p class="crm-colinha__trecho-cabeca">
-      <strong :id="idTitulo">{{ titulo ?? trecho.titulo }}</strong>
+      <strong :id="idTitulo" :class="{ 'so-leitor': tituloOculto }">{{ titulo ?? trecho.titulo }}</strong>
       <span v-if="trecho.esteira" class="crm-tag">esteira</span>
     </p>
     <template v-if="temTexto">
@@ -89,6 +93,6 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
     </template>
     <p v-else class="crm-muted">Ainda sem texto pronto.</p>
     <p v-if="trecho.dica" class="crm-colinha__dica">{{ trecho.dica }}</p>
-    <p v-if="trecho.esteira" class="crm-colinha__dica">A esteira (n8n) manda este texto sozinha: mande à mão só se ela não mandou.</p>
+    <p v-if="avisoDaEsteira" class="crm-colinha__dica">A esteira (n8n) manda este texto sozinha: mande à mão só se ela não mandou.</p>
   </article>
 </template>

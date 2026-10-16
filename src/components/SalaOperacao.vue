@@ -68,21 +68,21 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` ·
 <style>
 .operacao { display: grid; gap: var(--esp-3); }
 .operacao__bloco { display: grid; gap: var(--esp-2); }
-.operacao__bloco h4 { margin: 0; font-size: 0.78rem; font-weight: var(--peso-forte); letter-spacing: 0.04em; text-transform: uppercase; }
+.operacao__bloco h4 { margin: 0; font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.04em; text-transform: uppercase; }
 .operacao__bloco p { margin: 0; }
 .operacao ul { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .operacao a { color: inherit; text-decoration: none; }
 .operacao__contagem,
-.operacao__robos a { display: grid; gap: 0.15rem; min-height: 44px; padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
+.operacao__robos a { display: grid; gap: var(--esp-0); min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
 .operacao__contagem:hover,
 .operacao__robos a:hover { background: var(--destaque); color: var(--destaque-texto); }
 .operacao__contagem:hover .texto-2,
 .operacao__robos a:hover .texto-2 { color: inherit; }
 .operacao__rotulo { display: flex; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
-.operacao__n { font-size: 1.25rem; font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
-.operacao small { font-size: 0.82rem; overflow-wrap: anywhere; }
+.operacao__n { font-size: var(--tam-secao); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
+.operacao small { font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 .operacao__parados { padding-left: var(--esp-3) !important; border-left: var(--linha-fina); }
-.operacao__parados a { display: block; min-height: 44px; padding: var(--esp-1) 0; font-size: 0.88rem; overflow-wrap: anywhere; }
+.operacao__parados a { display: block; min-height: var(--toque); padding: var(--esp-1) 0; font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 .operacao__parados a:hover strong { text-decoration: underline; }
 /* O texto diz o estado; o quadrado só reforça (RULES 3). */
 .estado.is-robo-ok::before { background: var(--positivo); }
@@ -92,5 +92,5 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` ·
 .estado.is-robo-falha::before { background: var(--negativo); }
 .estado.is-robo-sem_sinal { color: var(--texto-2); }
 .estado.is-robo-sem_sinal::before { background: transparent; border-style: dashed; }
-.operacao .estado { font-size: 0.82rem; overflow-wrap: anywhere; }
+.operacao .estado { font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 </style>

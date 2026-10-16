@@ -67,7 +67,7 @@ onMounted(async () => {
   border: 3px solid #151914;
   background: #ffcf5c;
   color: #151914;
-  padding: 0.75rem 1rem;
+  padding: var(--esp-3) var(--esp-4);
   font-weight: var(--peso-medio);
   box-shadow: 4px 4px 0 #151914;
 }
