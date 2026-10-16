@@ -282,38 +282,70 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-resposta strong { padding: var(--esp-0) var(--esp-2); border: var(--linha-fina); }
 .crm-resposta__trecho { margin: 0; padding: var(--esp-2) var(--esp-3); border-left: 4px solid var(--borda); background: var(--superficie-2); overflow-wrap: anywhere; }
 
-/* Ficha */
-/* Coluna flex e não grid: o sticky de .crm-ficha__fixa só anda dentro do contêiner do item, e no grid isso seria a célula dele. */
-.crm-ficha { display: flex; flex-direction: column; gap: var(--esp-4); width: 100%; max-width: 52rem; }
-.crm-ficha__cabeca { padding: var(--esp-4) var(--esp-5); border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
+/* Ficha (16/10/2026, segunda volta): a folha é o único contorno. Dentro dela, seções separadas por
+   título, espaço e uma linha (--divisor), nunca caixa dentro de caixa; um primário só, o da ação de
+   agora; o que é consulta fica dobrado. Coluna flex e não grid: o sticky de .crm-ficha__fixa só anda
+   dentro do contêiner do item, e no grid isso seria a célula dele. Margem no lugar do gap porque a
+   ação fixa fica colada à seção "Agora" e as seções se afastam mais. */
+.crm-ficha { display: flex; flex-direction: column; width: 100%; max-width: var(--largura-leitura); }
+.crm-ficha > * { margin: 0; }
+.crm-ficha > * + * { margin-top: var(--esp-6); }
+.crm-ficha > .crm-ficha__fixa,
+.crm-ficha > .crm-ficha__status { margin-top: var(--esp-3); }
+.crm-ficha > .crm-ficha__status:empty { display: none; }
+.crm-ficha__cabeca h2[tabindex="-1"]:focus { outline: none; }
 .crm-ficha__cabeca h2 { margin: var(--esp-1) 0 var(--esp-2); font-size: var(--tam-titulo); line-height: 1.05; overflow-wrap: anywhere; }
-.crm-ficha__etapa { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); margin: 0; }
-.crm-etapa { padding: var(--esp-0) var(--esp-2); border: var(--linha-fina); background: var(--crm-cor); color: var(--cor-tinta); font-weight: var(--peso-titulo); }
-.crm-ficha__fonte,
-.crm-ficha__leitura { margin: var(--esp-2) 0 0; color: var(--texto-2); font-size: var(--tam-apoio); }
-.crm-divergencia { padding: var(--esp-4) var(--esp-4); border: 3px dashed var(--borda); background: var(--erro-fundo); }
-.crm-divergencia ul { margin: var(--esp-2) 0; padding-left: var(--esp-5); }
-.crm-divergencia small { font-size: var(--tam-apoio); }
-.crm-ficha__bloco { padding: var(--esp-4) var(--esp-5); border: var(--linha-fina); background: var(--superficie); }
-.crm-ficha__bloco h3 { margin-bottom: var(--esp-3); font-size: var(--tam-nome); letter-spacing: -0.01em; }
-.crm-ficha__bloco > p { margin: 0 0 var(--esp-3); }
-/* Bloco dobrado: o summary faz o papel do h3. */
-.crm-ficha__bloco.dobra > summary { font-size: var(--tam-nome); font-weight: var(--peso-titulo); letter-spacing: -0.01em; }
-.crm-ficha__bloco.dobra:not([open]) { padding-block: var(--esp-2); }
-.crm-ficha__bloco > .segmentado { margin-bottom: var(--esp-3); }
-.crm-ficha__links { display: grid; gap: var(--esp-2); }
-/* Próximo passo do lead, preso ao topo da folha enquanto se rola a ficha. */
-.crm-ficha__fixa { position: sticky; top: 0; z-index: var(--camada-fixa); display: grid; gap: var(--esp-2); padding: var(--esp-2) 0; background: var(--superficie); }
-/* Os links da faixa fixa e de "Ações" são .botao: aqui só ocupam a célula e alinham à esquerda, porque o rótulo é longo. */
-.crm-ficha__fixa .botao,
-.crm-ficha__links .botao { justify-content: flex-start; padding-block: var(--esp-2); font-size: var(--tam-texto); text-align: left; }
-.crm-ficha__links .botao { font-size: var(--tam-apoio); }
-.crm-ficha__detalhes { margin-top: var(--esp-3); }
-.crm-ficha__detalhes > p:first-of-type { margin-top: 0; }
-@media (min-width: 40rem) { .crm-ficha__fixa { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); } }
-@media (min-width: 40rem) { .crm-ficha__links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.crm-proximo { display: grid; gap: var(--esp-0); margin: 0 0 var(--esp-3); padding: var(--esp-3) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
-.crm-proximo.is-atrasado { background: var(--erro-fundo); }
+.crm-ficha__etapa { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); margin: 0; color: var(--texto-2); font-weight: var(--peso-medio); }
+.crm-etapa { padding: var(--esp-0) var(--esp-2); border: var(--linha-fina); border-radius: var(--raio-selo); background: var(--crm-cor); color: var(--cor-tinta); font-weight: var(--peso-titulo); }
+.crm-ficha__secao { padding-top: var(--esp-5); border-top: var(--divisor); }
+.crm-ficha__secao > h3,
+.crm-ficha__secao.dobra > summary { margin: 0 0 var(--esp-3); font-size: var(--tam-nome); font-weight: var(--peso-titulo); letter-spacing: -0.01em; }
+.crm-ficha__secao.dobra > summary { flex-wrap: wrap; margin-bottom: 0; }
+.crm-ficha__secao.dobra[open] > summary { margin-bottom: var(--esp-3); }
+.crm-ficha__secao.dobra > summary .crm-muted { font-size: var(--tam-apoio); font-weight: var(--peso-medio); letter-spacing: 0; }
+.crm-ficha__secao > p { margin: 0 0 var(--esp-3); }
+.crm-ficha__secao > .segmentado { margin: var(--esp-3) 0; }
+/* Rótulo pequeno de grupo dentro de uma seção (Agora, Antes confirme, Depois…). */
+.crm-ficha__rotulo { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-forte); letter-spacing: 0; }
+
+/* Agora: o que fazer numa frase, o prazo e o "Mudar" na mesma linha. */
+.crm-ficha__agora { display: grid; gap: var(--esp-2); padding-top: var(--esp-5); border-top: var(--divisor); }
+.crm-ficha__acao { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); line-height: 1.3; overflow-wrap: anywhere; }
+.crm-ficha__prazo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); margin: 0; color: var(--texto-2); font-weight: var(--peso-medio); }
+.crm-ficha__prazo .botao { margin-left: auto; }
+/* A ação de agora, presa ao topo da folha enquanto se rola. No celular o primário ocupa a largura.
+   O ::before cobre o respiro do topo da folha (--esp-4 em Sheet.vue): sem ele, o texto rolado aparecia
+   numa fresta acima do botão preso. Faixa de fundo, não sombra: sombra é só a do primário. */
+.crm-ficha__fixa { position: sticky; top: 0; z-index: var(--camada-fixa); display: flex; flex-wrap: wrap; gap: var(--esp-2); padding: var(--esp-2) 0; background: var(--superficie); }
+.crm-ficha__fixa::before { position: absolute; right: 0; bottom: 100%; left: 0; height: var(--esp-4); background: var(--superficie); content: ""; }
+.crm-ficha__fixa .botao { flex: 1 1 100%; justify-content: space-between; min-height: var(--toque-grande); padding-block: var(--esp-2); font-size: var(--tam-texto); text-align: left; }
+@media (min-width: 40rem) { .crm-ficha__fixa .botao { flex: 0 1 auto; gap: var(--esp-3); } }
+.crm-ficha__status { display: grid; gap: var(--esp-2); }
+/* Avisos: um por linha, com a faixa à esquerda pelo tom; a frase diz o que é (RULES 3). */
+.crm-ficha__avisos { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.crm-ficha__avisos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); padding: var(--esp-1) 0 var(--esp-1) var(--esp-3); border-left: var(--faixa) solid var(--texto-2); font-size: var(--tam-apoio); overflow-wrap: anywhere; }
+.crm-ficha__avisos li.is-atencao { border-left-color: var(--acento); }
+.crm-ficha__avisos li.is-erro { border-left-color: var(--negativo); }
+.crm-ficha__avisos code { font-size: var(--tam-mini); }
+/* Links de apoio: texto sublinhado em lista, cada um com o toque de 44 px; nenhum compete com o primário. */
+.crm-ficha__apoio { display: flex; flex-wrap: wrap; gap: 0 var(--esp-4); margin: 0; padding: 0; list-style: none; }
+.crm-ficha__apoio a { display: inline-flex; align-items: center; gap: var(--esp-1); min-height: var(--toque); color: var(--texto); font-weight: var(--peso-medio); text-underline-offset: 3px; }
+
+/* O que oferecer: o nome em negrito e o porquê embaixo, sem travessão nem caixa. */
+.crm-ficha__ofertas { display: grid; gap: var(--esp-3); margin: 0 0 var(--esp-3); padding: 0; list-style: none; }
+.crm-ficha__ofertas li { display: grid; gap: var(--esp-0); padding-left: var(--esp-3); border-left: var(--faixa) solid var(--destaque); overflow-wrap: anywhere; }
+.crm-ficha__ofertas li span { color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-ficha__ofertas.is-depois li { border-left-color: var(--borda); }
+.crm-ficha__ofertas.is-depois li strong { font-weight: var(--peso-medio); }
+.crm-ficha h4.crm-ficha__rotulo { margin-bottom: var(--esp-2); }
+/* Confirmar antes: checklist curta (o quadrado é só glifo; nada aqui grava). */
+.crm-ficha__conferir { display: grid; gap: var(--esp-2); margin: var(--esp-2) 0 var(--esp-3); padding: 0; list-style: none; font-size: var(--tam-apoio); }
+.crm-ficha__conferir li { position: relative; padding-left: var(--esp-6); overflow-wrap: anywhere; }
+.crm-ficha__conferir li::before { position: absolute; left: 0; content: "☐"; color: var(--texto-2); }
+.crm-ficha__perder { margin-top: var(--esp-4); }
+/* Consulta: as dobras empilhadas, cada uma com o seu toque de 44 px. */
+.crm-ficha__consulta { display: grid; gap: var(--esp-1); }
+.crm-ficha__consulta .dobra > p { margin: 0 0 var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-form { display: grid; gap: var(--esp-3); }
 .crm-form__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
 .crm-status { min-height: 1.2em; margin: 0; font-weight: var(--peso-medio); }
@@ -391,32 +423,33 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-colinha__botoes > * { flex: 1 1 10rem; }
 @media (min-width: 40rem) { .crm-colinha__botoes > * { flex: 0 1 auto; } }
 
-/* Na ficha */
-.crm-colinha__motivo { margin: 0 0 var(--esp-3); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); font-weight: var(--peso-medio); }
-.crm-ficha__bloco .crm-colinha__momento,
-.crm-ficha__bloco .crm-colinha__objecao { margin-bottom: var(--esp-3); }
+/* Na ficha (16/10/2026): o texto pronto perde a caixa (a citação com a faixa já o separa), e o motivo
+   e o "complete os campos" viram texto. Na página da colinha os cartões continuam. */
+.crm-colinha__motivo { margin: 0 0 var(--esp-3); font-weight: var(--peso-medio); }
+.crm-ficha .crm-colinha__momento,
+.crm-ficha .crm-colinha__objecao { margin-bottom: var(--esp-4); }
+.crm-ficha .crm-colinha__trecho { padding: 0; border: 0; background: none; }
+.crm-ficha .crm-colinha__texto { background: var(--superficie-2); }
+.crm-ficha .crm-colinha__pendente { padding: 0 0 0 var(--esp-3); border: 0; border-left: var(--faixa) solid var(--acento); background: none; }
 .crm-colinha__inteira { display: inline-flex; align-items: center; gap: var(--esp-1); min-height: var(--toque); color: var(--texto); font-weight: var(--peso-forte); text-underline-offset: 3px; }
 
-/* Jornada da Ficha (CrmJornada.vue, 15/10/2026): o passo atual, a trilha, o próximo passo e a oferta.
+/* Jornada da Ficha (CrmJornada.vue): "Passo N de M" e uma barra; a trilha inteira dobrada, em lista.
    Estado sempre com palavra para o leitor de tela e glifo à vista; a cor só reforça (RULES 3). */
-.crm-jornada__onde { display: grid; gap: var(--esp-0); }
-.crm-jornada__onde strong { font-size: var(--tam-nome); }
-.crm-jornada__trilha { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin: 0 0 var(--esp-3); padding: 0; list-style: none; }
-.crm-jornada__trilha li { padding: var(--esp-1) var(--esp-2); border: var(--linha-fina); background: var(--superficie); font-size: var(--tam-apoio); }
-.crm-jornada__trilha li.is-feito { background: var(--ok-fundo); }
-.crm-jornada__trilha li.is-agora { background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-forte); }
-.crm-jornada__trilha li.is-depois { color: var(--texto-2); border-style: dashed; }
-.crm-jornada__trilha li.is-sem-registro { color: var(--texto-2); }
-.crm-jornada__oferta { margin: 0 0 var(--esp-3); }
-.crm-jornada__oferta h4 { margin: 0 0 var(--esp-1); font-size: var(--tam-apoio); font-weight: var(--peso-forte); letter-spacing: 0; }
-.crm-jornada__oferta ul { margin: 0; padding-left: var(--esp-4); display: grid; gap: var(--esp-1); }
-.crm-jornada__oferta.is-nao, .crm-jornada__oferta.is-depois { color: var(--texto-2); }
-.crm-jornada__oferta.is-confirmar { padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--atencao-fundo); }
+.crm-jornada { display: grid; gap: var(--esp-2); margin-top: var(--esp-3); }
+.crm-jornada__onde { margin: 0; font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.crm-jornada__barra { height: var(--esp-2); overflow: hidden; border: var(--linha-fina); border-radius: var(--raio-pilula); background: var(--superficie-2); }
+.crm-jornada__barra span { display: block; height: 100%; background: var(--destaque); }
+.crm-jornada__passos > p { margin: 0 0 var(--esp-2); }
+.crm-jornada__passos ol { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; font-size: var(--tam-apoio); }
+.crm-jornada__passos li { display: flex; gap: var(--esp-2); }
+.crm-jornada__glifo { width: 1.2em; text-align: center; }
+.crm-jornada__passos li.is-agora { font-weight: var(--peso-forte); }
+.crm-jornada__passos li:is(.is-depois, .is-sem-registro) { color: var(--texto-2); }
 
-/* Sugestão do copiloto (CrmCopiloto.vue): reaproveita o cartão da colinha e as listas da jornada. */
-.crm-copiloto { display: grid; gap: var(--esp-3); }
-.crm-copiloto h3 .crm-tag { margin-left: var(--esp-2); vertical-align: middle; }
-.crm-copiloto__avisos { margin: 0; padding: var(--esp-2) var(--esp-3) var(--esp-2) var(--esp-6); border: var(--linha-fina); background: var(--atencao-fundo); font-size: var(--tam-apoio); display: grid; gap: var(--esp-1); }
+/* Sugestão do copiloto (CrmCopiloto.vue): dobrada, partes separadas por espaço, sem caixa. */
+.crm-copiloto[open] { display: grid; gap: var(--esp-3); }
+.crm-copiloto .crm-tag { margin-left: var(--esp-1); }
+.crm-copiloto__parte { display: grid; gap: var(--esp-2); }
 
 /* Vista Jornada (CrmJornadaVista.vue): um bloco por passo, na ordem da jornada; parado com palavra. */
 .crm-jornada-vista { display: grid; gap: var(--esp-3); }

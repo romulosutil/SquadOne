@@ -26,7 +26,7 @@ const trechoAtual = computed(() => props.passo.trechos[Math.min(escolhido.value,
   <section class="crm-colinha__momento" :aria-labelledby="idTitulo">
     <component :is="`h${nivel}`" :id="idTitulo">{{ passo.titulo }}</component>
     <p v-if="passo.objetivo" class="crm-colinha__objetivo">{{ passo.objetivo }}</p>
-    <p v-if="servico" class="crm-colinha__vende">Leva para: <strong>{{ servico.nome }}</strong> ({{ servico.preco }}<template v-if="servico.mensal"> + {{ servico.mensal }}</template>)</p>
+    <p v-if="servico" class="crm-colinha__vende">Leva para <strong>{{ servico.nome }}</strong> · {{ servico.preco }}<template v-if="servico.mensal"> + {{ servico.mensal }}</template></p>
     <template v-if="passo.trechos.length > 1">
       <div class="escolhas" role="group" :aria-label="`Qual texto de ${passo.titulo}`">
         <button v-for="(t, i) in passo.trechos" :key="t.id" type="button" :aria-pressed="trechoAtual === t" @click="escolhido = i">{{ t.titulo }}</button>

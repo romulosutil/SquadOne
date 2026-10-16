@@ -84,15 +84,16 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
       <!-- Numa linha só: com white-space pre-wrap, a quebra entre as tags apareceria no texto. -->
       <blockquote ref="mensagem" class="crm-colinha__texto"><template v-for="(parte, i) in partes" :key="i"><mark v-if="i % 2" class="crm-colinha__marca">{{ parte }}</mark><template v-else>{{ parte }}</template></template></blockquote>
       <p v-if="temColchetes" class="crm-colinha__pendente">Complete os campos entre colchetes antes de mandar.</p>
-      <p v-else-if="temChaves" class="crm-colinha__pendente">Os campos entre chaves viram o nome e o link do lead na ficha dele: troque antes de mandar.</p>
+      <p v-else-if="temChaves" class="crm-colinha__pendente">Troque os campos entre chaves pelo nome e o link do lead antes de mandar.</p>
       <div class="crm-colinha__botoes">
         <button class="botao" type="button" @click="copiar">{{ estado === 'copiado' ? 'Copiado ✓' : estado === 'selecionado' ? 'Selecionado' : 'Copiar' }}</button>
-        <a v-if="whatsapp" class="botao botao--primario" :href="whatsapp" target="_blank" rel="noopener">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
+        <!-- Secundário: o wa.me só existe na Ficha, e lá o primário é a ação de agora (um por tela). -->
+        <a v-if="whatsapp" class="botao" :href="whatsapp" target="_blank" rel="noopener">Abrir no WhatsApp <span aria-hidden="true">↗</span></a>
       </div>
       <span class="so-leitor" role="status">{{ anuncio }}</span>
     </template>
     <p v-else class="crm-muted">Ainda sem texto pronto.</p>
     <p v-if="trecho.dica" class="crm-colinha__dica">{{ trecho.dica }}</p>
-    <p v-if="avisoDaEsteira" class="crm-colinha__dica">A esteira (n8n) manda este texto sozinha: mande à mão só se ela não mandou.</p>
+    <p v-if="avisoDaEsteira" class="crm-colinha__dica">A esteira do n8n manda este texto sozinha: mande à mão só se ela não mandou.</p>
   </article>
 </template>

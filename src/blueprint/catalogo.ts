@@ -35,18 +35,20 @@ export const CATALOGO: readonly PecaDoCatalogo[] = [
   { id: 'BP-TRECHO', nome: 'Texto pronto', classe: '<CrmTrecho>', onde: 'operations/CrmTrecho.vue', regra: 'Copiar e Abrir no WhatsApp. Marcador por preencher fica realçado e escrito por extenso.' },
   { id: 'BP-FOLHA', nome: 'Folha', classe: '<Sheet>', onde: 'components/Sheet.vue', regra: 'Tudo que abre por cima. A folha é o contorno e a sombra; dentro, blocos sem sombra. Título sempre, "Fechar" com texto, um primário no rodapé.' },
   { id: 'BP-TABELA', nome: 'Tabela do desktop', classe: '.fin-tabela, .crm-tabela', onde: 'operations/financas/financas.css, operations/crm.css', regra: 'Só a partir de 64 rem; abaixo, a lista de sempre. Cabeçalho preso, zebra no lugar do divisor, número à direita, linha de 44 px, uma linha por item.' },
-  { id: 'BP-FICHA', nome: 'Ficha do lead', classe: '<CrmFicha>', onde: 'operations/CrmFicha.vue', regra: 'Na ordem da decisão: o que disse → onde está → como responder → anotar → histórico.' },
+  { id: 'BP-FICHA', nome: 'Ficha do lead', classe: '<CrmFicha>', onde: 'operations/CrmFicha.vue', regra: 'Quem, onde, o que fazer e um primário na primeira tela; seções por título e linha, sem caixa dentro de caixa; consulta dobrada.' },
 ]
 
 /** A ordem da Ficha, bloco a bloco, com a pergunta que cada um responde. É o contrato da tela. */
 export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string; visivel: 'sempre' | 'quando houver' | 'dobrado' }> = [
-  { bloco: 'Cabeça', pergunta: 'Quem é, em que etapa, quanto tempo falta para sair dela?', visivel: 'sempre' },
-  { bloco: 'Faixa fixa', pergunta: 'Qual é a ação de hoje? (presa no topo ao rolar)', visivel: 'quando houver' },
-  { bloco: 'O que respondeu', pergunta: 'O que ele disse, e de que tipo foi?', visivel: 'quando houver' },
-  { bloco: 'Jornada', pergunta: 'Em que passo está, o que fazer agora e o que oferecer?', visivel: 'sempre' },
-  { bloco: 'Colinha', pergunta: 'Com que texto respondo? (uma variante por vez)', visivel: 'sempre' },
-  { bloco: 'Ações', pergunta: 'Onde abro o resto (demo, Maps, planilha)?', visivel: 'sempre' },
-  { bloco: 'Anotar', pergunta: 'O que fica registrado? (um formulário por vez)', visivel: 'sempre' },
+  { bloco: 'Cabeça', pergunta: 'Quem é, em que etapa, em que passo da jornada (N de M, a trilha dobrada)?', visivel: 'sempre' },
+  { bloco: 'Agora', pergunta: 'O que fazer agora, numa frase, e para quando? Um próximo passo só, editado ali mesmo.', visivel: 'sempre' },
+  { bloco: 'Ação de agora', pergunta: 'O único primário da tela (presa no topo ao rolar).', visivel: 'quando houver' },
+  { bloco: 'Avisos', pergunta: 'Trava, ritmo, prazo, divergência, demo: um por linha, num lugar só.', visivel: 'quando houver' },
+  { bloco: 'Abrir em outro lugar', pergunta: 'Conversa, Raio-X, Maps, planilha, página do lead.', visivel: 'dobrado' },
+  { bloco: 'Resposta', pergunta: 'O que ele disse, e de que tipo foi?', visivel: 'quando houver' },
+  { bloco: 'O que oferecer', pergunta: 'Que oferta, por quê, e o que confirmar antes?', visivel: 'quando houver' },
+  { bloco: 'Colinha · Copiloto', pergunta: 'Com que texto respondo? Aberta quando o passo é escrever à mão.', visivel: 'dobrado' },
+  { bloco: 'Anotar', pergunta: 'Nota ou proposta (um formulário por vez).', visivel: 'sempre' },
   { bloco: 'Sobre o lead · Linha do tempo · Gerador', pergunta: 'Consulta: de onde veio, o que já aconteceu.', visivel: 'dobrado' },
 ]
 

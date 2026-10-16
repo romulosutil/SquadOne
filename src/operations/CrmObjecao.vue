@@ -19,6 +19,6 @@ const destino = computed(() => CARDAPIO.find((s) => s.id === props.objecao.levaP
   <section class="crm-colinha__objecao" :aria-labelledby="idTitulo">
     <component :is="`h${nivel}`" :id="idTitulo">Se disser “{{ objecao.fala }}”</component>
     <CrmTrecho :trecho="objecao.resposta" :lead="lead" titulo="Resposta pronta" />
-    <p v-if="destino" class="crm-colinha__vende">Leva para: <strong>{{ destino.nome }}</strong> ({{ destino.preco }}<template v-if="destino.mensal"> + {{ destino.mensal }}</template>)</p>
+    <p v-if="destino" class="crm-colinha__vende">Leva para <strong>{{ destino.nome }}</strong> · {{ destino.preco }}<template v-if="destino.mensal"> + {{ destino.mensal }}</template></p>
   </section>
 </template>

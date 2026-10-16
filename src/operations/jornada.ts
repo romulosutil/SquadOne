@@ -351,12 +351,12 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
   switch (passoAtual(lead)) {
     case 'achado':
       return funil === 'prumo' || funil === 'iris' || funil === 'estampa'
-        ? { acao: 'Revisar o lead na planilha e mandar o convite quando ele estiver bom', quem: 'você' }
-        : { acao: 'Esperar o Raio-X: o raio-x.py publica às 11:15 e às 17:15', quem: 'robô' }
+        ? { acao: 'Revisar o lead na planilha e mandar o convite', quem: 'você' }
+        : { acao: 'Esperar o Raio-X, que sai às 11:15 e às 17:15', quem: 'robô' }
     case 'raio-x':
       return lead.sinal === 'publicado'
-        ? { acao: 'Esperar o Balcão marcar "pronto" (de hora em hora)', quem: 'robô' }
-        : { acao: 'Mandar a primeira mensagem (Enviar um por um)', quem: 'você', quando: 'no expediente, no ritmo da trava' }
+        ? { acao: 'Esperar o Balcão marcar "pronto", de hora em hora', quem: 'robô' }
+        : { acao: 'Mandar a primeira mensagem pelo Enviar um por um', quem: 'você', quando: 'no expediente, no ritmo da trava' }
     case 'primeiro-contato':
       if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
       return {
@@ -366,10 +366,10 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
       }
     case 'resposta':
       if (tipo === 'exclusao') return { acao: 'Agradecer e apagar o lead', quem: 'você', quando: 'hoje' }
-      if (tipo === 'negativa') return { acao: 'Responder a objeção com a colinha (sem insistir depois de um "não")', quem: 'você' }
+      if (tipo === 'negativa') return { acao: 'Responder a objeção com a colinha, sem insistir depois de um "não"', quem: 'você' }
       if (tipo === 'interesse' || lead.interesseParado) {
         return {
-          acao: funil === 'prumo' ? 'Mandar o Raio-X (2ª mensagem)' : 'Mandar a 2ª mensagem: o Raio-X ou o demo, com o preço do Encontrado (sem demo, toque "Gerar demo")',
+          acao: funil === 'prumo' ? 'Mandar o Raio-X na 2ª mensagem' : 'Mandar a 2ª mensagem com o Raio-X ou o demo e o preço do Encontrado',
           quem: 'você',
           quando: 'em até 2 h',
         }
@@ -377,15 +377,15 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
       return { acao: 'Seguir a conversa com a colinha', quem: 'você' }
     case 'segunda':
       return dentro
-        ? { acao: 'Convidar para o Mapa (16 perguntas) e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
-        : { acao: 'Marcar a conversa (ou fechar o Encontrado, se ele pediu para pôr no ar)', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
+        ? { acao: 'Convidar para o Mapa e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
+        : { acao: 'Marcar a conversa, ou fechar o Encontrado se ele pediu para pôr no ar', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
     case 'conversa':
       return { acao: 'Marcar a conversa e mandar a proposta', quem: 'você', quando: 'proposta em até 24 h depois da conversa' }
     case 'mapa':
       return { acao: 'Completar o rascunho do Mapa e marcar a devolutiva de 45 min', quem: 'você' }
     case 'mapa-convite':
     case 'devolutiva':
-      return { acao: 'Mandar a proposta da Fonte (e dos produtos que o Mapa apontou)', quem: 'você', quando: 'em até 24 h' }
+      return { acao: 'Mandar a proposta da Fonte e dos produtos que o Mapa apontou', quem: 'você', quando: 'em até 24 h' }
     case 'proposta':
       return { acao: 'Cobrar a decisão e salvar a data no próximo passo', quem: 'você' }
     case 'ganho':
@@ -569,7 +569,7 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
         : 'Se tiver equipe (umas 8 pessoas ou mais): o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.',
     }
     ;(viuRaioX && comEquipe ? r.agora : r.depois).push(viuRaioX ? mapa : { ...mapa, porque: `Depois do Raio-X. ${mapa.porque}` })
-    if (!comEquipe) r.aConfirmar.push('Porte: a empresa tem umas 8 pessoas ou mais? O CNPJ do site não deu o porte, e é ele que decide o convite para o Mapa.')
+    if (!comEquipe) r.aConfirmar.push('Porte: a empresa tem umas 8 pessoas ou mais? Só com equipe vale o convite para o Mapa.')
     r.depois.push({ id: 'fonte', porque: 'Só depois do Mapa.' })
   } else {
     r.naoAgora.push({ id: 'mapa', porque: funil === 'site' ? 'Site antes da venda: empresa pequena, o Mapa não tem para onde levar.' : 'Empresa sem equipe: a Fonte não se paga.' })
@@ -577,9 +577,9 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
 
   // 4. O que falta saber.
   if (!achados.length && lead.links.raioX) {
-    r.aConfirmar.push('O que o Raio-X achou não está no CRM (Raio-X anterior a 15/10/2026 ou feito à mão): abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
+    r.aConfirmar.push('O que o Raio-X achou não chegou ao CRM: abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
   }
-  if (comSite && !disseQueTemSite && !achados.length) r.aConfirmar.push('O site atual aparece no Google? Se não, o Encontrado entra.')
+  if (comSite && !disseQueTemSite && !achados.length) r.aConfirmar.push('O site atual aparece no Google? Se não, ofereça o Encontrado.')
   return r
 }
 

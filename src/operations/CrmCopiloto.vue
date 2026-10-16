@@ -123,39 +123,41 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
 </script>
 
 <template>
-  <section class="crm-ficha__bloco crm-copiloto" aria-labelledby="crm-ficha-copiloto" :aria-busy="estado === 'gerando'">
-    <h3 id="crm-ficha-copiloto">Sugestão do copiloto <span class="crm-tag">em teste</span></h3>
-    <p class="crm-muted">Lê o lead, o Raio-X, a resposta e as suas notas, e sugere o próximo passo até a proposta. Não envia nada: você confere, copia e manda.</p>
+  <!-- Dobrado (16/10/2026): é ajuda, não o passo; o resumo diz se já há sugestão guardada. Dentro, listas e
+       a mensagem em citação, sem caixa: a folha é o único contorno. -->
+  <details class="dobra crm-ficha__secao crm-copiloto" :aria-busy="estado === 'gerando'">
+    <summary>Sugestão do copiloto <span class="crm-tag">em teste</span><span v-if="sugestao" class="crm-muted">pronta</span></summary>
+    <p class="crm-muted">Lê o lead, o Raio-X, a resposta e as suas notas. Não envia nada: confira, copie e mande.</p>
 
     <template v-if="sugestao">
-      <article class="crm-colinha__trecho">
-        <p class="crm-colinha__trecho-cabeca"><strong>Próxima mensagem</strong></p>
+      <div class="crm-copiloto__parte">
+        <h4 class="crm-ficha__rotulo">Próxima mensagem</h4>
         <blockquote ref="mensagemEl" class="crm-colinha__texto">{{ sugestao.sugestao.mensagem }}</blockquote>
         <p v-if="sugestao.sugestao.porque" class="crm-colinha__dica">{{ sugestao.sugestao.porque }}</p>
         <div class="crm-colinha__botoes">
-          <button class="botao botao--primario" type="button" @click="copiar('mensagem')">{{ copiado === 'mensagem' ? 'Copiado ✓' : 'Copiar a mensagem' }}</button>
+          <button class="botao" type="button" @click="copiar('mensagem')">{{ copiado === 'mensagem' ? 'Copiado ✓' : 'Copiar a mensagem' }}</button>
         </div>
-      </article>
-
-      <ul v-if="sugestao.avisos.length" class="crm-copiloto__avisos" aria-label="Confira antes de mandar">
-        <li v-for="a in sugestao.avisos" :key="a">{{ a }}</li>
-      </ul>
-
-      <div v-if="sugestao.sugestao.ofertas.length" class="crm-jornada__oferta is-agora">
-        <h4>O que oferecer</h4>
-        <ul>
-          <li v-for="o in sugestao.sugestao.ofertas" :key="o.id"><strong>{{ nomeDaOferta(o.id) }}</strong><template v-if="o.porque"> — {{ o.porque }}</template></li>
-        </ul>
       </div>
 
-      <div class="crm-jornada__oferta">
-        <h4>Rascunho da proposta</h4>
+      <template v-if="sugestao.avisos.length">
+        <h4 class="crm-ficha__rotulo">Confira antes de mandar</h4>
+        <ul class="crm-ficha__conferir"><li v-for="a in sugestao.avisos" :key="a">{{ a }}</li></ul>
+      </template>
+
+      <template v-if="sugestao.sugestao.ofertas.length">
+        <h4 class="crm-ficha__rotulo">O que oferecer</h4>
+        <ul class="crm-ficha__ofertas">
+          <li v-for="o in sugestao.sugestao.ofertas" :key="o.id"><strong>{{ nomeDaOferta(o.id) }}</strong><span v-if="o.porque">{{ o.porque }}</span></li>
+        </ul>
+      </template>
+
+      <div class="crm-copiloto__parte">
+        <h4 class="crm-ficha__rotulo">Rascunho da proposta</h4>
         <template v-if="proposta.length">
-          <ul>
+          <ul class="crm-ficha__ofertas">
             <li v-for="i in proposta" :key="i.id">
-              <strong>{{ i.nome }}</strong><template v-if="i.preco"> · {{ i.preco }}</template>
-              <template v-if="i.sobProposta"> <span class="crm-tag">só na proposta escrita</span></template>
-              <template v-if="i.porque"><br><span class="crm-muted">{{ i.porque }}</span></template>
+              <strong>{{ i.nome }}<template v-if="i.preco"> · {{ i.preco }}</template><template v-if="i.sobProposta"> <span class="crm-tag">só na proposta escrita</span></template></strong>
+              <span v-if="i.porque">{{ i.porque }}</span>
             </li>
           </ul>
           <p v-if="sugestao.sugestao.proposta.observacao" class="crm-colinha__dica">{{ sugestao.sugestao.proposta.observacao }}</p>
@@ -167,26 +169,26 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
         <p v-else class="crm-muted">Ainda cedo para a proposta: primeiro a conversa.</p>
       </div>
 
-      <div v-if="sugestao.sugestao.faltaSaber.length" class="crm-jornada__oferta is-confirmar">
-        <h4>Falta saber</h4>
-        <ul><li v-for="t in sugestao.sugestao.faltaSaber" :key="t">{{ t }}</li></ul>
-      </div>
+      <template v-if="sugestao.sugestao.faltaSaber.length">
+        <h4 class="crm-ficha__rotulo">Falta saber</h4>
+        <ul class="crm-ficha__conferir"><li v-for="t in sugestao.sugestao.faltaSaber" :key="t">{{ t }}</li></ul>
+      </template>
 
       <p class="crm-muted">
-        {{ sugestao.provedor }} · {{ dataHora(sugestao.quando) }}<template v-if="sugestao.guardada"> · guardada (o lead não mudou desde então)</template>
-        <template v-if="sugestao.raioX !== 'com texto'"> · {{ sugestao.raioX === 'só o link' ? 'sem o texto do Raio-X (só o link)' : 'sem Raio-X' }}</template>
+        {{ sugestao.provedor }} · {{ dataHora(sugestao.quando) }}<template v-if="sugestao.guardada"> · guardada, o lead não mudou desde então</template>
+        <template v-if="sugestao.raioX !== 'com texto'"> · {{ sugestao.raioX === 'só o link' ? 'sem o texto do Raio-X, só o link' : 'sem Raio-X' }}</template>
       </p>
     </template>
 
-    <p v-if="erro" class="crm-colinha__pendente" role="alert">{{ erro }}</p>
+    <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
     <div class="crm-colinha__botoes">
-      <button v-if="!sugestao" class="botao botao--primario" type="button" :disabled="estado !== 'pronto'" @click="pedir(false)">
-        {{ estado === 'gerando' ? 'Pensando… (até 2 min)' : estado === 'lendo' ? 'Lendo…' : 'Pedir sugestão' }}
+      <button v-if="!sugestao" class="botao" type="button" :disabled="estado !== 'pronto'" @click="pedir(false)">
+        {{ estado === 'gerando' ? 'Pensando, até 2 min…' : estado === 'lendo' ? 'Lendo…' : 'Pedir sugestão' }}
       </button>
-      <button v-else class="botao" type="button" :disabled="estado !== 'pronto'" @click="pedir(true)">
-        {{ estado === 'gerando' ? 'Pensando… (até 2 min)' : 'Gerar de novo' }}
+      <button v-else class="botao botao--leve" type="button" :disabled="estado !== 'pronto'" @click="pedir(true)">
+        {{ estado === 'gerando' ? 'Pensando, até 2 min…' : 'Gerar de novo' }}
       </button>
     </div>
     <span class="so-leitor" role="status">{{ anuncio }}</span>
-  </section>
+  </details>
 </template>
