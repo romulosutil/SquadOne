@@ -2076,7 +2076,7 @@ python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna
 python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
-### Observador do número do PRUMO (Evolution API; 16/10/2026, código pronto, NADA instalado)
+### Observador do número do PRUMO (Evolution API; 16/10/2026, instalado até o QR; observador do PRUMO desligado)
 
 Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
 prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no
@@ -2115,31 +2115,41 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
 - **Mensagem enviada pela API** (quando houver resposta automática) também chega como `fromMe:true` e conta como
   `saida`: marca o lead como `enviado` com a letra `manual`, igual a uma mensagem digitada.
 
-Instalar (nada disso foi feito; precisa do número novo, da Evolution no ar e do QR lido):
+**Estado em 16/10/2026 (instalado na Mel, nada conectado a número nenhum):**
 
-```bash
-# 1. segredo do webhook (o mesmo valor vai no header da Evolution)
-openssl rand -hex 24 > ~/.config/claude-ops/evolution-adaptador-segredo && chmod 600 ~/.config/claude-ops/evolution-adaptador-segredo
-# 2. adaptador e as duas units (o observador já está instalado)
-install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.py ~/.local/bin/evolution-adaptador.py
-cp ~/SquadOne/deploy/dell/whatsapp-observador/{evolution-adaptador,whatsapp-observador-prumo}.service ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now evolution-adaptador
-# 3. depois de o adaptador criar a pasta e o n8n responder, o segundo observador
-systemctl --user enable --now whatsapp-observador-prumo
-# 4. na Evolution (instância "prumo"): webhook só para estes eventos
-curl -s -X POST "$EVOLUTION_URL/webhook/set/prumo" -H "apikey: $EVOLUTION_APIKEY" -H 'Content-Type: application/json' \
-  -d '{"webhook":{"enabled":true,"url":"http://127.0.0.1:9131/evolution","events":["MESSAGES_UPSERT","MESSAGES_UPDATE","CONNECTION_UPDATE"],"headers":{"X-Adaptador":"<o segredo>"}}}'
-python3 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.test.py
-```
+| Peça | Onde | Estado |
+|---|---|---|
+| Evolution API **v2.3.7** + Postgres 17 + Redis | `~/workspace/evolution/` (compose em `deploy/dell/evolution/`, `.env` 600 fora do Git), API só em `127.0.0.1:8081`, rede `evolution_rede` (172.28.77.0/24) | no ar, `restart: unless-stopped` |
+| Instância `prumo` (Baileys) | dentro da Evolution | criada, **esperando o QR** (`connecting`); leitura e "marcar como lido" desligados, grupos ignorados |
+| `evolution-adaptador` | `~/.local/bin/evolution-adaptador.py`, escuta `172.28.77.1:9131` | ligado e habilitado; segredo em `~/.config/claude-ops/evolution-adaptador-segredo` (600) |
+| `whatsapp-observador-prumo` | unit instalada | **desligada de propósito**: sem ela ninguém grava `leads.json` e o adaptador, que falha fechado, não grava nada |
+| Regra do ufw | `172.28.77.0/24 -> 172.28.77.1:9131/tcp` | a única aberta; sem ela o ufw (política DROP) corta o container do host |
 
-Se a Evolution roda em container e o adaptador no host, `127.0.0.1` do container não é o host: ponha em
-`EVOLUTION_ENDERECO` (`Environment=` na unit) o endereço do host na ponte do Docker (`172.17.0.1` no padrão;
-`docker network inspect bridge` confirma) e use esse endereço na URL do webhook. Nunca `0.0.0.0`: o adaptador só
-deve ser alcançável pelo container. Decida isso no dia da instalação. Depois de atualizar o
-`observador.py`, reinicie as **duas** instâncias (`instalados.json` só reinicia a do número pessoal):
-`systemctl --user restart whatsapp-observador whatsapp-observador-prumo`. A entrada do adaptador em
-`instalados.json` usa curinga de propósito (`evolution-adaptador.p?`): só passa a ser comparada depois de instalada,
-então o `dell-status` não acusa "faltando" antes da instalação.
+- **Evolution 2.4 não, por enquanto.** A 2.4.x pede ativação de licença no primeiro acesso (e-mail e telefone do
+  operador, mais heartbeats com versão, contadores e o IP do servidor para a Evolution Foundation) e responde 503
+  até ativar; testada em 16/10/2026 (2.4.0-rc2). A 2.3.7 não pede. Custo: é de dez/2025 e o WhatsApp muda o
+  protocolo; ela gerou QR normalmente nesse dia. Subir de versão é decisão do dono (dados pessoais).
+- **O que falta, na ordem** (precisa do número novo): (1) chip/eSIM com WhatsApp Business e perfil completo;
+  (2) gerar o QR e ler no celular do número novo: `curl -s -H "apikey: $(grep ^EVOLUTION_APIKEY ~/workspace/evolution/.env | cut -d= -f2)" http://127.0.0.1:8081/instance/connect/prumo`
+  devolve `base64` (imagem do QR) e `code`; o QR vale poucos segundos e a instância só tenta `QRCODE_LIMIT` (30) vezes,
+  depois fecha: peça outro com o mesmo comando (o painel em `http://127.0.0.1:8081/manager`, pelo túnel, mostra o
+  QR); (3) `systemctl --user enable --now whatsapp-observador-prumo`; (4) o ensaio de um dia (abaixo); (5) só então a
+  fila "Enviar um por um" e a trava de ritmo contam por número.
+- **Segredo do webhook.** Troca: gere outro valor, grave em `evolution-adaptador-segredo`, mande o mesmo valor na
+  Evolution (`POST /webhook/set/prumo` com `headers.X-Adaptador`) e reinicie o adaptador. A resposta de
+  `/instance/create` **ecoa o header em claro**: nunca cole essa saída em lugar nenhum.
+- **Aviso de queda** só depois de o número ter conectado ao menos uma vez (marca `conectou` na pasta do PRUMO); o
+  `close` de uma instância cujo QR nunca foi lido não é queda.
+- **Reinstalar o adaptador ou o compose:** `install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.py
+  ~/.local/bin/ && systemctl --user restart evolution-adaptador`; `install -D -m 644
+  ~/SquadOne/deploy/dell/evolution/docker-compose.yml ~/workspace/evolution/ && (cd ~/workspace/evolution && docker
+  compose up -d)`. A entrada do adaptador em `instalados.json` usa curinga de propósito
+  (`evolution-adaptador.p?`): só é comparada depois de instalada. Depois de atualizar o `observador.py`, reinicie as
+  **duas** instâncias (`instalados.json` só reinicia a do número pessoal): `systemctl --user restart
+  whatsapp-observador whatsapp-observador-prumo`.
+- **Apagar tudo** (a pilha só tem a sessão do número, nenhum texto de conversa): `cd ~/workspace/evolution &&
+  docker compose down -v`, `systemctl --user disable --now evolution-adaptador whatsapp-observador-prumo` e
+  `sudo ufw delete allow from 172.28.77.0/24 to 172.28.77.1 port 9131 proto tcp`.
 
 ### Jev em sombra nas respostas (11/10/2026; código pronto, NADA aplicado no n8n)
 

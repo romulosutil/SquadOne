@@ -11,8 +11,11 @@
 #   O que a Evolution guarda é a sessão (para não pedir o QR de novo) e a instância. O texto de quem é
 #   lead passa pelo adaptador e vai ao n8n; o de quem não é nunca é gravado por nós.
 # - Telemetria desligada.
-# - Imagem fixada (EVOLUTION_TAG). A 2.3.7 é de dez/2025 e o WhatsApp muda o protocolo com frequência:
-#   se o QR não conectar, o primeiro suspeito é a versão.
+# - Imagem fixada (EVOLUTION_TAG) na v2.3.7. A 2.4.x exige ativação de licença no primeiro acesso (e-mail e
+#   telefone do operador, e heartbeats periódicos com versão, contadores e o IP do servidor para a Evolution
+#   Foundation; sem ativar, a API responde 503). Testado em 16/10/2026: a 2.4.0-rc2 sobe e trava nisso. A 2.3.x
+#   não pede ativação. Custo da escolha: a 2.3.7 é de dez/2025 e o WhatsApp muda o protocolo com frequência;
+#   se o QR não conectar, o primeiro suspeito é a versão. Subir para a 2.4 é decisão do dono (dados pessoais).
 name: evolution
 
 services:
@@ -40,7 +43,7 @@ services:
     networks: [rede]
 
   api:
-    image: evoapicloud/evolution-api:${EVOLUTION_TAG:-2.4.0-rc2}
+    image: evoapicloud/evolution-api:${EVOLUTION_TAG:-v2.3.7}
     restart: unless-stopped
     depends_on:
       postgres:

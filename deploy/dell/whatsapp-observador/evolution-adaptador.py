@@ -43,7 +43,9 @@ preenche só às vezes); sem nenhum dos dois o evento é contado em `lid_sem_tel
 Nada de "adivinhar" número.
 
 Desconexão: `CONNECTION_UPDATE` com estado `close` vira UM aviso pelo Hermes (o número deixou de
-ser acompanhado e ninguém veria), até a conexão voltar.
+ser acompanhado e ninguém veria), até a conexão voltar. Só depois de o número ter conectado ao
+menos uma vez (marca `conectou` na pasta): o `close` de uma instância cujo QR nunca foi lido não é
+queda.
 """
 from __future__ import annotations
 
@@ -372,6 +374,16 @@ class Gravador:
         # O observador espera o log existir; um arquivo vazio basta.
         self._anexar(self.pasta / "evolution.log", "")
 
+    def marcar_conectou(self) -> None:
+        """Lembra, em disco, que o número já chegou a conectar: só então uma queda merece aviso."""
+        try:
+            self._anexar(self.pasta / "conectou", "")
+        except OSError as e:
+            log("marca 'conectou' não gravada:", e)
+
+    def ja_conectou(self) -> bool:
+        return (self.pasta / "conectou").exists()
+
     def leads(self) -> set[str] | None:
         """leads.json relido só quando muda; ausente ou ilegível = None (falha fechada)."""
         arquivo = self.pasta / "leads.json"
@@ -473,13 +485,19 @@ class Adaptador:
         for l in t.linhas:
             chave = chave_do_numero(l["chatId"].partition("@")[0])
             log(f"{l['event']}{'/' + l['status'] if l.get('status') else ''}: {mascarar(chave)}")
-        if t.conexao == "close" and not self.desconectado_avisado:
-            self.desconectado_avisado = True
-            log("conexão do número caiu")
-            self.avisar(TEXTO_DESCONECTOU)
-        elif t.conexao == "open" and self.desconectado_avisado:
-            self.desconectado_avisado = False
-            log("conexão do número voltou")
+        if t.conexao == "open":
+            self.gravador.marcar_conectou()
+            if self.desconectado_avisado:
+                self.desconectado_avisado = False
+                log("conexão do número voltou")
+        elif t.conexao == "close" and not self.desconectado_avisado:
+            # Sem ter conectado nunca (QR ainda não lido, ou o limite de QRs estourou), "close" não é queda.
+            if self.gravador.ja_conectou():
+                self.desconectado_avisado = True
+                log("conexão do número caiu")
+                self.avisar(TEXTO_DESCONECTOU)
+            else:
+                log("instância fechada antes de conectar (QR não lido): sem aviso")
         return t
 
     def _registrar_forma(self, corpo, evento: str) -> None:

@@ -370,6 +370,7 @@ class Servico(unittest.TestCase):
     def test_queda_da_conexao_avisa_uma_vez_ate_voltar(self):
         queda = {"event": "connection.update", "instance": "prumo", "data": {"state": "close"}}
         volta = {"event": "connection.update", "instance": "prumo", "data": {"state": "open"}}
+        self.chamar(corpo=volta)  # o número já chegou a conectar
         self.chamar(corpo=queda)
         self.chamar(corpo=queda)
         self.assertEqual(len(self.avisos), 1)
@@ -377,6 +378,21 @@ class Servico(unittest.TestCase):
         self.chamar(corpo=volta)
         self.chamar(corpo=queda)
         self.assertEqual(len(self.avisos), 2)
+
+    def test_close_sem_nunca_ter_conectado_nao_e_queda(self):
+        # QR não lido: a Evolution fecha a instância depois do limite de QRs. Ninguém caiu.
+        queda = {"event": "connection.update", "instance": "prumo", "data": {"state": "close"}}
+        for _ in range(3):
+            self.chamar(corpo=queda)
+        self.assertEqual(self.avisos, [])
+        self.assertFalse(self.g.ja_conectou())
+
+    def test_a_marca_de_conectou_sobrevive_a_reinicio(self):
+        self.chamar(corpo={"event": "connection.update", "instance": "prumo", "data": {"state": "open"}})
+        self.assertTrue((self.dir / "conectou").is_file())
+        novo = ev.Adaptador(ev.Gravador(self.dir), relogio=lambda: T0, avisar=self.avisos.append, instancia="prumo")
+        novo.receber({"event": "connection.update", "instance": "prumo", "data": {"state": "close"}})
+        self.assertEqual(len(self.avisos), 1)
 
     def test_forma_nova_vai_ao_journal_uma_vez_sem_valores(self):
         saida = []
