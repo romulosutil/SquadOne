@@ -143,17 +143,14 @@ function alvoDoLink(url: string): string | null {
  */
 export function resumirConversa(mensagens: readonly MensagemDaConversa[] | null | undefined, links: ReadonlyArray<string | undefined> = []): ResumoDaConversa | null {
   if (!mensagens?.length) return null;
-  const alvos = links.map((l) => (l ? alvoDoLink(l) : null)).filter((a): a is string => Boolean(a));
   let ultimaEntrada: string | undefined;
   let ultimaSaida: string | undefined;
   let linkEm: string | undefined;
-  for (const m of mensagens) {
-    if (m.direcao === "entrada") ultimaEntrada = m.em;
-    else {
-      ultimaSaida = m.em;
-      const texto = m.texto.toLowerCase();
-      if (alvos.some((a) => texto.includes(a))) linkEm = m.em;
-    }
+  const saidas = saidasDaConversa(mensagens, links);
+  for (const m of mensagens) if (m.direcao === "entrada") ultimaEntrada = m.em;
+  for (const s of saidas) {
+    ultimaSaida = new Date(s.em).toISOString();
+    if (s.link === true) linkEm = ultimaSaida;
   }
   const ultima = mensagens[mensagens.length - 1];
   const trecho = ultima.texto.replace(/\s+/g, " ").trim();
@@ -167,21 +164,37 @@ export function resumirConversa(mensagens: readonly MensagemDaConversa[] | null 
   };
 }
 
+/** Uma mensagem nossa: `link` true = levou o link do lead; false = texto sem ele; null = texto não guardado. */
+export interface SaidaDaConversa {
+  em: number;
+  link: boolean | null;
+}
+
+/** PURO. As mensagens nossas, na ordem, e se cada uma levou um dos `links` do lead. */
+export function saidasDaConversa(mensagens: readonly MensagemDaConversa[] | null | undefined, links: ReadonlyArray<string | undefined> = []): SaidaDaConversa[] {
+  const alvos = links.map((l) => (l ? alvoDoLink(l) : null)).filter((a): a is string => Boolean(a));
+  return (mensagens ?? []).filter((m) => m.direcao === "saida").map((m) => {
+    const texto = m.texto.trim().toLowerCase();
+    return { em: Date.parse(m.em), link: texto ? alvos.some((a) => texto.includes(a)) : null };
+  });
+}
+
 /** Quanto tempo um toque em "Mandar o link" vale sem a conversa mostrar a mensagem (o observador lê com atraso). */
 export const FOLGA_DO_TOQUE_MS = 30 * 60_000;
 
 /**
  * PURO. Os envios anotados (toque no link da Central) contra a conversa guardada. O toque abre o
  * WhatsApp, mas nem sempre vira envio (16/10/2026: o "Mandar o link" da Kulniski abriu o WhatsApp
- * com o link que já tinha saído dois dias antes, e não foi mandado). Com a conversa cobrindo o
- * instante do toque, só vale o toque com uma mensagem nossa perto dele; o link visto na conversa
- * entra como envio. Toque recente (FOLGA_DO_TOQUE_MS) ou de antes da conversa guardada vale como era.
+ * com o link que já tinha saído dois dias antes; o que saiu depois foi um "Boa tarde"). Com a
+ * conversa cobrindo o instante do toque, só vale o toque com uma mensagem nossa perto dele que leve o
+ * link (ou cujo texto não foi guardado); o link visto na conversa entra como envio. Toque recente
+ * (FOLGA_DO_TOQUE_MS) ou de antes da conversa guardada vale como era.
  */
-export function enviosComAConversa(anotados: readonly number[], conversa: ResumoDaConversa | null, saidas: readonly number[], agora: number): number[] {
+export function enviosComAConversa(anotados: readonly number[], conversa: ResumoDaConversa | null, saidas: readonly SaidaDaConversa[], agora: number): number[] {
   if (!conversa) return [...anotados];
   const desde = Date.parse(conversa.desde);
   const valem = anotados.filter((t) => t < desde || agora - t < FOLGA_DO_TOQUE_MS
-    || saidas.some((s) => s >= t - 10 * 60_000 && s <= t + FOLGA_DO_TOQUE_MS));
+    || saidas.some((s) => s.link !== false && s.em >= t - 10 * 60_000 && s.em <= t + FOLGA_DO_TOQUE_MS));
   const link = conversa.linkEm ? Date.parse(conversa.linkEm) : NaN;
   if (Number.isFinite(link) && !valem.some((t) => Math.abs(t - link) <= FOLGA_DO_TOQUE_MS)) valem.push(link);
   return valem.sort((a, b) => a - b);

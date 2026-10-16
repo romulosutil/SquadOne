@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
+import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -665,7 +665,7 @@ function conversaDoLead(conversas: ContextoDoCrm["conversas"], numero: string | 
   segundasAnotadas: number[], agora: number) {
   const mensagens = numero ? conversas?.get(chaveDoNumero(numero)) : undefined;
   const resumo = resumirConversa(mensagens, links);
-  const saidas = (mensagens ?? []).filter((m) => m.direcao === "saida").map((m) => Date.parse(m.em));
+  const saidas = saidasDaConversa(mensagens, links);
   return {
     resumo,
     segundas: enviosComAConversa(segundasAnotadas, resumo, saidas, agora),

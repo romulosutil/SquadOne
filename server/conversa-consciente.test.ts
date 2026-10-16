@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
-import { chaveDoNumero, enviosComAConversa, resumirConversa, type MensagemDaConversa } from "./conversa-do-lead.ts";
+import { chaveDoNumero, enviosComAConversa, resumirConversa, saidasDaConversa, type MensagemDaConversa } from "./conversa-do-lead.ts";
 import { leadsDoAutomatico } from "./copiloto.ts";
 import { montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
 import { criarVendedor, ESPERA_DO_COPILOTO_MS } from "./vendedor.ts";
@@ -89,9 +89,16 @@ describe("o resumo da conversa", () => {
 
   it("toque no link que não virou mensagem não vale; o link visto na conversa entra; o toque recente espera o observador", () => {
     const r = resumirConversa(KULNISKI, [DEMO])!;
-    const saidas = KULNISKI.filter((m) => m.direcao === "saida").map((m) => Date.parse(m.em));
+    const saidas = saidasDaConversa(KULNISKI, [DEMO]);
     const toqueDeHoje = Date.parse(horas(1));
     assert.deepEqual(enviosComAConversa([toqueDeHoje], r, saidas, AGORA.getTime()), [Date.parse(horas(50.5))]);
+    // O caso de 16/10: depois do toque saiu um "Boa tarde", sem o link. Não é a 2ª mensagem.
+    const comBoaTarde = [...KULNISKI, msg(0.9, "saida", "Boa tarde")];
+    assert.deepEqual(enviosComAConversa([toqueDeHoje], resumirConversa(comBoaTarde, [DEMO]), saidasDaConversa(comBoaTarde, [DEMO]), AGORA.getTime()),
+      [Date.parse(horas(50.5))]);
+    // Texto não guardado (bridge antiga) perto do toque: não dá para dizer que não foi o link, o toque vale.
+    const semTexto = [...KULNISKI, msg(0.9, "saida", "")];
+    assert.ok(enviosComAConversa([toqueDeHoje], resumirConversa(semTexto, [DEMO]), saidasDaConversa(semTexto, [DEMO]), AGORA.getTime()).includes(toqueDeHoje));
     const toqueAgora = Date.parse(horas(0.1));
     assert.ok(enviosComAConversa([toqueAgora], r, saidas, AGORA.getTime()).includes(toqueAgora));
     // Antes da conversa guardada a Central não sabe: o toque vale como era.
