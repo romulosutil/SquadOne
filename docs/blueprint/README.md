@@ -37,4 +37,17 @@ Código publicado não muda nem se reaproveita: conversas e outros agentes citam
 3. Mudou o comportamento de um passo? Atualize o cartão no mesmo commit. `src/blueprint/servico.test.ts`
    falha se um código quebrar, uma ligação apontar para o nada ou um arquivo citado sumir.
 
+## A página
+
+`servico.html` usa a linguagem do app (16/10/2026): Inter, os tokens de `src/estilos/tokens.css`
+copiados no `:root` dela (o Artifact não lê o repositório), amarelo para o cartão escolhido, 2 px
+no cartão e sombra dura só no botão principal e no escolhido. Se um token do app mudar, copie o
+valor novo para lá. A partir de 60 rem é o quadro (passos em colunas, faixas em linhas, painel à
+direita); abaixo, uma lista por passo, e o cartão abre numa folha. Uma ação só por cartão:
+"Copiar para a conversa", que leva código, arquivos, marcas e ligações; o resto se cita pelo código.
+
+Para republicar, publique `servico.html` no mesmo Artifact
+(https://claude.ai/artifact/HHyUrvFAPSHsLZq5ZXmgJh) com `servico.json` em `files`: a página lê o JSON
+publicado ao lado e mostra o erro se ele faltar.
+
 O design system (tokens e componentes) é outra coisa: `/design-system` no app, `src/blueprint/tokens.ts`.

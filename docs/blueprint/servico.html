@@ -1,197 +1,259 @@
 <meta charset="utf-8">
-<title>Service Blueprint do SquadOne</title>
+<title>Service blueprint do SquadOne</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=swap">
 <style>
-/* Planta técnica: papel vegetal com tinta azul (palco) e verde-água (bastidor), como a convenção da NN/g; cianotipia no escuro.
-   Quadro em grade: uma coluna por passo, uma linha por faixa; painel de detalhe à direita (embaixo no celular). */
+/* Mesma linguagem do app (src/estilos/tokens.css e design.md, valores da main de 16/10/2026):
+   Inter, tinta sobre papel, amarelo para o escolhido, contorno de 3 px no que é bloco ou ação,
+   2 px no cartão, sombra dura só no botão principal e no cartão escolhido.
+   A partir de 60 rem: quadro da NN/g (uma coluna por passo, uma linha por faixa) e painel à direita.
+   Abaixo: lista por passo, e o cartão abre numa folha que sobe de baixo. Só um dos dois no DOM. */
 :root {
-  --papel: #f4f2eb;
-  --papel-2: #e9e6db;
-  --caixa: #fcfbf7;
-  --tinta: #163a6a;
-  --tinta-2: #4a6890;
-  --bastidor: #0f6b62;
-  --bastidor-fundo: #e3f2ef;
-  --realce: #a83512;
-  --realce-fundo: #fbe3d8;
-  --dor: #b3261e;
-  --dor-fundo: #f9dcd8;
-  --metrica: #735800;
-  --metrica-fundo: #fbf0c7;
-  --opcao: #1f63a3;
-  --opcao-fundo: #dcebf8;
-  --seguranca: #6b3fa0;
-  --seguranca-fundo: #ece2f7;
-  --grade: rgba(22, 58, 106, 0.06);
-  --t-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
-  --t-corpo: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --t-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --cor-tinta: #11130f;
+  --cor-papel: #f4f0e6;
+  --cor-papel-forte: #fffdf6;
+  --cor-papel-azul: #dce3ff;
+  --cor-amarelo: #ffdc59;
+  --cor-coral: #ff966f;
+  --cor-apagado: #565c55;
+
+  --fundo: var(--cor-papel-azul);
+  --superficie: var(--cor-papel-forte);
+  --superficie-2: var(--cor-papel);
+  --texto: var(--cor-tinta);
+  --texto-2: var(--cor-apagado);
+  --borda: var(--cor-tinta);
+  --destaque: var(--cor-amarelo);
+  --destaque-texto: var(--cor-tinta);
+  --acento: var(--cor-coral);
+  --sobre-pastel: var(--cor-tinta);
+  --foco: #1e64d4;
+  --hover: var(--superficie-2);
+  --veu: rgba(17, 19, 15, 0.45);
+
+  --linha: 3px solid var(--borda);
+  --linha-fina: 2px solid var(--borda);
+  --divisor: 1px solid color-mix(in srgb, var(--borda) 35%, transparent);
+  --sombra: 4px 4px 0 var(--borda);
+  --sombra-pequena: 2px 2px 0 var(--borda);
+  /* Canto vivo, como o app hoje. Se o design system adotar canto médio, muda só aqui. */
+  --raio: 0;
+  --toque: 44px;
+
+  --esp-1: 0.25rem;
+  --esp-2: 0.5rem;
+  --esp-3: 0.75rem;
+  --esp-4: 1rem;
+  --esp-5: 1.25rem;
+  --esp-6: 1.5rem;
+  --esp-8: 2rem;
+
+  --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --peso-texto: 450;
+  --peso-medio: 600;
+  --peso-forte: 700;
+  --peso-titulo: 800;
+  --tam-mini: 0.75rem;
+  --tam-apoio: 0.875rem;
+  --tam-texto: 1rem;
+  --tam-nome: 1.125rem;
+  --tam-secao: 1.375rem;
+  --tam-titulo: clamp(1.75rem, 6vw, 2.5rem);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --papel: #0d2747; --papel-2: #13345c; --caixa: #12325a; --tinta: #e7eefb; --tinta-2: #a9bddc; --bastidor: #6fd6c6; --bastidor-fundo: #0f3a40;
-    --realce: #ff9b6e; --realce-fundo: #4a2618; --dor: #ff8f86; --dor-fundo: #4a1f22; --metrica: #f2cd5c; --metrica-fundo: #3d3412;
-    --opcao: #8cc4ff; --opcao-fundo: #173f6b; --seguranca: #cfb2ff; --seguranca-fundo: #33264d; --grade: rgba(231, 238, 251, 0.06); color-scheme: dark;
+    --fundo: #10131a; --superficie: #1b202a; --superficie-2: #242a36; --texto: #f1ede2; --texto-2: #aab2c0;
+    --borda: #8792a7; --foco: #8ab4ff; --veu: rgba(0, 0, 0, 0.6);
+    --sombra: 4px 4px 0 #000; --sombra-pequena: 2px 2px 0 #000; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --papel: #0d2747; --papel-2: #13345c; --caixa: #12325a; --tinta: #e7eefb; --tinta-2: #a9bddc; --bastidor: #6fd6c6; --bastidor-fundo: #0f3a40;
-  --realce: #ff9b6e; --realce-fundo: #4a2618; --dor: #ff8f86; --dor-fundo: #4a1f22; --metrica: #f2cd5c; --metrica-fundo: #3d3412;
-  --opcao: #8cc4ff; --opcao-fundo: #173f6b; --seguranca: #cfb2ff; --seguranca-fundo: #33264d; --grade: rgba(231, 238, 251, 0.06); color-scheme: dark;
+  --fundo: #10131a; --superficie: #1b202a; --superficie-2: #242a36; --texto: #f1ede2; --texto-2: #aab2c0;
+  --borda: #8792a7; --foco: #8ab4ff; --veu: rgba(0, 0, 0, 0.6);
+  --sombra: 4px 4px 0 #000; --sombra-pequena: 2px 2px 0 #000; color-scheme: dark;
 }
-html, body { height: 100%; }
-body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--t-corpo); font-size: 14px; line-height: 1.45; }
+
 * { box-sizing: border-box; }
-button, input { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--realce); outline-offset: 2px; }
-code, .mono { font-family: var(--t-mono); font-size: 12px; overflow-wrap: anywhere; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--fonte); font-size: var(--tam-texto); font-weight: var(--peso-texto); line-height: 1.5; }
+button, input, select { font: inherit; color: inherit; }
+h1, h2, h3, p, ul, dl, dd { margin: 0; }
+h1, h2, h3 { text-wrap: balance; }
+:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+::selection { background: var(--destaque); color: var(--destaque-texto); }
+.codigo { white-space: nowrap; }
 
-.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
-.topo { display: grid; gap: 10px; padding: 12px 16px; border-bottom: 1.5px solid var(--tinta); }
-.topo__linha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
-.marca { display: grid; min-width: 0; margin-right: auto; }
-.marca h1 { margin: 0; font-family: var(--t-display); font-size: 28px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; line-height: 1; text-wrap: balance; }
-.marca small { color: var(--tinta-2); font-family: var(--t-mono); font-size: 12px; }
-.abas, .filtros { display: flex; flex-wrap: wrap; gap: 6px; }
-.bt { min-height: 36px; padding: 4px 12px; border: 1.5px solid var(--tinta); background: var(--caixa); cursor: pointer; font-weight: 500; }
-.bt:hover { background: var(--papel-2); }
-.bt[aria-pressed="true"] { background: var(--tinta); color: var(--papel); }
-.filtro { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 10px; border: 1.5px solid currentColor; background: var(--caixa); cursor: pointer; font-size: 13px; }
-.filtro[aria-pressed="true"] { box-shadow: inset 0 -3px 0 currentColor; font-weight: 600; }
-.busca input { width: min(260px, 100%); min-height: 36px; padding: 6px 10px; border: 1.5px solid var(--tinta); background: var(--caixa); }
+/* Casca: no quadro, a tela inteira é do app e só o quadro rola; na lista, a página rola. */
+.app.quadro { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; }
+.topo { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--esp-4) var(--esp-6); padding: var(--esp-4); border-bottom: var(--linha); background: var(--superficie); }
+.topo h1 { font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.05; }
+.topo p { margin-top: var(--esp-1); color: var(--texto-2); font-size: var(--tam-apoio); max-width: 40rem; }
+.controles { flex: 1 1 22rem; justify-content: end; display: flex; flex-wrap: wrap; align-items: end; gap: var(--esp-3); }
 
-.corpo { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 0; }
-@media (max-width: 900px) { .corpo { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } }
-.palco { min-width: 0; min-height: 0; overflow: auto; background-color: var(--papel);
-  background-image: linear-gradient(var(--grade) 1px, transparent 1px), linear-gradient(90deg, var(--grade) 1px, transparent 1px); background-size: 24px 24px; }
-.cabeca-bp { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 14px 16px 0; }
-.cabeca-bp p { margin: 0; max-width: 70ch; }
-.cabeca-bp strong { font-family: var(--t-display); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-2); margin-right: 6px; }
+.segmentado { display: inline-flex; border: var(--linha); border-radius: var(--raio); background: var(--superficie); }
+.segmentado button { min-height: var(--toque); padding: 0 var(--esp-4); border: 0; background: none; font-weight: var(--peso-forte); cursor: pointer; }
+.segmentado button + button { border-left: var(--linha); }
+.app.lista .segmentado { flex: 1 1 100%; }
+.app.lista .segmentado button { flex: 1; }
+.segmentado button:hover { background: var(--hover); }
+.segmentado button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); }
+
+.campo { flex: 1 1 10rem; display: grid; gap: var(--esp-1); font-size: var(--tam-apoio); font-weight: var(--peso-medio); color: var(--texto-2); }
+.campo input, .campo select { min-height: var(--toque); padding: 0 var(--esp-3); border: var(--linha-fina); border-radius: var(--raio); background: var(--superficie); color: var(--texto); font-size: var(--tam-texto); font-weight: var(--peso-texto); }
+.campo input, .campo select { width: 100%; }
+.app.quadro .campo { flex: 0 1 14rem; }
+.resultado { flex-basis: 100%; font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+.resultado:empty { display: none; }
+
+.corpo { display: grid; grid-template-columns: minmax(0, 1fr) 25rem; min-height: 0; }
+.app.lista .corpo { display: block; }
+.palco { min-width: 0; min-height: 0; overflow: auto; }
+.app.lista .palco { overflow: visible; padding: var(--esp-4); display: grid; gap: var(--esp-8); }
+
+/* Cartão do blueprint: igual em todas as faixas; a faixa e a linha é que dizem onde ele está. */
+.cartao { display: grid; gap: var(--esp-1); width: 100%; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); border-radius: var(--raio); background: var(--superficie); color: var(--texto); text-align: left; cursor: pointer; transition: opacity 160ms; }
+.cartao:hover { background: var(--hover); }
+.cartao__nome { font-weight: var(--peso-forte); line-height: 1.3; }
+.cartao__codigo { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-medio); }
+.cartao.escolhido { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra); }
+.cartao.escolhido .cartao__codigo { color: var(--destaque-texto); }
+.cartao.apagado { opacity: 0.4; }
+.app.lista .cartao.apagado { display: none; }
+.selo { justify-self: start; padding: 0 var(--esp-1); background: var(--acento); color: var(--sobre-pastel); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+@media (prefers-reduced-motion: reduce) { .cartao { transition: none; } }
 
 /* Quadro */
-.quadro { position: relative; display: grid; gap: 0 14px; padding: 12px 16px 24px; width: max-content; min-width: 100%; }
-.rotulo-faixa { position: sticky; left: 0; z-index: 2; display: grid; align-content: center; gap: 2px; padding: 8px 10px 8px 0; background: var(--papel); }
-.rotulo-faixa b { font-family: var(--t-display); font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.05; }
-.rotulo-faixa span { color: var(--tinta-2); font-size: 12px; font-style: italic; }
-.rotulo-faixa.abaixo b { color: var(--bastidor); }
-.celula { display: grid; align-content: start; gap: 8px; padding: 10px 0; min-width: 0; }
-.tempo { position: relative; display: grid; justify-items: center; gap: 2px; padding: 8px 4px 14px; text-align: center; }
-.tempo::before { content: ""; position: absolute; left: -14px; right: 0; top: 44px; border-top: 2px solid var(--tinta); }
-.tempo.ultimo::before { right: 20px; }
-.tempo.ultimo::after { content: ""; position: absolute; right: 8px; top: 38px; border: 7px solid transparent; border-left: 12px solid var(--tinta); }
-.tempo .n { position: relative; z-index: 1; display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--tinta); color: var(--papel); font-family: var(--t-mono); font-size: 12px; font-weight: 500; order: 2; margin-top: 4px; }
-.tempo .nome { order: 1; font-family: var(--t-display); font-size: 17px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; line-height: 1.05; text-wrap: balance; }
-.tempo .quando { order: 3; color: var(--tinta-2); font-size: 12px; }
-.linha { position: relative; grid-column: 1 / -1; height: 0; border-top: 2px dashed var(--tinta); margin: 4px 0; }
-.linha.visibilidade { border-top-style: solid; }
-.linha span { position: sticky; left: 0; display: inline-block; transform: translateY(-50%); padding: 0 8px 0 0; background: var(--papel); font-family: var(--t-display); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-
-.cartao { position: relative; display: grid; gap: 4px; width: 100%; padding: 8px 10px 8px; border: 1.5px solid var(--tinta); background: var(--caixa); text-align: left; cursor: pointer; }
-.cartao.abaixo { border-color: var(--bastidor); background: var(--bastidor-fundo); }
-.cartao.E { border-style: solid; border-width: 1.5px 1.5px 4px; }
-.cartao.momento { box-shadow: 4px 4px 0 var(--realce); }
-.cartao .nome { font-weight: 600; line-height: 1.25; }
-.cartao .id { color: var(--tinta-2); font-family: var(--t-mono); font-size: 11px; }
-.cartao.abaixo .id { color: var(--bastidor); }
-.cartao .marcas { display: flex; flex-wrap: wrap; gap: 4px; }
-.cartao:hover { outline: 2px solid var(--tinta-2); outline-offset: 1px; }
-.cartao.escolhido { outline: 3px solid var(--realce); outline-offset: 1px; }
-.cartao.apagado, .rotulo-faixa.apagado { opacity: 0.22; }
-.tag { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border: 1px solid; font-size: 11px; font-weight: 600; line-height: 18px; }
-.tag.momento { color: var(--realce); background: var(--realce-fundo); }
-.tag.dor { color: var(--dor); background: var(--dor-fundo); }
-.tag.metrica { color: var(--metrica); background: var(--metrica-fundo); }
-.tag.opcao { color: var(--opcao); background: var(--opcao-fundo); }
-.tag.seguranca { color: var(--seguranca); background: var(--seguranca-fundo); }
-.filtro.momento { color: var(--realce); } .filtro.dor { color: var(--dor); } .filtro.metrica { color: var(--metrica); } .filtro.opcao { color: var(--opcao); } .filtro.seguranca { color: var(--seguranca); }
-
+.grade { position: relative; display: grid; gap: 0 var(--esp-3); padding: var(--esp-4) var(--esp-4) var(--esp-8); width: max-content; min-width: 100%; }
+.faixa { position: sticky; left: 0; z-index: 2; display: grid; align-content: center; gap: var(--esp-1); padding: var(--esp-3) var(--esp-3) var(--esp-3) 0; background: var(--fundo); }
+.faixa b { font-size: var(--tam-apoio); font-weight: var(--peso-forte); line-height: 1.2; }
+.faixa span { color: var(--texto-2); font-size: var(--tam-mini); line-height: 1.3; }
+.celula { position: relative; z-index: 1; display: grid; align-content: start; gap: var(--esp-2); padding: var(--esp-3) 0; min-width: 0; }
+/* Cabeçalho dos passos fica no topo ao rolar para baixo: sem ele, nas faixas de baixo não se sabe de que passo é a coluna. */
+.passo { position: sticky; top: 0; z-index: 3; display: grid; align-content: end; gap: var(--esp-1); padding: var(--esp-3) 0; border-bottom: var(--linha); background: var(--fundo); }
+.faixa.canto { top: 0; z-index: 4; }
+.passo__nome { display: flex; align-items: start; gap: var(--esp-2); font-weight: var(--peso-titulo); line-height: 1.2; }
+.n { display: inline-grid; flex: none; place-items: center; min-width: 1.75rem; height: 1.75rem; background: var(--texto); color: var(--superficie); font-size: var(--tam-apoio); font-weight: var(--peso-forte); font-variant-numeric: tabular-nums; }
+.passo__quando { color: var(--texto-2); font-size: var(--tam-apoio); }
+.linha { grid-column: 1 / -1; border-top: 2px dashed var(--borda); margin: var(--esp-2) 0; }
+.linha.visibilidade { border-top: var(--linha); }
+.linha span { position: sticky; left: 0; z-index: 2; display: inline-block; transform: translateY(-55%); padding: 0 var(--esp-2) 0 0; background: var(--fundo); color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
 svg.setas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-.celula, .tempo { position: relative; z-index: 1; }
-svg.setas path { fill: none; stroke: var(--tinta-2); stroke-width: 1.5; marker-end: url(#seta); opacity: 0.55; }
-svg.setas path.acesa { stroke: var(--realce); stroke-width: 2.5; opacity: 1; marker-end: url(#seta-acesa); }
-svg.setas path.apagada { opacity: 0.12; }
+svg.setas path[data-de] { fill: none; stroke: var(--texto-2); stroke-width: 1.5; opacity: 0.45; marker-end: url(#seta); }
+svg.setas path.acesa { stroke: var(--texto); stroke-width: 3; opacity: 1; marker-end: url(#seta-acesa); }
+svg.setas path.apagada { opacity: 0.1; }
 
-/* Painel */
-.painel { min-width: 0; overflow-y: auto; border-left: 1.5px solid var(--tinta); background: var(--caixa); padding: 16px; display: grid; align-content: start; gap: 14px; }
-@media (max-width: 900px) { .painel { border-left: 0; border-top: 1.5px solid var(--tinta); max-height: 50vh; } }
-.painel h2 { margin: 0; font-family: var(--t-display); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; line-height: 1.02; text-wrap: balance; }
-.painel h3 { margin: 0 0 6px; font-family: var(--t-display); font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-2); }
-.painel p { margin: 0; }
-.painel ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-flex; padding: 2px 8px; border: 1px solid var(--tinta-2); font-family: var(--t-mono); font-size: 12px; }
-.chip.forte { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
-.bloco { padding: 10px 12px; border: 1.5px solid; }
-.bloco.dor { border-color: var(--dor); background: var(--dor-fundo); }
-.bloco.metrica { border-color: var(--metrica); background: var(--metrica-fundo); }
-.bloco.opcao { border-color: var(--opcao); background: var(--opcao-fundo); }
-.bloco.seguranca { border-color: var(--seguranca); background: var(--seguranca-fundo); }
-.bloco.melhorias { border-color: var(--realce); border-style: dashed; }
-.bloco h3 { color: var(--tinta); }
-.vizinhos button { display: flex; width: 100%; justify-content: space-between; gap: 8px; min-height: 36px; padding: 4px 8px; border: 0; border-bottom: 1px solid var(--papel-2); background: none; text-align: left; cursor: pointer; }
-.vizinhos button:hover { background: var(--papel-2); }
-.vizinhos .mono { color: var(--tinta-2); }
-.acoes { display: flex; flex-wrap: wrap; gap: 6px; }
-.aviso { min-height: 1.2em; color: var(--tinta-2); font-size: 12px; }
-.aviso + textarea { width: 100%; }
+/* Lista (celular) */
+.etapa { display: grid; gap: var(--esp-3); }
+.etapa__cabeca { display: grid; gap: var(--esp-1); padding-bottom: var(--esp-2); border-bottom: var(--linha); }
+.etapa__cabeca h2 { display: flex; align-items: start; gap: var(--esp-2); font-size: var(--tam-nome); font-weight: var(--peso-titulo); line-height: 1.25; }
+.grupo { display: grid; gap: var(--esp-2); }
+.grupo h3 { font-size: var(--tam-apoio); font-weight: var(--peso-forte); color: var(--texto-2); }
+.linha-lista { padding-top: var(--esp-2); border-top: var(--linha); color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
+
+/* Painel (quadro) e folha (lista) mostram o mesmo conteúdo. */
+.painel { min-width: 0; overflow-y: auto; border-left: var(--linha); background: var(--superficie); padding: var(--esp-6) var(--esp-5); }
+.app.lista .painel { display: none; }
+.detalhe { display: grid; align-content: start; gap: var(--esp-5); }
+.detalhe h2 { font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.15; }
+.detalhe__meta { color: var(--texto-2); font-size: var(--tam-apoio); }
+.detalhe__meta .codigo { color: var(--texto); font-weight: var(--peso-forte); }
+.detalhe__topo { display: grid; gap: var(--esp-2); }
+.secao { display: grid; gap: var(--esp-2); padding-top: var(--esp-4); border-top: var(--divisor); }
+.secao h3 { font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.secao ul { padding-left: var(--esp-5); display: grid; gap: var(--esp-1); }
+.secao li::marker { color: var(--texto-2); }
+.arquivos { list-style: none; padding: 0 !important; }
+.arquivos li { font-size: var(--tam-apoio); overflow-wrap: anywhere; }
+.ficha { display: grid; grid-template-columns: max-content 1fr; gap: var(--esp-2) var(--esp-3); }
+.ficha dt { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); padding-top: 0.1em; }
+.dica { color: var(--texto-2); font-size: var(--tam-apoio); }
+.dobra summary { min-height: var(--toque); display: flex; align-items: center; font-size: var(--tam-apoio); font-weight: var(--peso-forte); cursor: pointer; }
+.dobra ul { padding-left: var(--esp-5); display: grid; gap: var(--esp-1); }
+.dobra { padding-top: var(--esp-2); border-top: var(--divisor); }
+.dobra[open] ul { padding-bottom: var(--esp-2); }
+.fonte { color: var(--texto-2); font-size: var(--tam-mini); overflow-wrap: anywhere; }
+.vizinhos { list-style: none; padding: 0 !important; gap: 0 !important; }
+.vizinhos button { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: var(--esp-3); min-height: var(--toque); padding: var(--esp-1) var(--esp-2); border: 0; border-bottom: var(--divisor); background: none; text-align: left; cursor: pointer; }
+.vizinhos button:hover { background: var(--hover); }
+.vizinhos small { color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-medio); white-space: nowrap; }
+
+.acao { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); }
+.primario, .secundario { min-height: var(--toque); padding: 0 var(--esp-4); border: var(--linha); border-radius: var(--raio); font-weight: var(--peso-forte); cursor: pointer; }
+.primario { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra); }
+.primario:hover { filter: brightness(0.95); }
+.primario:active { transform: translate(2px, 2px); box-shadow: var(--sombra-pequena); }
+.secundario { background: var(--superficie); color: var(--texto); }
+.secundario:hover { background: var(--hover); }
+.aviso { font-size: var(--tam-apoio); color: var(--texto-2); }
+.aviso:empty { display: none; }
+.recurso { width: 100%; min-height: 8rem; font-size: var(--tam-apoio); }
+
+dialog.folha { width: 100%; max-width: 100%; max-height: 88vh; margin: auto 0 0; padding: 0; border: 0; border-top: var(--linha); border-radius: var(--raio) var(--raio) 0 0; background: var(--superficie); color: var(--texto); }
+dialog.folha::backdrop { background: var(--veu); }
+.folha__barra { position: sticky; top: 0; z-index: 1; display: flex; justify-content: end; padding: var(--esp-2) var(--esp-4); background: var(--superficie); border-bottom: var(--divisor); }
+.folha__corpo { padding: var(--esp-4) var(--esp-4) calc(var(--esp-8) + env(safe-area-inset-bottom, 0px)); }
+.erro { padding: var(--esp-6) var(--esp-4); }
 </style>
 
-<div class="app">
+<div class="app lista" id="app">
   <header class="topo">
-    <div class="topo__linha">
-      <div class="marca">
-        <h1>Service Blueprint do SquadOne</h1>
-        <small id="versao">carregando servico.json…</small>
-      </div>
-      <div class="abas" id="abas" role="group" aria-label="Serviço"></div>
+    <div>
+      <h1>Service blueprint</h1>
+      <p>Cada serviço do SquadOne passo a passo, do que o cliente vê ao que roda por trás.</p>
     </div>
-    <div class="topo__linha">
-      <div class="filtros" id="filtros" role="group" aria-label="Destacar marcas"></div>
-      <label class="busca"><input id="busca" type="search" placeholder="Buscar: vercel, trava, SITE-4…" aria-label="Buscar no blueprint"></label>
-      <button class="bt" id="copiar-tudo" type="button">Copiar blueprint (JSON)</button>
+    <div class="controles">
+      <div class="segmentado" id="servicos" role="group" aria-label="Serviço"></div>
+      <label class="campo" for="busca">Buscar<input id="busca" type="search" placeholder="vercel, SITE-4" autocomplete="off"></label>
+      <label class="campo" for="destacar">Destacar<select id="destacar"></select></label>
+      <p class="resultado" id="resultado" role="status"></p>
     </div>
   </header>
   <div class="corpo">
-    <main class="palco" id="palco">
-      <div class="cabeca-bp" id="cabeca-bp"></div>
-      <div class="quadro" id="quadro"></div>
-    </main>
-    <aside class="painel" id="painel" aria-live="polite"></aside>
+    <main class="palco" id="palco"></main>
+    <aside class="painel" id="painel" aria-label="Detalhe"></aside>
   </div>
 </div>
+<dialog class="folha" id="folha" aria-labelledby="detalhe-titulo">
+  <div class="folha__barra"><button class="secundario" type="button" id="fechar">Fechar</button></div>
+  <div class="folha__corpo" id="folha-corpo"></div>
+</dialog>
 
 <script>
 (() => {
-  const $ = (s) => document.querySelector(s)
+  const $ = (s, raiz = document) => raiz.querySelector(s)
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
   const ABAIXO = new Set(['B', 'A'])
   const CLASSE_DA_LINHA = { C: 'interacao', P: 'visibilidade', B: 'interna' }
   const ROTULO_QUEM = { cliente: 'cliente', 'você': 'Rômulo', 'robô': 'robô', terceiro: 'terceiro' }
+  // O nome completo vai no painel; no seletor, uma palavra cabe nos três a 390 px.
+  const NOME_CURTO = { SITE: 'Site', PRUMO: 'PRUMO', AGENDA: 'Agenda' }
+  const MARCA_NO_PLURAL = { momento: 'Momentos da verdade', dor: 'Pontos de dor', metrica: 'Com métrica', opcao: 'Opções de projeto', seguranca: 'Segurança' }
+  const largo = matchMedia('(min-width: 60rem)')
 
-  let mapa = null, bp = null, escolhido = null
-  const filtros = new Set()
+  const app = $('#app'), palco = $('#palco'), painel = $('#painel'), folha = $('#folha'), folhaCorpo = $('#folha-corpo')
+  const busca = $('#busca'), destacar = $('#destacar'), resultado = $('#resultado')
+  let mapa = null, bp = null, escolhido = null, abridor = null
   const porId = new Map()
 
-  function marcasDe(c) {
-    return [c.momento ? 'momento' : null, ...['dor', 'metrica', 'opcao', 'seguranca'].filter((m) => c[m]?.length)].filter(Boolean)
-  }
-  const NOME_CURTO = { momento: '★ momento', dor: 'dor', metrica: 'métrica', opcao: 'opção', seguranca: 'segurança' }
+  const marcasDe = (c) => [c.momento ? 'momento' : null, ...['dor', 'metrica', 'opcao', 'seguranca'].filter((m) => c[m]?.length)].filter(Boolean)
+  const quem = (c) => ROTULO_QUEM[c.quem] ?? c.quem
 
-  function montarTopo() {
-    const abas = $('#abas')
-    abas.replaceChildren(...mapa.blueprints.map((b) => {
+  function montarServicos() {
+    $('#servicos').replaceChildren(...mapa.blueprints.map((b) => {
       const bt = document.createElement('button')
-      bt.className = 'bt'; bt.type = 'button'; bt.textContent = b.nome; bt.dataset.id = b.id
+      bt.type = 'button'; bt.textContent = NOME_CURTO[b.id] ?? b.id; bt.dataset.id = b.id; bt.title = b.nome
       bt.onclick = () => abrir(b.id)
       return bt
     }))
-    $('#filtros').replaceChildren(...Object.entries(mapa.marcas).map(([id, nome]) => {
-      const bt = document.createElement('button')
-      bt.className = `filtro ${id}`; bt.type = 'button'; bt.textContent = nome; bt.setAttribute('aria-pressed', 'false')
-      bt.onclick = () => { filtros.has(id) ? filtros.delete(id) : filtros.add(id); bt.setAttribute('aria-pressed', String(filtros.has(id))); pintar() }
-      return bt
-    }))
+  }
+
+  // A contagem fica na própria opção: diz quanto há antes de escolher, sem uma fileira de números à parte.
+  function montarDestaque() {
+    const antes = destacar.value
+    const contar = (m) => bp.cartoes.filter((c) => marcasDe(c).includes(m)).length
+    destacar.innerHTML = '<option value="">Nada</option>' + Object.keys(mapa.marcas)
+      .map((m) => `<option value="${m}">${esc(MARCA_NO_PLURAL[m] ?? mapa.marcas[m])} (${contar(m)})</option>`).join('')
+    destacar.value = antes
   }
 
   function abrir(id, cartao) {
@@ -199,110 +261,161 @@ svg.setas path.apagada { opacity: 0.12; }
     porId.clear()
     for (const c of bp.cartoes) porId.set(c.id, c)
     escolhido = null
-    for (const b of document.querySelectorAll('#abas .bt')) b.setAttribute('aria-pressed', String(b.dataset.id === bp.id))
-    $('#cabeca-bp').innerHTML = `<p><strong>Cliente</strong>${esc(bp.cliente)}</p><p><strong>Objetivo</strong>${esc(bp.objetivo)}</p>`
+    for (const b of document.querySelectorAll('#servicos button')) b.setAttribute('aria-pressed', String(b.dataset.id === bp.id))
+    montarDestaque()
     desenhar()
     if (cartao && porId.has(cartao)) escolher(cartao, true)
-    else { inicio(); marcarHash(bp.id) }
+    else { mostrarInicio(); marcarHash(bp.id) }
+  }
+
+  function cartaoHtml(c) {
+    return `<button type="button" class="cartao" data-id="${esc(c.id)}">
+      <span class="cartao__nome">${esc(c.nome)}</span>
+      <span class="cartao__codigo codigo">${esc(c.id)}${c.quem === 'cliente' ? '' : ` · ${esc(quem(c))}`}</span>
+      ${c.momento ? '<span class="selo">Momento da verdade</span>' : ''}</button>`
+  }
+
+  function inicioHtml() {
+    return `<div class="detalhe">
+      <div class="detalhe__topo"><h2>${esc(bp.nome)}</h2></div>
+      <dl class="ficha"><dt>Cliente</dt><dd>${esc(bp.cliente)}</dd><dt>Objetivo</dt><dd>${esc(bp.objetivo)}</dd></dl>
+      <p class="dica">Toque num cartão para ver onde ele mora no código, o que medir e o que pode dar errado. Para falar de um cartão com um agente, cite o código dele (<span class="codigo">SITE-3-B2</span>) ou copie o contexto.</p>
+      ${bp.melhorias?.length ? `<details class="dobra"${largo.matches ? ' open' : ''}><summary>Melhorias em aberto (${bp.melhorias.length})</summary><ul>${bp.melhorias.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></details>` : ''}
+      <p class="fonte">Fonte: docs/blueprint/servico.json · versão ${esc(mapa.versao)} · ${esc(mapa.atualizado)}</p>
+    </div>`
   }
 
   function desenhar() {
-    const q = $('#quadro')
+    app.classList.toggle('quadro', largo.matches)
+    app.classList.toggle('lista', !largo.matches)
+    if (largo.matches) desenharQuadro(); else desenharLista()
+  }
+
+  function desenharQuadro() {
     const n = bp.passos.length
-    q.style.gridTemplateColumns = `minmax(110px, 140px) repeat(${n}, minmax(190px, 230px))`
-    const partes = []
-    partes.push('<div class="rotulo-faixa"><b>Passos</b><span>tempo</span></div>')
-    bp.passos.forEach((p, i) => partes.push(`<div class="tempo ${i === n - 1 ? 'ultimo' : ''}" data-passo="${esc(p.id)}"><span class="nome">${esc(p.nome)}</span><span class="n">${i + 1}</span><span class="quando">${esc(p.tempo || '')}</span></div>`))
+    const partes = ['<div class="faixa canto"><b>Passos</b><span>em ordem de tempo</span></div>']
+    bp.passos.forEach((p, i) => partes.push(`<div class="passo"><span class="passo__nome"><span class="n">${i + 1}</span>${esc(p.nome)}</span><span class="passo__quando">${esc(p.tempo || '')}</span></div>`))
     for (const f of mapa.faixas) {
-      const abaixo = ABAIXO.has(f.id) ? 'abaixo' : ''
-      partes.push(`<div class="rotulo-faixa ${abaixo}" data-faixa="${f.id}"><b>${esc(f.nome)}</b><span>${esc(f.sub)}</span></div>`)
-      for (const p of bp.passos) {
-        const cs = bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id)
-        partes.push(`<div class="celula">${cs.map((c) => `
-          <button type="button" class="cartao ${c.faixa} ${abaixo} ${c.momento ? 'momento' : ''}" data-id="${esc(c.id)}" aria-label="${esc(c.nome)}, ${esc(c.id)}">
-            <span class="nome">${esc(c.nome)}</span>
-            <span class="id">${esc(c.id)} · ${esc(ROTULO_QUEM[c.quem] ?? c.quem)}</span>
-            ${marcasDe(c).length ? `<span class="marcas">${marcasDe(c).map((m) => `<span class="tag ${m}">${NOME_CURTO[m]}</span>`).join('')}</span>` : ''}
-          </button>`).join('')}</div>`)
-      }
+      partes.push(`<div class="faixa"><b>${esc(f.nome)}</b><span>${esc(f.sub)}</span></div>`)
+      for (const p of bp.passos) partes.push(`<div class="celula">${bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id).map(cartaoHtml).join('')}</div>`)
       const linha = mapa.linhas.find((l) => l.depois === f.id)
       if (linha) partes.push(`<div class="linha ${CLASSE_DA_LINHA[f.id] ?? ''}"><span>${esc(linha.nome)}</span></div>`)
     }
-    q.innerHTML = partes.join('') + `<svg class="setas" aria-hidden="true"><defs>
-      <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--tinta-2);stroke:none"/></marker>
-      <marker id="seta-acesa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--realce);stroke:none"/></marker></defs><g></g></svg>`
-    for (const b of q.querySelectorAll('.cartao')) b.onclick = () => escolher(b.dataset.id)
+    palco.innerHTML = `<div class="grade" id="grade" style="grid-template-columns: minmax(7.5rem, 9rem) repeat(${n}, minmax(12.5rem, 14rem))">${partes.join('')}
+      <svg class="setas" aria-hidden="true"><defs>
+        <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--texto-2)"/></marker>
+        <marker id="seta-acesa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--texto)"/></marker></defs><g></g></svg></div>`
+    ligarCartoes()
+    observador.disconnect(); observador.observe($('#grade'))
     requestAnimationFrame(() => { setas(); pintar() })
   }
 
-  // Setas em cotovelo: na mesma coluna, de baixo para cima (ou o inverso); entre colunas, pela lateral.
+  function desenharLista() {
+    const etapas = bp.passos.map((p, i) => {
+      const grupos = []
+      let passouDaLinha = false
+      for (const f of mapa.faixas) {
+        const cs = bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id)
+        if (!cs.length) continue
+        if (ABAIXO.has(f.id) && !passouDaLinha) { passouDaLinha = true; grupos.push('<p class="linha-lista">Daqui para baixo o cliente não vê</p>') }
+        grupos.push(`<div class="grupo" data-grupo><h3>${esc(f.nome)}</h3>${cs.map(cartaoHtml).join('')}</div>`)
+      }
+      return `<section class="etapa" data-etapa><div class="etapa__cabeca"><h2><span class="n">${i + 1}</span>${esc(p.nome)}</h2><span class="passo__quando">${esc(p.tempo || '')}</span></div>${grupos.join('')}</section>`
+    })
+    palco.innerHTML = `<section id="intro">${inicioHtml()}</section>${etapas.join('')}`
+    ligarCartoes()
+    pintar()
+  }
+
+  function ligarCartoes() {
+    for (const b of palco.querySelectorAll('.cartao')) b.onclick = () => escolher(b.dataset.id)
+  }
+
+  // Setas em cotovelo: na mesma coluna, reta; entre colunas, pela lateral.
   function setas() {
-    const q = $('#quadro'), g = q.querySelector('svg.setas g')
+    const grade = $('#grade'), g = grade && $('svg.setas g', grade)
     if (!g) return
-    const base = q.getBoundingClientRect()
-    const caixa = (id) => { const e = q.querySelector(`.cartao[data-id="${CSS.escape(id)}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height } }
+    const base = grade.getBoundingClientRect()
+    const caixa = (id) => { const e = $(`.cartao[data-id="${CSS.escape(id)}"]`, grade); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height } }
     g.innerHTML = bp.ligacoes.map(([de, para]) => {
       const a = caixa(de), b = caixa(para)
       if (!a || !b) return ''
       let d
       if (Math.abs(a.x - b.x) < 4) {
-        const desce = b.y > a.y
-        const x = a.x + a.w / 2
+        const desce = b.y > a.y, x = a.x + a.w / 2
         d = `M${x} ${desce ? a.y + a.h : a.y} L${x} ${desce ? b.y - 2 : b.y + b.h + 2}`
       } else {
         const dir = b.x > a.x
-        const x1 = dir ? a.x + a.w : a.x, y1 = a.y + a.h / 2
-        const x2 = dir ? b.x - 2 : b.x + b.w + 2, y2 = b.y + b.h / 2
-        const mx = (x1 + x2) / 2
+        const x1 = dir ? a.x + a.w : a.x, y1 = a.y + a.h / 2, x2 = dir ? b.x - 2 : b.x + b.w + 2, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2
         d = `M${x1} ${y1} L${mx} ${y1} L${mx} ${y2} L${x2} ${y2}`
       }
       return `<path d="${d}" data-de="${esc(de)}" data-para="${esc(para)}"/>`
     }).join('')
+    pintar()
   }
 
-  function casa(c, q) {
-    if (filtros.size && !marcasDe(c).some((m) => filtros.has(m))) return false
+  function casa(c, q, marca) {
+    if (marca && !marcasDe(c).includes(marca)) return false
     if (!q) return true
-    return [c.id, c.nome, c.resumo, c.quem, ...(c.arquivos || []), ...(c.dor || []), ...(c.metrica || []), ...(c.opcao || []), ...(c.seguranca || [])]
+    return [c.id, c.nome, c.resumo, quem(c), ...(c.arquivos || []), ...(c.dor || []), ...(c.metrica || []), ...(c.opcao || []), ...(c.seguranca || []), ...(c.melhorias || [])]
       .some((s) => String(s).toLowerCase().includes(q))
   }
 
   function pintar() {
-    const q = $('#busca').value.trim().toLowerCase()
-    const vizinhos = new Set()
-    if (escolhido) { vizinhos.add(escolhido); for (const [de, para] of bp.ligacoes) { if (de === escolhido) vizinhos.add(para); if (para === escolhido) vizinhos.add(de) } }
-    for (const e of document.querySelectorAll('#quadro .cartao')) {
-      const c = porId.get(e.dataset.id)
+    if (!bp) return
+    const q = busca.value.trim().toLowerCase(), marca = destacar.value
+    const perto = new Set()
+    if (escolhido) { perto.add(escolhido); for (const [de, para] of bp.ligacoes) { if (de === escolhido) perto.add(para); if (para === escolhido) perto.add(de) } }
+    let achados = 0
+    for (const e of palco.querySelectorAll('.cartao')) {
+      const c = porId.get(e.dataset.id), bate = casa(c, q, marca)
+      if (bate) achados++
       e.classList.toggle('escolhido', c.id === escolhido)
-      e.classList.toggle('apagado', !casa(c, q) || (escolhido && !vizinhos.has(c.id)))
+      // Na lista, o escolhido abre numa folha por cima: apagar os outros só esconderia a lista.
+      e.classList.toggle('apagado', !bate || (largo.matches && escolhido && !perto.has(c.id)))
     }
-    for (const p of document.querySelectorAll('#quadro svg.setas path[data-de]')) {
+    if (!largo.matches) {
+      for (const g of palco.querySelectorAll('[data-grupo]')) g.hidden = !g.querySelector('.cartao:not(.apagado)')
+      for (const s of palco.querySelectorAll('[data-etapa]')) {
+        const vazio = !s.querySelector('.cartao:not(.apagado)')
+        s.hidden = vazio
+        const linha = $('.linha-lista', s)
+        if (linha) linha.hidden = ![...s.querySelectorAll('[data-grupo]')].some((g) => !g.hidden && ABAIXO.has(mapa.faixas.find((f) => f.nome === $('h3', g).textContent)?.id))
+      }
+    }
+    for (const p of palco.querySelectorAll('svg.setas path[data-de]')) {
       const ligada = escolhido && (p.dataset.de === escolhido || p.dataset.para === escolhido)
       p.classList.toggle('acesa', Boolean(ligada))
-      p.classList.toggle('apagada', Boolean((escolhido && !ligada) || q || filtros.size))
+      p.classList.toggle('apagada', Boolean((escolhido && !ligada) || q || marca))
     }
+    resultado.textContent = !q && !marca ? ''
+      : achados ? `${achados} de ${bp.cartoes.length} cartões${q ? ` com “${busca.value.trim()}”` : ''}.`
+      : `Nenhum cartão${q ? ` com “${busca.value.trim()}”` : ''} neste serviço. Limpe a busca ou troque o destaque.`
   }
 
-  function lista(titulo, itens, classe) {
-    return itens?.length ? `<section class="bloco ${classe}"><h3>${titulo}</h3><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></section>` : ''
+  function lista(titulo, itens) {
+    return itens?.length ? `<section class="secao"><h3>${titulo}</h3><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></section>` : ''
   }
 
-  function inicio() {
-    const contar = (m) => bp.cartoes.filter((c) => marcasDe(c).includes(m)).length
-    painel.innerHTML = `
-      <div class="chips"><span class="chip forte">${esc(bp.id)}</span><span class="chip">${bp.passos.length} passos</span><span class="chip">${bp.cartoes.length} cartões</span></div>
-      <h2>${esc(bp.nome)}</h2>
-      <p>${esc(mapa.resumo)}</p>
-      <section><h3>Neste serviço</h3><div class="chips">
-        <span class="chip">${contar('momento')} momentos da verdade</span><span class="chip">${contar('dor')} pontos de dor</span>
-        <span class="chip">${contar('metrica')} com métrica</span><span class="chip">${contar('seguranca')} com segurança</span></div></section>
-      ${lista('Melhorias em aberto', bp.melhorias, 'melhorias')}
-      <section class="bloco opcao"><h3>Para discutir uma melhoria</h3><ul>
-        <li>Toque num cartão: as setas dele acendem e o painel mostra arquivos, métricas, dores e segurança.</li>
-        <li>Cite o código (ex.: <code>SITE-3-B2</code>) numa conversa, ou use "Copiar contexto para agente".</li>
-        <li>A fonte é <code>docs/blueprint/servico.json</code> no repositório; um teste falha se um código quebrar ou um arquivo citado sumir.</li></ul></section>
-      <section><div class="acoes"><button class="bt" type="button" id="copiar-bp">Copiar este serviço para agente</button></div><p class="aviso" id="aviso" role="status"></p></section>`
-    $('#copiar-bp').onclick = () => copiar(contextoDoServico(), $('#aviso'))
+  function detalheHtml(c) {
+    const passo = bp.passos.find((p) => p.id === c.passo)
+    const faixa = mapa.faixas.find((f) => f.id === c.faixa)
+    const viz = (outro, rumo) => `<li><button type="button" data-ir="${esc(outro)}"><span>${rumo} ${esc(porId.get(outro)?.nome ?? outro)}</span><small class="codigo">${esc(outro)}</small></button></li>`
+    const vem = bp.ligacoes.filter(([, p]) => p === c.id).map(([d]) => viz(d, 'Vem de:'))
+    const vai = bp.ligacoes.filter(([de]) => de === c.id).map(([, p]) => viz(p, 'Leva a:'))
+    return `<div class="detalhe">
+      <div class="detalhe__topo">
+        <p class="detalhe__meta"><span class="codigo">${esc(c.id)}</span> · ${esc(faixa?.nome)} · passo ${bp.passos.indexOf(passo) + 1}, ${esc(passo?.nome)} · ${esc(quem(c))}</p>
+        <h2 id="detalhe-titulo">${esc(c.nome)}</h2>
+        ${c.momento ? '<span class="selo">Momento da verdade</span>' : ''}
+        <p>${esc(c.resumo)}</p>
+      </div>
+      <div class="acao"><button class="primario" type="button" data-copiar>Copiar para a conversa</button><p class="aviso" role="status"></p></div>
+      ${c.arquivos?.length ? `<section class="secao"><h3>Onde mora</h3><ul class="arquivos">${c.arquivos.map((a) => `<li class="codigo">${esc(a)}</li>`).join('')}</ul></section>` : ''}
+      ${lista('Pontos de dor', c.dor)}${lista('Métricas', c.metrica)}${lista('Opções de projeto', c.opcao)}${lista('Segurança', c.seguranca)}${lista('Melhorias', c.melhorias)}
+      ${vem.length || vai.length ? `<section class="secao"><h3>Ligações</h3><ul class="vizinhos">${vem.join('')}${vai.join('')}</ul></section>` : ''}
+      ${largo.matches ? `<div><button class="secundario" type="button" data-voltar>Voltar a ${esc(NOME_CURTO[bp.id] ?? bp.id)}</button></div>` : ''}
+    </div>`
   }
 
   function contextoDoCartao(c) {
@@ -314,7 +427,7 @@ svg.setas path.apagada { opacity: 0.12; }
     const bloco = (t, xs) => (xs?.length ? `\n${t}:\n${xs.map((x) => `- ${x}`).join('\n')}` : '')
     return [
       `Service blueprint do SquadOne · ${c.id} · ${c.nome}`,
-      `Serviço ${bp.id} (${bp.nome}), passo ${passo?.id} "${passo?.nome}" (${passo?.tempo ?? ''}), faixa ${faixa?.nome}. Quem: ${ROTULO_QUEM[c.quem] ?? c.quem}.${c.momento ? ' Momento da verdade.' : ''}`,
+      `Serviço ${bp.id} (${bp.nome}), passo ${passo?.id} "${passo?.nome}" (${passo?.tempo ?? ''}), faixa ${faixa?.nome}. Quem: ${quem(c)}.${c.momento ? ' Momento da verdade.' : ''}`,
       `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}, ${mapa.atualizado}).`,
       '', c.resumo,
       c.arquivos?.length ? `\nArquivos: ${c.arquivos.join(', ')}` : '',
@@ -323,64 +436,85 @@ svg.setas path.apagada { opacity: 0.12; }
     ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
   }
 
-  function contextoDoServico() {
-    const linhas = [`Service blueprint do SquadOne · ${bp.id} · ${bp.nome}`, `Cliente: ${bp.cliente}. Objetivo: ${bp.objetivo}`, `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}).`, '']
-    for (const p of bp.passos) {
-      linhas.push(`## ${p.id} ${p.nome} (${p.tempo ?? ''})`)
-      for (const f of mapa.faixas) for (const c of bp.cartoes.filter((x) => x.passo === p.id && x.faixa === f.id)) {
-        linhas.push(`- [${f.nome}] ${c.id} ${c.nome}: ${c.resumo}${marcasDe(c).length ? ` (${marcasDe(c).join(', ')})` : ''}`)
-      }
+  async function copiar(texto, botao, aviso) {
+    try {
+      await navigator.clipboard.writeText(texto)
+      botao.textContent = 'Copiado'
+      aviso.textContent = 'Cole na conversa com o agente.'
+      setTimeout(() => { botao.textContent = 'Copiar para a conversa'; aviso.textContent = '' }, 2500)
+    } catch {
+      // Algumas visões do app recusam a área de transferência: o texto fica selecionado para o Ctrl+C.
+      aviso.textContent = 'Não deu para copiar sozinho. O texto está selecionado abaixo: use Ctrl+C.'
+      let ta = aviso.parentElement.nextElementSibling
+      if (!ta?.matches('textarea')) { ta = document.createElement('textarea'); ta.className = 'recurso'; ta.readOnly = true; aviso.parentElement.after(ta) }
+      ta.value = texto; ta.focus(); ta.select()
     }
-    if (bp.melhorias?.length) linhas.push('', 'Melhorias em aberto:', ...bp.melhorias.map((m) => `- ${m}`))
-    return linhas.join('\n')
   }
 
-  async function copiar(texto, aviso) {
-    try { await navigator.clipboard.writeText(texto); aviso.textContent = 'Copiado. Cole na conversa ou no agente.' }
-    catch { aviso.textContent = 'Não consegui copiar: o texto está selecionado abaixo.'; const ta = document.createElement('textarea'); ta.value = texto; ta.rows = 8; ta.className = 'mono'; aviso.after(ta); ta.select() }
+  function mostrarInicio() {
+    if (largo.matches) { painel.innerHTML = inicioHtml(); painel.scrollTop = 0 }
+  }
+
+  function ligarDetalhe(raiz, c) {
+    for (const b of raiz.querySelectorAll('[data-ir]')) b.onclick = () => escolher(b.dataset.ir, true)
+    $('[data-copiar]', raiz).onclick = (e) => copiar(contextoDoCartao(c), e.currentTarget, $('.aviso', raiz))
+    const voltar = $('[data-voltar]', raiz)
+    if (voltar) voltar.onclick = limpar
   }
 
   function escolher(id, rolar) {
     const c = porId.get(id)
     if (!c) return
-    escolhido = escolhido === id ? null : id
-    if (!escolhido) { inicio(); pintar(); marcarHash(bp.id); return }
-    const passo = bp.passos.find((p) => p.id === c.passo)
-    const faixa = mapa.faixas.find((f) => f.id === c.faixa)
-    const viz = (outro, seta) => `<button type="button" data-ir="${esc(outro)}"><span>${seta} ${esc(porId.get(outro)?.nome ?? outro)}</span><span class="mono">${esc(outro)}</span></button>`
-    const saem = bp.ligacoes.filter(([de]) => de === c.id).map(([, p]) => viz(p, '→'))
-    const chegam = bp.ligacoes.filter(([, p]) => p === c.id).map(([d]) => viz(d, '←'))
-    painel.innerHTML = `
-      <div class="chips"><span class="chip forte">${esc(c.id)}</span><span class="chip">${esc(faixa?.nome)}</span><span class="chip">passo ${bp.passos.indexOf(passo) + 1} · ${esc(passo?.nome)}</span><span class="chip">${esc(ROTULO_QUEM[c.quem] ?? c.quem)}</span>${c.momento ? '<span class="chip">★ momento da verdade</span>' : ''}</div>
-      <h2>${esc(c.nome)}</h2>
-      <p>${esc(c.resumo)}</p>
-      ${c.arquivos?.length ? `<section><h3>Onde mora</h3><div class="chips">${c.arquivos.map((a) => `<code class="chip">${esc(a)}</code>`).join('')}</div></section>` : ''}
-      ${lista('Pontos de dor', c.dor, 'dor')}${lista('Métricas', c.metrica, 'metrica')}${lista('Opções de projeto', c.opcao, 'opcao')}${lista('Segurança', c.seguranca, 'seguranca')}${lista('Melhorias', c.melhorias, 'melhorias')}
-      ${saem.length || chegam.length ? `<section class="vizinhos"><h3>Ligações</h3>${saem.join('')}${chegam.join('')}</section>` : ''}
-      <section><h3>Levar para a conversa</h3><div class="acoes"><button class="bt" type="button" id="copiar-ref">Copiar referência</button><button class="bt" type="button" id="copiar-ctx">Copiar contexto para agente</button></div><p class="aviso" id="aviso" role="status"></p></section>`
-    for (const b of painel.querySelectorAll('[data-ir]')) b.onclick = () => { escolhido = null; escolher(b.dataset.ir, true) }
-    $('#copiar-ref').onclick = () => copiar(`${c.id} (${c.nome})${c.arquivos?.length ? ' · ' + c.arquivos.join(', ') : ''}`, $('#aviso'))
-    $('#copiar-ctx').onclick = () => copiar(contextoDoCartao(c), $('#aviso'))
+    if (escolhido === id && largo.matches) return limpar()
+    escolhido = id
+    if (largo.matches) {
+      painel.innerHTML = detalheHtml(c); painel.scrollTop = 0; ligarDetalhe(painel, c)
+      if (rolar) $(`.cartao[data-id="${CSS.escape(id)}"]`, palco)?.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+    } else {
+      if (!folha.open) { abridor = document.activeElement; folha.showModal() }
+      folhaCorpo.innerHTML = detalheHtml(c); folha.scrollTop = 0; ligarDetalhe(folhaCorpo, c)
+    }
     pintar()
-    if (rolar) document.querySelector(`.cartao[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     marcarHash(c.id)
+  }
+
+  function limpar() {
+    escolhido = null
+    if (folha.open) folha.close()
+    mostrarInicio(); pintar(); marcarHash(bp.id)
   }
 
   function marcarHash(id) { try { history.replaceState(null, '', '#' + id) } catch {} }
 
-  const painel = $('#painel')
-  $('#busca').addEventListener('input', pintar)
-  $('#copiar-tudo').onclick = (e) => copiar(JSON.stringify(mapa, null, 2), Object.assign(document.createElement('span'), {})).then(() => { e.target.textContent = 'Copiado'; setTimeout(() => { e.target.textContent = 'Copiar blueprint (JSON)' }, 1800) })
-  new ResizeObserver(() => { if (bp) { setas(); pintar() } }).observe($('#quadro'))
-  document.fonts?.ready.then(() => { if (bp) { setas(); pintar() } })
+  const observador = new ResizeObserver(() => { if (bp && largo.matches) setas() })
+  $('#fechar').onclick = () => folha.close()
+  folha.addEventListener('close', () => {
+    if (largo.matches) return
+    escolhido = null; pintar(); marcarHash(bp.id)
+    abridor?.focus?.()
+  })
+  folha.addEventListener('click', (e) => { if (e.target === folha) folha.close() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && largo.matches && escolhido && !e.target.matches('input, select')) limpar() })
+  busca.addEventListener('input', pintar)
+  destacar.addEventListener('change', pintar)
+  largo.addEventListener('change', () => {
+    if (!bp) return
+    const atual = escolhido
+    if (folha.open) folha.close()
+    escolhido = null
+    desenhar()
+    if (atual) escolher(atual); else mostrarInicio()
+  })
+  document.fonts?.ready.then(() => { if (bp && largo.matches) setas() })
 
   fetch('servico.json').then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }).then((dados) => {
     mapa = dados
-    $('#versao').textContent = `versão ${mapa.versao} · ${mapa.atualizado} · docs/blueprint/servico.json`
-    montarTopo()
+    montarServicos()
     const alvo = location.hash.slice(1)
     const doCartao = mapa.blueprints.find((b) => b.cartoes.some((c) => c.id === alvo))
     abrir(doCartao?.id ?? alvo, doCartao ? alvo : undefined)
-  }).catch((e) => { painel.innerHTML = `<h2>Não consegui ler o blueprint</h2><p>O arquivo servico.json não carregou (${esc(e.message)}). Ele precisa estar publicado ao lado desta página.</p>` })
+  }).catch((e) => {
+    palco.innerHTML = `<div class="erro detalhe"><h2>O blueprint não carregou</h2><p>O arquivo servico.json não veio (${esc(e.message)}). Ele precisa estar publicado ao lado desta página; republique os dois juntos.</p></div>`
+  })
 })()
 </script>
