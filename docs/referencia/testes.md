@@ -83,7 +83,13 @@ só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança)
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
 `src/operations-jornada.test.ts` (a jornada do cliente, 15/10/2026: o passo atual pelo retrato, o caminho de cada funil (PRUMO com os dois trilhos, Site sem Mapa, Iris e estamparias no caminho curto, Plus pela oferta), o estado de cada passo (outro trilho "depois", fecho "sem registro"), o próximo passo (o salvo à mão manda; depois do Raio-X, o Mapa e o site), a oferta por lead (Raio-X antes de tudo, Encontrado para quem não tem site, Mapa só com equipe, "já temos site"; e a oferta
 sob medida: a tabela de casos em que o que o Raio-X achou ordena as ofertas e entra no porquê com o número, e o porte do CNPJ põe o Mapa agora), a vista por passo com o parado só quando espera você, nenhum R$ e o guia `jornada-do-cliente.md` igual ao gerado),
-`src/office/postos.test.ts`, `src/office/trabalhadores.test.ts`,
+`src/office/postos.test.ts`, `src/office/trabalhadores.test.ts` (o catálogo único, 15/10/2026: nasce dos passos de `fluxos.ts`
+com o `quando` e a verificação deles, a sala de cada trabalhador em tabela, os caçadores do Iris e das Estamparias, o Plus sem robô,
+o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo do servidor importando catálogo, fluxos ou operação),
+`src/office/operacao.test.ts` (o Escritório como mapa da operação: o recorte da jornada de cada sala do PRUMO, contagens por passo
+com o filtro do produto do CRM, com você e parados sem contar o estoque, o link para a Jornada e para a Ficha, CRM não lido ou sem
+retrato = sem sinal (nunca zero), retrato velho marcado, o estado de cada robô só pelo `status.json` com "Sem sinal" para retrato
+ausente ou vencido, robô sem verificação ou fora do retrato),
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,

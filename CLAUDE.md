@@ -107,7 +107,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           turno, cartões, folhas; um por aba (`useAgentes`), com as guardas de isLoading e abertura
   src/agentes/ListaDeQuests.vue  compromissos da Mochila: "próximos 3" na Hoje e a Agenda por dia
   src/operations/         Central de Operações (só perfil operations), montada como rotas da casca
-    ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado)
+    ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado);
+                          ?fluxo=&passo= abre um fluxo com o passo em destaque (o link do robô no Escritório)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
     Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista), Resultados e Ficha (folha cheia)
@@ -159,7 +160,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
   src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch) e a escala inteira do mapa
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
   src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
-  src/office/trabalhadores.ts  catálogo versionado: trabalhador automático (n8n, timer) → sala; FORA do prompt (RULES 26)
+  src/office/trabalhadores.ts  trabalhador automático (n8n, timer) → sala, DERIVADO do campo `trabalhador` de fluxos.ts; FORA do prompt (RULES 26)
+  src/office/operacao.ts  PURO (15/10/2026): o Escritório como mapa da operação; leads de cada sala do PRUMO por passo da jornada
+                          (painelDaJornada no filtro do produto), parados e robôs com o estado do status.json; "Sem sinal" sem fonte
   src/office/salaFinancas.ts  PURO: Sala Finanças (domínio "Finanças") e o balão do PO com % do cartão e do orçamento
   src/office/pixelProps.ts  SVG pixel art dos móveis (mesa, cadeira, planta, estante...)
   src/office/useOffice.ts loop rAF, câmera, atores; passeio ambiente vs. movimento por comando

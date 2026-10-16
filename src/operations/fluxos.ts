@@ -7,8 +7,25 @@
 // `verificacao` e `fila` ligam um passo a uma verificação viva do status.json
 // (fluxo:<id do n8n>, gerador, prumo-mapa, backup:*, pend:*): a tela mostra "Falhou agora"
 // ou "53 esperando" no passo. Id que não existir no retrato não mostra nada.
+//
+// `trabalhador` (15/10/2026) é o catálogo dos automáticos de cada sala do
+// Escritório: src/office/trabalhadores.ts deriva a lista daqui, com o `quando`
+// e a `verificacao` do próprio passo, para o Escritório e o Como funciona nunca
+// divergirem. Fora do prompt (RULES 26): nada do servidor importa este arquivo.
 
 export type Onde = 'voce' | 'dell' | 'nuvem' | 'externo'
+
+/** O automático que faz este passo, e a sala (id do domínio) que responde por ele. */
+export interface TrabalhadorDoPasso {
+  id: string
+  nome: string
+  /** Id do domínio, que nunca muda (o nome muda no ✎). */
+  sala: string
+  /** O que ele faz, numa linha. */
+  faz: string
+  /** Onde roda, para quem for conferir. */
+  onde: string
+}
 
 export const ROTULO_DO_ONDE: Record<Onde, string> = {
   voce: 'Você',
@@ -29,6 +46,7 @@ export interface PassoDoFluxo {
   verificacao?: string
   fila?: string
   link?: { rotulo: string; url: string }
+  trabalhador?: TrabalhadorDoPasso
 }
 
 export interface FluxoDaOperacao {
@@ -43,6 +61,7 @@ const CRM_SITE = { rotulo: 'Abrir no CRM', url: '/crm?produto=site' }
 const CRM_PRUMO = { rotulo: 'Abrir no CRM', url: '/crm?produto=prumo' }
 const CRM_IRIS = { rotulo: 'Abrir no CRM', url: '/crm?produto=iris' }
 const CRM_ESTAMPA = { rotulo: 'Abrir no CRM', url: '/crm?produto=estampa' }
+const CRM_PLUS = { rotulo: 'Abrir no CRM', url: '/crm?produto=plus' }
 
 // PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne, e as quatro ofertas
 // (Site antes da venda, os serviços do PRUMO, Iris e CRM de estamparia) ficam sob o
@@ -55,21 +74,27 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'O Dell acha o negócio, faz o site e publica. Você aborda e marca o desfecho. Envio, leitura, resposta e follow-up se marcam sozinhos.',
     passos: [
       { titulo: 'Escolhe os nichos', texto: 'Aba Buscas da planilha "Leads — Site antes da venda": segmento × cidade. Desde 05/10: serviço que se procura no Google (advocacia, contabilidade, desentupidora, indústria, reformas); B2C de vitrine deu 0 interesse. O funil de segunda pausa a busca e o nicho sem sinal de compra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'Caçador acha o lead', texto: 'n8n 01: Google Places + Gemini. Fica quem tem nota 60 ou mais e WhatsApp; vira linha "novo" na planilha.', onde: 'dell', quando: '06:00', verificacao: 'fluxo:oow8TkxrAf4fVvTj' },
+      { titulo: 'Caçador acha o lead', texto: 'n8n 01: Google Places + Gemini. Fica quem tem nota 60 ou mais e WhatsApp; vira linha "novo" na planilha.', onde: 'dell', quando: '06:00', verificacao: 'fluxo:oow8TkxrAf4fVvTj',
+        trabalhador: { id: 'cacador', nome: 'Caçador', sala: 'prumo--prospeccao', faz: 'acha negócios no Google Places e põe na planilha do Site antes da venda os de nota 60 ou mais com WhatsApp', onde: 'n8n 01, no Dell' } },
       { titulo: 'A pasta do lead nasce', texto: 'auto-entrada cria ~/auto-site/<lead> com fotos e content.md.', onde: 'dell', quando: 'na hora' },
-      { titulo: 'Gerador faz e publica o site', texto: 'Claude (/lead-novo), até 4 por dia, 45 min cada; publica na Vercel como demo-<lead>. Com o Dell desligado às 08:00, roda quando ele liga.', onde: 'dell', quando: '08:00', verificacao: 'gerador', fila: 'pend:sites-fila' },
+      { titulo: 'Gerador faz e publica o site', texto: 'Claude (/lead-novo), até 4 por dia, 45 min cada; publica na Vercel como demo-<lead>. Com o Dell desligado às 08:00, roda quando ele liga.', onde: 'dell', quando: '08:00', verificacao: 'gerador', fila: 'pend:sites-fila',
+        trabalhador: { id: 'gerador', nome: 'Gerador', sala: 'prumo--site-antes-da-venda', faz: 'faz e publica na Vercel o site demo de cada lead, até 4 por dia', onde: 'gerador-de-sites (timer), no Dell' } },
       { titulo: 'Hermes avisa "Site publicado"', texto: 'No WhatsApp, com o link do demo.', onde: 'dell', quando: 'na hora' },
-      { titulo: 'Balcão marca "pronto"', texto: 'n8n 03 lê o publicado.json, monta a mensagem e o link de envio.', onde: 'dell', quando: 'de hora em hora (:10)', verificacao: 'fluxo:wjuoIknp2qlWo0QI' },
+      { titulo: 'Balcão marca "pronto"', texto: 'n8n 03 lê o publicado.json, monta a mensagem e o link de envio.', onde: 'dell', quando: 'de hora em hora (:10)', verificacao: 'fluxo:wjuoIknp2qlWo0QI',
+        trabalhador: { id: 'balcao', nome: 'Balcão', sala: 'prumo--geral', faz: 'lê os sites publicados, monta a mensagem e o link de envio e marca o lead como pronto para abordar', onde: 'n8n 03, no Dell' } },
       { titulo: 'Sites e pendências no WhatsApp', texto: 'Uma mensagem pela fila de avisos (o Hermes entrega): os sites do dia, o que espera você e o link de cada lead enviado ou em conversa.', onde: 'dell', quando: '10:30' },
       { titulo: 'Aborda o lead', texto: 'No CRM, em Hoje › Primeiro contato para enviar: o botão abre o WhatsApp com a primeira mensagem. Escrever direto ao número do lead também conta como envio.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:site-enviar', link: CRM_SITE },
-      { titulo: 'Envio e leitura se marcam', texto: 'O observador do WhatsApp registra o envio e, quando o lead lê, o visto_em. Quem desliga a confirmação de leitura nunca aparece como lido: é "não sei", não "não viu".', onde: 'dell', quando: 'na hora', verificacao: 'fluxo:fd8gz4uDQkJtEd9W' },
+      { titulo: 'Envio e leitura se marcam', texto: 'O observador do WhatsApp registra o envio e, quando o lead lê, o visto_em. Quem desliga a confirmação de leitura nunca aparece como lido: é "não sei", não "não viu".', onde: 'dell', quando: 'na hora', verificacao: 'fluxo:fd8gz4uDQkJtEd9W',
+        trabalhador: { id: 'observador', nome: 'Observador do WhatsApp', sala: 'prumo--geral', faz: 'marca sozinho o envio, a leitura e a resposta de cada lead a partir do que o aparelho vinculado recebe', onde: 'n8n "WhatsApp — conversa com lead", no Dell' } },
       { titulo: 'Lead responde', texto: 'Mensagem 5 min ou mais depois do envio preenche respondeu_em e a pasta vai para _em-conversa. Antes disso é a saudação automática do WhatsApp Business.', onde: 'dell', quando: 'na hora', fila: 'pend:site-resposta' },
-      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: 'O Hermes manda o texto pronto e o link do lead.', onde: 'dell', quando: '09:00', verificacao: 'fluxo:4lFlWNGv5KDZytJE' },
+      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: 'O Hermes manda o texto pronto e o link do lead.', onde: 'dell', quando: '09:00', verificacao: 'fluxo:4lFlWNGv5KDZytJE',
+        trabalhador: { id: 'acompanhamento', nome: 'Acompanhamento', sala: 'prumo--geral', faz: 'no 3º dia sem resposta manda pelo Hermes o follow-up pronto; no 10º, expira o lead', onde: 'n8n 05, no Dell' } },
       { ramo: 'se não responder', titulo: 'Expira no 10º dia', texto: 'Status "expirado". Se o lead responder depois, volta para "enviado".', onde: 'dell', quando: '09:00' },
       { titulo: 'Marca o desfecho', texto: 'Na página do lead (link no CRM e na mensagem das 10:30): Recusou, Fechou ou Desfazer. Planilha e pasta mudam juntas.', onde: 'voce', quando: 'um toque', comVoce: true, verificacao: 'fluxo:Kf5IWNdEFFnuSOy2', link: CRM_SITE },
       { ramo: 'se recusou ou expirou', titulo: 'Demo pausado em 15 dias', texto: 'O site sai do ar na Vercel, sem apagar. Desfazer ou uma resposta nova põe de volta.', onde: 'dell', quando: '09:40' },
       { titulo: 'Conversa, proposta e fechamento', texto: 'Com você. A ficha do CRM guarda nota, próximo passo e "proposta enviada"; prumo-pdf faz o PDF da proposta.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_SITE },
-      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento. Pausa a busca (segmento × cidade) e o nicho inteiro com 20+ enviados sem sinal de compra (interesse, pedido de preço, proposta ou ganho; negativa e robô não contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois de 3 dias. O gerador pula os leads novos do que pausou, e o aviso diz quais nichos pararam e por quê. Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0' },
+      { titulo: 'Funil por nicho', texto: 'Toda segunda: sites, envios, respostas e fechamentos por segmento. Pausa a busca (segmento × cidade) e o nicho inteiro com 20+ enviados sem sinal de compra (interesse, pedido de preço, proposta ou ganho; negativa e robô não contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois de 3 dias. O gerador pula os leads novos do que pausou, e o aviso diz quais nichos pararam e por quê. Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0',
+        trabalhador: { id: 'funil-por-nicho', nome: 'Funil por nicho', sala: 'prumo--prospeccao', faz: 'conta envios, respostas e fechamentos por segmento e pausa a busca e o nicho sem sinal de compra', onde: 'n8n 06, no Dell' } },
     ],
   },
   {
@@ -84,8 +109,10 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Leitura e resposta se marcam', texto: 'O observador anota "Leu o convite em…" e "Respondeu no WhatsApp em…" na planilha.', onde: 'dell', quando: 'na hora' },
       { ramo: 'se não responder', titulo: 'Manda um lembrete', texto: 'O CRM mostra há quantos dias cada convite espera; o lembrete é com você.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-aguardando', link: CRM_PRUMO },
       { titulo: 'Dono responde o formulário', texto: '"Prumo — Roteiro do Mapa", 16 perguntas.', onde: 'nuvem', quando: 'quando ele responder' },
-      { titulo: 'Diagnóstico', texto: 'n8n: Índice PRUMO e briefing na planilha, aviso no WhatsApp.', onde: 'dell', quando: 'de hora em hora', verificacao: 'fluxo:b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f', fila: 'pend:prumo-diagnostico' },
-      { titulo: 'Rascunho do Mapa em PDF', texto: 'O Dell monta o Mapa de 7 páginas com o que o formulário permite e deixa [PREENCHER] no resto. Fica em ~/prumo-entregas e no Drive (PRUMO/Entregas).', onde: 'dell', quando: 'na hora', verificacao: 'prumo-mapa' },
+      { titulo: 'Diagnóstico', texto: 'n8n: Índice PRUMO e briefing na planilha, aviso no WhatsApp.', onde: 'dell', quando: 'de hora em hora', verificacao: 'fluxo:b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f', fila: 'pend:prumo-diagnostico',
+        trabalhador: { id: 'diagnostico', nome: 'Diagnóstico', sala: 'prumo--organizar', faz: 'fecha o Índice PRUMO com a resposta do dono, grava índice e briefing e avisa', onde: 'n8n, no Dell' } },
+      { titulo: 'Rascunho do Mapa em PDF', texto: 'O Dell monta o Mapa de 7 páginas com o que o formulário permite e deixa [PREENCHER] no resto. Fica em ~/prumo-entregas e no Drive (PRUMO/Entregas).', onde: 'dell', quando: 'na hora', verificacao: 'prumo-mapa',
+        trabalhador: { id: 'prumo-mapa', nome: 'Rascunho do Mapa', sala: 'prumo--organizar', faz: 'monta o PDF de 7 páginas do Mapa com o que o formulário permite e deixa [PREENCHER] no resto, em ~/prumo-entregas', onde: 'prumo-mapa (unit .path sobre a fila do n8n), no Dell' } },
       { titulo: 'Completa o Mapa e conduz', texto: 'Entrevistas, travas em R$, recomendação, workshop e proposta. prumo-mapa refaz o PDF depois que você edita; "proposta enviada" vai na ficha do CRM.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PRUMO },
     ],
   },
@@ -96,7 +123,8 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Clínicas de terapia para o Iris. O Dell acha a clínica com WhatsApp no site; você revisa, convida em nome do PRUMO e conduz até o teste.',
     passos: [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: ABA/TEA, multidisciplinar infantil, neuropsicologia, fono, TO e TCC; ES primeiro, depois BH, Rio, São Paulo e Campinas. Uma busca por rodada, em rodízio.', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Nasceu desligado: roda à mão até você ligar o agendamento (dias úteis, 9h).', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:QRVkAhJBvBxt9mx8' },
+      { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Nasceu desligado: roda à mão até você ligar o agendamento (dias úteis, 9h).', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:QRVkAhJBvBxt9mx8',
+        trabalhador: { id: 'cacador-iris', nome: 'Caçador de clínicas', sala: 'prumo--iris', faz: 'acha no Google Places as clínicas de terapia com WhatsApp no site e põe até 15 por rodada na aba Clínicas', onde: 'n8n "PRUMO · Iris — Caçador de clínicas", no Dell (nasceu desligado)' } },
       { titulo: 'Revisa a clínica', texto: 'No CRM, em Hoje › Prospects para revisar (filtro Iris · Clínicas): veja o site e decida. Sem interesse na Etapa tira a clínica da fila.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
       { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite em nome do PRUMO (sem preço e sem link) e marca "Convite enviado".', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:mfyO1YAhBrXxe5Mb' },
       { titulo: 'Resposta', texto: 'O observador do WhatsApp ainda não lê a aba Clínicas: quem responder, marque "Em conversa" na Etapa.', onde: 'voce', quando: 'quando responder', comVoce: true, link: CRM_IRIS },
@@ -111,11 +139,27 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Estamparias para o CRM de estamparia (white-label do CRM da Silmer). Primeiro provar que alguém quer: conversa, não venda.',
     passos: [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: estamparia, camisetas e uniformes personalizados, silk, sublimação e confecção sob encomenda; ES primeiro. A Silmer, cliente do PRUMO, nunca entra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Nasceu desligado.', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:6pIzCCmktXAUGOdf' },
+      { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Nasceu desligado.', onde: 'dell', quando: 'à mão; 9h quando ligado', verificacao: 'fluxo:6pIzCCmktXAUGOdf',
+        trabalhador: { id: 'cacador-estampa', nome: 'Caçador de estamparias', sala: 'prumo--estamparias', faz: 'acha estamparias e confecções com WhatsApp no site e põe na aba Estamparias, sem repetir lead de outro funil', onde: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias", no Dell (nasceu desligado)' } },
       { titulo: 'Revisa a estamparia', texto: 'No CRM, em Hoje › Prospects para revisar (filtro CRM de estamparia). O plano pede 8 a 10 escolhidas à mão antes de ligar o agendamento.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_ESTAMPA },
       { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite (organizar os pedidos que chegam pelo WhatsApp) e marca "Convite enviado". O texto não diz que o CRM já roda num cliente: a Silmer ainda está em homologação.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:rNp1Upq53IFIuRwT' },
       { titulo: 'Resposta e conversa', texto: 'Quem responder, marque "Em conversa": 20 minutos sobre como os pedidos chegam hoje. Meta do piloto: 2 conversas em 4 semanas; sem isso, pausa.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_ESTAMPA },
       { titulo: 'Só depois: instalar', texto: 'Uma instalação por cliente, depois do CRM da Silmer estável por 30 dias, com contrato e DPA (plano de 13/10, B1 e B2).', onde: 'voce', quando: 'depois do piloto', comVoce: true },
+    ],
+  },
+  {
+    // Plus (15/10/2026): não é uma quinta oferta, é um filtro com os melhores leads; cada um anda no funil da oferta dele.
+    id: 'plus',
+    grupo: 'PRUMO',
+    nome: 'PRUMO · Plus',
+    frase: 'Os melhores leads, do Catálogo de Negócios Maçônicos. Não há robô: o catálogo é importado à mão, e envio e resposta você anota no CRM.',
+    passos: [
+      { titulo: 'O catálogo vira leads', texto: 'scripts/plus-importar.ts lê o PDF do catálogo, junta o mesmo WhatsApp num lead só e grava ~/prumo-entregas/plus/leads.json no Dell (nunca no git: são telefones de terceiros). Quem não tem telefone legível fica de fora.', onde: 'dell', quando: 'à mão, a cada catálogo novo', comVoce: true },
+      { titulo: 'Cada lead ganha a oferta dele', texto: 'Roupa = CRM de estamparia; psicologia e terapia = Iris; com site próprio = serviços PRUMO; o resto = Site. É o texto dessa oferta que ele recebe.', onde: 'dell', quando: 'na importação' },
+      { titulo: 'Envia com a saudação', texto: 'Na Hoje, os 10 primeiros Plus na frente dos do Site: "Enviar pelo WhatsApp" abre a mensagem ("Meu Ir.\'., tudo bem?…", sem preço e sem link) e anota o envio. Fica fora de "Enviar um por um", e as travas de horário e de ritmo valem igual.', onde: 'voce', quando: 'no expediente, no ritmo da trava', comVoce: true, link: CRM_PLUS },
+      { titulo: 'Resposta', texto: 'O observador do WhatsApp não lê o Plus: quem responder, anote "Respondeu no WhatsApp" na Ficha (de novo a cada resposta, para recomeçar os 7 dias).', onde: 'voce', quando: 'quando responder', comVoce: true, link: CRM_PLUS },
+      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: 'O CRM põe o lead em Follow-up para mandar; 7 dias sem mensagem, vai para Perdido.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PLUS },
+      { titulo: 'Conversa e proposta', texto: 'Segue a jornada da oferta dele: o Raio-X e o Encontrado no Site, o Mapa nos serviços PRUMO, a demonstração no Iris.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PLUS },
     ],
   },
   {
@@ -125,7 +169,8 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Quem viu, quem respondeu e quem recusou, nas quatro ofertas do PRUMO. A planilha é a verdade; o CRM só lê e anota.',
     passos: [
       { titulo: 'Tudo se marca na planilha', texto: 'Cliques nos links, o que você escreve, leitura, resposta, follow-up e desfecho escrevem na planilha sozinhos.', onde: 'dell', quando: 'na hora' },
-      { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects, Clínicas, Estamparias e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom (Clínicas e Estamparias não seguram o retrato: viram aviso).', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P' },
+      { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects, Clínicas, Estamparias e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom (Clínicas e Estamparias não seguram o retrato: viram aviso).', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P',
+        trabalhador: { id: 'retrato-do-crm', nome: 'Retrato do CRM', sala: 'prumo--geral', faz: 'lê as planilhas das quatro ofertas e a aba CRM e grava o retrato que o CRM e estas salas mostram', onde: 'n8n 08, no Dell' } },
       { titulo: 'Hoje', texto: 'Só o que depende de você: próximos passos, follow-ups, respostas, prospects, propostas e sites para enviar, cada um com o link que resolve.', onde: 'voce', quando: 'quando abrir', comVoce: true, link: { rotulo: 'Abrir o CRM', url: '/crm' } },
       { titulo: 'Funil', texto: 'As 5 etapas (Novo, Em contato, Proposta, Ganho, Perdido) com filtros por oferta (Site, Organizar, Iris, Estampa), nicho e cidade. Em contato sai sozinho para Perdido depois de 7 dias sem mensagem do lead.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' } },
       { titulo: 'Ficha e registros', texto: 'Nota, próximo passo com data e "proposta enviada" vão para a aba CRM pelo n8n. Nada é enviado ao lead.', onde: 'voce', quando: 'você decide', comVoce: true },
@@ -234,6 +279,19 @@ export const FLUXOS: FluxoDaOperacao[] = [
     ],
   },
 ]
+
+/**
+ * O fluxo e o passo pedidos no endereço (?fluxo=iris&passo=1), vindos do robô de
+ * uma sala do Escritório. Fluxo desconhecido = null (a aba guardada vale); passo
+ * fora do fluxo = só a aba.
+ */
+export function fluxoDoEndereco(busca: string): { fluxo: string; passo: number | null } | null {
+  const q = new URLSearchParams(busca)
+  const fluxo = FLUXOS.find(f => f.id === q.get('fluxo'))
+  if (!fluxo) return null
+  const n = Number(q.get('passo') ?? NaN)
+  return { fluxo: fluxo.id, passo: Number.isInteger(n) && n >= 0 && n < fluxo.passos.length ? n : null }
+}
 
 export interface HoraDoDia {
   hora: string

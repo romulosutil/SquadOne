@@ -14,11 +14,15 @@ import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, wat
 import Sheet from '../components/Sheet.vue'
 import SalaCartao from '../components/SalaCartao.vue'
 import SalasPainel from '../components/SalasPainel.vue'
+import SalaOperacao from '../components/SalaOperacao.vue'
 import SquadSelector from '../components/SquadSelector.vue'
 import { useAgentes } from '../agentes/estado'
 import { estadoDaPessoa } from '../casca/hoje'
+import { useOverview } from '../casca/overview'
 import { gravarVista, lerVistaGuardada, vistaInicial, type VistaDoEscritorio } from '../office/vista'
 import { ehSalaDeFinancas, estadoDoAgente, type EstadoDasFinancas, type EstadoDoAgente } from '../office/salaFinancas'
+import { fonteDoCrm, operacaoDaSala, temOperacao, type OperacaoDaSala } from '../office/operacao'
+import type { CrmVisao } from '../operations/types'
 
 const GameMap = defineAsyncComponent({
   loader: () => import('../components/GameMap.vue'),
@@ -112,6 +116,44 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.clearInterval(relogioDasFinancas))
 
+// Mapa da operação (15/10/2026): as salas do PRUMO mostram os leads delas por
+// passo da jornada (o retrato do CRM, o mesmo do /crm) e o estado de cada robô
+// (o status.json do Dell, o mesmo retrato que a casca já lê para a Hoje e Mais).
+// Só leitura; sem a fonte, a sala diz "Sem sinal" (office/operacao.ts). O CRM só
+// é lido quando a squad tem sala com operação: as outras não pagam os 5 MB.
+const { overview } = useOverview()
+const visaoDoCrm = ref<CrmVisao | null>(null)
+const erroDoCrm = ref('')
+const temSalaDeOperacao = computed(() => temOperacao((squadAtiva.value?.dominios ?? []).map((d) => d.id)))
+async function lerCrm() {
+  try {
+    // no-cache: revalida com o ETag; sem mudança no retrato o servidor responde 304.
+    const resposta = await fetch('/api/operations/crm', { cache: 'no-cache' })
+    const json = (resposta.headers.get('content-type') ?? '').includes('application/json')
+    if (!resposta.ok || !json) throw new Error(`HTTP ${resposta.status}`)
+    visaoDoCrm.value = await resposta.json()
+    erroDoCrm.value = ''
+  } catch (e) {
+    // O último retrato bom continua valendo (fica "velho" sozinho); sem nenhum, "Sem sinal".
+    erroDoCrm.value = e instanceof Error ? e.message : String(e)
+  }
+}
+watch(temSalaDeOperacao, (tem) => { if (tem) void lerCrm() }, { immediate: true })
+let relogioDoCrm = 0
+onMounted(() => {
+  // O n8n regrava o retrato a cada 10 min.
+  relogioDoCrm = window.setInterval(() => {
+    if (temSalaDeOperacao.value && document.visibilityState === 'visible') void lerCrm()
+  }, 5 * 60_000)
+})
+onBeforeUnmount(() => window.clearInterval(relogioDoCrm))
+const operacoes = computed<Record<string, OperacaoDaSala>>(() => {
+  if (!temSalaDeOperacao.value) return {}
+  const fontes = { crm: fonteDoCrm(visaoDoCrm.value, erroDoCrm.value, agora.value), dell: overview.value?.dell ?? null, agora: agora.value }
+  const pares = (squadAtiva.value?.dominios ?? []).map((d) => [d.id, operacaoDaSala(d.id, fontes)] as const)
+  return Object.fromEntries(pares.filter((p): p is readonly [string, OperacaoDaSala] => p[1] !== null))
+})
+
 const salaAberta = ref<string | null>(null)
 const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id === salaAberta.value) ?? null)
 </script>
@@ -155,6 +197,7 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         :total-arquivado="totalArquivado"
         :desabilitado="ocupadoComRoster"
         :estados="estados"
+        :operacoes="operacoes"
         @contratar="ag.contratarNaSala"
         @abrir-sala="ag.abrirSala"
         @substituir-po="ag.substituirPoDaSala"
@@ -191,7 +234,11 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         @arquivar-pessoa="ag.arquivarPessoa"
         @editar-dominio="ag.editarDominio"
         @arquivar-dominio="(id) => { salaAberta = null; ag.arquivarDominio(id) }"
-      />
+      >
+        <template v-if="operacoes[dominioAberto.id]" #rodape>
+          <SalaOperacao :operacao="operacoes[dominioAberto.id]" :nome-da-sala="dominioAberto.nome" />
+        </template>
+      </SalaCartao>
     </Sheet>
   </div>
 </template>

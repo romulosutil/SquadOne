@@ -167,10 +167,12 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
 
 | Sala (id) | Quem trabalha | Automáticos (catálogo) |
 |---|---|---|
-| Atendimento e proposta (`prumo--geral`, sala raiz) | todo contato com lead e dono: convite, abordagem com o site, follow-up, conversa, proposta, fechamento; e o do PRUMO sem outra sala | Balcão |
-| Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador (o Lead Scout foi desligado em 08/10/2026) |
+| Atendimento e proposta (`prumo--geral`, sala raiz) | todo contato com lead e dono: convite, abordagem com o site, follow-up, conversa, proposta, fechamento; e o do PRUMO sem outra sala | Balcão, Observador do WhatsApp, Acompanhamento (05), Retrato do CRM (08) |
+| Prospecção (`prumo--prospeccao`) | achar e qualificar empresas nos dois produtos, antes do primeiro contato | Caçador, Funil por nicho (06) (o Lead Scout foi desligado em 08/10/2026) |
 | Site antes da venda (`prumo--site-antes-da-venda`) | fazer, publicar, ajustar e pausar os sites (demo e de quem fechou) | gerador |
 | Organizar (`prumo--organizar`) | a consultoria: diagnóstico, Índice PRUMO, Mapa, entrevistas, recomendação, workshop | Diagnóstico, rascunho do Mapa (`prumo-mapa`) |
+| Iris (`prumo--iris`, 14/10/2026) | o Iris nas clínicas de terapia | Caçador de clínicas (desligado no n8n) |
+| Estamparias (`prumo--estamparias`, 14/10/2026) | o CRM de estamparia | Caçador de estamparias (desligado no n8n) |
 
 - **`prumo--geral` é o Atendimento.** Nova squad sempre nasce com a sala
   "Geral"; ela foi renomeada no ✎, e id nunca muda. Ser a sala raiz combina
@@ -189,13 +191,34 @@ funil — as etapas continuam em `src/operations/fluxos.ts` e nas planilhas:
   mais ao modelo; o redirecionamento automático continua como rede. Squad
   arquivada ou sumida: o turno falha antes do Gemini e a resposta diz para
   mandar sem o prefixo (regra 20).
-- **Catálogo dos trabalhadores automáticos** (`src/office/trabalhadores.ts`,
-  regra 26): versionado, fora do prompt, mostrado em texto sob cada sala no
-  painel de salas. Cada trabalhador aponta para a mesma verificação do
-  `status.json` que o passo dele em `fluxos.ts`; o teste confere as duas
-  listas e que nenhum módulo do servidor importa o catálogo. Quem o
-  `dell-status` não confere fica sem verificação, e o teste fixa a lista:
-  hoje ninguém. O rascunho do Mapa ganhou a verificação `prumo-mapa` em
+- **Catálogo dos trabalhadores automáticos** (regra 26): desde 15/10/2026 é
+  **um catálogo só**, o campo `trabalhador` dos passos de
+  `src/operations/fluxos.ts` (o "Como funciona" de Mais);
+  `src/office/trabalhadores.ts` deriva a lista dele, com o `quando` e a
+  `verificacao` do próprio passo. Antes eram duas listas à mão, e os
+  caçadores do Iris e das Estamparias estavam numa e não na outra. Fora do
+  prompt: o teste confere que nenhum módulo do servidor importa o catálogo,
+  os fluxos nem a operação das salas. Todo trabalhador tem verificação viva
+  (o teste fixa); a do caçador desligado não aparece no `status.json`, e a
+  sala diz "Sem sinal". O Plus tem fluxo em "Como funciona" e nenhum
+  trabalhador: o catálogo maçônico é importado à mão.
+- **O Escritório como mapa da operação** (15/10/2026, pedido do Rômulo: Entrada,
+  Escritório e Finanças pareciam distantes). Sob cada sala do PRUMO, na Lista e
+  na folha da sala do Mapa, `src/office/operacao.ts` (PURO) monta: os leads da
+  sala por passo da jornada (`painelDaJornada` sobre o retrato de
+  `/api/operations/crm`, o mesmo do `/crm`), os parados com ele (os 3 mais
+  antigos, com link para a Ficha) e cada robô com o estado do `status.json`
+  (`/api/operations/overview`, o retrato que a casca já lê). O recorte de cada
+  sala é uma decisão (`JORNADA_DAS_SALAS`): Prospecção = o estoque antes do
+  primeiro contato de cada oferta, Plus incluído; Atendimento = as conversas
+  em andamento de todas; as salas de oferta = a jornada inteira do produto
+  delas (Site, Organizar = `prumo`, Iris, Estamparias = `estampa`). Tocar numa
+  contagem abre `/crm?ver=jornada&produto=…`; tocar num robô abre o passo dele
+  em `/mais?fluxo=…&passo=…`. Só leitura (nada grava, nada vai ao prompt), e
+  só com fonte: sem retrato do CRM a sala diz que não leu (nunca "0"); sem
+  retrato do Dell de até 5 min, ou sem a verificação do robô nele, "Sem sinal".
+  O CRM (5 MB, revalidado por ETag) só é lido quando a squad ativa tem sala
+  com operação, e de novo a cada 5 min com a aba visível. O rascunho do Mapa ganhou a verificação `prumo-mapa` em
   07/10/2026 (gatilho, idade da `mapa-fila` e pasta de erro; ver
   `deploy/dell/README.md`, "Monitor do Dell").
 

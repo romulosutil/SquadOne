@@ -103,7 +103,7 @@ const estadoDe = (p: Pessoa) => props.estados[p.id] ?? { estado: 'sem_sinal' as 
       {{ expandida ? 'Recolher os integrantes' : `Mostrar ${dominio.integrantes.length} integrantes` }}
     </button>
 
-    <!-- Encaixe para o catálogo dos automáticos de cada sala (office/trabalhadores.ts, PRUMO como squad). -->
+    <!-- Encaixe para a operação da sala (SalaOperacao: leads da jornada e robôs, só leitura). -->
     <slot name="rodape" />
 
     <div class="acoes sala__gestos">

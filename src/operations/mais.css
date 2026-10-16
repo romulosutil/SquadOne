@@ -67,6 +67,9 @@
 .como__caixa { display: grid; gap: 0.35rem; min-width: 0; margin: 0.35rem 0; padding: 0.75rem 0.9rem; border: var(--linha-fina); background: var(--superficie); }
 .como__passo.is-voce .como__caixa { border-width: 3px; background: var(--atencao-fundo); }
 .como__passo.is-ramo .como__caixa { margin-left: 1.25rem; border-style: dashed; }
+/* O passo do robô que se tocou no Escritório (?fluxo=&passo=). A borda grossa e a sombra marcam; o aria-current diz. */
+.como__passo.is-alvo .como__caixa { border: var(--linha); box-shadow: var(--sombra); }
+.como__passo.is-alvo:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 .como__caixa h3 { font-size: 1rem; letter-spacing: -0.01em; }
 .como__caixa p { margin: 0; font-size: 0.9rem; overflow-wrap: anywhere; }
 .como__caixa .como__ramo { color: var(--texto-2); font-size: 0.75rem; font-weight: var(--peso-forte); }

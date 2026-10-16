@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { linkExterno, quantidadeDaFila, seloDoPasso } from './alertas'
-import { DELL_LIGADO, FLUXOS, O_TEMPO_TODO, ROTULO_DO_ONDE, UM_DIA } from './fluxos'
+import { DELL_LIGADO, FLUXOS, O_TEMPO_TODO, ROTULO_DO_ONDE, UM_DIA, fluxoDoEndereco } from './fluxos'
 import type { PassoDoFluxo } from './fluxos'
 import type { DellCheck } from './types'
 
@@ -21,7 +21,20 @@ function lerAba(): string {
   return ABAS[0].id
 }
 
-const atual = ref(lerAba())
+// Vindo do robô de uma sala do Escritório (?fluxo=&passo=): abre o fluxo dele e
+// leva ao passo, que fica em destaque. O endereço manda sobre a aba guardada.
+const pedido = fluxoDoEndereco(window.location.search)
+const atual = ref(pedido?.fluxo ?? lerAba())
+const alvo = ref<number | null>(pedido?.passo ?? null)
+onMounted(() => {
+  if (alvo.value === null) return
+  // Depois do foco que a casca dá ao conteúdo ao trocar de rota (rota.ts).
+  window.setTimeout(() => {
+    const el = document.getElementById(`como-passo-${alvo.value}`)
+    el?.scrollIntoView({ block: 'center' })
+    el?.focus({ preventScroll: true })
+  })
+})
 const fluxo = computed(() => FLUXOS.find(f => f.id === atual.value) ?? null)
 const porId = computed(() => new Map(props.checks.map(c => [c.id, c])))
 const comVoce = (id: string) => FLUXOS.find(f => f.id === id)?.passos.filter(p => p.comVoce).length ?? 0
@@ -31,6 +44,7 @@ const falhouNoFluxo = (id: string) => FLUXOS.find(f => f.id === id)?.passos
   .some(p => p.verificacao && porId.value.get(p.verificacao)?.estado === 'falha') ?? false
 
 function escolher(id: string, focar = false) {
+  if (id !== atual.value) alvo.value = null
   atual.value = id
   try { window.localStorage.setItem(CHAVE, id) } catch { /* só conveniência */ }
   if (focar) nextTick(() => document.getElementById(`como-aba-${id}`)?.focus())
@@ -81,7 +95,15 @@ function teclas(evento: KeyboardEvent) {
           <span class="is-voce">{{ fluxo.passos.filter(p => p.comVoce).length }} com você</span>
         </p>
         <ol class="como__trilha">
-          <li v-for="(passo, i) in fluxo.passos" :key="i" class="como__passo" :class="{ 'is-voce': passo.comVoce, 'is-ramo': passo.ramo }">
+          <li
+            v-for="(passo, i) in fluxo.passos"
+            :id="`como-passo-${i}`"
+            :key="i"
+            class="como__passo"
+            :class="{ 'is-voce': passo.comVoce, 'is-ramo': passo.ramo, 'is-alvo': i === alvo }"
+            :tabindex="i === alvo ? -1 : undefined"
+            :aria-current="i === alvo ? 'step' : undefined"
+          >
             <span class="como__no" :class="`is-${passo.onde}`" aria-hidden="true" />
             <div class="como__caixa">
               <p v-if="passo.ramo" class="como__ramo">↳ {{ passo.ramo }}</p>

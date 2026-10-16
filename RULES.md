@@ -229,19 +229,29 @@
     processos varrendo a mesma agenda mandariam cada lembrete duas vezes.
     Religar a reserva é um passo manual do runbook, com o Dell fora.
 26. **Trabalhadores automáticos ficam fora do prompt.** Os fluxos do n8n e os
-    timers do Dell que fazem trabalho de uma sala (Caçador,
-    gerador, Balcão, Diagnóstico, rascunho do Mapa) ligam-se a ela só pelo
-    catálogo versionado `src/office/trabalhadores.ts`, pelo id do domínio. O
+    timers do Dell que fazem trabalho de uma sala (Caçador, Funil por nicho,
+    gerador, Balcão, Observador do WhatsApp, Acompanhamento, Retrato do CRM,
+    Diagnóstico, rascunho do Mapa, caçadores do Iris e das Estamparias)
+    ligam-se a ela só pelo catálogo versionado, pelo id do domínio. O catálogo
+    é um só desde 15/10/2026: o campo `trabalhador` dos passos de
+    `src/operations/fluxos.ts`, de onde `src/office/trabalhadores.ts` deriva a
+    lista (duas listas à mão divergiram). O
     catálogo é para o Rômulo ver quem trabalha em cada sala; nunca entra no `systemInstruction`
-    e nenhum módulo do servidor o importa (o teste confere). O roster vai em
+    e nenhum módulo do servidor importa o catálogo, os fluxos nem a operação
+    das salas (`src/office/operacao.ts`; o teste confere). O roster vai em
     toda chamada ao modelo, e um agente que lesse o horário do Caçador
     acharia que pode acionar, reagendar ou consertar o Caçador — a
     infraestrutura é somente leitura (regra 10). Pelo mesmo motivo o treino
     das pessoas não cita os trabalhadores. Trabalhador não vira pessoa do
     roster, e sala não nasce por causa de um. Estado (rodou, falhou) só vem
-    do `status.json`, na Central (regras 2 e 19). As salas são quem trabalha,
-    não etapas do funil: as etapas continuam em `src/operations/fluxos.ts` e
-    nas planilhas.
+    do `status.json` (regras 2 e 19): desde 15/10/2026 o Escritório também o
+    mostra, sob cada sala, lido do mesmo retrato da Hoje e de Mais; sem
+    retrato de até 5 min, ou sem a verificação do robô nele, a sala diz "Sem
+    sinal". Os leads de cada sala vêm só do retrato do CRM, e o que não foi
+    lido é "sem sinal", nunca zero. O Escritório continua sem gravar nada além
+    do roster. As salas são quem trabalha,
+    não etapas do funil: as etapas continuam em `src/operations/fluxos.ts`,
+    em `src/operations/jornada.ts` e nas planilhas.
 27. **O Jev é medição até ser promovido.** O `typesafe/jev-1.13` (TypeSafe pela
     OpenRouter, `server/openrouter-decisoes.ts`) só responde perguntas em
     **sombra**, depois do turno, sem `await`: nada do que ele devolve decide

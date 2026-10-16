@@ -6,15 +6,21 @@
  * texto). Só emite: quem chama a API é o estado dos agentes.
  */
 import SalaCartao from './SalaCartao.vue'
-import type { Dominio, SquadView } from '../types'
+import SalaOperacao from './SalaOperacao.vue'
+import type { SquadView } from '../types'
 import type { EstadoDaPessoa } from '../casca/hoje'
-import { trabalhadoresDaSala } from '../office/trabalhadores'
+import type { OperacaoDaSala } from '../office/operacao'
 
 const props = defineProps<{
   squad: SquadView
   totalArquivado: number
   desabilitado: boolean
   estados: Record<string, { estado: EstadoDaPessoa; texto: string }>
+  /**
+   * A operação de cada sala (office/operacao.ts): leads por passo da jornada e
+   * robôs com o estado do status.json. Só leitura; sala ausente não mostra nada.
+   */
+  operacoes: Record<string, OperacaoDaSala>
 }>()
 
 const emit = defineEmits<{
@@ -30,14 +36,6 @@ const emit = defineEmits<{
 
 /** dominios[0] nunca é arquivado: o PO dele é quem circula pelo escritório. */
 const raizId = () => props.squad.dominios[0]?.id
-
-/**
- * Fluxos do n8n e timers do Dell ligados a esta sala pelo catálogo versionado
- * (office/trabalhadores.ts). Só leitura e só aqui: o catálogo não entra no
- * prompt, e o estado de cada um (rodou, falhou) fica na Central, que lê o
- * status.json — mostrar saúde aqui sem essa fonte seria inventar (RULES 2).
- */
-const automaticos = (d: Dominio) => trabalhadoresDaSala(d.id)
 </script>
 
 <template>
@@ -64,16 +62,8 @@ const automaticos = (d: Dominio) => trabalhadoresDaSala(d.id)
       @editar-dominio="emit('editarDominio', $event)"
       @arquivar-dominio="emit('arquivarDominio', $event)"
     >
-      <template v-if="automaticos(d).length" #rodape>
-        <div class="automaticos">
-          <h4>Automáticos desta sala</h4>
-          <ul>
-            <li v-for="t in automaticos(d)" :key="t.id">
-              <strong>{{ t.nome }}</strong> <span class="texto-2">({{ t.quando }})</span>
-              <small class="texto-2">{{ t.faz }} · {{ t.onde }}</small>
-            </li>
-          </ul>
-        </div>
+      <template v-if="operacoes[d.id]" #rodape>
+        <SalaOperacao :operacao="operacoes[d.id]" :nome-da-sala="d.nome" />
       </template>
     </SalaCartao>
   </section>
@@ -81,9 +71,4 @@ const automaticos = (d: Dominio) => trabalhadoresDaSala(d.id)
 
 <style>
 .salas { display: grid; gap: var(--esp-4); }
-.automaticos { display: grid; gap: var(--esp-1); }
-.automaticos h4 { margin: 0; font-size: 0.78rem; font-weight: var(--peso-forte); letter-spacing: 0.04em; text-transform: uppercase; }
-.automaticos ul { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
-.automaticos li { display: grid; gap: 0.1rem; font-size: 0.88rem; }
-.automaticos small { overflow-wrap: anywhere; }
 </style>
