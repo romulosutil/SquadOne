@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Blueprint do design (/blueprint, 16/10/2026): o design system vivo, para mexer no app junto
+ * Design system (/design-system, 16/10/2026): o design system vivo, para mexer no app junto
  * com o Claude sem adivinhar nome de classe nem valor.
  *
  *  - Os tokens saem do tokens.css cru (blueprint/tokens.ts): token novo aparece aqui sozinho.
@@ -170,7 +170,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
 
     <header class="bp-topo">
       <span class="bp-kicker">SquadOne · design system</span>
-      <h1>Blueprint do design</h1>
+      <h1>Design system</h1>
       <p class="bp-apoio">
         Os tokens e os componentes de verdade, lidos do código. Mude um valor e o app inteiro desta aba muda junto
         (até recarregar); depois copie o pedido e cole na conversa. Para apontar uma peça, use o código dela (ex.: <code>BP-BOTAO</code>).

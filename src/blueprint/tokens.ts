@@ -1,7 +1,7 @@
 /**
  * PURO (16/10/2026): o blueprint do design lido do próprio tokens.css.
  *
- * O blueprint (/blueprint) não tem lista de tokens própria: importa o tokens.css
+ * O design system (/design-system) não tem lista de tokens própria: importa o tokens.css
  * cru e lê daqui, então um token novo aparece nele sem ninguém lembrar de
  * cadastrar. O mesmo arquivo dá ao teste as regras que mantêm o app homogêneo
  * (nada de rem solto em espaço, de tamanho de fonte fora da escala, de peso

@@ -32,7 +32,7 @@ const links = computed(() => [
         { href: '/entrada/', rotulo: 'Entrada', dica: 'texto e arquivos para a Mel organizar' }
       ]
     : []),
-  { href: '/blueprint', rotulo: 'Blueprint do design', dica: 'tokens, componentes e a ordem das telas, ao vivo; mude e copie o pedido' }
+  { href: '/design-system', rotulo: 'Design system', dica: 'tokens, componentes e a ordem das telas, ao vivo; mude e copie o pedido' }
 ])
 </script>
 

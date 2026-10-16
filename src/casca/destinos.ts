@@ -47,9 +47,9 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
   const caminho = normalizarCaminho(caminhoCru)
   if (caminho === '/') return 'hoje'
   if (caminho === '/mais') return 'mais'
-  // Blueprint do design (16/10/2026): os tokens e os componentes vivos, nos dois perfis. Fora da barra e
+  // Design system (16/10/2026; era /blueprint, renomeado no mesmo dia: o blueprint é o de serviço, docs/blueprint/): os tokens e os componentes vivos, nos dois perfis. Fora da barra e
   // do trilho (é ferramenta de quem mexe no app, não destino do dia); entra pelo Mais e pelo Ctrl+K.
-  if (caminho === '/blueprint') return 'blueprint'
+  if (caminho === '/design-system') return 'blueprint'
   if (caminho === '/agenda') return c.agentes ? 'agenda' : 'nao-encontrada'
   if (comeca(caminho, '/squadone')) return c.agentes ? 'escritorio' : 'nao-encontrada'
   if (c.perfil !== 'operations') return 'nao-encontrada'
@@ -135,7 +135,7 @@ export function comandosDaPaleta(
     dica: d.href,
     acao: { tipo: 'ir', href: d.href },
   }))
-  ir.push({ id: 'ir:blueprint', rotulo: 'Ir para o Blueprint do design', dica: '/blueprint', acao: { tipo: 'ir', href: '/blueprint' } })
+  ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: '/design-system', acao: { tipo: 'ir', href: '/design-system' } })
   if (!c.agentes) return ir
   return [
     { id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } },

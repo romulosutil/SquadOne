@@ -82,9 +82,9 @@ tabela no desktop): `docs/auditoria-de-design-2026-10-15.md`.
 Modo escuro: `prefers-color-scheme: dark`, a não ser que `<html data-theme="light">`;
 `data-theme="dark"` força. Só os semânticos mudam; a paleta fica.
 
-## Blueprint (/blueprint) e a regra do teste
+## Design system (/design-system) e a regra do teste
 
-Desde 16/10/2026 o design system é uma página do próprio app: `/blueprint` (Mais ou Ctrl+K).
+Desde 16/10/2026 o design system é uma página do próprio app: `/design-system` (Mais ou Ctrl+K).
 Ela lê este `tokens.css` cru, mostra cada token com amostra, valor claro e escuro e o comentário
 de cima; mede o contraste dos pares que as telas usam no tema da hora; e traz cada componente vivo
 com um código fixo (`BP-BOTAO`, `BP-ESCOLHAS`, `BP-FICHA`...). Mudar um valor ali muda o app

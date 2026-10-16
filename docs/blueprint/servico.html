@@ -1,0 +1,386 @@
+<meta charset="utf-8">
+<title>Service Blueprint do SquadOne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Planta técnica: papel vegetal com tinta azul (palco) e verde-água (bastidor), como a convenção da NN/g; cianotipia no escuro.
+   Quadro em grade: uma coluna por passo, uma linha por faixa; painel de detalhe à direita (embaixo no celular). */
+:root {
+  --papel: #f4f2eb;
+  --papel-2: #e9e6db;
+  --caixa: #fcfbf7;
+  --tinta: #163a6a;
+  --tinta-2: #4a6890;
+  --bastidor: #0f6b62;
+  --bastidor-fundo: #e3f2ef;
+  --realce: #a83512;
+  --realce-fundo: #fbe3d8;
+  --dor: #b3261e;
+  --dor-fundo: #f9dcd8;
+  --metrica: #735800;
+  --metrica-fundo: #fbf0c7;
+  --opcao: #1f63a3;
+  --opcao-fundo: #dcebf8;
+  --seguranca: #6b3fa0;
+  --seguranca-fundo: #ece2f7;
+  --grade: rgba(22, 58, 106, 0.06);
+  --t-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --t-corpo: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --t-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papel: #0d2747; --papel-2: #13345c; --caixa: #12325a; --tinta: #e7eefb; --tinta-2: #a9bddc; --bastidor: #6fd6c6; --bastidor-fundo: #0f3a40;
+    --realce: #ff9b6e; --realce-fundo: #4a2618; --dor: #ff8f86; --dor-fundo: #4a1f22; --metrica: #f2cd5c; --metrica-fundo: #3d3412;
+    --opcao: #8cc4ff; --opcao-fundo: #173f6b; --seguranca: #cfb2ff; --seguranca-fundo: #33264d; --grade: rgba(231, 238, 251, 0.06); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --papel: #0d2747; --papel-2: #13345c; --caixa: #12325a; --tinta: #e7eefb; --tinta-2: #a9bddc; --bastidor: #6fd6c6; --bastidor-fundo: #0f3a40;
+  --realce: #ff9b6e; --realce-fundo: #4a2618; --dor: #ff8f86; --dor-fundo: #4a1f22; --metrica: #f2cd5c; --metrica-fundo: #3d3412;
+  --opcao: #8cc4ff; --opcao-fundo: #173f6b; --seguranca: #cfb2ff; --seguranca-fundo: #33264d; --grade: rgba(231, 238, 251, 0.06); color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--t-corpo); font-size: 14px; line-height: 1.45; }
+* { box-sizing: border-box; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--realce); outline-offset: 2px; }
+code, .mono { font-family: var(--t-mono); font-size: 12px; overflow-wrap: anywhere; }
+
+.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+.topo { display: grid; gap: 10px; padding: 12px 16px; border-bottom: 1.5px solid var(--tinta); }
+.topo__linha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.marca { display: grid; min-width: 0; margin-right: auto; }
+.marca h1 { margin: 0; font-family: var(--t-display); font-size: 28px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; line-height: 1; text-wrap: balance; }
+.marca small { color: var(--tinta-2); font-family: var(--t-mono); font-size: 12px; }
+.abas, .filtros { display: flex; flex-wrap: wrap; gap: 6px; }
+.bt { min-height: 36px; padding: 4px 12px; border: 1.5px solid var(--tinta); background: var(--caixa); cursor: pointer; font-weight: 500; }
+.bt:hover { background: var(--papel-2); }
+.bt[aria-pressed="true"] { background: var(--tinta); color: var(--papel); }
+.filtro { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 10px; border: 1.5px solid currentColor; background: var(--caixa); cursor: pointer; font-size: 13px; }
+.filtro[aria-pressed="true"] { box-shadow: inset 0 -3px 0 currentColor; font-weight: 600; }
+.busca input { width: min(260px, 100%); min-height: 36px; padding: 6px 10px; border: 1.5px solid var(--tinta); background: var(--caixa); }
+
+.corpo { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 0; }
+@media (max-width: 900px) { .corpo { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } }
+.palco { min-width: 0; min-height: 0; overflow: auto; background-color: var(--papel);
+  background-image: linear-gradient(var(--grade) 1px, transparent 1px), linear-gradient(90deg, var(--grade) 1px, transparent 1px); background-size: 24px 24px; }
+.cabeca-bp { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 14px 16px 0; }
+.cabeca-bp p { margin: 0; max-width: 70ch; }
+.cabeca-bp strong { font-family: var(--t-display); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-2); margin-right: 6px; }
+
+/* Quadro */
+.quadro { position: relative; display: grid; gap: 0 14px; padding: 12px 16px 24px; width: max-content; min-width: 100%; }
+.rotulo-faixa { position: sticky; left: 0; z-index: 2; display: grid; align-content: center; gap: 2px; padding: 8px 10px 8px 0; background: var(--papel); }
+.rotulo-faixa b { font-family: var(--t-display); font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.05; }
+.rotulo-faixa span { color: var(--tinta-2); font-size: 12px; font-style: italic; }
+.rotulo-faixa.abaixo b { color: var(--bastidor); }
+.celula { display: grid; align-content: start; gap: 8px; padding: 10px 0; min-width: 0; }
+.tempo { position: relative; display: grid; justify-items: center; gap: 2px; padding: 8px 4px 14px; text-align: center; }
+.tempo::before { content: ""; position: absolute; left: -14px; right: 0; top: 44px; border-top: 2px solid var(--tinta); }
+.tempo.ultimo::before { right: 20px; }
+.tempo.ultimo::after { content: ""; position: absolute; right: 8px; top: 38px; border: 7px solid transparent; border-left: 12px solid var(--tinta); }
+.tempo .n { position: relative; z-index: 1; display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--tinta); color: var(--papel); font-family: var(--t-mono); font-size: 12px; font-weight: 500; order: 2; margin-top: 4px; }
+.tempo .nome { order: 1; font-family: var(--t-display); font-size: 17px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; line-height: 1.05; text-wrap: balance; }
+.tempo .quando { order: 3; color: var(--tinta-2); font-size: 12px; }
+.linha { position: relative; grid-column: 1 / -1; height: 0; border-top: 2px dashed var(--tinta); margin: 4px 0; }
+.linha.visibilidade { border-top-style: solid; }
+.linha span { position: sticky; left: 0; display: inline-block; transform: translateY(-50%); padding: 0 8px 0 0; background: var(--papel); font-family: var(--t-display); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.cartao { position: relative; display: grid; gap: 4px; width: 100%; padding: 8px 10px 8px; border: 1.5px solid var(--tinta); background: var(--caixa); text-align: left; cursor: pointer; }
+.cartao.abaixo { border-color: var(--bastidor); background: var(--bastidor-fundo); }
+.cartao.E { border-style: solid; border-width: 1.5px 1.5px 4px; }
+.cartao.momento { box-shadow: 4px 4px 0 var(--realce); }
+.cartao .nome { font-weight: 600; line-height: 1.25; }
+.cartao .id { color: var(--tinta-2); font-family: var(--t-mono); font-size: 11px; }
+.cartao.abaixo .id { color: var(--bastidor); }
+.cartao .marcas { display: flex; flex-wrap: wrap; gap: 4px; }
+.cartao:hover { outline: 2px solid var(--tinta-2); outline-offset: 1px; }
+.cartao.escolhido { outline: 3px solid var(--realce); outline-offset: 1px; }
+.cartao.apagado, .rotulo-faixa.apagado { opacity: 0.22; }
+.tag { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border: 1px solid; font-size: 11px; font-weight: 600; line-height: 18px; }
+.tag.momento { color: var(--realce); background: var(--realce-fundo); }
+.tag.dor { color: var(--dor); background: var(--dor-fundo); }
+.tag.metrica { color: var(--metrica); background: var(--metrica-fundo); }
+.tag.opcao { color: var(--opcao); background: var(--opcao-fundo); }
+.tag.seguranca { color: var(--seguranca); background: var(--seguranca-fundo); }
+.filtro.momento { color: var(--realce); } .filtro.dor { color: var(--dor); } .filtro.metrica { color: var(--metrica); } .filtro.opcao { color: var(--opcao); } .filtro.seguranca { color: var(--seguranca); }
+
+svg.setas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.celula, .tempo { position: relative; z-index: 1; }
+svg.setas path { fill: none; stroke: var(--tinta-2); stroke-width: 1.5; marker-end: url(#seta); opacity: 0.55; }
+svg.setas path.acesa { stroke: var(--realce); stroke-width: 2.5; opacity: 1; marker-end: url(#seta-acesa); }
+svg.setas path.apagada { opacity: 0.12; }
+
+/* Painel */
+.painel { min-width: 0; overflow-y: auto; border-left: 1.5px solid var(--tinta); background: var(--caixa); padding: 16px; display: grid; align-content: start; gap: 14px; }
+@media (max-width: 900px) { .painel { border-left: 0; border-top: 1.5px solid var(--tinta); max-height: 50vh; } }
+.painel h2 { margin: 0; font-family: var(--t-display); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; line-height: 1.02; text-wrap: balance; }
+.painel h3 { margin: 0 0 6px; font-family: var(--t-display); font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-2); }
+.painel p { margin: 0; }
+.painel ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; padding: 2px 8px; border: 1px solid var(--tinta-2); font-family: var(--t-mono); font-size: 12px; }
+.chip.forte { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+.bloco { padding: 10px 12px; border: 1.5px solid; }
+.bloco.dor { border-color: var(--dor); background: var(--dor-fundo); }
+.bloco.metrica { border-color: var(--metrica); background: var(--metrica-fundo); }
+.bloco.opcao { border-color: var(--opcao); background: var(--opcao-fundo); }
+.bloco.seguranca { border-color: var(--seguranca); background: var(--seguranca-fundo); }
+.bloco.melhorias { border-color: var(--realce); border-style: dashed; }
+.bloco h3 { color: var(--tinta); }
+.vizinhos button { display: flex; width: 100%; justify-content: space-between; gap: 8px; min-height: 36px; padding: 4px 8px; border: 0; border-bottom: 1px solid var(--papel-2); background: none; text-align: left; cursor: pointer; }
+.vizinhos button:hover { background: var(--papel-2); }
+.vizinhos .mono { color: var(--tinta-2); }
+.acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.aviso { min-height: 1.2em; color: var(--tinta-2); font-size: 12px; }
+.aviso + textarea { width: 100%; }
+</style>
+
+<div class="app">
+  <header class="topo">
+    <div class="topo__linha">
+      <div class="marca">
+        <h1>Service Blueprint do SquadOne</h1>
+        <small id="versao">carregando servico.json…</small>
+      </div>
+      <div class="abas" id="abas" role="group" aria-label="Serviço"></div>
+    </div>
+    <div class="topo__linha">
+      <div class="filtros" id="filtros" role="group" aria-label="Destacar marcas"></div>
+      <label class="busca"><input id="busca" type="search" placeholder="Buscar: vercel, trava, SITE-4…" aria-label="Buscar no blueprint"></label>
+      <button class="bt" id="copiar-tudo" type="button">Copiar blueprint (JSON)</button>
+    </div>
+  </header>
+  <div class="corpo">
+    <main class="palco" id="palco">
+      <div class="cabeca-bp" id="cabeca-bp"></div>
+      <div class="quadro" id="quadro"></div>
+    </main>
+    <aside class="painel" id="painel" aria-live="polite"></aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s)
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const ABAIXO = new Set(['B', 'A'])
+  const CLASSE_DA_LINHA = { C: 'interacao', P: 'visibilidade', B: 'interna' }
+  const ROTULO_QUEM = { cliente: 'cliente', 'você': 'Rômulo', 'robô': 'robô', terceiro: 'terceiro' }
+
+  let mapa = null, bp = null, escolhido = null
+  const filtros = new Set()
+  const porId = new Map()
+
+  function marcasDe(c) {
+    return [c.momento ? 'momento' : null, ...['dor', 'metrica', 'opcao', 'seguranca'].filter((m) => c[m]?.length)].filter(Boolean)
+  }
+  const NOME_CURTO = { momento: '★ momento', dor: 'dor', metrica: 'métrica', opcao: 'opção', seguranca: 'segurança' }
+
+  function montarTopo() {
+    const abas = $('#abas')
+    abas.replaceChildren(...mapa.blueprints.map((b) => {
+      const bt = document.createElement('button')
+      bt.className = 'bt'; bt.type = 'button'; bt.textContent = b.nome; bt.dataset.id = b.id
+      bt.onclick = () => abrir(b.id)
+      return bt
+    }))
+    $('#filtros').replaceChildren(...Object.entries(mapa.marcas).map(([id, nome]) => {
+      const bt = document.createElement('button')
+      bt.className = `filtro ${id}`; bt.type = 'button'; bt.textContent = nome; bt.setAttribute('aria-pressed', 'false')
+      bt.onclick = () => { filtros.has(id) ? filtros.delete(id) : filtros.add(id); bt.setAttribute('aria-pressed', String(filtros.has(id))); pintar() }
+      return bt
+    }))
+  }
+
+  function abrir(id, cartao) {
+    bp = mapa.blueprints.find((b) => b.id === id) ?? mapa.blueprints[0]
+    porId.clear()
+    for (const c of bp.cartoes) porId.set(c.id, c)
+    escolhido = null
+    for (const b of document.querySelectorAll('#abas .bt')) b.setAttribute('aria-pressed', String(b.dataset.id === bp.id))
+    $('#cabeca-bp').innerHTML = `<p><strong>Cliente</strong>${esc(bp.cliente)}</p><p><strong>Objetivo</strong>${esc(bp.objetivo)}</p>`
+    desenhar()
+    if (cartao && porId.has(cartao)) escolher(cartao, true)
+    else { inicio(); marcarHash(bp.id) }
+  }
+
+  function desenhar() {
+    const q = $('#quadro')
+    const n = bp.passos.length
+    q.style.gridTemplateColumns = `minmax(110px, 140px) repeat(${n}, minmax(190px, 230px))`
+    const partes = []
+    partes.push('<div class="rotulo-faixa"><b>Passos</b><span>tempo</span></div>')
+    bp.passos.forEach((p, i) => partes.push(`<div class="tempo ${i === n - 1 ? 'ultimo' : ''}" data-passo="${esc(p.id)}"><span class="nome">${esc(p.nome)}</span><span class="n">${i + 1}</span><span class="quando">${esc(p.tempo || '')}</span></div>`))
+    for (const f of mapa.faixas) {
+      const abaixo = ABAIXO.has(f.id) ? 'abaixo' : ''
+      partes.push(`<div class="rotulo-faixa ${abaixo}" data-faixa="${f.id}"><b>${esc(f.nome)}</b><span>${esc(f.sub)}</span></div>`)
+      for (const p of bp.passos) {
+        const cs = bp.cartoes.filter((c) => c.passo === p.id && c.faixa === f.id)
+        partes.push(`<div class="celula">${cs.map((c) => `
+          <button type="button" class="cartao ${c.faixa} ${abaixo} ${c.momento ? 'momento' : ''}" data-id="${esc(c.id)}" aria-label="${esc(c.nome)}, ${esc(c.id)}">
+            <span class="nome">${esc(c.nome)}</span>
+            <span class="id">${esc(c.id)} · ${esc(ROTULO_QUEM[c.quem] ?? c.quem)}</span>
+            ${marcasDe(c).length ? `<span class="marcas">${marcasDe(c).map((m) => `<span class="tag ${m}">${NOME_CURTO[m]}</span>`).join('')}</span>` : ''}
+          </button>`).join('')}</div>`)
+      }
+      const linha = mapa.linhas.find((l) => l.depois === f.id)
+      if (linha) partes.push(`<div class="linha ${CLASSE_DA_LINHA[f.id] ?? ''}"><span>${esc(linha.nome)}</span></div>`)
+    }
+    q.innerHTML = partes.join('') + `<svg class="setas" aria-hidden="true"><defs>
+      <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--tinta-2);stroke:none"/></marker>
+      <marker id="seta-acesa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--realce);stroke:none"/></marker></defs><g></g></svg>`
+    for (const b of q.querySelectorAll('.cartao')) b.onclick = () => escolher(b.dataset.id)
+    requestAnimationFrame(() => { setas(); pintar() })
+  }
+
+  // Setas em cotovelo: na mesma coluna, de baixo para cima (ou o inverso); entre colunas, pela lateral.
+  function setas() {
+    const q = $('#quadro'), g = q.querySelector('svg.setas g')
+    if (!g) return
+    const base = q.getBoundingClientRect()
+    const caixa = (id) => { const e = q.querySelector(`.cartao[data-id="${CSS.escape(id)}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height } }
+    g.innerHTML = bp.ligacoes.map(([de, para]) => {
+      const a = caixa(de), b = caixa(para)
+      if (!a || !b) return ''
+      let d
+      if (Math.abs(a.x - b.x) < 4) {
+        const desce = b.y > a.y
+        const x = a.x + a.w / 2
+        d = `M${x} ${desce ? a.y + a.h : a.y} L${x} ${desce ? b.y - 2 : b.y + b.h + 2}`
+      } else {
+        const dir = b.x > a.x
+        const x1 = dir ? a.x + a.w : a.x, y1 = a.y + a.h / 2
+        const x2 = dir ? b.x - 2 : b.x + b.w + 2, y2 = b.y + b.h / 2
+        const mx = (x1 + x2) / 2
+        d = `M${x1} ${y1} L${mx} ${y1} L${mx} ${y2} L${x2} ${y2}`
+      }
+      return `<path d="${d}" data-de="${esc(de)}" data-para="${esc(para)}"/>`
+    }).join('')
+  }
+
+  function casa(c, q) {
+    if (filtros.size && !marcasDe(c).some((m) => filtros.has(m))) return false
+    if (!q) return true
+    return [c.id, c.nome, c.resumo, c.quem, ...(c.arquivos || []), ...(c.dor || []), ...(c.metrica || []), ...(c.opcao || []), ...(c.seguranca || [])]
+      .some((s) => String(s).toLowerCase().includes(q))
+  }
+
+  function pintar() {
+    const q = $('#busca').value.trim().toLowerCase()
+    const vizinhos = new Set()
+    if (escolhido) { vizinhos.add(escolhido); for (const [de, para] of bp.ligacoes) { if (de === escolhido) vizinhos.add(para); if (para === escolhido) vizinhos.add(de) } }
+    for (const e of document.querySelectorAll('#quadro .cartao')) {
+      const c = porId.get(e.dataset.id)
+      e.classList.toggle('escolhido', c.id === escolhido)
+      e.classList.toggle('apagado', !casa(c, q) || (escolhido && !vizinhos.has(c.id)))
+    }
+    for (const p of document.querySelectorAll('#quadro svg.setas path[data-de]')) {
+      const ligada = escolhido && (p.dataset.de === escolhido || p.dataset.para === escolhido)
+      p.classList.toggle('acesa', Boolean(ligada))
+      p.classList.toggle('apagada', Boolean((escolhido && !ligada) || q || filtros.size))
+    }
+  }
+
+  function lista(titulo, itens, classe) {
+    return itens?.length ? `<section class="bloco ${classe}"><h3>${titulo}</h3><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></section>` : ''
+  }
+
+  function inicio() {
+    const contar = (m) => bp.cartoes.filter((c) => marcasDe(c).includes(m)).length
+    painel.innerHTML = `
+      <div class="chips"><span class="chip forte">${esc(bp.id)}</span><span class="chip">${bp.passos.length} passos</span><span class="chip">${bp.cartoes.length} cartões</span></div>
+      <h2>${esc(bp.nome)}</h2>
+      <p>${esc(mapa.resumo)}</p>
+      <section><h3>Neste serviço</h3><div class="chips">
+        <span class="chip">${contar('momento')} momentos da verdade</span><span class="chip">${contar('dor')} pontos de dor</span>
+        <span class="chip">${contar('metrica')} com métrica</span><span class="chip">${contar('seguranca')} com segurança</span></div></section>
+      ${lista('Melhorias em aberto', bp.melhorias, 'melhorias')}
+      <section class="bloco opcao"><h3>Para discutir uma melhoria</h3><ul>
+        <li>Toque num cartão: as setas dele acendem e o painel mostra arquivos, métricas, dores e segurança.</li>
+        <li>Cite o código (ex.: <code>SITE-3-B2</code>) numa conversa, ou use "Copiar contexto para agente".</li>
+        <li>A fonte é <code>docs/blueprint/servico.json</code> no repositório; um teste falha se um código quebrar ou um arquivo citado sumir.</li></ul></section>
+      <section><div class="acoes"><button class="bt" type="button" id="copiar-bp">Copiar este serviço para agente</button></div><p class="aviso" id="aviso" role="status"></p></section>`
+    $('#copiar-bp').onclick = () => copiar(contextoDoServico(), $('#aviso'))
+  }
+
+  function contextoDoCartao(c) {
+    const passo = bp.passos.find((p) => p.id === c.passo)
+    const faixa = mapa.faixas.find((f) => f.id === c.faixa)
+    const nome = (id) => porId.get(id)?.nome ?? id
+    const saem = bp.ligacoes.filter(([de]) => de === c.id).map(([, para]) => `- → ${para} (${nome(para)})`)
+    const chegam = bp.ligacoes.filter(([, para]) => para === c.id).map(([de]) => `- ← ${de} (${nome(de)})`)
+    const bloco = (t, xs) => (xs?.length ? `\n${t}:\n${xs.map((x) => `- ${x}`).join('\n')}` : '')
+    return [
+      `Service blueprint do SquadOne · ${c.id} · ${c.nome}`,
+      `Serviço ${bp.id} (${bp.nome}), passo ${passo?.id} "${passo?.nome}" (${passo?.tempo ?? ''}), faixa ${faixa?.nome}. Quem: ${ROTULO_QUEM[c.quem] ?? c.quem}.${c.momento ? ' Momento da verdade.' : ''}`,
+      `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}, ${mapa.atualizado}).`,
+      '', c.resumo,
+      c.arquivos?.length ? `\nArquivos: ${c.arquivos.join(', ')}` : '',
+      bloco('Pontos de dor', c.dor), bloco('Métricas', c.metrica), bloco('Opções de projeto', c.opcao), bloco('Segurança', c.seguranca), bloco('Melhorias', c.melhorias),
+      saem.length ? `\nLeva a:\n${saem.join('\n')}` : '', chegam.length ? `\nVem de:\n${chegam.join('\n')}` : '',
+    ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  function contextoDoServico() {
+    const linhas = [`Service blueprint do SquadOne · ${bp.id} · ${bp.nome}`, `Cliente: ${bp.cliente}. Objetivo: ${bp.objetivo}`, `Fonte: docs/blueprint/servico.json (versão ${mapa.versao}).`, '']
+    for (const p of bp.passos) {
+      linhas.push(`## ${p.id} ${p.nome} (${p.tempo ?? ''})`)
+      for (const f of mapa.faixas) for (const c of bp.cartoes.filter((x) => x.passo === p.id && x.faixa === f.id)) {
+        linhas.push(`- [${f.nome}] ${c.id} ${c.nome}: ${c.resumo}${marcasDe(c).length ? ` (${marcasDe(c).join(', ')})` : ''}`)
+      }
+    }
+    if (bp.melhorias?.length) linhas.push('', 'Melhorias em aberto:', ...bp.melhorias.map((m) => `- ${m}`))
+    return linhas.join('\n')
+  }
+
+  async function copiar(texto, aviso) {
+    try { await navigator.clipboard.writeText(texto); aviso.textContent = 'Copiado. Cole na conversa ou no agente.' }
+    catch { aviso.textContent = 'Não consegui copiar: o texto está selecionado abaixo.'; const ta = document.createElement('textarea'); ta.value = texto; ta.rows = 8; ta.className = 'mono'; aviso.after(ta); ta.select() }
+  }
+
+  function escolher(id, rolar) {
+    const c = porId.get(id)
+    if (!c) return
+    escolhido = escolhido === id ? null : id
+    if (!escolhido) { inicio(); pintar(); marcarHash(bp.id); return }
+    const passo = bp.passos.find((p) => p.id === c.passo)
+    const faixa = mapa.faixas.find((f) => f.id === c.faixa)
+    const viz = (outro, seta) => `<button type="button" data-ir="${esc(outro)}"><span>${seta} ${esc(porId.get(outro)?.nome ?? outro)}</span><span class="mono">${esc(outro)}</span></button>`
+    const saem = bp.ligacoes.filter(([de]) => de === c.id).map(([, p]) => viz(p, '→'))
+    const chegam = bp.ligacoes.filter(([, p]) => p === c.id).map(([d]) => viz(d, '←'))
+    painel.innerHTML = `
+      <div class="chips"><span class="chip forte">${esc(c.id)}</span><span class="chip">${esc(faixa?.nome)}</span><span class="chip">passo ${bp.passos.indexOf(passo) + 1} · ${esc(passo?.nome)}</span><span class="chip">${esc(ROTULO_QUEM[c.quem] ?? c.quem)}</span>${c.momento ? '<span class="chip">★ momento da verdade</span>' : ''}</div>
+      <h2>${esc(c.nome)}</h2>
+      <p>${esc(c.resumo)}</p>
+      ${c.arquivos?.length ? `<section><h3>Onde mora</h3><div class="chips">${c.arquivos.map((a) => `<code class="chip">${esc(a)}</code>`).join('')}</div></section>` : ''}
+      ${lista('Pontos de dor', c.dor, 'dor')}${lista('Métricas', c.metrica, 'metrica')}${lista('Opções de projeto', c.opcao, 'opcao')}${lista('Segurança', c.seguranca, 'seguranca')}${lista('Melhorias', c.melhorias, 'melhorias')}
+      ${saem.length || chegam.length ? `<section class="vizinhos"><h3>Ligações</h3>${saem.join('')}${chegam.join('')}</section>` : ''}
+      <section><h3>Levar para a conversa</h3><div class="acoes"><button class="bt" type="button" id="copiar-ref">Copiar referência</button><button class="bt" type="button" id="copiar-ctx">Copiar contexto para agente</button></div><p class="aviso" id="aviso" role="status"></p></section>`
+    for (const b of painel.querySelectorAll('[data-ir]')) b.onclick = () => { escolhido = null; escolher(b.dataset.ir, true) }
+    $('#copiar-ref').onclick = () => copiar(`${c.id} (${c.nome})${c.arquivos?.length ? ' · ' + c.arquivos.join(', ') : ''}`, $('#aviso'))
+    $('#copiar-ctx').onclick = () => copiar(contextoDoCartao(c), $('#aviso'))
+    pintar()
+    if (rolar) document.querySelector(`.cartao[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+    marcarHash(c.id)
+  }
+
+  function marcarHash(id) { try { history.replaceState(null, '', '#' + id) } catch {} }
+
+  const painel = $('#painel')
+  $('#busca').addEventListener('input', pintar)
+  $('#copiar-tudo').onclick = (e) => copiar(JSON.stringify(mapa, null, 2), Object.assign(document.createElement('span'), {})).then(() => { e.target.textContent = 'Copiado'; setTimeout(() => { e.target.textContent = 'Copiar blueprint (JSON)' }, 1800) })
+  new ResizeObserver(() => { if (bp) { setas(); pintar() } }).observe($('#quadro'))
+  document.fonts?.ready.then(() => { if (bp) { setas(); pintar() } })
+
+  fetch('servico.json').then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }).then((dados) => {
+    mapa = dados
+    $('#versao').textContent = `versão ${mapa.versao} · ${mapa.atualizado} · docs/blueprint/servico.json`
+    montarTopo()
+    const alvo = location.hash.slice(1)
+    const doCartao = mapa.blueprints.find((b) => b.cartoes.some((c) => c.id === alvo))
+    abrir(doCartao?.id ?? alvo, doCartao ? alvo : undefined)
+  }).catch((e) => { painel.innerHTML = `<h2>Não consegui ler o blueprint</h2><p>O arquivo servico.json não carregou (${esc(e.message)}). Ele precisa estar publicado ao lado desta página.</p>` })
+})()
+</script>

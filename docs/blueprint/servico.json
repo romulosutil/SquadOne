@@ -1,0 +1,213 @@
+{
+  "versao": 1,
+  "atualizado": "2026-10-16",
+  "resumo": "Service blueprint do SquadOne: para cada serviço, o que o cliente faz e vê, o que acontece no palco, nos bastidores e nos processos de apoio, passo a passo. Fonte única para discutir melhorias com pessoas e agentes; os códigos (SITE-3-B2) não mudam depois de publicados.",
+  "faixas": [
+    { "id": "E", "nome": "Evidência", "sub": "o que o cliente vê, recebe ou guarda" },
+    { "id": "C", "nome": "Jornada do cliente", "sub": "o que ele faz" },
+    { "id": "P", "nome": "Palco", "sub": "pessoas e tecnologia que ele vê" },
+    { "id": "B", "nome": "Bastidor", "sub": "o que roda sem ele ver" },
+    { "id": "A", "nome": "Processos de apoio", "sub": "sistemas, dados e terceiros" }
+  ],
+  "linhas": [
+    { "depois": "C", "nome": "Linha de interação" },
+    { "depois": "P", "nome": "Linha de visibilidade" },
+    { "depois": "B", "nome": "Linha de interação interna" }
+  ],
+  "marcas": {
+    "momento": "Momento da verdade",
+    "dor": "Ponto de dor",
+    "metrica": "Métrica",
+    "opcao": "Opção de projeto",
+    "seguranca": "Segurança"
+  },
+  "blueprints": [
+    {
+      "id": "SITE",
+      "nome": "Lead do Site antes da venda",
+      "cliente": "Dono de negócio local com perfil no Google Maps e sem site",
+      "objetivo": "Ele vê o próprio site pronto antes de pagar e fecha o Encontrado (R$ 690 + R$ 39/mês).",
+      "passos": [
+        { "id": "SITE-1", "nome": "É achado", "tempo": "dia 0 · 06:00" },
+        { "id": "SITE-2", "nome": "Fica pronto para envio", "tempo": "dia 0 a 1" },
+        { "id": "SITE-3", "nome": "Recebe a 1ª mensagem", "tempo": "dia 1, em horário comercial" },
+        { "id": "SITE-4", "nome": "Lê e responde", "tempo": "dia 1 a 3" },
+        { "id": "SITE-5", "nome": "Vê o site dele", "tempo": "até 2 h depois do \"quero ver\"" },
+        { "id": "SITE-6", "nome": "Recebe o lembrete", "tempo": "dia 3" },
+        { "id": "SITE-7", "nome": "Decide", "tempo": "dia 3 a 7" }
+      ],
+      "cartoes": [
+        { "id": "SITE-1-E1", "passo": "SITE-1", "faixa": "E", "nome": "Perfil dele no Google Maps", "quem": "cliente", "resumo": "Fotos, avaliações e telefone que ele mesmo publicou. É a matéria-prima do demo." },
+        { "id": "SITE-1-C1", "passo": "SITE-1", "faixa": "C", "nome": "Tem Maps, não tem site", "quem": "cliente", "resumo": "Ainda não sabe que existe. Nada acontece do lado dele." },
+        { "id": "SITE-1-B1", "passo": "SITE-1", "faixa": "B", "nome": "01 · Caçador acha e pontua", "quem": "robô", "resumo": "Busca por nicho e cidade no Places, o Gemini pontua, e só entra quem tem WhatsApp confirmado.", "arquivos": ["deploy/dell/claude-ops/site-cacador-site-no-ar.py", "deploy/dell/claude-ops/site-nichos.py"], "metrica": ["Leads achados por dia e por nicho", "Parcela com WhatsApp confirmado"], "opcao": ["Nichos pausados pelo 06 · Funil quando não convertem"], "dor": ["Telefone fixo ou WhatsApp não confirmado vira envio perdido"] },
+        { "id": "SITE-1-A1", "passo": "SITE-1", "faixa": "A", "nome": "Google Places + Gemini", "quem": "terceiro", "resumo": "Places traz o perfil; o Gemini classifica nicho e prioridade." },
+        { "id": "SITE-1-A2", "passo": "SITE-1", "faixa": "A", "nome": "Planilha Leads (abas Leads e Buscas)", "quem": "robô", "resumo": "Fonte de verdade do lead. O caçador escreve; o Balcão e o CRM leem.", "seguranca": ["Telefones de terceiros ficam na planilha e no Dell, nunca no repositório"] },
+        { "id": "SITE-1-A3", "passo": "SITE-1", "faixa": "A", "nome": "auto-entrada → ~/auto-site/<lead>", "quem": "robô", "resumo": "O pacote do n8n vira a pasta do lead, que o gerador usa depois.", "arquivos": ["deploy/dell/auto-entrada.py", "deploy/dell/auto-entrada.path"] },
+
+        { "id": "SITE-2-C1", "passo": "SITE-2", "faixa": "C", "nome": "Ainda não sabe", "quem": "cliente", "resumo": "Tudo deste passo acontece sem ele. O que se prepara aqui decide a primeira impressão do passo seguinte." },
+        { "id": "SITE-2-B1", "passo": "SITE-2", "faixa": "B", "nome": "03 · Balcão marca \"pronto\"", "quem": "robô", "resumo": "De hora em hora: cruza o que foi publicado, marca o lead pronto com o link de envio e sorteia a letra da 1ª mensagem.", "arquivos": ["deploy/dell/claude-ops/balcao-cruzar.js", "deploy/dell/claude-ops/site-mensagem.js"], "opcao": ["A/B estratificado: a letra só se compara entre leads com o mesmo conjunto elegível, equilibrado por nicho", "Mensagem A sem demo: o demo só sai depois do \"quero ver\""], "metrica": ["Taxa de resposta por letra, só a partir de 30 envios por braço"] },
+        { "id": "SITE-2-B2", "passo": "SITE-2", "faixa": "B", "nome": "Raio-X avulso", "quem": "robô", "resumo": "Às 11:15 e 17:15 monta a página do Raio-X a partir do Places e publica.", "arquivos": ["deploy/dell/raio-x.py", "deploy/dell/raio-x.timer"] },
+        { "id": "SITE-2-A1", "passo": "SITE-2", "faixa": "A", "nome": "Vercel", "quem": "terceiro", "resumo": "Hospeda o Raio-X e, depois, o demo." },
+        { "id": "SITE-2-A2", "passo": "SITE-2", "faixa": "A", "nome": "Pastas e estado do n8n", "quem": "robô", "resumo": "publicado.json e site-pastas.json movem a pasta do lead entre as etapas.", "arquivos": ["deploy/dell/site-pastas.py", "deploy/dell/site-pastas.path"] },
+
+        { "id": "SITE-3-E1", "passo": "SITE-3", "faixa": "E", "nome": "Mensagem no WhatsApp", "quem": "cliente", "resumo": "Um número que ele não conhece, com o nome do negócio dele no texto.", "momento": true },
+        { "id": "SITE-3-C1", "passo": "SITE-3", "faixa": "C", "nome": "Recebe a mensagem", "quem": "cliente", "resumo": "Decide em segundos se é golpe, propaganda ou algo útil.", "momento": true, "dor": ["Mensagem depois das 18h: 0 de 29 envios tiveram resposta"] },
+        { "id": "SITE-3-P1", "passo": "SITE-3", "faixa": "P", "nome": "Rômulo toca \"Enviar\"", "quem": "você", "resumo": "Na Hoje, no \"Enviar um por um\" ou na Ficha. A mensagem aparece antes do toque.", "arquivos": ["src/operations/CrmFilaDeEnvio.vue", "src/operations/CrmHoje.vue", "src/operations/CrmFicha.vue"], "metrica": ["Envios por hora e por dia"] },
+        { "id": "SITE-3-P2", "passo": "SITE-3", "faixa": "P", "nome": "04 · Link de envio abre o WhatsApp", "quem": "robô", "resumo": "O clique marca \"enviado\" na planilha e redireciona para o wa.me com o texto pronto." },
+        { "id": "SITE-3-B1", "passo": "SITE-3", "faixa": "B", "nome": "Trava de horário", "quem": "robô", "resumo": "Fora do expediente o link de primeiro contato some até o \"Liberar\" daquele lead.", "arquivos": ["src/operations/trava-de-horario.ts"], "opcao": ["Liberar por lead, só em memória"] },
+        { "id": "SITE-3-B2", "passo": "SITE-3", "faixa": "B", "nome": "Trava de ritmo", "quem": "robô", "resumo": "No máximo 1 a cada 4 min, 8 por hora e 10/20/30 por dia, subindo por semana.", "arquivos": ["src/operations/trava-de-ritmo.ts"], "seguranca": ["Protege o número: 25 envios em 25 min renderam 24 h de restrição do WhatsApp (15/10/2026)"], "metrica": ["Teto do dia e envios de hoje"] },
+        { "id": "SITE-3-A1", "passo": "SITE-3", "faixa": "A", "nome": "Número do PRUMO no WhatsApp", "quem": "terceiro", "resumo": "O mesmo número serve o Hermes (envio de avisos) e a Evolution (leitura).", "seguranca": ["Sem segundo número: as travas de horário e de ritmo são a proteção"] },
+
+        { "id": "SITE-4-E1", "passo": "SITE-4", "faixa": "E", "nome": "Recibo de leitura", "quem": "cliente", "resumo": "Os dois tiques azuis, quando o WhatsApp dele manda.", "dor": ["Muitos não mandam recibo: a Central diz \"leitura desconhecida\" em vez de inventar"] },
+        { "id": "SITE-4-C1", "passo": "SITE-4", "faixa": "C", "nome": "Responde (ou não)", "quem": "cliente", "resumo": "\"Quero ver\", \"não tenho interesse\", \"pode apagar\", ou só a resposta automática do WhatsApp Business dele.", "momento": true },
+        { "id": "SITE-4-B1", "passo": "SITE-4", "faixa": "B", "nome": "Observador lê a resposta", "quem": "robô", "resumo": "O adaptador recebe o webhook da Evolution e o observador manda a conversa ao n8n.", "arquivos": ["deploy/dell/whatsapp-observador/evolution-adaptador.py", "deploy/dell/whatsapp-observador/observador.py"], "seguranca": ["Evolution só lê; o adaptador confere o cabeçalho X-Adaptador em tempo constante", "Mensagem de grupo e ruído temporário são descartados"] },
+        { "id": "SITE-4-B2", "passo": "SITE-4", "faixa": "B", "nome": "Classifica a resposta", "quem": "robô", "resumo": "Interesse, negativa, exclusão, neutra ou só o robô dele. A Hoje sobe quem respondeu.", "arquivos": ["deploy/dell/claude-ops/whatsapp-conversa.py"], "metrica": ["Taxa de resposta por nicho, letra e horário (Resultados)", "Interesse respondido em até 2 h"] },
+        { "id": "SITE-4-B3", "passo": "SITE-4", "faixa": "B", "nome": "08 · Retrato do CRM", "quem": "robô", "resumo": "A cada 10 min o n8n junta as abas e grava crm.json; a Central lê.", "arquivos": ["server/crm.ts", "deploy/dell/claude-ops/crm.py"], "dor": ["Até 10 min entre a resposta e a Hoje mostrar"] },
+        { "id": "SITE-4-A1", "passo": "SITE-4", "faixa": "A", "nome": "Evolution API (só leitura)", "quem": "terceiro", "resumo": "Container no Dell, só no loopback, instância do número do PRUMO.", "arquivos": ["deploy/dell/evolution/docker-compose.yml"] },
+
+        { "id": "SITE-5-E1", "passo": "SITE-5", "faixa": "E", "nome": "O site dele, pronto", "quem": "cliente", "resumo": "Demo na Vercel com as fotos e as avaliações dele. Ou o Raio-X, para quem recebeu a letra C.", "momento": true },
+        { "id": "SITE-5-C1", "passo": "SITE-5", "faixa": "C", "nome": "Abre o link e olha", "quem": "cliente", "resumo": "Vê o próprio negócio num site. É aqui que a venda acontece ou não." },
+        { "id": "SITE-5-P1", "passo": "SITE-5", "faixa": "P", "nome": "Rômulo manda a 2ª mensagem", "quem": "você", "resumo": "Pela faixa fixa da Ficha. O toque anota segunda_enviada na aba CRM.", "arquivos": ["src/operations/CrmFicha.vue", "src/operations/anotacao-de-envio.ts"], "opcao": ["Colinha escolhe o texto pela etapa e pela resposta"] },
+        { "id": "SITE-5-P2", "passo": "SITE-5", "faixa": "P", "nome": "\"Gerar demo\"", "quem": "você", "resumo": "Quem pediu para ver e ainda não tem demo: o gerador faz em 20 a 40 min e avisa no WhatsApp.", "dor": ["O lead espera 20 a 40 min depois de pedir"] },
+        { "id": "SITE-5-B1", "passo": "SITE-5", "faixa": "B", "nome": "Gerador de sites", "quem": "robô", "resumo": "Claude Code monta o site na pasta do lead e publica na Vercel. Até 4 por dia, mais os pedidos.", "arquivos": ["deploy/dell/gerador-de-sites.py", "deploy/dell/gerador-de-sites.timer"], "metrica": ["Sites por dia, falhas (falha.log)"] },
+        { "id": "SITE-5-B2", "passo": "SITE-5", "faixa": "B", "nome": "Copiloto sugere a resposta", "quem": "robô", "resumo": "Lê o dossiê do lead e sugere a próxima mensagem e a proposta. Só copia, nunca envia.", "arquivos": ["server/copiloto.ts", "src/operations/copiloto.ts"], "seguranca": ["Preços só do cardápio; número fora do dossiê vira aviso"] },
+        { "id": "SITE-5-A1", "passo": "SITE-5", "faixa": "A", "nome": "Vercel + Claude Code CLI", "quem": "terceiro", "resumo": "Publicação do demo e o modelo que o escreve." },
+
+        { "id": "SITE-6-E1", "passo": "SITE-6", "faixa": "E", "nome": "Lembrete no WhatsApp", "quem": "cliente", "resumo": "\"Deu para ver?\", com a porta aberta para um \"não\"." },
+        { "id": "SITE-6-C1", "passo": "SITE-6", "faixa": "C", "nome": "Ainda não respondeu", "quem": "cliente", "resumo": "Leu e não respondeu, ou nem leu." },
+        { "id": "SITE-6-P1", "passo": "SITE-6", "faixa": "P", "nome": "Rômulo manda o follow-up", "quem": "você", "resumo": "Um só. O toque anota followup_enviado.", "dor": ["O n8n também manda no 3º dia: confira a conversa antes, ou sai duplicado"] },
+        { "id": "SITE-6-B1", "passo": "SITE-6", "faixa": "B", "nome": "05 · Acompanhamento", "quem": "robô", "resumo": "Às 09:00 aponta o follow-up do 3º dia, só para quem leu.", "arquivos": ["deploy/dell/claude-ops/site-acompanhamento.py"], "opcao": ["Follow-up só para quem leu, no mesmo dia"] },
+        { "id": "SITE-6-A1", "passo": "SITE-6", "faixa": "A", "nome": "Fila de avisos", "quem": "robô", "resumo": "Pasta no Dell que o dell-status drena para o WhatsApp.", "arquivos": ["deploy/dell/dell-status.py"], "seguranca": ["Nenhum valor em R$ passa pela fila"] },
+
+        { "id": "SITE-7-E1", "passo": "SITE-7", "faixa": "E", "nome": "Preço e o site no ar", "quem": "cliente", "resumo": "R$ 690 uma vez e R$ 39 por mês. Depois, o site com o domínio dele.", "momento": true },
+        { "id": "SITE-7-C1", "passo": "SITE-7", "faixa": "C", "nome": "Aceita, recusa ou some", "quem": "cliente", "resumo": "Fecha, diz não, ou para de responder." },
+        { "id": "SITE-7-P1", "passo": "SITE-7", "faixa": "P", "nome": "Proposta e desfecho", "quem": "você", "resumo": "Proposta marcada à mão na Ficha; Fechou e Recusou na página do lead (07).", "arquivos": ["src/operations/CrmFicha.vue", "deploy/dell/claude-ops/site-lead-acoes.py"], "dor": ["Proposta marcada à mão: esquecida, o lead some do funil"] },
+        { "id": "SITE-7-B1", "passo": "SITE-7", "faixa": "B", "nome": "Regra dos 7 dias", "quem": "robô", "resumo": "Sem mensagem do lead por 7 dias, vai para Perdido; um próximo passo salvo segura.", "arquivos": ["server/crm.ts"] },
+        { "id": "SITE-7-B2", "passo": "SITE-7", "faixa": "B", "nome": "Pausa e limpeza dos demos", "quem": "robô", "resumo": "Demo pausado 15 dias depois da recusa; demo de lead Perdido sai da Vercel.", "arquivos": ["deploy/dell/site-demos-pausa.py", "deploy/dell/site-demos-limpeza.py"] },
+        { "id": "SITE-7-A1", "passo": "SITE-7", "faixa": "A", "nome": "Lições do funil", "quem": "robô", "resumo": "Às 06:40 lê o CRM e propõe lições; o modelo roda sem ferramentas.", "arquivos": ["deploy/dell/funil-aprendizado.py"], "metrica": ["Ganho e perdido por nicho e por letra"] }
+      ],
+      "ligacoes": [
+        ["SITE-1-B1", "SITE-1-A1"], ["SITE-1-B1", "SITE-1-A2"], ["SITE-1-A2", "SITE-1-A3"], ["SITE-1-A2", "SITE-2-B1"],
+        ["SITE-2-B2", "SITE-2-A1"], ["SITE-2-B1", "SITE-3-P1"],
+        ["SITE-3-P1", "SITE-3-B1"], ["SITE-3-P1", "SITE-3-B2"], ["SITE-3-P1", "SITE-3-P2"], ["SITE-3-P2", "SITE-3-A1"], ["SITE-3-A1", "SITE-3-E1"], ["SITE-3-E1", "SITE-3-C1"],
+        ["SITE-4-C1", "SITE-4-A1"], ["SITE-4-A1", "SITE-4-B1"], ["SITE-4-B1", "SITE-4-B2"], ["SITE-4-B2", "SITE-4-B3"], ["SITE-4-B3", "SITE-5-P1"],
+        ["SITE-5-P2", "SITE-5-B1"], ["SITE-5-B1", "SITE-5-A1"], ["SITE-5-B2", "SITE-5-P1"], ["SITE-5-P1", "SITE-5-E1"], ["SITE-5-E1", "SITE-5-C1"],
+        ["SITE-6-B1", "SITE-6-A1"], ["SITE-6-A1", "SITE-6-P1"], ["SITE-6-P1", "SITE-6-E1"],
+        ["SITE-7-C1", "SITE-7-P1"], ["SITE-7-B1", "SITE-7-B2"], ["SITE-7-B1", "SITE-7-A1"]
+      ],
+      "melhorias": [
+        "Proposta e desfecho ainda são marcados à mão (SITE-7-P1): o observador poderia sugerir \"Recusou\" quando a resposta é negativa.",
+        "O follow-up pode sair duplicado entre o n8n e o toque na Ficha (SITE-6-P1)."
+      ]
+    },
+    {
+      "id": "PRUMO",
+      "nome": "Cliente do PRUMO: Raio-X, Mapa e Fonte",
+      "cliente": "Dono de empresa com site e equipe",
+      "objetivo": "Ver o que falta (Raio-X), arrumar com a equipe (Mapa) e manter (Fonte).",
+      "passos": [
+        { "id": "PRUMO-1", "nome": "Recebe o convite", "tempo": "dia 0" },
+        { "id": "PRUMO-2", "nome": "Vê o Raio-X", "tempo": "dia 0 a 2" },
+        { "id": "PRUMO-3", "nome": "Responde o Mapa", "tempo": "até 7 dias" },
+        { "id": "PRUMO-4", "nome": "Devolutiva de 45 min", "tempo": "proposta em até 24 h depois" },
+        { "id": "PRUMO-5", "nome": "Contrata", "tempo": "sob proposta" }
+      ],
+      "cartoes": [
+        { "id": "PRUMO-1-E1", "passo": "PRUMO-1", "faixa": "E", "nome": "Convite no WhatsApp", "quem": "cliente", "resumo": "Uma mensagem com o nome da empresa e a oferta do Raio-X grátis." },
+        { "id": "PRUMO-1-C1", "passo": "PRUMO-1", "faixa": "C", "nome": "Recebe o convite", "quem": "cliente", "resumo": "Decide se abre ou ignora.", "momento": true },
+        { "id": "PRUMO-1-P1", "passo": "PRUMO-1", "faixa": "P", "nome": "Rômulo toca \"Enviar convite\"", "quem": "você", "resumo": "O clique passa pelo fluxo de convite, que marca a planilha.", "arquivos": ["src/operations/CrmFicha.vue"], "seguranca": ["Mesmas travas de horário e de ritmo do Site"] },
+        { "id": "PRUMO-1-B1", "passo": "PRUMO-1", "faixa": "B", "nome": "Porte e equipe conferidos", "quem": "robô", "resumo": "A classe da Receita pelo CNPJ do site decide se o Mapa faz sentido.", "arquivos": ["deploy/dell/claude-ops/prumo-porte-cnpj.py"], "opcao": ["Sem equipe conferida, não se oferece o Mapa"] },
+        { "id": "PRUMO-1-A1", "passo": "PRUMO-1", "faixa": "A", "nome": "Planilha Prospects", "quem": "robô", "resumo": "Fonte de verdade do lead do PRUMO." },
+
+        { "id": "PRUMO-2-E1", "passo": "PRUMO-2", "faixa": "E", "nome": "Página do Raio-X", "quem": "cliente", "resumo": "O que achamos no site e no Google dele, em ordem de peso.", "momento": true },
+        { "id": "PRUMO-2-C1", "passo": "PRUMO-2", "faixa": "C", "nome": "Lê o Raio-X e responde", "quem": "cliente", "resumo": "Concorda, discorda, pergunta o preço." },
+        { "id": "PRUMO-2-P1", "passo": "PRUMO-2", "faixa": "P", "nome": "Conversa pela colinha", "quem": "você", "resumo": "Respostas prontas para objeções e o cardápio na hierarquia ver → arrumar → manter.", "arquivos": ["src/operations/colinha.ts", "src/operations/CrmColinha.vue"], "opcao": ["Raio-X e Mapa grátis; Fonte só depois do Mapa"] },
+        { "id": "PRUMO-2-B1", "passo": "PRUMO-2", "faixa": "B", "nome": "Raio-X gerado e publicado", "quem": "robô", "resumo": "Places e o site viram a página, publicada na Vercel.", "arquivos": ["deploy/dell/raio-x.py", "deploy/dell/prumo-mapa/modelo_raio_x.py"] },
+        { "id": "PRUMO-2-B2", "passo": "PRUMO-2", "faixa": "B", "nome": "Jornada indica o próximo passo", "quem": "robô", "resumo": "Em que passo o lead está, o que fazer e o que oferecer.", "arquivos": ["src/operations/jornada.ts", "src/operations/CrmJornada.vue"] },
+        { "id": "PRUMO-2-A1", "passo": "PRUMO-2", "faixa": "A", "nome": "Vercel (raio-x-prumo)", "quem": "terceiro", "resumo": "Hospeda as páginas do Raio-X." },
+
+        { "id": "PRUMO-3-E1", "passo": "PRUMO-3", "faixa": "E", "nome": "Formulário de 16 perguntas", "quem": "cliente", "resumo": "Google Form do diagnóstico do dono." },
+        { "id": "PRUMO-3-C1", "passo": "PRUMO-3", "faixa": "C", "nome": "Responde o Mapa", "quem": "cliente", "resumo": "Ele (e a equipe) contam como a empresa funciona.", "dor": ["16 perguntas pedem tempo: quem para no meio some"] },
+        { "id": "PRUMO-3-B1", "passo": "PRUMO-3", "faixa": "B", "nome": "Diagnóstico do dono (n8n)", "quem": "robô", "resumo": "De hora em hora lê as respostas, calcula a nota e o briefing e põe o Mapa na fila.", "arquivos": ["deploy/dell/claude-ops/prumo-mapa-n8n.py"] },
+        { "id": "PRUMO-3-B2", "passo": "PRUMO-3", "faixa": "B", "nome": "Rascunho do Mapa em PDF", "quem": "robô", "resumo": "A fila vira um PDF de rascunho em ~/prumo-entregas.", "arquivos": ["deploy/dell/prumo-mapa/prumo_mapa.py", "deploy/dell/prumo-mapa/prumo-mapa.path"], "metrica": ["Mapas na fila e idade do mais antigo"] },
+        { "id": "PRUMO-3-A1", "passo": "PRUMO-3", "faixa": "A", "nome": "Google Forms + Sheets", "quem": "terceiro", "resumo": "Respostas e nota ficam na planilha." },
+
+        { "id": "PRUMO-4-E1", "passo": "PRUMO-4", "faixa": "E", "nome": "O Mapa da empresa", "quem": "cliente", "resumo": "O PDF com o que fazer, em ordem.", "momento": true },
+        { "id": "PRUMO-4-C1", "passo": "PRUMO-4", "faixa": "C", "nome": "Conversa de 45 min", "quem": "cliente", "resumo": "Entende o Mapa e pergunta como fazer." },
+        { "id": "PRUMO-4-P1", "passo": "PRUMO-4", "faixa": "P", "nome": "Rômulo conduz a devolutiva", "quem": "você", "resumo": "Com o Mapa revisado e a colinha da devolutiva." },
+        { "id": "PRUMO-4-B1", "passo": "PRUMO-4", "faixa": "B", "nome": "Cálculo do PRUMO", "quem": "robô", "resumo": "Preços e prioridades do Mapa vêm de uma tabela versionada.", "arquivos": ["deploy/dell/prumo-mapa/calculo_prumo.py", "deploy/dell/prumo-mapa/precos.json"] },
+
+        { "id": "PRUMO-5-E1", "passo": "PRUMO-5", "faixa": "E", "nome": "Proposta sob medida", "quem": "cliente", "resumo": "Fonte e serviços \"sob proposta\" para o cliente." },
+        { "id": "PRUMO-5-C1", "passo": "PRUMO-5", "faixa": "C", "nome": "Contrata ou adia", "quem": "cliente", "resumo": "Fecha a Fonte, um serviço avulso ou nada por enquanto." },
+        { "id": "PRUMO-5-P1", "passo": "PRUMO-5", "faixa": "P", "nome": "Proposta pelo copiloto", "quem": "você", "resumo": "Rascunho com os preços do cardápio; Rômulo revisa e manda.", "arquivos": ["src/operations/CrmCopiloto.vue", "server/copiloto.ts"], "seguranca": ["O modelo escolhe itens; os preços vêm do cardápio, nunca dele"] },
+        { "id": "PRUMO-5-B1", "passo": "PRUMO-5", "faixa": "B", "nome": "Etapa muda na planilha", "quem": "você", "resumo": "No PRUMO a Etapa é da planilha; a Central só lê." }
+      ],
+      "ligacoes": [
+        ["PRUMO-1-B1", "PRUMO-1-P1"], ["PRUMO-1-P1", "PRUMO-1-E1"], ["PRUMO-1-E1", "PRUMO-1-C1"], ["PRUMO-1-A1", "PRUMO-1-B1"],
+        ["PRUMO-2-B1", "PRUMO-2-A1"], ["PRUMO-2-A1", "PRUMO-2-E1"], ["PRUMO-2-E1", "PRUMO-2-C1"], ["PRUMO-2-C1", "PRUMO-2-P1"], ["PRUMO-2-B2", "PRUMO-2-P1"],
+        ["PRUMO-3-E1", "PRUMO-3-C1"], ["PRUMO-3-C1", "PRUMO-3-A1"], ["PRUMO-3-A1", "PRUMO-3-B1"], ["PRUMO-3-B1", "PRUMO-3-B2"], ["PRUMO-3-B2", "PRUMO-4-P1"],
+        ["PRUMO-4-B1", "PRUMO-4-P1"], ["PRUMO-4-P1", "PRUMO-4-E1"], ["PRUMO-4-E1", "PRUMO-4-C1"],
+        ["PRUMO-5-P1", "PRUMO-5-E1"], ["PRUMO-5-E1", "PRUMO-5-C1"], ["PRUMO-5-C1", "PRUMO-5-B1"]
+      ],
+      "melhorias": [
+        "A Etapa do PRUMO muda só na planilha (PRUMO-5-B1): a Central poderia registrar o desfecho como faz no Site."
+      ]
+    },
+    {
+      "id": "AGENDA",
+      "nome": "Você pede, a agenda se arruma",
+      "cliente": "Rômulo, usando o SquadOne",
+      "objetivo": "Dizer o que precisa fazer em linguagem natural e ver o compromisso no lugar certo, com lembrete.",
+      "passos": [
+        { "id": "AGENDA-1", "nome": "Pede", "tempo": "a qualquer hora" },
+        { "id": "AGENDA-2", "nome": "O squad entende", "tempo": "segundos; pior caso ≈ 3 min" },
+        { "id": "AGENDA-3", "nome": "Vê o resultado", "tempo": "logo depois" },
+        { "id": "AGENDA-4", "nome": "É lembrado", "tempo": "antes do compromisso" },
+        { "id": "AGENDA-5", "nome": "Ajusta", "tempo": "quando quiser" }
+      ],
+      "cartoes": [
+        { "id": "AGENDA-1-E1", "passo": "AGENDA-1", "faixa": "E", "nome": "Conversa no Telegram", "quem": "cliente", "resumo": "Texto ou áudio para o bot." },
+        { "id": "AGENDA-1-E2", "passo": "AGENDA-1", "faixa": "E", "nome": "Folha Pedir na Central", "quem": "cliente", "resumo": "O ＋Pedir da barra, com microfone.", "arquivos": ["src/casca/PedirFolha.vue", "src/casca/ditado.ts"] },
+        { "id": "AGENDA-1-C1", "passo": "AGENDA-1", "faixa": "C", "nome": "Diz o que precisa", "quem": "cliente", "resumo": "\"Duas horas de foco no relatório até sexta.\" Ou \"gastei 30 no mercado\", que é gasto, não demanda.", "momento": true },
+        { "id": "AGENDA-1-P1", "passo": "AGENDA-1", "faixa": "P", "nome": "Bot do Telegram", "quem": "robô", "resumo": "Responde \"digitando…\" na hora e põe o pedido numa fila serial.", "arquivos": ["server/telegram-bot.ts", "server/telegram-entrada.ts", "server/telegram-polling.ts", "server/telegram.ts"], "seguranca": ["Allowlist de chat_id fecha quando vazia; só chat privado", "Segredo do webhook em tempo constante (Easypanel)", "update_id deduplicado; pedido com mais de 10 min de atraso não roda"] },
+        { "id": "AGENDA-1-B1", "passo": "AGENDA-1", "faixa": "B", "nome": "Transcrição do áudio", "quem": "robô", "resumo": "Uma chamada ao Gemini transforma o áudio no texto da demanda.", "arquivos": ["server/transcricao.ts"], "metrica": ["Custa uma geração a mais por áudio"] },
+        { "id": "AGENDA-1-A1", "passo": "AGENDA-1", "faixa": "A", "nome": "Telegram Bot API", "quem": "terceiro", "resumo": "Polling no Dell (o offset fica em disco); webhook só no Easypanel." },
+
+        { "id": "AGENDA-2-C1", "passo": "AGENDA-2", "faixa": "C", "nome": "Espera", "quem": "cliente", "resumo": "Normalmente segundos.", "dor": ["Gemini ocupado: até 45 s por tentativa, ≈ 3 min no pior caso"] },
+        { "id": "AGENDA-2-B1", "passo": "AGENDA-2", "faixa": "B", "nome": "Turno", "quem": "robô", "resumo": "Uma chamada ao Gemini com a squad ativa como prompt; o modelo escolhe as capacidades.", "arquivos": ["server/turno.ts", "server/orchestrator.ts", "server/capabilities.ts"], "opcao": ["O roster é o prompt: papel + escopo de cada pessoa são o treino", "Troca de squad: um salto por turno, segunda chamada só nesse caso"], "metrica": ["Duração do turno e taxa de ModeloOcupado"] },
+        { "id": "AGENDA-2-B2", "passo": "AGENDA-2", "faixa": "B", "nome": "Luna e Jev em sombra", "quem": "robô", "resumo": "Desligados por padrão; quando ligados, só medem uma alternativa ao Gemini.", "arquivos": ["server/luna-sombra.ts", "server/jev-sombra.ts", "server/openrouter-decisoes.ts"], "seguranca": ["Finanças nunca vão ao Jev; OpenRouter com deny + ZDR"] },
+        { "id": "AGENDA-2-A1", "passo": "AGENDA-2", "faixa": "A", "nome": "Gemini", "quem": "terceiro", "resumo": "O modelo do turno e da transcrição." },
+        { "id": "AGENDA-2-A2", "passo": "AGENDA-2", "faixa": "A", "nome": "Roster (squad.json)", "quem": "robô", "resumo": "Squads, salas e pessoas; cópia datada a cada gravação.", "arquivos": ["server/squad.ts", "server/roster-historico.ts", "server/hire.ts", "server/ciclo-de-vida.ts", "server/redacao.ts"], "seguranca": ["Toda escrita passa por uma fila única e grava .tmp antes de renomear"] },
+
+        { "id": "AGENDA-3-E1", "passo": "AGENDA-3", "faixa": "E", "nome": "Evento no Google Calendar", "quem": "cliente", "resumo": "No horário que o servidor escolheu, com a cor da sala.", "momento": true },
+        { "id": "AGENDA-3-E2", "passo": "AGENDA-3", "faixa": "E", "nome": "Resposta no chat", "quem": "cliente", "resumo": "Texto puro com o que foi marcado.", "arquivos": ["server/telegram-resposta.ts"] },
+        { "id": "AGENDA-3-C1", "passo": "AGENDA-3", "faixa": "C", "nome": "Confere o que foi marcado", "quem": "cliente", "resumo": "Lê a resposta ou abre a Hoje." },
+        { "id": "AGENDA-3-P1", "passo": "AGENDA-3", "faixa": "P", "nome": "Hoje e cartões de decisão", "quem": "robô", "resumo": "No máximo 3 cartões: contratação, troca de squad, ajuste.", "arquivos": ["src/rotas/HojeRota.vue", "src/casca/hoje.ts", "server/time.ts"] },
+        { "id": "AGENDA-3-B1", "passo": "AGENDA-3", "faixa": "B", "nome": "Alocador escolhe o horário", "quem": "robô", "resumo": "O modelo diz a intenção; o servidor acha o slot na janela de trabalho.", "arquivos": ["server/alocador.ts", "server/agenda.ts", "server/agendamento.ts", "server/quest.ts"], "opcao": ["Foco e baixa prioridade gravam time_blocking; a baixa busca até o 7º dia útil"] },
+        { "id": "AGENDA-3-B2", "passo": "AGENDA-3", "faixa": "B", "nome": "Passos no Google Tasks", "quem": "robô", "resumo": "Checklist da tarefa-mãe. Falha vira aviso, nunca desfaz o compromisso.", "arquivos": ["server/passos.ts", "server/passos-no-google.ts", "server/tasks.ts"] },
+        { "id": "AGENDA-3-A1", "passo": "AGENDA-3", "faixa": "A", "nome": "Google Calendar e Tasks", "quem": "terceiro", "resumo": "Onde as quests vivem; a Central só guarda cache.", "arquivos": ["server/calendar.ts", "server/auth-store.ts"], "seguranca": ["Refresh token cifrado em disco; o navegador nunca vê token", "OAuth só pelo loopback; ampliar escopo é refazer o consentimento, nunca logout"] },
+
+        { "id": "AGENDA-4-E1", "passo": "AGENDA-4", "faixa": "E", "nome": "Aviso no WhatsApp", "quem": "cliente", "resumo": "O lembrete chega pelo número do Hermes; P0 também no Telegram." },
+        { "id": "AGENDA-4-C1", "passo": "AGENDA-4", "faixa": "C", "nome": "É lembrado", "quem": "cliente", "resumo": "Antes do compromisso." },
+        { "id": "AGENDA-4-B1", "passo": "AGENDA-4", "faixa": "B", "nome": "Vigia", "quem": "robô", "resumo": "A cada 60 s relê a agenda e publica os lembretes devidos. Só o operations roda.", "arquivos": ["server/vigia.ts", "server/lembretes.ts", "server/avisos.ts"], "seguranca": ["Nenhum R$ passa no aviso"], "opcao": ["Nada é agendado para o futuro: o laço relê tudo"] },
+        { "id": "AGENDA-4-A1", "passo": "AGENDA-4", "faixa": "A", "nome": "dell-status e fila de avisos", "quem": "robô", "resumo": "Drena a fila para o WhatsApp: silêncio das 22h às 7h (só P0), até 20 por hora, dedupe de 24 h.", "arquivos": ["deploy/dell/dell-status.py", "server/dell-status.ts"], "metrica": ["Verde/amarelo/vermelho por verificação; vermelho vai ao WhatsApp"] },
+        { "id": "AGENDA-4-A2", "passo": "AGENDA-4", "faixa": "A", "nome": "Sinal de vida", "quem": "robô", "resumo": "Ping a cada minuto ao healthchecks.io; /fail se o WhatsApp cair por mais de 15 min.", "arquivos": ["server/sinal-de-vida.ts"] },
+
+        { "id": "AGENDA-5-C1", "passo": "AGENDA-5", "faixa": "C", "nome": "Pede para mudar", "quem": "cliente", "resumo": "Mais tempo, menos tempo, outro dia." },
+        { "id": "AGENDA-5-P1", "passo": "AGENDA-5", "faixa": "P", "nome": "Cartão de ajuste", "quem": "robô", "resumo": "Mostra o antes e o depois; só aplica com aprovação.", "arquivos": ["src/components/AjusteCard.vue", "src/contribuicao.ts"] },
+        { "id": "AGENDA-5-B1", "passo": "AGENDA-5", "faixa": "B", "nome": "Ajuste relê o Google", "quem": "robô", "resumo": "Recalcula sobre o alocador e grava com If-Match, preservando as marcas.", "arquivos": ["server/ajuste.ts", "server/plano-de-ajuste.ts"], "seguranca": ["If-Match evita sobrescrever um evento editado no Google"] },
+        { "id": "AGENDA-5-A1", "passo": "AGENDA-5", "faixa": "A", "nome": "Porteiro e acesso", "quem": "robô", "resumo": "Só a tailnet entra; escrita só da mesma origem e com a identidade do Tailscale.", "arquivos": ["server/acesso.ts", "server/dados.ts", "server/operations.ts"], "seguranca": ["IPS_PERMITIDOS, Tailscale-User-Login e Origin conferidos antes de qualquer rota", "Nada exposto à internet: Serve só na tailnet, nunca Funnel"] }
+      ],
+      "ligacoes": [
+        ["AGENDA-1-C1", "AGENDA-1-E1"], ["AGENDA-1-E1", "AGENDA-1-A1"], ["AGENDA-1-A1", "AGENDA-1-P1"], ["AGENDA-1-P1", "AGENDA-1-B1"], ["AGENDA-1-P1", "AGENDA-2-B1"], ["AGENDA-1-E2", "AGENDA-2-B1"],
+        ["AGENDA-2-B1", "AGENDA-2-A1"], ["AGENDA-2-A2", "AGENDA-2-B1"], ["AGENDA-2-B1", "AGENDA-2-B2"], ["AGENDA-2-B1", "AGENDA-3-B1"],
+        ["AGENDA-3-B1", "AGENDA-3-A1"], ["AGENDA-3-B1", "AGENDA-3-B2"], ["AGENDA-3-A1", "AGENDA-3-E1"], ["AGENDA-3-B1", "AGENDA-3-E2"], ["AGENDA-3-P1", "AGENDA-3-C1"],
+        ["AGENDA-4-B1", "AGENDA-4-A1"], ["AGENDA-4-A1", "AGENDA-4-E1"], ["AGENDA-4-E1", "AGENDA-4-C1"],
+        ["AGENDA-5-C1", "AGENDA-5-P1"], ["AGENDA-5-P1", "AGENDA-5-B1"], ["AGENDA-5-B1", "AGENDA-3-A1"]
+      ],
+      "melhorias": [
+        "O lembrete sai pelo WhatsApp do mesmo número do PRUMO (AGENDA-4-E1): misturar avisos pessoais e o número de vendas aumenta o risco de restrição."
+      ]
+    }
+  ]
+}
