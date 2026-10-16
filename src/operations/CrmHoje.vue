@@ -73,10 +73,28 @@ const haTravados = computed(() => props.grupos.some(g => g.itens.some(travado)))
 const haSegurados = computed(() => segurado.value && props.grupos.some(g => g.itens.some(temPrimeiroContato)))
 // Já aberto: o link de envio some (o toque já marcou na planilha) e fica o resto.
 // Travado ou segurado: o link de primeiro contato some, o resto (demo, conversa) segue à mão.
+// A ordem (16/10/2026): a ação que manda texto pronto primeiro, porque é o que resolve a linha (no
+// Revisar ela vinha por último, depois de "Ver o site" e do Maps). Com ela na linha, a conversa sem
+// texto sai: eram dois botões para o mesmo WhatsApp ("Pedir o responsável" e "Abrir conversa"), e a
+// conversa continua na Ficha, em "Abrir em outro lugar".
+const daAcao = (item: CrmItemHoje, url: string) => {
+  const l = props.leads.get(item.leadId)?.links
+  return Boolean(l) && [l!.enviar, l!.convite, l!.segunda, l!.followup, l!.gerarDemo].includes(url)
+}
 const links = (grupo: CrmGrupoHoje, item: CrmItemHoje) => {
   const sem = grupo.id === 'enviar' && abertoEm(item) !== undefined ? item.links.filter(l => !ehEnvio(item, l.url)) : item.links
-  return travado(item) || segurado.value ? sem.filter(l => !primeiroContato(item, l.url)) : sem
+  const livres = travado(item) || segurado.value ? sem.filter(l => !primeiroContato(item, l.url)) : sem
+  const acao = livres.filter(l => daAcao(item, l.url))
+  const conversa = props.leads.get(item.leadId)?.links.whatsapp
+  const resto = livres.filter(l => !daAcao(item, l.url) && !(acao.length && l.url === conversa))
+  return [...acao, ...resto]
 }
+// Com contorno, a que resolve a linha; sem nenhuma (o "Próximo passo" só tem a conversa), a primeira.
+const ehAcaoDaLinha = (item: CrmItemHoje, lista: CrmItemHoje['links'], i: number) =>
+  daAcao(item, lista[i].url) || (i === 0 && !lista.some(l => daAcao(item, l.url)))
+// "(marca como enviado)" sai do rótulo: o grupo já diz uma vez que o toque anota o envio.
+const rotulo = (texto: string) => texto.replace(/\s*\(marca como enviado\)/, '')
+const anotaNoToque = (grupo: CrmGrupoHoje) => grupo.itens.some(i => i.links.some(l => /marca como enviado/.test(l.rotulo)))
 function aoTocar(item: CrmItemHoje, url: string) {
   if (ehEnvio(item, url)) emit('enviado', item.leadId)
   if (primeiroContato(item, url)) emit('primeiro', item.leadId)
@@ -96,7 +114,7 @@ function aoTocar(item: CrmItemHoje, url: string) {
         <h2 :id="`crm-grupo-${grupo.id}`">{{ grupo.titulo }}</h2>
         <strong :aria-label="`${grupo.itens.length} ${grupo.itens.length === 1 ? 'item' : 'itens'}`">{{ grupo.itens.length }}</strong>
       </header>
-      <p class="crm-grupo__explicacao">{{ grupo.explicacao }}</p>
+      <p class="crm-grupo__explicacao">{{ grupo.explicacao }}<template v-if="anotaNoToque(grupo) && !/marca o envio/.test(grupo.explicacao)"> Tocar em Enviar já marca o envio.</template></p>
       <button v-if="grupo.id === 'enviar' && paraEnviar > 1" type="button" class="botao botao--primario crm-grupo__fila" @click="emit('fila')">
         Enviar um por um <span>({{ paraEnviar }})</span>
       </button>
@@ -110,14 +128,14 @@ function aoTocar(item: CrmItemHoje, url: string) {
             <span class="crm-tag" :class="`is-${leads.get(item.leadId)?.produto}`">{{ SIGLA_DO_PRODUTO[leads.get(item.leadId)?.produto ?? 'site'] }}</span>
           </div>
           <p class="crm-item__acao"><strong>{{ item.acao }}</strong> <span>{{ item.detalhe }}</span></p>
-          <p v-if="anotacao(grupo, item)" class="crm-item__aberto is-aguardando">{{ anotacao(grupo, item) }} nesta tela. A planilha confirma no próximo retrato.</p>
+          <p v-if="anotacao(grupo, item)" class="crm-item__aberto is-aguardando">{{ anotacao(grupo, item) }} nesta tela. A planilha confirma em alguns minutos.</p>
           <p v-if="grupo.id === 'enviar' && estado(item)" class="crm-item__aberto" :class="`is-${estado(item)}`">
-            <template v-if="estado(item) === 'aguardando'">Aberto no WhatsApp às {{ horaDoToque(item) }} nesta tela. A planilha confirma no próximo retrato.</template>
+            <template v-if="estado(item) === 'aguardando'">Aberto no WhatsApp às {{ horaDoToque(item) }} nesta tela. A planilha confirma em alguns minutos.</template>
             <template v-else>Aberto às {{ horaDoToque(item) }} e a planilha ainda não confirmou: veja na conversa se a mensagem saiu.</template>
           </p>
           <div v-if="links(grupo, item).length || travado(item)" class="crm-item__links">
             <button v-if="travado(item)" type="button" class="botao botao--leve" @click="emit('liberar', item.leadId)">{{ ROTULO_DE_LIBERAR }}</button>
-            <a v-for="link in links(grupo, item)" :key="link.url" :href="link.url" target="_blank" rel="noopener" @click="aoTocar(item, link.url)">{{ link.rotulo }} <span aria-hidden="true">↗</span></a>
+            <a v-for="(link, i) in links(grupo, item)" :key="link.url" :class="{ 'is-acao': ehAcaoDaLinha(item, links(grupo, item), i) }" :href="link.url" target="_blank" rel="noopener" @click="aoTocar(item, link.url)">{{ rotulo(link.rotulo) }} <span aria-hidden="true">↗</span></a>
           </div>
         </li>
       </ul>
