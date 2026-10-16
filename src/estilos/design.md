@@ -23,8 +23,8 @@ tamanho. Tokens em `tokens.css`.
 | `--fundo` | fundo da página |
 | `--superficie`, `--superficie-2` | cartão; cartão dentro de cartão, faixa |
 | `--texto`, `--texto-2` | texto; texto secundário (datas, fontes) |
-| `--borda`, `--linha`, `--linha-fina` | contorno (3 px nos blocos, 2 px dentro) |
-| `--sombra`, `--sombra-pequena` | sombra dura, deslocada; nada de desfoque |
+| `--borda`, `--linha`, `--linha-fina` | contorno: ver "Força em ação e estado" abaixo |
+| `--sombra`, `--sombra-pequena` | sombra dura, deslocada; nada de desfoque; uma por pilha |
 | `--destaque` + `--destaque-texto` | seleção atual, ação primária |
 | `--positivo`, `--negativo` | entrada/saída de dinheiro (com sinal) |
 | `--ok-fundo`, `--atencao-fundo`, `--erro-fundo` | semáforo das conexões e avisos |
@@ -32,6 +32,41 @@ tamanho. Tokens em `tokens.css`.
 | `--esp-1…6` | espaço, múltiplos de 4 px |
 | `--fonte` | Inter variável, hospedada em `fontes/` (nunca depender da instalada) |
 | `--peso-texto`, `--peso-medio`, `--peso-forte`, `--peso-titulo` | 450 texto e campos; 600 rótulo e apoio; 700 nome, valor e botão; 800 título e total. Nada de número solto |
+| `--tam-mini…--tam-titulo` | seis tamanhos (tabela abaixo). Nada de rem solto em `font-size` |
+
+### Tamanhos
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--tam-mini` | 0,75 rem (12 px) | selo, pílula, sinal, legenda da barra inferior; o menor que se escreve |
+| `--tam-apoio` | 0,875 rem (14 px) | data, fonte, explicação, rótulo de campo, linha secundária, botão compacto |
+| `--tam-texto` | 1 rem (16 px) | corpo e campos (16 px: o iOS não dá zoom no foco) |
+| `--tam-nome` | 1,125 rem (18 px) | nome do lead, título de cartão, h2 de bloco da Hoje e de Finanças, h3 |
+| `--tam-secao` | 1,375 rem (22 px) | h2 de seção grande, cartão da fila, número de coluna, ícone grande |
+| `--tam-titulo` | clamp(1,75 rem, 6 vw, 2,5 rem) | h1 da tela, total e contagem grandes |
+
+Tracking: `-0.02em` no `--tam-secao` e no `--tam-titulo`; `-0.01em` (ou 0) do
+`--tam-nome` para baixo. A Inter a 800 já é compacta: mais apertado que isso
+encosta as letras.
+
+### Força em ação e estado, calma em leitura
+
+- **3 px** (`--linha`) só no contorno externo de um bloco de tela
+  (`.hoje__bloco`, `.fin-bloco`, `.crm-topo`, `.crm-coluna`, `.crm-ficha__cabeca`)
+  e em botão ou link de ação.
+- **2 px** (`--linha-fina`) em cartão de lista (`.crm-cartao`, `.crm-grupo`,
+  `.crm-ficha__bloco`, `.crm-colinha__secao`), campo e selo.
+- **1 px a 35%** de `--borda` entre linhas de uma lista (`.crm-item`,
+  `.fin-linhas`). Nada de borda em volta de cada linha.
+- **Sombra** só no que se toca ou no que está por cima (botão, folha, cabeça da
+  tela, cartão de decisão solto). Uma por pilha: o `.cartao` dentro de
+  `.hoje__bloco` e os `.fin-bloco` não têm; cartão de lista também não.
+- **Caixa alta espaçada** só em selo e pílula de estado (`.selo`, `.crm-tag`,
+  `.fin-pilula`: uma ou duas palavras). Rótulo de campo, kicker e título de
+  bloco em caixa normal.
+- **Hover** nunca em cor de estado: `--superficie-2` no comum e
+  `brightness(0.95)` no primário. Menta (`--ok-fundo`) é "Interesse" e
+  "Atualizada"; num link, parecia já mandado.
 
 Auditoria de 15/10/2026 (escala de tamanhos, onde vai borda de 3 px e sombra,
 tabela no desktop): `docs/auditoria-de-design-2026-10-15.md`.
@@ -71,7 +106,7 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 
 ## Componentes de finanças
 
-- **Bloco**: `--superficie`, `--linha`, `--sombra`, título curto em cima
+- **Bloco**: `--superficie`, `--linha`, sem sombra (ela fica no `.fin-topo`), título curto em cima
   ("Tenho", "Devo", "Gastei") e o total grande logo abaixo.
 - **Barra de proporção**: largura em %, sempre com o número ao lado; nunca a
   barra sozinha.

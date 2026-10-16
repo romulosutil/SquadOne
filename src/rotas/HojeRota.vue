@@ -404,10 +404,14 @@ onBeforeUnmount(() => {
 <style>
 .hoje { display: grid; gap: var(--esp-4); width: 100%; max-width: 56rem; margin: 0 auto; }
 .hoje__bloco { display: grid; gap: var(--esp-3); min-width: 0; padding: var(--esp-4); border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); color: var(--texto); }
+/* Uma sombra por pilha: o bloco já tem a dele (e os 3 px); o cartão de dentro fica em 2 px,
+   sem sombra, com a faixa colorida que diz o tipo (RULES 3). */
+.hoje__bloco .cartao { box-shadow: none; border-width: 2px; }
+.hoje__bloco :is(.cartao--decisao, .cartao--ajuste, .cartao--falha) { border-left-width: 8px; }
 .hoje__cabeca { display: grid; gap: var(--esp-1); }
 .hoje__cabeca--linha { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
-.hoje h1 { margin: 0; font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: var(--peso-titulo); line-height: 1.05; letter-spacing: -0.03em; }
-.hoje h2 { margin: 0; font-size: 1rem; font-weight: var(--peso-titulo); letter-spacing: 0.06em; text-transform: uppercase; }
+.hoje h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.05; letter-spacing: -0.02em; }
+.hoje h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .hoje p { margin: 0; }
 .hoje__precisa.is-falha { border-left-width: 10px; border-left-color: var(--negativo); }
 .hoje__precisa.is-atencao { border-left-width: 10px; border-left-color: var(--destaque); }
@@ -420,13 +424,13 @@ onBeforeUnmount(() => {
 .hoje__time { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .hoje__time li { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: var(--linha-fina); background: var(--superficie-2); }
 .hoje__squad { display: grid; gap: 0.1rem; }
-.hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: 1.05rem; }
+.hoje__squad strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); font-size: var(--tam-nome); }
 .hoje__estado { display: grid; gap: 0.1rem; }
 .hoje__bloco-agora { font-weight: var(--peso-medio); overflow-wrap: anywhere; }
 .hoje__funil { gap: var(--esp-1); color: var(--texto); text-decoration: none; }
 .hoje__funil:hover { background: var(--superficie-2); }
-.hoje__funil-rotulo { font-size: 1rem; font-weight: var(--peso-titulo); letter-spacing: 0.06em; text-transform: uppercase; }
-.hoje__funil strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.hoje__funil-rotulo { font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
+.hoje__funil strong { font-size: var(--tam-nome); font-variant-numeric: tabular-nums; }
 .hoje__sozinhos summary { min-height: 44px; display: flex; align-items: center; font-weight: var(--peso-forte); cursor: pointer; }
 .hoje__sozinhos ul { display: grid; gap: var(--esp-2); margin: var(--esp-3) 0 0; padding: 0; list-style: none; }
 .hoje__sozinhos li { display: grid; gap: var(--esp-1); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); }

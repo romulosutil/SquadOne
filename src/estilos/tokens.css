@@ -89,6 +89,15 @@
   --peso-medio: 600;
   --peso-forte: 700;
   --peso-titulo: 800;
+  /* Tamanhos (15/10/2026): seis degraus no lugar dos 26 rem soltos que a
+     auditoria achou (0,58 a 1,5, mais quatro clamp). Diferença de 0,02 rem
+     não se vê; o que se via era nada parecer da mesma família. Tabela em design.md. */
+  --tam-mini: 0.75rem;
+  --tam-apoio: 0.875rem;
+  --tam-texto: 1rem; /* 16 px: o iOS não dá zoom no foco do campo */
+  --tam-nome: 1.125rem;
+  --tam-secao: 1.375rem;
+  --tam-titulo: clamp(1.75rem, 6vw, 2.5rem);
   --tamanho-barra-inferior: 4rem;
 
   color-scheme: light;

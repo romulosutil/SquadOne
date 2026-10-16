@@ -17,13 +17,13 @@
   --crm-perdido: #f2c4bb;
   color: var(--texto);
   font-family: var(--fonte);
-  font-size: 1rem;
+  font-size: var(--tam-texto);
   font-weight: var(--peso-texto);
   line-height: 1.5;
 }
 .crm *, .crm-na-folha * { box-sizing: border-box; }
 .crm :is(h1, h2, h3),
-.crm-na-folha :is(h1, h2, h3) { margin: 0; font-weight: var(--peso-titulo); letter-spacing: -0.04em; }
+.crm-na-folha :is(h1, h2, h3) { margin: 0; font-weight: var(--peso-titulo); letter-spacing: -0.02em; }
 .crm :is(button, a, input, select, textarea),
 .crm-na-folha :is(button, a, input, select, textarea) { font: inherit; }
 .crm :is(button, a),
@@ -43,16 +43,16 @@
 .crm .is-perdido, .crm-na-folha .is-perdido { --crm-cor: var(--crm-perdido); }
 
 .crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; padding: 0.85rem 1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
-.crm-kicker { display: block; color: var(--texto-2); font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.12em; text-transform: uppercase; }
-.crm-topo h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); line-height: 0.95; }
-.crm-topo__fonte { margin: 0.4rem 0 0; color: var(--texto-2); font-size: 0.85rem; }
+.crm-kicker { display: block; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+.crm-topo h1 { font-size: var(--tam-titulo); line-height: 0.95; }
+.crm-topo__fonte { margin: 0.4rem 0 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-aviso,
 .crm-erro { margin: 0; padding: 0.8rem 1rem; border: var(--linha); background: var(--atencao-fundo); color: var(--texto); }
 .crm-aviso.is-forte,
 .crm-erro { background: var(--erro-fundo); }
 .crm-erro .botao { margin-left: 0.5rem; }
-.crm-nota-pequena { margin: 0; color: var(--texto-2); font-size: 0.82rem; }
-.crm-muted { margin: 0; color: var(--texto-2); font-size: 0.88rem; }
+.crm-nota-pequena { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-muted { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 
 .crm-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .crm-vistas { display: flex; max-width: 100%; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
@@ -62,11 +62,11 @@
    linha entre elas é o fundo aparecendo no vão (como no .crm-resumo). */
 @media (max-width: 30rem) {
   .crm-vistas { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; background: var(--borda); }
-  .crm-vistas a { padding-inline: 0.5rem; background: var(--superficie); font-size: 0.92rem; }
+  .crm-vistas a { padding-inline: 0.5rem; background: var(--superficie); font-size: var(--tam-apoio); }
   .crm-vistas a + a { border-left: 0; }
 }
 .crm-vistas a[aria-current="page"] { background: var(--texto); color: var(--superficie); }
-.crm-vistas a span { min-width: 1.7rem; padding: 0 0.35rem; border: 2px solid currentColor; font-size: 0.78rem; text-align: center; }
+.crm-vistas a span { min-width: 1.7rem; padding: 0 0.35rem; border: 2px solid currentColor; font-size: var(--tam-mini); text-align: center; }
 .crm-produtos { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .crm-produtos button { padding: 0.45rem 0.85rem; border: var(--linha-fina); border-radius: 999px; background: var(--superficie); color: var(--texto); font-weight: var(--peso-medio); cursor: pointer; }
 .crm-produtos button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); }
@@ -75,11 +75,11 @@
 .crm-resumo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; border: var(--linha); background: var(--borda); }
 .crm-resumo button { display: grid; width: 100%; height: 100%; justify-items: start; gap: 0.1rem; padding: 0.55rem 0.7rem; border: 0; background: var(--superficie); box-shadow: inset 0 -7px 0 var(--crm-cor); color: var(--texto); text-align: left; cursor: pointer; }
 .crm-resumo button:hover { background: var(--crm-cor); color: var(--cor-tinta); }
-.crm-resumo strong { font-size: clamp(1.5rem, 6vw, 2.2rem); font-weight: var(--peso-titulo); line-height: 1; font-variant-numeric: tabular-nums; }
-.crm-resumo span { font-size: 0.8rem; font-weight: var(--peso-medio); }
+.crm-resumo strong { font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1; font-variant-numeric: tabular-nums; }
+.crm-resumo span { font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 @media (min-width: 48rem) { .crm-resumo { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
-.crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: 0.66rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.crm-tag { display: inline-flex; align-items: center; padding: 0.05rem 0.4rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .crm-tag.is-prumo { background: var(--barra-fundo); color: var(--cor-papel-forte); }
 .crm-tag.is-iris { background: var(--acento); color: var(--cor-tinta); }
 .crm-tag.is-estampa { background: var(--texto); color: var(--superficie); }
@@ -87,19 +87,19 @@
 /* Hoje */
 .crm-hoje { display: grid; gap: 1rem; }
 .crm-vazio { margin: 0; padding: 1.25rem; border: 3px dashed var(--borda); background: var(--superficie); }
-.crm-grupo { padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
+.crm-grupo { padding: 1rem 1.1rem; border: var(--linha-fina); background: var(--superficie); }
 .crm-grupo__cabeca { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.crm-grupo__cabeca h2 { font-size: 1.2rem; letter-spacing: -0.02em; }
-.crm-grupo__cabeca strong { min-width: 2.4rem; padding: 0.05rem 0.5rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); font-size: 1.1rem; text-align: center; }
+.crm-grupo__cabeca h2 { font-size: var(--tam-nome); letter-spacing: -0.01em; }
+.crm-grupo__cabeca strong { min-width: 2.4rem; padding: 0.05rem 0.5rem; border: var(--linha-fina); background: var(--destaque); color: var(--destaque-texto); font-size: var(--tam-nome); text-align: center; }
 .crm-grupo.is-followup .crm-grupo__cabeca strong { background: var(--acento); color: var(--cor-tinta); }
-.crm-grupo__explicacao { margin: 0.2rem 0 0.6rem; color: var(--texto-2); font-size: 0.85rem; }
+.crm-grupo__explicacao { margin: 0.2rem 0 0.6rem; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-lista { margin: 0; padding: 0; list-style: none; border-top: var(--linha-fina); }
 .crm-item { display: grid; gap: 0.3rem; padding: 0.7rem 0; border-bottom: 1px solid color-mix(in srgb, var(--borda) 35%, transparent); }
 .crm-item__quem { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; }
 .crm-item__empresa,
 .crm-cartao__abrir { padding: 0; border: 0; background: none; color: var(--texto); text-align: left; cursor: pointer; }
-.crm-item__empresa { min-height: 44px; font-size: 1.05rem; font-weight: var(--peso-forte); text-decoration: underline; text-underline-offset: 3px; }
-.crm-item__acao { margin: 0; font-size: 0.92rem; }
+.crm-item__empresa { min-height: 44px; font-size: var(--tam-nome); font-weight: var(--peso-forte); text-decoration: underline; text-underline-offset: 3px; }
+.crm-item__acao { margin: 0; font-size: var(--tam-apoio); }
 .crm-item__acao span { color: var(--texto-2); }
 .crm-item__links,
 .crm-cartao__links { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; }
@@ -110,7 +110,10 @@
 .crm-ficha__links a.is-principal { background: var(--destaque); color: var(--destaque-texto); }
 .crm-item__links a:hover,
 .crm-cartao__links a:hover,
-.crm-ficha__links a:hover { background: var(--ok-fundo); color: var(--texto); }
+.crm-ficha__links a:hover { background: var(--superficie-2); color: var(--texto); }
+.crm-item__links a:first-child:hover,
+.crm-cartao__links a:first-child:hover,
+.crm-ficha__links a.is-principal:hover { background: var(--destaque); color: var(--destaque-texto); filter: brightness(0.95); }
 .crm-mais { margin-top: 0.75rem; padding: 0.45rem 0.9rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-weight: var(--peso-forte); cursor: pointer; }
 
 /* Fila de envio (08/10/2026): o que esta tela já abriu no WhatsApp sai do caminho
@@ -119,7 +122,7 @@
 .crm-item.is-aberto .crm-item__empresa { color: var(--texto-2); }
 .crm-item.is-aberto .crm-item__links a:first-child,
 .crm-fila__ver a:first-child { background: var(--superficie); color: var(--texto); }
-.crm-item__aberto { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--ok-fundo); font-size: 0.85rem; }
+.crm-item__aberto { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--ok-fundo); font-size: var(--tam-apoio); }
 .crm-item__aberto.is-conferir { background: var(--atencao-fundo); }
 /* Interesse parado há mais de 2 h (14/10/2026): o texto da ação já diz "há N dias"; a borda só reforça (RULES 3). */
 .crm-item.is-urgente { border-left: 4px solid var(--acento); padding-left: 0.6rem; }
@@ -132,17 +135,17 @@
 .crm-fila__nichos button span { color: var(--texto-2); font-weight: var(--peso-medio); }
 .crm-fila__nichos button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); }
 .crm-fila__nichos button[aria-pressed="true"] span { color: inherit; }
-.crm-fila__progresso { margin: 0; color: var(--texto-2); font-size: 0.88rem; font-weight: var(--peso-medio); }
+.crm-fila__progresso { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .crm-fila__cartao { display: grid; gap: 0.75rem; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
-.crm-fila__cartao h3 { margin: 0; font-size: 1.35rem; letter-spacing: -0.02em; }
-.crm-fila__detalhe { margin: 0; color: var(--texto-2); font-size: 0.92rem; }
+.crm-fila__cartao h3 { margin: 0; font-size: var(--tam-secao); letter-spacing: -0.02em; }
+.crm-fila__detalhe { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-fila__mensagem { margin: 0; }
-.crm-fila__mensagem figcaption { font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2); }
-.crm-fila__mensagem blockquote { margin: 0.35rem 0 0; padding: 0.75rem 0.9rem; border-left: 6px solid var(--destaque); background: var(--superficie-2); font-size: 0.98rem; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.crm-fila__mensagem figcaption { font-size: var(--tam-apoio); font-weight: var(--peso-forte); color: var(--texto-2); }
+.crm-fila__mensagem blockquote { margin: 0.35rem 0 0; padding: 0.75rem 0.9rem; border-left: 6px solid var(--destaque); background: var(--superficie-2); font-size: var(--tam-texto); line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .crm-fila__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .crm-fila__enviar { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 48px; padding: 0.55rem 1.1rem; border: var(--linha); background: var(--destaque); color: var(--destaque-texto); box-shadow: var(--sombra-pequena); font-weight: var(--peso-forte); text-decoration: none; }
 .crm-fila__enviar:hover { filter: brightness(0.95); }
-.crm-fila__aberto { margin: 0; padding: 0.7rem 0.85rem; border: var(--linha); background: var(--ok-fundo); }
+.crm-fila__aberto { margin: 0; padding: 0.7rem 0.85rem; border: var(--linha-fina); background: var(--ok-fundo); }
 @media (max-width: 30rem) { .crm-fila__acoes > * { flex: 1 1 100%; } }
 
 /* Resultados (08/10/2026): taxa de resposta por nicho, mensagem e versão do site.
@@ -152,11 +155,11 @@
 .crm-resultados__total { margin: 0; padding: 0.7rem 0.9rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
 .crm-resultado { display: grid; gap: 0.35rem; padding: 0.7rem 0; border-bottom: 1px solid color-mix(in srgb, var(--borda) 35%, transparent); }
 .crm-resultado__cabeca { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; }
-.crm-resultado__cabeca strong { font-size: 1.02rem; }
-.crm-resultado__cabeca span:not(.crm-tag) { color: var(--texto-2); font-size: 0.85rem; font-weight: var(--peso-medio); }
+.crm-resultado__cabeca strong { font-size: var(--tam-texto); }
+.crm-resultado__cabeca span:not(.crm-tag) { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .crm-resultado__barra { height: 0.55rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-resultado__barra span { display: block; height: 100%; background: var(--destaque); }
-.crm-resultado__numeros { margin: 0; font-size: 0.88rem; }
+.crm-resultado__numeros { margin: 0; font-size: var(--tam-apoio); }
 /* A/B do vídeo: o veredito embaixo das taxas, no mesmo cartão. */
 div.crm-resultados__total { display: grid; gap: 0.35rem; }
 /* A/B estratificado (14/10/2026): um par de letras por bloco, A × B primeiro. */
@@ -174,16 +177,16 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
   .crm-filtros label:first-child { grid-column: auto; }
 }
 .crm-filtros label,
-.crm-form label { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
-.crm-form label small { font-weight: var(--peso-medio); letter-spacing: 0; text-transform: none; }
+.crm-form label { display: grid; gap: 0.25rem; font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.crm-form label small { font-weight: var(--peso-medio); }
 .crm-filtros input,
 .crm-filtros select,
 .crm-form input,
-.crm-form textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: var(--peso-texto); letter-spacing: 0; text-transform: none; }
+.crm-form textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha-fina); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
 .crm-form textarea { min-height: 6rem; resize: vertical; }
 .crm-form input:disabled,
 .crm-form textarea:disabled { opacity: 0.6; }
-.crm-filtro-resumo { margin: 0; font-size: 0.85rem; font-weight: var(--peso-medio); }
+.crm-filtro-resumo { margin: 0; font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 /*
  * Quadro do desktop (08/10/2026): Novo | Em contato | Proposta | Ganho em cima de Perdido.
  * As quatro colunas cabem sem rolagem lateral a partir de ~1200 px com a barra lateral;
@@ -196,31 +199,33 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-colunas > .crm-coluna.is-ganho { grid-column: 4; grid-row: 1; }
 .crm-colunas > .crm-coluna.is-perdido { grid-column: 4; grid-row: 2; }
 .crm-coluna { display: flex; min-width: 0; flex-direction: column; gap: 0.5rem; padding: 0 0.55rem 0.65rem; border: var(--linha); background: var(--superficie-2); }
-.crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.55rem; padding: 0.55rem 0.65rem; border-bottom: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); }
-.crm-coluna__cabeca h2 { font-size: 1.15rem; letter-spacing: -0.02em; }
-.crm-coluna__cabeca strong { font-size: 1.5rem; font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
-.crm-coluna__cabeca small { grid-column: 1 / -1; font-size: 0.74rem; font-weight: var(--peso-medio); }
-.crm-coluna__nota { margin: 0; color: var(--texto-2); font-size: 0.8rem; }
-.crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: 0.85rem; }
-.crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: 0.82rem; font-weight: var(--peso-medio); }
+.crm-coluna__cabeca { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; margin: 0 -0.55rem; padding: 0.55rem 0.65rem; border-bottom: var(--linha-fina); background: var(--crm-cor); color: var(--cor-tinta); }
+.crm-coluna__cabeca h2 { font-size: var(--tam-nome); letter-spacing: -0.01em; }
+.crm-coluna__cabeca strong { font-size: var(--tam-secao); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
+.crm-coluna__cabeca small { grid-column: 1 / -1; font-size: var(--tam-mini); font-weight: var(--peso-medio); }
+.crm-coluna__nota { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-check { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .crm-check input { width: 1.2rem; height: 1.2rem; accent-color: var(--texto); }
 .crm-cartoes { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
-.crm-cartao { display: grid; gap: 0.35rem; padding: 0.55rem 0.65rem; border: var(--linha); background: var(--superficie); }
+.crm-cartao { display: grid; gap: 0.35rem; padding: 0.55rem 0.65rem; border: var(--linha-fina); background: var(--superficie); }
 .crm-cartao.tem-divergencia { border-style: dashed; }
 .crm-cartao__abrir { display: grid; gap: 0.1rem; min-height: 44px; }
-.crm-cartao__abrir strong { font-size: 0.98rem; line-height: 1.2; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
-.crm-cartao__abrir small { color: var(--texto-2); font-size: 0.76rem; }
-.crm-cartao__estado { margin: 0; font-size: 0.8rem; line-height: 1.35; }
-.crm-cartao__artefatos { margin: 0; color: var(--texto-2); font-size: 0.76rem; }
+.crm-cartao__abrir strong { font-size: var(--tam-texto); line-height: 1.2; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.crm-cartao__abrir small { color: var(--texto-2); font-size: var(--tam-mini); }
+.crm-cartao__estado { margin: 0; font-size: var(--tam-apoio); line-height: 1.35; }
+.crm-cartao__artefatos { margin: 0; color: var(--texto-2); font-size: var(--tam-mini); }
 .crm-cartao__links { gap: 0.35rem; }
-.crm-cartao__links a { padding: 0.25rem 0.5rem; font-size: 0.78rem; }
+/* Dentro do cartão do Funil o link é 2 px e sem fundo; só o primeiro (a ação do dia) vai em --destaque. */
+.crm-cartao__links a { padding: 0.25rem 0.5rem; border: var(--linha-fina); background: transparent; font-size: var(--tam-mini); }
+.crm-cartao__links a:first-child { background: var(--destaque); color: var(--destaque-texto); }
 /* Os três marcos numa linha de texto (eram três etiquetas com borda, uma por linha na coluna estreita). */
-.crm-marcos { display: flex; flex-wrap: wrap; gap: 0 0.35rem; margin: 0; padding: 0; list-style: none; color: var(--texto-2); font-size: 0.74rem; line-height: 1.4; }
+.crm-marcos { display: flex; flex-wrap: wrap; gap: 0 0.35rem; margin: 0; padding: 0; list-style: none; color: var(--texto-2); font-size: var(--tam-mini); line-height: 1.4; }
 .crm-marcos li + li::before { margin-right: 0.35rem; content: "·"; }
 .crm-marcos li.is-feito { color: var(--texto); font-weight: var(--peso-medio); }
 .crm-marcos li.is-desconhecido { font-style: italic; }
 .crm-sinais { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; }
-.crm-sinal { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.72rem; font-weight: var(--peso-forte); }
+.crm-sinal { padding: 0.1rem 0.4rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: var(--tam-mini); font-weight: var(--peso-forte); }
 .crm-sinal.is-resposta { background: var(--destaque); color: var(--destaque-texto); }
 .crm-sinal.is-followup { background: var(--acento); color: var(--cor-tinta); }
 .crm-sinal.is-divergencia { border-style: dashed; background: var(--erro-fundo); }
@@ -232,7 +237,7 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-sinal.is-negativa, .crm-resposta.is-negativa strong,
 .crm-sinal.is-exclusao, .crm-resposta.is-exclusao strong { background: var(--erro-fundo); color: var(--texto); }
 .crm-sinal.is-bot, .crm-resposta.is-bot strong { color: var(--texto-2); font-weight: var(--peso-medio); }
-.crm-cartao__resposta { margin: 0.35rem 0 0; font-size: 0.82rem; font-style: italic; overflow-wrap: anywhere; }
+.crm-cartao__resposta { margin: 0.35rem 0 0; font-size: var(--tam-apoio); font-style: italic; overflow-wrap: anywhere; }
 .crm-resposta { margin: 0 0 0.5rem; }
 .crm-resposta strong { padding: 0.1rem 0.4rem; border: var(--linha-fina); }
 .crm-resposta__trecho { margin: 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--borda); background: var(--superficie-2); overflow-wrap: anywhere; }
@@ -241,16 +246,16 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 /* Coluna flex e não grid: o sticky de .crm-ficha__fixa só anda dentro do contêiner do item, e no grid isso seria a célula dele. */
 .crm-ficha { display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 52rem; }
 .crm-ficha__cabeca { padding: 1.1rem 1.25rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
-.crm-ficha__cabeca h2 { margin: 0.25rem 0 0.55rem; font-size: clamp(1.7rem, 6vw, 2.6rem); line-height: 1.05; overflow-wrap: anywhere; }
+.crm-ficha__cabeca h2 { margin: 0.25rem 0 0.55rem; font-size: var(--tam-titulo); line-height: 1.05; overflow-wrap: anywhere; }
 .crm-ficha__etapa { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
-.crm-etapa { padding: 0.15rem 0.55rem; border: var(--linha); background: var(--crm-cor); color: var(--cor-tinta); font-weight: var(--peso-titulo); }
+.crm-etapa { padding: 0.15rem 0.55rem; border: var(--linha-fina); background: var(--crm-cor); color: var(--cor-tinta); font-weight: var(--peso-titulo); }
 .crm-ficha__fonte,
-.crm-ficha__leitura { margin: 0.5rem 0 0; color: var(--texto-2); font-size: 0.85rem; }
+.crm-ficha__leitura { margin: 0.5rem 0 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-divergencia { padding: 0.9rem 1rem; border: 3px dashed var(--borda); background: var(--erro-fundo); }
 .crm-divergencia ul { margin: 0.4rem 0; padding-left: 1.2rem; }
-.crm-divergencia small { font-size: 0.8rem; }
-.crm-ficha__bloco { padding: 1rem 1.25rem; border: var(--linha); background: var(--superficie); }
-.crm-ficha__bloco h3 { margin-bottom: 0.6rem; font-size: 1.1rem; letter-spacing: -0.02em; }
+.crm-divergencia small { font-size: var(--tam-apoio); }
+.crm-ficha__bloco { padding: 1rem 1.25rem; border: var(--linha-fina); background: var(--superficie); }
+.crm-ficha__bloco h3 { margin-bottom: 0.6rem; font-size: var(--tam-nome); letter-spacing: -0.01em; }
 .crm-ficha__bloco > p { margin: 0 0 0.6rem; }
 .crm-ficha__links { display: grid; gap: 0.5rem; }
 /* Próximo passo do lead, preso ao topo da folha enquanto se rola a ficha. */
@@ -263,17 +268,17 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-form { display: grid; gap: 0.6rem; }
 .crm-form__botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .crm-status { min-height: 1.2em; margin: 0; font-weight: var(--peso-medio); }
-.crm-tempo { margin: 0; padding: 0; border-left: var(--linha); list-style: none; }
+.crm-tempo { margin: 0; padding: 0; border-left: var(--linha-fina); list-style: none; }
 .crm-tempo li { position: relative; display: grid; grid-template-columns: 6.8rem minmax(0, 1fr); gap: 0.5rem; padding: 0.5rem 0 0.5rem 0.9rem; }
 .crm-tempo li::before { position: absolute; top: 0.8rem; left: -0.55rem; width: 0.8rem; height: 0.8rem; border: var(--linha-fina); background: var(--superficie); content: ""; }
 .crm-tempo li.is-manual::before { background: var(--destaque); }
-.crm-tempo time { font-size: 0.8rem; font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
+.crm-tempo time { font-size: var(--tam-apoio); font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
 .crm-tempo strong { display: block; }
 .crm-tempo p { margin: 0.15rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.crm-tempo small { color: var(--texto-2); font-size: 0.75rem; }
+.crm-tempo small { color: var(--texto-2); font-size: var(--tam-mini); }
 @media (max-width: 30rem) { .crm-tempo li { grid-template-columns: 1fr; gap: 0.1rem; } }
 .crm-artefatos { margin: 0 0 0.5rem; padding-left: 1.2rem; }
-.crm-rodape { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--texto-2); font-size: 0.78rem; }
+.crm-rodape { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--texto-2); font-size: var(--tam-mini); }
 .crm-rodape a { color: var(--texto); font-weight: var(--peso-medio); }
 @media (prefers-reduced-motion: reduce) { .crm-colunas { scroll-behavior: auto; } }
 
@@ -284,7 +289,7 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-segmento button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); }
 /* Cinco abas que quebram linha pelo tamanho do texto: num grid fixo "Em contato 100" não cabia. */
 .crm-abas { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.crm-abas button { display: flex; flex: 1 1 auto; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: 0.85rem; font-weight: var(--peso-medio); white-space: nowrap; cursor: pointer; }
+.crm-abas button { display: flex; flex: 1 1 auto; min-height: 44px; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font-size: var(--tam-apoio); font-weight: var(--peso-medio); white-space: nowrap; cursor: pointer; }
 .crm-abas button[aria-selected="true"] { background: var(--texto); color: var(--superficie); }
 .crm-colunas--uma { display: block; overflow: visible; padding-bottom: 0; }
 /* No celular quem escolhe o produto é o segmentado do Funil. */
@@ -296,22 +301,22 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
    escrito por extenso ({NOME}, [link do demo]), então a cor só reforça. */
 .crm-colinha { display: grid; gap: 1rem; min-width: 0; }
 .crm-colinha__topo { display: grid; gap: 0.6rem; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra); }
-.crm-colinha__topo h2 { font-size: clamp(1.6rem, 6vw, 2.2rem); line-height: 1; }
+.crm-colinha__topo h2 { font-size: var(--tam-titulo); line-height: 1; }
 .crm-colinha__indice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .crm-colinha__indice a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 44px; padding: 0.4rem 0.8rem; border: var(--linha-fina); background: var(--superficie-2); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; }
 .crm-colinha__indice a:hover { background: var(--destaque); color: var(--destaque-texto); }
-.crm-colinha__campo { display: grid; gap: 0.25rem; font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
-.crm-colinha__campo small { font-weight: var(--peso-medio); letter-spacing: 0; text-transform: none; }
-.crm-colinha__campo input { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: 1rem; font-weight: var(--peso-texto); letter-spacing: 0; text-transform: none; }
-.crm-colinha__secao { display: grid; gap: 0.85rem; min-width: 0; padding: 1rem 1.1rem; border: var(--linha); background: var(--superficie); box-shadow: var(--sombra-pequena); }
-.crm-colinha__secao > h2 { font-size: 1.4rem; letter-spacing: -0.02em; }
+.crm-colinha__campo { display: grid; gap: 0.25rem; font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.crm-colinha__campo small { font-weight: var(--peso-medio); }
+.crm-colinha__campo input { width: 100%; min-height: 44px; padding: 0.5rem 0.65rem; border: var(--linha-fina); border-radius: 0; background: var(--superficie); color: var(--texto); font: inherit; font-size: var(--tam-texto); font-weight: var(--peso-texto); }
+.crm-colinha__secao { display: grid; gap: 0.85rem; min-width: 0; padding: 1rem 1.1rem; border: var(--linha-fina); background: var(--superficie); }
+.crm-colinha__secao > h2 { font-size: var(--tam-secao); letter-spacing: -0.02em; }
 .crm-colinha [tabindex="-1"]:focus { outline: none; }
 .crm-colinha [tabindex="-1"]:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 
 .crm-colinha__cardapio { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
 @media (min-width: 40rem) { .crm-colinha__cardapio { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .crm-colinha__servico { display: grid; align-content: start; gap: 0.3rem; padding: 0.75rem 0.85rem; border: var(--linha-fina); background: var(--superficie-2); }
-.crm-colinha__servico h3 { font-size: 1.1rem; letter-spacing: -0.02em; }
+.crm-colinha__servico h3 { font-size: var(--tam-nome); letter-spacing: -0.01em; }
 .crm-colinha__servico p { margin: 0; overflow-wrap: anywhere; }
 .crm-colinha__preco { font-weight: var(--peso-forte); font-variant-numeric: tabular-nums; }
 
@@ -319,20 +324,20 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-colinha__momento,
 .crm-colinha__objecao { display: grid; gap: 0.55rem; min-width: 0; padding-top: 0.75rem; border-top: var(--linha-fina); }
 .crm-colinha__momento :is(h3, h4),
-.crm-colinha__objecao :is(h3, h4) { margin: 0; font-size: 1.1rem; font-weight: var(--peso-titulo); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.crm-colinha__objecao :is(h3, h4) { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-titulo); letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .crm-colinha__objetivo,
-.crm-colinha__vende { margin: 0; font-size: 0.92rem; }
+.crm-colinha__vende { margin: 0; font-size: var(--tam-apoio); }
 .crm-colinha__vende { color: var(--texto-2); }
 .crm-colinha__vende strong { color: var(--texto); }
-.crm-colinha__rotulo { margin: 0; color: var(--texto-2); font-size: 0.72rem; font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; }
+.crm-colinha__rotulo { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
 .crm-colinha__perguntas { display: grid; gap: 0.3rem; margin: 0; padding-left: 1.4rem; overflow-wrap: anywhere; }
 
 .crm-colinha__trecho { display: grid; gap: 0.5rem; min-width: 0; padding: 0.75rem 0.85rem; border: var(--linha-fina); background: var(--superficie-2); }
 .crm-colinha__trecho-cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0; overflow-wrap: anywhere; }
-.crm-colinha__texto { margin: 0; padding: 0.7rem 0.85rem; border-left: 6px solid var(--destaque); background: var(--superficie); font-size: 0.98rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-colinha__texto { margin: 0; padding: 0.7rem 0.85rem; border-left: 6px solid var(--destaque); background: var(--superficie); font-size: var(--tam-texto); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .crm-colinha__marca { padding: 0 0.15em; border: 1px dashed currentColor; background: var(--atencao-fundo); color: var(--texto); font-weight: var(--peso-forte); }
-.crm-colinha__pendente { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--atencao-fundo); font-size: 0.82rem; }
-.crm-colinha__dica { margin: 0; color: var(--texto-2); font-size: 0.82rem; overflow-wrap: anywhere; }
+.crm-colinha__pendente { margin: 0; padding: 0.35rem 0.6rem; border: var(--linha-fina); background: var(--atencao-fundo); font-size: var(--tam-apoio); }
+.crm-colinha__dica { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); overflow-wrap: anywhere; }
 /* Lado a lado enquanto couberem; no celular estreito, um por linha. */
 .crm-colinha__botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .crm-colinha__botoes > * { flex: 1 1 10rem; }
@@ -347,15 +352,15 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 /* Jornada da Ficha (CrmJornada.vue, 15/10/2026): o passo atual, a trilha, o próximo passo e a oferta.
    Estado sempre com palavra para o leitor de tela e glifo à vista; a cor só reforça (RULES 3). */
 .crm-jornada__onde { display: grid; gap: 0.15rem; }
-.crm-jornada__onde strong { font-size: 1.05rem; }
+.crm-jornada__onde strong { font-size: var(--tam-nome); }
 .crm-jornada__trilha { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 0.75rem; padding: 0; list-style: none; }
-.crm-jornada__trilha li { padding: 0.2rem 0.5rem; border: var(--linha-fina); background: var(--superficie); font-size: 0.82rem; }
+.crm-jornada__trilha li { padding: 0.2rem 0.5rem; border: var(--linha-fina); background: var(--superficie); font-size: var(--tam-apoio); }
 .crm-jornada__trilha li.is-feito { background: var(--ok-fundo); }
 .crm-jornada__trilha li.is-agora { background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-forte); }
 .crm-jornada__trilha li.is-depois { color: var(--texto-2); border-style: dashed; }
 .crm-jornada__trilha li.is-sem-registro { color: var(--texto-2); }
 .crm-jornada__oferta { margin: 0 0 0.6rem; }
-.crm-jornada__oferta h4 { margin: 0 0 0.25rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.crm-jornada__oferta h4 { margin: 0 0 0.25rem; font-size: var(--tam-apoio); font-weight: var(--peso-forte); letter-spacing: 0; }
 .crm-jornada__oferta ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
 .crm-jornada__oferta.is-nao, .crm-jornada__oferta.is-depois { color: var(--texto-2); }
 .crm-jornada__oferta.is-confirmar { padding: 0.5rem 0.75rem; border: var(--linha-fina); background: var(--atencao-fundo); }
@@ -364,12 +369,12 @@ div.crm-resultados__total { display: grid; gap: 0.35rem; }
 .crm-jornada-vista { display: grid; gap: 0.75rem; }
 .crm-jornada-vista__passos { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
 @media (min-width: 64rem) { .crm-jornada-vista__passos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.crm-jornada-vista__passo { padding: 0.75rem 1rem; border: var(--linha); background: var(--superficie); }
+.crm-jornada-vista__passo { padding: 0.75rem 1rem; border: var(--linha-fina); background: var(--superficie); }
 .crm-jornada-vista__passo.is-vazio { background: var(--superficie-2); }
 .crm-jornada-vista__passo header { display: grid; gap: 0.15rem; margin-bottom: 0.5rem; }
-.crm-jornada-vista__passo h3 { margin: 0; font-size: 1.05rem; }
+.crm-jornada-vista__passo h3 { margin: 0; font-size: var(--tam-nome); letter-spacing: -0.01em; }
 .crm-jornada-vista__n { display: inline-block; min-width: 1.6rem; padding: 0 0.35rem; border: var(--linha-fina); text-align: center; font-variant-numeric: tabular-nums; }
-.crm-jornada-vista__parados { margin: 0; padding: 0.15rem 0.5rem; justify-self: start; background: var(--erro-fundo); font-weight: var(--peso-medio); font-size: 0.85rem; }
+.crm-jornada-vista__parados { margin: 0; padding: 0.15rem 0.5rem; justify-self: start; background: var(--erro-fundo); font-weight: var(--peso-medio); font-size: var(--tam-apoio); }
 .crm-jornada-vista__passo ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
 .crm-jornada-vista__passo li button { display: grid; gap: 0.1rem; width: 100%; min-height: 44px; padding: 0.4rem 0.6rem; border: var(--linha-fina); background: var(--superficie); color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
 .crm-jornada-vista__passo li.is-parado button { background: var(--erro-fundo); }
