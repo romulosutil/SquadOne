@@ -123,7 +123,10 @@ login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead d
 `_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
 (61; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
 endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos), o `site-pastas.test.py` (o toque "Gerar
-demo" grava o pedido sem mover a pasta), o `site-antes-da-venda.py --testar` (35; o Balcão com o recibo só do Raio-X:
+demo" grava o pedido sem mover a pasta), o `raio-x-ia.test.py` (32, roda no PC e no Dell; Raio-X de IA, fase 1, só
+mede: a pergunta tirada da busca do Raio-X, termo vago fora, os nomes da linha `NOMES:` ou do negrito, o lead casado pelo
+núcleo do nome sem cidade nem ofício e nunca pela palavra genérica, estabilidade entre execuções, o JSON do `codex
+--json` e do Gemini com grounding, o resumo; HOME temporário, nada chama a rede), o `site-antes-da-venda.py --testar` (35; o Balcão com o recibo só do Raio-X:
 só a C, EUA fica de fora, o enviado não é regravado toda hora, o demo pedido depois não troca a primeira mensagem; e,
 desde 14/10/2026, a alocação balanceada: 30 leads divididos com diferença ≤ 1, dois nichos independentes, mesma saída
 em qualquer ordem, congelamento, novo sorteio quando o conjunto muda, a própria letra fora da contagem, só letra válida

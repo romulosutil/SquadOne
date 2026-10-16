@@ -31,6 +31,7 @@
     {"repo": "deploy/dell/qa-numerico.py", "instalado": "~/.local/bin/qa-numerico"},
     {"repo": "deploy/dell/lote-continuo.py", "instalado": "~/.local/bin/lote-continuo"},
     {"repo": "deploy/dell/raio-x.py", "instalado": "~/.local/bin/raio-x"},
+    {"repo": "deploy/dell/raio-x-ia.py", "instalado": "~/.local/bin/raio-x-ia"},
     {"repo": "deploy/dell/auto-site/auto-site-CLAUDE.md", "instalado": "~/auto-site/CLAUDE.md", "modo": "444"},
     {"repo": "deploy/dell/auto-site/lead-novo.md", "instalado": "~/auto-site/.claude/commands/lead-novo.md", "modo": "444"},
     {"repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html", "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html", "modo": "444"},
