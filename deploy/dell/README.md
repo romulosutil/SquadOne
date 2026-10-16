@@ -2076,7 +2076,19 @@ python3 whatsapp-conversa.py            # publica os dois fluxos e cria a coluna
 python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Google)
 ```
 
-### Observador do número do PRUMO (Evolution API; 16/10/2026, instalado até o QR; observador do PRUMO desligado)
+### Observador do número do PRUMO (Evolution API; 16/10/2026, instalado e conectado; observador do PRUMO ligado)
+
+> **CORREÇÃO (16/10/2026, 11:50): a Evolution está no MESMO número do Hermes.** A instância `prumo` foi conectada
+> ao chip **27 99976-2786** (conta WhatsApp Business "Prumo"), o mesmo em que o Hermes está pareado desde 09/10
+> (ver "Trocar o chip", acima; o `creds.json` do Hermes e o `ownerJid` da Evolution terminam em …86 e batem nos
+> 8 últimos dígitos). Durante a instalação eu comparei o número só com o antigo (…0954) e anunciei, errado, "um
+> número separado". Então **o objetivo de separar a prospecção do número do Hermes (Fase 2) NÃO foi atingido**: se
+> esse número for restrito ou banido, o Hermes cai junto, como em 15/10. Além disso a bridge do Hermes está
+> **"Logged out" desde 15/10 às 08:32** (o `dell-status` mostra "Sessão do WhatsApp" em falha): nenhum aviso pelo
+> WhatsApp chega. Duas saídas, decisão do dono: (a) parear o Hermes de novo neste número (a Evolution e o Hermes
+> convivem como aparelhos conectados) e tratar a separação como pendente até haver um segundo número; (b) um
+> segundo número para a prospecção: desconectar a instância `prumo` (`DELETE /instance/logout/prumo`) e ler um QR
+> novo no celular dele. Onde este texto diz "número novo" ou "número só do PRUMO", leia "o número da Evolution".
 
 Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
 prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no
