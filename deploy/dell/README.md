@@ -2102,6 +2102,11 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
 - **Privacidade.** Só entra no log e no `respostas.jsonl` quem está em `leads.json` (a lista que o próprio
   observador grava a cada leitura do n8n). Sem a lista, nada é gravado. O log não tem texto. O journal mostra
   DDD + 2 últimos dígitos. O webhook exige o header `X-Adaptador` (tempo constante, antes de ler o corpo).
+- **Ensaio de 16/10/2026 (11:27, telefone que não é lead, modo ensaio): passou.** Mensagem enviada, `DELIVERY_ACK`
+  às 11:27:28 e `READ` às 11:29:33, os dois em `@lid` e os dois resolvidos pelo id da mensagem (`nao_e_lead` = 3,
+  `lid_sem_telefone` = 0). Não exercitado ao vivo: o `owner_receipt` de um **lead de verdade** chegando ao n8n
+  (os testes cobrem com os formatos reais; falta o primeiro lead ler uma mensagem do número do PRUMO). Quem
+  desligou a confirmação de leitura nunca gera `READ`.
 - **Formato real do recibo de leitura (visto em 16/10/2026, Evolution 2.3.7).** `MESSAGES_UPDATE` chega como
   `{fromMe, instanceId, keyId, remoteJid, status}`: **só o `@lid` no `remoteJid`, sem telefone**. O `MESSAGES_UPSERT`
   de uma mensagem chega com `key.{addressingMode, fromMe, id, participant, remoteJid, remoteJidAlt}`: com
