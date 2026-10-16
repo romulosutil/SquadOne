@@ -30,6 +30,11 @@ tamanho. Tokens em `tokens.css`.
 | `--ok-fundo`, `--atencao-fundo`, `--erro-fundo` | semáforo das conexões e avisos |
 | `--barra-*` | barra inferior (celular) e trilho lateral |
 | `--esp-1…6` | espaço, múltiplos de 4 px |
+| `--fonte` | Inter variável, hospedada em `fontes/` (nunca depender da instalada) |
+| `--peso-texto`, `--peso-medio`, `--peso-forte`, `--peso-titulo` | 450 texto e campos; 600 rótulo e apoio; 700 nome, valor e botão; 800 título e total. Nada de número solto |
+
+Auditoria de 15/10/2026 (escala de tamanhos, onde vai borda de 3 px e sombra,
+tabela no desktop): `docs/auditoria-de-design-2026-10-15.md`.
 
 Modo escuro: `prefers-color-scheme: dark`, a não ser que `<html data-theme="light">`;
 `data-theme="dark"` força. Só os semânticos mudam; a paleta fica.
