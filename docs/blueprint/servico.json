@@ -332,7 +332,7 @@
         { "id": "AGENDA-4-E1", "passo": "AGENDA-4", "faixa": "E", "nome": "Lembrete no Telegram", "quem": "cliente", "resumo": "O lembrete chega pelo bot do Telegram, sem som das 22h às 7h; só cai no WhatsApp se o bot falhar. P0 vai aos dois.", "arquivos": ["server/avisos.ts"], "opcao": ["Fora do número que fala com os leads (OT-14, 16/10/2026)"] },
         { "id": "AGENDA-4-C1", "passo": "AGENDA-4", "faixa": "C", "nome": "É lembrado", "quem": "cliente", "resumo": "Antes do compromisso." },
         { "id": "AGENDA-4-B1", "passo": "AGENDA-4", "faixa": "B", "nome": "Vigia", "quem": "robô", "resumo": "A cada 60 s relê a agenda e publica os lembretes devidos. Só o operations roda.", "arquivos": ["server/vigia.ts","server/lembretes.ts","server/avisos.ts"], "seguranca": ["Nenhum R$ passa no aviso"], "opcao": ["Nada é agendado para o futuro: o laço relê tudo"] },
-        { "id": "AGENDA-4-A1", "passo": "AGENDA-4", "faixa": "A", "nome": "dell-status e fila de avisos", "quem": "robô", "resumo": "Drena a fila para o WhatsApp: silêncio das 22h às 7h (só P0), até 20 por hora, dedupe de 24 h. Desde 16/10/2026 a fila leva o P0, as falhas do Dell e a reserva dos lembretes; a falha nova também chama o socorro (remédio da lista branca, depois o diagnóstico do Hermes).", "arquivos": ["deploy/dell/dell-status.py","server/dell-status.ts","deploy/dell/socorro.py"], "metrica": ["Verde/amarelo/vermelho por verificação; vermelho vai ao WhatsApp"], "seguranca": ["Socorro só religa unit/container da lista branca (RULES 10), 2 vezes por falha a cada 6 h; Hermes sem terminal, 6 por dia"] },
+        { "id": "AGENDA-4-A1", "passo": "AGENDA-4", "faixa": "A", "nome": "dell-status e fila de avisos", "quem": "robô", "resumo": "Drena a fila para o WhatsApp: silêncio das 22h às 7h (só P0), até 20 por hora, dedupe de 24 h. A falha nova chama o socorro (remédio da lista branca, depois o diagnóstico do Hermes). Desde 16/10/2026 o \"Quebrou\" e o aviso do socorro vão pelo bot do Telegram, sem som das 22h às 7h; o WhatsApp só recebe se o bot falhar. Na fila ficam o P0, os avisos do n8n e dos scripts e a reserva dos lembretes.", "arquivos": ["deploy/dell/dell-status.py","server/dell-status.ts","deploy/dell/socorro.py"], "metrica": ["Verde/amarelo/vermelho por verificação; vermelho vai ao Telegram"], "opcao": ["Falhas fora do número que fala com os leads (OT-14, 16/10/2026); token e chat lidos do operations.env, nunca copiados"], "seguranca": ["Socorro só religa unit/container da lista branca (RULES 10), 2 vezes por falha a cada 6 h; Hermes sem terminal, 6 por dia"] },
         { "id": "AGENDA-4-A2", "passo": "AGENDA-4", "faixa": "A", "nome": "Sinal de vida", "quem": "robô", "resumo": "Ping a cada minuto ao healthchecks.io; /fail se o WhatsApp cair por mais de 15 min.", "arquivos": ["server/sinal-de-vida.ts"] },
 
         { "id": "AGENDA-5-C1", "passo": "AGENDA-5", "faixa": "C", "nome": "Pede para mudar", "quem": "cliente", "resumo": "Mais tempo, menos tempo, outro dia." },
@@ -349,7 +349,7 @@
         ["AGENDA-5-B1","AGENDA-3-A1"]
       ],
       "melhorias": [
-        "As falhas do dell-status ainda saem pelo WhatsApp de vendas (a fila); o lembrete e o alerta de finanças já não (OT-14)."
+        "Os avisos do n8n e dos scripts do Dell (inclusive a falha do atualizar-central) ainda saem pela fila, no WhatsApp de vendas; o lembrete, o alerta de finanças, o \"Quebrou\" e o socorro já não (OT-14)."
       ]
     }
   ],

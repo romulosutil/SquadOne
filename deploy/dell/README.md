@@ -312,7 +312,8 @@ socorro.path (DirectoryNotEmpty) --> socorro.service (oneshot, outro processo; o
      6 h, 6 por dia, 5 min. O Hermes devolve JSON: diagnóstico, um remédio OPCIONAL (só vale se estiver
      na lista; quem executa é o socorro, com o mesmo teto) e o pedido pronto para o Claude Code
   4. um aviso pela fila (lib/aviso.py, "🛟 Socorro do Dell"): "resolvido sozinho, <remédio>" (P2) ou
-     "continua fora ... Hermes: ... Peça ao Claude: ..." (P1)
+     "continua fora ... Hermes: ... Peça ao Claude: ..." (P1). A drenagem o manda pelo bot do
+     Telegram (origem "socorro"; WhatsApp só se o bot falhar; ver "Fila de avisos")
 ```
 
 - **A lista branca** (o único que muda estado): `systemctl --user restart` de `hermes-gateway`,
@@ -479,6 +480,26 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
   arquivo duas vezes.
 - Hermes fora do ar: o aviso fica na fila e a drenagem para no primeiro envio
   que falha (cada tentativa leva até 2 min); tenta de novo no minuto seguinte.
+- **Falhas pelo Telegram (16/10/2026, OT-14, exceção da RULES 20):** o WhatsApp
+  do Hermes é o número que fala com os leads (restrição de 24 h em 15/10), então
+  as falhas do Dell saem pelo bot da Central. O "Quebrou / Continua fora / Voltou
+  ao normal" do próprio `dell-status` (`enviar_pessoal`) e os avisos da fila com
+  `origem` em `ORIGENS_PELO_TELEGRAM` (hoje só `socorro`) vão por `sendMessage` ao
+  chat do dono, em texto puro, cortados em 4096 caracteres: na hora, **sem som
+  das 22h às 7h** (`disable_notification`) salvo P0, sem contar no teto de 20 por
+  hora (que protege o número) e com a chave de 24 h valendo igual. Bot desligado,
+  mal configurado ou com falha: o caminho do WhatsApp de antes (o "Quebrou" sai na
+  hora; o aviso do socorro espera o silêncio e o teto). Uma tentativa de bot por
+  drenagem, 10 s cada. O resto da fila (n8n, scripts, a reserva dos lembretes da
+  Central, os cartões) segue no WhatsApp.
+  - **Segredo:** o `dell-status` lê `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_IDS` do
+    ambiente ou, a cada envio, do `~/.config/squadone/operations.env` (o mesmo do
+    `squadone-operations`), como o `raio-x-ia` faz com a chave do Gemini. Nada é
+    copiado para a unit nem para o repo, e o log nunca leva a URL (ela tem o token).
+    Lista de chats vazia, chat de grupo ou token fora do formato = sem bot.
+  - **Desfazer:** `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` no `operations.env` volta
+    as falhas ao WhatsApp no minuto seguinte (e os lembretes da Central depois de
+    reiniciá-la).
 
 **Scripts Python gravam pela lib** `deploy/dell/lib/aviso.py` (11/10/2026),
 instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"

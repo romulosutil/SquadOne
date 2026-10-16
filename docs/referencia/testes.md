@@ -143,11 +143,15 @@ faixas e as três linhas, códigos únicos e no formato `SITE-3-B2`, todo passo 
 para cartões que existem e todo arquivo citado presente no repositório; versão 2: todo passo de venda numa etapa
 comum, otimizações `OT-nn` e telas `TELA-nn` em sequência, com tipo, impacto, esforço e veredito conhecidos e
 apontando para cartões e telas que existem, números do funil com data e fonte)). O monitor do Dell tem os seus em Python:
-`python3 deploy/dell/dell-status.test.py` (123, só na Mel por causa do `fcntl`; desde 16/10/2026 também a verificação
+`python3 deploy/dell/dell-status.test.py` (136, só na Mel por causa do `fcntl`; desde 16/10/2026 as falhas pelo
+Telegram, OT-14: config do `operations.env` temporário com o ambiente por cima, sem bot/grupo/token ruim/`false` = nada,
+`disable_notification` das 22h às 7h, log sem o token, corte em 4096, o "Quebrou" e o socorro da fila pelo bot e pelo
+WhatsApp quando o bot falha, com silêncio e teto; a Bot API é dublê e o `operations.env` de verdade nunca é lido; também a verificação
 "WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
 segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês; e o pedido
 ao socorro: só falha nova grava, desligado ou não instalado não grava e o "Quebrou" fica igual), o socorro,
-`python3 deploy/dell/socorro.test.py` (27, roda no PC e no Dell, 16/10/2026: a lista branca por verificação e detalhe,
+`python3 deploy/dell/socorro.test.py` (31, roda no PC e no Dell, 16/10/2026: o aviso gravado pela lib e drenado pelo
+dell-status vai pelo Telegram, sem som de noite, e cai no WhatsApp com o bot fora (só no Dell, que importa o dell-status); a lista branca por verificação e detalhe,
 todo remédio é restart/start e nada mais, a leitura só lê, os tetos de 2 remédios e 1 Hermes por verificação a cada
 6 h e 6 Hermes por dia, a chave de desligar, remédio do Hermes fora da lista nunca roda, telefone e token mascarados
 no prompt e no aviso, e o atendimento inteiro com systemctl, docker, reconferência e Hermes dublês); a lib da fila de avisos,

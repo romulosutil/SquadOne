@@ -184,8 +184,15 @@
       mesmo schema e sem R$; só se o bot estiver desligado ou falhar caem na fila
       acima. O motivo: o WhatsApp do Hermes é o número que fala com os leads e
       levou restrição de 24 h em 15/10, e cada aviso pessoal era uma mensagem a
-      mais na conta dele. O P0 segue nos dois canais; as falhas do `dell-status`
-      seguem na fila. `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz.
+      mais na conta dele. O P0 segue nos dois canais. **As falhas do Dell também
+      (mesmo dia, segunda parte):** o "Quebrou / Continua fora / Voltou ao normal"
+      do `dell-status` e o aviso do `socorro` (`origem` "socorro", que a drenagem
+      separa) vão pelo mesmo bot, sem som das 22h às 7h salvo P0, e só caem no
+      WhatsApp se o bot estiver desligado ou falhar (o socorro então espera o
+      silêncio e o teto da fila). O Python lê `TELEGRAM_BOT_TOKEN` e
+      `TELEGRAM_CHAT_IDS` do `operations.env` da Central a cada envio; o segredo
+      não é copiado (regra 25). `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` no mesmo
+      arquivo desfaz tudo, na Central e no Dell.
     - **P0 é espelhado no Telegram** (`sendMessage` do bot ao chat do dono). A
       sessão do WhatsApp não é oficial e cai (135 quedas em 7 dias, medido em
       05/10/2026); a Bot API é oficial. Só P0, porque P0 também fura o

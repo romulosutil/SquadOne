@@ -2,9 +2,10 @@
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
 agenda de cada um), as filas, o backup, os arquivos instalados, os timers, as units que caíram, os religamentos do
-healthwatch, a ausência do Syncthing, a idade dos dados, as rotinas caladas, o tamanho do cache e o "o que fazer" de cada alerta. Tudo
-em pasta temporária, com relógio fixo; nada é gravado no Dell nem enviado pelo
-Hermes.
+healthwatch, a ausência do Syncthing, a idade dos dados, as rotinas caladas, o tamanho do cache, o "o que fazer" de cada alerta
+e o canal das falhas (Telegram, WhatsApp de reserva). Tudo em pasta temporária, com relógio fixo; nada é gravado no Dell
+nem enviado pelo Hermes ou pelo bot: o operations.env de verdade nunca é lido (aponta para um arquivo que não
+existe e as variáveis do bot saem do ambiente), então o Telegram fica "desligado" fora da classe que o testa.
 
   python3 deploy/dell/dell-status.test.py
 """
@@ -28,6 +29,9 @@ BR = timezone(timedelta(hours=-3))
 spec = importlib.util.spec_from_file_location("dell_status", AQUI / "dell-status.py")
 ds = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ds)
+ds.OPERATIONS_ENV = Path(tempfile.gettempdir()) / "dell-status-teste" / "sem-operations.env"
+for _v in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_IDS", "SQUADONE_LEMBRETES_PELO_TELEGRAM"):
+    os.environ.pop(_v, None)
 
 
 def br(texto: str) -> datetime:
@@ -1614,6 +1618,196 @@ class Socorro(unittest.TestCase):
     def test_main_pede_o_socorro_antes_de_avisar(self):
         fonte = inspect.getsource(ds.main)
         self.assertLess(fonte.index("pedir_socorro"), fonte.index("avisar_transicoes"))
+
+
+TOKEN = "123456:" + "A" * 35
+
+
+class _RespostaDoBot(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class FalhasPeloTelegram(unittest.TestCase):
+    """16/10/2026 (OT-14): o "Quebrou" e o aviso do socorro vão pelo bot do Telegram, sem som das 22h às 7h
+    (salvo P0); o WhatsApp do número de vendas só recebe se o bot falhar. A Bot API é dublê (urlopen);
+    o operations.env é um temporário."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-telegram-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.env = self.dir / "operations.env"
+        self.env.write_text(f'SQUADONE_MODE=operations\nTELEGRAM_BOT_TOKEN="{TOKEN}"\nTELEGRAM_CHAT_IDS=111\n')
+        p = mock.patch.object(ds, "OPERATIONS_ENV", self.env)
+        p.start()
+        self.addCleanup(p.stop)
+        self.pedidos: list[dict] = []
+        self.bot_no_ar = True
+
+        def urlopen(req, timeout=None):
+            self.assertEqual(req.full_url, f"https://api.telegram.org/bot{TOKEN}/sendMessage")
+            self.pedidos.append(json.loads(req.data))
+            if not self.bot_no_ar:
+                raise ds.urllib.error.URLError("rede fora")
+            return _RespostaDoBot(b'{"ok": true, "result": {}}')
+        p = mock.patch.object(ds.urllib.request, "urlopen", side_effect=urlopen)
+        p.start()
+        self.addCleanup(p.stop)
+        self.whatsapp: list[str] = []
+        self.hermes_no_ar = True
+        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.hermes_no_ar and (self.whatsapp.append(m) or True))
+        p.start()
+        self.addCleanup(p.stop)
+
+    # --- a configuração: do operations.env, sem copiar o segredo
+
+    def test_config_vem_do_operations_env_e_o_ambiente_manda(self):
+        self.assertEqual(ds.config_do_telegram(), (TOKEN, [111]))
+        with mock.patch.dict(os.environ, {"TELEGRAM_CHAT_IDS": " 222, 333 "}):
+            self.assertEqual(ds.config_do_telegram(), (TOKEN, [222, 333]))
+
+    def test_sem_bot_ou_mal_configurado_e_none(self):
+        for conteudo in ("SQUADONE_MODE=operations\n",                                   # sem bot
+                         f"TELEGRAM_BOT_TOKEN={TOKEN}\n",                                 # sem chat: não abre
+                         f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=-100123\n",       # grupo
+                         f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=111,abc\n",
+                         "TELEGRAM_BOT_TOKEN=abc\nTELEGRAM_CHAT_IDS=111\n",                 # fora do formato
+                         f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=111\nSQUADONE_LEMBRETES_PELO_TELEGRAM=false\n"):
+            self.env.write_text(conteudo)
+            self.assertIsNone(ds.config_do_telegram(), conteudo)
+        self.env.unlink()
+        self.assertIsNone(ds.config_do_telegram())
+
+    # --- o transporte
+
+    def test_envia_texto_puro_e_silencioso_vira_disable_notification(self):
+        self.assertTrue(ds.enviar_telegram("⚠️ Dell worker\nQuebrou", silencioso=False))
+        self.assertTrue(ds.enviar_telegram("noite", silencioso=True))
+        self.assertEqual(self.pedidos, [{"chat_id": 111, "text": "⚠️ Dell worker\nQuebrou"},
+                                        {"chat_id": 111, "text": "noite", "disable_notification": True}])
+
+    def test_falha_do_bot_e_false_e_o_log_nao_leva_o_token(self):
+        def http_401(req, timeout=None):
+            raise ds.urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+        for erro in (http_401, ds.urllib.error.URLError("x"), TimeoutError()):
+            with mock.patch.object(ds.urllib.request, "urlopen", side_effect=erro), \
+                    contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertFalse(ds.enviar_telegram("x", silencioso=False))
+            self.assertIn("telegram", err.getvalue())
+            self.assertNotIn(TOKEN.split(":")[1], err.getvalue())
+        with mock.patch.object(ds.urllib.request, "urlopen", return_value=_RespostaDoBot(b'{"ok": false}')), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(ds.enviar_telegram("x", silencioso=False))
+
+    def test_mensagem_longa_e_cortada_no_limite_da_bot_api(self):
+        ds.enviar_telegram("x" * 5000, silencioso=False)
+        texto = self.pedidos[0]["text"]
+        self.assertEqual(len(texto), ds.MAX_TELEGRAM)
+        self.assertTrue(texto.endswith("o resto está na Central)"))
+
+    # --- o "Quebrou" do dell-status
+
+    def checks(self):
+        return [ds.check("n8n", "servicos", "n8n", "falha", "Sem resposta", o_que_fazer="Peça ao Claude.")]
+
+    def test_quebrou_vai_pelo_telegram_e_nao_pelo_whatsapp(self):
+        novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertEqual(len(self.pedidos), 1)
+        self.assertIn("Quebrou:", self.pedidos[0]["text"])
+        self.assertNotIn("disable_notification", self.pedidos[0])  # de dia, com som
+        self.assertEqual(self.whatsapp, [])
+        self.assertIn("avisado", novo["n8n"])
+
+    def test_de_noite_chega_sem_som(self):
+        ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T23:30"))
+        self.assertTrue(self.pedidos[0]["disable_notification"])
+        self.assertEqual(self.whatsapp, [])
+        self.pedidos.clear()
+        ds.avisar_transicoes([], {"n8n": {"estado": "falha"}}, br("2026-10-17T06:59"))
+        self.assertEqual(self.pedidos, [])  # sumiu: não avisa
+        ds.avisar_transicoes([ds.check("n8n", "servicos", "n8n", "ok", "ok")], {"n8n": {"estado": "falha"}},
+                             br("2026-10-17T07:00"))
+        self.assertIn("Voltou ao normal", self.pedidos[0]["text"])
+        self.assertNotIn("disable_notification", self.pedidos[0])
+
+    def test_bot_fora_cai_no_whatsapp(self):
+        self.bot_no_ar = False
+        with contextlib.redirect_stderr(io.StringIO()):
+            novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertEqual(len(self.whatsapp), 1)
+        self.assertIn("Quebrou:", self.whatsapp[0])
+        self.assertIn("avisado", novo["n8n"])
+
+    def test_sem_bot_configurado_e_o_whatsapp_de_antes(self):
+        self.env.write_text("SQUADONE_MODE=operations\n")
+        ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertEqual(self.pedidos, [])
+        self.assertEqual(len(self.whatsapp), 1)
+
+    def test_os_dois_fora_fica_pendente_para_o_proximo_minuto(self):
+        self.bot_no_ar, self.hermes_no_ar = False, False
+        with contextlib.redirect_stderr(io.StringIO()):
+            novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertTrue(novo["n8n"]["pendente"])
+        self.assertNotIn("avisado", novo["n8n"])
+
+    # --- o aviso do socorro, pela fila
+
+    def fila(self):
+        for nome, valor in (("FILA", self.dir / "fila"), ("FILA_TRAVA", self.dir / "estado/fila.lock"),
+                            ("FILA_ESTADO", self.dir / "estado/fila.json"),
+                            ("FILA_RECUSADOS", self.dir / "estado/recusados"), ("FRESCOR_S", 0)):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+        ds.FILA.mkdir()
+
+    def gravar(self, nome: str, **extra) -> Path:
+        f = ds.FILA / nome
+        f.write_text(json.dumps(aviso(**extra)), encoding="utf-8")
+        return f
+
+    def test_socorro_sai_pelo_telegram_e_o_resto_da_fila_pelo_whatsapp(self):
+        self.fila()
+        s = self.gravar("socorro.json", titulo="🛟 Socorro do Dell", origem="socorro", prioridade=1, chave="s:1")
+        self.gravar("lembrete.json", titulo="Lembrete", origem="squadone-lembretes")
+        r = ds.drenar_fila(br("2026-10-16T15:00"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (1, 1))
+        self.assertEqual([p["text"].split("\n")[0] for p in self.pedidos], ["🛟 Socorro do Dell"])
+        self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["Lembrete"])
+        self.assertFalse(s.exists())
+        # Não conta no teto do WhatsApp, mas a chave vale: o mesmo aviso não sai de novo em 24 h.
+        self.assertEqual(len(json.loads(ds.FILA_ESTADO.read_text())["envios"]), 1)
+        self.gravar("de-novo.json", titulo="🛟 Socorro do Dell", origem="socorro", chave="s:1")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(ds.drenar_fila(br("2026-10-16T15:05"))["descartados"], 1)
+        self.assertEqual(len(self.pedidos), 1)
+
+    def test_socorro_de_noite_sai_na_hora_sem_som(self):
+        self.fila()
+        self.gravar("socorro.json", titulo="🛟 Socorro do Dell", origem="socorro", prioridade=1)
+        espera = self.gravar("outro.json", titulo="Outro")
+        r = ds.drenar_fila(br("2026-10-16T23:30"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"], r["esperando"]), (1, 0, 1))
+        self.assertTrue(self.pedidos[0]["disable_notification"])
+        self.assertTrue(espera.exists())
+
+    def test_bot_fora_o_socorro_cai_no_whatsapp_com_silencio_e_teto(self):
+        self.fila()
+        self.bot_no_ar = False
+        s = self.gravar("a.json", titulo="🛟 Socorro A", origem="socorro", prioridade=1)
+        self.gravar("b.json", titulo="🛟 Socorro B", origem="socorro", prioridade=1)
+        with contextlib.redirect_stderr(io.StringIO()):
+            r = ds.drenar_fila(br("2026-10-16T23:30"))  # de noite: espera, não vai ao WhatsApp
+            self.assertEqual((r["pelo_telegram"], r["enviados"], r["esperando"]), (0, 0, 2))
+            self.assertEqual(len(self.pedidos), 1)  # uma tentativa só por drenagem
+            self.assertTrue(s.exists())
+            r = ds.drenar_fila(br("2026-10-17T07:00"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (0, 2))
+        self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["🛟 Socorro A", "🛟 Socorro B"])
 
 
 if __name__ == "__main__":

@@ -247,7 +247,8 @@ recusa escrita (409). Acesso: identidade do Tailscale Serve em todo pedido e esc
 mesma origem (curl local de escrita precisa de `-H 'Origin: http://127.0.0.1:9120'`). OAuth do
 Google só pelo loopback. Avisos: schema da fila do Dell, gravação atômica, nenhum "R$" passa,
 P0 também vai ao Telegram; lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
-fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz). Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
+fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz); as falhas do
+`dell-status` e o aviso do `socorro` também, com o token lido do `operations.env`, nunca copiado. Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
 para o futuro; só o `operations` roda vigia (dois processos duplicariam cada aviso).
 `POST /api/avisos/varrer` simula sem gravar.
 

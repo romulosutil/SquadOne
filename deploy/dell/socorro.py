@@ -20,7 +20,9 @@ Este script é a exceção LIMITADA que RULES 10 e o SOUL do Hermes passaram a p
    Teto: 1 Hermes por verificação a cada 6 h e 6 por dia no total; 5 min de tempo.
 3. **Um aviso** pela fila (lib/aviso.py) com o que aconteceu: "resolvido sozinho com X" ou "continua
    fora; o Hermes acha que...; peça ao Claude: ...". O "Quebrou" do dell-status sai do mesmo jeito,
-   na hora: o socorro nunca segura nem substitui o alerta de falha.
+   na hora: o socorro nunca segura nem substitui o alerta de falha. Desde 16/10/2026 (OT-14) a
+   drenagem do dell-status manda o aviso de `origem` "socorro" pelo bot do Telegram (sem som das 22h
+   às 7h) e só pelo WhatsApp, que é o número de vendas, se o bot falhar. Por isso a origem é fixa.
 
 Antes de qualquer coisa o script espera 60 s e reconfere (`dell-status --stdout`): o healthwatch
 religa em até 1 min, e o que voltou sozinho não ganha remédio nem aviso (o "Voltou ao normal" do
@@ -565,6 +567,8 @@ def chamar_hermes(prompt: str) -> str | None:
 
 
 PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel"]
+# O dell-status escolhe o canal por ela (ORIGENS_PELO_TELEGRAM): trocar aqui devolve o aviso ao WhatsApp.
+ORIGEM_DO_AVISO = "socorro"
 
 
 def avisar_pela_fila(titulo: str, texto: str, prioridade: int) -> bool:
@@ -580,7 +584,7 @@ def avisar_pela_fila(titulo: str, texto: str, prioridade: int) -> bool:
             continue
         if lib.VALOR_EM_REAIS.search(texto):
             texto = lib.sem_valores(texto)
-        r = lib.avisar(titulo, texto, "socorro", prioridade=prioridade, fila=FILA_DE_AVISOS, prefixo="socorro")
+        r = lib.avisar(titulo, texto, ORIGEM_DO_AVISO, prioridade=prioridade, fila=FILA_DE_AVISOS, prefixo="socorro")
         if not r.gravado:
             log("aviso não gravado:", r.estado, r.motivo)
         return r.gravado

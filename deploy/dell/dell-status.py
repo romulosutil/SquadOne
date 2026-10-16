@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Retrato do Dell worker a cada minuto: grava o estado para a Central e avisa
-o Rômulo pelo Hermes (WhatsApp) quando algo quebra e quando volta.
+o Rômulo quando algo quebra e quando volta: pelo bot do Telegram desde 16/10/2026
+(OT-14), pelo Hermes (WhatsApp) só se o bot falhar. Ver "avisos" abaixo.
 
 Uma verificação é {id, grupo, nome, estado, detalhe, link?, o_que_fazer?,
 acao?, sozinho?}. `estado` é `ok`, `atencao` ou `falha`. Só `falha` vira
@@ -41,6 +42,7 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as horario
@@ -1556,6 +1558,81 @@ def enviar(msg: str) -> bool:
         return False
 
 
+# Telegram (16/10/2026, OT-14 do blueprint, exceção da regra 20 escolhida pelo Rômulo): o WhatsApp do
+# Hermes é o mesmo número que fala com os leads e levou restrição de 24 h em 15/10; cada "Quebrou" era
+# uma mensagem a mais na conta dele. As falhas daqui e o resultado do socorro vão pelo bot da Central
+# (Bot API oficial), como o lembrete e o alerta de finanças do SquadOne (`publicarAvisoPessoal` em
+# server/avisos.ts). O token e os chats NÃO são copiados para cá nem para a unit (regra 25): lidos do
+# ambiente ou, como o raio-x-ia já faz, do operations.env da Central a cada envio. Bot ausente, mal
+# configurado ou com falha = o WhatsApp de sempre. SQUADONE_LEMBRETES_PELO_TELEGRAM=false (no mesmo
+# arquivo) desfaz a OT-14 inteira, aqui e na Central.
+
+OPERATIONS_ENV = HOME / ".config/squadone/operations.env"
+TOKEN_DO_BOT = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")  # o formato do BotFather, o mesmo do server/telegram.ts
+TEMPO_DO_TELEGRAM_S = 10
+MAX_TELEGRAM = 4096  # caracteres por mensagem na Bot API
+ORIGENS_PELO_TELEGRAM = {"socorro"}  # avisos de falha que chegam pela fila
+
+
+def config_do_telegram() -> tuple[str, list[int]] | None:
+    """(token, chats) do bot, ou None quando não há bot para usar."""
+    def valor(chave: str) -> str:
+        v = (os.environ.get(chave) or "").strip()
+        return v or (ler_env(OPERATIONS_ENV, chave) or "").strip()
+    if valor("SQUADONE_LEMBRETES_PELO_TELEGRAM").lower() == "false":
+        return None
+    token = valor("TELEGRAM_BOT_TOKEN")
+    chats = [c.strip() for c in valor("TELEGRAM_CHAT_IDS").split(",") if c.strip()]
+    # Lista vazia não abre o bot (como na Central), e chat de grupo (negativo) não é o dono.
+    if not TOKEN_DO_BOT.match(token) or not chats or not all(c.isdigit() for c in chats):
+        return None
+    return token, [int(c) for c in chats]
+
+
+def cortar_para_o_telegram(msg: str) -> str:
+    if len(msg) <= MAX_TELEGRAM:
+        return msg
+    fim = "\n… (cortado; o resto está na Central)"
+    return msg[:MAX_TELEGRAM - len(fim)].rstrip() + fim
+
+
+def enviar_telegram(msg: str, silencioso: bool) -> bool:
+    """sendMessage a cada chat do dono, texto puro. `silencioso` chega sem som (disable_notification).
+    Para no primeiro chat que falha, como o `telegramDoDono` da Central. O log nunca leva a URL: ela tem
+    o token."""
+    cfg = config_do_telegram()
+    if not cfg:
+        return False
+    token, chats = cfg
+    texto = cortar_para_o_telegram(msg)
+    for chat in chats:
+        corpo = {"chat_id": chat, "text": texto, **({"disable_notification": True} if silencioso else {})}
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
+                                     data=json.dumps(corpo, ensure_ascii=False).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=TEMPO_DO_TELEGRAM_S) as r:
+                ok = json.load(r).get("ok") is True
+        except urllib.error.HTTPError as e:
+            log(f"telegram: a Bot API respondeu {e.code}; vai pelo WhatsApp")
+            return False
+        except (OSError, ValueError) as e:  # URLError, timeout, JSON ilegível
+            log(f"telegram: sem resposta ({type(e).__name__}); vai pelo WhatsApp")
+            return False
+        if not ok:
+            log("telegram: a Bot API não confirmou o envio; vai pelo WhatsApp")
+            return False
+    return True
+
+
+def enviar_pessoal(msg: str, t: datetime, prioridade: int = 2) -> bool:
+    """Falha do Dell para o Rômulo: Telegram primeiro (sem som das 22h às 7h, salvo P0), WhatsApp só se o
+    bot falhar. True = chegou por um dos dois."""
+    if enviar_telegram(msg, silencioso=em_silencio(t) and prioridade != 0):
+        return True
+    return enviar(msg)
+
+
 # ---------------------------------------------------------------- fila de avisos
 #
 # Formato (06/10/2026): {titulo, texto, origem, chave?, prioridade?, expira_em?, link?}.
@@ -1570,6 +1647,9 @@ def enviar(msg: str) -> bool:
 # - `chave` já enviada nas últimas 24 h é descartada (estado em FILA_ESTADO);
 # - `expira_em` (ISO 8601) vencido é descartado sem enviar;
 # - até TETO_POR_HORA envios por hora; o excedente vai junto num resumo só.
+# - (16/10/2026, OT-14) aviso de falha (`origem` em ORIGENS_PELO_TELEGRAM, hoje o socorro) tenta antes
+#   o bot do Telegram, na hora e sem som das 22h às 7h (salvo P0); não conta no teto, que protege o
+#   número do WhatsApp. Bot fora: segue o caminho do WhatsApp acima, com silêncio e teto.
 # A drenagem roda sob flock: o dell-status de cada minuto e um `--drenar` avulso
 # nunca mandam o mesmo arquivo duas vezes.
 
@@ -1703,11 +1783,12 @@ def drenar_fila(t: datetime | None = None) -> dict:
 
 
 def _drenar(t: datetime) -> dict:
-    r = {"enviados": 0, "agrupados": 0, "descartados": 0, "recusados": 0, "esperando": 0}
+    r = {"enviados": 0, "agrupados": 0, "descartados": 0, "recusados": 0, "esperando": 0, "pelo_telegram": 0}
     if not FILA.is_dir():
         return r
     estado = _ler_estado_fila(t)
     silencio = em_silencio(t)
+    telegram_fora = False
     vistas: set[str] = set()
     prontos: list[tuple[Path, dict, float]] = []
     for f in sorted(FILA.glob("*.json")):
@@ -1733,6 +1814,14 @@ def _drenar(t: datetime) -> dict:
             _descartar(f, f"chave '{a['chave']}' já enviada nas últimas 24 h")
             r["descartados"] += 1
             continue
+        if a["origem"] in ORIGENS_PELO_TELEGRAM and not telegram_fora:
+            if enviar_telegram(mensagem_do_aviso(a), silencioso=silencio and a["prioridade"] != 0):
+                if a["chave"]:
+                    estado["chaves"][a["chave"]] = iso(t)
+                f.unlink(missing_ok=True)
+                r["pelo_telegram"] += 1
+                continue
+            telegram_fora = True  # uma tentativa por drenagem: com o bot fora, cada uma custaria até 10 s
         if silencio and a["prioridade"] != 0:
             r["esperando"] += 1  # sai às 7h; a chave só conta quando sair
             continue
@@ -2364,8 +2453,8 @@ def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro
         linhas += ["Voltou ao normal:"] + [f"• {c['nome']}" for c in voltou]
     if linhas:
         titulo = "⚠️ Dell worker" if (quebrou or lembrar) else "✅ Dell worker"
-        if not enviar(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}"):
-            # WhatsApp fora: nada fica marcado como avisado e o próximo minuto tenta de novo.
+        if not enviar_pessoal(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}", t):
+            # Telegram e WhatsApp fora: nada fica marcado como avisado e o próximo minuto tenta de novo.
             for c in quebrou + lembrar:
                 novo[c["id"]].pop("avisado", None)
                 novo[c["id"]]["pendente"] = True

@@ -355,5 +355,68 @@ class Pedidos(unittest.TestCase):
         self.assertTrue(str(so.MARCA_DESLIGADO).startswith(_RAIZ))
 
 
+@unittest.skipIf(so.fcntl is None, "o dell-status só importa no Linux (fcntl)")
+class AvisoPeloTelegram(unittest.TestCase):
+    """16/10/2026 (OT-14): o aviso do socorro sai pelo bot do Telegram, não pelo WhatsApp de vendas. Ponta a
+    ponta: `avisar_pela_fila` grava com a lib de verdade numa fila temporária e o dell-status do repo a drena,
+    com o bot e o Hermes como dublês (nada sai da máquina)."""
+
+    def setUp(self):
+        from unittest import mock
+        self.mock = mock
+        self.fila = Path(_RAIZ) / "fila-telegram"
+        shutil.rmtree(self.fila, ignore_errors=True)
+        self.fila.mkdir(parents=True)
+        p = mock.patch.object(so, "FILA_DE_AVISOS", self.fila)
+        p.start()
+        self.addCleanup(p.stop)
+        spec = importlib.util.spec_from_file_location("dell_status_do_socorro", AQUI / "dell-status.py")
+        ds = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ds)
+        estado = Path(_RAIZ) / "fila-telegram-estado"
+        shutil.rmtree(estado, ignore_errors=True)
+        ds.FILA, ds.FILA_TRAVA, ds.FILA_ESTADO = self.fila, estado / "fila.lock", estado / "fila.json"
+        ds.FILA_RECUSADOS, ds.FRESCOR_S = estado / "recusados", 0
+        self.ds = ds
+        self.telegram, self.whatsapp = [], []
+        self.bot_no_ar = True
+        ds.enviar_telegram = lambda m, silencioso: self.bot_no_ar and (self.telegram.append((m, silencioso)) or True)
+        ds.enviar = lambda m: self.whatsapp.append(m) or True
+
+    def aviso_de_falha(self):
+        itens = [{"check": falha("n8n", "Sem resposta", "n8n"), "tentou": [("docker-reiniciar:n8n", True)],
+                  "resolvido": False, "pulou": "", "hermes": None, "sem_hermes": "o Hermes não respondeu a tempo"}]
+        titulo, texto, prioridade = so.montar_aviso(itens, T0)
+        self.assertTrue(so.avisar_pela_fila(titulo, texto, prioridade))
+        self.assertEqual(len(list(self.fila.glob("socorro-*.json"))), 1)
+
+    def test_vai_pelo_telegram_e_nao_pelo_whatsapp(self):
+        self.aviso_de_falha()
+        quando = self.ds.datetime(2026, 10, 16, 15, 0, tzinfo=self.ds.FUSO_BR)
+        r = self.ds.drenar_fila(quando)
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (1, 0))
+        ((texto, silencioso),) = self.telegram
+        self.assertTrue(texto.startswith("🛟 Socorro do Dell\n• n8n: continua fora"))
+        self.assertFalse(silencioso)
+        self.assertEqual(self.whatsapp, [])
+        self.assertEqual(list(self.fila.glob("*.json")), [])
+
+    def test_de_noite_sem_som(self):
+        self.aviso_de_falha()
+        self.ds.drenar_fila(self.ds.datetime(2026, 10, 16, 23, 30, tzinfo=self.ds.FUSO_BR))
+        self.assertTrue(self.telegram[0][1])
+        self.assertEqual(self.whatsapp, [])
+
+    def test_bot_fora_cai_no_whatsapp(self):
+        self.aviso_de_falha()
+        self.bot_no_ar = False
+        r = self.ds.drenar_fila(self.ds.datetime(2026, 10, 16, 15, 0, tzinfo=self.ds.FUSO_BR))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (0, 1))
+        self.assertTrue(self.whatsapp[0].startswith("🛟 Socorro do Dell"))
+
+    def test_a_origem_e_a_que_o_dell_status_manda_pelo_telegram(self):
+        self.assertIn(so.ORIGEM_DO_AVISO, self.ds.ORIGENS_PELO_TELEGRAM)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
