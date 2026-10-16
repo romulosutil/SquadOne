@@ -197,6 +197,9 @@ SEM_PADRAO = "raio-x-sem-padrao.json"
 # quatro serviços com preço. Abaixo do padrão do piloto (3 pontos, 3 bons, 3 avaliações...), não sai.
 VERSAO = 5
 CAMINHO = "raio-x"
+# O que o deploy do demo sobe e o do Raio-X tem de levar de novo (cada deploy troca o projeto inteiro).
+# Os três últimos são do SEO técnico (seo-do-site.py, 15/10/2026): demo antigo sem eles segue igual.
+ARQUIVOS_DO_DEMO = ("index.html", "og.jpg", "robots.txt", "sitemap.xml", "llms.txt")
 MARCA = f'data-raio-x="{VERSAO}"'
 MAX_PONTOS = 3  # o modelo pede exatamente 3 pontos, 3 coisas que estão boas e 3 coisas a fazer
 MAX_BONS = 3
@@ -1721,7 +1724,7 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     if not re.fullmatch(r"demo-[a-z0-9][a-z0-9._-]{0,95}", projeto):
         return False, f"vercel_project inesperado: {projeto!r}"
     arquivos: dict[str, bytes] = {}
-    for nome in ("index.html", "og.jpg"):
+    for nome in ARQUIVOS_DO_DEMO:
         local = (pasta / nome).read_bytes() if (pasta / nome).is_file() else None
         codigo, no_ar = baixar(f"{site_url}/{'' if nome == 'index.html' else nome}")
         if nome == "index.html" and codigo != 200:
@@ -2927,6 +2930,20 @@ def testar() -> int:
                              ("https://demo-higor.vercel.app/raio-x", 3, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
+        def test_leva_de_novo_os_arquivos_do_seo_do_demo(self):
+            # Cada deploy troca o projeto inteiro: sem eles, o Raio-X tiraria robots, sitemap e llms do ar.
+            for nome in ("robots.txt", "sitemap.xml", "llms.txt"):
+                (self.pasta / nome).write_bytes(nome.encode())
+                self.no_ar[f"https://demo-higor.vercel.app/{nome}"] = (200, nome.encode())
+            ok, msg = publicar(self.pasta, self.deploy)
+            self.assertTrue(ok, msg)
+            self.assertEqual(self.subidos, [["index.html", "llms.txt", "og.jpg", "raio-x/index.html", "robots.txt",
+                                             "sitemap.xml"]])
+            self.no_ar["https://demo-higor.vercel.app/llms.txt"] = (200, b"outro")
+            ok, msg = publicar(self.pasta, lambda *a: self.fail("não podia publicar"))
+            self.assertFalse(ok)
+            self.assertIn("llms.txt da pasta não é o que está no ar", msg)
+
         def test_index_ou_og_diferente_do_que_esta_no_ar_nao_publica(self):
             for url, corpo in (("https://demo-higor.vercel.app/", (200, b"<html>outro</html>")),
                                ("https://demo-higor.vercel.app/og.jpg", (200, b"outra imagem")),
@@ -3101,6 +3118,7 @@ def testar() -> int:
         # Herdados do Publicar que supõem demo: não valem aqui.
         test_publica_os_bytes_conferidos_e_grava_os_campos_sem_perder_os_outros = None
         test_index_ou_og_diferente_do_que_esta_no_ar_nao_publica = None
+        test_leva_de_novo_os_arquivos_do_seo_do_demo = None
         test_demo_apagado_nao_publica = None
         test_raio_x_que_nao_responde_ou_e_antigo_nao_grava_o_campo = None
         test_alias_diferente_nao_grava_o_campo = None

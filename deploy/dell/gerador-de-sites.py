@@ -109,9 +109,9 @@ IDADE_MIN_CACHE_CHROME_S = 600
 # leads `novo` de busca pausada.
 FUNIL = Path(os.environ.get("SITE_FUNIL", str(Path.home() / ".local/share/n8n-estado/site-funil.json")))
 # Imagem do cartão de prévia (og:image). O Rômulo manda só o link no WhatsApp, e
-# até 05/10/2026 nenhum demo tinha og:image: o cartão saía sem foto. É o único
-# arquivo além do index.html que sobe (lista de permissão: content.md, Fotos/ e o
-# resto da pasta nunca vão para a Vercel).
+# até 05/10/2026 nenhum demo tinha og:image: o cartão saía sem foto. Sobe com o
+# index.html e, desde 15/10/2026, com os ARQUIVOS_DE_SEO (lista de permissão:
+# content.md, Fotos/ e o resto da pasta nunca vão para a Vercel).
 IMAGEM_DA_PREVIA = "og.jpg"
 VERCEL_SCOPE = os.environ.get("VERCEL_SCOPE", "romulodesigns")
 MAX_FALHAS = 2
@@ -146,9 +146,14 @@ NOTA_DA_REVISAO: str | None = None  # `--nota`: feedback do Rômulo que o refaze
 PREFIXO_BACKUP = "_v"  # _v1, _v2...: cada refazer guarda a versão que estava no ar
 TENTATIVA_FALHA = "_tentativa-falha"
 BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
+# SEO técnico (15/10/2026, seo-do-site.py): JSON-LD no index.html, só com dado que tem fonte, e estes três
+# arquivos, que sobem junto com o index.html e o og.jpg. Sem o script instalado, o demo sai como antes.
+SEO_DO_SITE = Path(os.environ.get("SEO_DO_SITE_BIN", str(Path.home() / ".local/bin/seo-do-site")))
+ARQUIVOS_DE_SEO = ("robots.txt", "sitemap.xml", "llms.txt")
+MARCA_DO_SEO = 'id="dados-estruturados"'
 # CONCEITO.md (metáfora, Atos e a tabela de movimento, passo 1.5.1) vai junto para o _vN: deixado na pasta,
 # ancoraria o refazer na ideia que ele deve trocar.
-ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md", "CONCEITO.md", "raio-x.html")
+ARQUIVOS_DO_SITE = ("index.html", "og.jpg", "publicado.json", "DESIGN.md", "CONCEITO.md", "raio-x.html") + ARQUIVOS_DE_SEO
 SITE_LEADS = Path(os.environ.get("SITE_LEADS", str(Path.home() / ".local/share/n8n-estado/site-leads.json")))
 # Raio-X do PRUMO (08/10/2026, deploy/dell/raio-x.py): depois de cada demo validado, o runner
 # publica `/raio-x` no mesmo projeto. O deploy do Claude só leva index.html e og.jpg, então um
@@ -297,6 +302,13 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
                       f"siga a composição do exemplo aprovado em {AUTO}/_exemplos/ e diga no resumo final.\n"
                       "- Desktop de verdade: capture cada seção também a 1440x900. Uma coluna estreita de celular "
                       "centralizada no desktop é defeito que bloqueia o deploy.")
+    if SEO_DO_SITE.is_file():
+        seo = f"""
+- Perguntas e SEO técnico (seção "Perguntas frequentes e SEO técnico" do CLAUDE.md): a página tem `<section id="perguntas">` com 3 a 5 `<details data-fonte="...">`, cada um com `<summary>` (a pergunta, terminada em "?", tirada de um tema das avaliações ou do briefing) e um `<p>` (a resposta direta, só com fato). data-fonte diz de onde veio a resposta: google, avaliacoes, instagram, facebook, cnpj ou dossie (advocacia e saúde: nunca avaliacoes). Não escreva JSON-LD, robots.txt, sitemap.xml nem llms.txt à mão: depois do {IMAGEM_DA_PREVIA} e antes do passo 5, rode `python3 {SEO_DO_SITE} {lead} --url https://demo-{slug}.vercel.app --exigir-faq`. Ele põe no <head> o JSON-LD (LocalBusiness no subtipo do ofício e FAQPage) só com o que tem fonte (content.md, Google Places, o texto da página) e grava os três arquivos na pasta. Código 1 = cada FALHA diz o que corrigir na seção de perguntas; corrija e rode de novo até sair 0. Se a linha "Aliased:" der outra URL, rode de novo com ela antes de publicar de novo."""
+        copias_de_seo = "".join(f"\n  cp {lead}/{nome} {palco}/" for nome in ARQUIVOS_DE_SEO)
+        sobe = f"a {IMAGEM_DA_PREVIA} e os três arquivos do SEO"
+    else:
+        seo, copias_de_seo, sobe = "", "", f"só a {IMAGEM_DA_PREVIA}"
     return f"""Execução automática do gerador de sites no Dell, com lista de permissão (modo dontAsk): o que não está na lista é negado na hora, sem pergunta. Não repita um comando negado; siga pelo caminho permitido.
 - A lista não muda o processo do CLAUDE.md nem a barra de qualidade: rode as cinco skills na ordem, embuta fontes (baixe com curl para o rascunho e faça o subset com pyftsubset) e faça o QA com capturas de desktop e celular no Chrome headless, como nos leads anteriores. O Chrome daqui é `google-chrome` (ou /snap/bin/chromium); `chrome` não existe.
 {referencia}
@@ -307,11 +319,11 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
 - rm só dentro de {lead}/ e do rascunho. Negados: git, sudo, ssh, wget, pip/npm/npx, chmod, curl que envia dados (-d, -F, -T, -X) ou grava em ~/.
 - Para pesquisar (Instagram, site do negócio) use WebFetch/WebSearch, curl ou o google-chrome headless (--dump-dom); o Dribbble, só pelo coletor do passo 1.6 (o curl leva 202 sem corpo).
 - Antes do deploy, tire do index.html o que só servia ao QA (`?qa`, classe `html.qa`, `#qa-resultado`, `window.onerror` de depuração): se precisar dele para capturar, use uma cópia no rascunho.
-- Prévia do link no WhatsApp: o Rômulo manda só o link, e o WhatsApp mostra o cartão de prévia (og:*) antes de o dono abrir o site. Sem og:image o cartão sai sem foto. Antes do passo 5: (a) gere {lead}/{IMAGEM_DA_PREVIA} com python3/PIL a partir da melhor foto real do negócio (a do hero), 1200x630, recorte centrado, JPEG qualidade ~80, menos de 300 KB; (b) no <head> do index.html ponha og:type website, og:locale (pt_BR no Brasil), og:title (nome do negócio + cidade), og:description (a promessa do hero, até 150 caracteres), og:image https://demo-{slug}.vercel.app/{IMAGEM_DA_PREVIA} com og:image:width 1200 e og:image:height 630, twitter:card summary_large_image, e um favicon SVG inline (data: URI com a inicial ou o símbolo da marca, na cor da marca). Só foto do próprio negócio (nunca a ilustrativa do Unsplash nem imagem de paciente); sem foto real, não gere a imagem nem o og:image e pule o cp dela. Se a linha "Aliased:" der outra URL, corrija o og:image para ela e publique de novo.
-- Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes comandos, um por chamada (outra forma de vercel é negada); além do index.html, sobe só a {IMAGEM_DA_PREVIA}:
+- Prévia do link no WhatsApp: o Rômulo manda só o link, e o WhatsApp mostra o cartão de prévia (og:*) antes de o dono abrir o site. Sem og:image o cartão sai sem foto. Antes do passo 5: (a) gere {lead}/{IMAGEM_DA_PREVIA} com python3/PIL a partir da melhor foto real do negócio (a do hero), 1200x630, recorte centrado, JPEG qualidade ~80, menos de 300 KB; (b) no <head> do index.html ponha og:type website, og:locale (pt_BR no Brasil), og:title (nome do negócio + cidade), og:description (a promessa do hero, até 150 caracteres), og:image https://demo-{slug}.vercel.app/{IMAGEM_DA_PREVIA} com og:image:width 1200 e og:image:height 630, twitter:card summary_large_image, e um favicon SVG inline (data: URI com a inicial ou o símbolo da marca, na cor da marca). Só foto do próprio negócio (nunca a ilustrativa do Unsplash nem imagem de paciente); sem foto real, não gere a imagem nem o og:image e pule o cp dela. Se a linha "Aliased:" der outra URL, corrija o og:image para ela e publique de novo.{seo}
+- Passo 5 (publicar): em vez do roteiro com variáveis do CLAUDE.md, rode exatamente estes comandos, um por chamada (outra forma de vercel é negada); além do index.html, sobe {sobe}:
   mkdir -p {palco}
   cp {lead}/index.html {palco}/
-  cp {lead}/{IMAGEM_DA_PREVIA} {palco}/
+  cp {lead}/{IMAGEM_DA_PREVIA} {palco}/{copias_de_seo}
   vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE}
   vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE}
   Depois siga o CLAUDE.md: URL da linha "Aliased:", curl dando 200, publicado.json, registro.md. Se o deploy falhar, deixe o index.html completo sem publicado.json: o runner publica.
@@ -849,12 +861,34 @@ def rodar_claude(slug: str, log_lead: Path, timeout_min: int, personalizado: boo
     }
 
 
-def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
+def aplicar_seo(pasta: Path, url: str, log_lead: Path) -> bool:
+    """Roda o seo-do-site na pasta (JSON-LD no index.html e os três arquivos). Nunca levanta: sem SEO o
+    demo sai como antes, e o motivo vai para o log do lead. True = aplicado e conferido."""
+    if not SEO_DO_SITE.is_file():
+        return False
+    try:
+        r = subprocess.run([sys.executable, str(SEO_DO_SITE), str(pasta), "--url", url], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=120)
+    except Exception as e:  # noqa: BLE001
+        log(f"SEO técnico não aplicado: {type(e).__name__}: {e}", "ERRO", log_lead)
+        return False
+    with open(log_lead, "a", encoding="utf-8") as f:
+        f.write((r.stdout or "") + (r.stderr or ""))
+    if r.returncode != 0:
+        log(f"SEO técnico com problema (código {r.returncode}); ver as linhas FALHA acima.", "ERRO", log_lead)
+    return r.returncode == 0
+
+
+def deploy_do_palco(pasta: Path, log_lead: Path) -> str | None:
+    """Sobe index.html, og.jpg e os arquivos do SEO (só os que existem) para demo-<slug>. Devolve a URL da
+    linha "Aliased:" ou None."""
     slug = pasta.name
     with tempfile.TemporaryDirectory(prefix=f"demo-{slug}-") as palco:
         shutil.copy2(pasta / "index.html", Path(palco) / "index.html")
-        if (pasta / IMAGEM_DA_PREVIA).is_file():  # o og:image do index.html aponta para ela
-            shutil.copy2(pasta / IMAGEM_DA_PREVIA, Path(palco) / IMAGEM_DA_PREVIA)
+        # O og:image do index.html aponta para a imagem; o robots.txt, para o sitemap.
+        for nome in (IMAGEM_DA_PREVIA,) + ARQUIVOS_DE_SEO:
+            if (pasta / nome).is_file():
+                shutil.copy2(pasta / nome, Path(palco) / nome)
         log(f"Publicando demo-{slug} na Vercel...", arquivo=log_lead)
         with open(log_lead, "a", encoding="utf-8") as saida:
             subprocess.run(["vercel", "link", "--yes", "--project", f"demo-{slug}", "--scope", VERCEL_SCOPE],
@@ -868,8 +902,41 @@ def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
     m = re.search(r"(?i)aliased:?\s+(https://\S+)", saida)
     if not m:
         log(f"Deploy sem linha 'Aliased:' na saída; recibo não escrito para {slug}.", "ERRO", log_lead)
+        return None
+    return m.group(1).rstrip(".,)")
+
+
+def garantir_seo(pasta: Path, log_lead: Path) -> None:
+    """O Claude publicou sem rodar o seo-do-site (o passo está nas instruções, mas é um passo a mais):
+    o runner aplica e republica no mesmo projeto. Nunca falha o lead: o demo já está no ar."""
+    try:
+        if not SEO_DO_SITE.is_file() or MARCA_DO_SEO in (pasta / "index.html").read_text(encoding="utf-8", errors="replace"):
+            return
+        url = str(json.loads((pasta / "publicado.json").read_text(encoding="utf-8-sig")).get("site_url") or "")
+        if not url.startswith("https://"):
+            return
+        log("O demo subiu sem o SEO técnico; o runner aplica e republica.", "ERRO", log_lead)
+        aplicar_seo(pasta, url, log_lead)
+        if MARCA_DO_SEO not in (pasta / "index.html").read_text(encoding="utf-8", errors="replace"):
+            return
+        alias = deploy_do_palco(pasta, log_lead)
+        if (alias or "").rstrip("/") != url.rstrip("/"):
+            log(f"Republicação com SEO respondeu {alias or 'sem Aliased:'} em vez de {url}.", "ERRO", log_lead)
+    except Exception as e:  # noqa: BLE001
+        log(f"SEO técnico não garantido: {type(e).__name__}: {e}", "ERRO", log_lead)
+
+
+def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
+    slug = pasta.name
+    # A URL de sempre; se a Vercel der outra, o JSON-LD e o sitemap são refeitos com ela e sobem de novo.
+    previsto = f"https://demo-{slug}.vercel.app"
+    aplicar_seo(pasta, previsto, log_lead)
+    url = deploy_do_palco(pasta, log_lead)
+    if not url:
         return False
-    url = m.group(1).rstrip(".,)")
+    if url.rstrip("/") != previsto and MARCA_DO_SEO in (pasta / "index.html").read_text(encoding="utf-8", errors="replace"):
+        aplicar_seo(pasta, url, log_lead)
+        url = deploy_do_palco(pasta, log_lead) or url
     conteudo = (pasta / "content.md").read_text(encoding="utf-8", errors="replace")
     pid = re.search(r"(?i)place_id[:* \t]+([a-zA-Z0-9_-]+)", conteudo)
     if not pid:
@@ -1055,6 +1122,7 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
             # Antes do raio-x: é o raio_x_url avulso no recibo que o faz republicar a página dele (agora com o
             # link do demo) em vez de pôr um /raio-x novo dentro do demo.
             devolver_recibo_do_raio_x(pasta, log_lead)
+        garantir_seo(pasta, log_lead)  # antes do raio-x: ele só republica o que a pasta e o ar têm igual
         publicar_raio_x(pasta, log_lead)
         return True, ""
     if resultado["estourou"]:

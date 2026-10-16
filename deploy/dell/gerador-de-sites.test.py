@@ -35,6 +35,7 @@ def carregar(auto: Path, avisar_real: bool = False):
     os.environ["FOLHA_DE_CONTATO_BIN"] = str(auto / ".sem-folha")
     os.environ["QA_NUMERICO_BIN"] = str(auto / ".sem-qa")
     os.environ["DRIBBBLE_BIN"] = str(auto / ".sem-dribbble")
+    os.environ["SEO_DO_SITE_BIN"] = str(auto / ".sem-seo")  # nem o seo-do-site instalado (pediria o Places)
     spec = importlib.util.spec_from_file_location("gerador", AQUI / "gerador-de-sites.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -1446,6 +1447,312 @@ class DemoSobPedido(unittest.TestCase):
         self.m.rodar_claude = lambda *a, **k: self.fail("rodou o Claude sem pedido")
         sys.argv = ["gerador-de-sites", "--pedidos"]
         self.assertEqual(self.m.main(), 0)
+
+
+CONTENT_SEO = """# Linotec - Desentupidora em Maceió
+
+- **Vertical:** desentupidora
+- **Cidade:** Maceió
+- **País:** Brasil
+- **Endereço:** Av. Luiz Avelino Pereira, 07 - Tabuleiro do Martins, Maceió - AL, 57081-131, Brasil
+- **Telefone:** +55 82 98722-3239
+- **Instagram:** @linotecdesentupidora (achado na busca do Caçador, não no Google Maps — confirmar à mão)
+- **Nota Google:** 4.7 (46 avaliações)
+- **Google Maps:** https://maps.google.com/?cid=4172888250304675344&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA
+- **place_id:** ChIJCTNjiSBIAQcREL7PNsET6Tk
+- **Slug:** linotec
+
+## Por que este lead
+
+- +5 nota 4.7
+"""
+
+# A resposta real do Places (New) para este lead em 15/10/2026, com os campos que o seo-do-site pede.
+PLACES_SEO = {
+    "id": "ChIJCTNjiSBIAQcREL7PNsET6Tk",
+    "formattedAddress": "Av. Luiz Avelino Pereira, 07 - Tabuleiro do Martins, Maceió - AL, 57081-131",
+    "location": {"latitude": -9.5664423, "longitude": -35.75553},
+    "googleMapsUri": "https://maps.google.com/?cid=4172888250304675344&g_mp=CiVnb29nbGUubWFwcy5wbGFj",
+    "regularOpeningHours": {"periods": [{"open": {"day": 0, "hour": 0, "minute": 0}}],
+                            "weekdayDescriptions": [f"{d}: Atendimento 24 horas" for d in (
+                                "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira",
+                                "sábado", "domingo")]},
+    "postalAddress": {"regionCode": "BR", "languageCode": "pt-BR", "postalCode": "57081-131",
+                      "administrativeArea": "Alagoas", "locality": "Maceió", "sublocality": "Tabuleiro do Martins",
+                      "addressLines": ["Av. Luiz Avelino Pereira, 07"]},
+}
+
+PERGUNTAS_SEO = """<section id="perguntas"><h2>Perguntas frequentes</h2>
+<details data-fonte="google"><summary>Vocês atendem de madrugada?</summary><p>Sim. O horário no Google é 24 horas, todos os dias.</p></details>
+<details data-fonte="avaliacoes"><summary>O serviço deixa sujeira?</summary><p>As avaliações contam que a equipe entrega o lugar limpo e organizado.</p></details>
+<details data-fonte="google"><summary>Onde fica a base?</summary><p>Na Av. Luiz Avelino Pereira, 07, no Tabuleiro do Martins, em Maceió.</p></details>
+</section>"""
+
+
+def pagina_seo(perguntas=PERGUNTAS_SEO, prova="Nota 4,7 no Google, em 46 avaliações.", cabeca=""):
+    return (f"<!doctype html><html lang=\"pt-BR\"><head><title>Linotec</title>{cabeca}</head><body><main>"
+            f"<section><h1>Desentupidora 24 horas no Tabuleiro do Martins, em Maceió</h1><p>{prova}</p></section>"
+            f"{perguntas}</main></body></html>")
+
+
+class SeoDoSite(unittest.TestCase):
+    """O JSON-LD, a seção de perguntas e os três arquivos do seo-do-site.py (15/10/2026). Sem rede: o
+    Places é um dublê com a resposta real gravada acima."""
+
+    def setUp(self):
+        self.s = modulo("seo-do-site")
+        self.s.PLACES_ENV = Path(tempfile.gettempdir()) / "seo-sem-chave.env"  # nunca a chave real
+        self.raiz = Path(tempfile.mkdtemp(prefix="seo-teste-"))
+        self.addCleanup(shutil.rmtree, self.raiz)
+        self.pasta = self.raiz / "linotec"
+        self.pasta.mkdir()
+        (self.pasta / "content.md").write_text(CONTENT_SEO, encoding="utf-8")
+        (self.pasta / "index.html").write_text(pagina_seo(), encoding="utf-8")
+        (self.pasta / "og.jpg").write_bytes(b"\xff\xd8og")
+        self.url = "https://demo-linotec.vercel.app"
+        self.pedidos = []
+
+    def pedir(self, resposta=PLACES_SEO):
+        def f(place_id, chave):
+            self.pedidos.append(place_id)
+            return resposta
+        return f
+
+    def aplicar(self, **k):
+        k.setdefault("pedir", self.pedir())
+        return self.s.aplicar(self.pasta, self.url, agora=k.pop("agora", None), **k)
+
+    def json_ld(self):
+        blocos = self.s.blocos_json_ld((self.pasta / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(len(blocos), 1)
+        return json.loads(blocos[0].replace("<\\/", "</"))
+
+    def conferir(self):
+        dados = self.s.ler_content(CONTENT_SEO)
+        places = self.s.ler_cache(self.pasta, dados["campos"]["place_id"], self.s.dt.datetime.now().astimezone())
+        return self.s.conferir((self.pasta / "index.html").read_text(encoding="utf-8"), dados, places, self.url, True)
+
+    def test_json_ld_le_tem_os_campos_obrigatorios_e_so_dado_com_fonte(self):
+        self.assertEqual(self.aplicar(exigir_faq=True), [])
+        ld = self.json_ld()
+        self.assertEqual(ld["@context"], "https://schema.org")
+        negocio, faq = ld["@graph"]
+        self.assertEqual(negocio["@type"], "Plumber")
+        self.assertEqual(negocio["name"], "Linotec - Desentupidora em Maceió")  # o nome do Google, não o h1
+        self.assertEqual(negocio["telephone"], "+55 82 98722-3239")
+        self.assertEqual(negocio["url"], "https://demo-linotec.vercel.app/")
+        self.assertEqual(negocio["image"], "https://demo-linotec.vercel.app/og.jpg")
+        self.assertEqual(negocio["address"], {
+            "@type": "PostalAddress", "streetAddress": "Av. Luiz Avelino Pereira, 07", "addressLocality": "Maceió",
+            "addressRegion": "Alagoas", "postalCode": "57081-131", "addressCountry": "BR"})
+        self.assertEqual(negocio["geo"], {"@type": "GeoCoordinates", "latitude": -9.5664423, "longitude": -35.75553})
+        self.assertEqual(negocio["openingHoursSpecification"], [{
+            "@type": "OpeningHoursSpecification", "opens": "00:00", "closes": "23:59",
+            "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}])
+        # A nota exata do Google (a mesma que a página mostra), sem bestRating nem número arredondado.
+        self.assertEqual(negocio["aggregateRating"], {"@type": "AggregateRating", "ratingValue": 4.7, "reviewCount": 46})
+        # O perfil do Google pelo cid, sem o rastreio; o Instagram "achado na busca" não entra.
+        self.assertEqual(negocio["sameAs"], ["https://maps.google.com/?cid=4172888250304675344"])
+        self.assertEqual(faq["@type"], "FAQPage")
+        self.assertEqual([q["name"] for q in faq["mainEntity"]],
+                         ["Vocês atendem de madrugada?", "O serviço deixa sujeira?", "Onde fica a base?"])
+        self.assertEqual(faq["mainEntity"][0]["acceptedAnswer"]["text"], "Sim. O horário no Google é 24 horas, todos os dias.")
+        self.assertEqual(self.conferir(), [])
+        self.assertEqual(self.pedidos, ["ChIJCTNjiSBIAQcREL7PNsET6Tk"])
+
+    def test_dado_sem_fonte_ou_diferente_da_fonte_reprova(self):
+        self.aplicar()
+        pagina = (self.pasta / "index.html").read_text(encoding="utf-8")
+        for antes, depois, esperado in (
+                ('"reviewCount": 46', '"reviewCount": 46,\n      "bestRating": 5', "sem fonte: $.@graph[0].aggregateRating.bestRating"),
+                ('"ratingValue": 4.7', '"ratingValue": 4.9', "diverge da fonte: $.@graph[0].aggregateRating.ratingValue"),
+                ('"@type": "Plumber",', '"@type": "Plumber",\n      "foundingDate": "2010",', "sem fonte: $.@graph[0].foundingDate"),
+                ('"telephone": "+55 82 98722-3239",', "", "falta: $.@graph[0].telephone"),
+                ("O serviço deixa sujeira?", "Vocês dão garantia?", "diverge da fonte: $.@graph[1].mainEntity[1].name")):
+            self.assertIn(antes, pagina)
+            problemas = self.s.conferir(pagina.replace(antes, depois, 1), self.s.ler_content(CONTENT_SEO),
+                                        self.s.ler_cache(self.pasta, "ChIJCTNjiSBIAQcREL7PNsET6Tk",
+                                                         self.s.dt.datetime.now().astimezone()), self.url, True)
+            self.assertTrue(any(p.startswith(esperado) for p in problemas), (esperado, problemas))
+        self.assertEqual(self.s.conferir(pagina.replace("application/ld+json", "text/plain"), self.s.ler_content(CONTENT_SEO),
+                                         None, self.url, True)[0][:1], "0")
+        self.assertIn("ilegível", self.s.conferir(pagina.replace('"@graph": [', '"@graph": [[', 1),
+                                                   self.s.ler_content(CONTENT_SEO), None, self.url, True)[0])
+
+    def test_nota_so_quando_a_pagina_mostra_os_numeros_exatos(self):
+        (self.pasta / "index.html").write_text(pagina_seo(prova="Clientes elogiam a rapidez."), encoding="utf-8")
+        self.aplicar()
+        self.assertNotIn("aggregateRating", self.json_ld()["@graph"][0])
+        (self.pasta / "index.html").write_text(pagina_seo(prova="Nota 4,8 no Google, em 46 avaliações."), encoding="utf-8")
+        self.aplicar()
+        self.assertNotIn("aggregateRating", self.json_ld()["@graph"][0])
+        self.assertEqual(self.conferir(), [])
+
+    def test_advocacia_sem_nota_e_sem_resposta_tirada_das_avaliacoes(self):
+        (self.pasta / "content.md").write_text(CONTENT_SEO.replace("desentupidora\n", "advocacia\n", 1), encoding="utf-8")
+        self.assertIn("advocacia e saúde não respondem com as avaliações", self.aplicar(exigir_faq=True)[0])
+        self.assertNotIn(self.s.ID_DO_BLOCO, (self.pasta / "index.html").read_text(encoding="utf-8"))  # nada gravado
+        perguntas = PERGUNTAS_SEO.replace('data-fonte="avaliacoes"', 'data-fonte="google"').replace(
+            "As avaliações contam que a equipe entrega o lugar limpo e organizado.", "O atendimento é com hora marcada.")
+        (self.pasta / "index.html").write_text(pagina_seo(perguntas), encoding="utf-8")
+        self.assertEqual(self.aplicar(exigir_faq=True), [])
+        negocio = self.json_ld()["@graph"][0]
+        self.assertEqual(negocio["@type"], "LegalService")
+        self.assertNotIn("aggregateRating", negocio)  # mesmo com a nota na página (Provimento 205/2021)
+        self.assertNotIn("Nota no Google", (self.pasta / "llms.txt").read_text(encoding="utf-8"))
+
+    def test_pergunta_fora_do_contrato_nao_grava_nada(self):
+        original = (self.pasta / "index.html").read_text(encoding="utf-8")
+        for perguntas, trecho in ((PERGUNTAS_SEO.replace(' data-fonte="google"', "", 1), "sem data-fonte"),
+                                  (PERGUNTAS_SEO.replace('data-fonte="google"', 'data-fonte="achismo"', 1), "fora da lista"),
+                                  (PERGUNTAS_SEO.replace("madrugada?", "madrugada", 1), 'terminada em "?"'),
+                                  ("", 'sem <section id="perguntas">')):
+            (self.pasta / "index.html").write_text(pagina_seo(perguntas), encoding="utf-8")
+            problemas = self.aplicar(exigir_faq=True)
+            self.assertTrue(any(trecho in p for p in problemas), (trecho, problemas))
+            self.assertNotIn(self.s.ID_DO_BLOCO, (self.pasta / "index.html").read_text(encoding="utf-8"))
+        self.assertFalse((self.pasta / "llms.txt").exists())
+        # Sem exigir (o runner num demo antigo): a pergunta sem fonte fica fora do FAQPage, e a conferência avisa.
+        (self.pasta / "index.html").write_text(original.replace(' data-fonte="google"', "", 1), encoding="utf-8")
+        problemas = self.aplicar()
+        self.assertTrue(any(p.startswith("FAQ: pergunta 1") for p in problemas), problemas)
+        self.assertEqual(len(self.json_ld()["@graph"][1]["mainEntity"]), 2)
+
+    def test_sem_places_sai_sem_geo_e_sem_horario_e_endereco_do_content(self):
+        self.assertEqual(self.aplicar(pedir=self.pedir(None)), [])
+        negocio = self.json_ld()["@graph"][0]
+        self.assertNotIn("geo", negocio)
+        self.assertNotIn("openingHoursSpecification", negocio)
+        self.assertEqual(negocio["address"], {
+            "@type": "PostalAddress", "streetAddress": "Av. Luiz Avelino Pereira, 07", "addressLocality": "Maceió",
+            "addressRegion": "AL", "postalCode": "57081-131", "addressCountry": "BR"})
+        self.assertFalse((self.pasta / self.s.CACHE).exists())
+
+    def test_cache_do_places_vale_30_dias(self):
+        agora = self.s.dt.datetime(2026, 10, 15, 10, tzinfo=self.s.dt.timezone.utc)
+        self.aplicar(agora=agora)
+        self.aplicar(agora=agora + self.s.dt.timedelta(days=29))
+        self.assertEqual(len(self.pedidos), 1)
+        self.aplicar(agora=agora + self.s.dt.timedelta(days=31))
+        self.assertEqual(len(self.pedidos), 2)
+
+    def test_horario_com_dias_diferentes_e_almoco(self):
+        def p(dia, a, f):
+            return {"open": {"day": dia, "hour": a[0], "minute": a[1]}, "close": {"day": dia, "hour": f[0], "minute": f[1]}}
+        periodos = [p(d, (8, 0), (12, 0)) for d in range(1, 6)] + [p(d, (13, 30), (18, 0)) for d in range(1, 6)]
+        periodos.append(p(6, (8, 0), (12, 0)))
+        self.assertEqual(self.s.horario(periodos), [
+            {"@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                                                                 "Saturday"], "opens": "08:00", "closes": "12:00"},
+            {"@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+             "opens": "13:30", "closes": "18:00"}])
+        self.assertIsNone(self.s.horario([{"open": {"day": 1, "hour": 8, "minute": 0}}, p(2, (8, 0), (18, 0))]))
+        self.assertIsNone(self.s.horario(None))
+
+    def test_json_ld_feito_a_mao_e_trocado_e_aplicar_de_novo_nao_muda_nada(self):
+        inventado = '<script type="application/ld+json">{"@type": "Plumber", "foundingDate": "1990"}</script>'
+        (self.pasta / "index.html").write_text(pagina_seo(cabeca=inventado), encoding="utf-8")
+        self.aplicar()
+        primeira = (self.pasta / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("foundingDate", primeira)
+        self.assertEqual(primeira.count('<link rel="canonical"'), 1)
+        self.aplicar()
+        self.assertEqual((self.pasta / "index.html").read_text(encoding="utf-8"), primeira)
+
+    def test_robots_sitemap_e_llms(self):
+        import xml.etree.ElementTree as ET
+        self.aplicar(agora=self.s.dt.datetime(2026, 10, 15, 10, tzinfo=self.s.dt.timezone.utc))
+        robots = (self.pasta / "robots.txt").read_text(encoding="utf-8")
+        self.assertIn("User-agent: *\nAllow: /\nDisallow: /raio-x\n", robots)
+        self.assertIn("Sitemap: https://demo-linotec.vercel.app/sitemap.xml", robots)
+        ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        raiz = ET.fromstring((self.pasta / "sitemap.xml").read_bytes())
+        self.assertEqual([u.find("s:loc", ns).text for u in raiz.findall("s:url", ns)], ["https://demo-linotec.vercel.app/"])
+        self.assertEqual(raiz.find("s:url/s:lastmod", ns).text, "2026-10-15")
+        llms = (self.pasta / "llms.txt").read_text(encoding="utf-8")
+        self.assertTrue(llms.startswith("# Linotec - Desentupidora em Maceió\n\n> Desentupidora 24 horas no Tabuleiro"))
+        for trecho in ("- Telefone: +55 82 98722-3239", "- Nota no Google: 4,7 (46 avaliações)",
+                       "segunda-feira: Atendimento 24 horas", "### Vocês atendem de madrugada?",
+                       "- [Linotec - Desentupidora em Maceió](https://demo-linotec.vercel.app/)"):
+            self.assertIn(trecho, llms)
+
+    def test_linha_de_comando_conferir(self):
+        self.aplicar()
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.assertEqual(self.s.main([str(self.pasta), "--conferir", "--url", self.url]), 0)
+        self.assertIn("OK", saida.getvalue())
+        (self.pasta / "index.html").write_text(
+            (self.pasta / "index.html").read_text(encoding="utf-8").replace('"reviewCount": 46', '"reviewCount": 460'),
+            encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.assertEqual(self.s.main([str(self.pasta), "--conferir", "--url", self.url]), 1)
+        self.assertIn("FALHA: diverge da fonte: $.@graph[0].aggregateRating.reviewCount", saida.getvalue())
+
+
+class SeoNoGerador(unittest.TestCase):
+    """O gerador com o seo-do-site instalado: instruções, palco do deploy e o runner que aplica quando o
+    Claude publica sem ele."""
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        self.m = carregar(self.auto)
+        self.pasta = self.auto / "linotec"
+        self.pasta.mkdir()
+        (self.pasta / "content.md").write_text(CONTENT_SEO, encoding="utf-8")
+        (self.pasta / "index.html").write_text(pagina_seo(), encoding="utf-8")
+        self.m.LOGS.mkdir(exist_ok=True)
+        self.log = self.m.LOGS / "x.log"
+        self.palcos = []
+        self.original = self.m.subprocess.run
+        self.addCleanup(setattr, self.m.subprocess, "run", self.original)
+
+        class Saida:
+            stdout, stderr, returncode = "▲ Aliased         https://demo-linotec.vercel.app\n", "", 0
+
+        def run(cmd, cwd=None, **k):
+            if cmd[0] == sys.executable:  # o seo-do-site de verdade, sem rede (sem chave nem cache: sem Places)
+                return self.original(cmd + ["--sem-rede"], cwd=cwd, **k)
+            if "deploy" in cmd:
+                self.palcos.append({n: Path(cwd, n).read_bytes() for n in sorted(os.listdir(cwd))})
+            return Saida()
+        self.m.subprocess.run = run
+
+    def instalar(self):
+        self.m.SEO_DO_SITE = AQUI / "seo-do-site.py"
+
+    def test_instrucoes_so_citam_o_seo_instalado(self):
+        texto = self.m.instrucoes_da_execucao("linotec", Path("/tmp/gerador-x"))
+        self.assertNotIn("seo-do-site", texto)
+        self.assertNotIn("robots.txt /tmp", texto)
+        self.instalar()
+        texto = self.m.instrucoes_da_execucao("linotec", Path("/tmp/gerador-x"))
+        self.assertIn(f"python3 {AQUI / 'seo-do-site.py'} {self.pasta} --url https://demo-linotec.vercel.app --exigir-faq", texto)
+        for nome in ("robots.txt", "sitemap.xml", "llms.txt"):
+            self.assertIn(f"cp {self.pasta}/{nome} {self.m.palco_do_deploy('linotec', Path('/tmp/gerador-x'))}/", texto)
+        self.assertIn('data-fonte', texto)
+
+    def test_deploy_do_runner_aplica_o_seo_e_leva_os_tres_arquivos(self):
+        self.instalar()
+        self.assertTrue(self.m.publicar_na_vercel(self.pasta, self.log))
+        self.assertEqual(sorted(self.palcos[-1]), ["index.html", "llms.txt", "robots.txt", "sitemap.xml"])
+        self.assertIn(b'id="dados-estruturados"', self.palcos[-1]["index.html"])
+
+    def test_claude_publicou_sem_seo_o_runner_aplica_e_republica(self):
+        self.instalar()
+        (self.pasta / "publicado.json").write_text(json.dumps({"site_url": "https://demo-linotec.vercel.app"}))
+        self.m.garantir_seo(self.pasta, self.log)
+        self.assertEqual(len(self.palcos), 1)
+        self.assertIn(b'id="dados-estruturados"', self.palcos[0]["index.html"])
+        self.m.garantir_seo(self.pasta, self.log)  # já tem: nada de outro deploy
+        self.assertEqual(len(self.palcos), 1)
+
+    def test_sem_o_seo_instalado_nada_muda(self):
+        self.assertTrue(self.m.publicar_na_vercel(self.pasta, self.log))
+        self.assertEqual(sorted(self.palcos[-1]), ["index.html"])
+        (self.pasta / "publicado.json").write_text(json.dumps({"site_url": "https://demo-linotec.vercel.app"}))
+        self.m.garantir_seo(self.pasta, self.log)
+        self.assertEqual(len(self.palcos), 1)
 
 
 if __name__ == "__main__":

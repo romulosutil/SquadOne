@@ -295,8 +295,46 @@ pelo Google:
   cada FALHA diz o que cortar. Rode até sair 0. Sem ele instalado, um script python3 no rascunho
   faz a conta dos bytes. Corte o que passar: a imagem feita em SVG custa
   pouco, a foto de celular esticada custa muito.
-  Publicar outros arquivos não é saída: o Raio-X republica só `index.html` e
-  `og.jpg`, e o que mais subisse sumiria no deploy dele.
+  Publicar outros arquivos não é saída: o Raio-X republica só `index.html`,
+  `og.jpg` e os três arquivos do SEO técnico (abaixo), e o que mais subisse
+  sumiria no deploy dele.
+
+### Perguntas frequentes e SEO técnico (15/10/2026)
+
+Quem procura pelo Google, e cada vez mais pelo AI Overviews, ChatGPT ou
+Perplexity, chega à página que tem fato fácil de extrair: dado estruturado e
+pergunta com resposta direta. Até 15/10 os demos só tinham `<title>` e
+`og:image`. É também o que o serviço Encontrado do PRUMO vende, então o demo
+mostra isso pronto.
+
+- **Seção de perguntas.** Antes do Contato, `<section id="perguntas">` com 3 a
+  5 perguntas, cada uma num `<details data-fonte="...">` fechado: o `<summary>`
+  é a pergunta, terminada em "?", e um `<p>` é a resposta. A pergunta sai de um
+  tema das avaliações ou do briefing do `content.md` (quem elogia a rapidez
+  vira "Vocês atendem no mesmo dia?"; quem fala da limpeza, "O serviço deixa
+  sujeira?"), nunca de uma lista genérica do ramo. A resposta é direta na
+  primeira frase e só tem fato com fonte: horário, endereço e nota do Google,
+  o que as avaliações contam (parafraseado, sem aspas, sem nome), o que o
+  Instagram ou o dossiê provam. Sem fonte, a pergunta não entra; nada de
+  promessa, preço inventado nem "garantia".
+- **`data-fonte`** diz de onde veio a resposta: `google`, `avaliacoes`,
+  `instagram`, `facebook`, `cnpj` ou `dossie` (mais de uma, separadas por
+  espaço). Advocacia e saúde: nunca `avaliacoes` (regra dos conselhos, ver
+  "Ramos novos"); lá as perguntas são sobre como funciona o atendimento.
+- **JSON-LD, `robots.txt`, `sitemap.xml` e `llms.txt` não se escrevem à mão.**
+  Depois do `og.jpg` e antes do deploy, roda
+  `python3 ~/.local/bin/seo-do-site <slug> --url https://demo-<slug>.vercel.app --exigir-faq`.
+  Ele põe no `<head>` o LocalBusiness no subtipo do ofício (LegalService,
+  Plumber, Dentist...) e o FAQPage, e grava os três arquivos na pasta. Cada
+  valor vem de uma fonte: nome, telefone e nota do `content.md`; endereço,
+  coordenadas e horário do Google Places; perguntas e respostas do texto da
+  página. A nota (`aggregateRating`) só entra com os números exatos do Google
+  e só se a página os mostra; em advocacia e saúde, nunca. O que não tem fonte
+  fica de fora, e um JSON-LD feito à mão é apagado. Código 1 = cada FALHA diz o
+  que corrigir na seção de perguntas.
+- **Sobem junto** o `robots.txt`, o `sitemap.xml` e o `llms.txt` (ver passo 5).
+  O `seo-places.json` que fica na pasta é cache do Places (até 30 dias) e não
+  sobe.
 
 ### Fotos
 
@@ -533,6 +571,10 @@ nem índice de progresso.
 5. **Contato: "como eu chamo?"** WhatsApp, telefone, endereço com o link do
    Maps, horário; rodapé com dados reais.
 
+Entre a prova e o contato, as **perguntas frequentes** (3 a 5, fechadas em
+`<details>`; regras em "Perguntas frequentes e SEO técnico"): é a parte da
+página que o Google e os assistentes de IA citam.
+
 Sempre: barra de WhatsApp fixa no celular depois que a primeira tela sai de
 vista. **No máximo 6 telas de celular** (o gate avisa acima de 6 e reprova acima de 8). Uma seção
 a mais só entra se responder a uma pergunta real deste negócio (por exemplo
@@ -666,10 +708,11 @@ aprofundam. Nenhuma traz de volta o que a seção "Cara de IA" proíbe.
 produção. Caminho: **Vercel CLI** (`vercel` 53.x, já logado nesta máquina como
 `sutilromulo-5015`). Não use o MCP da Vercel para isso.
 
-**O que sobe: só o `index.html` e o `og.jpg` (a prévia do link no WhatsApp). Nada mais.** A pasta do lead nunca é
+**O que sobe: só o `index.html`, o `og.jpg` (a prévia do link no WhatsApp) e, desde 15/10/2026, o `robots.txt`, o
+`sitemap.xml` e o `llms.txt` do `seo-do-site`. Nada mais.** A pasta do lead nunca é
 publicada — nem com `.vercelignore`. O deploy sai de uma pasta de staging fora
-desta pasta, para onde só o `index.html` é copiado. É lista de permissão, não de
-bloqueio: `content.md`, `Fotos/`, `Logotipo/`, `publicado.json` e qualquer
+desta pasta, para onde só esses arquivos são copiados. É lista de permissão, não de
+bloqueio: `content.md`, `Fotos/`, `Logotipo/`, `publicado.json`, `seo-places.json` e qualquer
 arquivo que apareça depois ficam de fora por construção. E o `.vercel/` que o
 `link` cria fica no staging, não entra nesta pasta.
 
@@ -682,6 +725,7 @@ stage="${TMPDIR:-/tmp}/esteira-deploy/demo-$slug"
 rm -rf "$stage" && mkdir -p "$stage"
 cp ~/auto-site/"$slug"/index.html "$stage"/
 [ -f ~/auto-site/"$slug"/og.jpg ] && cp ~/auto-site/"$slug"/og.jpg "$stage"/
+for f in robots.txt sitemap.xml llms.txt; do [ -f ~/auto-site/"$slug"/$f ] && cp ~/auto-site/"$slug"/$f "$stage"/; done
 cd "$stage"
 vercel link --yes --project "demo-$slug" --scope romulodesigns
 vercel deploy --prod --yes --scope romulodesigns
@@ -816,6 +860,8 @@ objeto 3D, letra gigante, polaroide inclinada, brinquedo.
       segue o shot, e nenhuma seção é uma coluna de celular no meio da tela
 - [ ] O `qa-numerico` saindo 0: bytes, imagens, contraste, título, menu,
       frases, campos, código de teste, WhatsApp, altura, toque e texto miúdo
+- [ ] 3 a 5 perguntas tiradas das avaliações, cada uma com `data-fonte`, e o
+      `seo-do-site --exigir-faq` saindo 0 depois do `og.jpg`
 
 ## Limites
 

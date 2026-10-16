@@ -99,7 +99,10 @@ seus, todos rodados à mão no Dell: `deploy/dell/prumo-mapa/prumo_mapa.test.py`
 (18; "R$" recusado com linha no journal, `[teste]` preservado, pacote ruim não
 derruba os outros), `deploy/dell/backup/backup-dell.test.py` (42, só no Dell por
 causa do `fcntl`; o código de saída do ensaio não muda com fila ausente, estragada ou
-lib que levanta), `deploy/dell/gerador-de-sites.test.py` (93; inclui o `main()` sem
+lib que levanta), `deploy/dell/gerador-de-sites.test.py` (108; desde 15/10/2026 também o `seo-do-site.py`: o JSON-LD
+lido de volta com os campos que o Google pede, campo a mais ou valor mudado reprovado como "sem fonte"/"diverge da
+fonte", nota só quando a página a mostra e nunca em advocacia, pergunta sem `data-fonte` recusada, Places dublado e
+cache de 30 dias, robots/sitemap/llms, e o gerador levando os três arquivos ao palco; inclui o `main()` sem
 login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead de fora do Brasil, o pedido gerado em
 `_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
 (61; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo

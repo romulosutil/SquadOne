@@ -24,6 +24,7 @@
     {"repo": "deploy/dell/site-demos-pausa.py", "instalado": "~/.local/bin/site-demos-pausa"},
     {"repo": "deploy/dell/site-pastas.py", "instalado": "~/.local/bin/site-pastas"},
     {"repo": "deploy/dell/gerador-de-sites.py", "instalado": "~/.local/bin/gerador-de-sites"},
+    {"repo": "deploy/dell/seo-do-site.py", "instalado": "~/.local/bin/seo-do-site"},
     {"repo": "deploy/dell/refero-aprender.py", "instalado": "~/.local/bin/refero-aprender"},
     {"repo": "deploy/dell/folha-de-contato.py", "instalado": "~/.local/bin/folha-de-contato"},
     {"repo": "deploy/dell/dribbble.py", "instalado": "~/.local/bin/dribbble"},

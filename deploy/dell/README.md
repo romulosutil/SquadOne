@@ -1484,6 +1484,23 @@ nenhum dos demos de 03-04/10 tinha `og:image` (o cartão saía sem foto) e 3 de
 Vercel o `index.html` e, se existir, o `og.jpg`; nada mais da pasta (o deploy
 de reserva do runner faz o mesmo).
 
+Desde 15/10/2026 **o demo tem SEO técnico** (`seo-do-site.py`, instalado em
+`~/.local/bin/seo-do-site`). Antes, só `<title>` e `og:image`; agora a página
+tem uma seção de perguntas (`<section id="perguntas">`, 3 a 5 `<details
+data-fonte>` tiradas dos temas das avaliações) e, depois do `og.jpg`, o
+Claude roda `seo-do-site <pasta> --url <demo> --exigir-faq`: JSON-LD
+LocalBusiness (subtipo pelo `Vertical:`) + FAQPage no `<head>`, e
+`robots.txt`, `sitemap.xml` e `llms.txt` na pasta, que sobem junto. Nenhum
+valor é escrito à mão: nome, telefone e nota do `content.md`; endereço
+estruturado, coordenadas e horário do Places (um pedido por lead, cache
+`seo-places.json` de 30 dias, a chave do raio-x); perguntas do texto visível.
+`aggregateRating` só com a nota exata, só se a página a mostra e nunca em
+advocacia ou saúde. `seo-do-site <pasta> --conferir` refaz o esperado e acusa
+campo sem fonte ou diferente da fonte. Se o Claude publicar sem rodar, o
+runner aplica e republica (`garantir_seo`); o deploy de reserva aplica antes
+de subir; o Raio-X leva os três arquivos de novo no deploy dele. Demo antigo
+não é regerado: ganha o SEO só num refazer.
+
 Também desde 05/10/2026 **lead de busca pausada não é gerado**: o "06 · Funil
 semanal" lista em `nao_gerar` (`~/.local/share/n8n-estado/site-funil.json`) os
 leads `novo` cuja busca está com `ativa` desligada (pausada por ele ou pelo
@@ -1550,8 +1567,9 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
   timer, mais o gancho do gerador) fica dentro do grátis, e o cache impede pagar
   duas vezes no mesmo mês. PageSpeed ficou de fora: o Caçador só deixa passar
   quem não tem site próprio no ar, então não há site para medir.
-- **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` +
-  `raio-x/index.html`. Antes, o `index.html` e o `og.jpg` da pasta são
+- **Publicação.** Um deploy a mais por lead: `index.html` + `og.jpg` (+
+  `robots.txt`, `sitemap.xml` e `llms.txt` do SEO técnico, quando o demo os tem) +
+  `raio-x/index.html`. Antes, o `index.html` e o `og.jpg` (e os do SEO) da pasta são
   comparados byte a byte com o que está no ar e são esses bytes que sobem; se
   diferem, nada sobe (o Raio-X nunca troca o demo). O `vercel link` tem de ligar
   o palco ao `vercel_project` do recibo (sem isso, `vercel deploy` criaria um
