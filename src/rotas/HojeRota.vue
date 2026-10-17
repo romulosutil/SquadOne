@@ -10,7 +10,7 @@
  *     CRM viram uma linha que abre Vendas;
  *  2. os próximos compromissos (os 3 primeiros da agenda dos agentes);
  *  3. o time: uma linha por squad, com texto e só com fonte (a Mochila da
- *     ativa e o /api/time de todas);
+ *     ativa e o /api/time de todas); só no perfil app desde 17/10/2026 (AC-18);
  *  4. a linha do funil (o resumo do CRM, que abre /crm);
  *  5. o que resolve sozinho, fechado.
  */
@@ -159,6 +159,9 @@ const hora = (iso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit'
 
 // ---------------------------------------------------------------- 3. time
 
+// Só no perfil app (AC-18): no operations a Hoje é a venda, e o bloco do time era só ruído ali.
+const mostraOTime = computed(() => agentes.value && !ops.value)
+
 // O time de TODAS as squads ativas, de uma leitura só no servidor (um
 // events.list por calendário, cache de 60 s lá). A Mochila das outras squads
 // não é lida aqui: seriam N leituras por domínio só para uma linha de texto.
@@ -245,7 +248,8 @@ function lerFontesDaHoje() {
     void lerFinancas()
     void lerFunil()
   }
-  if (agentes.value) void lerTime()
+  // Sem o bloco, sem a leitura: /api/time faz um events.list por calendário.
+  if (mostraOTime.value) void lerTime()
 }
 
 onMounted(() => {
@@ -374,8 +378,10 @@ onBeforeUnmount(() => {
       </template>
     </section>
 
-    <!-- 3. Time (só com os agentes neste processo: sem eles era um bloco que dizia "sem sinal"). -->
-    <section v-if="agentes" class="hoje__bloco" aria-labelledby="hoje-time">
+    <!-- 3. Time (só com os agentes neste processo: sem eles era um bloco que dizia "sem sinal").
+         No Dell sai da Hoje (AC-18, 17/10/2026): quatro squads com "Agenda livre" não decidem nada
+         na tela da venda; o Escritório continua a um toque (trilho lateral e Mais). -->
+    <section v-if="mostraOTime" class="hoje__bloco" aria-labelledby="hoje-time">
       <div class="hoje__cabeca hoje__cabeca--linha">
         <h2 id="hoje-time">Time</h2>
         <a v-if="agentes" class="hoje__mais" href="/squadone">Abrir o escritório</a>

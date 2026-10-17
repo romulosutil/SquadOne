@@ -643,7 +643,8 @@ export function createOperationsRouter(options: {
   // O "Enviei" e o "Pular" da fila de venda (16/10/2026, OT-01): uma memória para a Próxima venda em
   // qualquer navegador e para o vendedor do Telegram (o mesmo arquivo). Não é funil: só a ordem do dia.
   // Desde 17/10/2026 (AC-06) o GET devolve também por onde cada ação se resolveu, as anotações já
-  // feitas (uma por ação + tipo) e os primeiros contatos do dia das duas superfícies (a trava de ritmo).
+  // feitas (uma por ação + tipo) e os primeiros contatos do dia das duas superfícies (a trava de ritmo),
+  // e (AC-21) os leads liberados fora do expediente.
   const memoriaDaVenda = options.memoriaDaVenda ?? criarMemoriaDaVenda(path.join(options.dataDir, "venda-do-dia.json"));
   router.get("/crm/venda", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -677,6 +678,21 @@ export function createOperationsRouter(options: {
       res.json(await memoriaDaVenda.primeiroContato(leadId, "central"));
     } catch (error) {
       console.error("[venda] primeiro contato não gravou:", error);
+      res.status(500).json({ error: "Não deu para guardar agora." });
+    }
+  });
+  // O "Liberar" fora do expediente (17/10/2026, AC-21): um só, para a Próxima venda, a Triagem e a
+  // Ficha, em qualquer aba, até a meia-noite de SP. Só destrava o link na tela (o toque segue sendo do
+  // Rômulo); o ritmo não passa por aqui e nunca se libera. Devolve o dia, como os outros POST.
+  router.post("/crm/venda/liberar", express.json({ limit: "4kb" }), async (req, res) => {
+    const { leadId } = (req.body ?? {}) as { leadId?: unknown };
+    if (typeof leadId !== "string" || !/^[A-Za-z0-9_:.-]{1,200}$/.test(leadId)) {
+      return void res.status(400).json({ error: "Diga o lead a liberar." });
+    }
+    try {
+      res.json(await memoriaDaVenda.liberar(leadId));
+    } catch (error) {
+      console.error("[venda] liberar não gravou:", error);
       res.status(500).json({ error: "Não deu para guardar agora." });
     }
   });

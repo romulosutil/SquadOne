@@ -10,8 +10,14 @@
  * nesta tela: o funil continua sendo a planilha (RULES 11).
  *
  * Fora do expediente, o primeiro contato espera como nas telas do CRM (OT-02, 16/10/2026): a mesma
- * janela (trava-de-horario.ts), o mesmo aviso com a taxa medida e o mesmo "Liberar" por lead, só
- * nesta visita (memória, nunca localStorage). O ritmo continua sem "Liberar".
+ * janela (trava-de-horario.ts), o mesmo aviso com a taxa medida e o mesmo "Liberar" por lead. Desde
+ * 17/10/2026 (AC-21) o "Liberar" é um só, do dia, guardado no servidor (liberados.ts): vale na
+ * Triagem e na Ficha, e recarregar não trava de novo. O ritmo continua sem "Liberar".
+ *
+ * 17/10/2026 (AC-16): no celular o botão do WhatsApp ficava em y≈761 de 844, colado na barra, depois da
+ * citação, do "Como" e do rascunho. Agora vem logo depois do porquê; a mensagem fica em "Ver a
+ * mensagem", aberta a partir de 64 rem (no desktop ela segue à vista antes do toque) e fechada abaixo.
+ * O filtro de nicho só aparece com mais de um nicho de verdade (a mesma palavra é um nicho só).
  *
  * A fila única (OT-01, 16/10/2026): o "Enviei" e o "Pular" vão ao servidor (GET/POST
  * /api/operations/crm/venda, o mesmo arquivo do vendedor do Telegram), então valem em qualquer
@@ -33,11 +39,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
 import {
-  filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, noExpedienteDeVenda,
+  filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, nichosDoPrimeiro, noExpedienteDeVenda,
   resumoDaFila, resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
 } from './proxima-venda'
+import { absorverDia, liberadosDoDia as liberados, liberarLead } from './liberados'
 import { avisoDeHorario } from './resultados'
-import { liberarEnvio, ROTULO_DE_LIBERAR, type EnviosLiberados } from './trava-de-horario'
+import { ROTULO_DE_LIBERAR } from './trava-de-horario'
 import {
   gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, textoDoRitmo, type PrimeirosContatos,
 } from './trava-de-ritmo'
@@ -76,10 +83,16 @@ const falha = ref<{ leadId: string; texto: string } | null>(null)
 /** As sugestões que o copiloto fez sozinho para a conversa de agora (leadId -> mensagem). */
 const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
-/** Leads liberados fora do expediente nesta visita (o "Liberar" da trava de horário). */
-const liberados = ref<EnviosLiberados>(new Set())
-/** Primeiro contato de um nicho só; vazio = todos. */
+/** Primeiro contato de um nicho só (a chave de chaveDoNicho); vazio = todos. */
 const nicho = ref('')
+/**
+ * A mensagem aberta a partir de 64 rem (o desktop vê o texto antes do toque) e fechada no celular,
+ * onde ela empurrava o botão para baixo da dobra. O toque do Rômulo vale até a tela mudar de largura.
+ */
+const LARGO = '(min-width: 64rem)'
+const mensagemAberta = ref(false)
+let largura: MediaQueryList | null = null
+const aoMudarLargura = (e: MediaQueryListEvent) => { mensagemAberta.value = e.matches }
 /** "Vídeo enviado" do braço com vídeo (A/B do vídeo): lembrado neste navegador por 30 min. */
 const videos = ref<EnviosAbertos>({})
 
@@ -99,6 +112,7 @@ function lerDia(corpo: { resolvidas?: Record<string, { em: number; pulou: boolea
     gravarResolvidas()
   }
   if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+  absorverDia(corpo)
 }
 
 async function lerSugestoes() {
@@ -127,6 +141,11 @@ onMounted(() => {
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   lerResolvidas()
   videos.value = lerVideos(armazenamento(), Date.now())
+  try {
+    largura = window.matchMedia(LARGO)
+    mensagemAberta.value = largura.matches
+    largura.addEventListener('change', aoMudarLargura)
+  } catch { mensagemAberta.value = true /* sem matchMedia: à vista, como era */ }
   void lerDoServidor()
   void lerSugestoes()
   relogio = window.setInterval(() => {
@@ -135,7 +154,10 @@ onMounted(() => {
     void lerDoServidor()
   }, 30_000)
 })
-onBeforeUnmount(() => window.clearInterval(relogio))
+onBeforeUnmount(() => {
+  window.clearInterval(relogio)
+  largura?.removeEventListener('change', aoMudarLargura)
+})
 
 // O retrato mais os primeiros do servidor (as duas superfícies) e o reforço local, um por lead.
 const ritmo = computed(() => ritmoDoEnvio(
@@ -160,19 +182,17 @@ const candidatoForaDoExpediente = computed<AcaoDeVenda | null>(() => {
   const comoSeAberto = filaDeVenda(props.visao, { primeiroLiberado: true, agora: agora.value }, pulados.value)
   return comoSeAberto.find((a) => a.primeiroContato && !feitos.value.has(a.chave) && !liberados.value.has(a.leadId)) ?? null
 })
-function liberar(a: AcaoDeVenda) {
-  liberados.value = liberarEnvio(liberados.value, a.leadId)
-  status.value = `${a.empresa}: liberado fora do expediente nesta visita.`
+async function liberar(a: AcaoDeVenda) {
+  status.value = `${a.empresa}: liberado fora do expediente hoje, em toda tela.`
+  if (!(await liberarLead(a.leadId))) status.value = `${a.empresa}: liberado só nesta aba (o servidor não guardou).`
 }
 const porId = computed(() => new Map((props.visao?.leads ?? []).map((l) => [l.id, l])))
-/** Os nichos de quem espera o primeiro contato, do que tem mais para o que tem menos. */
-const nichos = computed(() => {
-  const conta = new Map<string, number>()
-  for (const i of props.visao?.hoje.find((g) => g.id === 'enviar')?.itens ?? []) {
-    const lead = porId.value.get(i.leadId)
-    if (lead) conta.set(nichoDo(lead), (conta.get(nichoDo(lead)) ?? 0) + 1)
-  }
-  return [...conta].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+/** Os nichos de quem espera o primeiro contato (um por palavra, sem caixa nem acento), do maior para o menor. */
+const nichos = computed(() => nichosDoPrimeiro((props.visao?.hoje.find((g) => g.id === 'enviar')?.itens ?? [])
+  .flatMap((i) => { const lead = porId.value.get(i.leadId); return lead ? [nichoDo(lead)] : [] })))
+// O filtro escondido não pode seguir valendo: sobrou um nicho só, ou o escolhido saiu da fila, volta a "todos".
+watch(nichos, (lista) => {
+  if (nicho.value && (lista.length < 2 || !lista.some((n) => n.chave === nicho.value))) nicho.value = ''
 })
 const atual = computed(() => fila.value[0] ?? null)
 const leadAtual = computed(() => (atual.value ? porId.value.get(atual.value.leadId) ?? null : null))
@@ -311,27 +331,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
         </p>
         <h2 id="venda-titulo">{{ atual.titulo }}</h2>
         <p class="venda__porque">{{ atual.porque }}</p>
-        <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
-        <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
-        <!-- "Como:" sempre (AC-12): o título já é a frase da ação (fraseDaAcao), a mesma do "Agora" da Ficha. -->
-        <p class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
 
-        <figure v-if="atual.rascunho" class="venda__rascunho">
-          <figcaption class="texto-2 texto-pequeno">
-            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
-            <template v-else>Mensagem pronta (revise antes de enviar)</template>
-          </figcaption>
-          <blockquote>{{ atual.rascunho }}</blockquote>
-          <template v-if="atual.copiloto?.padrao">
-            <button type="button" class="botao botao--leve venda__padrao" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
-              {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
-            </button>
-            <blockquote v-if="verPadrao" class="is-padrao">{{ atual.copiloto.padrao }}</blockquote>
-          </template>
-        </figure>
-        <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. A colinha da ficha ajuda.</p>
-
-        <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
+        <!-- O primário logo depois do porquê (AC-16): no celular ele ficava embaixo de tudo, colado na barra. -->
         <div class="venda__botoes">
           <template v-if="atual.tipo === 'desfecho'">
             <button type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
@@ -343,10 +344,34 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           >{{ atual.rascunho ? 'Abrir no WhatsApp com a mensagem' : 'Abrir a conversa no WhatsApp' }} <span aria-hidden="true">↗</span></a>
           <button v-if="passoDoVideoAtual && videoPendente && tocado === atual.chave" type="button" class="botao" @click="marcarOVideo">Vídeo enviado</button>
           <button v-if="tocado === atual.chave" type="button" class="botao" @click="resolver(atual, false)">Enviei, próxima</button>
-          <button v-if="atual.rascunho" type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
           <a class="botao botao--leve" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Ficha</a>
           <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Pular</button>
         </div>
+
+        <!-- A mensagem que o botão abre: dobrada no celular, aberta a partir de 64 rem (no desktop ela
+             continua à vista antes do toque). O "Copiar" mora com ela. -->
+        <details v-if="atual.rascunho" class="dobra venda__rascunho" :open="mensagemAberta" @toggle="mensagemAberta = ($event.target as HTMLDetailsElement).open">
+          <summary>Ver a mensagem <span class="texto-2 texto-pequeno">{{ atual.copiloto ? '(sugestão do copiloto)' : '(pronta)' }}</span></summary>
+          <p class="texto-2 texto-pequeno">
+            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
+            <template v-else>Mensagem pronta (revise antes de enviar)</template>
+          </p>
+          <blockquote>{{ atual.rascunho }}</blockquote>
+          <div class="venda__botoes">
+            <button type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
+            <button v-if="atual.copiloto?.padrao" type="button" class="botao botao--leve" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
+              {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
+            </button>
+          </div>
+          <blockquote v-if="atual.copiloto?.padrao && verPadrao" class="is-padrao">{{ atual.copiloto.padrao }}</blockquote>
+        </details>
+        <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. A colinha da ficha ajuda.</p>
+
+        <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
+        <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
+        <!-- "Como:" sempre (AC-12): o título já é a frase da ação (fraseDaAcao), a mesma do "Agora" da Ficha. -->
+        <p class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
+        <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
       </article>
 
       <p v-if="depois.length" class="venda__depois">
@@ -372,7 +397,7 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     <label v-if="nichos.length > 1" class="venda__nicho" for="venda-nicho">Primeiro contato de
       <select id="venda-nicho" v-model="nicho">
         <option value="">todos os nichos</option>
-        <option v-for="[n, q] in nichos" :key="n" :value="n">{{ n }} ({{ q }})</option>
+        <option v-for="n in nichos" :key="n.chave" :value="n.chave">{{ n.rotulo }} ({{ n.quantos }})</option>
       </select>
     </label>
     <p v-if="candidatoForaDoExpediente" class="venda__botoes">
@@ -392,7 +417,6 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__porque { color: var(--texto); }
 .venda__conversa { padding: var(--esp-2) var(--esp-3); border-left: var(--faixa) solid var(--borda); border-radius: var(--raio-controle); background: var(--superficie-2); overflow-wrap: anywhere; }
 .venda__conversa.is-sem { background: var(--atencao-fundo); }
-.venda__padrao { justify-self: start; }
 .venda__rascunho blockquote.is-padrao { border-left-color: var(--borda); background: var(--superficie-2); }
 .venda__tatica { padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); }
 .venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }

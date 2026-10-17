@@ -15,7 +15,8 @@ import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroCont
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
-import { acaoDoLead, agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
+import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
+import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
 // desfecho: ganhou, perdeu, proposta, com o desfazer de cada um; no Plus o envio e a resposta) e
@@ -24,7 +25,8 @@ import { acaoDoLead, agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, 
 // CrmPanel (14/10/2026). Desde 17/10/2026 (AC-08) o desfecho é da faixa "Desfecho": a página do lead
 // do n8n (fluxo 07) virou só um lugar a mais para abrir; a Etapa do PRUMO muda na planilha.
 // `aviso`/`liberados` (trava-de-horario.ts): fora do expediente, enviar a primeira mensagem, o
-// convite e o reenvio do só-robô esperam o "Liberar" deste lead, como na Hoje e no Funil.
+// convite e o reenvio do só-robô esperam o "Liberar" deste lead, como na Hoje e no Funil. Desde
+// 17/10/2026 (AC-21) é o "Liberar" do dia, guardado no servidor (liberados.ts): o mesmo da Próxima venda.
 // `anotados`/`falhaDaAnotacao` (anotacao-de-envio.ts): o toque na 2ª mensagem ou no follow-up anota
 // o envio pelo CrmPanel, em segundo plano; a ficha mostra a marca ou o pedido de anotar à mão.
 //
@@ -153,8 +155,14 @@ const sugestaoDaFila = computed<SugestaoDeVenda | undefined>(() => {
  * o horário e o ritmo deixassem: a Ficha diz o que fazer, as travas dizem quando. Sem ação, o "Agora"
  * diz que não há nada e por quê (agoraDaFicha); a jornada só mostra a posição, lá embaixo.
  */
+// O primeiro contato de um lead Novo sai daqui (AC-22, primeiro-da-ficha.ts), com as travas da
+// Próxima venda: o "Liberar" do dia (`liberados`, o mesmo do cartão) e o ritmo (`ritmo`, que o
+// CrmPanel conta com /crm/venda/primeiro). Fora da Hoje (o Plus depois dos 10), a frase é a da fila.
+const primeiroDaFicha = computed(() => primeiroContatoDaFicha(props.lead, {
+  foraDoExpediente: Boolean(props.aviso), liberado: props.liberados.has(props.lead.id), ritmo: props.ritmo,
+}))
 const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
-  ? acaoDoLead(props.visao, props.lead.id, Date.now(), sugestaoDaFila.value)
+  ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
 const agora = computed(() => agoraDaFicha(props.lead, acaoDaFila.value))
 
@@ -194,7 +202,13 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   return todas.flatMap(([chave, rotulo, href, principal, anota]) => (href ? [{ chave, rotulo, href, principal, anota }] : []))
     // Primeiro contato fora do expediente (envio, convite, reenvio do só-robô): some até o "Liberar".
     // Com a trava de ritmo segurando, some também, e sem "Liberar" (o aviso diz até quando).
-    .filter((a) => !((travado.value || segurado.value) && ehPrimeiroContato(props.lead, a.href)))
+    // O de um lead Novo fica (AC-22): é o primário, desabilitado com o motivo ao lado.
+    .filter((a) => a.chave === primeiroDaFicha.value?.chave || !((travado.value || segurado.value) && ehPrimeiroContato(props.lead, a.href)))
+})
+/** O primário é o primeiro contato do Novo e as travas seguram: botão desabilitado, motivo ao lado. */
+const primarioTravado = computed(() => {
+  const p = primeiroDaFicha.value
+  return p && !p.pode && primaria.value?.chave === p.chave ? p : null
 })
 const temPrimeiroContato = computed(() => linksDePrimeiroContato(props.lead).length > 0)
 const segurado = computed(() => props.ritmo.motivo !== null && temPrimeiroContato.value)
@@ -507,7 +521,14 @@ function irParaAnotar() {
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
     <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
-      <a class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
+      <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, com o motivo curto ao lado; o
+           "Liberar" aparece só quando o horário é o que segura (o ritmo não se libera). -->
+      <template v-if="primarioTravado">
+        <button class="botao botao--primario" type="button" disabled aria-describedby="crm-ficha-motivo">{{ primarioTravado.rotulo }}</button>
+        <button v-if="primarioTravado.pedeLiberar" type="button" class="botao" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
+        <p id="crm-ficha-motivo" class="crm-muted crm-ficha__motivo">{{ primarioTravado.motivo }}.</p>
+      </template>
+      <a v-else class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
       <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
     </div>
 
@@ -520,9 +541,10 @@ function irParaAnotar() {
 
       <!-- Os avisos num lugar só, um por linha, com a palavra antes da cor. -->
       <ul v-if="temAvisos" class="crm-ficha__avisos">
+        <!-- Com o primário travado, o "Liberar" já está ao lado dele: aqui fica só o porquê (a taxa medida). -->
         <li v-if="travado" class="is-atencao">
           {{ aviso }}
-          <button type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
+          <button v-if="!primarioTravado?.pedeLiberar" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
         </li>
         <li v-if="segurado" class="is-atencao" role="status">{{ textoDoRitmo(ritmo) }}</li>
         <li v-if="lead.plus?.fixo" class="is-atencao">Telefone fixo: confira se tem WhatsApp antes de enviar.</li>
@@ -739,3 +761,8 @@ function irParaAnotar() {
     </div>
   </article>
 </template>
+
+<style>
+/* O motivo do primeiro contato travado (AC-22): linha inteira, embaixo dos botões. */
+.crm-ficha__motivo { flex: 1 1 100%; margin: 0; }
+</style>

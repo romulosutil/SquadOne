@@ -14,6 +14,12 @@ import path from "node:path";
  * contatos do dia, venham de onde vierem: a trava de ritmo contava dois montes separados
  * (localStorage da Central e vendedor.json) e dava para passar do teto somando os dois.
  *
+ * 17/10/2026 (AC-21): também os leads liberados fora do expediente (o "Liberar" da trava de
+ * horário). Eram três estados de tela (a Próxima venda, a Triagem e a Ficha, só em memória): liberar
+ * num lugar não valia no outro, e recarregar a página travava de novo o que já se tinha decidido.
+ * Vale até a meia-noite de SP, como o resto: liberar é uma decisão do dia, não do lead. O vendedor
+ * do Telegram não lê daqui: fora do expediente ele não avisa nada, liberado ou não.
+ *
  * Não é estado do funil (RULES 11: a planilha é a verdade): é só quem está trabalhando a fila hoje.
  * Vira o dia (São Paulo), zera. Arquivo 600 no diretório de dados do operations.
  */
@@ -52,6 +58,8 @@ export interface VendaDoDia {
   anotadas: Record<string, Anotada[]>;
   /** leadId -> o primeiro contato de hoje: o primeiro toque vale, repetir não conta de novo. */
   primeiros: Record<string, PrimeiroDoDia>;
+  /** leadId -> o instante do "Liberar" fora do expediente; o primeiro toque vale. */
+  liberados: Record<string, number>;
 }
 
 export const MAX_CHAVE = 300;
@@ -68,11 +76,12 @@ const objeto = (x: unknown): x is Record<string, unknown> => Boolean(x) && typeo
 /**
  * PURO: o lido, se é de hoje e legível; senão um dia novo e vazio. Tolerante ao formato de 16/10
  * (`{ dia, resolvidas: { k: { em, pulou } } }`, que pode estar na Mel hoje): sem `como`, sai do
- * `pulou`; sem `anotadas`/`primeiros`, vazios. Item ilegível sai sozinho, sem derrubar o resto.
+ * `pulou`; sem `anotadas`/`primeiros`/`liberados` (o de antes de 17/10), vazios. Item ilegível sai
+ * sozinho, sem derrubar o resto.
  */
 export function vendaDoDia(lido: unknown, agora: number): VendaDoDia {
   const hoje = diaSP(agora);
-  const vazio: VendaDoDia = { dia: hoje, resolvidas: {}, anotadas: {}, primeiros: {} };
+  const vazio: VendaDoDia = { dia: hoje, resolvidas: {}, anotadas: {}, primeiros: {}, liberados: {} };
   if (!objeto(lido) || lido.dia !== hoje || !objeto(lido.resolvidas)) return vazio;
   for (const [chave, r] of Object.entries(lido.resolvidas)) {
     if (!chaveBoa(chave) || !objeto(r) || !Number.isFinite(r.em)) continue;
@@ -94,6 +103,11 @@ export function vendaDoDia(lido: unknown, agora: number): VendaDoDia {
       if (chaveBoa(leadId) && objeto(p) && Number.isFinite(p.em) && SUPERFICIES.includes(p.por as Superficie)) {
         vazio.primeiros[leadId] = { em: Number(p.em), por: p.por as Superficie };
       }
+    }
+  }
+  if (objeto(lido.liberados)) {
+    for (const [leadId, em] of Object.entries(lido.liberados)) {
+      if (chaveBoa(leadId) && typeof em === "number" && Number.isFinite(em)) vazio.liberados[leadId] = em;
     }
   }
   return vazio;
@@ -134,12 +148,24 @@ export function marcarPrimeiroDoDia(v: VendaDoDia, leadId: string, por: Superfic
   return { ...v, primeiros: podar({ ...v.primeiros, [leadId]: { em: agora, por } }, (p) => p.em) };
 }
 
+/**
+ * PURO: o "Liberar" fora do expediente de um lead, hoje. Idempotente: liberar de novo (outra aba,
+ * a Ficha depois da Próxima venda) devolve o mesmo dia, com o instante do primeiro toque.
+ */
+export function liberar(v: VendaDoDia, leadId: string, agora: number): VendaDoDia {
+  if (!chaveBoa(leadId)) throw new Error("lead inválido");
+  if (v.liberados[leadId] !== undefined) return v;
+  return { ...v, liberados: podar({ ...v.liberados, [leadId]: agora }, (em) => em) };
+}
+
 export type ResultadoDaAnotacao = { anotou: true; dia: VendaDoDia } | { anotou: false; jaEstava: true; dia: VendaDoDia };
 
 export interface MemoriaDaVenda {
   ler(): Promise<VendaDoDia>;
   resolver(chave: string, como: ComoResolveu, por: PorOnde): Promise<VendaDoDia>;
   primeiroContato(leadId: string, por: Superficie): Promise<VendaDoDia>;
+  /** O "Liberar" fora do expediente (só a Central: o Telegram não avisa fora dele). */
+  liberar(leadId: string): Promise<VendaDoDia>;
   /**
    * A anotação no CRM de uma ação, uma vez por chave + tipo no dia. `registrar` (o POST à aba CRM)
    * só roda se ainda não saiu; falhou, nada é marcado e o erro sobe para quem tocou.
@@ -175,6 +201,11 @@ export function criarMemoriaDaVenda(arquivo: string, agora: () => number = Date.
     primeiroContato: (leadId, por) => emSerie(async () => {
       const antes = await ler();
       const depois = marcarPrimeiroDoDia(antes, leadId, por, agora());
+      return depois === antes ? antes : gravar(depois);
+    }),
+    liberar: (leadId) => emSerie(async () => {
+      const antes = await ler();
+      const depois = liberar(antes, leadId, agora());
       return depois === antes ? antes : gravar(depois);
     }),
     // Dentro da fila: o "ainda não saiu?", o POST e a marca são um passo só. Fora dela, a Central e o

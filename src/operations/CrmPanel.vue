@@ -16,7 +16,7 @@ import {
 import { gravarEnvios, lerEnvios, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import { filaDaTela, lerResolvidas, noExpedienteDeVenda, type ResumoDoDia } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
-import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
+import { absorverDia, liberadosDoDia, liberarLead } from './liberados'
 import {
   gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, type EstadoDoRitmo, type PrimeirosContatos,
 } from './trava-de-ritmo'
@@ -52,9 +52,10 @@ const etapaEmFoco = ref<CrmEtapa | null>(null)
 // as salas do Escritório abrem o Funil já num passo.
 const passo = ref<FiltroDePasso>('')
 const envios = ref<EnviosAbertos>({})
-// Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts):
-// só em memória, de propósito. Recarregou a página ou voltou o expediente, o ciclo recomeça.
-const liberados = ref<EnviosLiberados>(new Set())
+// Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts).
+// Desde 17/10/2026 (AC-21) um só para a Central, guardado no servidor até a meia-noite (liberados.ts):
+// liberar na Próxima venda vale na Triagem e na Ficha, e recarregar não trava de novo.
+const liberados = liberadosDoDia
 // Trava de ritmo (trava-de-ritmo.ts, 15/10/2026): os toques de primeiro contato desta tela, até o
 // retrato confirmar. Sem "Liberar": o que ela segura é a pressa de esvaziar a fila.
 // Desde 17/10/2026 (AC-06) a fonte é o servidor (venda-do-dia.json, que a Próxima venda e o vendedor
@@ -67,6 +68,7 @@ async function lerPrimeirosDoServidor() {
     if (!r.ok) return
     const corpo = await r.json() as { primeiros?: Record<string, { em: number }> }
     if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+    absorverDia(corpo)
   } catch { /* sem servidor: o retrato e o reforço local */ }
 }
 // O toque em "Mandar o link"/"Mandar o follow-up" anota o envio (anotacao-de-envio.ts); a marca
@@ -185,9 +187,10 @@ function marcarPrimeiroContato(id: string) {
   }).catch(() => undefined)
 }
 
-function liberar(id: string) {
-  liberados.value = liberarEnvio(liberados.value, id)
-  anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: envio liberado fora do expediente.`
+async function liberar(id: string) {
+  const empresa = porId.value.get(id)?.empresa ?? 'Lead'
+  anuncio.value = `${empresa}: envio liberado fora do expediente.`
+  if (!(await liberarLead(id))) anuncio.value = `${empresa}: envio liberado só nesta aba (o servidor não guardou).`
 }
 
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).

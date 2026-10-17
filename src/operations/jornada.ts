@@ -375,7 +375,8 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
     case 'raio-x':
       return lead.sinal === 'publicado'
         ? { acao: 'Esperar o Balcão marcar "pronto", de hora em hora', quem: 'robô' }
-        : { acao: 'Mandar a primeira mensagem pela Próxima venda', quem: 'você', quando: 'no expediente, no ritmo da trava' }
+        // A Ficha tem o próprio botão (AC-22, 17/10/2026): "pela Próxima venda" mandava para outro lugar.
+        : { acao: 'Mandar a primeira mensagem', quem: 'você', quando: 'no expediente, no ritmo da trava' }
     case 'primeiro-contato':
       if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
       return {

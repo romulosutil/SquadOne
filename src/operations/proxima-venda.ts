@@ -102,7 +102,7 @@ export interface ContextoDaVenda {
    */
   liberados?: ReadonlySet<string>
   ritmoLivre?: boolean
-  /** Primeiro contato só deste nicho (o filtro que era da folha "Enviar um por um", OT-01). */
+  /** Primeiro contato só deste nicho (o filtro que era da folha "Enviar um por um", OT-01); compara por chaveDoNicho. */
   nichoDoPrimeiro?: string
   /** Relógio (ms) para o "o que achou?"; ausente, esse passo não entra. */
   agora?: number
@@ -259,6 +259,36 @@ const ORDEM_DOS_GRUPOS: Array<[CrmGrupoHojeId, TipoDeVenda]> = [
 
 /** O nicho como o filtro mostra: vazio vira "Sem nicho" (o mesmo de fila-de-envio.ts). */
 export const nichoDo = (lead: Pick<CrmLead, 'nicho'>) => lead.nicho.trim() || 'Sem nicho'
+
+/**
+ * PURO (17/10/2026, AC-16): a chave de comparação do nicho. A planilha traz o mesmo nicho escrito de
+ * jeitos diferentes ("Pilates", "pilates ", "Pilátes"), e o filtro mostrava cada grafia como uma opção.
+ * Sem caixa, sem acento, espaços colapsados: a mesma palavra é um nicho só.
+ */
+export function chaveDoNicho(nicho: string): string {
+  return nicho.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() || 'sem nicho'
+}
+
+export interface NichoDaFila { chave: string; rotulo: string; quantos: number }
+
+/**
+ * PURO. Os nichos de quem espera o primeiro contato, um por chave (chaveDoNicho), do que tem mais para
+ * o que tem menos. O rótulo é a grafia mais comum (empate: a primeira que apareceu).
+ */
+export function nichosDoPrimeiro(nichos: readonly string[]): NichoDaFila[] {
+  const porChave = new Map<string, { quantos: number; grafias: Map<string, number> }>()
+  for (const n of nichos) {
+    const chave = chaveDoNicho(n)
+    const g = porChave.get(chave) ?? { quantos: 0, grafias: new Map<string, number>() }
+    const grafia = n.trim().replace(/\s+/g, ' ') || 'Sem nicho'
+    g.quantos++
+    g.grafias.set(grafia, (g.grafias.get(grafia) ?? 0) + 1)
+    porChave.set(chave, g)
+  }
+  return [...porChave].map(([chave, g]) => ({
+    chave, quantos: g.quantos, rotulo: [...g.grafias].reduce((a, b) => (b[1] > a[1] ? b : a))[0],
+  })).sort((a, b) => b.quantos - a.quantos || a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
+}
 
 const ROTULO_CURTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
 
@@ -439,7 +469,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       if ((tipo === 'responder' || tipo === 'followup') && comDesfecho.has(lead.id)) continue
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
-      if (acao.primeiroContato && ctx.nichoDoPrimeiro && nichoDo(lead) !== ctx.nichoDoPrimeiro) continue
+      if (acao.primeiroContato && ctx.nichoDoPrimeiro && chaveDoNicho(nichoDo(lead)) !== chaveDoNicho(ctx.nichoDoPrimeiro)) continue
       if (acao.primeiroContato) {
         const pode = ctx.primeiroLiberado
           || podeMandarPrimeiroContato({ noExpediente: false, liberado: Boolean(ctx.liberados?.has(lead.id)), ritmoLivre: Boolean(ctx.ritmoLivre) })

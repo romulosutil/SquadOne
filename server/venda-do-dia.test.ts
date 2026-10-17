@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { anotar, criarMemoriaDaVenda, jaAnotada, marcarPrimeiroDoDia, resolver, vendaDoDia } from "./venda-do-dia.ts";
+import { anotar, criarMemoriaDaVenda, jaAnotada, liberar, marcarPrimeiroDoDia, resolver, vendaDoDia } from "./venda-do-dia.ts";
 import { leituraDoTesteDoRecibo, MINIMO_POR_BRACO_DO_RECIBO } from "../src/operations/ab-recibo.ts";
 import { instantesDePrimeiroContato, ritmoDoEnvio, somarPrimeiros } from "../src/operations/trava-de-ritmo.ts";
 
@@ -14,7 +14,7 @@ describe("memória da venda do dia", () => {
 
   it("vira o dia (São Paulo), zera; lixo é descartado", () => {
     assert.deepEqual(vendaDoDia({ dia: "2026-10-15", resolvidas: { a: { em: 1, pulou: false } } }, AGORA),
-      { dia: "2026-10-16", resolvidas: {}, anotadas: {}, primeiros: {} });
+      { dia: "2026-10-16", resolvidas: {}, anotadas: {}, primeiros: {}, liberados: {} });
     const lido = vendaDoDia({ dia: "2026-10-16", resolvidas: { a: { em: 1, pulou: true }, b: { em: "x", pulou: true }, "": { em: 1, pulou: false } } }, AGORA);
     assert.deepEqual(Object.keys(lido.resolvidas), ["a"]);
     assert.deepEqual(vendaDoDia(null, AGORA).resolvidas, {});
@@ -69,6 +69,42 @@ describe("memória da venda do dia", () => {
     const v = marcarPrimeiroDoDia(marcarPrimeiroDoDia(vendaDoDia(null, AGORA), "site:L", "central", AGORA), "site:L", "telegram", AGORA + 60_000);
     assert.deepEqual(v.primeiros, { "site:L": { em: AGORA, por: "central" } });
     assert.throws(() => marcarPrimeiroDoDia(v, "", "central", AGORA));
+  });
+
+  // AC-21 (17/10/2026): o "Liberar" fora do expediente, um só para a Central, até a meia-noite de SP.
+  it("liberados: lidos do arquivo, dia novo zera, formato antigo sem a chave é vazio, lixo sai", () => {
+    const casos: Array<{ nome: string; lido: unknown; esperado: Record<string, number> }> = [
+      { nome: "do dia", lido: { dia: "2026-10-16", resolvidas: {}, liberados: { "site:L": 5 } }, esperado: { "site:L": 5 } },
+      { nome: "de ontem: zera", lido: { dia: "2026-10-15", resolvidas: {}, liberados: { "site:L": 5 } }, esperado: {} },
+      { nome: "formato de 16/10 (sem a chave)", lido: { dia: "2026-10-16", resolvidas: { a: { em: 1, pulou: false } } }, esperado: {} },
+      { nome: "formato de AC-06 (com primeiros, sem liberados)", lido: { dia: "2026-10-16", resolvidas: {}, primeiros: { "site:L": { em: 9, por: "central" } } }, esperado: {} },
+      { nome: "lixo sai, o resto fica", lido: { dia: "2026-10-16", resolvidas: {}, liberados: { "site:L": 5, "site:M": "x", "": 1, "site:N": Number.NaN } }, esperado: { "site:L": 5 } },
+      { nome: "liberados não é objeto", lido: { dia: "2026-10-16", resolvidas: {}, liberados: ["site:L"] }, esperado: {} },
+    ];
+    for (const c of casos) assert.deepEqual(vendaDoDia(c.lido, AGORA).liberados, c.esperado, c.nome);
+  });
+
+  it("liberar: o primeiro toque vale, repetir não muda nada, lead inválido é recusado", () => {
+    const v1 = liberar(vendaDoDia(null, AGORA), "site:L", AGORA);
+    assert.deepEqual(v1.liberados, { "site:L": AGORA });
+    assert.equal(liberar(v1, "site:L", AGORA + 60_000), v1, "a segunda vez devolve o mesmo dia");
+    assert.deepEqual(liberar(v1, "prumo:P", AGORA + 1).liberados, { "site:L": AGORA, "prumo:P": AGORA + 1 });
+    assert.throws(() => liberar(v1, "", AGORA));
+    assert.throws(() => liberar(v1, "x".repeat(301), AGORA));
+  });
+
+  it("liberar grava no arquivo e vira o dia sozinho (diretório temporário)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "squadone-liberar-"));
+    let agora = AGORA;
+    try {
+      const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => agora);
+      await Promise.all([memoria.liberar("site:L"), memoria.liberar("site:M"), memoria.liberar("site:L")]);
+      assert.deepEqual(Object.keys((await memoria.ler()).liberados).sort(), ["site:L", "site:M"]);
+      agora = Date.parse("2026-10-17T03:30:00Z"); // 00:30 de SP do dia seguinte
+      assert.deepEqual((await memoria.ler()).liberados, {});
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("grava e relê do arquivo, em diretório temporário; a anotação concorrente sai uma vez", async () => {
