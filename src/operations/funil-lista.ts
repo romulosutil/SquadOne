@@ -11,6 +11,8 @@
  * Lista é conveniência da aba e pode não sobreviver (modo privado, storage bloqueado).
  */
 import { ROTULO_DA_RESPOSTA, diaEscolhido, textoDoPrazo } from './crm-formato'
+import { PASSOS, passoAtual, type IdDoPasso, type LeadDaJornada } from './jornada'
+import type { AcaoDeVenda } from './proxima-venda'
 import type { CrmEtapa, CrmLead } from './types'
 
 export type VistaDoFunil = 'quadro' | 'lista'
@@ -98,10 +100,83 @@ export function sinalMaisForte(lead: CrmLead, anotado: (tipo: 'followup_enviado'
   return null
 }
 
-/** "02/10 · Ligar de manhã": a coluna Próximo passo; vazio sem próximo passo. */
-export function textoDoProximoPasso(lead: CrmLead): string {
+/** "02/10 · Ligar de manhã": o próximo passo salvo por inteiro (o title da coluna); vazio sem ele. */
+export function textoDoProximoPasso(lead: Pick<CrmLead, 'proximoPasso'>): string {
   const p = lead.proximoPasso
   return p ? [diaEscolhido(p.data), p.texto].filter(Boolean).join(' · ') : ''
+}
+
+/**
+ * A coluna "Próximo passo" da Lista (AC-19, 17/10/2026). Lia só o próximo passo salvo à mão, que
+ * quase ninguém tem: a coluna vinha toda "—" com uma fila de venda cheia ao lado. Agora é a frase
+ * única da ação (fraseDaAcao, pela acaoDoLead de proxima-venda.ts: a mesma do cartão da Próxima
+ * venda e do "Agora" da Ficha); sem ação, a data do passo salvo; sem nenhum dos dois, vazio.
+ */
+export function textoDaColunaProximo(acao: Pick<AcaoDeVenda, 'titulo'> | null | undefined, lead: Pick<CrmLead, 'proximoPasso'>): string {
+  if (acao?.titulo) return acao.titulo
+  return lead.proximoPasso?.data ? diaEscolhido(lead.proximoPasso.data) : ''
+}
+
+/**
+ * A chave de um nicho para o filtro (AC-19): sem acento, em minúscula, com os espaços juntados. A
+ * planilha tem "Advocacia previdenciária" e "advocacia previdenciaria" vindos de caçadores
+ * diferentes, e o select mostrava os dois. Só a mesma palavra com outra grafia vira uma opção:
+ * palavras diferentes ("advocacia" e "advogado") continuam separadas, de propósito.
+ */
+export function chaveDoNicho(nicho: string): string {
+  return nicho.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+export interface OpcaoDeNicho { chave: string; rotulo: string; total: number }
+
+const acentos = (t: string) => t.normalize('NFD').replace(/[^̀-ͯ]/g, '').length
+
+/**
+ * PURO. Uma opção por chave de nicho, na ordem alfabética. O rótulo é a grafia mais usada; no
+ * empate, a com acento (é a forma certa em português) e depois a ordem do dicionário.
+ */
+export function opcoesDeNicho(nichos: readonly string[]): OpcaoDeNicho[] {
+  const grupos = new Map<string, Map<string, number>>()
+  for (const bruto of nichos) {
+    const grafia = bruto.replace(/\s+/g, ' ').trim()
+    const chave = chaveDoNicho(grafia)
+    if (!chave) continue
+    const g = grupos.get(chave) ?? new Map<string, number>()
+    g.set(grafia, (g.get(grafia) ?? 0) + 1)
+    grupos.set(chave, g)
+  }
+  return [...grupos].map(([chave, grafias]) => {
+    const [rotulo] = [...grafias].sort(([a, na], [b, nb]) => nb - na || acentos(b) - acentos(a) || a.localeCompare(b, 'pt-BR'))[0]
+    return { chave, rotulo, total: [...grafias.values()].reduce((s, n) => s + n, 0) }
+  }).sort((a, b) => a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
+}
+
+/**
+ * O filtro "Passo" do Funil (AC-19): a vista "Por passo da jornada" (?ver=jornada) virou este
+ * select, para o Funil ter uma alternância de vista só (Quadro | Lista). O passo é o de
+ * passoAtual (jornada.ts), o mesmo da Ficha e das salas do Escritório.
+ */
+export type FiltroDePasso = '' | IdDoPasso
+
+/** O `?passo=` do endereço, só se for um passo que existe; o resto é "todos". */
+export function lerFiltroDePasso(valor: string | null | undefined): FiltroDePasso {
+  return PASSOS.find((p) => p.id === valor)?.id ?? ''
+}
+
+export interface OpcaoDePasso { id: IdDoPasso; nome: string; total: number }
+
+/**
+ * PURO. Os passos na ordem da jornada, com quantos leads há em cada; só os que têm alguém (um
+ * select com doze opções vazias não ajuda), mais o escolhido, mesmo vazio, para o select não
+ * perder o valor quando o filtro de oferta muda.
+ */
+export function opcoesDePasso(leads: readonly LeadDaJornada[], escolhido: FiltroDePasso = ''): OpcaoDePasso[] {
+  const conta = new Map<IdDoPasso, number>()
+  for (const l of leads) {
+    const id = passoAtual(l)
+    conta.set(id, (conta.get(id) ?? 0) + 1)
+  }
+  return PASSOS.filter((p) => conta.has(p.id) || p.id === escolhido).map((p) => ({ id: p.id, nome: p.nome, total: conta.get(p.id) ?? 0 }))
 }
 
 /**

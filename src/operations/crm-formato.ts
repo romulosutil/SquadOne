@@ -62,7 +62,13 @@ export const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estamp
 export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
   site: 'Site antes da venda', prumo: 'Serviços PRUMO', iris: 'Iris · Clínicas', estampa: 'CRM de estamparia', plus: 'Plus',
 }
-export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'Organizar', iris: 'Iris', estampa: 'Estampa', plus: 'Plus' }
+/**
+ * O rótulo curto de cada oferta, o MESMO no celular e no desktop (AC-19, 17/10/2026): nos chips do
+ * filtro, no selo do cartão e na Lista. O celular dizia "Organizar" e "Estampa" e o desktop "Serviços
+ * PRUMO" e "CRM de estamparia": pareciam ofertas diferentes. É o rótulo da linha de contexto da
+ * Próxima venda (ROTULO_CURTO de proxima-venda.ts); o longo fica para a Ficha.
+ */
+export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
 /** Plus (15/10/2026): a oferta que o lead recebe, na ordem em que o filtro a mostra. */
 export const ROTULO_DA_OFERTA_DO_PLUS = { site: 'Site', prumo: 'Serviços PRUMO', iris: 'Iris', estampa: 'Estamparia' } as const
 /** O primeiro contato: o Site manda o site pronto, as outras ofertas um convite para conversar. */

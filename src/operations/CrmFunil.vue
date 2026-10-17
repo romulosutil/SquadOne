@@ -1,28 +1,37 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDeDias, textoDoPrazo } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDeDias, textoDoPrazo } from './crm-formato'
 import type { EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import {
-  SENTIDO_INICIAL, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDosDescartados, textoDoProximoPasso,
-  type FiltroDeEtapa, type OrdemDaLista, type Sentido, type VistaDoFunil,
+  SENTIDO_INICIAL, chaveDoNicho, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, opcoesDeNicho, opcoesDePasso, ordenarLista, sinalMaisForte,
+  textoDaColunaProximo, textoDosDescartados, textoDoProximoPasso,
+  type FiltroDeEtapa, type FiltroDePasso, type OrdemDaLista, type Sentido, type VistaDoFunil,
 } from './funil-lista'
+import { passoAtual } from './jornada'
+import { acaoDoLead, type AcaoDeVenda } from './proxima-venda'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
 // encerrados (Ganho em cima de Perdido) —, sem rolagem lateral a partir de
 // 1280 px (08/10/2026: seis colunas de 15 rem ficavam espremidas). No celular
-// (abaixo de 1024 px), um produto por vez (segmentado Site / Organizar / Iris /
-// Estampa: as quatro ofertas do PRUMO), abas com as etapas e a lista da etapa
-// escolhida. Estado sempre por texto, cor só reforça (RULES 3). No desktop,
-// desde 16/10/2026, Quadro | Lista: a Lista é uma tabela (funil-lista.ts).
+// (abaixo de 1024 px), abas com as etapas e a lista da etapa escolhida. Estado
+// sempre por texto, cor só reforça (RULES 3). No desktop, desde 16/10/2026,
+// Quadro | Lista: a Lista é uma tabela (funil-lista.ts).
+// 17/10/2026 (AC-19): Quadro | Lista é a ÚNICA alternância. A vista "Por passo da jornada" virou o
+// filtro Passo; e o segmentado de oferta só do celular (com "Organizar" e "Estampa", nomes que o
+// desktop não usava) saiu: a oferta é o mesmo filtro do CrmPanel nas duas larguras.
 const props = defineProps<{
   leads: CrmLead[]
   visao: CrmVisao
   etapaEmFoco: CrmEtapa | null
-  /** O filtro de produto do CRM; no celular "todos" vira Site. */
+  /** O filtro de oferta do CRM (os leads já vêm filtrados; aqui só decide a nota do gerador). */
   produto: 'todos' | CrmProduto
+  /** O filtro Passo (jornada.ts), dono no CrmPanel por causa do endereço (?passo=). */
+  passo: FiltroDePasso
+  /** Relógio do CrmPanel, para a frase da ação da Lista (o "o que achou?" depende da hora). */
+  agora: number
   /** Fora do expediente (trava-de-horario.ts): o envio de primeiro contato espera o "Liberar". */
   aviso?: string | null
   liberados: EnviosLiberados
@@ -32,7 +41,7 @@ const props = defineProps<{
   ritmo: EstadoDoRitmo
 }>()
 const emit = defineEmits<{
-  abrir: [leadId: string, origem: HTMLElement | null]; produto: [produto: CrmProduto]; liberar: [leadId: string]
+  abrir: [leadId: string, origem: HTMLElement | null]; passo: [passo: FiltroDePasso]; liberar: [leadId: string]
   anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
 }>()
 const anotado = (l: CrmLead, tipo: TipoDeEnvioAnotado) => anotadoEm(props.anotados, l.id, tipo) !== undefined
@@ -45,8 +54,7 @@ const aoMudarLargura = (e: MediaQueryListEvent) => { celular.value = e.matches }
 mq?.addEventListener('change', aoMudarLargura)
 onBeforeUnmount(() => mq?.removeEventListener('change', aoMudarLargura))
 
-const segmento = computed<CrmProduto>(() => (props.produto === 'todos' ? 'site' : props.produto))
-const leadsBase = computed(() => (celular.value ? props.leads.filter(l => l.produto === segmento.value) : props.leads))
+const leadsBase = computed(() => props.leads)
 
 const etapaAtiva = ref<CrmEtapa>(props.etapaEmFoco ?? 'novo')
 watch(() => props.etapaEmFoco, e => { if (e) etapaAtiva.value = e })
@@ -71,14 +79,22 @@ const LIMITE = 30
 const limites = ref<Record<CrmEtapa, number>>(Object.fromEntries(ETAPAS.map(e => [e, LIMITE])) as Record<CrmEtapa, number>)
 
 const ordenar = (a: string, b: string) => a.localeCompare(b, 'pt-BR')
-const nichos = computed(() => [...new Set(leadsBase.value.map(l => l.nicho).filter(Boolean))].sort(ordenar))
-const cidades = computed(() => [...new Set(leadsBase.value.filter(l => !nicho.value || l.nicho === nicho.value).map(l => l.cidade).filter(Boolean))].sort(ordenar))
+// `nicho` guarda a chave (chaveDoNicho): "Previdenciária" e "previdenciaria" são uma opção só (AC-19).
+const nichos = computed(() => opcoesDeNicho(leadsBase.value.map(l => l.nicho)))
+const doNicho = (l: CrmLead) => !nicho.value || chaveDoNicho(l.nicho) === nicho.value
+const cidades = computed(() => [...new Set(leadsBase.value.filter(doNicho).map(l => l.cidade).filter(Boolean))].sort(ordenar))
 watch(nicho, () => { if (cidade.value && !cidades.value.includes(cidade.value)) cidade.value = '' })
+// O passo de cada lead uma vez por retrato: o filtro o pediria de novo a cada tecla na busca.
+const passoDe = computed(() => new Map(leadsBase.value.map(l => [l.id, passoAtual(l)] as const)))
+const passos = computed(() => opcoesDePasso(leadsBase.value, props.passo))
+const passoEscolhido = computed({ get: () => props.passo, set: (v: FiltroDePasso) => emit('passo', v) })
+const comFiltro = computed(() => Boolean(busca.value || nicho.value || cidade.value || props.passo))
 
 const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const filtrados = computed(() => {
   const termo = normalizar(busca.value.trim())
-  return leadsBase.value.filter(l => (!nicho.value || l.nicho === nicho.value) && (!cidade.value || l.cidade === cidade.value)
+  return leadsBase.value.filter(l => doNicho(l) && (!cidade.value || l.cidade === cidade.value)
+    && (!props.passo || passoDe.value.get(l.id) === props.passo)
     && (!termo || normalizar(`${l.empresa} ${l.nicho} ${l.cidade}`).includes(termo)))
 })
 
@@ -146,11 +162,16 @@ function ordenarPor(o: Exclude<OrdemDaLista, 'acao'>) {
 const ariaSort = (o: Exclude<OrdemDaLista, 'acao'>) => (ordem.value !== o ? 'none' : sentido.value === 'asc' ? 'ascending' : 'descending')
 const LIMITE_DA_LISTA = 50
 const limiteDaLista = ref(LIMITE_DA_LISTA)
-watch([filtroDeEtapa, ordem, sentido, busca, nicho, cidade], () => { limiteDaLista.value = LIMITE_DA_LISTA })
+watch([filtroDeEtapa, ordem, sentido, busca, nicho, cidade, () => props.passo], () => { limiteDaLista.value = LIMITE_DA_LISTA })
 const linhas = computed(() => {
   const todas = ordenarLista(daEtapa(filtroDeEtapa.value), ordem.value, sentido.value)
   return { lista: todas.slice(0, limiteDaLista.value), total: todas.length }
 })
+// A ação da fila de venda de cada linha à vista (AC-19): a frase do cartão da Próxima venda e do
+// "Agora" da Ficha, nunca uma quarta redação. Só das linhas mostradas: acaoDoLead percorre os grupos
+// da Hoje inteiros, e fazer isso para os ~2000 leads a cada tique do relógio pesaria.
+const acoes = computed(() => new Map<string, AcaoDeVenda | null>(naLista.value ? linhas.value.lista.map(l => [l.id, acaoDoLead(props.visao, l.id, props.agora)]) : []))
+const proximoDe = (l: CrmLead) => textoDaColunaProximo(acoes.value.get(l.id), l)
 const sinalDe = (l: CrmLead) => sinalMaisForte(l, tipo => anotado(l, tipo))
 const seta = (o: Exclude<OrdemDaLista, 'acao'>) => (ordem.value !== o ? '' : sentido.value === 'asc' ? '↑' : '↓')
 /**
@@ -175,17 +196,14 @@ const artefatos = (l: CrmLead) => {
   <div class="crm-funil">
     <form class="crm-filtros" role="search" @submit.prevent>
       <label><span>Buscar</span><input v-model="busca" type="search" placeholder="Empresa, nicho ou cidade" autocomplete="off"></label>
-      <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n" :value="n">{{ n }}</option></select></label>
+      <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n.chave" :value="n.chave">{{ n.rotulo }}</option></select></label>
       <label><span>Cidade</span><select v-model="cidade"><option value="">Todas</option><option v-for="c in cidades" :key="c" :value="c">{{ c }}</option></select></label>
+      <!-- Era a vista "Por passo da jornada" (?ver=jornada); virou filtro para o Funil ter uma alternância só. -->
+      <label><span>Passo</span><select v-model="passoEscolhido"><option value="">Todos</option><option v-for="p in passos" :key="p.id" :value="p.id">{{ p.nome }} ({{ p.total }})</option></select></label>
     </form>
-    <p v-if="busca || nicho || cidade" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leadsBase.length }} leads com este filtro.</p>
+    <p v-if="comFiltro" class="crm-filtro-resumo" role="status">{{ filtrados.length }} de {{ leadsBase.length }} leads com este filtro.</p>
 
     <template v-if="celular">
-      <div class="segmentado" role="group" aria-label="Produto">
-        <button v-for="p in PRODUTOS" :key="p" type="button" :aria-pressed="segmento === p" :aria-label="ROTULO_DO_PRODUTO[p]" @click="emit('produto', p)">
-          {{ SIGLA_DO_PRODUTO[p] }}
-        </button>
-      </div>
       <div class="crm-abas" role="tablist" aria-label="Etapas do funil">
         <button
           v-for="(etapa, i) in ETAPAS"
@@ -266,9 +284,10 @@ const artefatos = (l: CrmLead) => {
                 <template v-if="lead.ultimoEvento">{{ dataCurta(lead.ultimoEvento) }}<small>{{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : lead.diasDesdeUltimoEvento !== undefined ? `há ${textoDeDias(lead.diasDesdeUltimoEvento)}` : '' }}</small></template>
                 <template v-else><span aria-hidden="true">—</span><span class="so-leitor">sem toque</span></template>
               </td>
-              <td class="crm-tabela__passo" :title="textoDoProximoPasso(lead) || undefined">
-                <template v-if="lead.proximoPasso">{{ textoDoProximoPasso(lead) }}</template>
-                <template v-else><span aria-hidden="true">—</span><span class="so-leitor">sem próximo passo</span></template>
+              <!-- A frase da ação (a da Próxima venda); sem ação, a data do passo salvo; o title traz o salvo inteiro. -->
+              <td class="crm-tabela__passo" :title="[proximoDe(lead), textoDoProximoPasso(lead)].filter(Boolean).join(' · ') || undefined">
+                <template v-if="proximoDe(lead)">{{ proximoDe(lead) }}</template>
+                <template v-else><span aria-hidden="true">—</span><span class="so-leitor">nada a fazer agora</span></template>
               </td>
               <td><span v-if="sinalDe(lead)" class="crm-sinal" :class="sinalDe(lead)!.classe">{{ sinalDe(lead)!.texto }}</span></td>
               <!-- OT-01 (16/10/2026): o Funil é consulta. Mandar mensagem é na Próxima venda ou na Ficha do lead
@@ -280,7 +299,7 @@ const artefatos = (l: CrmLead) => {
           </tbody>
         </table>
       </div>
-      <p v-else class="crm-coluna__vazia">Nenhum lead {{ filtroDeEtapa === 'abertas' ? 'aberto' : 'nesta etapa' }}{{ busca || nicho || cidade ? ' com este filtro' : '' }}.</p>
+      <p v-else class="crm-coluna__vazia">Nenhum lead {{ filtroDeEtapa === 'abertas' ? 'aberto' : 'nesta etapa' }}{{ comFiltro ? ' com este filtro' : '' }}.</p>
       <button v-if="linhas.total > linhas.lista.length" type="button" class="crm-mais" @click="limiteDaLista += LIMITE_DA_LISTA">
         Mostrar mais {{ Math.min(linhas.total - linhas.lista.length, LIMITE_DA_LISTA) }} de {{ linhas.total - linhas.lista.length }}
       </button>
@@ -353,7 +372,7 @@ const artefatos = (l: CrmLead) => {
             </article>
           </li>
         </ul>
-        <p v-if="!cartoes(etapa).lista.length" class="crm-coluna__vazia">Nenhum lead nesta etapa{{ busca || nicho || cidade ? ' com este filtro' : '' }}.</p>
+        <p v-if="!cartoes(etapa).lista.length" class="crm-coluna__vazia">Nenhum lead nesta etapa{{ comFiltro ? ' com este filtro' : '' }}.</p>
         <button v-if="cartoes(etapa).resto" type="button" class="crm-mais" @click="mais(etapa)">Mostrar mais {{ Math.min(cartoes(etapa).resto, LIMITE) }} de {{ cartoes(etapa).resto }}</button>
       </section>
     </div>

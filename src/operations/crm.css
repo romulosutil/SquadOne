@@ -63,18 +63,26 @@
 .crm-vistas { display: flex; max-width: 100%; overflow: hidden; border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); }
 .crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: var(--esp-2); padding: var(--esp-2) var(--esp-4); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
 .crm-vistas a + a { border-left: var(--linha); }
-/* Quatro vistas (A fazer, Funil, Números, Roteiro), ~385 px numa linha: no celular viram 2 × 2, e a
-   linha entre elas é o fundo aparecendo no vão (como no .crm-resumo). */
-@media (max-width: 30rem) {
-  .crm-vistas { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--linha-espessura); background: var(--borda); }
-  .crm-vistas a { padding-inline: var(--esp-2); background: var(--superficie); font-size: var(--tam-apoio); }
-  .crm-vistas a + a { border-left: 0; }
+/* Quatro abas (A fazer, Triagem, Funil, Números; 17/10/2026, AC-15). Abaixo de 48 rem, uma linha só
+   que rola de lado: a grade 2 × 2 de antes (com cinco abas, uma célula vazia) gastava duas linhas
+   antes da Próxima venda. Cada aba cresce se houver lugar e nunca encolhe abaixo do texto. */
+@media (max-width: 47.99rem) {
+  .crm-vistas { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .crm-vistas a { flex: 1 0 auto; padding-inline: var(--esp-3); font-size: var(--tam-apoio); scroll-snap-align: start; }
 }
 .crm-vistas a[aria-current="page"] { background: var(--destaque); color: var(--destaque-texto); }
 /* Para que serve a aba aberta, numa linha (16/10/2026): o nome sozinho não explicava. */
 .crm-vistas__dica { order: 3; flex-basis: 100%; margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
-.crm-modo-do-funil { order: 4; }
 .crm-vistas a span { min-width: 1.7rem; padding: 0 var(--esp-2); border: 1px solid currentColor; border-radius: var(--raio-selo); font-size: var(--tam-mini); text-align: center; }
+/* Filtros da aba (AC-15): no desktop o invólucro não existe para o layout (os chips ficam ao lado das
+   abas e os cartões de etapa numa linha inteira embaixo, como antes); no celular é um "Filtros"
+   fechado (details.dobra) numa linha inteira, depois da dica. */
+.crm-filtros-da-aba { display: contents; }
+.crm-filtros-da-aba > .crm-resumo { order: 5; flex-basis: 100%; }
+details.crm-filtros-da-aba { display: block; order: 4; flex-basis: 100%; min-width: 0; }
+details.crm-filtros-da-aba > summary { color: var(--texto); }
+details.crm-filtros-da-aba[open] { display: grid; gap: var(--esp-3); }
+details.crm-filtros-da-aba[open] > summary { margin-bottom: 0; }
 .crm-produtos { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
 .crm-produtos button { padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); border-radius: var(--raio-pilula); background: var(--superficie); color: var(--texto); font-weight: var(--peso-medio); cursor: pointer; }
 .crm-produtos button[aria-pressed="true"] { border-color: var(--destaque); background: var(--destaque); color: var(--destaque-texto); }
@@ -182,12 +190,15 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 
 /* Funil */
 .crm-funil { display: grid; gap: var(--esp-3); min-width: 0; }
-/* No celular, Nicho e Cidade lado a lado: três campos empilhados empurravam o funil meia tela para baixo. */
+/* No celular, Nicho e Cidade lado a lado e a busca e o Passo (AC-19) na linha inteira: quatro campos
+   empilhados empurravam o funil meia tela para baixo. */
 .crm-filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-2) var(--esp-3); }
-.crm-filtros label:first-child { grid-column: 1 / -1; }
+.crm-filtros label:first-child,
+.crm-filtros label:last-child { grid-column: 1 / -1; }
 @media (min-width: 48rem) {
-  .crm-filtros { grid-template-columns: minmax(12rem, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 1fr); }
-  .crm-filtros label:first-child { grid-column: auto; }
+  .crm-filtros { grid-template-columns: minmax(12rem, 1.5fr) repeat(3, minmax(9rem, 1fr)); }
+  .crm-filtros label:first-child,
+  .crm-filtros label:last-child { grid-column: auto; }
 }
 .crm-filtros label,
 .crm-form label { display: grid; gap: var(--esp-1); font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
@@ -216,6 +227,12 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-coluna__cabeca h2 { font-size: var(--tam-nome); letter-spacing: -0.01em; }
 .crm-coluna__cabeca strong { font-size: var(--tam-secao); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
 .crm-coluna__cabeca small { grid-column: 1 / -1; font-size: var(--tam-mini); font-weight: var(--peso-medio); }
+/* A altura de cada coluna do Quadro tem teto (AC-19, 17/10/2026): com 30 cartões por coluna o quadro
+   passava de 8.000 px e a página ia a mais de dez telas. Os cartões rolam dentro da coluna e o
+   "Mostrar mais" fica embaixo, à vista. Ganho e Perdido dividem a quarta coluna: meio teto cada. No
+   celular (.crm-colunas--uma) é uma etapa só, e a página rola como sempre. */
+.crm-colunas:not(.crm-colunas--uma) .crm-cartoes { max-height: min(48rem, 65vh); overflow-y: auto; overscroll-behavior-y: contain; }
+.crm-colunas:not(.crm-colunas--uma) :is(.is-ganho, .is-perdido) .crm-cartoes { max-height: min(22rem, 28vh); }
 .crm-coluna__nota { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-coluna__vazia { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-check { display: flex; align-items: center; gap: var(--esp-2); min-height: var(--toque); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
@@ -404,8 +421,6 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 /* Escolhido = --destaque, em todo o app (design.md): a aba de etapa era invertida e o segmentado ao lado, amarelo. */
 .crm-abas button[aria-selected="true"] { background: var(--destaque); color: var(--destaque-texto); font-weight: var(--peso-forte); }
 .crm-colunas--uma { display: block; overflow: visible; padding-bottom: 0; }
-/* No celular quem escolhe o produto é o segmentado do Funil. */
-@media (max-width: 63.99rem) { .crm-controles--funil .crm-produtos { display: none; } }
 
 /* Colinha de atendimento (08/10/2026): /crm?ver=colinha e o bloco "Colinha" da ficha.
    O texto da mensagem guarda as quebras (pre-wrap) e quebra palavra longa (link do

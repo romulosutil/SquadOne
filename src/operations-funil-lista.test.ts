@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  CHAVE_DA_VISTA_DO_FUNIL, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, naEtapa, ordenarLista, sinalMaisForte,
-  textoDosDescartados, textoDoProximoPasso, type Guardador,
+  CHAVE_DA_VISTA_DO_FUNIL, chaveDoNicho, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerFiltroDePasso, lerVistaDoFunil, naEtapa,
+  opcoesDeNicho, opcoesDePasso, ordenarLista, sinalMaisForte, textoDaColunaProximo, textoDosDescartados, textoDoProximoPasso, type Guardador,
 } from './operations/funil-lista.ts'
-import type { CrmLead } from './operations/types.ts'
+import { SIGLA_DO_PRODUTO } from './operations/crm-formato.ts'
+import { acaoDoLead } from './operations/proxima-venda.ts'
+import type { CrmLead, CrmVisao } from './operations/types.ts'
 
 const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
   id, produto: 'site', chave: id, empresa: id, nicho: '', cidade: '', etapa: 'contato', sinal: 'enviado', subEtapa: '',
@@ -111,6 +113,10 @@ describe('apoio da Lista', () => {
     assert.equal(textoDoProximoPasso(lead('a')), '')
   })
 
+  it('o rótulo curto da oferta é um só, sem "Organizar" nem "Estampa" (AC-19)', () => {
+    assert.deepEqual(SIGLA_DO_PRODUTO, { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' })
+  })
+
   it('a vista guardada só vale se for "lista"; storage que lança vira quadro', () => {
     const dados: Record<string, string> = {}
     const s: Guardador = { getItem: (k) => dados[k] ?? null, setItem: (k, v) => { dados[k] = v } }
@@ -121,5 +127,66 @@ describe('apoio da Lista', () => {
     const quebrado: Guardador = { getItem: () => { throw new Error('bloqueado') }, setItem: () => { throw new Error('bloqueado') } }
     assert.equal(lerVistaDoFunil(quebrado), 'quadro')
     assert.doesNotThrow(() => gravarVistaDoFunil(quebrado, 'lista'))
+  })
+})
+
+describe('textoDaColunaProximo (AC-19): a coluna "Próximo passo" da Lista', () => {
+  const salvo = { proximoPasso: { texto: 'Ligar de manhã', data: '2026-10-20', registradoEm: '' } }
+  const CASOS: Array<{ nome: string; acao: { titulo: string } | null; extra: Partial<CrmLead>; texto: string }> = [
+    { nome: 'com ação, a frase da ação (mesmo com passo salvo)', acao: { titulo: 'Responda a X' }, extra: salvo, texto: 'Responda a X' },
+    { nome: 'sem ação, a data do passo salvo', acao: null, extra: salvo, texto: '20/10' },
+    { nome: 'sem ação nem passo salvo, vazio (a tela põe "—")', acao: null, extra: {}, texto: '' },
+  ]
+  for (const c of CASOS) it(c.nome, () => assert.equal(textoDaColunaProximo(c.acao, lead('a', c.extra)), c.texto))
+
+  it('é a frase da Próxima venda (acaoDoLead), não uma redação da Lista', () => {
+    const l = lead('k', { empresa: 'Kulniski Advocacia', resposta: { tipo: 'interesse', trecho: 'pode sim' }, links: { segunda: 'https://n8n.exemplo/segunda' } })
+    const visao = {
+      estado: 'ok', leads: [l],
+      hoje: [{ id: 'resposta', titulo: '', explicacao: '', itens: [{ leadId: 'k', acao: 'Responder', detalhe: '', ordem: 0, links: [] }] }],
+    } as unknown as CrmVisao
+    const acao = acaoDoLead(visao, 'k', Date.parse('2026-10-17T13:00:00Z'))
+    assert.equal(textoDaColunaProximo(acao, l), 'Kulniski Advocacia disse sim: mande o link')
+    assert.equal(textoDaColunaProximo(acaoDoLead(visao, 'outro', 0), lead('outro')), '')
+  })
+})
+
+describe('opcoesDeNicho (AC-19): uma opção por nicho', () => {
+  it('a chave ignora caixa, acento e espaço sobrando', () => {
+    assert.equal(chaveDoNicho('  Advocacia   Previdenciária '), 'advocacia previdenciaria')
+    assert.equal(chaveDoNicho('advocacia previdenciaria'), chaveDoNicho('ADVOCACIA PREVIDENCIÁRIA'))
+  })
+
+  it('junta só a mesma palavra com outra grafia; palavras diferentes ficam separadas', () => {
+    const opcoes = opcoesDeNicho(['Advocacia previdenciária', 'advocacia previdenciaria', 'Advocacia previdenciária', 'Advogado', 'advocacia', '', '  '])
+    assert.deepEqual(opcoes, [
+      { chave: 'advocacia', rotulo: 'advocacia', total: 1 },
+      { chave: 'advocacia previdenciaria', rotulo: 'Advocacia previdenciária', total: 3 },
+      { chave: 'advogado', rotulo: 'Advogado', total: 1 },
+    ])
+  })
+
+  it('o rótulo é a grafia mais usada; no empate, a com acento', () => {
+    assert.equal(opcoesDeNicho(['estetica', 'estetica', 'Estética'])[0].rotulo, 'estetica')
+    assert.equal(opcoesDeNicho(['estetica', 'estética'])[0].rotulo, 'estética')
+  })
+})
+
+describe('filtro Passo (AC-19): a vista "Por passo da jornada" virou filtro do Funil', () => {
+  it('o ?passo= só vale para um passo que existe', () => {
+    assert.equal(lerFiltroDePasso('segunda'), 'segunda')
+    assert.equal(lerFiltroDePasso('inventado'), '')
+    assert.equal(lerFiltroDePasso(null), '')
+  })
+
+  it('os passos na ordem da jornada, só os que têm alguém, mais o escolhido', () => {
+    const leads = [
+      lead('a', { etapa: 'novo', sinal: 'pronto' }),
+      lead('b', { etapa: 'novo', sinal: 'pronto' }),
+      lead('c', { etapa: 'contato', marcos: { segundaEnviada: '2026-10-15' } }),
+      lead('d', { etapa: 'perdido' }),
+    ]
+    assert.deepEqual(opcoesDePasso(leads).map((p) => [p.id, p.total]), [['raio-x', 2], ['segunda', 1], ['perdido', 1]])
+    assert.deepEqual(opcoesDePasso(leads, 'proposta').map((p) => [p.id, p.total]), [['raio-x', 2], ['segunda', 1], ['proposta', 0], ['perdido', 1]])
   })
 })
