@@ -271,15 +271,21 @@ fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária
 ponta com dublês; desde 17/10/2026, OT-01: o "Montar avisos" do 05 no node só avisa os expirados e o `followup_em`
 continua gravado), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(68; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026, OT-13, os leads do
+(89; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026 o áudio de lead
+com Evolution e Gemini dublês (urlopen trocado, nenhuma rede): transcrição na conversa e no lote, teto de 20 por dia de
+São Paulo em JSON 600 (contador ilegível não gasta), cada falha grava só "[áudio Ns]" com o motivo e sem texto nem chave
+no journal, a linha "[áudio]" da outra instância é trocada pela transcrita (nunca o contrário), `papel` pela marca no
+texto e o `contexto` do lote; `OBSERVADOR_TRANSCREVER=0` antes do import; desde 17/10/2026, OT-13, os leads do
 Plus entram no filtro da bridge e na conversa em disco e nada deles vai ao n8n, quem está no Plus e numa planilha segue
 igual, arquivo ilegível é vazio e a releitura vale com o n8n fora; desde 16/10/2026 a conversa do lead em disco: entrada e saída com
 id e hora UTC, o mesmo id não entra duas vezes nem pelo outro observador, quem não é lead não tem arquivo, recibo não é
 linha, texto em 2000, nome saneado, poda de 120 dias uma vez por dia, falha ao gravar não derruba a classificação, e
 a pasta padrão aponta para um temporário antes do import),
-`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (83; webhooks de mentira, pasta temporária e HTTP no
+`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (90; webhooks de mentira, pasta temporária e HTTP no
 loopback em porta efêmera; o último grupo faz o `observador.py` de verdade ler o que o adaptador escreveu, com o n8n
-de mentira, inclusive a conversa do lead nas duas direções) e
+de mentira, inclusive a conversa do lead nas duas direções; desde 17/10/2026 o áudio de lead leva "[áudio Ns]" e só os
+campos do download, sem miniatura nem bytes, até 120 s, e chega transcrito ao n8n com um transcritor dublê, e o "sim"
+chega com a pergunta do Rômulo no `contexto`) e
 `deploy/hermes/scripts/patch_bridge_envios.test.py` (20; desde 16/10/2026 roda no node o bloco `squadone:envios`: o
 texto do que o dono escreve só a lead vai para `enviadas.jsonl`, o log ganha o id e nunca o texto). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o

@@ -43,7 +43,8 @@ from urllib.parse import quote
 TABELA = "jev_sombra_respostas"
 # O mesmo sal de whatsapp-conversa.py (JEV_SAL); o --testar de lá confere que os dois batem.
 SAL = "squadone:jev-sombra:v1"
-TIPOS = ("bot", "exclusao", "negativa", "interesse", "neutra")
+# licenca (17/10/2026): tipo novo do Gemini; o Jev não o tem (segue com os 5), mas a revisão humana pode usá-lo.
+TIPOS = ("bot", "exclusao", "negativa", "interesse", "licenca", "neutra")
 PERIGOSOS = ("negativa", "exclusao")
 MIN_REVISTAS = 60
 MIN_CONCORDANCIA = 0.95

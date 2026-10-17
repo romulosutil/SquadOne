@@ -31,6 +31,8 @@ ev = carregar("evolution_adaptador", "evolution-adaptador.py")
 # A conversa dos leads em disco nunca cai na pasta de verdade: o padrão do módulo aponta para um temporário.
 _CONVERSAS_TESTE = tempfile.mkdtemp(prefix="conversas-teste-")
 os.environ["WHATSAPP_CONVERSAS_DIR"] = _CONVERSAS_TESTE
+# A transcrição de áudio (17/10/2026) nasce desligada nos testes: nada chama a Evolution nem o Gemini de verdade.
+os.environ["OBSERVADOR_TRANSCREVER"] = "0"
 ob = carregar("observador", "observador.py")
 
 LEAD, LEAD2, OUTRO = "5527999887766", "5511988776655", "5521977776666"
@@ -86,7 +88,9 @@ class Textos(unittest.TestCase):
         self.assertEqual(ev.texto_da_mensagem({"extendedTextMessage": {"text": "olha https://x.com"}}), "olha https://x.com")
 
     def test_midia_como_na_bridge(self):
-        casos = [({"audioMessage": {}}, "[áudio]"), ({"imageMessage": {"caption": " cardápio "}}, "[imagem] cardápio"),
+        casos = [({"audioMessage": {}}, "[áudio]"), ({"audioMessage": {"seconds": 27}}, "[áudio 27s]"),
+                 ({"audioMessage": {"seconds": "9"}}, "[áudio 9s]"), ({"audioMessage": {"seconds": True}}, "[áudio]"),
+                 ({"imageMessage": {"caption": " cardápio "}}, "[imagem] cardápio"),
                  ({"imageMessage": {}}, "[imagem]"), ({"videoMessage": {"caption": "x"}}, "[vídeo] x"),
                  ({"documentMessage": {"fileName": "tabela.pdf"}}, "[documento] tabela.pdf"),
                  ({"stickerMessage": {}}, "[figurinha]"), ({"contactMessage": {}}, "[contato]"),
@@ -243,7 +247,73 @@ class Traducao(unittest.TestCase):
         corpo["data"]["message"] = {"audioMessage": {"seconds": 4}}
         t = self.tr(corpo)
         self.assertEqual(len(t.linhas), 1)
-        self.assertEqual(t.respostas[0]["texto"], "[áudio]")
+        self.assertEqual(t.respostas[0]["texto"], "[áudio 4s]")
+        self.assertNotIn("audio", t.respostas[0])  # sem url/mediaKey não há o que baixar
+
+    # Um audioMessage como o Baileys entrega (valores de mentira): o que o download precisa e o que não pode ir.
+    AUDIO = {"url": "https://mmg.whatsapp.net/v/t62/abc.enc", "directPath": "/v/t62/abc.enc", "mimetype": "audio/ogg; codecs=opus",
+             "mediaKey": "Q2hhdmUtZGUtbWVudGlyYQ==", "fileSha256": "aGFzaA==", "fileEncSha256": "aGFzaDI=",
+             "fileLength": {"low": 48213, "high": 0, "unsigned": True}, "seconds": 27, "ptt": True,
+             "mediaKeyTimestamp": "1790773100", "waveform": "AAECAwQFBgcICQ==", "jpegThumbnail": "/9j/4AAQSkZJRg==",
+             "contextInfo": {"stanzaId": "X", "participant": f"{LEAD}@s.whatsapp.net"}, "streamingSidecar": "c2lkZWNhcg=="}
+
+    def test_audio_de_lead_leva_o_que_o_observador_precisa_para_baixar(self):
+        corpo = upsert(LEAD, id_="AUD1")
+        corpo["data"]["message"] = {"audioMessage": dict(self.AUDIO), "base64": "QVVESU8tSU5URUlSTw=="}
+        t = self.tr(corpo)
+        r = t.respostas[0]
+        self.assertEqual((r["texto"], r["id"]), ("[áudio 27s]", "AUD1"))
+        self.assertEqual(r["audio"]["seg"], 27)
+        msg = r["audio"]["msg"]
+        self.assertEqual(msg["key"], {"id": "AUD1", "fromMe": False, "remoteJid": f"{LEAD}@s.whatsapp.net"})
+        self.assertEqual(set(msg["message"]), {"audioMessage"})
+        am = msg["message"]["audioMessage"]
+        self.assertEqual(set(am), {"url", "directPath", "mimetype", "mediaKey", "fileSha256", "fileEncSha256", "fileLength",
+                                   "seconds", "ptt", "mediaKeyTimestamp"})
+        texto = json.dumps(r)
+        for vazou in ("jpegThumbnail", "waveform", "contextInfo", "streamingSidecar", "QVVESU8tSU5URUlSTw=="):
+            self.assertNotIn(vazou, texto)  # nem miniatura, nem bytes do arquivo
+
+    def test_audio_longo_sem_duracao_ou_dentro_de_embrulho(self):
+        longo = upsert(LEAD, id_="L1")
+        longo["data"]["message"] = {"audioMessage": {**self.AUDIO, "seconds": 121}}
+        r = self.tr(longo).respostas[0]
+        self.assertEqual(r["texto"], "[áudio 121s]")
+        self.assertNotIn("audio", r)  # acima de 120 s fica só o marcador
+        sem = upsert(LEAD, id_="L2")
+        sem["data"]["message"] = {"audioMessage": {k: v for k, v in self.AUDIO.items() if k != "seconds"}}
+        r = self.tr(sem).respostas[0]
+        self.assertEqual(r["texto"], "[áudio]")
+        self.assertNotIn("audio", r)
+        temporaria = upsert(LEAD, id_="L3")
+        temporaria["data"]["message"] = {"ephemeralMessage": {"message": {"audioMessage": dict(self.AUDIO)}}}
+        r = self.tr(temporaria).respostas[0]
+        self.assertEqual((r["texto"], r["audio"]["seg"]), ("[áudio 27s]", 27))
+
+    def test_audio_do_prumo_nao_vai_para_transcricao(self):
+        corpo = upsert(LEAD, de_mim=True, id_="S1")
+        corpo["data"]["message"] = {"audioMessage": dict(self.AUDIO)}
+        t = self.tr(corpo)
+        self.assertEqual(t.enviadas, ({"chave": CHAVE, "ts": int(T0) - 5, "texto": "[áudio 27s]", "id": "S1"},))
+        # Vídeo, documento e imagem do Rômulo seguem com os marcadores de sempre.
+        for msg, esperado in (({"videoMessage": {"caption": "veja"}}, "[vídeo] veja"),
+                              ({"documentMessage": {"fileName": "proposta.pdf"}}, "[documento] proposta.pdf"),
+                              ({"imageMessage": {}}, "[imagem]")):
+            corpo = upsert(LEAD, de_mim=True, id_="S-" + esperado)
+            corpo["data"]["message"] = msg
+            self.assertEqual(self.tr(corpo).enviadas[0]["texto"], esperado)
+
+    def test_campo_de_bytes_grande_ou_estranho_nao_passa(self):
+        audio = {**self.AUDIO, "mediaKey": {str(i): i % 256 for i in range(32)}, "fileSha256": "x" * 5000,
+                 "url": {"nao": "texto"}}
+        msg = ev.pedido_do_audio({"key": {"id": "Z", "remoteJid": "1@lid"}}, audio)
+        am = msg["message"]["audioMessage"]
+        self.assertEqual(len(am["mediaKey"]), 32)  # Uint8Array serializado como objeto: aceito, é pequeno
+        self.assertNotIn("fileSha256", am)
+        self.assertNotIn("url", am)
+        self.assertEqual(am["directPath"], "/v/t62/abc.enc")
+        self.assertIsNone(ev.pedido_do_audio({"key": {"id": "Z"}}, {"seconds": 3}))  # sem chave de mídia
+        self.assertIsNone(ev.pedido_do_audio({"key": {}}, dict(self.AUDIO)))  # sem id
 
     def test_formas_do_data(self):
         a, b = upsert(LEAD, id_="L1"), upsert(LEAD2, id_="L2")
@@ -858,6 +928,40 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.alimentar(recibo_lid("MSG1"))
         eventos = [c[1] for c in self.chamadas if c[0] == "whatsapp-conversa"]
         self.assertEqual([(e["chave"], e["direcao"]) for e in eventos], [(CHAVE, "saida"), (CHAVE, "lido")])
+
+    def lote(self):
+        self.obs.tick()
+        self.agora += ob.ESPERA_DA_CONVERSA_S + 1
+        self.obs.tick()
+        return [c[1] for c in self.chamadas if c[0] == "whatsapp-resposta"]
+
+    def test_audio_do_lead_e_baixado_transcrito_e_chega_ao_n8n(self):
+        pedidos = []
+
+        def baixar(msg, apikey):
+            pedidos.append((msg, apikey))
+            return b"OggS-de-mentira", "audio/ogg; codecs=opus"
+        self.obs.transcritor = ob.Transcritor(self.dir, relogio=lambda: self.agora, ligado=True, baixar=baixar,
+                                              gemini=lambda dados, mime, chave: "No momento não, obrigado.",
+                                              chave_gemini=lambda: "chave-falsa", apikey=lambda: "apikey-falsa")
+        corpo = upsert(LEAD, id_="AUD9", ts=T0 - 5)
+        corpo["data"]["message"] = {"audioMessage": dict(Traducao.AUDIO)}
+        self.alimentar(corpo)
+        enviadas = self.lote()
+        self.assertEqual(enviadas[0]["mensagens"][0]["texto"], "[áudio 27s] No momento não, obrigado.")
+        msg, apikey = pedidos[0]
+        self.assertEqual((msg["key"]["id"], apikey), ("AUD9", "apikey-falsa"))
+        self.assertIn("mediaKey", msg["message"]["audioMessage"])
+        linha = json.loads((self.conversas / f"{CHAVE}.jsonl").read_text().splitlines()[0])
+        self.assertEqual((linha["texto"], linha["id"]), ("[áudio 27s] No momento não, obrigado.", "AUD9"))
+
+    def test_o_sim_chega_com_a_pergunta_do_romulo(self):
+        self.alimentar(upsert(LEAD, "Posso te mandar o vídeo? Sem compromisso", de_mim=True, id_="P1", ts=T0 - 120))
+        self.alimentar(upsert(LEAD, "CLaro, pode enviar sim", id_="R1", ts=T0 - 5))
+        enviadas = self.lote()
+        self.assertEqual(enviadas[0]["contexto"], {"saidas": [{"em": ob.iso_utc(T0 - 120),
+                                                               "texto": "Posso te mandar o vídeo? Sem compromisso"}]})
+        self.assertEqual([m["texto"] for m in enviadas[0]["mensagens"]], ["CLaro, pode enviar sim"])
 
     def test_silencio_do_log_e_desligavel(self):
         self.assertTrue(ob.silencio_suspeito(T0 + 7 * 3600, T0, False, limite=6 * 3600))

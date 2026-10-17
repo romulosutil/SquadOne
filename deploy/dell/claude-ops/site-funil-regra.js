@@ -62,6 +62,10 @@ function sinalDeCompra(l, propostas) {
   const tipo = norm(l.resposta_tipo);
   if (NAO_E_SINAL.includes(tipo)) return '';
   if (tipo === 'interesse') return 'interesse';
+  // "licenca" (17/10/2026, whatsapp-conversa.py): o "pode mandar" que até então o classificador gravava como
+  // interesse. Não é interesse, mas a régua da pausa (SEM_SINAL_MAX) foi medida com ele contando: separar o tipo
+  // não pode, sozinho, pausar nicho que antes ficava ligado. Rever quando houver semanas de "licenca" medidas.
+  if (tipo === 'licenca') return 'licença';
   if (RE_PRECO.test(norm(l.resposta_trecho))) return 'preço';
   return '';
 }
@@ -86,7 +90,8 @@ function medirSinal(ls, propostas, agora) {
 const semSinal = (m) => m.enviados >= SEM_SINAL_MAX && m.sinais === 0;
 
 const NOMES_DOS_TIPOS = { negativa: ['negativa', 'negativas'], exclusao: ['pediu para apagar', 'pediram para apagar'],
-  neutra: ['neutra', 'neutras'], bot: ['robô', 'robôs'], interesse: ['interesse', 'interesses'], 'sem tipo': ['sem tipo', 'sem tipo'] };
+  neutra: ['neutra', 'neutras'], bot: ['robô', 'robôs'], interesse: ['interesse', 'interesses'],
+  licenca: ['licença para mandar', 'licenças para mandar'], 'sem tipo': ['sem tipo', 'sem tipo'] };
 // "35 enviados; respostas: 6 negativas, 2 neutras": o porquê que vai para o aviso e para a aba Buscas.
 function porque(m) {
   const partes = Object.entries(m.tipos).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

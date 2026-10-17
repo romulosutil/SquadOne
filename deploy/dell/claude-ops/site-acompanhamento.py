@@ -818,6 +818,7 @@ def testar_regra() -> int:
                 ({"status": "fechado", "resposta_tipo": "negativa"}, False, "ganho"),
                 ({"resposta_tipo": "negativa"}, True, "proposta"),
                 ({"resposta_tipo": "Interesse"}, False, "interesse"),
+                ({"resposta_tipo": "licenca", "resposta_trecho": "pode mandar"}, False, "licença"),
                 ({"resposta_tipo": "neutra", "resposta_trecho": "Quanto custa?"}, False, "preço"),
                 ({"resposta_tipo": "", "resposta_trecho": "me passa um orçamento"}, False, "preço"),
                 ({"resposta_tipo": "neutra", "resposta_trecho": "quem é?"}, False, ""),

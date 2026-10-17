@@ -237,7 +237,7 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => " + json.dumps(PL
 
 # ---------------------------------------------------------------- texto das respostas (05/10/2026)
 #
-# POST /webhook/whatsapp-resposta {"chave", "mensagens": [{"em", "texto"}]}: o observador junta o que
+# POST /webhook/whatsapp-resposta {"chave", "mensagens": [{"em", "texto", "papel"?}], "contexto"?}: o observador junta o que
 # um lead escreveu (remendo squadone:respostas da bridge) e manda aqui. O Gemini classifica:
 #   bot       só mensagem automática (saudação, ausência, menu, catálogo): não é resposta. Apaga o
 #             respondeu_em que a regra dos 5 min tenha posto nesta conversa e o lead volta a Contatado,
@@ -253,7 +253,19 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => " + json.dumps(PL
 #             conteúdo por gentileza".
 #   interesse gente quer ver: respondeu_em; o aviso traz o link da segunda mensagem (Site: o site;
 #             PRUMO: a ficha do CRM, para fazer e mandar o Raio-X).
+#   licenca   (17/10/2026) gente só deu licença para o Rômulo mandar o que ELE ofereceu ("posso mandar o
+#             vídeo? sem compromisso" -> "claro, pode enviar sim"): respondeu_em como o interesse, o aviso
+#             manda enviar o material (Site: o link da segunda mensagem; PRUMO e ofertas: a ficha), mas o tipo
+#             gravado é "licenca", não "interesse": ainda não se sabe se ele quer o produto. Caso que trouxe o
+#             tipo: esse "sim" foi gravado como interesse porque o Gemini não via a pergunta do Rômulo.
 #   neutra    gente respondeu sem sim nem não: respondeu_em; continue a conversa.
+#
+# Desde 17/10/2026 o observador manda também `papel` em cada mensagem (recepcao/robo, pela marca no texto) e
+# `contexto` {saidas, anteriores}: as últimas 3 mensagens do Rômulo e as últimas 3 do lead antes do lote, da
+# conversa em disco. O prompt as mostra como contexto. Áudio chega como "[áudio 27s] <transcrição>" ou só
+# "[áudio 27s]" (ninguém ouviu). Regras que não dependem do modelo, em "Decidir pela resposta": lote só de áudio
+# sem transcrição = neutra (e não sobrescreve resposta de gente); lote só de robô/recepção não vira interesse;
+# neutra não apaga uma negativa ou exclusão anterior.
 # Grava o tipo e o trecho na planilha (Site: resposta_tipo, resposta_trecho, resposta_em; PRUMO:
 # "Tipo da resposta", "Resposta", "Resposta em") e responde ao observador com o aviso de cada lead
 # (gente, não bot), que vai ao Rômulo pelo Hermes. O texto inteiro não é guardado: só o trecho.
@@ -264,7 +276,7 @@ LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
 # A ficha do lead na Central (Serve da tailnet, porta 8443): o aviso de interesse do PRUMO leva para lá.
 CRM = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/crm"
 GEMINI_MODELO = "models/gemini-3.6-flash"  # o mesmo do Caçador
-TIPOS_HUMANOS = ("negativa", "exclusao", "interesse", "neutra")
+TIPOS_HUMANOS = ("negativa", "exclusao", "interesse", "licenca", "neutra")
 COLUNAS_RESPOSTA_SITE = ["resposta_tipo", "resposta_trecho", "resposta_em"]
 COLUNAS_RESPOSTA_PRUMO = ["Tipo da resposta", "Resposta", "Resposta em"]
 
@@ -272,8 +284,25 @@ MONTAR_RESPOSTA_JS = CHAVE_JS + """
 const ev = $('Resposta no WhatsApp').first().json.body ?? {};
 const alvo = chave(ev.chave);
 const txt = (v) => String(v ?? '').trim();
+// papel (17/10/2026): o observador marca "*[Nome]* ..." como recepção e "[Atendimento] ..." como robô; sem marca, gente.
+const PAPEIS = { robo: 'robô', recepcao: 'recepção' };
+const papelDe = (m) => (Object.prototype.hasOwnProperty.call(PAPEIS, m?.papel) ? m.papel : '');
 const mensagens = (Array.isArray(ev.mensagens) ? ev.mensagens : [])
-  .map(m => ({ em: txt(m?.em), texto: txt(m?.texto).slice(0, 1000) })).filter(m => m.texto).slice(0, 20);
+  .map(m => ({ em: txt(m?.em), texto: txt(m?.texto).slice(0, 1000), ...(papelDe(m) ? { papel: papelDe(m) } : {}) }))
+  .filter(m => m.texto).slice(0, 20);
+// contexto (17/10/2026): as últimas 3 mensagens do Rômulo e as 3 do negócio antes destas, da conversa em disco.
+// Sem ele o "Claro, pode enviar sim" a "posso mandar o vídeo? Sem compromisso" virou interesse.
+const ctx = ev.contexto && typeof ev.contexto === 'object' ? ev.contexto : {};
+const doContexto = (lista, quem) => (Array.isArray(lista) ? lista.slice(-3) : [])
+  .map(x => ({ em: txt(x?.em), texto: txt(x?.texto).slice(0, 500), quem, papel: papelDe(x) })).filter(x => x.texto);
+const antes = [...doContexto(ctx.saidas, 'Rômulo'), ...doContexto(ctx.anteriores, 'negócio')]
+  .sort((a, b) => (Date.parse(a.em) || 0) - (Date.parse(b.em) || 0));
+const marca = (p) => (p ? ' (' + PAPEIS[p] + ')' : '');
+const dataHora = (em) => {
+  const d = new Date(em);
+  return Number.isFinite(d.getTime())
+    ? d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '?';
+};
 const achados = [];
 for (const f of [{ planilha: 'prumo', no: 'Ler Prospects' }, ...OFERTAS]) for (const l of linhasDe(f.no)) {
   if (alvo && mensagens.length && chave(l['WhatsApp']) === alvo && txt(l['Etapa']) !== 'Concluído') {
@@ -298,31 +327,56 @@ const depois = (em) => {
   if (!Number.isFinite(s)) return '?';
   return s < 120 ? s + ' s' : s < 7200 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h';
 };
+// 17/10/2026: o tipo "licenca", o contexto, o papel, o áudio e as recusas educadas (ver a lista de tipos no topo).
 const prompt = !primeiro ? '' : [
   'O Rômulo mandou, pelo WhatsApp, uma mensagem de prospecção a um negócio que não o conhece.',
-  'O que ele mandou: ' + O_QUE_FOI[primeiro.planilha],
+  'O que ele mandou primeiro: ' + O_QUE_FOI[primeiro.planilha],
+  ...(antes.length ? [
+    '',
+    'Conversa ANTES das mensagens a classificar (só contexto, na ordem; não classifique estas):',
+    ...antes.map(x => '- ' + dataHora(x.em) + ' ' + x.quem + marca(x.papel) + ': ' + JSON.stringify(x.texto)),
+  ] : []),
   '',
-  'Mensagens que chegaram do número do negócio, na ordem (tempo desde o envio entre colchetes):',
-  ...mensagens.map(m => '- [' + depois(m.em) + '] ' + JSON.stringify(m.texto)),
+  'Mensagens a classificar, que chegaram do número do negócio, na ordem (tempo desde o envio entre colchetes;',
+  '"(robô)" ou "(recepção)" quando o próprio texto traz a marca de um atendimento automático ou da assinatura de uma recepção):',
+  ...mensagens.map(m => '- [' + depois(m.em) + ']' + marca(m.papel) + ' ' + JSON.stringify(m.texto)),
+  '',
+  'Áudio: "[áudio 27s]" sozinho é um áudio que ninguém ouviu (sem transcrição); "[áudio 27s] texto" é o áudio com a',
+  'transcrição, e vale o texto.',
   '',
   'Classifique a conversa em um tipo:',
   '- "bot": só mensagens automáticas (saudação ou ausência do WhatsApp Business, horário de atendimento, menu "digite 1",',
   '  "recebemos sua mensagem, em breve retornaremos", link de catálogo, cardápio ou agendamento), sem nenhuma frase escrita',
   '  por uma pessoa em resposta ao que o Rômulo disse. Mensagem que chega segundos depois do envio quase sempre é automática.',
+  '  Mensagem marcada "(robô)" é automática.',
   '- "exclusao": uma pessoa pediu para apagar, excluir, remover ou tirar do ar o site, a demonstração, as fotos',
   '  ou o conteúdo: "pode apagar", "se puder excluir esse conteúdo", "tira do ar", "não autorizo usar nossas fotos".',
   '  Vale mesmo que agradeça, elogie ou também recuse ("já temos agência, agradeço, mas exclua por favor").',
   '- "negativa": uma pessoa recusou: "não tenho interesse", "já temos site", "não precisamos", "não, obrigado",',
-  '  pediu para não mandar mais, reclamou de spam, disse que é número errado, ou foi hostil (sem pedir para apagar nada).',
-  '- "interesse": uma pessoa quer ver ou saber mais: "pode mandar", "manda sim", "quanto custa?", "como funciona?",',
-  '  "sou eu, pode falar", "gostei", ou aceitou.',
+  '  "agradeço, mas no momento não", "no momento não temos interesse", "agora não dá", pediu para não mandar mais,',
+  '  reclamou de spam, disse que é número errado, ou foi hostil (sem pedir para apagar nada).',
+  '  Recusa educada continua sendo recusa: agradecer ou elogiar não a transforma em interesse.',
+  '- "licenca": uma pessoa só deu licença para o Rômulo mandar algo que ELE ofereceu (o vídeo, o link, o PDF, o site):',
+  '  a última mensagem do Rômulo pedia licença ("posso te mandar o vídeo?", "posso enviar o link?", "sem compromisso")',
+  '  e a resposta é "pode", "pode mandar", "claro, pode enviar sim", "manda aí", "ok, pode". Se a primeira mensagem do',
+  '  Rômulo já perguntava se podia mandar algo, "pode mandar" também é "licenca". Licença não é interesse: ainda não se',
+  '  sabe se a pessoa quer o produto.',
+  '- "interesse": uma pessoa quer o que foi oferecido ou quer saber mais: "quanto custa?", "como funciona?", "gostei",',
+  '  "quero", "tenho interesse", "me explica melhor", "sou eu, pode falar", ou aceitou a proposta.',
   '- "neutra": uma pessoa respondeu sem sim nem não ("quem é?", "do que se trata?", "vou passar para o dono", "ok"),',
-  '  ou não dá para saber.',
-  'Se houver mensagem automática e mensagem de pessoa, decida pela de pessoa; se a pessoa mudou de ideia, pela última.',
-  'Pedido para apagar ou excluir vence a recusa: é "exclusao", nunca "negativa".',
+  '  "qualquer coisa eu aviso", "vou passar para o responsável e retornamos", ou não dá para saber.',
+  '',
+  'Regras de desempate:',
+  '- Se houver mensagem automática e mensagem de pessoa, decida pela de pessoa; se a pessoa mudou de ideia, pela última.',
+  '- Pedido para apagar ou excluir vence a recusa: é "exclusao", nunca "negativa".',
+  '- "[áudio Ns]" sem texto: não se sabe o que foi dito. Nunca é "bot" nem "interesse"; sozinho, é "neutra".',
+  '- Mensagem marcada "(robô)" ou "(recepção)" nunca vira "interesse" sozinha: precisa de uma frase de alguém dizendo que quer.',
+  '- Se a conversa anterior tem uma recusa do negócio, um "ok", "obrigado" ou outra resposta neutra depois NÃO a desfaz:',
+  '  continua "negativa", a menos que a pessoa diga claramente que mudou de ideia ("pensando bem, pode mandar", "quero sim").',
+  '- Recusa educada ou adiamento ("qualquer coisa eu aviso", "vou ver e retorno") nunca é "interesse".',
   '',
   'Responda só com JSON, sem texto em volta:',
-  '{"tipo": "bot|exclusao|negativa|interesse|neutra", "trecho": "a frase da pessoa que decidiu, literal, até 160 caracteres (vazio se bot)", "motivo": "até 12 palavras"}',
+  '{"tipo": "bot|exclusao|negativa|licenca|interesse|neutra", "trecho": "a frase da pessoa que decidiu, literal, até 160 caracteres (vazio se bot)", "motivo": "até 12 palavras"}',
 ].join('\\n');
 return [{ json: { tem: achados.length > 0, achados, mensagens, prompt } }];"""
 
@@ -332,9 +386,17 @@ const g = $('Gemini: classificar resposta').first().json ?? {};
 const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
 let r = {};
 try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)); } catch (e) { r = {}; }
-const HUMANOS = ['negativa', 'exclusao', 'interesse', 'neutra'];
+const HUMANOS = ['negativa', 'exclusao', 'interesse', 'licenca', 'neutra'];
 // Resposta ilegível do modelo: "neutra" (gente, sem decidir nada sozinho) em vez de tirar alguém do funil.
-const tipo = ['bot', ...HUMANOS].includes(r.tipo) ? r.tipo : 'neutra';
+let tipo = ['bot', ...HUMANOS].includes(r.tipo) ? r.tipo : 'neutra';
+// 17/10/2026, regras que não dependem do modelo:
+// - só áudio que ninguém ouviu ("[áudio 27s]" sem transcrição): não se sabe o que foi dito; nunca bot nem interesse.
+// - só mensagens com marca de robô ou de recepção: nunca viram interesse sozinhas.
+const SO_AUDIO = /^\\[áudio( \\d+s)?\\]$/;
+const soAudio = m.mensagens.length > 0 && m.mensagens.every(x => SO_AUDIO.test(String(x.texto ?? '').trim()));
+const soMarcadas = m.mensagens.length > 0 && m.mensagens.every(x => ['robo', 'recepcao'].includes(x.papel));
+if (soAudio) tipo = 'neutra';
+else if (soMarcadas && tipo === 'interesse') tipo = 'neutra';
 // Pedido de exclusão: o demo só sai pelo comando do Rômulo (RULES 10). O comando confere o pedido no
 // retrato da planilha (site-leads.json), que o fluxo 07 grava de hora em hora aos :20.
 const RETRATO_DEPOIS = (() => {
@@ -359,8 +421,17 @@ for (const a of m.achados) {
   const tipoAntes = txt(a.planilha === 'site' ? l.resposta_tipo : l['Tipo da resposta']);
   // Robô depois de gente (lembrete respondido pela saudação automática) não apaga o que a pessoa disse.
   if (tipo === 'bot' && HUMANOS.includes(tipoAntes)) continue;
+  // 17/10/2026: uma recusa não é apagada por uma resposta neutra depois ("ok", "obrigado", um áudio que ninguém
+  // ouviu); mudar de ideia de verdade vem como licenca ou interesse. E um áudio sem transcrição depois de qualquer
+  // resposta de gente não traz nada novo para gravar.
+  if (tipo === 'neutra' && ['negativa', 'exclusao'].includes(tipoAntes)) continue;
+  if (soAudio && HUMANOS.includes(tipoAntes)) continue;
   const nome = txt(a.planilha === 'site' ? l.nome : l['Empresa']) || 'lead';
   const cab = '\\ud83d\\udcac ' + nome + ' (' + ROTULO[a.planilha] + ') respondeu: ' + aspas(trecho) + '\\n\\u2192 ';
+  // O que fazer com um áudio que ninguém ouviu (a transcrição falhou ou não houve): ouvir no WhatsApp.
+  const OUVIR = 'Mandou um áudio que não foi transcrito: ouça no WhatsApp e continue a conversa';
+  // Licença (17/10/2026): o "pode mandar" autorizou o material que o Rômulo ofereceu; ainda não é interesse.
+  const LICENCA = 'Licença para mandar (ainda não é interesse): mande o que você ofereceu';
   if (a.planilha === 'site') {
     const status = txt(l.status);
     const respondeuAntes = txt(l.respondeu_em);
@@ -401,9 +472,12 @@ for (const a of m.achados) {
       item.aviso = cab + (so ? 'Interesse! Mande o raio-x' : 'Interesse! Mande o link do site')
         + (s.link ? ': ' + s.link : (s.numero ? ' (sem demo nem raio-x na linha).' : ' (sem WhatsApp na linha).'))
         + (so ? ' Se ele quiser o site, toque "Gerar demo" na ficha do CRM.' : '');
+    } else if (tipo === 'licenca') {
+      const s = segundaDe(l);
+      item.aviso = cab + LICENCA + (s.link ? ': ' + s.link : (s.numero ? ' (sem demo nem raio-x na linha).' : ' (sem WhatsApp na linha).'));
     } else if (tipo === 'neutra') {
       const n = numeroDoLead(l);
-      item.aviso = cab + 'Gente, sem sim nem não: continue a conversa' + (n ? ': https://wa.me/' + n : '.');
+      item.aviso = cab + (soAudio ? OUVIR : 'Gente, sem sim nem não: continue a conversa') + (n ? ': https://wa.me/' + n : '.');
     }
     if (status === 'recusado' && !['negativa', 'exclusao'].includes(tipo) && item.aviso) item.aviso += '\\n(Estava como Recusou; se mudou de ideia, desfaça na página do lead.)';
     saida.push({ json: item });
@@ -448,9 +522,14 @@ for (const a of m.achados) {
       item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (interesse): ' + aspas(trecho) + '. '
         + (oferta ? oferta.interesse : 'Faça o Raio-X e mande (botão na ficha do CRM).');
       item.aviso = cab + (oferta ? 'Interesse! ' + oferta.interesse + ' Ficha: ' : 'Interesse! Faça o Raio-X e mande pela ficha: ') + ficha;
+    } else if (tipo === 'licenca') {
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ' (licença para mandar): ' + aspas(trecho)
+        + '. Mande o que você ofereceu; interesse só quando ele reagir ao material.';
+      item.aviso = cab + LICENCA + '. Ficha: ' + ficha;
     } else {
-      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. Continue a conversa.';
-      item.aviso = cab + 'Gente, sem sim nem não: continue a conversa.';
+      item['Próxima ação'] = 'Respondeu no WhatsApp em ' + quando + ': ' + aspas(trecho) + '. '
+        + (soAudio ? 'Áudio não transcrito: ouça no WhatsApp.' : 'Continue a conversa.');
+      item.aviso = cab + (soAudio ? OUVIR + '.' : 'Gente, sem sim nem não: continue a conversa.');
     }
     saida.push({ json: item });
   }
@@ -669,7 +748,8 @@ try {
   const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
   let r = {};
   try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)); } catch (e) { r = {}; }
-  const tipo = ['bot', 'negativa', 'exclusao', 'interesse', 'neutra'].includes(r.tipo) ? r.tipo : 'neutra';
+  // licenca (17/10/2026) entra no registro como o Gemini disse; o Jev segue com os 5 tipos de antes (só mede).
+  const tipo = ['bot', 'negativa', 'exclusao', 'interesse', 'licenca', 'neutra'].includes(r.tipo) ? r.tipo : 'neutra';
   return [{ json: {
     pedido: pedidoJev(texto),
     registro: { lead_hash: sha256(JEV.sal + ':' + lead), planilha: String(m.achados?.[0]?.planilha ?? ''),
@@ -1240,8 +1320,9 @@ def testar() -> int:
 
         ENVIO = "2026-10-05T12:00:00Z"
 
-        def classificar(self, gemini, mensagens, sites=(), prumos=(), chave=LEAD, ofertas=None):
-            dados = {"Resposta no WhatsApp": {"body": {"chave": chave, "mensagens": mensagens}},
+        def classificar(self, gemini, mensagens, sites=(), prumos=(), chave=LEAD, ofertas=None, contexto=None):
+            corpo = {"chave": chave, "mensagens": mensagens, **({"contexto": contexto} if contexto is not None else {})}
+            dados = {"Resposta no WhatsApp": {"body": corpo},
                      "Ler Prospects": list(prumos), "Ler Leads do site": list(sites), **(ofertas or {})}
             montado = rodar_no(MONTAR_RESPOSTA_JS, dados)["itens"][0]
             if not montado["tem"]:
@@ -1261,7 +1342,112 @@ def testar() -> int:
         def test_prompt_explica_a_exclusao(self):
             montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:30:00Z", "texto": self.BABY_SCHOOL}], [self.lead_site()])
             self.assertIn('"exclusao"', montado["prompt"])
-            self.assertIn("bot|exclusao|negativa|interesse|neutra", montado["prompt"])
+            self.assertIn("bot|exclusao|negativa|licenca|interesse|neutra", montado["prompt"])
+
+        # ---- 17/10/2026: licença, contexto, papel, áudio e recusa que não se apaga
+
+        PERGUNTA = "Entendo! Posso te mandar o vídeo? Sem compromisso"
+
+        def test_prompt_traz_a_pergunta_do_romulo_e_a_recusa_anterior_em_ordem(self):
+            contexto = {"saidas": [{"em": "2026-10-05T12:20:00Z", "texto": self.PERGUNTA}],
+                        "anteriores": [{"em": "2026-10-05T12:10:00Z", "texto": "*[Bruna]* Quem fala?", "papel": "recepcao"},
+                                       {"em": "2026-10-05T12:15:00Z", "texto": "x" * 900, "papel": "inventado"}]}
+            montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:30:00Z", "texto": "CLaro, pode enviar sim"}],
+                                             [self.lead_site()], contexto=contexto)
+            p = montado["prompt"]
+            self.assertIn('Rômulo: "' + self.PERGUNTA + '"', p)
+            self.assertIn('negócio (recepção): "*[Bruna]* Quem fala?"', p)
+            self.assertLess(p.index("Quem fala?"), p.index("xxxx"))
+            self.assertLess(p.index("xxxx"), p.index(self.PERGUNTA))  # ordem do tempo, não da origem
+            self.assertNotIn("x" * 501, p)  # contexto cortado em 500
+            self.assertNotIn("inventado", p)  # papel fora da lista não entra
+            self.assertLess(p.index(self.PERGUNTA), p.index("Mensagens a classificar"))
+            self.assertIn('"licenca"', p)
+            self.assertIn('"agradeço, mas no momento não"', p)
+            self.assertIn('"qualquer coisa eu aviso"', p)
+            self.assertIn('Nunca é "bot" nem "interesse"', p)
+            # Sem contexto o prompt não ganha o bloco.
+            montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:30:00Z", "texto": "oi"}], [self.lead_site()])
+            self.assertNotIn("Conversa ANTES", montado["prompt"])
+
+        def test_papel_aparece_na_mensagem_a_classificar(self):
+            montado, _, _ = self.classificar("{}", [{"em": "2026-10-05T12:00:08Z", "texto": "[Atendimento] Digite 1", "papel": "robo"}],
+                                             [self.lead_site()])
+            self.assertIn('[8 s] (robô) "[Atendimento] Digite 1"', montado["prompt"])
+
+        def test_licenca_no_site_manda_o_material_e_grava_licenca(self):
+            _, itens, resp = self.classificar('{"tipo": "licenca", "trecho": "CLaro, pode enviar sim"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "CLaro, pode enviar sim"}],
+                                              [self.lead_site(status="expirado")])
+            i = itens[0]
+            self.assertEqual((i["resposta_tipo"], i["status"], i["respondeu_em"]), ("licenca", "enviado", "2026-10-05T12:40:00Z"))
+            aviso = resp["marcados"][0]["aviso"]
+            self.assertEqual(resp["marcados"][0]["tipo"], "licenca")
+            self.assertIn("Licença para mandar (ainda não é interesse)", aviso)
+            self.assertIn("https://wa.me/55" + LEAD + "?text=", aviso)
+            self.assertNotIn("Interesse!", aviso)
+
+        def test_licenca_no_prumo_e_na_oferta(self):
+            p = prumo("Convite enviado", **{"Convite enviado em": self.ENVIO, "Tipo da resposta": ""})
+            _, itens, resp = self.classificar('{"tipo": "licenca", "trecho": "pode mandar"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "pode mandar"}], prumos=[p])
+            self.assertEqual(itens[0]["Tipo da resposta"], "licenca")
+            self.assertTrue(itens[0]["Próxima ação"].startswith("Respondeu no WhatsApp em 05/10, 09:40 (licença para mandar)"))
+            self.assertIn(":8443/crm?ver=funil&lead=prumo%3AID-1", resp["marcados"][0]["aviso"])
+
+        def test_so_audio_sem_transcricao_e_neutra_e_pede_para_ouvir(self):
+            _, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "[áudio 27s]"}',
+                                              [{"em": "2026-10-05T12:40:00Z", "texto": "[áudio 27s]"}], [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "neutra")
+            self.assertIn("áudio que não foi transcrito", resp["marcados"][0]["aviso"])
+            _, itens, _ = self.classificar('{"tipo": "bot"}', [{"em": "2026-10-05T12:40:00Z", "texto": "[áudio]"}], [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "neutra")  # nunca bot
+            p = prumo("Convite enviado", **{"Convite enviado em": self.ENVIO, "Tipo da resposta": ""})
+            _, itens, _ = self.classificar('{"tipo": "neutra"}', [{"em": "2026-10-05T12:40:00Z", "texto": "[áudio 9s]"}], prumos=[p])
+            self.assertIn("Áudio não transcrito", itens[0]["Próxima ação"])
+
+        def test_audio_transcrito_vale_pelo_texto(self):
+            _, itens, _ = self.classificar('{"tipo": "negativa", "trecho": "no momento não"}',
+                                           [{"em": "2026-10-05T12:40:00Z", "texto": "[áudio 27s] Agradeço, mas no momento não"}],
+                                           [self.lead_site()])
+            self.assertEqual((itens[0]["resposta_tipo"], itens[0]["status"]), ("negativa", "recusado"))
+
+        def test_audio_sem_transcricao_nao_sobrescreve_resposta_de_gente(self):
+            for antes in ("interesse", "licenca", "negativa", "neutra"):
+                lead = self.lead_site(resposta_tipo=antes, respondeu_em="2026-10-05T12:30:00Z")
+                _, itens, resp = self.classificar('{"tipo": "neutra"}', [{"em": "2026-10-05T13:00:00Z", "texto": "[áudio 12s]"}], [lead])
+                self.assertEqual((itens, resp), ([], {"ok": True, "marcados": []}), antes)
+
+        def test_neutra_nao_apaga_a_recusa(self):
+            lead = self.lead_site(status="recusado", status_anterior="enviado", resposta_tipo="negativa", respondeu_em="2026-10-05T12:30:00Z")
+            _, itens, resp = self.classificar('{"tipo": "neutra", "trecho": "ok, obrigado"}',
+                                              [{"em": "2026-10-05T13:00:00Z", "texto": "ok, obrigado"}], [lead])
+            self.assertEqual((itens, resp), ([], {"ok": True, "marcados": []}))
+            p = prumo("Sem interesse", **{"Convite enviado em": self.ENVIO, "Tipo da resposta": "exclusao"})
+            _, itens, _ = self.classificar('{"tipo": "neutra"}', [{"em": "2026-10-05T13:00:00Z", "texto": "ok"}], prumos=[p])
+            self.assertEqual(itens, [])
+            # Mudar de ideia de verdade continua valendo, com o lembrete de que estava recusado.
+            _, itens, resp = self.classificar('{"tipo": "licenca", "trecho": "pensando bem, pode mandar"}',
+                                              [{"em": "2026-10-05T13:00:00Z", "texto": "pensando bem, pode mandar"}], [lead])
+            self.assertEqual(itens[0]["resposta_tipo"], "licenca")
+            self.assertIn("Estava como Recusou", resp["marcados"][0]["aviso"])
+
+        def test_robo_ou_recepcao_sozinhos_nao_viram_interesse(self):
+            for papel in ("robo", "recepcao"):
+                _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "pode falar"}',
+                                               [{"em": "2026-10-05T12:40:00Z", "texto": "*[Bruna]* Pode falar", "papel": papel}],
+                                               [self.lead_site()])
+                self.assertEqual(itens[0]["resposta_tipo"], "neutra", papel)
+            # Com uma frase de gente junto, vale o modelo.
+            _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "quanto custa?"}',
+                                           [{"em": "2026-10-05T12:40:00Z", "texto": "[Atendimento] Olá", "papel": "robo"},
+                                            {"em": "2026-10-05T12:45:00Z", "texto": "quanto custa?"}], [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "interesse")
+            # Licença dada pela recepção continua licença (não é interesse).
+            _, itens, _ = self.classificar('{"tipo": "licenca"}',
+                                           [{"em": "2026-10-05T12:40:00Z", "texto": "*[Bruna]* Pode enviar", "papel": "recepcao"}],
+                                           [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "licenca")
 
         def test_exclusao_sai_do_funil_e_so_propoe_apagar(self):
             _, itens, resp = self.classificar('{"tipo": "exclusao", "trecho": "se puder excluir esse conteúdo por gentileza"}',
@@ -1548,6 +1734,10 @@ def testar() -> int:
             decidir, _, registro = self.ramo("desculpe", [{"em": "2026-10-05T12:30:00Z", "texto": "quem é?"}], sites=[self.lead_site()])
             self.assertEqual(registro[0]["tipo_gemini"], decidir["itens"][0]["tipo"])
             self.assertEqual(registro[0]["tipo_gemini"], "neutra")
+            # licenca (17/10/2026) entra no registro como o Gemini disse, não como neutra.
+            decidir, _, registro = self.ramo('{"tipo": "licenca"}', [{"em": "2026-10-05T12:30:00Z", "texto": "pode mandar"}],
+                                             sites=[self.lead_site()])
+            self.assertEqual((decidir["itens"][0]["tipo"], registro[0]["tipo_gemini"]), ("licenca", "licenca"))
 
         def test_falha_do_jev_nao_gera_registro(self):
             for falha in ({"error": {"message": "timeout of 5000ms exceeded"}}, {"error": "401"}, {}, {"answers": {}},
