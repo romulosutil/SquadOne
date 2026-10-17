@@ -313,6 +313,10 @@ padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em so
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
 na Ficha a próxima mensagem e a proposta, nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
+O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; ainda NÃO construído): chat que
+substitui o Pedir no `operations`; Gemini roteia com leitura, o Hermes é consultado sem ferramentas (`hermes -z -t clarify`,
+contexto mascarado pela Central, sem sessão guardada), o Jev só mede; só propõe cartões, nada a lead, finanças e R$ de
+proposta fora de modelo; `SQUADONE_ASSISTENTE` e `SQUADONE_ASSISTENTE_HERMES` nascem desligadas.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o

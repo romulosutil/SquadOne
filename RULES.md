@@ -214,6 +214,20 @@
       planilha, lead e página; lidos como instrução, seriam injeção de prompt
       pelo próprio canal. As rotinas próprias do Hermes (Graphify, leituras)
       continuam dele; o que vale aqui é o papel dele no SquadOne.
+    - **Exceção do Assistente (17/10/2026, aprovada pelo Rômulo; regra 28): na
+      Central, o Hermes é especialista consultado, nunca motor.** A Central chama
+      `hermes -z -t clarify` (sem terminal, arquivo, navegador nem envio de
+      mensagem), numa pasta vazia 700, com stdin fechado, ambiente limpo, timeout
+      de 90 s e uma consulta por vez, e com o contexto já lido e mascarado por ela:
+      o Hermes não lê nada do SquadOne sozinho para o Assistente, a Central decide
+      o que ele vê. A conversa do lead pode ir, mascarada (decisão dele, como já
+      vai ao codex do copiloto). As sessões dessa pasta são apagadas antes e
+      depois: o `--resume` deixaria a conversa no `state.db`, onde o Hermes do
+      WhatsApp a acharia numa busca. O texto que volta é dado: nunca vira cartão,
+      ação nem chamada de ferramenta, e aparece como texto. Teto próprio por dia.
+      A api_server do Hermes continua desligada (ligar exigiria tirar o terminal do
+      toolset dela; com o mesmo usuário da Central, ele alcançaria `financas.db`, o
+      segredo do webhook do CRM e o token do Google).
 21. `deploy/dell/licitacoes-automation/` versiona somente configuração e código
     não sensíveis; `.env`, dados, históricos e backups do radar PNCP não entram
     no Git.
@@ -318,3 +332,28 @@
     do n8n da Mel; nunca no n8n do Easypanel. Virar
     motor de qualquer decisão exige cumprir os critérios de promoção de
     `docs/referencia/perfis-e-experimentos.md` e decisão explícita dele.
+
+28. **O Assistente da Central propõe; o Rômulo faz** (17/10/2026, aprovada por ele;
+    desenho na Auditoria da Central, AC-31). Painel de conversa
+    (`SQUADONE_ASSISTENTE=true`, só no perfil `operations`, nunca no Easypanel) que
+    substitui o Pedir no `operations` (o "＋" e o Ctrl+K passam a abri-lo; a folha
+    do Pedir fica só no Easypanel) e, numa segunda fase, a aba do copiloto da Ficha.
+    Papéis: o **Gemini** roteia e redige, com ferramentas **só de leitura** sobre os
+    GET que já existem (Hoje, funil, fila de venda, lead mascarado, agenda do dia, o
+    Dell pelo `status.json`, regra 19); o **Hermes** é consultado nas perguntas de
+    estratégia, na forma da exceção da regra 20 (`SQUADONE_ASSISTENTE_HERMES=true`);
+    o **Jev** só mede em sombra (regra 27), nunca responde. Para agir, o modelo só
+    **propõe cartões**: o servidor valida e o cartão nasce "proposto"; quem escreve é
+    o toque do Rômulo, pela rota que já existe e pela guarda de mesma origem (regra
+    10). Nada é enviado a lead (regras 11 e 17): mensagem para lead é só "Copiar".
+    **Finanças não entram no Assistente**: texto que parece finanças
+    (`pareceFinancas`, "R$", gasto falado) não vai a modelo nenhum; o gasto falado
+    vira cartão por regra fixa, e o resto responde "isso fica em Finanças". O R$ de
+    proposta conta como finanças para esta regra (decisão dele): o preço continua
+    vindo do cardápio na Ficha e no "Mandar a proposta". Telefone, e-mail, CPF/CNPJ
+    e wa.me saem mascarados de tudo o que vai a um modelo e do histórico. Histórico
+    em JSONL 600 em `SQUADONE_OPERATIONS_DATA_DIR/assistente/`, 90 dias, só
+    mascarado. Cada resposta mostra de onde veio (as ferramentas que de fato
+    rodaram, regra 14), e a saída do modelo é texto interpolado, nunca HTML (regra
+    23). Tetos por dia: 60 mensagens e 20 consultas ao Hermes. O catálogo de
+    trabalhadores fica fora do prompt (regra 26). As duas flags nascem desligadas.
