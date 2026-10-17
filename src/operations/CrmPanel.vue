@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Sheet from '../components/Sheet.vue'
 import CrmColinha from './CrmColinha.vue'
 import CrmFicha from './CrmFicha.vue'
@@ -14,6 +14,7 @@ import {
   type EnviosAnotados, type TipoDeEnvioAnotado,
 } from './anotacao-de-envio'
 import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
+import { filaDaTela, lerResolvidas, noExpedienteDeVenda, type ResumoDoDia } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
 import {
@@ -221,9 +222,18 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
   ...g,
   itens: g.itens.filter(i => produto.value === 'todos' || porId.value.get(i.leadId)?.produto === produto.value),
 })))
-// O número da aba "A fazer" conta o que pede mensagem: os prospects para revisar (1.400+ em 16/10/2026)
-// são triagem e afogavam o número ("A fazer 1603").
-const totalHoje = computed(() => hoje.value.filter(g => g.id !== 'revisar').reduce((soma, g) => soma + g.itens.length, 0))
+// O número da aba "A fazer" é o tamanho da fila da Próxima venda (AC-02, 17/10/2026): somar os grupos
+// contava todos os primeiros contatos prontos (183 na aba para 3 no cartão), e a fila deixa entrar um
+// por vez. Com o cartão montado vale o que ele contou (sabe o nicho, o "Liberar" e o que o servidor
+// resolveu); sem ele (aberto direto em outra aba), a mesma conta pura com o que esta tela sabe.
+const resumoDoCartao = ref<ResumoDoDia | null>(null)
+// Fora da A fazer o cartão desmonta e a última conta dele pararia no tempo (o ritmo e o relógio andam).
+watch(vista, (v) => { if (v !== 'afazer') resumoDoCartao.value = null })
+const totalAFazer = computed(() => {
+  if (resumoDoCartao.value) return resumoDoCartao.value.total
+  const tela = { ritmo: ritmo.value, noExpediente: noExpedienteDeVenda(agora.value), agora: agora.value, liberados: liberados.value }
+  return filaDaTela(visao.value, tela, lerResolvidas(armazenamento(), agora.value)).length
+})
 // Triagem (OT-05): só os prospects para revisar, em lotes de 10, longe da fila de venda.
 const triagem = computed(() => hoje.value.filter(g => g.id === 'revisar'))
 const totalTriagem = computed(() => triagem.value.reduce((soma, g) => soma + g.itens.length, 0))
@@ -340,7 +350,7 @@ async function abrirColinha() {
            nomes internos, perdidos ao lado de Hoje e Funil. A Jornada virou um modo do Funil. -->
       <nav class="crm-vistas" aria-label="Vistas do CRM">
         <a v-for="v in VISTAS" :key="v.id" :href="v.href" :aria-current="vistaDaAba === v.id ? 'page' : undefined" @click.prevent="trocarVista(v.id)">
-          {{ v.rotulo }} <span v-if="visao && v.id === 'afazer'">{{ totalHoje }}</span><span v-else-if="visao && v.id === 'triagem'">{{ totalTriagem }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
+          {{ v.rotulo }} <span v-if="visao && v.id === 'afazer'">{{ totalAFazer }}</span><span v-else-if="visao && v.id === 'triagem'">{{ totalTriagem }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
         </a>
       </nav>
       <p class="crm-vistas__dica">{{ VISTAS.find((v) => v.id === vistaDaAba)?.dica }}</p>
@@ -370,7 +380,7 @@ async function abrirColinha() {
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" />
+      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" @abrir="abrirFicha" @resumo="resumoDoCartao = $event" />
       <template v-else-if="vista === 'triagem'">
         <CrmHoje v-if="totalTriagem" :grupos="triagem" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" :limite="10" @abrir="abrirFicha" @enviado="marcarAberto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
         <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>

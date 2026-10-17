@@ -26,8 +26,10 @@
  * do número que é também o do Hermes).
  */
 import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
+import type { Guardador } from './fila-de-envio'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
+import type { EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 
 export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'desfecho' | 'primeiro'
@@ -449,6 +451,115 @@ export function resumoDaFila(fila: readonly AcaoDeVenda[]): string {
   const conta = new Map<TipoDeVenda, number>()
   for (const a of fila) conta.set(a.tipo, (conta.get(a.tipo) ?? 0) + 1)
   return [...conta].map(([t, n]) => `${n} ${NOMES[t][n === 1 ? 0 : 1]}`).join(' · ')
+}
+
+// ---------------------------------------------------------------- a fila da tela e a contagem do dia
+
+/** O "Enviei" (pulou: false) ou o "Pular" de uma ação, com o instante; vale até o fim do dia. */
+export interface Resolvida { em: number; pulou: boolean }
+export type Resolvidas = Record<string, Resolvida>
+
+/** A mesma chave que a Próxima venda sempre usou: trocar perderia o que já foi resolvido hoje. */
+export const CHAVE_DAS_RESOLVIDAS = 'squadone:venda:resolvidas'
+const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10)
+
+/**
+ * O que esta tela resolveu hoje (reserva do servidor, GET /api/operations/crm/venda). Morava no
+ * ProximaVenda.vue; veio para cá para a aba "A fazer" do CrmPanel contar a mesma fila sem o cartão
+ * montado (AC-02). Outro dia, ou storage ilegível, é fila sem nada resolvido.
+ */
+export function lerResolvidas(storage: Guardador | null | undefined, agora: number): Resolvidas {
+  try {
+    const bruto = JSON.parse(storage?.getItem(CHAVE_DAS_RESOLVIDAS) ?? '{}')
+    if (bruto?.dia === diaDeSP(agora) && bruto.itens && typeof bruto.itens === 'object' && !Array.isArray(bruto.itens)) return bruto.itens as Resolvidas
+  } catch { /* sem storage: só nesta visita */ }
+  return {}
+}
+
+export function gravarResolvidas(storage: Guardador | null | undefined, itens: Resolvidas, agora: number): void {
+  try { storage?.setItem(CHAVE_DAS_RESOLVIDAS, JSON.stringify({ dia: diaDeSP(agora), itens })) } catch { /* idem */ }
+}
+
+/** O que a tela sabe além do retrato: o ritmo, o expediente, o "Liberar", o copiloto e o nicho escolhido. */
+export interface EstadoDaTela {
+  ritmo: Pick<EstadoDoRitmo, 'motivo'>
+  noExpediente: boolean
+  agora: number
+  liberados?: ReadonlySet<string>
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>
+  /** Primeiro contato só deste nicho; vazio = todos. */
+  nicho?: string
+}
+
+/**
+ * PURO. A fila exatamente como a Próxima venda mostra: sem retrato legível, nada; o que foi
+ * "Pulado" hoje vai para o fim; o que foi "Enviei" sai. O cartão e a aba "A fazer" leem daqui,
+ * para os dois números nunca mais divergirem (eram 183 na aba e 3 no cartão em 16/10/2026).
+ */
+export function filaDaTela(visao: Pick<CrmVisao, 'hoje' | 'leads' | 'estado'> | null | undefined, tela: EstadoDaTela, resolvidas: Resolvidas = {}): AcaoDeVenda[] {
+  if (!visao || visao.estado !== 'ok') return []
+  const ritmoLivre = tela.ritmo.motivo === null
+  const pulados = new Set(Object.entries(resolvidas).filter(([, r]) => r?.pulou).map(([k]) => k))
+  const feitos = new Set(Object.entries(resolvidas).filter(([, r]) => r && !r.pulou).map(([k]) => k))
+  const ctx: ContextoDaVenda = { primeiroLiberado: ritmoLivre && tela.noExpediente, ritmoLivre, agora: tela.agora }
+  if (tela.liberados) ctx.liberados = tela.liberados
+  if (tela.sugestoes) ctx.sugestoes = tela.sugestoes
+  if (tela.nicho) ctx.nichoDoPrimeiro = tela.nicho
+  return filaDeVenda(visao, ctx, pulados).filter((a) => !feitos.has(a.chave))
+}
+
+/**
+ * Os quatro tipos que a tela conta, mais a recusa para marcar (que também é um toque da fila).
+ * O combinado é responder a quem espera por nós; o "o que achou?" é o follow-up depois do link;
+ * o reenvio do só-robô conta como primeiro contato, como na trava de ritmo.
+ */
+export type GrupoDaFila = 'responder' | 'proposta' | 'followup' | 'primeiro' | 'desfecho'
+
+const GRUPO_DO_TIPO: Record<TipoDeVenda, GrupoDaFila> = {
+  responder: 'responder', combinado: 'responder',
+  'mandar-proposta': 'proposta', proposta: 'proposta',
+  followup: 'followup', 'depois-do-link': 'followup',
+  primeiro: 'primeiro', desfecho: 'desfecho',
+}
+
+export interface ResumoDoDia {
+  /**
+   * Quantas ações a Próxima venda mostra, a atual incluída. É o N da aba "A fazer", do "N na fila"
+   * do cartão e do "Ver a fila inteira (N)": o mesmo número nos três lugares.
+   */
+  total: number
+  porGrupo: Record<GrupoDaFila, number>
+  /** Primeiros contatos prontos no retrato (o grupo "enviar"), entrem ou não na fila agora. */
+  primeirosProntos: number
+  /**
+   * Quantos primeiros contatos o ritmo ainda deixa sair hoje: o teto do dia menos os enviados, e 0
+   * na pausa (que pode durar além de hoje: melhor prometer de menos). Nunca mais que os prontos.
+   */
+  primeirosAindaHoje: number
+}
+
+/** PURO. A contagem da fila do dia, de onde todo rótulo da Próxima venda e da aba lê. */
+export function resumoDoDia(
+  fila: readonly Pick<AcaoDeVenda, 'tipo' | 'primeiroContato'>[],
+  visao: Pick<CrmVisao, 'hoje'> | null | undefined,
+  ritmo: Pick<EstadoDoRitmo, 'motivo' | 'enviadosHoje' | 'teto'>,
+): ResumoDoDia {
+  const porGrupo: Record<GrupoDaFila, number> = { responder: 0, proposta: 0, followup: 0, primeiro: 0, desfecho: 0 }
+  for (const a of fila) porGrupo[a.primeiroContato ? 'primeiro' : GRUPO_DO_TIPO[a.tipo]]++
+  const primeirosProntos = visao?.hoje.find((g) => g.id === 'enviar')?.itens.length ?? 0
+  const restam = ritmo.motivo === 'pausa' ? 0 : Math.max(0, ritmo.teto - ritmo.enviadosHoje)
+  return { total: fila.length, porGrupo, primeirosProntos, primeirosAindaHoje: Math.min(restam, primeirosProntos) }
+}
+
+/**
+ * PURO. "165 primeiros contatos prontos · até 10 hoje": quantos esperam e quantos o ritmo ainda deixa.
+ * Sem nenhum que caiba hoje, só a contagem: o motivo (teto, pausa, horário) vem na frase seguinte.
+ */
+export function textoDosPrimeiros(resumo: Pick<ResumoDoDia, 'primeirosProntos' | 'primeirosAindaHoje'>): string {
+  const n = resumo.primeirosProntos
+  if (!n) return ''
+  const prontos = n === 1 ? '1 primeiro contato pronto' : `${n} primeiros contatos prontos`
+  return resumo.primeirosAindaHoje > 0 ? `${prontos} · até ${resumo.primeirosAindaHoje} hoje` : prontos
 }
 
 // ---------------------------------------------------------------- expediente de venda

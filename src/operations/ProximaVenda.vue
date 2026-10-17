@@ -18,29 +18,51 @@
  * navegador e no Telegram; o localStorage fica só de reserva quando o servidor não responde. A folha
  * "Enviar um por um" saiu: o filtro por nicho e o passo do vídeo (A/B do vídeo) vieram para cá.
  * O desfecho (OT-06): quem disse não ganha "Marcar a recusa" em um toque.
+ *
+ * 17/10/2026 (AC-01, AC-02, AC-04): a Ficha abre na própria página quando quem monta o cartão sabe
+ * abrir (o CrmPanel passa `@abrir`); na Hoje o link segue para /crm?lead=. Todo número da fila sai de
+ * resumoDoDia (o mesmo da aba "A fazer"). O status do toque ficou visível, e a falha da anotação
+ * fica em destaque até "Entendi", com o botão da Ficha ao lado.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { corpoDaAnotacao } from './anotacao-de-envio'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
-import { filaDeVenda, nichoDo, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from './proxima-venda'
+import {
+  filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, noExpedienteDeVenda,
+  resumoDaFila, resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
+} from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, ROTULO_DE_LIBERAR, type EnviosLiberados } from './trava-de-horario'
 import { gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, textoDoRitmo, type PrimeirosContatos } from './trava-de-ritmo'
 import type { CrmVisao } from './types'
 
-const props = defineProps<{ visao: CrmVisao | null; erro?: string }>()
-const emit = defineEmits<{ registrado: [] }>()
+const props = defineProps<{
+  visao: CrmVisao | null
+  erro?: string
+  /**
+   * Quem monta o cartão abre a Ficha na mesma página (o CrmPanel, com `@abrir`). Sem ele (a Hoje), o
+   * link /crm?lead= troca de rota e o CrmPanel lê o lead ao montar. É prop, e não emit, porque só
+   * assim dá para saber se alguém escuta: na A fazer o pushState da casca não remonta o CrmPanel e a
+   * folha nunca abria (AC-01, 17/10/2026).
+   */
+  onAbrir?: (leadId: string) => void
+}>()
+const emit = defineEmits<{ registrado: []; resumo: [ResumoDoDia] }>()
 
 const agora = ref(Date.now())
 let relogio = 0
 const primeiros = ref<PrimeirosContatos>({})
 /** Chaves resolvidas nesta tela ("Enviei" ou "Pular"), com o instante; valem até o fim do dia. */
-const CHAVE_DO_DIA = 'squadone:venda:resolvidas'
-const resolvidas = ref<Record<string, { em: number; pulou: boolean }>>({})
+const resolvidas = ref<Resolvidas>({})
 const verFila = ref(false)
 const copiado = ref(false)
 const tocado = ref<string | null>(null)
 const status = ref('')
+/**
+ * A anotação que não chegou à aba CRM. Fica à parte do status (que o próximo toque troca) até o
+ * "Entendi": é o único recado que pede uma ação, e o "Enviei, próxima" logo depois o apagava.
+ */
+const falha = ref<{ leadId: string; texto: string } | null>(null)
 /** As sugestões que o copiloto fez sozinho para a conversa de agora (leadId -> mensagem). */
 const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
@@ -78,15 +100,12 @@ async function lerSugestoes() {
 function armazenamento(): Storage | null {
   try { return window.localStorage } catch { return null }
 }
-const diaSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10)
 function lerResolvidas() {
-  try {
-    const bruto = JSON.parse(armazenamento()?.getItem(CHAVE_DO_DIA) ?? '{}')
-    if (bruto?.dia === diaSP(Date.now()) && bruto.itens && typeof bruto.itens === 'object') resolvidas.value = bruto.itens
-  } catch { /* sem storage: só nesta visita */ }
+  const lidas = lerDoStorage(armazenamento(), Date.now())
+  if (Object.keys(lidas).length) resolvidas.value = lidas
 }
 function gravarResolvidas() {
-  try { armazenamento()?.setItem(CHAVE_DO_DIA, JSON.stringify({ dia: diaSP(Date.now()), itens: resolvidas.value })) } catch { /* idem */ }
+  gravarNoStorage(armazenamento(), resolvidas.value, Date.now())
 }
 
 onMounted(() => {
@@ -108,11 +127,13 @@ const expediente = computed(() => noExpedienteDeVenda(agora.value))
 const pulados = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => r.pulou).map(([k]) => k)))
 const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => !r.pulou).map(([k]) => k)))
 const ritmoLivre = computed(() => ritmo.value.motivo === null)
-const fila = computed<AcaoDeVenda[]>(() =>
-  filaDeVenda(props.visao?.estado === 'ok' ? props.visao : null,
-    { primeiroLiberado: ritmoLivre.value && expediente.value, liberados: liberados.value, ritmoLivre: ritmoLivre.value, agora: agora.value, sugestoes: sugestoes.value,
-      ...(nicho.value ? { nichoDoPrimeiro: nicho.value } : {}) }, pulados.value)
-    .filter((a) => !feitos.value.has(a.chave)))
+const fila = computed<AcaoDeVenda[]>(() => filaDaTela(props.visao, {
+  ritmo: ritmo.value, noExpediente: expediente.value, agora: agora.value,
+  liberados: liberados.value, sugestoes: sugestoes.value, nicho: nicho.value,
+}, resolvidas.value))
+/** A contagem do dia: o "N na fila", o "Ver a fila inteira (N)" e a aba "A fazer N" (via `resumo`). */
+const resumo = computed(() => resumoDoDia(fila.value, props.visao?.estado === 'ok' ? props.visao : null, ritmo.value))
+watch(resumo, (r) => emit('resumo', r), { immediate: true })
 /**
  * Fora do expediente e com o ritmo livre: o primeiro contato que sairia agora, para o "Liberar"
  * dizer de quem é (a fila calculada como se o expediente estivesse aberto).
@@ -147,14 +168,34 @@ function marcarOVideo() {
   status.value = `${leadAtual.value.empresa}: vídeo marcado como enviado.`
 }
 const depois = computed(() => fila.value.slice(1))
-/** Primeiros contatos prontos que a trava ou o relógio seguram agora. */
-const esperando = computed(() => (props.visao?.hoje.find((g) => g.id === 'enviar')?.itens.length ?? 0))
+/**
+ * Quantos primeiros contatos esperam e quantos o ritmo ainda deixa hoje ("165 … · até 10 hoje"),
+ * mais o motivo quando o relógio ou a trava seguram agora.
+ */
 const motivoDaEspera = computed(() => {
-  if (!esperando.value) return ''
-  if (!expediente.value) return `${esperando.value} primeiros contatos prontos. ${avisoDeHorario(props.visao?.leads ?? [], agora.value) ?? ''}`.trim()
-  if (ritmo.value.motivo) return `${esperando.value} primeiros contatos prontos. ${textoDoRitmo(ritmo.value)}`
-  return ''
+  const contagem = textoDosPrimeiros(resumo.value)
+  if (!contagem) return ''
+  if (!expediente.value) return `${contagem}. ${avisoDeHorario(props.visao?.leads ?? [], agora.value) ?? ''}`.trim()
+  if (ritmo.value.motivo) return `${contagem}. ${textoDoRitmo(ritmo.value)}`
+  return `${contagem}.`
 })
+
+const hrefDaFicha = (leadId: string) => `/crm?lead=${encodeURIComponent(leadId)}`
+/**
+ * Clique simples com alguém que abre a Ficha aqui: abre a folha e segura o link (a casca vê o
+ * `defaultPrevented` e não faz o pushState). Ctrl, Shift, botão do meio ou sem `onAbrir`: o link
+ * segue como sempre (aba nova, ou a rota /crm a partir da Hoje).
+ */
+function abrirAFicha(e: MouseEvent, leadId: string) {
+  if (!props.onAbrir || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  e.preventDefault()
+  props.onAbrir(leadId)
+}
+
+/** O que a anotação grava, para a falha dizer o que ficou por anotar. */
+const O_QUE_ANOTA: Record<NonNullable<AcaoDeVenda['anota']>, string> = {
+  proposta: 'a proposta', recusou: 'a recusa', segunda_enviada: 'o envio', followup_enviado: 'o envio', plus_enviado: 'o envio',
+}
 
 async function aoTocar(a: AcaoDeVenda) {
   tocado.value = a.chave
@@ -176,9 +217,10 @@ async function aoTocar(a: AcaoDeVenda) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     status.value = a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.`
       : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado no CRM.`
+    if (falha.value?.leadId === a.leadId) falha.value = null
     emit('registrado')
   } catch {
-    status.value = `${a.empresa}: não consegui anotar o envio — anote na ficha.`
+    falha.value = { leadId: a.leadId, texto: `${a.empresa}: não consegui anotar ${O_QUE_ANOTA[a.anota]} — anote na ficha.` }
   }
 }
 
@@ -218,8 +260,19 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
   <section class="venda" aria-labelledby="venda-titulo">
     <div class="venda__cabeca">
       <span class="venda__kicker">Próxima venda</span>
-      <span v-if="atual" class="texto-2 texto-pequeno">{{ fila.length }} na fila</span>
+      <span v-if="atual" class="texto-2 texto-pequeno">{{ resumo.total }} na fila</span>
     </div>
+
+    <!-- Em cima do cartão: depois do "Enviei", a ação seguinte toma o lugar e o recado do toque
+         anterior continua à vista. A falha fica até o "Entendi"; o status, até o próximo toque. -->
+    <p v-if="falha" class="recado recado--erro venda__falha" role="alert">
+      <span>{{ falha.texto }}</span>
+      <a class="botao" :href="hrefDaFicha(falha.leadId)" @click="abrirAFicha($event, falha.leadId)">Abrir a Ficha</a>
+      <button type="button" class="botao botao--leve" @click="falha = null">Entendi</button>
+    </p>
+    <!-- A região viva fica sempre no DOM (o leitor só anuncia o que muda numa região que já existia);
+         vazia, some da vista. -->
+    <p class="recado" :class="{ 'so-leitor': !status }" role="status" aria-live="polite">{{ status }}</p>
 
     <p v-if="erro" class="recado recado--erro">Funil indisponível: {{ erro }}</p>
     <p v-else-if="!visao" class="texto-2" role="status">Lendo o funil…</p>
@@ -265,18 +318,21 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           <button v-if="passoDoVideoAtual && videoPendente && tocado === atual.chave" type="button" class="botao" @click="marcarOVideo">Vídeo enviado</button>
           <button v-if="tocado === atual.chave" type="button" class="botao" @click="resolver(atual, false)">Enviei, próxima</button>
           <button v-if="atual.rascunho" type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
-          <a class="botao botao--leve" :href="`/crm?lead=${encodeURIComponent(atual.leadId)}`">Ficha</a>
+          <a class="botao botao--leve" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Ficha</a>
           <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Pular</button>
         </div>
       </article>
 
       <p v-if="depois.length" class="venda__depois">
         <span>Depois: {{ resumoDaFila(depois) }}.</span>
-        <button type="button" class="botao botao--leve" :aria-expanded="verFila" @click="verFila = !verFila">{{ verFila ? 'Esconder a fila' : `Ver a fila inteira (${depois.length})` }}</button>
+        <button type="button" class="botao botao--leve" :aria-expanded="verFila" @click="verFila = !verFila">{{ verFila ? 'Esconder a fila' : `Ver a fila inteira (${resumo.total})` }}</button>
       </p>
+      <!-- A fila inteira é a da contagem: a atual em primeiro, marcada, e as seguintes. -->
       <ol v-if="verFila" class="venda__fila">
-        <li v-for="a in depois" :key="a.chave">
-          <a :href="`/crm?lead=${encodeURIComponent(a.leadId)}`"><strong>{{ a.titulo }}</strong><small class="texto-2">{{ a.contexto }}</small></a>
+        <li v-for="(a, i) in fila" :key="a.chave">
+          <a :href="hrefDaFicha(a.leadId)" :aria-current="i === 0 ? 'step' : undefined" @click="abrirAFicha($event, a.leadId)">
+            <strong>{{ a.titulo }}<span v-if="i === 0" class="texto-2"> · agora</span></strong><small class="texto-2">{{ a.contexto }}</small>
+          </a>
         </li>
       </ol>
     </template>
@@ -296,7 +352,6 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     <p v-if="candidatoForaDoExpediente" class="venda__botoes">
       <button type="button" class="botao botao--leve" @click="liberar(candidatoForaDoExpediente)">{{ ROTULO_DE_LIBERAR }}: {{ candidatoForaDoExpediente.empresa }}</button>
     </p>
-    <p class="so-leitor" role="status" aria-live="polite">{{ status }}</p>
   </section>
 </template>
 
@@ -317,6 +372,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }
 .venda__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16em; overflow: auto; }
 .venda__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.venda__falha { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); overflow-wrap: anywhere; }
+.venda__falha span { flex: 1 1 16em; }
 .venda__nicho { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
 .venda__nicho select { min-height: var(--toque); padding: 0 var(--esp-2); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); }
 .venda__depois { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); padding-top: var(--esp-2); border-top: var(--divisor); color: var(--texto-2); }
