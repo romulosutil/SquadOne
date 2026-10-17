@@ -13,7 +13,7 @@ import {
 } from "./organizacao.ts";
 import { projetarParcelas, type ParcelamentoProjetado } from "./parcelas.ts";
 import { contextoDas } from "./processar.ts";
-import type { Conexao, Conta, Fatura, SaudeDaConexao, TipoDeConta, Transacao } from "./tipos.ts";
+import { TIPOS_DE_CONTA, type Conexao, type Conta, type Fatura, type SaudeDaConexao, type TipoDeConta, type Transacao } from "./tipos.ts";
 import { fechamentoDa, gastoNaVisao, mesDaFatura, receitaDoMes, vencimentoPrevisto, type Visao } from "./visoes.ts";
 
 /**
@@ -93,7 +93,7 @@ export interface ResumoFinanceiro {
   orcamento: OrcamentoDoMes | null;
   recorrentes: Recorrente[];
   recorrentesDesmarcados: Recorrentes["desmarcados"];
-  saude: { conexoes: (Conexao & { saude: SaudeDaConexao })[]; dadosAte: string | null };
+  saude: { conexoes: (Conexao & { saude: SaudeDaConexao; contas: string[] })[]; dadosAte: string | null };
 }
 
 /** O que o Rômulo organizou e o resumo usa: orçamento por categoria e marcas de recorrente. */
@@ -103,6 +103,26 @@ export interface OrganizacaoDoResumo {
 }
 
 const SEM_ORGANIZACAO: OrganizacaoDoResumo = { orcamentos: new Map(), marcasDeRecorrente: new Map() };
+
+/**
+ * Os nomes das contas de cada conexão (AC-26), para o selo de saúde dizer de qual banco é: pelo
+ * Meu Pluggy as conexões têm o mesmo nome de conector, e "MeuPluggy" três vezes não diz qual
+ * atrasou. Só o NOME, nunca saldo nem final (RULES 24). A ligação é o `itemId` que a leitura grava
+ * em cada conta; a manual não tem conexão. Corrente antes de cartão (a ordem de `TIPOS_DE_CONTA`),
+ * e o nome repetido aparece uma vez só: dois "Cartão Itaú" não dizem mais que um.
+ */
+export function contasPorConexao(contas: readonly Pick<Conta, "itemId" | "nome" | "tipo">[]): Map<string, string[]> {
+  const ordem = (t: TipoDeConta) => TIPOS_DE_CONTA.indexOf(t);
+  const porItem = new Map<string, string[]>();
+  for (const c of [...contas].sort((a, b) => ordem(a.tipo) - ordem(b.tipo) || a.nome.localeCompare(b.nome, "pt-BR"))) {
+    const nome = c.nome.trim();
+    if (!c.itemId || !nome) continue;
+    const nomes = porItem.get(c.itemId) ?? [];
+    if (!nomes.includes(nome)) nomes.push(nome);
+    porItem.set(c.itemId, nomes);
+  }
+  return porItem;
+}
 
 /** Status da Pluggy → semáforo. Desconhecido conta como erro: na dúvida, não dizer que está tudo bem (RULES 2). */
 export function saudeDa(c: Pick<Conexao, "status" | "erroLeitura">): SaudeDaConexao {
@@ -293,7 +313,8 @@ export function resumir(
   const { lista, desmarcados } = recorrentesAte(transacoes, fimDoMes(mes), org.marcasDeRecorrente, (t) => gastoNaVisao(t, "competencia", ctx)?.centavos ?? null);
 
   // --- Saúde ----------------------------------------------------------
-  const conexoes = entrada.conexoes.map((c) => ({ ...c, saude: saudeDa(c) }));
+  const contasDaConexao = contasPorConexao(contas);
+  const conexoes = entrada.conexoes.map((c) => ({ ...c, saude: saudeDa(c), contas: contasDaConexao.get(c.itemId) ?? [] }));
   // A data que vale é a da conexão mais atrasada: "dados até" promete que TUDO está até ali.
   const dadosAte = conexoes.map((c) => c.dadosAte).filter((d): d is string => !!d).sort()[0] ?? null;
 

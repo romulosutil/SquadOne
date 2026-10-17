@@ -77,7 +77,7 @@ const RESUMO: ResumoFinanceiro = {
   recorrentesDesmarcados: [{ estabelecimento: "PADARIA EXEMPLO", descricao: "PADARIA EXEMPLO" }],
   saude: {
     conexoes: [
-      { itemId: "item", nome: "Banco Exemplo", status: "UPDATED", executionStatus: "SUCCESS", dadosAte: "2026-10-20T09:00:00Z", consentimentoAte: null, lidoEm: null, erroLeitura: null, saude: "ok" },
+      { itemId: "item", nome: "Banco Exemplo", status: "UPDATED", executionStatus: "SUCCESS", dadosAte: "2026-10-20T09:00:00Z", consentimentoAte: null, lidoEm: null, erroLeitura: null, saude: "ok", contas: ["Conta Exemplo"] },
     ],
     dadosAte: "2026-10-20T09:00:00Z",
   },

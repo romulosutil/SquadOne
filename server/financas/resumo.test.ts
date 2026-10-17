@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { processar } from "./processar.ts";
-import { pagoDasFaturas, resumir, saudeDa } from "./resumo.ts";
+import { contasPorConexao, pagoDasFaturas, resumir, saudeDa } from "./resumo.ts";
 import { conta, fatura, tx } from "./teste-apoio.ts";
-import type { Conexao } from "./tipos.ts";
+import type { Conexao, Conta } from "./tipos.ts";
 
 const hoje = "2026-10-07";
 
@@ -259,5 +259,32 @@ describe("saúde das conexões", () => {
     const c = (itemId: string, dadosAte: string): Conexao => ({ itemId, nome: itemId, status: "UPDATED", executionStatus: "SUCCESS", dadosAte, consentimentoAte: null, lidoEm: null, erroLeitura: null });
     const r = resumir({ contas: [], faturas: [], transacoes: [], conexoes: [c("a", "2026-10-06T10:00:00Z"), c("b", "2026-10-04T08:00:00Z")] }, hoje, "2026-10", "competencia");
     assert.equal(r.saude.dadosAte, "2026-10-04T08:00:00Z");
+  });
+});
+
+describe("contas de cada conexão no selo (AC-26)", () => {
+  const c = (id: string, itemId: string, tipo: Conta["tipo"], nome: string) => conta(id, tipo, { itemId, nome });
+  const casos: [string, Conta[], Record<string, string[]>][] = [
+    ["sem contas, nada", [], {}],
+    ["cada conta na sua conexão", [c("a", "i1", "corrente", "Itaú Corrente"), c("b", "i2", "corrente", "Nubank")], { i1: ["Itaú Corrente"], i2: ["Nubank"] }],
+    ["corrente antes de cartão, mesmo com o nome depois", [c("k", "i1", "cartao", "Cartão Itaú"), c("z", "i1", "corrente", "Zeta Corrente")], { i1: ["Zeta Corrente", "Cartão Itaú"] }],
+    ["mesmo tipo em ordem de nome", [c("p", "i1", "poupanca", "Poupança"), c("y", "i1", "corrente", "Itaú B"), c("x", "i1", "corrente", "Itaú A")], { i1: ["Itaú A", "Itaú B", "Poupança"] }],
+    ["nome repetido aparece uma vez", [c("k1", "i1", "cartao", "Cartão Itaú"), c("k2", "i1", "cartao", "Cartão Itaú")], { i1: ["Cartão Itaú"] }],
+    ["conta sem conexão (a manual) fica fora", [c("manual:dinheiro", "", "dinheiro", "Dinheiro")], {}],
+    ["nome vazio fica fora; espaços saem", [c("v", "i1", "corrente", "  "), c("w", "i1", "corrente", " Itaú ")], { i1: ["Itaú"] }],
+  ];
+  for (const [titulo, contas, esperado] of casos) {
+    it(titulo, () => assert.deepEqual(Object.fromEntries(contasPorConexao(contas)), esperado));
+  }
+
+  it("o resumo leva os nomes em cada conexão, sem valor; conexão sem conta leva lista vazia", () => {
+    const cx = (itemId: string): Conexao => ({ itemId, nome: "MeuPluggy", status: "UPDATED", executionStatus: "SUCCESS", dadosAte: null, consentimentoAte: null, lidoEm: null, erroLeitura: null });
+    const contas = [
+      conta("cc", "corrente", { itemId: "i1", nome: "Itaú Corrente", saldoCentavos: 123456 }),
+      conta("k", "cartao", { itemId: "i1", nome: "Cartão Itaú", saldoCentavos: 7890, final: "4321" }),
+    ];
+    const r = resumir({ contas, faturas: [], transacoes: [], conexoes: [cx("i1"), cx("i2")] }, hoje, "2026-10", "competencia");
+    assert.deepEqual(r.saude.conexoes.map((x) => x.contas), [["Itaú Corrente", "Cartão Itaú"], []]);
+    assert.doesNotMatch(JSON.stringify(r.saude), /123456|7890|4321|R\$/);
   });
 });

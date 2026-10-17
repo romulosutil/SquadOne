@@ -71,9 +71,12 @@ arquivo da resposta apagado, cota/timeout/sem mensagem; o Gemini pedindo JSON; c
 `operations` e com o codex que não confere; o caminho do Raio-X sem `..`),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
-vezes" —, `resumo`, `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
+vezes" —, `resumo` (e os nomes das contas de cada conexão para o selo de saúde, AC-26,
+em tabela: corrente antes de cartão, nome repetido uma vez, a manual fora, nenhum valor),
+`pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
 e o "Explicar este mês": sem a flag 404, hash errado 409, o dublê do Gemini recebe o
-texto da prévia, `ModeloOcupado` 503 — com um SQLite num diretório temporário),
+texto da prévia, `ModeloOcupado` 503, o `/visao` com as contas de cada conexão — com um
+SQLite num diretório temporário),
 `organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, `explicacao`
 (o pacote padrão sem R$ nem estabelecimento, o que cada toggle acrescenta, o hash),
 e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),

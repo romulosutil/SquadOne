@@ -176,6 +176,8 @@ describe("rotas de finanças: explicar este mês", () => {
       }),
     );
     assert.equal(visao.explicacaoIa, false);
+    // O selo de saúde diz de qual conta é a conexão (AC-26), pelo itemId que o banco guardou.
+    assert.deepEqual(visao.saude.conexoes.map((c: any) => c.contas), [["cc"]]);
     assert.equal(chamadas.length, 0);
   });
 
