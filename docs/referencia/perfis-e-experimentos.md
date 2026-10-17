@@ -261,6 +261,28 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
     proposta saem e preço vira aviso. A Próxima venda e o Telegram trocam o título ("quem respondeu foi a recepção") e
     o "Como" pelo passo do copiloto; na Ficha, o "Agora" mostra o passo e a leitura dele quando quem respondeu não
     decide (o passo marcado à mão continua valendo).
+- **A Baobá: áudio, recepção, licença e vídeo** (17/10/2026, Iris). O lead mandou um áudio; o Rômulo perguntou "posso
+  de toda forma mandar o vídeo?"; a recepção respondeu "*[Patricia Adriano]* CLaro, pode enviar sim."; o n8n leu
+  "interesse", o cartão disse "disse sim: combine a demonstração", e depois do vídeo seguiu em "responder" (vídeo é mídia,
+  não URL). O lado TypeScript (o Python que grava e classifica é outra entrega):
+  - **Contrato do JSONL**: a entrada pode trazer `papel: "recepcao" | "robo"`; ausente, o texto decide
+    (`papelDaMensagem` em `src/operations/marcadores-da-conversa.ts`: "[Atendimento…"/"[Bot…" no começo = robô,
+    "*[Nome]*" no começo = recepção; sem sinal = gente). O áudio vem como "[áudio 27s]" ou "[áudio 27s] transcrição"
+    (o antigo "[áudio]" vale); a mídia nossa, como "[vídeo]", "[documento]" ou "[imagem]".
+  - **Material é link**: a saída com "[vídeo]", "[documento]" ou "[imagem]" conta como a 2ª mensagem (`saidasDaConversa`),
+    então o interesse parado sai da vez de responder e, de 20 h a 72 h depois, entra o "o que achou?".
+  - **Robô não é resposta**: `lead.conversa.ultimaEntrada` é a última de gente (lead ou recepção); o robô fica em
+    `ultimaEntradaRobo`, não recomeça o prazo de Perdido nem vira "resposta nova". `resultados.ts` (`quemRespondeu`):
+    conversa que cobre a resposta e só tem robô não conta como "respondeu"; só a recepção conta como respondeu, mas o
+    "interesse" dela sozinho não é "quero ver".
+  - **`resposta.tipo = "licenca"`**: o "sim" foi permissão para mandar o material. Espera o material como o interesse
+    parado ("Mande para X o que ele autorizou", sem preço), depois o "o que achou?"; nunca conta como "quero ver".
+  - **Nunca "disse sim" com a última mensagem nossa**: a frase vira "Você já respondeu a X; falta …" (fila, Telegram,
+    Ficha e a Hoje do servidor). E o "Respondeu ontem" do cartão é a última mensagem de gente, não o marco
+    `respondeu` (a primeira resposta, que segue valendo para o funil).
+  - **Áudio**: na tela, "áudio não ouvido (27s)" ou "(áudio 27s) transcrição"; no dossiê do copiloto e do Assistente,
+    "[áudio de 27s que o sistema não ouviu: o conteúdo é DESCONHECIDO, não suponha que seja interesse]". O dossiê leva
+    também o `papel` de cada mensagem do lead.
 
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 
