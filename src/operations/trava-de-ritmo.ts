@@ -25,6 +25,11 @@
  * 24 h), porque o retrato só muda no próximo ciclo do 08 · CRM: sem o toque local, dava para
  * mandar outros 10 antes de a planilha confirmar o primeiro. Toque e retrato do mesmo lead a
  * menos de 15 min um do outro são o mesmo envio. Outro aparelho entra pelo retrato (até 10 min).
+ *
+ * 17/10/2026 (AC-06): os toques têm uma fonte no servidor (venda-do-dia.json, `primeiros`), que a
+ * Central grava no toque do link e o vendedor do Telegram no "Enviei". As telas e o vendedor somam
+ * servidor + reforço local + vendedor.json com `somarPrimeiros` (um por lead) antes desta regra, que
+ * não mudou.
  */
 import type { CrmLead } from './types'
 import { hora } from './crm-formato'
@@ -149,6 +154,25 @@ export function instantesDePrimeiroContato(leads: readonly LeadDoRitmo[], toques
     if (!(porLead.get(id) ?? []).some(r => Math.abs(r - t) < MESMO_ENVIO_MS)) instantes.push(t)
   }
   return instantes
+}
+
+/**
+ * PURO (17/10/2026, AC-06): os toques de primeiro contato de várias fontes num monte só, um por lead,
+ * o mais antigo. As fontes são o servidor (venda-do-dia.json, que a Central e o Telegram gravam), o
+ * localStorage desta tela (reforço até o servidor confirmar) e o vendedor.json de antes de 17/10.
+ * Somar as contagens contaria duas vezes o mesmo lead tocado nas duas superfícies; contar só uma
+ * deixava passar do teto somando as duas. Aceita o instante cru ou `{ em }` (o formato do servidor).
+ */
+export function somarPrimeiros(...fontes: Array<Record<string, number | { em: number }> | null | undefined>): PrimeirosContatos {
+  const soma: PrimeirosContatos = {}
+  for (const fonte of fontes) {
+    for (const [id, v] of Object.entries(fonte ?? {})) {
+      const t = typeof v === 'number' ? v : v?.em
+      if (!id || typeof t !== 'number' || !Number.isFinite(t)) continue
+      if (!(id in soma) || t < soma[id]) soma[id] = t
+    }
+  }
+  return soma
 }
 
 export const CHAVE_DOS_PRIMEIROS = 'squadone:crm:primeiros-contatos'

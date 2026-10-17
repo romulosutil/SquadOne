@@ -3,32 +3,134 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { criarMemoriaDaVenda, resolver, vendaDoDia } from "./venda-do-dia.ts";
+import { anotar, criarMemoriaDaVenda, jaAnotada, marcarPrimeiroDoDia, resolver, vendaDoDia } from "./venda-do-dia.ts";
 import { leituraDoTesteDoRecibo, MINIMO_POR_BRACO_DO_RECIBO } from "../src/operations/ab-recibo.ts";
+import { instantesDePrimeiroContato, ritmoDoEnvio, somarPrimeiros } from "../src/operations/trava-de-ritmo.ts";
 
 // OT-01 (16/10/2026): o "Enviei"/"Pular" do dia, um só para a Próxima venda e o Telegram.
+// AC-06 (17/10/2026): por onde, a anotação uma vez por ação e os primeiros contatos do dia.
 describe("memória da venda do dia", () => {
   const AGORA = Date.parse("2026-10-16T15:00:00Z");
 
   it("vira o dia (São Paulo), zera; lixo é descartado", () => {
-    assert.deepEqual(vendaDoDia({ dia: "2026-10-15", resolvidas: { a: { em: 1, pulou: false } } }, AGORA), { dia: "2026-10-16", resolvidas: {} });
+    assert.deepEqual(vendaDoDia({ dia: "2026-10-15", resolvidas: { a: { em: 1, pulou: false } } }, AGORA),
+      { dia: "2026-10-16", resolvidas: {}, anotadas: {}, primeiros: {} });
     const lido = vendaDoDia({ dia: "2026-10-16", resolvidas: { a: { em: 1, pulou: true }, b: { em: "x", pulou: true }, "": { em: 1, pulou: false } } }, AGORA);
     assert.deepEqual(Object.keys(lido.resolvidas), ["a"]);
     assert.deepEqual(vendaDoDia(null, AGORA).resolvidas, {});
   });
 
-  it("a última decisão vale e a chave longa é recusada", () => {
-    const v = resolver(resolver(vendaDoDia(null, AGORA), "a|followup", true, AGORA), "a|followup", false, AGORA + 1);
-    assert.deepEqual(v.resolvidas["a|followup"], { em: AGORA + 1, pulou: false });
-    assert.throws(() => resolver(v, "x".repeat(301), false, AGORA));
+  it("lê o arquivo de 16/10 (só em + pulou) que pode estar na Mel hoje", () => {
+    const casos: Array<[unknown, object]> = [
+      [{ em: 1, pulou: true }, { em: 1, pulou: true, como: "pulada" }],
+      [{ em: 2, pulou: false }, { em: 2, pulou: false, como: "enviada" }],
+      [{ em: 3, pulou: false, como: "recusa", por: "central" }, { em: 3, pulou: false, como: "recusa", por: "central" }],
+      [{ em: 4, como: "pulada", por: "expirou" }, { em: 4, pulou: true, como: "pulada", por: "expirou" }],
+      // `por` desconhecido some; o resto vale.
+      [{ em: 5, pulou: false, por: "whatsapp" }, { em: 5, pulou: false, como: "enviada" }],
+    ];
+    for (const [cru, esperado] of casos) {
+      assert.deepEqual(vendaDoDia({ dia: "2026-10-16", resolvidas: { k: cru } }, AGORA).resolvidas.k, esperado, JSON.stringify(cru));
+    }
+    const lido = vendaDoDia({ dia: "2026-10-16", resolvidas: {}, anotadas: { k: [{ tipo: "segunda_enviada", em: 1, por: "central" }, { tipo: "x", em: "y", por: "central" }] },
+      primeiros: { "site:L": { em: 9, por: "telegram" }, "site:M": { em: 9, por: "pombo" } } }, AGORA);
+    assert.deepEqual(lido.anotadas, { k: [{ tipo: "segunda_enviada", em: 1, por: "central" }] });
+    assert.deepEqual(lido.primeiros, { "site:L": { em: 9, por: "telegram" } });
   });
 
-  it("grava e relê do arquivo, em diretório temporário", async () => {
+  it("a última decisão vale, guarda por onde, e a chave longa é recusada", () => {
+    const v = resolver(resolver(vendaDoDia(null, AGORA), "a|followup", "pulada", "central", AGORA), "a|followup", "enviada", "telegram", AGORA + 1);
+    assert.deepEqual(v.resolvidas["a|followup"], { em: AGORA + 1, pulou: false, como: "enviada", por: "telegram" });
+    assert.throws(() => resolver(v, "x".repeat(301), "enviada", "central", AGORA));
+  });
+
+  it("a anotação é idempotente por chave + tipo, venha de onde vier", () => {
+    const v0 = vendaDoDia(null, AGORA);
+    const casos: Array<{ passos: Array<[string, string, "central" | "telegram"]>; chave: string; tipo: string; anotada: boolean; total: number }> = [
+      { passos: [], chave: "site:L|followup", tipo: "followup_enviado", anotada: false, total: 0 },
+      { passos: [["site:L|followup", "followup_enviado", "central"]], chave: "site:L|followup", tipo: "followup_enviado", anotada: true, total: 1 },
+      // Central no link e depois o "Enviei" do Telegram: uma só.
+      { passos: [["site:L|followup", "followup_enviado", "central"], ["site:L|followup", "followup_enviado", "telegram"]], chave: "site:L|followup", tipo: "followup_enviado", anotada: true, total: 1 },
+      // Outro tipo na mesma ação, ou outra ação do mesmo lead, é outra anotação.
+      { passos: [["site:L|followup", "followup_enviado", "central"]], chave: "site:L|followup", tipo: "proposta", anotada: false, total: 1 },
+      { passos: [["site:L|followup", "followup_enviado", "central"]], chave: "site:L|proposta", tipo: "followup_enviado", anotada: false, total: 1 },
+    ];
+    for (const c of casos) {
+      const v = c.passos.reduce((acc, [chave, tipo, por], i) => anotar(acc, chave, tipo, por, AGORA + i), v0);
+      assert.equal(jaAnotada(v, c.chave, c.tipo), c.anotada, JSON.stringify(c));
+      assert.equal(Object.values(v.anotadas).flat().length, c.total, JSON.stringify(c));
+    }
+    const uma = anotar(v0, "k", "proposta", "central", AGORA);
+    assert.equal(anotar(uma, "k", "proposta", "telegram", AGORA + 5), uma, "a segunda vez não muda nada");
+    assert.equal(uma.anotadas.k[0].por, "central");
+  });
+
+  it("primeiro contato: o primeiro toque do lead vale, o segundo não conta de novo", () => {
+    const v = marcarPrimeiroDoDia(marcarPrimeiroDoDia(vendaDoDia(null, AGORA), "site:L", "central", AGORA), "site:L", "telegram", AGORA + 60_000);
+    assert.deepEqual(v.primeiros, { "site:L": { em: AGORA, por: "central" } });
+    assert.throws(() => marcarPrimeiroDoDia(v, "", "central", AGORA));
+  });
+
+  it("grava e relê do arquivo, em diretório temporário; a anotação concorrente sai uma vez", async () => {
     const dir = await mkdtemp(join(tmpdir(), "squadone-venda-"));
-    const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => AGORA);
-    await Promise.all([memoria.resolver("a|responder", false), memoria.resolver("b|primeiro", true)]);
-    assert.deepEqual(Object.keys((await memoria.ler()).resolvidas).sort(), ["a|responder", "b|primeiro"]);
-    await rm(dir, { recursive: true, force: true });
+    try {
+      const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => AGORA);
+      await Promise.all([memoria.resolver("a|responder", "enviada", "central"), memoria.resolver("b|primeiro", "pulada", "telegram")]);
+      assert.deepEqual(Object.keys((await memoria.ler()).resolvidas).sort(), ["a|responder", "b|primeiro"]);
+      let chamadas = 0;
+      const registrar = async () => { chamadas++; await new Promise((r) => setTimeout(r, 5)); };
+      const [r1, r2] = await Promise.all([
+        memoria.anotarUmaVez("site:L|followup", "followup_enviado", "central", registrar),
+        memoria.anotarUmaVez("site:L|followup", "followup_enviado", "telegram", registrar),
+      ]);
+      assert.equal(chamadas, 1, "Central e Telegram juntos anotam uma vez só");
+      assert.deepEqual([r1.anotou, r2.anotou], [true, false]);
+      // Falhou o registro: nada é marcado, o próximo toque tenta de novo.
+      await assert.rejects(memoria.anotarUmaVez("site:M|followup", "followup_enviado", "central", async () => { throw new Error("n8n fora"); }));
+      assert.equal(jaAnotada(await memoria.ler(), "site:M|followup", "followup_enviado"), false);
+      await memoria.primeiroContato("site:L", "central");
+      assert.deepEqual((await memoria.ler()).primeiros, { "site:L": { em: AGORA, por: "central" } });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// AC-06 (17/10/2026): a trava de ritmo conta o retrato mais os primeiros das duas superfícies.
+describe("ritmo somando a Central e o Telegram", () => {
+  const T = Date.parse("2026-10-16T15:00:00Z");
+  const min = 60_000;
+  const lead = (id: string, enviado?: number) => ({ id, sinal: "enviado" as const, marcos: enviado ? { enviado: new Date(enviado).toISOString() } : {} });
+
+  it("um lead por vez, o toque mais antigo; formatos crus e do servidor", () => {
+    const casos: Array<{ fontes: Parameters<typeof somarPrimeiros>; esperado: Record<string, number> }> = [
+      { fontes: [null, undefined], esperado: {} },
+      { fontes: [{ a: { em: 5 } }, { a: 3 }], esperado: { a: 3 } },
+      { fontes: [{ a: { em: 5 } }, { b: 7 }], esperado: { a: 5, b: 7 } },
+      { fontes: [{ a: { em: Number.NaN } }, { "": 1 }], esperado: {} },
+    ];
+    for (const c of casos) assert.deepEqual(somarPrimeiros(...c.fontes), c.esperado, JSON.stringify(c.fontes));
+  });
+
+  it("as duas origens somam para o teto, sem contar duas vezes o mesmo lead", () => {
+    const casos: Array<{ nome: string; servidor: Record<string, { em: number }>; local: Record<string, number>; leads: ReturnType<typeof lead>[]; enviadosHoje: number }> = [
+      { nome: "só a Central", servidor: { "site:A": { em: T - 30 * min } }, local: {}, leads: [], enviadosHoje: 1 },
+      { nome: "Central e Telegram, leads diferentes", servidor: { "site:A": { em: T - 30 * min }, "site:B": { em: T - 20 * min } }, local: {}, leads: [], enviadosHoje: 2 },
+      { nome: "o mesmo lead no servidor e no reforço local", servidor: { "site:A": { em: T - 30 * min } }, local: { "site:A": T - 29 * min }, leads: [], enviadosHoje: 1 },
+      { nome: "o retrato já viu o toque (a menos de 15 min)", servidor: { "site:A": { em: T - 30 * min } }, local: {}, leads: [lead("site:A", T - 25 * min)], enviadosHoje: 1 },
+      { nome: "reforço local que o servidor ainda não tem", servidor: { "site:A": { em: T - 30 * min } }, local: { "site:B": T - 10 * min }, leads: [], enviadosHoje: 2 },
+    ];
+    for (const c of casos) {
+      const r = ritmoDoEnvio(instantesDePrimeiroContato(c.leads, somarPrimeiros(c.servidor, c.local)), T);
+      assert.equal(r.enviadosHoje, c.enviadosHoje, c.nome);
+    }
+  });
+
+  it("9 da Central + 1 do Telegram: o teto do dia (10) segura nas duas superfícies", () => {
+    const daCentral = Object.fromEntries([...Array(9)].map((_, i) => [`site:${i}`, { em: T - (60 + i * 10) * min }]));
+    // Antes, cada superfície via só o seu monte: 9 de um lado e 1 do outro, os dois livres.
+    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral)), T).motivo, null);
+    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral, { "site:tg": T - 40 * min })), T).motivo, "dia");
   });
 });
 

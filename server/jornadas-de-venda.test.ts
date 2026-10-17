@@ -3,7 +3,12 @@ import { describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
 import { followupDoTerceiroDia, montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
 import { bracoDoRecibo } from "../src/operations/ab-recibo.ts";
-import { decidir, estadoNovo, textoDoAviso, botoesDoAviso, ESPERA_DO_AVISO_MS, fechadosNaVolta, lerHistoricoDoVendedor, resumoDoVendedor, type AvisoAberto } from "./vendedor.ts";
+import {
+  decidir, estadoNovo, textoDoAviso, botoesDoAviso, criarVendedor, ESPERA_DO_AVISO_MS, fechadosNaVolta, lerHistoricoDoVendedor,
+  resumoDoVendedor, RODAPE_DO_EXPIRADO, type AvisoAberto,
+} from "./vendedor.ts";
+import { criarMemoriaDaVenda } from "./venda-do-dia.ts";
+import type { Botao } from "./telegram.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -202,6 +207,146 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
   });
 });
 
+// AC-06 (17/10/2026): a Central e o Telegram numa fila só, pelo venda-do-dia.json. Fixture e
+// diretório temporário: nenhum Telegram, n8n ou arquivo de dados real é tocado.
+describe("vendedor e Central: o servidor é a fonte do dia", () => {
+  const vFollowup = visaoCom({ status: "enviado", enviado_em: dias(3), visto_em: dias(2.8) });
+  const CHAVE = "site:L|followup";
+
+  async function montar(visao: CrmVisao = vFollowup) {
+    const dir = await mkdtemp(join(tmpdir(), "squadone-vendedor-"));
+    const relogio = { agora: AGORA.getTime() };
+    const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => relogio.agora);
+    const enviados: Array<{ texto: string; botoes: Botao[][] }> = [];
+    const editados: Array<{ mensagemId: number; texto: string }> = [];
+    const registros: string[] = [];
+    const vendedor = criarVendedor({
+      lerVisao: async () => visao,
+      enviar: async (texto, botoes) => { enviados.push({ texto, botoes }); return [{ chatId: 1, mensagemId: 100 + enviados.length }]; },
+      editar: async (_chat, mensagemId, texto) => { editados.push({ mensagemId, texto }); },
+      registrar: async (corpo) => { registros.push(`${corpo.id}:${corpo.tipo}`); },
+      arquivoDeEstado: join(dir, "vendedor.json"),
+      vendaDoDia: memoria,
+      agora: () => relogio.agora,
+    });
+    const token = () => {
+      const b = enviados.at(-1)?.botoes.flat().find((x): x is { texto: string; dados: string } => "dados" in x);
+      return b ? b.dados.split(":")[1] : "";
+    };
+    const fim = async () => { vendedor.parar(); await rm(dir, { recursive: true, force: true }); };
+    return { relogio, memoria, enviados, editados, registros, vendedor, token, fim };
+  }
+
+  it("resolvido na Central: a próxima volta tira os botões do aviso e diz onde foi feito", async () => {
+    const m = await montar();
+    try {
+      assert.equal((await m.vendedor.volta()).tipo, "avisar");
+      assert.match(m.enviados[0].texto, /follow-up|Follow-up|Studio L/);
+      m.relogio.agora += 60_000;
+      await m.memoria.resolver(CHAVE, "enviada", "central");
+      m.relogio.agora += 60_000;
+      await m.vendedor.volta();
+      assert.deepEqual(m.editados.map((e) => e.mensagemId), [101]);
+      assert.match(m.editados[0].texto, /✅ Feito na Central\.$/);
+      // Feito lá não volta aqui: nenhum aviso novo da mesma ação.
+      assert.equal(m.enviados.length, 1);
+      assert.equal(m.registros.length, 0, "fechar por fora não anota nada");
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("toque atrasado: 'Enviei' depois de a Central fazer responde 'Já estava feito.' e não anota de novo", async () => {
+    const m = await montar();
+    try {
+      await m.vendedor.volta();
+      m.relogio.agora += 60_000;
+      // A Central anotou no toque do link e depois deu "Enviei, próxima".
+      await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      await m.memoria.resolver(CHAVE, "enviada", "central");
+      const r = await m.vendedor.tocar(m.token(), "enviei");
+      assert.equal(r.curto, "Já estava feito.");
+      assert.match(r.texto ?? "", /✅ Feito na Central\.$/);
+      assert.deepEqual(m.registros, ["central"], "o Telegram não chamou registrar");
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("a Central só anotou o link: o 'Enviei' do Telegram resolve sem anotar de novo", async () => {
+    const m = await montar();
+    try {
+      await m.vendedor.volta();
+      await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      const r = await m.vendedor.tocar(m.token(), "enviei");
+      assert.match(r.texto ?? "", /já estava anotado no CRM/);
+      assert.deepEqual(m.registros, ["central"]);
+      const doDia = await m.memoria.ler();
+      assert.deepEqual([doDia.resolvidas[CHAVE].como, doDia.resolvidas[CHAVE].por], ["enviada", "telegram"]);
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("'Enviei' sem nada da Central anota uma vez e conta para a Central", async () => {
+    const m = await montar();
+    try {
+      await m.vendedor.volta();
+      const r = await m.vendedor.tocar(m.token(), "enviei");
+      assert.match(r.texto ?? "", /anotado no CRM\.$/);
+      assert.deepEqual(m.registros, ["L:followup_enviado"]);
+      // A Central tentando anotar a mesma ação depois: já estava.
+      const deNovo = await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      assert.equal(deNovo.anotou, false);
+      assert.equal(m.registros.length, 1);
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("expirou no Telegram: a Central também manda para o fim (pulada, por 'expirou') e a mensagem perde os botões", async () => {
+    const m = await montar();
+    try {
+      await m.vendedor.volta();
+      m.relogio.agora += ESPERA_DO_AVISO_MS + 1;
+      await m.vendedor.volta();
+      const r = (await m.memoria.ler()).resolvidas[CHAVE];
+      assert.deepEqual([r.como, r.pulou, r.por], ["pulada", true, "expirou"]);
+      assert.equal(m.editados.length, 1);
+      assert.ok(m.editados[0].texto.endsWith(RODAPE_DO_EXPIRADO));
+      // O toque depois de expirar não faz nada.
+      assert.equal((await m.vendedor.tocar(m.token(), "enviei")).curto, "Este aviso já fechou.");
+      assert.equal(m.registros.length, 0);
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("o primeiro contato do 'Enviei' vai ao servidor, e a Central conta na trava", async () => {
+    const m = await montar(visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` }));
+    try {
+      await m.vendedor.volta();
+      await m.vendedor.tocar(m.token(), "enviei");
+      assert.deepEqual((await m.memoria.ler()).primeiros["site:L"], { em: AGORA.getTime(), por: "telegram" });
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("decidir: aviso de outra ação resolvido na Central fecha e a próxima sai na mesma volta", () => {
+    const vPronto = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
+    const t = AGORA.getTime();
+    const estado = { ...estadoNovo(t), avisados: ["outro|followup"], abertos: [{ chave: "outro|followup", token: "abc", em: t - 60_000, leadId: "outro", primeiroContato: false, produto: "site" as const, texto: "x" }] };
+    const doDia = { resolvidas: { "outro|followup": { em: t - 30_000, pulou: false, como: "enviada" as const, por: "central" as const } }, primeiros: {} };
+    const r = decidir(vPronto, estado, t, undefined, doDia);
+    assert.equal(r.fechados.fora.length, 1);
+    assert.equal(r.decisao.tipo, "avisar");
+    // E a trava conta o primeiro contato que a Central fez há 1 min: o próximo espera.
+    const comPrimeiro = decidir(vPronto, estadoNovo(t), t, undefined, { resolvidas: {}, primeiros: { "site:outro": { em: t - 60_000, por: "central" as const } } });
+    assert.deepEqual(comPrimeiro.decisao, { tipo: "nada", motivo: "fila-vazia" });
+  });
+});
+
 describe("a conversa guardada pelo observador", () => {
   it("lê as linhas em ordem, pula a ilegível e a repetida, e corta no teto", () => {
     const linhas = [
@@ -250,13 +395,18 @@ describe("histórico do vendedor", () => {
   const aberto = (chave: string, em: number, extra: Partial<AvisoAberto> = {}): AvisoAberto =>
     ({ chave, token: `t-${chave}`, em, leadId: "site:L", primeiroContato: false, produto: "site", texto: "", ...extra });
 
-  it("aviso que fecha sem toque: 30 min vira 'expirou', sumir da fila vira 'saiu'", () => {
-    const antes = { ...estadoNovo(T), abertos: [aberto("a|responder", T - 31 * 60_000, { tipo: "responder", quente: true }), aberto("b|followup", T - 5 * 60_000)] };
-    const depois = { ...antes, abertos: [], pulados: ["a|responder"] };
-    const ev = fechadosNaVolta(antes, depois, T);
-    assert.deepEqual(ev.map((e) => [e.chave, e.evento]), [["a|responder", "expirou"], ["b|followup", "saiu"]]);
-    assert.equal(ev[0].quente, true);
-    assert.equal(ev[0].esperaMs, 31 * 60_000);
+  it("aviso que fecha sem toque: 30 min vira 'expirou', sumir da fila vira 'saiu', a Central vira 'central'", () => {
+    const fechados = {
+      fora: [{ aberto: aberto("c|followup", T - 2 * 60_000), resolvida: { em: T - 60_000, pulou: false, como: "enviada" as const, por: "central" as const } }],
+      expirados: [aberto("a|responder", T - 31 * 60_000, { tipo: "responder", quente: true })],
+      sairam: [aberto("b|followup", T - 5 * 60_000)],
+    };
+    const ev = fechadosNaVolta(fechados, T);
+    assert.deepEqual(ev.map((e) => [e.chave, e.evento]), [["c|followup", "central"], ["a|responder", "expirou"], ["b|followup", "saiu"]]);
+    assert.equal(ev[1].quente, true);
+    assert.equal(ev[1].esperaMs, 31 * 60_000);
+    // Nos Resultados, o resolvido na Central conta como "resolvido por fora".
+    assert.equal(resumoDoVendedor(ev, T).saiu, 2);
   });
 
   it("resumo dos 30 dias: avisos, 'Enviei' e a mediana até o toque, e os 'quero ver' à parte", () => {

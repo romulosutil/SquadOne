@@ -163,10 +163,11 @@ export async function enviarMensagem(
   botoes?: Botao[] | Botao[][],
   /** `silencioso`: chega sem som (o lembrete das 22h às 7h, OT-14). */
   opcoes?: { silencioso?: boolean },
-): Promise<void> {
+): Promise<number | null> {
   // Uma fila de botões (o formato antigo) ou várias linhas (o aviso de venda, 16/10/2026).
   const linhas: Botao[][] = !botoes?.length ? [] : Array.isArray(botoes[0]) ? (botoes as Botao[][]) : [botoes as Botao[]];
-  await chamar(c, "sendMessage", {
+  // O id volta para quem precisa editar depois sem um toque (o aviso de venda resolvido na Central, AC-06).
+  const enviada = await chamar<{ message_id?: unknown }>(c, "sendMessage", {
     chat_id: chatId,
     text: texto,
     ...(opcoes?.silencioso ? { disable_notification: true } : {}),
@@ -175,6 +176,7 @@ export async function enviarMensagem(
       ? { reply_markup: { inline_keyboard: linhas.map((l) => l.map((b) => ("url" in b ? { text: b.texto, url: b.url } : { text: b.texto, callback_data: b.dados }))) } }
       : {}),
   });
+  return typeof enviada?.message_id === "number" ? enviada.message_id : null;
 }
 
 /**

@@ -23,9 +23,14 @@
  * abrir (o CrmPanel passa `@abrir`); na Hoje o link segue para /crm?lead=. Todo número da fila sai de
  * resumoDoDia (o mesmo da aba "A fazer"). O status do toque ficou visível, e a falha da anotação
  * fica em destaque até "Entendi", com o botão da Ficha ao lado.
+ *
+ * 17/10/2026 (AC-06): o servidor é a fonte única do dia, para esta tela e o vendedor do Telegram.
+ * O toque num primeiro contato vai a /crm/venda/primeiro e a trava conta o retrato mais os primeiros
+ * do servidor (os do Telegram inclusive); o localStorage fica só de reforço até o servidor
+ * confirmar. A anotação do toque vai a /crm/venda/anotar, uma vez por ação no dia: o "Enviei"
+ * atrasado no Telegram não anota de novo, e "Enviei, próxima" daqui fecha o aviso aberto lá.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { corpoDaAnotacao } from './anotacao-de-envio'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
 import {
   filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, noExpedienteDeVenda,
@@ -33,7 +38,9 @@ import {
 } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, ROTULO_DE_LIBERAR, type EnviosLiberados } from './trava-de-horario'
-import { gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, textoDoRitmo, type PrimeirosContatos } from './trava-de-ritmo'
+import {
+  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, textoDoRitmo, type PrimeirosContatos,
+} from './trava-de-ritmo'
 import type { CrmVisao } from './types'
 
 const props = defineProps<{
@@ -51,7 +58,10 @@ const emit = defineEmits<{ registrado: []; resumo: [ResumoDoDia] }>()
 
 const agora = ref(Date.now())
 let relogio = 0
+/** Os toques de primeiro contato deste navegador: reforço até o servidor confirmar, nunca a fonte. */
 const primeiros = ref<PrimeirosContatos>({})
+/** Os primeiros contatos do dia no servidor (Central e Telegram): a fonte da trava de ritmo. */
+const primeirosDoServidor = ref<Record<string, { em: number }>>({})
 /** Chaves resolvidas nesta tela ("Enviei" ou "Pular"), com o instante; valem até o fim do dia. */
 const resolvidas = ref<Resolvidas>({})
 const verFila = ref(false)
@@ -78,12 +88,17 @@ async function lerDoServidor() {
   try {
     const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
     if (!r.ok) return
-    const corpo = await r.json() as { resolvidas?: Record<string, { em: number; pulou: boolean }> }
-    if (corpo.resolvidas) {
-      resolvidas.value = { ...resolvidas.value, ...corpo.resolvidas }
-      gravarResolvidas()
-    }
+    lerDia(await r.json())
   } catch { /* sem servidor: a reserva local */ }
+}
+
+/** O dia como o servidor devolve (GET e os POST de /crm/venda): o que se resolveu e os primeiros. */
+function lerDia(corpo: { resolvidas?: Record<string, { em: number; pulou: boolean }>; primeiros?: Record<string, { em: number }> } | null) {
+  if (corpo?.resolvidas) {
+    resolvidas.value = { ...resolvidas.value, ...corpo.resolvidas }
+    gravarResolvidas()
+  }
+  if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
 }
 
 async function lerSugestoes() {
@@ -122,7 +137,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.clearInterval(relogio))
 
-const ritmo = computed(() => ritmoDoEnvio(instantesDePrimeiroContato(props.visao?.leads ?? [], primeiros.value), agora.value))
+// O retrato mais os primeiros do servidor (as duas superfícies) e o reforço local, um por lead.
+const ritmo = computed(() => ritmoDoEnvio(
+  instantesDePrimeiroContato(props.visao?.leads ?? [], somarPrimeiros(primeirosDoServidor.value, primeiros.value)), agora.value))
 const expediente = computed(() => noExpedienteDeVenda(agora.value))
 const pulados = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => r.pulou).map(([k]) => k)))
 const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([, r]) => !r.pulou).map(([k]) => k)))
@@ -200,25 +217,31 @@ const O_QUE_ANOTA: Record<NonNullable<AcaoDeVenda['anota']>, string> = {
 async function aoTocar(a: AcaoDeVenda) {
   tocado.value = a.chave
   if (a.primeiroContato) {
+    // O reforço local segura a trava já; o servidor conta para o Telegram e outro navegador.
     primeiros.value = marcarPrimeiro(primeiros.value, a.leadId, Date.now())
     gravarPrimeiros(armazenamento(), primeiros.value)
     agora.value = Date.now()
+    void fetch('/api/operations/crm/venda/primeiro', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: a.leadId }),
+    }).then(async (r) => { if (r.ok) lerDia(await r.json()) }).catch(() => undefined)
   }
   if (!a.anota) return
   const lead = props.visao?.leads.find((l) => l.id === a.leadId)
   if (!lead) return
   try {
-    const r = await fetch('/api/operations/crm/registro', {
-      // A proposta vai sem data: o servidor grava a de hoje (São Paulo), como o formulário da Ficha.
+    // Uma vez por ação no dia (o servidor guarda): o toque repetido aqui ou o "Enviei" no Telegram não
+    // anotam de novo. A proposta vai sem data: o servidor grava a de hoje (São Paulo), como a Ficha.
+    const r = await fetch('/api/operations/crm/venda/anotar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(a.anota === 'proposta' || a.anota === 'recusou'
-        ? { produto: lead.produto, id: lead.chave, tipo: a.anota, texto: '', data: '' } : corpoDaAnotacao(lead, a.anota)),
+      body: JSON.stringify({ chave: a.chave, produto: lead.produto, id: lead.chave, tipo: a.anota }),
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    status.value = a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.`
+    const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
+    status.value = corpo.jaEstava ? `${a.empresa}: já estava anotado no CRM.`
+      : a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.`
       : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado no CRM.`
     if (falha.value?.leadId === a.leadId) falha.value = null
-    emit('registrado')
+    if (!corpo.jaEstava) emit('registrado')
   } catch {
     falha.value = { leadId: a.leadId, texto: `${a.empresa}: não consegui anotar ${O_QUE_ANOTA[a.anota]} — anote na ficha.` }
   }
@@ -227,9 +250,11 @@ async function aoTocar(a: AcaoDeVenda) {
 function resolver(a: AcaoDeVenda, pulou: boolean) {
   resolvidas.value = { ...resolvidas.value, [a.chave]: { em: Date.now(), pulou } }
   gravarResolvidas()
-  // O servidor é a memória que vale para o Telegram e outro navegador; falhar não desfaz a tela.
+  // O servidor é a memória que vale para o Telegram (fecha o aviso aberto lá) e outro navegador;
+  // falhar não desfaz a tela.
+  const como = pulou ? 'pulada' : a.tipo === 'desfecho' ? 'recusa' : 'enviada'
   void fetch('/api/operations/crm/venda', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, pulou }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, como }),
   }).catch(() => undefined)
   tocado.value = null
   copiado.value = false

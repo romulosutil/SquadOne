@@ -272,7 +272,7 @@ async function startServer() {
       // O bot não tem aba: sem prefixo, squadId ausente = primeira squad ativa +
       // redirecionamento automático; com `/p`, a squad do prefixo (telegram-entrada).
       rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }, { luna: sombra, jev }),
-      enviar: (chatId, texto, responderA, botoes) => enviarMensagem(c, chatId, texto, responderA, botoes),
+      enviar: async (chatId, texto, responderA, botoes) => { await enviarMensagem(c, chatId, texto, responderA, botoes); },
       digitando: (chatId) => avisarDigitando(c, chatId),
       transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
       // Mesma função da rota /api/squad/hire: aplica na squad da proposta e
@@ -440,9 +440,16 @@ async function startServer() {
               },
             },
           } : {}),
+          // Guarda onde cada aviso caiu: resolvido na Central ou expirado, a volta tira os botões (AC-06).
           enviar: async (texto, botoes) => {
-            for (const chat of c.chatsPermitidos) await enviarMensagem(c, chat, texto, undefined, botoes);
+            const mensagens: Array<{ chatId: number; mensagemId: number }> = [];
+            for (const chat of c.chatsPermitidos) {
+              const id = await enviarMensagem(c, chat, texto, undefined, botoes);
+              if (id !== null) mensagens.push({ chatId: chat, mensagemId: id });
+            }
+            return mensagens;
           },
+          editar: (chatId, mensagemId, texto) => editarMensagem(c, chatId, mensagemId, texto),
           registrar: async (corpo) => { await crm.registrar(corpo); },
           arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
           arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),

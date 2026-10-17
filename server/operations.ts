@@ -7,11 +7,13 @@ import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
-import { criarMemoriaDaVenda, MAX_CHAVE, type MemoriaDaVenda } from "./venda-do-dia.ts";
+import { criarMemoriaDaVenda, MAX_CHAVE, type ComoResolveu, type MemoriaDaVenda } from "./venda-do-dia.ts";
 import { MAX_CORPO_DO_BEACON, telaDoCorpo, type ContadorDeUso } from "./uso.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
+/** O que a Próxima venda anota num toque (AnotacaoDeVenda de src/operations/proxima-venda.ts). */
+const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou"]);
 import { lerStatusDoDell } from "./dell-status.ts";
 
 export type SquadOneMode = "app" | "operations";
@@ -573,19 +575,23 @@ export function createOperationsRouter(options: {
     try {
       res.status(201).json(await options.crm.registrar(req.body));
     } catch (error) {
-      if (error instanceof RegistroInvalido) {
-        res.status(400).json({ error: error.message });
-      } else if (error instanceof RegistroIndisponivel) {
-        res.status(503).json({ error: error.message, configuracao: true });
-      } else if (error instanceof RegistroFalhou) {
-        console.warn(`[operations] Registro do CRM recusado pelo n8n (${error.status ?? "sem resposta"}): ${error.message}`);
-        res.status(502).json({ error: error.message, n8nFalhou: true });
-      } else {
-        console.error("[operations] Falha ao registrar no CRM:", error);
-        res.status(500).json({ error: "Não foi possível registrar agora." });
-      }
+      responderErroDoRegistro(res, error);
     }
   });
+  // Também a anotação da Próxima venda (/crm/venda/anotar): o mesmo POST à aba CRM, a mesma resposta.
+  function responderErroDoRegistro(res: express.Response, error: unknown) {
+    if (error instanceof RegistroInvalido) {
+      res.status(400).json({ error: error.message });
+    } else if (error instanceof RegistroIndisponivel) {
+      res.status(503).json({ error: error.message, configuracao: true });
+    } else if (error instanceof RegistroFalhou) {
+      console.warn(`[operations] Registro do CRM recusado pelo n8n (${error.status ?? "sem resposta"}): ${error.message}`);
+      res.status(502).json({ error: error.message, n8nFalhou: true });
+    } else {
+      console.error("[operations] Falha ao registrar no CRM:", error);
+      res.status(500).json({ error: "Não foi possível registrar agora." });
+    }
+  }
 
   // Copiloto do PRUMO (fase 1, em sombra): sugere, nunca envia. O lead sai da visão do CRM no
   // servidor, nunca do corpo do pedido; o navegador só diz qual (produto + id).
@@ -636,21 +642,60 @@ export function createOperationsRouter(options: {
 
   // O "Enviei" e o "Pular" da fila de venda (16/10/2026, OT-01): uma memória para a Próxima venda em
   // qualquer navegador e para o vendedor do Telegram (o mesmo arquivo). Não é funil: só a ordem do dia.
+  // Desde 17/10/2026 (AC-06) o GET devolve também por onde cada ação se resolveu, as anotações já
+  // feitas (uma por ação + tipo) e os primeiros contatos do dia das duas superfícies (a trava de ritmo).
   const memoriaDaVenda = options.memoriaDaVenda ?? criarMemoriaDaVenda(path.join(options.dataDir, "venda-do-dia.json"));
   router.get("/crm/venda", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json(await memoriaDaVenda.ler());
   });
+  // A Central resolve uma ação: { chave, como } (enviada | pulada | recusa), ou o formato de 16/10
+  // ({ chave, pulou }) de uma aba aberta antes da atualização. Por onde é sempre "central": o
+  // Telegram grava pelo vendedor, no mesmo processo.
   router.post("/crm/venda", express.json({ limit: "4kb" }), async (req, res) => {
-    const { chave, pulou } = (req.body ?? {}) as { chave?: unknown; pulou?: unknown };
-    if (typeof chave !== "string" || !chave.trim() || chave.length > MAX_CHAVE || typeof pulou !== "boolean") {
-      return void res.status(400).json({ error: "Diga a chave da ação e se foi pulada." });
+    const { chave, pulou, como } = (req.body ?? {}) as { chave?: unknown; pulou?: unknown; como?: unknown };
+    const comoFoi: ComoResolveu | null = como === "enviada" || como === "pulada" || como === "recusa" ? como
+      : typeof pulou === "boolean" ? (pulou ? "pulada" : "enviada") : null;
+    if (typeof chave !== "string" || !chave.trim() || chave.length > MAX_CHAVE || !comoFoi) {
+      return void res.status(400).json({ error: "Diga a chave da ação e como ela se resolveu." });
     }
     try {
-      res.json(await memoriaDaVenda.resolver(chave, pulou));
+      res.json(await memoriaDaVenda.resolver(chave, comoFoi, "central"));
     } catch (error) {
       console.error("[venda] não gravou:", error);
       res.status(500).json({ error: "Não deu para guardar agora." });
+    }
+  });
+  // O toque num link de primeiro contato na Central (17/10/2026, AC-06): a trava de ritmo das duas
+  // superfícies conta daqui. Repetir o toque no mesmo lead não conta de novo. Não envia nada a lead.
+  router.post("/crm/venda/primeiro", express.json({ limit: "4kb" }), async (req, res) => {
+    const { leadId } = (req.body ?? {}) as { leadId?: unknown };
+    if (typeof leadId !== "string" || !/^[A-Za-z0-9_:.-]{1,200}$/.test(leadId)) {
+      return void res.status(400).json({ error: "Diga o lead do primeiro contato." });
+    }
+    try {
+      res.json(await memoriaDaVenda.primeiroContato(leadId, "central"));
+    } catch (error) {
+      console.error("[venda] primeiro contato não gravou:", error);
+      res.status(500).json({ error: "Não deu para guardar agora." });
+    }
+  });
+  // A anotação do toque da Próxima venda (2ª mensagem, follow-up, Plus, proposta, recusa): o mesmo
+  // registro da Ficha, mas uma vez por ação no dia. Já saiu (pela Central ou pelo "Enviei" do
+  // Telegram), responde 200 com jaEstava e não chama o n8n de novo.
+  router.post("/crm/venda/anotar", express.json({ limit: "4kb" }), async (req, res) => {
+    if (!options.crm) return void res.status(503).json({ error: "O CRM não está configurado nesta Central." });
+    const crm = options.crm;
+    const { chave, produto, id, tipo } = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof chave !== "string" || chave.length > MAX_CHAVE || typeof produto !== "string" || typeof id !== "string"
+      || typeof tipo !== "string" || !TIPOS_DA_ANOTACAO_DE_VENDA.has(tipo) || !chave.startsWith(`${produto}:${id}|`)) {
+      return void res.status(400).json({ error: "Diga a ação, o lead e o que anotar." });
+    }
+    try {
+      const r = await memoriaDaVenda.anotarUmaVez(chave, tipo, "central", () => crm.registrar({ produto, id, tipo, texto: "", data: "" }));
+      res.status(r.anotou ? 201 : 200).json(r.anotou ? { anotou: true } : { anotou: false, jaEstava: true });
+    } catch (error) {
+      responderErroDoRegistro(res, error);
     }
   });
 

@@ -18,7 +18,7 @@ import { filaDaTela, lerResolvidas, noExpedienteDeVenda, type ResumoDoDia } from
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
 import {
-  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, type EstadoDoRitmo, type PrimeirosContatos,
+  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, type EstadoDoRitmo, type PrimeirosContatos,
 } from './trava-de-ritmo'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import './crm.css'
@@ -51,7 +51,18 @@ const envios = ref<EnviosAbertos>({})
 const liberados = ref<EnviosLiberados>(new Set())
 // Trava de ritmo (trava-de-ritmo.ts, 15/10/2026): os toques de primeiro contato desta tela, até o
 // retrato confirmar. Sem "Liberar": o que ela segura é a pressa de esvaziar a fila.
+// Desde 17/10/2026 (AC-06) a fonte é o servidor (venda-do-dia.json, que a Próxima venda e o vendedor
+// do Telegram também gravam); o localStorage fica de reforço até o servidor confirmar.
 const primeiros = ref<PrimeirosContatos>({})
+const primeirosDoServidor = ref<Record<string, { em: number }>>({})
+async function lerPrimeirosDoServidor() {
+  try {
+    const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
+    if (!r.ok) return
+    const corpo = await r.json() as { primeiros?: Record<string, { em: number }> }
+    if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+  } catch { /* sem servidor: o retrato e o reforço local */ }
+}
 // O toque em "Mandar o link"/"Mandar o follow-up" anota o envio (anotacao-de-envio.ts); a marca
 // local vale até o retrato confirmar. A falha não segura o WhatsApp: vira o aviso discreto abaixo.
 const anotados = ref<EnviosAnotados>({})
@@ -100,6 +111,7 @@ const aoVoltarNoNavegador = () => lerEndereco()
 async function carregar(anunciar = false) {
   carregando.value = true
   erro.value = ''
+  void lerPrimeirosDoServidor()
   try {
     // no-cache: revalida com o ETag; sem mudança no retrato o servidor responde 304.
     const resposta = await fetch('/api/operations/crm', { cache: 'no-cache' })
@@ -150,6 +162,13 @@ function marcarPrimeiroContato(id: string) {
   primeiros.value = marcarPrimeiro(primeiros.value, id, Date.now())
   gravarPrimeiros(armazenamento(), primeiros.value)
   agora.value = Date.now()
+  // O servidor conta para o Telegram e para outro navegador; falhar não segura o WhatsApp.
+  void fetch('/api/operations/crm/venda/primeiro', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: id }),
+  }).then(async (r) => {
+    const corpo = r.ok ? await r.json() as { primeiros?: Record<string, { em: number }> } : null
+    if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+  }).catch(() => undefined)
 }
 
 function liberar(id: string) {
@@ -240,7 +259,8 @@ const totalTriagem = computed(() => triagem.value.reduce((soma, g) => soma + g.i
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
-const ritmo = computed<EstadoDoRitmo>(() => ritmoDoEnvio(instantesDePrimeiroContato(visao.value?.leads ?? [], primeiros.value), agora.value))
+const ritmo = computed<EstadoDoRitmo>(() => ritmoDoEnvio(
+  instantesDePrimeiroContato(visao.value?.leads ?? [], somarPrimeiros(primeirosDoServidor.value, primeiros.value)), agora.value))
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
