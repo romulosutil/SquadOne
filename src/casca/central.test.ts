@@ -69,20 +69,20 @@ describe('faixa de Vendas', () => {
 })
 
 describe('faixa de Finanças', () => {
-  it('tenho, devo e gastei numa linha; o pior semáforo com as % na outra', () => {
+  it('o pior semáforo na linha e as % no detalhe; nunca um valor em R$', () => {
     const f = porId({ ...NADA, financas: {
       estado: { cartao: { pct: 92, semaforo: 'laranja', nome: 'Nubank' }, orcamento: { pct: 40, semaforo: 'verde' } },
-      valores: { tenho: 123456, devo: 50000, gastei: 7890 },
     } })
-    assert.match(f.financas.linha, /^Tenho R\$\s?1\.234,56 · Devo R\$\s?500,00 · Gastei R\$\s?78,90$/)
-    assert.equal(f.financas.detalhe, 'Passou de 90% (cartão 92% · orçamento 40%)')
+    assert.equal(f.financas.linha, 'Passou de 90%')
+    assert.equal(f.financas.detalhe, 'cartão 92% · orçamento 40%')
     assert.equal(f.financas.tom, 'atencao')
+    assert.doesNotMatch(`${f.financas.linha} ${f.financas.detalhe}`, /R\$/)
   })
-  it('sem os valores, só o semáforo; sem nada medido, neutro', () => {
-    const so = porId({ ...NADA, financas: { estado: { cartao: null, orcamento: { pct: 101, semaforo: 'vermelho' } }, valores: null } })
-    assert.deepEqual([so.financas.linha, so.financas.tom], ['Chegou a 100% (orçamento 101%)', 'falha'])
-    const nada = porId({ ...NADA, financas: { estado: { cartao: null, orcamento: null }, valores: null } })
-    assert.equal(nada.financas.tom, 'neutro')
+  it('só o orçamento medido; sem nada medido, neutro', () => {
+    const so = porId({ ...NADA, financas: { estado: { cartao: null, orcamento: { pct: 101, semaforo: 'vermelho' } } } })
+    assert.deepEqual([so.financas.linha, so.financas.detalhe, so.financas.tom], ['Chegou a 100%', 'orçamento 101%', 'falha'])
+    const nada = porId({ ...NADA, financas: { estado: { cartao: null, orcamento: null } } })
+    assert.deepEqual([nada.financas.linha, nada.financas.tom], ['Sem orçamento nem cartão com limite', 'neutro'])
   })
 })
 

@@ -17,7 +17,7 @@
  * da vez e a contagem, numa faixa. Nada aqui grava: as escritas são as dos cartões e das folhas, que
  * já existiam.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AgendaRota from './AgendaRota.vue'
 import Sheet from '../components/Sheet.vue'
 import EscritorioVivo from '../casca/EscritorioVivo.vue'
@@ -111,7 +111,9 @@ async function lerFinancas() {
     leituraDasFinancas.value = null
     erroDasFinancas.value = e instanceof Error ? e.message : String(e)
   }
-  await lerVisaoFinanceira()
+  // A Visão (com os R$) só é lida com a folha aberta: a faixa não mostra valor, então a home não
+  // precisa buscá-los a cada 5 minutos.
+  if (folha.value === 'financas') await lerVisaoFinanceira()
 }
 async function lerVisaoFinanceira() {
   const q = new URLSearchParams({ visao: modoDaFolha })
@@ -289,10 +291,7 @@ const fontesDaAgenda = computed<FontesDasFaixas['agenda']>(() => {
 const fontesDasFinancas = computed<FontesDasFaixas['financas']>(() => {
   const v = visaoFinanceira.value
   if (!leituraDasFinancas.value && !v) return erroDasFinancas.value ? { erro: erroDasFinancas.value } : null
-  return {
-    estado: (leituraDasFinancas.value?.estado as EstadoDasFinancasLido | null) ?? null,
-    valores: v ? { tenho: v.tenho.totalCentavos, devo: v.devo.totalCentavos, gastei: v.gastei.totalCentavos } : null,
-  }
+  return { estado: (leituraDasFinancas.value?.estado as EstadoDasFinancasLido | null) ?? null }
 })
 
 const faixas = computed<Faixa[]>(() =>
@@ -309,6 +308,7 @@ const faixas = computed<Faixa[]>(() =>
 )
 
 const folha = ref<'financas' | 'agenda' | null>(null)
+watch(folha, (aberta) => { if (aberta === 'financas') void lerVisaoFinanceira() })
 /**
  * A folha é teleportada para fora da casca, onde o clique em link não vira navegação sem recarregar
  * (App.vue escuta só dentro de .casca). Aqui ela vira: um turno rodando não se perde por um

@@ -232,7 +232,7 @@ o nome de cada conexão no selo),
 você > parados > contagem, "Sem sinal" sem Vendas ou sem retrato, finanças só em % e semáforo, a agenda em bloco antes do próximo,
 a sala que o PO raiz visita só por problema em destaque e o balão que ele leva, o corte em uma linha),
 `src/casca/central.test.ts` (17/10/2026: as cinco faixas na ordem, "Sem sinal" com o motivo em cada uma e nada afirmado lendo, o passo
-e a oferta de Vendas com o gargalo, tenho/devo/gastei e o semáforo, a agenda, o selo da Entrada, a saúde do Dell sem repetir o número
+e a oferta de Vendas com o gargalo, o semáforo e as % das finanças (sem R$), a agenda, o selo da Entrada, a saúde do Dell sem repetir o número
 do cabeçalho, o andar do mapa, o `?abrir=` e o status do mapa; desde a revisão de 17/10/2026, `depoisDaTrocaDeAndar`: troca de
 squad recusada fica na Central e avisa, nunca abre o Escritório na squad errada),
 `src/casca/casca.test.ts` (rotas por perfil; desde 17/10/2026 os três menus do Dell, Central de comando e Vendas, com a Manutenção

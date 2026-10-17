@@ -13,7 +13,7 @@
  * Regra que atravessa o arquivo (RULES 2 e 19): faixa sem leitura diz que não leu ("Sem sinal…"),
  * nunca zero nem "tudo certo".
  */
-import { ROTULO_DO_SEMAFORO, brl } from '../operations/financas/formato'
+import { ROTULO_DO_SEMAFORO } from '../operations/financas/formato'
 import { SIGLA_DO_PRODUTO } from '../operations/crm-formato'
 import type { ResumoDoDell } from '../operations/alertas'
 import type { CrmProduto } from '../operations/types'
@@ -65,7 +65,7 @@ export interface FontesDasFaixas {
   /** null = lendo. `resumo` é o resumoDaFila; `gargalo`, o título do "por que não vende". */
   vendas: { fila: AcaoDaFaixa[]; resumo: string; gargalo: string | null } | Falhou | null
   agenda: { itens: ItemDaFaixa[]; restantes: number; fonte: string } | Falhou | null
-  financas: { estado: EstadoDasFinancasLido | null; valores: { tenho: number; devo: number; gastei: number } | null } | Falhou | null
+  financas: { estado: EstadoDasFinancasLido | null } | Falhou | null
   entrada: { pendentes: number; avisos: number } | Falhou | null
   dell: ResumoDoDell | Falhou | null
 }
@@ -101,11 +101,10 @@ function faixaDeFinancas(f: FontesDasFaixas['financas']): Omit<Faixa, 'id' | 'ti
     f.estado?.cartao ? `cartão ${f.estado.cartao.pct}%` : '',
     f.estado?.orcamento ? `orçamento ${f.estado.orcamento.pct}%` : '',
   ].filter(Boolean).join(' · ')
-  const v = f.valores
-  const valores = v ? `Tenho ${brl(v.tenho)} · Devo ${brl(v.devo)} · Gastei ${brl(v.gastei)}` : ''
-  if (!pior && !valores) return { linha: 'Sem orçamento nem cartão com limite', detalhe: '', tom: 'neutro' }
-  const semaforo = pior ? `${ROTULO_DO_SEMAFORO[pior]}${pcts ? ` (${pcts})` : ''}` : ''
-  return { linha: valores || semaforo, detalhe: valores ? semaforo : '', tom: pior ? TOM_DO_SEMAFORO[pior] : 'neutro' }
+  // Sem R$ na faixa (decisão do dono, 17/10/2026): a tela inicial aparece em print e a quem está ao lado;
+  // os valores ficam na folha que ele abre de propósito (Visão), nunca na home.
+  if (!pior) return { linha: 'Sem orçamento nem cartão com limite', detalhe: '', tom: 'neutro' }
+  return { linha: ROTULO_DO_SEMAFORO[pior], detalhe: pcts, tom: TOM_DO_SEMAFORO[pior] }
 }
 
 function faixaDaEntrada(f: FontesDasFaixas['entrada']): Omit<Faixa, 'id' | 'titulo' | 'folha' | 'href' | 'rotuloDoLink'> {
