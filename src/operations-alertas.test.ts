@@ -5,6 +5,7 @@ import {
   linkExterno,
   quantidadeDaFila,
   remedioEmComum,
+  juntarContainers,
   resumoDoDell,
   semFraseCortada,
   seloDoPasso,
@@ -182,6 +183,32 @@ describe('resumoDoDell: um número só no topo, na Hoje e no Mais (AC-17)', () =
       assert.equal(r.total - r.ok, r.precisam.length + r.sozinhas.length)
     })
   }
+})
+
+describe('juntarContainers: o container parado é detalhe da verificação "Containers"', () => {
+  const resumo = c('containers', 'atencao', { grupo: 'containers', nome: 'Containers', desde: '2026-10-14T18:26:36Z' })
+  const a = c('container:p4f-a', 'falha', { grupo: 'containers', desde: '2026-10-14T18:31:06Z' })
+  const b = c('container:p4f-b', 'falha', { grupo: 'containers', desde: '2026-10-14T18:26:36Z' })
+  const ok = c('container:outro', 'ok', { grupo: 'containers' })
+
+  it('o caso de 17/10: dois parados e a resumo amarela viram uma linha vermelha "Containers"', () => {
+    const r = juntarContainers([resumo, a, b, ok, c('fila', 'falha')])
+    assert.deepEqual(r.map((x) => x.id), ['containers', 'fila'])
+    assert.equal(r[0].nome, 'Containers')
+    assert.equal(r[0].estado, 'falha')
+    assert.equal(r[0].desde, '2026-10-14T18:26:36Z')
+  })
+  it('tudo ok continua ok; sem a resumo, os individuais ficam como vieram', () => {
+    assert.equal(juntarContainers([c('containers', 'ok'), c('container:x', 'ok')])[0].estado, 'ok')
+    assert.deepEqual(juntarContainers([a, b]).map((x) => x.id), ['container:p4f-a', 'container:p4f-b'])
+  })
+  it('no resumoDoDell conta uma vez: 3 precisam de você, não 5', () => {
+    const status: DellStatus = { geradoEm: '2026-10-17T11:15:00Z', verificacoes: [resumo, a, b, c('backup', 'atencao'), c('fila', 'falha')] }
+    const r = resumoDoDell(status, Date.parse('2026-10-17T11:16:00Z'), 'America/Sao_Paulo')
+    assert.equal(r.precisam.length, 3)
+    assert.equal(r.total - r.ok, r.precisam.length + r.sozinhas.length)
+    assert.ok(!r.precisam.some((x) => x.nome.startsWith('p4f-')))
+  })
 })
 
 describe('semFraseCortada', () => {

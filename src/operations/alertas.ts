@@ -133,6 +133,25 @@ export function horaDoRetrato(iso: string | null | undefined, fuso?: string): st
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso }).format(new Date(iso))
 }
 
+const GRAVIDADE: Record<string, number> = { ok: 0, atencao: 1, falha: 2 }
+
+/**
+ * PURO: as verificações `container:<nome>` são o detalhe da verificação "Containers" (id
+ * `containers`, mesmo grupo). Contadas uma a uma, o nome técnico do container virava título
+ * na Hoje e cada container parado somava mais um "precisa de você" (17/10/2026: 5 em vez
+ * de 3). Com a resumo presente, elas se juntam nela: o pior estado, o "desde" mais antigo
+ * dos que não estão ok. Sem a resumo, ficam como vieram (nada some calado).
+ */
+export function juntarContainers(checks: DellCheck[]): DellCheck[] {
+  const resumo = checks.find((c) => c.id === 'containers')
+  const individuais = checks.filter((c) => c.id.startsWith('container:'))
+  if (!resumo || !individuais.length) return checks
+  const pior = [resumo, ...individuais].reduce((a, c) => ((GRAVIDADE[c.estado] ?? 0) > (GRAVIDADE[a.estado] ?? 0) ? c : a))
+  const desdes = [resumo, ...individuais].filter((c) => c.estado !== 'ok' && c.desde).map((c) => c.desde as string).sort()
+  const junto: DellCheck = { ...resumo, estado: pior.estado, desde: desdes[0] ?? resumo.desde }
+  return checks.filter((c) => !c.id.startsWith('container:')).map((c) => (c === resumo ? junto : c))
+}
+
 /** PURO: retrato + relógio -> os números e os textos. `fuso` existe para o teste não depender da máquina. */
 export function resumoDoDell(status: DellStatus | null, agora: number, fuso?: string): ResumoDoDell {
   const geradoEm = status?.geradoEm ?? null
@@ -145,7 +164,7 @@ export function resumoDoDell(status: DellStatus | null, agora: number, fuso?: st
   const filas: DellCheck[] = []
   let ok = 0
   let total = 0
-  for (const c of status?.verificacoes ?? []) {
+  for (const c of juntarContainers(status?.verificacoes ?? [])) {
     if (c.grupo === 'pendencias') {
       if (c.estado !== 'ok' && !c.sozinho) filas.push(c)
       continue
