@@ -313,7 +313,11 @@ padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em so
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
 na Ficha a próxima mensagem e a proposta, nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
-O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; ainda NÃO construído): chat que
+O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia, flags
+DESLIGADAS na Mel até o Rômulo ver funcionando): server/assistente.ts (cola: fila serial, tetos, prazo de 4 min, JSONL 600),
+server/assistente-ferramentas.ts (leituras e propor_*), server/hermes-consulta.ts (o Hermes consultado), src/operations/assistente.ts
+(PURO), server/financas/parece-financas.ts (a régua única de "parece finanças", também do Jev), src/casca/Assistente*.vue e
+assistente.ts (o painel); contrato em src/operations/assistente-contrato.ts. Chat que
 substitui o Pedir no `operations`; Gemini roteia com leitura, o Hermes é consultado sem ferramentas (`hermes -z -t clarify`,
 contexto mascarado pela Central, sem sessão guardada), o Jev só mede; só propõe cartões, nada a lead, finanças e R$ de
 proposta fora de modelo; `SQUADONE_ASSISTENTE` e `SQUADONE_ASSISTENTE_HERMES` nascem desligadas.

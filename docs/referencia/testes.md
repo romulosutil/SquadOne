@@ -90,6 +90,20 @@ a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas
 sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena; desde 17/10/2026,
 AC-03, uma regra por métrica: `leu`/`respondeuDeGente`/`quisVer` em tabela (robô, `respondeu_em` sem classificação, classificação sem a
 coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dias, e a taxa do expediente é a mesma com ou sem o filtro do Site),
+os do Assistente da Central (17/10/2026, RULES 28): `server/assistente.test.ts` (finanças sem modelo e sem o texto no JSONL,
+máscara no prompt e no arquivo, cartão proposto sem escrita, teto da tentativa e das respostas por regra, corrida de dois POSTs, o
+Hermes que falha ou responde e que NUNCA volta ao Gemini no histórico (também depois de reiniciar), releitura, poda por data de linha,
+prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita), `server/assistente-ponta.test.ts` (de ponta a ponta com
+as funções reais do painel: Ficha → buscar_lead/ler_lead → cartão de anotação aceito pelo validarRegistro; id inteiro ou só a chave;
+tela de Finanças sem leitura nem modelo; os desvios 400 pendente e 404), `src/operations-assistente.test.ts` (rotearLocal, prepararTexto,
+promptDoRoteador sem telefone/R$/trabalhador, lerCartaoProposto em tabela, valor com cara de preço recusado nos três cartões, fontes,
+histórico com a marca do Hermes, poda), `server/hermes-consulta.test.ts` (Hermes consultado: prompt marca o pacote como dado; saída sem
+ANSI, código, JSON de ação nem R$; sessões da pasta apagadas antes e depois; ambiente sem SQUADONE_/GEMINI; timeout, ocupado, teto em
+arquivo 600; pasta não vazia falha fechada; diretório temporário, nunca o HOME real), `server/financas/parece-financas.test.ts` (a régua
+única de "parece finanças": 51 casos que barram, inclusive plurais, BRL/US$/R＄, aluguel, conta de luz, banco, "1.200 do aluguel", e 22 que
+passam, como "o que devo responder?" e "mil desculpas") e `src/casca/assistente.test.ts` (o painel: contexto do endereço, atalhos por
+página sem Finanças, junção pelo `n`, etapas e falhas, erro HTTP → falha, chave do registro, o cartão com a oferta e o aviso de outro lead,
+polling com relógio e visibilidade falsos),
 `server/crm-desfecho.test.ts` (17/10/2026, AC-08 e AC-10: ganho e dispensa marcados na Central nas cinco ofertas, com desfazer e
 ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `prioridadeDaTriagem`, `notaDoGoogle` e
 `taxasDeRespostaPorNicho` em tabela),
