@@ -97,7 +97,20 @@
 12. `publicado.json` é somente um registro local. Disponibilidade pública,
     leitura, aprovação ou publicação pelo cliente exigem evidência própria e
     nunca podem ser inferidas pela interface.
-13. A home é **Hoje**, pensada primeiro para o celular, e responde nesta ordem:
+13. **Desde 17/10/2026, no perfil `operations` a home é a Central de comando**
+    (pedido do Rômulo: três menus, Central de comando, Assistente e Vendas). Ela
+    responde nesta ordem: o estado do Dell (o único lugar do número "precisam de
+    você") e **o que precisa do Rômulo agora, em no máximo 3 cartões** (o do Dell
+    conta como um; o resto atrás de "ver todos", pelo mesmo motivo de sempre); o
+    Escritório animado, com balões só com fonte e "Sem sinal" sem ela (regras 2, 19
+    e 26: o passeio é decoração; só o problema real do `status.json` move o PO
+    raiz até a sala dele); e uma faixa de uma linha por frente (Vendas, Agenda,
+    Finanças, Entrada, Dell), cujo detalhe abre numa folha ou na rota inteira, que
+    continua existindo por endereço. A Próxima venda mora em Vendas. Agenda,
+    Finanças, Escritório e Entrada saíram dos menus; o Mais virou a Manutenção,
+    discreta. No perfil `app` (Easypanel) a home continua a **Hoje** abaixo.
+
+    A Hoje (perfil `app`) é pensada primeiro para o celular, e responde nesta ordem:
     - **o que precisa do Rômulo agora**, em no máximo 3 cartões (falhas do
       `dell-status` com `o_que_fazer`, cartões de decisão dos agentes, leads
       que responderam e esperam resposta — do retrato do CRM, desde

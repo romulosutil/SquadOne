@@ -95,6 +95,19 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
 .topo__chip.is-pendente { background: var(--atencao-fundo); }
 .topo__chip.is-pendente::before { background: var(--destaque); }
 .topo__chip small { color: var(--texto-2); font-weight: var(--peso-medio); }
+/* A engrenagem da Manutenção (Dell, 17/10/2026): discreta, mas com 44 px de toque e nome acessível. */
+.topo__discreto {
+  display: inline-grid;
+  width: var(--toque);
+  height: var(--toque);
+  place-items: center;
+  border-radius: var(--raio-controle);
+  color: var(--texto-2);
+  font-size: var(--tam-nome);
+  text-decoration: none;
+}
+.topo__discreto:hover { background: var(--hover); color: var(--texto); }
+.topo__discreto[aria-current="page"] { background: var(--destaque); color: var(--destaque-texto); }
 
 /* ------------------------------------------------------------ aviso (toast) */
 
@@ -142,7 +155,9 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
     z-index: 50;
     inset: auto 0 0 0;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    /* Colunas iguais para quantos houver: cinco no Easypanel, três no Dell (Central · ＋ · Vendas). */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     min-height: var(--tamanho-barra-inferior);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     border-top: var(--linha-espessura) solid var(--cor-tinta);
@@ -197,6 +212,8 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
 @media (min-width: 64rem) {
   .casca { display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
   .topo__marca { display: none; }
+  /* No desktop a Manutenção está no trilho: a engrenagem do topo seria a segunda. */
+  .topo__discreto { display: none; }
   .aviso { bottom: var(--esp-6); left: auto; }
   .casca__conteudo { padding: var(--esp-6) clamp(var(--esp-6), 3vw, var(--esp-12)) var(--esp-16); }
 
@@ -272,6 +289,23 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
     font-weight: var(--peso-medio);
     cursor: pointer;
   }
+  /* A Manutenção no Dell: no pé do trilho, junto do Ctrl+K, sem o peso de um menu. */
+  .barra-lateral__discreto {
+    display: flex;
+    min-height: var(--toque);
+    align-items: center;
+    gap: var(--esp-2);
+    margin-top: auto;
+    padding: 0 var(--esp-3);
+    border-radius: var(--raio-controle);
+    color: var(--barra-texto);
+    font-size: var(--tam-apoio);
+    font-weight: var(--peso-medio);
+    text-decoration: none;
+  }
+  .barra-lateral__discreto:hover { text-decoration: underline; }
+  .barra-lateral__discreto[aria-current="page"] { background: var(--barra-ativo); color: var(--barra-ativo-texto); }
+  .barra-lateral__paleta--junto { margin-top: 0; }
   .barra-lateral__paleta kbd { padding: var(--esp-0) var(--esp-2); border: 1px solid var(--barra-texto); border-radius: var(--raio-selo); font: inherit; font-size: var(--tam-mini); }
   .barra-lateral :focus-visible { outline: 3px solid var(--cor-amarelo); outline-offset: 2px; }
 

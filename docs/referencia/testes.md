@@ -135,7 +135,7 @@ desde 16/10/2026, OT-02: a janela única seg–sex 8h–17h30 em tabela (17h45 e
 `src/operations-velocidade.test.ts` (16/10/2026, OT-09: do "quero ver" ao link pela 2ª anotada ou pelo link visto na conversa, link antes do
 interesse não conta, do link à proposta, perdido não espera e fora dos 30 dias não entra, mediana e duração legível),
 `src/operations-financas-importar.test.ts` (16/10/2026, OT-11: o "Importar" único de Finanças manda PDF à fatura e OFX/CSV/.txt ao extrato pela
-extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; e, em `casca.test.ts`, o Usar do Mais só com o que a barra da tela não alcança),
+extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; o Usar do Mais saiu em 17/10/2026 com a Central de comando),
 `src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
 10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
@@ -220,13 +220,20 @@ CRM de estamparia, `colinha.ts`, "quem fechou" numa mensagem ao lead) em tabela;
 por ele; `liberadosDoCorpo`; quando a Ficha oferece o primeiro contato de um Novo, o ritmo antes do horário, e desabilitado com o motivo),
 `src/operations-financas-formato.test.ts` (o dia de São Paulo, as parcelas futuras separadas e em ordem, as opções do filtro de mês e
 o nome de cada conexão no selo),
-`src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
-`src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
-semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
-linha do funil, o cartão de respostas com o interesse parado na frente; desde 16/10/2026 o `/design-system`),
-`src/casca/paleta.test.ts` (17/10/2026, o Ctrl+K, AC-23: as abas de Vendas, Finanças e do Mais só no `operations`, com a dica em
-palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada no perfil `app`, o id só no destino; e quando a mesma
-tela precisa de `popstate` (`/crm`) ou de remontar (Mais)),
+`src/office/vista.test.ts` (Lista|Mapa e escala inteira; desde 17/10/2026 a vista da Central, mapa por padrão e guardada à parte),
+`src/office/salaFinancas.test.ts`,
+`src/office/baloes.test.ts` (17/10/2026, Central de comando: o texto do balão por fonte, robô que falhou > pede olhar > leads com
+você > parados > contagem, "Sem sinal" sem Vendas ou sem retrato, finanças só em % e semáforo, a agenda em bloco antes do próximo,
+a sala que o PO raiz visita só por problema em destaque e o balão que ele leva, o corte em uma linha),
+`src/casca/central.test.ts` (17/10/2026: as cinco faixas na ordem, "Sem sinal" com o motivo em cada uma e nada afirmado lendo, o passo
+e a oferta de Vendas com o gargalo, tenho/devo/gastei e o semáforo, a agenda, o selo da Entrada, a saúde do Dell sem repetir o número
+do cabeçalho, o andar do mapa, o `?abrir=` e o status do mapa),
+`src/casca/casca.test.ts` (rotas por perfil; desde 17/10/2026 os três menus do Dell, Central de comando e Vendas, com a Manutenção
+discreta, o Easypanel igual, `aria-current` das rotas que viraram faixa; Ctrl+K com o Assistente e os saltos para a Central; a ordem
+dos cartões com o semáforo das finanças, estado do time só com fonte, com e sem `/api/time`, linha do funil; o `/design-system`),
+`src/casca/paleta.test.ts` (17/10/2026, o Ctrl+K, AC-23: as abas de Vendas, os saltos para as faixas da Central (`/?abrir=`) e a
+Manutenção só no `operations`, com a dica em palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada no perfil
+`app`, o id só no destino; e quando a mesma tela precisa de `popstate` (`/crm`) ou de remontar (Mais e Central)),
 `src/casca/mais.test.ts` (17/10/2026: qual seção o endereço do Mais abre, `?abrir=manutencao|roteiro` e `?fluxo=`; as Ferramentas
 sem Syncthing, CRM nem Agentes, e a reserva fria neutra) e
 `src/casca/tema.test.ts` (17/10/2026: o tema claro/escuro; sem escolha guardada é claro, valor inválido ou storage

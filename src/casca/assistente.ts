@@ -161,7 +161,7 @@ const FALHAS: Record<TipoDeFalhaDoPainel, { titulo: string; oQueFazer: string }>
   hermes: { titulo: 'O Hermes não respondeu.', oQueFazer: 'Pergunte de novo mais tarde se precisar da opinião dele; o resto segue sem ele.' },
   semCrm: { titulo: 'Não consegui ler Vendas agora.', oQueFazer: 'Abra Vendas e veja se o retrato está em dia; depois pergunte de novo.' },
   desligado: { titulo: 'O Assistente está desligado nesta Central.', oQueFazer: 'Ele liga com SQUADONE_ASSISTENTE=true no operations.env do Dell.' },
-  outro: { titulo: 'Algo falhou na resposta.', oQueFazer: 'Pergunte de novo; se repetir, veja o Dell em Mais › Manutenção.' },
+  outro: { titulo: 'Algo falhou na resposta.', oQueFazer: 'Pergunte de novo; se repetir, veja o Dell em Manutenção (a engrenagem no topo).' },
   rede: { titulo: 'A Central não respondeu.', oQueFazer: 'Confira a conexão com o Dell (Tailscale) e tente de novo.' },
   pendente: { titulo: 'A resposta anterior ainda está chegando.', oQueFazer: 'Espere ela aparecer aqui e mande de novo.' },
 }

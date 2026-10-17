@@ -11,6 +11,11 @@
 export type VistaDoEscritorio = 'lista' | 'mapa'
 
 export const CHAVE_DA_VISTA = 'squadone:escritorio:vista'
+/**
+ * A Central de comando (17/10/2026) guarda a sua à parte: lá o mapa é o centro da tela, e quem
+ * escolheu Lista no Escritório completo (para editar o roster) não escolheu Lista na home.
+ */
+export const CHAVE_DA_VISTA_DA_CENTRAL = 'squadone:central:vista'
 
 /** Só o necessário de `Storage`: os testes passam um objeto qualquer. */
 export interface Guardador {
@@ -18,18 +23,18 @@ export interface Guardador {
   setItem(chave: string, valor: string): void
 }
 
-export function lerVistaGuardada(storage: Guardador | null | undefined): VistaDoEscritorio | null {
+export function lerVistaGuardada(storage: Guardador | null | undefined, chave = CHAVE_DA_VISTA): VistaDoEscritorio | null {
   try {
-    const v = storage?.getItem(CHAVE_DA_VISTA)
+    const v = storage?.getItem(chave)
     return v === 'lista' || v === 'mapa' ? v : null
   } catch {
     return null
   }
 }
 
-export function gravarVista(storage: Guardador | null | undefined, vista: VistaDoEscritorio): void {
+export function gravarVista(storage: Guardador | null | undefined, vista: VistaDoEscritorio, chave = CHAVE_DA_VISTA): void {
   try {
-    storage?.setItem(CHAVE_DA_VISTA, vista)
+    storage?.setItem(chave, vista)
   } catch {
     // Sem storage: a escolha vale até o próximo reload.
   }
@@ -38,6 +43,15 @@ export function gravarVista(storage: Guardador | null | undefined, vista: VistaD
 /** A guardada vence; sem ela, mapa só em tela larga. */
 export function vistaInicial(guardada: VistaDoEscritorio | null, telaLarga: boolean): VistaDoEscritorio {
   return guardada ?? (telaLarga ? 'mapa' : 'lista')
+}
+
+/**
+ * Na Central o mapa é o padrão também no celular: é o pedido ("o Escritório como página inicial,
+ * em movimento"), e lá ele tem altura fixa, sem o andar inteiro a encaixar. Lista é a escolha de
+ * quem quer poupar bateria, e fica guardada.
+ */
+export function vistaInicialDaCentral(guardada: VistaDoEscritorio | null): VistaDoEscritorio {
+  return guardada ?? 'mapa'
 }
 
 export const ESCALA_MAXIMA = 3

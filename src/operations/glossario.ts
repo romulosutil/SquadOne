@@ -40,7 +40,7 @@ export const GLOSSARIO: readonly NomeDaUi[] = [
   },
   {
     certo: 'Roteiro',
-    nota: 'O que dizer em cada momento, em Mais › Entender e na Ficha. "colinha" ficou só no código (colinha.ts).',
+    nota: 'O que dizer em cada momento, em Manutenção › Entender e na Ficha. "colinha" ficou só no código (colinha.ts).',
     proibidos: [/(?<![\w/.=-])[Cc]olinha(?![\w-]|\.ts)/],
   },
   {
@@ -67,8 +67,13 @@ export const GLOSSARIO: readonly NomeDaUi[] = [
     certo: 'A fazer',
     // 17/10/2026 (hierarquia de Vendas): as abas são três, na ordem do trabalho, e mantêm os nomes de
     // antes; "Entender" é o mesmo nome da seção do Mais, porque é a mesma intenção (consulta, não tarefa).
-    nota: 'A aba de Vendas com a Próxima venda (Fazer); depois vêm Triagem (Triar) e Entender (Funil, Números e Resultados). "Hoje" é a tela inicial, onde o mesmo cartão também aparece.',
+    nota: 'A aba de Vendas com a Próxima venda (Fazer); depois vêm Triagem (Triar) e Entender (Funil, Números e Resultados). Na Central de comando ela é só uma faixa com o passo da vez.',
     proibidos: [/aparece na Hoje/, /Nada esperando você hoje/],
+  },
+  {
+    certo: 'Central de comando',
+    nota: 'A tela inicial no Dell (/, 17/10/2026): o Dell, o Escritório e as faixas. "Hoje" fica só para o Easypanel; "Manutenção" é o antigo Mais do Dell.',
+    proibidos: [/Centro de comando/, /Central de Comando/, /Painel de comando/],
   },
   {
     certo: 'A oferta: ROTULO_DO_PRODUTO (longo) e SIGLA_DO_PRODUTO (curto)',
