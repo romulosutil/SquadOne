@@ -15,6 +15,11 @@
  * 17/10/2026 (auditoria da Central): o Roteiro de venda saiu das abas de Vendas e mora no
  * Entender (AC-20; `/crm?ver=roteiro` manda para `?abrir=roteiro`), e o "Desconectar o Google"
  * saiu da Agenda para a Manutenção (AC-25): raro e derruba a agenda inteira.
+ * Ainda em 17/10/2026 (Central de comando, "os menus são Central + Assistente + Vendas"): no Dell o
+ * Mais encolheu para a Manutenção, fora dos menus (a engrenagem do topo e do trilho). O "Usar"
+ * sumiu: Agenda, Finanças, Escritório e Entrada viraram faixas da Central. No lugar, os atalhos do
+ * que só se abre para mexer: o Escritório completo (contratar, editar, arquivar), Organizar
+ * Finanças e o design system; e a conexão com o Google ganhou o Conectar e o Tasks.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AccessPanel from '../operations/AccessPanel.vue'
@@ -22,9 +27,9 @@ import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import CrmColinha from '../operations/CrmColinha.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
 import { useOverview } from '../casca/overview'
-import { atalhosDoMais, type Capacidades, type Destino } from '../casca/destinos'
+import type { Capacidades } from '../casca/destinos'
 import { useAgentes } from '../agentes/estado'
-import { conectado } from '../auth/google'
+import { ampliarAcesso, conectado, conectando, tasksLiberado } from '../auth/google'
 import { secaoDoMais } from '../casca/mais'
 import '../operations/mais.css'
 // O roteiro usa as peças do CRM (crm-colinha, crm-trecho...): sem o crm.css ele sairia cru aqui.
@@ -34,32 +39,24 @@ const props = defineProps<{ capacidades: Capacidades }>()
 const { overview, resumo } = useOverview()
 const ops = computed(() => props.capacidades.perfil === 'operations')
 
-// A mesma pergunta da casca (casca.css e App.vue): a partir de 64rem quem navega é o trilho
-// lateral. Acompanha o giro do tablet e a janela redimensionada, senão o Usar ficaria errado
-// até recarregar.
-const consulta = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 64rem)') : null
-const largo = ref(consulta?.matches ?? false)
-const aoMudarLargura = (e: MediaQueryListEvent) => (largo.value = e.matches)
 onMounted(() => {
-  consulta?.addEventListener('change', aoMudarLargura)
-  // O link "Ver em Mais › Manutenção" da Hoje e o "Roteiro" de Vendas: a navegação sobe a página
+  // O "Ver em Manutenção" da Central e o "Roteiro" de Vendas: a navegação sobe a página
   // antes de montar esta rota, então rolar até a seção fica para depois de ela existir.
   if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
   if (pedeRoteiro) void nextTick(() => document.getElementById('roteiro')?.scrollIntoView({ block: 'start' }))
 })
-onBeforeUnmount(() => {
-  consulta?.removeEventListener('change', aoMudarLargura)
-  window.clearTimeout(desarmar)
-})
+onBeforeUnmount(() => window.clearTimeout(desarmar))
 
-const DICA: Partial<Record<Destino['id'], string>> = {
-  agenda: 'os compromissos que os agentes marcaram, e a conexão com o Google',
-  escritorio: 'squads, salas e quem trabalha em cada uma (lista ou mapa)',
-  entrada: 'mande um texto ou arquivo e a Mel guarda no lugar certo',
-}
-const usar = computed(() =>
-  atalhosDoMais(props.capacidades, largo.value).map((d) => ({ href: d.href, rotulo: d.rotulo, dica: DICA[d.id] ?? '' }))
-)
+/** No Dell esta tela é a Manutenção; no Easypanel continua o Mais da barra. */
+const titulo = computed(() => (ops.value ? 'Manutenção' : 'Mais'))
+/** O que só se abre para mexer: rotas que existem e saíram dos menus. */
+const atalhos = computed(() => [
+  ...(props.capacidades.agentes && ops.value
+    ? [{ href: '/squadone', rotulo: 'Escritório completo', dica: 'squads, salas e quem trabalha em cada uma: contratar, editar, arquivar e andar' }]
+    : []),
+  ...(ops.value ? [{ href: '/financas/organizar', rotulo: 'Organizar Finanças', dica: 'categorias, orçamento e regras' }] : []),
+  { href: '/design-system', rotulo: 'Design system', dica: 'tokens e peças do app, para quem mexe no visual' },
+])
 const pedido = secaoDoMais(window.location.search)
 const pedeFluxo = pedido.fluxo
 /** `?abrir=manutencao`: a Hoje manda para cá com a seção e a lista do Dell já abertas (AC-17). */
@@ -108,15 +105,12 @@ const avisoDoDell = computed(() => {
 <template>
   <div class="mais">
     <section class="mais__bloco" aria-labelledby="mais-titulo">
-      <h1 id="mais-titulo">Mais</h1>
-      <template v-if="usar.length">
-        <h2 class="mais__grupo">Usar</h2>
-        <ul class="mais__links">
-          <li v-for="l in usar" :key="l.href">
-            <a :href="l.href"><strong>{{ l.rotulo }}</strong><small v-if="l.dica">{{ l.dica }}</small></a>
-          </li>
-        </ul>
-      </template>
+      <h1 id="mais-titulo">{{ titulo }}</h1>
+      <ul class="mais__links">
+        <li v-for="l in atalhos" :key="l.href">
+          <a :href="l.href"><strong>{{ l.rotulo }}</strong><small>{{ l.dica }}</small></a>
+        </li>
+      </ul>
     </section>
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
@@ -134,15 +128,31 @@ const avisoDoDell = computed(() => {
 
     <details id="manutencao" class="mais__bloco mais__dobra" :open="pedeManutencao || !!avisoDoDell">
       <summary>
-        <span class="mais__grupo">Manutenção</span>
-        <small>ferramentas do Dell, o que ele confere<template v-if="avisoDoDell"> ({{ avisoDoDell }})</template><template v-if="ag && conectado">, a conexão com o Google</template> e o design system</small>
+        <span class="mais__grupo">{{ ops ? 'Dell, ferramentas e Google' : 'Conexão com o Google' }}</span>
+        <small><template v-if="ops">ferramentas do Dell, o que ele confere<template v-if="avisoDoDell"> ({{ avisoDoDell }})</template><template v-if="ag">, </template></template><template v-if="ag">a conexão com o Google e o Tasks</template></small>
       </summary>
       <div class="mais__ops">
         <AccessPanel v-if="ops" :tools="overview?.tools ?? []" />
         <DellConferePanel v-if="ops" :status="overview?.dell ?? null" :resumo="resumo" :aberto="pedeManutencao" />
+        <!-- Conectar e autorizar o Tasks também aqui (a Agenda saiu dos menus no Dell): mesmo consentimento, nunca logout. -->
+        <section v-if="ag && !conectado" class="mais__google" aria-labelledby="mais-google-titulo">
+          <h2 id="mais-google-titulo" class="mais__grupo">Conexão com o Google</h2>
+          <p class="texto-2">Sem conexão: os agentes ainda respondem, mas não leem nem marcam nada na agenda.</p>
+          <div class="acoes">
+            <button type="button" class="botao" :disabled="conectando" @click="ag.conectarGoogle">
+              {{ conectando ? 'Conectando…' : 'Conectar o Google Calendar' }}
+            </button>
+          </div>
+        </section>
         <section v-if="ag && conectado" class="mais__google" aria-labelledby="mais-google-titulo">
           <h2 id="mais-google-titulo" class="mais__grupo">Conexão com o Google</h2>
-          <p class="texto-2">Desconectar revoga o acesso no Google: a agenda para de ler e de marcar até você conectar de novo pela Agenda.</p>
+          <p class="texto-2">
+            Google Calendar conectado.<template v-if="tasksLiberado"> Google Tasks autorizado.</template><template v-else> Google Tasks não autorizado: os passos não viram checklist.</template>
+            Desconectar revoga o acesso no Google: a agenda para de ler e de marcar até você conectar de novo.
+          </p>
+          <div v-if="!tasksLiberado" class="acoes">
+            <button type="button" class="botao" :disabled="conectando" @click="ampliarAcesso">Autorizar o Google Tasks</button>
+          </div>
           <div class="acoes">
             <button
               type="button"
@@ -156,9 +166,6 @@ const avisoDoDell = computed(() => {
             <button v-if="armadoDesconectar" type="button" class="botao botao--leve" @click="armadoDesconectar = false">Cancelar</button>
           </div>
         </section>
-        <ul class="mais__links">
-          <li><a href="/design-system"><strong>Design system</strong><small>tokens e peças do app, para quem mexe no visual</small></a></li>
-        </ul>
       </div>
     </details>
   </div>

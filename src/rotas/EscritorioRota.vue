@@ -20,8 +20,9 @@ import { useAgentes } from '../agentes/estado'
 import { estadoDaPessoa } from '../casca/hoje'
 import { useOverview } from '../casca/overview'
 import { gravarVista, lerVistaGuardada, vistaInicial, type VistaDoEscritorio } from '../office/vista'
-import { ehSalaDeFinancas, estadoDoAgente, type EstadoDasFinancas, type EstadoDoAgente } from '../office/salaFinancas'
+import { ehSalaDeFinancas, estadoDoAgente } from '../office/salaFinancas'
 import { fonteDoCrm, operacaoDaSala, temOperacao, type OperacaoDaSala } from '../office/operacao'
+import { baloesDasSalas, baloesDosAtores, type BalaoDaSala, type LeituraDasFinancas } from '../office/baloes'
 import type { CrmVisao } from '../operations/types'
 
 const GameMap = defineAsyncComponent({
@@ -83,21 +84,18 @@ const status = computed(() => {
 // cartão e do orçamento do mês — balão no Mapa, linha de texto na Lista. Só o
 // Dell tem finanças: no Easypanel a rota cai no fallback da SPA (HTML), e a
 // sala fica sem estado. Só % e semáforo (RULES 24); nada entra no roster nem no prompt.
-const estadoDasFinancas = ref<EstadoDasFinancas | null>(null)
+/** null = não lida (falhou, ou o Easypanel, que não tem finanças): o balão diz "Sem sinal". */
+const leituraDasFinancas = ref<LeituraDasFinancas>(null)
 const salasDeFinancas = computed(() => (squadAtiva.value?.dominios ?? []).filter(ehSalaDeFinancas))
-const estadoDaSalaFinancas = computed(() => estadoDoAgente(estadoDasFinancas.value))
-const estadosDasSalas = computed<Record<string, EstadoDoAgente>>(() => {
-  const estado = estadoDaSalaFinancas.value
-  return estado ? Object.fromEntries(salasDeFinancas.value.map((d) => [d.id, estado])) : {}
-})
+const estadoDaSalaFinancas = computed(() => estadoDoAgente(leituraDasFinancas.value?.estado ?? null))
 async function lerEstadoDasFinancas() {
   if (!salasDeFinancas.value.length) return
   try {
     const resposta = await fetch('/api/financas/estado')
     const json = (resposta.headers.get('content-type') ?? '').includes('application/json')
-    estadoDasFinancas.value = resposta.ok && json ? await resposta.json() : null
+    leituraDasFinancas.value = resposta.ok && json ? { estado: await resposta.json() } : null
   } catch {
-    estadoDasFinancas.value = null
+    leituraDasFinancas.value = null
   }
 }
 watch(
@@ -152,6 +150,19 @@ const operacoes = computed<Record<string, OperacaoDaSala>>(() => {
   const fontes = { crm: fonteDoCrm(visaoDoCrm.value, erroDoCrm.value, agora.value), dell: overview.value?.dell ?? null, agora: agora.value }
   const pares = (squadAtiva.value?.dominios ?? []).map((d) => [d.id, operacaoDaSala(d.id, fontes)] as const)
   return Object.fromEntries(pares.filter((p): p is readonly [string, OperacaoDaSala] => p[1] !== null))
+})
+
+// Os balões do Mapa (17/10/2026): a mesma regra da Central (office/baloes.ts). A Sala Finanças fala
+// como antes e, agora, as salas do PRUMO também (robôs e leads); o PO raiz não visita sozinho aqui:
+// no Escritório completo quem move é o pedido (`agent`), e a visita por problema é da Central.
+const baloes = computed<Record<string, BalaoDaSala>>(() => {
+  const squad = squadAtiva.value
+  if (!squad) return {}
+  const deSalas = baloesDasSalas(squad.dominios, {
+    operacoes: operacoes.value,
+    ...(salasDeFinancas.value.length ? { financas: leituraDasFinancas.value } : {}),
+  })
+  return baloesDosAtores(squad.dominios, deSalas)
 })
 
 const salaAberta = ref<string | null>(null)
@@ -216,7 +227,7 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         :squad="squadAtiva"
         :estados="estados"
         :status="status"
-        :estados-das-salas="estadosDasSalas"
+        :baloes="baloes"
         @abrir-sala="salaAberta = $event"
       />
     </template>

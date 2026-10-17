@@ -4,7 +4,9 @@
  *
  * Dois eixos decidem o que existe:
  *  - `perfil`: `operations` (Dell) tem Funil, Finanças, Entrada e o estado do
- *    Dell; `app` (Easypanel, reserva fria) não tem nenhum deles.
+ *    Dell; `app` (Easypanel, reserva fria) não tem nenhum deles. Desde 17/10/2026
+ *    o `operations` tem três menus (Central de comando, Assistente, Vendas) e a
+ *    Manutenção discreta; as outras rotas seguem existindo por endereço.
  *  - `agentes`: o app dos agentes (roster, turno, Mochila) mora neste processo.
  *    No `app` é sempre verdade; no `operations`, só com a agenda ligada.
  */
@@ -37,13 +39,17 @@ export interface Destino {
 }
 
 const HOJE: Destino = { id: 'hoje', rotulo: 'Hoje', href: '/', icone: '◉' }
+/**
+ * A home do `operations` desde 17/10/2026: "os menus são Central de comando + Assistente + Vendas".
+ * Mesma rota e mesmo id da Hoje (o `/`), outro nome e outra tela (rotas/CentralRota.vue).
+ */
+const CENTRAL: Destino = { id: 'hoje', rotulo: 'Central de comando', href: '/', icone: '◉' }
 const AGENDA: Destino = { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: '▦' }
 const FUNIL: Destino = { id: 'funil', rotulo: 'Vendas', href: '/crm', icone: '▤' }
-const FINANCAS: Destino = { id: 'financas', rotulo: 'Finanças', href: '/financas', icone: 'R$' }
 const ESCRITORIO: Destino = { id: 'escritorio', rotulo: 'Escritório', href: '/squadone', icone: '▣' }
-/** Não é da SPA: o servidor repassa /entrada/ ao serviço da Entrada (RULES 23). */
-const ENTRADA: Destino = { id: 'entrada', rotulo: 'Entrada', href: '/entrada/', icone: '⇣' }
 const MAIS: Destino = { id: 'mais', rotulo: 'Mais', href: '/mais', icone: '≡' }
+/** O Mais do `operations` encolheu para a Manutenção: some da barra e vira a engrenagem discreta. */
+const MANUTENCAO: Destino = { id: 'mais', rotulo: 'Manutenção', href: '/mais', icone: '⚙' }
 
 /** Normaliza o caminho: sem barra final, raiz vira "/". */
 export function normalizarCaminho(caminho: string): string {
@@ -69,50 +75,53 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
 }
 
 /**
- * Trilho lateral (a partir de 1024 px): todos os destinos do perfil. O Pedir
- * não entra aqui: é um botão, não uma página.
+ * Trilho lateral (a partir de 1024 px). No `operations`, desde 17/10/2026, só os dois destinos dos
+ * três menus (Central de comando e Vendas; o terceiro, o Assistente, é o botão ＋, não uma página);
+ * Agenda, Finanças, Escritório e Entrada viraram faixas da Central, e o Mais virou a Manutenção
+ * discreta (`destinoDiscreto`). No `app` (Easypanel, reserva fria) tudo fica como era.
  */
 export function destinosLaterais(c: Capacidades): Destino[] {
-  const ops = c.perfil === 'operations'
-  return [
-    HOJE,
-    ...(c.agentes ? [AGENDA] : []),
-    ...(ops ? [FUNIL, FINANCAS] : []),
-    ...(c.agentes ? [ESCRITORIO] : []),
-    ...(ops ? [ENTRADA] : []),
-    MAIS,
-  ]
+  if (c.perfil === 'operations') return [CENTRAL, FUNIL]
+  return [HOJE, ...(c.agentes ? [AGENDA, ESCRITORIO] : []), MAIS]
 }
 
 /**
- * Barra inferior (abaixo de 1024 px): quatro destinos, dois de cada lado do
- * ＋Pedir. No Dell é a de design.md (Hoje · Funil · Finanças · Mais); sem Funil
- * nem Finanças (Easypanel), Agenda e Escritório ocupam os lugares.
+ * Barra inferior (abaixo de 1024 px), metade de cada lado do ＋. No `operations`, Central · ＋ · Vendas
+ * (o ＋ no meio é o Assistente, o terceiro menu). No `app`, Hoje · Agenda · ＋ · Escritório · Mais.
  */
 export function destinosDaBarra(c: Capacidades): Destino[] {
-  if (c.perfil === 'operations') return [HOJE, FUNIL, FINANCAS, MAIS]
+  if (c.perfil === 'operations') return [CENTRAL, FUNIL]
   return [HOJE, AGENDA, ESCRITORIO, MAIS]
 }
 
 /**
- * O grupo "Usar" do Mais (16/10/2026, OT-11 do blueprint de serviço): só os
- * destinos que a barra da tela NÃO alcança. `largo` é a mesma pergunta da casca
- * (min-width: 64rem): a partir dela o trilho lateral já lista todos, e o Usar fica
- * vazio; no celular sobra o que não cabe nos quatro da barra inferior. Sai das
- * duas listas acima, e não de uma terceira, para nunca repetir um destino quando
- * a barra mudar. Lançamentos não entra: é aba de Finanças, não destino.
+ * A Manutenção no `operations`: fora dos menus, mas a um toque de qualquer tela (a engrenagem do topo e
+ * do trilho, e a do cabeçalho da Central). null no `app`, onde o Mais já está na barra.
  */
-export function atalhosDoMais(c: Capacidades, largo: boolean): Destino[] {
-  const naTela = new Set((largo ? destinosLaterais(c) : destinosDaBarra(c)).map((d) => d.id))
-  return destinosLaterais(c).filter((d) => !naTela.has(d.id))
+export function destinoDiscreto(c: Capacidades): Destino | null {
+  return c.perfil === 'operations' ? MANUTENCAO : null
 }
 
-/** O destino que leva `aria-current="page"`; null quando o caminho é de outro lugar. */
+/**
+ * O destino que leva `aria-current="page"`; null quando o caminho é de outro lugar. No `operations`, as
+ * rotas que viraram faixa da Central (Agenda, Finanças) acendem a Central, e as que moram na Manutenção
+ * (Escritório completo, design system) acendem a engrenagem.
+ */
 export function destinoAtual(caminhoCru: string, c: Capacidades): Destino['id'] | null {
   const rota = rotaDaCasca(caminhoCru, c)
-  // O blueprint mora dentro do Mais: é ele que fica aceso na barra.
+  if (rota === 'nao-encontrada') return null
+  // O design system mora dentro do Mais (a Manutenção, no Dell): é ele que fica aceso.
   if (rota === 'design-system') return 'mais'
-  return rota === 'nao-encontrada' ? null : rota
+  if (c.perfil === 'operations') {
+    if (rota === 'agenda' || rota === 'financas') return 'hoje'
+    if (rota === 'escritorio') return 'mais'
+  }
+  return rota
+}
+
+/** O nome da home no perfil: "Central de comando" no Dell, "Hoje" no Easypanel. */
+export function nomeDaHome(c: Capacidades): string {
+  return c.perfil === 'operations' ? CENTRAL.rotulo : HOJE.rotulo
 }
 
 /**
@@ -161,40 +170,59 @@ const DICA_DO_DESTINO: Record<Destino['id'], string> = {
   mais: 'Ajustes, ferramentas e manutenção',
   'design-system': 'Mais › Design system',
 }
+/** No Dell a home e o Mais mudaram de papel (17/10/2026); a dica acompanha. */
+const DICA_NO_DELL: Partial<Record<Destino['id'], string>> = {
+  hoje: 'O Dell, o Escritório e as frentes do dia',
+  mais: 'Escritório completo, como funciona, ferramentas e o Google',
+  'design-system': 'Manutenção › Design system',
+}
+
+type Atalho = { id: string; rotulo: string; dica: string; href: string; soComAgentes?: boolean }
 
 /**
- * As abas de cada área, no perfil `operations` (17/10/2026, AC-23): buscar "triagem" dava "Nada
- * com…" porque a paleta só conhecia as áreas. O rótulo é o nome da aba, igual ao da tela, e a
- * dica diz onde ela mora. O Roteiro de venda saiu de Vendas para o Mais (abre por `?abrir=roteiro`);
- * Lançamentos e Organizar são caminhos próprios de Finanças (FinancasPanel.vue).
+ * Os atalhos do perfil `operations`. As abas de Vendas (17/10/2026, AC-23: buscar "triagem" dava
+ * "Nada com…"); desde a Central de comando (17/10/2026), os saltos para as faixas dela (Finanças e
+ * Agenda abrem a folha na própria Central, `?abrir=`) e o que mora na Manutenção. O rótulo é o nome
+ * da tela; a dica diz onde ela mora. Lançamentos e Organizar seguem como caminhos de Finanças.
  */
-const ABAS_DO_DELL: Array<{ id: string; rotulo: string; dica: string; href: string }> = [
+const ATALHOS_DO_DELL: Atalho[] = [
   { id: 'vendas-afazer', rotulo: 'A fazer', dica: 'Vendas › A fazer', href: '/crm' },
   { id: 'vendas-triagem', rotulo: 'Triagem', dica: 'Vendas › Triagem', href: '/crm?ver=triagem' },
   { id: 'vendas-funil', rotulo: 'Funil', dica: 'Vendas › Funil', href: '/crm?ver=funil' },
   { id: 'vendas-numeros', rotulo: 'Números', dica: 'Vendas › Números', href: '/crm?ver=numeros' },
-  { id: 'mais-roteiro', rotulo: 'Roteiro de venda', dica: 'Mais › Roteiro de venda', href: '/mais?abrir=roteiro' },
-  { id: 'mais-manutencao', rotulo: 'Manutenção', dica: 'Mais › Manutenção', href: '/mais?abrir=manutencao' },
-  { id: 'financas-visao', rotulo: 'Visão', dica: 'Finanças › Visão', href: '/financas' },
+  { id: 'central-escritorio', rotulo: 'Escritório', dica: 'Central de comando › o mapa das salas', href: '/?abrir=escritorio' },
+  { id: 'central-financas', rotulo: 'Finanças', dica: 'Central de comando › Finanças', href: '/?abrir=financas' },
+  { id: 'central-agenda', rotulo: 'Agenda', dica: 'Central de comando › Agenda', href: '/?abrir=agenda', soComAgentes: true },
+  { id: 'central-entrada', rotulo: 'Entrada', dica: 'Mande um texto ou arquivo para a Mel guardar', href: '/entrada/' },
   { id: 'financas-lancamentos', rotulo: 'Lançamentos', dica: 'Finanças › Lançamentos', href: '/financas/lancamentos' },
   { id: 'financas-organizar', rotulo: 'Organizar', dica: 'Finanças › Organizar', href: '/financas/organizar' },
+  { id: 'mais-manutencao', rotulo: 'O que o Dell confere', dica: 'Manutenção › Dell', href: '/mais?abrir=manutencao' },
+  { id: 'mais-escritorio', rotulo: 'Escritório completo', dica: 'Manutenção › contratar, editar e arquivar', href: '/squadone', soComAgentes: true },
+  { id: 'mais-roteiro', rotulo: 'Roteiro de venda', dica: 'Manutenção › Roteiro de venda', href: '/mais?abrir=roteiro' },
 ]
 
-/** O que a paleta oferece: ir a cada destino e às abas do Dell, pedir e trocar de squad. */
+/** O que a paleta oferece: o Assistente (ou o Pedir), ir a cada destino e atalho, trocar de squad. */
 export function comandosDaPaleta(
   c: Capacidades,
   squads: Array<{ id: string; nome: string }>,
   ativaId: string | null
 ): Comando[] {
-  const ir = destinosLaterais(c).map<Comando>((d) => ({
+  const ops = c.perfil === 'operations'
+  const dica = (id: Destino['id']) => (ops ? DICA_NO_DELL[id] : undefined) ?? DICA_DO_DESTINO[id]
+  const destinos = [...destinosLaterais(c), ...(destinoDiscreto(c) ? [destinoDiscreto(c)!] : [])]
+  const ir = destinos.map<Comando>((d) => ({
     id: `ir:${d.id}`,
-    rotulo: `Ir para ${d.rotulo}`,
-    dica: DICA_DO_DESTINO[d.id],
+    rotulo: `Ir para ${d.id === 'hoje' && ops ? 'a ' : ''}${d.rotulo}`,
+    dica: dica(d.id),
     acao: { tipo: 'ir', href: d.href },
   }))
-  ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: DICA_DO_DESTINO['design-system'], acao: { tipo: 'ir', href: '/design-system' } })
-  if (c.perfil === 'operations') {
-    ir.push(...ABAS_DO_DELL.map<Comando>((a) => ({ id: `aba:${a.id}`, rotulo: a.rotulo, dica: a.dica, acao: { tipo: 'ir', href: a.href } })))
+  ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: dica('design-system'), acao: { tipo: 'ir', href: '/design-system' } })
+  if (ops) {
+    ir.push(
+      ...ATALHOS_DO_DELL.filter((a) => !a.soComAgentes || c.agentes).map<Comando>((a) => ({
+        id: `aba:${a.id}`, rotulo: a.rotulo, dica: a.dica, acao: { tipo: 'ir', href: a.href },
+      }))
+    )
   }
   // Com o Assistente, o primeiro comando é ele, com ou sem a agenda neste processo: sem agentes ele
   // ainda responde, só não oferece "Mandar para o time" (AssistenteCartao.vue).

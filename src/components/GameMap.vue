@@ -15,7 +15,8 @@
  * integrantes dele dentro. Nada aqui deriva sala de pessoa.
  *
  * Uma instância por SQUAD (um andar por vez): o Escritório monta com
- * `:key="squadAtiva.id"`, e só quando o Mapa está aberto (import assíncrono).
+ * `:key="squadAtiva.id"` (a Central, pelo andar dela), e só quando o Mapa está
+ * aberto (import assíncrono; na Central, logo na primeira pintura).
  * Trocar de squad recria o componente, e com ele o `knownRooms` de useOffice —
  * sem isso as salas da outra squad seriam lidas como crescimento e animariam.
  *
@@ -43,7 +44,7 @@ import {
   type RoomId,
 } from '../office/rooms'
 import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
-import type { EstadoDoAgente } from '../office/salaFinancas'
+import type { BalaoDaSala } from '../office/baloes'
 import type { Pessoa, SquadView } from '../types'
 
 const props = defineProps<{
@@ -54,20 +55,23 @@ const props = defineProps<{
   /** Uma frase sobre o andar agora ("Pedido em andamento", "Último pedido: Ana"). */
   status?: string
   /**
-   * Domínio → estado que o PO da sala mostra num balão sempre visível (hoje
-   * só a Sala Finanças: % do cartão e do orçamento, ver
-   * `office/salaFinancas.ts`). Dado da tela, não do roster.
+   * Pessoa → balão sempre visível, já com a fonte resolvida por quem monta (office/baloes.ts:
+   * a sala no PO dela, a agenda de cada um, o PO raiz em visita). Desde 17/10/2026 é genérico: a Sala
+   * Finanças, os robôs e os leads do PRUMO e a agenda falam pelo mesmo balão. Dado da tela, não do roster.
    */
-  estadosDasSalas?: Record<string, EstadoDoAgente>
+  baloes?: Record<string, BalaoDaSala>
+  /**
+   * A sala (id do domínio) que o PO raiz visita por um problema real (destinoDoSupervisor). Vence o
+   * `agent`; null volta para a mesa. É o único movimento que diz algo: o passeio é decoração.
+   */
+  visita?: string | null
+  /** Na Central: altura fixa e a barra do mapa enxuta, o mapa é uma parte da tela, não a tela. */
+  compacto?: boolean
 }>()
 
 const emit = defineEmits<{ abrirSala: [dominioId: string] }>()
 
-/** Pessoa → balão: o estado de uma sala é do agente que responde por ela, o PO. */
-const estadoDoAtor = computed<Record<string, EstadoDoAgente>>(() => {
-  const estados = props.estadosDasSalas ?? {}
-  return Object.fromEntries((props.squad?.dominios ?? []).filter((d) => estados[d.id]).map((d) => [d.po.id, estados[d.id]]))
-})
+const estadoDoAtor = computed<Record<string, BalaoDaSala>>(() => props.baloes ?? {})
 
 /** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
 const SPRITE_POOL = ['wraith_01', 'wraith_02', 'wraith_03']
@@ -149,7 +153,9 @@ const salaDe = computed(() => {
 const rotuloDoAtor = (p: OfficePessoa) => {
   const sala = salaDe.value.get(p.id)
   const estado = props.estados?.[p.id]?.texto ?? 'Sem sinal'
-  return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${estado}. Abrir a sala.`
+  // O balão também é lido: quem usa leitor de tela não vê o texto em cima do boneco.
+  const balao = estadoDoAtor.value[p.id]?.texto
+  return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${balao ? `${balao}. ` : ''}${estado}. Abrir a sala.`
 }
 
 // ---------------------------------------------------------------- escala
@@ -194,23 +200,29 @@ const poRaiz = computed(() => props.squad?.dominios[0]?.po.id ?? null)
 /**
  * `agent` é o id de uma PESSOA (responsavel_id do turno). Quem anda é o PO
  * raiz, até a SALA DO DOMÍNIO dessa pessoa — visitar alguém é ir ao domínio
- * dele, não a uma coordenada pessoal.
+ * dele, não a uma coordenada pessoal. `visita` (a Central, 17/10/2026) é uma
+ * sala por id, com um problema real nela, e vence o `agent`.
  */
+const salaVisitada = computed<string | null>(() => {
+  if (props.visita && dominios.value.some((d) => d.id === props.visita)) return props.visita
+  return dominios.value.find((d) => d.pessoas.some((p) => p.id === props.agent))?.id ?? null
+})
+
 /**
- * Só a troca de AGENTE move o PO raiz. O roster também entra no watch porque
- * o primeiro carregamento precisa posicionar a câmera — mas uma contratação
- * (§4.4) não pode puxar a câmera de volta para a sala do PO no meio da
- * animação de entrada do recém-chegado.
+ * Só a troca da SALA VISITADA move o PO raiz. O roster também entra no watch
+ * porque o primeiro carregamento precisa posicionar a câmera — mas uma
+ * contratação (§4.4) não pode puxar a câmera de volta para a sala do PO no
+ * meio da animação de entrada do recém-chegado.
  */
 watch(
-  [() => props.agent, dominios],
-  ([agent], anterior) => {
-    const [agentAnterior, domAnterior] = anterior ?? [undefined, [] as OfficeDominio[]]
+  [salaVisitada, () => dominios.value.length > 0],
+  ([sala, temSalas], anterior) => {
+    const [salaAntes, tinhaSalas] = anterior ?? [undefined, false]
     const raiz = poRaiz.value
-    if (!raiz || !dominios.value.length) return
-    const rosterChegou = !domAnterior?.length
-    if (!rosterChegou && agent === agentAnterior) return
-    const destino = dominios.value.find((d) => d.pessoas.some((p) => p.id === agent))
+    if (!raiz || !temSalas) return
+    const rosterChegou = !tinhaSalas
+    if (!rosterChegou && sala === salaAntes) return
+    const destino = dominios.value.find((d) => d.id === sala)
     if (destino && destino.id !== dominios.value[0].id) moveTo(raiz, destino.slot, VISIT_TILE)
     else moveTo(raiz, dominios.value[0].slot) // Idle ou próprio domínio: volta pra mesa
   },
@@ -272,12 +284,12 @@ function actorStyle(p: OfficePessoa) {
 </script>
 
 <template>
-  <section class="mapa" :aria-label="`Mapa do escritório de ${squad?.nome ?? 'squad'}`">
+  <section class="mapa" :class="{ 'mapa--compacto': compacto }" :aria-label="`Mapa do escritório de ${squad?.nome ?? 'squad'}`">
     <div class="mapa__barra">
       <p class="mapa__status" role="status">{{ status || 'Aguardando pedidos' }}<template v-if="pausado"> · animação pausada (mapa fora de vista)</template></p>
       <div class="mapa__zoom" role="group" aria-label="Escala do mapa">
         <button type="button" class="botao botao--leve" :disabled="scale <= 1" @click="afastar">Afastar</button>
-        <span class="mapa__escala">Escala {{ scale }}x{{ zoom === null ? ' (encaixe)' : '' }}</span>
+        <span v-if="!compacto" class="mapa__escala">Escala {{ scale }}x{{ zoom === null ? ' (encaixe)' : '' }}</span>
         <button type="button" class="botao botao--leve" :disabled="scale >= ESCALA_MAXIMA" @click="aproximar">Aproximar</button>
         <button v-if="zoom !== null" type="button" class="botao botao--leve" @click="encaixar">Encaixar</button>
       </div>
@@ -401,7 +413,14 @@ function actorStyle(p: OfficePessoa) {
               <div v-else class="actor__emoji">{{ p.emoji }}</div>
             </div>
             <span class="actor__name" aria-hidden="true">{{ p.nome }} · {{ p.papel }}</span>
-            <span v-if="estadoDoAtor[p.id]" class="actor__estado" :data-semaforo="estadoDoAtor[p.id].semaforo">{{ estadoDoAtor[p.id].texto }}</span>
+            <span
+              v-if="estadoDoAtor[p.id]"
+              class="actor__estado"
+              aria-hidden="true"
+              :data-tom="estadoDoAtor[p.id].tom"
+              :data-destaque="estadoDoAtor[p.id].destaque ? 'true' : undefined"
+              >{{ estadoDoAtor[p.id].texto }}</span
+            >
           </div>
         </div>
       </div>
@@ -612,6 +631,11 @@ function actorStyle(p: OfficePessoa) {
 .actor:focus-within {
   z-index: 100001 !important;
 }
+/* Quem leva um balão que pede o Rômulo fica acima das placas das salas: sem isso, o PO raiz em
+   visita tinha o "Falhou: …" escondido atrás da placa da sala que foi ver. */
+.actor:has(.actor__estado[data-destaque]) {
+  z-index: 100000 !important;
+}
 
 /* 44×44 px de TELA em qualquer escala (o mundo é escalado inteiro). */
 .actor__hit {
@@ -717,9 +741,9 @@ function actorStyle(p: OfficePessoa) {
 .actor[data-ativo] .actor__name {
   visibility: visible;
 }
-/* Balão de estado (Sala Finanças): sempre visível, acima da plaquinha do nome.
-   A borda esquerda é o semáforo; o texto já diz a %, então a cor nunca é a
-   única pista. Cores fixas como o resto do mapa (o mapa não segue o tema). */
+/* Balão de estado (office/baloes.ts: finanças, robôs, leads, agenda): sempre visível,
+   acima da plaquinha do nome. A borda esquerda é o tom; o texto já diz o estado, então a
+   cor nunca é a única pista. Cores fixas como o resto do mapa (o mapa não segue o tema). */
 .actor__estado {
   position: absolute;
   left: 50%;
@@ -737,10 +761,35 @@ function actorStyle(p: OfficePessoa) {
   padding: 2px 4px 3px;
   pointer-events: none;
 }
-.actor__estado[data-semaforo='verde'] { border-left-color: #167a4c; }
-.actor__estado[data-semaforo='amarelo'] { border-left-color: #e0b100; }
-.actor__estado[data-semaforo='laranja'] { border-left-color: #ff6a2b; }
-.actor__estado[data-semaforo='vermelho'] { border-left-color: #c92f3f; background: #ffd9d2; }
+.actor__estado[data-tom='verde'] { border-left-color: #167a4c; }
+.actor__estado[data-tom='amarelo'] { border-left-color: #e0b100; }
+.actor__estado[data-tom='laranja'] { border-left-color: #ff6a2b; }
+.actor__estado[data-tom='vermelho'] { border-left-color: #c92f3f; background: #ffd9d2; }
+.actor__estado[data-tom='neutro'] { border-left-color: #6b7a99; }
+/* Sem sinal: tracejado e apagado, para não ser lido como "tudo bem" nem como alarme. */
+.actor__estado[data-tom='sem_sinal'] { border-left-style: dashed; border-left-color: #8a8a8a; color: #4a4a4a; background: #e4e0d6; }
+/* O que pede o Rômulo salta: acima de todos os balões, com um pulso que para sozinho. */
+.actor__estado[data-destaque] {
+  z-index: 1;
+  border-width: 3px;
+  border-left-width: 8px;
+  animation: balao-pede 1.2s steps(2) 6;
+}
+@keyframes balao-pede {
+  50% { transform: translateX(-50%) translateY(-3px); }
+}
+.office--pausado .actor__estado[data-destaque] { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .actor__estado[data-destaque] { animation: none; }
+}
+
+/* Na Central: o mapa é uma faixa da tela, com altura fixa legível no celular. */
+.mapa--compacto .office-viewport {
+  height: clamp(16rem, 48dvh, 26rem);
+  min-height: 0;
+}
+.mapa--compacto .mapa__barra { padding: var(--esp-1) var(--esp-3); }
+.mapa--compacto .mapa__status { font-size: var(--tam-apoio); }
 /* Quem atende a demanda ganha a plaquinha amarela com a setinha de pixel. */
 .actor[data-ativo] .actor__name {
   background: #ffd23f;

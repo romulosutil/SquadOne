@@ -118,15 +118,19 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           POST /gasto, 17/10/2026: o cartão de gasto do Assistente, relido por lerPedidoDeGasto, chave painel:<id>)
     servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
-src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
-  src/casca/              destinos.ts (PURO: rota por perfil, barra, Ctrl+K), hoje.ts (PURO: ordem da Hoje,
+src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso; no operations
+                          três menus desde 17/10/2026 (Central de comando · ＋ Assistente · Vendas) e a Manutenção discreta (engrenagem)
+  src/casca/              destinos.ts (PURO: rota por perfil, barra, destinoDiscreto, Ctrl+K), central.ts (PURO, 17/10/2026: as faixas da
+                          Central de comando, o andar do mapa, ?abrir=), hoje.ts (PURO: ordem da Hoje,
                           semáforo das finanças, estado do time só com fonte, linha do funil; no operations a Hoje não tem o bloco Time, AC-18),
                           paleta.ts (PURO, AC-23: leads no Ctrl+K pelo nome da empresa, 8 no máximo, nunca telefone nem id na tela, leitura
                           do CRM guardada 60 s; reaberturaDepoisDeIr), mais.ts (PURO: secaoDoMais, ?abrir=manutencao|roteiro, e ferramentasDoMais;
                           Desconectar o Google está em Mais › Manutenção, AC-25), rota.ts (pushState sem roteador),
                           overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
-                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta
-  src/rotas/              HojeRota (/), AgendaRota (/agenda), EscritorioRota (/squadone), MaisRota (/mais)
+                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta,
+                          PrecisaDeVoce (os até 3 cartões, Hoje e Central), EscritorioVivo (o mapa da Central, sem editar o roster)
+  src/rotas/              CentralRota (/ no operations), HojeRota (/ no app), AgendaRota (/agenda), EscritorioRota (/squadone),
+                          MaisRota (/mais; Manutenção no operations). As rotas fora dos menus seguem por endereço
   src/agentes/estado.ts   estado e ações dos agentes (era o <script> do App.vue): roster, squad ativa, Mochila,
                           turno, cartões, folhas; um por aba (`useAgentes`), com as guardas de isLoading e abertura
   src/agentes/ListaDeQuests.vue  compromissos da Mochila: "próximos 3" na Hoje e a Agenda por dia
@@ -232,7 +236,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           TrocaSquadCard, SquadSelector, SalasPainel, SalaCartao,
                           ContratarFolha, EditarFolha (Arquivar a squad mora nela, AC-25), NovaSquadFolha, ArquivoFolha
   src/office/             geometria isométrica, salas, sprites
-  src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch) e a escala inteira do mapa
+  src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch, a da Central à parte) e a escala inteira do mapa
+  src/office/baloes.ts    PURO (17/10/2026): o texto de cada balão do mapa só com fonte ("Sem sinal" sem ela) e a sala que o PO raiz
+                          visita por um robô em falha (destinoDoSupervisor); o GameMap recebe pessoa → balão e `visita`
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
   src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
   src/office/trabalhadores.ts  trabalhador automático (n8n, timer) → sala, DERIVADO do campo `trabalhador` de fluxos.ts; FORA do prompt (RULES 26)
@@ -310,7 +316,8 @@ arquivo não muda (o Easypanel, reserva fria, o lê). Contratação aplica na sq
 O Escritório é só frontend e não grava nada; estado de pessoa só com fonte, nunca inventado.
 
 **Perfis.** `SQUADONE_MODE`: `app` (Easypanel) ou `operations` (Dell, só loopback); valor
-desconhecido derruba o boot. A Central é somente leitura para serviços. A Hoje mostra no
+desconhecido derruba o boot. A Central é somente leitura para serviços. A home (Central de comando no
+operations, Hoje no app) mostra no
 máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
