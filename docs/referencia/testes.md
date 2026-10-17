@@ -40,7 +40,12 @@ ou nenhuma mensagem, EUA, só A e nicho vazio; os casos completos estão no `sit
 `server/prumo-mensagem.test.ts` (o reenvio do só-robô do PRUMO: nome como o dono escreve, artigo, só número 55),
 `server/plus.test.ts` (filtro Plus: leitura do PDF em colunas, telefone, oferta e dedupe, mensagem maçônica com o artigo certo, funil só pelos registros, Hoje limitada, `lerPlus` e gravação em diretório temporário), `server/acesso.test.ts`,
 `server/avisos.test.ts` (desde 16/10/2026 também o aviso pessoal pelo Telegram, OT-14: não grava na fila, sem som das 22h às 7h,
-fila de reserva com o bot fora, P0 nos dois canais, R$ recusado antes de sair, a variável só desliga com `false`), `server/telegram-polling.test.ts`,
+fila de reserva com o bot fora, P0 nos dois canais, R$ recusado antes de sair, a variável só desliga com `false`),
+`server/telegram-polling.test.ts` (offset, 409, e quando declarar queda, 17/10/2026, AC-07: tabela de `declararQueda`/`tipoDaFalha`;
+soluço de uma tentativa não loga "inacessível" nem "voltou", e a queda real loga os dois, com backoff),
+`server/uso.test.ts` (17/10/2026, AC-28, o contador de uso: a tela normalizada (`lead=` vira "(ficha)", finanças só pelo caminho,
+query e telefone fora, "(outra)"), a chave da escrita (ids e telefones viram `:id`, GET e o próprio beacon não contam), o corpo do
+beacon, a virada do dia em São Paulo, o teto de chaves, a poda de 90 dias e a gravação com debounce em diretório temporário),
 `server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
 `server/roster-historico.test.ts`,
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
@@ -74,10 +79,17 @@ texto da prévia, `ModeloOcupado` 503 — com um SQLite num diretório temporár
 e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `server/telegram-gasto.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
-`src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts`,
+`src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` (além de `separarAlertas`, links e filas, desde 17/10/2026,
+AC-17, `resumoDoDell` em tabela: sem retrato, sem horário, retrato com mais de 5 min, tudo ok, só falhas, só filas, só "resolvem sozinhas",
+a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas`; e `semFraseCortada`),
 `src/operations-fila-de-envio.test.ts` (marcas de envio no navegador, a fila por nicho, pular, o passo e a marca "vídeo enviado" do A/B),
 `src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados;
-sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena),
+sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena; desde 17/10/2026,
+AC-03, uma regra por métrica: `leu`/`respondeuDeGente`/`quisVer` em tabela (robô, `respondeu_em` sem classificação, classificação sem a
+coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dias, e a taxa do expediente é a mesma com ou sem o filtro do Site),
+`src/operations-proxima-venda.test.ts` (17/10/2026, AC-02: a contagem da fila do dia (`resumoDoDia`: total igual à soma da quebra por tipo,
+primeiros contatos prontos e quantos o ritmo ainda deixa hoje, 0 na pausa), `textoDosPrimeiros`, `filaDaTela` (um primeiro contato por vez,
+só no expediente e com ritmo livre; "Enviei" sai, "Pular" vai para o fim) e as resolvidas do dia no storage (outro dia e storage ilegível = vazio)),
 `src/operations-anotacao-de-envio.test.ts` (a anotação do toque na 2ª mensagem e no follow-up: qual link anota, o primeiro
 toque vale, storage que lança, poda quando o retrato confirma, anotados no fim do grupo da Hoje),
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;
@@ -93,7 +105,8 @@ extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; e, em `casca.te
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
 `src/operations-funil-lista.test.ts` (a Lista do Funil no desktop, 16/10/2026: o sinal mais forte por ordem (Resposta nova > Follow-up hoje >
 Perdido amanhã > Divergência > o resto), follow-up anotado deixa de ser "hoje", ordenar por último toque e próximo passo com quem não tem data no fim
-nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança),
+nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança; desde 17/10/2026, AC-03, `contagemDaEtapa`: Quadro e Lista
+contam igual para a mesma escolha de "Mostrar descartados", e o que fica de fora vira "+N descartados antes do contato"),
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
 `src/operations-ab-mensagem.test.ts` (A/B estratificado da 1ª mensagem, 14/10/2026: sem `ab_elegiveis` o bloco fica vazio e o histórico é contado como fora; 29 × 31 só "faltam", sem taxa nem respostas; 30 × 30 com taxa, Fisher e veredito; +20 pontos e p < 0,10 nos dois sentidos; robô não conta; só entre quem podia receber as duas letras; estrato por nicho),
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
@@ -116,7 +129,12 @@ um aviso que fecha sem toque, o resumo dos 30 dias com os "quero ver" à parte e
 quem disse não vira "marcar a recusa" no lugar de responder, a exclusão sem mensagem, e o registro recusou encerra e o desfeito volta (OT-06);
 o braço do teste do recibo e a regra antiga para quem foi enviado antes ou leu (OT-10); a regra única do follow-up do 3º dia em tabela (OT-15).
 `server/venda-do-dia.test.ts` (16/10/2026, OT-01 e OT-10: a memória do "Enviei"/"Pular" zera no dia novo, descarta lixo, a última decisão vale,
-grava e relê em diretório temporário; a leitura do teste do recibo por braço, com a exclusão à parte e o p só com o mínimo dos dois lados).
+grava e relê em diretório temporário; a leitura do teste do recibo por braço, com a exclusão à parte e o p só com o mínimo dos dois lados;
+desde 17/10/2026, AC-06: como e por onde cada ação se resolveu (central, telegram, expirou), a anotação uma vez por ação + tipo no dia, os
+primeiros contatos das duas superfícies e a leitura do formato de 16/10),
+`server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
+responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
+servidor e reforço local contando cada lead uma vez).
 E o vendedor (`server/vendedor.ts`): expediente seg–sex 08:00–17:30, um aviso por vez, 30 min sem toque vira pulado, o
 "quero ver" fura a espera, o "Enviei" de primeiro contato conta na trava antes do retrato, o texto e os botões do Telegram
 (callback ≤ 64 bytes). E o "por que não está vendendo" (`por-que-nao-vende.ts`): o gargalo depois do "gostei"),
@@ -133,7 +151,8 @@ o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo 
 com o filtro do produto do CRM, com você e parados sem contar o estoque, o "Ver no Funil" para a vista por passo; desde 16/10/2026
 (OT-07) só a contagem, nenhum lead listado na sala; CRM não lido ou sem
 retrato = sem sinal (nunca zero), retrato velho marcado, o estado de cada robô só pelo `status.json` com "Sem sinal" para retrato
-ausente ou vencido, robô sem verificação ou fora do retrato),
+ausente ou vencido, robô sem verificação ou fora do retrato; desde 17/10/2026, AC-03, o total da sala por etapa do CRM (Em contato +
+Proposta) bate com as colunas do Funil),
 `src/operations-mapa-unico.test.ts` (16/10/2026, OT-03: todo código `blueprint` de `fluxos.ts` e `jornada.ts` existe como passo ou cartão
 em `docs/blueprint/servico.json`, todo passo da jornada tem o seu, o link do Artifact, e os fatos que tinham divergido não voltam: caçadores
 ligados, observador lendo Clínicas e Estamparias, revisão na Triagem, lembrete e falha pelo Telegram),

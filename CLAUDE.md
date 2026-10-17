@@ -85,7 +85,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
   server/venda-do-dia.ts  (16/10/2026, OT-01) o "Enviei"/"Pular" do dia num arquivo só (venda-do-dia.json), dividido pela Próxima
-                          venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP
+                          venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP;
+                          desde 17/10/2026 (AC-06) é a fonte única do dia: por onde cada ação se resolveu (central, telegram,
+                          expirou), a anotação no CRM uma vez por ação + tipo (/crm/venda/anotar) e os primeiros contatos das duas
+                          superfícies (/crm/venda/primeiro, a trava de ritmo); o aviso aberto no Telegram fecha quando a Central resolve
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
                           venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
@@ -100,6 +103,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           scripts/plus-importar.ts abre o PDF e grava ~/prumo-entregas/plus/leads.json (fora do repo: telefones de terceiros)
   server/plus-mensagem.ts PURO: 1ª mensagem e follow-up do Plus, com a saudação maçônica ("Meu Ir.'., tudo bem? Me chamo Rômulo… T.F.A.")
   server/dell-status.ts   Central: lê o status.json gravado pelo monitor deploy/dell/dell-status.py (o_que_fazer, acao, sozinho)
+  server/uso.ts           Central: contador de uso (17/10/2026, AC-28): telas da SPA (beacon da casca) e escritas da API por dia de
+                          SP, sem id/telefone/valor/query além de ver/produto; uso/AAAA-MM-DD.json 600, debounce 30 s, poda 90 dias;
+                          GET /api/operations/uso?dias=14 (PURO: normalizar, somar, podar)
   server/financas/        Central: finanças (Meu Pluggy + fatura em PDF do Santander), banco financas.db; ver ARCHITECTURE "Finanças"
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
     organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
@@ -119,7 +125,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
   src/operations/         Central de Operações (só perfil operations), montada como rotas da casca
     ComoFuncionaPanel.vue os fluxos da operação, um por vez, e "Um dia"; conteúdo em fluxos.ts (estático, versionado);
                           ?fluxo=&passo= abre um fluxo com o passo em destaque (o link do robô no Escritório)
-    alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
+    alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas;
+                          resumoDoDell (17/10/2026, AC-17) é o número único do topo, da Hoje e do Mais ("precisam de você" e
+                          "resolvem sozinhas"); a Hoje mostra só os títulos, o técnico fica em Mais › Manutenção
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
     Crm*.vue, crm-formato.ts  Vendas (/crm, 16/10/2026): A fazer (só a Próxima venda), Triagem (?ver=triagem, prospects em lotes
                           de 10), Funil (consulta, sem envio; no celular abas de etapa), Números (?ver=numeros), Roteiro (?ver=roteiro)
@@ -143,7 +151,12 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           (GET /api/operations/crm/vendedor)
     resultados.ts         PURO: Resultados (?ver=resultados): enviados no período por nicho, mensagem, versão do site e horário;
                           avisoDeHorario: a fila avisa fora do expediente, com a taxa medida dentro e fora;
-                          sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois
+                          sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois;
+                          leu/respondeuDeGente/quisVer/enviadoNosUltimos são a ÚNICA regra de Números e do "Por que não
+                          está vendendo", e taxaPorExpediente (só Site) alimenta o avisoDeHorario (17/10/2026, AC-03)
+    proxima-venda.ts      PURO: a fila de venda (filaDeVenda, a mesma do vendedor), a fila da tela (filaDaTela) e a contagem do
+                          dia (resumoDoDia): a aba "A fazer N", o "N na fila" e o "Ver a fila inteira (N)" leem dela, N com a
+                          atual (17/10/2026, AC-02); ProximaVenda.vue abre a Ficha na página pelo @abrir do CrmPanel (AC-01)
     funil-lista.ts        PURO (16/10/2026): a Lista do Funil no desktop (Quadro | Lista, BP-TABELA): um sinal por linha, o mais
                           forte (Resposta nova > Follow-up hoje > Perdido amanhã > Divergência > resto), ordem por último toque e
                           próximo passo. Os Lançamentos também viram <table> a partir de 64 rem (FinEditorDeLancamento.vue)
