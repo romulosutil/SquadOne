@@ -257,6 +257,7 @@ export interface CrmVisao {
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
   | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu' | 'recusou' | 'recusou_desfeito'
+  | 'ganhou' | 'ganhou_desfeito' | 'dispensado' | 'dispensado_desfeito'
 
 /** Espelho de REGIMES_DA_MENSAGEM (server/crm.ts): até 29/09, 30/09–04/10, desde 05/10. */
 export type CrmRegimeDaMensagem = 'curta_com_link' | 'prumo_com_link' | 'duas_mensagens'
