@@ -13,7 +13,7 @@ import {
   AVISO_DE_FALHA_DA_ANOTACAO, anotar, corpoDaAnotacao, desanotar, gravarAnotados, lerAnotados, podarAnotados,
   type EnviosAnotados, type TipoDeEnvioAnotado,
 } from './anotacao-de-envio'
-import { gravarEnvios, lerEnvios, marcarEnvio, podarEnvios, type EnviosAbertos } from './fila-de-envio'
+import { gravarEnvios, lerEnvios, podarEnvios, type EnviosAbertos } from './fila-de-envio'
 import { filaDaTela, lerResolvidas, noExpedienteDeVenda, type ResumoDoDia } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, type EnviosLiberados } from './trava-de-horario'
@@ -146,14 +146,11 @@ function armazenamento(): Storage | null {
   }
 }
 
+// A Triagem (AC-10) não marca mais "aberto no WhatsApp" aqui: o grupo dela não tem o link de envio
+// do Site, e o convite tem a marca própria (triagem.ts). Fica só a poda das marcas já gravadas.
 function guardarEnvios(novos: EnviosAbertos) {
   envios.value = novos
   gravarEnvios(armazenamento(), novos)
-}
-
-function marcarAberto(id: string) {
-  guardarEnvios(marcarEnvio(envios.value, id, Date.now()))
-  anuncio.value = `${porId.value.get(id)?.empresa ?? 'Lead'}: aberto no WhatsApp.`
 }
 
 // Qualquer toque num link de primeiro contato (Hoje, Funil, Ficha, fila). O relógio anda na hora:
@@ -253,9 +250,17 @@ const totalAFazer = computed(() => {
   const tela = { ritmo: ritmo.value, noExpediente: noExpedienteDeVenda(agora.value), agora: agora.value, liberados: liberados.value }
   return filaDaTela(visao.value, tela, lerResolvidas(armazenamento(), agora.value)).length
 })
-// Triagem (OT-05): só os prospects para revisar, em lotes de 10, longe da fila de venda.
-const triagem = computed(() => hoje.value.filter(g => g.id === 'revisar'))
-const totalTriagem = computed(() => triagem.value.reduce((soma, g) => soma + g.itens.length, 0))
+// Triagem (OT-05, AC-10): só os prospects para revisar, em lotes de 10 (triagem.ts), longe da fila de venda.
+const triagem = computed(() => hoje.value.find(g => g.id === 'revisar') ?? null)
+// Com a aba aberta, o número é o que ela conta (sem os dispensados e convidados desta tela que o
+// retrato ainda não confirmou); fora dela, o tamanho do grupo do servidor.
+const restantesDaTriagem = ref<number | null>(null)
+watch(vista, (v) => { if (v !== 'triagem') restantesDaTriagem.value = null })
+// O mínimo: a última conta da aba não pode passar do grupo (ela não conta de novo ao desmontar).
+const totalTriagem = computed(() => {
+  const doServidor = triagem.value?.itens.length ?? 0
+  return restantesDaTriagem.value === null ? doServidor : Math.min(doServidor, restantesDaTriagem.value)
+})
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
@@ -278,7 +283,7 @@ const textoDoRetrato = computed(() => {
 // As abas dizem a tarefa, e a linha embaixo diz para que serve a aba aberta.
 const VISTAS: Array<{ id: Vista; rotulo: string; href: string; dica: string }> = [
   { id: 'afazer', rotulo: 'A fazer', href: '/crm', dica: 'A próxima venda, uma por vez, na ordem de quem está mais perto de comprar. "Ver a fila inteira" mostra o resto.' },
-  { id: 'triagem', rotulo: 'Triagem', href: '/crm?ver=triagem', dica: 'Prospects que os caçadores acharam, em lotes de 10: veja o site e decida o convite. Não é venda: fica fora do A fazer.' },
+  { id: 'triagem', rotulo: 'Triagem', href: '/crm?ver=triagem', dica: 'Prospects que os caçadores acharam, em lotes de 10: convide ou dispense cada um. Não é venda: fica fora do A fazer.' },
   { id: 'funil', rotulo: 'Funil', href: '/crm?ver=funil', dica: 'Todos os leads por etapa (ou por passo da jornada), para consulta. Toque num lead para abrir a ficha.' },
   { id: 'numeros', rotulo: 'Números', href: '/crm?ver=numeros', dica: 'Onde o funil perde, depois do "sim" e por nicho, mensagem e horário.' },
   { id: 'roteiro', rotulo: 'Roteiro', href: '/crm?ver=roteiro', dica: 'O roteiro de venda: o que dizer em cada momento, objeções e preços do cardápio.' },
@@ -402,7 +407,11 @@ async function abrirColinha() {
 
       <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" @abrir="abrirFicha" @resumo="resumoDoCartao = $event" />
       <template v-else-if="vista === 'triagem'">
-        <CrmHoje v-if="totalTriagem" :grupos="triagem" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" :limite="10" @abrir="abrirFicha" @enviado="marcarAberto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
+        <CrmHoje
+          v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
+          :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
+          @abrir="abrirFicha" @liberar="liberar" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
+        />
         <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
       </template>
       <CrmJornadaVista v-else-if="vista === 'jornada'" :leads="leads" @abrir="abrirFicha" />

@@ -110,34 +110,36 @@
 .crm-item__empresa { min-height: var(--toque); font-size: var(--tam-nome); font-weight: var(--peso-forte); text-decoration: underline; text-underline-offset: 3px; }
 .crm-item__acao { margin: 0; font-size: var(--tam-apoio); }
 .crm-item__acao span { color: var(--texto-2); }
-.crm-item__links,
 .crm-cartao__links { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin: 0; }
-/* Numa lista, a ação da linha é secundária (BP-R2): a que resolve a linha (.is-acao na Hoje, o
-   primeiro link no Funil) tem o contorno do .botao, sem amarelo nem sombra; as outras (demo, Maps,
-   conversa) são link de texto, com o mesmo toque de 44 px. O amarelo fica para o primário da tela. */
-.crm-item__links,
+/* Numa lista, a ação da linha é secundária (BP-R2): a que resolve a linha (o primeiro link no Funil)
+   tem o contorno do .botao, sem amarelo nem sombra; as outras (demo, Maps, conversa) são link de
+   texto, com o mesmo toque de 44 px. O amarelo fica para o primário da tela. */
 .crm-cartao__links { align-items: center; gap: var(--esp-1) var(--esp-3); }
-.crm-item__links a,
 .crm-cartao__links a { display: inline-flex; align-items: center; gap: var(--esp-1); min-height: var(--toque); padding: 0; border: 0; background: none; color: var(--texto); font-size: var(--tam-apoio); font-weight: var(--peso-medio); text-decoration: underline; text-underline-offset: 3px; }
-.crm-item__links a.is-acao,
 .crm-cartao__links a:first-of-type { padding: 0 var(--esp-3); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); font-weight: var(--peso-forte); text-decoration: none; }
-.crm-item__links a:hover { color: var(--texto); }
-.crm-item__links a.is-acao:hover,
 .crm-cartao__links a:first-of-type:hover { background: var(--hover); }
 .crm-mais { margin-top: var(--esp-3); padding: 0 var(--esp-4); border: 0; border-radius: var(--raio-controle); background: var(--superficie-2); color: var(--texto); font-weight: var(--peso-forte); cursor: pointer; }
 .crm-mais:hover { filter: brightness(0.95); }
 
-/* Fila de envio (08/10/2026): o que esta tela já abriu no WhatsApp sai do caminho
-   até a planilha confirmar; a folha "Enviar um por um" mostra um site por vez. */
-.crm-grupo__fila { margin: 0 0 var(--esp-3); }
+/* Triagem (AC-10, 17/10/2026): o convidado nesta tela fica no lote, apagado, até o retrato confirmar. */
 .crm-item.is-aberto .crm-item__empresa { color: var(--texto-2); }
-.crm-item.is-aberto .crm-item__links a.is-acao { border-color: var(--texto-2); color: var(--texto-2); }
 /* Zona (fundo, sem borda): é estado da linha, não outra caixa dentro do grupo. */
 .crm-item__aberto { margin: 0; padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--ok-fundo); font-size: var(--tam-apoio); }
-.crm-item__aberto.is-conferir { background: var(--atencao-fundo); }
-/* Interesse parado há mais de 2 h (14/10/2026): o texto da ação já diz "há N dias"; a borda só reforça (RULES 3). */
-.crm-item.is-urgente { border-left: var(--faixa) solid var(--acento); padding-left: var(--esp-3); }
-.crm-item.is-urgente .crm-item__acao strong { color: var(--texto); }
+.crm-triagem__conta { margin: var(--esp-1) 0 0; font-size: var(--tam-apoio); font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
+/* As duas decisões lado a lado; o motivo do Convidar desligado cola nele, em texto (RULES 3). */
+.crm-triagem__decisoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); margin-top: var(--esp-1); }
+.crm-triagem__decisoes a.botao { text-decoration: none; }
+.crm-triagem__motivo { color: var(--texto-2); font-size: var(--tam-apoio); }
+/* Site e Maps são consulta: link de texto pequeno, com o toque de 44 px. */
+.crm-triagem__links { display: flex; flex-wrap: wrap; gap: 0 var(--esp-4); margin: 0; }
+.crm-triagem__links a { display: inline-flex; align-items: center; gap: var(--esp-1); min-height: var(--toque); color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); text-underline-offset: 3px; }
+.crm-triagem__links a:hover { color: var(--texto); }
+/* O lugar de quem acabou de sair, com o Desfazer: zona de fundo, não outra caixa. */
+.crm-triagem__dispensado { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); font-size: var(--tam-apoio); }
+.crm-triagem__fim { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); margin-top: var(--respiro-interno); }
+/* Armado para o segundo toque: muda a palavra e o fundo, para não passar por um toque comum. */
+.crm-triagem__fim .botao.is-armado { background: var(--atencao-fundo); }
+.crm-triagem__falha { display: flex; flex-wrap: wrap; gap: var(--esp-2); align-items: center; }
 .crm-anotacao-falhou { display: flex; flex-wrap: wrap; gap: var(--esp-2); align-items: center; }
 .crm-fila { display: grid; gap: var(--esp-3); }
 /* Uma linha só, com rolagem lateral: em três linhas os nichos empurravam o envio para fora da tela do celular. */
