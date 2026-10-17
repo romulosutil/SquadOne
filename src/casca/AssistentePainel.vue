@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
             <p v-if="m.falha" class="recado recado--erro">
               {{ m.falha.texto || textoDaFalha(m.falha.tipo).titulo }} {{ textoDaFalha(m.falha.tipo).oQueFazer }}
             </p>
-            <AssistenteCartao v-for="c in m.cartoes" :key="c.id" :cartao="c" :agentes="agentes" />
+            <AssistenteCartao v-for="c in m.cartoes" :key="c.id" :cartao="c" :agentes="agentes" :lead-aberto="contexto.lead ?? null" />
             <ul v-if="m.fontes.length" class="assistente-fontes" aria-label="De onde veio">
               <li v-for="(f, i) in m.fontes" :key="i">{{ f.rotulo }}</li>
             </ul>

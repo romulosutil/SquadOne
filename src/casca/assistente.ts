@@ -28,6 +28,8 @@ import type {
   TipoDeFalhaDoAssistente,
 } from '../operations/assistente-contrato'
 import type { Modo } from '../types'
+import { SIGLA_DO_PRODUTO } from '../operations/crm-formato'
+import type { CrmProduto } from '../operations/types'
 import { normalizarCaminho } from './destinos'
 
 export const ROTA_DO_ASSISTENTE = '/api/operations/assistente'
@@ -216,6 +218,24 @@ export function modoDoTurno(m: 'auto' | 'foco' | 'baixa'): Modo {
 export function chaveParaRegistro(produto: string, id: string): string {
   const prefixo = `${produto}:`
   return id.startsWith(prefixo) ? id.slice(prefixo.length) : id
+}
+
+/**
+ * PURO. Quem é o lead de um cartão, como a tela diz: "Empresa · Oferta" (a mesma empresa pode estar
+ * em duas ofertas, e a anotação vai para uma só) e se ele é outro que não o da Ficha aberta. O
+ * Assistente pode propor para qualquer lead de Vendas; com a Ficha de um lead aberta, anotar no
+ * outro sem perceber seria o erro mais fácil desta tela (revisão de 17/10/2026).
+ */
+export function leadDoCartao(
+  dados: { produto: string; id: string; empresa: string },
+  leadAberto?: { produto: string; id: string } | null,
+): { rotulo: string; outroLead: boolean } {
+  const oferta = SIGLA_DO_PRODUTO[dados.produto as CrmProduto] ?? dados.produto
+  const rotulo = [dados.empresa.trim(), oferta].filter(Boolean).join(' · ')
+  if (!leadAberto) return { rotulo, outroLead: false }
+  const mesmo = leadAberto.produto === dados.produto
+    && chaveParaRegistro(leadAberto.produto, leadAberto.id) === chaveParaRegistro(dados.produto, dados.id)
+  return { rotulo, outroLead: !mesmo }
 }
 
 /** O estado que a tela mostra num cartão: o toque desta aba vence o que o servidor guardou. */

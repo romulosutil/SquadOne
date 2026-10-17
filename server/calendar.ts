@@ -246,6 +246,8 @@ async function listarPaginado<T>(
   calendarId: string,
   params: Record<string, string>,
   token: string,
+  /** Só a agenda do dia da Central passa um (ver listarAgendaDoDia); o turno segue sem prazo aqui. */
+  sinal?: AbortSignal,
 ): Promise<T[]> {
   const itens: T[] = [];
   let pageToken: string | undefined;
@@ -254,6 +256,7 @@ async function listarPaginado<T>(
     if (pageToken) busca.set("pageToken", pageToken);
     const resp = await fetch(`${urlDeEventos(calendarId)}?${busca}`, {
       headers: { Authorization: `Bearer ${token}` },
+      ...(sinal ? { signal: sinal } : {}),
     });
     if (!resp.ok) {
       throw new ErroCalendario(resp.status, await resp.text().catch(() => ""));
@@ -272,11 +275,18 @@ async function listarPaginado<T>(
  * Visão resumida do dia para a Central de Operações. Diferente da Mochila,
  * lê o calendário principal sem filtrar marcas do SquadOne: a agenda do dia
  * precisa refletir também compromissos criados fora do produto.
+ *
+ * Com prazo de 20 s (17/10/2026): esta leitura só serve à Central (o /overview e o Assistente, RULES
+ * 28), nunca ao turno, e o Assistente a chama de dentro da fila serial dele; um Google que não
+ * respondesse prenderia todas as mensagens seguintes. O abort vira erro, que o /overview já mostra
+ * como "unavailable" e o Assistente como "sem sinal".
  */
+export const PRAZO_DA_AGENDA_DO_DIA_MS = 20_000;
 export async function listarAgendaDoDia(
   token: string,
   de: Date,
   ate: Date,
+  sinal: AbortSignal = AbortSignal.timeout(PRAZO_DA_AGENDA_DO_DIA_MS),
 ): Promise<EventoDaAgendaDoDia[]> {
   const eventos = await listarPaginado<GoogleEvent & { location?: string }>(
     CALENDARIO_DE_OCUPACAO,
@@ -290,6 +300,7 @@ export async function listarAgendaDoDia(
       fields: "nextPageToken,items(id,status,summary,start,end,htmlLink,location)",
     },
     token,
+    sinal,
   );
   return eventos.flatMap((evento) => {
     if (evento.status === "cancelled") return [];

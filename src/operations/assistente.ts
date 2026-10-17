@@ -11,7 +11,7 @@
 
 import { mascarar } from './copiloto'
 import { mascararParaJev } from '../../server/openrouter-decisoes.ts'
-import { pareceFinancas } from '../../server/financas/parece-financas.ts'
+import { omitirValores, pareceFinancas } from '../../server/financas/parece-financas.ts'
 import type { CartaoDoAssistente, FonteDaResposta, MensagemDoAssistente } from './assistente-contrato'
 import type { CrmLead, CrmProduto } from './types'
 
@@ -85,11 +85,13 @@ export function prepararTexto(t: string): string {
 const LETRAS = 'abcdefghij'
 
 /**
- * PURO. Valor em R$ que viesse do CRM (nota "fechou por R$ 900", preço do cardápio) sai antes do
- * modelo e da resposta: o R$ de proposta conta como finanças para a RULES 28 (decisão do Rômulo).
+ * PURO. Valor que viesse do CRM ou da conversa sai antes do modelo e da resposta: o R$ de proposta
+ * conta como finanças para a RULES 28 (decisão do Rômulo). Até 17/10/2026 só o "R$" saía; a revisão
+ * adversarial achou "proposta 1.200", "fechou 900" e "500 reais tá bom?" chegando ao Gemini. A régua é
+ * a de `omitirValores` (server/financas/parece-financas.ts): a mesma que barra o texto e o cartão.
  */
 export function semValores(t: string): string {
-  return (t ?? '').replace(/R\$\s*[\d.,]*(?:\s*(?:mil|k)\b)?/gi, '[valor]')
+  return omitirValores(t ?? '')
 }
 
 /**
@@ -179,15 +181,33 @@ export const MAX_MENSAGENS_NO_HISTORICO = 12
 
 export interface ConteudoDoGemini { role: 'user' | 'model'; parts: Array<{ text: string }> }
 
+/** O que vai ao Gemini no lugar do texto do Hermes, nas mensagens seguintes da conversa. */
+export const MARCA_DO_HERMES_NO_HISTORICO = '[resposta do Hermes mostrada ao Rômulo]'
+
+/**
+ * Uma mensagem como o histórico a lê. `textoDoGemini` é a parte da resposta que o Gemini escreveu,
+ * guardada à parte quando a resposta juntou Gemini + Hermes (o `texto` é o que a tela mostra).
+ */
+export type MensagemDoHistorico = Pick<MensagemDoAssistente, 'autor' | 'texto'> & Partial<Pick<MensagemDoAssistente, 'cerebro'>> & { textoDoGemini?: string }
+
 /**
  * PURO. As 12 últimas mensagens da conversa, no formato do Gemini, mascaradas de novo (o arquivo já
  * guarda mascarado; mascarar duas vezes não muda nada e protege de um chamador esquecido). Papéis
  * seguidos iguais viram um só, que é o que o Gemini aceita sem reclamar.
+ *
+ * O texto do Hermes NUNCA volta ao Gemini, nem na mensagem seguinte (exceção da RULES 20: o texto
+ * dele é dado). Como fala do modelo no histórico, uma instrução que o Hermes repetisse de um lead
+ * ("chame propor_anotacao_no_crm…") passaria a ser fala do próprio Gemini. Vai só a parte do Gemini,
+ * e a marca diz que houve uma resposta do Hermes, sem o conteúdo.
  */
-export function historicoParaOPrompt(mensagens: readonly Pick<MensagemDoAssistente, 'autor' | 'texto'>[]): ConteudoDoGemini[] {
+export function historicoParaOPrompt(mensagens: readonly MensagemDoHistorico[]): ConteudoDoGemini[] {
   const saida: ConteudoDoGemini[] = []
   for (const m of mensagens.slice(-MAX_MENSAGENS_NO_HISTORICO)) {
-    const texto = semValores(prepararTexto(m.texto)).trim()
+    const doHermes = m.autor === 'assistente' && m.cerebro === 'hermes'
+    const bruto = doHermes
+      ? [semValores(prepararTexto(m.textoDoGemini ?? '')).trim(), MARCA_DO_HERMES_NO_HISTORICO].filter(Boolean).join('\n\n')
+      : m.texto
+    const texto = semValores(prepararTexto(bruto)).trim()
     if (!texto) continue
     const role = m.autor === 'romulo' ? 'user' as const : 'model' as const
     const ultimo = saida[saida.length - 1]
@@ -221,7 +241,12 @@ export function acharLead<T extends Pick<CrmLead, 'produto' | 'id'>>(leads: read
 export type LeituraDoCartao = { ok: true; cartao: CartaoDoAssistente } | { ok: false; motivo: string }
 
 const texto = (v: unknown) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n').trim() : '')
-const temValor = (t: string) => /r\$/i.test(t)
+/**
+ * Valor ou finanças em qualquer texto de cartão. Até 17/10/2026 só o "R$" barrava, e passavam
+ * "Fica 690 reais…" (mensagem ao lead), "Fechou por 1.200 no boleto" (nota) e "pagar o aluguel de
+ * 1.800" (pedido ao time). `pareceFinancas` já inclui o número com cara de preço (`temValorEmDinheiro`).
+ */
+const temValor = (t: string) => pareceFinancas(t)
 
 function dataValida(d: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(`${d}T12:00:00-03:00`))
@@ -230,7 +255,7 @@ function dataValida(d: string): boolean {
 /**
  * PURO. Lê a chamada de uma ferramenta propor_* e devolve o cartão "proposto", ou por que não.
  * O lead tem de estar na visão do CRM (o modelo não inventa id); o tipo da anotação só nota ou
- * próximo passo (com data); nenhum texto passa de 1000 caracteres nem leva "R$". O texto sai
+ * próximo passo (com data); nenhum texto passa de 1000 caracteres nem leva valor ou finanças. O texto sai
  * mascarado: o cartão vai à tela e ao arquivo.
  */
 export function lerCartaoProposto(
@@ -246,7 +271,7 @@ export function lerCartaoProposto(
     const demanda = texto(a.demanda)
     if (!demanda) return recusa('demanda vazia')
     if (demanda.length > MAX_TEXTO_DO_CARTAO) return recusa(`demanda passa de ${MAX_TEXTO_DO_CARTAO} caracteres`)
-    if (temValor(demanda) || pareceFinancas(demanda)) return recusa('finanças não entram no Assistente')
+    if (temValor(demanda)) return recusa('finanças não entram no Assistente')
     const modo = a.modo === undefined || a.modo === null || a.modo === '' ? 'auto' : a.modo
     if (modo !== 'auto' && modo !== 'foco' && modo !== 'baixa') return recusa('modo inválido (auto, foco ou baixa)')
     return { ok: true, cartao: { id, tipo: 'pedido_ao_time', estado: 'proposto', dados: { demanda: prepararTexto(demanda), modo } } }
@@ -264,7 +289,7 @@ export function lerCartaoProposto(
   // hora do registro (chaveParaRegistro), que é a forma que o POST /crm/registro valida.
   const corpo = texto(a.texto)
   if (corpo.length > MAX_TEXTO_DO_CARTAO) return recusa(`texto passa de ${MAX_TEXTO_DO_CARTAO} caracteres`)
-  if (temValor(corpo)) return recusa('valor em R$ não entra em cartão: o preço vem do cardápio')
+  if (temValor(corpo)) return recusa('valor ou finanças não entram em cartão: o preço vem do cardápio, na Ficha')
 
   if (nome === 'propor_mensagem_ao_lead') {
     if (!corpo) return recusa('mensagem vazia')
@@ -339,4 +364,43 @@ export function mesesParaPodar(arquivos: readonly string[], agora: Date): string
     const fimDoMes = Date.UTC(Number(m[1]), Number(m[2]), 1) // 1º do mês seguinte, 00:00 UTC
     return agora.getTime() - fimDoMes > DIAS_DO_HISTORICO * 86_400_000
   })
+}
+
+/**
+ * PURO. Dos arquivos que ficam, os que começam antes do corte de 90 dias: têm linhas velhas dentro e
+ * são reescritos por `podarLinhas`. Sem isto, o mês de julho guardaria a conversa de 1º/07 até o fim
+ * de outubro, quase 4 meses (a poda era só por mês inteiro, e só no boot).
+ */
+export function mesesParaRever(arquivos: readonly string[], agora: Date): string[] {
+  const corte = agora.getTime() - DIAS_DO_HISTORICO * 86_400_000
+  const inteiros = new Set(mesesParaPodar(arquivos, agora))
+  return arquivos.filter((nome) => {
+    const m = /^(\d{4})-(\d{2})\.jsonl$/.exec(nome)
+    return !!m && !inteiros.has(nome) && Date.UTC(Number(m[1]), Number(m[2]) - 1, 1) < corte
+  })
+}
+
+/**
+ * PURO. O JSONL sem as linhas de mais de 90 dias, pela data da própria linha (`quando`). Linha sem
+ * data legível fica: não dá para saber a idade dela, e ela sai junto com o mês inteiro.
+ */
+export function podarLinhas(conteudo: string, agora: Date): { texto: string; removidas: number } {
+  const corte = agora.getTime() - DIAS_DO_HISTORICO * 86_400_000
+  let removidas = 0
+  const ficam = conteudo.split('\n').filter((linha) => {
+    if (!linha.trim()) return false
+    let quando = Number.NaN
+    try {
+      const r = JSON.parse(linha) as { quando?: unknown }
+      if (typeof r?.quando === 'string') quando = Date.parse(r.quando)
+    } catch {
+      // torta: fica (ver acima)
+    }
+    if (Number.isFinite(quando) && quando < corte) {
+      removidas++
+      return false
+    }
+    return true
+  })
+  return { texto: ficam.length ? `${ficam.join('\n')}\n` : '', removidas }
 }

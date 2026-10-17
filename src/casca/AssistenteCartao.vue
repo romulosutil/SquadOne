@@ -11,9 +11,12 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { CartaoDoAssistente } from '../operations/assistente-contrato'
 import { useAgentes } from '../agentes/estado'
-import { chaveParaRegistro, copiarTexto, estadoDoCartao, horaCurta, modoDoTurno, useAssistente } from './assistente'
+import { chaveParaRegistro, copiarTexto, estadoDoCartao, horaCurta, leadDoCartao, modoDoTurno, useAssistente } from './assistente'
 
-const props = defineProps<{ cartao: CartaoDoAssistente; agentes: boolean }>()
+/** `leadAberto`: o lead da Ficha aberta agora (o contexto do endereço), para avisar quando o cartão é de outro. */
+const props = defineProps<{ cartao: CartaoDoAssistente; agentes: boolean; leadAberto?: { produto: string; id: string } | null }>()
+
+const lead = computed(() => (props.cartao.tipo === 'pedido_ao_time' ? null : leadDoCartao(props.cartao.dados, props.leadAberto)))
 
 const ag = useAgentes()
 const as = useAssistente()
@@ -163,7 +166,8 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
 
     <!-- ---------------------------------------------------- anotação em Vendas -->
     <template v-else-if="cartao.tipo === 'anotacao_no_crm'">
-      <p class="texto-pequeno"><strong>{{ cartao.dados.empresa }}</strong> · {{ ROTULO_DA_ANOTACAO[cartao.dados.tipo] }}</p>
+      <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong> · {{ ROTULO_DA_ANOTACAO[cartao.dados.tipo] }}</p>
+      <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
       <p class="assistente-cartao__texto">{{ cartao.dados.texto }}</p>
       <template v-if="proposto">
         <label v-if="cartao.dados.tipo === 'proximo_passo'" class="rotulo">
@@ -182,7 +186,8 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
 
     <!-- ---------------------------------------------------- mensagem ao lead -->
     <template v-else-if="cartao.tipo === 'mensagem_ao_lead'">
-      <p class="texto-pequeno"><strong>{{ cartao.dados.empresa }}</strong></p>
+      <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong></p>
+      <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
       <blockquote class="assistente-cartao__mensagem">{{ cartao.dados.texto }}</blockquote>
       <p class="texto-2 texto-pequeno">Copie e mande você mesmo: o Assistente não envia nada a lead.</p>
       <div v-if="estado !== 'descartado'" class="acoes">

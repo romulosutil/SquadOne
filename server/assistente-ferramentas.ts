@@ -121,8 +121,14 @@ const MAX_POR_GRUPO = 5;
 const MAX_LEADS_NA_BUSCA = 5;
 const MAX_ACOES_DA_FILA = 5;
 const MAX_PERGUNTA_AO_HERMES = 1000;
+/** A leitura da agenda inteira (token + Google), no caminho do Assistente. */
+export const PRAZO_DA_AGENDA_MS = 20_000;
 
-/** O que nunca sai daqui sem passar: máscara de identificador e nenhum R$. */
+/**
+ * O que nunca sai daqui sem passar: máscara de identificador e nenhum valor. `semValores` tira o
+ * número com cara de dinheiro mesmo sem "R$" ("proposta 1.200" numa nota, "500 reais tá bom?" na
+ * conversa, "fechou 900"), em toda string que volta ao modelo, títulos da agenda inclusive.
+ */
 const CHAVES_INTACTAS: ReadonlySet<string> = new Set(["id", "produto"]);
 const limpar = <T>(valor: T): T => mapearTextos(valor, (t) => semValores(prepararTexto(t)), CHAVES_INTACTAS);
 
@@ -265,7 +271,16 @@ export class LeiturasDaMensagem {
       }
       case "ler_agenda_do_dia": {
         if (!this.fontes.agenda) return { semSinal: true, motivo: "A agenda não mora nesta Central." };
-        const a = await this.fontes.agenda();
+        // O fetch do Google já leva AbortSignal.timeout (listarAgendaDoDia, server/calendar.ts), mas o
+        // token pode estar renovando: o prazo aqui é da leitura inteira, para a fila não ficar presa.
+        let relogio: ReturnType<typeof setTimeout> | undefined;
+        const lida = this.fontes.agenda();
+        lida.catch(() => {});
+        const a = await Promise.race([
+          lida,
+          new Promise<"estourou">((r) => { relogio = setTimeout(() => r("estourou"), PRAZO_DA_AGENDA_MS); }),
+        ]).finally(() => clearTimeout(relogio));
+        if (a === "estourou") return { semSinal: true, motivo: "A agenda não respondeu a tempo." };
         if (a.state === "disconnected") return { semSinal: true, motivo: "A agenda do Google está desconectada." };
         if (a.state === "unavailable") return { semSinal: true, motivo: "A agenda não respondeu agora." };
         this.anotar({ tipo: "agenda" });

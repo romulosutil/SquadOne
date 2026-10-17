@@ -16,6 +16,7 @@ import {
   falhaDaResposta,
   horaCurta,
   juntarMensagens,
+  leadDoCartao,
   leadDoId,
   lerConversa,
   maiorN,
@@ -26,6 +27,22 @@ import {
 } from './assistente.ts'
 import { comandosDaPaleta, usaAssistente } from './destinos.ts'
 import type { ConversaDoAssistente, MensagemDoAssistente } from '../operations/assistente-contrato.ts'
+
+describe('assistente: o lead do cartão diz a oferta e avisa quando não é o da Ficha aberta', () => {
+  const dados = { produto: 'site', id: 'site:ChIJkulniski', empresa: 'Kulniski Advocacia' }
+  const casos: Array<[string, { produto: string; id: string } | null, { rotulo: string; outroLead: boolean }]> = [
+    ['sem Ficha aberta', null, { rotulo: 'Kulniski Advocacia · Site', outroLead: false }],
+    ['a Ficha é dele (id inteiro)', { produto: 'site', id: 'site:ChIJkulniski' }, { rotulo: 'Kulniski Advocacia · Site', outroLead: false }],
+    ['a Ficha é dele (só a chave)', { produto: 'site', id: 'ChIJkulniski' }, { rotulo: 'Kulniski Advocacia · Site', outroLead: false }],
+    ['a Ficha é de outro lead', { produto: 'site', id: 'site:ChIJpadaria' }, { rotulo: 'Kulniski Advocacia · Site', outroLead: true }],
+    ['mesma chave, outra oferta', { produto: 'prumo', id: 'prumo:ChIJkulniski' }, { rotulo: 'Kulniski Advocacia · Site', outroLead: true }],
+  ]
+  for (const [caso, aberto, esperado] of casos) it(caso, () => assert.deepEqual(leadDoCartao(dados, aberto), esperado))
+  it('a oferta pela sigla do CRM', () => {
+    assert.equal(leadDoCartao({ produto: 'estampa', id: 'estampa:x', empresa: 'Malharia' }).rotulo, 'Malharia · Estamparia')
+    assert.equal(leadDoCartao({ produto: 'plus', id: 'plus:x', empresa: 'Loja' }).rotulo, 'Loja · Plus')
+  })
+})
 
 describe('assistente: a casca troca o Pedir por ele só no Dell com a flag', () => {
   it('usaAssistente', () => {

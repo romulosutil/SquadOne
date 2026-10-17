@@ -149,9 +149,11 @@ describe("descricaoDaOpcao e embaralhar", () => {
 
 describe("pareceFinancas", () => {
   const sim = ["gastei 30 no mercado", "paguei a fatura do cartão", "ver o saldo", "boleto da luz vence dia 10", "proposta de R$ 1.500", "orçamento do mês",
-    "conferir meu salário de outubro", "negociar a dívida do carro", "declarar o imposto de renda", "pagar o DARF", "IPTU vence sexta", "tirar dinheiro do CDB", "juros do financiamento"];
+    "conferir meu salário de outubro", "negociar a dívida do carro", "declarar o imposto de renda", "pagar o DARF", "IPTU vence sexta", "tirar dinheiro do CDB", "juros do financiamento",
+    // Era "não" até 17/10/2026: "conta de luz" passou a ser finanças (a revisão do Assistente achou "conta de luz venceu" passando).
+    "ligar para a conta de luz"];
   const nao = ["reunião com a Pay4Fun amanhã", "revisar o site da padaria", "consulta no dentista sexta", "contratar alguém para dados",
-    "ligar para a conta de luz", "transferir a reunião para quinta", "cartão de visita novo"];
+    "transferir a reunião para quinta", "cartão de visita novo"];
   for (const t of sim) it(`sim: ${t}`, () => assert.equal(pareceFinancas(t), true));
   for (const t of nao) it(`não: ${t}`, () => assert.equal(pareceFinancas(t), false));
 });

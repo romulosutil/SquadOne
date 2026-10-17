@@ -139,6 +139,8 @@ describe("lerSaidaDoHermes", () => {
 
   it("valor em R$ sai", () => {
     assert.equal(lerSaidaDoHermes("Ofereça o Mapa por R$ 1.200,00 agora."), "Ofereça o Mapa por [valor omitido] agora.");
+    // Sem "R$" também (revisão de 17/10/2026).
+    assert.equal(lerSaidaDoHermes("Ofereça por 1.200 reais, ou fica 690 à vista."), "Ofereça por [valor omitido], ou fica [valor omitido] à vista.");
   });
 });
 

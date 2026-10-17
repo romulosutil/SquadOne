@@ -9,6 +9,12 @@
  *   - `~/.local/bin/hermes -z <prompt> -t clarify -s mapa-do-ecossistema --usage-file <arq>`, sem
  *     shell. O `-z` aprova sozinho qualquer ferramenta, então a trava é não dar ferramenta: `clarify`
  *     só faz perguntas (sem terminal, arquivo, navegador nem envio de mensagem).
+ *     As MCP também ficam de fora (conferido no código do Hermes na Mel, 17/10/2026): com `-t`, o
+ *     `hermes -z` monta o agente só com os toolsets listados (`_validate_explicit_toolsets` em
+ *     hermes_cli/oneshot.py; `_select_tool_names` em model_tools.py), e um servidor MCP só entra se o
+ *     NOME dele estiver no `-t`. Os dois do config (context7, deepwiki) estão ainda `enabled: false`.
+ *     As ferramentas de memória externa também saem (`memory_provider_tools_enabled` exige "memory"
+ *     no `-t`). Por isso nada de `--safe-mode`: ele também tira a skill pré-carregada.
  *   - cwd numa pasta vazia 700 só nossa: o `-z` carrega o AGENTS.md que estiver NA cwd.
  *   - stdin em /dev/null, ambiente limpo (as credenciais do Hermes vêm do ~/.hermes/.env, que ele
  *     mesmo lê; o operations.env tem GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TOKEN_ENC_KEY e a Pluggy).
@@ -21,6 +27,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { omitirValores } from "./financas/parece-financas.ts";
 
 // --- Tipos do contrato (outro módulo importa: mudar aqui é mudar lá) ------------------
 
@@ -170,7 +177,7 @@ function pareceJson(trecho: string): boolean {
 /**
  * O texto do Hermes, pronto para aparecer como texto. PURO. Bloco de código e JSON solto saem:
  * a resposta é dado, e um `{"tipo":"anotacao_no_crm",...}` aqui pareceria cartão a quem lesse
- * depois, sem ter passado pela validação do servidor. "R$ 1.200" sai como "[valor omitido]"
+ * depois, sem ter passado pela validação do servidor. "R$ 1.200" e "1.200 reais" saem como "[valor omitido]"
  * (RULES 28: R$ de proposta conta como finanças). Vazia depois disso -> HermesFalhou('saida').
  */
 export function lerSaidaDoHermes(stdout: string): string {
@@ -184,7 +191,8 @@ export function lerSaidaDoHermes(stdout: string): string {
     .split("\n")
     .map((linha) => (pareceJson(linha) ? OMITIDO : linha))
     .join("\n");
-  t = t.replace(/R\$\s*-?\s*\d[\d.,]*/gi, "[valor omitido]");
+  // A régua de valor do Assistente inteiro (também "1.200 reais", "fica 690" sem "R$").
+  t = omitirValores(t);
   t = t.replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
   const sobra = t.split(OMITIDO).join("").trim();
   if (!sobra) throw new HermesFalhou("saida");

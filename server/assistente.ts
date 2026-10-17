@@ -4,18 +4,22 @@ import path from "node:path";
 import { FunctionCallingConfigMode, type Content, type FunctionCall, type GenerateContentParameters, type GoogleGenAI, type Part } from "@google/genai";
 import {
   acharLead,
+  DIAS_DO_HISTORICO,
   fontesDaResposta,
   historicoParaOPrompt,
   ID_DE_LEAD,
   lerCartaoProposto,
   MAX_TEXTO_DA_MENSAGEM,
   mesesParaPodar,
+  mesesParaRever,
   NOMES_DAS_PROPOSTAS,
+  podarLinhas,
   prepararTexto,
   promptDoRoteador,
   rotearLocal,
   semValores,
   type LeadDoContexto,
+  type MensagemDoHistorico,
 } from "../src/operations/assistente.ts";
 import type {
   CartaoDoAssistente,
@@ -58,10 +62,24 @@ export class AssistenteMalConfigurado extends Error {
 }
 
 export const TETO_DIA_DO_ASSISTENTE = 60;
+/**
+ * As respostas por regra (finanças) não gastam o teto do modelo, mas gravam duas linhas cada no
+ * JSONL: sem teto próprio, um laço de "paguei a fatura" encheria o disco (revisão de 17/10/2026).
+ */
+export const TETO_DIA_DAS_REGRAS = 60;
 // O padrão do teto do Hermes é o do módulo dele (que conta as consultas no arquivo do dia): um número só.
 export { TETO_DIA_DO_HERMES };
 /** Gerações por mensagem: a 3ª já sai sem ferramentas, para sempre haver texto. */
 export const MAX_RODADAS = 3;
+/**
+ * Prazo de uma resposta inteira na fila. O Gemini tem 45 s por tentativa (pior caso de uma geração
+ * ≈ 3 min, server/orchestrator.ts) e o Hermes 90 s; sem prazo, uma promessa que nunca resolvesse
+ * prenderia a fila serial e todas as mensagens seguintes ficariam "pensando" para sempre.
+ */
+export const PRAZO_DA_RESPOSTA_MS = 240_000;
+/** Trocas de avaliação por resposta que viram linha: a última vale, e o arquivo não cresce sem fim. */
+const MAX_AVALIACOES_POR_RESPOSTA = 5;
+const DIAS_DO_HISTORICO_MS = DIAS_DO_HISTORICO * 86_400_000;
 const MAX_CARTOES_POR_RESPOSTA = 3;
 const MAX_TEXTO_DA_RESPOSTA = 4000;
 const MAX_MOTIVO_DA_AVALIACAO = 300;
@@ -106,8 +124,8 @@ export class PedidoDoAssistenteInvalido extends Error {
 }
 
 export class TetoDoAssistente extends Error {
-  constructor(readonly teto: number) {
-    super(`O Assistente já respondeu ${teto} mensagens hoje (teto do dia). Volta amanhã.`);
+  constructor(readonly teto: number, mensagem?: string) {
+    super(mensagem ?? `O Assistente já respondeu ${teto} mensagens hoje (teto do dia). Volta amanhã.`);
     this.name = "TetoDoAssistente";
   }
 }
@@ -145,7 +163,16 @@ export function lerPedidoDeMensagem(corpo: unknown): PedidoDeMensagem {
 // --- O registro (JSONL 600) ---------------------------------------------------------
 
 export type LinhaDoAssistente =
-  | { tipo: "mensagem"; quando: string; conversaId: string; mensagem: MensagemDoAssistente; /** Contou no teto do dia. */ conta?: true }
+  | {
+      tipo: "mensagem"; quando: string; conversaId: string; mensagem: MensagemDoAssistente;
+      /** Contou no teto do dia. */ conta?: true;
+      /** Contou no teto das respostas por regra (finanças). */ regra?: true;
+      /**
+       * A parte da resposta que o Gemini escreveu, quando ela juntou Gemini + Hermes: é o que volta ao
+       * Gemini no histórico (o texto do Hermes nunca volta, ver historicoParaOPrompt).
+       */
+      textoDoGemini?: string;
+    }
   | { tipo: "avaliacao"; quando: string; conversaId: string; respostaId: string; nota: 1 | -1; motivo?: string }
   | { tipo: "cartao"; quando: string; conversaId: string; cartaoId: string; desfecho: "confirmado" | "descartado" };
 
@@ -207,6 +234,7 @@ const TEXTO_DO_HERMES_FORA = "O Hermes não respondeu; isto é só o que li.";
 const TEXTO_SEM_CRM = "Não li Vendas agora: o que depende de lá ficou de fora.";
 const TEXTO_OCUPADO = "O Gemini está ocupado agora. Tente de novo em alguns segundos.";
 const TEXTO_OUTRO = "Não consegui responder agora. Tente de novo daqui a pouco.";
+const TEXTO_DEMOROU = "A resposta demorou demais e eu desisti dela. Tente de novo daqui a pouco.";
 
 function textoDoHermesFora(motivo: Exclude<ResultadoDoHermes, { ok: true }>["motivo"]): string {
   if (motivo === "teto") return "O Hermes já atendeu o teto de hoje; isto é só o que li.";
@@ -233,6 +261,8 @@ export interface DepsDoAssistente {
   agora?: () => Date;
   log?: Logger;
   novoId?: () => string;
+  /** Prazo de uma resposta na fila (PRAZO_DA_RESPOSTA_MS); os testes encurtam. */
+  prazoMs?: number;
 }
 
 export interface Assistente {
@@ -263,22 +293,72 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
   const cartoes = new Map<string, { conversa: Conversa; cartao: CartaoDoAssistente }>();
   /** dia (AAAA-MM-DD em SP) -> mensagens que foram ao modelo: o teto sobrevive a reinício. */
   const usados = new Map<string, number>();
+  /** dia -> respostas por regra (finanças): teto próprio, também relido do arquivo. */
+  const regrasUsadas = new Map<string, number>();
+  /** id da resposta -> a parte que o Gemini escreveu, quando ela juntou Gemini + Hermes. */
+  const textosDoGemini = new Map<string, string>();
+  /** id da resposta -> a avaliação que vale (a última) e quantas linhas ela já gastou. */
+  const avaliacoes = new Map<string, { nota: 1 | -1; motivo: string; linhas: number }>();
 
   const indexar = (c: Conversa, m: MensagemDoAssistente) => {
     if (m.autor === "assistente") respostas.set(m.id, c);
     for (const cartao of m.cartoes ?? []) cartoes.set(cartao.id, { conversa: c, cartao });
   };
 
+  /** A memória sem o que o disco já podou: a conversa velha não pode seguir servida pela rota. */
+  function esquecerAntigas(instante: Date) {
+    const corte = instante.getTime() - DIAS_DO_HISTORICO_MS;
+    for (const c of conversas.values()) {
+      const ficam = c.mensagens.filter((m) => !(Date.parse(m.quando) < corte));
+      if (ficam.length === c.mensagens.length) continue;
+      for (const m of c.mensagens) {
+        if (ficam.includes(m)) continue;
+        respostas.delete(m.id);
+        textosDoGemini.delete(m.id);
+        avaliacoes.delete(m.id);
+        for (const cartao of m.cartoes ?? []) cartoes.delete(cartao.id);
+      }
+      c.mensagens = ficam;
+      if (!ficam.length && !c.pendente) conversas.delete(c.id);
+    }
+  }
+
+  // A poda de 90 dias: no boot e de novo na primeira gravação de cada dia (a Central pode passar
+  // semanas sem reiniciar). O mês inteiro que passou sai de uma vez; o mês que atravessa o corte é
+  // reescrito sem as linhas velhas, pela data de cada linha.
+  let diaDaPoda = "";
+  async function podarDisco(): Promise<void> {
+    const instante = agora();
+    diaDaPoda = diaLocal(instante);
+    const nomes = (await fs.readdir(deps.dir)).filter((n) => /^\d{4}-\d{2}\.jsonl$/.test(n)).sort();
+    for (const nome of mesesParaPodar(nomes, instante)) {
+      await fs.rm(path.join(deps.dir, nome), { force: true });
+      log.log(`[assistente] histórico de ${nome.slice(0, 7)} podado (mais de 90 dias)`);
+    }
+    for (const nome of mesesParaRever(nomes, instante)) {
+      const arquivo = path.join(deps.dir, nome);
+      const { texto, removidas } = podarLinhas(await fs.readFile(arquivo, "utf8"), instante);
+      if (!removidas) continue;
+      if (!texto) {
+        await fs.rm(arquivo, { force: true });
+      } else {
+        // .tmp e rename: uma queda no meio deixa o arquivo velho inteiro, nunca pela metade.
+        const tmp = `${arquivo}.tmp`;
+        await fs.writeFile(tmp, texto, { mode: 0o600 });
+        await fs.chmod(tmp, 0o600);
+        await fs.rename(tmp, arquivo);
+      }
+      log.log(`[assistente] histórico de ${nome.slice(0, 7)}: ${removidas} linha(s) de mais de 90 dias podada(s)`);
+    }
+    esquecerAntigas(instante);
+  }
+
   // Subir: poda de 90 dias e releitura das conversas que sobraram (a Central reinicia a cada
   // atualização, atualizar-central.timer, e a conversa não pode sumir no meio).
   await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
+  await podarDisco();
   const nomes = (await fs.readdir(deps.dir)).filter((n) => /^\d{4}-\d{2}\.jsonl$/.test(n)).sort();
-  const podar = new Set(mesesParaPodar(nomes, agora()));
-  for (const nome of podar) {
-    await fs.rm(path.join(deps.dir, nome), { force: true });
-    log.log(`[assistente] histórico de ${nome.slice(0, 7)} podado (mais de 90 dias)`);
-  }
-  for (const nome of nomes.filter((n) => !podar.has(n))) {
+  for (const nome of nomes) {
     for (const linha of await lerLinhas(path.join(deps.dir, nome))) {
       if (linha.tipo === "mensagem") {
         let c = conversas.get(linha.conversaId);
@@ -286,39 +366,74 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
         const m = { ...linha.mensagem, fontes: linha.mensagem.fontes ?? [], cartoes: linha.mensagem.cartoes ?? [] };
         c.mensagens.push(m);
         indexar(c, m);
-        if (linha.conta) {
-          const dia = diaLocal(new Date(linha.quando));
-          usados.set(dia, (usados.get(dia) ?? 0) + 1);
-        }
+        if (typeof linha.textoDoGemini === "string" && linha.textoDoGemini) textosDoGemini.set(m.id, linha.textoDoGemini);
+        const dia = diaLocal(new Date(linha.quando));
+        if (linha.conta) usados.set(dia, (usados.get(dia) ?? 0) + 1);
+        if (linha.regra) regrasUsadas.set(dia, (regrasUsadas.get(dia) ?? 0) + 1);
       } else if (linha.tipo === "cartao") {
         const achado = cartoes.get(linha.cartaoId);
         if (achado) achado.cartao.estado = linha.desfecho;
+      } else if (linha.tipo === "avaliacao" && (linha.nota === 1 || linha.nota === -1)) {
+        const atual = avaliacoes.get(linha.respostaId);
+        avaliacoes.set(linha.respostaId, { nota: linha.nota, motivo: linha.motivo ?? "", linhas: (atual?.linhas ?? 0) + 1 });
       }
     }
+  }
+
+  // Tudo o que mexe no disco passa em fila: a poda reescreve o arquivo do mês, e uma gravação no
+  // meio dela se perderia no rename.
+  let disco: Promise<void> = Promise.resolve();
+  function noDisco(trabalho: () => Promise<void>): Promise<void> {
+    const vez = disco.then(trabalho);
+    disco = vez.catch(() => {});
+    return vez;
   }
 
   async function gravar(linha: LinhaDoAssistente): Promise<void> {
-    try {
-      await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
-      const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(linha.quando)), "a", 0o600);
-      try {
-        await arquivo.writeFile(`${JSON.stringify(linha)}\n`, "utf8");
-      } finally {
-        await arquivo.close();
+    await noDisco(async () => {
+      if (diaLocal(agora()) !== diaDaPoda) {
+        try {
+          await podarDisco();
+        } catch (error) {
+          log.error(`[assistente] não podou o histórico: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
-    } catch (error) {
-      // O histórico é medição: sem disco a conversa segue em memória, e o log diz.
-      log.error(`[assistente] não gravou o histórico: ${error instanceof Error ? error.message : String(error)}`);
-    }
+      try {
+        await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
+        const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(linha.quando)), "a", 0o600);
+        try {
+          await arquivo.writeFile(`${JSON.stringify(linha)}\n`, "utf8");
+        } finally {
+          await arquivo.close();
+        }
+      } catch (error) {
+        // O histórico é medição: sem disco a conversa segue em memória, e o log diz.
+        log.error(`[assistente] não gravou o histórico: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 
-  async function adicionar(c: Conversa, m: Omit<MensagemDoAssistente, "n">, conta = false): Promise<MensagemDoAssistente> {
+  async function adicionar(
+    c: Conversa,
+    m: Omit<MensagemDoAssistente, "n">,
+    extras: { conta?: boolean; regra?: boolean; textoDoGemini?: string } = {},
+  ): Promise<MensagemDoAssistente> {
     const mensagem: MensagemDoAssistente = { ...m, n: c.mensagens.length + 1 };
     c.mensagens.push(mensagem);
     indexar(c, mensagem);
-    await gravar({ tipo: "mensagem", quando: mensagem.quando, conversaId: c.id, mensagem, ...(conta ? { conta: true as const } : {}) });
+    if (extras.textoDoGemini) textosDoGemini.set(mensagem.id, extras.textoDoGemini);
+    await gravar({
+      tipo: "mensagem", quando: mensagem.quando, conversaId: c.id, mensagem,
+      ...(extras.conta ? { conta: true as const } : {}),
+      ...(extras.regra ? { regra: true as const } : {}),
+      ...(extras.textoDoGemini ? { textoDoGemini: extras.textoDoGemini } : {}),
+    });
     return mensagem;
   }
+
+  /** O que o histórico leva de cada mensagem: o texto e, na resposta com Hermes, só a parte do Gemini. */
+  const paraOHistorico = (mensagens: readonly MensagemDoAssistente[]): MensagemDoHistorico[] =>
+    mensagens.map((m) => ({ autor: m.autor, texto: m.texto, ...(m.cerebro ? { cerebro: m.cerebro } : {}), ...(textosDoGemini.has(m.id) ? { textoDoGemini: textosDoGemini.get(m.id) } : {}) }));
 
   const nova = (): Conversa => {
     const c: Conversa = { id: novoId(), mensagens: [], pendente: null };
@@ -339,8 +454,12 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
 
   /** Uma resposta inteira: o laço do Gemini com as ferramentas, no máximo MAX_RODADAS gerações. */
   async function gerarResposta(
-    c: Conversa, anteriores: MensagemDoAssistente[], textoDoRomulo: string, contexto: ContextoDaPagina, respostaId: string,
-  ): Promise<Omit<MensagemDoAssistente, "n">> {
+    c: Conversa, anteriores: MensagemDoHistorico[], textoDoRomulo: string, contexto: ContextoDaPagina, respostaId: string, sinal: AbortSignal,
+  ): Promise<Omit<MensagemDoAssistente, "n"> & { textoDoGemini?: string }> {
+    // Passado o prazo, a resposta já foi dada como perdida: nada de mais uma geração nem consulta.
+    const desistiu = () => {
+      if (sinal.aborted) throw new Error("o prazo da resposta passou");
+    };
     const etapa = (e: EtapaPendente) => {
       if (c.pendente?.respostaId === respostaId) c.pendente = { ...c.pendente, etapa: e };
     };
@@ -368,6 +487,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
       const functionDeclarations = declaracoesDoAssistente({ hermes: hermes !== null });
 
       for (let rodada = 1; rodada <= MAX_RODADAS; rodada++) {
+        desistiu();
         etapa("pensando");
         const ultima = rodada === MAX_RODADAS;
         const r = await deps.gerar({
@@ -407,6 +527,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
           } else if (nome === CONSULTAR_HERMES && hermes) {
             if (hermesTexto !== null || hermesFora !== null) saida = { erro: "Uma consulta ao Hermes por mensagem." };
             else {
+              desistiu();
               etapa("hermes");
               const h = await consultarOHermes(hermes, args.pergunta, leituras);
               if (h.ok === true) {
@@ -442,8 +563,12 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
     }
 
     let corpo = semValores(prepararTexto(texto)).trim();
+    // A parte do Gemini fica à parte: é ela, e nunca o texto do Hermes, que volta ao Gemini na
+    // próxima mensagem (historicoParaOPrompt). A tela mostra as duas juntas.
+    let textoDoGemini: string | undefined;
     if (hermesTexto !== null) {
       cerebro = "hermes";
+      textoDoGemini = corpo.slice(0, MAX_TEXTO_DA_RESPOSTA) || undefined;
       corpo = [corpo, hermesTexto].filter(Boolean).join("\n\n");
     }
     let falha: MensagemDoAssistente["falha"];
@@ -456,7 +581,10 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
     }
     if (!corpo) corpo = propostos.length ? "Deixei um cartão para você conferir." : "Não tenho o que dizer sobre isso agora.";
     if (corpo.length > MAX_TEXTO_DA_RESPOSTA) corpo = `${corpo.slice(0, MAX_TEXTO_DA_RESPOSTA - 1)}…`;
-    return resposta({ texto: corpo, cerebro, fontes: fontesDaResposta(leituras.feitas, FUSO), cartoes: propostos, ...(falha ? { falha } : {}) });
+    return {
+      ...resposta({ texto: corpo, cerebro, fontes: fontesDaResposta(leituras.feitas, FUSO), cartoes: propostos, ...(falha ? { falha } : {}) }),
+      ...(textoDoGemini ? { textoDoGemini } : {}),
+    };
   }
 
   return {
@@ -471,17 +599,34 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
       if (rota.regra === "recusa") throw new PedidoDoAssistenteInvalido((rota as { resposta: string }).resposta);
       let c = pedido.conversaId ? conversas.get(pedido.conversaId) : undefined;
       // `pendente`: o painel retoma o acompanhamento em vez de só mostrar o erro (outra aba mandou antes).
+      // Daqui até marcar `pendente` não há await: dois POSTs juntos na mesma conversa passavam os dois
+      // pela conferência enquanto o primeiro gravava a mensagem (revisão de 17/10/2026).
       if (c?.pendente) throw new PedidoDoAssistenteInvalido("Espere a resposta anterior chegar.", { pendente: true });
 
       if (rota.regra === "financas") {
         const financas = rota as { resposta: string; guardado: string };
-        // Sem modelo nenhum e sem o texto no arquivo (RULES 24 e 28); não conta no teto.
+        // Sem modelo nenhum e sem o texto no arquivo (RULES 24 e 28); não conta no teto do modelo,
+        // mas tem o seu: cada uma grava duas linhas.
+        const diaDaRegra = diaLocal(agora());
+        const feitas = regrasUsadas.get(diaDaRegra) ?? 0;
+        if (feitas >= TETO_DIA_DAS_REGRAS) {
+          throw new TetoDoAssistente(TETO_DIA_DAS_REGRAS, `O Assistente já respondeu ${TETO_DIA_DAS_REGRAS} perguntas de finanças hoje. Finanças ficam em /financas.`);
+        }
+        regrasUsadas.set(diaDaRegra, feitas + 1);
         c ??= nova();
+        const conversa = c;
         const quando = agora().toISOString();
-        const minha = await adicionar(c, { id: novoId(), autor: "romulo", texto: financas.guardado, quando, fontes: [], cartoes: [] });
-        const dela = await adicionar(c, { id: novoId(), autor: "assistente", texto: financas.resposta, quando, cerebro: "regra", fontes: [], cartoes: [] });
-        log.log("[assistente] finanças: respondido por regra, nada foi ao modelo");
-        return { conversaId: c.id, mensagemId: minha.id, respostaId: dela.id };
+        const minhaId = novoId();
+        const respostaId = novoId();
+        conversa.pendente = { respostaId, etapa: "pensando", desde: quando };
+        try {
+          const minha = await adicionar(conversa, { id: minhaId, autor: "romulo", texto: financas.guardado, quando, fontes: [], cartoes: [] }, { regra: true });
+          const dela = await adicionar(conversa, { id: respostaId, autor: "assistente", texto: financas.resposta, quando, cerebro: "regra", fontes: [], cartoes: [] });
+          log.log("[assistente] finanças: respondido por regra, nada foi ao modelo");
+          return { conversaId: conversa.id, mensagemId: minha.id, respostaId: dela.id };
+        } finally {
+          conversa.pendente = null;
+        }
       }
 
       const dia = diaLocal(agora());
@@ -492,22 +637,43 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
 
       c ??= nova();
       const conversa = c;
-      const anteriores = [...conversa.mensagens];
+      const anteriores = paraOHistorico(conversa.mensagens);
       const textoDoRomulo = prepararTexto(pedido.texto.trim());
-      const minha = await adicionar(conversa, { id: novoId(), autor: "romulo", texto: textoDoRomulo, quando: agora().toISOString(), fontes: [], cartoes: [] }, true);
+      const minhaId = novoId();
       const respostaId = novoId();
       conversa.pendente = { respostaId, etapa: "pensando", desde: agora().toISOString() };
+      const minha = await adicionar(conversa, { id: minhaId, autor: "romulo", texto: textoDoRomulo, quando: agora().toISOString(), fontes: [], cartoes: [] }, { conta: true });
       enfileirar(async () => {
         const inicio = agora().getTime();
-        let pronta: Omit<MensagemDoAssistente, "n">;
+        const falhou = (textoDaFalha: string): Omit<MensagemDoAssistente, "n"> => ({
+          id: respostaId, autor: "assistente", texto: textoDaFalha, quando: agora().toISOString(), fontes: [], cartoes: [], falha: { tipo: "outro", texto: textoDaFalha },
+        });
+        let pronta: Omit<MensagemDoAssistente, "n"> & { textoDoGemini?: string };
+        const controle = new AbortController();
+        let relogio: ReturnType<typeof setTimeout> | undefined;
+        const estouro = new Promise<"estourou">((r) => { relogio = setTimeout(() => r("estourou"), deps.prazoMs ?? PRAZO_DA_RESPOSTA_MS); });
+        const trabalho = gerarResposta(conversa, anteriores, textoDoRomulo, pedido.contexto, respostaId, controle.signal);
+        // Se o prazo vencer, a promessa segue sozinha: o erro dela não pode virar rejeição sem dono.
+        trabalho.catch(() => {});
         try {
-          pronta = await gerarResposta(conversa, anteriores, textoDoRomulo, pedido.contexto, respostaId);
+          const r = await Promise.race([trabalho, estouro]);
+          if (r === "estourou") {
+            // A fila segue; o que o trabalho atrasado ainda devolver (texto, cartões) é descartado.
+            controle.abort();
+            log.error(`[assistente] resposta desistida: passou de ${Math.round((deps.prazoMs ?? PRAZO_DA_RESPOSTA_MS) / 1000)} s`);
+            pronta = falhou(TEXTO_DEMOROU);
+          } else {
+            pronta = r;
+          }
         } catch (error) {
           log.error(`[assistente] erro: ${error instanceof Error ? error.message : String(error)}`);
-          pronta = { id: respostaId, autor: "assistente", texto: TEXTO_OUTRO, quando: agora().toISOString(), fontes: [], cartoes: [], falha: { tipo: "outro", texto: TEXTO_OUTRO } };
+          pronta = falhou(TEXTO_OUTRO);
+        } finally {
+          clearTimeout(relogio);
         }
         conversa.pendente = null;
-        await adicionar(conversa, pronta);
+        const { textoDoGemini, ...semGemini } = pronta;
+        await adicionar(conversa, semGemini, textoDoGemini ? { textoDoGemini } : {});
         log.log(`[assistente] resposta ${pronta.falha ? `com falha (${pronta.falha.tipo})` : "pronta"} · ${pronta.cerebro ?? "-"} · ${pronta.cartoes.length} cartão(ões) · ${Math.round((agora().getTime() - inicio) / 1000)} s · ${usados.get(dia) ?? 0}/${deps.tetoDia} hoje`);
       });
       return { conversaId: conversa.id, mensagemId: minha.id, respostaId };
@@ -523,6 +689,16 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
       const c = respostas.get(respostaId);
       if (!c) return false;
       const limpo = motivo ? semValores(prepararTexto(motivo.trim())).slice(0, MAX_MOTIVO_DA_AVALIACAO) : "";
+      // Uma avaliação por resposta, a última vale: a mesma de novo não grava, e as trocas param de
+      // virar linha depois de MAX_AVALIACOES_POR_RESPOSTA (a rota não conta no teto do dia, e um
+      // laço de cliques encheria o JSONL).
+      const atual = avaliacoes.get(respostaId);
+      if (atual && atual.nota === nota && atual.motivo === limpo) return true;
+      if (atual && atual.linhas >= MAX_AVALIACOES_POR_RESPOSTA) {
+        log.warn(`[assistente] avaliação de ${respostaId} trocada demais: fica a que já está no arquivo`);
+        return true;
+      }
+      avaliacoes.set(respostaId, { nota, motivo: limpo, linhas: (atual?.linhas ?? 0) + 1 });
       await gravar({ tipo: "avaliacao", quando: agora().toISOString(), conversaId: c.id, respostaId, nota, ...(limpo ? { motivo: limpo } : {}) });
       return true;
     },
