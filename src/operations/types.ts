@@ -142,7 +142,14 @@ export interface CrmLead {
   subEtapa: string
   motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
   /** A perda marcada na Central (aba CRM), que dá para desfazer de lá (16/10/2026, OT-06). */
-  perdaManual?: 'sem-contato' | 'recusou'
+  perdaManual?: 'sem-contato' | 'recusou' | 'dispensado'
+  /**
+   * O ganho marcado na Central (17/10/2026, AC-08): registro `ganhou` na aba CRM, desfeito por
+   * `ganhou_desfeito`. Vale para todas as ofertas, inclusive o Plus, que não tem planilha.
+   * `dispensado` (acima) é o "Dispensar" da Triagem (AC-10): registro `dispensado`, desfeito por
+   * `dispensado_desfeito`; o lead vira Perdido com o motivo Descartado e sai da Triagem.
+   */
+  ganhoManual?: boolean
   /** Teste do follow-up sem recibo (OT-10, ab-recibo.ts): o braço, só no Site enviado desde 17/10/2026 sem recibo. */
   testeDoRecibo?: 'teste' | 'controle'
   /** Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
