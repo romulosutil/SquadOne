@@ -96,19 +96,24 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
         <a href="/financas/lancamentos" :aria-current="aba === 'lancamentos' ? 'page' : undefined">Lançamentos</a>
         <a href="/financas/organizar" :aria-current="aba === 'organizar' ? 'page' : undefined">Organizar</a>
       </nav>
-      <button
-        type="button"
-        class="fin-botao fin-botao--primario"
-        :disabled="atualizando || dados?.sincronizando || !dados?.pluggyConfigurada"
-        @click="atualizarAgora"
-      >
-        {{ atualizando || dados?.sincronizando ? 'Atualizando…' : 'Atualizar agora' }}
-      </button>
     </header>
 
     <p class="fin-anuncio" role="status" aria-live="polite">{{ anuncio }}</p>
 
-    <FinSaude v-if="dados" :conexoes="dados.saude.conexoes" :dados-ate="dados.saude.dadosAte" :situacao="dados" />
+    <!-- "Atualizar agora" era o primário amarelo da tela, de largura inteira no celular, para um
+         gesto raro: a tela já relê a cada 5 min e a Pluggy lê os bancos sozinha. Vira um botão
+         pequeno ao lado do "dados até" (AC-25), o lugar onde se vê que está velho. -->
+    <FinSaude v-if="dados" :conexoes="dados.saude.conexoes" :dados-ate="dados.saude.dadosAte" :situacao="dados">
+      <button
+        v-if="dados.pluggyConfigurada"
+        type="button"
+        class="botao botao--leve fin-saude__atualizar"
+        :disabled="atualizando || dados.sincronizando"
+        @click="atualizarAgora"
+      >
+        {{ atualizando || dados.sincronizando ? 'Atualizando…' : 'Atualizar agora' }}
+      </button>
+    </FinSaude>
     <p v-if="erro" class="fin-aviso is-forte" role="alert">{{ erro }} <button type="button" class="fin-botao" @click="carregar">Tentar de novo</button></p>
     <p v-else-if="carregando && !dados" class="fin-sub" role="status">Carregando…</p>
 

@@ -638,8 +638,9 @@ function criarEstadoDosAgentes() {
    * Arquivar pede confirmação com o efeito explícito (spec §3.4). O perigo não é
    * perder dado, é o usuário achar que perdeu.
    */
-  const arquivar = async (tipo: TipoDoRoster, id: string, pergunta: string) => {
-    if (arquivando.value || !window.confirm(pergunta)) return
+  // `pergunta` null: a tela já confirmou com o segundo toque (a squad, na folha de editar: AC-25).
+  const arquivar = async (tipo: TipoDoRoster, id: string, pergunta: string | null) => {
+    if (arquivando.value || (pergunta !== null && !window.confirm(pergunta))) return
     arquivando.value = true
     try {
       const eraSquadAtiva = tipo === 'squads' && id === squadAtiva.value?.id
@@ -676,10 +677,16 @@ function criarEstadoDosAgentes() {
     if (!d) return
     arquivar('dominios', id, `Arquivar a sala ${d.nome} com ${1 + d.integrantes.length} pessoa(s)? A sala fecha e libera o slot. Os eventos continuam no Google, mas saem da agenda até você reativar.`)
   }
-  const arquivarSquadAtiva = () => {
-    const s = squadAtiva.value
-    if (!s) return
-    arquivar('squads', s.id, `Arquivar a squad ${s.nome}? Ela some do seletor e do prompt. Os eventos continuam no Google.`)
+  /**
+   * Arquivar a squad saiu do lado de "Editar" (AC-25, 17/10/2026): ação rara e de efeito grande
+   * não fica à vista. Mora na folha de editar a squad, que confirma com o segundo toque ali mesmo;
+   * a folha fecha porque a squad que ela editava não está mais à vista.
+   */
+  const arquivarSquadConfirmada = async (id: string) => {
+    await arquivar('squads', id, null)
+    if (edicao.value?.tipo === 'squad' && edicao.value.squad.id === id && !roster.value?.squads.some((s) => s.id === id)) {
+      edicao.value = null
+    }
   }
 
   const abrirArquivo = () => {
@@ -933,7 +940,8 @@ function criarEstadoDosAgentes() {
     salvarEdicao,
     arquivarPessoa,
     arquivarDominio,
-    arquivarSquadAtiva,
+    arquivarSquadConfirmada,
+    arquivando,
     abrirArquivo,
     reativar,
     conectarGoogle,

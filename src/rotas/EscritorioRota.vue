@@ -172,11 +172,9 @@ const dominioAberto = computed(() => squadAtiva.value?.dominios.find((d) => d.id
         :squads="roster.squads"
         :ativa-id="squadAtiva.id"
         :desabilitado="ocupadoComRoster"
-        :pode-arquivar="roster.squads.length > 1"
         @trocar="ag.trocarSquad"
         @nova="ag.abrirNovaSquad"
         @editar="ag.editarSquadAtiva"
-        @arquivar="ag.arquivarSquadAtiva"
       />
 
       <div class="escritorio__barra">

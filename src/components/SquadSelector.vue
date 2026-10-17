@@ -11,12 +11,12 @@ defineProps({
   squads: { type: Array as PropType<SquadView[]>, default: () => [] },
   ativaId: { type: String, default: '' },
   desabilitado: { type: Boolean, default: false },
-  // Falso com uma squad ativa só: a última não se arquiva.
-  podeArquivar: { type: Boolean, default: false },
   rotulo: { type: String, default: 'Squad' }
 })
 
-const emit = defineEmits<{ trocar: [id: string]; nova: []; editar: []; arquivar: [] }>()
+// "Arquivar a squad" saiu daqui (AC-25, 17/10/2026): rara e de efeito grande, ficava lado a
+// lado com Editar. Agora está no fim da folha de editar a squad, com segundo toque.
+const emit = defineEmits<{ trocar: [id: string]; nova: []; editar: [] }>()
 </script>
 
 <template>
@@ -34,11 +34,9 @@ const emit = defineEmits<{ trocar: [id: string]; nova: []; editar: []; arquivar:
     </label>
     <div class="acoes">
       <button type="button" class="botao botao--leve" :disabled="desabilitado" @click="emit('editar')">Editar a squad</button>
-      <button type="button" class="botao botao--leve" :disabled="desabilitado || !podeArquivar" @click="emit('arquivar')">Arquivar a squad</button>
       <button type="button" class="botao botao--leve" :disabled="desabilitado" @click="emit('nova')">Nova squad</button>
     </div>
     <p v-if="desabilitado" class="texto-2 texto-pequeno" role="status">Espere o pedido em andamento terminar para trocar de squad.</p>
-    <p v-else-if="!podeArquivar" class="texto-2 texto-pequeno">A última squad ativa não se arquiva.</p>
   </div>
 </template>
 

@@ -42,7 +42,8 @@ const titulo = computed(() => {
   const a = props.alvo
   if (a.alvo === 'integrante') return `Contratar em ${a.dominio.nome}`
   if (a.alvo === 'po') return `Substituir o PO de ${a.dominio.nome}`
-  return `Abrir sala (${a.slot[0]},${a.slot[1]})`
+  // Sem a coordenada da grade (AC-25): o mesmo nome do botão que abriu a folha.
+  return 'Abrir uma sala'
 })
 const integrantes = computed(() => (props.alvo.alvo === 'po' ? props.alvo.dominio.integrantes : []))
 const promovendo = computed(() => props.alvo.alvo === 'po' && form.integranteId !== '')

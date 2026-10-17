@@ -24,6 +24,8 @@
 .dell-dot { display: inline-block; flex: none; width: 0.8rem; height: 0.8rem; border: 2px solid var(--borda); border-radius: 50%; background: var(--positivo); }
 .dell-dot.is-atencao { background: var(--destaque); }
 .dell-dot.is-falha { background: var(--negativo); }
+/* Desligado de propósito (a reserva fria): nem verde nem vermelho, o tracejado do "sem sinal". */
+.dell-dot.is-neutro { background: var(--superficie-2); border-style: dashed; }
 
 /* ------------------------------------------------------------ Acessos */
 

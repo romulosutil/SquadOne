@@ -112,7 +112,7 @@ onMounted(() => void carregar())
     <section class="fin-bloco fin-bloco--largo" aria-labelledby="fin-categorias">
       <header class="fin-bloco__topo">
         <h2 id="fin-categorias">Categorias e orçamento</h2>
-        <p class="fin-sub">O orçamento é por mês e conta as compras no mês da fatura. Passou de 70, 90 e 100%, chega um aviso no WhatsApp só com a %.</p>
+        <p class="fin-sub">O orçamento é por mês e conta as compras no mês da fatura. Passou de 70, 90 e 100%, chega um aviso no Telegram só com a % (sem som das 22h às 7h).</p>
       </header>
       <form class="fin-linha-form" @submit.prevent="criar">
         <label>Nova categoria <input v-model="nova" maxlength="40" :disabled="ocupado" /></label>

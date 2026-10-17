@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BLUEPRINT_URL, FLUXOS, linkDoBlueprint } from './operations/fluxos.ts'
+import { BLUEPRINT_URL, FLUXOS, blueprintDoFluxo, linkDoBlueprint } from './operations/fluxos.ts'
 import { PASSOS } from './operations/jornada.ts'
 
 // Um mapa da operação, não três (OT-03, 16/10/2026). Como funciona (fluxos.ts), a jornada do lead
@@ -37,6 +37,17 @@ describe('um mapa só: os códigos do blueprint citados existem', () => {
   it('os caçadores, o observador e a jornada citam os cartões que a OT-03 apontou como divergentes', () => {
     const codigos = new Set(FLUXOS.flatMap((f) => f.passos.map((p) => p.blueprint)))
     for (const c of ['SITE-1-B1', 'OFERTAS-1-B1', 'OFERTAS-4-B1']) assert.ok(codigos.has(c), `nenhum passo cita ${c}`)
+  })
+
+  // AC-24 (17/10/2026): a tela mostra um "Ver no blueprint" por fluxo, não um selo por passo. Os
+  // códigos continuam nos passos; o do link é o do primeiro passo que cita um.
+  it('cada fluxo com passo ligado tem um link só, o do primeiro passo ligado', () => {
+    for (const f of FLUXOS) {
+      const primeiro = f.passos.find((p) => p.blueprint)?.blueprint ?? null
+      assert.equal(blueprintDoFluxo(f), primeiro, f.id)
+    }
+    assert.equal(blueprintDoFluxo(FLUXOS.find((f) => f.id === 'site')!), 'SITE-1-A2')
+    assert.equal(blueprintDoFluxo({ passos: [{ titulo: 't', texto: '', onde: 'dell', quando: '' }] }), null)
   })
 
   it('o link leva ao cartão no Artifact publicado', () => {

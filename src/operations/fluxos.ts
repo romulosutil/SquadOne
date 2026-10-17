@@ -66,6 +66,15 @@ export function linkDoBlueprint(codigo: string): string {
   return `${BLUEPRINT_URL}#${encodeURIComponent(codigo)}`
 }
 
+/**
+ * O código que o "Ver no blueprint" do fluxo abre: o do primeiro passo que cita um (AC-24,
+ * 17/10/2026). Eram ~44 selos "Blueprint XX", um por passo, que viravam ruído no meio do
+ * passo; os códigos continuam nos passos (o teste do mapa único confere), só a tela mostra um.
+ */
+export function blueprintDoFluxo(fluxo: Pick<FluxoDaOperacao, 'passos'>): string | null {
+  return fluxo.passos.find(p => p.blueprint)?.blueprint ?? null
+}
+
 export interface FluxoDaOperacao {
   id: string
   grupo: string

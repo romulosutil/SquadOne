@@ -93,7 +93,7 @@ class Pagina(Base):
         s, h, b = self.req("GET", "/")
         self.assertEqual(s, 200)
         html = b.decode()
-        for rotulo in ("Guardar no cofre", "Organizar", "Só guardar", 'data-acao="cofre"', 'data-acao="organizar"',
+        for rotulo in ("Guardar o segredo", "Organizar", "Só guardar", 'data-acao="cofre"', 'data-acao="organizar"',
                        'data-acao="guardar"', "X-Com-Cofre"):
             self.assertIn(rotulo, html)
         self.assertNotIn("__NONCE__", html)

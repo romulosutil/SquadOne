@@ -41,8 +41,9 @@ const raizId = () => props.squad.dominios[0]?.id
 <template>
   <section class="salas" aria-label="Salas da squad">
     <div class="acoes">
+      <!-- A coordenada da grade saiu do rótulo (AC-25): é do mapa, não diz nada a quem lê a lista. -->
       <button type="button" class="botao" :disabled="desabilitado || !squad.proximoSlot" @click="emit('abrirSala')">
-        {{ squad.proximoSlot ? `Abrir sala (${squad.proximoSlot[0]},${squad.proximoSlot[1]})` : 'Escritório cheio: 9 salas' }}
+        {{ squad.proximoSlot ? 'Abrir uma sala' : 'Escritório cheio: 9 salas' }}
       </button>
       <button type="button" class="botao" :disabled="desabilitado" @click="emit('abrirArquivo')">
         Arquivo ({{ totalArquivado }})

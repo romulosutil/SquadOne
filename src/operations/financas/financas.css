@@ -38,7 +38,9 @@
 
 /* Saúde */
 .fin-saude { display: grid; gap: var(--esp-2); }
+.fin-saude__linha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2) var(--esp-3); }
 .fin-saude__ate { margin: 0; font-size: var(--tam-texto); }
+.fin-saude__atualizar { flex: none; }
 .fin-saude__ate span { color: var(--texto-2); }
 .fin-saude__lista { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
 .fin-saude__lista li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-1) var(--esp-2); padding: var(--esp-2) var(--esp-3); border: var(--linha-fina); background: var(--superficie); }
@@ -183,6 +185,9 @@
 .fin-filtros label { display: grid; gap: var(--esp-1); font-size: var(--tam-apoio); font-weight: var(--peso-forte); min-width: 0; }
 .fin-filtros select, .fin-filtros input, .fin-escolha select { width: 100%; min-width: 0; min-height: var(--toque); padding: 0 var(--esp-2); border: var(--linha-fina); background: var(--superficie); color: var(--texto); font: inherit; font-weight: var(--peso-texto); }
 
+/* Lançamentos até hoje à vista e as parcelas futuras dobradas no fim (AC-26). */
+.fin-secao, .fin-futuras { display: grid; gap: var(--esp-2); min-width: 0; }
+.fin-futuras > summary small { display: block; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .fin-dia { display: grid; gap: var(--esp-1); }
 .fin-dia h3 { padding-top: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
 
@@ -209,7 +214,7 @@
 .fin-explicar__resposta p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (min-width: 48rem) {
-  .fin-topo { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fin-topo { grid-template-columns: minmax(0, 1fr) auto; }
   .fin-filtros { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; }
 }
 

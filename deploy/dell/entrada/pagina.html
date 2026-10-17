@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Entrada da Mel</title>
+<title>Entrada · SquadOne</title>
 <style nonce="__NONCE__">
   /*
    * Tokens: CÓPIA de src/estilos/tokens.css (só os que esta página usa), com os mesmos nomes e valores.
@@ -213,9 +213,9 @@
 </head>
 <body>
 <main>
-  <a class="volta" id="volta" href="/" hidden>← Central</a>
-  <h1>Entrada da Mel</h1>
-  <p class="sub">Cole um texto ou solte arquivos.</p>
+  <a class="volta" id="volta" href="/" hidden>← SquadOne</a>
+  <h1>Entrada</h1>
+  <p class="sub">Mande um texto ou um arquivo para o Dell. Ele guarda na hora e, se você pedir, o Hermes põe cada coisa no lugar certo.</p>
 
   <div class="avisos" id="avisos"></div>
 
@@ -234,12 +234,12 @@
     </details>
 
     <!-- Modo cofre: o rótulo só existe aqui, onde é obrigatório. -->
-    <p class="dica" id="sobre-cofre" hidden>Cifra na hora, nunca vai a modelo e não volta para esta tela.</p>
+    <p class="dica" id="sobre-cofre" hidden>Fica guardado cifrado no Dell, nunca vai a um modelo de IA e não volta para esta tela.</p>
     <div class="campo-grupo" id="grupo-rotulo" hidden>
       <label class="rotulo" for="rotulo">O que é</label>
       <input class="campo" id="rotulo" type="text" maxlength="120" autocomplete="off" spellcheck="false"
              placeholder="ex.: senha do banco X" aria-describedby="rotulo-dica rotulo-erro">
-      <p class="dica" id="rotulo-dica">Aparece na lista do cofre; o valor, nunca.</p>
+      <p class="dica" id="rotulo-dica">É o que aparece na lista dos segredos guardados; o valor, nunca.</p>
       <p class="erro-campo" id="rotulo-erro" hidden>Diga o que é para achar depois.</p>
     </div>
 
@@ -264,16 +264,16 @@
       <button type="button" class="botao botao--primario" data-acao="organizar">Organizar</button>
       <button type="button" class="botao" data-acao="guardar">Só guardar</button>
     </div>
-    <p class="dica" id="dica-comum">O Hermes organiza em até 5 min. “Só guardar” deixa em chegou, sem IA.</p>
+    <p class="dica" id="dica-comum">“Organizar”: o Hermes lê e guarda no lugar certo em até 5 min. “Só guardar”: fica guardado como veio, sem passar por IA.</p>
     <div class="acoes" id="acoes-cofre" hidden>
-      <button type="button" class="botao botao--primario" data-acao="cofre">Guardar no cofre</button>
+      <button type="button" class="botao botao--primario" data-acao="cofre">Guardar o segredo</button>
     </div>
   </form>
 
   <!-- Só quando o filtro barrou um "Organizar" e o servidor diz que dá para redigir. -->
   <section class="bloco decisao" id="redigir" aria-labelledby="t-redigir" hidden>
     <h2 id="t-redigir">Achei o que parece segredo</h2>
-    <p class="dica">Os segredos vão para o cofre e cada um vira {{SEGREDO:id}} no texto que segue. Até 20, em texto de até 5 MB.</p>
+    <p class="dica">Os segredos ficam guardados à parte, cifrados, e no texto que segue para o Hermes cada um vira uma marca {{SEGREDO:id}}. Até 20, em texto de até 5 MB.</p>
     <button type="button" class="botao" id="b-redigir">Separar e organizar</button>
   </section>
 
@@ -350,8 +350,8 @@
       if (e.limite_mb) limite = e.limite_mb * 1024 * 1024;
       $('avisos').replaceChildren(...(e.avisos || []).map((t) => {
         const p = document.createElement('p'); p.className = 'recado'; p.textContent = t; return p; }));
-      const partes = [`Fila do Hermes: ${e.pendentes}`];
-      if (e.cofre) partes.push(`cofre: ${e.cofre.itens} ${e.cofre.itens === 1 ? 'item' : 'itens'}` + (e.cofre.destinatarios ? '' : ' (sem chave)'));
+      const partes = [`Esperando o Hermes: ${e.pendentes}`];
+      if (e.cofre) partes.push(`segredos guardados: ${e.cofre.itens}` + (e.cofre.destinatarios ? '' : ' (sem a chave de cifra: o modo Segredo não guarda)'));
       partes.push(`até ${e.limite_mb} MB por envio`);
       $('estado').textContent = partes.join(' · ');
       $('soltar-dica').textContent = `ou solte aqui (até ${e.limite_mb} MB cada)`;

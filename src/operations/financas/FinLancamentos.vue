@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import FinEditorDeLancamento from './FinEditorDeLancamento.vue'
-import { brl, diaMes, ROTULO_DA_NATUREZA } from './formato'
+import { brl, diaMes, hojeEmSaoPaulo, mesesDoFiltro, ROTULO_DA_NATUREZA, separarFuturas } from './formato'
 import type { Lancamento, ListaDeLancamentos } from './types'
 
 // Lançamentos com filtro por conta, categoria e mês. O filtro mora na URL
@@ -74,6 +74,7 @@ async function carregar(mais = false) {
     if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
     lista.value = corpo
     itens.value = mais ? [...itens.value, ...corpo.lancamentos] : corpo.lancamentos
+    hoje.value = hojeEmSaoPaulo(new Date())
   } catch (e) {
     erro.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -81,17 +82,29 @@ async function carregar(mais = false) {
   }
 }
 
-const porDia = computed(() => {
+function porDia(lista: Lancamento[]) {
   const grupos: { dia: string; itens: Lancamento[] }[] = []
-  for (const l of itens.value) {
+  for (const l of lista) {
     const ultimo = grupos.at(-1)
     if (ultimo?.dia === l.data) ultimo.itens.push(l)
     else grupos.push({ dia: l.data, itens: [l] })
   }
   return grupos
+}
+// Até hoje primeiro; as parcelas que só vencem nos meses à frente numa dobra no fim (AC-26).
+// O dia é o de São Paulo, relido a cada carga da lista (filtro, "Mostrar mais", depois de salvar).
+const hoje = ref(hojeEmSaoPaulo(new Date()))
+const secoes = computed(() => {
+  const { ateHoje, futuras } = separarFuturas(itens.value, hoje.value)
+  return [
+    { id: 'ate-hoje', futuras: false, total: ateHoje.length, grupos: porDia(ateHoje) },
+    { id: 'futuras', futuras: true, total: futuras.length, grupos: porDia(futuras) },
+  ].filter((s) => s.total > 0)
 })
-/** Zebra da tabela pela posição na lista inteira: o nth-child contaria a linha do editor aberto. */
-const posicao = computed(() => new Map(itens.value.map((l, i) => [l.id, i])))
+/** Zebra da tabela pela posição na seção: o nth-child contaria a linha do editor aberto. */
+const posicao = computed(() => new Map(secoes.value.flatMap((s) => s.grupos.flatMap((g) => g.itens)).map((l, i) => [l.id, i])))
+// O select de mês (no lugar do <input type="month">, que vazio mostrava "---------- de ----").
+const opcoesDeMes = computed(() => mesesDoFiltro(hoje.value.slice(0, 7), mes.value))
 
 const classeDoValor = (l: Lancamento) => ({ 'is-positivo': l.centavos > 0, 'is-neutro': l.natureza === 'transferencia' || l.natureza === 'pagamento_fatura' })
 /** O que vem depois de conta e categoria na lista; na tabela, embaixo da descrição. */
@@ -157,7 +170,12 @@ onBeforeUnmount(() => {
         </select>
       </label>
       <label>Mês
-        <input v-model="mes" type="month" />
+        <select v-model="mes">
+          <option v-for="o in opcoesDeMes.filter((x) => !x.futuro)" :key="o.valor" :value="o.valor">{{ o.rotulo }}</option>
+          <optgroup label="Meses à frente (parcelas)">
+            <option v-for="o in opcoesDeMes.filter((x) => x.futuro)" :key="o.valor" :value="o.valor">{{ o.rotulo }}</option>
+          </optgroup>
+        </select>
       </label>
       <button v-if="filtrado" type="button" class="fin-botao" @click="limpar">Limpar filtro</button>
     </form>
@@ -166,8 +184,17 @@ onBeforeUnmount(() => {
     <p v-else-if="!carregando && !itens.length" class="fin-vazio">Nada aqui{{ filtrado ? ' com este filtro' : '' }}.</p>
     <p class="fin-anuncio" role="status" aria-live="polite">{{ anuncio }}</p>
 
-    <table v-if="largo && itens.length" class="fin-tabela">
-      <caption class="so-leitor">Lançamentos, do mais recente para o mais antigo. Escolha a descrição para trocar a categoria.</caption>
+    <!-- Até hoje à vista; as parcelas futuras numa dobra no fim (AC-26). O mesmo desenho nas duas. -->
+    <component
+      :is="s.futuras ? 'details' : 'div'"
+      v-for="s in secoes"
+      :key="s.id"
+      :class="s.futuras ? 'dobra fin-futuras' : 'fin-secao'"
+      :open="s.futuras && secoes.length === 1 ? true : undefined"
+    >
+    <summary v-if="s.futuras">Parcelas futuras ({{ s.total }}) <small>com data depois de hoje, da mais próxima à mais distante</small></summary>
+    <table v-if="largo" class="fin-tabela">
+      <caption class="so-leitor">{{ s.futuras ? 'Parcelas futuras, da mais próxima para a mais distante.' : 'Lançamentos até hoje, do mais recente para o mais antigo.' }} Escolha a descrição para trocar a categoria.</caption>
       <thead>
         <tr>
           <th scope="col">Data</th>
@@ -178,7 +205,7 @@ onBeforeUnmount(() => {
         </tr>
       </thead>
       <!-- Um tbody por dia: o dia aparece só na primeira linha do grupo (o leitor de tela ouve em todas). -->
-      <tbody v-for="g in porDia" :key="g.dia">
+      <tbody v-for="g in s.grupos" :key="g.dia">
         <template v-for="(l, i) in g.itens" :key="l.id">
           <tr :class="{ 'is-par': (posicao.get(l.id) ?? 0) % 2 === 1, 'is-aberto': aberto === l.id }" @click="abrir(l)">
             <td class="fin-tabela__data"><span :class="{ 'so-leitor': i > 0 }">{{ dia(g.dia) }}</span></td>
@@ -202,7 +229,7 @@ onBeforeUnmount(() => {
     </table>
 
     <template v-else>
-      <div v-for="g in porDia" :key="g.dia" class="fin-dia">
+      <div v-for="g in s.grupos" :key="g.dia" class="fin-dia">
         <h3>{{ dia(g.dia) }}</h3>
         <ul class="fin-linhas">
           <li v-for="l in g.itens" :key="l.id" class="fin-lanc">
@@ -223,6 +250,7 @@ onBeforeUnmount(() => {
         </ul>
       </div>
     </template>
+    </component>
 
     <button v-if="lista && itens.length < lista.total" type="button" class="fin-botao fin-mais" :disabled="carregando" @click="carregar(true)">
       Mostrar mais ({{ lista.total - itens.length }})

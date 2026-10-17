@@ -134,7 +134,7 @@ systemctl --user daemon-reload && systemctl --user enable --now entrada.service 
 
 Até 11/10/2026 o organizador era um job do Hermes (`hermes cron create "every 5m" --name "Entrada — organizar" --script entrada_organizar.py --no-agent --deliver whatsapp`), que hoje está pausado. Não o retome com o timer ligado: os dois organizariam a mesma fila.
 
-Depois do merge a Central se atualiza sozinha (reinício de ~0,5 s) e passa a ter o menu e a rota `/entrada/`; com o serviço no ar, `curl -s http://127.0.0.1:9120/entrada/ | grep -o '<title>[^<]*</title>'` deve mostrar `Entrada da Mel`. **Só o código 200 não prova nada:** antes da Central atualizar (e com a Entrada desligada) `/entrada/` também dá 200, porque cai na SPA (`<title>SquadOne</title>`). `tailscale serve status` segue com as 3 linhas.
+Depois do merge a Central se atualiza sozinha (reinício de ~0,5 s) e passa a ter o menu e a rota `/entrada/`; com o serviço no ar, `curl -s http://127.0.0.1:9120/entrada/ | grep -o '<title>[^<]*</title>'` deve mostrar `Entrada · SquadOne` (era `Entrada da Mel` até 17/10/2026). **Só o código 200 não prova nada:** antes da Central atualizar (e com a Entrada desligada) `/entrada/` também dá 200, porque cai na SPA (`<title>SquadOne</title>`). `tailscale serve status` segue com as 3 linhas.
 
 Pré-requisitos (feitos em 04/10): `age` 1.2.1 (`sudo apt install age`), `~/.config/mel/age/identity.txt` (600), `~/Mel/Entrada` e `~/Mel/Cofre` (700), `~/Mel/Cofre/recipients.txt` com a chave pública da Mel. O serviço lê o nome da Mel na tailnet com `tailscale status`; se falhar, sai com erro e o systemd tenta de novo (ou defina `ENTRADA_NOMES=<mel>.<tailnet>.ts.net`).
 
@@ -142,7 +142,7 @@ Pré-requisitos (feitos em 04/10): `age` 1.2.1 (`sudo apt install age`), `~/.con
 
 ## Conferência (critério da fase)
 
-Com um arquivo **falso** `chave-teste.txt` com `AGE-SECRET-KEY-…` falso: "Organizar" bloqueia; "Cofre" cifra e o `indice.json` não tem o valor; log e `diario.jsonl` não têm o valor; `cofre ler <id>` (no terminal) recupera; o texto de `requisicoes/` só tem `{{SEGREDO:id}}`; `tailscale serve status` mantém as 3 linhas; os 12 containers seguem `Up`; o menu **Entrada** da Central abre a página em `127.0.0.1:9120/entrada/` (confira o título `Entrada da Mel`, não só o 200). Tudo isso tem teste automatizado; a página pelo celular é conferência manual.
+Com um arquivo **falso** `chave-teste.txt` com `AGE-SECRET-KEY-…` falso: "Organizar" bloqueia; "Cofre" cifra e o `indice.json` não tem o valor; log e `diario.jsonl` não têm o valor; `cofre ler <id>` (no terminal) recupera; o texto de `requisicoes/` só tem `{{SEGREDO:id}}`; `tailscale serve status` mantém as 3 linhas; os 12 containers seguem `Up`; o menu **Entrada** da Central abre a página em `127.0.0.1:9120/entrada/` (confira o título `Entrada · SquadOne`, não só o 200). Tudo isso tem teste automatizado; a página pelo celular é conferência manual.
 
 ## Testes
 

@@ -11,6 +11,11 @@ export interface ConexaoVista {
   lidoEm: string | null
   erroLeitura: string | null
   saude: Saude
+  /**
+   * Nomes das contas desta conexão (sem valor), quando o servidor os mandar: o nome do conector
+   * é o mesmo para todas as conexões do Meu Pluggy (AC-26). Ausente, o selo numera as repetidas.
+   */
+  contas?: string[]
 }
 
 export interface Situacao {

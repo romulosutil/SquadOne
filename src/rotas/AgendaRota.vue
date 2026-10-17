@@ -3,8 +3,10 @@
  * Agenda (/agenda): os compromissos que os agentes marcaram para a squad
  * ativa, por dia, lidos do Google Calendar a cada abertura (invariante 3: a
  * verdade é o Google; isto é cache da última leitura). Também é onde a
- * conexão com o Google aparece por extenso: conectar, autorizar o Tasks e
- * desconectar — o botão "Calendário conectado" que desconectava ao toque saiu.
+ * conexão com o Google aparece por extenso: conectar e autorizar o Tasks — o botão
+ * "Calendário conectado" que desconectava ao toque saiu. Desconectar (raro, e derruba a agenda
+ * inteira) saiu daqui em 17/10/2026 (AC-25): era o 2º botão da tela, em vermelho; mora em
+ * Mais › Manutenção, com segundo toque.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AjusteCard from '../components/AjusteCard.vue'
@@ -62,12 +64,6 @@ const porDia = computed(() => {
   })
 })
 const total = computed(() => quests.value.filter((q) => !questTerminou(q, agora.value)).length)
-
-const desconectar = () => {
-  if (window.confirm('Desconectar o Google? O SquadOne para de ler e marcar na agenda até você conectar de novo. O refresh token é revogado no Google.')) {
-    void ag.desconectarGoogle()
-  }
-}
 </script>
 
 <template>
@@ -102,7 +98,6 @@ const desconectar = () => {
         <button v-if="conectado && !tasksLiberado" type="button" class="botao" :disabled="conectando" @click="ampliarAcesso">
           Autorizar o Google Tasks
         </button>
-        <button v-if="conectado" type="button" class="botao botao--leve botao--perigo" @click="desconectar">Desconectar o Google</button>
       </div>
     </section>
 
