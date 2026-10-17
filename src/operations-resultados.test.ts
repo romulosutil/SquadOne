@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, enviosAnotados, faixaDoHorario, horaEmSP, noHorarioComercial, porcento, resultados,
-  resumoDaLinha, textoDaSegunda, textoDoFollowup,
+  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, enviosAnotados, faixaDoHorario, horaEmSP, leu, noHorarioComercial, porcento, quisVer,
+  respondeuDeGente, resultados, resumoDaLinha, taxaPorExpediente, textoDaSegunda, textoDoFollowup,
 } from './operations/resultados.ts'
+import { diagnosticoDeVenda } from './operations/por-que-nao-vende.ts'
 import type { CrmLead } from './operations/types.ts'
 
 const AGORA = Date.parse('2026-10-08T12:00:00Z')
@@ -104,9 +105,9 @@ describe('follow-up e 2ª mensagem anotados (14/10/2026)', () => {
     assert.equal(porcento(1, 3), '33%')
     assert.equal(porcento(0, 0), '—')
     assert.equal(resumoDaLinha({ chave: 'x', enviados: 4, viram: 1, responderam: 1, interesse: 1, recusaram: 1, fecharam: 1 }),
-      '1 respondeu (25%) · 1 viu · 1 quis ver · 1 recusou · 1 fechou')
+      '1 respondeu (25%) · 1 leu · 1 quis ver · 1 recusou · 1 fechou')
     assert.equal(resumoDaLinha({ chave: 'x', enviados: 10, viram: 0, responderam: 2, interesse: 2, recusaram: 0, fecharam: 0 }),
-      '2 responderam (20%) · 0 viram · 2 quiseram ver · 0 recusaram · 0 fecharam')
+      '2 responderam (20%) · 0 leram · 2 quiseram ver · 0 recusaram · 0 fecharam')
     assert.equal(amostraPequena({ chave: 'x', enviados: 9, viram: 0, responderam: 0, interesse: 0, recusaram: 0, fecharam: 0 }), true)
   })
 })
@@ -147,9 +148,69 @@ describe('horário do envio', () => {
     const madrugada = em('2026-10-08T04:10:00Z')
     assert.equal(avisoDeHorario([...dentro, ...fora], em('2026-10-08T13:00:00Z')), null)
     const aviso = avisoDeHorario([...dentro, ...fora], madrugada) ?? ''
-    assert.match(aviso, /Fora dele, 10 envios tiveram 0 respostas \(0%\); dentro, 25% responderam\.$/)
+    assert.match(aviso, /Fora dele, 10 envios do Site tiveram 0 respostas \(0%\); dentro, 25% responderam\.$/)
     const pouco = avisoDeHorario([...dentro, ...fora.slice(0, 4)], madrugada) ?? ''
     assert.match(pouco, /costuma ficar sem resposta\.$/)
     assert.doesNotMatch(pouco, /%/)
+  })
+
+  it('AC-03: a Próxima venda (todos os leads) e a Triagem (só o Site) dão a mesma taxa', () => {
+    const dentro = Array.from({ length: 10 }, (_, i) => lead(`d${i}`, {
+      marcos: { enviado: '2026-10-07T13:00:00Z', ...(i < 2 ? { respondeu: '2026-10-07T15:00:00Z' } : {}) },
+    }))
+    const fora = Array.from({ length: 10 }, (_, i) => lead(`f${i}`, { marcos: { enviado: '2026-10-06T22:30:00Z' } }))
+    // Outras ofertas respondendo no expediente: antes, só a Próxima venda as contava (18 % × 20 %).
+    const outras = Array.from({ length: 5 }, (_, i) => lead(`o${i}`, {
+      produto: i % 2 ? 'prumo' : 'plus', marcos: { enviado: '2026-10-07T13:00:00Z' },
+    }))
+    const todos = [...dentro, ...fora, ...outras]
+    const madrugada = em('2026-10-08T04:10:00Z')
+    const proximaVenda = avisoDeHorario(todos, madrugada)
+    const triagem = avisoDeHorario(todos.filter(l => l.produto === 'site'), madrugada)
+    assert.equal(proximaVenda, triagem)
+    assert.match(proximaVenda ?? '', /dentro, 20% responderam/)
+    assert.deepEqual([taxaPorExpediente(todos, madrugada).dentro.enviados, taxaPorExpediente(todos, madrugada).fora.enviados], [10, 10])
+  })
+})
+
+describe('uma regra por métrica (AC-03): o funil e o placar de Números contam igual', () => {
+  const AGORA_17 = Date.parse('2026-10-17T11:15:00Z')
+  const d = (n: number) => new Date(AGORA_17 - n * 864e5).toISOString()
+  // Uma linha por caso que separava os dois números em 17/10/2026.
+  const CASOS: Array<{ nome: string; lead: Partial<CrmLead>; leu: boolean; respondeu: boolean; quisVer: boolean }> = [
+    { nome: 'só recibo', lead: { marcos: { enviado: d(3), visto: d(2) }, leitura: 'viu' }, leu: true, respondeu: false, quisVer: false },
+    { nome: 'respondeu_em sem classificação (o funil não contava)', lead: { marcos: { enviado: d(3), respondeu: d(2) }, leitura: 'pela-resposta' },
+      leu: true, respondeu: true, quisVer: false },
+    { nome: 'classificada sem respondeu_em (o placar não contava)', lead: { marcos: { enviado: d(3) }, resposta: { tipo: 'interesse', trecho: 'manda' } },
+      leu: true, respondeu: true, quisVer: true },
+    { nome: 'só o robô (o funil contava como leitura)', lead: { marcos: { enviado: d(3) }, leitura: 'pela-resposta', resposta: { tipo: 'bot', trecho: '' } },
+      leu: false, respondeu: false, quisVer: false },
+    { nome: 'Plus: respondeu anotado, sem recibo nem classificação', lead: { produto: 'plus', marcos: { enviado: d(3), respondeu: d(1) }, leitura: 'pela-resposta' },
+      leu: true, respondeu: true, quisVer: false },
+    { nome: 'fechou sem resposta registrada não é "quero ver"', lead: { etapa: 'ganho', marcos: { enviado: d(10) } }, leu: false, respondeu: false, quisVer: false },
+    { nome: 'proposta com resposta', lead: { etapa: 'proposta', marcos: { enviado: d(10), respondeu: d(9) } }, leu: true, respondeu: true, quisVer: true },
+    { nome: 'sem recibo: não sei, não "não leu"', lead: { marcos: { enviado: d(3) } }, leu: false, respondeu: false, quisVer: false },
+  ]
+  for (const c of CASOS) {
+    it(c.nome, () => {
+      const l = lead(c.nome, c.lead)
+      assert.deepEqual([leu(l), respondeuDeGente(l), quisVer(l)], [c.leu, c.respondeu, c.quisVer])
+    })
+  }
+
+  it('o mesmo conjunto dá o mesmo número na barra e no resumo, na mesma janela de 30 dias', () => {
+    const leads = [
+      ...CASOS.map(c => lead(c.nome, c.lead)),
+      // Na borda da janela: 29 entra nas duas, 31 em nenhuma.
+      lead('dia-29', { marcos: { enviado: d(29), visto: d(28) } }),
+      lead('dia-31', { marcos: { enviado: d(31), respondeu: d(30) } }),
+    ]
+    const barra = Object.fromEntries(diagnosticoDeVenda(leads, AGORA_17).degraus.map(g => [g.id, g.n]))
+    const { total } = resultados(leads, 'nicho', '30', AGORA_17)
+    assert.deepEqual(
+      { enviados: barra.enviados, leram: barra.leram, responderam: barra.responderam, interesse: barra.interesse },
+      { enviados: total.enviados, leram: total.viram, responderam: total.responderam, interesse: total.interesse },
+    )
+    assert.deepEqual([total.enviados, total.viram, total.responderam, total.interesse], [9, 6, 4, 2])
   })
 })

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  CHAVE_DA_VISTA_DO_FUNIL, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, naEtapa, ordenarLista, sinalMaisForte, textoDoProximoPasso,
-  type Guardador,
+  CHAVE_DA_VISTA_DO_FUNIL, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, naEtapa, ordenarLista, sinalMaisForte,
+  textoDosDescartados, textoDoProximoPasso, type Guardador,
 } from './operations/funil-lista.ts'
 import type { CrmLead } from './operations/types.ts'
 
@@ -10,6 +10,35 @@ const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
   id, produto: 'site', chave: id, empresa: id, nicho: '', cidade: '', etapa: 'contato', sinal: 'enviado', subEtapa: '',
   estadoNaPlanilha: 'enviado', leitura: 'desconhecida', marcos: {}, followupHoje: false, respostaNova: false, acervo: false,
   notas: 0, eventos: [], links: {}, divergencias: [], ...extra,
+})
+
+describe('contagemDaEtapa (AC-03): Quadro e Lista com o mesmo número', () => {
+  // O caso de 17/10/2026 em miniatura: 245 perdidos "de verdade" e 1.290 descartados antes do contato.
+  const perdidos = [
+    ...Array.from({ length: 245 }, (_, i) => lead(`p${i}`, { etapa: 'perdido', motivoPerda: i % 2 ? 'recusou' : 'expirou' })),
+    ...Array.from({ length: 1290 }, (_, i) => lead(`d${i}`, { etapa: 'perdido', motivoPerda: 'descartado' })),
+  ]
+  // O que a Lista mostra: o mesmo filtro de daEtapa em CrmFunil.vue.
+  const linhasDaLista = (mostrar: boolean) => (mostrar ? perdidos : perdidos.filter((l) => l.motivoPerda !== 'descartado')).length
+  const CASOS: Array<{ mostrar: boolean; mostrados: number; fora: number; texto: string }> = [
+    { mostrar: false, mostrados: 245, fora: 1290, texto: '+1.290 descartados antes do contato' },
+    { mostrar: true, mostrados: 1535, fora: 0, texto: '' },
+  ]
+  for (const c of CASOS) {
+    it(`mostrar descartados = ${c.mostrar}: ${c.mostrados}, igual às linhas da Lista`, () => {
+      const n = contagemDaEtapa(perdidos, 'perdido', c.mostrar)
+      assert.deepEqual(n, { mostrados: c.mostrados, foraDescartados: c.fora })
+      assert.equal(n.mostrados, linhasDaLista(c.mostrar))
+      assert.equal(n.mostrados + n.foraDescartados, perdidos.length, 'o total nunca some: o que sai vira aviso')
+      assert.equal(textoDosDescartados(n), c.texto)
+    })
+  }
+
+  it('só o Perdido tira descartados; um só no singular', () => {
+    assert.deepEqual(contagemDaEtapa([lead('a'), lead('b')], 'contato', false), { mostrados: 2, foraDescartados: 0 })
+    assert.equal(textoDosDescartados(contagemDaEtapa([lead('d', { etapa: 'perdido', motivoPerda: 'descartado' })], 'perdido', false)),
+      '+1 descartado antes do contato')
+  })
 })
 
 describe('juntarAbertas', () => {

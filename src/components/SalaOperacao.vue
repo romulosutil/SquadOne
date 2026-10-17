@@ -31,6 +31,10 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
                 <span class="operacao__n">{{ r.total }}</span>
                 <span class="so-leitor">{{ r.total === 1 ? 'lead' : 'leads' }}</span>
               </span>
+              <!-- AC-03: o total pelas etapas do CRM, para bater com as colunas do Funil. -->
+              <small v-if="r.etapas.length">
+                <template v-for="(e, i) in r.etapas" :key="e.etapa">{{ i ? ' · ' : '' }}{{ e.rotulo }} {{ e.leads }}</template>
+              </small>
               <small v-if="r.passos.length" class="texto-2">
                 <template v-for="(p, i) in r.passos" :key="p.passo">{{ i ? ' · ' : '' }}{{ p.nome }} {{ p.leads }}</template>
               </small>

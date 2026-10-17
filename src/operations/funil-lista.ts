@@ -54,6 +54,25 @@ export function juntarAbertas(porEtapa: Readonly<Record<CrmEtapa, readonly CrmLe
   return ORDEM_DAS_ABERTAS.flatMap((e) => porEtapa[e]).sort((a, b) => peso(a) - peso(b))
 }
 
+/**
+ * O número de uma etapa, o MESMO no Quadro, nas abas do celular e no filtro da Lista (AC-03, 17/10/2026).
+ * O Quadro contava o Perdido inteiro (1535) e a Lista só o que mostrava (245), sem dizer que tirou os
+ * 1.290 descartados antes do contato. Agora as duas contam o que mostram, pela mesma escolha de
+ * "Mostrar descartados", e `foraDescartados` diz quantos ficaram de fora para a tela avisar.
+ */
+export interface ContagemDaEtapa { mostrados: number; foraDescartados: number }
+export function contagemDaEtapa(daEtapa: readonly Pick<CrmLead, 'motivoPerda'>[], etapa: CrmEtapa, mostrarDescartados: boolean): ContagemDaEtapa {
+  const descartados = etapa === 'perdido' ? daEtapa.filter((l) => l.motivoPerda === 'descartado').length : 0
+  const foraDescartados = mostrarDescartados ? 0 : descartados
+  return { mostrados: daEtapa.length - foraDescartados, foraDescartados }
+}
+
+/** "+1.290 descartados antes do contato": o aviso ao lado do número; vazio quando nada ficou de fora. */
+export function textoDosDescartados(c: ContagemDaEtapa): string {
+  if (!c.foraDescartados) return ''
+  return `+${c.foraDescartados.toLocaleString('pt-BR')} descartado${c.foraDescartados === 1 ? '' : 's'} antes do contato`
+}
+
 /** A classe é a mesma do cartão (.crm-sinal.is-…, BP-SINAL), para a cor dizer o mesmo nas duas vistas. */
 export interface SinalDaLinha { texto: string; classe: string }
 

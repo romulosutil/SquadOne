@@ -10,6 +10,7 @@
  * Só conta o que o retrato afirma: lead sem marco de envio não entra; leitura desconhecida não é
  * "não leu" (o recibo pode estar desligado), por isso a leitura não escolhe gargalo.
  */
+import { enviadoNosUltimos, leu, quisVer, respondeuDeGente } from './resultados'
 import type { CrmLead } from './types'
 
 export interface DegrauDoFunil {
@@ -36,7 +37,6 @@ export interface DiagnosticoDeVenda {
   interessadosParados: number
 }
 
-const DIA = 86_400_000
 const REFERENCIAS: Partial<Record<DegrauDoFunil['id'], number>> = {
   leram: 0.6, responderam: 0.15, interesse: 0.3, segunda: 1, proposta: 0.4, ganho: 0.25,
 }
@@ -69,25 +69,20 @@ const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'
   }),
 }
 
-const instante = (iso?: string) => (iso ? Date.parse(iso) : NaN)
-
 export function diagnosticoDeVenda(leads: readonly CrmLead[], agora: number, dias = 30): DiagnosticoDeVenda {
-  const desde = agora - dias * DIA
-  const enviados = leads.filter((l) => {
-    const t = instante(l.marcos?.enviado)
-    return Number.isFinite(t) && t >= desde && t <= agora
-  })
-  const respondeu = (l: CrmLead) => Boolean(l.resposta && l.resposta.tipo !== 'bot')
-  const leram = enviados.filter((l) => l.leitura === 'viu' || l.leitura === 'pela-resposta' || respondeu(l))
-  const responderam = enviados.filter(respondeu)
-  const interesse = responderam.filter((l) => l.resposta?.tipo === 'interesse' || l.etapa === 'proposta' || l.etapa === 'ganho')
+  // A janela, "leram", "responderam" e "quero ver" são as mesmas regras do placar de Números
+  // (resultados.ts, AC-03): na mesma tela, a barra e o resumo davam 70/41 e 68/42.
+  const enviados = leads.filter((l) => enviadoNosUltimos(l, dias, agora))
+  const leram = enviados.filter(leu)
+  const responderam = enviados.filter(respondeuDeGente)
+  const interesse = responderam.filter(quisVer)
   const segunda = interesse.filter((l) => Boolean(l.marcos?.segundaEnviada) || l.etapa === 'proposta' || l.etapa === 'ganho' || l.sinal === 'diagnostico')
   const proposta = enviados.filter((l) => l.etapa === 'proposta' || l.etapa === 'ganho' || Boolean(l.proposta))
   const ganho = enviados.filter((l) => l.etapa === 'ganho')
 
   const crus: Array<[DegrauDoFunil['id'], string, number]> = [
     ['enviados', 'Receberam a 1ª mensagem', enviados.length],
-    ['leram', 'Leram (com recibo)', leram.length],
+    ['leram', 'Leram (recibo ou resposta)', leram.length],
     ['responderam', 'Responderam (gente, não robô)', responderam.length],
     ['interesse', 'Disseram "quero ver"', interesse.length],
     ['segunda', 'Receberam o próximo passo', segunda.length],

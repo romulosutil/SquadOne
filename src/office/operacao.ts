@@ -16,8 +16,8 @@
  * o servidor não importa este arquivo (o teste de trabalhadores confere).
  */
 import { PASSOS, painelDaJornada, type IdDoPasso, type QuemFaz } from "../operations/jornada";
-import { PRODUTOS, ROTULO_DO_PRODUTO } from "../operations/crm-formato";
-import type { CrmLead, CrmProduto, CrmVisao, DellCheck, DellStatus } from "../operations/types";
+import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO } from "../operations/crm-formato";
+import type { CrmEtapa, CrmLead, CrmProduto, CrmVisao, DellCheck, DellStatus } from "../operations/types";
 import { linkDoComoFunciona, trabalhadoresDaSala, type TrabalhadorAutomatico } from "./trabalhadores";
 
 // ------------------------------------------------------------------ que pedaço da jornada cada sala mostra
@@ -95,6 +95,12 @@ export interface RecorteLido {
   /** "Ver no Funil": /crm?ver=jornada&produto=… (sem produto quando são todas), onde está a lista. */
   href: string;
   total: number;
+  /**
+   * O mesmo `total` pelas etapas do CRM (AC-03, 17/10/2026): o Atendimento dizia "Todas as ofertas 71"
+   * e o Funil "Em contato 70", porque as conversas em andamento vão da 1ª mensagem à proposta. Com
+   * "Em contato 70 · Proposta 1" ao lado, o número bate com a coluna do Funil. Só as etapas com lead.
+   */
+  etapas: Array<{ etapa: CrmEtapa; rotulo: string; leads: number }>;
   /** Os passos do recorte que têm lead, na ordem da jornada. */
   passos: ContagemDoPasso[];
   /** Fechou e Perdido, só no recorte sem `passos` (a jornada inteira da oferta). */
@@ -117,11 +123,15 @@ export function lerRecorte(recorte: RecorteDaSala, leads: readonly CrmLead[]): R
   const abertos = (id: IdDoPasso) => (recorte.passos ? recorte.passos.includes(id) : id !== "ganho" && id !== "perdido");
   const doRecorte = painel.passos.filter((p) => abertos(p.passo.id));
   const contar = (id: IdDoPasso) => painel.passos.find((p) => p.passo.id === id)?.leads.length ?? 0;
+  // Pela etapa do próprio lead, não pelo passo: é a etapa que o Funil conta.
+  const porEtapa = new Map<CrmEtapa, number>();
+  for (const p of doRecorte) for (const { lead } of p.leads) porEtapa.set(lead.etapa, (porEtapa.get(lead.etapa) ?? 0) + 1);
   return {
     produto: recorte.produto,
     rotulo: recorte.produto ? ROTULO_DO_PRODUTO[recorte.produto] : "Todas as ofertas",
     href: hrefDaJornada(recorte.produto),
     total: doRecorte.reduce((n, p) => n + p.leads.length, 0),
+    etapas: ETAPAS.filter((e) => porEtapa.has(e)).map((e) => ({ etapa: e, rotulo: ROTULO_DA_ETAPA[e], leads: porEtapa.get(e)! })),
     passos: doRecorte
       .filter((p) => p.leads.length)
       .map((p) => ({ passo: p.passo.id, nome: p.passo.nome, quem: p.passo.quem, leads: p.leads.length, parados: p.parados })),

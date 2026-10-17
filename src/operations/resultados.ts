@@ -6,8 +6,8 @@
  * lugar com o número por nicho, e nada mostrava a variação nem a versão.
  *
  * Honestidade dos números (RULES 2 e 15):
- * - "viu" só conta quem deixa a confirmação de leitura ligada (ou respondeu);
- *   o resto é "não sei", nunca "não viu";
+ * - "leram" só conta quem deixa a confirmação de leitura ligada (ou respondeu);
+ *   o resto é "não sei", nunca "não leu";
  * - "respondeu" é gente: a saudação automática do WhatsApp Business não marca
  *   `respondeu_em` (regra dos 5 min e classificação "bot");
  * - recusa só conta entre os enviados: o acervo de `_recusados/` de 25/09 não
@@ -30,6 +30,7 @@ export const AMOSTRA_MINIMA = 10
 export interface LinhaDeResultado {
   chave: string
   enviados: number
+  /** Leram (`leu`): o nome do campo ficou do tempo do "viu"; na tela é "leram", como no funil. */
   viram: number
   responderam: number
   interesse: number
@@ -78,9 +79,40 @@ export function faixaDoHorario(ms: number): (typeof FAIXAS_DO_HORARIO)[number] {
 }
 
 export function enviadoNoPeriodo(lead: CrmLead, periodo: Periodo, agora: number): boolean {
+  return periodo === 'tudo' ? Number.isFinite(Date.parse(lead.marcos.enviado ?? '')) : enviadoNosUltimos(lead, Number(periodo), agora)
+}
+
+/**
+ * A janela de "últimos N dias" pela data do envio, a mesma do placar e do "Por que não está vendendo"
+ * (AC-03, 17/10/2026). Sem limite de cima de propósito: o relógio da aba pode estar segundos atrás do
+ * servidor que gravou o envio, e um envio "no futuro" sumiria de uma tela e não da outra.
+ */
+export function enviadoNosUltimos(lead: Pick<CrmLead, 'marcos'>, dias: number, agora: number): boolean {
   const t = Date.parse(lead.marcos.enviado ?? '')
-  if (!Number.isFinite(t)) return false
-  return periodo === 'tudo' || agora - t <= Number(periodo) * DIA_MS
+  return Number.isFinite(t) && agora - t <= dias * DIA_MS
+}
+
+// ---------------------------------------------------------------- uma regra por métrica (AC-03, 17/10/2026)
+// Em Números, na mesma tela, a barra dizia 41 responderam e 70 leram e o placar logo abaixo, 42 e 68 viram:
+// o placar contava `respondeu_em` e o funil, a resposta classificada; o placar lia o recibo e o funil, a
+// `leitura` do servidor (que conta a resposta do robô como leitura). As duas telas leem daqui agora.
+
+/**
+ * Respondeu de gente: `respondeu_em` (o Plus só tem este) ou a resposta classificada pelo n8n (às vezes
+ * chega antes da coluna), nunca a saudação automática (classificação "bot").
+ */
+export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'>): boolean {
+  return (Boolean(lead.marcos.respondeu) || Boolean(lead.resposta)) && lead.resposta?.tipo !== 'bot'
+}
+
+/** Leu: o recibo de leitura ou a resposta de gente (quem respondeu leu). Sem recibo é "não sei", nunca "não leu". */
+export function leu(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'leitura'>): boolean {
+  return Boolean(lead.marcos.visto) || lead.leitura === 'viu' || respondeuDeGente(lead)
+}
+
+/** Disse "quero ver": a resposta de gente classificada como interesse, ou já na proposta/fechado. */
+export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'>): boolean {
+  return respondeuDeGente(lead) && (lead.resposta?.tipo === 'interesse' || lead.etapa === 'proposta' || lead.etapa === 'ganho')
 }
 
 /** O rótulo do grupo do lead em cada critério. */
@@ -104,10 +136,9 @@ function contar(chave: string, leads: CrmLead[]): LinhaDeResultado {
   const linha: LinhaDeResultado = { chave, enviados: 0, viram: 0, responderam: 0, interesse: 0, recusaram: 0, fecharam: 0 }
   for (const l of leads) {
     linha.enviados++
-    const respondeu = Boolean(l.marcos.respondeu) && l.resposta?.tipo !== 'bot'
-    if (l.marcos.visto || respondeu) linha.viram++
-    if (respondeu) linha.responderam++
-    if (l.resposta?.tipo === 'interesse' || l.etapa === 'proposta' || l.etapa === 'ganho') linha.interesse++
+    if (leu(l)) linha.viram++
+    if (respondeuDeGente(l)) linha.responderam++
+    if (quisVer(l)) linha.interesse++
     if (l.motivoPerda === 'recusou' || l.motivoPerda === 'sem-interesse') linha.recusaram++
     if (l.etapa === 'ganho') linha.fecharam++
   }
@@ -134,22 +165,34 @@ export function resultados(leads: CrmLead[], criterio: Criterio, periodo: Period
 }
 
 /**
+ * A taxa de resposta dentro e fora do expediente: o conjunto é decidido AQUI, não por quem chama
+ * (AC-03, 17/10/2026). A Próxima venda passava todos os leads e a Triagem só os do Site, e a mesma
+ * frase dizia 18 % numa e 20 % na outra. Só o Site: é a 1ª mensagem com a hora do envio gravada pelo
+ * observador, o dado em que a trava foi medida (0 de 29 depois das 18h); o convite do PRUMO e o
+ * toque do Plus têm outra mensagem e outro público, e misturá-los mudaria a taxa sem mudar o horário.
+ */
+export function taxaPorExpediente(leads: readonly CrmLead[], agora: number): { dentro: LinhaDeResultado; fora: LinhaDeResultado } {
+  const enviados = leads.filter(l => l.produto === 'site' && enviadoNoPeriodo(l, 'tudo', agora))
+  const noExpediente = (l: CrmLead) => noExpedienteDeVenda(Date.parse(l.marcos.enviado ?? ''))
+  return { dentro: contar('dentro', enviados.filter(noExpediente)), fora: contar('fora', enviados.filter(l => !noExpediente(l))) }
+}
+
+/**
  * Aviso da fila de envio fora do expediente, com a taxa de resposta medida dentro e fora dele.
  * `null` no horário comercial. Com pouco envio de um dos lados, o aviso não cita número
  * (1 de 3 não é taxa).
  */
-export function avisoDeHorario(leads: CrmLead[], agora: number): string | null {
+export function avisoDeHorario(leads: readonly CrmLead[], agora: number): string | null {
   // O expediente de venda (trava-de-horario.ts), o mesmo da Próxima venda e do Telegram (OT-02):
   // a janela que trava é a mesma que a taxa mede.
   if (noExpedienteDeVenda(agora)) return null
-  const enviados = leads.filter(l => enviadoNoPeriodo(l, 'tudo', agora))
-  const dentro = contar('dentro', enviados.filter(l => noExpedienteDeVenda(Date.parse(l.marcos.enviado ?? ''))))
-  const fora = contar('fora', enviados.filter(l => !noExpedienteDeVenda(Date.parse(l.marcos.enviado ?? ''))))
+  const { dentro, fora } = taxaPorExpediente(leads, agora)
   const expediente = TEXTO_DO_EXPEDIENTE
   if (amostraPequena(dentro) || amostraPequena(fora)) {
     return `Agora é fora do expediente de quem recebe (${expediente}): mensagem de número desconhecido nessa hora costuma ficar sem resposta.`
   }
-  return `Agora é fora do expediente de quem recebe (${expediente}). Fora dele, ${fora.enviados} envios tiveram `
+  // "do Site": a frase diz de que envios é a taxa, para ninguém compará-la com o placar de todas as ofertas.
+  return `Agora é fora do expediente de quem recebe (${expediente}). Fora dele, ${fora.enviados} envios do Site tiveram `
     + `${fora.responderam === 1 ? '1 resposta' : `${fora.responderam} respostas`} (${porcento(fora.responderam, fora.enviados)}); `
     + `dentro, ${porcento(dentro.responderam, dentro.enviados)} responderam.`
 }
@@ -163,11 +206,11 @@ export const amostraPequena = (linha: LinhaDeResultado) => linha.enviados < AMOS
 
 const flexao = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 
-/** "3 responderam (25%) · 2 viram · 1 quis ver · 0 recusaram · 0 fecharam". */
+/** "3 responderam (25%) · 2 leram · 1 quis ver · 0 recusaram · 0 fecharam". "Leram", o rótulo do funil (AC-03). */
 export function resumoDaLinha(l: LinhaDeResultado): string {
   return [
     `${flexao(l.responderam, 'respondeu', 'responderam')} (${porcento(l.responderam, l.enviados)})`,
-    flexao(l.viram, 'viu', 'viram'),
+    flexao(l.viram, 'leu', 'leram'),
     `${flexao(l.interesse, 'quis', 'quiseram')} ver`,
     flexao(l.recusaram, 'recusou', 'recusaram'),
     flexao(l.fecharam, 'fechou', 'fecharam'),

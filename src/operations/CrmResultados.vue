@@ -77,7 +77,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
         <button v-for="p in PERIODOS" :key="p.id" type="button" :aria-pressed="periodo === p.id" @click="periodo = p.id">{{ p.rotulo }}</button>
       </div>
       <p class="crm-nota-pequena">
-        Só quem foi <strong>enviado</strong> no período. "Viu" depende da confirmação de leitura ligada; "respondeu" é gente
+        Só quem foi <strong>enviado</strong> no período. "Leram" é quem deixou o recibo ligado ou respondeu; "respondeu" é gente
         (a saudação automática não conta). Menos de {{ AMOSTRA_MINIMA }} enviados é amostra pequena.
       </p>
     </div>

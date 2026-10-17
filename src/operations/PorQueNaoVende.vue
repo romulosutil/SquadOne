@@ -40,7 +40,7 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
         <small class="texto-2 nao-vende__taxa">{{ pct(g.taxa) }}<template v-if="g.referencia !== undefined && g.taxa !== undefined"> (esperado ~{{ pct(g.referencia) }})</template></small>
       </li>
     </ol>
-    <p class="texto-2 texto-pequeno">Últimos {{ d.dias }} dias, pelo retrato das planilhas. "Leram" só conta quem tem recibo; o "esperado" é referência de prospecção por mensagem, não meta.</p>
+    <p class="texto-2 texto-pequeno">Últimos {{ d.dias }} dias, pelo retrato das planilhas. "Leram" é quem deixou o recibo ou respondeu (sem recibo é "não sei"), com as mesmas regras do placar abaixo; o "esperado" é referência de prospecção por mensagem, não meta.</p>
     </template>
   </section>
 </template>

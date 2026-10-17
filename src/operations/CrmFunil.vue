@@ -5,7 +5,7 @@ import type { EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import {
-  SENTIDO_INICIAL, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDoProximoPasso,
+  SENTIDO_INICIAL, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDosDescartados, textoDoProximoPasso,
   type FiltroDeEtapa, type OrdemDaLista, type Sentido, type VistaDoFunil,
 } from './funil-lista'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
@@ -104,6 +104,8 @@ const porEtapa = computed(() => {
   return grupos
 })
 const descartados = computed(() => porEtapa.value.perdido.filter(l => l.motivoPerda === 'descartado').length)
+/** O número da etapa no Quadro, nas abas e na Lista: um só, pela mesma escolha de descartados (AC-03). */
+const contagem = (etapa: CrmEtapa) => contagemDaEtapa(porEtapa.value[etapa], etapa, mostrarDescartados.value)
 /** "Recusou 90 · Sem resposta 12 · Descartado 750": só os motivos que têm alguém. */
 const perdasDaColuna = computed(() => (Object.keys(ROTULO_DA_PERDA) as Array<keyof typeof ROTULO_DA_PERDA>)
   .map(m => [ROTULO_DA_PERDA[m], porEtapa.value.perdido.filter(l => l.motivoPerda === m).length] as const)
@@ -198,7 +200,8 @@ const artefatos = (l: CrmLead) => {
           @click="etapaAtiva = etapa"
           @keydown="teclarNaAba($event, i)"
         >
-          {{ ROTULO_DA_ETAPA[etapa] }} <strong>{{ porEtapa[etapa].length }}</strong>
+          {{ ROTULO_DA_ETAPA[etapa] }} <strong>{{ contagem(etapa).mostrados }}</strong>
+          <span v-if="contagem(etapa).foraDescartados" class="so-leitor">, {{ textoDosDescartados(contagem(etapa)) }}</span>
         </button>
       </div>
     </template>
@@ -212,7 +215,8 @@ const artefatos = (l: CrmLead) => {
       <h2 id="crm-lista-titulo" class="so-leitor">Lista do funil</h2>
       <div class="escolhas" role="group" aria-label="Etapa">
         <button v-for="f in FILTROS_DE_ETAPA" :key="f" type="button" :aria-pressed="filtroDeEtapa === f" @click="filtroDeEtapa = f">
-          {{ rotuloDoFiltro(f) }} <span>{{ daEtapa(f).length }}</span>
+          {{ rotuloDoFiltro(f) }} <span>{{ f === 'abertas' ? abertas.length : contagem(f).mostrados }}</span>
+          <small v-if="f !== 'abertas' && contagem(f).foraDescartados"> · {{ textoDosDescartados(contagem(f)) }}</small>
         </button>
       </div>
       <p v-if="filtroDeEtapa === 'contato' && porEtapa.contato.length" class="crm-coluna__nota">
@@ -295,7 +299,8 @@ const artefatos = (l: CrmLead) => {
       >
         <header class="crm-coluna__cabeca">
           <h2 :id="`crm-coluna-titulo-${etapa}`">{{ ROTULO_DA_ETAPA[etapa] }}</h2>
-          <strong>{{ porEtapa[etapa].length }}</strong>
+          <strong>{{ contagem(etapa).mostrados }}</strong>
+          <small v-if="contagem(etapa).foraDescartados">{{ textoDosDescartados(contagem(etapa)) }}</small>
           <small>{{ DICA_DA_ETAPA[etapa] }}</small>
         </header>
 

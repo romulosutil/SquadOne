@@ -78,7 +78,7 @@ describe("operação das salas: o recorte lido", () => {
 
   it("só a contagem: a lista dos leads mora no Funil (OT-07), a sala não carrega lead nenhum", () => {
     const r = lerRecorte({ produto: "site" }, leads);
-    assert.deepEqual(Object.keys(r).sort(), ["comVoce", "fechados", "href", "parados", "passos", "produto", "rotulo", "total"]);
+    assert.deepEqual(Object.keys(r).sort(), ["comVoce", "etapas", "fechados", "href", "parados", "passos", "produto", "rotulo", "total"]);
     assert.ok(!JSON.stringify(r).includes("Empresa"), "nenhum nome de lead na sala");
   });
 
@@ -91,6 +91,25 @@ describe("operação das salas: o recorte lido", () => {
     // O site há 3 dias em "Respondeu" e a clínica há 5 em "Conversa".
     assert.equal(r.parados, 2);
     assert.deepEqual(r.passos.filter((p) => p.parados).map((p) => [p.passo, p.parados]), [["resposta", 1], ["conversa", 1]]);
+  });
+
+  it("AC-03: o total do Atendimento, pelas etapas, bate com as colunas do Funil (Em contato + Proposta)", () => {
+    // O caso de 17/10/2026: "Todas as ofertas 71" e o Funil "Em contato 70"; a diferença era a proposta.
+    const comProposta = [...leads, lead({ etapa: "proposta", sinal: "proposta", produto: "prumo" } as Partial<CrmLead>)];
+    const r = lerRecorte(JORNADA_DAS_SALAS["prumo--geral"].recortes[0], comProposta);
+    const colunaDoFunil = (etapa: string) => comProposta.filter((l) => l.etapa === etapa).length;
+    assert.deepEqual(r.etapas, [
+      { etapa: "contato", rotulo: "Em contato", leads: colunaDoFunil("contato") },
+      { etapa: "proposta", rotulo: "Proposta", leads: colunaDoFunil("proposta") },
+    ]);
+    assert.equal(r.total, colunaDoFunil("contato") + colunaDoFunil("proposta"));
+    assert.equal(r.etapas.reduce((n, e) => n + e.leads, 0), r.total, "as etapas somam o total");
+  });
+
+  it("AC-03: a oferta inteira, pelas etapas abertas, soma o total", () => {
+    const r = lerRecorte({ produto: "site" }, leads);
+    assert.deepEqual(r.etapas.map((e) => [e.etapa, e.leads]), [["novo", 3], ["contato", 3]]);
+    assert.equal(r.etapas.reduce((n, e) => n + e.leads, 0), r.total);
   });
 
   it("o estoque da Prospecção por oferta", () => {
