@@ -28,8 +28,10 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
   proposta_desfeita | sem_contato | sem_contato_desfeito | segunda_enviada |
   followup_enviado (14/10/2026: o toque em "Mandar o link"/"Mandar o follow-up"
   na Central anota o envio) | plus_enviado | plus_respondeu (15/10/2026: o filtro
-  Plus, produto "plus", não tem planilha: o estado dele sai só destas linhas),
-  responde {ok} e refaz o retrato na hora. Nada vai
+  Plus, produto "plus", não tem planilha: o estado dele sai só destas linhas) |
+  recusou | recusou_desfeito (17/10/2026, OT-06 do blueprint: o desfecho que a
+  conversa sugere e o Rômulo confirma na Central; texto e data vazios, como
+  sem_contato), responde {ok} e refaz o retrato na hora. Nada vai
   para lead nenhum.
 
 Segredo: ~/.config/claude-ops/crm-segredo (600), nasce aqui e nunca é impresso;
@@ -147,7 +149,7 @@ VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confer
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
-  'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu'];
+  'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu', 'recusou', 'recusou_desfeito'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
 if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(b.produto)) return recusa('Produto inválido.');
 const id = txt(b.id, 200);
@@ -441,6 +443,10 @@ def testar(erro, auth):
         codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro",
                              {"produto": "iris", "id": "teste-iris-1", "empresa": "Clínica teste", "tipo": "nota", "texto": "ok"}, chave)
         conferir(f"registro do Iris -> {codigo} {corpo[:80]}", codigo == 200)
+        for tipo, produto in (("recusou", "plus"), ("recusou_desfeito", "prumo")):  # OT-06, 17/10/2026
+            codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro",
+                                 {"produto": produto, "id": "TESTE-SITE-1", "empresa": "Loja teste 1", "tipo": tipo}, chave)
+            conferir(f"registro {tipo} -> {codigo} {corpo[:80]}", codigo == 200 and json.loads(corpo).get("ok") is True)
         codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro", {"produto": "site", "id": "TESTE-SITE-1", "tipo": "apagar"}, chave)
         conferir(f"registro inválido -> {codigo} {corpo[:80]}", codigo == 400)
         codigo, _ = post(f"{LOCAL}/zz-teste-crm-registro", {"produto": "site", "id": "TESTE-SITE-1", "tipo": "nota", "texto": "x"})
