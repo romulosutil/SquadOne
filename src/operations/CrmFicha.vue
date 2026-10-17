@@ -10,8 +10,10 @@ import { colinhaDoLead } from './colinha'
 import { nomeDaOferta, ofertaDoLead, proximoDaJornada } from './jornada'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataHora, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaSubEtapa, textoDoEvento } from './crm-formato'
-import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
-import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
+import type { EstadoDoRitmo } from './trava-de-ritmo'
+import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
+import RecadoDeTravas from './RecadoDeTravas.vue'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
@@ -215,6 +217,14 @@ const primarioTravado = computed(() => {
 const temPrimeiroContato = computed(() => linksDePrimeiroContato(props.lead).length > 0)
 const segurado = computed(() => props.ritmo.motivo !== null && temPrimeiroContato.value)
 const travado = computed(() => !segurado.value && envioTravado(props.aviso, props.liberados, props.lead.id) && temPrimeiroContato.value)
+/**
+ * As duas travas num recado só, com o próximo passo (recado-de-travas.ts, 17/10/2026): ao lado do
+ * primário travado, ou no lugar dos dois avisos que ficavam empilhados na lista. `aviso` presente =
+ * fora do expediente (é o avisoDeHorario do CrmPanel, com a taxa medida).
+ */
+const recado = computed(() => recadoDasTravas({
+  agora: Date.now(), noExpediente: !props.aviso, liberado: props.liberados.has(props.lead.id), ritmo: props.ritmo, contexto: 'ficha', taxa: props.aviso,
+}))
 
 // Um primário só: a primeira ação do passo; sem nenhuma, com o lead aberto, a conversa no WhatsApp.
 // As outras do passo (o "Gerar o demo" ao lado da 2ª mensagem) ficam ao lado, como secundárias.
@@ -259,7 +269,7 @@ const avisoDoPrazo = computed(() => {
   if (d === undefined || props.lead.etapa !== 'contato' || /Perdido/.test(proximo.value.quando ?? '')) return ''
   return `Vai para Perdido ${d <= 1 ? 'amanhã' : `em ${d} dias`} se ele não escrever. Salvar um próximo passo segura o lead.`
 })
-const temAvisos = computed(() => travado.value || segurado.value || Boolean(props.lead.plus?.fixo) || Boolean(avisoDoPrazo.value)
+const temAvisos = computed(() => Boolean(props.lead.plus?.fixo) || Boolean(avisoDoPrazo.value)
   || saiuPeloPrazo.value || props.lead.divergencias.length > 0 || Boolean(props.lead.demoPedidoEm) || Boolean(props.lead.demoApagadoEm) || !disponivel.value)
 
 // ------------------------------------------------------------ editar o próximo passo ali mesmo
@@ -522,12 +532,14 @@ function irParaAnotar() {
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
     <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
-      <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, com o motivo curto ao lado; o
-           "Liberar" aparece só quando o horário é o que segura (o ritmo não se libera). -->
+      <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, e embaixo o recado único das
+           travas diz quando volta; o "Liberar" é um link nele, só quando o horário é o que segura. -->
       <template v-if="primarioTravado">
         <button class="botao botao--primario" type="button" disabled aria-describedby="crm-ficha-motivo">{{ primarioTravado.rotulo }}</button>
-        <button v-if="primarioTravado.pedeLiberar" type="button" class="botao" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-        <p id="crm-ficha-motivo" class="crm-muted crm-ficha__motivo">{{ primarioTravado.motivo }}.</p>
+        <RecadoDeTravas
+          id="crm-ficha-motivo" class="crm-ficha__motivo" :recado="recado" sem-detalhe
+          :rotulo-do-liberar="primarioTravado.pedeLiberar ? rotuloDoLiberar('ficha') : undefined" @liberar="emit('liberar', lead.id)"
+        />
       </template>
       <a v-else class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
       <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
@@ -540,14 +552,14 @@ function irParaAnotar() {
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}. Marque à mão em Desfecho, “Proposta enviada”.</p>
       </template>
 
+      <!-- As travas do primeiro contato num recado só (horário e ritmo), com o quando; com o primário
+           travado ele já está ao lado do botão e não se repete aqui. -->
+      <RecadoDeTravas
+        v-if="(travado || segurado) && !primarioTravado" :recado="recado"
+        :rotulo-do-liberar="rotuloDoLiberar('ficha')" @liberar="emit('liberar', lead.id)"
+      />
       <!-- Os avisos num lugar só, um por linha, com a palavra antes da cor. -->
       <ul v-if="temAvisos" class="crm-ficha__avisos">
-        <!-- Com o primário travado, o "Liberar" já está ao lado dele: aqui fica só o porquê (a taxa medida). -->
-        <li v-if="travado" class="is-atencao">
-          {{ aviso }}
-          <button v-if="!primarioTravado?.pedeLiberar" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-        </li>
-        <li v-if="segurado" class="is-atencao" role="status">{{ textoDoRitmo(ritmo) }}</li>
         <li v-if="lead.plus?.fixo" class="is-atencao">Telefone fixo: confira se tem WhatsApp antes de enviar.</li>
         <li v-if="avisoDoPrazo">{{ avisoDoPrazo }}</li>
         <li v-else-if="saiuPeloPrazo">

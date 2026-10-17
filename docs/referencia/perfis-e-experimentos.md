@@ -185,6 +185,26 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 > `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor-historico.jsonl` (600, poda em 180 dias); `GET /api/operations/crm/vendedor` devolve
 > o resumo dos 30 dias, e Números abre com "Depois do sim" (`velocidade.ts`, PURO: do "quero ver" ao link, do link à
 > proposta, mediana, quantos em até 2 h e quem espera agora).
+>
+> **Hierarquia de Vendas (17/10/2026).** Pedido do Rômulo: "o UI de Vendas está complicado, sem hierarquia clara, não sei o
+> que fazer e em que ordem". Uma ação principal por tela, na ordem Fazer → Triar → Entender:
+> - **Abas** (`vendas-abas.ts`, PURO e testado): A fazer, Triagem e Entender, com Funil, Números e Resultados num segmentado e o
+>   botão "Roteiro de venda" (para `/mais?abrir=roteiro`). Os endereços de antes seguem valendo (`?ver=funil|numeros|resultados|
+>   triagem`, `?ver=jornada` no Funil com `?passo=`, `?ver=roteiro|colinha` no Mais, `?lead=`). O topo é uma linha de saúde do
+>   retrato com o Atualizar; os avisos do retrato ficam em "Avisos (n)", aberto sozinho só quando o retrato falhou; a dica de cada
+>   aba foi para o `title`; as ofertas num "Filtros" fechado fora da A fazer.
+> - **Próxima venda**: um primário (o que a ação pede; depois do toque no WhatsApp, "Enviei, próxima" no lugar dele) e o "Pular";
+>   "Abrir a Ficha", "Vídeo enviado" e reabrir o WhatsApp em "Mais ações" (o rótulo avisa "falta o vídeo"). A conversa, a leitura
+>   do copiloto, o "Como", o vídeo e a mensagem pronta numa dobra "Por quê e como", fechada, aberta sozinha quando não há texto
+>   pronto. O filtro de nicho numa dobra no fim. "Depois: …" continua à vista.
+> - **Travas** (`recado-de-travas.ts`, PURO, sobre as funções de `trava-de-horario.ts` e `trava-de-ritmo.ts`, que não mudaram):
+>   um recado só, com o próximo passo ("Fora do expediente: volta segunda às 8h", "Libera às 14:20 (ritmo)", "Teto de hoje (10 de
+>   10): volta segunda às 8h", "Pode enviar agora") e o que continua livre. Na Próxima venda, na Triagem e na Ficha
+>   (`RecadoDeTravas.vue`, BP-TRAVAS); o "Liberar" é link nele, só quando o horário segura.
+> - **Triagem**: abre num botão só, "Triar (N)"; o Convidar da primeira linha que pode é o primário, Dispensar secundário; o
+>   "Liberar" é um por lote (lead a lead no servidor, `liberados.ts`, como sempre).
+> - **Números**: os três A/B (vídeo, 1ª mensagem, recibo) numa dobra "Experimentos" fechada; o placar do período voltou a ser
+>   Resultados (`CrmResultados.vue` com `parte`).
 
 Pedido do Rômulo: "podia ser mais proativo, um aviso 'Envie mensagem para xpto' com tudo já organizado, só pra eu
 revisar", "a Hoje não está entregando valor" e "automatize o envio da primeira mensagem, de segunda a sexta, das 8h
@@ -196,8 +216,8 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   trava de ritmo e o expediente livres, no máximo um na fila). Cada ação traz o porquê (o `detalhe` da Hoje do CRM),
   a tática do momento e a mensagem pronta (o `?text=` do wa.me, ou a primeira mensagem do Balcão).
 - **Na tela:** `ProximaVenda.vue` é o primeiro cartão da Hoje (Dell) e da aba "A fazer" do CRM. O toque no link anota
-  como no CRM (2ª mensagem, follow-up, Plus) e conta o primeiro contato na trava; "Enviei, próxima" e "Pular" só mexem
-  na tela (localStorage do dia).
+  como no CRM (2ª mensagem, follow-up, Plus) e conta o primeiro contato na trava; "Enviei, próxima" e "Pular" vão ao
+  servidor (desde OT-01; o localStorage do dia é a reserva). Desde 17/10/2026 o "Enviei, próxima" vira o primário depois do toque.
 - **No Telegram** (`server/vendedor.ts`): `SQUADONE_VENDEDOR=true` no `operations` com o bot ligado. A cada minuto, de seg
   a sex das 08:00 às 17:30 (`EXPEDIENTE_DE_VENDA`), manda a próxima ação com "Abrir no WhatsApp com a mensagem" (botão de
   URL), "✓ Enviei" e "Pular" (callback `v:<token>:e|p`) e, com `SQUADONE_ORIGEM_CENTRAL`

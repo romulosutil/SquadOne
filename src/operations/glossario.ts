@@ -65,7 +65,9 @@ export const GLOSSARIO: readonly NomeDaUi[] = [
   },
   {
     certo: 'A fazer',
-    nota: 'A aba de Vendas com a Próxima venda. "Hoje" é a tela inicial, onde o mesmo cartão também aparece.',
+    // 17/10/2026 (hierarquia de Vendas): as abas são três, na ordem do trabalho, e mantêm os nomes de
+    // antes; "Entender" é o mesmo nome da seção do Mais, porque é a mesma intenção (consulta, não tarefa).
+    nota: 'A aba de Vendas com a Próxima venda (Fazer); depois vêm Triagem (Triar) e Entender (Funil, Números e Resultados). "Hoje" é a tela inicial, onde o mesmo cartão também aparece.',
     proibidos: [/aparece na Hoje/, /Nada esperando você hoje/],
   },
   {
