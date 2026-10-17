@@ -117,14 +117,28 @@ primário/secundário/terciário; "Card Grid": não fazer todo painel parecer ig
 Auditoria de 15/10/2026 (escala de tamanhos, onde vai borda de 3 px e sombra,
 tabela no desktop): `docs/auditoria-de-design-2026-10-15.md`.
 
-Modo escuro: `prefers-color-scheme: dark`, a não ser que `<html data-theme="light">`;
-`data-theme="dark"` força. Só os semânticos mudam; a paleta fica.
+Modo escuro (17/10/2026): **o padrão é claro**. O app abria escuro sozinho quando o sistema estava
+escuro, e o dono achou que atrapalhava; agora o escuro é escolha, em Mais › Aparência (e no
+`/design-system`): Claro | Escuro | Automático (`src/casca/SeletorDeTema.vue`, estado único em
+`temaVivo.ts`, regra PURA em `tema.ts`, guardada no `localStorage` em `squadone:tema`). Claro põe
+`<html data-theme="light">`, Escuro põe `data-theme="dark"` e Automático tira o atributo, e aí vale
+o `prefers-color-scheme`. Um `<script>` curto no `index.html` aplica a escolha antes do primeiro
+quadro (sem ele o fundo piscava escuro); o teste confere que ele dá o mesmo que `tema.ts`. Só os
+semânticos mudam; a paleta fica. Os dois blocos escuros do `tokens.css` (media query e
+`[data-theme="dark"]`) são iguais, e o teste confere.
+
+Erro no escuro (17/10/2026): `--erro-fundo` é um cinza-avermelhado (`#362a2d`) e `--negativo` um rosado
+calmo (`#ef9f97`); o vinho saturado de antes gritava em todo aviso. Como o fundo ficou perto da
+superfície 2, quem diz "erro" é a faixa ou a borda no `--negativo` (`.recado--erro`, `.zona--erro`,
+`.selo--erro`, o gargalo do "Por que não está vendendo"). Diagnóstico para ler (o gargalo) leva fundo
+neutro com faixa e título no `--negativo`, não o bloco inteiro em `--erro-fundo`.
 
 ## Design system (/design-system) e a regra do teste
 
 Desde 16/10/2026 o design system é uma página do próprio app: `/design-system` (Mais ou Ctrl+K).
 Ela lê este `tokens.css` cru, mostra cada token com amostra, valor claro e escuro e o comentário
-de cima; mede o contraste dos pares que as telas usam no tema da hora; e traz cada componente vivo
+de cima; mede o contraste dos pares que as telas usam no tema da hora (e o teste calcula os mesmos
+pares nos dois temas, do `tokens.css` cru, desde 17/10/2026); e traz cada componente vivo
 com um código fixo (`BP-BOTAO`, `BP-ESCOLHAS`, `BP-FICHA`...). Mudar um valor ali muda o app
 inteiro daquela aba até recarregar, e "Copiar pedido" devolve o bloco de CSS e o porquê, para colar
 na conversa. Para pedir mudança visual, cite o código `BP-` e, se for de token, cole o pedido.

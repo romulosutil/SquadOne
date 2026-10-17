@@ -9,6 +9,11 @@
     <meta property="og:description" content="Agendador pessoal e central de operações do SquadOne." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!-- Tema antes do primeiro quadro (17/10/2026): sem isto o fundo piscava escuro no sistema escuro
+         até o main.ts rodar. A regra é de src/casca/tema.ts (padrão claro); o teste confere que bate. -->
+    <script>
+      try { var t = localStorage.getItem('squadone:tema'); if (t !== 'automatico') document.documentElement.dataset.theme = t === 'escuro' ? 'dark' : 'light' } catch (e) { document.documentElement.dataset.theme = 'light' }
+    </script>
   </head>
   <body>
     <div id="app"></div>

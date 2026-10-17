@@ -212,7 +212,12 @@ palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada 
 tela precisa de `popstate` (`/crm`) ou de remontar (Mais)),
 `src/casca/mais.test.ts` (17/10/2026: qual seção o endereço do Mais abre, `?abrir=manutencao|roteiro` e `?fluxo=`; as Ferramentas
 sem Syncthing, CRM nem Agentes, e a reserva fria neutra) e
-`src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; o pedido de mudança;
+`src/casca/tema.test.ts` (17/10/2026: o tema claro/escuro; sem escolha guardada é claro, valor inválido ou storage
+que lança caem no claro, automático tira o `data-theme`; e o `<script>` do `index.html`, rodado num `vm`, dá o mesmo
+atributo que `tema.ts` para cada valor guardado),
+`src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; desde 17/10/2026 cada par de
+`PARES_DE_CONTRASTE` é CALCULADO nos dois temas a partir do `tokens.css` (var() resolvido em cadeia), com o
+`--negativo` sobre o `--erro-fundo`, e os dois blocos escuros (media query e `data-theme`) têm de ser iguais; o pedido de mudança;
 códigos `BP-` únicos; e as regras de homogeneidade sobre todo `.css` e `<style>` de `src/`: nada de rem/px
 solto em padding, margin, gap e font-size, nem peso numérico, e todo `var(--x)` definido. Exceção só com
 motivo, em `EXCECOES` no próprio teste: hoje só o `GameMap.vue`, pela geometria do mapa),
