@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { linkExterno, quantidadeDaFila, seloDoPasso } from './alertas'
-import { DELL_LIGADO, FLUXOS, O_TEMPO_TODO, ROTULO_DO_ONDE, UM_DIA, fluxoDoEndereco } from './fluxos'
+import { DELL_LIGADO, FLUXOS, O_TEMPO_TODO, ROTULO_DO_ONDE, UM_DIA, fluxoDoEndereco, linkDoBlueprint } from './fluxos'
 import type { PassoDoFluxo } from './fluxos'
 import type { DellCheck } from './types'
 
@@ -115,6 +115,14 @@ function teclas(evento: KeyboardEvent) {
                 <span class="como__marca" :class="passo.comVoce ? 'is-com-voce' : 'is-auto'">{{ passo.comVoce ? 'Com você' : 'Automático' }}</span>
                 <span v-if="selo(passo)" class="como__marca" :class="`is-${selo(passo)?.tom}`">{{ selo(passo)?.texto }}</span>
                 <span v-if="esperando(passo)" class="como__marca is-fila">{{ esperando(passo) }} esperando</span>
+                <!-- O cartão deste passo no service blueprint (OT-03): a descrição inteira da esteira mora lá. -->
+                <a
+                  v-if="passo.blueprint"
+                  class="como__marca como__blueprint"
+                  :href="linkDoBlueprint(passo.blueprint)"
+                  target="_blank"
+                  rel="noopener"
+                >Blueprint {{ passo.blueprint }}<span class="so-leitor"> (abre o service blueprint em outra aba)</span></a>
               </p>
               <a v-if="passo.link" class="como__link" :href="passo.link.url" :target="linkExterno(passo.link.url) ? '_blank' : undefined" :rel="linkExterno(passo.link.url) ? 'noopener' : undefined">{{ passo.link.rotulo }}<span class="so-leitor">: {{ passo.titulo }}</span></a>
             </div>
@@ -147,3 +155,10 @@ function teclas(evento: KeyboardEvent) {
     </div>
   </section>
 </template>
+
+<style>
+/* Um selo como os outros, mas clicável: o sublinhado diz que é link. */
+.como__blueprint { color: var(--texto); text-decoration: underline; }
+.como__blueprint:hover { background: var(--destaque); color: var(--destaque-texto); }
+.como__blueprint:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+</style>

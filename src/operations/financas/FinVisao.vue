@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import FinExplicar from './FinExplicar.vue'
-import FinImportar from './FinImportar.vue'
+import FinImportarArquivo from './FinImportarArquivo.vue'
 import { brl, diaMes, enviarJson, mesCurto, mesLongo, ROTULO_DO_SEMAFORO, ROTULO_DO_TIPO, somarMeses, variacao } from './formato'
 import type { VisaoFinanceira } from './types'
 
@@ -219,6 +219,7 @@ const nomeDoCartao = (c: { nome: string; final: string | null }) => (c.final ? `
       </details>
     </section>
 
-    <FinImportar @importado="emit('importado')" />
+    <!-- O "Importar" único (OT-11, 16/10/2026): fatura em PDF e extrato OFX/CSV no mesmo seletor. -->
+    <FinImportarArquivo @importado="emit('importado')" />
   </div>
 </template>

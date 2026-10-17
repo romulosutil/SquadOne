@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
-import { montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
+import { followupDoTerceiroDia, montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
+import { bracoDoRecibo } from "../src/operations/ab-recibo.ts";
 import { decidir, estadoNovo, textoDoAviso, botoesDoAviso, ESPERA_DO_AVISO_MS, fechadosNaVolta, lerHistoricoDoVendedor, resumoDoVendedor, type AvisoAberto } from "./vendedor.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -283,5 +284,79 @@ describe("histórico do vendedor", () => {
     await writeFile(arquivo, `${JSON.stringify({ em: T, evento: "avisado", chave: "a" })}\n{"em":\n`);
     assert.deepEqual((await lerHistoricoDoVendedor(arquivo)).map((e) => e.chave), ["a"]);
     await rm(dir, { recursive: true, force: true });
+  });
+});
+
+// OT-06 (16/10/2026): quem disse não ganha o desfecho na fila, e o registro "recusou" o tira do funil.
+describe("desfecho: quem disse não", () => {
+  const negativa = { status: "enviado", enviado_em: dias(2), respondeu_em: horas(5), resposta_tipo: "negativa", resposta_trecho: "não tenho interesse", resposta_em: horas(5) };
+
+  it("a fila oferece marcar a recusa no lugar de responder, com o agradecimento opcional", () => {
+    const v = visaoCom(negativa);
+    const fila = filaDeVenda(v, LIVRE);
+    assert.equal(fila.some((a) => a.tipo === "responder"), false);
+    const d = fila.find((a) => a.tipo === "desfecho");
+    assert.ok(d);
+    assert.equal(d.anota, "recusou");
+    assert.match(d.rascunho ?? "", /Obrigado pelo retorno/);
+  });
+
+  it("exclusão: marcar, sem escrever nada", () => {
+    const v = visaoCom({ ...negativa, resposta_tipo: "exclusao", resposta_trecho: "pode apagar meu número" });
+    const d = filaDeVenda(v, LIVRE).find((a) => a.tipo === "desfecho");
+    assert.ok(d);
+    assert.equal(d.link, undefined);
+    assert.equal(d.rascunho, undefined);
+  });
+
+  it("o registro recusou encerra como Perdido (recusou) e o desfeito volta", () => {
+    const reg = (tipo: string, em: string) => ({ em, produto: "site", id: "L", tipo, texto: "", data: "" });
+    const recusado = visaoCom(negativa, [reg("recusou", horas(1))]);
+    const lead = recusado.leads[0];
+    assert.equal(lead.etapa, "perdido");
+    assert.equal(lead.motivoPerda, "recusou");
+    assert.equal(lead.perdaManual, "recusou");
+    assert.equal(filaDeVenda(recusado, LIVRE).some((a) => a.leadId === lead.id), false);
+    const desfeito = visaoCom(negativa, [reg("recusou", horas(2)), reg("recusou_desfeito", horas(1))]);
+    assert.equal(desfeito.leads[0].etapa, "contato");
+    assert.equal(desfeito.leads[0].perdaManual, undefined);
+  });
+});
+
+// OT-10 (16/10/2026): metade dos sem recibo, enviados desde 17/10, recebe o follow-up do 3º dia.
+describe("teste do follow-up sem recibo", () => {
+  const depois = new Date("2026-10-21T13:00:00Z");
+  const site = { status: "enviado", enviado_em: "2026-10-17T13:00:00.000Z" };
+
+  it("o braço sai da chave, e só o teste recebe o follow-up sem ter lido", () => {
+    const lead = visaoCom(site, [], depois).leads[0];
+    assert.equal(lead.testeDoRecibo, bracoDoRecibo("L"));
+    assert.equal(lead.followupHoje, bracoDoRecibo("L") === "teste");
+  });
+
+  it("enviado antes do início segue a regra antiga, e quem leu recebe como sempre", () => {
+    const antigo = visaoCom({ status: "enviado", enviado_em: "2026-10-16T13:00:00.000Z" }, [], new Date("2026-10-20T13:00:00Z")).leads[0];
+    assert.equal(antigo.testeDoRecibo, undefined);
+    assert.equal(antigo.followupHoje, false);
+    const leu = visaoCom({ ...site, visto_em: "2026-10-17T14:00:00.000Z" }, [], depois).leads[0];
+    assert.equal(leu.testeDoRecibo, undefined);
+    assert.equal(leu.followupHoje, true);
+  });
+});
+
+// OT-15 (16/10/2026): uma regra do 3º dia para todas as ofertas, com o que muda como parâmetro.
+describe("follow-up do 3º dia, uma regra só", () => {
+  const T = AGORA.getTime();
+  const base = { etapa: "contato" as const, emConversa: false, enviado: T - 3 * 86_400_000, leu: true, followups: [] as number[], agora: T };
+  it("tabela", () => {
+    assert.equal(followupDoTerceiroDia(base), true);
+    assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 2 * 86_400_000 }), false, "antes do 3º dia");
+    assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 7 * 86_400_000 }), false, "no 7º dia já é Perdido");
+    assert.equal(followupDoTerceiroDia({ ...base, leu: false }), false, "sem recibo");
+    assert.equal(followupDoTerceiroDia({ ...base, emConversa: true }), false);
+    assert.equal(followupDoTerceiroDia({ ...base, acervo: true }), false);
+    assert.equal(followupDoTerceiroDia({ ...base, followups: [T - 3600_000] }), false, "já foi");
+    assert.equal(followupDoTerceiroDia({ ...base, marcadoPeloN8n: T - 86_400_000 }), false, "o 05 marcou ontem");
+    assert.equal(followupDoTerceiroDia({ ...base, ultimaSaida: T - 3600_000 }), false, "já escrevemos à mão depois");
   });
 });

@@ -30,10 +30,10 @@ import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 
-export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'primeiro'
+export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'desfecho' | 'primeiro'
 
 /** O que o toque em "Enviei" grava na aba CRM: um envio, ou a proposta (o servidor põe a data de hoje). */
-export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta'
+export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou'
 
 export interface AcaoDeVenda {
   /** `leadId|tipo`: o mesmo lead pode ter um combinado e uma resposta; cada um é um aviso. */
@@ -99,6 +99,8 @@ export interface ContextoDaVenda {
    */
   liberados?: ReadonlySet<string>
   ritmoLivre?: boolean
+  /** Primeiro contato só deste nicho (o filtro que era da folha "Enviar um por um", OT-01). */
+  nichoDoPrimeiro?: string
   /** Relógio (ms) para o "o que achou?"; ausente, esse passo não entra. */
   agora?: number
   /** leadId -> a sugestão do copiloto, quando há uma para a conversa de agora. */
@@ -207,6 +209,38 @@ function acaoMandarProposta(lead: CrmLead): AcaoDeVenda | null {
   }
 }
 
+/**
+ * Ele disse não (16/10/2026, OT-06): a resposta classificada como negativa ou exclusão, num lead
+ * ainda aberto e sem a recusa marcada. A ação é registrar o desfecho em um toque (o registro
+ * `recusou` da aba CRM), para o lead sair do funil e não receber follow-up. Na negativa, um
+ * agradecimento curto é opcional; na exclusão, nada se escreve: ele pediu para não receber mais.
+ */
+function acaoDeDesfecho(lead: CrmLead): AcaoDeVenda | null {
+  const tipoDaResposta = lead.resposta?.tipo
+  if ((tipoDaResposta !== 'negativa' && tipoDaResposta !== 'exclusao') || lead.perdaManual) return null
+  if (lead.etapa === 'ganho' || lead.etapa === 'perdido' || lead.etapa === 'novo') return null
+  const agradecer = tipoDaResposta === 'negativa' && lead.links.whatsapp
+    ? `Obrigado pelo retorno! Se mudar de ideia, é só me chamar por aqui.` : undefined
+  const url = agradecer && lead.links.whatsapp
+    ? `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(agradecer)}` : undefined
+  return {
+    chave: `${lead.id}|desfecho`,
+    leadId: lead.id,
+    empresa: lead.empresa,
+    produto: lead.produto,
+    tipo: 'desfecho',
+    titulo: titulo('desfecho', lead),
+    contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
+    porque: lead.resposta?.trecho ? `Ele escreveu: "${lead.resposta.trecho}".` : 'A resposta dele foi classificada como recusa.',
+    tatica: tatica('desfecho', lead),
+    ...(agradecer ? { rascunho: agradecer } : {}),
+    ...(url ? { link: { rotulo: 'Agradecer no WhatsApp', url } } : {}),
+    anota: 'recusou',
+    primeiroContato: false,
+    quente: false,
+  }
+}
+
 const ORDEM_DOS_GRUPOS: Array<[CrmGrupoHojeId, TipoDeVenda]> = [
   ['resposta', 'responder'],
   ['proximo', 'combinado'],
@@ -214,6 +248,9 @@ const ORDEM_DOS_GRUPOS: Array<[CrmGrupoHojeId, TipoDeVenda]> = [
   ['followup', 'followup'],
   ['enviar', 'primeiro'],
 ]
+
+/** O nicho como o filtro mostra: vazio vira "Sem nicho" (o mesmo de fila-de-envio.ts). */
+export const nichoDo = (lead: Pick<CrmLead, 'nicho'>) => lead.nicho.trim() || 'Sem nicho'
 
 const ROTULO_CURTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
 
@@ -246,6 +283,9 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
     case 'followup':
       if (lead.reenvioDoRobo) return 'Só o robô respondeu: peça quem cuida disso, sem repetir a oferta.'
       return 'Leu e não respondeu: uma linha só, com uma pergunta de sim ou não. Sem cobrar, sem repetir a mensagem inteira.'
+    case 'desfecho':
+      if (lead.resposta?.tipo === 'exclusao') return 'Ele pediu para não receber mais: não escreva. Marque a recusa para ele sair do funil e de todo follow-up.'
+      return 'Não é não: marque a recusa para ele sair do funil. Agradecer em uma linha é opcional e deixa a porta aberta.'
     case 'primeiro':
       return 'Primeira mensagem sem link e com uma pergunta: o objetivo é só a resposta. Um por vez, para o WhatsApp não ler como disparo.'
   }
@@ -260,6 +300,7 @@ function titulo(tipo: TipoDeVenda, lead: CrmLead): string {
     case 'depois-do-link': return `Pergunte a ${nome} o que achou`
     case 'proposta': return `Pergunte a ${nome} o que faltou na proposta`
     case 'followup': return lead.reenvioDoRobo ? `Peça o responsável na ${nome}` : `Follow-up para ${nome}`
+    case 'desfecho': return `${nome} disse não: marque a recusa`
     case 'primeiro': return `Envie a primeira mensagem para ${nome}`
   }
 }
@@ -324,6 +365,11 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     return a ? [a] : []
   })
   const comProposta = new Set(propostas.map((a) => a.leadId))
+  const desfechos = visao.leads.flatMap((l) => {
+    const a = acaoDeDesfecho(l)
+    return a ? [a] : []
+  })
+  const comDesfecho = new Set(desfechos.map((a) => a.leadId))
   for (const [grupo, tipo] of ORDEM_DOS_GRUPOS) {
     if (grupo === 'proximo') {
       for (const a of propostas) if (!vistas.has(a.chave)) { vistas.add(a.chave); fila.push(a) }
@@ -331,13 +377,20 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     if (grupo === 'proposta') {
       for (const a of depoisDoLink) if (!vistas.has(a.chave)) { vistas.add(a.chave); fila.push(a) }
     }
+    // O desfecho vem antes do primeiro contato: limpar o funil de quem disse não protege o número.
+    if (grupo === 'enviar') {
+      for (const a of desfechos) if (!vistas.has(a.chave)) { vistas.add(a.chave); fila.push(a) }
+    }
     for (const item of grupos.get(grupo)?.itens ?? []) {
       const lead = porId.get(item.leadId)
       if (!lead) continue
       // Quem gostou depois do link já tem a proposta na fila: "responder" seria o mesmo toque, sem a marca.
       if (tipo === 'responder' && comProposta.has(lead.id)) continue
+      // Quem disse não tem o desfecho na fila: "responder" seria escrever a quem recusou.
+      if ((tipo === 'responder' || tipo === 'followup') && comDesfecho.has(lead.id)) continue
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
+      if (acao.primeiroContato && ctx.nichoDoPrimeiro && nichoDo(lead) !== ctx.nichoDoPrimeiro) continue
       if (acao.primeiroContato) {
         const pode = ctx.primeiroLiberado
           || podeMandarPrimeiroContato({ noExpediente: false, liberado: Boolean(ctx.liberados?.has(lead.id)), ritmoLivre: Boolean(ctx.ritmoLivre) })
@@ -390,6 +443,7 @@ export function resumoDaFila(fila: readonly AcaoDeVenda[]): string {
     'depois-do-link': ['"o que achou?"', '"o que achou?"'],
     proposta: ['proposta sem retorno', 'propostas sem retorno'],
     followup: ['follow-up', 'follow-ups'],
+    desfecho: ['recusa para marcar', 'recusas para marcar'],
     primeiro: ['primeiro contato', 'primeiros contatos'],
   }
   const conta = new Map<TipoDeVenda, number>()

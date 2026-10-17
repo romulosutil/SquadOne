@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  atalhosDoMais,
   comandosDaPaleta,
   destinoAtual,
   destinosDaBarra,
@@ -14,13 +15,11 @@ import {
   MAX_NA_HOJE,
   estadoDaPessoa,
   estadoDaSquad,
-  pendenciaDeRespostas,
   pendenciasDaHoje,
   pendenciasDeFinancas,
   proximasQuests,
   resumoDoFunil,
   textoDaPendenciaDeFinancas,
-  textoDaPendenciaDeRespostas,
   type ContextoDoTime,
   type EstadoDasFinancasLido,
   type TimeLido,
@@ -60,7 +59,7 @@ describe('rotaDaCasca', () => {
 
 describe('destinos', () => {
   it('a barra do Dell é a de design.md, quatro destinos em volta do Pedir', () => {
-    assert.deepEqual(destinosDaBarra(DELL).map((d) => d.rotulo), ['Hoje', 'Funil', 'Finanças', 'Mais'])
+    assert.deepEqual(destinosDaBarra(DELL).map((d) => d.rotulo), ['Hoje', 'Vendas', 'Finanças', 'Mais'])
     assert.deepEqual(destinosDaBarra(EASYPANEL).map((d) => d.rotulo), ['Hoje', 'Agenda', 'Escritório', 'Mais'])
   })
 
@@ -68,6 +67,30 @@ describe('destinos', () => {
     assert.deepEqual(destinosLaterais(DELL).map((d) => d.id), ['hoje', 'agenda', 'funil', 'financas', 'escritorio', 'entrada', 'mais'])
     assert.deepEqual(destinosLaterais(DELL_SEM_AGENDA).map((d) => d.id), ['hoje', 'funil', 'financas', 'entrada', 'mais'])
     assert.deepEqual(destinosLaterais(EASYPANEL).map((d) => d.id), ['hoje', 'agenda', 'escritorio', 'mais'])
+  })
+
+  it('o Usar do Mais só traz o que a barra da tela não alcança (OT-11)', () => {
+    // A partir de 64rem o trilho lateral já tem tudo: o Usar some.
+    assert.deepEqual(atalhosDoMais(DELL, true), [])
+    assert.deepEqual(atalhosDoMais(DELL_SEM_AGENDA, true), [])
+    assert.deepEqual(atalhosDoMais(EASYPANEL, true), [])
+    // No celular, o que não cabe em Hoje · Funil · Finanças · Mais.
+    assert.deepEqual(atalhosDoMais(DELL, false).map((d) => d.id), ['agenda', 'escritorio', 'entrada'])
+    assert.deepEqual(atalhosDoMais(DELL_SEM_AGENDA, false).map((d) => d.id), ['entrada'])
+    // No Easypanel a barra inferior já é Hoje · Agenda · Escritório · Mais.
+    assert.deepEqual(atalhosDoMais(EASYPANEL, false), [])
+  })
+
+  it('o Usar nunca repete um destino da barra nem traz Lançamentos', () => {
+    for (const c of [DELL, DELL_SEM_AGENDA, EASYPANEL]) {
+      for (const largo of [true, false]) {
+        const naBarra = (largo ? destinosLaterais(c) : destinosDaBarra(c)).map((d) => d.id)
+        for (const d of atalhosDoMais(c, largo)) {
+          assert.ok(!naBarra.includes(d.id), `${d.id} já está na barra`)
+          assert.ok(!d.href.startsWith('/financas/'), `${d.href} é aba de Finanças`)
+        }
+      }
+    }
   })
 
   it('aria-current vai para o destino da rota, inclusive em subcaminho', () => {
@@ -88,9 +111,9 @@ describe('ehLinkDaCasca', () => {
   })
 })
 
-describe('blueprint', () => {
+describe('design system', () => {
   it('existe nos dois perfis, acende o Mais e entra pelo Ctrl+K, nunca na barra', () => {
-    assert.equal(rotaDaCasca('/design-system', DELL_SEM_AGENDA), 'blueprint')
+    assert.equal(rotaDaCasca('/design-system', DELL_SEM_AGENDA), 'design-system')
     assert.equal(destinoAtual('/design-system/', DELL), 'mais')
     assert.ok(comandosDaPaleta(DELL_SEM_AGENDA, [], null).some((c) => c.id === 'ir:design-system'))
     assert.ok(!destinosDaBarra(DELL).some((d) => d.href === '/design-system'))
@@ -133,67 +156,6 @@ describe('pendenciasDaHoje', () => {
   })
 })
 
-describe('Hoje: leads que responderam e esperam você', () => {
-  const lead = (id: string, empresa: string, extra: Partial<CrmLead> = {}) =>
-    ({ id, empresa, produto: 'site', marcos: {}, ...extra }) as CrmLead
-  const visao = (ids: string[], leads: CrmLead[], estado: CrmVisao['estado'] = 'ok') =>
-    ({ estado, leads, hoje: [{ id: 'resposta', titulo: '', explicacao: '', itens: ids.map((leadId) => ({ leadId, acao: '', detalhe: '', links: [], ordem: 0 })) }] }) as unknown as CrmVisao
-  const leads = [
-    lead('site:a', 'Silva Advogados', { resposta: { tipo: 'neutra', trecho: 'quem é?' }, marcos: { respondeu: '2026-10-08T12:00:00Z' } }),
-    lead('site:b', 'Dedetizadora Alfa', { resposta: { tipo: 'interesse', trecho: 'pode mandar' } }),
-    lead('prumo:c', 'Distribuidora C', { produto: 'prumo', resposta: { tipo: 'bot', trecho: '' } }),
-  ]
-
-  it('do grupo "Respostas para responder" do CRM, destacando quem espera há mais tempo', () => {
-    const p = pendenciaDeRespostas(visao(['site:a', 'site:b', 'prumo:c'], leads))!
-    assert.deepEqual(p, {
-      chave: 'crm:respostas', tipo: 'respostas', quantos: 3, interesse: 1,
-      primeiro: { empresa: 'Silva Advogados', produto: 'site', trecho: 'quem é?', respondeuEm: '2026-10-08T12:00:00Z' },
-    })
-    assert.deepEqual(textoDaPendenciaDeRespostas(p), {
-      titulo: '3 leads responderam e esperam você',
-      detalhe: 'Silva Advogados: “quem é?” · 1 quer ver',
-    })
-  })
-
-  it('um só: o nome no título; robô não vira trecho', () => {
-    const p = pendenciaDeRespostas(visao(['prumo:c'], leads))!
-    assert.deepEqual(textoDaPendenciaDeRespostas(p), { titulo: 'Distribuidora C respondeu e espera você', detalhe: '' })
-  })
-
-  // 14/10/2026: o servidor põe o interesse parado na frente; o cartão destaca ele e conta quantos esperam o link.
-  it('interesse parado: o primeiro é quem espera o link há mais tempo, e o detalhe diz quantos ainda estão sem ele', () => {
-    const parados = [
-      lead('site:p', 'Locação Sol', { resposta: { tipo: 'interesse', trecho: 'Manda aí' }, interesseParado: { desde: '2026-10-08T12:00:00Z' }, marcos: { respondeu: '2026-10-08T12:00:00Z' } }),
-      lead('site:q', 'Marido de Aluguel', { resposta: { tipo: 'interesse', trecho: 'Pode sim' }, interesseParado: {} }),
-      ...leads,
-    ]
-    const p = pendenciaDeRespostas(visao(['site:p', 'site:q', 'site:a', 'site:b'], parados))!
-    assert.equal(p.parados, 2)
-    assert.equal(p.primeiro.empresa, 'Locação Sol')
-    assert.deepEqual(textoDaPendenciaDeRespostas(p), {
-      titulo: '4 leads responderam e esperam você',
-      detalhe: 'Locação Sol: “Manda aí” · 3 querem ver · 2 ainda sem o link',
-    })
-    assert.equal('parados' in pendenciaDeRespostas(visao(['site:a', 'site:b'], leads))!, false, 'sem parado, sem o campo')
-  })
-
-  it('sem resposta esperando, sem retrato legível ou sem leitura: nenhum cartão', () => {
-    assert.equal(pendenciaDeRespostas(visao([], leads)), null)
-    assert.equal(pendenciaDeRespostas(visao(['site:a'], leads, 'sem-retrato')), null)
-    assert.equal(pendenciaDeRespostas(null), null)
-  })
-
-  it('entra depois dos cartões dos agentes e antes das finanças: resposta esfria em horas', () => {
-    const p = pendenciasDaHoje(
-      { falhas: [check('balcao', 'falha')], fila: [check('pend:x', 'atencao', 'pendencias')], olhar: [], sozinhos: [] },
-      { trocas: [], ajustes: ['a1'], crescimentos: [] },
-      { cartao: { pct: 95, semaforo: 'laranja', nome: 'Nubank' }, orcamento: null },
-      pendenciaDeRespostas(visao(['site:a'], leads))
-    )
-    assert.deepEqual(p.map((x) => x.chave), ['dell:balcao', 'ajuste:a1', 'crm:respostas', 'financas:cartao', 'dell:pend:x'])
-  })
-})
 
 describe('pendenciasDaHoje com finanças em semáforo', () => {
   const alertas = { falhas: [check('balcao', 'falha')], fila: [check('pend:x', 'atencao', 'pendencias')], olhar: [check('cofre', 'atencao', 'dados')], sozinhos: [] }

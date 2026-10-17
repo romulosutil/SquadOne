@@ -141,6 +141,10 @@ export interface CrmLead {
   sinal: CrmSinal
   subEtapa: string
   motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  /** A perda marcada na Central (aba CRM), que dá para desfazer de lá (16/10/2026, OT-06). */
+  perdaManual?: 'sem-contato' | 'recusou'
+  /** Teste do follow-up sem recibo (OT-10, ab-recibo.ts): o braço, só no Site enviado desde 17/10/2026 sem recibo. */
+  testeDoRecibo?: 'teste' | 'controle'
   /** Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
   diasParaSair?: number
   estadoNaPlanilha: string
@@ -245,7 +249,7 @@ export interface CrmVisao {
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
-  | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu'
+  | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu' | 'recusou' | 'recusou_desfeito'
 
 /** Espelho de REGIMES_DA_MENSAGEM (server/crm.ts): até 29/09, 30/09–04/10, desde 05/10. */
 export type CrmRegimeDaMensagem = 'curta_com_link' | 'prumo_com_link' | 'duas_mensagens'

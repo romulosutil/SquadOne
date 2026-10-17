@@ -84,6 +84,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/venda-do-dia.ts  (16/10/2026, OT-01) o "Enviei"/"Pular" do dia num arquivo só (venda-do-dia.json), dividido pela Próxima
+                          venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
                           venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
@@ -119,17 +121,23 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           ?fluxo=&passo= abre um fluxo com o passo em destaque (o link do robô no Escritório)
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
-    Crm*.vue, crm-formato.ts  CRM: Hoje, Funil (no celular: Site/Organizar, abas de etapa, lista), Resultados e Ficha (folha cheia)
+    Crm*.vue, crm-formato.ts  Vendas (/crm, 16/10/2026): A fazer (só a Próxima venda), Triagem (?ver=triagem, prospects em lotes
+                          de 10), Funil (consulta, sem envio; no celular abas de etapa), Números (?ver=numeros), Roteiro (?ver=roteiro)
+                          e a Ficha (folha cheia); ?ver=resultados e ?ver=colinha ainda abrem
     proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
                           (responder > mandar a proposta > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
-                          primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem pronta;
-                          ProximaVenda.vue é o 1º cartão da Hoje e da aba "A fazer" do CRM; o vendedor do Telegram usa a mesma fila
+                          recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem
+                          pronta; ProximaVenda.vue é o 1º cartão da Hoje e a aba "A fazer" inteira (a fila única, OT-01); o vendedor do Telegram
+                          usa a mesma fila; a Ficha mostra a ação dela no "Agora" (OT-04)
     mandar-proposta.ts    PURO (16/10/2026): "Mandar a proposta" em um toque: quem gostou depois do link ("gostei", "quanto fica")
                           ganha o primário na Ficha e o passo na fila; o toque abre o wa.me com a proposta (itens do copiloto e preços
                           do cardápio, ou o texto base da colinha) e anota `proposta` com a data de hoje; "R$" fora do cardápio = sem botão
-    por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue, na Hoje)
-    fila-de-envio.ts      PURO: "Enviar um por um" (CrmFilaDeEnvio.vue): a mensagem antes do toque, nicho, pular; o toque
-                          lembrado no localStorage por 30 min só para a lista não repetir o envio (a planilha é a verdade)
+    por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue:
+                          na Hoje só o gargalo, `resumido`; os degraus em Números, OT-08)
+    fila-de-envio.ts      PURO: as marcas de toque e do "Vídeo enviado" (A/B do vídeo) no localStorage por 30 min; a folha
+                          "Enviar um por um" saiu em 16/10/2026 (OT-01) e o passo do vídeo foi para a Próxima venda
+    ab-recibo.ts          PURO (16/10/2026, OT-10): teste do follow-up para quem não manda recibo: Site enviado desde 17/10, metade
+                          por sorteio fixo da chave recebe o follow-up do 3º dia; Números compara resposta e exclusão (Fisher)
     velocidade.ts         PURO (16/10/2026, OT-09): Números abre com "Depois do sim": do "quero ver" ao link e do link à proposta
                           (mediana, quantos em até 2 h, quem espera agora); o vendedor do Telegram mede em vendedor-historico.jsonl
                           (GET /api/operations/crm/vendedor)
@@ -177,7 +185,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
   src/blueprint/          (16/10/2026) tokens.ts (PURO: lê o tokens.css cru, contraste WCAG, pedido de mudança, regras de
                           homogeneidade que o teste aplica a todo CSS de src/), catalogo.ts (códigos BP-… das peças e a
-                          anatomia da Ficha), exemplo.ts (lead inventado); a página é src/rotas/BlueprintRota.vue (/design-system,
+                          anatomia da Ficha), exemplo.ts (lead inventado); a página é src/rotas/DesignSystemRota.vue (/design-system,
                           nos dois perfis, pelo Mais e pelo Ctrl+K). Para mudar o visual, comece por ela e cite o código BP-
   src/auth/google.ts      invólucro fino sobre /api/auth/*
   src/squadAtiva.ts       squad ativa da aba (localStorage)
@@ -290,9 +298,10 @@ Todos os textos das mensagens seguem um guia só, no topo das `VARIACOES` em `si
 Plus (15/10/2026, pedido do Rômulo): quinto filtro do CRM (`produto: "plus"`) com os melhores leads, vindos do Catálogo de
 Negócios Maçônicos. Não é uma quinta oferta: cada lead leva `plus.oferta` (site = sem site; prumo = com site; iris = psicologia/terapia;
 estampa = roupa) e recebe o texto dela, sempre aberto pela saudação da Ordem. Sem planilha: `lerPlus` lê `plus/leads.json` e o estado
-sai só dos registros da aba CRM (`plus_enviado`, anotado pelo toque no link de envio; `plus_respondeu`, à mão na Ficha); depois valem
+sai só dos registros da aba CRM (`plus_enviado`, anotado pelo toque no link de envio; `plus_respondeu`, à mão na Ficha) e, desde
+17/10/2026 (OT-13), da conversa guardada (a mensagem dele depois do envio vale como resposta); depois valem
 follow-up do 3º dia, 7 dias sem mensagem = Perdido, proposta e sem contato como nos outros funis. A Hoje mostra só os 10 primeiros Plus
-(`LIMITE_DO_PLUS_NA_HOJE`; o ritmo do WhatsApp é de poucos por dia), na frente dos do Site; "Enviar um por um" não os inclui. Detalhes em
+(`LIMITE_DO_PLUS_NA_HOJE`; o ritmo do WhatsApp é de poucos por dia), na frente dos do Site. Detalhes em
 `docs/referencia/perfis-e-experimentos.md`.
 
 **Persistência e acesso.** Persistência só em `squad.json` e `google-auth.json` (mais o que o

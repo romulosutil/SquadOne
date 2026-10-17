@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * A operação de uma sala (15/10/2026), no rodapé do SalaCartao: os leads dela
- * por passo da jornada, os parados com o Rômulo e o estado de cada robô. Vem
- * pronta de `operacaoDaSala` (office/operacao.ts, PURO); aqui é só texto e link.
- * Só lê: tocar numa contagem abre a Jornada do CRM no filtro da sala, tocar num
- * robô abre o passo dele em "Como funciona".
+ * A operação de uma sala (15/10/2026), no rodapé do SalaCartao: quantos leads
+ * dela há em cada passo da jornada, quantos estão parados com o Rômulo e o
+ * estado de cada robô. Vem pronta de `operacaoDaSala` (office/operacao.ts, PURO);
+ * aqui é só texto e link. Só lê: "Ver no Funil" abre a vista por passo da
+ * jornada no filtro da sala, onde estão os leads um a um (OT-07, 16/10/2026: a
+ * lista mora só lá); tocar num robô abre o passo dele em "Como funciona".
  */
 import type { OperacaoDaSala } from '../office/operacao'
 
 defineProps<{ operacao: OperacaoDaSala; nomeDaSala: string }>()
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
-const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` · ${plural(n, 'dia', 'dias')}`)
 </script>
 
 <template>
@@ -29,7 +29,7 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` ·
               <span class="operacao__rotulo">
                 <strong>{{ r.rotulo }}</strong>
                 <span class="operacao__n">{{ r.total }}</span>
-                <span class="so-leitor">{{ r.total === 1 ? 'lead' : 'leads' }}: abrir a Jornada do CRM</span>
+                <span class="so-leitor">{{ r.total === 1 ? 'lead' : 'leads' }}</span>
               </span>
               <small v-if="r.passos.length" class="texto-2">
                 <template v-for="(p, i) in r.passos" :key="p.passo">{{ i ? ' · ' : '' }}{{ p.nome }} {{ p.leads }}</template>
@@ -39,12 +39,8 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` ·
               <small v-if="r.comVoce || r.parados">
                 <template v-if="r.comVoce">{{ r.comVoce }} com você</template><template v-if="r.comVoce && r.parados"> · </template><strong v-if="r.parados">{{ plural(r.parados, 'parado', 'parados') }}</strong>
               </small>
+              <span class="operacao__ver">Ver no Funil <span aria-hidden="true">→</span><span class="so-leitor">: {{ r.rotulo }}, por passo da jornada</span></span>
             </a>
-            <ul v-if="r.maisParados.length" class="operacao__parados" :aria-label="`Parados com você em ${r.rotulo}`">
-              <li v-for="l in r.maisParados" :key="l.id">
-                <a :href="l.href"><strong>{{ l.empresa }}</strong><span class="texto-2">{{ dias(l.dias) }}</span> <span>{{ l.acao }}</span></a>
-              </li>
-            </ul>
           </li>
         </ul>
       </template>
@@ -81,9 +77,7 @@ const dias = (n?: number) => (n === undefined ? '' : n === 0 ? ' · hoje' : ` ·
 .operacao__rotulo { display: flex; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
 .operacao__n { font-size: var(--tam-secao); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; }
 .operacao small { font-size: var(--tam-apoio); overflow-wrap: anywhere; }
-.operacao__parados { padding-left: var(--esp-3) !important; border-left: var(--linha-fina); }
-.operacao__parados a { display: block; min-height: var(--toque); padding: var(--esp-1) 0; font-size: var(--tam-apoio); overflow-wrap: anywhere; }
-.operacao__parados a:hover strong { text-decoration: underline; }
+.operacao__ver { font-size: var(--tam-apoio); font-weight: var(--peso-forte); text-decoration: underline; }
 /* O texto diz o estado; o quadrado só reforça (RULES 3). */
 .estado.is-robo-ok::before { background: var(--positivo); }
 .estado.is-robo-atencao::before { background: var(--destaque); }

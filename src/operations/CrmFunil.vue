@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, rotuloDaSegunda, rotuloDoFollowup, textoDaLeitura, textoDeDias, textoDoPrazo } from './crm-formato'
-import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
-import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { DICA_DA_ETAPA, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDeDias, textoDoPrazo } from './crm-formato'
+import type { EnviosLiberados } from './trava-de-horario'
+import type { EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import {
   SENTIDO_INICIAL, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, ordenarLista, sinalMaisForte, textoDoProximoPasso,
@@ -36,14 +36,8 @@ const emit = defineEmits<{
   anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
 }>()
 const anotado = (l: CrmLead, tipo: TipoDeEnvioAnotado) => anotadoEm(props.anotados, l.id, tipo) !== undefined
-const segurado = computed(() => props.ritmo.motivo !== null)
-// Envio, convite e o reenvio do só-robô travam fora do expediente; o follow-up de sempre, não.
-const travado = (l: CrmLead) => !segurado.value && envioTravado(props.aviso, props.liberados, l.id) && linksDePrimeiroContato(l).length > 0
-const linkTravado = (l: CrmLead, url: string | undefined) => Boolean(url) && (segurado.value || travado(l)) && ehPrimeiroContato(l, url!)
-const haSegurados = computed(() => segurado.value && props.leads.some(l => linksDePrimeiroContato(l).length > 0))
-function aoTocarPrimeiro(l: CrmLead, url: string) {
-  if (ehPrimeiroContato(l, url)) emit('primeiro', l.id)
-}
+// Desde 16/10/2026 (OT-01) o Funil não envia: as travas de horário e de ritmo moram na Próxima venda e
+// na Ficha. As props `aviso`, `liberados` e `ritmo` ficam para quem monta (CrmPanel) não mudar de forma.
 
 const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
 const celular = ref(mq?.matches ?? false)
@@ -177,7 +171,6 @@ const artefatos = (l: CrmLead) => {
 
 <template>
   <div class="crm-funil">
-    <p v-if="haSegurados" class="crm-aviso" role="status"><strong>Devagar com os primeiros contatos.</strong> {{ textoDoRitmo(ritmo) }}</p>
     <form class="crm-filtros" role="search" @submit.prevent>
       <label><span>Buscar</span><input v-model="busca" type="search" placeholder="Empresa, nicho ou cidade" autocomplete="off"></label>
       <label><span>Nicho</span><select v-model="nicho"><option value="">Todos</option><option v-for="n in nichos" :key="n" :value="n">{{ n }}</option></select></label>
@@ -274,16 +267,10 @@ const artefatos = (l: CrmLead) => {
                 <template v-else><span aria-hidden="true">—</span><span class="so-leitor">sem próximo passo</span></template>
               </td>
               <td><span v-if="sinalDe(lead)" class="crm-sinal" :class="sinalDe(lead)!.classe">{{ sinalDe(lead)!.texto }}</span></td>
-              <!-- Uma ação por linha, na ordem do cartão; o resto fica na Ficha. As travas valem igual. -->
+              <!-- OT-01 (16/10/2026): o Funil é consulta. Mandar mensagem é na Próxima venda ou na Ficha do lead
+                   aberto (as travas moram lá); aqui a ação da linha é abrir a ficha. -->
               <td class="crm-tabela__acao" @click.stop>
-                <p class="crm-cartao__links">
-                  <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ rotuloDaSegunda(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
-                  <a v-else-if="lead.links.gerarDemo && lead.resposta?.tipo === 'interesse'" :href="lead.links.gerarDemo" target="_blank" rel="noopener">Gerar demo <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
-                  <a v-else-if="lead.links.followup && !linkTravado(lead, lead.links.followup)" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado'); aoTocarPrimeiro(lead, lead.links.followup)">{{ rotuloDoFollowup(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
-                  <button v-else-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
-                  <a v-else-if="lead.links.enviar && !linkTravado(lead, lead.links.enviar)" :href="lead.links.enviar" target="_blank" rel="noopener" @click="lead.produto === 'plus' && emit('anotar', lead.id, 'plus_enviado'); emit('primeiro', lead.id)">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                  <a v-else-if="lead.links.convite && !linkTravado(lead, lead.links.convite)" :href="lead.links.convite" target="_blank" rel="noopener" @click="emit('primeiro', lead.id)">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                </p>
+                <button type="button" class="botao botao--leve" @click="emit('abrir', lead.id, $event.currentTarget as HTMLElement)">Ficha <span class="so-leitor">de {{ lead.empresa }}</span></button>
               </td>
             </tr>
           </tbody>
@@ -354,15 +341,9 @@ const artefatos = (l: CrmLead) => {
                 <span v-if="lead.divergencias.length" class="crm-sinal is-divergencia">Divergência</span>
                 <span v-if="lead.acervo && lead.etapa === 'contato'" class="crm-sinal is-acervo">Acervo, sem follow-up automático</span>
               </p>
-              <p v-if="lead.links.enviar || lead.links.convite || lead.links.segunda || lead.links.followup || lead.links.site" class="crm-cartao__links">
-                <!-- O toque abre o WhatsApp e anota o envio em segundo plano (CrmPanel, anotarEnvio). -->
-                <a v-if="lead.links.segunda && lead.resposta?.tipo === 'interesse'" :href="lead.links.segunda" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'segunda_enviada')">{{ rotuloDaSegunda(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
-                <a v-if="lead.links.gerarDemo && lead.resposta?.tipo === 'interesse'" :href="lead.links.gerarDemo" target="_blank" rel="noopener">Gerar demo <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
-                <a v-if="lead.links.followup && !linkTravado(lead, lead.links.followup)" :href="lead.links.followup" target="_blank" rel="noopener" @click="emit('anotar', lead.id, 'followup_enviado'); aoTocarPrimeiro(lead, lead.links.followup)">{{ rotuloDoFollowup(lead) }} <span class="so-leitor">para {{ lead.empresa }}</span>↗</a>
-                <button v-if="travado(lead)" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }} <span class="so-leitor">para {{ lead.empresa }}</span></button>
-                <a v-if="lead.links.enviar && !linkTravado(lead, lead.links.enviar)" :href="lead.links.enviar" target="_blank" rel="noopener" @click="lead.produto === 'plus' && emit('anotar', lead.id, 'plus_enviado'); emit('primeiro', lead.id)">Enviar pelo WhatsApp <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.convite && !linkTravado(lead, lead.links.convite)" :href="lead.links.convite" target="_blank" rel="noopener" @click="emit('primeiro', lead.id)">Enviar convite <span class="so-leitor">para {{ lead.empresa }} (marca como enviado)</span>↗</a>
-                <a v-if="lead.links.site" :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
+              <!-- OT-01 (16/10/2026): só consulta. Mandar mensagem é na Próxima venda ou na Ficha (toque no nome). -->
+              <p v-if="lead.links.site" class="crm-cartao__links">
+                <a :href="lead.links.site" target="_blank" rel="noopener">{{ lead.produto === 'site' ? 'Demo' : 'Site' }} <span class="so-leitor">de {{ lead.empresa }}</span>↗</a>
               </p>
             </article>
           </li>

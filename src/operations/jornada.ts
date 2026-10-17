@@ -54,6 +54,13 @@ export interface PassoDaJornada {
    * em que a espera é sua (nos do robô e do dono, esperar é o normal).
    */
   paradoApos?: number
+  /**
+   * Onde este passo mora no service blueprint (docs/blueprint/servico.json): um código de passo
+   * (`SITE-3`) ou de cartão (`PRUMO-2-P1`) por serviço em que ele existe (OT-03, 16/10/2026). A
+   * jornada fica com a regra do lead; a descrição da esteira é do blueprint, e o teste
+   * src/operations-mapa-unico.test.ts falha se um código daqui sumir de lá.
+   */
+  blueprint?: readonly string[]
 }
 
 // A ordem do array é a da jornada (a Ficha e o guia mostram nesta ordem).
@@ -63,9 +70,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Achado',
     trilho: 'tronco',
     quem: 'robô',
-    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (rodados à mão); Plus pelo Catálogo de Negócios Maçônicos',
+    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (dias úteis, 9h, ligados em 16/10/2026; caem na Triagem); Plus pelo Catálogo de Negócios Maçônicos',
     entra: 'O caçador gravou a empresa na planilha (ou, no Plus, no leads.json).',
     sai: 'O Raio-X (ou o site) publicado vai para "Raio-X pronto".',
+    blueprint: ['SITE-1', 'OFERTAS-1'],
   },
   {
     id: 'raio-x',
@@ -76,16 +84,18 @@ export const PASSOS: PassoDaJornada[] = [
     entra: 'Raio-X publicado e o lead marcado "pronto", ainda sem a primeira mensagem.',
     sai: 'A primeira mensagem enviada leva para "Primeira mensagem".',
     servico: 'raio-x',
+    blueprint: ['SITE-2'],
   },
   {
     id: 'primeiro-contato',
     nome: 'Primeira mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: 'Enviar um por um no CRM, pelo WhatsApp (trava de ritmo: 1 a cada 4 min, 8 por hora, teto do dia); o observador marca envio e leitura sozinho',
+    como: 'A Próxima venda (Hoje, Vendas › A fazer ou o "Envie para X" do Telegram), pelo WhatsApp, no expediente e na trava de ritmo (1 a cada 4 min, 8 por hora, teto do dia); o observador marca envio e leitura sozinho',
     entra: 'Enviada (ou convite enviado), sem resposta de gente.',
     sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia) e Perdido em 7 dias.',
     prazo: 'follow-up no 3º dia; Perdido no 7º sem mensagem do lead',
+    blueprint: ['SITE-3', 'PRUMO-1', 'OFERTAS-3'],
   },
   {
     id: 'resposta',
@@ -97,6 +107,7 @@ export const PASSOS: PassoDaJornada[] = [
     entra: 'Respondeu e a 2ª mensagem ainda não saiu.',
     sai: 'Interesse: a 2ª mensagem (o Raio-X ou o demo, com o preço do Encontrado). Negativa: a resposta da objeção. Exclusão: agradecer e apagar no mesmo dia.',
     prazo: 'interesse respondido em até 2 h',
+    blueprint: ['SITE-4', 'OFERTAS-4'],
   },
   {
     id: 'segunda',
@@ -104,10 +115,11 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Viu o Raio-X',
     trilho: 'tronco',
     quem: 'você',
-    como: 'A 2ª mensagem do CRM (anotada sozinha ao tocar); "Gerar demo" quando ele quer ver o site (20 a 40 min, até 4 por dia)',
+    como: 'A 2ª mensagem do CRM (anotada sozinha ao tocar); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
     entra: 'A 2ª mensagem saiu (Raio-X, demo ou os dois, com o preço do Encontrado).',
     sai: 'Abre um trilho, ou os dois: por fora, a conversa sobre os produtos; por dentro, o convite para o Mapa (só empresa com equipe).',
     prazo: 'proposta em até 24 h depois de cada "gostei"',
+    blueprint: ['SITE-5', 'PRUMO-2'],
   },
   {
     id: 'conversa',
@@ -119,6 +131,7 @@ export const PASSOS: PassoDaJornada[] = [
     entra: 'Quer o site, ou o Raio-X mostrou um trecho do caminho que ele quer arrumar.',
     sai: 'Proposta por escrito em até 24 h.',
     prazo: 'proposta em até 24 h depois da conversa',
+    blueprint: ['PRUMO-2-P1', 'OFERTAS-5'],
   },
   {
     id: 'mapa-convite',
@@ -129,6 +142,7 @@ export const PASSOS: PassoDaJornada[] = [
     entra: 'Viu o Raio-X, a empresa tem equipe e o Mapa ainda não foi respondido.',
     sai: 'O dono responde as 16 perguntas no formulário: "Mapa respondido".',
     servico: 'mapa',
+    blueprint: ['PRUMO-3-E1'],
   },
   {
     id: 'mapa',
@@ -140,6 +154,7 @@ export const PASSOS: PassoDaJornada[] = [
     entra: 'O dono respondeu as 16 perguntas (sinal "diagnóstico" no CRM).',
     sai: 'Documento completo e a devolutiva de 45 min marcada.',
     servico: 'mapa',
+    blueprint: ['PRUMO-3'],
   },
   {
     id: 'devolutiva',
@@ -152,6 +167,7 @@ export const PASSOS: PassoDaJornada[] = [
     sai: 'Proposta da Fonte (e dos produtos que o Mapa apontou) em até 24 h.',
     prazo: 'proposta em até 24 h depois da devolutiva',
     servico: 'fonte',
+    blueprint: ['PRUMO-4'],
   },
   {
     id: 'proposta',
@@ -162,6 +178,7 @@ export const PASSOS: PassoDaJornada[] = [
     como: 'proposta-modelo do prumo (04-venda) com o cardápio; marque "Proposta enviada" na Ficha',
     entra: 'Proposta marcada na Ficha.',
     sai: 'Fechou (página do lead) ou recusou; sem decisão, cobre com data no próximo passo.',
+    blueprint: ['SITE-7', 'PRUMO-5'],
   },
   {
     id: 'ganho',
@@ -171,6 +188,7 @@ export const PASSOS: PassoDaJornada[] = [
     como: 'Encontrado: no ar e pago depois de ver; Fonte: 2 semanas, 50/50; depois, as mensalidades',
     entra: 'Fechou (ou Concluído na planilha).',
     sai: 'Entrega feita e a mensalidade correndo.',
+    blueprint: ['SITE-7-C1', 'PRUMO-5-C1'],
   },
   {
     id: 'perdido',
@@ -180,6 +198,7 @@ export const PASSOS: PassoDaJornada[] = [
     como: 'Recusou, pediu para apagar, 7 dias sem mensagem do lead ou sem contato fácil',
     entra: 'Saiu do funil.',
     sai: 'Volta sozinho se ele escrever; um próximo passo ou a proposta o trazem de volta.',
+    blueprint: ['SITE-7-B1'],
   },
 ]
 
@@ -351,12 +370,12 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
   switch (passoAtual(lead)) {
     case 'achado':
       return funil === 'prumo' || funil === 'iris' || funil === 'estampa'
-        ? { acao: 'Revisar o lead na planilha e mandar o convite', quem: 'você' }
+        ? { acao: 'Revisar o lead na Triagem e mandar o convite', quem: 'você' }
         : { acao: 'Esperar o Raio-X, que sai às 11:15 e às 17:15', quem: 'robô' }
     case 'raio-x':
       return lead.sinal === 'publicado'
         ? { acao: 'Esperar o Balcão marcar "pronto", de hora em hora', quem: 'robô' }
-        : { acao: 'Mandar a primeira mensagem pelo Enviar um por um', quem: 'você', quando: 'no expediente, no ritmo da trava' }
+        : { acao: 'Mandar a primeira mensagem pela Próxima venda', quem: 'você', quando: 'no expediente, no ritmo da trava' }
     case 'primeiro-contato':
       if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
       return {
@@ -673,12 +692,13 @@ export function guiaDaJornada(): string {
   l.push('')
   l.push('## Os passos')
   l.push('')
-  l.push('| # | Passo | Trilho | Quem | Como | Quando o lead está aqui | O que o tira daqui | Prazo |')
-  l.push('|---|---|---|---|---|---|---|---|')
+  l.push('| # | Passo | Trilho | Quem | Como | Quando o lead está aqui | O que o tira daqui | Prazo | Blueprint |')
+  l.push('|---|---|---|---|---|---|---|---|---|')
   PASSOS.forEach((p, i) => {
     const parado = p.paradoApos === undefined ? '' : `parado com ${p.paradoApos} dia${p.paradoApos === 1 ? '' : 's'} no passo`
     const prazo = [p.prazo, parado].filter(Boolean).join('; ')
-    l.push(`| ${i + 1} | **${p.nome}** | ${ROTULO_DO_TRILHO[p.trilho]} | ${p.quem} | ${celula(p.como)} | ${celula(p.entra)} | ${celula(p.sai)} | ${celula(prazo)} |`)
+    const blueprint = (p.blueprint ?? []).map((c) => `\`${c}\``).join(', ')
+    l.push(`| ${i + 1} | **${p.nome}** | ${ROTULO_DO_TRILHO[p.trilho]} | ${p.quem} | ${celula(p.como)} | ${celula(p.entra)} | ${celula(p.sai)} | ${celula(prazo)} | ${blueprint} |`)
   })
   l.push('')
   l.push('## O que oferecer a quem')
@@ -702,7 +722,8 @@ export function guiaDaJornada(): string {
   l.push('')
   l.push('- **Em que passo está um lead:** a Ficha no CRM (`/crm`, bloco "Jornada"). A etapa vem do retrato das planilhas (`server/crm.ts`, a cada 10 min).')
   l.push('- **O funil inteiro por passo** (quem espera quem, quem está parado): a vista Jornada (`/crm?ver=jornada`).')
-  l.push('- **O texto de cada momento** (mensagens, objeções, roteiro da conversa): a Colinha (`/crm?ver=colinha`, `src/operations/colinha.ts`).')
+  l.push('- **O texto de cada momento** (mensagens, objeções, roteiro da conversa): o Roteiro (`/crm?ver=roteiro`, `src/operations/colinha.ts`).')
+  l.push('- **O que roda por trás de cada passo** (robôs, travas, telas, terceiros): o service blueprint, `docs/blueprint/servico.json`; a coluna Blueprint acima dá o código do passo ou do cartão.')
   l.push('- **Mudou a ordem, um passo ou uma regra de oferta:** `src/operations/jornada.ts`, depois `npx tsx scripts/jornada-guia.ts`.')
   l.push('- **Mudou um preço ou um serviço:** `prumo/04-venda/piloto-cdl/precos.json` e o caminho descrito no `CLAUDE.md` do prumo (inclui `colinha.ts`).')
   l.push('')

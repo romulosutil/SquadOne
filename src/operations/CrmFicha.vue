@@ -15,7 +15,7 @@ import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroCont
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
-import { textoDoLink } from './proxima-venda'
+import { filaDeVenda, textoDoLink } from './proxima-venda'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo,
 // proposta, sem contato fácil, e no Plus o envio e a resposta) e todas vão para a aba CRM da
@@ -43,7 +43,7 @@ const props = defineProps<{
 }>()
 // Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
 // voltar do navegador, então a ficha não tem botão de voltar próprio.
-// `colinha`: o CrmPanel troca para /crm?ver=colinha (fecha a folha, sem recarregar).
+// `colinha`: o CrmPanel troca para /crm?ver=roteiro (fecha a folha, sem recarregar).
 const emit = defineEmits<{
   registrado: []; colinha: []; liberar: [leadId: string]; anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
 }>()
@@ -131,6 +131,17 @@ function aoTerSugestao(s: SugestaoDoCopiloto | null) {
   momento.value = s?.momento ?? null
   if (cabe.value) sugestaoGuardada.value = s
 }
+/**
+ * Uma regra de "o que fazer agora" (16/10/2026, OT-04): o "Agora" da Ficha é a ação da fila de venda
+ * para este lead (a mesma da Próxima venda e do Telegram), e a jornada vira contexto. Antes o "Agora"
+ * vinha só do passo da jornada, e o mesmo lead podia ter uma ordem aqui e outra na fila. A fila é
+ * calculada como se o horário e o ritmo deixassem: a Ficha diz o que fazer, as travas dizem quando.
+ * O próximo passo marcado à mão e a leitura do copiloto (recepção, robô) continuam vencendo.
+ */
+const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
+  ? filaDeVenda(props.visao, { primeiroLiberado: true, agora: Date.now() }).find((a) => a.leadId === props.lead.id) ?? null
+  : null))
+
 /** O passo do copiloto vence o da jornada quando quem respondeu não decide. */
 const passoDoCopiloto = computed(() => {
   const m = momento.value
@@ -260,7 +271,7 @@ const colinha = computed(() => colinhaDoLead(props.lead))
 type AbaDeVenda = 'oferta' | 'roteiro' | 'copiloto'
 const ABAS_DE_VENDA = computed<Array<{ id: AbaDeVenda; rotulo: string }>>(() => [
   { id: 'oferta', rotulo: 'O que oferecer' },
-  { id: 'roteiro', rotulo: 'O que dizer' },
+  { id: 'roteiro', rotulo: 'Roteiro' },
   ...(comCopiloto.value && copilotoServe(props.lead) ? [{ id: 'copiloto' as const, rotulo: 'Copiloto' }] : []),
 ])
 const abaInicial = (): AbaDeVenda =>
@@ -368,6 +379,10 @@ const marcarProposta = () => registrar('proposta', '', propostaData.value || hoj
 const desfazerProposta = () => registrar('proposta_desfeita', '', '', 'Proposta desfeita.')
 const marcarSemContato = () => registrar('sem_contato', '', '', 'Lead marcado como perdido.')
 const desfazerSemContato = () => registrar('sem_contato_desfeito', '', '', 'Perda desfeita.')
+// OT-06 (16/10/2026): a recusa marcada na Central (a Próxima venda oferece quando ele disse não).
+const marcarRecusa = () => registrar('recusou', '', '', 'Recusa marcada: sai do funil no próximo retrato.')
+const desfazerRecusa = () => registrar('recusou_desfeito', '', '', 'Recusa desfeita.')
+const disseNao = computed(() => props.lead.resposta?.tipo === 'negativa' || props.lead.resposta?.tipo === 'exclusao')
 // Plus: a planilha não conhece o lead, então o envio feito por fora e a resposta se anotam aqui.
 const ehPlus = computed(() => props.lead.produto === 'plus')
 const plusEmConversa = computed(() => props.lead.sinal === 'respondeu-prumo')
@@ -402,6 +417,11 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
         <template v-if="passoDoCopiloto && !proximo.marcadoAMao">
           <p class="crm-ficha__acao">{{ passoDoCopiloto.passo }}</p>
           <p class="crm-ficha__prazo">Leitura do copiloto: {{ passoDoCopiloto.leitura }}</p>
+        </template>
+        <template v-else-if="acaoDaFila && !proximo.marcadoAMao">
+          <p class="crm-ficha__acao">{{ acaoDaFila.titulo }}</p>
+          <p class="crm-ficha__prazo">Como: {{ acaoDaFila.tatica }}</p>
+          <p class="crm-ficha__prazo texto-2">Na jornada: {{ proximo.acao }}</p>
         </template>
         <p v-else class="crm-ficha__acao">{{ proximo.acao }}</p>
         <p class="crm-ficha__prazo">
@@ -541,7 +561,7 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       <p v-if="colinha.motivo" class="crm-colinha__motivo">{{ colinha.motivo }}</p>
       <CrmObjecao v-for="o in colinha.objecoes" :key="o.id" :objecao="o" :lead="lead" :nivel="4" />
       <CrmMomento v-for="m in colinha.momentos" :key="m.momento" :passo="m" :lead="lead" :nivel="4" />
-      <a class="crm-colinha__inteira" href="/crm?ver=colinha" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
+      <a class="crm-colinha__inteira" href="/crm?ver=roteiro" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
     </template>
 
     <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
@@ -576,7 +596,9 @@ const marcarRespondeuPlus = () => registrar('plus_respondeu', '', '', 'Resposta 
       </template>
 
       <button v-if="aberto" class="botao botao--leve crm-ficha__perder" type="button" :disabled="!disponivel || salvando !== null" @click="marcarSemContato">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil: marcar como perdido' }}</button>
-      <button v-else-if="lead.motivoPerda === 'sem-contato'" class="botao botao--leve crm-ficha__perder" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer a perda por falta de contato' }}</button>
+      <button v-if="aberto && disseNao" class="botao botao--leve crm-ficha__perder" type="button" :disabled="!disponivel || salvando !== null" @click="marcarRecusa">{{ salvando === 'recusou' ? 'Marcando…' : 'Ele disse não: marcar a recusa' }}</button>
+      <button v-if="lead.perdaManual === 'sem-contato'" class="botao botao--leve crm-ficha__perder" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerSemContato">{{ salvando === 'sem_contato_desfeito' ? 'Desfazendo…' : 'Desfazer a perda por falta de contato' }}</button>
+      <button v-if="lead.perdaManual === 'recusou'" class="botao botao--leve crm-ficha__perder" type="button" :disabled="!disponivel || salvando !== null" @click="desfazerRecusa">{{ salvando === 'recusou_desfeito' ? 'Desfazendo…' : 'Desfazer a recusa' }}</button>
 
       <template v-if="origem === 'anotar'">
         <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>

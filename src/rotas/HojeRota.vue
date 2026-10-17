@@ -19,7 +19,6 @@ import GrowthCard from '../components/GrowthCard.vue'
 import TrocaSquadCard from '../components/TrocaSquadCard.vue'
 import DellAlerta from '../casca/DellAlerta.vue'
 import FinancasAlerta from '../casca/FinancasAlerta.vue'
-import RespostasAlerta from '../casca/RespostasAlerta.vue'
 import ListaDeQuests from '../agentes/ListaDeQuests.vue'
 import PorQueNaoVende from '../operations/PorQueNaoVende.vue'
 import ProximaVenda from '../operations/ProximaVenda.vue'
@@ -30,7 +29,6 @@ import {
   MAX_NA_HOJE,
   ROTULO_DO_ESTADO_DA_SQUAD,
   estadoDaSquad,
-  pendenciaDeRespostas,
   pendenciasDaHoje,
   proximasQuests,
   type EstadoDasFinancasLido,
@@ -100,9 +98,7 @@ const pendencias = computed(() =>
       ajustes: agentes.value ? ajustes.value.map((a) => a.id) : [],
       crescimentos: agentes.value ? sugestoesDeCrescimento.value.map((s) => s.id) : []
     },
-    ops.value ? financas.value : null,
-    // No Dell a resposta de lead é o cartão "Próxima venda" (bloco 0): aqui só repetiria.
-    ops.value ? null : pendenciaDeRespostas(funil.value)
+    ops.value ? financas.value : null
   )
 )
 const verTodos = ref(false)
@@ -260,7 +256,7 @@ onBeforeUnmount(() => {
     <template v-if="ops">
       <h1 class="so-leitor">Hoje</h1>
       <ProximaVenda :visao="funil" :erro="erroFunil" @registrado="agendarReleitura" />
-      <PorQueNaoVende v-if="funil?.estado === 'ok'" :leads="funil.leads" :agora="agora" />
+      <PorQueNaoVende v-if="funil?.estado === 'ok'" :leads="funil.leads" :agora="agora" resumido />
     </template>
 
     <!-- 1. O que precisa de você -->
@@ -276,7 +272,6 @@ onBeforeUnmount(() => {
         <li v-for="p in mostradas" :key="p.chave">
           <DellAlerta v-if="p.tipo === 'dell'" :check="p.check" />
           <FinancasAlerta v-else-if="p.tipo === 'financas'" :pendencia="p" />
-          <RespostasAlerta v-else-if="p.tipo === 'respostas'" :pendencia="p" />
           <TrocaSquadCard
             v-else-if="p.tipo === 'troca' && troca(p.id)"
             :sugestao="troca(p.id)!"
@@ -391,7 +386,7 @@ onBeforeUnmount(() => {
     </section>
 
     <!-- 4. A linha do funil saiu (16/10/2026): o "Por que não está vendendo" (bloco 0) a substitui. -->
-    <p v-if="ops && fonteDoFunil" class="texto-2 texto-pequeno hoje__fonte">{{ fonteDoFunil }} · <a href="/crm">abrir o CRM</a></p>
+    <p v-if="ops && fonteDoFunil" class="texto-2 texto-pequeno hoje__fonte">{{ fonteDoFunil }} · <a href="/crm">abrir Vendas</a></p>
 
     <!-- 5. O que resolve sozinho, fechado: está aqui para conferir, não para interromper. -->
     <details v-if="alertas?.sozinhos.length" class="hoje__bloco hoje__sozinhos">

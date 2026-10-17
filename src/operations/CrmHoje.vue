@@ -20,6 +20,8 @@ import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead } from './types
 const props = defineProps<{
   grupos: CrmGrupoHoje[]; leads: Map<string, CrmLead>; envios: EnviosAbertos; agora: number; aviso?: string | null; liberados: EnviosLiberados
   anotados: EnviosAnotados; ritmo: EstadoDoRitmo
+  /** Quantas linhas por grupo antes do "ver todos" (a Triagem usa lotes de 10, OT-05). */
+  limite?: number
 }>()
 const emit = defineEmits<{
   abrir: [leadId: string, origem: HTMLElement | null]
@@ -30,7 +32,8 @@ const emit = defineEmits<{
   fila: []
 }>()
 
-const LIMITE = 5
+const LIMITE_PADRAO = 5
+const LIMITE = computed(() => props.limite ?? LIMITE_PADRAO)
 const abertos = ref<Set<CrmGrupoHojeId>>(new Set())
 const visiveis = computed(() => props.grupos.filter(g => g.itens.length))
 const total = computed(() => visiveis.value.reduce((soma, g) => soma + g.itens.length, 0))
@@ -44,7 +47,7 @@ const anotacao = (grupo: CrmGrupoHoje, item: CrmItemHoje) => {
   const t = tipo ? anotadoEm(props.anotados, item.leadId, tipo) : undefined
   return tipo && t !== undefined ? textoDaAnotacao(tipo, hora(new Date(t).toISOString())) : ''
 }
-const itens = (grupo: CrmGrupoHoje) => abertos.value.has(grupo.id) ? ordenados(grupo) : ordenados(grupo).slice(0, LIMITE)
+const itens = (grupo: CrmGrupoHoje) => abertos.value.has(grupo.id) ? ordenados(grupo) : ordenados(grupo).slice(0, LIMITE.value)
 const alternar = (id: CrmGrupoHojeId) => {
   const proximo = new Set(abertos.value)
   if (proximo.has(id)) proximo.delete(id)

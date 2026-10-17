@@ -7,9 +7,10 @@ import FinVisao from './FinVisao.vue'
 import type { VisaoFinanceira } from './types'
 import './financas.css'
 
-// Finanças (06/10/2026): Visão (/financas), Lançamentos (/financas/lancamentos)
-// e Organizar (/financas/organizar: categorias, orçamento, regras e o extrato
-// de reserva, 07/10/2026). O cabeçalho com a saúde de cada conexão e o "dados
+// Finanças (06/10/2026): Visão (/financas, com o "Importar" único de fatura em
+// PDF e extrato OFX/CSV desde 16/10/2026), Lançamentos (/financas/lancamentos)
+// e Organizar (/financas/organizar: categorias, orçamento e regras, 07/10/2026).
+// O cabeçalho com a saúde de cada conexão e o "dados
 // até" vale para as três. Valores só nesta tela (RULES 24): nada de R$ em
 // título, anúncio ou URL.
 const props = defineProps<{ caminho: string }>()

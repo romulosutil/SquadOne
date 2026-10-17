@@ -161,6 +161,15 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 
 ## Próxima venda e o vendedor do Telegram (16/10/2026)
 
+> **As outras otimizações do blueprint (16–17/10/2026).** OT-01: "A fazer" é só a Próxima venda (a fila única); a folha "Enviar um
+> por um" saiu (o filtro por nicho e o "Vídeo enviado" vieram para a Próxima venda), o Funil virou consulta, e o "Enviei"/"Pular" mora
+> no servidor (`server/venda-do-dia.ts`, `GET/POST /api/operations/crm/venda`), dividido com o vendedor do Telegram; o 05 · Acompanhamento
+> não avisa mais o follow-up (só grava o `followup_em`). OT-04: o "Agora" da Ficha é a ação da fila para o lead, com a jornada como
+> contexto. OT-05: aba Triagem (`?ver=triagem`, lotes de 10). OT-06: registros `recusou`/`recusou_desfeito` (perda manual, como o sem
+> contato), "Marcar a recusa" na fila, no Telegram e na Ficha. OT-08: na Hoje só o gargalo; os degraus em Números. OT-10: teste do
+> follow-up sem recibo (`ab-recibo.ts`). OT-12: Vendas, Números e Roteiro também na URL. OT-13: a conversa do Plus vale como resposta.
+> OT-15: `followupDoTerceiroDia` em `server/crm.ts`, uma regra para todas as ofertas.
+>
 > **Depois do blueprint (16/10/2026, OT-02 e OT-09).** Uma janela de horário só: `EXPEDIENTE_DE_VENDA` e
 > `noExpedienteDeVenda` moraram para `trava-de-horario.ts` (a Próxima venda reexporta) e o `avisoDeHorario` das telas do
 > CRM passou a usá-la, então o sábado de manhã e o 17h30–18h deixaram de passar sem "Liberar". A Próxima venda ganhou o

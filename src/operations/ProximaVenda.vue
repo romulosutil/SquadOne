@@ -12,10 +12,17 @@
  * Fora do expediente, o primeiro contato espera como nas telas do CRM (OT-02, 16/10/2026): a mesma
  * janela (trava-de-horario.ts), o mesmo aviso com a taxa medida e o mesmo "Liberar" por lead, só
  * nesta visita (memória, nunca localStorage). O ritmo continua sem "Liberar".
+ *
+ * A fila única (OT-01, 16/10/2026): o "Enviei" e o "Pular" vão ao servidor (GET/POST
+ * /api/operations/crm/venda, o mesmo arquivo do vendedor do Telegram), então valem em qualquer
+ * navegador e no Telegram; o localStorage fica só de reserva quando o servidor não responde. A folha
+ * "Enviar um por um" saiu: o filtro por nicho e o passo do vídeo (A/B do vídeo) vieram para cá.
+ * O desfecho (OT-06): quem disse não ganha "Marcar a recusa" em um toque.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { corpoDaAnotacao } from './anotacao-de-envio'
-import { filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from './proxima-venda'
+import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
+import { filaDeVenda, nichoDo, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { liberarEnvio, ROTULO_DE_LIBERAR, type EnviosLiberados } from './trava-de-horario'
 import { gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, textoDoRitmo, type PrimeirosContatos } from './trava-de-ritmo'
@@ -39,6 +46,23 @@ const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
 /** Leads liberados fora do expediente nesta visita (o "Liberar" da trava de horário). */
 const liberados = ref<EnviosLiberados>(new Set())
+/** Primeiro contato de um nicho só; vazio = todos. */
+const nicho = ref('')
+/** "Vídeo enviado" do braço com vídeo (A/B do vídeo): lembrado neste navegador por 30 min. */
+const videos = ref<EnviosAbertos>({})
+
+/** O que o servidor lembra do dia (o mesmo do Telegram); falhou, fica o que esta tela sabe. */
+async function lerDoServidor() {
+  try {
+    const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
+    if (!r.ok) return
+    const corpo = await r.json() as { resolvidas?: Record<string, { em: number; pulou: boolean }> }
+    if (corpo.resolvidas) {
+      resolvidas.value = { ...resolvidas.value, ...corpo.resolvidas }
+      gravarResolvidas()
+    }
+  } catch { /* sem servidor: a reserva local */ }
+}
 
 async function lerSugestoes() {
   try {
@@ -68,10 +92,13 @@ function gravarResolvidas() {
 onMounted(() => {
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   lerResolvidas()
+  videos.value = lerVideos(armazenamento(), Date.now())
+  void lerDoServidor()
   void lerSugestoes()
   relogio = window.setInterval(() => {
     agora.value = Date.now()
     void lerSugestoes()
+    void lerDoServidor()
   }, 30_000)
 })
 onBeforeUnmount(() => window.clearInterval(relogio))
@@ -83,7 +110,8 @@ const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([
 const ritmoLivre = computed(() => ritmo.value.motivo === null)
 const fila = computed<AcaoDeVenda[]>(() =>
   filaDeVenda(props.visao?.estado === 'ok' ? props.visao : null,
-    { primeiroLiberado: ritmoLivre.value && expediente.value, liberados: liberados.value, ritmoLivre: ritmoLivre.value, agora: agora.value, sugestoes: sugestoes.value }, pulados.value)
+    { primeiroLiberado: ritmoLivre.value && expediente.value, liberados: liberados.value, ritmoLivre: ritmoLivre.value, agora: agora.value, sugestoes: sugestoes.value,
+      ...(nicho.value ? { nichoDoPrimeiro: nicho.value } : {}) }, pulados.value)
     .filter((a) => !feitos.value.has(a.chave)))
 /**
  * Fora do expediente e com o ritmo livre: o primeiro contato que sairia agora, para o "Liberar"
@@ -98,7 +126,26 @@ function liberar(a: AcaoDeVenda) {
   liberados.value = liberarEnvio(liberados.value, a.leadId)
   status.value = `${a.empresa}: liberado fora do expediente nesta visita.`
 }
+const porId = computed(() => new Map((props.visao?.leads ?? []).map((l) => [l.id, l])))
+/** Os nichos de quem espera o primeiro contato, do que tem mais para o que tem menos. */
+const nichos = computed(() => {
+  const conta = new Map<string, number>()
+  for (const i of props.visao?.hoje.find((g) => g.id === 'enviar')?.itens ?? []) {
+    const lead = porId.value.get(i.leadId)
+    if (lead) conta.set(nichoDo(lead), (conta.get(nichoDo(lead)) ?? 0) + 1)
+  }
+  return [...conta].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+})
 const atual = computed(() => fila.value[0] ?? null)
+const leadAtual = computed(() => (atual.value ? porId.value.get(atual.value.leadId) ?? null : null))
+const passoDoVideoAtual = computed(() => (atual.value?.primeiroContato && leadAtual.value ? passoDoVideo(leadAtual.value) : null))
+const videoPendente = computed(() => (leadAtual.value ? estadoDoVideo(leadAtual.value, videos.value) === 'pendente' : false))
+function marcarOVideo() {
+  if (!leadAtual.value) return
+  videos.value = marcarVideo(videos.value, leadAtual.value.id, Date.now())
+  gravarVideos(armazenamento(), videos.value)
+  status.value = `${leadAtual.value.empresa}: vídeo marcado como enviado.`
+}
 const depois = computed(() => fila.value.slice(1))
 /** Primeiros contatos prontos que a trava ou o relógio seguram agora. */
 const esperando = computed(() => (props.visao?.hoje.find((g) => g.id === 'enviar')?.itens.length ?? 0))
@@ -123,10 +170,12 @@ async function aoTocar(a: AcaoDeVenda) {
     const r = await fetch('/api/operations/crm/registro', {
       // A proposta vai sem data: o servidor grava a de hoje (São Paulo), como o formulário da Ficha.
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(a.anota === 'proposta' ? { produto: lead.produto, id: lead.chave, tipo: 'proposta', texto: '', data: '' } : corpoDaAnotacao(lead, a.anota)),
+      body: JSON.stringify(a.anota === 'proposta' || a.anota === 'recusou'
+        ? { produto: lead.produto, id: lead.chave, tipo: a.anota, texto: '', data: '' } : corpoDaAnotacao(lead, a.anota)),
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    status.value = a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.` : `${a.empresa}: envio anotado no CRM.`
+    status.value = a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.`
+      : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado no CRM.`
     emit('registrado')
   } catch {
     status.value = `${a.empresa}: não consegui anotar o envio — anote na ficha.`
@@ -136,9 +185,19 @@ async function aoTocar(a: AcaoDeVenda) {
 function resolver(a: AcaoDeVenda, pulou: boolean) {
   resolvidas.value = { ...resolvidas.value, [a.chave]: { em: Date.now(), pulou } }
   gravarResolvidas()
+  // O servidor é a memória que vale para o Telegram e outro navegador; falhar não desfaz a tela.
+  void fetch('/api/operations/crm/venda', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, pulou }),
+  }).catch(() => undefined)
   tocado.value = null
   copiado.value = false
   status.value = pulou ? `${a.empresa}: fica para o fim da fila.` : `${a.empresa}: feito.`
+}
+
+/** O desfecho: o toque grava a recusa e a ação sai da fila. */
+async function marcarRecusa(a: AcaoDeVenda) {
+  await aoTocar(a)
+  resolver(a, false)
 }
 
 async function copiar(texto: string) {
@@ -151,7 +210,7 @@ async function copiar(texto: string) {
 }
 
 const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
-  responder: 'Responder', 'mandar-proposta': 'Mandar a proposta', combinado: 'Combinado', 'depois-do-link': 'Depois do link', proposta: 'Proposta', followup: 'Follow-up', primeiro: 'Primeiro contato',
+  responder: 'Responder', 'mandar-proposta': 'Mandar a proposta', combinado: 'Combinado', 'depois-do-link': 'Depois do link', proposta: 'Proposta', followup: 'Follow-up', desfecho: 'Recusou', primeiro: 'Primeiro contato',
 }
 </script>
 
@@ -193,11 +252,17 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
         </figure>
         <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. A colinha da ficha ajuda.</p>
 
+        <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
         <div class="venda__botoes">
+          <template v-if="atual.tipo === 'desfecho'">
+            <button type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
+            <a v-if="atual.link" class="botao" :href="atual.link.url" target="_blank" rel="noopener">{{ atual.link.rotulo }} <span aria-hidden="true">↗</span></a>
+          </template>
           <a
-            v-if="atual.link" class="botao botao--primario" :href="atual.link.url" target="_blank" rel="noopener"
+            v-else-if="atual.link" class="botao botao--primario" :href="atual.link.url" target="_blank" rel="noopener"
             @click="aoTocar(atual)"
           >{{ atual.rascunho ? 'Abrir no WhatsApp com a mensagem' : 'Abrir a conversa no WhatsApp' }} <span aria-hidden="true">↗</span></a>
+          <button v-if="passoDoVideoAtual && videoPendente && tocado === atual.chave" type="button" class="botao" @click="marcarOVideo">Vídeo enviado</button>
           <button v-if="tocado === atual.chave" type="button" class="botao" @click="resolver(atual, false)">Enviei, próxima</button>
           <button v-if="atual.rascunho" type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
           <a class="botao botao--leve" :href="`/crm?lead=${encodeURIComponent(atual.leadId)}`">Ficha</a>
@@ -207,10 +272,10 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 
       <p v-if="depois.length" class="venda__depois">
         <span>Depois: {{ resumoDaFila(depois) }}.</span>
-        <button type="button" class="botao botao--leve" :aria-expanded="verFila" @click="verFila = !verFila">{{ verFila ? 'Esconder a fila' : 'Ver a fila' }}</button>
+        <button type="button" class="botao botao--leve" :aria-expanded="verFila" @click="verFila = !verFila">{{ verFila ? 'Esconder a fila' : `Ver a fila inteira (${depois.length})` }}</button>
       </p>
       <ol v-if="verFila" class="venda__fila">
-        <li v-for="a in depois.slice(0, 8)" :key="a.chave">
+        <li v-for="a in depois" :key="a.chave">
           <a :href="`/crm?lead=${encodeURIComponent(a.leadId)}`"><strong>{{ a.titulo }}</strong><small class="texto-2">{{ a.contexto }}</small></a>
         </li>
       </ol>
@@ -222,6 +287,12 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     </template>
 
     <p v-if="motivoDaEspera" class="texto-2 texto-pequeno">{{ motivoDaEspera }}</p>
+    <label v-if="nichos.length > 1" class="venda__nicho" for="venda-nicho">Primeiro contato de
+      <select id="venda-nicho" v-model="nicho">
+        <option value="">todos os nichos</option>
+        <option v-for="[n, q] in nichos" :key="n" :value="n">{{ n }} ({{ q }})</option>
+      </select>
+    </label>
     <p v-if="candidatoForaDoExpediente" class="venda__botoes">
       <button type="button" class="botao botao--leve" @click="liberar(candidatoForaDoExpediente)">{{ ROTULO_DE_LIBERAR }}: {{ candidatoForaDoExpediente.empresa }}</button>
     </p>
@@ -246,6 +317,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }
 .venda__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16em; overflow: auto; }
 .venda__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.venda__nicho { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
+.venda__nicho select { min-height: var(--toque); padding: 0 var(--esp-2); border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); color: var(--texto); }
 .venda__depois { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); padding-top: var(--esp-2); border-top: var(--divisor); color: var(--texto-2); }
 .venda__fila { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
 .venda__fila a { display: grid; gap: var(--esp-0); min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); color: var(--texto); text-decoration: none; }

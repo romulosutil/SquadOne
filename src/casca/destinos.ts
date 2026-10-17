@@ -16,7 +16,7 @@ export interface Capacidades {
   agentes: boolean
 }
 
-export type RotaId = 'hoje' | 'agenda' | 'funil' | 'financas' | 'escritorio' | 'mais' | 'blueprint' | 'nao-encontrada'
+export type RotaId = 'hoje' | 'agenda' | 'funil' | 'financas' | 'escritorio' | 'mais' | 'design-system' | 'nao-encontrada'
 
 export interface Destino {
   id: Exclude<RotaId, 'nao-encontrada'> | 'entrada'
@@ -28,7 +28,7 @@ export interface Destino {
 
 const HOJE: Destino = { id: 'hoje', rotulo: 'Hoje', href: '/', icone: '◉' }
 const AGENDA: Destino = { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: '▦' }
-const FUNIL: Destino = { id: 'funil', rotulo: 'Funil', href: '/crm', icone: '▤' }
+const FUNIL: Destino = { id: 'funil', rotulo: 'Vendas', href: '/crm', icone: '▤' }
 const FINANCAS: Destino = { id: 'financas', rotulo: 'Finanças', href: '/financas', icone: 'R$' }
 const ESCRITORIO: Destino = { id: 'escritorio', rotulo: 'Escritório', href: '/squadone', icone: '▣' }
 /** Não é da SPA: o servidor repassa /entrada/ ao serviço da Entrada (RULES 23). */
@@ -49,7 +49,7 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
   if (caminho === '/mais') return 'mais'
   // Design system (16/10/2026; era /blueprint, renomeado no mesmo dia: o blueprint é o de serviço, docs/blueprint/): os tokens e os componentes vivos, nos dois perfis. Fora da barra e
   // do trilho (é ferramenta de quem mexe no app, não destino do dia); entra pelo Mais e pelo Ctrl+K.
-  if (caminho === '/design-system') return 'blueprint'
+  if (caminho === '/design-system') return 'design-system'
   if (caminho === '/agenda') return c.agentes ? 'agenda' : 'nao-encontrada'
   if (comeca(caminho, '/squadone')) return c.agentes ? 'escritorio' : 'nao-encontrada'
   if (c.perfil !== 'operations') return 'nao-encontrada'
@@ -84,11 +84,24 @@ export function destinosDaBarra(c: Capacidades): Destino[] {
   return [HOJE, AGENDA, ESCRITORIO, MAIS]
 }
 
+/**
+ * O grupo "Usar" do Mais (16/10/2026, OT-11 do blueprint de serviço): só os
+ * destinos que a barra da tela NÃO alcança. `largo` é a mesma pergunta da casca
+ * (min-width: 64rem): a partir dela o trilho lateral já lista todos, e o Usar fica
+ * vazio; no celular sobra o que não cabe nos quatro da barra inferior. Sai das
+ * duas listas acima, e não de uma terceira, para nunca repetir um destino quando
+ * a barra mudar. Lançamentos não entra: é aba de Finanças, não destino.
+ */
+export function atalhosDoMais(c: Capacidades, largo: boolean): Destino[] {
+  const naTela = new Set((largo ? destinosLaterais(c) : destinosDaBarra(c)).map((d) => d.id))
+  return destinosLaterais(c).filter((d) => !naTela.has(d.id))
+}
+
 /** O destino que leva `aria-current="page"`; null quando o caminho é de outro lugar. */
 export function destinoAtual(caminhoCru: string, c: Capacidades): Destino['id'] | null {
   const rota = rotaDaCasca(caminhoCru, c)
   // O blueprint mora dentro do Mais: é ele que fica aceso na barra.
-  if (rota === 'blueprint') return 'mais'
+  if (rota === 'design-system') return 'mais'
   return rota === 'nao-encontrada' ? null : rota
 }
 

@@ -16,6 +16,7 @@ import {
 } from "./crm.ts";
 import { lerCatalogo, normalizarTelefone, prepararPlus, type CartaoDoCatalogo, type ItemDoPdf, type LeadPlus } from "./plus-catalogo.ts";
 import { PRIMEIRA_PLUS, followupDoPlus, primeiraDoPlus, referenciasDaEmpresa } from "./plus-mensagem.ts";
+import { chaveDoNumero } from "./conversa-do-lead.ts";
 
 // Tudo fixture: nenhum PDF, planilha ou n8n real; o que grava usa diretório temporário (nunca data/).
 const AGORA = new Date("2026-10-15T15:00:00Z"); // 12:00 em São Paulo
@@ -402,5 +403,24 @@ describe("Plus: registro e arquivo", () => {
       assert.equal((await store.registrar({ produto: "plus", id: plus(2).id, tipo: "plus_respondeu" }, AGORA)).ok, true);
       await assert.rejects(store.registrar({ produto: "plus", id: plus(2).id, tipo: "plus_enviado" }, AGORA), /já recebeu a primeira mensagem/);
     });
+  });
+});
+
+// OT-13 (17/10/2026): o observador grava a conversa do Plus; a mensagem dele depois da primeira vale
+// como resposta, sem o "Respondeu no WhatsApp" à mão.
+describe("Plus: a resposta sai da conversa guardada", () => {
+  it("mensagem dele depois do envio leva a Em contato respondido; antes do envio não conta", () => {
+    const lead = plus(7);
+    const enviado = new Date(AGORA.getTime() - 2 * 86_400_000).toISOString();
+    const depois = new Date(AGORA.getTime() - 86_400_000).toISOString();
+    const montar = (em: string) => montarCrm(retratoComRegistros([{ id: lead.id, tipo: "plus_enviado", em: enviado }]), {
+      agora: AGORA, plus: { geradoEm: dias(1), leads: [lead] },
+      conversas: new Map([[chaveDoNumero(lead.whatsapp), [{ em, direcao: "entrada" as const, texto: "Opa, me conta mais" }]]]),
+    }).leads.find((l) => l.id === `plus:${lead.id}`)!;
+    const respondeu = montar(depois);
+    assert.equal(respondeu.etapa, "contato");
+    assert.equal(respondeu.marcos.respondeu, depois);
+    const antes = montar(new Date(AGORA.getTime() - 3 * 86_400_000).toISOString());
+    assert.equal(antes.marcos.respondeu, undefined);
   });
 });

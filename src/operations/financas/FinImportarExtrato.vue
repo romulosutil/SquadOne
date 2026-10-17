@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { brl, diaMes } from './formato'
 import type { PreviaDoExtrato } from './types'
 
@@ -7,21 +7,24 @@ import type { PreviaDoExtrato } from './types'
 // parar. Primeiro lê e mostra o que é novo (nada é gravado); importar é o
 // segundo toque. O que a Pluggy já tem não entra, e quando a conexão voltar
 // ela vence e a linha do extrato sai: o mesmo gasto nunca conta duas vezes.
-const emit = defineEmits<{ importado: [] }>()
+// Desde 16/10/2026 (OT-11) o arquivo chega do "Importar" único (FinImportarArquivo),
+// que monta este fluxo de novo a cada arquivo: conta e sinal recomeçam do zero
+// como antes, a leitura começa ao montar e "Cancelar" devolve a escolha para lá.
+const props = defineProps<{ arquivo: File }>()
+const emit = defineEmits<{ importado: []; cancelar: [] }>()
+// O seletor único fica desligado enquanto este fluxo lê ou grava, como antes.
+const ocupado = defineModel<boolean>('ocupado', { default: false })
 
-const arquivo = ref<File | null>(null)
 const contas = ref<{ id: string; nome: string; tipo: string }[]>([])
 const conta = ref('')
 const inverter = ref<boolean | null>(null)
 const previa = ref<PreviaDoExtrato | null>(null)
-const ocupado = ref(false)
 const erro = ref('')
 const feito = ref('')
 
 const novos = computed(() => previa.value?.lancamentos.filter((l) => l.novo) ?? [])
 
 async function enviar(confirmar: boolean) {
-  if (!arquivo.value) return
   ocupado.value = true
   erro.value = ''
   feito.value = ''
@@ -33,7 +36,7 @@ async function enviar(confirmar: boolean) {
     const resposta = await fetch(`/api/financas/importar/extrato?${q}`, {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
-      body: arquivo.value,
+      body: props.arquivo,
     })
     const corpo = await resposta.json().catch(() => ({}))
     if (resposta.status === 400 && corpo.escolherConta) {
@@ -56,14 +59,6 @@ async function enviar(confirmar: boolean) {
   }
 }
 
-function aoEscolher(evento: Event) {
-  arquivo.value = (evento.target as HTMLInputElement).files?.[0] ?? null
-  previa.value = null
-  inverter.value = null
-  feito.value = ''
-  if (arquivo.value) void enviar(false)
-}
-
 function aoMudarConta() {
   inverter.value = null
   void enviar(false)
@@ -74,27 +69,15 @@ function trocarSinal() {
   void enviar(false)
 }
 
-function cancelar() {
-  arquivo.value = null
-  previa.value = null
-  conta.value = ''
-  inverter.value = null
-  erro.value = ''
-}
+onMounted(() => void enviar(false))
 </script>
 
 <template>
-  <section class="fin-bloco" aria-labelledby="fin-extrato">
-    <header class="fin-bloco__topo">
-      <h2 id="fin-extrato">Extrato de reserva (OFX ou CSV)</h2>
-      <p class="fin-sub">Para quando uma conexão parar: baixe o extrato no app do banco e envie aqui. O que a Pluggy já tem não entra de novo.</p>
-    </header>
-    <label class="fin-arquivo">
-      <span>{{ arquivo ? arquivo.name : 'Escolher arquivo OFX ou CSV' }}</span>
-      <input type="file" accept=".ofx,.csv,.txt,application/x-ofx,text/csv" :disabled="ocupado" @change="aoEscolher" />
-    </label>
+  <div class="fin-importar-fluxo">
+    <h3 class="fin-subtitulo">Extrato de reserva (OFX ou CSV)</h3>
+    <p class="fin-sub">Para quando uma conexão parar. O que a Pluggy já tem não entra de novo.</p>
 
-    <label v-if="arquivo && contas.length" class="fin-escolha">De que conta é?
+    <label v-if="contas.length" class="fin-escolha">De que conta é?
       <select v-model="conta" :disabled="ocupado" @change="aoMudarConta">
         <option value="" disabled>Escolha</option>
         <option v-for="c in contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
@@ -128,8 +111,8 @@ function cancelar() {
         <button type="button" class="fin-botao fin-botao--primario" :disabled="ocupado || !previa.novos" @click="enviar(true)">
           Importar {{ previa.novos }} lançamento(s)
         </button>
-        <button type="button" class="fin-botao" :disabled="ocupado" @click="cancelar">Cancelar</button>
+        <button type="button" class="fin-botao" :disabled="ocupado" @click="emit('cancelar')">Cancelar</button>
       </div>
     </div>
-  </section>
+  </div>
 </template>

@@ -51,6 +51,7 @@ import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
+import { criarMemoriaDaVenda } from "./server/venda-do-dia.ts";
 import { lerConversaDoNumero } from "./server/conversa-do-lead.ts";
 import { descreverHistorico } from "./server/roster-historico.ts";
 import { criarLeitorDoTime } from "./server/time.ts";
@@ -394,6 +395,8 @@ async function startServer() {
         throw error;
       }
     };
+    // Uma instância só para a rota e o vendedor: as escritas no arquivo do dia ficam em fila.
+    const memoriaDaVenda = criarMemoriaDaVenda(path.join(operationsDataDir, "venda-do-dia.json"));
     app.use("/api/operations", createOperationsRouter({
       config: operationsConfig,
       store: operationsStore,
@@ -402,6 +405,7 @@ async function startServer() {
       copiloto,
       readAgenda,
       dataDir: operationsDataDir,
+      memoriaDaVenda,
     }));
 
     // O vendedor (16/10/2026): "Envie para X" no Telegram, seg–sex 08:00–17:30, um por vez, com a
@@ -434,6 +438,7 @@ async function startServer() {
           registrar: async (corpo) => { await crm.registrar(corpo); },
           arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
           arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),
+          vendaDoDia: memoriaDaVenda,
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,
           agora: () => Date.now(),
         });

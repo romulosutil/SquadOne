@@ -86,6 +86,8 @@ desde 16/10/2026, OT-02: a janela única seg–sex 8h–17h30 em tabela (17h45 e
 "pode mandar" = expediente ou liberado e sempre com o ritmo livre, e o trecho do Roteiro sem WhatsApp antes do primeiro contato),
 `src/operations-velocidade.test.ts` (16/10/2026, OT-09: do "quero ver" ao link pela 2ª anotada ou pelo link visto na conversa, link antes do
 interesse não conta, do link à proposta, perdido não espera e fora dos 30 dias não entra, mediana e duração legível),
+`src/operations-financas-importar.test.ts` (16/10/2026, OT-11: o "Importar" único de Finanças manda PDF à fatura e OFX/CSV/.txt ao extrato pela
+extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; e, em `casca.test.ts`, o Usar do Mais só com o que a barra da tela não alcança),
 `src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
 10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
@@ -110,7 +112,11 @@ mensagem com o texto do Balcão e só com a trava de ritmo livre; nada para quem
 quente com o link do demo; depois da 2ª anotada, ele sai das respostas (achado da simulação, corrigido em `server/crm.ts`);
 o "o que achou?" de 20 h a 72 h depois do link; a proposta sem reenviar o preço; o reenvio do só-robô como primeiro contato;
 fora do expediente só o lead liberado entra na fila, e nunca com o ritmo travado (OT-02); o histórico do vendedor: "expirou" e "saiu" de
-um aviso que fecha sem toque, o resumo dos 30 dias com os "quero ver" à parte e a leitura que pula linha cortada (OT-09).
+um aviso que fecha sem toque, o resumo dos 30 dias com os "quero ver" à parte e a leitura que pula linha cortada (OT-09);
+quem disse não vira "marcar a recusa" no lugar de responder, a exclusão sem mensagem, e o registro recusou encerra e o desfeito volta (OT-06);
+o braço do teste do recibo e a regra antiga para quem foi enviado antes ou leu (OT-10); a regra única do follow-up do 3º dia em tabela (OT-15).
+`server/venda-do-dia.test.ts` (16/10/2026, OT-01 e OT-10: a memória do "Enviei"/"Pular" zera no dia novo, descarta lixo, a última decisão vale,
+grava e relê em diretório temporário; a leitura do teste do recibo por braço, com a exclusão à parte e o p só com o mínimo dos dois lados).
 E o vendedor (`server/vendedor.ts`): expediente seg–sex 08:00–17:30, um aviso por vez, 30 min sem toque vira pulado, o
 "quero ver" fura a espera, o "Enviei" de primeiro contato conta na trava antes do retrato, o texto e os botões do Telegram
 (callback ≤ 64 bytes). E o "por que não está vendendo" (`por-que-nao-vende.ts`): o gargalo depois do "gostei"),
@@ -124,9 +130,13 @@ item; e quando a Ficha oferece a proposta como primário ou ao lado),
 com o `quando` e a verificação deles, a sala de cada trabalhador em tabela, os caçadores do Iris e das Estamparias, o Plus sem robô,
 o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo do servidor importando catálogo, fluxos ou operação),
 `src/office/operacao.test.ts` (o Escritório como mapa da operação: o recorte da jornada de cada sala do PRUMO, contagens por passo
-com o filtro do produto do CRM, com você e parados sem contar o estoque, o link para a Jornada e para a Ficha, CRM não lido ou sem
+com o filtro do produto do CRM, com você e parados sem contar o estoque, o "Ver no Funil" para a vista por passo; desde 16/10/2026
+(OT-07) só a contagem, nenhum lead listado na sala; CRM não lido ou sem
 retrato = sem sinal (nunca zero), retrato velho marcado, o estado de cada robô só pelo `status.json` com "Sem sinal" para retrato
 ausente ou vencido, robô sem verificação ou fora do retrato),
+`src/operations-mapa-unico.test.ts` (16/10/2026, OT-03: todo código `blueprint` de `fluxos.ts` e `jornada.ts` existe como passo ou cartão
+em `docs/blueprint/servico.json`, todo passo da jornada tem o seu, o link do Artifact, e os fatos que tinham divergido não voltam: caçadores
+ligados, observador lendo Clínicas e Estamparias, revisão na Triagem, lembrete e falha pelo Telegram),
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,

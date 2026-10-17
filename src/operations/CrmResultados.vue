@@ -10,6 +10,8 @@ import {
   type Criterio, type LinhaDeResultado, type Periodo,
 } from './resultados'
 import type { CrmLead } from './types'
+import PorQueNaoVende from './PorQueNaoVende.vue'
+import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
@@ -61,6 +63,8 @@ onMounted(async () => {
   } catch { /* sem a medida: o bloco diz que não há */ }
 })
 const minutos = (m: number | null) => (m === null ? '—' : duracao(m / 60))
+// OT-10: o teste do follow-up para quem não manda recibo (ab-recibo.ts). Ignora o período: conta inteiro.
+const recibo = computed(() => leituraDoTesteDoRecibo(props.leads, props.agora))
 
 const resumo = resumoDaLinha
 const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responderam / l.enviados) * 100) : 0}%`
@@ -127,6 +131,9 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       </p>
     </section>
 
+    <!-- OT-08 (16/10/2026): os degraus do funil moram aqui; a Hoje mostra só o gargalo. -->
+    <PorQueNaoVende :leads="leads" :agora="agora" />
+
     <section class="crm-grupo" aria-labelledby="crm-resultado-velocidade">
       <header class="crm-grupo__cabeca">
         <h2 id="crm-resultado-velocidade">Depois do "sim"</h2>
@@ -149,6 +156,25 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
             Viram o link e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
           </p>
+        </li>
+        <li class="crm-resultado">
+          <div class="crm-resultado__cabeca">
+            <strong>Follow-up para quem não manda recibo (teste)</strong>
+            <span v-if="recibo && (recibo.teste.n < MINIMO_POR_BRACO_DO_RECIBO || recibo.controle.n < MINIMO_POR_BRACO_DO_RECIBO)" class="crm-tag">amostra pequena</span>
+          </div>
+          <p v-if="!recibo" class="crm-resultado__numeros">Começa com os enviados a partir de 17/10/2026: metade dos sem recibo recebe o follow-up do 3º dia.</p>
+          <template v-else>
+            <p class="crm-resultado__numeros">
+              Com follow-up: {{ recibo.teste.responderam }} de {{ recibo.teste.n }} responderam ({{ porcento(recibo.teste.responderam, recibo.teste.n) }}) ·
+              sem: {{ recibo.controle.responderam }} de {{ recibo.controle.n }} ({{ porcento(recibo.controle.responderam, recibo.controle.n) }})
+            </p>
+            <p class="crm-nota-pequena">
+              Pediram para não receber mais: {{ recibo.teste.pediramParaParar }} com follow-up, {{ recibo.controle.pediramParaParar }} sem.
+              <template v-if="recibo.p !== null"> Fisher p = {{ recibo.p.toFixed(2) }}.</template>
+              <template v-else> Taxa só com {{ MINIMO_POR_BRACO_DO_RECIBO }} em cada lado.</template>
+              Se a exclusão subir no grupo com follow-up, a regra "só quem leu" fica.
+            </p>
+          </template>
         </li>
         <li class="crm-resultado">
           <div class="crm-resultado__cabeca"><strong>Vendedor no Telegram</strong></div>

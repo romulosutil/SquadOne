@@ -3,12 +3,15 @@
  * "Por que não está vendendo" (16/10/2026): o funil dos últimos 30 dias em degraus, com o que mais
  * perde marcado e o que fazer nele (por-que-nao-vende.ts). Substitui a linha de contagens da Hoje:
  * "3 novos · 7 em contato" não dizia onde o dinheiro escapa.
+ *
+ * `resumido` (16/10/2026, OT-08): na Hoje fica só o gargalo e o que fazer, com o link para Números;
+ * os degraus moram em Números, junto do "Depois do sim". Um lugar para os números, a Hoje só com a ação.
  */
 import { computed } from 'vue'
 import { diagnosticoDeVenda } from './por-que-nao-vende'
 import type { CrmLead } from './types'
 
-const props = defineProps<{ leads: readonly CrmLead[]; agora: number }>()
+const props = defineProps<{ leads: readonly CrmLead[]; agora: number; resumido?: boolean }>()
 const d = computed(() => diagnosticoDeVenda(props.leads, props.agora))
 const pct = (t?: number) => (t === undefined ? '' : `${Math.round(t * 100)}%`)
 const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
@@ -18,16 +21,17 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
   <section class="nao-vende" aria-labelledby="nao-vende-titulo">
     <div class="nao-vende__cabeca">
       <h2 id="nao-vende-titulo">Por que não está vendendo</h2>
-      <a class="nao-vende__mais" href="/crm?ver=funil">Abrir o funil</a>
+      <a v-if="resumido" class="nao-vende__mais" href="/crm?ver=numeros">Ver os números</a>
     </div>
     <div v-if="d.gargalo" class="nao-vende__gargalo" role="note">
       <strong>{{ d.gargalo.titulo }}</strong>
-      <p>{{ d.gargalo.texto }}</p>
+      <p v-if="!resumido">{{ d.gargalo.texto }}</p>
       <p><span class="texto-2">O que fazer:</span> {{ d.gargalo.acao }}</p>
     </div>
     <p v-else-if="!d.degraus[0].n" class="texto-2">Nenhuma primeira mensagem nos últimos {{ d.dias }} dias.</p>
     <p v-else class="texto-2">Nenhum degrau muito abaixo do esperado nos últimos {{ d.dias }} dias.</p>
 
+    <template v-if="!resumido">
     <ol class="nao-vende__degraus" :aria-label="`Funil dos últimos ${d.dias} dias`">
       <li v-for="g in d.degraus" :key="g.id" :class="{ 'is-gargalo': d.gargalo?.degrau === g.id }">
         <span class="nao-vende__rotulo">{{ g.rotulo }}</span>
@@ -37,6 +41,7 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
       </li>
     </ol>
     <p class="texto-2 texto-pequeno">Últimos {{ d.dias }} dias, pelo retrato das planilhas. "Leram" só conta quem tem recibo; o "esperado" é referência de prospecção por mensagem, não meta.</p>
+    </template>
   </section>
 </template>
 

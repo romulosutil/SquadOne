@@ -270,8 +270,10 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[]):
 
 export function botoesDoAviso(acao: AcaoDeVenda, token: string, origemCentral?: string): Botao[][] {
   const linhas: Botao[][] = [];
-  if (acao.link) linhas.push([{ texto: acao.rascunho ? "Abrir no WhatsApp com a mensagem" : "Abrir a conversa no WhatsApp", url: acao.link.url }]);
-  linhas.push([{ texto: "✓ Enviei", dados: dadosDaVenda(token, "enviei") }, { texto: "Pular", dados: dadosDaVenda(token, "pular") }]);
+  // O desfecho (OT-06): o toque principal é marcar a recusa; o agradecimento no WhatsApp é opcional.
+  const desfecho = acao.tipo === "desfecho";
+  if (acao.link) linhas.push([{ texto: desfecho ? acao.link.rotulo : acao.rascunho ? "Abrir no WhatsApp com a mensagem" : "Abrir a conversa no WhatsApp", url: acao.link.url }]);
+  linhas.push([{ texto: desfecho ? "✓ Marcar a recusa" : "✓ Enviei", dados: dadosDaVenda(token, "enviei") }, { texto: "Pular", dados: dadosDaVenda(token, "pular") }]);
   if (origemCentral) linhas.push([{ texto: "Ver a ficha", url: `${origemCentral.replace(/\/$/, "")}/crm?lead=${encodeURIComponent(acao.leadId)}` }]);
   return linhas;
 }
@@ -286,6 +288,11 @@ export interface DepsDoVendedor {
   arquivoDeEstado: string;
   /** O histórico de avisos e toques (OT-09). Ausente: não mede. */
   arquivoDeHistorico?: string;
+  /**
+   * O "Enviei"/"Pular" do dia, dividido com a Próxima venda da Central (OT-01, server/venda-do-dia.ts):
+   * o que se resolveu numa tela não volta no Telegram, e vice-versa. Ausente: só o estado próprio.
+   */
+  vendaDoDia?: { ler(): Promise<{ resolvidas: Record<string, { pulou: boolean }> }>; resolver(chave: string, pulou: boolean): Promise<unknown> };
   origemCentral?: string;
   agora(): number;
   /**
@@ -342,8 +349,16 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     const visao = await deps.lerVisao();
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
-    const { decisao, estado } = decidir(visao, lido, agora, sugestoes);
-    const historico = fechadosNaVolta(lido, estado, agora);
+    // O que a Central já resolveu hoje conta aqui: enviado lá é como avisado; pulado lá vai para o fim.
+    const daCentral = deps.vendaDoDia ? await deps.vendaDoDia.ler().catch(() => null) : null;
+    const resolvidas: Array<[string, { pulou: boolean }]> = daCentral ? Object.entries(daCentral.resolvidas) : [];
+    const comCentral: EstadoDoVendedor = !daCentral ? lido : {
+      ...lido,
+      avisados: [...new Set([...lido.avisados, ...resolvidas.filter(([, r]) => !r.pulou).map(([c]) => c)])],
+      pulados: [...new Set([...lido.pulados, ...resolvidas.filter(([, r]) => r.pulou).map(([c]) => c)])],
+    };
+    const { decisao, estado } = decidir(visao, comCentral, agora, sugestoes);
+    const historico = fechadosNaVolta(comCentral, estado, agora);
     if (decisao.tipo === "avisar" && deps.copiloto && esperaOCopiloto(decisao.acao)) {
       // A mensagem certa vem de quem leu a conversa: pede ao copiloto e segura o aviso uns minutos.
       const gerando = await deps.copiloto.pedir(decisao.acao.leadId, visao).catch(() => false);
@@ -399,6 +414,9 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       }
     }
     await gravarEstado(estado);
+    await deps.vendaDoDia?.resolver(aberto.chave, acao === "pular").catch((err) => {
+      console.warn(`[vendedor] a Central não soube do toque: ${err instanceof Error ? err.message : String(err)}`);
+    });
     await anotarNoHistorico(deps.arquivoDeHistorico, [{
       em: agora, evento: acao === "pular" ? "pulou" : "enviei", chave: aberto.chave, esperaMs: agora - aberto.em,
       ...(aberto.tipo ? { tipo: aberto.tipo } : {}), ...(aberto.quente ? { quente: true } : {}),

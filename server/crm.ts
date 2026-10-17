@@ -7,6 +7,7 @@ import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
+import { bracoDoRecibo, entraNoTesteDoRecibo, type BracoDoRecibo } from "../src/operations/ab-recibo.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
 //
@@ -228,7 +229,12 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
-  "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu"] as const;
+  "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito"] as const;
+/**
+ * `recusou` (16/10/2026, OT-06 do blueprint): o desfecho marcado na Central. Antes o "Recusou" do Site
+ * só existia na página do lead (fluxo 07) e no PRUMO só na Etapa da planilha; com a conversa guardada e
+ * a resposta classificada como negativa ou exclusão, a Próxima venda oferece marcar em um toque.
+ */
 export type CrmTipoDeRegistro = (typeof TIPOS_DE_REGISTRO)[number];
 /** Os registros que o toque num link de envio faz sozinho: um clique duplo não pode virar dois envios. */
 export const TIPOS_DE_ENVIO: ReadonlySet<CrmTipoDeRegistro> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado"]);
@@ -485,6 +491,10 @@ export interface CrmLead {
   subEtapa: string;
   /** `expirou`: nunca respondeu em DIAS_SEM_RESPOSTA; `esfriou`: respondeu e parou de responder. */
   motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato";
+  /** A perda marcada na Central (aba CRM), que dá para desfazer de lá: "sem contato fácil" ou "recusou". */
+  perdaManual?: "sem-contato" | "recusou";
+  /** Teste do follow-up sem recibo (OT-10): o braço do lead do Site enviado desde 17/10/2026 sem recibo. */
+  testeDoRecibo?: BracoDoRecibo;
   /** Só em Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
   diasParaSair?: number;
   /** Valor cru da planilha (status do Site, Etapa do PRUMO), para conferência. */
@@ -700,10 +710,11 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
 function manuais(registros: Registro[]) {
   let proposta: Registro | undefined;
   let proximo: Registro | undefined;
+  // A perda marcada na Central: a última vale, e o "desfeito" do mesmo tipo a apaga.
   let semContato: Registro | undefined;
   for (const r of registros) {
-    if (r.tipo === "sem_contato") semContato = r;
-    if (r.tipo === "sem_contato_desfeito") semContato = undefined;
+    if (r.tipo === "sem_contato" || r.tipo === "recusou") semContato = r;
+    if ((r.tipo === "sem_contato_desfeito" && semContato?.tipo === "sem_contato") || (r.tipo === "recusou_desfeito" && semContato?.tipo === "recusou")) semContato = undefined;
     if (r.tipo === "proposta") proposta = r;
     if (r.tipo === "proposta_desfeita") proposta = undefined;
     if (r.tipo === "proximo_passo") proximo = r.texto ? r : undefined;
@@ -749,6 +760,34 @@ export function followupJaEnviado(followups: number[], enviado: number | undefin
 }
 
 /**
+ * O follow-up do 3º dia, uma regra para todas as ofertas (16/10/2026, OT-15 do blueprint: "uma esteira
+ * de venda, a oferta como parâmetro"). Site, PRUMO, Iris, estamparias e Plus tinham cada um a sua cópia
+ * desta conta, e cada oferta nova copiava a esteira. O que muda por oferta entra como parâmetro:
+ * - `leu`: o recibo de leitura (Site e convites), ou o teste do recibo; o Plus não tem recibo e passa `true`;
+ * - `marcadoPeloN8n`: o `followup_em` do 05 · Acompanhamento (só o Site o tem): marcado em outro dia, não é hoje;
+ * - `ultimaSaida`: mensagem nossa depois do 2º dia já é um follow-up à mão (só a planilha do Site a tem).
+ * Fica de fora o reenvio do só-robô, que tem regra própria (reenvioDoRoboHoje).
+ */
+export function followupDoTerceiroDia(e: {
+  etapa: CrmEtapa;
+  emConversa: boolean;
+  acervo?: boolean;
+  enviado: number | undefined;
+  leu: boolean;
+  followups: number[];
+  agora: number;
+  marcadoPeloN8n?: number;
+  ultimaSaida?: number;
+}): boolean {
+  const d = dias(e.enviado, e.agora);
+  return e.etapa === "contato" && !e.emConversa && !e.acervo && d !== undefined && e.leu
+    && d >= DIAS_ATE_FOLLOWUP && d < DIAS_SEM_RESPOSTA
+    && (e.marcadoPeloN8n === undefined || diaSP(e.marcadoPeloN8n) === diaSP(e.agora))
+    && (e.ultimaSaida === undefined || e.enviado === undefined || e.ultimaSaida <= e.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
+    && !followupJaEnviado(e.followups, e.enviado);
+}
+
+/**
  * O reenvio do só-robô entra hoje no "Follow-up para mandar"? (14/10/2026)
  *
  * Medido em 14/10/2026: 19 leads em Em contato em que só a resposta automática do WhatsApp
@@ -782,11 +821,19 @@ export function reenvioDoRoboHoje(entrada: {
   return !followupJaEnviado(entrada.followups, enviado);
 }
 
-/** "Sem contato fácil" marcado à mão: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
+/** "Sem contato fácil" ou "Recusou" marcado na Central: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
 function comPerdaManual(calculada: EtapaCalculada, semContato: Registro | undefined): EtapaCalculada {
   if (!semContato || calculada.etapa === "ganho" || calculada.etapa === "perdido") return calculada;
+  if (semContato.tipo === "recusou") {
+    return { etapa: "perdido", sinal: "recusou", subEtapa: "Recusou (marcado na Central)", desde: semContato.em, motivoPerda: "recusou" };
+  }
   return { etapa: "perdido", sinal: "sem-contato", subEtapa: "Perdido: sem contato fácil", desde: semContato.em, motivoPerda: "sem-contato" };
 }
+
+/** Qual perda marcada na Central está valendo neste lead (para o "desfazer" da Ficha). */
+const perdaManualDo = (calculada: EtapaCalculada, semContato: Registro | undefined): CrmLead["perdaManual"] =>
+  semContato && calculada.subEtapa.endsWith("(marcado na Central)") ? "recusou"
+    : semContato && calculada.sinal === "sem-contato" ? "sem-contato" : undefined;
 
 /** Quem já falou com a gente: a classificação do n8n e a pasta em _em-conversa/ contam como conversa. */
 const SINAIS_DE_CONVERSA: ReadonlySet<CrmSinal> = new Set(["respondeu", "em-conversa", "respondeu-prumo", "diagnostico"]);
@@ -839,6 +886,8 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     proposta_desfeita: "Proposta desfeita",
     sem_contato: "Perdido: sem contato fácil",
     sem_contato_desfeito: "Perda por falta de contato desfeita",
+    recusou: "Recusou (marcado na Central)",
+    recusou_desfeito: "Recusa desfeita",
     segunda_enviada: "2ª mensagem enviada",
     followup_enviado: "Follow-up enviado",
     plus_enviado: "Primeira mensagem enviada",
@@ -1099,16 +1148,16 @@ function leadDoSite(linha: Linha, contexto: {
   // (15/10/2026) também: a primeira mensagem já disse que a demonstração existe, e o reenvio só a repete.
   const recebeuA = c("mensagemVariante") === "A";
   const reenvioLink = calculada.sinal === "so-robo" && (site || avulso || recebeuA) ? reenvioDoRoboDe(mensagem)?.link : undefined;
-  const diasDesdeEnvio = dias(t.enviado, agora);
   // Follow-up só para quem LEU (15/10/2026, o mesmo no PRUMO e no 05 · Acompanhamento): a segunda mensagem a quem nem
   // abriu a primeira é a que mais vira denúncia de spam. O reenvio do só-robô fica: o robô respondeu.
+  // Teste de 17/10/2026 (OT-10, src/operations/ab-recibo.ts): metade de quem não manda recibo, por sorteio
+  // fixo, recebe o follow-up como quem leu; a outra metade segue sem, para comparar resposta e exclusão.
+  const testeDoRecibo = entraNoTesteDoRecibo({ produto: "site", enviado: t.enviado, visto: t.visto }) ? bracoDoRecibo(chave) : undefined;
+  const leuOuTeste = t.visto !== undefined || testeDoRecibo === "teste";
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo, enviado: t.enviado, followups, ultimaSaida: t.ultimaSaida, agora })
-    : calculada.etapa === "contato" && !emConversa && !acervo && diasDesdeEnvio !== undefined && t.visto !== undefined
-      && diasDesdeEnvio >= DIAS_ATE_FOLLOWUP && diasDesdeEnvio < DIAS_SEM_RESPOSTA
-      && (t.followup === undefined || diaSP(t.followup) === diaSP(agora))
-      && (t.ultimaSaida === undefined || t.enviado === undefined || t.ultimaSaida <= t.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
-      && !followupJaEnviado(followups, t.enviado);
+    : followupDoTerceiroDia({ etapa: calculada.etapa, emConversa, acervo, enviado: t.enviado, leu: leuOuTeste, followups, agora,
+      marcadoPeloN8n: t.followup, ultimaSaida: t.ultimaSaida });
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // O toque que pede o demo: lead que nunca teve demo, com pasta, que não recusou nem fechou, e sem pedido aberto.
   // 15/10/2026: sem exigir o Raio-X avulso nem o publicado.json: quem recebeu a A sem demo (gerador que falhou,
@@ -1173,6 +1222,7 @@ function leadDoSite(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: status || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1180,6 +1230,7 @@ function leadDoSite(linha: Linha, contexto: {
     leitura: leituraDe(t.enviado, t.visto, t.respondeu ?? (calculada.sinal === "em-conversa" ? agora : undefined), calculada.etapa === "contato"),
     marcos,
     followupHoje,
+    ...(testeDoRecibo ? { testeDoRecibo } : {}),
     ...(reenvioDoRobo ? { reenvioDoRobo: true as const } : {}),
     respostaNova,
     ...(parado ? { interesseParado: parado.desde !== undefined ? { desde: iso(parado.desde) } : {} } : {}),
@@ -1301,7 +1352,6 @@ function leadDoPrumo(linha: Linha, contexto: {
   const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
     ultimaDoLead([t.respondeu, t.diagnostico, conv.ultimaEntrada], resposta), t.convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
-  const diasDesdeConvite = dias(t.convite, agora);
   const whatsapp = numeroDoWhatsapp(c("whatsapp"));
   // Só-robô com número do Brasil: o follow-up vira o reenvio único, com o texto que pede quem cuida do
   // marketing (antes o follow-up do PRUMO só abria a conversa vazia). A planilha do PRUMO não tem a
@@ -1309,9 +1359,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const reenvioLink = ehPrumo && calculada.sinal === "so-robo" && whatsapp ? reenvioDoPrumo(whatsapp, c("empresa") || chave) || undefined : undefined;
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo: false, enviado: t.convite, followups, agora })
-    : calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined && t.visto !== undefined
-      && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA
-      && !followupJaEnviado(followups, t.convite);
+    : followupDoTerceiroDia({ etapa: calculada.etapa, emConversa, enviado: t.convite, leu: t.visto !== undefined, followups, agora });
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // Com o formulário respondido (diagnóstico) a conversa já andou: não há mais 2ª mensagem a esperar.
   const parado = interesseParado({ conversa: emConversa && t.diagnostico === undefined, resposta, respondeu: t.respondeu, segundas });
@@ -1364,6 +1412,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: c("etapa") || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1420,19 +1469,21 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
   const { agora } = contexto;
   const registros = contexto.registros.get(`plus:${plus.id}`) ?? [];
   const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
-  // Plus: a conversa só informa (o estado sai dos registros); o site do lead conta como link.
+  // Plus: o site do lead conta como link. Desde 17/10/2026 (OT-13) o observador grava a conversa do Plus,
+  // então a mensagem dele depois da primeira também vale como resposta (e recomeça os 7 dias) sem o
+  // "Respondeu no WhatsApp" à mão, que continua valendo para o que veio por fora (ligação, outro número).
   const conv = conversaDoLead(contexto.conversas, plus.whatsapp, [plus.site], segundasAnotadas, agora);
   const segundas = conv.segundas;
   const convite = enviadoPlus;
-  const respondeu = respondeuPlus.length ? respondeuPlus[respondeuPlus.length - 1] : undefined;
+  const daConversa = convite !== undefined && conv.ultimaEntrada !== undefined && conv.ultimaEntrada > convite ? conv.ultimaEntrada : undefined;
+  const respondeu = maior(respondeuPlus.length ? respondeuPlus[respondeuPlus.length - 1] : undefined, daConversa);
   const base: EtapaCalculada = proposta || convite !== undefined || respondeu !== undefined
     ? etapaDoPrumo({ etapa: convite !== undefined ? "convite_enviado" : "", convite, respondeu, proposta })
     : { etapa: "novo", sinal: "pronto", subEtapa: "Pronto para enviar", desde: contexto.geradoEm };
   const calculada = comPrazoDoContato(comPerdaManual(base, semContato), respondeu, convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
-  const diasDesdeConvite = dias(convite, agora);
-  const followupHoje = calculada.etapa === "contato" && !emConversa && diasDesdeConvite !== undefined
-    && diasDesdeConvite >= DIAS_ATE_FOLLOWUP && diasDesdeConvite < DIAS_SEM_RESPOSTA && !followupJaEnviado(followups, convite);
+  // O Plus não tem recibo de leitura (não passa pelo observador da planilha): conta como lido.
+  const followupHoje = followupDoTerceiroDia({ etapa: calculada.etapa, emConversa, enviado: convite, leu: true, followups, agora });
   const respostaNova = emConversa && respondeu !== undefined && agora - respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000;
   const primeira = primeiraDoPlus(plus);
   const lembrete = followupDoPlus(plus);
@@ -1455,6 +1506,7 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
+    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: "(Plus: sem planilha)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1581,7 +1633,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
         acao: lead.reenvioDoRobo ? ACAO_DO_REENVIO : "Mandar follow-up",
         detalhe: lead.reenvioDoRobo
           ? `${enviado}; só a resposta automática respondeu.${prazo} Reenvio único: depois dele, o prazo de ${DIAS_SEM_RESPOSTA} dias recomeça.`
-          : `${enviado}, sem resposta · ${leitura(lead)}.`,
+          : `${enviado}, sem resposta · ${leitura(lead)}${lead.testeDoRecibo === "teste" ? " (teste do follow-up sem recibo)" : ""}.`,
         // Com o texto pronto primeiro (o mesmo do aviso do 05, ou o reenvio); a conversa vazia fica de reserva.
         links: lead.links.followup
           ? [{ rotulo: lead.reenvioDoRobo ? ROTULO_DO_REENVIO : ROTULO_DO_FOLLOWUP, url: lead.links.followup }, ...conversa] : conversa,
@@ -2161,7 +2213,9 @@ export class CrmStore {
     if (registro.tipo === "proposta" && lead.etapa === "proposta") throw new RegistroInvalido("Este lead já está em Proposta.");
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");
     if (registro.tipo === "sem_contato" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
-    if (registro.tipo === "sem_contato_desfeito" && lead.motivoPerda !== "sem-contato") throw new RegistroInvalido("Este lead não foi perdido por falta de contato.");
+    if (registro.tipo === "sem_contato_desfeito" && lead.perdaManual !== "sem-contato") throw new RegistroInvalido("Este lead não foi perdido por falta de contato.");
+    if (registro.tipo === "recusou" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
+    if (registro.tipo === "recusou_desfeito" && lead.perdaManual !== "recusou") throw new RegistroInvalido("A recusa deste lead não foi marcada na Central.");
     // Quem saiu pelo prazo (expirou/esfriou) não teve desfecho: uma proposta o traz de volta.
     if (registro.tipo === "proposta" && (lead.etapa === "ganho" || lead.etapa === "perdido") && !saiuPeloPrazo(lead)) {
       throw new RegistroInvalido("Lead já encerrado: desfaça o desfecho na página do lead antes.");

@@ -7,6 +7,7 @@ import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
+import { criarMemoriaDaVenda, MAX_CHAVE, type MemoriaDaVenda } from "./venda-do-dia.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -445,6 +446,8 @@ export function createOperationsRouter(options: {
   copiloto?: Copiloto | null;
   readAgenda: () => Promise<AgendaSummary>;
   dataDir: string;
+  /** O "Enviei"/"Pular" do dia, dividido com o vendedor (OT-01); ausente, a rota cria a sua. */
+  memoriaDaVenda?: MemoriaDaVenda;
 }): express.Router {
   const router = express.Router();
 
@@ -625,6 +628,26 @@ export function createOperationsRouter(options: {
       }])) });
     } catch (error) {
       responderErroDoCopiloto(res, error);
+    }
+  });
+
+  // O "Enviei" e o "Pular" da fila de venda (16/10/2026, OT-01): uma memória para a Próxima venda em
+  // qualquer navegador e para o vendedor do Telegram (o mesmo arquivo). Não é funil: só a ordem do dia.
+  const memoriaDaVenda = options.memoriaDaVenda ?? criarMemoriaDaVenda(path.join(options.dataDir, "venda-do-dia.json"));
+  router.get("/crm/venda", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await memoriaDaVenda.ler());
+  });
+  router.post("/crm/venda", express.json({ limit: "4kb" }), async (req, res) => {
+    const { chave, pulou } = (req.body ?? {}) as { chave?: unknown; pulou?: unknown };
+    if (typeof chave !== "string" || !chave.trim() || chave.length > MAX_CHAVE || typeof pulou !== "boolean") {
+      return void res.status(400).json({ error: "Diga a chave da ação e se foi pulada." });
+    }
+    try {
+      res.json(await memoriaDaVenda.resolver(chave, pulou));
+    } catch (error) {
+      console.error("[venda] não gravou:", error);
+      res.status(500).json({ error: "Não deu para guardar agora." });
     }
   });
 

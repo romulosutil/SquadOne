@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import FinImportarExtrato from './FinImportarExtrato.vue'
 import { brl, centavosDeReais, enviarJson, reaisDoCampo } from './formato'
 import type { Organizacao } from './types'
 
 // Organizar (07/10/2026): categorias (criar, renomear, juntar, remover),
-// orçamento mensal de cada uma, as regras "aplicar sempre a este
-// estabelecimento" e o extrato de reserva. Tudo é gesto do Rômulo e grava
-// por POST da mesma origem (RULES 10); o servidor refaz as categorias e
-// confere os alertas de 70/90/100% depois de cada um.
+// orçamento mensal de cada uma e as regras "aplicar sempre a este
+// estabelecimento". Tudo é gesto do Rômulo e grava por POST da mesma origem
+// (RULES 10); o servidor refaz as categorias e confere os alertas de
+// 70/90/100% depois de cada um. O extrato de reserva morava aqui até
+// 16/10/2026 (OT-11): agora entra pelo "Importar" único da Visão, junto da fatura.
 const props = defineProps<{ versao: number }>()
 const emit = defineEmits<{ mudou: [] }>()
 
@@ -164,6 +164,5 @@ onMounted(() => void carregar())
       </ul>
     </section>
 
-    <FinImportarExtrato @importado="emit('mudou')" />
   </div>
 </template>

@@ -194,6 +194,8 @@
 .fin-escolha { display: grid; gap: var(--esp-2); }
 .fin-escolha label { display: grid; gap: var(--esp-1); font-weight: var(--peso-forte); }
 .fin-previa { display: grid; gap: var(--esp-3); }
+/* O fluxo que o "Importar" único montou para o arquivo (fatura ou extrato, 16/10/2026). */
+.fin-importar-fluxo { display: grid; gap: var(--esp-3); padding-top: var(--esp-3); border-top: var(--divisor); }
 
 /* Explicar este mês: a folha vai para o body (Teleport), por isso as classes não dependem de .fin */
 .fin-explicar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }

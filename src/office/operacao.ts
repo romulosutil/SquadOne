@@ -2,9 +2,13 @@
  * O Escritório como mapa da operação (15/10/2026). PURO: sem Vue, sem fetch,
  * sem relógio (o `agora` vem de fora). O Rômulo achou Entrada, Escritório e
  * Finanças distantes, e o Escritório só editava o roster: cada sala da squad
- * PRUMO passa a mostrar os leads dela por passo da jornada (`painelDaJornada`,
- * com o filtro do produto do CRM), os parados com ele e o estado de cada robô
- * pelo status.json do Dell.
+ * PRUMO passa a mostrar quantos leads dela há em cada passo da jornada
+ * (`painelDaJornada`, com o filtro do produto do CRM), quantos estão parados com
+ * ele e o estado de cada robô pelo status.json do Dell.
+ *
+ * Só a contagem (OT-07, 16/10/2026): a sala também listava os parados, nome a
+ * nome, o mesmo `painelDaJornada` da vista "por passo da jornada" do Funil. Duas
+ * listas dos mesmos leads em duas telas; ficou a do Funil, e "Ver no Funil" leva a ela.
  *
  * Estado só com fonte (RULES 2, 19 e 26): sem retrato do CRM a sala diz que não
  * leu, nunca "0 leads"; sem retrato recente do Dell, ou sem verificação do robô
@@ -85,18 +89,10 @@ export interface ContagemDoPasso {
   parados: number;
 }
 
-export interface ParadoNaSala {
-  id: string;
-  empresa: string;
-  acao: string;
-  dias?: number;
-  href: string;
-}
-
 export interface RecorteLido {
   produto: CrmProduto | null;
   rotulo: string;
-  /** /crm?ver=jornada&produto=… (sem produto quando são todas). */
+  /** "Ver no Funil": /crm?ver=jornada&produto=… (sem produto quando são todas), onde está a lista. */
   href: string;
   total: number;
   /** Os passos do recorte que têm lead, na ordem da jornada. */
@@ -106,16 +102,12 @@ export interface RecorteLido {
   /** Em andamento esperando o Rômulo (o estoque antes do primeiro contato não conta, como na vista Jornada). */
   comVoce: number;
   parados: number;
-  /** Os parados há mais tempo, no máximo LIMITE_DE_PARADOS. */
-  maisParados: ParadoNaSala[];
 }
 
-export const LIMITE_DE_PARADOS = 3;
-
-export function hrefDaJornada(produto: CrmProduto | null, leadId?: string): string {
+/** A vista "por passo da jornada" do Funil, no filtro da oferta: é lá que os leads são listados. */
+export function hrefDaJornada(produto: CrmProduto | null): string {
   const q = new URLSearchParams({ ver: "jornada" });
   if (produto) q.set("produto", produto);
-  if (leadId) q.set("lead", leadId);
   return `/crm?${q.toString()}`;
 }
 
@@ -125,9 +117,6 @@ export function lerRecorte(recorte: RecorteDaSala, leads: readonly CrmLead[]): R
   const abertos = (id: IdDoPasso) => (recorte.passos ? recorte.passos.includes(id) : id !== "ganho" && id !== "perdido");
   const doRecorte = painel.passos.filter((p) => abertos(p.passo.id));
   const contar = (id: IdDoPasso) => painel.passos.find((p) => p.passo.id === id)?.leads.length ?? 0;
-  const parados = doRecorte
-    .flatMap((p) => p.leads.filter((l) => l.parado))
-    .sort((a, b) => (b.lead.diasNaEtapa ?? 0) - (a.lead.diasNaEtapa ?? 0));
   return {
     produto: recorte.produto,
     rotulo: recorte.produto ? ROTULO_DO_PRODUTO[recorte.produto] : "Todas as ofertas",
@@ -138,14 +127,7 @@ export function lerRecorte(recorte: RecorteDaSala, leads: readonly CrmLead[]): R
       .map((p) => ({ passo: p.passo.id, nome: p.passo.nome, quem: p.passo.quem, leads: p.leads.length, parados: p.parados })),
     ...(recorte.passos ? {} : { fechados: { ganho: contar("ganho"), perdido: contar("perdido") } }),
     comVoce: doRecorte.filter((p) => !p.fila).reduce((n, p) => n + p.leads.filter((l) => l.proximo.quem === "você").length, 0),
-    parados: parados.length,
-    maisParados: parados.slice(0, LIMITE_DE_PARADOS).map(({ lead, proximo }) => ({
-      id: lead.id,
-      empresa: lead.empresa,
-      acao: proximo.acao,
-      ...(lead.diasNaEtapa !== undefined ? { dias: lead.diasNaEtapa } : {}),
-      href: hrefDaJornada(recorte.produto, lead.id),
-    })),
+    parados: doRecorte.reduce((n, p) => n + p.parados, 0),
   };
 }
 

@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Sheet from '../components/Sheet.vue'
 import CrmColinha from './CrmColinha.vue'
 import CrmFicha from './CrmFicha.vue'
-import CrmFilaDeEnvio from './CrmFilaDeEnvio.vue'
 import CrmFunil from './CrmFunil.vue'
 import CrmHoje from './CrmHoje.vue'
 import CrmJornadaVista from './CrmJornadaVista.vue'
@@ -29,7 +28,11 @@ import './crm.css'
 // Central não guarda etapa. A Colinha (?ver=colinha) é a exceção: texto
 // estático (colinha.ts), que aparece mesmo com o CRM fora do ar.
 // Jornada (?ver=jornada, 15/10/2026): os leads por passo da jornada (jornada.ts), com quem espera quem.
-type Vista = 'hoje' | 'funil' | 'jornada' | 'resultados' | 'colinha'
+// 16/10/2026 (blueprint, OT-01, OT-05 e OT-12): a área se chama Vendas; "A fazer" é só a Próxima
+// venda (a fila única; a folha "Enviar um por um" e a lista de grupos repetida saíram); a revisão de
+// prospects ganhou a aba Triagem, fora do caminho da venda; e cada aba tem um nome só, também na URL
+// (?ver=numeros e ?ver=roteiro; ?ver=resultados e ?ver=colinha ainda abrem, para links antigos).
+type Vista = 'afazer' | 'triagem' | 'funil' | 'jornada' | 'numeros' | 'roteiro'
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = ref<CrmVisao | null>(null)
@@ -37,11 +40,10 @@ const carregando = ref(true)
 const erro = ref('')
 const lidoEm = ref<Date | null>(null)
 const agora = ref(Date.now())
-const vista = ref<Vista>('hoje')
+const vista = ref<Vista>('afazer')
 const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
-const filaAberta = ref(false)
 const envios = ref<EnviosAbertos>({})
 // Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts):
 // só em memória, de propósito. Recarregou a página ou voltou o expediente, o ciclo recomeça.
@@ -69,18 +71,19 @@ const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
 function lerEndereco() {
   const q = new URLSearchParams(window.location.search)
   const ver = q.get('ver')
-  vista.value = ver === 'funil' || ver === 'jornada' || ver === 'resultados' || ver === 'colinha' ? ver : 'hoje'
+  vista.value = ver === 'funil' || ver === 'jornada' || ver === 'triagem' ? ver
+    : ver === 'numeros' || ver === 'resultados' ? 'numeros'
+    : ver === 'roteiro' || ver === 'colinha' ? 'roteiro'
+    : 'afazer'
   const p = q.get('produto')
   produto.value = PRODUTOS.find(id => id === p) ?? 'todos'
   leadId.value = q.get('lead')
-  filaAberta.value = vista.value === 'hoje' && q.get('fila') === 'envio'
 }
 
 function escreverEndereco(substituir = false) {
   const q = new URLSearchParams()
-  if (vista.value !== 'hoje') q.set('ver', vista.value)
+  if (vista.value !== 'afazer') q.set('ver', vista.value)
   if (produto.value !== 'todos') q.set('produto', produto.value)
-  if (filaAberta.value) q.set('fila', 'envio')
   if (leadId.value) q.set('lead', leadId.value)
   const busca = q.toString()
   const url = `/crm${busca ? `?${busca}` : ''}`
@@ -221,7 +224,9 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
 // O número da aba "A fazer" conta o que pede mensagem: os prospects para revisar (1.400+ em 16/10/2026)
 // são triagem e afogavam o número ("A fazer 1603").
 const totalHoje = computed(() => hoje.value.filter(g => g.id !== 'revisar').reduce((soma, g) => soma + g.itens.length, 0))
-const prontosParaEnviar = computed(() => hoje.value.find(g => g.id === 'enviar')?.itens ?? [])
+// Triagem (OT-05): só os prospects para revisar, em lotes de 10, longe da fila de venda.
+const triagem = computed(() => hoje.value.filter(g => g.id === 'revisar'))
+const totalTriagem = computed(() => triagem.value.reduce((soma, g) => soma + g.itens.length, 0))
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
@@ -242,10 +247,11 @@ const textoDoRetrato = computed(() => {
 
 // As abas dizem a tarefa, e a linha embaixo diz para que serve a aba aberta.
 const VISTAS: Array<{ id: Vista; rotulo: string; href: string; dica: string }> = [
-  { id: 'hoje', rotulo: 'A fazer', href: '/crm', dica: 'A próxima venda e tudo que espera você hoje, na ordem de quem está mais perto de comprar.' },
-  { id: 'funil', rotulo: 'Funil', href: '/crm?ver=funil', dica: 'Todos os leads por etapa (ou por passo da jornada). Toque num lead para abrir a ficha.' },
-  { id: 'resultados', rotulo: 'Números', href: '/crm?ver=resultados', dica: 'O que funcionou: envios, respostas e interesse por nicho, mensagem e horário.' },
-  { id: 'colinha', rotulo: 'Roteiro', href: '/crm?ver=colinha', dica: 'O roteiro de venda: o que dizer em cada momento, objeções e preços do cardápio.' },
+  { id: 'afazer', rotulo: 'A fazer', href: '/crm', dica: 'A próxima venda, uma por vez, na ordem de quem está mais perto de comprar. "Ver a fila inteira" mostra o resto.' },
+  { id: 'triagem', rotulo: 'Triagem', href: '/crm?ver=triagem', dica: 'Prospects que os caçadores acharam, em lotes de 10: veja o site e decida o convite. Não é venda: fica fora do A fazer.' },
+  { id: 'funil', rotulo: 'Funil', href: '/crm?ver=funil', dica: 'Todos os leads por etapa (ou por passo da jornada), para consulta. Toque num lead para abrir a ficha.' },
+  { id: 'numeros', rotulo: 'Números', href: '/crm?ver=numeros', dica: 'Onde o funil perde, depois do "sim" e por nicho, mensagem e horário.' },
+  { id: 'roteiro', rotulo: 'Roteiro', href: '/crm?ver=roteiro', dica: 'O roteiro de venda: o que dizer em cada momento, objeções e preços do cardápio.' },
 ]
 // A Jornada é um modo do Funil: a aba Funil fica acesa nela.
 const vistaDaAba = computed<Vista>(() => (vista.value === 'jornada' ? 'funil' : vista.value))
@@ -253,19 +259,6 @@ const vistaDaAba = computed<Vista>(() => (vista.value === 'jornada' ? 'funil' : 
 function trocarVista(nova: Vista) {
   vista.value = nova
   leadId.value = null
-  filaAberta.value = false
-  escreverEndereco()
-}
-
-// "Enviar um por um" abre numa folha, como a ficha; ?fila=envio faz o "voltar"
-// do celular fechar a folha, e a ficha aberta de dentro dela empilha por cima.
-function abrirFila() {
-  filaAberta.value = true
-  escreverEndereco()
-}
-
-function fecharFila() {
-  filaAberta.value = false
   escreverEndereco()
 }
 
@@ -302,7 +295,7 @@ function fecharFicha() {
 // "Ver a colinha inteira", da ficha: a folha fecha e quem a abriu (um item da
 // lista) sai da tela junto com a vista, então o foco vai para o título da colinha.
 async function abrirColinha() {
-  trocarVista('colinha')
+  trocarVista('roteiro')
   await nextTick()
   document.getElementById('crm-colinha-titulo')?.focus()
 }
@@ -313,7 +306,7 @@ async function abrirColinha() {
     <header class="crm-topo">
       <div>
         <span class="crm-kicker">SquadOne · PRUMO</span>
-        <h1 id="crm-titulo">CRM do PRUMO</h1>
+        <h1 id="crm-titulo">Vendas</h1>
         <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
       </div>
       <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
@@ -328,7 +321,7 @@ async function abrirColinha() {
     <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
     <!-- Os avisos do retrato falam dos números; a colinha não tem nenhum. -->
-    <template v-if="visao && vista !== 'colinha'">
+    <template v-if="visao && vista !== 'roteiro'">
       <div v-if="visao.estado !== 'ok'" class="crm-aviso is-forte" role="status">
         <strong>{{ visao.estado === 'sem-retrato' ? 'Ainda sem retrato das planilhas.' : 'Retrato ilegível.' }}</strong> {{ visao.mensagem }}
         <template v-if="visao.ultimaFalha"> Última tentativa do n8n ({{ dataHora(visao.ultimaFalha.em) }}): {{ visao.ultimaFalha.erro }}</template>
@@ -342,12 +335,12 @@ async function abrirColinha() {
     </template>
 
     <!-- Fora do v-if do retrato: com o CRM fora do ar, ainda se chega à Colinha. As contagens só com retrato. -->
-    <div v-if="visao || vista === 'colinha' || erro" class="crm-controles" :class="{ 'crm-controles--funil': vista === 'funil' }">
+    <div v-if="visao || vista === 'roteiro' || erro" class="crm-controles" :class="{ 'crm-controles--funil': vista === 'funil' }">
       <!-- Quatro vistas com nome de tarefa (16/10/2026): "Jornada", "Resultados" e "Colinha" eram
            nomes internos, perdidos ao lado de Hoje e Funil. A Jornada virou um modo do Funil. -->
       <nav class="crm-vistas" aria-label="Vistas do CRM">
         <a v-for="v in VISTAS" :key="v.id" :href="v.href" :aria-current="vistaDaAba === v.id ? 'page' : undefined" @click.prevent="trocarVista(v.id)">
-          {{ v.rotulo }} <span v-if="visao && v.id === 'hoje'">{{ totalHoje }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
+          {{ v.rotulo }} <span v-if="visao && v.id === 'afazer'">{{ totalHoje }}</span><span v-else-if="visao && v.id === 'triagem'">{{ totalTriagem }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
         </a>
       </nav>
       <p class="crm-vistas__dica">{{ VISTAS.find((v) => v.id === vistaDaAba)?.dica }}</p>
@@ -360,11 +353,11 @@ async function abrirColinha() {
       </div>
     </div>
 
-    <CrmColinha v-if="vista === 'colinha'" :produto="produto" />
+    <CrmColinha v-if="vista === 'roteiro'" :produto="produto" />
 
     <template v-if="visao">
       <!-- No Funil cada coluna (ou aba, no celular) já traz o número: o resumo só repetiria. -->
-      <ol v-if="visao.estado === 'ok' && vista !== 'funil' && vista !== 'colinha'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
+      <ol v-if="visao.estado === 'ok' && vista !== 'funil' && vista !== 'roteiro'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
         <li v-for="etapa in ETAPAS" :key="etapa" :class="`is-${etapa}`">
           <button type="button" @click="irParaEtapa(etapa)">
             <strong>{{ contagens[etapa] }}</strong>
@@ -372,22 +365,19 @@ async function abrirColinha() {
           </button>
         </li>
       </ol>
-      <p v-if="visao.estado === 'ok' && visao.divergencias && vista !== 'colinha'" class="crm-nota-pequena">
+      <p v-if="visao.estado === 'ok' && visao.divergencias && vista !== 'roteiro'" class="crm-nota-pequena">
         {{ visao.divergencias }} lead{{ visao.divergencias === 1 ? '' : 's' }} com divergência entre planilha e pasta (marcados no Funil).
         <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
       </p>
 
-      <ProximaVenda v-if="vista === 'hoje' && visao.estado === 'ok'" :visao="visao" @registrado="depoisDoRegistro" />
-      <CrmHoje v-if="vista === 'hoje'":grupos="hoje" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @enviado="marcarAberto" @fila="abrirFila" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
+      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" />
+      <template v-else-if="vista === 'triagem'">
+        <CrmHoje v-if="totalTriagem" :grupos="triagem" :leads="porId" :envios="envios" :agora="agora" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" :limite="10" @abrir="abrirFicha" @enviado="marcarAberto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
+        <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
+      </template>
       <CrmJornadaVista v-else-if="vista === 'jornada'" :leads="leads" @abrir="abrirFicha" />
-      <CrmResultados v-else-if="vista === 'resultados'" :leads="leads" :agora="agora" />
+      <CrmResultados v-else-if="vista === 'numeros'" :leads="leads" :agora="agora" />
       <CrmFunil v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :etapa-em-foco="etapaEmFoco" :produto="produto" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo" @abrir="abrirFicha" @produto="trocarProduto" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato" />
-
-      <Sheet v-if="filaAberta" cheia titulo="Enviar um por um" subtitulo="Primeiro contato para enviar" @fechar="fecharFila">
-        <div class="crm-na-folha">
-          <CrmFilaDeEnvio :itens="prontosParaEnviar" :leads="porId" :envios="envios" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" @enviado="marcarAberto" @abrir="abrirFicha" @liberar="liberar" @primeiro="marcarPrimeiroContato" />
-        </div>
-      </Sheet>
 
       <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div class="crm-na-folha">
@@ -400,7 +390,7 @@ async function abrirColinha() {
         </div>
       </Sheet>
 
-      <footer v-if="visao.estado === 'ok' && vista !== 'colinha'" class="crm-rodape">
+      <footer v-if="visao.estado === 'ok' && vista !== 'roteiro'" class="crm-rodape">
         <span v-for="f in visao.fontes" :key="f.id">{{ f.nome }}: {{ f.linhas }} linha{{ f.linhas === 1 ? '' : 's' }}<template v-if="f.erro"> ({{ f.erro }})</template></span>
         <a v-if="visao.links.planilhaSite" :href="visao.links.planilhaSite" target="_blank" rel="noopener">Planilha do Site ↗</a>
         <a v-if="visao.links.planilhaPrumo" :href="visao.links.planilhaPrumo" target="_blank" rel="noopener">Planilha do PRUMO ↗</a>
@@ -408,6 +398,6 @@ async function abrirColinha() {
         <a v-if="visao.links.planilhaEstampa" :href="visao.links.planilhaEstampa" target="_blank" rel="noopener">Aba Estamparias ↗</a>
       </footer>
     </template>
-    <p v-else-if="carregando && vista !== 'colinha'" class="crm-muted" role="status">Lendo o CRM…</p>
+    <p v-else-if="carregando && vista !== 'roteiro'" class="crm-muted" role="status">Lendo o CRM…</p>
   </section>
 </template>

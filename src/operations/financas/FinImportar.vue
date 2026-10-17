@@ -1,23 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { brl, diaMes } from './formato'
 import type { PreviaDaFatura } from './types'
 
 // Fatura do Santander em PDF: o cartão vem da Pluggy só com os totais. Primeiro
 // lê e confere (nada é gravado); importar é o segundo toque, e só com a
 // conferência batendo — ou com o Rômulo aceitando a diferença, por escrito.
-const emit = defineEmits<{ importado: [] }>()
+// Desde 16/10/2026 (OT-11) o arquivo chega do "Importar" único (FinImportarArquivo),
+// que monta este fluxo de novo a cada arquivo escolhido: por isso a leitura começa
+// ao montar, e "Cancelar" devolve a escolha para lá.
+const props = defineProps<{ arquivo: File }>()
+const emit = defineEmits<{ importado: []; cancelar: [] }>()
+// O seletor único fica desligado enquanto este fluxo lê ou grava, como antes.
+const ocupado = defineModel<boolean>('ocupado', { default: false })
 
-const arquivo = ref<File | null>(null)
 const previa = ref<PreviaDaFatura | null>(null)
 const escolher = ref<{ id: string; vencimento: string; totalBanco: number }[]>([])
 const faturaEscolhida = ref('')
-const ocupado = ref(false)
 const erro = ref('')
 const feito = ref('')
 
 async function enviar(confirmar: boolean, aceitarDiferenca = false) {
-  if (!arquivo.value) return
   ocupado.value = true
   erro.value = ''
   feito.value = ''
@@ -29,7 +32,7 @@ async function enviar(confirmar: boolean, aceitarDiferenca = false) {
     const resposta = await fetch(`/api/financas/importar/santander?${q}`, {
       method: 'POST',
       headers: { 'content-type': 'application/pdf' },
-      body: arquivo.value,
+      body: props.arquivo,
     })
     const corpo = await resposta.json().catch(() => ({}))
     if (resposta.status === 409 && corpo.escolherFatura) {
@@ -53,33 +56,13 @@ async function enviar(confirmar: boolean, aceitarDiferenca = false) {
   }
 }
 
-function aoEscolher(evento: Event) {
-  const input = evento.target as HTMLInputElement
-  arquivo.value = input.files?.[0] ?? null
-  previa.value = null
-  faturaEscolhida.value = ''
-  escolher.value = []
-  if (arquivo.value) void enviar(false)
-}
-
-function cancelar() {
-  arquivo.value = null
-  previa.value = null
-  escolher.value = []
-  erro.value = ''
-}
+onMounted(() => void enviar(false))
 </script>
 
 <template>
-  <section class="fin-bloco" aria-labelledby="fin-importar">
-    <header class="fin-bloco__topo">
-      <h2 id="fin-importar">Fatura do Santander em PDF</h2>
-      <p class="fin-sub">O banco manda os totais do cartão, mas não os lançamentos. Baixe a fatura no app do Santander e envie aqui: ela é conferida com o total do banco antes de entrar.</p>
-    </header>
-    <label class="fin-arquivo">
-      <span>{{ arquivo ? arquivo.name : 'Escolher PDF da fatura' }}</span>
-      <input type="file" accept="application/pdf" :disabled="ocupado" @change="aoEscolher" />
-    </label>
+  <div class="fin-importar-fluxo">
+    <h3 class="fin-subtitulo">Fatura do Santander (PDF)</h3>
+    <p class="fin-sub">É conferida com o total do banco antes de entrar.</p>
     <p v-if="ocupado" class="fin-sub" role="status">Lendo…</p>
     <p v-if="erro" class="fin-aviso is-forte" role="alert">{{ erro }}</p>
     <p v-if="feito" class="fin-aviso is-ok" role="status">{{ feito }}</p>
@@ -122,8 +105,8 @@ function cancelar() {
         <button v-else type="button" class="fin-botao" :disabled="ocupado || !previa.novos" @click="enviar(true, true)">
           Importar mesmo com a diferença
         </button>
-        <button type="button" class="fin-botao" :disabled="ocupado" @click="cancelar">Cancelar</button>
+        <button type="button" class="fin-botao" :disabled="ocupado" @click="emit('cancelar')">Cancelar</button>
       </div>
     </div>
-  </section>
+  </div>
 </template>

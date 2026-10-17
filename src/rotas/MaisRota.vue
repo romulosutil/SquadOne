@@ -7,34 +7,41 @@
  *  - Entender: como a operação funciona, fechado até pedir;
  *  - Manutenção: ferramentas, o que o Dell confere e o design system, fechado.
  * Saiu o link "Agentes do SquadOne (ainda no Easypanel)": nesta Central ele dava 404.
+ * Ainda em 16/10/2026 (OT-11 do blueprint de serviço, "menos entradas repetidas no menu"): o
+ * Usar repetia destinos que a barra já mostrava. Agora vem de `atalhosDoMais`, só o que a barra
+ * DESTA tela não alcança: no desktop o trilho lateral tem tudo e o grupo some; no celular sobram
+ * Agenda, Escritório e Entrada. Lançamentos saiu: é aba de Finanças, um toque depois dela.
  * Os painéis da Central usam mais.css, só com tokens.
  */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
 import { useOverview } from '../casca/overview'
-import type { Capacidades } from '../casca/destinos'
+import { atalhosDoMais, type Capacidades, type Destino } from '../casca/destinos'
 import '../operations/mais.css'
 
 const props = defineProps<{ capacidades: Capacidades }>()
 const { overview } = useOverview()
 const ops = computed(() => props.capacidades.perfil === 'operations')
 
-const usar = computed(() => [
-  ...(props.capacidades.agentes
-    ? [
-        { href: '/agenda', rotulo: 'Agenda', dica: 'os compromissos que os agentes marcaram, e a conexão com o Google' },
-        { href: '/squadone', rotulo: 'Escritório', dica: 'squads, salas e quem trabalha em cada uma (lista ou mapa)' }
-      ]
-    : []),
-  ...(ops.value
-    ? [
-        { href: '/financas/lancamentos', rotulo: 'Lançamentos', dica: 'cada gasto e entrada, com filtro, para corrigir a categoria' },
-        { href: '/entrada/', rotulo: 'Entrada', dica: 'mande um texto ou arquivo e a Mel guarda no lugar certo' }
-      ]
-    : [])
-])
+// A mesma pergunta da casca (casca.css e App.vue): a partir de 64rem quem navega é o trilho
+// lateral. Acompanha o giro do tablet e a janela redimensionada, senão o Usar ficaria errado
+// até recarregar.
+const consulta = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 64rem)') : null
+const largo = ref(consulta?.matches ?? false)
+const aoMudarLargura = (e: MediaQueryListEvent) => (largo.value = e.matches)
+onMounted(() => consulta?.addEventListener('change', aoMudarLargura))
+onBeforeUnmount(() => consulta?.removeEventListener('change', aoMudarLargura))
+
+const DICA: Partial<Record<Destino['id'], string>> = {
+  agenda: 'os compromissos que os agentes marcaram, e a conexão com o Google',
+  escritorio: 'squads, salas e quem trabalha em cada uma (lista ou mapa)',
+  entrada: 'mande um texto ou arquivo e a Mel guarda no lugar certo',
+}
+const usar = computed(() =>
+  atalhosDoMais(props.capacidades, largo.value).map((d) => ({ href: d.href, rotulo: d.rotulo, dica: DICA[d.id] ?? '' }))
+)
 const pedeFluxo = new URLSearchParams(window.location.search).has('fluxo')
 const falhas = computed(() => (overview.value?.dell.verificacoes ?? []).filter((c) => c.estado === 'falha').length)
 </script>
@@ -43,12 +50,14 @@ const falhas = computed(() => (overview.value?.dell.verificacoes ?? []).filter((
   <div class="mais">
     <section class="mais__bloco" aria-labelledby="mais-titulo">
       <h1 id="mais-titulo">Mais</h1>
-      <h2 class="mais__grupo">Usar</h2>
-      <ul class="mais__links">
-        <li v-for="l in usar" :key="l.href">
-          <a :href="l.href"><strong>{{ l.rotulo }}</strong><small>{{ l.dica }}</small></a>
-        </li>
-      </ul>
+      <template v-if="usar.length">
+        <h2 class="mais__grupo">Usar</h2>
+        <ul class="mais__links">
+          <li v-for="l in usar" :key="l.href">
+            <a :href="l.href"><strong>{{ l.rotulo }}</strong><small v-if="l.dica">{{ l.dica }}</small></a>
+          </li>
+        </ul>
+      </template>
     </section>
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->

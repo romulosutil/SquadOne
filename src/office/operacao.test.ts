@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CrmLead, CrmVisao, DellCheck, DellStatus } from "../operations/types.ts";
 import {
-  JORNADA_DAS_SALAS, LIMITE_DE_PARADOS, estadoDoRobo, fonteDoCrm, hrefDaJornada, lerRecorte, operacaoDaSala, temOperacao,
+  JORNADA_DAS_SALAS, estadoDoRobo, fonteDoCrm, hrefDaJornada, lerRecorte, operacaoDaSala, temOperacao,
 } from "./operacao.ts";
 
 const AGORA = Date.parse("2026-10-15T15:00:00Z");
@@ -73,8 +73,13 @@ describe("operação das salas: o recorte lido", () => {
     const r = lerRecorte({ produto: "site" }, leads);
     assert.equal(r.comVoce, 2);
     assert.equal(r.parados, 1);
-    assert.equal(r.maisParados[0].href, `/crm?ver=jornada&produto=site&lead=${r.maisParados[0].id}`);
-    assert.equal(r.maisParados[0].dias, 3);
+    assert.deepEqual(r.passos.find((p) => p.passo === "resposta"), { passo: "resposta", nome: "Respondeu", quem: "você", leads: 2, parados: 1 });
+  });
+
+  it("só a contagem: a lista dos leads mora no Funil (OT-07), a sala não carrega lead nenhum", () => {
+    const r = lerRecorte({ produto: "site" }, leads);
+    assert.deepEqual(Object.keys(r).sort(), ["comVoce", "fechados", "href", "parados", "passos", "produto", "rotulo", "total"]);
+    assert.ok(!JSON.stringify(r).includes("Empresa"), "nenhum nome de lead na sala");
   });
 
   it("todas as ofertas, só as conversas (Atendimento)", () => {
@@ -83,10 +88,9 @@ describe("operação das salas: o recorte lido", () => {
     assert.equal(r.rotulo, "Todas as ofertas");
     assert.equal(r.total, 4);
     assert.equal(r.fechados, undefined);
-    // O mais parado primeiro (a clínica há 5 dias), e não mais que o limite.
+    // O site há 3 dias em "Respondeu" e a clínica há 5 em "Conversa".
     assert.equal(r.parados, 2);
-    assert.equal(r.maisParados[0].dias, 5);
-    assert.ok(r.maisParados.length <= LIMITE_DE_PARADOS);
+    assert.deepEqual(r.passos.filter((p) => p.parados).map((p) => [p.passo, p.parados]), [["resposta", 1], ["conversa", 1]]);
   });
 
   it("o estoque da Prospecção por oferta", () => {
@@ -96,9 +100,9 @@ describe("operação das salas: o recorte lido", () => {
     assert.equal(iris.passos.length, 0);
   });
 
-  it("hrefDaJornada sem produto e com lead", () => {
+  it("hrefDaJornada: o \"Ver no Funil\" leva à vista por passo, no filtro da oferta", () => {
     assert.equal(hrefDaJornada(null), "/crm?ver=jornada");
-    assert.equal(hrefDaJornada("estampa", "ab c"), "/crm?ver=jornada&produto=estampa&lead=ab+c");
+    assert.equal(hrefDaJornada("estampa"), "/crm?ver=jornada&produto=estampa");
   });
 });
 
@@ -146,7 +150,7 @@ describe("operação das salas: a sala inteira", () => {
     assert.equal(operacaoDaSala("pessoal--financeiro", fontes), null);
   });
 
-  it("Iris: a jornada da oferta e o caçador, que o monitor não confere (nasceu desligado) = Sem sinal", () => {
+  it("Iris: a jornada da oferta e o caçador, sem a verificação dele no retrato = Sem sinal", () => {
     const op = operacaoDaSala("prumo--iris", fontes)!;
     assert.ok(op.jornada?.estado === "ok");
     assert.equal(op.jornada.recortes[0].total, 1);
