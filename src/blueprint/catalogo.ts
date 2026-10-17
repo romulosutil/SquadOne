@@ -40,16 +40,16 @@ export const CATALOGO: readonly PecaDoCatalogo[] = [
 
 /** A ordem da Ficha, bloco a bloco, com a pergunta que cada um responde. É o contrato da tela. */
 export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string; visivel: 'sempre' | 'quando houver' | 'dobrado' }> = [
-  { bloco: 'Cabeça', pergunta: 'Quem é, em que etapa, em que passo da jornada (N de M, a trilha dobrada)?', visivel: 'sempre' },
-  { bloco: 'Agora', pergunta: 'O que fazer agora, numa frase, e para quando? Um próximo passo só, editado ali mesmo.', visivel: 'sempre' },
-  { bloco: 'Ação de agora', pergunta: 'O único primário da tela (presa no topo ao rolar).', visivel: 'quando houver' },
+  { bloco: 'Cabeça', pergunta: 'Quem é e em que etapa?', visivel: 'sempre' },
+  { bloco: 'Agora', pergunta: 'O que fazer agora, numa frase: a mesma do cartão da Próxima venda (AC-12). Sem ação, diz por quê.', visivel: 'sempre' },
+  { bloco: 'Ação de agora', pergunta: 'A mensagem que vai sair e o único primário da tela, logo abaixo (sem ficar preso ao rolar).', visivel: 'quando houver' },
   { bloco: 'Avisos', pergunta: 'Trava, ritmo, prazo, divergência, demo: um por linha, num lugar só.', visivel: 'quando houver' },
-  { bloco: 'Abrir em outro lugar', pergunta: 'Conversa, Raio-X, Maps, planilha, página do lead.', visivel: 'dobrado' },
-  { bloco: 'Resposta', pergunta: 'O que ele disse, e de que tipo foi?', visivel: 'quando houver' },
-  { bloco: 'O que oferecer', pergunta: 'Que oferta, por quê, e o que confirmar antes?', visivel: 'quando houver' },
-  { bloco: 'Colinha · Copiloto', pergunta: 'Com que texto respondo? Aberta quando o passo é escrever à mão.', visivel: 'dobrado' },
-  { bloco: 'Anotar', pergunta: 'Nota ou proposta (um formulário por vez).', visivel: 'sempre' },
-  { bloco: 'Sobre o lead · Linha do tempo · Gerador', pergunta: 'Consulta: de onde veio, o que já aconteceu.', visivel: 'dobrado' },
+  { bloco: 'Abrir em outro lugar', pergunta: 'Conversa no WhatsApp, Raio-X, Maps, planilha, página do lead no n8n.', visivel: 'dobrado' },
+  { bloco: 'Desfecho', pergunta: 'Ganhou (com confirmação), Perdeu (com o motivo) ou Proposta enviada, cada um com o desfazer (AC-08).', visivel: 'sempre' },
+  { bloco: 'Conversa', pergunta: 'O que ele disse e o que saiu, em balões.', visivel: 'quando houver' },
+  { bloco: 'Como vender', pergunta: 'O que oferecer (abre aqui), Roteiro e Copiloto (em teste).', visivel: 'sempre' },
+  { bloco: 'Anotar', pergunta: 'Nota, e a 2ª mensagem e o follow-up à mão quando a anotação automática falhou (AC-09).', visivel: 'sempre' },
+  { bloco: 'Jornada · Sobre o lead · Linha do tempo', pergunta: 'Consulta: a posição na jornada, de onde veio, o que já aconteceu.', visivel: 'dobrado' },
 ]
 
 /**

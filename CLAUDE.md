@@ -95,7 +95,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
-                          quatro ofertas no mesmo funil: Site antes da venda, serviços PRUMO, Iris, CRM de estamparia (14/10/2026)
+                          quatro ofertas no mesmo funil: Site antes da venda, serviços PRUMO, Iris, CRM de estamparia (14/10/2026);
+                          registros ganhou/dispensado (+ _desfeito, 17/10/2026, AC-08/AC-10): Ganho em todas as ofertas e Perdido
+                          (Descartado) saindo da Triagem; a Prioridade da Triagem é da Central (prioridadeDaTriagem, PURA), não do caçador
   server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM;
                           o reenvio do só-robô (REENVIO_ROBO*, "Pedir o responsável") é só do CRM, sem par no JS nem inglês
   server/prumo-mensagem.ts PURO: 2ª mensagem (o Raio-X) e reenvio do só-robô do PRUMO (só número 55)
@@ -156,7 +158,14 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           está vendendo", e taxaPorExpediente (só Site) alimenta o avisoDeHorario (17/10/2026, AC-03)
     proxima-venda.ts      PURO: a fila de venda (filaDeVenda, a mesma do vendedor), a fila da tela (filaDaTela) e a contagem do
                           dia (resumoDoDia): a aba "A fazer N", o "N na fila" e o "Ver a fila inteira (N)" leem dela, N com a
-                          atual (17/10/2026, AC-02); ProximaVenda.vue abre a Ficha na página pelo @abrir do CrmPanel (AC-01)
+                          atual (17/10/2026, AC-02); ProximaVenda.vue abre a Ficha na página pelo @abrir do CrmPanel (AC-01);
+                          fraseDaAcao é a frase única do passo (cartão, Telegram e o "Agora" da Ficha, via acaoDoLead/agoraDaFicha,
+                          AC-12), linkDoPasso escolhe o link pelo tipo e nunca abre o gerar_demo (AC-05), desfechosDoLead alimenta a
+                          faixa "Desfecho" da Ficha (AC-08) e anotacoesAMao o anotar à mão (AC-09)
+    triagem.ts            PURO (17/10/2026, AC-10): a Triagem (/crm?ver=triagem, CrmHoje.vue) em lotes de 10 fixos (o próximo só
+                          depois de decidir o atual); Convidar (travas de horário e ritmo com o motivo curto) e Dispensar (registro
+                          dispensado, Desfazer por 8 s, "Dispensar os que sobraram" em série com segundo toque); marca local podada
+                          quando o retrato confirma
     funil-lista.ts        PURO (16/10/2026): a Lista do Funil no desktop (Quadro | Lista, BP-TABELA): um sinal por linha, o mais
                           forte (Resposta nova > Follow-up hoje > Perdido amanhã > Divergência > resto), ordem por último toque e
                           próximo passo. Os Lançamentos também viram <table> a partir de 64 rem (FinEditorDeLancamento.vue)
@@ -297,8 +306,9 @@ Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): 
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o
 contrato do Prospects (`OFERTA_DE_PROSPECCAO`); os caçadores delas (`deploy/dell/claude-ops/prumo-ofertas.py`)
-nasceram desligados e foram **ligados em 16/10/2026** pelo Rômulo (dias úteis, 9h; só enchem a aba em Revisar e
-avisam, nada é enviado; `python3 prumo-ofertas.py --estado|--ativar|--desativar`, a partir de
+nasceram desligados, foram ligados em 16/10/2026 e **pausados em 17/10/2026** pelo Rômulo (AC-11 da auditoria: ~1.800
+achados num dia e 1.423 parados na Triagem contra 10 envios/dia; religar quando a Triagem cair para ~2 semanas de envio).
+Ligados, rodam em dias úteis às 9h, só enchem a aba em Revisar e avisam, nada é enviado; `python3 prumo-ofertas.py --estado|--ativar|--desativar`, a partir de
 `~/.local/share/claude-ops`); cliente do PRUMO (a Silmer) nunca vira prospect.
 A/B da 1ª mensagem do Site (14/10/2026): a letra só se compara entre leads com o mesmo conjunto
 elegível (coluna `ab_elegiveis`, gravada pelo Balcão com a letra) e é equilibrada por nicho; sem

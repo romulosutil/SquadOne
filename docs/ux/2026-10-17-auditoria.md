@@ -28,8 +28,18 @@ sem Dispensar, Telegram e Central fora de sincronia).
 | AC-17 | Um número só para o Dell no topo, na Hoje e no Mais; a Hoje sem comandos nem containers | `alertas.ts` (`resumoDoDell`) |
 | AC-28 | Contador de uso por tela e por escrita da API, sem dado de lead | `server/uso.ts` |
 
+## Onda 2 (fechar o laço), feita em 17/10/2026
+
+| AC | O quê | Onde |
+|---|---|---|
+| AC-05 | O botão da fila escolhe o link pelo tipo: "Abrir a conversa" nunca dispara o gerar_demo | `proxima-venda.ts` (`linkDoPasso`) |
+| AC-08 | Desfecho em um toque na Ficha, em todas as ofertas: Ganhou (confirmação), Perdeu (motivo), Proposta enviada, com desfazer | registros `ganhou`/`ganhou_desfeito`, `CrmFicha.vue`, `crm.py` |
+| AC-09 | "2ª mensagem enviada" e "Follow-up enviado" à mão em Anotar, para onde aponta o "anote à mão" | `CrmFicha.vue` (`anotacoesAMao`) |
+| AC-10 | Triagem em lotes de 10 com Convidar e Dispensar, e a Prioridade da Central (era 100 em todos) | `triagem.ts`, registros `dispensado`, `prioridadeDaTriagem` |
+| AC-11 | Caçadores de Iris e Estamparias pausados (decisão do Rômulo): 1.423 parados contra 10 envios/dia | `prumo-ofertas.py --desativar` na Mel |
+| AC-12 | Uma frase por próximo passo, a mesma no cartão e no "Agora" da Ficha | `fraseDaAcao`, `agoraDaFicha` |
+| AC-14 | Ficha em ordem de decisão: Agora e primário, Desfecho, Conversa, Como vender (abre em "O que oferecer"), consulta | `CrmFicha.vue`, `ANATOMIA_DA_FICHA` |
+
 ## O que fica para as próximas ondas
 
-Onda 2 (fechar o laço): desfecho em um toque na Ficha (Ganhou, Perdeu, Proposta), marcar à mão o envio que a anotação
-não marcou, Triagem com Convidar e Dispensar, limitar os caçadores, uma redação por próximo passo, Ficha em ordem de
-decisão. Onda 3 (menos telas) e Onda 4 (Assistente, que depende da emenda da RULES 20 e da RULES 28 nova): ver o Artifact.
+Onda 3 (menos telas) e Onda 4 (Assistente, que depende da emenda da RULES 20 e da RULES 28 nova): ver o Artifact.

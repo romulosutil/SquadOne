@@ -87,6 +87,17 @@ a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas
 sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena; desde 17/10/2026,
 AC-03, uma regra por métrica: `leu`/`respondeuDeGente`/`quisVer` em tabela (robô, `respondeu_em` sem classificação, classificação sem a
 coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dias, e a taxa do expediente é a mesma com ou sem o filtro do Site),
+`server/crm-desfecho.test.ts` (17/10/2026, AC-08 e AC-10: ganho e dispensa marcados na Central nas cinco ofertas, com desfazer e
+ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `prioridadeDaTriagem`, `notaDoGoogle` e
+`taxasDeRespostaPorNicho` em tabela),
+`src/operations-agora-e-desfecho.test.ts` (17/10/2026, AC-05/08/09/12: `fraseDaAcao`, uma frase por tipo de ação e a mesma no cartão da
+Próxima venda e no "Agora" da Ficha, com e sem o copiloto; `acaoDoLead` dá ação ao segundo lead "pronto"; `agoraDaFicha` sem ação (ganho,
+perdido, próximo passo salvo, esperando desde, vez do robô); `linkDoPasso` nunca abre o gerar_demo; `desfechosDoLead`, estados e desfazer
+por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha),
+`src/operations-triagem.test.ts` (17/10/2026, AC-10, `triagem.ts`: o lote nasce com os 10 primeiros na ordem do servidor; dispensar tira o
+item na hora sem puxar o 11º; o convidado fica à vista sem contar como pendente; decidido o lote, vêm os 10 seguintes; dispensado no retrato
+(`perdaManual`) fica fora; poda da marca local (dispensado confirmado, convidado fora da Revisar, lead sumido, vencida); storage quebrado;
+o corpo do registro; a pontuação só quando diferencia; o motivo curto do Convidar desligado),
 `src/operations-proxima-venda.test.ts` (17/10/2026, AC-02: a contagem da fila do dia (`resumoDoDia`: total igual à soma da quebra por tipo,
 primeiros contatos prontos e quantos o ritmo ainda deixa hoje, 0 na pausa), `textoDosPrimeiros`, `filaDaTela` (um primeiro contato por vez,
 só no expediente e com ritmo livre; "Enviei" sai, "Pular" vai para o fim) e as resolvidas do dia no storage (outro dia e storage ilegível = vazio)),

@@ -60,8 +60,7 @@ const nota = ref('')
 const proximoTexto = ref('')
 const proximoData = ref('')
 const propostaData = ref(hojeEmSP())
-// Os registros de ganho e dispensar (AC-08, AC-10) ainda não estão em CrmTipoDeRegistro (types.ts é o
-// contrato fixo desta rodada): a Ficha aceita os dois conjuntos.
+// Os registros de desfecho (AC-08) já estão em CrmTipoDeRegistro; o par fica explícito para quem lê.
 type TipoDaFicha = CrmTipoDeRegistro | RegistroDeDesfecho
 const salvando = ref<TipoDaFicha | null>(null)
 const mensagem = ref('')
