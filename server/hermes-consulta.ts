@@ -224,15 +224,23 @@ export function ambienteDoHermes(env: NodeJS.ProcessEnv = process.env): NodeJS.P
 const ID_DE_SESSAO = /^\d{8}_\d{6}_[0-9a-f]{6,}$/;
 
 /**
- * Ids das sessões cujo workspace é EXATAMENTE a nossa pasta. PURO. A tabela tem Title, Workspace,
- * Last Active e ID separados por 2+ espaços; lê-se da DIREITA, porque o título é texto livre gerado
- * pelo modelo e pode conter qualquer coisa, inclusive algo com cara de id.
+ * Ids das sessões da nossa pasta. PURO. A tabela tem Title, Workspace, Last Active e ID separados por
+ * 2+ espaços; lê-se da DIREITA, porque o título é texto livre gerado pelo modelo e pode conter qualquer
+ * coisa, inclusive algo com cara de id.
+ *
+ * A coluna Workspace vem CORTADA na largura da tabela (visto na Mel em 17/10/2026, na demonstração:
+ * "squadone-assiste" para "squadone-assistente-hermes"), e a comparação exata deixava a sessão no
+ * state.db. Vale o prefixo: a listagem já veio filtrada por `--workspace <caminho da pasta>`, e o nome
+ * é único; um prefixo curto demais (menos de 8 letras) não vale, para um corte extremo não casar com
+ * qualquer coisa.
  */
 export function sessoesDaPasta(listagem: string, nomeDaPasta: string): string[] {
   const ids: string[] = [];
   for (const linha of listagem.split(/\r?\n/)) {
     const cols = linha.trim().split(/\s{2,}/);
-    if (cols.length >= 4 && ID_DE_SESSAO.test(cols[cols.length - 1]) && cols[cols.length - 3] === nomeDaPasta) {
+    if (cols.length < 4 || !ID_DE_SESSAO.test(cols[cols.length - 1])) continue;
+    const mostrado = cols[cols.length - 3].replace(/(…|\.\.\.)$/, "");
+    if (mostrado === nomeDaPasta || (mostrado.length >= 8 && nomeDaPasta.startsWith(mostrado))) {
       ids.push(cols[cols.length - 1]);
     }
   }

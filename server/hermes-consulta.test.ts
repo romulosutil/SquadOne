@@ -156,6 +156,16 @@ describe("sessoesDaPasta", () => {
     assert.deepEqual(sessoesDaPasta(tabela, NOME_DA_PASTA_VAZIA), ["20261017_120000_abcdef"]);
     assert.deepEqual(sessoesDaPasta("No sessions found.", NOME_DA_PASTA_VAZIA), []);
   });
+  it("a coluna cortada da Mel ainda casa; corte curto demais e outra pasta não", () => {
+    // Como saiu na Mel em 17/10/2026: a Workspace cortada na largura da tabela.
+    const tabela = [
+      "Orientar consulta do pacot   squadone-assiste   just now      20261017_132709_29cb41",
+      "Outra coisa   squadone-assistente-h…   1m ago   20261017_132800_aaaaaa",
+      "Curto   squad   2m ago   20261017_132900_bbbbbb",
+      "Socorro   socorro   3m ago   20261017_133000_cccccc",
+    ].join("\n");
+    assert.deepEqual(sessoesDaPasta(tabela, NOME_DA_PASTA_VAZIA), ["20261017_132709_29cb41", "20261017_132800_aaaaaa"]);
+  });
 });
 
 describe("argumentos e ambiente", () => {
