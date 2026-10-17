@@ -18,7 +18,7 @@ const nomes = computed(() => nomesDasConexoes(props.conexoes))
         <span v-if="situacao?.ultimaSincronizacao?.fim"> · lido em {{ diaHora(situacao.ultimaSincronizacao.fim) }}</span>
         <span v-else> · ainda não lido</span>
       </p>
-      <!-- O "Atualizar agora" da tela (AC-25): ao lado da data que ele muda. -->
+      <!-- O "Atualizar" da tela (AC-25): ao lado da data que ele muda. -->
       <slot />
     </div>
     <p v-if="situacao?.problema" class="fin-aviso">{{ situacao.problema }}</p>

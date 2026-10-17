@@ -8,6 +8,7 @@ import type { CrmLead, CrmVisao, DellCheck, DellStatus } from "../operations/typ
 import {
   JORNADA_DAS_SALAS, estadoDoRobo, fonteDoCrm, hrefDaJornada, lerRecorte, operacaoDaSala, temOperacao,
 } from "./operacao.ts";
+import { lerFiltroDePasso } from "../operations/funil-lista.ts";
 
 const AGORA = Date.parse("2026-10-15T15:00:00Z");
 let seq = 0;
@@ -62,7 +63,7 @@ describe("operação das salas: o recorte lido", () => {
 
   it("a oferta inteira: passos com lead, fechados à parte, só o filtro do produto (Plus fica no filtro dele)", () => {
     const r = lerRecorte({ produto: "site" }, leads);
-    assert.equal(r.href, "/crm?ver=jornada&produto=site");
+    assert.equal(r.href, "/crm?ver=funil&produto=site");
     assert.equal(r.rotulo, "Site antes da venda");
     assert.deepEqual(r.passos.map((p) => [p.passo, p.leads]), [["achado", 2], ["raio-x", 1], ["primeiro-contato", 1], ["resposta", 2]]);
     assert.equal(r.total, 6);
@@ -84,7 +85,7 @@ describe("operação das salas: o recorte lido", () => {
 
   it("todas as ofertas, só as conversas (Atendimento)", () => {
     const r = lerRecorte(JORNADA_DAS_SALAS["prumo--geral"].recortes[0], leads);
-    assert.equal(r.href, "/crm?ver=jornada");
+    assert.equal(r.href, "/crm?ver=funil");
     assert.equal(r.rotulo, "Todas as ofertas");
     assert.equal(r.total, 4);
     assert.equal(r.fechados, undefined);
@@ -119,9 +120,12 @@ describe("operação das salas: o recorte lido", () => {
     assert.equal(iris.passos.length, 0);
   });
 
-  it("hrefDaJornada: o \"Ver no Funil\" leva à vista por passo, no filtro da oferta", () => {
-    assert.equal(hrefDaJornada(null), "/crm?ver=jornada");
-    assert.equal(hrefDaJornada("estampa"), "/crm?ver=jornada&produto=estampa");
+  it("hrefDaJornada: o \"Ver no Funil\" abre o Funil no filtro da oferta e, com um passo só, no filtro Passo", () => {
+    assert.equal(hrefDaJornada(null), "/crm?ver=funil");
+    assert.equal(hrefDaJornada("estampa"), "/crm?ver=funil&produto=estampa");
+    assert.equal(hrefDaJornada("site", "resposta"), "/crm?ver=funil&produto=site&passo=resposta");
+    // O ?passo= que o link escreve é o que o Funil lê.
+    assert.equal(lerFiltroDePasso(new URL(`http://x${hrefDaJornada("site", "resposta")}`).searchParams.get("passo")), "resposta");
   });
 });
 

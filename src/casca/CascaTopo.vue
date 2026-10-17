@@ -7,8 +7,11 @@ import { useOverview } from './overview'
 
 const props = defineProps<{
   nome: string
-  /** null = perfil sem Dell (Easypanel): o chip não aparece, em vez de dizer "tudo certo". */
-  dell: { carregando: boolean; falhas: number; semLeitura: boolean; conferidoEm: string; erro: string } | null
+  /**
+   * null = perfil sem Dell (Easypanel): o chip não aparece, em vez de dizer "tudo certo". O número
+   * e o instante saem do resumoDoDell (AC-17), não daqui: por isso não há falhas nem conferidoEm.
+   */
+  dell: { carregando: boolean; semLeitura: boolean; erro: string } | null
   pedindo: boolean
 }>()
 defineEmits<{ atualizar: [] }>()

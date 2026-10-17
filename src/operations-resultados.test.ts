@@ -105,9 +105,9 @@ describe('follow-up e 2ª mensagem anotados (14/10/2026)', () => {
     assert.equal(porcento(1, 3), '33%')
     assert.equal(porcento(0, 0), '—')
     assert.equal(resumoDaLinha({ chave: 'x', enviados: 4, viram: 1, responderam: 1, interesse: 1, recusaram: 1, fecharam: 1 }),
-      '1 respondeu (25%) · 1 leu · 1 quis ver · 1 recusou · 1 fechou')
+      '1 respondeu (25%) · 1 leu · 1 quis ver · 1 recusou · 1 ganhou')
     assert.equal(resumoDaLinha({ chave: 'x', enviados: 10, viram: 0, responderam: 2, interesse: 2, recusaram: 0, fecharam: 0 }),
-      '2 responderam (20%) · 0 leram · 2 quiseram ver · 0 recusaram · 0 fecharam')
+      '2 responderam (20%) · 0 leram · 2 quiseram ver · 0 recusaram · 0 ganharam')
     assert.equal(amostraPequena({ chave: 'x', enviados: 9, viram: 0, responderam: 0, interesse: 0, recusaram: 0, fecharam: 0 }), true)
   })
 })

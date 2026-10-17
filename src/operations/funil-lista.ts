@@ -12,7 +12,7 @@
  */
 import { ROTULO_DA_RESPOSTA, diaEscolhido, textoDoPrazo } from './crm-formato'
 import { PASSOS, passoAtual, type IdDoPasso, type LeadDaJornada } from './jornada'
-import type { AcaoDeVenda } from './proxima-venda'
+import { chaveDoNicho, type AcaoDeVenda } from './proxima-venda'
 import type { CrmEtapa, CrmLead } from './types'
 
 export type VistaDoFunil = 'quadro' | 'lista'
@@ -117,15 +117,9 @@ export function textoDaColunaProximo(acao: Pick<AcaoDeVenda, 'titulo'> | null | 
   return lead.proximoPasso?.data ? diaEscolhido(lead.proximoPasso.data) : ''
 }
 
-/**
- * A chave de um nicho para o filtro (AC-19): sem acento, em minúscula, com os espaços juntados. A
- * planilha tem "Advocacia previdenciária" e "advocacia previdenciaria" vindos de caçadores
- * diferentes, e o select mostrava os dois. Só a mesma palavra com outra grafia vira uma opção:
- * palavras diferentes ("advocacia" e "advogado") continuam separadas, de propósito.
- */
-export function chaveDoNicho(nicho: string): string {
-  return nicho.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
+// A chave do nicho é uma só, a da fila de venda (proxima-venda.ts, AC-16): o filtro do Funil (AC-19)
+// tinha uma cópia igual, que já divergia no vazio. Reexportada para o CrmFunil e o teste.
+export { chaveDoNicho }
 
 export interface OpcaoDeNicho { chave: string; rotulo: string; total: number }
 
@@ -139,8 +133,9 @@ export function opcoesDeNicho(nichos: readonly string[]): OpcaoDeNicho[] {
   const grupos = new Map<string, Map<string, number>>()
   for (const bruto of nichos) {
     const grafia = bruto.replace(/\s+/g, ' ').trim()
+    // Sem nicho não vira opção (a chave dele é "sem nicho", e o rótulo sairia vazio).
+    if (!grafia) continue
     const chave = chaveDoNicho(grafia)
-    if (!chave) continue
     const g = grupos.get(chave) ?? new Map<string, number>()
     g.set(grafia, (g.get(grafia) ?? 0) + 1)
     grupos.set(chave, g)

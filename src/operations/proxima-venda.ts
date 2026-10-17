@@ -311,7 +311,7 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
       if (lead.resposta?.tipo === 'neutra') return 'Resposta aberta: responda curto, tire a dúvida e devolva uma pergunta de sim ou não que leve ao "quero ver".'
       return 'Responda no mesmo dia, curto, e termine com uma pergunta que ele consiga responder com uma palavra.'
     case 'mandar-proposta':
-      return 'Ele gostou: a resposta é a proposta, hoje (em até 24 h do "gostei"). O que entra, quanto custa e quando começa; tocar já anota a proposta no CRM.'
+      return 'Ele gostou: a resposta é a proposta, hoje (em até 24 h do "gostei"). O que entra, quanto custa e quando começa; tocar já anota a proposta.'
     case 'combinado':
       return 'Você combinou: cumprir na data é o que faz confiar. Lembre o que ele disse da última vez e proponha o próximo passo com dia e hora.'
     case 'depois-do-link':
@@ -682,7 +682,7 @@ const minuscula = (t: string) => t.charAt(0).toLowerCase() + t.slice(1)
  */
 export function agoraDaFicha(lead: CrmLead, acao: Pick<AcaoDeVenda, 'titulo' | 'tatica'> | null): AgoraDaFicha {
   if (acao) return { frase: acao.titulo, como: acao.tatica, citaOProximo: false }
-  if (lead.etapa === 'ganho') return { frase: 'Fechado: nada a vender agora. É entregar e começar a mensalidade.', citaOProximo: false }
+  if (lead.etapa === 'ganho') return { frase: 'Ganho: nada a vender agora. É entregar e começar a mensalidade.', citaOProximo: false }
   if (lead.etapa === 'perdido') return { frase: 'Fora do funil: nada a mandar, a não ser que ele volte a escrever.', citaOProximo: false }
   const salvo = lead.proximoPasso
   if (salvo?.texto) {
@@ -730,8 +730,8 @@ export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'p
   const aberto = lead.etapa !== 'ganho' && lead.etapa !== 'perdido'
   const peloPrazo = lead.etapa === 'perdido' && !lead.perdaManual && (lead.motivoPerda === 'expirou' || lead.motivoPerda === 'esfriou')
   const marcados: DesfechoMarcado[] = []
-  if (lead.ganhoManual) marcados.push({ id: 'ganhou', texto: 'Fechou: o ganho foi marcado na Central.', desfazer: { tipo: 'ganhou_desfeito', rotulo: 'Desfazer o ganho' } })
-  else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Fechou, pela planilha. Para desfazer, use a página do lead no n8n.' })
+  if (lead.ganhoManual) marcados.push({ id: 'ganhou', texto: 'Ganhou: marcado na Central.', desfazer: { tipo: 'ganhou_desfeito', rotulo: 'Desfazer o ganho' } })
+  else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Ganhou, pela planilha. Para desfazer, use a página do lead no n8n.' })
   if (lead.perdaManual === 'recusou') marcados.push({ id: 'recusou', texto: 'Perdeu: ele disse não.', desfazer: { tipo: 'recusou_desfeito', rotulo: 'Desfazer a recusa' } })
   else if (lead.perdaManual === 'sem-contato') marcados.push({ id: 'sem-contato', texto: 'Perdeu: sem contato fácil.', desfazer: { tipo: 'sem_contato_desfeito', rotulo: 'Desfazer a perda' } })
   else if (lead.perdaManual === 'dispensado') marcados.push({ id: 'dispensado', texto: 'Dispensado na Triagem.', desfazer: { tipo: 'dispensado_desfeito', rotulo: 'Desfazer o dispensar' } })

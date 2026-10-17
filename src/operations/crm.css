@@ -499,22 +499,6 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-copiloto .crm-tag { margin-left: var(--esp-1); }
 .crm-copiloto__parte { display: grid; gap: var(--esp-2); }
 
-/* Vista Jornada (CrmJornadaVista.vue): um bloco por passo, na ordem da jornada; parado com palavra. */
-.crm-jornada-vista { display: grid; gap: var(--esp-3); }
-.crm-jornada-vista__passos { display: grid; gap: var(--esp-3); margin: 0; padding: 0; list-style: none; }
-@media (min-width: 64rem) { .crm-jornada-vista__passos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.crm-jornada-vista__passo { padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
-.crm-jornada-vista__passo.is-vazio { border-style: dashed; }
-.crm-jornada-vista__passo header { display: grid; gap: var(--esp-0); margin-bottom: var(--esp-2); }
-.crm-jornada-vista__passo h3 { margin: 0; font-size: var(--tam-nome); letter-spacing: -0.01em; }
-.crm-jornada-vista__n { display: inline-block; min-width: 1.6rem; padding: 0 var(--esp-2); border: var(--linha-fina); border-radius: var(--raio-selo); text-align: center; font-variant-numeric: tabular-nums; }
-.crm-jornada-vista__parados { margin: 0; padding: var(--esp-0) var(--esp-2); justify-self: start; border-radius: var(--raio-selo); background: var(--erro-fundo); font-weight: var(--peso-medio); font-size: var(--tam-apoio); }
-.crm-jornada-vista__passo ul { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
-.crm-jornada-vista__passo li button { display: grid; gap: var(--esp-0); width: 100%; min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--superficie-2); color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
-.crm-jornada-vista__passo li button:hover { filter: brightness(0.95); }
-.crm-jornada-vista__passo li.is-parado button { background: var(--erro-fundo); }
-.crm-jornada-vista__passo li button:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-
 /* Anúncio da Ficha (anotações desta tela): vazio, sai do fluxo sem sair da árvore de acessibilidade,
    para a região aria-live continuar existindo; antes deixava um vão de 1rem abaixo da faixa fixa. */
 .crm-ficha__anuncio:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }

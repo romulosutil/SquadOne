@@ -10,7 +10,7 @@ import CrmObjecao from './CrmObjecao.vue'
 import { colinhaDoLead } from './colinha'
 import { nomeDaOferta, ofertaDoLead, proximoDaJornada } from './jornada'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
-import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataHora, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem } from './crm-formato'
+import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataHora, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaSubEtapa, textoDoEvento } from './crm-formato'
 import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
 import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
@@ -49,7 +49,7 @@ const props = defineProps<{
 }>()
 // Abre numa folha cheia (CrmPanel): fechar é o "Fechar" da folha, o Esc ou o
 // voltar do navegador, então a ficha não tem botão de voltar próprio.
-// `colinha`: o CrmPanel troca para /crm?ver=roteiro (fecha a folha, sem recarregar).
+// `colinha`: o CrmPanel leva ao Roteiro, em /mais?abrir=roteiro (AC-20), sem recarregar.
 const emit = defineEmits<{
   registrado: []; colinha: []; liberar: [leadId: string]; anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
 }>()
@@ -229,7 +229,7 @@ const apoio = computed(() => acoes.value.filter((a) => !a.principal && a.chave !
 const comProposta = computed(() => primaria.value?.chave === 'proposta' || secundarias.value.some((a) => a.chave === 'proposta'))
 const dicaDaAcao = computed(() => [
   doPasso.value.some((a) => a.anota && a.chave !== 'proposta') ? 'Tocar já anota o envio.' : '',
-  comProposta.value ? 'Mandar a proposta abre o WhatsApp com ela e já a marca enviada hoje no CRM.' : '',
+  comProposta.value ? 'Mandar a proposta abre o WhatsApp com ela e já a marca enviada hoje.' : '',
   props.lead.reenvioDoRobo && doPasso.value.some((a) => a.chave === 'followup') ? 'Reenvio único, pedindo o responsável.' : '',
   doPasso.value.some((a) => a.chave === 'gerarDemo') ? 'O demo sai em 20 a 40 min; o aviso chega no WhatsApp.' : '',
 ].filter(Boolean).join(' '))
@@ -474,7 +474,7 @@ function irParaAnotar() {
       <h2 id="crm-ficha-titulo" ref="titulo" tabindex="-1">{{ lead.empresa }}</h2>
       <p class="crm-ficha__etapa">
         <span class="crm-etapa" :class="`is-${lead.etapa}`">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
-        <span>{{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}<template v-if="lead.leitura === 'viu'"> · leu</template><template v-else-if="lead.leitura === 'pela-resposta'"> · leu e respondeu</template></span>
+        <span>{{ textoDaSubEtapa(lead.subEtapa) }} · {{ diasNaEtapa(lead) }}<template v-if="lead.leitura === 'viu'"> · leu</template><template v-else-if="lead.leitura === 'pela-resposta'"> · leu e respondeu</template></span>
       </p>
     </header>
 
@@ -507,13 +507,13 @@ function irParaAnotar() {
 
     <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
     <figure v-if="rascunho" class="crm-ficha__rascunho">
-      <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primaria?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base da colinha.' }}</template></figcaption>
+      <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primaria?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base do Roteiro.' }}</template></figcaption>
       <blockquote>{{ rascunho }}</blockquote>
       <p v-if="primaria?.chave === 'proposta' && proposta?.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
     </figure>
     <!-- Proposta ao lado (sem o "gostei" registrado): o texto também à vista antes do toque, dobrado. -->
     <details v-if="propostaAoLado && proposta" class="dobra crm-ficha__rascunho">
-      <summary>Proposta que vai sair <span class="crm-muted">({{ proposta.origem === 'copiloto' ? 'itens do copiloto, preços do cardápio' : 'texto base da colinha' }})</span></summary>
+      <summary>Proposta que vai sair <span class="crm-muted">({{ proposta.origem === 'copiloto' ? 'itens do copiloto, preços do cardápio' : 'texto base do Roteiro' }})</span></summary>
       <blockquote>{{ proposta.texto }}</blockquote>
       <p v-if="proposta.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
     </details>
@@ -592,7 +592,7 @@ function irParaAnotar() {
       </ul>
       <div v-if="(desfecho.ganhar || desfecho.perder || desfecho.proposta) && !escolhendoPerda && !marcandoProposta" class="crm-form__botoes">
         <button v-if="desfecho.ganhar" class="botao" type="button" :disabled="!disponivel || salvando !== null" :aria-pressed="confirmandoGanho" @click="tocarGanhou">
-          {{ salvando === 'ganhou' ? 'Marcando…' : confirmandoGanho ? `Confirmar: fechou com ${lead.empresa}` : 'Ganhou' }}
+          {{ salvando === 'ganhou' ? 'Marcando…' : confirmandoGanho ? `Confirmar o ganho: ${lead.empresa}` : 'Ganhou' }}
         </button>
         <button v-if="desfecho.perder" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('perda')">Perdeu</button>
         <button v-if="desfecho.proposta" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('proposta')">Proposta enviada</button>
@@ -673,7 +673,7 @@ function irParaAnotar() {
       <p v-if="colinha.motivo" class="crm-colinha__motivo">{{ colinha.motivo }}</p>
       <CrmObjecao v-for="o in colinha.objecoes" :key="o.id" :objecao="o" :lead="lead" :nivel="4" />
       <CrmMomento v-for="m in colinha.momentos" :key="m.momento" :passo="m" :lead="lead" :nivel="4" />
-      <a class="crm-colinha__inteira" href="/crm?ver=roteiro" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
+      <a class="crm-colinha__inteira" href="/mais?abrir=roteiro" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
     </template>
 
     <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
@@ -738,8 +738,8 @@ function irParaAnotar() {
           <li v-for="(evento, i) in eventos" :key="`${evento.tipo}-${evento.em}-${i}`" :class="`is-${evento.origem === 'manual' ? 'manual' : 'auto'}`">
             <time :datetime="evento.em">{{ dataHora(evento.em) }}</time>
             <div>
-              <strong>{{ evento.rotulo }}</strong>
-              <p v-if="evento.texto">{{ evento.texto }}</p>
+              <strong>{{ textoDoEvento(evento.rotulo) }}</strong>
+              <p v-if="evento.texto">{{ textoDoEvento(evento.texto) }}</p>
               <small>{{ evento.origem === 'manual' ? 'Manual' : 'Automático' }} · {{ evento.fonte }}<template v-if="evento.estimado"> · data estimada</template></small>
             </div>
           </li>

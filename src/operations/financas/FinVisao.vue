@@ -46,7 +46,7 @@ const nomeDoCartao = (c: { nome: string; final: string | null }) => (c.final ? `
         <strong class="fin-total">{{ brl(dados.tenho.totalCentavos) }}</strong>
         <p class="fin-sub">Contas e investimentos, pelo saldo que o banco informa.</p>
       </header>
-      <p v-if="!dados.tenho.contas.length" class="fin-vazio">Nenhuma conta lida ainda. Toque em "Atualizar agora".</p>
+      <p v-if="!dados.tenho.contas.length" class="fin-vazio">Nenhuma conta lida ainda. Toque em "Atualizar".</p>
       <ul v-else class="fin-linhas">
         <li v-for="c in dados.tenho.contas" :key="c.id">
           <span><b>{{ c.nome }}</b><small>{{ ROTULO_DO_TIPO[c.tipo] ?? c.tipo }} · {{ c.instituicao }}</small></span>

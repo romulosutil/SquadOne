@@ -29,8 +29,24 @@ export const DICA_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: 'Site na fila ou pronto; prospect para revisar',
   contato: `Enviado ou respondeu; ${DIAS_SEM_RESPOSTA} dias sem mensagem do lead = Perdido`,
   proposta: 'Proposta enviada (marcada à mão)',
-  ganho: 'Fechou',
+  ganho: 'Ganhou: marcado na Central, na página do lead ou na planilha',
   perdido: 'Recusou, sem resposta, parou de responder ou descartado',
+}
+
+/**
+ * Um nome por coisa (AC-13, 17/10/2026): na tela o estado é "Ganho" e o verbo é "Ganhou", mas o
+ * servidor manda "Fechou (marcado na Central)", "Concluído (Etapa na planilha)" e o evento "Fechou em
+ * dd/mm". O mesmo com a leitura: o servidor diz "Viu, sem resposta" e Números diz "Leram". O texto
+ * do servidor fica (os testes de server/crm e o histórico da aba CRM dependem dele); a tradução é
+ * aqui, no último passo antes da tela.
+ */
+export function textoDaSubEtapa(sub: string): string {
+  return sub.replace(/^Fechou\b/, 'Ganho').replace(/^Concluído \(/, 'Ganho (').replace(/^Viu\b/, 'Leu')
+}
+
+/** O rótulo e o texto de um evento da linha do tempo: o desfecho é um fato, então o verbo. */
+export function textoDoEvento(texto: string): string {
+  return texto.replace(/^Fechou\b/, 'Ganhou').replace(/^Viu a mensagem\b/, 'Leu a mensagem')
 }
 
 export const ROTULO_DA_PERDA: Record<NonNullable<CrmLead['motivoPerda']>, string> = {
@@ -70,7 +86,10 @@ export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
  */
 export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
 /** Plus (15/10/2026): a oferta que o lead recebe, na ordem em que o filtro a mostra. */
-export const ROTULO_DA_OFERTA_DO_PLUS = { site: 'Site', prumo: 'Serviços PRUMO', iris: 'Iris', estampa: 'Estamparia' } as const
+// É o rótulo curto (AC-13): era um terceiro jogo de nomes, com "Serviços PRUMO" entre siglas.
+export const ROTULO_DA_OFERTA_DO_PLUS = {
+  site: SIGLA_DO_PRODUTO.site, prumo: SIGLA_DO_PRODUTO.prumo, iris: SIGLA_DO_PRODUTO.iris, estampa: SIGLA_DO_PRODUTO.estampa,
+} as const
 /** O primeiro contato: o Site manda o site pronto, as outras ofertas um convite para conversar. */
 export const ehConvite = (produto: CrmProduto) => produto !== 'site' && produto !== 'plus'
 
@@ -161,7 +180,8 @@ export function textoDaAbordagem(lead: CrmLead): string {
 }
 
 export function textoDaLeitura(lead: CrmLead): string {
-  if (lead.leitura === 'viu') return `Viu ${dataCurta(lead.marcos.visto)}`
+  // "Leu", como os "Leram" de Números (AC-13): o marco do cartão dizia "Viu".
+  if (lead.leitura === 'viu') return `Leu ${dataCurta(lead.marcos.visto)}`
   if (lead.leitura === 'pela-resposta') return 'Leu (respondeu)'
   if (lead.leitura === 'desconhecida') return 'Leitura desconhecida'
   return ''

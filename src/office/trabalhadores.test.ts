@@ -24,7 +24,7 @@ describe("catálogo dos trabalhadores automáticos", () => {
       "Rascunho do Mapa": "prumo--organizar",
       "Caçador de clínicas": "prumo--iris",
       "Caçador de estamparias": "prumo--estamparias",
-      "Retrato do CRM": "prumo--geral",
+      "Retrato das planilhas": "prumo--geral",
     });
   });
 

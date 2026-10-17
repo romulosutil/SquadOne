@@ -26,7 +26,7 @@ import { linkDoComoFunciona, trabalhadoresDaSala, type TrabalhadorAutomatico } f
 export interface RecorteDaSala {
   /** O filtro de produto do CRM; null = todas as ofertas. */
   produto: CrmProduto | null;
-  /** Só estes passos. Ausente = todos os abertos, e Fechou/Perdido numa linha. */
+  /** Só estes passos. Ausente = todos os abertos, e Ganho/Perdido numa linha. */
   passos?: IdDoPasso[];
 }
 
@@ -67,7 +67,7 @@ export type FonteDoCrm =
 
 /** O retrato do CRM como fonte das salas: o que não foi lido é "sem sinal", nunca lista vazia. */
 export function fonteDoCrm(visao: CrmVisao | null, erro: string, agora: number): FonteDoCrm {
-  if (!visao) return { estado: "sem-sinal", motivo: erro ? `o CRM não foi lido (${erro})` : "o CRM ainda não foi lido" };
+  if (!visao) return { estado: "sem-sinal", motivo: erro ? `Vendas não foi lido (${erro})` : "Vendas ainda não foi lido" };
   if (visao.estado !== "ok") return { estado: "sem-sinal", motivo: visao.mensagem ?? "sem retrato das planilhas" };
   const idadeMin = visao.geradoEm ? Math.max(0, Math.round((agora - Date.parse(visao.geradoEm)) / 60_000)) : null;
   return {
@@ -92,7 +92,7 @@ export interface ContagemDoPasso {
 export interface RecorteLido {
   produto: CrmProduto | null;
   rotulo: string;
-  /** "Ver no Funil": /crm?ver=jornada&produto=… (sem produto quando são todas), onde está a lista. */
+  /** "Ver no Funil": /crm?ver=funil&produto=…&passo=… (sem produto quando são todas), onde está a lista. */
   href: string;
   total: number;
   /**
@@ -103,17 +103,23 @@ export interface RecorteLido {
   etapas: Array<{ etapa: CrmEtapa; rotulo: string; leads: number }>;
   /** Os passos do recorte que têm lead, na ordem da jornada. */
   passos: ContagemDoPasso[];
-  /** Fechou e Perdido, só no recorte sem `passos` (a jornada inteira da oferta). */
+  /** Ganho e Perdido, só no recorte sem `passos` (a jornada inteira da oferta). */
   fechados?: { ganho: number; perdido: number };
   /** Em andamento esperando o Rômulo (o estoque antes do primeiro contato não conta, como na vista Jornada). */
   comVoce: number;
   parados: number;
 }
 
-/** A vista "por passo da jornada" do Funil, no filtro da oferta: é lá que os leads são listados. */
-export function hrefDaJornada(produto: CrmProduto | null): string {
-  const q = new URLSearchParams({ ver: "jornada" });
+/**
+ * O Funil no filtro da oferta, que é onde os leads são listados. A vista "por passo da jornada"
+ * (?ver=jornada) virou o filtro Passo do Funil (AC-19, 17/10/2026): com um passo só no recorte, o
+ * link já abre nele (?passo=, lerFiltroDePasso em funil-lista.ts); com vários, o filtro fica em
+ * "todos", porque o select escolhe um passo por vez.
+ */
+export function hrefDaJornada(produto: CrmProduto | null, passo?: IdDoPasso): string {
+  const q = new URLSearchParams({ ver: "funil" });
   if (produto) q.set("produto", produto);
+  if (passo) q.set("passo", passo);
   return `/crm?${q.toString()}`;
 }
 
@@ -129,7 +135,7 @@ export function lerRecorte(recorte: RecorteDaSala, leads: readonly CrmLead[]): R
   return {
     produto: recorte.produto,
     rotulo: recorte.produto ? ROTULO_DO_PRODUTO[recorte.produto] : "Todas as ofertas",
-    href: hrefDaJornada(recorte.produto),
+    href: hrefDaJornada(recorte.produto, recorte.passos?.length === 1 ? recorte.passos[0] : undefined),
     total: doRecorte.reduce((n, p) => n + p.leads.length, 0),
     etapas: ETAPAS.filter((e) => porEtapa.has(e)).map((e) => ({ etapa: e, rotulo: ROTULO_DA_ETAPA[e], leads: porEtapa.get(e)! })),
     passos: doRecorte

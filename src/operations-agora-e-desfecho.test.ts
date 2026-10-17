@@ -100,7 +100,7 @@ describe('o cartão da Próxima venda e o "Agora" da Ficha dizem a mesma frase (
 
 describe('agoraDaFicha sem ação na fila: diz que não há nada e por quê', () => {
   const casos: Array<[string, Partial<CrmLead>, RegExp]> = [
-    ['ganho', { etapa: 'ganho' }, /^Fechado: nada a vender agora/],
+    ['ganho', { etapa: 'ganho' }, /^Ganho: nada a vender agora/],
     ['perdido', { etapa: 'perdido' }, /^Fora do funil/],
     ['próximo passo salvo para depois', { etapa: 'contato', sinal: 'respondeu', proximoPasso: { texto: 'Ligar às 10h', data: '2026-10-20', registradoEm: '' } },
       /^Nada para fazer com ele agora; o próximo passo salvo é “Ligar às 10h”, para ter 20\/10\.$/],

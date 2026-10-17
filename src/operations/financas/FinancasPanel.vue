@@ -100,7 +100,7 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
 
     <p class="fin-anuncio" role="status" aria-live="polite">{{ anuncio }}</p>
 
-    <!-- "Atualizar agora" era o primário amarelo da tela, de largura inteira no celular, para um
+    <!-- O "Atualizar" (era "Atualizar agora"; AC-13: um nome nas três recargas) era o primário amarelo da tela, de largura inteira no celular, para um
          gesto raro: a tela já relê a cada 5 min e a Pluggy lê os bancos sozinha. Vira um botão
          pequeno ao lado do "dados até" (AC-25), o lugar onde se vê que está velho. -->
     <FinSaude v-if="dados" :conexoes="dados.saude.conexoes" :dados-ate="dados.saude.dadosAte" :situacao="dados">
@@ -111,7 +111,7 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
         :disabled="atualizando || dados.sincronizando"
         @click="atualizarAgora"
       >
-        {{ atualizando || dados.sincronizando ? 'Atualizando…' : 'Atualizar agora' }}
+        {{ atualizando || dados.sincronizando ? 'Atualizando…' : 'Atualizar' }}<span class="so-leitor"> as finanças</span>
       </button>
     </FinSaude>
     <p v-if="erro" class="fin-aviso is-forte" role="alert">{{ erro }} <button type="button" class="fin-botao" @click="carregar">Tentar de novo</button></p>

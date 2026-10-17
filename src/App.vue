@@ -126,9 +126,7 @@ const dell = computed(() =>
   ops.value
     ? {
         carregando: ov.carregando.value,
-        falhas: ov.falhas.value,
         semLeitura: !ov.overview.value?.dell.geradoEm,
-        conferidoEm: ov.overview.value?.dell.geradoEm ?? '',
         erro: ov.erro.value
       }
     : null

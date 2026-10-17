@@ -401,7 +401,7 @@ onBeforeUnmount(() => {
             <small v-if="s.fonte" class="texto-2 texto-pequeno">{{ s.fonte }}</small>
           </p>
           <button type="button" class="botao botao--leve" :disabled="isLoading && !s.ativa" @click="abrirEscritorio(s.id)">
-            Ver salas<span class="so-leitor"> da squad {{ s.nome }}</span>
+            Ver o escritório<span class="so-leitor"> da squad {{ s.nome }}</span>
           </button>
         </li>
       </ul>

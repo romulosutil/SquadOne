@@ -3,8 +3,8 @@
  * A operação de uma sala (15/10/2026), no rodapé do SalaCartao: quantos leads
  * dela há em cada passo da jornada, quantos estão parados com o Rômulo e o
  * estado de cada robô. Vem pronta de `operacaoDaSala` (office/operacao.ts, PURO);
- * aqui é só texto e link. Só lê: "Ver no Funil" abre a vista por passo da
- * jornada no filtro da sala, onde estão os leads um a um (OT-07, 16/10/2026: a
+ * aqui é só texto e link. Só lê: "Ver no Funil" abre o Funil no filtro da
+ * oferta da sala (e no filtro Passo, quando o recorte é um passo só), onde estão os leads um a um (OT-07, 16/10/2026: a
  * lista mora só lá); tocar num robô abre o passo dele em "Como funciona".
  */
 import type { OperacaoDaSala } from '../office/operacao'
@@ -21,7 +21,7 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
       <p v-if="operacao.jornada.estado === 'sem-sinal'" class="estado is-sem_sinal">Sem sinal: {{ operacao.jornada.motivo }}</p>
       <template v-else>
         <p v-if="operacao.jornada.velho" class="texto-2 texto-pequeno">
-          Retrato do CRM {{ operacao.jornada.idadeMin === null ? 'sem data' : `de há ${operacao.jornada.idadeMin} min` }}: pode estar velho.
+          Retrato de Vendas {{ operacao.jornada.idadeMin === null ? 'sem data' : `de há ${operacao.jornada.idadeMin} min` }}: pode estar velho.
         </p>
         <ul class="operacao__recortes">
           <li v-for="r in operacao.jornada.recortes" :key="r.produto ?? 'todas'">
@@ -39,7 +39,7 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
                 <template v-for="(p, i) in r.passos" :key="p.passo">{{ i ? ' · ' : '' }}{{ p.nome }} {{ p.leads }}</template>
               </small>
               <small v-else class="texto-2">nenhum lead aqui agora</small>
-              <small v-if="r.fechados" class="texto-2">Fechou {{ r.fechados.ganho }} · Perdido {{ r.fechados.perdido }}</small>
+              <small v-if="r.fechados" class="texto-2">Ganho {{ r.fechados.ganho }} · Perdido {{ r.fechados.perdido }}</small>
               <small v-if="r.comVoce || r.parados">
                 <template v-if="r.comVoce">{{ r.comVoce }} com você</template><template v-if="r.comVoce && r.parados"> · </template><strong v-if="r.parados">{{ plural(r.parados, 'parado', 'parados') }}</strong>
               </small>

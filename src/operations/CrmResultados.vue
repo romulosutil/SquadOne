@@ -154,7 +154,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <div class="crm-resultado__cabeca"><strong>Do link à proposta</strong></div>
           <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.linkAProposta) }}</p>
           <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
-            Viram o link e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
+            Receberam a 2ª mensagem e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
           </p>
         </li>
         <li class="crm-resultado">

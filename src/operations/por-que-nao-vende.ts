@@ -54,17 +54,17 @@ const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'
   }),
   segunda: (d, a) => ({
     titulo: 'Quem disse "quero ver" ficou esperando',
-    texto: `${a.n - d.n} de ${a.n} que disseram sim ainda não receberam o próximo passo. É a venda mais fácil de perder.`,
-    acao: 'Mande o link ou o Raio-X no mesmo dia do "sim". A Hoje põe esses na frente de tudo.',
+    texto: `${a.n - d.n} de ${a.n} que disseram sim ainda não receberam a 2ª mensagem. É a venda mais fácil de perder.`,
+    acao: 'Mande o link ou o Raio-X no mesmo dia do "sim". A Próxima venda põe esses na frente de tudo.',
   }),
   proposta: (d, a) => ({
     titulo: 'Ninguém chega na proposta',
-    texto: `${a.n} viram o demo ou o Raio-X e ${d.n === 0 ? 'nenhuma' : `só ${d.n}`} proposta saiu. O funil quebra depois do "gostei".`,
+    texto: `${a.n} receberam a 2ª mensagem (o demo ou o Raio-X) e ${d.n === 0 ? 'nenhuma' : `só ${d.n}`} proposta saiu. O funil quebra depois do "gostei".`,
     acao: 'Depois do link, pergunte o que achou em 24 h e, no primeiro "gostei", mande o preço e o próximo passo com data. Marque a proposta na ficha.',
   }),
   ganho: (d, a) => ({
-    titulo: 'Propostas não fecham',
-    texto: `${d.n} de ${a.n} propostas fecharam.`,
+    titulo: 'Propostas não viram ganho',
+    texto: `${d.n} de ${a.n} propostas viraram ganho.`,
     acao: 'Pergunte qual dúvida ficou e ofereça 10 minutos de ligação; dê um prazo real para a condição.',
   }),
 }
@@ -85,9 +85,9 @@ export function diagnosticoDeVenda(leads: readonly CrmLead[], agora: number, dia
     ['leram', 'Leram (recibo ou resposta)', leram.length],
     ['responderam', 'Responderam (gente, não robô)', responderam.length],
     ['interesse', 'Disseram "quero ver"', interesse.length],
-    ['segunda', 'Receberam o próximo passo', segunda.length],
+    ['segunda', 'Receberam a 2ª mensagem', segunda.length],
     ['proposta', 'Receberam proposta', proposta.length],
-    ['ganho', 'Fecharam', ganho.length],
+    ['ganho', 'Ganharam', ganho.length],
   ]
   // A taxa de "responderam" é sobre os enviados, não sobre quem leu: a leitura é parcial.
   const base = (id: DegrauDoFunil['id'], i: number) => (id === 'responderam' ? 0 : id === 'proposta' ? 4 : i - 1)

@@ -144,10 +144,10 @@ async function carregar(anunciar = false) {
       guardarEnvios(podarEnvios(envios.value, prontos, Date.now()))
       guardarAnotados(podarAnotados(anotados.value, new Map((corpo.leads ?? []).map((l: CrmLead) => [l.id, l] as [string, CrmLead])), Date.now()))
     }
-    if (anunciar) anuncio.value = `CRM atualizado: ${corpo.leads?.length ?? 0} leads.`
+    if (anunciar) anuncio.value = `Vendas atualizado: ${corpo.leads?.length ?? 0} leads.`
   } catch (motivo) {
     erro.value = motivo instanceof Error ? motivo.message : String(motivo)
-    if (anunciar) anuncio.value = 'Não foi possível ler o CRM.'
+    if (anunciar) anuncio.value = 'Não foi possível ler Vendas.'
   } finally {
     carregando.value = false
   }
@@ -385,7 +385,7 @@ function abrirColinha() {
         <h1 id="crm-titulo">Vendas</h1>
         <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
       </div>
-      <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Ler de novo' }}</button>
+      <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> Vendas</span></button>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; falta só a anotação, que dá para fazer na ficha (nota). -->
@@ -394,7 +394,7 @@ function abrirColinha() {
       <button type="button" class="crm-mais" @click="falhaDaAnotacao = null">Entendi</button>
     </p>
 
-    <div v-if="erro" class="crm-erro" role="alert"><strong>CRM indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
+    <div v-if="erro" class="crm-erro" role="alert"><strong>Vendas indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
     <template v-if="visao">
       <div v-if="visao.estado !== 'ok'" class="crm-aviso is-forte" role="status">
@@ -405,7 +405,7 @@ function abrirColinha() {
         <strong>Retrato desatualizado.</strong> Os números são de {{ dataHora(visao.geradoEm) }}.
         <template v-if="visao.ultimaFalha"> O n8n não conseguiu ler as planilhas em {{ dataHora(visao.ultimaFalha.em) }}: {{ visao.ultimaFalha.erro }}</template>
       </div>
-      <p v-if="visao.colunasAusentes.length" class="crm-nota-pequena">Colunas que a planilha ainda não tem (o CRM trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
+      <p v-if="visao.colunasAusentes.length" class="crm-nota-pequena">Colunas que a planilha ainda não tem (Vendas trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
       <p v-if="visao.estado === 'ok' && !visao.pastasLidas" class="crm-nota-pequena">A pasta ~/auto-site não foi lida: sem conferência de pastas agora.</p>
     </template>
 
@@ -485,6 +485,6 @@ function abrirColinha() {
         <a v-if="visao.links.planilhaEstampa" :href="visao.links.planilhaEstampa" target="_blank" rel="noopener">Aba Estamparias ↗</a>
       </footer>
     </template>
-    <p v-else-if="carregando" class="crm-muted" role="status">Lendo o CRM…</p>
+    <p v-else-if="carregando" class="crm-muted" role="status">Lendo Vendas…</p>
   </section>
 </template>

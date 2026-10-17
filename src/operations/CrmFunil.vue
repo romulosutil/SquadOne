@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDeDias, textoDoPrazo } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDaSubEtapa, textoDeDias, textoDoPrazo } from './crm-formato'
 import type { EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
@@ -278,7 +278,7 @@ const artefatos = (l: CrmLead) => {
               </td>
               <td :class="`is-${lead.etapa}`">
                 <span class="crm-etapa">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span>
-                <small>{{ lead.subEtapa }}</small>
+                <small>{{ textoDaSubEtapa(lead.subEtapa) }}</small>
               </td>
               <td class="crm-tabela__data">
                 <template v-if="lead.ultimoEvento">{{ dataCurta(lead.ultimoEvento) }}<small>{{ lead.diasDesdeUltimoEvento === 0 ? 'hoje' : lead.diasDesdeUltimoEvento !== undefined ? `há ${textoDeDias(lead.diasDesdeUltimoEvento)}` : '' }}</small></template>
@@ -344,7 +344,7 @@ const artefatos = (l: CrmLead) => {
                 <strong>{{ lead.empresa }}</strong>
                 <small>{{ onde(lead) }}</small>
               </button>
-              <p class="crm-cartao__estado"><span class="crm-tag" :class="`is-${lead.produto}`">{{ SIGLA_DO_PRODUTO[lead.produto] }}</span> {{ lead.subEtapa }} · {{ diasNaEtapa(lead) }}</p>
+              <p class="crm-cartao__estado"><span class="crm-tag" :class="`is-${lead.produto}`">{{ SIGLA_DO_PRODUTO[lead.produto] }}</span> {{ textoDaSubEtapa(lead.subEtapa) }} · {{ diasNaEtapa(lead) }}</p>
               <ol v-if="temMarcos(lead)" class="crm-marcos" aria-label="Enviado, leitura e resposta">
                 <li :class="{ 'is-feito': lead.marcos.enviado }">{{ lead.marcos.enviado ? `${ehConvite(lead.produto) ? 'Convite' : 'Enviado'} ${dataCurta(lead.marcos.enviado)}` : 'Não enviado' }}</li>
                 <li :class="{ 'is-feito': lead.leitura === 'viu' || lead.leitura === 'pela-resposta', 'is-desconhecido': lead.leitura === 'desconhecida' }">{{ textoDaLeitura(lead) || 'Leitura —' }}</li>

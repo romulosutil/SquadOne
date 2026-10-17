@@ -7,7 +7,7 @@ import { CARDAPIO, CDL, FRASE_SOB_PROPOSTA, OBJECOES, ROTEIRO, ROTULO_DA_ETAPA, 
 import { ROTULO_DO_PRODUTO } from './crm-formato'
 import type { CrmProduto } from './types'
 
-// O roteiro inteiro (/crm?ver=roteiro; era a "colinha" em ?ver=colinha, 08/10/2026): tudo para consultar durante
+// O roteiro inteiro (/mais?abrir=roteiro desde 17/10/2026; antes /crm?ver=roteiro e, até 08/10, a "colinha"): tudo para consultar durante
 // uma ligação, sem precisar de lead aberto. É estática (colinha.ts), então
 // aparece mesmo com o retrato do CRM ilegível ou fora do ar.
 // Sem lead não há número: só Copiar, nunca WhatsApp. O nome digitado aqui fica
@@ -58,7 +58,7 @@ async function irPara(id: string) {
       <span class="crm-kicker">PRUMO · atendimento</span>
       <h2 id="crm-colinha-titulo" tabindex="-1">Roteiro</h2>
       <p class="crm-muted">O que dizer em cada momento da conversa. Na ficha de cada lead, a parte que serve para ele aparece já com o nome e o link.</p>
-      <nav class="crm-colinha__indice" aria-label="Partes da colinha">
+      <nav class="crm-colinha__indice" aria-label="Partes do Roteiro">
         <a v-for="p in PARTES" :key="p.id" :href="`#${p.id}`" @click.prevent="irPara(p.id)">{{ p.rotulo }}</a>
       </nav>
       <label class="crm-colinha__campo">

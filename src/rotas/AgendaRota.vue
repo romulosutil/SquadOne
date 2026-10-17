@@ -78,7 +78,7 @@ const total = computed(() => quests.value.filter((q) => !questTerminou(q, agora.
         </p>
       </div>
       <button v-if="conectado" type="button" class="botao" :disabled="carregandoMochila" @click="ag.carregarMochila()">
-        {{ carregandoMochila ? 'Lendo…' : 'Ler de novo' }}
+        {{ carregandoMochila ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> a agenda</span>
       </button>
     </header>
 

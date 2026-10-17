@@ -257,9 +257,9 @@ async function aoTocar(a: AcaoDeVenda) {
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
-    status.value = corpo.jaEstava ? `${a.empresa}: já estava anotado no CRM.`
-      : a.anota === 'proposta' ? `${a.empresa}: proposta anotada no CRM.`
-      : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado no CRM.`
+    status.value = corpo.jaEstava ? `${a.empresa}: já estava anotado.`
+      : a.anota === 'proposta' ? `${a.empresa}: proposta anotada.`
+      : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado.`
     if (falha.value?.leadId === a.leadId) falha.value = null
     if (!corpo.jaEstava) emit('registrado')
   } catch {
@@ -365,7 +365,7 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           </div>
           <blockquote v-if="atual.copiloto?.padrao && verPadrao" class="is-padrao">{{ atual.copiloto.padrao }}</blockquote>
         </details>
-        <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. A colinha da ficha ajuda.</p>
+        <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. O Roteiro da Ficha ajuda.</p>
 
         <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
         <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>

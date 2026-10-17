@@ -147,7 +147,7 @@ const RITMO_LIVRE = { motivo: null, ate: null, enviadosHoje: 0, teto: 10 }
 const TRECHO_DE_EXEMPLO: Trecho = {
   id: 'bp-exemplo',
   produtos: ['site'],
-  titulo: 'Segunda mensagem',
+  titulo: '2ª mensagem',
   texto: 'Oi, é o Rômulo de novo. Ficou pronta a demonstração do site do {NOME}: [link do demo]\n\nSe algo não ficou do jeito de vocês, eu mudo em um dia.',
   dica: 'Complete o link antes de mandar. É um exemplo: não sai nada daqui.',
 }

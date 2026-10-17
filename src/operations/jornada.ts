@@ -103,7 +103,7 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Respondeu',
     trilho: 'tronco',
     quem: 'você',
-    como: 'O observador lê a resposta e o Gemini classifica (interesse, neutra, negativa, robô, exclusão); você responde com a colinha',
+    como: 'O observador lê a resposta e o Gemini classifica (interesse, neutra, negativa, robô, exclusão); você responde com o Roteiro',
     entra: 'Respondeu e a 2ª mensagem ainda não saiu.',
     sai: 'Interesse: a 2ª mensagem (o Raio-X ou o demo, com o preço do Encontrado). Negativa: a resposta da objeção. Exclusão: agradecer e apagar no mesmo dia.',
     prazo: 'interesse respondido em até 2 h',
@@ -112,10 +112,10 @@ export const PASSOS: PassoDaJornada[] = [
   {
     id: 'segunda',
     paradoApos: 2,
-    nome: 'Viu o Raio-X',
+    nome: 'Recebeu a 2ª mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: 'A 2ª mensagem do CRM (anotada sozinha ao tocar); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
+    como: 'A 2ª mensagem de Vendas (anotada sozinha ao tocar); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
     entra: 'A 2ª mensagem saiu (Raio-X, demo ou os dois, com o preço do Encontrado).',
     sai: 'Abre um trilho, ou os dois: por fora, a conversa sobre os produtos; por dentro, o convite para o Mapa (só empresa com equipe).',
     prazo: 'proposta em até 24 h depois de cada "gostei"',
@@ -138,8 +138,8 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Convite para o Mapa',
     trilho: 'dentro',
     quem: 'você',
-    como: 'Convite da colinha ("Mapa grátis: 16 perguntas, uns 10 minutos"); só empresa com umas 8 pessoas ou mais',
-    entra: 'Viu o Raio-X, a empresa tem equipe e o Mapa ainda não foi respondido.',
+    como: 'Convite do Roteiro ("Mapa grátis: 16 perguntas, uns 10 minutos"); só empresa com umas 8 pessoas ou mais',
+    entra: 'Recebeu a 2ª mensagem, a empresa tem equipe e o Mapa ainda não foi respondido.',
     sai: 'O dono responde as 16 perguntas no formulário: "Mapa respondido".',
     servico: 'mapa',
     blueprint: ['PRUMO-3-E1'],
@@ -151,7 +151,7 @@ export const PASSOS: PassoDaJornada[] = [
     trilho: 'dentro',
     quem: 'você',
     como: 'O formulário dispara o fluxo "PRUMO — Diagnóstico do dono" e o prumo-mapa gera o rascunho em PDF em ~/prumo-entregas; você completa os [PREENCHER]',
-    entra: 'O dono respondeu as 16 perguntas (sinal "diagnóstico" no CRM).',
+    entra: 'O dono respondeu as 16 perguntas (sinal "diagnóstico" em Vendas).',
     sai: 'Documento completo e a devolutiva de 45 min marcada.',
     servico: 'mapa',
     blueprint: ['PRUMO-3'],
@@ -177,16 +177,16 @@ export const PASSOS: PassoDaJornada[] = [
     quem: 'você',
     como: 'proposta-modelo do prumo (04-venda) com o cardápio; marque "Proposta enviada" na Ficha',
     entra: 'Proposta marcada na Ficha.',
-    sai: 'Fechou (página do lead) ou recusou; sem decisão, cobre com data no próximo passo.',
+    sai: 'Ganhou (na Ficha ou na página do lead) ou recusou; sem decisão, cobre com data no próximo passo.',
     blueprint: ['SITE-7', 'PRUMO-5'],
   },
   {
     id: 'ganho',
-    nome: 'Fechou',
+    nome: 'Ganho',
     trilho: 'fecho',
     quem: 'você',
     como: 'Encontrado: no ar e pago depois de ver; Fonte: 2 semanas, 50/50; depois, as mensalidades',
-    entra: 'Fechou (ou Concluído na planilha).',
+    entra: 'Ganhou (ou Concluído na Etapa da planilha).',
     sai: 'Entrega feita e a mensalidade correndo.',
     blueprint: ['SITE-7-C1', 'PRUMO-5-C1'],
   },
@@ -380,13 +380,13 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
     case 'primeiro-contato':
       if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
       return {
-        acao: 'Esperar a resposta; o follow-up aparece na Hoje no 3º dia',
+        acao: 'Esperar a resposta; o follow-up aparece em Vendas › A fazer no 3º dia',
         quem: 'o dono',
         ...(lead.diasParaSair !== undefined ? { quando: lead.diasParaSair <= 1 ? 'vai para Perdido amanhã' : `vai para Perdido em ${lead.diasParaSair} dias` } : {}),
       }
     case 'resposta':
       if (tipo === 'exclusao') return { acao: 'Agradecer e apagar o lead', quem: 'você', quando: 'hoje' }
-      if (tipo === 'negativa') return { acao: 'Responder a objeção com a colinha, sem insistir depois de um "não"', quem: 'você' }
+      if (tipo === 'negativa') return { acao: 'Responder a objeção com o Roteiro, sem insistir depois de um "não"', quem: 'você' }
       if (tipo === 'interesse' || lead.interesseParado) {
         return {
           acao: funil === 'prumo' ? 'Mandar o Raio-X na 2ª mensagem' : 'Mandar a 2ª mensagem com o Raio-X ou o demo e o preço do Encontrado',
@@ -394,7 +394,7 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
           quando: 'em até 2 h',
         }
       }
-      return { acao: 'Seguir a conversa com a colinha', quem: 'você' }
+      return { acao: 'Seguir a conversa com o Roteiro', quem: 'você' }
     case 'segunda':
       return dentro
         ? { acao: 'Convidar para o Mapa e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
@@ -441,7 +441,7 @@ export interface OfertaDoLead {
 export const REGRAS_DA_OFERTA: string[] = [
   'O Raio-X (grátis) é a porta de todo lead, com ou sem site. Até ele ver o Raio-X, não se oferece mais nada.',
   'Depois do Raio-X há dois trilhos, e eles se somam: por fora (Encontrado, Respondido e Acompanhado, Anúncios, Redes) e por dentro (Mapa → Fonte → Manutenção). Um lead com equipe pode fazer o Mapa e, ao mesmo tempo, querer o site.',
-  'O que o Raio-X achou decide a ordem e o porquê: a oferta que resolve o ponto de mais peso vem primeiro, citando o número ("Raio-X: 12 avaliações contra 60 no meio dos primeiros de “dentista em Anápolis”"). Sem os achados no CRM (Raio-X anterior a 15/10/2026 ou feito à mão sem eles), vale a ordem de sempre e o Raio-X aberto decide.',
+  'O que o Raio-X achou decide a ordem e o porquê: a oferta que resolve o ponto de mais peso vem primeiro, citando o número ("Raio-X: 12 avaliações contra 60 no meio dos primeiros de “dentista em Anápolis”"). Sem os achados em Vendas (Raio-X anterior a 15/10/2026 ou feito à mão sem eles), vale a ordem de sempre e o Raio-X aberto decide.',
   'Ponto de site ou de perfil (sem site, site fora do ar ou sem o nome deles, botão “Site” levando para rede social, site sem celular ou WhatsApp, horário que não aparece, fotos que não são deles) → Encontrado. Nota baixa ou poucas avaliações → Respondido e Acompanhado (cliente respondido e acompanhado é o que vira avaliação). Fora do topo da busca → Anúncios, só com site e perfil em dia; antes, o Encontrado.',
   'Sem site (Site antes da venda, Plus com oferta "site"): o Encontrado vem logo depois do Raio-X; é o que o demo e a 2ª mensagem vendem, e paga só depois de ver no ar.',
   'Com site (serviços PRUMO, Plus com oferta "prumo"): Respondido e Acompanhado, Anúncios ou Redes, conforme o que o Raio-X mostrou. O Encontrado só se o Raio-X achou um ponto de site ou de perfil, ou ele pedir um novo.',
@@ -518,12 +518,12 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
   }
   if (funil === 'iris' || funil === 'estampa') {
     const id: IdDaOfertaPropria = funil === 'iris' ? 'iris' : 'crm-estamparia'
-    r.agora.push({ id, porque: funil === 'iris' ? 'Clínica de terapia: o Iris, com o teste de 7 dias.' : 'Estamparia: só validar se ele quer o CRM (fase B0, sem preço).' })
+    r.agora.push({ id, porque: funil === 'iris' ? 'Clínica de terapia: o Iris, com o teste de 7 dias.' : 'Estamparia: só validar se ele quer o CRM de estamparia (fase B0, sem preço).' })
     r.naoAgora.push({ id: 'raio-x', porque: 'Iris e estamparias não passam pelo Raio-X nem pelo Mapa.' })
     return r
   }
 
-  // Viu o Raio-X = a 2ª mensagem saiu (é ela que o leva) ou o lead já passou dela.
+  // Recebeu a 2ª mensagem = ela saiu (é ela que o leva) ou o lead já passou dela.
   const antesDoRaioX: IdDoPasso[] = ['achado', 'raio-x', 'primeiro-contato', 'resposta']
   const viuRaioX = Boolean(lead.marcos.segundaEnviada) || !antesDoRaioX.includes(passoAtual(lead))
   const comSite = funil === 'prumo'
@@ -597,7 +597,7 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
 
   // 4. O que falta saber.
   if (!achados.length && lead.links.raioX) {
-    r.aConfirmar.push('O que o Raio-X achou não chegou ao CRM: abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
+    r.aConfirmar.push('O que o Raio-X achou não chegou a Vendas: abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
   }
   if (comSite && !disseQueTemSite && !achados.length) r.aConfirmar.push('O site atual aparece no Google? Se não, ofereça o Encontrado.')
   return r
@@ -671,13 +671,13 @@ export function guiaDaJornada(): string {
   l.push('> A fonte do negócio é o repositório prumo (`00-contexto/negocio.md`); os preços valem os de `04-venda/piloto-cdl/precos.json`.')
   l.push('')
   l.push('**Leia isto antes de atender, escrever para, ou montar qualquer coisa para um lead do PRUMO.** Diz em que ordem as coisas')
-  l.push('acontecem, quem faz cada passo e o que oferecer a quem. No CRM (`/crm`), a Ficha de cada lead mostra o passo em que ele está,')
+  l.push('acontecem, quem faz cada passo e o que oferecer a quem. Em Vendas (`/crm`), a Ficha de cada lead mostra o passo em que ele está,')
   l.push('o próximo passo e o que oferecer, com estas mesmas regras.')
   l.push('')
   l.push('## O desenho')
   l.push('')
   l.push('```')
-  l.push(' TODO LEAD     Achado → Raio-X pronto → Primeira mensagem → Respondeu → Viu o Raio-X')
+  l.push(' TODO LEAD     Achado → Raio-X pronto → Primeira mensagem → Respondeu → Recebeu a 2ª mensagem')
   l.push('                                                                           │')
   l.push('                     ┌─────────────────────────────────────────────────────┤  (um, outro ou os dois)')
   l.push('                     ▼                                                     ▼')
@@ -686,10 +686,10 @@ export function guiaDaJornada(): string {
   l.push('                     │                                                     │')
   l.push('                     └──────────────────────────┬──────────────────────────┘')
   l.push('                                                ▼')
-  l.push(' FECHO                       Proposta (em até 24 h) → Fechou → mensalidades')
+  l.push(' FECHO                       Proposta (em até 24 h) → Ganho → mensalidades')
   l.push('```')
   l.push('')
-  l.push('Iris e estamparias andam num caminho curto: Achado → Primeira mensagem (convite) → Respondeu → Conversa → Proposta → Fechou.')
+  l.push('Iris e estamparias andam num caminho curto: Achado → Primeira mensagem (convite) → Respondeu → Conversa → Proposta → Ganho.')
   l.push('')
   l.push('## Os passos')
   l.push('')
@@ -721,9 +721,9 @@ export function guiaDaJornada(): string {
   l.push('')
   l.push('## Onde ver e onde mudar')
   l.push('')
-  l.push('- **Em que passo está um lead:** a Ficha no CRM (`/crm`, bloco "Jornada"). A etapa vem do retrato das planilhas (`server/crm.ts`, a cada 10 min).')
-  l.push('- **O funil inteiro por passo** (quem espera quem, quem está parado): a vista Jornada (`/crm?ver=jornada`).')
-  l.push('- **O texto de cada momento** (mensagens, objeções, roteiro da conversa): o Roteiro (`/crm?ver=roteiro`, `src/operations/colinha.ts`).')
+  l.push('- **Em que passo está um lead:** a Ficha em Vendas (`/crm`, bloco "Jornada"). A etapa vem do retrato das planilhas (`server/crm.ts`, a cada 10 min).')
+  l.push('- **O funil inteiro por passo** (quem espera quem, quem está parado): o filtro Passo do Funil (`/crm?ver=funil&passo=`).')
+  l.push('- **O texto de cada momento** (mensagens, objeções, roteiro da conversa): o Roteiro (`/mais?abrir=roteiro`, `src/operations/colinha.ts`).')
   l.push('- **O que roda por trás de cada passo** (robôs, travas, telas, terceiros): o service blueprint, `docs/blueprint/servico.json`; a coluna Blueprint acima dá o código do passo ou do cartão.')
   l.push('- **Mudou a ordem, um passo ou uma regra de oferta:** `src/operations/jornada.ts`, depois `npx tsx scripts/jornada-guia.ts`.')
   l.push('- **Mudou um preço ou um serviço:** `prumo/04-venda/piloto-cdl/precos.json` e o caminho descrito no `CLAUDE.md` do prumo (inclui `colinha.ts`).')

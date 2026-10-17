@@ -146,7 +146,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     preco: 'R$ 690',
     mensal: 'R$ 39/mês',
     condicao: 'paga só depois de ver no ar',
-    paraQuem: 'Quem não tem site, ou tem um que ninguém acha no Google. É o que o demo e a segunda mensagem vendem.',
+    paraQuem: 'Quem não tem site, ou tem um que ninguém acha no Google. É o que o demo e a 2ª mensagem vendem.',
   },
   {
     id: 'respondido',
@@ -262,7 +262,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Primeira mensagem · C · Raio-X',
         texto:
           'Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e [N] pontos que fazem o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? É sem compromisso.',
-        dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na segunda mensagem.',
+        dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na 2ª mensagem.',
         produtos: SITE,
       },
       {
@@ -290,7 +290,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'segunda-raio-x',
-        titulo: 'Segunda mensagem · recebeu a C: o raio-x e o demo',
+        titulo: '2ª mensagem · recebeu a C: o raio-x e o demo',
         texto: SEGUNDA_RAIO_X,
         esteira: true,
         dica: 'Pediu o raio-x, então ele vai primeiro; o demo vem junto, já com o preço. Não mande só o link do site: não foi o que ele aceitou receber.',
@@ -300,7 +300,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'segunda-raio-x-sem-demo',
-        titulo: 'Segunda mensagem · recebeu a C: o raio-x (o demo ainda não existe)',
+        titulo: '2ª mensagem · recebeu a C: o raio-x (o demo ainda não existe)',
         texto: SEGUNDA_RAIO_X_SEM_DEMO,
         esteira: true,
         dica: 'Demo sob pedido: o raio-x vai sozinho e oferece a demonstração, sem preço. Se ele quiser ver o site, toque "Gerar demo" na ficha: sai em uns 20 a 40 minutos e o aviso chega no WhatsApp.',
@@ -320,7 +320,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'segunda',
-        titulo: 'Segunda mensagem (a da esteira)',
+        titulo: '2ª mensagem (a da esteira)',
         texto: SEGUNDA,
         esteira: true,
         dica: 'Já leva o preço do Encontrado.',
@@ -332,7 +332,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
           'Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.',
-        dica: 'A segunda mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
+        dica: 'A 2ª mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
         produtos: SITE,
       },
     ],
@@ -510,7 +510,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'fechamento-encontrado',
-        titulo: 'Fechou o Encontrado',
+        titulo: 'Ganho: o Encontrado',
         texto:
           'Fechado, obrigado pela confiança! Para colocar no ar preciso só de duas coisas: o endereço que vocês querem (por exemplo, nomedaempresa.com.br) e acesso ao perfil do Google, me adicionando como administrador. Em [dias] está no ar; vocês conferem e só então pagam.',
         dica: 'Pagamento só depois de ver no ar, pelo preço da proposta. Nada de desconto em troca de depoimento.',
@@ -518,7 +518,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'fechamento-projeto',
-        titulo: 'Fechou o Respondido ou a Fonte',
+        titulo: 'Ganho: o Respondido ou a Fonte',
         texto:
           'Fechado, obrigado pela confiança! Para começar, marco com vocês [dia e hora] e preciso de acesso de leitura ao WhatsApp e às planilhas. Te mando por aqui o que entra em cada semana, para vocês acompanharem.',
         dica: 'Combine forma e data do pagamento por escrito, pelo preço da proposta (a Fonte é 50/50). No Respondido, a contagem de antes acontece agora, antes de ligar.',
@@ -605,7 +605,7 @@ export const OBJECOES: Objecao[] = [
       titulo: '"Tá caro"',
       texto:
         'Entendo. O valor cobre o site no ar com o endereço de vocês, o perfil do Google revisado e o botão do WhatsApp, com domínio, hospedagem e ajustes incluídos. E vocês só pagam depois de ver tudo funcionando. Se agora não for o momento, dá para começar por uma parte menor ou retomar mais para frente. O que faz mais sentido para vocês?',
-      dica: 'O preço não muda: nada de desconto em troca de depoimento ou de favor, o PRUMO é consultoria e não pede ajuda. No Respondido ou na Fonte, troque a primeira frase pelo que entra no projeto e ofereça um trecho menor (só o Encontrado; na Fonte, começar pelo bloco do Mapa que mais trava). Se escolherem mais tarde, combine a data e anote no CRM. Nada de prazo inventado para pressionar.',
+      dica: 'O preço não muda: nada de desconto em troca de depoimento ou de favor, o PRUMO é consultoria e não pede ajuda. No Respondido ou na Fonte, troque a primeira frase pelo que entra no projeto e ofereça um trecho menor (só o Encontrado; na Fonte, começar pelo bloco do Mapa que mais trava). Se escolherem mais tarde, combine a data e anote na Ficha. Nada de prazo inventado para pressionar.',
       produtos: TODOS,
     },
   },
@@ -633,7 +633,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-sem-tempo',
       titulo: '"Não tenho tempo"',
       texto: 'Entendo, e é justamente disso que o Mapa trata: o que hoje só anda com você. São uns 10 minutos, de marcar, e dá para responder pelo celular numa brecha. Se esta semana não der, te chamo de novo em [dia]. Pode ser?',
-      dica: 'Uma tentativa só: combine a data, anote no CRM e não insista além disso.',
+      dica: 'Uma tentativa só: combine a data, anote na Ficha e não insista além disso.',
       produtos: PRUMO,
     },
   },
@@ -816,7 +816,7 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
       break
     case 'ganho':
       momentos = ['fechamento']
-      motivo = 'Fechou: o que combinar agora.'
+      motivo = 'Ganho: o que combinar agora.'
       break
     case 'perdido':
       if (tipo === 'exclusao') objecoes = [objecao('pode-apagar'), ...reconhecidas]

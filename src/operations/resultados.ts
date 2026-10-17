@@ -206,14 +206,14 @@ export const amostraPequena = (linha: LinhaDeResultado) => linha.enviados < AMOS
 
 const flexao = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 
-/** "3 responderam (25%) · 2 leram · 1 quis ver · 0 recusaram · 0 fecharam". "Leram", o rótulo do funil (AC-03). */
+/** "3 responderam (25%) · 2 leram · 1 quis ver · 0 recusaram · 0 ganharam". "Leram", o rótulo do funil (AC-03). */
 export function resumoDaLinha(l: LinhaDeResultado): string {
   return [
     `${flexao(l.responderam, 'respondeu', 'responderam')} (${porcento(l.responderam, l.enviados)})`,
     flexao(l.viram, 'leu', 'leram'),
     `${flexao(l.interesse, 'quis', 'quiseram')} ver`,
     flexao(l.recusaram, 'recusou', 'recusaram'),
-    flexao(l.fecharam, 'fechou', 'fecharam'),
+    flexao(l.fecharam, 'ganhou', 'ganharam'),
   ].join(' · ')
 }
 
