@@ -2102,7 +2102,12 @@ funil (sai da busca igual) e o aviso propõe apagar o demo com
 `:20`; nada é apagado sozinho (RULES 10, ver "Página do lead e pausa dos
 demos"). No PRUMO, que não tem demo, vira "Sem interesse" com "Pediu exclusão
 no WhatsApp" na Próxima ação. Resposta de gente a quem ainda estava
-`novo`/`pronto` também grava `manual`.
+`novo`/`pronto` também grava `manual`. Desde 17/10/2026 há também `licenca` (o
+"pode mandar" que só autorizou o Rômulo a mandar o material que ele ofereceu:
+mesmo efeito do interesse na planilha e no aviso, que manda enviar o material,
+mas o tipo gravado é `licenca`), o classificador vê as últimas mensagens do
+Rômulo e as anteriores do lead, e o áudio chega transcrito quando dá (ver
+"Áudio, papel e contexto" em "Observador do número do PRUMO").
 
 **Quanto demora o aviso** (medido em 08/10/2026, um "Sim, sou a Jackeline" de PRUMO: a resposta entrou na planilha na hora, o aviso com o texto e o link saiu ~2 min 20 s depois): o observador espera `ESPERA_DA_CONVERSA_S` sem mensagem nova do lead antes de mandar ao n8n (era 90 s, agora 45 s), o n8n classifica com o Gemini (~10–20 s) e a fila de avisos só era esvaziada pelo timer do `dell-status` (até 1 min). Desde 08/10/2026 quem grava o aviso (`avisar_pelo_hermes`) também manda `dell-status --drenar` 6 s depois (a fila ignora arquivo com menos de 5 s); o timer continua valendo, então falha ali não perde aviso, e silêncio das 22h às 7h, teto por hora e chave de 24 h valem igual. A espera de 45 s é o preço do "Oi" + "não temos interesse" virar uma conversa só: quem escreve devagar pode gerar dois avisos. Depois do merge, reinstale o observador (`instalados.json`) e reinicie o serviço.
 
@@ -2334,11 +2339,83 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
   ~/SquadOne/deploy/dell/evolution/docker-compose.yml ~/workspace/evolution/ && (cd ~/workspace/evolution && docker
   compose up -d)`. A entrada do adaptador em `instalados.json` usa curinga de propósito
   (`evolution-adaptador.p?`): só é comparada depois de instalada. Depois de atualizar o `observador.py`, reinicie as
-  **duas** instâncias (`instalados.json` só reinicia a do número pessoal): `systemctl --user restart
-  whatsapp-observador whatsapp-observador-prumo`.
+  **duas** instâncias: `systemctl --user restart whatsapp-observador whatsapp-observador-prumo` (desde 17/10/2026 o
+  `reiniciar` do `instalados.json` já traz as duas, e o comando do `dell-status --instalados` reinicia ambas; é a do
+  PRUMO que transcreve áudio).
 - **Apagar tudo** (a pilha só tem a sessão do número, nenhum texto de conversa): `cd ~/workspace/evolution &&
   docker compose down -v`, `systemctl --user disable --now evolution-adaptador whatsapp-observador-prumo` e
   `sudo ufw delete allow from 172.28.77.0/24 to 172.28.77.1 port 9131 proto tcp`.
+
+#### Áudio, papel e contexto (17/10/2026; código pronto, instalar na Mel)
+
+O caso: um **áudio de recusa** chegava como `[áudio]` e ninguém o ouvia, e o "CLaro, pode enviar sim" dado a
+"posso mandar o vídeo? Sem compromisso" foi gravado como `interesse`, porque o Gemini do n8n só via as mensagens do
+lead, nunca a pergunta do Rômulo.
+
+- **Adaptador** (`evolution-adaptador.py`, continua sem rede): áudio vira `[áudio 27s]` (com a duração; sem duração,
+  o `[áudio]` de sempre). Para áudio de **lead** com até **120 s**, a linha do `respostas.jsonl` ganha
+  `audio: {seg, msg}`, com `msg` = a chave da mensagem + o `audioMessage` **só com os campos do download** (url,
+  directPath, mimetype, mediaKey, hashes, fileLength, seconds, ptt, mediaKeyTimestamp): sem miniatura, waveform,
+  contextInfo nem bytes do arquivo. A mensagem vai **inteira** porque a Evolution roda com
+  `DATABASE_SAVE_DATA_NEW_MESSAGE=false`: ela não guarda a mensagem, e o `getBase64FromMediaMessage` só pelo id não
+  acharia nada. Mídia do Rômulo (vídeo, documento, imagem) segue com os marcadores de antes.
+- **Observador** (a instância do PRUMO, a única que recebe `audio`): baixa o áudio da Evolution
+  (`POST http://127.0.0.1:8081/chat/getBase64FromMediaMessage/prumo`, `apikey` lida a cada áudio do
+  `~/workspace/evolution/.env`, 600, nunca em log), transcreve com o Gemini (`gemini-3.7-flash`, a chave
+  `GEMINI_API_KEY` do ambiente ou do `~/.config/squadone/operations.env`, como o `raio-x-ia.py`; o mesmo pedido de
+  `server/transcricao.ts`, com `SEM_FALA` quando não há fala) e grava `[áudio 27s] <transcrição>` na conversa e no
+  lote do n8n. O áudio fica só em memória. **Teto: 20 por dia de São Paulo** (`transcricoes.json`, 600, na pasta do
+  observador do PRUMO; sem conseguir ler ou gravar a conta, não gasta), **120 s, 5 MB, 25 s por pedido**. Qualquer falha
+  (sem chave, teto, tempo, HTTP, `SEM_FALA`) grava só `[áudio 27s]` e o journal leva só o motivo
+  (`áudio de 27******66 sem transcrição: teto_do_dia`), nunca o texto. `OBSERVADOR_TRANSCREVER=0` desliga (drop-in na
+  unit). Variáveis opcionais: `OBSERVADOR_EVOLUTION_URL`, `OBSERVADOR_EVOLUTION_INSTANCIA`, `OBSERVADOR_EVOLUTION_ENV`.
+  Este é o único pedido que um serviço nosso faz à Evolution (o adaptador segue sem chamá-la); ele não envia nada a
+  ninguém.
+- **Corrida das duas instâncias:** a do número pessoal grava o `[áudio]` da bridge do Hermes com o mesmo id; se ela
+  chegar antes, a do PRUMO **troca** aquela linha pela transcrita (só quando a antiga é só o marcador; texto de gente
+  nunca é trocado). As duas mandam o lote ao n8n como antes; o "Decidir pela resposta" não deixa o lote só de
+  `[áudio]` sobrescrever a classificação de gente.
+- **`papel`** (determinístico, no observador): `^\*\[[^\]]+\]\*` = `recepcao`, `^\[(Atendimento|Bot)[^\]]*\]` = `robo`,
+  ausente = gente. Vai na linha da conversa e em cada mensagem do lote.
+- **`contexto` no lote:** as últimas 3 mensagens do Rômulo (até a última do lote) e as últimas 3 do lead antes do lote,
+  com o papel, lidas da conversa em disco (500 caracteres cada).
+- **Classificador** (`claude-ops/whatsapp-conversa.py`, nó "Montar pergunta"): o prompt mostra o contexto em ordem e
+  ganhou o tipo **`licenca`**, as recusas educadas ("agradeço, mas no momento não" = negativa; "qualquer coisa eu
+  aviso", "vou passar para o responsável e retornamos" = neutra, nunca interesse), o áudio e as regras de desempate.
+  Em "Decidir pela resposta", sem modelo: lote só de áudio sem transcrição = `neutra` (aviso "ouça no WhatsApp") e não
+  sobrescreve tipo de gente; lote só de robô/recepção não vira `interesse`; `neutra` não apaga `negativa`/`exclusao`.
+  Quem consome `licenca`: `funil-aprendizado.py` (resposta de gente), `site-funil-regra.js` (conta como sinal
+  "licença" na pausa do 06, para separar o tipo não pausar nicho que antes ficava ligado), `jev-respostas-resumo.py`
+  (revisão humana). O Jev em sombra segue com os 5 tipos.
+
+**Instalar na Mel** (depois do merge; o `~/SquadOne` se atualiza sozinho em até 10 min, ou `git -C ~/SquadOne pull`).
+A ordem não importa: cada peça nova aceita a antiga do outro lado (campos a mais são ignorados).
+
+```bash
+# 1. testes no Dell (nada toca a Evolution, o Gemini nem o n8n de verdade)
+python3 ~/SquadOne/deploy/dell/whatsapp-observador/observador.test.py
+python3 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.test.py
+cd ~/SquadOne/deploy/dell/claude-ops && python3 whatsapp-conversa.py --testar && python3 site-acompanhamento.py --testar-regra
+# 2. as cópias (instalados.json) e as TRÊS units
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/observador.py ~/.local/bin/whatsapp-observador
+install -m 755 ~/SquadOne/deploy/dell/whatsapp-observador/evolution-adaptador.py ~/.local/bin/
+install -m 755 ~/SquadOne/deploy/dell/funil-aprendizado.py ~/.local/bin/funil-aprendizado
+install -m 644 ~/SquadOne/deploy/dell/claude-ops/whatsapp-conversa.py ~/SquadOne/deploy/dell/claude-ops/site-acompanhamento.py \
+  ~/SquadOne/deploy/dell/claude-ops/site-funil-regra.js ~/SquadOne/deploy/dell/claude-ops/jev-respostas-resumo.py \
+  ~/.local/share/claude-ops/
+systemctl --user restart evolution-adaptador whatsapp-observador whatsapp-observador-prumo
+# 3. republicar os fluxos no n8n (o prompt novo e o "licenca"; o 06 · Funil com o sinal "licença")
+cd ~/.local/share/claude-ops && python3 whatsapp-conversa.py && python3 site-acompanhamento.py
+# 4. conferir: a chave da Evolution e a do Gemini são legíveis pelo usuário do serviço (sem imprimir o valor)
+grep -c '^EVOLUTION_APIKEY=' ~/workspace/evolution/.env; grep -c '^GEMINI_API_KEY=' ~/.config/squadone/operations.env
+journalctl --user -u whatsapp-observador-prumo -f | grep -E "áudio|resposta classificada"
+```
+
+**Riscos aceitos:** o download e a transcrição rodam no laço do observador do PRUMO (até ~50 s por áudio no pior
+caso, 20 por dia): o log espera, nada se perde. A chave de mídia do áudio fica no `respostas.jsonl` (600) só até o
+observador ler e apagar o arquivo. Se o áudio já expirou no servidor do WhatsApp, a Evolution pode pedir o reenvio
+da mídia ao aparelho do lead (protocolo do WhatsApp, invisível na conversa); na prática o áudio é baixado segundos
+depois de chegar. O áudio passa pelo Google (Gemini), como o texto das respostas já passa no n8n.
 
 ### Jev em sombra nas respostas (11/10/2026; código pronto, NADA aplicado no n8n)
 

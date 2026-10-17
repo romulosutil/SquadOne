@@ -31,6 +31,8 @@ _CONVERSAS_TESTE = tempfile.mkdtemp(prefix="conversas-teste-")
 os.environ["WHATSAPP_CONVERSAS_DIR"] = _CONVERSAS_TESTE
 # O Plus (OT-13) também: o padrão aponta para um arquivo que não existe, nunca para o ~/prumo-entregas real.
 os.environ["OBSERVADOR_PLUS"] = str(Path(_CONVERSAS_TESTE) / "sem-plus" / "leads.json")
+# A transcrição de áudio (17/10/2026) nasce desligada: só os testes dela ligam, com Evolution e Gemini dublês.
+os.environ["OBSERVADOR_TRANSCREVER"] = "0"
 spec =importlib.util.spec_from_file_location("observador", AQUI / "observador.py")
 ob = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ob)
@@ -844,6 +846,315 @@ class ConversaDoPlus(Base):
                             bridge_js=self.bridge, pasta=self.dir / "outro", conversas=self.pasta_conversas)
         self.assertEqual(obs.todas, {CHAVE})
         self.assertFalse(str(ob.PLUS).startswith(str(Path.home() / "prumo-entregas")))
+
+
+class Papel(unittest.TestCase):
+    """17/10/2026: quem escreveu, pela marca no texto (contrato: ausente = gente)."""
+
+    def test_tabela(self):
+        casos = [("*[Bruna]* Olá, qual o nome do paciente?", "recepcao"), ("  *[Recepção Clínica]* bom dia", "recepcao"),
+                 ("[Atendimento] Digite 1 para agendar", "robo"), ("[Atendimento Automático] Olá!", "robo"),
+                 ("[Bot] Em breve retornaremos", "robo"), ("[Bot da Loja] menu", "robo"),
+                 ("Claro, pode enviar sim", None), ("[áudio 27s] não, obrigado", None), ("*Bruna* oi", None),
+                 ("[imagem] cardápio", None), ("Atendimento: 8h às 18h", None), ("[Botão] x", "robo"), ("", None), (None, None)]
+        for texto, esperado in casos:
+            self.assertEqual(ob.papel_da_mensagem(texto), esperado, texto)
+
+
+class MarcadorDeAudio(unittest.TestCase):
+    def test_so_marcador_e_texto_com_transcricao(self):
+        for t in ("[áudio]", "[áudio 27s]", " [áudio 5s] "):
+            self.assertTrue(ob.so_marcador_de_audio(t), t)
+        for t in ("[áudio 27s] não", "[audio 27s]", "[áudio27s]", "áudio", "", None, "[imagem]"):
+            self.assertFalse(ob.so_marcador_de_audio(t), t)
+        self.assertEqual(ob.texto_com_transcricao("[áudio 27s]", " Agradeço, mas no momento não. "),
+                         "[áudio 27s] Agradeço, mas no momento não.")
+        self.assertEqual(len(ob.texto_com_transcricao("[áudio 9s]", "a" * 5000)), ob.MAX_TEXTO_NA_CONVERSA)
+
+    def test_melhora_o_audio(self):
+        self.assertTrue(ob.melhora_o_audio("[áudio]", "[áudio 27s] não quero"))
+        self.assertTrue(ob.melhora_o_audio("[áudio 27s]", "[áudio 27s] não quero"))
+        self.assertTrue(ob.melhora_o_audio("[áudio]", "[áudio 27s]"))  # ganhou a duração
+        self.assertFalse(ob.melhora_o_audio("[áudio 27s]", "[áudio]"))  # nunca piora
+        self.assertFalse(ob.melhora_o_audio("[áudio 27s] não", "[áudio 27s] outra coisa"))  # texto de gente não se troca
+        self.assertFalse(ob.melhora_o_audio("oi", "[áudio 27s] oi"))
+        self.assertFalse(ob.melhora_o_audio("[áudio 27s]", "[áudio 27s]"))
+
+    def test_ler_transcricao_e_resposta_do_gemini(self):
+        self.assertEqual(ob.ler_transcricao("  Agradeço,\n mas  não. "), "Agradeço, mas não.")
+        for nada in ("SEM_FALA", " SEM_FALA. ", "", None, "   "):
+            self.assertIsNone(ob.ler_transcricao(nada), nada)
+        r = {"candidates": [{"content": {"parts": [{"text": "pensando", "thought": True}, {"text": "Oi, "}, {"text": "tudo bem"}]}}]}
+        self.assertEqual(ob.texto_da_resposta_gemini(r), "Oi, tudo bem")
+        for ruim in ({}, {"candidates": []}, None, {"candidates": [{"content": {}}]}):
+            self.assertEqual(ob.texto_da_resposta_gemini(ruim), "")
+
+    def test_dia_de_sao_paulo(self):
+        self.assertEqual(ob.dia_de_sao_paulo(T0), "2026-09-30")
+        # 02:30 UTC do dia 01/10 ainda é 30/09 em São Paulo; 03:00 UTC já é 01/10.
+        meia_noite_sp = 1790823600.0  # 2026-10-01T03:00:00Z
+        self.assertEqual(ob.dia_de_sao_paulo(meia_noite_sp - 1800), "2026-09-30")
+        self.assertEqual(ob.dia_de_sao_paulo(meia_noite_sp), "2026-10-01")
+
+    def test_motivo_para_nao_transcrever(self):
+        bom = {"seg": 27, "msg": {"key": {"id": "A"}, "message": {"audioMessage": {"fileLength": {"low": 48000}}}}}
+        self.assertEqual(ob.motivo_para_nao_transcrever(bom), "")
+        casos = [(None, "sem_dados"), ({"seg": 3}, "sem_dados"), ({**bom, "seg": 121}, "longo"), ({**bom, "seg": True}, "sem_duracao"),
+                 ({**bom, "seg": None}, "sem_duracao"), ({"seg": 3, "msg": {"key": {}, "message": {"audioMessage": {}}}}, "sem_dados"),
+                 ({"seg": 3, "msg": {"key": {"id": "A"}, "message": {}}}, "sem_dados"),
+                 ({"seg": 3, "msg": {"key": {"id": "A"}, "message": {"audioMessage": {"fileLength": "6000000"}}}}, "grande")]
+        for audio, motivo in casos:
+            self.assertEqual(ob.motivo_para_nao_transcrever(audio), motivo, audio)
+
+
+class Contexto(unittest.TestCase):
+    def linha(self, t, direcao, texto, id_=None, papel=None):
+        return {"em": ob.iso_utc(t), "direcao": direcao, "texto": texto, "origem": "prumo",
+                **({"id": id_} if id_ else {}), **({"papel": papel} if papel else {})}
+
+    def test_ultimas_tres_de_cada_lado_e_o_lote_fora(self):
+        linhas = [self.linha(T0 - 900, "saida", "Oi! Montei um site para vocês."),
+                  self.linha(T0 - 800, "entrada", "*[Bruna]* Quem fala?", "E1", "recepcao"),
+                  self.linha(T0 - 700, "saida", ""),  # bridge antiga: saída sem texto não ajuda
+                  self.linha(T0 - 600, "entrada", "Agradeço, mas no momento não", "E2"),
+                  self.linha(T0 - 500, "saida", "Entendo! Posso mandar o vídeo? Sem compromisso"),
+                  self.linha(T0 - 400, "saida", "a" * 900),
+                  self.linha(T0 - 300, "saida", "Fico à disposição"),
+                  self.linha(T0 - 10, "entrada", "CLaro, pode enviar sim", "L1"),  # o lote
+                  self.linha(T0 + 600, "saida", "depois do lote não é a pergunta")]
+        ctx = ob.contexto_da_conversa(linhas, ["L1"], T0 - 10, T0 - 10)
+        self.assertEqual([s["texto"][:20] for s in ctx["saidas"]],
+                         ["Entendo! Posso manda", "a" * 20, "Fico à disposição"])
+        self.assertEqual(len(ctx["saidas"][1]["texto"]), ob.CONTEXTO_CORTE)
+        self.assertEqual(ctx["anteriores"], [
+            {"em": ob.iso_utc(T0 - 800), "texto": "*[Bruna]* Quem fala?", "papel": "recepcao"},
+            {"em": ob.iso_utc(T0 - 600), "texto": "Agradeço, mas no momento não"}])
+
+    def test_vazio_e_desordem(self):
+        self.assertEqual(ob.contexto_da_conversa([], [], T0, T0), {})
+        linhas = [self.linha(T0 - 100, "saida", "segunda"), self.linha(T0 - 200, "saida", "primeira"), {"em": "x", "texto": "ruim"}]
+        self.assertEqual([s["texto"] for s in ob.contexto_da_conversa(linhas, [], T0, T0)["saidas"]], ["primeira", "segunda"])
+
+
+class Transcricao(Base):
+    """Áudio de lead (17/10/2026): baixar, transcrever, teto do dia e falhas, com Evolution e Gemini dublês."""
+
+    AUDIO = {"seg": 27, "msg": {"key": {"id": "AUD1", "fromMe": False, "remoteJid": f"{LEAD}@s.whatsapp.net"},
+                                "message": {"audioMessage": {"url": "https://x/enc", "mediaKey": "bWVudGlyYQ==",
+                                                             "mimetype": "audio/ogg; codecs=opus", "seconds": 27}}}}
+
+    def setUp(self):
+        super().setUp()
+        self.baixados, self.ao_gemini = [], []
+        self.resposta_gemini = "Agradeço, mas no momento não."
+        self.erro = None
+        self.obs.transcritor = self.transcritor()
+
+    def transcritor(self, **k):
+        def baixar(msg, apikey):
+            if self.erro:
+                raise self.erro
+            self.baixados.append((msg["key"]["id"], apikey))
+            return b"\x00" * 1000, "audio/ogg; codecs=opus"
+
+        def gemini(dados, mime, chave):
+            self.ao_gemini.append((len(dados), mime, chave))
+            return self.resposta_gemini
+        base = dict(ligado=True, baixar=baixar, gemini=gemini, chave_gemini=lambda: "chave-gemini-falsa",
+                    apikey=lambda: "apikey-falsa")
+        return ob.Transcritor(self.obs.pasta, relogio=lambda: self.agora, **{**base, **k})
+
+    def escrever(self, *linhas):
+        with open(self.obs.pasta / "respostas.jsonl", "a", encoding="utf-8") as f:
+            for l in linhas:
+                f.write(json.dumps(l, ensure_ascii=False) + "\n")
+
+    def audio(self, id_="AUD1", texto="[áudio 27s]", **k):
+        return {"chave": CHAVE, "ts": T0 - 5, "texto": texto, "id": id_,
+                "audio": {**self.AUDIO, "msg": {**self.AUDIO["msg"], "key": {**self.AUDIO["msg"]["key"], "id": id_}}, **k}}
+
+    def conversa(self):
+        arquivo = self.pasta_conversas / f"{CHAVE}.jsonl"
+        return [json.loads(l) for l in arquivo.read_text(encoding="utf-8").splitlines()] if arquivo.exists() else []
+
+    def lotes(self):
+        return [c[2] for c in self.n8n.chamadas if c[1] == "whatsapp-resposta"]
+
+    def rodar(self):
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.passar(1)
+            self.passar(ob.ESPERA_DA_CONVERSA_S)
+        return saida.getvalue()
+
+    def test_transcreve_e_grava_na_conversa_e_no_lote(self):
+        self.escrever(self.audio())
+        journal = self.rodar()
+        esperado = "[áudio 27s] Agradeço, mas no momento não."
+        self.assertEqual([l["texto"] for l in self.conversa()], [esperado])
+        self.assertEqual([m["texto"] for m in self.lotes()[0]["mensagens"]], [esperado])
+        self.assertEqual(self.baixados, [("AUD1", "apikey-falsa")])
+        self.assertEqual(self.ao_gemini, [(1000, "audio/ogg; codecs=opus", "chave-gemini-falsa")])
+        self.assertIn("transcrito", journal)
+        for vazou in ("Agradeço", "apikey-falsa", "chave-gemini-falsa", LEAD):
+            self.assertNotIn(vazou, journal)
+        teto = json.loads((self.obs.pasta / "transcricoes.json").read_text())
+        self.assertEqual(teto, {"dia": "2026-09-30", "usadas": 1})
+        if os.name != "nt":
+            self.assertEqual((self.obs.pasta / "transcricoes.json").stat().st_mode & 0o777, 0o600)
+
+    def test_falhas_gravam_so_o_marcador_e_o_motivo(self):
+        casos = [
+            (dict(chave_gemini=lambda: None), None, "sem_chave_gemini"),
+            (dict(apikey=lambda: None), None, "sem_apikey_evolution"),
+            ({}, urllib.error.HTTPError("u", 401, "x", {}, None), "http_401"),
+            ({}, TimeoutError(), "tempo_esgotado"),
+            ({}, urllib.error.URLError(TimeoutError()), "tempo_esgotado"),
+            ({}, urllib.error.URLError("recusada"), "sem_conexao"),
+            ({}, ob.AudioGrande(), "grande"),
+            ({}, ValueError("json"), "resposta_ilegivel"),
+            (dict(ligado=False), None, "desligado"),
+        ]
+        for i, (k, erro, motivo) in enumerate(casos):
+            self.erro = erro
+            self.obs.transcritor = self.transcritor(**k)
+            self.escrever(self.audio(id_=f"F{i}"))
+            journal = self.rodar()
+            self.assertIn(f"sem transcrição: {motivo}", journal, motivo)
+            self.assertNotIn("apikey-falsa", journal)
+        self.assertEqual({l["texto"] for l in self.conversa()}, {"[áudio 27s]"})
+        self.assertEqual(len(self.conversa()), len(casos))
+
+    def test_sem_fala_e_audio_longo(self):
+        self.resposta_gemini = "SEM_FALA"
+        self.escrever(self.audio(id_="S1"))
+        self.assertIn("sem transcrição: sem_fala", self.rodar())
+        self.escrever(self.audio(id_="S2", texto="[áudio 300s]", seg=300))
+        self.assertIn("sem transcrição: longo", self.rodar())
+        self.assertEqual(len(self.ao_gemini), 1)  # o longo nem foi baixado
+        self.assertEqual([l["texto"] for l in self.conversa()], ["[áudio 27s]", "[áudio 300s]"])
+
+    def test_teto_do_dia_vira_a_meia_noite_de_sao_paulo(self):
+        self.obs.transcritor = self.transcritor(teto=2)
+        for i in range(3):
+            self.escrever(self.audio(id_=f"T{i}"))
+        journal = self.rodar()
+        self.assertEqual(len(self.baixados), 2)
+        self.assertIn("sem transcrição: teto_do_dia", journal)
+        self.agora = 1790823600.0 + 60  # 01/10 00:01 em São Paulo
+        self.escrever(self.audio(id_="T9"))
+        self.rodar()
+        self.assertEqual(len(self.baixados), 3)
+        self.assertEqual(json.loads((self.obs.pasta / "transcricoes.json").read_text()), {"dia": "2026-10-01", "usadas": 1})
+
+    def test_contador_ilegivel_nao_gasta(self):
+        self.obs.pasta.mkdir(parents=True, exist_ok=True)
+        (self.obs.pasta / "transcricoes.json").mkdir()  # nem lê nem grava
+        self.escrever(self.audio())
+        self.assertIn("sem transcrição: teto_do_dia", self.rodar())
+        self.assertEqual(self.baixados, [])
+
+    def test_transcritor_que_explode_nao_derruba_o_laco(self):
+        class Quebrado:
+            def transcrever(self, audio):
+                raise RuntimeError("boom")
+        self.obs.transcritor = Quebrado()
+        self.escrever(self.audio(), {"chave": CHAVE, "ts": T0, "texto": "e outra coisa", "id": "X2"})
+        self.assertIn("sem transcrição: RuntimeError", self.rodar())
+        self.assertEqual([m["texto"] for m in self.lotes()[0]["mensagens"]], ["[áudio 27s]", "e outra coisa"])
+
+    def test_linha_sem_audio_nao_chama_ninguem(self):
+        self.escrever({"chave": CHAVE, "ts": T0, "texto": "[áudio]", "id": "B1"})  # a bridge do Hermes
+        self.rodar()
+        self.assertEqual((self.baixados, self.ao_gemini), ([], []))
+
+    def test_corrida_das_duas_instancias_fica_com_a_transcrita(self):
+        pessoal = ob.Conversas(self.pasta_conversas, "pessoal", relogio=lambda: self.agora)
+        self.assertTrue(pessoal.anexar(CHAVE, "entrada", T0 - 5, "[áudio]", "AUD1"))
+        self.assertTrue(pessoal.anexar(CHAVE, "saida", T0 - 1, "depois", "S9"))
+        self.obs.conversa = ob.Conversas(self.pasta_conversas, "prumo", relogio=lambda: self.agora)
+        self.escrever(self.audio())
+        self.rodar()
+        # A linha do áudio é trocada no lugar (a ordem do arquivo fica) e ganha a origem de quem transcreveu.
+        self.assertEqual([(l["id"], l["texto"], l["origem"]) for l in self.conversa()],
+                         [("AUD1", "[áudio 27s] Agradeço, mas no momento não.", "prumo"), ("S9", "depois", "pessoal")])
+        # Na ordem inversa, o "[áudio]" que chega depois não apaga a transcrição.
+        self.assertFalse(pessoal.anexar(CHAVE, "entrada", T0 - 5, "[áudio]", "AUD1"))
+        self.assertEqual(self.conversa()[0]["texto"], "[áudio 27s] Agradeço, mas no momento não.")
+
+    def test_papel_na_conversa_e_no_lote(self):
+        self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "*[Bruna]* Pode mandar sim", "id": "P1"},
+                      {"chave": CHAVE, "ts": T0 - 4, "texto": "[Atendimento] Digite 1", "id": "P2"},
+                      {"chave": CHAVE, "ts": T0 - 3, "texto": "obrigado", "id": "P3"})
+        self.rodar()
+        self.assertEqual([l.get("papel") for l in self.conversa()], ["recepcao", "robo", None])
+        self.assertEqual([m.get("papel") for m in self.lotes()[0]["mensagens"]], ["recepcao", "robo", None])
+
+    def test_contexto_vai_com_o_lote(self):
+        self.obs.conversa.anexar(CHAVE, "entrada", T0 - 3600, "Agradeço, mas no momento não", "N1")
+        self.obs.conversa.anexar(CHAVE, "saida", T0 - 60, "Posso mandar o vídeo? Sem compromisso", "S1")
+        self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "CLaro, pode enviar sim", "id": "R1"})
+        self.rodar()
+        self.assertEqual(self.lotes()[0]["contexto"], {
+            "saidas": [{"em": ob.iso_utc(T0 - 60), "texto": "Posso mandar o vídeo? Sem compromisso"}],
+            "anteriores": [{"em": ob.iso_utc(T0 - 3600), "texto": "Agradeço, mas no momento não"}]})
+
+
+class Download(unittest.TestCase):
+    """baixar_da_evolution e transcrever_no_gemini com o urlopen trocado por um dublê: nenhuma rede."""
+
+    class Resposta(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def setUp(self):
+        self.pedidos = []
+        self._antes = ob.urllib.request.urlopen
+        self.corpo = b"{}"
+
+        def urlopen(req, timeout=None):
+            self.pedidos.append((req, timeout))
+            return self.Resposta(self.corpo)
+        ob.urllib.request.urlopen = urlopen
+
+    def tearDown(self):
+        ob.urllib.request.urlopen = self._antes
+
+    def test_pede_a_mensagem_inteira_com_a_apikey_no_cabecalho(self):
+        import base64
+        self.corpo = json.dumps({"mediaType": "audioMessage", "mimetype": "audio/ogg; codecs=opus",
+                                 "base64": base64.b64encode(b"OggS1234").decode()}).encode()
+        msg = Transcricao.AUDIO["msg"]
+        dados, mime = ob.baixar_da_evolution(msg, "apikey-falsa", url="http://127.0.0.1:8081", instancia="prumo")
+        self.assertEqual((dados, mime), (b"OggS1234", "audio/ogg; codecs=opus"))
+        req, timeout = self.pedidos[0]
+        self.assertEqual(req.full_url, "http://127.0.0.1:8081/chat/getBase64FromMediaMessage/prumo")
+        self.assertEqual((req.get_method(), req.get_header("Apikey"), timeout), ("POST", "apikey-falsa", ob.TEMPO_DO_AUDIO_S))
+        self.assertEqual(json.loads(req.data), {"message": msg, "convertToMp4": False})
+        self.assertNotIn("apikey-falsa", req.full_url)
+
+    def test_resposta_sem_audio_ou_grande(self):
+        import base64
+        for corpo in (b'{"base64": ""}', b"{}", b'{"base64": "@@@"}'):
+            self.corpo = corpo
+            with self.assertRaises(ob.SemAudio):
+                ob.baixar_da_evolution(Transcricao.AUDIO["msg"], "k")
+        self.corpo = json.dumps({"base64": base64.b64encode(b"\x00" * (ob.MAX_AUDIO_BYTES + 1)).decode()}).encode()
+        with self.assertRaises(ob.AudioGrande):
+            ob.baixar_da_evolution(Transcricao.AUDIO["msg"], "k")
+
+    def test_gemini_recebe_o_audio_inline_e_a_chave_no_cabecalho(self):
+        self.corpo = json.dumps({"candidates": [{"content": {"parts": [{"text": "Pode mandar sim"}]}}]}).encode()
+        self.assertEqual(ob.transcrever_no_gemini(b"OggS", "audio/ogg; codecs=opus", "chave-falsa"), "Pode mandar sim")
+        req, _ = self.pedidos[0]
+        self.assertIn(f"/models/{ob.MODELO_DA_TRANSCRICAO}:generateContent", req.full_url)
+        self.assertEqual(req.get_header("X-goog-api-key"), "chave-falsa")
+        self.assertNotIn("chave-falsa", req.full_url)
+        partes = json.loads(req.data)["contents"][0]["parts"]
+        self.assertEqual(partes[0]["inlineData"]["mimeType"], "audio/ogg")
+        self.assertIn("SEM_FALA", partes[1]["text"])
 
 
 if __name__ == "__main__":

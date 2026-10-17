@@ -73,7 +73,9 @@ PROMPT_VERSAO = 1
 FUSO = timezone(timedelta(hours=-3), "America/Sao_Paulo")
 BABY_SCHOOL = "ChIJH8lXhyzFyJQRoydoh868Npk"
 
-TIPOS_HUMANOS = ("negativa", "neutra", "interesse", "exclusao")
+# licenca (17/10/2026, whatsapp-conversa.py): o "pode mandar" que dá licença para o Rômulo mandar o material.
+# É gente respondendo com palavras; sem ele aqui, viraria "tipo_desconhecido".
+TIPOS_HUMANOS = ("negativa", "neutra", "interesse", "licenca", "exclusao")
 # O classificador grava isto quando a resposta foi marcada à mão antes de 05/10
 # e o texto não foi guardado: não são palavras do lead.
 SEM_TEXTO = re.compile(r"^\s*\(marcada à mão", re.I)

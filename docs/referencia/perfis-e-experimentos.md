@@ -224,6 +224,16 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
 - **A conversa na Ficha** (`server/conversa-do-lead.ts`): o observador passou a gravar as mensagens dos leads em
   `WHATSAPP_CONVERSAS_DIR` (padrão `~/.local/share/whatsapp-conversas/<chave>.jsonl`); a Ficha mostra a conversa e o
   Hermes lê pelo skill `conversa-do-lead`. Antes, só o trecho classificado chegava ao CRM.
+- **Áudio, papel, contexto e "licenca"** (17/10/2026; o caso: um áudio de recusa nunca foi ouvido, e o "Claro, pode
+  enviar sim" a "posso mandar o vídeo? Sem compromisso" virou `interesse`). Contrato da linha da conversa:
+  `{em, direcao, texto<=2000, origem, id?, papel?}`, com `papel` `recepcao` ("*[Nome]* ...") ou `robo` ("[Atendimento]
+  ...", "[Bot ...]"), ausente = gente. Áudio de lead: `"[áudio 27s]"` sem transcrição, `"[áudio 27s] <transcrição>"`
+  com (o observador do PRUMO baixa da Evolution e transcreve com o Gemini, até 120 s, 5 MB e 20 por dia de São Paulo).
+  O classificador do n8n recebe também as 3 últimas mensagens do Rômulo e as 3 anteriores do lead e ganhou o tipo
+  `licenca` (o "sim" foi licença para mandar o material, não interesse; o aviso manda enviar o material igual).
+  Regras fixas em "Decidir pela resposta": lote só de áudio sem transcrição é `neutra` e não sobrescreve resposta de
+  gente; lote só de robô/recepção não vira `interesse`; `neutra` não apaga `negativa`/`exclusao`. Detalhes e instalação
+  em `deploy/dell/README.md`, "Observador do número do PRUMO".
 - **Consciente da conversa** (16/10/2026, "essa ideia está muito boa, mas ainda não está consciente do que está
   acontecendo"; o caso: a Kulniski disse "pode sim" em 14/10, o link e o preço saíram à mão minutos depois, e dois dias
   depois o cartão dizia "o link ainda não foi mandado" e oferecia a mesma mensagem). Três coisas:

@@ -66,7 +66,8 @@ visão clara do que tá acontecendo"; o Jev ou o Hermes precisam LER a conversa 
 decidir a próxima mensagem, em vez de adivinhar a etapa pelo trecho de 200
 caracteres da planilha). Além do que vai ao n8n, cada mensagem de LEAD vira uma
 linha em WHATSAPP_CONVERSAS_DIR/<chave>.jsonl (pasta 700, arquivo 600):
-{"em" (UTC), "direcao": "entrada"|"saida", "texto" (até 2000), "origem", "id"?}.
+{"em" (UTC), "direcao": "entrada"|"saida", "texto" (até 2000), "origem", "id"?, "papel"?}
+("papel": "recepcao"|"robo" desde 17/10/2026; ausente = gente).
 "entrada" vem do respostas.jsonl (o texto que o lead escreveu); "saida", do
 enviadas.jsonl (o texto que o Rômulo escreveu a um lead: remendo `squadone:envios`
 da bridge e o evolution-adaptador) ou, com a bridge antiga (owner_sent sem id),
@@ -86,6 +87,22 @@ WHATSAPP_CONVERSAS_DIR como a dos outros leads, onde a Central a lê pelo númer
 quem é SÓ Plus: lá não há linha para marcar e cada conversa custaria uma classificação do Gemini à
 toa. O "plus_respondeu" da aba CRM continua sendo o toque na Ficha (a Central já mostra a conversa).
 
+Áudio e contexto (17/10/2026): um ÁUDIO de recusa virava "[áudio]" e nunca era ouvido, e o "Claro, pode
+enviar sim" a "posso mandar o vídeo? Sem compromisso" virou "interesse" porque o classificador só via as
+mensagens do lead. Agora:
+- áudio de lead que o evolution-adaptador marcou com `audio: {seg, msg}` (até 120 s) é baixado da Evolution
+  (POST /chat/getBase64FromMediaMessage, a apikey lida a cada vez do .env 600 do compose, nunca em log),
+  transcrito pelo Gemini (a chave do SquadOne, como o raio-x-ia.py) e gravado como "[áudio 27s] <transcrição>"
+  na conversa e no lote do n8n. O áudio fica só em memória. Teto de 20 por dia de São Paulo
+  (transcricoes.json, 600), 5 MB, 25 s por pedido. Qualquer falha grava só "[áudio 27s]" e o motivo vai ao
+  journal (sem texto); nada derruba o laço. OBSERVADOR_TRANSCREVER=0 desliga. A bridge do Hermes não tem o
+  que baixar: a instância do número pessoal grava "[áudio]" e, se ela chegar antes, a do PRUMO SUBSTITUI a
+  linha pela transcrita (mesmo id; ver melhora_o_audio);
+- `papel` na linha da conversa e na mensagem do lote: "*[Nome]* ..." = recepcao, "[Atendimento] ..." /
+  "[Bot ...]" = robo, ausente = gente (só pela marca no texto, sem modelo);
+- o lote leva `contexto`: as últimas 3 mensagens do Rômulo e as últimas 3 do lead antes do lote (com o papel),
+  lidas da conversa em disco, para o n8n saber a pergunta que o "sim" responde e uma recusa anterior.
+
 Privacidade: o bridge.log não tem conteúdo; texto só de quem é lead. Só o número
 de quem é lead sai daqui (DDD + 8 últimos dígitos), e a linha da conversa não
 leva número nenhum (a chave é o nome do arquivo). Grupos, canais, listas de
@@ -94,6 +111,8 @@ dígitos, nunca o texto.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import importlib.util
 import json
 import os
@@ -106,8 +125,9 @@ import urllib.error
 import urllib.request
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 try:  # no Dell sempre existe; no PC (testes) não: a trava vira no-op
     import fcntl
@@ -164,6 +184,36 @@ PLUS = Path(os.environ.get("OBSERVADOR_PLUS") or HOME / "prumo-entregas/plus/lea
 GUARDAR_CONVERSA_S = 120 * 86400
 PODAR_A_CADA_S = 86400
 MAX_TEXTO_NA_CONVERSA = 2000
+
+# Áudio de lead (17/10/2026; ver "Áudio e contexto" no topo). Só a instância do PRUMO recebe a linha com `audio`
+# (o evolution-adaptador a grava); a bridge do Hermes só dá o "[áudio]", sem o que baixar.
+TRANSCREVER = os.environ.get("OBSERVADOR_TRANSCREVER", "1").strip() != "0"
+EVOLUTION_URL = os.environ.get("OBSERVADOR_EVOLUTION_URL", "http://127.0.0.1:8081").rstrip("/")
+EVOLUTION_INSTANCIA = os.environ.get("OBSERVADOR_EVOLUTION_INSTANCIA", "prumo").strip() or "prumo"
+# O .env (600) do compose da Evolution; a chave sai dele a cada áudio e nunca vai a log.
+EVOLUTION_ENV = Path(os.environ.get("OBSERVADOR_EVOLUTION_ENV") or HOME / "workspace/evolution/.env")
+# A mesma chave do Gemini do SquadOne no Dell (raio-x-ia.py): GEMINI_API_KEY do ambiente ou do operations.env.
+OPERATIONS_ENV = HOME / ".config/squadone/operations.env"
+MODELO_DA_TRANSCRICAO = "gemini-3.7-flash"  # o mesmo do raio-x-ia.py
+TETO_DE_AUDIOS_POR_DIA = 20
+MAX_AUDIO_S = 120
+MAX_AUDIO_BYTES = 5 * 1024 * 1024
+TEMPO_DO_AUDIO_S = 25  # por pedido (download e Gemini): o laço do observador espera, então tem teto
+# O mesmo pedido de server/transcricao.ts, com o contexto daqui: literal, sem resumir, SEM_FALA sem fala.
+INSTRUCAO_DA_TRANSCRICAO = (
+    "Transcreva este áudio em português do Brasil, literalmente, como texto corrido. "
+    "É a resposta de um negócio a uma mensagem enviada pelo WhatsApp. Não responda à mensagem, não resuma, "
+    "não acrescente nada: devolva só a transcrição. Se não houver fala inteligível, devolva exatamente SEM_FALA.")
+# São Paulo sem horário de verão desde 2019: o deslocamento fixo basta e não depende do tzdata (o mesmo do
+# funil-aprendizado.py). O teto de áudios vira o dia à meia-noite de lá.
+FUSO_SP = timezone(timedelta(hours=-3))
+# Quem escreveu, pela marca que o próprio texto traz (17/10/2026): "*[Bruna]* Olá" é a assinatura de quem atende
+# (recepção, programa de atendimento) e "[Atendimento] Digite 1" / "[Bot ...]" é robô. Determinístico, sem modelo.
+RE_RECEPCAO = re.compile(r"^\*\[[^\]]+\]\*")
+RE_ROBO = re.compile(r"^\[(Atendimento|Bot)[^\]]*\]")
+RE_SO_AUDIO = re.compile(r"\[áudio(?: \d+s)?\]")
+CONTEXTO_N = 3
+CONTEXTO_CORTE = 500
 
 
 def log(*a):
@@ -390,6 +440,264 @@ def texto_do_lote(lote: list[dict]) -> str:
     return f"Registrado: você abordou {len(lote)} leads:\n" + "\n".join(f"• {item(a)}" for a in lote)
 
 
+# ------------------------------------------------------------------ papel e áudio (puro)
+
+def papel_da_mensagem(texto) -> str | None:
+    """'recepcao' | 'robo' pela marca no começo do texto; None = gente (o padrão do contrato)."""
+    t = str(texto or "").lstrip()
+    if RE_RECEPCAO.match(t):
+        return "recepcao"
+    if RE_ROBO.match(t):
+        return "robo"
+    return None
+
+
+def so_marcador_de_audio(texto) -> bool:
+    """'[áudio]' ou '[áudio 27s]' sem nada depois: um áudio que ninguém ouviu."""
+    return bool(RE_SO_AUDIO.fullmatch(str(texto or "").strip()))
+
+
+def texto_com_transcricao(marcador: str, transcricao: str) -> str:
+    """'[áudio 27s] <transcrição>', no teto da linha da conversa."""
+    return f"{marcador.strip()} {transcricao.strip()}"[:MAX_TEXTO_NA_CONVERSA]
+
+
+def melhora_o_audio(velho, novo) -> bool:
+    """A linha nova traz mais do mesmo áudio que a antiga (só o marcador): a transcrição, ou a duração que
+    faltava ao '[áudio]' da bridge. É a corrida das duas instâncias do observador sobre o mesmo chip."""
+    velho, novo = str(velho or "").strip(), str(novo or "").strip()
+    if not so_marcador_de_audio(velho) or not novo.startswith("[áudio") or novo == velho:
+        return False
+    return not so_marcador_de_audio(novo) or velho == "[áudio]"
+
+
+def ler_transcricao(bruto) -> str | None:
+    """A resposta do modelo -> a transcrição em uma linha, ou None quando não houve fala (SEM_FALA ou vazio)."""
+    t = re.sub(r"\s+", " ", str(bruto or "")).strip()
+    if not t or t.strip(" .\"'").upper() == "SEM_FALA":
+        return None
+    return t[:MAX_TEXTO_NA_CONVERSA]
+
+
+def texto_da_resposta_gemini(r) -> str:
+    """O texto do generateContent (as partes do primeiro candidato), sem as de raciocínio."""
+    try:
+        partes = r["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return "".join(str(p.get("text") or "") for p in partes if isinstance(p, dict) and not p.get("thought"))
+
+
+def dia_de_sao_paulo(instante: float) -> str:
+    return datetime.fromtimestamp(instante, FUSO_SP).strftime("%Y-%m-%d")
+
+
+def motivo_para_nao_transcrever(audio) -> str:
+    """'' quando a linha pode ir ao download; senão o motivo (vai ao journal, nunca o conteúdo)."""
+    if not isinstance(audio, dict) or not isinstance(audio.get("msg"), dict):
+        return "sem_dados"
+    seg = audio.get("seg")
+    if isinstance(seg, bool) or not isinstance(seg, (int, float)) or seg < 0:
+        return "sem_duracao"
+    if seg > MAX_AUDIO_S:
+        return "longo"
+    msg = audio["msg"]
+    am = (msg.get("message") or {}).get("audioMessage") if isinstance(msg.get("message"), dict) else None
+    if not isinstance(msg.get("key"), dict) or not msg["key"].get("id") or not isinstance(am, dict):
+        return "sem_dados"
+    tamanho = am.get("fileLength")
+    if isinstance(tamanho, dict):  # Long do Baileys
+        tamanho = tamanho.get("low")
+    try:
+        if tamanho is not None and int(tamanho) > MAX_AUDIO_BYTES:
+            return "grande"
+    except (TypeError, ValueError):
+        pass
+    return ""
+
+
+def contexto_da_conversa(linhas: list[dict], ids_do_lote, desde: float, ate: float,
+                         n: int = CONTEXTO_N, corte: int = CONTEXTO_CORTE) -> dict:
+    """O que o classificador do n8n precisa para ler a resposta: as últimas `n` mensagens do Rômulo até a
+    última do lote (a pergunta que o "sim" responde) e as últimas `n` do lead ANTES do lote (uma recusa
+    anterior, por exemplo), com o papel de cada uma. Saída vazia sem texto (a bridge antiga grava a saída
+    sem texto) não ajuda e fica de fora. {} quando não há nada."""
+    ids = {str(i) for i in ids_do_lote if i}
+    com_hora = []
+    for k, l in enumerate(linhas):
+        t = _instante_iso(l.get("em"))
+        texto = str(l.get("texto") or "").strip()
+        if t is None or not texto:
+            continue
+        com_hora.append((t, k, l, texto))
+    com_hora.sort(key=lambda x: (x[0], x[1]))
+    saidas = [{"em": l["em"], "texto": texto[:corte]} for t, _, l, texto in com_hora
+              if l.get("direcao") == "saida" and t <= ate + 1][-n:]
+    anteriores = [{"em": l["em"], "texto": texto[:corte], **({"papel": l["papel"]} if l.get("papel") in ("recepcao", "robo") else {})}
+                  for t, _, l, texto in com_hora
+                  if l.get("direcao") == "entrada" and t < desde and str(l.get("id") or "") not in ids][-n:]
+    return {k: v for k, v in (("saidas", saidas), ("anteriores", anteriores)) if v}
+
+
+# ------------------------------------------------------------------ áudio: teto, download e transcrição
+
+class TetoDiario:
+    """Quantos áudios já foram transcritos hoje (dia de São Paulo), num JSON 600 na pasta do observador.
+    Sem conseguir ler ou gravar a conta, não gasta (falha fechada): o teto é o que segura o custo."""
+
+    def __init__(self, arquivo: Path, teto: int = TETO_DE_AUDIOS_POR_DIA, relogio=time.time):
+        self.arquivo, self.teto, self.relogio = Path(arquivo), teto, relogio
+
+    def consumir(self) -> bool:
+        hoje = dia_de_sao_paulo(self.relogio())
+        try:
+            try:
+                d = json.loads(self.arquivo.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                d = {}
+            usadas = int(d.get("usadas") or 0) if isinstance(d, dict) and d.get("dia") == hoje else 0
+            if usadas >= self.teto:
+                return False
+            self.arquivo.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.arquivo.with_name(f".{self.arquivo.name}.tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"dia": hoje, "usadas": usadas + 1}))
+            os.replace(tmp, self.arquivo)
+            return True
+        except (OSError, ValueError, TypeError):
+            return False
+
+
+class AudioGrande(Exception):
+    """O arquivo que a Evolution devolveu passa de MAX_AUDIO_BYTES."""
+
+
+class SemAudio(Exception):
+    """A Evolution respondeu sem o arquivo (base64 ausente ou ilegível)."""
+
+
+def ler_do_env(arquivo: Path, nome: str) -> str | None:
+    """NOME=valor de um .env, sem aspas; None ausente. O valor nunca é impresso."""
+    try:
+        for linha in Path(arquivo).read_text(encoding="utf-8").splitlines():
+            if linha.startswith(nome + "="):
+                return linha.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except OSError:
+        pass
+    return None
+
+
+def chave_do_gemini() -> str | None:
+    return (os.environ.get("GEMINI_API_KEY") or "").strip() or ler_do_env(OPERATIONS_ENV, "GEMINI_API_KEY")
+
+
+def apikey_da_evolution() -> str | None:
+    return ler_do_env(EVOLUTION_ENV, "EVOLUTION_APIKEY")
+
+
+def _ler_limitado(resposta, limite: int) -> bytes:
+    bruto = resposta.read(limite + 1)
+    if len(bruto) > limite:
+        raise AudioGrande()
+    return bruto
+
+
+def baixar_da_evolution(msg: dict, apikey: str, url: str = EVOLUTION_URL, instancia: str = EVOLUTION_INSTANCIA,
+                        timeout: float = TEMPO_DO_AUDIO_S) -> tuple[bytes, str]:
+    """O áudio, em memória, pelo POST /chat/getBase64FromMediaMessage da Evolution (a mensagem inteira vai no
+    corpo: com DATABASE_SAVE_DATA_NEW_MESSAGE=false ela não acharia pelo id). Nada é gravado em disco."""
+    req = urllib.request.Request(
+        f"{url}/chat/getBase64FromMediaMessage/{quote(instancia, safe='')}", method="POST",
+        headers={"apikey": apikey, "Content-Type": "application/json"},
+        data=json.dumps({"message": msg, "convertToMp4": False}).encode())
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        # base64 de 5 MB tem ~6,7 MB; o resto é folga para o JSON em volta.
+        bruto = _ler_limitado(r, MAX_AUDIO_BYTES * 4 // 3 + 64 * 1024)
+    d = json.loads(bruto)
+    b64 = d.get("base64") if isinstance(d, dict) else None
+    if not isinstance(b64, str) or not b64:
+        raise SemAudio()
+    if "," in b64[:100] and b64.startswith("data:"):
+        b64 = b64.split(",", 1)[1]
+    try:
+        dados = base64.b64decode(re.sub(r"\s+", "", b64), validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise SemAudio() from e
+    if not dados:
+        raise SemAudio()
+    if len(dados) > MAX_AUDIO_BYTES:
+        raise AudioGrande()
+    mime = d.get("mimetype") or ((msg.get("message") or {}).get("audioMessage") or {}).get("mimetype") or "audio/ogg"
+    return dados, str(mime)
+
+
+def transcrever_no_gemini(dados: bytes, mime: str, chave: str, modelo: str = MODELO_DA_TRANSCRICAO,
+                          timeout: float = TEMPO_DO_AUDIO_S) -> str:
+    """Uma chamada ao generateContent com o áudio inline; devolve o texto cru do modelo."""
+    corpo = {"contents": [{"role": "user", "parts": [
+        {"inlineData": {"mimeType": (str(mime).split(";")[0].strip() or "audio/ogg"), "data": base64.b64encode(dados).decode()}},
+        {"text": INSTRUCAO_DA_TRANSCRICAO}]}],
+        "generationConfig": {"temperature": 0}}
+    req = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent", method="POST",
+        headers={"Content-Type": "application/json", "x-goog-api-key": chave}, data=json.dumps(corpo).encode())
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return texto_da_resposta_gemini(json.loads(_ler_limitado(r, 1024 * 1024)))
+
+
+def motivo_do_erro(e: BaseException) -> str:
+    """A classe do erro para o journal: nunca a mensagem (um corpo de erro pode ecoar o pedido)."""
+    if isinstance(e, urllib.error.HTTPError):
+        return f"http_{e.code}"
+    if isinstance(e, AudioGrande):
+        return "grande"
+    if isinstance(e, SemAudio):
+        return "sem_audio_na_resposta"
+    if isinstance(e, TimeoutError) or (isinstance(e, urllib.error.URLError) and isinstance(e.reason, TimeoutError)):
+        return "tempo_esgotado"
+    if isinstance(e, urllib.error.URLError):
+        return "sem_conexao"
+    if isinstance(e, ValueError):
+        return "resposta_ilegivel"
+    return type(e).__name__
+
+
+class Transcritor:
+    """Áudio de lead -> transcrição, com o teto do dia. `baixar`, `gemini` e as chaves entram de fora nos testes.
+    `transcrever` nunca levanta: devolve (texto, '') ou (None, motivo)."""
+
+    def __init__(self, pasta: Path, relogio=time.time, ligado: bool = TRANSCREVER, teto: int = TETO_DE_AUDIOS_POR_DIA,
+                 baixar=baixar_da_evolution, gemini=transcrever_no_gemini, chave_gemini=chave_do_gemini,
+                 apikey=apikey_da_evolution):
+        self.ligado, self.baixar, self.gemini = ligado, baixar, gemini
+        self.chave_gemini, self.apikey = chave_gemini, apikey
+        self.teto = TetoDiario(Path(pasta) / "transcricoes.json", teto, relogio)
+
+    def transcrever(self, audio) -> tuple[str | None, str]:
+        if not self.ligado:
+            return None, "desligado"
+        motivo = motivo_para_nao_transcrever(audio)
+        if motivo:
+            return None, motivo
+        try:
+            chave = self.chave_gemini()
+            if not chave:
+                return None, "sem_chave_gemini"
+            apikey = self.apikey()
+            if not apikey:
+                return None, "sem_apikey_evolution"
+            if not self.teto.consumir():
+                return None, "teto_do_dia"
+            dados, mime = self.baixar(audio["msg"], apikey)
+            if len(dados) > MAX_AUDIO_BYTES:
+                return None, "grande"
+            texto = ler_transcricao(self.gemini(dados, mime, chave))
+        except Exception as e:  # noqa: BLE001 — um áudio não derruba o laço
+            return None, motivo_do_erro(e)
+        return (texto, "") if texto else (None, "sem_fala")
+
+
 # ------------------------------------------------------------------ conversa do lead em disco
 
 def nome_da_conversa(chave) -> str:
@@ -423,10 +731,11 @@ class Conversas:
         self.pasta, self.origem, self.relogio = Path(pasta), origem, relogio
         self.podado: dict[str, float] = {}  # nome -> quando foi podado (uma vez por dia por arquivo)
 
-    def anexar(self, chave: str, direcao: str, quando: float, texto: str = "", id_msg=None) -> bool:
-        """True se a linha foi gravada; False se já estava lá, se a chave/direção não serve ou se falhou."""
+    def anexar(self, chave: str, direcao: str, quando: float, texto: str = "", id_msg=None, papel=None) -> bool:
+        """True se a linha foi gravada (ou melhorou a que estava: ver melhora_o_audio); False se já estava lá,
+        se a chave/direção não serve ou se falhou. `papel`: 'recepcao' | 'robo' (ausente = gente)."""
         try:
-            return self._anexar(chave, direcao, quando, texto, id_msg)
+            return self._anexar(chave, direcao, quando, texto, id_msg, papel)
         except Exception as e:  # noqa: BLE001 — nunca derruba o laço do observador
             log(f"conversa não gravada ({mascarar(str(chave))}): {type(e).__name__}: {e}"[:300])
             return False
@@ -443,7 +752,7 @@ class Conversas:
         finally:
             os.close(fd)  # fechar solta o flock
 
-    def _anexar(self, chave, direcao, quando, texto, id_msg) -> bool:
+    def _anexar(self, chave, direcao, quando, texto, id_msg, papel=None) -> bool:
         nome = nome_da_conversa(chave)
         if not nome or direcao not in ("entrada", "saida"):
             return False
@@ -456,11 +765,22 @@ class Conversas:
                  "origem": self.origem}
         if id_msg:
             linha["id"] = str(id_msg)[:200]
+        if papel in ("recepcao", "robo"):
+            linha["papel"] = papel
         arquivo = self.pasta / f"{nome}.jsonl"
         with self._trava():
             existentes = self._ler(arquivo)
-            if any(self._mesma(linha, e) for e in existentes):
-                return False
+            igual = next((k for k, e in enumerate(existentes) if self._mesma(linha, e)), None)
+            if igual is not None:
+                velha = existentes[igual]
+                # Corrida das duas instâncias (17/10/2026): a do número pessoal grava o "[áudio]" da bridge e a do
+                # PRUMO chega depois com a transcrição, com o MESMO id. Sem isto a segunda era descartada e a
+                # conversa ficava com o áudio mudo. Só melhora: texto de gente nunca é trocado.
+                if not (linha.get("id") and velha.get("id") == linha["id"] and melhora_o_audio(velha.get("texto"), linha["texto"])):
+                    return False
+                existentes[igual] = {**velha, "texto": linha["texto"], "origem": linha["origem"]}
+                self._regravar(arquivo, existentes)
+                return True
             if self.relogio() - self.podado.get(nome, 0.0) >= PODAR_A_CADA_S:
                 self.podado[nome] = self.relogio()
                 self._podar(arquivo, existentes)
@@ -472,6 +792,16 @@ class Conversas:
             finally:
                 os.close(fd)
         return True
+
+    def linhas_de(self, chave) -> list[dict]:
+        """A conversa gravada de um lead (para o contexto do classificador); [] sem arquivo ou com erro."""
+        nome = nome_da_conversa(chave)
+        if not nome:
+            return []
+        try:
+            return self._ler(self.pasta / f"{nome}.jsonl")
+        except OSError:
+            return []
 
     @staticmethod
     def _ler(arquivo: Path) -> list[dict]:
@@ -508,12 +838,17 @@ class Conversas:
             return
         if len(ficam) == total:
             return
+        self._regravar(arquivo, ficam)
+        existentes[:] = ficam
+
+    @staticmethod
+    def _regravar(arquivo: Path, linhas: list[dict]) -> None:
+        """Troca atômica do arquivo inteiro, 600 (poda e áudio que ganhou a transcrição)."""
         tmp = arquivo.with_name(f".{arquivo.name}.tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "wb") as f:
-            f.write("".join(json.dumps(e, ensure_ascii=True) + "\n" for e in ficam).encode("utf-8"))
+            f.write("".join(json.dumps(e, ensure_ascii=True) + "\n" for e in linhas).encode("utf-8"))
         os.replace(tmp, arquivo)
-        existentes[:] = ficam
 
 
 class Observador:
@@ -521,7 +856,7 @@ class Observador:
 
     def __init__(self, chaves: set[str], chamar=http, avisar=avisar_pelo_hermes, relogio=time.time,
                  telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None,
-                 conversas: "Conversas | Path | None" = None, ler_plus=None):
+                 conversas: "Conversas | Path | None" = None, ler_plus=None, transcritor: "Transcritor | None" = None):
         agora = relogio()
         self.chaves = chaves
         # Os do Plus (OT-13): só conversa em disco, nunca n8n. `ler_plus` None = sem Plus (os testes não leem
@@ -533,7 +868,10 @@ class Observador:
         self.conversa = conversas if isinstance(conversas, Conversas) else Conversas(conversas or CONVERSAS, relogio=relogio)
         # leads.json (para a bridge) e respostas.jsonl (da bridge) moram junto da posição.
         self.pasta = pasta or POSICAO.parent
-        # chave -> {"mensagens": [{"em", "texto"}], "ultima": instante}: juntando até a conversa parar.
+        # Áudio de lead -> texto (17/10/2026); o teto do dia mora na mesma pasta (transcricoes.json).
+        self.transcritor = transcritor or Transcritor(self.pasta, relogio=relogio)
+        # chave -> {"mensagens": [{"em", "texto", "papel"?}], "ultima": instante, "ids", "desde", "ate"}:
+        # juntando até a conversa parar (ids/desde/ate só servem ao contexto e não vão ao n8n).
         self.conversas: dict[str, dict] = {}
         # Conversas prontas que o n8n ainda não recebeu, na ordem.
         self.conversas_prontas: deque = deque()
@@ -748,19 +1086,48 @@ class Observador:
             # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
             if chave not in self.todas or not msg:
                 continue
+            if isinstance(r.get("audio"), dict) and so_marcador_de_audio(msg):
+                msg = self._ouvir(chave, msg, r["audio"])
+            papel = papel_da_mensagem(msg)
             quando = self._hora_vista(r.get("ts"), agora)
-            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"))
+            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"), papel)
             if chave not in self.chaves:
                 continue  # só Plus: sem classificação no n8n (ver o topo)
-            c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora})
+            c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora, "ids": [], "desde": quando, "ate": quando})
             if len(c["mensagens"]) < MAX_MENSAGENS_POR_CONVERSA:
-                c["mensagens"].append({"em": iso(quando), "texto": msg[:1000]})
+                c["mensagens"].append({"em": iso(quando), "texto": msg[:1000], **({"papel": papel} if papel else {})})
+            if r.get("id"):
+                c["ids"].append(str(r["id"]))
+            c["desde"], c["ate"] = min(c["desde"], quando), max(c["ate"], quando)
             c["ultima"] = agora
+
+    def _ouvir(self, chave: str, marcador: str, audio: dict) -> str:
+        """O marcador com a transcrição, ou só o marcador. O journal leva o motivo, nunca o texto."""
+        try:
+            texto, motivo = self.transcritor.transcrever(audio)
+        except Exception as e:  # noqa: BLE001 — um transcritor quebrado não derruba o laço
+            texto, motivo = None, motivo_do_erro(e)
+        if texto:
+            log(f"áudio de {mascarar(chave)} transcrito ({len(texto)} caracteres)")
+            return texto_com_transcricao(marcador, texto)
+        log(f"áudio de {mascarar(chave)} sem transcrição: {motivo}")
+        return marcador
 
     def fechar_conversas(self, todas: bool = False) -> None:
         agora = self.relogio()
         for chave in [k for k, c in self.conversas.items() if todas or agora - c["ultima"] >= ESPERA_DA_CONVERSA_S]:
-            self.conversas_prontas.append({"chave": chave, "mensagens": self.conversas.pop(chave)["mensagens"]})
+            c = self.conversas.pop(chave)
+            pronta = {"chave": chave, "mensagens": c["mensagens"]}
+            # Contexto (17/10/2026): sem a pergunta do Rômulo, o "sim" a "posso mandar o vídeo?" virava interesse.
+            try:
+                contexto = contexto_da_conversa(self.conversa.linhas_de(chave), c.get("ids", []),
+                                                c.get("desde", agora), c.get("ate", agora))
+            except Exception as e:  # noqa: BLE001 — sem contexto a conversa vai como antes
+                log(f"contexto de {mascarar(chave)} não lido: {type(e).__name__}")
+                contexto = {}
+            if contexto:
+                pronta["contexto"] = contexto
+            self.conversas_prontas.append(pronta)
 
     def mandar_conversas(self) -> None:
         if self.relogio() < self.conversa_tentar_em:
