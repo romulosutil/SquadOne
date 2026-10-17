@@ -31,6 +31,7 @@ import { useAgentes } from './agentes/estado'
 import { useOverview } from './casca/overview'
 import { caminho, interceptarLink, navegar, ouvirHistorico } from './casca/rota'
 import { pilhaDeFolhas } from './casca/pilhaDeFolhas'
+import { reaberturaDepoisDeIr } from './casca/paleta'
 import {
   comandosDaPaleta,
   destinoAtual,
@@ -67,6 +68,8 @@ const abrirPedir = () => {
 // ---------------------------------------------------------------- Ctrl+K
 
 const paletaAberta = ref(false)
+/** Chave do Mais: sobe quando a paleta pede `?abrir=` com o Mais já aberto (ele lê o endereço ao montar). */
+const remontagensDoMais = ref(0)
 const ehMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const comandos = computed(() =>
   comandosDaPaleta(capacidades.value, ag.roster.value?.squads ?? [], ag.squadAtiva.value?.id ?? null)
@@ -88,7 +91,14 @@ function executar(c: Comando) {
   const a = c.acao
   if (a.tipo === 'ir') {
     if (a.href.startsWith('/entrada/')) window.location.assign(a.href)
-    else navegar(a.href)
+    else {
+      // A mesma tela com outra busca (um lead ou a Triagem estando em Vendas, a Manutenção
+      // estando no Mais) não remonta nada sozinha: ver reaberturaDepoisDeIr em casca/paleta.ts.
+      const reabrir = reaberturaDepoisDeIr(`${window.location.pathname}${window.location.search}`, a.href)
+      navegar(a.href)
+      if (reabrir === 'popstate') window.dispatchEvent(new PopStateEvent('popstate'))
+      else if (reabrir === 'remontar') remontagensDoMais.value += 1
+    }
   } else if (a.tipo === 'pedir') abrirPedir()
   else if (a.tipo === 'squad') void ag.trocarSquad(a.id).then((ok) => { if (!ok) ag.avisar('Espere o pedido em andamento terminar para trocar de squad.') })
   else if (a.tipo === 'nova-squad') ag.abrirNovaSquad()
@@ -169,7 +179,7 @@ const {
         <!-- :key pelo caminho: Visão e Lançamentos leem a aba ao montar. -->
         <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
         <EscritorioRota v-else-if="rota === 'escritorio'" />
-        <MaisRota v-else-if="rota === 'mais'" :capacidades="capacidades" />
+        <MaisRota v-else-if="rota === 'mais'" :key="remontagensDoMais" :capacidades="capacidades" />
         <DesignSystemRota v-else-if="rota === 'design-system'" />
         <section v-else class="nao-encontrada">
           <h1>Página não encontrada</h1>
@@ -189,7 +199,7 @@ const {
   </div>
 
   <PedirFolha v-if="agentes && pedirAberto" @fechar="pedirAberto = false" />
-  <Paleta v-if="paletaAberta" :comandos="comandos" @fechar="paletaAberta = false" @executar="executar" />
+  <Paleta v-if="paletaAberta" :comandos="comandos" :perfil="perfil" @fechar="paletaAberta = false" @executar="executar" />
 
   <ContratarFolha
     v-if="contratacao"

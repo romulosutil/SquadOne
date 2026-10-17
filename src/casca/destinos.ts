@@ -136,7 +136,40 @@ export interface Comando {
   acao: AcaoDoComando
 }
 
-/** O que a paleta oferece: ir a cada destino, pedir e trocar de squad. */
+/**
+ * A dica de cada destino diz a tela em palavras (17/10/2026, AC-23): o caminho cru (/crm,
+ * /squadone) não dizia nada a quem não escreveu o roteador, e "squadone" nem é o nome da tela.
+ */
+const DICA_DO_DESTINO: Record<Destino['id'], string> = {
+  hoje: 'O que fazer agora',
+  agenda: 'Compromissos dos agentes, por dia',
+  funil: 'Vendas › A fazer',
+  financas: 'Finanças › Visão',
+  escritorio: 'Squads e salas',
+  entrada: 'Mande um texto ou arquivo para a Mel guardar',
+  mais: 'Ajustes, ferramentas e manutenção',
+  'design-system': 'Mais › Design system',
+}
+
+/**
+ * As abas de cada área, no perfil `operations` (17/10/2026, AC-23): buscar "triagem" dava "Nada
+ * com…" porque a paleta só conhecia as áreas. O rótulo é o nome da aba, igual ao da tela, e a
+ * dica diz onde ela mora. O Roteiro de venda saiu de Vendas para o Mais (abre por `?abrir=roteiro`);
+ * Lançamentos e Organizar são caminhos próprios de Finanças (FinancasPanel.vue).
+ */
+const ABAS_DO_DELL: Array<{ id: string; rotulo: string; dica: string; href: string }> = [
+  { id: 'vendas-afazer', rotulo: 'A fazer', dica: 'Vendas › A fazer', href: '/crm' },
+  { id: 'vendas-triagem', rotulo: 'Triagem', dica: 'Vendas › Triagem', href: '/crm?ver=triagem' },
+  { id: 'vendas-funil', rotulo: 'Funil', dica: 'Vendas › Funil', href: '/crm?ver=funil' },
+  { id: 'vendas-numeros', rotulo: 'Números', dica: 'Vendas › Números', href: '/crm?ver=numeros' },
+  { id: 'mais-roteiro', rotulo: 'Roteiro de venda', dica: 'Mais › Roteiro de venda', href: '/mais?abrir=roteiro' },
+  { id: 'mais-manutencao', rotulo: 'Manutenção', dica: 'Mais › Manutenção', href: '/mais?abrir=manutencao' },
+  { id: 'financas-visao', rotulo: 'Visão', dica: 'Finanças › Visão', href: '/financas' },
+  { id: 'financas-lancamentos', rotulo: 'Lançamentos', dica: 'Finanças › Lançamentos', href: '/financas/lancamentos' },
+  { id: 'financas-organizar', rotulo: 'Organizar', dica: 'Finanças › Organizar', href: '/financas/organizar' },
+]
+
+/** O que a paleta oferece: ir a cada destino e às abas do Dell, pedir e trocar de squad. */
 export function comandosDaPaleta(
   c: Capacidades,
   squads: Array<{ id: string; nome: string }>,
@@ -145,10 +178,13 @@ export function comandosDaPaleta(
   const ir = destinosLaterais(c).map<Comando>((d) => ({
     id: `ir:${d.id}`,
     rotulo: `Ir para ${d.rotulo}`,
-    dica: d.href,
+    dica: DICA_DO_DESTINO[d.id],
     acao: { tipo: 'ir', href: d.href },
   }))
-  ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: '/design-system', acao: { tipo: 'ir', href: '/design-system' } })
+  ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: DICA_DO_DESTINO['design-system'], acao: { tipo: 'ir', href: '/design-system' } })
+  if (c.perfil === 'operations') {
+    ir.push(...ABAS_DO_DELL.map<Comando>((a) => ({ id: `aba:${a.id}`, rotulo: a.rotulo, dica: a.dica, acao: { tipo: 'ir', href: a.href } })))
+  }
   if (!c.agentes) return ir
   return [
     { id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } },

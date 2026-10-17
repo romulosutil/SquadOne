@@ -130,7 +130,8 @@ describe('paleta', () => {
 
   it('filtra por todas as palavras, sem acento nem caixa', () => {
     const cmds = comandosDaPaleta(DELL, [], null)
-    assert.deepEqual(filtrarComandos(cmds, 'FINANCAS').map((c) => c.id), ['ir:financas'])
+    // A área e as três abas dela (AC-23): a dica "Finanças › …" também conta.
+    assert.deepEqual(filtrarComandos(cmds, 'FINANCAS').map((c) => c.id), ['ir:financas', 'aba:financas-visao', 'aba:financas-lancamentos', 'aba:financas-organizar'])
     assert.deepEqual(filtrarComandos(cmds, 'ir escri').map((c) => c.id), ['ir:escritorio'])
     assert.equal(filtrarComandos(cmds, '  ').length, cmds.length)
     assert.equal(filtrarComandos(cmds, 'xyz').length, 0)
