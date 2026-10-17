@@ -264,8 +264,9 @@ RESPOSTA_JS = ("{ ok: true, marcados: $input.all().filter(i => " + json.dumps(PL
 # `contexto` {saidas, anteriores}: as últimas 3 mensagens do Rômulo e as últimas 3 do lead antes do lote, da
 # conversa em disco. O prompt as mostra como contexto. Áudio chega como "[áudio 27s] <transcrição>" ou só
 # "[áudio 27s]" (ninguém ouviu). Regras que não dependem do modelo, em "Decidir pela resposta": lote só de áudio
-# sem transcrição = neutra (e não sobrescreve resposta de gente); lote só de robô/recepção não vira interesse;
-# neutra não apaga uma negativa ou exclusão anterior.
+# sem transcrição = neutra (e não sobrescreve resposta de gente); lote só de robô não vira interesse nem licença
+# (a recepção, desde a revisão de 17/10/2026, fica com o modelo: é gente); neutra não apaga uma negativa ou
+# exclusão anterior. As regras moram em TIPO_FINAL_JS, que o ramo do Jev também usa para o tipo_final.
 # Grava o tipo e o trecho na planilha (Site: resposta_tipo, resposta_trecho, resposta_em; PRUMO:
 # "Tipo da resposta", "Resposta", "Resposta em") e responde ao observador com o aviso de cada lead
 # (gente, não bot), que vai ao Rômulo pelo Hermes. O texto inteiro não é guardado: só o trecho.
@@ -370,7 +371,9 @@ const prompt = !primeiro ? '' : [
   '- Se houver mensagem automática e mensagem de pessoa, decida pela de pessoa; se a pessoa mudou de ideia, pela última.',
   '- Pedido para apagar ou excluir vence a recusa: é "exclusao", nunca "negativa".',
   '- "[áudio Ns]" sem texto: não se sabe o que foi dito. Nunca é "bot" nem "interesse"; sozinho, é "neutra".',
-  '- Mensagem marcada "(robô)" ou "(recepção)" nunca vira "interesse" sozinha: precisa de uma frase de alguém dizendo que quer.',
+  '- Mensagem marcada "(robô)" é o atendimento automático: nunca é "interesse" nem "licenca" sozinha.',
+  '- Mensagem marcada "(recepção)" é de gente que atende pelo negócio: classifique pelo que ela diz, como a de qualquer',
+  '  pessoa ("pode enviar sim" a um pedido de licença é "licenca"; "quanto custa?" é "interesse").',
   '- Se a conversa anterior tem uma recusa do negócio, um "ok", "obrigado" ou outra resposta neutra depois NÃO a desfaz:',
   '  continua "negativa", a menos que a pessoa diga claramente que mudou de ideia ("pensando bem, pode mandar", "quero sim").',
   '- Recusa educada ou adiamento ("qualquer coisa eu aviso", "vou ver e retorno") nunca é "interesse".',
@@ -380,7 +383,22 @@ const prompt = !primeiro ? '' : [
 ].join('\\n');
 return [{ json: { tem: achados.length > 0, achados, mensagens, prompt } }];"""
 
-DECIDIR_RESPOSTA_JS = CHAVE_JS + """
+# As regras do tipo que não dependem do modelo (17/10/2026), num lugar só: "Decidir pela resposta" grava o tipo
+# que sai daqui e o ramo do Jev o registra ao lado do bruto (tipo_final), para a medição saber o que foi gravado.
+TIPO_FINAL_JS = """
+// - só áudio que ninguém ouviu ("[áudio 27s]" sem transcrição): não se sabe o que foi dito; nunca bot nem interesse.
+// - só mensagens do robô: nunca viram interesse nem licença. A recepção (revisão de 17/10/2026) fica com o
+//   modelo: é gente, e rebaixá-la apagava interesse de verdade dito por quem atende ("quanto custa?").
+const SO_AUDIO = /^\\[áudio( \\d+s)?\\]$/;
+const soAudioDe = (mensagens) => mensagens.length > 0 && mensagens.every(x => SO_AUDIO.test(String(x?.texto ?? '').trim()));
+const tipoFinalDe = (tipo, mensagens) => {
+  if (soAudioDe(mensagens)) return 'neutra';
+  const soRobo = mensagens.length > 0 && mensagens.every(x => x?.papel === 'robo');
+  return soRobo && (tipo === 'interesse' || tipo === 'licenca') ? 'neutra' : tipo;
+};
+"""
+
+DECIDIR_RESPOSTA_JS = CHAVE_JS + TIPO_FINAL_JS + """
 const m = $('Montar pergunta').first().json;
 const g = $('Gemini: classificar resposta').first().json ?? {};
 const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
@@ -389,14 +407,9 @@ try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)
 const HUMANOS = ['negativa', 'exclusao', 'interesse', 'licenca', 'neutra'];
 // Resposta ilegível do modelo: "neutra" (gente, sem decidir nada sozinho) em vez de tirar alguém do funil.
 let tipo = ['bot', ...HUMANOS].includes(r.tipo) ? r.tipo : 'neutra';
-// 17/10/2026, regras que não dependem do modelo:
-// - só áudio que ninguém ouviu ("[áudio 27s]" sem transcrição): não se sabe o que foi dito; nunca bot nem interesse.
-// - só mensagens com marca de robô ou de recepção: nunca viram interesse sozinhas.
-const SO_AUDIO = /^\\[áudio( \\d+s)?\\]$/;
-const soAudio = m.mensagens.length > 0 && m.mensagens.every(x => SO_AUDIO.test(String(x.texto ?? '').trim()));
-const soMarcadas = m.mensagens.length > 0 && m.mensagens.every(x => ['robo', 'recepcao'].includes(x.papel));
-if (soAudio) tipo = 'neutra';
-else if (soMarcadas && tipo === 'interesse') tipo = 'neutra';
+// As regras que não dependem do modelo (TIPO_FINAL_JS): só áudio sem transcrição e só robô viram neutra.
+const soAudio = soAudioDe(m.mensagens);
+tipo = tipoFinalDe(tipo, m.mensagens);
 // Pedido de exclusão: o demo só sai pelo comando do Rômulo (RULES 10). O comando confere o pedido no
 // retrato da planilha (site-leads.json), que o fluxo 07 grava de hora em hora aos :20.
 const RETRATO_DEPOIS = (() => {
@@ -582,7 +595,10 @@ JEV_COLUNAS = [("lead_hash", "string"), ("planilha", "string"), ("n_mensagens", 
                ("tipo_gemini", "string"), ("jev_choice", "string"), ("jev_probabilities", "string"),
                ("jev_confidence", "number"), ("jev_injecao", "number"), ("jev_model", "string"),
                ("input_tokens", "number"), ("output_tokens", "number"), ("cost", "number"), ("latencia_ms", "number"),
-               ("em", "string"), ("revisao_humana", "string")]
+               ("em", "string"), ("revisao_humana", "string"),
+               # 17/10/2026: o tipo depois das regras sem modelo (só áudio, só robô). Tabela criada antes não a tem:
+               # o fluxo só a grava quando a tabela tem a coluna (jev_tabela_tem_tipo_final).
+               ("tipo_final", "string")]
 
 # Funções PURAS (sem $, sem rede, sem relógio): a máscara, o hash e o pedido. Testadas no node (--testar).
 JEV_FUNCOES_JS = r"""
@@ -726,7 +742,10 @@ const pedidoJev = (texto) => ({
 
 # Nó "Jev: mascarar e montar pedido". Lê o que o fluxo já tem; o item que sai leva o pedido (o único campo
 # que o nó HTTP envia) e, à parte, o registro (que nunca vai ao Jev). Qualquer erro: [] (nada sai).
-JEV_PEDIDO_JS = CHAVE_JS + JEV_FUNCOES_JS + r"""
+JEV_PEDIDO_JS = CHAVE_JS + TIPO_FINAL_JS + JEV_FUNCOES_JS + r"""
+// tipo_final (17/10/2026): só grava a coluna quando a Data Table a tem (nos_do_jev troca por false), senão o
+// insert com coluna desconhecida falharia calado e a sombra pararia de registrar.
+const COM_TIPO_FINAL = true;
 try {
   const m = $('Montar pergunta').first().json ?? {};
   const ev = $('Resposta no WhatsApp').first().json?.body ?? {};
@@ -748,12 +767,15 @@ try {
   const bruto = String(g.content?.parts?.map(p => p.text ?? '').join('') ?? g.text ?? g.output ?? '');
   let r = {};
   try { r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1)); } catch (e) { r = {}; }
-  // licenca (17/10/2026) entra no registro como o Gemini disse; o Jev segue com os 5 tipos de antes (só mede).
+  // licenca (17/10/2026) entra no registro como o Gemini disse; o Jev segue com os 5 tipos de antes (só mede, e o
+  // resumo compara a licença do Gemini com o "interesse" do Jev: jev-respostas-resumo.py, comparavel).
   const tipo = ['bot', 'negativa', 'exclusao', 'interesse', 'licenca', 'neutra'].includes(r.tipo) ? r.tipo : 'neutra';
   return [{ json: {
     pedido: pedidoJev(texto),
+    // tipo_gemini é o bruto do modelo (o que se compara com o Jev); tipo_final, o que "Decidir pela resposta" gravou.
     registro: { lead_hash: sha256(JEV.sal + ':' + lead), planilha: String(m.achados?.[0]?.planilha ?? ''),
-                n_mensagens: mensagens.length, resposta_em: String(ultima.em ?? ''), tipo_gemini: tipo },
+                n_mensagens: mensagens.length, resposta_em: String(ultima.em ?? ''), tipo_gemini: tipo,
+                ...(COM_TIPO_FINAL ? { tipo_final: tipoFinalDe(tipo, mensagens) } : {}) },
     inicio_ms: Date.now(),
   } }];
 } catch (e) {
@@ -787,14 +809,21 @@ try {
 }"""
 
 
-def nos_do_jev(credencial_jev):
+def jev_pedido_js(com_tipo_final: bool = True) -> str:
+    """O código do nó do pedido; sem a coluna tipo_final na Data Table, sem gravá-la (insert não quebra)."""
+    return JEV_PEDIDO_JS if com_tipo_final else JEV_PEDIDO_JS.replace(
+        "const COM_TIPO_FINAL = true;", "const COM_TIPO_FINAL = false;", 1)
+
+
+def nos_do_jev(credencial_jev, com_tipo_final: bool = True):
     """Os quatro nós do ramo em sombra, embaixo do canvas (y=400): na execução v1 o ramo de cima
     (responder, gravar a planilha) termina antes. Todo nó continua em erro (onError, o antigo
     continueOnFail): o Jev nunca derruba o fluxo nem chama o Error Workflow."""
     continuar = {"onError": "continueRegularOutput"}
     return [
         {"id": "jev-pedido", "name": "Jev: mascarar e montar pedido", "type": "n8n-nodes-base.code", "typeVersion": 2,
-         "position": [1540, 400], **continuar, "parameters": {"mode": "runOnceForAllItems", "jsCode": JEV_PEDIDO_JS}},
+         "position": [1540, 400], **continuar,
+         "parameters": {"mode": "runOnceForAllItems", "jsCode": jev_pedido_js(com_tipo_final)}},
         {"id": "jev-http", "name": "Jev: classificar (sombra)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
          "position": [1760, 400], **continuar, "retryOnFail": False, "credentials": credencial_jev,
          "parameters": {"method": "POST", "url": JEV_URL, "authentication": "genericCredentialType",
@@ -989,9 +1018,9 @@ def credencial_gemini():
     return {"googlePalmApi": {"id": achada["id"], "name": nome}}
 
 
-def montar_resposta(auth, gemini, jev=None):
+def montar_resposta(auth, gemini, jev=None, jev_tipo_final: bool = True):
     """`jev`: credencial "OpenRouter Jev" do n8n; com ela, o ramo em sombra (nos_do_jev). Sem ela, o
-    fluxo de sempre, nó por nó."""
+    fluxo de sempre, nó por nó. `jev_tipo_final`: a Data Table tem a coluna tipo_final."""
     marca_site = {c: "={{ $json." + c + " }}" for c in
                   ["place_id", "status", "status_anterior", "recusado_em", "respondeu_em", *COLUNAS_RESPOSTA_SITE, "mensagem_variante"]}
     marca_prumo = {c: "={{ $json['" + c + "'] }}" for c in
@@ -1061,7 +1090,7 @@ def montar_resposta(auth, gemini, jev=None):
                                        *([{"node": o["marcar"], "type": "main", "index": 0}] for o in OFERTAS)]},
            "Pacote da pasta (recusou)": {"main": [[{"node": "Pedir a mudança de pasta", "type": "main", "index": 0}]]}})
     if jev:
-        nos += nos_do_jev(jev)
+        nos += nos_do_jev(jev, jev_tipo_final)
         # A saída de "Decidir" vai inteira aos dois; o ramo de sempre é o primeiro da lista e o de cima.
         con["Decidir pela resposta"]["main"][0].append({"node": "Jev: mascarar e montar pedido", "type": "main", "index": 0})
         con["Jev: mascarar e montar pedido"] = {"main": [[{"node": "Jev: classificar (sombra)", "type": "main", "index": 0}]]}
@@ -1092,19 +1121,54 @@ def credencial_jev():
     return {"httpHeaderAuth": {"id": achada["id"], "name": JEV_CREDENCIAL}}
 
 
+def colunas_da_tabela(tabela: dict) -> set[str] | None:
+    """Os nomes das colunas de uma Data Table como a API a lista; None quando a resposta não diz."""
+    cols = tabela.get("columns") if isinstance(tabela, dict) else None
+    if not isinstance(cols, list):
+        return None
+    return {str(c.get("name")) for c in cols if isinstance(c, dict) and c.get("name")}
+
+
+def jev_tabela_tem_tipo_final(api) -> bool:
+    """A Data Table tem a coluna tipo_final (17/10/2026)? Sem saber (API sem as colunas, erro), False: gravar
+    uma coluna que não existe faria o insert falhar calado e a sombra parar de registrar."""
+    try:
+        tabelas = api("GET", "/data-tables?limit=100&filter=" + quote(json.dumps({"name": JEV_TABELA}))).get("data", [])
+        tabela = next((t for t in tabelas if t.get("name") == JEV_TABELA), None)
+        if not tabela:
+            return False
+        cols = colunas_da_tabela(tabela)
+        if cols is None and tabela.get("id"):
+            cols = colunas_da_tabela(api("GET", f"/data-tables/{tabela['id']}"))
+    except SystemExit as e:
+        print(f"AVISO: não consegui ler as colunas da Data Table {JEV_TABELA!r} ({e}): o Jev grava sem tipo_final")
+        return False
+    if cols is None or "tipo_final" not in cols:
+        print(f"AVISO: a Data Table {JEV_TABELA!r} não tem a coluna tipo_final: o Jev grava sem ela. Para gravar, "
+              "acrescente no editor do n8n a coluna tipo_final (string) e republique.")
+        return False
+    return True
+
+
 def jev_tabela():
     """Cria a Data Table da sombra, se faltar (o Rômulo roda; nada aqui roda sozinho)."""
     from n8n import api
     tabelas = api("GET", "/data-tables?limit=100&filter=" + quote(json.dumps({"name": JEV_TABELA}))).get("data", [])
     if any(t.get("name") == JEV_TABELA for t in tabelas):
         print(f"Data Table {JEV_TABELA!r} já existe")
+        jev_tabela_tem_tipo_final(api)  # avisa se falta a coluna nova
         return
     criada = api("POST", "/data-tables", {"name": JEV_TABELA, "columns": [{"name": n, "type": t} for n, t in JEV_COLUNAS]})
     print(f"Data Table {JEV_TABELA!r} criada:", criada.get("id"))
 
 
 def resposta(auth):
-    publicar(montar_resposta(auth, credencial_gemini(), credencial_jev()))
+    jev = credencial_jev()
+    com_tipo_final = False
+    if jev:
+        from n8n import api
+        com_tipo_final = jev_tabela_tem_tipo_final(api)
+    publicar(montar_resposta(auth, credencial_gemini(), jev, com_tipo_final))
 
 
 def colunas():
@@ -1432,12 +1496,23 @@ def testar() -> int:
             self.assertEqual(itens[0]["resposta_tipo"], "licenca")
             self.assertIn("Estava como Recusou", resp["marcados"][0]["aviso"])
 
-        def test_robo_ou_recepcao_sozinhos_nao_viram_interesse(self):
-            for papel in ("robo", "recepcao"):
-                _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "pode falar"}',
-                                               [{"em": "2026-10-05T12:40:00Z", "texto": "*[Bruna]* Pode falar", "papel": papel}],
+        def test_robo_sozinho_nao_vira_interesse_e_a_recepcao_fica_com_o_modelo(self):
+            for tipo in ("interesse", "licenca"):
+                _, itens, _ = self.classificar('{"tipo": "%s", "trecho": "pode falar"}' % tipo,
+                                               [{"em": "2026-10-05T12:40:00Z", "texto": "[Atendimento] Pode falar", "papel": "robo"}],
                                                [self.lead_site()])
-                self.assertEqual(itens[0]["resposta_tipo"], "neutra", papel)
+                self.assertEqual(itens[0]["resposta_tipo"], "neutra", tipo)
+            # A recepção é gente (revisão de 17/10/2026): o interesse dito por ela não é rebaixado.
+            _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "quanto custa?"}',
+                                           [{"em": "2026-10-05T12:40:00Z", "texto": "*[Bruna]* Quanto custa?", "papel": "recepcao"}],
+                                           [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "interesse")
+            # Robô e recepção juntos não é "só robô": vale o modelo.
+            _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "quanto custa?"}',
+                                           [{"em": "2026-10-05T12:40:00Z", "texto": "[Atendimento] Olá", "papel": "robo"},
+                                            {"em": "2026-10-05T12:41:00Z", "texto": "*[Bruna]* Quanto custa?", "papel": "recepcao"}],
+                                           [self.lead_site()])
+            self.assertEqual(itens[0]["resposta_tipo"], "interesse")
             # Com uma frase de gente junto, vale o modelo.
             _, itens, _ = self.classificar('{"tipo": "interesse", "trecho": "quanto custa?"}',
                                            [{"em": "2026-10-05T12:40:00Z", "texto": "[Atendimento] Olá", "papel": "robo"},
@@ -1738,6 +1813,40 @@ def testar() -> int:
             decidir, _, registro = self.ramo('{"tipo": "licenca"}', [{"em": "2026-10-05T12:30:00Z", "texto": "pode mandar"}],
                                              sites=[self.lead_site()])
             self.assertEqual((decidir["itens"][0]["tipo"], registro[0]["tipo_gemini"]), ("licenca", "licenca"))
+
+        def test_registro_leva_o_tipo_final_ao_lado_do_bruto(self):
+            # 17/10/2026: o bruto do Gemini (o que se compara com o Jev) e o que "Decidir pela resposta" gravou.
+            decidir, _, registro = self.ramo('{"tipo": "licenca"}', [{"em": "2026-10-05T12:30:00Z", "texto": "pode mandar"}],
+                                             sites=[self.lead_site()])
+            self.assertEqual((registro[0]["tipo_gemini"], registro[0]["tipo_final"]), ("licenca", "licenca"))
+            decidir, _, registro = self.ramo('{"tipo": "interesse"}',
+                                             [{"em": "2026-10-05T12:30:00Z", "texto": "[Atendimento] Pode falar", "papel": "robo"}],
+                                             sites=[self.lead_site()])
+            self.assertEqual((registro[0]["tipo_gemini"], registro[0]["tipo_final"]), ("interesse", "neutra"))
+            self.assertEqual(registro[0]["tipo_final"], decidir["itens"][0]["tipo"])
+            # Sem a coluna na Data Table, o registro não a leva (o insert não pode quebrar).
+            evento = {"body": {"chave": LEAD, "mensagens": [{"em": "2026-10-05T12:30:00Z", "texto": "pode mandar"}]}}
+            montado = rodar_no(MONTAR_RESPOSTA_JS, {"Resposta no WhatsApp": evento, "Ler Prospects": [],
+                                                    "Ler Leads do site": [self.lead_site()]})["itens"][0]
+            dados = {"Montar pergunta": montado, "Gemini: classificar resposta": {"content": {"parts": [{"text": '{"tipo": "licenca"}'}]}},
+                     "Resposta no WhatsApp": evento}
+            self.assertIn("tipo_final", rodar_no_jev(jev_pedido_js(True), dados, [])[0]["registro"])
+            self.assertNotIn("tipo_final", rodar_no_jev(jev_pedido_js(False), dados, [])[0]["registro"])
+
+        def test_tabela_sem_a_coluna_tipo_final_publica_sem_ela(self):
+            import contextlib
+            import io
+
+            def api_com(colunas):
+                def api(metodo, caminho, corpo=None):
+                    if caminho.startswith("/data-tables?"):
+                        return {"data": [{"id": "T1", "name": JEV_TABELA, **({"columns": colunas} if colunas is not None else {})}]}
+                    return {"id": "T1"}  # o GET da tabela também sem as colunas
+                return api
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertTrue(jev_tabela_tem_tipo_final(api_com([{"name": "lead_hash"}, {"name": "tipo_final"}])))
+                self.assertFalse(jev_tabela_tem_tipo_final(api_com([{"name": "lead_hash"}])))
+                self.assertFalse(jev_tabela_tem_tipo_final(api_com(None)))
 
         def test_falha_do_jev_nao_gera_registro(self):
             for falha in ({"error": {"message": "timeout of 5000ms exceeded"}}, {"error": "401"}, {}, {"answers": {}},

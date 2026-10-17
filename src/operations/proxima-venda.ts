@@ -29,7 +29,7 @@ import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { Guardador } from './fila-de-envio'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
-import { textoParaATela } from './marcadores-da-conversa'
+import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
@@ -441,7 +441,8 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
     ...(link ? { link } : {}),
     ...(anota ? { anota } : {}),
     primeiroContato,
-    quente: (tipo === 'responder' && lead.resposta?.tipo === 'interesse') || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
+    // A licença nova também é quente (pedeMaterial): fura o aviso aberto do vendedor como o "quero ver".
+    quente: (tipo === 'responder' && pedeMaterial(lead.resposta)) || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
   }
 }
 
@@ -789,7 +790,7 @@ export function anotacoesAMao(
   const emConversa = SINAIS_DE_CONVERSA.has(lead.sinal)
   if (emConversa) {
     // A licença (17/10/2026) também: o material que ele deixou mandar é a 2ª mensagem.
-    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || lead.resposta?.tipo === 'interesse' || lead.resposta?.tipo === 'licenca')
+    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || pedeMaterial(lead.resposta))
     return noPasso || comFalha ? ['segunda_enviada'] : []
   }
   return lead.followupHoje || Boolean(lead.links.followup) || comFalha ? ['followup_enviado'] : []

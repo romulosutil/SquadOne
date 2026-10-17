@@ -16,6 +16,7 @@
  *   pequena: 1 de 3 não é 33%.
  */
 import { ROTULO_DO_REGIME } from './crm-formato'
+import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
 import { noExpedienteDeVenda, TEXTO_DO_EXPEDIENTE } from './trava-de-horario'
 
@@ -128,14 +129,16 @@ export function leu(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'leitura'>): boo
 }
 
 /**
- * Disse "quero ver": a resposta de gente classificada como interesse, ou já na proposta/fechado. A
- * licença ("pode enviar sim" ao material oferecido, 17/10/2026) não é "quero ver"; e o "interesse" só da
- * recepção também não, sozinho: quem atende o público não decide a compra.
+ * Disse "quero ver": a resposta de gente que pede o material (interesse OU licença, pedeMaterial), ou já
+ * na proposta/fechado. A licença conta (17/10/2026): até então o "pode mandar" do Site era gravado como
+ * interesse, e separar o tipo não pode encolher a contagem. A recepção também conta: o que ela disse o
+ * classificador já leu com o papel na mão, e excluí-la aqui rebaixava interesse de verdade; só o robô fica
+ * de fora (respondeuDeGente). A recepção com resposta neutra não conta, como qualquer neutra.
  */
 export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
   if (!respondeuDeGente(lead)) return false
   if (lead.etapa === 'proposta' || lead.etapa === 'ganho') return true
-  return lead.resposta?.tipo === 'interesse' && quemRespondeu(lead) !== 'recepcao'
+  return pedeMaterial(lead.resposta)
 }
 
 /** O rótulo do grupo do lead em cada critério. */
@@ -278,7 +281,7 @@ export function enviosAnotados(leads: CrmLead[], periodo: Periodo, agora: number
       const resposta = ultimaRespostaDeGente(l)
       if (resposta !== undefined && resposta > followup) saida.responderamDepois++
     }
-    if (l.resposta?.tipo === 'interesse' && quisVer(l)) {
+    if (pedeMaterial(l.resposta) && quisVer(l)) {
       saida.quiseramVer++
       if (l.marcos.segundaEnviada) saida.segundas++
     }

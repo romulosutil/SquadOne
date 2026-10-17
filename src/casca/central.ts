@@ -199,3 +199,17 @@ export function statusDoMapa(destaques: number, horaDoDell: string, semNoticia: 
   if (!destaques) return `Nenhuma sala pede você${quando}`
   return `${plural(destaques, 'sala pede', 'salas pedem')} você${quando}`
 }
+
+// ---------------------------------------------------------------- o "Escritório completo"
+
+/** O mesmo texto do App.vue e do SquadSelector quando a troca de squad é recusada. */
+export const AVISO_DA_TROCA_RECUSADA = 'Espere o pedido em andamento terminar para trocar de squad.'
+
+/**
+ * PURO (revisão de 17/10/2026). Depois do "Abrir o Escritório completo": a troca de squad recusada (um
+ * pedido em andamento, `trocarSquad` devolve false) não navega, porque o Escritório abriria na squad
+ * ativa, que não é o andar que se estava olhando; avisa e fica na Central. Sem troca, ou trocada, navega.
+ */
+export function depoisDaTrocaDeAndar(precisouTrocar: boolean, trocou: boolean): { navegar: true } | { navegar: false; aviso: string } {
+  return !precisouTrocar || trocou ? { navegar: true } : { navegar: false, aviso: AVISO_DA_TROCA_RECUSADA }
+}

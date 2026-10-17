@@ -56,7 +56,8 @@ mensagem nova (quem escreve "Oi" e depois "não temos interesse" vira um envio
 só) e manda ao n8n (POST /webhook/whatsapp-resposta), que classifica com o
 Gemini e marca a planilha (`claude-ops/whatsapp-conversa.py`). O n8n devolve o
 aviso que vai ao Rômulo pelo Hermes ("<Nome> respondeu: ..."). O arquivo é
-apagado assim que lido; o texto fica só na memória até o n8n confirmar. Custo
+apagado depois de processado (desde 17/10/2026, só com a conversa em disco gravada e o
+lote montado: ver ler_respostas); o texto fica só na memória até o n8n confirmar. Custo
 aceito: reiniciar o serviço com uma conversa ainda juntando perde a
 classificação dela (o SIGTERM tenta mandar antes de sair), e a marcação de
 "respondeu" pelo log continua valendo.
@@ -97,7 +98,10 @@ mensagens do lead. Agora:
   (transcricoes.json, 600), 5 MB, 25 s por pedido. Qualquer falha grava só "[áudio 27s]" e o motivo vai ao
   journal (sem texto); nada derruba o laço. OBSERVADOR_TRANSCREVER=0 desliga. A bridge do Hermes não tem o
   que baixar: a instância do número pessoal grava "[áudio]" e, se ela chegar antes, a do PRUMO SUBSTITUI a
-  linha pela transcrita (mesmo id; ver melhora_o_audio);
+  linha pela transcrita (mesmo id; ver melhora_o_audio). Revisão de 17/10/2026: um aviso por áudio (a instância
+  sem `audio` no registro não manda ao n8n lote só de marcador; a que o recebeu manda a transcrição ou, sem ela,
+  o marcador uma vez), a cota só se gasta depois do download, conta ilegível recomeça o dia (contador_ilegivel) e
+  um reinício no meio da transcrição não perde o lote (o .lendo só sai no fim);
 - `papel` na linha da conversa e na mensagem do lote: "*[Nome]* ..." = recepcao, "[Atendimento] ..." /
   "[Bot ...]" = robo, ausente = gente (só pela marca no texto, sem modelo);
 - o lote leva `contexto`: as últimas 3 mensagens do Rômulo e as últimas 3 do lead antes do lote (com o papel),
@@ -209,8 +213,11 @@ INSTRUCAO_DA_TRANSCRICAO = (
 FUSO_SP = timezone(timedelta(hours=-3))
 # Quem escreveu, pela marca que o próprio texto traz (17/10/2026): "*[Bruna]* Olá" é a assinatura de quem atende
 # (recepção, programa de atendimento) e "[Atendimento] Digite 1" / "[Bot ...]" é robô. Determinístico, sem modelo.
-RE_RECEPCAO = re.compile(r"^\*\[[^\]]+\]\*")
-RE_ROBO = re.compile(r"^\[(Atendimento|Bot)[^\]]*\]")
+# As mesmas da Central (src/operations/marcadores-da-conversa.ts), com a mesma tabela de casos nos testes dos dois
+# lados (papel-da-mensagem.casos.json): robô = "[" + espaço opcional + Atendimento|Bot como palavra inteira (nem
+# "[Botafogo]" nem "[Botão]"), sem caixa, até o "]"; recepção = "*[" + 1 a 80 caracteres sem "]" nem quebra + "]*".
+RE_RECEPCAO = re.compile(r"^\*\[[^\]\n]{1,80}\]\*")
+RE_ROBO = re.compile(r"^\[\s*(?:atendimento|bot)(?!\w)[^\]\n]*\]", re.IGNORECASE)
 RE_SO_AUDIO = re.compile(r"\[áudio(?: \d+s)?\]")
 CONTEXTO_N = 3
 CONTEXTO_CORTE = 500
@@ -494,9 +501,14 @@ def dia_de_sao_paulo(instante: float) -> str:
 
 def motivo_para_nao_transcrever(audio) -> str:
     """'' quando a linha pode ir ao download; senão o motivo (vai ao journal, nunca o conteúdo)."""
-    if not isinstance(audio, dict) or not isinstance(audio.get("msg"), dict):
+    if not isinstance(audio, dict):
         return "sem_dados"
     seg = audio.get("seg")
+    # O adaptador marca também o áudio longo, sem `msg` (revisão de 17/10/2026): o journal diz "longo", não "sem_dados".
+    if isinstance(seg, (int, float)) and not isinstance(seg, bool) and seg > MAX_AUDIO_S:
+        return "longo"
+    if not isinstance(audio.get("msg"), dict):
+        return "sem_dados"
     if isinstance(seg, bool) or not isinstance(seg, (int, float)) or seg < 0:
         return "sem_duracao"
     if seg > MAX_AUDIO_S:
@@ -543,30 +555,58 @@ def contexto_da_conversa(linhas: list[dict], ids_do_lote, desde: float, ate: flo
 
 class TetoDiario:
     """Quantos áudios já foram transcritos hoje (dia de São Paulo), num JSON 600 na pasta do observador.
-    Sem conseguir ler ou gravar a conta, não gasta (falha fechada): o teto é o que segura o custo."""
+
+    Revisão de 17/10/2026: conta ilegível (JSON quebrado, `usadas` que não é número, arquivo que não abre)
+    RECOMEÇA a conta do dia, com o motivo próprio no journal (contador_ilegivel): antes ela virava
+    "teto_do_dia" calado e nenhum áudio era ouvido até alguém apagar o arquivo. Sem conseguir GRAVAR a conta,
+    não gasta (falha fechada, contador_sem_gravar): o teto é o que segura o custo. O consumo só acontece depois
+    do download dar certo (Transcritor): Evolution fora do ar ou mídia vencida não gasta cota."""
 
     def __init__(self, arquivo: Path, teto: int = TETO_DE_AUDIOS_POR_DIA, relogio=time.time):
         self.arquivo, self.teto, self.relogio = Path(arquivo), teto, relogio
 
-    def consumir(self) -> bool:
-        hoje = dia_de_sao_paulo(self.relogio())
+    def _usadas_hoje(self, hoje: str) -> int:
         try:
-            try:
-                d = json.loads(self.arquivo.read_text(encoding="utf-8"))
-            except FileNotFoundError:
-                d = {}
-            usadas = int(d.get("usadas") or 0) if isinstance(d, dict) and d.get("dia") == hoje else 0
-            if usadas >= self.teto:
-                return False
+            bruto = self.arquivo.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return 0
+        except (OSError, ValueError) as e:  # ValueError: UnicodeDecodeError
+            log(f"contador de transcrições ilegível (contador_ilegivel, {type(e).__name__}): recomeço a conta do dia")
+            return 0
+        try:
+            d = json.loads(bruto)
+            if not isinstance(d, dict):
+                raise ValueError("conta")
+            if d.get("dia") != hoje:
+                return 0  # a conta de outro dia: o dia virou
+            usadas = d.get("usadas", 0)
+            if isinstance(usadas, bool) or not isinstance(usadas, (int, float)) or usadas != usadas or usadas < 0:
+                raise ValueError("usadas")
+            return int(usadas)
+        except (ValueError, TypeError, OverflowError):
+            log("contador de transcrições ilegível (contador_ilegivel): recomeço a conta do dia")
+            return 0
+
+    def tem_cota(self) -> bool:
+        """Ainda cabe um áudio hoje? Só lê (o download vem antes do consumo)."""
+        return self._usadas_hoje(dia_de_sao_paulo(self.relogio())) < self.teto
+
+    def consumir(self) -> str:
+        """'' quando gastou um; senão o motivo: 'teto_do_dia' ou 'contador_sem_gravar'."""
+        hoje = dia_de_sao_paulo(self.relogio())
+        usadas = self._usadas_hoje(hoje)
+        if usadas >= self.teto:
+            return "teto_do_dia"
+        try:
             self.arquivo.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.arquivo.with_name(f".{self.arquivo.name}.tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(json.dumps({"dia": hoje, "usadas": usadas + 1}))
             os.replace(tmp, self.arquivo)
-            return True
-        except (OSError, ValueError, TypeError):
-            return False
+        except OSError:
+            return "contador_sem_gravar"
+        return ""
 
 
 class AudioGrande(Exception):
@@ -687,11 +727,15 @@ class Transcritor:
             apikey = self.apikey()
             if not apikey:
                 return None, "sem_apikey_evolution"
-            if not self.teto.consumir():
+            if not self.teto.tem_cota():
                 return None, "teto_do_dia"
             dados, mime = self.baixar(audio["msg"], apikey)
             if len(dados) > MAX_AUDIO_BYTES:
                 return None, "grande"
+            # A cota só é gasta com o áudio em mãos: falha da Evolution ou mídia vencida não consome o dia.
+            sem_cota = self.teto.consumir()
+            if sem_cota:
+                return None, sem_cota
             texto = ler_transcricao(self.gemini(dados, mime, chave))
         except Exception as e:  # noqa: BLE001 — um áudio não derruba o laço
             return None, motivo_do_erro(e)
@@ -802,6 +846,13 @@ class Conversas:
             return self._ler(self.pasta / f"{nome}.jsonl")
         except OSError:
             return []
+
+    def texto_de(self, chave, id_msg) -> str | None:
+        """O texto gravado da mensagem com este id (None sem id, sem arquivo ou sem a linha). Na releitura do
+        .lendo depois de um reinício, a transcrição que já entrou na conversa não é paga de novo."""
+        if not id_msg:
+            return None
+        return next((str(l.get("texto") or "") for l in self.linhas_de(chave) if l.get("id") == str(id_msg)[:200]), None)
 
     @staticmethod
     def _ler(arquivo: Path) -> list[dict]:
@@ -1040,20 +1091,37 @@ class Observador:
         except OSError as e:
             log("lista de leads não gravada para a bridge:", e)
 
-    def _tirar_e_ler(self, nome: str) -> list[str]:
-        """Tira <nome>.jsonl do caminho (a bridge abre o arquivo a cada linha e cria outro), lê e apaga.
-        Um <nome>.lendo.jsonl que sobrou de uma parada no meio é lido primeiro."""
+    def _abrir(self, nome: str) -> tuple[list[str], Path | None]:
+        """Tira <nome>.jsonl do caminho (a bridge abre o arquivo a cada linha e cria outro) e lê, SEM apagar:
+        o <nome>.lendo.jsonl só sai em _concluir, depois que o lote foi processado (revisão de 17/10/2026; antes
+        ele era apagado antes da transcrição, que leva até ~50 s por áudio, e um reinício nesse meio perdia o
+        resto do lote). Um <nome>.lendo.jsonl que sobrou de uma parada no meio é lido primeiro."""
         arquivo, lendo = self.pasta / f"{nome}.jsonl", self.pasta / f"{nome}.lendo.jsonl"
         try:
             if not lendo.exists():
                 if not arquivo.exists() or arquivo.stat().st_size == 0:
-                    return []
+                    return [], None
                 arquivo.replace(lendo)
-            linhas = lendo.read_text(encoding="utf-8", errors="replace").splitlines()
-            lendo.unlink()
+            return lendo.read_text(encoding="utf-8", errors="replace").splitlines(), lendo
         except OSError as e:
             log(f"{nome} não lidas:", e)
-            return []
+            return [], None
+
+    @staticmethod
+    def _concluir(lendo: Path | None) -> None:
+        if lendo is None:
+            return
+        try:
+            lendo.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            log(f"{lendo.name} não apagado:", e)
+
+    def _tirar_e_ler(self, nome: str) -> list[str]:
+        """_abrir + _concluir de uma vez: para o que é processado sem espera (enviadas.jsonl)."""
+        linhas, lendo = self._abrir(nome)
+        self._concluir(lendo)
         return linhas
 
     def ler_enviadas(self) -> None:
@@ -1071,12 +1139,25 @@ class Observador:
                 continue
             self.conversa.anexar(chave, "saida", self._hora_vista(r.get("ts"), agora), msg, r.get("id"))
 
-    def ler_respostas(self) -> None:
-        """Lê o respostas.jsonl da bridge (ver _tirar_e_ler) e junta as mensagens de cada lead."""
-        linhas = self._tirar_e_ler("respostas")
+    def ler_respostas(self, ouvir: bool = True) -> None:
+        """Lê o respostas.jsonl da bridge e junta as mensagens de cada lead, em três passos (revisão de 17/10/2026):
+        1. a conversa em disco recebe TODAS as linhas primeiro, texto e marcador de áudio como chegaram;
+        2. só então os áudios são transcritos (a linha do marcador é trocada pela transcrita, mesmo id);
+        3. o lote do n8n é montado e o .lendo é apagado (_concluir).
+        Um reinício no meio da transcrição relê o .lendo no próximo início: o passo 1 não duplica (id, ou direção,
+        hora e texto) e a transcrição já gravada é reaproveitada, sem gastar cota. `ouvir=False` (saída do serviço):
+        com áudio por transcrever, faz só o passo 1 e deixa o .lendo para o próximo início, que monta o lote uma vez.
+
+        Áudio sem `audio` no registro (a bridge do Hermes, que só tem o "[áudio]"): a conversa grava o marcador,
+        mas lote SÓ de marcadores assim não vai ao n8n (fechar_conversas). Quem responde pelo áudio é a instância
+        que o recebeu da Evolution: com a transcrição, ou, se ela não sair, com o marcador, uma vez. Assim cada
+        áudio dá no máximo um aviso ("ouça no WhatsApp" gastava um dos 2 avisos de 6 h antes do lote transcrito)."""
+        linhas, lendo = self._abrir("respostas")
         if not linhas:
+            self._concluir(lendo)
             return
         agora = self.relogio()
+        registros: list[list] = []  # [chave, texto, registro, quando]
         for texto in linhas:
             try:
                 r = json.loads(texto)
@@ -1086,20 +1167,38 @@ class Observador:
             # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
             if chave not in self.todas or not msg:
                 continue
-            if isinstance(r.get("audio"), dict) and so_marcador_de_audio(msg):
-                msg = self._ouvir(chave, msg, r["audio"])
-            papel = papel_da_mensagem(msg)
-            quando = self._hora_vista(r.get("ts"), agora)
-            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"), papel)
+            registros.append([chave, msg, r, self._hora_vista(r.get("ts"), agora)])
+        # 1. Conversa em disco primeiro: uma parada durante a transcrição não perde o que veio junto.
+        for chave, msg, r, quando in registros:
+            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"), papel_da_mensagem(msg))
+        por_ouvir = [x for x in registros if isinstance(x[2].get("audio"), dict) and so_marcador_de_audio(x[1])]
+        if por_ouvir and not ouvir:
+            log(f"{len(por_ouvir)} áudio(s) por transcrever: o lote fica para o próximo início")
+            return  # o .lendo fica
+        # 2. Transcrição (até ~50 s por áudio): troca o marcador pela transcrita na conversa.
+        for x in por_ouvir:
+            chave, msg, r, quando = x
+            ja = self.conversa.texto_de(chave, r.get("id"))
+            novo = ja if ja and melhora_o_audio(msg, ja) and not so_marcador_de_audio(ja) else self._ouvir(chave, msg, r["audio"])
+            if novo != msg:
+                self.conversa.anexar(chave, "entrada", quando, novo, r.get("id"), papel_da_mensagem(novo))
+            x[1] = novo
+        # 3. O lote do n8n (só de quem está numa planilha; o Plus fica só na conversa, ver o topo).
+        for chave, msg, r, quando in registros:
             if chave not in self.chaves:
-                continue  # só Plus: sem classificação no n8n (ver o topo)
-            c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora, "ids": [], "desde": quando, "ate": quando})
+                continue
+            papel = papel_da_mensagem(msg)
+            sem_ouvinte = so_marcador_de_audio(msg) and not isinstance(r.get("audio"), dict)
+            c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora, "ids": [], "desde": quando, "ate": quando,
+                                                  "so_audio_sem_ouvinte": True})
             if len(c["mensagens"]) < MAX_MENSAGENS_POR_CONVERSA:
                 c["mensagens"].append({"em": iso(quando), "texto": msg[:1000], **({"papel": papel} if papel else {})})
+                c["so_audio_sem_ouvinte"] = c.get("so_audio_sem_ouvinte", True) and sem_ouvinte
             if r.get("id"):
                 c["ids"].append(str(r["id"]))
             c["desde"], c["ate"] = min(c["desde"], quando), max(c["ate"], quando)
             c["ultima"] = agora
+        self._concluir(lendo)
 
     def _ouvir(self, chave: str, marcador: str, audio: dict) -> str:
         """O marcador com a transcrição, ou só o marcador. O journal leva o motivo, nunca o texto."""
@@ -1117,6 +1216,11 @@ class Observador:
         agora = self.relogio()
         for chave in [k for k, c in self.conversas.items() if todas or agora - c["ultima"] >= ESPERA_DA_CONVERSA_S]:
             c = self.conversas.pop(chave)
+            if c["mensagens"] and c.get("so_audio_sem_ouvinte"):
+                # Só "[áudio]" que esta instância não tem como ouvir (bridge do Hermes): quem manda ao n8n é a
+                # instância do PRUMO, transcrito ou, se não sair, o marcador uma vez (ver ler_respostas).
+                log(f"lote só de áudio sem ouvinte de {mascarar(chave)}: fica com a instância que o recebeu")
+                continue
             pronta = {"chave": chave, "mensagens": c["mensagens"]}
             # Contexto (17/10/2026): sem a pergunta do Rômulo, o "sim" a "posso mandar o vídeo?" virava interesse.
             try:
@@ -1221,7 +1325,9 @@ def main() -> int:
         return acompanhar(obs, onde)
     finally:
         obs.avisar_lote()  # parar o serviço não engole o aviso
-        obs.ler_respostas()  # nem a conversa que ainda estava juntando
+        # Nem a conversa que ainda estava juntando; sem transcrever (o systemd não espera ~50 s por áudio): com
+        # áudio pendente, a conversa em disco recebe o marcador e o .lendo fica para o próximo início.
+        obs.ler_respostas(ouvir=False)
         obs.ler_enviadas()
         obs.fechar_conversas(todas=True)
         obs.mandar_conversas()

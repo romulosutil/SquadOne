@@ -76,6 +76,9 @@ BABY_SCHOOL = "ChIJH8lXhyzFyJQRoydoh868Npk"
 # licenca (17/10/2026, whatsapp-conversa.py): o "pode mandar" que dá licença para o Rômulo mandar o material.
 # É gente respondendo com palavras; sem ele aqui, viraria "tipo_desconhecido".
 TIPOS_HUMANOS = ("negativa", "neutra", "interesse", "licenca", "exclusao")
+# Pedem o material (o pedeMaterial da Central): até 17/10/2026 a licença era gravada como interesse, então a
+# coluna "interesse" do funil por variante conta as duas; senão o tipo novo encolheria a coluna sozinho.
+PEDE_MATERIAL = ("interesse", "licenca")
 # O classificador grava isto quando a resposta foi marcada à mão antes de 05/10
 # e o texto não foi guardado: não são palavras do lead.
 SEM_TEXTO = re.compile(r"^\s*\(marcada à mão", re.I)
@@ -990,6 +993,8 @@ def funil_por_variante(linhas: list[dict]) -> dict[str, dict[str, Counter]]:
             if tipo in TIPOS_HUMANOS:
                 c["responderam"] += 1
                 c[tipo] += 1
+                if tipo in PEDE_MATERIAL and tipo != "interesse":
+                    c["interesse"] += 1
     return por
 
 
@@ -1319,7 +1324,7 @@ def texto_das_propostas(hoje: str, agora: datetime, propostas: list[dict], n_lic
     if funil:
         for eixo, titulo in (("variante", "Funil por variante da mensagem"), ("versao", "Funil por versão do site")):
             l += ["", f"## {titulo} (crm.json, todos os envios)", "",
-                  "| | enviados | responderam | interesse | negativa | exclusão |", "|---|---|---|---|---|---|"]
+                  "| | enviados | responderam | interesse (com licença) | negativa | exclusão |", "|---|---|---|---|---|---|"]
             for k, cont in sorted(funil[eixo].items()):
                 l.append(f"| {k} | {cont['enviados']} | {cont['responderam']} | {cont['interesse']} | "
                          f"{cont['negativa']} | {cont['exclusao']} |")

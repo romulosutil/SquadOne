@@ -30,7 +30,7 @@ import { interceptarLink, navegar } from '../casca/rota'
 import { conectado } from '../auth/google'
 import { pendenciasDaHoje, proximasQuests, referenciaDaQuest, type EstadoDasFinancasLido, type TimeLido } from '../casca/hoje'
 import {
-  andarDaCentral, faixasDaCentral, gravarAndar, lerAndar, pedidoDaCentral, statusDoMapa,
+  andarDaCentral, depoisDaTrocaDeAndar, faixasDaCentral, gravarAndar, lerAndar, pedidoDaCentral, statusDoMapa,
   type Faixa, type FontesDasFaixas,
 } from '../casca/central'
 import { baloesDaAgenda, baloesDasSalas, baloesDosAtores, destinoDoSupervisor, quandoCurto, type LeituraDasFinancas } from '../office/baloes'
@@ -235,8 +235,14 @@ const statusDoAndar = computed(() => {
   return statusDoMapa(destaques, resumo.value.hora, resumo.value.semNoticia)
 })
 async function abrirEscritorioCompleto() {
-  // O Escritório completo mostra a squad ativa: leva o andar que se estava olhando.
-  if (andar.value && andar.value.id !== squadAtiva.value?.id) await ag.trocarSquad(andar.value.id)
+  // O Escritório completo mostra a squad ativa: leva o andar que se estava olhando. Troca recusada
+  // (pedido em andamento): fica na Central e avisa, em vez de abrir o Escritório na squad errada.
+  const destino = andar.value && andar.value.id !== squadAtiva.value?.id ? andar.value.id : null
+  const passo = depoisDaTrocaDeAndar(destino !== null, destino === null || await ag.trocarSquad(destino))
+  if (passo.navegar === false) {
+    ag.avisar(passo.aviso)
+    return
+  }
   navegar('/squadone')
 }
 

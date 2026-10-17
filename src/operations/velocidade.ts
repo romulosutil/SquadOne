@@ -11,6 +11,7 @@
  * Quem ainda espera (sem fim) conta à parte, com há quanto tempo: é a venda parada agora.
  * A mediana, não a média: com amostras de 3 a 10, um caso de 4 dias distorce tudo.
  */
+import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
 
 export const LIMITE_DA_RESPOSTA_RAPIDA_H = 2
@@ -78,7 +79,8 @@ export function velocidadeDaVenda(leads: readonly LeadDaVelocidade[], agora: num
   const aProposta: Array<{ lead: LeadDaVelocidade; de: number; ate: number | null }> = []
   for (const lead of leads) {
     const encerrado = lead.etapa === 'perdido'
-    const interesse = lead.resposta?.tipo === 'interesse' ? ms(lead.resposta.em) : null
+    // A licença ("pode mandar") também começa a espera pelo link: até 17/10 ela era gravada como interesse.
+    const interesse = pedeMaterial(lead.resposta) ? ms(lead.resposta?.em) : null
     const link = primeiroDepois(interesse ?? -Infinity, ms(lead.marcos.segundaEnviada), ms(lead.conversa?.linkEm))
     if (interesse !== null && interesse >= desde && (link !== null || !encerrado)) aoLink.push({ lead, de: interesse, ate: link })
     if (link !== null && link >= desde) {

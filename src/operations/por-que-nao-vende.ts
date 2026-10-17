@@ -75,6 +75,8 @@ export function diagnosticoDeVenda(leads: readonly CrmLead[], agora: number, dia
   const enviados = leads.filter((l) => enviadoNosUltimos(l, dias, agora))
   const leram = enviados.filter(leu)
   const responderam = enviados.filter(respondeuDeGente)
+  // quisVer conta o interesse E a licença (pedeMaterial, 17/10/2026): o "pode mandar" que até então era
+  // gravado como interesse não sai do degrau "quero ver" nem do subconjunto "segunda" só por ter tipo novo.
   const interesse = responderam.filter(quisVer)
   const segunda = interesse.filter((l) => Boolean(l.marcos?.segundaEnviada) || l.etapa === 'proposta' || l.etapa === 'ganho' || l.sinal === 'diagnostico')
   const proposta = enviados.filter((l) => l.etapa === 'proposta' || l.etapa === 'ganho' || Boolean(l.proposta))

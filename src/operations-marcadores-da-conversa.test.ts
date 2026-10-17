@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { montarDossie, type LeadDoCopiloto } from './operations/copiloto.ts'
 import {
-  audioDaMensagem, levouMaterial, papelDaMensagem, textoParaATela, textoParaOModelo, type PapelDaMensagem,
+  audioDaMensagem, levouMaterial, papelDaMensagem, pedeMaterial, textoParaATela, textoParaOModelo, type PapelDaMensagem,
 } from './operations/marcadores-da-conversa.ts'
 import { anotacoesAMao, linhaDaConversa } from './operations/proxima-venda.ts'
 import { quemRespondeu, quisVer, respondeuDeGente } from './operations/resultados.ts'
@@ -29,6 +30,24 @@ describe('papelDaMensagem: quem escreveu, pelo campo gravado ou pelo texto', () 
     ['valor gravado fora do contrato cai no texto', '*[Patricia]* oi', 'gerente', 'recepcao'],
   ]
   for (const [nome, texto, gravado, esperado] of CASOS) it(nome, () => assert.equal(papelDaMensagem(texto, gravado), esperado))
+})
+
+describe('papelDaMensagem: a MESMA tabela do observador (Python)', () => {
+  // deploy/dell/whatsapp-observador/papel-da-mensagem.casos.json, lida também pelo observador.test.py: a regex de
+  // papel é uma só nos dois lados ("[Botão]" e "[Botafogo]" não são robô; "[Atendimento" sem "]" também não).
+  const { casos } = JSON.parse(readFileSync(new URL('../deploy/dell/whatsapp-observador/papel-da-mensagem.casos.json', import.meta.url), 'utf8')) as
+    { casos: Array<[string, PapelDaMensagem | null]> }
+  it('tem casos', () => assert.ok(casos.length > 20))
+  for (const [texto, esperado] of casos) {
+    it(JSON.stringify(texto).slice(0, 60), () => assert.equal(papelDaMensagem(texto), esperado ?? undefined))
+  }
+})
+
+describe('pedeMaterial: interesse e licença, a regra única das métricas', () => {
+  const CASOS: Array<[string | undefined, boolean]> = [
+    ['interesse', true], ['licenca', true], ['neutra', false], ['negativa', false], ['exclusao', false], ['bot', false], [undefined, false],
+  ]
+  for (const [tipo, esperado] of CASOS) it(String(tipo), () => assert.equal(pedeMaterial(tipo ? { tipo } : undefined), esperado))
 })
 
 describe('áudio: com e sem transcrição, marcador novo e antigo', () => {
@@ -72,14 +91,17 @@ const lead = (extra: Partial<CrmLead>): CrmLead => ({
   notas: 0, eventos: [], divergencias: [], links: { whatsapp: 'https://wa.me/5527999990000' }, marcos: { enviado: horas(96), respondeu: horas(72) }, ...extra,
 } as CrmLead)
 
-describe('quem respondeu: robô não é resposta, recepção não é "quero ver" sozinha, licença nunca', () => {
+describe('quem respondeu: robô não é resposta; a recepção e a licença contam como "quero ver" (revisão de 17/10/2026)', () => {
   const interesse = { tipo: 'interesse', trecho: 'pode enviar sim', em: horas(24) } as CrmLead['resposta']
   const CASOS: Array<[string, Partial<CrmLead>, ReturnType<typeof quemRespondeu>, boolean, boolean]> = [
     ['sem conversa: vale a planilha', { resposta: interesse }, undefined, true, true],
     ['só o robô na conversa', { resposta: interesse, conversa: conversa({ entradas: { gente: 0, recepcao: 0, robo: 2 } }) }, 'robo', false, false],
-    ['só a recepção', { resposta: interesse, conversa: conversa({ entradas: { gente: 0, recepcao: 1, robo: 1 } }) }, 'recepcao', true, false],
+    ['só a recepção: o interesse dela conta (o classificador já leu com o papel)', { resposta: interesse, conversa: conversa({ entradas: { gente: 0, recepcao: 1, robo: 1 } }) }, 'recepcao', true, true],
+    ['só a recepção, resposta neutra: não é "quero ver"', { resposta: { ...interesse!, tipo: 'neutra' }, conversa: conversa({ entradas: { gente: 0, recepcao: 1, robo: 0 } }) }, 'recepcao', true, false],
+    ['licença só da recepção conta', { resposta: { ...interesse!, tipo: 'licenca' }, conversa: conversa({ entradas: { gente: 0, recepcao: 1, robo: 0 } }) }, 'recepcao', true, true],
     ['a recepção e o lead (o áudio)', { resposta: interesse, conversa: conversa({ entradas: { gente: 1, recepcao: 1, robo: 0 } }) }, 'gente', true, true],
-    ['licença de gente não é "quero ver"', { resposta: { ...interesse!, tipo: 'licenca' }, conversa: conversa({ entradas: { gente: 1, recepcao: 0, robo: 0 } }) }, 'gente', true, false],
+    ['licença de gente conta como "quero ver" (até 17/10 era gravada como interesse)', { resposta: { ...interesse!, tipo: 'licenca' }, conversa: conversa({ entradas: { gente: 1, recepcao: 0, robo: 0 } }) }, 'gente', true, true],
+    ['licença só do robô não conta', { resposta: { ...interesse!, tipo: 'licenca' }, conversa: conversa({ entradas: { gente: 0, recepcao: 0, robo: 1 } }) }, 'robo', false, false],
     ['a conversa começou depois da resposta: não diz', { resposta: interesse, conversa: conversa({ desde: horas(10), entradas: { gente: 0, recepcao: 0, robo: 1 } }) }, undefined, true, true],
     ['resumo antigo, sem a contagem', { resposta: interesse, conversa: conversa({}) }, undefined, true, true],
     ['proposta conta, quem quer que tenha respondido', { etapa: 'proposta', resposta: interesse, conversa: conversa({ entradas: { gente: 0, recepcao: 1, robo: 0 } }) }, 'recepcao', true, true],

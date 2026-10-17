@@ -23,9 +23,29 @@ export type PapelDaMensagem = 'recepcao' | 'robo'
 export function papelDaMensagem(texto: string | undefined, gravado?: unknown): PapelDaMensagem | undefined {
   if (gravado === 'recepcao' || gravado === 'robo') return gravado
   const t = (texto ?? '').trimStart()
-  if (/^\[\s*(atendimento|bot)\b/i.test(t)) return 'robo'
-  if (/^\*\[[^\]\n]{1,80}\]\*/.test(t)) return 'recepcao'
+  if (RE_ROBO.test(t)) return 'robo'
+  if (RE_RECEPCAO.test(t)) return 'recepcao'
   return undefined
+}
+
+/*
+ * As duas marcas, IGUAIS às do observador (RE_ROBO e RE_RECEPCAO em deploy/dell/whatsapp-observador/observador.py;
+ * a mesma tabela de casos nos testes dos dois lados). Antes cada lado tinha a sua: o `\b` do JS sem `u` vê o "ã"
+ * como fim de palavra e lia "[Botão]" como robô, e o Python aceitava "[Atendimento" sem o "]". Agora:
+ * - robô: "[" + espaço opcional + Atendimento|Bot como PALAVRA INTEIRA (nem "[Botafogo]" nem "[Botão]"), até o "]";
+ * - recepção: "*[" + 1 a 80 caracteres sem "]" nem quebra de linha + "]*".
+ */
+const RE_ROBO = /^\[\s*(?:atendimento|bot)(?![\p{L}\p{N}_])[^\]\n]*\]/iu
+const RE_RECEPCAO = /^\*\[[^\]\n]{1,80}\]\*/
+
+/**
+ * PURO (17/10/2026). A resposta pede o material: "interesse" (quero ver) OU "licenca" (deixou mandar o
+ * que o Rômulo ofereceu). Até 17/10 o "pode mandar" do Site era gravado como interesse; separar a
+ * licença não pode tirar ninguém de uma contagem de "quero ver" nem do passo do material. A diferença
+ * entre as duas fica SÓ na frase e na tática do cartão. Servidor (server/crm.ts) e tela leem daqui.
+ */
+export function pedeMaterial(resposta: { tipo?: string } | null | undefined): boolean {
+  return resposta?.tipo === 'interesse' || resposta?.tipo === 'licenca'
 }
 
 // ---------------------------------------------------------------- áudio

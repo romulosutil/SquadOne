@@ -252,9 +252,13 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   com (o observador do PRUMO baixa da Evolution e transcreve com o Gemini, até 120 s, 5 MB e 20 por dia de São Paulo).
   O classificador do n8n recebe também as 3 últimas mensagens do Rômulo e as 3 anteriores do lead e ganhou o tipo
   `licenca` (o "sim" foi licença para mandar o material, não interesse; o aviso manda enviar o material igual).
-  Regras fixas em "Decidir pela resposta": lote só de áudio sem transcrição é `neutra` e não sobrescreve resposta de
-  gente; lote só de robô/recepção não vira `interesse`; `neutra` não apaga `negativa`/`exclusao`. Detalhes e instalação
-  em `deploy/dell/README.md`, "Observador do número do PRUMO".
+  Regras fixas em "Decidir pela resposta" (`TIPO_FINAL_JS`): lote só de áudio sem transcrição é `neutra` e não
+  sobrescreve resposta de gente; lote só de ROBÔ não vira `interesse` nem `licenca` (a recepção, desde a revisão de
+  17/10/2026, fica com o modelo: é gente, e rebaixá-la apagava interesse de verdade); `neutra` não apaga
+  `negativa`/`exclusao`. No máximo um aviso por áudio: a instância da bridge (só "[áudio]", sem `audio` no registro)
+  não manda ao n8n lote só de marcador; a do PRUMO manda a transcrição ou, se ela não sair, o marcador uma vez. O
+  Jev em sombra compara a `licenca` do Gemini como `interesse` e registra `tipo_final` ao lado do bruto. Detalhes e
+  instalação em `deploy/dell/README.md`, "Observador do número do PRUMO".
 - **Consciente da conversa** (16/10/2026, "essa ideia está muito boa, mas ainda não está consciente do que está
   acontecendo"; o caso: a Kulniski disse "pode sim" em 14/10, o link e o preço saíram à mão minutos depois, e dois dias
   depois o cartão dizia "o link ainda não foi mandado" e oferecia a mesma mensagem). Três coisas:
@@ -297,17 +301,25 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   "interesse", o cartão disse "disse sim: combine a demonstração", e depois do vídeo seguiu em "responder" (vídeo é mídia,
   não URL). O lado TypeScript (o Python que grava e classifica é outra entrega):
   - **Contrato do JSONL**: a entrada pode trazer `papel: "recepcao" | "robo"`; ausente, o texto decide
-    (`papelDaMensagem` em `src/operations/marcadores-da-conversa.ts`: "[Atendimento…"/"[Bot…" no começo = robô,
-    "*[Nome]*" no começo = recepção; sem sinal = gente). O áudio vem como "[áudio 27s]" ou "[áudio 27s] transcrição"
+    (`papelDaMensagem` em `src/operations/marcadores-da-conversa.ts`: "[" + Atendimento|Bot como palavra inteira até o
+    "]" = robô ("[Botafogo]" e "[Botão]" não), "*[Nome]*" de 1 a 80 caracteres no começo = recepção; sem sinal = gente;
+    a MESMA regra do observador, com a mesma tabela de casos nos dois testes:
+    `deploy/dell/whatsapp-observador/papel-da-mensagem.casos.json`). O áudio vem como "[áudio 27s]" ou "[áudio 27s] transcrição"
     (o antigo "[áudio]" vale); a mídia nossa, como "[vídeo]", "[documento]" ou "[imagem]".
   - **Material é link**: a saída com "[vídeo]", "[documento]" ou "[imagem]" conta como a 2ª mensagem (`saidasDaConversa`),
     então o interesse parado sai da vez de responder e, de 20 h a 72 h depois, entra o "o que achou?".
   - **Robô não é resposta**: `lead.conversa.ultimaEntrada` é a última de gente (lead ou recepção); o robô fica em
     `ultimaEntradaRobo`, não recomeça o prazo de Perdido nem vira "resposta nova". `resultados.ts` (`quemRespondeu`):
-    conversa que cobre a resposta e só tem robô não conta como "respondeu"; só a recepção conta como respondeu, mas o
-    "interesse" dela sozinho não é "quero ver".
+    conversa que cobre a resposta e só tem robô não conta como "respondeu"; só a recepção conta como respondeu e, desde
+    a revisão de 17/10/2026, o interesse ou a licença dela contam como "quero ver" (o classificador já leu com o papel;
+    excluí-la aqui rebaixava interesse de verdade). Recepção com resposta neutra não conta, como qualquer neutra.
   - **`resposta.tipo = "licenca"`**: o "sim" foi permissão para mandar o material. Espera o material como o interesse
-    parado ("Mande para X o que ele autorizou", sem preço), depois o "o que achou?"; nunca conta como "quero ver".
+    parado ("Mande para X o que ele autorizou", sem preço), depois o "o que achou?". Nas métricas conta igual ao
+    interesse (revisão de 17/10/2026): `pedeMaterial` (`marcadores-da-conversa.ts`, reusado por `server/crm.ts`) é a
+    regra única de `quisVer`, `enviosAnotados`, "Por que não está vendendo", a velocidade depois do "sim", o `quente` da
+    fila (a licença nova fura o aviso aberto do vendedor e entra no "Quero ver" dele), o "Mandar a proposta" depois do
+    link e a coluna "interesse" do `funil-aprendizado.py`: até 17/10 o mesmo "pode mandar" era gravado como interesse,
+    e o tipo novo não pode encolher contagem nenhuma. A diferença fica só na frase e na tática do cartão.
   - **Nunca "disse sim" com a última mensagem nossa**: a frase vira "Você já respondeu a X; falta …" (fila, Telegram,
     Ficha e a Hoje do servidor). E o "Respondeu ontem" do cartão é a última mensagem de gente, não o marco
     `respondeu` (a primeira resposta, que segue valendo para o funil).

@@ -248,7 +248,8 @@ class Traducao(unittest.TestCase):
         t = self.tr(corpo)
         self.assertEqual(len(t.linhas), 1)
         self.assertEqual(t.respostas[0]["texto"], "[áudio 4s]")
-        self.assertNotIn("audio", t.respostas[0])  # sem url/mediaKey não há o que baixar
+        # Sem url/mediaKey não há o que baixar, mas a marca diz que esta instância responde pelo áudio (revisão de 17/10).
+        self.assertEqual(t.respostas[0]["audio"], {"seg": 4})
 
     # Um audioMessage como o Baileys entrega (valores de mentira): o que o download precisa e o que não pode ir.
     AUDIO = {"url": "https://mmg.whatsapp.net/v/t62/abc.enc", "directPath": "/v/t62/abc.enc", "mimetype": "audio/ogg; codecs=opus",
@@ -279,12 +280,12 @@ class Traducao(unittest.TestCase):
         longo["data"]["message"] = {"audioMessage": {**self.AUDIO, "seconds": 121}}
         r = self.tr(longo).respostas[0]
         self.assertEqual(r["texto"], "[áudio 121s]")
-        self.assertNotIn("audio", r)  # acima de 120 s fica só o marcador
+        self.assertEqual(r["audio"], {"seg": 121})  # acima de 120 s não baixa, mas fica a marca (sem msg)
         sem = upsert(LEAD, id_="L2")
         sem["data"]["message"] = {"audioMessage": {k: v for k, v in self.AUDIO.items() if k != "seconds"}}
         r = self.tr(sem).respostas[0]
         self.assertEqual(r["texto"], "[áudio]")
-        self.assertNotIn("audio", r)
+        self.assertEqual(r["audio"], {})  # sem duração: nem baixa, mas é áudio de lead que esta instância recebeu
         temporaria = upsert(LEAD, id_="L3")
         temporaria["data"]["message"] = {"ephemeralMessage": {"message": {"audioMessage": dict(self.AUDIO)}}}
         r = self.tr(temporaria).respostas[0]

@@ -19,6 +19,7 @@
 import { CARDAPIO, PRECOS_DO_CARDAPIO, linkDoWhatsApp, objecoesNoTexto, passo, precosNoTexto, preencher } from './colinha'
 import type { SugestaoDoCopiloto } from './copiloto'
 import { funilDoLead, passoAtual, type LeadDaJornada } from './jornada'
+import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
 
 export type LeadDaProposta = LeadDaJornada & Pick<CrmLead, 'empresa'> & Partial<Pick<CrmLead, 'abordagem'>>
@@ -33,6 +34,8 @@ function instanteDaResposta(lead: LeadDaJornada): number {
  * "gostei" e o "quanto fica": a vez é da proposta, não de mais uma pergunta. O "quanto fica" o
  * n8n às vezes classifica como neutra; a pergunta de preço reconhecida pela colinha conta igual.
  * Só Site e PRUMO (e o Plus pela oferta deles): Iris e estamparias não têm cardápio nem 2ª mensagem.
+ * A licença depois do link ("pode mandar" a "posso te mandar a proposta?") também (pedeMaterial): até
+ * 17/10/2026 ela era gravada como interesse e já abria este passo.
  */
 export function gostouDepoisDoLink(lead: LeadDaJornada): boolean {
   if (lead.etapa !== 'contato' || lead.proposta) return false
@@ -42,7 +45,7 @@ export function gostouDepoisDoLink(lead: LeadDaJornada): boolean {
   const resposta = instanteDaResposta(lead)
   if (!Number.isFinite(link) || !Number.isFinite(resposta) || resposta <= link) return false
   const tipo = lead.resposta?.tipo
-  return tipo === 'interesse' || (tipo === 'neutra' && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa'))
+  return pedeMaterial(lead.resposta) || (tipo === 'neutra' && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa'))
 }
 
 /**

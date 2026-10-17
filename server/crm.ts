@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
-import { textoParaATela } from "../src/operations/marcadores-da-conversa.ts";
+import { pedeMaterial, textoParaATela } from "../src/operations/marcadores-da-conversa.ts";
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -190,8 +190,10 @@ export function porteDaColuna(valor: string): PorteDoCnpj | undefined {
 /**
  * "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa.
  * "licenca" (17/10/2026, a Baobá): o "pode enviar sim" a "posso mandar o vídeo?" é permissão para mandar
- * o material, não "quero ver". Fica na vez de responder até o material sair (como o interesse parado),
- * mas não conta como "quero ver" no funil (src/operations/resultados.ts) nem promete demonstração.
+ * o material, não um "quero ver" dito. Fica na vez de responder até o material sair (como o interesse
+ * parado) e, nas métricas, conta como o interesse contava (pedeMaterial): até 17/10 o mesmo "pode mandar"
+ * era gravado como interesse, e separar o tipo não pode encolher o "quero ver". A diferença fica só na
+ * frase e na tática do cartão (não promete demonstração).
  */
 export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "licenca", "neutra", "bot"] as const;
 export type CrmTipoDeResposta = (typeof TIPOS_DE_RESPOSTA)[number];
@@ -213,8 +215,8 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   bot: "Só resposta automática",
 };
 
-/** A resposta pede que algo saia daqui (o link, o Raio-X, o material): interesse ou licença. */
-export const pedeMaterial = (resposta: Pick<CrmResposta, "tipo"> | undefined) => resposta?.tipo === "interesse" || resposta?.tipo === "licenca";
+/** A resposta pede que algo saia daqui (o link, o Raio-X, o material): a regra única mora com a tela. */
+export { pedeMaterial };
 
 function respostaDaLinha(c: (campo: "respostaTipo" | "respostaTrecho" | "respostaEm") => string): CrmResposta | undefined {
   const tipo = c("respostaTipo").toLowerCase() as CrmTipoDeResposta;

@@ -387,6 +387,22 @@ def audio_para_transcrever(item: dict) -> dict | None:
     return {"seg": seg, "msg": msg} if msg else None
 
 
+def audio_do_lead(item: dict) -> dict | None:
+    """O `audio` da linha do respostas.jsonl para TODO áudio de lead (revisão de 17/10/2026): {seg, msg} quando dá
+    para baixar; senão só {seg} (ou {} sem duração), e o observador registra o motivo (longo, sem_dados). A marca diz
+    "esta instância recebeu o áudio e responde por ele": o observador da bridge do Hermes (que só tem o "[áudio]")
+    não manda lote só de áudio ao n8n, e é esta instância que manda, uma vez, o marcador que não foi transcrito.
+    Sem a marca, um áudio longo não chegaria ao n8n por nenhuma das duas."""
+    audio = audio_da_mensagem(item.get("message"))
+    if audio is None:
+        return None
+    para_baixar = audio_para_transcrever(item)
+    if para_baixar:
+        return para_baixar
+    seg = segundos_do_audio(audio)
+    return {"seg": seg} if seg is not None else {}
+
+
 def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     """O texto como a bridge do Hermes grava (mesma convenção de mídia). '' = nada a guardar
     (reação, edição, protocolo, mensagem sem conteúdo)."""
@@ -608,10 +624,11 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
                 pular("entrada_atrasada")
             if texto:
                 # id (16/10/2026): a conversa do lead em disco deduplica por ele (o mesmo chip chega pela bridge).
-                # audio (17/10/2026): o que o observador precisa para baixar e transcrever (ver MAX_AUDIO_S).
-                audio = audio_para_transcrever(item)
+                # audio (17/10/2026): o que o observador precisa para baixar e transcrever (ver MAX_AUDIO_S), e a marca
+                # de que esta instância responde pelo áudio mesmo quando não dá para baixar (audio_do_lead).
+                audio = audio_do_lead(item)
                 respostas.append({"chave": chave, "ts": int(ts), "texto": texto, **({"id": str(id_msg)} if id_msg else {}),
-                                  **({"audio": audio} if audio else {})})
+                                  **({"audio": audio} if audio is not None else {})})
         else:
             pular("sem_fromMe")
             continue

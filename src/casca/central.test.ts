@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  ORDEM_DAS_FAIXAS, andarDaCentral, faixasDaCentral, gravarAndar, lerAndar, pedidoDaCentral, statusDoMapa,
+  AVISO_DA_TROCA_RECUSADA, ORDEM_DAS_FAIXAS, andarDaCentral, depoisDaTrocaDeAndar, faixasDaCentral, gravarAndar, lerAndar, pedidoDaCentral, statusDoMapa,
   type FontesDasFaixas,
 } from './central.ts'
 import { resumoDoDell } from '../operations/alertas.ts'
@@ -150,4 +150,13 @@ describe('pedidoDaCentral e statusDoMapa', () => {
     assert.equal(statusDoMapa(2, '10:42', false), '2 salas pedem você (Dell às 10:42)')
     assert.equal(statusDoMapa(0, '', true), 'Sem notícia do Dell: os robôs estão sem sinal')
   })
+})
+
+describe('o "Escritório completo": troca recusada fica na Central (revisão de 17/10/2026)', () => {
+  const CASOS: Array<[string, boolean, boolean, ReturnType<typeof depoisDaTrocaDeAndar>]> = [
+    ['o andar já é a squad ativa: navega', false, false, { navegar: true }],
+    ['trocou: navega', true, true, { navegar: true }],
+    ['troca recusada (pedido em andamento): avisa e fica', true, false, { navegar: false, aviso: AVISO_DA_TROCA_RECUSADA }],
+  ]
+  for (const [nome, precisou, trocou, esperado] of CASOS) it(nome, () => assert.deepEqual(depoisDaTrocaDeAndar(precisou, trocou), esperado))
 })

@@ -81,7 +81,8 @@ describe("a Baobá antes do vídeo", () => {
     assert.doesNotMatch(`${a.titulo} ${a.tatica}`, /disse sim|demonstração/);
     assert.equal(a.quente, true, "esperando há mais de 2 h é urgente");
     assert.equal(a.conversa, "Última mensagem: a recepção, há 24 h: “*[Patricia Adriano]* CLaro, pode enviar sim.”");
-    assert.equal(quisVer(lead as never), false, "licença não é 'quero ver'");
+    // Revisão de 17/10/2026: a licença conta como "quero ver" nas métricas (pedeMaterial); só a frase e a tática mudam.
+    assert.equal(quisVer(lead as never), true, "a licença conta no 'quero ver' como o interesse contava");
   });
 
   it("o 'Respondeu ontem' também vale para o interesse do n8n", () => {

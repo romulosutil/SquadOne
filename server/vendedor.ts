@@ -186,7 +186,8 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const avisados = new Set(estado.avisados);
   const novas = fila.filter((a) => !avisados.has(a.chave));
   if (!novas.length) return { decisao: { tipo: "nada", motivo: "fila-vazia" }, estado, fechados };
-  // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar.
+  // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar: `quente` vem da fila (proxima-venda.ts)
+  // e vale para o interesse E para a licença (pedeMaterial), que até 17/10 era gravada como interesse.
   const proxima = estado.abertos.length ? novas.find((a) => a.tipo === "responder" && a.quente) : novas[0];
   if (!proxima) return { decisao: { tipo: "nada", motivo: "esperando-toque" }, estado, fechados };
   return { decisao: { tipo: "avisar", acao: proxima, depois: fila.filter((a) => a.chave !== proxima.chave) }, estado, fechados };
@@ -246,7 +247,7 @@ export interface ResumoDoVendedor {
   saiu: number;
   /** Do aviso ao "Enviei", em minutos (mediana). */
   medianaAteEnvieiMin: number | null;
-  /** Só os "quero ver" (quente): quantos e a mediana até o "Enviei". */
+  /** Só os "quero ver" (quente: interesse ou licença, pedeMaterial): quantos e a mediana até o "Enviei". */
   quentes: { avisos: number; enviei: number; medianaAteEnvieiMin: number | null };
 }
 

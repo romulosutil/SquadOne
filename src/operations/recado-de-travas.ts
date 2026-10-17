@@ -148,6 +148,21 @@ export function recadoDasTravas(e: EntradaDoRecado): RecadoDeTravas {
 }
 
 /**
+ * PURO (revisão de 17/10/2026). O `liberado` do recado na Próxima venda: fora do expediente, só quando um
+ * primeiro contato LIBERADO hoje está de fato na fila da tela agora. Antes valia "não sobrou ninguém por
+ * liberar", e com todos pulados, feitos ou fora do filtro do nicho o cartão dizia "Liberado fora do
+ * expediente: pode enviar agora" sem ninguém liberado. No expediente o horário não segura: false.
+ */
+export function liberadoNaFila(e: {
+  noExpediente: boolean
+  fila: ReadonlyArray<{ leadId: string; primeiroContato: boolean }>
+  liberados: ReadonlySet<string>
+}): boolean {
+  if (e.noExpediente) return false
+  return e.fila.some((a) => a.primeiroContato && e.liberados.has(a.leadId))
+}
+
+/**
  * PURO. O rótulo do "Liberar" no recado: diz quem sai da trava. Na Triagem é o lote inteiro, uma vez
  * (era um botão por linha); no cartão, o lead que sairia agora; na Ficha, o lead aberto.
  */

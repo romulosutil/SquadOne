@@ -18,7 +18,7 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
-import { textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
+import { pedeMaterial, textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
 import { useAssistente } from '../casca/assistente'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
@@ -180,7 +180,7 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   // Iris e estamparias: o site é o da empresa e a Etapa muda na planilha, como no PRUMO.
   const convite = ehConvite(props.lead.produto)
   // A licença (17/10/2026) também põe a 2ª mensagem no passo: é o material que ele deixou mandar.
-  const interesse = props.lead.resposta?.tipo === 'interesse' || props.lead.resposta?.tipo === 'licenca'
+  const interesse = pedeMaterial(props.lead.resposta)
   // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
   // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
   const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)

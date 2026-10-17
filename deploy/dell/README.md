@@ -2358,35 +2358,59 @@ lead, nunca a pergunta do Rômulo.
   directPath, mimetype, mediaKey, hashes, fileLength, seconds, ptt, mediaKeyTimestamp): sem miniatura, waveform,
   contextInfo nem bytes do arquivo. A mensagem vai **inteira** porque a Evolution roda com
   `DATABASE_SAVE_DATA_NEW_MESSAGE=false`: ela não guarda a mensagem, e o `getBase64FromMediaMessage` só pelo id não
-  acharia nada. Mídia do Rômulo (vídeo, documento, imagem) segue com os marcadores de antes.
+  acharia nada. Áudio de lead que não dá para baixar (mais de 120 s, sem duração, sem chave de mídia) leva só a marca
+  `audio: {seg}` (ou `{}`), desde a revisão de 17/10/2026: ela diz "esta instância recebeu o áudio e responde por ele"
+  (ver "Um aviso por áudio"). Mídia do Rômulo (vídeo, documento, imagem) segue com os marcadores de antes.
 - **Observador** (a instância do PRUMO, a única que recebe `audio`): baixa o áudio da Evolution
   (`POST http://127.0.0.1:8081/chat/getBase64FromMediaMessage/prumo`, `apikey` lida a cada áudio do
   `~/workspace/evolution/.env`, 600, nunca em log), transcreve com o Gemini (`gemini-3.7-flash`, a chave
   `GEMINI_API_KEY` do ambiente ou do `~/.config/squadone/operations.env`, como o `raio-x-ia.py`; o mesmo pedido de
   `server/transcricao.ts`, com `SEM_FALA` quando não há fala) e grava `[áudio 27s] <transcrição>` na conversa e no
   lote do n8n. O áudio fica só em memória. **Teto: 20 por dia de São Paulo** (`transcricoes.json`, 600, na pasta do
-  observador do PRUMO; sem conseguir ler ou gravar a conta, não gasta), **120 s, 5 MB, 25 s por pedido**. Qualquer falha
-  (sem chave, teto, tempo, HTTP, `SEM_FALA`) grava só `[áudio 27s]` e o journal leva só o motivo
+  observador do PRUMO), **120 s, 5 MB, 25 s por pedido**. A cota só é gasta depois do download dar certo (Evolution fora
+  do ar ou mídia vencida não consome o dia). Conta ilegível (JSON quebrado, `usadas` que não é número) recomeça a conta
+  do dia e o journal diz `contador_ilegivel`; conta que não se consegue GRAVAR não gasta (`contador_sem_gravar`). Para
+  zerar à mão: apague o `transcricoes.json`. Qualquer falha
+  (sem chave, teto, tempo, HTTP, `SEM_FALA`, `longo`) grava só `[áudio 27s]` e o journal leva só o motivo
   (`áudio de 27******66 sem transcrição: teto_do_dia`), nunca o texto. `OBSERVADOR_TRANSCREVER=0` desliga (drop-in na
   unit). Variáveis opcionais: `OBSERVADOR_EVOLUTION_URL`, `OBSERVADOR_EVOLUTION_INSTANCIA`, `OBSERVADOR_EVOLUTION_ENV`.
   Este é o único pedido que um serviço nosso faz à Evolution (o adaptador segue sem chamá-la); ele não envia nada a
   ninguém.
 - **Corrida das duas instâncias:** a do número pessoal grava o `[áudio]` da bridge do Hermes com o mesmo id; se ela
   chegar antes, a do PRUMO **troca** aquela linha pela transcrita (só quando a antiga é só o marcador; texto de gente
-  nunca é trocado). As duas mandam o lote ao n8n como antes; o "Decidir pela resposta" não deixa o lote só de
-  `[áudio]` sobrescrever a classificação de gente.
-- **`papel`** (determinístico, no observador): `^\*\[[^\]]+\]\*` = `recepcao`, `^\[(Atendimento|Bot)[^\]]*\]` = `robo`,
-  ausente = gente. Vai na linha da conversa e em cada mensagem do lote.
+  nunca é trocado).
+- **Um aviso por áudio** (revisão de 17/10/2026): as duas instâncias postam no n8n, e a da bridge mandava o `[áudio]`
+  sem transcrição antes do lote transcrito: o aviso "ouça no WhatsApp" gastava um dos 2 avisos de 6 h. Agora a
+  instância que NÃO tem `audio` no registro (a bridge) grava o marcador na conversa, mas não manda ao n8n um lote que
+  seja SÓ marcador de áudio (journal: `lote só de áudio sem ouvinte`); com texto junto, manda como antes. Quem responde
+  pelo áudio é a instância do PRUMO: o lote transcrito ou, se a transcrição não sair (falha, teto, `SEM_FALA`, longo),
+  o marcador, uma vez, e o n8n registra `neutra` sem sobrescrever a classificação de gente. Evolution fora do ar: o
+  áudio só-marcador não dá aviso nenhum (fica na conversa em disco e no "respondeu" pelo log).
+- **Reinício no meio da transcrição** (revisão de 17/10/2026): o observador grava primeiro TODAS as linhas do
+  `respostas.jsonl` na conversa (texto e marcador), só depois transcreve, e só apaga o `respostas.lendo.jsonl` com o
+  lote montado. Um reinício relê o `.lendo`: a conversa não duplica (id) e a transcrição já gravada não é paga de novo.
+  Ao parar o serviço com áudio por transcrever, a conversa recebe o marcador e o `.lendo` fica para o próximo início.
+- **`papel`** (determinístico, no observador, a MESMA regra da Central em `src/operations/marcadores-da-conversa.ts`,
+  com a mesma tabela de casos nos dois testes, `whatsapp-observador/papel-da-mensagem.casos.json`):
+  `^\*\[[^\]\n]{1,80}\]\*` = `recepcao`; `^\[\s*(atendimento|bot)` como palavra inteira, sem caixa, até o `]` = `robo`
+  (`[Botafogo]` e `[Botão]` não são robô); ausente = gente. Vai na linha da conversa e em cada mensagem do lote.
 - **`contexto` no lote:** as últimas 3 mensagens do Rômulo (até a última do lote) e as últimas 3 do lead antes do lote,
   com o papel, lidas da conversa em disco (500 caracteres cada).
 - **Classificador** (`claude-ops/whatsapp-conversa.py`, nó "Montar pergunta"): o prompt mostra o contexto em ordem e
   ganhou o tipo **`licenca`**, as recusas educadas ("agradeço, mas no momento não" = negativa; "qualquer coisa eu
   aviso", "vou passar para o responsável e retornamos" = neutra, nunca interesse), o áudio e as regras de desempate.
-  Em "Decidir pela resposta", sem modelo: lote só de áudio sem transcrição = `neutra` (aviso "ouça no WhatsApp") e não
-  sobrescreve tipo de gente; lote só de robô/recepção não vira `interesse`; `neutra` não apaga `negativa`/`exclusao`.
+  Em "Decidir pela resposta", sem modelo (`TIPO_FINAL_JS`): lote só de áudio sem transcrição = `neutra` (aviso "ouça no
+  WhatsApp") e não sobrescreve tipo de gente; lote só de ROBÔ não vira `interesse` nem `licenca`; a recepção, desde a
+  revisão de 17/10/2026, fica com o modelo (é gente; rebaixá-la apagava interesse de verdade); `neutra` não apaga
+  `negativa`/`exclusao`.
   Quem consome `licenca`: `funil-aprendizado.py` (resposta de gente), `site-funil-regra.js` (conta como sinal
   "licença" na pausa do 06, para separar o tipo não pausar nicho que antes ficava ligado), `jev-respostas-resumo.py`
-  (revisão humana). O Jev em sombra segue com os 5 tipos.
+  (revisão humana). O Jev em sombra segue com os 5 tipos; o `jev-respostas-resumo.py` compara a `licenca` do Gemini (e
+  da revisão) como `interesse` (sem isso a promoção de 95 % ficava inalcançável, e uma licença que o Jev chamasse de
+  negativa escaparia da regra 3), e o registro ganhou `tipo_final` (o tipo que o fluxo gravou, depois de só-áudio e
+  só-robô) ao lado do `tipo_gemini` bruto. A coluna só é gravada quando a Data Table a tem: tabela criada antes de
+  17/10 precisa da coluna `tipo_final` (string) acrescentada no editor do n8n; sem ela, o `whatsapp-conversa.py` avisa
+  e publica o ramo sem gravá-la (o insert não quebra).
 
 **Instalar na Mel** (depois do merge; o `~/SquadOne` se atualiza sozinho em até 10 min, ou `git -C ~/SquadOne pull`).
 A ordem não importa: cada peça nova aceita a antiga do outro lado (campos a mais são ignorados).
@@ -2412,7 +2436,7 @@ journalctl --user -u whatsapp-observador-prumo -f | grep -E "áudio|resposta cla
 ```
 
 **Riscos aceitos:** o download e a transcrição rodam no laço do observador do PRUMO (até ~50 s por áudio no pior
-caso, 20 por dia): o log espera, nada se perde. A chave de mídia do áudio fica no `respostas.jsonl` (600) só até o
+caso, 20 por dia): o log espera, nada se perde (nem num reinício no meio: ver acima). A chave de mídia do áudio fica no `respostas.jsonl` (600) só até o
 observador ler e apagar o arquivo. Se o áudio já expirou no servidor do WhatsApp, a Evolution pode pedir o reenvio
 da mídia ao aparelho do lead (protocolo do WhatsApp, invisível na conversa); na prática o áudio é baixado segundos
 depois de chegar. O áudio passa pelo Google (Gemini), como o texto das respostas já passa no n8n.

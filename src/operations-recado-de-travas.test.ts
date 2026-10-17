@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { proximaAbertura, quandoFalado, recadoDasTravas, rotuloDoLiberar } from './operations/recado-de-travas.ts'
+import { liberadoNaFila, proximaAbertura, quandoFalado, recadoDasTravas, rotuloDoLiberar } from './operations/recado-de-travas.ts'
 import { podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
 import type { EstadoDoRitmo } from './operations/trava-de-ritmo.ts'
 
@@ -117,5 +117,24 @@ describe('rotuloDoLiberar: quem sai da trava', () => {
     assert.equal(rotuloDoLiberar('triagem', { quantos: 1 }), 'Liberar mesmo assim')
     assert.equal(rotuloDoLiberar('venda', { empresa: 'Padaria Sol' }), 'Liberar Padaria Sol mesmo assim')
     assert.equal(rotuloDoLiberar('ficha'), 'Liberar este lead mesmo assim')
+  })
+})
+
+describe('liberadoNaFila: o cartão só diz "liberado" com um liberado de fato na fila (revisão de 17/10/2026)', () => {
+  const primeiro = (leadId: string) => ({ leadId, primeiroContato: true })
+  const CASOS: Array<[string, Parameters<typeof liberadoNaFila>[0], boolean]> = [
+    ['fora do expediente, o liberado está na fila', { noExpediente: false, fila: [primeiro('a')], liberados: new Set(['a']) }, true],
+    ['fora do expediente, ninguém na fila (todos feitos, pulados ou fora do filtro)', { noExpediente: false, fila: [], liberados: new Set(['a']) }, false],
+    ['fora do expediente, nada liberado', { noExpediente: false, fila: [primeiro('a')], liberados: new Set() }, false],
+    ['o liberado não é primeiro contato (resposta)', { noExpediente: false, fila: [{ leadId: 'a', primeiroContato: false }], liberados: new Set(['a']) }, false],
+    ['no expediente, o horário não segura', { noExpediente: true, fila: [primeiro('a')], liberados: new Set(['a']) }, false],
+  ]
+  for (const [nome, entrada, esperado] of CASOS) it(nome, () => assert.equal(liberadoNaFila(entrada), esperado))
+
+  it('sem liberado na fila, o recado diz quando volta, nunca "Liberado fora do expediente"', () => {
+    const agora = em('2026-10-16T19:00:00')
+    const r = recadoDasTravas({ agora, ritmo: livre, contexto: 'venda', liberado: liberadoNaFila({ noExpediente: false, fila: [], liberados: new Set(['a']) }) })
+    assert.equal(r.titulo, 'Fora do expediente: volta segunda às 8h')
+    assert.doesNotMatch(r.titulo, /Liberado/)
   })
 })

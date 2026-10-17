@@ -851,14 +851,14 @@ class ConversaDoPlus(Base):
 class Papel(unittest.TestCase):
     """17/10/2026: quem escreveu, pela marca no texto (contrato: ausente = gente)."""
 
-    def test_tabela(self):
-        casos = [("*[Bruna]* Olá, qual o nome do paciente?", "recepcao"), ("  *[Recepção Clínica]* bom dia", "recepcao"),
-                 ("[Atendimento] Digite 1 para agendar", "robo"), ("[Atendimento Automático] Olá!", "robo"),
-                 ("[Bot] Em breve retornaremos", "robo"), ("[Bot da Loja] menu", "robo"),
-                 ("Claro, pode enviar sim", None), ("[áudio 27s] não, obrigado", None), ("*Bruna* oi", None),
-                 ("[imagem] cardápio", None), ("Atendimento: 8h às 18h", None), ("[Botão] x", "robo"), ("", None), (None, None)]
+    def test_tabela_unica_com_a_central(self):
+        # A MESMA tabela do teste do papelDaMensagem (src/operations-marcadores-da-conversa.test.ts): um caso que
+        # mude de um lado só falha nos dois. "[Botão]" deixou de ser robô e "[Atendimento" sem "]" também.
+        casos = json.loads((AQUI / "papel-da-mensagem.casos.json").read_text(encoding="utf-8"))["casos"]
+        self.assertGreater(len(casos), 20)
         for texto, esperado in casos:
             self.assertEqual(ob.papel_da_mensagem(texto), esperado, texto)
+        self.assertIsNone(ob.papel_da_mensagem(None))
 
 
 class MarcadorDeAudio(unittest.TestCase):
@@ -1046,12 +1046,42 @@ class Transcricao(Base):
         self.assertEqual(len(self.baixados), 3)
         self.assertEqual(json.loads((self.obs.pasta / "transcricoes.json").read_text()), {"dia": "2026-10-01", "usadas": 1})
 
-    def test_contador_ilegivel_nao_gasta(self):
+    def test_contador_ilegivel_recomeca_a_conta_do_dia(self):
+        # Revisão de 17/10/2026: JSON quebrado de verdade e `usadas` que não é número recomeçam a conta, com o motivo
+        # próprio no journal; antes viravam "teto_do_dia" calado e nenhum áudio era ouvido até alguém apagar o arquivo.
+        self.obs.pasta.mkdir(parents=True, exist_ok=True)
+        conta = self.obs.pasta / "transcricoes.json"
+        for i, bruto in enumerate(('{"dia": "2026-09-30", "usadas": 3', '{"dia": "2026-09-30", "usadas": "muitas"}',
+                                   '{"dia": "2026-09-30", "usadas": true}', '[1, 2]')):
+            conta.write_text(bruto, encoding="utf-8")
+            self.escrever(self.audio(id_=f"I{i}"))
+            journal = self.rodar()
+            self.assertIn("contador_ilegivel", journal, bruto)
+            self.assertNotIn("teto_do_dia", journal, bruto)
+            self.assertIn("transcrito", journal, bruto)
+            self.assertEqual(json.loads(conta.read_text()), {"dia": "2026-09-30", "usadas": 1}, bruto)
+        self.assertEqual(len(self.baixados), 4)
+
+    def test_contador_que_nao_grava_nao_gasta(self):
         self.obs.pasta.mkdir(parents=True, exist_ok=True)
         (self.obs.pasta / "transcricoes.json").mkdir()  # nem lê nem grava
         self.escrever(self.audio())
-        self.assertIn("sem transcrição: teto_do_dia", self.rodar())
-        self.assertEqual(self.baixados, [])
+        journal = self.rodar()
+        self.assertIn("sem transcrição: contador_sem_gravar", journal)
+        self.assertNotIn("teto_do_dia", journal)
+        self.assertEqual(self.ao_gemini, [])  # sem conta gravada, o Gemini não é chamado
+
+    def test_download_que_falha_nao_gasta_a_cota(self):
+        # A cota só é consumida com o áudio em mãos: Evolution fora do ar ou mídia vencida não gasta o dia.
+        self.obs.transcritor = self.transcritor(teto=1)
+        self.erro = urllib.error.HTTPError("u", 410, "x", {}, None)
+        self.escrever(self.audio(id_="V1"))
+        self.assertIn("sem transcrição: http_410", self.rodar())
+        self.assertFalse((self.obs.pasta / "transcricoes.json").exists())
+        self.erro = None
+        self.escrever(self.audio(id_="V2"))
+        self.assertIn("transcrito", self.rodar())
+        self.assertEqual(json.loads((self.obs.pasta / "transcricoes.json").read_text()), {"dia": "2026-09-30", "usadas": 1})
 
     def test_transcritor_que_explode_nao_derruba_o_laco(self):
         class Quebrado:
@@ -1080,6 +1110,115 @@ class Transcricao(Base):
         # Na ordem inversa, o "[áudio]" que chega depois não apaga a transcrição.
         self.assertFalse(pessoal.anexar(CHAVE, "entrada", T0 - 5, "[áudio]", "AUD1"))
         self.assertEqual(self.conversa()[0]["texto"], "[áudio 27s] Agradeço, mas no momento não.")
+
+    # ---- revisão de 17/10/2026: no máximo um aviso por áudio (as duas instâncias postam no n8n)
+
+    def duas_instancias(self, transcritor_prumo):
+        """A instância do número pessoal (bridge: só "[áudio]", sem `audio`) e a do PRUMO (Evolution: com `audio`),
+        a mesma pasta de conversas e o mesmo n8n de mentira, como na Mel."""
+        pessoal = self.obs
+        pessoal.transcritor = ob.Transcritor(pessoal.pasta, relogio=lambda: self.agora, ligado=False)
+        prumo = ob.Observador({CHAVE, CHAVE2}, chamar=self.n8n, avisar=self.avisos.append, relogio=lambda: self.agora,
+                              bridge_js=self.bridge, pasta=self.dir / "estado-prumo",
+                              conversas=ob.Conversas(self.pasta_conversas, "prumo", relogio=lambda: self.agora),
+                              transcritor=transcritor_prumo)
+        return pessoal, prumo
+
+    def rodar_as_duas(self, pessoal, prumo, da_bridge, da_evolution):
+        for obs, linha in ((pessoal, da_bridge), (prumo, da_evolution)):
+            obs.pasta.mkdir(parents=True, exist_ok=True)
+            with open(obs.pasta / "respostas.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            for passo in (1, ob.ESPERA_DA_CONVERSA_S):
+                self.agora += passo
+                pessoal.tick()
+                prumo.tick()
+        return saida.getvalue()
+
+    def textos_dos_lotes(self):
+        return [[m["texto"] for m in l["mensagens"]] for l in self.lotes()]
+
+    def test_audio_transcrito_um_lote_so(self):
+        pessoal, prumo = self.duas_instancias(self.transcritor())
+        journal = self.rodar_as_duas(pessoal, prumo, {"chave": CHAVE, "ts": T0 - 5, "texto": "[áudio]", "id": "AUD1"}, self.audio())
+        self.assertEqual(self.textos_dos_lotes(), [["[áudio 27s] Agradeço, mas no momento não."]])
+        self.assertIn("sem ouvinte", journal)
+        self.assertEqual([l["texto"] for l in self.conversa()], ["[áudio 27s] Agradeço, mas no momento não."])
+
+    def test_audio_que_nao_foi_transcrito_vai_uma_vez_pela_instancia_que_o_recebeu(self):
+        for i, (k, resposta) in enumerate(((dict(chave_gemini=lambda: None), "x"), (dict(teto=0), "x"), ({}, "SEM_FALA"))):
+            self.n8n.chamadas.clear()
+            self.resposta_gemini = resposta
+            pessoal, prumo = self.duas_instancias(self.transcritor(**k))
+            self.rodar_as_duas(pessoal, prumo, {"chave": CHAVE, "ts": T0 - 5, "texto": "[áudio]", "id": f"N{i}"}, self.audio(id_=f"N{i}"))
+            self.assertEqual(self.textos_dos_lotes(), [["[áudio 27s]"]], k)
+
+    def test_audio_longo_sem_download_tambem_vai_uma_vez(self):
+        pessoal, prumo = self.duas_instancias(self.transcritor())
+        longo = {"chave": CHAVE, "ts": T0 - 5, "texto": "[áudio 300s]", "id": "LG1", "audio": {"seg": 300}}
+        journal = self.rodar_as_duas(pessoal, prumo, {"chave": CHAVE, "ts": T0 - 5, "texto": "[áudio]", "id": "LG1"}, longo)
+        self.assertIn("sem transcrição: longo", journal)
+        self.assertEqual(self.textos_dos_lotes(), [["[áudio 300s]"]])
+
+    def test_bridge_com_texto_junto_continua_mandando(self):
+        # Só o lote SÓ de marcador sem ouvinte fica de fora; com texto junto, a bridge manda como antes.
+        self.obs.transcritor = ob.Transcritor(self.obs.pasta, relogio=lambda: self.agora, ligado=False)
+        self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "[áudio]", "id": "B1"},
+                      {"chave": CHAVE, "ts": T0 - 4, "texto": "não temos interesse", "id": "B2"})
+        self.rodar()
+        self.assertEqual(self.textos_dos_lotes(), [["[áudio]", "não temos interesse"]])
+
+    # ---- revisão de 17/10/2026: reinício no meio da transcrição não perde nada
+
+    def test_queda_no_meio_da_transcricao_nao_perde_nem_duplica(self):
+        class Queda(BaseException):
+            """O SIGTERM no meio do pedido ao Gemini (não é Exception: nada no caminho o engole)."""
+        chamadas = []
+
+        def gemini_que_cai(dados, mime, chave):
+            chamadas.append(1)
+            if len(chamadas) == 2:
+                raise Queda()
+            return "Primeiro áudio, ouvido."
+        self.obs.transcritor = self.transcritor(gemini=gemini_que_cai)
+        self.escrever({"chave": CHAVE, "ts": T0 - 9, "texto": "oi, quem fala?", "id": "Q0"},
+                      self.audio(id_="Q1"), self.audio(id_="Q2"),
+                      {"chave": CHAVE, "ts": T0 - 3, "texto": "e outra coisa", "id": "Q3"})
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(Queda):
+            self.passar(1)
+        # Tudo na conversa em disco (o texto e os marcadores), e o .lendo continua lá para o próximo início.
+        self.assertEqual([l["id"] for l in self.conversa()], ["Q0", "Q1", "Q2", "Q3"])
+        self.assertTrue((self.obs.pasta / "respostas.lendo.jsonl").exists())
+        self.assertEqual(self.lotes(), [])
+        # Reinício: um Observador novo, a mesma pasta; o 1º áudio não é pago de novo, o 2º é transcrito.
+        baixados_antes = len(self.baixados)
+        self.obs = ob.Observador({CHAVE, CHAVE2}, chamar=self.n8n, avisar=self.avisos.append, relogio=lambda: self.agora,
+                                 bridge_js=self.bridge, pasta=self.obs.pasta,
+                                 conversas=ob.Conversas(self.pasta_conversas, "pessoal", relogio=lambda: self.agora))
+        self.resposta_gemini = "Segundo áudio, ouvido."
+        self.obs.transcritor = self.transcritor()
+        self.rodar()
+        self.assertEqual(len(self.baixados) - baixados_antes, 1)
+        self.assertEqual([(l["id"], l["texto"]) for l in self.conversa()],
+                         [("Q0", "oi, quem fala?"), ("Q1", "[áudio 27s] Primeiro áudio, ouvido."),
+                          ("Q2", "[áudio 27s] Segundo áudio, ouvido."), ("Q3", "e outra coisa")])
+        self.assertEqual(self.textos_dos_lotes(), [["oi, quem fala?", "[áudio 27s] Primeiro áudio, ouvido.",
+                                                    "[áudio 27s] Segundo áudio, ouvido.", "e outra coisa"]])
+        self.assertFalse((self.obs.pasta / "respostas.lendo.jsonl").exists())
+
+    def test_parar_o_servico_com_audio_pendente_deixa_para_o_proximo_inicio(self):
+        self.escrever(self.audio(id_="P9"), {"chave": CHAVE, "ts": T0 - 3, "texto": "e mais isto", "id": "P8"})
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.obs.ler_respostas(ouvir=False)  # o finally do main
+            self.obs.fechar_conversas(todas=True)
+            self.obs.mandar_conversas()
+        self.assertIn("fica para o próximo início", saida.getvalue())
+        self.assertEqual((self.baixados, self.lotes()), ([], []))
+        self.assertEqual([l["texto"] for l in self.conversa()], ["[áudio 27s]", "e mais isto"])
+        self.assertTrue((self.obs.pasta / "respostas.lendo.jsonl").exists())
+        self.rodar()  # o próximo início
+        self.assertEqual(self.textos_dos_lotes(), [["[áudio 27s] Agradeço, mas no momento não.", "e mais isto"]])
 
     def test_papel_na_conversa_e_no_lote(self):
         self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "*[Bruna]* Pode mandar sim", "id": "P1"},

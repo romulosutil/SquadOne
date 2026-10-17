@@ -52,7 +52,7 @@ import {
   resumoDaFila, resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
 } from './proxima-venda'
 import { absorverDia, liberadosDoDia as liberados, liberarLead } from './liberados'
-import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
+import { liberadoNaFila, recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
 import RecadoDeTravas from './RecadoDeTravas.vue'
 import { avisoDeHorario } from './resultados'
 import {
@@ -215,12 +215,13 @@ watch(() => atual.value?.chave, () => { comoAberto.value = Boolean(atual.value &
 /** Quantos primeiros contatos esperam e quantos o ritmo ainda deixa hoje ("165 … · até 10 hoje"). */
 const contagemDosPrimeiros = computed(() => textoDosPrimeiros(resumo.value))
 /**
- * As duas travas num recado só, com o próximo passo (recado-de-travas.ts). "Liberado" é o lead que
- * sairia agora: sem candidato fora do expediente com o ritmo livre, o próximo já foi liberado.
+ * As duas travas num recado só, com o próximo passo (recado-de-travas.ts). "Liberado" só quando um lead
+ * liberado hoje está de fato na fila (liberadoNaFila): sem ninguém por liberar E sem liberado na fila
+ * (todos pulados, feitos ou fora do filtro), o recado diz quando o expediente volta.
  */
 const recado = computed(() => recadoDasTravas({
   agora: agora.value, noExpediente: expediente.value, ritmo: ritmo.value, contexto: 'venda',
-  liberado: !expediente.value && candidatoForaDoExpediente.value === null,
+  liberado: liberadoNaFila({ noExpediente: expediente.value, fila: fila.value, liberados: liberados.value }),
   taxa: expediente.value ? null : avisoDeHorario(props.visao?.leads ?? [], agora.value),
 }))
 

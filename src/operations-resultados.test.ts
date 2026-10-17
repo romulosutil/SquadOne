@@ -214,3 +214,28 @@ describe('uma regra por métrica (AC-03): o funil e o placar de Números contam 
     assert.deepEqual([total.enviados, total.viram, total.responderam, total.interesse], [9, 6, 4, 2])
   })
 })
+
+describe('a licença nunca encolhe o "quero ver" (revisão de 17/10/2026)', () => {
+  // Até 17/10 o "pode mandar" do Site era gravado como interesse; o tipo novo não pode tirar ninguém das contagens.
+  const comTipo = (id: string, tipo: 'interesse' | 'licenca', extra: Partial<CrmLead> = {}) => lead(id, {
+    sinal: 'respondeu', marcos: { enviado: dias(3), respondeu: dias(2), ...(extra.marcos ?? {}) },
+    resposta: { tipo, trecho: 'pode mandar', em: dias(2) }, ...extra,
+  })
+  for (const tipo of ['interesse', 'licenca'] as const) {
+    it(`${tipo}: conta em "quiseram ver" e na 2ª mensagem anotada`, () => {
+      const leads = [comTipo('a', tipo, { marcos: { enviado: dias(3), respondeu: dias(2), segundaEnviada: dias(1) } }), comTipo('b', tipo)]
+      const a = enviosAnotados(leads, 'tudo', AGORA)
+      assert.equal(a.quiseramVer, 2)
+      assert.equal(a.segundas, 1)
+      assert.equal(resultados(leads, 'nicho', 'tudo', AGORA).total.interesse, 2)
+    })
+    it(`${tipo}: o degrau "Disseram quero ver" e o "Receberam a 2ª mensagem" do diagnóstico`, () => {
+      const leads = [comTipo('a', tipo, { marcos: { enviado: dias(3), respondeu: dias(2), segundaEnviada: dias(1) } }), comTipo('b', tipo)]
+      const d = diagnosticoDeVenda(leads, AGORA)
+      const n = (id: string) => d.degraus.find((g) => g.id === id)?.n
+      assert.equal(n('interesse'), 2)
+      assert.equal(n('segunda'), 1)
+      assert.equal(d.interessadosParados, 1)
+    })
+  }
+})
