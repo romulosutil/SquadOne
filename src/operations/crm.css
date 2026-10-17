@@ -299,9 +299,8 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 
 /* Ficha (16/10/2026, segunda volta): a folha é o único contorno. Dentro dela, seções separadas por
    título, espaço e uma linha (--divisor), nunca caixa dentro de caixa; um primário só, o da ação de
-   agora; o que é consulta fica dobrado. Coluna flex e não grid: o sticky de .crm-ficha__fixa só anda
-   dentro do contêiner do item, e no grid isso seria a célula dele. Margem no lugar do gap porque a
-   ação fixa fica colada à seção "Agora" e as seções se afastam mais. */
+   agora; o que é consulta fica dobrado. Margem no lugar do gap porque a ação de agora fica colada à
+   seção "Agora" e as seções se afastam mais. */
 .crm-ficha { display: flex; flex-direction: column; width: 100%; max-width: var(--largura-leitura); }
 .crm-ficha > * { margin: 0; }
 .crm-ficha > * + * { margin-top: var(--esp-6); }
@@ -328,11 +327,10 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-ficha__acao { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); line-height: 1.3; overflow-wrap: anywhere; }
 .crm-ficha__prazo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); margin: 0; color: var(--texto-2); font-weight: var(--peso-medio); }
 .crm-ficha__prazo .botao { margin-left: auto; }
-/* A ação de agora, presa ao topo da folha enquanto se rola. No celular o primário ocupa a largura.
-   O ::before cobre o respiro do topo da folha (--esp-4 em Sheet.vue): sem ele, o texto rolado aparecia
-   numa fresta acima do botão preso. Faixa de fundo, não sombra: sombra é só a do primário. */
-.crm-ficha__fixa { position: sticky; top: 0; z-index: var(--camada-fixa); display: flex; flex-wrap: wrap; gap: var(--esp-2); padding: var(--esp-2) 0; background: var(--superficie); }
-.crm-ficha__fixa::before { position: absolute; right: 0; bottom: 100%; left: 0; height: var(--esp-4); background: var(--superficie); content: ""; }
+/* A ação de agora, logo abaixo do "Agora". No celular o primário ocupa a largura. Deixou de ser
+   presa ao topo ao rolar (17/10/2026, AC-14): por cima da folha, cobria a primeira linha da Conversa
+   e de toda seção que passasse por baixo dela. */
+.crm-ficha__fixa { display: flex; flex-wrap: wrap; gap: var(--esp-2); padding: var(--esp-2) 0; }
 .crm-ficha__fixa .botao { flex: 1 1 100%; justify-content: space-between; min-height: var(--toque-grande); padding-block: var(--esp-2); font-size: var(--tam-texto); text-align: left; }
 @media (min-width: 40rem) { .crm-ficha__fixa .botao { flex: 0 1 auto; gap: var(--esp-3); } }
 /* A mensagem do primário, legível antes do toque (16/10/2026). Colada ao "Agora", como a ação fixa. */
@@ -370,7 +368,13 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-ficha__conferir { display: grid; gap: var(--esp-2); margin: var(--esp-2) 0 var(--esp-3); padding: 0; list-style: none; font-size: var(--tam-apoio); }
 .crm-ficha__conferir li { position: relative; padding-left: var(--esp-6); overflow-wrap: anywhere; }
 .crm-ficha__conferir li::before { position: absolute; left: 0; content: "☐"; color: var(--texto-2); }
-.crm-ficha__perder { margin-top: var(--esp-4); }
+/* Desfecho (AC-08): o que já está marcado, uma linha por desfecho, com o desfazer ao lado; os toques
+   abaixo. Faixa à esquerda como nos avisos, não caixa (BP-R1). */
+.crm-ficha__desfecho { display: grid; gap: var(--esp-3); }
+.crm-ficha__desfecho > h3 { margin-bottom: 0; }
+.crm-ficha__marcados { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.crm-ficha__marcados li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); padding-left: var(--esp-3); border-left: var(--faixa) solid var(--destaque); font-weight: var(--peso-medio); overflow-wrap: anywhere; }
+.crm-ficha__marcados li .botao { margin-left: auto; }
 /* Consulta: as dobras empilhadas, cada uma com o seu toque de 44 px. */
 .crm-ficha__consulta { display: grid; gap: var(--esp-1); }
 .crm-ficha__consulta .dobra > p { margin: 0 0 var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }

@@ -29,7 +29,9 @@ const GLIFO = { feito: '✓', agora: '●', depois: '○', 'sem-registro': '?' }
 
     <details class="dobra crm-jornada__passos">
       <summary>Ver os {{ passos.length }} passos</summary>
-      <p class="crm-muted">{{ ROTULO_DO_TRILHO[atual.trilho] }}. Para avançar: {{ atual.sai }}</p>
+      <!-- Só a posição (AC-12): o "Para avançar: …" era mais uma redação do passo ("Proposta por escrito
+           em até 24 h"), ao lado da frase do "Agora". O que tira de cada passo fica no mapa (/crm?ver=jornada). -->
+      <p class="crm-muted">{{ ROTULO_DO_TRILHO[atual.trilho] }}.</p>
       <ol aria-label="Passos deste lead">
         <li v-for="p in passos" :key="p.passo.id" :class="`is-${p.estado}`" :aria-current="p.estado === 'agora' ? 'step' : undefined">
           <span class="so-leitor">{{ ROTULO_DO_ESTADO[p.estado] }}:</span>

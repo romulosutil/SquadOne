@@ -27,6 +27,7 @@
  */
 import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { Guardador } from './fila-de-envio'
+import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
@@ -107,6 +108,11 @@ export interface ContextoDaVenda {
   agora?: number
   /** leadId -> a sugestão do copiloto, quando há uma para a conversa de agora. */
   sugestoes?: ReadonlyMap<string, SugestaoDeVenda>
+  /**
+   * Só as ações deste lead (a Ficha, AC-12). Sem isto a Ficha via a fila inteira, onde só entra um
+   * primeiro contato: o segundo lead "pronto" ficava sem ação na Ficha, embora tivesse uma.
+   */
+  soDoLead?: string
 }
 
 /** Os passos em que a mensagem do copiloto (que leu a conversa) vale mais que o texto pronto da esteira. */
@@ -174,7 +180,7 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
     empresa: lead.empresa,
     produto: lead.produto,
     tipo: 'depois-do-link',
-    titulo: titulo('depois-do-link', lead),
+    titulo: fraseDaAcao('depois-do-link', lead),
     contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
     porque: `O link saiu há ${horas} h e ele não escreveu mais.`,
     tatica: tatica('depois-do-link', lead),
@@ -199,7 +205,7 @@ function acaoMandarProposta(lead: CrmLead): AcaoDeVenda | null {
     empresa: lead.empresa,
     produto: lead.produto,
     tipo: 'mandar-proposta',
-    titulo: titulo('mandar-proposta', lead),
+    titulo: fraseDaAcao('mandar-proposta', lead),
     contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
     porque: lead.resposta?.trecho ? `Depois do link ele escreveu: "${lead.resposta.trecho}".` : 'Ele gostou depois do link.',
     tatica: tatica('mandar-proposta', lead),
@@ -231,7 +237,7 @@ function acaoDeDesfecho(lead: CrmLead): AcaoDeVenda | null {
     empresa: lead.empresa,
     produto: lead.produto,
     tipo: 'desfecho',
-    titulo: titulo('desfecho', lead),
+    titulo: fraseDaAcao('desfecho', lead),
     contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
     porque: lead.resposta?.trecho ? `Ele escreveu: "${lead.resposta.trecho}".` : 'A resposta dele foi classificada como recusa.',
     tatica: tatica('desfecho', lead),
@@ -293,10 +299,29 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
   }
 }
 
-function titulo(tipo: TipoDeVenda, lead: CrmLead): string {
+/** O "disse sim" diz o que mandar: "mande o próximo passo" sozinho não dizia o quê (AC-12). */
+function oQueMandarNoSim(lead: Pick<CrmLead, 'produto' | 'links' | 'demoApagadoEm'>): string {
+  if (lead.produto === 'iris' || lead.produto === 'estampa') return 'combine a demonstração'
+  if (lead.produto === 'prumo') return 'mande o Raio-X'
+  if (lead.demoApagadoEm) return 'republique o demo e mande o link'
+  if (lead.links.segunda) return 'mande o link'
+  if (lead.links.gerarDemo) return 'gere o demo e avise que já vai'
+  return 'responda com o próximo passo'
+}
+
+/**
+ * PURO. A frase da ação, uma por tipo (AC-12, 17/10/2026): é o título do cartão da Próxima venda, a
+ * linha do Telegram e o "Agora" da Ficha. Eram cinco redações do mesmo passo (a fila, o servidor, a
+ * jornada, o prazo da jornada e a colinha), e o Rômulo não sabia se eram cinco coisas a fazer.
+ * Com a leitura do copiloto (recepção, robô), quem está do outro lado manda na frase: o passo deixa de
+ * ser o da esteira e passa a ser chegar a quem decide.
+ */
+export function fraseDaAcao(tipo: TipoDeVenda, lead: Pick<CrmLead, 'empresa' | 'produto' | 'links' | 'resposta' | 'reenvioDoRobo' | 'demoApagadoEm'>, momento?: Pick<MomentoDaVenda, 'quem'>): string {
   const nome = lead.empresa
+  const deQuem = momento && COM_COPILOTO.has(tipo) ? TITULO_DE_QUEM[momento.quem]?.(nome) : undefined
+  if (deQuem) return deQuem
   switch (tipo) {
-    case 'responder': return lead.resposta?.tipo === 'interesse' ? `${nome} disse sim: mande o próximo passo` : `Responda a ${nome}`
+    case 'responder': return lead.resposta?.tipo === 'interesse' ? `${nome} disse sim: ${oQueMandarNoSim(lead)}` : `Responda a ${nome}`
     case 'mandar-proposta': return `${nome} gostou: mande a proposta`
     case 'combinado': return `Combinado com ${nome}`
     case 'depois-do-link': return `Pergunte a ${nome} o que achou`
@@ -307,9 +332,30 @@ function titulo(tipo: TipoDeVenda, lead: CrmLead): string {
   }
 }
 
-/** O link do passo: o primeiro do item que abre o WhatsApp para o lead (texto pronto ou conversa). */
-function linkDoItem(item: CrmItemHoje): { rotulo: string; url: string } | undefined {
-  return item.links.find((l) => textoDoLink(l.url) !== null) ?? item.links[0]
+/** wa.me ou whatsapp.com: abre a conversa, com ou sem texto. */
+function abreOWhatsApp(url: string): boolean {
+  try {
+    return /(^|\.)wa\.me$|(^|\.)whatsapp\.com$/.test(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * PURO. O link do passo, escolhido pelo tipo e nunca pela posição (AC-05, 17/10/2026). O servidor
+ * põe o "Gerar demo" antes da conversa no "quer ver" sem 2ª mensagem, e o `links[0]` de antes fazia
+ * o botão "Abrir a conversa no WhatsApp" chamar o webhook gerar_demo do n8n. A ordem: a mensagem
+ * pronta (wa.me com texto), o link do n8n que marca o envio (envio, convite, 2ª, follow-up) e a
+ * conversa. O "Gerar demo" e o que não abre o WhatsApp (demo, Maps) nunca são o link da fila: a fila
+ * só abre o WhatsApp; gerar o demo é o botão da Ficha.
+ */
+export function linkDoPasso(item: Pick<CrmItemHoje, 'links'>, lead: Pick<CrmLead, 'links'>): { rotulo: string; url: string } | undefined {
+  const l = lead.links
+  const candidatos = item.links.filter((x) => !(l.gerarDemo && x.url === l.gerarDemo) && !/^gerar\b/i.test(x.rotulo.trim()))
+  const doN8n = new Set([l.enviar, l.convite, l.segunda, l.followup].filter((u): u is string => Boolean(u)))
+  return candidatos.find((x) => textoDoLink(x.url) !== null)
+    ?? candidatos.find((x) => doN8n.has(x.url))
+    ?? candidatos.find((x) => x.url === l.whatsapp || abreOWhatsApp(x.url))
 }
 
 function anotaDoLink(lead: CrmLead, url: string | undefined): TipoDeEnvioAnotado | undefined {
@@ -321,7 +367,7 @@ function anotaDoLink(lead: CrmLead, url: string | undefined): TipoDeEnvioAnotado
 }
 
 function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDeVenda {
-  const link = linkDoItem(item)
+  const link = linkDoPasso(item, lead)
   const primeiroContato = tipo === 'primeiro' || (tipo === 'followup' && Boolean(lead.reenvioDoRobo))
   const rascunho = (link && textoDoLink(link.url)) ?? (tipo === 'primeiro' ? lead.mensagemPronta : undefined)
   const anota = anotaDoLink(lead, link?.url)
@@ -334,7 +380,7 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
     empresa: lead.empresa,
     produto: lead.produto,
     tipo,
-    titulo: titulo(tipo, lead),
+    titulo: fraseDaAcao(tipo, lead),
     contexto: lugar,
     porque: [item.acao, item.detalhe].filter(Boolean).join('. ').replace(/\.\./g, '.'),
     tatica: tatica(tipo, lead),
@@ -353,21 +399,22 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
  */
 export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | undefined, ctx: ContextoDaVenda, pulados: ReadonlySet<string> = new Set()): AcaoDeVenda[] {
   if (!visao) return []
-  const porId = new Map(visao.leads.map((l) => [l.id, l] as [string, CrmLead]))
+  const leads = ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads
+  const porId = new Map(leads.map((l) => [l.id, l] as [string, CrmLead]))
   const grupos = new Map(visao.hoje.map((g) => [g.id, g] as [CrmGrupoHojeId, CrmGrupoHoje]))
   const fila: AcaoDeVenda[] = []
   const vistas = new Set<string>()
   let primeiros = 0
-  const depoisDoLink = visao.leads.flatMap((l) => {
+  const depoisDoLink = leads.flatMap((l) => {
     const a = acaoDepoisDoLink(l, ctx.agora)
     return a ? [a] : []
   })
-  const propostas = visao.leads.flatMap((l) => {
+  const propostas = leads.flatMap((l) => {
     const a = acaoMandarProposta(l)
     return a ? [a] : []
   })
   const comProposta = new Set(propostas.map((a) => a.leadId))
-  const desfechos = visao.leads.flatMap((l) => {
+  const desfechos = leads.flatMap((l) => {
     const a = acaoDeDesfecho(l)
     return a ? [a] : []
   })
@@ -423,10 +470,10 @@ function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: Context
   // A leitura de quem respondeu manda no título e no "como": com a recepção ou o robô, o passo não é
   // o da jornada (link, proposta), é chegar a quem decide.
   const m = sugestao.momento
-  const titulo = m ? TITULO_DE_QUEM[m.quem]?.(lead.empresa) : undefined
+  const titulo = m ? fraseDaAcao(acao.tipo, lead, m) : acao.titulo
   const comSugestao: AcaoDeVenda = {
     ...comLinha,
-    ...(titulo ? { titulo, quente: false } : {}),
+    ...(titulo !== acao.titulo ? { titulo, quente: false } : {}),
     ...(m?.passo ? { tatica: m.passo } : {}),
     rascunho: sugestao.mensagem,
     link: { rotulo: 'Abrir no WhatsApp com a mensagem', url },
@@ -560,6 +607,138 @@ export function textoDosPrimeiros(resumo: Pick<ResumoDoDia, 'primeirosProntos' |
   if (!n) return ''
   const prontos = n === 1 ? '1 primeiro contato pronto' : `${n} primeiros contatos prontos`
   return resumo.primeirosAindaHoje > 0 ? `${prontos} · até ${resumo.primeirosAindaHoje} hoje` : prontos
+}
+
+// ---------------------------------------------------------------- a Ficha: o "Agora", o desfecho e o anotar
+
+/**
+ * PURO. A ação da fila para um lead só, como a Próxima venda a daria (AC-12): o horário e o ritmo
+ * contam como livres (a Ficha diz o que fazer; as travas dizem quando). `sugestao`: a do copiloto
+ * para a conversa de agora, a mesma que a Próxima venda usa, para a frase dos dois lugares ser uma.
+ */
+export function acaoDoLead(
+  visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | undefined, leadId: string, agora: number, sugestao?: SugestaoDeVenda,
+): AcaoDeVenda | null {
+  const ctx: ContextoDaVenda = { primeiroLiberado: true, agora, soDoLead: leadId }
+  if (sugestao) ctx.sugestoes = new Map([[leadId, sugestao]])
+  return filaDeVenda(visao, ctx)[0] ?? null
+}
+
+const DIAS_DA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+/** "2026-10-12" → "seg 12/10"; um instante ISO vira o dia dele em São Paulo. */
+export function diaCurto(valor?: string): string {
+  if (!valor) return ''
+  const dia = /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : Number.isFinite(Date.parse(valor)) ? diaDeSP(Date.parse(valor)) : ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia)
+  if (!m) return ''
+  return `${DIAS_DA_SEMANA[new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()]} ${m[3]}/${m[2]}`
+}
+
+export interface AgoraDaFicha {
+  /** A frase única: a da ação da fila (fraseDaAcao), ou o porquê de não haver nada a fazer. */
+  frase: string
+  /** Como fazer (a tática da fila); ausente sem ação. */
+  como?: string
+  /** A frase já diz o próximo passo salvo: a Ficha não o repete embaixo. */
+  citaOProximo: boolean
+}
+
+const minuscula = (t: string) => t.charAt(0).toLowerCase() + t.slice(1)
+
+/**
+ * PURO. O "Agora" da Ficha (AC-12): com ação na fila, a frase dela (a mesma do cartão da Próxima
+ * venda); sem ação, dizer claramente que não há nada a fazer e por quê, em vez de inventar um passo.
+ * Eram três "agoras" (copiloto, fila e jornada) e uma linha "Na jornada: …" com uma quarta redação.
+ */
+export function agoraDaFicha(lead: CrmLead, acao: Pick<AcaoDeVenda, 'titulo' | 'tatica'> | null): AgoraDaFicha {
+  if (acao) return { frase: acao.titulo, como: acao.tatica, citaOProximo: false }
+  if (lead.etapa === 'ganho') return { frase: 'Fechado: nada a vender agora. É entregar e começar a mensalidade.', citaOProximo: false }
+  if (lead.etapa === 'perdido') return { frase: 'Fora do funil: nada a mandar, a não ser que ele volte a escrever.', citaOProximo: false }
+  const salvo = lead.proximoPasso
+  if (salvo?.texto) {
+    const quando = diaCurto(salvo.data)
+    return { frase: `Nada para fazer com ele agora; o próximo passo salvo é “${salvo.texto}”${quando ? `, para ${quando}` : ''}.`, citaOProximo: true }
+  }
+  if (lead.etapa === 'contato' || lead.etapa === 'proposta') {
+    // A última coisa que saiu daqui: dali conta a espera.
+    const nossas = [lead.conversa?.ultimaSaida, lead.marcos.followupEnviado, lead.marcos.segundaEnviada, lead.proposta?.em, lead.marcos.enviado]
+      .map((v) => Date.parse(v ?? '')).filter(Number.isFinite)
+    if (nossas.length) return { frase: `Esperando a resposta dele desde ${diaCurto(new Date(Math.max(...nossas)).toISOString())}.`, citaOProximo: false }
+  }
+  // Novo lead: a vez é do robô, ou a primeira mensagem ainda não entrou na Hoje (o Plus passa de 10).
+  return { frase: `Nada para fazer com ele agora: ${minuscula(proximoDaJornada(lead).acao)}.`, citaOProximo: false }
+}
+
+/** Os registros de desfecho da aba CRM (os de ganho e dispensar são de 17/10/2026, AC-08 e AC-10). */
+export type RegistroDeDesfecho =
+  | 'ganhou' | 'ganhou_desfeito' | 'recusou' | 'recusou_desfeito' | 'sem_contato' | 'sem_contato_desfeito'
+  | 'proposta' | 'proposta_desfeita' | 'dispensado_desfeito'
+
+export interface DesfechoMarcado {
+  id: 'ganhou' | 'ganho' | 'recusou' | 'sem-contato' | 'dispensado' | 'perdido' | 'proposta'
+  /** O estado, em palavra (RULES 3). */
+  texto: string
+  /** O desfazer certo; ausente quando o desfecho veio de fora (planilha, página do n8n). */
+  desfazer?: { tipo: RegistroDeDesfecho; rotulo: string }
+}
+
+export interface DesfechosDoLead {
+  marcados: DesfechoMarcado[]
+  /** Os três toques da faixa "Desfecho". */
+  ganhar: boolean
+  perder: boolean
+  proposta: boolean
+}
+
+/**
+ * PURO. O que a faixa "Desfecho" da Ficha mostra (AC-08): o desfecho marcado com o desfazer dele, e os
+ * toques que ainda cabem. Vale para todas as ofertas, o Plus inclusive (o ganho e a perda são registros
+ * da aba CRM, não colunas de planilha). Perdido pelo prazo (7 dias sem mensagem) não teve desfecho:
+ * ainda cabe ganhar e marcar a proposta, que o trazem de volta; perder de novo não faz sentido.
+ */
+export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'perdaManual' | 'ganhoManual' | 'proposta'>): DesfechosDoLead {
+  const aberto = lead.etapa !== 'ganho' && lead.etapa !== 'perdido'
+  const peloPrazo = lead.etapa === 'perdido' && !lead.perdaManual && (lead.motivoPerda === 'expirou' || lead.motivoPerda === 'esfriou')
+  const marcados: DesfechoMarcado[] = []
+  if (lead.ganhoManual) marcados.push({ id: 'ganhou', texto: 'Fechou: o ganho foi marcado na Central.', desfazer: { tipo: 'ganhou_desfeito', rotulo: 'Desfazer o ganho' } })
+  else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Fechou, pela planilha. Para desfazer, use a página do lead no n8n.' })
+  if (lead.perdaManual === 'recusou') marcados.push({ id: 'recusou', texto: 'Perdeu: ele disse não.', desfazer: { tipo: 'recusou_desfeito', rotulo: 'Desfazer a recusa' } })
+  else if (lead.perdaManual === 'sem-contato') marcados.push({ id: 'sem-contato', texto: 'Perdeu: sem contato fácil.', desfazer: { tipo: 'sem_contato_desfeito', rotulo: 'Desfazer a perda' } })
+  else if (lead.perdaManual === 'dispensado') marcados.push({ id: 'dispensado', texto: 'Dispensado na Triagem.', desfazer: { tipo: 'dispensado_desfeito', rotulo: 'Desfazer o dispensar' } })
+  else if (lead.etapa === 'perdido' && !peloPrazo) marcados.push({ id: 'perdido', texto: 'Perdido, pela planilha. Para desfazer, use a página do lead no n8n.' })
+  if (lead.etapa === 'proposta') {
+    const quando = diaCurto(lead.proposta?.data || lead.proposta?.em)
+    marcados.push({ id: 'proposta', texto: `Proposta enviada${quando ? ` ${quando}` : ''}.`, desfazer: { tipo: 'proposta_desfeita', rotulo: 'Desfazer a proposta' } })
+  }
+  return {
+    marcados,
+    ganhar: aberto || peloPrazo,
+    perder: aberto,
+    proposta: (aberto && lead.etapa !== 'proposta') || peloPrazo,
+  }
+}
+
+/**
+ * Os sinais de "já falou com a gente" (espelho de SINAIS_DE_CONVERSA em server/crm.ts): o servidor
+ * recusa a 2ª mensagem fora deles e o follow-up dentro deles, e um botão que sempre erra é pior que nenhum.
+ */
+const SINAIS_DE_CONVERSA: ReadonlySet<CrmLead['sinal']> = new Set(['respondeu', 'em-conversa', 'respondeu-prumo', 'diagnostico'])
+
+/**
+ * PURO. Os envios que a Ficha deixa anotar à mão em "Anotar" (AC-09): a 2ª mensagem e o follow-up
+ * quando o lead está no passo deles, ou quando a anotação do toque falhou (o "anote à mão" aponta para
+ * cá). Só os que o servidor aceitaria (conferirEnvio): lead aberto, Em contato, em conversa ou não.
+ */
+export function anotacoesAMao(
+  lead: Pick<CrmLead, 'etapa' | 'sinal' | 'links' | 'marcos' | 'resposta' | 'followupHoje'>, comFalha: boolean,
+): Array<'segunda_enviada' | 'followup_enviado'> {
+  if (lead.etapa !== 'contato') return []
+  const emConversa = SINAIS_DE_CONVERSA.has(lead.sinal)
+  if (emConversa) {
+    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || lead.resposta?.tipo === 'interesse')
+    return noPasso || comFalha ? ['segunda_enviada'] : []
+  }
+  return lead.followupHoje || Boolean(lead.links.followup) || comFalha ? ['followup_enviado'] : []
 }
 
 // ---------------------------------------------------------------- expediente de venda

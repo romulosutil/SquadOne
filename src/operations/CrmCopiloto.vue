@@ -144,7 +144,8 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
         <template v-if="sugestao.sugestao.momento">
           <h4 class="crm-ficha__rotulo">Quem está respondendo</h4>
           <p class="crm-colinha__dica"><strong>{{ QUEM[sugestao.sugestao.momento.quem] }}.</strong> {{ sugestao.sugestao.momento.leitura }}</p>
-          <p v-if="sugestao.sugestao.momento.passo" class="crm-colinha__dica"><strong>Agora:</strong> {{ sugestao.sugestao.momento.passo }}</p>
+          <!-- "Passo sugerido", não "Agora" (AC-12): o "Agora" da Ficha é um só, o da fila. -->
+          <p v-if="sugestao.sugestao.momento.passo" class="crm-colinha__dica"><strong>Passo sugerido:</strong> {{ sugestao.sugestao.momento.passo }}</p>
         </template>
         <h4 class="crm-ficha__rotulo">Próxima mensagem</h4>
         <blockquote ref="mensagemEl" class="crm-colinha__texto">{{ sugestao.sugestao.mensagem }}</blockquote>
