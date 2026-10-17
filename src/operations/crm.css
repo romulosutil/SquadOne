@@ -494,11 +494,6 @@ div.crm-resultados__total { display: grid; gap: var(--esp-2); }
 .crm-jornada__passos li.is-agora { font-weight: var(--peso-forte); }
 .crm-jornada__passos li:is(.is-depois, .is-sem-registro) { color: var(--texto-2); }
 
-/* Sugestão do copiloto (CrmCopiloto.vue): dobrada, partes separadas por espaço, sem caixa. */
-.crm-copiloto[open] { display: grid; gap: var(--esp-3); }
-.crm-copiloto .crm-tag { margin-left: var(--esp-1); }
-.crm-copiloto__parte { display: grid; gap: var(--esp-2); }
-
 /* Anúncio da Ficha (anotações desta tela): vazio, sai do fluxo sem sair da árvore de acessibilidade,
    para a região aria-live continuar existindo; antes deixava um vão de 1rem abaixo da faixa fixa. */
 .crm-ficha__anuncio:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }

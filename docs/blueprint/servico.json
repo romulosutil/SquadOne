@@ -232,7 +232,7 @@
 
         { "id": "PRUMO-5-E1", "passo": "PRUMO-5", "faixa": "E", "nome": "Proposta sob medida", "quem": "cliente", "resumo": "Fonte e serviços \"sob proposta\" para o cliente." },
         { "id": "PRUMO-5-C1", "passo": "PRUMO-5", "faixa": "C", "nome": "Contrata ou adia", "quem": "cliente", "resumo": "Fecha a Fonte, um serviço avulso ou nada por enquanto." },
-        { "id": "PRUMO-5-P1", "passo": "PRUMO-5", "faixa": "P", "nome": "Proposta pelo copiloto", "quem": "você", "resumo": "Rascunho com os preços do cardápio; \"Mandar a proposta\" abre o WhatsApp com ele e marca a proposta.", "arquivos": ["src/operations/CrmCopiloto.vue","server/copiloto.ts","src/operations/mandar-proposta.ts"], "seguranca": ["O modelo escolhe itens; os preços vêm do cardápio, nunca dele"] },
+        { "id": "PRUMO-5-P1", "passo": "PRUMO-5", "faixa": "P", "nome": "Proposta pelo copiloto", "quem": "você", "resumo": "Rascunho com os preços do cardápio: no cartão do Assistente (\"Perguntar sobre este lead\", desde 17/10/2026) e no \"Mandar a proposta\", que abre o WhatsApp com ele e marca a proposta.", "arquivos": ["src/casca/AssistenteSugestao.vue","server/copiloto.ts","src/operations/mandar-proposta.ts"], "seguranca": ["O modelo escolhe itens; os preços vêm do cardápio, nunca dele", "O cartão do Assistente só leva a referência; o preço nunca passa pelo Gemini nem pelo histórico dele (RULES 28)"] },
         { "id": "PRUMO-5-B1", "passo": "PRUMO-5", "faixa": "B", "nome": "Etapa na planilha, recusa na Central", "quem": "você", "resumo": "A Etapa do PRUMO é da planilha; a recusa já se marca na Central em um toque (registro recusou).", "arquivos": ["server/crm.ts"] }
       ],
       "ligacoes": [

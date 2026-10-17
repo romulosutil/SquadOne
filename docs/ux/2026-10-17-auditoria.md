@@ -61,7 +61,9 @@ sem Dispensar, Telegram e Central fora de sincronia).
 ## O que fica para as próximas ondas
 
 - Onda 4 (Assistente): RULES 28 e a exceção da 20 aprovadas, MVP construído e ligado na Mel em 17/10/2026 (AC-31).
-  Fase 2: absorver o copiloto da Ficha, o cartão de gasto falado (a RULES 28 pede; o MVP só responde "isso fica em
-  Finanças"), abrir o painel de dentro da Ficha no celular; fase 3: Jev medindo a intenção em sombra e o /a no Telegram.
+  Fase 2 **feita em 17/10/2026**: o copiloto da Ficha absorvido pelo painel (cartão "Sugestão do copiloto" só com a
+  referência do lead; `CrmCopiloto.vue` saiu), o cartão de gasto falado (a RULES 28 pedia; grava por
+  `POST /api/financas/gasto`, sem o valor passar pelo Assistente) e o "Perguntar sobre este lead" abrindo o painel de
+  dentro da Ficha, também no celular. Pendente, fase 3: Jev medindo a intenção em sombra e o /a no Telegram.
 - O nome das contas no selo de Finanças: o selo já mostra o nome de cada conexão, mas o servidor ainda não
   manda as contas por conexão (`server/financas/resumo.ts` mandar `contas` em cada uma).

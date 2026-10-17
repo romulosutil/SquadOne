@@ -4,6 +4,7 @@ import path from "node:path";
 import { FunctionCallingConfigMode, type Content, type FunctionCall, type GenerateContentParameters, type GoogleGenAI, type Part } from "@google/genai";
 import {
   acharLead,
+  cartaoDaSugestao,
   DIAS_DO_HISTORICO,
   fontesDaResposta,
   historicoParaOPrompt,
@@ -34,7 +35,9 @@ import type {
 } from "../src/operations/assistente-contrato.ts";
 import { passoAtual, passoDaJornada } from "../src/operations/jornada.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
-import { CONSULTAR_HERMES, consultarOHermes, declaracoesDoAssistente, LEITURAS, LeiturasDaMensagem, type FontesDoAssistente, type ResultadoDoHermes } from "./assistente-ferramentas.ts";
+import {
+  CONSULTAR_HERMES, consultarOHermes, declaracoesDoAssistente, LEITURAS, LeiturasDaMensagem, type FontesDoAssistente, type ResultadoDoHermes,
+} from "./assistente-ferramentas.ts";
 import { TETO_DIA_DO_HERMES, type ConsultaAoHermes } from "./hermes-consulta.ts";
 import { FUSO } from "./alocador.ts";
 import { arquivoDoMes, diaLocal, type Logger } from "./luna-sombra.ts";
@@ -482,9 +485,10 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
         const l = v ? acharLead(v.leads, contexto.lead.produto, contexto.lead.id) : undefined;
         if (l) lead = { produto: l.produto, id: l.id, empresa: l.empresa, etapa: l.subEtapa || l.etapa, passo: passoDaJornada(passoAtual(l)).nome };
       }
-      const systemInstruction = promptDoRoteador({ pagina: contexto.pagina, lead, agoraLocal: agoraLegivel(agora()), hermes: hermes !== null });
+      const copiloto = deps.fontes.sugestao !== undefined;
+      const systemInstruction = promptDoRoteador({ pagina: contexto.pagina, lead, agoraLocal: agoraLegivel(agora()), hermes: hermes !== null, copiloto });
       const contents: Content[] = [...historicoParaOPrompt(anteriores), { role: "user", parts: [{ text: textoDoRomulo }] }];
-      const functionDeclarations = declaracoesDoAssistente({ hermes: hermes !== null });
+      const functionDeclarations = declaracoesDoAssistente({ hermes: hermes !== null, copiloto });
 
       for (let rodada = 1; rodada <= MAX_RODADAS; rodada++) {
         desistiu();
@@ -542,7 +546,15 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
             }
           } else if ((LEITURAS as readonly string[]).includes(nome)) {
             etapa("lendo");
+            const lidasAntes = leituras.sugestoes.length;
             saida = await leituras.executar(nome, args);
+            // A sugestão do copiloto achada vira cartão aqui, pela cola (fase 2): nunca por chamada do
+            // modelo, e só com a referência (o painel relê a sugestão e põe o preço do cardápio).
+            for (const ref of leituras.sugestoes.slice(lidasAntes)) {
+              const cartao = cartaoDaSugestao(ref, propostos, novoId(), MAX_CARTOES_POR_RESPOSTA);
+              if (cartao) propostos.push(cartao);
+              else saida = { ...saida, cartao: "Sem cartão novo para esta sugestão (já há um, ou a resposta já tem o máximo de cartões)." };
+            }
           } else {
             saida = { erro: "Ferramenta desconhecida." };
           }

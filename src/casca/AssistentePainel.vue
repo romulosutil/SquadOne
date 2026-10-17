@@ -18,6 +18,7 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, Teleport, watch } from 'vue'
 import Sheet from '../components/Sheet.vue'
 import AssistenteCartao from './AssistenteCartao.vue'
+import AssistenteGasto from './AssistenteGasto.vue'
 import { useDitado } from './ditado'
 import { pilhaDeFolhas } from './pilhaDeFolhas'
 import {
@@ -27,6 +28,7 @@ import {
   copiarTexto,
   enterEnvia,
   horaCurta,
+  linhaDoTempo,
   rotuloDoCerebro,
   textoDaEtapa,
   textoDaFalha,
@@ -104,7 +106,9 @@ const ditado = useDitado((t) => {
 
 const desligado = computed(() => as.estado.value?.ligado === false || as.erroDoEstado.value?.tipo === 'desligado')
 const ocupado = computed(() => !!as.enviando.value || !!as.pendente.value)
-const vazia = computed(() => !as.mensagens.value.length && !as.enviando.value)
+const vazia = computed(() => !as.mensagens.value.length && !as.enviando.value && !as.gastos.value.length)
+// As mensagens do servidor e os cartões de gasto desta aba (que nunca vão ao servidor), numa ordem só.
+const itens = computed(() => linhaDoTempo(as.mensagens.value, as.gastos.value))
 const enviandoNaLista = computed(() => {
   const e = as.enviando.value
   return e && !(e.id && as.mensagens.value.some((m) => m.id === e.id)) ? e : null
@@ -167,7 +171,7 @@ async function copiarResposta(id: string, t: string) {
 
 // Rola até o fim quando chega mensagem, a etapa muda ou uma pergunta sai.
 watch(
-  () => [as.mensagens.value.length, as.pendente.value?.etapa, !!as.enviando.value],
+  () => [as.mensagens.value.length, as.gastos.value.length, as.pendente.value?.etapa, !!as.enviando.value],
   async () => {
     await nextTick()
     const reduzir = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -261,12 +265,26 @@ onBeforeUnmount(() => {
         </ul>
       </section>
       <p v-else-if="vazia && !desligado && contexto.pagina === 'financas'" class="texto-2 texto-pequeno">
-        Finanças não passam pelo Assistente: o que for de dinheiro fica na tela de Finanças.
+        Finanças não passam pelo Assistente: o que for de dinheiro fica na tela de Finanças. Para anotar um gasto, escreva
+        “gastei 30 no mercado”: vira um cartão por regra fixa, sem modelo, e só grava no seu toque.
       </p>
 
       <ol v-if="!vazia" class="assistente-conversa" aria-label="Conversa">
+        <template v-for="item in itens" :key="item.chave">
+        <!-- O gasto falado: a frase dele e o cartão, os dois só nesta aba. -->
+        <template v-if="item.tipo === 'gasto'">
+          <li class="assistente-msg is-romulo">
+            <p class="assistente-msg__meta">Você · só nesta aba</p>
+            <p class="assistente-msg__texto">{{ item.gasto.texto }}</p>
+          </li>
+          <li class="assistente-msg is-assistente">
+            <p class="assistente-msg__meta">Assistente · regra fixa</p>
+            <AssistenteGasto :gasto="item.gasto" />
+          </li>
+        </template>
+        <template v-else>
         <li
-          v-for="m in as.mensagens.value"
+          v-for="m in [item.mensagem]"
           :key="m.n"
           class="assistente-msg"
           :class="m.autor === 'romulo' ? 'is-romulo' : 'is-assistente'"
@@ -307,6 +325,8 @@ onBeforeUnmount(() => {
             <p v-if="as.erroDaAvaliacao.value[m.id]" class="recado recado--atencao" role="status">{{ as.erroDaAvaliacao.value[m.id] }}</p>
           </template>
         </li>
+        </template>
+        </template>
         <li v-if="enviandoNaLista" class="assistente-msg is-romulo is-enviando">
           <p class="assistente-msg__meta">Você · enviando</p>
           <p class="assistente-msg__texto">{{ enviandoNaLista.texto }}</p>

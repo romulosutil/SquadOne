@@ -66,6 +66,8 @@ const ag = useAgentes()
 const ov = useOverview()
 
 const conversa = useAssistente()
+// A Ficha (dentro de Vendas) só oferece o "Perguntar sobre este lead" com o Assistente nesta Central.
+watch(comAssistente, (sim) => { conversa.disponivel.value = sim }, { immediate: true })
 
 // O Assistente responde mesmo sem a agenda neste processo (só não manda pedido ao time).
 const pedirIndisponivel = computed(() =>

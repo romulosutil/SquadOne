@@ -1,6 +1,6 @@
 import { Type, type FunctionDeclaration } from "@google/genai";
 import { montarDossie, type LeadDoCopiloto, type MensagemParaODossie } from "../src/operations/copiloto.ts";
-import { acharLead, mapearTextos, prepararTexto, semValores, type LeituraFeita } from "../src/operations/assistente.ts";
+import { acharLead, mapearTextos, prepararTexto, semValores, sugestaoParaOModelo, type LeituraFeita, type ReferenciaDaSugestao, type SugestaoLida } from "../src/operations/assistente.ts";
 import { passoAtual, passoDaJornada } from "../src/operations/jornada.ts";
 import { filaDeVenda } from "../src/operations/proxima-venda.ts";
 import { resumoDoDell } from "../src/operations/alertas.ts";
@@ -14,7 +14,7 @@ import type { ConsultaAoHermes } from "./hermes-consulta.ts";
 /**
  * As ferramentas do Assistente da Central (RULES 28). Dois grupos, e só dois:
  *  - LEITURA, sobre o que as telas já mostram (a visão do CRM, a fila de venda, o dossiê do copiloto,
- *    a agenda do dia, o status.json do Dell) e a consulta ao Hermes. Nenhuma escreve: nem disco, nem
+ *    a sugestão que o copiloto já guardou, a agenda do dia, o status.json do Dell) e a consulta ao Hermes. Nenhuma escreve: nem disco, nem
  *    planilha, nem Google. Tudo o que devolvem ao modelo sai mascarado e sem R$.
  *  - PROPOSTA (propor_*): não executam nada; a cola (server/assistente.ts) as lê com
  *    `lerCartaoProposto` e elas viram cartões "propostos". Quem escreve é o toque do Rômulo, pela
@@ -24,8 +24,9 @@ import type { ConsultaAoHermes } from "./hermes-consulta.ts";
 
 // --- As declarações ------------------------------------------------------------
 
+export const LER_SUGESTAO_DO_COPILOTO = "ler_sugestao_do_copiloto";
 export const LEITURAS = [
-  "ler_hoje", "ler_funil", "ler_proxima_venda", "buscar_lead", "ler_lead", "ler_agenda_do_dia", "ler_estado_do_dell",
+  "ler_hoje", "ler_funil", "ler_proxima_venda", "buscar_lead", "ler_lead", "ler_agenda_do_dia", "ler_estado_do_dell", LER_SUGESTAO_DO_COPILOTO,
 ] as const;
 export type NomeDaLeitura = (typeof LEITURAS)[number];
 export const CONSULTAR_HERMES = "consultar_hermes";
@@ -50,6 +51,17 @@ const DECLARACOES_DE_LEITURA: FunctionDeclaration[] = [
   { name: "ler_agenda_do_dia", description: "Os compromissos de hoje na agenda do Rômulo: só títulos e horários." },
   { name: "ler_estado_do_dell", description: "O estado do Dell (servidor da operação) pelo último retrato do monitor: o que precisa do Rômulo e o que resolve sozinho." },
 ];
+
+/**
+ * Fase 2 (17/10/2026): o copiloto da Ficha passou para o painel. Só LÊ a sugestão guardada para a
+ * conversa de agora (copiloto.ler), nunca gera: quem gera é o automático, que segue alimentando a
+ * Próxima venda e o Telegram. Achando, a cola cria o cartão (não o modelo).
+ */
+const DECLARACAO_DO_COPILOTO: FunctionDeclaration = {
+  name: LER_SUGESTAO_DO_COPILOTO,
+  description: "A sugestão que o copiloto já guardou para a conversa de agora com um lead (a próxima mensagem, o que oferecer, os itens da proposta sem preço). Não gera outra. Achando, vira um cartão na tela.",
+  parameters: { type: Type.OBJECT, properties: { produto: PRODUTO, id: ID }, required: ["produto", "id"] },
+};
 
 const DECLARACAO_DO_HERMES: FunctionDeclaration = {
   name: CONSULTAR_HERMES,
@@ -96,9 +108,14 @@ const DECLARACOES_DE_PROPOSTA: FunctionDeclaration[] = [
   },
 ];
 
-/** As declarações que o Gemini vê. O Hermes só entra com a consulta ligada. */
-export function declaracoesDoAssistente(opcoes: { hermes: boolean }): FunctionDeclaration[] {
-  return [...DECLARACOES_DE_LEITURA, ...(opcoes.hermes ? [DECLARACAO_DO_HERMES] : []), ...DECLARACOES_DE_PROPOSTA];
+/** As declarações que o Gemini vê. O Hermes só entra com a consulta ligada; o copiloto, com ele ligado. */
+export function declaracoesDoAssistente(opcoes: { hermes: boolean; copiloto?: boolean }): FunctionDeclaration[] {
+  return [
+    ...DECLARACOES_DE_LEITURA,
+    ...(opcoes.copiloto ? [DECLARACAO_DO_COPILOTO] : []),
+    ...(opcoes.hermes ? [DECLARACAO_DO_HERMES] : []),
+    ...DECLARACOES_DE_PROPOSTA,
+  ];
 }
 
 // --- As fontes -----------------------------------------------------------------
@@ -112,6 +129,11 @@ export interface FontesDoAssistente {
   agenda?: () => Promise<AgendaSummary>;
   /** O status.json do Dell (lerStatusDoDell). */
   dell?: () => Promise<StatusDoDell>;
+  /**
+   * A sugestão guardada do copiloto para a conversa de agora (Copiloto.ler: nunca chama o modelo);
+   * null = nenhuma. Ausente = copiloto desligado nesta Central (a leitura nem é declarada).
+   */
+  sugestao?: (lead: CrmLead) => Promise<SugestaoLida | null>;
 }
 
 /** O que voltou de uma ferramenta: o objeto que vai ao modelo como functionResponse. */
@@ -150,6 +172,8 @@ export class LeiturasDaMensagem {
   readonly lidas: Array<{ ferramenta: string; resultado: ResultadoDaLeitura }> = [];
   /** Alguma leitura do CRM ficou sem sinal (não configurado, sem retrato, erro). */
   crmSemSinal = false;
+  /** As sugestões do copiloto achadas nesta mensagem: a cola cria um cartão para cada (cartaoDaSugestao). */
+  readonly sugestoes: ReferenciaDaSugestao[] = [];
   private visaoLida: Promise<CrmVisao | null> | null = null;
 
   constructor(private readonly fontes: FontesDoAssistente, private readonly agora: () => Date, private readonly log: Pick<Console, "warn"> = console) {}
@@ -268,6 +292,35 @@ export class LeiturasDaMensagem {
         // (demo, Raio-X) também: o modelo não precisa deles para conversar, e mascarados não servem.
         const { cardapio: _cardapio, demo: _demo, raioX, ...resto } = dossie;
         return { ...resto, raioX: { situacao: raioX.situacao, ...(raioX.texto ? { texto: raioX.texto } : {}), ...(raioX.achados ? { achados: raioX.achados } : {}) } };
+      }
+      case LER_SUGESTAO_DO_COPILOTO: {
+        if (!this.fontes.sugestao) return { semSinal: true, motivo: "O copiloto está desligado nesta Central." };
+        const produto = typeof args.produto === "string" ? args.produto : "";
+        const id = typeof args.id === "string" ? args.id.trim() : "";
+        const v = await this.visao();
+        if (!v) return this.semSinalDoCrm();
+        const lead = acharLead(v.leads, produto, id);
+        if (!lead) return { erro: "Lead fora do CRM: use buscar_lead para achar o produto e o id." };
+        let s: SugestaoLida | null;
+        try {
+          s = await this.fontes.sugestao(lead);
+        } catch (error: any) {
+          // Pelo nome, sem importar as classes do copiloto: este módulo não chega a quem gera.
+          if (error?.name === "PassoSemCopiloto") return { foraDoTrecho: true, motivo: "O copiloto só acompanha do \"respondeu\" até a proposta; este lead está fora desse trecho." };
+          if (error?.name === "LeadForaDoCrm") return { erro: "Lead fora do CRM agora." };
+          throw error;
+        }
+        if (!s) {
+          return { nenhuma: true, motivo: "O copiloto não tem sugestão guardada para a conversa de agora (ele sugere sozinho quando a última mensagem é do lead)." };
+        }
+        // A saída primeiro: um registro antigo e torto que fizesse ela lançar não pode deixar cartão e
+        // fonte de uma leitura que o modelo recebeu como falha.
+        const saida = sugestaoParaOModelo(s);
+        this.anotar({ tipo: "copiloto", quando: s.quando });
+        if (!this.sugestoes.some((r) => r.produto === lead.produto && r.id === lead.id)) {
+          this.sugestoes.push({ produto: lead.produto, id: lead.id, empresa: lead.empresa, hashDoDossie: s.hashDoDossie });
+        }
+        return saida;
       }
       case "ler_agenda_do_dia": {
         if (!this.fontes.agenda) return { semSinal: true, motivo: "A agenda não mora nesta Central." };

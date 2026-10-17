@@ -77,9 +77,11 @@ vezes" —, `resumo` (e os nomes das contas de cada conexão para o selo de saú
 em tabela: corrente antes de cartão, nome repetido uma vez, a manual fora, nenhum valor),
 `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
 e o "Explicar este mês": sem a flag 404, hash errado 409, o dublê do Gemini recebe o
-texto da prévia, `ModeloOcupado` 503, o `/visao` com as contas de cada conexão — com um
-SQLite num diretório temporário),
-`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, `explicacao`
+texto da prévia, `ModeloOcupado` 503, o `/visao` com as contas de cada conexão; desde 17/10/2026, o
+`POST /gasto` do cartão do Assistente: mesma origem exigida, grava na conta manual, o mesmo cartão tocado de novo não
+duplica, 400 para frase que não é gasto — com um SQLite num diretório temporário),
+`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado` (e, desde 17/10/2026, `lerPedidoDeGasto` em tabela: texto até
+300, origem fora do formato recusada, a chave `painel:<id>`), `extrato`, `explicacao`
 (o pacote padrão sem R$ nem estabelecimento, o que cada toggle acrescenta, o hash),
 e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `server/telegram-gasto.test.ts`,
@@ -95,17 +97,20 @@ coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dia
 os do Assistente da Central (17/10/2026, RULES 28): `server/assistente.test.ts` (finanças sem modelo e sem o texto no JSONL,
 máscara no prompt e no arquivo, cartão proposto sem escrita, teto da tentativa e das respostas por regra, corrida de dois POSTs, o
 Hermes que falha ou responde e que NUNCA volta ao Gemini no histórico (também depois de reiniciar), releitura, poda por data de linha,
-prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita), `server/assistente-ponta.test.ts` (de ponta a ponta com
+prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita; desde a fase 2, 17/10/2026, a leitura do copiloto:
+o cartão `sugestao_do_copiloto` leva só a referência, nem R$ nem o texto da sugestão no JSONL, sem copiloto a leitura nem é declarada,
+um cartão por lead), `server/assistente-ponta.test.ts` (de ponta a ponta com
 as funções reais do painel: Ficha → buscar_lead/ler_lead → cartão de anotação aceito pelo validarRegistro; id inteiro ou só a chave;
 tela de Finanças sem leitura nem modelo; os desvios 400 pendente e 404), `src/operations-assistente.test.ts` (rotearLocal, prepararTexto,
 promptDoRoteador sem telefone/R$/trabalhador, lerCartaoProposto em tabela, valor com cara de preço recusado nos três cartões, fontes,
-histórico com a marca do Hermes, poda), `server/hermes-consulta.test.ts` (Hermes consultado: prompt marca o pacote como dado; saída sem
+histórico com a marca do Hermes, poda; fase 2: `sugestaoParaOModelo` sem preço e `cartaoDaSugestao`), `server/hermes-consulta.test.ts` (Hermes consultado: prompt marca o pacote como dado; saída sem
 ANSI, código, JSON de ação nem R$; sessões da pasta apagadas antes e depois; ambiente sem SQUADONE_/GEMINI; timeout, ocupado, teto em
 arquivo 600; pasta não vazia falha fechada; diretório temporário, nunca o HOME real), `server/financas/parece-financas.test.ts` (a régua
 única de "parece finanças": 51 casos que barram, inclusive plurais, BRL/US$/R＄, aluguel, conta de luz, banco, "1.200 do aluguel", e 22 que
 passam, como "o que devo responder?" e "mil desculpas") e `src/casca/assistente.test.ts` (o painel: contexto do endereço, atalhos por
 página sem Finanças, junção pelo `n`, etapas e falhas, erro HTTP → falha, chave do registro, o cartão com a oferta e o aviso de outro lead,
-polling com relógio e visibilidade falsos),
+polling com relógio e visibilidade falsos; fase 2: `gastoDoTexto`, `textoDoValor` e `linhaDoTempo`, que intercala os gastos da aba
+com as mensagens do servidor),
 `server/crm-desfecho.test.ts` (17/10/2026, AC-08 e AC-10: ganho e dispensa marcados na Central nas cinco ofertas, com desfazer e
 ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `prioridadeDaTriagem`, `notaDoGoogle` e
 `taxasDeRespostaPorNicho` em tabela),

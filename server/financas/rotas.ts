@@ -20,11 +20,12 @@ import {
   recorrentesAte,
   renomesDepois,
 } from "./organizacao.ts";
+import { lerPedidoDeGasto, textoDoGastoAnotado } from "./gasto-falado.ts";
 import { linhasDoPdf } from "./pdf-texto.ts";
 import { criarClienteDaPluggy, lerConfigDaPluggy, PluggyMalConfigurado } from "./pluggy.ts";
 import { contextoDas } from "./processar.ts";
 import { CONTA_MANUAL } from "./resumo.ts";
-import { categoriasDoBanco, criarAvisador, depoisDeEscrever, hojeEm, horaEm, resumoDoBanco, type Avisador } from "./servico.ts";
+import { anotarGasto, categoriasDoBanco, criarAvisador, depoisDeEscrever, hojeEm, horaEm, resumoDoBanco, type Avisador } from "./servico.ts";
 import { criarSincronizador, leituraDiariaDevida, reprocessar, type Sincronizador } from "./sync.ts";
 import { NATUREZAS, type Natureza } from "./tipos.ts";
 import { gastoNaVisao, mesDaFatura, type Visao } from "./visoes.ts";
@@ -342,6 +343,25 @@ export function criarRotasDeFinancas(estado: EstadoDasFinancas, opcoes: OpcoesDa
         .sort((a, b) => a.estabelecimento.localeCompare(b.estabelecimento, "pt-BR")),
       ...situacao(),
     });
+  });
+
+  // O cartão de gasto falado do Assistente (fase 2 da RULES 28, 17/10/2026): "gastei 30 no mercado"
+  // vira cartão no painel por regra fixa e só grava aqui, no toque, com a guarda de mesma origem e a de
+  // identidade das finanças (as do router inteiro). O texto é relido pela regra do Telegram
+  // (lerGastoFalado) e vai para a conta manual (anotarGasto), como "gastei" pelo bot. A resposta é a da
+  // tela do app; o log fica só com "anotado"/"repetido", sem valor nem lugar (RULES 24).
+  router.post("/gasto", (req, res) => {
+    const pedido = lerPedidoDeGasto(req.body);
+    if (pedido.ok === false) return void res.status(400).json({ error: pedido.erro });
+    try {
+      const r = anotarGasto(banco(), pedido.gasto, pedido.origem, agora());
+      if (r.novo) depoisDeEscrever(banco(), estado.avisador);
+      console.log(`[financas] gasto ${r.novo ? "anotado" : "repetido (já estava)"} pelo painel do Assistente.`);
+      res.json({ ok: true, categoria: r.categoria, novo: r.novo, texto: textoDoGastoAnotado(r.categoria) });
+    } catch (erro) {
+      console.error(`[financas] falha ao anotar o gasto do painel (${(erro as Error)?.name ?? "erro"})`);
+      res.status(500).json({ error: "Não foi possível anotar agora." });
+    }
   });
 
   router.post("/categorias", (req, res) => {

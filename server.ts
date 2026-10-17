@@ -424,6 +424,9 @@ async function startServer() {
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
         agenda: readAgenda,
         dell: () => lerStatusDoDell(operationsDataDir),
+        // Fase 2 (17/10/2026): a sugestão guardada do copiloto, só LIDA (copiloto.ler nunca chama o
+        // modelo). Sem copiloto ligado, a leitura nem é declarada ao Gemini.
+        ...(copiloto ? { sugestao: (lead) => copiloto.ler(lead.produto, lead.id) } : {}),
       },
     });
     // Uma instância só para a rota e o vendedor: as escritas no arquivo do dia ficam em fila.

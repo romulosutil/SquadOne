@@ -6,7 +6,7 @@
 //
 // PURO (sem Vue, sem fetch, sem node:*), como jornada.ts: o dossiê, o prompt, a leitura da
 // saída do modelo e o rascunho da proposta. A cola (provedor, teto/dia, JSONL) é do servidor,
-// em server/copiloto.ts; a Ficha (CrmCopiloto.vue) importa daqui os tipos e o rascunho.
+// em server/copiloto.ts; o cartão do Assistente (casca/AssistenteSugestao.vue) importa daqui os tipos e o rascunho.
 //
 // Por que os preços não vêm do modelo: o modelo escolhe os ITENS do cardápio; nome, entrega e
 // preço saem de colinha.ts. E a mensagem que leva um "R$" fora dos preços abertos (Encontrado,

@@ -114,7 +114,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
     organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
     explicacao (PURO): o texto exato do "Explicar este mês", o hash da prévia e o prompt fixo; só sai a pedido (SQUADONE_FINANCAS_IA)
-    pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
+    pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas;
+                          POST /gasto, 17/10/2026: o cartão de gasto do Assistente, relido por lerPedidoDeGasto, chave painel:<id>)
     servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
 src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
@@ -203,7 +204,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           (150 envios sem letra e os do hash) e o follow-up do 05 · Acompanhamento ficam fora
     copiloto.ts           PURO (15/10/2026): dossiê do lead do "respondeu" à proposta (jornada, colinha, Raio-X, notas; sem telefone),
                           prompt, leitura da saída (id só do cardápio, "R$" só dos preços abertos, número fora do dossiê = aviso)
-                          e o rascunho da proposta com preço do cardápio; CrmCopiloto.vue na Ficha só copia, nunca envia
+                          e o rascunho da proposta com preço do cardápio; desde 17/10/2026 a sugestão aparece no cartão do
+                          Assistente (casca/AssistenteSugestao.vue), que só copia, nunca envia; a Ficha só lê a guardada
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,
                           cardápio na hierarquia de 09/10/2026: ver → arrumar → manter, Raio-X e Mapa grátis, Fonte só depois do Mapa);
                           colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha
@@ -313,7 +315,7 @@ máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **de
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
-na Ficha a próxima mensagem e a proposta, nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
+a próxima mensagem e a proposta (desde 17/10/2026 no cartão do Assistente, não mais numa aba da Ficha), nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
 O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia e LIGADO
 na Mel às 13:40 de 17/10/2026, depois de ele ver funcionando numa instância-sombra: SQUADONE_ASSISTENTE=true e
 SQUADONE_ASSISTENTE_HERMES=true no operations.env, cópia anterior em operations.env.antes-do-assistente-20261017): server/assistente.ts (cola: fila serial, tetos, prazo de 4 min, JSONL 600),
@@ -323,6 +325,11 @@ assistente.ts (o painel); contrato em src/operations/assistente-contrato.ts. Cha
 substitui o Pedir no `operations`; Gemini roteia com leitura, o Hermes é consultado sem ferramentas (`hermes -z -t clarify`,
 contexto mascarado pela Central, sem sessão guardada), o Jev só mede; só propõe cartões, nada a lead, finanças e R$ de
 proposta fora de modelo; `SQUADONE_ASSISTENTE` e `SQUADONE_ASSISTENTE_HERMES` nascem desligadas.
+Fase 2 (17/10/2026): o copiloto entra no painel (leitura `ler_sugestao_do_copiloto`, que nunca gera; o cartão
+`sugestao_do_copiloto` leva só a referência do lead e o hash, e AssistenteSugestao.vue relê a sugestão com o preço do
+cardápio), "Perguntar sobre este lead" na Ficha abre o painel (no celular, folha por cima da Ficha), e o gasto falado vira
+cartão na aba por regra fixa, sem ir ao servidor do Assistente (AssistenteGasto.vue, grava por POST /api/financas/gasto).
+Fase 3 pendente: Jev medindo a intenção em sombra e o /a no Telegram.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o

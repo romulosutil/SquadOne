@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CrmCopiloto from './CrmCopiloto.vue'
 import CrmJornada from './CrmJornada.vue'
 import { copilotoServe, type SugestaoDoCopiloto } from './copiloto'
 import { cabeProposta, gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
@@ -17,6 +16,7 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
+import { useAssistente } from '../casca/assistente'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
 // desfecho: ganhou, perdeu, proposta, com o desfazer de cada um; no Plus o envio e a resposta) e
@@ -35,7 +35,7 @@ import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
 // salvo (que se edita ali mesmo), a ação e os avisos; o resto é seção separada por título e linha,
 // nunca caixa dentro de caixa, e o que é consulta fica dobrado.
 // A ordem de decisão (17/10/2026, AC-14): cabeça e etapa › Agora e o primário › Desfecho › Conversa ›
-// Como vender (abre em "O que oferecer"; o Copiloto está em teste e só abre se escolhido) › Anotar ›
+// Como vender (abre em "O que oferecer"; o "Perguntar sobre este lead" abre o Assistente) › Anotar ›
 // consulta (jornada, sobre o lead, linha do tempo).
 const props = defineProps<{
   lead: CrmLead
@@ -55,9 +55,15 @@ const emit = defineEmits<{
 }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
-// Copiloto (fase 1, em sombra): só pede sugestão e conta as cópias; não escreve na planilha.
+// Copiloto: a Ficha só LÊ a sugestão guardada (para a proposta e o "Agora"). A aba Copiloto saiu em
+// 17/10/2026 (fase 2 da RULES 28): a sugestão mora no painel do Assistente, num cartão com o preço do
+// cardápio, e o automático segue alimentando a Próxima venda e o Telegram.
 const comCopiloto = ref(false)
 copilotoLigado().then((ligado) => { comCopiloto.value = ligado })
+// O Assistente (RULES 28), quando existe nesta Central. No celular o ＋ da barra fica inerte com a
+// folha da Ficha aberta: este botão abre o painel por cima dela, com o lead do endereço como contexto.
+const assistente = useAssistente()
+const perguntarSobreOLead = () => assistente.abrir()
 const nota = ref('')
 const proximoTexto = ref('')
 const proximoData = ref('')
@@ -135,10 +141,6 @@ async function lerSugestaoGuardada() {
 }
 watch([comCopiloto, () => props.lead.id, cabe], () => { void lerSugestaoGuardada() }, { immediate: true })
 const proposta = computed(() => (cabe.value ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
-function aoTerSugestao(s: SugestaoDoCopiloto | null) {
-  lida.value = s
-  if (cabe.value) sugestaoGuardada.value = s
-}
 /**
  * A sugestão como a Próxima venda a recebe (/copiloto/prontas): só no trecho em que o copiloto serve
  * e com a última mensagem dele (conversaDaVez em server/copiloto.ts). Sem esse filtro, a Ficha diria
@@ -291,14 +293,13 @@ const contagemDasOutras = computed(() => outrasOfertas.value.reduce((n, g) => n 
 // com os textos já preenchidos com o nome, o artigo e o link do demo dele.
 const colinha = computed(() => colinhaDoLead(props.lead))
 
-// "Como vender" abre sempre em "O que oferecer" (AC-14, 17/10/2026). Abria no Copiloto quando ele
-// servia, e o Copiloto está em teste: a sugestão dele é texto para conferir, não o passo da tela.
-type AbaDeVenda = 'oferta' | 'roteiro' | 'copiloto'
-const ABAS_DE_VENDA = computed<Array<{ id: AbaDeVenda; rotulo: string }>>(() => [
+// "Como vender" abre sempre em "O que oferecer" (AC-14, 17/10/2026). A aba Copiloto saiu (fase 2 da
+// RULES 28): a sugestão dele vem pelo Assistente, no "Perguntar sobre este lead".
+type AbaDeVenda = 'oferta' | 'roteiro'
+const ABAS_DE_VENDA: Array<{ id: AbaDeVenda; rotulo: string }> = [
   { id: 'oferta', rotulo: 'O que oferecer' },
   { id: 'roteiro', rotulo: 'Roteiro' },
-  ...(comCopiloto.value && copilotoServe(props.lead) ? [{ id: 'copiloto' as const, rotulo: 'Copiloto' }] : []),
-])
+]
 const abaInicial = (): AbaDeVenda => 'oferta'
 const abaDeVenda = ref<AbaDeVenda>(abaInicial())
 
@@ -640,8 +641,8 @@ function irParaAnotar() {
       </template>
     </section>
 
-    <!-- Como vender (16/10/2026): oferta, roteiro e copiloto eram três blocos seguidos; viraram
-         uma seção com três abas, abrindo na que o momento pede. -->
+    <!-- Como vender (16/10/2026): oferta e roteiro numa seção com abas; o copiloto, que era a terceira,
+         foi para o Assistente em 17/10/2026 (o botão logo abaixo). -->
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-vender">
       <h3 id="crm-ficha-vender">Como vender</h3>
       <div class="segmentado" role="group" aria-label="Como vender este lead">
@@ -676,8 +677,12 @@ function irParaAnotar() {
       <a class="crm-colinha__inteira" href="/mais?abrir=roteiro" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
     </template>
 
-    <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
-    <CrmCopiloto v-else-if="abaDeVenda === 'copiloto'" :lead="lead" @sugestao="aoTerSugestao" />
+    <!-- Fase 2 da RULES 28 (17/10/2026): no lugar da aba Copiloto. Abre o Assistente com este lead como
+         contexto (o `?lead=` do endereço); a sugestão guardada do copiloto chega lá num cartão. -->
+    <div v-if="assistente.disponivel.value" class="crm-form__botoes crm-ficha__perguntar">
+      <button class="botao" type="button" @click="perguntarSobreOLead">Perguntar sobre este lead</button>
+      <span class="crm-muted">{{ comCopiloto && copilotoServe(lead) ? 'O Assistente traz a sugestão do copiloto, quando há uma para a conversa de agora, com a proposta e o preço do cardápio.' : 'O Assistente lê este lead e responde ao lado.' }}</span>
+    </div>
     </section>
 
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-anotar">
@@ -765,4 +770,6 @@ function irParaAnotar() {
 <style>
 /* O motivo do primeiro contato travado (AC-22): linha inteira, embaixo dos botões. */
 .crm-ficha__motivo { flex: 1 1 100%; margin: 0; }
+/* O "Perguntar sobre este lead" (fase 2 da RULES 28): embaixo das abas de Como vender, com a dica ao lado. */
+.crm-ficha__perguntar { align-items: center; margin-top: var(--esp-3); }
 </style>

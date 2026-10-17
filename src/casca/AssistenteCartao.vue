@@ -6,11 +6,14 @@
  *    mesmas guardas). Sem a agenda neste processo não há para onde mandar: o cartão diz por quê;
  *  - `anotacao_no_crm`: o POST /api/operations/crm/registro da Ficha, com o corpo dela;
  *  - `mensagem_ao_lead`: só "Copiar" (regras 11 e 17). Nunca abre o WhatsApp nem anota envio.
+ *  - `sugestao_do_copiloto` (fase 2): a sugestão guardada do copiloto, relida e montada com o preço do
+ *    cardápio por AssistenteSugestao.vue; também só "Copiar".
  * Depois do toque, `marcarDesfecho` avisa o servidor, que só conta.
  */
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { CartaoDoAssistente } from '../operations/assistente-contrato'
 import { useAgentes } from '../agentes/estado'
+import AssistenteSugestao from './AssistenteSugestao.vue'
 import { chaveParaRegistro, copiarTexto, estadoDoCartao, horaCurta, leadDoCartao, modoDoTurno, useAssistente } from './assistente'
 
 /** `leadAberto`: o lead da Ficha aberta agora (o contexto do endereço), para avisar quando o cartão é de outro. */
@@ -116,6 +119,12 @@ const TITULO: Record<CartaoDoAssistente['tipo'], string> = {
   pedido_ao_time: 'Pedido ao time',
   anotacao_no_crm: 'Anotar em Vendas',
   mensagem_ao_lead: 'Mensagem para o lead',
+  sugestao_do_copiloto: 'Sugestão do copiloto',
+}
+
+/** A primeira cópia da sugestão confirma o cartão (só mede, como a mensagem ao lead). */
+function copiouASugestao() {
+  if (proposto.value) as.marcarDesfecho(props.cartao.id, 'confirmado')
 }
 const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado: 'Descartado' } as const
 </script>
@@ -195,6 +204,13 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
         <button v-if="proposto" type="button" class="botao botao--leve" @click="descartar">Descartar</button>
       </div>
       <p v-if="copiado === 'falhou'" class="recado recado--atencao" role="status">Não consegui copiar: selecione o texto à mão.</p>
+    </template>
+
+    <!-- ---------------------------------------------------- sugestão do copiloto (fase 2) -->
+    <template v-else-if="cartao.tipo === 'sugestao_do_copiloto'">
+      <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong></p>
+      <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
+      <AssistenteSugestao v-if="estado !== 'descartado'" :dados="cartao.dados" :proposto="proposto" @copiou="copiouASugestao" @descartar="descartar" />
     </template>
   </article>
 </template>
