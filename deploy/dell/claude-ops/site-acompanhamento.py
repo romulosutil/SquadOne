@@ -3,10 +3,14 @@
 - "05 · Acompanhamento" (todo dia, 09:00): lead "enviado" sem respondeu_em,
   enviado a partir de 29/09/2026 e com a pasta ainda na raiz de ~/auto-site:
   no 3º dia, se ele LEU (visto_em; desde 15/10/2026, depois da restrição do WhatsApp),
-  um aviso ao Rômulo com o follow-up pronto (wa.me com o texto, mesmo
-  tom da variação A do Balcão, em site-mensagem.js) e followup_em na planilha;
-  no 10º dia, status "expirado" (a pasta vai para _concluidos/ pelo site-pastas
-  na hora seguinte, depois que o Balcão listar).
+  followup_em na planilha; no 10º dia, status "expirado" (a pasta vai para
+  _concluidos/ pelo site-pastas na hora seguinte, depois que o Balcão listar) e um
+  aviso só com os expirados.
+  Até 17/10/2026 o 3º dia também mandava um aviso pela fila do WhatsApp com o follow-up
+  pronto. Saiu (OT-01 do blueprint, follow-up com dono único): a Central já pede o mesmo
+  follow-up na Próxima venda e no vendedor do Telegram, com a trava de ritmo, e dois lembretes
+  do mesmo envio, um deles no número de vendas, só confundiam. O followup_em continua: é ele
+  que diz à Central (server/crm.ts) em que dia o follow-up entra na fila.
 - "06 · Funil semanal" (segunda, 08:00): por nicho (vertical + cidade) leads,
   sites, enviados, responderam, em conversa, recusados e concluídos. Aviso pelo
   Hermes e estado/site-funil.json (sem "itens": o dell-status e o Hermes não o
@@ -142,30 +146,20 @@ for (const l of $input.all().map(i => i.json)) {{
   if (dias >= {EXPIRA_DIAS}) {{
     saida.push({{ json: {{ ...base, acao: 'expirar', status: 'expirado', followup_em: followup }} }});
   }} else if (dias >= {FOLLOWUP_DIAS} && !followup && leu) {{
-    const f = followupDe(l);
-    saida.push({{ json: {{ ...base, acao: 'followup', status: 'enviado', followup_em: new Date().toISOString(), link: f.link, texto: f.texto }} }});
+    // Só a data: o texto e o wa.me do follow-up são da Central (OT-01), que lê o followup_em.
+    saida.push({{ json: {{ ...base, acao: 'followup', status: 'enviado', followup_em: new Date().toISOString() }} }});
   }}
 }}
 return saida;"""
 
-AVISOS = """// Um aviso por follow-up (o texto fica sozinho para copiar) e um só para os expirados.
+AVISOS = """// Só o aviso dos expirados. O follow-up do 3º dia não avisa mais daqui (17/10/2026, OT-01): quem o pede é a
+// fila de venda da Central (Próxima venda e o vendedor no Telegram), lendo o followup_em gravado no nó anterior.
 const NL = String.fromCharCode(10);
 const arquivo = (titulo, texto) => ({ json: { titulo, texto }, binary: { data: {
   data: Buffer.from(JSON.stringify({ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'aviso.json' } } });
 const itens = $('Decidir').all().map(i => i.json);
 const onde = (l) => l.nome + (l.cidade ? ' (' + l.cidade + ')' : '');
-// 14/10/2026 (demo sob pedido): quem recebeu só o Raio-X não tem site_url; o aviso mostra o Raio-X.
-const pagina = (l) => l.site_url ? 'Site: ' + l.site_url : 'Raio-X: ' + (l.raio_x_url || '—');
-const saida = itens.filter(l => l.acao === 'followup').map(l => arquivo('🔁 Site antes da venda: follow-up', [
-  '*' + onde(l) + '* não respondeu em ' + l.dias + ' dias.',
-  pagina(l),
-  l.link ? 'WhatsApp com a mensagem pronta: ' + l.link : 'Sem WhatsApp válido na planilha (telefone: ' + (l.telefone || '—') + ').',
-  '',
-  'Mensagem:',
-  l.texto,
-  '',
-  'Se já respondeu, preencha respondeu_em na planilha. Sem resposta, expira no 10º dia.',
-].join(NL)));
+const saida = [];
 const expirados = itens.filter(l => l.acao === 'expirar');
 if (expirados.length) saida.push(arquivo('⏳ Site antes da venda: expirados', [
   expirados.length + ' lead(s) sem resposta em 10 dias viraram "expirado"; a pasta vai para _concluidos/ na próxima hora:',
@@ -185,7 +179,7 @@ def acompanhamento(erro):
          "parameters": {"rule": {"interval": [{"field": "days", "triggerAtHour": 9, "triggerAtMinute": 0}]}}},
         *recibos(),
         ler_aba("planilha", "Ler a planilha", LEADS_GID, "Leads", [660, 0]),
-        code("decidir", "Decidir", sv.codigo_js("site-mensagem.js") + "\n" + DECIDIR, [880, 0]),
+        code("decidir", "Decidir", DECIDIR, [880, 0]),
         {"id": "marcar", "name": "Marcar na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1100, 0],
          "credentials": SHEETS, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
          "parameters": {"resource": "sheet", "operation": "update",

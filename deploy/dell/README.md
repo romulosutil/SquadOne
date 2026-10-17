@@ -977,10 +977,14 @@ todas as mensagens abrem com "Me chamo Rômulo e represento o Prumo" (decisão e
 Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
 
 - **05 · Acompanhamento** (todo dia, 09:00): `enviado` sem `respondeu_em`,
-  enviado a partir de 29/09 e com a pasta na raiz ganha, no 3º dia, um aviso
-  com o follow-up pronto (link `wa.me` com o texto) e a data em `followup_em`;
-  no 10º dia vira `expirado`. O que foi enviado antes é acervo: saiu um resumo
-  único (`--resumo-backlog`) e nada é automático.
+  enviado a partir de 29/09 e com a pasta na raiz ganha, no 3º dia (só quem leu),
+  a data em `followup_em`; no 10º dia vira `expirado`, com um aviso só dos
+  expirados. O que foi enviado antes é acervo: saiu um resumo único
+  (`--resumo-backlog`) e nada é automático. **Desde 17/10/2026 (OT-01) o 3º dia
+  não avisa mais pela fila do WhatsApp:** o follow-up tem um dono só, a fila de
+  venda da Central (Próxima venda e o vendedor no Telegram), que lê o
+  `followup_em` para saber o dia (`server/crm.ts`). Antes saíam dois lembretes do
+  mesmo follow-up, um deles pelo número de vendas.
 - **06 · Funil semanal** (segunda, 08:00): por nicho (vertical + cidade)
   leads, sites, enviados, responderam, em conversa, recusados e concluídos.
   Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira
@@ -2172,6 +2176,17 @@ contrato que a Central lê (Ficha do CRM) e que o Hermes lê pela skill
 - **Poda e falha.** Uma vez por dia por arquivo, na primeira escrita, sai o que
   passou de 120 dias. Erro ao gravar vai ao journal (sem o texto) e o resto do
   observador segue igual.
+- **Leads do Plus (17/10/2026, OT-13).** Os do Catálogo de Negócios Maçônicos
+  não estão em planilha, então o n8n não devolvia os números deles e a resposta
+  de um Plus só existia se o Rômulo a anotasse na Ficha. O observador lê também
+  `~/prumo-entregas/plus/leads.json` (`OBSERVADOR_PLUS`; o mesmo arquivo do
+  `lerPlus` da Central, fora do git) a cada 10 min, guarda só a chave de cada
+  número e a junta ao `leads.json` da bridge e do adaptador: o texto é gravado e a
+  conversa entra em `whatsapp-conversas/` como a dos outros leads, e a Central a
+  mostra pelo número. De quem é **só** Plus nada vai ao n8n (não há linha para
+  marcar, e cada conversa custaria uma classificação do Gemini); o `plus_respondeu`
+  continua sendo o toque na Ficha. Quem está no Plus e numa planilha segue igual.
+  Arquivo ausente ou ilegível = sem Plus, o resto igual.
 - **Instalar** (depois do merge e do `git pull`, nesta ordem: o observador antes,
   para ninguém gravar `enviadas.jsonl` sem leitor):
 

@@ -101,6 +101,46 @@ class Base(unittest.TestCase):
         return arquivos[0].read_bytes()
 
 
+class FollowupComDonoUnico(unittest.TestCase):
+    """17/10/2026 (OT-01): o 05 · Acompanhamento não avisa mais o follow-up do 3º dia (a fila de venda da Central
+    pede); continua gravando o followup_em, que o server/crm.ts lê, e avisando os expirados. O nó "Montar avisos"
+    roda no node com o `$('Decidir')` de mentira; nada vai ao n8n."""
+
+    def montar_avisos(self, itens: list[dict]) -> list[dict]:
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node")
+        js = ("const $workflow = { name: '05 · Acompanhamento (Site antes da venda)' };\n"
+              f"const $ = () => ({{ all: () => {json.dumps([{'json': i} for i in itens], ensure_ascii=False)} }});\n"
+              "const r = (() => {\n" + sa.AVISOS + "\n})();\n"
+              "console.log(JSON.stringify(r.map((x) => JSON.parse(Buffer.from(x.binary.data.data, 'base64').toString('utf8')))));")
+        import subprocess
+        p = subprocess.run([node, "-e", js], capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return json.loads(p.stdout)
+
+    def test_follow_up_nao_avisa_e_expirado_avisa(self):
+        avisos = self.montar_avisos([
+            {"acao": "followup", "nome": "Padaria", "cidade": "Vitória", "site_url": "https://p.vercel.app", "dias": 3},
+            {"acao": "expirar", "nome": "Oficina", "cidade": "", "site_url": "", "raio_x_url": "https://r.app/o", "dias": 10},
+        ])
+        self.assertEqual([a["titulo"] for a in avisos], ["⏳ Site antes da venda: expirados"])
+        self.assertIn("Oficina: https://r.app/o", avisos[0]["texto"])
+        self.assertNotIn("Padaria", avisos[0]["texto"])
+        self.assertTrue(avisos[0]["origem"].startswith("n8n:05"))
+
+    def test_so_follow_up_nao_sai_aviso_nenhum(self):
+        self.assertEqual(self.montar_avisos([{"acao": "followup", "nome": "Padaria", "dias": 3}]), [])
+
+    def test_o_followup_em_continua_gravado_na_planilha(self):
+        wf = sa.acompanhamento("erro")
+        marcar = next(n for n in wf["nodes"] if n["name"] == "Marcar na planilha")
+        self.assertIn("followup_em", marcar["parameters"]["columns"]["value"])
+        decidir = next(n for n in wf["nodes"] if n["name"] == "Decidir")["parameters"]["jsCode"]
+        self.assertIn("acao: 'followup', status: 'enviado', followup_em: new Date().toISOString()", decidir)
+        self.assertNotIn("followupDe", decidir)  # o texto do follow-up é da Central
+
+
 class TrocaPelaLib(Base):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(sa.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)

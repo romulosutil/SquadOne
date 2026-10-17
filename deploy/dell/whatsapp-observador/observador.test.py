@@ -29,7 +29,9 @@ AQUI = Path(__file__).resolve().parent
 # A conversa dos leads em disco (16/10/2026) nunca cai na pasta de verdade: o padrão do módulo é um temporário.
 _CONVERSAS_TESTE = tempfile.mkdtemp(prefix="conversas-teste-")
 os.environ["WHATSAPP_CONVERSAS_DIR"] = _CONVERSAS_TESTE
-spec = importlib.util.spec_from_file_location("observador", AQUI / "observador.py")
+# O Plus (OT-13) também: o padrão aponta para um arquivo que não existe, nunca para o ~/prumo-entregas real.
+os.environ["OBSERVADOR_PLUS"] = str(Path(_CONVERSAS_TESTE) / "sem-plus" / "leads.json")
+spec =importlib.util.spec_from_file_location("observador", AQUI / "observador.py")
 ob = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ob)
 
@@ -768,6 +770,80 @@ class ConversaEmDisco(Base):
     def test_padrao_da_pasta_e_da_origem(self):
         self.assertEqual(str(ob.CONVERSAS), _CONVERSAS_TESTE)  # o teste nunca toca a pasta de verdade
         self.assertIn(ob.ORIGEM, ("pessoal", "prumo"))
+
+
+PLUS, PLUS_E_PLANILHA = "5531988112233", LEAD2  # o segundo está no Plus E numa planilha
+CHAVE_PLUS = ob.chave_do_numero(PLUS)
+
+
+class ConversaDoPlus(Base):
+    """17/10/2026 (OT-13): os leads do Plus (plus/leads.json, sem planilha) entram no filtro da bridge e têm a
+    conversa em disco, mas nada deles vai ao n8n. O arquivo é um temporário; números fictícios."""
+
+    gravar = ConversaEmDisco.gravar
+    linhas = ConversaEmDisco.linhas
+
+    def setUp(self):
+        super().setUp()
+        self.plus = self.dir / "plus" / "leads.json"
+        self.plus.parent.mkdir()
+        self.escrever_plus(PLUS, PLUS_E_PLANILHA)
+        self.obs = ob.Observador({CHAVE, CHAVE2}, chamar=self.n8n, avisar=self.avisos.append,
+                                 relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado",
+                                 conversas=ob.Conversas(self.pasta_conversas, "prumo", relogio=lambda: self.agora),
+                                 ler_plus=lambda: ob.ler_chaves_do_plus(self.plus))
+
+    def escrever_plus(self, *numeros):
+        self.plus.write_text(json.dumps({"versao": 1, "geradoEm": "2026-10-15T12:00:00Z", "leads": [
+            {"id": f"p{i}", "empresa": f"Loja {i}", "whatsapp": n, "oferta": "site"} for i, n in enumerate(numeros)]}))
+
+    def test_le_so_as_chaves_do_arquivo_e_ilegivel_e_vazio(self):
+        self.assertEqual(ob.ler_chaves_do_plus(self.plus), {CHAVE_PLUS, CHAVE2})
+        for ruim in ("{ quebrado", "[]", '{"leads": {}}', '{"leads": [{"whatsapp": "123"}, "x", {}]}'):
+            self.plus.write_text(ruim)
+            self.assertEqual(ob.ler_chaves_do_plus(self.plus), set(), ruim)
+        self.assertEqual(ob.ler_chaves_do_plus(self.dir / "nao-existe.json"), set())
+
+    def test_entra_no_filtro_da_bridge_e_do_adaptador(self):
+        self.assertEqual(json.loads((self.obs.pasta / "leads.json").read_text()), sorted([CHAVE, CHAVE2, CHAVE_PLUS]))
+
+    def test_resposta_e_envio_do_plus_viram_conversa_e_nao_vao_ao_n8n(self):
+        self.gravar("respostas", {"chave": CHAVE_PLUS, "ts": T0 - 60, "texto": "Meu Ir.'., tenho interesse", "id": "X1"})
+        self.gravar("enviadas", {"chave": CHAVE_PLUS, "ts": T0 - 120, "texto": "Meu Ir.'., tudo bem?", "id": "X0"})
+        self.obs.linha(recebida(PLUS))
+        self.obs.linha(json.dumps({"event": "owner_sent", "chatId": f"{PLUS}@s.whatsapp.net", "ts": T0 - 120, "id": "X0"}) + "\n")
+        self.obs.linha(recibo(PLUS, "lido", T0 - 90))
+        self.passar(1)
+        self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertEqual([(l["direcao"], l["texto"]) for l in self.linhas(CHAVE_PLUS)],
+                         [("entrada", "Meu Ir.'., tenho interesse"), ("saida", "Meu Ir.'., tudo bem?")])
+        self.assertEqual([c for c in self.n8n.chamadas if c[1] != "whatsapp-telefones"], [])
+
+    def test_quem_esta_no_plus_e_numa_planilha_segue_indo_ao_n8n(self):
+        self.gravar("respostas", {"chave": CHAVE2, "ts": T0, "texto": "pode mandar", "id": "Y1"})
+        self.passar(1)
+        self.passar(ob.ESPERA_DA_CONVERSA_S)
+        self.assertEqual([c[2]["chave"] for c in self.n8n.chamadas if c[1] == "whatsapp-resposta"], [CHAVE2])
+        self.assertEqual(len(self.linhas(CHAVE2)), 1)
+
+    def test_releitura_pega_o_plus_novo_mesmo_com_o_n8n_fora(self):
+        novo = "5541977665544"
+        self.escrever_plus(PLUS, novo)
+        self.n8n.falhar = urllib.error.URLError("fora")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.passar(ob.RELER_NUMEROS_S)
+        self.assertIn(ob.chave_do_numero(novo), self.obs.todas)
+        self.assertEqual(self.obs.chaves, {CHAVE, CHAVE2})  # a lista do n8n fica a anterior
+        self.n8n.falhar = None
+        self.gravar("respostas", {"chave": ob.chave_do_numero(novo), "ts": T0, "texto": "oi", "id": "Z1"})
+        self.passar(1)
+        self.assertEqual(len(self.linhas(ob.chave_do_numero(novo))), 1)
+
+    def test_sem_ler_plus_nao_ha_plus(self):
+        obs = ob.Observador({CHAVE}, chamar=self.n8n, avisar=self.avisos.append, relogio=lambda: self.agora,
+                            bridge_js=self.bridge, pasta=self.dir / "outro", conversas=self.pasta_conversas)
+        self.assertEqual(obs.todas, {CHAVE})
+        self.assertFalse(str(ob.PLUS).startswith(str(Path.home() / "prumo-entregas")))
 
 
 if __name__ == "__main__":

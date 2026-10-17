@@ -186,10 +186,13 @@ em qualquer ordem, congelamento, novo sorteio quando o conjunto muda, a própria
 conta, sem demo só a C (conjunto "C") ou nenhuma mensagem, EUA, nicho vazio e grafia do nicho, dois leads da mesma
 rodada e um pronto que não muda de rodada para rodada; importa o `n8n.py`, que lê a chave em `~/.config/claude-ops`:
 fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária com uma chave falsa),
-`deploy/dell/claude-ops/site-acompanhamento.test.py` (20; `__main__` ponta a
-ponta com dublês), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
+`deploy/dell/claude-ops/site-acompanhamento.test.py` (23; `__main__` ponta a
+ponta com dublês; desde 17/10/2026, OT-01: o "Montar avisos" do 05 no node só avisa os expirados e o `followup_em`
+continua gravado), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(62; nada sobe o serviço nem lê o `bridge.log` real; desde 16/10/2026 a conversa do lead em disco: entrada e saída com
+(68; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026, OT-13, os leads do
+Plus entram no filtro da bridge e na conversa em disco e nada deles vai ao n8n, quem está no Plus e numa planilha segue
+igual, arquivo ilegível é vazio e a releitura vale com o n8n fora; desde 16/10/2026 a conversa do lead em disco: entrada e saída com
 id e hora UTC, o mesmo id não entra duas vezes nem pelo outro observador, quem não é lead não tem arquivo, recibo não é
 linha, texto em 2000, nome saneado, poda de 120 dias uma vez por dia, falha ao gravar não derruba a classificação, e
 a pasta padrão aponta para um temporário antes do import),

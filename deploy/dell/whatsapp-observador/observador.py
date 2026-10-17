@@ -77,6 +77,15 @@ arquivo e nunca derruba o fluxo: falha de gravação vai ao journal e segue.
 A Central lê esses arquivos (/crm, Ficha) e o Hermes também (skill
 `conversa-do-lead`); ninguém envia nada a lead a partir deles (RULES 17).
 
+Leads do Plus (17/10/2026, OT-13 do blueprint): os do Catálogo de Negócios Maçônicos não estão em
+planilha nenhuma (vêm de ~/prumo-entregas/plus/leads.json, só no Dell), então o n8n não devolvia os
+números deles e a resposta de um Plus nem era vista; o Rômulo anotava à mão na Ficha. Agora o leitor
+lê também esse arquivo (só a chave de cada número; nome e telefone não ficam na memória) e junta as
+chaves ao filtro: a bridge e o evolution-adaptador gravam o texto, e a conversa vai para
+WHATSAPP_CONVERSAS_DIR como a dos outros leads, onde a Central a lê pelo número. Ao n8n nada vai de
+quem é SÓ Plus: lá não há linha para marcar e cada conversa custaria uma classificação do Gemini à
+toa. O "plus_respondeu" da aba CRM continua sendo o toque na Ficha (a Central já mostra a conversa).
+
 Privacidade: o bridge.log não tem conteúdo; texto só de quem é lead. Só o número
 de quem é lead sai daqui (DDD + 8 últimos dígitos), e a linha da conversa não
 leva número nenhum (a chave é o nome do arquivo). Grupos, canais, listas de
@@ -150,6 +159,8 @@ COMANDO_REMENDO = "python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.
 CONVERSAS = Path(os.environ.get("WHATSAPP_CONVERSAS_DIR") or HOME / ".local/share/whatsapp-conversas")
 # Quem gravou a linha: o número pessoal (bridge do Hermes) ou o do PRUMO (Evolution).
 ORIGEM = (os.environ.get("OBSERVADOR_ORIGEM") or "").strip() or ("prumo" if "prumo" in str(LOG_DA_BRIDGE) else "pessoal")
+# Os leads do Plus (OT-13): o arquivo que server/crm.ts lê (lerPlus), fora do repositório.
+PLUS = Path(os.environ.get("OBSERVADOR_PLUS") or HOME / "prumo-entregas/plus/leads.json")
 GUARDAR_CONVERSA_S = 120 * 86400
 PODAR_A_CADA_S = 86400
 MAX_TEXTO_NA_CONVERSA = 2000
@@ -351,6 +362,19 @@ def ler_numeros(chamar=http) -> set[str]:
     return chaves
 
 
+def ler_chaves_do_plus(arquivo: Path = PLUS) -> set[str]:
+    """As chaves (DDD + 8) dos leads do Plus, do mesmo jeito que o lerPlus da Central: {"leads": [{"whatsapp"}]}.
+    Ausente ou ilegível = nenhum (o filtro Plus da Central também fica vazio); nunca levanta."""
+    try:
+        dados = json.loads(Path(arquivo).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    lista = dados.get("leads") if isinstance(dados, dict) else None
+    if not isinstance(lista, list):
+        return set()
+    return {c for item in lista[:2000] if isinstance(item, dict) and (c := chave_do_numero(item.get("whatsapp")))}
+
+
 def texto_do_lote(lote: list[dict]) -> str:
     def item(a):
         rotulo = ROTULO.get(a["planilha"], a["planilha"])
@@ -497,9 +521,14 @@ class Observador:
 
     def __init__(self, chaves: set[str], chamar=http, avisar=avisar_pelo_hermes, relogio=time.time,
                  telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None,
-                 conversas: "Conversas | Path | None" = None):
+                 conversas: "Conversas | Path | None" = None, ler_plus=None):
         agora = relogio()
         self.chaves = chaves
+        # Os do Plus (OT-13): só conversa em disco, nunca n8n. `ler_plus` None = sem Plus (os testes não leem
+        # o arquivo de verdade); o main passa ler_chaves_do_plus.
+        self.ler_plus = ler_plus
+        self.chaves_plus: set[str] = set()
+        self.reler_plus()
         # A conversa de cada lead em disco (ver o topo); os testes passam uma pasta temporária.
         self.conversa = conversas if isinstance(conversas, Conversas) else Conversas(conversas or CONVERSAS, relogio=relogio)
         # leads.json (para a bridge) e respostas.jsonl (da bridge) moram junto da posição.
@@ -559,12 +588,14 @@ class Observador:
         else:
             return
         chave = chave_do_numero(self.telefone(str(ev.get("chatId") or "")))
-        if not chave or chave not in self.chaves:
+        if not chave or chave not in self.todas:
             return
         if tipo == "saida" and not ev.get("id"):
             # Bridge sem o remendo de 16/10 (owner_sent sem id, e nenhum enviadas.jsonl): a conversa ganha a
             # linha sem texto. Com o id, quem grava a saída é ler_enviadas(), com o texto.
             self.conversa.anexar(chave, "saida", quando, "")
+        if chave not in self.chaves:
+            return  # só Plus: a conversa basta, o n8n não tem planilha onde marcar
         evento = {"chave": chave, "direcao": tipo, "em": iso(quando)}
         if tipo == "entrada":
             antes = self.respostas.get(chave)
@@ -627,8 +658,26 @@ class Observador:
                                           "hora": time.strftime("%H:%M", time.localtime(quando))})
                         self.lote_desde = self.lote_desde or self.relogio()
 
+    @property
+    def todas(self) -> set[str]:
+        """O filtro da bridge e da conversa em disco: os números das planilhas mais os do Plus."""
+        return self.chaves | self.chaves_plus
+
+    def reler_plus(self) -> None:
+        if self.ler_plus is None:
+            return
+        try:
+            novas = set(self.ler_plus())
+        except Exception as e:  # noqa: BLE001 — mantém a lista anterior
+            log("não consegui reler os números do Plus:", e)
+            return
+        if len(novas) != len(self.chaves_plus):
+            log(f"{len(novas)} número(s) do Plus no filtro")
+        self.chaves_plus = novas
+
     def reler_numeros(self) -> None:
         agora = self.relogio()
+        self.reler_plus()
         try:
             self.chaves = ler_numeros(self.chamar)
             self.falhas_numeros = 0
@@ -647,7 +696,7 @@ class Observador:
         try:
             self.pasta.mkdir(parents=True, exist_ok=True)
             tmp = self.pasta / "leads.json.tmp"
-            tmp.write_text(json.dumps(sorted(self.chaves)))
+            tmp.write_text(json.dumps(sorted(self.todas)))
             tmp.chmod(0o600)
             tmp.replace(self.pasta / "leads.json")
         except OSError as e:
@@ -680,7 +729,7 @@ class Observador:
                 chave, msg = str(r["chave"]), str(r.get("texto") or "").strip()
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
-            if chave not in self.chaves:
+            if chave not in self.todas:
                 continue
             self.conversa.anexar(chave, "saida", self._hora_vista(r.get("ts"), agora), msg, r.get("id"))
 
@@ -697,10 +746,12 @@ class Observador:
             except (ValueError, KeyError, TypeError):
                 continue
             # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
-            if chave not in self.chaves or not msg:
+            if chave not in self.todas or not msg:
                 continue
             quando = self._hora_vista(r.get("ts"), agora)
             self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"))
+            if chave not in self.chaves:
+                continue  # só Plus: sem classificação no n8n (ver o topo)
             c = self.conversas.setdefault(chave, {"mensagens": [], "ultima": agora})
             if len(c["mensagens"]) < MAX_MENSAGENS_POR_CONVERSA:
                 c["mensagens"].append({"em": iso(quando), "texto": msg[:1000]})
@@ -797,7 +848,7 @@ def main() -> int:
             log(f"não consegui ler os números dos leads (tento em {espera} s):", e)
             time.sleep(espera)
     onde: dict = {}
-    obs = Observador(chaves)
+    obs = Observador(chaves, ler_plus=ler_chaves_do_plus)
     log(f"acompanhando {LOG_DA_BRIDGE}; conversas dos leads em {obs.conversa.pasta} (origem {obs.conversa.origem})")
     try:
         return acompanhar(obs, onde)
