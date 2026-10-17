@@ -106,6 +106,7 @@ import {
 import { contarEscritasDaApi, criarContadorDeUso } from "./server/uso.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
 import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
+import { prepararAssistente, type Assistente } from "./server/assistente.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
@@ -264,6 +265,8 @@ async function startServer() {
       ? publicarAvisoPessoal(aviso, { fila: filaDeAvisos, telegram: telegramDoDono })
       : publicarAviso(aviso, { fila: filaDeAvisos, telegram: telegramDoDono });
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
+  // O Assistente da Central (RULES 28): preparado no bloco da Central, lido pelo /api/runtime.
+  let assistenteDoProcesso: Assistente | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
     const bot = (botDoTelegram = criarBotDoTelegram({
@@ -357,8 +360,9 @@ async function startServer() {
   // terminar antes de reiniciar o processo. `agenda` diz se o app (Pedir,
   // Escritório) mora neste processo: no Dell, só depois do cutover.
   app.get("/api/runtime", (_req, res) => {
-    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false);
-    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva });
+    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false);
+    // `assistente`: o painel do Assistente substitui o Pedir só quando ele está ligado aqui.
+    res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva, assistente: assistenteDoProcesso !== null });
   });
 
   if (operationsConfig) {
@@ -402,6 +406,20 @@ async function startServer() {
         throw error;
       }
     };
+    // O Assistente da Central (RULES 28): lê o que as telas já mostram e propõe cartões; nunca
+    // escreve. Só com SQUADONE_ASSISTENTE=true; a consulta ao Hermes (SQUADONE_ASSISTENTE_HERMES)
+    // entra por `criarHermes` quando server/hermes-consulta.ts existir.
+    assistenteDoProcesso = await prepararAssistente(process.env, {
+      dataDir: operationsDataDir,
+      operations: squadOneMode === "operations",
+      ai,
+      fontes: {
+        visao: () => crm.visao(),
+        conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
+        agenda: readAgenda,
+        dell: () => lerStatusDoDell(operationsDataDir),
+      },
+    });
     // Uma instância só para a rota e o vendedor: as escritas no arquivo do dia ficam em fila.
     const memoriaDaVenda = criarMemoriaDaVenda(path.join(operationsDataDir, "venda-do-dia.json"));
     app.use("/api/operations", createOperationsRouter({
@@ -414,6 +432,7 @@ async function startServer() {
       dataDir: operationsDataDir,
       memoriaDaVenda,
       uso: usoDaCentral,
+      assistente: assistenteDoProcesso,
     }));
 
     // O vendedor (16/10/2026): "Envie para X" no Telegram, seg–sex 08:00–17:30, um por vez, com a
@@ -477,6 +496,8 @@ async function startServer() {
   } else {
     // O copiloto nunca roda no Easypanel: com a env ligada, só o log diz que foi ignorada.
     await prepararCopiloto(process.env, { dataDir, operations: false });
+    // O Assistente também (RULES 28): o Easypanel não lê o CRM nem o Dell.
+    await prepararAssistente(process.env, { dataDir, operations: false, fontes: {} });
     // Impede o fallback SPA de responder HTML 200 para uma rota operacional
     // inexistente no EasyPanel. O perfil remoto falha fechado e explicitamente.
     app.use("/api/operations", (_req, res) => {

@@ -9,6 +9,8 @@ import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
 import { criarMemoriaDaVenda, MAX_CHAVE, type ComoResolveu, type MemoriaDaVenda } from "./venda-do-dia.ts";
 import { MAX_CORPO_DO_BEACON, telaDoCorpo, type ContadorDeUso } from "./uso.ts";
+import { lerPedidoDeMensagem, PedidoDoAssistenteInvalido, TetoDoAssistente, type Assistente } from "./assistente.ts";
+import type { EstadoDoAssistente } from "../src/operations/assistente-contrato.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -453,6 +455,8 @@ export function createOperationsRouter(options: {
   memoriaDaVenda?: MemoriaDaVenda;
   /** Contador de uso (server/uso.ts, AC-28); ausente, /uso responde 503. */
   uso?: ContadorDeUso;
+  /** Assistente da Central (server/assistente.ts, RULES 28): null/ausente = desligado. */
+  assistente?: Assistente | null;
 }): express.Router {
   const router = express.Router();
 
@@ -787,6 +791,71 @@ export function createOperationsRouter(options: {
       console.error("[uso] não leu:", error instanceof Error ? error.message : error);
       res.status(500).json({ error: "Não deu para ler o uso agora." });
     }
+  });
+
+  // Assistente da Central (RULES 28), no contrato de src/operations/assistente-contrato.ts. Propõe,
+  // nunca faz: nenhuma destas rotas escreve no CRM, na agenda nem no Google; o cartão confirmado vai
+  // pela rota de sempre, chamada pelo painel depois do toque. Os POST passam pela guarda de mesma
+  // origem do server.ts, como todos.
+  const assistenteDesligado = (res: express.Response) =>
+    void res.status(503).json({ error: "O Assistente está desligado nesta Central.", desligado: true });
+  const ID_DO_ASSISTENTE = /^[A-Za-z0-9-]{8,64}$/;
+
+  router.get("/assistente", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const desligado: EstadoDoAssistente = { ligado: false, hermes: false, tetoDia: 0, usadosHoje: 0 };
+    res.json(options.assistente ? await options.assistente.estado() : desligado);
+  });
+
+  router.post("/assistente/mensagens", async (req, res) => {
+    if (!options.assistente) return assistenteDesligado(res);
+    try {
+      res.status(202).json(await options.assistente.receber(lerPedidoDeMensagem(req.body)));
+    } catch (error) {
+      if (error instanceof PedidoDoAssistenteInvalido) res.status(400).json({ error: error.message });
+      else if (error instanceof TetoDoAssistente) res.status(429).json({ error: error.message, teto: true });
+      else {
+        console.error("[assistente] não recebeu a mensagem:", error instanceof Error ? error.message : error);
+        res.status(500).json({ error: "O Assistente não recebeu a mensagem agora." });
+      }
+    }
+  });
+
+  router.get("/assistente/conversas/:id", (req, res) => {
+    if (!options.assistente) return assistenteDesligado(res);
+    const id = String(req.params.id);
+    const desde = typeof req.query.desde === "string" && /^\d{1,6}$/.test(req.query.desde) ? Number(req.query.desde) : 0;
+    if (!ID_DO_ASSISTENTE.test(id)) return void res.status(400).json({ error: "Conversa inválida." });
+    const conversa = options.assistente.conversa(id, desde);
+    res.setHeader("Cache-Control", "no-store");
+    if (!conversa) return void res.status(404).json({ error: "Conversa não encontrada." });
+    res.json(conversa);
+  });
+
+  router.post("/assistente/avaliacao", async (req, res) => {
+    if (!options.assistente) return assistenteDesligado(res);
+    const { respostaId, nota, motivo } = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof respostaId !== "string" || !ID_DO_ASSISTENTE.test(respostaId) || (nota !== 1 && nota !== -1)
+      || (motivo !== undefined && (typeof motivo !== "string" || motivo.length > 1000))) {
+      return void res.status(400).json({ error: "Diga a resposta e a nota (1 ou -1)." });
+    }
+    if (!(await options.assistente.avaliar(respostaId, nota, motivo as string | undefined))) {
+      return void res.status(404).json({ error: "Resposta não encontrada." });
+    }
+    res.status(204).end();
+  });
+
+  router.post("/assistente/cartoes/:id", async (req, res) => {
+    if (!options.assistente) return assistenteDesligado(res);
+    const id = String(req.params.id);
+    const { desfecho } = (req.body ?? {}) as Record<string, unknown>;
+    if (!ID_DO_ASSISTENTE.test(id) || (desfecho !== "confirmado" && desfecho !== "descartado")) {
+      return void res.status(400).json({ error: "Diga o cartão e o desfecho (confirmado ou descartado)." });
+    }
+    const r = await options.assistente.decidirCartao(id, desfecho);
+    if (r === "naoAchou") return void res.status(404).json({ error: "Cartão não encontrado." });
+    if (r === "jaDecidido") return void res.status(409).json({ error: "Este cartão já foi decidido." });
+    res.status(204).end();
   });
 
   // Rota operacional inexistente (ex.: a antiga /auto) responde 404 JSON em vez
