@@ -93,7 +93,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           e os liberados do dia (AC-21, POST /api/operations/crm/venda/liberar), o mesmo "Liberar" para Próxima venda, Triagem e Ficha
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
-                          venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
+                          venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=;
+                          desde 17/10/2026 (a Baobá) o `papel` da entrada (recepção/robô; o robô não é resposta nem recomeça o prazo), a mídia nossa
+                          ("[vídeo]") vale como o link e o áudio não ouvido é dito assim (src/operations/marcadores-da-conversa.ts, PURO);
+                          `resposta.tipo = "licenca"` é permissão para mandar o material, nunca "quero ver"
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;

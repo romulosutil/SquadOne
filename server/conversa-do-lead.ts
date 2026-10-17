@@ -7,15 +7,23 @@
  *
  * `lerLinhasDaConversa` é PURO (texto -> mensagens): linha ilegível é pulada, nunca derruba a
  * leitura. A Central só lê; quem escreve é o observador.
+ *
+ * Contrato de 17/10/2026 (o caso Baobá): a linha de entrada pode trazer `papel: "recepcao" | "robo"`;
+ * ausente, o texto decide (papelDaMensagem) e, sem sinal nenhum, é gente. O áudio vem como
+ * "[áudio 27s]" ou "[áudio 27s] transcrição" (o antigo "[áudio]" continua valendo); a mídia que nós
+ * mandamos, como "[vídeo]", "[documento]" ou "[imagem]" (src/operations/marcadores-da-conversa.ts).
  */
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { levouMaterial, papelDaMensagem, type PapelDaMensagem } from "../src/operations/marcadores-da-conversa.ts";
 
 export interface MensagemDaConversa {
   em: string;
   direcao: "entrada" | "saida";
   texto: string;
+  /** Só em entrada: quem escreveu não é o lead falando por si (recepção ou robô). Ausente = gente. */
+  papel?: PapelDaMensagem;
 }
 
 export const MAX_MENSAGENS_NA_FICHA = 60;
@@ -46,7 +54,9 @@ export function lerLinhasDaConversa(conteudo: string, max = MAX_MENSAGENS_NA_FIC
     const id = typeof m.id === "string" ? m.id : "";
     if (id && vistas.has(id)) continue;
     if (id) vistas.add(id);
-    mensagens.push({ em: new Date(m.em).toISOString(), direcao: m.direcao, texto: typeof m.texto === "string" ? m.texto.slice(0, MAX_TEXTO) : "" });
+    const texto = typeof m.texto === "string" ? m.texto.slice(0, MAX_TEXTO) : "";
+    const papel = m.direcao === "entrada" ? papelDaMensagem(texto, m.papel) : undefined;
+    mensagens.push({ em: new Date(m.em).toISOString(), direcao: m.direcao, texto, ...(papel ? { papel } : {}) });
   }
   mensagens.sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
   return mensagens.slice(-max);
@@ -116,12 +126,27 @@ export interface ResumoDaConversa {
   /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
   desde: string;
   mensagens: number;
-  ultima: { direcao: "entrada" | "saida"; em: string; trecho: string };
+  ultima: { direcao: "entrada" | "saida"; em: string; trecho: string; papel?: PapelDaMensagem };
+  /**
+   * A última mensagem de GENTE (o lead ou a recepção): o robô não conta (17/10/2026). É ela que
+   * recomeça o prazo de Perdido e que diz "ele escreveu de novo"; a saudação automática não diz nada.
+   */
   ultimaEntrada?: string;
+  /** A última mensagem do robô, só para quem lê a ficha saber que ele falou. */
+  ultimaEntradaRobo?: string;
+  /** Quantas entradas de cada um: gente (sem papel), recepção e robô. Ausente em resumos antigos. */
+  entradas?: { gente: number; recepcao: number; robo: number };
   ultimaSaida?: string;
-  /** A última mensagem nossa que levou o link do lead (demo, site ou Raio-X): a 2ª mensagem de verdade. */
+  /**
+   * A última mensagem nossa que levou o link do lead (demo, site ou Raio-X) ou um material ("[vídeo]",
+   * "[documento]", "[imagem]", 17/10/2026): a 2ª mensagem de verdade.
+   */
   linkEm?: string;
 }
+
+/** O papel da entrada: o gravado pela leitura do arquivo ou, em quem montou a mensagem à mão, o do texto. */
+const papelDe = (m: MensagemDaConversa): PapelDaMensagem | undefined =>
+  m.direcao === "entrada" ? m.papel ?? papelDaMensagem(m.texto) : undefined;
 
 const MAX_TRECHO = 280;
 
@@ -144,38 +169,57 @@ function alvoDoLink(url: string): string | null {
 export function resumirConversa(mensagens: readonly MensagemDaConversa[] | null | undefined, links: ReadonlyArray<string | undefined> = []): ResumoDaConversa | null {
   if (!mensagens?.length) return null;
   let ultimaEntrada: string | undefined;
+  let ultimaEntradaRobo: string | undefined;
   let ultimaSaida: string | undefined;
   let linkEm: string | undefined;
+  const entradas = { gente: 0, recepcao: 0, robo: 0 };
   const saidas = saidasDaConversa(mensagens, links);
-  for (const m of mensagens) if (m.direcao === "entrada") ultimaEntrada = m.em;
+  for (const m of mensagens) {
+    if (m.direcao !== "entrada") continue;
+    const papel = papelDe(m);
+    entradas[papel ?? "gente"]++;
+    if (papel === "robo") ultimaEntradaRobo = m.em;
+    else ultimaEntrada = m.em;
+  }
   for (const s of saidas) {
     ultimaSaida = new Date(s.em).toISOString();
     if (s.link === true) linkEm = ultimaSaida;
   }
   const ultima = mensagens[mensagens.length - 1];
+  const papelDaUltima = papelDe(ultima);
   const trecho = ultima.texto.replace(/\s+/g, " ").trim();
   return {
     desde: mensagens[0].em,
     mensagens: mensagens.length,
-    ultima: { direcao: ultima.direcao, em: ultima.em, trecho: trecho.length > MAX_TRECHO ? `${trecho.slice(0, MAX_TRECHO - 1)}…` : trecho },
+    ultima: { direcao: ultima.direcao, em: ultima.em, trecho: trecho.length > MAX_TRECHO ? `${trecho.slice(0, MAX_TRECHO - 1)}…` : trecho,
+      ...(papelDaUltima ? { papel: papelDaUltima } : {}) },
     ...(ultimaEntrada ? { ultimaEntrada } : {}),
+    ...(ultimaEntradaRobo ? { ultimaEntradaRobo } : {}),
+    entradas,
     ...(ultimaSaida ? { ultimaSaida } : {}),
     ...(linkEm ? { linkEm } : {}),
   };
 }
 
-/** Uma mensagem nossa: `link` true = levou o link do lead; false = texto sem ele; null = texto não guardado. */
+/**
+ * Uma mensagem nossa: `link` true = levou o link do lead ou um material (vídeo, documento, imagem);
+ * false = texto sem ele; null = texto não guardado.
+ */
 export interface SaidaDaConversa {
   em: number;
   link: boolean | null;
 }
 
-/** PURO. As mensagens nossas, na ordem, e se cada uma levou um dos `links` do lead. */
+/**
+ * PURO. As mensagens nossas, na ordem, e se cada uma levou um dos `links` do lead. O material mandado
+ * como mídia ("[vídeo]", "[documento]", "[imagem]") conta como o link (17/10/2026, a Baobá): o Iris e as
+ * estamparias mandam o vídeo, não uma URL, e sem isto o "quero ver" nunca saía da vez de responder.
+ */
 export function saidasDaConversa(mensagens: readonly MensagemDaConversa[] | null | undefined, links: ReadonlyArray<string | undefined> = []): SaidaDaConversa[] {
   const alvos = links.map((l) => (l ? alvoDoLink(l) : null)).filter((a): a is string => Boolean(a));
   return (mensagens ?? []).filter((m) => m.direcao === "saida").map((m) => {
     const texto = m.texto.trim().toLowerCase();
-    return { em: Date.parse(m.em), link: texto ? alvos.some((a) => texto.includes(a)) : null };
+    return { em: Date.parse(m.em), link: texto ? levouMaterial(texto) || alvos.some((a) => texto.includes(a)) : null };
   });
 }
 

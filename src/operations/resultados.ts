@@ -101,8 +101,25 @@ export function enviadoNosUltimos(lead: Pick<CrmLead, 'marcos'>, dias: number, a
  * Respondeu de gente: `respondeu_em` (o Plus só tem este) ou a resposta classificada pelo n8n (às vezes
  * chega antes da coluna), nunca a saudação automática (classificação "bot").
  */
-export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'>): boolean {
-  return (Boolean(lead.marcos.respondeu) || Boolean(lead.resposta)) && lead.resposta?.tipo !== 'bot'
+export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
+  return (Boolean(lead.marcos.respondeu) || Boolean(lead.resposta)) && lead.resposta?.tipo !== 'bot' && quemRespondeu(lead) !== 'robo'
+}
+
+/**
+ * PURO (17/10/2026). Quem respondeu, pela conversa guardada, quando ela cobre a resposta (começou antes
+ * dela): 'robo' = só o atendimento automático escreveu; 'recepcao' = gente, mas só a recepção (não
+ * decide); 'gente' = alguém escreveu por si. `undefined` = a conversa não diz (ausente, resumo antigo
+ * ou começou depois da resposta): vale o que a planilha diz, como antes.
+ */
+export function quemRespondeu(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): 'gente' | 'recepcao' | 'robo' | undefined {
+  const c = lead.conversa
+  if (!c?.entradas) return undefined
+  const resposta = Math.min(...[lead.marcos.respondeu, lead.resposta?.em].map((v) => Date.parse(v ?? '')).filter(Number.isFinite))
+  if (Number.isFinite(resposta) && Date.parse(c.desde) > resposta) return undefined
+  const { gente, recepcao, robo } = c.entradas
+  if (gente > 0) return 'gente'
+  if (recepcao > 0) return 'recepcao'
+  return robo > 0 ? 'robo' : undefined
 }
 
 /** Leu: o recibo de leitura ou a resposta de gente (quem respondeu leu). Sem recibo é "não sei", nunca "não leu". */
@@ -110,9 +127,15 @@ export function leu(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'leitura'>): boo
   return Boolean(lead.marcos.visto) || lead.leitura === 'viu' || respondeuDeGente(lead)
 }
 
-/** Disse "quero ver": a resposta de gente classificada como interesse, ou já na proposta/fechado. */
-export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'>): boolean {
-  return respondeuDeGente(lead) && (lead.resposta?.tipo === 'interesse' || lead.etapa === 'proposta' || lead.etapa === 'ganho')
+/**
+ * Disse "quero ver": a resposta de gente classificada como interesse, ou já na proposta/fechado. A
+ * licença ("pode enviar sim" ao material oferecido, 17/10/2026) não é "quero ver"; e o "interesse" só da
+ * recepção também não, sozinho: quem atende o público não decide a compra.
+ */
+export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
+  if (!respondeuDeGente(lead)) return false
+  if (lead.etapa === 'proposta' || lead.etapa === 'ganho') return true
+  return lead.resposta?.tipo === 'interesse' && quemRespondeu(lead) !== 'recepcao'
 }
 
 /** O rótulo do grupo do lead em cada critério. */
@@ -238,8 +261,10 @@ export interface EnviosAnotadosNoPeriodo {
 
 /** A última mensagem de gente do lead: `respondeu_em` ou a resposta classificada (robô não conta). */
 function ultimaRespostaDeGente(lead: CrmLead): number | undefined {
+  // A conversa guardada também: a última de gente (o robô já fica de fora dela).
   const datas = [Date.parse(lead.marcos.respondeu ?? ''),
-    lead.resposta && lead.resposta.tipo !== 'bot' ? Date.parse(lead.resposta.em ?? '') : NaN].filter(Number.isFinite)
+    lead.resposta && lead.resposta.tipo !== 'bot' ? Date.parse(lead.resposta.em ?? '') : NaN,
+    Date.parse(lead.conversa?.ultimaEntrada ?? '')].filter(Number.isFinite)
   return datas.length ? Math.max(...datas) : undefined
 }
 
@@ -253,7 +278,7 @@ export function enviosAnotados(leads: CrmLead[], periodo: Periodo, agora: number
       const resposta = ultimaRespostaDeGente(l)
       if (resposta !== undefined && resposta > followup) saida.responderamDepois++
     }
-    if (l.resposta?.tipo === 'interesse') {
+    if (l.resposta?.tipo === 'interesse' && quisVer(l)) {
       saida.quiseramVer++
       if (l.marcos.segundaEnviada) saida.segundas++
     }

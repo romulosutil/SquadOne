@@ -16,6 +16,7 @@ import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
+import { textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
 import { useAssistente } from '../casca/assistente'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
@@ -176,7 +177,8 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const prumo = props.lead.produto === 'prumo'
   // Iris e estamparias: o site é o da empresa e a Etapa muda na planilha, como no PRUMO.
   const convite = ehConvite(props.lead.produto)
-  const interesse = props.lead.resposta?.tipo === 'interesse'
+  // A licença (17/10/2026) também põe a 2ª mensagem no passo: é o material que ele deixou mandar.
+  const interesse = props.lead.resposta?.tipo === 'interesse' || props.lead.resposta?.tipo === 'licenca'
   // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
   // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
   const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)
@@ -312,7 +314,9 @@ const rascunho = computed(() => {
 
 // ------------------------------------------------------------ a conversa (o observador, 16/10/2026)
 
-const conversaTodas = ref<Array<{ em: string; direcao: 'entrada' | 'saida'; texto: string }>>([])
+const conversaTodas = ref<Array<{ em: string; direcao: 'entrada' | 'saida'; texto: string; papel?: PapelDaMensagem }>>([])
+// Quem escreveu, quando não é o lead falando por si (17/10/2026): a recepção não decide, o robô nem é gente.
+const QUEM_DO_PAPEL: Record<PapelDaMensagem, string> = { recepcao: 'recepção', robo: 'resposta automática' }
 const conversaGuardada = ref<boolean | null>(null)
 const conversaErro = ref('')
 const conversaInteira = ref(false)
@@ -630,12 +634,12 @@ function irParaAnotar() {
         <li v-if="conversaCortada" class="crm-muted"><button type="button" class="crm-mais" @click="conversaInteira = true">Ver as {{ conversaTodas.length - conversa.length }} mensagens anteriores</button></li>
         <li v-for="(m, i) in conversa" :key="`${m.em}-${i}`" :class="`is-${m.direcao}`">
           <span class="so-leitor">{{ m.direcao === 'entrada' ? `${lead.empresa} escreveu` : 'Você escreveu' }}</span>
-          <p>{{ m.texto || (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
-          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}</time>
+          <p>{{ m.texto ? textoParaATela(m.texto) : (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
+          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}{{ m.papel ? ` · ${QUEM_DO_PAPEL[m.papel]}` : '' }}</time>
         </li>
       </ol>
       <template v-else>
-        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
+        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ textoParaATela(lead.resposta.trecho) }}</blockquote>
         <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
         <p class="crm-muted">{{ conversaGuardada === false ? 'A conversa inteira aparece aqui a partir das próximas mensagens: o observador passou a guardar em 16/10/2026.' : conversaErro || '' }}</p>
       </template>

@@ -117,7 +117,8 @@ ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabel
 `src/operations-agora-e-desfecho.test.ts` (17/10/2026, AC-05/08/09/12: `fraseDaAcao`, uma frase por tipo de ação e a mesma no cartão da
 Próxima venda e no "Agora" da Ficha, com e sem o copiloto; `acaoDoLead` dá ação ao segundo lead "pronto"; `agoraDaFicha` sem ação (ganho,
 perdido, próximo passo salvo, esperando desde, vez do robô); `linkDoPasso` nunca abre o gerar_demo; `desfechosDoLead`, estados e desfazer
-por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha),
+por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha; desde 17/10/2026, a licença e o "Você já respondeu"
+na tabela do `fraseDaAcao`),
 `src/operations-triagem.test.ts` (17/10/2026, AC-10, `triagem.ts`: o lote nasce com os 10 primeiros na ordem do servidor; dispensar tira o
 item na hora sem puxar o 11º; o convidado fica à vista sem contar como pendente; decidido o lote, vêm os 10 seguintes; dispensado no retrato
 (`perdaManual`) fica fora; poda da marca local (dispensado confirmado, convidado fora da Revisar, lead sumido, vencida); storage quebrado;
@@ -155,6 +156,15 @@ virou mensagem não conta e o link visto entra; o "o que achou?" no lugar de man
 encerra o "quero ver"; sem conversa, o cartão pede para conferir; mensagem nova dele é uma vez nova; a sugestão do
 copiloto no lugar do texto pronto sem anotar envio; quem o automático lê primeiro; o vendedor esperando o copiloto até 4
 min e saindo com a mensagem dele quando está pronta; diretório temporário próprio),
+`server/conversa-baoba.test.ts` (17/10/2026, o caso Baobá de ponta a ponta pelo `montarCrm` e pela fila: o papel gravado ou
+lido do texto na leitura do JSONL; o resumo sem o robô na última de gente e com o vídeo como link; antes do vídeo, a licença
+pede "o que ele autorizou" sem "disse sim" e o cartão diz "Respondeu ontem" pela última mensagem; com a última mensagem
+nossa, "Você já respondeu"; depois do vídeo, só o "o que achou?" no dia seguinte e nada logo depois; o prazo de Perdido não
+recomeça com o robô e recomeça com a recepção),
+`src/operations-marcadores-da-conversa.test.ts` (17/10/2026, tabelas PURAS de `marcadores-da-conversa.ts`: `papelDaMensagem`
+(campo gravado, assinatura de atendente, menu de atendimento), áudio com e sem transcrição e o marcador antigo na tela e para
+o modelo, `levouMaterial`; `quemRespondeu`/`respondeuDeGente`/`quisVer` com robô, recepção e licença; a linha da conversa com
+áudio e papel; a licença anotável como 2ª mensagem; o dossiê do copiloto com o áudio desconhecido e o papel),
 `server/jornadas-de-venda.test.ts` (16/10/2026, a simulação das jornadas: um lead do Site passa pelo retrato de verdade
 (`montarCrm`) do pronto ao "quero ver", e a fila de venda (`proxima-venda.ts`) diz o que fazer em cada passo: primeira
 mensagem com o texto do Balcão e só com a trava de ritmo livre; nada para quem não leu; follow-up de quem leu; o "quero ver"

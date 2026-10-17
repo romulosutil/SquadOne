@@ -11,6 +11,7 @@ import {
 } from './funil-lista'
 import { passoAtual } from './jornada'
 import { acaoDoLead, type AcaoDeVenda } from './proxima-venda'
+import { textoParaATela } from './marcadores-da-conversa'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
@@ -351,7 +352,7 @@ const artefatos = (l: CrmLead) => {
                 <li :class="{ 'is-feito': lead.marcos.respondeu }">{{ lead.marcos.respondeu ? `Respondeu ${dataCurta(lead.marcos.respondeu)}` : 'Sem resposta' }}</li>
               </ol>
               <p v-if="artefatos(lead)" class="crm-cartao__artefatos">{{ artefatos(lead) }}<template v-if="lead.pasta?.falha"> · falhou: {{ lead.pasta.falha }}</template></p>
-              <p v-if="lead.resposta?.trecho && lead.etapa !== 'novo'" class="crm-cartao__resposta">“{{ lead.resposta.trecho }}”</p>
+              <p v-if="lead.resposta?.trecho && lead.etapa !== 'novo'" class="crm-cartao__resposta">“{{ textoParaATela(lead.resposta.trecho) }}”</p>
               <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead) || (lead.etapa === 'novo' && lead.triagem)" class="crm-sinais">
                 <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>

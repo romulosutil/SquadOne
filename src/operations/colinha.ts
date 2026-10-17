@@ -795,6 +795,11 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
         motivo = convidaMapa
           ? 'Respondeu com interesse depois do Raio-X: com equipe, o convite para o Mapa; sem, a conversa e o preço.'
           : 'Respondeu com interesse: mande o próximo passo e já fale de preço.'
+      } else if (tipo === 'licenca') {
+        // 17/10/2026 (a Baobá): "pode enviar sim" ao material oferecido é licença, não "quero ver". O
+        // trecho é o de mandar; o preço fica para depois de ele dizer o que achou.
+        momentos = ['pode-mandar']
+        motivo = 'Deixou mandar o material: mande só o que ofereceu, sem preço, e depois pergunte o que achou.'
       } else if (tipo === 'exclusao') {
         objecoes = [objecao('pode-apagar'), ...reconhecidas]
         motivo = 'Pediu para apagar: agradeça e apague no mesmo dia.'

@@ -1,6 +1,7 @@
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO } from '../../server/site-mensagem.ts'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
+import { textoParaATela } from './marcadores-da-conversa'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
@@ -46,7 +47,8 @@ export function textoDaSubEtapa(sub: string): string {
 
 /** O rótulo e o texto de um evento da linha do tempo: o desfecho é um fato, então o verbo. */
 export function textoDoEvento(texto: string): string {
-  return texto.replace(/^Fechou\b/, 'Ganhou').replace(/^Viu a mensagem\b/, 'Leu a mensagem')
+  // O trecho da resposta pode ser só o marcador de um áudio que ninguém ouviu (17/10/2026).
+  return textoParaATela(texto).replace(/^Fechou\b/, 'Ganhou').replace(/^Viu a mensagem\b/, 'Leu a mensagem')
 }
 
 export const ROTULO_DA_PERDA: Record<NonNullable<CrmLead['motivoPerda']>, string> = {
@@ -69,6 +71,7 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   negativa: 'Negativa',
   exclusao: 'Pediu para apagar',
   interesse: 'Interesse',
+  licenca: 'Deixou mandar',
   neutra: 'Sem sim nem não',
   bot: 'Só robô',
 }
