@@ -103,6 +103,7 @@ import {
   todayWindow,
   type AgendaSummary,
 } from "./server/operations.ts";
+import { contarEscritasDaApi, criarContadorDeUso } from "./server/uso.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
 import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
@@ -332,6 +333,11 @@ async function startServer() {
     app.use(guardaDeIdentidade(loginsDoTailscale));
   }
 
+  const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
+  // Contador de uso da Central (AC-28): só no Dell. Falhar ao preparar a pasta não derruba o boot.
+  const usoDaCentral = squadOneMode === "operations" ? criarContadorDeUso({ dir: path.join(operationsDataDir, "uso") }) : undefined;
+  await usoDaCentral?.iniciar().catch((error) => console.error("[uso] pasta indisponível:", error instanceof Error ? error.message : error));
+
   // A página da Entrada (menu "Entrada"): só no perfil operations, destino fixo no loopback, e ANTES do
   // express.json(): o corpo de um envio é um arquivo de até 200 MB e passa em fluxo, sem ser lido aqui.
   if (squadOneMode === "operations") {
@@ -339,6 +345,8 @@ async function startServer() {
     // Escrita só da mesma origem (regra 7): o header de identidade acompanha
     // também um POST forjado por outra página aberta no celular.
     app.use("/api", guardaDeOrigem());
+    // Depois da guarda: escrita recusada por origem não é uso. Conta só método + modelo da rota.
+    if (usoDaCentral) app.use("/api", contarEscritasDaApi(usoDaCentral));
   }
 
   app.use(express.json());
@@ -353,7 +361,6 @@ async function startServer() {
     res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva });
   });
 
-  const operationsDataDir = process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations");
   if (operationsConfig) {
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
@@ -406,6 +413,7 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
       memoriaDaVenda,
+      uso: usoDaCentral,
     }));
 
     // O vendedor (16/10/2026): "Envie para X" no Telegram, seg–sex 08:00–17:30, um por vez, com a

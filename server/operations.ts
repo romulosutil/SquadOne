@@ -8,6 +8,7 @@ import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type C
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
 import { criarMemoriaDaVenda, MAX_CHAVE, type MemoriaDaVenda } from "./venda-do-dia.ts";
+import { MAX_CORPO_DO_BEACON, telaDoCorpo, type ContadorDeUso } from "./uso.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
@@ -448,6 +449,8 @@ export function createOperationsRouter(options: {
   dataDir: string;
   /** O "Enviei"/"Pular" do dia, dividido com o vendedor (OT-01); ausente, a rota cria a sua. */
   memoriaDaVenda?: MemoriaDaVenda;
+  /** Contador de uso (server/uso.ts, AC-28); ausente, /uso responde 503. */
+  uso?: ContadorDeUso;
 }): express.Router {
   const router = express.Router();
 
@@ -695,6 +698,33 @@ export function createOperationsRouter(options: {
       res.status(204).end();
     } catch (error) {
       responderErroDoCopiloto(res, error);
+    }
+  });
+
+  // Telas vistas (AC-28): o beacon da casca (src/casca/rota.ts) a cada troca de rota. O sendBeacon
+  // manda `text/plain` (tipo que não pede preflight), por isso o corpo chega como texto; passa pela
+  // guarda de mesma origem como qualquer POST (o navegador põe Origin e Sec-Fetch-Site nele).
+  const lerTextoDoBeacon = express.text({ type: "text/plain", limit: MAX_CORPO_DO_BEACON });
+  router.post("/uso", (req, res, next) => {
+    // Corpo grande demais é 413 curto, sem a pilha do erro no journal a cada tentativa.
+    lerTextoDoBeacon(req, res, (erro?: unknown) => (erro ? void res.status(413).json({ error: "Corpo grande demais." }) : next()));
+  }, (req, res) => {
+    if (!options.uso) return void res.status(503).json({ error: "O contador de uso está desligado." });
+    const tela = telaDoCorpo(req.body);
+    if (!tela) return void res.status(400).json({ error: "Diga a rota da tela." });
+    options.uso.contarTela(tela);
+    res.status(204).end();
+  });
+  // O agregado por dia, para a auditoria (sem tela por enquanto). Só lê.
+  router.get("/uso", async (req, res) => {
+    if (!options.uso) return void res.status(503).json({ error: "O contador de uso está desligado." });
+    const dias = Number.parseInt(typeof req.query.dias === "string" ? req.query.dias : "14", 10);
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ dias: await options.uso.ler(Number.isFinite(dias) ? dias : 14) });
+    } catch (error) {
+      console.error("[uso] não leu:", error instanceof Error ? error.message : error);
+      res.status(500).json({ error: "Não deu para ler o uso agora." });
     }
   });
 

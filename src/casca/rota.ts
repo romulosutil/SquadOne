@@ -51,6 +51,70 @@ export function interceptarLink(e: MouseEvent, c: Capacidades) {
   navegar(href)
 }
 
+// ------------------------------------------------------------------ contador de uso (AC-28)
+
+const ROTA_DO_USO = '/api/operations/uso'
+let ultimaTelaContada = ''
+
+/**
+ * Só o caminho, `ver`/`produto` e se há ficha aberta: o id do lead nunca sai daqui (o servidor
+ * peneira de novo em server/uso.ts, mas o que não sai não vaza). Finanças vão só pelo caminho.
+ */
+function telaAtual(): string {
+  const q = new URLSearchParams(window.location.search)
+  const p = new URLSearchParams()
+  const caminhoAtual = normalizarCaminho(window.location.pathname)
+  if (caminhoAtual === '/crm') {
+    for (const chave of ['ver', 'produto']) {
+      const v = q.get(chave)
+      if (v) p.set(chave, v.slice(0, 20))
+    }
+    if (q.get('lead')) p.set('lead', '1')
+  }
+  const busca = p.toString()
+  return `${caminhoAtual}${busca ? `?${busca}` : ''}`
+}
+
+/**
+ * Conta a tela no servidor quando ela muda. sendBeacon porque não segura a navegação nem espera
+ * resposta; falha (perfil app, que responde 404, ou navegador sem beacon) é silenciosa: contar
+ * nunca pode atrapalhar a tela.
+ */
+function contarTela() {
+  const tela = telaAtual()
+  if (tela === ultimaTelaContada) return
+  ultimaTelaContada = tela
+  try {
+    navigator.sendBeacon?.(ROTA_DO_USO, JSON.stringify({ rota: tela }))
+  } catch {
+    // sem contagem
+  }
+}
+
+/**
+ * O CRM (`?ver=&lead=`) e as Finanças escrevem o endereço com o próprio history, fora de `navegar`;
+ * por isso o contador escuta no history e não só aqui. Uma vez por página (o HMR do Vite reavalia o
+ * módulo): a marca fica no próprio history. Trocar só a query das finanças (mês, busca) dá a mesma
+ * tela e não conta de novo.
+ */
+const MARCA_DO_CONTADOR = Symbol.for('squadone.contadorDeUso')
+function instalarContadorDeUso() {
+  const h = history as History & { [MARCA_DO_CONTADOR]?: true }
+  if (!h[MARCA_DO_CONTADOR]) {
+    h[MARCA_DO_CONTADOR] = true
+    for (const metodo of ['pushState', 'replaceState'] as const) {
+      const original = h[metodo].bind(h)
+      h[metodo] = (...args: Parameters<History['pushState']>) => {
+        original(...args)
+        contarTela()
+      }
+    }
+    window.addEventListener('popstate', contarTela)
+  }
+  contarTela()
+}
+instalarContadorDeUso()
+
 /** Voltar/avançar do navegador (e do Android) troca a rota. */
 export function ouvirHistorico(): () => void {
   const aoVoltar = () => {
