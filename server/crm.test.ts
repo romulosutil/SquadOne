@@ -634,7 +634,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
       "Quer saber mais há 5 h — combinar a demonstração");
   });
 
-  it("Prospects para revisar: a maior Prioridade do caçador primeiro, com sinais, nota, Maps e o WhatsApp não confirmado dito", () => {
+  it("Prospects para revisar: a maior Prioridade primeiro, com sinais, nota, Maps e o WhatsApp não confirmado dito", () => {
     const base = retrato();
     const linhas = [
       linhaPrumo("baixa", { Prioridade: "40", Sinais: "TEA", "Origem do WhatsApp": "link no site", "Encontrado em": dias(9) }),
@@ -645,16 +645,19 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     base.fontes.iris = { planilha: "PRUMO — Fila de revisão", aba: "Clínicas", colunas: Object.keys(linhas[0]), linhas };
     const v = montarCrm(base, { agora: AGORA, pastas: PASTAS });
     const revisar = v.hoje.find((g) => g.id === "revisar")!.itens;
-    // 15/10/2026: o WhatsApp não confirmado (42) vem depois de todo confirmado, mesmo de Prioridade menor (40).
-    assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:baixa", "iris:sem-zap", "prumo:revisar"], "PRUMO sem Prioridade vem depois");
+    // 15/10/2026: o WhatsApp não confirmado vem depois de todo confirmado, mesmo de Prioridade menor.
+    // 17/10/2026: a Prioridade é a da Central (prioridadeDaTriagem), não a do caçador, e o PRUMO entra
+    // na mesma conta: alta 76 (nota, volume, contato, site, 2 sinais), baixa 45, PRUMO 40 (contato e site).
+    assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:baixa", "prumo:revisar", "iris:sem-zap"]);
     const alta = revisar[0];
-    assert.match(alta.detalhe, /Prioridade 96 · nota 5 \(43\) · convênio · ABA\./);
+    assert.match(alta.detalhe, /Prioridade 76 · nota 5 \(43\) · convênio · ABA\./);
     assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Enviar convite (marca como enviado)"]);
     assert.equal(lead(v.leads, "iris:alta").links.maps, "https://maps.google.com/?cid=1");
-    const semZap = revisar[2];
+    const semZap = revisar[3];
     assert.equal(semZap.acao, "Conferir o WhatsApp e decidir o convite");
     assert.match(semZap.detalhe, /WhatsApp não confirmado/);
-    assert.equal(lead(v.leads, "prumo:revisar").triagem, undefined, "o Prospects não tem triagem");
+    assert.match(semZap.detalhe, /Prioridade 23\./);
+    assert.deepEqual(lead(v.leads, "prumo:revisar").triagem, { prioridade: 40 }, "o Prospects ganha só a Prioridade");
   });
 
   it("registro aceita as quatro ofertas e recusa o resto", () => {

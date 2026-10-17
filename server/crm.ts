@@ -229,12 +229,21 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
-  "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito"] as const;
+  "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito",
+  "ganhou", "ganhou_desfeito", "dispensado", "dispensado_desfeito"] as const;
 /**
  * `recusou` (16/10/2026, OT-06 do blueprint): o desfecho marcado na Central. Antes o "Recusou" do Site
  * só existia na página do lead (fluxo 07) e no PRUMO só na Etapa da planilha; com a conversa guardada e
  * a resposta classificada como negativa ou exclusão, a Próxima venda oferece marcar em um toque.
+ *
+ * `ganhou` (17/10/2026, AC-08): o "Fechou" marcado na Central, para todas as ofertas. Antes só o Site
+ * tinha como fechar (a página do lead, fluxo 07) e o PRUMO só pela Etapa "Concluído" na planilha; o Plus,
+ * sem planilha, não tinha caminho nenhum, e quem fechava ficava na fila recebendo follow-up.
+ * `dispensado` (AC-10): o "Dispensar" da Triagem. Sem ele, o prospect que não serve só saía mudando a
+ * Etapa na planilha à mão, e a Triagem (1.423 itens em 17/10) não diminuía.
+ * Os dois têm o `_desfeito` do par: o último registro vale, como no sem_contato e no recusou.
  */
+export const TIPOS_DE_DESFECHO_DATADO: ReadonlySet<CrmTipoDeRegistro> = new Set(["ganhou", "ganhou_desfeito", "dispensado", "dispensado_desfeito"]);
 export type CrmTipoDeRegistro = (typeof TIPOS_DE_REGISTRO)[number];
 /** Os registros que o toque num link de envio faz sozinho: um clique duplo não pode virar dois envios. */
 export const TIPOS_DE_ENVIO: ReadonlySet<CrmTipoDeRegistro> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado"]);
@@ -491,8 +500,10 @@ export interface CrmLead {
   subEtapa: string;
   /** `expirou`: nunca respondeu em DIAS_SEM_RESPOSTA; `esfriou`: respondeu e parou de responder. */
   motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato";
-  /** A perda marcada na Central (aba CRM), que dá para desfazer de lá: "sem contato fácil" ou "recusou". */
-  perdaManual?: "sem-contato" | "recusou";
+  /** A perda marcada na Central (aba CRM), que dá para desfazer de lá: "sem contato fácil", "recusou" ou o "Dispensar" da Triagem. */
+  perdaManual?: "sem-contato" | "recusou" | "dispensado";
+  /** O ganho marcado na Central (registro `ganhou`, AC-08), que dá para desfazer de lá; o da planilha não entra. */
+  ganhoManual?: boolean;
   /** Teste do follow-up sem recibo (OT-10): o braço do lead do Site enviado desde 17/10/2026 sem recibo. */
   testeDoRecibo?: BracoDoRecibo;
   /** Só em Em contato sem próximo passo: em quantos dias vai para Perdido se o lead não escrever (1 = amanhã). */
@@ -712,15 +723,21 @@ function manuais(registros: Registro[]) {
   let proximo: Registro | undefined;
   // A perda marcada na Central: a última vale, e o "desfeito" do mesmo tipo a apaga.
   let semContato: Registro | undefined;
+  // O ganho marcado na Central (AC-08) corre à parte da perda: os dois podem existir (dispensado e depois
+  // fechou por fora), e quem decide qual vale é o mais novo (comDesfechoManual).
+  let ganho: Registro | undefined;
   for (const r of registros) {
-    if (r.tipo === "sem_contato" || r.tipo === "recusou") semContato = r;
-    if ((r.tipo === "sem_contato_desfeito" && semContato?.tipo === "sem_contato") || (r.tipo === "recusou_desfeito" && semContato?.tipo === "recusou")) semContato = undefined;
+    if (r.tipo === "sem_contato" || r.tipo === "recusou" || r.tipo === "dispensado") semContato = r;
+    if ((r.tipo === "sem_contato_desfeito" && semContato?.tipo === "sem_contato") || (r.tipo === "recusou_desfeito" && semContato?.tipo === "recusou")
+      || (r.tipo === "dispensado_desfeito" && semContato?.tipo === "dispensado")) semContato = undefined;
+    if (r.tipo === "ganhou") ganho = r;
+    if (r.tipo === "ganhou_desfeito") ganho = undefined;
     if (r.tipo === "proposta") proposta = r;
     if (r.tipo === "proposta_desfeita") proposta = undefined;
     if (r.tipo === "proximo_passo") proximo = r.texto ? r : undefined;
   }
   return {
-    proposta, proximo, semContato, notas: registros.filter((r) => r.tipo === "nota").length,
+    proposta, proximo, semContato, ganho, notas: registros.filter((r) => r.tipo === "nota").length,
     // Instantes dos envios anotados, em ordem: quem decide se valem é a regra de cada um (depois de quê).
     segundas: registros.filter((r) => r.tipo === "segunda_enviada").map((r) => r.em),
     followups: registros.filter((r) => r.tipo === "followup_enviado").map((r) => r.em),
@@ -821,19 +838,56 @@ export function reenvioDoRoboHoje(entrada: {
   return !followupJaEnviado(entrada.followups, enviado);
 }
 
-/** "Sem contato fácil" ou "Recusou" marcado na Central: encerra o lead como perdido, salvo se já estiver ganho ou perdido. */
-function comPerdaManual(calculada: EtapaCalculada, semContato: Registro | undefined): EtapaCalculada {
+// As subetapas dos desfechos marcados na Central. São elas que dizem qual desfecho está valendo (o
+// "desfazer" da Ficha): o sinal sozinho não basta, porque "recusou" e "fechou" também vêm da planilha.
+const SUB_RECUSOU_NA_CENTRAL = "Recusou (marcado na Central)";
+const SUB_GANHOU_NA_CENTRAL = "Fechou (marcado na Central)";
+const SUB_DISPENSADO_NA_TRIAGEM = "Dispensado na Triagem";
+
+/** O dia do registro, quando o Rômulo deu outro dia que não o do toque (fechou ontem, anotou hoje); senão, o toque. */
+function desdeDoRegistro(r: Registro): number {
+  const dia = dataDoDia(r.data);
+  return dia !== undefined && diaSP(dia) !== diaSP(r.em) ? dia : r.em;
+}
+
+/**
+ * Os desfechos marcados na Central. Ganho (AC-08) vale sobre qualquer etapa, até sobre Perdido: quem
+ * expirou e fechou por telefone fechou, e é o Rômulo dizendo. Só não troca o ganho que a planilha já
+ * deu (aí o "Fechou" da planilha manda). Com ganho e perda marcados, vale o mais novo: é o "último
+ * registro vale" dos pares, estendido aos dois. A perda (sem contato, recusou, dispensado) encerra como
+ * Perdido, salvo se o lead já estiver ganho ou perdido pela planilha.
+ */
+function comDesfechoManual(calculada: EtapaCalculada, semContato: Registro | undefined, ganho: Registro | undefined): EtapaCalculada {
+  if (ganho && (!semContato || ganho.em >= semContato.em)) {
+    return calculada.etapa === "ganho" ? calculada : { etapa: "ganho", sinal: "fechou", subEtapa: SUB_GANHOU_NA_CENTRAL, desde: desdeDoRegistro(ganho) };
+  }
   if (!semContato || calculada.etapa === "ganho" || calculada.etapa === "perdido") return calculada;
   if (semContato.tipo === "recusou") {
-    return { etapa: "perdido", sinal: "recusou", subEtapa: "Recusou (marcado na Central)", desde: semContato.em, motivoPerda: "recusou" };
+    return { etapa: "perdido", sinal: "recusou", subEtapa: SUB_RECUSOU_NA_CENTRAL, desde: semContato.em, motivoPerda: "recusou" };
+  }
+  // AC-10: o prospect que não serve sai da Triagem como Descartado, o mesmo motivo do Site descartado
+  // antes do contato; a subetapa diz de onde veio.
+  if (semContato.tipo === "dispensado") {
+    return { etapa: "perdido", sinal: "descartado", subEtapa: SUB_DISPENSADO_NA_TRIAGEM, desde: desdeDoRegistro(semContato), motivoPerda: "descartado" };
   }
   return { etapa: "perdido", sinal: "sem-contato", subEtapa: "Perdido: sem contato fácil", desde: semContato.em, motivoPerda: "sem-contato" };
 }
 
 /** Qual perda marcada na Central está valendo neste lead (para o "desfazer" da Ficha). */
 const perdaManualDo = (calculada: EtapaCalculada, semContato: Registro | undefined): CrmLead["perdaManual"] =>
-  semContato && calculada.subEtapa.endsWith("(marcado na Central)") ? "recusou"
-    : semContato && calculada.sinal === "sem-contato" ? "sem-contato" : undefined;
+  !semContato ? undefined
+    : calculada.subEtapa === SUB_RECUSOU_NA_CENTRAL ? "recusou"
+      : calculada.subEtapa === SUB_DISPENSADO_NA_TRIAGEM ? "dispensado"
+        : calculada.sinal === "sem-contato" ? "sem-contato" : undefined;
+
+/** Os dois campos do desfecho manual na ficha; ausentes quando o que vale é a planilha ou a regra. */
+function desfechoManualDo(calculada: EtapaCalculada, semContato: Registro | undefined, ganho: Registro | undefined): Pick<CrmLead, "perdaManual" | "ganhoManual"> {
+  const perda = perdaManualDo(calculada, semContato);
+  return {
+    ...(perda ? { perdaManual: perda } : {}),
+    ...(ganho && calculada.subEtapa === SUB_GANHOU_NA_CENTRAL ? { ganhoManual: true } : {}),
+  };
+}
 
 /** Quem já falou com a gente: a classificação do n8n e a pasta em _em-conversa/ contam como conversa. */
 const SINAIS_DE_CONVERSA: ReadonlySet<CrmSinal> = new Set(["respondeu", "em-conversa", "respondeu-prumo", "diagnostico"]);
@@ -888,6 +942,10 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     sem_contato_desfeito: "Perda por falta de contato desfeita",
     recusou: "Recusou (marcado na Central)",
     recusou_desfeito: "Recusa desfeita",
+    ganhou: SUB_GANHOU_NA_CENTRAL,
+    ganhou_desfeito: "Ganho desfeito",
+    dispensado: SUB_DISPENSADO_NA_TRIAGEM,
+    dispensado_desfeito: "Dispensa desfeita",
     segunda_enviada: "2ª mensagem enviada",
     followup_enviado: "Follow-up enviado",
     plus_enviado: "Primeira mensagem enviada",
@@ -903,7 +961,10 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
       ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : "Próximo passo limpo" }
       : r.tipo === "proposta" && r.data
         ? { texto: `Data da proposta: ${formatarDia(r.data)}${r.texto ? ` · ${r.texto}` : ""}` }
-        : r.texto ? { texto: r.texto } : {}),
+        // O ganho anotado noutro dia que não o do fechamento: a ficha diz o dia que ele deu.
+        : r.tipo === "ganhou" && desdeDoRegistro(r) !== r.em
+          ? { texto: `Fechou em ${formatarDia(r.data)}${r.texto ? ` · ${r.texto}` : ""}` }
+          : r.texto ? { texto: r.texto } : {}),
   }));
 }
 
@@ -1046,7 +1107,7 @@ function leadDoSite(linha: Linha, contexto: {
   const status = c("status").toLowerCase();
   const pasta = contexto.pastaPorId.get(chave);
   const registros = contexto.registros.get(`site:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups } = manuais(registros);
+  const { proposta, proximo, semContato, ganho, notas, segundas: segundasAnotadas, followups } = manuais(registros);
   // A conversa de verdade (16/10/2026): o link visto numa mensagem nossa é a 2ª mensagem, mesmo
   // mandado à mão; o toque que abriu o WhatsApp e não virou mensagem não é.
   const conv = conversaDoLead(contexto.conversas, numeroDoWhatsapp(c("waMe")), [urlHttps(c("site")), pasta?.siteUrl, urlHttps(c("raioXUrl"))],
@@ -1078,8 +1139,8 @@ function leadDoSite(linha: Linha, contexto: {
   const reenviado = resposta?.tipo === "bot" && t.respondeu === undefined && t.enviado !== undefined && followupJaEnviado(followups, t.enviado);
   const statusDaEtapa = status === "expirado" && (proximo || proposta || reenviado) ? "enviado" : status;
   const calculada = comPrazoDoContato(
-    comPerdaManual(etapaDoSite({ status: statusDaEtapa, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta,
-      publicadoEm: t.publicadoEm ?? t.raioXEm, semDemo: !urlHttps(c("site")) && !pasta?.siteUrl }), semContato),
+    comDesfechoManual(etapaDoSite({ status: statusDaEtapa, lugar: pasta?.lugar, publicado: Boolean(pasta?.artefatos.publicado), ...t, proposta, resposta,
+      publicadoEm: t.publicadoEm ?? t.raioXEm, semDemo: !urlHttps(c("site")) && !pasta?.siteUrl }), semContato, ganho),
     ultimaDoLead([t.respondeu, t.ultimaEntrada], resposta), t.enviado, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
@@ -1222,7 +1283,7 @@ function leadDoSite(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
-    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
+    ...desfechoManualDo(calculada, semContato, ganho),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: status || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1334,7 +1395,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const oferta = OFERTA_DE_PROSPECCAO[produto];
   const ehPrumo = produto === "prumo";
   const registros = contexto.registros.get(`${produto}:${chave}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups } = manuais(registros);
+  const { proposta, proximo, semContato, ganho, notas, segundas: segundasAnotadas, followups } = manuais(registros);
   const convite = instante(c("conviteEm"));
   const t = {
     encontrado: instante(c("encontradoEm")),
@@ -1349,7 +1410,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const conv = conversaDoLead(contexto.conversas, numeroDoWhatsapp(c("whatsapp")), [raioX?.url], segundasAnotadas, agora);
   const segundas = conv.segundas;
   const resposta = respostaDaLinha(c);
-  const calculada = comPrazoDoContato(comPerdaManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato),
+  const calculada = comPrazoDoContato(comDesfechoManual(etapaDoPrumo({ etapa: c("etapa"), ...t, proposta, resposta }), semContato, ganho),
     ultimaDoLead([t.respondeu, t.diagnostico, conv.ultimaEntrada], resposta), t.convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const whatsapp = numeroDoWhatsapp(c("whatsapp"));
@@ -1412,7 +1473,7 @@ function leadDoPrumo(linha: Linha, contexto: {
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
-    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
+    ...desfechoManualDo(calculada, semContato, ganho),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: c("etapa") || "(vazio)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1468,7 +1529,7 @@ export const ROTULO_DA_OFERTA: Record<OfertaDoPlus, string> = { site: "Site", pr
 function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<string, Registro[]>; geradoEm?: number; conversas?: ContextoDoCrm["conversas"] }): CrmLead {
   const { agora } = contexto;
   const registros = contexto.registros.get(`plus:${plus.id}`) ?? [];
-  const { proposta, proximo, semContato, notas, segundas: segundasAnotadas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
+  const { proposta, proximo, semContato, ganho, notas, segundas: segundasAnotadas, followups, enviadoPlus, respondeuPlus } = manuais(registros);
   // Plus: o site do lead conta como link. Desde 17/10/2026 (OT-13) o observador grava a conversa do Plus,
   // então a mensagem dele depois da primeira também vale como resposta (e recomeça os 7 dias) sem o
   // "Respondeu no WhatsApp" à mão, que continua valendo para o que veio por fora (ligação, outro número).
@@ -1480,7 +1541,7 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
   const base: EtapaCalculada = proposta || convite !== undefined || respondeu !== undefined
     ? etapaDoPrumo({ etapa: convite !== undefined ? "convite_enviado" : "", convite, respondeu, proposta })
     : { etapa: "novo", sinal: "pronto", subEtapa: "Pronto para enviar", desde: contexto.geradoEm };
-  const calculada = comPrazoDoContato(comPerdaManual(base, semContato), respondeu, convite, proximo, agora, followups);
+  const calculada = comPrazoDoContato(comDesfechoManual(base, semContato, ganho), respondeu, convite, proximo, agora, followups);
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   // O Plus não tem recibo de leitura (não passa pelo observador da planilha): conta como lido.
   const followupHoje = followupDoTerceiroDia({ etapa: calculada.etapa, emConversa, enviado: convite, leu: true, followups, agora });
@@ -1506,7 +1567,7 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
     sinal: calculada.sinal,
     subEtapa: calculada.subEtapa,
     ...(calculada.motivoPerda ? { motivoPerda: calculada.motivoPerda } : {}),
-    ...(perdaManualDo(calculada, semContato) ? { perdaManual: perdaManualDo(calculada, semContato) } : {}),
+    ...desfechoManualDo(calculada, semContato, ganho),
     ...(calculada.diasParaSair !== undefined ? { diasParaSair: calculada.diasParaSair } : {}),
     estadoNaPlanilha: "(Plus: sem planilha)",
     ...(desde !== undefined ? { desde: iso(desde), diasNaEtapa: dias(desde, agora) } : {}),
@@ -1538,6 +1599,120 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
     },
     divergencias: [],
   };
+}
+
+// ------------------------------------------------------------------ Triagem: a prioridade
+
+/** "4,5 (10)" ou "4.5 (10)", como o caçador e o Lead Scout gravam a Nota Google; o que não ler fica ausente. */
+export function notaDoGoogle(valor: string | undefined): { nota?: number; avaliacoes?: number } {
+  const m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:\((\d+)\))?/.exec(valor ?? "");
+  if (!m) return {};
+  const nota = Number(m[1].replace(",", "."));
+  const avaliacoes = m[2] !== undefined ? Number(m[2]) : undefined;
+  return {
+    ...(nota > 0 && nota <= 5 ? { nota } : {}),
+    ...(avaliacoes !== undefined && Number.isFinite(avaliacoes) ? { avaliacoes } : {}),
+  };
+}
+
+// As marcas que o caçador põe na coluna Sinais junto com os sinais do segmento (prumo-ofertas-triar.js):
+// não são sinal de nada a favor, então não contam como sinal.
+const MARCAS_DO_CACADOR = ["perfil não confirmado", "profissional que atende sozinho", "nenhum sinal no site"];
+
+export interface EntradaDaPrioridade {
+  /** A Nota Google crua ("4,5 (10)"). */
+  nota?: string;
+  /** A coluna Sinais do caçador, " · " entre os itens. */
+  sinais?: string;
+  origemWhatsapp?: string;
+  temSite: boolean;
+  temWhatsapp: boolean;
+  porte?: PorteDoCnpj;
+  /** Taxa de resposta dos convites do mesmo nicho na mesma oferta (0 a 1), só com amostra mínima. */
+  taxaDoNicho?: number;
+}
+
+/** Nota média que se supõe para quem tem poucas avaliações, e quantas avaliações "valem" essa suposição. */
+const NOTA_A_PRIORI = 4.3;
+const PESO_DA_NOTA_A_PRIORI = 10;
+/** Avaliações que dão o volume inteiro (escala log): 500 é negócio estabelecido no bairro. */
+const AVALIACOES_DO_TETO = 500;
+/** Convites no nicho para a taxa de resposta valer, e a taxa que já dá os pontos todos. */
+export const AMOSTRA_MINIMA_DO_NICHO = 10;
+const TAXA_DO_TETO = 0.3;
+
+/**
+ * PURA. A Prioridade da Triagem (17/10/2026): de 0 a 100, ordena a revisão humana, não diagnostica a
+ * empresa. A do caçador (prumo-ofertas-triar.js) satura: sinais do segmento valiam até 50, e com
+ * contato, avaliações e nota o teto de 100 chegava para quase todos (os 1.423 da Triagem ao vivo
+ * mostravam "Prioridade 100", e a ordem virava a da data). Esta pesa o que diferencia, com o que o
+ * retrato já tem, e cada parte é contínua para quase não empatar:
+ *
+ * - Reputação no Google, até 35. Nota até 15, pela média bayesiana ((nota × n + 4,3 × 10) / (n + 10)),
+ *   de 3,5 (0) a 5,0 (15): um 5,0 com 2 avaliações não passa um 4,8 com 300. Volume até 20, em log
+ *   (20 × log(1 + n) / log(501)): 10 avaliações dão 8, 100 dão 15, 500 ou mais dão 20.
+ * - Contato, até 25: WhatsApp publicado pela empresa (site, link do Google) 25; "não confirmado" (o
+ *   celular do Google) 8, porque é quem mais denuncia (trava de ritmo, 15/10); sem WhatsApp, 0.
+ * - Site, 10: é onde a revisão confere o perfil; sem site o caçador já marca "perfil não confirmado".
+ * - Sinais do segmento, 5 cada, até 15 (eram 10 cada até 50: é aqui que saturava).
+ * - Porte conferido pelo CNPJ (EPP ou DEMAIS, só PRUMO), 5.
+ * - Nicho, até 10: a taxa de resposta dos convites do mesmo nicho na mesma oferta, com pelo menos
+ *   AMOSTRA_MINIMA_DO_NICHO convites (10 × taxa / 30%, teto 10); sem amostra, 5 (neutro: nem prêmio
+ *   nem castigo por não saber).
+ * - "Profissional que atende sozinho?" (marca do caçador do Iris, que é para clínica com equipe), -20.
+ *
+ * Arredondada e presa entre 0 e 100. O "não confirmado" continua indo depois de todo confirmado na
+ * Hoje (montarHoje): a regra da trava de ritmo vem antes desta conta.
+ */
+export function prioridadeDaTriagem(e: EntradaDaPrioridade): number {
+  const { nota, avaliacoes } = notaDoGoogle(e.nota);
+  const n = avaliacoes ?? (nota !== undefined ? 1 : 0);
+  const media = nota === undefined ? undefined : (nota * n + NOTA_A_PRIORI * PESO_DA_NOTA_A_PRIORI) / (n + PESO_DA_NOTA_A_PRIORI);
+  const pontosDaNota = media === undefined ? 0 : 15 * Math.min(1, Math.max(0, (media - 3.5) / 1.5));
+  const pontosDoVolume = 20 * Math.min(1, Math.log10(1 + n) / Math.log10(1 + AVALIACOES_DO_TETO));
+  const naoConfirmado = (e.origemWhatsapp ?? "").startsWith("não confirmado");
+  const pontosDoContato = !e.temWhatsapp ? 0 : naoConfirmado ? 8 : 25;
+  const itens = (e.sinais ?? "").split("·").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const sinais = itens.filter((s) => !MARCAS_DO_CACADOR.some((m) => s.startsWith(m))).length;
+  const solo = itens.some((s) => s.startsWith("profissional que atende sozinho"));
+  const pontosDoNicho = e.taxaDoNicho === undefined ? 5 : 10 * Math.min(1, Math.max(0, e.taxaDoNicho / TAXA_DO_TETO));
+  const total = pontosDaNota + pontosDoVolume + pontosDoContato + (e.temSite ? 10 : 0) + Math.min(15, sinais * 5)
+    + (e.porte ? 5 : 0) + pontosDoNicho - (solo ? 20 : 0);
+  return Math.round(Math.min(100, Math.max(0, total)));
+}
+
+const chaveDoNicho = (lead: Pick<CrmLead, "produto" | "nicho">) => `${lead.produto}:${normalizarCabecalho(lead.nicho)}`;
+
+/**
+ * PURA. A taxa de resposta dos convites por oferta e nicho, para a Prioridade da Triagem. Conta quem
+ * recebeu o convite (marco `enviado`) e, desses, quem respondeu de gente (marco `respondeu`, ou uma
+ * resposta classificada que não seja do robô). Nicho com menos de AMOSTRA_MINIMA_DO_NICHO convites fica
+ * de fora: 1 de 2 não é taxa.
+ */
+export function taxasDeRespostaPorNicho(leads: ReadonlyArray<Pick<CrmLead, "produto" | "nicho" | "marcos" | "resposta">>): Map<string, number> {
+  const contas = new Map<string, { enviados: number; responderam: number }>();
+  for (const lead of leads) {
+    if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto) || !lead.nicho || !lead.marcos.enviado) continue;
+    const chave = chaveDoNicho(lead);
+    const conta = contas.get(chave) ?? { enviados: 0, responderam: 0 };
+    conta.enviados += 1;
+    if (lead.marcos.respondeu || (lead.resposta && lead.resposta.tipo !== "bot")) conta.responderam += 1;
+    contas.set(chave, conta);
+  }
+  return new Map([...contas].filter(([, c]) => c.enviados >= AMOSTRA_MINIMA_DO_NICHO).map(([chave, c]) => [chave, c.responderam / c.enviados]));
+}
+
+/** A Prioridade de um lead de prospecção pelo que ele traz no retrato. */
+function prioridadeDoLead(lead: CrmLead, taxas: Map<string, number>): number {
+  return prioridadeDaTriagem({
+    ...(lead.triagem?.nota ? { nota: lead.triagem.nota } : {}),
+    ...(lead.triagem?.sinais ? { sinais: lead.triagem.sinais } : {}),
+    ...(lead.triagem?.origemWhatsapp ? { origemWhatsapp: lead.triagem.origemWhatsapp } : {}),
+    temSite: Boolean(lead.links.site),
+    temWhatsapp: Boolean(lead.links.whatsapp),
+    ...(lead.porte ? { porte: lead.porte } : {}),
+    ...(taxas.has(chaveDoNicho(lead)) ? { taxaDoNicho: taxas.get(chaveDoNicho(lead)) } : {}),
+  });
 }
 
 // ------------------------------------------------------------------ Hoje
@@ -1684,7 +1859,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
         acao: naoConfirmado ? "Conferir o WhatsApp e decidir o convite" : "Ver o site e decidir o convite",
         detalhe: [
           `${lead.nicho || "Sem segmento"}${lead.cidade ? ` · ${lead.cidade}` : ""} · ${textoDeDias(lead.diasNaEtapa, "encontrado") || "sem data"}.`,
-          // A triagem do caçador (Iris, estamparias): o que fez a empresa entrar e quão na frente ela vem.
+          // A triagem: quão na frente ela vem (prioridadeDaTriagem) e o que o caçador achou (Iris, estamparias).
           ...(tr?.prioridade !== undefined ? [`Prioridade ${tr.prioridade}${tr.nota ? ` · nota ${tr.nota}` : ""}${tr.sinais ? ` · ${tr.sinais}` : ""}.`] : []),
           ...(naoConfirmado ? ["WhatsApp não confirmado (é o celular do Google): confira no Instagram ou no Maps antes do convite."] : []),
         ].join(" "),
@@ -1693,7 +1868,8 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
           ...(lead.links.maps ? [{ rotulo: "Ver no Google Maps", url: lead.links.maps }] : []),
           ...(lead.links.convite ? [{ rotulo: "Enviar convite (marca como enviado)", url: lead.links.convite }] : []),
         ],
-        // Maior Prioridade primeiro (14/10/2026); sem Prioridade (PRUMO), depois, pela data como antes.
+        // Maior Prioridade primeiro (14/10/2026); desde 17/10 todo prospect em Revisar tem a da Central
+        // (prioridadeDaTriagem), e o PRUMO entra na mesma ordem. Sem Prioridade, depois, pela data como antes.
         // 15/10/2026 (trava de ritmo): o WhatsApp publicado pela empresa vem antes de qualquer "não
         // confirmado" (o celular do Google, muitas vezes o pessoal do dono, que é quem mais denuncia).
         // Com o teto do dia baixo, os convites vão primeiro para quem escolheu o WhatsApp como canal.
@@ -1815,6 +1991,15 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       leads.push(lead);
     }
   }
+  // A Prioridade da Triagem (17/10/2026) troca a do caçador, que saturava em 100: depende da taxa do
+  // nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a revisão) ou onde a
+  // planilha já trazia uma, para a ficha não mostrar dois números.
+  const taxas = taxasDeRespostaPorNicho(leads);
+  for (const lead of leads) {
+    if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto)) continue;
+    if (lead.etapa !== "novo" && lead.triagem?.prioridade === undefined) continue;
+    lead.triagem = { ...lead.triagem, prioridade: prioridadeDoLead(lead, taxas) };
+  }
   const contagens = contagemVazia();
   for (const lead of leads) {
     contagens[lead.etapa].total += 1;
@@ -1911,6 +2096,8 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (data && !Number.isFinite(Date.parse(`${data}T12:00:00-03:00`))) throw new RegistroInvalido("Data inválida.");
   if (tipo === "proximo_passo" && textoSeguro && !data) throw new RegistroInvalido("Informe a data do próximo passo.");
   if (tipo === "proposta" && !data) data = hojeEmSP(agora);
+  // Ganho e dispensa (AC-08, AC-10) levam o dia, como a proposta: "fechou ontem" anotado hoje conta de ontem.
+  if (TIPOS_DE_DESFECHO_DATADO.has(tipo) && !data) data = hojeEmSP(agora);
   if (tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito" || TIPOS_DE_ENVIO.has(tipo)) data = "";
   return { produto, id, tipo, texto: textoSeguro, data };
 }
@@ -2073,6 +2260,23 @@ export function conferirEnvio(tipo: CrmTipoDeRegistro, lead: Pick<CrmLead, "etap
   }
 }
 
+/**
+ * Quando o ganho e a dispensa podem ser marcados (AC-08, AC-10). PURA: lança RegistroInvalido com o
+ * motivo. Ganhar vale de qualquer etapa menos Ganho (quem saiu e fechou por fora fechou); dispensar
+ * só quem ainda está em Novo, porque é a decisão da Triagem antes do primeiro contato: quem já
+ * conversou sai pela recusa ou pelo "sem contato fácil", que dizem o que aconteceu. O desfazer só
+ * vale para o que a Central marcou (o da planilha se desfaz na planilha).
+ */
+export function conferirDesfecho(tipo: CrmTipoDeRegistro, lead: Pick<CrmLead, "etapa" | "perdaManual" | "ganhoManual">): void {
+  if (tipo === "ganhou" && lead.etapa === "ganho") throw new RegistroInvalido("Este lead já está em Ganho.");
+  if (tipo === "ganhou_desfeito" && lead.ganhoManual !== true) throw new RegistroInvalido("O ganho deste lead não foi marcado na Central.");
+  if (tipo === "dispensado" && lead.etapa !== "novo") {
+    throw new RegistroInvalido(lead.etapa === "ganho" || lead.etapa === "perdido" ? "Este lead já está encerrado."
+      : "Só quem ainda não recebeu contato sai pela Triagem; marque a recusa ou o sem contato fácil.");
+  }
+  if (tipo === "dispensado_desfeito" && lead.perdaManual !== "dispensado") throw new RegistroInvalido("Este lead não foi dispensado na Triagem.");
+}
+
 /** O mesmo envio no retrato há pouco (o n8n já refez o retrato depois do primeiro toque)? */
 export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipoDeRegistro, agora: number): string | undefined {
   if (!TIPOS_DE_ENVIO.has(tipo)) return undefined;
@@ -2216,6 +2420,7 @@ export class CrmStore {
     if (registro.tipo === "sem_contato_desfeito" && lead.perdaManual !== "sem-contato") throw new RegistroInvalido("Este lead não foi perdido por falta de contato.");
     if (registro.tipo === "recusou" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
     if (registro.tipo === "recusou_desfeito" && lead.perdaManual !== "recusou") throw new RegistroInvalido("A recusa deste lead não foi marcada na Central.");
+    conferirDesfecho(registro.tipo, lead);
     // Quem saiu pelo prazo (expirou/esfriou) não teve desfecho: uma proposta o traz de volta.
     if (registro.tipo === "proposta" && (lead.etapa === "ganho" || lead.etapa === "perdido") && !saiuPeloPrazo(lead)) {
       throw new RegistroInvalido("Lead já encerrado: desfaça o desfecho na página do lead antes.");
