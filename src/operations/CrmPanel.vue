@@ -21,6 +21,10 @@ import {
   gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, type EstadoDoRitmo, type PrimeirosContatos,
 } from './trava-de-ritmo'
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
+import {
+  ABAS_DE_VENDAS, ENDERECO_DO_ROTEIRO, SECOES_DE_ENTENDER, abaDaVista, enderecoDeVendas, lerEnderecoDeVendas, vistaDaAba,
+  type AbaDeVendas, type VistaDeVendas,
+} from './vendas-abas'
 import './crm.css'
 
 // CRM da Central (/crm): Site antes da venda + PRUMO num modelo só, com as
@@ -34,9 +38,12 @@ import './crm.css'
 // 17/10/2026 (AC-19, AC-20): quatro abas. O Roteiro saiu daqui: é consulta, não tarefa de venda, e
 // mora no Mais (/mais?abrir=roteiro); ?ver=roteiro e ?ver=colinha vão para lá. A vista "Por passo
 // da jornada" (?ver=jornada) virou o filtro Passo do Funil, e o endereço antigo cai nele.
-type Vista = 'afazer' | 'triagem' | 'funil' | 'numeros'
-/** O Roteiro inteiro, no Mais (outro trabalhador faz o Mais abrir nele; o Ctrl+K aponta para o mesmo). */
-const ENDERECO_DO_ROTEIRO = '/mais?abrir=roteiro'
+// 17/10/2026 (hierarquia de Vendas): três abas na ordem do trabalho, Fazer (A fazer), Triar (Triagem)
+// e Entender (Funil, Números e Resultados num segmentado, mais o botão do Roteiro de venda). O topo é
+// uma linha de saúde do retrato com o Atualizar; os avisos condicionais ficam numa dobra "Avisos (n)",
+// aberta sozinha só quando o retrato falhou. A dica de cada aba foi para o title, e as ofertas para um
+// "Filtros" fechado fora da A fazer. As regras do endereço moram em vendas-abas.ts (PURO, testado).
+type Vista = VistaDeVendas
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = ref<CrmVisao | null>(null)
@@ -45,6 +52,9 @@ const erro = ref('')
 const lidoEm = ref<Date | null>(null)
 const agora = ref(Date.now())
 const vista = ref<Vista>('afazer')
+/** A seção de Entender aberta por último: tocar na aba volta a ela (o Funil na primeira vez). */
+const ultimaDeEntender = ref<Vista>('funil')
+const aba = computed<AbaDeVendas>(() => abaDaVista(vista.value))
 const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
@@ -91,32 +101,22 @@ const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
 
 /** Lê o endereço; `false` quando ele foi para outra rota (o Roteiro, no Mais) e não há o que montar. */
 function lerEndereco(): boolean {
-  const q = new URLSearchParams(window.location.search)
-  const ver = q.get('ver')
+  const lido = lerEnderecoDeVendas(window.location.search)
   // Links antigos (Ficha aberta com Ctrl, favoritos, o Hermes): o Roteiro saiu das abas (AC-20).
-  if (ver === 'roteiro' || ver === 'colinha') {
-    navegar(ENDERECO_DO_ROTEIRO, true)
+  if (lido.tipo === 'roteiro') {
+    navegar(lido.para, true)
     return false
   }
-  vista.value = ver === 'funil' || ver === 'jornada' ? 'funil'
-    : ver === 'triagem' ? 'triagem'
-    : ver === 'numeros' || ver === 'resultados' ? 'numeros'
-    : 'afazer'
-  const p = q.get('produto')
-  produto.value = PRODUTOS.find(id => id === p) ?? 'todos'
-  passo.value = vista.value === 'funil' ? lerFiltroDePasso(q.get('passo')) : ''
-  leadId.value = q.get('lead')
+  vista.value = lido.vista
+  if (abaDaVista(lido.vista) === 'entender') ultimaDeEntender.value = lido.vista
+  produto.value = PRODUTOS.find(id => id === lido.produto) ?? 'todos'
+  passo.value = lido.vista === 'funil' ? lerFiltroDePasso(lido.passo) : ''
+  leadId.value = lido.lead
   return true
 }
 
 function escreverEndereco(substituir = false) {
-  const q = new URLSearchParams()
-  if (vista.value !== 'afazer') q.set('ver', vista.value)
-  if (produto.value !== 'todos') q.set('produto', produto.value)
-  if (vista.value === 'funil' && passo.value) q.set('passo', passo.value)
-  if (leadId.value) q.set('lead', leadId.value)
-  const busca = q.toString()
-  const url = `/crm${busca ? `?${busca}` : ''}`
+  const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value })
   if (url === `${window.location.pathname}${window.location.search}`) return
   if (substituir) history.replaceState(null, '', url)
   else history.pushState(null, '', url)
@@ -193,6 +193,18 @@ async function liberar(id: string) {
   if (!(await liberarLead(id))) anuncio.value = `${empresa}: envio liberado só nesta aba (o servidor não guardou).`
 }
 
+/**
+ * O "Liberar" do recado da Triagem: o mesmo de sempre, lead a lead (liberados.ts), para os do lote que
+ * só o horário segura, de uma vez. Em série, para não empilhar POSTs; um anúncio só no fim.
+ */
+async function liberarVarios(ids: string[]) {
+  if (!ids.length) return
+  anuncio.value = `${ids.length} prospect${ids.length === 1 ? '' : 's'}: convite liberado fora do expediente hoje.`
+  let guardados = 0
+  for (const id of ids) if (await liberarLead(id)) guardados++
+  if (guardados < ids.length) anuncio.value = `${ids.length - guardados} liberado${ids.length - guardados === 1 ? '' : 's'} só nesta aba (o servidor não guardou).`
+}
+
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).
 function depoisDoRegistro() {
   atrasos.push(window.setTimeout(() => carregar(), 5000), window.setTimeout(() => carregar(), 15000))
@@ -236,7 +248,6 @@ onMounted(async () => {
   // Foi para o Roteiro (no Mais): a casca troca a rota e este painel desmonta já.
   if (!lerEndereco()) return
   escreverEndereco(true)
-  mqEstreito?.addEventListener('change', aoMudarLargura)
   window.addEventListener('popstate', aoVoltarNoNavegador)
   document.addEventListener('visibilitychange', aoMudarVisibilidade)
   await carregar()
@@ -245,7 +256,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  mqEstreito?.removeEventListener('change', aoMudarLargura)
   window.removeEventListener('popstate', aoVoltarNoNavegador)
   document.removeEventListener('visibilitychange', aoMudarVisibilidade)
   window.clearInterval(temporizador)
@@ -294,45 +304,53 @@ const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? nul
 
 const idadeMin = computed(() => visao.value?.geradoEm ? Math.max(0, Math.round((agora.value - Date.parse(visao.value.geradoEm)) / 60_000)) : null)
 const velho = computed(() => idadeMin.value === null || idadeMin.value > (visao.value?.minutosAteVelho ?? 30))
+// Uma linha de saúde (17/10/2026): quando as planilhas foram lidas e há quanto tempo. O ciclo do n8n e
+// a hora em que esta tela leu vão no title, para quem quiser.
 const textoDoRetrato = computed(() => {
   if (!visao.value?.geradoEm) return 'Sem retrato das planilhas ainda.'
   const idade = idadeMin.value ?? 0
   const quando = idade < 1 ? 'agora há pouco' : idade < 60 ? `há ${idade} min` : `há ${Math.floor(idade / 60)} h`
-  return `Planilhas lidas às ${hora(visao.value.geradoEm)} (${quando}) · o n8n relê a cada 10 min`
+  return `Planilhas lidas às ${hora(visao.value.geradoEm)} (${quando})`
+})
+const detalheDoRetrato = computed(() => `O n8n relê as planilhas a cada 10 min.${lidoEm.value ? ` Esta tela leu às ${hora(lidoEm.value.toISOString())}.` : ''}`)
+
+// Os avisos condicionais do retrato, contados para o "Avisos (n)": nenhum some, todos dobrados juntos.
+const avisos = computed(() => {
+  const v = visao.value
+  if (!v) return { falhou: false, quantos: 0 }
+  const falhou = v.estado !== 'ok'
+  const quantos = [
+    falhou,
+    !falhou && (velho.value || Boolean(v.ultimaFalha)),
+    v.colunasAusentes.length > 0,
+    !falhou && !v.pastasLidas,
+    !falhou && Boolean(v.divergencias) && vista.value === 'funil',
+  ].filter(Boolean).length
+  return { falhou, quantos }
 })
 
 // ------------------------------------------------------------------ navegação
 
-// As abas dizem a tarefa, e a linha embaixo diz para que serve a aba aberta.
-const VISTAS: Array<{ id: Vista; rotulo: string; href: string; dica: string }> = [
-  { id: 'afazer', rotulo: 'A fazer', href: '/crm', dica: 'A próxima venda, uma por vez, na ordem de quem está mais perto de comprar. "Ver a fila inteira" mostra o resto.' },
-  { id: 'triagem', rotulo: 'Triagem', href: '/crm?ver=triagem', dica: 'Prospects que os caçadores acharam, em lotes de 10: convide ou dispense cada um. Não é venda: fica fora do A fazer.' },
-  { id: 'funil', rotulo: 'Funil', href: '/crm?ver=funil', dica: 'Todos os leads por etapa, no Quadro ou na Lista; o filtro Passo mostra um passo da jornada. Toque num lead para abrir a ficha.' },
-  { id: 'numeros', rotulo: 'Números', href: '/crm?ver=numeros', dica: 'Onde o funil perde, depois do "sim" e por nicho, mensagem e horário.' },
-]
-
 // Filtros (AC-15, 17/10/2026). No celular o botão da Próxima venda ficava a ~1.683 px do topo,
 // depois de 6 chips de oferta e 5 cartões de etapa que nem mudam a fila (ela é de todas as ofertas).
-// Agora os chips só aparecem onde filtram de verdade (Triagem, Funil e Números: a Triagem lê os
-// grupos da Hoje já filtrados pela oferta) e os cartões de etapa só nos Números (no Funil cada
-// coluna já traz o número). Abaixo de 48 rem os dois ficam num "Filtros" fechado, com o filtro
-// ativo no resumo; acima, à vista, como sempre.
+// Os chips só aparecem onde filtram de verdade (Triagem e Entender: a Triagem lê os grupos da Hoje já
+// filtrados pela oferta) e, desde a hierarquia de Vendas (17/10/2026), sempre num "Filtros" fechado com
+// o filtro ativo no resumo, também no desktop: filtrar é ajuste, não a decisão da tela. Os cartões de
+// etapa ficam só nos Números, à vista (no Funil cada coluna já traz o número).
 const temFiltroDeOferta = computed(() => vista.value !== 'afazer')
 const temCartoesDeEtapa = computed(() => vista.value === 'numeros')
-const mqEstreito = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 47.99rem)') : null
-const estreito = ref(mqEstreito?.matches ?? false)
-const aoMudarLargura = (e: MediaQueryListEvent) => { estreito.value = e.matches }
-const filtrosAbertos = ref(false)
-function aoAlternarFiltros(e: Event) {
-  if (estreito.value) filtrosAbertos.value = (e.target as HTMLDetailsElement).open
-}
-const resumoDosFiltros = computed(() => (produto.value === 'todos' ? 'Filtros' : `Filtros · ${SIGLA_DO_PRODUTO[produto.value]}`))
+const resumoDosFiltros = computed(() => (produto.value === 'todos' ? 'Filtros: todas as ofertas' : `Filtros: ${SIGLA_DO_PRODUTO[produto.value]}`))
 
 function trocarVista(nova: Vista) {
   vista.value = nova
+  if (abaDaVista(nova) === 'entender') ultimaDeEntender.value = nova
   leadId.value = null
   if (nova !== 'funil') passo.value = ''
   escreverEndereco()
+}
+
+function trocarAba(nova: AbaDeVendas) {
+  trocarVista(vistaDaAba(nova, ultimaDeEntender.value))
 }
 
 function trocarProduto(novo: FiltroProduto) {
@@ -379,13 +397,13 @@ function abrirColinha() {
 
 <template>
   <section class="crm" aria-labelledby="crm-titulo">
+    <!-- Uma linha de saúde: o título, quando as planilhas foram lidas e o Atualizar. -->
     <header class="crm-topo">
       <div>
-        <span class="crm-kicker">SquadOne · PRUMO</span>
         <h1 id="crm-titulo">Vendas</h1>
-        <p class="crm-topo__fonte">{{ textoDoRetrato }}<template v-if="lidoEm"> · tela lida às {{ hora(lidoEm.toISOString()) }}</template></p>
+        <p class="crm-topo__fonte" :title="detalheDoRetrato">{{ textoDoRetrato }}</p>
       </div>
-      <button class="botao" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> Vendas</span></button>
+      <button class="botao botao--leve" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> Vendas</span></button>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; falta só a anotação, que dá para fazer na ficha (nota). -->
@@ -396,7 +414,10 @@ function abrirColinha() {
 
     <div v-if="erro" class="crm-erro" role="alert"><strong>Vendas indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
-    <template v-if="visao">
+    <!-- Os avisos do retrato num lugar só, dobrados com a contagem; abertos sozinhos quando o retrato
+         falhou (aí nada da tela vale até ele voltar). -->
+    <details v-if="visao && avisos.quantos" class="dobra crm-avisos" :open="avisos.falhou">
+      <summary>Avisos ({{ avisos.quantos }})</summary>
       <div v-if="visao.estado !== 'ok'" class="crm-aviso is-forte" role="status">
         <strong>{{ visao.estado === 'sem-retrato' ? 'Ainda sem retrato das planilhas.' : 'Retrato ilegível.' }}</strong> {{ visao.mensagem }}
         <template v-if="visao.ultimaFalha"> Última tentativa do n8n ({{ dataHora(visao.ultimaFalha.em) }}): {{ visao.ultimaFalha.erro }}</template>
@@ -407,32 +428,50 @@ function abrirColinha() {
       </div>
       <p v-if="visao.colunasAusentes.length" class="crm-nota-pequena">Colunas que a planilha ainda não tem (Vendas trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
       <p v-if="visao.estado === 'ok' && !visao.pastasLidas" class="crm-nota-pequena">A pasta ~/auto-site não foi lida: sem conferência de pastas agora.</p>
-    </template>
+      <!-- A divergência é marcada no Funil: só conta como aviso lá. -->
+      <p v-if="visao.estado === 'ok' && visao.divergencias && vista === 'funil'" class="crm-nota-pequena">
+        {{ visao.divergencias }} lead{{ visao.divergencias === 1 ? '' : 's' }} com divergência entre planilha e pasta (marcados no Funil).
+        <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
+      </p>
+    </details>
 
     <div v-if="visao || erro" class="crm-controles">
-      <!-- Quatro abas com nome de tarefa (17/10/2026, AC-20: o Roteiro foi para o Mais). No celular,
-           uma linha que rola de lado (AC-15): a grade de 2 colunas deixava uma célula vazia e
-           empurrava a Próxima venda para baixo. -->
-      <nav class="crm-vistas" aria-label="Vistas de Vendas">
-        <a v-for="v in VISTAS" :key="v.id" :href="v.href" :aria-current="vista === v.id ? 'page' : undefined" @click.prevent="trocarVista(v.id)">
-          {{ v.rotulo }} <span v-if="visao && v.id === 'afazer'">{{ totalAFazer }}</span><span v-else-if="visao && v.id === 'triagem'">{{ totalTriagem }}</span><span v-else-if="visao && v.id === 'funil'">{{ leads.length }}</span>
+      <!-- Três abas na ordem do trabalho (17/10/2026): Fazer, Triar, Entender. A dica de cada uma vai no
+           title. No celular, uma linha que rola de lado (AC-15). -->
+      <nav class="crm-vistas" aria-label="Vendas: fazer, triar, entender">
+        <a v-for="a in ABAS_DE_VENDAS" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
+          {{ a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span><span v-else-if="visao && a.id === 'triagem'">{{ totalTriagem }}</span>
         </a>
       </nav>
-      <!-- Na A fazer do celular o cartão vem logo abaixo das abas: ele mesmo diz o que fazer. -->
-      <p v-if="!(estreito && vista === 'afazer')" class="crm-vistas__dica">{{ VISTAS.find((v) => v.id === vista)?.dica }}</p>
-      <!-- No celular, um "Filtros" fechado com o filtro ativo no resumo; no desktop o invólucro some
-           (display: contents) e os chips ficam ao lado das abas, como antes. -->
-      <component
-        :is="estreito ? 'details' : 'div'" v-if="temFiltroDeOferta" class="crm-filtros-da-aba" :class="{ dobra: estreito }"
-        v-bind="estreito ? { open: filtrosAbertos } : {}"
-        @toggle="aoAlternarFiltros"
-      >
-        <summary v-if="estreito">{{ resumoDosFiltros }}</summary>
+      <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
+      <div v-if="aba === 'entender'" class="crm-entender">
+        <div class="segmentado segmentado--auto" role="group" aria-label="Entender">
+          <button v-for="s in SECOES_DE_ENTENDER" :key="s.id" type="button" :title="s.dica" :aria-pressed="vista === s.id" @click="trocarVista(s.id)">{{ s.rotulo }}</button>
+        </div>
+        <a class="botao botao--leve" :href="ENDERECO_DO_ROTEIRO" @click.prevent="abrirColinha">Roteiro de venda</a>
+      </div>
+      <!-- As ofertas num "Filtros" fechado, com a escolhida no resumo: filtrar é ajuste, não a decisão. -->
+      <details v-if="temFiltroDeOferta" class="dobra crm-filtros-da-aba">
+        <summary>{{ resumoDosFiltros }}</summary>
         <div class="crm-produtos" role="group" aria-label="Ofertas do PRUMO">
           <button v-for="p in FILTROS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
         </div>
+      </details>
+    </div>
+
+    <template v-if="visao">
+      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" @abrir="abrirFicha" @resumo="resumoDoCartao = $event" />
+      <template v-else-if="vista === 'triagem'">
+        <CrmHoje
+          v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" :agora="agora"
+          :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
+          @abrir="abrirFicha" @liberar-lote="liberarVarios" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
+        />
+        <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
+      </template>
+      <template v-else-if="vista === 'numeros'">
         <!-- No Funil cada coluna (ou aba, no celular) já traz o número: o resumo só repetiria. -->
-        <ol v-if="temCartoesDeEtapa && visao?.estado === 'ok'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
+        <ol v-if="temCartoesDeEtapa && visao.estado === 'ok'" class="crm-resumo" aria-label="Resumo do funil (toque para abrir a etapa)">
           <li v-for="etapa in ETAPAS" :key="etapa" :class="`is-${etapa}`">
             <button type="button" @click="irParaEtapa(etapa)">
               <strong>{{ contagens[etapa] }}</strong>
@@ -440,26 +479,9 @@ function abrirColinha() {
             </button>
           </li>
         </ol>
-      </component>
-    </div>
-
-    <template v-if="visao">
-      <!-- A divergência é marcada no Funil: na A fazer era mais uma linha entre as abas e a venda. -->
-      <p v-if="visao.estado === 'ok' && visao.divergencias && vista === 'funil'" class="crm-nota-pequena">
-        {{ visao.divergencias }} lead{{ visao.divergencias === 1 ? '' : 's' }} com divergência entre planilha e pasta (marcados no Funil).
-        <template v-if="visao.pastasSemLinha.length"> {{ visao.pastasSemLinha.length }} pasta(s) sem linha na planilha.</template>
-      </p>
-
-      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" @abrir="abrirFicha" @resumo="resumoDoCartao = $event" />
-      <template v-else-if="vista === 'triagem'">
-        <CrmHoje
-          v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
-          :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
-          @abrir="abrirFicha" @liberar="liberar" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
-        />
-        <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
+        <CrmResultados parte="numeros" :leads="leads" :agora="agora" />
       </template>
-      <CrmResultados v-else-if="vista === 'numeros'" :leads="leads" :agora="agora" />
+      <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :agora="agora" />
       <CrmFunil
         v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :agora="agora" :etapa-em-foco="etapaEmFoco" :produto="produto" :passo="passo"
         :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
@@ -488,3 +510,11 @@ function abrirColinha() {
     <p v-else-if="carregando" class="crm-muted" role="status">Lendo Vendas…</p>
   </section>
 </template>
+
+<style>
+/* Entender (17/10/2026): o segmentado das três seções e o Roteiro de venda numa linha inteira, embaixo das abas. */
+.crm-entender { display: flex; flex-wrap: wrap; flex-basis: 100%; align-items: center; gap: var(--esp-2) var(--esp-3); min-width: 0; }
+.crm-entender .segmentado button { padding: 0 var(--esp-4); }
+/* Os avisos do retrato, dobrados: abertos, cada um na sua linha. */
+.crm-avisos[open] { display: grid; gap: var(--esp-2); min-width: 0; }
+</style>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
-import { ROTULO_DE_LIBERAR, envioTravado, type EnviosLiberados } from './trava-de-horario'
-import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
+import RecadoDeTravas from './RecadoDeTravas.vue'
+import { envioTravado, type EnviosLiberados } from './trava-de-horario'
+import type { EstadoDoRitmo } from './trava-de-ritmo'
 import {
   DESFAZER_MS, corpoDoRegistro, decidir, detalheSemPrioridade, esquecerDecisao, gravarDecisoes, lerDecisoes, loteDaTriagem, mesmoLote,
   motivoDoConviteTravado, podarDecisoes, prioridadesDiferem, textoDaPrioridade, type DecisoesDaTriagem, type RegistroDaTriagem,
@@ -15,8 +17,15 @@ import type { CrmGrupoHoje, CrmItemHoje, CrmLead } from './types'
 // `aviso`/`liberados` (trava-de-horario.ts): fora do expediente o Convidar fica desligado, com o
 // motivo, e o "Liberar" daquele lead ao lado. `ritmo` (trava-de-ritmo.ts): com o intervalo, a hora
 // ou o dia cheios, o Convidar fica desligado sem "Liberar". Dispensar nunca trava: não manda nada a ninguém.
+// 17/10/2026 (hierarquia de Vendas): dois avisos no topo, dez linhas com três botões cada (Convidar
+// desabilitado, "Liberar o envio fora do expediente" e Dispensar) e um parágrafo de explicação. Agora
+// a aba abre num botão só, "Triar (N)"; dentro, cada linha tem Convidar (o primário só na primeira que
+// espera, BP-R2) e Dispensar; as travas são um recado só (recado-de-travas.ts) com o quando, e o
+// "Liberar" é um link nele, uma vez para o lote (o mesmo "Liberar" do dia, lead a lead, liberados.ts).
 const props = defineProps<{
   grupo: CrmGrupoHoje; leads: Map<string, CrmLead>; aviso?: string | null; liberados: EnviosLiberados; ritmo: EstadoDoRitmo
+  /** O relógio da tela (CrmPanel), para o recado dizer quando volta. */
+  agora?: number
   /** Se a aba CRM aceita registro agora (CrmVisao.registro): sem ele, Dispensar não teria onde gravar. */
   registro: { disponivel: boolean; motivo?: string }
   /** Retrato legível: só ele diz quem saiu da Revisar, então só com ele as marcas locais são podadas. */
@@ -24,7 +33,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   abrir: [leadId: string, origem: HTMLElement | null]
-  liberar: [leadId: string]
+  /** O "Liberar" do recado: os do lote que só o horário segura, de uma vez. */
+  liberarLote: [leadIds: string[]]
   primeiro: [leadId: string]
   registrado: []
   restantes: [quantos: number]
@@ -73,14 +83,29 @@ const convidadoEm = (item: CrmItemHoje) => {
 
 // ------------------------------------------------------------------ convidar
 
-const segurado = computed(() => props.ritmo.motivo !== null)
 const conviteDe = (item: CrmItemHoje) => props.leads.get(item.leadId)?.links.convite ?? ''
 const travadoPeloHorario = (item: CrmItemHoje) => envioTravado(props.aviso, props.liberados, item.leadId)
 const motivo = (item: CrmItemHoje) =>
   motivoDoConviteTravado({ temConvite: Boolean(conviteDe(item)), ritmo: props.ritmo, travadoPeloHorario: travadoPeloHorario(item) })
-// O "Liberar" só quando é o horário que segura: com o ritmo cheio, liberar não destravaria nada.
-const mostraLiberar = (item: CrmItemHoje) => Boolean(conviteDe(item)) && !segurado.value && travadoPeloHorario(item)
-const haTravados = computed(() => lote.value.pendentes.some(mostraLiberar))
+// Os do lote que só o horário segura (com convite): o "Liberar" do recado é para eles, de uma vez.
+const travadosPeloHorario = computed(() => lote.value.pendentes.filter((i) => Boolean(conviteDe(i)) && travadoPeloHorario(i)).map((i) => i.leadId))
+const temConvites = computed(() => lote.value.pendentes.some((i) => Boolean(conviteDe(i))))
+// Um recado só para as duas travas. `aviso` presente = fora do expediente (avisoDeHorario, com a taxa).
+const recado = computed(() => recadoDasTravas({
+  agora: props.agora ?? Date.now(), noExpediente: !props.aviso, ritmo: props.ritmo, contexto: 'triagem',
+  liberado: travadosPeloHorario.value.length === 0, taxa: props.aviso,
+}))
+// A primeira linha que espera e pode convidar agora ganha o primário: um por tela (BP-R2), e é a próxima decisão.
+const primeiroConvidavel = computed(() => lote.value.pendentes.find((i) => !motivo(i))?.leadId ?? null)
+
+// "Triar (N)": a aba abre num botão só. Já dentro de um lote (alguma decisão tomada), entra direto.
+const triando = ref(false)
+watch(decididosNoLote, (n) => { if (n > 0) triando.value = true }, { immediate: true })
+async function entrar() {
+  triando.value = true
+  await nextTick()
+  titulo.value?.focus()
+}
 
 // O link abre o WhatsApp sozinho (target=_blank) e o clique no link rastreado já marca o envio na
 // planilha (RULES 17); aqui só a marca local e o toque de primeiro contato, para o ritmo andar na hora.
@@ -255,8 +280,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="crm-hoje crm-triagem">
-    <p v-if="aviso && haTravados" class="crm-aviso" role="note"><strong>Melhor deixar para o expediente.</strong> {{ aviso }} O convite fica desligado até você liberar aquele prospect.</p>
-    <p v-if="segurado && lote.pendentes.length" class="crm-aviso" role="status"><strong>Devagar com os primeiros contatos.</strong> {{ textoDoRitmo(ritmo) }} Dispensar continua livre.</p>
     <p v-if="falha" class="crm-aviso is-forte crm-triagem__falha" role="alert">
       {{ falha }} <button type="button" class="crm-mais" @click="falha = ''">Entendi</button>
     </p>
@@ -267,16 +290,26 @@ onBeforeUnmount(() => {
         <h2 id="crm-triagem-titulo" ref="titulo" tabindex="-1">{{ grupo.titulo }}</h2>
         <strong :aria-label="`${numero(lote.restantes)} esperando decisão`">{{ numero(lote.restantes) }}</strong>
       </header>
-      <p class="crm-triagem__conta">
-        {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template>
-      </p>
+      <!-- Uma frase: o que fazer com cada um e quando vem o próximo lote. -->
       <p class="crm-grupo__explicacao">
-        Convidar abre o WhatsApp com o convite e já marca o envio; Dispensar tira o prospect da lista. Decididos todos deste lote, aparece o próximo.
-        <template v-if="comPontuacao"> A pontuação, de 0 a 100, é a do caçador; a lista vem da maior para a menor.</template>
+        Convide ou dispense cada um destes {{ lote.ids.length }}; decididos todos, vem o próximo lote.<template v-if="comPontuacao"> A pontuação (0 a 100) é do caçador.</template>
       </p>
+      <RecadoDeTravas
+        v-if="temConvites && !recado.pode" id="crm-triagem-recado" :recado="recado"
+        :rotulo-do-liberar="rotuloDoLiberar('triagem', { quantos: travadosPeloHorario.length })"
+        @liberar="emit('liberarLote', travadosPeloHorario)"
+      />
       <p v-if="!registro.disponivel" class="crm-nota-pequena">Dispensar está desligado: nada grava na planilha agora<template v-if="registro.motivo"> ({{ registro.motivo }})</template>.</p>
 
-      <ul class="crm-lista">
+      <!-- A entrada da Triagem: um botão só. Dentro, a lista do lote. -->
+      <p v-if="!triando" class="acoes">
+        <button type="button" class="botao botao--primario" @click="entrar">Triar ({{ lote.pendentes.length }})</button>
+      </p>
+      <p v-else class="crm-triagem__conta">
+        {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template>
+      </p>
+
+      <ul v-if="triando" class="crm-lista">
         <template v-for="linha in linhas" :key="linha.tipo === 'item' ? linha.item.leadId : `desfazer-${linha.id}`">
           <li v-if="linha.tipo === 'desfazer'" class="crm-item crm-triagem__dispensado">
             <span><strong>{{ linha.empresa }}</strong> dispensado.</span>
@@ -296,12 +329,19 @@ onBeforeUnmount(() => {
             <p class="crm-item__acao"><strong>{{ linha.item.acao }}</strong> <span>{{ detalheSemPrioridade(linha.item.detalhe) }}</span></p>
             <p v-if="convidadoEm(linha.item)" class="crm-item__aberto">Convite aberto às {{ convidadoEm(linha.item) }} nesta tela. A planilha confirma em alguns minutos.</p>
             <div v-else class="crm-triagem__decisoes">
-              <a v-if="!motivo(linha.item)" class="botao" :href="conviteDe(linha.item)" target="_blank" rel="noopener" @click="convidar(linha.item)">Convidar <span aria-hidden="true">↗</span></a>
+              <a
+                v-if="!motivo(linha.item)" class="botao" :class="{ 'botao--primario': primeiroConvidavel === linha.item.leadId }"
+                :href="conviteDe(linha.item)" target="_blank" rel="noopener" @click="convidar(linha.item)"
+              >Convidar <span aria-hidden="true">↗</span></a>
+              <!-- Travado pelas travas do envio: o porquê e o quando estão no recado único, lá em cima.
+                   Só a falta de convite é deste prospect e fica ao lado. -->
+              <template v-else-if="conviteDe(linha.item)">
+                <button type="button" class="botao" disabled aria-describedby="crm-triagem-recado">Convidar</button>
+              </template>
               <template v-else>
                 <button type="button" class="botao" disabled :aria-describedby="`crm-triagem-motivo-${linha.item.leadId}`">Convidar</button>
                 <span :id="`crm-triagem-motivo-${linha.item.leadId}`" class="crm-triagem__motivo">{{ motivo(linha.item) }}</span>
               </template>
-              <button v-if="mostraLiberar(linha.item)" type="button" class="botao botao--leve" @click="emit('liberar', linha.item.leadId)">{{ ROTULO_DE_LIBERAR }}</button>
               <button type="button" class="botao botao--leve" :disabled="!registro.disponivel || emSerie !== null" @click="dispensar(linha.item)">
                 Dispensar<span class="so-leitor"> {{ leads.get(linha.item.leadId)?.empresa }}</span>
               </button>
@@ -313,7 +353,7 @@ onBeforeUnmount(() => {
         </template>
       </ul>
 
-      <div v-if="lote.pendentes.length || emSerie || resultadoDaSerie" class="crm-triagem__fim">
+      <div v-if="triando && (lote.pendentes.length || emSerie || resultadoDaSerie)" class="crm-triagem__fim">
         <button
           v-if="lote.pendentes.length && !emSerie" type="button" class="botao" :class="{ 'is-armado': confirmando }"
           :disabled="!registro.disponivel" @click="armarOuDispensar"

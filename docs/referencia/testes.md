@@ -139,6 +139,13 @@ extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; e, em `casca.te
 `src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
 10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
+`src/operations-recado-de-travas.test.ts` (17/10/2026, hierarquia de Vendas, `recado-de-travas.ts`: quando o expediente volta (hoje, amanhã,
+sexta à noite e o fim de semana caem em "segunda às 8h", hora quebrada "8h30"); um recado por estado com o quando: pode enviar, fora do
+expediente com o Liberar e a taxa, liberado, "Libera às 14:20 (ritmo)", teto do dia que volta na segunda, pausa com a data; o ritmo antes do
+horário, sem Liberar; `pode` sempre igual a `podeMandarPrimeiroContato` em tabela; o rótulo do Liberar por tela),
+`src/operations-vendas-abas.test.ts` (17/10/2026, hierarquia de Vendas, `vendas-abas.ts`: três abas Fazer → Triar → Entender, as seções Funil,
+Números e Resultados; os links de antes continuam: ?ver=funil|numeros|resultados|triagem, ?ver=jornada no Funil com ?passo=, ?ver=roteiro e
+?ver=colinha para o Roteiro no Mais, ?lead= e ?produto= em qualquer vista; o endereço escrito de volta e a ida e volta),
 `src/operations-funil-lista.test.ts` (a Lista do Funil no desktop, 16/10/2026: o sinal mais forte por ordem (Resposta nova > Follow-up hoje >
 Perdido amanhã > Divergência > o resto), follow-up anotado deixa de ser "hoje", ordenar por último toque e próximo passo com quem não tem data no fim
 nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança; desde 17/10/2026, AC-03, `contagemDaEtapa`: Quadro e Lista

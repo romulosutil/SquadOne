@@ -198,6 +198,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           pausadoAte; sem "Liberar". Conta o retrato e os toques desta tela (localStorage, 24 h). No servidor,
                           no mesmo dia: follow-up só para quem leu (Site, PRUMO e o 05 · Acompanhamento) e Revisar com o
                           WhatsApp publicado antes do "não confirmado"
+    recado-de-travas.ts   PURO (17/10/2026, hierarquia de Vendas): as duas travas num recado só com o próximo passo ("Fora do
+                          expediente: volta segunda às 8h", "Libera às 14:20 (ritmo)") e o que continua livre; RecadoDeTravas.vue
+                          (BP-TRAVAS) na Próxima venda, na Triagem (o "Liberar" uma vez por lote) e na Ficha. Não muda as travas
+    vendas-abas.ts        PURO (17/10/2026): as abas de Vendas na ordem Fazer (A fazer) → Triar (Triagem) → Entender (Funil, Números,
+                          Resultados num segmentado + "Roteiro de venda") e o endereço ?ver= de cada uma (os links antigos seguem)
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
     ab-mensagem.ts        PURO (14/10/2026): A/B estratificado da 1ª mensagem em Resultados ("A × B (mesmo sorteio, por nicho)"):

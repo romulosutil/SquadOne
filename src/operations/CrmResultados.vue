@@ -17,7 +17,11 @@ import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
 // rendeu, contado só sobre quem foi enviado no período. Só leitura: os números
 // saem do mesmo retrato da planilha que o Hoje e o Funil usam (RULES 11).
-const props = defineProps<{ leads: CrmLead[]; agora: number }>()
+// 17/10/2026 (hierarquia de Vendas): duas seções de Entender, com o mesmo componente. `numeros` é o
+// "onde perde" (os degraus, depois do "sim", o vendedor do Telegram) e, numa dobra "Experimentos"
+// fechada, os três testes A/B (vídeo, 1ª mensagem, recibo): são medição em andamento, não decisão de
+// hoje, e ocupavam metade da tela. `resultados` é o placar do período (nicho, mensagem, site, horário).
+const props = withDefaults(defineProps<{ leads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
 
 const periodo = ref<Periodo>('30')
 const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: boolean }> = [
@@ -65,6 +69,8 @@ onMounted(async () => {
 const minutos = (m: number | null) => (m === null ? '—' : duracao(m / 60))
 // OT-10: o teste do follow-up para quem não manda recibo (ab-recibo.ts). Ignora o período: conta inteiro.
 const recibo = computed(() => leituraDoTesteDoRecibo(props.leads, props.agora))
+/** Quantos testes já têm envio contado: o número no título da dobra "Experimentos". */
+const experimentosComDados = computed(() => [Boolean(ab.value?.inicio), Boolean(abMensagem.value.inicio), Boolean(recibo.value)].filter(Boolean).length)
 
 const resumo = resumoDaLinha
 const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responderam / l.enviados) * 100) : 0}%`
@@ -72,7 +78,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
 
 <template>
   <div class="crm-resultados">
-    <div class="crm-resultados__topo">
+    <div v-if="parte === 'resultados'" class="crm-resultados__topo">
       <div class="crm-produtos" role="group" aria-label="Período (pela data de envio)">
         <button v-for="p in PERIODOS" :key="p.id" type="button" :aria-pressed="periodo === p.id" @click="periodo = p.id">{{ p.rotulo }}</button>
       </div>
@@ -82,174 +88,137 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       </p>
     </div>
 
-    <section v-if="ab" class="crm-grupo" aria-labelledby="crm-resultado-video">
-      <header class="crm-grupo__cabeca">
-        <h2 id="crm-resultado-video">Por vídeo no envio (teste A/B)</h2>
-      </header>
-      <p class="crm-grupo__explicacao">
-        {{ ab.nicho }}{{ ab.mensagem ? ` · mensagem ${ab.mensagem}` : '' }}{{ ab.inicio ? ` · desde ${dataCurta(ab.inicio)}` : ' · nenhum envio ainda' }}.
-        O braço sai do sorteio pelo place_id; o vídeo vai à mão logo depois da mensagem. Conta o teste inteiro, sem o período acima.
-      </p>
-      <ul class="crm-lista">
-        <li v-for="linha in bracos" :key="linha.chave" class="crm-resultado">
-          <div class="crm-resultado__cabeca">
-            <strong>{{ linha.chave }}</strong>
-            <span>{{ linha.enviados }} de {{ ENVIOS_POR_BRACO }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
-          </div>
-          <p v-if="ab.numeros" class="crm-resultado__numeros">{{ resumo(linha) }}</p>
-        </li>
-      </ul>
+    <template v-if="parte === 'numeros'">
+      <!-- OT-08 (16/10/2026): os degraus do funil moram aqui; a Hoje mostra só o gargalo. -->
+      <PorQueNaoVende :leads="leads" :agora="agora" />
 
-      <p v-if="ab.estado === 'amostra-insuficiente'" class="crm-aviso" role="status">
-        <strong>Amostra insuficiente.</strong> Faltam envios para {{ ENVIOS_POR_BRACO }} em cada braço. As taxas só aparecem
-        na leitura, {{ DIAS_ATE_A_LEITURA }} dias depois do último envio: olhar antes e parar quando "parece bom" inventa vencedor.
-      </p>
-      <p v-else-if="ab.estado === 'aguardando-leitura'" class="crm-aviso" role="status">
-        <strong>Amostra completa. Leitura em {{ dataHora(ab.leituraEm ?? '') }}</strong> ({{ DIAS_ATE_A_LEITURA }} dias depois do último envio).
-        Até lá, sem taxas.
-      </p>
-      <div v-else-if="ab.numeros" class="crm-resultados__total" role="status">
-        <p class="crm-resultado__numeros">
-          Respondeu de gente: com vídeo <strong>{{ porcento(ab.comVideo.responderam, ab.comVideo.enviados) }}</strong>
-          ({{ ab.comVideo.responderam }} de {{ ab.comVideo.enviados }}), sem vídeo
-          <strong>{{ porcento(ab.semVideo.responderam, ab.semVideo.enviados) }}</strong>
-          ({{ ab.semVideo.responderam }} de {{ ab.semVideo.enviados }}) · {{ textoDaDiferenca(ab.numeros.diferencaPp) }} · {{ textoDoP(ab.numeros.p) }}
-        </p>
-        <p class="crm-resultado__numeros"><strong>Veredito: {{ FRASE_DO_VEREDITO[ab.numeros.veredito] }}.</strong></p>
-      </div>
-
-      <p v-if="ab.foraDoSorteio" class="crm-aviso is-forte" role="note">
-        <strong>{{ ab.foraDoSorteio }} lead{{ ab.foraDoSorteio === 1 ? '' : 's' }} com a coluna braco_video diferente do sorteio.</strong>
-        Confira na planilha antes de ler: braço trocado à mão desfaz o sorteio.
-      </p>
-      <p v-if="ab.foraDoDesenho" class="crm-nota-pequena">
-        {{ ab.foraDoDesenho }} marcado{{ ab.foraDoDesenho === 1 ? '' : 's' }} fora do nicho ou da mensagem do teste: não entra{{ ab.foraDoDesenho === 1 ? '' : 'm' }} na conta.
-      </p>
-      <p class="crm-nota-pequena">
-        Regra fixada antes do teste: vídeo ganha só com +{{ DIFERENCA_MINIMA_PP }} pontos e p &lt; 0,10 (Fisher exato bilateral);
-        senão, não provado. {{ REGRA_DE_PARADA }}
-      </p>
-    </section>
-
-    <!-- OT-08 (16/10/2026): os degraus do funil moram aqui; a Hoje mostra só o gargalo. -->
-    <PorQueNaoVende :leads="leads" :agora="agora" />
-
-    <section class="crm-grupo" aria-labelledby="crm-resultado-velocidade">
-      <header class="crm-grupo__cabeca">
-        <h2 id="crm-resultado-velocidade">Depois do "sim"</h2>
-      </header>
-      <p class="crm-grupo__explicacao">
-        Quanto tempo a venda espera em cada passo, nos últimos {{ velocidade.dias }} dias. A chance de fechar cai rápido depois do
-        interesse: a meta é o link em até {{ LIMITE_DA_RESPOSTA_RAPIDA_H }} h.
-      </p>
-      <ul class="crm-lista">
-        <li class="crm-resultado">
-          <div class="crm-resultado__cabeca"><strong>Do "quero ver" ao link</strong></div>
-          <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.queroVerAoLink) }}</p>
-          <p v-if="velocidade.queroVerAoLink.esperando.length" class="crm-nota-pequena">
-            Esperando o link agora: {{ textoDaEspera(velocidade.queroVerAoLink) }}
-          </p>
-        </li>
-        <li class="crm-resultado">
-          <div class="crm-resultado__cabeca"><strong>Do link à proposta</strong></div>
-          <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.linkAProposta) }}</p>
-          <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
-            Receberam a 2ª mensagem e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
-          </p>
-        </li>
-        <li class="crm-resultado">
-          <div class="crm-resultado__cabeca">
-            <strong>Follow-up para quem não manda recibo (teste)</strong>
-            <span v-if="recibo && (recibo.teste.n < MINIMO_POR_BRACO_DO_RECIBO || recibo.controle.n < MINIMO_POR_BRACO_DO_RECIBO)" class="crm-tag">amostra pequena</span>
-          </div>
-          <p v-if="!recibo" class="crm-resultado__numeros">Começa com os enviados a partir de 17/10/2026: metade dos sem recibo recebe o follow-up do 3º dia.</p>
-          <template v-else>
-            <p class="crm-resultado__numeros">
-              Com follow-up: {{ recibo.teste.responderam }} de {{ recibo.teste.n }} responderam ({{ porcento(recibo.teste.responderam, recibo.teste.n) }}) ·
-              sem: {{ recibo.controle.responderam }} de {{ recibo.controle.n }} ({{ porcento(recibo.controle.responderam, recibo.controle.n) }})
-            </p>
-            <p class="crm-nota-pequena">
-              Pediram para não receber mais: {{ recibo.teste.pediramParaParar }} com follow-up, {{ recibo.controle.pediramParaParar }} sem.
-              <template v-if="recibo.p !== null"> Fisher p = {{ recibo.p.toFixed(2) }}.</template>
-              <template v-else> Taxa só com {{ MINIMO_POR_BRACO_DO_RECIBO }} em cada lado.</template>
-              Se a exclusão subir no grupo com follow-up, a regra "só quem leu" fica.
-            </p>
-          </template>
-        </li>
-        <li class="crm-resultado">
-          <div class="crm-resultado__cabeca"><strong>Vendedor no Telegram</strong></div>
-          <p v-if="!vendedor || !vendedor.avisos" class="crm-resultado__numeros">Nenhum aviso medido ainda (a medida começou em 16/10/2026).</p>
-          <template v-else>
-            <p class="crm-resultado__numeros">
-              {{ vendedor.avisos }} avisos · {{ vendedor.enviei }} viraram "Enviei" ({{ porcento(vendedor.enviei, vendedor.avisos) }}) ·
-              mediana de {{ minutos(vendedor.medianaAteEnvieiMin) }} até o toque
-            </p>
-            <p class="crm-nota-pequena">
-              {{ vendedor.pulou }} pulados, {{ vendedor.expirou }} sem toque em 30 min, {{ vendedor.saiu }} resolvidos por fora.
-              <template v-if="vendedor.quentes.avisos">"Quero ver": {{ vendedor.quentes.enviei }} de {{ vendedor.quentes.avisos }}, mediana de {{ minutos(vendedor.quentes.medianaAteEnvieiMin) }}.</template>
-            </p>
-          </template>
-        </li>
-      </ul>
-    </section>
-
-    <p v-if="!total.enviados" class="crm-vazio"><strong>Nenhum envio neste período.</strong> Os números aparecem quando sair o primeiro site.</p>
-
-    <template v-else>
-      <p class="crm-resultados__total" aria-live="polite">
-        <strong>{{ total.enviados }} enviado{{ total.enviados === 1 ? '' : 's' }}</strong> · {{ resumo(total) }}
-      </p>
-
-      <section class="crm-grupo" aria-labelledby="crm-resultado-anotados">
+      <section class="crm-grupo" aria-labelledby="crm-resultado-velocidade">
         <header class="crm-grupo__cabeca">
-          <h2 id="crm-resultado-anotados">Follow-up e 2ª mensagem</h2>
+          <h2 id="crm-resultado-velocidade">Depois do "sim"</h2>
         </header>
         <p class="crm-grupo__explicacao">
-          Anotados ao tocar em "Mandar o follow-up" e "Mandar o link" na Central, desde {{ INICIO_DAS_ANOTACOES }}; antes disso
-          nenhum envio deixou rastro. "Respondeu depois" é gente escrevendo depois do follow-up.
+          Quanto tempo a venda espera em cada passo, nos últimos {{ velocidade.dias }} dias. A chance de fechar cai rápido depois do
+          interesse: a meta é o link em até {{ LIMITE_DA_RESPOSTA_RAPIDA_H }} h.
         </p>
         <ul class="crm-lista">
           <li class="crm-resultado">
-            <div class="crm-resultado__cabeca">
-              <strong>Follow-up</strong>
-              <span v-if="anotados.followups && anotados.followups < AMOSTRA_MINIMA" class="crm-tag">amostra pequena</span>
-            </div>
-            <p class="crm-resultado__numeros">{{ textoDoFollowup(anotados) }}</p>
+            <div class="crm-resultado__cabeca"><strong>Do "quero ver" ao link</strong></div>
+            <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.queroVerAoLink) }}</p>
+            <p v-if="velocidade.queroVerAoLink.esperando.length" class="crm-nota-pequena">
+              Esperando o link agora: {{ textoDaEspera(velocidade.queroVerAoLink) }}
+            </p>
           </li>
           <li class="crm-resultado">
-            <div class="crm-resultado__cabeca"><strong>2ª mensagem</strong></div>
-            <p class="crm-resultado__numeros">{{ textoDaSegunda(anotados) }}</p>
+            <div class="crm-resultado__cabeca"><strong>Do link à proposta</strong></div>
+            <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.linkAProposta) }}</p>
+            <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
+              Receberam a 2ª mensagem e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
+            </p>
+          </li>
+          <li class="crm-resultado">
+            <div class="crm-resultado__cabeca"><strong>Vendedor no Telegram</strong></div>
+            <p v-if="!vendedor || !vendedor.avisos" class="crm-resultado__numeros">Nenhum aviso medido ainda (a medida começou em 16/10/2026).</p>
+            <template v-else>
+              <p class="crm-resultado__numeros">
+                {{ vendedor.avisos }} avisos · {{ vendedor.enviei }} viraram "Enviei" ({{ porcento(vendedor.enviei, vendedor.avisos) }}) ·
+                mediana de {{ minutos(vendedor.medianaAteEnvieiMin) }} até o toque
+              </p>
+              <p class="crm-nota-pequena">
+                {{ vendedor.pulou }} pulados, {{ vendedor.expirou }} sem toque em 30 min, {{ vendedor.saiu }} resolvidos por fora.
+                <template v-if="vendedor.quentes.avisos">"Quero ver": {{ vendedor.quentes.enviei }} de {{ vendedor.quentes.avisos }}, mediana de {{ minutos(vendedor.quentes.medianaAteEnvieiMin) }}.</template>
+              </p>
+            </template>
           </li>
         </ul>
       </section>
 
-      <template v-for="secao in secoes" :key="secao.id">
-        <section class="crm-grupo" :aria-labelledby="`crm-resultado-${secao.id}`">
+      <!-- Os testes A/B são medição em andamento, não decisão de hoje: dobrados, com quantos já têm envio. -->
+      <details class="dobra crm-experimentos">
+        <summary>Experimentos <span class="crm-muted">({{ experimentosComDados }} de 3 com envio contado)</span></summary>
+        <section v-if="ab" class="crm-grupo" aria-labelledby="crm-resultado-video">
           <header class="crm-grupo__cabeca">
-            <h2 :id="`crm-resultado-${secao.id}`">{{ secao.titulo }}</h2>
+            <h2 id="crm-resultado-video">Por vídeo no envio (teste A/B)</h2>
           </header>
-          <p class="crm-grupo__explicacao">{{ secao.explicacao }}</p>
+          <p class="crm-grupo__explicacao">
+            {{ ab.nicho }}{{ ab.mensagem ? ` · mensagem ${ab.mensagem}` : '' }}{{ ab.inicio ? ` · desde ${dataCurta(ab.inicio)}` : ' · nenhum envio ainda' }}.
+            O braço sai do sorteio pelo place_id; o vídeo vai à mão logo depois da mensagem. Conta o teste inteiro, sem período.
+          </p>
           <ul class="crm-lista">
-            <li v-for="linha in secao.linhas" :key="linha.chave" class="crm-resultado">
+            <li v-for="linha in bracos" :key="linha.chave" class="crm-resultado">
               <div class="crm-resultado__cabeca">
                 <strong>{{ linha.chave }}</strong>
-                <span>{{ linha.enviados }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
-                <span v-if="amostraPequena(linha)" class="crm-tag">amostra pequena</span>
+                <span>{{ linha.enviados }} de {{ ENVIOS_POR_BRACO }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
               </div>
-              <div class="crm-resultado__barra" aria-hidden="true"><span :style="{ width: largura(linha) }" /></div>
-              <p class="crm-resultado__numeros">{{ resumo(linha) }}</p>
+              <p v-if="ab.numeros" class="crm-resultado__numeros">{{ resumo(linha) }}</p>
+            </li>
+          </ul>
+
+          <p v-if="ab.estado === 'amostra-insuficiente'" class="crm-aviso" role="status">
+            <strong>Amostra insuficiente.</strong> Faltam envios para {{ ENVIOS_POR_BRACO }} em cada braço. As taxas só aparecem
+            na leitura, {{ DIAS_ATE_A_LEITURA }} dias depois do último envio: olhar antes e parar quando "parece bom" inventa vencedor.
+          </p>
+          <p v-else-if="ab.estado === 'aguardando-leitura'" class="crm-aviso" role="status">
+            <strong>Amostra completa. Leitura em {{ dataHora(ab.leituraEm ?? '') }}</strong> ({{ DIAS_ATE_A_LEITURA }} dias depois do último envio).
+            Até lá, sem taxas.
+          </p>
+          <div v-else-if="ab.numeros" class="crm-resultados__total" role="status">
+            <p class="crm-resultado__numeros">
+              Respondeu de gente: com vídeo <strong>{{ porcento(ab.comVideo.responderam, ab.comVideo.enviados) }}</strong>
+              ({{ ab.comVideo.responderam }} de {{ ab.comVideo.enviados }}), sem vídeo
+              <strong>{{ porcento(ab.semVideo.responderam, ab.semVideo.enviados) }}</strong>
+              ({{ ab.semVideo.responderam }} de {{ ab.semVideo.enviados }}) · {{ textoDaDiferenca(ab.numeros.diferencaPp) }} · {{ textoDoP(ab.numeros.p) }}
+            </p>
+            <p class="crm-resultado__numeros"><strong>Veredito: {{ FRASE_DO_VEREDITO[ab.numeros.veredito] }}.</strong></p>
+          </div>
+
+          <p v-if="ab.foraDoSorteio" class="crm-aviso is-forte" role="note">
+            <strong>{{ ab.foraDoSorteio }} lead{{ ab.foraDoSorteio === 1 ? '' : 's' }} com a coluna braco_video diferente do sorteio.</strong>
+            Confira na planilha antes de ler: braço trocado à mão desfaz o sorteio.
+          </p>
+          <p v-if="ab.foraDoDesenho" class="crm-nota-pequena">
+            {{ ab.foraDoDesenho }} marcado{{ ab.foraDoDesenho === 1 ? '' : 's' }} fora do nicho ou da mensagem do teste: não entra{{ ab.foraDoDesenho === 1 ? '' : 'm' }} na conta.
+          </p>
+          <p class="crm-nota-pequena">
+            Regra fixada antes do teste: vídeo ganha só com +{{ DIFERENCA_MINIMA_PP }} pontos e p &lt; 0,10 (Fisher exato bilateral);
+            senão, não provado. {{ REGRA_DE_PARADA }}
+          </p>
+        </section>
+
+        <section class="crm-grupo" aria-labelledby="crm-resultado-recibo">
+          <header class="crm-grupo__cabeca">
+            <h2 id="crm-resultado-recibo">Follow-up para quem não manda recibo (teste)</h2>
+          </header>
+          <ul class="crm-lista">
+            <li class="crm-resultado">
+              <div class="crm-resultado__cabeca">
+                <strong>Metade dos sem recibo recebe o follow-up do 3º dia</strong>
+                <span v-if="recibo && (recibo.teste.n < MINIMO_POR_BRACO_DO_RECIBO || recibo.controle.n < MINIMO_POR_BRACO_DO_RECIBO)" class="crm-tag">amostra pequena</span>
+              </div>
+              <p v-if="!recibo" class="crm-resultado__numeros">Começa com os enviados a partir de 17/10/2026: metade dos sem recibo recebe o follow-up do 3º dia.</p>
+              <template v-else>
+                <p class="crm-resultado__numeros">
+                  Com follow-up: {{ recibo.teste.responderam }} de {{ recibo.teste.n }} responderam ({{ porcento(recibo.teste.responderam, recibo.teste.n) }}) ·
+                  sem: {{ recibo.controle.responderam }} de {{ recibo.controle.n }} ({{ porcento(recibo.controle.responderam, recibo.controle.n) }})
+                </p>
+                <p class="crm-nota-pequena">
+                  Pediram para não receber mais: {{ recibo.teste.pediramParaParar }} com follow-up, {{ recibo.controle.pediramParaParar }} sem.
+                  <template v-if="recibo.p !== null"> Fisher p = {{ recibo.p.toFixed(2) }}.</template>
+                  <template v-else> Taxa só com {{ MINIMO_POR_BRACO_DO_RECIBO }} em cada lado.</template>
+                  Se a exclusão subir no grupo com follow-up, a regra "só quem leu" fica.
+                </p>
+              </template>
             </li>
           </ul>
         </section>
 
-        <!-- Logo depois do placar por mensagem: o placar mistura quem podia receber a B com quem não podia; este não. -->
-        <section v-if="secao.id === 'mensagem'" class="crm-grupo" aria-labelledby="crm-resultado-ab-mensagem">
+        <!-- O placar "Por mensagem" (em Resultados) mistura quem podia receber a B com quem não podia; este não. -->
+        <section class="crm-grupo" aria-labelledby="crm-resultado-ab-mensagem">
           <header class="crm-grupo__cabeca">
             <h2 id="crm-resultado-ab-mensagem">A × B (mesmo sorteio, por nicho)</h2>
           </header>
           <p class="crm-grupo__explicacao">
             Cada letra só é comparada entre leads que podiam receber as duas (coluna ab_elegiveis), com a letra equilibrada
-            dentro de cada nicho pelo Balcão. "Respondeu" é gente. Conta o teste inteiro, sem o período acima.
+            dentro de cada nicho pelo Balcão. "Respondeu" é gente. Conta o teste inteiro, sem período.
             <template v-if="abMensagem.inicio">Só vale para envios sorteados desde {{ dataCurta(abMensagem.inicio) }}.</template>
           </p>
           <p v-if="!abMensagem.inicio" class="crm-vazio">
@@ -299,7 +268,65 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
             bilateral), com {{ ENVIOS_MINIMOS_POR_BRACO }}+ envios em cada braço; senão, não provado. Por nicho é para ver, não para declarar ganhador.
           </p>
         </section>
+      </details>
+    </template>
+
+    <template v-else>
+      <p v-if="!total.enviados" class="crm-vazio"><strong>Nenhum envio neste período.</strong> Os números aparecem quando sair o primeiro site.</p>
+
+      <template v-else>
+        <p class="crm-resultados__total" aria-live="polite">
+          <strong>{{ total.enviados }} enviado{{ total.enviados === 1 ? '' : 's' }}</strong> · {{ resumo(total) }}
+        </p>
+
+        <section class="crm-grupo" aria-labelledby="crm-resultado-anotados">
+          <header class="crm-grupo__cabeca">
+            <h2 id="crm-resultado-anotados">Follow-up e 2ª mensagem</h2>
+          </header>
+          <p class="crm-grupo__explicacao">
+            Anotados ao tocar em "Mandar o follow-up" e "Mandar o link" na Central, desde {{ INICIO_DAS_ANOTACOES }}; antes disso
+            nenhum envio deixou rastro. "Respondeu depois" é gente escrevendo depois do follow-up.
+          </p>
+          <ul class="crm-lista">
+            <li class="crm-resultado">
+              <div class="crm-resultado__cabeca">
+                <strong>Follow-up</strong>
+                <span v-if="anotados.followups && anotados.followups < AMOSTRA_MINIMA" class="crm-tag">amostra pequena</span>
+              </div>
+              <p class="crm-resultado__numeros">{{ textoDoFollowup(anotados) }}</p>
+            </li>
+            <li class="crm-resultado">
+              <div class="crm-resultado__cabeca"><strong>2ª mensagem</strong></div>
+              <p class="crm-resultado__numeros">{{ textoDaSegunda(anotados) }}</p>
+            </li>
+          </ul>
+        </section>
+
+        <template v-for="secao in secoes" :key="secao.id">
+          <section class="crm-grupo" :aria-labelledby="`crm-resultado-${secao.id}`">
+            <header class="crm-grupo__cabeca">
+              <h2 :id="`crm-resultado-${secao.id}`">{{ secao.titulo }}</h2>
+            </header>
+            <p class="crm-grupo__explicacao">{{ secao.explicacao }}</p>
+            <ul class="crm-lista">
+              <li v-for="linha in secao.linhas" :key="linha.chave" class="crm-resultado">
+                <div class="crm-resultado__cabeca">
+                  <strong>{{ linha.chave }}</strong>
+                  <span>{{ linha.enviados }} enviado{{ linha.enviados === 1 ? '' : 's' }}</span>
+                  <span v-if="amostraPequena(linha)" class="crm-tag">amostra pequena</span>
+                </div>
+                <div class="crm-resultado__barra" aria-hidden="true"><span :style="{ width: largura(linha) }" /></div>
+                <p class="crm-resultado__numeros">{{ resumo(linha) }}</p>
+              </li>
+            </ul>
+          </section>
+        </template>
       </template>
     </template>
   </div>
 </template>
+
+<style>
+/* Experimentos: a dobra abre numa pilha com o mesmo respiro entre os testes que entre os grupos de fora. */
+.crm-experimentos[open] { display: grid; gap: var(--esp-4); min-width: 0; }
+</style>
