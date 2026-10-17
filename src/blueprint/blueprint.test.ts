@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import {
-  contraste, cssDoArquivo, desviosDaEscala, grupoDoToken, lerRgb, lerTokens, nivelWcag, pedidoDeMudanca,
-  PARES_DE_CONTRASTE, variaveisDefinidas, variaveisUsadas, type Desvio,
+  contraste, corDoToken, corpoDoBloco, cssDoArquivo, desviosDaEscala, grupoDoToken, lerRgb, lerTokens, nivelWcag, pedidoDeMudanca,
+  PARES_DE_CONTRASTE, SELETOR_ESCURO, SELETOR_ESCURO_DO_SISTEMA, valoresDoTema, variaveisDefinidas, variaveisUsadas, type Desvio,
 } from './tokens'
 import { CATALOGO, PRINCIPIOS, REGRAS_DE_COMPOSICAO } from './catalogo'
 
@@ -79,6 +79,42 @@ describe('contraste', () => {
       assert.ok(nomes.has(p.texto), p.texto)
       assert.ok(nomes.has(p.fundo), p.fundo)
     }
+  })
+
+  // Até 17/10/2026 o contraste só era medido ao vivo no /design-system, e o vinho do erro no escuro
+  // passou sem ninguém olhar. Agora cada par é calculado aqui, nos dois temas, do tokens.css cru.
+  for (const tema of ['claro', 'escuro'] as const) {
+    it(`todo par passa do mínimo no tema ${tema} (calculado do tokens.css)`, () => {
+      const valores = valoresDoTema(TOKENS, tema)
+      const abaixo = PARES_DE_CONTRASTE.flatMap((p) => {
+        const a = corDoToken(valores, p.texto)
+        const b = corDoToken(valores, p.fundo)
+        assert.ok(a && b, `${p.texto} sobre ${p.fundo}: cor não resolvida no tema ${tema}`)
+        const razao = contraste(a, b)
+        return razao >= p.minimo ? [] : [`${p.texto} sobre ${p.fundo}: ${razao} < ${p.minimo} (${p.uso})`]
+      })
+      assert.deepEqual(abaixo, [])
+    })
+  }
+
+  it('o texto de erro sobre o fundo de erro é par medido nos dois temas', () => {
+    assert.ok(PARES_DE_CONTRASTE.some((p) => p.texto === '--negativo' && p.fundo === '--erro-fundo'))
+  })
+
+  it('resolve var() em cadeia e o escuro sobrepõe o claro', () => {
+    const css = ':root { --cor-x: #102030; --a: var(--cor-x); --b: color-mix(in srgb, red 50%, blue); }\n:root[data-theme="dark"] { --cor-x: #ffffff; }'
+    assert.deepEqual(corDoToken(valoresDoTema(css, 'claro'), '--a'), [16, 32, 48])
+    assert.deepEqual(corDoToken(valoresDoTema(css, 'escuro'), '--a'), [255, 255, 255])
+    assert.equal(corDoToken(valoresDoTema(css, 'claro'), '--b'), null)
+    assert.equal(corDoToken(valoresDoTema(css, 'claro'), '--nao-existe'), null)
+  })
+
+  it('o escuro do sistema (media query) e o escuro forçado têm os mesmos tokens', () => {
+    const corpo = (sel: string) => [...corpoDoBloco(TOKENS, sel).replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)]
+      .map((m) => `${m[1]}: ${m[2].replace(/\s+/g, ' ').trim()}`)
+    const forcado = corpo(SELETOR_ESCURO)
+    assert.ok(forcado.length > 10)
+    assert.deepEqual(corpo(SELETOR_ESCURO_DO_SISTEMA), forcado)
   })
 })
 

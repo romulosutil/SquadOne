@@ -51,7 +51,10 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
 .nao-vende h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .nao-vende p { margin: 0; }
 .nao-vende__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
-.nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--negativo); border-radius: var(--raio-controle); background: var(--erro-fundo); }
+/* Gargalo calmo (17/10/2026): fundo neutro, a faixa e o título no --negativo. Com o bloco inteiro em
+   --erro-fundo o cartão gritava (no escuro era um vinho), e é um diagnóstico para ler, não uma falha. */
+.nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4) var(--esp-3) calc(var(--esp-4) + var(--faixa)); border-radius: var(--raio-controle); background: var(--superficie-2); box-shadow: inset var(--faixa) 0 0 var(--negativo); }
+.nao-vende__gargalo > strong { color: var(--negativo); }
 .nao-vende__degraus { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
 /* Coluna da direita com largura fixa: com `auto`, cada linha tinha uma barra de tamanho diferente. */
 .nao-vende__degraus li { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: var(--esp-0) var(--esp-2); align-items: center; padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); }

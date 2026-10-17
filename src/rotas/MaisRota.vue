@@ -26,6 +26,7 @@ import { atalhosDoMais, type Capacidades, type Destino } from '../casca/destinos
 import { useAgentes } from '../agentes/estado'
 import { conectado } from '../auth/google'
 import { secaoDoMais } from '../casca/mais'
+import SeletorDeTema from '../casca/SeletorDeTema.vue'
 import '../operations/mais.css'
 // O roteiro usa as peças do CRM (crm-colinha, crm-trecho...): sem o crm.css ele sairia cru aqui.
 import '../operations/crm.css'
@@ -109,6 +110,7 @@ const avisoDoDell = computed(() => {
   <div class="mais">
     <section class="mais__bloco" aria-labelledby="mais-titulo">
       <h1 id="mais-titulo">Mais</h1>
+      <h2 class="mais__grupo">Aparência</h2><SeletorDeTema />
       <template v-if="usar.length">
         <h2 class="mais__grupo">Usar</h2>
         <ul class="mais__links">

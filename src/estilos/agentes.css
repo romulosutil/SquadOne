@@ -37,7 +37,9 @@
 .zona--realce { background: var(--realce); }
 .zona--ok { background: var(--ok-fundo); }
 .zona--atencao { background: var(--atencao-fundo); }
-.zona--erro { background: var(--erro-fundo); }
+/* Erro (17/10/2026): o fundo ficou calmo no escuro, quase o da superfície 2; quem diz "erro" é a
+   faixa no --negativo, nos dois temas. */
+.zona--erro { padding-left: calc(var(--esp-4) + var(--faixa)); background: var(--erro-fundo); box-shadow: inset var(--faixa) 0 0 var(--negativo); }
 
 /* Número protagonista (total, contagem): grande e tabular, com o rótulo colado. */
 .numero-grande { margin: 0; font-size: var(--tam-numero); font-weight: var(--peso-titulo); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; }
@@ -90,7 +92,7 @@
 .selo--destaque { background: var(--destaque); color: var(--destaque-texto); }
 .selo--ok { background: var(--ok-fundo); }
 .selo--atencao { background: var(--atencao-fundo); }
-.selo--erro { background: var(--erro-fundo); }
+.selo--erro { border-color: var(--negativo); background: var(--erro-fundo); }
 
 .texto-2 { color: var(--texto-2); }
 .texto-pequeno { font-size: var(--tam-apoio); }
@@ -206,7 +208,7 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 
 /* Recado: frase de estado dentro de um bloco. Fundo, sem borda: é uma zona, não outra caixa. */
 .recado { margin: 0; padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--superficie-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
-.recado--erro { background: var(--erro-fundo); }
+.recado--erro { padding-left: calc(var(--esp-3) + var(--faixa)); background: var(--erro-fundo); box-shadow: inset var(--faixa) 0 0 var(--negativo); }
 .recado--atencao { background: var(--atencao-fundo); }
 .recado--ok { background: var(--ok-fundo); }
 
@@ -230,7 +232,8 @@ textarea.campo { resize: vertical; line-height: 1.4; }
 }
 .segmentado button + button { border-left: var(--linha); }
 .segmentado button[aria-pressed="true"],
-.segmentado button[aria-selected="true"] { background: var(--destaque); color: var(--destaque-texto); }
+.segmentado button[aria-selected="true"],
+.segmentado button[aria-checked="true"] { background: var(--destaque); color: var(--destaque-texto); }
 .segmentado button:disabled { opacity: 0.55; cursor: not-allowed; }
 .segmentado--auto { width: fit-content; max-width: 100%; }
 /* O overflow do canto arredondado cortaria o anel de fora: o foco entra para dentro do botão. */
