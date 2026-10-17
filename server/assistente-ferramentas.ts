@@ -1,15 +1,15 @@
 import { Type, type FunctionDeclaration } from "@google/genai";
 import { montarDossie, type LeadDoCopiloto, type MensagemParaODossie } from "../src/operations/copiloto.ts";
-import { mapearTextos, prepararTexto, semValores, type LeituraFeita } from "../src/operations/assistente.ts";
+import { acharLead, mapearTextos, prepararTexto, semValores, type LeituraFeita } from "../src/operations/assistente.ts";
 import { passoAtual, passoDaJornada } from "../src/operations/jornada.ts";
 import { filaDeVenda } from "../src/operations/proxima-venda.ts";
 import { resumoDoDell } from "../src/operations/alertas.ts";
 import { pareceFinancas } from "./financas/parece-financas.ts";
 import { FUSO } from "./alocador.ts";
-import type { CrmLead, CrmProduto, CrmVisao, DellStatus } from "../src/operations/types.ts";
+import type { CrmLead, CrmVisao, DellStatus } from "../src/operations/types.ts";
 import type { StatusDoDell } from "./dell-status.ts";
 import type { AgendaSummary } from "./operations.ts";
-import type { ConsultaAoHermes } from "./assistente-hermes-tipo.ts";
+import type { ConsultaAoHermes } from "./hermes-consulta.ts";
 
 /**
  * As ferramentas do Assistente da Central (RULES 28). Dois grupos, e só dois:
@@ -246,7 +246,8 @@ export class LeiturasDaMensagem {
         const id = typeof args.id === "string" ? args.id.trim() : "";
         const v = await this.visao();
         if (!v) return this.semSinalDoCrm();
-        const lead = v.leads.find((l) => l.produto === (produto as CrmProduto) && l.id === id);
+        // O id inteiro (o que buscar_lead devolve) ou só a chave da planilha: as duas acham o lead.
+        const lead = acharLead(v.leads, produto, id);
         if (!lead) return { erro: "Lead fora do CRM: use buscar_lead para achar o produto e o id." };
         let conversa: MensagemParaODossie[] | null = null;
         try {

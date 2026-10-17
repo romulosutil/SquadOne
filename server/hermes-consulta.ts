@@ -446,14 +446,18 @@ export function criarConsultaAoHermes(opts: {
  * SQUADONE_OPERATIONS_DATA_DIR: o estado fica em `<dataDir>/assistente/hermes/`. O binário é o fixo
  * do socorro e da Entrada (`~/.local/bin/hermes`): o PATH do serviço pode começar por outra pasta, e
  * trocar o binário por variável seria execução de comando com o texto do prompt no argv.
+ *
+ * `opcoes.tetoDia`: o teto já lido por quem chama (o boot do Assistente, `lerConfigDoAssistente`,
+ * que lê a MESMA variável e desliga tudo se ela for ilegível). Vindo dali, a env do teto não é
+ * relida: um lugar só decide o número, e um lugar só (o arquivo do dia, aqui) conta as consultas.
  */
-export function prepararConsultaAoHermes(env: NodeJS.ProcessEnv, dataDir: string): ConsultaAoHermes | null {
+export function prepararConsultaAoHermes(env: NodeJS.ProcessEnv, dataDir: string, opcoes: { tetoDia?: number } = {}): ConsultaAoHermes | null {
   if ((env.SQUADONE_ASSISTENTE_HERMES ?? "").trim() !== "true") return null;
   if ((env.SQUADONE_MODE ?? "").trim() !== "operations") {
     console.log("[hermes-consulta] SQUADONE_ASSISTENTE_HERMES ignorada: só no perfil operations");
     return null;
   }
-  const tetoBruto = (env.SQUADONE_ASSISTENTE_HERMES_TETO_DIA ?? "").trim();
+  const tetoBruto = opcoes.tetoDia !== undefined ? String(opcoes.tetoDia) : (env.SQUADONE_ASSISTENTE_HERMES_TETO_DIA ?? "").trim();
   let tetoDia = TETO_DIA_DO_HERMES;
   if (tetoBruto) {
     if (!/^\d+$/.test(tetoBruto) || Number(tetoBruto) <= 0) {

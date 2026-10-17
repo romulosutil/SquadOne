@@ -5,13 +5,32 @@
  *
  * Rotas (todas sob /api/operations, só no perfil operations; os POST passam pela guarda de
  * mesma origem):
- *   GET  /assistente                         -> EstadoDoAssistente
+ *   GET  /assistente                         -> EstadoDoAssistente; desligado também é 200, com
+ *                                            { ligado: false, hermes: false, tetoDia: 0, usadosHoje: 0 } (nunca 503:
+ *                                            é o que o painel lê para dizer "desligado nesta Central")
  *   POST /assistente/mensagens               PedidoDeMensagem -> 202 RecebidoDoAssistente
- *                                            400 { error } · 429 { error, teto: true } · 503 { error, desligado: true }
- *   GET  /assistente/conversas/:id?desde=n   -> ConversaDoAssistente (Cache-Control: no-store)
- *   POST /assistente/avaliacao               { respostaId, nota: 1 | -1, motivo? } -> 204
+ *                                            400 { error } · 400 { error, pendente: true } (a conversa já espera
+ *                                            resposta: o painel retoma o acompanhamento) · 429 { error, teto: true } ·
+ *                                            503 { error, desligado: true }. `conversaId` que o servidor não tem abre
+ *                                            outra conversa: o `conversaId` do 202 é o que vale (o painel zera a lista)
+ *   GET  /assistente/conversas/:id?desde=n   -> ConversaDoAssistente (Cache-Control: no-store); sem `desde`, a
+ *                                            conversa inteira. 400 id torto · 404 conversa inexistente (o painel
+ *                                            para de perguntar; sem mensagens na tela, começa outra)
+ *   POST /assistente/avaliacao               { respostaId, nota: 1 | -1, motivo? } -> 204 · 400 · 404 resposta inexistente
  *   POST /assistente/cartoes/:id             { desfecho: 'confirmado' | 'descartado' } -> 204 (só mede: quem
  *                                            escreve é a rota de sempre, chamada pelo painel depois do toque)
+ *                                            · 404 cartão inexistente · 409 já decidido com o outro desfecho (o
+ *                                            mesmo desfecho de novo é 204). O painel não espera esta rota: falha aqui
+ *                                            só vai ao console, o toque já valeu na tela.
+ *   Com o Assistente desligado, toda rota menos o GET /assistente responde 503 { error, desligado: true }.
+ *
+ * Formatos que os dois lados dividem com o CRM:
+ *   - `ContextoDaPagina.pagina` é o id curto do painel (hoje, agenda, vendas, triagem, funil, numeros,
+ *     ficha, financas, escritorio, mais, design-system, outra). Em `financas` o servidor não lê nada e
+ *     não chama modelo: responde por regra fixa (RULES 28).
+ *   - `lead.id` e o `dados.id` dos cartões são o id inteiro do CRM (`site:ChIJ…`, CrmLead.id); o
+ *     servidor também acha o lead pela chave sozinha. O POST /crm/registro quer a chave (CrmLead.chave,
+ *     sem o prefixo): o painel tira o prefixo na hora (chaveParaRegistro).
  */
 
 export interface EstadoDoAssistente {

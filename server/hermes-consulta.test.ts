@@ -291,6 +291,9 @@ describe("prepararConsultaAoHermes", () => {
       assert.equal(prepararConsultaAoHermes({ SQUADONE_ASSISTENTE_HERMES: "true", SQUADONE_MODE: "operations", SQUADONE_ASSISTENTE_HERMES_TETO_DIA: "0", HOME: "/home/teste" }, dataDir), null);
       const c = prepararConsultaAoHermes({ SQUADONE_ASSISTENTE_HERMES: "true", SQUADONE_MODE: "operations", HOME: path.resolve("/home/teste") }, dataDir);
       assert.ok(c && typeof c.consultar === "function");
+      // O teto vindo do boot do Assistente (que já leu a env) vale no lugar da env: um leitor só.
+      const doBoot = prepararConsultaAoHermes({ SQUADONE_ASSISTENTE_HERMES: "true", SQUADONE_MODE: "operations", SQUADONE_ASSISTENTE_HERMES_TETO_DIA: "0", HOME: path.resolve("/home/teste") }, dataDir, { tetoDia: 3 });
+      assert.ok(doBoot);
     } finally {
       console.log = log;
       console.error = erro;

@@ -10,7 +10,7 @@ import type { GenerateContentParameters } from "@google/genai";
 import { guardaDeOrigem } from "./acesso.ts";
 import { criarAssistente, prepararAssistente, TetoDoAssistente, type Assistente, type DepsDoAssistente, type RespostaDoGemini } from "./assistente.ts";
 import type { FontesDoAssistente } from "./assistente-ferramentas.ts";
-import { HermesFalhou, type ConsultaAoHermes } from "./assistente-hermes-tipo.ts";
+import { HermesFalhou, type ConsultaAoHermes } from "./hermes-consulta.ts";
 import { montarCrm, validarRetrato } from "./crm.ts";
 import { createOperationsRouter, HermesReadingsStore, OperationsProjectStore, type OperationsConfig } from "./operations.ts";
 import { ModeloOcupado } from "./orchestrator.ts";
@@ -98,7 +98,8 @@ async function linhasDoArquivo(dir: string): Promise<string[]> {
   return textos.join("").split("\n").filter(Boolean);
 }
 
-const PAGINA = { pagina: "/crm" };
+// O id curto que o painel manda (src/casca/assistente.ts, contextoDoEndereco).
+const PAGINA = { pagina: "vendas" };
 
 describe("finanças nem saem do processo", () => {
   for (const texto of ["gastei 30 no mercado", "quanto custa R$ 200 de farmácia?"]) {
@@ -138,7 +139,7 @@ describe("tudo o que vai ao modelo e ao arquivo sai mascarado", () => {
   it("o lead da Ficha entra no prompt pelo nome, sem o telefone da planilha", async () => {
     const g = geminiDeRoteiro([{ text: "ok" }]);
     const { a } = await montar({ gerar: g.gerar });
-    await a.receber({ texto: "o que falta neste lead?", contexto: { pagina: "/crm", lead: { produto: "site", id: "site:ChIJkulniski" } } });
+    await a.receber({ texto: "o que falta neste lead?", contexto: { pagina: "ficha", lead: { produto: "site", id: "site:ChIJkulniski" } } });
     await a.ocioso();
     const si = String(g.pedidos[0].config?.systemInstruction);
     assert.match(si, /Kulniski Advocacia/);

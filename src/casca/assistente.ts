@@ -141,8 +141,12 @@ export function textoDaEtapa(etapa: EtapaPendente | string): string {
   return TEXTO_DA_ETAPA[etapa as EtapaPendente] ?? 'Pensando…'
 }
 
-/** `rede`: o pedido nem chegou ao servidor (ou a resposta não chegou de volta). Só do painel. */
-export type TipoDeFalhaDoPainel = TipoDeFalhaDoAssistente | 'rede'
+/**
+ * Só do painel: `rede`, o pedido nem chegou ao servidor (ou a resposta não chegou de volta);
+ * `pendente`, o POST voltou 400 com `pendente: true` (a conversa já tem resposta em preparo, que
+ * outra aba pediu): o painel retoma o acompanhamento em vez de só mostrar o erro.
+ */
+export type TipoDeFalhaDoPainel = TipoDeFalhaDoAssistente | 'rede' | 'pendente'
 
 /**
  * Cada falha por tipo, com o que fazer (BP-RECADO: diz o que fazer, não só o que houve). Os nomes
@@ -156,6 +160,7 @@ const FALHAS: Record<TipoDeFalhaDoPainel, { titulo: string; oQueFazer: string }>
   desligado: { titulo: 'O Assistente está desligado nesta Central.', oQueFazer: 'Ele liga com SQUADONE_ASSISTENTE=true no operations.env do Dell.' },
   outro: { titulo: 'Algo falhou na resposta.', oQueFazer: 'Pergunte de novo; se repetir, veja o Dell em Mais › Manutenção.' },
   rede: { titulo: 'A Central não respondeu.', oQueFazer: 'Confira a conexão com o Dell (Tailscale) e tente de novo.' },
+  pendente: { titulo: 'A resposta anterior ainda está chegando.', oQueFazer: 'Espere ela aparecer aqui e mande de novo.' },
 }
 
 export function textoDaFalha(tipo: TipoDeFalhaDoPainel | string): { titulo: string; oQueFazer: string } {
@@ -164,16 +169,20 @@ export function textoDaFalha(tipo: TipoDeFalhaDoPainel | string): { titulo: stri
 
 /**
  * Uma resposta de erro do servidor vira falha classificada (o contrato: 429 com `teto`, 503 com
- * `desligado`, 400 com `error`). O texto do servidor vale quando há; senão, o título do tipo.
+ * `desligado`, 400 com `error`, e com `pendente` quando a conversa já espera resposta). 404
+ * (conversa, resposta ou cartão que o servidor não tem) e 409 (cartão já decidido) caem em
+ * `outro` com o `status` no erro: quem chama decide por ele. O texto do servidor vale quando há;
+ * senão, o título do tipo.
  */
 export function falhaDaResposta(status: number, corpo: unknown): { tipo: TipoDeFalhaDoPainel; texto: string } {
-  const c = (corpo && typeof corpo === 'object' ? corpo : {}) as { error?: unknown; teto?: unknown; desligado?: unknown; modeloOcupado?: unknown }
+  const c = (corpo && typeof corpo === 'object' ? corpo : {}) as { error?: unknown; teto?: unknown; desligado?: unknown; modeloOcupado?: unknown; pendente?: unknown }
   const texto = typeof c.error === 'string' && c.error.trim() ? c.error.trim() : ''
   const tipo: TipoDeFalhaDoPainel =
     c.teto === true || status === 429 ? 'teto'
       : c.desligado === true ? 'desligado'
         : c.modeloOcupado === true ? 'modeloOcupado'
-          : 'outro'
+          : c.pendente === true ? 'pendente'
+            : 'outro'
   return { tipo, texto: texto || (status ? `${textoDaFalha(tipo).titulo} (HTTP ${status})` : textoDaFalha(tipo).titulo) }
 }
 
@@ -499,6 +508,8 @@ function criarAssistente() {
       if (minha !== geracao) return
       mensagens.value = juntarMensagens(mensagens.value, c.mensagens)
       pendente.value = c.pendente
+      // O "ainda está chegando" some quando chega: o texto voltou ao campo, pronto para mandar de novo.
+      if (!c.pendente && falha.value?.tipo === 'pendente') falha.value = null
       const e = enviando.value
       if (e?.id && mensagens.value.some((m) => m.id === e.id)) enviando.value = null
     }, {
@@ -551,6 +562,9 @@ function criarAssistente() {
       const r = await enviar({ ...(conversaId.value ? { conversaId: conversaId.value } : {}), texto: t, contexto })
       if (minha !== geracao) return true
       if (r.conversaId !== conversaId.value) {
+        // Mandamos uma conversa que o servidor não tem (podada, ou de antes de trocar de Dell) e ele
+        // abriu outra: as mensagens da antiga saem, senão o `n` 1 e 2 da nova cairia por cima delas.
+        if (conversaId.value) mensagens.value = []
         conversaId.value = r.conversaId
         guardarConversa(r.conversaId)
       }
@@ -564,6 +578,8 @@ function criarAssistente() {
       if (minha !== geracao) return false
       enviando.value = null
       falha.value = e instanceof ErroDoAssistente ? { tipo: e.tipo, texto: e.message } : { tipo: 'outro', texto: String(e) }
+      // Outra aba já perguntou nesta conversa: acompanha a resposta dela, que chega aqui também.
+      if (e instanceof ErroDoAssistente && e.tipo === 'pendente') seguir()
       return false
     }
   }

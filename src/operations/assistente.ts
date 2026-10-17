@@ -28,6 +28,16 @@ export const RESPOSTA_DE_FINANCAS = 'Isso fica em Finanças: abra /financas. Nã
  */
 export const TEXTO_GUARDADO_DE_FINANCAS = '[assunto de finanças]'
 
+/** O id de página que o painel manda da tela de Finanças (src/casca/assistente.ts, contextoDoEndereco). */
+export const PAGINA_DE_FINANCAS = 'financas'
+
+/**
+ * A resposta de sempre a quem pergunta da tela de Finanças. Lá o servidor não lê nada (RULES 28):
+ * o que se pergunta com Finanças aberta quase sempre é sobre ela, e um "quanto sobrou?" sem "R$"
+ * escaparia do `pareceFinancas` e iria ao Gemini, que leria Vendas para responder outra coisa.
+ */
+export const RESPOSTA_NA_TELA_DE_FINANCAS = 'Aqui em Finanças eu não leio nada: finanças não vão a nenhum modelo. Para Vendas, a agenda ou o Dell, pergunte de outra tela.'
+
 export type RotaLocal =
   | { regra: 'financas'; resposta: string; guardado: string }
   | { regra: 'recusa'; resposta: string }
@@ -35,13 +45,15 @@ export type RotaLocal =
 
 /**
  * PURO. Roda antes de qualquer modelo. Finanças (`pareceFinancas`: "R$", gasto falado, salário,
- * dívida, fatura…) responde por regra fixa; vazio ou longo demais é recusa; o resto segue ao Gemini.
+ * dívida, fatura…) e qualquer pergunta feita da tela de Finanças respondem por regra fixa; vazio ou
+ * longo demais é recusa; o resto segue ao Gemini.
  */
-export function rotearLocal(texto: string): RotaLocal {
+export function rotearLocal(texto: string, pagina?: string): RotaLocal {
   const t = (texto ?? '').trim()
   if (!t) return { regra: 'recusa', resposta: 'Escreva a pergunta.' }
   if (t.length > MAX_TEXTO_DA_MENSAGEM) return { regra: 'recusa', resposta: `A mensagem passa de ${MAX_TEXTO_DA_MENSAGEM} caracteres.` }
   if (pareceFinancas(t)) return { regra: 'financas', resposta: RESPOSTA_DE_FINANCAS, guardado: TEXTO_GUARDADO_DE_FINANCAS }
+  if (pagina === PAGINA_DE_FINANCAS) return { regra: 'financas', resposta: RESPOSTA_NA_TELA_DE_FINANCAS, guardado: TEXTO_GUARDADO_DE_FINANCAS }
   return { regra: null }
 }
 
@@ -110,7 +122,7 @@ export interface LeadDoContexto {
 }
 
 export interface ContextoDoRoteador {
-  /** A página onde o Rômulo está ("/crm", "/"). */
+  /** A página onde o Rômulo está, no id curto do painel ("hoje", "vendas", "funil", "ficha"…). */
   pagina: string
   lead?: LeadDoContexto | null
   /** "sexta-feira, 17/10/2026, 14:05" no fuso de SP: o servidor passa, aqui não há relógio. */
@@ -195,6 +207,17 @@ const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa', 'pl
 /** O id do lead no formato do CRM (o mesmo de `leadDoPedido` em server/operations.ts). */
 export const ID_DE_LEAD = /^[A-Za-z0-9_:.-]{1,200}$/
 
+/**
+ * PURO. O lead da visão pelo produto e pelo id, aceitando o id inteiro do CRM (`site:ChIJ…`, o que
+ * buscar_lead, a Hoje e o `?lead=` da Ficha usam) ou só a chave da planilha (`ChIJ…`, o que o
+ * registro e a conversa usam). As duas formas circulam pela Central; o modelo e o painel podem
+ * trazer qualquer uma, e recusar a chave seria recusar o lead certo.
+ */
+export function acharLead<T extends Pick<CrmLead, 'produto' | 'id'>>(leads: readonly T[], produto: string, id: string): T | undefined {
+  const inteiro = id.startsWith(`${produto}:`) ? id : `${produto}:${id}`
+  return leads.find((l) => l.produto === produto && (l.id === inteiro || l.id === id))
+}
+
 export type LeituraDoCartao = { ok: true; cartao: CartaoDoAssistente } | { ok: false; motivo: string }
 
 const texto = (v: unknown) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n').trim() : '')
@@ -235,15 +258,17 @@ export function lerCartaoProposto(
   const leadId = typeof a.id === 'string' ? a.id.trim() : ''
   if (!PRODUTOS.includes(produto as CrmProduto) || !ID_DE_LEAD.test(leadId)) return recusa('lead com produto ou id fora do formato')
   if (!visao) return recusa('Vendas não foi lido: sem como conferir o lead')
-  const lead = visao.leads.find((l) => l.produto === produto && l.id === leadId)
+  const lead = acharLead(visao.leads, produto, leadId)
   if (!lead) return recusa('lead fora de Vendas')
+  // O cartão leva sempre o id inteiro do CRM, venha a chave ou o id: o painel tira o prefixo só na
+  // hora do registro (chaveParaRegistro), que é a forma que o POST /crm/registro valida.
   const corpo = texto(a.texto)
   if (corpo.length > MAX_TEXTO_DO_CARTAO) return recusa(`texto passa de ${MAX_TEXTO_DO_CARTAO} caracteres`)
   if (temValor(corpo)) return recusa('valor em R$ não entra em cartão: o preço vem do cardápio')
 
   if (nome === 'propor_mensagem_ao_lead') {
     if (!corpo) return recusa('mensagem vazia')
-    return { ok: true, cartao: { id, tipo: 'mensagem_ao_lead', estado: 'proposto', dados: { produto, id: leadId, empresa: lead.empresa, texto: prepararTexto(corpo) } } }
+    return { ok: true, cartao: { id, tipo: 'mensagem_ao_lead', estado: 'proposto', dados: { produto, id: lead.id, empresa: lead.empresa, texto: prepararTexto(corpo) } } }
   }
 
   const tipo = a.tipo
@@ -258,7 +283,7 @@ export function lerCartaoProposto(
       id,
       tipo: 'anotacao_no_crm',
       estado: 'proposto',
-      dados: { produto, id: leadId, empresa: lead.empresa, tipo, texto: prepararTexto(corpo), ...(data ? { data } : {}) },
+      dados: { produto, id: lead.id, empresa: lead.empresa, tipo, texto: prepararTexto(corpo), ...(data ? { data } : {}) },
     },
   }
 }

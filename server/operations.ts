@@ -812,7 +812,7 @@ export function createOperationsRouter(options: {
     try {
       res.status(202).json(await options.assistente.receber(lerPedidoDeMensagem(req.body)));
     } catch (error) {
-      if (error instanceof PedidoDoAssistenteInvalido) res.status(400).json({ error: error.message });
+      if (error instanceof PedidoDoAssistenteInvalido) res.status(400).json({ error: error.message, ...(error.pendente ? { pendente: true } : {}) });
       else if (error instanceof TetoDoAssistente) res.status(429).json({ error: error.message, teto: true });
       else {
         console.error("[assistente] não recebeu a mensagem:", error instanceof Error ? error.message : error);

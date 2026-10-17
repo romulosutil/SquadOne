@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { FunctionCallingConfigMode, type Content, type FunctionCall, type GenerateContentParameters, type GoogleGenAI, type Part } from "@google/genai";
 import {
+  acharLead,
   fontesDaResposta,
   historicoParaOPrompt,
   ID_DE_LEAD,
@@ -30,7 +31,7 @@ import type {
 import { passoAtual, passoDaJornada } from "../src/operations/jornada.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
 import { CONSULTAR_HERMES, consultarOHermes, declaracoesDoAssistente, LEITURAS, LeiturasDaMensagem, type FontesDoAssistente, type ResultadoDoHermes } from "./assistente-ferramentas.ts";
-import type { ConsultaAoHermes } from "./assistente-hermes-tipo.ts";
+import { TETO_DIA_DO_HERMES, type ConsultaAoHermes } from "./hermes-consulta.ts";
 import { FUSO } from "./alocador.ts";
 import { arquivoDoMes, diaLocal, type Logger } from "./luna-sombra.ts";
 import { gerarComRetry, MODEL, ModeloOcupado } from "./orchestrator.ts";
@@ -57,7 +58,8 @@ export class AssistenteMalConfigurado extends Error {
 }
 
 export const TETO_DIA_DO_ASSISTENTE = 60;
-export const TETO_DIA_DO_HERMES = 20;
+// O padrão do teto do Hermes é o do módulo dele (que conta as consultas no arquivo do dia): um número só.
+export { TETO_DIA_DO_HERMES };
 /** Gerações por mensagem: a 3ª já sai sem ferramentas, para sempre haver texto. */
 export const MAX_RODADAS = 3;
 const MAX_CARTOES_POR_RESPOSTA = 3;
@@ -94,9 +96,12 @@ export function lerConfigDoAssistente(env: NodeJS.ProcessEnv = process.env): Con
 // --- Erros classificados (a rota decide o status pelo tipo) -------------------------
 
 export class PedidoDoAssistenteInvalido extends Error {
-  constructor(mensagem: string) {
+  /** A conversa já tem resposta em preparo: a rota diz `pendente: true` junto do 400. */
+  readonly pendente: boolean;
+  constructor(mensagem: string, opcoes: { pendente?: boolean } = {}) {
     super(mensagem);
     this.name = "PedidoDoAssistenteInvalido";
+    this.pendente = opcoes.pendente === true;
   }
 }
 
@@ -350,11 +355,12 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
     });
 
     try {
-      // O lead da Ficha sai da visão do CRM, nunca do navegador.
+      // O lead da Ficha sai da visão do CRM, nunca do navegador. O painel manda o id inteiro
+      // (`?lead=site:…`); a chave sozinha também acha.
       let lead: LeadDoContexto | null = null;
       if (contexto.lead) {
         const v = await leituras.visao();
-        const l = v?.leads.find((x) => x.produto === contexto.lead!.produto && x.id === contexto.lead!.id);
+        const l = v ? acharLead(v.leads, contexto.lead.produto, contexto.lead.id) : undefined;
         if (l) lead = { produto: l.produto, id: l.id, empresa: l.empresa, etapa: l.subEtapa || l.etapa, passo: passoDaJornada(passoAtual(l)).nome };
       }
       const systemInstruction = promptDoRoteador({ pagina: contexto.pagina, lead, agoraLocal: agoraLegivel(agora()), hermes: hermes !== null });
@@ -460,10 +466,12 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
 
     async receber(pedido) {
       // Sem strictNullChecks no projeto, `{ regra: null }` não estreita a união: o tipo vai explícito.
-      const rota = rotearLocal(pedido.texto);
+      // A página entra na regra: da tela de Finanças nada é lido nem vai a modelo (RULES 28).
+      const rota = rotearLocal(pedido.texto, pedido.contexto.pagina);
       if (rota.regra === "recusa") throw new PedidoDoAssistenteInvalido((rota as { resposta: string }).resposta);
       let c = pedido.conversaId ? conversas.get(pedido.conversaId) : undefined;
-      if (c?.pendente) throw new PedidoDoAssistenteInvalido("Espere a resposta anterior chegar.");
+      // `pendente`: o painel retoma o acompanhamento em vez de só mostrar o erro (outra aba mandou antes).
+      if (c?.pendente) throw new PedidoDoAssistenteInvalido("Espere a resposta anterior chegar.", { pendente: true });
 
       if (rota.regra === "financas") {
         const financas = rota as { resposta: string; guardado: string };

@@ -107,6 +107,7 @@ import { contarEscritasDaApi, criarContadorDeUso } from "./server/uso.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
 import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
 import { prepararAssistente, type Assistente } from "./server/assistente.ts";
+import { prepararConsultaAoHermes } from "./server/hermes-consulta.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
@@ -407,12 +408,15 @@ async function startServer() {
       }
     };
     // O Assistente da Central (RULES 28): lê o que as telas já mostram e propõe cartões; nunca
-    // escreve. Só com SQUADONE_ASSISTENTE=true; a consulta ao Hermes (SQUADONE_ASSISTENTE_HERMES)
-    // entra por `criarHermes` quando server/hermes-consulta.ts existir.
+    // escreve. Só com SQUADONE_ASSISTENTE=true; a consulta ao Hermes (SQUADONE_ASSISTENTE_HERMES,
+    // exceção da regra 20) entra por `criarHermes`, só chamado com as duas flags. O teto do Hermes é
+    // lido uma vez, pelo Assistente (SQUADONE_ASSISTENTE_HERMES_TETO_DIA), e contado uma vez, no
+    // arquivo do dia de server/hermes-consulta.ts: o Assistente não conta consulta nenhuma.
     assistenteDoProcesso = await prepararAssistente(process.env, {
       dataDir: operationsDataDir,
       operations: squadOneMode === "operations",
       ai,
+      criarHermes: ({ tetoDia }) => prepararConsultaAoHermes(process.env, operationsDataDir, { tetoDia }),
       fontes: {
         visao: () => crm.visao(),
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
