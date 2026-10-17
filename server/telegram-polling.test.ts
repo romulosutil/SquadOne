@@ -14,9 +14,15 @@ import { criarBotDoTelegram, type DepsDoBot } from "./telegram-bot.ts";
 import {
   arquivoDeOffset,
   criarPollingDoTelegram,
+  declararQueda,
   ESPERA_CONFLITO_MS,
   ESPERA_CREDENCIAL_MS,
+  ESPERA_OUTRO_MS,
+  ESPERA_SOLUCO_MS,
   esperaDepoisDe,
+  FALHAS_PARA_DECLARAR,
+  tipoDaFalha,
+  type TipoDeFalha,
 } from "./telegram-polling.ts";
 import type { TurnoResult } from "./orchestrator.ts";
 
@@ -202,8 +208,85 @@ describe("polling", () => {
   it("espera por tipo de falha", () => {
     assert.equal(esperaDepoisDe(new ErroDeTelegram("x", 409), 1).ms, ESPERA_CONFLITO_MS);
     assert.equal(esperaDepoisDe(new ErroDeTelegram("x", 401), 1).ms, ESPERA_CREDENCIAL_MS);
-    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", null), 1).ms, 5_000);
-    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", null), 9).ms, 60_000);
+    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", null), 1).ms, ESPERA_SOLUCO_MS);
+    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", null), 2).ms, 5_000);
+    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", null), 9).ms, 60_000, "backoff limitado a 1 min");
+    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", 502), 1).ms, ESPERA_SOLUCO_MS, "5xx passa sozinho como rede");
+    assert.equal(esperaDepoisDe(new ErroDeTelegram("x", 400), 1).ms, ESPERA_OUTRO_MS);
+    assert.equal(esperaDepoisDe(new Error("x"), 1).ms, ESPERA_OUTRO_MS);
     assert.doesNotMatch(esperaDepoisDe(new ErroDeTelegram("x", 401), 1).motivo, new RegExp(TOKEN));
+  });
+
+  // Tabela da regra (13 a 17/10/2026, journal da Mel): 49 de 51 "inacessível"
+  // eram uma tentativa só; a queda real (DNS) passava de duas.
+  const casos: { nome: string; err: unknown; falhas: number; tipo: TipoDeFalha; declarar: boolean }[] = [
+    { nome: "ECONNRESET isolado", err: new ErroDeTelegram("Telegram inacessível em getUpdates (ECONNRESET).", null), falhas: 1, tipo: "rede", declarar: false },
+    { nome: "TimeoutError isolado", err: new ErroDeTelegram("Telegram inacessível em getUpdates (TimeoutError).", null), falhas: 1, tipo: "rede", declarar: false },
+    { nome: "segunda falha de rede seguida", err: new ErroDeTelegram("Telegram inacessível em getUpdates (EAI_AGAIN).", null), falhas: 2, tipo: "rede", declarar: true },
+    { nome: "rede fora há muito", err: new ErroDeTelegram("x", null), falhas: 30, tipo: "rede", declarar: true },
+    { nome: "502 isolado", err: new ErroDeTelegram("Telegram respondeu 502 em getUpdates: Bad Gateway", 502), falhas: 1, tipo: "rede", declarar: false },
+    { nome: "409 já na primeira", err: new ErroDeTelegram("x", 409), falhas: 1, tipo: "conflito", declarar: true },
+    { nome: "401 já na primeira", err: new ErroDeTelegram("x", 401), falhas: 1, tipo: "credencial", declarar: true },
+    { nome: "404 já na primeira", err: new ErroDeTelegram("x", 404), falhas: 1, tipo: "credencial", declarar: true },
+    { nome: "400 já na primeira", err: new ErroDeTelegram("x", 400), falhas: 1, tipo: "outro", declarar: true },
+    { nome: "erro que não é do Telegram", err: new TypeError("bug"), falhas: 1, tipo: "outro", declarar: true },
+  ];
+  for (const c of casos) {
+    it(`quando declarar queda: ${c.nome}`, () => {
+      assert.equal(tipoDaFalha(c.err), c.tipo);
+      assert.equal(declararQueda(c.tipo, c.falhas), c.declarar);
+      assert.equal(esperaDepoisDe(c.err, c.falhas).declarar, c.declarar);
+    });
+  }
+  it(`FALHAS_PARA_DECLARAR é ${FALHAS_PARA_DECLARAR}`, () => assert.equal(FALHAS_PARA_DECLARAR, 2));
+
+  /** Roda o laço contra um `buscar` roteirizado até entregar o update 5; devolve logs e esperas. */
+  async function laco(roteiro: (Error | unknown[])[]) {
+    const logs: string[] = [];
+    const avisos: string[] = [];
+    const esperas: number[] = [];
+    const pedidos: (number | null)[] = [];
+    const recebidos: number[] = [];
+    let parar = () => {};
+    let acabou = false;
+    const p = criarPollingDoTelegram({
+      buscar: async (o) => {
+        pedidos.push(o);
+        const passo = roteiro.shift();
+        // Roteiro no fim: para o laço por dentro (tudo aqui resolve em
+        // microtarefa, e um laço sem fim não deixaria o teste respirar).
+        if (roteiro.length === 0) { parar(); acabou = true; }
+        if (passo instanceof Error) throw passo;
+        return (passo ?? []) as unknown[];
+      },
+      receber: (u) => { recebidos.push((u as any).update_id); },
+      lerOffset: async () => 5, gravarOffset: async () => {},
+      esperar: async (ms) => { esperas.push(ms); },
+      log: { log: (m: unknown) => logs.push(String(m)), error: (m: unknown) => avisos.push(String(m)) },
+    });
+    parar = p.iniciar();
+    for (let i = 0; i < 50 && !acabou; i++) await flush();
+    await flush();
+    return { logs, avisos, esperas, pedidos, recebidos };
+  }
+  const reset = () => new ErroDeTelegram("Telegram inacessível em getUpdates (ECONNRESET).", null);
+
+  it("soluço de uma tentativa: nem 'inacessível' nem 'voltou', só a linha do soluço, e o offset se mantém", async () => {
+    const r = await laco([reset(), [mensagem(5, "a")], []]);
+    assert.deepEqual(r.avisos, []);
+    assert.equal(r.logs.length, 1);
+    assert.match(r.logs[0], /soluço de rede em getUpdates \(ECONNRESET\), nova tentativa em 1 s/);
+    assert.doesNotMatch(r.logs[0], /inacessível/, "o grep das quedas não conta o soluço");
+    assert.deepEqual(r.esperas, [ESPERA_SOLUCO_MS]);
+    assert.deepEqual(r.pedidos.slice(0, 3), [5, 5, 6], "a falha pede o mesmo offset: nada perdido nem repetido");
+    assert.deepEqual(r.recebidos, [5]);
+  });
+
+  it("queda real: duas falhas seguidas logam 'inacessível' uma vez e 'voltou' na volta, com backoff", async () => {
+    const r = await laco([reset(), reset(), reset(), [mensagem(5, "a")], []]);
+    assert.deepEqual(r.avisos, ["[telegram] polling: Telegram inacessível em getUpdates (ECONNRESET).", "[telegram] polling voltou a funcionar"]);
+    assert.deepEqual(r.esperas, [ESPERA_SOLUCO_MS, 5_000, 10_000]);
+    assert.deepEqual(r.pedidos.slice(0, 4), [5, 5, 5, 5]);
+    assert.deepEqual(r.recebidos, [5]);
   });
 });

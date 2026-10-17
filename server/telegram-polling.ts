@@ -35,7 +35,18 @@ export interface DepsDoPolling {
   log?: { log: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 }
 
-/** Rede fora: começa curto e dobra até 1 min. */
+/**
+ * Falhas de rede seguidas a partir das quais o polling se declara "inacessível".
+ * No journal da Mel de 13 a 17/10/2026, 49 das 51 quedas logadas eram UMA
+ * tentativa (ECONNRESET de conexão reaproveitada, TimeoutError de long poll que
+ * ficou mudo no Wi-Fi) e a seguinte já voltava; só as 2 de DNS (EAI_AGAIN, 2,5 e
+ * 6,5 min) eram queda de verdade. Com 1, cada soluço virava um par
+ * "inacessível"/"voltou" (5 a 17 por dia) e a queda real se perdia no meio.
+ */
+export const FALHAS_PARA_DECLARAR = 2;
+/** Primeira falha de rede: tenta de novo quase na hora, numa conexão nova. */
+export const ESPERA_SOLUCO_MS = 1_000;
+/** Rede fora (já declarada): começa curto e sobe até 1 min. */
 export const ESPERA_REDE_MS = [5_000, 10_000, 30_000, 60_000] as const;
 /** 409: webhook ainda registrado, ou outro processo buscando com o mesmo token. */
 export const ESPERA_CONFLITO_MS = 30_000;
@@ -43,24 +54,55 @@ export const ESPERA_CONFLITO_MS = 30_000;
 export const ESPERA_CREDENCIAL_MS = 5 * 60_000;
 export const ESPERA_OUTRO_MS = 30_000;
 
-/** O que fazer depois de uma falha do getUpdates: quanto esperar e o que logar. */
-export function esperaDepoisDe(err: unknown, falhasSeguidas: number): { ms: number; motivo: string } {
-  if (err instanceof ErroDeTelegram) {
-    if (err.status === 409) {
-      return {
-        ms: ESPERA_CONFLITO_MS,
-        motivo: "getUpdates recusado (409): webhook ainda registrado ou outro processo buscando. Rode o deleteWebhook do runbook (sem drop).",
-      };
-    }
-    if (err.status === 401 || err.status === 404) {
-      return { ms: ESPERA_CREDENCIAL_MS, motivo: `token do bot recusado (${err.status}): confira TELEGRAM_BOT_TOKEN.` };
-    }
-    if (err.status === null) {
-      const ms = ESPERA_REDE_MS[Math.min(falhasSeguidas - 1, ESPERA_REDE_MS.length - 1)];
-      return { ms, motivo: err.message };
-    }
+/**
+ * `rede`: sem resposta (status null) ou 5xx do Telegram; os dois passam sozinhos.
+ * O resto é configuração (409, 401/404) ou resposta que repetir não muda, e
+ * aparece na primeira vez: esperar a segunda só atrasaria o aviso.
+ */
+export type TipoDeFalha = "rede" | "conflito" | "credencial" | "outro";
+
+export function tipoDaFalha(err: unknown): TipoDeFalha {
+  if (!(err instanceof ErroDeTelegram)) return "outro";
+  if (err.status === null || err.status >= 500) return "rede";
+  if (err.status === 409) return "conflito";
+  if (err.status === 401 || err.status === 404) return "credencial";
+  return "outro";
+}
+
+/**
+ * PURO: esta falha (a `falhasSeguidas`-ésima seguida, contando com ela) já é
+ * queda? Soluço de rede de uma tentativa não é; a segunda seguida é.
+ */
+export function declararQueda(tipo: TipoDeFalha, falhasSeguidas: number): boolean {
+  return tipo !== "rede" || falhasSeguidas >= FALHAS_PARA_DECLARAR;
+}
+
+/**
+ * O que fazer depois de uma falha do getUpdates: quanto esperar, o que logar e
+ * se já é queda (`declarar`). O offset não muda numa falha: o getUpdates
+ * seguinte pede o mesmo, e o Telegram reentrega o que não foi confirmado.
+ */
+export function esperaDepoisDe(err: unknown, falhasSeguidas: number): { ms: number; motivo: string; declarar: boolean } {
+  const tipo = tipoDaFalha(err);
+  const declarar = declararQueda(tipo, falhasSeguidas);
+  const motivo = (err as Error)?.message ?? String(err);
+  if (tipo === "conflito") {
+    return {
+      ms: ESPERA_CONFLITO_MS,
+      declarar,
+      motivo: "getUpdates recusado (409): webhook ainda registrado ou outro processo buscando. Rode o deleteWebhook do runbook (sem drop).",
+    };
   }
-  return { ms: ESPERA_OUTRO_MS, motivo: (err as Error)?.message ?? String(err) };
+  if (tipo === "credencial") {
+    const status = (err as ErroDeTelegram).status;
+    return { ms: ESPERA_CREDENCIAL_MS, declarar, motivo: `token do bot recusado (${status}): confira TELEGRAM_BOT_TOKEN.` };
+  }
+  if (tipo === "rede") {
+    if (!declarar) return { ms: ESPERA_SOLUCO_MS, declarar, motivo };
+    const i = Math.min(falhasSeguidas - FALHAS_PARA_DECLARAR, ESPERA_REDE_MS.length - 1);
+    return { ms: ESPERA_REDE_MS[i], declarar, motivo };
+  }
+  return { ms: ESPERA_OUTRO_MS, declarar, motivo };
 }
 
 export function criarPollingDoTelegram(deps: DepsDoPolling) {
@@ -121,10 +163,17 @@ export function criarPollingDoTelegram(deps: DepsDoPolling) {
           motivoAntes = null;
         } catch (err) {
           falhasSeguidas++;
-          const { ms, motivo } = esperaDepoisDe(err, falhasSeguidas);
-          // Só loga quando muda: um webhook esquecido logaria 2880x/dia.
-          if (motivo !== motivoAntes) log.error(`[telegram] polling: ${motivo}`);
-          motivoAntes = motivo;
+          const { ms, motivo, declarar } = esperaDepoisDe(err, falhasSeguidas);
+          if (declarar) {
+            // Só loga quando muda: um webhook esquecido logaria 2880x/dia.
+            if (motivo !== motivoAntes) log.error(`[telegram] polling: ${motivo}`);
+            motivoAntes = motivo;
+          } else {
+            // Soluço: fica no journal SEM a palavra "inacessível", para medir sem
+            // virar queda num grep; o "voltou" só sai se a queda foi declarada.
+            const onde = motivo.replace(/^Telegram inacessível em /, "").replace(/\.$/, "");
+            log.log(`[telegram] polling: soluço de rede em ${onde}, nova tentativa em ${ms / 1000} s`);
+          }
           if (!parado) await deps.esperar(ms);
         }
       }
