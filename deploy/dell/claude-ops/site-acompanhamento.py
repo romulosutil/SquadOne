@@ -299,7 +299,12 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
 AVISO_FUNIL = f"""const NL = String.fromCharCode(10);
 const f = $('Funil').first().json;
 const linha = (m) => [m.leads, m.sites, m.enviados, m.responderam, m.em_conversa, m.recusados, m.concluidos].join(' · ');
-const nichos = f.nichos.filter(n => n.sites > 0);
+// A lista inteira chegou a 75 linhas e passou dos 4000 caracteres do schema da fila de avisos
+// (12/10/2026: recusado, não chegou no WhatsApp). Vão os 15 de mais envios (já ordenados) e o
+// resto some numa linha só; o detalhe completo fica em site-funil.json e na planilha.
+const todosNichos = f.nichos.filter(n => n.sites > 0);
+const nichos = todosNichos.slice(0, 15);
+const restoNichos = todosNichos.length - nichos.length;
 const pausadas = f.buscas.filter(b => b.pausar);
 const naoGerar = f.nao_gerar ?? [];
 // Nicho sem sinal de compra: o que pausou agora, o que já estava parado e o que o Rômulo religou.
@@ -307,11 +312,12 @@ const semSinal = (f.segmentos ?? []).filter(s => s.sem_sinal);
 const situacao = (s) => s.religado ? 'religado por você, segue rodando'
   : s.pausadas_agora ? 'pausado agora (' + s.pausadas_agora + ' busca(s))'
   : s.buscas_ligadas ? 'segue com ' + s.buscas_ligadas + ' busca(s) ligada(s)' : 'já estava pausado';
-const texto = [
+const bruto = [
   'Últimos 7 dias: ' + f.semana.leads + ' leads, ' + f.semana.sites + ' sites, ' + f.semana.enviados + ' enviados, ' + f.semana.responderam + ' respostas.',
   '',
   'Por nicho (leads · sites · enviados · responderam · em conversa · recusados · concluídos):',
   ...nichos.map(n => '• ' + n.nicho + ': ' + linha(n)),
+  ...(restoNichos > 0 ? ['… e mais ' + restoNichos + ' nicho(s) com site, menos enviados (detalhe na planilha).'] : []),
   '*Total:* ' + linha(f.totais),
   '',
   ...(f.crm && !f.crm.lido ? ['A aba CRM não foi lida (' + f.crm.erro + '): a pausa por falta de sinal de compra ficou para a próxima segunda.', ''] : []),
@@ -330,6 +336,10 @@ const texto = [
   '',
   'Planilha: {LINK_PLANILHA}',
 ].join(NL);
+// Trava final: pausas e nichos sem sinal também crescem. Passou do limite, corta com marca
+// (como a lib dos scripts do Hermes), em vez de a fila recusar o aviso inteiro.
+const LIMITE = 3900;
+const texto = bruto.length > LIMITE ? bruto.slice(0, LIMITE - 14) + NL + '… (cortado)' : bruto;
 const titulo = '📊 Site antes da venda: funil da semana';
 return [{{ json: {{ titulo, texto }}, binary: {{ data: {{ data: Buffer.from(JSON.stringify({{ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }}), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: 'aviso.json' }} }} }}];"""
@@ -785,6 +795,22 @@ def testar_regra() -> int:
             self.assertFalse(any(b["regra"] in ("busca_sem_sinal", "nicho_sem_sinal") for b in f["buscas"]))
             aviso = rodar_no(AVISO_FUNIL, {"Funil": f}, [])[0]["texto"]
             self.assertIn("A aba CRM não foi lida (credencial caída)", aviso)
+
+        def test_aviso_nunca_passa_do_limite_da_fila(self):
+            # 12/10/2026: 75 nichos viraram 4602 caracteres e a fila recusou o aviso inteiro.
+            nichos = [{"nicho": f"vertical {i} · cidade {i}", "leads": 9, "sites": 9, "enviados": 100 - i, "responderam": 1,
+                       "em_conversa": 0, "recusados": 2, "concluidos": 1} for i in range(120)]
+            aviso = rodar_no(AVISO_FUNIL, {"Funil": {**self.f, "nichos": nichos}}, [])[0]["texto"]
+            self.assertLessEqual(len(aviso), 4000)
+            self.assertIn("… e mais 105 nicho(s)", aviso)
+            self.assertIn("vertical 14 · cidade 14", aviso)
+            self.assertNotIn("vertical 15 · cidade 15", aviso)
+            # Pausas e nichos sem sinal também crescem: a trava final corta com marca em vez de perder o aviso.
+            buscas_longas = [{"query": "x" * 60, "cidade": "y" * 30, "lat": "-23.5", "lng": "-46.6", "pausar": True,
+                              "pausa_motivo": "z" * 80} for _ in range(60)]
+            aviso = rodar_no(AVISO_FUNIL, {"Funil": {**self.f, "buscas": buscas_longas}}, [])[0]["texto"]
+            self.assertLessEqual(len(aviso), 4000)
+            self.assertTrue(aviso.endswith("… (cortado)"))
 
     class Sinal(unittest.TestCase):
         def test_tabela(self):
