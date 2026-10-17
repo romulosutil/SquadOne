@@ -40,6 +40,26 @@ sem Dispensar, Telegram e Central fora de sincronia).
 | AC-12 | Uma frase por próximo passo, a mesma no cartão e no "Agora" da Ficha | `fraseDaAcao`, `agoraDaFicha` |
 | AC-14 | Ficha em ordem de decisão: Agora e primário, Desfecho, Conversa, Como vender (abre em "O que oferecer"), consulta | `CrmFicha.vue`, `ANATOMIA_DA_FICHA` |
 
+## Onda 3 (menos telas), feita em 17/10/2026
+
+| AC | O quê | Onde |
+|---|---|---|
+| AC-13 | Um nome por coisa na tela (Vendas, Ganho/Ganhou, Roteiro, 2ª mensagem, Leram/Leu, Atualizar, Escritório, A fazer, as ofertas), com o glossário que o teste confere | `src/operations/glossario.ts`, `src/operations-glossario.test.ts`, `crm-formato.ts` (`textoDaSubEtapa`) |
+| AC-15 | Vendas no celular: abas numa linha que rola de lado, ofertas e etapas num "Filtros" fechado, a Próxima venda logo abaixo das abas | `CrmPanel.vue` |
+| AC-16 | O primário logo depois do porquê, a mensagem em "Ver a mensagem" e o filtro de nicho por chave | `ProximaVenda.vue`, `proxima-venda.ts` (`chaveDoNicho`) |
+| AC-18 | A Hoje no Dell sem o bloco Time | `HojeRota.vue` |
+| AC-19 | Funil com uma alternância (Quadro \| Lista); "Por passo" virou o filtro Passo; Próximo passo pela fila; um rótulo curto por oferta | `funil-lista.ts`, `CrmFunil.vue`, `SIGLA_DO_PRODUTO` |
+| AC-20 | O Roteiro saiu das abas de Vendas e mora em Mais › Entender | `MaisRota.vue`, `/mais?abrir=roteiro` |
+| AC-21 | Um "Liberar" do dia no servidor, o mesmo na Próxima venda, na Triagem e na Ficha | `venda-do-dia.ts`, `liberados.ts` |
+| AC-22 | O lead Novo tem o primeiro contato como primário na Ficha, com as travas e o motivo | `primeiro-da-ficha.ts` |
+| AC-23 | O Ctrl+K acha as abas e os leads, e a dica diz a tela em palavras | `casca/paleta.ts` |
+| AC-24 | Manutenção só com ferramentas; um "Ver no blueprint" por fluxo | `casca/mais.ts`, `fluxos.ts` (`blueprintDoFluxo`) |
+| AC-25 | Ações raras fora do destaque: Desconectar o Google em Manutenção, Arquivar a squad na folha de editar, "Atualizar" pequeno | `MaisRota.vue`, `EditarFolha.vue`, `FinancasPanel.vue` |
+| AC-26 | Finanças: aviso de orçamento pelo Telegram, parcelas futuras numa dobra, "Todos os meses", o nome de cada conexão no selo | `financas/*` |
+| AC-27 | A Entrada diz "Entrada" e volta para "← SquadOne" | `deploy/dell/entrada/pagina.html` |
+
 ## O que fica para as próximas ondas
 
-Onda 3 (menos telas) e Onda 4 (Assistente, que depende da emenda da RULES 20 e da RULES 28 nova): ver o Artifact.
+- Onda 4 (Assistente), que depende da emenda da RULES 20 e da RULES 28 nova: ver o Artifact.
+- O nome das contas no selo de Finanças: o selo já mostra o nome de cada conexão, mas o servidor ainda não
+  manda as contas por conexão (`server/financas/resumo.ts` mandar `contas` em cada uma).

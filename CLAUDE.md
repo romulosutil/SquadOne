@@ -88,7 +88,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP;
                           desde 17/10/2026 (AC-06) é a fonte única do dia: por onde cada ação se resolveu (central, telegram,
                           expirou), a anotação no CRM uma vez por ação + tipo (/crm/venda/anotar) e os primeiros contatos das duas
-                          superfícies (/crm/venda/primeiro, a trava de ritmo); o aviso aberto no Telegram fecha quando a Central resolve
+                          superfícies (/crm/venda/primeiro, a trava de ritmo); o aviso aberto no Telegram fecha quando a Central resolve;
+                          e os liberados do dia (AC-21, POST /api/operations/crm/venda/liberar), o mesmo "Liberar" para Próxima venda, Triagem e Ficha
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
                           venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
@@ -117,7 +118,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
 src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
   src/casca/              destinos.ts (PURO: rota por perfil, barra, Ctrl+K), hoje.ts (PURO: ordem da Hoje,
-                          semáforo das finanças, estado do time só com fonte, linha do funil), rota.ts (pushState sem roteador),
+                          semáforo das finanças, estado do time só com fonte, linha do funil; no operations a Hoje não tem o bloco Time, AC-18),
+                          paleta.ts (PURO, AC-23: leads no Ctrl+K pelo nome da empresa, 8 no máximo, nunca telefone nem id na tela, leitura
+                          do CRM guardada 60 s; reaberturaDepoisDeIr), mais.ts (PURO: secaoDoMais, ?abrir=manutencao|roteiro, e ferramentasDoMais;
+                          Desconectar o Google está em Mais › Manutenção, AC-25), rota.ts (pushState sem roteador),
                           overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
                           BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta
   src/rotas/              HojeRota (/), AgendaRota (/agenda), EscritorioRota (/squadone), MaisRota (/mais)
@@ -131,9 +135,16 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           resumoDoDell (17/10/2026, AC-17) é o número único do topo, da Hoje e do Mais ("precisam de você" e
                           "resolvem sozinhas"); a Hoje mostra só os títulos, o técnico fica em Mais › Manutenção
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
-    Crm*.vue, crm-formato.ts  Vendas (/crm, 16/10/2026): A fazer (só a Próxima venda), Triagem (?ver=triagem, prospects em lotes
-                          de 10), Funil (consulta, sem envio; no celular abas de etapa), Números (?ver=numeros), Roteiro (?ver=roteiro)
-                          e a Ficha (folha cheia); ?ver=resultados e ?ver=colinha ainda abrem
+    Crm*.vue, crm-formato.ts  Vendas (/crm): A fazer, Triagem, Funil (Quadro | Lista, filtros Buscar, Nicho, Cidade e Passo;
+                          ?ver=jornada cai no Funil com ?passo=) e Números, mais a Ficha (folha cheia); o Roteiro mora em Mais › Entender
+                          (/mais?abrir=roteiro), e ?ver=roteiro/colinha vão para lá; no celular as abas rolam de lado e as ofertas ficam num
+                          "Filtros" fechado, nunca na A fazer; SIGLA_DO_PRODUTO é o rótulo curto único (ROTULO_DO_PRODUTO, o longo);
+                          textoDaSubEtapa/textoDoEvento traduzem o "Fechou"/"Viu" do servidor para Ganho/Leu (AC-13)
+    glossario.ts          PURO (17/10/2026, AC-13): um nome por coisa na UI (Vendas, Ganho/Ganhou, Roteiro, 2ª mensagem, Leram,
+                          Atualizar, Escritório, A fazer, as ofertas) e os nomes proibidos; src/operations-glossario.test.ts varre o texto
+                          visível de todo .vue e .ts de src/ e falha se um deles voltar
+    liberados.ts          o espelho único do "Liberar" do dia (AC-21), do corpo de GET /crm/venda; primeiro-da-ficha.ts PURO (AC-22): quando a
+                          Ficha oferece o primeiro contato de um Novo (o ritmo antes do horário, desabilitado com o motivo)
     proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
                           (responder > mandar a proposta > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
                           recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem
@@ -201,7 +212,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     jornada.ts            PURO (15/10/2026): a jornada do cliente do PRUMO, um passo por vez (quem faz, quando entra, o que tira,
                           prazo, parado depois de N dias), os dois trilhos combináveis (por fora: Encontrado/Respondido/Anúncios/Redes;
                           por dentro: Mapa → Fonte, só equipe) e a oferta por lead (agora, depois, não oferecer, a confirmar).
-                          Bloco "Jornada" na Ficha (CrmJornada) e /crm?ver=jornada (CrmJornadaVista); gera
+                          Bloco "Jornada" na Ficha (CrmJornada) e o filtro Passo do Funil; gera
                           docs/referencia/jornada-do-cliente.md (scripts/jornada-guia.ts; o teste falha se ficar para trás)
     financas/             Finanças: Visão (tenho, devo, gastei, orçamento, todo mês), Lançamentos (editor de categoria) e Organizar; saúde e "dados até" em toda tela
   src/estilos/            tokens.css (paleta + modo escuro), casca.css (layout), agentes.css (cartões, botões, campos), design.md
@@ -216,7 +227,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
   src/contribuicao.ts     sem Vue: formata minutos, resume o turno e o ajuste, monta o ajuste do usuário
   src/components/         Sheet (folha acessível), GameMap (import dinâmico), GrowthCard, AjusteCard,
                           TrocaSquadCard, SquadSelector, SalasPainel, SalaCartao,
-                          ContratarFolha, EditarFolha, NovaSquadFolha, ArquivoFolha
+                          ContratarFolha, EditarFolha (Arquivar a squad mora nela, AC-25), NovaSquadFolha, ArquivoFolha
   src/office/             geometria isométrica, salas, sprites
   src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch) e a escala inteira do mapa
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura

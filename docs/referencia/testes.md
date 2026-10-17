@@ -117,7 +117,8 @@ só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança)
 `src/operations-funil-lista.test.ts` (a Lista do Funil no desktop, 16/10/2026: o sinal mais forte por ordem (Resposta nova > Follow-up hoje >
 Perdido amanhã > Divergência > o resto), follow-up anotado deixa de ser "hoje", ordenar por último toque e próximo passo com quem não tem data no fim
 nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança; desde 17/10/2026, AC-03, `contagemDaEtapa`: Quadro e Lista
-contam igual para a mesma escolha de "Mostrar descartados", e o que fica de fora vira "+N descartados antes do contato"),
+contam igual para a mesma escolha de "Mostrar descartados", e o que fica de fora vira "+N descartados antes do contato"; AC-19:
+a coluna Próximo passo pela `acaoDoLead`, `opcoesDeNicho` (uma opção por grafia do nicho), o filtro Passo e o rótulo curto único da oferta),
 `src/operations-ab-video.test.ts` (A/B do vídeo: hash estável em tabela e ~50/50 em 1000 ids, Fisher exato contra o R, veredito com +20 pontos e p < 0,10, amostra insuficiente, leitura só depois dos 7 dias, quem entra no teste, braço trocado),
 `src/operations-ab-mensagem.test.ts` (A/B estratificado da 1ª mensagem, 14/10/2026: sem `ab_elegiveis` o bloco fica vazio e o histórico é contado como fora; 29 × 31 só "faltam", sem taxa nem respostas; 30 × 30 com taxa, Fisher e veredito; +20 pontos e p < 0,10 nos dois sentidos; robô não conta; só entre quem podia receber as duas letras; estrato por nicho),
 `src/operations-colinha.test.ts` (a colinha do PRUMO: o trecho de cada etapa e resposta, a objeção reconhecida no texto, a esteira vinda de `site-mensagem`, o lead do Site que recebeu a C só com textos do raio-x (segunda e follow-up; com o Raio-X avulso, o raio-x sozinho antes do demo e a mensagem do demo depois), nenhum R$ fora do cardápio, o cardápio ver → arrumar → manter com o Mapa grátis, o convite para o Mapa só depois do Raio-X e com equipe, Respondido/Fonte "sob proposta" sem valor nas mensagens fora da proposta, e nenhum cliente fundador),
@@ -142,7 +143,8 @@ o braço do teste do recibo e a regra antiga para quem foi enviado antes ou leu 
 `server/venda-do-dia.test.ts` (16/10/2026, OT-01 e OT-10: a memória do "Enviei"/"Pular" zera no dia novo, descarta lixo, a última decisão vale,
 grava e relê em diretório temporário; a leitura do teste do recibo por braço, com a exclusão à parte e o p só com o mínimo dos dois lados;
 desde 17/10/2026, AC-06: como e por onde cada ação se resolveu (central, telegram, expirou), a anotação uma vez por ação + tipo no dia, os
-primeiros contatos das duas superfícies e a leitura do formato de 16/10),
+primeiros contatos das duas superfícies e a leitura do formato de 16/10; AC-21: os liberados do dia (dia novo zera, o formato sem a
+chave ainda lê, liberar duas vezes é uma),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
 servidor e reforço local contando cada lead uma vez).
@@ -159,18 +161,33 @@ item; e quando a Ficha oferece a proposta como primário ou ao lado),
 com o `quando` e a verificação deles, a sala de cada trabalhador em tabela, os caçadores do Iris e das Estamparias, o Plus sem robô,
 o link para o passo em Como funciona e o endereço que o abre, e nenhum módulo do servidor importando catálogo, fluxos ou operação),
 `src/office/operacao.test.ts` (o Escritório como mapa da operação: o recorte da jornada de cada sala do PRUMO, contagens por passo
-com o filtro do produto do CRM, com você e parados sem contar o estoque, o "Ver no Funil" para a vista por passo; desde 16/10/2026
+com o filtro do produto do CRM, com você e parados sem contar o estoque, o "Ver no Funil" no filtro da oferta (desde 17/10/2026,
+com um passo só, também no filtro Passo, no `?passo=` que o Funil lê); desde 16/10/2026
 (OT-07) só a contagem, nenhum lead listado na sala; CRM não lido ou sem
 retrato = sem sinal (nunca zero), retrato velho marcado, o estado de cada robô só pelo `status.json` com "Sem sinal" para retrato
 ausente ou vencido, robô sem verificação ou fora do retrato; desde 17/10/2026, AC-03, o total da sala por etapa do CRM (Em contato +
 Proposta) bate com as colunas do Funil),
 `src/operations-mapa-unico.test.ts` (16/10/2026, OT-03: todo código `blueprint` de `fluxos.ts` e `jornada.ts` existe como passo ou cartão
 em `docs/blueprint/servico.json`, todo passo da jornada tem o seu, o link do Artifact, e os fatos que tinham divergido não voltam: caçadores
-ligados, observador lendo Clínicas e Estamparias, revisão na Triagem, lembrete e falha pelo Telegram),
+ligados, observador lendo Clínicas e Estamparias, revisão na Triagem, lembrete e falha pelo Telegram; desde 17/10/2026, AC-24, um link de
+blueprint por fluxo),
+`src/operations-glossario.test.ts` (17/10/2026, AC-13, um nome por coisa: o glossário de `src/operations/glossario.ts` aplicado a todo
+`.vue` e `.ts` de `src/`, lidos crus; só o texto visível conta (template, mustache, `aria-label`/`title`/`placeholder` e literais com
+espaço ou maiúscula), comentário, regex, classe, `href` e chave ficam fora; as exceções que são outra coisa (a aba CRM, o `08 · CRM`, o
+CRM de estamparia, `colinha.ts`, "quem fechou" numa mensagem ao lead) em tabela; e a varredura lê de fato o texto das telas),
+`src/operations-primeiro-e-nicho.test.ts` (17/10/2026, AC-16, 21 e 22: o nicho normalizado (caixa, acento, espaço) e o filtro da fila
+por ele; `liberadosDoCorpo`; quando a Ficha oferece o primeiro contato de um Novo, o ritmo antes do horário, e desabilitado com o motivo),
+`src/operations-financas-formato.test.ts` (o dia de São Paulo, as parcelas futuras separadas e em ordem, as opções do filtro de mês e
+o nome de cada conexão no selo),
 `src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
 `src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
 semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
-linha do funil, o cartão de respostas com o interesse parado na frente; desde 16/10/2026 o `/design-system`) e
+linha do funil, o cartão de respostas com o interesse parado na frente; desde 16/10/2026 o `/design-system`),
+`src/casca/paleta.test.ts` (17/10/2026, o Ctrl+K, AC-23: as abas de Vendas, Finanças e do Mais só no `operations`, com a dica em
+palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada no perfil `app`, o id só no destino; e quando a mesma
+tela precisa de `popstate` (`/crm`) ou de remontar (Mais)),
+`src/casca/mais.test.ts` (17/10/2026: qual seção o endereço do Mais abre, `?abrir=manutencao|roteiro` e `?fluxo=`; as Ferramentas
+sem Syncthing, CRM nem Agentes, e a reserva fria neutra) e
 `src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; o pedido de mudança;
 códigos `BP-` únicos; e as regras de homogeneidade sobre todo `.css` e `<style>` de `src/`: nada de rem/px
 solto em padding, margin, gap e font-size, nem peso numérico, e todo `var(--x)` definido. Exceção só com
