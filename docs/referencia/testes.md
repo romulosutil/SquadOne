@@ -5,7 +5,9 @@
 
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
 (hoje `server/baixa-prioridade.test.ts`,
-`server/lembretes.test.ts`, `server/vigia.test.ts`, `server/auth-store.test.ts`,
+`server/lembretes.test.ts`, `server/vigia.test.ts` (inclui, desde 17/10/2026, a cola do resumo matinal: um por dia,
+retentativa, leitura incompleta não vira "dia livre"), `server/resumo-matinal.test.ts` (janela 07:30–11:00, agrupamento,
+foco somado, nenhum R$, corte em 30 linhas), `server/auth-store.test.ts`,
 `server/passos.test.ts`, `server/tasks.test.ts`, `server/passos-no-google.test.ts`,
 `server/auth-escopos.test.ts`, `server/squad.test.ts`, `server/calendar.test.ts`,
 `server/prompt-passos.test.ts`, `server/telegram.test.ts`,

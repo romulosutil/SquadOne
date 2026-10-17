@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fsp from "fs/promises";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -50,6 +51,7 @@ import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/si
 import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
+import { resumoMatinalLigado } from "./server/resumo-matinal.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
 import { criarMemoriaDaVenda } from "./server/venda-do-dia.ts";
 import { lerConversaDoNumero } from "./server/conversa-do-lead.ts";
@@ -853,6 +855,19 @@ async function startServer() {
           enviar: async (a: Aviso) => {
             await publicarPessoal(a);
           },
+          // Um arquivo de uma linha (o dia do último resumo) em SQUADONE_DATA_DIR; ausente = só memória.
+          resumoMatinal: resumoMatinalLigado(process.env)
+            ? {
+                ler: async () => {
+                  const texto = await fsp.readFile(path.join(dataDir, "resumo-matinal.txt"), "utf8").catch((e) => {
+                    if (e?.code === "ENOENT") return "";
+                    throw e;
+                  });
+                  return /^\d{4}-\d{2}-\d{2}$/.test(texto.trim()) ? texto.trim() : null;
+                },
+                gravar: (dia: string) => fsp.writeFile(path.join(dataDir, "resumo-matinal.txt"), `${dia}\n`, { mode: 0o600 }),
+              }
+            : undefined,
         })
       : null;
 

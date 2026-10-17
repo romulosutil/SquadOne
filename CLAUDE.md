@@ -64,7 +64,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 também no Telegram, cartões, sem R$;
                           lembrete e alerta de finanças pelo Telegram, fila só de reserva (publicarAvisoPessoal, OT-14)
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
-  server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos
+  server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos e, às 7h30–11h, o resumo matinal (1 por dia)
+  server/resumo-matinal.ts  PURO (17/10/2026): quando sai (resumoDevido) e o texto da agenda do dia (montarResumo); SQUADONE_RESUMO_MATINAL=false desliga
   server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min
   server/time.ts          time vivo da Hoje: agruparTimePorSquad (PURO) + leitor de /api/time (1 leitura por calendário, cache 60 s)
   server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido

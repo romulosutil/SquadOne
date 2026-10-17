@@ -237,6 +237,129 @@ describe("vigia", () => {
   });
 });
 
+describe("vigia: resumo matinal", () => {
+  const MANHA = new Date("2026-09-14T07:30:00-03:00");
+  const doDia = [quest({ inicio: "2026-09-14T09:00:00-03:00", fim: "2026-09-14T10:00:00-03:00" })];
+
+  function comResumo(sobre: Partial<DependenciasDaVigia> = {}, gravados: string[] = [], lido: string | null = null) {
+    return montar({
+      listar: async () => doDia,
+      resumoMatinal: { ler: async () => lido, gravar: async (d) => void gravados.push(d) },
+      ...sobre,
+    });
+  }
+
+  it("manda uma vez por dia e grava o dia", async () => {
+    const gravados: string[] = [];
+    const { vigia, enviadas } = comResumo({}, gravados);
+    await vigia.varrer(MANHA, REAL);
+    await vigia.varrer(new Date(MANHA.getTime() + 60_000), REAL);
+    assert.equal(enviadas.length, 1);
+    assert.equal(enviadas[0].chave, "resumo-matinal:2026-09-14");
+    assert.deepEqual(gravados, ["2026-09-14"]);
+  });
+
+  it("redeploy no meio da manhã não repete: o dia gravado manda mais que a memória", async () => {
+    const { vigia, enviadas } = comResumo({}, [], "2026-09-14");
+    await vigia.varrer(MANHA, REAL);
+    assert.equal(enviadas.length, 0);
+  });
+
+  it("fora da janela (antes das 7h30 e depois das 11h) não manda", async () => {
+    const { vigia, enviadas } = comResumo();
+    await vigia.varrer(new Date("2026-09-14T07:00:00-03:00"), REAL);
+    await vigia.varrer(new Date("2026-09-14T11:00:00-03:00"), REAL);
+    assert.equal(enviadas.length, 0);
+  });
+
+  it("sem resumoMatinal na dependência fica desligado", async () => {
+    const { vigia, enviadas } = montar({ listar: async () => doDia });
+    await vigia.varrer(MANHA, REAL);
+    assert.equal(enviadas.length, 0);
+  });
+
+  it("envio que falhou volta no minuto seguinte, sem gravar o dia", async () => {
+    let falhar = true;
+    const gravados: string[] = [];
+    const { vigia, enviadas } = comResumo(
+      {
+        enviar: async (m) => {
+          if (falhar) throw new Error("telegram e fila fora");
+          enviadas.push(m);
+        },
+      },
+      gravados,
+    );
+    const primeira = await vigia.varrer(MANHA, REAL);
+    assert.match(primeira.erros[0], /resumo matinal não saiu/);
+    assert.deepEqual(gravados, []);
+    falhar = false;
+    await vigia.varrer(new Date(MANHA.getTime() + 60_000), REAL);
+    assert.equal(enviadas.length, 1);
+    assert.deepEqual(gravados, ["2026-09-14"]);
+  });
+
+  it("calendário que falhou não vira 'dia livre': nada é mandado nem gravado", async () => {
+    const gravados: string[] = [];
+    const { vigia, enviadas } = comResumo({ listar: async () => Promise.reject(new Error("google 503")) }, gravados);
+    const r = await vigia.varrer(MANHA, REAL);
+    assert.equal(enviadas.length, 0);
+    assert.deepEqual(gravados, []);
+    assert.match(r.erros.join("\n"), /resumo, calendário 'primary': google 503/);
+  });
+
+  it("dia vazio não manda nada e também não repete a leitura até as 11h", async () => {
+    let leituras = 0;
+    const gravados: string[] = [];
+    const { vigia, enviadas } = comResumo(
+      {
+        listar: async () => {
+          leituras++;
+          return [];
+        },
+      },
+      gravados,
+    );
+    await vigia.varrer(MANHA, REAL);
+    const depois = leituras;
+    await vigia.varrer(new Date(MANHA.getTime() + 60_000), REAL);
+    assert.equal(enviadas.length, 0);
+    assert.deepEqual(gravados, ["2026-09-14"]);
+    assert.equal(leituras - depois, 1, "só a leitura da janela de lembretes, não a do resumo");
+  });
+
+  it("simulação (registrar=false) mostra o resumo sem gravar nem consumir o do dia", async () => {
+    const gravados: string[] = [];
+    const { vigia, enviadas } = comResumo({}, gravados);
+    const sim = await vigia.varrer(MANHA, { enviar: false, registrar: false });
+    assert.equal(sim.mensagens.find((m) => m.eventId === "resumo-matinal")?.enviada, false);
+    assert.equal(enviadas.length, 0);
+    assert.deepEqual(gravados, []);
+    await vigia.varrer(MANHA, REAL);
+    assert.equal(enviadas.length, 1);
+  });
+
+  it("falha ao gravar o dia vira erro da varredura mas o resumo já saiu", async () => {
+    const { vigia, enviadas } = comResumo({ resumoMatinal: { ler: async () => null, gravar: async () => Promise.reject(new Error("disco cheio")) } });
+    const r = await vigia.varrer(MANHA, REAL);
+    assert.equal(enviadas.length, 1);
+    assert.match(r.erros.join("\n"), /não gravado/);
+    await vigia.varrer(new Date(MANHA.getTime() + 60_000), REAL);
+    assert.equal(enviadas.length, 1, "a memória do processo evita o segundo");
+  });
+
+  it("lembrete e resumo na mesma varredura: os dois saem", async () => {
+    const { vigia, enviadas } = comResumo({
+      listar: async () => [
+        quest({ eventId: "agora", inicio: "2026-09-14T07:40:00-03:00", fim: "2026-09-14T08:40:00-03:00" }),
+        ...doDia,
+      ],
+    });
+    await vigia.varrer(MANHA, REAL);
+    assert.deepEqual(enviadas.map((m) => m.chave.split(":")[0]), ["lembrete", "resumo-matinal"]);
+  });
+});
+
 describe("listarQuestsDaJanela", () => {
   const fetchOriginal = globalThis.fetch;
   afterEach(() => {

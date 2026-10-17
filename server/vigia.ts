@@ -20,6 +20,7 @@ import {
   ORIGEM_DOS_LEMBRETES,
   VARREDURA_MS,
 } from "./lembretes.ts";
+import { limitesDoDia, montarResumo, resumoDevido } from "./resumo-matinal.ts";
 import type { Roster } from "./squad.ts";
 
 const MIN_MS = 60_000;
@@ -35,6 +36,15 @@ export interface DependenciasDaVigia {
   listar: (token: string, calendarId: string, de: Date, ate: Date) => Promise<QuestCalendario[]>;
   /** Publica o aviso (a fila de avisos do Dell). */
   enviar: (a: Aviso) => Promise<void>;
+  /**
+   * Resumo matinal (17/10/2026). Ausente = desligado. `ultimoEnviado` guarda o dia (AAAA-MM-DD)
+   * fora da memória, para um redeploy entre 7h30 e 11h não repetir o "bom dia"; falha de
+   * leitura ou gravação cai para a memória do processo, nunca derruba a varredura.
+   */
+  resumoMatinal?: {
+    ler: () => Promise<string | null>;
+    gravar: (dia: string) => Promise<void>;
+  };
   log?: { log: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 }
 
@@ -144,7 +154,77 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
         if (referencia < agora.getTime() - RETENCAO_MS) enviados.delete(chave);
       }
     }
+
+    // Depois dos lembretes: o resumo nunca atrasa um aviso de bloco. Falha dele vira erro da
+    // varredura e é tentada de novo no minuto seguinte (até as 11h).
+    if (dep.resumoMatinal) await resumir(agora, janela, alvos.calendarios, alvos.dominios, token, opcoes, resultado);
     return resultado;
+  }
+
+  /** Dia (AAAA-MM-DD) do último resumo enviado. null = ainda não lido do disco neste processo. */
+  let ultimoResumo: string | null | undefined;
+
+  async function resumir(
+    agora: Date,
+    janela: Janela,
+    calendarios: string[],
+    dominios: Map<string, string>,
+    token: string,
+    opcoes: { enviar: boolean; registrar: boolean },
+    resultado: ResultadoDaVarredura,
+  ): Promise<void> {
+    const lugar = dep.resumoMatinal!;
+    try {
+      if (ultimoResumo === undefined) {
+        ultimoResumo = await lugar.ler().catch((e) => {
+          resultado.erros.push(`resumo: dia do último envio não lido: ${mensagemDe(e)}`);
+          return null;
+        });
+      }
+      const dia = resumoDevido(agora.getTime(), janela.fuso, ultimoResumo);
+      if (dia === null) return;
+      const { de, ate } = limitesDoDia(agora.getTime(), janela.fuso);
+      const quests: QuestCalendario[] = [];
+      let leituraCompleta = true;
+      for (const calendarId of calendarios) {
+        try {
+          quests.push(...(await dep.listar(token, calendarId, de, ate)));
+        } catch (err) {
+          // Resumo com um calendário faltando mentiria ("dia livre"): tenta de novo no minuto seguinte.
+          leituraCompleta = false;
+          resultado.erros.push(`resumo, calendário '${calendarId}': ${mensagemDe(err)}`);
+        }
+      }
+      if (!leituraCompleta) return;
+      const aviso = montarResumo(quests, agora.getTime(), janela, dominios);
+      if (aviso === null) {
+        // Dia vazio: nada a mandar e nada a repetir a cada minuto até as 11h.
+        if (opcoes.registrar) await marcarResumo(dia, resultado);
+        return;
+      }
+      let enviada = false;
+      if (opcoes.enviar) {
+        try {
+          await dep.enviar(aviso);
+          enviada = true;
+          if (opcoes.registrar) await marcarResumo(dia, resultado);
+        } catch (err) {
+          resultado.erros.push(`resumo matinal não saiu: ${mensagemDe(err)}`);
+        }
+      }
+      resultado.mensagens.push({ ...aviso, eventId: "resumo-matinal", enviada });
+    } catch (err) {
+      resultado.erros.push(`resumo matinal: ${mensagemDe(err)}`);
+    }
+  }
+
+  async function marcarResumo(dia: string, resultado: ResultadoDaVarredura): Promise<void> {
+    ultimoResumo = dia;
+    try {
+      await dep.resumoMatinal!.gravar(dia);
+    } catch (e) {
+      resultado.erros.push(`resumo: dia do envio não gravado (vale só até o próximo redeploy): ${mensagemDe(e)}`);
+    }
   }
 
   function iniciar(relogio: () => Date = () => new Date()): () => void {
