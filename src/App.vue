@@ -8,9 +8,10 @@
  * Um app só nos dois perfis: no Dell (`operations`) com Funil, Finanças e o
  * estado do Dell; no Easypanel (`app`, reserva fria) só os agentes. Celular
  * primeiro: barra inferior com o ＋Pedir no meio; a partir de 1024 px, barra
- * lateral e Ctrl+K.
+ * lateral e Ctrl+K. No Dell com `assistente` no /api/runtime (RULES 28), o ＋, a
+ * lateral e o Ctrl+K abrem o Assistente (casca/AssistentePainel.vue) no lugar do Pedir.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ArquivoFolha from './components/ArquivoFolha.vue'
 import ContratarFolha from './components/ContratarFolha.vue'
 import EditarFolha from './components/EditarFolha.vue'
@@ -20,6 +21,8 @@ import BarraLateral from './casca/BarraLateral.vue'
 import CascaTopo from './casca/CascaTopo.vue'
 import Paleta from './casca/Paleta.vue'
 import PedirFolha from './casca/PedirFolha.vue'
+import AssistentePainel from './casca/AssistentePainel.vue'
+import { useAssistente } from './casca/assistente'
 import AgendaRota from './rotas/AgendaRota.vue'
 import EscritorioRota from './rotas/EscritorioRota.vue'
 import HojeRota from './rotas/HojeRota.vue'
@@ -38,6 +41,7 @@ import {
   destinosDaBarra,
   destinosLaterais,
   rotaDaCasca,
+  usaAssistente,
   type Comando,
   type Perfil
 } from './casca/destinos'
@@ -45,10 +49,12 @@ import './estilos/tokens.css'
 import './estilos/casca.css'
 import './estilos/agentes.css'
 
-const props = defineProps<{ perfil: Perfil; agentes: boolean }>()
+const props = withDefaults(defineProps<{ perfil: Perfil; agentes: boolean; assistente?: boolean }>(), { assistente: false })
 
-const capacidades = computed(() => ({ perfil: props.perfil, agentes: props.agentes }))
+const capacidades = computed(() => ({ perfil: props.perfil, agentes: props.agentes, assistente: props.assistente }))
 const ops = computed(() => props.perfil === 'operations')
+/** RULES 28: no Dell com a flag, o ＋, a lateral e o Ctrl+K abrem o Assistente; senão, o Pedir de sempre. */
+const comAssistente = computed(() => usaAssistente(capacidades.value))
 
 // A antiga Produção Auto (/projetos/producao-auto) virou o CRM em 30/09/2026.
 if (caminho.value === '/projetos/producao-auto') navegar('/crm', true)
@@ -59,10 +65,32 @@ const atual = computed(() => destinoAtual(caminho.value, capacidades.value))
 const ag = useAgentes()
 const ov = useOverview()
 
-const pedirIndisponivel = computed(() => (props.agentes ? '' : ops.value ? 'sem agenda aqui' : 'indisponível'))
+const conversa = useAssistente()
+
+// O Assistente responde mesmo sem a agenda neste processo (só não manda pedido ao time).
+const pedirIndisponivel = computed(() =>
+  comAssistente.value || props.agentes ? '' : ops.value ? 'sem agenda aqui' : 'indisponível'
+)
+const rotuloDoPedir = computed(() => (comAssistente.value ? 'Assistente' : 'Pedir'))
+const pedindo = computed(() =>
+  ag.isLoading.value || (comAssistente.value && (!!conversa.pendente.value || !!conversa.enviando.value))
+)
 const abrirPedir = () => {
-  if (!pedirIndisponivel.value) ag.abrirPedir()
+  if (comAssistente.value) conversa.abrir()
+  else if (!pedirIndisponivel.value) ag.abrirPedir()
 }
+
+// O "Ver detalhes" do aviso do turno (agentes/estado.ts) abre o Pedir: com o Assistente, a folha
+// do Pedir não existe no Dell (RULES 28) e o resultado mora no cartão que mandou o pedido.
+watch(
+  () => ag.pedirAberto.value,
+  (aberto) => {
+    if (aberto && comAssistente.value) {
+      ag.pedirAberto.value = false
+      conversa.abrir()
+    }
+  }
+)
 
 
 // ---------------------------------------------------------------- Ctrl+K
@@ -99,7 +127,7 @@ function executar(c: Comando) {
       if (reabrir === 'popstate') window.dispatchEvent(new PopStateEvent('popstate'))
       else if (reabrir === 'remontar') remontagensDoMais.value += 1
     }
-  } else if (a.tipo === 'pedir') abrirPedir()
+  } else if (a.tipo === 'pedir' || a.tipo === 'assistente') abrirPedir()
   else if (a.tipo === 'squad') void ag.trocarSquad(a.id).then((ok) => { if (!ok) ag.avisar('Espere o pedido em andamento terminar para trocar de squad.') })
   else if (a.tipo === 'nova-squad') ag.abrirNovaSquad()
 }
@@ -161,7 +189,8 @@ const {
       :destinos="destinosLaterais(capacidades)"
       :atual="atual"
       :pedir-indisponivel="pedirIndisponivel"
-      :pedindo="isLoading"
+      :pedindo="pedindo"
+      :rotulo="rotuloDoPedir"
       :atalho="ehMac ? '⌘K' : 'Ctrl+K'"
       @pedir="abrirPedir"
       @paleta="paletaAberta = true"
@@ -191,12 +220,15 @@ const {
       :destinos="destinosDaBarra(capacidades)"
       :atual="atual"
       :pedir-indisponivel="pedirIndisponivel"
-      :pedindo="isLoading"
+      :pedindo="pedindo"
+      :rotulo="rotuloDoPedir"
       @pedir="abrirPedir"
     />
   </div>
 
-  <PedirFolha v-if="agentes && pedirAberto" @fechar="pedirAberto = false" />
+  <PedirFolha v-if="agentes && pedirAberto && !comAssistente" @fechar="pedirAberto = false" />
+  <!-- Fora do .casca e com Teleport por dentro: o #app fica inerte com a Ficha aberta. -->
+  <AssistentePainel v-if="comAssistente && conversa.aberto.value" :agentes="agentes" @fechar="conversa.aberto.value = false" />
   <Paleta v-if="paletaAberta" :comandos="comandos" :perfil="perfil" @fechar="paletaAberta = false" @executar="executar" />
 
   <ContratarFolha

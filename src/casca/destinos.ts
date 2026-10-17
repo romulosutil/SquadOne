@@ -14,6 +14,16 @@ export type Perfil = 'app' | 'operations'
 export interface Capacidades {
   perfil: Perfil
   agentes: boolean
+  /**
+   * O Assistente da Central (RULES 28, `assistente` no /api/runtime): no `operations` ele toma o
+   * lugar do Pedir no ＋, na lateral e no Ctrl+K. Ausente ou falso, tudo fica como antes.
+   */
+  assistente?: boolean
+}
+
+/** O ＋ abre o Assistente em vez da folha Pedir: só no Dell e só com a flag ligada. */
+export function usaAssistente(c: Capacidades): boolean {
+  return c.perfil === 'operations' && c.assistente === true
 }
 
 export type RotaId = 'hoje' | 'agenda' | 'funil' | 'financas' | 'escritorio' | 'mais' | 'design-system' | 'nao-encontrada'
@@ -126,6 +136,7 @@ export function ehLinkDaCasca(href: string, origem: string, c: Capacidades): boo
 export type AcaoDoComando =
   | { tipo: 'ir'; href: string }
   | { tipo: 'pedir' }
+  | { tipo: 'assistente' }
   | { tipo: 'squad'; id: string }
   | { tipo: 'nova-squad' }
 
@@ -185,9 +196,16 @@ export function comandosDaPaleta(
   if (c.perfil === 'operations') {
     ir.push(...ABAS_DO_DELL.map<Comando>((a) => ({ id: `aba:${a.id}`, rotulo: a.rotulo, dica: a.dica, acao: { tipo: 'ir', href: a.href } })))
   }
-  if (!c.agentes) return ir
+  // Com o Assistente, o primeiro comando é ele, com ou sem a agenda neste processo: sem agentes ele
+  // ainda responde, só não oferece "Mandar para o time" (AssistenteCartao.vue).
+  const primeiro: Comando[] = usaAssistente(c)
+    ? [{ id: 'assistente', rotulo: 'Assistente', dica: 'Pergunte ou peça; ele propõe, você confirma', acao: { tipo: 'assistente' } }]
+    : c.agentes
+      ? [{ id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } }]
+      : []
+  if (!c.agentes) return [...primeiro, ...ir]
   return [
-    { id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } },
+    ...primeiro,
     ...ir,
     ...squads
       .filter((s) => s.id !== ativaId)

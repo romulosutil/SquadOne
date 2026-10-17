@@ -3,14 +3,19 @@
 // a paleta (Ctrl+K). Abaixo de 1024 px some, e quem navega é a barra inferior.
 import type { Destino } from './destinos'
 
-defineProps<{
-  destinos: Destino[]
-  atual: Destino['id'] | null
-  pedirIndisponivel: string
-  pedindo: boolean
-  /** "Mac" mostra ⌘K; o resto, Ctrl+K. Só o rótulo muda: os dois atalhos valem. */
-  atalho: string
-}>()
+withDefaults(
+  defineProps<{
+    destinos: Destino[]
+    atual: Destino['id'] | null
+    pedirIndisponivel: string
+    pedindo: boolean
+    /** "Mac" mostra ⌘K; o resto, Ctrl+K. Só o rótulo muda: os dois atalhos valem. */
+    atalho: string
+    /** "Pedir", ou "Assistente" no Dell com a flag (RULES 28): o mesmo botão abre o painel dele. */
+    rotulo?: string
+  }>(),
+  { rotulo: 'Pedir' }
+)
 defineEmits<{ pedir: []; paleta: [] }>()
 </script>
 
@@ -22,8 +27,8 @@ defineEmits<{ pedir: []; paleta: [] }>()
     </a>
 
     <button type="button" class="barra-lateral__pedir" :disabled="!!pedirIndisponivel" @click="$emit('pedir')">
-      <span aria-hidden="true">＋</span> Pedir
-      <small v-if="pedirIndisponivel || pedindo">{{ pedirIndisponivel || 'Pedido em andamento' }}</small>
+      <span aria-hidden="true">＋</span> {{ rotulo }}
+      <small v-if="pedirIndisponivel || pedindo">{{ pedirIndisponivel || (rotulo === 'Pedir' ? 'Pedido em andamento' : 'Em andamento') }}</small>
     </button>
 
     <nav aria-label="Navegação principal">

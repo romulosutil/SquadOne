@@ -274,5 +274,13 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
   }
   .barra-lateral__paleta kbd { padding: var(--esp-0) var(--esp-2); border: 1px solid var(--barra-texto); border-radius: var(--raio-selo); font: inherit; font-size: var(--tam-mini); }
   .barra-lateral :focus-visible { outline: 3px solid var(--cor-amarelo); outline-offset: 2px; }
+
+  /* Assistente aberto (RULES 28, casca/AssistentePainel.vue): o painel fica fixo à direita, fora do
+     #app. A casca encolhe para não ficar por baixo dele, o aviso sai da frente e o fundo das folhas
+     (a Ficha) para antes do painel: coberto, o painel ficaria sem clique enquanto a Ficha está aberta. */
+  html.com-assistente { --assistente-largura: min(26rem, 34vw); }
+  html.com-assistente .casca { padding-right: var(--assistente-largura); }
+  html.com-assistente .aviso { right: calc(var(--assistente-largura) + var(--esp-4)); }
+  html.com-assistente .folha-fundo { right: var(--assistente-largura); }
 }
 

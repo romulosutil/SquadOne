@@ -7,6 +7,9 @@ import type { Perfil } from './casca/destinos'
 // se a agenda (o app dos agentes) mora neste processo; a casca decide o resto.
 const perfil = ref<Perfil | null>(null)
 const agentes = ref(false)
+// O Assistente da Central (RULES 28): só no `operations` e só com `assistente: true` no runtime.
+// Fora disso (ou no modo seguro) o ＋ continua abrindo o Pedir.
+const assistente = ref(false)
 const failed = ref(false)
 
 // /squadone é o endereço dos agentes em toda a Central. Com a agenda neste
@@ -22,6 +25,7 @@ onMounted(async () => {
     const body = await response.json()
     if (body.mode === 'operations') {
       agentes.value = body.agenda === true
+      assistente.value = body.assistente === true
       if (!agentes.value && window.location.pathname.startsWith('/squadone')) {
         window.location.replace(APP_DOS_AGENTES)
         return
@@ -43,7 +47,7 @@ onMounted(async () => {
 
 <template>
   <div v-if="perfil === null" class="runtime-loading" role="status">Carregando SquadOne…</div>
-  <App v-else :perfil="perfil" :agentes="agentes" />
+  <App v-else :perfil="perfil" :agentes="agentes" :assistente="assistente" />
   <p v-if="failed" class="runtime-warning" role="status">
     O perfil de execução não pôde ser confirmado; o aplicativo foi aberto no modo seguro.
   </p>
