@@ -4,11 +4,15 @@
  * roda. Um por aba: a Hoje, o Mais e o topo leem o mesmo retrato.
  */
 import { computed, ref } from 'vue'
+import { resumoDoDell } from '../operations/alertas'
 import type { OperationsOverview } from '../operations/types'
 
 const overview = ref<OperationsOverview | null>(null)
 const carregando = ref(false)
 const erro = ref('')
+// O relógio do resumo: sem ele, um retrato que parou de chegar continuaria "recente"
+// até a próxima leitura dar certo (RULES 19).
+const agora = ref(Date.now())
 let temporizador = 0
 
 async function ler() {
@@ -23,16 +27,21 @@ async function ler() {
     erro.value = e instanceof Error ? e.message : String(e)
   } finally {
     carregando.value = false
+    agora.value = Date.now()
   }
 }
 
-const falhas = computed(() => overview.value?.dell.verificacoes.filter((c) => c.estado === 'falha').length ?? 0)
+/** Topo, Hoje e Mais contam pela mesma regra e do mesmo retrato (AC-17): um número só. */
+const resumo = computed(() => resumoDoDell(overview.value?.dell ?? null, agora.value))
+/** O que precisa do Rômulo no Dell (vermelho ou amarelo sem "sozinho"), não só os vermelhos. */
+const falhas = computed(() => resumo.value.precisam.length)
 
 /** Lê agora e a cada 30 s com a aba visível (o monitor grava a cada minuto). */
 function iniciar() {
   if (temporizador) return
   void ler()
   temporizador = window.setInterval(() => {
+    agora.value = Date.now()
     if (document.visibilityState === 'visible') void ler()
   }, 30_000)
 }
@@ -43,5 +52,5 @@ function parar() {
 }
 
 export function useOverview() {
-  return { overview, carregando, erro, falhas, ler, iniciar, parar }
+  return { overview, carregando, erro, falhas, resumo, ler, iniciar, parar }
 }

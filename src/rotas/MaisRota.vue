@@ -13,7 +13,7 @@
  * Agenda, Escritório e Entrada. Lançamentos saiu: é aba de Finanças, um toque depois dela.
  * Os painéis da Central usam mais.css, só com tokens.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
@@ -22,7 +22,7 @@ import { atalhosDoMais, type Capacidades, type Destino } from '../casca/destinos
 import '../operations/mais.css'
 
 const props = defineProps<{ capacidades: Capacidades }>()
-const { overview } = useOverview()
+const { overview, resumo } = useOverview()
 const ops = computed(() => props.capacidades.perfil === 'operations')
 
 // A mesma pergunta da casca (casca.css e App.vue): a partir de 64rem quem navega é o trilho
@@ -31,7 +31,12 @@ const ops = computed(() => props.capacidades.perfil === 'operations')
 const consulta = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 64rem)') : null
 const largo = ref(consulta?.matches ?? false)
 const aoMudarLargura = (e: MediaQueryListEvent) => (largo.value = e.matches)
-onMounted(() => consulta?.addEventListener('change', aoMudarLargura))
+onMounted(() => {
+  consulta?.addEventListener('change', aoMudarLargura)
+  // O link "Ver em Mais › Manutenção" da Hoje: a navegação sobe a página antes de montar esta
+  // rota, então rolar até a seção fica para depois de ela existir.
+  if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
+})
 onBeforeUnmount(() => consulta?.removeEventListener('change', aoMudarLargura))
 
 const DICA: Partial<Record<Destino['id'], string>> = {
@@ -42,8 +47,18 @@ const DICA: Partial<Record<Destino['id'], string>> = {
 const usar = computed(() =>
   atalhosDoMais(props.capacidades, largo.value).map((d) => ({ href: d.href, rotulo: d.rotulo, dica: DICA[d.id] ?? '' }))
 )
-const pedeFluxo = new URLSearchParams(window.location.search).has('fluxo')
-const falhas = computed(() => (overview.value?.dell.verificacoes ?? []).filter((c) => c.estado === 'falha').length)
+const pedido = new URLSearchParams(window.location.search)
+const pedeFluxo = pedido.has('fluxo')
+/** `?abrir=manutencao`: a Hoje manda para cá com a seção e a lista do Dell já abertas (AC-17). */
+const pedeManutencao = pedido.get('abrir') === 'manutencao'
+// O mesmo número da Hoje e do topo (resumoDoDell): abre quando algo precisa do Rômulo, não só
+// no vermelho, e quando o retrato parou de chegar (RULES 19: aí o detalhe é o que se tem).
+const avisoDoDell = computed(() => {
+  if (!ops.value || !overview.value) return ''
+  const r = resumo.value
+  if (r.semNoticia) return r.textoPrecisam
+  return r.precisam.length ? `${r.precisam.length} ${r.precisam.length === 1 ? 'precisa' : 'precisam'} de você` : ''
+})
 </script>
 
 <template>
@@ -66,14 +81,14 @@ const falhas = computed(() => (overview.value?.dell.verificacoes ?? []).filter((
       <ComoFuncionaPanel :checks="overview?.dell.verificacoes ?? []" />
     </details>
 
-    <details class="mais__bloco mais__dobra" :open="falhas > 0">
+    <details id="manutencao" class="mais__bloco mais__dobra" :open="pedeManutencao || !!avisoDoDell">
       <summary>
         <span class="mais__grupo">Manutenção</span>
-        <small>ferramentas do Dell, o que ele confere<template v-if="falhas"> ({{ falhas }} com falha)</template> e o design system</small>
+        <small>ferramentas do Dell, o que ele confere<template v-if="avisoDoDell"> ({{ avisoDoDell }})</template> e o design system</small>
       </summary>
       <div class="mais__ops">
         <AccessPanel v-if="ops" :tools="overview?.tools ?? []" />
-        <DellConferePanel v-if="ops" :status="overview?.dell ?? null" />
+        <DellConferePanel v-if="ops" :status="overview?.dell ?? null" :resumo="resumo" :aberto="pedeManutencao" />
         <ul class="mais__links">
           <li><a href="/design-system"><strong>Design system</strong><small>tokens e peças do app, para quem mexe no visual</small></a></li>
         </ul>

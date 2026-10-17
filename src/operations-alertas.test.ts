@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { linkExterno, quantidadeDaFila, remedioEmComum, seloDoPasso, separarAlertas, soNoDell } from './operations/alertas.ts'
-import type { DellCheck } from './operations/types.ts'
+import {
+  RETRATO_VELHO_MS,
+  linkExterno,
+  quantidadeDaFila,
+  remedioEmComum,
+  resumoDoDell,
+  semFraseCortada,
+  seloDoPasso,
+  separarAlertas,
+  soNoDell,
+} from './operations/alertas.ts'
+import type { DellCheck, DellStatus } from './operations/types.ts'
 
 const c = (id: string, estado: DellCheck['estado'], extra: Partial<DellCheck> = {}): DellCheck => ({
   id, grupo: 'fluxos', nome: id, estado, detalhe: '', ...extra,
@@ -58,5 +68,130 @@ describe('remedioEmComum', () => {
     ]
     assert.deepEqual(remedioEmComum(falhas), { texto: cred, quantas: 2 })
     assert.equal(remedioEmComum(falhas.slice(1)), null)
+  })
+})
+
+describe('resumoDoDell: um número só no topo, na Hoje e no Mais (AC-17)', () => {
+  const FUSO = 'America/Sao_Paulo'
+  // 08:15 em Brasília.
+  const GERADO = '2026-10-17T11:15:00.000Z'
+  const AGORA = Date.parse(GERADO) + 60_000
+  const retrato = (verificacoes: DellCheck[], geradoEm: string | null = GERADO): DellStatus => ({ geradoEm, verificacoes })
+  const oks = (n: number, grupo: DellCheck['grupo'] = 'servicos') => Array.from({ length: n }, (_, i) => c(`ok${i}`, 'ok', { grupo }))
+
+  const casos: Array<{
+    nome: string
+    status: DellStatus | null
+    agora?: number
+    semNoticia: boolean
+    precisam: number
+    sozinhas: number
+    filas: number
+    textoPrecisam: string
+    topo: string
+    mais: string
+  }> = [
+    {
+      nome: 'sem retrato nenhum: não sabe, nunca zero',
+      status: null,
+      semNoticia: true, precisam: 0, sozinhas: 0, filas: 0,
+      textoPrecisam: 'Sem notícia do Dell', topo: 'pendente Sem notícia do Dell ', mais: 'Sem notícia do Dell',
+    },
+    {
+      nome: 'retrato sem horário',
+      status: retrato(oks(3), null),
+      semNoticia: true, precisam: 0, sozinhas: 0, filas: 0,
+      textoPrecisam: 'Sem notícia do Dell', topo: 'pendente Sem notícia do Dell ', mais: 'Sem notícia do Dell · no último retrato, 3 de 3 ok',
+    },
+    {
+      nome: 'retrato velho (mais de 5 min): diz desde quando, e a contagem é do último retrato',
+      status: retrato([...oks(2), c('balcao', 'falha')]),
+      agora: Date.parse(GERADO) + RETRATO_VELHO_MS + 1,
+      semNoticia: true, precisam: 1, sozinhas: 0, filas: 0,
+      textoPrecisam: 'Sem notícia do Dell desde 08:15',
+      topo: 'pendente Sem notícia do Dell desde 08:15',
+      mais: 'Sem notícia do Dell desde 08:15 · no último retrato, 2 de 3 ok · 1 precisa de você',
+    },
+    {
+      nome: 'tudo ok',
+      status: retrato(oks(4)),
+      semNoticia: false, precisam: 0, sozinhas: 0, filas: 0,
+      textoPrecisam: 'Nada no Dell precisa de você', topo: 'ok Dell: tudo certo às 08:15', mais: '4 de 4 ok',
+    },
+    {
+      nome: 'só falhas (inclusive a marcada "sozinho": vermelho nunca se esconde)',
+      status: retrato([...oks(2), c('balcao', 'falha'), c('wa', 'falha', { sozinho: true })]),
+      semNoticia: false, precisam: 2, sozinhas: 0, filas: 0,
+      textoPrecisam: '2 falhas precisam de você', topo: 'falha 2 precisam de você às 08:15', mais: '2 de 4 ok · 2 precisam de você',
+    },
+    {
+      nome: 'só filas do CRM: não é saúde, não entra no número do Dell',
+      status: retrato([
+        ...oks(2),
+        c('pend:site-enviar', 'atencao', { grupo: 'pendencias' }),
+        c('pend:prumo-revisar', 'atencao', { grupo: 'pendencias' }),
+        c('pend:sites-fila', 'atencao', { grupo: 'pendencias', sozinho: true }),
+        c('pend:vazia', 'ok', { grupo: 'pendencias' }),
+      ]),
+      semNoticia: false, precisam: 0, sozinhas: 0, filas: 2,
+      textoPrecisam: 'Nada no Dell precisa de você', topo: 'ok Dell: tudo certo às 08:15', mais: '2 de 2 ok',
+    },
+    {
+      nome: 'só o que resolve sozinho',
+      status: retrato([...oks(1), c('healthwatch', 'atencao', { sozinho: true }), c('pncp', 'atencao', { grupo: 'dados', sozinho: true })]),
+      semNoticia: false, precisam: 0, sozinhas: 2, filas: 0,
+      textoPrecisam: 'Nada no Dell precisa de você', topo: 'ok Dell: tudo certo às 08:15', mais: '1 de 3 ok · 2 resolvem sozinhas',
+    },
+    {
+      nome: 'mistura do 17/10: 43 de 49 ok · 3 precisam de você · 3 resolvem sozinhas',
+      status: retrato([
+        ...oks(43),
+        c('fila-avisos', 'falha'),
+        c('p4f', 'falha', { grupo: 'containers' }),
+        c('cofre', 'atencao', { grupo: 'dados' }),
+        c('healthwatch', 'atencao', { sozinho: true }),
+        c('pncp', 'atencao', { grupo: 'dados', sozinho: true }),
+        c('espelho', 'atencao', { grupo: 'dados', sozinho: true }),
+        c('pend:site-enviar', 'atencao', { grupo: 'pendencias' }),
+        c('pend:site-resposta', 'atencao', { grupo: 'pendencias', sozinho: true }),
+      ]),
+      semNoticia: false, precisam: 3, sozinhas: 3, filas: 1,
+      textoPrecisam: '2 falhas e 1 aviso precisam de você',
+      topo: 'falha 3 precisam de você às 08:15',
+      mais: '43 de 49 ok · 3 precisam de você · 3 resolvem sozinhas',
+    },
+    {
+      nome: 'um aviso só (amarelo sem "sozinho"): singular e tom de atenção',
+      status: retrato([...oks(1), c('cofre', 'atencao', { grupo: 'dados' })]),
+      semNoticia: false, precisam: 1, sozinhas: 0, filas: 0,
+      textoPrecisam: '1 aviso precisa de você', topo: 'pendente 1 precisa de você às 08:15', mais: '1 de 2 ok · 1 precisa de você',
+    },
+  ]
+
+  for (const caso of casos) {
+    it(caso.nome, () => {
+      const r = resumoDoDell(caso.status, caso.agora ?? AGORA, FUSO)
+      assert.equal(r.semNoticia, caso.semNoticia)
+      assert.equal(r.precisam.length, caso.precisam)
+      assert.equal(r.sozinhas.length, caso.sozinhas)
+      assert.equal(r.filas.length, caso.filas)
+      assert.equal(r.textoPrecisam, caso.textoPrecisam)
+      assert.equal(`${r.topo.tom} ${r.topo.texto} ${r.topo.quando}`, caso.topo)
+      assert.equal(r.textoDoMais, caso.mais)
+      // O "N de M ok" do Mais bate com o que a Hoje e o topo dizem.
+      assert.equal(r.total - r.ok, r.precisam.length + r.sozinhas.length)
+    })
+  }
+})
+
+describe('semFraseCortada', () => {
+  it('texto cortado no meio da palavra volta até a última frase inteira', () => {
+    const cortado = 'Algum script gravou um aviso fora do formato. Peça ao Claude: "aviso recusado na fila do dell-status". Depois dê o visto; ele vai par'
+    assert.equal(semFraseCortada(cortado), 'Algum script gravou um aviso fora do formato. Peça ao Claude: "aviso recusado na fila do dell-status".')
+  })
+  it('texto inteiro passa como veio; sem frase inteira nenhuma, também', () => {
+    assert.equal(semFraseCortada('O Hermes parou.'), 'O Hermes parou.')
+    assert.equal(semFraseCortada('Rode `dell-status --instalados`'), 'Rode `dell-status --instalados`')
+    assert.equal(semFraseCortada('sem ponto nenhum'), 'sem ponto nenhum')
   })
 })

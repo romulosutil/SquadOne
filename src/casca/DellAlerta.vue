@@ -1,38 +1,42 @@
 <script setup lang="ts">
-// Um alerta do retrato do dell-status na Hoje: o que é, o que fazer e o link
-// que resolve. O texto de "o que fazer" é escrito lá, junto de cada
-// verificação (RULES 19); a tela não inventa remédio.
-import { ROTULO_DO_GRUPO, grupoDoAlerta, linkExterno, soNoDell } from '../operations/alertas'
+// O que o Dell pede ao Rômulo, num cartão só na Hoje (AC-17, 17/10/2026). Era um
+// cartão por verificação, com nome de container, caminho de pasta e comando, entre a
+// venda e a agenda; o socorro do Hermes já tenta o primeiro remédio de cada falha.
+// Aqui fica o título de cada uma (o nome que o dell-status dá ao check) e o caminho
+// para o detalhe, que mora só em Mais › Manutenção. Número e textos vêm de
+// resumoDoDell, o mesmo do topo e do Mais.
+import type { ResumoDoDell } from '../operations/alertas'
 import type { DellCheck } from '../operations/types'
 
-const props = defineProps<{ check: DellCheck }>()
+defineProps<{ resumo: ResumoDoDell }>()
 
-const grupo = grupoDoAlerta(props.check)
-const desde = props.check.desde
-  ? ` · desde ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(props.check.desde))}`
-  : ''
-const rotuloDoLink = (url: string) => (soNoDell(url) ? 'Abrir no Dell' : url.includes('docs.google.com/spreadsheets') ? 'Planilha' : 'Abrir')
+/** Destino do link: o Mais com a Manutenção e a lista do Dell já abertas. */
+const MANUTENCAO = '/mais?abrir=manutencao'
+
+const formatoDoDesde = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+const desde = (c: DellCheck) => (c.desde ? `desde ${formatoDoDesde.format(new Date(c.desde))}` : '')
 </script>
 
 <template>
-  <article class="cartao" :class="{ 'cartao--falha': grupo === 'falha' }" :aria-label="`${ROTULO_DO_GRUPO[grupo]}: ${check.nome}`">
+  <article class="cartao" :class="{ 'cartao--falha': resumo.vermelhos }" :aria-label="`Dell: ${resumo.textoPrecisam}`">
     <div class="selos">
-      <span class="selo" :class="grupo === 'falha' ? 'selo--erro' : 'selo--atencao'">{{ ROTULO_DO_GRUPO[grupo] }}</span>
+      <span class="selo" :class="resumo.vermelhos ? 'selo--erro' : 'selo--atencao'">Dell</span>
     </div>
-    <h3>{{ check.nome }}</h3>
-    <p><strong>O que fazer:</strong> {{ check.oQueFazer ?? 'Veja o detalhe; se não souber o que fazer, peça ao Claude.' }}</p>
-    <p class="texto-2 texto-pequeno">{{ check.detalhe }}{{ desde }}</p>
-    <div v-if="check.acao || check.link" class="acoes">
-      <a
-        v-if="check.acao"
-        class="botao botao--primario"
-        :href="check.acao.url"
-        :target="linkExterno(check.acao.url) ? '_blank' : undefined"
-        :rel="linkExterno(check.acao.url) ? 'noopener' : undefined"
-      >{{ check.acao.rotulo }}<span class="so-leitor">: {{ check.nome }}</span><span v-if="linkExterno(check.acao.url)" aria-hidden="true"> ↗</span></a>
-      <a v-if="check.link" class="botao botao--leve" :href="check.link" target="_blank" rel="noopener">
-        {{ rotuloDoLink(check.link) }}<span class="so-leitor">: {{ check.nome }}</span> <span aria-hidden="true">↗</span>
-      </a>
+    <!-- O "N falhas precisam de você" é o título do bloco na Hoje: o cartão não o repete. -->
+    <ul class="dell-alerta__lista">
+      <li v-for="c in resumo.precisam" :key="c.id">
+        <span class="selo" :class="c.estado === 'falha' ? 'selo--erro' : 'selo--atencao'">{{ c.estado === 'falha' ? 'Falhou' : 'Aviso' }}</span>
+        <span>{{ c.nome }}</span>
+        <small v-if="c.desde" class="texto-2 texto-pequeno">{{ desde(c) }}</small>
+      </li>
+    </ul>
+    <div class="acoes">
+      <a class="botao botao--leve" :href="MANUTENCAO">Ver em Mais › Manutenção</a>
     </div>
   </article>
 </template>
+
+<style>
+.dell-alerta__lista { display: grid; gap: var(--esp-2); margin: 0; padding: 0; list-style: none; }
+.dell-alerta__lista li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--esp-1) var(--esp-2); overflow-wrap: anywhere; }
+</style>

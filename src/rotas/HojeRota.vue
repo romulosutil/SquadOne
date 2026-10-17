@@ -4,9 +4,10 @@
  *  0. no Dell (16/10/2026, "a Hoje não está entregando valor"): a próxima venda, uma ação por vez
  *     com a mensagem pronta (ProximaVenda), e o porquê de não vender (PorQueNaoVende), que
  *     substituiu a linha do funil e o cartão "N responderam" (a resposta agora é a própria venda);
- *  1. o que precisa do Rômulo agora, no máximo 3 cartões (falhas do Dell,
- *     cartões de decisão dos agentes, finanças em laranja/vermelho, fila e
- *     "vale olhar"); o resto atrás de "ver todos";
+ *  1. o que precisa do Rômulo agora, no máximo 3 cartões: o do Dell (um só, com o título
+ *     de cada falha e o link para Mais › Manutenção; AC-17, 17/10/2026), os de decisão dos
+ *     agentes e as finanças em laranja/vermelho; o resto atrás de "ver todos". As filas do
+ *     CRM viram uma linha que abre Vendas;
  *  2. os próximos compromissos (os 3 primeiros da agenda dos agentes);
  *  3. o time: uma linha por squad, com texto e só com fonte (a Mochila da
  *     ativa e o /api/time de todas);
@@ -34,7 +35,6 @@ import {
   type EstadoDasFinancasLido,
   type TimeLido
 } from '../casca/hoje'
-import { remedioEmComum, separarAlertas } from '../operations/alertas'
 import { upcomingAgendaEvents } from '../operations/agenda-window'
 import type { CrmVisao } from '../operations/types'
 import type { Capacidades } from '../casca/destinos'
@@ -63,7 +63,7 @@ const {
   nomesDeDominio,
   nomesDePessoa
 } = ag
-const { overview, carregando: lendoDell, erro: erroDell } = useOverview()
+const { overview, carregando: lendoDell, erro: erroDell, resumo } = useOverview()
 
 const ops = computed(() => props.capacidades.perfil === 'operations')
 const agentes = computed(() => props.capacidades.agentes)
@@ -74,7 +74,10 @@ let relogio = 0
 
 // ---------------------------------------------------------------- 1. precisa de você
 
-const alertas = computed(() => (ops.value && overview.value ? separarAlertas(overview.value.dell.verificacoes) : null))
+// O Dell sai pela mesma regra do topo e do Mais (resumoDoDell): um número, um instante. Sem
+// retrato recente não há contagem nenhuma, só "Sem notícia do Dell desde HH:MM" (RULES 19).
+const dell = computed(() => (ops.value && overview.value ? resumo.value : null))
+const cartaoDoDell = computed(() => !!dell.value && !dell.value.semNoticia && dell.value.precisam.length > 0)
 
 // Finanças em semáforo: só o Dell tem o banco. A leitura é a mesma da Sala
 // Finanças (só % e semáforo, nunca R$). Falha = sem cartão: não dá para
@@ -90,9 +93,10 @@ async function lerFinancas() {
   }
 }
 
+// Sem os alertas do Dell aqui: eles viram o cartão único acima, e as filas do CRM, uma linha.
 const pendencias = computed(() =>
   pendenciasDaHoje(
-    alertas.value,
+    null,
     {
       trocas: agentes.value ? sugestoesDeTroca.value.map((s) => s.id) : [],
       ajustes: agentes.value ? ajustes.value.map((a) => a.id) : [],
@@ -102,32 +106,40 @@ const pendencias = computed(() =>
   )
 )
 const verTodos = ref(false)
-const mostradas = computed(() => (verTodos.value ? pendencias.value : pendencias.value.slice(0, MAX_NA_HOJE)))
-const emComum = computed(() => remedioEmComum(alertas.value?.falhas ?? []))
+// RULES 13: o cartão do Dell conta como um dos 3.
+const vagas = computed(() => MAX_NA_HOJE - (cartaoDoDell.value ? 1 : 0))
+const mostradas = computed(() => (verTodos.value ? pendencias.value : pendencias.value.slice(0, vagas.value)))
 
 const titulo = computed(() => {
-  const n = pendencias.value.length
-  if (n) return `${n} ${n === 1 ? 'coisa precisa' : 'coisas precisam'} de você`
-  // Sem retrato do monitor não há como afirmar que está tudo bem (RULES 2).
+  // No Dell o título é o número do Dell, o mesmo do topo e do Mais; os cartões dos agentes e
+  // das finanças vêm abaixo com o próprio título. Somar tudo num "9 coisas" era o que não batia.
   if (ops.value) {
     if (erroDell.value) return 'Não consegui ler o estado do Dell'
-    if (!overview.value) return lendoDell.value ? 'Conferindo o Dell…' : 'Sem leitura do Dell'
-    if (!overview.value.dell.geradoEm) return 'Ainda sem leitura do Dell'
-    return 'Nada precisa de você agora'
+    if (!dell.value) return lendoDell.value ? 'Conferindo o Dell…' : 'Sem leitura do Dell'
+    return dell.value.textoPrecisam
   }
+  const n = pendencias.value.length
+  if (n) return `${n} ${n === 1 ? 'coisa precisa' : 'coisas precisam'} de você`
   return 'Nenhum cartão dos agentes esperando você'
 })
 const subtitulo = computed(() => {
   if (ops.value && erroDell.value) return erroDell.value
-  const quando = overview.value?.dell.geradoEm
-    ? `Dell conferido às ${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(overview.value.dell.geradoEm))}.`
-    : ''
-  const falhas = alertas.value?.falhas.length ? ' O Hermes já avisou das falhas no WhatsApp.' : ''
+  const d = dell.value
+  if (!d || d.semNoticia) return ''
+  const quando = d.hora ? `Dell conferido às ${d.hora}.` : ''
+  const falhas = d.vermelhos ? ' O Hermes já avisou das falhas no WhatsApp.' : ''
   return `${quando}${falhas}`.trim()
 })
-const tom = computed(() =>
-  (alertas.value?.falhas.length || erroDell.value) ? 'falha' : pendencias.value.length || (ops.value && !overview.value?.dell.geradoEm) ? 'atencao' : 'ok'
-)
+const tom = computed(() => {
+  if (erroDell.value || dell.value?.vermelhos) return 'falha'
+  const dellPede = !!dell.value && (dell.value.semNoticia || dell.value.precisam.length > 0)
+  return dellPede || pendencias.value.length || (ops.value && !dell.value) ? 'atencao' : 'ok'
+})
+/** As filas do CRM: trabalho de venda, não saúde do Dell; uma linha só, pelo nome de cada uma. */
+const linhaDasFilas = computed(() => {
+  const filas = dell.value && !dell.value.semNoticia ? dell.value.filas : []
+  return filas.length ? `Na fila de Vendas: ${filas.map((c) => c.nome).join(', ')}.` : ''
+})
 
 const troca = (id: string) => sugestoesDeTroca.value.find((s) => s.id === id) as (PropostaTrocaSquad & { id: string }) | undefined
 const ajuste = (id: string) => ajustes.value.find((a) => a.id === id)
@@ -266,12 +278,15 @@ onBeforeUnmount(() => {
         <component :is="ops ? 'h2' : 'h1'" id="hoje-precisa">{{ titulo }}</component>
         <p v-if="subtitulo" class="texto-2 texto-pequeno">{{ subtitulo }}</p>
       </div>
-      <p v-if="emComum" class="recado recado--atencao"><strong>{{ emComum.quantas }} falhas, um gesto só:</strong> {{ emComum.texto }}</p>
+      <!-- Sem retrato recente: só o aviso e o caminho para o último retrato (RULES 19), nunca zero. -->
+      <p v-if="dell?.semNoticia" class="texto-pequeno">
+        O que aparece em Mais é do último retrato. <a href="/mais?abrir=manutencao">Ver em Mais › Manutenção</a>
+      </p>
 
-      <ol v-if="mostradas.length" class="hoje__cartoes">
+      <ol v-if="cartaoDoDell || mostradas.length" class="hoje__cartoes">
+        <li v-if="cartaoDoDell && dell"><DellAlerta :resumo="dell" /></li>
         <li v-for="p in mostradas" :key="p.chave">
-          <DellAlerta v-if="p.tipo === 'dell'" :check="p.check" />
-          <FinancasAlerta v-else-if="p.tipo === 'financas'" :pendencia="p" />
+          <FinancasAlerta v-if="p.tipo === 'financas'" :pendencia="p" />
           <TrocaSquadCard
             v-else-if="p.tipo === 'troca' && troca(p.id)"
             :sugestao="troca(p.id)!"
@@ -305,14 +320,15 @@ onBeforeUnmount(() => {
           />
         </li>
       </ol>
+      <p v-if="linhaDasFilas" class="texto-2 texto-pequeno">{{ linhaDasFilas }} <a href="/crm">Abrir Vendas</a></p>
       <button
-        v-if="pendencias.length > MAX_NA_HOJE"
+        v-if="pendencias.length > vagas"
         type="button"
         class="botao botao--leve botao--largo"
         :aria-expanded="verTodos"
         @click="verTodos = !verTodos"
       >
-        {{ verTodos ? 'Mostrar só as 3 primeiras' : `Ver todas as ${pendencias.length}` }}
+        {{ verTodos ? 'Mostrar menos' : `Ver todos os ${pendencias.length} cartões` }}
       </button>
     </section>
 
@@ -388,18 +404,14 @@ onBeforeUnmount(() => {
     <!-- 4. A linha do funil saiu (16/10/2026): o "Por que não está vendendo" (bloco 0) a substitui. -->
     <p v-if="ops && fonteDoFunil" class="texto-2 texto-pequeno hoje__fonte">{{ fonteDoFunil }} · <a href="/crm">abrir Vendas</a></p>
 
-    <!-- 5. O que resolve sozinho, fechado: está aqui para conferir, não para interromper. -->
-    <details v-if="alertas?.sozinhos.length" class="hoje__bloco hoje__sozinhos">
-      <summary>
-        {{ alertas.sozinhos.length }} {{ alertas.sozinhos.length === 1 ? 'item resolve' : 'itens resolvem' }} sozinho{{ alertas.sozinhos.length === 1 ? '' : 's' }}: ver
-      </summary>
+    <!-- 5. O que resolve sozinho, fechado: está aqui para conferir, não para interromper. Mesma
+         contagem do Mais ("3 resolvem sozinhas"); o detalhe técnico fica lá. -->
+    <details v-if="dell && !dell.semNoticia && dell.sozinhas.length" class="hoje__bloco hoje__sozinhos">
+      <summary>No Dell, {{ dell.textoSozinhas }}: ver</summary>
       <ul>
-        <li v-for="c in alertas.sozinhos" :key="c.id">
-          <strong>{{ c.nome }}</strong>
-          <p v-if="c.oQueFazer">{{ c.oQueFazer }}</p>
-          <small class="texto-2">{{ c.detalhe }}</small>
-        </li>
+        <li v-for="c in dell.sozinhas" :key="c.id"><strong>{{ c.nome }}</strong></li>
       </ul>
+      <a class="hoje__mais" href="/mais?abrir=manutencao">Ver em Mais › Manutenção</a>
     </details>
   </div>
 </template>
