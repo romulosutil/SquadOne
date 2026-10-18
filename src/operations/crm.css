@@ -129,6 +129,24 @@ details.crm-filtros-da-aba[open] > summary { margin-bottom: 0; }
 .crm-mais { margin-top: var(--esp-3); padding: 0 var(--esp-4); border: 0; border-radius: var(--raio-controle); background: var(--superficie-2); color: var(--texto); font-weight: var(--peso-forte); cursor: pointer; }
 .crm-mais:hover { filter: brightness(0.95); }
 
+/* Filtro por motivo (cohort.ts, 17/10/2026): BP-DOBRA fechada, BP-ESCOLHAS lá dentro. O resumo (ligado ou
+   desligado) fica colado no título; as duas colunas só dividem a linha a partir de 48 rem. */
+.crm-cohort-raiz { display: grid; gap: var(--esp-1); }
+details.crm-cohort[open] { display: grid; gap: var(--esp-3); }
+details.crm-cohort[open] > summary { margin-bottom: 0; }
+.crm-cohort__resumo { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
+.crm-cohort__resumo::before { content: "· "; }
+.crm-cohort__colunas { display: grid; gap: var(--esp-4); }
+@media (min-width: 48rem) { .crm-cohort__colunas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.crm-cohort__coluna { display: grid; gap: var(--esp-2); align-content: start; min-width: 0; }
+.crm-cohort__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--esp-2) var(--esp-3); }
+.crm-cohort__campos select { min-width: 0; }
+.crm-cohort__conta { margin: 0; font-size: var(--tam-apoio); font-variant-numeric: tabular-nums; }
+.crm-cohort__texto { margin: 0; }
+/* O porquê de cada linha, só com o filtro ligado: texto, não selo (o selo é do sinal do funil, BP-SINAL). */
+.crm-item__porque { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
+.crm-item__porque strong { color: var(--texto); font-weight: var(--peso-forte); }
+
 /* Triagem (AC-10, 17/10/2026): o convidado nesta tela fica no lote, apagado, até o retrato confirmar. */
 .crm-item.is-aberto .crm-item__empresa { color: var(--texto-2); }
 /* Zona (fundo, sem borda): é estado da linha, não outra caixa dentro do grupo. */

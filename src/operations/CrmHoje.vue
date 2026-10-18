@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { aplicarCohort, gravarCohort, lerCohort, motivosDoLead, semCriterios, type Cohort } from './cohort'
+import CrmCohort from './CrmCohort.vue'
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
 import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
 import RecadoDeTravas from './RecadoDeTravas.vue'
 import { envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import {
-  DESFAZER_MS, corpoDoRegistro, decidir, detalheSemPrioridade, esquecerDecisao, gravarDecisoes, lerDecisoes, loteDaTriagem, mesmoLote,
+  DESFAZER_MS, corpoDoRegistro, decidir, detalheSemPrioridade, dispensado, esquecerDecisao, gravarDecisoes, lerDecisoes, loteDaTriagem, mesmoLote,
   motivoDoConviteTravado, podarDecisoes, prioridadesDiferem, textoDaPrioridade, type DecisoesDaTriagem, type RegistroDaTriagem,
 } from './triagem'
 import type { CrmGrupoHoje, CrmItemHoje, CrmLead } from './types'
@@ -62,13 +64,53 @@ watch(() => [props.leads, props.confirmavel] as const, ([leads, ok]) => {
   if (ok) guardar(podarDecisoes(decisoes.value, leads, Date.now()))
 })
 
+// ------------------------------------------------------------------ filtro por motivo (cohort.ts)
+
+// O cohort só escolhe QUAIS prospects entram nos lotes de 10. Quem convida e quem dispensa segue
+// sendo a pessoa, com as mesmas travas: nada abaixo mexe em Convidar, Dispensar ou Desfazer.
+const cohort = ref<Cohort>(lerCohort(armazenamento()))
+const cohortAtivo = computed(() => !semCriterios(cohort.value))
+const naoDecidido = (id: string) => !(id in decisoes.value)
+
+// Os que ainda estão na Triagem (nem dispensados nesta tela nem no retrato), com o lead de cada um.
+const leadsNaTriagem = computed(() => props.grupo.itens
+  .filter((i) => !dispensado(decisoes.value, props.leads.get(i.leadId), i.leadId))
+  .map((i) => props.leads.get(i.leadId))
+  .filter((l): l is CrmLead => l !== undefined))
+const aplicado = computed(() => aplicarCohort(leadsNaTriagem.value, cohort.value))
+const idsQueBatem = computed(() => new Set(aplicado.value.batem.map((l) => l.id)))
+// Sem filtro, o grupo do servidor inteiro, como sempre foi. Com filtro, só quem bate (sem leitura fica de fora).
+const itensDaTriagem = computed(() => (cohortAtivo.value ? props.grupo.itens.filter((i) => idsQueBatem.value.has(i.leadId)) : props.grupo.itens))
+
+// As contagens do painel valem para quem ainda espera decisão (convidado desta tela já foi decidido).
+const aDecidir = computed(() => leadsNaTriagem.value.filter((l) => naoDecidido(l.id)))
+const quantosDoCohort = computed(() => ({
+  batem: aplicado.value.batem.filter((l) => naoDecidido(l.id)).length,
+  semLeitura: aplicado.value.semLeitura.filter((l) => naoDecidido(l.id)).length,
+  total: aDecidir.value.length,
+}))
+const motivosDe = (item: CrmItemHoje): string[] => {
+  const lead = props.leads.get(item.leadId)
+  return cohortAtivo.value && lead ? motivosDoLead(lead, cohort.value) : []
+}
+
 // ------------------------------------------------------------------ o lote
 
 const idsDoLote = ref<string[]>([])
-const lote = computed(() => loteDaTriagem(props.grupo.itens, props.leads, decisoes.value, idsDoLote.value))
+const lote = computed(() => loteDaTriagem(itensDaTriagem.value, props.leads, decisoes.value, idsDoLote.value))
 // O lote nasce na conta pura; aqui só se guarda, para o próximo cálculo saber qual era.
 watch(() => lote.value.ids, (ids) => { if (!mesmoLote(ids, idsDoLote.value)) idsDoLote.value = ids }, { immediate: true })
-watch(() => lote.value.restantes, (n) => emit('restantes', n), { immediate: true })
+// O número da aba é o do grupo inteiro (os que esperam decisão), não o do filtro: o filtro é da tela.
+const restantesDoGrupo = computed(() => props.grupo.itens.filter((i) => !dispensado(decisoes.value, props.leads.get(i.leadId), i.leadId) && naoDecidido(i.leadId)).length)
+watch(restantesDoGrupo, (n) => emit('restantes', n), { immediate: true })
+
+// Mudar o filtro refaz o lote do zero, só com quem bate: o lote em andamento não encolhe nem fica
+// com gente que o filtro novo tirou.
+function mudarCohort(novo: Cohort) {
+  cohort.value = novo
+  gravarCohort(armazenamento(), novo)
+  idsDoLote.value = []
+}
 // Quem do lote já não espera decisão: convidado, dispensado, ou já fora da Revisar pelo retrato.
 const decididosNoLote = computed(() => lote.value.ids.length - lote.value.pendentes.length)
 const numero = (n: number) => n.toLocaleString('pt-BR')
@@ -283,7 +325,7 @@ onBeforeUnmount(() => {
     <p v-if="falha" class="crm-aviso is-forte crm-triagem__falha" role="alert">
       {{ falha }} <button type="button" class="crm-mais" @click="falha = ''">Entendi</button>
     </p>
-    <p v-if="!linhas.length" class="crm-vazio"><strong>Nada para triar.</strong> Tudo o que os caçadores acharam já foi decidido; o que chegar de novo aparece aqui.</p>
+    <p v-if="!linhas.length && !cohortAtivo" class="crm-vazio"><strong>Nada para triar.</strong> Tudo o que os caçadores acharam já foi decidido; o que chegar de novo aparece aqui.</p>
 
     <section v-else class="crm-grupo is-revisar" aria-labelledby="crm-triagem-titulo">
       <header class="crm-grupo__cabeca">
@@ -291,8 +333,15 @@ onBeforeUnmount(() => {
         <strong :aria-label="`${numero(lote.restantes)} esperando decisão`">{{ numero(lote.restantes) }}</strong>
       </header>
       <!-- Uma frase: o que fazer com cada um e quando vem o próximo lote. -->
-      <p class="crm-grupo__explicacao">
+      <p v-if="linhas.length" class="crm-grupo__explicacao">
         Convide ou dispense cada um destes {{ lote.ids.length }}; decididos todos, vem o próximo lote.<template v-if="comPontuacao"> A pontuação (0 a 100) é do caçador.</template>
+      </p>
+      <!-- Filtro por motivo (BP-DOBRA, cohort.ts): só escolhe quem entra nos lotes; fechado por padrão. -->
+      <CrmCohort :model-value="cohort" :leads="aDecidir" :quantos="quantosDoCohort" @update:model-value="mudarCohort" />
+      <p v-if="!linhas.length" class="crm-vazio">
+        <strong>Nada para triar neste filtro.</strong>
+        <template v-if="quantosDoCohort.semLeitura"> {{ numero(quantosDoCohort.semLeitura) }} prospects talvez batam, mas falta a leitura de algum critério.</template>
+        Mude ou limpe o filtro para ver os outros.
       </p>
       <RecadoDeTravas
         v-if="temConvites && !recado.pode" id="crm-triagem-recado" :recado="recado"
@@ -302,11 +351,11 @@ onBeforeUnmount(() => {
       <p v-if="!registro.disponivel" class="crm-nota-pequena">Dispensar está desligado: nada grava na planilha agora<template v-if="registro.motivo"> ({{ registro.motivo }})</template>.</p>
 
       <!-- A entrada da Triagem: um botão só. Dentro, a lista do lote. -->
-      <p v-if="!triando" class="acoes">
+      <p v-if="linhas.length && !triando" class="acoes">
         <button type="button" class="botao botao--primario" @click="entrar">Triar ({{ lote.pendentes.length }})</button>
       </p>
-      <p v-else class="crm-triagem__conta">
-        {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template>
+      <p v-else-if="linhas.length" class="crm-triagem__conta">
+        {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template><template v-if="cohortAtivo"> · com o filtro por motivo</template>
       </p>
 
       <ul v-if="triando" class="crm-lista">
@@ -327,6 +376,8 @@ onBeforeUnmount(() => {
               <span v-if="comPontuacao && pontuacao(linha.item) !== undefined" class="crm-sinal">{{ textoDaPrioridade(pontuacao(linha.item)!) }}</span>
             </div>
             <p class="crm-item__acao"><strong>{{ linha.item.acao }}</strong> <span>{{ detalheSemPrioridade(linha.item.detalhe) }}</span></p>
+            <!-- O motivo à vista: por que este prospect passou pelo filtro (só com o filtro ligado). -->
+            <p v-if="motivosDe(linha.item).length" class="crm-item__porque"><strong>Motivo:</strong> {{ motivosDe(linha.item).join(' · ') }}</p>
             <p v-if="convidadoEm(linha.item)" class="crm-item__aberto">Convite aberto às {{ convidadoEm(linha.item) }} nesta tela. A planilha confirma em alguns minutos.</p>
             <div v-else class="crm-triagem__decisoes">
               <a
