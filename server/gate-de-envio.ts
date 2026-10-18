@@ -19,6 +19,11 @@
  * questão de estilo, então `destinatario_diferente` bloqueia em qualquer modo.
  *
  * Sem relógio, env, fetch ou arquivo: só os helpers puros que o resto do CRM já usa.
+ *
+ * A 1ª mensagem do Balcão (n8n, só JS embutido no nó) passa por uma CÓPIA deste gate em
+ * deploy/dell/claude-ops/gate-de-envio.js (tipo "primeiro": marca, frase, emoji, tamanho, links, nome, R$).
+ * Mexeu em MARCAS, FRASES_PROIBIDAS, LIMITES ou nas regras acima? Mexa na cópia: o
+ * server/gate-de-envio-balcao.test.ts compara as duas e falha se divergirem.
  */
 import { PRECOS_DO_CARDAPIO, normalizar } from "../src/operations/colinha.ts";
 import { precosProibidos } from "../src/operations/copiloto.ts";
@@ -105,7 +110,8 @@ export const PRECOS_DA_PROPOSTA: readonly string[] = PRECOS_DO_CARDAPIO;
 
 // ------------------------------------------------------------------ marcas de modelo
 
-const MARCAS: Array<{ regex: RegExp; colchete?: true }> = [
+// Exportadas (18/10/2026) para o teste comparar com a cópia em JS do Balcão (deploy/dell/claude-ops/gate-de-envio.js).
+export const MARCAS: Array<{ regex: RegExp; colchete?: true }> = [
   { regex: /\{\{[^}\n]*\}\}/ },
   { regex: /\$\{[^}\n]*\}/ },
   { regex: /\{[^{}\n]{1,40}\}/ },
@@ -127,7 +133,7 @@ const MARCAS: Array<{ regex: RegExp; colchete?: true }> = [
  * TOM_DE_VOZ do copiloto (sem trio de vendedor, sem "depende do dono") e do jeito de texto gerado
  * que o guia evita ("espero que esteja bem", "venho por meio desta", "passando para").
  */
-const FRASES_PROIBIDAS: Array<{ regex: RegExp; motivo: string }> = [
+export const FRASES_PROIBIDAS: Array<{ regex: RegExp; motivo: string }> = [
   { regex: /espero que (?:voce |vc |tudo )?(?:esteja|estejam)\b|espero que (?:esta|essa) mensagem|espero que (?:este|esse) (?:e-?mail|contato)/, motivo: "abertura de texto de IA" },
   { regex: /gostaria de (?:entrar em contato|me apresentar|apresentar)/, motivo: "abertura de texto de IA" },
   { regex: /venho (?:por meio|atraves|por esta|por essa)/, motivo: "abertura de ofício" },
@@ -143,13 +149,13 @@ const FRASES_PROIBIDAS: Array<{ regex: RegExp; motivo: string }> = [
   { regex: /depende do dono|centralizador|merito seu/, motivo: "fala que o PRUMO evita" },
 ];
 
-const CONVERSA_QUE_NAO_HOUVE = /\b(?:conforme|como) (?:conversamos|combinamos|falamos|combinado)\b|conforme nossa conversa/;
+export const CONVERSA_QUE_NAO_HOUVE = /\b(?:conforme|como) (?:conversamos|combinamos|falamos|combinado)\b|conforme nossa conversa/;
 
-const EMOJI = /\p{Extended_Pictographic}/u;
+export const EMOJI = /\p{Extended_Pictographic}/u;
 
 // ------------------------------------------------------------------ links e nomes
 
-const LINK = /(?:https?:\/\/|www\.|wa\.me\/)\S+/gi;
+export const LINK = /(?:https?:\/\/|www\.|wa\.me\/)\S+/gi;
 
 /** O número do destino de um wa.me / api.whatsapp.com; '' = o link não leva número. */
 export function numeroDoLink(url: string | undefined): string {

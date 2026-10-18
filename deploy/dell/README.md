@@ -960,12 +960,37 @@ site-antes-da-venda.py --colunas` cria; o `--balcao` também):
   enquanto o lead está `pronto` e congelada com ela depois do envio; vazia nos
   EUA e sem telefone. É ela que diz com quem a letra pode ser comparada; o CRM a
   lê como `abordagem.elegiveis`. Linhas de antes ficam vazias (fora do teste).
+- `gate_de_envio` (18/10/2026): o motivo curto do **gate de pré-envio** da 1ª
+  mensagem (abaixo). Vazio quando a mensagem passou; `aviso: <motivos>` com o lead
+  ainda `pronto`; `barrado: <motivos>` quando o lead não virou `pronto`. Com o gate
+  `desligado` a coluna nem entra na escrita.
+
+**Gate de pré-envio da 1ª mensagem** (18/10/2026). Antes de marcar `pronto`, o
+Balcão confere o texto já montado, sem modelo: marca sem preencher (`{NOME}`,
+`[x]`, `undefined`), frase de IA ou de agência, emoji, mais de 600 caracteres, link
+(a 1ª mensagem não leva), nome da empresa vazio/com lixo/repetido e "R$" fora dos
+preços abertos do cardápio. É a cópia em JS (`gate-de-envio.js`, entre o
+`site-mensagem.js` e o `balcao-cruzar.js` no nó) do gate PURO em TypeScript que já
+protege o copiloto e o vendedor do Telegram (`server/gate-de-envio.ts`);
+`server/gate-de-envio-balcao.test.ts` falha se as duas divergirem. **Nunca
+reescreve o texto nem mexe no sorteio das letras**: só lê o texto e escreve a
+coluna. O modo é a constante `GATE_DE_ENVIO` do `balcao-cruzar.js`, que o
+`site-antes-da-venda.py` troca pela variável de ambiente de mesmo nome ao publicar:
+
+- `avisar` (padrão): o lead segue `pronto` e a coluna diz o motivo. Um falso-positivo
+  não pode travar a fila de venda; os textos de hoje passam no gate por teste.
+- `bloquear`: o lead não vira `pronto` (um `pronto` que reprova volta a `novo`, sem
+  `wa_link` nem letra) e a coluna diz `barrado: …`. O barrado sai do sorteio e a letra
+  que a planilha guardava para ele deixa de contar (`alocarRodada` roda de novo sem
+  ele): não gasta a vez de ninguém no A/B. Lead `enviado` nunca passa pelo gate.
+- `desligado`: o código de antes, byte a byte (a coluna não é escrita).
 
 ```bash
 cd ~/.local/share/claude-ops
 python3 site-antes-da-venda.py --testar       # cruzamento no node, planilha de mentira, sem n8n
 python3 site-antes-da-venda.py --testar-n8n   # cópia do Balcão: recibos reais, planilha de mentira, nada gravado
-python3 site-antes-da-venda.py --balcao       # colunas que faltam + publica o Balcão
+python3 site-antes-da-venda.py --balcao       # colunas que faltam + publica o Balcão (gate em "avisar")
+GATE_DE_ENVIO=bloquear python3 site-antes-da-venda.py --balcao   # ou desligado; sem a variável vale o do arquivo
 ```
 O texto do convite do PRUMO fica em `prumo-simples.py` (função `convite`) e é
 montado a cada clique; `python3 prumo-simples.py --convite` publica só esse

@@ -63,6 +63,12 @@ falhou, Raio-X sem padrão) também vira "pronto" com a A; se responder, o demo 
 EUA (seguem a fila do gerador), sem telefone, quem tem qualquer recibo (até cópia ou descartado) e os
 descartes do gerador. Os textos foram revistos no mesmo dia (guia no site-mensagem.js).
 
+18/10/2026: gate de pré-envio da 1ª mensagem (gate-de-envio.js, cópia do server/gate-de-envio.ts), entre o
+site-mensagem.js e o balcao-cruzar.js no nó do Balcão. Modo na constante GATE_DE_ENVIO do balcao-cruzar.js
+(`avisar` por padrão: o lead segue "pronto" e a coluna nova `gate_de_envio` diz o motivo; `bloquear`: o
+lead não vira "pronto" e sai do sorteio sem gastar a vez de ninguém; `desligado`: a saída de antes). A
+variável de ambiente GATE_DE_ENVIO troca a constante ao publicar (codigo_do_balcao). Nunca muda o texto.
+
 Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
      python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao, raio_x_url e ab_elegiveis)
@@ -72,6 +78,7 @@ Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
 """
 import copy
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -96,7 +103,10 @@ LEADS_GID = "396728619"
 # recebeu a variação C (o aviso de interesse e o CRM montam a segunda da linha, não do recibo).
 # ab_elegiveis (14/10/2026): as letras que o lead podia receber no sorteio ("A", "AB", "AC", "ABC"),
 # gravada junto com mensagem_variante; é ela que diz com quem a letra pode ser comparada no CRM.
-COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url", "ab_elegiveis"]
+# gate_de_envio (18/10/2026): o motivo curto do gate de pré-envio da 1ª mensagem ("aviso: …" ou "barrado: …"),
+# vazio quando a mensagem passou; só é escrita com o gate ligado (GATE_DE_ENVIO diferente de "desligado").
+COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url", "ab_elegiveis", "gate_de_envio"]
+MODOS_DO_GATE = ("desligado", "avisar", "bloquear")
 
 # Onde mora o lead hoje: place_id -> "slug" (raiz) ou "_recusados/slug" etc.
 # Vem do diretório de cada publicado.json lido por "Ler recibos da pasta auto".
@@ -117,6 +127,23 @@ const naRaiz = (pid) => Boolean(pasta[pid]) && !pasta[pid].includes('/');"""
 def codigo_js(*arquivos):
     """Junta arquivos .js desta pasta num só código de nó (site-mensagem.js vai na frente)."""
     return "\n".join((AQUI / a).read_text(encoding="utf-8") for a in arquivos)
+
+
+def codigo_do_balcao(modo=None):
+    """O código do nó do Balcão: site-mensagem.js, gate-de-envio.js e balcao-cruzar.js, nesta ordem.
+    `modo` (ou a variável de ambiente GATE_DE_ENVIO) troca a constante GATE_DE_ENVIO do balcao-cruzar.js;
+    sem nenhum dos dois, vale o que o arquivo diz (hoje "avisar"). Valor desconhecido para o publicar:
+    um modo digitado errado não pode virar outro em silêncio."""
+    codigo = codigo_js("site-mensagem.js", "gate-de-envio.js", "balcao-cruzar.js")
+    modo = modo or os.environ.get("GATE_DE_ENVIO", "").strip() or None
+    if modo is None:
+        return codigo
+    if modo not in MODOS_DO_GATE:
+        raise SystemExit(f"GATE_DE_ENVIO={modo!r} desconhecido; use {', '.join(MODOS_DO_GATE)}")
+    trocado, n = re.subn(r"^const GATE_DE_ENVIO = '[a-z]+';", f"const GATE_DE_ENVIO = '{modo}';", codigo, count=1, flags=re.M)
+    if n != 1:
+        raise SystemExit("não achei a linha const GATE_DE_ENVIO = '...'; no balcao-cruzar.js")
+    return trocado
 
 
 def erro_wf():
@@ -319,7 +346,7 @@ def balcao(erro):
         {"id": "planilha", "name": "Ler a planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1760, 0],
          "parameters": ler_planilha, "credentials": SHEETS, "executeOnce": True, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000},
         {"id": "cruzar", "name": "Cruzar recibos e montar abordagem", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1980, 0],
-         "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": codigo_js("site-mensagem.js", "balcao-cruzar.js")}},
+         "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": codigo_do_balcao()}},
         {"id": "atualizar", "name": "Atualizar lead na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [2200, 0],
          "parameters": {**{k: v for k, v in ler_planilha.items() if k != "operation"}, "operation": "update",
                         "columns": {"mappingMode": "autoMapInputData", "matchingColumns": ["place_id"], "value": {}, "schema": colunas},
@@ -462,14 +489,14 @@ def testar() -> int:
     # Pastas com DOSSIE.md: casa-f sem marca (v1 por inferência); padaria-a com a marca v2, que vence.
     DOSSIES = ["casa-f", "padaria-a", "padaria-a/_v1"]
 
-    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES, dossies=DOSSIES):
+    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES, dossies=DOSSIES, modo=None):
         nos = {**nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos),
                **nos_de_arquivos("Ler marcas do modo personalizado", "Ler o JSON da marca", "marca", marcas),
                **nos_de_arquivos("Ler descartes do gerador", "Ler o texto do descarte", "conteudo", descartes),
                # Só o readWriteFile (o diretório basta); sem dossiê, o n8n entrega um item sem binário.
                "Ler dossiês do modo personalizado": [{"json": {}, "binary": {"data": {"directory": AUTO_NO_N8N + p}}} for p in dossies]
                or [{"json": {}}]}
-        codigo = codigo_js("site-mensagem.js", "balcao-cruzar.js")
+        codigo = codigo_do_balcao(modo)
         for de, para in (troca or {}).items():
             codigo = codigo.replace(de, para)
         saida = [i["json"] for i in rodar_js(codigo, nos, planilha)]
@@ -854,8 +881,60 @@ def testar() -> int:
             self.assertEqual(r["pasta"]["pid-c"], "_em-conversa/clinica-c")
             self.assertEqual((r["a"], r["c"]), (True, False))
 
+    class GateDeEnvio(unittest.TestCase):
+        """18/10/2026: o gate de pré-envio da 1ª mensagem (gate-de-envio.js) no cruzamento do Balcão.
+        O lead ruim tem lixo no nome ("Padaria {X}": marca sem preencher), então o texto sai quebrado."""
+        RUIM = "pid-03x"  # no meio da ordem de place_id (a alocação sorteia nessa ordem), para o barrado poder gastar a vez de outros
+
+        def rodada(self, modo, n=8, ruim=True, status="novo", **extra):
+            pids = [f"pid-{i:02d}" for i in range(n)] + ([self.RUIM] if ruim else [])
+            planilha = [linha(p, status, nota="4.9", avaliacoes="34", vertical="advocacia",
+                              **({"nome": "Padaria {X}"} if p == self.RUIM else {}), **extra) for p in pids]
+            recibos = [(f"lead-{p}", recibo(p, f"lead-{p}")) for p in pids]
+            return cruzar(planilha=planilha, recibos=recibos, marcas=[], descartes=[], dossies=[], modo=modo)
+
+        def test_avisar_mantem_pronto_e_grava_o_motivo(self):
+            por = self.rodada("avisar")
+            ruim = por[self.RUIM][0]
+            self.assertEqual(ruim["status"], "pronto")
+            self.assertTrue(ruim["wa_link"].endswith("/enviar?place_id=" + self.RUIM))
+            self.assertTrue(ruim["gate_de_envio"].startswith("aviso: "), ruim["gate_de_envio"])
+            self.assertIn("marca sem preencher", ruim["gate_de_envio"])
+            for pid, itens in por.items():
+                if pid != self.RUIM:
+                    self.assertEqual((itens[0]["status"], itens[0]["gate_de_envio"]), ("pronto", ""), pid)
+
+        def test_desligado_nao_escreve_a_coluna_e_o_resto_e_igual(self):
+            desligado, avisar = self.rodada("desligado"), self.rodada("avisar")
+            for itens in desligado.values():
+                self.assertNotIn("gate_de_envio", itens[0])
+            sem_coluna = {p: [{k: v for k, v in i.items() if k != "gate_de_envio"} for i in itens] for p, itens in avisar.items()}
+            self.assertEqual(desligado, sem_coluna)
+
+        def test_bloquear_novo_nao_vira_pronto_e_so_ganha_o_motivo(self):
+            ruim = self.rodada("bloquear")[self.RUIM]
+            self.assertEqual(len(ruim), 1)
+            self.assertEqual(set(ruim[0]), {"place_id", "gate_de_envio"})
+            self.assertTrue(ruim[0]["gate_de_envio"].startswith("barrado: "), ruim[0])
+
+        def test_bloquear_pronto_que_reprova_volta_a_novo_sem_link(self):
+            ruim = self.rodada("bloquear", status="pronto")[self.RUIM][0]
+            self.assertEqual((ruim["status"], ruim["wa_me"], ruim["wa_link"], ruim["mensagem_variante"], ruim["ab_elegiveis"]),
+                             ("novo", "", "", "", ""))
+            self.assertTrue(ruim["gate_de_envio"].startswith("barrado: "))
+
+        def test_barrado_nao_gasta_a_vez_de_ninguem(self):
+            # As letras dos bons com o barrado na rodada (bloquear) = as letras deles sem o barrado existir.
+            def letras(por):
+                return {p: i[0]["mensagem_variante"] for p, i in por.items() if p != self.RUIM}
+            com = letras(self.rodada("bloquear"))
+            sem = letras(self.rodada("bloquear", ruim=False))
+            self.assertEqual(com, sem)
+            self.assertEqual(len(com), 8)
+            self.assertEqual({com[p] for p in com}, {"A", "B"})  # nota boa, sem Raio-X: A e B
+
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, Alocacao, PastaDoLead))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, Alocacao, PastaDoLead, GateDeEnvio))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
