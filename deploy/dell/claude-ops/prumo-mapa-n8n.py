@@ -105,13 +105,10 @@ const coluna = (r, prefixo) => Object.keys(r).find(k => k.startsWith(prefixo));
 const texto = (r, prefixo) => { const c = coluna(r, prefixo); return c ? String(r[c] ?? '').trim() : ''; };
 const prospects = new Map($('Ler prospects').all()
   .map(i => [String(i.json['ID'] ?? '').trim().toLowerCase(), i.json]).filter(([k]) => k));
-__LEADS_DO_SITE__const ultima = new Map();
-for (const r of $('Ler respostas do formulário').all().map(i => i.json)) {
-  const ref = String(r['Empresa'] ?? '').trim();
-  if (ref) ultima.set(ref.toLowerCase(), r);  // a planilha do Form está em ordem de chegada
-}
+__LEADS_DO_SITE__const recebidas = new Set();
 const saida = [];
-for (const r of ultima.values()) {
+for (const r of $('Ler respostas do formulário').all().map(i => i.json)) {
+  if (!String(r['Empresa'] ?? '').trim()) continue;
   const ref = String(r['Empresa']).trim();
   const sep = ref.indexOf('::');
   const idRef = sep > 0 ? ref.slice(0, sep).trim() : '';
@@ -129,7 +126,8 @@ for (const r of ultima.values()) {
   const id = p ? String(p['ID']).trim() : idRef;
   const carimbo = String(r['Carimbo de data/hora'] ?? r.row_number ?? '').trim();
   const chave = (id + '|' + carimbo).toLowerCase();
-  if (chave in feitos) continue;
+  if (chave in feitos || recebidas.has(chave)) continue;
+  recebidas.add(chave);
   const aprofundamentos = {};
   for (const [qid, prefixo] of Object.entries(APROFUNDAMENTOS)) {
     const t = texto(r, prefixo);

@@ -1,0 +1,17 @@
+[Unit]
+Description=Luna do Hermes para qualificar e resumir no n8n
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/claude-ops/luna_workflows.py
+Environment=LUNA_BIND=172.23.0.1
+Environment=LUNA_REDE_N8N=172.23.0.0/16
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

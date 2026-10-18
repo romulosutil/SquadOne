@@ -34,6 +34,13 @@ ORIGEM_JS = "origem: ('n8n:' + $workflow.name).slice(0, 80)"
 
 def api(method, path, body=None):
     partes = path.strip("/").split("/")
+    if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
+        from workflow_confiabilidade import preparar
+        body = preparar(body)
+        cred_luna = Path.home() / '.config/claude-ops/luna-workflows-cred'
+        if cred_luna.exists():
+            from workflow_luna import usar_luna
+            body = usar_luna(body, cred_luna.read_text().strip())
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}

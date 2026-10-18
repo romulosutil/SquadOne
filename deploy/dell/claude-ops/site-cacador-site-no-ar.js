@@ -69,10 +69,24 @@ const NAO_E_AGENCIA = /(^|\.)(wordpress\.(org|com)|wix(site)?\.com|wixstudio\.co
 const esperar = (ms) => new Promise((pronto) => setTimeout(pronto, ms));
 const mensagem = (e) => String(e?.message ?? e ?? 'erro').replace(/\s+/g, ' ').slice(0, 120);
 
+// Endereços de terceiros só podem apontar para a internet pública.
+const hostPublico = (bruto) => {
+  const h = String(bruto).toLowerCase().replace(/\.$/, '');
+  if (/[\[\]:@%]/.test(h) || /(^|\.)(localhost|local|internal)$/.test(h) || /(^|\.)0x[0-9a-f]+/.test(h)) return false;
+  if (/^[0-9.]+$/.test(h)) {
+    const s = h.split('.');
+    if (s.length !== 4 || s.some(x => !/^(0|[1-9][0-9]{0,2})$/.test(x) || Number(x) > 255)) return false;
+    const [a,b] = s.map(Number);
+    return a !== 0 && a !== 10 && a !== 127 && a < 224 && !(a === 169 && b === 254)
+      && !(a === 172 && b >= 16 && b <= 31) && !(a === 192 && b === 168) && !(a === 100 && b >= 64 && b <= 127);
+  }
+  return true;
+};
+
 // Sem URL(): no modo seguro do runner do n8n o contexto não tem esse global.
 const partes = (link) => {
   const m = String(link ?? '').trim().match(/^(?:(https?):\/\/)?([^\/?#\s:]+)(:\d+)?([^#\s]*)/i);
-  if (!m || !m[2].includes('.')) return null;
+  if (!m || !m[2].includes('.') || !hostPublico(m[2])) return null;
   const caminho = m[4] || '/';
   return { protocolo: (m[1] || 'http').toLowerCase(), host: m[2].toLowerCase().replace(/\.$/, ''), porta: m[3] || '',
            caminho: caminho.startsWith('/') ? caminho : '/' + caminho };

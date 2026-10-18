@@ -318,7 +318,7 @@ def decidir_js(o, gid):
         "// Sem a linha ou sem celular: abre a aba, para decidir à mão.",
         "const planilha = " + json.dumps(f"https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={gid}") + ";",
         "const destino = achou && digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : planilha;",
-        "return [{ json: { chave: id, destino, marcar: achou && destino !== planilha && String(l['Etapa'] ?? '').trim() === 'Revisar', agora: new Date().toISOString() } }];",
+        "return [{ json: { chave: id, destino, marcar: false, agora: new Date().toISOString() } }];",
     ])
 
 

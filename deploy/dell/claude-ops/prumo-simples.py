@@ -275,7 +275,7 @@ def perguntas_atuais():
     """As 16 perguntas (prefixo, área, opções) vêm do código em produção, sem redigitar."""
     wf = api("GET", f"/workflows/{PONTUACAO}")
     for n in wf["nodes"]:
-        m = re.search(r"const questions = (\[.*?\n\]);", n["parameters"].get("jsCode", ""), re.S)
+        m = re.search(r"const (?:questions|QUESTIONS) = (\[.*?\n\]);", n["parameters"].get("jsCode", ""), re.S)
         if m:
             return m.group(1)
     arquivo = AQUI / "prumo-perguntas.js"
@@ -296,7 +296,10 @@ const prospects = new Map($('Ler prospects').all()
 const ultima = new Map();
 for (const r of $input.all().map(i => i.json)) {{
   const ref = String(r['Empresa'] ?? '').trim();
-  if (ref) ultima.set(ref.toLowerCase(), r);  // a planilha do Form está em ordem de chegada
+  const papel = String(Object.entries(r).find(([k]) => k.startsWith('Sessão / papel'))?.[1] ?? 'Dono').trim();
+  const completa = QUESTIONS.every(q => q.choices.includes(String(r[Object.keys(r).find(k => k.startsWith(q.prefix))] ?? '').trim()));
+  // O briefing é do dono; as demais sessões seguem integralmente ao ramo do Mapa.
+  if (ref && (!papel || papel.toLowerCase() === 'dono') && completa) ultima.set(ref.split('::')[0].trim().toLowerCase(), r);
 }}
 {aviso.MEMORIA}const saida = [];
 for (const r of ultima.values()) {{
@@ -315,7 +318,9 @@ for (const r of ultima.values()) {{
   }}
   if (respostas.length < QUESTIONS.length) continue;  // incompleta: espera
   const indice = Math.round(respostas.reduce((t, a) => t + a.nota, 0) / (4 * respostas.length) * 1000) / 10;
-  if (p['Diagnóstico em'] && String(p['Índice PRUMO']) === String(indice)) continue;  // já gravado
+  const carimbo = String(r['Carimbo de data/hora'] ?? r.row_number ?? '');
+  const assinatura = '[resposta:' + carimbo + '|' + respostas.map(a => a.id + ':' + a.nota).join('|') + ']';
+  if (String(p['Briefing'] ?? '').includes(assinatura)) continue;
   const areas = Object.entries(porArea).map(([a, n]) => [a, Math.round(n.reduce((t, x) => t + x, 0) / (4 * n.length) * 1000) / 10])
     .sort((a, b) => a[1] - b[1]);
   const faixa = indice < 45 ? 'dependência e informalidade altas' : indice < 70 ? 'processos parcialmente definidos, com aderência inconsistente' : 'base operacional padronizada, com oportunidades pontuais';
@@ -324,13 +329,13 @@ for (const r of ultima.values()) {{
     `Índice PRUMO: ${{indice}}/100 — ${{faixa}}.`,
     'Prioridades para o workshop:',
     ...areas.slice(0, 3).map(([a, n], i) => `${{i + 1}}. ${{a}} (${{n}}/100): validar regra, responsável e fonte de dados antes de automatizar.`),
-    'Evidências de menor maturidade:', lacunas,
+    'Evidências de menor maturidade:', lacunas, assinatura,
   ].join('\\n');
   const podeMudar = ['', 'Revisar', 'Convite enviado'].includes(String(p['Etapa'] ?? '').trim());
   saida.push({{ json: {{
     naFila: true, empresa, 'ID': p['ID'], 'Etapa': podeMudar ? 'Diagnóstico pronto' : p['Etapa'],
     'Índice PRUMO': indice, 'Briefing': briefing,
-    'Próxima ação': 'Leia o briefing e marque o workshop com o dono.', 'Diagnóstico em': new Date().toISOString(),
+    'Próxima ação': podeMudar ? 'Leia o briefing e marque a devolutiva com o dono.' : p['Próxima ação'], 'Diagnóstico em': new Date().toISOString(),
   }} }});
 }}
 return saida;"""
@@ -405,6 +410,7 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
     wf = api("GET", f"/workflows/{PONTUACAO}")
     wf["name"] = "PRUMO — Diagnóstico do dono"
     wf["nodes"], wf["connections"] = nos, con
+    mapa.marcar_diagnostico(wf)
     put(wf)
     api("POST", f"/workflows/{PONTUACAO}/activate")
     print("Pontuação simplificada:", len(nos), "nós")
@@ -469,7 +475,7 @@ let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
 if (!achou) destino = 'https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={pid}';
-return [{{ json: {{ chave: id, destino, marcar: achou && passo === 'convite' && String(l['Etapa'] ?? '').trim() === 'Revisar', agora: new Date().toISOString() }} }}];"""
+return [{{ json: {{ chave: id, destino, marcar: false, agora: new Date().toISOString() }} }}];"""
     fc.webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
                         PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
                         {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
@@ -485,6 +491,7 @@ if __name__ == "__main__":
         convite(next(a["properties"]["sheetId"] for a in abas if a["properties"]["title"] == "Prospects"))
         sys.exit(0)
     pid, did = planilha()
-    lead_scout(pid, did)
+    if "--lead-scout-legado" in sys.argv:
+        lead_scout(pid, did)
     pontuacao(pid)
     convite(pid)

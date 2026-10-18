@@ -57,6 +57,7 @@ Uso: python3 site-nichos.py                aplica tudo (backups em ~/.local/shar
      python3 site-nichos.py --testar-vivo  lê o Caçador do Dell, aplica em memória e pontua leads de mentira (não grava)
 """
 import copy
+from workflow_confiabilidade import desembrulhar
 import json
 import re
 import shutil
@@ -158,12 +159,17 @@ pelo Google:
 
 def aplicar_cacador(wf: dict) -> dict:
     """Regra 1 do Gemini e "Pontuar". Rodar de novo não muda nada."""
-    wf = copy.deepcopy(wf)
+    wf = desembrulhar(wf)
     por = {n["name"]: n for n in wf["nodes"]}
-    msg = por["Gemini: classificar e checar na web"]["parameters"]["messages"]["values"][0]
-    if not re.search(r"^1\. .*$", msg["content"], flags=re.M):
+    parametros = por["Gemini: classificar e checar na web"]["parameters"]
+    if "messages" in parametros:
+        msg, campo = parametros["messages"]["values"][0], "content"
+    else:
+        msg = next(p for p in parametros["bodyParameters"]["parameters"] if p["name"] == "prompt")
+        campo = "value"  # Luna mantém o mesmo prompt, no corpo da chamada HTTP.
+    if not re.search(r"^1\. .*$", msg[campo], flags=re.M):
         raise SystemExit("Caçador: regra 1 do Gemini não encontrada; nada foi aplicado")
-    msg["content"] = re.sub(r"^1\. .*$", lambda _: REGRA_1, msg["content"], count=1, flags=re.M)
+    msg[campo] = re.sub(r"^1\. .*$", lambda _: REGRA_1, msg[campo], count=1, flags=re.M)
     pont = por["Pontuar"]["parameters"]
     js = pont["jsCode"]
     if "const ALTA_INTENCAO = " in js:

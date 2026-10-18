@@ -25,6 +25,7 @@ Uso: python3 site-cacador-site-no-ar.py             aplica no Caçador do Dell (
                                                     (nada no n8n nem na planilha; até ~2 min com site fora do ar)
 """
 import copy
+from workflow_confiabilidade import desembrulhar
 import json
 import re
 import shutil
@@ -52,7 +53,7 @@ def ligacao(no, indice=0):
 def aplicar(wf: dict) -> dict:
     """Troca o nó HTTP pelo Code, tira o "Sem site ou site morto" e põe o IF.
     Rodar de novo só atualiza o código do nó."""
-    wf = copy.deepcopy(wf)
+    wf = desembrulhar(wf)
     por = {n["name"]: n for n in wf["nodes"]}
     x, y = por[CHECAR]["position"]
     if por[CHECAR]["type"] != "n8n-nodes-base.code":

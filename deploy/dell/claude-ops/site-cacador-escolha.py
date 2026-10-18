@@ -21,6 +21,7 @@ Uso: python3 site-cacador-escolha.py            aplica no Caçador do Dell (guar
      python3 site-cacador-escolha.py --testar   só a escolha, no node, com buscas de mentira (sem n8n)
 """
 import copy
+from workflow_confiabilidade import desembrulhar
 import json
 import shutil
 import subprocess
@@ -67,7 +68,7 @@ return [{ json: itens[melhor].json, pairedItem: melhor }];"""
 def aplicar(wf: dict) -> dict:
     """Troca a ordenação + limite por "Escolher a busca". Rodar de novo só
     atualiza o código do nó."""
-    wf = copy.deepcopy(wf)
+    wf = desembrulhar(wf)
     por = {n["name"]: n for n in wf["nodes"]}
     if NOME in por:
         por[NOME]["parameters"]["jsCode"] = ESCOLHER

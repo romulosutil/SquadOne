@@ -109,7 +109,7 @@ const achou = pid !== '' && l.place_id === pid;
 const waMe = String(l.wa_me || '').trim() || (String(l.wa_link || '').startsWith('https://wa.me/') ? String(l.wa_link) : '');
 // Sem wa.me (lead sem telefone ou não achado): abre a planilha para decidir à mão.
 const destino = achou && waMe ? waMe : 'https://docs.google.com/spreadsheets/d/""" + SITE + """/edit#gid=396728619';
-return [{ json: { chave: pid, destino, marcar: !soAbrir && achou && waMe !== '' && String(l.status).trim() === 'pronto', agora: new Date().toISOString() } }];"""
+return [{ json: { chave: pid, destino, marcar: false, agora: new Date().toISOString() } }];"""
 
 DECIDIR_PRUMO = """const id = String($('Clique (convite)').first().json.query?.id ?? '');
 const l = $input.first()?.json ?? {};

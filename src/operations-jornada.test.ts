@@ -306,3 +306,11 @@ describe('jornada: integridade', () => {
     assert.equal(noDisco, guiaDaJornada())
   })
 })
+
+
+it('regressão: Site com equipe confirmada também recebe Mapa e Fonte', () => {
+  const l=lead({ produto:'site', equipe:true, etapa:'contato', sinal:'respondeu', marcos:{segundaEnviada:'2026-10-18T12:00:00Z'} })
+  assert.ok(caminhoDoLead(l).includes('mapa'))
+  assert.ok(ofertaDoLead(l).agora.some(o=>o.id==='mapa'))
+  assert.match(proximoDaJornada(l).acao,/Mapa/)
+})

@@ -370,3 +370,12 @@
     rodaram, regra 14), e a saída do modelo é texto interpolado, nunca HTML (regra
     23). Tetos por dia: 60 mensagens e 20 consultas ao Hermes. O catálogo de
     trabalhadores fica fora do prompt (regra 26). As duas flags nascem desligadas.
+
+
+### Exceção autorizada em 18/10/2026: Luna no Caçador do n8n
+
+Por pedido do Rômulo para usar o Luna do Hermes quando o Gemini falhar, o Caçador usa
+inferência do Luna para qualificar negócios públicos e resumir avaliações. O adaptador
+fixa modelo e ferramentas de leitura, valida a saída, limita prazo e uso, remove sessões
+e não oferece ferramenta de escrita ou envio. A escrita do workflow continua nas regras
+fixas de persistência e deduplicação. A coleta não envia mensagens a leads.

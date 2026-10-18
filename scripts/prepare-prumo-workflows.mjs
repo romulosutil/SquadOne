@@ -1,3 +1,4 @@
+import { protectWorkflow } from './prumo-workflow-guards.mjs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
@@ -606,6 +607,9 @@ diagnostic.connections['Reprocessar diagnóstico manualmente'] = { main: [[{ nod
 diagnostic.connections['Verificar respostas do Form — 5 min'] = diagnostic.connections['Nova resposta do Form'] ?? diagnostic.connections['Verificar respostas do Form — 5 min']
 delete diagnostic.connections['Nova resposta do Form']
 diagnostic.settings = { ...(diagnostic.settings ?? {}), timezone: 'America/Sao_Paulo' }
+
+protectWorkflow(lead)
+protectWorkflow(diagnostic)
 
 const output = resolve(outputDirectory)
 await mkdir(output, { recursive: true })

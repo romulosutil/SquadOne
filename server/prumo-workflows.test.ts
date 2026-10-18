@@ -309,3 +309,52 @@ test('Preparação da planilha preserva o vínculo técnico e entrega uma fila h
   assert.equal(api.parameters.authentication, 'predefinedCredentialType')
   assert.equal(api.credentials?.googleSheetsOAuth2Api?.id, '5Dy1tDUiFtAq7PHj')
 })
+
+test('Regressão: diagnóstico atualiza todas as empresas e agrupa pelo ID', async () => {
+  const w = await load('prumo-diagnostico.json')
+  const aggregate = findNode(w, 'Agrupar e calcular Índice Prumo')
+  const grouped = await runCode(aggregate.parameters.jsCode, { $input: { all: () => [
+    response('a::Nome antigo', 'Dono', '18/10/2026 10:00:00'),
+    response('A::Nome novo', 'Vendas', '18/10/2026 10:10:00'),
+    response('b::Outra empresa', 'Dono', '18/10/2026 10:15:00'),
+  ].map(json => ({ json })) } })
+  assert.equal(grouped.length, 2)
+  assert.equal(grouped[0].json.sessionCount, 2)
+  const results = await runCode(findNode(w, 'Aguardar sessões faltantes').parameters.jsCode, { $input: { all: () => grouped } })
+  assert.equal(results.length, 2)
+  assert.equal(findNode(w, 'Devolver briefing ao lead').parameters.operation, 'update')
+})
+
+test('Regressão: diagnóstico não cria desconhecidos nem reabre etapa comercial', async () => {
+  const w = await load('prumo-diagnostico.json')
+  const guard = findNode(w, 'Relacionar diagnóstico à fila')
+  const input = { company_id: 'a', lastResponseAt: '18/10/2026', prumoIndex: 50, areas: {}, gaps: [], status: 'READY' }
+  const result = await runCode(guard.parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { 'ID da empresa': 'A', Etapa: 'Concluído', 'Próxima ação': 'Acompanhar cliente', 'Diagnóstico concluído em': '17/10/2026' } }] }),
+    $input: { all: () => [{ json: input }, { json: { ...input, company_id: 'desconhecido' } }] },
+  })
+  assert.equal(result.length, 1)
+  assert.equal(result[0].json._etapaPreservada, 'Concluído')
+  const ready = { ...result[0].json, company: 'Empresa', rolesReceived: ['Dono'] }
+  const briefing = await runCode(findNode(w, 'Briefing do relatório — revisão humana').parameters.jsCode, { $input: { all: () => [{ json: ready }] } })
+  assert.equal(briefing[0].json.Etapa, 'Concluído')
+  assert.equal(briefing[0].json['Diagnóstico concluído em'], '17/10/2026')
+  assert.equal(briefing[0].json['Próxima ação'], 'Acompanhar cliente')
+})
+
+test('Regressão: não contatar prevalece e links escapados são reconhecidos', async () => {
+  const w = await load('prumo-lead-scout.json')
+  const invite = await runCode(findNode(w, 'Preparar convite do diagnóstico').parameters.jsCode, { $input: { all: () => [{ json: {
+    'ID da empresa': 'a', Empresa: 'Empresa', Etapa: 'Contato aceito', 'Não contatar': 'Sim',
+  } }] } })
+  assert.deepEqual(invite, [])
+  const html = String.raw`<script>{"url":"https:\/\/wa.me\/5511999999999"}</script>`
+  const confirmed = await runCode(findNode(w, 'Confirmar WhatsApp publicado').parameters.jsCode, {
+    $: () => ({ all: () => [{ json: { company_id: 'a' } }] }), $input: { all: () => [{ json: { data: html } }] },
+  })
+  assert.equal(confirmed[0].json.whatsapp_url, 'https://wa.me/5511999999999')
+  const unsafe = await runCode(findNode(w, 'Preparar busca de WhatsApp').parameters.jsCode, { $input: { all: () => [
+    'http://127.1/admin', 'http://2130706433/admin', 'http://0x7f000001/admin', 'http://100.100.100.100/admin',
+  ].map(website => ({ json: { website } })) } })
+  assert.deepEqual(unsafe, [])
+})

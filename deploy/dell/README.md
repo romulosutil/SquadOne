@@ -2710,3 +2710,33 @@ encerra antes de coleta + 3 h: o resumo do Hermes chega às 08:00 e naquele dia
 trouxe um pregão que encerrava às 07:59. Esses itens saem da lista (o Hermes
 não mostra descartes) e ficam só em `counts.deadline_dropped` e
 `deadline_dropped` do `latest-run.json` e numa linha de contagem no relatório.
+
+
+### Luna nos workflows do Caçador (18/10/2026)
+
+Autorizado pelo Rômulo após erros 503 do Gemini: `luna-workflows.service` executa o Luna
+`gpt-6-luna-900k` do Hermes só para qualificação com pesquisa e resumo. O serviço aceita
+apenas `/inferir`, tarefas fixas e o contrato de resposta existente; não aceita modelo,
+ferramenta ou comando do cliente. Qualificação: `web,clarify`; resumo: `clarify`;
+`--ignore-rules`, pasta vazia, ambiente limpo, sessão removida antes/depois, 140 s por
+inferência e 200 tentativas/dia. O teto conta falhas. Não envia mensagem a lead.
+
+A porta 8766 escuta só a ponte `172.23.0.1`; UFW aceita exclusivamente entrada pela
+`br-ecef3b89e8bc`, origem `172.23.0.0/16`, destino `172.23.0.1:8766`. O hostname interno
+`luna-workflows` é a exceção explícita de SSRF junto com `collector`; demais privados,
+loopback e tailnet seguem bloqueados. Se recriar a rede Docker com outro endereço,
+alinhe `N8N_LUNA_HOST_IP` no compose, `LUNA_BIND`/`LUNA_REDE_N8N` na unit e a regra UFW.
+
+O token (600) fica em `~/.config/claude-ops/luna-workflows-token`; a credencial
+`httpHeaderAuth` no n8n o guarda cifrado. Só o ID fica em `luna-workflows-cred` (600).
+`n8n.py` aplica `workflow_luna.usar_luna` nas reconstruções do Caçador. Copie os módulos
+pelo registro `instalados.json`, instale a unit, faça `systemctl --user daemon-reload`
+e reinicie `luna-workflows`. Testes: `luna_workflows.test.py` e
+`workflow_confiabilidade.test.py`. Backup anterior à troca em
+`~/.local/share/claude-ops/backups/auditoria-20261018T201438Z/`.
+
+O Caçador só atualiza `ultima_rodada` depois do subfluxo inteiro; erro de pesquisa,
+resposta inválida ou falha de gravação conserva a busca para nova tentativa. Os
+observadores HTTP também esperam a persistência. Links de envio só abrem o WhatsApp;
+quem confirma envio é o observador ou um gesto explícito do operador. Ações do lead
+por GET mostram confirmação; POST de outra origem ou com contexto antigo falha.

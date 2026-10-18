@@ -421,8 +421,6 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
                           f'<span class="det">{e(x["detalhe"])}</span></li>' for x in linhas) + "</ul>")
 
     t = termos(dados)
-    com_mapa = bool(dados.get("mapa_link"))
-    site = next(s for s in precos["servicos"] if s["chave"] == "site")
     c = [topo("Raio-X")]
     if dados.get("exemplo"):
         c.append(f'<p class="exemplo">{AVISO_EXEMPLO.format(doc="Raio-X", empresa=t["empresa"])} O de um associado usa só o que é público '
@@ -541,42 +539,33 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
           .replace('<details class="detalhe">', '<details class="detalhe" id="a-nota">', 1),
           "</div></section>"]
 
-    # Ato 3 · O que fazer. Com equipe, o Raio-X leva ao Mapa e quem vende é o Mapa; sem equipe,
-    # não há Mapa, e os serviços com preço são o próximo passo.
+    # Ato 3 · O que fazer. Todo Raio-X leva ao Mapa e quem vende é o Mapa: sem preço aqui.
     c += ['<section class="ato o-que-fazer fazer" id="o-que-fazer" aria-labelledby="t-o-que-fazer">',
           '<p class="kicker" id="t-o-que-fazer">O que fazer</p>',
           f'<h2>{len(dados["o_que_fazer"])} coisas, nesta ordem</h2><ul class="lista">'
           + "".join(f'<li><span class="marcador">{e(f["n"])}</span><div><h3>{e(f["titulo"])}</h3><p>{e(f["texto"])}</p>'
                     f'<p class="quem">{e(f["quem"])}</p></div></li>' for f in dados["o_que_fazer"]) + "</ul>"]
-    if com_mapa:
-        exemplo_mapa = (f'<a class="link-escuro" href="{e(dados["mapa_exemplo_url"])}">Ver como fica um Mapa pronto</a>'
-                        if dados.get("mapa_exemplo_url") else "")
-        c.append('<div class="mapa-convite"><span class="miudo">O próximo passo · grátis</span>'
-                 '<h2>Agora, o olhar por dentro: o Mapa</h2>'
-                 f'<p><strong>O Raio-X mostrou por que o {e(t["cliente"])} não chega. O Mapa mostra por que ele escapa '
-                 f'depois que chega.</strong> Com {e(dados.get("equipe") or "equipe")}, parte disso está em quem decide o desconto, o '
-                 'parcelamento e a agenda. O Mapa mostra o que passa por você, quanto tempo leva e quanto custa; o documento '
-                 'é de vocês, contratem ou não.</p>'
-                 '<p class="fatos"><span>16 perguntas</span><span>~10 minutos</span><span>sem extrato nem senha</span>'
-                 '<span>conversa de 45 min</span></p>'
-                 f'<a class="botao-zap" href="{e(dados["mapa_link"])}" target="_blank" rel="noopener">Responder as 16 perguntas</a>'
-                 f'{exemplo_mapa}</div>')
-        c.append('<div class="servicos-curto"><h3>Já sabe o que quer arrumar?</h3>'
-                 '<p class="intro">Os preços vêm no fim do Mapa. Se preferir conversar antes, cada link abre o WhatsApp do '
-                 'PRUMO com a mensagem começada.</p>'
-                 f'<ul>{lista_servicos(nome, "Raio-X", dados.get("servicos_motivo") or {}, precos)}</ul></div>')
-    else:
-        c.append('<div class="bloco"><h2>Se quiserem que o PRUMO faça</h2>'
-                 '<p class="intro">Cada botão abre o WhatsApp do PRUMO com a mensagem começada. Escolham um, todos ou '
-                 'nenhum: o Raio-X é de vocês do mesmo jeito.</p>'
-                 f'<div class="cartoes">{cartoes(nome, "Raio-X", dados.get("servicos_motivo") or {}, precos)}</div></div>')
+    exemplo_mapa = (f'<a class="link-escuro" href="{e(dados["mapa_exemplo_url"])}">Ver como fica um Mapa pronto</a>'
+                    if dados.get("mapa_exemplo_url") else "")
+    c.append('<div class="mapa-convite"><span class="miudo">O próximo passo · grátis</span>'
+             '<h2>Agora, o olhar por dentro: o Mapa</h2>'
+             f'<p><strong>O Raio-X mostrou por que o {e(t["cliente"])} não chega. O Mapa mostra por que ele escapa '
+             f'depois que chega.</strong> Com {e(dados.get("equipe") or "equipe")}, parte disso está em quem decide o desconto, o '
+             'parcelamento e a agenda. O Mapa mostra o que passa por você, quanto tempo leva e quanto custa; o documento '
+             'é de vocês, contratem ou não.</p>'
+             '<p class="fatos"><span>16 perguntas</span><span>~10 minutos</span><span>sem extrato nem senha</span>'
+             '<span>conversa de 45 min</span></p>'
+             f'<a class="botao-zap" href="{e(dados["mapa_link"])}" target="_blank" rel="noopener">Responder as 16 perguntas</a>'
+             f'{exemplo_mapa}</div>')
+    c.append('<div class="servicos-curto"><h3>Já sabe o que quer arrumar?</h3>'
+             '<p class="intro">Os preços vêm no fim do Mapa. Se preferir conversar antes, cada link abre o WhatsApp do '
+             'PRUMO com a mensagem começada.</p>'
+             f'<ul>{lista_servicos(nome, "Raio-X", dados.get("servicos_motivo") or {}, precos)}</ul></div>')
     c.append("</section>")
     c.append(f'<footer><span>Feito pelo PRUMO com dados públicos, lidos em {e(dados["lido_em"])}.'
-             + ('' if com_mapa else ' Preços de outubro de 2026.')
-             + '</span><span>PRUMO · <a href="https://prumo.services" rel="noopener">prumo.services</a> · '
+             '</span><span>PRUMO · <a href="https://prumo.services" rel="noopener">prumo.services</a> · '
              'WhatsApp +55 27 99976-2786</span></footer>')
-    barra = ((dados["mapa_link"], "Responder as 16 perguntas do Mapa") if com_mapa
-             else (zap(f"Olá, PRUMO. Vi o Raio-X da {nome} e quero falar de site.", precos), f'{site["botao"]} · {site["preco"]}'))
+    barra = (dados["mapa_link"], "Responder as 16 perguntas do Mapa")
     doc = pagina(f"Raio-X · {nome}", dados.get("descricao")
                  or f"Como {nome} aparece para quem procura: Google, site, redes, anúncios e concorrentes.",
                  c, barra, rx, cp, "raio-x", dados.get("cabeca") or "", dados.get("corpo_attr") or "")
@@ -649,6 +638,19 @@ def conferir_raio_x(d: dict, precos: dict, automatico: bool = False) -> list[str
         _lista(erros, d, campo, minimo)
     _motivos(erros, d, precos, ("site", "trafego") if automatico else ())
     if not d.get("exemplo") and not automatico:
+        if not str(d.get("mapa_link") or "").startswith("https://docs.google.com/forms/"):
+            erros.append("mapa_link: todo Raio-X termina no convite para o Mapa; o link das 16 perguntas "
+                         "(o mapa_link do exemplo) não pode ficar vazio")
+        else:
+            link = urllib.parse.urlsplit(d["mapa_link"])
+            campos = urllib.parse.parse_qs(link.query)
+            empresas = campos.get("entry.171063854", [])
+            empresa = empresas[0].split("::", 1) if len(empresas) == 1 else []
+            if (link.netloc != "docs.google.com" or len(empresa) != 2
+                    or not empresa[0].strip() or empresa[1].strip() != str(d.get("nome") or "").strip()
+                    or campos.get("entry.1936869861") != ["Dono"]):
+                erros.append("mapa_link: preencha uma única Empresa como <ID>::<nome desta empresa> "
+                             "e o papel Dono; sem isso a resposta não chega ao lead correto")
         if str(d.get("mapa_exemplo_url") or "").startswith("/"):
             erros.append("mapa_exemplo_url: num lead, o endereço completo do exemplo "
                          "(https://prumo-piloto-cdl.vercel.app/mapa)")
@@ -667,7 +669,7 @@ def conferir_pagina(doc: str) -> list[str]:
 
 
 # Campos do exemplo que um lead não tem: o aviso de exemplo, os links entre as páginas do exemplo e,
-# no Raio-X, o mapa_link (vazio é o Raio-X sem equipe, a outra variante do molde).
+# no Raio-X, o mapa_link (o do lead é o formulário, às vezes com a empresa preenchida).
 SO_DO_EXEMPLO = {"_como_usar", "_conferir", "exemplo", "origem", "raio_x_url", "mapa_link", "mapa_exemplo_url", "versao"}
 # Vazio também é resposta: a busca em que a empresa não aparece entre as lidas não tem posição.
 PODEM_FICAR_VAZIOS = {"posicao"}
@@ -678,8 +680,9 @@ def vazio(v) -> bool:
 
 
 def molde_raio_x(exemplo: dict, lead: dict) -> dict:
-    """Sem equipe (mapa_link vazio), o Raio-X não convida para o Mapa e não fala da equipe."""
-    return exemplo if lead.get("mapa_link") else {k: v for k, v in exemplo.items() if k != "equipe"}
+    """A equipe pode ficar vazia (o Places não diz, e "equipe a confirmar" fala mal da empresa): vazia, a
+    página diz só "Com equipe" e não cita número. Todo Raio-X leva o convite para o Mapa."""
+    return exemplo if lead.get("equipe") else {k: v for k, v in exemplo.items() if k != "equipe"}
 
 
 def molde_mapa(exemplo: dict, lead: dict) -> dict:

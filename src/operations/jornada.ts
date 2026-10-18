@@ -12,6 +12,7 @@
 // A fonte do negócio continua sendo o repositório prumo (00-contexto/negocio.md,
 // "A oferta" e "Jornada do cliente"): mudou lá, mude aqui e refaça o guia.
 
+import { REGRAS_DO_RITMO } from './trava-de-ritmo'
 import { CARDAPIO, objecoesNoTexto, type IdDoServico, type ServicoDoCardapio } from './colinha'
 import type { AchadoDoRaioX, CrmLead, CrmProduto, IdDoAchado } from './types'
 
@@ -91,10 +92,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Primeira mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: 'A Próxima venda (Hoje, Vendas › A fazer ou o "Envie para X" do Telegram), pelo WhatsApp, no expediente e na trava de ritmo (1 a cada 4 min, 8 por hora, teto do dia); o observador marca envio e leitura sozinho',
+    como: `A Próxima venda (Hoje, Vendas › A fazer ou o "Envie para X" do Telegram), pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
     entra: 'Enviada (ou convite enviado), sem resposta de gente.',
-    sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia) e Perdido em 7 dias.',
-    prazo: 'follow-up no 3º dia; Perdido no 7º sem mensagem do lead',
+    sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia). Vendas mostra a saída por prazo no 7º dia; a planilha marca expirado no 10º.',
+    prazo: 'follow-up no 3º dia; saída por prazo em Vendas em 7 dias; expiração da planilha em 10 dias',
     blueprint: ['SITE-3', 'PRUMO-1', 'OFERTAS-3'],
   },
   {
@@ -272,7 +273,7 @@ export function caminhoDoLead(lead: LeadDaJornada): IdDoPasso[] {
  */
 function trilhoDeDentro(lead: LeadDaJornada): boolean {
   if (lead.sinal === 'diagnostico') return true
-  return funilDoLead(lead) === 'prumo' && lead.equipe !== false
+  return (funilDoLead(lead) === 'prumo' && lead.equipe !== false) || (funilDoLead(lead) === 'site' && lead.equipe === true)
 }
 
 /** Em que passo o lead está agora, pelo que o retrato do CRM mostra. */
@@ -582,7 +583,7 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
   if (mapaRespondido) {
     r.agora.push({ id: 'fonte', porque: 'Respondeu o Mapa: depois da devolutiva, a proposta da Fonte.' })
     r.depois.push({ id: 'fonte-em-dia', porque: 'Depois da Fonte e dos 30 dias de ajustes (opcional).' })
-  } else if (funil === 'prumo' && lead.equipe !== false) {
+  } else if (trilhoDeDentro(lead)) {
     const comEquipe = lead.equipe === true
     const mapa: OfertaSugerida = {
       id: 'mapa',
