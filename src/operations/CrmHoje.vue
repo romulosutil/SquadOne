@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { aplicarCohort, gravarCohort, lerCohort, motivosDoLead, semCriterios, type Cohort } from './cohort'
 import CrmCohort from './CrmCohort.vue'
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
+import { alvosDoLote, corpoDaLeitura, desfechoDaResposta, lerEmSerie, textoDoAndamento, textoDoResumo, type Andamento } from './leitura-de-sinais'
 import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
 import RecadoDeTravas from './RecadoDeTravas.vue'
 import { envioTravado, type EnviosLiberados } from './trava-de-horario'
@@ -40,6 +41,8 @@ const emit = defineEmits<{
   primeiro: [leadId: string]
   registrado: []
   restantes: [quantos: number]
+  /** Terminou (ou parou) uma leitura de sinais que guardou algo no servidor: a visão precisa ser relida. */
+  sinaisLidos: []
 }>()
 
 // ------------------------------------------------------------------ decisões locais (triagem.ts)
@@ -301,6 +304,59 @@ async function dispensarSobras() {
 
 watch(() => lote.value.ids, () => { confirmando.value = false })
 
+// ------------------------------------------------------------------ ler os sinais do lote (leitura-de-sinais.ts)
+
+// Só os do lote que está na tela e só quando a pessoa toca: nada automático e nada da fila inteira. Os
+// que esperam decisão e têm site próprio sem leitura guardada entram, um de cada vez (POST
+// /api/operations/crm/sinais, o mesmo da Ficha). Ao fim a visão é relida: a Prioridade e o filtro por
+// motivo passam a enxergar a leitura, e o lote continua o mesmo (loteDaTriagem só troca de lote quando
+// ninguém dele espera decisão). Só informa: nada daqui convida, dispensa ou envia.
+const tentadosNosSinais = ref<Set<string>>(new Set())
+const alvosDeSinais = computed(() => alvosDoLote(lote.value.pendentes.map((i) => i.leadId), props.leads, tentadosNosSinais.value))
+const lendoSinais = ref<Andamento | null>(null)
+const resumoDosSinais = ref('')
+let paradaDosSinais: AbortController | null = null
+let aoSair = false
+
+async function lerSinaisDoLote() {
+  const alvos = alvosDeSinais.value
+  if (!alvos.length || lendoSinais.value) return
+  const parada = new AbortController()
+  paradaDosSinais = parada
+  resumoDosSinais.value = ''
+  lendoSinais.value = { feitos: 0, total: alvos.length, empresa: '' }
+  const resumo = await lerEmSerie(alvos, {
+    async ler(alvo) {
+      const resposta = await fetch('/api/operations/crm/sinais', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpoDaLeitura(alvo)), signal: parada.signal,
+      })
+      return desfechoDaResposta(resposta.status, await resposta.json().catch(() => null))
+    },
+    // A pausa entre sites acaba na hora se a pessoa parar.
+    esperar: (ms) => new Promise<void>((pronto) => {
+      const fim = () => { window.clearTimeout(t); parada.signal.removeEventListener('abort', fim); pronto() }
+      const t = window.setTimeout(fim, ms)
+      parada.signal.addEventListener('abort', fim)
+    }),
+    parou: () => parada.signal.aborted,
+    aoAndar: (a) => { lendoSinais.value = a },
+  })
+  if (paradaDosSinais === parada) paradaDosSinais = null
+  lendoSinais.value = null
+  // A tela pode ter saído (abort no desmonte): o resumo e a releitura não têm para quem.
+  if (aoSair) return
+  tentadosNosSinais.value = new Set([...tentadosNosSinais.value, ...resumo.resolvidos])
+  resumoDosSinais.value = textoDoResumo(resumo)
+  if (resumo.lidos) emit('sinaisLidos')
+}
+
+function pararSinais() {
+  paradaDosSinais?.abort()
+}
+
+// Outro lote, outra conversa: o resumo do anterior sairia do lugar.
+watch(() => lote.value.ids, () => { resumoDosSinais.value = '' })
+
 // ------------------------------------------------------------------ links secundários
 
 // Consulta antes de decidir, não decisão: links de texto pequenos, depois dos dois botões.
@@ -315,6 +371,9 @@ onMounted(() => {
   if (props.confirmavel) guardar(podarDecisoes(decisoes.value, props.leads, Date.now()))
 })
 onBeforeUnmount(() => {
+  // Sair da tela interrompe a série; o que já foi lido ficou guardado no servidor.
+  aoSair = true
+  paradaDosSinais?.abort()
   window.clearTimeout(desarmar)
   desfazeis.value.forEach((d) => window.clearTimeout(d.temporizador))
 })
@@ -357,6 +416,18 @@ onBeforeUnmount(() => {
       <p v-else-if="linhas.length" class="crm-triagem__conta">
         {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template><template v-if="cohortAtivo"> · com o filtro por motivo</template>
       </p>
+
+      <!-- Ler os sinais do site só deste lote (BP-BOTAO: um secundário; "Parar" é leve). O primário segue sendo o Convidar. -->
+      <div v-if="triando && linhas.length && (alvosDeSinais.length || lendoSinais || resumoDosSinais)" class="crm-triagem__fim crm-triagem__sinais">
+        <template v-if="lendoSinais">
+          <p class="crm-nota-pequena" role="status">Lendo os sinais do site… {{ textoDoAndamento(lendoSinais) }}</p>
+          <button type="button" class="botao botao--leve" @click="pararSinais">Parar</button>
+        </template>
+        <template v-else>
+          <button v-if="alvosDeSinais.length" type="button" class="botao" @click="lerSinaisDoLote">Ler os sinais deste lote ({{ alvosDeSinais.length }})</button>
+          <p v-if="resumoDosSinais" class="crm-nota-pequena" role="status">{{ resumoDosSinais }}</p>
+        </template>
+      </div>
 
       <ul v-if="triando" class="crm-lista">
         <template v-for="linha in linhas" :key="linha.tipo === 'item' ? linha.item.leadId : `desfazer-${linha.id}`">
