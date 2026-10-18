@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import type { CrmLead } from "../src/operations/types.ts";
 import {
+  barradaPeloGate,
   caminhosDoRaioX,
   CopilotoFalhou,
   CopilotoMalConfigurado,
@@ -142,6 +143,25 @@ describe("copiloto: a cola", () => {
     assert.equal(await copiloto.ler("site", "ChIJabc"), null);
     const [registro] = await lerRegistros(arquivo);
     assert.equal(registro.tipo === "sugestao" && registro.falha?.motivo, "preco_proibido");
+  });
+
+  it("o gate de envio barra a mensagem quebrada: falha classificada com o motivo, nada guardado", async () => {
+    for (const mensagem of ["Oi [NOME], espero que esteja bem. Posso mandar o link?", "Oi, tudo bem? 😀 Posso mandar o link?", `Oi! ${"Mais um texto. ".repeat(100)}`]) {
+      const ruim = JSON.stringify({ mensagem, ofertas: [], proposta: { itens: [] } });
+      const { copiloto, arquivo } = await montar({ respostas: [{ ok: true, texto: ruim }] });
+      await assert.rejects(copiloto.sugerir("site", "ChIJabc"), (e: unknown) => e instanceof CopilotoFalhou && e.motivo === "gate_de_envio" && e.detalhe.length > 0);
+      assert.equal(await copiloto.ler("site", "ChIJabc"), null);
+      const [registro] = await lerRegistros(arquivo);
+      assert.equal(registro.tipo === "sugestao" && registro.falha?.motivo, "gate_de_envio");
+      assert.equal(registro.tipo === "sugestao" && registro.sugestao, undefined);
+    }
+  });
+
+  it("barradaPeloGate: mensagem boa passa, mensagem com marca ou frase de IA volta com os motivos", () => {
+    assert.equal(barradaPeloGate("Oi, tudo bem? Posso te mandar o link para dar uma olhada? É sem compromisso."), null);
+    const motivos = barradaPeloGate("Oi {NOME}, passando para ver.") ?? "";
+    assert.match(motivos, /marca sem preencher: \{NOME\}/);
+    assert.match(motivos, /abertura de vendedor/);
   });
 
   it("lead fora do CRM e passo sem copiloto", async () => {

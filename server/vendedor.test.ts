@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ESPERA_DO_AVISO_MS, limparAbertos, rodapeDeFora, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
+import { ESPERA_DO_AVISO_MS, conferirDoAviso, limparAbertos, rodapeDeFora, textoDoAviso, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
 import type { Resolvida } from "./venda-do-dia.ts";
+import type { AcaoDeVenda } from "../src/operations/proxima-venda.ts";
 
 // AC-06 (17/10/2026): a Central e o Telegram numa fila só. Regras puras, em tabela; a cola com o
 // arquivo do dia e o Telegram é exercitada em jornadas-de-venda.test.ts (com o retrato de verdade).
@@ -95,4 +96,42 @@ describe("vendedor: o toque atrasado e a anotação uma vez só", () => {
     },
   ];
   for (const c of casos) it(c.nome, () => assert.deepEqual(toqueNoAviso(c.aviso ?? a, c.acao, c.doDia), c.esperado));
+});
+
+// O gate de envio sobre o rascunho do aviso (17/10/2026): copiloto bloqueia, esteira avisa, o número errado bloqueia sempre.
+describe("vendedor: o gate de envio sobre o rascunho", () => {
+  const acao = (extra: Partial<AcaoDeVenda> = {}): AcaoDeVenda => ({
+    chave: "site:L|followup", leadId: "site:L", empresa: "Clínica Alfa", produto: "site", tipo: "followup", titulo: "Follow-up para Clínica Alfa",
+    contexto: "Site · clínica · Vitória", porque: "Leu e não respondeu.", tatica: "Uma linha só.", primeiroContato: false, quente: false,
+    rascunho: "Oi, é o Rômulo de novo. Deu para ver a demonstração de site da Clínica Alfa?", ...extra,
+  });
+  const copiloto = { porque: "leu a conversa", quando: "agora" };
+
+  it("sem rascunho não há o que conferir", () => assert.equal(conferirDoAviso(acao({ rascunho: undefined })), null));
+  it("texto da esteira limpo: ok", () => assert.equal(conferirDoAviso(acao())?.ok, true));
+  it("texto da esteira com marca sem preencher: avisa, não bloqueia", () => {
+    const r = conferirDoAviso(acao({ rascunho: "Oi, é o Rômulo de novo. Deu para ver a demonstração de site da {NOME}?" }))!;
+    assert.equal(r.ok, false);
+    assert.equal(r.bloqueia, false);
+    assert.equal(r.modo, "avisar");
+  });
+  it("mensagem do copiloto com problema: bloqueia", () => {
+    const r = conferirDoAviso(acao({ copiloto, rascunho: "Espero que esteja bem! Posso mandar o link?" }))!;
+    assert.equal(r.bloqueia, true);
+    assert.equal(r.modo, "bloquear");
+  });
+  it("o link para outro número que o do registro bloqueia até a esteira", () => {
+    const link = { rotulo: "Abrir", url: "https://wa.me/5511988880001?text=oi" };
+    assert.equal(conferirDoAviso(acao({ link }), "https://wa.me/5511988880002")?.bloqueia, true);
+    assert.equal(conferirDoAviso(acao({ link }), "https://wa.me/5511988880001")?.ok, true);
+    assert.equal(conferirDoAviso(acao({ link }), undefined)?.ok, true);
+  });
+  it("o reenvio do só-robô é conferido como reenvio (sem link no texto)", () => {
+    const r = conferirDoAviso(acao({ primeiroContato: true, rascunho: "Oi, tudo bem? Veja https://demo.vercel.app" }))!;
+    assert.ok(r.problemas.some((p) => p.codigo === "links_demais"));
+  });
+  it("o texto do Telegram leva a linha Confira só quando o gate achou algo", () => {
+    assert.ok(!textoDoAviso(acao(), []).includes("Confira antes de enviar"));
+    assert.ok(textoDoAviso(acao(), [], "marca sem preencher: {NOME}").includes("⚠ Confira antes de enviar: marca sem preencher: {NOME}."));
+  });
 });

@@ -258,6 +258,27 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
     return { relogio, memoria, enviados, editados, registros, vendedor, token, fim };
   }
 
+  // O gate de envio (17/10/2026): o link do aviso é de outro número que o do registro do lead.
+  it("link para outro número que o do registro: o aviso não sai com botão, o motivo vai ao Telegram e não repete", async () => {
+    const visao = structuredClone(vFollowup);
+    assert.match(visao.leads[0].links.whatsapp ?? "", /wa\.me\/\d+/, "o fixture precisa de um wa.me para o teste valer");
+    visao.leads[0].links.whatsapp = "https://wa.me/5511900000999";
+    const m = await montar(visao);
+    try {
+      const d = await m.vendedor.volta();
+      assert.deepEqual(d, { tipo: "nada", motivo: "mensagem-barrada" });
+      assert.equal(m.enviados.length, 1);
+      assert.match(m.enviados[0].texto, /^⛔ Não mandei o aviso de .*número do link não é o do registro/);
+      assert.deepEqual(m.enviados[0].botoes, []);
+      // Não repete na volta seguinte.
+      m.relogio.agora += 60_000;
+      await m.vendedor.volta();
+      assert.equal(m.enviados.length, 1);
+    } finally {
+      await m.fim();
+    }
+  });
+
   it("resolvido na Central: a próxima volta tira os botões do aviso e diz onde foi feito", async () => {
     const m = await montar();
     try {

@@ -37,6 +37,7 @@ import type { CrmVisao } from "../src/operations/types.ts";
 import type { Botao } from "./telegram.ts";
 import { dadosDaVenda } from "./telegram-entrada.ts";
 import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
+import { conferirMensagem, resumoDosProblemas, type ResultadoDoGate, type TipoDeMensagem } from "./gate-de-envio.ts";
 
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 export const MAX_AVISOS_POR_DIA = 40;
@@ -109,7 +110,7 @@ export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
 }
 
 export type Decisao =
-  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" | "esperando-copiloto" }
+  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" | "esperando-copiloto" | "mensagem-barrada" }
   | { tipo: "avisar"; acao: AcaoDeVenda; depois: AcaoDeVenda[] };
 
 /** O que o servidor lembra do dia (server/venda-do-dia.ts): o vendedor lê só isto. */
@@ -226,7 +227,9 @@ export function toqueNoAviso(aberto: Pick<AvisoAberto, "chave" | "em" | "anota" 
 export type EventoDoVendedor = {
   em: number;
   /** "central": a Próxima venda resolveu a ação com o aviso aberto (17/10/2026, AC-06). */
-  evento: "avisado" | "enviei" | "pulou" | "expirou" | "saiu" | "central";
+  evento: "avisado" | "enviei" | "pulou" | "expirou" | "saiu" | "central" | "barrado";
+  /** "barrado": o gate de envio (gate-de-envio.ts) recusou a mensagem; só os códigos, nunca o texto. */
+  motivos?: string[];
   chave: string;
   tipo?: AcaoDeVenda["tipo"];
   quente?: boolean;
@@ -342,8 +345,28 @@ async function anotarNoHistorico(arquivo: string | undefined, eventos: EventoDoV
 
 const MAX_RASCUNHO = 2500;
 
-/** Texto puro (sem parse_mode), como todo o bot. */
-export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[]): string {
+/**
+ * PURO (17/10/2026): o gate de envio sobre o rascunho do aviso. A mensagem do copiloto (modelo) é
+ * conferida em "bloquear": se reprova, o aviso não sai. O texto da esteira (modelo estático) em
+ * "avisar": o aviso sai com a linha "Confira", e o botão fica. O número do link contra o do registro
+ * do lead bloqueia nos dois (mandar para a pessoa errada não é questão de estilo). Sem rascunho, nada a conferir.
+ */
+export function conferirDoAviso(acao: AcaoDeVenda, whatsappDoRegistro?: string): ResultadoDoGate | null {
+  if (!acao.rascunho) return null;
+  const tipo: TipoDeMensagem = acao.tipo === "primeiro" ? "primeiro"
+    : acao.tipo === "followup" ? (acao.primeiroContato ? "reenvio" : "followup")
+    : acao.tipo === "mandar-proposta" ? "proposta"
+    : "conversa";
+  return conferirMensagem(acao.rascunho, {
+    modo: acao.copiloto ? "bloquear" : "avisar",
+    tipo,
+    nome: acao.empresa,
+    destino: { ...(acao.link?.url ? { link: acao.link.url } : {}), ...(whatsappDoRegistro ? { registro: whatsappDoRegistro } : {}) },
+  });
+}
+
+/** Texto puro (sem parse_mode), como todo o bot. `confira`: o que o gate achou num texto da esteira (aviso, não bloqueio). */
+export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[], confira?: string): string {
   const linhas = [
     `${acao.quente ? "🔥" : "📨"} ${acao.titulo}`,
     acao.contexto,
@@ -360,6 +383,7 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[]):
       ? `Sugestão do copiloto, que leu a conversa (revise antes de enviar):${acao.copiloto.porque ? `\n${acao.copiloto.porque}` : ""}`
       : "Mensagem pronta (revise antes de enviar):";
     linhas.push("", titulo, "――――", r, "――――");
+    if (confira) linhas.push(`⚠ Confira antes de enviar: ${confira}.`);
   } else {
     linhas.push("", "Sem texto pronto: escreva à mão (a colinha da ficha ajuda).");
   }
@@ -513,8 +537,27 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     }
     if (decisao.tipo === "avisar") {
       esperandoCopiloto.delete(decisao.acao.chave);
+      // O gate de envio (17/10/2026): mensagem do copiloto quebrada, ou link para outro número que o do
+      // registro, não vira aviso; o texto da esteira com problema sai com a linha "Confira".
+      const lead = visao.leads.find((l) => l.id === decisao.acao.leadId);
+      const gate = conferirDoAviso(decisao.acao, lead?.links.whatsapp);
+      if (gate && !gate.ok) {
+        const motivos = resumoDosProblemas(gate.problemas);
+        console.warn(`[vendedor] ${gate.bloqueia ? "aviso barrado" : "confira"} (${decisao.acao.chave}): ${motivos}`);
+        if (gate.bloqueia) {
+          // Não repete hoje (senão a volta de 1 min pegaria o mesmo); a Central segue mostrando o lead.
+          estado.avisados.push(decisao.acao.chave);
+          historico.push({ em: agora, evento: "barrado", chave: decisao.acao.chave, tipo: decisao.acao.tipo, motivos: [...new Set(gate.problemas.map((p) => p.codigo))] });
+          await deps.enviar(`⛔ Não mandei o aviso de ${decisao.acao.empresa}: ${motivos}. Confira a ficha na Central.`, []).catch((err) => {
+            console.warn(`[vendedor] o motivo do aviso barrado não foi enviado: ${err instanceof Error ? err.message : String(err)}`);
+          });
+          await gravarEstado(estado);
+          await anotarNoHistorico(deps.arquivoDeHistorico, historico, agora);
+          return { tipo: "nada", motivo: "mensagem-barrada" };
+        }
+      }
       const token = randomBytes(6).toString("hex");
-      const texto = textoDoAviso(decisao.acao, decisao.depois);
+      const texto = textoDoAviso(decisao.acao, decisao.depois, gate && !gate.ok ? resumoDosProblemas(gate.problemas) : undefined);
       const mensagens = await deps.enviar(texto, botoesDoAviso(decisao.acao, token, deps.origemCentral));
       estado.avisados.push(decisao.acao.chave);
       estado.abertos.push({
