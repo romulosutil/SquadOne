@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
-import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from "./crm.ts";
+import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido, siteProprioDoLead } from "./crm.ts";
+import { SiteBloqueado, type LeitorDeSinais } from "./sinais-do-site-leitor.ts";
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
@@ -459,6 +460,8 @@ export function createOperationsRouter(options: {
   uso?: ContadorDeUso;
   /** Assistente da Central (server/assistente.ts, RULES 28): null/ausente = desligado. */
   assistente?: Assistente | null;
+  /** Leitor dos sinais do site de um lead (server/sinais-do-site-leitor.ts); ausente, POST /crm/sinais responde 503. */
+  sinaisDoSite?: LeitorDeSinais;
 }): express.Router {
   const router = express.Router();
 
@@ -737,6 +740,30 @@ export function createOperationsRouter(options: {
     const registros = await lerRegistrosDoLeadQuente(path.join(options.dataDir, "lead-quente-sombra"), agora);
     res.setHeader("Cache-Control", "no-store");
     res.json({ resumo: resumoDoLeadQuente(registros, agora), desde: registros[0]?.quando ?? null });
+  });
+
+  // Os sinais do site de UM lead (17/10/2026), lidos sob demanda quando a Ficha abre: no máximo 3
+  // requisições ao site dele, com cache em disco (server/sinais-do-site-leitor.ts). POST e não GET de
+  // propósito: abrir uma Ficha faz a Central ir à rede, e o POST passa pela guarda da mesma origem.
+  // Só informa; nada daqui vai a lead.
+  router.post("/crm/sinais", express.json({ limit: "4kb" }), async (req, res) => {
+    const leitor = options.sinaisDoSite;
+    if (!leitor || !options.crm) return void res.status(503).json({ error: "A leitura dos sinais do site não está ligada nesta Central." });
+    const alvo = leadDoPedido((req.body ?? {}) as Record<string, unknown>);
+    if (!alvo) return void res.status(400).json({ error: "Diga o produto e o id do lead." });
+    try {
+      const lead = (await options.crm.visao()).leads.find((l) => l.produto === alvo.produto && l.chave === alvo.id);
+      if (!lead) return void res.status(404).json({ error: "Lead não encontrado no retrato atual." });
+      const site = siteProprioDoLead(lead);
+      if (typeof site !== "string") return void res.status(409).json({ error: "Este lead não tem um site próprio para ler.", semSite: site === null });
+      const r = await leitor.ler(lead.id, site, { forcar: (req.body as Record<string, unknown>).forcar === true });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ sinais: r.sinais, estado: r.estado, lidoEm: r.lidoEm, origem: r.origem, requisicoes: r.requisicoes });
+    } catch (error) {
+      if (error instanceof SiteBloqueado) return void res.status(422).json({ error: "Esse endereço não pode ser lido pela Central.", bloqueado: true });
+      console.error("[operations] Falha ao ler os sinais do site:", error);
+      res.status(500).json({ error: "Não foi possível ler o site agora." });
+    }
   });
 
   router.get("/crm/copiloto/sugestao", async (req, res) => {

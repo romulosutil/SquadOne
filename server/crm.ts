@@ -9,6 +9,7 @@ import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
 import { bracoDoRecibo, entraNoTesteDoRecibo, type BracoDoRecibo } from "../src/operations/ab-recibo.ts";
+import { ajusteDaPrioridade, ehSiteProprio, extrairSinais, type SinaisDoSite } from "./sinais-do-site.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
 //
@@ -563,6 +564,12 @@ export interface CrmLead {
    * conferência antes do convite). Ausentes nos outros produtos.
    */
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string };
+  /**
+   * Os sinais do site do lead (17/10/2026, server/sinais-do-site.ts): lidos sob demanda pela Ficha, com
+   * validade em disco. Cada um é `true`, `false` ou `null` (sem fonte). Ausente = o site ainda não foi
+   * lido (ou o lead não tem site próprio para ler); no lead sem site no cadastro vem só `semSite: true`.
+   */
+  sinais?: SinaisDoSite;
   /** Plus (15/10/2026): a oferta que o lead recebe e o que o catálogo diz dele. O site, quando há, vai em `links.site`. */
   plus?: { oferta: OfertaDoPlus; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] };
   /**
@@ -688,6 +695,8 @@ export interface ContextoDoCrm {
   ultimaFalha?: { em: string; erro: string };
   /** As conversas guardadas pelo observador, pela chave do número (conversa-do-lead.ts). */
   conversas?: Map<string, MensagemDaConversa[]>;
+  /** Os sinais do site já lidos, por id do lead, com o endereço lido (a leitura só vale para ele). */
+  sinaisDoSite?: ReadonlyMap<string, { url: string; sinais: SinaisDoSite }>;
 }
 
 /**
@@ -1645,6 +1654,8 @@ export interface EntradaDaPrioridade {
   porte?: PorteDoCnpj;
   /** Taxa de resposta dos convites do mesmo nicho na mesma oferta (0 a 1), só com amostra mínima. */
   taxaDoNicho?: number;
+  /** Os sinais do site já lidos (server/sinais-do-site.ts): só o que tem fonte pesa, e pouco. */
+  sinaisDoSite?: SinaisDoSite;
 }
 
 /** Nota média que se supõe para quem tem poucas avaliações, e quantas avaliações "valem" essa suposição. */
@@ -1675,6 +1686,9 @@ const TAXA_DO_TETO = 0.3;
  *   AMOSTRA_MINIMA_DO_NICHO convites (10 × taxa / 30%, teto 10); sem amostra, 5 (neutro: nem prêmio
  *   nem castigo por não saber).
  * - "Profissional que atende sozinho?" (marca do caçador do Iris, que é para clínica com equipe), -20.
+ * - Sinais do site (17/10/2026, só quando a Ficha já leu o site do lead; ajusteDaPrioridade): anúncio no ar
+ *   +4, sem agendamento online +2, agência já creditada no rodapé -4. Pouco de propósito: o site só é lido
+ *   sob demanda, e o sinal desempata, não decide.
  *
  * Arredondada e presa entre 0 e 100. O "não confirmado" continua indo depois de todo confirmado na
  * Hoje (montarHoje): a regra da trava de ritmo vem antes desta conta.
@@ -1692,7 +1706,7 @@ export function prioridadeDaTriagem(e: EntradaDaPrioridade): number {
   const solo = itens.some((s) => s.startsWith("profissional que atende sozinho"));
   const pontosDoNicho = e.taxaDoNicho === undefined ? 5 : 10 * Math.min(1, Math.max(0, e.taxaDoNicho / TAXA_DO_TETO));
   const total = pontosDaNota + pontosDoVolume + pontosDoContato + (e.temSite ? 10 : 0) + Math.min(15, sinais * 5)
-    + (e.porte ? 5 : 0) + pontosDoNicho - (solo ? 20 : 0);
+    + (e.porte ? 5 : 0) + pontosDoNicho - (solo ? 20 : 0) + ajusteDaPrioridade(e.sinaisDoSite).pontos;
   return Math.round(Math.min(100, Math.max(0, total)));
 }
 
@@ -1727,7 +1741,20 @@ function prioridadeDoLead(lead: CrmLead, taxas: Map<string, number>): number {
     temWhatsapp: Boolean(lead.links.whatsapp),
     ...(lead.porte ? { porte: lead.porte } : {}),
     ...(taxas.has(chaveDoNicho(lead)) ? { taxaDoNicho: taxas.get(chaveDoNicho(lead)) } : {}),
+    ...(lead.sinais ? { sinaisDoSite: lead.sinais } : {}),
   });
+}
+
+/**
+ * PURA. O endereço do site DO LEAD, para os sinais: `undefined` = não se sabe (no Site antes da venda o
+ * `links.site` é o demo, e um perfil de rede social no lugar do site também não diz nada do negócio);
+ * `null` = o cadastro não traz site; senão o endereço.
+ */
+export function siteProprioDoLead(lead: Pick<CrmLead, "produto" | "links">): string | null | undefined {
+  if (lead.produto === "site") return undefined;
+  const site = lead.links.site;
+  if (!site) return null;
+  return ehSiteProprio(site) ? site : undefined;
 }
 
 // ------------------------------------------------------------------ Hoje
@@ -2021,6 +2048,16 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   // nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a revisão) ou onde a
   // planilha já trazia uma, para a ficha não mostrar dois números.
   const taxas = taxasDeRespostaPorNicho(leads);
+  // Os sinais do site (17/10/2026) entram antes da Prioridade: só a leitura já guardada, que vale para o
+  // endereço de agora (se o site do lead mudou, a leitura velha não conta). Nada aqui chama a rede.
+  for (const lead of leads) {
+    const site = siteProprioDoLead(lead);
+    if (site === null) lead.sinais = extrairSinais({ url: null });
+    else if (site) {
+      const lido = contexto.sinaisDoSite?.get(lead.id);
+      if (lido && lido.url === site) lead.sinais = lido.sinais;
+    }
+  }
   for (const lead of leads) {
     if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto)) continue;
     if (lead.etapa !== "novo" && lead.triagem?.prioridade === undefined) continue;
@@ -2317,6 +2354,12 @@ export class CrmStore {
    */
   private readonly enviosRecentes = new Map<string, { em: number; resposta: Promise<RespostaDoRegistro> }>();
 
+  /**
+   * As leituras de sinais do site já feitas (server/sinais-do-site-leitor.ts), só do cache em memória:
+   * a visão nunca vai à rede por causa delas. Ligado pelo server.ts, só no operations.
+   */
+  sinaisDoSite?: () => ReadonlyMap<string, { url: string; sinais: SinaisDoSite }>;
+
   constructor(readonly config: ConfigDoCrm, private readonly fetcher: typeof fetch = fetch) {}
 
   private async segredo(): Promise<string | undefined> {
@@ -2383,6 +2426,7 @@ export class CrmStore {
       registroDisponivel,
       ...(ultimaFalha ? { ultimaFalha } : {}),
       ...(conversas ? { conversas } : {}),
+      ...(this.sinaisDoSite ? { sinaisDoSite: this.sinaisDoSite() } : {}),
     };
     let bruto = await this.lerRetrato();
     if (bruto === null) {

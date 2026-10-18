@@ -109,6 +109,7 @@ import {
 import { contarEscritasDaApi, criarContadorDeUso } from "./server/uso.ts";
 import { CrmStore, configDoCrm } from "./server/crm.ts";
 import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./server/copiloto.ts";
+import { criarLeitorDeSinais, type LeitorDeSinais } from "./server/sinais-do-site-leitor.ts";
 import { prepararAssistente, type Assistente } from "./server/assistente.ts";
 import { prepararConsultaAoHermes } from "./server/hermes-consulta.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
@@ -380,6 +381,15 @@ async function startServer() {
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
     const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
+    // Sinais do site de um lead (17/10/2026): lidos sob demanda pela Ficha (POST /crm/sinais), com cache
+    // em disco; a visão do CRM só usa o que já foi lido. SQUADONE_SINAIS_DO_SITE=false desliga.
+    let sinaisDoSite: LeitorDeSinais | undefined;
+    if ((process.env.SQUADONE_SINAIS_DO_SITE ?? "").trim() !== "false") {
+      sinaisDoSite = criarLeitorDeSinais({ dir: path.join(operationsDataDir, "sinais-do-site") });
+      await sinaisDoSite.iniciar();
+      const leitor = sinaisDoSite;
+      crm.sinaisDoSite = () => leitor.doCache();
+    }
     // Copiloto do PRUMO (fase 1, em sombra): sugere a próxima mensagem e a proposta na Ficha,
     // nunca envia. Só com SQUADONE_COPILOTO=true; provedor ilegível ou ausente vira log e null.
     const copiloto = await prepararCopiloto(process.env, {
@@ -449,6 +459,7 @@ async function startServer() {
       memoriaDaVenda,
       uso: usoDaCentral,
       assistente: assistenteDoProcesso,
+      ...(sinaisDoSite ? { sinaisDoSite } : {}),
     }));
 
     // O vendedor (16/10/2026): "Envie para X" no Telegram, seg–sex 08:00–17:30, um por vez, com a

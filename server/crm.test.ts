@@ -1245,3 +1245,41 @@ describe("CRM: retrato e registro", () => {
     assert.equal(JSON.parse(chamadas[0]).tipo, "proposta");
   });
 });
+
+describe("CRM: sinais do site (17/10/2026)", () => {
+  function comIris(extra: Record<string, string> = {}) {
+    const base = retrato();
+    const linhas = [
+      linhaPrumo("a", { Prioridade: "10", Sinais: "convênio", "Nota Google": "4,5 (80)", "Origem do WhatsApp": "link no site", "Encontrado em": dias(1), ...extra }),
+      linhaPrumo("b", { "Nota Google": "4,5 (80)", "Origem do WhatsApp": "link no site", "Encontrado em": dias(1), Site: "", ...extra }),
+      linhaPrumo("c", { "Nota Google": "4,5 (80)", "Origem do WhatsApp": "link no site", "Encontrado em": dias(1), Site: "https://www.instagram.com/perfil", ...extra }),
+    ];
+    base.fontes.iris = { planilha: "PRUMO — Fila de revisão", aba: "Clínicas", colunas: Object.keys(linhas[0]), linhas };
+    return base;
+  }
+  const sinais = { temAgencia: null, rodandoGoogleAds: true, rodandoMetaAds: null, semAgendamentoOnline: true, semSchema: null, blogParado: null, semSite: false } as const;
+
+  it("sem leitura guardada, o lead não tem sinais e a Prioridade é a de sempre; sem site no cadastro vem só semSite", () => {
+    const v = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS });
+    assert.equal(lead(v.leads, "iris:a").sinais, undefined);
+    assert.deepEqual(lead(v.leads, "iris:b").sinais, { temAgencia: null, rodandoGoogleAds: null, rodandoMetaAds: null, semAgendamentoOnline: null, semSchema: null, blogParado: null, semSite: true });
+    assert.equal(lead(v.leads, "iris:c").sinais, undefined, "perfil de rede social não é o site do negócio");
+  });
+
+  it("a leitura guardada entra no lead e soma à Prioridade (+4 anúncio, +2 sem agenda); outro endereço não vale", () => {
+    const sem = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS });
+    const site = lead(sem.leads, "iris:a").links.site!;
+    const guardados = new Map([["iris:a", { url: site, sinais: { ...sinais } }]]);
+    const com = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: guardados });
+    assert.deepEqual(lead(com.leads, "iris:a").sinais, sinais);
+    assert.equal(lead(com.leads, "iris:a").triagem!.prioridade, lead(sem.leads, "iris:a").triagem!.prioridade! + 6);
+    const velho = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: new Map([["iris:a", { url: "https://outro-site.example/", sinais: { ...sinais } }]]) });
+    assert.equal(lead(velho.leads, "iris:a").sinais, undefined);
+    assert.equal(lead(velho.leads, "iris:a").triagem!.prioridade, lead(sem.leads, "iris:a").triagem!.prioridade);
+  });
+
+  it("o Site antes da venda não recebe sinais: o link do cadastro dele é o demo", () => {
+    const v = montarCrm(retrato(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: new Map([["site:pronto", { url: "https://demo-pronto.vercel.app", sinais: { ...sinais } }]]) });
+    assert.equal(lead(v.leads, "site:pronto").sinais, undefined);
+  });
+});

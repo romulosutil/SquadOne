@@ -1,3 +1,5 @@
+import type { SinaisDoSite } from '../../server/sinais-do-site.ts'
+
 export type OperationalState = 'healthy' | 'syncing' | 'unavailable' | 'unknown'
 // Espelha server/operations.ts. 'syncthing' é opcional (aposentado em
 // 12/10/2026): só vem em `tools` se a configuração do Dell ainda tiver a entrada.
@@ -187,6 +189,8 @@ export interface CrmLead {
   demoPedidoEm?: string
   /** Caçadores do Iris e das estamparias (14/10/2026): Prioridade, sinais do site, nota do Google e de onde veio o WhatsApp. */
   triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string }
+  /** Os sinais do site do lead (17/10/2026, server/sinais-do-site.ts): cada um true, false ou null (sem fonte). Ausente = site ainda não lido. */
+  sinais?: SinaisDoSite
   /** Plus (15/10/2026): os leads do Catálogo de Negócios Maçônicos. A oferta é o fluxo que o lead recebe. */
   plus?: { oferta: 'site' | 'prumo' | 'iris' | 'estampa'; fixo: boolean; descricao: string; instagram?: string; tambem?: string[] }
   /** O que o Raio-X publicado achou (15/10/2026), na ordem de peso da página. Raio-X mais antigo não tem. */
