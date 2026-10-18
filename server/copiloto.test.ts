@@ -157,6 +157,35 @@ describe("copiloto: a cola", () => {
     }
   });
 
+  it("sinais do site: o prompt leva a observação e a cautela; sem sinais o hash é o de antes; sinal novo gera de novo", async () => {
+    const leads = [leadCrm()];
+    const { copiloto, provedor } = await montar({ leads });
+    const antes = await copiloto.sugerir("site", "ChIJabc");
+    assert.doesNotMatch(provedor.prompts[0], /sinaisDoSite|Sinais do site/);
+    // Sinais todos sem fonte (site que ainda não foi lido): nada muda, a sugestão guardada vale.
+    const semFonte = { temAgencia: null, rodandoGoogleAds: null, rodandoMetaAds: null, semAgendamentoOnline: null, semSchema: null, blogParado: null, semSite: null };
+    leads[0] = leadCrm({ sinais: semFonte });
+    assert.equal((await copiloto.sugerir("site", "ChIJabc")).hashDoDossie, antes.hashDoDossie);
+    assert.equal(provedor.prompts.length, 1);
+    // Com um sinal com fonte o dossiê muda: o modelo é chamado de novo, com a regra de cautela e sem telefone.
+    leads[0] = leadCrm({ sinais: { ...semFonte, rodandoGoogleAds: true, temAgencia: true, agencia: { nome: "Alfa 27 99999-1234", confianca: 0.9 } } });
+    const depois = await copiloto.sugerir("site", "ChIJabc");
+    assert.notEqual(depois.hashDoDossie, antes.hashDoDossie);
+    assert.equal(provedor.prompts.length, 2);
+    assert.match(provedor.prompts[1], /tag do Google Ads instalada/);
+    assert.match(provedor.prompts[1], /NÃO prova\s+gasto/);
+    assert.doesNotMatch(provedor.prompts[1], /99999/);
+  });
+
+  it("sinais do site: o gate de envio continua barrando a mensagem quebrada", async () => {
+    const ruim = JSON.stringify({ mensagem: "Oi [NOME], vi que o site tem a tag do Google Ads.", ofertas: [], proposta: { itens: [] } });
+    const lead = leadCrm({ sinais: { temAgencia: null, rodandoGoogleAds: true, rodandoMetaAds: null, semAgendamentoOnline: null, semSchema: null, blogParado: null, semSite: null } });
+    const { copiloto, provedor } = await montar({ leads: [lead], respostas: [{ ok: true, texto: ruim }] });
+    await assert.rejects(copiloto.sugerir("site", "ChIJabc"), (e: unknown) => e instanceof CopilotoFalhou && e.motivo === "gate_de_envio");
+    assert.equal(provedor.prompts.length, 1);
+    assert.equal(await copiloto.ler("site", "ChIJabc"), null);
+  });
+
   it("barradaPeloGate: mensagem boa passa, mensagem com marca ou frase de IA volta com os motivos", () => {
     assert.equal(barradaPeloGate("Oi, tudo bem? Posso te mandar o link para dar uma olhada? É sem compromisso."), null);
     const motivos = barradaPeloGate("Oi {NOME}, passando para ver.") ?? "";
