@@ -7,6 +7,8 @@ import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido } from
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
 import { lerConversaDoNumero } from "./conversa-do-lead.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
+import { lerRegistrosDoLeadQuente } from "./lead-quente-sombra.ts";
+import { resumoDoLeadQuente } from "./lead-quente.ts";
 import { criarMemoriaDaVenda, MAX_CHAVE, type ComoResolveu, type MemoriaDaVenda } from "./venda-do-dia.ts";
 import { MAX_CORPO_DO_BEACON, telaDoCorpo, type ContadorDeUso } from "./uso.ts";
 import { lerPedidoDeMensagem, PedidoDoAssistenteInvalido, TetoDoAssistente, type Assistente } from "./assistente.ts";
@@ -725,6 +727,16 @@ export function createOperationsRouter(options: {
     const eventos = await lerHistoricoDoVendedor(path.join(options.dataDir, "vendedor-historico.jsonl"));
     res.setHeader("Cache-Control", "no-store");
     res.json({ resumo: resumoDoVendedor(eventos, Date.now()), desde: eventos[0]?.em ?? null });
+  });
+
+  // A medida do agente do lead quente em sombra (17/10/2026): quantas decisões de cada tipo, os falsos
+  // positivos do classificador de `interesse` (os 👎 num "responder") e quanto o lead esperou de fato pela
+  // resposta humana. Só lê o JSONL; sem a sombra ligada (ou antes da primeira decisão) vem tudo zero.
+  router.get("/crm/lead-quente", async (_req, res) => {
+    const agora = Date.now();
+    const registros = await lerRegistrosDoLeadQuente(path.join(options.dataDir, "lead-quente-sombra"), agora);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ resumo: resumoDoLeadQuente(registros, agora), desde: registros[0]?.quando ?? null });
   });
 
   router.get("/crm/copiloto/sugestao", async (req, res) => {

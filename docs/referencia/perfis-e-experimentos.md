@@ -327,6 +327,66 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
     "[áudio de 27s que o sistema não ouviu: o conteúdo é DESCONHECIDO, não suponha que seja interesse]". O dossiê leva
     também o `papel` de cada mensagem do lead.
 
+## Agente que mantém o lead quente — fase de SOMBRA (17/10/2026; desligado, nada é enviado)
+
+Decisão do Rômulo em 17/10/2026: ele **continua** fazendo os primeiros contatos e mandando o primeiro link; um agente passa a **manter o
+lead quente depois que o link saiu e o lead escreve de novo**. Esta fase é só a decisão: o agente não envia nada. A Evolution na Mel só lê, o
+chip é o mesmo do Hermes e levou restrição de 24 h em 15/10 por rajada de primeiros contatos, então o envio é uma decisão à parte (abaixo).
+
+- **A decisão (PURA, `server/lead-quente.ts`)**: `decidirLeadQuente({ lead, mensagens, sugestao, agora, jaDecididas, toques })` devolve
+  `responder`, `escalar`, `calar` ou `aguardar` (a sugestão do copiloto ainda não saiu; nunca é gravado). Sem fetch, relógio, env nem disco.
+  O texto de um `responder` é **sempre o da sugestão do copiloto** (que já conferiu ids do cardápio, R$ e números do dossiê): o agente escolhe, não escreve.
+- **Chave de dedupe**: `${lead.id}|responder|${ultimaEntrada}`, a mesma da Próxima venda e do vendedor (uma decisão por mensagem nova do lead).
+- **Gate de `responder`** (todos juntos): lead em `contato` (proposta escala; novo/ganho/perdido calam), o lead escreveu **depois** do link
+  (`conversa.linkEm`; antes dele o passo é do Rômulo e o vendedor já avisa), o Rômulo **não** escreveu à mão depois do link nas últimas 6 h
+  (`SQUADONE_LEAD_QUENTE_CALAR_HORAS`; no JSONL da conversa toda `saida` é dele, e o próprio envio do link não conta), resposta classificada
+  `interesse` (nem `neutra`, `bot`, `negativa`, `exclusao`; `licenca` escala), mensagem curta (até 160 caracteres e 3 mensagens na rajada),
+  sem sinal negativo nas 3 últimas mensagens de gente, sugestão do copiloto presente, sem aviso dele, sem item de proposta, sem valor em dinheiro
+  no texto (`temValorEmDinheiro` e `precosProibidos`: nem o preço aberto do cardápio, preço é do Rômulo) e teto de toques.
+- **`escalar`** (motivos em `FRASE_DO_MOTIVO`): preço, proposta, fechar, ligação/pessoa, objeção, **áudio** (com ou sem transcrição),
+  irritação, sinal de recusa, recepção, licença, mensagem longa, lead já na proposta, resposta pronta com valor/fora do dossiê, sem sugestão depois
+  de 5 min, teto de toques. Os sinais são regex sobre o texto sem acento (`SINAIS`) e erram para o lado de escalar.
+- **`calar`**: sem novidade (última mensagem é nossa, só o robô falou, mensagem com mais de 24 h), etapa, já decidida, antes do link, Rômulo assumiu, recusa, robô, sem interesse dito.
+  Só os calar que são decisão (`romulo-assumiu`, `negativa`, `robo`, `sem-interesse`) vão para o JSONL (`CALAR_SEM_REGISTRO` lista os outros).
+- **Teto de toques** (`podeTocar`): no máximo **2 respostas do agente seguidas sem o Rômulo escrever**; a terceira escala. Para o
+  follow-up de quem **não** responde (fase de envio, ainda sem laço que o dispare): 1 depois do link e 1 depois do 3º dia, nunca dois toques
+  seguidos sem o lead no meio. **7 dias sem mensagem segue sendo Perdido** (`server/crm.ts`, sem mudança).
+- **A cola (`server/lead-quente-sombra.ts`)**: `SQUADONE_LEAD_QUENTE_SOMBRA=true` (desligada por padrão), **só no `operations`**, com o bot do
+  Telegram e o copiloto ligados (sem eles, log de erro e null; nunca no Easypanel). A cada minuto relê o CRM; para cada lead com mensagem
+  nova dele sem resposta nossa, decide, grava em `<SQUADONE_OPERATIONS_DATA_DIR>/lead-quente-sombra/AAAA-MM.jsonl` (600, pasta 700) e avisa o chat do
+  Rômulo: **"Sombra: eu teria respondido a X: <texto>"** ou **"Sombra: eu teria escalado X (pediu preço): assuma"**, com 👍 Concordo / 👎 Discordo.
+  Teto de **30 avisos/dia** (`SQUADONE_LEAD_QUENTE_TETO_DIA`): passado o teto a decisão é gravada com `semAviso: "teto"`. Das 22h às 7h o aviso
+  chega sem som. O registro leva a empresa, a chave, a ação, o motivo e o texto do agente; **nunca** telefone nem a mensagem do lead. O copiloto
+  é só LIDO (`prontas`, que nunca chama o modelo); quem gera é o copiloto automático.
+- **Nenhum código chama Evolution, `sendText` nem qualquer envio ao lead.** O único `enviarMensagem` é o aviso ao chat do próprio Rômulo, e
+  `server/lead-quente.test.ts` varre o código-fonte dos dois módulos (sem comentários) atrás de `sendText`, `evolution`, `wa.me` e afins.
+- **Medição** (`GET /api/operations/crm/lead-quente`, `resumoDoLeadQuente`, 30 dias): quantos `responder`/`escalar`/`calar` (e por motivo), avisos
+  e os cortados pelo teto; os votos do Rômulo; os **falsos positivos do classificador de `interesse`** (dos `responder` votados, quantos 👎;
+  sem voto não há taxa); e o **tempo entre a mensagem do lead e a resposta humana real** (a cola confere a conversa a cada 10 min por 3 dias e
+  grava `humano`), com a mediana separada para os `responder` (o quanto o agente teria encurtado a espera).
+- **Ligar** (não nesta entrega): `SQUADONE_LEAD_QUENTE_SOMBRA=true` no `operations.env` da Mel, com `SQUADONE_COPILOTO=true` e o bot já ligados, e
+  reiniciar a Central. Não há nada a instalar fora do deploy normal. Desligar: tirar a linha (ou `false`) e reiniciar; o JSONL fica.
+- **Como ler o resultado**: uma semana de sombra com pelo menos ~30 `responder` votados. Taxa de 👎 acima de ~10% nos `responder`, ou qualquer
+  `responder` que o Rômulo marque como "não podia ter ido", segura a fase de envio e vira ajuste do gate (`SINAIS`, limites) primeiro.
+
+### Decisão aberta: a fase de ENVIO (não implementar sem o Rômulo)
+
+Mandar a resposta de verdade **exige mudar o invariante "nunca envia ao lead"** (vendedor, copiloto, Assistente, Luna e Jev dizem o mesmo; a
+Evolution na Mel é só leitura) e abrir a escrita na Evolution num chip compartilhado com o Hermes. Antes disso o Rômulo precisa decidir:
+
+1. **Veto de 3 min no Telegram**: o aviso sai com o texto e um botão "Vetar"; passados 3 min sem veto, o agente envia (e o 👍/👎 vira o feedback). Sem resposta
+   do Telegram (caiu, madrugada) o padrão é **não enviar**.
+2. **O agente se identifica como assistente do Rômulo?** ("Sou o assistente do Rômulo…") ou fala como ele. Há o lado ético/de confiança (o lead acha que
+   fala com uma pessoa) e o de política do WhatsApp; sem decisão, nada é enviado. Se se identificar, o texto do copiloto precisa de uma abertura
+   fixa, fora do modelo.
+3. **Ritmo e restrição do número**: o envio do agente conta na trava de ritmo (`trava-de-ritmo.ts`) e na janela de expediente; resposta a quem acabou
+   de escrever é o caso de menor risco (conversa iniciada pelo lead), mas o teto de 2 respostas seguidas e o "Rômulo assumiu" precisam valer no envio real.
+   Em envio real a conversa passa a ter saídas do agente: a regra "toda saída é do Rômulo" muda, e o observador precisa marcar a origem (`origem`
+   já existe no JSONL; falta o agente escrever o dele).
+4. **Como mandar**: Evolution `sendText` com o número do lead vindo da Central, nunca do modelo; o envio fica num módulo à parte, sob flag própria
+   (`SQUADONE_LEAD_QUENTE_ENVIO`), nunca na mesma de sombra; `texto` registrado no JSONL; botão geral "Parar agente" no Telegram.
+5. **Finanças** nunca entram: o agente não lê nem cita nada do banco `financas.db`; nenhum valor em dinheiro numa resposta (já é o gate de hoje).
+
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 
 Pedido do Rômulo (já foi maçom e tem o catálogo do macons.org): os melhores leads num filtro próprio, "Plus", que podem ser de qualquer

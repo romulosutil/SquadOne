@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   criarMemoriaDeUpdates,
   dadosDoBotao,
+  dadosDoLeadQuente,
   IDADE_MAXIMA_DEMANDA_MIN,
   MAX_BYTES_AUDIO,
   MAX_DURACAO_AUDIO_S,
@@ -237,6 +238,16 @@ describe("botões de proposta (callback_query)", () => {
     const dados = dadosDoBotao("9f1c2a4e-1b2c-4d5e-8f90-a1b2c3d4e5f6", "aprovar");
     assert.ok(Buffer.byteLength(dados) <= 64);
     assert.equal(interpretarUpdate(toque(dados), PERMITIDOS).tipo, "botao");
+  });
+
+  it("👍/👎 do aviso do agente do lead quente (sombra) viram o voto, com o token", () => {
+    assert.deepEqual(interpretarUpdate(toque(dadosDoLeadQuente("a1b2c3d4e5f6", true)), PERMITIDOS), {
+      tipo: "leadQuente", updateId: 20, chatId: 111, mensagemId: 77, callbackId: "cb1", concorda: true, token: "a1b2c3d4e5f6",
+    });
+    assert.equal((interpretarUpdate(toque(dadosDoLeadQuente("a1b2c3d4e5f6", false)), PERMITIDOS) as any).concorda, false);
+    assert.ok(Buffer.byteLength(dadosDoLeadQuente("a1b2c3d4e5f6", true)) <= 64);
+    assert.equal(interpretarUpdate(toque("q:a1b2:x"), PERMITIDOS).tipo, "ignorar");
+    assert.equal(interpretarUpdate(toque("q:a1b2c3d4e5f6:c", { id: 222, type: "private" }), PERMITIDOS).tipo, "naoAutorizado");
   });
 
   it("chat fora da allowlist = naoAutorizado; grupo e dado estranho = ignorar", () => {

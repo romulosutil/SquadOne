@@ -192,6 +192,15 @@ grava e relê em diretório temporário; a leitura do teste do recibo por braço
 desde 17/10/2026, AC-06: como e por onde cada ação se resolveu (central, telegram, expirou), a anotação uma vez por ação + tipo no dia, os
 primeiros contatos das duas superfícies e a leitura do formato de 16/10; AC-21: os liberados do dia (dia novo zera, o formato sem a
 chave ainda lê, liberar duas vezes é uma),
+`server/lead-quente.test.ts` (17/10/2026, o agente do lead quente em SOMBRA, regras puras em tabela: a mensagem pendente e a chave
+(a mesma do vendedor), o gate de `responder`, cada `calar` (antes do link, Rômulo assumiu há 1 h e há 7 h, recusa, robô, neutra, etapa), cada
+motivo de `escalar` (preço, proposta, fechar, ligação, objeção, áudio, irritação, recusa, recepção, licença, mensagem longa, valor na
+resposta pronta, aviso do copiloto), esperar a sugestão por 5 min, o teto de toques e os follow-ups, o aviso sem valor nem a mensagem do lead,
+o resumo (falso positivo de `interesse`, mediana da resposta humana) e a varredura do código-fonte atrás de qualquer envio ao WhatsApp),
+`server/lead-quente-sombra.test.ts` (a cola com CRM, conversa, copiloto e Telegram dublês num diretório temporário: flag desligada não deixa
+rastro, só no operations com bot e copiloto, uma decisão por mensagem mesmo reiniciando, teto do dia que sobrevive a reinício, Telegram fora do
+ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700),
+`server/telegram-entrada.test.ts` (também o callback `q:<token>:c|d` do voto da sombra),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
 servidor e reforço local contando cada lead uma vez).

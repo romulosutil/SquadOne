@@ -85,6 +85,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/lead-quente.ts   (17/10/2026, SOMBRA) o agente que mantém o lead quente depois do link: decisão PURA responder|escalar|calar a cada mensagem nova do lead
+                          (gate estrito, teto de toques, texto só do copiloto, sem R$); NADA envia ao lead. Fase de envio = decisão aberta do Rômulo
+  server/lead-quente-sombra.ts  a cola (SQUADONE_LEAD_QUENTE_SOMBRA, desligada, só operations com bot e copiloto): JSONL 600 em lead-quente-sombra/,
+                          aviso "Eu teria respondido/escalado" no Telegram com 👍/👎 (callback q:), teto/dia, GET /api/operations/crm/lead-quente
   server/venda-do-dia.ts  (16/10/2026, OT-01) o "Enviei"/"Pular" do dia num arquivo só (venda-do-dia.json), dividido pela Próxima
                           venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP;
                           desde 17/10/2026 (AC-06) é a fonte única do dia: por onde cada ação se resolveu (central, telegram,
@@ -280,7 +284,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Agenda no Dell, avisos, lembretes | `acesso`, `dados`, `avisos`, `lembretes`, `vigia`, `sinal-de-vida` | `agenda-no-dell.md` |
 | Bot do Telegram | `telegram*`, `transcricao`, `financas/gasto-falado` | `telegram.md` |
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
-| Perfis, avaliação de turno, Luna, Jev, copiloto | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto` | `perfis-e-experimentos.md` |
+| Perfis, avaliação de turno, Luna, Jev, copiloto, lead quente | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto`, `lead-quente*` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
 | WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
@@ -331,6 +335,10 @@ padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em so
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
 a próxima mensagem e a proposta (desde 17/10/2026 no cartão do Assistente, não mais numa aba da Ficha), nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
+O agente que mantém o lead quente (17/10/2026, decisão do Rômulo: ele segue nos primeiros contatos e no primeiro link; o agente cuida do lead depois
+que o link saiu e o lead escreve) está só em **sombra** (`SQUADONE_LEAD_QUENTE_SOMBRA`, desligada, só `operations` com bot e copiloto): decide
+responder/escalar/calar, grava JSONL e avisa o Rômulo no Telegram; **nada é enviado ao lead**, e a fase de envio (veto de 3 min, o agente se
+identificar como assistente) é decisão aberta dele em `perfis-e-experimentos.md`.
 O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia e LIGADO
 na Mel às 13:40 de 17/10/2026, depois de ele ver funcionando numa instância-sombra: SQUADONE_ASSISTENTE=true e
 SQUADONE_ASSISTENTE_HERMES=true no operations.env, cópia anterior em operations.env.antes-do-assistente-20261017): server/assistente.ts (cola: fila serial, tetos, prazo de 4 min, JSONL 600),
