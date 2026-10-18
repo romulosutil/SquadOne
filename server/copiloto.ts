@@ -18,6 +18,17 @@ import type { CrmLead, CrmProduto, CrmVisao } from "../src/operations/types.ts";
 import type { MensagemParaODossie } from "../src/operations/copiloto.ts";
 import { arquivoDoMes, COTA_ESGOTADA, conferirCodex, diaLocal, executarCodex, type ExecutorDoCodex, type Logger } from "./luna-sombra.ts";
 import { gerarComRetry, MODEL, ModeloOcupado } from "./orchestrator.ts";
+import { conferirMensagem, resumoDosProblemas } from "./gate-de-envio.ts";
+
+/**
+ * O gate de pré-envio (server/gate-de-envio.ts) sobre a mensagem do modelo, em modo "bloquear": marca
+ * sem preencher, frase de texto de IA, tamanho, links e "R$" fora dos preços abertos. Devolve os
+ * motivos, ou null se a mensagem passa. Não confere nome nem destino: o modelo não escolhe nenhum dos dois.
+ */
+export function barradaPeloGate(mensagem: string): string | null {
+  const r = conferirMensagem(mensagem, { modo: "bloquear", tipo: "conversa" });
+  return r.bloqueia ? resumoDosProblemas(r.problemas) : null;
+}
 
 /**
  * Copiloto do PRUMO em SOMBRA (perfis-e-experimentos.md, "Copiloto do PRUMO"). Na Ficha de um
@@ -329,7 +340,8 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     if (guardadas) return guardadas;
     const mapa = new Map<string, RegistroDeSugestao>();
     for (const r of await lerRegistros(arquivoDoMes(deps.dir, agora()))) {
-      if (r.tipo === "sugestao" && r.sugestao) mapa.set(r.lead, r);
+      // Sugestão guardada antes do gate (ou que ele não deixaria passar hoje) não volta para a Ficha nem para a fila.
+      if (r.tipo === "sugestao" && r.sugestao && barradaPeloGate(r.sugestao.mensagem) === null) mapa.set(r.lead, r);
     }
     guardadas = mapa;
     return mapa;
@@ -410,7 +422,10 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
 
     const inicio = agora();
     const resposta = await deps.provedor.gerar(promptDoCopiloto(dossie));
-    const leitura = resposta.ok === true ? lerSaidaDoCopiloto(resposta.texto, dossie) : null;
+    const lida = resposta.ok === true ? lerSaidaDoCopiloto(resposta.texto, dossie) : null;
+    // O gate de pré-envio: a mensagem quebrada vira falha (com o motivo), e a Ficha não oferece "Copiar".
+    const barrada = lida && lida.ok === true ? barradaPeloGate(lida.sugestao.mensagem) : null;
+    const leitura = barrada !== null ? { ok: false as const, motivo: "gate_de_envio" as const, detalhe: barrada } : lida;
     const falha = resposta.ok === false
       ? { motivo: resposta.motivo as MotivoDaFalha, detalhe: resposta.detalhe }
       : leitura && leitura.ok === false ? { motivo: leitura.motivo as MotivoDaFalha, detalhe: leitura.detalhe } : null;

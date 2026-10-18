@@ -322,6 +322,8 @@ export type MotivoDaRecusa =
   | 'oferta_desconhecida'
   /** A mensagem leva um valor que não pode ir ao WhatsApp (sob proposta, ou fora da tabela). */
   | 'preco_proibido'
+  /** O gate de pré-envio (server/gate-de-envio.ts) barrou a mensagem: marca sem preencher, frase de IA, tamanho, links. */
+  | 'gate_de_envio'
 
 export type LeituraDoCopiloto =
   | { ok: true, sugestao: SugestaoDoCopiloto, avisos: string[] }
@@ -362,9 +364,12 @@ export const PRECOS_ABERTOS: string[] = [...new Set(CARDAPIO.filter((s) => !s.so
 
 const soDigitos = (p: string) => p.replace(/\D/g, '')
 
-/** Os valores da mensagem que não podem ir ao WhatsApp. Vazio = pode. */
-export function precosProibidos(mensagem: string): string[] {
-  const abertos = new Set(PRECOS_ABERTOS.map(soDigitos))
+/**
+ * Os valores da mensagem que não podem ir ao WhatsApp. Vazio = pode. `permitidos`: os "R$" que valem
+ * (o padrão são os abertos; o gate de envio, server/gate-de-envio.ts, passa a tabela inteira na proposta).
+ */
+export function precosProibidos(mensagem: string, permitidos: readonly string[] = PRECOS_ABERTOS): string[] {
+  const abertos = new Set(permitidos.map(soDigitos))
   const comCifrao = precosNoTexto(mensagem).filter((p) => !abertos.has(soDigitos(p)))
   // "2.400 reais", "1500 reais", "2 mil reais": valor sem o R$ também conta.
   const achados: string[] = mensagem.match(/\b\d{1,3}(?:\.\d{3})*(?:,\d+)?\s*(?:mil\s+)?reais\b/gi) ?? []
