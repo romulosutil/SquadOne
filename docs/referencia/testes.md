@@ -131,6 +131,9 @@ o corpo do registro; a pontuação só quando diferencia; o motivo curto do Conv
 `src/operations-proxima-venda.test.ts` (17/10/2026, AC-02: a contagem da fila do dia (`resumoDoDia`: total igual à soma da quebra por tipo,
 primeiros contatos prontos e quantos o ritmo ainda deixa hoje, 0 na pausa), `textoDosPrimeiros`, `filaDaTela` (um primeiro contato por vez,
 só no expediente e com ritmo livre; "Enviei" sai, "Pular" vai para o fim) e as resolvidas do dia no storage (outro dia e storage ilegível = vazio)),
+`src/operations-plano-do-dia.test.ts` (17/10/2026: o plano do dia da Hoje, `planoDoDia` (feitas, falta, janela de envio, urgente a 45 min,
+primeiros contatos fora da conta fora do expediente, próximo passo do gargalo com a fila vazia), `minutosAteFecharOExpediente` e
+`proximaAberturaDoExpediente`, `chamadaDaAcao` ("Envie para X, isto:") e o gargalo com os nomes de quem está parado),
 `src/operations-anotacao-de-envio.test.ts` (a anotação do toque na 2ª mensagem e no follow-up: qual link anota, o primeiro
 toque vale, storage que lança, poda quando o retrato confirma, anotados no fim do grupo da Hoje),
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;

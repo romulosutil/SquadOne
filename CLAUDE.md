@@ -175,7 +175,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           ganha o primário na Ficha e o passo na fila; o toque abre o wa.me com a proposta (itens do copiloto e preços
                           do cardápio, ou o texto base da colinha) e anota `proposta` com a data de hoje; "R$" fora do cardápio = sem botão
     por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue:
-                          na Hoje só o gargalo, `resumido`; os degraus em Números, OT-08)
+                          na Hoje o gargalo, quem está parado nele (nomes que abrem a Ficha) e a trilha dos degraus numa linha,
+                          `resumido`; as barras e a taxa esperada em Números, OT-08; 17/10/2026)
+    plano-do-dia.ts       PURO (17/10/2026): a Hoje abre dizendo o dia (feitas, falta, janela de envio até as 17h30 ou quando volta,
+                          urgente a 45 min) e, com a fila vazia, o próximo passo do gargalo; o cartão da Próxima venda chama
+                          "Envie para X, isto:" (`chamadaDaAcao`) com a mensagem sempre à vista, e `fraseDaAcao` virou o porquê
     fila-de-envio.ts      PURO: as marcas de toque e do "Vídeo enviado" (A/B do vídeo) no localStorage por 30 min; a folha
                           "Enviar um por um" saiu em 16/10/2026 (OT-01) e o passo do vídeo foi para a Próxima venda
     ab-recibo.ts          PURO (16/10/2026, OT-10): teste do follow-up para quem não manda recibo: Site enviado desde 17/10, metade

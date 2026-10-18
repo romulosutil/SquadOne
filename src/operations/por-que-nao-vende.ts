@@ -22,12 +22,30 @@ export interface DegrauDoFunil {
   referencia?: number
 }
 
+/** Quem está parado no degrau que mais perde: o nome e o lead que a Ficha abre. */
+export interface LeadParado {
+  id: string
+  empresa: string
+}
+
 export interface Gargalo {
   degrau: DegrauDoFunil['id']
   titulo: string
   texto: string
   acao: string
+  /**
+   * Os leads que travaram neste degrau (17/10/2026, "tem que ser funcional"): o diagnóstico sem nome
+   * dizia onde perde, não onde mexer. No máximo `MAX_PARADOS`, os que esperam há mais tempo primeiro.
+   */
+  parados: LeadParado[]
+  /** Quantos travaram de verdade (`parados` é o corte). 0 nos degraus sem lista (responderam: são centenas). */
+  totalParados: number
+  /** Para onde o botão leva quando não há um lead só para abrir (a comparação das mensagens). */
+  verEm: { rotulo: string; href: string }
 }
+
+/** A lista da Hoje cabe em um cartão de celular; o resto está na Ficha e em Números. */
+export const MAX_PARADOS = 4
 
 export interface DiagnosticoDeVenda {
   dias: number
@@ -41,7 +59,7 @@ const REFERENCIAS: Partial<Record<DegrauDoFunil['id'], number>> = {
   leram: 0.6, responderam: 0.15, interesse: 0.3, segunda: 1, proposta: 0.4, ganho: 0.25,
 }
 
-const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'>, (d: DegrauDoFunil, antes: DegrauDoFunil) => Omit<Gargalo, 'degrau'>> = {
+const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'>, (d: DegrauDoFunil, antes: DegrauDoFunil) => Pick<Gargalo, 'titulo' | 'texto' | 'acao'>> = {
   responderam: (d, a) => ({
     titulo: 'Pouca gente responde a primeira mensagem',
     texto: `${d.n} de ${a.n} responderam. O texto ou o público não estão puxando conversa.`,
@@ -99,6 +117,20 @@ export function diagnosticoDeVenda(leads: readonly CrmLead[], agora: number, dia
     return { id, rotulo, n, ...(anterior > 0 ? { taxa: n / anterior } : {}), ...(REFERENCIAS[id] !== undefined ? { referencia: REFERENCIAS[id] } : {}) }
   })
 
+  // Quem travou em cada degrau com lista: quem chegou nele e não passou ao seguinte. "Responderam"
+  // fica sem lista (são centenas de silêncios; o que se mexe ali é a mensagem, não um lead).
+  const naoChegou = (de: readonly CrmLead[], para: readonly CrmLead[]) => {
+    const chegaram = new Set(para.map((l) => l.id))
+    return de.filter((l) => !chegaram.has(l.id))
+  }
+  const parados: Partial<Record<DegrauDoFunil['id'], CrmLead[]>> = {
+    interesse: naoChegou(responderam, interesse),
+    segunda: naoChegou(interesse, segunda),
+    proposta: naoChegou(segunda, proposta),
+    ganho: naoChegou(proposta, ganho),
+  }
+  const maisAntigoPrimeiro = (a: CrmLead, b: CrmLead) => (Date.parse(a.marcos.enviado ?? '') || 0) - (Date.parse(b.marcos.enviado ?? '') || 0)
+
   // O gargalo: o degrau mais abaixo da referência, com pelo menos 3 na base (menos é sorte).
   let gargalo: Gargalo | null = null
   let pior = 1
@@ -109,7 +141,16 @@ export function diagnosticoDeVenda(leads: readonly CrmLead[], agora: number, dia
     const razao = d.taxa / d.referencia
     if (razao < pior) {
       pior = razao
-      gargalo = { degrau: d.id, ...TEXTO_DO_GARGALO[d.id as keyof typeof TEXTO_DO_GARGALO](d, antes) }
+      const lista = [...(parados[d.id] ?? [])].sort(maisAntigoPrimeiro)
+      gargalo = {
+        degrau: d.id,
+        ...TEXTO_DO_GARGALO[d.id as keyof typeof TEXTO_DO_GARGALO](d, antes),
+        parados: lista.slice(0, MAX_PARADOS).map((l) => ({ id: l.id, empresa: l.empresa })),
+        totalParados: lista.length,
+        verEm: d.id === 'responderam'
+          ? { rotulo: 'Comparar as mensagens', href: '/crm?ver=numeros' }
+          : { rotulo: 'Ver no Funil', href: '/crm?ver=funil' },
+      }
     }
   })
 

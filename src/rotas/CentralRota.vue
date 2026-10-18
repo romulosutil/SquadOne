@@ -22,6 +22,8 @@ import AgendaRota from './AgendaRota.vue'
 import Sheet from '../components/Sheet.vue'
 import EscritorioVivo from '../casca/EscritorioVivo.vue'
 import PrecisaDeVoce from '../casca/PrecisaDeVoce.vue'
+import PorQueNaoVende from '../operations/PorQueNaoVende.vue'
+import ProximaVenda from '../operations/ProximaVenda.vue'
 import FinSaude from '../operations/financas/FinSaude.vue'
 import FinVisao from '../operations/financas/FinVisao.vue'
 import { useAgentes } from '../agentes/estado'
@@ -294,6 +296,19 @@ const fontesDasFinancas = computed<FontesDasFaixas['financas']>(() => {
   return { estado: (leituraDasFinancas.value?.estado as EstadoDasFinancasLido | null) ?? null }
 })
 
+/**
+ * "Agora" (17/10/2026, "a Central está muito reativa"): com o retrato do CRM lido, a Central mostra o
+ * plano do dia, o passo da vez com a mensagem pronta e o porquê de não vender, e a faixa de Vendas
+ * (a mesma informação em uma linha) sai: duas vezes o mesmo passo na tela era ruído. Sem retrato, a
+ * faixa fica e diz "sem sinal de Vendas".
+ */
+const agoraNaCentral = computed(() => visaoDoCrm.value?.estado === 'ok')
+// Depois do "Enviei", o n8n refaz o retrato em uns 5 s: a Central relê duas vezes, como a Hoje fazia.
+const atrasos: number[] = []
+function agendarReleituraDoCrm() {
+  atrasos.push(window.setTimeout(() => void lerCrm(), 5000), window.setTimeout(() => void lerCrm(), 15000))
+}
+
 const faixas = computed<Faixa[]>(() =>
   faixasDaCentral(
     {
@@ -306,6 +321,8 @@ const faixas = computed<Faixa[]>(() =>
     agentes.value
   )
 )
+
+const faixasVisiveis = computed(() => (agoraNaCentral.value ? faixas.value.filter((f) => f.id !== 'vendas') : faixas.value))
 
 const folha = ref<'financas' | 'agenda' | null>(null)
 watch(folha, (aberta) => { if (aberta === 'financas') void lerVisaoFinanceira() })
@@ -343,6 +360,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.clearInterval(relogio)
   window.clearInterval(releitura)
+  atrasos.forEach((id) => window.clearTimeout(id))
 })
 </script>
 
@@ -369,6 +387,13 @@ onBeforeUnmount(() => {
       <PrecisaDeVoce :dell="dellLido" :pendencias="pendencias" />
     </section>
 
+    <!-- Agora: o que fazer, em ordem, sem esperar o Rômulo procurar (o plano do dia, o passo da vez
+         "Envie para X, isto:" e o porquê de não vender, com quem está parado). -->
+    <section v-if="agoraNaCentral" class="central__agora" aria-label="Agora">
+      <ProximaVenda :visao="visaoDoCrm" :erro="erroDoCrm" @registrado="agendarReleituraDoCrm" />
+      <PorQueNaoVende v-if="visaoDoCrm" :leads="visaoDoCrm.leads" :agora="agora" resumido />
+    </section>
+
     <!-- 2. O Escritório no centro. -->
     <EscritorioVivo
       :squads="squads"
@@ -387,7 +412,7 @@ onBeforeUnmount(() => {
     <!-- 3. As frentes, uma linha cada. -->
     <section class="central__faixas" aria-label="Frentes">
       <ul>
-        <li v-for="f in faixas" :key="f.id" class="central__faixa" :class="`is-${f.tom}`">
+        <li v-for="f in faixasVisiveis" :key="f.id" class="central__faixa" :class="`is-${f.tom}`">
           <component
             :is="f.folha ? 'button' : 'a'"
             class="central__faixa-alvo"
@@ -438,6 +463,9 @@ onBeforeUnmount(() => {
 .central__acoes { display: flex; align-items: center; gap: var(--esp-2); }
 
 .central__bloco { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+/* Agora: o passo da vez e o diagnóstico lado a lado a partir de 64 rem, empilhados antes disso. */
+.central__agora { display: grid; gap: var(--respiro-pilha); min-width: 0; }
+@media (min-width: 64rem) { .central__agora { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; } }
 .central__cabeca { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); }
 
 /* As faixas: zonas (fundo, sem borda; BP-R1) com a faixa do tom à esquerda. */
