@@ -20,6 +20,7 @@ import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type Registr
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
 import { pedeMaterial, textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
 import { useAssistente } from '../casca/assistente'
+import { ehSiteProprio, linhasDosSinais, type SinaisDoSite } from '../../server/sinais-do-site.ts'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
 // desfecho: ganhou, perdeu, proposta, com o desfazer de cada um; no Plus o envio e a resposta) e
@@ -349,6 +350,49 @@ async function lerConversa() {
   }
 }
 
+// ------------------------------------------------------------ sinais do site (17/10/2026)
+
+// O que o site do lead mostra (server/sinais-do-site.ts): anúncio no ar, agência, agendamento, blog. Lido
+// sob demanda AO ABRIR a Ficha de um lead aberto (POST /crm/sinais: no máximo 3 requisições ao site dele,
+// com cache de 7 dias em disco), nunca em lote. Só informa: nada daqui vai a lead. A seção mostra só o que
+// tem fonte; sinal sem fonte (`null`) não aparece, nem como "desconhecido".
+const sinaisLidos = ref<SinaisDoSite | null>(null)
+const lidoEmSinais = ref('')
+const estadoDosSinais = ref<'' | 'lendo' | 'inacessivel' | 'bloqueado' | 'falhou'>('')
+const sinaisDoLead = computed(() => sinaisLidos.value ?? props.lead.sinais ?? null)
+const linhasDeSinais = computed(() => linhasDosSinais(sinaisDoLead.value ?? undefined))
+// Há site próprio a ler: não é o demo do Site, nem perfil de rede social, e o lead ainda está no funil.
+const podeLerSinais = computed(() => aberto.value && props.lead.produto !== 'site' && Boolean(props.lead.links.site) && ehSiteProprio(props.lead.links.site ?? ''))
+const mostraSinais = computed(() => linhasDeSinais.value.length > 0 || estadoDosSinais.value !== '' || podeLerSinais.value)
+async function lerSinais(forcar = false) {
+  if (!podeLerSinais.value) return
+  const id = props.lead.id
+  estadoDosSinais.value = 'lendo'
+  try {
+    const r = await fetch('/api/operations/crm/sinais', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produto: props.lead.produto, id: props.lead.chave, forcar }),
+    })
+    const corpo = await r.json().catch(() => ({}))
+    if (props.lead.id !== id) return
+    if (r.status === 422) { estadoDosSinais.value = 'bloqueado'; return }
+    if (!r.ok) { estadoDosSinais.value = 'falhou'; return }
+    sinaisLidos.value = corpo.sinais ?? null
+    lidoEmSinais.value = corpo.lidoEm ?? ''
+    estadoDosSinais.value = corpo.estado === 'inacessivel' ? 'inacessivel' : ''
+  } catch {
+    if (props.lead.id === id) estadoDosSinais.value = 'falhou'
+  }
+}
+function recomecarSinais() {
+  sinaisLidos.value = null
+  lidoEmSinais.value = ''
+  estadoDosSinais.value = ''
+  // Já lido e guardado pela visão: não pede de novo ao abrir.
+  if (!props.lead.sinais) void lerSinais()
+}
+
 // Ctrl/Cmd/Shift/meio abrem a página numa aba nova, como os links da casca (casca/rota.ts).
 function verColinha(e: MouseEvent) {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
@@ -358,11 +402,13 @@ function verColinha(e: MouseEvent) {
 
 onMounted(async () => {
   void lerConversa()
+  recomecarSinais()
   await nextTick()
   titulo.value?.focus()
 })
 watch(() => props.lead.id, () => {
   void lerConversa()
+  recomecarSinais()
   abaDeVenda.value = abaInicial()
   nota.value = ''
   proximoTexto.value = ''
@@ -655,6 +701,24 @@ function irParaAnotar() {
         <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
         <p class="crm-muted">{{ conversaGuardada === false ? 'A conversa inteira aparece aqui a partir das próximas mensagens: o observador passou a guardar em 16/10/2026.' : conversaErro || '' }}</p>
       </template>
+    </section>
+
+    <!-- Sinais do site (17/10/2026): seção por título e linha (BP-FICHA), uma linha por sinal COM fonte;
+         o que não se pôde ler não aparece. Só informa; a leitura é deste lead, ao abrir a Ficha. -->
+    <section v-if="mostraSinais" class="crm-ficha__secao" aria-labelledby="crm-ficha-sinais">
+      <h3 id="crm-ficha-sinais">Sinais do site</h3>
+      <p v-if="estadoDosSinais === 'lendo'" class="crm-muted" role="status">Lendo a página inicial do site…</p>
+      <ul v-if="linhasDeSinais.length" class="crm-ficha__ofertas" aria-label="O que o site mostra">
+        <li v-for="l in linhasDeSinais" :key="l.rotulo"><strong>{{ l.rotulo }}</strong><span>{{ l.motivo }}</span></li>
+      </ul>
+      <p v-else-if="estadoDosSinais === '' && sinaisDoLead" class="crm-muted">A página inicial não deu nada a afirmar (ela é montada no navegador).</p>
+      <p v-if="estadoDosSinais === 'inacessivel'" class="crm-muted" role="status">Não consegui ler o site: fora do ar ou bloqueou a leitura.</p>
+      <p v-else-if="estadoDosSinais === 'bloqueado'" class="crm-muted" role="status">A Central não lê esse endereço (rede que não é pública).</p>
+      <p v-else-if="estadoDosSinais === 'falhou'" class="crm-muted" role="status">Não deu para ler o site agora.</p>
+      <p v-if="podeLerSinais && estadoDosSinais !== 'lendo'" class="crm-muted">
+        {{ lidoEmSinais ? `Lido ${quandoFoi(lidoEmSinais)}. ` : '' }}Só a página inicial e o mapa do site; nada é enviado a ninguém.
+        <button type="button" class="crm-mais" aria-label="Atualizar os sinais do site" @click="lerSinais(true)">Atualizar</button>
+      </p>
     </section>
 
     <!-- Como vender (16/10/2026): oferta e roteiro numa seção com abas; o copiloto, que era a terceira,
