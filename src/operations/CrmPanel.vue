@@ -466,6 +466,7 @@ function abrirColinha() {
           v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" :agora="agora"
           :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
           @abrir="abrirFicha" @liberar-lote="liberarVarios" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
+          @sinais-lidos="carregar()"
         />
         <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
       </template>
