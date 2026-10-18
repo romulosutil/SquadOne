@@ -57,7 +57,7 @@ e o que segura e o que perde cliente. Por quê: os pontos abertos e o resto em d
 fechados (`<details>`, sem JS), com o "X de 18" e a calculadora em "Como fizemos". O que
 fazer: a demonstração, o Encontrado com preço e o botão para o WhatsApp do PRUMO (no
 celular, também numa barra fixa). O preço do Respondido só na conversa. Medição sem cookie
-preparada e desligada (URL_EVENTOS vazia no JS da página).
+ativa, sem cookies ou identificação de visitantes.
 
 Versão 5 (14/10/2026): o Raio-X aprovado do piloto CDL (prumo, `04-venda/piloto-cdl/gerar.py`, no ar em
 prumo-piloto-cdl.vercel.app/raio-x). Este arquivo junta os dados; o desenho e a trava de qualidade são os do
@@ -1347,18 +1347,18 @@ html.com-js .barra-fixa.visivel{transition:transform .32s cubic-bezier(.2,.8,.2,
 """
 
 # O único JS da página fora da calculadora: a barra fixa do celular (aparece quando o "O que fazer"
-# entra na tela) e a medição sem cookie, preparada e desligada. Sem JS, a barra não aparece e o
-# botão do fim continua lá; com URL_EVENTOS vazia, nada é enviado a ninguém.
+# entra na tela) e a medição sem cookie. Sem JS, a barra não aparece e o
+# botão do fim continua lá. A coleta conta eventos sem identificar visitantes.
 JS_PAGINA = """(function(){
-// Fica vazia até existir o webhook de eventos no n8n do Dell. Vazia, nada sai desta página.
-const URL_EVENTOS = '';
-// Só o nome do evento, o caminho e a hora: nada de cookie, localStorage ou identificador.
-function evento(e){if(!URL_EVENTOS||!navigator.sendBeacon)return;
-try{navigator.sendBeacon(URL_EVENTOS,JSON.stringify({e:e,p:location.pathname,t:Date.now()}))}catch(_){}}
+// Medição ativa: a recepção pública persiste e o n8n lê as contagens.
+const URL_EVENTOS = 'https://aladdin-prumo-automacoes.jicnzg.easypanel.host/eventos';
+// A referência é aleatória por evento: não identifica nem acompanha o visitante.
+function evento(e){if(!URL_EVENTOS)return;
+try{const corpo=JSON.stringify({e:e,p:'/raio-x',t:Date.now(),id:crypto.randomUUID()});if(!navigator.sendBeacon||!navigator.sendBeacon(URL_EVENTOS,corpo))fetch(URL_EVENTOS,{method:'POST',body:corpo,keepalive:true,credentials:'omit'}).catch(function(){})}catch(_){}}
 document.documentElement.classList.add('com-js');
 addEventListener('load',function(){evento('raiox-aberto')});
 document.addEventListener('click',function(ev){
-const a=ev.target&&ev.target.closest?ev.target.closest('[data-evento]'):null;if(a)evento(a.getAttribute('data-evento'))});
+const a=ev.target&&ev.target.closest?ev.target.closest('a[href],[data-evento]'):null;if(!a)return;const nome=a.getAttribute('data-evento')||((a.href||'').includes('docs.google.com/forms/')?'raiox-mapa':(a.href||'').startsWith('https://wa.me/')?'raiox-whatsapp':'');if(nome)evento(nome)});
 const ato=document.getElementById('o-que-fazer'),barra=document.querySelector('.barra-fixa');
 if(!ato||!('IntersectionObserver' in window))return;
 const olho=new IntersectionObserver(function(itens){
@@ -2781,7 +2781,7 @@ def testar() -> int:
             self.assertIn(f'href="{html.escape(esperado)}"', h)
             self.assertNotIn("<Ltda>", h)  # o nome vai codificado no link e escapado no texto
             self.assertEqual(h.count(html.escape(esperado)), 1)  # a lista dos serviços; a barra do celular vai ao Mapa
-            for servico in ("anúncios", "redes sociais", "whatsapp que responde"):
+            for servico in ("anúncios", "redes sociais", "produtos digitais"):
                 resp = f"Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de {servico}."
                 self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
             for velho in ("5527997780954", "27997780954", "99778-0954", "997780954"):
@@ -2795,7 +2795,7 @@ def testar() -> int:
             for velho in ("R$ 990", "Encontrado", "O caminho do cliente", "Montamos uma demonstração", "data-ato="):
                 self.assertNotIn(velho, h)
 
-        def test_barra_fixa_e_medicao_desligada_sem_cookie(self):
+        def test_barra_fixa_e_medicao_ativa_sem_cookie(self):
             h = self.h
             self.assertIn('<div class="barra-fixa">', h)
             self.assertLess(h.index("</main>"), h.index('<div class="barra-fixa">'))
@@ -2803,12 +2803,12 @@ def testar() -> int:
             self.assertIn("html.com-js body{padding-bottom:88px}", h)  # não cobre o fim da página
             self.assertIn("@media (max-width:719.98px)", h)
             js = JS_PAGINA
-            self.assertIn("const URL_EVENTOS = '';", js)
-            self.assertIn("if(!URL_EVENTOS||!navigator.sendBeacon)return;", js)
+            self.assertIn("https://aladdin-prumo-automacoes.jicnzg.easypanel.host/eventos", js)
+            self.assertIn("if(!navigator.sendBeacon||!navigator.sendBeacon", js)
             for ev in ("raiox-aberto", "raiox-o-que-fazer"):
                 self.assertIn(f"'{ev}'", js)
             self.assertIn("IntersectionObserver", js)
-            self.assertIn("{e:e,p:location.pathname,t:Date.now()}", js)
+            self.assertIn("{e:e,p:'/raio-x',t:Date.now(),id:crypto.randomUUID()}", js)
             codigo = re.sub(r"//[^\n]*", "", js)  # o comentário diz o que não se faz; o código não faz
             for proibido in ("cookie", "localStorage", "sessionStorage", "indexedDB"):
                 self.assertNotIn(proibido, codigo)

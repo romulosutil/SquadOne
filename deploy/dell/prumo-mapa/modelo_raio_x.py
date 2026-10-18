@@ -264,15 +264,19 @@ def css_da_pagina(css: str) -> str:
 def js_da_pagina(rx, doc: str) -> str:
     """O JS do Raio-X sem comentários; no Mapa, os eventos levam o nome do Mapa."""
     js = re.sub(r"^//.*\n", "", rx.JS_PAGINA, flags=re.M)
+    js = js.replace("const URL_EVENTOS = '';", "const URL_EVENTOS = 'https://aladdin-prumo-automacoes.jicnzg.easypanel.host/eventos';")
+    js = js.replace("const a=ev.target&&ev.target.closest?ev.target.closest('[data-evento]'):null;if(a)evento(a.getAttribute('data-evento'))});", "const a=ev.target&&ev.target.closest?ev.target.closest('a[href],[data-evento]'):null;if(!a)return;const nome=a.getAttribute('data-evento')||((a.href||'').includes('docs.google.com/forms/')?'raiox-mapa':(a.href||'').startsWith('https://wa.me/')?'raiox-whatsapp':'');if(nome)evento(nome)});")
+    js = js.replace('function evento(e){if(!URL_EVENTOS||!navigator.sendBeacon)return;\ntry{navigator.sendBeacon(URL_EVENTOS,JSON.stringify({e:e,p:location.pathname,t:Date.now()}))}catch(_){}}', "function evento(e){if(!URL_EVENTOS)return;\ntry{const corpo=JSON.stringify({e:e,p:location.pathname,t:Date.now(),id:crypto.randomUUID()});if(!navigator.sendBeacon||!navigator.sendBeacon(URL_EVENTOS,corpo))fetch(URL_EVENTOS,{method:'POST',body:corpo,keepalive:true,credentials:'omit'}).catch(function(){})}catch(_){}}")
+    js = js.replace("p:location.pathname", "p:'/" + ("mapa" if doc == "mapa" else "raio-x") + "'")
     if doc == "mapa":
-        js = js.replace("evento('raiox-", "evento('mapa-")
+        js = js.replace("'raiox-mapa'", "'mapa-formulario'").replace("'raiox-", "'mapa-")
     return js
 
 
 def pagina(titulo: str, descricao: str, corpo: list[str], barra: tuple[str, str], rx, cp, doc: str,
            cabeca: str = "", corpo_attr: str = "") -> str:
     """O esqueleto comum: cabeça, fonte embutida, o corpo, a barra fixa do celular e o JS do Raio-X
-    (a barra aparece quando o "O que fazer" chega na tela; medição sem cookie, desligada)."""
+    (a barra aparece quando o "O que fazer" chega na tela; medição ativa, sem cookies)."""
     return "\n".join([
         '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1">',

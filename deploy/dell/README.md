@@ -1,5 +1,39 @@
 # Central de Operações no Dell
 
+## PRUMO: medição e Fonte com Luna (18/10/2026)
+
+O site consulta uma fila pública persistente no serviço Easypanel
+`aladdin/prumo-automacoes`, nunca expõe o n8n ou o Hermes. O workflow
+`PRUMO · Fonte com IA (Luna do Hermes)` (`yNLwUy5bdEmC4Qss`) consulta a fila a cada
+5 s e chama a rota autenticada `/fonte` do `luna-workflows:8766`. O modelo é
+`gpt-6-luna-900k`, sem pesquisa, escrita ou memória entre perguntas. As fichas não
+autorizadas são removidas do prompt; fontes, responsável e revisão são conferidos
+no servidor. Credenciais de cliente fixam empresa e perfil no servidor.
+
+`PRUMO · Medição de eventos` (`qA5R9UXZj4UgIjFi`) atualiza a lista de origens dos
+sites publicados e o retrato de contagens a cada minuto. Os dois workflows não
+salvam dados de execução. Instalador idempotente: `claude-ops/prumo-publico.py`.
+Tokens e IDs das credenciais ficam em `~/.config/claude-ops/prumo-publico-*` (600).
+
+Painel privado:
+https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/prumo/metricas
+(`prumo-metricas.service`, loopback 8767; Tailscale Serve). Filtros, total e CSV
+usam contagens reais; eventos não representam visitantes únicos ou vendas.
+
+Base pública fictícia em `prumo-fonte/bases/vale-norte-demo.json`, instalada em
+`~/.local/share/prumo-fonte/bases/`. Cliente real usa base aprovada e
+`prumo-fonte-cliente.py --base empresa.json --perfil vendedor --dias 90`; código
+privado só em arquivo 600. Nunca versionar regras ou acessos reais de clientes.
+Guia completo, limites, retenção e validação: repositório PRUMO,
+`automacao-publica/README.md`.
+
+Após o push, reinstalar `luna_workflows.py`, `fonte_luna.py`, `prumo-publico.py`,
+`prumo-fonte-cliente.py`, `prumo-metricas.py`, a base de exemplo, `raio-x` e
+`prumo-mapa/modelo_raio_x.py`, conforme `instalados.json`. Recarregar o systemd,
+reiniciar `luna-workflows` e `prumo-metricas`; executar o instalador dos workflows.
+Testes: `fonte_luna.test.py`, `luna_workflows.test.py`,
+`workflow_confiabilidade.test.py` e `raio-x --testar`. Sem envio de mensagens.
+
 O serviço usa o build do clone Git `~/SquadOne` e escuta apenas em
 `127.0.0.1:9120`. Até 28/09/2026 usava a réplica `~/Pessoal-dev/SquadOne`, que
 congelou com o PC; o `.env` (o build lê `VITE_GOOGLE_CLIENT_ID`, e o

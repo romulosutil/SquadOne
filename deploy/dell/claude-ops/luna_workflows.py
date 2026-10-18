@@ -58,8 +58,8 @@ def ambiente():
     return {k: v for k, v in os.environ.items() if k in permitidas}
 
 
-def executar(args, prazo=35):
-    with subprocess.Popen([BIN, *args], cwd=PASTA, env=ambiente(), stdin=subprocess.DEVNULL,
+def executar(args, prazo=35, pasta=None):
+    with subprocess.Popen([BIN, *args], cwd=pasta or PASTA, env=ambiente(), stdin=subprocess.DEVNULL,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True) as p:
         try:
             saida, erro = p.communicate(timeout=prazo)
@@ -73,14 +73,15 @@ def executar(args, prazo=35):
         return saida
 
 
-def limpar_sessoes():
-    tabela = executar(['sessions', 'list', '--workspace', str(PASTA), '--limit', '200'])
+def limpar_sessoes(pasta=None):
+    pasta = pasta or PASTA
+    tabela = executar(['sessions', 'list', '--workspace', str(pasta), '--limit', '200'], pasta=pasta)
     for linha in tabela.splitlines():
         cols = re.split(r'\s{2,}', linha.strip())
         if len(cols) >= 4 and re.fullmatch(r'\d{8}_\d{6}_[a-f0-9]+', cols[-1]):
             nome = cols[-3].rstrip('….')
-            if len(nome) >= 8 and PASTA.name.startswith(nome):
-                executar(['sessions', 'delete', '--yes', cols[-1]])
+            if len(nome) >= 8 and pasta.name.startswith(nome):
+                executar(['sessions', 'delete', '--yes', cols[-1]], pasta=pasta)
 
 
 def inferir(dado):
@@ -142,17 +143,23 @@ class Servidor(BaseHTTPRequestHandler):
         rede = ipaddress.ip_network(os.environ.get('LUNA_REDE_N8N', '172.23.0.0/16'))
         if not (ip.is_loopback or ip in rede) or not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + segredo):
             return self.responder(403, {'erro': 'Acesso negado'})
-        if self.path != '/inferir':
+        if self.path not in ['/inferir', '/fonte']:
             return self.responder(404, {'erro': 'Rota inexistente'})
         try:
             tamanho = int(self.headers.get('Content-Length', '0'))
             if not 0 < tamanho <= 70000:
                 raise ValueError('Tamanho inválido')
-            dado = validar_pedido(json.loads(self.rfile.read(tamanho)))
+            dado = json.loads(self.rfile.read(tamanho))
+            if self.path == '/inferir':
+                validar_pedido(dado)
         except (ValueError, OSError):
             return self.responder(400, {'erro': 'Pedido inválido'})
         try:
-            resposta = inferir(dado)
+            if self.path == '/fonte':
+                from fonte_luna import responder
+                resposta = responder(dado)
+            else:
+                resposta = inferir(dado)
         except Exception:
             return self.responder(503, {'erro': 'Luna indisponível; a busca não foi concluída'})
         self.responder(200, resposta)

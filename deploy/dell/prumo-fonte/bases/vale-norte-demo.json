@@ -1,0 +1,209 @@
+{
+  "id": "vale-norte-demo",
+  "nome": "Vale Norte (empresa fictícia)",
+  "exemplo": true,
+  "fichas": [
+    {
+      "id": "desconto",
+      "assunto": "Alçada de desconto e prazo",
+      "dono": "Elaine",
+      "revisada": "2026-10-01",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Até 5% de desconto, vendedor ou balcão decide, com pagamento em até 28 dias. Acima de 5% até 8%, só em pedido ACIMA de R$ 3.000, pagamento até 28 dias e motivo registrado. Em pedido de R$ 3.000 ou menos, desconto acima de 5% vai para Antônio. Acima de 8% ou prazo acima de 28 dias, Antônio decide. Peça os dados do caso que faltarem; não presuma aprovação."
+    },
+    {
+      "id": "preco",
+      "assunto": "Tabela de preço oficial",
+      "dono": "Elaine",
+      "revisada": "2026-10-05",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Uma tabela oficial para loja, balcão e vendedor externo. Elaine revisa toda segunda. Preços por unidade: [{\"cod\": \"HID-0134\", \"nome\": \"Registro de gaveta 3/4\\\"\", \"un\": \"unidade\", \"preco\": 3.72}, {\"cod\": \"HID-0210\", \"nome\": \"Tubo PVC soldável 25 mm (barra de 6 m)\", \"un\": \"barra\", \"preco\": 21.9}, {\"cod\": \"HID-0211\", \"nome\": \"Tubo PVC soldável 32 mm (barra de 6 m)\", \"un\": \"barra\", \"preco\": 34.5}, {\"cod\": \"HID-0240\", \"nome\": \"Tubo PVC esgoto 100 mm (barra de 6 m)\", \"un\": \"barra\", \"preco\": 62.8}, {\"cod\": \"HID-0305\", \"nome\": \"Joelho 90° soldável 25 mm\", \"un\": \"unidade\", \"preco\": 0.89}, {\"cod\": \"HID-0306\", \"nome\": \"Tê soldável 25 mm\", \"un\": \"unidade\", \"preco\": 1.15}, {\"cod\": \"HID-0320\", \"nome\": \"Luva soldável 25 mm\", \"un\": \"unidade\", \"preco\": 0.62}, {\"cod\": \"HID-0410\", \"nome\": \"Adesivo para PVC 175 g\", \"un\": \"unidade\", \"preco\": 14.9}, {\"cod\": \"HID-0415\", \"nome\": \"Fita veda-rosca 18 mm x 25 m\", \"un\": \"unidade\", \"preco\": 5.4}, {\"cod\": \"HID-0502\", \"nome\": \"Caixa d’água de polietileno 500 L\", \"un\": \"unidade\", \"preco\": 389}, {\"cod\": \"HID-0503\", \"nome\": \"Caixa d’água de polietileno 1.000 L\", \"un\": \"unidade\", \"preco\": 529}, {\"cod\": \"HID-0610\", \"nome\": \"Torneira de jardim 1/2\\\"\", \"un\": \"unidade\", \"preco\": 18.7}, {\"cod\": \"HID-0720\", \"nome\": \"Caixa sifonada 150 mm\", \"un\": \"unidade\", \"preco\": 27.4}, {\"cod\": \"CON-0101\", \"nome\": \"Cimento CP II 50 kg\", \"un\": \"saco\", \"preco\": 36.9}, {\"cod\": \"CON-0110\", \"nome\": \"Argamassa AC-I 20 kg\", \"un\": \"saco\", \"preco\": 16.8}, {\"cod\": \"CON-0115\", \"nome\": \"Argamassa AC-III 20 kg\", \"un\": \"saco\", \"preco\": 39.9}, {\"cod\": \"CON-0120\", \"nome\": \"Cal hidratada 20 kg\", \"un\": \"saco\", \"preco\": 14.5}, {\"cod\": \"CON-0201\", \"nome\": \"Areia média lavada\", \"un\": \"m³\", \"preco\": 135}, {\"cod\": \"CON-0202\", \"nome\": \"Brita 1\", \"un\": \"m³\", \"preco\": 148}, {\"cod\": \"CON-0301\", \"nome\": \"Bloco de concreto 14x19x39\", \"un\": \"unidade\", \"preco\": 3.95}, {\"cod\": \"CON-0305\", \"nome\": \"Tijolo cerâmico 8 furos\", \"un\": \"milheiro\", \"preco\": 890}, {\"cod\": \"CON-0410\", \"nome\": \"Vergalhão CA-50 10 mm (barra de 12 m)\", \"un\": \"barra\", \"preco\": 52.9}, {\"cod\": \"CON-0501\", \"nome\": \"Telha de fibrocimento 2,44 x 1,10 m, 6 mm\", \"un\": \"unidade\", \"preco\": 64.9}, {\"cod\": \"CON-0610\", \"nome\": \"Rejunte flexível 1 kg\", \"un\": \"unidade\", \"preco\": 9.8}]. Não há estoque nem prazo de fornecedor na base. Item ausente: consultar Elaine."
+    },
+    {
+      "id": "vencido",
+      "assunto": "Entrega para cliente com título vencido",
+      "dono": "Marlene",
+      "revisada": "2026-09-28",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Até 15 dias de atraso E até R$ 2.000 em aberto: Wesley libera e avisa Marlene no mesmo dia. De 16 a 30 dias OU acima de R$ 2.000: Marlene decide em até 2 horas úteis. Mais de 30 dias: não libera, só após pagamento ou acordo assinado com Marlene. Se faltar dias ou valor, peça. Esta consulta não libera entrega em sistema."
+    },
+    {
+      "id": "credito",
+      "assunto": "Crédito para cliente novo",
+      "dono": "Marlene",
+      "revisada": "2026-09-28",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Cliente novo: Marlene aprova até R$ 5.000 após análise em até 1 dia útil. Exige CNPJ há mais de 1 ano, sem restrição e 2 referências comerciais. Acima de R$ 5.000, Antônio decide com análise pronta. CNPJ com menos de 1 ano ou restrição compra à vista; após 3 pedidos pagos em dia, Marlene revê. Primeiro pedido pode sair à vista. Esta consulta não realiza análise nem concede crédito."
+    },
+    {
+      "id": "compras",
+      "assunto": "Aprovação de compra",
+      "dono": "Elaine",
+      "revisada": "2026-10-01",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Até R$ 1.500 inclusive: Elaine compra direto, sem cotação. Acima de R$ 1.500 até R$ 5.000 inclusive: 3 cotações e aprovação da Elaine. Acima de R$ 5.000: 3 cotações, sugestão da Elaine e aprovação do Antônio. Curva A é reposta às terças; fora disso só com estoque abaixo do mínimo. Esta consulta não faz compra."
+    },
+    {
+      "id": "cobranca",
+      "assunto": "Régua de cobrança",
+      "dono": "Marlene",
+      "revisada": "2026-09-28",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Política escrita: D-3 lembrete com boleto por WhatsApp; D+1 mensagem com segunda via; D+5 ligação de Marlene; D+15 bloquear pedidos a prazo; D+30 aviso formal de protesto por carta e e-mail; D+45 protesto em cartório. Acordos com Marlene. São passos da política, esta consulta NÃO confirma que algum envio, bloqueio ou protesto ocorreu. Entrega segue a regra de título vencido."
+    },
+    {
+      "id": "frete",
+      "assunto": "Frete e prazo de entrega",
+      "dono": "Wesley",
+      "revisada": "2026-09-30",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Grande Vitória (Serra, Vitória, Vila Velha e Cariacica): grátis a partir de R$ 1.500 inclusive, abaixo R$ 60 por entrega. Fora da Grande Vitória: R$ 4 por km rodado ida e volta, mínimo R$ 150; Wesley confirma a rota e o valor. Até 16h: próximo dia útil; depois das 16h: segundo dia útil, segunda a sexta. Isentar fora da regra só com Antônio. Distâncias não estão cadastradas."
+    },
+    {
+      "id": "troca",
+      "assunto": "Troca e garantia",
+      "dono": "Wesley",
+      "revisada": "2026-09-30",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Sem defeito: até 30 dias, com nota, sem uso e na embalagem. Não troca material cortado sob medida nem saco aberto. Defeito: registrar foto; item até R$ 300 com estoque troca na hora. Acima de R$ 300, Elaine aciona fabricante e laudo sai em até 15 dias. Exceções com Antônio. Valor e estoque precisam ser confirmados."
+    },
+    {
+      "id": "horario",
+      "assunto": "Horários",
+      "dono": "Wesley",
+      "revisada": "2026-09-15",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Loja segunda a sexta 7h às 18h, sábado 7h às 12h. CD segunda a sexta 7h às 17h, retirada até 16h30. Financeiro segunda a sexta 8h às 17h. Domingo e feriado fechado."
+    },
+    {
+      "id": "quem",
+      "assunto": "Quem faz o quê",
+      "dono": "Antônio",
+      "revisada": "2026-10-01",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Antônio: exceções, desconto acima de 8%, prazo acima de 28 dias, compra e crédito acima de R$ 5.000. Elaine: compras, preços, descontos e garantia de fabricante. Marlene: financeiro, cobrança, crédito até R$ 5.000 e certificado. Wesley: expedição, rotas, frete e troca. Elaine e Marlene cobrem uma à outra. Conferente-líder cobre Wesley. Férias fictícias de Marlene: 03 a 13/11/2026; Elaine cobre cobrança, crédito e entrega; Wesley fica com certificado. Sem Elaine, Marlene consulta a tabela e não altera sem ela."
+    },
+    {
+      "id": "certificado",
+      "assunto": "Certificado digital",
+      "dono": "Marlene",
+      "revisada": "2026-09-28",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "Marlene e Wesley têm acesso em cofre de senhas separado. Senha nunca fica na Fonte, nem para o dono. Validade fictícia 14/03/2027; Marlene começa renovar 30 dias antes. Na ausência dela Wesley emite."
+    },
+    {
+      "id": "pagamento",
+      "assunto": "Formas de pagamento",
+      "dono": "Marlene",
+      "revisada": "2026-09-28",
+      "perfis": [
+        "vendedor",
+        "balcao",
+        "compras",
+        "financeiro",
+        "expedicao",
+        "dono"
+      ],
+      "texto": "PIX, dinheiro e débito à vista. Cartão até 3x sem juros a partir de R$ 600; abaixo só 1x. De 4x a 6x, juros da maquininha: taxa numérica não está na base, não inventar. Boleto em 28 dias só com crédito aprovado."
+    },
+    {
+      "id": "carteira",
+      "assunto": "Carteira em aberto",
+      "dono": "Marlene",
+      "revisada": "2026-10-05",
+      "perfis": [
+        "financeiro",
+        "dono"
+      ],
+      "texto": "Dado FICTÍCIO da demonstração de 05/10/2026: R$ 143.000 em aberto há mais de 60 dias, 12 clientes, 5 no passo D+45 de protesto. Não são dados atuais de empresa real."
+    },
+    {
+      "id": "custos",
+      "assunto": "Custos e margens da tabela fictícia",
+      "dono": "Elaine",
+      "revisada": "2026-10-05",
+      "perfis": [
+        "dono",
+        "compras"
+      ],
+      "texto": "Margem média fictícia 24%. Custos por unidade: [{\"cod\": \"HID-0134\", \"nome\": \"Registro de gaveta 3/4\\\"\", \"preco\": 3.72, \"custo\": 2.71}, {\"cod\": \"HID-0210\", \"nome\": \"Tubo PVC soldável 25 mm (barra de 6 m)\", \"preco\": 21.9, \"custo\": 16.2}, {\"cod\": \"HID-0211\", \"nome\": \"Tubo PVC soldável 32 mm (barra de 6 m)\", \"preco\": 34.5, \"custo\": 25.6}, {\"cod\": \"HID-0240\", \"nome\": \"Tubo PVC esgoto 100 mm (barra de 6 m)\", \"preco\": 62.8, \"custo\": 47.1}, {\"cod\": \"HID-0305\", \"nome\": \"Joelho 90° soldável 25 mm\", \"preco\": 0.89, \"custo\": 0.52}, {\"cod\": \"HID-0306\", \"nome\": \"Tê soldável 25 mm\", \"preco\": 1.15, \"custo\": 0.7}, {\"cod\": \"HID-0320\", \"nome\": \"Luva soldável 25 mm\", \"preco\": 0.62, \"custo\": 0.36}, {\"cod\": \"HID-0410\", \"nome\": \"Adesivo para PVC 175 g\", \"preco\": 14.9, \"custo\": 10.3}, {\"cod\": \"HID-0415\", \"nome\": \"Fita veda-rosca 18 mm x 25 m\", \"preco\": 5.4, \"custo\": 3.1}, {\"cod\": \"HID-0502\", \"nome\": \"Caixa d’água de polietileno 500 L\", \"preco\": 389, \"custo\": 298}, {\"cod\": \"HID-0503\", \"nome\": \"Caixa d’água de polietileno 1.000 L\", \"preco\": 529, \"custo\": 405}, {\"cod\": \"HID-0610\", \"nome\": \"Torneira de jardim 1/2\\\"\", \"preco\": 18.7, \"custo\": 12.4}, {\"cod\": \"HID-0720\", \"nome\": \"Caixa sifonada 150 mm\", \"preco\": 27.4, \"custo\": 19.1}, {\"cod\": \"CON-0101\", \"nome\": \"Cimento CP II 50 kg\", \"preco\": 36.9, \"custo\": 31.2}, {\"cod\": \"CON-0110\", \"nome\": \"Argamassa AC-I 20 kg\", \"preco\": 16.8, \"custo\": 12.4}, {\"cod\": \"CON-0115\", \"nome\": \"Argamassa AC-III 20 kg\", \"preco\": 39.9, \"custo\": 29.8}, {\"cod\": \"CON-0120\", \"nome\": \"Cal hidratada 20 kg\", \"preco\": 14.5, \"custo\": 10.9}, {\"cod\": \"CON-0201\", \"nome\": \"Areia média lavada\", \"preco\": 135, \"custo\": 98}, {\"cod\": \"CON-0202\", \"nome\": \"Brita 1\", \"preco\": 148, \"custo\": 109}, {\"cod\": \"CON-0301\", \"nome\": \"Bloco de concreto 14x19x39\", \"preco\": 3.95, \"custo\": 2.9}, {\"cod\": \"CON-0305\", \"nome\": \"Tijolo cerâmico 8 furos\", \"preco\": 890, \"custo\": 680}, {\"cod\": \"CON-0410\", \"nome\": \"Vergalhão CA-50 10 mm (barra de 12 m)\", \"preco\": 52.9, \"custo\": 43.5}, {\"cod\": \"CON-0501\", \"nome\": \"Telha de fibrocimento 2,44 x 1,10 m, 6 mm\", \"preco\": 64.9, \"custo\": 49.8}, {\"cod\": \"CON-0610\", \"nome\": \"Rejunte flexível 1 kg\", \"preco\": 9.8, \"custo\": 6.3}]. Margem = (preço-custo)/preço. Não confundir com markup."
+    }
+  ]
+}

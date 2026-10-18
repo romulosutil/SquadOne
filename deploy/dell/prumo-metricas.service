@@ -1,0 +1,14 @@
+[Unit]
+Description=Medição privada do PRUMO
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/share/claude-ops/prumo-metricas.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
