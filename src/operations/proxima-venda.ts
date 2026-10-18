@@ -29,6 +29,7 @@ import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { Guardador } from './fila-de-envio'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
+import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
@@ -142,11 +143,16 @@ export function linhaDaConversa(lead: Pick<CrmLead, 'conversa' | 'etapa'>, agora
       ? 'A Central não tem esta conversa guardada: confira no WhatsApp o que já saiu antes de mandar.'
       : undefined
   }
-  const quem = c.ultima.direcao === 'entrada' ? 'ele' : 'você'
+  const quem = c.ultima.direcao === 'saida' ? 'você'
+    : c.ultima.papel === 'robo' ? 'a resposta automática' : c.ultima.papel === 'recepcao' ? 'a recepção' : 'ele'
   const quando = agora === undefined ? '' : `, ${haQuanto(agora - Date.parse(c.ultima.em))}`
-  const texto = c.ultima.trecho ? `: “${c.ultima.trecho}”` : ' (texto não guardado)'
+  // O áudio que ninguém ouviu é dito assim, e não como "[áudio]" entre aspas, que parecia lido (17/10/2026).
+  const texto = c.ultima.trecho ? `: “${textoParaATela(c.ultima.trecho)}”` : ' (texto não guardado)'
   return `Última mensagem: ${quem}${quando}${texto}`
 }
+
+/** A última mensagem da conversa guardada é nossa: o cartão não pode falar do "sim" dele como se fosse a vez dele. */
+const jaRespondeu = (lead: Pick<CrmLead, 'conversa'>) => lead.conversa?.ultima.direcao === 'saida'
 
 /** O "o que achou?" vale de 20 h a 72 h depois do link: antes é cobrança, depois esfriou (é follow-up). */
 export const JANELA_DO_DEPOIS_DO_LINK = { deMs: 20 * 3600_000, ateMs: 72 * 3600_000 } as const
@@ -207,7 +213,7 @@ function acaoMandarProposta(lead: CrmLead): AcaoDeVenda | null {
     tipo: 'mandar-proposta',
     titulo: fraseDaAcao('mandar-proposta', lead),
     contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
-    porque: lead.resposta?.trecho ? `Depois do link ele escreveu: "${lead.resposta.trecho}".` : 'Ele gostou depois do link.',
+    porque: lead.resposta?.trecho ? `Depois do link ele escreveu: "${textoParaATela(lead.resposta.trecho)}".` : 'Ele gostou depois do link.',
     tatica: tatica('mandar-proposta', lead),
     rascunho: proposta.texto,
     link: { rotulo: 'Mandar a proposta', url: proposta.url },
@@ -239,7 +245,7 @@ function acaoDeDesfecho(lead: CrmLead): AcaoDeVenda | null {
     tipo: 'desfecho',
     titulo: fraseDaAcao('desfecho', lead),
     contexto: [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · '),
-    porque: lead.resposta?.trecho ? `Ele escreveu: "${lead.resposta.trecho}".` : 'A resposta dele foi classificada como recusa.',
+    porque: lead.resposta?.trecho ? `Ele escreveu: "${textoParaATela(lead.resposta.trecho)}".` : 'A resposta dele foi classificada como recusa.',
     tatica: tatica('desfecho', lead),
     ...(agradecer ? { rascunho: agradecer } : {}),
     ...(url ? { link: { rotulo: 'Agradecer no WhatsApp', url } } : {}),
@@ -307,6 +313,12 @@ export function textoDoLink(url: string): string | null {
 function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
   switch (tipo) {
     case 'responder':
+      if (lead.resposta?.tipo === 'licenca') {
+        return jaRespondeu(lead)
+          ? 'Você já respondeu, mas o que ele deixou mandar ainda não saiu. Mande só isso, curto e sem preço; depois do material, pergunte o que achou.'
+          : 'Ele deixou mandar, não disse que quer comprar: mande o que ofereceu, curto e sem preço. Depois do material, pergunte o que achou.'
+      }
+      if (lead.resposta?.tipo === 'interesse' && jaRespondeu(lead)) return 'Você já respondeu, mas o que ele pediu ainda não saiu: mande agora; depois, pergunte o que achou em vez de esperar.'
       if (lead.resposta?.tipo === 'interesse') return 'Ele disse sim: mande agora. Cada hora de espera esfria o "quero ver"; depois do link, pergunte o que achou em vez de esperar.'
       if (lead.resposta?.tipo === 'neutra') return 'Resposta aberta: responda curto, tire a dúvida e devolva uma pergunta de sim ou não que leve ao "quero ver".'
       return 'Responda no mesmo dia, curto, e termine com uma pergunta que ele consiga responder com uma palavra.'
@@ -346,12 +358,23 @@ function oQueMandarNoSim(lead: Pick<CrmLead, 'produto' | 'links' | 'demoApagadoE
  * Com a leitura do copiloto (recepção, robô), quem está do outro lado manda na frase: o passo deixa de
  * ser o da esteira e passa a ser chegar a quem decide.
  */
-export function fraseDaAcao(tipo: TipoDeVenda, lead: Pick<CrmLead, 'empresa' | 'produto' | 'links' | 'resposta' | 'reenvioDoRobo' | 'demoApagadoEm'>, momento?: Pick<MomentoDaVenda, 'quem'>): string {
+export function fraseDaAcao(tipo: TipoDeVenda, lead: Pick<CrmLead, 'empresa' | 'produto' | 'links' | 'resposta' | 'reenvioDoRobo' | 'demoApagadoEm'> & Partial<Pick<CrmLead, 'conversa'>>, momento?: Pick<MomentoDaVenda, 'quem'>): string {
   const nome = lead.empresa
   const deQuem = momento && COM_COPILOTO.has(tipo) ? TITULO_DE_QUEM[momento.quem]?.(nome) : undefined
   if (deQuem) return deQuem
   switch (tipo) {
-    case 'responder': return lead.resposta?.tipo === 'interesse' ? `${nome} disse sim: ${oQueMandarNoSim(lead)}` : `Responda a ${nome}`
+    case 'responder': {
+      // 17/10/2026 (a Baobá): com a última mensagem nossa, nunca "disse sim"; e a licença ("pode enviar
+      // sim" a "posso mandar o vídeo?") não é sim a comprar: o passo é só mandar o que foi autorizado.
+      const tipoDaResposta = lead.resposta?.tipo
+      if (jaRespondeu(lead)) {
+        if (tipoDaResposta === 'licenca') return `Você já respondeu a ${nome}; falta mandar o que ele autorizou`
+        if (tipoDaResposta === 'interesse') return `Você já respondeu a ${nome}; falta: ${oQueMandarNoSim(lead)}`
+        return `Você já respondeu a ${nome}: confira a conversa antes de escrever de novo`
+      }
+      if (tipoDaResposta === 'licenca') return `Mande para ${nome} o que ele autorizou`
+      return tipoDaResposta === 'interesse' ? `${nome} disse sim: ${oQueMandarNoSim(lead)}` : `Responda a ${nome}`
+    }
     case 'mandar-proposta': return `${nome} gostou: mande a proposta`
     case 'combinado': return `Combinado com ${nome}`
     case 'depois-do-link': return `Pergunte a ${nome} o que achou`
@@ -434,7 +457,8 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
     ...(link ? { link } : {}),
     ...(anota ? { anota } : {}),
     primeiroContato,
-    quente: (tipo === 'responder' && lead.resposta?.tipo === 'interesse') || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
+    // A licença nova também é quente (pedeMaterial): fura o aviso aberto do vendedor como o "quero ver".
+    quente: (tipo === 'responder' && pedeMaterial(lead.resposta)) || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
   }
 }
 
@@ -781,7 +805,8 @@ export function anotacoesAMao(
   if (lead.etapa !== 'contato') return []
   const emConversa = SINAIS_DE_CONVERSA.has(lead.sinal)
   if (emConversa) {
-    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || lead.resposta?.tipo === 'interesse')
+    // A licença (17/10/2026) também: o material que ele deixou mandar é a 2ª mensagem.
+    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || pedeMaterial(lead.resposta))
     return noPasso || comFalha ? ['segunda_enviada'] : []
   }
   return lead.followupHoje || Boolean(lead.links.followup) || comFalha ? ['followup_enviado'] : []

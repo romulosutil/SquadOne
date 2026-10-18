@@ -1,0 +1,31 @@
+{
+  "_sobre": "Tabela ÚNICA do papel pela marca no texto (17/10/2026): observador.test.py (RE_ROBO/RE_RECEPCAO) e src/operations-marcadores-da-conversa.test.ts (papelDaMensagem) leem daqui; null = gente.",
+  "casos": [
+    ["*[Bruna]* Olá, qual o nome do paciente?", "recepcao"],
+    ["  *[Recepção Clínica]* bom dia", "recepcao"],
+    ["*[Patricia Adriano]* CLaro, pode enviar sim.", "recepcao"],
+    ["*[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]* no limite", "recepcao"],
+    ["*[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]* longo demais", null],
+    ["*[]* vazio", null],
+    ["*[Bruna\nSilva]* quebra de linha", null],
+    ["*Bruna* oi", null],
+    ["oi *[Patricia]* aqui", null],
+    ["[Atendimento] Digite 1 para agendar", "robo"],
+    ["[Atendimento Automático] Olá!", "robo"],
+    ["  [atendimento automático] fora do horário", "robo"],
+    ["[ Bot ] Em breve retornaremos", "robo"],
+    ["[Bot] Em breve retornaremos", "robo"],
+    ["[BOT da Loja] menu", "robo"],
+    ["[Bot-Clínica] menu", "robo"],
+    ["[Botafogo] jogo hoje", null],
+    ["[Botão] x", null],
+    ["[Atendimentos] x", null],
+    ["[Atendimento sem fecho", null],
+    ["[Bot\nquebra] x", null],
+    ["Atendimento: 8h às 18h", null],
+    ["Claro, pode enviar sim", null],
+    ["[áudio 27s] não, obrigado", null],
+    ["[imagem] cardápio", null],
+    ["", null]
+  ]
+}

@@ -25,7 +25,7 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
       <a v-if="resumido" class="nao-vende__mais" href="/crm?ver=numeros">Ver os números</a>
     </div>
     <!-- Funcional (17/10/2026): o diagnóstico traz os nomes de quem travou e o botão que abre o primeiro,
-         em vez de só dizer onde o funil perde. Na Hoje a trilha dos degraus cabe numa linha que quebra. -->
+         em vez de só dizer onde o funil perde. Na Central a trilha dos degraus cabe numa linha que quebra. -->
     <div v-if="d.gargalo" class="nao-vende__gargalo" role="note">
       <strong>{{ d.gargalo.titulo }}</strong>
       <p>{{ d.gargalo.texto }}</p>
@@ -73,12 +73,15 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
 .nao-vende h2 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
 .nao-vende p { margin: 0; }
 .nao-vende__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
-.nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--negativo); border-radius: var(--raio-controle); background: var(--erro-fundo); }
+/* Gargalo calmo (17/10/2026): fundo neutro, a faixa e o título no --negativo. Com o bloco inteiro em
+   --erro-fundo o cartão gritava (no escuro era um vinho), e é um diagnóstico para ler, não uma falha. */
+.nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4) var(--esp-3) calc(var(--esp-4) + var(--faixa)); border-radius: var(--raio-controle); background: var(--superficie-2); box-shadow: inset var(--faixa) 0 0 var(--negativo); }
+.nao-vende__gargalo > strong { color: var(--negativo); }
 .nao-vende__parados-titulo { margin-top: var(--esp-1); font-weight: var(--peso-medio); }
 .nao-vende__parados { display: flex; flex-wrap: wrap; gap: 0 var(--esp-4); margin: 0; padding: 0; list-style: none; }
 .nao-vende__parados a { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); overflow-wrap: anywhere; }
 .nao-vende__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin-top: var(--esp-1); }
-/* A trilha da Hoje: os degraus numa linha que quebra, o gargalo no fundo de erro. A barra e a taxa de
+/* A trilha da Central: os degraus numa linha que quebra, o gargalo no fundo de erro. A barra e a taxa de
    referência ficam em Números. */
 .nao-vende__trilha { display: flex; flex-wrap: wrap; gap: var(--esp-1) var(--esp-2); margin: 0; padding: 0; list-style: none; font-size: var(--tam-apoio); }
 .nao-vende__trilha li { padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); background: var(--superficie-2); font-variant-numeric: tabular-nums; }

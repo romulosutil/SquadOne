@@ -21,8 +21,14 @@ import {
   rotearLocal,
   semValores,
   TEXTO_GUARDADO_DE_FINANCAS,
+  cartaoDaSugestao,
+  sugestaoParaOModelo,
+  type SugestaoLida,
 } from './operations/assistente.ts'
 import { TRABALHADORES } from './office/trabalhadores.ts'
+import { textoDaProposta } from './operations/copiloto.ts'
+import { pareceFinancas } from '../server/financas/parece-financas.ts'
+import type { CartaoDoAssistente } from './operations/assistente-contrato.ts'
 
 const VISAO = { leads: [{ produto: 'site' as const, id: 'ChIJkulniski', empresa: 'Kulniski Advocacia' }] }
 
@@ -270,5 +276,88 @@ describe('mesesParaPodar: 90 dias', () => {
     // 17/10/2026: junho acabou em 30/06 (109 dias), julho em 31/07 (78 dias).
     assert.deepEqual(mesesParaPodar(arquivos, new Date('2026-10-17T12:00:00Z')), ['2026-06.jsonl'])
     assert.deepEqual(mesesParaPodar(arquivos, new Date('2026-11-05T12:00:00Z')), ['2026-06.jsonl', '2026-07.jsonl'])
+  })
+})
+
+// ------------------------------------------------------------------ fase 2: a sugestão do copiloto
+
+const SUGESTAO: SugestaoLida = {
+  quando: '2026-10-17T13:41:00.000Z',
+  hashDoDossie: 'ab12cd34ef56ab12cd34ef56ab12cd34',
+  avisos: ['Confira antes de mandar: 297 não aparece no dossiê.'],
+  sugestao: {
+    mensagem: 'Oi! O Encontrado sai por R$ 297 e eu te mando o passo a passo. Me chama no (16) 98100-0093.',
+    porque: 'Ele perguntou o preço.',
+    ofertas: [{ id: 'encontrado', porque: 'sem Google' }],
+    proposta: { itens: [{ id: 'encontrado', porque: 'o primeiro passo' }, { id: 'respondido', porque: 'depois' }], observacao: 'Fechou 1.200 no total?' },
+    faltaSaber: ['Quem decide'],
+    momento: { quem: 'decisor', leitura: 'É o dono.', passo: 'Mandar a proposta.' },
+  },
+}
+
+describe('sugestaoParaOModelo: a sugestão vai ao Gemini sem preço nem telefone', () => {
+  const saida = sugestaoParaOModelo(SUGESTAO)
+  const texto = JSON.stringify(saida)
+  it('itens só pelo nome; nenhum R$, valor com cara de preço nem telefone', () => {
+    assert.doesNotMatch(texto, /R\$|297|1\.200|98100|\d{8,}/)
+    assert.deepEqual((saida.proposta as { itens: string[] }).itens.length, 2)
+    assert.ok((saida.proposta as { itens: string[] }).itens.every((n) => !/\d/.test(n)))
+  })
+  it('leva o momento, o porquê e o aviso do cartão, e a hora intacta', () => {
+    assert.equal(saida.quemResponde, 'decisor')
+    assert.equal(saida.porque, 'Ele perguntou o preço.')
+    assert.equal(saida.quando, SUGESTAO.quando)
+    assert.match(String(saida.cartao), /cartão na tela/)
+  })
+  it('o rascunho do cartão, montado na tela, tem o preço do cardápio (que o modelo nunca viu)', () => {
+    assert.match(textoDaProposta('Kulniski', SUGESTAO.sugestao), /Investimento: R\$/)
+  })
+})
+
+describe('cartaoDaSugestao: o servidor cria, só com a referência', () => {
+  const ref = { produto: 'site', id: 'site:ChIJkulniski', empresa: 'Kulniski Advocacia', hashDoDossie: SUGESTAO.hashDoDossie }
+  const outro: CartaoDoAssistente = { id: 'c0', tipo: 'pedido_ao_time', estado: 'proposto', dados: { demanda: 'x', modo: 'auto' } }
+  const casos: Array<[string, readonly CartaoDoAssistente[], typeof ref, boolean]> = [
+    ['primeiro cartão', [], ref, true],
+    ['ao lado de outro cartão', [outro], ref, true],
+    ['resposta já no máximo', [outro, outro, outro], ref, false],
+    ['hash torto', [], { ...ref, hashDoDossie: 'não é hash' }, false],
+  ]
+  for (const [nome, ja, r, cria] of casos) {
+    it(nome, () => {
+      const c = cartaoDaSugestao(r, ja, 'novo-id', 3)
+      assert.equal(c !== null, cria)
+      if (c) assert.deepEqual(c, { id: 'novo-id', tipo: 'sugestao_do_copiloto', estado: 'proposto', dados: ref })
+    })
+  }
+  it('um por lead por resposta', () => {
+    const primeiro = cartaoDaSugestao(ref, [], 'a', 3)!
+    assert.equal(cartaoDaSugestao(ref, [primeiro], 'b', 3), null)
+    assert.notEqual(cartaoDaSugestao({ ...ref, id: 'site:ChIJoutro' }, [primeiro], 'b', 3), null)
+  })
+  it('o cartão não leva texto da sugestão nem preço', () => {
+    assert.doesNotMatch(JSON.stringify(cartaoDaSugestao(ref, [], 'a', 3)), /R\$|mensagem|Encontrado/)
+  })
+})
+
+describe('fase 2: prompt e fontes com o copiloto', () => {
+  const base = { pagina: 'ficha', agoraLocal: 'sexta-feira, 17/10/2026, 14:05', hermes: false }
+  it('com o copiloto ligado, o prompt manda ler a sugestão antes e não repetir; sem ele, nem cita', () => {
+    assert.match(promptDoRoteador({ ...base, copiloto: true }), /ler_sugestao_do_copiloto/)
+    assert.doesNotMatch(promptDoRoteador(base), /ler_sugestao_do_copiloto/)
+  })
+  it('a leitura do copiloto vira "copiloto das HH:MM" no fuso de SP', () => {
+    assert.deepEqual(fontesDaResposta([{ tipo: 'copiloto', quando: SUGESTAO.quando }]), [{ rotulo: 'copiloto das 10:41' }])
+  })
+})
+
+describe('sugestaoParaOModelo: preço sem "R$" também sai (revisão de 17/10/2026)', () => {
+  const comMensagem = (mensagem: string): SugestaoLida => ({ ...SUGESTAO, avisos: [], sugestao: { ...SUGESTAO.sugestao, mensagem, proposta: { itens: [] } } })
+  for (const m of ['O Encontrado sai a 297, te mando hoje.', 'O Encontrado (297) resolve.', 'São 297 à vista, ou 3 de 99.', 'Encontrado: 297.', 'valor: 297', '297 e pronto']) {
+    it(JSON.stringify(m), () => assert.doesNotMatch(JSON.stringify(sugestaoParaOModelo(comMensagem(m))), /297|99/))
+  }
+  it('uma sugestão sem dinheiro não parece finanças: chega ao pacote do Hermes', () => {
+    const limpa = comMensagem('Oi! Posso te mostrar como fica no Google?')
+    assert.equal(pareceFinancas(JSON.stringify(sugestaoParaOModelo({ ...limpa, sugestao: { ...limpa.sugestao, porque: 'Ela pediu para ver.' } }))), false)
   })
 })

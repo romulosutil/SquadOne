@@ -583,3 +583,84 @@ describe("não há caminho daqui até uma escrita", () => {
     }
   });
 });
+
+// Fase 2 (17/10/2026): o copiloto da Ficha no painel. A leitura só LÊ a sugestão guardada; o cartão
+// nasce da cola (não do modelo) e leva só a referência: nem o texto da sugestão nem R$ de proposta
+// chegam ao Gemini com preço ou ao JSONL do Assistente.
+describe("fase 2: a sugestão do copiloto no painel", () => {
+  const HASH = "ab12cd34ef56ab12cd34ef56ab12cd34";
+  const SUGESTAO = {
+    quando: "2026-10-17T13:41:00.000Z",
+    hashDoDossie: HASH,
+    avisos: ["Confira antes de mandar: 297 não aparece no dossiê."],
+    sugestao: {
+      mensagem: "Oi! O Encontrado sai por R$ 297, te mando o passo a passo hoje.",
+      porque: "Ela perguntou o preço.",
+      ofertas: [{ id: "encontrado" as const, porque: "sem Google" }],
+      proposta: { itens: [{ id: "encontrado" as const, porque: "o primeiro passo" }] },
+      faltaSaber: [],
+    },
+  };
+  const LER = { name: "ler_sugestao_do_copiloto", args: { produto: "site", id: "site:ChIJkulniski" } };
+  const nomes = (p: GenerateContentParameters) => ((p.config?.tools?.[0] as { functionDeclarations?: Array<{ name?: string }> })?.functionDeclarations ?? []).map((d) => d.name);
+
+  it("acha a sugestão: um cartão só com a referência, a fonte com a hora, nada de preço no modelo nem no arquivo", async () => {
+    const lidos: string[] = [];
+    const g = geminiDeRoteiro([{ functionCalls: [LER, LER] }, { text: "O copiloto sugere responder o preço; o cartão está aí." }]);
+    const crm = crmDeMentira();
+    const { a, dir } = await montar({
+      gerar: g.gerar,
+      fontes: { visao: crm.visao, sugestao: async (lead) => { lidos.push(lead.id); return SUGESTAO; } },
+    });
+    const r = await a.receber({ texto: "o que respondo para a Kulniski?", contexto: { pagina: "ficha", lead: { produto: "site", id: "site:ChIJkulniski" } } });
+    await a.ocioso();
+    assert.ok(nomes(g.pedidos[0]).includes("ler_sugestao_do_copiloto"));
+    assert.match(String(g.pedidos[0].config?.systemInstruction), /ler_sugestao_do_copiloto/);
+    const resposta = a.conversa(r.conversaId)!.mensagens.at(-1)!;
+    assert.deepEqual(resposta.cartoes.map((c) => [c.tipo, c.estado, c.dados]), [
+      ["sugestao_do_copiloto", "proposto", { produto: "site", id: "site:ChIJkulniski", empresa: "Kulniski Advocacia", hashDoDossie: HASH }],
+    ], "um cartão só, mesmo com a leitura repetida");
+    assert.ok(resposta.fontes.some((f) => f.rotulo === "copiloto das 10:41"));
+    assert.deepEqual(lidos, ["site:ChIJkulniski", "site:ChIJkulniski"]);
+    const aoModelo = JSON.stringify(g.pedidos[1].contents);
+    assert.match(aoModelo, /Encontrado/);
+    assert.doesNotMatch(aoModelo, /R\$|297/);
+    const arquivo = (await linhasDoArquivo(dir)).join("\n");
+    assert.doesNotMatch(arquivo, /R\$|297|passo a passo/);
+    assert.match(arquivo, /sugestao_do_copiloto/);
+    assert.equal(crm.chamadas.registrar, 0);
+  });
+
+  it("sem copiloto ligado: a leitura nem é declarada, e o prompt não a cita", async () => {
+    const g = geminiDeRoteiro([{ text: "ok" }]);
+    const { a } = await montar({ gerar: g.gerar });
+    await a.receber({ texto: "o que respondo?", contexto: PAGINA });
+    await a.ocioso();
+    assert.ok(!nomes(g.pedidos[0]).includes("ler_sugestao_do_copiloto"));
+    assert.doesNotMatch(String(g.pedidos[0].config?.systemInstruction), /ler_sugestao_do_copiloto/);
+  });
+
+  for (const [nome, fonte, esperado] of [
+    ["sem sugestão guardada", async () => null, /"nenhuma":true/],
+    ["fora do trecho do copiloto", async () => { const e = new Error("fora"); e.name = "PassoSemCopiloto"; throw e; }, /"foraDoTrecho":true/],
+  ] as const) {
+    it(`${nome}: nenhum cartão, e o modelo fica sabendo`, async () => {
+      const g = geminiDeRoteiro([{ functionCalls: [LER] }, { text: "Sem sugestão agora." }]);
+      const { a } = await montar({ gerar: g.gerar, fontes: { visao: crmDeMentira().visao, sugestao: fonte } });
+      const r = await a.receber({ texto: "o que respondo?", contexto: PAGINA });
+      await a.ocioso();
+      assert.equal(a.conversa(r.conversaId)!.mensagens.at(-1)!.cartoes.length, 0);
+      assert.match(JSON.stringify(g.pedidos[1].contents), esperado);
+    });
+  }
+
+  it("a sugestão de um lead fora de Vendas é recusada sem chamar o copiloto", async () => {
+    let chamadas = 0;
+    const g = geminiDeRoteiro([{ functionCalls: [{ name: "ler_sugestao_do_copiloto", args: { produto: "site", id: "ChIJinventado" } }] }, { text: "Não achei." }]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { visao: crmDeMentira().visao, sugestao: async () => { chamadas++; return SUGESTAO; } } });
+    await a.receber({ texto: "e o lead X?", contexto: PAGINA });
+    await a.ocioso();
+    assert.equal(chamadas, 0);
+    assert.match(JSON.stringify(g.pedidos[1].contents), /Lead fora do CRM/);
+  });
+});

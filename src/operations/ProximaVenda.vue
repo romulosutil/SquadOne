@@ -35,6 +35,15 @@
  * do servidor (os do Telegram inclusive); o localStorage fica só de reforço até o servidor
  * confirmar. A anotação do toque vai a /crm/venda/anotar, uma vez por ação no dia: o "Enviei"
  * atrasado no Telegram não anota de novo, e "Enviei, próxima" daqui fecha o aviso aberto lá.
+ *
+ * 17/10/2026 (hierarquia de Vendas): "não sei o que fazer e em que ordem". O cartão tinha até cinco
+ * botões em fileira e uns dez elementos antes da decisão. Agora é UM primário, o que a ação pede
+ * (Abrir no WhatsApp, Marcar a recusa) e, depois do toque, "Enviei, próxima" no lugar dele (é o passo
+ * seguinte, não um botão a mais); ao lado só o "Pular". Ficha, "Vídeo enviado" e reabrir o WhatsApp
+ * vão para "Mais ações" (BP-R3). A conversa, a leitura do copiloto, o "Como", o vídeo e a mensagem
+ * pronta ficam numa dobra só, "Por quê e como", fechada, que abre sozinha quando não há texto pronto
+ * (o passo é escrever, e o como é o que falta). As duas travas viram um recado só (recado-de-travas.ts)
+ * com o quando, e o "Liberar" é um link nele. Lógica e endpoints iguais: só a ordem da tela mudou.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
@@ -45,10 +54,11 @@ import {
 import { planoDoDia } from './plano-do-dia'
 import { diagnosticoDeVenda } from './por-que-nao-vende'
 import { absorverDia, liberadosDoDia as liberados, liberarLead } from './liberados'
+import { liberadoNaFila, recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
+import RecadoDeTravas from './RecadoDeTravas.vue'
 import { avisoDeHorario } from './resultados'
-import { ROTULO_DE_LIBERAR } from './trava-de-horario'
 import {
-  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, textoDoRitmo, type PrimeirosContatos,
+  gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, type PrimeirosContatos,
 } from './trava-de-ritmo'
 import type { CrmVisao } from './types'
 
@@ -87,6 +97,13 @@ const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
 /** Primeiro contato de um nicho só (a chave de chaveDoNicho); vazio = todos. */
 const nicho = ref('')
+/**
+ * A dobra "Por quê e como" (17/10/2026): fechada quando há mensagem pronta (o botão já a leva ao
+ * WhatsApp, onde ela se revisa) e aberta quando o passo é escrever à mão, porque aí o "Como" e a
+ * conversa são o que falta para agir. Volta a esse padrão a cada ação nova; o toque do Rômulo vale
+ * até a ação mudar.
+ */
+const comoAberto = ref(false)
 /** "Vídeo enviado" do braço com vídeo (A/B do vídeo): lembrado neste navegador por 30 min. */
 const videos = ref<EnviosAbertos>({})
 
@@ -162,17 +179,6 @@ const fila = computed<AcaoDeVenda[]>(() => filaDaTela(props.visao, {
 const resumo = computed(() => resumoDoDia(fila.value, props.visao?.estado === 'ok' ? props.visao : null, ritmo.value))
 watch(resumo, (r) => emit('resumo', r), { immediate: true })
 /**
- * O plano do dia (17/10/2026): a tela abre dizendo quanto do dia já foi, quanto falta e quanto de
- * janela de envio sobra, em vez de esperar o Rômulo olhar a fila. Com a fila vazia, a próxima coisa a
- * fazer é a do gargalo do funil.
- */
-const plano = computed(() => planoDoDia({
-  resumo: resumo.value,
-  feitas: feitos.value.size,
-  agora: agora.value,
-  gargalo: props.visao?.estado === 'ok' ? diagnosticoDeVenda(props.visao.leads, agora.value).gargalo : null,
-}))
-/**
  * Fora do expediente e com o ritmo livre: o primeiro contato que sairia agora, para o "Liberar"
  * dizer de quem é (a fila calculada como se o expediente estivesse aberto).
  */
@@ -195,6 +201,17 @@ watch(nichos, (lista) => {
 })
 const atual = computed(() => fila.value[0] ?? null)
 const chamada = computed(() => (atual.value ? chamadaDaAcao(atual.value) : ''))
+/**
+ * O plano do dia (17/10/2026, "a Central está muito reativa"): o cartão abre dizendo quanto do dia já
+ * foi, quanto falta e quanto de janela de envio sobra, em vez de esperar o Rômulo olhar a fila. Com a
+ * fila vazia, a próxima coisa a fazer é a do gargalo do funil.
+ */
+const plano = computed(() => planoDoDia({
+  resumo: resumo.value,
+  feitas: feitos.value.size,
+  agora: agora.value,
+  gargalo: props.visao?.estado === 'ok' ? diagnosticoDeVenda(props.visao.leads, agora.value).gargalo : null,
+}))
 const leadAtual = computed(() => (atual.value ? porId.value.get(atual.value.leadId) ?? null : null))
 const passoDoVideoAtual = computed(() => (atual.value?.primeiroContato && leadAtual.value ? passoDoVideo(leadAtual.value) : null))
 const videoPendente = computed(() => (leadAtual.value ? estadoDoVideo(leadAtual.value, videos.value) === 'pendente' : false))
@@ -205,17 +222,22 @@ function marcarOVideo() {
   status.value = `${leadAtual.value.empresa}: vídeo marcado como enviado.`
 }
 const depois = computed(() => fila.value.slice(1))
+/** O vídeo do A/B ainda por mandar depois do toque: o "Mais ações" avisa no próprio rótulo. */
+const videoAFazer = computed(() => Boolean(atual.value && passoDoVideoAtual.value && videoPendente.value && tocado.value === atual.value.chave))
+// Cada ação nova volta ao padrão da dobra: aberta só quando não há texto pronto (o passo é escrever).
+watch(() => atual.value?.chave, () => { comoAberto.value = Boolean(atual.value && !atual.value.rascunho) }, { immediate: true })
+/** Quantos primeiros contatos esperam e quantos o ritmo ainda deixa hoje ("165 … · até 10 hoje"). */
+const contagemDosPrimeiros = computed(() => textoDosPrimeiros(resumo.value))
 /**
- * Quantos primeiros contatos esperam e quantos o ritmo ainda deixa hoje ("165 … · até 10 hoje"),
- * mais o motivo quando o relógio ou a trava seguram agora.
+ * As duas travas num recado só, com o próximo passo (recado-de-travas.ts). "Liberado" só quando um lead
+ * liberado hoje está de fato na fila (liberadoNaFila): sem ninguém por liberar E sem liberado na fila
+ * (todos pulados, feitos ou fora do filtro), o recado diz quando o expediente volta.
  */
-const motivoDaEspera = computed(() => {
-  const contagem = textoDosPrimeiros(resumo.value)
-  if (!contagem) return ''
-  if (!expediente.value) return `${contagem}. ${avisoDeHorario(props.visao?.leads ?? [], agora.value) ?? ''}`.trim()
-  if (ritmo.value.motivo) return `${contagem}. ${textoDoRitmo(ritmo.value)}`
-  return `${contagem}.`
-})
+const recado = computed(() => recadoDasTravas({
+  agora: agora.value, noExpediente: expediente.value, ritmo: ritmo.value, contexto: 'venda',
+  liberado: liberadoNaFila({ noExpediente: expediente.value, fila: fila.value, liberados: liberados.value }),
+  taxa: expediente.value ? null : avisoDeHorario(props.visao?.leads ?? [], agora.value),
+}))
 
 const hrefDaFicha = (leadId: string) => `/crm?lead=${encodeURIComponent(leadId)}`
 /**
@@ -278,6 +300,7 @@ function resolver(a: AcaoDeVenda, pulou: boolean) {
   }).catch(() => undefined)
   tocado.value = null
   copiado.value = false
+  verPadrao.value = false
   status.value = pulou ? `${a.empresa}: fica para o fim da fila.` : `${a.empresa}: feito.`
 }
 
@@ -303,8 +326,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 
 <template>
   <section class="venda" aria-label="Próxima venda">
-    <!-- O plano do dia (17/10/2026): a tela diz o dia antes de pedir o próximo toque. Só com o funil
-         lido: sem retrato não há conta, e o aviso de baixo já diz isso. -->
+    <!-- O plano do dia: a tela diz o dia antes de pedir o próximo toque. Só com o funil lido: sem
+         retrato não há conta, e o aviso de baixo já diz isso. -->
     <div v-if="visao?.estado === 'ok'" class="venda__plano" :class="{ 'is-urgente': plano.urgente }">
       <p class="venda__manchete">{{ plano.manchete }}</p>
       <div
@@ -336,48 +359,71 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           <span class="selo" :class="atual.quente ? 'selo--erro' : ''">{{ ROTULO_DO_TIPO[atual.tipo] }}</span>
           <span class="texto-2 texto-pequeno">{{ atual.contexto }}</span>
         </p>
-        <!-- "Envie para X, isto:" (17/10/2026): a chamada é a instrução, a mensagem vem logo abaixo, à vista
-             (era uma dobra fechada no celular) e o botão que a envia fica colado nela (AC-16 segue valendo:
-             a mensagem tem altura máxima, então o botão nunca desce para baixo da barra). -->
+        <!-- "Envie para X, isto:" (17/10/2026): a chamada é a instrução e a mensagem vem logo abaixo, à
+             vista (era uma dobra fechada), com o botão que a envia colado nela. A mensagem tem altura
+             máxima, então o botão não desce para baixo da barra no celular (AC-16). -->
         <h2 id="venda-titulo">{{ chamada }}</h2>
-
         <template v-if="atual.rascunho">
-          <p class="texto-2 texto-pequeno venda__origem">
-            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
-            <template v-else>Mensagem pronta (revise antes de enviar)</template>
-          </p>
+          <div class="venda__origem">
+            <p class="texto-2 texto-pequeno">
+              <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
+              <template v-else>Mensagem pronta (revise antes de enviar)</template>
+            </p>
+            <button type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
+          </div>
           <blockquote class="venda__mensagem" tabindex="0" aria-label="Mensagem a enviar">{{ atual.rascunho }}</blockquote>
         </template>
         <p v-else-if="atual.tipo !== 'desfecho'" class="venda__escrever">Sem texto pronto: escreva à mão. <strong>Como:</strong> {{ atual.tatica }}</p>
 
-        <div class="venda__botoes">
-          <template v-if="atual.tipo === 'desfecho'">
-            <button type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
-            <a v-if="atual.link" class="botao" :href="atual.link.url" target="_blank" rel="noopener">{{ atual.link.rotulo }} <span aria-hidden="true">↗</span></a>
-          </template>
+        <!-- Fazer agora: UM primário, logo depois da mensagem (AC-16), e só o "Pular" ao lado (BP-R3).
+             Depois do toque no WhatsApp o passo seguinte é "Enviei, próxima": ele toma o lugar do
+             primário em vez de virar mais um botão na fileira. O resto mora em "Mais ações". -->
+        <div class="venda__botoes acoes">
+          <button v-if="tocado === atual.chave" type="button" class="botao botao--primario" @click="resolver(atual, false)">Enviei, próxima</button>
+          <button v-else-if="atual.tipo === 'desfecho'" type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
           <a
-            v-else-if="atual.link" class="botao" :class="{ 'botao--primario': tocado !== atual.chave }" :href="atual.link.url" target="_blank" rel="noopener"
+            v-else-if="atual.link" class="botao botao--primario" :href="atual.link.url" target="_blank" rel="noopener"
             @click="aoTocar(atual)"
           >{{ atual.rascunho ? 'Abrir no WhatsApp com a mensagem' : 'Abrir a conversa no WhatsApp' }} <span aria-hidden="true">↗</span></a>
-          <button v-if="atual.rascunho" type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
-          <button v-if="passoDoVideoAtual && videoPendente && tocado === atual.chave" type="button" class="botao" @click="marcarOVideo">Vídeo enviado</button>
-          <button v-if="tocado === atual.chave" type="button" class="botao botao--primario" @click="resolver(atual, false)">Enviei, próxima</button>
-          <a class="botao botao--leve" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Ficha</a>
+          <a v-else class="botao botao--primario" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Abrir a Ficha</a>
           <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Pular</button>
+          <details v-if="atual.link || atual.tipo === 'desfecho'" class="mais-acoes">
+            <summary>Mais ações<template v-if="videoAFazer"> · falta o vídeo</template></summary>
+            <ul class="lista-acoes">
+              <li v-if="videoAFazer"><button type="button" @click="marcarOVideo">Vídeo enviado</button></li>
+              <li v-if="tocado === atual.chave && atual.link">
+                <a :href="atual.link.url" target="_blank" rel="noopener" @click="aoTocar(atual)">Abrir o WhatsApp de novo <span aria-hidden="true">↗</span></a>
+              </li>
+              <li v-if="atual.tipo === 'desfecho' && atual.link">
+                <a :href="atual.link.url" target="_blank" rel="noopener">{{ atual.link.rotulo }} <span aria-hidden="true">↗</span></a>
+              </li>
+              <li v-if="atual.link || atual.tipo === 'desfecho'"><a :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Abrir a Ficha</a></li>
+            </ul>
+          </details>
         </div>
+
         <p v-if="atual.link && atual.tipo !== 'desfecho' && tocado !== atual.chave" class="texto-2 texto-pequeno">Depois de enviar, volte aqui e toque em “Enviei, próxima”.</p>
-        <button v-if="atual.copiloto?.padrao" type="button" class="botao botao--leve venda__padrao" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
-          {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
-        </button>
-        <blockquote v-if="atual.copiloto?.padrao && verPadrao" class="venda__mensagem is-padrao">{{ atual.copiloto.padrao }}</blockquote>
 
         <!-- O porquê agora: a situação (a frase única da ação, AC-12) e o que o servidor sabe do momento. -->
         <p class="venda__porque"><strong>{{ atual.titulo }}.</strong> {{ atual.porque }}</p>
-        <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
-        <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
-        <!-- "Como:" sempre (AC-12): o título já é a frase da ação (fraseDaAcao), a mesma do "Agora" da Ficha. -->
-        <p v-if="atual.rascunho || atual.tipo === 'desfecho'" class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
-        <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
+
+        <!-- Uma dobra só para o que é consulta: a conversa, a leitura do copiloto, o "Como", o vídeo e o
+             texto padrão da esteira. A mensagem pronta saiu daqui: ela fica à vista, logo depois da
+             chamada. Fechada com texto pronto; aberta quando o passo é escrever. -->
+        <details class="dobra venda__como" :open="comoAberto" @toggle="comoAberto = ($event.target as HTMLDetailsElement).open">
+          <summary>Conversa e como <span class="texto-2 texto-pequeno">{{ atual.rascunho ? (atual.copiloto ? '(com a leitura do copiloto)' : '(com o passo a passo)') : '(escrever à mão)' }}</span></summary>
+          <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
+          <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
+          <p v-if="atual.rascunho || atual.tipo === 'desfecho'" class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
+          <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
+          <div v-if="atual.copiloto?.padrao" class="venda__rascunho">
+            <button type="button" class="botao botao--leve" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
+              {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
+            </button>
+            <blockquote v-if="verPadrao" class="venda__mensagem is-padrao">{{ atual.copiloto.padrao }}</blockquote>
+          </div>
+          <p v-if="!atual.rascunho && atual.tipo !== 'desfecho'" class="texto-2 texto-pequeno">O Roteiro da Ficha ajuda a escrever.</p>
+        </details>
       </article>
 
       <p v-if="depois.length" class="venda__depois">
@@ -397,20 +443,27 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     <template v-else>
       <h2 id="venda-titulo">Nada para mandar agora</h2>
       <p class="texto-2">Ninguém esperando resposta, combinado ou follow-up.</p>
-      <!-- Fila vazia não é hora de esperar: o próximo passo é o do gargalo (abaixo, com quem está parado). -->
+      <!-- Fila vazia não é hora de esperar: o próximo passo é o do gargalo (em "Por que não está vendendo", com quem está parado). -->
       <p v-if="plano.proximoPasso" class="venda__tatica"><strong>Enquanto isso:</strong> {{ plano.proximoPasso }}</p>
     </template>
 
-    <p v-if="motivoDaEspera" class="texto-2 texto-pequeno">{{ motivoDaEspera }}</p>
-    <label v-if="nichos.length > 1" class="venda__nicho" for="venda-nicho">Primeiro contato de
-      <select id="venda-nicho" v-model="nicho">
-        <option value="">todos os nichos</option>
-        <option v-for="n in nichos" :key="n.chave" :value="n.chave">{{ n.rotulo }} ({{ n.quantos }})</option>
-      </select>
-    </label>
-    <p v-if="candidatoForaDoExpediente" class="venda__botoes">
-      <button type="button" class="botao botao--leve" @click="liberar(candidatoForaDoExpediente)">{{ ROTULO_DE_LIBERAR }}: {{ candidatoForaDoExpediente.empresa }}</button>
-    </p>
+    <!-- Quando o primeiro contato volta: um recado só (horário e ritmo), com o "Liberar" como link
+         quando é o horário que segura, para o lead que sairia agora. -->
+    <RecadoDeTravas
+      v-if="contagemDosPrimeiros && visao?.estado === 'ok'" :recado="recado" :contagem="`${contagemDosPrimeiros}.`"
+      :rotulo-do-liberar="candidatoForaDoExpediente ? rotuloDoLiberar('venda', { empresa: candidatoForaDoExpediente.empresa }) : undefined"
+      @liberar="candidatoForaDoExpediente && liberar(candidatoForaDoExpediente)"
+    />
+    <!-- O filtro de nicho é ajuste, não decisão: dobrado, com o escolhido no título. -->
+    <details v-if="nichos.length > 1" class="dobra venda__filtro">
+      <summary>Primeiro contato de {{ nichos.find((n) => n.chave === nicho)?.rotulo ?? 'todos os nichos' }}</summary>
+      <label class="venda__nicho" for="venda-nicho">Só um nicho
+        <select id="venda-nicho" v-model="nicho">
+          <option value="">todos os nichos</option>
+          <option v-for="n in nichos" :key="n.chave" :value="n.chave">{{ n.rotulo }} ({{ n.quantos }})</option>
+        </select>
+      </label>
+    </details>
   </section>
 </template>
 
@@ -423,7 +476,6 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__progresso span { display: block; width: 100%; height: 100%; border-radius: var(--raio-pilula); background: var(--positivo); transform: scaleX(var(--andamento, 0)); transform-origin: left; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 .venda__janela.is-urgente { padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-selo); background: var(--erro-fundo); font-weight: var(--peso-forte); }
 @media (prefers-reduced-motion: reduce) { .venda__progresso span { transition: none; } }
-.venda__tatica, .venda__porque { overflow-wrap: anywhere; }
 .venda h2 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .venda p { margin: 0; }
 .venda__atual { display: grid; gap: var(--esp-3); min-width: 0; }
@@ -432,14 +484,16 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__conversa { padding: var(--esp-2) var(--esp-3); border-left: var(--faixa) solid var(--borda); border-radius: var(--raio-controle); background: var(--superficie-2); overflow-wrap: anywhere; }
 .venda__conversa.is-sem { background: var(--atencao-fundo); }
 .venda__tatica { padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); }
+.venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }
+.venda__como[open] { display: grid; gap: var(--esp-2); min-width: 0; }
 /* A mensagem à vista, logo depois da chamada. Altura máxima curta no celular para o botão do WhatsApp
    não descer para baixo da barra (AC-16); a rolagem é dela, e o foco por teclado a alcança. */
 .venda__mensagem { margin: 0; padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--ok-fundo); color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow: auto; }
 .venda__mensagem.is-padrao { background: var(--superficie-2); }
-.venda__origem { margin-top: calc(var(--esp-1) * -1); }
+.venda__origem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); }
 .venda__escrever { padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--atencao-fundo); }
-.venda__padrao { justify-self: start; }
 @media (min-width: 64rem) { .venda__mensagem { max-height: 16em; } }
+.venda__tatica, .venda__porque { overflow-wrap: anywhere; }
 .venda__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
 .venda__falha { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); overflow-wrap: anywhere; }
 .venda__falha span { flex: 1 1 16em; }

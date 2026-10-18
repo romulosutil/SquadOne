@@ -23,6 +23,7 @@ import { ModeloOcupado } from "./server/orchestrator.ts";
 import { haTurnoEmAndamento, rodarDemanda } from "./server/turno.ts";
 import { prepararSombra } from "./server/luna-sombra.ts";
 import { prepararJevSombra } from "./server/jev-sombra.ts";
+import { prepararLeadQuenteSombra, type LeadQuenteSombra } from "./server/lead-quente-sombra.ts";
 import { ErroCalendario, LeituraIncompleta, listarAgendaDoDia, listarQuests, listarQuestsDaJanela, MarcasPerdidas, QuestSumiu } from "./server/calendar.ts";
 import { aplicarAjuste, interpretarPedidoDeAjuste } from "./server/ajuste.ts";
 import { QuestRecusada } from "./server/quest.ts";
@@ -253,6 +254,8 @@ async function startServer() {
   // por aqui quando chega um "gastei 30 no mercado".
   let financasDoProcesso: EstadoDasFinancas | null = null;
   let vendedorDoProcesso: Vendedor | null = null;
+  // O agente do lead quente em sombra (server/lead-quente-sombra.ts): nasce com a Central; o voto o acha por aqui.
+  let leadQuenteDoProcesso: LeadQuenteSombra | null = null;
   // Fila de avisos do Dell (regra 20): o P0 e a reserva dos avisos pessoais.
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   // O bot ao chat do dono: espelho do P0 e, desde 16/10/2026 (OT-14, exceção da regra 20), o canal
@@ -305,6 +308,10 @@ async function startServer() {
       tocarVenda:
         squadOneMode === "operations"
           ? async (token, acao) => (vendedorDoProcesso ? vendedorDoProcesso.tocar(token, acao) : { curto: "O vendedor está desligado." })
+          : undefined,
+      votarLeadQuente:
+        squadOneMode === "operations"
+          ? async (token, concorda) => (leadQuenteDoProcesso ? leadQuenteDoProcesso.votar(token, concorda) : { curto: "A sombra do lead quente está desligada." })
           : undefined,
     }));
     if (c.transporte === "webhook") {
@@ -424,6 +431,9 @@ async function startServer() {
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
         agenda: readAgenda,
         dell: () => lerStatusDoDell(operationsDataDir),
+        // Fase 2 (17/10/2026): a sugestão guardada do copiloto, só LIDA (copiloto.ler nunca chama o
+        // modelo). Sem copiloto ligado, a leitura nem é declarada ao Gemini.
+        ...(copiloto ? { sugestao: (lead) => copiloto.ler(lead.produto, lead.id) } : {}),
       },
     });
     // Uma instância só para a rota e o vendedor: as escritas no arquivo do dia ficam em fila.
@@ -485,6 +495,32 @@ async function startServer() {
         console.log("[vendedor] ligado: um aviso por vez no Telegram, seg–sex 08:00–17:30; nunca envia ao lead.");
       }
     }
+
+    // O agente que mantém o lead quente, EM SOMBRA (17/10/2026): decide responder/escalar/calar para cada
+    // mensagem nova de lead e só avisa o Rômulo ("eu teria respondido…"). Só com SQUADONE_LEAD_QUENTE_SOMBRA=true,
+    // o bot e o copiloto ligados; o único envio é o aviso ao chat dele, nunca ao lead.
+    const cop = copiloto;
+    const botDoDono = configDeTelegram;
+    leadQuenteDoProcesso = prepararLeadQuenteSombra(
+      process.env,
+      { dataDir: operationsDataDir, operations: true, telegramLigado: botDoDono !== null, copilotoLigado: cop !== null },
+      {
+        lerVisao: () => crm.visao(),
+        lerConversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
+        // Só LÊ a sugestão guardada (prontas nunca chama o modelo): quem gera é o copiloto automático.
+        sugestoes: async (leads) => new Map([...(cop ? await cop.prontas(leads) : new Map())].map(([id, s]) =>
+          [id, {
+            mensagem: s.sugestao.mensagem,
+            avisos: s.avisos,
+            itensDeProposta: s.sugestao.proposta.itens.length,
+            ...(s.sugestao.momento ? { momento: { quem: s.sugestao.momento.quem } } : {}),
+          }] as const)),
+        avisar: async (texto, botoes, opcoes) => {
+          if (!botDoDono) return;
+          for (const chat of botDoDono.chatsPermitidos) await enviarMensagem(botDoDono, chat, texto, undefined, botoes, opcoes);
+        },
+      },
+    );
 
     // Finanças (06/10/2026): banco próprio no diretório de dados, Pluggy por
     // polling diário. Falha ao abrir não derruba a Central: as rotas dizem 503.
@@ -1010,6 +1046,7 @@ async function startServer() {
     vigia?.iniciar();
     sinal?.iniciar();
     vendedorDoProcesso?.iniciar();
+    leadQuenteDoProcesso?.iniciar();
 
     // Polling (Dell): busca as mensagens; nunca registra webhook.
     if (configDeTelegram?.transporte === "polling" && botDoTelegram) {

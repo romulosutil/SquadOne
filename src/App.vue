@@ -10,6 +10,10 @@
  * primeiro: barra inferior com o ＋Pedir no meio; a partir de 1024 px, barra
  * lateral e Ctrl+K. No Dell com `assistente` no /api/runtime (RULES 28), o ＋, a
  * lateral e o Ctrl+K abrem o Assistente (casca/AssistentePainel.vue) no lugar do Pedir.
+ *
+ * Desde 17/10/2026 o Dell tem três menus: Central de comando (a home, rotas/CentralRota.vue),
+ * o Assistente (o ＋) e Vendas; a Manutenção (o antigo Mais) é a engrenagem discreta do topo e do
+ * trilho. Agenda, Finanças, Escritório e Entrada viraram faixas da Central e seguem por endereço.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ArquivoFolha from './components/ArquivoFolha.vue'
@@ -24,6 +28,7 @@ import PedirFolha from './casca/PedirFolha.vue'
 import AssistentePainel from './casca/AssistentePainel.vue'
 import { useAssistente } from './casca/assistente'
 import AgendaRota from './rotas/AgendaRota.vue'
+import CentralRota from './rotas/CentralRota.vue'
 import EscritorioRota from './rotas/EscritorioRota.vue'
 import HojeRota from './rotas/HojeRota.vue'
 import MaisRota from './rotas/MaisRota.vue'
@@ -38,8 +43,10 @@ import { reaberturaDepoisDeIr } from './casca/paleta'
 import {
   comandosDaPaleta,
   destinoAtual,
+  destinoDiscreto,
   destinosDaBarra,
   destinosLaterais,
+  nomeDaHome,
   rotaDaCasca,
   usaAssistente,
   type Comando,
@@ -66,6 +73,8 @@ const ag = useAgentes()
 const ov = useOverview()
 
 const conversa = useAssistente()
+// A Ficha (dentro de Vendas) só oferece o "Perguntar sobre este lead" com o Assistente nesta Central.
+watch(comAssistente, (sim) => { conversa.disponivel.value = sim }, { immediate: true })
 
 // O Assistente responde mesmo sem a agenda neste processo (só não manda pedido ao time).
 const pedirIndisponivel = computed(() =>
@@ -96,8 +105,11 @@ watch(
 // ---------------------------------------------------------------- Ctrl+K
 
 const paletaAberta = ref(false)
-/** Chave do Mais: sobe quando a paleta pede `?abrir=` com o Mais já aberto (ele lê o endereço ao montar). */
-const remontagensDoMais = ref(0)
+/**
+ * Chave do Mais e da Central: sobe quando a paleta pede `?abrir=` com a tela já aberta (as duas leem
+ * o endereço ao montar).
+ */
+const remontagens = ref(0)
 const ehMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const comandos = computed(() =>
   comandosDaPaleta(capacidades.value, ag.roster.value?.squads ?? [], ag.squadAtiva.value?.id ?? null)
@@ -125,7 +137,7 @@ function executar(c: Comando) {
       const reabrir = reaberturaDepoisDeIr(`${window.location.pathname}${window.location.search}`, a.href)
       navegar(a.href)
       if (reabrir === 'popstate') window.dispatchEvent(new PopStateEvent('popstate'))
-      else if (reabrir === 'remontar') remontagensDoMais.value += 1
+      else if (reabrir === 'remontar') remontagens.value += 1
     }
   } else if (a.tipo === 'pedir' || a.tipo === 'assistente') abrirPedir()
   else if (a.tipo === 'squad') void ag.trocarSquad(a.id).then((ok) => { if (!ok) ag.avisar('Espere o pedido em andamento terminar para trocar de squad.') })
@@ -150,15 +162,7 @@ onBeforeUnmount(() => {
 const aoClicar = (e: MouseEvent) => interceptarLink(e, capacidades.value)
 
 const nome = computed(() => ov.overview.value?.displayName ?? '')
-const dell = computed(() =>
-  ops.value
-    ? {
-        carregando: ov.carregando.value,
-        semLeitura: !ov.overview.value?.dell.geradoEm,
-        erro: ov.erro.value
-      }
-    : null
-)
+const discreto = computed(() => destinoDiscreto(capacidades.value))
 
 const {
   roster,
@@ -187,31 +191,35 @@ const {
   <div class="casca" @click="aoClicar">
     <BarraLateral
       :destinos="destinosLaterais(capacidades)"
+      :discreto="discreto"
       :atual="atual"
       :pedir-indisponivel="pedirIndisponivel"
       :pedindo="pedindo"
       :rotulo="rotuloDoPedir"
+      :subtitulo="ops ? 'Central, Assistente e Vendas' : 'Hoje, agenda e agentes'"
       :atalho="ehMac ? '⌘K' : 'Ctrl+K'"
       @pedir="abrirPedir"
       @paleta="paletaAberta = true"
     />
 
     <div class="casca__principal">
-      <CascaTopo :nome="nome" :dell="dell" :pedindo="isLoading" @atualizar="ov.ler" />
+      <CascaTopo :nome="nome" :discreto="discreto" :atual="atual" :pedindo="isLoading" />
 
       <main id="conteudo" class="casca__conteudo" tabindex="-1">
-        <HojeRota v-if="rota === 'hoje'" :capacidades="capacidades" />
+        <!-- :key: o salto do Ctrl+K para uma faixa (?abrir=) estando na Central remonta e abre a folha. -->
+        <CentralRota v-if="rota === 'hoje' && ops" :key="remontagens" :capacidades="capacidades" />
+        <HojeRota v-else-if="rota === 'hoje'" :capacidades="capacidades" />
         <AgendaRota v-else-if="rota === 'agenda'" />
         <CrmPanel v-else-if="rota === 'funil'" />
         <!-- :key pelo caminho: Visão e Lançamentos leem a aba ao montar. -->
         <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
         <EscritorioRota v-else-if="rota === 'escritorio'" />
-        <MaisRota v-else-if="rota === 'mais'" :key="remontagensDoMais" :capacidades="capacidades" />
+        <MaisRota v-else-if="rota === 'mais'" :key="remontagens" :capacidades="capacidades" />
         <DesignSystemRota v-else-if="rota === 'design-system'" />
         <section v-else class="nao-encontrada">
           <h1>Página não encontrada</h1>
           <p>Este endereço não existe {{ ops ? 'no SquadOne do Dell' : 'neste SquadOne' }}.</p>
-          <a class="botao botao--primario" href="/">Voltar para Hoje</a>
+          <a class="botao botao--primario" href="/">Voltar para {{ ops ? 'a ' : '' }}{{ nomeDaHome(capacidades) }}</a>
         </section>
       </main>
     </div>

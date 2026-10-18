@@ -66,6 +66,7 @@ describe('glossário: os nomes proibidos e as exceções que são outra coisa', 
     ['três recargas, um nome', 'Ler de novo · Atualizar agora', ['Ler de novo', 'Atualizar agora']],
     ['Escritório', 'Agentes do SquadOne', ['Agentes do SquadOne']],
     ['a sigla da oferta', 'Estampa · Estamparia', ['Estampa']],
+    ['a home do Dell é a Central de comando', 'Abrir o Centro de comando · Central de Comando', ['Centro de comando', 'Central de Comando']],
   ]
   for (const [nome, texto, esperado] of casos) it(nome, () => assert.deepEqual(nomesProibidos(texto).map((a) => a.achado), esperado))
 
@@ -78,7 +79,7 @@ describe('glossário: nenhum nome proibido no texto visível de src/', () => {
   const arquivos = fontes()
 
   it('a varredura acha os arquivos de tela', () => {
-    for (const a of ['operations/CrmPanel.vue', 'operations/fluxos.ts', 'operations/jornada.ts', 'rotas/HojeRota.vue']) {
+    for (const a of ['operations/CrmPanel.vue', 'operations/fluxos.ts', 'operations/jornada.ts', 'rotas/HojeRota.vue', 'rotas/CentralRota.vue']) {
       assert.ok(arquivos.some((f) => f.arquivo === a), a)
     }
   })
@@ -88,6 +89,7 @@ describe('glossário: nenhum nome proibido no texto visível de src/', () => {
     assert.ok(de('operations/CrmPanel.vue').includes('Atualizar'))
     assert.ok(de('operations/fluxos.ts').includes('Vendas'))
     assert.ok(de('rotas/HojeRota.vue').some((s) => s.startsWith('Ver o escritório')))
+    assert.ok(de('rotas/CentralRota.vue').includes('Central de comando'))
   })
 
   it('um nome por coisa', () => {

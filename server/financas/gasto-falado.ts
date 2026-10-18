@@ -81,6 +81,30 @@ export function categoriaDoGasto(onde: string, existentes: readonly string[], re
   return renomes.get(padrao) ?? padrao;
 }
 
+/** O texto do cartão cabe numa frase: mais que isto não é "gastei 30 no mercado". */
+export const MAX_TEXTO_DO_GASTO = 300;
+/** O id que o painel gera por cartão: o mesmo toque repetido (clique duplo, rede) não duplica o gasto. */
+const ORIGEM_DO_PAINEL = /^[A-Za-z0-9-]{8,64}$/;
+
+export type PedidoDeGasto = { ok: true; gasto: GastoFalado; origem: string } | { ok: false; erro: string };
+
+/**
+ * PURO. O corpo do POST /api/financas/gasto, do cartão de gasto falado do Assistente (fase 2 da RULES
+ * 28, 17/10/2026). O servidor lê o TEXTO de novo pela mesma regra do Telegram: o valor e o "onde" nunca
+ * vêm prontos do navegador. A origem leva o prefixo `painel:` (o Telegram usa `tg:`), e é a chave da
+ * transação: o mesmo cartão tocado duas vezes devolve a categoria que já tinha.
+ */
+export function lerPedidoDeGasto(corpo: unknown): PedidoDeGasto {
+  const c = (corpo && typeof corpo === "object" ? corpo : {}) as Record<string, unknown>;
+  const texto = typeof c.texto === "string" ? c.texto.trim() : "";
+  if (!texto || texto.length > MAX_TEXTO_DO_GASTO) return { ok: false, erro: "Escreva o gasto numa frase, como \"gastei 30 no mercado\"." };
+  const origem = typeof c.origem === "string" ? c.origem : "";
+  if (!ORIGEM_DO_PAINEL.test(origem)) return { ok: false, erro: "Cartão sem identificação: toque de novo no cartão." };
+  const gasto = lerGastoFalado(texto);
+  if (!gasto) return { ok: false, erro: "Não reconheci um gasto: escreva como \"gastei 30 no mercado\"." };
+  return { ok: true, gasto, origem: `painel:${origem}` };
+}
+
 /** A resposta no chat: a categoria, nunca o valor nem o "onde" (RULES 24). */
 export function textoDoGastoAnotado(categoria: string): string {
   return categoria === SEM_CATEGORIA ? `Anotado: ${SEM_CATEGORIA}. Dá para trocar a categoria no app, em Finanças.` : `Anotado: ${categoria}`;

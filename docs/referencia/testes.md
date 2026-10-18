@@ -77,9 +77,11 @@ vezes" —, `resumo` (e os nomes das contas de cada conexão para o selo de saú
 em tabela: corrente antes de cartão, nome repetido uma vez, a manual fora, nenhum valor),
 `pluggy-mapa`, `fatura-santander`, `rotas` (as travas de acesso
 e o "Explicar este mês": sem a flag 404, hash errado 409, o dublê do Gemini recebe o
-texto da prévia, `ModeloOcupado` 503, o `/visao` com as contas de cada conexão — com um
-SQLite num diretório temporário),
-`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado`, `extrato`, `explicacao`
+texto da prévia, `ModeloOcupado` 503, o `/visao` com as contas de cada conexão; desde 17/10/2026, o
+`POST /gasto` do cartão do Assistente: mesma origem exigida, grava na conta manual, o mesmo cartão tocado de novo não
+duplica, 400 para frase que não é gasto — com um SQLite num diretório temporário),
+`organizacao`, `alertas` (nenhum R$ sai), `gasto-falado` (e, desde 17/10/2026, `lerPedidoDeGasto` em tabela: texto até
+300, origem fora do formato recusada, a chave `painel:<id>`), `extrato`, `explicacao`
 (o pacote padrão sem R$ nem estabelecimento, o que cada toggle acrescenta, o hash),
 e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `server/telegram-gasto.test.ts`,
@@ -91,28 +93,33 @@ a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas
 `src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados;
 sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena; desde 17/10/2026,
 AC-03, uma regra por métrica: `leu`/`respondeuDeGente`/`quisVer` em tabela (robô, `respondeu_em` sem classificação, classificação sem a
-coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dias, e a taxa do expediente é a mesma com ou sem o filtro do Site),
+coluna, Plus), o funil e o placar dão o mesmo número na mesma janela de 30 dias, e a taxa do expediente é a mesma com ou sem o filtro do Site;
+desde a revisão de 17/10/2026, a licença conta igual ao interesse em "quiseram ver", na 2ª anotada e nos degraus do diagnóstico),
 os do Assistente da Central (17/10/2026, RULES 28): `server/assistente.test.ts` (finanças sem modelo e sem o texto no JSONL,
 máscara no prompt e no arquivo, cartão proposto sem escrita, teto da tentativa e das respostas por regra, corrida de dois POSTs, o
 Hermes que falha ou responde e que NUNCA volta ao Gemini no histórico (também depois de reiniciar), releitura, poda por data de linha,
-prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita), `server/assistente-ponta.test.ts` (de ponta a ponta com
+prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita; desde a fase 2, 17/10/2026, a leitura do copiloto:
+o cartão `sugestao_do_copiloto` leva só a referência, nem R$ nem o texto da sugestão no JSONL, sem copiloto a leitura nem é declarada,
+um cartão por lead), `server/assistente-ponta.test.ts` (de ponta a ponta com
 as funções reais do painel: Ficha → buscar_lead/ler_lead → cartão de anotação aceito pelo validarRegistro; id inteiro ou só a chave;
 tela de Finanças sem leitura nem modelo; os desvios 400 pendente e 404), `src/operations-assistente.test.ts` (rotearLocal, prepararTexto,
 promptDoRoteador sem telefone/R$/trabalhador, lerCartaoProposto em tabela, valor com cara de preço recusado nos três cartões, fontes,
-histórico com a marca do Hermes, poda), `server/hermes-consulta.test.ts` (Hermes consultado: prompt marca o pacote como dado; saída sem
+histórico com a marca do Hermes, poda; fase 2: `sugestaoParaOModelo` sem preço e `cartaoDaSugestao`), `server/hermes-consulta.test.ts` (Hermes consultado: prompt marca o pacote como dado; saída sem
 ANSI, código, JSON de ação nem R$; sessões da pasta apagadas antes e depois; ambiente sem SQUADONE_/GEMINI; timeout, ocupado, teto em
 arquivo 600; pasta não vazia falha fechada; diretório temporário, nunca o HOME real), `server/financas/parece-financas.test.ts` (a régua
 única de "parece finanças": 51 casos que barram, inclusive plurais, BRL/US$/R＄, aluguel, conta de luz, banco, "1.200 do aluguel", e 22 que
 passam, como "o que devo responder?" e "mil desculpas") e `src/casca/assistente.test.ts` (o painel: contexto do endereço, atalhos por
 página sem Finanças, junção pelo `n`, etapas e falhas, erro HTTP → falha, chave do registro, o cartão com a oferta e o aviso de outro lead,
-polling com relógio e visibilidade falsos),
+polling com relógio e visibilidade falsos; fase 2: `gastoDoTexto`, `textoDoValor` e `linhaDoTempo`, que intercala os gastos da aba
+com as mensagens do servidor),
 `server/crm-desfecho.test.ts` (17/10/2026, AC-08 e AC-10: ganho e dispensa marcados na Central nas cinco ofertas, com desfazer e
 ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `prioridadeDaTriagem`, `notaDoGoogle` e
 `taxasDeRespostaPorNicho` em tabela),
 `src/operations-agora-e-desfecho.test.ts` (17/10/2026, AC-05/08/09/12: `fraseDaAcao`, uma frase por tipo de ação e a mesma no cartão da
 Próxima venda e no "Agora" da Ficha, com e sem o copiloto; `acaoDoLead` dá ação ao segundo lead "pronto"; `agoraDaFicha` sem ação (ganho,
 perdido, próximo passo salvo, esperando desde, vez do robô); `linkDoPasso` nunca abre o gerar_demo; `desfechosDoLead`, estados e desfazer
-por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha),
+por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha; desde 17/10/2026, a licença e o "Você já respondeu"
+na tabela do `fraseDaAcao`),
 `src/operations-triagem.test.ts` (17/10/2026, AC-10, `triagem.ts`: o lote nasce com os 10 primeiros na ordem do servidor; dispensar tira o
 item na hora sem puxar o 11º; o convidado fica à vista sem contar como pendente; decidido o lote, vêm os 10 seguintes; dispensado no retrato
 (`perdaManual`) fica fora; poda da marca local (dispensado confirmado, convidado fora da Revisar, lead sumido, vencida); storage quebrado;
@@ -130,12 +137,21 @@ o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-u
 desde 16/10/2026, OT-02: a janela única seg–sex 8h–17h30 em tabela (17h45 e sábado agora travam), a Próxima venda usa a mesma função,
 "pode mandar" = expediente ou liberado e sempre com o ritmo livre, e o trecho do Roteiro sem WhatsApp antes do primeiro contato),
 `src/operations-velocidade.test.ts` (16/10/2026, OT-09: do "quero ver" ao link pela 2ª anotada ou pelo link visto na conversa, link antes do
-interesse não conta, do link à proposta, perdido não espera e fora dos 30 dias não entra, mediana e duração legível),
+interesse não conta, do link à proposta, perdido não espera e fora dos 30 dias não entra, mediana e duração legível; desde a revisão de
+17/10/2026, a licença também começa a espera pelo link),
 `src/operations-financas-importar.test.ts` (16/10/2026, OT-11: o "Importar" único de Finanças manda PDF à fatura e OFX/CSV/.txt ao extrato pela
-extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; e, em `casca.test.ts`, o Usar do Mais só com o que a barra da tela não alcança),
+extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; o Usar do Mais saiu em 17/10/2026 com a Central de comando),
 `src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
 10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
+`src/operations-recado-de-travas.test.ts` (17/10/2026, hierarquia de Vendas, `recado-de-travas.ts`: quando o expediente volta (hoje, amanhã,
+sexta à noite e o fim de semana caem em "segunda às 8h", hora quebrada "8h30"); um recado por estado com o quando: pode enviar, fora do
+expediente com o Liberar e a taxa, liberado, "Libera às 14:20 (ritmo)", teto do dia que volta na segunda, pausa com a data; o ritmo antes do
+horário, sem Liberar; `pode` sempre igual a `podeMandarPrimeiroContato` em tabela; o rótulo do Liberar por tela; desde a revisão de
+17/10/2026, `liberadoNaFila`: o "liberado" só com um primeiro contato liberado de fato na fila, nunca com todos pulados, feitos ou filtrados),
+`src/operations-vendas-abas.test.ts` (17/10/2026, hierarquia de Vendas, `vendas-abas.ts`: três abas Fazer → Triar → Entender, as seções Funil,
+Números e Resultados; os links de antes continuam: ?ver=funil|numeros|resultados|triagem, ?ver=jornada no Funil com ?passo=, ?ver=roteiro e
+?ver=colinha para o Roteiro no Mais, ?lead= e ?produto= em qualquer vista; o endereço escrito de volta e a ida e volta),
 `src/operations-funil-lista.test.ts` (a Lista do Funil no desktop, 16/10/2026: o sinal mais forte por ordem (Resposta nova > Follow-up hoje >
 Perdido amanhã > Divergência > o resto), follow-up anotado deixa de ser "hoje", ordenar por último toque e próximo passo com quem não tem data no fim
 nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança; desde 17/10/2026, AC-03, `contagemDaEtapa`: Quadro e Lista
@@ -153,6 +169,17 @@ virou mensagem não conta e o link visto entra; o "o que achou?" no lugar de man
 encerra o "quero ver"; sem conversa, o cartão pede para conferir; mensagem nova dele é uma vez nova; a sugestão do
 copiloto no lugar do texto pronto sem anotar envio; quem o automático lê primeiro; o vendedor esperando o copiloto até 4
 min e saindo com a mensagem dele quando está pronta; diretório temporário próprio),
+`server/conversa-baoba.test.ts` (17/10/2026, o caso Baobá de ponta a ponta pelo `montarCrm` e pela fila: o papel gravado ou
+lido do texto na leitura do JSONL; o resumo sem o robô na última de gente e com o vídeo como link; antes do vídeo, a licença
+pede "o que ele autorizou" sem "disse sim" e o cartão diz "Respondeu ontem" pela última mensagem; com a última mensagem
+nossa, "Você já respondeu"; depois do vídeo, só o "o que achou?" no dia seguinte e nada logo depois; o prazo de Perdido não
+recomeça com o robô e recomeça com a recepção),
+`src/operations-marcadores-da-conversa.test.ts` (17/10/2026, tabelas PURAS de `marcadores-da-conversa.ts`: `papelDaMensagem`
+(campo gravado, assinatura de atendente, menu de atendimento; desde a revisão de 17/10/2026 também a tabela ÚNICA
+`deploy/dell/whatsapp-observador/papel-da-mensagem.casos.json`, a mesma do `observador.test.py`), `pedeMaterial`, áudio com e
+sem transcrição e o marcador antigo na tela e para o modelo, `levouMaterial`; `quemRespondeu`/`respondeuDeGente`/`quisVer` com
+robô, recepção (interesse dela conta, neutra não) e licença (conta como "quero ver"); a linha da conversa com
+áudio e papel; a licença anotável como 2ª mensagem; o dossiê do copiloto com o áudio desconhecido e o papel),
 `server/jornadas-de-venda.test.ts` (16/10/2026, a simulação das jornadas: um lead do Site passa pelo retrato de verdade
 (`montarCrm`) do pronto ao "quero ver", e a fila de venda (`proxima-venda.ts`) diz o que fazer em cada passo: primeira
 mensagem com o texto do Balcão e só com a trava de ritmo livre; nada para quem não leu; follow-up de quem leu; o "quero ver"
@@ -161,12 +188,22 @@ o "o que achou?" de 20 h a 72 h depois do link; a proposta sem reenviar o preço
 fora do expediente só o lead liberado entra na fila, e nunca com o ritmo travado (OT-02); o histórico do vendedor: "expirou" e "saiu" de
 um aviso que fecha sem toque, o resumo dos 30 dias com os "quero ver" à parte e a leitura que pula linha cortada (OT-09);
 quem disse não vira "marcar a recusa" no lugar de responder, a exclusão sem mensagem, e o registro recusou encerra e o desfeito volta (OT-06);
-o braço do teste do recibo e a regra antiga para quem foi enviado antes ou leu (OT-10); a regra única do follow-up do 3º dia em tabela (OT-15).
+o braço do teste do recibo e a regra antiga para quem foi enviado antes ou leu (OT-10); a regra única do follow-up do 3º dia em tabela (OT-15);
+desde a revisão de 17/10/2026, a licença nova (1 h) fura o aviso aberto de outro lead que segue na fila, quente como o "quero ver").
 `server/venda-do-dia.test.ts` (16/10/2026, OT-01 e OT-10: a memória do "Enviei"/"Pular" zera no dia novo, descarta lixo, a última decisão vale,
 grava e relê em diretório temporário; a leitura do teste do recibo por braço, com a exclusão à parte e o p só com o mínimo dos dois lados;
 desde 17/10/2026, AC-06: como e por onde cada ação se resolveu (central, telegram, expirou), a anotação uma vez por ação + tipo no dia, os
 primeiros contatos das duas superfícies e a leitura do formato de 16/10; AC-21: os liberados do dia (dia novo zera, o formato sem a
 chave ainda lê, liberar duas vezes é uma),
+`server/lead-quente.test.ts` (17/10/2026, o agente do lead quente em SOMBRA, regras puras em tabela: a mensagem pendente e a chave
+(a mesma do vendedor), o gate de `responder`, cada `calar` (antes do link, Rômulo assumiu há 1 h e há 7 h, recusa, robô, neutra, etapa), cada
+motivo de `escalar` (preço, proposta, fechar, ligação, objeção, áudio, irritação, recusa, recepção, licença, mensagem longa, valor na
+resposta pronta, aviso do copiloto), esperar a sugestão por 5 min, o teto de toques e os follow-ups, o aviso sem valor nem a mensagem do lead,
+o resumo (falso positivo de `interesse`, mediana da resposta humana) e a varredura do código-fonte atrás de qualquer envio ao WhatsApp),
+`server/lead-quente-sombra.test.ts` (a cola com CRM, conversa, copiloto e Telegram dublês num diretório temporário: flag desligada não deixa
+rastro, só no operations com bot e copiloto, uma decisão por mensagem mesmo reiniciando, teto do dia que sobrevive a reinício, Telegram fora do
+ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700),
+`server/telegram-entrada.test.ts` (também o callback `q:<token>:c|d` do voto da sombra),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
 servidor e reforço local contando cada lead uma vez).
@@ -201,16 +238,29 @@ CRM de estamparia, `colinha.ts`, "quem fechou" numa mensagem ao lead) em tabela;
 por ele; `liberadosDoCorpo`; quando a Ficha oferece o primeiro contato de um Novo, o ritmo antes do horário, e desabilitado com o motivo),
 `src/operations-financas-formato.test.ts` (o dia de São Paulo, as parcelas futuras separadas e em ordem, as opções do filtro de mês e
 o nome de cada conexão no selo),
-`src/office/vista.test.ts` (Lista|Mapa e escala inteira), `src/office/salaFinancas.test.ts` e
-`src/casca/casca.test.ts` (rotas por perfil, Ctrl+K, a ordem da Hoje com o
-semáforo das finanças, estado do time só com fonte, com e sem `/api/time`,
-linha do funil, o cartão de respostas com o interesse parado na frente; desde 16/10/2026 o `/design-system`),
-`src/casca/paleta.test.ts` (17/10/2026, o Ctrl+K, AC-23: as abas de Vendas, Finanças e do Mais só no `operations`, com a dica em
-palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada no perfil `app`, o id só no destino; e quando a mesma
-tela precisa de `popstate` (`/crm`) ou de remontar (Mais)),
+`src/office/vista.test.ts` (Lista|Mapa e escala inteira; desde 17/10/2026 a vista da Central, mapa por padrão e guardada à parte),
+`src/office/salaFinancas.test.ts`,
+`src/office/baloes.test.ts` (17/10/2026, Central de comando: o texto do balão por fonte, robô que falhou > pede olhar > leads com
+você > parados > contagem, "Sem sinal" sem Vendas ou sem retrato, finanças só em % e semáforo, a agenda em bloco antes do próximo,
+a sala que o PO raiz visita só por problema em destaque e o balão que ele leva, o corte em uma linha),
+`src/casca/central.test.ts` (17/10/2026: as cinco faixas na ordem, "Sem sinal" com o motivo em cada uma e nada afirmado lendo, o passo
+e a oferta de Vendas com o gargalo, o semáforo e as % das finanças (sem R$), a agenda, o selo da Entrada, a saúde do Dell sem repetir o número
+do cabeçalho, o andar do mapa, o `?abrir=` e o status do mapa; desde a revisão de 17/10/2026, `depoisDaTrocaDeAndar`: troca de
+squad recusada fica na Central e avisa, nunca abre o Escritório na squad errada),
+`src/casca/casca.test.ts` (rotas por perfil; desde 17/10/2026 os três menus do Dell, Central de comando e Vendas, com a Manutenção
+discreta, o Easypanel igual, `aria-current` das rotas que viraram faixa; Ctrl+K com o Assistente e os saltos para a Central; a ordem
+dos cartões com o semáforo das finanças, estado do time só com fonte, com e sem `/api/time`, linha do funil; o `/design-system`),
+`src/casca/paleta.test.ts` (17/10/2026, o Ctrl+K, AC-23: as abas de Vendas, os saltos para as faixas da Central (`/?abrir=`) e a
+Manutenção só no `operations`, com a dica em palavras; leads por prefixo de palavra sem acento nem caixa, no máximo 8, nada no perfil
+`app`, o id só no destino; e quando a mesma tela precisa de `popstate` (`/crm`) ou de remontar (Mais e Central)),
 `src/casca/mais.test.ts` (17/10/2026: qual seção o endereço do Mais abre, `?abrir=manutencao|roteiro` e `?fluxo=`; as Ferramentas
 sem Syncthing, CRM nem Agentes, e a reserva fria neutra) e
-`src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; o pedido de mudança;
+`src/casca/tema.test.ts` (17/10/2026: o tema claro/escuro; sem escolha guardada é claro, valor inválido ou storage
+que lança caem no claro, automático tira o `data-theme`; e o `<script>` do `index.html`, rodado num `vm`, dá o mesmo
+atributo que `tema.ts` para cada valor guardado),
+`src/blueprint/blueprint.test.ts` (16/10/2026: lê o `tokens.css` real; contraste WCAG; desde 17/10/2026 cada par de
+`PARES_DE_CONTRASTE` é CALCULADO nos dois temas a partir do `tokens.css` (var() resolvido em cadeia), com o
+`--negativo` sobre o `--erro-fundo`, e os dois blocos escuros (media query e `data-theme`) têm de ser iguais; o pedido de mudança;
 códigos `BP-` únicos; e as regras de homogeneidade sobre todo `.css` e `<style>` de `src/`: nada de rem/px
 solto em padding, margin, gap e font-size, nem peso numérico, e todo `var(--x)` definido. Exceção só com
 motivo, em `EXCECOES` no próprio teste: hoje só o `GameMap.vue`, pela geometria do mapa),
@@ -267,17 +317,30 @@ rodada e um pronto que não muda de rodada para rodada; importa o `n8n.py`, que 
 fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária com uma chave falsa),
 `deploy/dell/claude-ops/site-acompanhamento.test.py` (23; `__main__` ponta a
 ponta com dublês; desde 17/10/2026, OT-01: o "Montar avisos" do 05 no node só avisa os expirados e o `followup_em`
-continua gravado), `deploy/dell/funil-aprendizado.test.py` (72; modo 660 sob umask
+continua gravado), `deploy/dell/funil-aprendizado.test.py` (73; desde a revisão de 17/10/2026 a licença conta na coluna
+"interesse" do funil por variante; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(68; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026, OT-13, os leads do
+(97; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026 o áudio de lead
+com Evolution e Gemini dublês (urlopen trocado, nenhuma rede): transcrição na conversa e no lote, teto de 20 por dia de
+São Paulo em JSON 600 (desde a revisão de 17/10/2026: JSON quebrado ou `usadas` que não é número recomeça a conta com
+`contador_ilegivel`, conta que não grava não gasta com `contador_sem_gravar`, download que falha não consome cota), as duas
+instâncias no mesmo n8n dão UM lote por áudio (transcrito, não transcrito, longo; a bridge com texto junto manda como antes),
+uma queda no meio da transcrição não perde nem duplica (o `.lendo` só sai depois do lote, a transcrição já gravada não é
+paga de novo) e parar o serviço com áudio pendente deixa o lote para o próximo início; a tabela de `papel` é a mesma
+da Central (`papel-da-mensagem.casos.json`), cada falha grava só "[áudio Ns]" com o motivo e sem texto nem chave
+no journal, a linha "[áudio]" da outra instância é trocada pela transcrita (nunca o contrário), `papel` pela marca no
+texto e o `contexto` do lote; `OBSERVADOR_TRANSCREVER=0` antes do import; desde 17/10/2026, OT-13, os leads do
 Plus entram no filtro da bridge e na conversa em disco e nada deles vai ao n8n, quem está no Plus e numa planilha segue
 igual, arquivo ilegível é vazio e a releitura vale com o n8n fora; desde 16/10/2026 a conversa do lead em disco: entrada e saída com
 id e hora UTC, o mesmo id não entra duas vezes nem pelo outro observador, quem não é lead não tem arquivo, recibo não é
 linha, texto em 2000, nome saneado, poda de 120 dias uma vez por dia, falha ao gravar não derruba a classificação, e
 a pasta padrão aponta para um temporário antes do import),
-`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (83; webhooks de mentira, pasta temporária e HTTP no
+`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (90; webhooks de mentira, pasta temporária e HTTP no
 loopback em porta efêmera; o último grupo faz o `observador.py` de verdade ler o que o adaptador escreveu, com o n8n
-de mentira, inclusive a conversa do lead nas duas direções) e
+de mentira, inclusive a conversa do lead nas duas direções; desde 17/10/2026 o áudio de lead leva "[áudio Ns]" e só os
+campos do download, sem miniatura nem bytes, até 120 s (o longo e o sem duração levam só a marca `audio: {seg}` / `{}`,
+desde a revisão de 17/10/2026), e chega transcrito ao n8n com um transcritor dublê, e o "sim"
+chega com a pergunta do Rômulo no `contexto`) e
 `deploy/hermes/scripts/patch_bridge_envios.test.py` (20; desde 16/10/2026 roda no node o bloco `squadone:envios`: o
 texto do que o dono escreve só a lead vai para `enviadas.jsonl`, o log ganha o id e nunca o texto). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o

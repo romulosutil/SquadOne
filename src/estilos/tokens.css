@@ -42,7 +42,9 @@
   --cor-menta: #b9f6d0;
   --cor-azul: #20293b;
   --cor-verde: #167a4c;
-  --cor-perigo: #c92f3f;
+  /* Um degrau mais escuro em 17/10/2026 (era #c92f3f): o texto de perigo sobre o --erro-fundo
+     (botão armado, selo) dava 4,07 e agora dá 4,73 (o teste do blueprint calcula). */
+  --cor-perigo: #b8283a;
   --cor-apagado: #565c55;
 
   /* Semânticos (claro) */
@@ -184,11 +186,13 @@
     --destaque-texto: var(--cor-tinta);
     --acento: var(--cor-coral);
     --positivo: #6fdc9a;
-    --negativo: #ff8a80;
+    /* Vermelho calmo no escuro (17/10/2026): o vinho #561f27 com o #ff8a80 gritava em todo
+       aviso. Fundo cinza-avermelhado e texto rosado; quem marca o erro é a faixa no --negativo. */
+    --negativo: #ef9f97;
     --ok-fundo: #1d4532;
     --atencao-fundo: #4a4016;
     --realce: #2f2a12;
-    --erro-fundo: #561f27;
+    --erro-fundo: #362a2d;
     --barra-fundo: #0b0e14;
     --barra-texto: #c3cad8;
     --foco: #8ab4ff;
@@ -209,11 +213,11 @@
   --destaque-texto: var(--cor-tinta);
   --acento: var(--cor-coral);
   --positivo: #6fdc9a;
-  --negativo: #ff8a80;
+  --negativo: #ef9f97;
   --ok-fundo: #1d4532;
   --atencao-fundo: #4a4016;
   --realce: #2f2a12;
-  --erro-fundo: #561f27;
+  --erro-fundo: #362a2d;
   --barra-fundo: #0b0e14;
   --barra-texto: #c3cad8;
   --foco: #8ab4ff;

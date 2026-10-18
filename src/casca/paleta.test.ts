@@ -21,13 +21,18 @@ describe('paleta: abas e dicas (AC-23)', () => {
     assert.equal(filtrarComandos(comandosDaPaleta(EASYPANEL, [], null), 'triagem').length, 0)
   })
 
-  it('o Roteiro e a Manutenção levam ao Mais pelo ?abrir=', () => {
-    const cmds = comandosDaPaleta(DELL, [], null)
+  it('o Roteiro e o Dell levam à Manutenção pelo ?abrir=; Finanças e Agenda, à folha da Central', () => {
+    const cmds = comandosDaPaleta({ ...DELL, agentes: true }, [], null)
     const href = (id: string) => { const a = cmds.find((c) => c.id === id)?.acao; return a?.tipo === 'ir' ? a.href : null }
     assert.equal(href('aba:mais-roteiro'), '/mais?abrir=roteiro')
     assert.equal(href('aba:mais-manutencao'), '/mais?abrir=manutencao')
     assert.equal(href('aba:vendas-funil'), '/crm?ver=funil')
     assert.equal(href('aba:financas-lancamentos'), '/financas/lancamentos')
+    assert.equal(href('aba:central-financas'), '/?abrir=financas')
+    assert.equal(href('aba:central-agenda'), '/?abrir=agenda')
+    assert.equal(href('aba:central-escritorio'), '/?abrir=escritorio')
+    // A Entrada não é da SPA: o App.vue navega de verdade (window.location).
+    assert.equal(href('aba:central-entrada'), '/entrada/')
   })
 
   it('nenhuma dica é um caminho cru', () => {
@@ -80,6 +85,8 @@ describe('reaberturaDepoisDeIr', () => {
     ['/', '/crm?lead=s-1', 'nada'],
     ['/mais', '/mais?abrir=manutencao', 'remontar'],
     ['/mais/', '/mais?abrir=roteiro', 'remontar'],
+    // Na Central, o salto para uma faixa (Ctrl+K) remonta a rota, que lê ?abrir= ao montar.
+    ['/', '/?abrir=financas', 'remontar'],
     ['/financas', '/financas/lancamentos', 'nada'],
   ]
   for (const [de, para, esperado] of casos) {

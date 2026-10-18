@@ -1,33 +1,20 @@
 <script setup lang="ts">
-// Topo da casca: a marca (no celular, onde não há barra lateral), o dia, o
-// estado do Dell (só no perfil operations, do status.json) e o pedido em
-// andamento. Tudo com texto; o ponto colorido só reforça (RULES 3).
-import { computed } from 'vue'
-import { useOverview } from './overview'
+// Topo da casca: a marca (no celular, onde não há barra lateral), o dia, o pedido em andamento e,
+// no Dell, a engrenagem da Manutenção. Tudo com texto; o ponto colorido só reforça (RULES 3).
+//
+// O chip do Dell saiu daqui em 17/10/2026: o número "N precisam de você" aparecia no topo, na Hoje
+// e no Mais. Agora mora num lugar só, o cabeçalho da Central de comando, que também tem o Atualizar.
+import type { Destino } from './destinos'
 
-const props = defineProps<{
+defineProps<{
   nome: string
-  /**
-   * null = perfil sem Dell (Easypanel): o chip não aparece, em vez de dizer "tudo certo". O número
-   * e o instante saem do resumoDoDell (AC-17), não daqui: por isso não há falhas nem conferidoEm.
-   */
-  dell: { carregando: boolean; semLeitura: boolean; erro: string } | null
+  /** A Manutenção no Dell (destinoDiscreto); null no Easypanel, onde o Mais está na barra. */
+  discreto: Destino | null
+  atual: Destino['id'] | null
   pedindo: boolean
 }>()
-defineEmits<{ atualizar: [] }>()
-
-// O número e o instante vêm do mesmo resumo da Hoje e do Mais (AC-17): o topo dizia
-// "3 com falha" enquanto a Hoje dizia "9 coisas" e o Mais "43 de 49 ok".
-const { resumo } = useOverview()
 
 const hoje = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
-const estadoDoDell = computed(() => {
-  const d = props.dell
-  if (!d) return null
-  if (d.erro) return { tom: 'falha', texto: 'Dell sem resposta', quando: '' }
-  if (d.carregando && d.semLeitura) return { tom: 'pendente', texto: 'Conferindo o Dell', quando: '' }
-  return resumo.value.topo
-})
 </script>
 
 <template>
@@ -36,12 +23,14 @@ const estadoDoDell = computed(() => {
     <p class="topo__dia"><span v-if="nome">Olá, {{ nome }} · </span>{{ hoje }}</p>
     <div class="topo__estados">
       <p v-if="pedindo" class="topo__chip is-pendente" role="status">Pedido em andamento</p>
-      <p v-if="estadoDoDell" class="topo__chip" :class="`is-${estadoDoDell.tom}`" role="status">
-        {{ estadoDoDell.texto }}<small v-if="estadoDoDell.quando"> {{ estadoDoDell.quando }}</small>
-      </p>
-      <button v-if="dell" type="button" class="botao botao--leve" :disabled="dell.carregando" @click="$emit('atualizar')">
-        {{ dell.carregando ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> o estado do Dell</span>
-      </button>
+      <a
+        v-if="discreto"
+        class="topo__discreto"
+        :href="discreto.href"
+        :aria-current="atual === discreto.id ? 'page' : undefined"
+        :aria-label="discreto.rotulo"
+        :title="discreto.rotulo"
+      ><span aria-hidden="true">{{ discreto.icone }}</span></a>
     </div>
   </header>
 </template>

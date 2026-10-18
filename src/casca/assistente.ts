@@ -30,6 +30,7 @@ import type {
 import type { Modo } from '../types'
 import { SIGLA_DO_PRODUTO } from '../operations/crm-formato'
 import type { CrmProduto } from '../operations/types'
+import { lerGastoFalado, type GastoFalado } from '../../server/financas/gasto-falado.ts'
 import { normalizarCaminho } from './destinos'
 
 export const ROTA_DO_ASSISTENTE = '/api/operations/assistente'
@@ -160,7 +161,7 @@ const FALHAS: Record<TipoDeFalhaDoPainel, { titulo: string; oQueFazer: string }>
   hermes: { titulo: 'O Hermes não respondeu.', oQueFazer: 'Pergunte de novo mais tarde se precisar da opinião dele; o resto segue sem ele.' },
   semCrm: { titulo: 'Não consegui ler Vendas agora.', oQueFazer: 'Abra Vendas e veja se o retrato está em dia; depois pergunte de novo.' },
   desligado: { titulo: 'O Assistente está desligado nesta Central.', oQueFazer: 'Ele liga com SQUADONE_ASSISTENTE=true no operations.env do Dell.' },
-  outro: { titulo: 'Algo falhou na resposta.', oQueFazer: 'Pergunte de novo; se repetir, veja o Dell em Mais › Manutenção.' },
+  outro: { titulo: 'Algo falhou na resposta.', oQueFazer: 'Pergunte de novo; se repetir, veja o Dell em Manutenção (a engrenagem no topo).' },
   rede: { titulo: 'A Central não respondeu.', oQueFazer: 'Confira a conexão com o Dell (Tailscale) e tente de novo.' },
   pendente: { titulo: 'A resposta anterior ainda está chegando.', oQueFazer: 'Espere ela aparecer aqui e mande de novo.' },
 }
@@ -243,6 +244,75 @@ export function estadoDoCartao(c: CartaoDoAssistente, local?: 'confirmado' | 'de
   return local ?? c.estado
 }
 
+// ---------------------------------------------------------------- o gasto falado (fase 2)
+
+/**
+ * "gastei 30 no mercado" no painel (fase 2 da RULES 28, 17/10/2026): vira cartão AQUI, pela regra fixa
+ * do Telegram (lerGastoFalado), sem ir ao servidor do Assistente: nem o texto nem o valor chegam a modelo
+ * nenhum nem ao JSONL dele (RULES 24). O cartão vive só nesta aba e só grava no toque, pelo
+ * POST /api/financas/gasto. O valor aparece na tela, que é o lugar dele (RULES 24: R$ só no app).
+ */
+export interface GastoNaTela {
+  /** Também é a origem do lançamento (`painel:<id>`): o mesmo cartão tocado de novo não duplica. */
+  id: string
+  /** A frase como o Rômulo escreveu: o servidor lê de novo, pela mesma regra. */
+  texto: string
+  gasto: GastoFalado
+  /** Fica depois desta mensagem da conversa (o maior `n` quando foi escrito; 0 = antes de todas). */
+  depoisDe: number
+  estado: 'proposto' | 'anotando' | 'confirmado' | 'descartado'
+  /** "Anotado: Mercado", a resposta do servidor (sem o valor, como no Telegram). */
+  resultado?: string
+  erro?: string
+}
+
+/** PURO. O gasto da frase, ou null quando ela não é um gasto (vai ao Assistente como sempre). */
+export function gastoDoTexto(texto: string): GastoFalado | null {
+  return lerGastoFalado(texto ?? '')
+}
+
+/** PURO. "R$ 1.200,50": o valor na tela do cartão, e só nela. */
+export function textoDoValor(centavos: number): string {
+  return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+export type ItemDaConversa =
+  | { tipo: 'mensagem'; chave: string; mensagem: MensagemDoAssistente }
+  | { tipo: 'gasto'; chave: string; gasto: GastoNaTela }
+
+/**
+ * PURO. As mensagens do servidor e os gastos desta aba numa ordem só: cada gasto logo depois da
+ * mensagem que já estava na tela quando ele foi escrito, na ordem em que foram escritos.
+ */
+export function linhaDoTempo(mensagens: readonly MensagemDoAssistente[], gastos: readonly GastoNaTela[]): ItemDaConversa[] {
+  const ordenadas = [...mensagens].sort((a, b) => a.n - b.n)
+  const saida: ItemDaConversa[] = []
+  const restantes = [...gastos]
+  const despejar = (ate: number) => {
+    for (let i = 0; i < restantes.length;) {
+      if (restantes[i].depoisDe <= ate) saida.push({ tipo: 'gasto', chave: `g:${restantes[i].id}`, gasto: restantes.splice(i, 1)[0] })
+      else i++
+    }
+  }
+  despejar(0)
+  for (const m of ordenadas) {
+    saida.push({ tipo: 'mensagem', chave: `m:${m.n}`, mensagem: m })
+    despejar(m.n)
+  }
+  despejar(Number.POSITIVE_INFINITY)
+  return saida
+}
+
+/** Um id para a origem do gasto: o do navegador quando há (https, localhost), senão um aleatório longo. */
+function novoIdDeGasto(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  } catch {
+    // sem crypto: o aleatório abaixo
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`
+}
+
 /** Enter manda; Shift+Enter (e a composição de acento do IME) quebra a linha. */
 export function enterEnvia(e: { key: string; shiftKey: boolean; isComposing?: boolean }): boolean {
   return e.key === 'Enter' && !e.shiftKey && !e.isComposing
@@ -312,6 +382,23 @@ export function avaliar(respostaId: string, nota: 1 | -1, motivo?: string, busca
 /** Só mede (contrato): quem escreve é a rota de sempre, chamada antes, pelo toque no cartão. */
 export function registrarDesfecho(cartaoId: string, desfecho: 'confirmado' | 'descartado', buscar: Buscar = buscarPadrao): Promise<void> {
   return pedir(`${ROTA_DO_ASSISTENTE}/cartoes/${encodeURIComponent(cartaoId)}`, postJson({ desfecho }), buscar, true)
+}
+
+/**
+ * O toque no cartão de gasto: a rota das finanças, não a do Assistente. Manda a frase (o servidor relê
+ * pela regra fixa) e o id do cartão como origem. Erro vem com o texto do servidor quando há.
+ */
+export async function gravarGasto(texto: string, origem: string, buscar: Buscar = buscarPadrao): Promise<{ categoria: string; novo: boolean; texto: string }> {
+  let r: Response
+  try {
+    r = await buscar('/api/financas/gasto', postJson({ texto, origem }))
+  } catch {
+    throw new Error('A Central não respondeu. Confira a conexão e toque de novo.')
+  }
+  const corpo = (await r.json().catch(() => ({}))) as { error?: unknown; categoria?: unknown; novo?: unknown; texto?: unknown }
+  if (!r.ok) throw new Error(typeof corpo.error === 'string' && corpo.error ? corpo.error : `HTTP ${r.status}`)
+  const categoria = typeof corpo.categoria === 'string' ? corpo.categoria : ''
+  return { categoria, novo: corpo.novo === true, texto: typeof corpo.texto === 'string' && corpo.texto ? corpo.texto : `Anotado: ${categoria}` }
 }
 
 export interface OpcoesDoAcompanhamento {
@@ -483,6 +570,11 @@ export interface FalhaNaTela {
 }
 
 function criarAssistente() {
+  /**
+   * O Assistente existe nesta Central (a casca diz, pelo /api/runtime): a Ficha só mostra o
+   * "Perguntar sobre este lead" com ele. Fora da casca (teste), fica falso.
+   */
+  const disponivel = ref(false)
   const aberto = ref(false)
   /** Sobe quando o ＋ é tocado com o painel já aberto (desktop): o painel leva o foco ao campo. */
   const focar = ref(0)
@@ -501,6 +593,8 @@ function criarAssistente() {
   const desfechos = ref<Record<string, 'confirmado' | 'descartado'>>({})
   /** O cartão que mandou o último pedido ao time: só ele mostra o resultado do turno. */
   const pedidoDoCartao = ref<string | null>(null)
+  /** Os cartões de gasto falado desta aba (nunca vão ao servidor do Assistente). */
+  const gastos = ref<GastoNaTela[]>([])
 
   let acompanhamento: { parar: () => void } | null = null
   /** Sobe a cada "Nova conversa": resposta de um envio antigo não cai na conversa nova. */
@@ -570,11 +664,19 @@ function criarAssistente() {
     pendente.value = null
     enviando.value = null
     falha.value = null
+    gastos.value = []
   }
 
   async function mandar(texto: string, contexto: ContextoDaPagina): Promise<boolean> {
     const t = texto.trim().slice(0, LIMITE_DO_TEXTO)
     if (!t || enviando.value || pendente.value) return false
+    // O gasto falado nem sai da aba: cartão por regra fixa, gravado só no toque (RULES 24 e 28).
+    const gasto = gastoDoTexto(t)
+    if (gasto) {
+      falha.value = null
+      gastos.value = [...gastos.value, { id: novoIdDeGasto(), texto: t, gasto, depoisDe: maiorN(mensagens.value) ?? 0, estado: 'proposto' }]
+      return true
+    }
     const minha = geracao
     falha.value = null
     enviando.value = { id: null, texto: t }
@@ -584,7 +686,11 @@ function criarAssistente() {
       if (r.conversaId !== conversaId.value) {
         // Mandamos uma conversa que o servidor não tem (podada, ou de antes de trocar de Dell) e ele
         // abriu outra: as mensagens da antiga saem, senão o `n` 1 e 2 da nova cairia por cima delas.
-        if (conversaId.value) mensagens.value = []
+        if (conversaId.value) {
+          mensagens.value = []
+          // Os gastos da aba ficam, no começo: o `depoisDe` deles era da conversa antiga.
+          gastos.value = gastos.value.map((g) => ({ ...g, depoisDe: 0 }))
+        }
         conversaId.value = r.conversaId
         guardarConversa(r.conversaId)
       }
@@ -626,6 +732,28 @@ function criarAssistente() {
     void registrarDesfecho(cartaoId, desfecho).catch((e) => console.warn('[assistente] desfecho não medido:', e))
   }
 
+  function trocarGasto(id: string, campos: Partial<GastoNaTela>) {
+    gastos.value = gastos.value.map((g) => (g.id === id ? { ...g, ...campos } : g))
+  }
+
+  /** O toque em "Anotar em Finanças": a única escrita do cartão de gasto. */
+  async function anotarGasto(id: string) {
+    const g = gastos.value.find((x) => x.id === id)
+    if (!g || g.estado === 'anotando' || g.estado === 'confirmado') return
+    trocarGasto(id, { estado: 'anotando', erro: undefined })
+    try {
+      const r = await gravarGasto(g.texto, g.id)
+      trocarGasto(id, { estado: 'confirmado', resultado: r.texto })
+    } catch (e) {
+      trocarGasto(id, { estado: 'proposto', erro: `Não foi anotado: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
+
+  function descartarGasto(id: string) {
+    const g = gastos.value.find((x) => x.id === id)
+    if (g && g.estado === 'proposto') trocarGasto(id, { estado: 'descartado', erro: undefined })
+  }
+
   /** O ＋, a lateral e o Ctrl+K: abre, ou leva o foco ao campo se já está aberto. */
   function abrir() {
     if (aberto.value) focar.value += 1
@@ -633,9 +761,13 @@ function criarAssistente() {
   }
 
   return {
+    disponivel,
     aberto,
     focar,
     abrir,
+    gastos,
+    anotarGasto,
+    descartarGasto,
     estado,
     erroDoEstado,
     conversaId,

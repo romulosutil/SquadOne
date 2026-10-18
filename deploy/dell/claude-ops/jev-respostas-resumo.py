@@ -11,7 +11,7 @@ mostrar o trecho de cada resposta ao revisar, o retrato local do CRM (~/.local/s
 casando o hash e a hora da resposta. O vínculo lead <-> resultado fica só aqui, do lado do Rômulo.
 
 Revisão humana: na Data Table, coluna `revisao_humana`, escreva o tipo certo da linha (bot, exclusao,
-negativa, interesse ou neutra). `--revisar` lista as linhas ainda sem revisão com o id e o trecho.
+negativa, interesse, licenca ou neutra). `--revisar` lista as linhas ainda sem revisão com o id e o trecho.
 
 Regra de promoção (o Jev só sai da sombra se TUDO valer):
   1. pelo menos 60 LEADS com resposta revista por humano (um lead que respondeu várias vezes conta uma vez, pela
@@ -19,6 +19,10 @@ Regra de promoção (o Jev só sai da sombra se TUDO valer):
   2. concordância do Jev com a revisão humana >= 95 % nessas respostas;
   3. NENHUM "interesse" (do Gemini, em qualquer linha, ou da revisão humana) que o Jev tenha chamado de
      negativa ou exclusao: perder um lead que quer ver é o erro que não se aceita.
+A "licenca" (17/10/2026) do Gemini ou da revisão vale como "interesse" em toda comparação com o Jev (comparavel):
+o Jev só tem os 5 tipos de antes, e o "pode mandar" que ele chama de interesse não pode virar discordância (a
+promoção de 95 % ficaria inalcançável) nem escapar da regra 3. A linha leva também `tipo_final` (o tipo que o
+fluxo gravou, depois de só-áudio e só-robô), só para consulta: a comparação é com o bruto do modelo.
 A concordância Jev x Gemini (todas as linhas) aparece para informação; ela sozinha não promove nada,
 porque o Gemini também erra. Promover exige ainda o DPA da TypeSafe (ver deploy/dell/README.md).
 
@@ -43,8 +47,14 @@ from urllib.parse import quote
 TABELA = "jev_sombra_respostas"
 # O mesmo sal de whatsapp-conversa.py (JEV_SAL); o --testar de lá confere que os dois batem.
 SAL = "squadone:jev-sombra:v1"
-TIPOS = ("bot", "exclusao", "negativa", "interesse", "neutra")
+# licenca (17/10/2026): tipo novo do Gemini; o Jev não o tem (segue com os 5), mas a revisão humana pode usá-lo.
+TIPOS = ("bot", "exclusao", "negativa", "interesse", "licenca", "neutra")
 PERIGOSOS = ("negativa", "exclusao")
+
+
+def comparavel(tipo: str) -> str:
+    """O tipo como o Jev o conhece: a licença (que ele não tem) é o interesse de antes de 17/10/2026."""
+    return "interesse" if tipo == "licenca" else tipo
 MIN_REVISTAS = 60
 MIN_CONCORDANCIA = 0.95
 RETRATO = Path.home() / ".local/share/n8n-estado/crm.json"
@@ -91,7 +101,7 @@ def normalizar(linha: dict) -> dict:
     txt = lambda k: str(linha.get(k) or "").strip()
     return {"id": txt("id"), "lead_hash": txt("lead_hash"), "planilha": txt("planilha"),
             "n_mensagens": numero(linha.get("n_mensagens")), "resposta_em": txt("resposta_em"),
-            "tipo_gemini": txt("tipo_gemini"), "jev_choice": txt("jev_choice"),
+            "tipo_gemini": txt("tipo_gemini"), "tipo_final": txt("tipo_final"), "jev_choice": txt("jev_choice"),
             "jev_confidence": numero(linha.get("jev_confidence")), "jev_injecao": numero(linha.get("jev_injecao")),
             "jev_model": txt("jev_model"), "cost": numero(linha.get("cost")), "latencia_ms": numero(linha.get("latencia_ms")),
             "em": txt("em"), "revisao_humana": txt("revisao_humana").lower()}
@@ -159,7 +169,8 @@ def resumir(linhas: list[dict]) -> dict:
     revistas = um_por_lead([l for l in validas if l["revisao_humana"] in TIPOS])
     pct = lambda a, b: (a / b) if b else None
     perigosos = [l for l in validas if l["jev_choice"] in PERIGOSOS
-                 and (l["tipo_gemini"] == "interesse" or l["revisao_humana"] == "interesse")]
+                 and (comparavel(l["tipo_gemini"]) == "interesse" or comparavel(l["revisao_humana"]) == "interesse")]
+    concorda = lambda l, outro: l["jev_choice"] == comparavel(l[outro])
     matriz: dict = {}
     for l in validas:
         matriz.setdefault(l["tipo_gemini"] or "?", {}).setdefault(l["jev_choice"], 0)
@@ -168,11 +179,11 @@ def resumir(linhas: list[dict]) -> dict:
     quantil = lambda q: lat[min(len(lat) - 1, int(q * len(lat)))] if lat else None
     return {
         "linhas": len(validas),
-        "jev_x_gemini": pct(sum(l["jev_choice"] == l["tipo_gemini"] for l in validas), len(validas)),
-        "uma_mensagem_jev_x_gemini": pct(sum(l["jev_choice"] == l["tipo_gemini"] for l in validas if l["n_mensagens"] == 1),
+        "jev_x_gemini": pct(sum(concorda(l, "tipo_gemini") for l in validas), len(validas)),
+        "uma_mensagem_jev_x_gemini": pct(sum(concorda(l, "tipo_gemini") for l in validas if l["n_mensagens"] == 1),
                                          sum(1 for l in validas if l["n_mensagens"] == 1)),
         "revistas": len(revistas),
-        "jev_x_humano": pct(sum(l["jev_choice"] == l["revisao_humana"] for l in revistas), len(revistas)),
+        "jev_x_humano": pct(sum(concorda(l, "revisao_humana") for l in revistas), len(revistas)),
         "gemini_x_humano": pct(sum(l["tipo_gemini"] == l["revisao_humana"] for l in revistas), len(revistas)),
         "perigosos": [l["id"] or "?" for l in perigosos],
         "injecao": sum(1 for l in validas if (l["jev_injecao"] or 0) >= 0.5),
@@ -224,9 +235,9 @@ GRUPOS_DA_REVISAO = (
 def grupo_da_revisao(x: dict) -> int:
     """0..3, o índice em GRUPOS_DA_REVISAO. Ordem de utilidade da revisão: o que pode barrar vem antes do que diverge,
     e só depois entra o que os dois acham igual."""
-    if x["tipo_gemini"] == "interesse" and x["jev_choice"] in PERIGOSOS:
+    if comparavel(x["tipo_gemini"]) == "interesse" and x["jev_choice"] in PERIGOSOS:
         return 0
-    if x["tipo_gemini"] != x["jev_choice"]:
+    if comparavel(x["tipo_gemini"]) != x["jev_choice"]:
         return 1
     if x["jev_confidence"] is not None and x["jev_confidence"] < 0.5:
         return 2
@@ -316,6 +327,20 @@ def testar() -> int:
             self.assertFalse(veredito(resumir(base + [linha("y", "neutra", "negativa", "interesse")]))[0])
             # Interesse que o Jev chamou de neutra não barra (só conta na concordância).
             self.assertTrue(veredito(resumir(base + [linha("z", "interesse", "neutra")]))[0])
+
+        def test_licenca_vale_como_interesse_na_comparacao_com_o_jev(self):
+            # 17/10/2026: o Jev não tem "licenca"; sem isto a promoção de 95 % ficava inalcançável.
+            r = resumir([linha(i, "licenca", "interesse", "licenca") for i in range(60)])
+            self.assertEqual((r["jev_x_gemini"], r["jev_x_humano"]), (1.0, 1.0))
+            self.assertTrue(veredito(r)[0])
+            # E a licença que o Jev chamou de negativa barra como o interesse.
+            base = [linha(i, "neutra", "neutra", "neutra") for i in range(100)]
+            self.assertEqual(resumir(base + [linha("L", "licenca", "negativa")])["perigosos"], ["L"])
+            self.assertEqual(resumir(base + [linha("H", "neutra", "exclusao", "licenca")])["perigosos"], ["H"])
+            self.assertEqual(grupo_da_revisao(linha(1, "licenca", "interesse")), 3)
+            self.assertEqual(grupo_da_revisao(linha(2, "licenca", "negativa")), 0)
+            # O tipo final é lido (consulta), sem mudar a comparação.
+            self.assertEqual(linha(3, "interesse", "interesse", tipo_final="neutra")["tipo_final"], "neutra")
 
         def test_concordancia_jev_x_gemini_nao_promove_sozinha(self):
             r = resumir([linha(i, "neutra", "neutra") for i in range(200)])

@@ -10,11 +10,14 @@
  *  - Componentes e telas com código fixo (BP-…, blueprint/catalogo.ts) e a Ficha de verdade
  *    com um lead inventado, sem gravar nada.
  *
- * Nada aqui grava no servidor nem no localStorage: é um espelho do código, não uma configuração.
+ * Nada aqui grava no servidor; no localStorage só o tema (o mesmo de Mais › Aparência). O resto é
+ * um espelho do código, não uma configuração.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import CSS_DOS_TOKENS from '../estilos/tokens.css?raw'
 import Sheet from '../components/Sheet.vue'
+import SeletorDeTema from '../casca/SeletorDeTema.vue'
+import { useTema } from '../casca/temaVivo'
 import CrmFicha from '../operations/CrmFicha.vue'
 import CrmTrecho from '../operations/CrmTrecho.vue'
 import '../operations/crm.css'
@@ -31,21 +34,11 @@ const tokens = lerTokens(CSS_DOS_TOKENS)
 
 // ------------------------------------------------------------ tema
 
-type Tema = 'sistema' | 'claro' | 'escuro'
+// O mesmo estado e o mesmo seletor de Mais › Aparência (temaVivo.ts): trocar aqui fica guardado
+// e vale para o app inteiro, e o contraste é remedido a cada troca (inclusive do sistema, no automático).
 const html = document.documentElement
-const temaEscolhido = ref<Tema>(html.dataset.theme === 'dark' ? 'escuro' : html.dataset.theme === 'light' ? 'claro' : 'sistema')
-const sistemaEscuro = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
-const consulta = window.matchMedia('(prefers-color-scheme: dark)')
-const aoMudarSistema = (e: MediaQueryListEvent) => { sistemaEscuro.value = e.matches }
-consulta.addEventListener('change', aoMudarSistema)
-onBeforeUnmount(() => consulta.removeEventListener('change', aoMudarSistema))
-const temaVisto = computed<'claro' | 'escuro'>(() =>
-  temaEscolhido.value === 'sistema' ? (sistemaEscuro.value ? 'escuro' : 'claro') : temaEscolhido.value)
-watch(temaEscolhido, (t) => {
-  if (t === 'sistema') delete html.dataset.theme
-  else html.dataset.theme = t === 'escuro' ? 'dark' : 'light'
-  medir()
-})
+const { temaVisto } = useTema()
+watch(temaVisto, () => medir())
 
 // ------------------------------------------------------------ edição de tokens
 // Fora do componente: sair do blueprint e voltar não perde a lista do que já foi mudado
@@ -134,7 +127,6 @@ function medir() {
     })
   }))
 }
-watch(sistemaEscuro, medir)
 onMounted(medir)
 const falhas = computed(() => medidas.value.filter((m) => !m.passa).length)
 
@@ -177,11 +169,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
         (até recarregar); depois copie o pedido e cole na conversa. Para apontar uma peça, use o código dela (ex.: <code>BP-BOTAO</code>).
       </p>
       <div class="bp-topo__linha">
-        <div class="segmentado segmentado--auto" role="group" aria-label="Tema">
-          <button v-for="t in (['sistema', 'claro', 'escuro'] as const)" :key="t" type="button" :aria-pressed="temaEscolhido === t" @click="temaEscolhido = t">
-            {{ t === 'sistema' ? 'Sistema' : t === 'claro' ? 'Claro' : 'Escuro' }}
-          </button>
-        </div>
+        <SeletorDeTema />
         <nav class="bp-indice" aria-label="Seções do blueprint">
           <a v-for="s in secoes" :key="s.id" :href="`#${s.id}`">{{ s.rotulo }}</a>
         </nav>

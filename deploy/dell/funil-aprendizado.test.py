@@ -770,6 +770,14 @@ class Revisao(Base):
         self.assertIn("| personalizado-v2 | 1 |", md)
         self.assertIn("antes de 30 envios", md)
 
+    def test_licenca_conta_na_coluna_interesse(self):
+        # 17/10/2026: o "pode mandar" era gravado como interesse; o tipo novo não pode encolher a coluna.
+        por = fa.funil_por_variante([linha("ChIJffffffffff1", mensagem_variante="A", resposta_tipo="licenca"),
+                                      linha("ChIJffffffffff2", mensagem_variante="A", resposta_tipo="interesse"),
+                                      linha("ChIJffffffffff3", mensagem_variante="A", resposta_tipo="neutra")])
+        a = por["variante"]["A"]
+        self.assertEqual((a["enviados"], a["responderam"], a["interesse"], a["licenca"]), (3, 3, 2, 1))
+
 
 class Diffs(unittest.TestCase):
     def test_variante_b_depois_c_depois_esperando_vaga(self):

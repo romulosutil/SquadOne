@@ -22,7 +22,7 @@ const desde = (c: DellCheck) => (c.desde ? `desde ${formatoDoDesde.format(new Da
     <div class="selos">
       <span class="selo" :class="resumo.vermelhos ? 'selo--erro' : 'selo--atencao'">Dell</span>
     </div>
-    <!-- O "N falhas precisam de você" é o título do bloco na Hoje: o cartão não o repete. -->
+    <!-- O "N falhas precisam de você" é o cabeçalho da Central de comando: o cartão não o repete. -->
     <ul class="dell-alerta__lista">
       <li v-for="c in resumo.precisam" :key="c.id">
         <span class="selo" :class="c.estado === 'falha' ? 'selo--erro' : 'selo--atencao'">{{ c.estado === 'falha' ? 'Falhou' : 'Aviso' }}</span>
@@ -31,7 +31,7 @@ const desde = (c: DellCheck) => (c.desde ? `desde ${formatoDoDesde.format(new Da
       </li>
     </ul>
     <div class="acoes">
-      <a class="botao botao--leve" :href="MANUTENCAO">Ver em Mais › Manutenção</a>
+      <a class="botao botao--leve" :href="MANUTENCAO">Ver em Manutenção</a>
     </div>
   </article>
 </template>

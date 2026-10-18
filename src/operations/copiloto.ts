@@ -6,7 +6,7 @@
 //
 // PURO (sem Vue, sem fetch, sem node:*), como jornada.ts: o dossiê, o prompt, a leitura da
 // saída do modelo e o rascunho da proposta. A cola (provedor, teto/dia, JSONL) é do servidor,
-// em server/copiloto.ts; a Ficha (CrmCopiloto.vue) importa daqui os tipos e o rascunho.
+// em server/copiloto.ts; o cartão do Assistente (casca/AssistenteSugestao.vue) importa daqui os tipos e o rascunho.
 //
 // Por que os preços não vêm do modelo: o modelo escolhe os ITENS do cardápio; nome, entrega e
 // preço saem de colinha.ts. E a mensagem que leva um "R$" fora dos preços abertos (Encontrado,
@@ -22,6 +22,7 @@ import {
   type Funil, type IdDaOferta, type IdDoPasso, type LeadDaJornada, type ProximoDaJornada,
 } from './jornada'
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
+import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
 
 // ------------------------------------------------------------------ onde o copiloto vale
 
@@ -109,7 +110,7 @@ export interface DossieDoLead {
    * As últimas mensagens de verdade (16/10/2026: o observador passou a guardar a conversa dos leads),
    * da mais antiga à mais nova, mascaradas. Ausente = ainda não guardada para este lead.
    */
-  conversa?: Array<{ em: string, quem: 'lead' | 'romulo', texto: string }>
+  conversa?: Array<{ em: string, quem: 'lead' | 'romulo', texto: string, papel?: PapelDaMensagem }>
   /** Os últimos eventos do lead, do mais antigo ao mais novo, com as notas da Ficha. */
   historico: Array<{ em: string, oQue: string, texto?: string }>
   proposta?: { em: string, data: string }
@@ -130,7 +131,7 @@ const MAX_TEXTO_DE_EVENTO = 400
 export const MAX_MENSAGENS_NO_DOSSIE = 20
 
 /** Uma mensagem da conversa como o servidor lê (server/conversa-do-lead.ts). */
-export interface MensagemParaODossie { em: string, direcao: 'entrada' | 'saida', texto: string }
+export interface MensagemParaODossie { em: string, direcao: 'entrada' | 'saida', texto: string, papel?: PapelDaMensagem }
 
 const corta = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1)}…` : t)
 
@@ -143,7 +144,10 @@ const corta = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 
 export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: string, conversa?: readonly MensagemParaODossie[] } = {}): DossieDoLead {
   const conversa = (extra.conversa ?? [])
     .slice(-MAX_MENSAGENS_NO_DOSSIE)
-    .map((m) => ({ em: m.em, quem: m.direcao === 'entrada' ? 'lead' as const : 'romulo' as const, texto: corta(mascarar(m.texto), MAX_TEXTO_DE_EVENTO) }))
+    // O áudio que ninguém ouviu vai dito com todas as letras (17/10/2026, a Baobá: o modelo leu "[áudio]"
+    // seguido de "pode enviar sim" como interesse); e quem escreveu, quando é a recepção ou o robô.
+    .map((m) => ({ em: m.em, quem: m.direcao === 'entrada' ? 'lead' as const : 'romulo' as const,
+      texto: corta(textoParaOModelo(m.texto, mascarar), MAX_TEXTO_DE_EVENTO), ...(m.direcao === 'entrada' && m.papel ? { papel: m.papel } : {}) }))
   const funil = funilDoLead(lead)
   const atual = passoDaJornada(passoAtual(lead))
   const oferta = ofertaDoLead(lead)
@@ -158,7 +162,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const historico = [...lead.eventos]
     .sort((a, b) => a.em.localeCompare(b.em))
     .slice(-MAX_EVENTOS_NO_DOSSIE)
-    .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(mascarar(e.texto), MAX_TEXTO_DE_EVENTO) } : {}) }))
+    .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(textoParaOModelo(e.texto, mascarar), MAX_TEXTO_DE_EVENTO) } : {}) }))
   const textoRaioX = extra.textoDoRaioX?.trim()
   const urlRaioX = lead.links.raioX?.trim()
   const proprias = funil === 'iris' || funil === 'estampa'
@@ -183,7 +187,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
       naoOferecer: oferta.naoAgora.map(nomear),
       aConfirmar: oferta.aConfirmar,
     },
-    ...(lead.resposta ? { resposta: { tipo: lead.resposta.tipo, trecho: mascarar(lead.resposta.trecho), ...(lead.resposta.em ? { em: lead.resposta.em } : {}) } } : {}),
+    ...(lead.resposta ? { resposta: { tipo: lead.resposta.tipo, trecho: textoParaOModelo(lead.resposta.trecho, mascarar), ...(lead.resposta.em ? { em: lead.resposta.em } : {}) } } : {}),
     ...(conversa.length ? { conversa } : {}),
     historico,
     ...(lead.proposta ? { proposta: lead.proposta } : {}),
@@ -241,6 +245,8 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
     'Rômulo. Quando há "conversa", são as últimas mensagens de verdade (lead e Rômulo): é por ela que se',
     'sabe em que ponto a conversa está; não repita o que o Rômulo já mandou e responda ao que o lead disse',
     'por último. Sem "conversa", só o trecho existe: se faltar contexto, diga em "falta_saber".',
+    'Mensagem do lead com "papel": "recepcao" foi escrita por quem atende o público; "robo", pelo atendimento',
+    'automático. Resposta do tipo "licenca" quer dizer que ele só deixou mandar o material oferecido: não é "quero ver".',
     'Quando a mensagem leva a demonstração do site, use o link de "demo" do dossiê exatamente como está;',
     'se a conversa mostra que ele já foi mandado, não mande de novo: pergunte o que acharam.',
     '',

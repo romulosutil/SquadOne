@@ -68,7 +68,8 @@ export type CrmSinal =
   | 'proposta' | 'fechou' | 'concluido' | 'recusou' | 'recusou-pasta' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
   | 'so-robo'
 
-export type CrmTipoDeResposta = 'negativa' | 'exclusao' | 'interesse' | 'neutra' | 'bot'
+/** `licenca` (17/10/2026): o "sim" foi só permissão para mandar o material, não interesse dito. */
+export type CrmTipoDeResposta = 'negativa' | 'exclusao' | 'interesse' | 'licenca' | 'neutra' | 'bot'
 
 export interface CrmResposta {
   tipo: CrmTipoDeResposta
@@ -96,9 +97,13 @@ export interface CrmResumoDaConversa {
   /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
   desde: string
   mensagens: number
-  ultima: { direcao: 'entrada' | 'saida', em: string, trecho: string }
+  ultima: { direcao: 'entrada' | 'saida', em: string, trecho: string, papel?: 'recepcao' | 'robo' }
+  /** A última de gente (o lead ou a recepção); o robô não conta. */
   ultimaEntrada?: string
+  ultimaEntradaRobo?: string
+  entradas?: { gente: number, recepcao: number, robo: number }
   ultimaSaida?: string
+  /** O link do lead ou um material (vídeo, documento, imagem) numa mensagem nossa. */
   linkEm?: string
 }
 

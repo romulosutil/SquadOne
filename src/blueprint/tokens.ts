@@ -164,7 +164,11 @@ export interface ParDeContraste {
   minimo: 3 | 4.5
 }
 
-/** Os pares que de fato aparecem nas telas. O blueprint mede cada um no tema da hora. */
+/**
+ * Os pares que de fato aparecem nas telas. O blueprint mede cada um no tema da hora, com as cores
+ * que o navegador resolveu; o teste calcula os mesmos pares nos dois temas a partir do tokens.css
+ * (coresDoTema), para um token novo ou mudado não passar abaixo do mínimo sem ninguém abrir a página.
+ */
 export const PARES_DE_CONTRASTE: readonly ParDeContraste[] = [
   { texto: '--texto', fundo: '--fundo', uso: 'texto direto na página', minimo: 4.5 },
   { texto: '--texto', fundo: '--superficie', uso: 'texto em cartão e bloco', minimo: 4.5 },
@@ -178,12 +182,43 @@ export const PARES_DE_CONTRASTE: readonly ParDeContraste[] = [
   { texto: '--texto-2', fundo: '--realce', uso: 'apoio na zona de realce', minimo: 4.5 },
   { texto: '--positivo', fundo: '--superficie', uso: 'valor de entrada', minimo: 4.5 },
   { texto: '--negativo', fundo: '--superficie', uso: 'valor de saída', minimo: 4.5 },
+  { texto: '--negativo', fundo: '--superficie-2', uso: 'título do gargalo, aviso em faixa', minimo: 4.5 },
+  { texto: '--negativo', fundo: '--erro-fundo', uso: 'botão de perigo armado, texto de erro em recado', minimo: 4.5 },
+  { texto: '--texto-2', fundo: '--erro-fundo', uso: 'apoio dentro de recado de erro', minimo: 4.5 },
   { texto: '--barra-texto', fundo: '--barra-fundo', uso: 'barra inferior e trilho', minimo: 4.5 },
   { texto: '--sobre-pastel', fundo: '--etapa-contato', uso: 'cabeça de coluna do funil', minimo: 4.5 },
   { texto: '--sobre-pastel', fundo: '--etapa-perdido', uso: 'cabeça de coluna do funil', minimo: 4.5 },
   { texto: '--foco', fundo: '--superficie', uso: 'anel de foco', minimo: 3 },
   { texto: '--borda', fundo: '--superficie', uso: 'contorno de campo e botão', minimo: 3 },
 ]
+
+export type TemaDosTokens = 'claro' | 'escuro'
+
+/** Seletor do bloco escuro forçado; o da media query (prefers-color-scheme) repete o mesmo corpo. */
+export const SELETOR_ESCURO = ':root[data-theme="dark"]'
+export const SELETOR_ESCURO_DO_SISTEMA = ':root:not([data-theme="light"])'
+
+/** Nome -> valor cru de cada token no tema: o :root e, no escuro, o bloco escuro por cima. */
+export function valoresDoTema(css: string, tema: TemaDosTokens): Map<string, string> {
+  const mapa = new Map(declaracoes(corpoDoBloco(css, ':root')).map((d) => [d.nome, d.valor]))
+  if (tema === 'escuro') for (const d of declaracoes(corpoDoBloco(css, SELETOR_ESCURO))) mapa.set(d.nome, d.valor)
+  return mapa
+}
+
+/**
+ * A cor de um token, seguindo var(--x) até um hex. Como o navegador, a cadeia é resolvida no
+ * tema pedido (o --negativo claro aponta para a --cor-perigo). `null` quando não chega numa cor
+ * que lerRgb entende (color-mix, por exemplo).
+ */
+export function corDoToken(valores: ReadonlyMap<string, string>, nome: string): Rgb | null {
+  let atual = valores.get(nome)
+  for (let saltos = 0; atual !== undefined && saltos < 10; saltos++) {
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(atual)
+    if (!ref) return lerRgb(atual)
+    atual = valores.get(ref[1])
+  }
+  return null
+}
 
 // ------------------------------------------------------------ pedido de mudança
 

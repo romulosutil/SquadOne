@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CrmCopiloto from './CrmCopiloto.vue'
 import CrmJornada from './CrmJornada.vue'
 import { copilotoServe, type SugestaoDoCopiloto } from './copiloto'
 import { cabeProposta, gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
@@ -11,12 +10,16 @@ import { colinhaDoLead } from './colinha'
 import { nomeDaOferta, ofertaDoLead, proximoDaJornada } from './jornada'
 import { anotadoEm, textoDaAnotacao, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import { DIAS_SEM_RESPOSTA, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, ROTULO_DO_PRODUTO, dataHora, diasNaEtapa, ehConvite, hojeEmSP, hora, onde, rotuloDoFollowup, textoDaAbordagem, textoDaSubEtapa, textoDoEvento } from './crm-formato'
-import { ROTULO_DE_LIBERAR, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
-import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { ehPrimeiroContato, envioTravado, linksDePrimeiroContato, type EnviosLiberados } from './trava-de-horario'
+import type { EstadoDoRitmo } from './trava-de-ritmo'
+import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
+import RecadoDeTravas from './RecadoDeTravas.vue'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, anotacoesAMao, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
+import { pedeMaterial, textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
+import { useAssistente } from '../casca/assistente'
 
 // Ficha de um lead. As únicas escritas da Central são as deste arquivo (nota, próximo passo e o
 // desfecho: ganhou, perdeu, proposta, com o desfazer de cada um; no Plus o envio e a resposta) e
@@ -35,7 +38,7 @@ import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
 // salvo (que se edita ali mesmo), a ação e os avisos; o resto é seção separada por título e linha,
 // nunca caixa dentro de caixa, e o que é consulta fica dobrado.
 // A ordem de decisão (17/10/2026, AC-14): cabeça e etapa › Agora e o primário › Desfecho › Conversa ›
-// Como vender (abre em "O que oferecer"; o Copiloto está em teste e só abre se escolhido) › Anotar ›
+// Como vender (abre em "O que oferecer"; o "Perguntar sobre este lead" abre o Assistente) › Anotar ›
 // consulta (jornada, sobre o lead, linha do tempo).
 const props = defineProps<{
   lead: CrmLead
@@ -55,9 +58,15 @@ const emit = defineEmits<{
 }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
-// Copiloto (fase 1, em sombra): só pede sugestão e conta as cópias; não escreve na planilha.
+// Copiloto: a Ficha só LÊ a sugestão guardada (para a proposta e o "Agora"). A aba Copiloto saiu em
+// 17/10/2026 (fase 2 da RULES 28): a sugestão mora no painel do Assistente, num cartão com o preço do
+// cardápio, e o automático segue alimentando a Próxima venda e o Telegram.
 const comCopiloto = ref(false)
 copilotoLigado().then((ligado) => { comCopiloto.value = ligado })
+// O Assistente (RULES 28), quando existe nesta Central. No celular o ＋ da barra fica inerte com a
+// folha da Ficha aberta: este botão abre o painel por cima dela, com o lead do endereço como contexto.
+const assistente = useAssistente()
+const perguntarSobreOLead = () => assistente.abrir()
 const nota = ref('')
 const proximoTexto = ref('')
 const proximoData = ref('')
@@ -135,10 +144,6 @@ async function lerSugestaoGuardada() {
 }
 watch([comCopiloto, () => props.lead.id, cabe], () => { void lerSugestaoGuardada() }, { immediate: true })
 const proposta = computed(() => (cabe.value ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
-function aoTerSugestao(s: SugestaoDoCopiloto | null) {
-  lida.value = s
-  if (cabe.value) sugestaoGuardada.value = s
-}
 /**
  * A sugestão como a Próxima venda a recebe (/copiloto/prontas): só no trecho em que o copiloto serve
  * e com a última mensagem dele (conversaDaVez em server/copiloto.ts). Sem esse filtro, a Ficha diria
@@ -174,7 +179,8 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const prumo = props.lead.produto === 'prumo'
   // Iris e estamparias: o site é o da empresa e a Etapa muda na planilha, como no PRUMO.
   const convite = ehConvite(props.lead.produto)
-  const interesse = props.lead.resposta?.tipo === 'interesse'
+  // A licença (17/10/2026) também põe a 2ª mensagem no passo: é o material que ele deixou mandar.
+  const interesse = pedeMaterial(props.lead.resposta)
   // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
   // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
   const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)
@@ -213,6 +219,14 @@ const primarioTravado = computed(() => {
 const temPrimeiroContato = computed(() => linksDePrimeiroContato(props.lead).length > 0)
 const segurado = computed(() => props.ritmo.motivo !== null && temPrimeiroContato.value)
 const travado = computed(() => !segurado.value && envioTravado(props.aviso, props.liberados, props.lead.id) && temPrimeiroContato.value)
+/**
+ * As duas travas num recado só, com o próximo passo (recado-de-travas.ts, 17/10/2026): ao lado do
+ * primário travado, ou no lugar dos dois avisos que ficavam empilhados na lista. `aviso` presente =
+ * fora do expediente (é o avisoDeHorario do CrmPanel, com a taxa medida).
+ */
+const recado = computed(() => recadoDasTravas({
+  agora: Date.now(), noExpediente: !props.aviso, liberado: props.liberados.has(props.lead.id), ritmo: props.ritmo, contexto: 'ficha', taxa: props.aviso,
+}))
 
 // Um primário só: a primeira ação do passo; sem nenhuma, com o lead aberto, a conversa no WhatsApp.
 // As outras do passo (o "Gerar o demo" ao lado da 2ª mensagem) ficam ao lado, como secundárias.
@@ -257,7 +271,7 @@ const avisoDoPrazo = computed(() => {
   if (d === undefined || props.lead.etapa !== 'contato' || /Perdido/.test(proximo.value.quando ?? '')) return ''
   return `Vai para Perdido ${d <= 1 ? 'amanhã' : `em ${d} dias`} se ele não escrever. Salvar um próximo passo segura o lead.`
 })
-const temAvisos = computed(() => travado.value || segurado.value || Boolean(props.lead.plus?.fixo) || Boolean(avisoDoPrazo.value)
+const temAvisos = computed(() => Boolean(props.lead.plus?.fixo) || Boolean(avisoDoPrazo.value)
   || saiuPeloPrazo.value || props.lead.divergencias.length > 0 || Boolean(props.lead.demoPedidoEm) || Boolean(props.lead.demoApagadoEm) || !disponivel.value)
 
 // ------------------------------------------------------------ editar o próximo passo ali mesmo
@@ -291,14 +305,13 @@ const contagemDasOutras = computed(() => outrasOfertas.value.reduce((n, g) => n 
 // com os textos já preenchidos com o nome, o artigo e o link do demo dele.
 const colinha = computed(() => colinhaDoLead(props.lead))
 
-// "Como vender" abre sempre em "O que oferecer" (AC-14, 17/10/2026). Abria no Copiloto quando ele
-// servia, e o Copiloto está em teste: a sugestão dele é texto para conferir, não o passo da tela.
-type AbaDeVenda = 'oferta' | 'roteiro' | 'copiloto'
-const ABAS_DE_VENDA = computed<Array<{ id: AbaDeVenda; rotulo: string }>>(() => [
+// "Como vender" abre sempre em "O que oferecer" (AC-14, 17/10/2026). A aba Copiloto saiu (fase 2 da
+// RULES 28): a sugestão dele vem pelo Assistente, no "Perguntar sobre este lead".
+type AbaDeVenda = 'oferta' | 'roteiro'
+const ABAS_DE_VENDA: Array<{ id: AbaDeVenda; rotulo: string }> = [
   { id: 'oferta', rotulo: 'O que oferecer' },
   { id: 'roteiro', rotulo: 'Roteiro' },
-  ...(comCopiloto.value && copilotoServe(props.lead) ? [{ id: 'copiloto' as const, rotulo: 'Copiloto' }] : []),
-])
+]
 const abaInicial = (): AbaDeVenda => 'oferta'
 const abaDeVenda = ref<AbaDeVenda>(abaInicial())
 
@@ -311,7 +324,9 @@ const rascunho = computed(() => {
 
 // ------------------------------------------------------------ a conversa (o observador, 16/10/2026)
 
-const conversaTodas = ref<Array<{ em: string; direcao: 'entrada' | 'saida'; texto: string }>>([])
+const conversaTodas = ref<Array<{ em: string; direcao: 'entrada' | 'saida'; texto: string; papel?: PapelDaMensagem }>>([])
+// Quem escreveu, quando não é o lead falando por si (17/10/2026): a recepção não decide, o robô nem é gente.
+const QUEM_DO_PAPEL: Record<PapelDaMensagem, string> = { recepcao: 'recepção', robo: 'resposta automática' }
 const conversaGuardada = ref<boolean | null>(null)
 const conversaErro = ref('')
 const conversaInteira = ref(false)
@@ -521,12 +536,14 @@ function irParaAnotar() {
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
     <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
-      <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, com o motivo curto ao lado; o
-           "Liberar" aparece só quando o horário é o que segura (o ritmo não se libera). -->
+      <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, e embaixo o recado único das
+           travas diz quando volta; o "Liberar" é um link nele, só quando o horário é o que segura. -->
       <template v-if="primarioTravado">
         <button class="botao botao--primario" type="button" disabled aria-describedby="crm-ficha-motivo">{{ primarioTravado.rotulo }}</button>
-        <button v-if="primarioTravado.pedeLiberar" type="button" class="botao" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-        <p id="crm-ficha-motivo" class="crm-muted crm-ficha__motivo">{{ primarioTravado.motivo }}.</p>
+        <RecadoDeTravas
+          id="crm-ficha-motivo" class="crm-ficha__motivo" :recado="recado" sem-detalhe
+          :rotulo-do-liberar="primarioTravado.pedeLiberar ? rotuloDoLiberar('ficha') : undefined" @liberar="emit('liberar', lead.id)"
+        />
       </template>
       <a v-else class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
       <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
@@ -539,14 +556,14 @@ function irParaAnotar() {
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}. Marque à mão em Desfecho, “Proposta enviada”.</p>
       </template>
 
+      <!-- As travas do primeiro contato num recado só (horário e ritmo), com o quando; com o primário
+           travado ele já está ao lado do botão e não se repete aqui. -->
+      <RecadoDeTravas
+        v-if="(travado || segurado) && !primarioTravado" :recado="recado"
+        :rotulo-do-liberar="rotuloDoLiberar('ficha')" @liberar="emit('liberar', lead.id)"
+      />
       <!-- Os avisos num lugar só, um por linha, com a palavra antes da cor. -->
       <ul v-if="temAvisos" class="crm-ficha__avisos">
-        <!-- Com o primário travado, o "Liberar" já está ao lado dele: aqui fica só o porquê (a taxa medida). -->
-        <li v-if="travado" class="is-atencao">
-          {{ aviso }}
-          <button v-if="!primarioTravado?.pedeLiberar" type="button" class="botao botao--leve" @click="emit('liberar', lead.id)">{{ ROTULO_DE_LIBERAR }}</button>
-        </li>
-        <li v-if="segurado" class="is-atencao" role="status">{{ textoDoRitmo(ritmo) }}</li>
         <li v-if="lead.plus?.fixo" class="is-atencao">Telefone fixo: confira se tem WhatsApp antes de enviar.</li>
         <li v-if="avisoDoPrazo">{{ avisoDoPrazo }}</li>
         <li v-else-if="saiuPeloPrazo">
@@ -629,19 +646,19 @@ function irParaAnotar() {
         <li v-if="conversaCortada" class="crm-muted"><button type="button" class="crm-mais" @click="conversaInteira = true">Ver as {{ conversaTodas.length - conversa.length }} mensagens anteriores</button></li>
         <li v-for="(m, i) in conversa" :key="`${m.em}-${i}`" :class="`is-${m.direcao}`">
           <span class="so-leitor">{{ m.direcao === 'entrada' ? `${lead.empresa} escreveu` : 'Você escreveu' }}</span>
-          <p>{{ m.texto || (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
-          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}</time>
+          <p>{{ m.texto ? textoParaATela(m.texto) : (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
+          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}{{ m.papel ? ` · ${QUEM_DO_PAPEL[m.papel]}` : '' }}</time>
         </li>
       </ol>
       <template v-else>
-        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ lead.resposta.trecho }}</blockquote>
+        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ textoParaATela(lead.resposta.trecho) }}</blockquote>
         <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
         <p class="crm-muted">{{ conversaGuardada === false ? 'A conversa inteira aparece aqui a partir das próximas mensagens: o observador passou a guardar em 16/10/2026.' : conversaErro || '' }}</p>
       </template>
     </section>
 
-    <!-- Como vender (16/10/2026): oferta, roteiro e copiloto eram três blocos seguidos; viraram
-         uma seção com três abas, abrindo na que o momento pede. -->
+    <!-- Como vender (16/10/2026): oferta e roteiro numa seção com abas; o copiloto, que era a terceira,
+         foi para o Assistente em 17/10/2026 (o botão logo abaixo). -->
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-vender">
       <h3 id="crm-ficha-vender">Como vender</h3>
       <div class="segmentado" role="group" aria-label="Como vender este lead">
@@ -676,8 +693,12 @@ function irParaAnotar() {
       <a class="crm-colinha__inteira" href="/mais?abrir=roteiro" @click="verColinha">Ver o roteiro inteiro <span aria-hidden="true">→</span></a>
     </template>
 
-    <!-- Do "respondeu" à proposta, com o copiloto ligado. -->
-    <CrmCopiloto v-else-if="abaDeVenda === 'copiloto'" :lead="lead" @sugestao="aoTerSugestao" />
+    <!-- Fase 2 da RULES 28 (17/10/2026): no lugar da aba Copiloto. Abre o Assistente com este lead como
+         contexto (o `?lead=` do endereço); a sugestão guardada do copiloto chega lá num cartão. -->
+    <div v-if="assistente.disponivel.value" class="crm-form__botoes crm-ficha__perguntar">
+      <button class="botao" type="button" @click="perguntarSobreOLead">Perguntar sobre este lead</button>
+      <span class="crm-muted">{{ comCopiloto && copilotoServe(lead) ? 'O Assistente traz a sugestão do copiloto, quando há uma para a conversa de agora, com a proposta e o preço do cardápio.' : 'O Assistente lê este lead e responde ao lado.' }}</span>
+    </div>
     </section>
 
     <section class="crm-ficha__secao" aria-labelledby="crm-ficha-anotar">
@@ -765,4 +786,6 @@ function irParaAnotar() {
 <style>
 /* O motivo do primeiro contato travado (AC-22): linha inteira, embaixo dos botões. */
 .crm-ficha__motivo { flex: 1 1 100%; margin: 0; }
+/* O "Perguntar sobre este lead" (fase 2 da RULES 28): embaixo das abas de Como vender, com a dica ao lado. */
+.crm-ficha__perguntar { align-items: center; margin-top: var(--esp-3); }
 </style>

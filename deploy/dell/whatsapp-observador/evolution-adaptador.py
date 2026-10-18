@@ -11,8 +11,9 @@ da bridge, o que o observador espera, numa pasta só do PRUMO:
     {"event":"ignored","reason":"self_chat_mode_rejects_non_self","chatId":"<tel>@s.whatsapp.net"}   o lead escreveu
     {"event":"owner_sent","chatId":...,"ts":...}                                                      o PRUMO escreveu
     {"event":"owner_receipt","chatId":...,"status":"lido","ts":...}                                   o lead leu
-- `respostas.jsonl`: {"chave","ts","texto","id"?} do que um lead escreveu (a mesma convenção do remendo
-  `squadone:respostas`: mídia vira "[áudio]", "[imagem] legenda"...);
+- `respostas.jsonl`: {"chave","ts","texto","id"?,"audio"?} do que um lead escreveu (a mesma convenção do remendo
+  `squadone:respostas`: mídia vira "[imagem] legenda"...; áudio, desde 17/10/2026, "[áudio 27s]" com a duração e,
+  até MAX_AUDIO_S, `audio: {seg, msg}` para o observador baixar da Evolution e transcrever);
 - `enviadas.jsonl` (16/10/2026): {"chave","ts","texto","id"?} do que o PRUMO escreveu a um lead, só para a
   conversa do lead em disco (o observador grava em WHATSAPP_CONVERSAS_DIR e apaga este arquivo). O
   `owner_sent` do log ganha o `id` da mensagem, nunca o texto.
@@ -306,6 +307,102 @@ def texto_de_empresa(mensagem) -> str:
     return "\n".join(partes).strip()
 
 
+# Áudio de lead (17/10/2026): um áudio de recusa virava "[áudio]" e o classificador nunca o ouvia. O texto
+# passa a levar a duração ("[áudio 27s]", o contrato que a Central lê) e, para áudio de LEAD de até
+# MAX_AUDIO_S, a linha do respostas.jsonl leva também `audio: {seg, msg}`: o bastante para o observador pedir
+# o arquivo à Evolution (POST /chat/getBase64FromMediaMessage) e transcrever. Este adaptador continua sem rede.
+# O `msg` vai inteiro (chave + audioMessage) porque a Evolution roda com DATABASE_SAVE_DATA_NEW_MESSAGE=false:
+# ela não guarda a mensagem, então pedir só pelo id não acharia nada.
+MAX_AUDIO_S = 120
+# O que o download precisa (url/directPath, a chave de mídia e os hashes) e nada além: sem jpegThumbnail,
+# waveform, contextInfo nem bytes do arquivo (a Evolution com WEBHOOK_BASE64 poria o áudio no corpo).
+CAMPOS_DO_AUDIO = ("url", "directPath", "mimetype", "mediaKey", "fileSha256", "fileEncSha256", "fileLength",
+                   "seconds", "ptt", "mediaKeyTimestamp")
+# Campos que o Baileys serializa como objeto (Uint8Array -> {"0": n, ...}; Long -> {low, high, unsigned})
+# em vez de texto base64/número. Aceitos só pequenos: nada de arquivo inteiro escondido num deles.
+CAMPOS_DO_AUDIO_EM_OBJETO = ("mediaKey", "fileSha256", "fileEncSha256", "fileLength", "mediaKeyTimestamp")
+MAX_CAMPO_DO_AUDIO = 2000
+
+
+def segundos_do_audio(audio) -> int | None:
+    """A duração declarada do áudio (audioMessage.seconds), ou None quando ausente/absurda."""
+    if not isinstance(audio, dict):
+        return None
+    s = audio.get("seconds")
+    if isinstance(s, bool):
+        return None
+    try:
+        n = int(s)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return n if 0 <= n <= 86400 else None
+
+
+def marcador_de_audio(seg: int | None) -> str:
+    """'[áudio 27s]' (contrato da conversa em disco); sem duração conhecida, o '[áudio]' de sempre."""
+    return f"[áudio {seg}s]" if seg is not None else "[áudio]"
+
+
+def audio_da_mensagem(mensagem, profundidade: int = 0) -> dict | None:
+    """O audioMessage, abrindo os embrulhos (mensagem temporária, visualização única). Edição não conta."""
+    if not isinstance(mensagem, dict) or profundidade > 3:
+        return None
+    for embrulho in EMBRULHOS:
+        interno = mensagem.get(embrulho)
+        if isinstance(interno, dict):
+            return None if embrulho == "editedMessage" else audio_da_mensagem(interno.get("message"), profundidade + 1)
+    audio = mensagem.get("audioMessage")
+    return audio if isinstance(audio, dict) else None
+
+
+def pedido_do_audio(item: dict, audio: dict) -> dict | None:
+    """{key, message: {audioMessage}} só com os campos do download; None quando falta o que baixar."""
+    chave = item.get("key") if isinstance(item.get("key"), dict) else {}
+    id_msg = chave.get("id") or item.get("id") or item.get("messageId")
+    if not isinstance(id_msg, str) or not id_msg:
+        return None
+    limpo: dict = {}
+    for campo in CAMPOS_DO_AUDIO:
+        v = audio.get(campo)
+        if isinstance(v, (str, int, float, bool)) and not (isinstance(v, str) and len(v) > MAX_CAMPO_DO_AUDIO):
+            limpo[campo] = v
+        elif isinstance(v, dict) and campo in CAMPOS_DO_AUDIO_EM_OBJETO \
+                and len(json.dumps(v)) <= MAX_CAMPO_DO_AUDIO and all(isinstance(x, (int, bool)) for x in v.values()):
+            limpo[campo] = v
+    if not limpo.get("mediaKey") or not (limpo.get("url") or limpo.get("directPath")):
+        return None
+    remoto = chave.get("remoteJid") or item.get("remoteJid") or ""
+    return {"key": {"id": id_msg, "fromMe": False, "remoteJid": remoto if isinstance(remoto, str) else ""},
+            "message": {"audioMessage": limpo}}
+
+
+def audio_para_transcrever(item: dict) -> dict | None:
+    """{seg, msg} de um áudio de lead que cabe no teto de duração; None no resto (sem áudio, longo, sem duração,
+    sem o que baixar). Quem decide se transcreve (teto por dia, chave, tamanho) é o observador."""
+    audio = audio_da_mensagem(item.get("message"))
+    seg = segundos_do_audio(audio)
+    if audio is None or seg is None or seg > MAX_AUDIO_S:
+        return None
+    msg = pedido_do_audio(item, audio)
+    return {"seg": seg, "msg": msg} if msg else None
+
+
+def audio_do_lead(item: dict) -> dict | None:
+    """O `audio` da linha do respostas.jsonl para TODO áudio de lead (revisão de 17/10/2026): {seg, msg} quando dá
+    para baixar; senão só {seg} (ou {} sem duração), e o observador registra o motivo (longo, sem_dados). A marca diz
+    "esta instância recebeu o áudio e responde por ele": o observador da bridge do Hermes (que só tem o "[áudio]")
+    não manda lote só de áudio ao n8n, e é esta instância que manda, uma vez, o marcador que não foi transcrito.
+    Sem a marca, um áudio longo não chegaria ao n8n por nenhuma das duas."""
+    audio = audio_da_mensagem(item.get("message"))
+    if audio is None:
+        return None
+    para_baixar = audio_para_transcrever(item)
+    if para_baixar:
+        return para_baixar
+    seg = segundos_do_audio(audio)
+    return {"seg": seg} if seg is not None else {}
+
+
 def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     """O texto como a bridge do Hermes grava (mesma convenção de mídia). '' = nada a guardar
     (reação, edição, protocolo, mensagem sem conteúdo)."""
@@ -337,7 +434,7 @@ def texto_da_mensagem(mensagem, profundidade: int = 0) -> str:
     elif "videoMessage" in mensagem:
         texto = f"[vídeo] {_legenda(mensagem['videoMessage'])}"
     elif "audioMessage" in mensagem:
-        texto = "[áudio]"
+        texto = marcador_de_audio(segundos_do_audio(mensagem["audioMessage"]))
     elif "documentMessage" in mensagem:
         doc = mensagem["documentMessage"]
         texto = f"[documento] {str(doc.get('fileName') or '') if isinstance(doc, dict) else ''}"
@@ -527,7 +624,11 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
                 pular("entrada_atrasada")
             if texto:
                 # id (16/10/2026): a conversa do lead em disco deduplica por ele (o mesmo chip chega pela bridge).
-                respostas.append({"chave": chave, "ts": int(ts), "texto": texto, **({"id": str(id_msg)} if id_msg else {})})
+                # audio (17/10/2026): o que o observador precisa para baixar e transcrever (ver MAX_AUDIO_S), e a marca
+                # de que esta instância responde pelo áudio mesmo quando não dá para baixar (audio_do_lead).
+                audio = audio_do_lead(item)
+                respostas.append({"chave": chave, "ts": int(ts), "texto": texto, **({"id": str(id_msg)} if id_msg else {}),
+                                  **({"audio": audio} if audio is not None else {})})
         else:
             pular("sem_fromMe")
             continue

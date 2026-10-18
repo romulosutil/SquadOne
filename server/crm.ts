@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
+import { pedeMaterial, textoParaATela } from "../src/operations/marcadores-da-conversa.ts";
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -186,8 +187,15 @@ export function porteDaColuna(valor: string): PorteDoCnpj | undefined {
   return v === "EPP" || v === "DEMAIS" ? v : undefined;
 }
 
-/** "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa. */
-export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "neutra", "bot"] as const;
+/**
+ * "exclusao" (07/10/2026): pediu para apagar o demo ou o conteúdo; para o funil é uma negativa.
+ * "licenca" (17/10/2026, a Baobá): o "pode enviar sim" a "posso mandar o vídeo?" é permissão para mandar
+ * o material, não um "quero ver" dito. Fica na vez de responder até o material sair (como o interesse
+ * parado) e, nas métricas, conta como o interesse contava (pedeMaterial): até 17/10 o mesmo "pode mandar"
+ * era gravado como interesse, e separar o tipo não pode encolher o "quero ver". A diferença fica só na
+ * frase e na tática do cartão (não promete demonstração).
+ */
+export const TIPOS_DE_RESPOSTA = ["negativa", "exclusao", "interesse", "licenca", "neutra", "bot"] as const;
 export type CrmTipoDeResposta = (typeof TIPOS_DE_RESPOSTA)[number];
 const ehRecusa = (resposta: CrmResposta | undefined) => resposta?.tipo === "negativa" || resposta?.tipo === "exclusao";
 
@@ -202,9 +210,13 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
   negativa: "Negativa",
   exclusao: "Pediu para apagar",
   interesse: "Interesse",
+  licenca: "Deixou mandar",
   neutra: "Sem sim nem não",
   bot: "Só resposta automática",
 };
+
+/** A resposta pede que algo saia daqui (o link, o Raio-X, o material): a regra única mora com a tela. */
+export { pedeMaterial };
 
 function respostaDaLinha(c: (campo: "respostaTipo" | "respostaTrecho" | "respostaEm") => string): CrmResposta | undefined {
   const tipo = c("respostaTipo").toLowerCase() as CrmTipoDeResposta;
@@ -761,8 +773,10 @@ export function interesseParado(entrada: {
   segundas: number[];
   ultimaSaida?: number;
 }): { desde?: number } | null {
-  if (!entrada.conversa || entrada.resposta?.tipo !== "interesse") return null;
-  const desde = instante(entrada.resposta.em ?? "") ?? entrada.respondeu;
+  // A licença (17/10/2026) também espera o que foi autorizado sair: a vez é nossa até o material.
+  if (!entrada.conversa || !pedeMaterial(entrada.resposta)) return null;
+  const resposta = entrada.resposta!;
+  const desde = instante(resposta.em ?? "") ?? entrada.respondeu;
   // Sem a data da resposta, qualquer 2ª mensagem anotada vale: é melhor sumir com o link mandado
   // do que ficar para sempre por falta de data.
   const depois = (t: number) => desde === undefined || t > desde;
@@ -1027,6 +1041,7 @@ interface EtapaCalculada {
 /** "Respondeu" diz o que a pessoa disse, quando o n8n classificou; sem classificação, como antes. */
 function subEtapaDaResposta(resposta: CrmResposta | undefined, base = "Respondeu"): string {
   if (resposta?.tipo === "interesse") return `${base}: quer ver (interesse)`;
+  if (resposta?.tipo === "licenca") return `${base}: deixou mandar o material (licença, não é "quero ver")`;
   if (resposta?.tipo === "neutra") return `${base}: sem sim nem não`;
   return base;
 }
@@ -1756,8 +1771,10 @@ export function oQueASegundaLeva(lead: Pick<CrmLead, "links" | "abordagem">): "s
 }
 
 /** A ação do interesse parado há mais de HORAS_ATE_URGENTE: diz há quanto tempo e o que falta mandar. */
-export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | "abordagem" | "demoApagadoEm">, esperandoMs: number): string {
+export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | "abordagem" | "demoApagadoEm" | "resposta">, esperandoMs: number): string {
   const ha = `há ${tempoEsperando(esperandoMs)}`;
+  // A licença não é "quer ver": ele deixou mandar o que foi oferecido, e é só isso que falta.
+  if (lead.resposta?.tipo === "licenca") return `Deixou mandar ${ha} — o que ele autorizou ainda não foi mandado`;
   if (lead.produto === "iris" || lead.produto === "estampa") return `Quer saber mais ${ha} — combinar a demonstração`;
   if (lead.produto === "prumo") {
     return lead.links.segunda ? `Quer saber mais ${ha} — o Raio-X ainda não foi mandado`
@@ -1818,8 +1835,14 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       });
     }
     if (lead.respostaNova) {
-      const t = Date.parse(lead.marcos.respondeu ?? "");
+      // "Respondeu ontem" é a ÚLTIMA mensagem de gente (17/10/2026): o marco `respondeu` é a primeira
+      // resposta (o funil conta por ele) e, na Baobá, dizia "há 3 dias" de quem tinha escrito ontem.
+      const t = maior(...[lead.conversa?.ultimaEntrada, lead.resposta?.tipo !== "bot" ? lead.resposta?.em : undefined, lead.marcos.respondeu]
+        .map((v) => instante(v ?? ""))) ?? NaN;
       const r = lead.resposta && lead.resposta.tipo !== "bot" ? lead.resposta : undefined;
+      // A última mensagem da conversa é nossa: o cartão nunca afirma o "sim" dele como se fosse agora,
+      // diz que você já respondeu e o que ainda falta (o link, o material).
+      const jaRespondeu = lead.conversa?.ultima.direcao === "saida";
       const segunda = [
         ...(lead.links.segunda ? [{ rotulo: lead.produto === "prumo" ? "Mandar o Raio-X" : ROTULO_DA_SEGUNDA[oQueASegundaLeva(lead)],
           url: lead.links.segunda }] : []),
@@ -1829,23 +1852,26 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       const parado = lead.interesseParado;
       const desde = Date.parse(parado?.desde ?? "");
       const urgente = parado !== undefined && Number.isFinite(desde) && agora - desde >= HORAS_ATE_URGENTE * 60 * 60 * 1000;
+      const base = urgente ? acaoDoInteresseParado(lead, agora - desde)
+        : r?.tipo === "licenca" ? "Deixou mandar: mandar o que ele autorizou"
+        : r?.tipo === "interesse" ? (lead.produto === "iris" || lead.produto === "estampa" ? "Quer saber mais: combinar a demonstração"
+          : lead.produto === "prumo"
+          ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
+          : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
+          : ACAO_DO_INTERESSE[oQueASegundaLeva(lead)])
+          : "Responder no WhatsApp";
       itens.resposta.push({
         leadId: lead.id,
-        acao: urgente ? acaoDoInteresseParado(lead, agora - desde)
-          : r?.tipo === "interesse" ? (lead.produto === "iris" || lead.produto === "estampa" ? "Quer saber mais: combinar a demonstração"
-            : lead.produto === "prumo"
-            ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
-            : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
-            : ACAO_DO_INTERESSE[oQueASegundaLeva(lead)])
-            : "Responder no WhatsApp",
+        acao: jaRespondeu && !urgente && pedeMaterial(r) ? `Você já respondeu; falta ${base.replace(/^[^:]*:\s*/, "")}` : base,
         detalhe: [
           Number.isFinite(t) ? `${textoDeDias(dias(t, agora), "Respondeu")}.` : "Escreveu por último.",
-          ...(r?.trecho ? [`“${r.trecho}”`] : []),
+          ...(r?.trecho ? [`“${textoParaATela(r.trecho)}”`] : []),
+          ...(jaRespondeu ? ["A última mensagem da conversa é sua."] : []),
           // A regra dos 7 dias continua valendo para o interesse parado: dizer quanto falta é o empurrão.
           ...(parado && lead.diasParaSair !== undefined
             ? [`Sem mensagem dele, vai para Perdido ${lead.diasParaSair <= 1 ? "amanhã" : `em ${lead.diasParaSair} dias`}.`] : []),
         ].join(" "),
-        links: r?.tipo === "interesse" ? [...segunda, ...conversa] : [...conversa, ...segunda],
+        links: pedeMaterial(r) ? [...segunda, ...conversa] : [...conversa, ...segunda],
         // Interesse parado na frente, o que espera há mais tempo primeiro; depois as demais respostas.
         ordem: (parado ? 0 : 1e13) + (parado && Number.isFinite(desde) ? desde : Number.isFinite(t) ? t : 0),
         ...(urgente ? { urgente: true } : {}),

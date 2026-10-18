@@ -85,6 +85,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/lead-quente.ts   (17/10/2026, SOMBRA) o agente que mantém o lead quente depois do link: decisão PURA responder|escalar|calar a cada mensagem nova do lead
+                          (gate estrito, teto de toques, texto só do copiloto, sem R$); NADA envia ao lead. Fase de envio = decisão aberta do Rômulo
+  server/lead-quente-sombra.ts  a cola (SQUADONE_LEAD_QUENTE_SOMBRA, desligada, só operations com bot e copiloto): JSONL 600 em lead-quente-sombra/,
+                          aviso "Eu teria respondido/escalado" no Telegram com 👍/👎 (callback q:), teto/dia, GET /api/operations/crm/lead-quente
   server/venda-do-dia.ts  (16/10/2026, OT-01) o "Enviei"/"Pular" do dia num arquivo só (venda-do-dia.json), dividido pela Próxima
                           venda (GET/POST /api/operations/crm/venda) e pelo vendedor do Telegram; zera à meia-noite de SP;
                           desde 17/10/2026 (AC-06) é a fonte única do dia: por onde cada ação se resolveu (central, telegram,
@@ -93,7 +97,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           e os liberados do dia (AC-21, POST /api/operations/crm/venda/liberar), o mesmo "Liberar" para Próxima venda, Triagem e Ficha
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
-                          venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=
+                          venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=;
+                          desde 17/10/2026 (a Baobá) o `papel` da entrada (recepção/robô; o robô não é resposta nem recomeça o prazo), a mídia nossa
+                          ("[vídeo]") vale como o link e o áudio não ouvido é dito assim (src/operations/marcadores-da-conversa.ts, PURO);
+                          `resposta.tipo = "licenca"` é permissão para mandar o material, nunca "quero ver"
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
@@ -114,18 +121,23 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
     tipos, comum, natureza, categoria, transferencias, dedupe, parcelas, visoes, processar, resumo, pluggy-mapa, fatura-santander: PUROS
     organizacao (categorias, semáforo, orçamento, recorrentes), alertas (70/90/100%), gasto-falado, extrato (OFX/CSV): PUROS
     explicacao (PURO): o texto exato do "Explicar este mês", o hash da prévia e o prompt fixo; só sai a pedido (SQUADONE_FINANCAS_IA)
-    pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas)
+    pluggy.ts (transporte), banco.ts (better-sqlite3, 600, migrações), sync.ts (polling), pdf-texto.ts (pdfjs), rotas.ts (/api/financas;
+                          POST /gasto, 17/10/2026: o cartão de gasto do Assistente, relido por lerPedidoDeGasto, chave painel:<id>)
     servico.ts (cola: resumo com a organização, depois de cada escrita, avisador, gasto anotado)
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
-src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso
-  src/casca/              destinos.ts (PURO: rota por perfil, barra, Ctrl+K), hoje.ts (PURO: ordem da Hoje,
+src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso; no operations
+                          três menus desde 17/10/2026 (Central de comando · ＋ Assistente · Vendas) e a Manutenção discreta (engrenagem)
+  src/casca/              destinos.ts (PURO: rota por perfil, barra, destinoDiscreto, Ctrl+K), central.ts (PURO, 17/10/2026: as faixas da
+                          Central de comando, o andar do mapa, ?abrir=), hoje.ts (PURO: ordem da Hoje,
                           semáforo das finanças, estado do time só com fonte, linha do funil; no operations a Hoje não tem o bloco Time, AC-18),
                           paleta.ts (PURO, AC-23: leads no Ctrl+K pelo nome da empresa, 8 no máximo, nunca telefone nem id na tela, leitura
                           do CRM guardada 60 s; reaberturaDepoisDeIr), mais.ts (PURO: secaoDoMais, ?abrir=manutencao|roteiro, e ferramentasDoMais;
                           Desconectar o Google está em Mais › Manutenção, AC-25), rota.ts (pushState sem roteador),
                           overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
-                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta
-  src/rotas/              HojeRota (/), AgendaRota (/agenda), EscritorioRota (/squadone), MaisRota (/mais)
+                          BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta,
+                          PrecisaDeVoce (os até 3 cartões, Hoje e Central), EscritorioVivo (o mapa da Central, sem editar o roster)
+  src/rotas/              CentralRota (/ no operations), HojeRota (/ no app), AgendaRota (/agenda), EscritorioRota (/squadone),
+                          MaisRota (/mais; Manutenção no operations). As rotas fora dos menus seguem por endereço
   src/agentes/estado.ts   estado e ações dos agentes (era o <script> do App.vue): roster, squad ativa, Mochila,
                           turno, cartões, folhas; um por aba (`useAgentes`), com as guardas de isLoading e abertura
   src/agentes/ListaDeQuests.vue  compromissos da Mochila: "próximos 3" na Hoje e a Agenda por dia
@@ -198,6 +210,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           pausadoAte; sem "Liberar". Conta o retrato e os toques desta tela (localStorage, 24 h). No servidor,
                           no mesmo dia: follow-up só para quem leu (Site, PRUMO e o 05 · Acompanhamento) e Revisar com o
                           WhatsApp publicado antes do "não confirmado"
+    recado-de-travas.ts   PURO (17/10/2026, hierarquia de Vendas): as duas travas num recado só com o próximo passo ("Fora do
+                          expediente: volta segunda às 8h", "Libera às 14:20 (ritmo)") e o que continua livre; RecadoDeTravas.vue
+                          (BP-TRAVAS) na Próxima venda, na Triagem (o "Liberar" uma vez por lote) e na Ficha. Não muda as travas
+    vendas-abas.ts        PURO (17/10/2026): as abas de Vendas na ordem Fazer (A fazer) → Triar (Triagem) → Entender (Funil, Números,
+                          Resultados num segmentado + "Roteiro de venda") e o endereço ?ver= de cada uma (os links antigos seguem)
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
     ab-mensagem.ts        PURO (14/10/2026): A/B estratificado da 1ª mensagem em Resultados ("A × B (mesmo sorteio, por nicho)"):
@@ -207,7 +224,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           (150 envios sem letra e os do hash) e o follow-up do 05 · Acompanhamento ficam fora
     copiloto.ts           PURO (15/10/2026): dossiê do lead do "respondeu" à proposta (jornada, colinha, Raio-X, notas; sem telefone),
                           prompt, leitura da saída (id só do cardápio, "R$" só dos preços abertos, número fora do dossiê = aviso)
-                          e o rascunho da proposta com preço do cardápio; CrmCopiloto.vue na Ficha só copia, nunca envia
+                          e o rascunho da proposta com preço do cardápio; desde 17/10/2026 a sugestão aparece no cartão do
+                          Assistente (casca/AssistenteSugestao.vue), que só copia, nunca envia; a Ficha só lê a guardada
     colinha.ts            PURO: colinha de atendimento do PRUMO (cardápio, roteiro, objeções, CDL; texto do plano de 08/10/2026,
                           cardápio na hierarquia de 09/10/2026: ver → arrumar → manter, Raio-X e Mapa grátis, Fonte só depois do Mapa);
                           colinhaDoLead escolhe pela etapa e pela resposta. Bloco "Colinha" na Ficha e /crm?ver=colinha
@@ -234,7 +252,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           TrocaSquadCard, SquadSelector, SalasPainel, SalaCartao,
                           ContratarFolha, EditarFolha (Arquivar a squad mora nela, AC-25), NovaSquadFolha, ArquivoFolha
   src/office/             geometria isométrica, salas, sprites
-  src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch) e a escala inteira do mapa
+  src/office/vista.ts     PURO: Lista|Mapa (localStorage com try/catch, a da Central à parte) e a escala inteira do mapa
+  src/office/baloes.ts    PURO (17/10/2026): o texto de cada balão do mapa só com fonte ("Sem sinal" sem ela) e a sala que o PO raiz
+                          visita por um robô em falha (destinoDoSupervisor); o GameMap recebe pessoa → balão e `visita`
   src/office/salas.ts     diferença de salas (abrir/fechar/trocar dono), pura
   src/office/postos.ts    PURO: posto de cada pessoa na sala (cadeiras, depois espalhado); tiles livres
   src/office/trabalhadores.ts  trabalhador automático (n8n, timer) → sala, DERIVADO do campo `trabalhador` de fluxos.ts; FORA do prompt (RULES 26)
@@ -268,7 +288,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Agenda no Dell, avisos, lembretes | `acesso`, `dados`, `avisos`, `lembretes`, `vigia`, `sinal-de-vida` | `agenda-no-dell.md` |
 | Bot do Telegram | `telegram*`, `transcricao`, `financas/gasto-falado` | `telegram.md` |
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
-| Perfis, avaliação de turno, Luna, Jev, copiloto | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto` | `perfis-e-experimentos.md` |
+| Perfis, avaliação de turno, Luna, Jev, copiloto, lead quente | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto`, `lead-quente*` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
 | WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
@@ -312,12 +332,17 @@ arquivo não muda (o Easypanel, reserva fria, o lê). Contratação aplica na sq
 O Escritório é só frontend e não grava nada; estado de pessoa só com fonte, nunca inventado.
 
 **Perfis.** `SQUADONE_MODE`: `app` (Easypanel) ou `operations` (Dell, só loopback); valor
-desconhecido derruba o boot. A Central é somente leitura para serviços. A Hoje mostra no
+desconhecido derruba o boot. A Central é somente leitura para serviços. A home (Central de comando no
+operations, Hoje no app) mostra no
 máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
 padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
 (RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
-na Ficha a próxima mensagem e a proposta, nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
+a próxima mensagem e a proposta (desde 17/10/2026 no cartão do Assistente, não mais numa aba da Ficha), nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
+O agente que mantém o lead quente (17/10/2026, decisão do Rômulo: ele segue nos primeiros contatos e no primeiro link; o agente cuida do lead depois
+que o link saiu e o lead escreve) está só em **sombra** (`SQUADONE_LEAD_QUENTE_SOMBRA`, desligada, só `operations` com bot e copiloto): decide
+responder/escalar/calar, grava JSONL e avisa o Rômulo no Telegram; **nada é enviado ao lead**, e a fase de envio (veto de 3 min, o agente se
+identificar como assistente) é decisão aberta dele em `perfis-e-experimentos.md`.
 O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia e LIGADO
 na Mel às 13:40 de 17/10/2026, depois de ele ver funcionando numa instância-sombra: SQUADONE_ASSISTENTE=true e
 SQUADONE_ASSISTENTE_HERMES=true no operations.env, cópia anterior em operations.env.antes-do-assistente-20261017): server/assistente.ts (cola: fila serial, tetos, prazo de 4 min, JSONL 600),
@@ -327,6 +352,11 @@ assistente.ts (o painel); contrato em src/operations/assistente-contrato.ts. Cha
 substitui o Pedir no `operations`; Gemini roteia com leitura, o Hermes é consultado sem ferramentas (`hermes -z -t clarify`,
 contexto mascarado pela Central, sem sessão guardada), o Jev só mede; só propõe cartões, nada a lead, finanças e R$ de
 proposta fora de modelo; `SQUADONE_ASSISTENTE` e `SQUADONE_ASSISTENTE_HERMES` nascem desligadas.
+Fase 2 (17/10/2026): o copiloto entra no painel (leitura `ler_sugestao_do_copiloto`, que nunca gera; o cartão
+`sugestao_do_copiloto` leva só a referência do lead e o hash, e AssistenteSugestao.vue relê a sugestão com o preço do
+cardápio), "Perguntar sobre este lead" na Ficha abre o painel (no celular, folha por cima da Ficha), e o gasto falado vira
+cartão na aba por regra fixa, sem ir ao servidor do Assistente (AssistenteGasto.vue, grava por POST /api/financas/gasto).
+Fase 3 pendente: Jev medindo a intenção em sombra e o /a no Telegram.
 Na config da Central, `tools.syncthing` é opcional (aposentado em 12/10/2026): ausente, some do painel.
 PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne e as quatro ofertas sob o PRUMO, no mesmo
 CRM (`site`, `prumo`, `iris`, `estampa`). Iris e estamparias saem das abas Clínicas e Estamparias com o

@@ -387,6 +387,8 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
     case 'resposta':
       if (tipo === 'exclusao') return { acao: 'Agradecer e apagar o lead', quem: 'você', quando: 'hoje' }
       if (tipo === 'negativa') return { acao: 'Responder a objeção com o Roteiro, sem insistir depois de um "não"', quem: 'você' }
+      // A licença (17/10/2026) não é "quero ver": só o material autorizado, sem preço.
+      if (tipo === 'licenca') return { acao: 'Mandar o material que ele deixou mandar, sem preço, e depois perguntar o que achou', quem: 'você', quando: 'hoje' }
       if (tipo === 'interesse' || lead.interesseParado) {
         return {
           acao: funil === 'prumo' ? 'Mandar o Raio-X na 2ª mensagem' : 'Mandar a 2ª mensagem com o Raio-X ou o demo e o preço do Encontrado',

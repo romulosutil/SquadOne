@@ -252,3 +252,79 @@ describe("rotas de finanças: explicar este mês", () => {
     }
   });
 });
+
+// O cartão de gasto falado do Assistente (fase 2 da RULES 28, 17/10/2026): só grava no toque, por esta
+// rota, com a guarda de mesma origem; relê a frase pela regra do Telegram; o mesmo cartão não duplica;
+// o log não leva valor nem lugar (RULES 24).
+describe("rotas de finanças: POST /gasto (cartão do Assistente)", () => {
+  const ESCRITA = { host: "127.0.0.1:9120", origin: "http://127.0.0.1:9120", "content-type": "application/json" };
+  const ORIGEM = "3f2a9c1e-77b0-4a51-9c3e-0d1f2a3b4c5d";
+  let dir: string;
+  let banco: BancoDeFinancas;
+  let porta = 0;
+  let s: http.Server;
+
+  function postar(corpo: unknown, headers: Record<string, string> = ESCRITA) {
+    return new Promise<{ status: number; corpo: any }>((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port: porta, path: "/api/financas/gasto", method: "POST", headers }, (res) => {
+        let texto = "";
+        res.on("data", (c) => (texto += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, corpo: texto ? JSON.parse(texto) : null }));
+      });
+      req.on("error", reject);
+      req.write(JSON.stringify(corpo));
+      req.end();
+    });
+  }
+
+  before(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "financas-gasto-"));
+    banco = await abrirBanco(dir);
+    const app = express();
+    const estado = { banco, sincronizador: null, avisador: null, problema: null };
+    app.use("/api/financas", criarRotasDeFinancas(estado, { logins: new Set(), agora: () => new Date("2026-10-17T15:00:00Z") }));
+    s = http.createServer(app);
+    await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+    porta = (s.address() as AddressInfo).port;
+  });
+  after(() => {
+    s.close();
+    banco.fechar();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("sem a mesma origem não grava", async () => {
+    assert.equal((await postar({ texto: "gastei 30 no mercado", origem: ORIGEM }, { host: "127.0.0.1:9120", "content-type": "application/json" })).status, 403);
+    assert.equal((await postar({ texto: "gastei 30 no mercado", origem: ORIGEM }, { ...ESCRITA, origin: "https://outro.exemplo", "sec-fetch-site": "cross-site" })).status, 403);
+    assert.equal(banco.transacoes().length, 0);
+  });
+
+  it("frase que não é gasto é 400, e nada grava", async () => {
+    const r = await postar({ texto: "quanto gastei esse mês?", origem: ORIGEM });
+    assert.equal(r.status, 400);
+    assert.equal(banco.transacoes().length, 0);
+  });
+
+  it("grava na conta manual com a categoria; o mesmo cartão de novo não duplica; o log não diz valor nem lugar", async () => {
+    const logs: string[] = [];
+    const original = console.log;
+    console.log = (...a: unknown[]) => { logs.push(a.map(String).join(" ")); };
+    try {
+      const r = await postar({ texto: "gastei 30 no mercado", origem: ORIGEM });
+      assert.equal(r.status, 200, JSON.stringify(r.corpo));
+      assert.deepEqual(r.corpo, { ok: true, categoria: "Mercado", novo: true, texto: "Anotado: Mercado" });
+      const de_novo = await postar({ texto: "gastei 30 no mercado", origem: ORIGEM });
+      assert.equal(de_novo.corpo.novo, false);
+      const outro = await postar({ texto: "gastei 30 no mercado", origem: "a1b2c3d4-0000-4000-8000-000000000001" });
+      assert.equal(outro.corpo.novo, true);
+    } finally {
+      console.log = original;
+    }
+    const manuais = banco.transacoes().filter((t) => t.fonte === "manual");
+    assert.equal(manuais.length, 2);
+    assert.equal(manuais[0].id, `manual:painel:${ORIGEM}`);
+    assert.equal(manuais[0].centavos, -3000);
+    for (const l of logs.filter((l) => l.includes("[financas]"))) assert.doesNotMatch(l, /30|mercado|R\$/i);
+    assert.ok(logs.some((l) => /gasto anotado pelo painel/.test(l)));
+  });
+});

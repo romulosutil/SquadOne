@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { CHAVE_DA_VISTA, escalaInteira, gravarVista, lerVistaGuardada, vistaInicial } from './vista.ts'
+import { CHAVE_DA_VISTA, CHAVE_DA_VISTA_DA_CENTRAL, escalaInteira, gravarVista, lerVistaGuardada, vistaInicial, vistaInicialDaCentral } from './vista.ts'
 
 const memoria = () => {
   const m = new Map<string, string>()
@@ -24,6 +24,15 @@ describe('vista do escritório', () => {
     assert.equal(s.m.get(CHAVE_DA_VISTA), 'mapa')
     assert.equal(lerVistaGuardada(s), 'mapa')
     s.m.set(CHAVE_DA_VISTA, 'grade')
+    assert.equal(lerVistaGuardada(s), null)
+  })
+
+  it('na Central, mapa por padrão em qualquer tela, guardado à parte do Escritório', () => {
+    assert.equal(vistaInicialDaCentral(null), 'mapa')
+    assert.equal(vistaInicialDaCentral('lista'), 'lista')
+    const s = memoria()
+    gravarVista(s, 'lista', CHAVE_DA_VISTA_DA_CENTRAL)
+    assert.equal(lerVistaGuardada(s, CHAVE_DA_VISTA_DA_CENTRAL), 'lista')
     assert.equal(lerVistaGuardada(s), null)
   })
 

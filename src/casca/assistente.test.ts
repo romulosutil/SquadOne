@@ -10,6 +10,12 @@ import {
   chaveParaRegistro,
   contextoDoEndereco,
   enterEnvia,
+  gastoDoTexto,
+  gravarGasto,
+  linhaDoTempo,
+  textoDoValor,
+  useAssistente,
+  type GastoNaTela,
   enviar,
   ErroDoAssistente,
   estadoDoCartao,
@@ -336,5 +342,62 @@ describe('assistente: acompanhamento', () => {
     await r.tique()
     await r.tique()
     assert.deepEqual(falhas, ['outro'])
+  })
+})
+
+// Fase 2 (17/10/2026): o gasto falado vira cartão NA ABA, por regra fixa, e nunca vai ao servidor do
+// Assistente; só o toque grava, pela rota das finanças.
+describe('assistente: o gasto falado fica na aba', () => {
+  const casos: Array<[string, { centavos: number; onde: string } | null]> = [
+    ['gastei 30 no mercado', { centavos: 3000, onde: 'mercado' }],
+    ['paguei R$ 45,90 na farmácia', { centavos: 4590, onde: 'farmácia' }],
+    ['quanto gastei esse mês?', null],
+    ['o que respondo para a Kulniski?', null],
+  ]
+  for (const [texto, esperado] of casos) it(`gastoDoTexto(${JSON.stringify(texto)})`, () => assert.deepEqual(gastoDoTexto(texto), esperado))
+
+  it('textoDoValor: o valor só na tela, no formato do real', () => {
+    assert.equal(textoDoValor(120050).replace(/\s/g, ' '), 'R$ 1.200,50')
+  })
+
+  const msg = (n: number): MensagemDoAssistente => ({ id: `m${n}`, n, autor: n % 2 ? 'romulo' : 'assistente', texto: `t${n}`, quando: '2026-10-17T14:00:00Z', fontes: [], cartoes: [] })
+  const gasto = (id: string, depoisDe: number): GastoNaTela => ({ id, texto: 'gastei 30 no mercado', gasto: { centavos: 3000, onde: 'mercado' }, depoisDe, estado: 'proposto' })
+
+  it('linhaDoTempo: cada gasto logo depois da mensagem que já estava na tela, na ordem escrita', () => {
+    const itens = linhaDoTempo([msg(2), msg(1), msg(3)], [gasto('a', 0), gasto('b', 2), gasto('c', 2), gasto('d', 9)])
+    assert.deepEqual(itens.map((i) => i.chave), ['g:a', 'm:1', 'm:2', 'g:b', 'g:c', 'm:3', 'g:d'])
+  })
+
+  it('mandar uma frase de gasto não chama rede nenhuma; o toque grava só pela rota das finanças', async () => {
+    const original = globalThis.fetch
+    const chamadas: Array<{ url: string; corpo: any }> = []
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      chamadas.push({ url, corpo: init?.body ? JSON.parse(String(init.body)) : null })
+      return new Response(JSON.stringify({ ok: true, categoria: 'Mercado', novo: true, texto: 'Anotado: Mercado' }), { status: 200 })
+    }) as typeof fetch
+    try {
+      const as = useAssistente()
+      as.novaConversa()
+      assert.equal(await as.mandar('gastei 30 no mercado', { pagina: 'hoje' }), true)
+      assert.equal(chamadas.length, 0, 'nada vai ao servidor do Assistente')
+      assert.equal(as.gastos.value.length, 1)
+      const g = as.gastos.value[0]
+      assert.equal(g.estado, 'proposto')
+      await as.anotarGasto(g.id)
+      assert.deepEqual(chamadas, [{ url: '/api/financas/gasto', corpo: { texto: 'gastei 30 no mercado', origem: g.id } }])
+      assert.equal(as.gastos.value[0].estado, 'confirmado')
+      assert.equal(as.gastos.value[0].resultado, 'Anotado: Mercado')
+      await as.anotarGasto(g.id)
+      assert.equal(chamadas.length, 1, 'cartão feito não grava de novo')
+      as.novaConversa()
+      assert.equal(as.gastos.value.length, 0)
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('gravarGasto: o erro do servidor volta como texto', async () => {
+    const buscar = async () => new Response(JSON.stringify({ error: 'Não reconheci um gasto.' }), { status: 400 })
+    await assert.rejects(gravarGasto('x', 'abcdefgh-1', buscar), /Não reconheci um gasto/)
   })
 })

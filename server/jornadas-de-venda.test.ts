@@ -184,6 +184,27 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
     assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.tipo, "responder");
   });
 
+  it("uma licença nova (menos de 2 h) também fura o aviso aberto de outro lead, que segue na fila", () => {
+    // Revisão de 17/10/2026: o "pode mandar" gravado como licença é quente como o interesse (pedeMaterial).
+    const licenca = visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "licenca", resposta_trecho: "pode mandar", resposta_em: horas(1) });
+    const outro = visaoCom({ place_id: "F", nome: "Studio F", status: "enviado", enviado_em: dias(3), visto_em: dias(2.8) });
+    const grupos = new Map<string, CrmVisao["hoje"][number]>();
+    for (const g of [...licenca.hoje, ...outro.hoje]) {
+      const ja = grupos.get(g.id);
+      grupos.set(g.id, ja ? { ...ja, itens: [...ja.itens, ...g.itens] } : g);
+    }
+    const v = { ...licenca, leads: [...licenca.leads, ...outro.leads], hoje: [...grupos.values()] } as CrmVisao;
+    const [aberta] = filaDeVenda(outro, LIVRE);
+    assert.equal(aberta?.tipo, "followup");
+    const estado = { ...estadoNovo(t), avisados: [aberta.chave],
+      abertos: [{ chave: aberta.chave, token: "abc", em: t, leadId: aberta.leadId, primeiroContato: false, produto: "site" as const, texto: "x" }] };
+    const r = decidir(v, estado, t + 60_000);
+    assert.equal(r.estado.abertos.length, 1, "o aviso do outro lead continua aberto");
+    assert.equal(r.decisao.tipo, "avisar");
+    assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.leadId, "site:L");
+    assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.quente, true);
+  });
+
   it("fora do expediente não avisa nada", () => {
     const sabado = Date.parse("2026-10-17T13:00:00Z");
     assert.deepEqual(decidir(vPronto, estadoNovo(sabado), sabado).decisao, { tipo: "nada", motivo: "fora-do-expediente" });

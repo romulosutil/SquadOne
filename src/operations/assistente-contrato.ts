@@ -24,6 +24,12 @@
  *                                            só vai ao console, o toque já valeu na tela.
  *   Com o Assistente desligado, toda rota menos o GET /assistente responde 503 { error, desligado: true }.
  *
+ * O gasto falado (fase 2, 17/10/2026) NÃO passa por estas rotas: "gastei 30 no mercado" é lido no
+ * painel por regra fixa (lerGastoFalado, a mesma do Telegram) e vira um cartão só da aba; o toque
+ * grava por POST /api/financas/gasto { texto, origem } -> { ok, categoria, novo, texto }, com a guarda
+ * de mesma origem e a de identidade das finanças. Nem o texto nem o valor chegam ao Assistente, ao
+ * modelo ou ao JSONL dele (RULES 24 e 28).
+ *
  * Formatos que os dois lados dividem com o CRM:
  *   - `ContextoDaPagina.pagina` é o id curto do painel (hoje, agenda, vendas, triagem, funil, numeros,
  *     ficha, financas, escritorio, mais, design-system, outra). Em `financas` o servidor não lê nada e
@@ -95,6 +101,19 @@ export type CartaoDoAssistente =
       estado: EstadoDoCartao
       /** Só "Copiar" (regras 11 e 17): nunca abre o WhatsApp nem marca envio. */
       dados: { produto: string; id: string; empresa: string; texto: string }
+    }
+  | {
+      id: string
+      tipo: 'sugestao_do_copiloto'
+      estado: EstadoDoCartao
+      /**
+       * Fase 2 (17/10/2026): nasce do SERVIDOR quando a leitura `ler_sugestao_do_copiloto` acha a
+       * sugestão guardada, nunca de uma chamada do modelo. Leva só a referência: o painel relê a
+       * sugestão de agora no GET /api/operations/crm/copiloto/sugestao e monta os itens com o preço do
+       * cardápio (textoDaProposta). Assim nem o texto da sugestão nem R$ de proposta chegam ao
+       * histórico do Assistente (RULES 28). Só "Copiar", como a mensagem ao lead.
+       */
+      dados: { produto: string; id: string; empresa: string; hashDoDossie: string }
     }
 
 export interface MensagemDoAssistente {

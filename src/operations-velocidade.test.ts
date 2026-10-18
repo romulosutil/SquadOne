@@ -58,3 +58,14 @@ describe('velocidade depois do "sim"', () => {
     assert.equal(duracao(48), '2 dias')
   })
 })
+
+describe('a licença também começa a espera pelo link (revisão de 17/10/2026)', () => {
+  it('"pode mandar" gravado como licença entra no "do quero ver ao link" como o interesse', () => {
+    const v = velocidadeDaVenda([
+      lead('licenca', { resposta: { tipo: 'licenca', trecho: 'pode mandar', em: h(10) }, marcos: { segundaEnviada: h(9) } }),
+      lead('esperando', { resposta: { tipo: 'licenca', trecho: 'pode enviar sim', em: h(5) } }),
+    ], AGORA)
+    assert.deepEqual(v.queroVerAoLink.feitos.map((f) => [f.leadId, f.horas]), [['licenca', 1]])
+    assert.deepEqual(v.queroVerAoLink.esperando.map((e) => e.leadId), ['esperando'])
+  })
+})

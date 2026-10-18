@@ -74,6 +74,11 @@ export interface DepsDoBot {
    * `curto` vai no topo do chat; `texto`, quando vem, substitui a mensagem (e tira os botões).
    */
   tocarVenda?(token: string, acao: "enviei" | "pular"): Promise<{ curto: string; texto?: string }>;
+  /**
+   * 👍/👎 num aviso do agente do lead quente em sombra (server/lead-quente-sombra.ts). Só anota o voto:
+   * não envia nada a lead nenhum. Ausente = a sombra está desligada.
+   */
+  votarLeadQuente?(token: string, concorda: boolean): Promise<{ curto: string; texto?: string }>;
 }
 
 export const TEXTO_FINANCAS_FORA = "As finanças não estão neste servidor: anote o gasto pelo app.";
@@ -298,6 +303,20 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
           await deps.responderBotao(callbackId, r.curto).catch(falhouAoEnviar);
           if (r.texto) await deps.editar(chatId, mensagemId, r.texto).catch(falhouAoEnviar);
         })().catch((err) => console.error("[telegram] botão de venda falhou:", err));
+        return;
+      }
+      case "leadQuente": {
+        // Voto no aviso da sombra: grava e tira os botões. Fora da fila de turnos, como a venda.
+        const { chatId, mensagemId, callbackId, concorda, token } = entrada;
+        (async () => {
+          if (!deps.votarLeadQuente) {
+            await deps.responderBotao(callbackId, "A sombra do lead quente não está ligada neste servidor.");
+            return;
+          }
+          const r = await deps.votarLeadQuente(token, concorda);
+          await deps.responderBotao(callbackId, r.curto).catch(falhouAoEnviar);
+          if (r.texto) await deps.editar(chatId, mensagemId, r.texto).catch(falhouAoEnviar);
+        })().catch((err) => console.error("[telegram] voto do lead quente falhou:", err));
         return;
       }
       case "audio": {

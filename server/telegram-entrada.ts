@@ -26,6 +26,8 @@ export type Entrada =
   | { tipo: "botao"; updateId: number; chatId: number; mensagemId: number; callbackId: string; acao: "aprovar" | "descartar"; propostaId: string }
   /** Toque em "Enviei"/"Pular" de um aviso de venda (server/vendedor.ts, 16/10/2026). */
   | { tipo: "venda"; updateId: number; chatId: number; mensagemId: number; callbackId: string; acao: "enviei" | "pular"; token: string }
+  /** Toque em 👍/👎 num aviso do agente do lead quente, em sombra (server/lead-quente-sombra.ts, 17/10/2026). */
+  | { tipo: "leadQuente"; updateId: number; chatId: number; mensagemId: number; callbackId: string; concorda: boolean; token: string }
   | { tipo: "atrasada"; updateId: number; chatId: number; mensagemId: number; atrasoMin: number }
   | { tipo: "ajuda"; updateId: number; chatId: number; mensagemId: number }
   | { tipo: "semTexto"; updateId: number; chatId: number; mensagemId: number }
@@ -70,6 +72,13 @@ const BOTAO_DE_VENDA = /^v:([A-Za-z0-9]{1,16}):([ep])$/;
 
 export function dadosDaVenda(token: string, acao: "enviei" | "pular"): string {
   return `v:${token}:${acao === "enviei" ? "e" : "p"}`;
+}
+
+/** callback_data dos avisos do agente do lead quente (sombra): `q:<token>:c|d` (Concordo / Discordo). */
+const BOTAO_DO_LEAD_QUENTE = /^q:([A-Za-z0-9]{1,16}):([cd])$/;
+
+export function dadosDoLeadQuente(token: string, concorda: boolean): string {
+  return `q:${token}:${concorda ? "c" : "d"}`;
 }
 
 /**
@@ -214,6 +223,10 @@ function interpretarBotao(updateId: number, q: any, chatsPermitidos: ReadonlySet
   const v = typeof q.data === "string" ? BOTAO_DE_VENDA.exec(q.data) : null;
   if (v && typeof q.message?.message_id === "number") {
     return { tipo: "venda", updateId, chatId, mensagemId: q.message.message_id, callbackId: q.id, acao: v[2] === "e" ? "enviei" : "pular", token: v[1] };
+  }
+  const lq = typeof q.data === "string" ? BOTAO_DO_LEAD_QUENTE.exec(q.data) : null;
+  if (lq && typeof q.message?.message_id === "number") {
+    return { tipo: "leadQuente", updateId, chatId, mensagemId: q.message.message_id, callbackId: q.id, concorda: lq[2] === "c", token: lq[1] };
   }
   const b = typeof q.data === "string" ? BOTAO.exec(q.data) : null;
   if (!b || typeof q.message?.message_id !== "number") return { tipo: "ignorar", updateId };
