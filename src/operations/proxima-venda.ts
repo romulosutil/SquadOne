@@ -362,6 +362,22 @@ export function fraseDaAcao(tipo: TipoDeVenda, lead: Pick<CrmLead, 'empresa' | '
   }
 }
 
+/**
+ * PURO. A chamada do cartão (17/10/2026, "passos mais claros"): o destino e o que fazer, no jeito que
+ * o Rômulo diria em voz alta, "Envie para a Kulniski Advocacia, isto:", com a mensagem logo abaixo.
+ * `fraseDaAcao` continua sendo a situação ("Kulniski disse sim: …") e aparece como o porquê; esta é a
+ * instrução. Quem respondeu foi a recepção ou o robô (leitura do copiloto): a mensagem vai a quem
+ * atende, e a chamada diz isso para ninguém mandar proposta a um atendente.
+ */
+export function chamadaDaAcao(acao: Pick<AcaoDeVenda, 'tipo' | 'empresa' | 'rascunho' | 'copiloto'>): string {
+  if (acao.tipo === 'desfecho') return `Marque que ${acao.empresa} recusou`
+  const quem = acao.copiloto?.momento?.quem
+  const destino = quem === 'recepcao' ? `a recepção de ${acao.empresa}`
+    : quem === 'robo' ? `o atendimento automático de ${acao.empresa}`
+    : acao.empresa
+  return acao.rascunho ? `Envie para ${destino}, isto:` : `Escreva para ${destino}:`
+}
+
 /** wa.me ou whatsapp.com: abre a conversa, com ou sem texto. */
 function abreOWhatsApp(url: string): boolean {
   try {

@@ -15,6 +15,7 @@ const props = defineProps<{ leads: readonly CrmLead[]; agora: number; resumido?:
 const d = computed(() => diagnosticoDeVenda(props.leads, props.agora))
 const pct = (t?: number) => (t === undefined ? '' : `${Math.round(t * 100)}%`)
 const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
+const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
 </script>
 
 <template>
@@ -23,13 +24,34 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
       <h2 id="nao-vende-titulo">Por que não está vendendo</h2>
       <a v-if="resumido" class="nao-vende__mais" href="/crm?ver=numeros">Ver os números</a>
     </div>
+    <!-- Funcional (17/10/2026): o diagnóstico traz os nomes de quem travou e o botão que abre o primeiro,
+         em vez de só dizer onde o funil perde. Na Hoje a trilha dos degraus cabe numa linha que quebra. -->
     <div v-if="d.gargalo" class="nao-vende__gargalo" role="note">
       <strong>{{ d.gargalo.titulo }}</strong>
-      <p v-if="!resumido">{{ d.gargalo.texto }}</p>
-      <p><span class="texto-2">O que fazer:</span> {{ d.gargalo.acao }}</p>
+      <p>{{ d.gargalo.texto }}</p>
+      <p><strong>O que fazer:</strong> {{ d.gargalo.acao }}</p>
+      <template v-if="d.gargalo.parados.length">
+        <p class="nao-vende__parados-titulo">
+          {{ d.gargalo.totalParados === 1 ? 'Parado aqui' : `Parados aqui (${d.gargalo.totalParados})` }}:
+        </p>
+        <ul class="nao-vende__parados">
+          <li v-for="p in d.gargalo.parados" :key="p.id"><a :href="hrefDaFicha(p.id)">{{ p.empresa }}</a></li>
+          <li v-if="d.gargalo.totalParados > d.gargalo.parados.length" class="texto-2">e mais {{ d.gargalo.totalParados - d.gargalo.parados.length }}</li>
+        </ul>
+      </template>
+      <div class="nao-vende__botoes">
+        <a v-if="d.gargalo.parados[0]" class="botao botao--primario" :href="hrefDaFicha(d.gargalo.parados[0].id)">Abrir a Ficha de {{ d.gargalo.parados[0].empresa }}</a>
+        <a class="botao" :href="d.gargalo.verEm.href">{{ d.gargalo.verEm.rotulo }}</a>
+      </div>
     </div>
     <p v-else-if="!d.degraus[0].n" class="texto-2">Nenhuma primeira mensagem nos últimos {{ d.dias }} dias.</p>
     <p v-else class="texto-2">Nenhum degrau muito abaixo do esperado nos últimos {{ d.dias }} dias.</p>
+
+    <ol v-if="resumido && d.degraus[0].n" class="nao-vende__trilha" :aria-label="`Funil dos últimos ${d.dias} dias`">
+      <li v-for="g in d.degraus" :key="g.id" :class="{ 'is-gargalo': d.gargalo?.degrau === g.id }">
+        <span>{{ g.rotulo }}</span> <strong>{{ g.n }}</strong><small v-if="g.taxa !== undefined" class="texto-2"> {{ pct(g.taxa) }}</small>
+      </li>
+    </ol>
 
     <template v-if="!resumido">
     <ol class="nao-vende__degraus" :aria-label="`Funil dos últimos ${d.dias} dias`">
@@ -52,6 +74,15 @@ const maior = computed(() => Math.max(1, d.value.degraus[0]?.n ?? 1))
 .nao-vende p { margin: 0; }
 .nao-vende__mais { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); }
 .nao-vende__gargalo { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--negativo); border-radius: var(--raio-controle); background: var(--erro-fundo); }
+.nao-vende__parados-titulo { margin-top: var(--esp-1); font-weight: var(--peso-medio); }
+.nao-vende__parados { display: flex; flex-wrap: wrap; gap: 0 var(--esp-4); margin: 0; padding: 0; list-style: none; }
+.nao-vende__parados a { display: inline-flex; min-height: var(--toque); align-items: center; color: var(--texto); font-weight: var(--peso-forte); overflow-wrap: anywhere; }
+.nao-vende__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); margin-top: var(--esp-1); }
+/* A trilha da Hoje: os degraus numa linha que quebra, o gargalo no fundo de erro. A barra e a taxa de
+   referência ficam em Números. */
+.nao-vende__trilha { display: flex; flex-wrap: wrap; gap: var(--esp-1) var(--esp-2); margin: 0; padding: 0; list-style: none; font-size: var(--tam-apoio); }
+.nao-vende__trilha li { padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); background: var(--superficie-2); font-variant-numeric: tabular-nums; }
+.nao-vende__trilha li.is-gargalo { background: var(--erro-fundo); }
 .nao-vende__degraus { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
 /* Coluna da direita com largura fixa: com `auto`, cada linha tinha uma barra de tamanho diferente. */
 .nao-vende__degraus li { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: var(--esp-0) var(--esp-2); align-items: center; padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-controle); }

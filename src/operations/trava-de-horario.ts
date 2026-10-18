@@ -47,6 +47,27 @@ export function noExpedienteDeVenda(agora: number): boolean {
   return (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
 }
 
+/** Minutos até fechar o expediente (17h30 de SP); null fora dele. Para o plano do dia dizer quanto tempo sobra. */
+export function minutosAteFecharOExpediente(agora: number): number | null {
+  if (!noExpedienteDeVenda(agora)) return null
+  return EXPEDIENTE_DE_VENDA.fimMin - relogioSP(agora).minutos
+}
+
+const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+
+/** Quando o expediente abre de novo, para quem olha fora dele: "hoje às 8h", "amanhã às 8h", "segunda às 8h". */
+export function proximaAberturaDoExpediente(agora: number): string {
+  const { dia, minutos } = relogioSP(agora)
+  const dias = EXPEDIENTE_DE_VENDA.dias as readonly number[]
+  const abre = `às ${EXPEDIENTE_DE_VENDA.inicioMin / 60}h`
+  if (dias.includes(dia) && minutos < EXPEDIENTE_DE_VENDA.inicioMin) return `hoje ${abre}`
+  for (let passo = 1; passo <= 7; passo++) {
+    const d = (dia + passo) % 7
+    if (dias.includes(d)) return `${passo === 1 ? 'amanhã' : NOME_DO_DIA[d]} ${abre}`
+  }
+  return `na próxima segunda ${abre}`
+}
+
 /**
  * A pergunta de todo botão de primeiro contato: dentro do expediente, ou liberado à mão fora dele,
  * e sempre com o ritmo livre (o ritmo protege o número e não tem "Liberar").

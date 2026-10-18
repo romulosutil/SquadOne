@@ -39,9 +39,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
 import {
-  filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, nichosDoPrimeiro, noExpedienteDeVenda,
+  chamadaDaAcao, filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, nichosDoPrimeiro, noExpedienteDeVenda,
   resumoDaFila, resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
 } from './proxima-venda'
+import { planoDoDia } from './plano-do-dia'
+import { diagnosticoDeVenda } from './por-que-nao-vende'
 import { absorverDia, liberadosDoDia as liberados, liberarLead } from './liberados'
 import { avisoDeHorario } from './resultados'
 import { ROTULO_DE_LIBERAR } from './trava-de-horario'
@@ -85,14 +87,6 @@ const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 const verPadrao = ref(false)
 /** Primeiro contato de um nicho só (a chave de chaveDoNicho); vazio = todos. */
 const nicho = ref('')
-/**
- * A mensagem aberta a partir de 64 rem (o desktop vê o texto antes do toque) e fechada no celular,
- * onde ela empurrava o botão para baixo da dobra. O toque do Rômulo vale até a tela mudar de largura.
- */
-const LARGO = '(min-width: 64rem)'
-const mensagemAberta = ref(false)
-let largura: MediaQueryList | null = null
-const aoMudarLargura = (e: MediaQueryListEvent) => { mensagemAberta.value = e.matches }
 /** "Vídeo enviado" do braço com vídeo (A/B do vídeo): lembrado neste navegador por 30 min. */
 const videos = ref<EnviosAbertos>({})
 
@@ -141,11 +135,6 @@ onMounted(() => {
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   lerResolvidas()
   videos.value = lerVideos(armazenamento(), Date.now())
-  try {
-    largura = window.matchMedia(LARGO)
-    mensagemAberta.value = largura.matches
-    largura.addEventListener('change', aoMudarLargura)
-  } catch { mensagemAberta.value = true /* sem matchMedia: à vista, como era */ }
   void lerDoServidor()
   void lerSugestoes()
   relogio = window.setInterval(() => {
@@ -156,7 +145,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.clearInterval(relogio)
-  largura?.removeEventListener('change', aoMudarLargura)
 })
 
 // O retrato mais os primeiros do servidor (as duas superfícies) e o reforço local, um por lead.
@@ -173,6 +161,17 @@ const fila = computed<AcaoDeVenda[]>(() => filaDaTela(props.visao, {
 /** A contagem do dia: o "N na fila", o "Ver a fila inteira (N)" e a aba "A fazer N" (via `resumo`). */
 const resumo = computed(() => resumoDoDia(fila.value, props.visao?.estado === 'ok' ? props.visao : null, ritmo.value))
 watch(resumo, (r) => emit('resumo', r), { immediate: true })
+/**
+ * O plano do dia (17/10/2026): a tela abre dizendo quanto do dia já foi, quanto falta e quanto de
+ * janela de envio sobra, em vez de esperar o Rômulo olhar a fila. Com a fila vazia, a próxima coisa a
+ * fazer é a do gargalo do funil.
+ */
+const plano = computed(() => planoDoDia({
+  resumo: resumo.value,
+  feitas: feitos.value.size,
+  agora: agora.value,
+  gargalo: props.visao?.estado === 'ok' ? diagnosticoDeVenda(props.visao.leads, agora.value).gargalo : null,
+}))
 /**
  * Fora do expediente e com o ritmo livre: o primeiro contato que sairia agora, para o "Liberar"
  * dizer de quem é (a fila calculada como se o expediente estivesse aberto).
@@ -195,6 +194,7 @@ watch(nichos, (lista) => {
   if (nicho.value && (lista.length < 2 || !lista.some((n) => n.chave === nicho.value))) nicho.value = ''
 })
 const atual = computed(() => fila.value[0] ?? null)
+const chamada = computed(() => (atual.value ? chamadaDaAcao(atual.value) : ''))
 const leadAtual = computed(() => (atual.value ? porId.value.get(atual.value.leadId) ?? null : null))
 const passoDoVideoAtual = computed(() => (atual.value?.primeiroContato && leadAtual.value ? passoDoVideo(leadAtual.value) : null))
 const videoPendente = computed(() => (leadAtual.value ? estadoDoVideo(leadAtual.value, videos.value) === 'pendente' : false))
@@ -302,10 +302,17 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 </script>
 
 <template>
-  <section class="venda" aria-labelledby="venda-titulo">
-    <div class="venda__cabeca">
-      <span class="venda__kicker">Próxima venda</span>
-      <span v-if="atual" class="texto-2 texto-pequeno">{{ resumo.total }} na fila</span>
+  <section class="venda" aria-label="Próxima venda">
+    <!-- O plano do dia (17/10/2026): a tela diz o dia antes de pedir o próximo toque. Só com o funil
+         lido: sem retrato não há conta, e o aviso de baixo já diz isso. -->
+    <div v-if="visao?.estado === 'ok'" class="venda__plano" :class="{ 'is-urgente': plano.urgente }">
+      <p class="venda__manchete">{{ plano.manchete }}</p>
+      <div
+        v-if="plano.feitas || plano.restantes" class="venda__progresso" role="progressbar" aria-label="Andamento do dia"
+        aria-valuemin="0" :aria-valuemax="plano.feitas + plano.restantes" :aria-valuenow="plano.feitas"
+      ><span :style="{ '--andamento': plano.progresso }" /></div>
+      <p v-if="plano.oQueFalta" class="texto-pequeno">Falta: {{ plano.oQueFalta }}</p>
+      <p class="venda__janela texto-pequeno" :class="{ 'is-urgente': plano.urgente }">{{ plano.janela }}</p>
     </div>
 
     <!-- Em cima do cartão: depois do "Enviei", a ação seguinte toma o lugar e o recado do toque
@@ -329,48 +336,47 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           <span class="selo" :class="atual.quente ? 'selo--erro' : ''">{{ ROTULO_DO_TIPO[atual.tipo] }}</span>
           <span class="texto-2 texto-pequeno">{{ atual.contexto }}</span>
         </p>
-        <h2 id="venda-titulo">{{ atual.titulo }}</h2>
-        <p class="venda__porque">{{ atual.porque }}</p>
+        <!-- "Envie para X, isto:" (17/10/2026): a chamada é a instrução, a mensagem vem logo abaixo, à vista
+             (era uma dobra fechada no celular) e o botão que a envia fica colado nela (AC-16 segue valendo:
+             a mensagem tem altura máxima, então o botão nunca desce para baixo da barra). -->
+        <h2 id="venda-titulo">{{ chamada }}</h2>
 
-        <!-- O primário logo depois do porquê (AC-16): no celular ele ficava embaixo de tudo, colado na barra. -->
+        <template v-if="atual.rascunho">
+          <p class="texto-2 texto-pequeno venda__origem">
+            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
+            <template v-else>Mensagem pronta (revise antes de enviar)</template>
+          </p>
+          <blockquote class="venda__mensagem" tabindex="0" aria-label="Mensagem a enviar">{{ atual.rascunho }}</blockquote>
+        </template>
+        <p v-else-if="atual.tipo !== 'desfecho'" class="venda__escrever">Sem texto pronto: escreva à mão. <strong>Como:</strong> {{ atual.tatica }}</p>
+
         <div class="venda__botoes">
           <template v-if="atual.tipo === 'desfecho'">
             <button type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
             <a v-if="atual.link" class="botao" :href="atual.link.url" target="_blank" rel="noopener">{{ atual.link.rotulo }} <span aria-hidden="true">↗</span></a>
           </template>
           <a
-            v-else-if="atual.link" class="botao botao--primario" :href="atual.link.url" target="_blank" rel="noopener"
+            v-else-if="atual.link" class="botao" :class="{ 'botao--primario': tocado !== atual.chave }" :href="atual.link.url" target="_blank" rel="noopener"
             @click="aoTocar(atual)"
           >{{ atual.rascunho ? 'Abrir no WhatsApp com a mensagem' : 'Abrir a conversa no WhatsApp' }} <span aria-hidden="true">↗</span></a>
+          <button v-if="atual.rascunho" type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
           <button v-if="passoDoVideoAtual && videoPendente && tocado === atual.chave" type="button" class="botao" @click="marcarOVideo">Vídeo enviado</button>
-          <button v-if="tocado === atual.chave" type="button" class="botao" @click="resolver(atual, false)">Enviei, próxima</button>
+          <button v-if="tocado === atual.chave" type="button" class="botao botao--primario" @click="resolver(atual, false)">Enviei, próxima</button>
           <a class="botao botao--leve" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Ficha</a>
           <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Pular</button>
         </div>
+        <p v-if="atual.link && atual.tipo !== 'desfecho' && tocado !== atual.chave" class="texto-2 texto-pequeno">Depois de enviar, volte aqui e toque em “Enviei, próxima”.</p>
+        <button v-if="atual.copiloto?.padrao" type="button" class="botao botao--leve venda__padrao" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
+          {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
+        </button>
+        <blockquote v-if="atual.copiloto?.padrao && verPadrao" class="venda__mensagem is-padrao">{{ atual.copiloto.padrao }}</blockquote>
 
-        <!-- A mensagem que o botão abre: dobrada no celular, aberta a partir de 64 rem (no desktop ela
-             continua à vista antes do toque). O "Copiar" mora com ela. -->
-        <details v-if="atual.rascunho" class="dobra venda__rascunho" :open="mensagemAberta" @toggle="mensagemAberta = ($event.target as HTMLDetailsElement).open">
-          <summary>Ver a mensagem <span class="texto-2 texto-pequeno">{{ atual.copiloto ? '(sugestão do copiloto)' : '(pronta)' }}</span></summary>
-          <p class="texto-2 texto-pequeno">
-            <template v-if="atual.copiloto">Sugestão do copiloto, que leu a conversa (revise antes de enviar)<span v-if="atual.copiloto.porque">: {{ atual.copiloto.porque }}</span></template>
-            <template v-else>Mensagem pronta (revise antes de enviar)</template>
-          </p>
-          <blockquote>{{ atual.rascunho }}</blockquote>
-          <div class="venda__botoes">
-            <button type="button" class="botao botao--leve" @click="copiar(atual.rascunho)">{{ copiado ? 'Copiado' : 'Copiar o texto' }}</button>
-            <button v-if="atual.copiloto?.padrao" type="button" class="botao botao--leve" :aria-expanded="verPadrao" @click="verPadrao = !verPadrao">
-              {{ verPadrao ? 'Esconder o texto padrão' : 'Ver o texto padrão da esteira' }}
-            </button>
-          </div>
-          <blockquote v-if="atual.copiloto?.padrao && verPadrao" class="is-padrao">{{ atual.copiloto.padrao }}</blockquote>
-        </details>
-        <p v-else class="texto-2 texto-pequeno">Sem texto pronto: este passo é escrever à mão. O Roteiro da Ficha ajuda.</p>
-
+        <!-- O porquê agora: a situação (a frase única da ação, AC-12) e o que o servidor sabe do momento. -->
+        <p class="venda__porque"><strong>{{ atual.titulo }}.</strong> {{ atual.porque }}</p>
         <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
         <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
         <!-- "Como:" sempre (AC-12): o título já é a frase da ação (fraseDaAcao), a mesma do "Agora" da Ficha. -->
-        <p class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
+        <p v-if="atual.rascunho || atual.tipo === 'desfecho'" class="venda__tatica"><strong>Como:</strong> {{ atual.tatica }}</p>
         <p v-if="passoDoVideoAtual" class="venda__tatica"><strong>Vídeo:</strong> {{ passoDoVideoAtual }}</p>
       </article>
 
@@ -391,6 +397,8 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     <template v-else>
       <h2 id="venda-titulo">Nada para mandar agora</h2>
       <p class="texto-2">Ninguém esperando resposta, combinado ou follow-up.</p>
+      <!-- Fila vazia não é hora de esperar: o próximo passo é o do gargalo (abaixo, com quem está parado). -->
+      <p v-if="plano.proximoPasso" class="venda__tatica"><strong>Enquanto isso:</strong> {{ plano.proximoPasso }}</p>
     </template>
 
     <p v-if="motivoDaEspera" class="texto-2 texto-pequeno">{{ motivoDaEspera }}</p>
@@ -408,8 +416,14 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 
 <style>
 .venda { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-left-width: var(--faixa-forte); border-left-color: var(--destaque); border-radius: var(--raio-bloco); background: var(--superficie); color: var(--texto); }
-.venda__cabeca { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--esp-2); }
-.venda__kicker { font-size: var(--tam-apoio); font-weight: var(--peso-forte); letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2); }
+/* O plano do dia: fundo de zona (sem borda), a manchete em peso forte e a barra do andamento. */
+.venda__plano { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }
+.venda__manchete { font-size: var(--tam-nome); font-weight: var(--peso-titulo); line-height: 1.2; letter-spacing: -0.01em; }
+.venda__progresso { height: var(--esp-2); border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden; }
+.venda__progresso span { display: block; width: 100%; height: 100%; border-radius: var(--raio-pilula); background: var(--positivo); transform: scaleX(var(--andamento, 0)); transform-origin: left; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.venda__janela.is-urgente { padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-selo); background: var(--erro-fundo); font-weight: var(--peso-forte); }
+@media (prefers-reduced-motion: reduce) { .venda__progresso span { transition: none; } }
+.venda__tatica, .venda__porque { overflow-wrap: anywhere; }
 .venda h2 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .venda p { margin: 0; }
 .venda__atual { display: grid; gap: var(--esp-3); min-width: 0; }
@@ -417,10 +431,15 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__porque { color: var(--texto); }
 .venda__conversa { padding: var(--esp-2) var(--esp-3); border-left: var(--faixa) solid var(--borda); border-radius: var(--raio-controle); background: var(--superficie-2); overflow-wrap: anywhere; }
 .venda__conversa.is-sem { background: var(--atencao-fundo); }
-.venda__rascunho blockquote.is-padrao { border-left-color: var(--borda); background: var(--superficie-2); }
 .venda__tatica { padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); }
-.venda__rascunho { display: grid; gap: var(--esp-1); margin: 0; }
-.venda__rascunho blockquote { margin: 0; padding: var(--esp-3) var(--esp-4); border-left: var(--faixa) solid var(--positivo); border-radius: var(--raio-controle); background: var(--ok-fundo); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16em; overflow: auto; }
+/* A mensagem à vista, logo depois da chamada. Altura máxima curta no celular para o botão do WhatsApp
+   não descer para baixo da barra (AC-16); a rolagem é dela, e o foco por teclado a alcança. */
+.venda__mensagem { margin: 0; padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--ok-fundo); color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow: auto; }
+.venda__mensagem.is-padrao { background: var(--superficie-2); }
+.venda__origem { margin-top: calc(var(--esp-1) * -1); }
+.venda__escrever { padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--atencao-fundo); }
+.venda__padrao { justify-self: start; }
+@media (min-width: 64rem) { .venda__mensagem { max-height: 16em; } }
 .venda__botoes { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
 .venda__falha { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); overflow-wrap: anywhere; }
 .venda__falha span { flex: 1 1 16em; }
