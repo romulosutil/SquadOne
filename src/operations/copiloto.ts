@@ -23,6 +23,7 @@ import {
 } from './jornada'
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
 import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
+import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-site.ts'
 
 // ------------------------------------------------------------------ onde o copiloto vale
 
@@ -30,7 +31,7 @@ import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa
 export const PASSOS_DO_COPILOTO: IdDoPasso[] = ['resposta', 'segunda', 'conversa', 'mapa', 'proposta']
 
 export type LeadDoCopiloto = LeadDaJornada & Pick<CrmLead, 'id' | 'empresa' | 'nicho' | 'cidade' | 'subEtapa' | 'eventos'>
-  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem'>>
+  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem' | 'sinais'>>
 
 export function copilotoServe(lead: LeadDaJornada): boolean {
   return PASSOS_DO_COPILOTO.includes(passoAtual(lead))
@@ -122,8 +123,55 @@ export interface DossieDoLead {
    * do link saía com "[link]" para preencher. Ausente = não há demo publicado.
    */
   demo?: string
+  /**
+   * O que o código público do site mostrou (17/10/2026, server/sinais-do-site.ts), só dos sinais COM fonte.
+   * Ausente = nenhum sinal com fonte: o dossiê (e o hash dele) fica idêntico ao de antes dos sinais.
+   */
+  sinaisDoSite?: SinalNoDossie[]
   cardapio: ItemDoCardapioNoDossie[]
   ofertasProprias: Array<{ id: IdDaOferta, nome: string, entrega: string, paraQuem: string }>
+}
+
+/** Uma observação do site, escrita como se confere na hora (abrir o site e olhar), nunca como julgamento. */
+export interface SinalNoDossie {
+  sinal: keyof Omit<SinaisDoSite, 'agencia'>
+  observacao: string
+  /** Pode ser a UMA observação da primeira linha? Contexto (agência, "não achei", dado técnico) não abre mensagem. */
+  serveParaAbrir: boolean
+}
+
+const MAX_NOME_DA_AGENCIA = 60
+
+/** O nome da agência vem do HTML de terceiros: vira dado limpo (sem telefone, marca de modelo nem quebra de linha) ou nada. */
+function nomeLimpoDaAgencia(nome: string | undefined): string {
+  return mascarar(nome ?? '').replace(/[\u0000-\u001f<>{}[\]"`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_NOME_DA_AGENCIA).trim()
+}
+
+/**
+ * PURO. Os sinais do site que têm fonte (`true`/`false`; `null` e ausente somem, nunca viram "desconhecido"),
+ * na ordem de peso para a venda. Cada frase só diz o que o código da página mostra: tag instalada NÃO prova
+ * gasto com anúncio, e ausência de tag não prova que não anuncia. A agência só entra com `temAgencia === true`
+ * e é contexto, nunca abertura (a mensagem não ataca nem cita o incumbente).
+ */
+export function sinaisParaODossie(sinais?: SinaisDoSite): SinalNoDossie[] {
+  if (!sinais) return []
+  const l: SinalNoDossie[] = []
+  const add = (sinal: SinalNoDossie['sinal'], observacao: string, serveParaAbrir: boolean) => l.push({ sinal, observacao, serveParaAbrir })
+  if (sinais.semSite === true) add('semSite', 'O cadastro do negócio não traz o endereço de um site.', true)
+  if (sinais.temAgencia === true) {
+    const nome = nomeLimpoDaAgencia(sinais.agencia?.nome)
+    add('temAgencia', nome ? `O rodapé do site credita a agência ${nome}.` : 'O rodapé do site credita uma agência.', false)
+  }
+  if (sinais.rodandoGoogleAds === true) add('rodandoGoogleAds', 'O site tem a tag do Google Ads instalada (isso não prova que haja gasto com anúncios).', true)
+  if (sinais.rodandoMetaAds === true) add('rodandoMetaAds', 'O site tem o pixel do Meta (Facebook e Instagram) instalado (isso não prova que haja gasto com anúncios).', true)
+  if (sinais.rodandoGoogleAds === false) add('rodandoGoogleAds', 'Não achei a tag do Google Ads na página inicial (isso não prova que o negócio não anuncie).', false)
+  if (sinais.rodandoMetaAds === false) add('rodandoMetaAds', 'Não achei o pixel do Meta na página inicial (isso não prova que o negócio não anuncie).', false)
+  if (sinais.semAgendamentoOnline === true) add('semAgendamentoOnline', 'A página inicial do site não mostra link de agenda nem agendador online.', true)
+  if (sinais.semAgendamentoOnline === false) add('semAgendamentoOnline', 'A página inicial do site leva a uma agenda online.', false)
+  if (sinais.blogParado === true) add('blogParado', `O blog do site está sem publicação há mais de ${DIAS_DO_BLOG_PARADO} dias, pelo mapa do site.`, true)
+  if (sinais.blogParado === false) add('blogParado', 'O blog do site publicou nos últimos meses, pelo mapa do site.', false)
+  if (sinais.semSchema === true) add('semSchema', 'O site não traz dados estruturados (schema.org) na página inicial.', false)
+  return l
 }
 
 export const MAX_EVENTOS_NO_DOSSIE = 12
@@ -166,6 +214,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const textoRaioX = extra.textoDoRaioX?.trim()
   const urlRaioX = lead.links.raioX?.trim()
   const proprias = funil === 'iris' || funil === 'estampa'
+  const sinaisDoSite = sinaisParaODossie(lead.sinais)
   return {
     lead: {
       id: lead.id,
@@ -199,6 +248,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
       situacao: textoRaioX ? 'com texto' : urlRaioX ? 'só o link' : 'sem Raio-X',
     },
     ...(funil === 'site' && lead.links.site?.trim() ? { demo: lead.links.site.trim() } : {}),
+    ...(sinaisDoSite.length ? { sinaisDoSite } : {}),
     // Iris e estamparias não usam o cardápio (jornada.ts, regra 9): mandar o cardápio só confundiria.
     cardapio: proprias ? [] : CARDAPIO.map((s) => ({
       id: s.id, nome: s.nome, etapa: s.etapa, entrega: s.entrega, paraQuem: s.paraQuem, precoParaOCliente: precoParaOCliente(s),
@@ -222,6 +272,26 @@ export const TOM_DE_VOZ: string[] = [
   'Sem trio de vendedor: nada de "número limitado", "só 2 minutos", "sem custo".',
   'Preço sem rodeio só dos serviços com preço aberto no cardápio (o que não diz "sob proposta"). Serviço "sob proposta" nunca leva valor na mensagem: o valor vai por escrito na proposta, em até 24 h.',
   'Uma mensagem só, pronta para colar no WhatsApp, sem marcador de modelo ([nome], {X}) a não ser o link que falta.',
+]
+
+/**
+ * Só vão ao prompt quando o dossiê traz "sinaisDoSite". Não mexem em nenhum modelo de mensagem do funil
+ * (a 1ª mensagem A/B/C é um experimento e o Balcão envia antes de qualquer leitura de sinal): é só contexto
+ * para a linha de abertura de uma mensagem de conversa, que o Rômulo lê antes de mandar.
+ */
+export const REGRAS_DOS_SINAIS: string[] = [
+  '',
+  'Sinais do site ("sinaisDoSite" no dossiê): são observações do código público do site, lidas por regra e',
+  'não por pessoa; "serveParaAbrir": false é só contexto. Regras:',
+  '- Se a mensagem abre ou retoma o assunto e couber sem forçar, abra com UMA observação específica e verdadeira,',
+  '  só de um item com "serveParaAbrir": true, curta, dita como quem olhou o site ("vi que o site tem a tag do',
+  '  Google Ads"), sem tom de auditoria nem de "escaneei você". Nunca cite mais de um sinal na primeira linha.',
+  '- Se o lead acabou de perguntar ou objetar, responda a isso primeiro e deixe a observação de fora; se a',
+  '  conversa mostra que o Rômulo já a citou, não repita. Sem sinal que sirva, não invente: abra como sem eles.',
+  '- Use só o que está escrito, com a cautela escrita. Tag do Google Ads ou pixel do Meta instalado NÃO prova',
+  '  gasto: nunca diga que ele gasta, investe ou paga por anúncios. "Não achei X" não prova que X não existe.',
+  '- A agência (quando houver) é contexto: não a cite, não a critique e não a compare. Se o lead falar dela, siga a objeção pronta do dossiê.',
+  '- Nunca invente um sinal ausente, nem tire conclusão (venda perdida, site ruim) do que não está no dossiê.',
 ]
 
 /** PURO. O pedido ao modelo: as regras, o formato da resposta e o dossiê, cercado como dado. */
@@ -249,6 +319,7 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
     'automático. Resposta do tipo "licenca" quer dizer que ele só deixou mandar o material oferecido: não é "quero ver".',
     'Quando a mensagem leva a demonstração do site, use o link de "demo" do dossiê exatamente como está;',
     'se a conversa mostra que ele já foi mandado, não mande de novo: pergunte o que acharam.',
+    ...(dossie.sinaisDoSite?.length ? REGRAS_DOS_SINAIS : []),
     '',
     'Antes de escrever, leia QUEM está respondendo e diga em "momento":',
     '- "robo": menu automático, botões, "você será transferido", horário de atendimento, saudação pronta.',
