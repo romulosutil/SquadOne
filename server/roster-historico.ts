@@ -103,6 +103,8 @@ export async function guardarCopia(dados: string, agora: Date): Promise<string |
   }
   const pasta = path.join(dados, PASTA_HISTORICO);
   await fs.mkdir(pasta, { recursive: true, mode: 0o700 });
+  // mkdir não restringe uma pasta já existente ou restaurada com outro modo.
+  await fs.chmod(pasta, 0o700);
 
   let quando = agora;
   while (await existe(path.join(pasta, nomeDaCopia(quando)))) quando = new Date(quando.getTime() + 1000);

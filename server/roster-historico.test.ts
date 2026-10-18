@@ -120,11 +120,18 @@ describe("writeRoster guarda o anterior", () => {
     assert.deepEqual(await fs.readFile(path.join(pasta, nome)), antes);
   });
 
-  it("modo 600 (não há bits de grupo no Windows)", { skip: process.platform === "win32" }, async () => {
+  it("cópia 600 e pasta 700, inclusive se a pasta já existe (POSIX)", { skip: process.platform === "win32" }, async () => {
     await squad.writeRoster(versao(1));
     await squad.writeRoster(versao(2));
     const [nome] = await copias();
     assert.equal((await fs.stat(path.join(pasta, nome))).mode & 0o777, 0o600);
+    assert.equal((await fs.stat(pasta)).mode & 0o777, 0o700);
+    await fs.chmod(pasta, 0o755);
+    await squad.writeRoster(versao(3));
+    assert.equal((await fs.stat(pasta)).mode & 0o777, 0o700);
+    for (const copia of await copias()) {
+      assert.equal((await fs.stat(path.join(pasta, copia))).mode & 0o777, 0o600);
+    }
   });
 
   it("não deixa .tmp para trás", async () => {

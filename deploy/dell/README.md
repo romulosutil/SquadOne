@@ -42,6 +42,14 @@ lá e ficam no clone, fora do Git.
 
 Para atualizar a Central (fast-forward da `main`, build e reinício com teste):
 
+Desde 18/10/2026, antes do build, o atualizador também executa os 53 testes de
+`lead-quente-sombra.test.ts` e `roster-historico.test.ts`. Os dois casos POSIX que
+o Windows pula são obrigatórios aqui no Linux: arquivo `600`, pasta `700`,
+inclusive quando já existiam com permissões mais abertas. Uma falha para a
+atualização antes de substituir o build ou reiniciar. A suíte completa (`npm test`)
+também deve ser validada no Linux antes do push; a diferença entre plataformas
+está explicada em `docs/referencia/testes.md`.
+
 ```bash
 install -m 755 deploy/dell/atualizar-central.sh ~/.local/bin/atualizar-central
 atualizar-central

@@ -146,12 +146,20 @@ describe("lead quente (cola): uma volta", () => {
     }
   });
 
-  it("o JSONL é 600 e a pasta 700 (fora do Windows)", { skip: process.platform === "win32" }, async () => {
+  it("o JSONL é 600 e a pasta 700, inclusive se já existem (POSIX)", { skip: process.platform === "win32" }, async () => {
     poe("site:A", "Gostei!");
     await criarLeadQuenteSombra(deps()).volta();
     const [arq] = await fs.readdir(dir);
     assert.equal((await fs.stat(path.join(dir, arq))).mode & 0o777, 0o600);
     assert.equal((await fs.stat(dir)).mode & 0o777, 0o700);
+    // Arquivo restaurado ou pasta antiga podem ter permissões mais abertas.
+    await fs.chmod(path.join(dir, arq), 0o644);
+    await fs.chmod(dir, 0o755);
+    poe("site:B", "Gostei também!");
+    await criarLeadQuenteSombra(deps()).volta();
+    assert.equal((await fs.stat(path.join(dir, arq))).mode & 0o777, 0o600);
+    assert.equal((await fs.stat(dir)).mode & 0o777, 0o700);
+    assert.equal((await lerTudo()).filter((r) => r.tipo === "decisao").length, 2);
   });
 
   it("a mesma mensagem não é decidida duas vezes, nem depois de reiniciar", async () => {

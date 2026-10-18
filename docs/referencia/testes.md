@@ -1,5 +1,24 @@
 # Testes: o que cada arquivo cobre
 
+## Permissões: validar no Linux
+
+`lead-quente-sombra.test.ts` e `roster-historico.test.ts` têm uma verificação
+POSIX cada, pulada exclusivamente no Windows, que não representa os modos de
+grupo/outros. Não remover essa condição nem simular o resultado no Windows.
+Antes de concluir a validação, executar `npm test` na Dell ou em outro Linux:
+esses dois testes precisam executar, sem pulo. Em 18/10/2026, a suíte da `main`
+executou 3.147 testes no Linux com zero falhas e zero pulos.
+
+Os mesmos casos cobrem criação e reutilização de pasta/arquivo. O teste do lead
+quente abre um JSONL em `644` numa pasta `755`, grava outra decisão e exige
+arquivo `600` e pasta `700`, preservando as duas decisões. O histórico restringe
+uma pasta existente em `755` para `700` antes de guardar a próxima cópia `600`.
+Os modos passados só à criação não corrigiam esses casos, reproduzidos antes da
+correção. O `atualizar-central` executa os 53 testes desses dois arquivos na Dell
+antes do build e reinício; uma falha interrompe a atualização.
+
+## Inventário
+
 > Movido do `CLAUDE.md` em 11/10/2026 para a sessão não carregar isto toda vez.
 > O texto é o original, sem alteração; o `CLAUDE.md` guarda só o resumo das regras.
 

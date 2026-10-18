@@ -181,8 +181,11 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
 
   async function gravar(registro: RegistroDoLeadQuente): Promise<void> {
     await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
+    // O mode de mkdir/open só vale na criação, inclusive após uma restauração.
+    await fs.chmod(deps.dir, 0o700);
     const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(registro.quando)), "a", 0o600);
     try {
+      await arquivo.chmod(0o600);
       await arquivo.writeFile(`${JSON.stringify(registro)}\n`, "utf8");
     } finally {
       await arquivo.close();

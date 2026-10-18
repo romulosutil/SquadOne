@@ -41,6 +41,9 @@ echo "Código em $(git log -1 --format='%h %s')"
 
 # Sem package-lock: o projeto versiona bun.lock, e o Dell não tem bun.
 npm install --no-package-lock --no-audit --no-fund
+# Permissões POSIX não são verificáveis no Windows. Na Dell estes testes são
+# obrigatórios antes de substituir o build ou reiniciar a Central.
+./node_modules/.bin/tsx --test server/lead-quente-sombra.test.ts server/roster-historico.test.ts
 npm run build
 
 # Não reinicia no meio de um turno (ou com a fila do bot andando): o turno pode
