@@ -8,7 +8,7 @@ import {
 import type { CrmLead } from './operations/types.ts'
 
 // Leads inventados: nenhum nome, telefone ou link real.
-const lead = (id: string, extra: Partial<CrmLead> & { sinais?: SinaisDoLead } = {}): LeadDoCohort & { id: string } => ({
+const lead = (id: string, extra: Omit<Partial<CrmLead>, 'sinais'> & { sinais?: SinaisDoLead } = {}): LeadDoCohort & { id: string } => ({
   id, produto: 'iris', nicho: 'Dentista', cidade: 'Vitória', etapa: 'novo', sinal: 'revisar', marcos: {}, followupHoje: false, links: {}, ...extra,
 })
 const ids = (ls: ReadonlyArray<{ id: string }>) => ls.map((l) => l.id)

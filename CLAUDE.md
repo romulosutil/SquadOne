@@ -85,6 +85,14 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/gate-de-envio.ts PURO (17/10/2026, ideia do Harvey): gate de pré-envio sem modelo: marca de modelo sem preencher, frase de IA/emoji, tamanho e links por tipo, nome vazio/com lixo,
+                          "R$" fora dos permitidos (reusa precosProibidos do copiloto) e número do wa.me ≠ o do registro (chaveDoNumero). `modo`: copiloto e vendedor com mensagem do
+                          copiloto = "bloquear" (falha gate_de_envio, sem Copiar, aviso do Telegram barrado com o motivo); texto da esteira = "avisar" (linha "Confira", botão fica);
+                          destinatario_diferente bloqueia sempre. Nunca reescreve nem envia. A 1ª mensagem A/B/C do n8n só passa por ele no teste (plugar = JS do Balcão, com instalação no Dell)
+  server/sinais-do-site.ts  PURO (17/10/2026, estágio PROFILE do Harvey, MIT): HTML do site do lead -> sinais tri-estado (temAgencia com confiança ≥ 0,75, rodandoGoogleAds/MetaAds,
+                          semAgendamentoOnline, semSchema, blogParado, semSite; null = sem fonte), ajusteDaPrioridade (−4 a +6: anúncio +4, sem agenda +2, agência −4) e linhasDosSinais (a Ficha)
+  server/sinais-do-site-leitor.ts  leitura sob demanda de UM lead (POST /api/operations/crm/sinais, ao abrir a Ficha): ≤ 3 requisições, 10 s, 2 MB, bloqueio de SSRF (IP privado/loopback/
+                          metadata/tailnet, redirecionamento conferido, IP conferido na conexão), cache em disco 600 (sinais-do-site/sinais.json, 7 dias); SQUADONE_SINAIS_DO_SITE=false desliga
   server/lead-quente.ts   (17/10/2026, SOMBRA) o agente que mantém o lead quente depois do link: decisão PURA responder|escalar|calar a cada mensagem nova do lead
                           (gate estrito, teto de toques, texto só do copiloto, sem R$); NADA envia ao lead. Fase de envio = decisão aberta do Rômulo
   server/lead-quente-sombra.ts  a cola (SQUADONE_LEAD_QUENTE_SOMBRA, desligada, só operations com bot e copiloto): JSONL 600 em lead-quente-sombra/,
@@ -190,6 +198,10 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           depois de decidir o atual); Convidar (travas de horário e ritmo com o motivo curto) e Dispensar (registro
                           dispensado, Desfazer por 8 s, "Dispensar os que sobraram" em série com segundo toque); marca local podada
                           quando o retrato confirma
+    cohort.ts             PURO (17/10/2026): filtro por motivo da Triagem ("cohort como consulta", ideia do Harvey): "deve" (todos) e "desqualifica" (qualquer um) sobre campos
+                          do lead (oferta, nicho, cidade, passo, site, WhatsApp publicado, pontuação) e sobre `lead.sinais` do servidor (ChaveDeSinal; null/ausente = sem leitura).
+                          Sem leitura nunca bate nem desqualifica: vai para semLeitura e a tela diz "N sem leitura". Só filtra quem entra nos lotes de 10; as travas, o Convidar,
+                          o Dispensar e o Desfazer ficam como estão. Guarda em localStorage (try/catch); CrmCohort.vue é a dobra "Filtro por motivo" (BP-DOBRA + BP-ESCOLHAS) no CrmHoje.vue
     funil-lista.ts        PURO (16/10/2026): a Lista do Funil no desktop (Quadro | Lista, BP-TABELA): um sinal por linha, o mais
                           forte (Resposta nova > Follow-up hoje > Perdido amanhã > Divergência > resto), ordem por último toque e
                           próximo passo. Os Lançamentos também viram <table> a partir de 64 rem (FinEditorDeLancamento.vue)
