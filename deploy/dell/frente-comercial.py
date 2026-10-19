@@ -30,7 +30,7 @@ SP = ZoneInfo('America/Sao_Paulo')
 ROLES = [('Diego', 'aderência ao negócio e qualidade do contato'),
          ('Elisa', 'adequação da entrega e evidências disponíveis'),
          ('Carla', 'abordagem, clareza e prioridade comercial; decida após ler os colegas')]
-MAX_DIA, INTERVALO, MAX_HORA, MAX_IA = 100, 300, 12, 40
+MAX_DIA, INTERVALO, MAX_HORA, MAX_IA = 100, 300, 12, 60
 EXPEDIENTE_INICIO, EXPEDIENTE_FIM = 8 * 60, 17 * 60 + 30
 CENTRAL = 'http://127.0.0.1:9120'
 # A Central só aceita escrita da mesma origem (server/acesso.ts); é o que o curl local também manda.
