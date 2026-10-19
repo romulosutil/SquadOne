@@ -388,6 +388,16 @@ TROCAS_RAIO_X = [
 ]
 
 
+# Sem ficha no Google Maps (google: null, Radix, 19/10/2026): onde a página mostraria a nota, as avaliações e o
+# perfil, diz que a ficha não existe. A presença conta o que é verdade sem ela: nenhuma avaliação, nada do perfil.
+CENARIO_SEM_FICHA = "Se vocês tivessem uma ficha no Google Maps, com horário, fotos, telefone e o botão “Site”"
+SEM_FICHA_ITENS = ("Horário de funcionamento", "Telefone", "Fotos", "Categoria", "Botão “Site”")
+
+
+def sem_ficha(dados: dict) -> bool:
+    return "google" in dados and dados["google"] is None
+
+
 LEDE = "Feito pelo PRUMO só com o que qualquer pessoa vê no Google, nas redes e nos anúncios, sem pedir nada a vocês."
 # As chaves opcionais de `dados` (o Raio-X à mão do piloto não usa nenhuma):
 GANCHOS = {
@@ -407,11 +417,16 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
     as chaves de GANCHOS são opcionais (o Raio-X automático do Dell usa) e, ausentes, a página sai
     byte a byte como a do piloto."""
     nome, g = dados["nome"], dados["google"]
+    if sem_ficha(dados):
+        g = {"nota": None, "avaliacoes": 0, "horario": "", "categoria": "", "fotos_total": 0, "fotos_da_empresa": 0}
     buscas = [{"consulta": b["consulta"], "posicao": b["posicao"], "lidos": b["lidos"],
                "concorrentes": [{"id": c["id"], "avaliacoes": c["avaliacoes"]} for c in b["concorrentes"]]}
               for b in dados["buscas"]]
     presenca = cp.nota_de_presenca(buscas=buscas, nota=g["nota"], avaliacoes=g["avaliacoes"],
                                    respostas=dados.get("respostas"), perfil=dados["perfil"], site=dados["site"])
+    if sem_ficha(dados):
+        perfil = next(b for b in presenca["blocos"] if b["chave"] == "perfil")
+        presenca["cenarios"] = [CENARIO_SEM_FICHA if x == perfil["cenario"] else x for x in presenca["cenarios"]]
     pontos, bons = dados["pontos"], dados["bons"]
     item = lambda i, x: (f'<li><span class="marcador">{e(i)}</span><div><h3>{e(x["titulo"])}</h3>'  # noqa: E731
                          f'<p>{e(x["porque"])}</p></div></li>')
@@ -434,8 +449,10 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
     c += ['<section class="ato veredito" id="veredito" aria-labelledby="t-veredito">',
           '<p class="kicker">Como vocês aparecem para quem procura</p>', f'<h1 id="t-veredito">{e(nome)}</h1>',
           f'<p class="lede">{e(dados["ramo"])} · {e(dados["cidade"])}. {e(dados.get("lede") or LEDE)}</p>',
-          f'<div class="nota"><span class="num">{e(rx.numero(g["nota"]))}</span><span class="leitura">nota no Google<br>'
-          f'{avaliacoes(g["avaliacoes"])}<br>lida em {e(dados["lido_em"])}</span></div>',
+          (f'<div class="nota"><span class="num">—</span><span class="leitura">sem ficha no Google<br>'
+           f'nenhuma nota, nenhuma avaliação<br>lida em {e(dados["lido_em"])}</span></div>' if sem_ficha(dados) else
+           f'<div class="nota"><span class="num">{e(rx.numero(g["nota"]))}</span><span class="leitura">nota no Google<br>'
+           f'{avaliacoes(g["avaliacoes"])}<br>lida em {e(dados["lido_em"])}</span></div>'),
           cp.bloco_faixa_html(presenca),
           (f'<p class="nota-pe">Nota de presença: <strong>{e(num(presenca["nota"]))} de 18</strong> · '
            '<a class="link-escuro" href="#a-nota" onclick="document.getElementById(\'a-nota\').open=true">'
@@ -480,8 +497,11 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
                    '<p class="intro">' + ("Os nomes dos concorrentes estão trocados por letras neste exemplo. "
                                           if dados.get("exemplo") else "")
                    + 'A ordem muda um pouco de pessoa para pessoa, porque o Google leva em conta onde cada um está.</p>')
-    avals = rx.temas_das_avaliacoes(dados["avaliacoes_recentes"])
+    avals = rx.temas_das_avaliacoes(dados.get("avaliacoes_recentes") or [])
     secao_avaliacoes = rx.secao_avaliacoes({"avaliacoes_lidas": avals}, e)
+    if sem_ficha(dados):
+        secao_avaliacoes = (f'<p class="intro">Sem ficha no Google Maps, não há onde um {e(t["cliente"])} deixe avaliação, '
+                            'e quem procura vocês no Google não lê nenhuma.</p>')
     r = dados.get("respostas") or {}
     if r:
         secao_avaliacoes += (f'<p class="intro">Das {r["lidas"]} avaliações mais recentes, {r["respondidas"]} '
@@ -502,6 +522,10 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
         {"estado": g.get("site_estado") or dados["perfil"]["site"], "item": "Botão “Site”",
          "detalhe": g.get("site_detalhe") or ("o perfil não tem" if dados["perfil"]["site"] == "falta" else "leva ao site de vocês")},
     ]
+    if sem_ficha(dados):
+        perfil_linhas = ([{"estado": "falta", "item": "Ficha no Google Maps", "detalhe": dados["sem_ficha"]}]
+                         + [{"estado": "falta", "item": x, "detalhe": "sem a ficha, não aparece no Google"}
+                            for x in SEM_FICHA_ITENS])
     lidos = sorted({b["lidos"] for b in dados["buscas"]})
     quantos = (f"os {lidos[0]} primeiros resultados de cada uma" if len(lidos) == 1
                else f"pelo menos os {lidos[0]} primeiros resultados de cada uma")
@@ -516,6 +540,10 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
         "(Instagram e Facebook), que é pública.",
         "Não conferimos quanto tempo vocês levam para responder uma mensagem: isso só se vê por dentro.",
     ]
+    if sem_ficha(dados):
+        metodo[0] = (f"A ficha no Google Maps: procurada pelo nome e pelo endereço de vocês em {e(dados['lido_em'])}; "
+                     "não existe, e por isso não há nota, avaliações, horário, fotos nem categoria para ler.")
+        metodo[2] = "As avaliações: sem ficha, não há nenhuma no Google para ler."
     metodo = [m.replace("{como_ordena}", f'<a href="{e(rx.FONTE_RANKING)}" rel="noopener">Como o Google escolhe a ordem</a>') for m in metodo]
     nota_presenca = nota_html(cp, presenca["nota"], "presenca", [x["presenca"][0] for x in cp.FAIXAS],
                               [x["presenca"][1] for x in cp.FAIXAS]) if presenca.get("nota") is not None else ""
@@ -534,7 +562,9 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
           rx.detalhe("A busca, em detalhe", secao_busca),
           rx.detalhe(f"O que os {t['clientes']} dizem", secao_avaliacoes),
           rx.detalhe("O perfil no Google, item por item",
-                     checklist(perfil_linhas, f"O que o {t['cliente']} encontra quando abre o perfil de vocês no Google Maps.")),
+                     checklist(perfil_linhas, f"O que o {t['cliente']} encontra quando procura vocês no Google Maps: hoje, "
+                               "nenhuma ficha." if sem_ficha(dados) else
+                               f"O que o {t['cliente']} encontra quando abre o perfil de vocês no Google Maps.")),
           rx.detalhe("Redes sociais", checklist(dados["redes"], f"O que aparece quando o {t['cliente']} procura vocês fora do Google.")),
           rx.detalhe("Anúncios", checklist(dados["anuncios"], "Quem paga para aparecer antes, nas mesmas buscas.")),
           rx.detalhe("A nota e de onde vem cada dado", nota_presenca + calculadora(cp, presenca)
@@ -630,7 +660,9 @@ def conferir_raio_x(d: dict, precos: dict, automatico: bool = False) -> list[str
     erros = [f"falta preencher: {c}" for c in _lacunas(d)]
     erros += [f"falta: {c}" for c in ("nome", "ramo", "cidade", "lido_em") if not d.get(c)]
     g = d.get("google") or {}
-    if g.get("nota") is None or g.get("avaliacoes") is None:
+    if sem_ficha(d):
+        erros += conferir_sem_ficha(d)
+    elif g.get("nota") is None or g.get("avaliacoes") is None:
         erros.append("falta: google.nota e google.avaliacoes")
     for b in _lista(erros, d, "buscas", 3, exato=True):
         if len(b.get("concorrentes") or []) < 3:
@@ -638,7 +670,8 @@ def conferir_raio_x(d: dict, precos: dict, automatico: bool = False) -> list[str
     _texto(erros, _lista(erros, d, "pontos", 3, exato=True), "ponto", "porque", 150, numero=True)
     _texto(erros, _lista(erros, d, "bons", 3, exato=True), "o que está bom", "porque", 80)
     _texto(erros, _lista(erros, d, "o_que_fazer", 3, exato=True), "o que fazer", "texto", 80)
-    for campo, minimo in (("avaliacoes_recentes", 3), ("comparacao.linhas", 4), ("redes", 1), ("anuncios", 1)):
+    for campo, minimo in (("avaliacoes_recentes", 0 if sem_ficha(d) else 3), ("comparacao.linhas", 4), ("redes", 1),
+                          ("anuncios", 1)):
         _lista(erros, d, campo, minimo)
     _motivos(erros, d, precos, ("site", "trafego") if automatico else ())
     if not d.get("exemplo") and not automatico:
@@ -665,6 +698,20 @@ def conferir_raio_x(d: dict, precos: dict, automatico: bool = False) -> list[str
     return erros
 
 
+def conferir_sem_ficha(d: dict) -> list[str]:
+    """google: null quer dizer que a ficha não existe; nada na página pode dizer o contrário."""
+    erros = []
+    if len(str(d.get("sem_ficha") or "")) < 60:
+        erros.append("sem_ficha: 60 letras ou mais, dizendo como a ficha foi procurada e o que o Google mostrou")
+    if any((d.get("perfil") or {}).get(k) != "falta" for k in ("horario", "fotos", "categoria", "telefone", "site")):
+        erros.append("perfil: sem ficha, os 5 itens são “falta”")
+    if any(b.get("posicao") for b in d.get("buscas") or []):
+        erros.append("buscas: sem ficha, a empresa não tem posição no Google Maps")
+    if d.get("avaliacoes_recentes") or d.get("respostas"):
+        erros.append("avaliacoes_recentes e respostas: sem ficha, não há avaliações para ler")
+    return erros
+
+
 def conferir_pagina(doc: str) -> list[str]:
     """O texto que o dono lê não tem vocabulário interno, a fórmula da nota nem campo do modelo."""
     texto = re.sub(r"<script.*?</script>|<style.*?</style>", " ", doc, flags=re.S)
@@ -685,8 +732,12 @@ def vazio(v) -> bool:
 
 def molde_raio_x(exemplo: dict, lead: dict) -> dict:
     """A equipe pode ficar vazia (o Places não diz, e "equipe a confirmar" fala mal da empresa): vazia, a
-    página diz só "Com equipe" e não cita número. Todo Raio-X leva o convite para o Mapa."""
-    return exemplo if lead.get("equipe") else {k: v for k, v in exemplo.items() if k != "equipe"}
+    página diz só "Com equipe" e não cita número. Todo Raio-X leva o convite para o Mapa. Sem ficha no Google,
+    a nota, as avaliações e as respostas não existem para ler (o sem_ficha diz isso no lugar)."""
+    fora = set() if lead.get("equipe") else {"equipe"}
+    if sem_ficha(lead):
+        fora |= {"google", "avaliacoes_recentes", "respostas"}
+    return {k: v for k, v in exemplo.items() if k not in fora}
 
 
 def molde_mapa(exemplo: dict, lead: dict) -> dict:
@@ -741,12 +792,16 @@ def esqueleto(doc: str) -> tuple[list[str], dict[str, int]]:
     return marcas, contagem
 
 
-def conferir_esqueleto(doc: str, modelo: str) -> list[str]:
+# Blocos que só existem com a ficha no Google: sem ela, o esqueleto não os cobra.
+SO_COM_FICHA = {"ul.temas"}
+
+
+def conferir_esqueleto(doc: str, modelo: str, fora: set[str] | frozenset = frozenset()) -> list[str]:
     """A página de um lead tem os mesmos blocos, na mesma ordem, da página do exemplo, feita agora pelo
     mesmo código. Um campo opcional esquecido no JSON (riscos, o que não recomendar, a comparação…)
     sumiria com um bloco sem erro nenhum; aqui, para."""
     ref, cont_ref = esqueleto(modelo)
-    unicos = [x for x in ref if ref.count(x) == 1]
+    unicos = [x for x in ref if ref.count(x) == 1 and x not in fora]
     seq, cont = esqueleto(doc)
     seq = [x for x in seq if x in unicos]
     erros = [f"{k}: o exemplo tem {cont_ref[k]}, esta página tem {cont[k]}" for k in cont_ref if cont[k] != cont_ref[k]]
