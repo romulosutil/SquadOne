@@ -231,7 +231,7 @@ rastro, só no operations com bot e copiloto, uma decisão por mensagem mesmo re
 ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700),
 `server/telegram-entrada.test.ts` (também o callback `q:<token>:c|d` do voto da sombra),
 `server/frente-comercial.test.ts` (19/10/2026, o time comercial na Central, com a memória do dia num diretório temporário: a reserva
-devolve o texto do Balcão e grava o primeiro `por: "time"`; o intervalo de 4 min vale entre o time e a Central nos dois sentidos; lead
+devolve o texto do Balcão e grava o primeiro `por: "time"`; o intervalo de 5 min vale entre o time e a Central nos dois sentidos; lead
 tocado pela Central é recusado ao time; dois pedidos juntos, só um passa; Triagem, fora da fila, time pausado, gate e fora do expediente
 recusam; só da mesma origem; o estado não vaza número nem chave),
 `src/operations-primeiro-contato.test.ts` (19/10/2026: quem faz o 1º contato, só Site `pronto` é elegível, a janela e o ritmo da Central

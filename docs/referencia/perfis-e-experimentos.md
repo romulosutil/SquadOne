@@ -348,6 +348,9 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
   dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
   dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time.
+  Os números são os de `REGRAS_DO_RITMO`: desde 19/10/2026 (decisão do Rômulo), 5 min entre primeiros contatos, 12 por hora móvel e
+  100 por dia de São Paulo, somando time, telas e Telegram (antes: 4 min, 8/h e a rampa 10/20/30). São tetos internos, não um limite
+  publicado pelo WhatsApp; `pausadoAte` segue sendo o freio depois de um aviso ou restrição.
 - **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
   fluxo "04 · Clique no wa_link"), que grava `clique_em` (abrir nunca marca envio: regra `[abrir-nao-envia]` de 18/10/2026); o
   observador, vendo a saída até 15 min depois do clique, marca `status = enviado` e `enviado_em` e mantém a `mensagem_variante` e o

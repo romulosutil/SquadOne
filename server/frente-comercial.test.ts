@@ -45,12 +45,12 @@ test('reserva: o lead do time sai com o texto do Balcão e entra no ritmo de tod
   try {
     assert.deepEqual((await m.reservar('site:a')).corpo, { reservado: true, texto: MSG });
     assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros['site:a'], { em: AGORA, por: 'time' });
-    // O segundo, logo depois: o intervalo de 4 min da Central vale para o time também.
-    assert.deepEqual((await m.reservar('site:b')).corpo, { reservado: false, motivo: 'intervalo', ate: new Date(AGORA + 4 * 60_000).toISOString() });
-    m.relogio.agora = AGORA + 4 * 60_000;
+    // O segundo, logo depois: o intervalo de 5 min da Central vale para o time também.
+    assert.deepEqual((await m.reservar('site:b')).corpo, { reservado: false, motivo: 'intervalo', ate: new Date(AGORA + 5 * 60_000).toISOString() });
+    m.relogio.agora = AGORA + 5 * 60_000;
     assert.equal((await m.reservar('site:b')).corpo.reservado, true);
     // O mesmo lead de novo: já tem o primeiro do dia.
-    m.relogio.agora = AGORA + 9 * 60_000;
+    m.relogio.agora = AGORA + 11 * 60_000;
     assert.equal((await m.reservar('site:a')).corpo.motivo, 'ja-tocado');
   } finally { await m.fechar(); }
 });
@@ -112,8 +112,8 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', fila: [{ id: 'site:1', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
     const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
-    // O teto mostrado é o da trava de ritmo da Central (1ª semana do número: 10), não uma cota do time.
-    assert.equal(v.limite, 10);
+    // O teto mostrado é o da trava de ritmo da Central (100 por dia desde 19/10/2026), não uma cota do time.
+    assert.equal(v.limite, 100);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: '2020-01-01T00:00:00Z', estado: 'pronto' }));
     assert.equal((await lerFrente(dir, AGORA)).estado, 'sem-sinal');

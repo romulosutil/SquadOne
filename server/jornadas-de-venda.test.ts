@@ -215,7 +215,7 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
 
   it("primeiro contato do 'Enviei' conta na trava antes de o retrato ver", () => {
     const estado = { ...estadoNovo(t), primeiros: { "site:outro": t - 60_000 } };
-    // 1 min depois de outro primeiro contato: a trava de 4 min segura este.
+    // 1 min depois de outro primeiro contato: a trava de 5 min segura este.
     assert.deepEqual(decidir(vPronto, estado, t).decisao, { tipo: "nada", motivo: "fila-vazia" });
   });
 

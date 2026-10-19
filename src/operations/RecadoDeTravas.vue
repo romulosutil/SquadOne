@@ -7,6 +7,7 @@
  * por linha).
  */
 import type { RecadoDeTravas } from './recado-de-travas'
+import { AVISO_DO_RITMO } from './trava-de-ritmo'
 
 defineProps<{
   recado: RecadoDeTravas
@@ -27,6 +28,7 @@ const emit = defineEmits<{ liberar: [] }>()
     <span v-if="contagem || (!semDetalhe && recado.detalhe)" class="recado-de-travas__porque">
       {{ [contagem, semDetalhe ? '' : recado.detalhe].filter(Boolean).join(' ') }}
     </span>
+    <span class="recado-de-travas__porque">{{ AVISO_DO_RITMO }}</span>
     <button v-if="recado.podeLiberar && rotuloDoLiberar" type="button" class="recado-de-travas__liberar" @click="emit('liberar')">{{ rotuloDoLiberar }}</button>
   </p>
 </template>

@@ -1,5 +1,15 @@
 # Envio pelo WhatsApp sem cair no antispam (15/10/2026)
 
+> **Revisão de 18/10/2026:** o pedido atual substitui a rampa abaixo por teto interno de
+> **100 primeiros contatos por dia de São Paulo, 12 por hora móvel e 5 min entre contatos**,
+> mantendo expediente, pausa por restrição e envio manual. Não há garantia de envio sem riscos:
+> esses números não são limites antispam publicados pela Meta. O limite de 250 da Cloud API
+> não é uma franquia para o aplicativo. Ter telefone público ou link de WhatsApp não comprova
+> consentimento; o destinatário precisa ter autorizado o contato. O relato de restrição não
+> confirma sua causa, nem permite prever a duração de uma próxima restrição. As afirmações
+> categóricas do plano histórico abaixo não devem ser usadas como diagnóstico ou garantia.
+> A contagem do sistema não cobre necessariamente os envios feitos diretamente no celular.
+
 > Plano escrito no dia do bloqueio de 24 h no número pessoal do Rômulo. Os números vêm do
 > `GET /api/operations/crm` da Mel.
 >

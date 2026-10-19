@@ -85,17 +85,18 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     const sabado = reservaDoTime(base({ agora: Date.parse('2026-10-17T14:00:00Z') }))
     assert.equal(sabado.ok === false && sabado.motivo, 'fora-do-expediente')
   })
-  it('o toque da Central de 2 min atrás segura o intervalo de 4 min, com a hora em que libera', () => {
+  it('o toque da Central de 2 min atrás segura o intervalo de 5 min, com a hora em que libera', () => {
     const r = reservaDoTime(base({ primeiros: { outro: { em: AGORA - 2 * MIN } } }))
-    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 2 * MIN })
+    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 3 * MIN })
   })
-  it('o retrato conta: 8 envios na última hora (de qualquer superfície) seguram a hora', () => {
-    const leads = Array.from({ length: 8 }, (_, i) => lead(`e${i}`, { marcos: { enviado: new Date(AGORA - (50 - i * 5) * MIN).toISOString() } }))
+  it('o retrato conta: 12 envios na última hora (de qualquer superfície) seguram a hora', () => {
+    const leads = Array.from({ length: 12 }, (_, i) => lead(`e${i}`, { marcos: { enviado: new Date(AGORA - (59 - i * 4.5) * MIN).toISOString() } }))
     const r = reservaDoTime(base({ leads: [lead('L'), ...leads] }))
     assert.equal(r.ok === false && r.motivo, 'hora')
   })
   it('o teto do dia é o da trava de ritmo, somando Central, Telegram e time', () => {
-    const primeiros = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i}`, { em: AGORA - (120 + i * 10) * MIN }]))
+    // 100 no dia (o teto de 19/10/2026), todos antes da última hora: só o do dia segura.
+    const primeiros = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
     const r = reservaDoTime(base({ primeiros }))
     assert.equal(r.ok === false && r.motivo, 'dia')
   })

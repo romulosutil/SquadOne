@@ -3,22 +3,21 @@
  *
  * Em 15/10/2026 o WhatsApp do Rômulo levou 24 h de restrição depois de 25 primeiros contatos em
  * 25 minutos (10 a 50 s entre um e outro), logo depois de 26 no dia 14 e 18 no dia 13. A fila
- * "Enviar um por um" deixava esvaziar 25 sites de uma vez: o filtro do WhatsApp lê isso como
- * disparo em massa para desconhecidos. Plano em docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md.
+ * "Enviar um por um" deixava esvaziar 25 sites de uma vez. A proximidade da restrição não
+ * comprova qual sinal a causou. Plano em docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md.
  *
  * Três limites, todos sobre PRIMEIRO contato (os mesmos links da trava de horário,
  * `linksDePrimeiroContato`: envio do Site, convite do PRUMO/Iris/estamparias e o reenvio do
  * só-robô). Resposta, 2ª mensagem e follow-up de quem leu não contam: são conversa.
  *  - intervalo mínimo entre dois primeiros contatos;
  *  - teto por hora (janela móvel de 60 min);
- *  - teto por dia (dia de São Paulo), que sobe por semana desde `inicioDoNumero` (número novo,
- *    ou que acabou de sair de uma restrição, começa baixo).
+ *  - teto por dia (dia de São Paulo). Desde 18/10/2026, 100; a configuração ainda aceita rampa.
  * E `pausadoAte`: depois de um aviso ou restrição do WhatsApp, nada sai até a data (editar e
  * fazer push; a Central se atualiza sozinha em até 10 min).
  *
- * Os valores são conservadores e chutados com folga: o WhatsApp não publica limite. Ao
- * contrário da trava de horário, esta não tem "Liberar": a pressa de esvaziar a fila é
- * exatamente o que ela segura, e esperar 4 min custa pouco.
+ * São limites operacionais internos, não uma faixa segura publicada pelo WhatsApp. Envio
+ * manual também pode ser restringido, mesmo abaixo do teto. Ao contrário da trava de
+ * horário, esta não tem "Liberar". Envios diretos pelo celular podem ficar fora da contagem.
  *
  * De onde vêm os envios: do retrato (`marcos.enviado` de todo produto e, para o só-robô, o
  * `marcos.followupEnviado`, que é o reenvio) e dos toques desta tela (`squadone:crm:primeiros-contatos`,
@@ -47,13 +46,15 @@ export interface RegrasDoRitmo {
 }
 
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
-  intervaloMs: 4 * 60_000,
-  porHora: 8,
-  tetosPorSemana: [10, 20, 30],
-  // Volta da restrição de 15/10/2026 (24 h): o número recomeça como se fosse novo.
+  intervaloMs: 5 * 60_000,
+  porHora: 12,
+  tetosPorSemana: [100],
+  // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,
 }
+
+export const AVISO_DO_RITMO = 'Teto interno; não garante ausência de bloqueio. Inicie contato só com autorização do destinatário.'
 
 const MIN = 60_000
 const HORA = 60 * MIN
@@ -118,7 +119,7 @@ export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGR
     case 'hora':
       return `${regras.porHora} primeiros contatos na última hora, o máximo. O próximo sai às ${quando}.`
     case 'intervalo':
-      return `O próximo primeiro contato sai às ${quando} (${minutos} min entre um e outro, para o WhatsApp não ler como disparo).`
+      return `O próximo primeiro contato sai às ${quando} (intervalo interno de ${minutos} min entre contatos).`
     default:
       return `${estado.enviadosHoje} de ${estado.teto} primeiros contatos hoje.`
   }
