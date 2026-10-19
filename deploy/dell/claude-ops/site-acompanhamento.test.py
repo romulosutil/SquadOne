@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Testes do `--resumo-backlog --enviar` do site-acompanhamento.py: python3 deploy/dell/claude-ops/site-acompanhamento.test.py
 
-Só a troca da gravação do aviso pela lib de aviso (11/10/2026): o aviso gravado
-pela lib tem o MESMO conteúdo, byte a byte, que o do jeito antigo (o dict que
-`resumo_backlog()` devolve), o dell-status aceita o arquivo, sem a lib o
-`--enviar` volta ao jeito antigo, e a fila ausente vira uma mensagem (e a saída
-1), não um traceback. O resto do script (n8n, planilha, fluxos) tem os testes
+Só a gravação do aviso pela lib de aviso (11/10/2026): o aviso gravado tem o
+conteúdo do dict que `resumo_backlog()` devolve, o dell-status aceita o arquivo,
+sem a lib o `--enviar` não grava nada (linha no stderr, saída 1), e a fila ausente
+vira uma mensagem (e a saída 1), não um traceback. O resto do script (n8n, planilha, fluxos) tem os testes
 embutidos do `--testar-regra` e não é tocado aqui.
 
 Nada toca o Dell: o HOME vira um temporário ANTES do import (o `n8n.py` lê a
@@ -22,6 +21,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 _HOME = tempfile.mkdtemp(prefix="site-acompanhamento-teste-home-")
@@ -90,10 +90,10 @@ class Base(unittest.TestCase):
             ok = sa.enviar_para_a_fila(aviso)
         return ok, saida.getvalue()
 
-    def gravado_pelo(self, jeito: str, aviso: dict) -> bytes:
+    def gravado_pela_lib(self, aviso: dict) -> bytes:
         shutil.rmtree(sa.FILA, ignore_errors=True)
         sa.FILA.mkdir()
-        sa.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        sa.PASTAS_DA_LIB = self.lib_do_repo
         ok, _ = self.enviar(aviso)
         self.assertTrue(ok)
         arquivos = self.fila()
@@ -101,10 +101,10 @@ class Base(unittest.TestCase):
         return arquivos[0].read_bytes()
 
 
-class FollowupComDonoUnico(unittest.TestCase):
-    """17/10/2026 (OT-01): o 05 · Acompanhamento não avisa mais o follow-up do 3º dia (a fila de venda da Central
-    pede); continua gravando o followup_em, que o server/crm.ts lê, e avisando os expirados. O nó "Montar avisos"
-    roda no node com o `$('Decidir')` de mentira; nada vai ao n8n."""
+class ExpiracaoSemFollowup(unittest.TestCase):
+    """19/10/2026: o 05 · Acompanhamento só expira (no 7º dia) e avisa os expirados. O follow-up do 3º dia é da Central
+    (server/crm.ts): o ramo `followup`, a coluna `followup_em` e o `leu` saíram daqui. O nó "Montar avisos" e o "Decidir"
+    rodam no node com entradas de mentira; nada vai ao n8n."""
 
     def montar_avisos(self, itens: list[dict]) -> list[dict]:
         node = shutil.which("node")
@@ -119,40 +119,76 @@ class FollowupComDonoUnico(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         return json.loads(p.stdout)
 
-    def test_follow_up_nao_avisa_e_expirado_avisa(self):
+    def decidir(self, linhas: list[dict], recibos: list[tuple[str, dict]]) -> list[dict]:
+        """O código do nó Decidir, com o corte recuado para 01/09 (o real deixaria tudo como acervo)."""
+        if not shutil.which("node"):
+            self.skipTest("sem node")
+        codigo = sa.DECIDIR.replace(sa.CORTE, "2026-09-01T00:00:00-03:00")
+        nos = sa.sv.nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos)
+        return [i["json"] for i in sa.sv.rodar_js(codigo, nos, [{"json": l} for l in linhas])]
+
+    def test_expirado_avisa_com_o_prazo_certo_e_so_ele(self):
         avisos = self.montar_avisos([
-            {"acao": "followup", "nome": "Padaria", "cidade": "Vitória", "site_url": "https://p.vercel.app", "dias": 3},
-            {"acao": "expirar", "nome": "Oficina", "cidade": "", "site_url": "", "raio_x_url": "https://r.app/o", "dias": 10},
+            {"acao": "expirar", "nome": "Oficina", "cidade": "", "site_url": "", "raio_x_url": "https://r.app/o", "dias": 7},
         ])
         self.assertEqual([a["titulo"] for a in avisos], ["⏳ Site antes da venda: expirados"])
         self.assertIn("Oficina: https://r.app/o", avisos[0]["texto"])
-        self.assertNotIn("Padaria", avisos[0]["texto"])
+        self.assertIn(f"sem resposta em {sa.EXPIRA_DIAS} dias", avisos[0]["texto"])
+        self.assertEqual(sa.EXPIRA_DIAS, 7)  # o DIAS_SEM_RESPOSTA da Central (server/crm.ts)
         self.assertTrue(avisos[0]["origem"].startswith("n8n:05"))
 
-    def test_so_follow_up_nao_sai_aviso_nenhum(self):
-        self.assertEqual(self.montar_avisos([{"acao": "followup", "nome": "Padaria", "dias": 3}]), [])
+    def test_sem_expirado_nao_sai_aviso_nenhum(self):
+        self.assertEqual(self.montar_avisos([]), [])
 
-    def test_o_followup_em_continua_gravado_na_planilha(self):
+    def test_o_05_nao_decide_mais_o_follow_up(self):
         wf = sa.acompanhamento("erro")
         marcar = next(n for n in wf["nodes"] if n["name"] == "Marcar na planilha")
-        self.assertIn("followup_em", marcar["parameters"]["columns"]["value"])
+        self.assertEqual(set(marcar["parameters"]["columns"]["value"]), {"place_id", "status"})
         decidir = next(n for n in wf["nodes"] if n["name"] == "Decidir")["parameters"]["jsCode"]
-        self.assertIn("acao: 'followup', status: 'enviado', followup_em: new Date().toISOString()", decidir)
+        for resto in ("followup", "visto_em", "lido_em", "FOLLOWUP"):
+            self.assertNotIn(resto, decidir)
         self.assertNotIn("followupDe", decidir)  # o texto do follow-up é da Central
+
+    def test_decidir_expira_no_setimo_dia_e_nao_faz_mais_nada(self):
+        agora = datetime.now(timezone.utc)
+        dia = lambda d: datetime.fromtimestamp(agora.timestamp() - d * 86400, timezone.utc).isoformat()
+        def lead(pid, **k):
+            return {"place_id": pid, "nome": pid, "status": "enviado", "respondeu_em": "", "enviado_em": dia(1), **k}
+        recibos = [("a", {"place_id": "a"}), ("b", {"place_id": "b"}), ("c", {"place_id": "c"}), ("d", {"place_id": "d"}),
+                   ("_recusados/e", {"place_id": "e"}), ("_em-conversa/f", {"place_id": "f"})]
+        saida = self.decidir([
+            lead("a", enviado_em=dia(3.2), visto_em=dia(3)),   # 3º dia e leu: nada (follow-up é da Central)
+            lead("b", enviado_em=dia(5)),                      # ainda cedo
+            lead("c", enviado_em=dia(7.5)),                    # expira
+            lead("d", enviado_em=dia(9), respondeu_em=dia(8)),  # respondeu: nada
+            lead("e", enviado_em=dia(9)),                      # _recusados: o Rômulo já decidiu
+            lead("f", enviado_em=dia(9)),                      # _em-conversa: idem
+            lead("sem-pasta", enviado_em=dia(8)),              # sem recibo (A sem demo): expira também
+            lead("sem-pasta-novo", enviado_em=dia(2)),         # sem recibo, cedo: nada
+            lead("g", enviado_em=dia(9), resposta_tipo="interesse"),  # resposta de gente protege
+        ], recibos)
+        self.assertEqual(sorted((s["place_id"], s["acao"], s["status"]) for s in saida),
+                         [("c", "expirar", "expirado"), ("sem-pasta", "expirar", "expirado")])
+
+    def test_sem_nenhum_recibo_lido_nada_expira(self):
+        # A leitura da pasta que falhou não pode expirar ninguém por falta de informação.
+        agora = datetime.now(timezone.utc)
+        velho = datetime.fromtimestamp(agora.timestamp() - 9 * 86400, timezone.utc).isoformat()
+        self.assertEqual(self.decidir([{"place_id": "x", "nome": "x", "status": "enviado", "respondeu_em": "", "enviado_em": velho}], []), [])
 
 
 class TrocaPelaLib(Base):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(sa.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in (RESUMO, "curto", "aspas \"duplas\", barra \\ e acento: ação", "duas\nlinhas e emoji 🌐"):
             with self.subTest(texto=texto[:30]):
-                self.assertEqual(self.gravado_pelo("lib", aviso_de(texto)), self.gravado_pelo("antigo", aviso_de(texto)))
+                self.assertEqual(json.loads(self.gravado_pela_lib(aviso_de(texto))), aviso_de(texto))
 
     def test_conteudo_fixado(self):
         esperado = json.dumps(aviso_de("duas\nlinhas"), ensure_ascii=False).encode("utf-8")
-        self.assertEqual(self.gravado_pelo("lib", aviso_de("duas\nlinhas")), esperado)
+        self.assertEqual(self.gravado_pela_lib(aviso_de("duas\nlinhas")), esperado)
         self.assertEqual(json.loads(esperado)["origem"], "site-acompanhamento")
 
     def test_nome_e_atomicidade(self):
@@ -221,26 +257,25 @@ class Falhas(Base):
 
 
 class SemLib(Base):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self):
+        sa.FILA.mkdir()
+        ok, saida = self.enviar(aviso_de("x"))
+        self.assertFalse(ok)
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: " + aviso_de("x")["titulo"], saida)
+        self.assertEqual(self.fila(), [], "sem a lib nada é gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         sa.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.assertIsNone(sa.lib_de_aviso())
-        sa.FILA.mkdir()  # o antigo nunca criou a pasta
-        ok, saida = self.enviar(aviso_de("x"))
-        self.assertTrue(ok)
-        self.assertEqual(saida.strip(), "-> na fila de avisos")
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^site-acervo-\d+\.json$")
+        self.sem_gravar()
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         sa.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(sa.lib_de_aviso())
-        sa.FILA.mkdir()
-        ok, _ = self.enviar(aviso_de("x"))
-        self.assertTrue(ok)
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar()
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
@@ -249,17 +284,12 @@ class SemLib(Base):
         sa.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(sa.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)
 
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
+    def test_sem_a_lib_o_valor_em_reais_nao_chega_a_fila(self):
+        # Sem a lib não há a regra do R$ (RULES 24): nada é gravado, nem o valor.
         sa.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         sa.FILA.mkdir()
         self.enviar(aviso_de("custa R$ 5"))
-        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
-
-    def test_sem_a_lib_a_fila_ausente_continua_levantando_como_antes(self):
-        # O jeito antigo era assim (FileNotFoundError); a reserva não muda nada.
-        sa.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
-        with self.assertRaises(OSError):
-            self.enviar(aviso_de("x"))
+        self.assertEqual(self.fila(), [])
 
 
 class PontaAPonta(unittest.TestCase):

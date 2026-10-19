@@ -9,7 +9,12 @@ enviado a ninguém.
 
 - GET /webhook/lead?id=<place_id>: página pequena (nome, link do demo, estado
   atual e os botões). id desconhecido: "lead não encontrado", nada gravado.
-- GET /webhook/lead-acao?id=<place_id>&acao=recusou|fechou|desfazer: o toque.
+- /webhook/lead-acao?id=<place_id>&acao=recusou|fechou|desfazer|gerar_demo: o toque. Na publicação,
+  workflow_confiabilidade.confirmar_acao (regra [confirmacao-http]) muda o desenho: o GET NÃO grava,
+  só mostra uma página de confirmação com o formulário; quem grava é o POST do botão "Confirmar", que
+  precisa vir da mesma origem (tailnet ou loopback) e com o contexto (o estado do lead) igual ao da
+  página, senão 403 (origem) ou 409 (o lead mudou, reabra). Link aberto, recarregado ou pré-visualizado
+  nunca escreve. O nó "Decidir a ação" abaixo descreve a decisão; o guard vem na frente dele.
   recusou -> status "recusado" + recusado_em; fechou -> "fechado" + fechado_em;
   os dois guardam em status_anterior o que o Desfazer devolve. Desfazer volta a
   status_anterior (sem ele, "enviado") e apaga a data. A pasta muda pelo
@@ -21,8 +26,7 @@ enviado a ninguém.
   _em-conversa/). Depois do toque, volta para a página com o estado novo.
 - A cada hora (:20): retrato da planilha em estado/site-leads.json (status,
   datas, pasta, grupo e link de cada lead com site), que o resumo das 10:30
-  (sites_e_pendencias.py) usa para pôr o link de cada lead e o site-demos-pausa
-  usa para as datas; e a coluna acoes_link da planilha com o link de cada lead
+  (sites_e_pendencias.py) usa para pôr o link de cada lead; e a coluna acoes_link da planilha com o link de cada lead
   que tem site (só grava as que faltam). Desde 07/10/2026 o retrato leva também
   resposta_tipo, mensagem_variante e site_versao (o funil compara o que cada
   lead recebeu com o que respondeu; o site-demos-limpeza --exclusao confere o
@@ -63,9 +67,9 @@ sv = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sv)
 
 PLANILHA, SHEETS = sv.PLANILHA, sv.SHEETS
-LEADS_GID = "396728619"
+LEADS_GID = sv.LEADS_GID
 NOME = "07 · Lead: página e ações (Site antes da venda)"
-LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
+LINKS = sv.LINKS
 LOCAL = "http://127.0.0.1:5679/webhook"
 COLUNAS_NOVAS = ["status_anterior", "recusado_em", "fechado_em", "acoes_link"]
 ESTADO = "/home/node/.n8n-files/estado/"
@@ -131,7 +135,7 @@ const estado = estadoDe(l), topo = topoDe(pid);
 const DESCRICAO = {
   fechado: '<b>Fechou</b>' + em(l.fechado_em),
   recusado: '<b>Recusou</b>' + (txt(l.recusado_em) ? em(l.recusado_em) : ' (anotado à mão, antes deste link)'),
-  expirado: '<b>Expirou</b>: 10 dias sem resposta' + (txt(l.enviado_em) ? ' (enviado' + em(l.enviado_em) + ')' : ''),
+  expirado: '<b>Expirou</b>: __DIAS__ dias sem resposta' + (txt(l.enviado_em) ? ' (enviado' + em(l.enviado_em) + ')' : ''),
   conversa: '<b>Em conversa</b>' + (txt(l.respondeu_em) ? ': respondeu' + em(l.respondeu_em) : ''),
   enviado: '<b>Enviado</b>' + em(l.enviado_em) + ', esperando resposta',
   pronto: txt(l.site_url) ? '<b>Site pronto</b>, ainda não enviado' : '<b>Primeira mensagem pronta</b>, ainda sem demo',
@@ -158,9 +162,12 @@ const corpo = (AVISO[feito] ? '<p class="aviso">' + AVISO[feito] + '</p>' : '')
   + '<div class="botoes">' + (podeGerarDemo(l) ? botao('gerar_demo', 'Gerar demo', feito === 'gerar_demo') : '')
   + botao('recusou', 'Recusou', estado === 'recusado') + botao('fechou', 'Fechou', estado === 'fechado')
   + (['recusado', 'fechado'].includes(estado) ? botao('desfazer', 'Desfazer', false) : '') + '</div></div>'
-  + '<p class="nota">Nada é enviado ao lead: os botões só mudam a planilha e a pasta. Recusado ou expirado há 15 dias, '
-  + 'o demo é pausado na Vercel (nada é apagado); Desfazer põe de volta no ar.</p>';
+  + '<p class="nota">Nada é enviado ao lead: os botões só mudam a planilha e a pasta. Quem está em Perdido há 2 dias '
+  + '(recusou, não respondeu em __DIAS__ dias, parou de responder) tem o demo apagado da Vercel; a pasta e o conteúdo '
+  + 'ficam no Dell. Desfazer não traz o demo de volta.</p>';
 return [{ json: { codigo: 200, html: pagina(txt(l.nome) || 'Lead', corpo) } }];"""
+PAGINA_JS = PAGINA_JS.replace("__DIAS__", str(sv.EXPIRA_DIAS))
+
 
 DECIDIR_JS = """// O toque num botão. Só grava quando muda algo; id ou botão desconhecido não grava nada.
 const q = $('Botão da página').first().json.query ?? {};
@@ -207,7 +214,7 @@ return [{ json: { nome }, binary: { data: { data: Buffer.from(JSON.stringify(d.p
   mimeType: 'application/json', fileName: nome } } }];"""
 
 RETRATO_JS = """// Retrato da planilha para o Dell: o resumo das 10:30 (link de cada lead) e o
-// site-demos-pausa (datas). Sem "itens": o dell-status e a Central não o leem como pendência.
+// site-demos-limpeza (datas). Sem "itens": o dell-status e a Central não o leem como pendência.
 const linhas = $input.all().map(i => i.json).filter(l => txt(l.place_id) && !/^TESTE/.test(txt(l.place_id)));
 const grupoDe = (l, e) => e === 'conversa' ? 'conversa'
   : (e === 'enviado' && topoDe(txt(l.place_id)) === 'raiz' && !txt(l.respondeu_em) ? 'resposta' : '');

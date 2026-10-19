@@ -18,10 +18,14 @@ Para cada oferta de prumo-ofertas.json:
   por rodada e um aviso pelo Hermes com quantos entraram. NASCE DESLIGADO
   (princípio 5 do plano): roda à mão, confere a lista, só então liga o
   agendamento (dias úteis, 9h) no n8n.
-- "PRUMO · <oferta> — Clique em Enviar convite (marca enviado)": GET
-  /webhook/convite-<oferta>?id=<ID>, abre o WhatsApp com o convite da oferta e
-  marca Etapa = Convite enviado (só a partir de Revisar). Ativo: só roda quando
-  o Rômulo toca o link (Central ou planilha).
+- "PRUMO · <oferta> — Clique em Enviar convite": GET /webhook/convite-<oferta>?id=<ID>,
+  abre o WhatsApp com o convite da oferta (Ler a linha > Decidir > Abrir o canal).
+  NÃO marca nada na planilha: quem muda a Etapa para "Convite enviado" é o
+  observador do WhatsApp (whatsapp-conversa.py), quando a mensagem sai de verdade;
+  `proxima_enviado` do JSON é o texto que ELE grava na Próxima ação. Até 19/10/2026
+  o fluxo tinha um "Marcar como enviado" que nunca gravava (workflow_confiabilidade.py
+  força marcar:false). O nome antigo ("... (marca enviado)") é achado e trocado pelo id.
+  Ativo: só roda quando o Rômulo toca o link (Central ou planilha).
 
 O CRM lê as abas pelo 08 · CRM (crm.py, rode depois deste) e mostra as ofertas
 no mesmo funil (server/crm.ts, OFERTA_DE_PROSPECCAO).
@@ -46,6 +50,7 @@ from n8n import aviso_nodes
 AQUI = Path(__file__).resolve().parent
 CONFIG = json.loads((AQUI / "prumo-ofertas.json").read_text(encoding="utf-8"))
 TRIAR = (AQUI / "prumo-ofertas-triar.js").read_text(encoding="utf-8")
+NOME_JS = (AQUI / "prumo-nome.js").read_text(encoding="utf-8")  # a regra do nome: a mesma do convite do PRUMO
 
 PLANILHA = "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U"  # PRUMO — Fila de revisão
 PROSPECTS_GID = "1838781376"
@@ -196,6 +201,9 @@ def escolher_js(o, leitura_propria):
         "// numa segunda rodada à mão no mesmo dia, e a ordem errada punha a melhor busca do Iris por último.",
         "// Quando cada busca rodou sai da coluna Busca da aba e de Descartados (Encontrado em); nunca rodou",
         "// vem primeiro, na ordem de prumo-ofertas.json (nicho na frente). Para mudar: o JSON e republicar.",
+        "// Busca sem empresa nova também deixa rastro (19/10/2026): 'Triar e checar sites' grava uma linha em",
+        "// Descartados com Motivo '<oferta>: Busca sem novidade', Busca e Encontrado em. Sem ela, essa busca",
+        "// seguia como 'nunca rodou', era escolhida todo dia e travava as de trás.",
         "const BUSCAS = " + json.dumps(buscas_de(o), ensure_ascii=False) + ";",
         "const ROTULO = " + json.dumps(o["rotulo"] + ":", ensure_ascii=False) + ";",
         "const ultima = new Map();",
@@ -298,17 +306,15 @@ def cacador(oferta, gids, descartados, erro, busca_fixa=None):
 
 def decidir_js(o, gid):
     return "\n".join([
-        f"// Clique em Enviar convite ({o['rotulo']}): abre o WhatsApp com o convite e marca a linha.",
+        f"// Clique em Enviar convite ({o['rotulo']}): abre o WhatsApp com o convite. Não marca a linha:",
+        "// quem muda a Etapa é o observador do WhatsApp (whatsapp-conversa.py), quando a mensagem sai.",
         "// Texto em prumo-ofertas.json: voz PRUMO, sem nome, sem R$, sem link, uma pergunta.",
+        NOME_JS,
         f"const q = $('Clique ({o['convite']})').first().json.query ?? {{}};",
         "const id = String(q.id ?? '');",
         "const l = $input.first()?.json ?? {};",
         "const achou = id !== '' && String(l['ID'] ?? '') === id;",
-        "let nome = String(l['Empresa'] ?? '').trim();",
-        "for (let i = 0; i < 2; i++) nome = nome.replace(/[\\s,.-]+(ltda|me|epp|eireli|s\\.?\\/?a\\.?)\\.?$/i, '').trim();",
-        "// Nome todo em maiúsculas denuncia mensagem automática.",
-        "if (nome === nome.toUpperCase() && /\\p{Lu}{4}/u.test(nome)) nome = nome.toLowerCase()",
-        "  .replace(/(^|\\s)(\\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());",
+        "const nome = nomeDaEmpresa(l['Empresa']);  // a regra de prumo-nome.js, igual à do CRM",
         "const hora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }));",
         "const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';",
         "const mensagem = " + json.dumps(o["mensagem"], ensure_ascii=False)
@@ -318,15 +324,17 @@ def decidir_js(o, gid):
         "// Sem a linha ou sem celular: abre a aba, para decidir à mão.",
         "const planilha = " + json.dumps(f"https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={gid}") + ";",
         "const destino = achou && digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : planilha;",
-        "return [{ json: { chave: id, destino, marcar: false, agora: new Date().toISOString() } }];",
+        "return [{ json: { chave: id, destino } }];",
     ])
 
 
 def clique(oferta, gids):
+    """O clique só abre o WhatsApp (o construtor é o de prumo-simples.py, sem nó de marcar). O nome antigo,
+    "... (marca enviado)", é achado e trocado pelo id: um segundo fluxo com o mesmo path não pode nascer."""
     o = CONFIG["ofertas"][oferta]
-    fc = _modulo("fecha_ciclos", "fecha-ciclos.py")
-    fc.webhook_workflow(o["clique"], o["convite"], o["webhook_id"], PLANILHA, str(gids[oferta]), o["aba"], "ID", "id", decidir_js(o, gids[oferta]),
-                        {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}", "Próxima ação": o["proxima_enviado"]})
+    simples = _modulo("prumo_simples", "prumo-simples.py")
+    simples.clique_workflow(o["clique"], o["clique"] + " (marca enviado)", o["convite"], o["webhook_id"], PLANILHA, str(gids[oferta]),
+                            o["aba"], decidir_js(o, gids[oferta]))
 
 
 # ------------------------------------------------------------------ publicar e rodar

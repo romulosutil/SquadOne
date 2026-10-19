@@ -19,7 +19,7 @@ runner não conhece fonte nenhuma pelo nome.
 
 Não manda WhatsApp: grava ~/.local/state/backup-dell/status.json, e o
 dell-status transforma a idade do último sucesso em ok/atencao/falha (e o
-Hermes avisa). Só o resultado do ensaio vai para a fila de avisos.
+Telegram avisa). Só o resultado do ensaio vai para a fila de avisos.
 
 Somente biblioteca padrão. Uso:
   backup-dell iniciar                 # uma vez: pastas no Drive, repositório e kit
@@ -168,25 +168,24 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", HOME / ".local/
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o backup: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
 
-def avisar(titulo: str, texto: str) -> None:
+def avisar(titulo: str, texto: str, chave: str | None = None, expira_em: str | None = None) -> None:
     """Fila do dell-status (pela lib de aviso: atômico, validado, sem criar a pasta).
-    BACKUP_DELL_SEM_AVISO=1 cala o WhatsApp em testes com repositório local.
+    BACKUP_DELL_SEM_AVISO=1 cala o aviso em testes com repositório local.
+
+    `chave` (a fila descarta a repetida por 24 h) e `expira_em` (ISO 8601; vencido, não sai) só entram no
+    arquivo quando dados: sem eles o aviso é byte a byte o de antes.
 
     NUNCA levanta: o aviso é o último passo do ensaio (e sai de dentro do
     `except` dele), e o backup, o status.json e o código de saída não podem
@@ -195,25 +194,24 @@ def avisar(titulo: str, texto: str) -> None:
         log(f"(aviso suprimido) {titulo}: {texto}")
         return
     aviso = {"titulo": titulo, "texto": texto, "origem": "backup-dell"}
+    if chave:
+        aviso["chave"] = chave
+    if expira_em:
+        aviso["expira_em"] = expira_em
     try:
         lib = lib_de_aviso()
-        if lib is not None:
-            # O texto leva a mensagem de uma exceção (restic, psql); se trouxer
-            # "R$" a lib recusaria o aviso, e perder o único sinal de ensaio
-            # ruim é pior que mandá-lo sem o valor.
-            for campo in ("titulo", "texto"):
-                if lib.VALOR_EM_REAIS.search(aviso[campo]):
-                    aviso[campo] = lib.sem_valores(aviso[campo])
-            r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="backup-dell")
-            if not r.gravado:  # a lib já escreveu a linha no stderr; aqui vai ao log do backup
-                log(f"aviso não gravado ({r.estado}): {r.motivo}")
+        if lib is None:  # sem a lib não há validação: não grava na fila, só registra e segue
+            print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {titulo}", file=sys.stderr, flush=True)
             return
-        # Sem a lib instalada: o jeito de antes (.tmp + rename), sem mudar o arquivo.
-        FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-        nome = FILA_AVISOS / f"backup-dell-{time.time_ns()}.json"
-        tmp = nome.with_suffix(".tmp")
-        tmp.write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(nome)
+        # O texto leva a mensagem de uma exceção (restic, psql); se trouxer
+        # "R$" a lib recusaria o aviso, e perder o único sinal de ensaio
+        # ruim é pior que mandá-lo sem o valor.
+        for campo in ("titulo", "texto"):
+            if lib.VALOR_EM_REAIS.search(aviso[campo]):
+                aviso[campo] = lib.sem_valores(aviso[campo])
+        r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="backup-dell")
+        if not r.gravado:  # a lib já escreveu a linha no stderr; aqui vai ao log do backup
+            log(f"aviso não gravado ({r.estado}): {r.motivo}")
     except Exception as e:  # noqa: BLE001 — ver a docstring
         log(f"aviso não gravado: {type(e).__name__}: {e}")
 
@@ -690,7 +688,11 @@ def ensaio(m: dict, a: argparse.Namespace) -> int:
         return 1
     except Exception as e:  # noqa: BLE001
         registrar("ensaio", **base, estado="falha", ultima_tentativa=iso(t), detalhe=f"Ensaio falhou: {str(e)[:200]}")
-        avisar("🗄️ Backup do Dell", f"O ensaio de restauração falhou: {str(e)[:200]}. O cofre existe, mas não provei que ele refaz o Dell.")
+        # Sem chave, o ensaio que falha todo dia (cofre das 03:30) mandava um aviso por dia. Com ela, um por 24 h;
+        # o texto muda com a causa, mas o fato de o ensaio estar falhando é um só. Vencido, não vale mais.
+        avisar("🗄️ Backup do Dell",
+               f"O ensaio de restauração falhou: {str(e)[:200]}. O cofre existe, mas não provei que ele refaz o Dell.",
+               chave="backup-dell:ensaio-falhou", expira_em=iso(agora() + dt.timedelta(hours=20)))
         log(f"ensaio: FALHA {e}")
         return 1
     registrar("ensaio", **base, estado="ok", ultima_tentativa=iso(t), ultimo_sucesso=iso(agora()), detalhe=det)

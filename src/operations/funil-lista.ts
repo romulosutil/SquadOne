@@ -79,20 +79,16 @@ export function textoDosDescartados(c: ContagemDaEtapa): string {
 export interface SinalDaLinha { texto: string; classe: string }
 
 /**
- * O sinal mais forte de um lead, ou `null`. `anotado` diz se este envio já foi anotado
- * nesta tela (anotacao-de-envio.ts): follow-up anotado não é mais "Follow-up hoje".
- * O próximo passo tem coluna própria e não entra aqui.
+ * O sinal mais forte de um lead, ou `null`. O próximo passo tem coluna própria e não entra aqui.
  */
-export function sinalMaisForte(lead: CrmLead, anotado: (tipo: 'followup_enviado' | 'segunda_enviada') => boolean = () => false): SinalDaLinha | null {
+export function sinalMaisForte(lead: CrmLead): SinalDaLinha | null {
   if (lead.respostaNova) return { texto: 'Resposta nova', classe: 'is-resposta' }
-  if (lead.followupHoje && !anotado('followup_enviado')) return { texto: lead.reenvioDoRobo ? 'Reenvio hoje (só robô)' : 'Follow-up hoje', classe: 'is-followup' }
+  if (lead.followupHoje) return { texto: lead.reenvioDoRobo ? 'Reenvio hoje (só robô)' : 'Follow-up hoje', classe: 'is-followup' }
   const prazo = textoDoPrazo(lead)
   if (prazo && lead.diasParaSair !== undefined && lead.diasParaSair <= 1) return { texto: prazo, classe: 'is-prazo is-amanha' }
   if (lead.divergencias.length) return { texto: 'Divergência', classe: 'is-divergencia' }
   // O resto, na ordem do cartão.
   if (lead.resposta) return { texto: ROTULO_DA_RESPOSTA[lead.resposta.tipo], classe: `is-${lead.resposta.tipo}` }
-  if (anotado('followup_enviado')) return { texto: 'Follow-up anotado', classe: '' }
-  if (anotado('segunda_enviada')) return { texto: '2ª mensagem anotada', classe: '' }
   if (lead.etapa === 'novo' && lead.triagem?.origemWhatsapp?.startsWith('não confirmado')) return { texto: 'WhatsApp não confirmado', classe: 'is-prazo' }
   if (lead.etapa === 'novo' && lead.triagem?.prioridade !== undefined) return { texto: `Prioridade ${lead.triagem.prioridade}`, classe: '' }
   if (prazo) return { texto: prazo, classe: 'is-prazo' }

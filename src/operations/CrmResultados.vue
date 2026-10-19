@@ -39,7 +39,8 @@ const secoes = computed(() => SECOES.filter(s => !s.soSite || temSite.value).map
   ...resultados(s.soSite ? props.leads.filter(l => l.produto === 'site') : props.leads, s.id, periodo.value, props.agora),
 })))
 const total = computed(() => resultados(props.leads, 'nicho', periodo.value, props.agora).total)
-// Follow-up e 2ª mensagem anotados ao tocar no link (14/10/2026): o "follow-up funciona?" com número.
+// Follow-up e 2ª mensagem registrados (14/10/2026): o "follow-up funciona?" com número. Quem os marca é o
+// observador do WhatsApp ou o "Enviei" explícito, não o toque no link (regra [abrir-nao-envia]).
 const anotados = computed(() => enviosAnotados(props.leads, periodo.value, props.agora))
 
 // A/B do vídeo (11/10/2026, ab-video.ts): só existe com a coluna `braco_video` preenchida.
@@ -299,8 +300,8 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
             <h2 id="crm-resultado-anotados">Follow-up e 2ª mensagem</h2>
           </header>
           <p class="crm-grupo__explicacao">
-            Anotados ao tocar em "Mandar o follow-up" e "Mandar o link" na Central, desde {{ INICIO_DAS_ANOTACOES }}; antes disso
-            nenhum envio deixou rastro. "Respondeu depois" é gente escrevendo depois do follow-up.
+            Os que o observador do WhatsApp registrou (ou um "Enviei" seu), desde {{ INICIO_DAS_ANOTACOES }}; antes disso
+            nenhum envio deixou rastro. Abrir o WhatsApp não conta. "Respondeu depois" é gente escrevendo depois do follow-up.
           </p>
           <ul class="crm-lista">
             <li class="crm-resultado">

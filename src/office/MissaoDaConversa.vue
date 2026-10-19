@@ -24,7 +24,7 @@ const resolvidoPrimeiro = computed(() => movimento.value.doCombinado && moviment
 const ajuste = ref<'concluir' | 'reagendar' | null>(null)
 const ultima = computed(() => props.lead.conversa?.ultima ?? null)
 const rotuloDaUltima = computed(() => ultima.value?.direcao === 'saida' ? 'Última mensagem enviada' : ultima.value?.papel === 'robo' ? 'Última mensagem do robô' : 'Última mensagem recebida')
-const anotando = ref(false), anotado = ref(''), statusDaAcao = ref(''), erroDaAcao = ref('')
+const ocupadoNaAcao = ref(false), resolvido = ref(''), statusDaAcao = ref(''), erroDaAcao = ref('')
 async function guardar() {
   if (!texto.value.trim() || salvando.value) return
   salvando.value = true; emit('ocupado', true); erro.value = ''; recebido.value = ''
@@ -35,22 +35,43 @@ async function guardar() {
   } catch (e) { erro.value = (e as Error).message } finally { salvando.value = false; emit('ocupado', false) }
 }
 /**
- * O essencial do aoTocar da Próxima venda: o toque no link anota o envio (uma vez por ação no dia, o
- * servidor guarda). A proposta não se anota no toque: abrir o WhatsApp não comprova envio, então ela
- * espera o "Enviei a proposta".
+ * Abrir o WhatsApp NÃO grava nada (regra [abrir-nao-envia], 18/10/2026): o link é um <a> comum. O que
+ * grava é o botão explícito, depois de enviar: "Enviei" (ou "Enviei a proposta") anota o envio na aba CRM
+ * quando o passo tem o que anotar (POST /crm/venda/anotar, uma vez por ação no dia) e resolve a ação no
+ * servidor (POST /crm/venda): é isso que tira o passo da lista da Central e fecha o aviso aberto do
+ * Telegram. "Marcar a recusa" anota o desfecho; "Pular" só deixa o passo para o fim do dia.
  */
-async function anotar(a: AcaoDeVenda, confirmou = false) {
-  if (!a.anota || anotando.value || anotado.value === a.chave) return
-  if (a.anota === 'proposta' && !confirmou) { statusDaAcao.value = 'Proposta preparada. Toque em “Enviei a proposta” só depois de enviar.'; return }
-  anotando.value = true; emit('ocupado', true); erroDaAcao.value = ''
+async function resolver(a: AcaoDeVenda, como: 'enviada' | 'pulada' | 'recusa') {
+  const r = await fetch('/api/operations/crm/venda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, como }) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+}
+async function confirmar(a: AcaoDeVenda, como: 'enviada' | 'recusa' = 'enviada') {
+  if (ocupadoNaAcao.value || resolvido.value === a.chave) return
+  ocupadoNaAcao.value = true; emit('ocupado', true); erroDaAcao.value = ''; statusDaAcao.value = ''
+  let anotou = ''
   try {
-    const r = await fetch('/api/operations/crm/venda/anotar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, produto: props.lead.produto, id: props.lead.chave, tipo: a.anota, texto: a.anota === 'proposta' ? a.rascunho?.slice(0, 1000) ?? '' : '' }) })
-    if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
-    anotado.value = a.chave
-    statusDaAcao.value = corpo.jaEstava ? 'Já estava anotado.' : a.anota === 'proposta' ? 'Proposta anotada.' : a.anota === 'recusou' ? 'Recusa marcada.' : 'Envio anotado.'
-    if (!corpo.jaEstava) emit('registrado')
-  } catch { erroDaAcao.value = 'Não consegui anotar — anote na ficha.' } finally { anotando.value = false; emit('ocupado', false) }
+    if (a.anota) {
+      const r = await fetch('/api/operations/crm/venda/anotar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, produto: props.lead.produto, id: props.lead.chave, tipo: a.anota, texto: a.anota === 'proposta' ? a.rascunho?.slice(0, 1000) ?? '' : '' }) })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
+      anotou = corpo.jaEstava ? 'Já estava anotado.' : a.anota === 'proposta' ? 'Proposta anotada.' : a.anota === 'recusou' ? 'Recusa marcada.' : 'Envio anotado.'
+    }
+  } catch { erroDaAcao.value = 'Não consegui anotar — anote na ficha.'; ocupadoNaAcao.value = false; emit('ocupado', false); return }
+  try {
+    await resolver(a, como)
+    resolvido.value = a.chave
+    statusDaAcao.value = anotou || 'Registrado.'
+  } catch {
+    statusDaAcao.value = anotou
+    erroDaAcao.value = anotou ? 'Anotei, mas não consegui tirar o passo da lista agora.' : 'Não consegui registrar agora.'
+  } finally { ocupadoNaAcao.value = false; emit('ocupado', false) }
+  emit('registrado')
+}
+async function pular(a: AcaoDeVenda) {
+  if (ocupadoNaAcao.value) return
+  ocupadoNaAcao.value = true; emit('ocupado', true); erroDaAcao.value = ''; statusDaAcao.value = ''
+  try { await resolver(a, 'pulada'); statusDaAcao.value = 'Deixado para o fim do dia.'; emit('registrado') }
+  catch { erroDaAcao.value = 'Não consegui pular agora.' } finally { ocupadoNaAcao.value = false; emit('ocupado', false) }
 }
 </script>
 <template>
@@ -67,9 +88,10 @@ async function anotar(a: AcaoDeVenda, confirmou = false) {
       <div v-if="acao?.rascunho" class="missao-conversa__rascunho"><span class="sobretitulo">Mensagem pronta</span><p>{{ acao.rascunho }}</p></div>
       <div class="missao-conversa__acoes">
         <template v-if="resolvidoPrimeiro && !ajuste"><button type="button" class="botao botao--primario" @click="ajuste = 'concluir'">Já resolvi</button></template>
-        <a v-if="acao && linkDaAcao" :class="['botao', resolvidoPrimeiro ? '' : 'botao--primario']" :href="linkDaAcao.url" target="_blank" rel="noopener" @click="anotar(acao)">{{ linkDaAcao.rotulo }} <span aria-hidden="true">↗</span></a>
-        <button v-if="acao && linkDaAcao && acao.anota === 'proposta'" type="button" class="botao" :disabled="anotando || anotado === acao.chave" @click="anotar(acao, true)">Enviei a proposta</button>
-        <button v-if="acao && !linkDaAcao && !acao.primeiroContato && acao.anota === 'recusou'" type="button" class="botao botao--primario" :disabled="anotando || anotado === acao.chave" @click="anotar(acao, true)">Marcar a recusa</button>
+        <a v-if="acao && linkDaAcao" :class="['botao', resolvidoPrimeiro ? '' : 'botao--primario']" :href="linkDaAcao.url" target="_blank" rel="noopener">{{ linkDaAcao.rotulo }} <span aria-hidden="true">↗</span></a>
+        <button v-if="acao && linkDaAcao && !acao.primeiroContato && acao.tipo !== 'desfecho'" type="button" class="botao" :disabled="ocupadoNaAcao || resolvido === acao.chave" @click="confirmar(acao)">{{ acao.anota === 'proposta' ? 'Enviei a proposta' : 'Enviei' }}</button>
+        <button v-if="acao && !acao.primeiroContato && acao.anota === 'recusou'" type="button" :class="['botao', linkDaAcao ? '' : 'botao--primario']" :disabled="ocupadoNaAcao || resolvido === acao.chave" @click="confirmar(acao, 'recusa')">Marcar a recusa</button>
+        <button v-if="acao && !acao.primeiroContato && resolvido !== acao.chave" type="button" class="botao botao--leve" :disabled="ocupadoNaAcao" @click="pular(acao)">Pular por hoje</button>
         <button v-if="acao?.primeiroContato" type="button" class="botao botao--primario" @click="emit('ficha', lead.id)">Enviar pela Ficha</button>
         <a v-if="lead.links.whatsapp && linkDaAcao?.url !== lead.links.whatsapp" :class="['botao', resolvidoPrimeiro || (acao && (linkDaAcao || acao.primeiroContato)) ? '' : 'botao--primario']" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp <span aria-hidden="true">↗</span></a>
         <template v-if="movimento.doCombinado && !ajuste"><button v-if="!resolvidoPrimeiro" type="button" class="botao" @click="ajuste = 'concluir'">Já resolvi</button><button type="button" class="botao botao--leve" @click="ajuste = 'reagendar'">Remarcar</button></template>
@@ -86,7 +108,7 @@ async function anotar(a: AcaoDeVenda, confirmou = false) {
     </div>
     <form v-if="informar" class="missao-conversa__form" @submit.prevent="guardar"><label class="rotulo">O que o time precisa saber?<textarea v-model="texto" class="campo" rows="3" maxlength="1000" required :disabled="salvando" placeholder="Um combinado por telefone, uma informação nova ou uma mudança de prioridade…" /></label><p class="texto-2 texto-pequeno">O contexto fica ligado a esta conversa.</p><button type="submit" class="botao" :disabled="!disponivel || salvando">{{ salvando ? 'Guardando…' : 'Guardar contexto para o time' }}</button></form>
     <p v-if="recebido" class="recado recado--ok" role="status">{{ recebido }}</p><p v-if="erro" class="recado recado--erro" role="alert">{{ erro }}</p>
-    <p class="texto-2 texto-pequeno">O time observa os envios e as respostas nas integrações. A jornada se atualiza com os registros.</p>
+    <p class="texto-2 texto-pequeno">Abrir o WhatsApp não registra nada: o observador marca o que sai, ou você toca em “Enviei”. A jornada se atualiza com os registros.</p>
   </article>
 </template>
 <style scoped>

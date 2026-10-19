@@ -25,8 +25,9 @@ Visão sem retrato válido, sem as pastas lidas ou com o retrato com mais de 1 h
 não vale: uma resposta de agora poderia estar de fora.
 
 O que NÃO apaga: a pasta do lead em ~/auto-site (conteúdo, fotos, DESIGN.md)
-fica, para regerar ou republicar. Só ganha `apagado_em` no publicado.json, o
-`site-demos-pausa` passa a ignorar o lead e o CRM tira o link do demo.
+fica, para regerar ou republicar. Só ganha `apagado_em` no publicado.json e o CRM
+tira o link do demo. O demo apagado só volta republicando (o site-demos-pausa, que
+o religava no Desfazer, foi aposentado em 19/10/2026).
 
 O timer diário (09:50) e o `lote-continuo` rodam `--apagar`: apagam sozinhos e
 mandam UM aviso com o que saiu. No máximo MAX_POR_RODADA por rodada (os mais
@@ -42,7 +43,7 @@ antigos em Perdido primeiro): um erro de regra não leva a Vercel inteira de uma
 Pedido de exclusão (`--exclusao`, 07/10/2026): o lead respondeu pedindo para
 apagar o site ou o conteúdo ("se puder excluir esse conteúdo por gentileza",
 Baby School). O classificador do WhatsApp grava `resposta_tipo` "exclusao", marca
-o lead como recusado e o aviso pelo Hermes traz este comando. Desde 18/10 a classificação automática fica protegida na regra geral;
+o lead como recusado e o aviso (Telegram) traz este comando. Desde 18/10 a classificação automática fica protegida na regra geral;
 o comando explícito continua servindo para atender um pedido confirmado de exclusão. Entra só o projeto nomeado cujo lead, no retrato da planilha (site-leads.json),
 tem `resposta_tipo` "exclusao", não está fechado e tem o publicado.json da pasta
 confirmando o projeto. A pasta fica.
@@ -306,38 +307,31 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
 
 def avisar(texto: str) -> bool:
-    """True quando o aviso ficou na fila. Com a lib nada levanta (fila ausente ou
-    aviso recusado voltam False e o motivo vai ao journal); sem ela, como antes:
-    ou grava, ou levanta."""
+    """True quando o aviso ficou na fila. Nada levanta: fila ausente, aviso recusado
+    ou lib ausente voltam False e o motivo vai ao journal."""
     aviso = {"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": texto, "origem": "site-demos-limpeza"}
     lib = lib_de_aviso()
-    if lib is not None:
-        # Os nomes vêm de planilha/CRM; se um deles trouxer "R$" a lib recusaria o
-        # aviso inteiro, e calar uma exclusão na Vercel é pior que mandá-lo sem o valor.
-        if lib.VALOR_EM_REAIS.search(texto):
-            aviso["texto"] = lib.sem_valores(texto)
-        return lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-demos-limpeza").gravado
-    # Sem a lib instalada: o jeito de antes, sem mudar nada.
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    (FILA_AVISOS / f"site-demos-limpeza-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-    return True
+    if lib is None:  # sem a lib não há validação (nem a regra do R$): não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
+        return False
+    # Os nomes vêm de planilha/CRM; se um deles trouxer "R$" a lib recusaria o
+    # aviso inteiro, e calar uma exclusão na Vercel é pior que mandá-lo sem o valor.
+    if lib.VALOR_EM_REAIS.search(texto):
+        aviso["texto"] = lib.sem_valores(texto)
+    return lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-demos-limpeza").gravado
 
 
 def _montar_texto(apagados: list[dict], falhas: list[str], a_pedido: bool, max_nomes: int, max_falhas: int) -> str:

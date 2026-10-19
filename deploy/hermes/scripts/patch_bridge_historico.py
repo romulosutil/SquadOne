@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Instala leitura dirigida, com backup. Aplicar não reinicia o Hermes."""
+"""Remenda a bridge do WhatsApp do Hermes com a leitura dirigida do histórico de UM lead.
+
+O que faz (idempotente, com backup em ~/.local/share/claude-ops/backups/historico-hermes-*):
+- no bridge.js (~/.hermes/hermes-agent/scripts/whatsapp-bridge) liga o evento `messaging-history.set` e as rotas
+  POST /squadone/historico e /squadone/historico/audio, marcadas por `// squadone:historico`;
+- copia squadone_history.mjs para a pasta da bridge (a lógica: só lê, nunca envia, nunca marca como lida, só chaves
+  da lista de leads do observador, segredo em ~/.config/claude-ops/whatsapp-observador-segredo);
+- instala squadone-historico-arquivar em ~/.local/bin (ele grava o retorno do aparelho na conversa do lead, com
+  origem `hermes-historico`, usando a classe Conversas do whatsapp-observador instalado; nunca chama n8n).
+
+Quem consome: o bloco de histórico da Ficha (CrmHistorico.vue, POST /api/operations/crm/historico em server/operations.ts) chama
+http://127.0.0.1:3000/squadone/historico na bridge; conferir-historicos.py (deploy/dell/whatsapp-observador) é o
+leitor manual em lote.
+
+Um `hermes update` troca o bridge.js e leva o remendo junto: a rota da Central passa a dar 503 sem aviso. Por isso o
+aplicar-hermes.py chama este script e confere a marca no bridge.js. Aplicar não reinicia o Hermes (o aplicar-hermes
+reinicia o gateway no fim).
+"""
 from pathlib import Path
 import shutil
 import subprocess
@@ -32,7 +49,9 @@ s = s.replace('getContent: getMessageContent });', "getContent: getMessageConten
 if "app.post('/squadone/historico/audio'" not in s:
     s = s.replace("app.post('/squadone/historico',", "app.post('/squadone/historico/audio', (req, res) => squadoneHistory().audio(req, res));\napp.post('/squadone/historico',")
 if s != original:
-    node = home / '.hermes/tools/node-26.7.0-linux-x64/bin/node'
+    # O Node do Hermes muda de versão em cada atualização: pega o mais novo que houver, e o do PATH se não houver.
+    nodes = sorted((home / '.hermes/tools').glob('node-*/bin/node'))
+    node = nodes[-1] if nodes else Path(shutil.which('node') or 'node')
     with tempfile.NamedTemporaryFile(suffix='.mjs', mode='w') as f:
         f.write(s); f.flush()
         subprocess.run([str(node), '--check', f.name], check=True)

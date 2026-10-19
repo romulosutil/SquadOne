@@ -28,8 +28,10 @@ Quase aditivo: nós "Mapa: ...", uma saída nova de "Ler respostas do formulári
 (o ramo do pacote, abaixo do ramo do diagnóstico: a ordem v1 roda aquele ramo
 primeiro), dois nós "Mapa: ... leads do site" entre "Extrair avisados" e o
 formulário (os dois ramos leem o retrato) e um trecho marcado no 'Calcular
-diagnóstico'. Rodar de novo troca tudo pelos atuais. prumo-simples.py recria o
-fluxo sem eles: depois dele, rode este script de novo.
+diagnóstico'. Rodar de novo troca tudo pelos atuais. prumo-simples.py (pontuacao)
+recria o fluxo JÁ COM o ramo: carrega este arquivo e chama nos(), ligar() e
+marcar_diagnostico(), então não é preciso rodar este script depois dele. Rodar
+este sozinho serve para aplicar uma mudança daqui sem recriar o resto do fluxo.
 
 Uso:
     python3 prumo-mapa-n8n.py            aplica no fluxo (backup antes)

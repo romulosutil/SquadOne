@@ -13,6 +13,12 @@
 // e a `verificacao` do próprio passo, para o Escritório e o Como funciona nunca
 // divergirem. Fora do prompt (RULES 26): nada do servidor importa este arquivo.
 //
+// Os nomes das abas de Vendas vêm de NOME_DAS_ABAS (vendas-abas.ts, via caminhoDaAba): um mapa só, o mesmo
+// da barra, do Ctrl+K e da jornada.
+//
+// Abrir o WhatsApp NÃO marca envio (regra [abrir-nao-envia], 18/10/2026): o envio, a leitura e a resposta
+// quem marca é o observador do WhatsApp, ou o "Enviei" explícito. Os textos abaixo seguem isso.
+//
 // `blueprint` (16/10/2026, OT-03 "um mapa da operação, não três") liga o passo
 // ao cartão do service blueprint (docs/blueprint/servico.json), que é quem
 // descreve a esteira por inteiro. Este arquivo, jornada.ts e o blueprint já
@@ -20,6 +26,9 @@
 // "não lia" a aba que lia); com o código, a tela linka o cartão e o teste
 // src/operations-mapa-unico.test.ts falha se um código citado aqui sumir de lá.
 // Só nos passos em que o cartão é claramente o mesmo trabalho.
+
+import { TEXTO_DO_EXPEDIENTE } from './trava-de-horario'
+import { caminhoDaAba } from './vendas-abas'
 
 export type Onde = 'voce' | 'dell' | 'nuvem' | 'externo'
 
@@ -89,7 +98,8 @@ const CRM_PRUMO = { rotulo: 'Abrir em Vendas', url: '/crm?produto=prumo' }
 const CRM_IRIS = { rotulo: 'Abrir em Vendas', url: '/crm?produto=iris' }
 const CRM_ESTAMPA = { rotulo: 'Abrir em Vendas', url: '/crm?produto=estampa' }
 const CRM_PLUS = { rotulo: 'Abrir em Vendas', url: '/crm?produto=plus' }
-// A revisão dos prospects saiu da A fazer para uma fila própria (OT-05, 16/10/2026).
+// A revisão dos prospects tem fila própria (OT-05, 16/10/2026), na aba Primeiros contatos.
+const PRIMEIROS = caminhoDaAba('triagem')
 const triagem = (produto: string) => ({ rotulo: 'Abrir a Triagem', url: `/crm?ver=triagem&produto=${produto}` })
 
 // PRUMO como holding (14/10/2026): o PRUMO fica sob o SquadOne, e as quatro ofertas
@@ -111,20 +121,23 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Balcão marca "pronto"', texto: 'n8n 03 lê o publicado.json, monta a mensagem, sorteia a letra do A/B e o link de envio.', onde: 'dell', quando: 'de hora em hora (:10)', verificacao: 'fluxo:wjuoIknp2qlWo0QI', blueprint: 'SITE-2-B1',
         trabalhador: { id: 'balcao', nome: 'Balcão', sala: 'prumo--geral', faz: 'lê os Raio-X e sites publicados, monta a mensagem e o link de envio e marca o lead como pronto para abordar', onde: 'n8n 03, no Dell' } },
       { titulo: 'Sites e pendências no WhatsApp', texto: 'Uma mensagem pela fila de avisos (o Hermes entrega): os sites do dia, o que espera você e o link de cada lead enviado ou em conversa.', onde: 'dell', quando: '10:30' },
-      { titulo: 'Aborda o lead', texto: 'Pela Próxima venda (em Vendas › A fazer) ou pelo "Envie para X" do Telegram: "Abrir no WhatsApp" mostra e abre a primeira mensagem. Só no expediente (seg a sex, 8h às 17h30, ou com o "Liberar" daquele lead) e no ritmo da trava. Escrever direto ao número do lead também conta como envio.', onde: 'voce', quando: 'no expediente, no ritmo da trava', comVoce: true, fila: 'pend:site-enviar', link: CRM_SITE, blueprint: 'SITE-3-P1' },
-      { titulo: 'Envio e leitura se marcam', texto: 'O observador do WhatsApp registra o envio e, quando o lead lê, o visto_em. Quem desliga a confirmação de leitura nunca aparece como lido: é "não sei", não "não viu".', onde: 'dell', quando: 'na hora', verificacao: 'fluxo:fd8gz4uDQkJtEd9W', blueprint: 'SITE-4-B1',
+      // 18-19/10/2026: o time comercial (frente-comercial.py) faz o primeiro contato do Site em `pronto`; nasce desligado.
+      { titulo: 'Time comercial avalia e inicia o contato', texto: 'Três agentes (Diego seleciona, Elisa avalia a entrega, Carla prepara) avaliam os leads em pronto, até 60 avaliações de IA por dia, e ficam com os de nota 65 ou mais. No expediente, cada envio pede reserva à Central (a mesma janela, o mesmo ritmo e o gate de envio das telas e do Telegram); com ela, o time dá o clique no link rastreado e manda o texto do Balcão pelo número do PRUMO. A Triagem, o Plus, o PRUMO, o Iris e as estamparias não são dele. Tem dois interruptores: o ativo da Central e o timer do Dell; a tela diz se o ciclo está parado.', onde: 'dell', quando: 'a cada minuto, só se ativo', link: { rotulo: `Abrir ${PRIMEIROS}`, url: '/crm?ver=triagem' }, blueprint: 'SITE-3-P1',
+        trabalhador: { id: 'time-comercial', nome: 'Time comercial', sala: 'prumo--prospeccao', faz: 'avalia os leads em pronto com três agentes (Diego, Elisa e Carla) e inicia o primeiro contato dos aprovados pelo número do PRUMO, dentro da janela e do ritmo da Central', onde: 'frente-comercial (timer a cada minuto, desligado por padrão), no Dell' } },
+      { titulo: 'Aborda o lead', texto: `O que o time não pega (ele pausado, ou lead que ele não escolheu) sai pela Ficha do lead ou pelo "Envie para X" do Telegram: "Abrir no WhatsApp" mostra e abre a primeira mensagem. Só no expediente (${TEXTO_DO_EXPEDIENTE}, ou com o "Liberar" daquele lead) e no ritmo da trava. Abrir não registra envio: o observador marca quando a mensagem sai.`, onde: 'voce', quando: 'no expediente, no ritmo da trava', comVoce: true, fila: 'pend:site-enviar', link: CRM_SITE, blueprint: 'SITE-3-P1' },
+      { titulo: 'Envio e leitura se marcam', texto: 'O observador do WhatsApp registra o envio (o clique no link só deixa clique_em) e, quando o lead lê, o visto_em. Quem desliga a confirmação de leitura nunca aparece como lido: é "não sei", não "não viu".', onde: 'dell', quando: 'na hora', verificacao: 'fluxo:fd8gz4uDQkJtEd9W', blueprint: 'SITE-4-B1',
         trabalhador: { id: 'observador', nome: 'Observador do WhatsApp', sala: 'prumo--geral', faz: 'marca sozinho o envio, a leitura e a resposta de cada lead a partir do que o aparelho vinculado recebe', onde: 'n8n "WhatsApp — conversa com lead", no Dell' } },
       { titulo: 'Lead responde', texto: 'Mensagem 5 min ou mais depois do envio preenche respondeu_em, a resposta é classificada (interesse, negativa, exclusão, neutra ou robô) e a pasta vai para _em-conversa. Antes disso é a saudação automática do WhatsApp Business.', onde: 'dell', quando: 'na hora', fila: 'pend:site-resposta', blueprint: 'SITE-4-B2' },
-      { titulo: 'Manda o link', texto: 'A 2ª mensagem, com o Raio-X ou o demo, pela Próxima venda ou pela Ficha. O toque anota segunda_enviada; o link visto numa mensagem nossa na conversa também vale.', onde: 'voce', quando: 'em até 2 h depois do "quero ver"', comVoce: true, link: CRM_SITE, blueprint: 'SITE-5-P1' },
+      { titulo: 'Manda o link', texto: `A 2ª mensagem, com o Raio-X ou o demo, pelas ${caminhoDaAba('afazer')}, pela missão da Central ou pela Ficha. O toque só abre o WhatsApp: segunda_enviada vem do observador (o link visto numa mensagem nossa na conversa vale) ou do "Enviei" explícito.`, onde: 'voce', quando: 'em até 2 h depois do "quero ver"', comVoce: true, link: CRM_SITE, blueprint: 'SITE-5-P1' },
       { ramo: 'se pediu para ver o site', titulo: 'Gerar demo', texto: 'O toque em "Gerar demo" na página do lead acorda o gerador: Claude faz o site em 20 a 40 min, publica na Vercel como demo-<lead> e o aviso "Site publicado" chega no WhatsApp. Lead de fora do Brasil segue na fila de sempre das 08:00 (até 4 por dia; com o Dell desligado, roda quando ele liga).', onde: 'dell', quando: 'no toque; 08:00 a fila', verificacao: 'gerador', fila: 'pend:sites-fila', blueprint: 'SITE-5-B1',
         trabalhador: { id: 'gerador', nome: 'Gerador', sala: 'prumo--site-antes-da-venda', faz: 'faz e publica na Vercel o demo de quem pediu para ver ("Gerar demo"); lead de fora do Brasil, na fila das 08:00', onde: 'gerador-de-sites (timer e pedido), no Dell' } },
       // Desde 16/10/2026 quem põe o follow-up na sua frente é a Próxima venda (e o vendedor do Telegram).
-      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: 'O 05 · Acompanhamento aponta o follow-up do 3º dia só para quem leu a primeira (desde 15/10, depois da restrição do WhatsApp); a Próxima venda e o vendedor do Telegram o põem na fila com o texto pronto. O envio é seu.', onde: 'dell', quando: '09:00', verificacao: 'fluxo:4lFlWNGv5KDZytJE', blueprint: 'SITE-6-B1',
-        trabalhador: { id: 'acompanhamento', nome: 'Acompanhamento', sala: 'prumo--geral', faz: 'no 3º dia sem resposta aponta o follow-up de quem leu; no 10º, expira o lead', onde: 'n8n 05, no Dell' } },
-      { ramo: 'se não responder', titulo: 'Expira no 10º dia', texto: 'Status "expirado". Se o lead responder depois, volta para "enviado".', onde: 'dell', quando: '09:00' },
+      { ramo: 'se não responder', titulo: 'Follow-up entre o 3º e o 6º dia', texto: `Só para quem leu a primeira (desde 15/10, depois da restrição do WhatsApp). Quem decide é a Central, sem o 05: as ${caminhoDaAba('afazer')} e o vendedor do Telegram o põem na fila com o texto pronto. O envio é seu.`, onde: 'dell', quando: '09:00', verificacao: 'fluxo:4lFlWNGv5KDZytJE', blueprint: 'SITE-6-B1',
+        trabalhador: { id: 'acompanhamento', nome: 'Acompanhamento', sala: 'prumo--geral', faz: 'expira o lead sem resposta no 7º dia, o mesmo prazo do Perdido da Central (o follow-up é decidido só pela Central)', onde: 'n8n 05, no Dell' } },
+      { ramo: 'se não responder', titulo: 'Expira no 7º dia', texto: 'Status "expirado", junto com o Perdido da Central. Se o lead responder depois, volta para "enviado".', onde: 'dell', quando: '09:00' },
       { titulo: 'Marca o desfecho', texto: 'Na página do lead (link na Ficha e na mensagem das 10:30): os botões de recusa, de ganho e o desfazer. Planilha e pasta mudam juntas.', onde: 'voce', quando: 'um toque', comVoce: true, verificacao: 'fluxo:Kf5IWNdEFFnuSOy2', link: CRM_SITE, blueprint: 'SITE-7-P1' },
-      { ramo: 'se recusou ou expirou', titulo: 'Demo pausado em 15 dias', texto: 'O site sai do ar na Vercel, sem apagar. Desfazer ou uma resposta nova põe de volta.', onde: 'dell', quando: '09:40', blueprint: 'SITE-7-B2' },
-      { titulo: 'Conversa, proposta e fechamento', texto: 'Com você. Depois do "gostei", "Mandar a proposta" abre o WhatsApp com a proposta do cardápio e já a anota; a Ficha guarda nota e próximo passo.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_SITE, blueprint: 'SITE-7-P1' },
+      { ramo: 'se recusou ou expirou', titulo: 'Demo apagado da Vercel', texto: 'A pausa de 15 dias foi aposentada. Com o lead em Perdido há 2 dias, o site-demos-limpeza apaga o demo da Vercel; a pasta do lead fica.', onde: 'dell', quando: 'todo dia', blueprint: 'SITE-7-B2' },
+      { titulo: 'Conversa, proposta e fechamento', texto: 'Com você. Depois do "gostei", "Mandar a proposta" abre o WhatsApp com a proposta do cardápio; abrir não a anota, e o "Enviei a proposta" (ou "Proposta enviada" no Desfecho da Ficha) marca depois de enviar. A Ficha guarda nota e próximo passo.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_SITE, blueprint: 'SITE-7-P1' },
       { titulo: 'Funil por nicho', texto:'Toda segunda: sites, envios, respostas e fechamentos por segmento. Pausa a busca (segmento × cidade) e o nicho inteiro com 20+ enviados sem sinal de compra (interesse, pedido de preço, proposta ou ganho; negativa e robô não contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois de 3 dias. O gerador pula os leads novos do que pausou, e o aviso diz quais nichos pararam e por quê. Religar é TRUE em ativa na aba Buscas.', onde: 'dell', quando: 'segunda 08:00', verificacao: 'fluxo:cn4KcQujNk9CwcN0',
         trabalhador: { id: 'funil-por-nicho', nome: 'Funil por nicho', sala: 'prumo--prospeccao', faz: 'conta envios, respostas e fechamentos por segmento e pausa a busca e o nicho sem sinal de compra', onde: 'n8n 06, no Dell' } },
     ],
@@ -136,8 +149,8 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Do prospect ao Mapa. O prospect chega pela CDL; o Dell pontua e monta o rascunho; você revisa, convida e conduz.',
     passos: [
       { titulo: 'O prospect chega pela CDL ou pelo Raio-X', texto: 'A empresa com equipe chega pela CDL ou pede o Mapa depois do Raio-X. O caminho é Raio-X, depois o Mapa (grátis) e, só depois dele, a Fonte (09/10). O Lead Scout (convite frio a distribuidoras achadas no Places) está desligado no n8n: 57 convites, 21 respostas de robô e nenhum dono interessado. O fluxo continua lá, inativo.', onde: 'externo', quando: 'quando chegar' },
-      { titulo: 'Revisa o prospect', texto: 'Em Vendas › Triagem, fora da A fazer: veja o site e o briefing do CNPJ.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-revisar', link: triagem('prumo') },
-      { titulo: 'Enviar convite', texto: 'Pela Próxima venda ou pela Ficha, com as mesmas travas de horário e de ritmo do Site: o clique marca "Convite enviado" e abre o WhatsApp com a mensagem. Escrever direto ao dono também conta.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:GkgYmWZJ65a2e9XF', blueprint: 'PRUMO-1-P1' },
+      { titulo: 'Revisa o prospect', texto: `Em ${PRIMEIROS} (Triagem), fora das ${caminhoDaAba('afazer')}: veja o site e o briefing do CNPJ.`, onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-revisar', link: triagem('prumo') },
+      { titulo: 'Enviar convite', texto: 'Pela Triagem ou pela Ficha, com as mesmas travas de horário e de ritmo do Site: "Abrir convite no WhatsApp" só abre a conversa com a mensagem. O "Convite enviado" é marcado pelo observador, ou pelo "Enviei" que você toca depois de enviar. Escrever direto ao dono também conta.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:GkgYmWZJ65a2e9XF', blueprint: 'PRUMO-1-P1' },
       { titulo: 'Leitura e resposta se marcam', texto: 'O observador anota "Leu o convite em…" e "Respondeu no WhatsApp em…" na planilha.', onde: 'dell', quando: 'na hora' },
       { ramo: 'se não responder', titulo: 'Manda um lembrete', texto: 'Vendas mostra há quantos dias cada convite espera; o lembrete é com você.', onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-aguardando', link: CRM_PRUMO },
       { titulo: 'Dono responde o formulário', texto: '"Prumo — Roteiro do Mapa", 16 perguntas.', onde: 'nuvem', quando: 'quando ele responder', blueprint: 'PRUMO-3-C1' },
@@ -157,10 +170,10 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: ABA/TEA, multidisciplinar infantil, neuropsicologia, fono, TO e TCC; ES primeiro, depois BH, Rio, São Paulo e Campinas. Uma busca por rodada, em rodízio.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Nasceu desligado e foi ligado em 16/10/2026 (dias úteis, 9h); só enche a aba e avisa, nada é enviado. `prumo-ofertas.py --estado` diz se está ligado.', onde: 'dell', quando: 'dias úteis, 9h', verificacao: 'fluxo:QRVkAhJBvBxt9mx8', blueprint: 'OFERTAS-1-B1',
         trabalhador: { id: 'cacador-iris', nome: 'Caçador de clínicas', sala: 'prumo--iris', faz: 'acha no Google Places as clínicas de terapia com WhatsApp no site e põe até 15 por rodada na aba Clínicas', onde: 'n8n "PRUMO · Iris — Caçador de clínicas", no Dell' } },
-      { titulo: 'Revisa a clínica', texto: 'Em Vendas › Triagem (filtro Iris), fora da A fazer: veja o site e decida. Sem interesse na Etapa tira a clínica da fila.', onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('iris'), blueprint: 'OFERTAS-2-B1' },
-      { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite em nome do PRUMO (sem preço e sem link) e marca "Convite enviado". As travas de horário e de ritmo valem igual: o convite é primeiro contato.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:mfyO1YAhBrXxe5Mb', blueprint: 'OFERTAS-3-P1' },
+      { titulo: 'Revisa a clínica', texto: `Em ${PRIMEIROS} (Triagem, filtro Iris), fora das ${caminhoDaAba('afazer')}: veja o site e decida. Sem interesse na Etapa tira a clínica da fila.`, onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('iris'), blueprint: 'OFERTAS-2-B1' },
+      { titulo: 'Enviar convite', texto: 'O toque abre o WhatsApp com o convite em nome do PRUMO (sem preço e sem link); "Convite enviado" é marcado pelo observador ou pelo "Enviei" explícito. As travas de horário e de ritmo valem igual: o convite é primeiro contato.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:mfyO1YAhBrXxe5Mb', blueprint: 'OFERTAS-3-P1' },
       { titulo: 'Resposta se marca', texto: 'Desde 14/10 o observador do WhatsApp lê a aba Clínicas: a resposta é registrada e classificada como a do Site, sem anotar à mão.', onde: 'dell', quando: 'na hora', link: CRM_IRIS, blueprint: 'OFERTAS-4-B1' },
-      { ramo: 'se não responder', titulo: 'Um lembrete só', texto: 'No 3º dia Vendas põe o convite em Follow-up para mandar; no 7º sem resposta, vai para Perdido.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
+      { ramo: 'se não responder', titulo: 'Um lembrete só', texto: `No 3º dia as ${caminhoDaAba('afazer')} põem o convite em Follow-up para mandar; no 7º sem resposta, vai para Perdido.`, onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS },
       { titulo: 'Demonstração e teste', texto: 'Demonstração do dossiê com caso fictício (nunca dado de paciente), cadastro da clínica no Iris e "proposta enviada" na Ficha. Clínica pagando: Concluído na Etapa.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_IRIS, blueprint: 'OFERTAS-5-E1' },
     ],
   },
@@ -173,8 +186,8 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: estamparia, camisetas e uniformes personalizados, silk, sublimação e confecção sob encomenda; ES primeiro. A Silmer, cliente do PRUMO, nunca entra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
       { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Nasceu desligado e foi ligado em 16/10/2026 (dias úteis, 9h); só enche a aba e avisa.', onde: 'dell', quando: 'dias úteis, 9h', verificacao: 'fluxo:6pIzCCmktXAUGOdf', blueprint: 'OFERTAS-1-B1',
         trabalhador: { id: 'cacador-estampa', nome: 'Caçador de estamparias', sala: 'prumo--estamparias', faz: 'acha estamparias e confecções com WhatsApp no site e põe na aba Estamparias, sem repetir lead de outro funil', onde: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias", no Dell' } },
-      { titulo: 'Revisa a estamparia', texto: 'Em Vendas › Triagem (filtro Estamparia), fora da A fazer: veja o site e decida.', onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('estampa'), blueprint: 'OFERTAS-2-B1' },
-      { titulo: 'Enviar convite', texto: 'O clique abre o WhatsApp com o convite (organizar os pedidos que chegam pelo WhatsApp) e marca "Convite enviado", dentro das travas de horário e de ritmo. O texto não diz que o CRM de estamparia já roda num cliente: a Silmer ainda está em homologação.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:rNp1Upq53IFIuRwT', blueprint: 'OFERTAS-3-P1' },
+      { titulo: 'Revisa a estamparia', texto: `Em ${PRIMEIROS} (Triagem, filtro Estamparia), fora das ${caminhoDaAba('afazer')}: veja o site e decida.`, onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('estampa'), blueprint: 'OFERTAS-2-B1' },
+      { titulo: 'Enviar convite', texto: 'O toque abre o WhatsApp com o convite (organizar os pedidos que chegam pelo WhatsApp); "Convite enviado" é marcado pelo observador ou pelo "Enviei" explícito, dentro das travas de horário e de ritmo. O texto não diz que o CRM de estamparia já roda num cliente: a Silmer ainda está em homologação.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:rNp1Upq53IFIuRwT', blueprint: 'OFERTAS-3-P1' },
       { titulo: 'Resposta e conversa', texto: 'Desde 14/10 o observador lê a aba Estamparias e registra a resposta sozinho. A conversa é com você: 20 minutos sobre como os pedidos chegam hoje. Meta do piloto: 2 conversas em 4 semanas; sem isso, pausa.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_ESTAMPA, blueprint: 'OFERTAS-5-P1' },
       { titulo: 'Só depois: instalar', texto: 'Uma instalação por cliente, depois do CRM da Silmer estável por 30 dias, com contrato e DPA (plano de 13/10, B1 e B2).', onde: 'voce', quando: 'depois do piloto', comVoce: true },
     ],
@@ -184,13 +197,13 @@ export const FLUXOS: FluxoDaOperacao[] = [
     id: 'plus',
     grupo: 'PRUMO',
     nome: 'PRUMO · Plus',
-    frase: 'Os melhores leads, do Catálogo de Negócios Maçônicos. Não há robô: o catálogo é importado à mão, e envio e resposta você anota na Ficha.',
+    frase: 'Os melhores leads, do Catálogo de Negócios Maçônicos. O catálogo é importado à mão; o envio e a resposta saem da conversa guardada, como nas outras ofertas (desde 17/10/2026).',
     passos: [
       { titulo: 'O catálogo vira leads', texto: 'scripts/plus-importar.ts lê o PDF do catálogo, junta o mesmo WhatsApp num lead só e grava ~/prumo-entregas/plus/leads.json no Dell (nunca no git: são telefones de terceiros). Quem não tem telefone legível fica de fora.', onde: 'dell', quando: 'à mão, a cada catálogo novo', comVoce: true, blueprint: 'OFERTAS-1-B2' },
       { titulo: 'Cada lead ganha a oferta dele', texto: 'Roupa = Estamparia; psicologia e terapia = Iris; com site próprio = PRUMO; o resto = Site. É o texto dessa oferta que ele recebe.', onde: 'dell', quando: 'na importação' },
-      { titulo: 'Envia com a saudação', texto: 'Na Hoje (os 10 primeiros Plus, na frente dos do Site) e pela Próxima venda: "Enviar pelo WhatsApp" abre a mensagem ("Meu Ir.\'., tudo bem?…", sem preço e sem link) e anota o envio. Fica fora de "Enviar um por um", e as travas de horário e de ritmo valem igual.', onde: 'voce', quando: 'no expediente, no ritmo da trava', comVoce: true, link: CRM_PLUS, blueprint: 'OFERTAS-3-P1' },
-      { titulo: 'Resposta', texto: 'O observador do WhatsApp não lê o Plus: quem responder, anote "Respondeu no WhatsApp" na Ficha (de novo a cada resposta, para recomeçar os 7 dias).', onde: 'voce', quando: 'quando responder', comVoce: true, link: CRM_PLUS, blueprint: 'OFERTAS-4-P1' },
-      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: 'Vendas põe o lead em Follow-up para mandar; 7 dias sem mensagem, vai para Perdido.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PLUS },
+      { titulo: 'Envia com a saudação', texto: 'Pela Ficha: "Enviar a primeira mensagem" abre o WhatsApp com a mensagem ("Meu Ir.\'., tudo bem?…", sem preço e sem link). Abrir não anota o envio: o observador marca quando a mensagem sai. As travas de horário e de ritmo valem igual.', onde: 'voce', quando: 'no expediente, no ritmo da trava', comVoce: true, link: CRM_PLUS, blueprint: 'OFERTAS-3-P1' },
+      { titulo: 'Resposta', texto: 'O observador do WhatsApp grava a conversa do Plus, e a mensagem dele depois do envio vale como resposta (e recomeça os 7 dias). "Respondeu no WhatsApp" na Ficha fica para o que veio por fora.', onde: 'voce', quando: 'quando responder', comVoce: true, link: CRM_PLUS, blueprint: 'OFERTAS-4-P1' },
+      { ramo: 'se não responder', titulo: 'Follow-up no 3º dia', texto: `As ${caminhoDaAba('afazer')} põem o lead em Follow-up para mandar; 7 dias sem mensagem, vai para Perdido.`, onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PLUS },
       { titulo: 'Conversa e proposta', texto: 'Segue a jornada da oferta dele: o Raio-X e o Encontrado no Site, o Mapa nos serviços PRUMO, a demonstração no Iris.', onde: 'voce', quando: 'você decide', comVoce: true, link: CRM_PLUS, blueprint: 'OFERTAS-5-C1' },
     ],
   },
@@ -198,16 +211,16 @@ export const FLUXOS: FluxoDaOperacao[] = [
     id: 'crm',
     grupo: 'PRUMO',
     nome: 'Vendas',
-    frase: 'Quem viu, quem respondeu e quem recusou, nas ofertas do PRUMO. A planilha é a verdade; Vendas só lê e anota. Abas: A fazer · Triagem · Funil · Números · Roteiro.',
+    frase: 'Quem viu, quem respondeu e quem recusou, nas ofertas do PRUMO. A planilha é a verdade; Vendas só lê e anota. Abas: ' + [caminhoDaAba('afazer'), caminhoDaAba('triagem'), caminhoDaAba('funil'), caminhoDaAba('numeros'), caminhoDaAba('resultados')].map(c => c.replace('Vendas › ', '')).join(' · ') + '. O Roteiro mora em Manutenção › Entender.',
     passos: [
-      { titulo: 'Tudo se marca na planilha', texto: 'Cliques nos links, o que você escreve, leitura, resposta, follow-up e desfecho escrevem na planilha sozinhos.', onde: 'dell', quando: 'na hora' },
+      { titulo: 'Tudo se marca na planilha', texto: 'O clique no link deixa só o rastro (clique_em); o envio, a leitura e a resposta quem marca é o observador do WhatsApp; o desfecho, a nota e o "Enviei" escrevem pelo n8n.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Retrato a cada 10 min', texto: 'O fluxo 08 lê Leads, Prospects, Clínicas, Estamparias e a aba CRM e grava o retrato que a Central mostra. Leitura que falha mantém o último retrato bom (Clínicas e Estamparias não seguram o retrato: viram aviso).', onde: 'dell', quando: 'a cada 10 min', verificacao: 'fluxo:AsjxktRCqRJSmj9P', blueprint: 'SITE-4-B3',
         trabalhador: { id: 'retrato-do-crm', nome: 'Retrato das planilhas', sala: 'prumo--geral', faz: 'lê as planilhas das quatro ofertas e a aba CRM e grava o retrato que Vendas e estas salas mostram', onde: 'n8n 08, no Dell' } },
-      { titulo: 'A fazer', texto: 'A Próxima venda: uma ação por vez, na ordem de quem está mais perto de comprar (responder, proposta, "o que achou?", follow-up, primeiro contato), com a mensagem pronta. A mesma fila está no "Envie para X" do Telegram (seg a sex, 8h às 17h30).', onde: 'voce', quando: 'quando abrir', comVoce: true, link: { rotulo: 'Abrir Vendas', url: '/crm' }, blueprint: 'SITE-3-B3' },
-      { titulo: 'Triagem', texto: 'Os prospects dos caçadores (PRUMO, Iris e estamparias) para revisar, numa fila própria: triagem não é venda e não disputa a A fazer com quem respondeu.', onde: 'voce', quando: 'quando puder', comVoce: true, link: { rotulo: 'Abrir a Triagem', url: '/crm?ver=triagem' }, blueprint: 'OFERTAS-2-B1' },
+      { titulo: 'Conversas para você', texto: `Quem respondeu, os combinados e os passos da fila de venda (proposta, "o que achou?", follow-up, recusa a marcar), um lead por linha, em ordem de prioridade, com a mensagem pronta; a mesma lista do "Sua vez" da Central. A mesma fila está no "Envie para X" do Telegram (${TEXTO_DO_EXPEDIENTE}), onde também sai o primeiro contato. "Enviei" e "Pular" ficam no servidor e valem nos dois.`, onde: 'voce', quando: 'quando abrir', comVoce: true, link: { rotulo: 'Abrir Vendas', url: '/crm' }, blueprint: 'SITE-3-B3' },
+      { titulo: 'Primeiros contatos', texto: 'O painel do time comercial (quem está avaliando, a fila dele, o teto do dia, "Quem envia hoje") e, embaixo, a Triagem: os prospects dos caçadores (PRUMO, Iris e estamparias) para revisar, numa fila própria. Triagem não é venda e não disputa lugar com quem respondeu.', onde: 'voce', quando: 'quando puder', comVoce: true, link: { rotulo: `Abrir ${PRIMEIROS}`, url: '/crm?ver=triagem' }, blueprint: 'OFERTAS-2-B1' },
       { titulo: 'Funil', texto: 'As 5 etapas (Novo, Em contato, Proposta, Ganho, Perdido), em Quadro ou Lista, com filtros por oferta (Site, PRUMO, Iris, Estamparia, Plus), nicho, cidade e passo da jornada. Em contato sai sozinho para Perdido depois de 7 dias sem mensagem do lead.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o funil', url: '/crm?ver=funil' }, blueprint: 'SITE-7-B1' },
-      { titulo: 'Números e Roteiro', texto: 'Números: envios, respostas e interesse por nicho, mensagem e horário, abrindo com "Depois do sim". Roteiro (em Manutenção › Entender): o que dizer em cada momento, objeções e o cardápio.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver os Números', url: '/crm?ver=numeros' } },
-      { titulo: 'Ficha e registros', texto: 'Nota, próximo passo com data e "proposta enviada" vão para a aba CRM pelo n8n. Nada é enviado ao lead.', onde: 'voce', quando: 'você decide', comVoce: true },
+      { titulo: 'Diagnóstico e Roteiro', texto: 'Diagnóstico: envios, respostas e interesse por nicho, mensagem e horário, abrindo com "Depois do sim". Roteiro (em Manutenção › Entender): o que dizer em cada momento, objeções e o cardápio.', onde: 'voce', quando: 'quando quiser', link: { rotulo: 'Ver o Diagnóstico', url: '/crm?ver=numeros' } },
+      { titulo: 'Ficha e registros', texto: 'Nota, próximo passo com data, "proposta enviada" e o "Enviei" explícito vão para a aba CRM pelo n8n. Nada é enviado ao lead.', onde: 'voce', quando: 'você decide', comVoce: true },
       { titulo: 'Divergência vira nota', texto: 'Se a planilha e a pasta discordam por mais de 2 h, a ficha mostra. Nada é corrigido sozinho.', onde: 'dell', quando: 'a cada leitura' },
     ],
   },
@@ -267,11 +280,11 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Visão semanal de receita', texto: 'Lê ~/renda-2026 e o PRUMO.', onde: 'dell', quando: 'segunda 08:30' },
       { titulo: 'ASMR: conceito do dia', texto: 'Briefing de prompt tátil.', onde: 'dell', quando: '09:00' },
       { titulo: 'ASMR: revisão 24/48 h', texto: 'Decisão editorial com os números do canal.', onde: 'dell', quando: '09:30' },
-      { titulo: 'Demos pausados', texto: 'Quando um demo sai do ar, 15 dias depois de recusar ou expirar.', onde: 'dell', quando: '09:40' },
+      { titulo: 'Demos apagados', texto: 'Quando o demo de um lead em Perdido há 2 dias sai da Vercel.', onde: 'dell', quando: '09:40' },
       { titulo: 'Sites e pendências', texto: 'Os sites do dia, o que espera você e o link de cada lead.', onde: 'dell', quando: '10:30' },
       { titulo: '"Registrado: você abordou…"', texto: 'Quando você escreve a um lead novo, juntando o que acontecer em 5 min.', onde: 'dell', quando: 'na hora' },
       { titulo: 'Avisos a qualquer hora', texto: 'Site publicado, rascunho do Mapa e os avisos dos fluxos do n8n e dos scripts do Dell. O P0 vai aos dois canais.', onde: 'dell', quando: 'na hora' },
-      { titulo: 'No Telegram: o vendedor', texto: '"Envie para X" com "Abrir no WhatsApp", "Enviei" e "Pular", um aviso por vez, na ordem da Próxima venda (o follow-up do 3º dia entra aqui). Nada sai ao lead sem o seu toque.', onde: 'dell', quando: 'seg a sex, 8h às 17h30', blueprint: 'SITE-3-B3' },
+      { titulo: 'No Telegram: o vendedor', texto: '"Envie para X" com "Abrir no WhatsApp", "Enviei" e "Pular", um aviso por vez, na ordem da fila de venda (o follow-up entra aqui, e o primeiro contato dos leads que não são do time comercial). Nada sai ao lead sem o seu toque.', onde: 'dell', quando: TEXTO_DO_EXPEDIENTE, blueprint: 'SITE-3-B3' },
       { titulo: 'No Telegram: lembretes e finanças', texto: 'O lembrete da agenda e o alerta de finanças, sem som das 22h às 7h. A fila do WhatsApp fica só de reserva, se o bot falhar.', onde: 'dell', quando: 'na hora', blueprint: 'AGENDA-4-E1' },
       { titulo: 'No Telegram: falhas do Dell', texto: 'O "Quebrou / Continua fora / Voltou ao normal" do monitor e o aviso do socorro.', onde: 'dell', quando: 'na hora', blueprint: 'AGENDA-4-A1' },
     ],
@@ -355,13 +368,13 @@ export const UM_DIA: HoraDoDia[] = [
   {
     hora: '09:00',
     itens: [
-      { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'aponta o follow-up do 3º dia (só de quem leu), expira no 10º' },
-      { onde: 'dell', titulo: 'Caçadores de clínicas e de estamparias', nota: 'só dias úteis; enchem a Triagem' },
+      { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'expira o lead sem resposta no 7º dia (o follow-up é decidido pela Central)' },
+      { onde: 'dell', titulo: 'Caçadores de clínicas e de estamparias', nota: 'só dias úteis; enchem a Triagem (hoje pausados)' },
       { onde: 'dell', titulo: 'ASMR: conceito do dia', nota: 'Hermes' },
     ],
   },
   { hora: '09:30', itens: [{ onde: 'dell', titulo: 'ASMR: revisão 24/48 h', nota: 'Hermes' }] },
-  { hora: '09:40', itens: [{ onde: 'dell', titulo: 'Pausa dos demos', nota: '15 dias depois de recusar ou expirar' }] },
+  { hora: '09:40', itens: [{ onde: 'dell', titulo: 'Limpeza dos demos', nota: 'apaga da Vercel o demo de quem está em Perdido há 2 dias' }] },
   { hora: '10:30', itens: [{ onde: 'dell', titulo: 'Sites e pendências', nota: 'a mensagem do dia com o que espera você' }] },
   { hora: '11:15', itens: [{ onde: 'dell', titulo: 'Raio-X dos leads prontos', nota: 'raio-x.py, Places sem modelo' }] },
   { hora: '17:15', itens: [{ onde: 'dell', titulo: 'Raio-X dos leads prontos', nota: 'a segunda rodada do dia' }] },

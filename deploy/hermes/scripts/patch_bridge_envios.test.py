@@ -3,10 +3,9 @@
 
 O remendo em si (âncoras, blocos JS, sintaxe) tem os testes embutidos no script
 (`patch_bridge_envios.py --testar`, precisa do bridge.js do Hermes). Este arquivo
-cobre só a troca do avisar() pela lib de aviso (11/10/2026): o aviso gravado pela
-lib é IDÊNTICO, byte a byte, ao que o jeito antigo gravava, o dell-status o
-aceita, sem a lib (cópia ausente ou quebrada) o script volta ao jeito antigo, a
-fila ausente não derruba o remendo (o main sai com 2 do mesmo jeito) e "R$" na
+cobre só o avisar() pela lib de aviso (11/10/2026): o dell-status aceita o que a
+lib grava, sem a lib (cópia ausente ou quebrada) nada vai à fila (uma linha no
+stderr e avisar() devolve False), a fila ausente não derruba o remendo (o main sai com 2 do mesmo jeito) e "R$" na
 mensagem da exceção não faz o aviso se perder.
 
 Nada toca o Hermes nem o Dell: o HOME vira um temporário ANTES do import e cada
@@ -85,11 +84,11 @@ class Base(unittest.TestCase):
             patch.avisar(texto)
         return err.getvalue()
 
-    def gravado_pelo(self, jeito: str, texto: str) -> bytes:
-        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+    def gravado_pela_lib(self, texto: str) -> bytes:
+        """O aviso gravado pela lib do repo, numa fila limpa."""
         shutil.rmtree(patch.FILA_DE_AVISOS, ignore_errors=True)
         patch.FILA_DE_AVISOS.mkdir()
-        patch.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        patch.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto)
         self.assertEqual(len(self.fila()), 1, self.fila())
         return self.fila()[0].read_bytes()
@@ -117,18 +116,19 @@ class AvisoPelaLib(Base):
         patch.PASTAS_DA_LIB = [self.raiz / "sem-lib", instalada]
         self.assertEqual(Path(patch.lib_de_aviso().__file__).resolve(), (instalada / "aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in TEXTOS:
             with self.subTest(texto=texto):
-                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+                d = json.loads(self.gravado_pela_lib(texto).decode("utf-8"))
+                self.assertEqual(d, {"titulo": "⚠️ Hermes (WhatsApp)", "texto": texto, "origem": "hermes:patch-bridge-envios"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "⚠️ Hermes (WhatsApp)", "texto": "uma\\nduas", "origem": "hermes:patch-bridge-envios"}'
-        self.assertEqual(self.gravado_pelo("lib", "uma\nduas"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("uma\nduas"), esperado.encode("utf-8"))
 
     def test_nome_unico_e_atomicidade(self):
         patch.FILA_DE_AVISOS.mkdir()
-        for _ in range(5):  # o antigo (int(time.time())) sobrescrevia no mesmo segundo
+        for _ in range(5):  # o nome leva nanossegundos: no mesmo segundo nada se sobrescreve
             self.avisar("x")
         self.assertEqual(len(self.fila()), 5)
         self.assertRegex(self.fila()[0].name, r"^bridge-envios-\d+-[0-9a-f]{6}\.json$")
@@ -169,22 +169,27 @@ class AvisoPelaLib(Base):
 
 
 class SemLib(Base):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    TITULO = "⚠️ Hermes (WhatsApp)"
+
+    def sem_gravar(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertFalse(patch.avisar("x"))
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: " + self.TITULO, err.getvalue())
+        self.assertFalse(patch.FILA_DE_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         self.sem_lib()
         self.assertIsNone(patch.lib_de_aviso())
-        self.assertTrue(patch.avisar("x"))  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^bridge-envios-\d+\.json$")
+        self.sem_gravar()
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         patch.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(patch.lib_de_aviso())
-        patch.FILA_DE_AVISOS.mkdir()
-        patch.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar()
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
@@ -192,19 +197,6 @@ class SemLib(Base):
         (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
         patch.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(patch.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        self.sem_lib()
-        patch.avisar("custa R$ 5")
-        self.assertEqual(self.avisos()[0]["texto"], "custa R$ 5")
-
-    def test_sem_a_lib_e_pasta_impossivel_nao_levanta(self):
-        self.sem_lib()
-        arquivo = self.raiz / "arquivo"
-        arquivo.write_text("x", encoding="utf-8")
-        patch.FILA_DE_AVISOS = arquivo / "fila"  # filha de um arquivo: o mkdir falha com OSError
-        with contextlib.redirect_stderr(io.StringIO()):
-            self.assertFalse(patch.avisar("x"))
 
 
 class NoMain(Base):
@@ -233,12 +225,13 @@ class NoMain(Base):
         self.assertFalse(patch.FILA_DE_AVISOS.exists())
         self.assertIn("fila_ausente", err)
 
-    def test_sem_a_lib_o_main_avisa_como_antes(self):
+    def test_sem_a_lib_o_main_sai_com_2_e_registra_no_stderr(self):
         self.sem_lib()
-        codigo, _ = self.main("--bridge", str(self.raiz / "nao-existe.js"), "--avisar")
+        patch.FILA_DE_AVISOS.mkdir()
+        codigo, err = self.main("--bridge", str(self.raiz / "nao-existe.js"), "--avisar")
         self.assertEqual(codigo, 2)
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^bridge-envios-\d+\.json$")
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado:", err)
+        self.assertEqual(self.fila(), [])
 
 
 @unittest.skipIf(patch.node() is None, "sem node: o bloco JS só roda no `--testar` do Dell")

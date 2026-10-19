@@ -73,7 +73,7 @@ const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'
   segunda: (d, a) => ({
     titulo: 'Quem disse "quero ver" ficou esperando',
     texto: `${a.n - d.n} de ${a.n} que disseram sim ainda não receberam a 2ª mensagem. É a venda mais fácil de perder.`,
-    acao: 'Mande o link ou o Raio-X no mesmo dia do "sim". A Próxima venda põe esses na frente de tudo.',
+    acao: 'Mande o link ou o Raio-X no mesmo dia do "sim". As Conversas para você põem esses na frente de tudo.',
   }),
   proposta: (d, a) => ({
     titulo: 'Poucas propostas registradas',

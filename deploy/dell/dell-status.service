@@ -1,7 +1,8 @@
 [Unit]
-Description=Retrato do Dell para a Central e avisos pelo Hermes
+Description=Retrato do Dell para a Central e avisos pelo Telegram (WhatsApp do Hermes só de reserva)
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 %h/.local/bin/dell-status
+# O monitor se limita a ~100 s de verificações (PRAZO_TOTAL_S) e grava o status.json antes de avisar.
 TimeoutStartSec=150

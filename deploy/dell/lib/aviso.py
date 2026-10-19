@@ -33,8 +33,9 @@ O que a lib faz por quem chama:
   também sai numa linha no stderr, que o systemd leva ao journal, para o
   chamador que ignora o resultado não perder o rastro.
 
-Uso (o script carrega a lib pelo caminho, com o jeito antigo de reserva; ver
-docs/superpowers/plans/2026-10-11-aviso-unico.md):
+Uso (o script carrega a lib pelo caminho; sem ela NÃO grava na fila: registra no
+stderr "lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: <título>" e
+segue; ver docs/superpowers/plans/2026-10-11-aviso-unico.md):
 
     r = aviso.avisar("🌐 Sites", texto, "auto-entrada", chave="auto-entrada:x", prioridade=2)
     if not r.gravado:

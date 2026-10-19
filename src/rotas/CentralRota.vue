@@ -11,8 +11,9 @@ import { useOverview } from '../casca/overview'
 import { andarDaCentral, gravarAndar, lerAndar } from '../casca/central'
 import type { BalaoDaSala } from '../office/baloes'
 import { fonteDoCrm, operacaoDaSala, temOperacao, type OperacaoDaSala } from '../office/operacao'
-import { conversasParaConduzir } from '../operations/conversas-para-conduzir'
-import { acaoDoLead, filaDaTela, lerResolvidas, type Resolvidas } from '../operations/proxima-venda'
+import { conversasParaVoce } from '../operations/conversas-para-conduzir'
+import { acaoDoLead, filaDaTela, type Resolvidas } from '../operations/proxima-venda'
+import { lerFrente, useFrente } from '../casca/frente'
 import type { CrmVisao } from '../operations/types'
 import type { TimeLido } from '../casca/hoje'
 import type { Capacidades } from '../casca/destinos'
@@ -31,13 +32,8 @@ const timeLido = ref<TimeLido | null>(null)
 const pedidoAntigo = new URLSearchParams(window.location.search).get('abrir')
 const painel = ref<'agentes' | 'decisoes' | 'agente' | null>(null)
 const pessoaSelecionada = ref<{ salaId: string; pessoaId: string; clique: number } | null>(null)
-interface FrenteLida { estado: string; ativo: boolean; selecionados: number; avaliados: number; enviados: number; atualizadoEm: string | null; detalhe: string; fila: { id: string; empresa: string; estado: string }[] }
-const frente = ref<FrenteLida | null>(null)
-const erroFrente = ref('')
-async function lerFrente(signal: AbortSignal) {
-  try { const r = await fetch('/api/operations/crm/frente', { signal, cache: 'no-store' }); if (!r.ok) throw new Error(); frente.value = await r.json(); erroFrente.value = '' }
-  catch { erroFrente.value = 'Sem leitura recente' }
-}
+// A leitura do time é compartilhada com o painel do FrenteComercial (casca/frente.ts): uma por ciclo.
+const { frente, erro: erroFrente } = useFrente()
 function armazenamento(): Storage | null { try { return window.localStorage } catch { return null } }
 async function lerCrm(signal: AbortSignal) {
   try {
@@ -46,9 +42,9 @@ async function lerCrm(signal: AbortSignal) {
     visaoDoCrm.value = await r.json(); erroDoCrm.value = ''
   } catch (e) { if (!signal.aborted) erroDoCrm.value = e instanceof Error ? e.message : 'Não foi possível ler as conversas.' }
 }
+// O "Enviei"/"Pular" do dia vem do servidor (o mesmo arquivo do vendedor do Telegram); sem ele, a lista inteira.
 async function lerVenda(signal: AbortSignal) {
-  resolvidas.value = lerResolvidas(armazenamento(), Date.now())
-  try { const r = await fetch('/api/operations/crm/venda', { cache: 'no-store', signal }); if (r.ok) resolvidas.value = { ...resolvidas.value, ...(await r.json()).resolvidas } } catch { /* Mantém o último retrato. */ }
+  try { const r = await fetch('/api/operations/crm/venda', { cache: 'no-store', signal }); if (r.ok) resolvidas.value = (await r.json()).resolvidas ?? {} } catch { /* Mantém o último retrato. */ }
 }
 async function lerTime(signal: AbortSignal) {
   if (!props.capacidades.agentes) return
@@ -60,8 +56,9 @@ async function lerTudo(signal: AbortSignal) {
   return !erroDoCrm.value
 }
 const { atualizando, conferidoEm, sincronizar } = useAtualizacaoViva(lerTudo)
-const filaPrioritaria = computed(() => filaDaTela(visaoDoCrm.value, { ritmo: { motivo: 'dia' }, noExpediente: false, agora: agora.value }, resolvidas.value))
-const conversasPrioritarias = computed(() => conversasParaConduzir(visaoDoCrm.value?.leads ?? [], agora.value))
+const filaPrioritaria = computed(() => filaDaTela(visaoDoCrm.value, { agora: agora.value }, resolvidas.value))
+// A mesma lista da aba "Conversas para você" de Vendas: conversas, combinados e os passos da fila de venda.
+const conversasPrioritarias = computed(() => conversasParaVoce(visaoDoCrm.value, agora.value, resolvidas.value))
 const dellLido = computed(() => overview.value ? resumo.value : null)
 const andarEscolhido = ref<string | null>(lerAndar(armazenamento()))
 const squads = computed(() => props.capacidades.agentes ? roster.value?.squads ?? [] : [])
@@ -80,13 +77,17 @@ watch(painel, p => { if (p === 'decisoes') missaoId.value = conversasPrioritaria
 const leadDaMissao = computed(() => visaoDoCrm.value?.leads.find(l => l.id === missaoId.value) ?? conversasPrioritarias.value[0]?.lead ?? null)
 // A ação da fila de venda para o lead da missão (a mesma da Próxima venda e da Ficha): o cartão mostra o
 // passo, a mensagem pronta e o link, em vez de só abrir a conversa.
-const acaoDaMissao = computed(() => visaoDoCrm.value?.estado === 'ok' && leadDaMissao.value ? acaoDoLead(visaoDoCrm.value, leadDaMissao.value.id, agora.value) : null)
+const acaoDaMissao = computed(() => {
+  const item = conversasPrioritarias.value.find(m => m.lead.id === leadDaMissao.value?.id)
+  if (item?.acao) return item.acao
+  return visaoDoCrm.value?.estado === 'ok' && leadDaMissao.value ? acaoDoLead(visaoDoCrm.value, leadDaMissao.value.id, agora.value) : null
+})
 const motivoDaMissao = computed(() => conversasPrioritarias.value.find(m => m.lead.id === leadDaMissao.value?.id)?.rotulo ?? 'Andamento atualizado')
-const turnoDoTime = computed(() => erroFrente.value ? 'Time sem leitura recente' : !frente.value ? 'Lendo o time…' : ({ avaliando: 'Turno do time · avaliando', enviando: 'Turno do time · iniciando contato', 'fora-do-horario': 'Fila pronta · próximo expediente', pausado: 'Primeiros contatos pausados', bloqueado: 'Time precisa de atenção', pronto: 'Time acompanhando a fila', concluido: 'Rodada do time concluída' }[frente.value.estado] ?? 'Time acompanhando'))
+const turnoDoTime = computed(() => erroFrente.value ? 'Time sem leitura recente' : !frente.value ? 'Lendo o time…' : frente.value.cicloParado ? 'Time ativo, mas o ciclo está parado' : ({ avaliando: 'Turno do time · avaliando', enviando: 'Turno do time · iniciando contato', 'fora-do-horario': 'Fila pronta · próximo expediente', pausado: 'Primeiros contatos pausados', bloqueado: 'Time precisa de atenção', pronto: 'Time acompanhando a fila', concluido: 'Rodada do time concluída' }[frente.value.estado] ?? 'Time acompanhando'))
 function abrirFichaDaMissao(id: string) { painel.value = null; navegar(`/crm?lead=${encodeURIComponent(id)}`) }
 const resumoAgentes = computed(() => ({
   resumo: erroFrente.value || (frente.value ? `${frente.value.selecionados} selecionados · ${frente.value.enviados} enviados` : 'Lendo o time…'),
-  detalhe: erroFrente.value ? 'Aguardando a integração' : frente.value?.estado === 'avaliando' ? 'Time avaliando os próximos contatos' : frente.value?.estado === 'pausado' ? 'Primeiros contatos pausados' : frente.value?.fila.find(c => c.estado === 'pronto') ? `Próximo WhatsApp: ${frente.value.fila.find(c => c.estado === 'pronto')!.empresa}` : frente.value?.detalhe ?? 'Decisões e trabalho do time',
+  detalhe: erroFrente.value ? 'Aguardando a integração' : frente.value?.cicloParado ? 'Ciclo do time parado' : frente.value?.estado === 'avaliando' ? 'Time avaliando os próximos contatos' : frente.value?.estado === 'pausado' ? 'Primeiros contatos pausados' : frente.value?.fila.find(c => c.estado === 'pronto') ? `Próximo WhatsApp: ${frente.value.fila.find(c => c.estado === 'pronto')!.empresa}` : frente.value?.detalhe ?? 'Decisões e trabalho do time',
 }))
 const resumoDecisoes = computed(() => ({
   resumo: erroDoCrm.value ? 'Sem leitura recente' : !visaoDoCrm.value ? 'Lendo as conversas…' : `${conversasPrioritarias.value.length} ${conversasPrioritarias.value.length === 1 ? 'conversa para você' : 'conversas para você'}`,

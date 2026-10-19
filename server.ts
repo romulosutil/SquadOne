@@ -45,7 +45,7 @@ import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./se
 import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { avisosPessoaisPeloTelegram, publicarAviso, publicarAvisoPessoal, type Aviso } from "./server/avisos.ts";
+import { avisosPessoaisPeloTelegram, criarRegistroDeEnviados, publicarAviso, publicarAvisoPessoal, type Aviso } from "./server/avisos.ts";
 import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
 import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
 import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
@@ -258,19 +258,34 @@ async function startServer() {
   let vendedorDoProcesso: Vendedor | null = null;
   // O agente do lead quente em sombra (server/lead-quente-sombra.ts): nasce com a Central; o voto o acha por aqui.
   let leadQuenteDoProcesso: LeadQuenteSombra | null = null;
+  // Quem para cada laço do boot (vigia, sinal de vida, polling, leitura diária, copiloto automático):
+  // o SIGTERM do systemd/Easypanel os chama antes de fechar o servidor, em vez de deixar timer pendurado.
+  // O vendedor e a sombra do lead quente ainda não devolvem função de parar (iniciar(): void).
+  const paradores: Array<() => void> = [];
   // Fila de avisos do Dell (regra 20): o P0 e a reserva dos avisos pessoais.
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   // O bot ao chat do dono: espelho do P0 e, desde 16/10/2026 (OT-14, exceção da regra 20), o canal
   // dos lembretes da agenda e dos alertas de finanças, para tirá-los do número que fala com os leads.
+  // Sucesso se AO MENOS UM chat recebeu: lançar com um chat entregue mandaria o aviso de novo pela fila.
   const telegramDoDono = configDeTelegram
     ? async (texto: string, opcoes?: { silencioso?: boolean }) => {
-        for (const chat of configDeTelegram!.chatsPermitidos) await enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes);
+        const chats = [...configDeTelegram!.chatsPermitidos];
+        if (chats.length === 0) throw new Error("nenhum chat na allowlist do Telegram");
+        const resultados = await Promise.allSettled(chats.map((chat) => enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes)));
+        const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+        if (falhas.length === chats.length) throw falhas[0].reason;
+        if (falhas.length > 0) console.error(`[avisos] Telegram: ${falhas.length} de ${chats.length} chat(s) não receberam o aviso`);
       }
     : undefined;
   const pessoalPeloTelegram = avisosPessoaisPeloTelegram(process.env);
+  // Chaves já enviadas pelo caminho pessoal, em disco: a Central reinicia a cada merge e a vigia varre no
+  // boot, então a memória sozinha repetia o lembrete da janela de 10 min e o "Google desconectado".
+  const enviadosPessoais = criarRegistroDeEnviados(
+    path.join(process.env.SQUADONE_OPERATIONS_DATA_DIR ?? path.join(process.cwd(), "data", "operations"), "avisos-enviados.json"),
+  );
   const publicarPessoal = (aviso: Aviso) =>
     pessoalPeloTelegram
-      ? publicarAvisoPessoal(aviso, { fila: filaDeAvisos, telegram: telegramDoDono })
+      ? publicarAvisoPessoal(aviso, { fila: filaDeAvisos, telegram: telegramDoDono, enviados: enviadosPessoais })
       : publicarAviso(aviso, { fila: filaDeAvisos, telegram: telegramDoDono });
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
   // O Assistente da Central (RULES 28): preparado no bloco da Central, lido pelo /api/runtime.
@@ -373,7 +388,8 @@ async function startServer() {
   // terminar antes de reiniciar o processo. `agenda` diz se o app (Pedir,
   // Escritório) mora neste processo: no Dell, só depois do cutover.
   app.get("/api/runtime", (_req, res) => {
-    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false);
+    // A vigia no meio de uma volta também conta: reiniciar agora largaria um lembrete a meio caminho.
+    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false) || (vigia?.ocupada() ?? false);
     // `assistente`: o painel do Assistente substitui o Pedir só quando ele está ligado aqui.
     res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva, assistente: assistenteDoProcesso !== null });
   });
@@ -403,7 +419,7 @@ async function startServer() {
     });
     // O copiloto sozinho (16/10/2026): quando um lead escreve, a sugestão fica pronta sem ninguém pedir.
     if (copiloto && (process.env.SQUADONE_COPILOTO_AUTOMATICO ?? "").trim() !== "false") {
-      iniciarCopilotoAutomatico(copiloto, () => crm.visao());
+      paradores.push(iniciarCopilotoAutomatico(copiloto, () => crm.visao()));
       console.log("[copiloto] automático ligado: lê a conversa e sugere quando a vez é sua (SQUADONE_COPILOTO_AUTOMATICO=false desliga).");
     }
     const readAgenda = async (): Promise<AgendaSummary> => {
@@ -550,7 +566,8 @@ async function startServer() {
     // cliente do Gemini vai junto, mas sem a flag as rotas nem montam.
     app.use("/api/financas", criarRotasDeFinancas(financas, { logins: loginsDoTailscale, ai }));
     if (explicacaoIaLigada()) console.log("[financas] explicação com IA ligada (só a pedido, com prévia).");
-    iniciarLeituraDiaria(financas);
+    const pararLeituraDiaria = iniciarLeituraDiaria(financas);
+    if (pararLeituraDiaria) paradores.push(pararLeituraDiaria);
   } else {
     // O copiloto nunca roda no Easypanel: com a env ligada, só o log diz que foi ignorada.
     await prepararCopiloto(process.env, { dataDir, operations: false });
@@ -907,6 +924,7 @@ async function startServer() {
           enviar: async (a: Aviso) => {
             await publicarPessoal(a);
           },
+          esquecerAviso: (chave: string) => enviadosPessoais.esquecer(chave),
           // Um arquivo de uma linha (o dia do último resumo) em SQUADONE_DATA_DIR; ausente = só memória.
           resumoMatinal: resumoMatinalLigado(process.env)
             ? {
@@ -1023,7 +1041,9 @@ async function startServer() {
     console.log(`Diretório de dados: ${dataDir}`);
     if (!agendaAtiva) console.log(`Agenda desligada neste processo: ${motivoDaAgendaDesligada}`);
     else {
-      console.log(`Agenda ligada; lembretes pela fila de avisos (${filaDeAvisos}), ${ANTECEDENCIA_LEMBRETE_MIN} min antes`);
+      console.log(
+        `Agenda ligada; lembretes ${pessoalPeloTelegram && telegramDoDono ? "pelo Telegram (sem som das 22h às 7h; fila de reserva em " + filaDeAvisos + ")" : "pela fila de avisos (" + filaDeAvisos + ")"}, ${ANTECEDENCIA_LEMBRETE_MIN} min antes`,
+      );
       if (!process.env.GEMINI_API_KEY) console.error("GEMINI_API_KEY vazia: turno, redação e transcrição vão falhar.");
       // Só a contagem e a data da mais recente: nada do conteúdo do roster no log.
       void descreverHistorico(dataDir).then((linha) => console.log(linha));
@@ -1043,8 +1063,14 @@ async function startServer() {
   try {
     const url = lerUrlDoSinal(process.env);
     if (url && squadOneMode === "operations") {
-      sinal = criarSinalDeVida({ url, lerStatus: (agora) => lerStatusDoDell(operationsDataDir, agora), pingar: pingarHealthchecks });
-      console.log("Sinal de vida: healthchecks a cada minuto (/fail com o WhatsApp fora há mais de 15 min)");
+      sinal = criarSinalDeVida({
+        url,
+        lerStatus: (agora) => lerStatusDoDell(operationsDataDir, agora),
+        pingar: pingarHealthchecks,
+        // Vigia ligada e sem varredura completa há 5 min: os lembretes pararam em silêncio.
+        ...(vigia ? { ultimaVarreduraOkEm: () => vigia.ultimaVarreduraOkEm() } : {}),
+      });
+      console.log(`Sinal de vida: healthchecks a cada minuto (/fail com o WhatsApp fora há mais de 15 min${vigia ? " ou a vigia sem varredura há mais de 5 min" : ""})`);
     } else if (url) {
       console.log("Sinal de vida: DEADMAN_URL ignorada fora do perfil operations");
     }
@@ -1056,11 +1082,11 @@ async function startServer() {
   else if (configDeTelegram) console.log(`Bot do Telegram: ${descreverTelegram(configDeTelegram)}`);
   else console.log("Bot do Telegram desligado (TELEGRAM_BOT_TOKEN vazia)");
 
-  app.listen(PORT, listenHost, () => {
+  const servidor = app.listen(PORT, listenHost, () => {
     console.log(`SquadOne (${squadOneMode}) em http://${listenHost}:${PORT}`);
     // Depois do listen: a primeira varredura não disputa o boot do Vite.
-    vigia?.iniciar();
-    sinal?.iniciar();
+    if (vigia) paradores.push(vigia.iniciar());
+    if (sinal) paradores.push(sinal.iniciar());
     vendedorDoProcesso?.iniciar();
     leadQuenteDoProcesso?.iniciar();
 
@@ -1068,13 +1094,15 @@ async function startServer() {
     if (configDeTelegram?.transporte === "polling" && botDoTelegram) {
       const c = configDeTelegram;
       const offset = arquivoDeOffset(path.join(dataDir, "telegram-offset.json"));
-      criarPollingDoTelegram({
-        buscar: (o) => buscarAtualizacoes(c, o),
-        receber: botDoTelegram.receber,
-        lerOffset: offset.ler,
-        gravarOffset: offset.gravar,
-        esperar: (ms) => new Promise((ok) => setTimeout(ok, ms)),
-      }).iniciar();
+      paradores.push(
+        criarPollingDoTelegram({
+          buscar: (o) => buscarAtualizacoes(c, o),
+          receber: botDoTelegram.receber,
+          lerOffset: offset.ler,
+          gravarOffset: offset.gravar,
+          esperar: (ms) => new Promise((ok) => setTimeout(ok, ms)),
+        }).iniciar(),
+      );
     }
 
     // Só em produção: o APP_URL de dev é http://localhost (o Telegram exige
@@ -1101,6 +1129,27 @@ async function startServer() {
       }
     }
   });
+
+  // SIGTERM (systemd, Easypanel) e SIGINT: para os laços ANTES de fechar o servidor, para nenhum tick
+  // começar uma volta nova com o processo indo embora. Uma volta já em andamento termina dentro do prazo.
+  let encerrando = false;
+  const encerrar = (sinalRecebido: string) => {
+    if (encerrando) return;
+    encerrando = true;
+    console.log(`[boot] ${sinalRecebido}: parando os laços e fechando o servidor`);
+    for (const parar of paradores) {
+      try {
+        parar();
+      } catch (error) {
+        console.error("[boot] um laço não parou:", error instanceof Error ? error.message : error);
+      }
+    }
+    servidor.close(() => process.exit(0));
+    servidor.closeIdleConnections?.();
+    setTimeout(() => process.exit(0), 15_000).unref();
+  };
+  process.once("SIGTERM", () => encerrar("SIGTERM"));
+  process.once("SIGINT", () => encerrar("SIGINT"));
 }
 
 startServer();

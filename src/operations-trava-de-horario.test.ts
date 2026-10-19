@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { avisoDeHorario } from './operations/resultados.ts'
 import { rotuloDoFollowup } from './operations/crm-formato.ts'
-import { aindaSemPrimeiroContato, ehPrimeiroContato, envioTravado, liberarEnvio, linksDePrimeiroContato, noExpedienteDeVenda, podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
+import { aindaSemPrimeiroContato, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, noExpedienteDeVenda, podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
 import { noExpedienteDeVenda as daFila } from './operations/proxima-venda.ts'
 import type { CrmLead } from './operations/types.ts'
 
@@ -17,15 +17,6 @@ describe('trava de horário do envio', () => {
     assert.equal(envioTravado(AVISO, nenhum, 'a'), true)
     assert.equal(envioTravado(AVISO, new Set(['a']), 'a'), false)
     assert.equal(envioTravado(AVISO, new Set(['a']), 'b'), true, 'liberar um lead não libera os outros')
-  })
-
-  it('liberar devolve um conjunto novo e não altera o de entrada', () => {
-    const antes = new Set(['a'])
-    const depois = liberarEnvio(antes, 'b')
-    assert.deepEqual([...antes], ['a'])
-    assert.deepEqual([...depois].sort(), ['a', 'b'])
-    assert.notEqual(antes, depois)
-    assert.deepEqual([...liberarEnvio(depois, 'b')].sort(), ['a', 'b'], 'liberar de novo é inofensivo')
   })
 
   // 14/10/2026: o reenvio do só-robô é uma primeira abordagem (a anterior só chegou ao robô) e

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, enviosAnotados, faixaDoHorario, horaEmSP, leu, noHorarioComercial, porcento, quisVer,
+  amostraPequena, avisoDeHorario, chaveDe, enviadoNoPeriodo, enviosAnotados, faixaDoHorario, horaEmSP, leu, porcento, quisVer,
   respondeuDeGente, resultados, resumoDaLinha, taxaPorExpediente, textoDaSegunda, textoDoFollowup,
 } from './operations/resultados.ts'
 import { diagnosticoDeVenda } from './operations/por-que-nao-vende.ts'
@@ -118,14 +118,6 @@ describe('horário do envio', () => {
   it('hora e dia em São Paulo, qualquer que seja o fuso da máquina', () => {
     assert.deepEqual(horaEmSP(em('2026-10-08T12:00:00Z')), { hora: 9, diaDaSemana: 4 })
     assert.deepEqual(horaEmSP(em('2026-10-09T03:00:00Z')), { hora: 0, diaDaSemana: 5 })
-  })
-
-  it('expediente: seg–sex 8h–18h, sábado 8h–12h, domingo nunca', () => {
-    assert.equal(noHorarioComercial(em('2026-10-08T11:00:00Z')), true, 'quinta 8h')
-    assert.equal(noHorarioComercial(em('2026-10-08T21:00:00Z')), false, 'quinta 18h')
-    assert.equal(noHorarioComercial(em('2026-10-10T14:00:00Z')), true, 'sábado 11h')
-    assert.equal(noHorarioComercial(em('2026-10-10T16:00:00Z')), false, 'sábado 13h')
-    assert.equal(noHorarioComercial(em('2026-10-11T13:00:00Z')), false, 'domingo 10h')
   })
 
   it('faixas na ordem do dia, e o placar por horário segue essa ordem', () => {

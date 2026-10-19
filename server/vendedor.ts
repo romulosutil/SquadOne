@@ -39,9 +39,17 @@ import type { Botao } from "./telegram.ts";
 import { dadosDaVenda } from "./telegram-entrada.ts";
 import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
 import { conferirMensagem, resumoDosProblemas, type ResultadoDoGate, type TipoDeMensagem } from "./gate-de-envio.ts";
+import { criarEmSerie } from "./em-serie.ts";
 
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
+/**
+ * Teto de avisos que de fato saíram no Telegram no dia (`avisosHoje`). Não conta o que a Central resolveu
+ * nem o aviso barrado pelo gate, e o "quero ver" quente passa por cima dele: o teto existe para o volume
+ * de rotina não afogar o Rômulo, não para calar quem acabou de pedir o material.
+ */
 export const MAX_AVISOS_POR_DIA = 40;
+/** Quantas gravações seguidas do estado podem falhar antes de o laço parar (avisar sem gravar reenvia a cada minuto). */
+export const MAX_FALHAS_DE_GRAVACAO = 3;
 export const INTERVALO_DO_VENDEDOR_MS = 60_000;
 /**
  * Quanto o aviso espera a mensagem do copiloto (que leu a conversa) antes de sair com o texto pronto
@@ -82,37 +90,35 @@ export interface EstadoDoVendedor {
   avisados: string[];
   pulados: string[];
   abertos: AvisoAberto[];
-  /**
-   * leadId -> instante (ms) do "Enviei" de um primeiro contato. Desde 17/10/2026 (AC-06) a fonte é o
-   * venda-do-dia.json (os das duas superfícies); este fica para ler o vendedor.json de antes e para
-   * quando o servidor do dia falha, e a trava soma os dois sem repetir o lead (somarPrimeiros).
-   */
-  primeiros: Record<string, number>;
   enviadosHoje: number;
+  /** Avisos que de fato saíram no Telegram hoje: o teto (MAX_AVISOS_POR_DIA) conta este, não `avisados`. */
+  avisosHoje: number;
 }
 
 export const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10);
 
 export function estadoNovo(agora: number): EstadoDoVendedor {
-  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], primeiros: {}, enviadosHoje: 0 };
+  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 0 };
 }
 
 /** O estado lido, ou um novo se é de outro dia ou ilegível. */
 export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
   const e = lido as Partial<EstadoDoVendedor> | null;
   if (!e || e.dia !== diaDeSP(agora) || !Array.isArray(e.avisados) || !Array.isArray(e.abertos)) return estadoNovo(agora);
+  const avisados = e.avisados.filter((c) => typeof c === "string");
   return {
     dia: e.dia,
-    avisados: e.avisados.filter((c) => typeof c === "string"),
+    avisados,
     pulados: Array.isArray(e.pulados) ? e.pulados.filter((c) => typeof c === "string") : [],
     abertos: e.abertos.filter((a) => a && typeof a.chave === "string" && typeof a.token === "string" && Number.isFinite(a.em)),
-    primeiros: e.primeiros && typeof e.primeiros === "object" ? e.primeiros : {},
     enviadosHoje: Number.isFinite(e.enviadosHoje) ? Number(e.enviadosHoje) : 0,
+    // Estado de antes do campo: `avisados` é o teto mais conservador (soma o que a Central resolveu) até o dia virar.
+    avisosHoje: Number.isFinite(e.avisosHoje) ? Number(e.avisosHoje) : avisados.length,
   };
 }
 
 export type Decisao =
-  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" | "esperando-copiloto" | "mensagem-barrada" }
+  | { tipo: "nada"; motivo: "fora-do-expediente" | "esperando-toque" | "fila-vazia" | "teto-do-dia" | "esperando-copiloto" | "mensagem-barrada" | "dia-ilegivel" }
   | { tipo: "avisar"; acao: AcaoDeVenda; depois: AcaoDeVenda[] };
 
 /** O que o servidor lembra do dia (server/venda-do-dia.ts): o vendedor lê só isto. */
@@ -166,6 +172,8 @@ export const RODAPE_DO_EXPIRADO = "⌛ 30 min sem toque: fica para o fim da fila
  * o que a Central e o Telegram resolveram hoje e os primeiros contatos das duas superfícies (a trava
  * de ritmo conta o retrato mais esses, sem repetir o lead). `doTime` (19/10/2026): os leads cujo
  * primeiro contato é do time comercial (primeiro-contato.ts); o aviso não oferece o primeiro contato deles.
+ * É a única regra de quem faz o primeiro contato, a mesma da Central: o time desligado ou pausado, sem
+ * fila, não tira nada do operador.
  */
 export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number,
   sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
@@ -180,7 +188,7 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   };
   const nada: Fechados = { fora: [], expirados: [], sairam: [] };
   if (!noExpedienteDeVenda(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
-  const toques = somarPrimeiros(doDia?.primeiros, estado.primeiros);
+  const toques = somarPrimeiros(doDia?.primeiros);
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
   const porId = new Map((visao?.leads ?? []).map((l) => [l.id, l]));
   const fila = filaDeVenda(visao, {
@@ -190,10 +198,11 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
   estado.abertos = ficam;
   for (const a of fechados.expirados) if (!estado.pulados.includes(a.chave)) estado.pulados.push(a.chave);
-  if (estado.avisados.length >= MAX_AVISOS_POR_DIA) return { decisao: { tipo: "nada", motivo: "teto-do-dia" }, estado, fechados };
   const avisados = new Set(estado.avisados);
-  const novas = fila.filter((a) => !avisados.has(a.chave));
-  if (!novas.length) return { decisao: { tipo: "nada", motivo: "fila-vazia" }, estado, fechados };
+  // Passado o teto só o "quero ver" quente ainda avisa (ver MAX_AVISOS_POR_DIA).
+  const noTeto = estado.avisosHoje >= MAX_AVISOS_POR_DIA;
+  const novas = fila.filter((a) => !avisados.has(a.chave) && (!noTeto || (a.tipo === "responder" && a.quente)));
+  if (!novas.length) return { decisao: { tipo: "nada", motivo: noTeto ? "teto-do-dia" : "fila-vazia" }, estado, fechados };
   // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar: `quente` vem da fila (proxima-venda.ts)
   // e vale para o interesse E para a licença (pedeMaterial), que até 17/10 era gravada como interesse.
   const proxima = estado.abertos.length ? novas.find((a) => a.tipo === "responder" && a.quente) : novas[0];
@@ -425,9 +434,10 @@ export interface DepsDoVendedor {
   arquivoDeHistorico?: string;
   /**
    * O dia dividido com a Próxima venda da Central (OT-01 e AC-06, server/venda-do-dia.ts): o que se
-   * resolveu, as anotações e os primeiros contatos. Ausente: só o estado próprio (como antes).
+   * resolveu, as anotações e os primeiros contatos. Obrigatório desde 19/10/2026: é a única fonte dos
+   * primeiros contatos do dia (o vendedor.json não os guarda mais).
    */
-  vendaDoDia?: MemoriaDaVenda;
+  vendaDoDia: MemoriaDaVenda;
   /** Os leads cujo primeiro contato é do time comercial (server/frente-comercial.ts). Ausente: nenhum. */
   primeirosDoTime?(): Promise<ReadonlySet<string>>;
   origemCentral?: string;
@@ -461,35 +471,64 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   // chave da ação -> desde quando o aviso espera a sugestão do copiloto (só em memória: reiniciar zera).
   const esperandoCopiloto = new Map<string, number>();
   // Uma volta ou um toque por vez: os dois leem e gravam o mesmo estado.
-  let fila: Promise<unknown> = Promise.resolve();
-  const emSerie = <T>(f: () => Promise<T>): Promise<T> => {
-    const p = fila.then(f, f);
-    fila = p.catch(() => undefined);
-    return p;
-  };
+  const emSerie = criarEmSerie();
 
+  // O que já foi ao Telegram mas ainda não está no arquivo. Se a gravação falha depois do envio, a volta
+  // seguinte reenviaria o mesmo aviso a cada minuto (o teto não segura: ele também mora no arquivo) e o
+  // toque nele não acharia o token. Só em memória; sai quando uma gravação passa.
+  const pendentes: { dia: string; avisados: Set<string>; abertos: AvisoAberto[]; avisos: number } = { dia: "", avisados: new Set(), abertos: [], avisos: 0 };
+  let falhasDeGravacao = 0;
+
+  /** O estado do arquivo; só o arquivo que ainda não existe é "dia novo". Outro erro sobe: a volta é pulada com log. */
   async function lerEstado(): Promise<EstadoDoVendedor> {
+    let e: EstadoDoVendedor;
     try {
-      return estadoDoDia(JSON.parse(await fs.readFile(deps.arquivoDeEstado, "utf8")), deps.agora());
-    } catch {
-      return estadoNovo(deps.agora());
+      e = estadoDoDia(JSON.parse(await fs.readFile(deps.arquivoDeEstado, "utf8")), deps.agora());
+    } catch (erro: any) {
+      // Engolir tudo daria um estado vazio, e a gravação seguinte apagava o que já se avisou hoje
+      // (a fila inteira voltava ao Telegram).
+      if (erro?.code !== "ENOENT") throw erro;
+      e = estadoNovo(deps.agora());
     }
+    if (pendentes.dia === e.dia) {
+      for (const a of pendentes.abertos) if (!e.abertos.some((x) => x.chave === a.chave)) e.abertos.push(a);
+      for (const c of pendentes.avisados) if (!e.avisados.includes(c)) e.avisados.push(c);
+      e.avisosHoje += pendentes.avisos;
+    }
+    return e;
   }
   async function gravarEstado(e: EstadoDoVendedor): Promise<void> {
-    await fs.mkdir(path.dirname(deps.arquivoDeEstado), { recursive: true });
-    const tmp = `${deps.arquivoDeEstado}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(e), { mode: 0o600 });
-    await fs.rename(tmp, deps.arquivoDeEstado);
+    try {
+      await fs.mkdir(path.dirname(deps.arquivoDeEstado), { recursive: true });
+      const tmp = `${deps.arquivoDeEstado}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(e), { mode: 0o600 });
+      await fs.rename(tmp, deps.arquivoDeEstado);
+    } catch (err) {
+      falhasDeGravacao++;
+      if (falhasDeGravacao >= MAX_FALHAS_DE_GRAVACAO) {
+        console.error(`[vendedor] ${falhasDeGravacao} gravações seguidas do estado falharam: laço parado até reiniciar a Central.`);
+        pararLaco();
+      }
+      throw err;
+    }
+    falhasDeGravacao = 0;
+    pendentes.avisados.clear();
+    pendentes.abertos.length = 0;
+    pendentes.avisos = 0;
+  }
+  function pararLaco() {
+    if (relogio) clearInterval(relogio);
+    if (proximaJa) clearTimeout(proximaJa);
+    relogio = null;
+    proximaJa = null;
   }
 
-  /** O dia do servidor; falhou a leitura, segue com o estado próprio (null), como antes do AC-06. */
-  async function lerDoDia(): Promise<VendaDoDia | null> {
-    if (!deps.vendaDoDia) return null;
-    return deps.vendaDoDia.ler().catch((err) => {
-      console.warn(`[vendedor] o dia do servidor não foi lido: ${err instanceof Error ? err.message : String(err)}`);
-      return null;
-    });
-  }
+  /**
+   * O dia do servidor. Falhou a leitura, quem chama pula a volta (ou o toque): sem ele não se sabe o
+   * que a Central já resolveu nem quantos primeiros contatos já saíram, e seguir só com o estado próprio
+   * deixaria passar da trava de ritmo.
+   */
+  const lerDoDia = (): Promise<VendaDoDia> => deps.vendaDoDia.ler();
 
   /** Tira os botões das mensagens de um aviso que fechou sem toque. Falhar não segura a volta. */
   async function fecharMensagens(aberto: AvisoAberto, rodape: string): Promise<void> {
@@ -505,10 +544,6 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   /** A anotação do "Enviei": uma vez por chave + tipo no dia, pela memória do servidor quando há. */
   async function anotarDoToque(aberto: AvisoAberto & { anota: NonNullable<AvisoAberto["anota"]> }): Promise<"anotou" | "ja-estava"> {
     const corpo = { produto: aberto.produto, id: aberto.leadId.slice(aberto.leadId.indexOf(":") + 1), tipo: aberto.anota, texto: "" as const, data: "" as const };
-    if (!deps.vendaDoDia) {
-      await deps.registrar(corpo);
-      return "anotou";
-    }
     const r = await deps.vendaDoDia.anotarUmaVez(aberto.chave, aberto.anota, "telegram", () => deps.registrar(corpo));
     return r.anotou ? "anotou" : "ja-estava";
   }
@@ -520,29 +555,34 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       if (lido.dia !== estadoNovo(agora).dia) await gravarEstado(estadoNovo(agora));
       return { tipo: "nada", motivo: "fora-do-expediente" };
     }
-    const lida = await deps.lerVisao();
-    // Com o serviço de primeiros contatos configurado, o aviso ao operador cuida só
-    // das conversas. Pausar o time não devolve a ele uma segunda fila de envio manual.
-    const peloTime = await fs.access(path.join(path.dirname(deps.arquivoDeEstado), 'frente-comercial-config.json')).then(() => true, () => false);
-    const visao = peloTime ? { ...lida, leads: lida.leads.filter(l => l.etapa !== 'novo') } : lida;
+    const visao = await deps.lerVisao();
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
-    const doDia = await lerDoDia();
-    // Sem ler a fila do time, nenhum primeiro contato vai ao aviso: poderia ser o lead que o time está enviando.
-    const doTime = deps.primeirosDoTime ? await deps.primeirosDoTime().catch(() => null) : undefined;
-    const { decisao, estado, fechados } = doTime === null
-      ? decidir({ ...visao, leads: visao.leads.filter((l) => l.etapa !== "novo") }, lido, agora, sugestoes, doDia)
-      : decidir(visao, lido, agora, sugestoes, doDia, doTime);
+    let doDia: VendaDoDia;
+    try {
+      doDia = await lerDoDia();
+    } catch (err) {
+      console.warn(`[vendedor] volta pulada: o dia do servidor não foi lido (${err instanceof Error ? err.message : String(err)})`);
+      return { tipo: "nada", motivo: "dia-ilegivel" };
+    }
+    // Quem faz o primeiro contato é só o primeirosDoTime (a regra da Central, src/operations/primeiro-contato.ts):
+    // o arquivo de config do time existir não tira o lead novo do operador, ligado ou não. lerPrimeirosDoTime nunca rejeita.
+    const doTime = deps.primeirosDoTime ? await deps.primeirosDoTime() : undefined;
+    const { decisao, estado, fechados } = decidir(visao, lido, agora, sugestoes, doDia, doTime);
     const historico = fechadosNaVolta(fechados, agora);
     // O que a Central resolveu fecha aqui também; o que expirou vale como pular lá (AC-06).
     for (const { aberto, resolvida } of fechados.fora) await fecharMensagens(aberto, rodapeDeFora(resolvida));
     for (const aberto of fechados.expirados) {
       await fecharMensagens(aberto, RODAPE_DO_EXPIRADO);
-      await deps.vendaDoDia?.resolver(aberto.chave, "pulada", "expirou").catch((err) => {
+      await deps.vendaDoDia.resolver(aberto.chave, "pulada", "expirou").catch((err) => {
         console.warn(`[vendedor] a Central não soube do aviso expirado: ${err instanceof Error ? err.message : String(err)}`);
       });
     }
-    if (decisao.tipo === "avisar" && deps.copiloto && esperaOCopiloto(decisao.acao)) {
+    // O copiloto só gera quando a última mensagem da conversa guardada é do lead (conversaDaVez, copiloto.ts):
+    // nos outros passos (depois do link, follow-up, proposta) ele nunca responde, e segurar o aviso por 4 min
+    // seria esperar à toa.
+    if (decisao.tipo === "avisar" && deps.copiloto && esperaOCopiloto(decisao.acao)
+      && visao.leads.find((l) => l.id === decisao.acao.leadId)?.conversa?.ultima.direcao === "entrada") {
       // A mensagem certa vem de quem leu a conversa: pede ao copiloto e segura o aviso uns minutos.
       const gerando = await deps.copiloto.pedir(decisao.acao.leadId, visao).catch(() => false);
       const desde = esperandoCopiloto.get(decisao.acao.chave) ?? agora;
@@ -569,6 +609,8 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
           await deps.enviar(`⛔ Não mandei o aviso de ${decisao.acao.empresa}: ${motivos}. Confira a ficha na Central.`, []).catch((err) => {
             console.warn(`[vendedor] o motivo do aviso barrado não foi enviado: ${err instanceof Error ? err.message : String(err)}`);
           });
+          pendentes.dia = estado.dia;
+          pendentes.avisados.add(decisao.acao.chave);
           await gravarEstado(estado);
           await anotarNoHistorico(deps.arquivoDeHistorico, historico, agora);
           return { tipo: "nada", motivo: "mensagem-barrada" };
@@ -577,14 +619,21 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       const token = randomBytes(6).toString("hex");
       const texto = textoDoAviso(decisao.acao, decisao.depois, gate && !gate.ok ? resumoDosProblemas(gate.problemas) : undefined);
       const mensagens = await deps.enviar(texto, botoesDoAviso(decisao.acao, token, deps.origemCentral));
-      estado.avisados.push(decisao.acao.chave);
-      estado.abertos.push({
+      const novoAberto: AvisoAberto = {
         chave: decisao.acao.chave, token, em: agora, leadId: decisao.acao.leadId, primeiroContato: decisao.acao.primeiroContato,
         produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}),
         tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}),
         ...(decisao.acao.conferirHistorico ? { conferirHistorico: true } : {}),
         ...(Array.isArray(mensagens) && mensagens.length ? { mensagens } : {}),
-      });
+      };
+      // Lembrado na hora, antes de gravar: se a gravação falhar, a volta seguinte não reenvia (ver `pendentes`).
+      pendentes.dia = estado.dia;
+      pendentes.avisados.add(decisao.acao.chave);
+      pendentes.abertos.push(novoAberto);
+      pendentes.avisos++;
+      estado.avisados.push(decisao.acao.chave);
+      estado.abertos.push(novoAberto);
+      estado.avisosHoje++;
       historico.push({ em: agora, evento: "avisado", chave: decisao.acao.chave, tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}) });
     }
     await gravarEstado(estado);
@@ -598,8 +647,15 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     const aberto = estado.abertos.find((a) => a.token === token);
     if (!aberto) return { curto: "Este aviso já fechou." };
     if (aberto.conferirHistorico && acao === 'enviei') return { curto: 'Confira o histórico na Ficha antes de escolher a retomada.' };
+    let doDia: VendaDoDia;
+    try {
+      doDia = await lerDoDia();
+    } catch (err) {
+      console.warn(`[vendedor] toque adiado: o dia do servidor não foi lido (${err instanceof Error ? err.message : String(err)})`);
+      return { curto: "Não consegui ler o dia agora. Toque de novo em instantes." };
+    }
     estado.abertos = estado.abertos.filter((a) => a.token !== token);
-    const toque = toqueNoAviso(aberto, acao, await lerDoDia());
+    const toque = toqueNoAviso(aberto, acao, doDia);
     if (toque.tipo === "ja-feito") {
       // A Central resolveu antes deste toque: fecha a mensagem, sem anotar nem resolver de novo.
       await gravarEstado(estado);
@@ -617,9 +673,8 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     } else {
       estado.enviadosHoje++;
       if (aberto.primeiroContato) {
-        // vendedor.json fica de reserva; quem as duas superfícies leem é o servidor do dia.
-        estado.primeiros[aberto.leadId] = agora;
-        await deps.vendaDoDia?.primeiroContato(aberto.leadId, "telegram").catch((err) => {
+        // Quem as duas superfícies leem é o servidor do dia (o vendedor.json não guarda mais os primeiros).
+        await deps.vendaDoDia.primeiroContato(aberto.leadId, "telegram").catch((err) => {
           console.warn(`[vendedor] a Central não soube do primeiro contato: ${err instanceof Error ? err.message : String(err)}`);
         });
       }
@@ -637,7 +692,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       }
     }
     await gravarEstado(estado);
-    await deps.vendaDoDia?.resolver(aberto.chave, toque.como, "telegram").catch((err) => {
+    await deps.vendaDoDia.resolver(aberto.chave, toque.como, "telegram").catch((err) => {
       console.warn(`[vendedor] a Central não soube do toque: ${err instanceof Error ? err.message : String(err)}`);
     });
     await anotarNoHistorico(deps.arquivoDeHistorico, [{
@@ -657,12 +712,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       relogio = setInterval(() => { void emSerie(voltaSemFila).catch(registrarFalha); }, INTERVALO_DO_VENDEDOR_MS);
       void emSerie(voltaSemFila).catch(registrarFalha);
     },
-    parar() {
-      if (relogio) clearInterval(relogio);
-      if (proximaJa) clearTimeout(proximaJa);
-      relogio = null;
-      proximaJa = null;
-    },
+    parar: pararLaco,
     volta: () => emSerie(voltaSemFila),
     tocar: (token, acao) => emSerie(() => tocarSemFila(token, acao)),
   };

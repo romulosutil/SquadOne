@@ -19,7 +19,7 @@
  * ao reload.
  */
 import { SIGLA_DO_PRODUTO } from './crm-formato'
-import type { Guardador } from './anotacao-de-envio'
+import type { Guardador } from './guardador'
 import { PASSOS, passoAtual, type IdDoPasso, type LeadDaJornada } from './jornada'
 import type { CrmLead, CrmProduto } from './types'
 

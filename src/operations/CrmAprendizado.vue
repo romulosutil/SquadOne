@@ -37,7 +37,7 @@ function salvar() {
       <label><span>Próximo teste e sinal de sucesso</span><textarea v-model="teste" required maxlength="220" rows="2" /></label>
       <label><span>Resultado observado</span><select v-model="resultado"><option v-for="r in RESULTADOS_DO_TESTE" :key="r" :value="r">{{ ROTULO_DO_TESTE[r] }}</option></select></label>
       <label><input v-model="pausarAteResposta" type="checkbox"> Pausar sugestões de contato até ele responder (ou eu desmarcar e salvar)</label>
-      <p class="crm-nota-pequena">A pausa tira este lead da Próxima venda, inclusive no Telegram. Uma nova mensagem humana guardada depois deste registro libera a fila; recibo de leitura não libera.</p>
+      <p class="crm-nota-pequena">A pausa tira este lead das Conversas para você, inclusive no Telegram. Uma nova mensagem humana guardada depois deste registro libera a fila; recibo de leitura não libera.</p>
       <button class="botao" type="submit" :disabled="!disponivel || salvando">{{ salvando ? 'Salvando…' : 'Salvar aprendizado' }}</button>
       <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
     </form>

@@ -17,7 +17,7 @@ Este leitor acompanha o log e, quando o número é das planilhas, avisa o n8n
 (`claude-ops/whatsapp-conversa.py`) com a direção: "entrada" (o lead escreveu),
 "saida" (o Rômulo escreveu) ou "lido" (o lead leu). "entregue" fica só no log.
 O n8n responde o que vai marcar; abordagem nova ("abordou"/"retomou") vira um
-aviso pelo Hermes, juntando o que acontecer em 5 min: "Registrado: você abordou
+aviso (Telegram), juntando o que acontecer em 5 min: "Registrado: você abordou
 <Nome> (Site antes da venda) às HH:MM". Mensagem a quem já estava "enviado"
 (conversa normal) e leitura não avisam.
 
@@ -42,7 +42,7 @@ vira resposta; no pior caso, uma resposta de verdade fica para o follow-up.
 
 n8n com erro (30/09/2026): o evento não se perde. Fica numa fila em memória, na
 ordem, e o leitor tenta de novo depois de 1 min, 4, 16 e então de hora em hora
-(cada tentativa que falha dentro do n8n vira aviso de falha pelo Hermes; n8n
+(cada tentativa que falha dentro do n8n vira aviso de falha; n8n
 fora do ar, conexão recusada, tenta a cada 30 s sem aviso). A posição gravada
 nunca passa do primeiro evento da fila: se o serviço reinicia, relê dali.
 
@@ -55,12 +55,16 @@ Este leitor junta as mensagens de cada lead até ficar ESPERA_DA_CONVERSA_S sem
 mensagem nova (quem escreve "Oi" e depois "não temos interesse" vira um envio
 só) e manda ao n8n (POST /webhook/whatsapp-resposta), que classifica com o
 Gemini e marca a planilha (`claude-ops/whatsapp-conversa.py`). O n8n devolve o
-aviso que vai ao Rômulo pelo Hermes ("<Nome> respondeu: ..."). O arquivo é
+aviso que vai ao Rômulo ("<Nome> respondeu: ..."). O arquivo é
 apagado depois de processado (desde 17/10/2026, só com a conversa em disco gravada e o
 lote montado: ver ler_respostas); o texto fica só na memória até o n8n confirmar. Custo
 aceito: reiniciar o serviço com uma conversa ainda juntando perde a
 classificação dela (o SIGTERM tenta mandar antes de sair), e a marcação de
 "respondeu" pelo log continua valendo.
+
+Duas instâncias veem o mesmo chip (a da bridge do Hermes e a da Evolution do PRUMO): cada mensagem vai ao n8n
+só pela instância cuja linha ficou na conversa em disco (Conversas.anexar_e_dono); a que já estava lá,
+gravada pela outra, não entra no lote. Sem isto a classificação e o aviso saíam em dobro.
 
 Conversa do lead em disco (16/10/2026, pedido do Rômulo: "o 'em contato' não tem
 visão clara do que tá acontecendo"; o Jev ou o Hermes precisam LER a conversa para
@@ -285,43 +289,33 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", HOME / ".local/
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar_pelo_hermes() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o serviço: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
 
-def avisar_pelo_hermes(texto: str) -> None:
+def avisar(texto: str) -> None:
+    """Grava o aviso na fila do dell-status e pede a entrega já (sai pelo Telegram, WhatsApp de reserva)."""
     aviso = {"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"}
     lib = lib_de_aviso()
-    if lib is not None:
-        # O texto traz trecho do que o lead escreveu (e nome de empresa): "R$" aí é
-        # comum ("quanto custa? R$ 50 ?") e a lib recusaria o aviso inteiro, perdendo
-        # a resposta do lead. Melhor mandar sem o valor (RULES 24) do que não mandar.
-        if lib.VALOR_EM_REAIS.search(texto):
-            aviso["texto"] = lib.sem_valores(texto)
-        r = lib.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="observador")
-        if not r.gravado:
-            log("aviso não gravado:", r.estado, r.motivo)
-            return
-        entregar_ja()
+    if lib is None:  # sem a lib não há validação (nem a regra do R$): não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
         return
-    # Sem a lib instalada: o jeito de antes, sem mudar nada.
-    try:
-        FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
-        (FILA_DE_AVISOS / f"observador-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-    except OSError as e:
-        log("aviso não gravado:", e)
+    # O texto traz trecho do que o lead escreveu (e nome de empresa): "R$" aí é
+    # comum ("quanto custa? R$ 50 ?") e a lib recusaria o aviso inteiro, perdendo
+    # a resposta do lead. Melhor mandar sem o valor (RULES 24) do que não mandar.
+    if lib.VALOR_EM_REAIS.search(texto):
+        aviso["texto"] = lib.sem_valores(texto)
+    r = lib.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="observador")
+    if not r.gravado:
+        log("aviso não gravado:", r.estado, r.motivo)
         return
     entregar_ja()
 
@@ -414,9 +408,7 @@ def seguir(caminho: Path, onde: dict):
 
 
 def ler_numeros(chamar=http) -> set[str]:
-    chaves = set(filter(None, chamar("GET", "whatsapp-telefones").get("chaves", [])))
-    log(f"{len(chaves)} número(s) de lead no filtro")
-    return chaves
+    return set(filter(None, chamar("GET", "whatsapp-telefones").get("chaves", [])))
 
 
 def ler_chaves_do_plus(arquivo: Path = PLUS) -> set[str]:
@@ -778,11 +770,18 @@ class Conversas:
     def anexar(self, chave: str, direcao: str, quando: float, texto: str = "", id_msg=None, papel=None) -> bool:
         """True se a linha foi gravada (ou melhorou a que estava: ver melhora_o_audio); False se já estava lá,
         se a chave/direção não serve ou se falhou. `papel`: 'recepcao' | 'robo' (ausente = gente)."""
+        return self.anexar_e_dono(chave, direcao, quando, texto, id_msg, papel)[0]
+
+    def anexar_e_dono(self, chave: str, direcao: str, quando: float, texto: str = "", id_msg=None, papel=None) -> tuple[bool, bool]:
+        """(gravou, minha). `minha` diz se a linha que está no arquivo é desta instância: gravada agora, melhorada
+        agora ou gravada por ela antes (um reinício relê o .lendo e a mensagem já está lá). False quando a linha
+        já estava lá gravada pela OUTRA instância (o mesmo chip chega pelos dois observadores): quem manda o lote
+        ao n8n é só a dona da linha, senão a classificação e o aviso saem em dobro (auditoria de 19/10/2026)."""
         try:
             return self._anexar(chave, direcao, quando, texto, id_msg, papel)
         except Exception as e:  # noqa: BLE001 — nunca derruba o laço do observador
             log(f"conversa não gravada ({mascarar(str(chave))}): {type(e).__name__}: {e}"[:300])
-            return False
+            return False, True  # falhou ao gravar: não é a outra instância quem tem a linha, segue como antes
 
     @contextmanager
     def _trava(self):
@@ -796,10 +795,10 @@ class Conversas:
         finally:
             os.close(fd)  # fechar solta o flock
 
-    def _anexar(self, chave, direcao, quando, texto, id_msg, papel=None) -> bool:
+    def _anexar(self, chave, direcao, quando, texto, id_msg, papel=None) -> tuple[bool, bool]:
         nome = nome_da_conversa(chave)
         if not nome or direcao not in ("entrada", "saida"):
-            return False
+            return False, True
         self.pasta.mkdir(mode=0o700, parents=True, exist_ok=True)
         try:
             os.chmod(self.pasta, 0o700)
@@ -821,10 +820,12 @@ class Conversas:
                 # PRUMO chega depois com a transcrição, com o MESMO id. Sem isto a segunda era descartada e a
                 # conversa ficava com o áudio mudo. Só melhora: texto de gente nunca é trocado.
                 if not (linha.get("id") and velha.get("id") == linha["id"] and melhora_o_audio(velha.get("texto"), linha["texto"])):
-                    return False
+                    # Linha sem origem (anterior ao campo) conta como nossa: na dúvida, o lote vai (melhor um aviso
+                    # a mais do que uma resposta de lead perdida).
+                    return False, velha.get("origem") in (None, "", self.origem)
                 existentes[igual] = {**velha, "texto": linha["texto"], "origem": linha["origem"]}
                 self._regravar(arquivo, existentes)
-                return True
+                return True, True
             if self.relogio() - self.podado.get(nome, 0.0) >= PODAR_A_CADA_S:
                 self.podado[nome] = self.relogio()
                 self._podar(arquivo, existentes)
@@ -835,7 +836,7 @@ class Conversas:
                 os.write(fd, dados)  # uma escrita por linha, com O_APPEND
             finally:
                 os.close(fd)
-        return True
+        return True, True
 
     def linhas_de(self, chave) -> list[dict]:
         """A conversa gravada de um lead (para o contexto do classificador); [] sem arquivo ou com erro."""
@@ -905,7 +906,7 @@ class Conversas:
 class Observador:
     """O que o leitor lembra entre linhas. `chamar`, `avisar` e `relogio` entram de fora nos testes."""
 
-    def __init__(self, chaves: set[str], chamar=http, avisar=avisar_pelo_hermes, relogio=time.time,
+    def __init__(self, chaves: set[str], chamar=http, avisar=avisar, relogio=time.time,
                  telefone=telefone_do_chat, bridge_js: Path = BRIDGE_JS, pasta: Path | None = None,
                  conversas: "Conversas | Path | None" = None, ler_plus=None, transcritor: "Transcritor | None" = None):
         agora = relogio()
@@ -1068,7 +1069,10 @@ class Observador:
         agora = self.relogio()
         self.reler_plus()
         try:
-            self.chaves = ler_numeros(self.chamar)
+            novas = ler_numeros(self.chamar)
+            if len(novas) != len(self.chaves):  # a cada 10 min sem novidade eram 288 linhas por dia no journal
+                log(f"{len(novas)} número(s) de lead no filtro")
+            self.chaves = novas
             self.falhas_numeros = 0
             self.proxima_leitura = agora + RELER_NUMEROS_S
             self.gravar_lista()
@@ -1157,7 +1161,7 @@ class Observador:
             self._concluir(lendo)
             return
         agora = self.relogio()
-        registros: list[list] = []  # [chave, texto, registro, quando]
+        registros: list[list] = []  # [chave, texto, registro, quando, vai ao n8n]
         for texto in linhas:
             try:
                 r = json.loads(texto)
@@ -1167,25 +1171,28 @@ class Observador:
             # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
             if chave not in self.todas or not msg:
                 continue
-            registros.append([chave, msg, r, self._hora_vista(r.get("ts"), agora)])
+            registros.append([chave, msg, r, self._hora_vista(r.get("ts"), agora), True])
         # 1. Conversa em disco primeiro: uma parada durante a transcrição não perde o que veio junto.
-        for chave, msg, r, quando in registros:
-            self.conversa.anexar(chave, "entrada", quando, msg, r.get("id"), papel_da_mensagem(msg))
+        #    O 5º campo diz se o lote do n8n leva a mensagem: só a que a linha do arquivo é desta instância
+        #    (a outra instância do mesmo chip já a gravou e manda a sua; ver anexar_e_dono).
+        for x in registros:
+            x[4] = self.conversa.anexar_e_dono(x[0], "entrada", x[3], x[1], x[2].get("id"), papel_da_mensagem(x[1]))[1]
         por_ouvir = [x for x in registros if isinstance(x[2].get("audio"), dict) and so_marcador_de_audio(x[1])]
         if por_ouvir and not ouvir:
             log(f"{len(por_ouvir)} áudio(s) por transcrever: o lote fica para o próximo início")
             return  # o .lendo fica
         # 2. Transcrição (até ~50 s por áudio): troca o marcador pela transcrita na conversa.
         for x in por_ouvir:
-            chave, msg, r, quando = x
+            chave, msg, r, quando, _ = x
+            x[4] = True  # quem recebeu o áudio da Evolution responde por ele, com a transcrição ou com o marcador
             ja = self.conversa.texto_de(chave, r.get("id"))
             novo = ja if ja and melhora_o_audio(msg, ja) and not so_marcador_de_audio(ja) else self._ouvir(chave, msg, r["audio"])
             if novo != msg:
                 self.conversa.anexar(chave, "entrada", quando, novo, r.get("id"), papel_da_mensagem(novo))
             x[1] = novo
         # 3. O lote do n8n (só de quem está numa planilha; o Plus fica só na conversa, ver o topo).
-        for chave, msg, r, quando in registros:
-            if chave not in self.chaves:
+        for chave, msg, r, quando, minha in registros:
+            if chave not in self.chaves or not minha:
                 continue
             papel = papel_da_mensagem(msg)
             sem_ouvinte = so_marcador_de_audio(msg) and not isinstance(r.get("audio"), dict)
@@ -1319,6 +1326,7 @@ def main() -> int:
             log(f"não consegui ler os números dos leads (tento em {espera} s):", e)
             time.sleep(espera)
     onde: dict = {}
+    log(f"{len(chaves)} número(s) de lead no filtro")
     obs = Observador(chaves, ler_plus=ler_chaves_do_plus)
     log(f"acompanhando {LOG_DA_BRIDGE}; conversas dos leads em {obs.conversa.pasta} (origem {obs.conversa.origem})")
     try:

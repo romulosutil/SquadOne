@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Testes do prumo_mapa.py: python3 deploy/dell/prumo-mapa/prumo_mapa.test.py
 
-O que importa aqui é a troca do avisar() pela lib de aviso (11/10/2026): o
-aviso gravado pela lib é IDÊNTICO, byte a byte, ao que o jeito antigo gravava
-(com e sem o "[teste] "), o dell-status aceita o arquivo, sem a lib (cópia
-ausente ou quebrada) o script volta ao jeito antigo e a fila ausente não
-derruba a rodada. O aviso é de entrega ao Rômulo (rascunho do Mapa de um
+O que importa aqui é o avisar() pela lib de aviso (11/10/2026): o aviso gravado
+é o do formato da fila (com e sem o "[teste] "), o dell-status aceita o arquivo,
+sem a lib (cópia ausente ou quebrada) nada é gravado (uma linha no stderr) e a
+fila ausente não derruba a rodada. O aviso é de entrega ao Rômulo (rascunho do Mapa de um
 cliente): "R$" no texto NÃO é escondido com [valor], o aviso é recusado e a
 linha fica no journal (stderr).
 
@@ -81,11 +80,11 @@ class Base(unittest.TestCase):
             pm.avisar(texto, teste)
         return err.getvalue()
 
-    def gravado_pelo(self, jeito: str, texto: str, teste: bool = False) -> bytes:
-        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+    def gravado_pela_lib(self, texto: str, teste: bool = False) -> bytes:
+        """O aviso gravado pela lib do repo, numa fila limpa."""
         shutil.rmtree(pm.FILA_AVISOS, ignore_errors=True)
         pm.FILA_AVISOS.mkdir()
-        pm.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        pm.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto, teste)
         arquivos = self.fila()
         self.assertEqual(len(arquivos), 1, arquivos)
@@ -96,17 +95,18 @@ class TrocaPelaLib(Base):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(pm.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for teste in (False, True):
             for texto in TEXTOS:
                 with self.subTest(texto=texto[:30], teste=teste):
-                    self.assertEqual(self.gravado_pelo("lib", texto, teste), self.gravado_pelo("antigo", texto, teste))
+                    d = json.loads(self.gravado_pela_lib(texto, teste).decode("utf-8"))
+                    self.assertEqual(d, {"titulo": "📊 PRUMO", "texto": ("[teste] " if teste else "") + texto, "origem": "prumo-mapa"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "📊 PRUMO", "texto": "[teste] Mapa de Fulano\\nok", "origem": "prumo-mapa"}'
-        self.assertEqual(self.gravado_pelo("lib", "Mapa de Fulano\nok", True), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("Mapa de Fulano\nok", True), esperado.encode("utf-8"))
         esperado = '{"titulo": "📊 PRUMO", "texto": "Mapa de Fulano", "origem": "prumo-mapa"}'
-        self.assertEqual(self.gravado_pelo("lib", "Mapa de Fulano"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("Mapa de Fulano"), esperado.encode("utf-8"))
 
     def test_nome_e_atomicidade(self):
         pm.FILA_AVISOS.mkdir()
@@ -157,22 +157,22 @@ class TrocaPelaLib(Base):
 
 
 class SemLib(Base):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self, err):
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 📊 PRUMO: x", err)
+        self.assertFalse(pm.FILA_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         pm.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.assertIsNone(pm.lib_de_aviso())
-        self.avisar("x")  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^prumo-mapa-\d+\.json$")
+        self.sem_gravar(self.avisar("x"))
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         pm.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(pm.lib_de_aviso())
-        pm.FILA_AVISOS.mkdir()
-        self.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar(self.avisar("x"))
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
@@ -180,12 +180,6 @@ class SemLib(Base):
         (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
         pm.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(pm.lib_de_aviso().__file__).resolve(), LIB_DO_REPO)
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        # O jeito antigo não mexe no texto (o dell-status é quem aceita ou não).
-        pm.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
-        self.avisar("custa R$ 5")
-        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
 
 
 class RodadaDaFila(Base):
@@ -265,12 +259,12 @@ class RodadaDaFila(Base):
         self.assertEqual(len(textos), 1)  # o da Loja R$ foi recusado; o outro saiu
         self.assertIn("Fulano", textos[0])
 
-    def test_sem_a_lib_o_aviso_sai_como_antes(self):
+    def test_sem_a_lib_o_mapa_sai_e_so_o_aviso_nao_vai(self):
         pm.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.pacote("1-bom.json", {"empresa": "Fulano"})
         self.rodar()
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^prumo-mapa-\d+\.json$")
+        self.assertEqual(self.gerou, ["Fulano"])
+        self.assertEqual(self.fila(), [])
 
 
 if __name__ == "__main__":

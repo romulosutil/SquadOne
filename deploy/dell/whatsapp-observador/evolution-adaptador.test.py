@@ -6,7 +6,9 @@ adaptador escreveu, com o n8n de mentira: é o que prova que os dois falam a mes
 
   python3 deploy/dell/whatsapp-observador/evolution-adaptador.test.py
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -969,6 +971,37 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.assertFalse(ob.silencio_suspeito(T0 + 7 * 3600, T0, False, limite=0))
         self.assertFalse(ob.silencio_suspeito(T0 + 7 * 3600, T0, True, limite=6 * 3600))
         self.assertFalse(ob.silencio_suspeito(T0 + 3600, T0, False, limite=6 * 3600))
+
+
+class AvisoPelaLib(unittest.TestCase):
+    """O avisar() do adaptador: pela lib de aviso do repo; sem ela nada vai à fila (uma linha no stderr)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="ev-aviso-teste-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.antes = (ev.FILA_DE_AVISOS, ev.PASTAS_DA_LIB)
+        self.addCleanup(lambda: setattr(ev, "FILA_DE_AVISOS", self.antes[0]) or setattr(ev, "PASTAS_DA_LIB", self.antes[1]))
+        ev.FILA_DE_AVISOS = self.tmp / "fila"
+        ev.FILA_DE_AVISOS.mkdir()
+
+    def avisar(self, texto):
+        err = io.StringIO()
+        with contextlib.redirect_stdout(err), contextlib.redirect_stderr(err):
+            ev.avisar(texto)
+        return err.getvalue()
+
+    def test_grava_pela_lib_do_repo(self):
+        ev.PASTAS_DA_LIB = [AQUI.parent / "lib"]
+        self.avisar("O número desconectou")
+        [arquivo] = list(ev.FILA_DE_AVISOS.glob("evolution-*.json"))
+        self.assertEqual(json.loads(arquivo.read_text(encoding="utf-8")),
+                         {"titulo": "📱 Número do PRUMO no WhatsApp", "texto": "O número desconectou", "origem": "evolution-adaptador"})
+
+    def test_sem_a_lib_nada_e_gravado_e_a_linha_vai_ao_stderr(self):
+        ev.PASTAS_DA_LIB = [self.tmp / "sem-lib"]
+        saida = self.avisar("O número desconectou")
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 📱 Número do PRUMO no WhatsApp", saida)
+        self.assertEqual(list(ev.FILA_DE_AVISOS.iterdir()), [])
 
 
 if __name__ == "__main__":

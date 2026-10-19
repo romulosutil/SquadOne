@@ -17,7 +17,8 @@ Este script é a exceção LIMITADA que RULES 10 e o SOUL do Hermes passaram a p
    nem mensagens: o -z aprova tudo sozinho, então a trava é não dar a ferramenta). O Hermes responde
    em JSON: diagnóstico, um remédio OPCIONAL que só vale se estiver na lista branca (quem executa é
    este script, com o mesmo teto de tentativas) e o pedido pronto para o Rômulo colar no Claude Code.
-   Teto: 1 Hermes por verificação a cada 6 h e 6 por dia no total; 5 min de tempo.
+   Teto: 1 Hermes por verificação a cada 6 h e 6 por dia no total; 5 min de tempo. Verificação sem remédio
+   nem leitura própria (fluxo, cron, pncp, idade...) não chama o Hermes: o aviso leva o "o que fazer" da Central.
 3. **Um aviso** pela fila (lib/aviso.py) com o que aconteceu: "resolvido sozinho com X" ou "continua
    fora; o Hermes acha que...; peça ao Claude: ...". O "Quebrou" do dell-status sai do mesmo jeito,
    na hora: o socorro nunca segura nem substitui o alerta de falha. Desde 16/10/2026 (OT-14) a
@@ -229,17 +230,37 @@ UNITS_DO_CHECK = {
     "whatsapp-prumo": ["evolution-adaptador.service", "whatsapp-observador-prumo.service"],
     "gerador": ["gerador-de-sites.service"],
     "funil-aprendizado": ["funil-aprendizado.service"],
-    "backup": ["backup-dell.service"],
     "prumo-mapa": ["prumo-mapa.service", "prumo-mapa.path"],
     "healthwatch": ["dell-worker-healthwatch.service"],
 }
+
+
+# O backup-dell.service nunca existiu: são os dois timers do backup (cofre e espelho) e a coleta da estrutura.
+# O id é "backup" (status.json ausente) ou "backup:<fonte>" (HC-9, auditoria de 19/10/2026).
+UNITS_DO_BACKUP = ["backup-dell-cofre.service", "backup-dell-espelho.service", "estrutura-coletar.service"]
+
+# Ids cuja única leitura útil é a lista geral de units falhas (a verificação é justamente essa lista).
+SO_A_LISTA_GERAL = {"units"}
+
+
+def units_do_check(cid: str) -> list[str]:
+    if cid == "backup" or cid.startswith("backup:"):
+        return UNITS_DO_BACKUP
+    return UNITS_DO_CHECK.get(cid, [])
+
+
+def ha_o_que_ler(c: dict) -> bool:
+    """PURO. Há leitura própria desta falha (units, containers, disco) além do `systemctl --failed` genérico?
+    Sem leitura e sem remédio o Hermes receberia só o detalhe que o aviso já traz: gastar o teto de
+    diagnósticos por dia com isso (HC-8) esconderia as falhas que ele poderia mesmo explicar."""
+    return str(c.get("id") or "") in SO_A_LISTA_GERAL or len(comandos_de_leitura(c)) > 1
 
 
 def comandos_de_leitura(c: dict) -> list[list[str]]:
     """PURO. Só leitura: journal, status, docker ps/logs. Nome de container só de [A-Za-z0-9_.-]."""
     cid = str(c.get("id") or "")
     cmds: list[list[str]] = [["systemctl", "--user", "--failed", "--no-pager", "--plain"]]
-    for unit in UNITS_DO_CHECK.get(cid, []):
+    for unit in units_do_check(cid):
         cmds += [_status(unit), _journal(unit)]
     containers = []
     if cid in ("n8n", "docker", "containers"):
@@ -367,19 +388,28 @@ class Socorro:
             else:
                 i["check"] = {**i["check"], **{k: atual[k] for k in ("detalhe", "o_que_fazer", "nome") if atual.get(k)}}
 
-    def _aplicar(self, i: dict, remedios: list[str]) -> bool:
+    def _aplicar(self, i: dict, remedios: list[str], rodados: dict[str, tuple[int, str]] | None = None) -> bool:
+        """`rodados`: remédio -> (rc, saída) já executado neste atendimento. Duas verificações da mesma queda
+        (gateway: hermes + whatsapp-sessao; n8n: n8n + container) mapeiam para o mesmo remédio: roda uma vez
+        e o resultado vale para as duas (HC-3), em vez de reiniciar o serviço duas vezes seguidas."""
         cid = i["check"]["id"]
         if not pode_remediar(self.estado, cid, self.relogio()):
             i["pulou"] = f"remédio já usado {MAX_REMEDIOS_POR_JANELA} vezes nas últimas 6 h; não tentei de novo"
             return False
         registrar(self.estado, "remedios", cid, self.relogio())
+        rodados = rodados if rodados is not None else {}
         for r in remedios:
             if self.esta_desligado():
                 i["pulou"] = "socorro desligado no meio"
                 return False
-            cmd, _ = REMEDIOS[r]
-            rc, saida = self.rodar(cmd, TEMPO_DO_COMANDO_S)
-            log(f"remédio {r} para {cid}: {'ok' if rc == 0 else f'saiu {rc}'} {mascarar(saida)[:200]}")
+            if r in rodados:
+                rc, saida = rodados[r]
+                log(f"remédio {r} para {cid}: já rodado neste atendimento ({'ok' if rc == 0 else f'saiu {rc}'})")
+            else:
+                cmd, _ = REMEDIOS[r]
+                rc, saida = self.rodar(cmd, TEMPO_DO_COMANDO_S)
+                rodados[r] = (rc, saida)
+                log(f"remédio {r} para {cid}: {'ok' if rc == 0 else f'saiu {rc}'} {mascarar(saida)[:200]}")
             i["tentou"].append((r, rc == 0))
         return True
 
@@ -405,7 +435,12 @@ class Socorro:
             return {"itens": [], "aviso": None}
 
         # 1. Remédio da lista branca.
-        aplicou = [i for i in itens if (rs := remedios_para(i["check"])) and self._aplicar(i, rs)]
+        rodados: dict[str, tuple[int, str]] = {}
+        aplicou = []
+        for i in itens:
+            rs = remedios_para(i["check"])
+            if rs and self._aplicar(i, rs, rodados):
+                aplicou.append(i)
         if aplicou:
             self.dormir(ESPERA_DEPOIS_DO_REMEDIO_S)
             self._ainda_falha(aplicou)
@@ -416,19 +451,24 @@ class Socorro:
         para_hermes = []
         for i in restantes:
             pode, motivo = pode_hermes(self.estado, i["check"]["id"], self.relogio())
-            if pode:
+            if not remedios_para(i["check"]) and not ha_o_que_ler(i["check"]):
+                # Nada a ler e nada a religar: o Hermes só repetiria o detalhe. Registra e deixa o aviso
+                # levar o "o que fazer" da Central, sem gastar o teto do dia (HC-8).
+                log("sem remédio nem leitura, Hermes não chamado:", i["check"]["id"])
+                i["sem_hermes"] = "não há remédio nem leitura própria para esta falha"
+            elif pode:
                 para_hermes.append(i)
             else:
                 i["sem_hermes"] = motivo
         if para_hermes and not self.esta_desligado():
-            self._perguntar_ao_hermes(para_hermes)
+            self._perguntar_ao_hermes(para_hermes, rodados)
 
         aviso = montar_aviso(itens, self.relogio())
         if aviso:
             self.avisar(*aviso)
         return {"itens": itens, "aviso": aviso}
 
-    def _perguntar_ao_hermes(self, itens: list[dict]) -> None:
+    def _perguntar_ao_hermes(self, itens: list[dict], rodados: dict[str, tuple[int, str]]) -> None:
         agora = self.relogio()
         registrar(self.estado, "hermes_dia", None, agora)
         for i in itens:
@@ -458,7 +498,7 @@ class Socorro:
             if not h or not h.get("diagnostico"):
                 i["sem_hermes"] = "o Hermes não trouxe diagnóstico desta falha"
             if h and h["remedio"] and h["remedio"] not in [r for r, _ in i["tentou"]]:
-                if self._aplicar(i, [h["remedio"]]):
+                if self._aplicar(i, [h["remedio"]], rodados):
                     i["remedio_do_hermes"] = h["remedio"]
                     a_reconferir.append(i)
         if a_reconferir:
@@ -588,7 +628,7 @@ def avisar_pela_fila(titulo: str, texto: str, prioridade: int) -> bool:
         if not r.gravado:
             log("aviso não gravado:", r.estado, r.motivo)
         return r.gravado
-    log("aviso não gravado: lib de aviso ausente")
+    print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {titulo}", file=sys.stderr, flush=True)
     return False
 
 

@@ -18,9 +18,9 @@ SETTINGS_OK = {
     "timeSavedPerExecution", "availableInMCP",
 }
 
-# Fluxos desligados de propósito. Todo script prumo-*.py (e o fecha-ciclos --tailnet) termina
-# em POST /workflows/<id>/activate depois de trocar os nós: sem esta trava, ajustar o convite
-# religaria o Lead Scout calado. Religar = tirar daqui (PR) e ativar no n8n.
+# Fluxos desligados de propósito. Todo script prumo-*.py termina em POST /workflows/<id>/activate
+# depois de trocar os nós: sem esta trava, ajustar o convite religaria o Lead Scout calado.
+# Religar = tirar daqui (PR) e ativar no n8n. O rodar-agora.py também recusa estes ids sem --forcar.
 DESLIGADOS = {
     # 08/10/2026, decisão do Rômulo: 57 convites frios a distribuidoras, 21 respostas de robô,
     # nenhum dono interessado. O Organizado agora chega só pela CDL. O fluxo fica no n8n, inativo.
@@ -32,11 +32,20 @@ FILA_NO_CONTAINER = "/home/node/.n8n-files/avisos/"
 ORIGEM_JS = "origem: ('n8n:' + $workflow.name).slice(0, 80)"
 
 
+def garantir_erro_salvo(body):
+    """Todo fluxo publicado guarda a execução que FALHOU (saveDataErrorExecution "all"). Com "none" o
+    "00 · Avisar falha pelo Hermes" dispara, mas não há execução para abrir: o fluxo fica cego (VIVO-9).
+    Sucesso pode ficar como o fluxo quiser. Devolve uma cópia; o dict do chamador não muda."""
+    body = dict(body)
+    body["settings"] = {**(body.get("settings") or {}), "saveDataErrorExecution": "all"}
+    return body
+
+
 def api(method, path, body=None):
     partes = path.strip("/").split("/")
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from workflow_confiabilidade import preparar
-        body = preparar(body)
+        body = garantir_erro_salvo(preparar(body))
         cred_luna = Path.home() / '.config/claude-ops/luna-workflows-cred'
         if cred_luna.exists():
             from workflow_luna import usar_luna

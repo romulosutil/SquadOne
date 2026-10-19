@@ -2,11 +2,16 @@
 Description=Catch up the daily PNCP collection when n8n missed its 07:30 run
 After=network-online.target docker.service
 Wants=network-online.target
-StartLimitIntervalSec=0
+# Repetir para sempre (StartLimitIntervalSec=0 com Restart=on-failure a cada 15 min) martelava o PNCP o dia
+# todo quando a fonte caía (DELL-18/HC-13). Agora: no máximo 4 inícios em 6 h (1ª tentativa + 3 repetições);
+# o do dia seguinte já cai numa janela nova.
+StartLimitIntervalSec=6h
+StartLimitBurst=4
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/docker exec licitacoes-automation-collector-1 node /opt/licitacoes/scripts/pncp-catchup.mjs
 Restart=on-failure
 RestartSec=15min
-TimeoutStartSec=20min
+# Type=simple: TimeoutStartSec não limita a execução; RuntimeMaxSec sim (a coleta não passa de 20 min).
+RuntimeMaxSec=20min

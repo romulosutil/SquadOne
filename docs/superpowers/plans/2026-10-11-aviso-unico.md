@@ -1,5 +1,12 @@
 # Aviso único: uma lib para a fila de avisos da Mel (11/10/2026)
 
+> **Superado em 19/10/2026.** Os 16 scripts que carregam `deploy/dell/lib/aviso.py` não têm mais o fallback "jeito
+> antigo" (gravar o JSON direto na fila, sem validar) que este plano descreve como rede de segurança da migração: sem a
+> lib, registram em stderr "lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: <título>" e seguem (o
+> `funil-aprendizado` sai com 1, para regravar na rodada seguinte). `avisar_pelo_hermes` virou `avisar` no
+> `observador.py` e no `evolution-adaptador.py`. O inventário e as ondas abaixo ficam como registro da migração; para
+> o estado de hoje, leia `deploy/dell/README.md`, "Fila de avisos".
+
 Origem: auditoria da Mel de 11/10/2026. Havia uma dúzia de `avisar()` copiadas
 pelos scripts, cada uma gravando na fila do dell-status
 (`~/.local/share/avisos/fila`) do seu jeito, e três jobs `no_agent` do Hermes

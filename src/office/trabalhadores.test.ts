@@ -19,6 +19,7 @@ describe("catálogo dos trabalhadores automáticos", () => {
       Balcão: "prumo--geral",
       "Observador do WhatsApp": "prumo--geral",
       Acompanhamento: "prumo--geral",
+      "Time comercial": "prumo--prospeccao",
       "Funil por nicho": "prumo--prospeccao",
       Diagnóstico: "prumo--organizar",
       "Rascunho do Mapa": "prumo--organizar",
@@ -49,8 +50,10 @@ describe("catálogo dos trabalhadores automáticos", () => {
     }
   });
 
-  it("todo trabalhador tem verificação viva (perder uma por engano quebra aqui)", () => {
-    assert.deepEqual(TRABALHADORES.filter((t) => !t.verificacao).map((t) => t.id), []);
+  it("todo trabalhador tem verificação viva (perder uma por engano quebra aqui), salvo o time comercial", () => {
+    // O time comercial (19/10/2026) ainda não tem check no dell-status: a tela dele lê o próprio estado
+    // (GET /crm/frente, com cicloParado). Quando o monitor ganhar o check, ponha a `verificacao` no passo e tire daqui.
+    assert.deepEqual(TRABALHADORES.filter((t) => !t.verificacao).map((t) => t.id), ["time-comercial"]);
   });
 
   it("o Plus está em Como funciona, sem trabalhador: não há robô, o catálogo é importado à mão", () => {
@@ -61,7 +64,7 @@ describe("catálogo dos trabalhadores automáticos", () => {
 
   it("trabalhadoresDaSala filtra pelo id; sala sem ninguém ou desconhecida = lista vazia", () => {
     // O Lead Scout saiu em 08/10/2026 (desligado no n8n): fluxo inativo não aparece como trabalhador.
-    assert.deepEqual(trabalhadoresDaSala("prumo--prospeccao").map((t) => t.nome), ["Caçador", "Funil por nicho"]);
+    assert.deepEqual(trabalhadoresDaSala("prumo--prospeccao").map((t) => t.nome), ["Caçador", "Time comercial", "Funil por nicho"]);
     assert.deepEqual(trabalhadoresDaSala("prumo--organizar").map((t) => t.nome), ["Diagnóstico", "Rascunho do Mapa"]);
     assert.deepEqual(trabalhadoresDaSala("prumo--iris").map((t) => t.nome), ["Caçador de clínicas"]);
     assert.deepEqual(trabalhadoresDaSala("geral"), []);

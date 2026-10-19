@@ -44,7 +44,7 @@ export const MAXIMO_DE_RODADAS = 200
 
 /**
  * Onde o Rômulo está, num id curto e estável: vai ao servidor como `pagina` e escolhe os atalhos.
- * Em Vendas a aba conta (o Funil pergunta outra coisa que o A fazer) e a Ficha aberta vira `ficha`.
+ * Em Vendas a aba conta (o Funil pergunta outra coisa que as Conversas para você) e a Ficha aberta vira `ficha`.
  */
 export type PaginaDoAssistente =
   | 'hoje'

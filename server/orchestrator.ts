@@ -327,9 +327,15 @@ export async function gerarComRetry(
   timeoutMs = TIMEOUT_GEMINI_MS,
 ) {
   let ultimo: any;
+  // Quem chama pode desistir (o prazo de 4 min do Assistente): sem ligar o sinal de fora ao
+  // controle de cada tentativa, a geração seguia em voo e a fila soltava a próxima em paralelo.
+  const externo = params.config?.abortSignal;
   for (const model of [params.model, ...MODELOS_RESERVA]) {
     for (let i = 0; i < tentativas; i++) {
+      if (externo?.aborted) throw externo.reason ?? new Error("ABORTADO: quem pediu desistiu.");
       const controle = new AbortController();
+      const repassar = () => controle.abort(externo?.reason);
+      externo?.addEventListener("abort", repassar, { once: true });
       let relogio: ReturnType<typeof setTimeout> | undefined;
       // Race além do abortSignal: o SDK cancela o fetch pelo sinal, mas a
       // tentativa não pode depender de ele honrar o cancelamento para acabar.
@@ -346,7 +352,7 @@ export async function gerarComRetry(
         ]);
       } catch (err: any) {
         const msg = String(err?.message ?? err);
-        if (!TRANSITORIO.test(msg)) throw err;
+        if (externo?.aborted || !TRANSITORIO.test(msg)) throw err;
         ultimo = err;
         if (i < tentativas - 1) {
           // Jitter junto do backoff: sem ele duas abas retentando batem no
@@ -356,6 +362,7 @@ export async function gerarComRetry(
         }
       } finally {
         clearTimeout(relogio);
+        externo?.removeEventListener("abort", repassar);
       }
     }
   }

@@ -1179,18 +1179,15 @@ class PelaFila(Base):
         self.assertIn("fila_ausente", err)
         self.assertFalse(self.fila.exists())  # a lib não cria a pasta do dell-status
 
-    def test_sem_a_lib_grava_do_jeito_antigo_com_o_mesmo_conteudo(self):
+    def test_sem_a_lib_nada_e_gravado_e_a_rodada_sai_1(self):
         self.um_item_organizado()
         org.PASTAS_DA_LIB = [self.tmp / "sem-lib"]
         self.assertIsNone(org.lib_de_aviso())
-        codigo, _, _ = self.pela_fila()
-        self.assertEqual(codigo, 0)
-        arquivos = sorted(self.fila.glob("*.json"))
-        self.assertRegex(arquivos[0].name, r"^entrada-organizar-\d+\.json$")
-        d = self.avisos()[0]
-        self.assertEqual(d["titulo"], "📥 Entrada: 1 item(ns) organizado(s)")
-        if ds is not None:
-            ds.validar_aviso(d)
+        codigo, out, err = self.pela_fila()
+        self.assertEqual(codigo, 1)
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 📥 Entrada: 1 item(ns) organizado(s)", err)
+        self.assertIn("📥 Entrada: 1 item(ns) organizado(s)", out)  # o texto fica no journal
+        self.assertEqual(sorted(self.fila.glob("*.json")), [])
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.tmp / "quebrada"
@@ -1201,19 +1198,15 @@ class PelaFila(Base):
         org.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(org.lib_de_aviso())
 
-    def test_texto_longo_e_cortado_com_e_sem_a_lib(self):
+    def test_texto_longo_e_cortado_pela_lib(self):
         saida = "📥 Entrada: 1 item(ns) organizado(s)\n" + "\n".join(f"• item-{i:04d}.txt → organizado/arquivo/x" for i in range(300))
-        for jeito in ("lib", "antigo"):
-            with self.subTest(jeito=jeito):
-                for p in self.fila.glob("*.json"):
-                    p.unlink()
-                org.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.tmp / "sem-lib"]
-                self.assertTrue(calado(org.gravar_aviso, org.aviso_da_rodada(saida, {"ids": ["x"]}, AGORA))[0])
-                d = self.avisos()[0]
-                self.assertLessEqual(len(d["texto"]), 4000)
-                self.assertTrue(d["texto"].endswith("… (cortado)"))
-                if ds is not None:
-                    ds.validar_aviso(d)
+        org.PASTAS_DA_LIB = self.lib_do_repo
+        self.assertTrue(calado(org.gravar_aviso, org.aviso_da_rodada(saida, {"ids": ["x"]}, AGORA))[0])
+        d = self.avisos()[0]
+        self.assertLessEqual(len(d["texto"]), 4000)
+        self.assertTrue(d["texto"].endswith("… (cortado)"))
+        if ds is not None:
+            ds.validar_aviso(d)
 
 
 class Units(unittest.TestCase):

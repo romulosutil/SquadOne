@@ -15,8 +15,9 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
 
 "08 · CRM: retrato e registros (Site antes da venda + PRUMO)", três entradas:
 
-- A cada 10 min e POST /webhook/crm-atualizar (header X-CRM, para outros
-  fluxos chamarem depois de um evento): lê as abas Leads (Site), Prospects
+- A cada 10 min e POST /webhook/crm-atualizar (header X-CRM): hoje só o
+  `python3 crm.py --agora` o chama, para pedir um retrato na hora; nenhum outro fluxo
+  o usa (o registro da Central já refaz o retrato sozinho). Lê as abas Leads (Site), Prospects
   (PRUMO) e CRM e grava estado/crm.json (versão 1: as linhas com o cabeçalho
   como veio, sem colunas pesadas ou de contato cru; a Central decide as
   etapas em server/crm.ts). Leitura que falha (credencial do Google, cota)
@@ -38,9 +39,9 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
   para lead nenhum.
 
 Segredo: ~/.config/claude-ops/crm-segredo (600), nasce aqui e nunca é impresso;
-credencial "CRM Central" (Header Auth X-CRM) no n8n. Outro fluxo que queira
-atualizar o retrato depois de um evento: HTTP Request POST
-http://127.0.0.1:5678/webhook/crm-atualizar com essa credencial.
+credencial "CRM Central" (Header Auth X-CRM) no n8n. O "Atualizar agora" atende
+POST http://127.0.0.1:5679/webhook/crm-atualizar (a porta é a do host, LOCAL abaixo)
+com essa credencial; quem quiser pedir o retrato depois de um evento usa o mesmo caminho.
 
 Uso: python3 crm.py              aba CRM (se faltar) + credencial + publica e ativa o 08
      python3 crm.py --aba        só cria a aba CRM com o cabeçalho (precisa da credencial do Google viva)

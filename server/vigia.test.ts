@@ -4,14 +4,17 @@
  * Google nem a fila de avisos.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, it, mock } from "node:test";
 import { lerJanela } from "./alocador.ts";
-import { validarAviso, type Aviso } from "./avisos.ts";
+import { criarRegistroDeEnviados, publicarAvisoPessoal, validarAviso, type Aviso } from "./avisos.ts";
 import { PrecisaConectar } from "./auth-store.ts";
 import { listarQuestsDaJanela, type QuestCalendario } from "./calendar.ts";
 import { VARREDURA_MS } from "./lembretes.ts";
 import type { Roster } from "./squad.ts";
-import { avisoDeDesconexao, criarVigia, type DependenciasDaVigia } from "./vigia.ts";
+import { avisoDeDesconexao, CHAVE_DO_AVISO_DE_DESCONEXAO, criarVigia, type DependenciasDaVigia } from "./vigia.ts";
 
 const JANELA = lerJanela({});
 const AGORA = new Date("2026-09-14T12:00:00-03:00");
@@ -189,6 +192,116 @@ describe("vigia", () => {
     assert.equal(pedido!.ate.getTime(), AGORA.getTime() + 12 * 60_000);
   });
 
+  it("o aviso de desconexão tem chave fixa; a vigia esquece a chave quando o Google volta (só varredura real)", async () => {
+    assert.equal(avisoDeDesconexao(AGORA).chave, CHAVE_DO_AVISO_DE_DESCONEXAO);
+    assert.equal(avisoDeDesconexao(new Date(AGORA.getTime() + 3600_000)).chave, CHAVE_DO_AVISO_DE_DESCONEXAO);
+    const esquecidas: string[] = [];
+    const { vigia } = montar({ listar: async () => [], esquecerAviso: async (c) => void esquecidas.push(c) });
+    await vigia.varrer(AGORA, REAL);
+    assert.deepEqual(esquecidas, [CHAVE_DO_AVISO_DE_DESCONEXAO]);
+    await vigia.varrer(AGORA, { enviar: false, registrar: false });
+    assert.equal(esquecidas.length, 1, "a simulação não mexe no registro");
+  });
+
+  it("esquecerAviso que falha não derruba a varredura", async () => {
+    const { vigia } = montar({
+      listar: async () => [],
+      esquecerAviso: async () => {
+        throw new Error("disco cheio");
+      },
+    });
+    const r = await vigia.varrer(AGORA, REAL);
+    assert.equal(r.leituraCompleta, true);
+  });
+
+  it("cada leitura ao Google leva um AbortSignal com prazo (a vigia não pode ficar presa)", async () => {
+    const sinais: (AbortSignal | undefined)[] = [];
+    const { vigia } = montar({
+      listar: async (_t, _c, _de, _ate, sinal) => {
+        sinais.push(sinal);
+        return [];
+      },
+    });
+    await vigia.varrer(AGORA, REAL);
+    assert.equal(sinais.length, 1);
+    assert.ok(sinais[0] instanceof AbortSignal);
+    assert.equal(sinais[0]!.aborted, false);
+  });
+
+  it("calendário que falha marca a varredura como incompleta", async () => {
+    const { vigia } = montar({
+      listar: async () => {
+        throw new Error("timeout");
+      },
+    });
+    assert.equal((await vigia.varrer(AGORA, REAL)).leituraCompleta, false);
+    const ok = montar({ listar: async () => [] });
+    assert.equal((await ok.vigia.varrer(AGORA, REAL)).leituraCompleta, true);
+  });
+
+  describe("ultimaVarreduraOkEm e ocupada (o sinal de vida e o /api/runtime leem daqui)", () => {
+    const flush = async () => {
+      for (let i = 0; i < 5; i++) await new Promise<void>((r) => setImmediate(r));
+    };
+
+    it("só uma volta do laço completa e com credencial conta; a varredura avulsa não", async () => {
+      const { vigia } = montar({ listar: async () => [] });
+      assert.equal(vigia.ultimaVarreduraOkEm(), null);
+      await vigia.varrer(AGORA, REAL);
+      assert.equal(vigia.ultimaVarreduraOkEm(), null, "varrer() direto é a rota de teste, não o laço");
+      const parar = vigia.iniciar(() => AGORA);
+      await flush();
+      parar();
+      assert.equal(vigia.ultimaVarreduraOkEm(), AGORA.getTime());
+    });
+
+    it("sem credencial, calendário com erro ou exceção: não atualiza", async () => {
+      let modo: "semCredencial" | "erro" | "ok" = "semCredencial";
+      const { vigia } = montar({
+        obterToken: async () => {
+          if (modo === "semCredencial") throw new PrecisaConectar("sem credencial");
+          return "tk";
+        },
+        listar: async () => {
+          if (modo === "erro") throw new Error("503");
+          return [];
+        },
+      });
+      let agora = AGORA;
+      const parar = vigia.iniciar(() => agora);
+      await flush();
+      assert.equal(vigia.ultimaVarreduraOkEm(), null);
+      parar();
+      for (const proximo of ["erro"] as const) {
+        modo = proximo;
+        const p = vigia.iniciar(() => agora);
+        await flush();
+        p();
+        assert.equal(vigia.ultimaVarreduraOkEm(), null, proximo);
+      }
+      modo = "ok";
+      agora = new Date(AGORA.getTime() + 60_000);
+      const p = vigia.iniciar(() => agora);
+      await flush();
+      p();
+      assert.equal(vigia.ultimaVarreduraOkEm(), agora.getTime());
+    });
+
+    it("ocupada() é verdadeira enquanto a volta está em andamento", async () => {
+      let soltar!: () => void;
+      const travada = new Promise<void>((r) => (soltar = r));
+      const { vigia } = montar({ listar: async () => (await travada, []) });
+      assert.equal(vigia.ocupada(), false);
+      const parar = vigia.iniciar(() => AGORA);
+      await flush();
+      assert.equal(vigia.ocupada(), true);
+      soltar();
+      await flush();
+      parar();
+      assert.equal(vigia.ocupada(), false);
+    });
+  });
+
   it("iniciar: falha permanente loga uma vez, não a cada tick (F2)", async () => {
     const logs: string[] = [];
     let falhar = true;
@@ -234,6 +347,58 @@ describe("vigia", () => {
     } finally {
       mock.timers.reset();
     }
+  });
+});
+
+// MSG-2 (19/10/2026): a Central reinicia a cada merge e a vigia varre no boot. Aqui o "reinício" é uma vigia
+// nova com um registro novo sobre o MESMO arquivo, e o envio é o real (publicarAvisoPessoal) com Telegram de dublê.
+describe("vigia + registro de 24 h: reinício da Central", () => {
+  async function ambiente() {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "squadone-vigia-"));
+    const arquivo = path.join(dir, "avisos-enviados.json");
+    const telegram: string[] = [];
+    const nova = (sobre: Partial<DependenciasDaVigia> = {}) => {
+      const registro = criarRegistroDeEnviados(arquivo, { log: { error() {} } });
+      return montar({
+        enviar: async (a) => {
+          await publicarAvisoPessoal(a, {
+            fila: dir,
+            telegram: async (t) => void telegram.push(t),
+            enviados: registro,
+            agora: () => AGORA,
+            log: { error() {} },
+          });
+        },
+        esquecerAviso: (c) => registro.esquecer(c),
+        ...sobre,
+      }).vigia;
+    };
+    return { nova, telegram };
+  }
+
+  it("lembrete na janela de 10 min não sai duas vezes depois do reinício", async () => {
+    const { nova, telegram } = await ambiente();
+    await nova().varrer(AGORA, REAL);
+    await nova().varrer(new Date(AGORA.getTime() + 20_000), REAL); // processo novo, memória vazia
+    assert.equal(telegram.length, 1);
+  });
+
+  it("'Google desconectado' não repete a cada reinício; uma perda nova depois de reconectar avisa de novo", async () => {
+    const { nova, telegram } = await ambiente();
+    let conectado = false;
+    const obterToken = async () => {
+      if (!conectado) throw new PrecisaConectar("sem credencial");
+      return "tk";
+    };
+    await nova({ obterToken, listar: async () => [] }).varrer(AGORA, REAL);
+    await nova({ obterToken, listar: async () => [] }).varrer(AGORA, REAL); // reinício, ainda desconectado
+    assert.equal(telegram.length, 1);
+
+    conectado = true;
+    await nova({ obterToken, listar: async () => [] }).varrer(AGORA, REAL); // voltou: a chave é esquecida
+    conectado = false;
+    await nova({ obterToken, listar: async () => [] }).varrer(AGORA, REAL); // perdeu de novo
+    assert.equal(telegram.length, 2);
   });
 });
 
@@ -392,5 +557,21 @@ describe("listarQuestsDaJanela", () => {
     assert.equal(busca.get("timeMin"), AGORA.toISOString());
     assert.equal(busca.get("singleEvents"), "true");
     assert.equal(busca.has("privateExtendedProperty"), false);
+  });
+
+  it("repassa o AbortSignal ao fetch: a leitura da vigia tem prazo e uma resposta parada vira erro", async () => {
+    let recebido: AbortSignal | null | undefined;
+    globalThis.fetch = ((_url: string, init?: RequestInit) => {
+      recebido = init?.signal;
+      return new Promise((_ok, falha) => {
+        init?.signal?.addEventListener("abort", () => falha(init.signal!.reason));
+      });
+    }) as unknown as typeof fetch;
+
+    const controle = new AbortController();
+    const leitura = listarQuestsDaJanela("tk", "primary", AGORA, new Date(AGORA.getTime() + 12 * 60_000), controle.signal);
+    controle.abort(new Error("prazo"));
+    await assert.rejects(leitura, /prazo/);
+    assert.equal(recebido, controle.signal);
   });
 });

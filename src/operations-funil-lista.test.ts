@@ -71,9 +71,8 @@ describe('sinalMaisForte', () => {
     assert.equal(sinalMaisForte(lead('a')), null)
   })
 
-  it('follow-up anotado nesta tela deixa de ser "Follow-up hoje"', () => {
-    const l = lead('a', { followupHoje: true })
-    assert.equal(sinalMaisForte(l, (t) => t === 'followup_enviado')?.texto, 'Follow-up anotado')
+  it('o follow-up de hoje, e o reenvio do só-robô com o nome dele', () => {
+    assert.equal(sinalMaisForte(lead('a', { followupHoje: true }))?.texto, 'Follow-up hoje')
     assert.equal(sinalMaisForte(lead('a', { followupHoje: true, reenvioDoRobo: true }))?.texto, 'Reenvio hoje (só robô)')
   })
 

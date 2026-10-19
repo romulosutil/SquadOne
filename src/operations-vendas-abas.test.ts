@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  ABAS_DE_VENDAS, ENDERECO_DO_ROTEIRO, SECOES_DE_ENTENDER, abaDaVista, enderecoDeVendas, lerEnderecoDeVendas, vistaDaAba,
+  ABAS_DE_VENDAS, ENDERECO_DO_ROTEIRO, NOME_DAS_ABAS, caminhoDaAba, SECOES_DE_ENTENDER, abaDaVista, enderecoDeVendas, lerEnderecoDeVendas, vistaDaAba,
 } from './operations/vendas-abas.ts'
 
 describe('abas de Vendas na ordem do trabalho', () => {
@@ -19,6 +19,15 @@ describe('abas de Vendas na ordem do trabalho', () => {
     assert.equal(vistaDaAba('entender', 'resultados'), 'resultados')
     assert.equal(vistaDaAba('entender', 'afazer'), 'funil')
     assert.equal(vistaDaAba('triagem', 'numeros'), 'triagem')
+  })
+})
+
+describe('os nomes das abas são um mapa só', () => {
+  it('a barra e as seções leem de NOME_DAS_ABAS, e o caminho diz Vendas › nome', () => {
+    assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), [NOME_DAS_ABAS.afazer, NOME_DAS_ABAS.triagem, NOME_DAS_ABAS.entender])
+    assert.deepEqual(SECOES_DE_ENTENDER.map((a) => a.rotulo), [NOME_DAS_ABAS.funil, 'Diagnóstico', NOME_DAS_ABAS.resultados])
+    assert.equal(caminhoDaAba('afazer'), 'Vendas › Conversas para você')
+    assert.equal(caminhoDaAba('numeros'), 'Vendas › Diagnóstico')
   })
 })
 

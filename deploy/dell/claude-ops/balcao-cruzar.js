@@ -1,24 +1,12 @@
 // Cruza os recibos (publicado.json) com a planilha e monta a abordagem.
 // Textos e utilitarios (VARIACOES, alocarRodada, telefoneE164, detalheDoBriefing...) vem de
-// site-mensagem.js, e o gate de pre-envio (conferirPrimeiraMensagem, resumoDoGate) de
-// gate-de-envio.js; o site-antes-da-venda.py poe os dois na frente deste codigo.
-
-// 18/10/2026: gate de pre-envio da 1a mensagem, sem modelo (copia JS do server/gate-de-envio.ts).
-// Confere o texto ja montado antes de o lead virar "pronto": marca sem preencher, frase de IA ou
-// de agencia, emoji, tamanho, link na 1a mensagem, nome invalido e "R$" fora do cardapio. Nunca
-// altera o texto nem o sorteio das letras. O motivo vai para a coluna gate_de_envio.
-//   'desligado': nao confere e nao grava a coluna (a saida e a de antes do gate);
-//   'avisar'   : o lead segue "pronto" e a coluna diz "aviso: <motivos>" (padrao: um falso-positivo
-//                nao pode travar a fila de venda; os textos de hoje passam no gate por teste);
-//   'bloquear' : o lead NAO vira "pronto" (um pronto que reprova volta a "novo", sem wa_link) e a
-//                coluna diz "barrado: <motivos>". O barrado nao entra no sorteio nem na contagem
-//                das letras: nao gasta a vez de ninguem.
-// O site-antes-da-venda.py troca este valor pela variavel de ambiente GATE_DE_ENVIO ao publicar.
-const GATE_DE_ENVIO = 'avisar';
-const MODO_DO_GATE = ['desligado', 'avisar', 'bloquear'].indexOf(GATE_DE_ENVIO) >= 0 ? GATE_DE_ENVIO : 'avisar';
+// site-mensagem.js; o site-antes-da-venda.py poe esse arquivo na frente deste codigo.
+// 19/10/2026: o gate de pre-envio (gate-de-envio.js, coluna gate_de_envio) saiu daqui. No modo padrao so
+// escrevia uma coluna que ninguem lia; o gate que protege roda na Central, sobre o texto que sai de verdade.
 
 // 29/09/2026: o link rastreado passa pela tailnet (tailscale serve /webhook ->
-// n8n do Dell), entao abre no celular com Tailscale, nao so no Dell.
+// n8n do Dell), entao abre no celular com Tailscale, nao so no Dell. Esta URL repete o LINKS do
+// site-antes-da-venda.py (codigo de no nao importa Python): o teste de la confere as duas.
 const LINKS = 'https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook';
 
 const recibos = $('Ler o JSON do recibo').all();
@@ -146,11 +134,7 @@ const pedidosDeLetra = aMontar
     placeId: m.pid, nicho: m.linha.vertical, eua: ehEua(telefoneE164(m.linha.telefone)), lead: leadDaVariante(m),
     salva: { letra: m.linha.mensagem_variante, elegiveis: m.linha.ab_elegiveis },
   }));
-// `barrados` (so no modo bloquear) saem do sorteio e a letra que a planilha guardava para eles deixa de
-// contar: o lead barrado nao gasta a vez de ninguem. Sem barrados, e a alocacao de sempre.
-const alocar = (barrados) => alocarRodada(
-  linhas.map(l => (barrados.has(l.json.place_id) ? { ...l.json, mensagem_variante: '', ab_elegiveis: '' } : l.json)),
-  pedidosDeLetra.filter(p => !barrados.has(p.placeId)));
+const alocadas = alocarRodada(linhas.map(l => l.json), pedidosDeLetra);
 
 // A mensagem do lead nesta rodada, montada com a letra que a alocacao decidiu (vazia = sem mensagem).
 function montarMensagem(m, alocadas) {
@@ -181,60 +165,21 @@ function montarMensagem(m, alocadas) {
   return { nome, manterWaMe, letra, elegiveis, mensagem, waLink };
 }
 
-// O gate so olha a 1a mensagem de quem vai virar (ou continuar) "pronto": o enviado sem site so ganha
-// o site, e a mensagem dele ja foi.
-const problemasDoLead = (m, alocadas) => {
-  if (MODO_DO_GATE === 'desligado' || m.semSite) return [];
-  const { nome, mensagem } = montarMensagem(m, alocadas);
-  return mensagem ? conferirPrimeiraMensagem(mensagem, nome) : [];
-};
-
-const barrados = new Set();
-const motivoDoBarrado = {};
-let alocadas = alocar(barrados);
-let problemas = {};
-const conferirTodos = () => {
-  problemas = {};
-  for (const m of aMontar) {
-    if (barrados.has(m.pid)) continue;
-    const achados = problemasDoLead(m, alocadas);
-    if (achados.length) problemas[m.pid] = achados;
-  }
-};
-conferirTodos();
-if (MODO_DO_GATE === 'bloquear') {
-  // Tirar um lead do sorteio pode trocar a letra dos que vinham depois dele (e o texto deles): confere de
-  // novo ate ninguem reprovar. Cada volta barra pelo menos um lead, entao termina em no maximo aMontar.length voltas.
-  for (let volta = 0; volta <= aMontar.length && Object.keys(problemas).length; volta++) {
-    for (const pid of Object.keys(problemas)) {
-      barrados.add(pid);
-      motivoDoBarrado[pid] = resumoDoGate(problemas[pid]);
-    }
-    alocadas = alocar(barrados);
-    conferirTodos();
-  }
-}
+// O item so tem campos que o Balcao escreve; vale igual quando cada um bate com a coluna da linha (texto, sem espaco sobrando).
+const igualALinha = (item, linha) => Object.keys(item)
+  .every(k => k === 'place_id' || String(item[k] ?? '').trim() === String(linha[k] ?? '').trim());
 
 for (const m of aMontar) {
   const { pid, rec, linha, status, waAtual, siteVersao, siteUrl, ehNovo, semSite } = m;
-
-  // Barrado (modo bloquear): nao vira "pronto". Quem ainda era novo so ganha o motivo; quem ja era
-  // pronto volta a "novo", sem o link de envio e sem a letra (que nao foi enviada, entao nada se perde).
-  if (barrados.has(pid)) {
-    const motivo = 'barrado: ' + motivoDoBarrado[pid];
-    saida.push({ json: ehNovo ? { place_id: pid, gate_de_envio: motivo }
-      : { place_id: pid, status: 'novo', wa_me: '', wa_link: '', mensagem_variante: '', ab_elegiveis: '', gate_de_envio: motivo } });
-    continue;
-  }
 
   const { manterWaMe, letra, elegiveis, waLink } = montarMensagem(m, alocadas);
   // Sem demo e sem mensagem possivel (EUA, ou o raio-x sem pontos): o lead fica como esta, sem virar pronto.
   if (!siteUrl && !waLink && !manterWaMe) continue;
 
-  // 23/09/2026: wa_link passa a ser o link rastreado do n8n do Dell. O clique
-  // marca o lead como enviado e redireciona para o wa.me real, guardado em wa_me.
+  // 23/09/2026: wa_link passa a ser o link rastreado do n8n do Dell. O clique grava clique_em (o rastro,
+  // nunca o envio: quem marca "enviado" e o observador) e redireciona para o wa.me real, guardado em wa_me.
   const waMe = waLink || String(linha.wa_me || '').trim() || (waAtual.indexOf('https://wa.me/') === 0 ? waAtual : '');
-  saida.push({ json: {
+  const item = {
     place_id: pid,
     status: ehNovo ? 'pronto' : status,
     site_url: siteUrl,
@@ -245,16 +190,15 @@ for (const m of aMontar) {
     // 08/10/2026: o link do Raio-X vai para a planilha porque a segunda mensagem (aviso de
     // interesse e ficha do CRM) e montada da linha, nao do recibo. Vazio sem Raio-X no ar.
     raio_x_url: String(rec.raio_x_url || '').trim(),
-    // A variacao que o wa_link leva, so enquanto o lead nao foi enviado: o clique marca
-    // "enviado" e a letra fica; envio que o observador ve sem o clique vira "manual".
+    // A variacao que o wa_link leva, so enquanto o lead nao foi enviado: o observador mantem a letra
+    // quando ve o envio ate 15 min depois do clique (clique_em); sem o clique, grava "manual".
     // ab_elegiveis (14/10/2026) vai na MESMA escrita: as letras do sorteio, que dizem com quem a
     // letra pode ser comparada. Congela junto com a letra quando o lead sai de "pronto".
     ...(semSite ? {} : { mensagem_variante: letra, ab_elegiveis: elegiveis }),
-    // Gate de pre-envio (18/10/2026): o aviso do modo 'avisar', ou vazio quando a mensagem passou
-    // (limpa o aviso de uma rodada anterior). Desligado, a coluna nem entra na escrita.
-    ...(MODO_DO_GATE === 'desligado' || semSite ? {}
-      : { gate_de_envio: problemas[pid] ? 'aviso: ' + resumoDoGate(problemas[pid]) : '' }),
-  } });
+  };
+  // 19/10/2026: o "pronto" e remontado toda hora; item igual ao que a planilha ja tem nao vai para a escrita
+  // (antes cada rodada regravava todas as linhas "pronto" sem mudar nada).
+  if (!igualALinha(item, linha)) saida.push({ json: item });
 }
 
 // Os descartes (lidos antes da alocação) que ainda estão "novo" na planilha.

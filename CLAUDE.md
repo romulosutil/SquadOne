@@ -61,12 +61,16 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
   server/calendar.ts      leitura/escrita no Google Calendar (listar, GET/PATCH/POST de um evento)
-  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 também no Telegram, cartões, sem R$;
-                          lembrete e alerta de finanças pelo Telegram, fila só de reserva (publicarAvisoPessoal, OT-14)
+  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 nos dois canais (capacidade pronta: nenhum chamador o produz), sem R$;
+                          lembrete e alerta de finanças pelo Telegram, fila só de reserva (publicarAvisoPessoal, OT-14); a chave de 24 h dos avisos pessoais
+                          fica em disco (RegistroDeEnviados, avisos-enviados.json), porque a Central reinicia a cada merge; o cartão de decisão saiu (19/10/2026)
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
-  server/vigia.ts         laço de 60 s: relê a agenda e publica os lembretes devidos e, às 7h30–11h, o resumo matinal (1 por dia)
+  server/vigia.ts         laço de 60 s: relê a agenda (cada leitura com prazo de 15 s) e publica os lembretes devidos e, às 7h30–11h, o resumo matinal (1 por dia);
+                          ultimaVarreduraOkEm alimenta o sinal de vida e ocupada() o /api/runtime
   server/resumo-matinal.ts  PURO (17/10/2026): quando sai (resumoDevido) e o texto da agenda do dia (montarResumo); SQUADONE_RESUMO_MATINAL=false desliga
-  server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min
+  server/sinal-de-vida.ts ping ao healthchecks.io (DEADMAN_URL); /fail com o WhatsApp fora há > 15 min ou a vigia sem varredura completa há > 5 min
+  server/tempo.ts         PURO (19/10/2026): o relógio de São Paulo num lugar só (diaDeSP, horaDeSP, ehMadrugada 22h–7h); era "menos 3 h" copiado por módulo
+  server/em-serie.ts      fila de uma tarefa por vez (criarEmSerie) e anexarJsonl (JSONL 600 em pasta 700): vendedor, venda-do-dia, lead quente, copiloto, Assistente
   server/time.ts          time vivo da Hoje: agruparTimePorSquad (PURO) + leitor de /api/time (1 leitura por calendário, cache 60 s)
   server/passos.ts        PURO: normaliza os passos, título da lista, notas e due da tarefa-mãe, escopo concedido
   server/tasks.ts         transporte do Google Tasks: lista, tarefa, ErroTasks classificado, timeout 10 s
@@ -86,19 +90,18 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           sinais do site (17/10/2026): o dossiê leva sinaisDoSite (sinaisParaODossie, PURO) só com sinais COM fonte, em observação cautelosa (tag/pixel instalado nunca vira gasto; agência só
                           contexto, sem abrir), e o prompt ganha a regra de UMA observação na 1ª linha só quando há sinais; sem sinais o hash do dossiê não muda; nenhum template do funil muda (experimento A/B/C)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
-                          um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+                          um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min só se a última mensagem é do lead) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead;
+                          teto de 40 avisos que SAÍRAM por dia (o "quero ver" quente passa por cima); quem faz o 1º contato é a regra da Central (primeirosDoTime); o dia do servidor (venda-do-dia) é obrigatório
   server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
                           POST /crm/frente/reservar (o time pede UM primeiro contato: mesma janela e ritmo da Central, gate em "bloquear", grava o
                           primeiro do dia `por: "time"` na fila do venda-do-dia); `doTime` em GET /crm/venda. O time em si é deploy/dell/frente-comercial.py:
-                          o ÚNICO agente que ENVIA a lead (o 1º contato do Site `pronto`, texto do Balcão, pela Evolution do PRUMO), DESLIGADO por padrão
+                          o ÚNICO agente que ENVIA a lead (o 1º contato do Site `pronto`, texto do Balcão, pela Evolution do PRUMO). Dois interruptores: `ativo` no config e o
+                          timer do systemd; GET /crm/frente diz `cicloParado` (ativo, sem rodada há > 5 min no expediente) e `ultimaRodadaEm`. Estado real: ver "Perfis"
   server/gate-de-envio.ts PURO (17/10/2026, ideia do Harvey): gate de pré-envio sem modelo: marca de modelo sem preencher, frase de IA/emoji, tamanho e links por tipo, nome vazio/com lixo,
                           "R$" fora dos permitidos (reusa precosProibidos do copiloto) e número do wa.me ≠ o do registro (chaveDoNumero). `modo`: copiloto e vendedor com mensagem do
                           copiloto = "bloquear" (falha gate_de_envio, sem Copiar, aviso do Telegram barrado com o motivo); texto da esteira = "avisar" (linha "Confira", botão fica);
-                          destinatario_diferente bloqueia sempre. Nunca reescreve nem envia.
-  deploy/dell/claude-ops/gate-de-envio.js  (18/10/2026) cópia em JS do gate, tipo "primeiro", embutida no nó do Balcão entre site-mensagem.js e balcao-cruzar.js; modo na constante GATE_DE_ENVIO
-                          do balcao-cruzar.js (avisar = padrão: lead segue pronto e a coluna gate_de_envio diz "aviso: …"; bloquear: lead não vira pronto, sai do sorteio sem gastar a vez; desligado = saída
-                          de antes); site-antes-da-venda.py --balcao troca a constante pela env GATE_DE_ENVIO; nunca altera o texto nem o sorteio; server/gate-de-envio-balcao.test.ts compara as duas cópias.
-                          Só vale no Dell depois de reinstalar claude-ops e rodar --balcao (README do Dell, seção do gate)
+                          destinatario_diferente bloqueia sempre. Nunca reescreve nem envia. Fonte única desde 19/10/2026 (a cópia em JS do Balcão, que só escrevia uma coluna que
+                          ninguém lia, saiu); o time comercial também o cumpre em "bloquear" ao pedir a reserva.
   server/sinais-do-site.ts  PURO (17/10/2026, estágio PROFILE do Harvey, MIT): HTML do site do lead -> sinais tri-estado (temAgencia com confiança ≥ 0,75, rodandoGoogleAds/MetaAds,
                           semAgendamentoOnline, semSchema, blogParado, semSite; null = sem fonte), ajusteDaPrioridade (−4 a +6: anúncio +4, sem agenda +2, agência −4) e linhasDosSinais (a Ficha)
   server/sinais-do-site-leitor.ts  leitura sob demanda de UM lead (POST /api/operations/crm/sinais, ao abrir a Ficha): ≤ 3 requisições, 10 s, 2 MB, bloqueio de SSRF (IP privado/loopback/
@@ -112,13 +115,18 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           desde 17/10/2026 (AC-06) é a fonte única do dia: por onde cada ação se resolveu (central, telegram,
                           expirou), a anotação no CRM uma vez por ação + tipo (/crm/venda/anotar) e os primeiros contatos das duas
                           superfícies (/crm/venda/primeiro, a trava de ritmo); o aviso aberto no Telegram fecha quando a Central resolve;
-                          e os liberados do dia (AC-21, POST /api/operations/crm/venda/liberar), o mesmo "Liberar" para Próxima venda, Triagem e Ficha
+                          e os liberados do dia (AC-21, POST /api/operations/crm/venda/liberar), o mesmo "Liberar" para a fila de venda, a Triagem e a Ficha
   server/conversa-do-lead.ts  (16/10/2026) a conversa do lead como o observador grava (~/.local/share/whatsapp-conversas/<chave>.jsonl, chave = DDD + 8
                           últimos dígitos do NÚMERO, nunca o id da planilha); resumo PURO (última mensagem, link já mandado) que o CRM, a Próxima
                           venda e o copiloto usam; toque em "Mandar o link" sem mensagem perto não conta como envio; GET /api/operations/crm/conversa?id=;
                           desde 17/10/2026 (a Baobá) o `papel` da entrada (recepção/robô; o robô não é resposta nem recomeça o prazo), a mídia nossa
                           ("[vídeo]") vale como o link e o áudio não ouvido é dito assim (src/operations/marcadores-da-conversa.ts, PURO);
                           `resposta.tipo = "licenca"` é permissão para mandar o material, nunca "quero ver"
+  server/decisoes-comerciais.ts, revisao-resposta.ts, importar-conversa.ts, protecao-comercial.ts, convite-mensagem.ts  (18–19/10/2026) a decisão humana sobre o lead,
+                          como nota na aba CRM pelo n8n e, nas de decisão, com o hash do contexto do lead (409 se mudou, trava de repetição de 15 min): confirmar a revisão da
+                          classificação ou um convite enviado à mão (POST /crm/decisao/confirmar), ajustar o próximo passo (POST /crm/proximo-passo/ajustar, GET /crm/resposta/contexto),
+                          importar a exportação do WhatsApp para a conversa em disco (POST /crm/conversa/importar), e proteger a demo/pedir revisão (PURAS). Nada gera nem envia mensagem
+  server/entrada-proxy.ts repasse fechado de /entrada/ ao serviço da Entrada da Mel (127.0.0.1:9130, deploy/dell/entrada/), antes do express.json (RULES 23)
   server/operations.ts    perfil `operations` (só Dell): SQUADONE_MODE, bind loopback, rotas /api/operations/*
   server/auto-production.ts   Central: leitura das pastas de ~/auto-site para o CRM (somente leitura)
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
@@ -145,7 +153,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
 src/main.ts -> src/RootApp.vue  pergunta /api/runtime (perfil e `agenda`) e monta a casca com { perfil, agentes }
 src/App.vue               a casca (07/10/2026): rota atual, barra inferior/lateral, Ctrl+K, folhas do roster, aviso; no operations
                           três menus desde 17/10/2026 (Central de comando · ＋ Assistente · Vendas) e a Manutenção discreta (engrenagem)
-  src/casca/              destinos.ts (PURO: rota por perfil, barra, destinoDiscreto, Ctrl+K), central.ts (PURO, 17/10/2026: as faixas da
+  src/casca/              frente.ts (a leitura do time comercial, uma por aba, compartilhada pela Central e pelo painel), destinos.ts (PURO: rota por perfil, barra, destinoDiscreto, Ctrl+K), central.ts (PURO, 17/10/2026: as faixas da
                           Central de comando, o andar do mapa, ?abrir=), hoje.ts (PURO: ordem da Hoje,
                           semáforo das finanças, estado do time só com fonte, linha do funil; no operations a Hoje não tem o bloco Time, AC-18),
                           paleta.ts (PURO, AC-23: leads no Ctrl+K pelo nome da empresa, 8 no máximo, nunca telefone nem id na tela, leitura
@@ -166,35 +174,43 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           resumoDoDell (17/10/2026, AC-17) é o número único do topo, da Hoje e do Mais ("precisam de você" e
                           "resolvem sozinhas"); a Hoje mostra só os títulos, o técnico fica em Mais › Manutenção
     AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
-    Crm*.vue, crm-formato.ts  Vendas (/crm): A fazer, Triagem, Funil (Quadro | Lista, filtros Buscar, Nicho, Cidade e Passo;
-                          ?ver=jornada cai no Funil com ?passo=) e Números, mais a Ficha (folha cheia); o Roteiro mora em Mais › Entender
+    Crm*.vue, crm-formato.ts  Vendas (/crm): Conversas para você (id afazer), Primeiros contatos (id triagem: o painel do time e a Triagem), Funil (Quadro | Lista, filtros Buscar, Nicho, Cidade e Passo;
+                          ?ver=jornada cai no Funil com ?passo=) e Diagnóstico (id numeros), mais a Ficha (folha cheia); os nomes da tela são NOME_DAS_ABAS (vendas-abas.ts); o Roteiro mora em Mais › Entender
                           (/mais?abrir=roteiro), e ?ver=roteiro/colinha vão para lá; no celular as abas rolam de lado e as ofertas ficam num
-                          "Filtros" fechado, nunca na A fazer; SIGLA_DO_PRODUTO é o rótulo curto único (ROTULO_DO_PRODUTO, o longo);
+                          "Filtros" fechado, nunca nas Conversas para você; abrir o WhatsApp nunca registra envio: "Enviei", "Marcar a recusa" e "Pular por hoje" (MissaoDaConversa.vue) gravam e resolvem; SIGLA_DO_PRODUTO é o rótulo curto único (ROTULO_DO_PRODUTO, o longo);
                           textoDaSubEtapa/textoDoEvento traduzem o "Fechou"/"Viu" do servidor para Ganho/Leu (AC-13)
     glossario.ts          PURO (17/10/2026, AC-13): um nome por coisa na UI (Vendas, Ganho/Ganhou, Roteiro, 2ª mensagem, Leram,
                           Atualizar, Escritório, A fazer, as ofertas) e os nomes proibidos; src/operations-glossario.test.ts varre o texto
                           visível de todo .vue e .ts de src/ e falha se um deles voltar
     liberados.ts          o espelho único do "Liberar" do dia (AC-21), do corpo de GET /crm/venda; primeiro-da-ficha.ts PURO (AC-22): quando a
+    proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar (responder > mandar a proposta > combinado >
+                          "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up > recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo
+                          livre), com o porquê, a tática e a mensagem pronta. Ninguém a desenha como cartão desde 19/10/2026 (ProximaVenda.vue saiu): ela é o "Agora" da Ficha
+                          (acaoDoLead/agoraDaFicha), o "Envie para X" do Telegram e, por filaDaTela, a lista "Conversas para você". fraseDaAcao é a frase única do passo (AC-12),
+                          linkDoPasso escolhe o link pelo tipo e nunca abre o gerar_demo (AC-05), desfechosDoLead alimenta a faixa "Desfecho" da Ficha (AC-08), anotacoesAMao o
+                          anotar à mão (AC-09); COM_COPILOTO é só `responder` (nos outros passos o copiloto nunca responde)
+    conversas-para-conduzir.ts  PURO (18–19/10/2026): "Conversas para você", a aba inicial de Vendas e o "Sua vez" da Central, uma lista só: a conversa guardada e o combinado
+                          de hoje ou atrasado mais, vindos da fila de venda, o follow-up do 3º dia, o "o que achou?", a proposta sem retorno, a recusa a marcar e a proposta a mandar
+                          (conversasParaVoce); primeiro contato não entra (é do time e do Telegram); o "Enviei"/"Pular" do dia (GET /crm/venda) tira o passo ou o manda para o fim
+    guardador.ts          o pedaço de Storage que as marcas locais usam (ritmo, Triagem, filtro por motivo); localStorage pode lançar, quem usa envolve em try/catch
+    aprendizado-comercial, historico-comercial, decisoes-comerciais, retomadas, retorno-da-venda, acompanhamento-observado, ajuste-do-passo, revisao-resposta, importar-conversa  (PUROS, 18–19/10/2026)
+                          a camada de decisão humana sobre o lead, tudo sobre as notas da aba CRM (nenhuma fonte nova): o aprendizado (fato, hipótese, teste, resultado; a automática nunca vira
+                          humana), a cobertura honesta do histórico (ausência exige revisão), a revisão de classificação e o convite à mão (decisoes-comerciais), os próximos passos datados do dia
+                          em SP (retomadas), o retorno como a última anotação humana, o que um evento observado prova (envio sim, tarefa concluída nunca), o ajuste do passo, o hash do contexto
+                          antes de abrir a mensagem (revisao-resposta) e a exportação do WhatsApp (importar-conversa); os testes ficam em src/office/ e src/operations-*.test.ts
+  src/office/ (camada comercial)  missao.ts (os marcos da missão da conversa), andamento.ts, comando.ts (o controle por sala), rascunhos.ts, movimento.ts, foco.ts; SalaComando,
+                          MissaoDaConversa (os botões explícitos Enviei/Marcar a recusa/Pular), ConversaDoAgente, RevisarResposta, AjustarProximoPasso, AndamentoDaVenda, AcompanhamentoObservado, SpriteDaSala
+  src/casca/ (resto)      atualizacao-viva.ts (uma leitura por vez, com prazo, retomada ao voltar ao app), tema.ts (PURO)/temaVivo.ts/SeletorDeTema.vue (claro/escuro), AssistentePainel/AssistenteCartao.vue
                           Ficha oferece o primeiro contato de um Novo (o ritmo antes do horário, desabilitado com o motivo)
     primeiro-contato.ts   PURO (19/10/2026): quem faz o 1º contato (quemFazOPrimeiroContato: a fila do time ligado, ou o envio que ele começou,
                           é do time; o resto, do Rômulo), elegivelParaOTime (só Site `pronto`, nunca `revisar`/Plus) e reservaDoTime (EXPEDIENTE_DE_VENDA
-                          e REGRAS_DO_RITMO contando todas as superfícies). A Próxima venda e o vendedor tiram da fila o 1º contato dos leads do time
-    proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
-                          (responder > mandar a proposta > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
-                          recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem
-                          pronta; ProximaVenda.vue é o 1º cartão da Hoje e a aba "A fazer" inteira (a fila única, OT-01); o vendedor do Telegram
-                          usa a mesma fila; a Ficha mostra a ação dela no "Agora" (OT-04)
+                          e REGRAS_DO_RITMO contando todas as superfícies). A fila de venda e o vendedor tiram o 1º contato dos leads do time
     mandar-proposta.ts    PURO (16/10/2026): "Mandar a proposta" em um toque: quem gostou depois do link ("gostei", "quanto fica")
                           ganha o primário na Ficha e o passo na fila; o toque abre o wa.me com a proposta (itens do copiloto e preços
                           do cardápio, ou o texto base da colinha) e anota `proposta` com a data de hoje; "R$" fora do cardápio = sem botão
     por-que-nao-vende.ts  PURO (16/10/2026): o funil dos 30 dias em degraus e o gargalo contra referências (PorQueNaoVende.vue:
                           na Hoje o gargalo, quem está parado nele (nomes que abrem a Ficha) e a trilha dos degraus numa linha,
                           `resumido`; as barras e a taxa esperada em Números, OT-08; 17/10/2026)
-    plano-do-dia.ts       PURO (17/10/2026): a Hoje abre dizendo o dia (feitas, falta, janela de envio até as 17h30 ou quando volta,
-                          urgente a 45 min) e, com a fila vazia, o próximo passo do gargalo; o cartão da Próxima venda chama
-                          "Envie para X, isto:" (`chamadaDaAcao`) com a mensagem sempre à vista, e `fraseDaAcao` virou o porquê
-    fila-de-envio.ts      PURO: as marcas de toque e do "Vídeo enviado" (A/B do vídeo) no localStorage por 30 min; a folha
-                          "Enviar um por um" saiu em 16/10/2026 (OT-01) e o passo do vídeo foi para a Próxima venda
     ab-recibo.ts          PURO (16/10/2026, OT-10): teste do follow-up para quem não manda recibo: Site enviado desde 17/10, metade
                           por sorteio fixo da chave recebe o follow-up do 3º dia; Números compara resposta e exclusão (Fisher)
     velocidade.ts         PURO (16/10/2026, OT-09): Números abre com "Depois do sim": do "quero ver" ao link e do link à proposta
@@ -205,12 +221,6 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois;
                           leu/respondeuDeGente/quisVer/enviadoNosUltimos são a ÚNICA regra de Números e do "Por que não
                           está vendendo", e taxaPorExpediente (só Site) alimenta o avisoDeHorario (17/10/2026, AC-03)
-    proxima-venda.ts      PURO: a fila de venda (filaDeVenda, a mesma do vendedor), a fila da tela (filaDaTela) e a contagem do
-                          dia (resumoDoDia): a aba "A fazer N", o "N na fila" e o "Ver a fila inteira (N)" leem dela, N com a
-                          atual (17/10/2026, AC-02); ProximaVenda.vue abre a Ficha na página pelo @abrir do CrmPanel (AC-01);
-                          fraseDaAcao é a frase única do passo (cartão, Telegram e o "Agora" da Ficha, via acaoDoLead/agoraDaFicha,
-                          AC-12), linkDoPasso escolhe o link pelo tipo e nunca abre o gerar_demo (AC-05), desfechosDoLead alimenta a
-                          faixa "Desfecho" da Ficha (AC-08) e anotacoesAMao o anotar à mão (AC-09)
     triagem.ts            PURO (17/10/2026, AC-10): a Triagem (/crm?ver=triagem, CrmHoje.vue) em lotes de 10 fixos (o próximo só
                           depois de decidir o atual); Convidar (travas de horário e ritmo com o motivo curto) e Dispensar (registro
                           dispensado, Desfazer por 8 s, "Dispensar os que sobraram" em série com segundo toque); marca local podada
@@ -224,13 +234,10 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     funil-lista.ts        PURO (16/10/2026): a Lista do Funil no desktop (Quadro | Lista, BP-TABELA): um sinal por linha, o mais
                           forte (Resposta nova > Follow-up hoje > Perdido amanhã > Divergência > resto), ordem por último toque e
                           próximo passo. Os Lançamentos também viram <table> a partir de 64 rem (FinEditorDeLancamento.vue)
-    anotacao-de-envio.ts  PURO (14/10/2026): o toque em "Mandar o link"/"Mandar o follow-up" (Hoje, Funil, Ficha) anota
-                          segunda_enviada/followup_enviado na aba CRM em segundo plano; marca local até o retrato confirmar
-                          (10 min); falha = "anote à mão", o WhatsApp abre igual. Interesse parado não some da Hoje (server/crm.ts)
     trava-de-horario.ts   PURO (14/10/2026): o aviso também TRAVA o link de primeiro contato (fila, Hoje, Funil, Ficha) até o
                           "Liberar" daquele lead, só em memória (depois das 18h: 0 de 29 envios com resposta);
                           desde 16/10 (OT-02) é a janela única de envio (EXPEDIENTE_DE_VENDA, seg–sex 8h–17h30) para o CRM, a
-                          Próxima venda (que ganhou o "Liberar") e o Telegram; o trecho do Roteiro não abre o WhatsApp antes do 1º contato;
+                          fila de venda (que ganhou o "Liberar"), o time comercial e o Telegram; o trecho do Roteiro não abre o WhatsApp antes do 1º contato;
                           primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     trava-de-ritmo.ts     PURO (15/10/2026, depois da restrição de 24 h do WhatsApp por 25 envios em 25 min): primeiro contato
                           no máximo 1 a cada 5 min, 12 por hora e 100 por dia (19/10/2026, decisão do Rômulo; era 4 min, 8/h e a
@@ -240,9 +247,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           WhatsApp publicado antes do "não confirmado"
     recado-de-travas.ts   PURO (17/10/2026, hierarquia de Vendas): as duas travas num recado só com o próximo passo ("Fora do
                           expediente: volta segunda às 8h", "Libera às 14:20 (ritmo)") e o que continua livre; RecadoDeTravas.vue
-                          (BP-TRAVAS) na Próxima venda, na Triagem (o "Liberar" uma vez por lote) e na Ficha. Não muda as travas
-    vendas-abas.ts        PURO (17/10/2026): as abas de Vendas na ordem Fazer (A fazer) → Triar (Triagem) → Entender (Funil, Números,
-                          Resultados num segmentado + "Roteiro de venda") e o endereço ?ver= de cada uma (os links antigos seguem)
+                          (BP-TRAVAS) na Triagem (o "Liberar" uma vez por lote) e na Ficha. Não muda as travas
+    vendas-abas.ts        PURO (17/10/2026): as abas de Vendas na ordem Fazer → Triar → Entender (Funil, Diagnóstico, Resultados num segmentado + "Roteiro de venda"), o nome
+                          de cada uma num mapa só (NOME_DAS_ABAS, 19/10/2026) e o endereço ?ver= de cada uma (os links antigos seguem)
     ab-video.ts           PURO: A/B do vídeo no envio (coluna braco_video, sorteio pelo place_id, Fisher, veredito);
                           só mede, nada ligado sem a coluna; ver docs/referencia/perfis-e-experimentos.md
     ab-mensagem.ts        PURO (14/10/2026): A/B estratificado da 1ª mensagem em Resultados ("A × B (mesmo sorteio, por nicho)"):
@@ -318,7 +325,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
 | Perfis, avaliação de turno, Luna, Jev, copiloto, lead quente | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto`, `lead-quente*` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
-| WhatsApp do número do PRUMO (Evolution API: o observador só lê; o time comercial, desligado por padrão, é o único que envia, e só o 1º contato) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
+| WhatsApp do número do PRUMO (Evolution API: o observador só lê; o time comercial, ver "Perfis", é o único que envia, e só o 1º contato) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 | Service blueprint (Site, PRUMO, Ofertas, Agenda; códigos `SITE-3-B2`; desde 16/10 de uso: Lado a lado, Telas `TELA-nn` e otimizações `OT-nn` com a triagem do Rômulo no banco do Artifact) | `docs/blueprint/servico.json` (fonte), `servico.html` (Artifact) | `docs/blueprint/README.md`; atualize o cartão no mesmo commit em que o passo muda (o teste confere códigos e arquivos); antes de atacar uma OT, leia a decisão dela (`ArtifactData list decisoes`) |
@@ -340,9 +347,9 @@ checkout; no Dell nunca semeia o roster (`RosterAusente`). `SQUADONE_ROSTER_CONG
 recusa escrita (409). Acesso: identidade do Tailscale Serve em todo pedido e escrita só da
 mesma origem (curl local de escrita precisa de `-H 'Origin: http://127.0.0.1:9120'`). OAuth do
 Google só pelo loopback. Avisos: schema da fila do Dell, gravação atômica, nenhum "R$" passa,
-P0 também vai ao Telegram; lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
-fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz); as falhas do
-`dell-status` e o aviso do `socorro` também, com o token lido do `operations.env`, nunca copiado. Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
+P0 vai aos dois canais (capacidade pronta, ninguém o produz); lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
+fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz), com a chave de 24 h em disco (`avisos-enviados.json`); as falhas do
+`dell-status`, o `socorro`, o backup, o `atualizar-central`, o sync do Silmer e os avisos dos fluxos do n8n também, com o token lido do `operations.env`, nunca copiado. Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
 para o futuro; só o `operations` roda vigia (dois processos duplicariam cada aviso).
 `POST /api/avisos/varrer` simula sem gravar.
 
@@ -360,11 +367,15 @@ arquivo não muda (o Easypanel, reserva fria, o lê). Contratação aplica na sq
 O Escritório é só frontend e não grava nada; estado de pessoa só com fonte, nunca inventado.
 
 **Perfis.** `SQUADONE_MODE`: `app` (Easypanel) ou `operations` (Dell, só loopback); valor
-desconhecido derruba o boot. A Central é somente leitura para serviços. A home (Central de comando no
+desconhecido derruba o boot. A Central é somente leitura para **serviços e infraestrutura** (nunca para, reinicia nem reconfigura n8n, Hermes, Docker, systemd),
+mas **grava domínio**, por gesto ou regra fixa: o registro do CRM (pelo webhook do n8n), o dia da venda (`venda-do-dia.json`), o estado do vendedor e do lead quente,
+os JSONL do copiloto e do Assistente, o contador de uso, a conversa importada, o config do time comercial, as finanças e a fila de avisos. A home (Central de comando no
 operations, Hoje no app) mostra no
-máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra estão **desligadas** por
-padrão; a Luna é medição, nunca motor, e nunca vai ao Easypanel. O Jev em sombra
-(RULES 27) também: desligado, só mede, nunca no Easypanel, finanças nunca vão a ele.
+máximo 3 cartões (RULES 13). Avaliação de turno e Luna em sombra nascem **desligadas** (padrão do código); a Luna em sombra é medição, nunca motor, e nunca vai ao Easypanel.
+O Jev em sombra (RULES 27) também: desligado por padrão, só mede, nunca no Easypanel, finanças nunca vão a ele. **Na Mel, segundo a auditoria de 19/10/2026, as duas estão
+LIGADAS** (`operations.env`/`jev.env`) **mas sem tráfego novo** desde que o Assistente substituiu o Pedir: desligar ou apontar para o Assistente é decisão do Rômulo. A "Luna é
+medição, nunca motor" vale só para a sombra: o `luna-workflows.service` (desde 18/10/2026, autorizado após erros 503 do Gemini) classifica o Caçador do Site e responde a Fonte do PRUMO
+para o n8n, com dois contratos fixos e sem ferramenta de escrita (`deploy/dell/README.md`).
 O copiloto do PRUMO (15/10/2026, `SQUADONE_COPILOTO=true`) também nasce desligado e só no `operations`: sugere
 a próxima mensagem e a proposta (desde 17/10/2026 no cartão do Assistente, não mais numa aba da Ficha), nunca envia; o modelo escolhe itens, os preços vêm do cardápio.
 O agente que mantém o lead quente (17/10/2026, decisão do Rômulo: ele segue nos primeiros contatos e no primeiro link; o agente cuida do lead depois
@@ -372,8 +383,9 @@ que o link saiu e o lead escreve) está só em **sombra** (`SQUADONE_LEAD_QUENTE
 responder/escalar/calar, grava JSONL e avisa o Rômulo no Telegram; **nada é enviado ao lead**, e a fase de envio (veto de 3 min, o agente se
 identificar como assistente) é decisão aberta dele em `perfis-e-experimentos.md`.
 O time comercial (19/10/2026, `deploy/dell/frente-comercial.py` + `server/frente-comercial.ts`) é o único agente que **envia** a lead:
-o primeiro contato do Site `pronto`, com o texto do Balcão, pela Evolution do número do PRUMO. Nasce **desligado** (timer desabilitado e
-`frente-comercial-config.json` sem `ativo: true`); religar é decisão do Rômulo. Cada envio pede reserva à Central (a mesma janela e o
+o primeiro contato do Site `pronto`, com o texto do Balcão, pela Evolution do número do PRUMO (o adaptador e o observador da Evolution só leem; quem envia é este). Há **dois interruptores em desacordo**:
+o `frente-comercial-config.json` está com `ativo: true` (autorizado pelo Rômulo em 18/10) e o `frente-comercial.timer` está parado na Mel, então nada é enviado; a tela mostra "ativo, mas o ciclo
+está parado" (`cicloParado`). Ligar o timer ou pausar o config é decisão do Rômulo. Cada envio pede reserva à Central (a mesma janela e o
 mesmo ritmo das telas e do Telegram, contando todos) e passa antes pelo clique rastreado do n8n (o registro de `enviado_em`, da letra e
 do `ab_elegiveis`); a Triagem (`revisar`) e o Plus ficam com o Rômulo. Detalhes em `perfis-e-experimentos.md`.
 O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia e LIGADO
@@ -431,7 +443,7 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Comentários e identificadores em **português**. Comentário explica *por quê*, não *o quê* — a maioria dos blocos aqui documenta a decisão e o que aconteceria sem ela.
 - Erros carregam classificação, não só mensagem: `ErroDeDominio.credencial`, `PedidoInvalido` (400) vs `ConflitoDeRoster` (409), `SquadInexistente` (409 + `squadInexistente: true`: a UI recarrega e cai na primeira squad), `SquadArquivada` (filha dela, mesmo 409 + flag), `RedacaoInvalida` (502 + `redacaoFalhou`), `ModeloOcupado` (503 + `modeloOcupado`), `RosterIlegivel` (500), `PrecisaConectar` vs `ErroDeConfig`, `JanelaMalConfigurada` (500 + `configuracao`), `ErroTarefa.motivo` (`precisaConectar`, `configuracao`, `semHorarioLivre`, `agendaIndisponivel`), `ErroTasks` (`ehCredencial` só 401, `escopoInsuficiente`, `apiDesligada`), `ListaSumiu`, `TasksSemResposta`, `EscopoNegado` (callback → `?auth=escopo_calendar_negado`), `AvisoTarefa.motivo: "ampliarAcesso"` (`server/orchestrator.ts`; carregado internamente em `AvisoDoCompromisso`, passos sem o escopo do Tasks: toast com "Autorizar Google Tasks", nunca logout), `TelegramMalConfigurado` (env do bot presente e ilegível: log de erro no boot, bot desligado, resto do app igual), `ErroDeTelegram` (`status` da Bot API, `null` quando nem houve resposta; só `console.error`, nunca derruba o turno nem a rota), `RosterAusente` (503 + `rosterAusente`: Dell sem o roster de produção), `RosterCongelado` (409 + `rosterCongelado`), `AvisoInvalido` (fora do schema da fila ou com R$: o aviso não é gravado), `SinalMalConfigurado` (`DEADMAN_URL` ilegível: log, sem sinal). A UI decide o que fazer pelo tipo.
 - Falha de uma parte não derruba o resto: um domínio com erro no Calendar não zera a Mochila inteira; um turno sem credencial ainda roda as capacidades que não tocam o Google; um compromisso que falha não impede os seguintes da série; a checklist do Tasks que falha não desfaz o compromisso.
-- Ao terminar tarefa: `git commit` + `git push`. O grafo é do Hermes no Dell (job "Graphify — projetos", às 03:00, sobre os clones vivos e os espelhos de todos os repositórios do GitHub; o PC consulta por SSH com `scripts/grafo.sh`); no Dell, `graphify update .` depois de mudar código; nunca no Windows. Depois do push, a Central do Dell se atualiza sozinha em até 10 min (`atualizar-central.timer`).
+- Ao terminar tarefa: `git commit` + `git push`. O grafo é do Dell (`graphify-projetos.timer` do systemd, às 03:00, sobre os clones vivos e os espelhos de todos os repositórios do GitHub; o PC consulta por SSH com `scripts/grafo.sh`); no Dell, `graphify update .` depois de mudar código; nunca no Windows. Depois do push, a Central do Dell se atualiza sozinha em até 10 min (`atualizar-central.timer`).
 
 ### Remote Infrastructure Directives
 - **Sem PR (14/10/2026, autorizado pelo Rômulo: "não é um produto").** Terminou, faz merge direto na `main` e push; não abra pull request. Vale também para o repo `prumo`. Branch remota muito atrás da `main` não entra sem olhar: reporte.

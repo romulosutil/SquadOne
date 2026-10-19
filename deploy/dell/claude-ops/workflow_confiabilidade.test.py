@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -133,7 +134,7 @@ class DiagnosticoDoDono(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Mesmo questionário do export, sem consultar o Google ou o n8n.
-        fixture=json.loads((BASE.parents[2]/'ops/n8n/workflows/prumo-diagnostico.json').read_text(encoding='utf-8'))[0]
+        fixture=json.loads((BASE/'testes/prumo-diagnostico.fixture.json').read_text(encoding='utf-8'))[0]
         fake=types.ModuleType('n8n')
         fake.api=lambda method,*args:fixture if method=='GET' else {}
         captured=[];fake.put=captured.append
@@ -165,6 +166,95 @@ class DiagnosticoDoDono(unittest.TestCase):
         nodes={'Ler prospects':[],'Extrair avisados':[{'json':{'data':{}}}],
                'Mapa: extrair leads do site':[{'json':{'data':{'leads':[{'place_id':'site-id'}]}}}]}
         self.assertEqual(js(self.code,nodes,[{'json':row}]),[])
+
+
+class NomesQueNaoMentem(unittest.TestCase):
+    """19/10/2026: o 04 do Site grava só o clique e se chama assim; o convite do PRUMO ainda tem o nó antigo."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.h=load('workflow_confiabilidade')
+        fake=types.ModuleType('n8n');fake.api=lambda *a:None;fake.put=lambda *a:None;fake.DESLIGADOS={'abc':'Fluxo parado'}
+        cls.fake=fake
+        with patch.dict(sys.modules,{'n8n':fake}):
+            cls.fc=load('fecha-ciclos')
+            cls.ra=load('rodar-agora')
+
+    def marcar(self,nome,colunas):
+        no=code_node(nome);no['parameters']={'columns':{'matchingColumns':['place_id'],'value':{'place_id':'={{ $json.chave }}',**colunas}}}
+        return no
+
+    def test_os_dois_nomes_valem_para_o_rastro_do_clique(self):
+        for nome in ('Marcar como enviado','Gravar clique_em'):
+            wf={'name':'04','nodes':[code_node('Decidir','return [{json:{marcar:true}}];'),self.marcar(nome,{'clique_em':'x'})],'connections':{}}
+            self.assertTrue(js(self.h.preparar(wf)['nodes'][0]['parameters']['jsCode'])[0]['json']['marcar'],nome)
+
+    def test_convite_com_o_no_novo_ou_antigo_continua_sem_marcar_envio(self):
+        for nome in ('Marcar como enviado','Gravar clique_em'):
+            wf={'name':'Convite','nodes':[code_node('Decidir','return [{json:{marcar:true}}];'),self.marcar(nome,{'status':'enviado'})],'connections':{}}
+            self.assertFalse(js(self.h.preparar(wf)['nodes'][0]['parameters']['jsCode'])[0]['json']['marcar'],nome)
+
+    def test_fluxo_antigo_e_achado_pelo_nome_velho_e_o_novo_tem_prioridade(self):
+        todos=[{'id':'1','name':self.fc.NOME_ANTIGO_DO_04},{'id':'2','name':'outro'}]
+        achados=self.fc.achar_fluxo(todos,self.fc.NOME_DO_04,(self.fc.NOME_ANTIGO_DO_04,))
+        self.assertEqual([w['id'] for w in achados],['1'])
+        todos.append({'id':'3','name':self.fc.NOME_DO_04})
+        self.assertEqual([w['id'] for w in self.fc.achar_fluxo(todos,self.fc.NOME_DO_04,(self.fc.NOME_ANTIGO_DO_04,))],['3','1'])
+        self.assertEqual(self.fc.achar_fluxo(todos,'Convite do PRUMO'),[])
+
+    def test_publicar_o_04_renomeia_pelo_id_e_nomeia_o_no(self):
+        chamadas=[]
+        def api(metodo,caminho,corpo=None):
+            chamadas.append((metodo,caminho,corpo))
+            if metodo=='GET':return {'data':[{'id':'erro1','name':'00 · Avisar falha pelo Hermes'},{'id':'velho1','name':self.fc.NOME_ANTIGO_DO_04}]}
+            return {'id':'novo'}
+        puts=[]
+        with patch.object(self.fc,'api',api),patch.object(self.fc,'put',puts.append):
+            self.fc.webhook_workflow(self.fc.NOME_DO_04,'enviar','wid','planilha','1','Leads','place_id','place_id','return [];',{'clique_em':'x'},
+                                     nome_do_no_marcar='Gravar clique_em',nomes_antigos=(self.fc.NOME_ANTIGO_DO_04,))
+        self.assertEqual(len(puts),1)
+        self.assertEqual((puts[0]['id'],puts[0]['name']),('velho1',self.fc.NOME_DO_04))
+        self.assertFalse([c for c in chamadas if c[0]=='POST' and c[1]=='/workflows'],'não pode nascer um 2º fluxo com o mesmo path')
+        nomes={n['name'] for n in puts[0]['nodes']}
+        self.assertIn('Gravar clique_em',nomes);self.assertNotIn('Marcar como enviado',nomes)
+        self.assertEqual(puts[0]['connections']['Primeiro clique?']['main'][0][0]['node'],'Gravar clique_em')
+        self.assertIn('Gravar clique_em',puts[0]['connections'])
+
+    def test_convite_do_prumo_segue_com_o_no_antigo_por_padrao(self):
+        criados=[]
+        def api(m,c,b=None):
+            if m=='GET':return {'data':[{'id':'e','name':'00 · Avisar falha pelo Hermes'}]}
+            if m=='POST' and c=='/workflows':criados.append(b)
+            return {'id':'n'}
+        with patch.object(self.fc,'api',api):
+            self.fc.webhook_workflow('PRUMO — convite','convite','wid','p','1','Leads','ID','id','return [];',{'status':'x'})
+        self.assertEqual(len(criados),1)
+        self.assertIn('Marcar como enviado',{n['name'] for n in criados[0]['nodes']})
+        self.assertEqual(criados[0]['connections']['Primeiro clique?']['main'][0][0]['node'],'Marcar como enviado')
+
+    def test_o_04_do_site_tem_o_nome_e_a_base_certos(self):
+        self.assertEqual(self.fc.NOME_DO_04,'04 · Clique no wa_link (registra o clique)')
+        self.assertTrue(self.fc.LINKS.endswith('.ts.net/webhook'))
+        self.assertIn('edit#gid='+self.fc.LEADS_GID,self.fc.DECIDIR_SITE)
+
+    def test_erro_de_execucao_sempre_salvo(self):
+        with tempfile.TemporaryDirectory() as home:
+            (Path(home)/'.config/claude-ops').mkdir(parents=True)
+            (Path(home)/'.config/claude-ops/n8n-api-key').write_text('k',encoding='utf-8')
+            with patch.object(Path,'home',return_value=Path(home)):
+                n8n=load('n8n')
+        for settings in (None,{},{'saveDataErrorExecution':'none','executionOrder':'v1'}):
+            corpo={'name':'x','nodes':[],'connections':{}}
+            if settings is not None:corpo['settings']=settings
+            out=n8n.garantir_erro_salvo(corpo)
+            self.assertEqual(out['settings']['saveDataErrorExecution'],'all')
+            if settings:self.assertEqual(out['settings']['executionOrder'],'v1')
+            self.assertEqual(corpo.get('settings'),settings,'o dict do chamador não muda')
+
+    def test_rodar_agora_recusa_fluxo_desligado_sem_forcar(self):
+        self.assertIn('Fluxo parado',self.ra.recusa_desligado('abc',False))
+        self.assertEqual(self.ra.recusa_desligado('abc',True),'')
+        self.assertEqual(self.ra.recusa_desligado('outro',False),'')
 
 
 if __name__=='__main__':unittest.main()

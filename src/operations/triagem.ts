@@ -8,19 +8,19 @@
  *  - O lote é fixo: os 10 primeiros na ordem do servidor que ainda não foram decididos. Decidir
  *    um não puxa o 11º para dentro (o lote encolheria e cresceria a cada toque, e nunca acabaria);
  *    o próximo lote só aparece quando nenhum do lote atual espera decisão.
- *  - Duas decisões por item: convidar (o toque no link rastreado do n8n já marca o envio, RULES 17)
- *    e dispensar (registro `dispensado` na aba CRM, desfeito por `dispensado_desfeito`).
- *  - A marca local é otimista, como a das anotações (anotacao-de-envio.ts): o item sai na hora e
- *    a marca vale até o retrato confirmar (o dispensado com `perdaManual === 'dispensado'`; o
- *    convidado quando sai da Etapa Revisar) ou vencer. A planilha continua sendo a verdade (RULES 11).
+ *  - Duas decisões por item: dispensar (registro `dispensado` na aba CRM, desfeito por
+ *    `dispensado_desfeito`) e avaliar depois (só neste aparelho, 24 h). O convite não é decisão da tela:
+ *    "Abrir convite no WhatsApp" só abre a conversa (regra [abrir-nao-envia], 18/10/2026), e o envio é
+ *    marcado pelo observador do WhatsApp ou pelo "Enviei" explícito (CrmConfirmarConvite), nunca pelo toque.
+ *  - A marca local é otimista: o item sai na hora e a marca vale até o retrato confirmar (o dispensado
+ *    com `perdaManual === 'dispensado'`) ou vencer. A planilha continua sendo a verdade (RULES 11).
  *
  * `localStorage` pode lançar (modo privado, storage bloqueado): sem ele a marca só não
  * sobrevive ao reload.
  */
-import { hora } from './crm-formato'
-import type { Guardador } from './anotacao-de-envio'
+import type { Guardador } from './guardador'
 import type { CrmItemHoje, CrmLead, CrmProduto } from './types'
-import type { EstadoDoRitmo } from './trava-de-ritmo'
+import { motivoCurtoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 
 export const TAMANHO_DO_LOTE = 10
 export const CHAVE_DAS_DECISOES = 'squadone:crm:triagem-decisoes'
@@ -32,13 +32,13 @@ export const VALIDADE_DA_DECISAO_MS = 15 * 60_000
 /** Quanto tempo o "Desfazer" fica à vista depois de um Dispensar. */
 export const DESFAZER_MS = 8_000
 
-export type DecisaoDaTriagem = 'convidado' | 'dispensado' | 'adiado'
+export type DecisaoDaTriagem = 'dispensado' | 'adiado'
 /** Os registros da Triagem no POST /api/operations/crm/registro (o servidor os aceita desde AC-10). */
 export type RegistroDaTriagem = 'dispensado' | 'dispensado_desfeito'
 /** leadId -> a decisão tomada nesta tela e quando. */
 export type DecisoesDaTriagem = Record<string, { tipo: DecisaoDaTriagem; em: number }>
 
-const TIPOS: readonly DecisaoDaTriagem[] = ['convidado', 'dispensado', 'adiado']
+const TIPOS: readonly DecisaoDaTriagem[] = ['dispensado', 'adiado']
 
 function validas(decisoes: DecisoesDaTriagem, agora: number): DecisoesDaTriagem {
   return Object.fromEntries(Object.entries(decisoes).filter(([id, d]) =>
@@ -49,9 +49,9 @@ function validas(decisoes: DecisoesDaTriagem, agora: number): DecisoesDaTriagem 
 export function lerDecisoes(storage: Guardador | null | undefined, agora: number): DecisoesDaTriagem {
   try {
     const bruto = JSON.parse(storage?.getItem(CHAVE_DAS_DECISOES) ?? '{}')
-    // Marcas antigas de abertura não comprovam envio e não podem esconder contatos após a migração.
-    return bruto && typeof bruto === 'object' && !Array.isArray(bruto)
-      ? Object.fromEntries(Object.entries(validas(bruto as DecisoesDaTriagem, agora)).filter(([, d]) => d.tipo !== 'convidado')) : {}
+    // Marcas antigas de "convidado" (abertura do convite) não passam em `validas`: abrir não prova envio
+    // e não pode esconder contatos depois da migração.
+    return bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? validas(bruto as DecisoesDaTriagem, agora) : {}
   } catch {
     return {}
   }
@@ -81,8 +81,7 @@ type LeadDaPoda = Pick<CrmLead, 'sinal' | 'perdaManual'>
 /**
  * Tira o que venceu e o que o retrato já confirma. Só com um retrato legível: sem ele, quem chama
  * não poda. Lead que sumiu do retrato leva a marca junto. Dispensado: confirmado pelo
- * `perdaManual`, ou já fora da Revisar por outro caminho (não há o que esconder). Convidado: fora da
- * Revisar (o clique do link rastreado leva a Convite enviado).
+ * `perdaManual`, ou já fora da Revisar por outro caminho (não há o que esconder).
  */
 export function podarDecisoes(decisoes: DecisoesDaTriagem, leads: ReadonlyMap<string, LeadDaPoda>, agora: number): DecisoesDaTriagem {
   return Object.fromEntries(Object.entries(validas(decisoes, agora)).filter(([id, d]) => {
@@ -101,7 +100,7 @@ export function dispensado(decisoes: DecisoesDaTriagem, lead: Pick<CrmLead, 'per
 export interface LoteDaTriagem {
   /** Os ids do lote, na ordem do servidor do momento em que o lote nasceu. Guarde e devolva como `anterior`. */
   ids: string[]
-  /** O que a tela mostra: os do lote ainda no grupo e não dispensados (convidados ficam, com a marca). */
+  /** O que a tela mostra: os do lote ainda no grupo e não dispensados nem adiados. */
   itens: CrmItemHoje[]
   /** Os do lote que ainda esperam decisão: é o "Dispensar os que sobraram". */
   pendentes: CrmItemHoje[]
@@ -166,14 +165,8 @@ export function detalheSemPrioridade(detalhe: string): string {
  */
 export function motivoDoConviteTravado(p: { temConvite: boolean; ritmo: EstadoDoRitmo; travadoPeloHorario: boolean }): string | null {
   if (!p.temConvite) return 'Sem link de convite'
-  const ate = p.ritmo.ate === null ? '' : hora(new Date(p.ritmo.ate).toISOString())
-  switch (p.ritmo.motivo) {
-    case 'pausa': return `Pausado até ${ate}`
-    case 'dia': return 'Teto de hoje atingido'
-    case 'hora': return `Teto da hora: libera às ${ate}`
-    case 'intervalo': return `O próximo sai às ${ate}`
-    default: break
-  }
+  const curto = motivoCurtoDoRitmo(p.ritmo)
+  if (curto) return curto
   return p.travadoPeloHorario ? 'Fora do expediente' : null
 }
 

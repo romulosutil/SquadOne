@@ -78,7 +78,7 @@ function faixaDeVendas(f: FontesDasFaixas['vendas']): Omit<Faixa, 'id' | 'titulo
   if (!f) return { linha: 'Lendo Vendas…', detalhe: '', tom: 'sem_sinal' }
   if (falhou(f)) return { linha: 'Sem sinal de Vendas', detalhe: f.erro, tom: 'sem_sinal' }
   const [primeira] = f.fila
-  // O passo e a oferta, sem o texto da mensagem: a mensagem pronta mora em Vendas › A fazer.
+  // O passo e a oferta, sem o texto da mensagem: a mensagem pronta mora em Vendas › Conversas para você.
   const linha = primeira ? `Agora: ${primeira.titulo} · ${SIGLA_DO_PRODUTO[primeira.produto]}` : 'Nenhuma conversa esperando você'
   const detalhe = [f.resumo, f.gargalo ? `Gargalo: ${f.gargalo}` : ''].filter(Boolean).join(' · ')
   return { linha, detalhe, tom: primeira?.quente ? 'atencao' : primeira ? 'neutro' : 'ok' }

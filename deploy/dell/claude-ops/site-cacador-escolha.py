@@ -10,7 +10,7 @@ com o atraso das verticais que respondem contando em dobro. Nunca rodada
 continua primeiro (na ordem da aba), e a escolha segue sendo uma só por
 execução: os nós seguintes leem `$('Montar área da busca').first()`.
 
-Ainda em 05/10/2026, na migração de nicho (site-nichos.py), PREFERIDAS virou
+Ainda em 05/10/2026, na migração de nicho (já aplicada; o script dela foi apagado), PREFERIDAS virou
 advocacia: as respostas de pousada e eventos eram todas "não tenho interesse",
 e advogado é o dono que mais procura site no Google Trends.
 
@@ -21,6 +21,7 @@ Uso: python3 site-cacador-escolha.py            aplica no Caçador do Dell (guar
      python3 site-cacador-escolha.py --testar   só a escolha, no node, com buscas de mentira (sem n8n)
 """
 import copy
+import importlib.util
 from workflow_confiabilidade import desembrulhar
 import json
 import shutil
@@ -30,7 +31,12 @@ import tempfile
 import time
 from pathlib import Path
 
-CACADOR = "oow8TkxrAf4fVvTj"  # "01 · Caçador" no n8n do Dell
+# O id do "01 · Caçador" mora no site-antes-da-venda.py (uma fonte só). Ele importa o n8n.py, que lê a chave da
+# API do n8n na importação: no Dell ela existe; num teste, HOME temporário com ~/.config/claude-ops/n8n-api-key.
+_spec = importlib.util.spec_from_file_location("site_antes_da_venda", Path(__file__).resolve().parent / "site-antes-da-venda.py")
+_sv = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_sv)
+CACADOR = _sv.CACADOR  # "01 · Caçador" no n8n do Dell
 SAI = ("Rodada mais antiga primeiro", "Pegar 1 busca")
 ANTES, DEPOIS = "Só buscas ativas", "Montar área da busca"
 NOME = "Escolher a busca"
@@ -41,7 +47,7 @@ ESCOLHER = """// Uma busca por execução (os nós seguintes leem .first()): a m
 // Para mudar a preferência, edite só PREFERIDAS (trecho do query ou da vertical).
 // Migração de nicho de 05/10/2026: saíram pousada, eventos e buffet (as 11
 // respostas eram todas "não tenho interesse"). Entrou advocacia, o ramo cujo
-// dono mais procura "site para advogado" no Google Trends (site-nichos.py).
+// dono mais procura "site para advogado" no Google Trends .
 // Troque pelos ramos que o funil mostrar com interesse de verdade.
 const PREFERIDAS = ['advog', 'advoc'];
 const PESO = 2;
@@ -161,7 +167,7 @@ def testar() -> int:
 
 
 def main() -> int:
-    from n8n import api, put  # só aqui: o --testar roda sem a chave do n8n
+    from n8n import api, put
     atual = api("GET", f"/workflows/{CACADOR}")
     BACKUPS.mkdir(parents=True, exist_ok=True)
     copia = BACKUPS / f"cacador-{time.strftime('%Y%m%d-%H%M%S')}.json"

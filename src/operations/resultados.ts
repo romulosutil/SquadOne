@@ -61,13 +61,6 @@ export function horaEmSP(ms: number): { hora: number; diaDaSemana: number } {
   return { hora: Number(valor('hour')) % 24, diaDaSemana: DIAS.indexOf(valor('weekday')) }
 }
 
-/** Expediente de quem recebe: segunda a sexta das 8h às 18h, sábado das 8h às 12h (São Paulo). */
-export function noHorarioComercial(ms: number): boolean {
-  const { hora, diaDaSemana } = horaEmSP(ms)
-  if (diaDaSemana === 0) return false
-  return hora >= 8 && hora < (diaDaSemana === 6 ? 12 : 18)
-}
-
 export const FAIXAS_DO_HORARIO = ['Manhã (8h–12h)', 'Almoço (12h–14h)', 'Tarde (14h–18h)', 'Noite (18h–21h)', 'Madrugada (21h–8h)'] as const
 
 export function faixaDoHorario(ms: number): (typeof FAIXAS_DO_HORARIO)[number] {
@@ -104,6 +97,18 @@ export function enviadoNosUltimos(lead: Pick<CrmLead, 'marcos'>, dias: number, a
  */
 export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
   return (Boolean(lead.marcos.respondeu) || Boolean(lead.resposta)) && lead.resposta?.tipo !== 'bot' && quemRespondeu(lead) !== 'robo'
+}
+
+/**
+ * A vez é dele: a última mensagem da conversa guardada é de gente (entrada que não é do robô nem a
+ * saudação classificada "bot"). Devolve quando foi (ms), ou null. As "Conversas para você" usam; a
+ * recepção conta (é gente, e quem decide o que fazer com ela é o Rômulo).
+ */
+export function entradaDeGenteDaVez(lead: Pick<CrmLead, 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): number | null {
+  const ultima = lead.conversa?.ultima
+  if (!ultima || ultima.direcao !== 'entrada' || ultima.papel === 'robo' || lead.resposta?.tipo === 'bot') return null
+  const em = Date.parse(ultima.em)
+  return Number.isFinite(em) ? em : null
 }
 
 /**
@@ -262,9 +267,12 @@ export interface EnviosAnotadosNoPeriodo {
   segundas: number
 }
 
-/** A última mensagem de gente do lead: `respondeu_em` ou a resposta classificada (robô não conta). */
-function ultimaRespostaDeGente(lead: CrmLead): number | undefined {
-  // A conversa guardada também: a última de gente (o robô já fica de fora dela).
+/**
+ * A última mensagem de gente do lead, em ms: `respondeu_em`, a resposta classificada (a saudação "bot"
+ * não conta) ou a última entrada da conversa guardada (o robô já fica de fora dela). A régua única de
+ * "quando ele escreveu por último": o "o que achou?" da fila e o follow-up deste placar leem daqui.
+ */
+export function ultimaRespostaDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): number | undefined {
   const datas = [Date.parse(lead.marcos.respondeu ?? ''),
     lead.resposta && lead.resposta.tipo !== 'bot' ? Date.parse(lead.resposta.em ?? '') : NaN,
     Date.parse(lead.conversa?.ultimaEntrada ?? '')].filter(Number.isFinite)

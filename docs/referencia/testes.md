@@ -25,7 +25,7 @@ antes do build e reinício; uma falha interrompe a atualização.
 Os testes são pontuais — só as regras puras que dá para fixar em tabela de casos
 (hoje `server/baixa-prioridade.test.ts`,
 `server/lembretes.test.ts`, `server/vigia.test.ts` (inclui, desde 17/10/2026, a cola do resumo matinal: um por dia,
-retentativa, leitura incompleta não vira "dia livre"), `server/resumo-matinal.test.ts` (janela 07:30–11:00, agrupamento,
+retentativa, leitura incompleta não vira "dia livre"; desde 19/10/2026: a chave fixa do "Google desconectado" que a vigia esquece quando o Google volta, cada leitura com `AbortSignal` de prazo e repassado ao `fetch`, calendário que falha marca a varredura como incompleta, `ultimaVarreduraOkEm` e `ocupada` e o reinício da Central sem lembrete nem aviso repetido), `server/resumo-matinal.test.ts` (janela 07:30–11:00, agrupamento,
 foco somado, nenhum R$, corte em 30 linhas), `server/auth-store.test.ts`,
 `server/passos.test.ts`, `server/tasks.test.ts`, `server/passos-no-google.test.ts`,
 `server/auth-escopos.test.ts`, `server/squad.test.ts`, `server/calendar.test.ts`,
@@ -35,7 +35,7 @@ foco somado, nenhum R$, corte em 30 linhas), `server/auth-store.test.ts`,
 `server/operations.test.ts` (inclui a config das ferramentas com e sem o Syncthing
 opcional e o `/overview` num servidor de saúde dublê em loopback), `server/auto-production.test.ts` (desde 15/10/2026,
 os achados do Raio-X no recibo: só ids conhecidos e números com sentido),
-`server/dell-status.test.ts`, `server/prumo-workflows.test.ts`,
+`server/dell-status.test.ts`,
 `server/prumo-ofertas.test.ts` (14/10/2026: contrato entre `deploy/dell/claude-ops/prumo-ofertas.json`, o que
 os caçadores do Iris e das estamparias gravam, e o CRM: aba e caminho do convite iguais aos de
 `OFERTA_DE_PROSPECCAO`, cabeçalho com toda coluna que o CRM lê, cada Etapa da lista com lugar no funil, convite
@@ -61,18 +61,19 @@ ou nenhuma mensagem, EUA, só A e nicho vazio; desde 19/10/2026, A, B e C passam
 `server/prumo-mensagem.test.ts` (o reenvio do só-robô do PRUMO: nome como o dono escreve, artigo, só número 55),
 `server/plus.test.ts` (filtro Plus: leitura do PDF em colunas, telefone, oferta e dedupe, mensagem maçônica com o artigo certo, funil só pelos registros, Hoje limitada, `lerPlus` e gravação em diretório temporário), `server/acesso.test.ts`,
 `server/avisos.test.ts` (desde 16/10/2026 também o aviso pessoal pelo Telegram, OT-14: não grava na fila, sem som das 22h às 7h,
-fila de reserva com o bot fora, P0 nos dois canais, R$ recusado antes de sair, a variável só desliga com `false`),
+fila de reserva com o bot fora, P0 nos dois canais, R$ recusado antes de sair, a variável só desliga com `false`; desde 19/10/2026 o `RegistroDeEnviados` em disco: a chave sai uma vez em 24 h mesmo depois de "reiniciar" (outra instância sobre o mesmo arquivo), a gravação seguinte poda o velho, `esquecer`, arquivo torto recomeça vazio, gravação que falha não lança, aviso que não saiu não é marcado, a fila de reserva também marca, e `avisoDeCartao` saiu junto com o cartão de decisão),
 `server/telegram-polling.test.ts` (offset, 409, e quando declarar queda, 17/10/2026, AC-07: tabela de `declararQueda`/`tipoDaFalha`;
 soluço de uma tentativa não loga "inacessível" nem "voltou", e a queda real loga os dois, com backoff),
 `server/uso.test.ts` (17/10/2026, AC-28, o contador de uso: a tela normalizada (`lead=` vira "(ficha)", finanças só pelo caminho,
 query e telefone fora, "(outra)"), a chave da escrita (ids e telefones viram `:id`, GET e o próprio beacon não contam), o corpo do
 beacon, a virada do dia em São Paulo, o teto de chaves, a poda de 90 dias e a gravação com debounce em diretório temporário),
-`server/sinal-de-vida.test.ts`, `server/agenda-no-dell.test.ts`,
+`server/sinal-de-vida.test.ts` (o WhatsApp fora há mais de 15 min e, desde 19/10/2026, `vigiaParada`: 5 min sem varredura completa vira /fail, a carência do boot, e sem a vigia no processo ela nunca é falha), `server/agenda-no-dell.test.ts`,
+`server/tempo.test.ts` (19/10/2026, o relógio de São Paulo de `server/tempo.ts`: `diaDeSP` vira às 03:00 UTC, `horaDeSP`, `ehMadrugada` de 22h a 7h atravessando a meia-noite),
 `server/roster-historico.test.ts`,
 `server/time.test.ts` (o time vivo agrupado por squad e o leitor com cache),
 `server/luna-sombra.test.ts` (a saída da Luna como dado, a comparação com o
 Gemini, as flags do `codex exec --help`, e a cola — teto do dia, fila serial,
-cota, JSONL — com o `codex` dublado num diretório temporário),
+cota, JSONL — com o `codex` dublado num diretório temporário; desde 19/10/2026, demanda que parece finanças nem chega ao `codex` nem gasta o teto),
 `server/openrouter-decisoes.test.ts` (o transporte do Jev com `fetch` dublê e
 chave inventada: `questions` é objeto, `provider` sempre com `data_collection:
 "deny"` e ZDR, a máscara de telefone/e-mail/CPF/CNPJ/URL/segredo, a resposta
@@ -89,7 +90,7 @@ guardada pelo hash do dossiê e relida do JSONL depois de reiniciar, forçar e d
 vira uma geração, teto do dia que conta a tentativa e sobrevive a reinício, preço sob proposta vira falha que não fica
 guardada, lead fora do CRM e passo sem copiloto, a cópia registrada; o codex por `execFile` com stdin, read-only e o
 arquivo da resposta apagado, cota/timeout/sem mensagem; o Gemini pedindo JSON; config ilegível lança, null fora do
-`operations` e com o codex que não confere; o caminho do Raio-X sem `..`),
+`operations` e com o codex que não confere; o caminho do Raio-X sem `..`; desde 19/10/2026 o automático: a falha vale só no dia, a cota esgotada pausa o laço por 10 min sem carimbar o lead, o teto do dia nem tenta, e a volta de 1 min não relê o Raio-X nem a conversa de quem não mudou),
 os de finanças em `server/financas/` (`natureza`, `transferencias`, `dedupe`,
 `parcelas`, `visoes` — com o obrigatório "o mesmo gasto nunca conta duas
 vezes" —, `resumo` (e os nomes das contas de cada conexão para o selo de saúde, AC-26,
@@ -108,7 +109,6 @@ e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` (além de `separarAlertas`, links e filas, desde 17/10/2026,
 AC-17, `resumoDoDell` em tabela: sem retrato, sem horário, retrato com mais de 5 min, tudo ok, só falhas, só filas, só "resolvem sozinhas",
 a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas`; e `semFraseCortada`),
-`src/operations-fila-de-envio.test.ts` (marcas de envio no navegador, a fila por nicho, pular, o passo e a marca "vídeo enviado" do A/B),
 `src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados;
 sem letra, a linha da mensagem pelo regime; follow-up anotado e quem respondeu depois, com amostra pequena; desde 17/10/2026,
 AC-03, uma regra por métrica: `leu`/`respondeuDeGente`/`quisVer` em tabela (robô, `respondeu_em` sem classificação, classificação sem a
@@ -117,7 +117,7 @@ desde a revisão de 17/10/2026, a licença conta igual ao interesse em "quiseram
 os do Assistente da Central (17/10/2026, RULES 28): `server/assistente.test.ts` (finanças sem modelo e sem o texto no JSONL,
 máscara no prompt e no arquivo, cartão proposto sem escrita, teto da tentativa e das respostas por regra, corrida de dois POSTs, o
 Hermes que falha ou responde e que NUNCA volta ao Gemini no histórico (também depois de reiniciar), releitura, poda por data de linha,
-prazo de 4 min, rotas com Express real e guarda de origem, imports sem escrita; desde a fase 2, 17/10/2026, a leitura do copiloto:
+prazo de 4 min (desde 19/10/2026 o prazo aborta a geração em voo e a fila só libera a próxima quando a anterior parou), rotas com Express real e guarda de origem, imports sem escrita; desde a fase 2, 17/10/2026, a leitura do copiloto:
 o cartão `sugestao_do_copiloto` leva só a referência, nem R$ nem o texto da sugestão no JSONL, sem copiloto a leitura nem é declarada,
 um cartão por lead), `server/assistente-ponta.test.ts` (de ponta a ponta com
 as funções reais do painel: Ficha → buscar_lead/ler_lead → cartão de anotação aceito pelo validarRegistro; id inteiro ou só a chave;
@@ -141,9 +141,8 @@ por caso; `anotacoesAMao`, 2ª mensagem e follow-up no passo ou com falha; desde
 na tabela do `fraseDaAcao`),
 `src/operations-cohort.test.ts` (17/10/2026, `cohort.ts`, filtro por motivo da Triagem: E / E NÃO sobre sinais, sem leitura que não bate nem desqualifica, critérios dos campos do lead, cohort vazio, texto de `descreverCohort` e `motivosDoLead`, opções que só aparecem quando dividem o grupo, edição, leitura e gravação no storage com lixo e storage que lança),
 `src/operations-leitura-de-sinais.test.ts` (17/10/2026: `podeLerSinais` e `alvosDoLote` (só o lote, na ordem, sem repetir, sem quem já foi tentado), `desfechoDaResposta` (409, 422 e 503; estado e origem), `lerEmSerie` (pausa só entre leituras que foram ao site, a falha de um não derruba os outros, parar interrompe, 503 para) e `textoDoResumo`),
-`server/gate-de-envio-balcao.test.ts` (18/10/2026: a cópia JS do gate (`deploy/dell/claude-ops/gate-de-envio.js`) igual à do TS (regex, motivos, limite, preços abertos, resultado em ~40 textos × 12 nomes); A, B, C e EN do JS do n8n × 12 leads inventados, zero problema; um caso por código; `balcao-cruzar.js` rodado em vm nos modos desligado, avisar e bloquear: desligado sem a coluna, avisar não muda texto nem letra, bloquear barra o novo, devolve o pronto a novo, o barrado não gasta a vez, enviado fora do gate; em Python, `site-antes-da-venda.py --testar` ganhou a classe GateDeEnvio, 5 testes, rodam no Dell),
 `src/operations-copiloto.test.ts` ganhou o bloco "sinais do site no dossiê" (com e sem sinais: hash, JSON e prompt idênticos sem fonte; `null` some; agência com e sem nome limpo de telefone e marcação; cautela de anúncio instalado; ordem de peso; `serveParaAbrir`; regras no prompt só com sinais) e `server/copiloto.test.ts` +2 (prompt com a observação e a cautela, hash novo só com sinal, gate ainda barra),
-`server/gate-de-envio.test.ts` (17/10/2026: tabela por código de problema, modos bloquear/avisar e o gate sobre TODOS os textos atuais (VARIACOES do JS do n8n via vm, site-mensagem, prumo-mensagem, plus-mensagem, colinha inteira, rascunho de proposta) exigindo zero problema; também há casos do gate em `copiloto.test.ts`, `vendedor.test.ts` e `jornadas-de-venda.test.ts`),
+`server/gate-de-envio.test.ts` (17/10/2026; fonte única desde 19/10/2026, a cópia em JS do Balcão saiu: tabela por código de problema, modos bloquear/avisar e o gate sobre TODOS os textos atuais (VARIACOES do JS do n8n via vm, site-mensagem, prumo-mensagem, plus-mensagem, colinha inteira, rascunho de proposta) exigindo zero problema; também há casos do gate em `copiloto.test.ts`, `vendedor.test.ts` e `jornadas-de-venda.test.ts`),
 `server/sinais-do-site.test.ts` (17/10/2026: extração em tabela com HTML sintético em português: anúncios, agendamento, schema, agência com confiança e rótulo fraco não registrado, blog pelo sitemap, tri-estado e página-casca; `ehSiteProprio`/`siteProprioDoLead`, ajuste da Prioridade, linhas da Ficha, validação do que vem do disco),
 `server/sinais-do-site-leitor.test.ts` (17/10/2026: `ipEhPublico` e SSRF (loopback, 10.x, 169.254.x, tailnet, IPv6, v4 embutido, `.ts.net`, porta, usuário na URL, redirecionamento para rede privada sem fazer a requisição), orçamento de 3 requisições, laço de redirecionamento, ISO-8859-1, cache em pasta temporária (validade, `forcar`, single-flight, arquivo ilegível) e o buscador real contra `localhost`; mais o bloco "CRM: sinais do site" em `crm.test.ts`),
 `src/operations-triagem.test.ts` (17/10/2026, AC-10, `triagem.ts`: o lote nasce com os 10 primeiros na ordem do servidor; dispensar tira o
@@ -153,11 +152,6 @@ o corpo do registro; a pontuação só quando diferencia; o motivo curto do Conv
 `src/operations-proxima-venda.test.ts` (17/10/2026, AC-02: a contagem da fila do dia (`resumoDoDia`: total igual à soma da quebra por tipo,
 primeiros contatos prontos e quantos o ritmo ainda deixa hoje, 0 na pausa), `textoDosPrimeiros`, `filaDaTela` (um primeiro contato por vez,
 só no expediente e com ritmo livre; "Enviei" sai, "Pular" vai para o fim) e as resolvidas do dia no storage (outro dia e storage ilegível = vazio)),
-`src/operations-plano-do-dia.test.ts` (17/10/2026: o plano do dia da Hoje, `planoDoDia` (feitas, falta, janela de envio, urgente a 45 min,
-primeiros contatos fora da conta fora do expediente, próximo passo do gargalo com a fila vazia), `minutosAteFecharOExpediente` e
-`proximaAberturaDoExpediente`, `chamadaDaAcao` ("Envie para X, isto:") e o gargalo com os nomes de quem está parado),
-`src/operations-anotacao-de-envio.test.ts` (a anotação do toque na 2ª mensagem e no follow-up: qual link anota, o primeiro
-toque vale, storage que lança, poda quando o retrato confirma, anotados no fim do grupo da Hoje),
 `src/operations-trava-de-horario.test.ts` (a trava do envio fora do expediente: só com aviso, liberação por lead sem mutar o conjunto, 19h e domingo travam, 10h não;
 o que trava em tabela: envio, convite e o reenvio do só-robô, nunca o follow-up de sempre nem a 2ª mensagem; o rótulo "Pedir o responsável";
 desde 16/10/2026, OT-02: a janela única seg–sex 8h–17h30 em tabela (17h45 e sábado agora travam), a Próxima venda usa a mesma função,
@@ -167,8 +161,8 @@ interesse não conta, do link à proposta, perdido não espera e fora dos 30 dia
 17/10/2026, a licença também começa a espera pelo link),
 `src/operations-financas-importar.test.ts` (16/10/2026, OT-11: o "Importar" único de Finanças manda PDF à fatura e OFX/CSV/.txt ao extrato pela
 extensão, MIME só sem extensão, .xlsx/.jpg recusados na tela; o Usar do Mais saiu em 17/10/2026 com a Central de comando),
-`src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 4 min, 8 por hora e
-10 no dia; teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
+`src/operations-trava-de-ritmo.test.ts` (a trava de ritmo de 15/10/2026: o caso real de 25 envios em 25 min vira intervalo de 5 min, 12 por hora e
+100 no dia (decisão de 19/10/2026; antes 4 min, 8/h e a rampa 10/20/30); teto por semana desde o início do número; dia de São Paulo; pausa antes de tudo; de onde vêm os instantes: enviado do retrato, o reenvio do
 só-robô, o toque desta tela sem contar duas vezes; storage de 24 h que lança),
 `src/operations-recado-de-travas.test.ts` (17/10/2026, hierarquia de Vendas, `recado-de-travas.ts`: quando o expediente volta (hoje, amanhã,
 sexta à noite e o fim de semana caem em "segunda às 8h", hora quebrada "8h30"); um recado por estado com o quando: pode enviar, fora do
@@ -177,7 +171,7 @@ horário, sem Liberar; `pode` sempre igual a `podeMandarPrimeiroContato` em tabe
 17/10/2026, `liberadoNaFila`: o "liberado" só com um primeiro contato liberado de fato na fila, nunca com todos pulados, feitos ou filtrados),
 `src/operations-vendas-abas.test.ts` (17/10/2026, hierarquia de Vendas, `vendas-abas.ts`: três abas Fazer → Triar → Entender, as seções Funil,
 Números e Resultados; os links de antes continuam: ?ver=funil|numeros|resultados|triagem, ?ver=jornada no Funil com ?passo=, ?ver=roteiro e
-?ver=colinha para o Roteiro no Mais, ?lead= e ?produto= em qualquer vista; o endereço escrito de volta e a ida e volta),
+?ver=colinha para o Roteiro no Mais, ?lead= e ?produto= em qualquer vista; o endereço escrito de volta e a ida e volta; desde 19/10/2026 `NOME_DAS_ABAS` é o mapa único dos nomes (a barra e as seções leem dele e o caminho diz "Vendas › nome")),
 `src/operations-funil-lista.test.ts` (a Lista do Funil no desktop, 16/10/2026: o sinal mais forte por ordem (Resposta nova > Follow-up hoje >
 Perdido amanhã > Divergência > o resto), follow-up anotado deixa de ser "hoje", ordenar por último toque e próximo passo com quem não tem data no fim
 nos dois sentidos, as etapas abertas, e a vista guardada com storage que lança; desde 17/10/2026, AC-03, `contagemDaEtapa`: Quadro e Lista
@@ -225,15 +219,15 @@ chave ainda lê, liberar duas vezes é uma),
 (a mesma do vendedor), o gate de `responder`, cada `calar` (antes do link, Rômulo assumiu há 1 h e há 7 h, recusa, robô, neutra, etapa), cada
 motivo de `escalar` (preço, proposta, fechar, ligação, objeção, áudio, irritação, recusa, recepção, licença, mensagem longa, valor na
 resposta pronta, aviso do copiloto), esperar a sugestão por 5 min, o teto de toques e os follow-ups, o aviso sem valor nem a mensagem do lead,
-o resumo (falso positivo de `interesse`, mediana da resposta humana) e a varredura do código-fonte atrás de qualquer envio ao WhatsApp),
+o resumo (falso positivo de `interesse`, mediana da resposta humana) e a varredura do código-fonte atrás de qualquer envio ao WhatsApp; desde 19/10/2026 `podeTocar(toques, mensagens)` só conhece a resposta: duas respostas depois da última saída do Rômulo fecham, uma deixa, e os follow-ups da fase de envio saíram do módulo),
 `server/lead-quente-sombra.test.ts` (a cola com CRM, conversa, copiloto e Telegram dublês num diretório temporário: flag desligada não deixa
 rastro, só no operations com bot e copiloto, uma decisão por mensagem mesmo reiniciando, teto do dia que sobrevive a reinício, Telegram fora do
-ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700),
+ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700; desde 19/10/2026 a gravação que falha depois do aviso não o reenvia e, em 3 falhas seguidas, o laço para com erro no log, e o leitor mantém os registros em memória: lê o arquivo uma vez, acrescenta o que grava e só relê quando o tamanho ou o mtime muda por fora),
 `server/telegram-entrada.test.ts` (também o callback `q:<token>:c|d` do voto da sombra),
 `server/frente-comercial.test.ts` (19/10/2026, o time comercial na Central, com a memória do dia num diretório temporário: a reserva
 devolve o texto do Balcão e grava o primeiro `por: "time"`; o intervalo de 5 min vale entre o time e a Central nos dois sentidos; lead
 tocado pela Central é recusado ao time; dois pedidos juntos, só um passa; Triagem, fora da fila, time pausado, gate e fora do expediente
-recusam; só da mesma origem; o estado não vaza número nem chave),
+recusam; só da mesma origem; o estado não vaza número nem chave; desde 19/10/2026 `ativo` com o ciclo parado: sem rodada há mais de 5 min dentro do expediente o estado diz `cicloParado`, com `ultimaRodadaEm`),
 `src/operations-primeiro-contato.test.ts` (19/10/2026: quem faz o 1º contato, só Site `pronto` é elegível, a janela e o ritmo da Central
 contando retrato e todas as superfícies, e a Próxima venda e o vendedor do Telegram pulando os leads do time),
 `deploy/dell/frente-comercial.test.py` (Python, roda no Dell: sem ritmo próprio, a reserva recusada não envia, o clique rastreado antes
@@ -241,7 +235,7 @@ do envio e conferido pelo redirecionamento, clique que falha não envia e libera
 antigo com `revisar` não vira fila, a fila parcial não substitui a anterior),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
-servidor e reforço local contando cada lead uma vez).
+servidor e reforço local contando cada lead uma vez; desde 19/10/2026 o dia do servidor é a única fonte dos primeiros contatos e o vendedor não os guarda mais; o teto de avisos do dia, a gravação que falha sem reenviar e a volta pulada com o dia ilegível ainda NÃO têm teste próprio).
 E o vendedor (`server/vendedor.ts`): expediente seg–sex 08:00–17:30, um aviso por vez, 30 min sem toque vira pulado, o
 "quero ver" fura a espera, o "Enviei" de primeiro contato conta na trava antes do retrato, o texto e os botões do Telegram
 (callback ≤ 64 bytes). E o "por que não está vendendo" (`por-que-nao-vende.ts`): o gargalo depois do "gostei"),
@@ -307,55 +301,54 @@ faixas e as três linhas, códigos únicos e no formato `SITE-3-B2`, todo passo 
 para cartões que existem e todo arquivo citado presente no repositório; versão 2: todo passo de venda numa etapa
 comum, otimizações `OT-nn` e telas `TELA-nn` em sequência, com tipo, impacto, esforço e veredito conhecidos e
 apontando para cartões e telas que existem, números do funil com data e fonte)). O monitor do Dell tem os seus em Python:
-`python3 deploy/dell/dell-status.test.py` (136, só na Mel por causa do `fcntl`; desde 16/10/2026 as falhas pelo
+`python3 deploy/dell/dell-status.test.py` (177 por `def test_`, só na Mel por causa do `fcntl`; desde 19/10/2026 também os prazos (`com_prazo`, `executar_verificacoes` com o teto de 100 s, o `status.json` gravado antes dos avisos), os checks `central`, `telegram`, `central-atualizada` e `units-falhas`, a segunda rodada em falha dos serviços HTTP, as marcas de pausa de daemons, `.path` e containers, o `socorro` só pedido quando há remédio ou leitura, as origens que saem pelo Telegram (`n8n:*`, backup, atualizar-central, silmer) e a chave por fluxo no aviso do 00; desde 16/10/2026 as falhas pelo
 Telegram, OT-14: config do `operations.env` temporário com o ambiente por cima, sem bot/grupo/token ruim/`false` = nada,
 `disable_notification` das 22h às 7h, log sem o token, corte em 4096, o "Quebrou" e o socorro da fila pelo bot e pelo
 WhatsApp quando o bot falha, com silêncio e teto; a Bot API é dublê e o `operations.env` de verdade nunca é lido; também a verificação
 "WhatsApp do PRUMO (Evolution)": tabela de casos da função pura, a verificação some sem o compose, `/saude` com o
 segredo só no cabeçalho e nenhum segredo, chave ou telefone no resultado; Docker, systemd e rede são dublês; e o pedido
 ao socorro: só falha nova grava, desligado ou não instalado não grava e o "Quebrou" fica igual), o socorro,
-`python3 deploy/dell/socorro.test.py` (31, roda no PC e no Dell, 16/10/2026: o aviso gravado pela lib e drenado pelo
+`python3 deploy/dell/socorro.test.py` (34, roda no PC e no Dell, 16/10/2026: o aviso gravado pela lib e drenado pelo
 dell-status vai pelo Telegram, sem som de noite, e cai no WhatsApp com o bot fora (só no Dell, que importa o dell-status); a lista branca por verificação e detalhe,
 todo remédio é restart/start e nada mais, a leitura só lê, os tetos de 2 remédios e 1 Hermes por verificação a cada
 6 h e 6 Hermes por dia, a chave de desligar, remédio do Hermes fora da lista nunca roda, telefone e token mascarados
 no prompt e no aviso, e o atendimento inteiro com systemctl, docker, reconferência e Hermes dublês); a lib da fila de avisos,
 `python3 deploy/dell/lib/aviso.test.py` (formato igual ao do dell-status, cortes,
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
-`python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py`,
-`python3 deploy/dell/site-demos-limpeza.test.py` e `python3 deploy/dell/site-demos-pausa.test.py`
-(aviso idêntico byte a byte ao jeito antigo, aceito pelo dell-status, o jeito
-antigo sem a lib, a fila ausente sem derrubar a rodada; na limpeza e na pausa
-também o texto do aviso do acervo inteiro dentro de 4000 caracteres e, na limpeza,
-o estado "avisado" só quando o aviso ficou na fila; a pausa roda o `main` inteiro
-com a Vercel dublada). Os demais scripts trocados para a lib (12/10/2026) têm os
+`python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py` e
+`python3 deploy/dell/site-demos-limpeza.test.py`
+(aviso aceito pelo dell-status, a fila ausente sem derrubar a rodada; desde 19/10/2026 sem o
+"jeito antigo": sem a lib o aviso não é gravado e vai ao stderr; na limpeza também o texto do aviso do
+acervo inteiro dentro de 4000 caracteres e o estado "avisado" só quando o aviso ficou na fila; o
+`site-demos-pausa` e o teste dele saíram em 19/10/2026). Os demais scripts trocados para a lib (12/10/2026) têm os
 seus, todos rodados à mão no Dell: `deploy/dell/prumo-mapa/prumo_mapa.test.py`
-(18; "R$" recusado com linha no journal, `[teste]` preservado, pacote ruim não
+(17; "R$" recusado com linha no journal, `[teste]` preservado, pacote ruim não
 derruba os outros), `deploy/dell/backup/backup-dell.test.py` (42, só no Dell por
 causa do `fcntl`; o código de saída do ensaio não muda com fila ausente, estragada ou
-lib que levanta), `deploy/dell/gerador-de-sites.test.py` (108; desde 15/10/2026 também o `seo-do-site.py`: o JSON-LD
+lib que levanta), `deploy/dell/gerador-de-sites.test.py` (106; desde 15/10/2026 também o `seo-do-site.py`: o JSON-LD
 lido de volta com os campos que o Google pede, campo a mais ou valor mudado reprovado como "sem fonte"/"diverge da
 fonte", nota só quando a página a mostra e nunca em advocacia, pergunta sem `data-fonte` recusada, Places dublado e
 cache de 30 dias, robots/sitemap/llms, e o gerador levando os três arquivos ao palco; inclui o `main()` sem
 login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead de fora do Brasil, o pedido gerado em
 `_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
-(61; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
+(65; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
 endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos), o `site-pastas.test.py` (o toque "Gerar
 demo" grava o pedido sem mover a pasta), o `raio-x-ia.test.py` (32, roda no PC e no Dell; Raio-X de IA, fase 1, só
 mede: a pergunta tirada da busca do Raio-X, termo vago fora, os nomes da linha `NOMES:` ou do negrito, o lead casado pelo
 núcleo do nome sem cidade nem ofício e nunca pela palavra genérica, estabilidade entre execuções, o JSON do `codex
---json` e do Gemini com grounding, o resumo; HOME temporário, nada chama a rede), o `site-antes-da-venda.py --testar` (35; o Balcão com o recibo só do Raio-X:
+--json` e do Gemini com grounding, o resumo; HOME temporário, nada chama a rede), o `site-antes-da-venda.py --testar` (43; desde 19/10/2026 sem a classe do gate: o Balcão não o escreve mais, `test_o_balcao_nao_escreve_mais_o_gate`, e a pasta do lead, o "sem recibo" e a URL da tailnet no `balcao-cruzar.js`; o Balcão com o recibo só do Raio-X:
 só a C, EUA fica de fora, o enviado não é regravado toda hora, o demo pedido depois não troca a primeira mensagem; e,
 desde 14/10/2026, a alocação balanceada: 30 leads divididos com diferença ≤ 1, dois nichos independentes, mesma saída
 em qualquer ordem, congelamento, novo sorteio quando o conjunto muda, a própria letra fora da contagem, só letra válida
 conta, sem demo só a C (conjunto "C") ou nenhuma mensagem, EUA, nicho vazio e grafia do nicho, dois leads da mesma
 rodada e um pronto que não muda de rodada para rodada; importa o `n8n.py`, que lê a chave em `~/.config/claude-ops`:
 fora do Dell, rode com `HOME`/`USERPROFILE` apontando para uma pasta temporária com uma chave falsa),
-`deploy/dell/claude-ops/site-acompanhamento.test.py` (23; `__main__` ponta a
+`deploy/dell/claude-ops/site-acompanhamento.test.py` (24; `__main__` ponta a
 ponta com dublês; desde 17/10/2026, OT-01: o "Montar avisos" do 05 no node só avisa os expirados e o `followup_em`
-continua gravado), `deploy/dell/funil-aprendizado.test.py` (73; desde a revisão de 17/10/2026 a licença conta na coluna
+continua gravado), `deploy/dell/funil-aprendizado.test.py` (70; desde a revisão de 17/10/2026 a licença conta na coluna
 "interesse" do funil por variante; modo 660 sob umask
 022 e dado pessoal ainda recusado com a lib), `deploy/dell/whatsapp-observador/observador.test.py`
-(97; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026 o áudio de lead
+(101; nada sobe o serviço nem lê o `bridge.log` real nem o `plus/leads.json` real; desde 17/10/2026 o áudio de lead
 com Evolution e Gemini dublês (urlopen trocado, nenhuma rede): transcrição na conversa e no lote, teto de 20 por dia de
 São Paulo em JSON 600 (desde a revisão de 17/10/2026: JSON quebrado ou `usadas` que não é número recomeça a conta com
 `contador_ilegivel`, conta que não grava não gasta com `contador_sem_gravar`, download que falha não consome cota), as duas
@@ -370,13 +363,13 @@ igual, arquivo ilegível é vazio e a releitura vale com o n8n fora; desde 16/10
 id e hora UTC, o mesmo id não entra duas vezes nem pelo outro observador, quem não é lead não tem arquivo, recibo não é
 linha, texto em 2000, nome saneado, poda de 120 dias uma vez por dia, falha ao gravar não derruba a classificação, e
 a pasta padrão aponta para um temporário antes do import),
-`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (90; webhooks de mentira, pasta temporária e HTTP no
+`deploy/dell/whatsapp-observador/evolution-adaptador.test.py` (92; webhooks de mentira, pasta temporária e HTTP no
 loopback em porta efêmera; o último grupo faz o `observador.py` de verdade ler o que o adaptador escreveu, com o n8n
 de mentira, inclusive a conversa do lead nas duas direções; desde 17/10/2026 o áudio de lead leva "[áudio Ns]" e só os
 campos do download, sem miniatura nem bytes, até 120 s (o longo e o sem duração levam só a marca `audio: {seg}` / `{}`,
 desde a revisão de 17/10/2026), e chega transcrito ao n8n com um transcritor dublê, e o "sim"
 chega com a pergunta do Rômulo no `contexto`) e
-`deploy/hermes/scripts/patch_bridge_envios.test.py` (20; desde 16/10/2026 roda no node o bloco `squadone:envios`: o
+`deploy/hermes/scripts/patch_bridge_envios.test.py` (18; desde 16/10/2026 roda no node o bloco `squadone:envios`: o
 texto do que o dono escreve só a lead vai para `enviadas.jsonl`, o log ganha o id e nunca o texto). Os de
 `src/` cobrem módulos sem Vue, não componentes: nada monta o Vue nem toca o
 Google, e o texto depende de locale/fuso passados por parâmetro para não variar
@@ -384,3 +377,37 @@ com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório
 temporário (chdir/env antes do import) e nunca em `data/`; `avisos` e
 `telegram-polling` gravam a fila e o offset em temporário; `fetch` é dublê em todos. A verificação
 continua sendo typecheck + build + exercitar a rota.
+
+## Arquivos que faltavam no inventário (acrescentados em 19/10/2026)
+
+Todos rodam no `npm test` (os `.ts`) ou à mão (os `.py` e `.mjs`, em `HOME` temporário quando mexem em pasta). As contagens de Python deste arquivo são por `def test_`, conferidas em 19/10/2026.
+
+**Servidor (`server/`)**
+- `crm-retrato-texto.test.ts`: o nó real de montagem do retrato (extraído do `crm.py`) preserva notas de 1000 caracteres e o JSON do aprendizado, e corta o resto nos limites de sempre.
+- `decisoes-comerciais.test.ts`: a revisão humana da classificação da fonte (reabrir/manter) e o convite enviado à mão, gravados como nota na aba CRM: a revisão reabre sem apagar histórico, o convite usa destino direto e a hora real confirmada, e a confirmação valida o contexto e não repete.
+- `protecao-comercial.test.ts`: conversa posterior à recusa exige revisão (nunca vira interesse sozinha), encerramento atual × resposta ou proposta posterior, silêncio de 7 dias pede conferência, robô não é conversa humana, pausa conserva o próximo passo e tira o contato da fila; é daqui que a limpeza da demo se protege.
+- `revisao-resposta.test.ts`: `POST /crm/proximo-passo/ajustar` e `GET /crm/resposta/contexto`: falha de gravação bloqueia a repetição do mesmo contexto, o ajuste exige o contexto atual e grava uma vez, e a conferência lê só o lead exato.
+- `importar-conversa.test.ts`: a exportação individual PT-BR do WhatsApp: o original recuperado substitui a transcrição aproximada do print, importar acrescenta sem substituir, deduplica exportações e eventos já observados e recusa telefone livre.
+- `hermes-historico.test.ts`: a consulta ao histórico pela ponte do Hermes, na conexão existente (autentica, filtra leads, usa âncora real e só arquiva os retornos pedidos).
+- `entrada-proxy.test.ts`: o repasse da Entrada pela Central (RULES 23): lista fechada de rotas, redirecionamento sem a barra final, envio em fluxo byte a byte, cabeçalhos que não seguem, query descartada, 404/405 sem chegar à Entrada.
+- `prumo-nome-paridade.test.ts` (19/10/2026): `claude-ops/prumo-nome.js` (a regra do nome da empresa nos convites do n8n) e `nomeDaEmpresa` do CRM dão o mesmo resultado numa tabela, e os construtores embutem o arquivo em vez de guardar cópia.
+- `tempo.test.ts` (19/10/2026): `server/tempo.ts`, descrito acima.
+
+**Front (`src/office/` e `src/`)**: estes testes ficam em `src/office/`, mas cobrem módulos de `src/operations/` e `src/office/` da camada de conversa comercial ("Minhas decisões" e a sala de comando).
+- `src/office/acompanhamento-observado.test.ts`, `retorno-da-venda.test.ts`, `andamento.test.ts` e `ajuste-do-passo.test.ts`: o que um evento observado prova (envio sim, conclusão de tarefa nunca), o retorno como a última anotação humana (data do fato × data do registro), as anotações de andamento e o ajuste do próximo passo (datas impossíveis recusadas).
+- `src/office/missao.test.ts`, `rascunhos.test.ts`, `retomadas.test.ts` e `conversas-para-conduzir.test.ts`: a missão da conversa e seus marcos (resposta humana e material pronto não presumem envio nem venda; 2ª mensagem com preço conta como proposta), o rascunho por oferta e lead (antes da data só prepara), a retomada do dia em São Paulo, e a lista "Conversas para você" (lacuna de histórico não vira prioridade, espera combinada fica com o time, o follow-up do 3º dia aparece, o primeiro contato não, um lead por linha; "Enviei" tira o passo e "Pular" manda para o fim).
+- `src/office/revisao-resposta.test.ts`: a revisão antes de abrir a mensagem ao cliente: o atalho chega ao modelo sem o bloqueio de finanças, o texto editado vai ao destino exato do `wa.me` sem link rastreado nem confirmação de envio, e destino externo, esquemas e texto incompleto são recusados.
+- `src/office/comando.test.ts`, `movimento.test.ts` e `sprites.test.ts`: o controle por sala (Atendimento reúne as conversas das ofertas, Prospecção fica com o estoque), o movimento que segue o sistema com a escolha explícita à frente, e a identidade visual (nomes antigos do roster mantêm personagem e cor, o mapa não usa emoji de reserva).
+- `src/operations-aprendizado-comercial.test.ts` e `src/operations-historico-comercial.test.ts`: o aprendizado comercial (fato, hipótese, teste e resultado separados, sobrevive à nota do CRM, anotação automática nunca vira aprendizado humano) e a cobertura honesta do histórico (ausência e arquivo parcial exigem revisão, revisão humana libera, evento posterior invalida).
+- `src/operations-precos.test.ts` (19/10/2026): `PRECOS_DO_CARDAPIO` e todo "R$" do cardápio do Roteiro (`colinha.ts`) existem em `deploy/dell/prumo-mapa/precos.json`, a fonte única dos preços.
+
+**Python e Node em `deploy/`**
+- `deploy/dell/claude-ops/prumo-construtores.test.py` (11, 19/10/2026): o clique do convite sem "primeiro clique" nem "marcar como enviado", o fluxo com o nome antigo trocado pelo id sem duplicar, o `decidir` que só devolve o destino e usa a regra única do nome.
+- `deploy/dell/claude-ops/workflow_confiabilidade.test.py` (16): confirmação só depois de todas as gravações, checkpoint só depois do subfluxo, abrir o convite nunca marca envio, GET não escreve e POST exige origem e contexto, e o diagnóstico do dono lido do fixture `claude-ops/testes/prumo-diagnostico.fixture.json`.
+- `deploy/dell/claude-ops/fonte_luna.test.py` (4) e `luna_workflows.test.py` (3): a Fonte e a classificação do Caçador pela Luna: fichas restritas fora do prompt, referência fora do perfil falha fechado, modelo, comando e ferramenta vindos do cliente recusados, sessão limpa, classificação incompleta falha fechada.
+- `deploy/dell/backup/estrutura-coletar.test.py` (34): o filtro de segredos da coleta da Estrutura (casos positivos e negativos), a prova contra vazamento e a montagem da área de preparo.
+- `deploy/dell/entrada/` (a Entrada da Mel): `entrada.test.py` (52, recebimento, bloqueio, cofre, fila), `segredos.test.py` (91, o filtro de segredos, todos falsos), `cofre.test.py` (16) e `cofre_cli.test.py` (9) (usam o `age` de verdade; sem ele, pulam), `executor.test.py` (40, a barreira entre o que o modelo propõe e o disco), `organizar.test.py` (84, o job do Hermes, com o `hermes` de mentira) e `servidor.test.py` (35, HTTP em loopback, CSP com nonce, host de fora recusado).
+- `deploy/dell/prumo-mapa/calculo_prumo.test.py` (35): a escala e as faixas do Índice, o Vale Norte batendo a simulação, a calculadora do Raio-X em Python e no JS da página.
+- `deploy/dell/hermes-uso-skills.test.py` (4): contagem das skills nunca usadas, só os campos conhecidos, arquivo 600.
+- `deploy/hermes/scripts/graphify_projetos.test.py` (52), `projetos_verificar.test.py` (25) e `sites_e_pendencias.test.py` (18): o planejamento dos espelhos e a rodada do grafo, o verificador do registro de projetos, e o aviso diário (o job do Hermes trocado pelo timer, gravado pela lib de aviso).
+- `deploy/dell/licitacoes-automation/scripts/collect-pncp.test.mjs` e `collector-server.test.mjs` (`node --test`): prazo antes de coleta + 3 h não é qualificado, o relatório separa o descartado, e o collector responde na hora, deduplica e persiste a falha controlada (Radar PNCP, RULES 22).

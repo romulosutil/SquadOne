@@ -93,7 +93,6 @@ async function listen(server: http.Server): Promise<string> {
 const EXEMPLO_ANTIGO_COM_SYNCTHING = {
   displayName: "Seu nome",
   autoDirectory: "/home/usuario/auto",
-  autoNotificationStateFile: "/home/usuario/.hermes/leads-notificados.json",
   tools: {
     hermes: { label: "Hermes Chat Web", description: "Conversas e agentes", launchUrl: "http://127.0.0.1:9119/chat", healthUrl: "http://127.0.0.1:9119/api/status" },
     ide: { label: "IDE", description: "code-server", launchUrl: "http://127.0.0.1:8080/", healthUrl: "http://127.0.0.1:8080/healthz" },

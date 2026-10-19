@@ -273,4 +273,13 @@ const saida = prospects.slice(0, CONFIG.teto_por_rodada).map(({ r, prioridade })
   'Telefone no Google': r.foneGoogle,
   _tipo: 'prospect',
 }));
-return [...saida, ...descartes].map((json) => ({ json: { ...json, ...resumo } }));
+const linhas = [...saida, ...descartes];
+// Rastro da rodada (19/10/2026): busca sem nenhuma empresa nova (tudo já visto, ou só sites fora do ar) não
+// gravava linha, e o rodízio ("a mais antiga primeiro", em prumo-ofertas.py) a escolhia de novo no dia seguinte,
+// travando as de trás. Esta linha em Descartados carrega Busca + Encontrado em, que o rodízio já lê.
+if (!linhas.length) {
+  linhas.push({ 'ID': 'busca-sem-novidade:' + busca.query + ':' + agora.slice(0, 10), 'Empresa': '(busca sem novidade)', 'Cidade': busca.cidade ?? '',
+    'Segmento': busca.nicho ?? '', 'Motivo': CONFIG.rotulo + ': Busca sem novidade', 'Encontrado em': agora, 'Site': '', 'Telefone': '',
+    'Google Maps': '', 'Tipo no Google': '', 'Busca': busca.query, _tipo: 'descarte' });
+}
+return linhas.map((json) => ({ json: { ...json, ...resumo } }));

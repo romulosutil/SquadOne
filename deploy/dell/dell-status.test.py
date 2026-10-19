@@ -2,8 +2,8 @@
 """Testes do dell-status para o que não depende de serviço vivo: o avaliador
 de cron, as rotinas do Hermes, o gerador de sites, o rascunho do Mapa, os fluxos do n8n (pela
 agenda de cada um), as filas, o backup, os arquivos instalados, os timers, as units que caíram, os religamentos do
-healthwatch, a ausência do Syncthing, a idade dos dados, as rotinas caladas, o tamanho do cache, o "o que fazer" de cada alerta
-e o canal das falhas (Telegram, WhatsApp de reserva). Tudo em pasta temporária, com relógio fixo; nada é gravado no Dell
+healthwatch, a ausência do Syncthing, as rotinas caladas, o tamanho do cache, o "o que fazer" de cada alerta
+o canal das falhas (Telegram, WhatsApp de reserva), os prazos do monitor, a internet, as units paradas e a Central atualizada. Tudo em pasta temporária, com relógio fixo; nada é gravado no Dell
 nem enviado pelo Hermes ou pelo bot: o operations.env de verdade nunca é lido (aponta para um arquivo que não
 existe e as variáveis do bot saem do ambiente), então o Telegram fica "desligado" fora da classe que o testa.
 
@@ -450,7 +450,12 @@ class OQueFazer(unittest.TestCase):
             {"id": "site-resposta", "nome": "Enviados esperando resposta", "quantidade": 12, "detalhe": "x"},
             {"id": "prumo-diagnostico", "nome": "Diagnósticos", "quantidade": 0, "detalhe": "x"}]}))
         r = {c["id"]: c for c in ds.pendencias()}
-        self.assertEqual(r["pend:site-enviar"]["acao"]["url"], "/crm?produto=site&fila=envio")
+        self.assertEqual(r["pend:site-enviar"]["acao"]["url"], "/crm?ver=triagem&produto=site")
+        self.assertNotIn("fila=envio", r["pend:site-enviar"]["o_que_fazer"])
+        self.assertNotIn("Enviar um por um", r["pend:site-enviar"]["o_que_fazer"])
+        self.assertIn("o observador do WhatsApp", r["pend:site-enviar"]["o_que_fazer"])
+        self.assertNotIn("09:00", r["pend:site-resposta"]["o_que_fazer"])
+        self.assertIn("7 dias", r["pend:site-resposta"]["o_que_fazer"])
         self.assertNotIn("sozinho", r["pend:site-enviar"])
         self.assertTrue(r["pend:site-resposta"]["sozinho"])
         self.assertEqual(r["pend:prumo-diagnostico"]["estado"], "ok")
@@ -465,7 +470,7 @@ class OQueFazer(unittest.TestCase):
             "entregas": {"nome": "Entregas", "estado": "adiado", "ultimo_sucesso": agora_, "detalhe": "Adiado"}}}))
         r = {c["id"]: c for c in ds.backup()}
         self.assertEqual(r["backup:sites"]["estado"], "falha")
-        self.assertIn("rclone config reconnect", r["backup:sites"]["o_que_fazer"])
+        self.assertIn("rclone config reconnect gdrive:", r["backup:sites"]["o_que_fazer"])
         self.assertEqual(r["backup:entregas"]["estado"], "ok")
         self.assertNotIn("o_que_fazer", r["backup:entregas"])
 
@@ -727,7 +732,7 @@ class SemSyncthing(unittest.TestCase):
         finally:
             ds.http_ok, ds.http_json, ds.unit_ativa = originais
         self.assertEqual([c["id"] for c in itens],
-                         ["hermes", "hermes-navegador", "n8n", "terminal", "whatsapp-sessao"])
+                         ["hermes", "hermes-navegador", "n8n", "terminal", "central", "whatsapp-sessao"])
         self.assertTrue(all(c["estado"] == "ok" for c in itens))
         self.assertNotIn("syncthing", json.dumps(itens, ensure_ascii=False).lower())
         self.assertFalse([u for u in urls if ":8384" in u], urls)
@@ -803,89 +808,6 @@ class Religamentos(unittest.TestCase):
         self.assertNotIn("sozinho", c)
         self.assertIn("3 vezes em 24 h", c["o_que_fazer"])
         self.assertIn("n8n 3x", c["detalhe"])
-
-
-SAIDA_BLOQUEADA = ("# Cron Job: ASMR FULLBRINGER — coleta de métricas\n\n**Job ID:** 79a04dbf2d81\n\n## Prompt\n\nx\n\n"
-                   "## Response\n\n*ASMR — coleta 11/10*\n*Canal:* bloqueado\n*Coletados:* 0 Shorts\n")
-SAIDA_PULADA = ("# Cron Job: ASMR FULLBRINGER — coleta de métricas\n\n**Job ID:** 79a04dbf2d81\n\n"
-                "Script gate returned `wakeAgent=false` — agent skipped.\n")
-
-
-class IdadeDosDados(unittest.TestCase):
-    """O shorts-metrics.json do ASMR parado desde 05/10/2026 21:42, com a coleta rodando."""
-
-    def setUp(self):
-        self.dir = Path(tempfile.mkdtemp(prefix="dell-status-idade-"))
-        self.addCleanup(shutil.rmtree, self.dir)
-        self.antes = {k: getattr(ds, k) for k in ("CRON_JOBS", "HERMES_SAIDAS", "DADOS_COM_IDADE", "agora")}
-        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
-        self.addCleanup(ds.agendas_vistas.clear)
-        ds.CRON_JOBS = self.dir / "jobs.json"
-        ds.HERMES_SAIDAS = self.dir / "output"
-        self.metricas = self.dir / "shorts-metrics.json"
-        self.metricas.write_text("{}")
-        os.utime(self.metricas, (br("2026-10-05T21:42").timestamp(),) * 2)
-        ds.DADOS_COM_IDADE = [{**ds.DADOS_COM_IDADE[0], "arquivo": self.metricas}]
-
-    def coleta(self, **extra) -> dict:
-        return job("79a04dbf2d81", minutos=60, last_run="2026-10-11T15:42:58-03:00",
-                   name="ASMR FULLBRINGER — coleta de métricas", **extra)
-
-    def saida(self, quando: str, texto: str) -> None:
-        p = ds.HERMES_SAIDAS / "79a04dbf2d81" / (quando.replace(":", "-").replace("T", "_") + ".md")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(texto)
-        os.utime(p, (br(quando).timestamp(),) * 2)
-
-    def rodar(self, quando: str, *jobs) -> dict:
-        ds.CRON_JOBS.write_text(json.dumps({"jobs": list(jobs)}))
-        ds.agora = lambda: br(quando).astimezone(timezone.utc)
-        [c] = ds.idade_dos_dados()
-        return c
-
-    def test_pausada_de_proposito_e_ok_como_hoje_na_mel(self):
-        self.saida("2026-10-11T03:31:19", SAIDA_BLOQUEADA)
-        c = self.rodar("2026-10-11T21:45", self.coleta(enabled=False, state="paused",
-                                                         paused_at="2026-10-11T16:29:45-03:00"))
-        self.assertEqual((c["id"], c["estado"]), ("idade:asmr-metricas", "ok"))
-        self.assertEqual(c["detalhe"], "Coleta pausada de propósito em 11/10; dados de 05/10 21:42")
-
-    def test_coleta_que_roda_e_nao_grava_e_falha(self):
-        self.saida("2026-10-05T21:45:00", "x\n## Response\n\nok, gravado")  # a rodada que gravou: não conta
-        for h in ("00-28-22", "01-29-20", "02-30-15", "03-31-19"):
-            self.saida("2026-10-11T" + h.replace("-", ":"), SAIDA_BLOQUEADA)
-        self.saida("2026-10-11T04:32:00", SAIDA_PULADA)
-        c = self.rodar("2026-10-11T09:00", self.coleta())
-        self.assertEqual(c["estado"], "falha")
-        self.assertEqual(c["detalhe"], "Sem dado novo há 5 dia(s) (desde 05/10 21:42), e a coleta rodou 4 vez(es) "
-                                       "depois sem gravar")
-        self.assertIn("bloqueado", c["o_que_fazer"])
-
-    def test_sem_short_novo_resolve_sozinho(self):
-        self.saida("2026-10-11T04:32:00", SAIDA_PULADA)
-        c = self.rodar("2026-10-11T09:00", self.coleta())
-        self.assertEqual(c["estado"], "atencao")
-        self.assertTrue(c["sozinho"])
-        self.assertIn("Short", c["o_que_fazer"])
-
-    def test_dado_recente_e_ok(self):
-        self.saida("2026-10-08T10:00:00", SAIDA_BLOQUEADA)
-        c = self.rodar("2026-10-08T21:00", self.coleta())
-        self.assertEqual((c["estado"], c["detalhe"]), ("ok", "Atualizado em 05/10 21:42"))
-
-    def test_voltou_da_pausa_tem_72h_de_folga(self):
-        ds.agendas_vistas["79a04dbf2d81"] = {"assinatura": "x", "desde": "2026-10-20T10:00:00-03:00"}
-        self.saida("2026-10-20T11:00:00", SAIDA_BLOQUEADA)
-        self.assertEqual(self.rodar("2026-10-20T12:00", self.coleta())["estado"], "ok")
-        ds.agendas_vistas["79a04dbf2d81"] = {"assinatura": "x", "desde": "2026-10-20T10:00:00-03:00"}
-        c = self.rodar("2026-10-23T11:00", self.coleta())
-        self.assertEqual(c["estado"], "falha")
-        self.assertIn("rodou 1 vez(es)", c["detalhe"])
-
-    def test_rotina_apagada_pede_decisao(self):
-        c = self.rodar("2026-10-11T21:45", job("outra", "0 9 * * *"))
-        self.assertEqual(c["estado"], "atencao")
-        self.assertIn("não existe mais", c["detalhe"])
 
 
 def resposta(texto: str) -> str:
@@ -1543,7 +1465,7 @@ class WhatsAppPrumo(unittest.TestCase):
             self.assertEqual(ds._evolution_units(), {})
 
     def test_esta_na_lista_de_verificacoes_do_main(self):
-        self.assertIn("whatsapp_prumo", inspect.getsource(ds.main))
+        self.assertIn("whatsapp_prumo", [f.__name__ for f in ds.VERIFICACOES])
 
 
 class Socorro(unittest.TestCase):
@@ -1568,6 +1490,9 @@ class Socorro(unittest.TestCase):
         self.addCleanup(env.stop)
         self.enviadas = []
         p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.enviadas.append(m) or True)
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch.object(ds, "unit_ativa", lambda u: u == "socorro.path")  # o socorro.path está de pé
         p.start()
         self.addCleanup(p.stop)
 
@@ -1814,6 +1739,644 @@ class FalhasPeloTelegram(unittest.TestCase):
             r = ds.drenar_fila(br("2026-10-17T07:00"))
         self.assertEqual((r["pelo_telegram"], r["enviados"]), (0, 2))
         self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["🛟 Socorro A", "🛟 Socorro B"])
+
+
+def falso_run(saidas: dict, vistos: list):
+    """subprocess.run falso: `saidas` mapeia o começo do comando à resposta; registra os kwargs de cada chamada."""
+    def run(cmd, **kw):
+        vistos.append((cmd, kw))
+        for inicio, resposta in saidas.items():
+            if list(cmd[:len(inicio)]) == list(inicio):
+                if isinstance(resposta, Exception):
+                    raise resposta
+                return types.SimpleNamespace(returncode=0, stdout=resposta, stderr="")
+        raise AssertionError(f"comando inesperado: {cmd}")
+    return run
+
+
+class PrazosDoMonitor(unittest.TestCase):
+    """HC-2: o monitor não pode estourar o TimeoutStartSec antes de gravar o status.json."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-prazos-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        for nome, valor in (("ESTADO_DIR", self.dir / "estado"), ("FLUXOS_VISTOS", self.dir / "fluxos.json")):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(ds.fluxos_vistos.clear)
+
+    def test_com_prazo_devolve_levanta_e_desiste(self):
+        self.assertEqual(ds.com_prazo(lambda: 7, 1), 7)
+        with self.assertRaises(ValueError):
+            ds.com_prazo(lambda: int("x"), 1)
+        with self.assertRaises(TimeoutError):
+            ds.com_prazo(lambda: threading_sleep(2), 0.05)
+
+    def test_verificacao_lenta_ou_quebrada_vira_erro_e_as_outras_rodam(self):
+        def lenta():
+            threading_sleep(2)
+            return []
+
+        def quebrada():
+            raise RuntimeError("boom")
+
+        def boa():
+            return [ds.check("a", "maquina", "A", "ok", "ok")]
+        with mock.patch.object(ds, "PRAZO_POR_VERIFICACAO_S", 0.05):
+            r = {c["id"]: c for c in ds.executar_verificacoes((lenta, quebrada, boa))}
+        self.assertEqual(r["erro:lenta"]["estado"], "atencao")
+        self.assertIn("passou de", r["erro:lenta"]["detalhe"])
+        self.assertEqual(r["erro:quebrada"]["detalhe"], "boom")
+        self.assertEqual(r["a"]["estado"], "ok")
+
+    def test_teto_global_pula_o_resto_e_diz_quais(self):
+        relogio = iter([0, 0, 200, 200, 200])  # início, 1ª (dentro), 2ª e 3ª (já passou do teto)
+
+        def a():
+            return [ds.check("a", "maquina", "A", "ok", "ok")]
+
+        def b():
+            return []
+
+        def c():
+            return []
+        r = {x["id"]: x for x in ds.executar_verificacoes((a, b, c), relogio=lambda: next(relogio))}
+        self.assertIn("a", r)
+        self.assertEqual(r["erro:prazo"]["estado"], "atencao")
+        self.assertIn("b, c", r["erro:prazo"]["detalhe"])
+
+    def test_fluxos_acima_do_teto_viram_nao_verificados_e_guardam_a_memoria(self):
+        ds.FLUXOS_VISTOS.write_text(json.dumps({"a": {"visto_desde": "2026-10-01T00:00:00Z"}}))
+
+        def http(url, headers=None, timeout=8):
+            return {"data": [{"id": "a", "name": "01 · Caçador", "nodes": []}, {"id": "b", "name": "X", "nodes": []}]}
+        with mock.patch.object(ds, "ler_env", return_value="chave"), mock.patch.object(ds, "http_json", http), \
+                mock.patch.object(ds, "ligado_desde", return_value=None), \
+                mock.patch.object(ds, "n8n_no_ar_desde", return_value=None), \
+                mock.patch.object(ds, "TETO_DOS_FLUXOS_S", -1):
+            out = ds.fluxos()
+        self.assertEqual([(c["id"], c["estado"], c.get("nao_verificado")) for c in out],
+                         [("fluxo:a", "atencao", True), ("fluxo:b", "atencao", True)])
+        self.assertEqual(ds.fluxos_vistos["a"], {"visto_desde": "2026-10-01T00:00:00Z"})
+        self.assertEqual(ds.fluxos_vistos["b"], {})
+
+    def test_nao_verificado_mantem_o_estado_de_antes_e_nao_avisa(self):
+        avisos = []
+        c = ds.check("fluxo:a", "fluxos", "01", "atencao", "Não verificado")
+        c["nao_verificado"] = True
+        ant = {"fluxo:a": {"estado": "falha", "desde": "2026-10-19T10:00:00Z", "avisado": "2026-10-19T10:00:00Z"}}
+        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda *a: avisos.append(a) or True):
+            novo = ds.avisar_transicoes([c], ant, br("2026-10-19T11:00"))
+        self.assertEqual(novo["fluxo:a"], ant["fluxo:a"])
+        self.assertEqual(avisos, [])
+
+    def test_subprocess_do_docker_tem_prazo(self):
+        vistos: list = []
+        ps = json.dumps({"Names": "x", "State": "exited", "Status": "Exited (1)"})
+        run = falso_run({("docker", "ps"): ps + "\n", ("docker", "inspect"): "always\n"}, vistos)
+        with mock.patch.object(ds.subprocess, "run", run):
+            ds.containers()
+        self.assertEqual(len(vistos), 2)
+        self.assertTrue(all(kw.get("timeout") for _, kw in vistos), vistos)
+
+    def test_docker_travado_e_inspect_travado(self):
+        with mock.patch.object(ds.subprocess, "run", side_effect=subprocess.TimeoutExpired("docker", 10)):
+            [c] = ds.containers()
+        self.assertEqual((c["id"], c["estado"]), ("docker", "falha"))
+        ps = json.dumps({"Names": "x", "State": "exited", "Status": "Exited (1)"})
+        run = falso_run({("docker", "ps"): ps + "\n", ("docker", "inspect"): subprocess.TimeoutExpired("docker", 5)}, [])
+        with mock.patch.object(ds.subprocess, "run", run):
+            r = {c["id"]: c for c in ds.containers()}
+        self.assertEqual(r["container:x"]["estado"], "falha")  # sem saber a política, não conta como de propósito
+
+    def test_unit_ativa_com_systemctl_travado_ou_ausente(self):
+        for erro in (subprocess.TimeoutExpired("systemctl", 5), FileNotFoundError("systemctl")):
+            with mock.patch.object(ds.subprocess, "run", side_effect=erro):
+                self.assertFalse(ds.unit_ativa("x.service"))
+        vistos: list = []
+        with mock.patch.object(ds.subprocess, "run", falso_run({("systemctl",): "active\n"}, vistos)):
+            self.assertTrue(ds.unit_ativa("x.service"))
+        self.assertTrue(vistos[0][1]["timeout"])
+
+    def test_todo_subprocess_do_arquivo_tem_timeout(self):
+        """Quem chama subprocess.run sem timeout= reabre o HC-2."""
+        import re as _re
+        fonte = (AQUI / "dell-status.py").read_text(encoding="utf-8")
+        for m in _re.finditer(r"subprocess\.run\(", fonte):
+            chamada = fonte[m.start():m.start() + 400]
+            fim = chamada.index("timeout=") if "timeout=" in chamada else -1
+            proxima = chamada.find("subprocess.run(", 5)
+            self.assertTrue(fim != -1 and (proxima == -1 or fim < proxima), chamada[:120])
+
+    def test_main_grava_o_retrato_antes_de_avisar(self):
+        ordem = []
+
+        def falha():
+            return [ds.check("disco", "maquina", "Disco", "falha", "96% usado")]
+        saida, estado = self.dir / "status.json", self.dir / "estado.json"
+
+        def avisa(msg, t, prioridade=2):
+            ordem.append(("aviso", saida.exists(), prioridade))
+            return True
+        with contextlib.ExitStack() as pilha:
+            for nome, valor in (("SAIDA", saida), ("ESTADO", estado), ("AGENDAS", self.dir / "ag.json"),
+                                ("TAMANHOS", self.dir / "tam.json"), ("CENTRAL_VISTA", self.dir / "cv.json"),
+                                ("SOCORRO", self.dir / "sem-socorro"), ("VERIFICACOES", (falha,))):
+                pilha.enter_context(mock.patch.object(ds, nome, valor))
+            pilha.enter_context(mock.patch.object(ds, "enviar_pessoal", avisa))
+            pilha.enter_context(mock.patch.object(ds, "drenar_fila", lambda: ordem.append("drenou")))
+            pilha.enter_context(mock.patch.object(ds.sys, "argv", ["dell-status"]))
+            ds.main()
+        self.assertEqual(ordem, [("aviso", True, 0), "drenou"])  # retrato já gravado; disco ≥95% sai com prioridade 0
+        self.assertEqual(json.loads(saida.read_text())["verificacoes"][0]["id"], "disco")
+        self.assertIn("desde", json.loads(saida.read_text())["verificacoes"][0])
+        self.assertEqual(json.loads(estado.read_text())["disco"]["estado"], "falha")
+
+    def test_main_aviso_que_quebra_nao_deixa_a_central_sem_retrato(self):
+        def falha():
+            return [ds.check("disco", "maquina", "Disco", "falha", "96% usado")]
+        saida = self.dir / "status.json"
+        with contextlib.ExitStack() as pilha:
+            for nome, valor in (("SAIDA", saida), ("ESTADO", self.dir / "estado.json"), ("AGENDAS", self.dir / "ag.json"),
+                                ("TAMANHOS", self.dir / "tam.json"), ("CENTRAL_VISTA", self.dir / "cv.json"),
+                                ("SOCORRO", self.dir / "sem-socorro"), ("VERIFICACOES", (falha,))):
+                pilha.enter_context(mock.patch.object(ds, nome, valor))
+            pilha.enter_context(mock.patch.object(ds, "enviar_pessoal", side_effect=RuntimeError("travou")))
+            pilha.enter_context(mock.patch.object(ds, "drenar_fila", lambda: None))
+            pilha.enter_context(mock.patch.object(ds.sys, "argv", ["dell-status"]))
+            pilha.enter_context(contextlib.redirect_stderr(io.StringIO()))
+            ds.main()
+        self.assertTrue(saida.exists())
+        self.assertFalse((self.dir / "estado.json").exists())  # sem estado novo: o próximo minuto tenta avisar de novo
+
+
+def threading_sleep(s: float) -> None:
+    import time as _t
+    _t.sleep(s)
+
+
+class InternetEDns(unittest.TestCase):
+    """HC-21: o check de internet fala com o canal do alerta, não só resolve nome."""
+
+    def test_dns_que_trava_vira_falso_no_prazo(self):
+        def trava(*a, **k):
+            threading_sleep(2)
+        with mock.patch.object(ds.socket, "getaddrinfo", trava):
+            self.assertFalse(ds.conectar_ao_canal(prazo=0.05))
+
+    def test_resolve_mas_nao_conecta_e_falso(self):
+        info = [(ds.socket.AF_INET, ds.socket.SOCK_STREAM, 6, "", ("203.0.113.9", 443))]
+
+        class Soquete:
+            def __init__(self, *a): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def settimeout(self, s): self.prazo = s
+            def connect(self, end): raise OSError("sem rota")
+        with mock.patch.object(ds.socket, "getaddrinfo", return_value=info), mock.patch.object(ds.socket, "socket", Soquete):
+            self.assertFalse(ds.conectar_ao_canal())
+
+    def test_conecta_e_faz_o_handshake(self):
+        info = [(ds.socket.AF_INET6, ds.socket.SOCK_STREAM, 6, "", ("::1", 443, 0, 0)),
+                (ds.socket.AF_INET, ds.socket.SOCK_STREAM, 6, "", ("203.0.113.9", 443))]
+        tentados = []
+
+        class Soquete:
+            def __init__(self, familia, *a): self.familia = familia
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def settimeout(self, s): assert s <= 3
+            def connect(self, end): tentados.append(end)
+
+        class Contexto:
+            def wrap_socket(self, s, server_hostname=None):
+                assert server_hostname == "api.telegram.org"
+                return Soquete(0)
+        with mock.patch.object(ds.socket, "getaddrinfo", return_value=info), mock.patch.object(ds.socket, "socket", Soquete), \
+                mock.patch.object(ds.ssl, "create_default_context", return_value=Contexto()):
+            self.assertTrue(ds.conectar_ao_canal())
+        self.assertEqual(tentados[0], ("203.0.113.9", 443))  # IPv4 primeiro
+
+    def test_maquina_nao_usa_so_o_dns(self):
+        fonte = inspect.getsource(ds.maquina)
+        self.assertIn("conectar_ao_canal", fonte)
+        self.assertNotIn("getaddrinfo", fonte)
+
+
+class ServicosHttpEUnitsParadas(unittest.TestCase):
+    """HC-11 (duas rodadas), HC-5 (daemon parado, Central), HC-6 (.path), HC-14, HC-24, VIVO-4."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-units-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        p = mock.patch.object(ds, "ESTADO_DIR", self.dir)
+        p.start()
+        self.addCleanup(p.stop)
+
+    # --- HC-11
+
+    def test_primeira_falha_http_vira_atencao_e_a_segunda_vira_falha(self):
+        c = ds.explicar(ds.check("n8n", "servicos", "n8n", "falha", "Sem resposta: timed out"))
+        ds.confirmar_servicos_http([c], {"n8n": {"estado": "ok"}})
+        self.assertEqual(c["estado"], "atencao")
+        self.assertIn("1ª tentativa", c["detalhe"])
+        self.assertTrue(c["sozinho"])
+        avisos = []
+        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda *a: avisos.append(a) or True):
+            ant = ds.avisar_transicoes([c], {"n8n": {"estado": "ok"}}, br("2026-10-19T10:00"))
+            self.assertEqual(avisos, [])  # atenção não avisa
+            c2 = ds.check("n8n", "servicos", "n8n", "falha", "Sem resposta: timed out")
+            ds.confirmar_servicos_http([c2], ant)
+            self.assertEqual(c2["estado"], "falha")
+            ds.avisar_transicoes([c2], ant, br("2026-10-19T10:01"))
+        self.assertEqual(len(avisos), 1)
+
+    def test_sem_estado_anterior_tambem_espera_e_o_que_nao_e_http_nao(self):
+        a = ds.check("central", "servicos", "Central", "falha", "x")
+        b = ds.check("disco", "maquina", "Disco", "falha", "96%")
+        ds.confirmar_servicos_http([a, b], {})
+        self.assertEqual((a["estado"], b["estado"]), ("atencao", "falha"))
+
+    def test_central_esta_nos_servicos_http(self):
+        self.assertIn("central", ds.SERVICOS_HTTP)
+        self.assertEqual(ds.CENTRAL_RUNTIME, "http://127.0.0.1:9120/api/runtime")
+
+    # --- HC-5 / HC-6
+
+    def daemon(self, **extra):
+        return {**unit(id_="luna-workflows.service", ativo="inactive", sub="dead", tipo="simple"),
+                "Restart": "on-failure", "TriggeredBy": "", **extra}
+
+    def test_daemon_parado_limpo_e_atencao_e_a_marca_de_pausa_apaga(self):
+        a = ds.avaliar_unit(self.daemon())
+        self.assertEqual(a["estado"], "atencao")
+        self.assertIn("Restart=on-failure", a["motivo"])
+        self.assertEqual(ds.avaliar_unit(self.daemon(), pausada=True)["estado"], "ok")
+        self.assertEqual(ds.avaliar_unit(self.daemon(ActiveState="active", SubState="running"))["estado"], "ok")
+
+    def test_oneshot_de_timer_e_service_com_restart_e_timer_nao_sao_daemon(self):
+        self.assertEqual(ds.avaliar_unit(unit())["estado"], "ok")  # sem Restart=
+        self.assertEqual(ds.avaliar_unit(self.daemon(TriggeredBy="pncp-catchup.timer"))["estado"], "ok")
+
+    def test_path_parado_e_atencao(self):
+        path = {"Id": "socorro.path", "LoadState": "loaded", "ActiveState": "inactive", "SubState": "dead",
+                "Result": "success", "Type": ""}
+        self.assertEqual(ds.avaliar_unit(path)["estado"], "atencao")
+        self.assertEqual(ds.avaliar_unit(path, pausada=True)["estado"], "ok")
+        self.assertEqual(ds.avaliar_unit({**path, "ActiveState": "active", "SubState": "waiting"})["estado"], "ok")
+
+    def test_texto_da_unit_parada_ensina_a_ligar_e_a_pausar(self):
+        c = ds.avaliar_units([ds.avaliar_unit(self.daemon()),
+                              ds.avaliar_unit({"Id": "auto-entrada.path", "LoadState": "loaded", "ActiveState": "inactive"})],
+                             br("2026-10-19T10:00"))
+        self.assertTrue(c["detalhe"].startswith("Parada(s): "))
+        self.assertIn("systemctl --user start luna-workflows.service", c["o_que_fazer"])
+        self.assertIn("pausa-luna-workflows", c["o_que_fazer"])
+        self.assertNotIn("reset-failed", c["o_que_fazer"])
+        p = ds.avaliar_units([ds.avaliar_unit({"Id": "auto-entrada.path", "LoadState": "loaded", "ActiveState": "inactive"})],
+                             br("2026-10-19T10:00"))
+        self.assertIn("enable --now auto-entrada.path", p["o_que_fazer"])
+        self.assertIn("pausa-auto-entrada.path", p["o_que_fazer"])
+
+    def test_units_que_cairam_olha_os_path_e_a_pausa(self):
+        repo, home = self.dir / "SquadOne", self.dir / "home"
+        ds_antes = {k: getattr(ds, k) for k in ("REPO", "INSTALADOS", "HOME", "_campos_das_units")}
+        self.addCleanup(lambda: [setattr(ds, k, v) for k, v in ds_antes.items()])
+        ds.REPO, ds.HOME = repo, home
+        ds.INSTALADOS = repo / "deploy/dell/instalados.json"
+        ds.INSTALADOS.parent.mkdir(parents=True)
+        ds.INSTALADOS.write_text(json.dumps({"arquivos": [{"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"},
+                                                           {"repo": "deploy/dell/*.path", "instalado": "~/.config/systemd/user/"}]}))
+        for n in ("luna-workflows.service", "socorro.path", "prumo-mapa.path", "backup-dell-cofre.service"):
+            for raiz in (repo / "deploy/dell", home / ".config/systemd/user"):
+                raiz.mkdir(parents=True, exist_ok=True)
+                (raiz / n).write_text(n)
+        pedidos = []
+
+        def campos(units):
+            pedidos.append(units)
+            return {u: ({"Id": u, "LoadState": "loaded", "ActiveState": "inactive", "Result": "success"} if u.endswith(".path")
+                        else self.daemon(Id=u)) for u in units}
+        ds._campos_das_units = campos
+        (self.dir / "pausa-socorro.path").write_text("")
+        [c] = ds.units_que_cairam()
+        self.assertEqual(pedidos, [["luna-workflows.service", "socorro.path"]])  # sem as de verificação própria
+        self.assertIn("luna-workflows", c["detalhe"])
+        self.assertNotIn("socorro.path", c["detalhe"])  # tem marca de pausa
+
+    def test_verificacoes_proprias_nao_aparecem_duas_vezes(self):
+        for u in ("prumo-mapa.service", "prumo-mapa.path", "backup-dell-cofre.service", "backup-dell-espelho.service",
+                  "atualizar-central.service"):
+            self.assertIn(u, ds.UNITS_COM_VERIFICACAO_PROPRIA)
+
+    # --- VIVO-4
+
+    def test_unit_em_falha_fora_das_verificadas(self):
+        self.assertEqual(ds.avaliar_units_falhas(["a.service"], {"a.service"})["estado"], "ok")
+        c = ds.avaliar_units_falhas(["run-u123.service", "a.service"], {"a.service"})
+        self.assertEqual(c["estado"], "atencao")
+        self.assertIn("run-u123.service", c["detalhe"])
+        self.assertIn("reset-failed run-u123.service", c["o_que_fazer"])
+
+    def test_central_atualizada(self):
+        t = br("2026-10-19T12:00").astimezone(timezone.utc)
+        ha = lambda m: t - timedelta(minutes=m)  # noqa: E731
+        casos = [
+            (("aaa1111", "aaa1111", ha(300), "success", None), "ok"),
+            (("bbb2222", "aaa1111", ha(10), "success", None), "ok"),          # build em andamento
+            (("bbb2222", "aaa1111", ha(45), "success", None), "atencao"),      # main parada há 45 min
+            (("aaa1111", "aaa1111", ha(5), "exit-code", ha(2)), "atencao"),    # a rodada falhou
+            ((None, None, None, "", None), "ok"),                              # sem git: nada a dizer
+        ]
+        for args, estado in casos:
+            with self.subTest(args=args):
+                self.assertEqual(ds.avaliar_central_atualizada(*args, t)["estado"], estado)
+        c = ds.avaliar_central_atualizada("bbb2222", "aaa1111", ha(45), "success", None, t)
+        self.assertIn("bbb2222", c["detalhe"])
+        self.assertIn("aaa1111", c["detalhe"])  # o sha não pode ser "capitalizado" para minúsculas
+        self.assertIn("45 min", c["detalhe"])
+
+    def test_atualizar_central_esta_nas_verificacoes(self):
+        nomes = [f.__name__ for f in ds.VERIFICACOES]
+        for n in ("central_atualizada", "units_falhas", "telegram"):
+            self.assertIn(n, nomes)
+
+    # --- HC-24
+
+    def test_containers_um_nivel_so_e_a_pausa_vale(self):
+        linhas = [{"Names": "n8n", "State": "exited", "Status": "Exited (1)"},
+                  {"Names": "velho", "State": "exited", "Status": "Exited (0)"},
+                  {"Names": "ok", "State": "running", "Status": "Up 3 hours"}]
+        run = falso_run({("docker", "ps"): "\n".join(json.dumps(x) for x in linhas) + "\n",
+                         ("docker", "inspect"): "always\n"}, [])
+        with mock.patch.object(ds.subprocess, "run", run):
+            r = {c["id"]: c for c in ds.containers()}
+            self.assertEqual((r["container:n8n"]["estado"], r["containers"]["estado"]), ("falha", "falha"))
+            (self.dir / "pausa-velho").write_text("19/10")
+            (self.dir / "pausa-n8n").write_text("19/10")
+            r = {c["id"]: c for c in ds.containers()}
+        self.assertEqual(list(r), ["containers"])
+        self.assertEqual(r["containers"]["estado"], "ok")
+        self.assertIn("2 pausado(s) de propósito", r["containers"]["detalhe"])
+
+    def test_resumo_de_containers_nao_avisa_nem_pede_socorro_sozinho(self):
+        avisos = []
+        cs = [ds.check("container:x", "containers", "x", "falha", "Exited"),
+              ds.check("containers", "containers", "Containers", "falha", "1 com problema")]
+        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda m, *a: avisos.append(m) or True):
+            ds.avisar_transicoes(cs, {}, br("2026-10-19T10:00"))
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("• x:", avisos[0])
+        self.assertNotIn("• Containers:", avisos[0])
+
+
+class BackupEFilas(unittest.TestCase):
+    def test_ensaio_com_ultima_rodada_falha_e_atencao_mesmo_com_sucesso_recente(self):
+        t = br("2026-10-19T12:00").astimezone(timezone.utc)
+        recente = ds.iso(t - timedelta(days=10))
+        f = {"nome": "Ensaio de restauração", "tipo": "ensaio", "estado": "falha", "ultimo_sucesso": recente,
+             "detalhe": "restic restore: arquivo sumiu"}
+        c = ds._fonte_do_backup("ensaio", f, t)
+        self.assertEqual(c["estado"], "atencao")
+        self.assertEqual(c["detalhe"], "restic restore: arquivo sumiu")
+        self.assertFalse(c.get("sozinho"))
+        self.assertIn("falhou", c["o_que_fazer"])
+        self.assertEqual(ds._fonte_do_backup("ensaio", {**f, "estado": "ok"}, t)["estado"], "ok")
+
+    def test_remote_do_rclone_vem_do_fontes_toml(self):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        toml = d / "fontes.toml"
+        toml.write_text('[geral]\nremoto = "gdrive"\n[[espelho]]\nid = "sites"\n[[espelho]]\nid = "estrutura"\n'
+                        'remoto = "gdrive-estrutura"\n[cofre]\nrepositorio = "rclone:gdrive-cofre:Backups/restic"\n')
+        self.assertEqual(ds.remoto_do_backup("estrutura", toml), "gdrive-estrutura")
+        self.assertEqual(ds.remoto_do_backup("sites", toml), "gdrive")
+        self.assertEqual(ds.remoto_do_backup("cofre", toml), "gdrive-cofre")
+        self.assertEqual(ds.remoto_do_backup("estrutura", d / "nao-existe.toml"), "gdrive")
+
+    def test_token_recusado_manda_reconectar_o_remote_certo(self):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        (d / "fontes.toml").write_text('[[espelho]]\nid = "estrutura"\nremoto = "gdrive-estrutura"\n')
+        t = br("2026-10-19T12:00").astimezone(timezone.utc)
+        f = {"nome": "Estrutura", "estado": "falha", "ultimo_sucesso": ds.iso(t), "atencao_h": 3, "falha_h": 24,
+             "detalhe": "couldn't fetch token: invalid_grant"}
+        with mock.patch.object(ds, "BACKUP_FONTES", d / "fontes.toml"):
+            c = ds._fonte_do_backup("estrutura", f, t)
+        self.assertIn("rclone config reconnect gdrive-estrutura:", c["o_que_fazer"])
+
+    def test_textos_das_filas_nao_falam_do_que_saiu(self):
+        todo = " ".join(o for o, _, _ in ds.FILAS.values()) + " ".join(a[1] for _, a, _ in ds.FILAS.values())
+        for velho in ("Enviar um por um", "fila=envio", "Hoje › Prospects", "Enviar convite", "(09:00)", "expira no 10º",
+                      "o toque abre o WhatsApp e marca"):
+            self.assertNotIn(velho, todo)
+        for v in ds.FILAS.values():
+            self.assertTrue(v[1][1].startswith("/crm"), v[1][1])
+        self.assertIn("/crm?ver=triagem", ds.FILAS["prumo-revisar"][1][1])
+
+    def test_fila_de_leads_esperando_o_raio_x_tem_texto_proprio(self):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        (d / "lead").mkdir()
+        (d / "lead/content.md").write_text("x")
+        (d / ".demo-sob-pedido").write_text("")
+        with mock.patch.object(ds, "AUTO", d), mock.patch.object(ds, "ESTADO_N8N", d / "sem"):
+            [c] = ds.pendencias()
+        self.assertIn("raio-x.timer", c["o_que_fazer"])
+        self.assertIn("Gerar demo", c["o_que_fazer"])
+        self.assertNotIn("4 sites por dia", c["o_que_fazer"])
+        (d / ".demo-sob-pedido").unlink()
+        with mock.patch.object(ds, "AUTO", d), mock.patch.object(ds, "ESTADO_N8N", d / "sem"):
+            [c] = ds.pendencias()
+        self.assertIn("4 sites por dia", c["o_que_fazer"])
+
+
+class SocorroSoQuandoHaOQueFazer(unittest.TestCase):
+    """HC-8 / HC-6: o "Quebrou" só promete socorro que roda."""
+
+    T = datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc)
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-socorro2-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        (self.dir / "bin").mkdir()
+        (self.dir / "bin/socorro").write_text("#!/bin/sh\n")
+        for nome, valor in (("SOCORRO", self.dir / "bin/socorro"), ("SOCORRO_PEDIDOS", self.dir / "estado/pedidos"),
+                            ("SOCORRO_DESLIGADO", self.dir / "desligado")):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+        e = mock.patch.dict(os.environ, {"SOCORRO_DESLIGADO": ""})
+        e.start()
+        self.addCleanup(e.stop)
+        self.path_ativo = True
+        p = mock.patch.object(ds, "unit_ativa", lambda u: u == "socorro.path" and self.path_ativo)
+        p.start()
+        self.addCleanup(p.stop)
+        self.enviadas = []
+        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.enviadas.append(m) or True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def falha(self, cid, detalhe="x"):
+        return ds.check(cid, "servicos", cid, "falha", detalhe)
+
+    def pedidos(self):
+        return sorted((self.dir / "estado/pedidos").glob("*.json")) if (self.dir / "estado/pedidos").is_dir() else []
+
+    def test_falha_sem_remedio_nem_leitura_nao_pede_nem_promete(self):
+        cs = [self.falha("fluxo:abc"), self.falha("cron:xyz"), self.falha("pncp"), self.falha("idade:x")]
+        self.assertEqual(ds.pedir_socorro(cs, {}, self.T), set())
+        self.assertEqual(self.pedidos(), [])
+        ds.avisar_transicoes(cs, {}, self.T, {"fluxo:abc"})  # mesmo que alguém passasse o id, não há linha a dizer
+        self.assertIn("Quebrou:", self.enviadas[0])
+        self.assertNotIn("Socorro", self.enviadas[0])
+
+    def test_so_leitura_diz_diagnostico_e_com_remedio_diz_religar(self):
+        cs = [self.falha("backup:cofre"), self.falha("n8n")]
+        ids = ds.pedir_socorro(cs, {}, self.T)
+        self.assertEqual(ids, {"backup:cofre", "n8n"})
+        ds.avisar_transicoes(cs, {}, self.T, ids)
+        msg = self.enviadas[0]
+        self.assertEqual(msg.count(ds.LINHA_DO_DIAGNOSTICO), 1)
+        self.assertEqual(msg.count(ds.LINHA_DO_SOCORRO), 1)
+
+    def test_whatsapp_desconectado_e_container_qualquer(self):
+        self.assertTrue(ds.socorro_religa(self.falha("whatsapp-sessao", "Bridge do WhatsApp sem resposta em :3000")))
+        self.assertFalse(ds.socorro_religa(self.falha("whatsapp-sessao", "a sessão está 'disconnected'")))
+        self.assertFalse(ds.socorro_religa(self.falha("whatsapp-prumo", "O número do PRUMO caiu")))
+        self.assertTrue(ds.socorro_religa(self.falha("container:evolution-api-1")))
+        self.assertFalse(ds.socorro_religa(self.falha("container:outro")))
+        self.assertTrue(ds.socorro_le(self.falha("container:outro")))
+
+    def test_sem_o_socorro_path_ativo_nao_pede_e_nao_promete(self):
+        self.path_ativo = False
+        cs = [self.falha("n8n")]
+        self.assertEqual(ds.pedir_socorro(cs, {}, self.T), set())
+        self.assertEqual(self.pedidos(), [])
+        ds.avisar_transicoes(cs, {}, self.T, set())
+        self.assertNotIn("Socorro", self.enviadas[0])
+
+    def test_resumo_de_containers_nao_pede(self):
+        self.assertEqual(ds.pedir_socorro([self.falha("containers")], {}, self.T), set())
+
+
+class TelegramComoCanal(unittest.TestCase):
+    """HC-23 (sentinela), HC-17 (prioridade 0), OT-14 (mais origens pelo Telegram) e HC-10 (chave por fluxo)."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="ds-canal-"))
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        env = self.dir / "operations.env"
+        env.write_text(f'TELEGRAM_BOT_TOKEN="{TOKEN}"\nTELEGRAM_CHAT_IDS=111\n')
+        for nome, valor in (("OPERATIONS_ENV", env), ("TELEGRAM_ESTADO", self.dir / "telegram.json"),
+                            ("FILA", self.dir / "fila"), ("FILA_TRAVA", self.dir / "fila.lock"),
+                            ("FILA_ESTADO", self.dir / "fila-estado.json"), ("FILA_RECUSADOS", self.dir / "recusados"),
+                            ("FRESCOR_S", 0)):
+            p = mock.patch.object(ds, nome, valor)
+            p.start()
+            self.addCleanup(p.stop)
+        ds.FILA.mkdir()
+        self.pedidos = []
+        self.bot_no_ar = True
+
+        def urlopen(req, timeout=None):
+            self.pedidos.append(json.loads(req.data))
+            if not self.bot_no_ar:
+                raise ds.urllib.error.URLError("fora")
+            return _RespostaDoBot(b'{"ok": true, "result": {}}')
+        for alvo, valor in ((ds.urllib.request, mock.patch.object(ds.urllib.request, "urlopen", side_effect=urlopen)),):
+            valor.start()
+            self.addCleanup(valor.stop)
+        self.whatsapp = []
+        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.whatsapp.append(m) or True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def estado(self):
+        return json.loads(ds.TELEGRAM_ESTADO.read_text())
+
+    def test_envio_registra_ok_e_conta_as_falhas_seguidas(self):
+        ds.enviar_telegram("a", silencioso=False)
+        self.assertEqual(self.estado()["falhas_seguidas"], 0)
+        self.assertIn("ok_em", self.estado())
+        self.bot_no_ar = False
+        with contextlib.redirect_stderr(io.StringIO()):
+            for _ in range(3):
+                ds.enviar_telegram("a", silencioso=False)
+        self.assertEqual(self.estado()["falhas_seguidas"], 3)
+        self.assertIn("falhando_desde", self.estado())
+        self.bot_no_ar = True
+        ds.enviar_telegram("a", silencioso=False)
+        self.assertEqual(self.estado()["falhas_seguidas"], 0)
+        self.assertNotIn("falhando_desde", self.estado())
+
+    def test_sem_bot_configurado_nada_e_registrado(self):
+        ds.OPERATIONS_ENV.write_text("")
+        self.assertFalse(ds.enviar_telegram("a", silencioso=False))
+        self.assertFalse(ds.TELEGRAM_ESTADO.exists())
+        self.assertEqual(ds.telegram(), [])
+
+    def test_tres_falhas_seguidas_viram_falha_e_a_sonda_apaga(self):
+        t = br("2026-10-19T12:00")
+        self.assertEqual(ds.avaliar_telegram({"falhas_seguidas": 2}, t)["estado"], "ok")
+        c = ds.avaliar_telegram({"falhas_seguidas": 3, "falhando_desde": "2026-10-19T14:00:00Z",
+                                 "ok_em": "2026-10-18T10:00:00Z"}, t)
+        self.assertEqual(c["estado"], "falha")
+        self.assertIn("3 envios seguidos", c["detalhe"])
+        self.assertIn("operations.env", c["o_que_fazer"])
+        ds.TELEGRAM_ESTADO.write_text(json.dumps({"falhas_seguidas": 3}))
+        with mock.patch.object(ds, "_sondar_telegram", return_value=False):
+            self.assertEqual(ds.telegram()[0]["estado"], "falha")
+        with mock.patch.object(ds, "_sondar_telegram", return_value=True):
+            self.assertEqual(ds.telegram()[0]["estado"], "ok")
+        self.assertEqual(self.estado()["falhas_seguidas"], 0)
+
+    def test_falha_critica_de_noite_chega_com_som_e_a_comum_sem(self):
+        noite = br("2026-10-19T23:30")
+        for cid, silencioso in (("disco", False), ("dns", False), ("backup:cofre", False), ("container:x", False),
+                                ("fluxo:a", True), ("pncp", True)):
+            with self.subTest(cid):
+                self.pedidos.clear()
+                ds.avisar_transicoes([ds.check(cid, "maquina", cid, "falha", "x")], {}, noite)
+                self.assertEqual("disable_notification" in self.pedidos[0], silencioso)
+
+    def test_origens_que_saem_pelo_telegram(self):
+        for origem in ("socorro", "backup-dell", "atualizar-central", "silmer-drive-sync", "n8n:03 · Balcão"):
+            self.assertTrue(ds.sai_pelo_telegram(origem), origem)
+        for origem in ("teste", "squadone-lembretes", "n8nfake"):
+            self.assertFalse(ds.sai_pelo_telegram(origem), origem)
+
+    def gravar(self, nome, **extra):
+        (ds.FILA / nome).write_text(json.dumps(aviso(**extra)), encoding="utf-8")
+
+    def test_drenar_manda_pelo_telegram_as_origens_novas(self):
+        self.gravar("a.json", titulo="Backup", origem="backup-dell")
+        self.gravar("b.json", titulo="Central não atualizou", origem="atualizar-central")
+        self.gravar("c.json", titulo="Drive", origem="silmer-drive-sync")
+        self.gravar("d.json", titulo="Fluxo", origem="n8n:07 · Lead")
+        self.gravar("e.json", titulo="Lembrete", origem="squadone-lembretes")
+        r = ds.drenar_fila(br("2026-10-19T15:00"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (4, 1))
+        self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["Lembrete"])
+
+    def test_aviso_de_falha_do_fluxo_00_ganha_chave_por_fluxo(self):
+        origem = "n8n:00 · Avisar falha pelo Hermes"
+        self.gravar("a.json", titulo="⚠️ n8n do Dell", origem=origem, texto='Fluxo "01 · Caçador" falhou no nó X: erro 1')
+        self.gravar("b.json", titulo="⚠️ n8n do Dell", origem=origem, texto='Fluxo "01 · Caçador" falhou no nó Y: erro 2')
+        self.gravar("c.json", titulo="⚠️ n8n do Dell", origem=origem, texto='Fluxo "08 · CRM" falhou no nó Z: erro 3')
+        with contextlib.redirect_stderr(io.StringIO()):
+            r = ds.drenar_fila(br("2026-10-19T15:00"))
+        self.assertEqual((r["pelo_telegram"], r["descartados"]), (2, 1))
+        self.assertEqual(sorted(json.loads(ds.FILA_ESTADO.read_text())["chaves"]),
+                         ["n8n-falha:01 · Caçador", "n8n-falha:08 · CRM"])
+
+    def test_aviso_com_chave_propria_ou_de_outra_origem_nao_e_mexido(self):
+        self.gravar("a.json", origem="n8n:00 · Avisar falha pelo Hermes", chave="minha", texto='Fluxo "X" falhou')
+        self.gravar("b.json", origem="n8n:Outro", texto='Fluxo "X" falhou')
+        ds.drenar_fila(br("2026-10-19T15:00"))
+        self.assertEqual(sorted(json.loads(ds.FILA_ESTADO.read_text())["chaves"]), ["minha"])
 
 
 if __name__ == "__main__":

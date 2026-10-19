@@ -20,10 +20,9 @@
  *
  * Sem relógio, env, fetch ou arquivo: só os helpers puros que o resto do CRM já usa.
  *
- * A 1ª mensagem do Balcão (n8n, só JS embutido no nó) passa por uma CÓPIA deste gate em
- * deploy/dell/claude-ops/gate-de-envio.js (tipo "primeiro": marca, frase, emoji, tamanho, links, nome, R$).
- * Mexeu em MARCAS, FRASES_PROIBIDAS, LIMITES ou nas regras acima? Mexa na cópia: o
- * server/gate-de-envio-balcao.test.ts compara as duas e falha se divergirem.
+ * Fonte única desde 19/10/2026: a cópia em JS que o Balcão do n8n rodava em modo "avisar" só
+ * escrevia uma coluna que ninguém lia e saiu. A 1ª mensagem é conferida aqui, quando a Central ou o
+ * vendedor do Telegram a oferecem (frente-comercial.ts, vendedor.ts).
  */
 import { PRECOS_DO_CARDAPIO, normalizar } from "../src/operations/colinha.ts";
 import { precosProibidos } from "../src/operations/copiloto.ts";
@@ -110,7 +109,7 @@ export const PRECOS_DA_PROPOSTA: readonly string[] = PRECOS_DO_CARDAPIO;
 
 // ------------------------------------------------------------------ marcas de modelo
 
-// Exportadas (18/10/2026) para o teste comparar com a cópia em JS do Balcão (deploy/dell/claude-ops/gate-de-envio.js).
+// Exportadas (18/10/2026): o teste do gate as lê. A cópia em JS do Balcão saiu em 19/10 (o Balcão não barra mais nada).
 export const MARCAS: Array<{ regex: RegExp; colchete?: true }> = [
   { regex: /\{\{[^}\n]*\}\}/ },
   { regex: /\$\{[^}\n]*\}/ },

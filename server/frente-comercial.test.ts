@@ -120,6 +120,30 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('ativo com o ciclo parado: sem rodada há mais de 5 min no expediente, o estado diz cicloParado', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-'));
+  try {
+    await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
+    // Nunca rodou (nenhum arquivo de estado), dentro do expediente: parado.
+    const nunca = await lerFrente(dir, AGORA);
+    assert.equal(nunca.cicloParado, true); assert.equal(nunca.ultimaRodadaEm, null);
+    // Rodou há 2 min: andando. Há 6 min: parado, e a hora da última rodada vai junto.
+    await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA - 2 * 60_000).toISOString(), estado: 'pronto', fila: [] }));
+    assert.equal((await lerFrente(dir, AGORA)).cicloParado, false);
+    const parado = await lerFrente(dir, AGORA + 4 * 60_000);
+    assert.equal(parado.cicloParado, true); assert.equal(parado.ultimaRodadaEm, new Date(AGORA - 2 * 60_000).toISOString());
+    // Fora do expediente (sábado) o timer não é cobrado; pausado (ativo: false) também não.
+    assert.equal((await lerFrente(dir, Date.parse('2026-10-24T14:00:00Z'))).cicloParado, false);
+    await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: false }));
+    assert.equal((await lerFrente(dir, AGORA + 4 * 60_000)).cicloParado, false);
+    // Sem atualizadoEm legível, vale o mtime do arquivo de estado.
+    await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
+    await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ estado: 'pronto', fila: [] }));
+    const agoraReal = Date.now();
+    assert.equal((await lerFrente(dir, agoraReal)).ultimaRodadaEm !== null, true);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
 test('pausa é configuração de negócio da mesma origem, sem ampliar limites ou apagar a pausa existente', async () => {
   const m = await montar([], []);
   const post = (body: unknown, origin?: string) => fetch(`${m.base}/crm/frente/config`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) }, body: JSON.stringify(body) });

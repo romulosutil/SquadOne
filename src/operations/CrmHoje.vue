@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { aplicarCohort, gravarCohort, lerCohort, motivosDoLead, semCriterios, type Cohort } from './cohort'
 import CrmCohort from './CrmCohort.vue'
 import CrmConfirmarConvite from './CrmConfirmarConvite.vue'
-import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
+import { SIGLA_DO_PRODUTO } from './crm-formato'
 import { alvosDoLote, corpoDaLeitura, desfechoDaResposta, lerEmSerie, textoDoAndamento, textoDoResumo, type Andamento } from './leitura-de-sinais'
 import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
 import RecadoDeTravas from './RecadoDeTravas.vue'
@@ -95,7 +95,7 @@ const idsQueBatem = computed(() => new Set(aplicado.value.batem.map((l) => l.id)
 // Sem filtro, o grupo do servidor inteiro, como sempre foi. Com filtro, só quem bate (sem leitura fica de fora).
 const itensDaTriagem = computed(() => (cohortAtivo.value ? props.grupo.itens.filter((i) => idsQueBatem.value.has(i.leadId)) : props.grupo.itens))
 
-// As contagens do painel valem para quem ainda espera decisão (convidado desta tela já foi decidido).
+// As contagens do painel valem para quem ainda espera decisão (nem dispensado nem adiado nesta tela).
 const aDecidir = computed(() => leadsNaTriagem.value.filter((l) => naoDecidido(l.id)))
 const quantosDoCohort = computed(() => ({
   batem: aplicado.value.batem.filter((l) => naoDecidido(l.id)).length,
@@ -126,17 +126,12 @@ function mudarCohort(novo: Cohort) {
   gravarCohort(armazenamento(), novo)
   idsDoLote.value = []
 }
-// Quem do lote já não espera decisão: convidado, dispensado, ou já fora da Revisar pelo retrato.
+// Quem do lote já não espera decisão: dispensado, adiado, ou já fora da Revisar pelo retrato.
 const decididosNoLote = computed(() => lote.value.ids.length - lote.value.pendentes.length)
 const numero = (n: number) => n.toLocaleString('pt-BR')
 
 const comPontuacao = computed(() => prioridadesDiferem(props.grupo.itens, props.leads))
 const pontuacao = (item: CrmItemHoje) => props.leads.get(item.leadId)?.triagem?.prioridade
-
-const convidadoEm = (item: CrmItemHoje) => {
-  const d = decisoes.value[item.leadId]
-  return d?.tipo === 'convidado' ? hora(new Date(d.em).toISOString()) : ''
-}
 
 // ------------------------------------------------------------------ convidar
 
@@ -442,7 +437,7 @@ onBeforeUnmount(() => {
               Desfazer<span class="so-leitor"> o dispensar de {{ linha.empresa }}</span>
             </button>
           </li>
-          <li v-else class="crm-item" :class="{ 'is-aberto': convidadoEm(linha.item) }">
+          <li v-else class="crm-item">
             <div class="crm-item__quem">
               <button type="button" class="crm-item__empresa" :data-lead="linha.item.leadId" @click="emit('abrir', linha.item.leadId, $event.currentTarget as HTMLElement)">
                 {{ leads.get(linha.item.leadId)?.empresa ?? linha.item.leadId }}
@@ -454,8 +449,7 @@ onBeforeUnmount(() => {
             <p class="crm-item__acao"><strong>{{ linha.item.acao }}</strong> <span>{{ detalheSemPrioridade(linha.item.detalhe) }}</span></p>
             <!-- O motivo à vista: por que este prospect passou pelo filtro (só com o filtro ligado). -->
             <p v-if="motivosDe(linha.item).length" class="crm-item__porque"><strong>Motivo:</strong> {{ motivosDe(linha.item).join(' · ') }}</p>
-            <p v-if="convidadoEm(linha.item)" class="crm-item__aberto">Convite aberto às {{ convidadoEm(linha.item) }} nesta tela. A planilha confirma em alguns minutos.</p>
-            <div v-else class="crm-triagem__decisoes">
+            <div class="crm-triagem__decisoes">
               <a
                 v-if="!motivo(linha.item)" class="botao" :class="{ 'botao--primario': primeiroConvidavel === linha.item.leadId }"
                 :href="conviteDe(linha.item)" target="_blank" rel="noopener" @click="convidar(linha.item)"
@@ -475,7 +469,7 @@ onBeforeUnmount(() => {
               <button v-if="!verAdiadas" type="button" class="botao botao--leve" @click="adiar(linha.item)">Avaliar depois<span class="so-leitor"> {{ leads.get(linha.item.leadId)?.empresa }}</span></button>
               <button v-else type="button" class="botao botao--leve" @click="voltarATriagem(linha.item)">Retomar avaliação<span class="so-leitor"> de {{ leads.get(linha.item.leadId)?.empresa }}</span></button>
             </div>
-            <CrmConfirmarConvite v-if="leads.get(linha.item.leadId) && !convidadoEm(linha.item)" :lead="leads.get(linha.item.leadId)!" :disponivel="registro.disponivel" @registrado="emit('registrado')" />
+            <CrmConfirmarConvite v-if="leads.get(linha.item.leadId)" :lead="leads.get(linha.item.leadId)!" :disponivel="registro.disponivel" @registrado="emit('registrado')" />
             <p v-if="secundarios(linha.item).length" class="crm-triagem__links">
               <a v-for="link in secundarios(linha.item)" :key="link.url" :href="link.url" target="_blank" rel="noopener">{{ link.rotulo }} <span aria-hidden="true">↗</span></a>
             </p>

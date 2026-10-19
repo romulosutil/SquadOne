@@ -108,7 +108,7 @@ def preparar(wf):
         return confirmar_persistencia(wf)
     if any(n.get("parameters", {}).get("path") == "lead-acao" for n in wf.get("nodes", [])):
         return confirmar_acao(wf)
-    if any(n["name"] == "Marcar como enviado" for n in wf.get("nodes", [])) and not so_rastro_do_clique(wf):
+    if no_de_marcar(wf) is not None and not so_rastro_do_clique(wf):
         wf = copy.deepcopy(wf)
         no = next(n for n in wf["nodes"] if n["name"] == "Decidir")
         if "[abrir-nao-envia]" not in no["parameters"]["jsCode"]:
@@ -118,10 +118,20 @@ def preparar(wf):
     return wf
 
 
+# O nó que grava na planilha o clique do link rastreado. O 04 do Site o chama "Gravar clique_em" (era "Marcar
+# como enviado", nome que mentia: só grava o clique); os convites do PRUMO ainda o têm com o nome antigo até
+# o prumo-*.py tirar a marca de lá. Os dois nomes valem aqui.
+NOS_DE_MARCAR = ("Marcar como enviado", "Gravar clique_em")
+
+
+def no_de_marcar(wf):
+    return next((n for n in wf.get("nodes", []) if n["name"] in NOS_DE_MARCAR), None)
+
+
 def so_rastro_do_clique(wf):
-    """O nó "Marcar como enviado" só grava `clique_em` (o 04 do Site desde 19/10/2026)? Então abrir não marca
-    envio e o clique pode ficar registrado: é o rastro que o observador usa para manter a letra do Balcão."""
-    no = next(n for n in wf["nodes"] if n["name"] == "Marcar como enviado")
+    """O nó que grava o clique (NOS_DE_MARCAR) só grava `clique_em` (o 04 do Site desde 19/10/2026)? Então abrir não
+    marca envio e o clique pode ficar registrado: é o rastro que o observador usa para manter a letra do Balcão."""
+    no = no_de_marcar(wf)
     colunas = (no.get("parameters") or {}).get("columns") or {}
     gravadas = set(colunas.get("value") or {}) - set(colunas.get("matchingColumns") or [])
     return gravadas == {"clique_em"}

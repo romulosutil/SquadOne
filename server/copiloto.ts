@@ -19,6 +19,7 @@ import type { MensagemParaODossie } from "../src/operations/copiloto.ts";
 import { arquivoDoMes, COTA_ESGOTADA, conferirCodex, diaLocal, executarCodex, type ExecutorDoCodex, type Logger } from "./luna-sombra.ts";
 import { gerarComRetry, MODEL, ModeloOcupado } from "./orchestrator.ts";
 import { conferirMensagem, resumoDosProblemas } from "./gate-de-envio.ts";
+import { anexarJsonl } from "./em-serie.ts";
 
 /**
  * O gate de pré-envio (server/gate-de-envio.ts) sobre a mensagem do modelo, em modo "bloquear": marca
@@ -327,6 +328,11 @@ export interface Copiloto {
 
 const chaveDoLead = (produto: string, id: string) => `${produto}:${id}`;
 
+/** Passado isto o dossiê é relido do disco mesmo sem mudança na conversa (o Raio-X pode ter aparecido). */
+export const RELEITURA_DO_DOSSIE_MS = 15 * 60_000;
+/** A cota do provedor esgotou: o automático espera isto antes de tentar de novo. */
+export const PAUSA_POR_COTA_MS = 10 * 60_000;
+
 export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
   const log = deps.log ?? console;
   const agora = deps.agora ?? (() => new Date());
@@ -357,15 +363,7 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     return contador;
   }
 
-  async function gravar(registro: RegistroDoCopiloto): Promise<void> {
-    await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
-    const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(registro.quando)), "a", 0o600);
-    try {
-      await arquivo.writeFile(`${JSON.stringify(registro)}\n`, "utf8");
-    } finally {
-      await arquivo.close();
-    }
-  }
+  const gravar = (registro: RegistroDoCopiloto): Promise<void> => anexarJsonl(arquivoDoMes(deps.dir, new Date(registro.quando)), registro);
 
   async function dossieDe(produto: CrmProduto, id: string): Promise<{ lead: CrmLead; dossie: DossieDoLead; passo: IdDoPasso }> {
     const { leads } = await deps.fontes.visao();
@@ -398,14 +396,14 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     return { lead, dossie, passo };
   }
 
-  const naFicha = (r: RegistroDeSugestao, dossie: DossieDoLead, guardada: boolean): SugestaoNaFicha => ({
+  const naFicha = (r: RegistroDeSugestao, raioX: DossieDoLead["raioX"]["situacao"], guardada: boolean): SugestaoNaFicha => ({
     hashDoDossie: r.hashDoDossie,
     quando: r.quando,
     provedor: deps.provedor.descricao,
     sugestao: r.sugestao!,
     avisos: r.avisos ?? [],
     guardada,
-    raioX: dossie.raioX.situacao,
+    raioX,
   });
 
   async function gerar(produto: CrmProduto, id: string, forcar: boolean, doLead?: CrmLead): Promise<SugestaoNaFicha> {
@@ -413,7 +411,7 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     const hash = hashDoDossie(dossie);
     const chave = chaveDoLead(produto, id);
     const anterior = (await carregar()).get(chave);
-    if (!forcar && anterior?.hashDoDossie === hash) return naFicha(anterior, dossie, true);
+    if (!forcar && anterior?.hashDoDossie === hash) return naFicha(anterior, dossie.raioX.situacao, true);
 
     const c = await contadorDoDia();
     if (c.usados >= deps.tetoDia) throw new TetoDoCopiloto(deps.tetoDia);
@@ -444,7 +442,7 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     log.log(`[copiloto] ${chave} (${passo}): ${falha ? `falhou (${falha.motivo})` : "sugestão pronta"} · ${deps.provedor.nome} · ${Math.round(registro.duracaoMs / 1000)} s · ${c.usados}/${deps.tetoDia} hoje`);
     if (falha) throw new CopilotoFalhou(falha.motivo, falha.detalhe);
     (await carregar()).set(chave, registro);
-    return naFicha(registro, dossie, false);
+    return naFicha(registro, dossie.raioX.situacao, false);
   }
 
   function sugerir(produto: CrmProduto, id: string, forcar = false, doLead?: CrmLead): Promise<SugestaoNaFicha> {
@@ -457,9 +455,29 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     return p;
   }
 
-  // O automático não tenta de novo o mesmo dossiê que falhou (ou que bateu no teto): chave -> hash.
-  const semAutomatico = new Map<string, string>();
+  // O automático não tenta de novo, no mesmo dia, o mesmo dossiê que falhou: chave -> hash e dia. Teto do dia e
+  // cota não entram aqui (não são culpa do dossiê, e carimbá-lo bloquearia o lead por todos os dias seguintes);
+  // a cota segura o laço todo por um tempo (`semAutomaticoAte`).
+  const semAutomatico = new Map<string, { hash: string; dia: string }>();
+  let semAutomaticoAte = 0;
 
+  // O que a volta anterior já sabe de cada lead (19/10/2026): o dossiê lê o Raio-X e a conversa do disco, e o
+  // laço de 1 min o refazia para todo lead cuja vez é do Rômulo. Sem mudança na conversa, na etapa ou nos
+  // eventos, vale o hash de antes; a releitura periódica pega o que não deixa rastro (o Raio-X que apareceu).
+  const vistos = new Map<string, { assinatura: string; hash: string; raioX: DossieDoLead["raioX"]["situacao"]; em: number }>();
+  const assinaturaDoLead = (lead: CrmLead) =>
+    [lead.conversa?.ultimaEntrada ?? "", lead.conversa?.ultima?.em ?? "", lead.etapa, lead.subEtapa, lead.eventos.length].join("|");
+  async function hashDoLead(lead: CrmLead): Promise<{ hash: string; raioX: DossieDoLead["raioX"]["situacao"] }> {
+    const chave = chaveDoLead(lead.produto, lead.id);
+    const assinatura = assinaturaDoLead(lead);
+    const visto = vistos.get(chave);
+    const agoraMs = agora().getTime();
+    if (visto && visto.assinatura === assinatura && agoraMs - visto.em < RELEITURA_DO_DOSSIE_MS) return visto;
+    const { dossie } = await dossieDoLead(lead);
+    const novo = { assinatura, hash: hashDoDossie(dossie), raioX: dossie.raioX.situacao, em: agoraMs };
+    vistos.set(chave, novo);
+    return novo;
+  }
   return {
     async estado() {
       const c = await contadorDoDia();
@@ -468,22 +486,31 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
     async ler(produto, id) {
       const { dossie } = await dossieDe(produto, id);
       const anterior = (await carregar()).get(chaveDoLead(produto, id));
-      return anterior && anterior.hashDoDossie === hashDoDossie(dossie) ? naFicha(anterior, dossie, true) : null;
+      return anterior && anterior.hashDoDossie === hashDoDossie(dossie) ? naFicha(anterior, dossie.raioX.situacao, true) : null;
     },
     sugerir: (produto, id, forcar = false) => sugerir(produto, id, forcar),
     async automatica(lead) {
       if (!copilotoServe(lead) || !conversaDaVez(lead)) return { estado: "sem" };
       const chave = chaveDoLead(lead.produto, lead.id);
       if (emAndamento.has(chave)) return { estado: "gerando" };
-      const { dossie } = await dossieDoLead(lead);
-      const hash = hashDoDossie(dossie);
+      const { hash, raioX } = await hashDoLead(lead);
       const anterior = (await carregar()).get(chave);
-      if (anterior?.hashDoDossie === hash) return { estado: "pronta", sugestao: naFicha(anterior, dossie, true) };
-      if (semAutomatico.get(chave) === hash) return { estado: "sem" };
+      if (anterior?.hashDoDossie === hash) return { estado: "pronta", sugestao: naFicha(anterior, raioX, true) };
+      const hoje = diaLocal(agora());
+      const falhou = semAutomatico.get(chave);
+      if (falhou && falhou.hash === hash && falhou.dia === hoje) return { estado: "sem" };
+      // Teto do dia e cota: nem tenta (cada tentativa releria o dossiê para bater na mesma porta).
+      if (agora().getTime() < semAutomaticoAte || (await contadorDoDia()).usados >= deps.tetoDia) return { estado: "sem" };
       // Uma geração por vez na Central: o codex roda no Dell, e dez de uma vez travariam a máquina.
       if (emAndamento.size) return { estado: "na-fila" };
       void sugerir(lead.produto, lead.id, false, lead).catch((error) => {
-        semAutomatico.set(chave, hash);
+        if (error instanceof TetoDoCopiloto) {
+          // Não é o dossiê.
+        } else if (error instanceof CopilotoFalhou && error.motivo === "cota") {
+          semAutomaticoAte = agora().getTime() + PAUSA_POR_COTA_MS;
+        } else {
+          semAutomatico.set(chave, { hash, dia: hoje });
+        }
         log.warn(`[copiloto] automático sem sugestão para ${chave}: ${error instanceof Error ? error.message : String(error)}`);
       });
       return { estado: "gerando" };
@@ -496,8 +523,8 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
         // Na Próxima venda e no Telegram só a sugestão de quem leu a conversa e responde à última dele.
         if (!anterior?.sugestao || !copilotoServe(lead) || !conversaDaVez(lead)) continue;
         try {
-          const { dossie } = await dossieDoLead(lead);
-          if (anterior.hashDoDossie === hashDoDossie(dossie)) mapa.set(lead.id, naFicha(anterior, dossie, true));
+          const { hash, raioX } = await hashDoLead(lead);
+          if (anterior.hashDoDossie === hash) mapa.set(lead.id, naFicha(anterior, raioX, true));
         } catch {
           // um lead torto não tira as sugestões dos outros
         }

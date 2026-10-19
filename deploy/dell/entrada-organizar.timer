@@ -1,11 +1,16 @@
 [Unit]
-Description=Entrada da Mel — organizar a fila a cada 5 min
+Description=Entrada da Mel — organizar a fila a cada 15 min
 
 [Timer]
-# De 5 em 5 min no relógio (:00, :05, ...), como o "every 5m" do job do Hermes que ele substitui. Rodada perdida com
-# o Dell desligado não importa (a seguinte pega a fila inteira): sem Persistent. Uma rodada que passe de 5 min
-# não acumula: o systemd não inicia o service de novo enquanto ele roda (e a trava do organizador cobre o resto).
-OnCalendar=*:0/5
+# De 15 em 15 min no relógio (:00, :15, ...). Eram 5 min, como o "every 5m" do job do Hermes que este timer
+# substitui, e 576 rodadas em 48 h terminaram sem nada a dizer (VIVO-7/DELL-19, auditoria de 19/10/2026).
+# Um .path (PathExistsGlob na fila) NÃO serve: o item organizado continua em ~/Mel/Entrada/fila/ com outro
+# estado, então o glob ficaria sempre verdadeiro e o serviço rodaria em laço; e PathChanged transformaria as
+# repetições do item (tentativas, MAX_TENTATIVAS), que hoje esperam o próximo disparo do timer, em chamadas
+# seguidas ao modelo. Rodada perdida com o Dell desligado não importa (a seguinte pega a fila inteira): sem
+# Persistent. Uma rodada que passe de 15 min não acumula: o systemd não inicia o service de novo enquanto ele
+# roda (e a trava do organizador cobre o resto).
+OnCalendar=*:0/15
 AccuracySec=10s
 
 [Install]

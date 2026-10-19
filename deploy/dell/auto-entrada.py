@@ -12,13 +12,13 @@ e este script materializa cada um em ~/auto-site/<caminho>, criando as pastas.
 no PC (e dali para o Drive); o PC queimou em 25/09/2026 e o espelho do Drive
 ficou parado até o PC novo (deploy/pc/README.md).
 
-Pacote inválido vai para ~/.local/share/auto-entrada-erro/ e gera aviso pelo
-Hermes (fila de avisos).
+Pacote inválido vai para ~/.local/share/auto-entrada-erro/ e gera aviso na
+fila de avisos (sai pelo Telegram, WhatsApp de reserva).
 """
 import base64
 import importlib.util
 import json
-import time
+import sys
 from pathlib import Path
 
 HOME = Path.home()
@@ -44,18 +44,14 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a entrada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -63,15 +59,12 @@ def lib_de_aviso():
 def avisar(texto: str) -> None:
     aviso = {"titulo": "🌐 Sites", "texto": texto, "origem": "auto-entrada"}
     lib = lib_de_aviso()
-    if lib is not None:
-        # Valida, grava atômico, não cria a pasta da fila e nunca levanta: o que
-        # não foi gravado (recusado, fila ausente) vai ao journal pelo stderr.
-        lib.gravar(aviso, fila=FILA_AVISOS, prefixo="auto-entrada")
+    if lib is None:  # sem a lib não há validação: não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr)
         return
-    # Sem a lib instalada: o jeito de antes, sem mudar nada.
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    nome = FILA_AVISOS / f"auto-entrada-{time.time_ns()}.json"
-    nome.write_text(json.dumps(aviso, ensure_ascii=False))
+    # Valida, grava atômico, não cria a pasta da fila e nunca levanta: o que
+    # não foi gravado (recusado, fila ausente) vai ao journal pelo stderr.
+    lib.gravar(aviso, fila=FILA_AVISOS, prefixo="auto-entrada")
 
 
 def main() -> None:
@@ -88,7 +81,12 @@ def main() -> None:
             tmp.replace(destino)
             pacote.unlink()
         except Exception as e:  # noqa: BLE001 — um pacote ruim não trava os outros
-            pacote.replace(ERRO / pacote.name)
+            # Se nem mover para ERRO der (disco cheio), o pacote fica na fila e o .path (PathExistsGlob)
+            # religa o serviço em laço até o limite de início: some com ele, o aviso diz qual era.
+            try:
+                pacote.replace(ERRO / pacote.name)
+            except OSError:
+                pacote.unlink(missing_ok=True)
             avisar(f"Pacote da pasta auto não pôde ser gravado ({pacote.name}): {e}")
 
 

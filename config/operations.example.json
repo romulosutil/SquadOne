@@ -1,7 +1,6 @@
 {
   "displayName": "Seu nome",
   "autoDirectory": "/home/usuario/auto",
-  "autoNotificationStateFile": "/home/usuario/.hermes/leads-notificados.json",
   "tools": {
     "hermes": {
       "label": "Hermes Chat Web",

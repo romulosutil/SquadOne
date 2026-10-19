@@ -206,12 +206,23 @@ class ErroDoGoogle extends Error {
   }
 }
 
+/** O endpoint de token sem resposta não pode prender a vigia nem uma rota: some depois disto. */
+export const PRAZO_DO_GOOGLE_MS = 15_000;
+
 async function pedirAoGoogle(corpo: Record<string, string>): Promise<any> {
-  const resp = await fetch(TOKEN, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(corpo),
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(corpo),
+      signal: AbortSignal.timeout(PRAZO_DO_GOOGLE_MS),
+    });
+  } catch (err: any) {
+    // Sem resposta (rede, prazo): status null, que `refreshRecusado` trata como transitório e nunca apaga a credencial.
+    const motivo = err?.name === "TimeoutError" ? `sem resposta em ${PRAZO_DO_GOOGLE_MS / 1000} s` : err?.cause?.code ?? err?.message ?? "erro de rede";
+    throw new ErroDoGoogle(`Google inacessível (${motivo})`, null, undefined);
+  }
   const dados = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     throw new ErroDoGoogle(

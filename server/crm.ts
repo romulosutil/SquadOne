@@ -66,26 +66,30 @@ export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
   plus: "Plus",
 };
 
-/** De onde vem cada oferta de prospecção: aba, caminho do clique em "Enviar convite" e quem encontrou. */
+/** De onde vem cada oferta de prospecção: aba, quem encontrou e qual link da planilha ela usa. */
 export const OFERTA_DE_PROSPECCAO: Record<CrmProdutoDeProspeccao, {
-  aba: string; convite: string; cacador: string; link: "planilhaPrumo" | "planilhaIris" | "planilhaEstampa";
+  aba: string; cacador: string; link: "planilhaPrumo" | "planilhaIris" | "planilhaEstampa";
 }> = {
-  prumo: { aba: "Prospects", convite: "convite", cacador: "Encontrado pelo Lead Scout", link: "planilhaPrumo" },
-  iris: { aba: "Clínicas", convite: "convite-iris", cacador: "Encontrado pelo Caçador do Iris", link: "planilhaIris" },
-  estampa: { aba: "Estamparias", convite: "convite-estampa", cacador: "Encontrado pelo Caçador de estamparias", link: "planilhaEstampa" },
+  prumo: { aba: "Prospects", cacador: "Encontrado pelo Lead Scout", link: "planilhaPrumo" },
+  iris: { aba: "Clínicas", cacador: "Encontrado pelo Caçador do Iris", link: "planilhaIris" },
+  estampa: { aba: "Estamparias", cacador: "Encontrado pelo Caçador de estamparias", link: "planilhaEstampa" },
 };
 
 /** Follow-up, expiração e mudança automática de pasta só valem para envio a partir daqui (site-antes-da-venda.py). */
 export const CORTE_DO_ACOMPANHAMENTO = "2026-09-29T00:00:00-03:00";
 export const DIAS_ATE_FOLLOWUP = 3;
-/** A regra da PLANILHA: o 05 · Acompanhamento marca "expirado" no 10º dia e o site-pastas move a pasta. */
-export const DIAS_ATE_EXPIRAR = 10;
 /**
  * A regra do CRM (08/10/2026, pedido do Rômulo: "7 ou 8 dias sem falar, é claro que não funcionou"):
  * Em contato sem mensagem do lead há tantos dias — da última resposta, ou do envio se ele nunca
- * respondeu — vai para Perdido. Vale para Site (acervo incluído) e PRUMO, antes da planilha expirar.
+ * respondeu — vai para Perdido. Vale para Site (acervo incluído) e PRUMO.
  */
 export const DIAS_SEM_RESPOSTA = 7;
+/**
+ * A regra da PLANILHA: o 05 · Acompanhamento marca "expirado" e o site-pastas move a pasta. Desde 19/10/2026 é
+ * o mesmo 7º dia do CRM (era o 10º, e as duas contas se desencontravam); a constante só serve para mostrar a
+ * data estimada e a folga da divergência de pasta.
+ */
+export const DIAS_ATE_EXPIRAR = DIAS_SEM_RESPOSTA;
 /** Resposta "nova" para a lista Hoje quando não há colunas de última entrada/saída. */
 export const HORAS_DE_RESPOSTA_NOVA = 48;
 /** Retrato mais velho que isto aparece como desatualizado (o fluxo roda a cada 10 min). */
@@ -469,10 +473,14 @@ function numeroDoWhatsapp(...fontes: string[]): string | undefined {
 /** Limite do texto que a fila de envio mostra: a primeira mensagem tem ~300 caracteres. */
 export const MAX_MENSAGEM_PRONTA = 1000;
 
+/** Quanto tempo a visão do CrmStore vale antes de ser montada de novo (as leituras são pesadas e o retrato muda a cada ~10 min). */
+export const TTL_DA_VISAO_MS = 20_000;
+
 /**
  * O texto que o `wa_me` do Balcão põe no WhatsApp (`?text=`). A fila de envio da
- * Central mostra a mensagem antes do toque: o clique no `wa_link` já marca o lead
- * como enviado, então ler a mensagem depois do clique é tarde.
+ * Central mostra a mensagem antes do toque: o link abre o WhatsApp com o texto já preenchido, e
+ * quem confere precisa vê-lo antes de enviar. (O clique no `wa_link` só grava `clique_em`; o envio
+ * é marcado pelo observador quando a mensagem aparece na conversa.)
  */
 export function textoDoWaMe(valor: string): string | undefined {
   try {
@@ -809,7 +817,6 @@ export function followupJaEnviado(followups: number[], enviado: number | undefin
  * de venda, a oferta como parâmetro"). Site, PRUMO, Iris, estamparias e Plus tinham cada um a sua cópia
  * desta conta, e cada oferta nova copiava a esteira. O que muda por oferta entra como parâmetro:
  * - `leu`: o recibo de leitura (Site e convites), ou o teste do recibo; o Plus não tem recibo e passa `true`;
- * - `marcadoPeloN8n`: o `followup_em` do 05 · Acompanhamento (só o Site o tem): marcado em outro dia, não é hoje;
  * - `ultimaSaida`: mensagem nossa depois do 2º dia já é um follow-up à mão (só a planilha do Site a tem).
  * Fica de fora o reenvio do só-robô, que tem regra própria (reenvioDoRoboHoje).
  */
@@ -821,13 +828,11 @@ export function followupDoTerceiroDia(e: {
   leu: boolean;
   followups: number[];
   agora: number;
-  marcadoPeloN8n?: number;
   ultimaSaida?: number;
 }): boolean {
   const d = dias(e.enviado, e.agora);
   return e.etapa === "contato" && !e.emConversa && !e.acervo && d !== undefined && e.leu
     && d >= DIAS_ATE_FOLLOWUP && d < DIAS_SEM_RESPOSTA
-    && (e.marcadoPeloN8n === undefined || diaSP(e.marcadoPeloN8n) === diaSP(e.agora))
     && (e.ultimaSaida === undefined || e.enviado === undefined || e.ultimaSaida <= e.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
     && !followupJaEnviado(e.followups, e.enviado);
 }
@@ -846,7 +851,7 @@ export function followupDoTerceiroDia(e: {
  * - uma vez só: o `followup_enviado` anotado depois do envio o tira (e recomeça o prazo,
  *   comPrazoDoContato); saída nossa em outro dia que não o do envio (`ultima_saida_em`) também,
  *   porque alguém já escreveu de novo à mão. A do próprio dia é a 1ª mensagem: o `enviado_em`
- *   é o clique no link, e a mensagem sai minutos depois.
+ *   é marcado pelo observador quando ela aparece na conversa, e a saída do próprio dia é essa.
  * Acervo (envio antes do corte) fica de fora, como no follow-up de sempre.
  */
 export function reenvioDoRoboHoje(entrada: {
@@ -1088,7 +1093,7 @@ export function etapaDoSite(entrada: {
     return { etapa: "perdido", sinal: "recusou", subEtapa: `Recusou${noWhatsapp}`, desde: entrada.recusado, motivoPerda: "recusou" };
   }
   if (lugar === "_recusados") return { etapa: "perdido", sinal: "recusou-pasta", subEtapa: "Recusou (anotado na pasta _recusados/)", motivoPerda: "recusou" };
-  // A planilha expira no 10º dia, o CRM já tirou no 7º: mesma saída e mesma data, para o
+  // A planilha expira no mesmo 7º dia do CRM (até 19/10/2026 era o 10º): mesma saída e mesma data, para o
   // "desde" (e a folga da limpeza dos demos) não recomeçar quando o status chega.
   if (status === "expirado" && entrada.respondeu === undefined) {
     return {
@@ -1167,8 +1172,8 @@ function leadDoSite(linha: Linha, contexto: {
   const resposta = respostaDaLinha(c);
   // "expirado" é a regra de tempo da planilha, não decisão de ninguém: próximo passo ou proposta
   // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato). O reenvio
-  // do só-robô anotado também: o prazo recomeça nele, e a planilha, que conta 10 dias do ENVIO,
-  // cortaria antes (um reenvio no 6º dia ficaria com 4 dias em vez de 7).
+  // do só-robô anotado também: o prazo recomeça nele, e a planilha, que conta 7 dias do ENVIO,
+  // cortaria antes (um reenvio no 6º dia ficaria com 1 dia em vez de 7).
   const reenviado = resposta?.tipo === "bot" && t.respondeu === undefined && t.enviado !== undefined && followupJaEnviado(followups, t.enviado);
   const statusDaEtapa = status === "expirado" && (proximo || proposta || reenviado) ? "enviado" : status;
   const calculada = comPrazoDoContato(
@@ -1210,7 +1215,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...evento("followup", "Lembrete de follow-up (05 · Acompanhamento)", t.followup, "planilha · followup_em"),
     ...eventoDoPrazo(calculada),
     ...(status === "expirado" && t.enviado !== undefined
-      ? evento("expirou", "Planilha marcou expirado", t.enviado + DIAS_ATE_EXPIRAR * DIA_MS, "status expirado · data pela regra dos 10 dias", { estimado: true })
+      ? evento("expirou", "Planilha marcou expirado", t.enviado + DIAS_ATE_EXPIRAR * DIA_MS, "status expirado · data pela regra dos 7 dias", { estimado: true })
       : []),
     ...evento("recusou", "Recusou", t.recusado, "planilha · recusado_em"),
     ...evento("fechou", "Fechou", t.fechado, "planilha · fechado_em"),
@@ -1251,7 +1256,7 @@ function leadDoSite(linha: Linha, contexto: {
   const followupHoje = reenvioLink
     ? reenvioDoRoboHoje({ etapa: calculada.etapa, sinal: calculada.sinal, acervo, enviado: t.enviado, followups, ultimaSaida: t.ultimaSaida, agora })
     : followupDoTerceiroDia({ etapa: calculada.etapa, emConversa, acervo, enviado: t.enviado, leu: leuOuTeste, followups, agora,
-      marcadoPeloN8n: t.followup, ultimaSaida: t.ultimaSaida });
+      ultimaSaida: t.ultimaSaida });
   const reenvioDoRobo = followupHoje && Boolean(reenvioLink);
   // O toque que pede o demo: lead que nunca teve demo, com pasta, que não recusou nem fechou, e sem pedido aberto.
   // 15/10/2026: sem exigir o Raio-X avulso nem o publicado.json: quem recebeu a A sem demo (gerador que falhou,
@@ -1778,7 +1783,7 @@ const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
   { id: "revisar", titulo: "Prospects para revisar", explicacao: "Serviços PRUMO, Iris e estamparias na Etapa Revisar: veja o site e decida o convite." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
-  { id: "enviar", titulo: "Primeiro contato para enviar", explicacao: "O botão abre o WhatsApp com a primeira mensagem e marca o envio. Sem demo, você gera quando o lead pedir." },
+  { id: "enviar", titulo: "Primeiro contato para enviar", explicacao: "O botão abre o WhatsApp com a primeira mensagem; o envio é marcado quando ela aparece na conversa. Sem demo, você gera quando o lead pedir." },
 ];
 
 /** A ação da Hoje para o reenvio do só-robô (o rótulo do link é ROTULO_DO_REENVIO, de site-mensagem.ts). */
@@ -1963,7 +1968,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
             ? ` Oferta: ${ROTULO_DA_OFERTA[lead.plus!.oferta]}.${lead.plus!.fixo ? " Telefone fixo: confira se tem WhatsApp." : ""}`
             : lead.links.site ? "" : " Ainda sem demo: gere quando ele pedir."),
         links: [
-          ...(lead.links.enviar ? [{ rotulo: "Enviar pelo WhatsApp (marca como enviado)", url: lead.links.enviar }] : []),
+          ...(lead.links.enviar ? [{ rotulo: "Enviar pelo WhatsApp", url: lead.links.enviar }] : []),
           ...(lead.links.site ? [{ rotulo: "Ver o demo", url: lead.links.site }] : []),
         ],
         // Quem dá para enviar com um toque vem antes; dentro de cada parte, o mais antigo primeiro.
@@ -2428,7 +2433,33 @@ export class CrmStore {
     }
   }
 
-  async visao(agora = new Date()): Promise<CrmVisao> {
+  /**
+   * A visão guardada por `ttlDaVisaoMs` (19/10/2026). Cada chamada relê as pastas, os mapas, o Raio-X, o
+   * Plus e até 3000 JSONL de conversa, e o copiloto, o vendedor, o lead quente, as abas e o Assistente a
+   * pediam, cada um, a cada minuto. A promessa em voo é compartilhada (duas chamadas juntas montam uma
+   * visão só) e toda escrita que passa por aqui a descarta. Quem passa `agora` (os testes, a validação
+   * de um registro) quer a leitura daquele instante e não usa o cache.
+   */
+  ttlDaVisaoMs = TTL_DA_VISAO_MS;
+  private visaoGuardada: { em: number; promessa: Promise<CrmVisao> } | null = null;
+
+  visao(agora?: Date): Promise<CrmVisao> {
+    if (agora) return this.montarVisao(agora);
+    const hoje = Date.now();
+    if (this.visaoGuardada && hoje - this.visaoGuardada.em < this.ttlDaVisaoMs) return this.visaoGuardada.promessa;
+    const entrada = { em: hoje, promessa: this.montarVisao(new Date(hoje)) };
+    this.visaoGuardada = entrada;
+    // Leitura que falhou não fica guardada: a próxima tenta de novo.
+    entrada.promessa.catch(() => { if (this.visaoGuardada === entrada) this.visaoGuardada = null; });
+    return entrada.promessa;
+  }
+
+  /** Descarta a visão guardada: a próxima chamada relê tudo. */
+  invalidarVisao(): void {
+    this.visaoGuardada = null;
+  }
+
+  private async montarVisao(agora: Date): Promise<CrmVisao> {
     const [leitura, mapas, raioX, plus, registroDisponivel, ultimaFalha, conversas] = await Promise.all([
       this.config.autoDirectory ? lerPastasDosLeads(this.config.autoDirectory).catch((error) => {
         console.error("[crm] Falha ao ler ~/auto-site:", error);
@@ -2502,6 +2533,16 @@ export class CrmStore {
   }
 
   private async gravar(registro: CrmRegistroEntrada, agora: Date): Promise<RespostaDoRegistro> {
+    try {
+      return await this.gravarNoN8n(registro, agora);
+    } finally {
+      // O retrato leva segundos para refletir, mas o que o CRM calcula de fora dele (eventos manuais,
+      // marcas) muda assim que o registro entra: ninguém deve ler a visão de antes da escrita.
+      this.invalidarVisao();
+    }
+  }
+
+  private async gravarNoN8n(registro: CrmRegistroEntrada, agora: Date): Promise<RespostaDoRegistro> {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");

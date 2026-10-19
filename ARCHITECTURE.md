@@ -207,8 +207,8 @@ celular ── tailnet :8443 (Serve, ACL, header de identidade) ─┤
                            ├─► Google Calendar e Tasks (credencial do Dell)
                            ├─► finanças (financas.db; Meu Pluggy, OFX/CSV de reserva)
                            ├─► sinais: status.json, retrato do CRM, ~/auto-site
-                           └─► fila de avisos (schema e teto) ─► Hermes ─► WhatsApp
-                                    └─ P0 também ─► Telegram
+                           ├─► avisos pessoais (lembrete, finanças, falhas do Dell) ─► bot do Telegram do dono
+                           └─► fila de avisos (schema e teto) ─► Hermes ─► WhatsApp  (reserva do Telegram; P0 nos dois)
 healthchecks.io ◄── sinal de vida do Dell; parou = avisa por Telegram e e-mail
 Easypanel: reserva fria, travada, sem TELEGRAM_*
 ```
@@ -233,9 +233,9 @@ Easypanel: reserva fria, travada, sem TELEGRAM_*
   |---|---|---|
   | Demandas (texto, áudio, `/foco`, `/baixa`) | Telegram, `getUpdates` pelo Dell | sem URL pública: Funnel é proibido |
   | Resultado do turno e botões | Telegram, na mesma conversa | resposta a um gesto; os botões só existem lá |
-  | Lembretes, falhas, cartões, alertas de finanças | WhatsApp do Hermes, pela fila | ponto único com teto: o número é o mesmo dos leads |
-  | Cartão que pede decisão | WhatsApp com link da tailnet | abrir não confirma |
-  | P0 | WhatsApp + espelho no Telegram | a sessão do WhatsApp não é oficial e cai |
+  | Lembretes, alertas de finanças, falhas do Dell (OT-14, 16/10/2026) | Telegram do dono, sem som das 22h às 7h; a fila do WhatsApp do Hermes só como reserva | o número do WhatsApp é o mesmo dos leads e já levou restrição; a chave de 24 h dos avisos pessoais fica em `avisos-enviados.json` |
+  | Avisos que ainda vão pela fila | WhatsApp do Hermes, com schema e teto | ponto único com teto (o cartão que pedia decisão por link da tailnet saiu em 19/10/2026) |
+  | P0 | WhatsApp + Telegram | a sessão do WhatsApp não é oficial e cai; capacidade pronta, nenhum chamador a produz hoje |
   | Dell sumiu | healthchecks.io (Telegram e e-mail) | o Hermes cai junto com o Dell |
 
   O Hermes é só transporte: o SquadOne decide quando e o quê, grava na fila, e
@@ -693,8 +693,9 @@ A mesma aplicação possui dois perfis selecionados no servidor por
   Dell é um retrato de 14/09/2026 e nada da Central o lê ou escreve.
 
 `src/RootApp.vue` consulta somente `/api/runtime` para escolher a superfície.
-A mesma rota diz `ocupado` (turno ou fila do bot do Telegram em andamento),
-que o `atualizar-central` do Dell espera virar `false` antes de reiniciar.
+A mesma rota diz `ocupado` (turno, fila do bot do Telegram, resposta do Assistente ou uma volta da vigia em andamento),
+que o `atualizar-central` do Dell espera virar `false` antes de reiniciar. No SIGTERM a Central para os laços (vigia, sinal de vida, polling,
+leitura diária, copiloto automático) antes de fechar o servidor.
 Os componentes da Central ficam em `src/operations/`; eles não incorporam o
 SquadOne em iframe. `/squadone` redireciona ao app do Easypanel até a mudança
 da agenda para o Dell; depois, os agentes moram no mesmo app.
@@ -710,7 +711,7 @@ Desde a casca mobile (07/10/2026) a Central são rotas da mesma casca do app
   funciona (`src/operations/fluxos.ts`), os acessos e tudo que o Dell confere
   ficam em `/mais`;
 - `/entrada/` abre a página da Entrada da Mel (texto e arquivos para o Hermes organizar; segredos
-  vão para o cofre `age`). Não é da SPA: `server/entrada-proxy.ts` repassa três rotas fechadas ao
+  vão para o cofre `age`). Não é da SPA: `server/entrada-proxy.ts` repassa quatro rotas fechadas (a página, `api/estado`, `api/enviar` e a fonte) ao
   serviço `deploy/dell/entrada/` em `127.0.0.1:9130`, com o mesmo porteiro de IP, e o item
   "Entrada" do menu fica logo abaixo de CRM. Pela tailnet é a mesma porta 8443 da Central: não há
   outro listener do Tailscale Serve. Detalhes e modelo de segurança em `deploy/dell/entrada/README.md`.
@@ -722,8 +723,9 @@ cada minuto por `deploy/dell/dell-status.py` e lido por `server/dell-status.ts`
 dentro de `GET /api/operations/overview`. Desde 30/09/2026 cada verificação
 pode trazer `o_que_fazer`, `acao` ({rotulo, url}: http(s) ou rota da Central)
 e `sozinho` (resolve sem o Rômulo); os três são opcionais e o leitor aceita
-retrato antigo sem eles. O mesmo monitor avisa o Rômulo pelo
-Hermes quando algo quebra e quando volta. Retrato com mais de 5 minutos vira a
+retrato antigo sem eles. O mesmo monitor avisa o Rômulo (pelo Telegram, com o WhatsApp do Hermes de reserva) quando algo
+quebra e quando volta; desde 19/10/2026 o `status.json` é gravado ANTES de qualquer aviso e cada verificação tem prazo (70 s, 100 s no total),
+para um aviso lento ou uma verificação presa não deixarem a Central sem retrato. Retrato com mais de 5 minutos vira a
 falha "Monitor do Dell". As rotas de projetos e leituras do Hermes seguem no
 servidor, mas saíram da interface em 23/09/2026.
 
@@ -925,19 +927,23 @@ Revisar → Convite enviado → Diagnóstico pronto → Concluído | Sem interes
   WhatsApp publicado no site → nota → Prospects (com o link "Enviar convite ↗")
   ou Descartados; cadastro repetido (mesmo WhatsApp) é descartado. Resumo da
   busca pelo Hermes.
-- **Clique em "Enviar convite"** (webhook do n8n pelo túnel): Etapa → Convite
-  enviado e abre o WhatsApp com a mensagem e o formulário já com a empresa e o
-  papel "Dono".
+- **Clique em "Enviar convite"** (webhook do n8n pelo túnel): só abre o WhatsApp com
+  a mensagem e o formulário já com a empresa e o papel "Dono"; não marca nada. A Etapa
+  muda para Convite enviado quando o **observador do WhatsApp** vê a mensagem sair
+  (desde 19/10/2026; o nó "Marcar como enviado" nunca gravava e saiu).
 - **Diagnóstico do dono** (de hora em hora): a resposta completa mais recente
-  da empresa fecha o Índice PRUMO, grava Índice e Briefing na linha, muda a
-  Etapa para Diagnóstico pronto e avisa pelo Hermes. Também grava as
-  pendências que a Central mostra em "Esperando você".
+  da empresa fecha o Índice (a média das 16 respostas, 0 a 100), grava Índice e Briefing na linha e muda a
+  Etapa para Diagnóstico pronto. O aviso para o Rômulo é um só, o do Mapa (`prumo_mapa.py`, com o Índice
+  do Prumo X/18); o aviso "Diagnóstico pronto" do próprio fluxo saiu em 19/10/2026 (eram dois WhatsApps com dois
+  índices para a mesma resposta). Também grava as pendências que a Central mostra em "Esperando você".
 
 O vínculo entre formulário e linha é o `ID` (ID do Google Places), enviado no
 campo Empresa como `ID::Nome`. Os scripts que montam tudo isso estão em
-`deploy/dell/claude-ops/` (`prumo-simples.py`, `prumo-ajuste-planilha.py`); os
-JSON em `ops/n8n/workflows/` e o `scripts/prepare-prumo-workflows.mjs`
-descrevem a versão anterior.
+`deploy/dell/claude-ops/` (`prumo-simples.py`, que monta o Diagnóstico, a Pontuação e o clique do convite; `prumo-mapa-n8n.py`, o ramo do Mapa; `prumo-ofertas.py`, os caçadores do Iris e das
+estamparias; `prumo-publico.py`, a Fonte e a Medição), cada um idempotente pela API do n8n. A regra do nome da empresa é
+um arquivo só, `prumo-nome.js`, embutido nos construtores e comparado com `nomeDaEmpresa` do CRM por teste. Os JSON de `ops/n8n/workflows/`, o
+`scripts/prepare-prumo-workflows.mjs` e o `prumo-ajuste-planilha.py` descreviam o desenho anterior a 23/09/2026 e foram apagados em 19/10/2026
+(`ops/n8n/README.md` explica); resta só a fixture `deploy/dell/claude-ops/testes/prumo-diagnostico.fixture.json`.
 
 ## Radar PNCP
 

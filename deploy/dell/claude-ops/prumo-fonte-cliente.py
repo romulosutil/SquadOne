@@ -3,7 +3,7 @@
 
 Uso na Dell: python3 prumo-fonte-cliente.py --base empresa.json --perfil vendedor
 O código fica em arquivo 600, nunca em URL, Git ou log. Reexecutar cria outro
-acesso; cada um vence em até um ano. Revogar: mesma hash com validade curta.
+acesso; cada um vence em até um ano. Este script não revoga: não há --revogar.
 """
 import argparse
 import hashlib

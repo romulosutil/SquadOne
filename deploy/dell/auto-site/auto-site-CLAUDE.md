@@ -71,10 +71,10 @@ resumo das 10:30 do Hermes) com os botões Recusou, Fechou e Desfazer. O toque
 muda a planilha (`status` `recusado`, `recusado_em`), move a pasta para cá e
 anota a linha `**Recusou.**` no `registro.md`; nada vai para o lead. Se o
 Rômulo avisar uma recusa numa sessão, mande-o ao link do lead (ou, sem ele,
-mova a pasta à mão e anote a linha como antes; não mexa na planilha). **O demo
-fica no ar por 15 dias depois da recusa e então é pausado na Vercel**
-(`site-demos-pausa`, todo dia às 09:40): pausado, nunca apagado, e a pasta fica
-aqui. Se o lead voltar (Desfazer), o demo volta ao ar sozinho.
+mova a pasta à mão e anote a linha como antes; não mexa na planilha). **Dois dias
+depois de o lead ir a Perdido no CRM, o demo é apagado da Vercel**
+(`site-demos-limpeza`, todo dia às 09:50); a pasta fica aqui. Se o lead voltar
+(Desfazer), o demo só volta ao ar republicando a pasta.
 
 **`_fechados/` também não é fila.** Criada em 30/09/2026 para o botão "Fechou"
 da página do lead: guarda quem fechou negócio (`status` `fechado`,
@@ -199,7 +199,7 @@ a pesquisa mostrou, para virar regra quando o mesmo país se repetir.
 Continua valendo tudo o mais: premissa "sem site" (confira antes), nada
 inventado, franquia/rede fora.
 
-<!-- site-nichos.py: início (não edite entre os marcadores; rode o script) -->
+<!-- nichos: início (escrito à mão desde 19/10/2026; o site-nichos.py só troca a lista FEMININOS nos fluxos) -->
 ### Ramos novos: urgência, escritório, indústria (desde 05/10/2026)
 
 Migração de nicho do Rômulo: 83 demos de B2C de vitrine (pousada, eventos,
@@ -230,7 +230,7 @@ pelo Google:
   Laudo ou certificado para condomínio e Vigilância só se o negócio já cita.
 - **Saúde** (psicologia, odontologia, medicina) saiu das buscas: os conselhos
   proíbem depoimento. Se um lead assim aparecer, nada de avaliações na página.
-<!-- site-nichos.py: fim -->
+<!-- nichos: fim -->
 
 ### Regras do arquivo
 

@@ -34,7 +34,9 @@ Meu Drive/
 - **Ensaio:** depois do cofre, quando o último ensaio tem mais de 30 dias,
   restaura o essencial numa pasta à parte e sobe um Postgres e um n8n
   descartáveis, sem rede, para provar que as credenciais do n8n decifram com a
-  chave do cofre. O resultado chega pelo WhatsApp.
+  chave do cofre. O resultado chega pela fila de avisos do dell-status; o de falha leva a chave
+  `backup-dell:ensaio-falhou` (um por 24 h, vence em 20 h), para um ensaio que falha todo dia não
+  virar uma mensagem por dia.
 
 Tudo vem de `fontes.toml`. **Fonte nova = bloco novo no manifesto**; o runner
 `backup-dell.py` não conhece fonte pelo nome.
@@ -46,7 +48,8 @@ um `backup:<fonte>` por fonte, pela idade do último sucesso:
 
 - **Espelho:** rodada ruim isolada vira `atencao` (só na Central). Mais de
   3 h sem sucesso (30 h na consultoria) também é `atencao`, e mais de 24 h
-  (72 h) vira `falha`, com WhatsApp pelo Hermes.
+  (72 h) vira `falha`, com o "Quebrou" do dell-status pelo Telegram (o WhatsApp do Hermes só entra de
+  reserva, se o bot falhar; desde 16/10/2026).
 - **Cofre:** mais de 50 h sem sucesso, ou `restic check` falho, vira `falha`.
   Dump de banco que falhou (n8n ou projeto: todo `postgres`/`mysql`, e o que
   tiver `critico = true`) também é `falha`. Arquivo `obrigatorios` sumido ou

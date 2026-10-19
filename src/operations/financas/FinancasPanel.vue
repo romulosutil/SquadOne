@@ -72,9 +72,9 @@ useAtualizacaoViva(signal => carregar(signal), 60_000)
 
     <p class="fin-anuncio" role="status" aria-live="polite">{{ anuncio }}</p>
 
-    <!-- O "Atualizar" (era "Atualizar agora"; AC-13: um nome nas três recargas) era o primário amarelo da tela, de largura inteira no celular, para um
-         gesto raro: a tela já relê a cada 5 min e a Pluggy lê os bancos sozinha. Vira um botão
-         pequeno ao lado do "dados até" (AC-25), o lugar onde se vê que está velho. -->
+    <!-- Não há botão "Atualizar" nas Finanças (nem o "Atualizar agora" de antes, AC-13/AC-25): a tela já relê a cada 5 min e a Pluggy lê os
+         bancos sozinha. Ao lado do "dados até", o lugar onde se vê que está velho, fica só o aviso de que a atualização é automática.
+         A rota POST /api/financas/sincronizar segue para uso manual (curl). -->
     <FinSaude v-if="dados" :conexoes="dados.saude.conexoes" :dados-ate="dados.saude.dadosAte" :situacao="dados">
       <span class="sincronizacao" role="status">{{ dados.sincronizando ? 'Lendo os bancos…' : 'Atualização automática' }}</span>
     </FinSaude>

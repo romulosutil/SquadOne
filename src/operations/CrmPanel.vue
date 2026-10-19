@@ -9,16 +9,11 @@ import '../estilos/operacao.css'
 import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
 import ConversasParaAvancar from './ConversasParaAvancar.vue'
-import { conversasParaConduzir } from './conversas-para-conduzir'
+import { conversasParaVoce } from './conversas-para-conduzir'
 import { coberturaDoHistorico } from './historico-comercial'
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { lerFiltroDePasso, type FiltroDePasso } from './funil-lista'
-import {
-  AVISO_DE_FALHA_DA_ANOTACAO, anotar, corpoDaAnotacao, desanotar, gravarAnotados, lerAnotados, podarAnotados,
-  type EnviosAnotados, type TipoDeEnvioAnotado,
-} from './anotacao-de-envio'
-import { gravarEnvios, lerEnvios, podarEnvios, type EnviosAbertos } from './fila-de-envio'
-import { filaDaTela, lerResolvidas, noExpedienteDeVenda, type ResumoDoDia } from './proxima-venda'
+import type { Resolvidas } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { absorverDia, liberadosDoDia, liberarLead } from './liberados'
 import {
@@ -35,18 +30,19 @@ import './crm.css'
 // vistas Hoje (padrão), Funil e Resultados (08/10/2026) e a Ficha de um lead.
 // Tudo vem do retrato que o n8n grava das planilhas (server/crm.ts); a
 // Central não guarda etapa.
-// 16/10/2026 (blueprint, OT-01, OT-05 e OT-12): a área se chama Vendas; "A fazer" é só a Próxima
-// venda (a fila única; a folha "Enviar um por um" e a lista de grupos repetida saíram); a revisão de
-// prospects ganhou a aba Triagem, fora do caminho da venda; e cada aba tem um nome só, também na URL
-// (?ver=numeros; ?ver=resultados ainda abre, para links antigos).
+// 16/10/2026 (blueprint, OT-01, OT-05 e OT-12): a área se chama Vendas; a revisão de prospects ganhou
+// a aba Triagem, fora do caminho da venda; e cada aba tem um nome só, também na URL (?ver=numeros;
+// ?ver=resultados ainda abre, para links antigos). Desde 19/10/2026 os nomes da tela são NOME_DAS_ABAS
+// (vendas-abas.ts): Conversas para você (id afazer, que no lugar da Próxima venda lista as conversas e os
+// passos da fila), Primeiros contatos (id triagem) e Entender (Funil, Diagnóstico e Resultados).
 // 17/10/2026 (AC-19, AC-20): quatro abas. O Roteiro saiu daqui: é consulta, não tarefa de venda, e
 // mora no Mais (/mais?abrir=roteiro); ?ver=roteiro e ?ver=colinha vão para lá. A vista "Por passo
 // da jornada" (?ver=jornada) virou o filtro Passo do Funil, e o endereço antigo cai nele.
-// 17/10/2026 (hierarquia de Vendas): três abas na ordem do trabalho, Fazer (A fazer), Triar (Triagem)
-// e Entender (Funil, Números e Resultados num segmentado, mais o botão do Roteiro de venda). O topo é
+// 17/10/2026 (hierarquia de Vendas): três abas na ordem do trabalho, Fazer, Triar e Entender (Funil,
+// Diagnóstico e Resultados num segmentado, mais o botão do Roteiro de venda). O topo é
 // uma linha de saúde do retrato com o Atualizar; os avisos condicionais ficam numa dobra "Avisos (n)",
 // aberta sozinha só quando o retrato falhou. A dica de cada aba foi para o title, e as ofertas para um
-// "Filtros" fechado fora da A fazer. As regras do endereço moram em vendas-abas.ts (PURO, testado).
+// "Filtros" fechado fora das Conversas para você. As regras do endereço moram em vendas-abas.ts (PURO, testado).
 const props = defineProps<{ fichaInicial?: string }>()
 const emit = defineEmits<{ fechar: []; registrado: [] }>()
 
@@ -68,31 +64,37 @@ const etapaEmFoco = ref<CrmEtapa | null>(null)
 // O filtro Passo do Funil (AC-19) mora aqui, e não no CrmFunil, para ir no endereço (?passo=):
 // as salas do Escritório abrem o Funil já num passo.
 const passo = ref<FiltroDePasso>('')
-const envios = ref<EnviosAbertos>({})
 // Fora do expediente o link de envio fica travado até o "Liberar" daquele lead (trava-de-horario.ts).
 // Desde 17/10/2026 (AC-21) um só para a Central, guardado no servidor até a meia-noite (liberados.ts):
 // liberar na Próxima venda vale na Triagem e na Ficha, e recarregar não trava de novo.
 const liberados = liberadosDoDia
 // Trava de ritmo (trava-de-ritmo.ts, 15/10/2026): os toques de primeiro contato desta tela, até o
 // retrato confirmar. Sem "Liberar": o que ela segura é a pressa de esvaziar a fila.
-// Desde 17/10/2026 (AC-06) a fonte é o servidor (venda-do-dia.json, que a Próxima venda e o vendedor
-// do Telegram também gravam); o localStorage fica de reforço até o servidor confirmar.
+// Desde 17/10/2026 (AC-06) a fonte é o servidor (venda-do-dia.json, que o vendedor do Telegram e o time
+// comercial também gravam); o localStorage fica de reforço até o servidor confirmar.
 const primeiros = ref<PrimeirosContatos>({})
 const primeirosDoServidor = ref<Record<string, { em: number }>>({})
-async function lerPrimeirosDoServidor() {
+/** O "Enviei"/"Pular" do dia (o mesmo arquivo do Telegram): tira da lista "Conversas para você" o que já foi resolvido. */
+const resolvidas = ref<Resolvidas>({})
+/**
+ * O dia do servidor (GET /crm/venda) só é lido onde alguém o usa: a lista de conversas (resolvidas), a
+ * Primeiros contatos (ritmo e "Liberar") e a Ficha aberta (ritmo e "Liberar"). Funil, Diagnóstico e
+ * Resultados não precisam dele, e a leitura a cada 30 s ia à toa (VEN-22).
+ */
+const precisaDoDia = computed(() => vista.value === 'afazer' || vista.value === 'triagem' || leadId.value !== null)
+async function lerDoDia() {
   try {
     const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
     if (!r.ok) return
-    const corpo = await r.json() as { primeiros?: Record<string, { em: number }> }
+    const corpo = await r.json() as { primeiros?: Record<string, { em: number }>; resolvidas?: Resolvidas }
     if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+    resolvidas.value = corpo?.resolvidas && typeof corpo.resolvidas === 'object' ? corpo.resolvidas : {}
     absorverDia(corpo)
   } catch { /* sem servidor: o retrato e o reforço local */ }
 }
-// O toque em "Mandar o link"/"Mandar o follow-up" anota o envio (anotacao-de-envio.ts); a marca
-// local vale até o retrato confirmar. A falha não segura o WhatsApp: vira o aviso discreto abaixo.
-const anotados = ref<EnviosAnotados>({})
-const falhaDaAnotacao = ref<{ leadId: string; texto: string } | null>(null)
 const anuncio = ref('')
+/** O servidor não guardou o convite aberto: vale só neste aparelho (o ritmo do Telegram e do time não sabe). */
+const avisoDoPrimeiro = ref('')
 let temporizador = 0
 let relogio = 0
 const atrasos: number[] = []
@@ -141,7 +143,7 @@ async function carregar(anunciar = false) {
   const prazo = window.setTimeout(() => controle.abort(), 25_000)
   carregando.value = true
   erro.value = ''
-  void lerPrimeirosDoServidor()
+  if (precisaDoDia.value) void lerDoDia()
   try {
     // no-cache: revalida com o ETag; sem mudança no retrato o servidor responde 304.
     const resposta = await fetch('/api/operations/crm', { cache: 'no-cache', signal: controle.signal })
@@ -149,12 +151,6 @@ async function carregar(anunciar = false) {
     if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
     visao.value = corpo
     lidoEm.value = new Date()
-    // Só um retrato legível diz quem ainda está pronto; sem ele, as marcas ficam.
-    if (corpo.estado === 'ok') {
-      const prontos = new Set<string>((corpo.leads ?? []).filter((l: CrmLead) => l.sinal === 'pronto').map((l: CrmLead) => l.id))
-      guardarEnvios(podarEnvios(envios.value, prontos, Date.now()))
-      guardarAnotados(podarAnotados(anotados.value, new Map((corpo.leads ?? []).map((l: CrmLead) => [l.id, l] as [string, CrmLead])), Date.now()))
-    }
     if (anunciar) anuncio.value = `Vendas atualizado: ${corpo.leads?.length ?? 0} leads.`
   } catch (motivo) {
     erro.value = motivo instanceof Error ? motivo.message : String(motivo)
@@ -167,7 +163,7 @@ async function carregar(anunciar = false) {
 
 const aoMudarVisibilidade = () => { if (document.visibilityState === 'visible') carregar() }
 
-// ------------------------------------------------------------------ envios abertos nesta tela (fila-de-envio.ts)
+// ------------------------------------------------------------------ marcas locais
 
 function armazenamento(): Storage | null {
   try {
@@ -177,26 +173,25 @@ function armazenamento(): Storage | null {
   }
 }
 
-// A Triagem (AC-10) não marca mais "aberto no WhatsApp" aqui: o grupo dela não tem o link de envio
-// do Site, e o convite tem a marca própria (triagem.ts). Fica só a poda das marcas já gravadas.
-function guardarEnvios(novos: EnviosAbertos) {
-  envios.value = novos
-  gravarEnvios(armazenamento(), novos)
-}
-
-// Qualquer toque num link de primeiro contato (Hoje, Funil, Ficha, fila). O relógio anda na hora:
-// sem isso a trava esperaria o próximo tique de 30 s e daria para tocar o seguinte.
+// Qualquer toque num link de primeiro contato (Triagem, Ficha). Abrir o WhatsApp não é enviar (regra
+// [abrir-nao-envia]), mas conta no ritmo, do lado seguro: um convite aberto e não enviado só atrasa o
+// próximo. O relógio anda na hora: sem isso a trava esperaria o próximo tique de 30 s e daria para
+// tocar o seguinte.
 function marcarPrimeiroContato(id: string) {
   primeiros.value = marcarPrimeiro(primeiros.value, id, Date.now())
   gravarPrimeiros(armazenamento(), primeiros.value)
   agora.value = Date.now()
-  // O servidor conta para o Telegram e para outro navegador; falhar não segura o WhatsApp.
+  avisoDoPrimeiro.value = ''
+  // O servidor conta para o Telegram, o time e outro navegador; falhar não segura o WhatsApp, mas não se esconde.
   void fetch('/api/operations/crm/venda/primeiro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: id }),
   }).then(async (r) => {
-    const corpo = r.ok ? await r.json() as { primeiros?: Record<string, { em: number }> } : null
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const corpo = await r.json() as { primeiros?: Record<string, { em: number }> }
     if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
-  }).catch(() => undefined)
+  }).catch(() => {
+    avisoDoPrimeiro.value = 'O servidor não guardou este convite aberto: ele conta no ritmo só neste aparelho. O Telegram e o time podem não saber.'
+  })
 }
 
 async function liberar(id: string) {
@@ -224,41 +219,8 @@ function depoisDoRegistro() {
   atrasos.push(window.setTimeout(() => carregar(), 5000), window.setTimeout(() => carregar(), 15000))
 }
 
-// ------------------------------------------------------------------ envios anotados (anotacao-de-envio.ts)
-
-function guardarAnotados(novos: EnviosAnotados) {
-  anotados.value = novos
-  gravarAnotados(armazenamento(), novos)
-}
-
-/**
- * O link já abriu o WhatsApp (é um <a target=_blank> comum); aqui só se anota, em segundo plano.
- * Falha (rede, n8n, validação) não desfaz nada no WhatsApp: tira a marca e pede a anotação à mão.
- */
-async function anotarEnvio(id: string, tipo: TipoDeEnvioAnotado) {
-  const lead = porId.value.get(id)
-  if (!lead) return
-  guardarAnotados(anotar(anotados.value, id, tipo, Date.now()))
-  if (falhaDaAnotacao.value?.leadId === id) falhaDaAnotacao.value = null
-  try {
-    const resposta = await fetch('/api/operations/crm/registro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpoDaAnotacao(lead, tipo)),
-    })
-    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`)
-    anuncio.value = `${lead.empresa}: ${tipo === 'segunda_enviada' ? '2ª mensagem anotada' : tipo === 'plus_enviado' ? 'primeira mensagem anotada' : 'follow-up anotado'}.`
-    depoisDoRegistro()
-  } catch {
-    guardarAnotados(desanotar(anotados.value, id, tipo))
-    falhaDaAnotacao.value = { leadId: id, texto: `${lead.empresa}: ${AVISO_DE_FALHA_DA_ANOTACAO}` }
-  }
-}
-
 let desmontado = false
 onMounted(async () => {
-  envios.value = lerEnvios(armazenamento(), Date.now())
-  anotados.value = lerAnotados(armazenamento(), Date.now())
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   // Foi para o Roteiro (no Mais): a casca troca a rota e este painel desmonta já.
   if (!lerEndereco()) return
@@ -290,20 +252,17 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
   ...g,
   itens: g.itens.filter(i => produto.value === 'todos' || porId.value.get(i.leadId)?.produto === produto.value),
 })))
-// O número da aba "A fazer" é o tamanho da fila da Próxima venda (AC-02, 17/10/2026): somar os grupos
-// contava todos os primeiros contatos prontos (183 na aba para 3 no cartão), e a fila deixa entrar um
-// por vez. Com o cartão montado vale o que ele contou (sabe o nicho, o "Liberar" e o que o servidor
-// resolveu); sem ele (aberto direto em outra aba), a mesma conta pura com o que esta tela sabe.
-const resumoDoCartao = ref<ResumoDoDia | null>(null)
-// Fora da A fazer o cartão desmonta e a última conta dele pararia no tempo (o ritmo e o relógio andam).
-watch(vista, (v) => { if (v !== 'afazer') resumoDoCartao.value = null })
-const totalAFazer = computed(() => conversasParaConduzir(visao.value?.leads ?? [], agora.value).length)
+// O número da aba "Conversas para você" é o tamanho da própria lista (conversasParaVoce): a mesma conta
+// do "Sua vez" da Central, sem os primeiros contatos (que são da aba Primeiros contatos, AC-02).
+const totalAFazer = computed(() => conversasParaVoce(visao.value, agora.value, resolvidas.value).length)
 // Triagem (OT-05, AC-10): só os prospects para revisar, em lotes de 10 (triagem.ts), longe da fila de venda.
 const triagem = computed(() => hoje.value.find(g => g.id === 'revisar') ?? null)
 // Com a aba aberta, o número é o que ela conta (sem os dispensados e convidados desta tela que o
 // retrato ainda não confirmou); fora dela, o tamanho do grupo do servidor.
 const restantesDaTriagem = ref<number | null>(null)
 watch(vista, (v) => { if (v !== 'triagem') restantesDaTriagem.value = null })
+// Voltou a uma aba que usa o dia do servidor: relê já, em vez de esperar o próximo ciclo de 30 s.
+watch(precisaDoDia, (usa) => { if (usa) void lerDoDia() })
 // O mínimo: a última conta da aba não pode passar do grupo (ela não conta de novo ao desmontar).
 const totalTriagem = computed(() => {
   const doServidor = triagem.value?.itens.length ?? 0
@@ -423,10 +382,10 @@ function abrirColinha() {
 <span class="sincronizacao">Atualização automática</span>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
-    <!-- Discreto de propósito: o WhatsApp já abriu; falta só a anotação, que dá para fazer na ficha (nota). -->
-    <p v-if="falhaDaAnotacao" class="crm-nota-pequena crm-anotacao-falhou" role="alert">
-      {{ falhaDaAnotacao.texto }}
-      <button type="button" class="crm-mais" @click="falhaDaAnotacao = null">Entendi</button>
+    <!-- Discreto de propósito: o WhatsApp já abriu; só o ritmo do servidor ficou sem saber do convite aberto. -->
+    <p v-if="avisoDoPrimeiro" class="crm-nota-pequena crm-anotacao-falhou" role="alert">
+      {{ avisoDoPrimeiro }}
+      <button type="button" class="crm-mais" @click="avisoDoPrimeiro = ''">Entendi</button>
     </p>
 
     <div v-if="erro" class="crm-erro" role="alert"><strong>Vendas indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
@@ -457,9 +416,9 @@ function abrirColinha() {
            title. No celular, uma linha que rola de lado (AC-15). -->
       <nav class="crm-vistas" aria-label="Vendas: fazer, triar, entender">
         <a v-for="a in ABAS_DE_VENDAS.filter((a) => a.id !== 'entender')" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
-          {{ a.id === 'afazer' ? 'Conversas para você' : 'Primeiros contatos' }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
+          {{ a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
         </a>
-        <a v-for="s in SECOES_DE_ENTENDER" :key="s.id" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a>
+        <a v-for="s in SECOES_DE_ENTENDER" :key="s.id" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.rotulo }}</a>
       </nav>
       <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
 
@@ -473,7 +432,7 @@ function abrirColinha() {
     </div>
 
     <template v-if="visao">
-      <ConversasParaAvancar v-if="vista === 'afazer'" :visao="visao" :agora="agora" :maximo="20" @abrir="abrirFicha" />
+      <ConversasParaAvancar v-if="vista === 'afazer'" :visao="visao" :agora="agora" :resolvidas="resolvidas" :maximo="20" @abrir="abrirFicha" />
       <!-- O time só pega o Site em `pronto`; a Triagem (`revisar`) e o Convidar seguem do Rômulo (19/10/2026). -->
       <template v-else-if="vista === 'triagem'">
         <FrenteComercial />
@@ -500,8 +459,7 @@ function abrirColinha() {
       <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :agora="agora" />
       <CrmFunil
         v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :agora="agora" :etapa-em-foco="etapaEmFoco" :produto="produto" :passo="passo"
-        :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
-        @abrir="abrirFicha" @passo="trocarPasso" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
+        @abrir="abrirFicha" @passo="trocarPasso"
       />
 
 
@@ -524,9 +482,8 @@ function abrirColinha() {
       <Sheet v-if="leadId" flutuante titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div class="crm-na-folha">
           <CrmFicha
-            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
-            :falha-da-anotacao="falhaDaAnotacao?.leadId === lead.id ? falhaDaAnotacao.texto : ''"
-            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
+            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
+            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @primeiro="marcarPrimeiroContato"
           />
           <p v-else-if="carregando" role="status">Lendo a ficha…</p>
           <p v-else-if="erro" class="recado recado--erro" role="alert">{{ erro }} <button type="button" class="botao" @click="carregar(true)">Tentar de novo</button></p>

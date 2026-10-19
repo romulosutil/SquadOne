@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Aplica no ~/.hermes do Dell o que está versionado aqui: SOUL.md, as skills de
-leitura do Dell e do mapa do ecossistema, os scripts do cron, os ajustes de config.yaml e da memória do
-secretário, os jobs que dependem deles (graphify dos projetos, "Sites e
-pendências" das 10:30 e o pré-check da coleta do ASMR) e as ferramentas que as
-skills do ASMR chamam no terminal (yt-dlp, agent-reach, mcporter).
+leitura do Dell e do mapa do ecossistema, o pré-check da coleta do ASMR, os ajustes
+de config.yaml e da memória do secretário, as ferramentas que as skills do ASMR chamam
+no terminal (yt-dlp, agent-reach, mcporter) e os remendos da bridge do WhatsApp
+(envios/recibos/respostas e a leitura dirigida do histórico, com a marca conferida no fim).
+
+Não mexe mais em jobs do cron do Hermes: o graphify dos projetos, "Sites e pendências"
+e a Entrada viraram timers do systemd (deploy/dell), e o job do ASMR está pausado.
 
 Rodar pelo Python do Hermes (tem ruamel, que preserva os comentários do YAML):
 
@@ -112,9 +115,9 @@ MEMORIAS = [
     "desde 23/09/2026: editar repositório não é papel do secretário. Não reativar "
     "sem pedido explícito do Rômulo.",
     "O PC Windows do Rômulo queimou (NVMe); o Dell o viu pela última vez em 25/09/2026. "
-    "O que não sincronizou foi perdido e não se recupera. Até o PC novo chegar, o Dell é "
-    "a máquina de controle (Claude e Codex rodam nele); o PC novo vai receber a organização "
-    "do SquadOne. A pasta auto do Drive parou em 25/09 (a esteira não depende dela). "
+    "O que não sincronizou foi perdido e não se recupera. Desde 04/10/2026 o PC novo (Jarvis, "
+    "Windows, `paiduben` na tailnet) é a máquina de controle; o Dell (Mel) segue sempre ligado "
+    "e roda a operação. A pasta auto do Drive parou em 25/09 (a esteira não depende dela). "
     "Detalhes: skill mapa-do-ecossistema.",
 ]
 
@@ -145,76 +148,6 @@ def ajustar_memoria() -> None:
         print(f"ajustado  {mem} (+{len(faltam)} entrada(s))")
     else:
         print(f"igual     {mem}")
-
-
-HERMES_CLI = str(Path.home() / ".local/bin/hermes")
-JOB_GRAPHIFY = "Graphify — projetos"
-# Era "Site antes da venda — briefing diário 08h", com modelo, e saía antes do gerador.
-JOB_SITES = "18c55d8bbae7"
-NOME_SITES = "Sites e pendências — 10h30"
-JOB_ASMR_BRIEFING = "d12b6431a2e6"  # ASMR FULLBRINGER — briefing diário
-AVISO_FERRAMENTAS = (
-    "No Dell não há conda: `agent-reach`, `yt-dlp` e `mcporter` estão no PATH; chame direto.\n\n"
-)
-JOB_ASMR = "79a04dbf2d81"  # ASMR FULLBRINGER — coleta de métricas
-AVISO_ASMR = (
-    "O pré-check acima lista os Shorts que cruzaram um marco de idade (2, 6, 12, 24, 48 ou 72 h) "
-    "desde a última coleta. Colete esses Shorts e registre `age_approx_hours` exato.\n\n"
-)
-
-
-def jobs():
-    import json
-    return json.loads((HERMES / "cron/jobs.json").read_text())["jobs"]
-
-
-def hermes(*args) -> None:
-    subprocess.run([HERMES_CLI, *args], check=True, stdout=subprocess.DEVNULL)
-
-
-def ajustar_cron() -> None:
-    # graphify: um job só, sem modelo; stdout vazio = silêncio, falha vira WhatsApp.
-    if not any(j["name"] == JOB_GRAPHIFY for j in jobs()):
-        hermes("cron", "create", "0 3 * * *", "--no-agent", "--script", "graphify_projetos.py",
-               "--deliver", "whatsapp", "--name", JOB_GRAPHIFY)
-        print(f"criado    job {JOB_GRAPHIFY} (03:00)")
-    else:
-        print(f"igual     job {JOB_GRAPHIFY}")
-
-    # Sites e pendências: sem modelo, às 10:30, depois do gerador das 08h (de 24 a
-    # 28/09/2026 ele terminou entre 09:17 e 10:17). Junta o briefing dos sites e a
-    # fila do que espera o Rômulo numa mensagem só.
-    sites = next((j for j in jobs() if j["id"] == JOB_SITES or j["name"] == NOME_SITES), None)
-    if sites is None:
-        hermes("cron", "create", "30 10 * * *", "--no-agent", "--script", "sites_e_pendencias.py",
-               "--deliver", "whatsapp", "--name", NOME_SITES)
-        print(f"criado    job {NOME_SITES}")
-    elif (sites["name"] != NOME_SITES or not sites.get("no_agent") or sites.get("skills")
-          or sites["schedule"].get("expr") != "30 10 * * *"):
-        hermes("cron", "edit", sites["id"], "--name", NOME_SITES, "--schedule", "30 10 * * *",
-               "--no-agent", "--script", "sites_e_pendencias.py", "--clear-skills", "--no-continuity",
-               "--prompt", "")
-        print(f"ajustado  job {NOME_SITES} (era o briefing das 08h com modelo)")
-    else:
-        print(f"igual     job {NOME_SITES}")
-
-    # ASMR briefing: a skill agent-reach manda usar `conda run -n dl`, que era do PC.
-    brief = next((j for j in jobs() if j["id"] == JOB_ASMR_BRIEFING), None)
-    if brief and not brief["prompt"].startswith(AVISO_FERRAMENTAS):
-        hermes("cron", "edit", JOB_ASMR_BRIEFING, "--prompt", AVISO_FERRAMENTAS + brief["prompt"])
-        print("ajustado  job ASMR briefing (ferramentas no PATH, sem conda)")
-
-    # ASMR: pré-check de hora em hora; o agente só acorda em marco de idade.
-    asmr = next(j for j in jobs() if j["id"] == JOB_ASMR)
-    prompt = asmr["prompt"] if asmr["prompt"].startswith(AVISO_ASMR) else AVISO_ASMR + asmr["prompt"]
-    hermes("cron", "edit", JOB_ASMR, "--schedule", "every 60m", "--script", "asmr_coleta_gate.py",
-           "--reasoning-effort", "medium", "--prompt", prompt)
-    # Só navegador e arquivo: sem terminal nem execute_code, que ele tentava e eram bloqueados.
-    import sys
-    sys.path.insert(0, str(HERMES / "hermes-agent"))
-    from cron.jobs import update_job
-    update_job(JOB_ASMR, {"enabled_toolsets": ["browser", "file"]})
-    print("ajustado  job ASMR coleta (pré-check de hora em hora, browser+file, esforço medium)")
 
 
 # Ferramentas que as skills do ASMR chamam no terminal (youtube-channel-analysis,
@@ -263,22 +196,30 @@ def instalar_ferramentas() -> None:
         print(f"igual     {mcp}")
 
 
-def ajustar_graphify_fora_do_hermes() -> None:
-    # O pre-push do Windows chama este caminho; agora ele só pede ao Hermes.
-    gatilho = Path.home() / "workspace/scripts/run-graphify.sh"
-    copiar(AQUI / "scripts/run-graphify.sh", gatilho)
-    gatilho.chmod(0o755)
-    # O crontab das 03:00 vira o job do Hermes: tira a linha antiga.
-    atual = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout
-    novo = "".join(l for l in atual.splitlines(True) if "run-graphify.sh" not in l)
-    if novo != atual:
-        (Path.home() / f"crontab.bak-{CARIMBO}").write_text(atual)
-        subprocess.run(["crontab", "-"], input=novo, text=True, check=True)
-        print("ajustado  crontab (linha do run-graphify.sh removida)")
-    # Skill do graphify no Hermes, para ele consultar os grafos ao responder.
-    subprocess.run([str(Path.home() / ".local/bin/graphify"), "install", "--platform", "hermes"],
-                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print("instalado skill graphify no Hermes")
+BRIDGE_JS = HERMES / "hermes-agent/scripts/whatsapp-bridge/bridge.js"
+# Marcas que cada remendo deixa no bridge.js; um `hermes update` troca o arquivo e leva todas.
+MARCAS_DA_BRIDGE = {
+    "patch_bridge_envios.py": ("squadone:envios", "squadone:recibos", "squadone:respostas"),
+    # A rota POST /squadone/historico, que a Central chama em /api/operations/crm/historico.
+    "patch_bridge_historico.py": ("squadone:historico",),
+}
+
+
+def remendar_a_bridge() -> None:
+    """Reaplica os remendos da bridge e confere as marcas no bridge.js: sem isto, um `hermes update` quebrava o
+    histórico da Ficha (503 na Central) sem nenhum aviso."""
+    # Envios/recibos/respostas do dono no bridge.log; falha vira aviso pelo Hermes.
+    subprocess.run(["python3", str(AQUI / "scripts/patch_bridge_envios.py"), "--avisar"], check=False)
+    subprocess.run(["python3", str(AQUI / "scripts/patch_bridge_historico.py")], check=False)
+    try:
+        texto = BRIDGE_JS.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        print(f"ATENÇÃO   bridge.js ilegível ({e}): remendos não conferidos")
+        return
+    for script, marcas in MARCAS_DA_BRIDGE.items():
+        faltam = [m for m in marcas if m not in texto]
+        print(f"ATENÇÃO   {script}: faltam {', '.join(faltam)} no bridge.js (bridge incompatível?)" if faltam
+              else f"igual     {script}: marcas no bridge.js")
 
 
 def main() -> None:
@@ -287,17 +228,13 @@ def main() -> None:
     for nome in ("dell-operations-manager", "mapa-do-ecossistema", "conversa-do-lead"):
         skill = f"skills/{nome}/SKILL.md"
         copiar(AQUI / skill, HERMES / skill)
-    for script in ("graphify_projetos.py", "asmr_coleta_gate.py", "sites_e_pendencias.py", "site_antes_venda_watcher.py"):
-        copiar(AQUI / "scripts" / script, HERMES / "scripts" / script)
-    # O watcher é serviço próprio (site-antes-venda-watcher), não job do cron: só relê o script no boot.
-    subprocess.run(["systemctl", "--user", "restart", "site-antes-venda-watcher"], check=False)
+    # Só o gate do ASMR ainda é script do Hermes (job pausado): graphify_projetos.py e sites_e_pendencias.py viraram
+    # timers do systemd, instalados em ~/.local/bin (deploy/dell/instalados.json), e o watcher de sites foi aposentado.
+    copiar(AQUI / "scripts/asmr_coleta_gate.py", HERMES / "scripts/asmr_coleta_gate.py")
     ajustar_config()
     ajustar_memoria()
     instalar_ferramentas()
-    ajustar_graphify_fora_do_hermes()
-    ajustar_cron()
-    # Remendo da bridge (envios/recibos do dono no bridge.log); falha vira aviso pelo Hermes.
-    subprocess.run(["python3", str(AQUI / "scripts/patch_bridge_envios.py"), "--avisar"], check=False)
+    remendar_a_bridge()
     subprocess.run(["systemctl", "--user", "restart", "hermes-gateway"], check=True)
     time.sleep(5)
     subprocess.run(["systemctl", "--user", "is-active", "hermes-gateway"], check=False)

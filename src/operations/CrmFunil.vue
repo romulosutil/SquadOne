@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDaSubEtapa, textoDeDias, textoDoPrazo } from './crm-formato'
-import type { EnviosLiberados } from './trava-de-horario'
-import type { EstadoDoRitmo } from './trava-de-ritmo'
-import { anotadoEm, type EnviosAnotados, type TipoDeEnvioAnotado } from './anotacao-de-envio'
 import {
   SENTIDO_INICIAL, chaveDoNicho, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, opcoesDeNicho, opcoesDePasso, ordenarLista, sinalMaisForte,
   textoDaColunaProximo, textoDosDescartados, textoDoProximoPasso,
@@ -33,21 +30,12 @@ const props = defineProps<{
   passo: FiltroDePasso
   /** Relógio do CrmPanel, para a frase da ação da Lista (o "o que achou?" depende da hora). */
   agora: number
-  /** Fora do expediente (trava-de-horario.ts): o envio de primeiro contato espera o "Liberar". */
-  aviso?: string | null
-  liberados: EnviosLiberados
-  /** Envios anotados nesta tela (anotacao-de-envio.ts), até o retrato confirmar. */
-  anotados: EnviosAnotados
-  /** Trava de ritmo (trava-de-ritmo.ts): com ela segurando, nenhum link de primeiro contato, sem "Liberar". */
-  ritmo: EstadoDoRitmo
 }>()
+// O Funil só mostra e abre a Ficha: não envia nem anota nada (desde 16/10/2026, OT-01), então não tem as
+// travas de horário e de ritmo nem marca de envio; elas moram na Ficha e nas telas de primeiro contato.
 const emit = defineEmits<{
-  abrir: [leadId: string, origem: HTMLElement | null]; passo: [passo: FiltroDePasso]; liberar: [leadId: string]
-  anotar: [leadId: string, tipo: TipoDeEnvioAnotado]; primeiro: [leadId: string]
+  abrir: [leadId: string, origem: HTMLElement | null]; passo: [passo: FiltroDePasso]
 }>()
-const anotado = (l: CrmLead, tipo: TipoDeEnvioAnotado) => anotadoEm(props.anotados, l.id, tipo) !== undefined
-// Desde 16/10/2026 (OT-01) o Funil não envia: as travas de horário e de ritmo moram na Próxima venda e
-// na Ficha. As props `aviso`, `liberados` e `ritmo` ficam para quem monta (CrmPanel) não mudar de forma.
 
 const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 63.99rem)') : null
 const celular = ref(mq?.matches ?? false)
@@ -173,7 +161,7 @@ const linhas = computed(() => {
 // da Hoje inteiros, e fazer isso para os ~2000 leads a cada tique do relógio pesaria.
 const acoes = computed(() => new Map<string, AcaoDeVenda | null>(naLista.value ? linhas.value.lista.map(l => [l.id, acaoDoLead(props.visao, l.id, props.agora)]) : []))
 const proximoDe = (l: CrmLead) => textoDaColunaProximo(acoes.value.get(l.id), l)
-const sinalDe = (l: CrmLead) => sinalMaisForte(l, tipo => anotado(l, tipo))
+const sinalDe = (l: CrmLead) => sinalMaisForte(l)
 const seta = (o: Exclude<OrdemDaLista, 'acao'>) => (ordem.value !== o ? '' : sentido.value === 'asc' ? '↑' : '↓')
 /**
  * Clicar em qualquer ponto da linha abre a Ficha. O nome ganha o foco antes: a folha devolve o foco
@@ -356,9 +344,7 @@ const artefatos = (l: CrmLead) => {
               <p v-if="lead.resposta || lead.followupHoje || lead.respostaNova || lead.proximoPasso || lead.divergencias.length || lead.acervo || textoDoPrazo(lead) || (lead.etapa === 'novo' && lead.triagem)" class="crm-sinais">
                 <span v-if="lead.resposta" class="crm-sinal" :class="`is-${lead.resposta.tipo}`">{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</span>
                 <span v-if="lead.respostaNova" class="crm-sinal is-resposta">Resposta nova</span>
-                <span v-if="lead.followupHoje && !anotado(lead, 'followup_enviado')" class="crm-sinal is-followup">{{ lead.reenvioDoRobo ? 'Reenvio hoje (só robô)' : 'Follow-up hoje' }}</span>
-                <span v-if="anotado(lead, 'followup_enviado')" class="crm-sinal">Follow-up anotado</span>
-                <span v-if="anotado(lead, 'segunda_enviada')" class="crm-sinal">2ª mensagem anotada</span>
+                <span v-if="lead.followupHoje" class="crm-sinal is-followup">{{ lead.reenvioDoRobo ? 'Reenvio hoje (só robô)' : 'Follow-up hoje' }}</span>
                 <span v-if="lead.proximoPasso" class="crm-sinal">Próximo passo {{ diaEscolhido(lead.proximoPasso.data) }}</span>
                 <span v-if="lead.etapa === 'novo' && lead.triagem?.prioridade !== undefined" class="crm-sinal">Prioridade {{ lead.triagem.prioridade }}</span>
                 <span v-if="lead.etapa === 'novo' && lead.triagem?.origemWhatsapp?.startsWith('não confirmado')" class="crm-sinal is-prazo">WhatsApp não confirmado</span>

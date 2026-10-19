@@ -394,6 +394,8 @@ export async function listarQuestsDaJanela(
   calendarId: string,
   de: Date,
   ate: Date,
+  /** A vigia passa um prazo: sem ele uma resposta parada prendia a varredura por minutos. */
+  sinal?: AbortSignal,
 ): Promise<QuestCalendario[]> {
   const eventos = await listarPaginado<GoogleEvent>(
     calendarId,
@@ -405,6 +407,7 @@ export async function listarQuestsDaJanela(
       maxResults: "250",
     },
     token,
+    sinal,
   );
   const quests: QuestCalendario[] = [];
   for (const ev of eventos) {

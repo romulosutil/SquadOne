@@ -7,15 +7,22 @@ import type { StatusDoDell } from "./dell-status.ts";
  * healthchecks avisa por Telegram e e-mail. O sinal leva só o nome do check
  * (a URL), nenhum dado: GET sem corpo.
  *
- * `/fail` quando a sessão do WhatsApp fica fora de "aberta" por mais de 15 min:
- * os avisos param de chegar e o próprio aviso disso não chegaria pelo WhatsApp.
- * O estado vem do `status.json` do dell-status (regra 19: o SquadOne não roda
- * verificação); retrato velho ou sem a verificação conta como "não sei", e "não
- * sei" por 15 min também é falha — sem retrato, a fila também não drena.
+ * `/fail` em duas situações, as duas em que quem avisaria também parou:
+ * - a sessão do WhatsApp fica fora de "aberta" por mais de 15 min: a fila de reserva e os avisos
+ *   do dell-status (falhas, P1 de operação) não chegam. Os lembretes e alertas pessoais vão pelo
+ *   Telegram e não dependem dela, mas o resto do Dell sim;
+ * - a vigia dos lembretes (quando ligada) não completa uma varredura com sucesso há mais de 5 min
+ *   (sem credencial do Google, Google fora, leitura presa): os lembretes pararam em silêncio e o
+ *   aviso disso depende do mesmo Google.
+ * O estado do WhatsApp vem do `status.json` do dell-status (regra 19: o SquadOne não roda
+ * verificação); retrato velho ou sem a verificação conta como "não sei", e "não sei" por 15 min
+ * também é falha — sem retrato, a fila também não drena.
  */
 
 export const INTERVALO_SINAL_MS = 60_000;
 export const LIMITE_WHATSAPP_FORA_MS = 15 * 60_000;
+/** Sem varredura completa da vigia por mais que isto, o sinal vira /fail. */
+export const LIMITE_VIGIA_PARADA_MS = 5 * 60_000;
 export const TIMEOUT_SINAL_MS = 10_000;
 export const ID_VERIFICACAO_WHATSAPP = "whatsapp-sessao";
 
@@ -68,9 +75,19 @@ export function decidirSinal(
   return { foraDesde: desde, falha: agora - desde > LIMITE_WHATSAPP_FORA_MS };
 }
 
+/**
+ * PURO: a vigia está parada? `ultimaOk` é a última varredura completa; null = nenhuma desde o boot,
+ * e então a carência conta do `desde` (o início do sinal), para o boot não nascer em /fail.
+ */
+export function vigiaParada(ultimaOk: number | null, desde: number, agora: number): boolean {
+  return agora - (ultimaOk ?? desde) > LIMITE_VIGIA_PARADA_MS;
+}
+
 export interface DepsDoSinal {
   url: string;
   lerStatus(agora: Date): Promise<StatusDoDell>;
+  /** Instante (ms) da última varredura completa da vigia. Ausente = a vigia não está ligada neste processo. */
+  ultimaVarreduraOkEm?: () => number | null;
   /** GET na URL (com `/fail` quando é falha). */
   pingar(url: string): Promise<void>;
   agora?: () => Date;
@@ -81,7 +98,9 @@ export function criarSinalDeVida(deps: DepsDoSinal) {
   const log = deps.log ?? console;
   let foraDesde: number | null = null;
   let falhaAntes: boolean | null = null;
+  let vigiaAntes: boolean | null = null;
   let erroAntes: string | null = null;
+  let comecouEm: number | null = null;
 
   /** Um sinal. Devolve qual foi mandado. Nunca lança: falha do healthchecks é só log. */
   async function enviar(): Promise<"ok" | "fail"> {
@@ -94,13 +113,20 @@ export function criarSinalDeVida(deps: DepsDoSinal) {
     }
     const decisao = decidirSinal(aberto, foraDesde, agora.getTime());
     foraDesde = decisao.foraDesde;
-    const tipo = decisao.falha ? "fail" : "ok";
+    comecouEm ??= agora.getTime();
+    const vigiaFalha = deps.ultimaVarreduraOkEm ? vigiaParada(deps.ultimaVarreduraOkEm(), comecouEm, agora.getTime()) : false;
+    const falha = decisao.falha || vigiaFalha;
+    const tipo = falha ? "fail" : "ok";
     if (decisao.falha !== falhaAntes) {
       log.log(decisao.falha ? "[sinal] WhatsApp fora há mais de 15 min: healthchecks recebe /fail" : "[sinal] sinal de vida normal");
       falhaAntes = decisao.falha;
     }
+    if (vigiaFalha !== vigiaAntes && (vigiaFalha || vigiaAntes !== null)) {
+      log.log(vigiaFalha ? "[sinal] vigia sem varredura completa há mais de 5 min: healthchecks recebe /fail" : "[sinal] vigia varrendo de novo");
+    }
+    vigiaAntes = vigiaFalha;
     try {
-      await deps.pingar(decisao.falha ? `${deps.url}/fail` : deps.url);
+      await deps.pingar(falha ? `${deps.url}/fail` : deps.url);
       if (erroAntes !== null) log.error("[sinal] healthchecks voltou a responder");
       erroAntes = null;
     } catch (err) {
@@ -113,6 +139,7 @@ export function criarSinalDeVida(deps: DepsDoSinal) {
 
   function iniciar(): () => void {
     const id = setInterval(() => void enviar(), INTERVALO_SINAL_MS);
+    id.unref?.();
     void enviar();
     return () => clearInterval(id);
   }

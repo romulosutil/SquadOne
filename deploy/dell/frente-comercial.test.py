@@ -2,7 +2,9 @@ import datetime as dt
 import importlib.util
 import io
 import json
+import math
 from pathlib import Path
+import re
 import sys
 import tempfile
 import types
@@ -197,5 +199,59 @@ class Frente(unittest.TestCase):
         with patch.object(f,'BASE',Path(self.tmp.name)/'base'),patch.object(f,'H',Path(self.tmp.name)),patch.object(f,'DATA',self.data),patch.object(f,'ler_crm',return_value={'leads':[]}),patch.object(f,'agora',return_value=self.now),patch.object(f,'ler_config',return_value={'ativo':False}),patch.object(f,'gravar',side_effect=lambda s:estados.append(s.copy())):
             f.rodada()
         self.assertEqual(estados[-1]['estado'],'pausado');self.assertEqual(estados[-1]['avaliados'],200);self.assertEqual(estados[-1]['selecionados'],100);self.assertEqual(len(estados[-1]['fila']),1)
+
+    # Parado (desligado ou em pausa configurada): não lê o CRM, não abre o SQLite, não chama o modelo (19/10/2026).
+    def rodar_parado(self,config):
+        estados=[]
+        with patch.object(f,'BASE',Path(self.tmp.name)/'base'),patch.object(f,'H',Path(self.tmp.name)),patch.object(f,'DATA',self.data),\
+             patch.object(f,'agora',return_value=self.now),patch.object(f,'ler_config',return_value=config),patch.object(f,'ler_crm') as crm,\
+             patch.object(f,'Registro') as registro,patch.object(f,'inferir') as ai,patch.object(f,'gravar',side_effect=lambda s:estados.append(s.copy())):
+            resultado=f.rodada()
+        return types.SimpleNamespace(crm=crm,registro=registro,ai=ai,estados=estados,resultado=resultado)
+
+    def test_desligado_nao_le_crm_nem_sqlite(self):
+        (self.data/'frente-comercial.json').write_text(json.dumps({'dia':'2026-10-19','avaliados':7,'selecionados':3,'enviados':2,'respondidos':1,'fila':[{'id':'site:a'}]}))
+        x=self.rodar_parado({'ativo':False})
+        x.crm.assert_not_called();x.registro.assert_not_called();x.ai.assert_not_called()
+        e=x.estados[-1]
+        self.assertEqual((e['estado'],e['avaliados'],e['selecionados'],e['enviados'],e['respondidos']),('pausado',7,3,2,1));self.assertEqual(e['fila'],[{'id':'site:a'}])
+
+    def test_pausa_configurada_tambem_para_antes_de_ler(self):
+        depois=(self.now+dt.timedelta(hours=2)).isoformat()
+        x=self.rodar_parado({'ativo':True,'pausadoAte':depois})
+        x.crm.assert_not_called();x.registro.assert_not_called();x.ai.assert_not_called()
+        self.assertEqual(x.estados[-1]['estado'],'pausado');self.assertIn('período configurado',x.estados[-1]['detalhe'])
+
+    def test_pausa_vencida_deixa_a_rodada_seguir(self):
+        antes=(self.now-dt.timedelta(hours=2)).isoformat()
+        self.assertIsNone(f.motivo_da_pausa({'ativo':True,'pausadoAte':antes},self.now))
+        self.assertIsNone(f.motivo_da_pausa({'ativo':True},self.now))
+        self.assertIsNotNone(f.motivo_da_pausa({},self.now))
+
+    def test_pausa_de_outro_dia_nao_herda_os_numeros(self):
+        (self.data/'frente-comercial.json').write_text(json.dumps({'dia':'2026-10-18','avaliados':9,'fila':[{'id':'x'}]}))
+        e=self.rodar_parado({'ativo':False}).estados[-1]
+        self.assertEqual((e['avaliados'],e['fila']),(0,[]))
+
+    # A cópia da janela e das recusas tem de andar com a Central (a reserva só responde com um lead na mão).
+    def test_janela_e_recusas_iguais_as_da_central(self):
+        raiz=Path(__file__).resolve().parents[2]
+        horario=(raiz/'src/operations/trava-de-horario.ts').read_text(encoding='utf-8')
+        m=re.search(r'EXPEDIENTE_DE_VENDA\s*=\s*\{\s*dias:\s*\[([\d,\s]+)\],\s*inicioMin:\s*([\d\s*+]+?),\s*fimMin:\s*([\d\s*+]+?)\s*\}',horario)
+        self.assertIsNotNone(m,'EXPEDIENTE_DE_VENDA mudou de forma: ajuste o teste')
+        conta=lambda expr:sum(math.prod(int(n) for n in termo.split('*')) for termo in expr.split('+'))
+        self.assertEqual([int(d) for d in m.group(1).split(',')],[1,2,3,4,5],'seg–sex (getDay 1 a 5)')
+        self.assertEqual((conta(m.group(2)),conta(m.group(3))),(f.EXPEDIENTE_INICIO,f.EXPEDIENTE_FIM))
+        # seg–sex também no relógio do .py: sexta às 17h30 de SP já fechou, e a fila volta na segunda às 8h.
+        sexta_fechou=dt.datetime(2026,10,23,20,30,tzinfo=dt.timezone.utc)
+        self.assertEqual(f.proximo_expediente(sexta_fechou).isoformat(),'2026-10-26T08:00:00-03:00')
+        contato=(raiz/'src/operations/primeiro-contato.ts').read_text(encoding='utf-8')
+        tipo=re.search(r'export type RecusaDoTime\s*=([^\n]+)',contato).group(1)
+        ritmo=re.search(r'MotivoDoRitmo\s*=\s*([^\n]+)',(raiz/'src/operations/trava-de-ritmo.ts').read_text(encoding='utf-8')).group(1)
+        literais=lambda t:set(re.findall(r"'([a-z-]+)'",t))
+        todas=literais(tipo)|literais(ritmo)
+        gerais=literais(re.search(r'RECUSAS_GERAIS[^=]*=\s*new Set\(\[([^\]]+)\]\)',contato).group(1))
+        self.assertEqual(set(f.RECUSAS_DO_LEAD)|gerais,todas,'a Central ganhou ou perdeu uma recusa: decida se é do lead ou geral')
+        self.assertFalse(set(f.RECUSAS_DO_LEAD)&gerais)
 
 if __name__=='__main__':unittest.main()

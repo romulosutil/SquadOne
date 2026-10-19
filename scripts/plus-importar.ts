@@ -29,7 +29,7 @@ const cartoes = lerCatalogo(paginas);
 const { leads, excluidos, semTelefone } = prepararPlus(cartoes);
 
 await fs.mkdir(path.dirname(path.resolve(saida)), { recursive: true });
-await fs.writeFile(saida, JSON.stringify({ versao: 1, origem: "Catálogo de Negócios Maçônicos (macons.org)", leads, semTelefone }, null, 1), { mode: 0o600 });
+await fs.writeFile(saida, JSON.stringify({ versao: 1, origem: "Catálogo de Negócios Maçônicos (macons.org)", geradoEm: new Date().toISOString(), leads, semTelefone }, null, 1), { mode: 0o600 });
 
 const porOferta = leads.reduce<Record<string, number>>((m, l) => ({ ...m, [l.oferta]: (m[l.oferta] ?? 0) + 1 }), {});
 console.log(`${cartoes.length} cartões lidos · ${leads.length} leads Plus · ${semTelefone.length} sem telefone legível (guardados à parte) · ${excluidos.length} fora`);

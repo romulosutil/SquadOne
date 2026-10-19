@@ -4,7 +4,7 @@ import {
   elegivelParaOTime, frenteDosArquivos, primeirosDoTime, quemFazOPrimeiroContato, RECUSAS_GERAIS, reservaDoTime,
   type FrenteDoPrimeiro, type PedidoDoTime,
 } from './operations/primeiro-contato.ts'
-import { filaDaTela, type EstadoDaTela } from './operations/proxima-venda.ts'
+import { filaDeVenda, type ContextoDaVenda } from './operations/proxima-venda.ts'
 import { REGRAS_DO_RITMO } from './operations/trava-de-ritmo.ts'
 import type { CrmGrupoHojeId, CrmLead, CrmVisao } from './operations/types.ts'
 import { decidir, estadoDoDia } from '../server/vendedor.ts'
@@ -124,12 +124,12 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
 describe('a tela e o Telegram não oferecem o primeiro contato dos leads do time', () => {
   const prontos = ['p0', 'p1', 'p2'].map((id) => lead(id))
   const v = visao({ enviar: ['p0', 'p1', 'p2'] }, prontos)
-  const tela: EstadoDaTela = { ritmo: { motivo: null }, noExpediente: true, agora: AGORA }
+  const tela: ContextoDaVenda = { primeiroLiberado: true, agora: AGORA }
 
-  it('Próxima venda: pula os do time e oferece o próximo do operador', () => {
-    assert.deepEqual(filaDaTela(v, tela).map((a) => a.leadId), ['p0'])
-    assert.deepEqual(filaDaTela(v, { ...tela, primeirosDoTime: new Set(['p0']) }).map((a) => a.leadId), ['p1'])
-    assert.deepEqual(filaDaTela(v, { ...tela, primeirosDoTime: new Set(['p0', 'p1', 'p2']) }), [])
+  it('a fila de venda: pula os do time e oferece o próximo do operador', () => {
+    assert.deepEqual(filaDeVenda(v, tela).map((a) => a.leadId), ['p0'])
+    assert.deepEqual(filaDeVenda(v, { ...tela, primeirosDoTime: new Set(['p0']) }).map((a) => a.leadId), ['p1'])
+    assert.deepEqual(filaDeVenda(v, { ...tela, primeirosDoTime: new Set(['p0', 'p1', 'p2']) }), [])
   })
 
   it('vendedor do Telegram: o mesmo predicado, no mesmo lugar da fila', () => {

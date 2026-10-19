@@ -1,5 +1,10 @@
 # Mensagens e jornadas: retrato de 17/10/2026
 
+> **Registro de época.** Descreve a Central de 17/10/2026. Desde 19/10/2026 (`docs/auditoria-de-fluxos-2026-10-19.md`) a Próxima venda não é mais um cartão
+> (`ProximaVenda.vue` saiu): a fila de venda alimenta a Ficha, o "Envie para X" do Telegram e a lista **Conversas para você**; as abas de Vendas se chamam
+> Conversas para você, Primeiros contatos e Entender (Funil, Diagnóstico, Resultados); abrir o WhatsApp nunca registra envio; e o follow-up e o Perdido (7 dias)
+> têm um dono só, a Central.
+
 Levantamento feito antes do redesenho em três menus (Central de comando, Assistente,
 Vendas). Parte 1: como uma mensagem de WhatsApp do lead vira ação. Parte 2: os fluxos de
 cada item de menu, com o que manter, fundir, esconder ou cortar.

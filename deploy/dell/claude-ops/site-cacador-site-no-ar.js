@@ -20,6 +20,10 @@
 // - responde mas não dá para ler (bloqueio de robô, página só de JavaScript),
 //   ou ficou sem tempo para as RODADAS: não segue nem é gravado, como era com
 //   site no ar: reavaliado na próxima rodada da busca, que custa só HTTP.
+//   Limite conhecido (SITE-18, 19/10/2026): o lead inconclusivo é retestado para sempre, a cada rodada
+//   da busca. Descartá-lo depois de 3 vezes pede um contador por lead, e este nó não guarda estado: o
+//   lead não está na planilha e o Caçador roda como subfluxo inline (sem id, o staticData do n8n não
+//   persiste). Só custa HTTP; se pesar, o contador tem de morar na planilha.
 const RODADAS = 3;
 const ESPERA_ENTRE_RODADAS_MS = 30000;
 const TIMEOUT_MS = 10000;

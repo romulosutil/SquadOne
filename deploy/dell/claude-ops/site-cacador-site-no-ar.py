@@ -25,6 +25,7 @@ Uso: python3 site-cacador-site-no-ar.py             aplica no Caçador do Dell (
                                                     (nada no n8n nem na planilha; até ~2 min com site fora do ar)
 """
 import copy
+import importlib.util
 from workflow_confiabilidade import desembrulhar
 import json
 import re
@@ -35,7 +36,12 @@ import tempfile
 import time
 from pathlib import Path
 
-CACADOR = "oow8TkxrAf4fVvTj"  # "01 · Caçador" no n8n do Dell
+# O id do "01 · Caçador" mora no site-antes-da-venda.py (uma fonte só). Ele importa o n8n.py, que lê a chave da
+# API do n8n na importação: no Dell ela existe; num teste, HOME temporário com ~/.config/claude-ops/n8n-api-key.
+_spec = importlib.util.spec_from_file_location("site_antes_da_venda", Path(__file__).resolve().parent / "site-antes-da-venda.py")
+_sv = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_sv)
+CACADOR = _sv.CACADOR  # "01 · Caçador" no n8n do Dell
 CHECAR = "Checar site próprio"
 VELHO = "Sem site ou site morto"
 SE = "Site no ar?"
@@ -433,7 +439,7 @@ def ensaiar(args) -> int:
 
 
 def main() -> int:
-    from n8n import api, put  # só aqui: --testar e --ensaiar rodam sem a chave do n8n
+    from n8n import api, put
     atual = api("GET", f"/workflows/{CACADOR}")
     BACKUPS.mkdir(parents=True, exist_ok=True)
     copia = BACKUPS / f"cacador-{time.strftime('%Y%m%d-%H%M%S')}.json"

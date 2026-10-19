@@ -71,6 +71,19 @@ class ListaBranca(unittest.TestCase):
             for r in so.remedios_para(c):
                 self.assertIn(r, so.REMEDIOS)
 
+    def test_backup_le_as_units_que_existem(self):
+        # HC-9: backup-dell.service nunca existiu.
+        for cid in ("backup", "backup:cofre"):
+            cmds = so.comandos_de_leitura({"id": cid})
+            unidades = {c[3] for c in cmds if c[:3] == ["systemctl", "--user", "status"]}
+            self.assertEqual(unidades, set(so.UNITS_DO_BACKUP))
+            self.assertNotIn("backup-dell.service", unidades)
+            self.assertTrue(so.ha_o_que_ler({"id": cid}))
+        for cid in ("fluxo:x", "cron:y", "pncp", "idade:z"):
+            self.assertFalse(so.ha_o_que_ler({"id": cid}), cid)
+        for cid in ("disco", "units", "gerador", "container:evolution-api-1"):
+            self.assertTrue(so.ha_o_que_ler({"id": cid}), cid)
+
     def test_leitura_e_so_leitura(self):
         for cid in ("hermes", "n8n", "whatsapp-prumo", "container:evolution-api-1", "disco", "gerador", "fluxo:x",
                     "container:x;rm -rf ~"):
@@ -241,15 +254,41 @@ class Atendimento(unittest.TestCase):
         self.assertIn("resolvido sozinho, religuei o observador do WhatsApp (remédio escolhido pelo Hermes)", texto)
 
     def test_hermes_pede_comando_fora_da_lista_e_nada_roda(self):
-        f = falha("fluxo:abc", "Falhou no nó Planilha", nome="08 · CRM")
-        self.retratos = [{"fluxo:abc": f}]
-        self.resposta_do_hermes = json.dumps({"checks": [{"id": "fluxo:abc", "diagnostico": "Credencial do Google expirou.",
+        f = falha("gerador", "sem login", nome="Gerador")
+        self.retratos = [{"gerador": f}]
+        self.resposta_do_hermes = json.dumps({"checks": [{"id": "gerador", "diagnostico": "Credencial do Google expirou.",
                                                           "remedio": "docker compose down", "pedido_para_o_claude": "reconectar"}]})
         self.novo().atender([f])
         self.assertEqual(self.remedios_rodados(), [])
         (_, texto, _), = self.avisos
-        self.assertIn("08 · CRM: continua fora", texto)
+        self.assertIn("Gerador: continua fora", texto)
         self.assertIn('Peça ao Claude: "reconectar"', texto)
+
+    def test_sem_remedio_nem_leitura_o_hermes_nao_e_chamado_e_o_teto_do_dia_fica(self):
+        # HC-8: fluxo, cron, pncp, idade... não têm o que ler: o diagnóstico sairia vazio e gastaria 1 dos 6 do dia.
+        f = falha("fluxo:abc", "Falhou no nó Planilha", nome="08 · CRM")
+        self.retratos = [{"fluxo:abc": f}]
+        self.resposta_do_hermes = "{}"
+        estado = {}
+        self.novo(estado).atender([f])
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(estado.get("hermes_dia", []), [])
+        (_, texto, _), = self.avisos
+        self.assertIn("08 · CRM: continua fora", texto)
+        self.assertIn("não há remédio nem leitura própria", texto)
+        self.assertIn("O que fazer: Peça ao Claude.", texto)
+
+    def test_dois_checks_da_mesma_queda_rodam_o_remedio_uma_vez(self):
+        # HC-3: n8n e o container do n8n -> docker-reiniciar:n8n; hermes (gateway) e whatsapp-sessao -> o mesmo restart.
+        a, b = falha("n8n", "Sem resposta"), falha(f"container:{so.N8N_CONTAINER}", "Exited (1)")
+        g, w = falha("hermes", "Gateway parado"), falha("whatsapp-sessao", "Bridge do WhatsApp sem resposta em :3000")
+        ok = lambda cid: {"id": cid, "estado": "ok"}
+        self.retratos = [{c["id"]: c for c in (a, b, g, w)}, {c["id"]: ok(c["id"]) for c in (a, b, g, w)}]
+        self.novo().atender([a, b, g, w])
+        self.assertEqual(self.remedios_rodados(), [["docker", "restart", so.N8N_CONTAINER],
+                                                   ["systemctl", "--user", "restart", "hermes-gateway.service"]])
+        (_, texto, _), = self.avisos
+        self.assertEqual(texto.count("resolvido sozinho"), 4)
 
     def test_tetos_seguram_remedio_e_hermes(self):
         f = falha("n8n", "Sem resposta")
@@ -275,14 +314,14 @@ class Atendimento(unittest.TestCase):
         self.assertIn("teto de 6 diagnósticos", self.avisos[0][1])
 
     def test_varias_falhas_viram_uma_chamada_so_ao_hermes(self):
-        a, b = falha("gerador", "sem login"), falha("pncp", "fora")
-        self.retratos = [{"gerador": a, "pncp": b}]
+        a, b = falha("gerador", "sem login"), falha("funil-aprendizado", "parado")
+        self.retratos = [{"gerador": a, "funil-aprendizado": b}]
         self.resposta_do_hermes = "{}"
         estado = {}
         self.novo(estado).atender([a, b, dict(a)])  # repetido no pedido conta uma vez
         self.assertEqual(len(self.prompts), 1)
         self.assertEqual(len(estado["hermes_dia"]), 1)
-        self.assertEqual(set(estado["hermes"]), {"gerador", "pncp"})
+        self.assertEqual(set(estado["hermes"]), {"gerador", "funil-aprendizado"})
         self.assertEqual(self.avisos[0][1].count("continua fora"), 2)
 
     def test_hermes_sem_resposta_ainda_avisa(self):

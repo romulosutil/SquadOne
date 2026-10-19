@@ -8,6 +8,12 @@ atividade fora do comércio, rede e empresa com menos de 1 ano. O motivo vai
 para Descartados; quem passa leva o resumo do CNPJ na coluna Briefing.
 
 Também tira "atacadista" solto do rodízio (a busca que trazia hipermercado).
+
+Roda sobre o Lead Scout que está no n8n (inativo desde 08/10/2026, n8n.DESLIGADOS): nenhum construtor o
+recria mais (prumo-simples.py não tem mais o ramo do Lead Scout, e os remendos que o montavam foram apagados em
+19/10/2026). O fluxo vivo já traz os nós que este script pressupõe ("Remover duplicados", "Linha de prospect",
+"Config — mercado-alvo"...); se algum faltar, o script para sem mexer em nada. Ligar o Lead Scout de novo é
+decisão à parte (tirar o id de DESLIGADOS e ativar no n8n).
 """
 from pathlib import Path
 
@@ -22,6 +28,10 @@ DEPOIS = ["É prospect?", "Linha de prospect", "Linha de descarte", "Gravar pros
 def main():
     wf = api("GET", f"/workflows/{LEAD_SCOUT}")
     nos = {n["name"]: n for n in wf["nodes"]}
+    faltam = [n for n in ("Config — mercado-alvo", "Remover duplicados", "É prospect?", "Linha de prospect",
+                          "Resumo da busca: montar aviso") if n not in nos]
+    if faltam:
+        raise SystemExit(f"Lead Scout sem os nós {faltam}: nada aplicado (o fluxo não é o que este script pressupõe).")
 
     cfg = nos["Config — mercado-alvo"]["parameters"]
     cfg["jsCode"] = cfg["jsCode"].replace("'distribuidora de bebidas', 'atacadista',", "'distribuidora de bebidas',")

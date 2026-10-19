@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { liberadosDoCorpo } from './operations/liberados.ts'
-import { acaoDaFicha, motivoCurtoDoRitmo, primeiroContatoDaFicha, type TravasDoPrimeiro } from './operations/primeiro-da-ficha.ts'
-import { agoraDaFicha, chaveDoNicho, filaDeVenda, nichosDoPrimeiro } from './operations/proxima-venda.ts'
+import { acaoDaFicha, primeiroContatoDaFicha, type TravasDoPrimeiro } from './operations/primeiro-da-ficha.ts'
+import { motivoCurtoDoRitmo } from './operations/trava-de-ritmo.ts'
+import { agoraDaFicha, chaveDoNicho, filaDeVenda } from './operations/proxima-venda.ts'
 import type { CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmVisao } from './operations/types.ts'
 
 // 17/10/2026 (auditoria da Central): o filtro de nicho sem grafias repetidas (AC-16), o "Liberar" do
@@ -40,33 +41,6 @@ describe('nicho normalizado: a mesma palavra é uma opção só (AC-16)', () => 
     ['vazio vira "sem nicho"', '   ', 'sem nicho'],
   ]
   for (const [nome, nicho, chave] of casos) it(nome, () => assert.equal(chaveDoNicho(nicho), chave))
-
-  it('as grafias de um nicho somam numa opção, com a grafia mais comum como rótulo', () => {
-    assert.deepEqual(nichosDoPrimeiro(['Pilates', 'pilates ', 'Pilátes', 'Pilates', 'Advocacia', 'advocacia']), [
-      { chave: 'pilates', rotulo: 'Pilates', quantos: 4 },
-      { chave: 'advocacia', rotulo: 'Advocacia', quantos: 2 },
-    ])
-  })
-
-  it('um nicho escrito de dois jeitos é um nicho só (o select não aparece)', () => {
-    assert.equal(nichosDoPrimeiro(['Estética', 'estetica', 'ESTÉTICA']).length, 1)
-    assert.equal(nichosDoPrimeiro([]).length, 0)
-  })
-
-  it('empate na contagem: ordem alfabética', () => {
-    assert.deepEqual(nichosDoPrimeiro(['Odonto', 'Advocacia']).map((n) => n.rotulo), ['Advocacia', 'Odonto'])
-  })
-
-  it('o filtro da fila compara pela chave: outra grafia do mesmo nicho passa', () => {
-    const a = lead('p1', { nicho: 'Estética', links: { enviar: `${N8N}/enviar?place_id=p1` } })
-    const b = lead('p2', { nicho: 'Advocacia', links: { enviar: `${N8N}/enviar?place_id=p2` } })
-    const v = visao({ enviar: [
-      { leadId: 'p2', links: [{ rotulo: 'Enviar', url: b.links.enviar! }] },
-      { leadId: 'p1', links: [{ rotulo: 'Enviar', url: a.links.enviar! }] },
-    ] }, [a, b])
-    assert.deepEqual(filaDeVenda(v, { primeiroLiberado: true, nichoDoPrimeiro: 'estetica' }).map((x) => x.leadId), ['p1'])
-    assert.deepEqual(filaDeVenda(v, { primeiroLiberado: true, nichoDoPrimeiro: 'ESTETICA ' }).map((x) => x.leadId), ['p1'])
-  })
 })
 
 describe('o "Liberar" do dia como o servidor devolve (AC-21)', () => {

@@ -15,6 +15,7 @@ import {
   lerRaioXDoDisco,
   lerRegistros,
   PassoSemCopiloto,
+  PAUSA_POR_COTA_MS,
   prepararCopiloto,
   provedorCodex,
   provedorGemini,
@@ -250,6 +251,80 @@ describe("copiloto: sozinho (16/10/2026)", () => {
     const { copiloto, provedor } = await montar({ leads: [lead] });
     assert.deepEqual(await copiloto.automatica(lead), { estado: "sem" });
     assert.equal(provedor.prompts.length, 0);
+  });
+
+  // Relógio e fontes próprios: os testes de 19/10/2026 mexem no dia e contam as leituras do Raio-X.
+  async function comRelogio(respostas: RespostaDoProvedor[], lead: CrmLead, teto = 20) {
+    const dir = await temp();
+    const provedor = provedorDuble(respostas);
+    const relogio = { agora: Date.parse("2026-10-15T15:00:00Z") };
+    const leituras = { raioX: 0, conversa: 0 };
+    const copiloto = criarCopiloto({
+      dir, provedor, tetoDia: teto, log: silencio, agora: () => new Date(relogio.agora),
+      fontes: {
+        visao: async () => ({ leads: [lead] }),
+        raioX: async () => { leituras.raioX++; return null; },
+        conversa: async () => { leituras.conversa++; return null; },
+      },
+    });
+    return { copiloto, provedor, relogio, leituras };
+  }
+  // Logo depois de um "gerando": pega a geração em voo (a mesma promessa da automática) e espera o fim dela.
+  const esperarAGeracao = (copiloto: ReturnType<typeof criarCopiloto>) => copiloto.sugerir("site", "ChIJabc").catch(() => undefined);
+
+  // MSG-7: carimbar o dossiê que falhou vale no dia; o dia seguinte tenta de novo.
+  it("falhou num dia: no dia seguinte o automático tenta de novo", async () => {
+    const lead = comConversa();
+    const { copiloto, provedor, relogio } = await comRelogio([{ ok: false, motivo: "timeout", detalhe: "lento" }], lead);
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "gerando" });
+    await esperarAGeracao(copiloto);
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "sem" });
+    relogio.agora += 24 * 3600_000;
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "gerando" });
+    await esperarAGeracao(copiloto);
+    assert.equal(provedor.prompts.length, 2);
+  });
+
+  it("cota esgotada não carimba o lead: o automático espera uns minutos e volta", async () => {
+    const lead = comConversa();
+    const { copiloto, provedor, relogio } = await comRelogio([{ ok: false, motivo: "cota", detalhe: "limite" }], lead);
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "gerando" });
+    await esperarAGeracao(copiloto);
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "sem" }, "dentro da pausa");
+    assert.equal(provedor.prompts.length, 1);
+    relogio.agora += PAUSA_POR_COTA_MS + 1;
+    assert.deepEqual(await copiloto.automatica(lead), { estado: "gerando" });
+    await esperarAGeracao(copiloto);
+    assert.equal(provedor.prompts.length, 2);
+  });
+
+  it("teto do dia: não tenta nem carimba o dossiê; no dia seguinte gera", async () => {
+    const lead = comConversa();
+    const { copiloto, provedor, relogio } = await comRelogio([], lead, 1);
+    await copiloto.sugerir("site", "ChIJabc", true); // gasta o único do dia
+    const outro = comConversa({ id: "ChIJoutro", chave: "27999990000" });
+    assert.deepEqual(await copiloto.automatica(outro), { estado: "sem" });
+    assert.equal(provedor.prompts.length, 1);
+    relogio.agora += 24 * 3600_000;
+    assert.deepEqual(await copiloto.automatica(outro), { estado: "gerando" });
+  });
+
+  // MSG-9: sem mudança na conversa, na etapa ou nos eventos, a volta não relê o disco.
+  it("a volta de 1 min não relê o Raio-X nem a conversa se o lead não mudou", async () => {
+    const lead = comConversa();
+    const { copiloto, leituras } = await comRelogio([], lead);
+    await copiloto.automatica(lead);
+    await esperarAGeracao(copiloto);
+    const depoisDaGeracao = { ...leituras };
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await copiloto.automatica(lead)).estado, "pronta");
+      await copiloto.prontas([lead]);
+    }
+    assert.deepEqual(leituras, depoisDaGeracao);
+    // Mensagem nova do lead: o dossiê é relido do disco.
+    const nova = comConversa({ conversa: { ...lead.conversa!, ultimaEntrada: "2026-10-15T14:00:00Z", ultima: { direcao: "entrada", em: "2026-10-15T14:00:00Z", trecho: "e o preço?" } } });
+    await copiloto.automatica(nova);
+    assert.ok(leituras.raioX > depoisDaGeracao.raioX);
   });
 });
 

@@ -58,8 +58,8 @@ O PRUMO ficou de fora dessa regra até 05/10/2026: qualquer mensagem de quem
 tinha "Convite enviado" virava "Respondeu no WhatsApp". Dos 20 prospects
 marcados assim, todos "responderam" até cerca de 5 min depois do convite e 17
 em menos de 1 min. Eram saudações, e a tela Hoje do CRM listava "Respostas
-para responder" e "Conversando" que não existiam. prumo-desfazer-saudacao.py
-devolve as marcas antigas a "Só resposta automática".
+para responder" e "Conversando" que não existiam. prumo-desfazer-saudacao.py (aplicado;
+devolveu as marcas antigas a "Só resposta automática"; removido do repo em 19/10).
 
 Só número, direção e hora: o conteúdo das mensagens nunca sai do observador.
 Os dois webhooks exigem o header X-Observador (credencial "Observador

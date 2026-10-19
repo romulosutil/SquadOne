@@ -1,7 +1,7 @@
 /**
  * Avisos: o formato da fila do dell-status, a gravação atômica, o espelho P0 no
- * Telegram (dublê), os cartões só com o link da tailnet e nenhum valor em R$.
- * Grava num diretório temporário, nunca em ~/.local/share/avisos.
+ * Telegram (dublê), o registro de 24 h dos avisos pessoais e nenhum valor em R$.
+ * Grava num diretório temporário, nunca em ~/.local/share/avisos nem em data/.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -9,20 +9,20 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  avisoDeCartao,
   avisoParaArquivo,
   AvisoInvalido,
   avisosPessoaisPeloTelegram,
+  criarRegistroDeEnviados,
   gravarAvisoNaFila,
   noSilencio,
   publicarAviso,
   publicarAvisoPessoal,
+  RETENCAO_DOS_ENVIADOS_MS,
   semValores,
   validarAviso,
   type Aviso,
 } from "./avisos.ts";
 
-const TAILNET = "https://mel.tail0000.ts.net:8443";
 const base: Aviso = {
   titulo: "⏳ Em 10 min: Revisar contrato",
   texto: "12:10–13:10 · Geral",
@@ -212,24 +212,126 @@ describe("publicarAviso", () => {
   });
 });
 
-describe("avisoDeCartao: só o link da tailnet, e abrir não confirma", () => {
-  const pedido = { titulo: "Proposta de contratação", texto: "Um QA para Pessoal.", origem: "squadone:cartoes", chave: "cartao:c1", expiraEm: base.expiraEm, caminho: "/cartoes/c1" };
+// Auditoria de 19/10/2026 (MSG-2): o lembrete e o alerta de finanças saíram da fila e perderam a chave de 24 h
+// do dell-status; a memória da vigia some a cada reinício da Central. O registro devolve a regra em disco.
+describe("criarRegistroDeEnviados", () => {
+  const T0 = new Date("2026-10-19T12:00:00Z");
+  const h = (horas: number) => new Date(T0.getTime() + horas * 3600_000);
+  const arquivo = async () => path.join(await fila(), "avisos-enviados.json");
 
-  it("o link é a origem da tailnet + o caminho da tela", () => {
-    const a = avisoDeCartao(pedido, TAILNET);
-    assert.equal(a.link, `${TAILNET}/cartoes/c1`);
-    assert.equal(a.prioridade, 2);
+  it("marca, persiste e sobrevive a um 'reinício' (outra instância sobre o mesmo arquivo)", async () => {
+    const f = await arquivo();
+    const antes = criarRegistroDeEnviados(f, { log: silencio });
+    assert.equal(await antes.jaEnviado("lembrete:ev1@1", T0), false);
+    await antes.marcar("lembrete:ev1@1", T0);
+    assert.equal(await antes.jaEnviado("lembrete:ev1@1", h(1)), true);
+
+    const depois = criarRegistroDeEnviados(f, { log: silencio });
+    assert.equal(await depois.jaEnviado("lembrete:ev1@1", h(1)), true);
+    assert.equal(await depois.jaEnviado("outra", h(1)), false);
+    assert.deepEqual(await fs.readdir(path.dirname(f)), ["avisos-enviados.json"], "sem .tmp esquecido");
   });
 
-  for (const caminho of ["/cartoes/c1?confirmar=1", "/cartoes/c1#aprovar", "cartoes/c1", "//outro.host/x"]) {
-    it(`recusa o caminho ${caminho}`, () => assert.throws(() => avisoDeCartao({ ...pedido, caminho }, TAILNET), AvisoInvalido));
-  }
+  it("vale 24 h: passou disso, o aviso pode sair de novo; a gravação seguinte poda o velho", async () => {
+    const f = await arquivo();
+    const r = criarRegistroDeEnviados(f, { log: silencio });
+    await r.marcar("velha", T0);
+    assert.equal(await r.jaEnviado("velha", new Date(T0.getTime() + RETENCAO_DOS_ENVIADOS_MS - 1)), true);
+    assert.equal(await r.jaEnviado("velha", new Date(T0.getTime() + RETENCAO_DOS_ENVIADOS_MS)), false);
+    await r.marcar("nova", h(25));
+    assert.deepEqual(Object.keys(JSON.parse(await fs.readFile(f, "utf8"))), ["nova"]);
+  });
 
-  for (const origem of ["http://mel.tail0000.ts.net:8443", "https://aladdin-squadone-app.jicnzg.easypanel.host", "https://mel.tail0000.ts.net:8443/sub", "https://exemplo.com"]) {
-    it(`recusa a origem ${origem}`, () => assert.throws(() => avisoDeCartao(pedido, origem), AvisoInvalido));
-  }
+  it("esquecer tira a chave (e grava); chave que não existe não toca o disco", async () => {
+    const f = await arquivo();
+    const r = criarRegistroDeEnviados(f, { log: silencio });
+    await r.esquecer("nada");
+    await assert.rejects(fs.access(f), "nada a esquecer, nada gravado");
+    await r.marcar("a", T0);
+    await r.esquecer("a");
+    assert.equal(await criarRegistroDeEnviados(f, { log: silencio }).jaEnviado("a", T0), false);
+  });
 
-  it("recusa URL no texto: o único lugar clicável é o link", () => {
-    assert.throws(() => avisoDeCartao({ ...pedido, texto: "Veja https://outro.site" }, TAILNET), AvisoInvalido);
+  it("arquivo torto ou com lixo: recomeça vazio e não lança", async () => {
+    const f = await arquivo();
+    await fs.writeFile(f, "{isto não é json");
+    const erros: string[] = [];
+    const r = criarRegistroDeEnviados(f, { log: { error: (m: unknown) => erros.push(String(m)) } });
+    assert.equal(await r.jaEnviado("a", T0), false);
+    assert.equal(erros.length, 1);
+    await r.marcar("a", T0);
+    await fs.writeFile(f, JSON.stringify({ boa: T0.getTime(), ruim: "x", lista: [1] }));
+    assert.equal(await criarRegistroDeEnviados(f, { log: silencio }).jaEnviado("boa", T0), true);
+    assert.equal(await criarRegistroDeEnviados(f, { log: silencio }).jaEnviado("ruim", T0), false);
+  });
+
+  it("não conseguir gravar não lança (a mensagem já saiu) e a memória segue valendo", async () => {
+    const dir = await fila();
+    const f = path.join(dir, "avisos-enviados.json");
+    await fs.mkdir(f); // o destino é uma pasta: o rename falha
+    const erros: string[] = [];
+    const r = criarRegistroDeEnviados(f, { log: { error: (m: unknown) => erros.push(String(m)) } });
+    await r.marcar("a", T0);
+    assert.equal(await r.jaEnviado("a", T0), true);
+    assert.equal(erros.length >= 1, true);
+    assert.deepEqual((await fs.readdir(dir)).sort(), ["avisos-enviados.json"], "o .tmp não fica");
+  });
+});
+
+describe("publicarAvisoPessoal com o registro de 24 h", () => {
+  const T0 = new Date("2026-10-19T18:00:00Z");
+  const telegram = (enviados: string[]) => async (texto: string) => { enviados.push(texto); };
+
+  it("a mesma chave não sai duas vezes, nem depois de reiniciar", async () => {
+    const dir = await fila();
+    const f = path.join(dir, "enviados.json");
+    const enviados: string[] = [];
+    const deps = (r = criarRegistroDeEnviados(f, { log: silencio })) => ({ fila: dir, telegram: telegram(enviados), agora: () => T0, log: silencio, enviados: r });
+
+    assert.equal((await publicarAvisoPessoal(base, deps())).canal, "telegram");
+    const reinicio = await publicarAvisoPessoal(base, deps()); // registro novo sobre o mesmo arquivo
+    assert.equal(reinicio.canal, "repetido");
+    assert.equal(enviados.length, 1);
+    assert.equal((await fs.readdir(dir)).filter((n) => n.endsWith(".json") && n !== "enviados.json").length, 0, "nada na fila de reserva");
+
+    const outra = await publicarAvisoPessoal({ ...base, chave: "lembrete:ev2@2" }, deps());
+    assert.equal(outra.canal, "telegram");
+    assert.equal(enviados.length, 2);
+  });
+
+  it("24 h depois a chave volta a valer", async () => {
+    const dir = await fila();
+    const enviados: string[] = [];
+    let agora = T0;
+    const r = criarRegistroDeEnviados(path.join(dir, "enviados.json"), { log: silencio });
+    const deps = { fila: dir, telegram: telegram(enviados), agora: () => agora, log: silencio, enviados: r };
+    await publicarAvisoPessoal(base, deps);
+    agora = new Date(T0.getTime() + RETENCAO_DOS_ENVIADOS_MS);
+    assert.equal((await publicarAvisoPessoal(base, deps)).canal, "telegram");
+    assert.equal(enviados.length, 2);
+  });
+
+  it("aviso que NÃO saiu (Telegram e fila falharam) não é marcado: a próxima tentativa envia", async () => {
+    const dir = path.join(await fila(), "nao-existe");
+    const f = path.join(await fila(), "enviados.json");
+    const r = criarRegistroDeEnviados(f, { log: silencio });
+    await assert.rejects(publicarAvisoPessoal(base, { fila: dir, telegram: async () => { throw new Error("fora"); }, agora: () => T0, log: silencio, enviados: r }));
+    assert.equal(await r.jaEnviado(base.chave, T0), false);
+  });
+
+  it("caiu na fila de reserva: também marca (o dell-status dedupa igual)", async () => {
+    const dir = await fila();
+    const r = criarRegistroDeEnviados(path.join(await fila(), "enviados.json"), { log: silencio });
+    const resultado = await publicarAvisoPessoal(base, { fila: dir, agora: () => T0, log: silencio, enviados: r });
+    assert.equal(resultado.canal, "fila");
+    assert.equal(await r.jaEnviado(base.chave, T0), true);
+  });
+
+  it("sem registro nas dependências, nada muda (testes antigos e o modo sem disco)", async () => {
+    const enviados: string[] = [];
+    const deps = { fila: await fila(), telegram: telegram(enviados), agora: () => T0, log: silencio };
+    await publicarAvisoPessoal(base, deps);
+    await publicarAvisoPessoal(base, deps);
+    assert.equal(enviados.length, 2);
   });
 });

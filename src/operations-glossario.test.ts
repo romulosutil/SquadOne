@@ -65,6 +65,8 @@ describe('glossário: os nomes proibidos e as exceções que são outra coisa', 
     ['Leu, não Viu', 'Viu 02/10', ['Viu']],
     ['três recargas, um nome', 'Ler de novo · Atualizar agora', ['Ler de novo', 'Atualizar agora']],
     ['Escritório', 'Agentes do SquadOne', ['Agentes do SquadOne']],
+    ['a aba é Conversas para você, não A fazer', 'Vendas › A fazer', ['A fazer']],
+    ['Triagem e Números são seções, não caminhos de aba', 'em Vendas › Triagem e Vendas › Números', ['Vendas › Triagem', 'Vendas › Números']],
     ['a sigla da oferta', 'Estampa · Estamparia', ['Estampa']],
     ['a home do Dell é a Central de comando', 'Abrir o Centro de comando · Central de Comando', ['Centro de comando', 'Central de Comando']],
   ]

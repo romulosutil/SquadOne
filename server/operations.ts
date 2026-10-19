@@ -695,8 +695,15 @@ export function createOperationsRouter(options: {
   // `doTime` (19/10/2026): os leads cujo primeiro contato é do time comercial; a Próxima venda não os oferece.
   router.get("/crm/venda", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    const [dia, doTime] = await Promise.all([memoriaDaVenda.ler(), lerPrimeirosDoTime(options.dataDir)]);
-    res.json({ ...dia, doTime: [...doTime] });
+    // memoriaDaVenda.ler() lança em erro de leitura que não seja ENOENT: sem o catch a rejeição ficaria sem
+    // dono (Express 4) e poderia derrubar o processo. Quem lê o dia (as telas, o vendedor) já trata o 500.
+    try {
+      const [dia, doTime] = await Promise.all([memoriaDaVenda.ler(), lerPrimeirosDoTime(options.dataDir)]);
+      res.json({ ...dia, doTime: [...doTime] });
+    } catch (error) {
+      console.error("[venda] não leu o dia:", error);
+      res.status(500).json({ error: "Não deu para ler o dia agora." });
+    }
   });
   // O time comercial (deploy/dell/frente-comercial.py, desligado por padrão): estado, pausa e a reserva
   // do primeiro contato pela mesma janela e ritmo da Central.
@@ -776,7 +783,11 @@ export function createOperationsRouter(options: {
   router.get("/crm/vendedor", async (_req, res) => {
     const eventos = await lerHistoricoDoVendedor(path.join(options.dataDir, "vendedor-historico.jsonl"));
     res.setHeader("Cache-Control", "no-store");
-    res.json({ resumo: resumoDoVendedor(eventos, Date.now()), desde: eventos[0]?.em ?? null });
+    // `configurado`: as mesmas duas condições com que server.ts liga o vendedor (a flag e o bot), lidas do
+    // mesmo ambiente do processo; a tela "Quem envia hoje" não inventa estado. `ultimoEm` é o último aviso
+    // que ele gravou (a prova de que o laço andou), ou null.
+    const configurado = (process.env.SQUADONE_VENDEDOR ?? "").trim() === "true" && Boolean((process.env.TELEGRAM_BOT_TOKEN ?? "").trim());
+    res.json({ resumo: resumoDoVendedor(eventos, Date.now()), desde: eventos[0]?.em ?? null, ultimoEm: eventos[eventos.length - 1]?.em ?? null, configurado });
   });
 
   // A medida do agente do lead quente em sombra (17/10/2026): quantas decisões de cada tipo, os falsos

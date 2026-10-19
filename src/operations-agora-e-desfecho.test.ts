@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  acaoDoLead, agoraDaFicha, anotacoesAMao, desfechosDoLead, filaDeVenda, fraseDaAcao, linkDoPasso,
+  acaoDoLead, agoraDaFicha, desfechosDoLead, filaDeVenda, fraseDaAcao, linkDoPasso,
   type ContextoDaVenda, type TipoDeVenda,
 } from './operations/proxima-venda.ts'
 import type { CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmVisao } from './operations/types.ts'
@@ -180,19 +180,4 @@ describe('desfechosDoLead: o que a faixa "Desfecho" mostra (AC-08)', () => {
   it('a proposta diz o dia', () => {
     assert.equal(desfechosDoLead(lead('d', { etapa: 'proposta', proposta: { em: '2026-10-13T15:00:00Z', data: '2026-10-13' } })).marcados[0].texto, 'Proposta enviada ter 13/10.')
   })
-})
-
-describe('anotacoesAMao: a 2ª mensagem e o follow-up em "Anotar" (AC-09)', () => {
-  const casos: Array<[string, Partial<CrmLead>, boolean, string[]]> = [
-    ['disse sim, 2ª mensagem por mandar', { etapa: 'contato', sinal: 'respondeu', resposta: { tipo: 'interesse' } as CrmLead['resposta'] }, false, ['segunda_enviada']],
-    ['2ª mensagem já anotada: some', { etapa: 'contato', sinal: 'respondeu', resposta: { tipo: 'interesse' } as CrmLead['resposta'], marcos: { segundaEnviada: '2026-10-13T15:00:00Z' } }, false, []],
-    ['… mas volta se a anotação do toque falhou', { etapa: 'contato', sinal: 'respondeu', marcos: { segundaEnviada: '2026-10-13T15:00:00Z' } }, true, ['segunda_enviada']],
-    ['follow-up de hoje', { etapa: 'contato', sinal: 'enviado', followupHoje: true }, false, ['followup_enviado']],
-    ['enviado, sem follow-up hoje: nada', { etapa: 'contato', sinal: 'enviado' }, false, []],
-    ['enviado, toque do follow-up falhou', { etapa: 'contato', sinal: 'enviado' }, true, ['followup_enviado']],
-    ['lead novo ou encerrado: nada, nem com falha (o servidor recusaria)', { etapa: 'perdido', sinal: 'enviado' }, true, []],
-  ]
-  for (const [nome, extra, falha, esperado] of casos) {
-    it(nome, () => assert.deepEqual(anotacoesAMao(lead('n', extra), falha), esperado))
-  }
 })

@@ -5,7 +5,7 @@ import { montarDossie, type LeadDoCopiloto } from './operations/copiloto.ts'
 import {
   audioDaMensagem, levouMaterial, papelDaMensagem, pedeMaterial, textoParaATela, textoParaOModelo, type PapelDaMensagem,
 } from './operations/marcadores-da-conversa.ts'
-import { anotacoesAMao, linhaDaConversa } from './operations/proxima-venda.ts'
+import { linhaDaConversa } from './operations/proxima-venda.ts'
 import { quemRespondeu, quisVer, respondeuDeGente } from './operations/resultados.ts'
 import type { CrmLead, CrmResumoDaConversa } from './operations/types.ts'
 
@@ -128,13 +128,6 @@ describe('a linha da conversa no cartão', () => {
   for (const [nome, ultima, esperado] of CASOS) {
     it(nome, () => assert.equal(linhaDaConversa({ etapa: 'contato', conversa: conversa({ ultima }) }, AGORA), esperado))
   }
-})
-
-describe('a licença põe o material no passo, como o interesse', () => {
-  it('2ª mensagem anotável à mão', () => {
-    const l = lead({ resposta: { tipo: 'licenca', trecho: 'pode enviar sim', em: horas(24) } })
-    assert.deepEqual(anotacoesAMao(l, false), ['segunda_enviada'])
-  })
 })
 
 describe('o dossiê do copiloto (e do Assistente) diz que o áudio não foi ouvido', () => {

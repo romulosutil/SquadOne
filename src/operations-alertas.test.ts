@@ -9,31 +9,12 @@ import {
   resumoDoDell,
   semFraseCortada,
   seloDoPasso,
-  separarAlertas,
   soNoDell,
 } from './operations/alertas.ts'
 import type { DellCheck, DellStatus } from './operations/types.ts'
 
 const c = (id: string, estado: DellCheck['estado'], extra: Partial<DellCheck> = {}): DellCheck => ({
   id, grupo: 'fluxos', nome: id, estado, detalhe: '', ...extra,
-})
-
-describe('separarAlertas', () => {
-  it('vermelho nunca se esconde, fila é do CRM e o que resolve sozinho fica à parte', () => {
-    const a = separarAlertas([
-      c('ok', 'ok'),
-      c('balcao', 'falha'),
-      c('falha-sozinha', 'falha', { sozinho: true }),
-      c('pend:site-enviar', 'atencao', { grupo: 'pendencias' }),
-      c('pend:site-resposta', 'atencao', { grupo: 'pendencias', sozinho: true }),
-      c('cacador', 'atencao', { sozinho: true }),
-      c('cofre', 'atencao', { grupo: 'dados' }),
-    ])
-    assert.deepEqual(a.falhas.map(x => x.id), ['balcao', 'falha-sozinha'])
-    assert.deepEqual(a.fila.map(x => x.id), ['pend:site-enviar'])
-    assert.deepEqual(a.olhar.map(x => x.id), ['cofre'])
-    assert.deepEqual(a.sozinhos.map(x => x.id), ['pend:site-resposta', 'cacador'])
-  })
 })
 
 describe('links e filas', () => {

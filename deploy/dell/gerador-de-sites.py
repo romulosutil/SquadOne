@@ -138,11 +138,9 @@ LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
 # v1 = dossiê, conceito, redação e revisão (07/10/2026 à tarde); v2 = soma a etapa de
 # movimento de nível especialista (motor próprio em JS, scroll narrativo, interações autorais).
 VERSAO_PERSONALIZADO = 2
-# v3 = modo premium (referências do Refero a cada lead, imagem feita em código, laço de crítica visual).
-# PREMIUM_DESLIGADO: desde 13/10/2026 o `--premium` só roda com GERADOR_PREMIUM_LIGADO=1 (ver main()).
-VERSAO_PREMIUM = 3
-MODO_PREMIUM = False  # ligado por `--premium` em main()
-NOTA_DA_REVISAO: str | None = None  # `--nota`: feedback do Rômulo que o refazer premium deve aplicar sobre a versão anterior
+# O modo premium (v3: Refero a cada lead, imagem feita em código, laço de crítica visual) foi desligado em
+# 13/10/2026 e apagado em 19/10/2026 (--premium, --nota e instrucoes_premium). Os sites que ele fez têm
+# personalizado.json com versao 3 e seguem valendo; o lote só refaz quem tem versão menor que a atual.
 PREFIXO_BACKUP = "_v"  # _v1, _v2...: cada refazer guarda a versão que estava no ar
 TENTATIVA_FALHA = "_tentativa-falha"
 BACKUP_EM_CURSO: dict[str, str] = {}  # slug -> pasta _vN do refazer em andamento
@@ -362,43 +360,6 @@ def instrucoes_personalizado(slug: str, backup: str | None = None) -> str:
 - No resumo final, diga qual foi o fato que distingue este negócio e qual frase do site mais prova que ele foi feito para ele."""
 
 
-def instrucoes_premium(slug: str, rascunho: Path, nota: str | None = None) -> str:
-    """Terceiro bloco (modo `--premium`, 08/10/2026). O Rômulo reprovou o primeiro site com movimento
-    (turbo): "muito fraco e MUITO distante do refero.design/web-apps". O diagnóstico: uma passada só,
-    fotos de celular como único material, referência de estilo sem relação com o negócio, e ninguém
-    olhando o resultado renderizado. Aqui o Claude aprende com o Refero INTEIRO a cada lead, constrói,
-    olha as próprias capturas ao lado das referências e reescreve, três vezes."""
-    lead = pasta_do_lead(slug)
-    refs = rascunho / "refs"
-    qa = rascunho / "qa"
-    caderno = AUTO / "_build" / "aprendizados-refero.md"
-    texto = f"""MODO PREMIUM (pedido do Rômulo, 08/10/2026). O padrão de qualidade é o refero.design/web-apps: produtos reais de estúdios grandes, com direção de arte, imagem rica, tipografia e ritmo de produção. "Correto" e "criativo" não bastam: o site precisa parecer feito por um estúdio caro. A exigência é a mesma para uma desentupidora e para um escritório de advocacia; muda o mundo visual, não o nível. Estas etapas SOMAM às do modo personalizado, e a etapa R vem antes do `/design`:
-  R. APRENDER COM O REFERO, a cada lead (o exemplo são todos os exemplos). 1) Leia {caderno} se existir: são os princípios que os leads anteriores já extraíram; não repita o que ele já mostra. 2) Rode `python3 /home/romulo-sutil-corr-a/.local/bin/refero-aprender --saida {refs} --consulta "<termo em inglês do setor>" --consulta "<outro termo>" --consulta "<estilo desejado>" --max 30` com 3 a 5 consultas em inglês: o setor do negócio (ex.: "plumber", "law firm", "construction", "equipment rental"), o tipo de serviço (ex.: "local service", "emergency service", "consultancy"), e o ESTILO que o conceito pede (ex.: "editorial", "technical diagram", "dark product", "warm brand"). Sem resultado, tente outras consultas até ter pelo menos 15 imagens. 3) Leia (Read) TODAS as imagens da pasta, uma a uma, e olhe de verdade: grade, escala e contraste da tipografia, o que é imagem e o que é texto, como o hero usa a imagem, densidade, cor, profundidade, acabamento dos componentes. 4) Escolha as 6 mais úteis ao mundo visual deste negócio (não as mais bonitas em geral) e grave {lead}/REFERENCIAS.md: para cada uma, o site, o que ela faz que o seu rascunho de conceito não faz, e UMA decisão concreta que você vai tomar por causa dela (nunca "usar o estilo dela": copiar layout, texto ou marca de terceiros é proibido; aprenda o princípio). Termine com "Princípios deste lead": 5 linhas que valem para qualquer site futuro. 5) O `DESIGN.md` do passo 1.6.1 do CLAUDE.md deve vir de uma referência do MESMO MUNDO do negócio; um estilo de outro mundo (ex.: monografia industrial para um serviço de bairro) é erro.
-  G. IMAGEM E MATERIAL, o que mais separa um site de estúdio do nosso. As fotos do Google Places são de celular e pequenas: nunca as use grandes nem cruas. Use-as como PROVA (pequenas, tratadas: recorte intencional, duotone ou grão, moldura, legenda que diz o que mostram). O visual principal tem de ser FEITO POR VOCÊ, em código, com produção: ilustração e cena em SVG com gradientes, luz, sombra projetada, textura (feTurbulence para grão e papel, feDisplacementMap, máscaras), CSS 3D (perspective, transform-style, camadas em profundidade), canvas 2D ou WebGL simples quando o conceito pedir. Proibido: bloco cinza liso, caixa vazia, ícone de biblioteca no lugar de imagem, hero só com texto e cor. Cada seção tem um objeto visual com volume, material e luz. Tipografia: par de fontes com função clara (embutidas e subsetadas, regra do CLAUDE.md), escala modular, entrelinha e tracking ajustados por tamanho, números tabulares onde há número; um sistema de espaçamento de 8 px; no máximo 3 cores mais neutros, com uma cor de acento usada com disciplina.
-  K. CONCEITO COMO SISTEMA (feedback do Rômulo sobre o turbo: "ainda não está bem conceitual"). A ideia central não é um tema nem um hero bonito: é a regra que decide TUDO. Complete o {lead}/CONCEITO.md do passo 1.5.1 do CLAUDE.md com: a ideia em uma frase; a METÁFORA VISUAL única que a carrega (a família do nicho e a instância deste lead: um objeto, um mapa, um instrumento, um documento, um percurso); e a tabela "como a ideia aparece em": estrutura da página (os cinco Atos, nomeados e ordenados pela metáfora: a ordem É a ideia), navegação (o índice dos Atos é a metáfora), cada interação (o gesto do visitante é a ideia acontecendo), a microcopy (o vocabulário vem da ideia), o movimento (o que se move e por quê), a cor e a tipografia (a ideia decide o material). Teste obrigatório: tire a ideia e a página deixa de fazer sentido? Se ela continua funcionando como um template com outro tema, o conceito é decoração: refaça. Cada seção responde a uma pergunta que o visitante realmente tem, na ordem em que ele a tem.
-  U. UX E UI DE PRODUTO (feedback do Rômulo: "mais UX e mais UI"). REGRA ZERO: nada inventado. Nenhuma interação, categoria, convenção ou vocabulário pode depender de o visitante saber algo que só você sabe (aconteceu: "Qual é a sua C?" supunha que todo visitante diz a rua pelo código do bairro; quem digitou o endereço normal não teve resposta). Toda interação nasce de uma ENTRADA QUE O VISITANTE REALMENTE TEM (o endereço como todo mundo escreve, o nome do problema com as palavras dele, o horário em que precisa) e de DADO REAL com fonte; se você não tem a base para responder, não finja: aceite o que ele digitar e leve-o ao WhatsApp com o texto pronto. UX: 1) Para cada tela e componente, desenhe e implemente TODOS os estados: vazio, digitando, validando, erro, sucesso, carregando e "não sei responder"; erro diz o que fazer, nunca culpa o visitante. 2) Um formulário tem rótulo visível, exemplo real no placeholder, ajuda em uma linha, validação em linha, `autocomplete`/`inputmode`/`enterkeyhint` certos, alvo de toque de 44 px, foco visível e Enter envia. 3) Uma ação primária por tela, hierarquia pelo tamanho e peso, texto de botão que diz o resultado ("Chamar no WhatsApp com meu endereço"). 4) Mobile primeiro: tudo dentro de 390 px sem rolagem lateral, polegar alcança a ação, teclado do celular não cobre o campo. 5) O caminho até o contato nunca passa por mais de dois toques a partir de qualquer ponto da página. UI: 6) Um sistema de componentes: botão, campo, chip, cartão, rótulo e legenda com o mesmo raio, altura, borda, sombra, ritmo e estados (repouso, hover, foco, pressionado, desabilitado), definidos uma vez em variáveis CSS e reutilizados; um conjunto de ícones SVG único, desenhado por você, com o mesmo traço. 7) Escala tipográfica com no máximo 6 tamanhos, grade de 8 px, alinhamento rigoroso, contraste mínimo de 4,5:1 e margens generosas; nenhum componente espremido nem texto solto sem função. 8) TESTE DE ENTRADAS REAIS: implemente `?qa=teste`, que preenche cada formulário e interação com pelo menos 5 entradas realistas, incluindo as erradas e as que você não sabe responder (ex.: "Rua Horácio Santana 342", "rua x", vazio, só número, com acento e maiúsculas), e escreve o resultado de cada uma em `<pre id="qa-resultado">`; leia com `google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=8000 --dump-dom "file://{lead}/index.html?qa=teste"` e registre a tabela entrada → resposta na CRITICA. Qualquer entrada realista sem resposta útil é defeito que bloqueia o deploy.
-  V. LAÇO DE CRÍTICA VISUAL, três rodadas depois do HTML funcionando e antes do deploy. Em cada rodada: 1) o index.html aceita o parâmetro `?qa=1` (e `&p=0.0 a 1.0` para fixar o progresso da seção narrativa): com ele as entradas terminam na hora, o scroll narrativo fica no progresso pedido e nada espera tempo ou ponteiro; o Chrome headless do Dell não roda animação por tempo, então sem isso a captura sai vazia (já aconteceu). 2) Tire capturas no Chrome headless: `google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=8000 --window-size=1440,900 --screenshot={qa}/d1.png "file://{lead}/index.html?qa=1&p=0.3"` (mkdir -p {qa} antes), em pelo menos 5 posições e estados (hero, narrativa em 0.3 e 0.8, uma seção intermediária, o fecho) no desktop 1440x900 e no celular 390x844, salvas em {qa}/, mais o Ato I e a sequência do Ato III a 390x844 com `--force-prefers-reduced-motion` e sem `?qa` (é o que o dono de celular com movimento reduzido vê). 3) Leia (Read) as capturas LADO A LADO com 4 imagens da pasta {refs} que você escolheu e escreva {lead}/CRITICA-N.md (N = rodada) com os 8 piores defeitos desta rodada, em ordem, cada um com a referência que o mostra e a correção que você vai fazer; seja cruel: pergunte "um estúdio entregaria isto?", "onde o olho entra e para?", "o que está vazio, chapado ou genérico?", "o texto é legível a 390 px?", "o movimento tem propósito?", "o conceito decide esta seção ou é decoração?", "o visitante saberia o que fazer sem explicação?", "algo aqui foi inventado sem base?". Depois, o CHECKLIST DOS ATOS, item por item, "sim" ou "não" com a captura que prova (um "não" entra nos defeitos da rodada): METÁFORA (1) dá para dizê-la em uma frase e ela vem do ofício, não de banco de imagem? (2) o índice e os nomes dos Atos são ela? (3) ela mostra cuidado e controle, nunca o problema? (4) trocar o nome por o de um concorrente da cidade deixaria algo falso? ATOS (5) no celular, em 3 s no Ato I: o que é, onde é e como chamar? (6) os cinco Atos estão na ordem das perguntas do visitante? (7) de qualquer ponto o WhatsApp está a até dois toques? (8) quem ignorar todos os efeitos entende tudo só rolando? MOVIMENTO (9) cada efeito tem linha no CONCEITO.md e nenhum sobra? (10) a sequência presa ao scroll conta a metáfora (capturas em p=0.3 e p=0.8)? (11) efeito de cursor só com pointer: fine, e o toque tem equivalente? (12) a captura com `--force-prefers-reduced-motion` está completa e legível? CONFIANÇA (13) toda afirmação de experiência (anos, nota, horário, marcas) tem fonte? (14) nenhuma frase de medo, desconfiança, urgência artificial ou deboche do ramo? (15) fotos reais tratadas e legendadas, nada proibido (paciente, criança, praga, sujeira)? (16) nada amador: alinhamento a 390 px, componentes coerentes, sem placeholder nem erro de texto? TÉCNICA (17) o script de bytes passa (fim do Ato I ≤ 200 KB, arquivo ≤ 450 KB, CSS ≤ 35 KB, JS ≤ 25 KB)? (18) título e foto do Ato I visíveis no primeiro quadro, sem esperar JS? (19) sem JS (`--blink-settings=scriptEnabled=false`), conteúdo e CTAs funcionam? (20) `window.onerror` vazio em todas as capturas? Inclua em cada CRITICA a tabela do `?qa=teste` (UX). 4) Aplique TODAS as correções no index.html. A rodada 3 só termina quando um estúdio entregaria a página: se ainda houver bloco chapado, imagem crua, hierarquia fraca ou algo que lembre template, faça uma 4ª rodada. Reduced-motion e teclado continuam obrigatórios; o parâmetro `?qa` pode ficar (inofensivo).
-  W. APRENDIZADO PARA OS PRÓXIMOS. Ao final, leia {caderno} (se existir), acrescente uma seção "## {slug}" com os "Princípios deste lead" e os 3 defeitos que mais se repetiram nas suas críticas, e regrave o arquivo inteiro (Write) mantendo só as 40 seções mais recentes. Este caderno é o que faz o próximo lead começar melhor que este.
-- Tempo: este modo pode usar até 3 horas. Gaste na referência, na imagem e nas rodadas de crítica; é aqui que a cota rende. No resumo final diga o que mudou da rodada 1 para a última e qual referência mais pesou.""" + (f"""
-- REVISÃO DIRIGIDA (feedback do Rômulo sobre a versão anterior deste lead, que está em {lead}/{BACKUP_EM_CURSO.get(slug, '_v1')}/): NÃO comece do zero. Copie o index.html (e o CONCEITO.md, se houver) dessa pasta de volta para {lead}/ (cp) e parta dele: mantenha o que o feedback não condena, refaça por inteiro o que ele condena (um trecho condenado não se remenda: repense a ideia dele, com base real, e reimplemente), e rode U e V sobre a página toda. O feedback, nas palavras dele: "{nota}" """ if nota else "")
-    if not ferramentas_de_qa():
-        return texto
-    # Laço V com a folha de contato e o gate (11/10/2026): cada rodada lia ~15 capturas e as 4
-    # referências uma a uma. Agora é uma imagem por rodada; as referências já foram lidas na etapa R.
-    for antes, depois in (
-        (f"--screenshot={qa}/d1.png", f"--screenshot={qa}/d-ato3-p0.3.png"),
-        (f"salvas em {qa}/, mais", f"salvas em {qa}/ com os nomes das instruções da execução (d-ato1.png, m-ato3-p0.8.png...), mais"),
-        (f"3) Leia (Read) as capturas LADO A LADO com 4 imagens da pasta {refs} que você escolheu e escreva",
-         f"3) Junte as capturas da rodada e as 4 imagens de {refs} que você escolheu numa folha: `python3 {FOLHA_DE_CONTATO} "
-         f"--saida {qa}/folha-N.jpg --pasta {qa} --refs <os 4 arquivos de {refs}>`, e leia (Read) só ela: UMA imagem por "
-         "rodada (as referências você já leu na etapa R; na folha elas ficam ao lado das capturas). Escreva"),
-        ("(17) o script de bytes passa", f"(17) o gate `python3 {QA_NUMERICO} {lead}/index.html --capturas {qa}` sai 0"),
-        ("(19) sem JS (`--blink-settings=scriptEnabled=false`)", "(19) sem JS (a m-ato1-semjs.png que o gate tira de uma cópia sem <script>)"),
-    ):
-        texto = texto.replace(antes, depois)
-    return texto
-
-
 def instrucoes_pedido(slug: str) -> str:
     """Último bloco quando o demo foi pedido (demo sob pedido, 14/10/2026): o dono já recebeu o Raio-X,
     respondeu, e o Rômulo pediu o site. A triagem do CLAUDE.md não se aplica e a pasta pode estar fora da raiz."""
@@ -414,8 +375,6 @@ def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) ->
     instrucoes = instrucoes_da_execucao(slug, rascunho)
     if personalizado:
         instrucoes += "\n\n" + instrucoes_personalizado(slug, BACKUP_EM_CURSO.get(slug))
-        if MODO_PREMIUM:
-            instrucoes += "\n\n" + instrucoes_premium(slug, rascunho, NOTA_DA_REVISAO)
     if slug in PEDIDOS_EM_CURSO:
         instrucoes += "\n\n" + instrucoes_pedido(slug)
     cmd = [
@@ -500,44 +459,38 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", Path.home() / ".local/
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o gerador: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
 
 def avisar(texto: str) -> None:
-    """Aviso pelo WhatsApp: a fila que o dell-status repassa ao Hermes.
+    """Aviso na fila do dell-status (que o entrega pelo Telegram, WhatsApp de reserva).
 
     Nunca levanta: o gerador roda sozinho pelo timer e um aviso que não saiu
     não pode derrubar a execução (nem um lead)."""
     aviso = {"titulo": "🌐 Gerador de sites", "texto": texto, "origem": "gerador-de-sites"}
     try:
         lib = lib_de_aviso()
-        if lib is not None:
-            # Valida, grava atômico, não cria a pasta da fila e dá um nome que
-            # nunca colide (o antigo usava só os segundos). Texto interno: se
-            # um dia trouxer "R$", sai com [valor] em vez de se perder.
-            if lib.VALOR_EM_REAIS.search(texto):
-                aviso["texto"] = lib.sem_valores(texto)
-            r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="gerador")
-            if not r.gravado:
-                log(f"Aviso não gravado ({r.estado}): {r.motivo}", "ERRO")
+        if lib is None:  # sem a lib não há validação: não grava na fila, só registra e segue
+            print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
             return
-        # Sem a lib instalada: o jeito de antes, sem mudar nada.
-        FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-        (FILA_AVISOS / f"gerador-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:  # noqa: BLE001 — era só OSError; ver a docstring
+        # Valida, grava atômico, não cria a pasta da fila e dá um nome que
+        # nunca colide. Texto interno: se um dia trouxer "R$", sai com [valor]
+        # em vez de se perder.
+        if lib.VALOR_EM_REAIS.search(texto):
+            aviso["texto"] = lib.sem_valores(texto)
+        r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="gerador")
+        if not r.gravado:
+            log(f"Aviso não gravado ({r.estado}): {r.motivo}", "ERRO")
+    except Exception as e:  # noqa: BLE001 — qualquer falha do aviso; ver a docstring
         try:
             log(f"Aviso não gravado: {e}", "ERRO")
         except Exception:  # noqa: BLE001 — nem o log (pasta .logs) derruba a execução por causa do aviso
@@ -1011,7 +964,7 @@ def marcar_personalizado(pasta: Path) -> None:
     (v2 = com a etapa de movimento de nível especialista). Nunca derruba o lead."""
     try:
         (pasta / "personalizado.json").write_text(json.dumps({
-            "versao": VERSAO_PREMIUM if MODO_PREMIUM else VERSAO_PERSONALIZADO, "modelo": os.environ.get("GERADOR_MODELO", "").strip() or "padrão",
+            "versao": VERSAO_PERSONALIZADO, "modelo": os.environ.get("GERADOR_MODELO", "").strip() or "padrão",
             "em": dt.datetime.now().astimezone().isoformat(timespec="seconds")}, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
@@ -1173,14 +1126,9 @@ def main() -> int:
     ap.add_argument("--listar", action="store_true", help="só mostra a fila, sem gerar nada")
     ap.add_argument("--refazer", nargs="+", metavar="SLUG",
                     help="modo personalizado: refaz estes leads (publicados e não enviados), na ordem dada")
-    ap.add_argument("--premium", action="store_true",
-                    help="DESLIGADO desde 13/10/2026 (religa com GERADOR_PREMIUM_LIGADO=1). Modo premium: aprende com o "
-                         "Refero a cada lead, imagem feita em código e laço de crítica visual "
-                         "(implica --personalizado; use --timeout-min 180)")
     ap.add_argument("--personalizado", action="store_true",
                     default=os.environ.get("GERADOR_PERSONALIZADO", "").strip().lower() in ("1", "true", "sim"),
                     help="leads novos da fila também no modo personalizado (env GERADOR_PERSONALIZADO=1 liga sempre)")
-    ap.add_argument("--nota", help="com --refazer --premium: feedback a aplicar sobre a versão anterior (parte dela, não do zero)")
     ap.add_argument("--teto-horas", type=float, default=4.0,
                     help="duração máxima da execução (TimeoutStartSec do serviço); mude junto com o systemd-run")
     ap.add_argument("--pedidos", action="store_true",
@@ -1189,12 +1137,6 @@ def main() -> int:
     a = ap.parse_args()
     if a.refazer and not all(re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,179}", s) for s in a.refazer):
         ap.error("--refazer espera slugs de pasta (minúsculas, números, ponto, hífen e sublinhado)")
-    # Premium desligado em 13/10/2026 (decisão do Rômulo): Refero a cada lead, imagem feita em código e duas
-    # interações autorais eram a maior fonte da cara de IA dos demos, e cada lead levava até 3 h. O código
-    # fica; GERADOR_PREMIUM_LIGADO=1 no gerador.env religa.
-    if a.premium and os.environ.get("GERADOR_PREMIUM_LIGADO", "").strip().lower() not in ("1", "true", "sim"):
-        ap.error("o modo premium está desligado desde 13/10/2026 (ver PREMIUM_DESLIGADO no gerador-de-sites.py); "
-                 "rode sem --premium, ou ponha GERADOR_PREMIUM_LIGADO=1 no gerador.env para religar")
 
     if a.listar:
         pausados = nao_gerar()
@@ -1243,11 +1185,7 @@ def main() -> int:
     inicio_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     concluidos, falhas, descartados, sumidos = [], [], [], []
     tentados: set[str] = set()
-    global MODO_PREMIUM
-    MODO_PREMIUM = a.premium
-    global NOTA_DA_REVISAO
-    NOTA_DA_REVISAO = (a.nota or "").strip().replace('"', "'")[:3000] or None
-    personalizado = bool(a.refazer) or a.personalizado or a.premium
+    personalizado = bool(a.refazer) or a.personalizado
     erro = None
     if a.refazer:
         a.quantidade = max(a.quantidade, len(a.refazer))

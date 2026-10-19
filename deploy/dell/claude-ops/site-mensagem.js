@@ -2,8 +2,9 @@
 // codigo do Balcao (abordagem) e do Acompanhamento (follow-up): os dois falam
 // com o mesmo tom e montam o telefone do mesmo jeito.
 
-// Variacao A esta aprovada e fica como controle. Variacao null nao sai: com B e C
-// null, todo lead sai na A.
+// Variacao A esta aprovada e fica como controle. Variacao null nao sai (o codigo ainda
+// respeita isso), mas desde 08/10/2026 as tres tem texto: quem fica so na A e o lead
+// sem nota boa (sem B) ou sem Raio-X (sem C).
 // 22/09/2026: saiu o {NOME_CONTATO}. Ele usava a primeira palavra do nome do
 // negocio ("Oi Clinica!", "Oi Academia!"), e a planilha nao tem o nome do dono.
 // 30/09/2026: toda mensagem abre dizendo quem escreve e por quem ("Me chamo
@@ -31,24 +32,25 @@
 // raio_x_pontos ("1 ponto que faz", "2 pontos que fazem"): o plano dizia "3 pontos",
 // mas em 08/10 so 1 dos 88 demos tinha 3 (o Raio-X so mostra fato verificavel do
 // Places), e o numero fixo seria falso para quase todos.
-// 15/10/2026 (revisao de texto pedida pelo Romulo: as mensagens estavam diferentes entre si).
-// A A ficou como ele ditou; as outras seguem o mesmo guia, para a conversa soar de uma pessoa so:
-// - quem fala: "Oi, tudo bem? Aqui e o Romulo." no primeiro contato e no reenvio (que chega a
-//   outra pessoa); "Oi, e o Romulo de novo." no follow-up. Sem "do PRUMO" no Site: a A nao o tem,
-//   e com ele so na B e na C o A/B media a apresentacao junto com o gancho;
-// - nomes que o lead entende: "demonstracao de site" (nunca "demo") e "raio-x" em minusculas;
-// - o mesmo pedido no fim de toda primeira mensagem e follow-up: "Posso te mandar o link para dar
-//   uma olhada? E sem compromisso.";
-// - o link sempre sozinho na linha de baixo de quem ele e ("Aqui esta o raio-x da X:" e, na linha seguinte, o link);
-// - preco legivel: "R$ 690 uma vez e R$ 39 por mes" (antes "R$ 690 e R$ 39 por mes", que lia
-//   como dois valores do mesmo mes);
-// - a saida facil igual em todas: "Se nao for o momento, e so dizer que eu apago."; uma pergunta so.
-// 19/10/2026 (pedido do Romulo: "humanize mais a mensagem que os agentes enviam"; o time comercial
-// manda este mesmo texto). A A fica como ele ditou: e o controle (24% de resposta em 14/10). A B e a
-// C ficaram mais soltas, como alguem escreveria a mao: sem "por conta propria", sem o argumento de
-// venda ("acaba indo para quem tem") e fechando com "Quer que eu te mande...? Sem compromisso.".
-// "Site de exemplo" no lugar de "demonstracao de site" so na B: e o que o dono entende de primeira.
-// A contagem do A/B dos pares com B ou C recomeca nesta data (TEXTO_DESDE em src/operations/ab-mensagem.ts):
+// 15/10/2026 (revisao de texto pedida pelo Romulo: as mensagens estavam diferentes entre si)
+// fixou um guia para a conversa soar de uma pessoa so. Em 19/10/2026 (pedido dele: "humanize mais
+// a mensagem que os agentes enviam"; o time comercial manda este mesmo texto) a B e a C ficaram mais
+// soltas, "como alguem escreveria a mao", e se afastaram de parte desse guia. O guia VIGENTE e o que
+// as variacoes fazem hoje (a A e o controle e fica como ele ditou: 24% de resposta em 14/10):
+// - quem fala: "Oi, tudo bem? Aqui e o Romulo." abre as tres primeiras mensagens e o reenvio (que
+//   chega a outra pessoa); "Oi, e o Romulo de novo." abre o follow-up. Sem "do PRUMO" no Site;
+// - nomes que o lead entende: a A, a segunda mensagem e o follow-up dizem "demonstracao de site"
+//   (nunca "demo"); a B diz "site de exemplo" (e o que o dono entende de primeira); "raio-x" em minusculas;
+// - o pedido do fim: a A, o follow-up e o follow-up do raio-x fecham com "Posso te mandar o link para
+//   dar uma olhada? E sem compromisso."; a B fecha com "Quer que eu te mande o link? Sem compromisso." e
+//   a C com "Quer que eu te mande? Sem compromisso.". A B e a C nao dizem "por conta propria" (a A ainda
+//   diz) nem trazem o argumento de venda ("acaba indo para quem tem");
+// - a primeira mensagem nunca leva o link; nas mensagens com link (segunda, follow-up com link) ele
+//   fica sozinho na linha de baixo de quem ele e ("Aqui esta o raio-x da X:" e, na linha seguinte, o link);
+// - preco legivel: "R$ 690 uma vez e R$ 39 por mes" (so na segunda mensagem);
+// - a saida facil "Se nao for o momento, e so dizer que eu apago." fica na segunda mensagem e no
+//   follow-up com link; as primeiras dizem so "sem compromisso". Uma pergunta so por mensagem.
+// A contagem do A/B dos pares com B ou C recomeca em 19/10 (TEXTO_DESDE em src/operations/ab-mensagem.ts):
 // o envio de antes leva a letra com o texto antigo e nao entra na comparacao.
 const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google, nota {NOTA} com {AVALIACOES} avaliações, muito bom! Só senti falta de um site de vocês, então montei um de exemplo com as fotos e as avaliações que já estão lá. Quer que eu te mande o link? Sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como {O_A} {NOME} aparece no Google e anotei numa página o que já está bom e {PONTOS} o cliente ir para outro lugar. Quer que eu te mande? Sem compromisso.'];
 
@@ -151,12 +153,12 @@ function varianteDe(placeId, eua, lead) {
 // sumiu) ou a linha nao tem conjunto (vazia, ou letra do sorteio antigo sem ab_elegiveis):
 // sorteia de novo, no estrato novo. Isso so acontece enquanto o lead e "pronto": o Balcao nunca
 // reescreve a letra de quem ja foi enviado, entao o que saiu nunca muda.
-const ELEGIVEIS_VALIDOS = /^A?B?C?$/;
-// "ab", " A B " ou "BA" valem "AB"; vazio ou com outra letra, ''.
+// "ab", " A B " ou "BA" valem "AB"; vazio ou com outra letra, ''. (As letras saem de LETRAS, na ordem
+// A, B, C: o resultado e sempre um conjunto bem formado, entao nao ha o que validar depois.)
 function normalizarElegiveis(valor) {
   const t = String(valor === undefined || valor === null ? '' : valor).toUpperCase().replace(/[^A-Z]/g, '');
   const letras = LETRAS.filter(l => t.indexOf(l) >= 0).join('');
-  return letras && letras.length === new Set(t).size && ELEGIVEIS_VALIDOS.test(letras) ? letras : '';
+  return letras && letras.length === new Set(t).size ? letras : '';
 }
 // O conjunto de letras do lead agora ("A", "AB", "AC", "ABC").
 function elegiveisDe(lead) { return indicesElegiveis(lead).map(i => LETRAS[i]).join(''); }

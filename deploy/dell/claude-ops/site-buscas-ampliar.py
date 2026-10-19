@@ -13,11 +13,17 @@ Uso: python3 site-buscas-ampliar.py --simular   mostra o que entraria, sem grava
      python3 site-buscas-ampliar.py             acrescenta na aba Buscas
      python3 site-buscas-ampliar.py --testar    só a função pura, sem planilha
 """
+import importlib.util
 import sys
 import time
+from pathlib import Path
 
-PLANILHA = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o"  # "Leads — Site antes da venda"
-COLUNAS = ["query", "lat", "lng", "raio_m", "vertical", "ativa", "ultima_rodada", "pausada_em", "pausa_motivo"]
+# A planilha e as colunas da aba Buscas moram no site-antes-da-venda.py (uma fonte só). Ele importa o n8n.py,
+# que lê a chave da API do n8n na importação (~/.config/claude-ops/n8n-api-key): no Dell ela existe; num teste, HOME temporário.
+_spec = importlib.util.spec_from_file_location("site_antes_da_venda", Path(__file__).resolve().parent / "site-antes-da-venda.py")
+sv = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(sv)
+PLANILHA, COLUNAS = sv.PLANILHA, sv.COLUNAS_DE_BUSCAS  # "Leads — Site antes da venda", aba Buscas
 
 # query, lat, lng, raio_m, vertical
 BUSCAS = [
@@ -152,7 +158,7 @@ def main() -> int:
     simular = "--simular" in sys.argv[1:]
     base = f"/v4/spreadsheets/{PLANILHA}"
     with SheetsProxy([PLANILHA]) as s:
-        valores = s.get(f"{base}/values/Buscas!A1:Z1000").get("values", [])
+        valores = s.get(f"{base}/values/Buscas").get("values", [])  # a aba inteira, sem limite de linha
         cab = valores[0]
         novas = novas_buscas(valores)
         print(f"{len(novas)} busca(s) nova(s) de {len(BUSCAS)} (a aba tem {len(valores) - 1})")

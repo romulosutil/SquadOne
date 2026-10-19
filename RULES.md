@@ -277,18 +277,19 @@ não agenda ações e não reescreve estratégia, preço ou prompt automaticamen
       lá, e no WhatsApp a resposta dele cairia na IA do Hermes.
     - **Exceção de 16/10/2026 (pedido do Rômulo): o aviso de venda do vendedor
       sai pelo Telegram** (`server/vendedor.ts`, `SQUADONE_VENDEDOR=true`): seg a
-      sex, 08:00–17:30, um por vez, teto de 40 por dia. Precisa de botões (abrir o
+      sex, 08:00–17:30, um por vez, teto de 40 avisos que saíram por dia (o "quero ver" quente passa por cima). Precisa de botões (abrir o
       WhatsApp com a mensagem, "Enviei", "Pular") e, pela fila, sairia pelo mesmo
       número que fala com os leads. Nunca envia nada ao lead (regra 17).
     - **Toda saída proativa vai pelo WhatsApp do Hermes, pela fila com schema
       e teto** (`~/.local/share/avisos/fila`, drenada pelo `dell-status`:
       formato fechado com `origem` obrigatória, até 20 envios por hora com o
       excedente num resumo, silêncio das 22h às 7h exceto P0, chave repetida
-      em 24 h descartada, `expira_em`). Lembretes, falhas, cartões esperando e
-      alertas de finanças entram nela; ninguém chama `hermes send` direto. O
+      em 24 h descartada, `expira_em`). Lembretes, falhas e alertas de
+      finanças entram nela (o cartão que pedia decisão por link da tailnet saiu
+      em 19/10/2026: nada o produz mais); ninguém chama `hermes send` direto. O
       número é o pessoal, o mesmo que fala com leads: rajada é o que costuma
       dar banimento, e um ponto único é o único jeito de o teto valer para
-      todos. Cartão que pede decisão leva só o link da tailnet (regra 10).
+      todos.
     - **Exceção de 16/10/2026 (escolha do Rômulo, OT-14 do blueprint): o aviso
       pessoal do SquadOne sai pelo Telegram.** O lembrete da agenda (vigia) e o
       alerta de finanças (70/90/100%) vão pelo bot ao chat do dono
@@ -296,7 +297,10 @@ não agenda ações e não reescreve estratégia, preço ou prompt automaticamen
       mesmo schema e sem R$; só se o bot estiver desligado ou falhar caem na fila
       acima. O motivo: o WhatsApp do Hermes é o número que fala com os leads e
       levou restrição de 24 h em 15/10, e cada aviso pessoal era uma mensagem a
-      mais na conta dele. O P0 segue nos dois canais. **As falhas do Dell também
+      mais na conta dele. A chave de 24 h que a fila dava a esses avisos agora vive em
+      `avisos-enviados.json` (sobrevive ao reinício da Central, que acontece a cada
+      merge). O P0 segue nos dois canais, mas hoje é capacidade pronta: nenhum
+      chamador o produz. **As falhas do Dell também
       (mesmo dia, segunda parte):** o "Quebrou / Continua fora / Voltou ao normal"
       do `dell-status` e o aviso do `socorro` (`origem` "socorro", que a drenagem
       separa) vão pelo mesmo bot, sem som das 22h às 7h salvo P0, e só caem no
@@ -347,7 +351,7 @@ não agenda ações e não reescreve estratégia, preço ou prompt automaticamen
     uma execução ativa: confirmação rápida com ID, repetição com o mesmo ID e
     acompanhamento por estado persistido.
 23. `/entrada/` (menu "Entrada", desde 04/10/2026) é só uma ponte: `server/entrada-proxy.ts`
-    repassa um conjunto FECHADO de rotas (`GET /`, `GET /api/estado`, `POST /api/enviar`) para
+    repassa um conjunto FECHADO de rotas (`GET /entrada/`, `GET /entrada/api/estado`, `POST /entrada/api/enviar` e a fonte `GET /entrada/inter.woff2`) para
     um destino FIXO de configuração, `127.0.0.1:9130` (o serviço da Entrada em
     `deploy/dell/entrada/`). Fica antes do `express.json()` porque o corpo é um arquivo de
     até 200 MB que passa em fluxo. Só seguem cabeçalhos de uma lista de permissão (nunca

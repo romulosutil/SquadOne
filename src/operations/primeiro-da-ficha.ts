@@ -12,9 +12,8 @@
  * O reenvio do só-robô também é primeiro contato, mas o lead já está Em contato e o passo é o
  * follow-up: continua como era (some com a trava e o aviso diz por quê).
  */
-import { hora } from './crm-formato'
 import { acaoDoLead, type AcaoDeVenda } from './proxima-venda'
-import type { EstadoDoRitmo } from './trava-de-ritmo'
+import { motivoCurtoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmItemHoje, CrmLead, CrmVisao } from './types'
 
 export interface PrimeiroDaFicha {
@@ -36,18 +35,6 @@ export interface TravasDoPrimeiro {
   /** O "Liberar" de hoje para este lead (liberados.ts). */
   liberado: boolean
   ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' | 'enviadosHoje' | 'teto'>
-}
-
-/** PURO. O motivo do ritmo em poucas palavras, para o lado do botão (o texto longo é textoDoRitmo). */
-export function motivoCurtoDoRitmo(ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' | 'enviadosHoje' | 'teto'>): string {
-  const quando = ritmo.ate === null ? '' : hora(new Date(ritmo.ate).toISOString())
-  switch (ritmo.motivo) {
-    case 'pausa': return `Pausado até ${quando}`
-    case 'dia': return `Teto de hoje: ${ritmo.enviadosHoje} de ${ritmo.teto}`
-    case 'hora': return `Teto da hora; o próximo sai às ${quando}`
-    case 'intervalo': return `O próximo sai às ${quando}`
-    default: return ''
-  }
 }
 
 /**

@@ -5,6 +5,7 @@ import express, { type Router } from 'express';
 import type { CrmVisao } from '../src/operations/types.ts';
 import { frenteDosArquivos, primeirosDoTime, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
 import { tetoDoDia } from '../src/operations/trava-de-ritmo.ts';
+import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
 
@@ -28,6 +29,14 @@ const ESTADO = 'frente-comercial.json';
 
 const lerJson = (arquivo: string) => fs.readFile(arquivo, 'utf8').then(JSON.parse).catch(() => null);
 
+/**
+ * O time tem dois interruptores: `ativo` na config (o que a tela liga e pausa) e o frente-comercial.timer
+ * do systemd (que roda o script a cada minuto). Com `ativo: true` e o timer parado a tela dizia "ativo"
+ * e nada rodava (19/10/2026). A prova de que o ciclo anda é a hora que o próprio script grava a cada
+ * rodada: sem rodada há mais que isto, dentro do expediente, o ciclo está parado.
+ */
+export const CICLO_PARADO_APOS_MS = 5 * 60_000;
+
 /** A fila do time do disco, para o predicado de quem faz o primeiro contato. Ilegível = sem time. */
 export async function lerFrenteDoPrimeiro(dataDir: string): Promise<FrenteDoPrimeiro> {
   return frenteDosArquivos(await lerJson(path.join(dataDir, CONFIG)), await lerJson(path.join(dataDir, ESTADO)));
@@ -44,10 +53,17 @@ export async function lerFrente(dataDir: string, agora = Date.now()) {
   const bruto = await lerJson(path.join(dataDir, ESTADO));
   // O teto é o da trava de ritmo da Central, dividido com as telas e o Telegram: não é uma cota do time.
   const limite = tetoDoDia(agora);
-  if (!bruto) return { ativo: config.ativo === true, estado: 'iniciando', limite, fila: [], atualizadoEm: null };
+  const ativo = config.ativo === true;
+  // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
+  const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;
+  const ultimaRodada = Number.isFinite(gravada) ? gravada : bruto ? await fs.stat(path.join(dataDir, ESTADO)).then((st) => st.mtimeMs).catch(() => null) : null;
+  const ultimaRodadaEm = ultimaRodada === null ? null : new Date(ultimaRodada).toISOString();
+  const cicloParado = ativo && noExpedienteDeVenda(agora) && (ultimaRodada === null || agora - ultimaRodada > CICLO_PARADO_APOS_MS);
+  if (!bruto) return { ativo, estado: 'iniciando', limite, fila: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
   const stale = !Number.isFinite(Date.parse(bruto.atualizadoEm)) || agora - Date.parse(bruto.atualizadoEm) > 10 * 60_000;
   return {
-    ativo: config.ativo === true, estado: stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
+    ativo, estado: stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
+    cicloParado, ultimaRodadaEm,
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
     enviados: bruto.enviados ?? 0, respondidos: bruto.respondidos ?? 0,

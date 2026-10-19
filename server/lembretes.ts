@@ -123,15 +123,18 @@ export const ORIGEM_DOS_LEMBRETES = "squadone:vigia";
  * Texto do aviso. Minutos contados do `agora` real, não da antecedência
  * nominal: um aviso atrasado diz quanto falta de verdade.
  *
- * - `chave` = `lembrete:<eventId>@<referência>`: a fila descarta a mesma chave
- *   em 24 h, então um redeploy dentro dos 10 min não manda o lembrete de novo
- *   (a deduplicação da vigia é só memória);
+ * - `chave` = `lembrete:<eventId>@<referência>`: o registro de 24 h de
+ *   `publicarAvisoPessoal` (em disco) descarta a mesma chave, então um redeploy
+ *   dentro dos 10 min não manda o lembrete de novo (a memória da vigia some no
+ *   reinício; a fila do WhatsApp só dedupa o que cai nela, de reserva);
  * - `expiraEm` = o próprio horário: lembrete preso no teto por hora ou com o
  *   Hermes fora não serve depois. Marco de dia inteiro (avisa no início da
  *   janela) vale até o fim do dia;
- * - marco é P1 e bloco P2; nenhum é P0 (P0 fura o silêncio e vai ao Telegram);
+ * - marco é P1 e bloco P2; nenhum é P0 (P0 fura o silêncio e vai aos dois canais);
  * - o título do compromisso vem do usuário: uma linha, cortado e sem valor em
  *   R$ (regra 24).
+ * - `expiraEm` só vale na fila de reserva (o dell-status descarta o vencido); pelo
+ *   Telegram o aviso sai na hora.
  */
 export function mensagemDoDisparo(d: Disparo, agora: number, fuso: string, nomeDoDominio: string): Aviso {
   const formato = new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });

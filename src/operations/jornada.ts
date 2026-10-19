@@ -13,6 +13,7 @@
 // "A oferta" e "Jornada do cliente"): mudou lá, mude aqui e refaça o guia.
 
 import { REGRAS_DO_RITMO } from './trava-de-ritmo'
+import { caminhoDaAba } from './vendas-abas'
 import { CARDAPIO, objecoesNoTexto, type IdDoServico, type ServicoDoCardapio } from './colinha'
 import type { AchadoDoRaioX, CrmLead, CrmProduto, IdDoAchado } from './types'
 
@@ -71,7 +72,7 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Achado',
     trilho: 'tronco',
     quem: 'robô',
-    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (dias úteis, 9h, ligados em 16/10/2026; caem na Triagem); Plus pelo Catálogo de Negócios Maçônicos',
+    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (dias úteis, 9h, ligados em 16/10/2026, pausados em 17/10; caem na Triagem de Primeiros contatos); Plus pelo Catálogo de Negócios Maçônicos',
     entra: 'O caçador gravou a empresa na planilha (ou, no Plus, no leads.json).',
     sai: 'O Raio-X (ou o site) publicado vai para "Raio-X pronto".',
     blueprint: ['SITE-1', 'OFERTAS-1'],
@@ -92,10 +93,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Primeira mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: `A Próxima venda (Hoje, Vendas › A fazer ou o "Envie para X" do Telegram), pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
+    como: `O time comercial (só o Site em pronto), a Ficha do lead ou o "Envie para X" do Telegram, pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
     entra: 'Enviada (ou convite enviado), sem resposta de gente.',
-    sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia). Vendas mostra a saída por prazo no 7º dia; a planilha marca expirado no 10º.',
-    prazo: 'follow-up no 3º dia; saída por prazo em Vendas em 7 dias; expiração da planilha em 10 dias',
+    sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia). Vendas mostra a saída por prazo no 7º dia; a planilha marca expirado no 7º, junto.',
+    prazo: 'follow-up no 3º dia; saída por prazo em Vendas em 7 dias; expiração da planilha também em 7 dias',
     blueprint: ['SITE-3', 'PRUMO-1', 'OFERTAS-3'],
   },
   {
@@ -116,7 +117,7 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Recebeu a 2ª mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: 'A 2ª mensagem de Vendas (anotada sozinha ao tocar); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
+    como: 'A 2ª mensagem de Vendas (o observador do WhatsApp a marca quando sai); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
     entra: 'A 2ª mensagem saiu (Raio-X, demo ou os dois, com o preço do Encontrado).',
     sai: 'Abre um trilho, ou os dois: por fora, a conversa sobre os produtos; por dentro, o convite para o Mapa (só empresa com equipe).',
     prazo: 'proposta em até 24 h depois de cada "gostei"',
@@ -381,7 +382,7 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
     case 'primeiro-contato':
       if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
       return {
-        acao: 'Esperar a resposta; o follow-up aparece em Vendas › A fazer no 3º dia',
+        acao: `Esperar a resposta; o follow-up aparece em ${caminhoDaAba('afazer')} no 3º dia`,
         quem: 'o dono',
         ...(lead.diasParaSair !== undefined ? { quando: lead.diasParaSair <= 1 ? 'vai para Perdido amanhã' : `vai para Perdido em ${lead.diasParaSair} dias` } : {}),
       }

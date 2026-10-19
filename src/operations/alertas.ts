@@ -4,36 +4,11 @@ import type { DellCheck, DellStatus } from './types'
 // agir ou está quebrado agora" e nunca se esconde; amarelo de fila é trabalho
 // dele (CRM); o resto amarelo é "vale olhar"; o que resolve sozinho fica à parte.
 
-export type GrupoDoAlerta = 'falha' | 'fila' | 'olhar'
-
-export const ROTULO_DO_GRUPO: Record<GrupoDoAlerta, string> = {
-  falha: 'Falhou',
-  fila: 'Sua fila',
-  olhar: 'Vale olhar',
-}
-
 export interface AlertasDaHome {
   falhas: DellCheck[]
   fila: DellCheck[]
   olhar: DellCheck[]
   sozinhos: DellCheck[]
-}
-
-export function grupoDoAlerta(c: DellCheck): GrupoDoAlerta {
-  if (c.estado === 'falha') return 'falha'
-  return c.grupo === 'pendencias' ? 'fila' : 'olhar'
-}
-
-export function separarAlertas(checks: DellCheck[]): AlertasDaHome {
-  const alertas: AlertasDaHome = { falhas: [], fila: [], olhar: [], sozinhos: [] }
-  for (const c of checks) {
-    if (c.estado === 'ok') continue
-    if (c.estado !== 'falha' && c.sozinho) alertas.sozinhos.push(c)
-    else if (c.estado === 'falha') alertas.falhas.push(c)
-    else if (c.grupo === 'pendencias') alertas.fila.push(c)
-    else alertas.olhar.push(c)
-  }
-  return alertas
 }
 
 /** Quando duas ou mais falhas pedem a mesma coisa (ex.: reconectar a mesma

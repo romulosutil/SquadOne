@@ -47,7 +47,7 @@ export const CATALOGO: readonly PecaDoCatalogo[] = [
 /** A ordem da Ficha, bloco a bloco, com a pergunta que cada um responde. É o contrato da tela. */
 export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string; visivel: 'sempre' | 'quando houver' | 'dobrado' }> = [
   { bloco: 'Cabeça', pergunta: 'Quem é e em que etapa?', visivel: 'sempre' },
-  { bloco: 'Agora', pergunta: 'O que fazer agora, numa frase: a mesma do cartão da Próxima venda (AC-12). Sem ação, diz por quê.', visivel: 'sempre' },
+  { bloco: 'Agora', pergunta: 'O que fazer agora, numa frase: a mesma da lista Conversas para você e do Telegram (AC-12). Sem ação, diz por quê.', visivel: 'sempre' },
   { bloco: 'Ação de agora', pergunta: 'A mensagem que vai sair e o único primário da tela, logo abaixo (sem ficar preso ao rolar).', visivel: 'quando houver' },
   { bloco: 'Avisos', pergunta: 'Trava, ritmo, prazo, divergência, demo: um por linha, num lugar só.', visivel: 'quando houver' },
   { bloco: 'Abrir em outro lugar', pergunta: 'Conversa no WhatsApp, Raio-X, Maps, planilha, página do lead no n8n.', visivel: 'dobrado' },

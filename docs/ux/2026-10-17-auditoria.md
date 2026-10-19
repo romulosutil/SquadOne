@@ -1,5 +1,10 @@
 # Auditoria da Central (17/10/2026)
 
+> **Registro de época.** O que segue descreve a Central de 16–17/10/2026. Em 19/10/2026 (`docs/auditoria-de-fluxos-2026-10-19.md`) o `ProximaVenda.vue`
+> e o que só ele usava (`plano-do-dia.ts`, `fila-de-envio.ts`, `anotacao-de-envio.ts`) saíram, e as abas de Vendas passaram a se chamar **Conversas para
+> você**, **Primeiros contatos** e **Entender** (Funil, Diagnóstico, Resultados; `NOME_DAS_ABAS` em `vendas-abas.ts`). Onde o texto diz "A fazer", "Números"
+> ou "Próxima venda", leia esses nomes e a fila de venda (`proxima-venda.ts`) como ela é hoje.
+
 Pedido do Rômulo: analisar as features e os botões da Central com as heurísticas de Nielsen, os padrões do MCP de UX
 (uxpatterns.dev), padrões de produto e a estrutura de CRM e vendas, para uma operação "o mais linear e fácil possível".
 Feita depois das 15 otimizações do blueprint (2f6386f), por oito subagentes só de leitura: inventário do código, inspeção

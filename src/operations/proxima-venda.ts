@@ -1,7 +1,10 @@
 /**
  * PURO: a próxima venda (16/10/2026). Uma fila só, na ordem de quem está mais perto de comprar, com
- * a mensagem já escrita para o Rômulo só revisar e mandar. Usada pela Hoje (o cartão "Próxima
- * venda") e pelo vendedor do servidor (server/vendedor.ts), que avisa no Telegram "Envie para X".
+ * a mensagem já escrita para o Rômulo só revisar e mandar. Usada pelas "Conversas para você"
+ * (conversas-para-conduzir.ts, os passos que não são primeiro contato), pela Ficha e pela missão da
+ * Central, e pelo vendedor do servidor (server/vendedor.ts), que avisa no Telegram "Envie para X".
+ * O cartão "Próxima venda" da Hoje (ProximaVenda.vue) saiu em 19/10/2026: o primeiro contato é do time
+ * comercial e do "Envie para X" do Telegram, e as conversas têm a lista própria.
  *
  * Por que esta ordem (o que se sabe de venda por mensagem, não opinião de tela):
  *  1. Responder quem respondeu. A chance de qualificar cai muito depois da primeira hora
@@ -18,15 +21,16 @@
  *     qual é, e oferecer 10 min de ligação, fecha mais que mandar a proposta de novo.
  *  4. Follow-up de quem leu e não respondeu (curto, uma pergunta de sim ou não).
  *  5. Primeiro contato, por último, e só quando a trava de ritmo (trava-de-ritmo.ts) e o expediente
- *     de venda deixam: um por vez. O reenvio do só-robô também é primeiro contato.
+ *     de venda deixam: um por vez. O reenvio do só-robô também é primeiro contato. Quem o oferece é o
+ *     vendedor do Telegram e a Ficha; a lista da tela de Vendas não (ele é da aba Primeiros contatos).
  * "Revisar prospects" fica fora: é triagem, não mensagem.
  *
  * Nada aqui envia: a fila só monta o texto e o link do WhatsApp; quem toca em enviar é o Rômulo
  * (decisão de 16/10/2026: semi-automático; a API não oficial ficou de fora pelo risco de banimento
  * do número que é também o do Hermes).
  */
-import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
-import type { Guardador } from './fila-de-envio'
+import { diaEmSP } from './retomadas'
+import { ultimaRespostaDeGente } from './resultados'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { contatoPausado } from './aprendizado-comercial'
@@ -38,7 +42,10 @@ import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, Cr
 
 export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'desfecho' | 'primeiro'
 
-/** O que o toque em "Enviei" grava na aba CRM: um envio, ou a proposta (o servidor põe a data de hoje). */
+/** Os envios que o servidor sabe anotar na aba CRM (server/crm.ts): a 2ª mensagem, o follow-up e o primeiro envio do Plus. */
+export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_enviado'
+
+/** O que o "Enviei" grava na aba CRM: um envio, a proposta (o servidor põe a data de hoje) ou a recusa. */
 export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou'
 
 export interface AcaoDeVenda {
@@ -61,7 +68,7 @@ export interface AcaoDeVenda {
   rascunho?: string
   /** O link que abre o WhatsApp (com o texto, quando há). */
   link?: { rotulo: string; url: string }
-  /** O envio que o toque em "Enviei" anota; ausente quando o próprio link já marca (o do n8n). */
+  /** O que o "Enviei" anota (POST /crm/venda/anotar); ausente quando não há nada a anotar (a conversa, o "o que achou?"). */
   anota?: AnotacaoDeVenda
   /** Primeiro contato: conta na trava de ritmo. */
   primeiroContato: boolean
@@ -106,8 +113,6 @@ export interface ContextoDaVenda {
    */
   liberados?: ReadonlySet<string>
   ritmoLivre?: boolean
-  /** Primeiro contato só deste nicho (o filtro que era da folha "Enviar um por um", OT-01); compara por chaveDoNicho. */
-  nichoDoPrimeiro?: string
   /** Relógio (ms) para o "o que achou?"; ausente, esse passo não entra. */
   agora?: number
   /** leadId -> a sugestão do copiloto, quando há uma para a conversa de agora. */
@@ -125,7 +130,7 @@ export interface ContextoDaVenda {
 }
 
 /** Os passos em que a mensagem do copiloto (que leu a conversa) vale mais que o texto pronto da esteira. */
-const COM_COPILOTO: ReadonlySet<TipoDeVenda> = new Set(['responder', 'combinado', 'depois-do-link', 'proposta', 'followup'])
+const COM_COPILOTO: ReadonlySet<TipoDeVenda> = new Set(['responder'])
 
 /** A ação ganharia com a mensagem do copiloto e ainda está com o texto pronto da esteira. */
 export function esperaOCopiloto(acao: AcaoDeVenda): boolean {
@@ -180,8 +185,7 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
   if (!Number.isFinite(segunda)) return null
   const desde = agora - segunda
   if (desde < JANELA_DO_DEPOIS_DO_LINK.deMs || desde > JANELA_DO_DEPOIS_DO_LINK.ateMs) return null
-  const dele = Math.max(Date.parse(lead.marcos.respondeu ?? '') || 0, Date.parse(lead.resposta?.em ?? '') || 0,
-    Date.parse(lead.conversa?.ultimaEntrada ?? '') || 0)
+  const dele = ultimaRespostaDeGente(lead) ?? 0
   if (dele > segunda) return null
   // Já escrevemos de novo depois do link (a conversa sabe): a pergunta já foi feita, à mão.
   if ((Date.parse(lead.conversa?.ultimaSaida ?? '') || 0) > segunda + 10 * 60_000) return null
@@ -271,9 +275,6 @@ const ORDEM_DOS_GRUPOS: Array<[CrmGrupoHojeId, TipoDeVenda]> = [
   ['enviar', 'primeiro'],
 ]
 
-/** O nicho como o filtro mostra: vazio vira "Sem nicho" (o mesmo de fila-de-envio.ts). */
-export const nichoDo = (lead: Pick<CrmLead, 'nicho'>) => lead.nicho.trim() || 'Sem nicho'
-
 /**
  * PURO (17/10/2026, AC-16): a chave de comparação do nicho. A planilha traz o mesmo nicho escrito de
  * jeitos diferentes ("Pilates", "pilates ", "Pilátes"), e o filtro mostrava cada grafia como uma opção.
@@ -281,27 +282,6 @@ export const nichoDo = (lead: Pick<CrmLead, 'nicho'>) => lead.nicho.trim() || 'S
  */
 export function chaveDoNicho(nicho: string): string {
   return nicho.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() || 'sem nicho'
-}
-
-export interface NichoDaFila { chave: string; rotulo: string; quantos: number }
-
-/**
- * PURO. Os nichos de quem espera o primeiro contato, um por chave (chaveDoNicho), do que tem mais para
- * o que tem menos. O rótulo é a grafia mais comum (empate: a primeira que apareceu).
- */
-export function nichosDoPrimeiro(nichos: readonly string[]): NichoDaFila[] {
-  const porChave = new Map<string, { quantos: number; grafias: Map<string, number> }>()
-  for (const n of nichos) {
-    const chave = chaveDoNicho(n)
-    const g = porChave.get(chave) ?? { quantos: 0, grafias: new Map<string, number>() }
-    const grafia = n.trim().replace(/\s+/g, ' ') || 'Sem nicho'
-    g.quantos++
-    g.grafias.set(grafia, (g.grafias.get(grafia) ?? 0) + 1)
-    porChave.set(chave, g)
-  }
-  return [...porChave].map(([chave, g]) => ({
-    chave, quantos: g.quantos, rotulo: [...g.grafias].reduce((a, b) => (b[1] > a[1] ? b : a))[0],
-  })).sort((a, b) => b.quantos - a.quantos || a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
 }
 
 const ROTULO_CURTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
@@ -391,22 +371,6 @@ export function fraseDaAcao(tipo: TipoDeVenda, lead: Pick<CrmLead, 'empresa' | '
     case 'desfecho': return `${nome} disse não: marque a recusa`
     case 'primeiro': return `Envie a primeira mensagem para ${nome}`
   }
-}
-
-/**
- * PURO. A chamada do cartão (17/10/2026, "passos mais claros"): o destino e o que fazer, no jeito que
- * o Rômulo diria em voz alta, "Envie para a Kulniski Advocacia, isto:", com a mensagem logo abaixo.
- * `fraseDaAcao` continua sendo a situação ("Kulniski disse sim: …") e aparece como o porquê; esta é a
- * instrução. Quem respondeu foi a recepção ou o robô (leitura do copiloto): a mensagem vai a quem
- * atende, e a chamada diz isso para ninguém mandar proposta a um atendente.
- */
-export function chamadaDaAcao(acao: Pick<AcaoDeVenda, 'tipo' | 'empresa' | 'rascunho' | 'copiloto'>): string {
-  if (acao.tipo === 'desfecho') return `Marque que ${acao.empresa} recusou`
-  const quem = acao.copiloto?.momento?.quem
-  const destino = quem === 'recepcao' ? `a recepção de ${acao.empresa}`
-    : quem === 'robo' ? `o atendimento automático de ${acao.empresa}`
-    : acao.empresa
-  return acao.rascunho ? `Envie para ${destino}, isto:` : `Escreva para ${destino}:`
 }
 
 /** wa.me ou whatsapp.com: abre a conversa, com ou sem texto. */
@@ -526,7 +490,6 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
       if (acao.primeiroContato && ctx.primeirosDoTime?.has(lead.id)) continue
-      if (acao.primeiroContato && ctx.nichoDoPrimeiro && chaveDoNicho(nichoDo(lead)) !== chaveDoNicho(ctx.nichoDoPrimeiro)) continue
       if (acao.primeiroContato) {
         const pode = ctx.primeiroLiberado
           || podeMandarPrimeiroContato({ noExpediente: false, liberado: Boolean(ctx.liberados?.has(lead.id)), ritmoLivre: Boolean(ctx.ritmoLivre) })
@@ -587,120 +550,36 @@ export function resumoDaFila(fila: readonly AcaoDeVenda[]): string {
   return [...conta].map(([t, n]) => `${n} ${NOMES[t][n === 1 ? 0 : 1]}`).join(' · ')
 }
 
-// ---------------------------------------------------------------- a fila da tela e a contagem do dia
+// ---------------------------------------------------------------- a fila das conversas na tela
 
 /** O "Enviei" (pulou: false) ou o "Pular" de uma ação, com o instante; vale até o fim do dia. */
 export interface Resolvida { em: number; pulou: boolean }
 export type Resolvidas = Record<string, Resolvida>
 
-/** A mesma chave que a Próxima venda sempre usou: trocar perderia o que já foi resolvido hoje. */
-export const CHAVE_DAS_RESOLVIDAS = 'squadone:venda:resolvidas'
-const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10)
-
-/**
- * O que esta tela resolveu hoje (reserva do servidor, GET /api/operations/crm/venda). Morava no
- * ProximaVenda.vue; veio para cá para a aba "A fazer" do CrmPanel contar a mesma fila sem o cartão
- * montado (AC-02). Outro dia, ou storage ilegível, é fila sem nada resolvido.
- */
-export function lerResolvidas(storage: Guardador | null | undefined, agora: number): Resolvidas {
-  try {
-    const bruto = JSON.parse(storage?.getItem(CHAVE_DAS_RESOLVIDAS) ?? '{}')
-    if (bruto?.dia === diaDeSP(agora) && bruto.itens && typeof bruto.itens === 'object' && !Array.isArray(bruto.itens)) return bruto.itens as Resolvidas
-  } catch { /* sem storage: só nesta visita */ }
-  return {}
-}
-
-export function gravarResolvidas(storage: Guardador | null | undefined, itens: Resolvidas, agora: number): void {
-  try { storage?.setItem(CHAVE_DAS_RESOLVIDAS, JSON.stringify({ dia: diaDeSP(agora), itens })) } catch { /* idem */ }
-}
-
-/** O que a tela sabe além do retrato: o ritmo, o expediente, o "Liberar", o copiloto e o nicho escolhido. */
+/** O que a tela sabe além do retrato: o relógio e as sugestões do copiloto. */
 export interface EstadoDaTela {
-  ritmo: Pick<EstadoDoRitmo, 'motivo'>
-  noExpediente: boolean
   agora: number
-  liberados?: ReadonlySet<string>
   sugestoes?: ReadonlyMap<string, SugestaoDeVenda>
-  /** Primeiro contato só deste nicho; vazio = todos. */
-  nicho?: string
-  /** Os leads cujo primeiro contato é do time comercial (o `doTime` de GET /crm/venda). */
-  primeirosDoTime?: ReadonlySet<string>
 }
 
 /**
- * PURO. A fila exatamente como a Próxima venda mostra: sem retrato legível, nada; o que foi
- * "Pulado" hoje vai para o fim; o que foi "Enviei" sai. O cartão e a aba "A fazer" leem daqui,
- * para os dois números nunca mais divergirem (eram 183 na aba e 3 no cartão em 16/10/2026).
+ * PURO. A fila das conversas como a tela de Vendas a mostra: sem retrato legível, nada; o que foi
+ * "Pulado" hoje vai para o fim; o que foi "Enviei" sai. Nunca traz primeiro contato (ele é do time
+ * comercial e do "Envie para X" do Telegram): é a fila de quem já respondeu ou já recebeu algo, e por
+ * isso não depende de ritmo nem de expediente. Era `ritmo: { motivo: 'dia' }` e `noExpediente: false`
+ * passados só para esconder o primeiro contato (VEN-24).
  */
 export function filaDaTela(visao: Pick<CrmVisao, 'hoje' | 'leads' | 'estado'> | null | undefined, tela: EstadoDaTela, resolvidas: Resolvidas = {}): AcaoDeVenda[] {
   if (!visao || visao.estado !== 'ok') return []
-  const ritmoLivre = tela.ritmo.motivo === null
   const pulados = new Set(Object.entries(resolvidas).filter(([, r]) => r?.pulou).map(([k]) => k))
   const feitos = new Set(Object.entries(resolvidas).filter(([, r]) => r && !r.pulou).map(([k]) => k))
-  const ctx: ContextoDaVenda = { primeiroLiberado: ritmoLivre && tela.noExpediente, ritmoLivre, agora: tela.agora }
-  if (tela.liberados) ctx.liberados = tela.liberados
+  const ctx: ContextoDaVenda = { primeiroLiberado: false, agora: tela.agora }
   if (tela.sugestoes) ctx.sugestoes = tela.sugestoes
-  if (tela.nicho) ctx.nichoDoPrimeiro = tela.nicho
-  if (tela.primeirosDoTime) ctx.primeirosDoTime = tela.primeirosDoTime
   const porId = new Map(visao.leads.map((l) => [l.id, l]))
   return filaDeVenda(visao, ctx, pulados).filter((a) => !feitos.has(a.chave)).map((a) => comHistoricoConferido(a, porId.get(a.leadId)))
 }
 
-/**
- * Os quatro tipos que a tela conta, mais a recusa para marcar (que também é um toque da fila).
- * O combinado é responder a quem espera por nós; o "o que achou?" é o follow-up depois do link;
- * o reenvio do só-robô conta como primeiro contato, como na trava de ritmo.
- */
-export type GrupoDaFila = 'responder' | 'proposta' | 'followup' | 'primeiro' | 'desfecho'
-
-const GRUPO_DO_TIPO: Record<TipoDeVenda, GrupoDaFila> = {
-  responder: 'responder', combinado: 'responder',
-  'mandar-proposta': 'proposta', proposta: 'proposta',
-  followup: 'followup', 'depois-do-link': 'followup',
-  primeiro: 'primeiro', desfecho: 'desfecho',
-}
-
-export interface ResumoDoDia {
-  /**
-   * Quantas ações a Próxima venda mostra, a atual incluída. É o N da aba "A fazer", do "N na fila"
-   * do cartão e do "Ver a fila inteira (N)": o mesmo número nos três lugares.
-   */
-  total: number
-  porGrupo: Record<GrupoDaFila, number>
-  /** Primeiros contatos prontos no retrato (o grupo "enviar"), entrem ou não na fila agora. */
-  primeirosProntos: number
-  /**
-   * Quantos primeiros contatos o ritmo ainda deixa sair hoje: o teto do dia menos os enviados, e 0
-   * na pausa (que pode durar além de hoje: melhor prometer de menos). Nunca mais que os prontos.
-   */
-  primeirosAindaHoje: number
-}
-
-/** PURO. A contagem da fila do dia, de onde todo rótulo da Próxima venda e da aba lê. */
-export function resumoDoDia(
-  fila: readonly Pick<AcaoDeVenda, 'tipo' | 'primeiroContato'>[],
-  visao: Pick<CrmVisao, 'hoje'> | null | undefined,
-  ritmo: Pick<EstadoDoRitmo, 'motivo' | 'enviadosHoje' | 'teto'>,
-): ResumoDoDia {
-  const porGrupo: Record<GrupoDaFila, number> = { responder: 0, proposta: 0, followup: 0, primeiro: 0, desfecho: 0 }
-  for (const a of fila) porGrupo[a.primeiroContato ? 'primeiro' : GRUPO_DO_TIPO[a.tipo]]++
-  const primeirosProntos = visao?.hoje.find((g) => g.id === 'enviar')?.itens.length ?? 0
-  const restam = ritmo.motivo === 'pausa' ? 0 : Math.max(0, ritmo.teto - ritmo.enviadosHoje)
-  return { total: fila.length, porGrupo, primeirosProntos, primeirosAindaHoje: Math.min(restam, primeirosProntos) }
-}
-
-/**
- * PURO. "165 primeiros contatos prontos · até 10 hoje": quantos esperam e quantos o ritmo ainda deixa.
- * Sem nenhum que caiba hoje, só a contagem: o motivo (teto, pausa, horário) vem na frase seguinte.
- */
-export function textoDosPrimeiros(resumo: Pick<ResumoDoDia, 'primeirosProntos' | 'primeirosAindaHoje'>): string {
-  const n = resumo.primeirosProntos
-  if (!n) return ''
-  const prontos = n === 1 ? '1 primeiro contato pronto' : `${n} primeiros contatos prontos`
-  return resumo.primeirosAindaHoje > 0 ? `${prontos} · até ${resumo.primeirosAindaHoje} hoje` : prontos
-}
-
-// ---------------------------------------------------------------- a Ficha: o "Agora", o desfecho e o anotar
+// ---------------------------------------------------------------- a Ficha: o "Agora" e o desfecho
 
 /**
  * PURO. A ação da fila para um lead só, como a Próxima venda a daria (AC-12): o horário e o ritmo
@@ -720,7 +599,7 @@ const DIAS_DA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 /** "2026-10-12" → "seg 12/10"; um instante ISO vira o dia dele em São Paulo. */
 export function diaCurto(valor?: string): string {
   if (!valor) return ''
-  const dia = /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : Number.isFinite(Date.parse(valor)) ? diaDeSP(Date.parse(valor)) : ''
+  const dia = /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : Number.isFinite(Date.parse(valor)) ? diaEmSP(new Date(valor)) : ''
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia)
   if (!m) return ''
   return `${DIAS_DA_SEMANA[new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()]} ${m[3]}/${m[2]}`
@@ -811,30 +690,6 @@ export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'p
     perder: aberto,
     proposta: (aberto && lead.etapa !== 'proposta') || peloPrazo,
   }
-}
-
-/**
- * Os sinais de "já falou com a gente" (espelho de SINAIS_DE_CONVERSA em server/crm.ts): o servidor
- * recusa a 2ª mensagem fora deles e o follow-up dentro deles, e um botão que sempre erra é pior que nenhum.
- */
-const SINAIS_DE_CONVERSA: ReadonlySet<CrmLead['sinal']> = new Set(['respondeu', 'em-conversa', 'respondeu-prumo', 'diagnostico'])
-
-/**
- * PURO. Os envios que a Ficha deixa anotar à mão em "Anotar" (AC-09): a 2ª mensagem e o follow-up
- * quando o lead está no passo deles, ou quando a anotação do toque falhou (o "anote à mão" aponta para
- * cá). Só os que o servidor aceitaria (conferirEnvio): lead aberto, Em contato, em conversa ou não.
- */
-export function anotacoesAMao(
-  lead: Pick<CrmLead, 'etapa' | 'sinal' | 'links' | 'marcos' | 'resposta' | 'followupHoje'>, comFalha: boolean,
-): Array<'segunda_enviada' | 'followup_enviado'> {
-  if (lead.etapa !== 'contato') return []
-  const emConversa = SINAIS_DE_CONVERSA.has(lead.sinal)
-  if (emConversa) {
-    // A licença (17/10/2026) também: o material que ele deixou mandar é a 2ª mensagem.
-    const noPasso = !lead.marcos.segundaEnviada && (Boolean(lead.links.segunda) || pedeMaterial(lead.resposta))
-    return noPasso || comFalha ? ['segunda_enviada'] : []
-  }
-  return lead.followupHoje || Boolean(lead.links.followup) || comFalha ? ['followup_enviado'] : []
 }
 
 // ---------------------------------------------------------------- expediente de venda

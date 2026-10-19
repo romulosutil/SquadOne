@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Mantém os grafos do graphify de todos os projetos e o diário do que mudou.
 
-É o único lugar que roda `graphify update` fora das sessões de código: o
-crontab antigo saiu e o `run-graphify.sh` só pede que rode agora.
+É o único lugar que roda `graphify update` fora das sessões de código (o
+crontab antigo e o `run-graphify.sh` saíram; não há mais job do Hermes).
 
-Dois jeitos de rodar (11/10/2026, plano do aviso único):
+Dois jeitos de rodar:
 
 - `--fila` (o graphify-projetos.service, pelo .timer das 03:00): a falha vira
   UM aviso na fila do dell-status (`deploy/dell/lib/aviso.py`), com o silêncio
@@ -12,10 +12,9 @@ Dois jeitos de rodar (11/10/2026, plano do aviso único):
   hora; o stdout é só log (journal). Erro inesperado e SIGTERM (o
   TimeoutStartSec de 1 h do service) também viram aviso, no lugar do
   `failure_deliver` do Hermes, e a unit sai com erro.
-- sem `--fila` (o job `no_agent` do Hermes, como sempre foi): stdout vazio =
-  silêncio, qualquer texto vira mensagem no WhatsApp na hora. Por isso só
-  imprime falha. Fica para a troca ser reversível: com o timer desligado e o
-  job retomado, tudo volta a ser como antes sem reinstalar nada.
+- sem `--fila` (rodada manual, no terminal): a falha sai só no stdout, sem
+  aviso na fila, para a rodada que o Rômulo conduz à mão não acordar o
+  Telegram. O systemd sempre passa `--fila`; não há mais job do Hermes.
 
 O que ele cobre vem do registro de projetos (deploy/hermes/projetos.toml, lido
 do clone ~/SquadOne, que o atualizar-central mantém em dia):
@@ -46,13 +45,12 @@ registro, repositório em duas pastas, clone vivo com o origin errado. Cada
 conjunto de avisos vira UMA mensagem na fila do dell-status; o mesmo conjunto
 não se repete na noite seguinte.
 
-Tempo: o Hermes mata script de cron depois de 1 hora, e o service tem o mesmo
-teto (TimeoutStartSec=1h). Por isso há um orçamento (ORCAMENTO_S): passado dele
+Tempo: o service tem teto de 1 h (TimeoutStartSec=1h). Por isso há um orçamento (ORCAMENTO_S): passado dele
 o script para de abrir projeto novo, avisa quantos faltaram e continua na noite
 seguinte. A primeira rodada grande é manual.
 
 Uso manual:
-  graphify_projetos.py                rodada completa (falha no stdout)
+  graphify_projetos.py                rodada completa à mão (falha só no stdout)
   graphify_projetos.py --fila         rodada completa (falha na fila de avisos)
   graphify_projetos.py <projeto> ...  só estes (não limpa o global nem varre duplicatas)
   graphify_projetos.py --planejar     mostra o que faria, sem clonar nem gravar nada
@@ -112,8 +110,6 @@ PULAR_NA_VARREDURA = {"node_modules", "snap", "Arquivo", "__pycache__"}
 ORIGEM = "hermes:graphify-projetos"
 TITULO_FALHA = "🧭 Operação — graphify"
 HORA_DA_RODADA = 3           # o .timer (e o job antigo do Hermes): a falha expira na rodada seguinte
-MAX_TEXTO_AVISO = 4000
-MARCA_DE_CORTE = "\n… (cortado)"
 
 # A lib de aviso (deploy/dell/lib/aviso.py, 11/10/2026): no repo, em
 # deploy/dell/lib; no Dell, instalada em ~/.local/lib/mel/ (instalados.json).
@@ -123,18 +119,14 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent.parent / "dell/lib", HOM
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    aviso sai do jeito antigo (gravado direto na fila, sem validar)."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -418,19 +410,10 @@ def avisar_na_fila(ctx: Contexto, estado: dict, avisos: list, agora: float) -> N
         texto = "Conferi as pastas do Dell contra o registro de projetos e achei:\n" + "\n".join(f"• {a}" for a in novos) \
             + "\n\nNada foi mexido. Veja ~/PRUMO/PROJETOS.md; quem decide é você."
         aviso = {"titulo": "Mel: pastas fora do registro ou repetidas", "texto": texto, "origem": ORIGEM}
-        lib = lib_de_aviso()
-        if lib is not None:
-            # Valida, corta a lista longa com marca (antes passava de 4000 e o
-            # dell-status recusava), grava atômico, não cria a pasta da fila e nunca
-            # levanta. Não gravou: os avisos não contam como vistos e voltam amanhã.
-            if not lib.gravar(aviso, fila=ctx.fila, prefixo="graphify-duplicatas").gravado:
-                return
-        else:
-            # Sem a lib instalada: o jeito de antes, sem mudar nada.
-            ctx.fila.mkdir(parents=True, exist_ok=True)
-            # O sufixo evita que dois avisos no mesmo segundo se sobrescrevam.
-            arq = ctx.fila / f"graphify-duplicatas-{datetime.fromtimestamp(agora):%Y%m%d%H%M%S}-{time.time_ns() % 10**6:06d}.json"
-            arq.write_text(json.dumps(aviso, ensure_ascii=False) + "\n")
+        # Valida, corta a lista longa com marca, grava atômico, não cria a pasta da fila e nunca
+        # levanta. Não gravou (nem sem a lib): os avisos não contam como vistos e voltam amanhã.
+        if not gravar_aviso(ctx.fila, aviso, "graphify-duplicatas"):
+            return
     estado["avisos_vistos"] = sorted(avisos)
 
 
@@ -741,23 +724,16 @@ def aviso_de_falha(mensagem: str, agora: datetime) -> dict:
 
 
 def gravar_aviso(fila: Path, aviso: dict, prefixo: str) -> bool:
-    """Pela lib; sem ela, do jeito antigo (direto na fila), já com o texto
-    cortado no teto para o dell-status não recusar a lista longa."""
+    """Pela lib (valida, corta com marca o texto longo, grava atômico). Sem a lib nada é gravado: uma
+    linha no stderr e False (a rodada sai 1 e o texto fica no journal)."""
     lib = lib_de_aviso()
-    if lib is not None:
-        if lib.VALOR_EM_REAIS.search(aviso["texto"]):
-            # O texto leva mensagens de erro de fora; "R$" faria a lib recusar o aviso inteiro.
-            aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))
-        return lib.gravar(aviso, fila=fila, prefixo=prefixo).gravado
-    if len(aviso["texto"]) > MAX_TEXTO_AVISO:
-        aviso = dict(aviso, texto=aviso["texto"][:MAX_TEXTO_AVISO - len(MARCA_DE_CORTE)].rstrip() + MARCA_DE_CORTE)
-    try:
-        fila.mkdir(parents=True, exist_ok=True)
-        (fila / f"{prefixo}-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-        return True
-    except OSError as e:
-        print(f"aviso não gravado ({ORIGEM}): {e}", file=sys.stderr, flush=True)
+    if lib is None:
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
         return False
+    if lib.VALOR_EM_REAIS.search(aviso["texto"]):
+        # O texto leva mensagens de erro de fora; "R$" faria a lib recusar o aviso inteiro.
+        aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))
+    return lib.gravar(aviso, fila=fila, prefixo=prefixo).gravado
 
 
 def rodar_pela_fila(ctx: Contexto, nomes=(), agora: Callable[[], datetime] = lambda: datetime.now().astimezone()) -> int:

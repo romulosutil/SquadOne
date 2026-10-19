@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""O agente que organiza a fila da Entrada, a cada 5 min.
+"""O agente que organiza a fila da Entrada, a cada 15 min.
 
-Dois jeitos de rodar (11/10/2026, plano do aviso único):
-- `organizar.py --fila` (o entrada-organizar.service, pelo .timer de 5 em 5 min): o que mudou vira UM aviso na fila
+Dois jeitos de rodar:
+- `organizar.py --fila` (o entrada-organizar.service, pelo .timer de 15 em 15 min): o que mudou vira UM aviso na fila
   do dell-status (`deploy/dell/lib/aviso.py`), com o silêncio das 22h às 7h, o teto por hora e a chave pelo hash dos
   ids do lote e do texto (a mesma rodada repetida não duplica); o stdout é só log. Erro inesperado e SIGTERM viram
   aviso no lugar do `failure_deliver` do Hermes, e a unit sai com erro;
-- `principal()` sem argumentos (o job `no_agent` do Hermes, via ~/.hermes/scripts/entrada_organizar.py): imprime, e o
-  Hermes entrega no WhatsApp na hora, como sempre foi. Fica para a troca ser reversível.
+- `principal()` sem argumentos (rodada manual): imprime o resumo no terminal, sem aviso na fila. O systemd sempre
+  passa `--fila`; o job do Hermes e o wrapper `entrada_organizar.py` não existem mais.
 
 Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio no WhatsApp). Com itens:
 
@@ -23,7 +23,7 @@ Fila vazia: não imprime nada e não chama modelo nenhum (zero token, silêncio 
    SESSÃO (com o texto do prompt) no state.db do Hermes, onde o Hermes do WhatsApp poderia achá-la:
    depois da chamada as sessões dessa pasta de trabalho são apagadas, uma por id;
 5. o executor valida cada plano contra a lista de permissão e executa, ou recusa;
-6. avisa só o que mudou (na fila de avisos, ou no stdout que o Hermes entrega).
+6. avisa só o que mudou (na fila de avisos, ou no stdout numa rodada manual).
 
 Falha do modelo, resposta estranha ou plano inválido: o item fica em chegou/ e tenta de novo; depois
 de 3 tentativas vira "sem-plano" e é avisado uma vez.
@@ -472,8 +472,6 @@ def _rodada(info: dict) -> tuple[int, str]:
 PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", Path.home() / ".local/lib/mel"]
 ORIGEM = "entrada-organizar"
 TITULO_PADRAO = "📥 Entrada"
-MAX_TEXTO_AVISO = 4000
-MARCA_DE_CORTE = "\n… (cortado)"
 
 
 class Interrompido(BaseException):
@@ -486,18 +484,14 @@ def _interromper(signum, _frame):
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o aviso sai do jeito antigo (gravado
-    direto na fila, sem validar)."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arq = pasta / "aviso.py"
-        if not arq.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arq)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -531,23 +525,15 @@ def aviso_da_rodada(saida: str, info: dict, agora: datetime) -> dict:
 
 
 def gravar_aviso(aviso: dict) -> bool:
-    """Pela lib (valida, corta com marca, grava atômico, não cria a pasta da fila, nunca levanta); sem ela, do jeito
-    antigo, já com o mesmo corte."""
+    """Pela lib (valida, corta com marca, grava atômico, não cria a pasta da fila, nunca levanta). Sem a lib nada
+    é gravado: uma linha no stderr e False (a rodada sai 1 e o texto fica no journal)."""
     lib = lib_de_aviso()
-    if lib is not None:
-        if lib.VALOR_EM_REAIS.search(aviso["texto"]):
-            aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))   # "R$" faria a lib recusar o aviso inteiro
-        return lib.gravar(aviso, fila=fila_de_avisos(), prefixo=ORIGEM).gravado
-    if len(aviso["texto"]) > MAX_TEXTO_AVISO:
-        aviso = dict(aviso, texto=aviso["texto"][:MAX_TEXTO_AVISO - len(MARCA_DE_CORTE)].rstrip() + MARCA_DE_CORTE)
-    try:
-        fila = fila_de_avisos()
-        fila.mkdir(parents=True, exist_ok=True)
-        (fila / f"{ORIGEM}-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-        return True
-    except OSError as e:
-        print(f"aviso não gravado ({ORIGEM}): {e}", file=sys.stderr, flush=True)
+    if lib is None:
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
         return False
+    if lib.VALOR_EM_REAIS.search(aviso["texto"]):
+        aviso = dict(aviso, texto=lib.sem_valores(aviso["texto"]))   # "R$" faria a lib recusar o aviso inteiro
+    return lib.gravar(aviso, fila=fila_de_avisos(), prefixo=ORIGEM).gravado
 
 
 def principal_pela_fila(agora=None) -> int:
@@ -578,7 +564,7 @@ def principal_pela_fila(agora=None) -> int:
 
 
 def principal(argv: list[str] | None = None) -> int:
-    """Sem argumentos (o job do Hermes chama `principal()`): imprime, como sempre. Com `--fila`: o service."""
+    """Sem argumentos (rodada manual): imprime. Com `--fila`: o service."""
     if "--fila" in (argv or []):
         return principal_pela_fila()
     codigo, saida = _rodada({})

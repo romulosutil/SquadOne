@@ -64,7 +64,7 @@ describe('trava de ritmo dos primeiros contatos', () => {
     const agora = sp('16', '10:00')
     assert.match(textoDoRitmo(ritmoDoEnvio([agora], agora, REGRAS), REGRAS), /sai às 10:04 \(intervalo interno de 4 min entre contatos/)
     assert.match(textoDoRitmo(ritmoDoEnvio(Array(10).fill(agora), agora, REGRAS), REGRAS), /10 de 10/)
-    assert.equal(textoDoRitmo(ritmoDoEnvio([], agora, REGRAS), REGRAS), '0 de 10 primeiros contatos hoje.')
+    assert.equal(textoDoRitmo(ritmoDoEnvio([], agora, REGRAS), REGRAS), '0 de 10 primeiros contatos hoje (enviados ou convites abertos).')
   })
 
   it('o teto atual é 100 em todas as semanas, sem aumento pela idade do número', () => {

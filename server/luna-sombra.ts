@@ -5,6 +5,8 @@ import path from "node:path";
 import type { FunctionCall, FunctionDeclaration } from "@google/genai";
 import { declarations, type Modo } from "./capabilities.ts";
 import { FUSO } from "./alocador.ts";
+import { pareceFinancas } from "./financas/parece-financas.ts";
+import { diaDeSP } from "./tempo.ts";
 
 /**
  * Luna em modo SOMBRA (ARCHITECTURE "Luna em modo sombra"): depois de cada
@@ -459,6 +461,7 @@ export interface Sombra {
 
 /** `AAAA-MM-DD` em São Paulo: o teto e a cota zeram à meia-noite local, não em UTC. */
 export function diaLocal(d: Date, fuso: string = FUSO): string {
+  if (fuso === FUSO) return diaDeSP(d);
   return new Intl.DateTimeFormat("sv-SE", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
@@ -554,6 +557,9 @@ export function criarSombra(deps: DepsDaSombra): Sombra {
   }
 
   async function processar(obs: ObservacaoDeTurno): Promise<void> {
+    // RULES 24: nada de finanças vai a modelo sem pedido do Rômulo, e o codex é um provedor de fora:
+    // demanda que parece finanças não chega à Luna e não conta no teto (o Gemini do turno real já a atendeu).
+    if (pareceFinancas(obs.demanda)) return;
     const inicio = agora();
     const { dia } = await contadorDoDia(inicio);
     if (cotaEsgotadaNoDia === dia) return;

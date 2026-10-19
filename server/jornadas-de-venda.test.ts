@@ -5,11 +5,11 @@ import { followupDoTerceiroDia, montarCrm, validarRetrato, type CrmVisao } from 
 import { bracoDoRecibo } from "../src/operations/ab-recibo.ts";
 import {
   decidir, estadoNovo, textoDoAviso, botoesDoAviso, criarVendedor, ESPERA_DO_AVISO_MS, fechadosNaVolta, lerHistoricoDoVendedor,
-  resumoDoVendedor, RODAPE_DO_EXPIRADO, type AvisoAberto,
+  resumoDoVendedor, RODAPE_DO_EXPIRADO, MAX_AVISOS_POR_DIA, type AvisoAberto,
 } from "./vendedor.ts";
 import { criarMemoriaDaVenda } from "./venda-do-dia.ts";
 import type { Botao } from "./telegram.ts";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { filaDeVenda, noExpedienteDeVenda } from "../src/operations/proxima-venda.ts";
@@ -208,15 +208,28 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
     assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.quente, true);
   });
 
+  // MSG-8 / VEN-18 (19/10/2026): o teto conta o que saiu no Telegram, não o que a Central resolveu, e o quente passa.
+  it("o teto de avisos: as resolvidas na Central não contam, e o 'quero ver' quente passa por cima", () => {
+    const resolvidas = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`x${i}|followup`, { em: t - 60_000, pulou: false, como: "enviada" as const, por: "central" as const }]));
+    assert.equal(decidir(vPronto, estadoNovo(t), t, undefined, { resolvidas, primeiros: {} }).decisao.tipo, "avisar", "60 resolvidas na Central não calam o vendedor");
+    const noTeto = { ...estadoNovo(t), avisosHoje: MAX_AVISOS_POR_DIA };
+    assert.deepEqual(decidir(vPronto, noTeto, t).decisao, { tipo: "nada", motivo: "teto-do-dia" });
+    const quente = visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "licenca", resposta_trecho: "pode mandar", resposta_em: horas(1) });
+    quente.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
+    const r = decidir(quente, noTeto, t);
+    assert.equal(r.decisao.tipo, "avisar");
+    assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.quente, true);
+  });
+
   it("fora do expediente não avisa nada", () => {
     const sabado = Date.parse("2026-10-17T13:00:00Z");
     assert.deepEqual(decidir(vPronto, estadoNovo(sabado), sabado).decisao, { tipo: "nada", motivo: "fora-do-expediente" });
   });
 
   it("primeiro contato do 'Enviei' conta na trava antes de o retrato ver", () => {
-    const estado = { ...estadoNovo(t), primeiros: { "site:outro": t - 60_000 } };
-    // 1 min depois de outro primeiro contato: a trava de 5 min segura este.
-    assert.deepEqual(decidir(vPronto, estado, t).decisao, { tipo: "nada", motivo: "fila-vazia" });
+    // 1 min depois de outro primeiro contato: a trava de 5 min segura este. A fonte é só o dia do servidor.
+    const doDia = { resolvidas: {}, primeiros: { "site:outro": { em: t - 60_000, por: "telegram" as const } } };
+    assert.deepEqual(decidir(vPronto, estadoNovo(t), t, undefined, doDia).decisao, { tipo: "nada", motivo: "fila-vazia" });
   });
 
   it("o texto do Telegram traz o porquê, o como e a mensagem; os botões abrem o WhatsApp e anotam", () => {
@@ -239,7 +252,7 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
   vFollowup.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
   const CHAVE = "site:L|followup";
 
-  async function montar(visao: CrmVisao = vFollowup) {
+  async function montar(visao: CrmVisao = vFollowup, extras: Partial<Parameters<typeof criarVendedor>[0]> = {}) {
     const dir = await mkdtemp(join(tmpdir(), "squadone-vendedor-"));
     const relogio = { agora: AGORA.getTime() };
     const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => relogio.agora);
@@ -254,13 +267,14 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
       arquivoDeEstado: join(dir, "vendedor.json"),
       vendaDoDia: memoria,
       agora: () => relogio.agora,
+      ...extras,
     });
     const token = () => {
       const b = enviados.at(-1)?.botoes.flat().find((x): x is { texto: string; dados: string } => "dados" in x);
       return b ? b.dados.split(":")[1] : "";
     };
     const fim = async () => { vendedor.parar(); await rm(dir, { recursive: true, force: true }); };
-    return { relogio, memoria, enviados, editados, registros, vendedor, token, fim };
+    return { dir, relogio, memoria, enviados, editados, registros, vendedor, token, fim };
   }
 
   // O gate de envio (17/10/2026): o link do aviso é de outro número que o do registro do lead.
@@ -279,6 +293,75 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
       m.relogio.agora += 60_000;
       await m.vendedor.volta();
       assert.equal(m.enviados.length, 1);
+    } finally {
+      await m.fim();
+    }
+  });
+
+  // MSG-1 / VEN-6 (19/10/2026): quem faz o primeiro contato é só o primeirosDoTime, como na Central. Antes, o
+  // arquivo de config do time existir (mesmo com ativo:false) tirava todo lead novo do aviso.
+  it("peloTime: o arquivo de config do time não tira o lead novo; só o primeirosDoTime tira", async () => {
+    const vPronto = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
+    const ID = vPronto.leads[0].id;
+    let doTime = new Set<string>();
+    const m = await montar(vPronto, { primeirosDoTime: async () => doTime });
+    try {
+      await writeFile(join(m.dir, "frente-comercial-config.json"), JSON.stringify({ ativo: false }));
+      // Do time: sem primeiro contato no aviso.
+      doTime = new Set([ID]);
+      assert.deepEqual(await m.vendedor.volta(), { tipo: "nada", motivo: "fila-vazia" });
+      assert.equal(m.enviados.length, 0);
+      // O time deixou o lead (não é mais dele): o operador recebe, com o arquivo de config lá.
+      doTime = new Set();
+      m.relogio.agora += 60_000;
+      assert.equal((await m.vendedor.volta()).tipo, "avisar");
+      assert.equal(m.enviados.length, 1);
+    } finally {
+      await m.fim();
+    }
+  });
+
+  // MSG-4: erro de leitura que não é "arquivo não existe" não vira "dia vazio" (a próxima gravação o apagaria).
+  it("o dia do servidor ilegível: a volta é pulada, nada é avisado nem gravado", async () => {
+    const m = await montar();
+    try {
+      await writeFile(join(m.dir, "venda-do-dia.json"), "{ cortado");
+      assert.deepEqual(await m.vendedor.volta(), { tipo: "nada", motivo: "dia-ilegivel" });
+      assert.equal(m.enviados.length, 0);
+      const r = await m.vendedor.tocar("qualquer", "enviei");
+      assert.equal(r.curto, "Este aviso já fechou.");
+    } finally {
+      await m.fim();
+    }
+  });
+
+  it("o estado do vendedor ilegível: a volta falha com o erro e não zera o dia", async () => {
+    const m = await montar();
+    try {
+      await m.vendedor.volta();
+      await writeFile(join(m.dir, "vendedor.json"), "{ cortado");
+      await assert.rejects(() => m.vendedor.volta());
+      assert.equal(m.enviados.length, 1, "nada foi reavisado");
+    } finally {
+      await m.fim();
+    }
+  });
+
+  // MSG-6: enviou ao Telegram e a gravação falhou: a volta seguinte não reenvia, e o toque acha o token.
+  it("a gravação do estado falha depois do envio: não reenvia e o toque ainda acha o aviso", async () => {
+    const m = await montar();
+    try {
+      // vendedor.json.tmp como pasta: a leitura segue ENOENT (dia novo) e a gravação falha.
+      await mkdir(join(m.dir, "vendedor.json.tmp"));
+      await assert.rejects(() => m.vendedor.volta());
+      assert.equal(m.enviados.length, 1);
+      m.relogio.agora += 60_000;
+      await assert.rejects(() => m.vendedor.volta());
+      assert.equal(m.enviados.length, 1, "o mesmo aviso não saiu de novo");
+      // O disco volta: o toque acha o aviso pela memória.
+      await rm(join(m.dir, "vendedor.json.tmp"), { recursive: true });
+      const r = await m.vendedor.tocar(m.token(), "pular");
+      assert.match(r.curto, /Pulado/);
     } finally {
       await m.fim();
     }
@@ -553,7 +636,8 @@ describe("follow-up do 3º dia, uma regra só", () => {
     assert.equal(followupDoTerceiroDia({ ...base, emConversa: true }), false);
     assert.equal(followupDoTerceiroDia({ ...base, acervo: true }), false);
     assert.equal(followupDoTerceiroDia({ ...base, followups: [T - 3600_000] }), false, "já foi");
-    assert.equal(followupDoTerceiroDia({ ...base, marcadoPeloN8n: T - 86_400_000 }), false, "o 05 marcou ontem");
+    // 19/10/2026: o follow-up é da Central (3 <= dias < 7), não do dia em que o n8n gravou o followup_em.
+    assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 6 * 86_400_000 }), true, "no 6º dia ainda vale: a janela é de 3 a 6 dias");
     assert.equal(followupDoTerceiroDia({ ...base, ultimaSaida: T - 3600_000 }), false, "já escrevemos à mão depois");
   });
 });

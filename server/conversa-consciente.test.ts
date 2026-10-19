@@ -8,6 +8,7 @@ import { chaveDoNumero, enviosComAConversa, resumirConversa, saidasDaConversa, t
 import { leadsDoAutomatico } from "./copiloto.ts";
 import { montarCrm, validarRetrato, type CrmVisao } from "./crm.ts";
 import { criarVendedor, ESPERA_DO_COPILOTO_MS } from "./vendedor.ts";
+import { criarMemoriaDaVenda } from "./venda-do-dia.ts";
 import { filaDeVenda, linhaDaConversa } from "../src/operations/proxima-venda.ts";
 import type { CrmLead } from "../src/operations/types.ts";
 
@@ -211,13 +212,15 @@ describe("o copiloto sozinho", () => {
     try {
       let agora = AGORA.getTime();
       const enviados: string[] = [];
-      const v = visaoCom(SIM, KULNISKI.slice(0, 3));
+      // A última mensagem é DELE ("pode sim"): é a conversa em que o copiloto gera.
+      const v = visaoCom(SIM, KULNISKI.slice(0, 2));
       v.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
       const vendedor = criarVendedor({
         lerVisao: async () => v,
         enviar: async (texto) => { enviados.push(texto); },
         registrar: async () => {},
         arquivoDeEstado: path.join(dir, "vendedor.json"),
+        vendaDoDia: criarMemoriaDaVenda(path.join(dir, "venda-do-dia.json"), () => agora),
         agora: () => agora,
         copiloto: { prontas: async () => new Map(), pedir: async () => true },
       });
@@ -225,8 +228,32 @@ describe("o copiloto sozinho", () => {
       assert.equal(enviados.length, 0);
       agora += ESPERA_DO_COPILOTO_MS;
       assert.equal((await vendedor.volta()).tipo, "avisar");
-      assert.match(enviados[0], /💬 Última mensagem: você/);
+      assert.match(enviados[0], /💬 Última mensagem: ele/);
       assert.match(enviados[0], /Mensagem pronta/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // MSG-10 (19/10/2026): o copiloto só gera quando a última mensagem é do lead; nos outros passos
+  // (aqui, "o que achou?" depois do link: a última é nossa) segurar o aviso por 4 min seria esperar à toa.
+  it("a última mensagem é nossa: o vendedor não espera o copiloto, que nunca geraria", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "vendedor-"));
+    try {
+      const enviados: string[] = [];
+      const v = visaoCom(SIM, KULNISKI.slice(0, 3));
+      v.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
+      const vendedor = criarVendedor({
+        lerVisao: async () => v,
+        enviar: async (texto) => { enviados.push(texto); },
+        registrar: async () => {},
+        arquivoDeEstado: path.join(dir, "vendedor.json"),
+        vendaDoDia: criarMemoriaDaVenda(path.join(dir, "venda-do-dia.json"), () => AGORA.getTime()),
+        agora: () => AGORA.getTime(),
+        copiloto: { prontas: async () => new Map(), pedir: async () => { throw new Error("não devia pedir"); } },
+      });
+      assert.equal((await vendedor.volta()).tipo, "avisar");
+      assert.match(enviados[0], /💬 Última mensagem: você/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -245,6 +272,7 @@ describe("o copiloto sozinho", () => {
         enviar: async (texto) => { enviados.push(texto); },
         registrar: async () => {},
         arquivoDeEstado: path.join(dir, "vendedor.json"),
+        vendaDoDia: criarMemoriaDaVenda(path.join(dir, "venda-do-dia.json"), () => AGORA.getTime()),
         agora: () => AGORA.getTime(),
         copiloto: {
           prontas: async () => new Map([["site:K", { mensagem: "Segue o link, desculpe a demora!", porque: "pediu há 2 dias", quando: horas(0.1) }]]),

@@ -1,22 +1,30 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ehMadrugada } from "./tempo.ts";
 
 /**
- * Saída proativa do SquadOne (regra 20): todo aviso vira um arquivo na fila de
- * avisos do Dell (`~/.local/share/avisos/fila`), que o `dell-status` drena para
- * o WhatsApp do Hermes com teto, silêncio das 22h às 7h e chave de 24 h. O
- * SquadOne decide QUANDO e O QUÊ; o Hermes só entrega. Ninguém chama `hermes
- * send` direto: o número é o mesmo que fala com leads, e só um ponto único
- * deixa o teto valer para todos.
+ * Saída proativa do SquadOne (regra 20). Hoje há dois caminhos, e o Telegram vem primeiro:
  *
- * O formato é o da fase 1 (`deploy/dell/README.md`, "Fila de avisos"): campo
- * fora dele é recusado pelo `dell-status` e deixa a verificação vermelha, por
- * isso a validação daqui espelha a de lá e recusa ANTES de gravar.
+ * - Avisos pessoais (lembrete da agenda, alerta de finanças, "Google desconectado"; OT-14,
+ *   16/10/2026): vão ao chat do dono pelo bot do Telegram (Bot API oficial), sem som das 22h às 7h.
+ *   A fila do WhatsApp é só RESERVA, quando o bot está desligado ou falha. Motivo: o número do
+ *   WhatsApp é o mesmo que fala com os leads e já levou restrição por volume.
+ * - A fila de avisos do Dell (`~/.local/share/avisos/fila`), que o `dell-status` drena para o
+ *   WhatsApp do Hermes com teto, silêncio das 22h às 7h (aí sim, o aviso espera e sai às 7h) e chave
+ *   de 24 h. Ninguém chama `hermes send` direto: só um ponto único deixa o teto valer para todos.
  *
- * P0 também vai ao Telegram (sendMessage ao chat do dono): a sessão do WhatsApp
- * não é oficial e cai, a Bot API é oficial. Só P0, porque P0 também fura o
- * silêncio e espelhar o resto dobraria o barulho.
+ * O SquadOne decide QUANDO e O QUÊ; o transporte só entrega. O formato da fila é o da fase 1
+ * (`deploy/dell/README.md`, "Fila de avisos"): campo fora dele é recusado pelo `dell-status` e deixa
+ * a verificação vermelha, por isso a validação daqui espelha a de lá e recusa ANTES de gravar.
+ *
+ * P0 vai aos DOIS canais (fila e Telegram): a sessão do WhatsApp não é oficial e cai, a Bot API é
+ * oficial. Só P0, porque P0 também fura o silêncio. Capacidade pronta: nenhum chamador produz P0
+ * hoje (o cartão de decisão que era P0 foi removido em 19/10/2026).
+ *
+ * Aviso que NÃO passa pela fila perde a chave de 24 h do dell-status; por isso o caminho pessoal
+ * guarda as chaves enviadas em disco (`RegistroDeEnviados`) e sobrevive ao reinício da Central, que
+ * acontece a cada merge.
  *
  * Nenhum valor em R$ (regra 24): os canais recebem semáforo e %, nunca valor.
  * `semValores` limpa o texto montado a partir de dado do usuário (título de
@@ -32,7 +40,7 @@ export interface Aviso {
   texto: string;
   /** Quem gravou (`squadone:vigia`...), uma linha, até 80. */
   origem: string;
-  /** A mesma chave enviada nas últimas 24 h é descartada pelo dell-status. */
+  /** A mesma chave enviada nas últimas 24 h é descartada (pelo dell-status e pelo `RegistroDeEnviados`). */
   chave: string;
   /** 0 = urgente (fura o silêncio e vai ao Telegram), 3 = baixa. */
   prioridade: PrioridadeDoAviso;
@@ -153,14 +161,107 @@ export function textoDoAviso(a: Aviso): string {
   return [a.titulo, a.texto, a.link].filter(Boolean).join("\n");
 }
 
+
+/**
+ * Chaves de aviso já enviadas pelo caminho pessoal, em disco (`chave → enviadoEm`, ms). Desde a OT-14
+ * o lembrete e o alerta de finanças não passam mais pela fila, então perderam a chave de 24 h do
+ * dell-status; sobrou a memória da vigia, que some a cada reinício (a Central reinicia a cada merge e
+ * a vigia varre no boot): um lembrete na janela de 10 min saía duas vezes e o "Google desconectado"
+ * repetia a cada reinício. Este arquivo pequeno devolve a regra de 24 h, para todos os chamadores.
+ */
+export const RETENCAO_DOS_ENVIADOS_MS = 24 * 3600_000;
+
+export interface RegistroDeEnviados {
+  /** A chave foi enviada nas últimas 24 h? */
+  jaEnviado(chave: string, agora: Date): Promise<boolean>;
+  /** Anota o envio. Nunca lança: a mensagem já saiu, e falhar aqui faria quem chama reenviar. */
+  marcar(chave: string, agora: Date): Promise<void>;
+  /** Tira a chave (ex.: o Google voltou, a próxima perda é um aviso novo). Só grava se ela existia. */
+  esquecer(chave: string): Promise<void>;
+}
+
+export function criarRegistroDeEnviados(
+  arquivo: string,
+  opcoes: { log?: { error: (...a: unknown[]) => void }; retencaoMs?: number } = {},
+): RegistroDeEnviados {
+  const log = opcoes.log ?? console;
+  const retencao = opcoes.retencaoMs ?? RETENCAO_DOS_ENVIADOS_MS;
+  let mapa: Map<string, number> | null = null;
+  let gravacoes: Promise<void> = Promise.resolve();
+
+  async function carregar(): Promise<Map<string, number>> {
+    if (mapa) return mapa;
+    const lido = new Map<string, number>();
+    try {
+      const bruto = JSON.parse(await fs.readFile(arquivo, "utf8"));
+      if (bruto && typeof bruto === "object" && !Array.isArray(bruto)) {
+        for (const [chave, em] of Object.entries(bruto)) if (typeof em === "number" && Number.isFinite(em)) lido.set(chave, em);
+      }
+    } catch (err: any) {
+      // Arquivo ausente é o primeiro boot; torto é perda do que já foi dito: começa vazio e reescreve.
+      if (err?.code !== "ENOENT") log.error(`[avisos] registro de enviados ilegível, recomeço vazio: ${err?.message ?? err}`);
+    }
+    return (mapa = lido);
+  }
+
+  function podar(m: Map<string, number>, agora: number): boolean {
+    let mudou = false;
+    for (const [chave, em] of m) {
+      if (agora - em >= retencao) {
+        m.delete(chave);
+        mudou = true;
+      }
+    }
+    return mudou;
+  }
+
+  /** Em série e atômico (`.tmp` + rename): duas gravações juntas não se pisam e o arquivo nunca fica pela metade. */
+  function gravar(m: Map<string, number>): Promise<void> {
+    const instantaneo = JSON.stringify(Object.fromEntries(m));
+    gravacoes = gravacoes.then(async () => {
+      const tmp = `${arquivo}.tmp`;
+      try {
+        await fs.mkdir(path.dirname(arquivo), { recursive: true });
+        await fs.writeFile(tmp, `${instantaneo}\n`, { encoding: "utf8", mode: 0o600 });
+        await fs.rename(tmp, arquivo);
+      } catch (err) {
+        await fs.rm(tmp, { force: true }).catch(() => {});
+        log.error(`[avisos] registro de enviados não gravado (vale só até o próximo reinício): ${(err as Error)?.message ?? err}`);
+      }
+    });
+    return gravacoes;
+  }
+
+  return {
+    async jaEnviado(chave, agora) {
+      const m = await carregar();
+      const em = m.get(chave);
+      return em !== undefined && agora.getTime() - em < retencao;
+    },
+    async marcar(chave, agora) {
+      const m = await carregar();
+      m.set(chave, agora.getTime());
+      podar(m, agora.getTime());
+      await gravar(m);
+    },
+    async esquecer(chave) {
+      const m = await carregar();
+      if (m.delete(chave)) await gravar(m);
+    },
+  };
+}
+
 export interface DepsDePublicacao {
   /** Pasta da fila (`~/.local/share/avisos/fila`). */
   fila: string;
   /**
    * sendMessage do bot ao chat do dono. Ausente = bot desligado: P0 só na fila. `silencioso` chega
-   * sem som (o `disable_notification` da Bot API).
+   * sem som (o `disable_notification` da Bot API). Deve lançar só se NENHUM chat recebeu: lançar com
+   * um chat entregue mandaria o aviso de novo pela fila.
    */
   telegram?: (texto: string, opcoes?: { silencioso?: boolean }) => Promise<void>;
+  /** Só o caminho pessoal consulta e grava (`publicarAvisoPessoal`). Ausente = sem dedupe de 24 h. */
+  enviados?: RegistroDeEnviados;
   agora?: () => Date;
   log?: { error: (...a: unknown[]) => void };
 }
@@ -208,21 +309,30 @@ export async function publicarAviso(aviso: Aviso, deps: DepsDePublicacao): Promi
  * - vai pelo bot do Telegram (Bot API oficial, sem risco para o número de vendas);
  * - das 22h às 7h de São Paulo chega sem som (o silêncio que a fila já fazia);
  * - Telegram desligado ou com falha: cai na fila de sempre, para o lembrete nunca se perder;
+ * - a mesma chave não sai duas vezes em 24 h, mesmo depois de reinício (`deps.enviados`);
  * - a validação é a mesma da fila (schema e nenhum R$, regra 24).
  * O P0 segue por `publicarAviso` (os dois canais).
  */
 export function noSilencio(agora: Date): boolean {
-  const hora = new Date(agora.getTime() - 3 * 3600_000).getUTCHours();
-  return hora >= 22 || hora < 7;
+  return ehMadrugada(agora);
 }
 
 export interface ResultadoDoPessoal {
-  canal: "telegram" | "fila";
+  /** `repetido`: a chave já saiu nas últimas 24 h, nada foi enviado agora. */
+  canal: "telegram" | "fila" | "repetido";
   arquivo: string | null;
 }
 
 export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao): Promise<ResultadoDoPessoal> {
   validarAviso(aviso);
+  const agora = deps.agora?.() ?? new Date();
+  if (deps.enviados && (await deps.enviados.jaEnviado(aviso.chave, agora))) return { canal: "repetido", arquivo: null };
+  const resultado = await enviarPessoal(aviso, deps, agora);
+  await deps.enviados?.marcar(aviso.chave, agora);
+  return resultado;
+}
+
+async function enviarPessoal(aviso: Aviso, deps: DepsDePublicacao, agora: Date): Promise<ResultadoDoPessoal> {
   if (aviso.prioridade === 0) {
     const r = await publicarAviso(aviso, deps);
     return { canal: "fila", arquivo: r.arquivo };
@@ -230,66 +340,17 @@ export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao)
   const log = deps.log ?? console;
   if (deps.telegram) {
     try {
-      await deps.telegram(textoDoAviso(aviso), { silencioso: noSilencio(deps.agora?.() ?? new Date()) });
+      await deps.telegram(textoDoAviso(aviso), { silencioso: noSilencio(agora) });
       return { canal: "telegram", arquivo: null };
     } catch (err) {
       log.error(`[avisos] Telegram falhou, o aviso vai pela fila: ${(err as Error)?.message ?? err}`);
     }
   }
-  const arquivo = await gravarAvisoNaFila(deps.fila, aviso, deps.agora?.() ?? new Date());
+  const arquivo = await gravarAvisoNaFila(deps.fila, aviso, agora);
   return { canal: "fila", arquivo };
 }
 
 /** `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` volta lembretes e alertas de finanças à fila do WhatsApp. */
 export function avisosPessoaisPeloTelegram(env: NodeJS.ProcessEnv): boolean {
   return (env.SQUADONE_LEMBRETES_PELO_TELEGRAM ?? "").trim().toLowerCase() !== "false";
-}
-
-/**
- * Cartão que pede decisão (regra 10): no WhatsApp vai SÓ o link da tailnet, que
- * abre a tela; a confirmação é um POST da mesma origem lá dentro. Por isso:
- * - o link é a origem da tailnet + um caminho, sem query (um GET com
- *   "?confirmar=1" seria uma decisão tomada por quem abrir o link, inclusive a
- *   prévia de link do próprio WhatsApp);
- * - o texto não leva URL nenhuma: o único lugar clicável é o link;
- * - "responda 1 ou 2" não existe: a resposta cairia na IA do Hermes.
- */
-export interface PedidoDeCartao {
-  titulo: string;
-  texto: string;
-  origem: string;
-  chave: string;
-  prioridade?: PrioridadeDoAviso;
-  expiraEm: string;
-  /** Caminho da tela que mostra o cartão, ex.: `/cartoes/abc`. */
-  caminho: string;
-}
-
-export function avisoDeCartao(p: PedidoDeCartao, origemTailnet: string): Aviso {
-  let base: URL;
-  try {
-    base = new URL(origemTailnet);
-  } catch {
-    throw new AvisoInvalido("origem da tailnet não é uma URL");
-  }
-  if (base.protocol !== "https:" || !base.hostname.endsWith(".ts.net") || base.pathname !== "/" || base.search) {
-    throw new AvisoInvalido("cartão só leva link da tailnet: https://<máquina>.ts.net[:porta], sem caminho");
-  }
-  if (!p.caminho.startsWith("/") || p.caminho.startsWith("//") || /[?#]/.test(p.caminho)) {
-    throw new AvisoInvalido("caminho do cartão começa com '/' e não tem query nem fragmento: abrir não confirma");
-  }
-  if (/https?:\/\//i.test(p.texto) || /https?:\/\//i.test(p.titulo)) {
-    throw new AvisoInvalido("cartão não leva URL no texto: só o link da tailnet");
-  }
-  const aviso: Aviso = {
-    titulo: p.titulo,
-    texto: p.texto,
-    origem: p.origem,
-    chave: p.chave,
-    prioridade: p.prioridade ?? 2,
-    expiraEm: p.expiraEm,
-    link: new URL(p.caminho, base).href,
-  };
-  validarAviso(aviso);
-  return aviso;
 }

@@ -271,6 +271,22 @@ describe("criarSombra (fila, teto, arquivo)", () => {
     assert.equal(linha.veredito, "diferente");
   });
 
+  // RULES 24 (auditoria de 19/10/2026, MSG-11): o codex é provedor de fora e nada de finanças vai a modelo sem pedido.
+  it("demanda que parece finanças nem chega ao codex, não é gravada e não gasta o teto", async () => {
+    const dir = await tmp();
+    const codex = codexDuble([]);
+    const sombra = criarSombra({ dir, bin: "codex", tetoDia: 1, guardarDemanda: true, executar: codex.executar, agora: () => AGORA, log: silencio });
+    sombra.observar(observacao("pagar a fatura do cartão amanhã"));
+    sombra.observar(observacao("gastei R$ 30 no mercado"));
+    await sombra.aguardar();
+    assert.equal(codex.execucoes.length, 0);
+    await assert.rejects(linhasDe(dir), "nada gravado");
+    // O teto de 1 continua inteiro para uma demanda comum.
+    sombra.observar(observacao("revisar o contrato amanhã"));
+    await sombra.aguardar();
+    assert.equal(codex.execucoes.length, 1);
+  });
+
   it("falha da Luna vira linha com `falha`, sem derrubar nada", async () => {
     const dir = await tmp();
     const codex = codexDuble(["isso não é JSON", { codigo: 1, stderr: "error: something broke\nmais" }, { estourouTempo: true, codigo: null }, { codigo: 0 }]);

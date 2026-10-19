@@ -1,16 +1,16 @@
 """Site antes da venda depois do envio (29/09/2026). Idempotente: recria pelo nome.
 
-- "05 · Acompanhamento" (todo dia, 09:00): lead "enviado" sem respondeu_em,
-  enviado a partir de 29/09/2026 e com a pasta ainda na raiz de ~/auto-site:
-  no 3º dia, se ele LEU (visto_em; desde 15/10/2026, depois da restrição do WhatsApp),
-  followup_em na planilha; no 10º dia, status "expirado" (a pasta vai para
-  _concluidos/ pelo site-pastas na hora seguinte, depois que o Balcão listar) e um
-  aviso só com os expirados.
-  Até 17/10/2026 o 3º dia também mandava um aviso pela fila do WhatsApp com o follow-up
-  pronto. Saiu (OT-01 do blueprint, follow-up com dono único): a Central já pede o mesmo
-  follow-up na Próxima venda e no vendedor do Telegram, com a trava de ritmo, e dois lembretes
-  do mesmo envio, um deles no número de vendas, só confundiam. O followup_em continua: é ele
-  que diz à Central (server/crm.ts) em que dia o follow-up entra na fila.
+- "05 · Acompanhamento" (todo dia, 09:00): lead "enviado" sem respondeu_em, enviado a partir de
+  29/09/2026 e que NÃO tem pasta fora da raiz de ~/auto-site (sem pasta nenhuma também vale: a
+  mensagem A vai a lead sem recibo): no 7º dia (EXPIRA_DIAS, o mesmo DIAS_SEM_RESPOSTA da Central,
+  server/crm.ts), status "expirado" (a pasta, se houver, vai para _concluidos/ pelo site-pastas na
+  hora seguinte, depois que o Balcão listar) e um aviso só com os expirados.
+  Follow-up (19/10/2026): o 05 NÃO decide mais o follow-up do 3º dia. Até 17/10 ele também avisava
+  pelo WhatsApp (OT-01: saiu, a Central pede o follow-up na Próxima venda e no vendedor do Telegram,
+  com a trava de ritmo) e, até 18/10, gravava `followup_em` para os leads que LERAM (visto_em). A
+  Central é a dona do follow-up e do Perdido (server/crm.ts): ela calcula o dia sozinha a partir do
+  envio, sem depender de uma data que o n8n gravava uma vez só, então o ramo e a coluna saíram daqui.
+  A coluna `followup_em` continua na planilha (o histórico e o CRM a leem); só ninguém a escreve.
 - "06 · Funil semanal" (segunda, 08:00): por nicho (vertical + cidade) leads,
   sites, enviados, responderam, em conversa, recusados e concluídos. Aviso pelo
   Hermes e estado/site-funil.json (sem "itens": o dell-status e o Hermes não o
@@ -69,11 +69,11 @@ sv = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sv)
 
 PLANILHA, SHEETS, CORTE = sv.PLANILHA, sv.SHEETS, sv.CORTE
-LEADS_GID, BUSCAS_GID = "396728619", "52197070"
+LEADS_GID, BUSCAS_GID = sv.LEADS_GID, sv.BUSCAS_GID
 LINK_PLANILHA = f"https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={LEADS_GID}"
-FOLLOWUP_DIAS, EXPIRA_DIAS, MIN_ENVIADOS = 3, 10, 5
+EXPIRA_DIAS, MIN_ENVIADOS = sv.EXPIRA_DIAS, 5
 # Escritas pelo funil quando pausa uma busca; o resto da aba Buscas é do Rômulo e do Caçador.
-COLUNAS_BUSCAS = ["pausada_em", "pausa_motivo"]
+COLUNAS_BUSCAS = [c for c in sv.COLUNAS_DE_BUSCAS if c in ("pausada_em", "pausa_motivo")]
 FILA = Path.home() / ".local/share/avisos/fila"
 AUTO = Path.home() / "auto-site"
 
@@ -123,7 +123,7 @@ DIAS_JS = """// Dias corridos no fuso de São Paulo (sem horário de verão desd
 const DIA = 24 * 60 * 60 * 1000;
 const diaSP = (ms) => Math.floor((ms - 3 * 60 * 60 * 1000) / DIA);"""
 
-DECIDIR = f"""// Follow-up no {FOLLOWUP_DIAS}º dia e expiração no {EXPIRA_DIAS}º, só para o que foi enviado desde o corte.
+DECIDIR = f"""// Expiração no {EXPIRA_DIAS}º dia, só para o que foi enviado desde o corte. O follow-up do 3º dia é da Central (server/crm.ts).
 {sv.PASTA_DO_LEAD_JS}
 {DIAS_JS}
 const CORTE = Date.parse('{CORTE}');
@@ -136,26 +136,18 @@ for (const l of $input.all().map(i => i.json)) {{
   const enviado = Date.parse(String(l.enviado_em ?? '').trim());
   // Acervo (antes do corte ou sem data): só no resumo único, nada automático.
   if (!Number.isFinite(enviado) || enviado < CORTE) continue;
-  // Pasta em _recusados/ ou _em-conversa/: o Rômulo já decidiu, não cobra nem expira.
+  // Pasta em _recusados/ ou _em-conversa/: o Rômulo já decidiu, não expira. Sem pasta nenhuma (a mensagem A
+  // vai a lead sem recibo) expira como os outros: naRaiz vale para os dois.
   if (!naRaiz(l.place_id)) continue;
   const dias = hoje - diaSP(enviado);
-  const followup = String(l.followup_em ?? '').trim();
-  // 15/10/2026: follow-up só para quem LEU a primeira (visto_em, gravado pelo observador). Insistir
-  // com quem nem abriu é o que mais vira denúncia de spam; a expiração do 10º dia continua para todos.
-  const leu = String(l.visto_em || l.lido_em || '').trim() !== '';
-  const base = {{ place_id: String(l.place_id), nome: String(l.nome ?? ''), cidade: String(l.cidade ?? ''),
-    site_url: String(l.site_url ?? ''), raio_x_url: String(l.raio_x_url ?? ''), telefone: String(l.telefone ?? ''), dias }};
-  if (dias >= {EXPIRA_DIAS}) {{
-    saida.push({{ json: {{ ...base, acao: 'expirar', status: 'expirado', followup_em: followup }} }});
-  }} else if (dias >= {FOLLOWUP_DIAS} && !followup && leu) {{
-    // Só a data: o texto e o wa.me do follow-up são da Central (OT-01), que lê o followup_em.
-    saida.push({{ json: {{ ...base, acao: 'followup', status: 'enviado', followup_em: new Date().toISOString() }} }});
-  }}
+  if (dias < {EXPIRA_DIAS}) continue;
+  saida.push({{ json: {{ place_id: String(l.place_id), nome: String(l.nome ?? ''), cidade: String(l.cidade ?? ''),
+    site_url: String(l.site_url ?? ''), raio_x_url: String(l.raio_x_url ?? ''), dias, acao: 'expirar', status: 'expirado' }} }});
 }}
 return saida;"""
 
-AVISOS = """// Só o aviso dos expirados. O follow-up do 3º dia não avisa mais daqui (17/10/2026, OT-01): quem o pede é a
-// fila de venda da Central (Próxima venda e o vendedor no Telegram), lendo o followup_em gravado no nó anterior.
+AVISOS = """// Só o aviso dos expirados. O follow-up do 3º dia não é mais daqui (17/10/2026 o aviso, 19/10/2026 a decisão):
+// quem o pede é a fila de venda da Central (Próxima venda e o vendedor no Telegram), pelo dia do envio.
 const NL = String.fromCharCode(10);
 const arquivo = (titulo, texto) => ({ json: { titulo, texto }, binary: { data: {
   data: Buffer.from(JSON.stringify({ titulo, texto, origem: ('n8n:' + $workflow.name).slice(0, 80) }), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'aviso.json' } } });
@@ -164,16 +156,18 @@ const onde = (l) => l.nome + (l.cidade ? ' (' + l.cidade + ')' : '');
 const saida = [];
 const expirados = itens.filter(l => l.acao === 'expirar');
 if (expirados.length) saida.push(arquivo('⏳ Site antes da venda: expirados', [
-  expirados.length + ' lead(s) sem resposta em 10 dias viraram "expirado"; a pasta vai para _concluidos/ na próxima hora:',
+  expirados.length + ' lead(s) sem resposta em __DIAS__ dias viraram "expirado"; a pasta vai para _concluidos/ na próxima hora:',
   ...expirados.map(l => '• ' + onde(l) + ': ' + (l.site_url || l.raio_x_url)),
   '',
   'Se algum respondeu, preencha respondeu_em: a pasta vai para _em-conversa/.',
 ].join(NL)));
 return saida;"""
 
+AVISOS = AVISOS.replace("__DIAS__", str(EXPIRA_DIAS))
+
 
 def acompanhamento(erro):
-    marca = {"place_id": "={{ $json.place_id }}", "status": "={{ $json.status }}", "followup_em": "={{ $json.followup_em }}"}
+    marca = {"place_id": "={{ $json.place_id }}", "status": "={{ $json.status }}"}
     _, gravar = aviso_nodes("acompanhamento", 1540, 0, "''")
     gravar["name"] = "Avisar pelo Hermes"
     nos = [
@@ -477,16 +471,16 @@ def cenario_acompanhamento():
     r = recibos_na_raiz(5)
     base = lambda rec, **k: {"place_id": rec["place_id"], "nome": rec["nome"] + " [teste]", "cidade": "Cidade", "telefone": "(19) 99000-0000",
                              # Recibo do Raio-X avulso (demo sob pedido, 14/10/2026) não tem site_url.
-                             "site_url": rec.get("site_url", ""), "status": "enviado", "respondeu_em": "", "followup_em": "", **k}
+                             "site_url": rec.get("site_url", ""), "status": "enviado", "respondeu_em": "", **k}
     linhas = [
-        base(r[0], enviado_em=dia(3.2), visto_em=dia(3)),                 # follow-up (leu)
-        base(r[1], enviado_em=dia(10.5), followup_em=dia(7)),             # expira
+        base(r[0], enviado_em=dia(3.2), visto_em=dia(3)),                 # 3º dia, leu: nada (o follow-up é da Central)
+        base(r[1], enviado_em=dia(7.5)),                                  # expira
         base(r[2], enviado_em=dia(4), respondeu_em=dia(3)),               # respondeu: nada
         base(r[3], enviado_em="2026-08-20T10:00:00Z"),                    # acervo (antes do corte do teste): nada
-        {"place_id": "SEM-PASTA", "nome": "Sem pasta [teste]", "status": "enviado", "enviado_em": dia(5)},  # sem recibo: nada
+        {"place_id": "SEM-PASTA", "nome": "Sem pasta [teste]", "status": "enviado", "enviado_em": dia(8)},  # sem recibo (A sem demo): expira também
     ]
     if len(r) > 4:
-        linhas.append(base(r[4], enviado_em=dia(3.2)))                    # não leu (15/10/2026): nada
+        linhas.append(base(r[4], enviado_em=dia(3.2)))                    # 3º dia, não leu: nada
     return linhas
 
 
@@ -564,18 +558,14 @@ PASTAS_DA_LIB = [AQUI.parent / "lib", Path.home() / ".local/lib/mel"]
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    --enviar volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba o script: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -588,12 +578,10 @@ def enviar_para_a_fila(aviso: dict) -> bool:
     mensagem (e não um traceback) e o texto do acervo, que pode passar de 4000
     caracteres, é cortado com marca em vez de o dell-status recusar o arquivo."""
     lib = lib_de_aviso()
-    if lib is None:
-        # Sem a lib instalada: o jeito de antes, sem mudar nada.
-        # (utf-8 explícito: antes dependia do locale; no Dell já era utf-8, o arquivo é o mesmo.)
-        (FILA / f"site-acervo-{int(time.time())}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-        print("\n-> na fila de avisos")
-        return True
+    if lib is None:  # sem a lib não há validação (nem a regra do R$): não grava na fila
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
+        print("\n-> NÃO entrou na fila de avisos (lib ausente)")
+        return False
     aviso = dict(aviso)
     if lib.VALOR_EM_REAIS.search(aviso["texto"]):
         aviso["texto"] = lib.sem_valores(aviso["texto"])

@@ -2,10 +2,10 @@
 """Testes do observador do WhatsApp com linhas de log de mentira, n8n de mentira
 e relógio fixo. Nada é lido do Hermes nem gravado na planilha; números fictícios.
 
-A troca do avisar_pelo_hermes() pela lib de aviso (11/10/2026) tem as suas classes
-(AvisoPelaLib, SemLib, AvisoDeLead): o aviso gravado pela lib é IDÊNTICO, byte a
-byte, ao do jeito antigo, o dell-status o aceita, sem a lib o serviço volta ao
-antigo, a fila ausente não derruba o laço nem pede a entrega, e "R$" no trecho do
+O avisar() pela lib de aviso (11/10/2026) tem as suas classes (AvisoPelaLib,
+SemLib, AvisoDeLead): o dell-status aceita o que a lib grava, sem a lib nada vai à
+fila (uma linha no stderr) e não se pede entrega, a fila ausente não derruba o
+laço nem pede a entrega, e "R$" no trecho do
 lead vira [valor] em vez de a resposta do lead se perder. Nada sobe o serviço, lê o
 bridge.log do Hermes nem toca a fila real: a fila, o dell-status e o subprocess
 são dublês ou pastas temporárias.
@@ -79,7 +79,7 @@ class EntregaImediata(unittest.TestCase):
         ob.DELL_STATUS = self.tmp / "dell-status"
         ob.DELL_STATUS.write_text("#!/bin/sh\n")
         ob.FILA_DE_AVISOS.mkdir()  # a lib de aviso não cria a pasta da fila
-        ob.avisar_pelo_hermes("X respondeu")
+        ob.avisar("X respondeu")
         self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
         self.assertEqual(len(self.chamadas), 1)
         self.assertEqual(self.chamadas[0][-1], str(ob.DELL_STATUS))
@@ -88,7 +88,7 @@ class EntregaImediata(unittest.TestCase):
     def test_sem_dell_status_so_grava(self):
         ob.DELL_STATUS = self.tmp / "nao-existe"
         ob.FILA_DE_AVISOS.mkdir()
-        ob.avisar_pelo_hermes("X respondeu")
+        ob.avisar("X respondeu")
         self.assertEqual(len(list(ob.FILA_DE_AVISOS.glob("observador-*.json"))), 1)
         self.assertEqual(self.chamadas, [])
 
@@ -96,7 +96,7 @@ class EntregaImediata(unittest.TestCase):
         ob.DELL_STATUS = self.tmp / "dell-status"
         ob.DELL_STATUS.write_text("#!/bin/sh\n")
         (self.tmp / "fila").write_text("é um arquivo, não uma pasta")
-        ob.avisar_pelo_hermes("X respondeu")
+        ob.avisar("X respondeu")
         self.assertEqual(self.chamadas, [])
 
 
@@ -350,7 +350,7 @@ class Respostas(Base):
         self.passar(ob.ESPERA_DA_CONVERSA_S)
         self.assertEqual([c["chave"] for c in self.conversas()], [CHAVE2])
 
-    def test_aviso_do_n8n_vai_pelo_hermes_e_falha_tenta_de_novo(self):
+    def test_aviso_do_n8n_vai_para_a_fila_e_falha_tenta_de_novo(self):
         self.escrever((CHAVE, T0, "pode mandar o link"))
         self.passar(1)
         self.n8n.falhar = urllib.error.HTTPError("u", 500, "erro", {}, None)
@@ -419,17 +419,17 @@ class BaseDoAviso(unittest.TestCase):
         ob.PASTAS_DA_LIB = [self.tmp / "sem-lib"]
 
     def avisar(self, texto):
-        """Roda o avisar_pelo_hermes e devolve o que ele escreveu no stdout (o log)."""
+        """Roda o avisar e devolve o que ele escreveu no stdout (o log) e no stderr."""
         saida = io.StringIO()
-        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(io.StringIO()):
-            ob.avisar_pelo_hermes(texto)
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            ob.avisar(texto)
         return saida.getvalue()
 
-    def gravado_pelo(self, jeito: str, texto: str) -> bytes:
-        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+    def gravado_pela_lib(self, texto: str) -> bytes:
+        """O aviso gravado pela lib do repo, numa fila limpa."""
         shutil.rmtree(ob.FILA_DE_AVISOS, ignore_errors=True)
         ob.FILA_DE_AVISOS.mkdir()
-        ob.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.tmp / "sem-lib"]
+        ob.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto)
         self.assertEqual(len(self.fila()), 1, self.fila())
         return self.fila()[0].read_bytes()
@@ -439,14 +439,15 @@ class AvisoPelaLib(BaseDoAviso):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(ob.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib" / "aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in TEXTOS_DO_AVISO:
             with self.subTest(texto=texto):
-                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+                d = json.loads(self.gravado_pela_lib(texto).decode("utf-8"))
+                self.assertEqual(d, {"titulo": "📱 Observador do WhatsApp", "texto": texto, "origem": "whatsapp-observador"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "📱 Observador do WhatsApp", "texto": "uma\\nduas", "origem": "whatsapp-observador"}'
-        self.assertEqual(self.gravado_pelo("lib", "uma\nduas"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("uma\nduas"), esperado.encode("utf-8"))
 
     def test_nome_e_atomicidade(self):
         ob.FILA_DE_AVISOS.mkdir()
@@ -528,23 +529,23 @@ class AvisoPelaLib(BaseDoAviso):
 
 
 class SemLib(BaseDoAviso):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self, saida):
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 📱 Observador do WhatsApp", saida)
+        self.assertFalse(ob.FILA_DE_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+        self.assertEqual(self.entregas, [])  # nada gravado: não há o que entregar
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         self.sem_lib()
         self.assertIsNone(ob.lib_de_aviso())
-        self.avisar("x")
-        self.assertEqual(len(self.fila()), 1)  # o antigo cria a pasta da fila
-        self.assertRegex(self.fila()[0].name, r"^observador-\d+\.json$")
-        self.assertEqual(len(self.entregas), 1)
+        self.sem_gravar(self.avisar("x"))
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.tmp / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         ob.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(ob.lib_de_aviso())
-        self.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
-        self.assertEqual(len(self.entregas), 1)
+        self.sem_gravar(self.avisar("x"))
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.tmp / "quebrada"
@@ -560,17 +561,11 @@ class SemLib(BaseDoAviso):
         ob.PASTAS_DA_LIB = [self.tmp / "sem-lib", instalada]
         self.assertEqual(Path(ob.lib_de_aviso().__file__).resolve(), (instalada / "aviso.py").resolve())
 
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
+    def test_sem_a_lib_o_valor_em_reais_nao_chega_a_fila(self):
         self.sem_lib()
+        ob.FILA_DE_AVISOS.mkdir()
         self.avisar("custa R$ 5")
-        self.assertEqual(self.avisos()[0]["texto"], "custa R$ 5")
-
-    def test_sem_a_lib_o_oserror_e_logado_e_nao_pede_entrega(self):
-        self.sem_lib()
-        ob.FILA_DE_AVISOS.write_text("é um arquivo, não uma pasta")
-        saida = self.avisar("x")
-        self.assertIn("aviso não gravado:", saida)
-        self.assertEqual(self.entregas, [])
+        self.assertEqual(self.fila(), [])
 
 
 class AvisoDeLead(BaseDoAviso):
@@ -587,7 +582,7 @@ class AvisoDeLead(BaseDoAviso):
         self._sessao, ob.SESSAO_HERMES = ob.SESSAO_HERMES, self.dir
         self.addCleanup(lambda: setattr(ob, "SESSAO_HERMES", self._sessao))
         ob.FILA_DE_AVISOS.mkdir()
-        self.obs = ob.Observador({CHAVE}, chamar=self.n8n, avisar=ob.avisar_pelo_hermes,
+        self.obs = ob.Observador({CHAVE}, chamar=self.n8n, avisar=ob.avisar,
                                  relogio=lambda: self.agora, bridge_js=self.bridge, pasta=self.dir / "estado")
 
     def passar(self, segundos):
@@ -1168,6 +1163,56 @@ class Transcricao(Base):
                       {"chave": CHAVE, "ts": T0 - 4, "texto": "não temos interesse", "id": "B2"})
         self.rodar()
         self.assertEqual(self.textos_dos_lotes(), [["[áudio]", "não temos interesse"]])
+
+    # ---- auditoria de 19/10/2026 (DELL-1): o mesmo chip pelos dois observadores, um lote só ao n8n
+
+    def test_mesma_mensagem_pelas_duas_instancias_vai_uma_vez_ao_n8n(self):
+        pessoal, prumo = self.duas_instancias(self.transcritor())
+        msg = {"chave": CHAVE, "ts": T0 - 5, "texto": "não temos interesse", "id": "TX1"}
+        self.rodar_as_duas(pessoal, prumo, msg, dict(msg))
+        self.assertEqual(self.textos_dos_lotes(), [["não temos interesse"]])
+        self.assertEqual([l["texto"] for l in self.conversa()], ["não temos interesse"])
+
+    def test_quem_chega_depois_so_manda_o_que_a_outra_nao_viu(self):
+        pessoal, prumo = self.duas_instancias(self.transcritor())
+        for obs, ids in ((pessoal, ("A1", "A2")), (prumo, ("A2", "A3"))):
+            obs.pasta.mkdir(parents=True, exist_ok=True)
+            with open(obs.pasta / "respostas.jsonl", "a", encoding="utf-8") as f:
+                for i in ids:
+                    f.write(json.dumps({"chave": CHAVE, "ts": T0 - 5, "texto": f"texto {i}", "id": i}) + "\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            for passo in (1, ob.ESPERA_DA_CONVERSA_S):
+                self.agora += passo
+                pessoal.tick()
+                prumo.tick()
+        textos = sorted(t for lote in self.textos_dos_lotes() for t in lote)
+        self.assertEqual(textos, ["texto A1", "texto A2", "texto A3"])  # nenhuma perdida, nenhuma em dobro
+
+    def test_reinicio_reenvia_o_que_a_propria_instancia_gravou(self):
+        # A instância gravou na conversa e caiu antes de mandar o lote: o .lendo é relido e a mensagem, que já
+        # está no arquivo COM A ORIGEM DELA, ainda vai ao n8n (só a gravada pela outra instância fica de fora).
+        self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "quero ver", "id": "R1"})
+        self.obs.conversa.anexar(CHAVE, "entrada", T0 - 5, "quero ver", "R1")
+        self.rodar()
+        self.assertEqual(self.textos_dos_lotes(), [["quero ver"]])
+
+    def test_mensagem_gravada_pela_outra_instancia_nao_vai_ao_n8n_daqui(self):
+        ob.Conversas(self.pasta_conversas, "prumo", relogio=lambda: self.agora).anexar(CHAVE, "entrada", T0 - 5, "quero ver", "R2")
+        self.escrever({"chave": CHAVE, "ts": T0 - 5, "texto": "quero ver", "id": "R2"})
+        self.rodar()
+        self.assertEqual(self.lotes(), [])
+        self.assertEqual(len(self.conversa()), 1)
+
+    def test_numeros_so_no_journal_quando_a_contagem_muda(self):
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.passar(ob.RELER_NUMEROS_S)
+            self.passar(ob.RELER_NUMEROS_S)
+        self.assertNotIn("número(s) de lead", saida.getvalue())  # o n8n de mentira devolve as mesmas duas
+        original = self.n8n
+        self.obs.chamar = lambda m, c, corpo=None: {"chaves": [CHAVE]} if c == "whatsapp-telefones" else original(m, c, corpo)
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.passar(ob.RELER_NUMEROS_S)
+        self.assertIn("1 número(s) de lead no filtro", saida.getvalue())
 
     # ---- revisão de 17/10/2026: reinício no meio da transcrição não perde nada
 

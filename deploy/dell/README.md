@@ -5,14 +5,15 @@
 O site consulta uma fila pública persistente no serviço Easypanel
 `aladdin/prumo-automacoes`, nunca expõe o n8n ou o Hermes. O workflow
 `PRUMO · Fonte com IA (Luna do Hermes)` (`yNLwUy5bdEmC4Qss`) consulta a fila a cada
-5 s e chama a rota autenticada `/fonte` do `luna-workflows:8766`. O modelo é
+30 s (eram 5 s, 17.280 execuções por dia para um trabalho raro; desde 19/10/2026) e chama a rota autenticada `/fonte` do `luna-workflows:8766`. O modelo é
 `gpt-6-luna-900k`, sem pesquisa, escrita ou memória entre perguntas. As fichas não
 autorizadas são removidas do prompt; fontes, responsável e revisão são conferidos
 no servidor. Credenciais de cliente fixam empresa e perfil no servidor.
 
-`PRUMO · Medição de eventos` (`qA5R9UXZj4UgIjFi`) atualiza a lista de origens dos
-sites publicados e o retrato de contagens a cada minuto. Os dois workflows não
-salvam dados de execução. Instalador idempotente: `claude-ops/prumo-publico.py`.
+`PRUMO · Medição de eventos` (`qA5R9UXZj4UgIjFi`) lê o retrato de contagens a cada minuto e só
+reenvia a lista de origens dos sites publicados quando ela muda (ou a cada 30 min, por garantia). A Fonte
+não guarda dados de execução, nem as com erro (privacidade das perguntas); a Medição só conta eventos e guarda
+as execuções com erro, para a falha deixar rastro. Instalador idempotente: `claude-ops/prumo-publico.py`.
 Tokens e IDs das credenciais ficam em `~/.config/claude-ops/prumo-publico-*` (600).
 
 Painel privado:
@@ -34,22 +35,7 @@ reiniciar `luna-workflows` e `prumo-metricas`; executar o instalador dos workflo
 Testes: `fonte_luna.test.py`, `luna_workflows.test.py`,
 `workflow_confiabilidade.test.py` e `raio-x --testar`. Sem envio de mensagens.
 
-## Time de primeiros contatos (18–19/10/2026; timer desabilitado)
-
-Diego, Elisa e Carla avaliam os leads; o executor sem modelo manda só o primeiro contato pelo número
-do PRUMO, e a conversa depois fica com o Rômulo. Desde 19/10/2026 o `.py` não tem ritmo nem expediente
-próprios: cada envio pede `POST /api/operations/crm/frente/reservar` e a Central decide com a mesma janela
-e a mesma trava de ritmo das telas e do Telegram. Regras, elegibilidade e o porquê:
-`docs/referencia/perfis-e-experimentos.md`, "Time comercial".
-
-Estado privado: `~/.local/share/frente-comercial/registro.sqlite` (avaliações, orçamento de inferência,
-plano e recibos) e `~/.local/share/squadone-operations/frente-comercial{,-config}.json`. O app lê
-`/api/operations/crm/frente` e pausa/ativa em Mais › Primeiros contatos; nenhuma credencial ou comando
-de infraestrutura vai ao navegador.
-
-Instalação: o Python vai para `~/.local/bin/frente-comercial`; service/timer vão para
-`~/.config/systemd/user/`. Validar com `python3 deploy/dell/frente-comercial.test.py`. O timer não
-substitui o observador nem o n8n: os dois precisam estar no ar.
+## A Central (`squadone-operations`)
 
 O serviço usa o build do clone Git `~/SquadOne` e escuta apenas em
 `127.0.0.1:9120`. Até 28/09/2026 usava a réplica `~/Pessoal-dev/SquadOne`, que
@@ -74,8 +60,16 @@ atualizar-central
 
 Desde 29/09/2026 isso roda sozinho: `atualizar-central.timer` confere a
 `main` a cada 10 min e só reconstrói quando ela andou (`--se-mudou`). Uma falha
-vira aviso na fila do `dell-status`, que chega pelo WhatsApp (uma vez por
-commit: `chave` = o commit da `main`).
+vira aviso na fila do `dell-status`, que chega pelo Telegram (origem `atualizar-central`; o WhatsApp é a reserva), uma vez por
+commit (`chave` = o commit da `main`), com o motivo quando o merge para por arquivos não rastreados que colidem.
+
+**O que vale como "atualizado" (19/10/2026, HC-1).** O sha **construído**, que o script grava em `~/.local/state/atualizar-central/construido`
+só depois do build, do reinício e de `/api/runtime` responder; comparar com o `HEAD` do clone não servia, porque o merge vem antes do
+`npm install`/testes/build e uma falha ali deixava `HEAD == origin/main` e o ciclo seguinte saía calado, com a Central presa na versão velha.
+Agora o timer retenta a cada 10 min até construir. Só roda install/testes/build e reinicia se algo que entra no build mudou desde o construído
+(tudo menos `docs/`, `ops/`, `prototypes/`, `*.md` e `deploy/`, salvo `prumo-ofertas.json` e `entrada/pagina.html`, que o servidor lê): mudança só
+de documentação não derruba um turno do Assistente nem o bot. A **primeira rodada depois desta versão reconstrói uma vez** (sem o arquivo
+`construido`). O `dell-status` confere o construído contra a `origin/main` (check `central-atualizada`).
 
 Desde 06/10/2026 o reinício espera a Central ficar ociosa: depois do build,
 `atualizar-central` lê `GET /api/runtime` a cada 10 s e só reinicia com
@@ -124,7 +118,7 @@ bloco `crm` é opcional (os padrões são os do Dell): `retrato`
 (`http://127.0.0.1:5679/webhook/crm-registro`, só loopback), `segredoArquivo`
 e `entregasPrumo` (`~/prumo-entregas`). A Central só lê pastas e retrato.
 `auto-production.json` (marcos manuais da antiga Produção Auto) e
-`autoNotificationStateFile` deixaram de ser lidos em 30/09/2026; o arquivo
+`autoNotificationStateFile` deixaram de ser lidos em 30/09/2026 (a chave saiu do `operations.example.json` em 19/10/2026); o arquivo
 ficou no disco, sem uso.
 
 O arquivo de ambiente deve definir pelo menos:
@@ -171,6 +165,15 @@ systemctl --user enable --now squadone-operations.service dell-worker-healthwatc
 O healthwatch consulta o n8n pela porta publicada no host, `5679`. A porta
 interna `5678` existe somente dentro do container; usá-la no host cria um ciclo
 de reinício falso e interrompe operações da interface.
+
+**O que o healthwatch religa (19/10/2026):** o painel do Hermes, a Central, o code-server e o n8n, a cada 30 s, com duas
+consultas de 8 s antes de agir. **Sem o gateway do Hermes**: o `hermes-gateway.service` tem `Restart=always`, e o
+healthwatch só conseguia desfazer uma parada de propósito (exit 78, ou o `stop` para trocar o chip) a cada 30 s; o
+socorro tem o remédio dele. Por serviço há **teto de 3 reinícios em 10 min** (passou disso, registra uma vez no
+journal "not restarting" e deixa o `dell-status` acusar a falha), **carência de 90 s** depois de cada reinício e a
+**marca de pausa** `~/.local/state/dell-status/pausa-<serviço>` (`squadone-operations`, `hermes-dashboard`, `code-server`,
+`n8n`) para parar de propósito sem ser religado. O estado fica em `~/.local/state/healthwatch/`. O n8n sobe com
+`docker compose up -d --no-deps n8n`, para não reviver o collector do Radar PNCP pausado.
 
 **A home (30/09/2026)**, pedido do Rômulo ("um botão que abra os agentes do
 SquadOne" e "coloque aqui os fluxos e como são, e o que fazer com cada
@@ -251,16 +254,72 @@ Instale também `deploy/hermes/scripts/validate-dell-operations.sh` como
 `~/.local/bin/dell-validate`. O comando é somente leitura, não imprime segredos
 e valida systemd, Docker, n8n, credenciais OAuth, GitHub, Chromium e SquadOne.
 
+## Time de primeiros contatos (18–19/10/2026; ativo no config, timer parado)
+
+**Estado em 19/10/2026:** o `frente-comercial-config.json` diz `ativo: true` (autorizado em 18/10) e o
+`frente-comercial.timer` está parado na Mel, então nada roda nem é enviado; a tela mostra "ativo, mas o ciclo está
+parado" (`GET /crm/frente` devolve `cicloParado` e `ultimaRodadaEm`). Ligar o timer ou pausar o config é decisão do
+Rômulo (`install` e `enable --now` abaixo; `POST /crm/frente/config {"ativo":false}` pausa).
+
+Diego, Elisa e Carla avaliam os leads; o executor sem modelo manda só o primeiro contato pelo número
+do PRUMO (pela Evolution: o adaptador e o observador só leem, quem envia é este), e a conversa depois fica com o Rômulo. Desde 19/10/2026 o `.py` não tem ritmo nem expediente
+próprios: cada envio pede `POST /api/operations/crm/frente/reservar` e a Central decide com a mesma janela
+e a mesma trava de ritmo das telas e do Telegram. Regras, elegibilidade e o porquê:
+`docs/referencia/perfis-e-experimentos.md`, "Time comercial".
+
+Estado privado: `~/.local/share/frente-comercial/registro.sqlite` (avaliações, orçamento de inferência,
+plano e recibos) e `~/.local/share/squadone-operations/frente-comercial{,-config}.json`. O app lê
+`/api/operations/crm/frente` e pausa/ativa em Mais › Primeiros contatos; nenhuma credencial ou comando
+de infraestrutura vai ao navegador.
+
+Instalação: o Python vai para `~/.local/bin/frente-comercial`; service/timer vão para
+`~/.config/systemd/user/`. Validar com `python3 deploy/dell/frente-comercial.test.py`. O timer não
+substitui o observador nem o n8n: os dois precisam estar no ar.
+
 ## Monitor do Dell (`dell-status`)
 
 Roda a cada minuto e faz duas coisas: grava
 `~/.local/share/squadone-operations/status.json`, que a página inicial da
-Central lê, e manda WhatsApp pelo Hermes (`hermes send`) quando uma verificação
-passa a falhar, a cada 12 h enquanto continuar falhando e quando volta ao normal.
+Central lê, e avisa o Rômulo quando uma verificação passa a falhar, a cada 12 h enquanto continuar falhando e
+quando volta ao normal: pelo bot do Telegram (OT-14) e, só se ele falhar, pelo WhatsApp do Hermes (`hermes send`).
 Estados `atencao` só aparecem na Central. Também esvazia
 `~/.local/share/avisos/fila/*.json`, a fila que os containers e os scripts do
 Dell usam para avisar sem abrir rede nem firewall (formato e regras em "Fila de
 avisos", abaixo).
+
+**Auditoria de 19/10/2026 (HC-nn, DELL-nn, VIVO-nn nos comentários do código).**
+
+- **Prazos:** toda verificação roda numa thread com prazo (`com_prazo`): 70 s cada e `PRAZO_TOTAL_S` = 100 s no conjunto
+  (`executar_verificacoes`); a que trava vira `erro:<função>` e as seguintes ainda rodam, e as que ficam sem tempo vêm em
+  `erro:prazo`. Os `subprocess` das verificações têm timeout. O laço de fluxos do n8n gasta no máximo 20 s (`TETO_DOS_FLUXOS_S`); os que
+  sobram ficam "não verificados neste minuto" e guardam a memória que tinham. O **`status.json` é gravado antes de qualquer
+  aviso** (`antes_de_enviar`), para um aviso lento ou preso não deixar a Central sem retrato; o `TimeoutStartSec` é 150 s.
+- **Checks novos:** `central` (a própria Central responde em `/api/runtime`), `telegram` (o canal dos alertas: 3 envios
+  seguidos falhando é vermelho, e com falha o monitor sonda o `getMe` a cada minuto; estado em
+  `~/.local/state/dell-status/telegram.json`), `central-atualizada` (o sha CONSTRUÍDO, que o `atualizar-central` grava em
+  `~/.local/state/atualizar-central/construido`, contra a `origin/main`; atenção se a main não está no ar há mais de 30 min
+  ou se a última rodada do atualizar-central falhou; memória em `central-vista.json`) e `units-falhas` (o que o systemd
+  marca como falho e nenhuma outra verificação cobre). A **internet** passou a ser uma conexão TLS de verdade a
+  `api.telegram.org` (DNS com prazo, TCP, handshake), não só `getaddrinfo`, que vinha do cache.
+- **Removida** a verificação de idade dos dados (`idade:asmr-metricas` e a lista `DADOS_COM_IDADE`): a coleta do ASMR está
+  pausada, e a lista tinha um único item.
+- **Serviços HTTP em duas rodadas:** `hermes`, `hermes-navegador`, `n8n`, `terminal` e `central` são conferidos com 5 s e
+  uma tentativa; a **primeira** falha vira atenção ("confirma no próximo minuto") e só a segunda seguida é falha e avisa
+  (o healthwatch tolera 8 s e uma segunda tentativa; sem a mesma tolerância aqui, um instante lento virava "Quebrou").
+- **Parado de propósito tem marca:** daemon (`Restart=` e sem timer/path) `inactive`, `.path` fora do ar e container
+  parado são atenção, a menos que exista `~/.local/state/dell-status/pausa-<nome>` (o `.service` perde o sufixo; o `.path`
+  o mantém). Container fora do ar é **falha**, e o resumo "Containers" acompanha o pior dos individuais.
+- **Prioridade:** falha de `disco`, `monitor`, `dns`, `docker`, `backup:cofre` ou de qualquer `container:*` toca com som
+  mesmo das 22h às 7h (P0); as demais seguem a prioridade padrão.
+- **O socorro só é prometido quando roda:** o "Quebrou" só grava o pedido e só diz "vou tentar religar" ou "diagnóstico do
+  Hermes a caminho" para o que tem remédio ou leitura própria (`IDS_COM_REMEDIO`, `IDS_COM_LEITURA`, replicados do
+  `socorro.py` de propósito); com o `socorro.path` parado não grava pedido.
+- **Avisos pelo Telegram:** `ORIGENS_PELO_TELEGRAM` = `socorro`, `backup-dell`, `atualizar-central`, `silmer-drive-sync` e o
+  prefixo `n8n:` (todo aviso gravado por fluxo do n8n). O fluxo "00 · Avisar falha pelo Hermes", que não manda `chave`,
+  ganha uma por fluxo (`n8n-falha:<fluxo>`, 24 h); o "Quebrou" do `dell-status` (`fluxo:<id>`) ainda repete a mesma
+  falha com a causa até 1 min depois (a duplicata só sai mexendo no próprio fluxo 00).
+- **Links que existem:** os botões `acao` das filas apontam para telas da Central de hoje (Vendas › Primeiros contatos,
+  Conversas para você, Funil); o texto de "Enviados esperando resposta" diz que só o observador marca o envio.
 
 Desde 29/09/2026 também confere:
 
@@ -375,6 +434,12 @@ socorro.path (DirectoryNotEmpty) --> socorro.service (oneshot, outro processo; o
      Telegram (origem "socorro"; WhatsApp só se o bot falhar; ver "Fila de avisos")
 ```
 
+- **O que mudou em 19/10/2026:** o mesmo remédio roda **uma vez por atendimento** (duas verificações da mesma queda, como
+  `hermes` e `whatsapp-sessao`, ou `n8n` e o container, não reiniciam o serviço duas vezes seguidas); falha **sem remédio nem
+  leitura própria** (fluxo, rotina, Radar PNCP, fila de avisos, idade...) não chama o Hermes nem gasta o teto, e o aviso leva o
+  "o que fazer" da Central; as units lidas para `backup` e `backup:<fonte>` são `backup-dell-cofre`, `backup-dell-espelho` e
+  `estrutura-coletar` (o `backup-dell.service` nunca existiu); e o dell-status só grava o pedido com o `socorro.path` ativo
+  (sem ele o pedido ficaria parado na pasta).
 - **A lista branca** (o único que muda estado): `systemctl --user restart` de `hermes-gateway`,
   `hermes-dashboard`, `hermes-google-browser`, `code-server`, `evolution-adaptador`,
   `whatsapp-observador`, `whatsapp-observador-prumo`; `docker restart licitacoes-automation-n8n-1` (o
@@ -426,8 +491,10 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   Nunca vermelho: o serviço que continua fora já é vermelho na verificação dele. Para
   parar o gateway **de propósito** (trocar o chip), pare antes o healthwatch
   (`systemctl --user stop dell-worker-healthwatch`), senão ele religa a cada 30 s (09/10,
-  16:06) — e religue-o depois.
-- **Idade dos dados** (`idade:<id>`, grupo Dados; lista `DADOS_COM_IDADE`): um arquivo que
+  16:06) — e religue-o depois. **Desde 19/10/2026 o healthwatch não toca mais no gateway** (o `Restart=always` do systemd o
+  sobe) e tem teto, carência e marca de pausa (ver acima); parar o gateway de propósito já não exige parar o healthwatch.
+- **Idade dos dados** (`idade:<id>`, grupo Dados; **removida em 19/10/2026**, com a lista `DADOS_COM_IDADE` e o único item dela; o texto
+  abaixo é o do que ela fazia): um arquivo que
   uma rotina do Hermes deveria renovar. Hoje só **Métricas do ASMR**
   (`~/.local/share/asmr-fullbringer/shorts-metrics.json`, renovado pela coleta
   `79a04dbf2d81`), parado desde 05/10/2026 21:42 sem ninguém ver: a coleta rodava de hora
@@ -477,8 +544,10 @@ Central não mostrava. Nenhuma acende vermelho com o estado da Mel de 11/10/2026
   motivo, a hora e o `journalctl --user -u <unit> -n 50`; nunca "resolve sozinho". Oneshot
   de timer `inactive`/`success` entre rodadas é ok, e a próxima rodada com sucesso apaga a
   queda (o systemd zera o `Result` no start). Unit que o systemd não conhece (`not-found`,
-  `masked`) fica de fora. O `gerador-de-sites` e o `funil-aprendizado` também ficam: as
-  verificações deles já leem o `Result`. No verde, o detalhe cita quem o systemd religou
+  `masked`) fica de fora. O `gerador-de-sites`, o `funil-aprendizado`, o `prumo-mapa` (service e path), os dois backups e o
+  `atualizar-central` também ficam: as verificações deles já leem o `Result` (HC-14). Desde 19/10/2026 a verificação cobre
+  também o **daemon parado** (`Restart=` e sem timer/path, `inactive`) e o **`.path` fora do ar**, atenção "parada" com
+  o comando que religa e a marca de pausa que apaga o amarelo; o que o systemd marca como falho fora disso vem em `units-falhas`. No verde, o detalhe cita quem o systemd religou
   sozinho (`NRestarts`).
 - **Cache e ~/.local** (`pastas`, grupo Máquina): em 11/10/2026 o `~/.cache` tinha 34 GB de
   perfis temporários do Chrome headless do QA (`google-chrome-headless/scoped_dir*`) e o
@@ -543,14 +612,15 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
   do Hermes é o número que fala com os leads (restrição de 24 h em 15/10), então
   as falhas do Dell saem pelo bot da Central. O "Quebrou / Continua fora / Voltou
   ao normal" do próprio `dell-status` (`enviar_pessoal`) e os avisos da fila com
-  `origem` em `ORIGENS_PELO_TELEGRAM` (hoje só `socorro`) vão por `sendMessage` ao
+  `origem` em `ORIGENS_PELO_TELEGRAM` (`socorro`, `backup-dell`, `atualizar-central`, `silmer-drive-sync` e o prefixo `n8n:`) vão por `sendMessage` ao
   chat do dono, em texto puro, cortados em 4096 caracteres: na hora, **sem som
   das 22h às 7h** (`disable_notification`) salvo P0, sem contar no teto de 20 por
   hora (que protege o número) e com a chave de 24 h valendo igual. Bot desligado,
   mal configurado ou com falha: o caminho do WhatsApp de antes (o "Quebrou" sai na
   hora; o aviso do socorro espera o silêncio e o teto). Uma tentativa de bot por
-  drenagem, 10 s cada. O resto da fila (n8n, scripts, a reserva dos lembretes da
-  Central, os cartões) segue no WhatsApp.
+  drenagem, 10 s cada. O resto da fila (scripts como o gerador e o observador, a reserva dos lembretes da
+  Central) segue no WhatsApp; o cartão de decisão com link da tailnet saiu em 19/10/2026. Cada envio ao bot
+  é anotado em `telegram.json` (a conta das falhas seguidas do check `telegram`).
   - **Segredo:** o `dell-status` lê `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_IDS` do
     ambiente ou, a cada envio, do `~/.config/squadone/operations.env` (o mesmo do
     `squadone-operations`), como o `raio-x-ia` faz com a chave do Gemini. Nada é
@@ -565,9 +635,9 @@ instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"
 e 16 KB), corta com segurança o que passa do teto, grava `.tmp` oculto +
 rename com nome único, não cria a pasta e nunca levanta (devolve `gravado`,
 `recusado`, `fila_ausente` ou `falhou`; o que não gravou vai ao journal). Sem a
-lib instalada, o script volta ao jeito antigo. Gravam pela lib (instalados em
+lib instalada, o script NÃO grava (desde 19/10/2026 não há mais o fallback "jeito antigo", que gravava o JSON direto sem validar): registra no stderr "lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: <título>" e segue (o `funil-aprendizado` sai com 1, para regravar na rodada seguinte). A regra do "R$" não tem mais como ser contornada por um script. Gravam pela lib (instalados em
 11 e 12/10/2026): `auto-entrada`, `site-pastas`, `site-demos-limpeza`,
-`site-demos-pausa`, `prumo-mapa` (aviso ao cliente: "R$" é recusado e vai ao
+`prumo-mapa` (aviso ao cliente: "R$" é recusado e vai ao
 journal, não escondido), `backup-dell` (o aviso do ensaio nunca muda o código de
 saída; `BACKUP_DELL_SEM_AVISO` continua calando antes de gravar), `gerador-de-sites`
 (o aviso nunca derruba um lead; a colisão de nome no mesmo segundo acabou),
@@ -581,7 +651,7 @@ interno, "R$" vira `[valor]`; em aviso ao cliente, é recusado. Faltam o
 cópias e a ordem da troca estão em `docs/superpowers/plans/2026-10-11-aviso-unico.md`.
 
 ```bash
-python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py && python3 deploy/dell/site-pastas.test.py && python3 deploy/dell/site-demos-limpeza.test.py && python3 deploy/dell/site-demos-pausa.test.py
+python3 deploy/dell/lib/aviso.test.py && python3 deploy/dell/auto-entrada.test.py && python3 deploy/dell/site-pastas.test.py && python3 deploy/dell/site-demos-limpeza.test.py
 python3 deploy/dell/prumo-mapa/prumo_mapa.test.py && python3 deploy/dell/backup/backup-dell.test.py && python3 deploy/dell/gerador-de-sites.test.py && python3 deploy/dell/claude-ops/site-acompanhamento.test.py
 python3 deploy/dell/funil-aprendizado.test.py && python3 deploy/dell/whatsapp-observador/observador.test.py && python3 deploy/hermes/scripts/patch_bridge_envios.test.py
 install -D -m 644 deploy/dell/lib/aviso.py ~/.local/lib/mel/aviso.py   # antes do script que a usa
@@ -599,7 +669,7 @@ gravar aviso em nome de quem quisesse. O `2` (setgid) mantém o grupo nos
 arquivos novos.
 
 ```bash
-python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados, timers, healthwatch, idade dos dados, rotinas caladas, pastas e "o que fazer"
+python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados, timers, healthwatch, rotinas caladas, pastas, prazos, central atualizada, telegram e "o que fazer"
 (cd deploy/dell/claude-ops && python3 aviso-origem.py --aplicar)   # antes do dell-status novo
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
 mkdir -p ~/.local/share/avisos/fila
@@ -673,7 +743,12 @@ em atenção). Refaça depois de contratar, editar ou arquivar alguém.
 O `google-auth.json` do Easypanel **não** vem junto: é cifrado com o
 `TOKEN_ENC_KEY` de lá, e o Dell tem a credencial própria (ver acima).
 
-## Luna em sombra (fase 8c, desde 07/10/2026, desligada)
+## Luna em sombra (fase 8c, desde 07/10/2026, desligada por padrão)
+
+**Estado em 19/10/2026:** segundo a auditoria (a flag está no `operations.env` da Mel, não no repositório), a sombra está **ligada**, mas desde que o
+Assistente substituiu o Pedir não há tráfego novo (só uma demanda mandada pelo Telegram passa por `rodarDemanda`, onde ela observa); desligar
+ou apontá-la para o Assistente é decisão do Rômulo. Não confunda com a Luna do `luna-workflows.service` (mais abaixo), que **opera**: classifica o Caçador
+e responde a Fonte do PRUMO. A "medição, nunca motor" é só desta sombra.
 
 Medição de ~30 dias para saber se a Luna (`gpt-6-luna`, pelo `codex exec` com
 o login ChatGPT Pro do Dell) substituiria o Gemini como motor do turno. Depois
@@ -758,7 +833,10 @@ só no Gemini, só na Luna) e as 10 divergências mais recentes.
 parte (`rm -r ~/.local/share/squadone/luna-sombra`). Não há nada a desfazer no
 Google, no Telegram ou no roster: a sombra nunca escreveu neles.
 
-## Jev em sombra (desde 11/10/2026, desligado)
+## Jev em sombra (desde 11/10/2026, desligado por padrão)
+
+**Estado em 19/10/2026:** como a Luna, segundo a auditoria está ligado na Mel (`jev.env` + `operations.env`) e sem tráfego novo desde que o
+Assistente substituiu o Pedir; decisão do Rômulo (desligar ou apontar).
 
 Medição do roteamento de demandas pelo Jev (`typesafe/jev-1.13`, TypeSafe pela
 OpenRouter). Depois de cada demanda, sem `await`, o servidor pergunta ao Jev
@@ -885,19 +963,21 @@ cp deploy/dell/auto-entrada.path deploy/dell/auto-entrada.service ~/.config/syst
 systemctl --user daemon-reload && systemctl --user enable --now auto-entrada.path
 ```
 
+O `auto-entrada.path` dispara por `PathExistsGlob=…/auto-entrada/*.json`, não por "diretório não vazio": o serviço só consome `.json`, e uma sobra de outro tipo reacionava o serviço em laço até o limite de início, deixando o `.path` em `failed` calado (DELL-17, 19/10/2026). O mesmo vale para o `site-pastas.path`.
+
 Desde 29/09/2026 as pastas também mudam de lugar sozinhas. A cada hora o
 Balcão grava em `~/.local/share/n8n-estado/site-pastas.json` o que mover, e
 `site-pastas` (disparado por `site-pastas.path`) move: respondeu no WhatsApp
-→ `_em-conversa/`; `expirado` (10 dias sem resposta) → `_concluidos/`. Só vale
+→ `_em-conversa/`; `expirado` (7 dias sem resposta, o mesmo prazo da Central desde 19/10/2026; eram 10) → `_concluidos/`. Só vale
 para resposta ou envio a partir de 29/09/2026 (o acervo fica onde está), só
 tira pasta da raiz (ou de `_concluidos/` quando um expirado responde), confere
 o `place_id` do `publicado.json` e nunca sobrescreve. `site-pastas --listar`
 mostra o que faria.
 
 Desde 30/09/2026 o `site-pastas` também atende os botões da página do lead
-(ver "Página do lead e pausa dos demos"): um pacote por toque em
+(ver "Página do lead e limpeza dos demos"): um pacote por toque em
 `~/.local/share/n8n-estado/site-acoes/` (segundo gatilho do `.path`,
-"diretório não vazio"; o pacote lido é apagado, o ilegível vai para
+`PathExistsGlob` em `*.json`; o pacote lido é apagado, o ilegível vai para
 `~/.local/share/site-acoes-erro/` com aviso). Recusou → `_recusados/`, Fechou →
 `_fechados/` (pasta nova), de onde a pasta estiver; Desfazer devolve para onde
 estava (pilha em `~/.local/state/site-pastas/acoes.json`; sem histórico, de
@@ -920,15 +1000,25 @@ Desde 28/09/2026 o Dell manda direto ao Drive, sem PC:
   segredos), às 03:30, com ensaio de restauração mensal.
 
 Um manifesto (`backup/fontes.toml`) e um runner (`backup-dell`). Instalação,
-decisões e alertas em `backup/README.md`; restauração em `backup/RESTAURAR.md`.
+decisões e alertas em `backup/README.md`; restauração em `backup/RESTAURAR.md`. Os avisos do backup (ensaio que falha, com a chave
+`backup-dell:ensaio-falhou`) saem pelo Telegram (origem `backup-dell`).
+
+**Sync da pasta Silmer** (`silmer/silmer-drive-sync.{sh,service,timer}`): `rclone bisync ~/Silmer gdrive-silmer:`, **a cada 15 min** (eram 5: 578
+execuções em 48 h para 1 mudança; VIVO-7). Auditoria de 19/10/2026 (DELL-9): depois de qualquer falha o ciclo seguinte rodava `--resync
+--resync-mode newer`, que reconstrói a base e **anula o `--max-delete`**; se o que falhou foi justamente a trava (`too many deletes`), o
+ciclo seguinte aplicava as exclusões que ela segurou. Agora a falha por max-delete **para o sync** (marca `parado-max-delete` no estado, sem
+resync automático) e avisa pelo Telegram (origem `silmer-drive-sync`, a chave limita a 1 por dia); só volta depois que o Rômulo confere o
+que ia ser apagado e remove a marca. As outras falhas seguem com o resync de antes. No bisync `--max-delete` é **percentual** (10 = 10% dos
+arquivos), não contagem. A saída do rclone vai ao journal e a `ultima-saida.log`; a unit usa `%h` e só define `RCLONE_CONFIG`.
 
 ## Scripts de operação do n8n (`claude-ops/`)
 
 Copiados para `~/.local/share/claude-ops` no Dell. `n8n.py` é o cliente da
 API (chave de operações em `~/.config/claude-ops/n8n-api-key`);
 `aviso-de-falha.py` liga o Error Workflow em todos os fluxos;
-`prumo-ajustes.py` e `site-antes-da-venda.py` aplicam as mudanças de
-23/09/2026; `prumo-aviso-unico.py` faz a resposta do formulário fora dos
+`site-antes-da-venda.py` aplica as mudanças do Site (os scripts-remendo do PRUMO, `prumo-ajustes`, `prumo-ajuste-planilha`, `prumo-rodizio`,
+`prumo-escolha`, `prumo-aviso-fila` e `prumo-desfazer-saudacao`, foram apagados em 19/10/2026: aplicados uma vez, rodar de novo desfazia o
+desenho vivo; apague as cópias antigas de `~/.local/share/claude-ops`); `prumo-aviso-unico.py` faz a resposta do formulário fora dos
 prospects avisar uma vez só (memória em `~/.local/share/n8n-estado/prumo-avisados.json`,
 24/09/2026; apagar o arquivo faz cada resposta avisar mais uma vez). A memória
 do fluxo (`$getWorkflowStaticData`) não serve aqui: o n8n só a grava quando o
@@ -939,7 +1029,11 @@ id do fluxo tem até 21 caracteres, e os fluxos importados do PRUMO usam UUID;
 
 `wa_link` (Site antes da venda) e "Enviar convite" (PRUMO) apontam para
 `https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook/enviar` e
-`/webhook/convite`: o clique marca o envio e redireciona ao canal. Desde
+`/webhook/convite`: o clique **só abre o canal**, nunca marca envio (regra `[abrir-nao-envia]`, 18/10/2026). O do Site
+grava `clique_em` no fluxo "04 · Clique no wa_link (registra o clique)" (era "(marca enviado)", e o nó "Marcar como enviado" virou
+"Gravar clique_em"; ao publicar, `fecha-ciclos.py` acha o fluxo pelo nome velho e o renomeia pelo id, sem criar um segundo com o
+mesmo path); o do PRUMO ("PRUMO — Clique em Enviar convite") só redireciona, sem "Primeiro clique?" nem "Marcar como enviado". Quem marca
+`enviado` é o observador do WhatsApp, quando a mensagem sai de verdade. Desde
 29/09/2026 o `tailscale serve` do Dell publica `/webhook` do n8n nesse
 endereço, **só para a tailnet** (não é Funnel; `/` continua sendo o Hermes).
 O link abre em qualquer aparelho logado na tailnet com a conta do Rômulo:
@@ -949,7 +1043,7 @@ era `127.0.0.1:5679`, que só abria no Dell.
 ```bash
 sudo tailscale serve --bg --set-path /webhook http://127.0.0.1:5679/webhook
 tailscale serve status   # / -> 9119 (Hermes), /webhook -> 5679/webhook
-cd ~/.local/share/claude-ops && python3 fecha-ciclos.py --tailnet   # base no Lead Scout e convites em Revisar
+cd ~/.local/share/claude-ops && python3 fecha-ciclos.py   # refaz só o 04 do Site (a opção --tailnet e o Lead Scout antigo saíram do script em 19/10/2026)
 ```
 
 O Balcão remonta o `wa_link` dos leads `pronto` a cada hora
@@ -1000,9 +1094,9 @@ site-antes-da-venda.py --colunas` cria; o `--balcao` também):
   `place_id`; desde então sai da alocação balanceada acima e fica guardada na
   própria coluna, então um lead `pronto` não troca de variação entre duas
   rodadas enquanto o conjunto não mudar; com B e C `null`, todo lead é `A`. É gravada enquanto o lead está
-  `pronto`: o clique no `wa_link` marca `enviado` e a letra fica. Quando o envio
-  aparece sem o clique (o observador vê `owner_sent`, a leitura ou a resposta de
-  um lead ainda `novo`/`pronto`), o observador grava `manual`: o texto foi o que
+  `pronto`: o clique no `wa_link` grava `clique_em` (não marca `enviado`), e o observador, ao ver a saída até 15 min depois do
+  clique, marca `enviado` e a letra fica. Quando o envio aparece sem o clique recente (o observador vê `owner_sent`, a leitura ou a
+  resposta de um lead ainda `novo`/`pronto`), o observador grava `manual`: o texto foi o que
   o Rômulo escreveu ou colou (o aviso "Site publicado" do Hermes sugere o texto
   A sem o detalhe dos elogios, mas não dá para saber se ele editou). Limite: o
   clique com `marcar=nao` (operador do Dell) não deixa rastro para o observador,
@@ -1019,56 +1113,40 @@ site-antes-da-venda.py --colunas` cria; o `--balcao` também):
   enquanto o lead está `pronto` e congelada com ela depois do envio; vazia nos
   EUA e sem telefone. É ela que diz com quem a letra pode ser comparada; o CRM a
   lê como `abordagem.elegiveis`. Linhas de antes ficam vazias (fora do teste).
-- `gate_de_envio` (18/10/2026): o motivo curto do **gate de pré-envio** da 1ª
-  mensagem (abaixo). Vazio quando a mensagem passou; `aviso: <motivos>` com o lead
-  ainda `pronto`; `barrado: <motivos>` quando o lead não virou `pronto`. Com o gate
-  `desligado` a coluna nem entra na escrita.
+- `gate_de_envio` (18/10/2026; **o Balcão deixou de escrevê-la em 19/10/2026**): a coluna segue na planilha, mas ninguém a escreve, nem o `--balcao` a cria.
 
-**Gate de pré-envio da 1ª mensagem** (18/10/2026). Antes de marcar `pronto`, o
-Balcão confere o texto já montado, sem modelo: marca sem preencher (`{NOME}`,
-`[x]`, `undefined`), frase de IA ou de agência, emoji, mais de 600 caracteres, link
-(a 1ª mensagem não leva), nome da empresa vazio/com lixo/repetido e "R$" fora dos
-preços abertos do cardápio. É a cópia em JS (`gate-de-envio.js`, entre o
-`site-mensagem.js` e o `balcao-cruzar.js` no nó) do gate PURO em TypeScript que já
-protege o copiloto e o vendedor do Telegram (`server/gate-de-envio.ts`);
-`server/gate-de-envio-balcao.test.ts` falha se as duas divergirem. **Nunca
-reescreve o texto nem mexe no sorteio das letras**: só lê o texto e escreve a
-coluna. O modo é a constante `GATE_DE_ENVIO` do `balcao-cruzar.js`, que o
-`site-antes-da-venda.py` troca pela variável de ambiente de mesmo nome ao publicar:
-
-- `avisar` (padrão): o lead segue `pronto` e a coluna diz o motivo. Um falso-positivo
-  não pode travar a fila de venda; os textos de hoje passam no gate por teste.
-- `bloquear`: o lead não vira `pronto` (um `pronto` que reprova volta a `novo`, sem
-  `wa_link` nem letra) e a coluna diz `barrado: …`. O barrado sai do sorteio e a letra
-  que a planilha guardava para ele deixa de contar (`alocarRodada` roda de novo sem
-  ele): não gasta a vez de ninguém no A/B. Lead `enviado` nunca passa pelo gate.
-- `desligado`: o código de antes, byte a byte (a coluna não é escrita).
+**Gate de pré-envio da 1ª mensagem** (18/10/2026; **fonte única desde 19/10/2026**). O gate PURO em TypeScript
+(`server/gate-de-envio.ts`) confere o texto já montado, sem modelo: marca sem preencher (`{NOME}`, `[x]`, `undefined`), frase de IA ou de agência,
+emoji, mais de 600 caracteres, link (a 1ª mensagem não leva), nome da empresa vazio/com lixo/repetido e "R$" fora dos preços abertos do cardápio.
+Ele roda onde a mensagem é oferecida: na Central e no vendedor do Telegram (em `avisar` ou `bloquear`, conforme a origem do texto) e quando o time
+comercial pede a reserva (`bloquear`). **O Balcão não o confere mais:** a cópia em JS (`gate-de-envio.js`), o modo `GATE_DE_ENVIO` e o
+`server/gate-de-envio-balcao.test.ts` saíram, porque no modo padrão (`avisar`) só escreviam uma coluna que ninguém lia. Nunca reescreve o texto
+nem mexe no sorteio das letras.
 
 ```bash
 cd ~/.local/share/claude-ops
 python3 site-antes-da-venda.py --testar       # cruzamento no node, planilha de mentira, sem n8n
 python3 site-antes-da-venda.py --testar-n8n   # cópia do Balcão: recibos reais, planilha de mentira, nada gravado
-python3 site-antes-da-venda.py --balcao       # colunas que faltam + publica o Balcão (gate em "avisar")
-GATE_DE_ENVIO=bloquear python3 site-antes-da-venda.py --balcao   # ou desligado; sem a variável vale o do arquivo
+python3 site-antes-da-venda.py --balcao       # colunas que faltam + publica o Balcão
 ```
 O texto do convite do PRUMO fica em `prumo-simples.py` (função `convite`) e é
 montado a cada clique; `python3 prumo-simples.py --convite` publica só esse
-fluxo, sem mexer na planilha, no Lead Scout nem na Pontuação. Desde 30/09/2026
-todas as mensagens abrem com "Me chamo Rômulo e represento o Prumo" (decisão em
-`romulosutil/prumo`, `00-contexto/decisoes.md`), e o aviso do Hermes
-(`site_antes_venda_watcher.py`) repete a abordagem do Site.
+fluxo, sem mexer na planilha nem na Pontuação. A abertura das mensagens **mudou**: a decisão de 30/09/2026 ("Me chamo Rômulo e
+represento o Prumo", em `romulosutil/prumo`, `00-contexto/decisoes.md`) foi trocada em 05 e 19/10/2026 pelo guia do topo das
+`VARIACOES` em `site-mensagem.js`. Hoje: o Site abre com "Oi, tudo bem? Aqui é o Rômulo." (sem "do PRUMO") e o follow-up com "Oi, é o
+Rômulo de novo."; o convite do PRUMO com "Aqui é o Rômulo, do Prumo"; o do Iris e o das estamparias com "Aqui é do Prumo"; o Plus com a
+saudação da Ordem. O aviso "Site publicado" do Hermes (`site_antes_venda_watcher.py`) **foi aposentado em 19/10/2026** (o texto divergia do
+guia e ficava fora da fila: duas mensagens para o mesmo fato); a unit `site-antes-venda-watcher` e o script em `~/.hermes/scripts` saem da Mel.
 
 Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
 
-- **05 · Acompanhamento** (todo dia, 09:00): `enviado` sem `respondeu_em`,
-  enviado a partir de 29/09 e com a pasta na raiz ganha, no 3º dia (só quem leu),
-  a data em `followup_em`; no 10º dia vira `expirado`, com um aviso só dos
-  expirados. O que foi enviado antes é acervo: saiu um resumo único
-  (`--resumo-backlog`) e nada é automático. **Desde 17/10/2026 (OT-01) o 3º dia
-  não avisa mais pela fila do WhatsApp:** o follow-up tem um dono só, a fila de
-  venda da Central (Próxima venda e o vendedor no Telegram), que lê o
-  `followup_em` para saber o dia (`server/crm.ts`). Antes saíam dois lembretes do
-  mesmo follow-up, um deles pelo número de vendas.
+- **05 · Acompanhamento** (todo dia, 09:00): `enviado` sem `respondeu_em`, enviado a partir de 29/09, **só expira**: no 7º dia
+  (`EXPIRA_DIAS`, o mesmo `DIAS_SEM_RESPOSTA` da Central; era o 10º) vira `expirado`, com um aviso só dos expirados. Vale também para
+  lead sem pasta nenhuma (a mensagem A vai a lead sem recibo); quem tem pasta em `_recusados/` ou `_em-conversa/` não expira. O que foi
+  enviado antes é acervo: saiu um resumo único (`--resumo-backlog`) e nada é automático. **O follow-up do 3º dia não é mais daqui**
+  (19/10/2026): o 05 não grava mais `followup_em` (a coluna segue na planilha, ninguém a escreve) e, desde 17/10 (OT-01), também não avisa.
+  A Central é a dona do follow-up e do Perdido (`server/crm.ts`): calcula o dia sozinha a partir do envio, vale do 3º ao 6º dia, só para
+  quem leu, e aparece em Vendas › Conversas para você e no "Envie para X" do Telegram.
 - **06 · Funil semanal** (segunda, 08:00): por nicho (vertical + cidade)
   leads, sites, enviados, responderam, em conversa, recusados e concluídos.
   Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira
@@ -1158,8 +1236,10 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   seção do gerador para eles (OAB sóbria, sem avaliações na página de
   advocacia; B2B com "Pedir orçamento"; urgência com botão fixo); desde
   08/10/2026 ela vive no arquivo versionado (`deploy/dell/auto-site/`, ver
-  "Gerador de sites") e o script não reescreve mais a cópia. Rodar de novo
-  não muda nada; `--testar` e `--testar-vivo` não gravam.
+  "Gerador de sites") e o script não reescreve mais a cópia. **O `site-nichos.py` de hoje só troca a
+  lista `FEMININOS`** (o artigo da mensagem, "da Desentupidora X", "do Escritório Y") em todo nó Code do n8n que a copia, lida do
+  `site-mensagem.js`; a pausa das buscas, a troca da regra 1 e do Pontuar e a escrita do `CLAUDE.md` foram apagadas dele em 19/10/2026
+  (rodar a pausa hoje desligaria as ~80 buscas que o `site-buscas-ampliar.py` acrescentou). Rodar de novo não muda nada; `--testar` não grava.
 - `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
   `--testar-regra`, `python3 site-cacador-escolha.py --testar` e
   `python3 site-cacador-site-no-ar.py --testar` (HTTP de mentira, mais o
@@ -1175,27 +1255,34 @@ lá (PR), instalar e ativar no n8n.
 
 Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
-resposta" conta só quem ainda está na raiz de `~/auto-site`. `claude-ops/prumo-rodizio.py` põe o Lead Scout em rodízio de
-buscas. `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
+resposta" conta só quem ainda está na raiz de `~/auto-site`. (O `prumo-rodizio.py`, que punha o Lead Scout em rodízio de buscas, foi apagado em
+19/10/2026 com o Lead Scout desligado.) `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
 em `prumo-porte-cnpj.js`): acha o CNPJ no site, consulta a Receita pela
 BrasilAPI e descarta MEI, microempresa, rede, CNPJ baixado e quem não é
 comércio. Quem passa leva o resumo do CNPJ na coluna Briefing.
 
-## Página do lead e pausa dos demos (`claude-ops/site-lead-acoes.py`, `site-demos-pausa.*`)
+## Página do lead e limpeza dos demos (`claude-ops/site-lead-acoes.py`, `site-demos-limpeza.*`)
 
 Decisões do Rômulo de 29/09/2026: o Hermes **não manda mensagem a lead**
 (risco de banimento do WhatsApp), mas o desfecho de cada lead se marca com um
-toque no celular; e demo de quem recusou ou expirou é **pausado** na Vercel 15
-dias depois, nunca apagado.
+toque no celular; e demo de quem recusou ou expirou saía do ar da Vercel 15 dias depois (a **pausa**, "nunca apagado"). A
+pausa foi trocada pela **limpeza** em 08/10/2026 e o `site-demos-pausa` foi aposentado em 19/10/2026 (ver abaixo).
 
 **Página do lead** (fluxo `07 · Lead: página e ações`, id `Kf5IWNdEFFnuSOy2`):
 `…/webhook/lead?id=<place_id>` pela tailnet (mesma base do `wa_link`) mostra
-nome, link do demo, estado e três botões. Nada é enviado a ninguém:
+nome, link do demo, estado e os botões. Nada é enviado a ninguém.
+
+Os botões são **Recusou**, **Fechou**, **Desfazer** e, para quem pediu, **Gerar demo**. **Desde 19/10/2026 abrir o link não grava
+nada** (regra `[confirmacao-http]`, `workflow_confiabilidade.confirmar_acao`): o `GET /webhook/lead-acao?id=…&acao=…` só mostra uma página de
+confirmação com o formulário, e quem grava é o **POST** do botão Confirmar, que precisa vir da mesma origem (tailnet ou loopback) e com o
+contexto (o estado do lead) igual ao da página: origem errada dá 403, lead que mudou dá 409 (reabra). Um link aberto, recarregado ou
+pré-visualizado pelo WhatsApp nunca escreve. O que cada ação faz:
 
 - **Recusou**: `status` = `recusado`, `recusado_em`, pasta → `_recusados/`;
 - **Fechou**: `status` = `fechado`, `fechado_em`, pasta → `_fechados/`;
 - **Desfazer** (só em recusado/fechado): volta a `status_anterior` (sem ele,
-  `enviado`), apaga a data, a pasta volta para onde estava.
+  `enviado`), apaga a data, a pasta volta para onde estava. **Não traz de volta o demo que a limpeza já apagou da Vercel** (só
+  republicando), e a página avisa isso.
 
 Repetir um toque não muda nada; id desconhecido mostra "lead não encontrado" e
 não grava. Lead em `_recusados/` sem `recusado` na planilha (acervo de 25/09)
@@ -1213,24 +1300,13 @@ código do retrato no node, sem n8n (o `--testar` roda ele antes). O resumo das 
 com o link para cada enviado sem resposta e cada lead em conversa (até 15 por
 grupo, os mais antigos primeiro).
 
-Desde 08/10/2026 a limpeza (abaixo) **apaga** o demo de todo lead em Perdido no
-CRM dois dias depois, então a pausa de 15 dias quase não chega a agir: fica
-para o que a limpeza não pega (Central fora do ar, lead fora do teto da rodada).
-
-**Pausa dos demos** (`site-demos-pausa`, todo dia às 09:40, depois do 05 e do
-Balcão): a pasta diz quem está fora (`_recusados/` = recusado, `_concluidos/` =
-expirado; `fechado` na planilha veta). Conta 15 dias desde `recusado_em` (ou
-`enviado_em` + 10 dias para expirado) do retrato; sem isso (acervo), a data
-mais recente entre a linha `**Recusou.**` do `registro.md` e a ctime da pasta,
-congelada no estado; sem nada, o primeiro dia em que viu. Só toca em projeto
-`demo-*` de um `publicado.json`, só despausa o que ele pausou, nunca apaga.
-Quem volta (Desfazer, expirado que responde) tem o demo de volta no ar: o
-`site-pastas` acorda o serviço logo depois de um botão. Estado em
-`~/.local/state/site-demos-pausa/` (`estado.json`, `historico.jsonl`); um aviso
-por rodada, só quando algo mudou. Token: o da Vercel CLI (`auth.json`),
-renovado pela CLI quando está para vencer; a API de pausa só aceita o id
-`prj_…`. Em 30/09/2026 os 74 leads de `_recusados/` (73 projetos) contam desde
-25/09 (ctime + balanço do `registro.md`): pausa em 10/10/2026.
+**Pausa dos demos: aposentada em 19/10/2026.** Desde 08/10/2026 a limpeza (abaixo) **apaga** o demo de todo lead em Perdido no
+CRM dois dias depois, então a pausa de 15 dias (`site-demos-pausa`, timer das 09:40, estado em `~/.local/state/site-demos-pausa/`) só agia
+no que a limpeza não pega e, por isso, ficou duplicando a regra com datas próprias (15 dias de `recusado_em`, `enviado_em` + 10 para
+expirado) e outro conjunto de pastas. O script, o teste, a unit e o timer saíram do repositório; na Mel: `systemctl --user disable --now
+site-demos-pausa.timer` e apagar as cópias e o estado (comandos na seção de instalação da auditoria, `docs/auditoria-de-fluxos-2026-10-19.md`).
+A página do lead diz hoje: quem está em Perdido há 2 dias (recusou, não respondeu em 7 dias, parou de responder) tem o demo **apagado** da
+Vercel; a pasta e o conteúdo ficam no Dell.
 
 **Limpeza dos demos de leads perdidos** (`site-demos-limpeza`, desde 07/10/2026;
 critério de 08/10/2026, todo dia às 09:50 e uma vez por dia no `lote-continuo`).
@@ -1242,8 +1318,8 @@ apaga o projeto `demo-*` de todo lead do Site em Perdido há **2 dias ou mais**
 (recusou, 7 dias sem mensagem do lead, parou de responder, sem contato fácil,
 descartado), com a pasta na raiz, em `_recusados/`, `_concluidos/`,
 `_em-conversa/` ou `_descartados/` (`_fechados/` nunca) e o `publicado.json`
-dela confirmando o projeto. A pasta fica; o `publicado.json` ganha `apagado_em`,
-o `site-demos-pausa` passa a ignorá-lo e o CRM tira "Ver o demo" e a segunda
+dela confirmando o projeto. A pasta fica; o `publicado.json` ganha `apagado_em`
+e o CRM tira "Ver o demo" e a segunda
 mensagem (levariam a um link morto) e diz na ficha para republicar antes. Os
 2 dias de folga são para desfazer um "Recusou" tocado errado ou para a resposta
 de amanhã. Central fora do ar, visão sem retrato válido, sem as pastas lidas ou
@@ -1300,11 +1376,6 @@ python3 site-lead-acoes.py --testar        # cópia com planilha de mentira, nã
 python3 site-lead-acoes.py                 # colunas que faltam + publica e ativa o 07
 python3 site-lead-acoes.py --retrato-agora # retrato + acoes_link agora
 python3 site-lead-acoes.py --verificar ChIJ64zCC14ZqwcRJ2DcIs-rioA   # id falso + I&C (já recusada): nada muda
-
-install -m 755 deploy/dell/site-demos-pausa.py ~/.local/bin/site-demos-pausa
-cp deploy/dell/site-demos-pausa.{service,timer} ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now site-demos-pausa.timer
-site-demos-pausa --simular   # o que pausaria agora e depois, com a evidência de cada data
 ```
 
 ## CRM (`/crm`, fluxo `08 · CRM`, `claude-ops/crm.py`)
@@ -1339,15 +1410,15 @@ para Perdido: "Sem resposta em 7 dias" (`expirou`) ou "Parou de responder"
 (`esfriou`). Vale para o acervo e para o PRUMO, que não expiravam. O cartão
 mostra "Perdido em N dias". Um **próximo passo** registrado na ficha segura o
 lead (é o Rômulo dizendo que ainda vale) — inclusive o que a planilha já marcou
-`expirado` no 10º dia —; uma **proposta** também; e uma mensagem nova do lead o
+`expirado` pelo 05 —; uma **proposta** também; e uma mensagem nova do lead o
 traz de volta sozinho. O CRM só calcula: a planilha continua com o status que
-tem (o 05 · Acompanhamento segue expirando no 10º dia). Quem sai pela regra
-cai na limpeza dos demos dois dias depois.
+tem. **Desde 19/10/2026 o 05 · Acompanhamento expira no mesmo 7º dia** (era o 10º, e as duas contas se desencontravam: o CRM
+tirava o lead no 7º e a planilha só no 10º). Quem sai pela regra cai na limpeza dos demos dois dias depois.
 
 "Entregue sem lido" é **não sei**, nunca "não viu": quem desliga a confirmação
 de leitura nunca aparece como lido; quem respondeu aparece como "leu
-(respondeu)". Sinais: **follow-up hoje** (Em contato há 3 a 6 dias sem resposta;
-no Site só envio a partir de 29/09 e uma vez por lembrete do 05; desde
+(respondeu)". Sinais: **follow-up hoje** (Em contato há 3 a 6 dias sem resposta, só quem leu;
+no Site só envio a partir de 29/09; desde 19/10/2026 o dia é da Central, sem depender do `followup_em` do 05; desde
 08/10/2026 o link "Mandar o follow-up" abre o WhatsApp com o mesmo texto do
 aviso do 05, de `server/site-mensagem.ts`, espelho testado do
 `site-mensagem.js`), **resposta
@@ -1355,6 +1426,12 @@ nova** (respondeu nas últimas 48 h; exato quando houver colunas de última
 entrada/saída), dias na etapa e desde o último evento, **divergência**
 (planilha e pasta discordam depois de 2 h de folga: nota na ficha, nunca
 correção).
+
+> **Nota de 19/10/2026 sobre os dois blocos seguintes.** O que segue descreve o CRM de 14–16/10. Hoje: abrir o WhatsApp ("Mandar o link",
+> "Mandar o follow-up", "Enviar pelo WhatsApp") **nunca anota nada**; quem anota é o "Enviei" explícito na missão da conversa (ou o observador,
+> quando a mensagem sai). A "Hoje" e a folha "Enviar um por um" saíram; a vista inicial de Vendas é **Conversas para você** (a fila inteira de
+> quem já foi contatado) e o primeiro contato mora em **Primeiros contatos** e na Ficha de um lead Novo, com as travas de horário e ritmo
+> (hoje 5 min entre um e outro, 12 por hora e 100 por dia). `server/crm.ts` guarda a visão por 20 s (`TTL_DA_VISAO_MS`).
 
 **Loop fechado (14/10/2026).** Dos 221 envios, 5 de interesse e 0 propostas:
 "Manda aí" e "Pode sim" de 08–09/10 saíram da Hoje em 48 h sem o CRM saber se
@@ -1596,8 +1673,9 @@ texto em 39, vidro fosco em 34, 11 telas de mediana) e configuração errada
   (medido no Chrome do Windows; o gate avisa a largura real da janela do Dell
   em "Largura das capturas"). `qa-numerico --celular URL SAIDA.png` tira uma
   captura de celular de verdade;
-- modo premium desligado (`--premium` só com `GERADOR_PREMIUM_LIGADO=1` no
-  `gerador.env`; o `lote-continuo` segue no personalizado).
+- modo premium **apagado** (desligado em 13/10/2026 e removido em 19/10/2026, com `--premium`, `--nota`, `GERADOR_PREMIUM_LIGADO` e
+  `instrucoes_premium`; os sites que ele fez têm `personalizado.json` com `versao` 3 e seguem valendo, e o lote só refaz quem tem versão menor
+  que a atual; o `lote-continuo` segue no personalizado).
 
 Desde 23/09/2026 a fila do "Site antes da venda" é gerada no Dell, não no PC:
 a tarefa `EsteiraLeads08h` do PC só rodava com ele ligado às 08h e não gerava
@@ -1920,7 +1998,7 @@ Rômulo), não numa edição da cópia. As skills de `~/.claude/skills` e o
 ### Direção dos sites: metáfora e Atos (08/10/2026)
 
 A direção do "redesign conceitual e de movimento" do site do PRUMO virou a dos
-demos, em todos os modos (fila comum, `--personalizado`, `--premium`). Leitura
+demos, em todos os modos (fila comum e `--personalizado`; o `--premium` foi apagado em 19/10/2026). Leitura
 de cinco demos no ar em 08/10/2026: o fluxo comum saía em ordem de template
 (hero, serviços, diferenciais, orçamento, contato); quando havia ideia, ela
 morava num brinquedo isolado; os arquivos pesavam 440 a 905 KB (75-90% de foto
@@ -1946,10 +2024,10 @@ como alarme ou deboche do ramo. O que mudou:
 - `gerador-de-sites.py`: o prompt pede a direção; as instruções da execução
   pedem o `CONCEITO.md`, o script de bytes e as capturas com
   `--force-prefers-reduced-motion` e sem JS; o personalizado amarra o conceito
-  autoral aos Atos; o laço de crítica do premium responde a um checklist de 20
+  autoral aos Atos; o laço de crítica do premium (apagado em 19/10/2026) respondia a um checklist de 20
   itens; o refazer guarda o `CONCEITO.md` anterior no `_vN/`.
 
-As versões (`VERSAO_PERSONALIZADO`, `VERSAO_PREMIUM`) não subiram: o
+As versões (`VERSAO_PERSONALIZADO`; a `VERSAO_PREMIUM` saiu com o modo) não subiram: o
 `lote-continuo` refaz todo demo `pronto` com versão menor que a alvo, e subir
 agora refaria a fila inteira. Para medir a direção nova como versão no funil,
 suba-as num PR à parte, junto com o `VERSAO_ALVO` do `lote-continuo`, se
@@ -1964,6 +2042,9 @@ install -m 755 ~/SquadOne/deploy/dell/gerador-de-sites.py ~/.local/bin/gerador-d
 ```
 
 ### QA com uma imagem por rodada: folha de contato e gate numérico (11/10/2026)
+
+**Nota de 19/10/2026:** o modo premium (e o laço "V" com as referências do Refero) foi apagado do gerador; a tabela e as estimativas por lead
+premium abaixo são a medição de 11/10 que justificou as duas ferramentas, e o que vale hoje é o `qa-numerico` no personalizado.
 
 A cota do Claude aperta, e o QA era o que mais lia imagem. Medido nas transcrições dos leads
 de 08-10/10/2026 (`~/.claude/projects/-home-romulo-sutil-corr-a-auto-site/*.jsonl`, contando
@@ -2193,7 +2274,7 @@ mas o tipo gravado é `licenca`), o classificador vê as últimas mensagens do
 Rômulo e as anteriores do lead, e o áudio chega transcrito quando dá (ver
 "Áudio, papel e contexto" em "Observador do número do PRUMO").
 
-**Quanto demora o aviso** (medido em 08/10/2026, um "Sim, sou a Jackeline" de PRUMO: a resposta entrou na planilha na hora, o aviso com o texto e o link saiu ~2 min 20 s depois): o observador espera `ESPERA_DA_CONVERSA_S` sem mensagem nova do lead antes de mandar ao n8n (era 90 s, agora 45 s), o n8n classifica com o Gemini (~10–20 s) e a fila de avisos só era esvaziada pelo timer do `dell-status` (até 1 min). Desde 08/10/2026 quem grava o aviso (`avisar_pelo_hermes`) também manda `dell-status --drenar` 6 s depois (a fila ignora arquivo com menos de 5 s); o timer continua valendo, então falha ali não perde aviso, e silêncio das 22h às 7h, teto por hora e chave de 24 h valem igual. A espera de 45 s é o preço do "Oi" + "não temos interesse" virar uma conversa só: quem escreve devagar pode gerar dois avisos. Depois do merge, reinstale o observador (`instalados.json`) e reinicie o serviço.
+**Quanto demora o aviso** (medido em 08/10/2026, um "Sim, sou a Jackeline" de PRUMO: a resposta entrou na planilha na hora, o aviso com o texto e o link saiu ~2 min 20 s depois): o observador espera `ESPERA_DA_CONVERSA_S` sem mensagem nova do lead antes de mandar ao n8n (era 90 s, agora 45 s), o n8n classifica com o Gemini (~10–20 s) e a fila de avisos só era esvaziada pelo timer do `dell-status` (até 1 min). Desde 08/10/2026 quem grava o aviso (`avisar`, ex-`avisar_pelo_hermes`) também manda `dell-status --drenar` 6 s depois (a fila ignora arquivo com menos de 5 s); o timer continua valendo, então falha ali não perde aviso, e silêncio das 22h às 7h, teto por hora e chave de 24 h valem igual. A espera de 45 s é o preço do "Oi" + "não temos interesse" virar uma conversa só: quem escreve devagar pode gerar dois avisos. Depois do merge, reinstale o observador (`instalados.json`) e reinicie o serviço.
 
 Por que 5 min: em 28/09/2026 dez leads "responderam" segundos depois de cada
 envio, na ordem em que o Rômulo mandava. É a saudação automática do WhatsApp
@@ -2207,14 +2288,14 @@ O PRUMO só ganhou a regra dos 5 min em 05/10/2026. Até então toda mensagem de
 quem tinha "Convite enviado" virava "Respondeu no WhatsApp": 20 prospects, todos
 até cerca de 5 min depois do convite e 17 em menos de 1 min (saudação), e a tela
 Hoje do CRM mostrava "Conversando" e "Respostas para responder" que não
-existiam. `claude-ops/prumo-desfazer-saudacao.py` devolve essas marcas antigas
-a "Só resposta automática" (simula por padrão; só grava com `--aplicar`).
+existiam. O `prumo-desfazer-saudacao.py` devolveu essas marcas antigas
+a "Só resposta automática" (aplicado uma vez; o script foi apagado em 19/10/2026).
 
 Por que o log e não um segundo aparelho: o pareamento por código falhou (no
 DDD 27 o WhatsApp registra o número sem o 9). O remendo da bridge é pequeno,
 idempotente e marcado (`// >>> squadone:` ... `// <<< squadone:`); o
 `hermes update` guarda e reaplica mudanças locais, mas pode perdê-lo se a bridge
-mudar perto das âncoras. O `aplicar-hermes.py` reaplica, e o observador avisa
+mudar perto das âncoras. O `aplicar-hermes.py` reaplica (o remendo de envios/recibos/respostas e, desde 19/10/2026, o da leitura dirigida do histórico, `patch_bridge_historico.py`, com a marca conferida no fim; ele não mexe mais em jobs do cron do Hermes), e o observador avisa
 uma vez quando as marcas somem do `bridge.js`. Âncora não encontrada = o script
 sai com erro sem tocar no arquivo (e, com `--avisar`, avisa pelo Hermes).
 LID vira telefone pelo mapa da sessão do Hermes (`lid-mapping-*_reverse.json`,
@@ -2337,7 +2418,9 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
                        whatsapp-observador-prumo (o MESMO observador.py) --> n8n (whatsapp-conversa / -resposta)
 ```
 
-- **Só leitura.** O adaptador nunca envia, marca como lido nem chama a Evolution. Nada em
+- **Só leitura (o adaptador e o observador).** O adaptador nunca envia, marca como lido nem chama a Evolution. **Quem envia pela Evolution é
+  outro processo:** o `frente-comercial.py` (time comercial, ver o começo deste arquivo) chama `POST /message/sendText/prumo` direto, só para o
+  primeiro contato, sob a reserva da Central; nada disso passa pelo adaptador. Nada em
   `observador.py` (fora do silêncio do log, ver abaixo), `whatsapp-conversa.py` ou no n8n muda de
   contrato; o número pessoal e o Hermes seguem como estão. A pasta é própria:
   `~/.local/state/whatsapp-observador-prumo/` (`evolution.log`, `respostas.jsonl`, `leads.json`, `posicao.json`).
@@ -2395,21 +2478,21 @@ Evolution API --webhook--> evolution-adaptador.py --> evolution.log + respostas.
   QR"), peça fora ou `/saude` mudo = falha, adaptador sem `lista_de_leads` = atenção. O resultado nunca leva segredo,
   chave da API, telefone nem texto de conversa.
 
-**Estado em 16/10/2026 (instalado na Mel, nada conectado a número nenhum):**
+**Estado em 19/10/2026 (instalado e conectado desde 16/10; a tabela de 16/10 de manhã, "nada conectado a número nenhum", ficou obsoleta no mesmo dia):**
 
 | Peça | Onde | Estado |
 |---|---|---|
 | Evolution API **v2.3.7** + Postgres 17 + Redis | `~/workspace/evolution/` (compose em `deploy/dell/evolution/`, `.env` 600 fora do Git), API só em `127.0.0.1:8081`, rede `evolution_rede` (172.28.77.0/24) | no ar, `restart: unless-stopped` |
-| Instância `prumo` (Baileys) | dentro da Evolution | criada, **esperando o QR** (`connecting`); leitura e "marcar como lido" desligados, grupos ignorados |
+| Instância `prumo` (Baileys) | dentro da Evolution | **conectada** ao chip 27 99976-2786 (o mesmo do Hermes, ver a correção acima); leitura e "marcar como lido" desligados, grupos ignorados |
 | `evolution-adaptador` | `~/.local/bin/evolution-adaptador.py`, escuta `172.28.77.1:9131` | ligado e habilitado; segredo em `~/.config/claude-ops/evolution-adaptador-segredo` (600) |
-| `whatsapp-observador-prumo` | unit instalada | **desligada de propósito**: sem ela ninguém grava `leads.json` e o adaptador, que falha fechado, não grava nada |
+| `whatsapp-observador-prumo` | unit instalada | **ligado** (grava `leads.json`, lê o que o adaptador escreve e transcreve áudio); desligado, o adaptador, que falha fechado, não grava nada |
 | Regra do ufw | `172.28.77.0/24 -> 172.28.77.1:9131/tcp` | a única aberta; sem ela o ufw (política DROP) corta o container do host |
 
 - **Evolution 2.4 não, por enquanto.** A 2.4.x pede ativação de licença no primeiro acesso (e-mail e telefone do
   operador, mais heartbeats com versão, contadores e o IP do servidor para a Evolution Foundation) e responde 503
   até ativar; testada em 16/10/2026 (2.4.0-rc2). A 2.3.7 não pede. Custo: é de dez/2025 e o WhatsApp muda o
   protocolo; ela gerou QR normalmente nesse dia. Subir de versão é decisão do dono (dados pessoais).
-- **O que falta, na ordem** (precisa do número novo): (1) chip/eSIM com WhatsApp Business e perfil completo;
+- **O que faltava, na ordem (feito em 16/10, com a ressalva de que o chip é o do Hermes: não haverá segundo número; o roteiro serve para parear de novo):** (1) chip/eSIM com WhatsApp Business e perfil completo;
   (2) gerar o QR e ler no celular do número novo: `curl -s -H "apikey: $(grep ^EVOLUTION_APIKEY ~/workspace/evolution/.env | cut -d= -f2)" http://127.0.0.1:8081/instance/connect/prumo`
   devolve `base64` (imagem do QR) e `code`; o QR vale poucos segundos e a instância só tenta `QRCODE_LIMIT` (30) vezes,
   depois fecha: peça outro com o mesmo comando (o painel em `http://127.0.0.1:8081/manager`, pelo túnel, mostra o
@@ -2762,9 +2845,16 @@ amarelo ("A coleta de hoje não aconteceu") a partir das 09:00 do dia seguinte e
 assim; com ela diz "Pausado de propósito (data)" e fica ok. A mesma marca apaga o
 amarelo de "Timers do repositório" pelo `pncp-catchup.timer` desligado no passo 2; até
 o passo 5, `date +%d/%m/%Y > ~/.local/state/dell-status/pausa-pncp-catchup` apaga só esse
-(sem esconder a coleta, que ainda roda). Cuidado: o
-`dell-worker-healthwatch` usa `docker compose up -d n8n` quando o n8n não existe, e
-isso sobe o `collector` de volta (`depends_on`); `docker restart` do n8n não.
+(sem esconder a coleta, que ainda roda).
+
+**A pausa mora no compose (19/10/2026, DELL-18/HC-13).** O serviço `collector` ganhou `profiles: ["radar"]`, então `docker compose up -d` **não o sobe**;
+o `depends_on` dele no n8n virou `required: false` (Compose 2.20 ou mais novo), e o n8n, que é o n8n geral da Mel (PRUMO, Site, CRM), sobe sem o radar.
+O healthwatch usa `docker compose up -d --no-deps n8n`, por isso religar o n8n deixou de reviver o collector (antes sim, via `depends_on`).
+Para religar o radar: `COMPOSE_PROFILES=radar docker compose up -d collector` (mais os passos reversos 1 a 3 acima). Na instalação, valide com
+`docker compose config --quiet` e `up -d --no-deps n8n`. O `pncp-catchup.service` não repete mais para sempre: no máximo 4 inícios em 6 h
+(`StartLimitIntervalSec=6h`, `StartLimitBurst=4`; antes o `Restart=on-failure` a cada 15 min martelava o PNCP o dia todo quando a fonte caía) e
+`RuntimeMaxSec=20min` limita a execução (`TimeoutStartSec` não vale para `Type=simple`). O estado dos passos 3 a 5 da tabela não foi conferido na Mel
+nesta revisão: confira antes de assumir "pendente".
 
 Desde 29/09/2026 a coleta das 07:30 não qualifica item cujo prazo de proposta
 encerra antes de coleta + 3 h: o resumo do Hermes chega às 08:00 e naquele dia

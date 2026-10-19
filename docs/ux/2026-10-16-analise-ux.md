@@ -1,5 +1,10 @@
 # Análise de UX da Central (16/10/2026)
 
+> **Registro de época.** O que segue descreve a Central de 16–17/10/2026. Em 19/10/2026 (`docs/auditoria-de-fluxos-2026-10-19.md`) o `ProximaVenda.vue`
+> e o que só ele usava (`plano-do-dia.ts`, `fila-de-envio.ts`, `anotacao-de-envio.ts`) saíram, e as abas de Vendas passaram a se chamar **Conversas para
+> você**, **Primeiros contatos** e **Entender** (Funil, Diagnóstico, Resultados; `NOME_DAS_ABAS` em `vendas-abas.ts`). Onde o texto diz "A fazer", "Números"
+> ou "Próxima venda", leia esses nomes e a fila de venda (`proxima-venda.ts`) como ela é hoje.
+
 Pedido do Rômulo: análise profunda com os padrões do MCP de UX (uxpatterns.dev), e os 11 pontos dele (a Hoje não
 entrega valor, "Em contato" sem visão, botões perdidos, menu com "pra que tem isso aqui?", ficha confusa, falhas que
 deveriam disparar o Hermes, "por que não vende"). Os números vêm do `GET /api/operations/crm` da Mel às 16:30 de 16/10.

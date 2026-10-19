@@ -64,11 +64,12 @@ export const GLOSSARIO: readonly NomeDaUi[] = [
     proibidos: [/Agentes do SquadOne/, /Ver salas/],
   },
   {
-    certo: 'A fazer',
-    // 17/10/2026 (hierarquia de Vendas): as abas são três, na ordem do trabalho, e mantêm os nomes de
-    // antes; "Entender" é o mesmo nome da seção do Mais, porque é a mesma intenção (consulta, não tarefa).
-    nota: 'A aba de Vendas com a Próxima venda (Fazer); depois vêm Triagem (Triar) e Entender (Funil, Números e Resultados). Na Central de comando ela é só uma faixa com o passo da vez.',
-    proibidos: [/aparece na Hoje/, /Nada esperando você hoje/],
+    certo: 'Conversas para você · Primeiros contatos · Diagnóstico',
+    // 19/10/2026 (auditoria dos fluxos): os nomes das abas de Vendas são um mapa só, NOME_DAS_ABAS
+    // (vendas-abas.ts). A fila única "A fazer" virou a lista Conversas para você; a Triagem mora na aba
+    // Primeiros contatos, ao lado do time comercial; e a aba Números chama-se Diagnóstico.
+    nota: 'As abas de Vendas, na ordem do trabalho: Conversas para você (id afazer), Primeiros contatos (id triagem; a Triagem é a revisão dentro dela) e Entender (Funil, Diagnóstico e Resultados). Na Central de comando a primeira é só a faixa "Sua vez".',
+    proibidos: [/aparece na Hoje/, /Nada esperando você hoje/, /\bA fazer\b/, /Vendas › (?:Triagem|Números)/],
   },
   {
     certo: 'Central de comando',

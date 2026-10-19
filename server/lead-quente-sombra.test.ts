@@ -362,3 +362,48 @@ describe("lead quente (cola): o que NÃO está no registro", () => {
     assert.doesNotMatch(bruto, /Meu número/);
   });
 });
+
+// MSG-6 (19/10/2026): o aviso vai ao Telegram ANTES de a decisão ser gravada. Gravação que falha não pode
+// reenviar o aviso a cada minuto.
+describe("lead quente (cola): a gravação falha depois do aviso", () => {
+  it("não reenvia o mesmo aviso, e depois de 3 falhas seguidas o laço para com erro no log", async () => {
+    // O arquivo do mês é uma pasta: abrir para anexar falha, e a leitura não acha linha nenhuma.
+    await fs.mkdir(path.join(dir, "2026-10.jsonl"), { recursive: true });
+    const erros: string[] = [];
+    const s = criarLeadQuenteSombra(deps({ log: { ...SILENCIO, error: (m: unknown) => erros.push(String(m)) } }));
+    poe("site:A", "Gostei!");
+    await assert.rejects(() => s.volta());
+    assert.equal(c.avisos.length, 1);
+    // A mesma mensagem: já avisada, nada de segundo aviso.
+    const r = await s.volta();
+    assert.equal(r.avaliados, 0);
+    assert.equal(c.avisos.length, 1);
+    // Mais duas decisões que também não gravam: a terceira falha seguida para o laço.
+    poe("site:B", "Gostei!");
+    await assert.rejects(() => s.volta());
+    assert.deepEqual(erros, []);
+    poe("site:C", "Gostei!");
+    await assert.rejects(() => s.volta());
+    assert.equal(c.avisos.length, 3);
+    assert.ok(erros.some((m) => /3 gravações seguidas falharam/.test(m)), erros.join("|"));
+  });
+});
+
+// MSG-17: o laço de 1 min não relê o JSONL inteiro a cada volta.
+describe("lead quente (cola): o registro fica em memória", () => {
+  it("lê o arquivo uma vez, acrescenta o que grava e relê só quando alguém mexe por fora", async () => {
+    poe("site:A", "Gostei!");
+    const s = criarLeadQuenteSombra(deps());
+    await s.volta();
+    const arquivo = path.join(dir, (await fs.readdir(dir))[0]);
+    // Alguém apaga a linha por fora (tamanho muda): a volta seguinte enxerga o arquivo de verdade, e decide de novo.
+    await fs.writeFile(arquivo, "");
+    c.agora = T0 + 1 * min;
+    const r = await s.volta();
+    assert.equal(r.avaliados, 1, "releu o arquivo esvaziado");
+    // Sem mexer por fora, o que ela mesma gravou está na memória: a mesma mensagem não é decidida duas vezes.
+    c.agora = T0 + 2 * min;
+    assert.equal((await s.volta()).avaliados, 0);
+    assert.equal((await lerTudo()).filter((x) => x.tipo === "decisao").length, 1);
+  });
+});

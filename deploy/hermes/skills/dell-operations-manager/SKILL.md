@@ -11,7 +11,7 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 
 ## Fontes e fronteiras
 
-- `~/Pessoal-dev`: réplica Syncthing da pasta `dev` do PC Windows antigo,
+- `~/Pessoal-dev`: réplica da pasta `dev` do PC Windows antigo (veio por Syncthing),
   congelada em 25/09/2026 (aquele PC queimou; nada novo chega, e o PC novo
   clona do GitHub). Leia como retrato; não faça operações Git nela, o `.git`
   pode estar incompleto.
@@ -24,7 +24,7 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
   cofre cifrado em `Backups/dell-worker`; o espelho antigo, pelo PC, parou em
   25/09/2026.
 - `~/.hermes`: estado privado do Hermes. Nunca copie segredos daqui para
-  repositórios, Syncthing, Drive, logs ou respostas.
+  repositórios, Drive, logs ou respostas.
 - `~/.config/squadone` e `~/.local/share/squadone-operations`: configuração e
   estado privados da Central.
 
@@ -38,8 +38,8 @@ para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.
 - IDE: `code-server.service`, loopback `127.0.0.1:8080`.
 - Tailscale Serve: publica na tailnet o painel do Hermes (`/`) e os webhooks
   do n8n (`/webhook`); `tailscale serve status` mostra.
-- Syncthing: transporte de arquivos; não use como transporte de metadados Git.
-  Sem aparelho pareado (desde 04/10/2026), nenhuma pasta tem com quem sincronizar.
+- Syncthing: aposentado em 12/10/2026 (sem aparelho pareado desde 04/10); o
+  código chega ao Dell pelo GitHub, e o `dell-validate` não o confere mais.
 
 ## Diagnóstico
 

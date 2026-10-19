@@ -5,7 +5,7 @@ O que importa aqui é a troca do job do Hermes pelo timer do systemd (11/10/2026
 com `--fila` a mensagem do dia vira UM aviso que o dell-status aceita, com o
 conteúdo que o job antigo imprimia (chave do dia, P1, vale até as 22h, cortado
 acima de 4000 com marca); `--teste` nunca grava na fila; erro e SIGTERM viram
-aviso; sem a lib de aviso o script volta ao jeito antigo; sem `--fila` nada muda.
+aviso; sem a lib de aviso nada é gravado (uma linha no stderr, a rodada sai 1); sem `--fila` nada muda.
 
 Nada toca o Dell: o HOME vira um temporário ANTES do import e cada teste aponta
 as fontes (auto-site, n8n-estado, status.json), a contagem e a fila para a
@@ -161,27 +161,22 @@ class PelaFila(Base):
         self.assertEqual(self.fila(), [])
         self.assertTrue(sep.CONTAGENS.exists())
 
-    def test_texto_longo_e_cortado_com_marca_com_e_sem_a_lib(self):
+    def test_texto_longo_e_cortado_com_marca_pela_lib(self):
         itens = [{"id": f"p{i}", "nome": f"Pendência {i}", "quantidade": i + 1,
                   "detalhe": "um detalhe comprido o bastante para a mensagem passar de quatro mil caracteres " * 2,
                   "link": f"https://docs.google.com/spreadsheets/d/{i}"} for i in range(40)]
-        for jeito in ("lib", "antigo"):
-            with self.subTest(jeito=jeito):
-                for f in self.fila():
-                    f.unlink()
-                sep.CONTAGENS.unlink(missing_ok=True)
-                (sep.N8N / "site-antes-da-venda.json").write_text(json.dumps(
-                    {"geradoEm": "2026-10-11T10:00:00-03:00", "itens": itens}), encoding="utf-8")
-                sep.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
-                self.assertGreater(len(self.antigo()), 4000)
-                r, _, _ = calado(sep.main, ["--fila"])
-                self.assertEqual(r, 0)
-                d = self.aviso()
-                self.assertLessEqual(len(d["texto"]), 4000)
-                self.assertTrue(d["texto"].endswith("… (cortado)"))
-                self.assertTrue(d["texto"].startswith("*Gerador:* terminou às 09:47"))
-                if ds is not None:
-                    ds.validar_aviso(d)
+        (sep.N8N / "site-antes-da-venda.json").write_text(json.dumps(
+            {"geradoEm": "2026-10-11T10:00:00-03:00", "itens": itens}), encoding="utf-8")
+        sep.PASTAS_DA_LIB = self.lib_do_repo
+        self.assertGreater(len(self.antigo()), 4000)
+        r, _, _ = calado(sep.main, ["--fila"])
+        self.assertEqual(r, 0)
+        d = self.aviso()
+        self.assertLessEqual(len(d["texto"]), 4000)
+        self.assertTrue(d["texto"].endswith("… (cortado)"))
+        self.assertTrue(d["texto"].startswith("*Gerador:* terminou às 09:47"))
+        if ds is not None:
+            ds.validar_aviso(d)
 
     def test_valor_em_reais_vira_marcador_em_vez_de_perder_a_mensagem(self):
         (sep.N8N / "prumo.json").write_text(json.dumps({"geradoEm": "2026-10-11T10:00:00-03:00", "itens": [
@@ -249,22 +244,15 @@ class Falhas(Base):
 
 
 class SemLib(Base):
-    def test_sem_copia_grava_do_jeito_antigo_e_o_dell_status_aceita(self):
+    def test_sem_copia_nada_e_gravado_e_a_rodada_sai_1(self):
+        sep.FILA.mkdir(exist_ok=True)
         sep.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.assertIsNone(sep.lib_de_aviso())
-        r, _, _ = calado(sep.main, ["--fila"])
-        self.assertEqual(r, 0)
-        self.assertRegex(self.fila()[0].name, r"^sites-e-pendencias-\d+\.json$")
-        if ds is not None:
-            ds.validar_aviso(self.aviso())
-
-    def test_mesmo_conteudo_com_e_sem_a_lib(self):
-        calado(sep.main, ["--fila"])
-        com = self.aviso()
-        self.fila()[0].unlink()
-        sep.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
-        calado(sep.main, ["--fila"])
-        self.assertEqual(self.aviso(), com)
+        r, out, err = calado(sep.main, ["--fila"])
+        self.assertEqual(r, 1)
+        self.assertIn("🌐 *Sites e pendências — 11/10*", out)  # o texto fica no journal
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 🌐 *Sites e pendências — 11/10*", err)
+        self.assertEqual(self.fila(), [])
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"

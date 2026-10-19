@@ -34,9 +34,6 @@ export const ESPERA_DA_SUGESTAO_MS = 5 * 60_000;
 export const IDADE_MAXIMA_DA_MENSAGEM_MS = 24 * 3600_000;
 /** Respostas do agente seguidas, sem o Rômulo escrever, antes de passar o lead para ele. */
 export const MAX_RESPOSTAS_SEGUIDAS = 2;
-/** Os follow-ups de quem NÃO responde (fase de envio, ainda não ligada): um depois do link, um depois do 3º dia. */
-export const MAX_FOLLOWUP_DEPOIS_DO_LINK = 1;
-export const MAX_FOLLOWUP_DO_TERCEIRO_DIA = 1;
 
 // ---------------------------------------------------------------- tipos
 
@@ -98,7 +95,8 @@ export interface SugestaoParaOLeadQuente {
   momento?: Pick<MomentoDaConversa, "quem">;
 }
 
-export type TipoDeToque = "resposta" | "depois-do-link" | "terceiro-dia";
+// A fase de envio, quando o Rômulo a decidir, acrescenta aqui os outros tipos de toque (follow-up de quem não responde).
+export type TipoDeToque = "resposta";
 
 /** Uma resposta do agente (sombra: a que ele teria dado), para o teto de toques. */
 export interface ToqueDoAgente {
@@ -185,28 +183,16 @@ export function temSinalNegativo(texto: string): boolean {
 export type RespostaDoTeto = { pode: true } | { pode: false; motivo: string };
 
 /**
- * PURO. O agente pode tocar este lead agora? O teto de 17/10/2026:
- * - "resposta" (reativo, ao que o lead escreveu): até MAX_RESPOSTAS_SEGUIDAS sem o Rômulo escrever à mão
- *   no meio; a terceira passa o lead a ele;
- * - "depois-do-link" e "terceiro-dia" (follow-up de quem não respondeu, FASE DE ENVIO, ainda sem laço que
- *   os dispare): um de cada, e nunca dois toques seguidos do agente sem uma mensagem do lead no meio.
- * `mensagens` dá o que o lead e o Rômulo disseram; o agente (ainda) não escreve nelas.
+ * PURO. O agente pode responder a este lead agora? O teto de 17/10/2026: até MAX_RESPOSTAS_SEGUIDAS respostas
+ * sem o Rômulo escrever à mão no meio; a terceira passa o lead a ele. `mensagens` dá o que o lead e o
+ * Rômulo disseram; o agente (ainda) não escreve nelas.
  */
-export function podeTocar(tipo: TipoDeToque, toques: readonly ToqueDoAgente[], mensagens: readonly MensagemDaConversa[] | null | undefined): RespostaDoTeto {
+export function podeTocar(toques: readonly ToqueDoAgente[], mensagens: readonly MensagemDaConversa[] | null | undefined): RespostaDoTeto {
   const msgs = mensagens ?? [];
-  const ultima = (direcao: "entrada" | "saida") =>
-    msgs.reduce((maior, m) => (m.direcao === direcao && m.papel !== "robo" ? Math.max(maior, Date.parse(m.em)) : maior), -Infinity);
-  if (tipo === "resposta") {
-    // O Rômulo escreveu à mão por último? Zera a contagem: ele está na conversa.
-    const desdeOMolde = ultima("saida");
-    const seguidos = toques.filter((t) => t.tipo === "resposta" && t.em > desdeOMolde).length;
-    return seguidos >= MAX_RESPOSTAS_SEGUIDAS ? { pode: false, motivo: `${seguidos} respostas seguidas sem o Rômulo` } : { pode: true };
-  }
-  const semResposta = toques.filter((t) => t.em > ultima("entrada")).length;
-  if (semResposta > 0) return { pode: false, motivo: "o último toque ainda não foi respondido" };
-  const ja = toques.filter((t) => t.tipo === tipo).length;
-  const teto = tipo === "depois-do-link" ? MAX_FOLLOWUP_DEPOIS_DO_LINK : MAX_FOLLOWUP_DO_TERCEIRO_DIA;
-  return ja >= teto ? { pode: false, motivo: `já houve ${ja} follow-up ${tipo === "depois-do-link" ? "depois do link" : "do 3º dia"}` } : { pode: true };
+  // O Rômulo escreveu à mão por último? Zera a contagem: ele está na conversa.
+  const desdeOMolde = msgs.reduce((maior, m) => (m.direcao === "saida" && m.papel !== "robo" ? Math.max(maior, Date.parse(m.em)) : maior), -Infinity);
+  const seguidos = toques.filter((t) => t.em > desdeOMolde).length;
+  return seguidos >= MAX_RESPOSTAS_SEGUIDAS ? { pode: false, motivo: `${seguidos} respostas seguidas sem o Rômulo` } : { pode: true };
 }
 
 // ---------------------------------------------------------------- a decisão
@@ -266,7 +252,7 @@ export function decidirLeadQuente(e: EntradaDoLeadQuente): DecisaoDoLeadQuente {
   const tamanho = pendente.rajada.reduce((s, m) => s + m.texto.trim().length, 0);
   if (pendente.rajada.length > MAX_MENSAGENS_NA_RAJADA || tamanho > MAX_CARACTERES_DA_MENSAGEM) return escalar("mensagem-longa");
   const toques = e.toques ?? [];
-  if (!podeTocar("resposta", toques, mensagens).pode) return escalar("teto-de-toques");
+  if (!podeTocar(toques, mensagens).pode) return escalar("teto-de-toques");
 
   if (!e.sugestao) {
     return e.agora - Date.parse(pendente.ultimaEntrada) < ESPERA_DA_SUGESTAO_MS ? { acao: "aguardar", chave } : escalar("sem-sugestao");

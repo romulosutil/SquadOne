@@ -9,9 +9,13 @@ Resultado ambíguo nunca é repetido. Respostas posteriores ficam com o Rômulo.
 nada no CRM; parado antes de enviar). Desde então:
 - só lead do Site em `pronto` (o que a Central liberou, com o link rastreado e a mensagem do Balcão);
   `revisar` é a Triagem, do Rômulo; Plus, PRUMO, Iris e estamparias ficam fora;
-- não há ritmo nem expediente aqui: cada envio pede reserva à Central (POST /crm/frente/reservar),
-  que decide com a MESMA regra das telas e do Telegram (src/operations/primeiro-contato.ts), contando
-  os envios de todos, confere a mensagem no gate de envio e grava o primeiro do dia por "time";
+- não há ritmo aqui, e quem decide se um envio sai é a Central: cada envio pede reserva a ela
+  (POST /crm/frente/reservar), que usa a MESMA regra das telas e do Telegram
+  (src/operations/primeiro-contato.ts), contando os envios de todos, confere a mensagem no gate de
+  envio e grava o primeiro do dia por "time". Sobra aqui só uma CÓPIA da janela (proximo_expediente,
+  EXPEDIENTE_*), porque a reserva é por lead e só responde com um lead na mão: o time precisa saber
+  antes, para planejar a fila do dia certo e dizer quando ela volta. A cópia é travada por teste
+  contra src/operations/trava-de-horario.ts (frente-comercial.test.py);
 - o texto é o do Balcão, sem troca: a letra do A/B e o ab_elegiveis continuam valendo;
 - antes de enviar, o mesmo caminho da Central: o clique no link rastreado do n8n (/webhook/enviar),
   que grava clique_em; o observador, vendo a saída logo depois, marca enviado + enviado_em e mantém a
@@ -46,14 +50,15 @@ ROLES = [('Diego', 'aderência ao negócio e qualidade do contato'),
          ('Elisa', 'adequação da entrega e evidências disponíveis'),
          ('Carla', 'abordagem, clareza e prioridade comercial; decida após ler os colegas')]
 MAX_IA = 60
-# Só para dizer na tela quando a fila volta (EXPEDIENTE_DE_VENDA em trava-de-horario.ts): quem decide
-# se sai é a Central, na reserva.
+# Cópia de EXPEDIENTE_DE_VENDA (src/operations/trava-de-horario.ts), seg–sex: planeja o dia da fila e diz na
+# tela quando ela volta. Quem decide se um envio sai é a Central, na reserva (o teste confere os números).
 EXPEDIENTE_INICIO, EXPEDIENTE_FIM = 8 * 60, 17 * 60 + 30
 CENTRAL = 'http://127.0.0.1:9120'
 # O n8n local: o clique no wa_link (fluxo "04 · Clique no wa_link", claude-ops/fecha-ciclos.py).
 N8N = 'http://127.0.0.1:5679/webhook'
-# As recusas da reserva que valem para qualquer lead (RECUSAS_GERAIS em primeiro-contato.ts): a rodada para.
-RECUSAS_GERAIS = {'fora-do-expediente', 'pausa', 'dia', 'hora', 'intervalo'}
+# As recusas da reserva que são do LEAD (o resto vale para qualquer um, RECUSAS_GERAIS em primeiro-contato.ts, e
+# a rodada para): o time passa ao próximo. O teste confere que as duas listas cobrem o RecusaDoTime da Central.
+RECUSAS_DO_LEAD = ('nao-elegivel', 'nao-e-do-time', 'ja-tocado', 'mensagem-barrada')
 # A Central só aceita escrita da mesma origem (server/acesso.ts); é o que o curl local também manda.
 ORIGEM = {'Origin': CENTRAL}
 
@@ -280,7 +285,7 @@ def anotar_na_central(l):
     """Depois do envio confirmado: a nota no histórico da Ficha. Falhar não desfaz nem repete o envio."""
     try:
         http(CENTRAL + '/api/operations/crm/registro', {'produto': l['produto'], 'id': l['id'].partition(':')[2], 'tipo': 'nota', 'data': '',
-            'texto': 'Primeiro contato enviado pelo time comercial (Diego, Elisa e Carla), confirmado pela integração do WhatsApp. A conversa segue com o Rômulo.'},
+            'texto': 'Primeiro contato enviado pelo time comercial (avaliado em 3 leituras do mesmo modelo, Diego, Elisa e Carla), confirmado pela integração do WhatsApp. A conversa segue com o Rômulo.'},
             ORIGEM, timeout=20)
         return True
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -300,23 +305,33 @@ def gravar(estado):
     estado['atualizadoEm']=iso()
     p=DATA/'frente-comercial.json';tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(estado,ensure_ascii=False));tmp.chmod(0o600);tmp.replace(p)
 
+def motivo_da_pausa(config, now):
+    """O detalhe a mostrar quando o time não deve trabalhar (desligado ou em pausa configurada); None = segue."""
+    if not config.get('ativo'):return 'Primeiros contatos pausados. As conversas e o acompanhamento continuam disponíveis.'
+    pausa=instante(config.get('pausadoAte'))
+    if pausa and pausa>now.timestamp():return 'Primeiros contatos pausados pelo período configurado.'
+    return None
+
 def rodada():
     now=agora(); alvo=proximo_expediente(now);dia_=dia(alvo)
-    registro=Registro(BASE/'registro.sqlite');registro.reconciliar()
     estado={'dia':dia_,'estado':'avaliando','avaliados':0,'selecionados':0,'enviados':0,'respondidos':0,'fila':[],'proximoEnvioEm':alvo.isoformat()}
+    # Desligado ou em pausa: nada de ler o CRM, abrir o SQLite ou chamar o modelo. O timer roda a cada 60 s e,
+    # com o time parado, lia tudo à toa. Os números do dia vêm do último estado gravado (nada sai enquanto parado).
+    detalhe=motivo_da_pausa(ler_config(),now)
+    if detalhe:
+        try:
+            anterior=json.loads((DATA/'frente-comercial.json').read_text())
+            if anterior.get('dia')==dia_:
+                for campo in ['avaliados','selecionados','enviados','respondidos','fila']:estado[campo]=anterior.get(campo,estado[campo])
+        except (OSError,ValueError):pass
+        estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
+    registro=Registro(BASE/'registro.sqlite');registro.reconciliar()
     try:
         crm=ler_crm()
         for key,em in registro.db.execute("SELECT chave,em FROM contatos WHERE estado='enviado'"):
             if dia(dt.datetime.fromisoformat(em))==dia(now):estado['enviados']+=1
         enviados={r[0] for r in registro.db.execute("SELECT chave FROM contatos WHERE estado='enviado'")}
         estado['respondidos']=len({chave(numero(l)) for l in crm['leads'] if numero(l) and chave(numero(l)) in enviados and instante(l.get('conversa',{}).get('ultimaEntrada')) and dia(dt.datetime.fromtimestamp(instante(l['conversa']['ultimaEntrada']),dt.timezone.utc))==dia(now)})
-        if not ler_config().get('ativo'):
-            try:
-                anterior=json.loads((DATA/'frente-comercial.json').read_text())
-                if anterior.get('dia')==dia_:
-                    for campo in ['avaliados','selecionados','fila']:estado[campo]=anterior.get(campo,estado[campo])
-            except (OSError,ValueError):pass
-            estado.update(estado='pausado',detalhe='Primeiros contatos pausados. As conversas e o acompanhamento continuam disponíveis.');gravar(estado);return
         # Qualquer contato prévio em QUALQUER oferta impede outro primeiro contato ao mesmo número.
         conhecidos={chave(numero(l)) for l in crm['leads'] if numero(l) and (l.get('conversa') or any(l.get('marcos',{}).values()) or l.get('resposta') or l.get('etapa')!='novo')}
         candidatos=[];vistos=set()
@@ -364,8 +379,8 @@ def rodada():
         primeiros=http(CENTRAL+'/api/operations/crm/venda').get('primeiros',{})
         now=agora()
         if proximo_expediente(now)>now:estado.update(estado='fora-do-horario',detalhe='A avaliação terminou fora do expediente. A fila fica preparada para o próximo horário.');gravar(estado);return
-        pausa=instante(ler_config().get('pausadoAte'))
-        if pausa and pausa>now.timestamp():estado.update(estado='pausado',detalhe='Primeiros contatos pausados pelo período configurado.');gravar(estado);return
+        detalhe=motivo_da_pausa(ler_config(),now)
+        if detalhe:estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
         atuais={l['id']:l for l in fresh['leads']}
         for c in estado['fila']:
             l=atuais.get(c['id'])
@@ -381,7 +396,7 @@ def rodada():
             r=reservar_na_central(l)
             if r.get('reservado') is not True or not isinstance(r.get('texto'),str) or not r['texto'].strip():
                 motivo=r.get('motivo')
-                if motivo in ('nao-elegivel','nao-e-do-time','ja-tocado','mensagem-barrada'):continue
+                if motivo in RECUSAS_DO_LEAD:continue
                 estado['proximoEnvioEm']=r.get('ate') or estado['proximoEnvioEm']
                 estado.update(estado='pronto',detalhe=DETALHE_DA_RECUSA.get(motivo,'A Central não reservou o primeiro contato agora. O time tenta de novo na próxima rodada.'))
                 break

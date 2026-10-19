@@ -2,8 +2,8 @@
  * PURO (o storage entra por parâmetro): a trava de ritmo dos primeiros contatos (15/10/2026).
  *
  * Em 15/10/2026 o WhatsApp do Rômulo levou 24 h de restrição depois de 25 primeiros contatos em
- * 25 minutos (10 a 50 s entre um e outro), logo depois de 26 no dia 14 e 18 no dia 13. A fila
- * "Enviar um por um" deixava esvaziar 25 sites de uma vez. A proximidade da restrição não
+ * 25 minutos (10 a 50 s entre um e outro), logo depois de 26 no dia 14 e 18 no dia 13. A antiga fila
+ * "Enviar um por um" (a folha saiu em 16/10/2026) deixava esvaziar 25 sites de uma vez. A proximidade da restrição não
  * comprova qual sinal a causou. Plano em docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md.
  *
  * Três limites, todos sobre PRIMEIRO contato (os mesmos links da trava de horário,
@@ -32,7 +32,7 @@
  */
 import type { CrmLead } from './types'
 import { hora } from './crm-formato'
-import type { Guardador } from './fila-de-envio'
+import type { Guardador } from './guardador'
 
 export interface RegrasDoRitmo {
   intervaloMs: number
@@ -61,6 +61,8 @@ const HORA = 60 * MIN
 const DIA = 24 * HORA
 /** Dia de São Paulo (UTC−3, sem horário de verão desde 2019), como em server/crm.ts. */
 const diaSP = (ms: number) => Math.floor((ms - 3 * HORA) / DIA)
+/** O número do dia de São Paulo (dias desde 1970), para comparar e contar dias; recado-de-travas.ts usa o mesmo. */
+export const indiceDoDiaSP = diaSP
 /** Meia-noite de São Paulo do dia seguinte ao de `ms`. */
 const amanhaSP = (ms: number) => (diaSP(ms) + 1) * DIA + 3 * HORA
 
@@ -107,6 +109,22 @@ export function ritmoDoEnvio(instantes: readonly number[], agora: number, regras
   return { ...base, motivo: null, ate: null }
 }
 
+/**
+ * O motivo em poucas palavras, ao lado do botão desabilitado (a Ficha de um Novo e o Convidar da
+ * Triagem): a redação-base do ritmo, uma só. O texto longo é `textoDoRitmo`; o do recado único, que diz
+ * o próximo passo, é recado-de-travas.ts. Vazio quando o ritmo está livre.
+ */
+export function motivoCurtoDoRitmo(ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' | 'enviadosHoje' | 'teto'>): string {
+  const quando = ritmo.ate === null ? '' : hora(new Date(ritmo.ate).toISOString())
+  switch (ritmo.motivo) {
+    case 'pausa': return `Pausado até ${quando}`
+    case 'dia': return `Teto de hoje: ${ritmo.enviadosHoje} de ${ritmo.teto}`
+    case 'hora': return `Teto da hora; o próximo sai às ${quando}`
+    case 'intervalo': return `O próximo sai às ${quando}`
+    default: return ''
+  }
+}
+
 /** O que a tela diz quando segura o envio (e uma linha curta de quanto falta quando não segura). */
 export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGRAS_DO_RITMO): string {
   const quando = estado.ate === null ? '' : hora(new Date(estado.ate).toISOString())
@@ -121,13 +139,13 @@ export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGR
     case 'intervalo':
       return `O próximo primeiro contato sai às ${quando} (intervalo interno de ${minutos} min entre contatos).`
     default:
-      return `${estado.enviadosHoje} de ${estado.teto} primeiros contatos hoje.`
+      return `${estado.enviadosHoje} de ${estado.teto} primeiros contatos hoje (enviados ou convites abertos).`
   }
 }
 
 // ---------------------------------------------------------------- de onde vêm os instantes
 
-/** O mesmo envio visto pelo toque desta tela e pelo retrato: a planilha marca no clique do link do n8n. */
+/** O mesmo envio visto pelo toque desta tela e pelo retrato: a planilha marca o envio quando o observador do WhatsApp o vê (o clique no link só deixa clique_em); o toque é só uma tentativa. */
 const MESMO_ENVIO_MS = 15 * MIN
 
 type LeadDoRitmo = Pick<CrmLead, 'id' | 'sinal' | 'marcos'>

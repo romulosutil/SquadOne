@@ -410,7 +410,7 @@ class Entrada:
                 "segredos_no_cofre": ids_cofre, "estado": "pendente", "tentativas": 0}
         self.salvar_item(item)
         self.diario("na-fila", id=i, arquivo=arquivo, bytes=anon.tamanho, tipo=tipo, segredos_no_cofre=ids_cofre)
-        resposta["mensagem"] = ("Na fila para organizar. O Hermes arruma em até 5 minutos e avisa no WhatsApp."
+        resposta["mensagem"] = ("Na fila para organizar. O Hermes arruma em até 15 minutos e avisa no WhatsApp."
                                 + (f" {len(ids_cofre)} segredo(s) foram para o cofre." if ids_cofre else ""))
         resposta["segredos_no_cofre"] = ids_cofre
         return resposta

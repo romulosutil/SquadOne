@@ -1,9 +1,10 @@
 [Unit]
-Description=Run the Silmer Google Drive sync every five minutes
+Description=Run the Silmer Google Drive sync every 15 minutes
 
 [Timer]
 OnActiveSec=30s
-OnUnitActiveSec=5min
+# Eram 5 min: 578 execuções em 48 h para 1 mudança (VIVO-7, auditoria de 19/10/2026).
+OnUnitActiveSec=15min
 AccuracySec=30s
 Unit=silmer-drive-sync.service
 

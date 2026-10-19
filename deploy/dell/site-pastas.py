@@ -5,9 +5,9 @@ O n8n não move diretórios (mesmo motivo do auto-entrada). Dois pedidos chegam
 aqui, e o site-pastas.path dispara este script quando qualquer um aparece:
 
 1. A cada hora o Balcão grava em ~/.local/share/n8n-estado/site-pastas.json o
-   que mudou de lugar:
+   que mudou de lugar (e só grava quando há o que mover):
    - respondeu no WhatsApp (respondeu_em a partir de 29/09/2026) -> _em-conversa/;
-   - expirado (10 dias sem resposta, enviados a partir de 29/09/2026) -> _concluidos/.
+   - expirado (7 dias sem resposta, enviados a partir de 29/09/2026) -> _concluidos/.
    Só tira pasta da raiz (ou de _concluidos/ para _em-conversa/, quando um
    expirado responde).
 
@@ -21,8 +21,8 @@ aqui, e o site-pastas.path dispara este script quando qualquer um aparece:
      em ~/.local/state/site-pastas/acoes.json); sem histórico (recusa anotada à
      mão antes do link), vai para _em-conversa/: quem recusou tinha respondido.
    Cada mudança feita por pacote ganha uma linha no registro.md ("**Recusou.**",
-   "**Fechou.**", "**Recusa desfeita.**"...) e acorda o site-demos-pausa, que
-   põe de volta no ar o demo de quem voltou. Pacote lido é apagado (o gatilho é
+   "**Fechou.**", "**Recusa desfeita.**"...). Desfazer só devolve a pasta: o demo que o
+   site-demos-limpeza já apagou da Vercel não volta (só republicando). Pacote lido é apagado (o gatilho é
    "diretório não vazio"); pacote ilegível vai para ~/.local/share/site-acoes-erro/.
    - gerar_demo (14/10/2026, demo sob pedido): o lead recebeu só o Raio-X e o
      Rômulo pediu o demo. Não move nada: grava PEDIDO-DEMO.json na pasta (onde ela
@@ -106,18 +106,14 @@ PASTAS_DA_LIB = [Path(__file__).resolve().parent / "lib", HOME / ".local/lib/mel
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -125,18 +121,16 @@ def lib_de_aviso():
 def avisar(texto: str) -> None:
     aviso = {"titulo": "🌐 Sites", "texto": texto, "origem": "site-pastas"}
     lib = lib_de_aviso()
-    if lib is not None:
-        # Valida, grava atômico, não cria a pasta da fila e nunca levanta (quem
-        # chama está dentro de um `except`): o que não foi gravado vai ao journal.
-        # O texto leva a mensagem da exceção; se ela trouxer "R$" a lib recusaria
-        # o aviso inteiro, e perder o aviso é pior que mandá-lo sem o valor.
-        if lib.VALOR_EM_REAIS.search(texto):
-            aviso["texto"] = lib.sem_valores(texto)
-        lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-pastas")
+    if lib is None:  # sem a lib não há validação: não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
         return
-    # Sem a lib instalada: o jeito de antes, sem mudar nada.
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    (FILA_AVISOS / f"site-pastas-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+    # Valida, grava atômico, não cria a pasta da fila e nunca levanta (quem
+    # chama está dentro de um `except`): o que não foi gravado vai ao journal.
+    # O texto leva a mensagem da exceção; se ela trouxer "R$" a lib recusaria
+    # o aviso inteiro, e perder o aviso é pior que mandá-lo sem o valor.
+    if lib.VALOR_EM_REAIS.search(texto):
+        aviso["texto"] = lib.sem_valores(texto)
+    lib.gravar(aviso, fila=FILA_AVISOS, prefixo="site-pastas")
 
 
 def pedido_do_balcao(listar: bool) -> int | None:
@@ -347,10 +341,6 @@ def botoes_da_pagina(listar: bool) -> int:
             arq.replace(ERRO / arq.name)
             avisar(f"Botão da página do lead não moveu a pasta ({arq.name}): {e}. "
                    "A planilha já mudou; confira a pasta em ~/auto-site.")
-    if movidas:
-        # Quem voltou (Desfazer) tem o demo de volta no ar sem esperar a rodada diária.
-        subprocess.run(["systemctl", "--user", "start", "--no-block", "site-demos-pausa.service"],
-                       capture_output=True, timeout=30, check=False)
     if pedidos:
         # O gerador espera a trava de uma execução em andamento; --no-block: o n8n não fica preso nisto.
         subprocess.run(["systemctl", "--user", "start", "--no-block", "gerador-de-sites-pedido.service"],

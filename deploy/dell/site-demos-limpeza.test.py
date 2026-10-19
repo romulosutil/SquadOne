@@ -3,8 +3,8 @@
 com dublês no lugar da Central, do disco e da Vercel (nada aqui toca ~/auto-site nem a rede).
 
 Desde 11/10/2026 também a troca do avisar() pela lib de aviso: o aviso gravado
-pela lib é IDÊNTICO, byte a byte, ao do jeito antigo, o dell-status o aceita, sem
-a lib o script volta ao antigo, e a fila ausente não derruba a rodada.
+pela lib é o do formato da fila, o dell-status o aceita, sem a lib nada é gravado
+(uma linha no stderr, avisar() devolve False) e a fila ausente não derruba a rodada.
 
   python3 deploy/dell/site-demos-limpeza.test.py
 
@@ -307,11 +307,11 @@ class BaseDoAviso(unittest.TestCase):
             limpeza.avisar(texto)
         return err.getvalue()
 
-    def gravado_pelo(self, jeito: str, texto: str) -> bytes:
-        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+    def gravado_pela_lib(self, texto: str) -> bytes:
+        """O aviso gravado pela lib do repo, numa fila limpa."""
         shutil.rmtree(limpeza.FILA_AVISOS, ignore_errors=True)
         limpeza.FILA_AVISOS.mkdir()
-        limpeza.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        limpeza.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto)
         self.assertEqual(len(self.fila()), 1, self.fila())
         return self.fila()[0].read_bytes()
@@ -330,15 +330,17 @@ class AvisoPelaLib(BaseDoAviso):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(limpeza.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in TEXTOS:
             with self.subTest(texto=texto):
-                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+                d = json.loads(self.gravado_pela_lib(texto).decode("utf-8"))
+                self.assertEqual(d, {"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": texto,
+                                     "origem": "site-demos-limpeza"})
 
     def test_conteudo_fixado(self):
         esperado = ('{"titulo": "🧹 Site antes da venda: demos de leads perdidos", "texto": "uma\\nduas", '
                     '"origem": "site-demos-limpeza"}')
-        self.assertEqual(self.gravado_pelo("lib", "uma\nduas"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("uma\nduas"), esperado.encode("utf-8"))
 
     def test_nome_e_atomicidade(self):
         limpeza.FILA_AVISOS.mkdir()
@@ -381,22 +383,27 @@ class AvisoPelaLib(BaseDoAviso):
 
 
 class SemLib(BaseDoAviso):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    TITULO = "🧹 Site antes da venda: demos de leads perdidos"
+
+    def sem_gravar(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertFalse(limpeza.avisar("x"))
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: " + self.TITULO, err.getvalue())
+        self.assertFalse(limpeza.FILA_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         self.sem_lib()
         self.assertIsNone(limpeza.lib_de_aviso())
-        self.assertTrue(limpeza.avisar("x"))  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^site-demos-limpeza-\d+\.json$")
+        self.sem_gravar()
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         limpeza.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(limpeza.lib_de_aviso())
-        limpeza.FILA_AVISOS.mkdir()
-        limpeza.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar()
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
@@ -404,11 +411,6 @@ class SemLib(BaseDoAviso):
         (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
         limpeza.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(limpeza.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        self.sem_lib()
-        limpeza.avisar("custa R$ 5")
-        self.assertEqual(self.avisos()[0]["texto"], "custa R$ 5")
 
 
 def texto_antigo(apagados, falhas, a_pedido=False):
@@ -553,18 +555,18 @@ class ApagarGravaOAviso(BaseDoAviso):
         self.assertIn("Ruim: o publicado.json da pasta não confirma o projeto demo-ruim", texto)
 
     def test_fila_ausente_nao_desfaz_nem_derruba_o_que_ja_foi_apagado(self):
-        # O jeito antigo criava a pasta da fila (do dell-status, 2770) e um OSError ali
-        # levantava depois de a Vercel já ter apagado. Com a lib: nada levanta, a pasta
-        # não é criada e o recibo já está marcado.
+        # A pasta da fila é do dell-status (2770): a lib não a cria e nada levanta depois
+        # de a Vercel já ter apagado; o recibo já está marcado.
         self.assertEqual(self.quieto(limpeza.apagar, [self.alvo("fulano")]), 0)
         self.assertIn("apagado_em", json.loads((limpeza.AUTO / "fulano/publicado.json").read_text(encoding="utf-8")))
         self.assertFalse(limpeza.FILA_AVISOS.exists())
 
-    def test_sem_a_lib_o_aviso_sai_como_antes(self):
+    def test_sem_a_lib_o_demo_e_apagado_e_so_o_aviso_nao_vai(self):
         self.sem_lib()
+        limpeza.FILA_AVISOS.mkdir()
         self.assertEqual(self.quieto(limpeza.apagar, [self.alvo("fulano")]), 0)
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^site-demos-limpeza-\d+\.json$")
+        self.assertIn("apagado_em", json.loads((limpeza.AUTO / "fulano/publicado.json").read_text(encoding="utf-8")))
+        self.assertEqual(self.fila(), [])
 
 
 class AvisoDosQueEntram(BaseDoAviso):
@@ -601,11 +603,12 @@ class AvisoDosQueEntram(BaseDoAviso):
         self.assertEqual(len(self.avisos()), 1)
         self.assertTrue(limpeza.ESTADO.exists())
 
-    def test_sem_a_lib_tudo_como_antes(self):
+    def test_sem_a_lib_nada_e_gravado_e_nao_marca_como_avisado(self):
         self.sem_lib()
+        limpeza.FILA_AVISOS.mkdir()
         self.assertEqual(self.rodar(), 0)
-        self.assertEqual(len(self.fila()), 1)
-        self.assertTrue(limpeza.ESTADO.exists())
+        self.assertEqual(self.fila(), [])
+        self.assertFalse(limpeza.ESTADO.exists())  # a próxima rodada avisa quando a lib voltar
 
 
 if __name__ == "__main__":

@@ -6,11 +6,21 @@
   automação não reavaliar; ela e a antiga "Leads" ficam ocultas.
 - Diagnóstico só com o dono: o link do formulário já vem com a empresa e o
   papel "Dono"; uma resposta completa fecha o diagnóstico.
-- Lead Scout grava prospect com o convite pronto (link rastreado) e descarte
-  na aba oculta. A sincronização de aceites deixa de existir.
-- Clique em "Enviar convite": Etapa -> Convite enviado e abre o WhatsApp.
-- Pontuação (de hora em hora): diagnóstico pronto -> Índice + Briefing na
-  linha e aviso pelo Hermes; também grava as pendências para a Central.
+- Quem grava prospect e descarte são os caçadores: prumo-ofertas.py (Iris e
+  estamparia). O Lead Scout antigo, que este arquivo remendava, está desligado
+  desde 08/10/2026 (n8n.DESLIGADOS) e nenhum construtor o recria.
+- Clique em "Enviar convite" (Ler a linha > Decidir > Abrir o canal): só abre o
+  WhatsApp com o texto pronto. NÃO marca nada na planilha: quem muda a Etapa para
+  "Convite enviado" é o observador do WhatsApp (whatsapp-conversa.py), quando a
+  mensagem sai de verdade. Até 19/10/2026 o fluxo tinha um "Marcar como enviado"
+  que nunca marcava (workflow_confiabilidade.py forçava marcar:false).
+- Pontuação (de hora em hora): diagnóstico pronto -> Índice (média das 16
+  respostas) + Briefing na linha; também grava as pendências para a Central. O
+  aviso pelo Hermes é um só e sai do Mapa (prumo-mapa-n8n.py + prumo_mapa.py,
+  com o Índice do Prumo X/18): antes saíam dois WhatsApps para a mesma resposta.
+
+Uso: python3 prumo-simples.py            planilha + Diagnóstico + clique do convite
+     python3 prumo-simples.py --convite  só o clique do convite (não mexe na planilha nem na Pontuação)
 """
 import importlib.util
 import json
@@ -30,7 +40,6 @@ LEADS_ANTIGA = 957714022
 FORM = "https://docs.google.com/forms/d/e/1FAIpQLScknF_YOBUHrX94tfgykv37NaEryAzqzIdc55Hel8RX1wp2Sg/viewform"
 ENTRY_EMPRESA, ENTRY_PAPEL = "171063854", "1936869861"
 SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sheets account"}}
-LEAD_SCOUT = "e02c6f43-17ce-430b-9238-0b997a7656ce"
 PONTUACAO = "b091d18b-106b-4f4d-ad4e-f77cdeaa7a5f"
 CONVITE_URL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook/convite?id="  # tailnet desde 29/09/2026: abre no celular
 
@@ -169,16 +178,6 @@ def ler(nome, gid, aba, pos):
             "parameters": {"resource": "sheet", "operation": "read", **doc(gid, aba), "filtersUI": {"values": []}, "options": {}}}
 
 
-def anexar(nome, gid, aba, colunas, pos):
-    return {"id": nome.lower().replace(" ", "-"), "name": nome, "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
-            "position": pos, "credentials": SHEETS, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
-            "parameters": {"resource": "sheet", "operation": "append", **doc(gid, aba),
-                           "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [],
-                                       "schema": [{"id": c, "displayName": c, "required": False, "defaultMatch": False, "display": True,
-                                                   "type": "string", "canBeUsedToMatch": True} for c in colunas]},
-                           "options": {"cellFormat": "RAW", "handlingExtraData": "ignoreIt", "useAppend": True}}}
-
-
 def se(nome, expr, pos):
     return {"id": nome.lower().replace(" ", "-"), "name": nome, "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": pos,
             "parameters": {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
@@ -198,77 +197,6 @@ def liga(con, de, para, saida=0):
         main.append([])
     if not any(d["node"] == para for d in main[saida]):
         main[saida].append({"node": para, "type": "main", "index": 0})
-
-
-def lead_scout(pid, did):
-    wf = api("GET", f"/workflows/{LEAD_SCOUT}")
-    sai = {"Sincronizar aceites — 5 min", "Ler fila para convites", "Preparar convite do diagnóstico", "Atualizar convite na fila",
-           "Pendências do PRUMO", "Gravar pendências do PRUMO", "Enviar para revisão?", "Humanizar linha da fila",
-           "Persistir fila PRUMO", "Registrar falha de descoberta"}
-    nos = [n for n in wf["nodes"] if n["name"] not in sai]
-    por = {n["name"]: n for n in nos}
-    con = {de: {t: [[d for d in (s or []) if d["node"] not in sai] for s in saidas] for t, saidas in tipos.items()}
-           for de, tipos in wf["connections"].items() if de not in sai}
-
-    lidos = por["Ler empresas já registradas"]
-    lidos["parameters"] = ler("x", pid, "Prospects", [0, 0])["parameters"]
-    x, y = lidos["position"]
-    descartados = ler("Ler descartados", did, "Descartados", [x + 110, y + 160])
-    prep = por["Preparar descoberta sem repetidos"]
-    prep["parameters"]["jsCode"] = ("const cfg = $('Config — mercado-alvo').first().json;\n"
-                                    "// Prospects + Descartados: quem já foi visto não volta para a revisão.\n"
-                                    "const linhas = [...$('Ler empresas já registradas').all(), ...$input.all()];\n"
-                                    "const existingCompanyIds = [...new Set(linhas\n"
-                                    "  .map(({ json }) => String(json['ID'] ?? json['ID da empresa'] ?? json.company_id ?? '').trim().toLowerCase())\n"
-                                    "  .filter(Boolean))];\n"
-                                    "return [{ json: { ...cfg, existingCompanyIds } }];")
-    con["Ler empresas já registradas"] = {"main": [[{"node": "Ler descartados", "type": "main", "index": 0}]]}
-    con["Ler descartados"] = {"main": [[{"node": "Preparar descoberta sem repetidos", "type": "main", "index": 0}]]}
-
-    px, py = por["Pontuar para revisão humana"]["position"]
-    e_prospect = se("É prospect?", "={{ $json.status === 'REVIEW' }}", [px + 220, py])
-    linha_p = code("Linha de prospect", "\n".join([
-        "const fmt = (bruto) => {",
-        "  let d = String(bruto ?? '').replace(/\\D/g, '');",
-        "  if (d.startsWith('55') && (d.length === 12 || d.length === 13)) d = d.slice(2);",
-        "  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;",
-        "  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;",
-        "  return d;",
-        "};",
-        "return $input.all().map(({ json: l }) => ({ json: {",
-        "  'ID': l.company_id, 'Empresa': l.company_name, 'Cidade': l.city, 'Segmento': l.target_vertical,",
-        "  'WhatsApp': fmt(l.whatsapp_number), 'Site': l.website ?? '',",
-        "  'Nota Google': l.rating ? `${l.rating} (${l.review_count})` : '',",
-        f"  'Etapa': 'Revisar', 'Enviar convite': '{CONVITE_URL}' + encodeURIComponent(l.company_id),",
-        f"  'Índice PRUMO': '', 'Próxima ação': '{PROXIMA_REVISAR}', 'Briefing': '',",
-        "  'Google Maps': 'https://www.google.com/maps/place/?q=place_id:' + (l.place_id ?? ''), 'Encontrado em': l.discovered_at,",
-        "} }));"]), [px + 440, py - 120])
-    linha_d = code("Linha de descarte", "\n".join([
-        "return $input.all().map(({ json: l }) => ({ json: {",
-        "  'ID': l.company_id, 'Empresa': l.company_name, 'Cidade': l.city, 'Segmento': l.target_vertical,",
-        "  'Motivo': l.research_note ?? '', 'Encontrado em': l.discovered_at,",
-        "} }));"]), [px + 440, py + 120])
-    grava_p = anexar("Gravar prospect", pid, "Prospects", PROSPECTS, [px + 660, py - 120])
-    grava_d = anexar("Gravar descarte", did, "Descartados", DESCARTADOS, [px + 660, py + 120])
-    gx, gy = por["Google Places — busca pública"]["position"]
-    fm, fg = aviso_nodes("Falha do Places", gx + 240, gy + 420,
-                         "'Lead Scout: a busca no Google Places falhou (' + String(item.json.error?.message ?? item.json.message ?? 'sem detalhe').slice(0, 200) + '). Tenta de novo na próxima execução.'",
-                         "📊 PRUMO")
-    nos += [descartados, e_prospect, linha_p, linha_d, grava_p, grava_d, fm, fg]
-    con["Pontuar para revisão humana"] = {"main": [[{"node": "É prospect?", "type": "main", "index": 0}]]}
-    con["É prospect?"] = {"main": [[{"node": "Linha de prospect", "type": "main", "index": 0}],
-                                   [{"node": "Linha de descarte", "type": "main", "index": 0}]]}
-    con["Linha de prospect"] = {"main": [[{"node": "Gravar prospect", "type": "main", "index": 0}]]}
-    con["Linha de descarte"] = {"main": [[{"node": "Gravar descarte", "type": "main", "index": 0}]]}
-    places = con["Google Places — busca pública"]["main"]
-    while len(places) < 2:
-        places.append([])
-    places[1] = [{"node": fm["name"], "type": "main", "index": 0}]
-    liga(con, fm["name"], fg["name"])
-    wf["nodes"], wf["connections"] = nos, con
-    put(wf)
-    api("POST", f"/workflows/{LEAD_SCOUT}/activate")
-    print("Lead Scout simplificado:", len(nos), "nós")
 
 
 def perguntas_atuais():
@@ -326,7 +254,8 @@ for (const r of ultima.values()) {{
   const faixa = indice < 45 ? 'dependência e informalidade altas' : indice < 70 ? 'processos parcialmente definidos, com aderência inconsistente' : 'base operacional padronizada, com oportunidades pontuais';
   const lacunas = respostas.filter(a => a.nota <= 2).slice(0, 6).map(a => `- [${{a.id}}] ${{a.resposta}}`).join('\\n') || '- Nenhuma resposta com nota 1 ou 2.';
   const briefing = [
-    `Índice PRUMO: ${{indice}}/100 — ${{faixa}}.`,
+    // Média das 16 respostas em 0-100; o Índice do Prumo (X/18) é o do Mapa, que tem outro cálculo.
+    `Índice (média das 16 respostas): ${{indice}}/100 — ${{faixa}}.`,
     'Prioridades para o workshop:',
     ...areas.slice(0, 3).map(([a, n], i) => `${{i + 1}}. ${{a}} (${{n}}/100): validar regra, responsável e fonte de dados antes de automatizar.`),
     'Evidências de menor maturidade:', lacunas, assinatura,
@@ -344,12 +273,16 @@ const linhas = $input.all().map(i => i.json).filter(l => l['ID']);
 const etapa = (l) => String(l['Etapa'] ?? '').trim();
 const conta = (e) => linhas.filter(l => etapa(l) === e).length;
 const planilha = '{planilha_url}';
+// A Central tira da fila quem não respondeu em 7 dias (DIAS_SEM_RESPOSTA em server/crm.ts): só conta aqui
+// quem ainda está dentro do prazo. Sem data legível, conta (o convite não tem como ter expirado).
+const prazo = Date.now() - 7 * 24 * 3600 * 1000;
+const aguardando = linhas.filter(l => etapa(l) === 'Convite enviado' && !(Date.parse(String(l['Convite enviado em'] ?? '')) < prazo)).length;
 const estado = {{ geradoEm: new Date().toISOString(), itens: [
   {{ id: 'prumo-revisar', nome: 'PRUMO: prospects para revisar', quantidade: conta('Revisar'),
     detalhe: 'Veja o site; se fizer sentido, clique em Enviar convite.', link: planilha }},
   {{ id: 'prumo-diagnostico', nome: 'PRUMO: diagnósticos prontos', quantidade: conta('Diagnóstico pronto'),
     detalhe: 'Leia o briefing e marque o workshop com o dono.', link: planilha }},
-  {{ id: 'prumo-aguardando', nome: 'PRUMO: convites sem resposta', quantidade: conta('Convite enviado'),
+  {{ id: 'prumo-aguardando', nome: 'PRUMO: convites sem resposta', quantidade: aguardando,
     detalhe: 'O dono ainda não respondeu; vale um lembrete.', link: planilha }},
 ] }};
 return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'prumo.json' }} }} }}];"""
@@ -378,14 +311,12 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
                                                for c in ("ID", "Etapa", "Índice PRUMO", "Briefing", "Próxima ação", "Diagnóstico em")]},
                         "options": {"cellFormat": "RAW"}}},
     ]
-    pm, pg = aviso_nodes("Diagnóstico pronto", 1320, 0,
-                         "(() => { const d = $('Calcular diagnóstico').all().filter(x => x.json.naFila)[i]?.json ?? {};"
-                         " return 'Diagnóstico pronto: ' + d.empresa + ' · Índice PRUMO ' + d['Índice PRUMO'] + '/100.' + NL"
-                         " + 'O briefing está na planilha, aba Prospects. Próximo passo: workshop com o dono.'; })()", "📊 PRUMO")
+    # Sem aviso de "Diagnóstico pronto" aqui (19/10/2026): a mesma resposta já gera o aviso do Mapa
+    # (prumo_mapa.py), que avisa também quando falha. Dois WhatsApps com dois índices confundiam.
     om, og = aviso_nodes("Resposta fora da lista", 1100, 250,
                          "'Diagnóstico PRUMO recebeu resposta de uma empresa que não está nos prospects: ' + item.json.empresa"
                          " + ' (ID ' + item.json.id + '). Confira o link usado no formulário.'", "📊 PRUMO")
-    nos += [pm, pg, om, og]
+    nos += [om, og]
     con = {}
     liga(con, "A cada hora", "Ler prospects")
     liga(con, "Rodar manualmente", "Ler prospects")
@@ -397,8 +328,6 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
     liga(con, "Está nos prospects?", "Gravar diagnóstico", 0)
     liga(con, "Está nos prospects?", om["name"], 1)
     liga(con, om["name"], og["name"])
-    liga(con, "Gravar diagnóstico", pm["name"])
-    liga(con, pm["name"], pg["name"])
     nos += aviso.nos_memoria()
     aviso.ligar_memoria(con, aviso_gravado=og["name"])
     # Resposta completa vira pacote do Mapa (P3); sem isto, recriar o fluxo apagaria o ramo.
@@ -416,11 +345,58 @@ return [{{ json: estado, binary: {{ data: {{ data: Buffer.from(JSON.stringify(es
     print("Pontuação simplificada:", len(nos), "nós")
 
 
-def convite(pid):
+NOME_JS = (AQUI / "prumo-nome.js").read_text(encoding="utf-8")  # a regra do nome: uma fonte só, ver o arquivo
+
+
+def clique_workflow(nome, nome_antigo, caminho, webhook_id, planilha, gid, aba, decidir_js):
+    """Fluxo do clique em "Enviar convite": Ler a linha > Decidir > Abrir o canal (redireciona ao WhatsApp).
+
+    Não tem "Primeiro clique?" nem "Marcar como enviado" (tirados em 19/10/2026): o clique só abre o WhatsApp.
+    Quem muda a Etapa para "Convite enviado" é o observador do WhatsApp (whatsapp-conversa.py), quando a
+    mensagem sai de verdade; o "Marcar" que existia aqui nunca gravava (o Decidir devolvia marcar:false e
+    workflow_confiabilidade.py força isso em todo fluxo que tenha esse nó).
+
+    O fluxo é achado pelo nome novo OU pelo antigo ("... (marca enviado)") e trocado pelo id, para não criar
+    um segundo workflow com o mesmo path do webhook. Usado também por prumo-ofertas.py (Iris e estamparia).
+    """
     spec = importlib.util.spec_from_file_location("fecha_ciclos", AQUI / "fecha-ciclos.py")
     fc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fc)
-    decidir = f"""const q = $('Clique (convite)').first().json.query ?? {{}};
+    gatilho = f"Clique ({caminho})"
+    nos = [
+        {"id": "clique", "name": gatilho, "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 0],
+         "webhookId": webhook_id, "parameters": {"httpMethod": "GET", "path": caminho, "responseMode": "responseNode", "options": {}}},
+        {"id": "ler", "name": "Ler a linha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [220, 0],
+         "credentials": fc.SHEETS, "alwaysOutputData": True, "executeOnce": True, "retryOnFail": True, "maxTries": 3,
+         "parameters": {"resource": "sheet", "operation": "read", **fc.doc(planilha, gid, aba),
+                        "filtersUI": {"values": [{"lookupColumn": "ID", "lookupValue": "={{ $json.query.id }}"}]}, "options": {}}},
+        {"id": "decidir", "name": "Decidir", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [440, 0],
+         "parameters": {"mode": "runOnceForAllItems", "jsCode": decidir_js}},
+        {"id": "abrir", "name": "Abrir o canal", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [660, 0],
+         "parameters": {"respondWith": "redirect", "redirectURL": "={{ $('Decidir').first().json.destino }}", "options": {}}},
+    ]
+    con = {gatilho: {"main": [[{"node": "Ler a linha", "type": "main", "index": 0}]]},
+           "Ler a linha": {"main": [[{"node": "Decidir", "type": "main", "index": 0}]]},
+           "Decidir": {"main": [[{"node": "Abrir o canal", "type": "main", "index": 0}]]}}
+    todos = api("GET", "/workflows?limit=250")["data"]
+    erro = next(w["id"] for w in todos if w["name"] == "00 · Avisar falha pelo Hermes")
+    wf = {"name": nome, "nodes": nos, "connections": con,
+          "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "errorWorkflow": erro}}
+    existentes = sorted((w for w in todos if w["name"] in (nome, nome_antigo)), key=lambda w: w["name"] != nome)
+    if existentes:
+        wf["id"] = existentes[0]["id"]
+        put(wf)
+        wid = wf["id"]
+    else:
+        wid = api("POST", "/workflows", wf)["id"]
+    api("POST", f"/workflows/{wid}/activate")
+    print(nome, "->", wid, f"{fc.LINKS}/{caminho}")
+    return wid
+
+
+def convite(pid):
+    decidir = f"""{NOME_JS}
+const q = $('Clique (convite)').first().json.query ?? {{}};
 const id = String(q.id ?? '');
 // 05/10/2026: dois passos. "convite" (padrão, o botão Enviar convite): pede para
 // falar com o responsável, sem link. "diagnostico" (botão da ficha do CRM e do
@@ -458,11 +434,7 @@ const areas = !distribuidora ? 'do dia a dia'
   : /constru/.test(seg) ? 'de preço, desconto e crédito'
   : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança'
   : 'de preço, crédito e entregas';
-let nome = empresa.trim();
-for (let i = 0; i < 2; i++) nome = nome.replace(/[\\s,.-]+(ltda|me|epp|eireli|s\\.?\\/?a\\.?)\\.?$/i, '').trim();
-// Nome todo em maiúsculas ("CACAU PEÇAS PARA MOTORES") denuncia mensagem automática.
-if (nome === nome.toUpperCase() && /\\p{{Lu}}{{4}}/u.test(nome)) nome = nome.toLowerCase()
-  .replace(/(^|\\s)(\\p{{L}})/gu, (m, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, (m) => m.toLowerCase());
+const nome = nomeDaEmpresa(empresa);  // a regra de prumo-nome.js, igual à do CRM
 // Cumprimento da hora de São Paulo (o clique é a hora do envio).
 const hora = Number(new Date().toLocaleString('en-US', {{ timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }}));
 const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
@@ -475,12 +447,9 @@ let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');
 if (digitos.length === 10 || digitos.length === 11) digitos = '55' + digitos;
 let destino = digitos.length >= 12 && digitos.length <= 13 ? 'https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensagem) : form;
 if (!achou) destino = 'https://docs.google.com/spreadsheets/d/{PLANILHA}/edit#gid={pid}';
-return [{{ json: {{ chave: id, destino, marcar: false, agora: new Date().toISOString() }} }}];"""
-    fc.webhook_workflow("PRUMO — Clique em Enviar convite (marca enviado)", "convite", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002",
-                        PLANILHA, str(pid), "Prospects", "ID", "id", decidir,
-                        {"Etapa": "Convite enviado", "Convite enviado em": "={{ $json.agora }}",
-                         "Próxima ação": "Aguarde a resposta (do dono ou de quem atende o número). Quando aceitarem, "
-                                         "faça o Raio-X e mande pelo botão da ficha no CRM. Sem resposta em 3 dias, um lembrete só."})
+return [{{ json: {{ chave: id, destino }} }}];"""
+    clique_workflow("PRUMO — Clique em Enviar convite", "PRUMO — Clique em Enviar convite (marca enviado)", "convite",
+                    "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60002", PLANILHA, str(pid), "Prospects", decidir)
 
 
 if __name__ == "__main__":
@@ -491,7 +460,5 @@ if __name__ == "__main__":
         convite(next(a["properties"]["sheetId"] for a in abas if a["properties"]["title"] == "Prospects"))
         sys.exit(0)
     pid, did = planilha()
-    if "--lead-scout-legado" in sys.argv:
-        lead_scout(pid, did)
     pontuacao(pid)
     convite(pid)

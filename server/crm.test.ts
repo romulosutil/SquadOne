@@ -75,6 +75,7 @@ function retrato(): CrmRetrato {
           // Leu (15/10/2026: follow-up só para quem leu); "nao-leu" é o mesmo sem a leitura.
           linhaSite("followup", { status: "enviado", enviado_em: dias(3), visto_em: dias(2.5), wa_me: "https://wa.me/5527999990001?text=oi" }),
           linhaSite("nao-leu", { status: "enviado", enviado_em: dias(3), wa_me: "https://wa.me/5527999990002?text=oi" }),
+          // Sem recibo de leitura: fora do follow-up, e o followup_em do 05 (ontem) não o põe na janela. A janela de quem leu é testada em jornadas-de-venda.test.ts.
           linhaSite("followup-ontem", { status: "enviado", enviado_em: dias(4), followup_em: dias(1) }),
           linhaSite("viu", { status: "enviado", enviado_em: dias(1), visto_em: dias(0.9) }),
           linhaSite("respondeu", { status: "enviado", enviado_em: dias(2), respondeu_em: dias(1) }),
@@ -186,7 +187,7 @@ describe("CRM: etapas do Site antes da venda", () => {
     const { leads } = visao();
     assert.equal(lead(leads, "site:followup").followupHoje, true);
     assert.equal(lead(leads, "site:followup").diasNaEtapa, 3);
-    assert.equal(lead(leads, "site:followup-ontem").followupHoje, false, "o lembrete do 05 foi ontem");
+    assert.equal(lead(leads, "site:followup-ontem").followupHoje, false, "sem recibo de leitura, o followup_em do 05 não decide");
     assert.equal(lead(leads, "site:acervo").followupHoje, false);
     assert.equal(lead(leads, "site:acervo").acervo, true);
     assert.equal(lead(leads, "site:viu").followupHoje, false);
@@ -425,7 +426,7 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     const item = enviar.itens.find((i) => i.leadId === "site:a-sem-demo")!;
     assert.equal(item.acao, "Mandar a primeira mensagem");
     assert.ok(item.detalhe.endsWith("Ainda sem demo: gere quando ele pedir."), item.detalhe);
-    assert.deepEqual(item.links.map((x) => x.rotulo), ["Enviar pelo WhatsApp (marca como enviado)"]);
+    assert.deepEqual(item.links.map((x) => x.rotulo), ["Enviar pelo WhatsApp"]);
 
     const querVer = lead(v.leads, "site:a-quer-ver");
     assert.equal(querVer.links.segunda, undefined, "sem demo, não há link para mandar");
@@ -692,7 +693,7 @@ describe("CRM: lista Hoje e contagens", () => {
     const texto = new URL(site.links[0].url).searchParams.get("text") ?? "";
     assert.match(texto, /^Oi, é o Rômulo de novo\. A demonstração de site da Empresa followup está pronta/);
     assert.equal(site.links[1].rotulo, "Abrir conversa no WhatsApp");
-    assert.equal(lead(leads, "site:followup-ontem").links.followup, undefined, "fora do dia do follow-up não há link");
+    assert.equal(lead(leads, "site:followup-ontem").links.followup, undefined, "sem follow-up não há link");
     assert.equal(followup.find((i) => i.leadId === "prumo:convite")!.links.some((l) => l.rotulo === "Mandar o follow-up"), false);
   });
 
@@ -1019,7 +1020,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
     for (const [nome, extra, esperado] of casos) assert.equal(reenvioDoRoboHoje({ ...base, ...extra }), esperado, nome);
   });
 
-  it("Site: entra no dia seguinte, sem esperar o 3º dia nem o dia do followup_em do n8n, com o texto que pede o responsável", () => {
+  it("Site: entra no dia seguinte, sem esperar o 3º dia nem depender do followup_em do n8n, com o texto que pede o responsável", () => {
     const v = com([
       robo("robo-1", d(1)),
       robo("robo-lembrete-ontem", d(4), { followup_em: d(1) }),
@@ -1032,7 +1033,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
     assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo\. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para a Empresa robo-1, mas acho que só chegou a resposta automática\./);
     assert.ok(um.links.followup!.startsWith("https://wa.me/5527999990030?text="));
     assert.equal(lead(v.leads, "site:robo-lembrete-ontem").followupHoje, true, "o lembrete do 05 foi ontem, o reenvio continua");
-    assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, false, "sem robô, o follow-up continua preso ao dia do lembrete");
+    assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, false, "sem robô e sem recibo de leitura, o lembrete do 05 não o põe no follow-up");
     const hoje = lead(v.leads, "site:robo-hoje");
     assert.equal(`${hoje.followupHoje}/${hoje.reenvioDoRobo}/${hoje.links.followup}`, "false/undefined/undefined", "no mesmo dia do envio, não");
   });
@@ -1147,6 +1148,36 @@ describe("CRM: retrato e registro", () => {
     assert.equal(comFalha.estado, "ok", "o retrato anterior continua valendo");
     assert.deepEqual(comFalha.ultimaFalha, { em: "2026-10-02T14:58:00.000Z", erro: "Leads: credencial caída" });
     assert.throws(() => validarRetrato({ versao: 2, geradoEm: AGORA.toISOString() }), /Versão/);
+  });
+
+  // MSG-3 (19/10/2026): a visão pesa (pastas, mapas, Raio-X, até 3000 JSONL) e era montada de novo a cada pedido.
+  it("a visão sem relógio é guardada, compartilha a leitura em voo e cai com uma escrita", async () => {
+    const fetcher = (async () => new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:01Z" }), { status: 200 })) as unknown as typeof fetch;
+    const store = await loja(retrato(), true, fetcher);
+    const [a, b] = await Promise.all([store.visao(), store.visao()]);
+    assert.equal(a, b, "duas chamadas juntas montam uma visão só");
+    assert.equal(await store.visao(), a, "a seguinte vem da memória");
+    assert.notEqual(await store.visao(AGORA), a, "quem passa o relógio não usa o cache");
+    // O arquivo muda por fora: a guardada segue valendo até o TTL.
+    await fs.writeFile(store.config.retrato, "{ nao é json");
+    assert.equal(await store.visao(), a);
+    // Uma escrita pelo store descarta a guardada (aqui o retrato ficou ilegível, então a escrita nem acha o lead: o erro também descarta).
+    await assert.rejects(() => store.registrar({ produto: "site", id: "respondeu", tipo: "nota", texto: "oi" }, AGORA));
+    const nova = await store.visao();
+    assert.notEqual(nova, a);
+    assert.equal(nova.estado, "retrato-invalido");
+    // TTL zero: sempre relê.
+    store.ttlDaVisaoMs = 0;
+    assert.notEqual(await store.visao(), nova);
+  });
+
+  it("leitura que falha não fica guardada", async () => {
+    const store = await loja(retrato());
+    store.config.retrato = path.join(path.dirname(store.config.retrato), "pasta");
+    await fs.mkdir(store.config.retrato);
+    await assert.rejects(() => store.visao());
+    await fs.rm(store.config.retrato, { recursive: true });
+    assert.equal((await store.visao()).estado, "sem-retrato");
   });
 
   it("recusa registro ruim antes de chamar o n8n", () => {

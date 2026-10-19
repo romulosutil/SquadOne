@@ -8,6 +8,11 @@ After=network.target
 # Restart tenta de novo.
 Environment=EVOLUTION_ENDERECO=172.28.77.1
 Environment=EVOLUTION_INSTANCIA=prumo
+# Espera o IP da bridge existir (até 60 s) antes de subir: o Docker (unit de SISTEMA) cria a rede do compose
+# depois do login do usuário, e sem o IP o bind falhava e o Restart repetia a cada 15 s sem dizer por quê
+# (DELL-20, auditoria de 19/10/2026). Unit de usuário não ordena contra docker.service (outro gerenciador),
+# por isso a espera é ativa. $$ e %% são os escapes do systemd.
+ExecStartPre=/bin/sh -c 'PATH=/usr/sbin:/sbin:$$PATH; for i in $$(seq 1 60); do ip -o -4 addr show | grep -qF "inet $${EVOLUTION_ENDERECO}/" && exit 0; sleep 1; done; echo "IP $${EVOLUTION_ENDERECO} nao apareceu em 60 s" >&2; exit 1'
 ExecStart=/usr/bin/python3 %h/.local/bin/evolution-adaptador.py
 Restart=always
 RestartSec=15

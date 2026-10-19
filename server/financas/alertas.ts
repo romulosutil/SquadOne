@@ -5,8 +5,9 @@ import type { ResumoFinanceiro } from "./resumo.ts";
 
 /**
  * Alertas de 70, 90 e 100% (do limite do cartão e do orçamento de cada
- * categoria) pela fila de avisos do Dell, que vai ao WhatsApp. PURO: recebe o
- * resumo do mês corrente e as chaves já avisadas, devolve o que sair agora.
+ * categoria) pelo Telegram do dono, sem som das 22h às 7h (OT-14); a fila de
+ * avisos do Dell, que vai ao WhatsApp, só de reserva quando o bot falha. PURO:
+ * recebe o resumo do mês corrente e as chaves já avisadas, devolve o que sair agora.
  *
  * Privacidade (RULES 24): o aviso leva semáforo e %, NUNCA R$ nem
  * estabelecimento. A categoria pode ("Mercado"), e o nome do cartão também
@@ -15,16 +16,17 @@ import type { ResumoFinanceiro } from "./resumo.ts";
  *
  * - **Uma vez por faixa e período.** A chave é `cartao:<id>:<mês da fatura
  *   aberta>:<faixa>` e `orcamento:<hash da categoria>:<mês>:<faixa>`, guardada no
- *   banco depois de gravada na fila (a deduplicação de 24 h do dell-status não
- *   basta: o uso fica acima de 70% o mês inteiro).
+ *   banco depois de publicada (a deduplicação de 24 h do aviso, na fila ou no
+ *   registro de enviados, não basta: o uso fica acima de 70% o mês inteiro).
  * - **Só a faixa mais alta.** Pulou de 60 para 95%: sai só o de 90, e o de 70
  *   fica marcado como avisado junto, para não chegar atrasado depois.
- * - **Nenhum é P0.** P0 fura o silêncio das 22h às 7h e vai ao Telegram; um
- *   orçamento estourado espera a manhã. 70% é P2; 90 e 100%, P1.
+ * - **Nenhum é P0.** P0 fura o silêncio das 22h às 7h e vai aos dois canais; um
+ *   orçamento estourado não merece isso (pelo Telegram chega sem som de noite).
+ *   70% é P2; 90 e 100%, P1.
  */
 
 export const ORIGEM_DOS_ALERTAS = "squadone:financas";
-/** Alerta preso na fila (teto, silêncio, Hermes fora) por mais que isto não serve: a próxima leitura diz o estado novo. */
+/** Alerta preso na fila de reserva (teto, silêncio, Hermes fora) por mais que isto não serve: a próxima leitura diz o estado novo. */
 export const VALIDADE_DO_ALERTA_MS = 24 * 3600_000;
 
 const PRIORIDADE: Record<Exclude<Faixa, 0>, PrioridadeDoAviso> = { 70: 2, 90: 1, 100: 1 };

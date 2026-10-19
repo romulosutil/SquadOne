@@ -147,10 +147,6 @@ details.crm-cohort[open] > summary { margin-bottom: 0; }
 .crm-item__porque { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-item__porque strong { color: var(--texto); font-weight: var(--peso-forte); }
 
-/* Triagem (AC-10, 17/10/2026): o convidado nesta tela fica no lote, apagado, até o retrato confirmar. */
-.crm-item.is-aberto .crm-item__empresa { color: var(--texto-2); }
-/* Zona (fundo, sem borda): é estado da linha, não outra caixa dentro do grupo. */
-.crm-item__aberto { margin: 0; padding: var(--esp-2) var(--esp-3); border: 0; border-radius: var(--raio-controle); background: var(--ok-fundo); font-size: var(--tam-apoio); }
 .crm-triagem__conta { margin: var(--esp-1) 0 0; font-size: var(--tam-apoio); font-weight: var(--peso-medio); font-variant-numeric: tabular-nums; }
 /* As duas decisões lado a lado; o motivo do Convidar desligado cola nele, em texto (RULES 3). */
 .crm-triagem__decisoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); margin-top: var(--esp-1); }

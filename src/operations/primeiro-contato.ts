@@ -13,9 +13,9 @@
  *    primeiro contato dos leads do time; o time, por sua vez, não reserva lead que o operador já
  *    tocou hoje (`primeiros` do venda-do-dia.json, de qualquer superfície).
  *  - `elegivelParaOTime`: só o lead que a Central já liberou para o primeiro contato (`pronto`, com
- *    o link rastreado e a mensagem do Balcão). `revisar` é a Triagem, que é do Rômulo: lá o
- *    "Convidar" é o próprio envio (o toque no convite rastreado), então nenhum lead convidado
- *    chega ao time sem já ter recebido a mensagem. Plus fica fora (texto e saudação próprios).
+ *    o link rastreado e a mensagem do Balcão). `revisar` é a Triagem, que é do Rômulo: lá o convite
+ *    abre o WhatsApp e quem o envia é ele (o envio só vale quando o observador o vê ou o "Enviei"
+ *    explícito o marca), então o time não pega lead da Triagem. Plus fica fora (texto e saudação próprios).
  *    PRUMO, Iris e estamparias não têm `pronto` (o convite só existe em `revisar`): ficam fora até
  *    existir uma decisão "Convidar pelo time" gravada no CRM.
  *  - `reservaDoTime`: a MESMA janela (EXPEDIENTE_DE_VENDA) e o MESMO ritmo (REGRAS_DO_RITMO) da
@@ -37,8 +37,6 @@ export interface FrenteDoPrimeiro {
   /** leadId -> o estado dele na fila do time. */
   leads: Readonly<Record<string, EstadoNoTime>>
 }
-
-export const SEM_TIME: FrenteDoPrimeiro = { ativo: false, leads: {} }
 
 const ESTADOS: readonly EstadoNoTime[] = ['pronto', 'incerto', 'enviado']
 const objeto = (x: unknown): x is Record<string, unknown> => Boolean(x) && typeof x === 'object' && !Array.isArray(x)

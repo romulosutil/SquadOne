@@ -204,7 +204,7 @@ def limite_nos_logs_dos_leads(desde: float, logs: Path | None = None) -> str:
 
 
 def limpar_antigos() -> None:
-    """Apaga os demos enviados há 10+ dias sem interação (a regra e a trava são do próprio script)."""
+    """Apaga os demos de lead em Perdido há 2+ dias (a regra e a trava são do site-demos-limpeza.py)."""
     if not LIMPEZA.exists():
         return
     r = subprocess.run([sys.executable, str(LIMPEZA), "--apagar"], capture_output=True, text=True, timeout=1800)

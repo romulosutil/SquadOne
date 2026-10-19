@@ -40,12 +40,15 @@ import { FUSO } from "./alocador.ts";
 import { arquivoDoMes, diaLocal, type Logger } from "./luna-sombra.ts";
 import type { Botao } from "./telegram.ts";
 import { dadosDoLeadQuente } from "./telegram-entrada.ts";
+import { anexarJsonl, criarEmSerie } from "./em-serie.ts";
 
 export const INTERVALO_DO_LEAD_QUENTE_MS = 60_000;
 /** Quantos avisos por dia, no máximo. Passado isto a decisão continua gravada, só não vai ao Telegram. */
 export const TETO_DIA_PADRAO = 30;
 /** A resposta humana é conferida a cada tanto, não a cada minuto: lê o arquivo de cada conversa. */
 export const INTERVALO_DA_CONFERENCIA_MS = 10 * 60_000;
+/** Gravações seguidas que podem falhar antes de a volta parar: avisar sem gravar reenvia o aviso a cada minuto. */
+export const MAX_FALHAS_DE_GRAVACAO = 3;
 /** Até quando se confere se o Rômulo respondeu a uma decisão. */
 export const JANELA_DA_CONFERENCIA_MS = 3 * 86_400_000;
 
@@ -85,30 +88,91 @@ export function lerConfigDoLeadQuente(env: Record<string, string | undefined>): 
 
 // ---------------------------------------------------------------- o registro
 
-/** As linhas do mês do instante e do mês anterior (30 dias podem cruzar a virada). Linha torta é pulada. */
-export async function lerRegistrosDoLeadQuente(dir: string, agora: number): Promise<RegistroDoLeadQuente[]> {
+/** Os arquivos do mês do instante e do mês anterior (30 dias podem cruzar a virada). */
+function arquivosDoLeadQuente(dir: string, agora: number): string[] {
   const d = new Date(agora);
   const anterior = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 15));
-  const arquivos = [...new Set([arquivoDoMes(dir, anterior), arquivoDoMes(dir, d)])];
+  return [...new Set([arquivoDoMes(dir, anterior), arquivoDoMes(dir, d)])];
+}
+
+/** As linhas de um arquivo. Linha torta é pulada. */
+function registrosDoTexto(texto: string): RegistroDoLeadQuente[] {
   const registros: RegistroDoLeadQuente[] = [];
-  for (const arquivo of arquivos) {
-    let texto: string;
+  for (const linha of texto.split("\n")) {
+    if (!linha.trim()) continue;
     try {
-      texto = await fs.readFile(arquivo, "utf8");
+      const r = JSON.parse(linha) as RegistroDoLeadQuente;
+      if (r && (r.tipo === "decisao" || r.tipo === "voto" || r.tipo === "humano") && typeof r.chave === "string" && typeof r.quando === "string") registros.push(r);
     } catch {
-      continue;
-    }
-    for (const linha of texto.split("\n")) {
-      if (!linha.trim()) continue;
-      try {
-        const r = JSON.parse(linha) as RegistroDoLeadQuente;
-        if (r && (r.tipo === "decisao" || r.tipo === "voto" || r.tipo === "humano") && typeof r.chave === "string" && typeof r.quando === "string") registros.push(r);
-      } catch {
-        // linha cortada não derruba a medida
-      }
+      // linha cortada não derruba a medida
     }
   }
   return registros;
+}
+
+/** As linhas do mês do instante e do mês anterior, relidas do disco (a rota de leitura usa esta). */
+export async function lerRegistrosDoLeadQuente(dir: string, agora: number): Promise<RegistroDoLeadQuente[]> {
+  const registros: RegistroDoLeadQuente[] = [];
+  for (const arquivo of arquivosDoLeadQuente(dir, agora)) {
+    try {
+      registros.push(...registrosDoTexto(await fs.readFile(arquivo, "utf8")));
+    } catch {
+      continue;
+    }
+  }
+  return registros;
+}
+
+/**
+ * O mesmo, para o laço de 1 min (19/10/2026): relia e parseava os dois JSONL a cada volta, e eles só
+ * crescem. Fica na memória depois da primeira leitura, ganha cada linha gravada por aqui (`anexou`) e só é
+ * relido quando o tamanho ou o mtime do arquivo muda por fora (outra instância, edição à mão, restauração).
+ */
+export function criarLeitorDeRegistros(dir: string) {
+  const lidos = new Map<string, { mtimeMs: number; size: number; registros: RegistroDoLeadQuente[] }>();
+  return {
+    async ler(agora: number): Promise<RegistroDoLeadQuente[]> {
+      const todos: RegistroDoLeadQuente[] = [];
+      for (const arquivo of arquivosDoLeadQuente(dir, agora)) {
+        let st: Awaited<ReturnType<typeof fs.stat>>;
+        try {
+          st = await fs.stat(arquivo);
+        } catch {
+          lidos.delete(arquivo);
+          continue;
+        }
+        let lido = lidos.get(arquivo);
+        if (!lido || lido.mtimeMs !== st.mtimeMs || lido.size !== st.size) {
+          try {
+            lido = { mtimeMs: st.mtimeMs, size: st.size, registros: registrosDoTexto(await fs.readFile(arquivo, "utf8")) };
+          } catch {
+            lidos.delete(arquivo);
+            continue;
+          }
+          lidos.set(arquivo, lido);
+        }
+        todos.push(...lido.registros);
+      }
+      return todos;
+    },
+    /** Uma linha acabou de ser gravada em `arquivo`: acrescenta ao que está na memória, se nada mais mexeu no arquivo. */
+    async anexou(arquivo: string, registro: RegistroDoLeadQuente): Promise<void> {
+      const lido = lidos.get(arquivo);
+      if (!lido) return;
+      try {
+        const st = await fs.stat(arquivo);
+        if (st.size === lido.size + Buffer.byteLength(`${JSON.stringify(registro)}\n`)) {
+          lido.registros.push(registro);
+          lido.mtimeMs = st.mtimeMs;
+          lido.size = st.size;
+          return;
+        }
+      } catch {
+        // cai na releitura
+      }
+      lidos.delete(arquivo);
+    },
+  };
 }
 
 /** Hora cheia de São Paulo (0–23): o aviso das 22h às 7h chega sem som, como os lembretes. */
@@ -172,24 +236,35 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
   let relogio: ReturnType<typeof setInterval> | null = null;
   let ultimaConferencia = 0;
   // Uma volta ou um voto por vez: os dois leem e gravam o mesmo arquivo.
-  let fila: Promise<unknown> = Promise.resolve();
-  const emSerie = <T>(f: () => Promise<T>): Promise<T> => {
-    const p = fila.then(f, f);
-    fila = p.catch(() => undefined);
-    return p;
-  };
+  const emSerie = criarEmSerie();
+  const leitor = criarLeitorDeRegistros(deps.dir);
+  // Chave -> instante dos avisos que já foram ao Telegram mas cuja decisão não chegou ao arquivo. Sem isto, a
+  // gravação que falha depois do aviso reenvia o mesmo aviso a cada minuto (o teto também mora no arquivo).
+  const avisadosSemGravar = new Map<string, number>();
+  let falhasDeGravacao = 0;
 
   async function gravar(registro: RegistroDoLeadQuente): Promise<void> {
-    await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
-    // O mode de mkdir/open só vale na criação, inclusive após uma restauração.
-    await fs.chmod(deps.dir, 0o700);
-    const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(registro.quando)), "a", 0o600);
+    const arquivo = arquivoDoMes(deps.dir, new Date(registro.quando));
+    await anexarJsonl(arquivo, registro);
+    await leitor.anexou(arquivo, registro);
+  }
+  /** Grava na volta: depois de MAX_FALHAS_DE_GRAVACAO falhas seguidas o laço para, com o erro no log. */
+  async function gravarNaVolta(registro: RegistroDoLeadQuente): Promise<void> {
     try {
-      await arquivo.chmod(0o600);
-      await arquivo.writeFile(`${JSON.stringify(registro)}\n`, "utf8");
-    } finally {
-      await arquivo.close();
+      await gravar(registro);
+    } catch (err) {
+      falhasDeGravacao++;
+      if (falhasDeGravacao >= MAX_FALHAS_DE_GRAVACAO) {
+        log.error(`[lead-quente] ${falhasDeGravacao} gravações seguidas falharam: laço parado até reiniciar a Central.`);
+        pararLaco();
+      }
+      throw err;
     }
+    falhasDeGravacao = 0;
+  }
+  function pararLaco() {
+    if (relogio) clearInterval(relogio);
+    relogio = null;
   }
 
   const botoesDoAviso = (token: string): Botao[][] => [[
@@ -210,7 +285,7 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
       const espera = esperaDaRespostaHumana(await deps.lerConversa(lead).catch(() => null), r.ultimaEntrada);
       if (!espera) continue;
       const humano: RegistroDeHumano = { tipo: "humano", quando: new Date(agora).toISOString(), chave: r.chave, ...espera };
-      await gravar(humano);
+      await gravarNaVolta(humano);
       comHumano.add(r.chave);
       achadas++;
     }
@@ -222,16 +297,17 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
     const resumo: ResumoDaVolta = { avaliados: 0, gravadas: 0, avisadas: 0, aguardando: 0 };
     const visao = await deps.lerVisao();
     if (visao.estado !== "ok") return resumo;
-    const registros = await lerRegistrosDoLeadQuente(deps.dir, agora);
+    const registros = await leitor.ler(agora);
     const decisoes = registros.filter((r): r is RegistroDeDecisao => r.tipo === "decisao");
-    const jaDecididas = new Set(decisoes.map((d) => d.chave));
+    const jaDecididas = new Set([...decisoes.map((d) => d.chave), ...avisadosSemGravar.keys()]);
     const toques = new Map<string, ToqueDoAgente[]>();
     for (const d of decisoes) {
       if (d.acao !== "responder") continue;
       toques.set(d.lead, [...(toques.get(d.lead) ?? []), { em: Date.parse(d.quando), tipo: "resposta" }]);
     }
     const hoje = diaLocal(new Date(agora));
-    let avisadasHoje = decisoes.filter((d) => d.avisado && diaLocal(new Date(d.quando)) === hoje).length;
+    let avisadasHoje = decisoes.filter((d) => d.avisado && diaLocal(new Date(d.quando)) === hoje).length
+      + [...avisadosSemGravar.values()].filter((em) => diaLocal(new Date(em)) === hoje).length;
 
     const quentes = visao.leads.filter((l) => candidato(l, agora) && !jaDecididas.has(chaveDoLeadQuente(l.id, l.conversa!.ultimaEntrada!)));
     // O copiloto só importa a quem passaria do gate de `interesse`; os outros nem pedem a sugestão.
@@ -271,6 +347,7 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
             avisado = true;
             avisadasHoje++;
             resumo.avisadas++;
+            avisadosSemGravar.set(chave, agora);
           } catch (err) {
             semAviso = "falhou";
             log.warn(`[lead-quente] aviso não enviado: ${err instanceof Error ? err.message : String(err)}`);
@@ -292,7 +369,8 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
         avisado,
         ...(semAviso ? { semAviso } : {}),
       };
-      await gravar(registro);
+      await gravarNaVolta(registro);
+      avisadosSemGravar.delete(chave);
       jaDecididas.add(chave);
       if (decisao.acao === "responder") toques.set(lead.id, [...(toques.get(lead.id) ?? []), { em: agora, tipo: "resposta" }]);
       resumo.gravadas++;
@@ -305,7 +383,7 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
 
   async function votarSemFila(token: string, concorda: boolean): Promise<{ curto: string; texto?: string }> {
     const agora = agoraMs();
-    const registros = await lerRegistrosDoLeadQuente(deps.dir, agora);
+    const registros = await leitor.ler(agora);
     const decisao = registros.find((r): r is RegistroDeDecisao => r.tipo === "decisao" && r.token === token);
     if (!decisao || decisao.acao === "calar") return { curto: "Este aviso não existe mais." };
     const aviso = textoDoAvisoLeadQuente(decisao.empresa, decisao.acao === "responder"
@@ -325,10 +403,7 @@ export function criarLeadQuenteSombra(deps: DepsDoLeadQuente): LeadQuenteSombra 
       relogio = setInterval(() => { void emSerie(voltaSemFila).catch(registrarFalha); }, INTERVALO_DO_LEAD_QUENTE_MS);
       void emSerie(voltaSemFila).catch(registrarFalha);
     },
-    parar() {
-      if (relogio) clearInterval(relogio);
-      relogio = null;
-    },
+    parar: pararLaco,
     volta: () => emSerie(voltaSemFila),
     votar: (token, concorda) => emSerie(() => votarSemFila(token, concorda)),
   };

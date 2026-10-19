@@ -44,6 +44,7 @@ import {
 import { TETO_DIA_DO_HERMES, type ConsultaAoHermes } from "./hermes-consulta.ts";
 import { FUSO } from "./alocador.ts";
 import { arquivoDoMes, diaLocal, type Logger } from "./luna-sombra.ts";
+import { anexarJsonl } from "./em-serie.ts";
 import { gerarComRetry, MODEL, ModeloOcupado } from "./orchestrator.ts";
 
 /**
@@ -83,6 +84,8 @@ export const MAX_RODADAS = 3;
  * prenderia a fila serial e todas as mensagens seguintes ficariam "pensando" para sempre.
  */
 export const PRAZO_DA_RESPOSTA_MS = 240_000;
+/** Depois de abortar uma resposta que passou do prazo, quanto a fila espera o trabalho parar de fato antes de seguir. */
+export const ESPERA_DO_ABORTO_MS = 5_000;
 /** Trocas de avaliação por resposta que viram linha: a última vale, e o arquivo não cresce sem fim. */
 const MAX_AVALIACOES_POR_RESPOSTA = 5;
 const DIAS_DO_HISTORICO_MS = DIAS_DO_HISTORICO * 86_400_000;
@@ -233,7 +236,26 @@ export interface RespostaDoGemini {
   candidates?: Array<{ content?: Content }>;
 }
 
-export type GerarNoGemini = (params: GenerateContentParameters) => Promise<RespostaDoGemini>;
+/** `sinal`: aborta quando a resposta passa do prazo; quem honra o sinal cancela a chamada em voo. */
+export type GerarNoGemini = (params: GenerateContentParameters, sinal?: AbortSignal) => Promise<RespostaDoGemini>;
+
+/**
+ * Espera `promessa` até o sinal abortar. Passado o prazo a resposta já foi dada como perdida; uma chamada
+ * em voo que não honra o sinal termina sozinha e o resultado dela é descartado, mas o trabalho da fila para
+ * aqui (senão a fila liberava a próxima e rodava outra geração em paralelo com a antiga).
+ */
+function ate<T>(sinal: AbortSignal, promessa: Promise<T>): Promise<T> {
+  const estourou = () => new Error("o prazo da resposta passou");
+  if (sinal.aborted) {
+    promessa.catch(() => {});
+    return Promise.reject(estourou());
+  }
+  return new Promise<T>((resolver, rejeitar) => {
+    const aoAbortar = () => rejeitar(estourou());
+    sinal.addEventListener("abort", aoAbortar, { once: true });
+    promessa.then(resolver, rejeitar).finally(() => sinal.removeEventListener("abort", aoAbortar));
+  });
+}
 
 /** O texto da resposta, sem os pensamentos e sem o aviso do SDK quando também há functionCall. */
 function textoDaResposta(r: RespostaDoGemini): string {
@@ -426,13 +448,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
         }
       }
       try {
-        await fs.mkdir(deps.dir, { recursive: true, mode: 0o700 });
-        const arquivo = await fs.open(arquivoDoMes(deps.dir, new Date(linha.quando)), "a", 0o600);
-        try {
-          await arquivo.writeFile(`${JSON.stringify(linha)}\n`, "utf8");
-        } finally {
-          await arquivo.close();
-        }
+        await anexarJsonl(arquivoDoMes(deps.dir, new Date(linha.quando)), linha);
       } catch (error) {
         // O histórico é medição: sem disco a conversa segue em memória, e o log diz.
         log.error(`[assistente] não gravou o histórico: ${error instanceof Error ? error.message : String(error)}`);
@@ -531,7 +547,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
         desistiu();
         etapa("pensando");
         const ultima = rodada === MAX_RODADAS;
-        const r = await deps.gerar({
+        const r = await ate(sinal, deps.gerar({
           model: MODEL,
           contents,
           config: {
@@ -542,7 +558,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
             // para a resposta sempre terminar em texto.
             toolConfig: { functionCallingConfig: { mode: ultima ? FunctionCallingConfigMode.NONE : FunctionCallingConfigMode.AUTO } },
           },
-        });
+        }, sinal));
         texto = textoDaResposta(r);
         const chamadas = ultima ? [] : (r.functionCalls ?? []);
         if (!chamadas.length) break;
@@ -578,7 +594,7 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
             else {
               desistiu();
               etapa("hermes");
-              const h = await consultarOHermes(hermes, args.pergunta, leituras);
+              const h = await ate(sinal, consultarOHermes(hermes, args.pergunta, leituras));
               if (h.ok === true) {
                 hermesTexto = h.texto;
                 leituras.feitas.push({ tipo: "hermes", ms: h.ms });
@@ -734,10 +750,20 @@ export async function criarAssistente(deps: DepsDoAssistente): Promise<Assistent
         try {
           const r = await Promise.race([trabalho, estouro]);
           if (r === "estourou") {
-            // A fila segue; o que o trabalho atrasado ainda devolver (texto, cartões) é descartado.
+            // O que o trabalho atrasado ainda devolver (texto, cartões) é descartado.
             controle.abort();
             log.error(`[assistente] resposta desistida: passou de ${Math.round((deps.prazoMs ?? PRAZO_DA_RESPOSTA_MS) / 1000)} s`);
             pronta = falhou(TEXTO_DEMOROU);
+            // A fila só libera a próxima quando este trabalho parou de fato (o abort chega à geração e à
+            // consulta ao Hermes). Se não parar em ESPERA_DO_ABORTO_MS, segue e o log diz, para uma
+            // resposta presa não travar o Assistente para sempre.
+            let limite: ReturnType<typeof setTimeout> | undefined;
+            const parou = await Promise.race([
+              trabalho.then(() => true, () => true),
+              new Promise<false>((resolver) => { limite = setTimeout(() => resolver(false), ESPERA_DO_ABORTO_MS); }),
+            ]);
+            clearTimeout(limite);
+            if (!parou) log.warn(`[assistente] o trabalho abortado não parou em ${ESPERA_DO_ABORTO_MS / 1000} s: a fila segue assim mesmo`);
           } else {
             pronta = r;
           }
@@ -840,7 +866,8 @@ export async function prepararAssistente(
       log.error("[assistente] desligado: sem GEMINI_API_KEY");
       return null;
     }
-    gerar = (params) => gerarComRetry(ai as GoogleGenAI, params);
+    // O sinal vai na config: quando o gerarComRetry passar a honrá-lo, o prazo cancela a chamada em voo.
+    gerar = (params, sinal) => gerarComRetry(ai as GoogleGenAI, sinal ? { ...params, config: { ...params.config, abortSignal: sinal } } : params);
   }
   let hermes: ConsultaAoHermes | null = null;
   if (config.hermes) {

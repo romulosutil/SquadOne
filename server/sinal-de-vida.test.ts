@@ -1,7 +1,8 @@
 /**
  * Sinal de vida do healthchecks.io: ping a cada minuto e `/fail` com o
- * WhatsApp fora de "aberto" por mais de 15 min, pelo status.json. Dublês:
- * nada sai para a rede.
+ * WhatsApp fora de "aberto" por mais de 15 min (pelo status.json) ou com a
+ * vigia dos lembretes sem varredura completa há mais de 5 min. Dublês: nada
+ * sai para a rede.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -9,9 +10,11 @@ import { interpretarStatusDoDell, type StatusDoDell } from "./dell-status.ts";
 import {
   criarSinalDeVida,
   decidirSinal,
+  LIMITE_VIGIA_PARADA_MS,
   LIMITE_WHATSAPP_FORA_MS,
   lerUrlDoSinal,
   SinalMalConfigurado,
+  vigiaParada,
   whatsappAberto,
 } from "./sinal-de-vida.ts";
 
@@ -75,7 +78,60 @@ describe("decidirSinal", () => {
   });
 });
 
+describe("vigiaParada", () => {
+  it("5 min sem varredura completa ainda é ok; passou disso, parada", () => {
+    const t = T0.getTime();
+    assert.equal(vigiaParada(t, t, t + LIMITE_VIGIA_PARADA_MS), false);
+    assert.equal(vigiaParada(t, t, t + LIMITE_VIGIA_PARADA_MS + 1), true);
+  });
+
+  it("nenhuma varredura desde o boot: a carência conta do início do sinal", () => {
+    const desde = T0.getTime();
+    assert.equal(vigiaParada(null, desde, desde + 4 * MIN), false);
+    assert.equal(vigiaParada(null, desde, desde + 6 * MIN), true);
+  });
+});
+
 describe("criarSinalDeVida", () => {
+  it("vigia ligada e parada há mais de 5 min vira /fail mesmo com o WhatsApp aberto; voltou, volta ao normal", async () => {
+    let agora = T0;
+    let ultimaOk: number | null = null;
+    const pings: string[] = [];
+    const logs: string[] = [];
+    const sinal = criarSinalDeVida({
+      url: URL_HC,
+      lerStatus: async (t) => retrato("ok", t),
+      ultimaVarreduraOkEm: () => ultimaOk,
+      pingar: async (u) => { pings.push(u); },
+      agora: () => agora,
+      log: { log: (m: unknown) => logs.push(String(m)), error() {} },
+    });
+    assert.equal(await sinal.enviar(), "ok", "boot: ainda na carência");
+    agora = new Date(T0.getTime() + 4 * MIN);
+    assert.equal(await sinal.enviar(), "ok");
+    agora = new Date(T0.getTime() + 6 * MIN);
+    assert.equal(await sinal.enviar(), "fail", "nenhuma varredura em 6 min");
+    assert.equal(await sinal.enviar(), "fail");
+    ultimaOk = agora.getTime();
+    agora = new Date(T0.getTime() + 7 * MIN);
+    assert.equal(await sinal.enviar(), "ok");
+    agora = new Date(T0.getTime() + 13 * MIN);
+    assert.equal(await sinal.enviar(), "fail", "a última varredura ok envelheceu");
+    assert.deepEqual(pings, [URL_HC, URL_HC, `${URL_HC}/fail`, `${URL_HC}/fail`, URL_HC, `${URL_HC}/fail`]);
+    assert.equal(logs.filter((l) => l.includes("vigia sem varredura")).length, 2, "loga na mudança, não a cada minuto");
+  });
+
+  it("sem a dependência da vigia (desligada neste processo) ela nunca é falha", async () => {
+    const sinal = criarSinalDeVida({
+      url: URL_HC,
+      lerStatus: async (t) => retrato("ok", t),
+      pingar: async () => {},
+      agora: () => new Date(T0.getTime() + 60 * MIN),
+      log: { log() {}, error() {} },
+    });
+    assert.equal(await sinal.enviar(), "ok");
+  });
+
   it("ping normal; 16 min de WhatsApp fora vira /fail; volta vira ping normal", async () => {
     let agora = T0;
     let estado: "ok" | "falha" = "ok";

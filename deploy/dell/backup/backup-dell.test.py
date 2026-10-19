@@ -196,10 +196,9 @@ class Espelho(unittest.TestCase):
 
 
 class AvisoPelaLib(unittest.TestCase):
-    """A troca do avisar() pela lib de aviso (11/10/2026): o aviso gravado pela
-    lib é IDÊNTICO, byte a byte, ao do jeito antigo; o dell-status aceita; sem a
-    lib volta ao antigo; e a fila ausente ou estragada nunca muda o resultado do
-    ensaio nem o código de saída. Nada aqui toca a fila, o estado ou o HOME reais."""
+    """O avisar() pela lib de aviso (11/10/2026): o dell-status aceita o que ela grava;
+    sem a lib nada vai à fila (uma linha no stderr); e a fila ausente ou estragada
+    nunca muda o resultado do ensaio nem o código de saída. Nada aqui toca a fila, o estado ou o HOME reais."""
 
     TITULO = "🗄️ Backup do Dell"
     TEXTOS = [
@@ -230,10 +229,10 @@ class AvisoPelaLib(unittest.TestCase):
             bd.avisar(titulo, texto)
         return saida.getvalue()
 
-    def gravado_pelo(self, jeito, titulo, texto):
+    def gravado_pela_lib(self, titulo, texto):
         shutil.rmtree(bd.FILA_AVISOS, ignore_errors=True)
         bd.FILA_AVISOS.mkdir()
-        bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
+        bd.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(titulo, texto)
         arquivos = self.fila()
         self.assertEqual(len(arquivos), 1, arquivos)
@@ -242,15 +241,29 @@ class AvisoPelaLib(unittest.TestCase):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(bd.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib/aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for titulo in (self.TITULO, "outro título"):
             for texto in self.TEXTOS:
                 with self.subTest(titulo=titulo, texto=texto[:30]):
-                    self.assertEqual(self.gravado_pelo("lib", titulo, texto), self.gravado_pelo("antigo", titulo, texto))
+                    d = json.loads(self.gravado_pela_lib(titulo, texto).decode("utf-8"))
+                    self.assertEqual(d, {"titulo": titulo, "texto": texto, "origem": "backup-dell"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "🗄️ Backup do Dell", "texto": "Ensaio de restauração ok: x.", "origem": "backup-dell"}'
-        self.assertEqual(self.gravado_pelo("lib", self.TITULO, "Ensaio de restauração ok: x."), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib(self.TITULO, "Ensaio de restauração ok: x."), esperado.encode("utf-8"))
+
+    def test_aviso_de_ensaio_que_falhou_leva_chave_e_validade(self):
+        # A chave (24 h) impede um aviso por dia enquanto o ensaio falhar; o dell-status tem de aceitar o formato.
+        bd.FILA_AVISOS.mkdir()
+        bd.PASTAS_DA_LIB = self.lib_do_repo
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida), contextlib.redirect_stderr(saida):
+            bd.avisar(self.TITULO, "O ensaio de restauração falhou: x.", chave="backup-dell:ensaio-falhou",
+                      expira_em=bd.iso(bd.agora() + bd.dt.timedelta(hours=20)))
+        dados = json.loads(self.fila()[0].read_text(encoding="utf-8"))
+        self.assertEqual(dados["chave"], "backup-dell:ensaio-falhou")
+        self.assertIn("expira_em", dados)
+        self.assertEqual(set(dados), {"titulo", "texto", "origem", "chave", "expira_em"})
 
     def test_nome_e_atomicidade(self):
         bd.FILA_AVISOS.mkdir()
@@ -280,7 +293,7 @@ class AvisoPelaLib(unittest.TestCase):
 
     def test_backup_dell_sem_aviso_nao_grava(self):
         bd.FILA_AVISOS.mkdir()
-        for jeito in ("lib", "antigo"):  # a trava vem antes de qualquer gravação, com ou sem a lib
+        for jeito in ("lib", "sem-lib"):  # a trava vem antes de qualquer gravação, com ou sem a lib
             bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
             os.environ["BACKUP_DELL_SEM_AVISO"] = "1"
             try:
@@ -304,29 +317,24 @@ class AvisoPelaLib(unittest.TestCase):
         self.avisar(self.TITULO, "  dois  espaços  ")
         self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "  dois  espaços  ")
 
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self, saida):
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: " + self.TITULO, saida)
+        self.assertFalse(bd.FILA_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         bd.PASTAS_DA_LIB = [self.d / "sem-lib"]
         self.assertIsNone(bd.lib_de_aviso())
-        self.avisar(self.TITULO, "x")  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^backup-dell-\d+\.json$")
-        self.assertEqual([p for p in bd.FILA_AVISOS.iterdir() if not p.name.endswith(".json")], [])  # o .tmp foi renomeado
+        self.sem_gravar(self.avisar(self.TITULO, "x"))
 
-    def test_copia_quebrada_volta_ao_jeito_antigo_e_cai_na_seguinte(self):
+    def test_copia_quebrada_nao_grava_e_cai_na_seguinte(self):
         quebrada = self.d / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         bd.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(bd.lib_de_aviso())
-        self.avisar(self.TITULO, "x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar(self.avisar(self.TITULO, "x"))
         bd.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(bd.lib_de_aviso().__file__).resolve(), (AQUI.parent / "lib/aviso.py").resolve())
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        bd.PASTAS_DA_LIB = [self.d / "sem-lib"]
-        self.avisar(self.TITULO, "custa R$ 5")
-        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
 
     # --- o aviso nunca muda o resultado do ensaio nem o código de saída -------
 
@@ -354,9 +362,9 @@ class AvisoPelaLib(unittest.TestCase):
         self.assertEqual(self.estado_do_ensaio(), "falha")
 
     def test_ensaio_com_a_fila_estragada_nao_muda_o_codigo_de_saida(self):
-        # A "fila" é um arquivo: nem a lib nem o jeito antigo conseguem gravar.
+        # A "fila" é um arquivo: a lib não consegue gravar (e sem a lib nada é gravado).
         bd.FILA_AVISOS.write_text("não sou pasta", encoding="utf-8")
-        for jeito in ("lib", "antigo"):
+        for jeito in ("lib", "sem-lib"):
             bd.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.d / "sem-lib"]
             with self.subTest(jeito=jeito):
                 self.assertEqual(self.ensaio("det"), 0)

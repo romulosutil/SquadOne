@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { criarEmSerie } from "./em-serie.ts";
 
 /**
  * O que já se resolveu hoje na fila de venda (16/10/2026, OT-01 do blueprint): "Enviei", "Pular" ou a
@@ -188,18 +189,20 @@ export interface MemoriaDaVenda {
 
 /** O arquivo, com uma escrita por vez (a tela e o Telegram podem tocar juntos). */
 export function criarMemoriaDaVenda(arquivo: string, agora: () => number = Date.now): MemoriaDaVenda {
-  let fila: Promise<unknown> = Promise.resolve();
-  const emSerie = <T>(f: () => Promise<T>): Promise<T> => {
-    const p = fila.then(f, f);
-    fila = p.catch(() => undefined);
-    return p;
-  };
+  const emSerie = criarEmSerie();
   async function ler(): Promise<VendaDoDia> {
+    let bruto: string;
     try {
-      return vendaDoDia(JSON.parse(await fs.readFile(arquivo, "utf8")), agora());
-    } catch {
-      return vendaDoDia(null, agora());
+      bruto = await fs.readFile(arquivo, "utf8");
+    } catch (erro: any) {
+      // Só o arquivo que ainda não existe é "dia vazio". Qualquer outro erro (permissão, disco, JSON
+      // cortado) sobe: engolido, a próxima gravação sobrescrevia o dia com um vazio, zerava os
+      // primeiros contatos (a trava de ritmo) e fazia o vendedor reavisar a fila inteira.
+      if (erro?.code === "ENOENT") return vendaDoDia(null, agora());
+      throw erro;
     }
+    // A virada de dia não precisa de tratamento: `vendaDoDia` devolve o dia novo e vazio.
+    return vendaDoDia(JSON.parse(bruto), agora());
   }
   async function gravar(v: VendaDoDia): Promise<VendaDoDia> {
     await fs.mkdir(path.dirname(arquivo), { recursive: true });

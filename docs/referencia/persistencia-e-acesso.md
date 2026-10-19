@@ -94,7 +94,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `TELEGRAM_WEBHOOK_SECRET` | servidor | 32–256 chars `[A-Za-z0-9_-]`; obrigatória com o token presente; vai no `secret_token` do `setWebhook` e é conferida no header de cada POST |
 | `TELEGRAM_CHAT_IDS` | servidor | `chat_id` autorizados, por vírgula; obrigatória com o token presente; **vazia NÃO abre o bot** (ao contrário de `IPS_PERMITIDOS`) |
 | `SQUADONE_MODE` | servidor | `app` (padrão, Easypanel) ou `operations` (Dell); outro valor derruba o boot. Ver "Dois perfis" |
-| `SQUADONE_OPERATIONS_CONFIG` / `_DATA_DIR` | servidor | só em `operations`: config privada da Central e diretório de dados; nunca no Easypanel |
+| `SQUADONE_OPERATIONS_CONFIG` / `SQUADONE_OPERATIONS_DATA_DIR` | servidor | só em `operations`: config privada da Central e diretório de dados da Central (`vendedor.json`, `venda-do-dia.json`, `avisos-enviados.json`, `uso/`, `frente-comercial*.json`...; padrão `./data/operations`, no Dell `~/.local/share/squadone-operations`); não confundir com `SQUADONE_DATA_DIR` (agenda). Nunca no Easypanel |
 | `SQUADONE_AVALIACOES` | servidor | `true` liga a avaliação de turno; qualquer outro valor = desligada |
 | `SQUADONE_DATA_DIR` | servidor | `squad.json`, `google-auth.json`, offset do Telegram; ausente = `./data`. No `operations` a agenda só liga com ela presente e fora do checkout (Dell: `~/.local/share/squadone`, caminho absoluto) |
 | `SQUADONE_ROSTER_CONGELADO` | servidor | `true` recusa toda escrita no roster (409 `rosterCongelado`): cutover e reserva fria |
@@ -118,5 +118,47 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_JEV_GUARDAR_DEMANDA` | servidor | só `operations`: `true` grava a demanda (já mascarada) no JSONL do Jev; padrão só o sha256 e o tamanho (na Mel está `true` desde 15/10/2026) |
 | `SQUADONE_SINAIS_DO_SITE` | servidor | só `operations`: `false` desliga a leitura sob demanda dos sinais do site (POST /api/operations/crm/sinais); ligada por padrão, no máximo 3 requisições por lead, cache de 7 dias |
 | `SQUADONE_JEV_ZDR` | servidor | só `operations`: `false` deixa de exigir retenção zero (só para teste); ausente = ZDR exigido em toda chamada; outro valor = log e desligado |
+| `SQUADONE_ASSISTENTE` / `SQUADONE_ASSISTENTE_HERMES` | servidor | só `operations` (RULES 28): `true` liga o painel do Assistente que substitui o Pedir / a consulta ao Hermes dentro dele; qualquer outro valor = desligado (padrão). Ligadas na Mel desde 17/10/2026 |
+| `SQUADONE_ASSISTENTE_TETO_DIA` | servidor | só `operations`: respostas do Assistente por dia (São Paulo) que gastam o modelo; ausente = 60; ilegível ou ≤ 0 = `AssistenteMalConfigurado` no boot. As respostas por regra (finanças) têm teto próprio fixo de 60 |
+| `SQUADONE_ASSISTENTE_HERMES_TETO_DIA` | servidor | só `operations`: consultas ao Hermes por dia (contadas no arquivo do dia, uma vez só); ausente = 20; ilegível ou ≤ 0 = log e consulta ao Hermes desligada |
+| `SQUADONE_COPILOTO` / `_PROVEDOR` / `_TETO_DIA` / `_MODELO` / `_AUTOMATICO` | servidor | só `operations` (copiloto do PRUMO): `true` liga; provedor `codex` (padrão) ou `gemini`, outro valor = `CopilotoMalConfigurado`; teto/dia ausente = 20; modelo opcional; o automático (sugere sozinho quando a vez é do Rômulo) vem ligado com o copiloto e `false` o desliga |
+| `SQUADONE_VENDEDOR` | servidor | só `operations` com o bot: `true` liga o vendedor do Telegram ("Envie para X"); sem o bot, log de erro e desligado |
+| `SQUADONE_ORIGEM_CENTRAL` | servidor | só `operations`: origem da Central na tailnet para os botões "Ver a ficha" e "Conferir histórico e decidir" do aviso do vendedor; ausente = sem esses botões |
+| `SQUADONE_LEAD_QUENTE_SOMBRA` / `_TETO_DIA` / `_CALAR_HORAS` | servidor | só `operations` com bot e copiloto: `true` liga o lead quente em sombra; teto de decisões avisadas por dia ausente = 30; horas sem o agente depois que o Rômulo escreveu à mão ausente = 6 |
+| `SQUADONE_RESUMO_MATINAL` | servidor | só `operations` com a agenda: nasce ligado; `false` desliga o resumo das 7h30–11h |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
+
+### Variáveis internas do Dell (scripts, não a Central)
+
+Lidas por scripts Python/Node do Dell (`deploy/dell/`), com padrão no código; só se mudam numa unit ou no compose. Nenhuma passa pelo `operations.env` da Central.
+
+| Var | Quem lê | Padrão |
+|---|---|---|
+| `COFRE_RAIZ` | `entrada/` (servidor, organizar, cofre_cli) | `~/Mel/Cofre` |
+| `SITE_LEADS`, `SITE_FUNIL` | `gerador-de-sites.py`, `raio-x.py` | `~/.local/share/n8n-estado/site-leads.json` e `site-funil.json` |
+| `AUTO_DIR` | `gerador-de-sites.py`, `raio-x.py` | `~/auto-site` |
+| `VERCEL_SCOPE` | `gerador-de-sites.py`, `raio-x.py` | `romulodesigns` |
+| `QA_NUMERICO_BIN` | `gerador-de-sites.py` | `~/.local/bin/qa-numerico` |
+| `QA_CHROME` | `qa-numerico.py` | `google-chrome:chromium:/snap/bin/chromium` (lista separada por `:`) |
+| `DRIBBBLE_BIN`, `CHROME_BIN` | `gerador-de-sites.py` / `dribbble.py` | `~/.local/bin/dribbble`; `CHROME_BIN` entra na frente de `google-chrome`, `chromium`, `/snap/bin/chromium` |
+| `PRUMO_CHROME` | `prumo-mapa/prumo_pdf.py` | ausente = o primeiro de `google-chrome`, `google-chrome-stable`, `chromium-browser`, `chromium` no PATH; nenhum = erro |
+| `FUNIL_CLAUDE_BIN`, `FUNIL_MODELO` | `funil-aprendizado.py` | `claude`; modelo ausente = `GERADOR_MODELO`, depois o padrão do CLI |
+| `RADAR_DATA_DIR` | `licitacoes-automation/scripts/*.mjs` (dentro do container) | `/data` |
+| `COLLECTOR_HOST`, `COLLECTOR_PORT` | `collector-server.mjs` (Radar PNCP) | `0.0.0.0` e `3000` (no compose, só a rede interna) |
+
+## Rotas da Central (`/api/operations/*`) fora do uso comum
+
+As telas do `operations` usam `/overview`, `/crm`, `/crm/venda*`, `/crm/frente*` etc. Estas existem e merecem registro (todas atrás do porteiro e, as que escrevem, da guarda de mesma origem):
+
+| Rota | Para quê |
+|---|---|
+| `POST /crm/historico` | pede ao Hermes (a ponte do WhatsApp, `squadone/historico` em `127.0.0.1:3000`, com o segredo do observador) o histórico de UM lead pelo número do CRM; só arquiva o que foi pedido. 404 sem número, 503 se o Hermes não responde ("nenhuma recuperação foi confirmada") |
+| `POST /crm/conversa/importar` | importa uma exportação individual PT-BR do WhatsApp para a conversa em disco do lead: `leadId`, `texto` (até 400 mil), `dono` e `confirmar: true`; acrescenta sem substituir e deduplica, com a mesma `.trava` do observador |
+| `POST /crm/proximo-passo/ajustar` | ajuste humano do próximo passo salvo (concluir, reagendar, esperar), conferido pelo hash do contexto do lead; 409 se o contexto mudou ou o mesmo contexto já foi confirmado em 15 min. Nunca gera nem envia mensagem |
+| `GET /crm/resposta/contexto` | devolve o `contextoHash` e o WhatsApp do lead, para a revisão de resposta antes de abrir a conversa |
+| `POST /crm/decisao/confirmar` | confirma uma revisão de classificação (`reabrir`/`manter`) ou um convite enviado à mão (com a hora real), como nota na aba CRM; mesmo hash de contexto e mesma trava de repetição |
+| `GET /assistente`, `POST /assistente/mensagens`, `GET /assistente/conversas/:id`, `POST /assistente/avaliacao`, `POST /assistente/cartoes/:id` | o painel do Assistente (RULES 28): estado, mensagem (202, fila serial; 429 no teto do dia), leitura incremental da conversa, nota 1/-1 e o desfecho do cartão (`confirmado`/`descartado`, uma vez só). Desligado, `GET /assistente` diz `ligado: false` e as outras respondem 503 `desligado`. O cartão decidido não grava nada: quem grava é a rota da própria coisa (registro do CRM, gasto das finanças) |
+| `POST /uso`, `GET /uso?dias=14` | o contador de uso (beacon da casca e leitura) |
+
+Só pela API, sem tela (uso manual, curl com a `Origin` da mesma origem quando escreve): `GET /api/operations/crm/lead-quente` (resumo da sombra do lead quente), `GET /api/operations/crm/vendedor` (histórico do vendedor), `POST /api/financas/alertas/simular` (o que os alertas de 70/90/100% mandariam, sem gravar nem marcar) e `POST /api/financas/sincronizar` (leitura do Pluggy sob demanda; a sincronização normal é do servidor, e a tela não tem mais o botão Atualizar).

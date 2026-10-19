@@ -1,19 +1,13 @@
-"""Migra a esteira Site antes da venda (Caçador e Balcão) do n8n do Easypanel
-para o n8n do Dell. Idempotente: recria pelo nome.
+"""Balcão (fluxo 03) da esteira Site antes da venda, no n8n do Dell. Idempotente: recria pelo nome.
 
-- Sheets: credencial Google do Dell (lê a mesma planilha de leads).
-- Places: chave do Dell. Gemini: credencial criada a partir de GOOGLE_API_KEY
-  do Hermes, sem passar a chave por nenhum outro lugar.
-- Drive saiu: o Caçador grava pacotes em /home/node/.n8n-files/auto-entrada e
-  o auto-entrada do Dell cria as pastas em ~/auto-site (o espelho em G:\\Meu
-  Drive\\auto, pelo PC, parou em 25/09/2026). O Balcão lê os publicado.json
-  direto de ~/auto-site.
-- Error Workflow: o aviso único pelo Hermes.
-
-Estado em 23/09/2026: Caçador (oow8TkxrAf4fVvTj) e Balcão (wjuoIknp2qlWo0QI)
-ativos no Dell; as versões do Easypanel e o "00 · Alerta" de lá foram
-despublicados. A credencial "Google Gemini (Dell)" precisa de chave com cota
-para busca no Google (grounding); a do Hermes não tem.
+- Sheets: credencial Google do Dell. Error Workflow: o aviso único pelo Hermes.
+- Drive saiu: o Caçador grava pacotes em /home/node/.n8n-files/auto-entrada e o auto-entrada do Dell
+  cria as pastas em ~/auto-site. O Balcão lê os publicado.json direto de ~/auto-site.
+- O Caçador ("01 · Caçador", oow8TkxrAf4fVvTj) NÃO é mais montado aqui. Até 19/10/2026 este script
+  também recriava o Caçador a partir de um export do Easypanel (argumento posicional), uma migração
+  de 23/09/2026 já feita: rodá-lo com um export velho teria apagado nós do fluxo vivo. Quem mexe no
+  Caçador agora são site-nichos.py, site-cacador-escolha.py e site-cacador-site-no-ar.py, sobre o
+  fluxo que está no n8n.
 
 29/09/2026: o Balcão também grava `estado/site-pastas.json`, a lista de pastas
 que o `site-pastas` do Dell move (respondeu -> _em-conversa, expirado ->
@@ -63,22 +57,21 @@ falhou, Raio-X sem padrão) também vira "pronto" com a A; se responder, o demo 
 EUA (seguem a fila do gerador), sem telefone, quem tem qualquer recibo (até cópia ou descartado) e os
 descartes do gerador. Os textos foram revistos no mesmo dia (guia no site-mensagem.js).
 
-18/10/2026: gate de pré-envio da 1ª mensagem (gate-de-envio.js, cópia do server/gate-de-envio.ts), entre o
-site-mensagem.js e o balcao-cruzar.js no nó do Balcão. Modo na constante GATE_DE_ENVIO do balcao-cruzar.js
-(`avisar` por padrão: o lead segue "pronto" e a coluna nova `gate_de_envio` diz o motivo; `bloquear`: o
-lead não vira "pronto" e sai do sorteio sem gastar a vez de ninguém; `desligado`: a saída de antes). A
-variável de ambiente GATE_DE_ENVIO troca a constante ao publicar (codigo_do_balcao). Nunca muda o texto.
+19/10/2026: o gate de pré-envio saiu do Balcão (gate-de-envio.js, a coluna `gate_de_envio` e o modo
+GATE_DE_ENVIO). No modo padrão ("avisar") só escrevia uma coluna que ninguém lia; o gate que protege
+roda na Central (server/gate-de-envio.ts, usado por server/frente-comercial.ts e server/vendedor.ts), em
+cima do texto que sai de verdade. A coluna `gate_de_envio` continua na planilha, só que ninguém a escreve.
+Também em 19/10/2026: a expiração passou de 10 para 7 dias (EXPIRA_DIAS, o mesmo DIAS_SEM_RESPOSTA da Central
+em server/crm.ts) e o lead "enviado" sem pasta nenhuma (a A sem demo não tem recibo) conta como "na raiz":
+sem isso nunca expirava.
 
-Uso: python3 site-antes-da-venda.py cacador-easypanel.json [--ativar]
-     python3 site-antes-da-venda.py --balcao     (colunas que faltam + só o Balcão, sem mexer no Caçador)
+Uso: python3 site-antes-da-venda.py --balcao     (colunas que faltam + publica e ativa o Balcão)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao, raio_x_url e ab_elegiveis)
      python3 site-antes-da-venda.py --testar     (código do cruzamento no node, planilha de mentira, sem n8n)
      python3 site-antes-da-venda.py --testar-n8n (cópia do Balcão no n8n: recibos reais, planilha de
                                                   mentira, nada gravado; apaga a cópia no fim)
 """
-import copy
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -92,21 +85,30 @@ from n8n import api, put
 PLANILHA = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o"
 SHEETS = {"googleSheetsOAuth2Api": {"id": "5Dy1tDUiFtAq7PHj", "name": "Google Sheets account"}}
 PLACES = {"httpHeaderAuth": {"id": "v7aU1q4PRbTSOYZu", "name": "Google Maps API Key — PRUMO"}}
-ENTRADA = "/home/node/.n8n-files/auto-entrada/"
 AQUI = Path(__file__).resolve().parent
 # Follow-up, expiração e mudança automática de pasta valem para quem foi enviado
 # (ou respondeu) a partir daqui; o que veio antes é acervo e fica à mão.
 CORTE = "2026-09-29T00:00:00-03:00"
 LEADS_GID = "396728619"
+BUSCAS_GID = "52197070"
+# O "01 · Caçador" no n8n do Dell: os scripts que o editam (site-nichos, site-cacador-*) importam daqui.
+CACADOR = "oow8TkxrAf4fVvTj"
+# As colunas da aba Buscas, na ordem da planilha (site-nichos.py e site-buscas-ampliar.py escrevem por ela).
+COLUNAS_DE_BUSCAS = ["query", "lat", "lng", "raio_m", "vertical", "ativa", "ultima_rodada", "pausada_em", "pausa_motivo"]
+# Dias sem resposta até o lead "enviado" virar "expirado" (05 · Acompanhamento) e a pasta ir para _concluidos/
+# (Pastas a mover, aqui). É o DIAS_SEM_RESPOSTA da Central (server/crm.ts) e o que os textos dizem: se mudar
+# aqui, mude lá. O follow-up do 3º dia não é mais do n8n: a Central o pede (Próxima venda e vendedor).
+EXPIRA_DIAS = 7
+# O link rastreado passa pela tailnet (tailscale serve /webhook -> n8n do Dell): abre no celular com Tailscale.
+# balcao-cruzar.js repete esta URL (código de nó não importa Python): o teste de paridade confere as duas.
+LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
 # Colunas que o Balcão grava desde 07/10/2026 (no fim da aba Leads; os fluxos escrevem pelo nome).
 # raio_x_url (08/10/2026): o link do Raio-X do publicado.json, para a segunda mensagem de quem
 # recebeu a variação C (o aviso de interesse e o CRM montam a segunda da linha, não do recibo).
 # ab_elegiveis (14/10/2026): as letras que o lead podia receber no sorteio ("A", "AB", "AC", "ABC"),
 # gravada junto com mensagem_variante; é ela que diz com quem a letra pode ser comparada no CRM.
-# gate_de_envio (18/10/2026): o motivo curto do gate de pré-envio da 1ª mensagem ("aviso: …" ou "barrado: …"),
-# vazio quando a mensagem passou; só é escrita com o gate ligado (GATE_DE_ENVIO diferente de "desligado").
-COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url", "ab_elegiveis", "gate_de_envio"]
-MODOS_DO_GATE = ("desligado", "avisar", "bloquear")
+# gate_de_envio (18/10/2026, saiu em 19/10/2026): a coluna segue na planilha, mas o Balcão não a escreve mais.
+COLUNAS_NOVAS = ["mensagem_variante", "site_versao", "raio_x_url", "ab_elegiveis"]
 
 # Onde mora o lead hoje: place_id -> "slug" (raiz) ou "_recusados/slug" etc.
 # Vem do diretório de cada publicado.json lido por "Ler recibos da pasta auto".
@@ -121,7 +123,11 @@ $('Ler o JSON do recibo').all().forEach((r, i) => {
   const dir = String(arquivosDosRecibos[r.pairedItem?.item ?? i]?.binary?.data?.directory ?? '');
   if (pid && dir.startsWith(AUTO) && !dir.split('/').pop().startsWith('_')) pasta[pid] = dir.slice(AUTO.length);
 });
-const naRaiz = (pid) => Boolean(pasta[pid]) && !pasta[pid].includes('/');"""
+// 19/10/2026: lead SEM pasta nenhuma (a mensagem A vale sem demo e sem recibo) também está "na raiz": só quem
+// tem pasta FORA da raiz (_recusados, _em-conversa...) já tem destino. Antes exigia recibo, e esse lead, que o
+// Balcão marca "pronto" e o envio faz "enviado", ficava fora da espera e nunca expirava. Se nenhum recibo foi
+// lido (leitura da pasta que falhou), ninguém está na raiz: nada é decidido por falta de informação.
+const naRaiz = (pid) => Object.keys(pasta).length > 0 && (pasta[pid] === undefined || !pasta[pid].includes('/'));"""
 
 
 def codigo_js(*arquivos):
@@ -129,37 +135,13 @@ def codigo_js(*arquivos):
     return "\n".join((AQUI / a).read_text(encoding="utf-8") for a in arquivos)
 
 
-def codigo_do_balcao(modo=None):
-    """O código do nó do Balcão: site-mensagem.js, gate-de-envio.js e balcao-cruzar.js, nesta ordem.
-    `modo` (ou a variável de ambiente GATE_DE_ENVIO) troca a constante GATE_DE_ENVIO do balcao-cruzar.js;
-    sem nenhum dos dois, vale o que o arquivo diz (hoje "avisar"). Valor desconhecido para o publicar:
-    um modo digitado errado não pode virar outro em silêncio."""
-    codigo = codigo_js("site-mensagem.js", "gate-de-envio.js", "balcao-cruzar.js")
-    modo = modo or os.environ.get("GATE_DE_ENVIO", "").strip() or None
-    if modo is None:
-        return codigo
-    if modo not in MODOS_DO_GATE:
-        raise SystemExit(f"GATE_DE_ENVIO={modo!r} desconhecido; use {', '.join(MODOS_DO_GATE)}")
-    trocado, n = re.subn(r"^const GATE_DE_ENVIO = '[a-z]+';", f"const GATE_DE_ENVIO = '{modo}';", codigo, count=1, flags=re.M)
-    if n != 1:
-        raise SystemExit("não achei a linha const GATE_DE_ENVIO = '...'; no balcao-cruzar.js")
-    return trocado
+def codigo_do_balcao():
+    """O código do nó do Balcão: site-mensagem.js e balcao-cruzar.js, nesta ordem."""
+    return codigo_js("site-mensagem.js", "balcao-cruzar.js")
 
 
 def erro_wf():
     return next(w["id"] for w in api("GET", "/workflows?limit=200")["data"] if w["name"] == "00 · Avisar falha pelo Hermes")
-
-
-def credencial_gemini():
-    nome = "Google Gemini (Dell)"
-    existentes = [c for c in api("GET", "/credentials?limit=100").get("data", []) if c["name"] == nome]
-    if existentes:
-        return {"googlePalmApi": {"id": existentes[0]["id"], "name": nome}}
-    env = (Path.home() / ".hermes/.env").read_text().splitlines()
-    chave = next(l.split("=", 1)[1].strip().strip('"') for l in env if l.startswith("GOOGLE_API_KEY="))
-    c = api("POST", "/credentials", {"name": nome, "type": "googlePalmApi",
-                                      "data": {"host": "https://generativelanguage.googleapis.com", "apiKey": chave}})
-    return {"googlePalmApi": {"id": c["id"], "name": nome}}
 
 
 def criar_ou_trocar(wf):
@@ -171,104 +153,10 @@ def criar_ou_trocar(wf):
     return api("POST", "/workflows", wf)["id"]
 
 
-def pacote_code(expr_caminho, expr_base64, extra=""):
-    return "\n".join([
-        "const saida = [];",
-        "const itens = $input.all();",
-        "for (let i = 0; i < itens.length; i++) {",
-        "  const item = itens[i];",
-        extra,
-        f"  const pacote = {{ caminho: {expr_caminho}, base64: {expr_base64} }};",
-        "  if (item.json.pastas) pacote.pastas = item.json.pastas;",
-        "  const nome = String(pacote.caminho).replace(/[^a-zA-Z0-9._-]+/g, '_') + '.json';",
-        "  saida.push({ json: { caminho: pacote.caminho, nome }, binary: { data: { data: Buffer.from(JSON.stringify(pacote), 'utf8').toString('base64'), mimeType: 'application/json', fileName: nome } } });",
-        "}",
-        "return saida;",
-    ])
-
-
-def gravar_na_entrada(nome, pos):
-    return {"id": nome.lower().replace(" ", "-"), "name": nome, "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
-            "position": pos, "parameters": {"operation": "write", "dataPropertyName": "data",
-                                            "fileName": "={{ '" + ENTRADA + "' + $execution.id + '-' + $json.nome }}"}}
-
-
-def cacador(fonte, gemini, erro):
-    wf = json.loads(Path(fonte).read_text())["workflow"]
-    sai = {"Criar pasta do lead", "ID da pasta", "Lead + pasta", "Criar subpasta Fotos", "ID de Fotos",
-           "Criar subpasta Logotipo", "ID de Logotipo", "Lead + subpastas", "Escrever content.md", "Fila de fotos",
-           "Uma foto por item", "Loop fotos", "Foto + destino", "Enviar foto para o Drive", "Pausa 1s"}
-    nos = [copy.deepcopy(n) for n in wf["nodes"] if n["name"] not in sai]
-    for n in nos:
-        if n["type"] == "n8n-nodes-base.googleSheets":
-            n["credentials"] = SHEETS
-        elif n["type"].endswith(".googleGemini"):  # @n8n/n8n-nodes-langchain.googleGemini
-            n["credentials"] = gemini
-        elif (n.get("credentials") or {}).get("httpHeaderAuth"):
-            n["credentials"] = PLACES
-    baixar = next(n for n in nos if n["name"] == "Baixar foto (Places Media)")
-    baixar["parameters"].setdefault("options", {})["batching"] = {"batch": {"batchSize": 1, "batchInterval": 1000}}
-    baixar["onError"] = "continueRegularOutput"
-
-    x, y = next(n for n in nos if n["name"] == "Lead salvo")["position"]
-    content = {"id": "pacote-content", "name": "Pacote content.md", "type": "n8n-nodes-base.code", "typeVersion": 2,
-               "position": [x + 240, y - 120], "parameters": {"mode": "runOnceForAllItems", "jsCode": pacote_code(
-                   "item.json.slug + '/content.md'", "Buffer.from(String(item.json.content_md ?? ''), 'utf8').toString('base64')",
-                   "  item.json.pastas = ['Fotos', 'Logotipo'];")}}
-    fila = {"id": "fila-fotos", "name": "Fila de fotos", "type": "n8n-nodes-base.code", "typeVersion": 2,
-            "position": [x + 240, y + 120], "parameters": {"mode": "runOnceForAllItems", "jsCode": "\n".join([
-                "// Até 5 fotos do Google Places em Fotos/ e a primeira de novo como capa em Logotipo/.",
-                "return $input.all().flatMap(item => {",
-                "  const l = item.json;",
-                "  const fotos = (l.fotos_places ?? []).filter(Boolean);",
-                "  return fotos.map((foto, i) => ({ json: { foto, caminho: l.slug + '/Fotos/' + l.slug + '-foto-' + (i + 1) + '.jpg' } }))",
-                "    .concat(fotos.slice(0, 1).map(foto => ({ json: { foto, caminho: l.slug + '/Logotipo/' + l.slug + '-capa.jpg' } })));",
-                "});"])}}
-    baixar["position"] = [x + 480, y + 120]
-    foto = {"id": "pacote-foto", "name": "Pacote foto", "type": "n8n-nodes-base.code", "typeVersion": 2,
-            "position": [x + 720, y + 120], "parameters": {"mode": "runOnceForAllItems", "jsCode": "\n".join([
-                "// Foto que não baixou (onError contínuo) fica de fora; o resto segue.",
-                "const fila = $('Fila de fotos').all();",
-                "const saida = [];",
-                "const itens = $input.all();",
-                "for (let i = 0; i < itens.length; i++) {",
-                "  if (!itens[i].binary?.data) continue;",
-                "  const origem = fila[itens[i].pairedItem?.item ?? i]?.json ?? {};",
-                "  const buf = await this.helpers.getBinaryDataBuffer(i, 'data');",
-                "  const pacote = { caminho: origem.caminho, base64: buf.toString('base64') };",
-                "  const nome = String(pacote.caminho).replace(/[^a-zA-Z0-9._-]+/g, '_') + '.json';",
-                "  saida.push({ json: { caminho: pacote.caminho, nome }, binary: { data: { data: Buffer.from(JSON.stringify(pacote), 'utf8').toString('base64'), mimeType: 'application/json', fileName: nome } } });",
-                "}",
-                "return saida;"])}}
-    g1 = gravar_na_entrada("Entregar content.md", [x + 480, y - 120])
-    g2 = gravar_na_entrada("Entregar foto", [x + 960, y + 120])
-    nos += [content, fila, foto, g1, g2]
-
-    nomes = {n["name"] for n in nos}
-    con = {}
-    for de, tipos in wf["connections"].items():
-        if de not in nomes:
-            continue
-        for tipo, saidas in tipos.items():
-            con.setdefault(de, {})[tipo] = [[d for d in (s or []) if d["node"] in nomes] for s in saidas]
-    ligar = lambda a, b: con.setdefault(a, {}).setdefault("main", [[]])[0].append({"node": b, "type": "main", "index": 0})
-    con["Lead salvo"] = {"main": [[]]}
-    ligar("Lead salvo", "Pacote content.md")
-    ligar("Pacote content.md", "Entregar content.md")
-    ligar("Lead salvo", "Fila de fotos")
-    ligar("Fila de fotos", "Baixar foto (Places Media)")
-    con["Baixar foto (Places Media)"] = {"main": [[]]}
-    ligar("Baixar foto (Places Media)", "Pacote foto")
-    ligar("Pacote foto", "Entregar foto")
-
-    return {"name": "01 · Caçador", "nodes": nos, "connections": con,
-            "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "errorWorkflow": erro}}
-
-
 def balcao(erro):
     ler_planilha = {"resource": "sheet", "operation": "read",
                     "documentId": {"__rl": True, "mode": "id", "value": PLANILHA, "cachedResultName": "Leads — Site antes da venda"},
-                    "sheetName": {"__rl": True, "mode": "id", "value": "396728619", "cachedResultName": "Leads"}}
+                    "sheetName": {"__rl": True, "mode": "id", "value": LEADS_GID, "cachedResultName": "Leads"}}
     colunas = [{"id": c, "displayName": c, "required": False, "defaultMatch": c == "place_id", "display": True,
                 "type": "string", "canBeUsedToMatch": c == "place_id"}
                for c in ("place_id", "status", "site_url", "vercel_project", "wa_me", "wa_link", *COLUNAS_NOVAS)]
@@ -276,15 +164,15 @@ def balcao(erro):
         "// O que depende do Rômulo nesta esteira. A Central lê este arquivo via dell-status.",
         PASTA_DO_LEAD_JS,
         "const linhas = $input.all().map(i => i.json);",
-        "const planilha = 'https://docs.google.com/spreadsheets/d/" + PLANILHA + "/edit#gid=396728619';",
+        "const planilha = 'https://docs.google.com/spreadsheets/d/" + PLANILHA + "/edit#gid=" + LEADS_GID + "';",
         "const conta = (f) => linhas.filter(f).length;",
         "const estado = { geradoEm: new Date().toISOString(), itens: [",
         "  { id: 'site-enviar', nome: 'Primeiro contato para enviar', quantidade: conta(l => String(l.status).trim() === 'pronto'),",
-        "    detalhe: 'Clique no wa_link do lead: abre o WhatsApp com a mensagem e marca como enviado.', link: planilha },",
+        "    detalhe: 'Clique no wa_link do lead: abre o WhatsApp com a mensagem. O envio é marcado sozinho quando a mensagem sai.', link: planilha },",
         "  // Pasta fora da raiz (_recusados, _em-conversa) já tem destino: não espera mais nada.",
         "  { id: 'site-resposta', nome: 'Enviados esperando resposta',",
         "    quantidade: conta(l => String(l.status).trim() === 'enviado' && !l.respondeu_em && naRaiz(l.place_id)),",
-        "    detalhe: 'A resposta no WhatsApp preenche respondeu_em sozinha. Sem resposta, o follow-up chega em 3 dias e o lead expira em 10.', link: planilha },",
+        "    detalhe: 'A resposta no WhatsApp preenche respondeu_em sozinha. Sem resposta, a Central pede o follow-up no 3º dia e o lead expira em " + str(EXPIRA_DIAS) + " dias.', link: planilha },",
         "] };",
         "return [{ json: estado, binary: { data: { data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'site-antes-da-venda.json' } } }];",
     ])
@@ -307,9 +195,12 @@ def balcao(erro):
         "  if (['enviado', 'expirado'].includes(status) && respondeu && Date.parse(respondeu) >= CORTE && (topo === '' || topo === '_concluidos')) {",
         "    mover.push({ ...base, para: '_em-conversa/' + slug, motivo: 'respondeu em ' + respondeu });",
         "  } else if (status === 'expirado' && !respondeu && topo === '') {",
-        "    mover.push({ ...base, para: '_concluidos/' + slug, motivo: '10 dias sem resposta' });",
+        "    mover.push({ ...base, para: '_concluidos/' + slug, motivo: '" + str(EXPIRA_DIAS) + " dias sem resposta' });",
         "  }",
         "}",
+        # Sem nada a mover não grava: o site-pastas.path dispara a cada escrita do arquivo, e uma por hora com
+        # mover: [] acordava o site-pastas.service à toa. O arquivo antigo fica; o site-pastas pula o que já foi movido.
+        "if (!mover.length) return [];",
         "const estado = { geradoEm: new Date().toISOString(), mover };",
         "return [{ json: estado, binary: { data: { data: Buffer.from(JSON.stringify(estado), 'utf8').toString('base64'), mimeType: 'application/json', fileName: 'site-pastas.json' } } }];",
     ])
@@ -435,6 +326,7 @@ def nos_de_arquivos(leitura, extracao, chave, arquivos):
 
 
 def testar() -> int:
+    import base64
     import unittest
     from urllib.parse import unquote
 
@@ -489,14 +381,14 @@ def testar() -> int:
     # Pastas com DOSSIE.md: casa-f sem marca (v1 por inferência); padaria-a com a marca v2, que vence.
     DOSSIES = ["casa-f", "padaria-a", "padaria-a/_v1"]
 
-    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES, dossies=DOSSIES, modo=None):
+    def cruzar(recibos=RECIBOS, marcas=MARCAS, planilha=PLANILHA_FALSA, troca=None, descartes=DESCARTES, dossies=DOSSIES):
         nos = {**nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos),
                **nos_de_arquivos("Ler marcas do modo personalizado", "Ler o JSON da marca", "marca", marcas),
                **nos_de_arquivos("Ler descartes do gerador", "Ler o texto do descarte", "conteudo", descartes),
                # Só o readWriteFile (o diretório basta); sem dossiê, o n8n entrega um item sem binário.
                "Ler dossiês do modo personalizado": [{"json": {}, "binary": {"data": {"directory": AUTO_NO_N8N + p}}} for p in dossies]
                or [{"json": {}}]}
-        codigo = codigo_do_balcao(modo)
+        codigo = codigo_do_balcao()
         for de, para in (troca or {}).items():
             codigo = codigo.replace(de, para)
         saida = [i["json"] for i in rodar_js(codigo, nos, planilha)]
@@ -881,60 +773,82 @@ def testar() -> int:
             self.assertEqual(r["pasta"]["pid-c"], "_em-conversa/clinica-c")
             self.assertEqual((r["a"], r["c"]), (True, False))
 
-    class GateDeEnvio(unittest.TestCase):
-        """18/10/2026: o gate de pré-envio da 1ª mensagem (gate-de-envio.js) no cruzamento do Balcão.
-        O lead ruim tem lixo no nome ("Padaria {X}": marca sem preencher), então o texto sai quebrado."""
-        RUIM = "pid-03x"  # no meio da ordem de place_id (a alocação sorteia nessa ordem), para o barrado poder gastar a vez de outros
+        def test_lead_sem_pasta_nenhuma_esta_na_raiz_mas_so_se_algum_recibo_foi_lido(self):
+            # A sem demo e sem recibo (SITE-8): "pid-sem-pasta" não tem publicado.json em lugar nenhum.
+            nos = nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", RECIBOS)
+            r = rodar_js(PASTA_DO_LEAD_JS + "\nreturn [{ json: { sem: naRaiz('pid-sem-pasta'), recusado: naRaiz('pid-h'), "
+                         "descartado: naRaiz('pid-z') } }];", nos)[0]["json"]
+            self.assertEqual((r["sem"], r["recusado"], r["descartado"]), (True, False, False))
+            # Nenhum recibo lido (a leitura da pasta falhou): ninguém é decidido por falta de informação.
+            vazio = nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", [])
+            r = rodar_js(PASTA_DO_LEAD_JS + "\nreturn [{ json: { sem: naRaiz('pid-sem-pasta') } }];", vazio)[0]["json"]
+            self.assertFalse(r["sem"])
 
-        def rodada(self, modo, n=8, ruim=True, status="novo", **extra):
-            pids = [f"pid-{i:02d}" for i in range(n)] + ([self.RUIM] if ruim else [])
-            planilha = [linha(p, status, nota="4.9", avaliacoes="34", vertical="advocacia",
-                              **({"nome": "Padaria {X}"} if p == self.RUIM else {}), **extra) for p in pids]
-            recibos = [(f"lead-{p}", recibo(p, f"lead-{p}")) for p in pids]
-            return cruzar(planilha=planilha, recibos=recibos, marcas=[], descartes=[], dossies=[], modo=modo)
+    class SemRecibo(unittest.TestCase):
+        """19/10/2026 (SITE-8, SITE-17): o Balcão marca "pronto" o lead sem recibo; o enviado sem recibo expira como os outros,
+        e "Pastas a mover" só escreve o arquivo do site-pastas quando há o que mover."""
 
-        def test_avisar_mantem_pronto_e_grava_o_motivo(self):
-            por = self.rodada("avisar")
-            ruim = por[self.RUIM][0]
-            self.assertEqual(ruim["status"], "pronto")
-            self.assertTrue(ruim["wa_link"].endswith("/enviar?place_id=" + self.RUIM))
-            self.assertTrue(ruim["gate_de_envio"].startswith("aviso: "), ruim["gate_de_envio"])
-            self.assertIn("marca sem preencher", ruim["gate_de_envio"])
-            for pid, itens in por.items():
-                if pid != self.RUIM:
-                    self.assertEqual((itens[0]["status"], itens[0]["gate_de_envio"]), ("pronto", ""), pid)
+        def test_pastas_a_mover_nao_grava_arquivo_vazio(self):
+            wf = balcao(None)
+            codigo = next(n for n in wf["nodes"] if n["name"] == "Pastas a mover")["parameters"]["jsCode"]
+            ler = nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", RECIBOS)
+            def linha_(pid, status, **k):
+                return {"json": {"place_id": pid, "nome": pid, "status": status, "respondeu_em": "", **k}}
+            # Nada a mover (um enviado esperando, outro sem pasta): não sai item, então o nó de gravar nem roda.
+            self.assertEqual(rodar_js(codigo, ler, [linha_("pid-b", "enviado"), linha_("pid-sem-pasta", "enviado")]), [])
+            # Expirado na raiz vai para _concluidos/ com o prazo certo no motivo.
+            saida = rodar_js(codigo, ler, [linha_("pid-b", "expirado")])
+            self.assertEqual(len(saida), 1)
+            mover = json.loads(base64.b64decode(saida[0]["binary"]["data"]["data"]))["mover"]
+            self.assertEqual([(m["place_id"], m["para"], m["motivo"]) for m in mover],
+                             [("pid-b", "_concluidos/oficina-b", f"{EXPIRA_DIAS} dias sem resposta")])
 
-        def test_desligado_nao_escreve_a_coluna_e_o_resto_e_igual(self):
-            desligado, avisar = self.rodada("desligado"), self.rodada("avisar")
-            for itens in desligado.values():
-                self.assertNotIn("gate_de_envio", itens[0])
-            sem_coluna = {p: [{k: v for k, v in i.items() if k != "gate_de_envio"} for i in itens] for p, itens in avisar.items()}
-            self.assertEqual(desligado, sem_coluna)
+        def test_pendencia_conta_o_enviado_sem_recibo_e_diz_o_prazo(self):
+            wf = balcao(None)
+            codigo = next(n for n in wf["nodes"] if n["name"] == "Pendências da esteira")["parameters"]["jsCode"]
+            ler = nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", RECIBOS)
+            entrada = [{"json": {"place_id": p, "status": "enviado", "respondeu_em": ""}}
+                       for p in ("pid-b", "pid-sem-pasta", "pid-h", "pid-c")]  # h: _recusados, c: _em-conversa
+            estado = json.loads(base64.b64decode(rodar_js(codigo, ler, entrada)[0]["binary"]["data"]["data"]))
+            espera = next(i for i in estado["itens"] if i["id"] == "site-resposta")
+            self.assertEqual(espera["quantidade"], 2)
+            self.assertIn(f"expira em {EXPIRA_DIAS} dias", espera["detalhe"])
+            self.assertNotIn("marca como enviado", next(i for i in estado["itens"] if i["id"] == "site-enviar")["detalhe"])
 
-        def test_bloquear_novo_nao_vira_pronto_e_so_ganha_o_motivo(self):
-            ruim = self.rodada("bloquear")[self.RUIM]
-            self.assertEqual(len(ruim), 1)
-            self.assertEqual(set(ruim[0]), {"place_id", "gate_de_envio"})
-            self.assertTrue(ruim[0]["gate_de_envio"].startswith("barrado: "), ruim[0])
+        def test_pronto_igual_a_linha_nao_e_regravado_e_o_que_mudou_e(self):
+            # SITE-17: o Balcão remonta o "pronto" toda hora; depois que a planilha tem o que ele escreveu, nada a gravar.
+            recibos = [(f"lead-{i}", recibo(f"pid-{i}", f"lead-{i}")) for i in range(4)]
+            planilha = [linha(f"pid-{i}", "novo", vertical="advocacia", nota="4.9", avaliacoes="34") for i in range(4)]
+            primeira = cruzar(planilha=planilha, recibos=recibos, marcas=[], descartes=[], dossies=[])
+            self.assertEqual(len(primeira), 4)
+            gravada = []
+            for l in planilha:
+                novo = {**l["json"], **primeira[l["json"]["place_id"]][0]}
+                gravada.append({"json": novo})
+            segunda = cruzar(planilha=gravada, recibos=recibos, marcas=[], descartes=[], dossies=[])
+            self.assertEqual(segunda, {}, "nada mudou: nenhuma linha vai para a escrita")
+            # Mudou o briefing de um que recebeu a A (só ela leva o detalhe dos elogios): só ele volta, com o texto novo.
+            com_a = next(g for g in gravada if g["json"]["mensagem_variante"] == "A")
+            com_a["json"]["briefing"] = "**Elogiam:** o café coado."
+            terceira = cruzar(planilha=gravada, recibos=recibos, marcas=[], descartes=[], dossies=[])
+            self.assertEqual(sorted(terceira), [com_a["json"]["place_id"]])
+            self.assertIn("caf", unquote(terceira[com_a["json"]["place_id"]][0]["wa_me"]))
 
-        def test_bloquear_pronto_que_reprova_volta_a_novo_sem_link(self):
-            ruim = self.rodada("bloquear", status="pronto")[self.RUIM][0]
-            self.assertEqual((ruim["status"], ruim["wa_me"], ruim["wa_link"], ruim["mensagem_variante"], ruim["ab_elegiveis"]),
-                             ("novo", "", "", "", ""))
-            self.assertTrue(ruim["gate_de_envio"].startswith("barrado: "))
+        def test_o_balcao_nao_escreve_mais_o_gate(self):
+            self.assertNotIn("gate_de_envio", COLUNAS_NOVAS)
+            for resto in ("conferirPrimeiraMensagem", "MODO_DO_GATE", "resumoDoGate"):
+                self.assertNotIn(resto, codigo_do_balcao())
+            wf = balcao(None)
+            schema = next(n for n in wf["nodes"] if n["name"] == "Atualizar lead na planilha")["parameters"]["columns"]["schema"]
+            self.assertNotIn("gate_de_envio", [c["id"] for c in schema])
 
-        def test_barrado_nao_gasta_a_vez_de_ninguem(self):
-            # As letras dos bons com o barrado na rodada (bloquear) = as letras deles sem o barrado existir.
-            def letras(por):
-                return {p: i[0]["mensagem_variante"] for p, i in por.items() if p != self.RUIM}
-            com = letras(self.rodada("bloquear"))
-            sem = letras(self.rodada("bloquear", ruim=False))
-            self.assertEqual(com, sem)
-            self.assertEqual(len(com), 8)
-            self.assertEqual({com[p] for p in com}, {"A", "B"})  # nota boa, sem Raio-X: A e B
+        def test_balcao_cruzar_repete_a_url_da_tailnet(self):
+            # O código do nó não importa Python: a constante do balcao-cruzar.js tem de ser a LINKS daqui.
+            js = (AQUI / "balcao-cruzar.js").read_text(encoding="utf-8")
+            self.assertIn(f"const LINKS = '{LINKS}';", js)
 
     carga = unittest.TestLoader()
-    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, Alocacao, PastaDoLead, GateDeEnvio))
+    suite = unittest.TestSuite(carga.loadTestsFromTestCase(c) for c in (Cruzar, Variante, SobPedido, Alocacao, PastaDoLead, SemRecibo))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
@@ -1061,24 +975,14 @@ if __name__ == "__main__":
     if "--colunas" in sys.argv:
         acrescentar_colunas(PLANILHA, LEADS_GID, "Leads", COLUNAS_NOVAS)
         sys.exit(0)
+    if sys.argv[1:2] != ["--balcao"]:
+        raise SystemExit("Uso: " + __doc__.split("Uso:", 1)[1].strip())
     erro = erro_wf()
-    if sys.argv[1:2] == ["--balcao"]:
-        try:
-            acrescentar_colunas(PLANILHA, LEADS_GID, "Leads", COLUNAS_NOVAS)
-        except Exception as e:  # noqa: BLE001 — o Balcão cria a coluna sozinho (insertInNewColumn); o observador espera por ela
-            print(f"colunas não criadas ({e}); rode de novo com --colunas quando a credencial Google estiver ok")
-        wf = balcao(erro)
-        wid = criar_ou_trocar(wf)
-        api("POST", f"/workflows/{wid}/activate")  # o PUT guarda; ativar publica a versão nova
-        print(wf["name"], "->", wid, f"({len(wf['nodes'])} nós, ativo)")
-        sys.exit(0)
-    gemini = credencial_gemini()
-    ids = {}
-    for wf in (cacador(sys.argv[1], gemini, erro), balcao(erro)):
-        ids[wf["name"]] = criar_ou_trocar(wf)
-        print(wf["name"], "->", ids[wf["name"]], f"({len(wf['nodes'])} nós)")
-    Path(AQUI / "site-antes-da-venda.ids.json").write_text(json.dumps(ids, ensure_ascii=False))
-    if "--ativar" in sys.argv:
-        for nome, i in ids.items():
-            api("POST", f"/workflows/{i}/activate")
-            print("ativo:", nome)
+    try:
+        acrescentar_colunas(PLANILHA, LEADS_GID, "Leads", COLUNAS_NOVAS)
+    except Exception as e:  # noqa: BLE001 — o Balcão cria a coluna sozinho (insertInNewColumn); o observador espera por ela
+        print(f"colunas não criadas ({e}); rode de novo com --colunas quando a credencial Google estiver ok")
+    wf = balcao(erro)
+    wid = criar_ou_trocar(wf)
+    api("POST", f"/workflows/{wid}/activate")  # o PUT guarda; ativar publica a versão nova
+    print(wf["name"], "->", wid, f"({len(wf['nodes'])} nós, ativo)")

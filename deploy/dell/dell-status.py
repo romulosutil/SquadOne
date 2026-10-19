@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Retrato do Dell worker a cada minuto: grava o estado para a Central e avisa
 o Rômulo quando algo quebra e quando volta: pelo bot do Telegram desde 16/10/2026
-(OT-14), pelo Hermes (WhatsApp) só se o bot falhar. Ver "avisos" abaixo.
+(OT-14), pelo Hermes (WhatsApp) só se o bot falhar. Ver "avisos" abaixo. O status.json é gravado
+ANTES de qualquer aviso (19/10/2026, HC-2): aviso lento ou travado não deixa a Central sem retrato.
 
 Uma verificação é {id, grupo, nome, estado, detalhe, link?, o_que_fazer?,
 acao?, sozinho?}. `estado` é `ok`, `atencao` ou `falha`. Só `falha` vira
-WhatsApp: `atencao` aparece na Central e não interrompe ninguém. Vermelho quer
+aviso: `atencao` aparece na Central e não interrompe ninguém. Vermelho quer
 dizer "você precisa agir, ou está quebrado agora"; amarelo, "vale olhar".
 `o_que_fazer` diz, em uma ou duas frases, o que aquilo significa e o que o
 Rômulo faz (ou "nada — resolve sozinho quando…", com `sozinho: true`); `acao`
@@ -41,6 +42,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -69,6 +71,7 @@ LEMBRETE_FALHA_H = 12  # falha que continua é relembrada, não repetida a cada 
 # O aviso do WhatsApp é lido no celular: o link é o da tailnet, não o loopback.
 CENTRAL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/"
 N8N_CONTAINER = "licitacoes-automation-n8n-1"
+CENTRAL_RUNTIME = "http://127.0.0.1:9120/api/runtime"
 
 
 def agora() -> datetime:
@@ -147,8 +150,34 @@ def http_json(url: str, headers: dict | None = None, timeout: float = 8):
         return json.load(r)
 
 
+def com_prazo(fn, segundos: float):
+    """Roda `fn()` numa thread daemon e levanta TimeoutError se passar de `segundos` (HC-2): para o que não
+    tem timeout próprio (getaddrinfo) e para uma verificação inteira que travou. A thread que ficou para
+    trás morre com o processo."""
+    saida: dict = {}
+
+    def alvo() -> None:
+        try:
+            saida["valor"] = fn()
+        except Exception as e:  # noqa: BLE001 — repassado a quem espera
+            saida["erro"] = e
+    th = threading.Thread(target=alvo, daemon=True)
+    th.start()
+    th.join(segundos)
+    if th.is_alive():
+        raise TimeoutError(f"passou de {segundos:g} s")
+    if "erro" in saida:
+        raise saida["erro"]
+    return saida["valor"]
+
+
 def unit_ativa(unit: str) -> bool:
-    r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True)
+    """Todo subprocess daqui tem prazo (HC-2): um systemctl/docker travado não pode levar o monitor
+    inteiro ao TimeoutStartSec do systemd antes de gravar o status.json."""
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
     return r.stdout.strip() == "active"
 
 
@@ -183,6 +212,10 @@ def servicos() -> list[dict]:
     ok, det = http_ok("http://127.0.0.1:8080/healthz")
     out.append(check("terminal", "servicos", "Terminal e IDE (code-server)", "ok" if ok else "falha",
                      "Respondendo" if ok else f"Sem resposta: {det}", "http://127.0.0.1:8080/"))
+    # A própria Central (HC-5): o healthwatch a religa, mas ninguém contava ao Rômulo que ela caiu.
+    ok, det = http_ok(CENTRAL_RUNTIME)
+    out.append(check("central", "servicos", "Central do SquadOne", "ok" if ok else "falha",
+                     "Respondendo" if ok else f"Sem resposta: {det}"))
     out.append(whatsapp_sessao())
     return out
 
@@ -203,8 +236,9 @@ def avaliar_whatsapp(resposta, erro: str | None = None) -> dict:
     detalhe = (f"Bridge responde, mas a sessão está '{status}'" if status
                else f"Bridge do WhatsApp sem resposta em :3000 ({(erro or 'resposta sem status')[:80]})")
     return check("whatsapp-sessao", "servicos", "Sessão do WhatsApp", "falha", detalhe,
-                 o_que_fazer=("Nenhum aviso chega pelo WhatsApp (ficam na fila e saem quando voltar) — inclusive "
-                              "este. Se ~/.hermes/whatsapp/bridge.log diz 'Logged out', a sessão foi desconectada "
+                 o_que_fazer=("Nada chega pelo WhatsApp (os avisos que dependem dele ficam na fila e saem quando "
+                              "voltar); os alertas do Dell seguem pelo Telegram. Se ~/.hermes/whatsapp/bridge.log diz "
+                              "'Logged out', a sessão foi desconectada "
                               "no celular: refaça o pareamento do WhatsApp do Hermes no Dell (QR code no celular). "
                               "Se não, peça ao Claude: \"o WhatsApp do Hermes caiu\"."))
 
@@ -323,25 +357,46 @@ def religamentos() -> list[dict]:
 
 # ---------------------------------------------------------------- containers
 
+def pausado_de_proposito(nome: str) -> bool:
+    """Marca `pausa-<nome>` em ~/.local/state/dell-status/: a mesma convenção dos timers e das units."""
+    return (ESTADO_DIR / f"pausa-{nome}").exists()
+
+
+def _politica_de_reinicio(nome: str) -> str:
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.HostConfig.RestartPolicy.Name}}", nome],
+                           capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        return "?"  # sem resposta, não dá para dizer que foi de propósito: entra como problema
+    return r.stdout.strip()
+
+
 def containers() -> list[dict]:
-    r = subprocess.run(["docker", "ps", "-a", "--format", "{{json .}}"], capture_output=True, text=True)
+    """Container fora do ar é falha, e o resumo "Containers" acompanha o pior dos individuais (HC-24: antes
+    o resumo era atenção e o individual falha, para a mesma condição). Parado de propósito (política
+    de reinício `no`, ou a marca de pausa) não conta."""
+    try:
+        r = subprocess.run(["docker", "ps", "-a", "--format", "{{json .}}"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return [check("docker", "containers", "Docker", "falha", "docker ps não respondeu em 10 s")]
     if r.returncode != 0:
         return [check("docker", "containers", "Docker", "falha", r.stderr.strip()[:120] or "docker ps falhou")]
-    problemas, rodando = [], 0
+    problemas, rodando, pausados = [], 0, 0
     for linha in r.stdout.splitlines():
         c = json.loads(linha)
         nome, estado, status = c["Names"], c["State"], c["Status"]
         if estado == "running" and "unhealthy" not in status:
             rodando += 1
             continue
-        if estado == "exited":
-            pol = subprocess.run(["docker", "inspect", "-f", "{{.HostConfig.RestartPolicy.Name}}", nome],
-                                 capture_output=True, text=True).stdout.strip()
-            if pol in ("", "no"):
-                continue  # parado de propósito: não é problema
+        if estado == "exited" and _politica_de_reinicio(nome) in ("", "no"):
+            continue  # parado de propósito: não é problema
+        if pausado_de_proposito(nome):
+            pausados += 1
+            continue
         problemas.append(check(f"container:{nome}", "containers", nome, "falha", status))
-    return problemas + [check("containers", "containers", "Containers", "ok" if not problemas else "atencao",
-                              f"{rodando} rodando" + (f", {len(problemas)} com problema" if problemas else ""))]
+    return problemas + [check("containers", "containers", "Containers", "falha" if problemas else "ok",
+                              f"{rodando} rodando" + (f", {len(problemas)} com problema" if problemas else "")
+                              + (f"; {pausados} pausado(s) de propósito" if pausados else ""))]
 
 
 # ---------------------------------------------------------------- fluxos (n8n)
@@ -350,6 +405,9 @@ FLUXOS_VISTOS = HOME / ".local/state/dell-status/fluxos.json"
 ERRO_N8N = ("error", "crashed")
 FOLGA_FLUXO = timedelta(minutes=15)  # startedAt é a hora do disparo; 15 min cobre fila e relógio
 SEM_REGISTRO_OK = timedelta(minutes=30)
+# Quanto o laço de fluxos pode gastar (cada um é uma chamada à API do n8n, de até 8 s). O monitor
+# inteiro tem PRAZO_TOTAL_S; este teto deixa folga para as outras verificações.
+TETO_DOS_FLUXOS_S = 20
 # Gatilhos que só rodam quando alguém chama: não rodar não é problema.
 ESPERA = {"webhook": "um clique ou uma chamada (webhook)", "formTrigger": "uma resposta do formulário",
           "errorTrigger": "a falha de outro fluxo", "manualTrigger": "alguém rodar à mão",
@@ -598,7 +656,18 @@ def fluxos() -> list[dict]:
     t, ligado, n8n = agora(), ligado_desde(), n8n_no_ar_desde()
     fluxos_vistos.clear()
     out = []
+    inicio = time.monotonic()
     for w in wfs:
+        if time.monotonic() - inicio > TETO_DOS_FLUXOS_S:
+            # Uma chamada à API do n8n por fluxo: com o n8n lento, o laço inteiro comeria o prazo do
+            # monitor (HC-2). Os que sobram ficam "não verificados" e guardam a memória que tinham.
+            fluxos_vistos[w["id"]] = dict(memoria.get(w["id"]) or {})
+            c = check(f"fluxo:{w['id']}", "fluxos", w["name"], "atencao",
+                      "Não verificado neste minuto: a API do n8n está lenta",
+                      f"{N8N_EDITOR}/workflow/{w['id']}", "Nada: a próxima rodada do monitor confere de novo.", sozinho=True)
+            c["nao_verificado"] = True
+            out.append(c)
+            continue
         try:
             ex = http_json(f"{N8N}/api/v1/executions?workflowId={w['id']}&limit=50", h)["data"]
         except Exception:  # noqa: BLE001 — sem a lista, vale a memória
@@ -918,7 +987,7 @@ def avaliar_rotinas_caladas(rotinas: list[tuple[str, str, list[tuple[datetime, s
     jid, rnome = caladas[0][0], caladas[0][1]
     return check("rotinas-caladas", "dados", nome, "atencao", "; ".join(partes)[:300],
                  o_que_fazer=(f"A rotina roda, mas não tem nada a dizer há dias: costuma ser o dado que ela lê parado "
-                              "(no ASMR, \"Métricas do ASMR\" em Dados) ou um prompt que não serve mais. Peça ao Claude: \"a rotina "
+                              "(foi o caso do ASMR) ou um prompt que não serve mais. Peça ao Claude: \"a rotina "
                               f"{rnome} só responde [SILENT]\". Se não serve mais, pause: hermes cron pause {jid}. Se "
                               "calar é o normal dela, ponha o id em ~/.local/state/dell-status/silencio-esperado."))
 
@@ -935,77 +1004,6 @@ def rotinas_caladas() -> list[dict]:
     lista = [(jid, j.get("name") or jid, [(em, classificar_saida(txt)) for em, txt in saidas_da_rotina(jid)])
              for jid, j in rotinas.items() if rotina_ativa(j) and not j.get("no_agent")]
     return [avaliar_rotinas_caladas(lista, esperados & set(rotinas), agora())]
-
-
-# ---------------------------------------------------------------- idade dos dados
-
-# Dado que uma rotina do Hermes deveria renovar. O shorts-metrics.json do ASMR parou em
-# 05/10/2026 e ninguém viu: a coleta seguia rodando de hora em hora, "bloqueada" (feed público
-# com erro e sem navegador), e a revisão diária ficou [SILENT] por falta de snapshot novo.
-DADOS_COM_IDADE = [
-    {"id": "asmr-metricas", "nome": "Métricas do ASMR", "rotina": "79a04dbf2d81",
-     "arquivo": HOME / ".local/share/asmr-fullbringer/shorts-metrics.json",
-     # O portão da coleta (asmr_coleta_gate.py) só acorda com Short de até 72 h no ar.
-     "limite_h": 72,
-     "sem_rodar": ("Nada, se não saiu Short novo: a coleta só acorda o modelo com Short de até 72 h no ar. Se "
-                   "você publicou e não aparece, peça ao Claude: \"a coleta do ASMR não vê o Short novo\"."),
-     "rodou_sem_gravar": ("A coleta roda e não grava: leia a última resposta em ~/.hermes/cron/output/79a04dbf2d81/ "
-                          "(em 11/10/2026 dizia \"bloqueado\": feed público com erro e sem o navegador do Hermes). "
-                          "Confira \"Navegador do Hermes\" em Serviços e peça ao Claude: \"a coleta do ASMR não "
-                          "grava\". A revisão 24/48 h fica muda enquanto isso.")},
-]
-# A saída do Hermes é gravada no fim da rodada, minutos depois de a coleta gravar o arquivo.
-FOLGA_SAIDA = timedelta(minutes=15)
-
-
-def avaliar_idade_do_dado(dado: dict, gravado: datetime | None, rotina: dict | None, ativa_desde: datetime | None,
-                          acordou_depois: int, t: datetime) -> dict:
-    """Ok com a rotina pausada (de propósito: `hermes cron pause`) ou com o dado
-    mais novo que o limite, contado também desde que a rotina voltou da pausa.
-    Velho: vermelho se o modelo rodou depois da última gravação e não gravou
-    (a coleta está quebrada); amarelo que resolve sozinho se a rotina nem
-    precisou acordar o modelo."""
-    cid, nome = f"idade:{dado['id']}", dado["nome"]
-    quando = f"{gravado.astimezone(FUSO_BR):%d/%m %H:%M}" if gravado else "nunca"
-    if rotina is None:
-        return check(cid, "dados", nome, "atencao", f"A rotina {dado['rotina']} não existe mais no Hermes; dados de {quando}",
-                     o_que_fazer="Ninguém mais renova este dado. Se a coleta acabou de vez, peça ao Claude tirá-lo do "
-                                 "dell-status (DADOS_COM_IDADE); se não, a rotina precisa voltar ao Hermes.")
-    if not rotina_ativa(rotina):
-        pausa = _quando(rotina.get("paused_at"))
-        return check(cid, "dados", nome, "ok", "Coleta pausada de propósito"
-                     + (f" em {pausa.astimezone(FUSO_BR):%d/%m}" if pausa else "") + f"; dados de {quando}")
-    base = max(filter(None, (gravado, ativa_desde)), default=None)
-    if base and t - base <= timedelta(hours=dado["limite_h"]):
-        return check(cid, "dados", nome, "ok", f"Atualizado em {quando}")
-    desde = f"há {(t - gravado).days} dia(s) (desde {quando})" if gravado else "(nunca gravado)"
-    if acordou_depois:
-        return check(cid, "dados", nome, "falha",
-                     f"Sem dado novo {desde}, e a coleta rodou {acordou_depois} vez(es) depois sem gravar",
-                     o_que_fazer=dado["rodou_sem_gravar"])
-    return check(cid, "dados", nome, "atencao", f"Sem dado novo {desde}; a coleta não precisou rodar",
-                 o_que_fazer=dado["sem_rodar"], sozinho=True)
-
-
-def idade_dos_dados() -> list[dict]:
-    try:
-        rotinas = rotinas_do_hermes()
-    except (OSError, ValueError):
-        return []  # "Rotinas do Hermes" já fica amarela com o jobs.json ilegível
-    t, out = agora(), []
-    for dado in DADOS_COM_IDADE:
-        try:
-            gravado = datetime.fromtimestamp(dado["arquivo"].stat().st_mtime, timezone.utc)
-        except OSError:
-            gravado = None
-        rotina = rotinas.get(dado["rotina"])
-        # Quando a rotina voltou da pausa (ou mudou de agenda): crons_hermes() roda antes e anota.
-        ativa_desde = _quando((agendas_vistas.get(dado["rotina"]) or {}).get("desde"))
-        corte = max(filter(None, ((gravado + FOLGA_SAIDA) if gravado else None, ativa_desde)), default=None)
-        acordou = sum(1 for em, texto in saidas_da_rotina(dado["rotina"])
-                      if (not corte or em > corte) and acordou_o_modelo(texto)) if rotina else 0
-        out.append(avaliar_idade_do_dado(dado, gravado, rotina, ativa_desde, acordou, t))
-    return out
 
 
 # ---------------------------------------------------------------- gerador de sites
@@ -1200,16 +1198,23 @@ AUTO = HOME / "auto-site"
 
 # O que o Rômulo faz com cada fila e onde (rota da Central). sozinho = a fila anda sem ele.
 FILAS = {
-    "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00 (com o demo sob pedido, o raio-x.timer faz o "
-                   "Raio-X às 11:15 e 17:15). Para adiantar um lead, rode /lead-novo numa sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
-    # 08/10/2026: o link abre direto a fila "Enviar um por um" do CRM (um site por vez, a mensagem antes do toque).
-    "site-enviar": ("Abra a fila Enviar um por um: um site por vez, com o demo e a mensagem; o toque abre o WhatsApp "
-                    "e marca o envio. Escrever direto ao número do lead também conta como envio.",
-                    ("Enviar um por um", "/crm?produto=site&fila=envio"), False),
-    "site-resposta": ("Nada por enquanto: a resposta no WhatsApp marca sozinha. Sem resposta, o follow-up pronto "
-                      "chega no 3º dia (09:00) e o lead expira no 10º.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
-    "prumo-revisar": ("Abra o CRM em Hoje › Prospects para revisar: veja o site e, se fizer sentido, clique em "
-                      "Enviar convite.", ("Abrir no CRM", "/crm?produto=prumo"), False),
+    # Gerador em operação normal (sem o marcador do demo sob pedido): até 4 sites por dia às 08:00.
+    "sites-fila": ("Nada: o gerador faz até 4 sites por dia às 08:00. Para adiantar um lead, rode /lead-novo numa "
+                   "sessão do Claude em ~/auto-site.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    # Demo sob pedido (14/10/2026): a fila do gerador fica vazia e quem trabalha é o Raio-X.
+    "sites-fila-raio-x": ("Nada: o raio-x.timer faz o Raio-X às 11:15 e 17:15. O site só sai se o lead disser que quer "
+                          "ver, pelo botão Gerar demo da Ficha (gerador-de-sites-pedido.service).",
+                          ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    # Desde 18/10/2026 só o observador do WhatsApp marca o envio: tocar no link não anota nada.
+    "site-enviar": ("Os primeiros contatos saem dentro do expediente (seg–sex, 8h às 17h30) e do ritmo. Veja em Vendas › "
+                    "Primeiros contatos o que o time preparou. O envio só é anotado quando o observador do WhatsApp vê "
+                    "a mensagem sair do número: tocar no link não marca nada.",
+                    ("Primeiros contatos", "/crm?ver=triagem&produto=site"), False),
+    "site-resposta": ("Nada por enquanto: a resposta no WhatsApp entra sozinha pelo observador. Sem resposta, o "
+                      "follow-up de quem leu aparece em Vendas › Conversas para você a partir do 3º dia, e o CRM manda "
+                      "o lead para Perdido com 7 dias sem mensagem.", ("Ver no CRM", "/crm?ver=funil&produto=site"), True),
+    "prumo-revisar": ("Abra Vendas › Primeiros contatos: veja o site de cada empresa e convide ou dispense.",
+                      ("Primeiros contatos", "/crm?ver=triagem&produto=prumo"), False),
     "prumo-aguardando": ("Vale um lembrete no WhatsApp do dono; o CRM mostra há quantos dias cada convite espera.",
                          ("Abrir no CRM", "/crm?produto=prumo"), False),
     "prumo-diagnostico": ("Leia o diagnóstico e o rascunho do Mapa (~/prumo-entregas) e marque o workshop com o dono.",
@@ -1217,15 +1222,16 @@ FILAS = {
 }
 
 
-def _fila(id_: str, nome: str, qtd: int, detalhe: str, link: str | None = None) -> dict:
-    o, acao, sozinho = FILAS.get(id_, (None, None, False))
+def _fila(id_: str, nome: str, qtd: int, detalhe: str, link: str | None = None, texto: str | None = None) -> dict:
+    """`texto`: a chave de FILAS quando o texto não é a do próprio id (a fila é a mesma, o fluxo mudou)."""
+    o, acao, sozinho = FILAS.get(texto or id_, (None, None, False))
     return check(f"pend:{id_}", "pendencias", nome, "atencao" if qtd else "ok", detalhe, link,
                  o if qtd else None, acao if qtd else None, sozinho=bool(qtd and sozinho))
 
 
 def pendencias() -> list[dict]:
     """Não é saúde: é fila de trabalho humano. `atencao` quando há algo esperando,
-    e nunca vira WhatsApp (só `falha` vira)."""
+    e nunca vira aviso (só `falha` vira)."""
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
@@ -1234,7 +1240,8 @@ def pendencias() -> list[dict]:
         # do padrão do modelo (raio-x-sem-padrao.json) não é abordado e sai da conta.
         fila = [d for d in fila if not (d / "raio-x-sem-padrao.json").is_file()]
         out.append(_fila("sites-fila", "Leads esperando o Raio-X", len(fila),
-                         f"{len(fila)} lead(s) com pasta e sem Raio-X (demo sob pedido: o site só sai pelo botão Gerar demo)"))
+                         f"{len(fila)} lead(s) com pasta e sem Raio-X (demo sob pedido: o site só sai pelo botão Gerar demo)",
+                         texto="sites-fila-raio-x"))
     else:
         out.append(_fila("sites-fila", "Sites na fila do gerador", len(fila),
                          f"{len(fila)} lead(s) com pasta e sem site publicado"))
@@ -1278,6 +1285,23 @@ def backup() -> list[dict]:
 
 # O Google recusou o token do rclone: não passa sozinho, alguém precisa reconectar.
 TOKEN_RECUSADO = re.compile(r"invalid_grant|couldn't fetch token|token (has been )?(expired|revoked)|reconnect", re.I)
+BACKUP_FONTES = HOME / ".config/backup-dell/fontes.toml"
+
+
+def remoto_do_backup(fid: str, fontes: Path | None = None) -> str:
+    """O remote do rclone que a fonte usa, lido do mesmo fontes.toml do runner (HC-22): a Estrutura usa o
+    `gdrive-estrutura`, e mandar reconectar o `gdrive` não a destrava. Qualquer dúvida cai no `gdrive`."""
+    try:
+        import tomllib
+        cfg = tomllib.loads((fontes or BACKUP_FONTES).read_text(encoding="utf-8"))
+    except (ImportError, OSError, ValueError):
+        return "gdrive"
+    geral = (cfg.get("geral") or {}).get("remoto") or "gdrive"
+    for e in cfg.get("espelho") or []:
+        if e.get("id") == fid:
+            return e.get("remoto") or geral
+    m = re.match(r"rclone:([^:]+):", str((cfg.get("cofre") or {}).get("repositorio") or ""))
+    return m.group(1) if fid == "cofre" and m else geral
 
 
 def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
@@ -1291,6 +1315,10 @@ def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
             detalhe = detalhe or "Ensaio de restauração ainda não rodou"
         elif idade > 35 * 24:
             estado, detalhe = "atencao", f"Último ensaio ok em {datetime.fromisoformat(ok_em):%d/%m}; o próximo cofre roda outro"
+        elif f.get("estado") == "falha":
+            # A rodada mais recente falhou, mesmo com um sucesso de menos de 35 dias atrás (HC-7): o ensaio
+            # é o único que prova que o cofre restaura, então não pode sair verde com a última tentativa ruim.
+            estado = "atencao"
         else:
             estado = "ok"
     elif idade is None:
@@ -1308,7 +1336,7 @@ def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
         pass
     elif f.get("estado") in ("falha", "atencao") and TOKEN_RECUSADO.search(detalhe):
         estado = "falha"
-        o = ("O Google desconectou o backup. No terminal do Dell rode: rclone config reconnect gdrive: "
+        o = (f"O Google desconectou o backup. No terminal do Dell rode: rclone config reconnect {remoto_do_backup(fid)}: "
              "(abre o navegador para entrar com a conta do Google). A próxima rodada volta sozinha.")
     elif "restic check falhou" in detalhe:
         o = "O cofre pode ter partes estragadas. Peça ao Claude agora: \"o restic check do cofre falhou\"."
@@ -1323,11 +1351,14 @@ def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
         o = "Entrou uma pasta grande nova no cofre. Se ela não precisa de backup, peça ao Claude pô-la no \"excluir\"."
     elif estado == "falha":
         o = "O backup está parado além do limite. Veja o detalhe e peça ao Claude: \"o backup do Dell parou\"."
+    elif f.get("tipo") == "ensaio" and f.get("estado") == "falha":
+        o = ("O último ensaio de restauração falhou (veja o detalhe): sem ele não há prova de que o cofre restaura. "
+             "O próximo roda junto com o cofre (03:30); se falhar de novo, peça ao Claude: \"o ensaio de restauração falhou\".")
     elif f.get("tipo") == "ensaio" and estado == "atencao":
         o, sozinho = "Nada: o ensaio de restauração é mensal e roda junto com o próximo cofre (03:30).", True
     elif estado == "atencao":
         o, sozinho = ("Uma rodada não deu certo; a próxima tenta de novo sozinha. Se passar do limite, vira "
-                      "falha e o Hermes avisa."), True
+                      "falha e o aviso sai pelo Telegram."), True
     return check(f"backup:{fid}", "dados", nome, estado, detalhe, o_que_fazer=o, sozinho=sozinho)
 
 
@@ -1365,13 +1396,38 @@ def maquina() -> list[dict]:
     out.append(check("memoria", "maquina", "Memória", "atencao" if livre < 10 else "ok", f"{livre}% livre"))
     falhas = 0
     for _ in range(3):
-        try:
-            socket.getaddrinfo("oauth2.googleapis.com", 443)
-        except OSError:
-            falhas += 1
+        if conectar_ao_canal():
+            break
+        falhas += 1
     out.append(check("dns", "maquina", "Internet e DNS", "falha" if falhas == 3 else "atencao" if falhas else "ok",
-                     "Resolvendo nomes normalmente" if not falhas else f"{falhas}/3 consultas de DNS falharam"))
+                     f"Conectando normalmente a {HOST_DO_ALERTA} (o canal dos alertas)" if not falhas
+                     else f"{falhas}/3 tentativas de conexão a {HOST_DO_ALERTA} falharam"))
     return out
+
+
+# O que importa da internet para o monitor é o canal do alerta (HC-21): getaddrinfo sozinho pode vir do
+# cache do resolvedor e dizer "ok" com o Dell sem rota nenhuma.
+HOST_DO_ALERTA = "api.telegram.org"
+PRAZO_DA_INTERNET_S = 3
+
+
+def conectar_ao_canal(host: str = HOST_DO_ALERTA, prazo: float = PRAZO_DA_INTERNET_S) -> bool:
+    """DNS (numa thread, porque getaddrinfo não tem timeout) + TCP + handshake TLS, cada passo com `prazo`.
+    Tenta até dois endereços, IPv4 primeiro: uma rota IPv6 quebrada não derruba a internet."""
+    try:
+        infos = com_prazo(lambda: socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM), prazo)
+    except (OSError, TimeoutError):
+        return False
+    for familia, tipo, proto, _, endereco in sorted(infos, key=lambda i: i[0] != socket.AF_INET)[:2]:
+        try:
+            with socket.socket(familia, tipo, proto) as s:
+                s.settimeout(prazo)
+                s.connect(endereco)
+                with ssl.create_default_context().wrap_socket(s, server_hostname=host):
+                    return True
+        except OSError:  # inclui timeout e ssl.SSLError
+            continue
+    return False
 
 
 # ---------------------------------------------------------------- pastas que crescem
@@ -1383,6 +1439,7 @@ GB = 1_000_000_000
 PASTAS_VIGIADAS = {"~/.cache": (HOME / ".cache", 25 * GB), "~/.local": (HOME / ".local", 15 * GB)}
 CRESCIMENTO_DIA = 2 * GB
 MEDIR_A_CADA = timedelta(hours=1)  # du a cada minuto seria desperdício
+TEMPO_DO_DU_S = 25  # por pasta: duas pastas têm de caber no prazo da verificação (PRAZO_POR_VERIFICACAO_S)
 GUARDAR_MEDIDAS = timedelta(days=8)
 TAMANHOS = HOME / ".local/state/dell-status/tamanhos.json"
 tamanhos_medidos: dict = {}  # preenchido por pastas_que_crescem(); main() grava (fora do --stdout)
@@ -1395,7 +1452,7 @@ def _gb(n: float) -> str:
 def medir_pasta(pasta: Path) -> dict:
     """{total, maiores: [[nome, bytes] ×3]} por `du -x --max-depth=1`."""
     r = subprocess.run(["du", "-x", "--max-depth=1", "--block-size=1", str(pasta)],
-                       capture_output=True, text=True, timeout=60)
+                       capture_output=True, text=True, timeout=TEMPO_DO_DU_S)
     total, filhas = None, []
     for linha in r.stdout.splitlines():
         n, _, caminho = linha.partition("\t")
@@ -1493,6 +1550,8 @@ O_QUE_FAZER = {
             "continuar, peça ao Claude.", False),
     "terminal": ("O terminal do navegador (code-server) não responde. Só afeta o Terminal; peça ao Claude se "
                  "precisar dele.", False),
+    "central": ("A Central do SquadOne (esta página) não responde: o healthwatch a reinicia em até 1 min; se "
+                "continuar, peça ao Claude: \"a Central caiu no Dell\" (journalctl --user -u squadone-operations).", False),
     "squadone-app": ("O SquadOne de agendas (Easypanel) não responde: demandas e lembretes param. Peça ao Claude "
                      "conferir o app no Easypanel.", False),
     "docker": ("O Docker não responde: o n8n e os projetos param. Peça ao Claude.", False),
@@ -1516,10 +1575,10 @@ def explicar(c: dict) -> dict:
     cid, det = c["id"], c["detalhe"]
     texto, sozinho = O_QUE_FAZER.get(cid, (None, False))
     if cid == "dns":
-        texto, sozinho = (("Algumas consultas de nome falharam: costuma ser a rede oscilando e passa sozinho.", True)
+        texto, sozinho = (("Algumas tentativas de conexão ao Telegram (o canal dos alertas) falharam: costuma ser a rede oscilando e passa sozinho.", True)
                           if c["estado"] == "atencao" else
-                          ("O Dell está sem internet: nada que depende da rede funciona. Confira o Wi-Fi e o "
-                           "roteador.", False))
+                          ("O Dell não consegue falar com a internet (nem com o Telegram, que leva os alertas): nada que depende da "
+                           "rede funciona. Confira o Wi-Fi e o roteador.", False))
     elif cid.startswith("container:"):
         texto = (f"O container {c['nome']} parou ou está sem saúde. Se for do n8n ou do radar, peça ao Claude já; os "
                  "outros são projetos e só afetam o próprio projeto.")
@@ -1550,9 +1609,14 @@ def explicar(c: dict) -> dict:
 
 # ---------------------------------------------------------------- avisos
 
+# Reserva do Telegram: não pode, sozinha, estourar o TimeoutStartSec da unit (150 s) depois que o
+# status.json já foi gravado; uma mensagem do Hermes leva segundos quando ele está de pé.
+TEMPO_DO_HERMES_S = 45
+
+
 def enviar(msg: str) -> bool:
     try:
-        r = subprocess.run([str(HERMES), "send", "--to", DESTINO, "-q", msg], capture_output=True, text=True, timeout=120)
+        r = subprocess.run([str(HERMES), "send", "--to", DESTINO, "-q", msg], capture_output=True, text=True, timeout=TEMPO_DO_HERMES_S)
         return r.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -1571,7 +1635,21 @@ OPERATIONS_ENV = HOME / ".config/squadone/operations.env"
 TOKEN_DO_BOT = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")  # o formato do BotFather, o mesmo do server/telegram.ts
 TEMPO_DO_TELEGRAM_S = 10
 MAX_TELEGRAM = 4096  # caracteres por mensagem na Bot API
-ORIGENS_PELO_TELEGRAM = {"socorro"}  # avisos de falha que chegam pela fila
+# Avisos de falha ou pessoais que chegam pela fila e saem pelo Telegram, não pelo WhatsApp de vendas (OT-14):
+# o socorro, o backup, o atualizar-central, o sync do Drive do Silmer e todo aviso gravado por fluxo do n8n
+# (a origem é "n8n:<nome do fluxo>", ver ORIGEM_JS em claude-ops/n8n.py: por isso o prefixo).
+ORIGENS_PELO_TELEGRAM = {"socorro", "backup-dell", "atualizar-central", "silmer-drive-sync"}
+PREFIXOS_PELO_TELEGRAM = ("n8n:",)
+# O fluxo "00 · Avisar falha pelo Hermes" avisa toda falha de fluxo na hora, e o "Quebrou" do dell-status
+# (fluxo:<id>) avisa a mesma falha até 1 min depois, com a causa: o mesmo problema em duas mensagens (HC-10).
+# Daqui só dá para colapsar as repetições do 00: sem `chave`, ele ganha uma por fluxo (24 h). Tirar a duplicata
+# do "Quebrou" pede mexer no próprio fluxo 00 (claude-ops/aviso-de-falha.py), que não é deste arquivo.
+ORIGEM_AVISO_DE_FALHA = "n8n:00 · Avisar falha pelo Hermes"
+FLUXO_QUE_FALHOU = re.compile(r'^Fluxo "(.+?)" falhou')
+
+
+def sai_pelo_telegram(origem: str) -> bool:
+    return origem in ORIGENS_PELO_TELEGRAM or origem.startswith(PREFIXOS_PELO_TELEGRAM)
 
 
 def config_do_telegram() -> tuple[str, list[int]] | None:
@@ -1597,12 +1675,20 @@ def cortar_para_o_telegram(msg: str) -> str:
 
 
 def enviar_telegram(msg: str, silencioso: bool) -> bool:
-    """sendMessage a cada chat do dono, texto puro. `silencioso` chega sem som (disable_notification).
-    Para no primeiro chat que falha, como o `telegramDoDono` da Central. O log nunca leva a URL: ela tem
-    o token."""
+    """Envia pelo bot e anota o resultado (HC-23): sem a conta das falhas seguidas, o Telegram podia ficar
+    fora semanas e todo alerta cair calado no WhatsApp de reserva. Sem bot configurado nada é anotado."""
     cfg = config_do_telegram()
     if not cfg:
         return False
+    ok = _enviar_telegram(cfg, msg, silencioso)
+    registrar_telegram(ok)
+    return ok
+
+
+def _enviar_telegram(cfg: tuple[str, list[int]], msg: str, silencioso: bool) -> bool:
+    """sendMessage a cada chat do dono, texto puro. `silencioso` chega sem som (disable_notification).
+    Para no primeiro chat que falha, como o `telegramDoDono` da Central. O log nunca leva a URL: ela tem
+    o token."""
     token, chats = cfg
     texto = cortar_para_o_telegram(msg)
     for chat in chats:
@@ -1623,6 +1709,73 @@ def enviar_telegram(msg: str, silencioso: bool) -> bool:
             log("telegram: a Bot API não confirmou o envio; vai pelo WhatsApp")
             return False
     return True
+
+
+TELEGRAM_ESTADO = HOME / ".local/state/dell-status/telegram.json"
+TELEGRAM_FALHAS_MAX = 3  # envios seguidos que falham antes de o canal virar uma verificação vermelha
+
+
+def registrar_telegram(ok: bool, t: datetime | None = None) -> None:
+    """{ok_em, falhas_seguidas, falhando_desde}: o último envio bom e quantos ruins vieram depois."""
+    t = t or agora()
+    try:
+        e = json.loads(TELEGRAM_ESTADO.read_text())
+        e = e if isinstance(e, dict) else {}
+    except (OSError, ValueError):
+        e = {}
+    if ok:
+        e = {"ok_em": iso(t), "falhas_seguidas": 0}
+    else:
+        e = {**e, "falhas_seguidas": int(e.get("falhas_seguidas") or 0) + 1,
+             "falhando_desde": e.get("falhando_desde") or iso(t)}
+    try:
+        gravar(TELEGRAM_ESTADO, e)
+    except OSError as erro:
+        log(f"telegram: estado não gravado: {erro}")
+
+
+def avaliar_telegram(e: dict, t: datetime) -> dict:
+    """PURA. N envios seguidos falhando = o canal dos alertas está fora e tudo cai no WhatsApp de reserva."""
+    nome = "Telegram (canal dos alertas)"
+    falhas = int(e.get("falhas_seguidas") or 0)
+    ok_em = _quando(e.get("ok_em"))
+    ultimo = f"último envio bom {_quando_br(ok_em, t)}" if ok_em else "nenhum envio bom registrado"
+    if falhas < TELEGRAM_FALHAS_MAX:
+        return check("telegram", "servicos", nome, "ok",
+                     (f"{falhas} envio(s) falharam; " if falhas else "") + ultimo[0].upper() + ultimo[1:])
+    desde = _quando(e.get("falhando_desde"))
+    return check("telegram", "servicos", nome, "falha",
+                 f"{falhas} envios seguidos falharam" + (f" desde {_quando_br(desde, t)}" if desde else "") + f"; {ultimo}",
+                 o_que_fazer=("O bot do Telegram não está entregando: os alertas do Dell estão indo só pelo WhatsApp de "
+                              "reserva (ou ficando na fila). Confira TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_IDS no "
+                              "~/.config/squadone/operations.env e se o bot foi bloqueado no Telegram. Sai do vermelho "
+                              "sozinho quando o bot voltar a responder. Se não souber, peça ao Claude: \"o Telegram do "
+                              "dell-status falha\"."))
+
+
+def telegram() -> list[dict]:
+    """Só existe com bot configurado. Em falha, sonda o bot (getMe) a cada minuto: sem isso o vermelho só
+    apagaria no próximo alerta, que pode demorar dias."""
+    cfg = config_do_telegram()
+    if not cfg:
+        return []
+    try:
+        e = json.loads(TELEGRAM_ESTADO.read_text())
+        e = e if isinstance(e, dict) else {}
+    except (OSError, ValueError):
+        e = {}
+    if int(e.get("falhas_seguidas") or 0) >= TELEGRAM_FALHAS_MAX and _sondar_telegram(cfg[0]):
+        registrar_telegram(True)
+        e = {"ok_em": iso(agora()), "falhas_seguidas": 0}
+    return [avaliar_telegram(e, agora())]
+
+
+def _sondar_telegram(token: str) -> bool:
+    try:
+        with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getMe", timeout=5) as r:
+            return json.load(r).get("ok") is True
+    except (OSError, ValueError):  # o texto do erro pode ter a URL, e ela tem o token: nem vai ao log
+        return False
 
 
 def enviar_pessoal(msg: str, t: datetime, prioridade: int = 2) -> bool:
@@ -1647,7 +1800,7 @@ def enviar_pessoal(msg: str, t: datetime, prioridade: int = 2) -> bool:
 # - `chave` já enviada nas últimas 24 h é descartada (estado em FILA_ESTADO);
 # - `expira_em` (ISO 8601) vencido é descartado sem enviar;
 # - até TETO_POR_HORA envios por hora; o excedente vai junto num resumo só.
-# - (16/10/2026, OT-14) aviso de falha (`origem` em ORIGENS_PELO_TELEGRAM, hoje o socorro) tenta antes
+# - (16/10/2026, OT-14) aviso de falha (`origem` em sai_pelo_telegram: socorro, backup, atualizar-central, silmer e n8n:*) tenta antes
 #   o bot do Telegram, na hora e sem som das 22h às 7h (salvo P0); não conta no teto, que protege o
 #   número do WhatsApp. Bot fora: segue o caminho do WhatsApp acima, com silêncio e teto.
 # A drenagem roda sob flock: o dell-status de cada minuto e um `--drenar` avulso
@@ -1806,6 +1959,8 @@ def _drenar(t: datetime) -> dict:
             _recusar(f, str(e)[:300], t)
             r["recusados"] += 1
             continue
+        if not a["chave"] and a["origem"] == ORIGEM_AVISO_DE_FALHA and (m := FLUXO_QUE_FALHOU.match(a["texto"])):
+            a["chave"] = f"n8n-falha:{m.group(1)}"[:MAX_CARACTERES["chave"]]
         if a["expira_em"] and a["expira_em"] <= t:
             _descartar(f, f"expirou em {iso(a['expira_em'])}")
             r["descartados"] += 1
@@ -1814,7 +1969,7 @@ def _drenar(t: datetime) -> dict:
             _descartar(f, f"chave '{a['chave']}' já enviada nas últimas 24 h")
             r["descartados"] += 1
             continue
-        if a["origem"] in ORIGENS_PELO_TELEGRAM and not telegram_fora:
+        if sai_pelo_telegram(a["origem"]) and not telegram_fora:
             if enviar_telegram(mensagem_do_aviso(a), silencioso=silencio and a["prioridade"] != 0):
                 if a["chave"]:
                     estado["chaves"][a["chave"]] = iso(t)
@@ -1969,7 +2124,17 @@ def comparar_instalados(entradas: list[dict], repo: Path, home: Path) -> list[di
                 item["estado"] = "diferente"
                 item["mais_novo"] = copia.stat().st_mtime > origem.stat().st_mtime
             itens.append(item)
-    return itens
+    # Entrada explícita e curinga podem cobrir a mesma cópia (fonte_luna.py está nas duas, com e sem
+    # `reiniciar`): contada duas vezes, a soma "N de M iguais" incha e, quando difere, sai também o
+    # comando do curinga, sem o restart que a explícita existe para garantir. Uma linha por cópia,
+    # e a que diz o que reiniciar vence.
+    unicos: dict[tuple[str, str], dict] = {}
+    for item in itens:
+        chave = (item["repo"], item["instalado"])
+        ja = unicos.get(chave)
+        if ja is None or (item["entrada"].get("reiniciar") and not ja["entrada"].get("reiniciar")):
+            unicos[chave] = item
+    return list(unicos.values())
 
 
 def comando_instalar(item: dict) -> str | None:
@@ -2114,10 +2279,15 @@ def timers_desligados() -> list[dict]:
 # nada: só o systemd sabe que ele caiu. Esta verificação lê o que o systemd
 # registrou de cada .service que o repo instala (o mesmo instalados.json dos timers).
 # Quem já tem verificação própria que lê o Result fica de fora, para a mesma
-# queda não aparecer duas vezes.
-UNITS_COM_VERIFICACAO_PROPRIA = {"gerador-de-sites.service", "funil-aprendizado.service"}
+# queda não aparecer duas vezes (HC-14: o prumo-mapa, os dois backups e o atualizar-central também).
+UNITS_COM_VERIFICACAO_PROPRIA = {"gerador-de-sites.service", "funil-aprendizado.service", "prumo-mapa.service",
+                                 "prumo-mapa.path", "backup-dell-cofre.service", "backup-dell-espelho.service",
+                                 "atualizar-central.service"}
 PROPS_DA_UNIT = ["LoadState", "ActiveState", "SubState", "Type", "Result", "ExecMainCode", "ExecMainStatus",
-                 "NRestarts", "StateChangeTimestamp"]
+                 "NRestarts", "StateChangeTimestamp", "Restart", "TriggeredBy"]
+# Restart= de quem é daemon (fica de pé, e o systemd o religa). Um daemon `inactive` está parado: ou caiu, ou alguém o
+# desligou (HC-5), e só uma marca de pausa diz que foi de propósito. Quem tem timer/path (TriggeredBy) roda e termina.
+RESTART_DE_DAEMON = {"always", "on-failure", "on-success", "on-abnormal", "on-abort", "on-watchdog"}
 CLD_EXITED = "1"  # ExecMainCode: 1 = saiu com código; 2 = morto por sinal; 3 = core dump
 
 
@@ -2157,11 +2327,19 @@ def _de_epoch(txt: str | None) -> datetime | None:
         return None
 
 
-def avaliar_unit(campos: dict) -> dict | None:
+def nome_da_pausa(unit: str) -> str:
+    """`pausa-<nome>` em ~/.local/state/dell-status/: o .service perde o sufixo (como o timer), o .path o mantém
+    para não colidir com o .service de mesmo nome (socorro.service e socorro.path)."""
+    return unit.removesuffix(".service")
+
+
+def avaliar_unit(campos: dict, pausada: bool = False) -> dict | None:
     """Uma unit pelo `systemctl --user show`. None: não está carregada (não
     instalada, ou mascarada de propósito), não é vermelho nem amarelo. Oneshot de
     timer fica `inactive`/`success` entre as rodadas: é ok. O systemd zera o Result
-    no start, então a próxima rodada com sucesso apaga a queda sozinha."""
+    no start, então a próxima rodada com sucesso apaga a queda sozinha.
+    Daemon (Restart= e sem timer/path) e .path têm de estar `active`: parados, ninguém religa o que
+    eles fazem (HC-5/HC-6). `pausada`: a marca de pausa da unit existe."""
     unit, carga = campos.get("Id", "?"), campos.get("LoadState", "")
     if carga in ("", "not-found", "masked"):
         return None
@@ -2169,6 +2347,14 @@ def avaliar_unit(campos: dict) -> dict | None:
     if carga != "loaded":
         return {**base, "estado": "atencao", "motivo": f"o arquivo da unit não carrega ({carga})"}
     resultado, ativo, sub = campos.get("Result", ""), campos.get("ActiveState", ""), campos.get("SubState", "")
+    if unit.endswith(".path"):
+        if ativo == "active" or pausada:
+            return {**base, "estado": "ok"}
+        return {**base, "estado": "atencao", "parada": True, "motivo": f"o gatilho está {ativo or 'parado'}"}
+    daemon = campos.get("Restart") in RESTART_DE_DAEMON and not campos.get("TriggeredBy")
+    if daemon and ativo == "inactive" and not pausada:
+        return {**base, "estado": "atencao", "parada": True,
+                "motivo": f"deveria ficar sempre de pé (Restart={campos['Restart']}) e está parada"}
     if resultado in ("", "success") and ativo != "failed":
         try:
             religou = int(campos.get("NRestarts") or 0)
@@ -2204,11 +2390,18 @@ def avaliar_units(units: list[dict], t: datetime) -> dict:
                       + ")" for u in caidas)
     u = caidas[0]
     diario = f"journalctl --user -u {u['unit']} -n 50"
-    partes = [f"O systemd registrou que {curto(u['unit'])} caiu ({u['motivo']}): o que ela faz parou no meio, e quem "
-              f"morre assim não consegue avisar. Veja o diário: {diario}."]
+    if u.get("parada"):
+        religar = (f"systemctl --user enable --now {u['unit']}" if u["unit"].endswith(".path")
+                   else f"systemctl --user start {u['unit']}")
+        partes = [f"{curto(u['unit'])} está parada ({u['motivo']}): o que ela faz não roda e ninguém é avisado. "
+                  f"Veja o diário: {diario}. Se foi engano, religue: {religar}. Se parou de propósito, marque a pausa: "
+                  f"date +%d/%m/%Y > ~/.local/state/dell-status/pausa-{nome_da_pausa(u['unit'])} (o amarelo apaga)."]
+    else:
+        partes = [f"O systemd registrou que {curto(u['unit'])} caiu ({u['motivo']}): o que ela faz parou no meio, e quem "
+                  f"morre assim não consegue avisar. Veja o diário: {diario}."]
     if u.get("resultado") == "oom-kill" or "SIGKILL" in u["motivo"]:
         partes.append("Para ver se foi a memória: journalctl -k -g oom --since -2d (e o item Memória).")
-    if u.get("tipo") == "oneshot":
+    if u.get("tipo") == "oneshot" and not u.get("parada"):
         partes.append("A próxima rodada que terminar bem apaga o amarelo; para apagar antes, depois de entender: "
                       f"systemctl --user reset-failed {u['unit']}.")
     elif u.get("resultado"):
@@ -2216,7 +2409,8 @@ def avaliar_units(units: list[dict], t: datetime) -> dict:
     if len(caidas) > 1:
         partes.append("As outras da lista: o mesmo journalctl, com o nome de cada uma.")
     partes.append("Se não souber o que fazer, peça ao Claude: \"a unit caiu no Dell\".")
-    return check("units", "servicos", nome, "atencao", f"Caiu/caíram: {lista}"[:300], o_que_fazer=" ".join(partes))
+    prefixo = "Parada(s): " if all(c.get("parada") for c in caidas) else "Caiu/caíram: "
+    return check("units", "servicos", nome, "atencao", f"{prefixo}{lista}"[:300], o_que_fazer=" ".join(partes))
 
 
 def _campos_das_units(units: list[str]) -> dict[str, dict]:
@@ -2228,11 +2422,98 @@ def units_que_cairam() -> list[dict]:
     if itens is None:
         return []
     nomes = sorted({i["instalado"].rsplit("/", 1)[-1] for i in itens
-                    if i["instalado"].startswith("~/.config/systemd/user/") and i["instalado"].endswith(".service")
+                    if i["instalado"].startswith("~/.config/systemd/user/") and i["instalado"].endswith((".service", ".path"))
                     and i["estado"] in ("igual", "diferente")} - UNITS_COM_VERIFICACAO_PROPRIA)
     campos = _campos_das_units(nomes)
-    avaliadas = [a for a in (avaliar_unit(campos[n]) for n in nomes if n in campos) if a]
+    avaliadas = [a for a in (avaliar_unit(campos[n], pausado_de_proposito(nome_da_pausa(n))) for n in nomes if n in campos) if a]
     return [avaliar_units(avaliadas, agora())] if avaliadas else []
+
+
+def avaliar_units_falhas(falhas: list[str], cobertas: set[str]) -> dict:
+    """PURA. O que o systemd marca como falho e nenhuma outra verificação enxerga (unit que não é do repo,
+    transiente de preview ou de teste): informação útil, então vira atenção com o nome (VIVO-4)."""
+    nome = "Units em falha fora das verificadas"
+    soltas = sorted(set(falhas) - cobertas)
+    if not soltas:
+        return check("units-falhas", "servicos", nome, "ok", "Nenhuma unit em falha além das já verificadas")
+    lista = ", ".join(soltas[:5]) + (f" e mais {len(soltas) - 5}" if len(soltas) > 5 else "")
+    return check("units-falhas", "servicos", nome, "atencao", f"{len(soltas)} unit(s) em falha: {lista}"[:300],
+                 o_que_fazer=(f"O systemd tem unit em falha que nenhuma outra verificação cobre ({lista}). Veja: "
+                              f"journalctl --user -u {soltas[0]} -n 50. Entendida a causa, apague o registro: "
+                              f"systemctl --user reset-failed {soltas[0]}. Se não souber, peça ao Claude: \"unit em falha no Dell\"."))
+
+
+def units_falhas() -> list[dict]:
+    r = subprocess.run(["systemctl", "--user", "--failed", "--plain", "--no-legend", "--no-pager"],
+                       capture_output=True, text=True, timeout=10)
+    falhas = [l.split()[0] for l in r.stdout.splitlines() if l.split()]
+    cobertas = {i["instalado"].rsplit("/", 1)[-1] for i in ler_instalados() or []} | UNITS_COM_VERIFICACAO_PROPRIA
+    return [avaliar_units_falhas(falhas, cobertas)]
+
+
+# ---------------------------------------------------------------- Central atualizada (VIVO-4)
+
+# O atualizar-central falhou 6 vezes seguidas sem aparecer aqui: a Central ficou presa numa versão velha e ninguém
+# viu. O que vale é o sha CONSTRUÍDO (gravado pelo próprio script só depois do build, do reinício e de a Central
+# responder) contra a main do GitHub; o clone ~/SquadOne não serve, o merge vem antes do build.
+CENTRAL_CONSTRUIDO = HOME / ".local/state/atualizar-central/construido"
+CENTRAL_VISTA = HOME / ".local/state/dell-status/central-vista.json"
+CENTRAL_ATRASO = timedelta(minutes=30)  # build (~5 min) + até 10 min esperando a Central ficar ociosa
+central_vista: dict = {}  # preenchido por central_atualizada(); main() grava (fora do --stdout)
+
+
+def avaliar_central_atualizada(alvo: str | None, construido: str | None, desde: datetime | None, resultado: str,
+                               saiu: datetime | None, t: datetime) -> dict:
+    """PURA. `alvo`: a main (origin/main); `construido`: o que a Central roda; `desde`: quando este alvo foi visto
+    pela primeira vez (a data do commit não serve: um rebase merge traz commit antigo para a main de agora)."""
+    nome = "Central atualizada"
+    problemas = []
+    if resultado not in ("", "success") and saiu:
+        problemas.append(f"a última rodada do atualizar-central falhou {_quando_br(saiu, t)} (systemd: {resultado})")
+    if alvo and construido and alvo != construido and desde and t - desde > CENTRAL_ATRASO:
+        problemas.append(f"a main ({alvo[:7]}) não está no ar há {int((t - desde).total_seconds() // 60)} min: "
+                         f"a Central roda {construido[:7]}")
+    if not problemas:
+        return check("central-atualizada", "servicos", nome, "ok",
+                     f"No ar: {construido[:7]}" if construido and construido == alvo else "Sem atraso em relação à main")
+    detalhe = "; ".join(problemas)
+    return check("central-atualizada", "servicos", nome, "atencao", (detalhe[0].upper() + detalhe[1:])[:300],
+                 o_que_fazer=("A Central não está acompanhando a main: um push novo não chega ao ar. Veja: journalctl --user "
+                              "-u atualizar-central -n 50 (o timer tenta de novo a cada 10 min; build que falha, merge "
+                              "travado por arquivo não rastreado e a Central não subindo são as causas até hoje). Se não "
+                              "souber, peça ao Claude: \"a Central não atualiza no Dell\"."))
+
+
+def _git_da_central(*args: str) -> str | None:
+    try:
+        r = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
+def central_atualizada() -> list[dict]:
+    if not (REPO / ".git").exists():
+        return []
+    t = agora()
+    alvo = _git_da_central("rev-parse", "origin/main")
+    try:
+        construido = CENTRAL_CONSTRUIDO.read_text().strip() or None
+    except OSError:
+        construido = _git_da_central("rev-parse", "HEAD")  # script antigo, sem o registro do construído
+    try:
+        antes = json.loads(CENTRAL_VISTA.read_text())
+    except (OSError, ValueError):
+        antes = {}
+    desde = _quando(antes.get("desde")) if antes.get("alvo") == alvo else t
+    if alvo:
+        central_vista.clear()
+        central_vista.update({"alvo": alvo, "desde": iso(desde or t)})
+    try:
+        resultado, saiu = _unit_resultado("atualizar-central.service")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        resultado, saiu = "", None
+    return [avaliar_central_atualizada(alvo, construido, desde, resultado, saiu, t)]
 
 
 # ---------------------------------------------------------------- WhatsApp do PRUMO (Evolution)
@@ -2397,7 +2678,42 @@ def listar_instalados() -> None:
 SOCORRO = HOME / ".local/bin/socorro"
 SOCORRO_PEDIDOS = HOME / ".local/state/socorro/pedidos"
 SOCORRO_DESLIGADO = HOME / ".config/socorro/desligado"
-LINHA_DO_SOCORRO = "Socorro: vou tentar resolver sozinho (só religar o que é seguro) e mando o resultado em seguida."
+LINHA_DO_SOCORRO = "Socorro: vou tentar religar o que for seguro e mando o resultado em seguida."
+LINHA_DO_DIAGNOSTICO = "Socorro: diagnóstico do Hermes a caminho; não há o que religar sozinho nesta falha."
+
+# O que o socorro faz com cada id, replicado aqui de propósito de forma simples (socorro.py: `remedios_para`,
+# `ha_o_que_ler`, UNITS_DO_CHECK; é outro processo, instalado como ~/.local/bin/socorro, e não se importa): o
+# aviso só promete o que roda (HC-8). Falha de fluxo, rotina, Radar PNCP ou aviso recusado não tem remédio nem
+# leitura própria: o pedido nem é gravado e o "Quebrou" não menciona socorro. Mudou lá, mude aqui.
+IDS_COM_REMEDIO = {"hermes", "hermes-navegador", "terminal", "n8n"}
+IDS_COM_LEITURA = IDS_COM_REMEDIO | {"whatsapp-sessao", "whatsapp-prumo", "gerador", "funil-aprendizado", "prumo-mapa",
+                                     "healthwatch", "units", "docker", "containers", "disco", "backup"}
+# Resume outras verificações (um `container:<nome>` por container parado): nunca avisa nem pede socorro sozinho.
+RESUMOS = {"containers"}
+# Falha que acorda: o aviso sai COM som mesmo das 22h às 7h (HC-17). Disco só chega a `falha` com 95% ou mais.
+PRIORIDADE_ZERO = {"disco", "monitor", "dns", "docker", "backup:cofre"}
+
+
+def socorro_religa(c: dict) -> bool:
+    """O socorro tem remédio (religar unit ou container) para esta falha?"""
+    cid, det = c["id"], str(c.get("detalhe") or "")
+    if cid in IDS_COM_REMEDIO:
+        return True
+    if cid == "whatsapp-sessao":  # sessão desconectada pede QR no celular, não remédio
+        return "sem resposta" in det
+    if cid == "whatsapp-prumo":
+        return "caiu" not in det and ("container" in det or "fora do ar" in det)
+    return cid == f"container:{N8N_CONTAINER}" or cid.startswith("container:evolution-")
+
+
+def socorro_le(c: dict) -> bool:
+    """O socorro tem leitura própria (journal, status, docker, df) para o Hermes diagnosticar?"""
+    return c["id"] in IDS_COM_LEITURA or c["id"].startswith(("backup:", "container:"))
+
+
+def linha_do_socorro(c: dict) -> str:
+    """O que o "Quebrou" diz sobre o socorro: religar, só diagnosticar, ou nada (não promete o que não roda)."""
+    return LINHA_DO_SOCORRO if socorro_religa(c) else LINHA_DO_DIAGNOSTICO if socorro_le(c) else ""
 
 
 def socorro_desligado() -> bool:
@@ -2405,10 +2721,12 @@ def socorro_desligado() -> bool:
 
 
 def pedir_socorro(checks: list[dict], estado_ant: dict, t: datetime) -> set[str]:
-    """Os ids para os quais o socorro foi chamado (só os que acabaram de entrar em falha). Desligado,
-    não instalado ou erro ao gravar: nenhum, e nada muda no aviso."""
-    novos = [c for c in checks if c["estado"] == "falha" and estado_ant.get(c["id"], {}).get("estado") != "falha"]
-    if not novos or socorro_desligado() or not SOCORRO.exists():
+    """Os ids para os quais o socorro foi chamado (só os que acabaram de entrar em falha e que ele sabe tratar).
+    Desligado, não instalado, com o socorro.path parado (sem ele o pedido fica na pasta, ninguém o lê) ou erro ao
+    gravar: nenhum, e nada muda no aviso."""
+    novos = [c for c in checks if c["estado"] == "falha" and estado_ant.get(c["id"], {}).get("estado") != "falha"
+             and c["id"] not in RESUMOS and linha_do_socorro(c)]
+    if not novos or socorro_desligado() or not SOCORRO.exists() or not unit_ativa("socorro.path"):
         return set()
     pedido = {"em": iso(t), "checks": [{k: c[k] for k in ("id", "grupo", "nome", "detalhe", "o_que_fazer") if c.get(k)}
                                         for c in novos]}
@@ -2424,36 +2742,79 @@ def pedir_socorro(checks: list[dict], estado_ant: dict, t: datetime) -> set[str]
     return {c["id"] for c in novos}
 
 
-def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro: set[str] | frozenset = frozenset()) -> dict:
+# Serviços conferidos por HTTP com 5 s e uma tentativa. O healthwatch (que os religa) tolera 8 s e uma segunda
+# tentativa; sem a mesma tolerância aqui, um instante lento virava "Quebrou" no primeiro minuto (HC-11). A
+# primeira falha vira atenção; a segunda seguida é falha, e o aviso sai.
+SERVICOS_HTTP = {"hermes", "hermes-navegador", "n8n", "terminal", "central"}
+
+
+def confirmar_servicos_http(checks: list[dict], estado_ant: dict) -> None:
+    """Rebaixa para `atencao` a PRIMEIRA falha dos serviços HTTP. Estes ids só produzem ok ou falha, então um
+    `atencao` anterior só pode ser esta espera: a segunda rodada em falha passa."""
+    for c in checks:
+        if c["id"] in SERVICOS_HTTP and c["estado"] == "falha" \
+                and (estado_ant.get(c["id"]) or {}).get("estado") not in ("falha", "atencao"):
+            c["estado"] = "atencao"
+            c["detalhe"] += " (1ª tentativa: confirma no próximo minuto)"
+            c["o_que_fazer"] = ("Nada por enquanto: pode ser só um instante lento. Se no próximo minuto continuar sem "
+                                "resposta, vira falha e o aviso sai.")
+            c["sozinho"] = True
+
+
+def prioridade_do_aviso(agravos: list[dict]) -> int:
+    """0 (com som a qualquer hora) se algum dos que quebraram é crítico; senão a padrão."""
+    critico = any(c["estado"] == "falha" and (c["id"] in PRIORIDADE_ZERO or c["id"].startswith("container:"))
+                  for c in agravos)
+    return 0 if critico else PRIORIDADE_PADRAO
+
+
+def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro: set[str] | frozenset = frozenset(),
+                      antes_de_enviar=None) -> dict:
+    """Calcula as transições, chama `antes_de_enviar(novo)` (o main grava o status.json ali: HC-2, aviso lento ou
+    travado não pode deixar a Central sem retrato) e só então envia. Devolve o estado novo."""
     novo, quebrou, voltou, lembrar = {}, [], [], []
     for c in checks:
         ant = estado_ant.get(c["id"], {})
+        if c.get("nao_verificado") and ant:
+            novo[c["id"]] = dict(ant)  # sem leitura neste minuto: o estado de antes vale e ninguém é avisado
+            continue
         desde = ant.get("desde", iso(t)) if ant.get("estado") == c["estado"] else iso(t)
         avisado = ant.get("avisado") if ant.get("estado") == c["estado"] else None
+        resumo = c["id"] in RESUMOS
         if c["estado"] == "falha":
             if ant.get("estado") != "falha" or ant.get("pendente"):
-                quebrou.append(c)
+                if not resumo:
+                    quebrou.append(c)
                 avisado = iso(t)
             elif not avisado or t - datetime.fromisoformat(avisado.replace("Z", "+00:00")) > timedelta(hours=LEMBRETE_FALHA_H):
-                lembrar.append(c)
+                if not resumo:
+                    lembrar.append(c)
                 avisado = iso(t)
-        elif ant.get("estado") == "falha":
+        elif ant.get("estado") == "falha" and not resumo:
             voltou.append(c)
         novo[c["id"]] = {"estado": c["estado"], "desde": desde, **({"avisado": avisado} if avisado else {})}
     # Itens que sumiram (ex.: container removido) não geram aviso.
+    if antes_de_enviar:
+        antes_de_enviar(novo)
+
     def item(c: dict) -> str:
         return f"• {c['nome']}: {c['detalhe']}" + (f"\n  O que fazer: {c['o_que_fazer']}" if c.get("o_que_fazer") else "")
 
+    def socorrido(c: dict) -> str:
+        linha = linha_do_socorro(c) if c["id"] in socorro else ""
+        return f"\n  {linha}" if linha else ""
+
     linhas = []
     if quebrou:
-        linhas += ["Quebrou:"] + [item(c) + (f"\n  {LINHA_DO_SOCORRO}" if c["id"] in socorro else "") for c in quebrou]
+        linhas += ["Quebrou:"] + [item(c) + socorrido(c) for c in quebrou]
     if lembrar:
         linhas += ["Continua fora:"] + [item(c) for c in lembrar]
     if voltou:
         linhas += ["Voltou ao normal:"] + [f"• {c['nome']}" for c in voltou]
     if linhas:
         titulo = "⚠️ Dell worker" if (quebrou or lembrar) else "✅ Dell worker"
-        if not enviar_pessoal(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}", t):
+        if not enviar_pessoal(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}", t,
+                              prioridade_do_aviso(quebrou + lembrar)):
             # Telegram e WhatsApp fora: nada fica marcado como avisado e o próximo minuto tenta de novo.
             for c in quebrou + lembrar:
                 novo[c["id"]].pop("avisado", None)
@@ -2466,6 +2827,42 @@ def gravar(path: Path, dados: dict) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(dados, ensure_ascii=False, indent=1))
     tmp.replace(path)
+
+
+def radar_pncp() -> list[dict]:
+    return [pncp()]
+
+
+VERIFICACOES = (servicos, religamentos, containers, fluxos, maquina, pastas_que_crescem, crons_hermes, rotinas_caladas,
+                gerador, funil_aprendizado, prumo_mapa, pendencias, easypanel, backup, fila_de_avisos, instalados,
+                timers_desligados, units_que_cairam, units_falhas, central_atualizada, whatsapp_prumo, telegram,
+                radar_pncp)
+# Tudo precisa caber folgado no TimeoutStartSec=150 da unit, com o status.json gravado antes dos avisos. Cada
+# verificação tem o seu prazo e o conjunto tem um teto: passou, a que travou vira erro e as seguintes ainda rodam
+# (ou, esgotado o teto, são puladas e ditas). As chamadas externas já têm timeout próprio; isto é o cinto.
+PRAZO_TOTAL_S = 100
+PRAZO_POR_VERIFICACAO_S = 70
+
+
+def executar_verificacoes(verificacoes=None, relogio=time.monotonic) -> list[dict]:
+    """Todas as verificações, uma quebrada (ou lenta) não cala as outras. Devolve os checks, com
+    `erro:<função>` para a que levantou ou passou do prazo e `erro:prazo` para as que ficaram sem tempo."""
+    verificacoes = VERIFICACOES if verificacoes is None else verificacoes
+    inicio, checks, puladas = relogio(), [], []
+    for fn in verificacoes:
+        restante = PRAZO_TOTAL_S - (relogio() - inicio)
+        if restante <= 0:
+            puladas.append(fn.__name__)
+            continue
+        try:
+            checks += com_prazo(fn, min(PRAZO_POR_VERIFICACAO_S, restante))
+        except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
+            checks.append(check(f"erro:{fn.__name__}", "maquina", f"Verificação {fn.__name__}", "atencao",
+                                (str(e) or type(e).__name__)[:120]))
+    if puladas:
+        checks.append(check("erro:prazo", "maquina", "Prazo do monitor", "atencao",
+                            f"Sem tempo neste minuto, não verificadas: {', '.join(puladas)}"[:300]))
+    return checks
 
 
 def main() -> None:
@@ -2487,42 +2884,48 @@ def main() -> None:
         listar_instalados()
         return
     t = agora()
-    checks = []
-    for fn in (servicos, religamentos, containers, fluxos, maquina, pastas_que_crescem, crons_hermes, idade_dos_dados, rotinas_caladas, gerador, funil_aprendizado, prumo_mapa, pendencias,
-               easypanel, backup, fila_de_avisos, instalados, timers_desligados, units_que_cairam, whatsapp_prumo):
-        try:
-            checks += fn()
-        except Exception as e:  # noqa: BLE001 — uma verificação quebrada não cala as outras
-            checks.append(check(f"erro:{fn.__name__}", "maquina", f"Verificação {fn.__name__}", "atencao", str(e)[:120]))
-    try:
-        checks.append(pncp())
-    except Exception as e:  # noqa: BLE001
-        checks.append(check("pncp", "dados", "Radar PNCP", "atencao", str(e)[:120]))
-    checks = [explicar(c) for c in checks]
-    snapshot = {"geradoEm": iso(t), "verificacoes": checks}
+    checks = [explicar(c) for c in executar_verificacoes()]
     if a.stdout:
-        print(json.dumps(snapshot, ensure_ascii=False, indent=1))
+        print(json.dumps({"geradoEm": iso(t), "verificacoes": checks}, ensure_ascii=False, indent=1))
         return
     try:
         estado_ant = json.loads(ESTADO.read_text())
     except (OSError, ValueError):
         estado_ant = {}
+    confirmar_servicos_http(checks, estado_ant)
+    snapshot = {"geradoEm": iso(t), "verificacoes": checks}
     try:
         socorro = pedir_socorro(checks, estado_ant, t)
     except Exception as e:  # noqa: BLE001 — o socorro nunca cala o "Quebrou"
         log(f"socorro: {type(e).__name__}: {e}")
         socorro = set()
-    estado = avisar_transicoes(checks, estado_ant, t, socorro)
-    for c in checks:
-        c["desde"] = estado[c["id"]]["desde"]
-    gravar(ESTADO, estado)
-    gravar(SAIDA, snapshot)
-    if agendas_vistas:
-        gravar(AGENDAS, agendas_vistas)
-    if fluxos_vistos:
-        gravar(FLUXOS_VISTOS, fluxos_vistos)
-    if tamanhos_medidos:
-        gravar(TAMANHOS, tamanhos_medidos)
+    gravado = []
+
+    def gravar_retrato(novo: dict) -> None:
+        """O retrato da Central e a memória das verificações, ANTES de qualquer aviso."""
+        if gravado:
+            return
+        gravado.append(True)
+        for c in checks:
+            c["desde"] = novo.get(c["id"], {}).get("desde", iso(t))
+            c.pop("nao_verificado", None)
+        gravar(SAIDA, snapshot)
+        if agendas_vistas:
+            gravar(AGENDAS, agendas_vistas)
+        if fluxos_vistos:
+            gravar(FLUXOS_VISTOS, fluxos_vistos)
+        if tamanhos_medidos:
+            gravar(TAMANHOS, tamanhos_medidos)
+        if central_vista:
+            gravar(CENTRAL_VISTA, central_vista)
+    try:
+        estado = avisar_transicoes(checks, estado_ant, t, socorro, gravar_retrato)
+    except Exception as e:  # noqa: BLE001 — falha ao avisar não pode deixar o retrato sem gravar
+        log(f"avisos: {type(e).__name__}: {e}")
+        estado = None
+    gravar_retrato({})  # só faz algo se o avisar_transicoes quebrou antes de chegar ao retrato
+    if estado is not None:
+        gravar(ESTADO, estado)
     drenar_fila()
 
 

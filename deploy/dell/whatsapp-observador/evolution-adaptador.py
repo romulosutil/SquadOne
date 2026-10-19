@@ -46,7 +46,7 @@ LID: se o `remoteJid` vem como `@lid`, o telefone sai de `remoteJidAlt`/`senderP
 preenche só às vezes); sem nenhum dos dois o evento é contado em `lid_sem_telefone` e descartado.
 Nada de "adivinhar" número.
 
-Desconexão: `CONNECTION_UPDATE` com estado `close` vira UM aviso pelo Hermes (o número deixou de
+Desconexão: `CONNECTION_UPDATE` com estado `close` vira UM aviso (o número deixou de
 ser acompanhado e ninguém veria), até a conexão voltar. Só depois de o número ter conectado ao
 menos uma vez (marca `conectou` na pasta): o `close` de uma instância cujo QR nunca foi lido não é
 queda.
@@ -730,28 +730,29 @@ class Gravador:
 PASTAS_DA_LIB = [Path(__file__).resolve().parent.parent / "lib", HOME / ".local/lib/mel"]
 
 
-def avisar_pelo_hermes(texto: str) -> None:
-    """A fila de avisos do Dell (a mesma lib do observador); sem a lib, o arquivo no formato antigo."""
-    aviso = {"titulo": "📱 Número do PRUMO no WhatsApp", "texto": texto, "origem": "evolution-adaptador"}
+def lib_de_aviso():
+    """O módulo da lib (a mesma do observador), ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
-            r = mod.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="evolution")
-            if not r.gravado:
-                log("aviso não gravado:", r.estado, r.motivo)
-            return
-        except Exception:  # noqa: BLE001 — cópia quebrada: tenta a próxima, depois o jeito antigo
+            return mod
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
-    try:
-        FILA_DE_AVISOS.mkdir(parents=True, exist_ok=True)
-        (FILA_DE_AVISOS / f"evolution-{time.time_ns()}.json").write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
-    except OSError as e:
-        log("aviso não gravado:", e)
+    return None
+
+
+def avisar(texto: str) -> None:
+    """Aviso na fila do dell-status (sai pelo Telegram, WhatsApp de reserva). Nunca derruba o adaptador."""
+    aviso = {"titulo": "📱 Número do PRUMO no WhatsApp", "texto": texto, "origem": "evolution-adaptador"}
+    lib = lib_de_aviso()
+    if lib is None:  # sem a lib não há validação: não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}", file=sys.stderr, flush=True)
+        return
+    r = lib.gravar(aviso, fila=FILA_DE_AVISOS, prefixo="evolution")
+    if not r.gravado:
+        log("aviso não gravado:", r.estado, r.motivo)
 
 
 TEXTO_DESCONECTOU = ("O número do PRUMO no WhatsApp desconectou da Evolution API: as respostas dos leads deste número "
@@ -763,7 +764,7 @@ TEXTO_DESCONECTOU = ("O número do PRUMO no WhatsApp desconectou da Evolution AP
 class Adaptador:
     """Junta tradução, arquivos e contadores. `relogio` e `avisar` entram de fora nos testes."""
 
-    def __init__(self, gravador: Gravador, relogio=time.time, avisar: Callable[[str], None] = avisar_pelo_hermes,
+    def __init__(self, gravador: Gravador, relogio=time.time, avisar: Callable[[str], None] = avisar,
                  instancia: str = INSTANCIA):
         self.gravador, self.relogio, self.avisar, self.instancia = gravador, relogio, avisar, instancia
         self.vistos = Recentes()

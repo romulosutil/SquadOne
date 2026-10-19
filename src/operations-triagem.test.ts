@@ -19,7 +19,7 @@ const lead = (id: string, extra: Partial<CrmLead> = {}): CrmLead => ({
 const ids = Array.from({ length: 23 }, (_, i) => `p${String(i + 1).padStart(2, '0')}`)
 const itens = ids.map(item)
 const leads = new Map(ids.map((id) => [id, lead(id)] as [string, CrmLead]))
-const marcar = (base: DecisoesDaTriagem, quais: string[], tipo: 'convidado' | 'dispensado') =>
+const marcar = (base: DecisoesDaTriagem, quais: string[], tipo: 'adiado' | 'dispensado') =>
   quais.reduce((d, id) => decidir(d, id, tipo, T), base)
 
 describe('loteDaTriagem (AC-10): um lote de 10 de verdade', () => {
@@ -55,15 +55,8 @@ describe('loteDaTriagem (AC-10): um lote de 10 de verdade', () => {
     assert.equal(lote.restantes, 22)
   })
 
-  it('o convidado fica à vista no lote, mas não conta como pendente', () => {
-    const d = marcar({}, ['p01'], 'convidado')
-    const lote = loteDaTriagem(itens, leads, d, ids.slice(0, 10))
-    assert.ok(lote.itens.some((i) => i.leadId === 'p01'))
-    assert.ok(!lote.pendentes.some((i) => i.leadId === 'p01'))
-  })
-
   it('decidido o lote inteiro, o próximo traz os 10 seguintes não decididos', () => {
-    const d = marcar(marcar({}, ['p01', 'p02'], 'convidado'), ids.slice(2, 10), 'dispensado')
+    const d = marcar({}, ids.slice(0, 10), 'dispensado')
     const lote = loteDaTriagem(itens, leads, d, ids.slice(0, 10))
     assert.deepEqual(lote.ids, ids.slice(10, 20))
     assert.equal(lote.restantes, 13)
@@ -86,7 +79,7 @@ describe('loteDaTriagem (AC-10): um lote de 10 de verdade', () => {
   })
 
   it('lote nascido de novo pula os já decididos nesta tela', () => {
-    const d = marcar(marcar({}, ['p01'], 'convidado'), ['p02'], 'dispensado')
+    const d = marcar({}, ['p01', 'p02'], 'dispensado')
     assert.deepEqual(loteDaTriagem(itens, leads, d, []).ids, ids.slice(2, 12))
   })
 
@@ -121,7 +114,7 @@ describe('decisões locais: marca otimista e poda pelo retrato', () => {
   it('repetir a mesma decisão não renova o instante; trocar a decisão troca', () => {
     const d = decidir({}, 'p01', 'dispensado', T)
     assert.equal(decidir(d, 'p01', 'dispensado', T + 1000).p01.em, T)
-    assert.equal(decidir(d, 'p01', 'convidado', T + 1000).p01.tipo, 'convidado')
+    assert.equal(decidir(d, 'p01', 'adiado', T + 1000).p01.tipo, 'adiado')
   })
 
   it('poda o dispensado que o retrato confirmou e mantém o que ele ainda não viu', () => {
@@ -130,8 +123,8 @@ describe('decisões locais: marca otimista e poda pelo retrato', () => {
     assert.deepEqual(Object.keys(podarDecisoes(d, retrato, T + 60_000)), ['p02'])
   })
 
-  it('poda o convidado que saiu da Revisar, o lead que sumiu do retrato e o que venceu', () => {
-    const d = marcar(marcar({}, ['p01', 'p02'], 'convidado'), ['p03'], 'dispensado')
+  it('poda o que saiu da Revisar, o lead que sumiu do retrato e o que venceu', () => {
+    const d = marcar({}, ['p01', 'p02', 'p03'], 'dispensado')
     const retrato = new Map(leads).set('p01', lead('p01', { sinal: 'convite' }))
     retrato.delete('p03')
     assert.deepEqual(Object.keys(podarDecisoes(d, retrato, T + 60_000)), ['p02'])
@@ -200,7 +193,7 @@ describe('motivoDoConviteTravado: o porquê curto do Convidar desligado', () => 
   it('o ritmo vem antes do horário, com a hora em que libera', () => {
     const intervalo: EstadoDoRitmo = { motivo: 'intervalo', ate, enviadosHoje: 3, teto: 10 }
     assert.equal(motivoDoConviteTravado({ temConvite: true, ritmo: intervalo, travadoPeloHorario: true }), 'O próximo sai às 14:04')
-    assert.equal(motivoDoConviteTravado({ temConvite: true, ritmo: { ...intervalo, motivo: 'dia' }, travadoPeloHorario: false }), 'Teto de hoje atingido')
-    assert.equal(motivoDoConviteTravado({ temConvite: true, ritmo: { ...intervalo, motivo: 'hora' }, travadoPeloHorario: false }), 'Teto da hora: libera às 14:04')
+    assert.equal(motivoDoConviteTravado({ temConvite: true, ritmo: { ...intervalo, motivo: 'dia' }, travadoPeloHorario: false }), 'Teto de hoje: 3 de 10')
+    assert.equal(motivoDoConviteTravado({ temConvite: true, ritmo: { ...intervalo, motivo: 'hora' }, travadoPeloHorario: false }), 'Teto da hora; o próximo sai às 14:04')
   })
 })

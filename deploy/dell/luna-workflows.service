@@ -7,6 +7,10 @@ Type=simple
 ExecStart=/usr/bin/python3 %h/.local/share/claude-ops/luna_workflows.py
 Environment=LUNA_BIND=172.23.0.1
 Environment=LUNA_REDE_N8N=172.23.0.0/16
+# Espera o IP da bridge do n8n existir (até 60 s): o Docker (unit de SISTEMA) cria a rede depois do login do
+# usuário, e o bind falhava logo no boot (DELL-20, auditoria de 19/10/2026). Unit de usuário não ordena contra
+# docker.service (outro gerenciador; o After= acima não tem efeito), por isso a espera é ativa.
+ExecStartPre=/bin/sh -c 'PATH=/usr/sbin:/sbin:$$PATH; for i in $$(seq 1 60); do ip -o -4 addr show | grep -qF "inet $${LUNA_BIND}/" && exit 0; sleep 1; done; echo "IP $${LUNA_BIND} nao apareceu em 60 s" >&2; exit 1'
 Restart=on-failure
 RestartSec=10
 UMask=0077

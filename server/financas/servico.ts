@@ -1,5 +1,5 @@
 import type { Aviso } from "../avisos.ts";
-import { FUSO } from "../alocador.ts";
+import { diaDeSP, horaDeSP } from "../tempo.ts";
 import { alertasDevidos, type AlertaDevido } from "./alertas.ts";
 import type { BancoDeFinancas, Organizacao } from "./banco.ts";
 import { SEM_CATEGORIA } from "./categoria.ts";
@@ -20,12 +20,13 @@ import type { Visao } from "./visoes.ts";
  * estabelecimento (RULES 24).
  */
 
+/** O relógio de São Paulo é de `../tempo.ts`; estes nomes ficam porque a rota, o sync e os testes os importam daqui. */
 export function hojeEm(agora: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(agora);
+  return diaDeSP(agora);
 }
 
 export function horaEm(agora: Date): number {
-  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSO, hour: "2-digit", hourCycle: "h23" }).format(agora));
+  return horaDeSP(agora);
 }
 
 export function resumoDoBanco(b: BancoDeFinancas, hoje: string, mes: string, visao: Visao, org: Organizacao = b.organizacao()): ResumoFinanceiro {
@@ -44,9 +45,9 @@ export interface Avisador {
 }
 
 /**
- * `publicar` ausente = sem fila (dev, teste): `avisar` não faz nada. Alerta
- * que não entra na fila não é marcado e é tentado na próxima escrita ou
- * sincronização. Em série: a sincronização e um gasto anotado ao mesmo tempo
+ * `publicar` ausente = sem canal (dev, teste): `avisar` não faz nada. Alerta
+ * que não saiu (Telegram e fila de reserva falharam) não é marcado e é tentado
+ * na próxima escrita ou sincronização. Em série: a sincronização e um gasto anotado ao mesmo tempo
  * não mandam o mesmo alerta duas vezes.
  */
 export function criarAvisador(deps: { banco: BancoDeFinancas; publicar?: (a: Aviso) => Promise<unknown>; agora?: () => Date }): Avisador {
@@ -68,10 +69,10 @@ export function criarAvisador(deps: { banco: BancoDeFinancas; publicar?: (a: Avi
         deps.banco.registrarAlertas(a.marcar, agora().toISOString());
         enviados++;
       } catch (erro) {
-        console.error(`[financas] alerta não entrou na fila (${(erro as Error)?.name ?? "erro"}); tento de novo na próxima leitura.`);
+        console.error(`[financas] alerta não saiu (${(erro as Error)?.name ?? "erro"}); tento de novo na próxima leitura.`);
       }
     }
-    if (enviados) console.log(`[financas] ${enviados} alerta(s) de limite ou orçamento na fila de avisos.`);
+    if (enviados) console.log(`[financas] ${enviados} alerta(s) de limite ou orçamento publicados (Telegram, fila de reserva).`);
     return enviados;
   }
 
@@ -84,7 +85,7 @@ export function criarAvisador(deps: { banco: BancoDeFinancas; publicar?: (a: Avi
 /**
  * Depois de toda escrita de domínio (categoria, regra, orçamento, extrato,
  * gasto anotado): o passe puro de novo, a cópia para o cofre e os alertas
- * (sem esperar: o gesto não fica preso na fila de avisos).
+ * (sem esperar: o gesto não fica preso no envio do aviso).
  */
 export function depoisDeEscrever(b: BancoDeFinancas, avisador: Avisador | null) {
   reprocessar(b);

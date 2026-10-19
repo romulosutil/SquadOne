@@ -267,15 +267,11 @@ describe("lead quente: teto de toques", () => {
     assert.equal(d.acao, "responder");
   });
   const base: MensagemDaConversa[] = [msg(-300, "saida", "link"), msg(-200, "entrada", "oi")];
-  const casos: Array<{ nome: string; tipo: ToqueDoAgente["tipo"]; toques: ToqueDoAgente[]; pode: boolean }> = [
-    { nome: "primeiro follow-up depois do link", tipo: "depois-do-link", toques: [], pode: true },
-    { nome: "segundo follow-up depois do link: nunca", tipo: "depois-do-link", toques: [toque(-500, "depois-do-link")], pode: false },
-    { nome: "primeiro follow-up do 3º dia", tipo: "terceiro-dia", toques: [], pode: true },
-    { nome: "segundo follow-up do 3º dia: nunca", tipo: "terceiro-dia", toques: [toque(-500, "terceiro-dia")], pode: false },
-    { nome: "o follow-up do 3º dia depois de um depois-do-link respondido", tipo: "terceiro-dia", toques: [toque(-500, "depois-do-link")], pode: true },
-    { nome: "duas seguidas sem o lead no meio: não", tipo: "terceiro-dia", toques: [toque(-100, "depois-do-link")], pode: false },
-  ];
-  for (const c of casos) it(`follow-up: ${c.nome}`, () => assert.equal(podeTocar(c.tipo, c.toques, base).pode, c.pode));
+  it("podeTocar: duas respostas depois da última saída do Rômulo fecham; uma deixa", () => {
+    assert.equal(podeTocar([toque(-100), toque(-50)], base).pode, false);
+    assert.equal(podeTocar([toque(-100)], base).pode, true);
+    assert.equal(podeTocar([toque(-500), toque(-400)], base).pode, true, "as de antes da saída dele não contam");
+  });
 });
 
 describe("lead quente: sinais no texto", () => {

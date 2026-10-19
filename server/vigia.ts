@@ -1,9 +1,10 @@
 /**
  * A vigia dos lembretes: a cada VARREDURA_MS relê a agenda numa janela curta e
- * publica o que ficou devido como `Aviso` (no Dell, a fila de avisos que o
- * Hermes entrega no WhatsApp). Nada é agendado para o futuro e nada vai
- * para o disco: o Google é a verdade (editar, apagar ou ajustar lá reflete na
- * varredura seguinte) e um redeploy não deixa timer órfão.
+ * publica o que ficou devido como `Aviso` (no Dell, pelo Telegram do dono; a fila do
+ * WhatsApp só de reserva, ver avisos.ts). Nada é agendado para o futuro: o Google é a verdade
+ * (editar, apagar ou ajustar lá reflete na varredura seguinte) e um redeploy não deixa timer
+ * órfão. O que a vigia lembra em memória é só atalho; a deduplicação de 24 h que sobrevive ao
+ * reinício é do `RegistroDeEnviados`, consultado em `publicarAvisoPessoal`.
  *
  * Roda separada do turno: falha do transporte ou da leitura nunca chega em
  * agendamento.ts nem em ajuste.ts.
@@ -25,6 +26,15 @@ import type { Roster } from "./squad.ts";
 
 const MIN_MS = 60_000;
 
+/**
+ * Prazo de cada leitura ao Google (a listagem inteira de um calendário, páginas incluídas). Sem ele
+ * uma resposta que não vem prendia `emAndamento` por minutos e a vigia parava calada.
+ */
+const PRAZO_DA_LEITURA_MS = 15_000;
+
+/** A chave do aviso de desconexão: fixa, para o registro de 24 h não repeti-lo a cada reinício. */
+export const CHAVE_DO_AVISO_DE_DESCONEXAO = "google-desconectado";
+
 /** Chaves enviadas somem depois disto: o evento já começou há muito. */
 const RETENCAO_MS = 60 * MIN_MS;
 
@@ -33,9 +43,15 @@ export interface DependenciasDaVigia {
   lerJanela: () => Janela;
   lerRoster: () => Promise<Roster>;
   obterToken: () => Promise<string>;
-  listar: (token: string, calendarId: string, de: Date, ate: Date) => Promise<QuestCalendario[]>;
-  /** Publica o aviso (a fila de avisos do Dell). */
+  /** `sinal` aborta a leitura no prazo; quem não o honra só perde a proteção contra resposta parada. */
+  listar: (token: string, calendarId: string, de: Date, ate: Date, sinal?: AbortSignal) => Promise<QuestCalendario[]>;
+  /** Publica o aviso (Telegram do dono, com a fila de avisos do Dell de reserva). */
   enviar: (a: Aviso) => Promise<void>;
+  /**
+   * Esquece a chave de um aviso já enviado (o registro de 24 h): o Google voltou, então a próxima
+   * perda é um aviso novo. Ausente = o registro não existe neste processo.
+   */
+  esquecerAviso?: (chave: string) => Promise<void>;
   /**
    * Resumo matinal (17/10/2026). Ausente = desligado. `ultimoEnviado` guarda o dia (AAAA-MM-DD)
    * fora da memória, para um redeploy entre 7h30 e 11h não repetir o "bom dia"; falha de
@@ -53,6 +69,8 @@ export interface ResultadoDaVarredura {
   mensagens: (Aviso & { eventId: string; enviada: boolean })[];
   erros: string[];
   semCredencial: boolean;
+  /** false quando algum calendário não foi lido: a varredura não viu a agenda toda. */
+  leituraCompleta: boolean;
 }
 
 export interface Vigia {
@@ -64,20 +82,28 @@ export interface Vigia {
   varrer(agora: Date, opcoes: { enviar: boolean; registrar: boolean }): Promise<ResultadoDaVarredura>;
   /** Liga o laço. Devolve a função que desliga. */
   iniciar(relogio?: () => Date): () => void;
+  /**
+   * Instante (ms) da última varredura do laço que viu a agenda toda, com credencial. null = ainda
+   * nenhuma neste processo. O sinal de vida avisa o healthchecks se isto envelhecer.
+   */
+  ultimaVarreduraOkEm(): number | null;
+  /** Há uma volta do laço em andamento? O `/api/runtime` conta como ocupado, para o reinício esperar. */
+  ocupada(): boolean;
 }
 
 /**
  * Sem credencial a vigia fica cega e o usuário não abriria o app para
- * descobrir: o próprio canal avisa, uma vez por perda. A chave leva o instante
- * da perda: duas perdas no mesmo dia são dois avisos, e a fila não confunde.
- * P1, não P0: não acorda ninguém de madrugada, sai às 7h.
+ * descobrir: o próprio canal avisa, uma vez por perda. A chave é fixa e a vigia a
+ * esquece quando o Google volta (`esquecerAviso`): a mesma perda não repete a cada
+ * reinício da Central, e uma perda nova, depois de reconectar, é um aviso novo.
+ * P1, não P0: pelo Telegram chega na hora, sem som das 22h às 7h.
  */
 export function avisoDeDesconexao(agora: Date): Aviso {
   return {
     titulo: "⚠️ SquadOne sem acesso ao Google",
     texto: "Os lembretes pararam até o Google ser reconectado no SquadOne.",
     origem: ORIGEM_DOS_LEMBRETES,
-    chave: `google-desconectado:${agora.toISOString()}`,
+    chave: CHAVE_DO_AVISO_DE_DESCONEXAO,
     prioridade: 1,
     expiraEm: new Date(agora.getTime() + 24 * 3600_000).toISOString(),
   };
@@ -87,13 +113,18 @@ const mensagemDe = (err: unknown) => (err as Error)?.message ?? String(err);
 
 export function criarVigia(dep: DependenciasDaVigia): Vigia {
   const log = dep.log ?? console;
-  /** chave → referência. Só memória: redeploy na janela de 10 min reenvia uma vez (custo aceito). */
+  /**
+   * chave → referência. Atalho em memória, sem I/O por varredura. O que sobrevive a um reinício na
+   * janela de 10 min é o registro de 24 h de `publicarAvisoPessoal`: ele devolve "repetido" e a
+   * vigia o conta como enviado.
+   */
   const enviados = new Map<string, number>();
   let avisouDesconexao = false;
   let emAndamento = false;
+  let ultimaOk: number | null = null;
 
   async function varrer(agora: Date, opcoes: { enviar: boolean; registrar: boolean }): Promise<ResultadoDaVarredura> {
-    const resultado: ResultadoDaVarredura = { mensagens: [], erros: [], semCredencial: false };
+    const resultado: ResultadoDaVarredura = { mensagens: [], erros: [], semCredencial: false, leituraCompleta: true };
     const janela = dep.lerJanela();
     const alvos = alvosDoRoster(await dep.lerRoster());
 
@@ -114,7 +145,11 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       }
       return resultado;
     }
-    if (opcoes.registrar) avisouDesconexao = false;
+    if (opcoes.registrar) {
+      avisouDesconexao = false;
+      // Cada reinício recomeça com a flag em memória apagada; sem isto a chave fixa calaria a perda seguinte por 24 h.
+      await dep.esquecerAviso?.(CHAVE_DO_AVISO_DE_DESCONEXAO).catch((e) => log.error(`[vigia] chave de desconexão não esquecida: ${mensagemDe(e)}`));
+    }
 
     // Margem de 2 varreduras: um tick atrasado (Google lento) não perde evento na borda.
     const ate = new Date(agora.getTime() + ANTECEDENCIA_LEMBRETE_MIN * MIN_MS + 2 * VARREDURA_MS);
@@ -122,8 +157,9 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
     for (const calendarId of alvos.calendarios) {
       // Um calendário quebrado não cala os outros.
       try {
-        quests.push(...(await dep.listar(token, calendarId, agora, ate)));
+        quests.push(...(await dep.listar(token, calendarId, agora, ate, AbortSignal.timeout(PRAZO_DA_LEITURA_MS))));
       } catch (err) {
+        resultado.leituraCompleta = false;
         resultado.erros.push(`calendário '${calendarId}': ${mensagemDe(err)}`);
       }
     }
@@ -188,7 +224,7 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       let leituraCompleta = true;
       for (const calendarId of calendarios) {
         try {
-          quests.push(...(await dep.listar(token, calendarId, de, ate)));
+          quests.push(...(await dep.listar(token, calendarId, de, ate, AbortSignal.timeout(PRAZO_DA_LEITURA_MS))));
         } catch (err) {
           // Resumo com um calendário faltando mentiria ("dia livre"): tenta de novo no minuto seguinte.
           leituraCompleta = false;
@@ -239,6 +275,7 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       emAndamento = true;
       try {
         const r = await varrer(relogio(), { enviar: true, registrar: true });
+        if (!r.semCredencial && r.leituraCompleta) ultimaOk = relogio().getTime();
         if (falhaAntes !== null) {
           log.error("[vigia] varredura voltou a funcionar");
           falhaAntes = null;
@@ -264,9 +301,11 @@ export function criarVigia(dep: DependenciasDaVigia): Vigia {
       }
     };
     const id = setInterval(tick, VARREDURA_MS);
+    // O servidor HTTP já segura o processo; o laço sozinho não deve impedir o encerramento.
+    id.unref?.();
     void tick();
     return () => clearInterval(id);
   }
 
-  return { varrer, iniciar };
+  return { varrer, iniciar, ultimaVarreduraOkEm: () => ultimaOk, ocupada: () => emAndamento };
 }

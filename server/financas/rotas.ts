@@ -47,7 +47,7 @@ import { gastoNaVisao, mesDaFatura, type Visao } from "./visoes.ts";
  *
  * Privacidade (RULES 24): as respostas levam R$ porque são a TELA do app;
  * nada daqui vai a log (só contagens e status), Telegram, Hermes ou ao modelo.
- * Os alertas de 70/90/100% vão à fila de avisos só com semáforo e %
+ * Os alertas de 70/90/100% vão pelo Telegram (fila do WhatsApp só de reserva), só com semáforo e %
  * (`alertas.ts`). `Cache-Control: no-store`: o celular não guarda extrato em
  * cache.
  *
@@ -71,7 +71,7 @@ const MAX_ORCAMENTO_CENTAVOS = 100_000_000;
 export interface EstadoDasFinancas {
   banco: BancoDeFinancas | null;
   sincronizador: Sincronizador | null;
-  /** Alertas de 70/90/100% na fila de avisos; null sem banco. */
+  /** Alertas de 70/90/100% pelo Telegram (fila de reserva); null sem banco. */
   avisador: Avisador | null;
   /** Por que o banco ou a Pluggy não estão disponíveis (texto para a tela, sem segredo). */
   problema: string | null;
@@ -114,7 +114,7 @@ export async function prepararFinancas(
     itemIds: config?.itemIds ?? [],
     depois: () => avisador.avisar(),
   });
-  console.log(`[financas] banco aberto; Pluggy ${config ? `com ${config.itemIds.length} conexão(ões)` : "desligada"}; alertas ${opcoes.publicar ? "pela fila de avisos" : "desligados"}.`);
+  console.log(`[financas] banco aberto; Pluggy ${config ? `com ${config.itemIds.length} conexão(ões)` : "desligada"}; alertas ${opcoes.publicar ? "pelo Telegram (fila de reserva)" : "desligados"}.`);
   return { banco, sincronizador, avisador, problema };
 }
 

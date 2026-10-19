@@ -21,7 +21,7 @@ Uma página privada, **só pela tailnet**, onde o Rômulo manda texto e arquivos
    (nunca ao modelo)               achou → BLOQUEIA               achou → BLOQUEIA
         │                          não achou → fila/              não achou → chegou/
         ▼                               │
-  ~/Mel/Cofre/*.age                     ▼   a cada 5 min (entrada-organizar.timer)
+  ~/Mel/Cofre/*.age                     ▼   a cada 15 min (entrada-organizar.timer)
   indice.json (sem valor)        organizar.py ── fila vazia: silêncio, zero token
                                         │       um item de texto por chamada; `hermes -z -t clarify` (SEM ferramentas)
                                         ▼
@@ -38,11 +38,11 @@ Uma página privada, **só pela tailnet**, onde o Rômulo manda texto e arquivos
 | `servidor.py` + `pagina.html` | a página e a API (`127.0.0.1:9130`) |
 | `organizar.py` | o organizador: monta o texto para o modelo, chama, executa, resume. Com `--fila` (o `entrada-organizar.service`, desde 11/10/2026) o resumo vira aviso na fila do `dell-status`; sem argumento imprime, que era o jeito do job "Entrada — organizar" do Hermes (`cbb21e966fce`, hoje pausado) |
 | `cofre_cli.py` | `cofre listar / ler / destinatarios / adicionar-destinatario / recifrar` |
-| `bin/cofre`, `bin/entrada_organizar.py` | atalhos instalados em `~/.local/bin` e `~/.hermes/scripts` |
+| `bin/cofre` | atalho instalado em `~/.local/bin` |
 | `bin/proteger-identidade` | **opcional, ainda não usado** (o Rômulo deixou a identidade sem senha em 04/10): protege a identidade `age` da Mel com uma senha SUA (só em terminal; só apaga a cópia em claro depois de conferir que a senha decifra) |
 | `server/entrada-proxy.ts` (na Central, fora desta pasta) | repasse de `/entrada/*` da Central ao serviço, para um destino fixo e 3 rotas |
 | `entrada.service` | unit de usuário do servidor |
-| `../entrada-organizar.service` + `.timer` | o organizador a cada 5 min, sem `Persistent` (a rodada seguinte pega a fila inteira) |
+| `../entrada-organizar.service` + `.timer` | o organizador a cada 15 min (eram 5; 576 rodadas em 48 h terminaram sem nada a dizer), sem `Persistent` (a rodada seguinte pega a fila inteira) |
 
 ## Como abrir
 
@@ -83,7 +83,7 @@ O modelo roda com `hermes -z … -t clarify` (o único conjunto de ferramentas �
 - **Pasta de trabalho suja** (qualquer arquivo, até oculto): o organizador **não chama o modelo, não gasta tentativa dos itens, não grava "prova" de prompt que não saiu** e avisa **uma vez** no WhatsApp (um marcador evita repetir a cada 5 minutos); some o aviso quando a pasta volta a ficar vazia.
 - **O `-z` grava uma sessão** (com o texto do prompt) no `state.db`, onde o Hermes do WhatsApp poderia achá-la numa busca. O organizador apaga as sessões **dessa pasta** ANTES da chamada (sobra de uma rodada que caiu: o `hermes` órfão grava depois) e DEPOIS, também quando a chamada falha ou estoura o tempo. Lê o `hermes sessions list --workspace <pasta> --limit 200` **da direita** (colunas Title, Workspace, Last Active, ID: o título é texto livre e pode ter algo com cara de id) e só apaga linha de workspace **exatamente** `.agente` (o `--workspace` do Hermes casa por substring: `.agente-velho` aparece na lista e não pode ser apagado). Tenta de novo se o banco estiver travado, confere no fim e, se sobrar sessão, avisa e registra no diário (`sessoes_restantes`). **Nunca `sessions prune`**: ele se recusa com o gateway no ar e `--force` arriscaria o banco do Hermes. **Apagar a sessão a tira da busca, não do disco**: o texto pode ficar em páginas livres e no WAL do SQLite, e `~/.hermes/*.db` entra no backup cifrado.
 - **Ambiente e entrada do filho:** `stdin` fechado e só `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TZ`, `TMPDIR`, `XDG_*` e `HERMES_HOME` (as credenciais ele lê de `~/.hermes/.env`; o gateway exporta outras `HERMES_*`, como `HERMES_SUPERVISED_CHILD`, que não repasso porque não medi o efeito). O binário é `~/.local/bin/hermes` por caminho absoluto (o `PATH` do cron do Hermes começa por outra pasta). `ENTRADA_HERMES_CMD` (gancho de teste) só vale com `ENTRADA_TESTE=1`.
-- **Tempo:** 180 s por chamada (as reais levam 10 a 20 s) e no máximo 5 chamadas por rodada: o pior caso (15 min) cabe folgado na 1 h que o Hermes dá ao script do cron.
+- **Tempo:** 180 s por chamada (as reais levam 10 a 20 s) e no máximo 5 chamadas por rodada: o pior caso (15 min) cabe folgado no teto de 1 h do `entrada-organizar.service` (`TimeoutStartSec`).
 - **Limite aceito:** o `hermes -z` só aceita o prompt como argumento, então o texto (já mascarado) fica visível em `/proc/<pid>/cmdline` enquanto a chamada dura (segundos a minutos) para **qualquer conta local**; a Mel não monta `/proc` com `hidepid` e há contas de sistema com processos (avahi, dnsmasq, syslog…).
 
 `tentativas` é gravada **antes** de chamar o modelo (uma queda já conta). Resposta estranha, id que não é texto, JSON aninhado, plano recusado ou erro na execução: o item fica em `chegou/` e tenta de novo; depois de 3 vira `sem-plano` e é avisado uma vez.
@@ -125,20 +125,19 @@ for f in segredos cofre entrada executor servidor organizar cofre_cli; do instal
 install -m 644 $D/pagina.html ~/.local/lib/mel-entrada/
 install -m 644 <clone>/src/estilos/fontes/inter-latin-wght-normal.woff2 ~/.local/lib/mel-entrada/   # a Inter do app (16/10/2026); sem ela, fonte do sistema
 install -m 755 $D/bin/cofre ~/.local/bin/cofre
-install -m 644 $D/bin/entrada_organizar.py ~/.hermes/scripts/entrada_organizar.py
 install -m 644 $D/entrada.service ~/.config/systemd/user/entrada.service
 install -m 644 <clone>/deploy/dell/backup/fontes.toml ~/.config/backup-dell/fontes.toml   # obrigatorios do cofre
 install -m 644 <clone>/deploy/dell/entrada-organizar.service <clone>/deploy/dell/entrada-organizar.timer ~/.config/systemd/user/
 systemctl --user daemon-reload && systemctl --user enable --now entrada.service entrada-organizar.timer
 ```
 
-Até 11/10/2026 o organizador era um job do Hermes (`hermes cron create "every 5m" --name "Entrada — organizar" --script entrada_organizar.py --no-agent --deliver whatsapp`), que hoje está pausado. Não o retome com o timer ligado: os dois organizariam a mesma fila.
+Até 11/10/2026 o organizador era um job do Hermes (`entrada-organizar`, id `cbb21e966fce`), hoje pausado no cron do Hermes e sem o script `entrada_organizar.py` no repositório. Não o retome com o timer ligado: os dois organizariam a mesma fila. Se `~/.hermes/scripts/entrada_organizar.py` ainda existir na Mel, pode apagar (`hermes cron remove cbb21e966fce` tira o job).
 
 Depois do merge a Central se atualiza sozinha (reinício de ~0,5 s) e passa a ter o menu e a rota `/entrada/`; com o serviço no ar, `curl -s http://127.0.0.1:9120/entrada/ | grep -o '<title>[^<]*</title>'` deve mostrar `Entrada · SquadOne` (era `Entrada da Mel` até 17/10/2026). **Só o código 200 não prova nada:** antes da Central atualizar (e com a Entrada desligada) `/entrada/` também dá 200, porque cai na SPA (`<title>SquadOne</title>`). `tailscale serve status` segue com as 3 linhas.
 
 Pré-requisitos (feitos em 04/10): `age` 1.2.1 (`sudo apt install age`), `~/.config/mel/age/identity.txt` (600), `~/Mel/Entrada` e `~/Mel/Cofre` (700), `~/Mel/Cofre/recipients.txt` com a chave pública da Mel. O serviço lê o nome da Mel na tailnet com `tailscale status`; se falhar, sai com erro e o systemd tenta de novo (ou defina `ENTRADA_NOMES=<mel>.<tailnet>.ts.net`).
 
-**Desfazer:** `systemctl --user disable --now entrada-organizar.timer entrada.service` (e `hermes cron remove cbb21e966fce`, o job pausado); remover `~/.local/lib/mel-entrada`, `~/.local/bin/cofre`, `~/.hermes/scripts/entrada_organizar.py` e a unit; restaurar `fontes.toml.bak-…`. As pastas `~/Mel/Entrada` e `~/Mel/Cofre` ficam (têm dado do Rômulo).
+**Desfazer:** `systemctl --user disable --now entrada-organizar.timer entrada.service` (e `hermes cron remove cbb21e966fce`, o job pausado); remover `~/.local/lib/mel-entrada`, `~/.local/bin/cofre` e a unit; restaurar `fontes.toml.bak-…`. As pastas `~/Mel/Entrada` e `~/Mel/Cofre` ficam (têm dado do Rômulo).
 
 ## Conferência (critério da fase)
 

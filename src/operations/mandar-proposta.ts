@@ -2,8 +2,10 @@
  * PURO (16/10/2026): o "Mandar a proposta" em um toque. O diagnóstico "Por que não está vendendo"
  * mostrou o gargalo: 267 primeiros contatos, 41 respostas, 7 "quero ver", 3 receberam o link e
  * 0 propostas. A proposta era um formulário "Marcar a proposta enviada" no fim da Ficha, separado
- * do envio: ninguém marcava, e o funil não sabia que ela tinha saído. Aqui o envio e a marca são
- * o mesmo toque: o botão abre o WhatsApp com o texto da proposta e quem chama anota `proposta`.
+ * do envio: ninguém marcava, e o funil não sabia que ela tinha saído. O botão abre o WhatsApp com o
+ * texto da proposta. Desde a regra [abrir-nao-envia] (18/10/2026) abrir NÃO anota nada: a proposta só
+ * é marcada no "Enviei a proposta", que o Rômulo toca depois de enviar (MissaoDaConversa, ou
+ * "Proposta enviada" no Desfecho da Ficha), porque abrir o WhatsApp não prova que a mensagem saiu.
  *
  * Nada é enviado sem o toque do Rômulo: isto só monta o texto e o link do wa.me; o WhatsApp abre
  * com a mensagem para ele revisar e mandar (decisão de 16/10/2026: semi-automático).

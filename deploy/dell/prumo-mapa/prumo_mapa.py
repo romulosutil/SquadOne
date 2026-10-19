@@ -11,7 +11,7 @@ completa do formulário "Roteiro do Mapa", um pacote JSON em
   2. grava ~/prumo-entregas/<AAAA-MM-DD>-<empresa>/dados.json (o pacote mais
      os campos que só a entrevista e a coleta dão, vazios);
   3. gera o documento (7 páginas A4, como o exemplo Vale Norte) em HTML e PDF;
-  4. avisa o Rômulo pela fila de avisos (WhatsApp pelo Hermes).
+  4. avisa o Rômulo pela fila de avisos (Telegram; WhatsApp de reserva).
 
 O que o formulário não dá (mapa de dependência, inventário, travas em reais,
 recomendação) sai como [PREENCHER]. Para completar: editar dados.json e rodar
@@ -268,18 +268,14 @@ PASTAS_DA_LIB = [AQUI.parent / "lib", HOME / ".local/lib/mel"]
 
 
 def lib_de_aviso():
-    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega: aí o
-    avisar() volta ao jeito antigo e o aviso sai do mesmo modo que antes."""
+    """O módulo da lib, ou None quando nenhuma cópia existe ou carrega."""
     for pasta in PASTAS_DA_LIB:
-        arquivo = pasta / "aviso.py"
-        if not arquivo.is_file():
-            continue
         try:
-            spec = importlib.util.spec_from_file_location("mel_aviso", arquivo)
+            spec = importlib.util.spec_from_file_location("mel_aviso", pasta / "aviso.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
-        except Exception:  # noqa: BLE001 — cópia quebrada não derruba a rodada: tenta a próxima
+        except Exception:  # noqa: BLE001 — ausente ou quebrada: tenta a próxima
             continue
     return None
 
@@ -289,23 +285,20 @@ def avisar(texto: str, teste: bool = False) -> None:
         texto = "[teste] " + texto
     aviso = {"titulo": "📊 PRUMO", "texto": texto, "origem": "prumo-mapa"}
     lib = lib_de_aviso()
-    if lib is not None:
-        # Valida, grava atômico, não cria a pasta da fila e nunca levanta (o
-        # aviso de erro sai de dentro de um `except` e não pode derrubar os
-        # pacotes seguintes). O texto leva nome de empresa e a mensagem da
-        # exceção: se vier "R$", a lib recusa o aviso (RULES 24: nenhum valor
-        # sai num aviso) e NÃO o escondemos com [valor]; o que não foi gravado
-        # fica no journal, com o começo do texto para saber de qual Mapa era
-        # (o pacote e a pasta de entrega seguem no disco).
-        r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="prumo-mapa")
-        if not r.gravado:
-            print(f"prumo-mapa: aviso não entregue ({r.estado}): {texto.splitlines()[0][:160]}",
-                  file=sys.stderr, flush=True)
+    if lib is None:  # sem a lib não há validação (nem a regra do R$): não grava na fila, só registra e segue
+        print(f"lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: {aviso['titulo']}: {texto.splitlines()[0][:160]}", file=sys.stderr, flush=True)
         return
-    # Sem a lib instalada: o jeito de antes, sem mudar nada.
-    FILA_AVISOS.mkdir(parents=True, exist_ok=True)
-    arq = FILA_AVISOS / f"prumo-mapa-{time.time_ns()}.json"
-    arq.write_text(json.dumps(aviso, ensure_ascii=False), encoding="utf-8")
+    # Valida, grava atômico, não cria a pasta da fila e nunca levanta (o
+    # aviso de erro sai de dentro de um `except` e não pode derrubar os
+    # pacotes seguintes). O texto leva nome de empresa e a mensagem da
+    # exceção: se vier "R$", a lib recusa o aviso (RULES 24: nenhum valor
+    # sai num aviso) e NÃO o escondemos com [valor]; o que não foi gravado
+    # fica no journal, com o começo do texto para saber de qual Mapa era
+    # (o pacote e a pasta de entrega seguem no disco).
+    r = lib.gravar(aviso, fila=FILA_AVISOS, prefixo="prumo-mapa")
+    if not r.gravado:
+        print(f"prumo-mapa: aviso não entregue ({r.estado}): {texto.splitlines()[0][:160]}",
+              file=sys.stderr, flush=True)
 
 
 def ja_feito(resposta_id: str) -> Path | None:

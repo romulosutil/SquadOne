@@ -11,6 +11,8 @@
  *    No `app` é sempre verdade; no `operations`, só com a agenda ligada.
  */
 
+import { NOME_DAS_ABAS, caminhoDaAba } from '../operations/vendas-abas'
+
 export type Perfil = 'app' | 'operations'
 
 export interface Capacidades {
@@ -163,7 +165,7 @@ export interface Comando {
 const DICA_DO_DESTINO: Record<Destino['id'], string> = {
   hoje: 'O que fazer agora',
   agenda: 'Compromissos dos agentes, por dia',
-  funil: 'Vendas › A fazer',
+  funil: caminhoDaAba('afazer'),
   financas: 'Finanças › Visão',
   escritorio: 'Squads e salas',
   entrada: 'Mande um texto ou arquivo para a Mel guardar',
@@ -186,10 +188,10 @@ type Atalho = { id: string; rotulo: string; dica: string; href: string; soComAge
  * da tela; a dica diz onde ela mora. Lançamentos e Organizar seguem como caminhos de Finanças.
  */
 const ATALHOS_DO_DELL: Atalho[] = [
-  { id: 'vendas-afazer', rotulo: 'A fazer', dica: 'Vendas › A fazer', href: '/crm' },
-  { id: 'vendas-triagem', rotulo: 'Primeiros contatos', dica: 'Vendas › avaliação do time e triagem', href: '/crm?ver=triagem' },
-  { id: 'vendas-funil', rotulo: 'Funil', dica: 'Vendas › Funil', href: '/crm?ver=funil' },
-  { id: 'vendas-numeros', rotulo: 'Números', dica: 'Vendas › Números', href: '/crm?ver=numeros' },
+  { id: 'vendas-afazer', rotulo: NOME_DAS_ABAS.afazer, dica: caminhoDaAba('afazer'), href: '/crm' },
+  { id: 'vendas-triagem', rotulo: NOME_DAS_ABAS.triagem, dica: `${caminhoDaAba('triagem')} · avaliação do time e triagem`, href: '/crm?ver=triagem' },
+  { id: 'vendas-funil', rotulo: NOME_DAS_ABAS.funil, dica: caminhoDaAba('funil'), href: '/crm?ver=funil' },
+  { id: 'vendas-numeros', rotulo: NOME_DAS_ABAS.numeros, dica: caminhoDaAba('numeros'), href: '/crm?ver=numeros' },
   { id: 'central-escritorio', rotulo: 'Escritório', dica: 'Central de comando › o mapa das salas', href: '/?abrir=escritorio' },
   { id: 'financas-lancamentos', rotulo: 'Lançamentos', dica: 'Finanças › Lançamentos', href: '/financas/lancamentos' },
   { id: 'financas-organizar', rotulo: 'Organizar', dica: 'Finanças › Organizar', href: '/financas/organizar' },

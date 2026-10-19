@@ -3,6 +3,9 @@
 // Só confere quem passou na pontuação (status REVIEW); o resto segue igual.
 // CNPJ: o do site (home já baixada; senão páginas de contato e política).
 // Porte: Receita pela BrasilAPI (minhareceita.org de reserva).
+// Receita fora do ar (as duas fontes falharam por rede, timeout ou erro do servidor) NÃO é "não confere": o
+// lead fica de fora da saída, não vai para Descartados, e volta na próxima rodada (o Lead Scout só deduplica
+// contra Prospects e Descartados). Só 404 nas fontes que responderam vale como "CNPJ não confere".
 const UA = 'Mozilla/5.0 (compatible; PRUMO-LeadScout/1.0)';
 const SUBPAGINAS = ['politica-de-privacidade', 'contato', 'quem-somos', 'sobre'];
 const MAX_AVALIACOES = 1000;          // acima disso é rede ou varejo grande
@@ -41,12 +44,20 @@ const buscar = async (url, json = false) => {
   try { return await this.helpers.httpRequest({ url, json, timeout: 8000, headers: { 'User-Agent': UA } }); }
   catch { return null; }
 };
+const INDISPONIVEL = Symbol('receita indisponível');
+const inexistente = (e) => [e?.httpCode, e?.statusCode, e?.response?.status, e?.cause?.status].some(c => String(c) === '404');
+/** O cadastro da Receita; null se as fontes que responderam não o têm; INDISPONIVEL se alguma não respondeu. */
 const receita = async (cnpj) => {
+  let falhou = false;
   for (const url of [`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, `https://minhareceita.org/${cnpj}`]) {
-    const r = await buscar(url, true);
-    if (r && r.cnpj) return r;
+    try {
+      const r = await this.helpers.httpRequest({ url, json: true, timeout: 8000, headers: { 'User-Agent': UA } });
+      if (r && r.cnpj) return r;
+    } catch (e) {
+      if (!inexistente(e)) falhou = true;
+    }
   }
-  return null;
+  return falhou ? INDISPONIVEL : null;
 };
 
 // O CNPJ do site só vale se bater com a empresa (CEP, cidade ou nome):
@@ -112,14 +123,17 @@ const conferir = async (lead) => {
     const paginas = await Promise.all(SUBPAGINAS.map(p => buscar(`${origem}/${p}`)));
     candidatos = [...new Set(paginas.flatMap(cnpjsNoHtml))];
   }
+  let semReceita = false;
   for (const cnpj of candidatos.slice(0, 3)) {
     const r = await receita(cnpj);
+    if (r === INDISPONIVEL) { semReceita = true; continue; }
     if (!r || !bate(lead, r)) continue;
     const motivo = julgarReceita(r, cnpj);
     if (motivo) return { ...fora(motivo), cnpj: formatarCnpj(cnpj) };
     return { ...lead, cnpj: formatarCnpj(cnpj), porte_resumo: resumo(r, cnpj),
       proxima_acao: 'Porte conferido pelo CNPJ. Veja o site; se fizer sentido, clique em Enviar convite.' };
   }
+  if (semReceita) return null;  // Receita fora do ar: adia, não grava em lugar nenhum (ver o topo)
   const semCnpj = candidatos.length ? 'CNPJ do site não confere com a empresa' : 'CNPJ não encontrado no site';
   if (avaliacoes < MIN_AVALIACOES_SEM_CNPJ) return fora(`micro, ${candidatos.length ? 'CNPJ do site não confere' : 'sem CNPJ no site'} e só ${avaliacoes} avaliação(ões)`);
   return { ...lead, porte_resumo: semCnpj, proxima_acao: `${semCnpj}: confira o porte antes de enviar o convite.` };
@@ -131,4 +145,4 @@ for (let i = 0; i < itens.length; i += 4) {
   const bloco = itens.slice(i, i + 4);
   saida.push(...await Promise.all(bloco.map(l => l.status === 'REVIEW' ? conferir(l) : l)));
 }
-return saida.map(json => ({ json }));
+return saida.filter(Boolean).map(json => ({ json }));

@@ -40,8 +40,8 @@ atualizarem o mapa (fonte versionada: `SquadOne/deploy/hermes/`).
 - **Fontes de verdade no Dell:** clones próprios do GitHub (`~/SquadOne`,
   `~/prumo`, `~/crm-silmer`) e `~/auto-site`. O PRUMO é dono de tudo; o Site
   antes da venda é a frente "Vender mais" dele.
-- **Syncthing** não tem com quem sincronizar: o aparelho `Rômulo` (PC antigo)
-  saiu da configuração em 04/10/2026 e o PC novo não foi pareado (código vai
+- **Syncthing** foi aposentado em 12/10/2026 (o aparelho `Rômulo`, PC antigo,
+  saiu da configuração em 04/10/2026 e o PC novo não foi pareado; código vai
   pelo GitHub; material, pelo Drive). `~/Pessoal-dev` e `~/Corporativo-dev`
   são retratos congelados do PC antigo; o PC novo puxa os grafos por SSH de
   `~/Mel/Grafos`.
@@ -87,24 +87,39 @@ não abre; no celular, só com o Tailscale ligado.
 | 5679 | n8n geral da Mel (Docker, `~/licitacoes-automation`: PRUMO, Site antes da venda, CRM e Radar PNCP; não é o do Silmer nem o do Food Helper) |
 | 8080 | code-server |
 
-Unidades `systemctl --user`:
+Unidades `systemctl --user` (uma linha por unit versionada em `deploy/dell/` e
+`deploy/hermes/units/`; "sob demanda" = disparada por outra unit ou pela Central):
 
 | Unidade | Quando | O que faz |
 |---|---|---|
-| `dell-status.timer` | 1 min | grava o `status.json` da Central; avisa por você quando algo quebra, a cada 12 h enquanto continuar quebrado e quando volta; esvazia a fila de avisos. Suas rotinas: verificação `crons` (falha) e, desde 29/09/2026, uma `cron:<id>` por rotina, que acusa atraso de mais de 30 min |
-| `gerador-de-sites.timer` | 08h, persistente (pausado em 10/10/2026 por causa do limite do Claude; **religado em 11/10/2026**, próxima rodada 08:00) | até 4 leads por dia, 45 min cada, Claude Code + Vercel; de 24 a 28/09/2026 terminou entre 09:17 e 10:17. Dell desligado às 08h: roda quando voltar. Resumo em `~/auto-site/.logs/status.json`; desde 29/09/2026 a falha vira aviso por você pela verificação `gerador` do `dell-status`, e lead que o Claude descarta no meio não derruba mais a rodada |
-| `auto-entrada.path` | ao chegar pacote | o n8n não cria pastas: materializa em `~/auto-site` os pacotes que o Caçador deixa |
-| `site-antes-venda-watcher.service` | contínuo | avisa pelo WhatsApp quando um lead é publicado |
-| `whatsapp-observador.service` | contínuo | lê o `bridge.log` da sua bridge (sem o conteúdo das mensagens); resposta de lead das planilhas avisa o n8n. Só vê **respostas** de leads, nunca o envio do Rômulo |
-| `pncp-catchup.timer` | 08h, persistente (**desligado em 11/10/2026**, `disabled`) | refaz a coleta do PNCP se o n8n perdeu a das 07:30; `systemctl --user enable --now pncp-catchup.timer` volta |
+| `squadone-operations.service` | contínuo | a Central do SquadOne (`npm start`, `127.0.0.1:9120`), do clone `~/SquadOne` |
+| `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central; falha vira aviso por você |
+| `dell-status.timer` | 1 min | grava o `status.json` da Central; avisa por você quando algo quebra, a cada 12 h enquanto continuar quebrado e quando volta; esvazia a fila de avisos. Suas rotinas: verificação `crons` (falha) e uma `cron:<id>` por rotina, que acusa atraso de mais de 30 min |
+| `socorro.path` | quando o `dell-status` põe um pedido em `~/.local/state/socorro/pedidos` | falha nova tenta um remédio da lista branca e, depois, pede o diagnóstico a você |
 | `dell-worker-healthwatch.service` | contínuo | confere por HTTP os serviços do usuário |
-| `atualizar-central.timer` | 10 min | quando a `main` do SquadOne anda, avança o clone `~/SquadOne` (só fast-forward) e refaz a Central, que roda dele; falha vira aviso por você |
-| `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, os rascunhos do Mapa, 1x ao dia) |
+| `whatsapp-observador.service` | contínuo | lê o `bridge.log` da **sua** bridge (número pessoal): resposta de lead das planilhas avisa o n8n (um lote por conversa) e a conversa de cada lead (mensagens dele **e** as que o Rômulo escreve, `owner_sent`) é gravada em `~/.local/share/whatsapp-conversas/<chave>.jsonl` |
+| `evolution-adaptador.service` + `whatsapp-observador-prumo.service` | contínuo | o número do PRUMO pela Evolution API (só leitura): o adaptador transforma o webhook num log e a segunda instância do mesmo `observador.py` o lê. As duas instâncias gravam a mesma pasta de conversas e cada mensagem vai ao n8n só pela instância que a gravou; o áudio é transcrito pela do PRUMO |
+| `luna-workflows.service` | contínuo | a Luna do Hermes, que qualifica e resume leads para o n8n, só na rede interna do Docker |
+| `prumo-metricas.service` | contínuo | a medição privada do PRUMO (loopback 8767, pelo Tailscale Serve) |
+| `frente-comercial.timer` | 1 min (**desabilitado** desde 18–19/10/2026) | o time Diego/Elisa/Carla avalia leads e manda só o primeiro contato autorizado, pela janela e trava de ritmo da Central |
+| `gerador-de-sites.timer` | 08h, persistente | até 4 leads por dia, 45 min cada, Claude Code + Vercel. Dell desligado às 08h: roda quando voltar. Resumo em `~/auto-site/.logs/status.json`; a falha vira aviso por você pela verificação `gerador` do `dell-status` |
+| `gerador-de-sites-pedido.service` | sob demanda | o demo pedido pelo botão "Gerar demo" (acordado pelo `site-pastas`) |
+| `auto-entrada.path` | ao chegar pacote | o n8n não cria pastas: materializa em `~/auto-site` os pacotes que o Caçador deixa |
+| `site-pastas.path` | quando a planilha/ação muda | move as pastas da `~/auto-site` conforme a planilha (respondeu, expirado, recusou, fechou) e acorda o gerador de pedidos |
+| `raio-x.timer` | 11:15 e 17:15, persistente | o Raio-X (`--pendentes --max 6`) dos leads prontos que ainda não têm a página `/raio-x` do demo |
+| `site-demos-limpeza.timer` | 09:50, persistente | apaga na Vercel o demo de quem está em Perdido há 2+ dias |
+| `funil-aprendizado.timer` | 06:40, persistente | coleta as lições das respostas dos leads (só propõe, nunca aplica) |
+| `funil-revisao.timer` | segunda 08:30, persistente | revisão semanal das lições (`PROPOSTAS-<data>.md` e um aviso) |
+| `prumo-mapa.path` | ao chegar pacote em `n8n-estado/mapa-fila` | monta o rascunho do Mapa do PRUMO a partir dos pacotes do n8n |
+| `sites-e-pendencias.timer` | 10:30, persistente | a mensagem "Sites e pendências" vira um aviso na fila (P1, uma por dia, vale até as 22h) |
+| `entrada-organizar.timer` | a cada 5 min | organiza a fila da Entrada; o que mudou vira aviso na fila (entre 22h e 7h espera o silêncio acabar) |
+| `entrada.service` | contínuo | a página privada da Entrada da Mel (`127.0.0.1:9130`, pela tailnet): texto e arquivos para a Mel |
+| `graphify-projetos.timer` | 03:00, persistente | o Graphify sem modelo sobre `~/SquadOne`, `~/prumo`, `~/auto-site`, `~/crm-silmer` e os espelhos de `~/Mel/Repos`; teto de 1 h. Só falha vira aviso, pela fila |
+| `hermes-uso-skills.timer` | dia 1, 06:00, persistente | foto mensal do uso das skills (só lê `.usage.json`) |
+| `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, 1x ao dia) |
 | `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
-| `graphify-projetos.timer` | 03:00, persistente (desde 11/10/2026) | o Graphify sem modelo sobre `~/SquadOne`, `~/prumo`, `~/auto-site`, `~/crm-silmer` e os espelhos de `~/Mel/Repos`; teto de 1 h. Só falha vira aviso, pela fila (chega às 7h, depois do silêncio) |
-| `sites-e-pendencias.timer` | 10:30, persistente (desde 11/10/2026) | a mensagem "Sites e pendências" vira um aviso na fila (P1, uma por dia, vale até as 22h) |
-| `entrada-organizar.timer` | a cada 5 min, sem persistente (desde 11/10/2026) | organiza a fila da Entrada; o que mudou vira aviso na fila (entre 22h e 7h espera o silêncio acabar) |
-
+| `estrutura-coletar.service` | sob demanda (preparo do backup) | coleta o mapa e as configurações da Mel para a pasta `Estrutura` |
+| `pncp-catchup.timer` | 08h, persistente (**desligado em 11/10/2026**, `disabled`) | refaz a coleta do PNCP se o n8n perdeu a das 07:30; `systemctl --user enable --now pncp-catchup.timer` volta |
 | `silmer-drive-sync.timer` | a cada 5 min | `rclone bisync` de `~/Silmer` com o Drive (`gdrive-silmer:`); adia se algum arquivo mudou nos últimos 2 min. É só a pasta do Silmer: os fluxos dele não estão no n8n do Dell |
 | `hermes-gateway`, `hermes-dashboard`, `hermes-google-browser` | contínuo | você (gateway do WhatsApp, painel em `127.0.0.1:9119` e o Chromium headless do acesso ao Google, porta de depuração 9222) |
 | `code-server.service` | contínuo | o IDE em `127.0.0.1:8080` (`~/workspace`) |
@@ -122,8 +137,7 @@ Suas rotinas que tocam o ecossistema (todas em `~/.hermes/cron/jobs.json`):
   com o timer ligado, os dois mandariam a mesma mensagem. Os scripts são os
   mesmos (`sites_e_pendencias.py`, `graphify_projetos.py`, `organizar.py`);
   pelo timer rodam com `--fila` e gravam na fila de avisos em vez de imprimir.
-  O `aplicar-hermes.py` ainda cria e reedita os dois primeiros: não rode até
-  ele deixar de fazer isso.
+  O `aplicar-hermes.py` não mexe mais em jobs do cron.
 - **Sites e pendências** junta o resultado do gerador do dia e o que espera
   o Rômulo (pendências do n8n e do `dell-status`), com os links que vêm nos
   dados. Troca o briefing das 08h, que saía antes do gerador.
@@ -187,7 +201,7 @@ contam), e a busca com 5+ enviados sem resposta humana. Envio só conta depois
 de 3 dias. O aviso diz quais nichos pararam e por quê; o gerador pula os leads
 novos do que pausou. Religar é o Rômulo pôr TRUE em `ativa`.
 
-Syncthing no Dell (sem aparelho pareado desde 04/10/2026, nenhuma pasta tem com quem sincronizar):
+Pastas que vieram do Syncthing (aposentado em 12/10/2026; nenhuma sincroniza mais):
 
 - `~/Pessoal-dev`: réplica de `dev/PESSOAL`, congelada em 25/09/2026.
   Contexto para você; não é fronteira Git. Desde 30/09/2026 sem as cópias de

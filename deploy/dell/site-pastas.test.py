@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Testes do site-pastas.py: python3 deploy/dell/site-pastas.test.py
 
-O que importa aqui é a troca do avisar() pela lib de aviso (11/10/2026): o
-aviso gravado pela lib é IDÊNTICO, byte a byte, ao que o jeito antigo gravava,
-o dell-status aceita o arquivo, sem a lib (cópia ausente ou quebrada) o script
-volta ao jeito antigo e a fila ausente não derruba a rodada dos botões.
+O que importa aqui é o avisar() pela lib de aviso (11/10/2026): o aviso gravado
+é o do formato da fila, o dell-status aceita o arquivo, sem a lib (cópia ausente
+ou quebrada) nada é gravado (uma linha no stderr) e a fila ausente não derruba a
+rodada dos botões.
 
 Nada toca o Dell: o HOME vira um temporário ANTES do import, cada teste aponta
 AUTO, ACOES, ERRO, PILHA, REGISTRO e FILA_AVISOS para a própria raiz
@@ -80,11 +80,11 @@ class Base(unittest.TestCase):
             sp.avisar(texto)
         return err.getvalue()
 
-    def gravado_pelo(self, jeito: str, texto: str) -> bytes:
-        """O aviso gravado com a lib ('lib') ou sem ela ('antigo'), numa fila limpa."""
+    def gravado_pela_lib(self, texto: str) -> bytes:
+        """O aviso gravado pela lib do repo, numa fila limpa."""
         shutil.rmtree(sp.FILA_AVISOS, ignore_errors=True)
         sp.FILA_AVISOS.mkdir()
-        sp.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        sp.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto)
         arquivos = self.fila()
         self.assertEqual(len(arquivos), 1, arquivos)
@@ -95,14 +95,15 @@ class TrocaPelaLib(Base):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(sp.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in TEXTOS:
             with self.subTest(texto=texto):
-                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+                d = json.loads(self.gravado_pela_lib(texto).decode("utf-8"))
+                self.assertEqual(d, {"titulo": "🌐 Sites", "texto": texto, "origem": "site-pastas"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "🌐 Sites", "texto": "duas\\nlinhas e emoji 🌐", "origem": "site-pastas"}'
-        self.assertEqual(self.gravado_pelo("lib", "duas\nlinhas e emoji 🌐"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("duas\nlinhas e emoji 🌐"), esperado.encode("utf-8"))
 
     def test_nome_e_atomicidade(self):
         sp.FILA_AVISOS.mkdir()
@@ -157,22 +158,22 @@ class TrocaPelaLib(Base):
 
 
 class SemLib(Base):
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self, err):
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 🌐 Sites", err)
+        self.assertFalse(sp.FILA_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         sp.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.assertIsNone(sp.lib_de_aviso())
-        self.avisar("x")  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^site-pastas-\d+\.json$")
+        self.sem_gravar(self.avisar("x"))
 
-    def test_copia_quebrada_volta_ao_jeito_antigo(self):
+    def test_copia_quebrada_registra_no_stderr_e_nao_grava(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         sp.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(sp.lib_de_aviso())
-        sp.FILA_AVISOS.mkdir()
-        self.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar(self.avisar("x"))
 
     def test_copia_quebrada_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
@@ -180,12 +181,6 @@ class SemLib(Base):
         (quebrada / "aviso.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
         sp.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(sp.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        # O jeito antigo não mexe no texto (o dell-status é quem aceita ou não).
-        sp.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
-        self.avisar("custa R$ 5")
-        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
 
 
 class BotoesDaPagina(Base):
@@ -224,7 +219,7 @@ class BotoesDaPagina(Base):
         self.assertIn("1-ruim.json", avisos[0]["texto"])
         self.assertIn("ação desconhecida", avisos[0]["texto"])
         self.assertIn("confira a pasta em ~/auto-site", avisos[0]["texto"])
-        self.assertEqual(len(self.systemctl), 1)  # acorda o site-demos-pausa: o dublê, não o systemd
+        self.assertEqual(self.systemctl, [])  # o site-demos-pausa foi aposentado: mover pasta não acorda mais nada
 
     @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
     def test_dell_status_aceita_o_aviso_da_rodada(self):
@@ -243,12 +238,13 @@ class BotoesDaPagina(Base):
         self.assertTrue((sp.ERRO / "1-ruim.json").is_file())
         self.assertFalse(sp.FILA_AVISOS.exists())
 
-    def test_sem_a_lib_o_aviso_sai_como_antes(self):
+    def test_sem_a_lib_o_pacote_ruim_vai_para_erro_e_o_aviso_nao_vai(self):
         sp.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
+        sp.FILA_AVISOS.mkdir()
         self.pacote("1-ruim.json", {"place_id": "P1", "acao": "xyz"})
         self.rodar()
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^site-pastas-\d+\.json$")
+        self.assertTrue((sp.ERRO / "1-ruim.json").is_file())
+        self.assertEqual(self.fila(), [])
 
 
 class PedirDemo(BotoesDaPagina):

@@ -2,7 +2,9 @@
 Description=Pacotes do n8n para a pasta auto (Site antes da venda)
 
 [Path]
-DirectoryNotEmpty=%h/.local/share/auto-entrada
+# *.json, não "diretório não vazio": o auto-entrada só consome .json, e uma sobra de outro tipo reacionava o
+# serviço em laço até o limite de início, deixando o .path failed calado (DELL-17, auditoria de 19/10/2026).
+PathExistsGlob=%h/.local/share/auto-entrada/*.json
 MakeDirectory=yes
 
 [Install]

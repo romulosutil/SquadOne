@@ -1,13 +1,13 @@
 /**
  * O "Liberar fora do expediente", um só para a Central (17/10/2026, AC-21).
  *
- * Eram três estados de tela, cada um em memória: a Próxima venda (o cartão da Hoje e da aba A fazer),
+ * Eram três estados de tela, cada um em memória: a Próxima venda (o cartão, que saiu em 19/10/2026),
  * a Triagem e a Ficha (as duas pelo CrmPanel). Liberar um lead no cartão não destravava a Ficha dele,
  * e recarregar a página travava de novo o que já se tinha decidido. A fonte agora é o servidor
  * (venda-do-dia.json, `liberados`, zera à meia-noite de SP) e este módulo é o espelho único dele no
  * navegador: um estado reativo de módulo, o mesmo objeto para todo componente que o importa.
  *
- * Quem já lê GET /api/operations/crm/venda (o cartão, a cada 30 s; o CrmPanel, a cada leitura do CRM)
+ * Quem já lê GET /api/operations/crm/venda (o CrmPanel, a cada leitura do CRM, nas abas que usam o dia)
  * passa o corpo para `absorverDia`: nenhum GET a mais. O toque em "Liberar" marca na hora (otimista)
  * e manda o POST. Se o POST falha, a marca segue só nesta aba (como era antes de AC-21): a trava
  * existe para a decisão ser explícita, e ela foi.

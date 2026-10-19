@@ -123,11 +123,5 @@ else
   warn 'GitHub CLI sem autenticação válida'
 fi
 
-if syncthing cli config dump-json 2>/dev/null | jq -e '.folders | length > 0' >/dev/null; then
-  ok 'Syncthing possui pastas configuradas'
-else
-  warn 'Syncthing sem pastas configuradas ou CLI indisponível'
-fi
-
 printf '\nResumo: %d falha(s), %d aviso(s).\n' "$failures" "$warnings"
 (( failures == 0 ))

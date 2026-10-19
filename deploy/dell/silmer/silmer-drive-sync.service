@@ -4,7 +4,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-Environment=HOME=/home/romulo-sutil-corr-a
-Environment=RCLONE_CONFIG=/home/romulo-sutil-corr-a/.config/rclone/rclone.conf
-ExecStart=/home/romulo-sutil-corr-a/.local/bin/silmer-drive-sync
+# %h é a home de quem roda a unit de usuário; o systemd já define HOME, só o RCLONE_CONFIG é preciso.
+Environment=RCLONE_CONFIG=%h/.config/rclone/rclone.conf
+ExecStart=%h/.local/bin/silmer-drive-sync
 TimeoutStartSec=30min

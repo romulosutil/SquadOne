@@ -312,14 +312,6 @@ class Descarte(unittest.TestCase):
         for velho in ("INSTÂNCIA da metáfora", "MOVIMENTO DE NÍVEL ESPECIALISTA", "PELO MENOS DUAS INTERAÇÕES",
                       "window.onerror` temporário", "O hero abre com a ideia do conceito"):
             self.assertNotIn(velho, sistema_pers)
-        self.m.MODO_PREMIUM = True
-        try:
-            prem = self.m.comando_do_claude("b-bom", Path("/tmp/gerador-x"), True)
-        finally:
-            self.m.MODO_PREMIUM = False
-        sistema_prem = prem[prem.index("--append-system-prompt") + 1]
-        for trecho in ("Complete o", "CHECKLIST DOS ATOS", "(20) `window.onerror` vazio", "deboche do ramo"):
-            self.assertIn(trecho, sistema_prem)
 
 
 CLAUDE_FALSO = r'''#!/usr/bin/env python3
@@ -559,59 +551,35 @@ class ListaDePermissao(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.m.main()
 
-    def test_modo_premium_traz_referencias_imagem_e_laco_visual(self):
-        self.m.MODO_PREMIUM = True
-        try:
-            cmd = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
-            sistema = cmd[cmd.index("--append-system-prompt") + 1]
-            for trecho in ("MODO PREMIUM", "refero-aprender", "/tmp/gerador-x/refs", "REFERENCIAS.md", "CRITICA-N.md",
-                           "?qa=1", "aprendizados-refero.md", "feTurbulence", "bloco cinza liso", "MODO PERSONALIZADO",
-                           "CONCEITO.md", "REGRA ZERO: nada inventado", "?qa=teste", "Rua Horácio Santana 342"):
-                self.assertIn(trecho, sistema)
-            self.assertNotIn("REVISÃO DIRIGIDA", sistema)
-            self.m.NOTA_DA_REVISAO = "a seção X é invenção sem base"
-            self.m.BACKUP_EM_CURSO["lead-p"] = "_v3"
-            com_nota = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
-            sistema_nota = com_nota[com_nota.index("--append-system-prompt") + 1]
-            self.assertIn("REVISÃO DIRIGIDA", sistema_nota)
-            self.assertIn("a seção X é invenção sem base", sistema_nota)
-            self.assertIn("lead-p/_v3/", sistema_nota)
-            self.assertIn(str(self.auto / "_build/aprendizados-refero.md"), sistema)
-        finally:
-            self.m.MODO_PREMIUM = False
-            self.m.NOTA_DA_REVISAO = None
-            self.m.BACKUP_EM_CURSO.clear()
-        comum = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
-        self.assertNotIn("MODO PREMIUM", comum[comum.index("--append-system-prompt") + 1])
+    def test_o_modo_premium_foi_apagado(self):
+        """19/10/2026: --premium e --nota saíram (desligados desde 13/10); o personalizado grava a versão atual."""
+        self.assertFalse(hasattr(self.m, "MODO_PREMIUM"))
+        self.assertFalse(hasattr(self.m, "instrucoes_premium"))
+        sistema = self.m.comando_do_claude("lead-p", Path("/tmp/gerador-x"), True)
+        self.assertNotIn("MODO PREMIUM", sistema[sistema.index("--append-system-prompt") + 1])
+        self.publicado("lead-p")
+        self.m.rodar_claude = lambda *a, **k: self.fail("não podia rodar o Claude")
+        for opcao in (["--premium"], ["--nota", "x"]):
+            sys.argv = ["gerador-de-sites", "--refazer", "lead-p", *opcao]
+            with contextlib.redirect_stderr(io.StringIO()) as erro, self.assertRaises(SystemExit) as saida:
+                self.m.main()
+            self.assertEqual(saida.exception.code, 2)
+            self.assertIn("unrecognized arguments", erro.getvalue())
+        self.assertFalse((self.auto / "lead-p/_v1").exists())
 
-    def test_premium_grava_versao_3_e_liga_o_modo_pelo_argumento(self):
+    def test_refazer_grava_a_versao_atual_do_personalizado(self):
         self.publicado("lead-p")
         vistos = []
 
         def claude(slug, log_lead, timeout_min, personalizado=False):
-            vistos.append((personalizado, self.m.MODO_PREMIUM))
+            vistos.append(personalizado)
             return self.novo_site(slug, "v2")
 
         self.m.rodar_claude = claude
-        sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--refazer", "lead-p", "--premium"]
-        os.environ["GERADOR_PREMIUM_LIGADO"] = "1"  # desligado desde 13/10/2026; o religar continua funcionando
-        self.addCleanup(os.environ.pop, "GERADOR_PREMIUM_LIGADO", None)
+        sys.argv = ["gerador-de-sites", "--timeout-min", "1", "--refazer", "lead-p"]
         self.m.main()
-        self.assertEqual(vistos, [(True, True)])
-        self.assertEqual(json.loads((self.auto / "lead-p/personalizado.json").read_text())["versao"], 3)
-        self.m.MODO_PREMIUM = False
-
-    def test_premium_desligado_recusa_sem_o_religar(self):
-        """13/10/2026: --premium sem GERADOR_PREMIUM_LIGADO=1 sai com erro de uso, antes de tocar em lead."""
-        self.publicado("lead-p")
-        self.m.rodar_claude = lambda *a, **k: self.fail("não podia rodar o Claude")
-        os.environ.pop("GERADOR_PREMIUM_LIGADO", None)
-        sys.argv = ["gerador-de-sites", "--refazer", "lead-p", "--premium"]
-        with contextlib.redirect_stderr(io.StringIO()) as erro, self.assertRaises(SystemExit) as saida:
-            self.m.main()
-        self.assertEqual(saida.exception.code, 2)
-        self.assertIn("premium está desligado desde 13/10/2026", erro.getvalue())
-        self.assertFalse((self.auto / "lead-p/_v1").exists())
+        self.assertEqual(vistos, [True])
+        self.assertEqual(json.loads((self.auto / "lead-p/personalizado.json").read_text())["versao"], self.m.VERSAO_PERSONALIZADO)
 
     def test_comando_personalizado_traz_o_roteiro_e_o_prompt_proprio(self):
         self.m.BACKUP_EM_CURSO["lead-r"] = "_v1"
@@ -702,22 +670,17 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
         for nome in (".sem-folha", ".sem-qa", ".sem-dribbble"):
             (self.auto / nome).write_text("# cópia instalada\n")
 
-    def sistema(self, personalizado=False, premium=False):
-        self.m.MODO_PREMIUM = premium
-        try:
-            cmd = self.m.comando_do_claude("b-bom", self.rascunho, personalizado)
-        finally:
-            self.m.MODO_PREMIUM = False
+    def sistema(self, personalizado=False):
+        cmd = self.m.comando_do_claude("b-bom", self.rascunho, personalizado)
         return cmd[cmd.index("--append-system-prompt") + 1]
 
     def test_sem_as_copias_o_qa_e_o_de_antes(self):
         """O gerador novo instalado antes dos dois scripts não pode mandar o Claude chamar o que não existe."""
-        for texto in (self.sistema(), self.sistema(True), self.sistema(True, True)):
+        for texto in (self.sistema(), self.sistema(True)):
             self.assertNotIn("folha-de-contato", texto)
             self.assertNotIn("qa-numerico", texto)
             self.assertIn("grave no rascunho um script python3", texto)
             self.assertIn("--blink-settings=scriptEnabled=false", texto)
-        self.assertIn("Leia (Read) as capturas LADO A LADO", self.sistema(True, True))
 
     def test_dribbble_so_quando_instalado(self):
         """14/10/2026: com o coletor instalado, os comandos de busca e de shot; sem ele, o exemplo aprovado
@@ -750,14 +713,6 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
             self.assertIn(trecho, comum)
         self.assertNotIn("grave no rascunho um script python3", comum)
         self.assertIn("folha de contato só", self.sistema(True))
-        premium = self.sistema(True, True)
-        for trecho in (f"python3 {folha} --saida /tmp/gerador-x/qa/folha-N.jpg --pasta /tmp/gerador-x/qa --refs",
-                       f"(17) o gate `python3 {qa} {self.auto}/b-bom/index.html --capturas /tmp/gerador-x/qa` sai 0",
-                       "--screenshot=/tmp/gerador-x/qa/d-ato3-p0.3.png", "a m-ato1-semjs.png que o gate tira",
-                       "CHECKLIST DOS ATOS", "(20) `window.onerror` vazio"):
-            self.assertIn(trecho, premium)
-        for velho in ("Leia (Read) as capturas LADO A LADO", "o script de bytes passa", "/qa/d1.png"):
-            self.assertNotIn(velho, premium)
 
     def test_lista_de_permissao_deixa_chamar_os_dois_por_caminho(self):
         """O Claude chama `python3 <caminho instalado>` (como o refero-aprender): uma regra allow casa e nenhuma deny."""
@@ -1199,9 +1154,9 @@ class QaCaraDeIa(unittest.TestCase):
 
 
 class AvisoPelaLib(unittest.TestCase):
-    """A troca do avisar() pela lib de aviso (11/10/2026): o aviso gravado pela
-    lib é IDÊNTICO, byte a byte, ao do jeito antigo; o dell-status aceita; sem a
-    lib volta ao antigo; e a fila ausente ou estragada nunca derruba a execução.
+    """O avisar() pela lib de aviso (11/10/2026): o dell-status aceita o que ela
+    grava; sem a lib nada vai à fila (uma linha no stderr); e a fila ausente ou
+    estragada nunca derruba a execução.
     O avisar() é o de verdade, mas a fila é uma pasta temporária e o HOME também."""
 
     TEXTOS = [
@@ -1234,10 +1189,10 @@ class AvisoPelaLib(unittest.TestCase):
             self.m.avisar(texto)
         return saida.getvalue()
 
-    def gravado_pelo(self, jeito, texto):
+    def gravado_pela_lib(self, texto):
         shutil.rmtree(self.m.FILA_AVISOS, ignore_errors=True)
         self.m.FILA_AVISOS.mkdir()
-        self.m.PASTAS_DA_LIB = self.lib_do_repo if jeito == "lib" else [self.raiz / "sem-lib"]
+        self.m.PASTAS_DA_LIB = self.lib_do_repo
         self.avisar(texto)
         arquivos = self.fila()
         self.assertEqual(len(arquivos), 1, arquivos)
@@ -1253,19 +1208,20 @@ class AvisoPelaLib(unittest.TestCase):
     def test_a_lib_do_repo_e_a_que_carrega(self):
         self.assertEqual(Path(self.m.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
 
-    def test_aviso_identico_ao_jeito_antigo(self):
+    def test_aviso_gravado_le_de_volta_igual(self):
         for texto in self.TEXTOS:
             with self.subTest(texto=texto[:30]):
-                self.assertEqual(self.gravado_pelo("lib", texto), self.gravado_pelo("antigo", texto))
+                d = json.loads(self.gravado_pela_lib(texto).decode("utf-8"))
+                self.assertEqual(d, {"titulo": "🌐 Gerador de sites", "texto": texto, "origem": "gerador-de-sites"})
 
     def test_conteudo_fixado(self):
         esperado = '{"titulo": "🌐 Gerador de sites", "texto": "duas\\nlinhas", "origem": "gerador-de-sites"}'
-        self.assertEqual(self.gravado_pelo("lib", "duas\nlinhas"), esperado.encode("utf-8"))
+        self.assertEqual(self.gravado_pela_lib("duas\nlinhas"), esperado.encode("utf-8"))
 
     def test_nome_atomico_e_sem_colisao_no_mesmo_segundo(self):
         self.m.FILA_AVISOS.mkdir()
         for i in range(5):
-            self.avisar(f"aviso {i}")  # antes: gerador-<segundos>.json, e o 2º sobrescrevia o 1º
+            self.avisar(f"aviso {i}")  # o nome leva nanossegundos: o 2º nunca sobrescreve o 1º
         self.assertEqual(len(self.fila()), 5)
         self.assertRegex(self.fila()[0].name, r"^gerador-\d+-[0-9a-f]{6}\.json$")
         self.assertEqual([p for p in self.m.FILA_AVISOS.iterdir() if not p.name.endswith(".json")], [])
@@ -1291,28 +1247,24 @@ class AvisoPelaLib(unittest.TestCase):
         self.assertNotRegex(d["texto"], r"R\s*\$")
         self.assertIn("[valor]", d["texto"])
 
-    def test_sem_copia_volta_ao_jeito_antigo(self):
+    def sem_gravar(self, saida):
+        self.assertIn("lib de aviso ausente em ~/.local/lib/mel: aviso não gravado: 🌐 Gerador de sites", saida)
+        self.assertFalse(self.m.FILA_AVISOS.exists(), "sem a lib nada é criado nem gravado na fila")
+
+    def test_sem_copia_registra_no_stderr_e_nao_grava(self):
         self.m.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
         self.assertIsNone(self.m.lib_de_aviso())
-        self.avisar("x")  # o antigo cria a pasta da fila
-        self.assertEqual(len(self.fila()), 1)
-        self.assertRegex(self.fila()[0].name, r"^gerador-\d+\.json$")
+        self.sem_gravar(self.avisar("x"))
 
-    def test_copia_quebrada_volta_ao_jeito_antigo_e_cai_na_seguinte(self):
+    def test_copia_quebrada_nao_grava_e_cai_na_seguinte(self):
         quebrada = self.raiz / "quebrada"
         quebrada.mkdir()
         (quebrada / "aviso.py").write_text("def x(:\n", encoding="utf-8")
         self.m.PASTAS_DA_LIB = [quebrada]
         self.assertIsNone(self.m.lib_de_aviso())
-        self.avisar("x")
-        self.assertEqual(len(self.fila()), 1)
+        self.sem_gravar(self.avisar("x"))
         self.m.PASTAS_DA_LIB = [quebrada] + self.lib_do_repo
         self.assertEqual(Path(self.m.lib_de_aviso().__file__).resolve(), (AQUI / "lib/aviso.py").resolve())
-
-    def test_sem_a_lib_o_texto_com_valor_vai_como_sempre(self):
-        self.m.PASTAS_DA_LIB = [self.raiz / "sem-lib"]
-        self.avisar("custa R$ 5")
-        self.assertEqual(json.loads(self.fila()[0].read_text(encoding="utf-8"))["texto"], "custa R$ 5")
 
     # --- o caminho real: o main() sem login do Claude, antes de qualquer lead ----
 
@@ -1328,7 +1280,7 @@ class AvisoPelaLib(unittest.TestCase):
 
     def test_main_sem_login_com_a_fila_ausente_ou_estragada_continua_2(self):
         for estrago in ("ausente", "arquivo"):
-            for jeito in ("lib", "antigo"):
+            for jeito in ("lib", "sem-lib"):
                 with self.subTest(fila=estrago, jeito=jeito):
                     shutil.rmtree(self.m.FILA_AVISOS, ignore_errors=True)
                     if self.m.FILA_AVISOS.is_file():

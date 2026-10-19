@@ -424,6 +424,30 @@ describe("a revisão adversarial de 17/10/2026", () => {
     assert.equal(a.conversa(r2.conversaId)!.mensagens.at(-1)!.texto, "a segunda chegou");
   });
 
+  // MSG-12: o prazo aborta o trabalho de verdade: o sinal chega à geração e a próxima só começa depois.
+  it("passado o prazo o sinal é abortado na geração em voo, e a segunda só roda depois que a primeira parou", async () => {
+    const eventos: string[] = [];
+    const sinais: Array<AbortSignal | undefined> = [];
+    let n = 0;
+    const gerar = async (_p: GenerateContentParameters, sinal?: AbortSignal): Promise<RespostaDoGemini> => {
+      const minha = ++n;
+      sinais.push(sinal);
+      eventos.push(`começa ${minha}`);
+      if (minha === 1) {
+        // Uma geração que honra o sinal: termina quando ele aborta.
+        return new Promise<RespostaDoGemini>((_, rejeitar) => sinal?.addEventListener("abort", () => { eventos.push("aborta 1"); rejeitar(new Error("abortada")); }));
+      }
+      return { text: "a segunda chegou" };
+    };
+    const { a } = await montar({ gerar, prazoMs: 30 });
+    await a.receber({ texto: "um", contexto: PAGINA });
+    const r2 = await a.receber({ texto: "dois", contexto: PAGINA });
+    await a.ocioso();
+    assert.equal(sinais[0]?.aborted, true);
+    assert.deepEqual(eventos, ["começa 1", "aborta 1", "começa 2"]);
+    assert.equal(a.conversa(r2.conversaId)!.mensagens.at(-1)!.texto, "a segunda chegou");
+  });
+
   it("a agenda que não responde vira sem sinal em 20 s, não prende a fila", async () => {
     const leituras = new LeiturasDaMensagem({ agenda: () => new Promise(() => {}) }, () => AGORA, silencio);
     const relogio = mock.timers;

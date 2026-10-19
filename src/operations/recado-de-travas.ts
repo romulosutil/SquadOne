@@ -20,14 +20,13 @@
  */
 import { dataHora, hora } from './crm-formato'
 import { EXPEDIENTE_DE_VENDA, noExpedienteDeVenda, podeMandarPrimeiroContato } from './trava-de-horario'
-import { textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { indiceDoDiaSP, textoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
 
 const MIN = 60_000
 const HORA = 60 * MIN
 const DIA = 24 * HORA
 /** São Paulo é UTC−3 o ano todo desde 2019 (o mesmo atalho das duas travas). */
 const FUSO_MS = 3 * HORA
-const diaSP = (ms: number) => Math.floor((ms - FUSO_MS) / DIA)
 
 const DIAS_DA_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'] as const
 
@@ -45,7 +44,7 @@ function horaFalada(minutos: number): string {
 export function proximaAbertura(agora: number): number | null {
   if (!Number.isFinite(agora)) return null
   if (noExpedienteDeVenda(agora)) return agora
-  const hoje = diaSP(agora)
+  const hoje = indiceDoDiaSP(agora)
   for (let k = 0; k <= 7; k++) {
     const dia = hoje + k
     const semana = new Date(dia * DIA).getUTCDay()
@@ -58,9 +57,9 @@ export function proximaAbertura(agora: number): number | null {
 
 /** PURO. "hoje às 8h", "amanhã às 8h", "segunda às 8h": o dia contado a partir de `agora`. */
 export function quandoFalado(instante: number, agora: number): string {
-  const dias = diaSP(instante) - diaSP(agora)
+  const dias = indiceDoDiaSP(instante) - indiceDoDiaSP(agora)
   const minutos = Math.round(((instante - FUSO_MS) % DIA + DIA) % DIA / MIN)
-  const dia = dias <= 0 ? 'hoje' : dias === 1 ? 'amanhã' : DIAS_DA_SEMANA[new Date(diaSP(instante) * DIA).getUTCDay()]
+  const dia = dias <= 0 ? 'hoje' : dias === 1 ? 'amanhã' : DIAS_DA_SEMANA[new Date(indiceDoDiaSP(instante) * DIA).getUTCDay()]
   return `${dia} às ${horaFalada(minutos)}`
 }
 
@@ -148,23 +147,8 @@ export function recadoDasTravas(e: EntradaDoRecado): RecadoDeTravas {
 }
 
 /**
- * PURO (revisão de 17/10/2026). O `liberado` do recado na Próxima venda: fora do expediente, só quando um
- * primeiro contato LIBERADO hoje está de fato na fila da tela agora. Antes valia "não sobrou ninguém por
- * liberar", e com todos pulados, feitos ou fora do filtro do nicho o cartão dizia "Liberado fora do
- * expediente: pode enviar agora" sem ninguém liberado. No expediente o horário não segura: false.
- */
-export function liberadoNaFila(e: {
-  noExpediente: boolean
-  fila: ReadonlyArray<{ leadId: string; primeiroContato: boolean }>
-  liberados: ReadonlySet<string>
-}): boolean {
-  if (e.noExpediente) return false
-  return e.fila.some((a) => a.primeiroContato && e.liberados.has(a.leadId))
-}
-
-/**
  * PURO. O rótulo do "Liberar" no recado: diz quem sai da trava. Na Triagem é o lote inteiro, uma vez
- * (era um botão por linha); no cartão, o lead que sairia agora; na Ficha, o lead aberto.
+ * (era um botão por linha); na Ficha, o lead aberto.
  */
 export function rotuloDoLiberar(contexto: ContextoDoRecado, o: { empresa?: string; quantos?: number } = {}): string {
   if (contexto === 'triagem') return o.quantos && o.quantos > 1 ? `Liberar este lote (${o.quantos}) mesmo assim` : 'Liberar mesmo assim'

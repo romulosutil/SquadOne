@@ -9,8 +9,8 @@
  *
  * A trava é a presença do aviso: `avisoDeHorario` devolve `null` no horário comercial e o texto
  * (com a taxa medida) fora dele. Um critério só, para o aviso e a trava nunca discordarem.
- * A liberação vive só na tela aberta (memória, nunca localStorage): voltou o expediente ou
- * recarregou a página, o ciclo recomeça.
+ * A liberação mora no servidor (venda-do-dia.json, até a meia-noite de SP) e a tela a espelha em
+ * liberados.ts (AC-21, 17/10/2026): recarregar a página não trava de novo o que já foi liberado.
  *
  * Uma regra só (16/10/2026, OT-02 do blueprint): até aqui havia duas janelas, a desta trava (seg a
  * sex 8h–18h e sábado até 12h, com "Liberar") e a da Próxima venda e do vendedor do Telegram (seg a
@@ -45,27 +45,6 @@ export function noExpedienteDeVenda(agora: number): boolean {
   if (!Number.isFinite(agora)) return false
   const { dia, minutos } = relogioSP(agora)
   return (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
-}
-
-/** Minutos até fechar o expediente (17h30 de SP); null fora dele. Para o plano do dia dizer quanto tempo sobra. */
-export function minutosAteFecharOExpediente(agora: number): number | null {
-  if (!noExpedienteDeVenda(agora)) return null
-  return EXPEDIENTE_DE_VENDA.fimMin - relogioSP(agora).minutos
-}
-
-const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
-
-/** Quando o expediente abre de novo, para quem olha fora dele: "hoje às 8h", "amanhã às 8h", "segunda às 8h". */
-export function proximaAberturaDoExpediente(agora: number): string {
-  const { dia, minutos } = relogioSP(agora)
-  const dias = EXPEDIENTE_DE_VENDA.dias as readonly number[]
-  const abre = `às ${EXPEDIENTE_DE_VENDA.inicioMin / 60}h`
-  if (dias.includes(dia) && minutos < EXPEDIENTE_DE_VENDA.inicioMin) return `hoje ${abre}`
-  for (let passo = 1; passo <= 7; passo++) {
-    const d = (dia + passo) % 7
-    if (dias.includes(d)) return `${passo === 1 ? 'amanhã' : NOME_DO_DIA[d]} ${abre}`
-  }
-  return `na próxima segunda ${abre}`
 }
 
 /**
@@ -104,11 +83,3 @@ export function ehPrimeiroContato(lead: LeadDaTrava | undefined, url: string): b
 export function envioTravado(aviso: string | null | undefined, liberados: EnviosLiberados, leadId: string): boolean {
   return Boolean(aviso) && !liberados.has(leadId)
 }
-
-/** Libera um lead sem mexer no conjunto de entrada (o Vue só reage a um conjunto novo). */
-export function liberarEnvio(liberados: EnviosLiberados, leadId: string): Set<string> {
-  return new Set([...liberados, leadId])
-}
-
-/** O que o botão que destrava diz, e por quê: o número vem do aviso, nunca fixo aqui. */
-export const ROTULO_DE_LIBERAR = 'Liberar o envio fora do expediente'

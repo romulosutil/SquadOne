@@ -28,6 +28,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { omitirValores } from "./financas/parece-financas.ts";
+import { diaDeSP } from "./tempo.ts";
 
 // --- Tipos do contrato (outro módulo importa: mudar aqui é mudar lá) ------------------
 
@@ -95,7 +96,6 @@ const TIMEOUT_DAS_SESSOES_MS = 60_000;
 const TENTATIVAS_DO_DELETE = 3;
 /** "database is locked": o gateway do WhatsApp também grava no state.db. */
 const ESPERA_DO_DELETE_MS = 1000;
-const FUSO = "America/Sao_Paulo";
 
 // --- Prompt (PURO) -----------------------------------------------------------------------
 
@@ -289,7 +289,7 @@ async function limparSessoes(
 // --- Teto do dia (arquivo 600, sobrevive a reinício) ------------------------------------------
 
 export function diaDeSaoPaulo(ms: number): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+  return diaDeSP(ms);
 }
 
 interface ContagemDoDia {
