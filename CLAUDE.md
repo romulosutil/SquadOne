@@ -240,8 +240,8 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           fila de venda (que ganhou o "Liberar"), o time comercial e o Telegram; o trecho do Roteiro não abre o WhatsApp antes do 1º contato;
                           primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     trava-de-ritmo.ts     PURO (15/10/2026, depois da restrição de 24 h do WhatsApp por 25 envios em 25 min): primeiro contato
-                          no máximo 1 a cada 5 min, 12 por hora e 100 por dia (19/10/2026, decisão do Rômulo; era 4 min, 8/h e a
-                          rampa 10/20/30; tetosPorSemana ainda aceita rampa), AVISO_DO_RITMO no recado,
+                          no máximo 1 a cada 5 min, 12 por hora e 30 por dia (19/10/2026 à noite, Fase 0 do diagnóstico de vendas;
+                          foi 100 de 18 a 19/10, antes 4 min, 8/h e a rampa 10/20/30; tetosPorSemana ainda aceita rampa), AVISO_DO_RITMO no recado,
                           pausadoAte; sem "Liberar". Conta o retrato e os toques desta tela (localStorage, 24 h). No servidor,
                           no mesmo dia: follow-up só para quem leu (Site, PRUMO e o 05 · Acompanhamento) e Revisar com o
                           WhatsApp publicado antes do "não confirmado"

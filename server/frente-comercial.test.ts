@@ -132,7 +132,7 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
     const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
     // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
-    assert.equal(v.limite, 100);
+    assert.equal(v.limite, 30);
     assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
     assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);

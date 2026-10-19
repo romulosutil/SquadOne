@@ -412,8 +412,9 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
   dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
   dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time.
-  Os números são os de `REGRAS_DO_RITMO`: desde 19/10/2026 (decisão do Rômulo), 5 min entre primeiros contatos, 12 por hora móvel e
-  100 por dia de São Paulo, somando time, telas e Telegram (antes: 4 min, 8/h e a rampa 10/20/30). São tetos internos, não um limite
+  Os números são os de `REGRAS_DO_RITMO`: 5 min entre primeiros contatos, 12 por hora móvel e 30 por dia de São Paulo, somando
+  time, telas e Telegram (30 desde a noite de 19/10/2026, Fase 0 do diagnóstico de vendas; foi 100 de 18 a 19/10, antes 4 min,
+  8/h e a rampa 10/20/30). São tetos internos, não um limite
   publicado pelo WhatsApp; `pausadoAte` segue sendo o freio depois de um aviso ou restrição.
 - **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
   fluxo "04 · Clique no wa_link"), que grava `clique_em` (abrir nunca marca envio: regra `[abrir-nao-envia]` de 18/10/2026); o
@@ -518,3 +519,21 @@ um dos quatro fluxos e abrem com a saudação da Ordem.
   recomeçar os 7 dias). O n8n `08 · CRM` aceita `plus` e os dois tipos desde a republicação do `crm.py`.
 - **Ritmo:** a Hoje mostra só os 10 primeiros Plus (o fixo por último) e a trava de horário vale como nos outros primeiros contatos. Plus fica fora de
   "Enviar um por um", porque a fila não anota o envio.
+
+## Fase 0 do diagnóstico de vendas (19/10/2026, decisões do Rômulo)
+
+O diagnóstico e o plano completo estão em `docs/PRUMO-DIAGNOSTICO-VENDAS-2026-10-19.md`. Estas são as decisões que vêm
+antes de qualquer código das Fases 1 a 5:
+
+1. **Teto de primeiros contatos: 30 por dia**, somando o time comercial, as telas e o Telegram (`REGRAS_DO_RITMO`).
+   O motivo é o chip único (prospecção, Hermes e alertas) três dias depois da restrição de 24 h. Vale até existir um
+   segundo chip só para prospecção. Os 5 min e os 12 por hora não mudaram.
+2. **Nenhuma linha é congelada.** Iris e o CRM de estamparia são produtos prontos; condicionar a prospecção deles a um
+   primeiro pagamento os travaria para sempre, porque ainda não há cliente em nenhuma linha. As cinco linhas dividem o
+   teto do dia pela ordem da fila de venda, sem cota por linha. Os caçadores de Iris e estamparias seguem pausados (AC-11)
+   até a Triagem cair para cerca de duas semanas de envio.
+3. **Plus como rede quente: teste de 20 envios.** Exceção registrada à regra "só gente nova". Os envios são do Rômulo,
+   porque o time comercial não manda Plus. O resultado (respostas de gente, "quero ver", propostas) é comparado com o Site.
+4. **Os fatos do Raio-X podem abrir a mensagem como evento crítico** (domínio vencido, site fora do ar, posição no Google),
+   com respeito e sem nota. Revoga, para a abertura, a regra "o que está bom vem primeiro". Entra como variante nova do
+   A/B da 1ª mensagem (30 por braço antes de qualquer taxa).

@@ -11,7 +11,9 @@
  * só-robô). Resposta, 2ª mensagem e follow-up de quem leu não contam: são conversa.
  *  - intervalo mínimo entre dois primeiros contatos;
  *  - teto por hora (janela móvel de 60 min);
- *  - teto por dia (dia de São Paulo). Desde 18/10/2026, 100; a configuração ainda aceita rampa.
+ *  - teto por dia (dia de São Paulo). De 18 a 19/10/2026, 100; desde 19/10/2026 à noite, 30 (Fase 0 do
+ *    diagnóstico de vendas, decisão do Rômulo: um chip só para prospecção, Hermes e alertas, três dias depois
+ *    da restrição de 24 h; vale até existir um segundo chip só para prospecção). A configuração ainda aceita rampa.
  * E `pausadoAte`: depois de um aviso ou restrição do WhatsApp, nada sai até a data (editar e
  * fazer push; a Central se atualiza sozinha em até 10 min).
  *
@@ -48,7 +50,7 @@ export interface RegrasDoRitmo {
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
   intervaloMs: 5 * 60_000,
   porHora: 12,
-  tetosPorSemana: [100],
+  tetosPorSemana: [30],
   // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,

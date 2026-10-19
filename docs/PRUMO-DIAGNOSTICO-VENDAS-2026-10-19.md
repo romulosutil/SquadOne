@@ -77,7 +77,8 @@ os scripts do Dell, o repositório `prumo` com as memórias, e os números ao vi
 10. **Há cinco linhas e uma pessoa.**
     - Os públicos são quatro, sem nada em comum, e o Plus é um canal, não um público.
     - O ICP declarado (ES, equipe de 8 ou mais) não bate com os leads reais: profissionais sozinhos em GO, PR e SP.
-    - Fonte e CRM de estamparia são vendidos e ainda não existem prontos.
+    - A Fonte é vendida e ainda não existe pronta (a página `/fonte` tem respostas fixas). Iris e o CRM de estamparia
+      estão prontos, segundo o Rômulo (19/10), o que corrige o levantamento que dizia o contrário.
 11. **A Triagem premia quem tem menos dor.** 35 dos 100 pontos vão para nota e volume no Google
     ([crm.ts:1713](../server/crm.ts:1713)), e nota baixa é justamente a dor que se vende.
 12. **O chip único é ponto único de falha.**
@@ -159,10 +160,14 @@ INVARIANTES (não negocie):
 - Cada passo que muda atualiza o cartão em docs/blueprint/servico.json no mesmo commit.
 - Verificação: npx vue-tsc --noEmit, npm test, npm run build, e exercitar a rota.
 
+FASE 0 — DECIDIDA EM 19/10/2026 (ver docs/referencia/perfis-e-experimentos.md, "Fase 0 do diagnóstico de vendas"):
+teto de 30/dia no ar; nenhuma linha congelada (Iris e estamparia são produtos prontos); Plus em teste de 20 envios;
+fatos do Raio-X abrem a mensagem como variante do A/B. O texto original das perguntas fica abaixo para registro.
 FASE 0 — DECISÕES [decisão do Rômulo], ANTES DE QUALQUER CÓDIGO
 a) O teto do robô de envio: 100/dia no chip único, três dias depois da restrição de 24 h. Sugestão: 30/dia
    até haver um segundo chip só para prospecção.
 b) O foco: Site + Serviços PRUMO (95% dos envios). Iris, Estamparia e o CRM de estamparia ficam congelados até o 1º pagamento.
+   [Recusado: os dois são produtos prontos e sem cliente não há pagamento; as cinco linhas seguem e dividem o teto pela fila.]
 c) O Plus: testar 20 envios como rede quente (2 de 2 responderam), mesmo contra a regra "só gente nova"?
 d) A abertura: os fatos do Raio-X (domínio vencido, site fora do ar) podem abrir a mensagem como evento crítico?
 Registre as decisões em docs/referencia/perfis-e-experimentos.md.

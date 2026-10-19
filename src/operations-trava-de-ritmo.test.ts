@@ -67,26 +67,26 @@ describe('trava de ritmo dos primeiros contatos', () => {
     assert.equal(textoDoRitmo(ritmoDoEnvio([], agora, REGRAS), REGRAS), '0 de 10 primeiros contatos hoje (enviados ou convites abertos).')
   })
 
-  it('o teto atual é 100 em todas as semanas, sem aumento pela idade do número', () => {
+  it('o teto atual é 30 em todas as semanas, sem aumento pela idade do número', () => {
     assert.equal(REGRAS_DO_RITMO.inicioDoNumero, '2026-10-16')
-    for (const dia of ['18', '19', '23', '30']) assert.equal(tetoDoDia(sp(dia, '08:00')), 100)
-    assert.equal(tetoDoDia(Date.parse('2027-03-01T12:00:00-03:00')), 100)
+    for (const dia of ['18', '19', '23', '30']) assert.equal(tetoDoDia(sp(dia, '08:00')), 30)
+    assert.equal(tetoDoDia(Date.parse('2027-03-01T12:00:00-03:00')), 30)
     assert.equal(REGRAS_DO_RITMO.pausadoAte, null)
   })
 
-  it('permite 100 contatos distribuídos no expediente e barra o 101º até o dia seguinte', () => {
+  it('permite 30 contatos distribuídos no expediente e barra o 31º até o dia seguinte', () => {
     const inicio = sp('19', '08:00')
     const enviados: number[] = []
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 30; i++) {
       const agora = inicio + i * 5 * MIN
       assert.equal(noExpedienteDeVenda(agora), true)
       assert.equal(ritmoDoEnvio(enviados, agora).motivo, null, `contato ${i + 1}`)
       enviados.push(agora)
-      if (i < 99) assert.notEqual(ritmoDoEnvio(enviados, agora + MIN).motivo, null, 'não libera rajada')
+      if (i < 29) assert.notEqual(ritmoDoEnvio(enviados, agora + MIN).motivo, null, 'não libera rajada')
     }
-    assert.equal(enviados[99], sp('19', '16:15'))
-    assert.deepEqual(ritmoDoEnvio(enviados, sp('19', '16:20')), {
-      motivo: 'dia', ate: sp('20', '00:00'), enviadosHoje: 100, teto: 100,
+    assert.equal(enviados[29], sp('19', '10:25'))
+    assert.deepEqual(ritmoDoEnvio(enviados, sp('19', '10:30')), {
+      motivo: 'dia', ate: sp('20', '00:00'), enviadosHoje: 30, teto: 30,
     })
     assert.equal(ritmoDoEnvio(enviados, sp('20', '08:00')).motivo, null)
   })
@@ -98,27 +98,27 @@ describe('trava de ritmo dos primeiros contatos', () => {
     // Histórico de envios externos/importados mais próximos que o intervalo interno.
     const doze = Array.from({ length: 12 }, (_, i) => agora + i * MIN)
     assert.deepEqual(ritmoDoEnvio(doze, agora + 20 * MIN), {
-      motivo: 'hora', ate: agora + 60 * MIN, enviadosHoje: 12, teto: 100,
+      motivo: 'hora', ate: agora + 60 * MIN, enviadosHoje: 12, teto: 30,
     })
     assert.equal(ritmoDoEnvio(doze, agora + 60 * MIN).motivo, null)
   })
 
-  it('a pausa por restrição prevalece mesmo com o teto de 100', () => {
+  it('a pausa por restrição prevalece mesmo com o teto de 30', () => {
     const agora = sp('19', '10:00')
     const ate = sp('22', '10:00')
     assert.deepEqual(ritmoDoEnvio([], agora, { ...REGRAS_DO_RITMO, pausadoAte: new Date(ate).toISOString() }), {
-      motivo: 'pausa', ate, enviadosHoje: 0, teto: 100,
+      motivo: 'pausa', ate, enviadosHoje: 0, teto: 30,
     })
   })
 
-  it('soma Central, Telegram e retrato sem duplicar o contato e sem oferecer o 101º', () => {
+  it('soma Central, Telegram e retrato sem duplicar o contato e sem oferecer o 31º', () => {
     const inicio = sp('19', '08:00')
-    const toques = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`lead-${i}`, inicio + i * 5 * MIN]))
+    const toques = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`lead-${i}`, inicio + i * 5 * MIN]))
     const servidor = Object.fromEntries(Object.entries(toques).map(([id, em]) => [id, { em }]))
     const leads = Object.entries(toques).map(([id, t]) => ({ id, sinal: 'enviado' as const, marcos: { enviado: new Date(t).toISOString() } }))
     const instantes = instantesDePrimeiroContato(leads, somarPrimeiros(servidor, toques))
-    assert.equal(instantes.length, 100)
-    assert.equal(ritmoDoEnvio(instantes, sp('19', '16:20')).motivo, 'dia')
+    assert.equal(instantes.length, 30)
+    assert.equal(ritmoDoEnvio(instantes, sp('19', '10:30')).motivo, 'dia')
   })
 })
 
