@@ -16,7 +16,7 @@ os scripts do Dell, o repositório `prumo` com as memórias, e os números ao vi
 4. Não existe qualificação. Nenhum campo de dor, impacto, prazo ou decisor; a proposta sai com um "gostei", sem conversa.
    Também não há evento crítico: o domínio vencido do lead não é usado como urgência.
 5. O risco operacional é alto: um só chip para prospecção, alertas e Hermes. O robô de envio automático foi autorizado
-   em 18/10 com teto de 100/dia, três dias depois de uma restrição de 24 h.
+   em 18/10 com teto de 100/dia, três dias depois de uma restrição de 24 h. O teto caiu para 30 na Fase 0 (19/10).
 
 ## Números (desde 23/09; retrato de 19/10)
 
@@ -88,8 +88,8 @@ os scripts do Dell, o repositório `prumo` com as memórias, e os números ao vi
 13. **Há três relógios de perda.** O CRM marca Perdido em 7 dias, a planilha expira em 10 e a pausa do demo conta 15.
     O demo é apagado antes de a planilha considerar o lead perdido.
 14. **O Caçador do Site não está versionado.** Ele nasce de um JSON externo remendado e não dá para auditar o dedupe.
-15. **A documentação ficou para trás.** O CLAUDE.md ainda diz 10/20/30 por dia e 4 min; a trava hoje é de 5 min, 12/h
-    e 100/dia. O `fluxos.ts` diz "ligado em 16/10" sobre caçadores pausados.
+15. **A documentação ficou para trás.** O `fluxos.ts` diz "ligado em 16/10" sobre caçadores pausados.
+    O CLAUDE.md já foi acertado para 30/dia na Fase 0.
 
 ## Qual framework
 
@@ -136,7 +136,7 @@ Adaptações:
 
 ## O prompt
 
-Cole numa sessão nova do Claude Code no SquadOne. O Rômulo decide os itens marcados **[decisão do Rômulo]** antes da Fase 2.
+Cole numa sessão nova do Claude Code no SquadOne. A Fase 0 já foi decidida (19/10/2026); o agente começa pela Fase 1.
 
 ```text
 Você é o orquestrador de vendas do PRUMO (Serviços PRUMO, Venda de site, Iris, Estamparia e Plus, tudo sob o PRUMO),
@@ -160,17 +160,16 @@ INVARIANTES (não negocie):
 - Cada passo que muda atualiza o cartão em docs/blueprint/servico.json no mesmo commit.
 - Verificação: npx vue-tsc --noEmit, npm test, npm run build, e exercitar a rota.
 
-FASE 0 — DECIDIDA EM 19/10/2026 (ver docs/referencia/perfis-e-experimentos.md, "Fase 0 do diagnóstico de vendas"):
-teto de 30/dia no ar; nenhuma linha congelada (Iris e estamparia são produtos prontos); Plus em teste de 20 envios;
-fatos do Raio-X abrem a mensagem como variante do A/B. O texto original das perguntas fica abaixo para registro.
-FASE 0 — DECISÕES [decisão do Rômulo], ANTES DE QUALQUER CÓDIGO
-a) O teto do robô de envio: 100/dia no chip único, três dias depois da restrição de 24 h. Sugestão: 30/dia
-   até haver um segundo chip só para prospecção.
-b) O foco: Site + Serviços PRUMO (95% dos envios). Iris, Estamparia e o CRM de estamparia ficam congelados até o 1º pagamento.
-   [Recusado: os dois são produtos prontos e sem cliente não há pagamento; as cinco linhas seguem e dividem o teto pela fila.]
-c) O Plus: testar 20 envios como rede quente (2 de 2 responderam), mesmo contra a regra "só gente nova"?
-d) A abertura: os fatos do Raio-X (domínio vencido, site fora do ar) podem abrir a mensagem como evento crítico?
-Registre as decisões em docs/referencia/perfis-e-experimentos.md.
+FASE 0 — DECIDIDA PELO RÔMULO EM 19/10/2026 (não reabra; registro em docs/referencia/perfis-e-experimentos.md,
+seção "Fase 0 do diagnóstico de vendas"):
+a) Teto de primeiros contatos: 30/dia, somando o time comercial, as telas e o Telegram (REGRAS_DO_RITMO, commit
+   0611f26, já no ar na Mel). Não mexa no teto, no intervalo de 5 min nem nas 12/h.
+b) Nenhuma linha congelada: Iris e o CRM de estamparia são produtos prontos. As cinco linhas dividem o teto pela
+   ordem da fila de venda, sem cota por linha. Os caçadores de Iris e estamparias seguem pausados (AC-11).
+c) Plus: teste de 20 envios como rede quente. Os envios são do Rômulo (o time comercial não manda Plus).
+d) Os fatos do Raio-X podem abrir a 1ª mensagem como evento crítico, como variante nova do A/B.
+
+COMECE PELA FASE 1. Depois, as Fases 2 a 5 em ordem; uma fase só começa com a anterior entregue.
 
 FASE 1 — FECHAR OS QUENTES (trabalho do Rômulo, hoje; o agente só prepara)
 Gere a lista dos 10 "quero ver" e das 2 propostas abertas (Verde+, Comece), sem telefone na tela.
@@ -188,7 +187,8 @@ FASE 2 — SPICED NO CRM (código)
 2. O copiloto extrai SPICED da conversa guardada como SUGESTÃO, com a citação do trecho. O Rômulo confirma com um
    toque na Ficha. O modelo nunca confirma sozinho.
 3. A trava: "Mandar a proposta" (gostouDepoisDoLink) só aparece com dor + impacto + decisor_confirmado = sim.
-   Sem isso, a ação vira "Marque 10 minutos com X", com as perguntas que faltam. Vale para o Site e o PRUMO.
+   Sem isso, a ação vira "Marque 10 minutos com X", com as perguntas que faltam. Vale para as cinco linhas: hoje
+   gostouDepoisDoLink só cobre Site e PRUMO; Iris, Estamparia e Plus ganham o mesmo passo com a mesma trava.
 4. A Ficha mostra o SPICED como uma faixa (S·P·I·C·D, preenchido / falta), com o código BP- do design system.
 Pronto: testes de tabela para a trava (todas as combinações dos três campos) e para a leitura da sugestão do copiloto.
 
@@ -203,6 +203,14 @@ FASE 3 — CADÊNCIA (código)
    Teste a nova versão com o A/B existente (30 por braço antes de qualquer taxa).
 6. Um relógio de perda só: 7 dias no CRM, na planilha e na limpeza do demo. Mexa no crm.py, no 05 · Acompanhamento
    e no site-demos-* juntos; reinstale na Mel (instalados.json).
+7. Abertura com evento crítico (decisão d da Fase 0): uma variante nova da 1ª mensagem que abre com UM fato do
+   Raio-X do lead (domínio vencido, site fora do ar, posição no Google), com respeito, sem nota e sem "defeito".
+   Siga o guia no topo das VARIACOES de site-mensagem.js e o espelho em server/site-mensagem.ts; para Serviços PRUMO,
+   server/prumo-mensagem.ts. Sem fato verificável no Raio-X, o lead não entra nesse braço. Ela entra no A/B
+   estratificado (ab_elegiveis, alocarRodada), com 30 por braço antes de qualquer taxa; o que já foi enviado nunca
+   troca de letra. Os textos novos passam pelo Rômulo antes de ir ao ar.
+8. Teste do Plus (decisão c): marque os 20 envios do teste (registro plus_enviado já existe) e mostre em Números
+   a comparação com o Site no mesmo período: respostas de gente, "quero ver" e propostas.
 
 FASE 4 — AARRR NA CENTRAL (código)
 Em Vendas › Números, uma faixa AARRR no topo:
@@ -223,9 +231,10 @@ FASE 5 — ROBUSTEZ (código e Dell)
 - Versionar o "01 · Caçador" em ops/n8n/workflows/.
 - A Triagem pontua a dor: nota baixa ou poucas avaliações SOBEM para o Respondido; o peso do nicho vem de
   "quero ver", não só de resposta.
-- Atualizar o CLAUDE.md (trava de 5 min, 12/h, 100/dia) e o fluxos.ts (caçadores pausados).
+- Atualizar o fluxos.ts (caçadores de Iris e estamparias pausados desde 17/10; o CLAUDE.md já diz 30/dia).
 
-FORA DESTA RODADA: caçador novo, linha nova, nicho novo, tela nova fora das Fases 2–4, refatoração.
+FORA DESTA RODADA: caçador novo, linha nova, nicho novo, tela nova fora das Fases 2–4, refatoração, mudar o teto
+de ritmo, religar caçadores.
 
 ENTREGA DE CADA FASE: o que mudou (arquivo:linha), testes adicionados, o que foi instalado na Mel, o que ficou para o
 Rômulo, e o número da Estrela-guia na data.
