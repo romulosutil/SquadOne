@@ -80,6 +80,16 @@ class Confiabilidade(unittest.TestCase):
         out=self.h.preparar(wf)
         self.assertFalse(js(out['nodes'][0]['parameters']['jsCode'])[0]['json']['marcar'])
 
+    def test_rastro_do_clique_do_site_nao_e_embrulhado(self):
+        marcar=code_node('Marcar como enviado');marcar['parameters']={'columns':{'matchingColumns':['place_id'],'value':{'place_id':'={{ $json.chave }}','clique_em':'={{ $json.agora }}'}}}
+        wf={'name':'04','nodes':[code_node('Decidir','return [{json:{marcar:true}}];'),marcar],'connections':{}}
+        out=self.h.preparar(wf)
+        self.assertTrue(js(out['nodes'][0]['parameters']['jsCode'])[0]['json']['marcar'])
+        # Quem grava status ou enviado_em continua sem poder marcar no clique.
+        marcar['parameters']['columns']['value']['status']='enviado'
+        out=self.h.preparar(wf)
+        self.assertFalse(js(out['nodes'][0]['parameters']['jsCode'])[0]['json']['marcar'])
+
     def acao(self):
         wf={'name':'07 · Lead: página e ações (Site antes da venda)','nodes':[
             {'id':'get','name':'Botão da página','webhookId':'get','type':'n8n-nodes-base.webhook','parameters':{'httpMethod':'GET','path':'lead-acao'}},

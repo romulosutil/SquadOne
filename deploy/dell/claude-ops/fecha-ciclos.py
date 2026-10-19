@@ -1,8 +1,14 @@
 """Links rastreados e pendências (idempotente).
 
-- "Clique no wa_link" (GET /webhook/enviar?place_id=): marca o lead do Site antes
-  da venda como enviado (status + enviado_em) no primeiro clique e redireciona
-  para o wa.me guardado em wa_me. Com `&marcar=nao` (01/10/2026) só redireciona:
+- "Clique no wa_link" (GET /webhook/enviar?place_id=): redireciona para o wa.me
+  guardado em wa_me e, num lead "pronto", grava `clique_em` (19/10/2026: o rastro
+  do clique, nunca o envio). Quem marca "enviado" é o observador, quando a mensagem
+  sai de verdade; com um clique até 15 min antes, ele mantém a letra do Balcão em
+  mensagem_variante (o texto que saiu é o do wa_me), e sem clique grava "manual".
+  Até 18/10/2026 o clique marcava "enviado" (status + enviado_em) direto; a regra
+  [abrir-nao-envia] de workflow_confiabilidade.py tirou isso, e o A/B da 1ª
+  mensagem parou de contar (todo envio virava "manual") até o clique_em.
+  Histórico: Com `&marcar=nao` (01/10/2026) só redireciona:
   é o caminho do operador do Dell, que envia pelo WhatsApp Web, e o lead vira
   "enviado" pelo observador quando a mensagem sai de verdade (owner_sent), nunca
   no clique. Assim um envio que falha depois do clique não deixa o lead marcado.
@@ -101,15 +107,15 @@ def webhook_workflow(nome, caminho, webhook_id, planilha, gid, aba, coluna_chave
 
 DECIDIR_SITE = """const q = $('Clique (enviar)').first().json.query ?? {};
 const pid = String(q.place_id ?? '');
-// marcar=nao: só abre o WhatsApp. Quem marca "enviado" é o observador, quando a mensagem sai
-// (e grava mensagem_variante "manual": ele não sabe deste clique).
+// marcar=nao: só abre o WhatsApp, sem rastro (o observador grava "manual"). Sem ele, o clique num
+// lead "pronto" grava clique_em: é o que o observador usa para manter a letra (nunca marca enviado).
 const soAbrir = String(q.marcar ?? '') === 'nao';
 const l = $input.first()?.json ?? {};
 const achou = pid !== '' && l.place_id === pid;
 const waMe = String(l.wa_me || '').trim() || (String(l.wa_link || '').startsWith('https://wa.me/') ? String(l.wa_link) : '');
 // Sem wa.me (lead sem telefone ou não achado): abre a planilha para decidir à mão.
 const destino = achou && waMe ? waMe : 'https://docs.google.com/spreadsheets/d/""" + SITE + """/edit#gid=396728619';
-return [{ json: { chave: pid, destino, marcar: false, agora: new Date().toISOString() } }];"""
+return [{ json: { chave: pid, destino, marcar: !soAbrir && achou && waMe !== '' && String(l.status).trim() === 'pronto', agora: new Date().toISOString() } }];"""
 
 DECIDIR_PRUMO = """const id = String($('Clique (convite)').first().json.query?.id ?? '');
 const l = $input.first()?.json ?? {};
@@ -212,6 +218,6 @@ if __name__ == "__main__":
         sys.exit(0)
     webhook_workflow("04 · Clique no wa_link (marca enviado)", "enviar", "5b1c2d3e-4f50-4a61-8b72-c3d4e5f60001",
                      SITE, "396728619", "Leads", "place_id", "place_id", DECIDIR_SITE,
-                     {"status": "enviado", "enviado_em": "={{ $json.agora }}"})
+                     {"clique_em": "={{ $json.agora }}"})
     # O convite PRUMO (aba Leads antiga, DECIDIR_PRUMO) e o lead_scout() abaixo são de antes de
     # prumo-simples.py: rodá-los hoje desfaria o PRUMO simples. Ficam só como histórico.

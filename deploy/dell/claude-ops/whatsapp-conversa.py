@@ -30,8 +30,9 @@ prumo-ofertas.json; aba que não lê é pulada, sem segurar Site e Prospects.
   "enviado"/"fechado": conversa normal, nada muda. PRUMO: Etapa "Revisar" ->
   "Convite enviado" (como o clique em "Enviar convite"). Desde 07/10/2026 o
   lead que vira "enviado" aqui (por saida, lido ou entrada) ganha
-  mensagem_variante "manual": o clique no wa_link já marca "enviado", então o
-  texto não foi o da variação que o Balcão gravou.
+  mensagem_variante "manual": o texto não foi o da variação que o Balcão gravou.
+  Desde 19/10/2026 o clique no wa_link só deixa `clique_em` (não marca mais
+  "enviado"); com um clique até 15 min antes do envio, a letra fica.
 - "entrada": o lead escreveu. PRUMO: Etapa "Revisar" -> "Convite enviado";
   "Convite enviado" -> Próxima ação "Respondeu no WhatsApp ..." só se a mensagem
   veio 5 min ou mais depois de "Convite enviado em" (desde 05/10/2026). Site
@@ -89,7 +90,8 @@ PRUMO, PROSPECTS_GID = "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U", "18387813
 SITE, LEADS_GID = "1ObvUtTTefAA9PoQocPWmiSMMkxJgoiG_TCR7tNEYu0o", "396728619"
 SEGREDO = Path.home() / ".config/claude-ops/whatsapp-observador-segredo"
 CREDENCIAL = "Observador WhatsApp"
-COLUNAS_NOVAS = ["visto_em"]
+# clique_em (19/10/2026): o rastro do clique no wa_link (04), que mantém a letra do Balcão no envio.
+COLUNAS_NOVAS = ["visto_em", "clique_em"]
 
 # Ofertas do PRUMO além da consultoria (14/10/2026, PRUMO como holding; prumo-ofertas.py): abas Clínicas
 # (Iris) e Estamparias (CRM de estamparia) na planilha do PRUMO, com o contrato de colunas do Prospects
@@ -196,10 +198,13 @@ for (const l of $('Ler Leads do site').all().map(i => i.json)) {
     status, enviado_em: enviadoAntes, respondeu_em: respondeuAntes, visto_em: vistoAntes, mensagem_variante: txt(l.mensagem_variante) };
   // "novo" com site publicado: o Rômulo manda a demo assim que o Hermes avisa, antes de o Balcão passar.
   const aEnviar = status === 'novo' || status === 'pronto';
-  // 07/10/2026: lead que vira "enviado" aqui saiu sem o clique no wa_link (o clique já marca
-  // "enviado"). O texto foi o que o Rômulo escreveu ou colou, não a variação que o Balcão
-  // gravou em mensagem_variante: o funil não pode creditá-lo à variação.
-  const MANUAL = { mensagem_variante: 'manual' };
+  // 07/10/2026: lead que vira "enviado" aqui sem o clique no wa_link levou o texto que o Rômulo
+  // escreveu ou colou, não a variação que o Balcão gravou em mensagem_variante: o funil não pode
+  // creditá-lo à variação. 19/10/2026: o clique não marca mais "enviado", só grava clique_em; com
+  // um clique até 15 min antes do envio (o wa.me já levava o texto da letra), a letra fica.
+  const clique = Date.parse(txt(l.clique_em));
+  const peloClique = Number.isFinite(clique) && em.getTime() - clique >= -60 * 1000 && em.getTime() - clique <= 15 * 60 * 1000;
+  const MANUAL = peloClique ? {} : { mensagem_variante: 'manual' };
   if (direcao === 'saida') {
     // Enviado e fechado: conversa normal. Recusado/expirado: retomou, e o acompanhamento conta de novo.
     if (aEnviar) saida.push({ json: { ...base, acao: 'abordou', status: 'enviado', enviado_em: em.toISOString(), ...MANUAL } });
@@ -1280,8 +1285,17 @@ def testar() -> int:
                 self.assertEqual((itens[0]["status"], itens[0]["enviado_em"], itens[0]["acao"]),
                                  ("enviado", "2026-09-30T13:00:00.000Z", "abordou"))
                 self.assertEqual(resp["marcados"], [{"planilha": "site", "nome": "Padaria Teste", "acao": "abordou", "antes": st}])
-                # Saiu sem o clique no wa_link (o clique já marca "enviado"): não é a variação A do Balcão.
+                # Saiu sem o clique no wa_link: não é a variação A do Balcão.
                 self.assertEqual(itens[0]["mensagem_variante"], "manual")
+
+        def test_site_com_clique_recente_mantem_a_letra(self):
+            # 19/10/2026: o clique no wa_link só grava clique_em; o envio até 15 min depois é o texto da letra.
+            for clique, letra in (("2026-09-30T12:58:00Z", "A"), ("2026-09-30T13:00:30Z", "A"),
+                                  ("2026-09-30T12:40:00Z", "manual"), ("data ruim", "manual")):
+                itens, _ = decidir("saida", [site("pronto", clique_em=clique)])
+                self.assertEqual((itens[0]["status"], itens[0]["mensagem_variante"]), ("enviado", letra), clique)
+            itens, _ = decidir("lido", [site("pronto", clique_em="2026-09-30T12:58:00Z")])
+            self.assertEqual((itens[0]["status"], itens[0]["mensagem_variante"]), ("enviado", "A"))
 
         def test_site_recusado_e_expirado_voltam_a_enviado(self):
             for st in ("recusado", "expirado"):

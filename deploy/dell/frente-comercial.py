@@ -13,8 +13,9 @@ nada no CRM; parado antes de enviar). Desde então:
   que decide com a MESMA regra das telas e do Telegram (src/operations/primeiro-contato.ts), contando
   os envios de todos, confere a mensagem no gate de envio e grava o primeiro do dia por "time";
 - o texto é o do Balcão, sem troca: a letra do A/B e o ab_elegiveis continuam valendo;
-- antes de enviar, o mesmo registro da Central: o clique no link rastreado do n8n (/webhook/enviar),
-  que marca enviado + enviado_em e congela a letra; o observador vê a saída com o lead já enviado;
+- antes de enviar, o mesmo caminho da Central: o clique no link rastreado do n8n (/webhook/enviar),
+  que grava clique_em; o observador, vendo a saída logo depois, marca enviado + enviado_em e mantém a
+  letra do Balcão (sem o clique, "manual");
 - lead que o Rômulo já tocou hoje (Central ou Telegram) é dele; lead na fila do time some da
   Próxima venda e do aviso do Telegram (quemFazOPrimeiroContato).
 Nasce desligado: timer desabilitado e frente-comercial-config.json sem `ativo: true`.
@@ -256,9 +257,10 @@ def reservar_na_central(l):
 def marcar_no_crm(l, texto):
     """O registro da Central: o clique no link rastreado do Site, ANTES do envio, como o toque do Rômulo.
 
-    O n8n marca enviado + enviado_em no primeiro clique e congela a letra (mensagem_variante) e o
-    ab_elegiveis que o Balcão gravou; o observador, vendo a saída com o lead já enviado, não grava
-    "manual". O redirecionamento tem de levar ao número do lead e ao texto reservado; senão, nada sai.
+    O n8n grava clique_em (abrir nunca marca envio, a regra [abrir-nao-envia]); o observador, vendo a
+    saída até 15 min depois, marca enviado + enviado_em e mantém a letra (mensagem_variante) e o
+    ab_elegiveis que o Balcão gravou. O redirecionamento tem de levar ao número do lead e ao texto
+    reservado; senão, nada sai.
     """
     url = N8N + '/enviar?' + urllib.parse.urlencode({'place_id': l['id'].partition(':')[2]})
     try:

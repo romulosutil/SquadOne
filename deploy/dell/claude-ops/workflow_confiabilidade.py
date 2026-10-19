@@ -108,7 +108,7 @@ def preparar(wf):
         return confirmar_persistencia(wf)
     if any(n.get("parameters", {}).get("path") == "lead-acao" for n in wf.get("nodes", [])):
         return confirmar_acao(wf)
-    if any(n["name"] == "Marcar como enviado" for n in wf.get("nodes", [])):
+    if any(n["name"] == "Marcar como enviado" for n in wf.get("nodes", [])) and not so_rastro_do_clique(wf):
         wf = copy.deepcopy(wf)
         no = next(n for n in wf["nodes"] if n["name"] == "Decidir")
         if "[abrir-nao-envia]" not in no["parameters"]["jsCode"]:
@@ -116,6 +116,15 @@ def preparar(wf):
             no["parameters"]["jsCode"] = ("// [abrir-nao-envia] Envio só pelo observador ou confirmação humana.\n"
                 "return (await (async () => {\n" + codigo + "\n})()).map(i => ({...i, json: {...i.json, marcar: false}}));")
     return wf
+
+
+def so_rastro_do_clique(wf):
+    """O nó "Marcar como enviado" só grava `clique_em` (o 04 do Site desde 19/10/2026)? Então abrir não marca
+    envio e o clique pode ficar registrado: é o rastro que o observador usa para manter a letra do Balcão."""
+    no = next(n for n in wf["nodes"] if n["name"] == "Marcar como enviado")
+    colunas = (no.get("parameters") or {}).get("columns") or {}
+    gravadas = set(colunas.get("value") or {}) - set(colunas.get("matchingColumns") or [])
+    return gravadas == {"clique_em"}
 
 
 def confirmar_acao(wf):

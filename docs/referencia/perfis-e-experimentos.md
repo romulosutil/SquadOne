@@ -349,12 +349,14 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
   dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time.
 - **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
-  fluxo "04 · Clique no wa_link"), que marca `status = enviado` e `enviado_em` e congela a `mensagem_variante` e o `ab_elegiveis` que o
-  Balcão gravou; o redirecionamento tem de levar ao número do lead e ao texto reservado. O texto enviado é o do Balcão, sem troca: o envio
-  entra na trava de ritmo, em Números, na taxa do nicho e nos A/B como se o Rômulo tivesse tocado. O observador vê a saída com o lead já
-  enviado e não grava "manual". Clique falhou: nada sai e o número volta a ficar livre no registro do time. Envio confirmado: nota na Ficha.
-  Limite: se o envio falhar depois do clique, o lead fica "enviado" sem ter recebido (o mesmo de um toque do Rômulo sem enviar); o
-  registro do time fica "incerto" e bloqueia novos envios até a reconciliação.
+  fluxo "04 · Clique no wa_link"), que grava `clique_em` (abrir nunca marca envio: regra `[abrir-nao-envia]` de 18/10/2026); o
+  observador, vendo a saída até 15 min depois do clique, marca `status = enviado` e `enviado_em` e mantém a `mensagem_variante` e o
+  `ab_elegiveis` que o Balcão gravou (sem clique, "manual"). Vale igual para o toque do Rômulo no link da Central: de 18/10 até o
+  `clique_em` (19/10), todo envio do Site saía "manual" e o A/B da 1ª mensagem não contava. O redirecionamento tem de levar ao número
+  do lead e ao texto reservado. O texto enviado é o do Balcão, sem troca: o envio
+  entra na trava de ritmo, em Números, na taxa do nicho e nos A/B como se o Rômulo tivesse tocado. Clique falhou: nada sai e o número volta a ficar livre no registro do time. Envio confirmado: nota na Ficha.
+  Se o envio falhar depois do clique, o lead continua "pronto" (o clique não marca envio); o registro do time fica "incerto" e bloqueia
+  novos envios até a reconciliação.
 - **Quem faz o 1º contato** (`quemFazOPrimeiroContato`): lead na fila do time, com o time ligado, ou cujo envio o time já começou
   (incerto/enviado), é do time; o resto é do Rômulo. `GET /crm/venda` devolve `doTime` e a Próxima venda e o vendedor do Telegram tiram da
   fila o primeiro contato desses leads; o time não pede reserva para lead que o Rômulo já tocou hoje (Central ou Telegram).
