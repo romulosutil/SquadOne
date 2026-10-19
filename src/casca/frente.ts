@@ -10,7 +10,9 @@
 import { ref } from 'vue'
 
 export interface AvaliacaoDaFrente { agente: string; nota: number; motivo: string }
-export interface ContatoDaFrente { id: string; empresa: string; produto: string; nota: number; estado: string; motivo: string; avaliacoes: AvaliacaoDaFrente[]; mensagem: string }
+export interface ContatoDaFrente { id: string; empresa: string; produto: string; setor?: string; nota: number; estado: string; motivo: string; avaliacoes: AvaliacaoDaFrente[]; mensagem: string }
+export interface SetorDaFrente { setor: string; avaliados: number; selecionados: number; enviados: number }
+export interface FunilDaFrente { produto: string; novo: number; contato: number; proposta: number; ganho: number; perdido: number; elegiveis: number; contatosObservados: number; respostasWhatsapp: number; taxaResposta: number | null }
 export interface FrenteLida {
   ativo: boolean
   estado: string
@@ -23,6 +25,8 @@ export interface FrenteLida {
   respondidos?: number
   avaliados?: number
   selecionados?: number
+  setores?: SetorDaFrente[]
+  funil?: FunilDaFrente[]
   atualizadoEm: string | null
   detalhe?: string
   proximoEnvioEm?: string | null

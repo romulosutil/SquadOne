@@ -10,6 +10,7 @@ import tempfile
 import types
 import unittest
 import urllib.error
+import urllib.parse
 from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('frente',Path(__file__).with_name('frente-comercial.py'))
@@ -21,7 +22,16 @@ def lead(id_='site:teste',n='5511998887766'):
     return {'id':id_,'produto':'site','empresa':'Empresa de teste','etapa':'novo','sinal':'pronto','marcos':{},'mensagemPronta':MSG,
             'links':{'whatsapp':'https://wa.me/'+n,'enviar':'https://dell.test/webhook/enviar?place_id='+id_.partition(':')[2]}}
 
-def avaliar(_a,_e,lote,_ant):
+def outro_produto(produto,n='5511998887766'):
+    l=lead(f'{produto}:teste',n)|{'produto':produto}
+    if produto=='plus':
+        l['plus']={'fixo':False};l['links']['enviar']='https://wa.me/'+n+'?text='+urllib.parse.quote(MSG)
+    else:
+        l['sinal']='revisar';l['triagem']={'origemWhatsapp':'cadastro confirmado'}
+        l['links']['convite']='https://wa.me/'+n+'?text='+urllib.parse.quote(MSG)
+    return l
+
+def avaliar(_a,_e,lote,_ant,_funil=None,_taxas=None):
     return {f.pacote(l)['id']:{'id':f.pacote(l)['id'],'nota':80,'decisao':'contatar','motivo':'Aderência confirmada ao recorte'} for l in lote}
 
 class Redirecionar:
@@ -50,13 +60,52 @@ class Frente(unittest.TestCase):
             resultados=[f.rodada() for _ in range(vezes)]
         return types.SimpleNamespace(estados=estados,ai=ai,reservar=reservar,clique=clique,nota=nota,envio=envio,resultados=resultados)
 
-    # 1. Elegibilidade: só o que a Central já liberou (`pronto` do Site), nunca a Triagem.
+    # 1. Elegibilidade: cada oferta exige mensagem pronta, destino e nenhuma interação anterior.
     def test_so_lead_pronto_do_site_com_link_rastreado(self):
         self.assertTrue(f.elegivel(lead()))
         for change in [{'sinal':'revisar'},{'sinal':'descartado'},{'produto':'plus'},{'produto':'prumo'},{'produto':'iris'},{'produto':'estampa'},
                        {'mensagemPronta':''},{'links':{'whatsapp':'https://wa.me/5511998887766'}},
                        {'etapa':'perdido'},{'marcos':{'enviado':f.iso()}},{'conversa':{'mensagens':1}},{'resposta':{'tipo':'negativa'}},{'proximoPasso':{'texto':'aguardar'}}]:
             self.assertFalse(f.elegivel(lead()|change),change)
+
+    def test_cinco_ofertas_e_bloqueios_por_origem(self):
+        for produto in ('site','prumo','iris','estampa','plus'):
+            l=lead() if produto=='site' else outro_produto(produto)
+            self.assertTrue(f.elegivel(l),produto)
+            self.assertEqual(f.texto_do_lead(l),MSG)
+        self.assertFalse(f.elegivel(outro_produto('plus')|{'plus':{'fixo':True}}))
+        self.assertFalse(f.elegivel(outro_produto('iris')|{'triagem':{'origemWhatsapp':'não confirmado — número do Google'}}))
+        self.assertFalse(f.elegivel(outro_produto('prumo')|{'links':{'whatsapp':'https://wa.me/5511998887766','convite':'https://wa.me/5521998887766?text=oi'}}))
+
+    def test_funil_inclui_todas_as_etapas_e_respostas(self):
+        ls=[lead(),outro_produto('plus','5511998887700')|{'etapa':'contato','conversa':{'ultimaEntrada':f.iso(self.now),'ultimaSaida':f.iso(self.now)}},
+            outro_produto('iris','5511998887701')|{'etapa':'proposta'},outro_produto('prumo','5511998887702')|{'etapa':'ganho'},
+            outro_produto('estampa','5511998887703')|{'etapa':'perdido'}]
+        m={x['produto']:x for x in f.metricas_do_funil({'leads':ls})}
+        self.assertEqual(m['site']['novo'],1);self.assertEqual(m['site']['elegiveis'],1)
+        self.assertEqual(m['plus']['contato'],1);self.assertEqual(m['plus']['respostasWhatsapp'],1)
+        self.assertEqual(m['iris']['proposta'],1);self.assertEqual(m['prumo']['ganho'],1);self.assertEqual(m['estampa']['perdido'],1)
+
+    def test_taxa_historica_so_pesa_com_dez_contatos_observados(self):
+        ls=[]
+        for i in range(10):
+            l=outro_produto('iris',f'55119988877{i:02}')|{'etapa':'contato','nicho':'terapia','marcos':{'enviado':f.iso(self.now)}}
+            if i<3:l['conversa']={'ultimaEntrada':f.iso(self.now)}
+            ls.append(l)
+        taxas=f.taxas_por_setor({'leads':ls})
+        novo=outro_produto('iris')|{'nicho':'terapia','triagem':{'prioridade':70,'origemWhatsapp':'confirmado'}}
+        self.assertEqual(taxas[('iris','terapia')],0.3)
+        self.assertEqual(f.prioridade_do_candidato(novo,taxas),76)
+        self.assertEqual(f.taxas_por_setor({'leads':ls[:9]}),{})
+
+    def test_plus_avalia_descricao_e_oferta_e_invalida_cache_antigo(self):
+        l=outro_produto('plus')|{'plus':{'fixo':False,'oferta':'estampa','descricao':'Faz camisetas para eventos','tambem':['site']}}
+        d=f.pacote(l)
+        self.assertEqual(d['plus'],{'ofertaIndicada':'estampa','descricaoPublica':'Faz camisetas para eventos','ofertasRelacionadas':['site']})
+        self.assertNotEqual(f.hash_avaliacao(l),f.fingerprint(l))
+        with self.r.db:
+            self.r.db.execute('INSERT INTO avaliacoes VALUES(?,?,?,?,?)',('2026-10-19',l['id'],f.fingerprint(l),'Diego',json.dumps({'nota':0,'decisao':'adiar','motivo':'sem dados'})))
+        self.assertIsNone(self.r.avaliar('2026-10-19',l,'Diego'))
 
     def test_plano_antigo_com_revisar_nao_vira_fila(self):
         # Um plano do dia gravado antes de 19/10 (com leads da Triagem) é relido no retrato de agora.
@@ -65,6 +114,14 @@ class Frente(unittest.TestCase):
         x=self.rodar({'estado':'ok','leads':[revisar]},lambda l:{'reservado':True,'texto':MSG})
         x.ai.assert_not_called();x.reservar.assert_not_called();x.envio.assert_not_called()
         self.assertEqual(x.estados[-1]['fila'],[])
+
+    def test_plano_fixa_ids_mas_avalia_ficha_atual_do_crm(self):
+        antigo=lead()|{'triagem':{'prioridade':70}}
+        registro=f.Registro(Path(self.tmp.name)/'base'/'registro.sqlite');registro.plano('2026-10-19',[antigo]);registro.db.close()
+        atual=lead()|{'triagem':{'prioridade':85},'achados':[{'titulo':'Site indisponível'}]}
+        x=self.rodar({'estado':'ok','leads':[atual]},lambda l:{'reservado':True,'texto':MSG})
+        self.assertEqual(x.envio.call_count,1)
+        self.assertEqual(x.estados[-1]['fila'][0]['hash'],f.fingerprint(atual))
 
     def test_numero_nao_vem_de_outro_host_ou_do_modelo(self):
         for uri in ['http://wa.me/5511998887766','https://evil.test/5511998887766','https://wa.me.evil/5511998887766','https://wa.me/1234']:
@@ -107,6 +164,37 @@ class Frente(unittest.TestCase):
         self.assertEqual(x.estados[-1]['enviados'],1);self.assertEqual(x.estados[-1]['fila'][0]['estado'],'enviado')
         self.assertEqual(x.estados[-1]['fila'][0]['mensagem'],MSG)
 
+    def test_plus_e_convite_enviam_sem_clique_site_e_anotam_etapa(self):
+        for produto in ('plus','prumo','iris','estampa'):
+            with self.subTest(produto=produto):
+                with tempfile.TemporaryDirectory() as pasta:
+                    l=outro_produto(produto)
+                    with patch.object(f,'BASE',Path(pasta)/'base'),patch.object(f,'H',Path(pasta)),patch.object(f,'DATA',Path(pasta)),\
+                         patch.object(f,'ler_crm',return_value={'estado':'ok','leads':[l]}),patch.object(f,'agora',return_value=self.now),\
+                         patch.object(f,'ler_config',return_value={'ativo':True}),patch.object(f,'inferir',side_effect=avaliar),\
+                         patch.object(f,'http',return_value={'primeiros':{}}),patch.object(f,'conexao',return_value={'apikey':'fake'}),\
+                         patch.object(f,'reservar_na_central',return_value={'reservado':True,'texto':MSG}),\
+                         patch.object(f,'marcar_no_crm') as clique,patch.object(f,'anotar_na_central',return_value=True) as nota,\
+                         patch.object(f,'enviar',return_value='recibo') as envio,patch.object(f,'gravar'):
+                        f.rodada()
+                    clique.assert_not_called();envio.assert_called_once();nota.assert_called_once_with(l,MSG,f.iso(self.now))
+
+    def test_registro_de_convite_e_plus_tem_tipo_correto(self):
+        for produto,tipo in [('prumo','nota'),('iris','nota'),('estampa','nota'),('plus','plus_enviado')]:
+            with patch.object(f,'http',return_value={'ok':True}) as h:
+                self.assertTrue(f.anotar_na_central(outro_produto(produto),MSG,f.iso(self.now)))
+            corpo=h.call_args.args[1]
+            self.assertEqual(corpo['tipo'],tipo)
+            if tipo=='nota':
+                self.assertTrue(corpo['texto'].startswith('[Convite enviado confirmado pela integração do time]\n'))
+                self.assertEqual(json.loads(corpo['texto'].split('\n',1)[1])['mensagem'],MSG)
+
+    def test_pendencia_de_registro_bloqueia_ate_o_funil_confirmar(self):
+        l=outro_produto('iris')
+        self.r.pendencia_registro(l,f.iso(self.now))
+        self.assertEqual(self.r.conferir_pendencias({'leads':[l]}),1)
+        self.assertEqual(self.r.conferir_pendencias({'leads':[l|{'etapa':'contato'}]}),0)
+
     def test_clique_que_falha_nao_envia_e_libera_o_numero(self):
         def marcar(l,texto):raise RuntimeError('n8n fora')
         x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG},marcar=marcar)
@@ -148,6 +236,55 @@ class Frente(unittest.TestCase):
         self.assertTrue(parciais);self.assertTrue(all(e['fila'][0]['id']=='site:velho' for e in parciais))
         self.assertEqual([c['id'] for c in x.estados[-1]['fila']],['site:teste'])
 
+    def test_alterna_setores_aprovados_e_publica_metricas_da_carteira(self):
+        leads=[lead(f'site:u{i}',f'55119988877{i:02}')|{'nicho':'dedetizadora' if i%2 else 'desentupidora'} for i in range(4)]
+        leads += [lead(f'site:a{i}',f'55119988878{i:02}')|{'nicho':'advocacia'} for i in range(2)]
+        x=self.rodar({'estado':'ok','leads':leads},lambda l:{'reservado':False,'motivo':'intervalo','ate':None})
+        final=x.estados[-1]
+        self.assertEqual([c['setor'] for c in final['fila'][:4]],
+            ['Advocacia','Serviços de urgência','Advocacia','Serviços de urgência'])
+        self.assertEqual([(s['setor'],s['avaliados'],s['selecionados'],s['enviados']) for s in final['setores']],
+            [('Serviços de urgência',4,4,0),('Advocacia',2,2,0)])
+        self.assertEqual(final['selecionados'],6)
+
+    def test_metricas_contam_so_avaliacoes_feitas_e_preservam_envio_confirmado(self):
+        leads=[lead(f'site:{i}',f'5511998{i:06}')|{'nicho':'advocacia' if i%2 else 'dedetizadora'} for i in range(61)]
+        x=self.rodar({'estado':'ok','leads':leads},lambda l:{'reservado':False,'motivo':'intervalo'})
+        final=x.estados[-1]
+        self.assertEqual(final['avaliados'],40)
+        self.assertEqual(sum(s['avaliados'] for s in final['setores']),40)
+        primeiro=final['fila'][0]
+        primeiro.update(estado='enviado')
+        (self.data/'frente-comercial.json').write_text(json.dumps(final,ensure_ascii=False))
+        atual=[l|{'etapa':'contato','marcos':{'enviado':f.iso(self.now)}} if l['id']==primeiro['id'] else l for l in leads]
+        y=self.rodar({'estado':'ok','leads':atual},lambda l:{'reservado':False,'motivo':'intervalo'})
+        seguinte=y.estados[-1]
+        self.assertEqual(seguinte['avaliados'],61)
+        self.assertEqual(sum(s['avaliados'] for s in seguinte['setores']),61)
+        self.assertIn(primeiro['id'],[c['id'] for c in seguinte['fila'] if c['estado']=='enviado'])
+
+    def test_lote_novo_preserva_aprovado_de_rodada_anterior(self):
+        leads=[lead(f'site:{i}',f'5511998{i:06}') for i in range(61)]
+        ultimo=leads[-1]
+        anterior={'dia':'2026-10-19','fila':[{'id':ultimo['id'],'empresa':ultimo['empresa'],'produto':'site',
+            'setor':f.setor(ultimo),'nota':80,'estado':'pronto','hash':f.fingerprint(ultimo)}]}
+        (self.data/'frente-comercial.json').write_text(json.dumps(anterior))
+        x=self.rodar({'estado':'ok','leads':leads},lambda l:{'reservado':False,'motivo':'intervalo'})
+        self.assertIn(ultimo['id'],[c['id'] for c in x.estados[-1]['fila']])
+
+    def test_diversifica_o_plano_antes_do_corte_de_200(self):
+        leads=[lead(f'site:u{i}',f'5511998{i:06}')|{'nicho':'desentupidora','triagem':{'prioridade':90}} for i in range(205)]
+        leads += [lead('site:a','551198877665')|{'nicho':'advocacia','triagem':{'prioridade':70}}]
+        ordem=f.intercalar_setores(leads,lambda l:l['triagem']['prioridade'])[:200]
+        self.assertIn('site:a',[l['id'] for l in ordem])
+
+    def test_plano_existente_so_de_site_passa_a_intercalar_as_ofertas(self):
+        antigos=[lead(f'site:{i}',f'55119988877{i:02}') for i in range(40)]
+        self.r.plano('2026-10-19',antigos)
+        novos=[outro_produto(p,f'55119988878{i:02}') for i,p in enumerate(('prumo','iris','estampa','plus'))]
+        plano=self.r.plano('2026-10-19',antigos+novos)
+        self.assertEqual(set(l['produto'] for l in plano[:5]),{'site','prumo','iris','estampa','plus'})
+
     # O que já valia antes de 19/10.
     def test_bloqueia_duplicidade_e_resultado_incerto_apos_reinicio(self):
         l=lead();self.assertTrue(self.r.reservar(l,'Olá',self.now));self.assertFalse(self.r.reservar(l,'Olá',self.now))
@@ -164,9 +301,9 @@ class Frente(unittest.TestCase):
         self.assertNotEqual(f.fingerprint(lead(n='5511998887755')),h)
         self.assertNotEqual(f.fingerprint(base|{'links':base['links']|{'raioX':'https://x.test'}}),h)
 
-    def test_plano_do_dia_nao_troca_depois_de_cada_envio(self):
+    def test_plano_do_dia_acrescenta_candidatos_sem_perder_os_anteriores(self):
         self.assertEqual(self.r.plano('2026-10-19',[lead()]),[lead()])
-        self.assertEqual(self.r.plano('2026-10-19',[lead('novo')]),[lead()])
+        self.assertEqual({l['id'] for l in self.r.plano('2026-10-19',[lead('novo')])},{'site:teste','novo'})
 
     def test_contrato_exige_todos_os_ids_notas_e_decisoes(self):
         a={'id':'a','nota':80,'decisao':'contatar','motivo':'Boa aderência ao recorte'}

@@ -12,12 +12,8 @@
  *    (Próxima venda, Ficha, Telegram). A Próxima venda e o vendedor do Telegram tiram da fila o
  *    primeiro contato dos leads do time; o time, por sua vez, não reserva lead que o operador já
  *    tocou hoje (`primeiros` do venda-do-dia.json, de qualquer superfície).
- *  - `elegivelParaOTime`: só o lead que a Central já liberou para o primeiro contato (`pronto`, com
- *    o link rastreado e a mensagem do Balcão). `revisar` é a Triagem, que é do Rômulo: lá o convite
- *    abre o WhatsApp e quem o envia é ele (o envio só vale quando o observador o vê ou o "Enviei"
- *    explícito o marca), então o time não pega lead da Triagem. Plus fica fora (texto e saudação próprios).
- *    PRUMO, Iris e estamparias não têm `pronto` (o convite só existe em `revisar`): ficam fora até
- *    existir uma decisão "Convidar pelo time" gravada no CRM.
+ *  - `elegivelParaOTime`: Novo sem histórico, com mensagem e destino da fonte. Site usa o link
+ *    rastreado; Plus exige celular; PRUMO, Iris e Estamparia exigem origem do WhatsApp confirmada.
  *  - `reservaDoTime`: a MESMA janela (EXPEDIENTE_DE_VENDA) e o MESMO ritmo (REGRAS_DO_RITMO) da
  *    Central, contando o retrato e os primeiros do dia de todas as superfícies. A rota que usa isto
  *    (server/frente-comercial.ts) decide e grava o primeiro do time num passo só da fila do
@@ -71,12 +67,41 @@ export function primeirosDoTime(frente: FrenteDoPrimeiro): Set<string> {
 }
 
 type LeadDoTime = Pick<CrmLead, 'produto' | 'etapa' | 'sinal' | 'links' | 'marcos' | 'empresa'>
-  & Partial<Pick<CrmLead, 'conversa' | 'resposta' | 'proximoPasso' | 'mensagemPronta'>>
+  & Partial<Pick<CrmLead, 'conversa' | 'resposta' | 'proximoPasso' | 'mensagemPronta' | 'triagem' | 'plus'>>
+
+/** O texto aprovado da fonte; o agente só seleciona o destinatário. */
+export function mensagemDoPrimeiroContato(lead: LeadDoTime | undefined): string | null {
+  if (!lead) return null
+  if (lead.produto === 'site' || lead.produto === 'plus') return lead.mensagemPronta?.trim() || null
+  if (!['prumo', 'iris', 'estampa'].includes(lead.produto) || !lead.links.convite) return null
+  try {
+    const u = new URL(lead.links.convite)
+    return u.protocol === 'https:' && u.hostname === 'wa.me' ? u.searchParams.get('text')?.trim() || null : null
+  } catch { return null }
+}
+
+function destinoValido(lead: LeadDoTime): boolean {
+  try {
+    const registro = new URL(lead.links.whatsapp ?? '')
+    if (registro.protocol !== 'https:' || registro.hostname !== 'wa.me' || !/^55\d{10,11}$/.test(registro.pathname.slice(1))) return false
+    const link = lead.produto === 'site' ? lead.links.enviar : lead.produto === 'plus' ? lead.links.enviar : lead.links.convite
+    if (!link) return false
+    if (lead.produto === 'site') return true // O redirecionamento rastreado será conferido pelo executor.
+    const destino = new URL(link)
+    return destino.protocol === 'https:' && destino.hostname === 'wa.me' && destino.pathname === registro.pathname
+      && (lead.produto !== 'plus' || destino.searchParams.get('text')?.trim() === lead.mensagemPronta?.trim())
+  } catch { return false }
+}
 
 /** O lead que a Central já liberou para o primeiro contato e que o time pode fazer (o mesmo `elegivel` do .py). */
 export function elegivelParaOTime(lead: LeadDoTime | undefined): boolean {
-  if (!lead || lead.produto !== 'site' || lead.etapa !== 'novo' || lead.sinal !== 'pronto') return false
-  if (!lead.links.enviar || !lead.links.whatsapp || !lead.mensagemPronta?.trim()) return false
+  if (!lead || lead.etapa !== 'novo' || !destinoValido(lead) || !mensagemDoPrimeiroContato(lead)) return false
+  if (lead.produto === 'site' && lead.sinal !== 'pronto') return false
+  if (lead.produto === 'plus' && (lead.sinal !== 'pronto' || lead.plus?.fixo !== false)) return false
+  if (['prumo', 'iris', 'estampa'].includes(lead.produto)) {
+    const origem = lead.triagem?.origemWhatsapp?.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (lead.sinal !== 'revisar' || !origem || /^(nao confirm|a confirmar|desconhecid)/.test(origem)) return false
+  }
   if (lead.conversa || lead.resposta || lead.proximoPasso) return false
   return !Object.values(lead.marcos ?? {}).some(Boolean)
 }
@@ -100,7 +125,7 @@ export interface PedidoDoTime {
   leads: ReadonlyArray<Pick<CrmLead, 'id' | 'sinal' | 'marcos'>>
   /** Os primeiros do dia de todas as superfícies (venda-do-dia.json). */
   primeiros: Readonly<Record<string, { em: number } | number>>
-  /** O gate de envio (server/gate-de-envio.ts) aprovou a mensagem do Balcão em modo "bloquear". */
+  /** O gate de envio (server/gate-de-envio.ts) aprovou a mensagem da fonte em modo "bloquear". */
   mensagemAprovada: boolean
   agora: number
   regras?: RegrasDoRitmo

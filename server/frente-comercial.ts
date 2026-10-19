@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import express, { type Router } from 'express';
 import type { CrmVisao } from '../src/operations/types.ts';
-import { frenteDosArquivos, primeirosDoTime, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
+import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
 import { tetoDoDia } from '../src/operations/trava-de-ritmo.ts';
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
@@ -11,18 +11,18 @@ import type { MemoriaDaVenda } from './venda-do-dia.ts';
 
 /**
  * O time comercial na Central (19/10/2026). O time em si roda no Dell (deploy/dell/frente-comercial.py,
- * timer desligado por padrão): avalia os leads `pronto` com três agentes e manda o primeiro contato pelo
+ * timer desligado por padrão): avalia leads novos das cinco ofertas com três agentes e manda o primeiro contato pelo
  * número do PRUMO. Daqui saem só leitura e a reserva:
  *
  *  - GET /crm/frente: o estado que o time grava, sem segredo nem número (para a tela).
  *  - POST /crm/frente/config: ligar ou pausar o time ({ ativo }), só da mesma origem.
  *  - POST /crm/frente/reservar: o time pede para fazer o primeiro contato de UM lead. A Central decide
  *    com a mesma janela e o mesmo ritmo das telas e do Telegram (src/operations/primeiro-contato.ts),
- *    confere a mensagem do Balcão no gate de envio em modo "bloquear" e, podendo, grava o primeiro
+ *    confere a mensagem da fonte no gate de envio em modo "bloquear" e, podendo, grava o primeiro
  *    do dia `por: "time"` no mesmo passo. Sem reserva, o time não envia.
  *
- * O registro no CRM (enviado_em, a letra e o ab_elegiveis congelados) é o clique no link rastreado
- * do n8n, o mesmo da Central: quem o faz é o time, antes de enviar. Aqui nada fala com o WhatsApp.
+ * Site usa o clique rastreado do n8n antes do envio. Plus e os convites são anotados após o recibo
+ * do WhatsApp. Esta rota não fala com a integração de mensagens.
  */
 const CONFIG = 'frente-comercial-config.json';
 const ESTADO = 'frente-comercial.json';
@@ -67,10 +67,21 @@ export async function lerFrente(dataDir: string, agora = Date.now()) {
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
     enviados: bruto.enviados ?? 0, respondidos: bruto.respondidos ?? 0,
+    funil: (Array.isArray(bruto.funil) ? bruto.funil : []).slice(0, 5).map((m: Record<string, unknown>) => ({
+      produto: ['site', 'prumo', 'iris', 'estampa', 'plus'].includes(String(m.produto)) ? m.produto : 'desconhecido',
+      ...Object.fromEntries(['novo', 'contato', 'proposta', 'ganho', 'perdido', 'elegiveis', 'contatosObservados', 'respostasWhatsapp'].map(k => [k, typeof m[k] === 'number' ? m[k] : 0])),
+      taxaResposta: typeof m.taxaResposta === 'number' ? m.taxaResposta : null,
+    })),
+    setores: (Array.isArray(bruto.setores) ? bruto.setores : []).slice(0, 30).map((s: Record<string, unknown>) => ({
+      setor: typeof s.setor === 'string' ? s.setor.slice(0, 60) : 'Nicho não informado',
+      avaliados: typeof s.avaliados === 'number' ? s.avaliados : 0,
+      selecionados: typeof s.selecionados === 'number' ? s.selecionados : 0,
+      enviados: typeof s.enviados === 'number' ? s.enviados : 0,
+    })),
     proximoEnvioEm: bruto.proximoEnvioEm ?? null,
     detalhe: typeof bruto.detalhe === 'string' ? bruto.detalhe.slice(0, 400) : '',
     fila: (Array.isArray(bruto.fila) ? bruto.fila : []).slice(0, 100).map((l: Record<string, unknown>) => ({
-      id: l.id, empresa: l.empresa, produto: l.produto, nota: l.nota, estado: l.estado, motivo: l.motivo,
+      id: l.id, empresa: l.empresa, produto: l.produto, setor: l.setor, nota: l.nota, estado: l.estado, motivo: l.motivo,
       avaliacoes: l.avaliacoes, enviadoEm: l.enviadoEm, mensagem: l.mensagem,
     })),
   };
@@ -123,15 +134,16 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
       if (!visao || visao.estado !== 'ok') return void res.status(503).json({ reservado: false, motivo: 'sem-retrato', ate: null });
       const frente = await lerFrenteDoPrimeiro(dataDir);
       const lead = visao.leads.find((l) => l.id === leadId);
-      // Automático, a mensagem do Balcão só sai com o gate limpo (o Balcão a gera em "avisar"; aqui é "bloquear").
-      const gate = lead?.mensagemPronta
-        ? conferirMensagem(lead.mensagemPronta, { modo: 'bloquear', tipo: 'primeiro', nome: lead.empresa, destino: { registro: lead.links.whatsapp } })
+      const texto = mensagemDoPrimeiroContato(lead);
+      // O texto da fonte é conferido na reserva, junto com o destino e o retrato atual.
+      const gate = lead && texto
+        ? conferirMensagem(texto, { modo: 'bloquear', tipo: 'primeiro', nome: lead.empresa, destino: { link: lead.produto === 'site' ? undefined : lead.produto === 'plus' ? lead.links.enviar : lead.links.convite, registro: lead.links.whatsapp } })
         : null;
       const r: ReservaDoTime = await deps.memoriaDaVenda.reservarPrimeiro(leadId, (dia) => reservaDoTime({
         leadId, lead, frente, leads: visao.leads, primeiros: dia.primeiros, mensagemAprovada: Boolean(gate && !gate.bloqueia), agora: agora(),
       }));
       if (r.ok === false) return void res.json({ reservado: false, motivo: r.motivo, ate: r.ate === null ? null : new Date(r.ate).toISOString() });
-      res.json({ reservado: true, texto: lead!.mensagemPronta });
+      res.json({ reservado: true, texto });
     } catch (error) {
       console.error('[frente] reserva não gravou:', error instanceof Error ? error.message : String(error));
       res.status(500).json({ reservado: false, error: 'Não deu para reservar agora.' });

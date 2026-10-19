@@ -50,7 +50,7 @@ test('reserva: o lead do time sai com o texto do Balcão e entra no ritmo de tod
     m.relogio.agora = AGORA + 5 * 60_000;
     assert.equal((await m.reservar('site:b')).corpo.reservado, true);
     // O mesmo lead de novo: já tem o primeiro do dia.
-    m.relogio.agora = AGORA + 11 * 60_000;
+    m.relogio.agora = AGORA + 10 * 60_000;
     assert.equal((await m.reservar('site:a')).corpo.motivo, 'ja-tocado');
   } finally { await m.fechar(); }
 });
@@ -94,6 +94,25 @@ test('reserva: Triagem, fora da fila, time pausado, gate e fora do expediente re
   } finally { await m.fechar(); }
 });
 
+test('reserva: cinco ofertas usam o texto aprovado da fonte e rejeitam número não confirmado', async () => {
+  for (const produto of ['site', 'prumo', 'iris', 'estampa', 'plus'] as const) {
+    const id = `${produto}:a`;
+    const convite = `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`;
+    const extra: Partial<CrmLead> = produto === 'site' ? {} : produto === 'plus'
+      ? { produto, plus: { oferta: 'site', fixo: false, descricao: '' }, links: { enviar: convite, whatsapp: 'https://wa.me/5511998887766' } }
+      : { produto, sinal: 'revisar', mensagemPronta: undefined, triagem: { origemWhatsapp: 'cadastro confirmado' }, links: { convite, whatsapp: 'https://wa.me/5511998887766' } };
+    const m = await montar([lead(id, extra)], [{ id, estado: 'pronto' }]);
+    try { assert.deepEqual((await m.reservar(id)).corpo, { reservado: true, texto: MSG }); }
+    finally { await m.fechar(); }
+  }
+  const id = 'iris:duvida';
+  const m = await montar([lead(id, { produto: 'iris', sinal: 'revisar', mensagemPronta: undefined,
+    triagem: { origemWhatsapp: 'não confirmado — número do Google' },
+    links: { convite: `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`, whatsapp: 'https://wa.me/5511998887766' } })], [{ id, estado: 'pronto' }]);
+  try { assert.equal((await m.reservar(id)).corpo.motivo, 'nao-elegivel'); }
+  finally { await m.fechar(); }
+});
+
 test('quem faz o primeiro contato, do disco: a fila do time com ele ligado, e o que ele já começou sempre', async () => {
   const m = await montar([], [{ id: 'site:a', estado: 'pronto' }, { id: 'site:b', estado: 'enviado' }, { id: 'site:c', estado: 'lixo' }]);
   try {
@@ -110,10 +129,12 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
   try {
     const vazio = await lerFrente(dir, AGORA); assert.equal(vazio.atualizadoEm, null); assert.equal(vazio.estado, 'iniciando');
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
-    await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', fila: [{ id: 'site:1', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
+    await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
     const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
-    // O teto mostrado é o da trava de ritmo da Central (100 por dia desde 19/10/2026), não uma cota do time.
+    // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
     assert.equal(v.limite, 100);
+    assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
+    assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: '2020-01-01T00:00:00Z', estado: 'pronto' }));
     assert.equal((await lerFrente(dir, AGORA)).estado, 'sem-sinal');

@@ -21,7 +21,9 @@ export function revisaoComercialDoLead(lead: CrmLead, agora: number): string | u
     return 'A planilha mantém Recusado, mas a resposta atual não é uma recusa. Confira o histórico e use Revisar classificação nesta ficha antes de encerrar ou retomar.'
   }
   const humana = Math.max(instante(lead.conversa?.ultimaEntrada), lead.resposta?.tipo === 'bot' ? 0 : instante(lead.marcos.respondeu))
-  if (['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '') && humana > instante(lead.resposta?.em)) {
+  // respondeu_em e resposta.em podem ser gravados para a mesma mensagem com segundos de diferença.
+  // Só uma entrada posterior de fato justifica reabrir a classificação.
+  if (['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '') && humana > instante(lead.resposta?.em) + 60_000) {
     return 'A conversa continuou depois da classificação de recusa. Confira o contexto e revise a classificação antes de encerrar ou retomar.'
   }
   if (lead.etapa === 'contato' && !lead.proximoPasso && !lead.proposta && humana && agora - humana >= 7 * 86400000) {

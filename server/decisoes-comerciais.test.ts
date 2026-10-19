@@ -5,7 +5,14 @@ import type { AddressInfo } from 'node:net'
 import { montarCrm, validarRetrato, type CrmRetrato } from './crm.ts'
 import { montarDecisoesComerciais } from './decisoes-comerciais.ts'
 import { hashDoContexto } from '../src/operations/revisao-resposta.ts'
-import { baseDaClassificacao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE } from '../src/operations/decisoes-comerciais.ts'
+import { baseDaClassificacao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, PREFIXO_CONVITE_TIME, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts'
+
+test('convite confirmado pela integração do time também muda a etapa', () => {
+  const enviadoEm = '2026-10-19T14:00:00.000Z'
+  assert.deepEqual(ultimoConviteConfirmado([{ origem: 'manual', tipo: 'nota', em: enviadoEm,
+    texto: PREFIXO_CONVITE_TIME + JSON.stringify({ enviadoEm, mensagem: 'Convite enviado' }) }] as never),
+  { enviadoEm, mensagem: 'Convite enviado' })
+})
 import { mensagemDoConvite } from './convite-mensagem.ts'
 import { readFileSync } from 'node:fs'
 
