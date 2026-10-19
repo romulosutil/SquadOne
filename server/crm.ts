@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
-import { revisaoDaClassificacao, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts';
+import { revisaoDaClassificacao, ultimoConviteConfirmado, PREFIXO_CONVITE_TIME } from '../src/operations/decisoes-comerciais.ts';
 import { mensagemDoConvite } from './convite-mensagem.ts';
 import os from "node:os";
 import path from "node:path";
@@ -1430,6 +1430,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const registros = contexto.registros.get(`${produto}:${chave}`) ?? [];
   const { proposta, proximo, semContato, ganho, notas, segundas: segundasAnotadas, followups } = manuais(registros);
   const confirmado = ultimoConviteConfirmado(eventosManuais(registros));
+  const confirmadoPeloTime = registros.some((r) => r.tipo === 'nota' && r.texto?.startsWith(PREFIXO_CONVITE_TIME));
   const convite = instante(c("conviteEm")) ?? instante(confirmado?.enviadoEm ?? '');
   const t = {
     encontrado: instante(c("encontradoEm")),
@@ -1471,7 +1472,7 @@ function leadDoPrumo(linha: Linha, contexto: {
   const eventos: CrmEvento[] = [
     ...evento("encontrado", oferta.cacador, t.encontrado, "planilha · Encontrado em"),
     ...evento("convite", "Convite enviado", t.convite,
-      instante(c('conviteEm')) !== undefined ? 'planilha · Convite enviado em' : 'CRM · envio confirmado pelo operador',
+      instante(c('conviteEm')) !== undefined ? 'planilha · Convite enviado em' : confirmadoPeloTime ? 'CRM · integração do time' : 'CRM · envio confirmado pelo operador',
       instante(c('conviteEm')) === undefined && confirmado ? { origem: 'manual' } : {}),
     ...evento("visto", "Leu o convite", t.visto, instante(c("vistoEm")) !== undefined ? "planilha · visto_em" : "planilha · Próxima ação"),
     ...evento("respondeu", "Respondeu no WhatsApp", t.respondeu, instante(c("respondeuEm")) !== undefined ? "planilha · respondeu_em" : "planilha · Próxima ação"),

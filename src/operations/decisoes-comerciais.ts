@@ -2,6 +2,7 @@ import type { CrmLead } from './types'
 
 export const PREFIXO_CLASSIFICACAO = '[Classificação revisada pelo operador]\n'
 export const PREFIXO_CONVITE = '[Convite enviado confirmado pelo operador]\n'
+export const PREFIXO_CONVITE_TIME = '[Convite enviado confirmado pela integração do time]\n'
 export type RevisaoClassificacao = { base: string; decisao: 'reabrir' | 'manter'; motivo: string }
 export type ConviteConfirmado = { enviadoEm: string; mensagem: string }
 
@@ -32,6 +33,7 @@ export function ultimoConviteConfirmado(eventos: CrmLead['eventos']): ConviteCon
   for (const evento of eventos) {
     if (evento.origem !== 'manual' || evento.tipo !== 'nota') continue
     const r = lerDecisao<ConviteConfirmado>(evento.texto, PREFIXO_CONVITE)
+      ?? lerDecisao<ConviteConfirmado>(evento.texto, PREFIXO_CONVITE_TIME)
     if (!r || typeof r.mensagem !== 'string' || !r.mensagem.trim() || !Number.isFinite(Date.parse(r.enviadoEm))) continue
     if (!ultimo || Date.parse(r.enviadoEm) > Date.parse(ultimo.enviadoEm)) ultimo = r
   }

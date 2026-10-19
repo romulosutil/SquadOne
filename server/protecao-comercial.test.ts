@@ -29,6 +29,15 @@ describe('contexto comercial protege oportunidade e muda a próxima ação', () 
     assert.equal(esperaOCopiloto(fila[0]), false)
     for (const campo of ['anota', 'link', 'rascunho', 'copiloto']) assert.equal(campo in fila[0], false)
   })
+  it('segundos de diferença no registro da mesma resposta não criam conversa nova', () => {
+    const l = lead({
+      conversa: undefined,
+      resposta: { tipo: 'negativa', trecho: 'Sem interesse', em: '2026-10-14T16:49:18Z' },
+      marcos: { respondeu: '2026-10-14T16:49:20Z' },
+    })
+    assert.equal(revisaoComercialDoLead(l, agora), undefined)
+    assert.match(revisaoComercialDoLead({ ...l, marcos: { respondeu: '2026-10-14T16:51:20Z' } }, agora)!, /conversa continuou/)
+  })
   it('encerramento atual libera; resposta ou proposta posterior e desfazer voltam a proteger', () => {
     assert.equal(encerramentoAtual(lead({ eventos: [final] })), true)
     assert.equal(protecaoDaDemo(lead({ eventos: [final] })), undefined)
