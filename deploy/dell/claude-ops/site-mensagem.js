@@ -43,7 +43,14 @@
 // - preco legivel: "R$ 690 uma vez e R$ 39 por mes" (antes "R$ 690 e R$ 39 por mes", que lia
 //   como dois valores do mesmo mes);
 // - a saida facil igual em todas: "Se nao for o momento, e so dizer que eu apago."; uma pergunta so.
-const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google: nota {NOTA} em {AVALIACOES} avaliações. Só que quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e {PONTOS} o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? É sem compromisso.'];
+// 19/10/2026 (pedido do Romulo: "humanize mais a mensagem que os agentes enviam"; o time comercial
+// manda este mesmo texto). A A fica como ele ditou: e o controle (24% de resposta em 14/10). A B e a
+// C ficaram mais soltas, como alguem escreveria a mao: sem "por conta propria", sem o argumento de
+// venda ("acaba indo para quem tem") e fechando com "Quer que eu te mande...? Sem compromisso.".
+// "Site de exemplo" no lugar de "demonstracao de site" so na B: e o que o dono entende de primeira.
+// A contagem do A/B dos pares com B ou C recomeca nesta data (TEXTO_DESDE em src/operations/ab-mensagem.ts):
+// o envio de antes leva a letra com o texto antigo e nao entra na comparacao.
+const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google, nota {NOTA} com {AVALIACOES} avaliações, muito bom! Só senti falta de um site de vocês, então montei um de exemplo com as fotos e as avaliações que já estão lá. Quer que eu te mande o link? Sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como {O_A} {NOME} aparece no Google e anotei numa página o que já está bom e {PONTOS} o cliente ir para outro lugar. Quer que eu te mande? Sem compromisso.'];
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
 const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google and, on my own initiative, put together a demo website for you. Can I send you the link so you can take a look? No strings attached.';

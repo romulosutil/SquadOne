@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import vm from "node:vm";
+import { conferirMensagem } from "./gate-de-envio.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, artigoDe, followupDe, reenvioDoRoboDe, segundaDe, type LeadDaMensagem } from "./site-mensagem.ts";
 
 // A fonte é o JS que o n8n usa: roda ele aqui, numa caixa sem nada, e compara.
@@ -170,11 +171,11 @@ describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
     const pidB = pids.find((p) => doN8n.varianteDe(p, false, { nota: 5, avaliacoes: 1234 }).letra === "B")!;
     const b = doN8n.varianteDe(pidB, false, { nota: 5, avaliacoes: 1234 });
     assert.equal(doN8n.preencher(b.molde, "Clínica Bem Estar", "https://x", ""),
-      "Oi, tudo bem? Aqui é o Rômulo. Vi a Clínica Bem Estar no Google: nota 5,0 em 1.234 avaliações. Só que quem pesquisa " +
-      "não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos " +
-      "e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.");
+      "Oi, tudo bem? Aqui é o Rômulo. Vi a Clínica Bem Estar no Google, nota 5,0 com 1.234 avaliações, muito bom! Só senti " +
+      "falta de um site de vocês, então montei um de exemplo com as fotos e as avaliações que já estão lá. Quer que eu te mande " +
+      "o link? Sem compromisso.");
     const b2 = doN8n.varianteDe(pidB, false, { nota: "4.8", avaliacoes: "40" });
-    assert.match(doN8n.preencher(b2.molde, "Escritório Silva", "https://x", ""), /Vi o Escritório Silva no Google: nota 4,8 em 40 avaliações\./);
+    assert.match(doN8n.preencher(b2.molde, "Escritório Silva", "https://x", ""), /Vi o Escritório Silva no Google, nota 4,8 com 40 avaliações, muito bom!/);
     const pidA = pids.find((p) => doN8n.varianteDe(p, false, { nota: 5, avaliacoes: 40 }).letra === "A")!;
     assert.match(doN8n.preencher(doN8n.varianteDe(pidA, false, { nota: 5, avaliacoes: 40 }).molde, "Clínica X", "https://x", ""),
       /^Oi, tudo bem\? Aqui é o Rômulo\. Encontrei vocês no Google/);
@@ -192,15 +193,23 @@ describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
     for (const x of "ABC") assert.ok(todas.filter((l) => l === x).length > 45, x);
   });
 
+  it("A, B e C passam no gate de envio do primeiro contato (o Balcão e o time comercial conferem por ele)", () => {
+    const lead = { nota: 4.9, avaliacoes: 34, raio_x_url: "https://demo-x.vercel.app/raio-x", raio_x_pontos: 2 };
+    for (const letra of "ABC") {
+      const pid = pids.find((p) => doN8n.varianteDe(p, false, lead).letra === letra)!;
+      const texto = doN8n.preencher(doN8n.varianteDe(pid, false, lead).molde, "Clínica Bem Estar", "https://demo-x.vercel.app", "");
+      assert.deepEqual(conferirMensagem(texto, { modo: "bloquear", tipo: "primeiro", nome: "Clínica Bem Estar" }).problemas, [], letra);
+    }
+  });
+
   it("o texto da C diz quantos pontos o Raio-X mostra, sem o link", () => {
     const lead = (n: number) => ({ raio_x_url: "https://demo-x.vercel.app/raio-x", raio_x_pontos: n });
     const pidC = pids.find((p) => doN8n.varianteDe(p, false, lead(1)).letra === "C")!;
     assert.equal(doN8n.preencher(doN8n.varianteDe(pidC, false, lead(1)).molde, "Clínica Bem Estar", "https://demo-x.vercel.app", ""),
-      "Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como a Clínica Bem Estar aparece para quem procura no Google: " +
-      "o que já está bom e 1 ponto que faz o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? " +
-      "É sem compromisso.");
+      "Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como a Clínica Bem Estar aparece no Google e anotei numa página " +
+      "o que já está bom e 1 ponto que faz o cliente ir para outro lugar. Quer que eu te mande? Sem compromisso.");
     const dois = doN8n.preencher(doN8n.varianteDe(pidC, false, lead(2)).molde, "Escritório Lima", "https://demo-x.vercel.app", "");
-    assert.match(dois, /como o Escritório Lima aparece .* e 2 pontos que fazem o cliente ir para o concorrente\./);
+    assert.match(dois, /como o Escritório Lima aparece .* e 2 pontos que fazem o cliente ir para outro lugar\./);
     assert.doesNotMatch(dois, /https?:|\{/);
   });
 

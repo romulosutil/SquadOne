@@ -253,7 +253,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-b',
         titulo: 'Primeira mensagem · B · observação concreta',
         texto:
-          'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google: nota [nota] em [avaliações] avaliações. Só que quem pesquisa não encontra um site de vocês e acaba indo para quem tem. Montei, por conta própria, uma demonstração de site com as fotos e as avaliações que vocês já têm. Posso te mandar o link para dar uma olhada? É sem compromisso.',
+          'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google, nota [nota] com [avaliações] avaliações, muito bom! Só senti falta de um site de vocês, então montei um de exemplo com as fotos e as avaliações que já estão lá. Quer que eu te mande o link? Sem compromisso.',
         dica: 'Troca o "encontrei vocês" genérico por um fato que o dono confere na hora. Sem nota boa (abaixo de 4,3 ou menos de 15 avaliações), sai a A.',
         produtos: SITE,
       },
@@ -261,7 +261,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'primeira-c',
         titulo: 'Primeira mensagem · C · Raio-X',
         texto:
-          'Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como {O_A} {NOME} aparece para quem procura no Google: o que já está bom e [N] pontos que fazem o cliente ir para o concorrente. É uma página só. Posso te mandar o link para dar uma olhada? É sem compromisso.',
+          'Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como {O_A} {NOME} aparece no Google e anotei numa página o que já está bom e [N] pontos que fazem o cliente ir para outro lugar. Quer que eu te mande? Sem compromisso.',
         dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na 2ª mensagem.',
         produtos: SITE,
       },

@@ -18,7 +18,9 @@
  *   ("faltam N"); a taxa, o p e o veredito nem são calculados;
  * - "ganhou" só com DIFERENCA_MINIMA_PP pontos E Fisher exato bilateral p < P_MAXIMO; o resto é
  *   "não provado". Cada nicho tem a letra equilibrada pelo Balcão, então o total do par não é
- *   confundido pelo nicho; a quebra por nicho é para ver, não para declarar ganhador.
+ *   confundido pelo nicho; a quebra por nicho é para ver, não para declarar ganhador;
+ * - texto trocado recomeça a contagem: o par só conta envios a partir do TEXTO_DESDE mais recente
+ *   das duas letras (antes dele, a letra levava outro texto, e misturar os dois mede nada).
  */
 import { DIFERENCA_MINIMA_PP, P_MAXIMO, fisherExato } from './ab-video.ts'
 import { chaveDe, resultados, type LinhaDeResultado } from './resultados.ts'
@@ -28,6 +30,18 @@ export const ENVIOS_MINIMOS_POR_BRACO = 30
 export type Letra = 'A' | 'B' | 'C'
 export type Par = 'AB' | 'AC' | 'BC'
 export const PARES: readonly Par[] = ['AB', 'AC', 'BC']
+
+/**
+ * Desde quando cada letra tem o texto de hoje em site-mensagem.js. 19/10/2026: B e C ficaram mais
+ * soltas (pedido do Rômulo); a A não mudou. Vale a meia-noite de SP do dia SEGUINTE à troca: o
+ * Balcão remonta o wa_link dos `pronto` de hora em hora, e até lá ainda podia sair o texto velho.
+ */
+export const TEXTO_DESDE: Readonly<Partial<Record<Letra, string>>> = {
+  B: '2026-10-20T03:00:00.000Z',
+  C: '2026-10-20T03:00:00.000Z',
+}
+const desdeDoPar = (x: Letra, y: Letra) =>
+  Math.max(Date.parse(TEXTO_DESDE[x] ?? '') || 0, Date.parse(TEXTO_DESDE[y] ?? '') || 0)
 
 /** `linha` (respostas, interesse...) só existe na leitura: antes dos 30 por braço, só os envios. */
 export interface BracoDoPar {
@@ -80,9 +94,11 @@ export function ganhadorDoPar(x: Letra, y: Letra, diferencaPp: number, p: number
 
 function lerPar(par: Par, sorteados: CrmLead[], agora: number): LeituraDoPar {
   const [x, y] = par.split('') as [Letra, Letra]
+  const desde = desdeDoPar(x, y)
   const doPar = sorteados.filter(l => {
     const elegiveis = l.abordagem?.elegiveis ?? ''
     return elegiveis.includes(x) && elegiveis.includes(y) && (l.abordagem?.mensagem === x || l.abordagem?.mensagem === y)
+      && enviadoEm(l) >= desde
   })
   const nx = doPar.filter(l => l.abordagem?.mensagem === x).length
   const ny = doPar.length - nx

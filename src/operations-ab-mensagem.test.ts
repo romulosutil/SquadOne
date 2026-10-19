@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { ENVIOS_MINIMOS_POR_BRACO, ganhadorDoPar, leituraDoAbMensagem, textoDoFaltam } from './operations/ab-mensagem.ts'
+import { ENVIOS_MINIMOS_POR_BRACO, TEXTO_DESDE, ganhadorDoPar, leituraDoAbMensagem, textoDoFaltam } from './operations/ab-mensagem.ts'
 import { fisherExato } from './operations/ab-video.ts'
 import type { CrmLead } from './operations/types.ts'
 
@@ -72,6 +72,17 @@ describe('A/B estratificado da 1ª mensagem', () => {
     const ab = leituraDoAbMensagem(leads, AGORA).pares[0]
     assert.equal(ab.x.linha?.responderam, 0)
     assert.equal(ab.numeros!.diferencaPp, 0)
+  })
+
+  it('texto trocado recomeça a contagem: o par com B ou C só conta envios desde o TEXTO_DESDE', () => {
+    // AGORA é 01/11; a B e a C mudaram de texto (vale desde 20/10). Há 20 dias = 12/10: texto velho.
+    assert.ok(Date.parse(TEXTO_DESDE.B!) > AGORA - 20 * DIA && Date.parse(TEXTO_DESDE.B!) < AGORA - 10 * DIA)
+    const velhos = [lead('A', 'AB', { envio: 20 }), lead('B', 'AB', { envio: 20, responde: 'gente' }), lead('C', 'AC', { envio: 20 })]
+    const l = leituraDoAbMensagem([...velhos, ...varios(2, 'A', 'AB'), ...varios(3, 'B', 'AB')], AGORA)
+    const ab = l.pares.find(p => p.par === 'AB')!
+    assert.deepEqual([ab.x.enviados, ab.y.enviados], [2, 3], 'nem a A de antes entra: o par compara o mesmo período')
+    assert.equal(l.pares.find(p => p.par === 'AC'), undefined)
+    assert.equal(l.letraFora, 0)
   })
 
   it('só compara entre quem podia receber as duas letras', () => {

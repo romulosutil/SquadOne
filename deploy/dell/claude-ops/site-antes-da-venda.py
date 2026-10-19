@@ -605,7 +605,7 @@ def testar() -> int:
         def test_o_texto_casa_com_a_letra(self):
             inicio = {"A": "Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google",
                       "B": "Oi, tudo bem? Aqui é o Rômulo. Vi a Padaria ",
-                      "C": "Oi, tudo bem? Aqui é o Rômulo. Fiz, por conta própria, um raio-x de como a Padaria "}
+                      "C": "Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como a Padaria "}
             # O Raio-X vem do recibo (publicado.json), a nota vem da linha da planilha.
             por = cruzar(planilha=[linha(f"pid-{i}", "pronto", **self.NOTA_BOA) for i in range(40)],
                          recibos=[(f"lead-{i}", {**recibo(f"pid-{i}", f"lead-{i}"), **self.RAIO_X}) for i in range(40)], marcas=[])
@@ -617,9 +617,9 @@ def testar() -> int:
                 texto, letra = unquote(itens[0]["wa_me"]).split("?text=")[1], itens[0]["mensagem_variante"]
                 self.assertTrue(texto.startswith(inicio[letra]), (letra, texto))
                 if letra == "B":
-                    self.assertIn("no Google: nota 4,9 em 34 avaliações. Só que quem pesquisa", texto)
+                    self.assertIn("no Google, nota 4,9 com 34 avaliações, muito bom!", texto)
                 if letra == "C":
-                    self.assertIn("o que já está bom e 2 pontos que fazem o cliente ir para o concorrente", texto)
+                    self.assertIn("o que já está bom e 2 pontos que fazem o cliente ir para outro lugar", texto)
                     self.assertNotIn("https://", texto)  # o link do raio-x não vai na 1ª
                 self.assertNotIn("{", texto)
                 self.assertEqual(itens[0]["raio_x_url"], "https://demo-x.vercel.app/raio-x")
@@ -811,7 +811,7 @@ def testar() -> int:
                 item = itens[0]
                 self.assertEqual((item["status"], item["site_url"], item["raio_x_url"]), ("pronto", "", self.AVULSO["raio_x_url"]))
                 texto = unquote(item["wa_me"]).split("?text=")[1]
-                self.assertIn("Fiz, por conta própria, um raio-x" if item["mensagem_variante"] == "C" else "montei, por conta própria", texto)
+                self.assertIn("anotei numa página" if item["mensagem_variante"] == "C" else "montei, por conta própria", texto)
 
         def test_lead_sem_recibo_vira_pronto_com_a(self):
             # 15/10/2026: na fila do gerador (ou o gerador falhou), sem recibo nenhum: sai a A, sem demo.
