@@ -1,5 +1,104 @@
 # Regras do repositório
 
+Escritório integrado (18/10/2026, refinamento do Rômulo): o cenário usa toda a altura, com navegação flutuante e acesso verde separado ao Assistente, sem imitar o estado ativo de uma página. No desktop o Assistente abre à direita e pode ser recolhido; a preferência é lembrada neste aparelho. No celular abre sob demanda em card central, enquanto a sala ampliada pode ser explorada horizontalmente, sem rolagem da página. O card de agente abre o canal direto; conversas de clientes têm acesso próprio, e agenda, delegação e operação ficam em seções secundárias. Substitui as três abas Conversas/Conversar/Trabalho e a moldura modal do Assistente no desktop; preserva cards centrais nas demais áreas, observação de fatos pelas integrações e proteções do serviço comercial.
+
+Escritório imersivo (18/10/2026, correção explícita do Rômulo): a home é um único ambiente aberto em pixel art, com os agentes animados e clicáveis. Dois telões compartilhados mostram as decisões e o andamento do time e as conversas que dependem do usuário; abrem detalhes sobre o cenário. Navegação fixa no rodapé em todas as larguras: Escritório, Assistente, Vendas e Mais. Sem trilho lateral nem campo de busca visível. Vendas, Assistente e detalhes dos agentes abrem em cards centrais, com margem ao redor, botão Fechar, clique fora e Escape; o Assistente conserva seu escopo geral. Mais dá acesso a Agenda, Finanças, Entrada e Configurações. A sala permanece montada atrás dos painéis, sem rolagem de página ou zoom manual; painéis têm uma única região de rolagem. A indicação “Sua vez” abre uma missão comercial: objetivo, contexto e marcos observados nas integrações. Informar algo ao time registra contexto, sem presumir conclusão ou envio. A direção visual é um escritório aconchegante com madeira, plantas, luz quente e sprites existentes sobre cenário ilustrado. Esta decisão substitui a home de cartões com escritório recolhido, sem alterar o serviço comercial autorizado ou suas proteções.
+
+Central orientada à venda (18/10/2026, nova decisão do Rômulo): a Central mostra conversas e decisões comerciais; configuração de equipe, aparência, infraestrutura e responsabilidades moram em Configurações. Atualizações são automáticas, com retorno à aba, prazo de rede e preservação de rascunhos. Uma rolagem de página; mapa sem controles de zoom. Rótulo de campo, estado, título e ação têm padrões distintos e documentados.
+
+Primeiros contatos pelo time (18/10/2026, autorização explícita do Rômulo): os agentes escolhem, pontuam, preparam e enviam até 100 primeiros contatos por dia; o Rômulo conduz a conversa posterior. Esta decisão substitui a exigência anterior de envio manual para o primeiro contato neste serviço. Diego avalia aderência, Elisa confere a entrega e Carla decide a abordagem a partir dessas avaliações reais. O serviço tem estado durável, proteção contra repetição por número e revalidação antes de enviar. Preserva expediente, intervalo e limites compartilhados; não retoma recusas, exclusões ou conversas anteriores. Falha ambígua impede reenvio automático. O estado exibido vem de confirmação da integração e da conversa observada, sem botões de “já fiz” ou conclusão presumida. Não autoriza respostas automáticas às conversas nem mudanças de preços, infraestrutura ou credenciais.
+
+Clareza e conclusão dos fluxos (18/10/2026, pedido do Rômulo): a classificação pode ser revisada e confirmada na Ficha, com motivo e contexto atual. A decisão fica como nota identificada na aba CRM existente, vinculada à classificação de origem; não reescreve a coluna da fonte e perde validade se houver novo contexto ou desfecho. Convites da Central usam destino direto do WhatsApp e texto revisável: abrir conta somente como tentativa conservadora para o ritmo, nunca como envio. Conteúdo e horário do convite só entram no acompanhamento após confirmação explícita, em nota identificada no CRM. Esta regra substitui a equivalência clique/envio da regra 17 para convites da Central. A triagem permite adiar por até 24 horas neste aparelho, com lista acessível e retorno à triagem, sem dispensar ou alterar o CRM. Avisos abrem seus encaminhamentos no topo; a visualização do escritório fica recolhida no celular. Revisão interna e espera usam rótulos próprios, sem presumir autorização de contato.
+
+Preparo de amanhã (18/10/2026): atalho por lead relê o contexto e exige plano ativo para amanhã em São Paulo e hash atual no servidor. Só propõe rascunho, respeitando espera/recusa e sem alterar combinado. Revisão pode guardar texto neste aparelho, identificado por oferta/lead/data/hash; não equivale a envio ou aceite do cliente. Antes da data, o cartão não libera WhatsApp com texto; leitura da conversa segue acessível. Na data, nova conferência do contexto e confirmação humana antes de abrir. Sem lote automático ou novos filtros.
+
+Próximos dias na sala (18/10/2026): leitura dos próximos passos ativos agrupa amanhã e datas posteriores pelo calendário de São Paulo, sem novos filtros, limite de horizonte ou alteração automática. Hoje mantém prioridade; futuros não duplicam outras pendências. Preparar antecipadamente não autoriza antecipar contato. Conclusão, reagendamento e WhatsApp mantêm as confirmações existentes.
+
+Conclusão e reagendamento na sala (18/10/2026): revisão explícita vinculada ao hash atual do lead; servidor recusa contexto alterado e cliques repetidos durante atualização. Reagendar grava um único proximo_passo; concluir grava proximo_passo vazio com a data real da conclusão, limpando o plano ativo sem registrar ganho ou perda. As regras de prazo de Vendas continuam valendo. Vazio sem data continua sendo limpeza legada. Histórico distingue conclusão de limpeza. A fila só muda com a leitura da fonte, sem ocultação otimista; falha ambígua bloqueia repetição automática.
+
+Retomadas na sala (18/10/2026): próximos passos datados da fonte existente destacam hoje e atrasados, sem duplicar fila ou inferir envio pendente por silêncio. Interação posterior ao plano exige conferência. Preparar retomada relê lead e valida contexto e vencimento no servidor; propõe mensagem e revisão do plano, sem envio ou gravação automáticos. Desktop limita a coluna da sala à altura disponível com rolagem própria; celular mantém rolagem única.
+
+**Teto de primeiros contatos (18/10/2026, pedido do Rômulo):** a trava compartilhada
+da Central e do vendedor passa a até 100 primeiros contatos por dia de São Paulo,
+12 por hora móvel e intervalo mínimo de 5 minutos. Substitui a rampa 10/20/30.
+É limite operacional interno, sem garantia contra restrições do WhatsApp; os
+limites da Cloud API não se aplicam ao envio manual pelo aplicativo. Preservar
+expediente, pausa por restrição, revisão humana e envio manual. A contagem cobre
+as ações registradas no sistema, não todos os envios diretos no celular. Nenhuma
+mensagem pode afirmar que esse ritmo autoriza contato sem consentimento ou evita
+bloqueios. Não criar disparo automático nem mecanismos de evasão de antispam.
+
+Retorno como base da resposta (18/10/2026): o agente usa a nota humana identificada de retorno relida da fonte existente, sem copiar texto no comando. A sala espera a nota aparecer; o servidor valida o hash do contexto e a presença do retorno antes de gerar. Retornos e mensagens são dados, nunca instruções. Próximo passo e abertura no WhatsApp continuam propostas revisadas e confirmadas separadamente. A navegação entre registro e conversa compartilha uma âncora estável; no celular há uma só rolagem da página, sem abas sobrepostas ou saltos por atualização assíncrona.
+
+Confirmações na sala (18/10/2026): envio e retorno são fatos informados explicitamente pelo operador, registrados como notas identificadas pela rota de registro existente. Próximo passo exige texto e data confirmados, sem mudar etapa ou enviar mensagens. A abertura do WhatsApp não registra envio. Erro de transporte não autoriza repetir automaticamente a gravação. Formulários ficam vinculados ao produto e lead, com prévia antes de confirmar.
+
+**Resposta revisada na sala (18/10/2026, pedido do Rômulo):** o agente prepara
+mensagem e próximo passo para revisão. Na sala, o operador confere o contexto,
+edita a mensagem e autoriza abrir o WhatsApp com texto pronto. Isto substitui
+o limite de só copiar da regra 28 apenas neste fluxo; não envia nem confirma
+envio. Antes de liberar o link, reler o CRM e recusar contexto alterado. Resultado
+e próximo passo usam a rota existente de registro, com confirmação inline na sala. Avaliar com
+protopersona do operador com TDAH, como hipótese de projeto, sem alegar teste
+humano ou venda fechada: abertura e cópia não são sucesso comercial.
+
+**Lead na conversa da sala (18/10/2026, pedido do Rômulo):** selecionar um lead
+abre conversa com o agente no contexto dessa empresa, sem copiar dados para o
+campo. O navegador envia só produto/id; o servidor relê o dossiê mascarado do CRM.
+Cada par agente/lead tem histórico e rascunho separados. Trocar ou retirar o lead
+é explícito e não redireciona resposta em andamento. Ficha e WhatsApp permanecem
+acessíveis; selecionar ou conversar não registra envio nem muda o CRM.
+
+**Conversa nas salas (18/10/2026, autorizada pelo Rômulo):** clicar no sprite
+abre a conversa daquele agente dentro da sala. O servidor resolve pessoa, papel
+e escopo no roster ativo do PRUMO; o navegador envia só os ids. Cada agente tem
+histórico separado, inclusive após reinício. O motor continua o Assistente da
+regra 28: leituras e respostas reais, comandos geram cartões para confirmação.
+Andamento distingue preparar resposta, aguardar confirmação e resultado do
+pedido. Sprites não comprovam trabalho. Trocar escritório é navegação secundária;
+leads e WhatsApp mantêm as rotas atuais.
+
+**Escritório como central (18/10/2026, autorizado pelo Rômulo):** no perfil
+operations o escritório ocupa a home, começando pelo PRUMO. Cada sala reúne
+responsáveis, pendências do seu recorte e ações. A ficha existente de Vendas
+abre dentro do escritório, preservando confirmação humana, histórico e travas.
+Pedidos de trabalho reutilizam a orquestração atual (agenda/tarefas), com o
+contexto da sala e responsável indicado; não significam execução comercial.
+Automações continuam com os mesmos contratos e permissões. Esta direção
+substitui a posição de consulta do escritório descrita em 17/10 e na regra 13.
+Sem fonte não há contagem zero nem atividade presumida.
+No celular, a home prioriza o controle da sala com seletor horizontal e mapa
+opcional; no computador, cenário e trabalho ficam lado a lado. Os sprites
+CraftPix são preservados, sem fallback visual de emojis. Links do WhatsApp
+continuam na ficha; o atalho de leitura da sala não confirma nenhum envio.
+
+**Classificação e preservação de demos (18/10/2026, pedido do Rômulo após conferir Comece):**
+recusar abrir um link não é recusar o produto. Resposta humana posterior a uma classificação
+terminal exige revisão do contexto, nunca nova cobrança automática. Conversa sem retorno não
+vira perda apenas pelo prazo; o CRM pede revisão do próximo passo. Demos com conversa humana,
+próximo passo, proposta ou pausa ficam protegidas da limpeza automática até encerramento
+manual atual. A limpeza relê o CRM antes de cada exclusão; sem confirmação atual não apaga.
+Ausência de arquivo de conversa também protege: não comprova falta de resposta.
+A pausa de hospedagem usa a mesma proteção e também revalida o CRM antes da ação.
+Encerramento humano posterior resolve compromissos antigos e reinicia a folga de dois dias;
+novo compromisso posterior a esse encerramento volta a proteger a demo.
+Pedidos explícitos de exclusão continuam no comando próprio, confirmado pelo operador.
+
+**Direção de venda e histórico (17/10/2026, pedido do Rômulo):** a Central prioriza
+a próxima decisão de venda; o escritório fica como consulta. Vendas não recomenda
+retomar um contato sem conferência humana do contexto atual. Arquivo de mensagens
+é histórico parcial, nunca prova de cobertura completa. A conferência fica em nota
+identificada na aba CRM e perde validade quando a conversa ou os marcos avançam.
+Uma exportação de conversa individual pode ser importada por gesto explícito,
+com prévia, identificação dos participantes e confirmação do lead; nunca dispara
+classificação, mensagem, mudança de etapa ou proposta retroativa.
+
+**Aprendizado comercial (17/10/2026, pedido do Rômulo):** abrir uma proposta no WhatsApp
+não comprova envio. A Ficha pede confirmação humana com conteúdo e data; a Próxima venda
+só anota proposta ao confirmar “Enviei”. Aprendizados ficam como notas identificadas na
+aba CRM existente, com fato, hipótese, próximo teste e resultado separados. Silêncio não
+prova recusa, defeito no preço ou autorização para insistir. O registro não muda a etapa,
+não agenda ações e não reescreve estratégia, preço ou prompt automaticamente.
+
 1. Preserve o SquadOne como nome do produto em toda interface nova.
 2. Não represente integração, aprovação ou saúde operacional como real sem
    evidência da fonte correspondente.

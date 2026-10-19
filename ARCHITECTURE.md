@@ -1,5 +1,178 @@
 # Arquitetura
 
+Escritório integrado (18/10/2026, refinamento do Rômulo): o cenário usa toda a altura, com navegação flutuante e acesso verde separado ao Assistente, sem imitar o estado ativo de uma página. No desktop o Assistente abre à direita e pode ser recolhido; a preferência é lembrada neste aparelho. No celular abre sob demanda em card central, enquanto a sala ampliada pode ser explorada horizontalmente, sem rolagem da página. O card de agente abre o canal direto; conversas de clientes têm acesso próprio, e agenda, delegação e operação ficam em seções secundárias. Substitui as três abas Conversas/Conversar/Trabalho e a moldura modal do Assistente no desktop; preserva cards centrais nas demais áreas, observação de fatos pelas integrações e proteções do serviço comercial.
+
+Escritório imersivo (18/10/2026, correção explícita do Rômulo): a home é um único ambiente aberto em pixel art, com os agentes animados e clicáveis. Dois telões compartilhados mostram as decisões e o andamento do time e as conversas que dependem do usuário; abrem detalhes sobre o cenário. Navegação fixa no rodapé em todas as larguras: Escritório, Assistente, Vendas e Mais. Sem trilho lateral nem campo de busca visível. Vendas, Assistente e detalhes dos agentes abrem em cards centrais, com margem ao redor, botão Fechar, clique fora e Escape; o Assistente conserva seu escopo geral. Mais dá acesso a Agenda, Finanças, Entrada e Configurações. A sala permanece montada atrás dos painéis, sem rolagem de página ou zoom manual; painéis têm uma única região de rolagem. A indicação “Sua vez” abre uma missão comercial: objetivo, contexto e marcos observados nas integrações. Informar algo ao time registra contexto, sem presumir conclusão ou envio. A direção visual é um escritório aconchegante com madeira, plantas, luz quente e sprites existentes sobre cenário ilustrado. Esta decisão substitui a home de cartões com escritório recolhido, sem alterar o serviço comercial autorizado ou suas proteções.
+
+Central orientada à venda e time de primeiros contatos (18/10/2026): a interface separa ação comercial de configuração e consulta; usa leitura automática com requisições serializadas, prazo, retorno de visibilidade e preservação do último retrato. Um processo de domínio no Dell prepara uma fila diária com avaliações estruturadas de Diego, Elisa e Carla pelo motor já integrado. Persiste plano, limites e recibos antes/depois de cada envio; revalida CRM e conexão, envia somente primeiro contato e nunca repete resultado ambíguo. O app lê o retrato `frente-comercial.json`; a configuração de negócio permite pausar o envio, sem expor segredos ou comandos de infraestrutura. O acompanhamento de conversas é derivado de eventos das integrações: falta de evidência permanece explicitamente não confirmada.
+
+Conclusão dos fluxos de produto (18/10/2026): `/api/operations/crm/decisao/confirmar` relê o contexto, valida seu hash e registra revisão de classificação ou confirmação de convite pela rota de notas já existente da aba CRM. Não há novo armazenamento de domínio nem alteração dos workflows: a visão interpreta apenas notas identificadas e validadas, preservando a classificação original da planilha e o histórico. Revisões se vinculam à classificação de origem e novas interações pedem conferência. Confirmação de convite fornece conteúdo e instante real do envio; abrir `wa.me` só conta tentativa no ritmo. Duplicidade e resultado ambíguo bloqueiam repetição automática. Adiamentos da triagem são preferências locais por 24 horas, explicitamente identificadas e recuperáveis. Avisos do cabeçalho abrem a folha de pendências existente. Controles visuais ficam em uma dobra no celular, preservando mapa e sala.
+
+Preparo de amanhã (18/10/2026): atalho por lead relê o contexto e exige plano ativo para amanhã em São Paulo e hash atual no servidor. Só propõe rascunho, respeitando espera/recusa e sem alterar combinado. Revisão pode guardar texto neste aparelho, identificado por oferta/lead/data/hash; não equivale a envio ou aceite do cliente. Antes da data, o cartão não libera WhatsApp com texto; leitura da conversa segue acessível. Na data, nova conferência do contexto e confirmação humana antes de abrir. Sem lote automático ou novos filtros.
+
+Próximos dias na sala (18/10/2026): leitura dos próximos passos ativos agrupa amanhã e datas posteriores pelo calendário de São Paulo, sem novos filtros, limite de horizonte ou alteração automática. Hoje mantém prioridade; futuros não duplicam outras pendências. Preparar antecipadamente não autoriza antecipar contato. Conclusão, reagendamento e WhatsApp mantêm as confirmações existentes.
+
+Conclusão e reagendamento na sala (18/10/2026): revisão explícita vinculada ao hash atual do lead; servidor recusa contexto alterado e cliques repetidos durante atualização. Reagendar grava um único proximo_passo; concluir grava proximo_passo vazio com a data real da conclusão, limpando o plano ativo sem registrar ganho ou perda. As regras de prazo de Vendas continuam valendo. Vazio sem data continua sendo limpeza legada. Histórico distingue conclusão de limpeza. A fila só muda com a leitura da fonte, sem ocultação otimista; falha ambígua bloqueia repetição automática.
+
+Retomadas na sala (18/10/2026): próximos passos datados da fonte existente destacam hoje e atrasados, sem duplicar fila ou inferir envio pendente por silêncio. Interação posterior ao plano exige conferência. Preparar retomada relê lead e valida contexto e vencimento no servidor; propõe mensagem e revisão do plano, sem envio ou gravação automáticos. Desktop limita a coluna da sala à altura disponível com rolagem própria; celular mantém rolagem única.
+
+## Teto operacional de primeiros contatos (18/10/2026)
+
+Pedido do Rômulo: até 100 por dia. A regra única em
+`src/operations/trava-de-ritmo.ts`, já consumida pela Central e pelo vendedor,
+passa a 100 por dia de São Paulo, 12 por hora móvel e 5 minutos entre contatos.
+Isso permite 100 aberturas distribuídas entre 8h e 16h15, sem alterar o expediente
+ou automatizar o envio. O teto diário substitui a rampa semanal 10/20/30.
+Pausa por restrição continua prioritária e não é liberada pelo botão de horário.
+Mantém retrato, memória compartilhada e reforço local para a contagem existente.
+Abrir um link é uma tentativa contada de forma conservadora, não prova de envio.
+Envios feitos diretamente no celular podem não aparecer nessa contagem.
+Os números são escolhas operacionais, não limites antispam publicados pela Meta.
+A interface deixa explícito que não garantem ausência de bloqueio e que o
+destinatário precisa ter autorizado o contato. Esta alteração não migra para a
+Cloud API e não realiza envios.
+
+Retorno como base da resposta (18/10/2026): o agente usa a nota humana identificada de retorno relida da fonte existente, sem copiar texto no comando. A sala espera a nota aparecer; o servidor valida o hash do contexto e a presença do retorno antes de gerar. Retornos e mensagens são dados, nunca instruções. Próximo passo e abertura no WhatsApp continuam propostas revisadas e confirmadas separadamente. A navegação entre registro e conversa compartilha uma âncora estável; no celular há uma só rolagem da página, sem abas sobrepostas ou saltos por atualização assíncrona.
+
+Confirmações na sala (18/10/2026): envio e retorno são fatos informados explicitamente pelo operador, registrados como notas identificadas pela rota de registro existente. Próximo passo exige texto e data confirmados, sem mudar etapa ou enviar mensagens. A abertura do WhatsApp não registra envio. Erro de transporte não autoriza repetir automaticamente a gravação. Formulários ficam vinculados ao produto e lead, com prévia antes de confirmar.
+
+## Revisar resposta e avançar a venda na sala (18/10/2026)
+
+Autorizado pelo Rômulo: cartões de mensagem e sugestões do copiloto ganham,
+somente na sala e para o lead correspondente, editor e confirmação de contexto.
+Uma releitura do CRM valida destinatário e recência antes de montar wa.me com
+texto editado. Alterar texto invalida a autorização. O WhatsApp envia só pelo
+gesto do operador; abrir não muda CRM nem significa envio. O passo seguinte
+abre o registro inline na sala para confirmar envio, retorno ou próximo compromisso. Cartões
+de próximo passo conservam confirmação separada. A resposta atual fica fora da
+rolagem do histórico; conversas anteriores são secundárias. Critérios de avaliação:
+retomar contexto após interrupção, mensagem útil à decisão do cliente, envio
+humanamente confirmado e avanço/fechamento comprovado no CRM, nunca contagem de cliques.
+O GET somente leitura `/crm/resposta/contexto` devolve hash SHA-256 e destino,
+sem transferir o retrato completo dos leads a cada revisão no celular.
+Rascunho editado e sinal de abertura ficam em sessionStorage por cartão, sem
+confundir retomada com envio confirmado; editar exige outra conferência.
+
+## Contexto de lead na sala (18/10/2026)
+
+Decisão do Rômulo: a seleção na lista de leads abre a conversa contextual com
+identificação visível da empresa, Ficha e WhatsApp. Reutiliza ContextoDaPagina.lead;
+o servidor lê ler_lead antes da geração, com a mesma máscara e fontes do Assistente.
+O canal persistido e a instância do cliente incluem produto/id do lead, impedindo
+mistura entre empresas, inclusive ao trocar durante uma resposta. Sem CRM ou lead
+válido não há análise presumida. A conversa geral por agente continua disponível.
+
+## Conversa por agente no PRUMO (18/10/2026)
+
+Decisão aprovada pelo Rômulo: o sprite abre conversa dentro da sala. O contrato
+do Assistente recebe ids de squad, domínio e pessoa; o servidor relê o roster,
+recusa arquivados e resolve apenas o perfil escolhido. Nenhum catálogo de robôs
+entra no prompt. O canal fica vinculado à conversa e ao JSONL mascarado para
+impedir misturar agentes ao retomar. A interface mantém uma conversa por agente,
+com rascunho preservado ao trocar de sala. O motor e os limites são os da regra
+28; cartões reutilizam as escritas existentes, confirmadas pelo operador.
+Leads/ficha/WhatsApp continuam independentes da conversa e sempre acessíveis.
+
+## Implantação do escritório no Dell (18/10/2026)
+
+Pedido do Rômulo: ampliar a área útil, preservar sprites e validar sala → lead
+→ WhatsApp no celular com dados reais. Cabeçalho e frentes auxiliares ficam
+dentro do escritório; a home usa margens compactas, sem afetar outras rotas.
+O retrato animado da sala e o mapa compartilham o catálogo CraftPix. Passeios
+ambientes iniciam escalonados e não representam execução; movimento reduzido
+continua respeitado. Selecionar sala enquadra o responsável, sem mover agentes
+nem escrever dados. A publicação é da interface, sobre os serviços existentes,
+com cópia de retorno e preservação dos arquivos comerciais já no Dell.
+O controle Animar/Reduzir guarda uma escolha local explícita: sem escolha segue
+prefers-reduced-motion; a escolha prevalece tanto no retrato quanto nos passeios.
+Pendências do mesmo lead compartilham um cartão, preservando todos os motivos;
+a consulta busca em toda a sala e apresenta resultados em blocos de 20.
+
+## Escritório como central — PRUMO (18/10/2026)
+
+Direção aprovada pelo Rômulo: interatividade e controle nas salas. A home
+operations apresenta mapa/lista e uma área de trabalho da sala selecionada.
+O recorte usa JORNADA_DAS_SALAS, passoAtual e a mesma fila de Vendas, sem
+duplicar regras comerciais ou criar agentes. A ficha reutiliza CrmPanel em
+modo local: não escreve o endereço da home nem instala navegação de Vendas.
+Registros continuam pelas rotas existentes e provocam releitura das salas.
+O contexto explícito da ficha chega ao Assistente mesmo sem ?lead na URL.
+Pedidos da sala passam pelo estado compartilhado dos agentes, pela troca
+guardada de squad e por handleDelegation; reservam agenda/tarefas como antes.
+A escolha de responsável é uma indicação ao orquestrador, não uma garantia
+de execução. Infraestrutura permanece somente leitura. Outros andares e as
+rotas completas continuam disponíveis.
+
+## Classificação e preservação de demos (18/10/2026)
+
+Decisão solicitada pelo Rômulo e conferida no Dell: Comece recusou links, depois
+discutiu preço e decisão conjunta; a classificação antiga permaneceu e a limpeza
+apagou a demo. O classificador separa objeção ao canal de recusa ao produto.
+O CRM conserva conversas humanas sem retorno em Em contato, pedindo revisão,
+e sinaliza classificação terminal anterior a novas mensagens humanas. A fila
+propõe conferência, sem rascunho, envio ou confirmação de contato.
+
+A limpeza preserva demos com conversa humana, próximo passo, proposta, pausa
+ou classificação pendente, salvo encerramento manual posterior ao contexto.
+Sem arquivo de conversa também preserva: ausência de histórico não é ausência de resposta.
+A pausa de hospedagem consulta a mesma função de proteção e revalida antes de pausar;
+pastas antigas, isoladamente, não autorizam tirar uma negociação do ar.
+O encerramento manual só vale se posterior à conversa, proposta, próximo passo e pausa;
+ele reinicia a folga da limpeza, em vez de herdar a data da classificação automática.
+Revalida elegibilidade no CRM imediatamente antes da exclusão; falha de leitura
+fecha a operação. A fonte permanece nas planilhas via n8n; a correção da Comece
+é uma operação explícita desta demanda, com evidência e registro de auditoria,
+sem reclassificação retroativa em massa nem mensagem ao lead.
+
+## Contexto antes da retomada (17/10/2026)
+
+Leitura dirigida, pelo pedido explícito de usar Hermes/Evolution: a bridge existente
+pede `fetchMessageHistory` ao aparelho com âncora real. Sem ID, pode experimentar
+uma janela anterior a agora com telefone do CRM, omitindo o campo opcional do
+protocolo; só o retorno observado vale como dado. Endpoint só no loopback, com
+segredo do observador e lista atual de leads. Só mensagens dos leads solicitados
+são arquivadas pelo mesmo `Conversas.anexar`, com sua trava. Não consome a fila
+`/messages`, não envia ao lead e não reprocessa o histórico no classificador.
+Pedido aceito não significa histórico recuperado.
+
+Metadados dos áudios retornados ficam apenas em memória na bridge, no máximo 50
+por até 30 minutos. A rota de áudio exige o mesmo segredo e lead autorizado;
+não transcreve nem envia conteúdo a fornecedores. Nesta auditoria, transcrição
+externa foi autorizada pelo Rômulo somente para o áudio de Jéssica.
+
+`historico-comercial.ts` mede cobertura por lead e lê a conferência humana em
+notas `[historico-conferido-v1]` do CRM. A fila da tela e a Ficha trocam o envio
+por conferir contexto quando falta revisão atual. O aviso do vendedor também
+deve pedir conferência, sem botão de confirmar envio nesse caso.
+`CrmHistorico.vue` permite conferir e importar uma exportação individual, com
+prévia e confirmação. O POST autenticado de importação resolve o telefone pelo
+lead conhecido, valida autores e datas, acrescenta mensagens deduplicadas ao
+arquivo existente com permissão 0600 e não chama o classificador ou o vendedor.
+As mensagens permanecem parciais; a conferência humana não alega sincronização
+completa. Central resume a próxima decisão e encaminha a Vendas, sem repetir o
+compositor e o diagnóstico; escritório e fontes ficam em consulta.
+
+## Aprendizado comercial (17/10/2026)
+
+`src/operations/aprendizado-comercial.ts` lê notas humanas com prefixo
+`[aprendizado-v1]` dos eventos do CRM. `CrmAprendizado.vue` salva pelo POST de
+registro que já existe; `CrmResultados.vue` reúne a última revisão válida por lead.
+Não há banco, endpoint nem fonte de verdade adicionais. O conteúdo cabe no limite
+de 1000 caracteres da nota. Estratégia continua sendo decisão humana.
+O nó “Montar retrato” do fluxo 08 preserva 1000 caracteres na coluna `texto`,
+como o endpoint de gravação; o limite antigo de 500 cortava notas estruturadas
+e resumos de propostas depois de salvar. Outras colunas mantêm seus limites.
+Uma pausa marcada nessa nota tira o lead da fila compartilhada (tela e vendedor).
+Só nova entrada humana guardada depois da nota, ou revisão humana desmarcando a
+pausa, libera as sugestões; leitura e mensagem nossa não liberam.
+
+Abrir o WhatsApp não anota proposta na Ficha nem na Próxima venda. A confirmação
+humana guarda o conteúdo enviado: pelo registro existente na Ficha, ou pelo campo
+opcional `texto` em `/api/operations/crm/venda/anotar`, com o mesmo teto de 1000
+caracteres e deduplicação já usada pela fila. O Telegram continua confirmando por
+“Enviei”; seu contrato permanece compatível. Plano comercial e evidências em
+`docs/PRUMO-CICLO-DE-VENDA.md`.
+
 ## Aplicação atual
 
 - Frontend Vue em `src/`, com o escritório visual em `src/office/` e
