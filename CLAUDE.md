@@ -87,6 +87,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           contexto, sem abrir), e o prompt ganha a regra de UMA observação na 1ª linha só quando há sinais; sem sinais o hash do dossiê não muda; nenhum template do funil muda (experimento A/B/C)
   server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min por ela) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead
+  server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
+                          POST /crm/frente/reservar (o time pede UM primeiro contato: mesma janela e ritmo da Central, gate em "bloquear", grava o
+                          primeiro do dia `por: "time"` na fila do venda-do-dia); `doTime` em GET /crm/venda. O time em si é deploy/dell/frente-comercial.py:
+                          o ÚNICO agente que ENVIA a lead (o 1º contato do Site `pronto`, texto do Balcão, pela Evolution do PRUMO), DESLIGADO por padrão
   server/gate-de-envio.ts PURO (17/10/2026, ideia do Harvey): gate de pré-envio sem modelo: marca de modelo sem preencher, frase de IA/emoji, tamanho e links por tipo, nome vazio/com lixo,
                           "R$" fora dos permitidos (reusa precosProibidos do copiloto) e número do wa.me ≠ o do registro (chaveDoNumero). `modo`: copiloto e vendedor com mensagem do
                           copiloto = "bloquear" (falha gate_de_envio, sem Copiar, aviso do Telegram barrado com o motivo); texto da esteira = "avisar" (linha "Confira", botão fica);
@@ -172,6 +176,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           visível de todo .vue e .ts de src/ e falha se um deles voltar
     liberados.ts          o espelho único do "Liberar" do dia (AC-21), do corpo de GET /crm/venda; primeiro-da-ficha.ts PURO (AC-22): quando a
                           Ficha oferece o primeiro contato de um Novo (o ritmo antes do horário, desabilitado com o motivo)
+    primeiro-contato.ts   PURO (19/10/2026): quem faz o 1º contato (quemFazOPrimeiroContato: a fila do time ligado, ou o envio que ele começou,
+                          é do time; o resto, do Rômulo), elegivelParaOTime (só Site `pronto`, nunca `revisar`/Plus) e reservaDoTime (EXPEDIENTE_DE_VENDA
+                          e REGRAS_DO_RITMO contando todas as superfícies). A Próxima venda e o vendedor tiram da fila o 1º contato dos leads do time
     proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
                           (responder > mandar a proposta > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
                           recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem
@@ -310,7 +317,7 @@ mexer nos módulos da coluna do meio**; abaixo ficam só as regras que não pode
 | Roster, contratação, Escritório | `squad`, `hire`, `ciclo-de-vida`, `roster-historico`, `src/office/*` | `roster-e-escritorio.md` |
 | Perfis, avaliação de turno, Luna, Jev, copiloto, lead quente | `operations`, `RootApp`, `casca/*`, `avaliacoes-turno`, `luna-sombra`, `jev-sombra`, `openrouter-decisoes`, `copiloto`, `lead-quente*` | `perfis-e-experimentos.md` |
 | Persistência, Google, porteiro, env | `auth-store`, `dados`, `acesso`, `.env` | `persistencia-e-acesso.md` |
-| WhatsApp do número do PRUMO (Evolution API, só leitura) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
+| WhatsApp do número do PRUMO (Evolution API: o observador só lê; o time comercial, desligado por padrão, é o único que envia, e só o 1º contato) | `deploy/dell/whatsapp-observador/evolution-adaptador.py`, `observador.py`, `deploy/dell/evolution/` | `deploy/dell/README.md`, seção "Observador do número do PRUMO" (decisão de 16/10: sem segundo número; a Evolution e o Hermes dividem o 27 99976-2786, protegidos pelas travas de horário e de ritmo) |
 | Jornada do cliente do PRUMO (ordem, quem faz, o que oferecer a cada lead) | `src/operations/jornada.ts`, `colinha.ts` | `jornada-do-cliente.md` (gerado; leia antes de atender ou montar algo para um lead) |
 | Inventário de testes | todos os `*.test.ts` | `testes.md` |
 | Service blueprint (Site, PRUMO, Ofertas, Agenda; códigos `SITE-3-B2`; desde 16/10 de uso: Lado a lado, Telas `TELA-nn` e otimizações `OT-nn` com a triagem do Rômulo no banco do Artifact) | `docs/blueprint/servico.json` (fonte), `servico.html` (Artifact) | `docs/blueprint/README.md`; atualize o cartão no mesmo commit em que o passo muda (o teste confere códigos e arquivos); antes de atacar uma OT, leia a decisão dela (`ArtifactData list decisoes`) |
@@ -363,6 +370,11 @@ O agente que mantém o lead quente (17/10/2026, decisão do Rômulo: ele segue n
 que o link saiu e o lead escreve) está só em **sombra** (`SQUADONE_LEAD_QUENTE_SOMBRA`, desligada, só `operations` com bot e copiloto): decide
 responder/escalar/calar, grava JSONL e avisa o Rômulo no Telegram; **nada é enviado ao lead**, e a fase de envio (veto de 3 min, o agente se
 identificar como assistente) é decisão aberta dele em `perfis-e-experimentos.md`.
+O time comercial (19/10/2026, `deploy/dell/frente-comercial.py` + `server/frente-comercial.ts`) é o único agente que **envia** a lead:
+o primeiro contato do Site `pronto`, com o texto do Balcão, pela Evolution do número do PRUMO. Nasce **desligado** (timer desabilitado e
+`frente-comercial-config.json` sem `ativo: true`); religar é decisão do Rômulo. Cada envio pede reserva à Central (a mesma janela e o
+mesmo ritmo das telas e do Telegram, contando todos) e passa antes pelo clique rastreado do n8n (o registro de `enviado_em`, da letra e
+do `ab_elegiveis`); a Triagem (`revisar`) e o Plus ficam com o Rômulo. Detalhes em `perfis-e-experimentos.md`.
 O Assistente da Central (RULES 28 e a exceção da RULES 20, aprovadas em 17/10/2026; MVP construído no mesmo dia e LIGADO
 na Mel às 13:40 de 17/10/2026, depois de ele ver funcionando numa instância-sombra: SQUADONE_ASSISTENTE=true e
 SQUADONE_ASSISTENTE_HERMES=true no operations.env, cópia anterior em operations.env.antes-do-assistente-20261017): server/assistente.ts (cola: fila serial, tetos, prazo de 4 min, JSONL 600),

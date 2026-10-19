@@ -45,9 +45,15 @@ export interface Anotada {
   por: Superficie;
 }
 
+/**
+ * De onde veio o primeiro contato: as duas superfícies do Rômulo ou, desde 19/10/2026, o time
+ * comercial (deploy/dell/frente-comercial.py), que reserva o dele pela rota /crm/frente/reservar.
+ */
+export type OrigemDoPrimeiro = Superficie | "time";
+
 export interface PrimeiroDoDia {
   em: number;
-  por: Superficie;
+  por: OrigemDoPrimeiro;
 }
 
 export interface VendaDoDia {
@@ -67,6 +73,7 @@ export const MAX_RESOLVIDAS = 500;
 const COMOS: readonly ComoResolveu[] = ["enviada", "pulada", "recusa"];
 const PORES: readonly PorOnde[] = ["central", "telegram", "expirou"];
 const SUPERFICIES: readonly Superficie[] = ["central", "telegram"];
+const ORIGENS: readonly OrigemDoPrimeiro[] = [...SUPERFICIES, "time"];
 
 export const diaSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10);
 
@@ -100,8 +107,8 @@ export function vendaDoDia(lido: unknown, agora: number): VendaDoDia {
   }
   if (objeto(lido.primeiros)) {
     for (const [leadId, p] of Object.entries(lido.primeiros)) {
-      if (chaveBoa(leadId) && objeto(p) && Number.isFinite(p.em) && SUPERFICIES.includes(p.por as Superficie)) {
-        vazio.primeiros[leadId] = { em: Number(p.em), por: p.por as Superficie };
+      if (chaveBoa(leadId) && objeto(p) && Number.isFinite(p.em) && ORIGENS.includes(p.por as OrigemDoPrimeiro)) {
+        vazio.primeiros[leadId] = { em: Number(p.em), por: p.por as OrigemDoPrimeiro };
       }
     }
   }
@@ -142,7 +149,7 @@ export function anotar(v: VendaDoDia, chave: string, tipo: string, por: Superfic
 }
 
 /** PURO: o primeiro toque num link de primeiro contato do lead hoje; repetir não conta de novo. */
-export function marcarPrimeiroDoDia(v: VendaDoDia, leadId: string, por: Superficie, agora: number): VendaDoDia {
+export function marcarPrimeiroDoDia(v: VendaDoDia, leadId: string, por: OrigemDoPrimeiro, agora: number): VendaDoDia {
   if (!chaveBoa(leadId)) throw new Error("lead inválido");
   if (v.primeiros[leadId]) return v;
   return { ...v, primeiros: podar({ ...v.primeiros, [leadId]: { em: agora, por } }, (p) => p.em) };
@@ -164,6 +171,12 @@ export interface MemoriaDaVenda {
   ler(): Promise<VendaDoDia>;
   resolver(chave: string, como: ComoResolveu, por: PorOnde): Promise<VendaDoDia>;
   primeiroContato(leadId: string, por: Superficie): Promise<VendaDoDia>;
+  /**
+   * O primeiro contato do time comercial (19/10/2026): `decidir` lê o dia (os primeiros de todas as
+   * superfícies) e diz se pode; podendo, a marca `por: "time"` grava no mesmo passo da fila. Fora
+   * dela, o toque da Central e o pedido do time juntos passariam os dois pelo ritmo.
+   */
+  reservarPrimeiro<R extends { ok: boolean }>(leadId: string, decidir: (dia: VendaDoDia) => R): Promise<R>;
   /** O "Liberar" fora do expediente (só a Central: o Telegram não avisa fora dele). */
   liberar(leadId: string): Promise<VendaDoDia>;
   /**
@@ -202,6 +215,12 @@ export function criarMemoriaDaVenda(arquivo: string, agora: () => number = Date.
       const antes = await ler();
       const depois = marcarPrimeiroDoDia(antes, leadId, por, agora());
       return depois === antes ? antes : gravar(depois);
+    }),
+    reservarPrimeiro: (leadId, decidir) => emSerie(async () => {
+      const antes = await ler();
+      const r = decidir(antes);
+      if (r.ok) await gravar(marcarPrimeiroDoDia(antes, leadId, "time", agora()));
+      return r;
     }),
     liberar: (leadId) => emSerie(async () => {
       const antes = await ler();

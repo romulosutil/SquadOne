@@ -230,6 +230,15 @@ o resumo (falso positivo de `interesse`, mediana da resposta humana) e a varredu
 rastro, só no operations com bot e copiloto, uma decisão por mensagem mesmo reiniciando, teto do dia que sobrevive a reinício, Telegram fora do
 ar, aviso sem som de madrugada, voto 👍/👎, resposta humana conferida uma vez, JSONL sem telefone nem a mensagem do lead, 600/700),
 `server/telegram-entrada.test.ts` (também o callback `q:<token>:c|d` do voto da sombra),
+`server/frente-comercial.test.ts` (19/10/2026, o time comercial na Central, com a memória do dia num diretório temporário: a reserva
+devolve o texto do Balcão e grava o primeiro `por: "time"`; o intervalo de 4 min vale entre o time e a Central nos dois sentidos; lead
+tocado pela Central é recusado ao time; dois pedidos juntos, só um passa; Triagem, fora da fila, time pausado, gate e fora do expediente
+recusam; só da mesma origem; o estado não vaza número nem chave),
+`src/operations-primeiro-contato.test.ts` (19/10/2026: quem faz o 1º contato, só Site `pronto` é elegível, a janela e o ritmo da Central
+contando retrato e todas as superfícies, e a Próxima venda e o vendedor do Telegram pulando os leads do time),
+`deploy/dell/frente-comercial.test.py` (Python, roda no Dell: sem ritmo próprio, a reserva recusada não envia, o clique rastreado antes
+do envio e conferido pelo redirecionamento, clique que falha não envia e libera o número, lead tocado pelo Rômulo não é pedido, plano
+antigo com `revisar` não vira fila, a fila parcial não substitui a anterior),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
 servidor e reforço local contando cada lead uma vez).

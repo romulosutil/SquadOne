@@ -20,6 +20,7 @@ const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estamp
 /** O que a Próxima venda anota num toque (AnotacaoDeVenda de src/operations/proxima-venda.ts). */
 const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou"]);
 import { lerStatusDoDell } from "./dell-status.ts";
+import { lerPrimeirosDoTime, montarFrenteComercial } from "./frente-comercial.ts";
 
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
@@ -655,9 +656,16 @@ export function createOperationsRouter(options: {
   // feitas (uma por ação + tipo) e os primeiros contatos do dia das duas superfícies (a trava de ritmo),
   // e (AC-21) os leads liberados fora do expediente.
   const memoriaDaVenda = options.memoriaDaVenda ?? criarMemoriaDaVenda(path.join(options.dataDir, "venda-do-dia.json"));
+  // `doTime` (19/10/2026): os leads cujo primeiro contato é do time comercial; a Próxima venda não os oferece.
   router.get("/crm/venda", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(await memoriaDaVenda.ler());
+    const [dia, doTime] = await Promise.all([memoriaDaVenda.ler(), lerPrimeirosDoTime(options.dataDir)]);
+    res.json({ ...dia, doTime: [...doTime] });
+  });
+  // O time comercial (deploy/dell/frente-comercial.py, desligado por padrão): estado, pausa e a reserva
+  // do primeiro contato pela mesma janela e ritmo da Central.
+  montarFrenteComercial(router, {
+    dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao() } : {}),
   });
   // A Central resolve uma ação: { chave, como } (enviada | pulada | recusa), ou o formato de 16/10
   // ({ chave, pulou }) de uma aba aberta antes da atualização. Por onde é sempre "central": o

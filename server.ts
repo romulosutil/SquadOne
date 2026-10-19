@@ -54,6 +54,7 @@ import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import { resumoMatinalLigado } from "./server/resumo-matinal.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
+import { lerPrimeirosDoTime } from "./server/frente-comercial.ts";
 import { criarMemoriaDaVenda } from "./server/venda-do-dia.ts";
 import { lerConversaDoNumero } from "./server/conversa-do-lead.ts";
 import { descreverHistorico } from "./server/roster-historico.ts";
@@ -498,6 +499,8 @@ async function startServer() {
           editar: (chatId, mensagemId, texto) => editarMensagem(c, chatId, mensagemId, texto),
           registrar: async (corpo) => { await crm.registrar(corpo); },
           arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
+          // O time comercial faz o primeiro contato dos leads da fila dele: o aviso não os oferece.
+          primeirosDoTime: () => lerPrimeirosDoTime(operationsDataDir),
           arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),
           vendaDoDia: memoriaDaVenda,
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,

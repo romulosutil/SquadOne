@@ -328,11 +328,48 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
     "[áudio de 27s que o sistema não ouviu: o conteúdo é DESCONHECIDO, não suponha que seja interesse]". O dossiê leva
     também o `papel` de cada mensagem do lead.
 
+## Time comercial: o agente que envia o 1º contato (18–19/10/2026; desligado por padrão)
+
+`deploy/dell/frente-comercial.py` (timer `frente-comercial.timer`, a cada minuto) com três agentes (Diego, Elisa, Carla) que avaliam os
+leads e um executor sem modelo que manda o **primeiro contato** pelo número do PRUMO (Evolution, `POST /message/sendText/prumo`). É o
+único agente do SquadOne que envia mensagem a lead. Respostas e tudo depois do primeiro contato seguem com o Rômulo.
+
+**Por que as regras abaixo.** Ligado na Mel em 18/10/2026 sem elas, ele escolheu 35 estamparias em `revisar` (passava por cima da
+Triagem), tinha ritmo próprio (100/dia, 12/h, 5 min, até 18h) contra o da Central, um dia depois da restrição de 24 h do WhatsApp por
+25 envios em 25 min (15/10), e não anotava nada no CRM; a Próxima venda e o Telegram ofereciam os mesmos leads ao Rômulo. Foi parado e
+o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
+
+- **Elegibilidade** (`elegivel` no .py, `elegivelParaOTime` em `src/operations/primeiro-contato.ts`, a Central confere de novo): só o
+  Site em `pronto` (Novo, sem marco, conversa, resposta ou próximo passo), com o link rastreado (`links.enviar`) e a mensagem do Balcão
+  (`mensagemPronta`). `revisar` é a Triagem: lá o "Convidar" do Rômulo já é o envio (o convite rastreado), então nenhum lead convidado
+  chega ao time sem ter recebido a mensagem. Plus fica fora (saudação própria). PRUMO, Iris e estamparias não têm `pronto`: ficam fora até
+  existir uma decisão "Convidar pelo time" gravada no CRM (não existe hoje).
+- **Uma regra de ritmo e expediente**: o .py não tem mais ritmo. Cada envio pede `POST /api/operations/crm/frente/reservar { leadId }`;
+  a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
+  dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
+  dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time.
+- **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
+  fluxo "04 · Clique no wa_link"), que marca `status = enviado` e `enviado_em` e congela a `mensagem_variante` e o `ab_elegiveis` que o
+  Balcão gravou; o redirecionamento tem de levar ao número do lead e ao texto reservado. O texto enviado é o do Balcão, sem troca: o envio
+  entra na trava de ritmo, em Números, na taxa do nicho e nos A/B como se o Rômulo tivesse tocado. O observador vê a saída com o lead já
+  enviado e não grava "manual". Clique falhou: nada sai e o número volta a ficar livre no registro do time. Envio confirmado: nota na Ficha.
+  Limite: se o envio falhar depois do clique, o lead fica "enviado" sem ter recebido (o mesmo de um toque do Rômulo sem enviar); o
+  registro do time fica "incerto" e bloqueia novos envios até a reconciliação.
+- **Quem faz o 1º contato** (`quemFazOPrimeiroContato`): lead na fila do time, com o time ligado, ou cujo envio o time já começou
+  (incerto/enviado), é do time; o resto é do Rômulo. `GET /crm/venda` devolve `doTime` e a Próxima venda e o vendedor do Telegram tiram da
+  fila o primeiro contato desses leads; o time não pede reserva para lead que o Rômulo já tocou hoje (Central ou Telegram).
+- **Ligar** (decisão do Rômulo; nada disto roda sozinho). A Central precisa estar na `main` com a rota `/crm/frente/reservar`
+  (sem ela a reserva dá 404 e nada sai). Na Mel: `install -m 755 ~/SquadOne/deploy/dell/frente-comercial.py ~/.local/bin/frente-comercial`,
+  `install -m 644 ~/SquadOne/deploy/dell/frente-comercial.{service,timer} ~/.config/systemd/user/`, `systemctl --user daemon-reload`,
+  `dell-status --instalados` (confere a cópia), `curl -s -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:9120'
+  -d '{"ativo":true}' http://127.0.0.1:9120/api/operations/crm/frente/config` e `systemctl --user enable --now frente-comercial.timer`.
+  Pausar: o mesmo POST com `{"ativo":false}`, ou `systemctl --user disable --now frente-comercial.timer`.
+
 ## Agente que mantém o lead quente — fase de SOMBRA (17/10/2026; desligado, nada é enviado)
 
 Decisão do Rômulo em 17/10/2026: ele **continua** fazendo os primeiros contatos e mandando o primeiro link; um agente passa a **manter o
-lead quente depois que o link saiu e o lead escreve de novo**. Esta fase é só a decisão: o agente não envia nada. A Evolution na Mel só lê, o
-chip é o mesmo do Hermes e levou restrição de 24 h em 15/10 por rajada de primeiros contatos, então o envio é uma decisão à parte (abaixo).
+lead quente depois que o link saiu e o lead escreve de novo**. Esta fase é só a decisão: o agente não envia nada. A Evolution na Mel só lê (a exceção, desde 19/10/2026, é o
+primeiro contato do time comercial, desligado por padrão: seção acima), o chip é o mesmo do Hermes e levou restrição de 24 h em 15/10 por rajada de primeiros contatos, então o envio é uma decisão à parte (abaixo).
 
 - **A decisão (PURA, `server/lead-quente.ts`)**: `decidirLeadQuente({ lead, mensagens, sugestao, agora, jaDecididas, toques })` devolve
   `responder`, `escalar`, `calar` ou `aguardar` (a sugestão do copiloto ainda não saiu; nunca é gravado). Sem fetch, relógio, env nem disco.

@@ -81,6 +81,8 @@ let relogio = 0
 const primeiros = ref<PrimeirosContatos>({})
 /** Os primeiros contatos do dia no servidor (Central e Telegram): a fonte da trava de ritmo. */
 const primeirosDoServidor = ref<Record<string, { em: number }>>({})
+/** Os leads cujo primeiro contato é do time comercial (19/10/2026): a fila não os oferece. */
+const primeirosDoTime = ref<ReadonlySet<string>>(new Set())
 /** Chaves resolvidas nesta tela ("Enviei" ou "Pular"), com o instante; valem até o fim do dia. */
 const resolvidas = ref<Resolvidas>({})
 const verFila = ref(false)
@@ -117,12 +119,14 @@ async function lerDoServidor() {
 }
 
 /** O dia como o servidor devolve (GET e os POST de /crm/venda): o que se resolveu e os primeiros. */
-function lerDia(corpo: { resolvidas?: Record<string, { em: number; pulou: boolean }>; primeiros?: Record<string, { em: number }> } | null) {
+function lerDia(corpo: { resolvidas?: Record<string, { em: number; pulou: boolean }>; primeiros?: Record<string, { em: number }>; doTime?: unknown } | null) {
   if (corpo?.resolvidas) {
     resolvidas.value = { ...resolvidas.value, ...corpo.resolvidas }
     gravarResolvidas()
   }
   if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
+  // Só o GET traz `doTime`; os POST devolvem o dia sem ele e não apagam o que se leu.
+  if (Array.isArray(corpo?.doTime)) primeirosDoTime.value = new Set(corpo.doTime.filter((id): id is string => typeof id === 'string'))
   absorverDia(corpo)
 }
 
@@ -173,7 +177,7 @@ const feitos = computed(() => new Set(Object.entries(resolvidas.value).filter(([
 const ritmoLivre = computed(() => ritmo.value.motivo === null)
 const fila = computed<AcaoDeVenda[]>(() => filaDaTela(props.visao, {
   ritmo: ritmo.value, noExpediente: expediente.value, agora: agora.value,
-  liberados: liberados.value, sugestoes: sugestoes.value, nicho: nicho.value,
+  liberados: liberados.value, sugestoes: sugestoes.value, nicho: nicho.value, primeirosDoTime: primeirosDoTime.value,
 }, resolvidas.value))
 /** A contagem do dia: o "N na fila", o "Ver a fila inteira (N)" e a aba "A fazer N" (via `resumo`). */
 const resumo = computed(() => resumoDoDia(fila.value, props.visao?.estado === 'ok' ? props.visao : null, ritmo.value))
@@ -184,7 +188,7 @@ watch(resumo, (r) => emit('resumo', r), { immediate: true })
  */
 const candidatoForaDoExpediente = computed<AcaoDeVenda | null>(() => {
   if (expediente.value || !ritmoLivre.value || props.visao?.estado !== 'ok') return null
-  const comoSeAberto = filaDeVenda(props.visao, { primeiroLiberado: true, agora: agora.value }, pulados.value)
+  const comoSeAberto = filaDeVenda(props.visao, { primeiroLiberado: true, agora: agora.value, primeirosDoTime: primeirosDoTime.value }, pulados.value)
   return comoSeAberto.find((a) => a.primeiroContato && !feitos.value.has(a.chave) && !liberados.value.has(a.leadId)) ?? null
 })
 async function liberar(a: AcaoDeVenda) {

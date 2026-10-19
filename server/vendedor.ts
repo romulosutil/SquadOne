@@ -162,10 +162,11 @@ export const RODAPE_DO_EXPIRADO = "⌛ 30 min sem toque: fica para o fim da fila
  * saiu da fila fecha, o aberto há mais de 30 min sem toque vira pulado. `sugestoes`: as do copiloto
  * que valem para a conversa de agora (leadId -> mensagem); entram no lugar do texto pronto. `doDia`:
  * o que a Central e o Telegram resolveram hoje e os primeiros contatos das duas superfícies (a trava
- * de ritmo conta o retrato mais esses, sem repetir o lead).
+ * de ritmo conta o retrato mais esses, sem repetir o lead). `doTime` (19/10/2026): os leads cujo
+ * primeiro contato é do time comercial (primeiro-contato.ts); o aviso não oferece o primeiro contato deles.
  */
 export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number,
-  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
   const resolvidas = doDia?.resolvidas ?? {};
   const entradas = Object.entries(resolvidas);
   // O que se resolveu hoje conta aqui: enviado ou recusa marcada é como avisado; pulado vai para o fim.
@@ -179,7 +180,9 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   if (!noExpedienteDeVenda(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
   const toques = somarPrimeiros(doDia?.primeiros, estado.primeiros);
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
-  const fila = filaDeVenda(visao, { primeiroLiberado: ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}) }, new Set(estado.pulados));
+  const fila = filaDeVenda(visao, {
+    primeiroLiberado: ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
+  }, new Set(estado.pulados));
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
   estado.abertos = ficam;
   for (const a of fechados.expirados) if (!estado.pulados.includes(a.chave)) estado.pulados.push(a.chave);
@@ -420,6 +423,8 @@ export interface DepsDoVendedor {
    * resolveu, as anotações e os primeiros contatos. Ausente: só o estado próprio (como antes).
    */
   vendaDoDia?: MemoriaDaVenda;
+  /** Os leads cujo primeiro contato é do time comercial (server/frente-comercial.ts). Ausente: nenhum. */
+  primeirosDoTime?(): Promise<ReadonlySet<string>>;
   origemCentral?: string;
   agora(): number;
   /**
@@ -514,7 +519,11 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
     const doDia = await lerDoDia();
-    const { decisao, estado, fechados } = decidir(visao, lido, agora, sugestoes, doDia);
+    // Sem ler a fila do time, nenhum primeiro contato vai ao aviso: poderia ser o lead que o time está enviando.
+    const doTime = deps.primeirosDoTime ? await deps.primeirosDoTime().catch(() => null) : undefined;
+    const { decisao, estado, fechados } = doTime === null
+      ? decidir({ ...visao, leads: visao.leads.filter((l) => l.etapa !== "novo") }, lido, agora, sugestoes, doDia)
+      : decidir(visao, lido, agora, sugestoes, doDia, doTime);
     const historico = fechadosNaVolta(fechados, agora);
     // O que a Central resolveu fecha aqui também; o que expirou vale como pular lá (AC-06).
     for (const { aberto, resolvida } of fechados.fora) await fecharMensagens(aberto, rodapeDeFora(resolvida));

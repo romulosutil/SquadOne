@@ -114,6 +114,11 @@ export interface ContextoDaVenda {
    * primeiro contato: o segundo lead "pronto" ficava sem ação na Ficha, embora tivesse uma.
    */
   soDoLead?: string
+  /**
+   * Os leads cujo primeiro contato é do time comercial (19/10/2026, `primeirosDoTime` de
+   * primeiro-contato.ts): a fila não oferece o primeiro contato deles, nem na tela nem no Telegram.
+   */
+  primeirosDoTime?: ReadonlySet<string>
 }
 
 /** Os passos em que a mensagem do copiloto (que leu a conversa) vale mais que o texto pronto da esteira. */
@@ -509,6 +514,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       if ((tipo === 'responder' || tipo === 'followup') && comDesfecho.has(lead.id)) continue
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
+      if (acao.primeiroContato && ctx.primeirosDoTime?.has(lead.id)) continue
       if (acao.primeiroContato && ctx.nichoDoPrimeiro && chaveDoNicho(nichoDo(lead)) !== chaveDoNicho(ctx.nichoDoPrimeiro)) continue
       if (acao.primeiroContato) {
         const pode = ctx.primeiroLiberado
@@ -606,6 +612,8 @@ export interface EstadoDaTela {
   sugestoes?: ReadonlyMap<string, SugestaoDeVenda>
   /** Primeiro contato só deste nicho; vazio = todos. */
   nicho?: string
+  /** Os leads cujo primeiro contato é do time comercial (o `doTime` de GET /crm/venda). */
+  primeirosDoTime?: ReadonlySet<string>
 }
 
 /**
@@ -622,6 +630,7 @@ export function filaDaTela(visao: Pick<CrmVisao, 'hoje' | 'leads' | 'estado'> | 
   if (tela.liberados) ctx.liberados = tela.liberados
   if (tela.sugestoes) ctx.sugestoes = tela.sugestoes
   if (tela.nicho) ctx.nichoDoPrimeiro = tela.nicho
+  if (tela.primeirosDoTime) ctx.primeirosDoTime = tela.primeirosDoTime
   return filaDeVenda(visao, ctx, pulados).filter((a) => !feitos.has(a.chave))
 }
 
