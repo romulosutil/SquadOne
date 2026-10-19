@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  PASSOS_DO_COPILOTO, PRECOS_ABERTOS, copilotoServe, itensDaProposta, lerSaidaDoCopiloto, mascarar, montarDossie, numerosForaDoDossie,
+  PASSOS_DO_COPILOTO, PRECOS_ABERTOS, copilotoServe, itensDaProposta, lerSaidaDoCopiloto, lerSugestaoSpiced, mascarar, montarDossie, numerosForaDoDossie,
   precosProibidos, promptDoCopiloto, textoDaProposta, textoDoRaioX, sinaisParaODossie, REGRAS_DOS_SINAIS, type LeadDoCopiloto,
 } from './operations/copiloto.ts'
 import { SEM_FONTE, type SinaisDoSite } from '../server/sinais-do-site.ts'
+import { spicedVazio } from './operations/spiced.ts'
 
 const lead = (extra: Partial<LeadDoCopiloto> = {}): LeadDoCopiloto => ({
   id: 'ChIJabc', produto: 'site', empresa: 'Desentupidora Estrela', nicho: 'desentupidora', cidade: 'Vitória', subEtapa: 'Respondeu',
@@ -235,9 +236,9 @@ describe('copiloto: preços na mensagem', () => {
 })
 
 describe('copiloto: a leitura da saída', () => {
-  const dossie = montarDossie(lead({ marcos: { segundaEnviada: '2026-10-14T14:00:00Z' } }), { textoDoRaioX: textoDoRaioX(RAIO_X) })
+  const dossie = montarDossie(lead({ spiced: { ...spicedVazio(), dor: 'Não encontram a empresa', impacto: 'Perde pedidos', decisao: { decisor_confirmado: 'sim', quem: 'Dono', como_paga: '' } }, marcos: { segundaEnviada: '2026-10-14T14:00:00Z' } }), { textoDoRaioX: textoDoRaioX(RAIO_X) })
   const saida = (extra: Record<string, unknown> = {}) => JSON.stringify({
-    mensagem: 'Oi! Aqui é o Rômulo, do PRUMO. Vi que vocês têm 37 avaliações e nota 4,8. Posso colocar o site no ar? O Encontrado é R$ 690 + R$ 39/mês, pago só depois de ver.',
+    mensagem: 'Oi! Aqui é o Rômulo, do PRUMO. Vi que vocês têm 37 avaliações e nota 4,8. Podemos conversar sobre o próximo passo?',
     porque: 'Ele disse que quer ver.',
     ofertas: [{ id: 'encontrado', porque: 'Não tem site.' }],
     proposta: { itens: [{ id: 'encontrado', porque: 'O que ele pediu.' }] },
@@ -256,7 +257,7 @@ describe('copiloto: a leitura da saída', () => {
   it('aceita cerca de código e texto em volta', () => {
     assert.equal(lerSaidaDoCopiloto(`Aqui está:\n\`\`\`json\n${saida()}\n\`\`\``, dossie).ok, true)
   })
-  it('lê quem responde; recepção não leva proposta e o preço vira aviso (a Conecta Kids, 16/10/2026)', () => {
+  it('lê quem responde; recepção não leva proposta (a Conecta Kids, 16/10/2026)', () => {
     const momento = { quem: 'recepcao', leitura: 'É a recepção, tratando você como paciente.', passo: 'Peça quem coordena.' }
     const r = lerSaidaDoCopiloto(saida({ momento }), dossie)
     assert.equal(r.ok, true)
@@ -264,7 +265,6 @@ describe('copiloto: a leitura da saída', () => {
     assert.deepEqual(r.sugestao.momento, momento)
     assert.deepEqual(r.sugestao.proposta.itens, [])
     assert.ok(r.avisos.some((a) => /não decide/.test(a)))
-    assert.ok(r.avisos.some((a) => /preço para quem não decide/.test(a)))
     // Momento fora do formato não derruba a sugestão: só some.
     const torto = lerSaidaDoCopiloto(saida({ momento: { quem: 'gerente', leitura: 'x' } }), dossie)
     assert.equal(torto.ok === true && torto.sugestao.momento, undefined)
@@ -283,6 +283,7 @@ describe('copiloto: a leitura da saída', () => {
     { nome: 'ofertas não é lista', texto: saida({ ofertas: 'encontrado' }), motivo: 'formato' },
     { nome: 'id inventado', texto: saida({ ofertas: [{ id: 'consultoria-premium' }] }), motivo: 'oferta_desconhecida' },
     { nome: 'preço de serviço sob proposta', texto: saida({ mensagem: 'O Respondido é R$ 2.400 + R$ 290/mês.' }), motivo: 'preco_proibido' },
+    { nome: 'preço canônico também não é gerado pelo modelo', texto: saida({ mensagem: 'O Encontrado é R$ 690.' }), motivo: 'preco_proibido' },
   ]
   for (const c of RECUSAS) {
     it(`recusa: ${c.nome}`, () => {

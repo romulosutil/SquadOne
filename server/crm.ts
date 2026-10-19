@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { lerRegistroSpiced, type Spiced } from '../src/operations/spiced.ts';
 import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
 import { revisaoDaClassificacao, ultimoConviteConfirmado, PREFIXO_CONVITE_TIME } from '../src/operations/decisoes-comerciais.ts';
 import { mensagemDoConvite } from './convite-mensagem.ts';
@@ -249,6 +250,7 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
+  "spiced",
   "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito",
   "ganhou", "ganhou_desfeito", "dispensado", "dispensado_desfeito"] as const;
 /**
@@ -380,7 +382,11 @@ function lerFonte(valor: unknown, nome: string): CrmFonte {
   const linhas = bruto.linhas
     .filter((linha): linha is Record<string, unknown> => Boolean(linha) && typeof linha === "object" && !Array.isArray(linha))
     .slice(0, 5000)
-    .map((linha) => Object.fromEntries(Object.entries(linha).slice(0, 80).map(([k, v]) => [texto(k, 80), texto(v)])));
+    .map((linha) => {
+      const spiced = Object.entries(linha).some(([k, v]) => normalizarCabecalho(k) === 'tipo' && v === 'spiced');
+      return Object.fromEntries(Object.entries(linha).slice(0, 80).map(([k, v]) => [texto(k, 80),
+        spiced && normalizarCabecalho(k) === 'texto' && !lerRegistroSpiced(v) ? '' : texto(v)]));
+    });
   const colunas = Array.isArray(bruto.colunas)
     ? bruto.colunas.filter((c): c is string => typeof c === "string").map((c) => texto(c, 80))
     : [...new Set(linhas.flatMap((linha) => Object.keys(linha)))];
@@ -567,6 +573,7 @@ export interface CrmLead {
   acervo: boolean;
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
+  spiced?: Spiced;
   /** Site: o `site-demos-limpeza` apagou o projeto na Vercel; sem link de demo nem segunda mensagem até republicar. */
   demoApagadoEm?: string;
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
@@ -744,7 +751,9 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
     if (!ehProduto(produto) || !c("id") || !TIPOS_DE_REGISTRO.includes(tipo) || em === undefined) continue;
     const chave = `${produto}:${c("id")}`;
     const lista = mapa.get(chave) ?? [];
-    lista.push({ em, tipo, texto: texto(c("texto"), 1000), data: c("data") });
+    // JSON qualificado nunca pode ser truncado até parecer outro registro válido.
+    if (tipo === 'spiced' && !lerRegistroSpiced(c("texto"))) continue;
+    lista.push({ em, tipo, texto: tipo === 'spiced' ? c("texto") : texto(c("texto"), 1000), data: c("data") });
     mapa.set(chave, lista);
   }
   for (const lista of mapa.values()) lista.sort((a, b) => a.em - b.em);
@@ -971,6 +980,7 @@ function ultimaDoLead(datas: Array<number | undefined>, resposta: CrmResposta | 
 
 function eventosManuais(registros: Registro[]): CrmEvento[] {
   const rotulo: Record<CrmTipoDeRegistro, string> = {
+    spiced: 'Qualificação SPICED confirmada',
     nota: "Nota",
     proximo_passo: "Próximo passo",
     proposta: "Proposta enviada",
@@ -2067,6 +2077,13 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   // nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a revisão) ou onde a
   // planilha já trazia uma, para a ficha não mostrar dois números.
   const taxas = taxasDeRespostaPorNicho(leads);
+  for (const lead of leads) {
+    const confirmados = (registros.get(lead.id) ?? []).filter(r => r.tipo === 'spiced' && r.em <= agora);
+    for (const r of confirmados) {
+      const s = lerRegistroSpiced(r.texto);
+      if (s) lead.spiced = s;
+    }
+  }
   // Os sinais do site (17/10/2026) entram antes da Prioridade: só a leitura já guardada, que vale para o
   // endereço de agora (se o site do lead mudou, a leitura velha não conta). Nada aqui chama a rede.
   for (const lead of leads) {
@@ -2185,8 +2202,11 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (!TIPOS_DE_REGISTRO.includes(tipo)) throw new RegistroInvalido("Tipo de registro inválido.");
   const bruto = typeof corpo.texto === "string" ? corpo.texto.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim() : "";
   if (bruto.length > 1000) throw new RegistroInvalido("O texto deve ter no máximo 1000 caracteres.");
+  if (tipo === 'spiced' && (typeof corpo.texto !== 'string' || !lerRegistroSpiced(corpo.texto))) {
+    throw new RegistroInvalido('SPICED inválido: confira os campos, limites e a data real do evento crítico.');
+  }
   // Texto vai como está: o n8n grava com cellFormat RAW, então "=..." fica texto e nunca vira fórmula.
-  const textoSeguro = bruto;
+  const textoSeguro = tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : bruto;
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
   if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new RegistroInvalido("Data inválida (use AAAA-MM-DD).");
@@ -2195,7 +2215,7 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (tipo === "proposta" && !data) data = hojeEmSP(agora);
   // Ganho e dispensa (AC-08, AC-10) levam o dia, como a proposta: "fechou ontem" anotado hoje conta de ontem.
   if (TIPOS_DE_DESFECHO_DATADO.has(tipo) && !data) data = hojeEmSP(agora);
-  if (tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito" || TIPOS_DE_ENVIO.has(tipo)) data = "";
+  if (tipo === "spiced" || tipo === "nota" || tipo === "proposta_desfeita" || tipo === "sem_contato" || tipo === "sem_contato_desfeito" || TIPOS_DE_ENVIO.has(tipo)) data = "";
   return { produto, id, tipo, texto: textoSeguro, data };
 }
 

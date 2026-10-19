@@ -50,6 +50,15 @@ describe('quem faz o primeiro contato', () => {
     assert.deepEqual([...primeirosDoTime(frente(false, { a: 'pronto', b: 'enviado' }))], ['b'])
   })
 
+  it('Plus pronto fica com o Rômulo; tentativa incerta antiga continua protegida contra repetição', () => {
+    assert.equal(quemFazOPrimeiroContato('plus:a', frente(true, { 'plus:a': 'pronto' })), 'operador')
+    assert.equal(quemFazOPrimeiroContato('plus:a', frente(true, { 'plus:a': 'incerto' })), 'time')
+    assert.deepEqual(frenteDosArquivos({ ativo: true }, { fila: [
+      { id: 'plus:a', produto: 'plus', estado: 'pronto' },
+      { id: 'plus:b', produto: 'plus', estado: 'incerto' },
+    ] }), { ativo: true, leads: { 'plus:b': 'incerto' } })
+  })
+
   it('os arquivos do Dell: ausente ou ilegível é o time desligado e sem fila', () => {
     assert.deepEqual(frenteDosArquivos(null, null), { ativo: false, leads: {} })
     assert.deepEqual(frenteDosArquivos({ ativo: 'true' }, { fila: 'x' }), { ativo: false, leads: {} })
@@ -60,6 +69,15 @@ describe('quem faz o primeiro contato', () => {
 
 describe('elegível para o time: só o que a Central liberou', () => {
   it('pronto do Site, com o link rastreado e a mensagem do Balcão', () => assert.equal(elegivelParaOTime(lead('L')), true))
+  it('Plus com celular, mensagem e destino corretos é enviado apenas pelo Rômulo', () => {
+    const mensagemPronta = 'Meu Ir., posso mostrar uma prévia?'
+    assert.equal(elegivelParaOTime(lead('plus:a', { produto: 'plus', mensagemPronta,
+      plus: { oferta: 'site', fixo: false, descricao: '' }, links: {
+        enviar: `https://wa.me/5511998887766?text=${encodeURIComponent(mensagemPronta)}`,
+        whatsapp: 'https://wa.me/5511998887766',
+      },
+    })), false)
+  })
   const fora: Array<[string, Partial<CrmLead>]> = [
     ['revisar (a Triagem é do Rômulo)', { sinal: 'revisar' } as Partial<CrmLead>],
     ['Plus', { produto: 'plus' } as Partial<CrmLead>],
@@ -95,8 +113,8 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     assert.equal(r.ok === false && r.motivo, 'hora')
   })
   it('o teto do dia é o da trava de ritmo, somando Central, Telegram e time', () => {
-    // 100 no dia (o teto de 19/10/2026), todos antes da última hora: só o do dia segura.
-    const primeiros = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
+    // 30 no dia (o teto da Fase 0 de 19/10/2026), todos antes da última hora: só o do dia segura.
+    const primeiros = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
     const r = reservaDoTime(base({ primeiros }))
     assert.equal(r.ok === false && r.motivo, 'dia')
   })

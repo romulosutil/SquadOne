@@ -1,4 +1,5 @@
 import type { SinaisDoSite } from '../../server/sinais-do-site.ts'
+import type { Spiced } from './spiced'
 
 export type OperationalState = 'healthy' | 'syncing' | 'unavailable' | 'unknown'
 // Espelha server/operations.ts. 'syncthing' é opcional (aposentado em
@@ -185,6 +186,8 @@ export interface CrmLead {
   acervo: boolean
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }
+  /** Apenas o último registro SPICED válido confirmado pelo operador, nunca sugestão do modelo. */
+  spiced?: Spiced
   /** Site: o `site-demos-limpeza` apagou o demo na Vercel; sem link de demo nem segunda mensagem até republicar. */
   demoApagadoEm?: string
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
@@ -267,6 +270,7 @@ export interface CrmVisao {
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
+  | 'spiced'
   | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu' | 'recusou' | 'recusou_desfeito'
   | 'ganhou' | 'ganhou_desfeito' | 'dispensado' | 'dispensado_desfeito'
 

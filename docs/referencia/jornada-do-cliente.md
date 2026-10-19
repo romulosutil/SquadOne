@@ -72,7 +72,7 @@ Iris e estamparias andam num caminho curto: Achado → Primeira mensagem (convit
 Fora do cardápio, ofertas próprias:
 
 - **Iris**: Sistema para clínicas de terapia (agenda, fichas e prontuário), já em produção; cadastro grátis e 7 dias de teste. Psicologia e terapias (aba Clínicas). A conversa segue à mão: não há 2ª mensagem aprovada.
-- **CRM de estamparia**: O CRM da Silmer adaptado para outra estamparia. Fase B0: só valida se há demanda, ainda sem preço nem instalação. Estamparias e confecções (aba Estamparias). Nada de prometer prazo ou preço antes da fase B1.
+- **CRM de estamparia**: O CRM da Silmer adaptado para outra estamparia, produto pronto (decisão de 19/10/2026). Escopo e condições comerciais próprios, sem preço no cardápio do Site/PRUMO. Estamparias e confecções (aba Estamparias). Confirmar escopo e condições próprias, sem inventar prazo ou preço.
 
 ## Onde ver e onde mudar
 

@@ -23,6 +23,8 @@ import type { SugestaoDoCopiloto } from './copiloto'
 import { funilDoLead, passoAtual, type LeadDaJornada } from './jornada'
 import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
+import { qualificadoParaProposta } from './spiced'
+import { textoDasFaixasIris, PRECOS_CANONICOS_IRIS } from './precos-iris'
 
 export type LeadDaProposta = LeadDaJornada & Pick<CrmLead, 'empresa'> & Partial<Pick<CrmLead, 'abordagem'>>
 
@@ -33,21 +35,30 @@ function instanteDaResposta(lead: LeadDaJornada): number {
 
 /**
  * A última resposta é de interesse e veio depois do link (a 2ª mensagem: demo ou Raio-X). É o
- * "gostei" e o "quanto fica": a vez é da proposta, não de mais uma pergunta. O "quanto fica" o
+ * "gostei" e o "quanto fica": a proposta exige antes dor, impacto e decisor confirmados. O "quanto fica" o
  * n8n às vezes classifica como neutra; a pergunta de preço reconhecida pela colinha conta igual.
- * Só Site e PRUMO (e o Plus pela oferta deles): Iris e estamparias não têm cardápio nem 2ª mensagem.
+ * As cinco linhas usam a mesma qualificação; Iris e estamparias têm condições comerciais próprias.
  * A licença depois do link ("pode mandar" a "posso te mandar a proposta?") também (pedeMaterial): até
  * 17/10/2026 ela era gravada como interesse e já abria este passo.
  */
-export function gostouDepoisDoLink(lead: LeadDaJornada): boolean {
+export function indicouInteresseDepoisDoLink(lead: LeadDaJornada): boolean {
   if (lead.etapa !== 'contato' || lead.proposta) return false
-  const funil = funilDoLead(lead)
-  if (funil !== 'site' && funil !== 'prumo') return false
+  if (interlocutorSemDecisao(lead)) return false
   const link = Date.parse(lead.marcos.segundaEnviada ?? '')
   const resposta = instanteDaResposta(lead)
   if (!Number.isFinite(link) || !Number.isFinite(resposta) || resposta <= link) return false
   const tipo = lead.resposta?.tipo
   return pedeMaterial(lead.resposta) || (tipo === 'neutra' && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa'))
+}
+
+/** A conversa com recepção/robô ainda precisa chegar a quem decide, mesmo com dados confirmados antes. */
+export function interlocutorSemDecisao(lead: LeadDaJornada): boolean {
+  const ultima = lead.conversa?.ultima
+  return lead.resposta?.tipo === 'bot' || Boolean(ultima?.direcao === 'entrada' && (ultima.papel === 'recepcao' || ultima.papel === 'robo'))
+}
+
+export function gostouDepoisDoLink(lead: LeadDaJornada): boolean {
+  return qualificadoParaProposta(lead) && indicouInteresseDepoisDoLink(lead)
 }
 
 /**
@@ -56,9 +67,7 @@ export function gostouDepoisDoLink(lead: LeadDaJornada): boolean {
  * andado por telefone, e o n8n só vê o WhatsApp.
  */
 export function cabeProposta(lead: LeadDaJornada): boolean {
-  if (lead.etapa !== 'contato' || lead.proposta) return false
-  const funil = funilDoLead(lead)
-  if (funil !== 'site' && funil !== 'prumo') return false
+  if (lead.etapa !== 'contato' || lead.proposta || !qualificadoParaProposta(lead) || interlocutorSemDecisao(lead)) return false
   return ['segunda', 'conversa', 'mapa'].includes(passoAtual(lead))
 }
 
@@ -102,6 +111,11 @@ export function rascunhoDaProposta(empresa: string, sugestao: Pick<SugestaoDoCop
  */
 export function textoBaseDaProposta(lead: LeadDaProposta): string {
   const funil = funilDoLead(lead)
+  if (funil === 'iris') return `Como combinamos, segue o rascunho da Iris para ${lead.empresa.trim()}:\n\n${textoDasFaixasIris()}\n\nEscopo e início: [confirmar com a clínica antes de fechar por escrito].`
+  if (funil === 'estampa') {
+    const produto = 'CRM de estamparia'
+    return `Como combinamos, segue o rascunho para ${lead.empresa.trim()}:\n\n${produto}\nEscopo: [confirmar a entrega combinada].\nInvestimento: [preencher com as condições aprovadas do catálogo desta oferta].\nInício: [confirmar dia].\n\nVamos conferir esses pontos antes de fechar por escrito?`
+  }
   const id = funil === 'site' ? 'proposta-encontrado' : lead.sinal === 'diagnostico' ? 'proposta-fonte' : 'proposta-respondido'
   const trecho = passo('proposta').trechos.find((t) => t.id === id)
   return trecho ? preencher(trecho.texto, lead) : ''
@@ -117,21 +131,22 @@ export interface PropostaDeUmToque {
 }
 
 /** Todo "R$" do texto está no cardápio. */
-export function soPrecosDoCardapio(texto: string): boolean {
-  const permitidos = new Set(PRECOS_DO_CARDAPIO)
+export function soPrecosDoCardapio(texto: string, funil?: string): boolean {
+  const permitidos = new Set(funil === 'iris' ? PRECOS_CANONICOS_IRIS : PRECOS_DO_CARDAPIO)
   return precosNoTexto(texto).every((p) => permitidos.has(p.replace(/\s+/, ' ')))
 }
 
 /**
  * PURO. A proposta pronta para o toque: o texto do copiloto quando ele tem itens, senão o da
- * colinha. `null` sem WhatsApp do lead, sem texto (Iris, estamparias) ou com preço fora do cardápio.
+ * colinha. `null` sem qualificação, sem WhatsApp ou com preço fora do cardápio.
+ * Iris e estamparias recebem rascunho com condições por completar, sem valores de outro produto.
  */
 export function propostaDeUmToque(lead: LeadDaProposta, sugestao?: Pick<SugestaoDoCopiloto, 'proposta'> | null): PropostaDeUmToque | null {
+  if (!cabeProposta(lead)) return null
   const funil = funilDoLead(lead)
-  if (funil !== 'site' && funil !== 'prumo') return null
-  const doCopiloto = sugestao ? rascunhoDaProposta(lead.empresa, sugestao) : ''
+  const doCopiloto = sugestao && (funil === 'site' || funil === 'prumo') ? rascunhoDaProposta(lead.empresa, sugestao) : ''
   const texto = doCopiloto || textoBaseDaProposta(lead)
-  if (!texto || !soPrecosDoCardapio(texto)) return null
+  if (!texto || !soPrecosDoCardapio(texto, funil)) return null
   const url = linkDoWhatsApp(lead.links.whatsapp, texto)
   if (!url) return null
   return { texto, url, origem: doCopiloto ? 'copiloto' : 'colinha', completar: /\[[^\]]+\]/.test(texto) }

@@ -208,7 +208,7 @@ export const passoDaJornada = (id: IdDoPasso): PassoDaJornada => PASSOS.find((p)
 
 // ------------------------------------------------------------------ ofertas fora do cardápio
 
-/** Iris e o CRM de estamparia não estão no cardápio do PRUMO (são produtos próprios, sem preço aqui). */
+/** Iris e o CRM de estamparia são produtos próprios; a Iris usa as faixas versionadas em precos-iris.ts. */
 export type IdDaOfertaPropria = 'iris' | 'crm-estamparia'
 
 export interface OfertaPropria {
@@ -228,8 +228,8 @@ export const OFERTAS_PROPRIAS: OfertaPropria[] = [
   {
     id: 'crm-estamparia',
     nome: 'CRM de estamparia',
-    entrega: 'O CRM da Silmer adaptado para outra estamparia. Fase B0: só valida se há demanda, ainda sem preço nem instalação.',
-    paraQuem: 'Estamparias e confecções (aba Estamparias). Nada de prometer prazo ou preço antes da fase B1.',
+    entrega: 'O CRM da Silmer adaptado para outra estamparia, produto pronto (decisão de 19/10/2026). Escopo e condições comerciais próprios, sem preço no cardápio do Site/PRUMO.',
+    paraQuem: 'Estamparias e confecções (aba Estamparias). Confirmar escopo e condições próprias, sem inventar prazo ou preço.',
   },
 ]
 
@@ -249,7 +249,7 @@ export const servicoDoCardapio = (id: IdDoServico): ServicoDoCardapio => CARDAPI
  * `false` o tira. `achados` (o que o Raio-X achou) ordena e explica a oferta.
  */
 export type LeadDaJornada = Pick<CrmLead, 'produto' | 'etapa' | 'sinal' | 'marcos' | 'links' | 'followupHoje'>
-  & Partial<Pick<CrmLead, 'resposta' | 'proposta' | 'proximoPasso' | 'plus' | 'diasParaSair' | 'interesseParado' | 'achados' | 'porte' | 'equipe'>>
+  & Partial<Pick<CrmLead, 'resposta' | 'proposta' | 'proximoPasso' | 'plus' | 'diasParaSair' | 'interesseParado' | 'achados' | 'porte' | 'equipe' | 'spiced' | 'conversa'>>
 
 /** O funil em que o lead anda: o Plus segue o da oferta dele. */
 export type Funil = Exclude<CrmProduto, 'plus'>
@@ -522,7 +522,7 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
   }
   if (funil === 'iris' || funil === 'estampa') {
     const id: IdDaOfertaPropria = funil === 'iris' ? 'iris' : 'crm-estamparia'
-    r.agora.push({ id, porque: funil === 'iris' ? 'Clínica de terapia: o Iris, com o teste de 7 dias.' : 'Estamparia: só validar se ele quer o CRM de estamparia (fase B0, sem preço).' })
+    r.agora.push({ id, porque: funil === 'iris' ? 'Clínica de terapia: o Iris, com o teste de 7 dias.' : 'Estamparia: CRM de estamparia pronto; confirmar a necessidade e as condições próprias antes da proposta.' })
     r.naoAgora.push({ id: 'raio-x', porque: 'Iris e estamparias não passam pelo Raio-X nem pelo Mapa.' })
     return r
   }

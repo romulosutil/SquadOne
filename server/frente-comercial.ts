@@ -11,7 +11,7 @@ import type { MemoriaDaVenda } from './venda-do-dia.ts';
 
 /**
  * O time comercial na Central (19/10/2026). O time em si roda no Dell (deploy/dell/frente-comercial.py,
- * timer desligado por padrão): avalia leads novos das cinco ofertas com três agentes e manda o primeiro contato pelo
+ * timer desligado por padrão): avalia leads novos de Site, PRUMO, Iris e Estamparia com três agentes e manda o primeiro contato pelo
  * número do PRUMO. Daqui saem só leitura e a reserva:
  *
  *  - GET /crm/frente: o estado que o time grava, sem segredo nem número (para a tela).
@@ -21,7 +21,7 @@ import type { MemoriaDaVenda } from './venda-do-dia.ts';
  *    confere a mensagem da fonte no gate de envio em modo "bloquear" e, podendo, grava o primeiro
  *    do dia `por: "time"` no mesmo passo. Sem reserva, o time não envia.
  *
- * Site usa o clique rastreado do n8n antes do envio. Plus e os convites são anotados após o recibo
+ * Plus é enviado pelo Rômulo, no teste de rede quente da Fase 0. Site usa o clique rastreado do n8n antes do envio. Os convites são anotados após o recibo
  * do WhatsApp. Esta rota não fala com a integração de mensagens.
  */
 const CONFIG = 'frente-comercial-config.json';

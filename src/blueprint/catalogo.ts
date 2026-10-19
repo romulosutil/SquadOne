@@ -17,6 +17,7 @@ export interface PecaDoCatalogo {
 }
 
 export const CATALOGO: readonly PecaDoCatalogo[] = [
+  { id: 'BP-SPICED', nome: 'Qualificação da venda', classe: '<CrmSpiced>', onde: 'operations/CrmSpiced.vue', regra: 'Faixa S · P · I · C · D com preenchido ou falta. Sugestão citada separada dos fatos confirmados; só confirmação humana grava. Rascunho preservado durante atualização; proposta exige dor, impacto e decisor confirmado.' },
   { id: 'BP-CABECALHO', nome: 'Hierarquia de página e bloco', classe: '.cabecalho-pagina, .cabecalho-bloco, .sobretitulo', onde: 'estilos/operacao.css', regra: 'Uma pergunta principal por página; título de bloco abaixo dela. Sobretítulo orienta o contexto, sem competir com a ação.' },
   { id: 'BP-ETIQUETA', nome: 'Etiqueta de estado', classe: '.etiqueta[data-tom]', onde: 'estilos/operacao.css', regra: 'Estado compacto, distinto de texto corrido e de botão; palavra sempre presente, cor como reforço. Nunca recebe hover de ação.' },
   { id: 'BP-METRICAS', nome: 'Métricas de resultado', classe: '.metricas-venda', onde: 'estilos/operacao.css', regra: 'Até três números com unidade e período explícitos; ausência de leitura não vira zero. Avaliação, envio e resposta são fatos diferentes.' },

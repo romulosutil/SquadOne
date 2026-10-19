@@ -19,6 +19,7 @@ import {
 } from '../../server/site-mensagem.ts'
 import { FOLLOWUP_PRUMO, SEGUNDA_PRUMO } from '../../server/prumo-mensagem.ts'
 import type { CrmEtapa, CrmProduto, CrmSinal, CrmTipoDeResposta } from './types'
+export { PRECOS_CANONICOS_IRIS, FAIXAS_PRECIFICACAO_IRIS, ORIGEM_DOS_PRECOS_IRIS, mensalidadeIrisCentavos, detalharMensalidadeIris, textoDasFaixasIris } from './precos-iris'
 
 // ------------------------------------------------------------------ tipos
 

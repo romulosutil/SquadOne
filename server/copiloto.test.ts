@@ -39,7 +39,7 @@ const leadCrm = (extra: Partial<CrmLead> = {}): CrmLead => ({
 });
 
 const BOA = JSON.stringify({
-  mensagem: "Aqui é o Rômulo, do PRUMO. Posso pôr o site no ar? O Encontrado é R$ 690 + R$ 39/mês, pago só depois de ver.",
+  mensagem: "Aqui é o Rômulo, do PRUMO. Podemos conversar por dez minutos sobre os pedidos que vocês perdem?",
   porque: "Disse que quer ver.",
   ofertas: [{ id: "encontrado", porque: "Sem site." }],
   proposta: { itens: [{ id: "encontrado", porque: "Pediu." }] },
@@ -80,7 +80,7 @@ describe("copiloto: a cola", () => {
     const primeira = await copiloto.sugerir("site", "ChIJabc");
     assert.equal(primeira.guardada, false);
     assert.equal(primeira.raioX, "com texto");
-    assert.match(primeira.sugestao.mensagem, /Encontrado/);
+    assert.match(primeira.sugestao.mensagem, /dez minutos/);
     const segunda = await copiloto.sugerir("site", "ChIJabc");
     assert.equal(segunda.guardada, true);
     assert.equal(segunda.hashDoDossie, primeira.hashDoDossie);
@@ -235,7 +235,7 @@ describe("copiloto: sozinho (16/10/2026)", () => {
     assert.equal(pronta.estado, "pronta");
     assert.equal(provedor.prompts.length, 1);
     const prontas = await copiloto.prontas(leads);
-    assert.match(prontas.get("ChIJabc")?.sugestao.mensagem ?? "", /Encontrado/);
+    assert.match(prontas.get("ChIJabc")?.sugestao.mensagem ?? "", /dez minutos/);
   });
 
   it("falhou: não tenta de novo o mesmo dossiê (nada de laço gastando o teto)", async () => {

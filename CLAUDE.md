@@ -454,3 +454,7 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 - Never search Windows paths for container binaries or Nginx executables.
 - From the PC, run container commands via `ssh mel "docker ..."` or `DOCKER_HOST="ssh://mel"`.
 - Container mounts map to `~/workspace/` on the Dell. Nothing is mirrored from the PC anymore (Syncthing has no paired device since 04/10/2026 and was retired on 12/10/2026; `~/Pessoal-dev` is a frozen replica): code reaches the Dell through GitHub.
+
+## Fase 0 do diagnóstico de vendas (19/10/2026)
+
+Decisão do Rômulo já tomada: teto único de 30 primeiros contatos/dia, somando time comercial, telas e Telegram; manter 5 min e 12/h. As cinco linhas dividem a fila sem cotas e nenhuma fica congelada. Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X será variante nova no A/B, com texto revisado pelo Rômulo antes de ir ao ar. Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".

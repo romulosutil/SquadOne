@@ -25,7 +25,7 @@ planilhas; a Central só lê um retrato delas e, para o que um CRM precisa à m�
   retrato anterior com o aviso.
 - POST /webhook/crm-registro (header X-CRM; só o servidor da Central tem o
   segredo): acrescenta uma linha na aba CRM {em, produto, id, empresa, tipo,
-  texto, data, origem} com tipo nota | proximo_passo | proposta |
+  texto, data, origem} com tipo spiced (qualificação confirmada pelo operador, JSON até 1000) | nota | proximo_passo | proposta |
   proposta_desfeita | sem_contato | sem_contato_desfeito | segunda_enviada |
   followup_enviado (14/10/2026: o toque em "Mandar o link"/"Mandar o follow-up"
   na Central anota o envio) | plus_enviado | plus_respondeu (15/10/2026: o filtro
@@ -117,7 +117,8 @@ const ler = (no, chave, extra) => {
     // mostrava a primeira mensagem pela metade (26 de 39 em 08/10/2026).
     // Notas e propostas aceitam 1000 caracteres no registro; o retrato deve preservá-los.
     // Cortar JSON do aprendizado em 500 fazia a nota salva sumir na próxima leitura.
-    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : norm(k) === 'texto' ? 1000 : 500)])),
+    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, l.tipo === 'spiced' && norm(k) === 'texto' && String(l[k] ?? '').length > 1000
+      ? '' : txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : norm(k) === 'texto' ? 1000 : 500)])),
       ...(extra ? extra(l) : {}) }));
   return { colunas: extra ? [...colunas, ...Object.keys(extra({}))] : colunas, linhas };
 };
@@ -155,6 +156,7 @@ VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confer
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
+  'spiced',
   'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu', 'recusou', 'recusou_desfeito',
   'ganhou', 'ganhou_desfeito', 'dispensado', 'dispensado_desfeito'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
@@ -162,8 +164,29 @@ if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(b.produto)) return re
 const id = txt(b.id, 200);
 if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) return recusa('Lead inválido.');
 if (!TIPOS.includes(b.tipo)) return recusa('Tipo de registro inválido.');
-const texto = txt(b.texto, 1000);
-const data = txt(b.data, 10);
+let texto = txt(b.texto, 1000);
+let data = txt(b.data, 10);
+if (b.tipo === 'spiced') {
+  // Espelho de src/operations/spiced.ts: nada é truncado ou confirmado pelo modelo.
+  const obj = v => v && typeof v === 'object' && !Array.isArray(v);
+  const keys = (v, ks) => Object.keys(v).length === ks.length && ks.every(k => Object.hasOwn(v, k));
+  const campo = v => typeof v === 'string' && v.length <= 200 && !/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/.test(v);
+  const dia = v => v === '' || typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v)
+    && Number.isFinite(Date.parse(v + 'T12:00:00Z')) && new Date(v + 'T12:00:00Z').toISOString().slice(0, 10) === v;
+  if (typeof b.texto !== 'string' || b.texto.length > 1000) return recusa('SPICED deve caber em 1000 caracteres.');
+  let s;
+  try { s = JSON.parse(b.texto); } catch { return recusa('SPICED inválido.'); }
+  if (!obj(s) || !keys(s, ['situacao','dor','impacto','evento_critico','decisao'])
+    || ![s.situacao,s.dor,s.impacto].every(campo)
+    || !obj(s.evento_critico) || !keys(s.evento_critico, ['fato','data']) || !campo(s.evento_critico.fato) || !dia(s.evento_critico.data)
+    || !obj(s.decisao) || !keys(s.decisao, ['decisor_confirmado','quem','como_paga'])
+    || !['sim','nao','nao-sei'].includes(s.decisao.decisor_confirmado) || !campo(s.decisao.quem) || !campo(s.decisao.como_paga)) return recusa('SPICED inválido.');
+  texto = JSON.stringify({situacao:s.situacao.trim(),dor:s.dor.trim(),impacto:s.impacto.trim(),
+    evento_critico:{fato:s.evento_critico.fato.trim(),data:s.evento_critico.data},
+    decisao:{decisor_confirmado:s.decisao.decisor_confirmado,quem:s.decisao.quem.trim(),como_paga:s.decisao.como_paga.trim()}});
+  if (texto.length > 1000) return recusa('SPICED deve caber em 1000 caracteres.');
+  data = '';
+}
 if (data && !/^\\d{4}-\\d{2}-\\d{2}$/.test(data)) return recusa('Data inválida.');
 if (b.tipo === 'nota' && !texto) return recusa('Nota vazia.');
 const em = new Date().toISOString();

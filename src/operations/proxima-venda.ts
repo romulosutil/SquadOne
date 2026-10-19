@@ -32,7 +32,8 @@
 import { diaEmSP } from './retomadas'
 import { ultimaRespostaDeGente } from './resultados'
 import { proximoDaJornada } from './jornada'
-import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
+import { gostouDepoisDoLink, indicouInteresseDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
+import { lacunasDoSpiced, qualificadoParaProposta } from './spiced'
 import { contatoPausado } from './aprendizado-comercial'
 import { comHistoricoConferido } from './historico-comercial'
 import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
@@ -213,7 +214,25 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
  * Gostou depois do link: a proposta pronta (o texto base da colinha; o do copiloto só na Ficha,
  * que lê a sugestão guardada). Sem WhatsApp ou sem texto, null: o lead segue no "responder".
  */
-function acaoMandarProposta(lead: CrmLead): AcaoDeVenda | null {
+function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVenda | null {
+  if (momento?.quem === 'recepcao' || momento?.quem === 'robo') return null
+  if (indicouInteresseDepoisDoLink(lead) && !qualificadoParaProposta(lead)) {
+    const lacunas = lacunasDoSpiced(lead)
+    const perguntas = [
+      lacunas.includes('dor') && 'O que mais atrapalha hoje?',
+      lacunas.includes('impacto') && 'Como isso afeta o trabalho e os clientes?',
+      lacunas.includes('decisor confirmado') && 'Quem decide essa contratação com você?',
+    ].filter(Boolean).join(' ')
+    const texto = `Podemos marcar 10 minutos de ligação para entender o que a ${lead.empresa} precisa? Qual dia e horário funcionam para você?`
+    return {
+      chave: `${lead.id}|qualificar`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto,
+      tipo: 'combinado', titulo: `Marque 10 minutos com ${lead.empresa}`,
+      contexto: 'Qualificação antes da proposta', porque: `Falta confirmar: ${lacunas.join(', ')}.`,
+      tatica: perguntas, rascunho: texto,
+      ...(lead.links.whatsapp ? { link: { rotulo: 'Convidar para 10 minutos', url: `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(texto)}` } } : {}),
+      primeiroContato: false, quente: true,
+    }
+  }
   if (!gostouDepoisDoLink(lead)) return null
   const proposta = propostaDeUmToque(lead)
   if (!proposta) return null
@@ -315,7 +334,7 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
     case 'combinado':
       return 'Você combinou: cumprir na data é o que faz confiar. Lembre o que ele disse da última vez e proponha o próximo passo com dia e hora.'
     case 'depois-do-link':
-      return 'Depois do link, a venda está na pergunta. Se ele gostou, responda com o preço e o próximo passo com data, e marque a proposta na ficha; se tiver dúvida, ofereça 10 minutos de ligação.'
+      return 'Depois do link, confirme a dor, o impacto e quem decide. Ofereça 10 minutos de ligação para completar o que falta; só prepare a proposta com a qualificação confirmada na Ficha.'
     case 'proposta':
       return 'Proposta sem retorno: não reenvie o preço. Pergunte qual dúvida ficou e ofereça 10 minutos de ligação ainda esta semana.'
     case 'followup':
@@ -460,7 +479,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     return a ? [a] : []
   })
   const propostas = leads.flatMap((l) => {
-    const a = acaoMandarProposta(l)
+    const a = acaoMandarProposta(l, ctx.sugestoes?.get(l.id)?.momento)
     return a ? [a] : []
   })
   const comProposta = new Set(propostas.map((a) => a.leadId))
@@ -515,6 +534,7 @@ function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: Context
   const conversa = linhaDaConversa(lead, ctx.agora)
   const sugestao = COM_COPILOTO.has(acao.tipo) ? ctx.sugestoes?.get(lead.id) : undefined
   const comLinha = conversa ? { ...acao, conversa } : acao
+  if (acao.chave.endsWith('|qualificar')) return comLinha
   if (!sugestao?.mensagem.trim() || !lead.links.whatsapp) return comLinha
   const url = `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(sugestao.mensagem)}`
   // A leitura de quem respondeu manda no título e no "como": com a recepção ou o robô, o passo não é

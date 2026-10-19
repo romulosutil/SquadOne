@@ -267,6 +267,11 @@ próprios: cada envio pede `POST /api/operations/crm/frente/reservar` e a Centra
 e a mesma trava de ritmo das telas e do Telegram. Regras, elegibilidade e o porquê:
 `docs/referencia/perfis-e-experimentos.md`, "Time comercial".
 
+Fase 0 (19/10): as cinco linhas compartilham 30 primeiros contatos/dia, 12/h e
+5 minutos entre contatos, sem cotas por linha. Plus é rede quente: teste de 20
+envios feitos apenas pelo Rômulo, fora do executor automático. Iris e CRM de
+estamparia são produtos prontos; seus caçadores continuam pausados (AC-11).
+
 Estado privado: `~/.local/share/frente-comercial/registro.sqlite` (avaliações, orçamento de inferência,
 plano e recibos) e `~/.local/share/squadone-operations/frente-comercial{,-config}.json`. O app lê
 `/api/operations/crm/frente` e pausa/ativa em Mais › Primeiros contatos; nenhuma credencial ou comando
@@ -2399,7 +2404,7 @@ python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Go
 > número (a Evolution e o Hermes convivem como aparelhos conectados), com a sessão antiga em
 > `session.antiga-5527999762786-20261016` (o Rômulo a apagou depois). **Decisão do Rômulo em 16/10/2026: não haverá
 > segundo número.** A Evolution e o Hermes ficam neste chip, e a proteção é a trava de horário mais a trava de ritmo
-> (desde 18/10/2026: 5 min entre primeiros contatos, 12 por hora, teto interno de 100 por dia,
+> (Fase 0, 19/10/2026: 5 min entre primeiros contatos, 12 por hora, teto interno de 30 por dia,
 > follow-up só de quem leu). Esses valores não garantem ausência de restrições e não substituem
 > autorização do destinatário. Envios diretos no celular podem ficar fora da contagem. Se um dia mudar:
 > `DELETE /instance/logout/prumo` e um QR novo no celular do outro número. Onde este texto diz "número novo" ou

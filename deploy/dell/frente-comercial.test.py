@@ -68,8 +68,8 @@ class Frente(unittest.TestCase):
                        {'etapa':'perdido'},{'marcos':{'enviado':f.iso()}},{'conversa':{'mensagens':1}},{'resposta':{'tipo':'negativa'}},{'proximoPasso':{'texto':'aguardar'}}]:
             self.assertFalse(f.elegivel(lead()|change),change)
 
-    def test_cinco_ofertas_e_bloqueios_por_origem(self):
-        for produto in ('site','prumo','iris','estampa','plus'):
+    def test_quatro_ofertas_e_bloqueios_por_origem(self):
+        for produto in ('site','prumo','iris','estampa'):
             l=lead() if produto=='site' else outro_produto(produto)
             self.assertTrue(f.elegivel(l),produto)
             self.assertEqual(f.texto_do_lead(l),MSG)
@@ -164,8 +164,8 @@ class Frente(unittest.TestCase):
         self.assertEqual(x.estados[-1]['enviados'],1);self.assertEqual(x.estados[-1]['fila'][0]['estado'],'enviado')
         self.assertEqual(x.estados[-1]['fila'][0]['mensagem'],MSG)
 
-    def test_plus_e_convite_enviam_sem_clique_site_e_anotam_etapa(self):
-        for produto in ('plus','prumo','iris','estampa'):
+    def test_convites_enviam_sem_clique_site_e_anotam_etapa(self):
+        for produto in ('prumo','iris','estampa'):
             with self.subTest(produto=produto):
                 with tempfile.TemporaryDirectory() as pasta:
                     l=outro_produto(produto)
@@ -178,6 +178,12 @@ class Frente(unittest.TestCase):
                          patch.object(f,'enviar',return_value='recibo') as envio,patch.object(f,'gravar'):
                         f.rodada()
                     clique.assert_not_called();envio.assert_called_once();nota.assert_called_once_with(l,MSG,f.iso(self.now))
+
+    def test_plus_pronto_e_rede_quente_exclusiva_do_romulo(self):
+        l=outro_produto('plus')
+        self.assertFalse(f.elegivel(l))
+        x=self.rodar({'estado':'ok','leads':[l]},lambda l:{'reservado':True,'texto':MSG})
+        x.ai.assert_not_called();x.reservar.assert_not_called();x.envio.assert_not_called()
 
     def test_registro_de_convite_e_plus_tem_tipo_correto(self):
         for produto,tipo in [('prumo','nota'),('iris','nota'),('estampa','nota'),('plus','plus_enviado')]:

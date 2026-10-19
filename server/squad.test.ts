@@ -13,6 +13,7 @@ import { beforeEach, describe, it } from "node:test";
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "squadone-squad-"));
 process.chdir(tmp);
+process.env.SQUADONE_DATA_DIR = path.join(tmp, "data");
 const squad = await import("./squad.ts");
 const ciclo = await import("./ciclo-de-vida.ts");
 

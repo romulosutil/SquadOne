@@ -1,6 +1,6 @@
 // Copiloto do PRUMO, fase 1 em sombra (15/10/2026): acompanha o lead do "respondeu" até a
 // proposta. Funil real em 15/10: 221 envios, 5 interesses, 0 propostas; o gargalo é do
-// interesse até a proposta (regra: proposta em até 24 h depois de cada "gostei"). O copiloto
+// interesse até a proposta. A proposta exige dor, impacto e decisor confirmados pelo Rômulo. O copiloto
 // sugere, na Ficha, a próxima mensagem, o que oferecer e o rascunho dos itens da proposta.
 // NUNCA envia nada: o Rômulo copia e manda pelo WhatsApp, como sempre.
 //
@@ -24,6 +24,7 @@ import {
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
 import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
 import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-site.ts'
+import { lerSpiced, qualificadoParaProposta, type Spiced } from './spiced'
 
 // ------------------------------------------------------------------ onde o copiloto vale
 
@@ -31,7 +32,7 @@ import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-s
 export const PASSOS_DO_COPILOTO: IdDoPasso[] = ['resposta', 'segunda', 'conversa', 'mapa', 'proposta']
 
 export type LeadDoCopiloto = LeadDaJornada & Pick<CrmLead, 'id' | 'empresa' | 'nicho' | 'cidade' | 'subEtapa' | 'eventos'>
-  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem' | 'sinais'>>
+  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem' | 'sinais' | 'spiced'>>
 
 export function copilotoServe(lead: LeadDaJornada): boolean {
   return PASSOS_DO_COPILOTO.includes(passoAtual(lead))
@@ -84,6 +85,8 @@ export interface ItemDoCardapioNoDossie {
 }
 
 export interface DossieDoLead {
+  /** Qualificação confirmada pelo operador; sugestões nunca entram aqui. */
+  spiced?: Spiced
   lead: {
     id: string
     funil: Funil
@@ -216,6 +219,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const proprias = funil === 'iris' || funil === 'estampa'
   const sinaisDoSite = sinaisParaODossie(lead.sinais)
   return {
+    ...(lead.spiced ? { spiced: JSON.parse(JSON.stringify(lead.spiced)) as Spiced } : {}),
     lead: {
       id: lead.id,
       funil,
@@ -270,7 +274,7 @@ export const TOM_DE_VOZ: string[] = [
   'Use só fatos que o dono confere na hora e que estão no dossiê (a nota, as avaliações, o que o Raio-X mostrou). Nunca invente número, cliente, prazo ou caso.',
   'Peça licença e suba um degrau de confiança por vez. Depois de um "não" ou "agora não", não insista nem mande link não pedido; ofereça apagar ("se não for o momento, eu apago").',
   'Sem trio de vendedor: nada de "número limitado", "só 2 minutos", "sem custo".',
-  'Preço sem rodeio só dos serviços com preço aberto no cardápio (o que não diz "sob proposta"). Serviço "sob proposta" nunca leva valor na mensagem: o valor vai por escrito na proposta, em até 24 h.',
+  'Não gere preço, R$ nem valores monetários na mensagem. O texto da proposta recebe valores deterministicamente do cardápio, após a qualificação. A Iris usa sua regra de fichas ativas; estamparia aguarda preços definidos pelo Rômulo.',
   'Uma mensagem só, pronta para colar no WhatsApp, sem marcador de modelo ([nome], {X}) a não ser o link que falta.',
 ]
 
@@ -300,7 +304,9 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
   return [
     'Você é o copiloto de vendas do PRUMO. O Rômulo atende sozinho os leads pelo WhatsApp e te pede,',
     'para UM lead, a próxima mensagem, o que oferecer e o rascunho dos itens da proposta. Você não envia',
-    'nada: ele lê, decide e manda. A meta é chegar à proposta por escrito em até 24 h depois de cada "gostei".',
+    'nada: ele lê, decide e manda. Proposta só com dor, impacto e decisor confirmado como sim no SPICED',
+    'confirmado do dossiê. Um "gostei" não qualifica. Se faltar, proponha uma ligação de 10 minutos',
+    'e perguntas SPIN para descobrir o problema, a consequência e quem decide.',
     '',
     'Tom de voz:',
     ...TOM_DE_VOZ.map((t) => `- ${t}`),
@@ -344,10 +350,17 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
     ' "ofertas":[{"id":"<id>","porque":"<uma frase>"}],',
     ' "proposta":{"itens":[{"id":"<id>","porque":"<uma frase>"}],"observacao":"<opcional>"},',
     ' "falta_saber":["<o que o Rômulo precisa descobrir antes da proposta>"],',
-    ' "momento":{"quem":"decisor|recepcao|robo|nao_sei","leitura":"<o que está acontecendo, uma frase>","passo":"<o que fazer agora, uma frase>"}}',
+    ' "momento":{"quem":"decisor|recepcao|robo|nao_sei","leitura":"<o que está acontecendo, uma frase>","passo":"<o que fazer agora, uma frase>"},',
+    ' "spiced":{"situacao":{"valor":"<situação>","citacao":"<trecho literal>"},"dor":{"valor":"<problema>","citacao":"<trecho literal>"},',
+    ' "impacto":{"valor":"<consequência dita pelo lead>","citacao":"<trecho literal>"},',
+    ' "evento_critico":{"valor":{"fato":"<fato verificável>","data":"AAAA-MM-DD ou vazio"},"citacao":"<trecho literal>"},',
+    ' "decisao":{"valor":{"decisor_confirmado":"sim|nao|nao-sei","quem":"<quem decide>","como_paga":"<forma dita pelo lead>"},"citacao":"<trecho literal>"}}}',
+    'SPICED é somente SUGESTÃO para confirmação humana. Omita campos sem evidência literal; nunca preencha por palpite.',
+    'Para S, P, I e D cite uma mensagem do lead; evento crítico pode citar o texto do Raio-X. Recepção e robô não confirmam decisor.',
+    'Impacto monetário só reproduz valor dito pelo próprio lead na citação; nunca calcule nem gere R$.',
     `Ids válidos em "ofertas" e "proposta.itens": ${ids.join(', ')}.`,
     'A proposta lista só o que se paga (diagnóstico grátis não é item). Cedo demais para proposta: "itens": [].',
-    'Não escreva preço em lugar nenhum além da mensagem; os preços da proposta saem do cardápio, não de você.',
+    'Não escreva preço na mensagem nem na observação: os preços da proposta saem do cardápio, não de você.',
   ].join('\n')
 }
 
@@ -375,6 +388,7 @@ export interface MomentoDaConversa {
 }
 
 export interface SugestaoDoCopiloto {
+  spiced?: SugestaoSpiced
   mensagem: string
   porque: string
   ofertas: ItemSugerido[]
@@ -382,6 +396,38 @@ export interface SugestaoDoCopiloto {
   faltaSaber: string[]
   /** A leitura da conversa; ausente em sugestões antigas ou quando o modelo não a deu. */
   momento?: MomentoDaConversa
+}
+
+export type SugestaoSpiced = { [K in keyof Spiced]?: { valor: Spiced[K], citacao: string } }
+
+/** Evidência literal é necessária, mas continua sendo só uma sugestão revisável. */
+export function lerSugestaoSpiced(bruto: unknown, dossie: DossieDoLead, momento?: MomentoDaConversa): SugestaoSpiced | undefined {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return undefined
+  const campos = ['situacao', 'dor', 'impacto', 'evento_critico', 'decisao'] as const
+  const saida: SugestaoSpiced = {}
+  for (const campo of campos) {
+    const candidato = (bruto as Record<string, unknown>)[campo]
+    if (!candidato || typeof candidato !== 'object' || Array.isArray(candidato)) continue
+    const { valor, citacao } = candidato as Record<string, unknown>
+    if (typeof citacao !== 'string' || !citacao.trim() || citacao.length > 400) continue
+    const mensagens = (dossie.conversa ?? []).filter(m => m.quem === 'lead' && m.papel !== 'robo' && m.texto.includes(citacao))
+    const resposta = !dossie.conversa?.length && dossie.resposta?.tipo !== 'bot' && dossie.resposta?.trecho.includes(citacao)
+    if (!mensagens.length && !resposta && !(campo === 'evento_critico' && dossie.raioX.texto?.includes(citacao))) continue
+    const vazio = { situacao: '', dor: '', impacto: '', evento_critico: { fato: '', data: '' }, decisao: { decisor_confirmado: 'nao-sei', quem: '', como_paga: '' } }
+    const validado = lerSpiced({ ...vazio, [campo]: valor })
+    if (!validado) continue
+    if (campo === 'evento_critico' && validado.evento_critico.data) {
+      const [ano, mes, dia] = validado.evento_critico.data.split('-')
+      if (!citacao.includes(validado.evento_critico.data) && !citacao.includes(`${dia}/${mes}/${ano}`)) continue
+    }
+    const texto = JSON.stringify(valor)
+    const dinheiro = texto.match(/R\$\s*\d[\d.,]*|\d[\d.,]*\s*(?:mil\s+)?reais/gi) ?? []
+    if ((dinheiro.length && campo !== 'impacto') || dinheiro.some(v => !citacao.includes(v))) continue
+    if (campo === 'decisao' && (momento?.quem === 'robo' || momento?.quem === 'recepcao'
+      || mensagens.some(m => m.papel === 'recepcao') || dossie.resposta?.tipo === 'bot')) continue
+    Object.assign(saida, { [campo]: { valor: validado[campo], citacao } })
+  }
+  return Object.keys(saida).length ? saida : undefined
 }
 
 export type MotivoDaRecusa =
@@ -494,7 +540,7 @@ export function lerSaidaDoCopiloto(texto: string, dossie: DossieDoLead): Leitura
   const itensBrutos = lerItens(propostaBruta.itens, 'proposta.itens')
   if (!Array.isArray(itensBrutos)) return { ok: false, ...itensBrutos }
 
-  const proibidos = precosProibidos(mensagem)
+  const proibidos = precosProibidos(JSON.stringify({ ...j, spiced: undefined }), [])
   if (proibidos.length) return { ok: false, motivo: 'preco_proibido', detalhe: `a mensagem diz ${proibidos.join(', ')}` }
 
   const avisos: string[] = []
@@ -516,8 +562,14 @@ export function lerSaidaDoCopiloto(texto: string, dossie: DossieDoLead): Leitura
   const faltaSaber = Array.isArray(j.falta_saber) ? j.falta_saber.map((t) => textoCurto(t, MAX_PORQUE)).filter(Boolean).slice(0, 5) : []
   const observacao = textoCurto(propostaBruta.observacao, MAX_PORQUE)
   const momento = lerMomento(j.momento)
+  const spiced = lerSugestaoSpiced(j.spiced, dossie, momento)
+  if (j.spiced && !spiced) avisos.push('SPICED sem citação verificável: confirme a qualificação na conversa.')
   // Robô e recepção não compram: proposta e preço para eles é falar com a pessoa errada.
   let itensFinais = itens
+  if (!qualificadoParaProposta(dossie)) {
+    if (itens.length) avisos.push('Proposta aguarda dor, impacto e decisor confirmados pelo Rômulo.')
+    itensFinais = []
+  }
   if (momento && (momento.quem === 'recepcao' || momento.quem === 'robo')) {
     if (itens.length) avisos.push('Quem respondeu não decide: os itens da proposta ficam para quando falar com o responsável.')
     itensFinais = []
@@ -532,6 +584,7 @@ export function lerSaidaDoCopiloto(texto: string, dossie: DossieDoLead): Leitura
       proposta: { itens: itensFinais, ...(observacao ? { observacao } : {}) },
       faltaSaber,
       ...(momento ? { momento } : {}),
+      ...(spiced ? { spiced } : {}),
     },
     avisos: [...new Set(avisos)],
   }

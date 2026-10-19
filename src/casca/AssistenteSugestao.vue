@@ -13,6 +13,7 @@ import { nomeDaOferta } from '../operations/jornada'
 import { copiarTexto, horaCurta } from './assistente'
 import RevisarResposta from '../office/RevisarResposta.vue'
 import type { CrmLead } from '../operations/types'
+import { qualificadoParaProposta } from '../operations/spiced'
 
 const props = defineProps<{ dados: { produto: string; id: string; empresa: string; hashDoDossie: string; contextoHash?: string }; proposto: boolean; leadDaSala?: CrmLead | null; rascunhoId?: string }>()
 const emit = defineEmits<{ copiou: []; descartar: []; ficha: []; atualizar: [] }>()
@@ -36,18 +37,26 @@ const erro = ref('')
 const copiado = ref<'' | 'mensagem' | 'proposta' | 'falhou'>('')
 let temporizador: number | undefined
 
-const itens = computed(() => (lida.value ? itensDaProposta(lida.value.sugestao) : []))
-const rascunho = computed(() => (lida.value ? textoDaProposta(props.dados.empresa, lida.value.sugestao) : ''))
+const leadRelido = ref<CrmLead | null>(null)
+const propostaLiberada = computed(() => Boolean(leadRelido.value && qualificadoParaProposta(leadRelido.value)
+  && lida.value?.sugestao.momento?.quem !== 'recepcao' && lida.value?.sugestao.momento?.quem !== 'robo'
+  && leadRelido.value.conversa?.ultima.papel !== 'recepcao' && leadRelido.value.conversa?.ultima.papel !== 'robo'))
+const itens = computed(() => (lida.value && propostaLiberada.value ? itensDaProposta(lida.value.sugestao) : []))
+const rascunho = computed(() => (lida.value && propostaLiberada.value ? textoDaProposta(props.dados.empresa, lida.value.sugestao) : ''))
 /** A conversa andou depois da resposta do Assistente: o cartão mostra a sugestão de agora, e diz. */
 const mudou = computed(() => Boolean(lida.value && lida.value.hashDoDossie !== props.dados.hashDoDossie))
 
 async function ler() {
+  const { produto, id } = props.dados
+  const atual = () => props.dados.produto === produto && props.dados.id === id
   estado.value = 'lendo'
+  leadRelido.value = null
   erro.value = ''
   try {
-    const q = new URLSearchParams({ produto: props.dados.produto, id: props.dados.id })
+    const q = new URLSearchParams({ produto, id })
     const r = await fetch(`/api/operations/crm/copiloto/sugestao?${q}`, { cache: 'no-store' })
     const corpo = await r.json().catch(() => ({}))
+    if (!atual()) return
     if (!r.ok) {
       // 409: o lead saiu do trecho do copiloto (do "respondeu" à proposta) ou do funil.
       estado.value = r.status === 409 || r.status === 404 ? 'sem' : 'erro'
@@ -56,8 +65,16 @@ async function ler() {
       return
     }
     lida.value = corpo.sugestao ?? null
+    const visao = await fetch('/api/operations/crm', { cache: 'no-store' })
+    if (!atual()) return
+    if (visao.ok) {
+      const atual = await visao.json()
+      if (props.dados.produto !== produto || props.dados.id !== id) return
+      leadRelido.value = atual.estado === 'ok' ? atual.leads?.find((l: CrmLead) => l.produto === produto && (l.id === id || l.chave === id)) ?? null : null
+    }
     estado.value = lida.value ? 'pronto' : 'sem'
   } catch {
+    if (!atual()) return
     estado.value = 'erro'
     erro.value = 'A Central não respondeu.'
   }
@@ -66,6 +83,7 @@ async function ler() {
 async function copiar(oQue: 'mensagem' | 'proposta') {
   const s = lida.value
   if (!s) return
+  if (oQue === 'proposta' && !propostaLiberada.value) return
   const ok = await copiarTexto(oQue === 'mensagem' ? s.sugestao.mensagem : rascunho.value)
   copiado.value = ok ? oQue : 'falhou'
   window.clearTimeout(temporizador)

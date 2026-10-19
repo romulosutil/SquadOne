@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CrmJornada from './CrmJornada.vue'
 import CrmAprendizado from './CrmAprendizado.vue'
+import CrmSpiced from './CrmSpiced.vue'
 import CrmHistorico from './CrmHistorico.vue'
 import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
 import AcompanhamentoObservado from '../office/AcompanhamentoObservado.vue'
@@ -155,7 +156,9 @@ async function lerSugestaoGuardada() {
   }
 }
 watch([comCopiloto, () => props.lead.id, cabe], () => { void lerSugestaoGuardada() }, { immediate: true })
-const proposta = computed(() => (cabe.value ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
+const proposta = computed(() => (cabe.value && lida.value?.momento?.quem !== 'recepcao' && lida.value?.momento?.quem !== 'robo'
+  && props.lead.conversa?.ultima.papel !== 'recepcao' && props.lead.conversa?.ultima.papel !== 'robo'
+  ? propostaDeUmToque(props.lead, sugestaoGuardada.value) : null))
 /**
  * A sugestão como a Próxima venda a recebe (/copiloto/prontas): só no trecho em que o copiloto serve
  * e com a última mensagem dele (conversaDaVez em server/copiloto.ts). Sem esse filtro, a Ficha diria
@@ -534,6 +537,8 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         <span>{{ textoDaSubEtapa(lead.subEtapa) }} · {{ diasNaEtapa(lead) }}<template v-if="lead.leitura === 'viu'"> · leu</template><template v-else-if="lead.leitura === 'pela-resposta'"> · leu e respondeu</template></span>
       </p>
     </header>
+
+    <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
 
     <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 

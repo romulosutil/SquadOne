@@ -403,15 +403,11 @@ Triagem), tinha ritmo próprio (100/dia, 12/h, 5 min, até 18h) contra o da Cent
 25 envios em 25 min (15/10), e não anotava nada no CRM; a Próxima venda e o Telegram ofereciam os mesmos leads ao Rômulo. Foi parado e
 o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
 
-- **Elegibilidade** (`elegivel` no .py, `elegivelParaOTime` em `src/operations/primeiro-contato.ts`, a Central confere de novo): só o
-  Site em `pronto` (Novo, sem marco, conversa, resposta ou próximo passo), com o link rastreado (`links.enviar`) e a mensagem do Balcão
-  (`mensagemPronta`). `revisar` é a Triagem: lá o "Convidar" do Rômulo já é o envio (o convite rastreado), então nenhum lead convidado
-  chega ao time sem ter recebido a mensagem. Plus fica fora (saudação própria). PRUMO, Iris e estamparias não têm `pronto`: ficam fora até
-  existir uma decisão "Convidar pelo time" gravada no CRM (não existe hoje).
+- **Elegibilidade** (`elegivel` no .py, `elegivelParaOTime` em `src/operations/primeiro-contato.ts`, a Central confere de novo): Novo sem marco, conversa, resposta ou próximo passo, com mensagem e destino da fonte. Site em `pronto` usa o link rastreado e a mensagem do Balcão; PRUMO, Iris e Estamparia exigem o convite e origem do WhatsApp confirmada na Triagem. Plus fica fora do time: os envios são do Rômulo na Fase 0.
 - **Uma regra de ritmo e expediente**: o .py não tem mais ritmo. Cada envio pede `POST /api/operations/crm/frente/reservar { leadId }`;
   a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
   dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
-  dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time.
+  dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time. Teto único: 30/dia, 12/h, 5 min, sem cota por linha.
   Os números são os de `REGRAS_DO_RITMO`: 5 min entre primeiros contatos, 12 por hora móvel e 30 por dia de São Paulo, somando
   time, telas e Telegram (30 desde a noite de 19/10/2026, Fase 0 do diagnóstico de vendas; foi 100 de 18 a 19/10, antes 4 min,
   8/h e a rampa 10/20/30). São tetos internos, não um limite

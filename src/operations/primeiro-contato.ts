@@ -13,7 +13,7 @@
  *    primeiro contato dos leads do time; o time, por sua vez, não reserva lead que o operador já
  *    tocou hoje (`primeiros` do venda-do-dia.json, de qualquer superfície).
  *  - `elegivelParaOTime`: Novo sem histórico, com mensagem e destino da fonte. Site usa o link
- *    rastreado; Plus exige celular; PRUMO, Iris e Estamparia exigem origem do WhatsApp confirmada.
+ *    rastreado; PRUMO, Iris e Estamparia exigem origem do WhatsApp confirmada. Plus é do Rômulo.
  *  - `reservaDoTime`: a MESMA janela (EXPEDIENTE_DE_VENDA) e o MESMO ritmo (REGRAS_DO_RITMO) da
  *    Central, contando o retrato e os primeiros do dia de todas as superfícies. A rota que usa isto
  *    (server/frente-comercial.ts) decide e grava o primeiro do time num passo só da fila do
@@ -46,6 +46,8 @@ export function frenteDosArquivos(config: unknown, estado: unknown): FrenteDoPri
   const fila = objeto(estado) && Array.isArray(estado.fila) ? estado.fila : []
   for (const item of fila) {
     if (!objeto(item) || typeof item.id !== 'string' || !item.id) continue
+    // Plus pronto volta ao operador; recibos e incertezas antigos continuam protegendo contra repetição.
+    if (item.estado === 'pronto' && (item.produto === 'plus' || item.id.startsWith('plus:'))) continue
     if (ESTADOS.includes(item.estado as EstadoNoTime)) leads[item.id] = item.estado as EstadoNoTime
   }
   return { ativo: objeto(config) && config.ativo === true, leads }
@@ -58,6 +60,7 @@ export function frenteDosArquivos(config: unknown, estado: unknown): FrenteDoPri
 export function quemFazOPrimeiroContato(leadId: string, frente: FrenteDoPrimeiro): QuemFazOPrimeiro {
   const estado = frente.leads[leadId]
   if (estado === 'incerto' || estado === 'enviado') return 'time'
+  if (leadId.startsWith('plus:')) return 'operador'
   return frente.ativo && estado === 'pronto' ? 'time' : 'operador'
 }
 
@@ -95,9 +98,8 @@ function destinoValido(lead: LeadDoTime): boolean {
 
 /** O lead que a Central já liberou para o primeiro contato e que o time pode fazer (o mesmo `elegivel` do .py). */
 export function elegivelParaOTime(lead: LeadDoTime | undefined): boolean {
-  if (!lead || lead.etapa !== 'novo' || !destinoValido(lead) || !mensagemDoPrimeiroContato(lead)) return false
+  if (!lead || lead.produto === 'plus' || lead.etapa !== 'novo' || !destinoValido(lead) || !mensagemDoPrimeiroContato(lead)) return false
   if (lead.produto === 'site' && lead.sinal !== 'pronto') return false
-  if (lead.produto === 'plus' && (lead.sinal !== 'pronto' || lead.plus?.fixo !== false)) return false
   if (['prumo', 'iris', 'estampa'].includes(lead.produto)) {
     const origem = lead.triagem?.origemWhatsapp?.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     if (lead.sinal !== 'revisar' || !origem || /^(nao confirm|a confirmar|desconhecid)/.test(origem)) return false

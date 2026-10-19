@@ -13,7 +13,7 @@ entra em primeiro contato, com texto e destino da fonte validados na Central. De
   janela (proximo_expediente, EXPEDIENTE_*), porque a reserva é por lead e só responde com um lead na mão:
   o time precisa saber antes, para planejar a fila do dia certo e dizer quando ela volta. A cópia é travada
   por teste contra src/operations/trava-de-horario.ts (frente-comercial.test.py);
-- o texto é o da fonte: Balcão para Site, mensagem do Plus ou convite da Triagem;
+- o texto é o da fonte: Balcão para Site ou convite da Triagem; Plus é enviado apenas pelo Rômulo;
 - Site faz o clique rastreado do n8n antes do envio (grava clique_em; abrir nunca marca envio); outras
   ofertas são anotadas no CRM após o recibo;
 - lead que o Rômulo já tocou hoje (Central ou Telegram) é dele; lead na fila do time some da
@@ -192,7 +192,8 @@ def metricas_dos_setores(candidatos, fila, crm, registro, now):
 
 def elegivel(lead):
     produto=lead.get('produto');sinal=lead.get('sinal')
-    pronto=(produto=='site' and sinal=='pronto' or produto=='plus' and sinal=='pronto' and (lead.get('plus') or {}).get('fixo') is False
+    # Fase 0 (19/10): Plus é rede quente enviada pelo Rômulo, nunca pelo executor.
+    pronto=(produto=='site' and sinal=='pronto'
         or produto in ('prumo','iris','estampa') and sinal=='revisar' and origem_confirmada(lead))
     return bool(pronto and lead.get('etapa')=='novo' and numero(lead) and destino_do_lead(lead) and texto_do_lead(lead)
         and not lead.get('conversa') and not any((lead.get('marcos') or {}).values())

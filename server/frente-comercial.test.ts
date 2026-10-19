@@ -94,13 +94,11 @@ test('reserva: Triagem, fora da fila, time pausado, gate e fora do expediente re
   } finally { await m.fechar(); }
 });
 
-test('reserva: cinco ofertas usam o texto aprovado da fonte e rejeitam número não confirmado', async () => {
-  for (const produto of ['site', 'prumo', 'iris', 'estampa', 'plus'] as const) {
+test('reserva: quatro ofertas usam o texto aprovado da fonte e rejeitam número não confirmado', async () => {
+  for (const produto of ['site', 'prumo', 'iris', 'estampa'] as const) {
     const id = `${produto}:a`;
     const convite = `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`;
-    const extra: Partial<CrmLead> = produto === 'site' ? {} : produto === 'plus'
-      ? { produto, plus: { oferta: 'site', fixo: false, descricao: '' }, links: { enviar: convite, whatsapp: 'https://wa.me/5511998887766' } }
-      : { produto, sinal: 'revisar', mensagemPronta: undefined, triagem: { origemWhatsapp: 'cadastro confirmado' }, links: { convite, whatsapp: 'https://wa.me/5511998887766' } };
+    const extra: Partial<CrmLead> = produto === 'site' ? {} : { produto, sinal: 'revisar', mensagemPronta: undefined, triagem: { origemWhatsapp: 'cadastro confirmado' }, links: { convite, whatsapp: 'https://wa.me/5511998887766' } };
     const m = await montar([lead(id, extra)], [{ id, estado: 'pronto' }]);
     try { assert.deepEqual((await m.reservar(id)).corpo, { reservado: true, texto: MSG }); }
     finally { await m.fechar(); }
@@ -121,6 +119,30 @@ test('quem faz o primeiro contato, do disco: a fila do time com ele ligado, e o 
     assert.deepEqual([...await lerPrimeirosDoTime(m.dir)], ['site:b']);
     await fs.rm(path.join(m.dir, 'frente-comercial.json'));
     assert.deepEqual([...await lerPrimeirosDoTime(m.dir)], []);
+  } finally { await m.fechar(); }
+});
+
+test('Fase 0: Plus não pode ser reservado pelo time, mesmo pronto numa fila antiga', async () => {
+  const id = 'plus:rede';
+  const convite = `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`;
+  const m = await montar([lead(id, { produto: 'plus', plus: { oferta: 'site', fixo: false, descricao: '' }, links: { enviar: convite, whatsapp: 'https://wa.me/5511998887766' } })], [{ id, estado: 'pronto' }]);
+  try {
+    assert.deepEqual((await m.reservar(id)).corpo, { reservado: false, motivo: 'nao-elegivel', ate: null });
+    assert.deepEqual([...await lerPrimeirosDoTime(m.dir)], []);
+    assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
+  } finally { await m.fechar(); }
+});
+
+test('Fase 0: o 31º contato do time é barrado pela soma das cinco linhas e superfícies', async () => {
+  const m = await montar([lead('site:novo')], [{ id: 'site:novo', estado: 'pronto' }]);
+  try {
+    const produtos = ['site', 'prumo', 'iris', 'estampa', 'plus'];
+    for (let i = 0; i < 30; i++) {
+      m.relogio.agora = AGORA - (30 - i) * 5 * 60_000;
+      await m.memoriaDaVenda.primeiroContato(`${produtos[i % produtos.length]}:${i}`, i % 2 ? 'central' : 'telegram');
+    }
+    m.relogio.agora = AGORA;
+    assert.deepEqual((await m.reservar('site:novo')).corpo, { reservado: false, motivo: 'dia', ate: '2026-10-20T03:00:00.000Z' });
   } finally { await m.fechar(); }
 });
 

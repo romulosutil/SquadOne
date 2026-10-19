@@ -14,6 +14,7 @@ import { afterEach, describe, it } from "node:test";
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "squadone-auth-"));
 process.chdir(tmp);
+process.env.SQUADONE_DATA_DIR = path.join(tmp, "data");
 process.env.VITE_GOOGLE_CLIENT_ID = "123-abc.apps.googleusercontent.com";
 process.env.GOOGLE_CLIENT_SECRET = "segredo";
 process.env.TOKEN_ENC_KEY = crypto.randomBytes(32).toString("base64");

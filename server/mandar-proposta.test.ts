@@ -12,6 +12,9 @@ import {
 // toque abre o WhatsApp com a proposta e anota `proposta`; a fila põe o passo logo depois do
 // "responder". Tudo fixture: nenhuma planilha, n8n, copiloto ou WhatsApp real é tocado.
 
+import { spicedVazio, textoDoRegistroSpiced } from "../src/operations/spiced.ts";
+
+const QUALIFICADO = { ...spicedVazio(), dor: "site não apresenta o serviço", impacto: "clientes não encontram a empresa", decisao: { decisor_confirmado: "sim" as const, quem: "dono", como_paga: "a combinar" } };
 const AGORA = new Date("2026-10-14T13:00:00Z"); // quarta, 10:00 em São Paulo
 const WEBHOOK = "https://dell.exemplo.ts.net/webhook";
 const horas = (n: number) => new Date(AGORA.getTime() - n * 3600_000).toISOString();
@@ -30,7 +33,7 @@ function visaoCom(site: Record<string, string>, registros: Array<Record<string, 
     links: { webhook: WEBHOOK },
     fontes: {
       site: { planilha: "Leads", aba: "Leads", colunas: COLUNAS, linhas: [linha] },
-      registros: { aba: "CRM", colunas: ["em", "produto", "id", "tipo", "texto", "data"], linhas: registros },
+      registros: { aba: "CRM", colunas: ["em", "produto", "id", "tipo", "texto", "data"], linhas: [...registros, { em: "2026-10-13T13:00:00Z", produto: "site", id: "L", tipo: "spiced", texto: textoDoRegistroSpiced(QUALIFICADO), data: "" }] },
     },
   });
   const pasta: PastaDoLead = {
@@ -90,7 +93,7 @@ describe("fila de venda: 'mandar a proposta' depois do 'gostei'", () => {
 // ---------------------------------------------------------------- o texto, PURO
 
 const BASE: LeadDaProposta = {
-  produto: "site", etapa: "contato", sinal: "enviado", followupHoje: false, empresa: "Studio L",
+  spiced: QUALIFICADO, produto: "site", etapa: "contato", sinal: "enviado", followupHoje: false, empresa: "Studio L",
   marcos: { enviado: dias(3), segundaEnviada: horas(26) },
   links: { whatsapp: "https://wa.me/5527999990000" },
   resposta: { tipo: "interesse", trecho: "gostei", em: horas(2) },
@@ -107,7 +110,7 @@ describe("propostaDeUmToque: copiloto, colinha ou nada", () => {
     },
     { caso: "copiloto só com grátis: cai na colinha", lead: BASE, sugestao: comItens("raio-x", "mapa"), origem: "colinha" },
     { caso: "PRUMO depois do Mapa sem copiloto: a Fonte, com colchetes para completar", lead: { ...BASE, produto: "prumo", sinal: "diagnostico" }, origem: "colinha", tem: [/R\$ 1\.500/, /\[/] },
-    { caso: "Iris: sem cardápio, sem botão", lead: { ...BASE, produto: "iris" }, origem: null },
+    { caso: "Iris: faixas próprias e quantidade a confirmar, sem preço de outro produto", lead: { ...BASE, produto: "iris" }, origem: "colinha", tem: [/Iris/, /R\$ 39/, /R\$ 32/, /R\$ 25/, /ficha ativa/, /\[confirmar/], naoTem: [/R\$ 690/] },
     { caso: "sem WhatsApp do lead: sem botão", lead: { ...BASE, links: {} }, origem: null },
   ];
   for (const c of casos) {
@@ -115,7 +118,7 @@ describe("propostaDeUmToque: copiloto, colinha ou nada", () => {
       const p = propostaDeUmToque(c.lead, c.sugestao ?? null);
       assert.equal(p?.origem ?? null, c.origem);
       if (!p) return;
-      assert.ok(soPrecosDoCardapio(p.texto), p.texto);
+      assert.ok(soPrecosDoCardapio(p.texto, c.lead.produto === 'plus' ? c.lead.plus?.oferta : c.lead.produto), p.texto);
       assert.equal(new URL(p.url).searchParams.get("text"), p.texto);
       for (const r of c.tem ?? []) assert.match(p.texto, r);
       for (const r of c.naoTem ?? []) assert.doesNotMatch(p.texto, r);
