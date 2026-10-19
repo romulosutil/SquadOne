@@ -11,6 +11,7 @@ import {
 } from './resultados'
 import type { CrmLead } from './types'
 import PorQueNaoVende from './PorQueNaoVende.vue'
+import { aprendizadosDosLeads, ROTULO_DO_TESTE } from './aprendizado-comercial'
 import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 
@@ -24,6 +25,7 @@ import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } 
 const props = withDefaults(defineProps<{ leads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
 
 const periodo = ref<Periodo>('30')
+const aprendizados = computed(() => aprendizadosDosLeads(props.leads))
 const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: boolean }> = [
   { id: 'nicho', titulo: 'Por nicho', explicacao: 'Quem responde e quem fecha em cada busca.', soSite: false },
   { id: 'mensagem', titulo: 'Por mensagem', explicacao: 'A variação da primeira mensagem que o lead recebeu (letra desde 07/10). Sem a letra, o regime pela data: com o link na 1ª mensagem até 04/10, pedido de licença sem link desde 05/10.', soSite: true },
@@ -92,27 +94,40 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       <!-- OT-08 (16/10/2026): os degraus do funil moram aqui; a Hoje mostra só o gargalo. -->
       <PorQueNaoVende :leads="leads" :agora="agora" />
 
+      <section class="crm-grupo" aria-labelledby="crm-aprendizados">
+        <header class="crm-grupo__cabeca"><h2 id="crm-aprendizados">O que os leads ensinaram</h2></header>
+        <p class="crm-grupo__explicacao">{{ aprendizados.length }} leads com aprendizado registrado na seleção atual. Última revisão por lead, sem filtro de período. Avançar não significa vender; só o desfecho confirma a venda. Revise os resultados antes de mudar a oferta.</p>
+        <p v-if="!aprendizados.length" class="crm-nota-pequena">Abra uma ficha e registre o fato, a hipótese, o próximo teste e o resultado em “O que este lead ensinou”.</p>
+        <ul v-else class="crm-lista">
+          <li v-for="a in aprendizados" :key="a.leadId" class="crm-resultado">
+            <div class="crm-resultado__cabeca"><a :href="`/crm?lead=${encodeURIComponent(a.leadId)}`">{{ a.empresa }}</a><span>{{ ROTULO_DO_TESTE[a.resultado] }}{{ a.pausarAteResposta ? ' · pausa solicitada' : '' }}</span></div>
+            <p><strong>Fato:</strong> {{ a.fato }}</p>
+            <p><strong>Hipótese:</strong> {{ a.hipotese }}</p>
+            <p><strong>Teste:</strong> {{ a.teste }}</p>
+          </li>
+        </ul>
+      </section>
+
       <section class="crm-grupo" aria-labelledby="crm-resultado-velocidade">
         <header class="crm-grupo__cabeca">
           <h2 id="crm-resultado-velocidade">Depois do "sim"</h2>
         </header>
         <p class="crm-grupo__explicacao">
-          Quanto tempo a venda espera em cada passo, nos últimos {{ velocidade.dias }} dias. A chance de fechar cai rápido depois do
-          interesse: a meta é o link em até {{ LIMITE_DA_RESPOSTA_RAPIDA_H }} h.
+          Intervalos entre registros nos últimos {{ velocidade.dias }} dias. Até {{ LIMITE_DA_RESPOSTA_RAPIDA_H }} h é uma meta operacional, não uma taxa de conversão comprovada. Mensagem fora do arquivo pode não ter sido medida.
         </p>
         <ul class="crm-lista">
           <li class="crm-resultado">
             <div class="crm-resultado__cabeca"><strong>Do "quero ver" ao link</strong></div>
             <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.queroVerAoLink) }}</p>
             <p v-if="velocidade.queroVerAoLink.esperando.length" class="crm-nota-pequena">
-              Esperando o link agora: {{ textoDaEspera(velocidade.queroVerAoLink) }}
+              Sem registro do material depois da autorização: {{ textoDaEspera(velocidade.queroVerAoLink) }}
             </p>
           </li>
           <li class="crm-resultado">
             <div class="crm-resultado__cabeca"><strong>Do link à proposta</strong></div>
             <p class="crm-resultado__numeros">{{ textoDaMedida(velocidade.linkAProposta) }}</p>
             <p v-if="velocidade.linkAProposta.esperando.length" class="crm-nota-pequena">
-              Receberam a 2ª mensagem e esperam a proposta: {{ textoDaEspera(velocidade.linkAProposta) }}
+              Material registrado, sem proposta registrada depois: {{ textoDaEspera(velocidade.linkAProposta) }}
             </p>
           </li>
           <li class="crm-resultado">

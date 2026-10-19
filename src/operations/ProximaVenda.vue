@@ -48,9 +48,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { estadoDoVideo, gravarVideos, lerVideos, marcarVideo, passoDoVideo, type EnviosAbertos } from './fila-de-envio'
 import {
-  chamadaDaAcao, filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, nichosDoPrimeiro, noExpedienteDeVenda,
-  resumoDaFila, resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
+  filaDaTela, filaDeVenda, gravarResolvidas as gravarNoStorage, lerResolvidas as lerDoStorage, nichoDo, nichosDoPrimeiro, noExpedienteDeVenda,
+  resumoDoDia, textoDosPrimeiros, type AcaoDeVenda, type Resolvidas, type ResumoDoDia, type SugestaoDeVenda,
 } from './proxima-venda'
+import { nomeCurto } from './historico-comercial'
 import { planoDoDia } from './plano-do-dia'
 import { diagnosticoDeVenda } from './por-que-nao-vende'
 import { absorverDia, liberadosDoDia as liberados, liberarLead } from './liberados'
@@ -178,7 +179,7 @@ const ritmoLivre = computed(() => ritmo.value.motivo === null)
 const fila = computed<AcaoDeVenda[]>(() => filaDaTela(props.visao, {
   ritmo: ritmo.value, noExpediente: expediente.value, agora: agora.value,
   liberados: liberados.value, sugestoes: sugestoes.value, nicho: nicho.value, primeirosDoTime: primeirosDoTime.value,
-}, resolvidas.value))
+}, resolvidas.value).filter(a => !a.primeiroContato))
 /** A contagem do dia: o "N na fila", o "Ver a fila inteira (N)" e a aba "A fazer N" (via `resumo`). */
 const resumo = computed(() => resumoDoDia(fila.value, props.visao?.estado === 'ok' ? props.visao : null, ritmo.value))
 watch(resumo, (r) => emit('resumo', r), { immediate: true })
@@ -204,7 +205,7 @@ watch(nichos, (lista) => {
   if (nicho.value && (lista.length < 2 || !lista.some((n) => n.chave === nicho.value))) nicho.value = ''
 })
 const atual = computed(() => fila.value[0] ?? null)
-const chamada = computed(() => (atual.value ? chamadaDaAcao(atual.value) : ''))
+const chamada = computed(() => atual.value?.conferirHistorico ? 'Confira o contexto antes de retomar' : atual.value ? ROTULO_DO_TIPO[atual.value.tipo] : '')
 /**
  * O plano do dia (17/10/2026, "a Central está muito reativa"): o cartão abre dizendo quanto do dia já
  * foi, quanto falta e quanto de janela de envio sobra, em vez de esperar o Rômulo olhar a fila. Com a
@@ -260,7 +261,7 @@ const O_QUE_ANOTA: Record<NonNullable<AcaoDeVenda['anota']>, string> = {
   proposta: 'a proposta', recusou: 'a recusa', segunda_enviada: 'o envio', followup_enviado: 'o envio', plus_enviado: 'o envio',
 }
 
-async function aoTocar(a: AcaoDeVenda) {
+async function aoTocar(a: AcaoDeVenda, confirmouEnvio = false) {
   tocado.value = a.chave
   if (a.primeiroContato) {
     // O reforço local segura a trava já; o servidor conta para o Telegram e outro navegador.
@@ -272,6 +273,10 @@ async function aoTocar(a: AcaoDeVenda) {
     }).then(async (r) => { if (r.ok) lerDia(await r.json()) }).catch(() => undefined)
   }
   if (!a.anota) return
+  if (a.anota === 'proposta' && !confirmouEnvio) {
+    status.value = `${a.empresa}: proposta preparada. Confirme “Enviei” somente depois de enviar.`
+    return
+  }
   const lead = props.visao?.leads.find((l) => l.id === a.leadId)
   if (!lead) return
   try {
@@ -279,7 +284,7 @@ async function aoTocar(a: AcaoDeVenda) {
     // anotam de novo. A proposta vai sem data: o servidor grava a de hoje (São Paulo), como a Ficha.
     const r = await fetch('/api/operations/crm/venda/anotar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chave: a.chave, produto: lead.produto, id: lead.chave, tipo: a.anota }),
+      body: JSON.stringify({ chave: a.chave, produto: lead.produto, id: lead.chave, tipo: a.anota, texto: a.anota === 'proposta' ? a.rascunho?.slice(0, 1000) ?? '' : '' }),
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
@@ -288,12 +293,15 @@ async function aoTocar(a: AcaoDeVenda) {
       : a.anota === 'recusou' ? `${a.empresa}: recusa marcada; sai do funil no próximo retrato.` : `${a.empresa}: envio anotado.`
     if (falha.value?.leadId === a.leadId) falha.value = null
     if (!corpo.jaEstava) emit('registrado')
+    return true
   } catch {
     falha.value = { leadId: a.leadId, texto: `${a.empresa}: não consegui anotar ${O_QUE_ANOTA[a.anota]} — anote na ficha.` }
+    return false
   }
 }
 
-function resolver(a: AcaoDeVenda, pulou: boolean) {
+async function resolver(a: AcaoDeVenda, pulou: boolean) {
+  if (!pulou && a.anota === 'proposta' && !(await aoTocar(a, true))) return
   resolvidas.value = { ...resolvidas.value, [a.chave]: { em: Date.now(), pulou } }
   gravarResolvidas()
   // O servidor é a memória que vale para o Telegram (fecha o aviso aberto lá) e outro navegador;
@@ -332,14 +340,9 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
   <section class="venda" aria-label="Próxima venda">
     <!-- O plano do dia: a tela diz o dia antes de pedir o próximo toque. Só com o funil lido: sem
          retrato não há conta, e o aviso de baixo já diz isso. -->
-    <div v-if="visao?.estado === 'ok'" class="venda__plano" :class="{ 'is-urgente': plano.urgente }">
-      <p class="venda__manchete">{{ plano.manchete }}</p>
-      <div
-        v-if="plano.feitas || plano.restantes" class="venda__progresso" role="progressbar" aria-label="Andamento do dia"
-        aria-valuemin="0" :aria-valuemax="plano.feitas + plano.restantes" :aria-valuenow="plano.feitas"
-      ><span :style="{ '--andamento': plano.progresso }" /></div>
-      <p v-if="plano.oQueFalta" class="texto-pequeno">Falta: {{ plano.oQueFalta }}</p>
-      <p class="venda__janela texto-pequeno" :class="{ 'is-urgente': plano.urgente }">{{ plano.janela }}</p>
+    <div v-if="visao?.estado === 'ok'" class="venda__plano">
+      <p class="venda__manchete">Sua próxima ação</p>
+      <p class="texto-2 texto-pequeno">{{ resumo.total }} {{ resumo.total === 1 ? 'ação na fila' : 'ações na fila' }} · uma decisão por vez, começando pelas conversas em andamento.</p>
     </div>
 
     <!-- Em cima do cartão: depois do "Enviei", a ação seguinte toma o lugar e o recado do toque
@@ -360,13 +363,19 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
     <template v-else-if="atual">
       <article class="venda__atual" :class="{ 'is-quente': atual.quente }">
         <p class="venda__tipo">
-          <span class="selo" :class="atual.quente ? 'selo--erro' : ''">{{ ROTULO_DO_TIPO[atual.tipo] }}</span>
+          <span class="selo" :class="atual.quente ? 'selo--erro' : ''">{{ atual.conferirHistorico ? 'Histórico a conferir' : ROTULO_DO_TIPO[atual.tipo] }}</span>
           <span class="texto-2 texto-pequeno">{{ atual.contexto }}</span>
         </p>
         <!-- "Envie para X, isto:" (17/10/2026): a chamada é a instrução e a mensagem vem logo abaixo, à
              vista (era uma dobra fechada), com o botão que a envia colado nela. A mensagem tem altura
              máxima, então o botão não desce para baixo da barra no celular (AC-16). -->
         <h2 id="venda-titulo">{{ chamada }}</h2>
+        <p class="venda__empresa" :title="atual.empresa">{{ nomeCurto(atual.empresa) }}</p>
+        <div v-if="atual.conferirHistorico" class="venda__botoes acoes">
+          <a class="botao botao--primario" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Conferir histórico e decidir</a>
+          <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Deixar para depois</button>
+        </div>
+        <p class="texto-2">{{ atual.porque }}</p>
         <template v-if="atual.rascunho">
           <div class="venda__origem">
             <p class="texto-2 texto-pequeno">
@@ -377,20 +386,20 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           </div>
           <blockquote class="venda__mensagem" tabindex="0" aria-label="Mensagem a enviar">{{ atual.rascunho }}</blockquote>
         </template>
-        <p v-else-if="atual.tipo !== 'desfecho'" class="venda__escrever">Sem texto pronto: escreva à mão. <strong>Como:</strong> {{ atual.tatica }}</p>
+        <p v-else-if="!atual.conferirHistorico && atual.tipo !== 'desfecho'" class="venda__escrever">Sem texto pronto: escreva à mão. <strong>Como:</strong> {{ atual.tatica }}</p>
 
         <!-- Fazer agora: UM primário, logo depois da mensagem (AC-16), e só o "Pular" ao lado (BP-R3).
              Depois do toque no WhatsApp o passo seguinte é "Enviei, próxima": ele toma o lugar do
              primário em vez de virar mais um botão na fileira. O resto mora em "Mais ações". -->
-        <div class="venda__botoes acoes">
-          <button v-if="tocado === atual.chave" type="button" class="botao botao--primario" @click="resolver(atual, false)">Enviei, próxima</button>
+        <div v-if="!atual.conferirHistorico" class="venda__botoes acoes">
+          <span v-if="tocado === atual.chave" class="etiqueta" role="status">Time acompanhando a conversa</span>
           <button v-else-if="atual.tipo === 'desfecho'" type="button" class="botao botao--primario" @click="marcarRecusa(atual)">Marcar a recusa</button>
           <a
             v-else-if="atual.link" class="botao botao--primario" :href="atual.link.url" target="_blank" rel="noopener"
             @click="aoTocar(atual)"
           >{{ atual.rascunho ? 'Abrir no WhatsApp com a mensagem' : 'Abrir a conversa no WhatsApp' }} <span aria-hidden="true">↗</span></a>
           <a v-else class="botao botao--primario" :href="hrefDaFicha(atual.leadId)" @click="abrirAFicha($event, atual.leadId)">Abrir a Ficha</a>
-          <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Pular</button>
+          <button type="button" class="botao botao--leve" @click="resolver(atual, true)">Deixar para depois</button>
           <details v-if="atual.link || atual.tipo === 'desfecho'" class="mais-acoes">
             <summary>Mais ações<template v-if="videoAFazer"> · falta o vídeo</template></summary>
             <ul class="lista-acoes">
@@ -406,15 +415,15 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
           </details>
         </div>
 
-        <p v-if="atual.link && atual.tipo !== 'desfecho' && tocado !== atual.chave" class="texto-2 texto-pequeno">Depois de enviar, volte aqui e toque em “Enviei, próxima”.</p>
+        <p v-if="atual.link && atual.tipo !== 'desfecho'" class="texto-2 texto-pequeno">Envios e respostas são acompanhados pela integração com o WhatsApp.</p>
 
         <!-- O porquê agora: a situação (a frase única da ação, AC-12) e o que o servidor sabe do momento. -->
-        <p class="venda__porque"><strong>{{ atual.titulo }}.</strong> {{ atual.porque }}</p>
+        <p v-if="atual.conferirHistorico" class="texto-2 texto-pequeno">A conferência não envia mensagem nem altera a etapa do lead.</p>
 
         <!-- Uma dobra só para o que é consulta: a conversa, a leitura do copiloto, o "Como", o vídeo e o
              texto padrão da esteira. A mensagem pronta saiu daqui: ela fica à vista, logo depois da
              chamada. Fechada com texto pronto; aberta quando o passo é escrever. -->
-        <details class="dobra venda__como" :open="comoAberto" @toggle="comoAberto = ($event.target as HTMLDetailsElement).open">
+        <details v-if="!atual.conferirHistorico" class="dobra venda__como" :open="comoAberto" @toggle="comoAberto = ($event.target as HTMLDetailsElement).open">
           <summary>Conversa e como <span class="texto-2 texto-pequeno">{{ atual.rascunho ? (atual.copiloto ? '(com a leitura do copiloto)' : '(com o passo a passo)') : '(escrever à mão)' }}</span></summary>
           <p v-if="atual.conversa" class="venda__conversa" :class="{ 'is-sem': !atual.conversa.startsWith('Última') }">{{ atual.conversa }}</p>
           <p v-if="atual.copiloto?.momento" class="venda__tatica"><strong>Leitura do copiloto:</strong> {{ atual.copiloto.momento.leitura }}</p>
@@ -431,7 +440,7 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
       </article>
 
       <p v-if="depois.length" class="venda__depois">
-        <span>Depois: {{ resumoDaFila(depois) }}.</span>
+        <span>{{ depois.length }} {{ depois.length === 1 ? 'outra ação aguardando' : 'outras ações aguardando' }}.</span>
         <button type="button" class="botao botao--leve" :aria-expanded="verFila" @click="verFila = !verFila">{{ verFila ? 'Esconder a fila' : `Ver a fila inteira (${resumo.total})` }}</button>
       </p>
       <!-- A fila inteira é a da contagem: a atual em primeiro, marcada, e as seguintes. -->
@@ -453,8 +462,11 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 
     <!-- Quando o primeiro contato volta: um recado só (horário e ritmo), com o "Liberar" como link
          quando é o horário que segura, para o lead que sairia agora. -->
+    <details v-if="contagemDosPrimeiros && visao?.estado === 'ok'" class="dobra venda__prospeccao">
+      <summary>Prospecção · {{ resumo.primeirosProntos }} contatos preparados</summary>
+      <p class="texto-2 texto-pequeno">As travas abaixo valem para primeiros contatos. Confira as conversas em andamento antes de ampliar a prospecção.</p>
     <RecadoDeTravas
-      v-if="contagemDosPrimeiros && visao?.estado === 'ok'" :recado="recado" :contagem="`${contagemDosPrimeiros}.`"
+      :recado="recado" :contagem="`${contagemDosPrimeiros}.`"
       :rotulo-do-liberar="candidatoForaDoExpediente ? rotuloDoLiberar('venda', { empresa: candidatoForaDoExpediente.empresa }) : undefined"
       @liberar="candidatoForaDoExpediente && liberar(candidatoForaDoExpediente)"
     />
@@ -468,19 +480,19 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
         </select>
       </label>
     </details>
+    </details>
   </section>
 </template>
 
 <style>
 .venda { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-left-width: var(--faixa-forte); border-left-color: var(--destaque); border-radius: var(--raio-bloco); background: var(--superficie); color: var(--texto); }
 /* O plano do dia: fundo de zona (sem borda), a manchete em peso forte e a barra do andamento. */
-.venda__plano { display: grid; gap: var(--esp-1); padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--superficie-2); }
+.venda__plano { display: grid; gap: var(--esp-1); padding-bottom: var(--esp-3); border-bottom: var(--divisor); }
+.venda__empresa { font-size: var(--tam-nome); font-weight: var(--peso-forte); overflow-wrap: anywhere; }
+.venda__prospeccao[open] { display: grid; gap: var(--esp-3); }
 .venda__manchete { font-size: var(--tam-nome); font-weight: var(--peso-titulo); line-height: 1.2; letter-spacing: -0.01em; }
-.venda__progresso { height: var(--esp-2); border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden; }
-.venda__progresso span { display: block; width: 100%; height: 100%; border-radius: var(--raio-pilula); background: var(--positivo); transform: scaleX(var(--andamento, 0)); transform-origin: left; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 .venda__janela.is-urgente { padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-selo); background: var(--erro-fundo); font-weight: var(--peso-forte); }
-@media (prefers-reduced-motion: reduce) { .venda__progresso span { transition: none; } }
-.venda h2 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.venda h2 { margin: 0; font-size: var(--tam-secao); font-weight: var(--peso-titulo); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .venda p { margin: 0; }
 .venda__atual { display: grid; gap: var(--esp-3); min-width: 0; }
 .venda__tipo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
@@ -492,7 +504,7 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__como[open] { display: grid; gap: var(--esp-2); min-width: 0; }
 /* A mensagem à vista, logo depois da chamada. Altura máxima curta no celular para o botão do WhatsApp
    não descer para baixo da barra (AC-16); a rolagem é dela, e o foco por teclado a alcança. */
-.venda__mensagem { margin: 0; padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--ok-fundo); color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow: auto; }
+.venda__mensagem { margin: 0; padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--ok-fundo); color: var(--texto); white-space: pre-wrap; overflow-wrap: anywhere;  }
 .venda__mensagem.is-padrao { background: var(--superficie-2); }
 .venda__origem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); }
 .venda__escrever { padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-controle); background: var(--atencao-fundo); }
@@ -507,4 +519,7 @@ const ROTULO_DO_TIPO: Record<AcaoDeVenda['tipo'], string> = {
 .venda__fila { display: grid; gap: var(--esp-1); margin: 0; padding: 0; list-style: none; }
 .venda__fila a { display: grid; gap: var(--esp-0); min-height: var(--toque); padding: var(--esp-2) var(--esp-3); border-radius: var(--raio-controle); background: var(--superficie-2); color: var(--texto); text-decoration: none; }
 .venda__fila a:hover { background: var(--hover); }
+@media (max-width: 39.99rem) {
+  .venda__empresa { font-size: var(--tam-texto); line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+}
 </style>

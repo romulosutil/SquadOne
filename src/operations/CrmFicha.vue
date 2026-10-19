@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CrmJornada from './CrmJornada.vue'
+import CrmAprendizado from './CrmAprendizado.vue'
+import CrmHistorico from './CrmHistorico.vue'
+import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
+import AcompanhamentoObservado from '../office/AcompanhamentoObservado.vue'
+import { precisaConferirHistorico } from './historico-comercial'
+import { contatoPausado } from './aprendizado-comercial'
 import { copilotoServe, type SugestaoDoCopiloto } from './copiloto'
 import { cabeProposta, gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { copilotoLigado } from './copiloto-ligado'
@@ -67,18 +73,21 @@ copilotoLigado().then((ligado) => { comCopiloto.value = ligado })
 // O Assistente (RULES 28), quando existe nesta Central. No celular o ＋ da barra fica inerte com a
 // folha da Ficha aberta: este botão abre o painel por cima dela, com o lead do endereço como contexto.
 const assistente = useAssistente()
+onMounted(() => { assistente.contextoDaFicha.value = { pagina: 'ficha', lead: { produto: props.lead.produto, id: props.lead.id } } })
+onBeforeUnmount(() => { if (assistente.contextoDaFicha.value?.lead?.id === props.lead.id) assistente.contextoDaFicha.value = null })
 const perguntarSobreOLead = () => assistente.abrir()
 const nota = ref('')
 const proximoTexto = ref('')
 const proximoData = ref('')
 const propostaData = ref(hojeEmSP())
+const propostaResumo = ref('')
 // Os registros de desfecho (AC-08) já estão em CrmTipoDeRegistro; o par fica explícito para quem lê.
 type TipoDaFicha = CrmTipoDeRegistro | RegistroDeDesfecho
 const salvando = ref<TipoDaFicha | null>(null)
 const mensagem = ref('')
 const erro = ref('')
 // De onde saiu o último registro: a confirmação aparece perto do botão tocado, não no outro canto da ficha.
-const origem = ref<'proximo' | 'anotar' | 'acao' | 'desfecho'>('anotar')
+const origem = ref<'proximo' | 'anotar' | 'acao' | 'desfecho' | 'aprendizado' | 'historico'>('anotar')
 
 const hoje = hojeEmSP()
 const aberto = computed(() => props.lead.etapa !== 'ganho' && props.lead.etapa !== 'perdido')
@@ -107,6 +116,8 @@ function quandoFoi(iso?: string): string {
 // Um "próximo passo" só (eram três: a faixa fixa, a Jornada e o "Próximo passo salvo" em Anotar).
 // A jornada daqui só serve ao prazo dos 7 dias; a frase do "Agora" é a da fila (agoraDaFicha).
 const proximo = computed(() => proximoDaJornada(props.lead))
+const historicoPendente = computed(() => precisaConferirHistorico(props.lead) && !primeiroDaFicha.value)
+const contatoEmPausa = computed(() => contatoPausado(props.lead))
 // O prazo é só o do próximo passo salvo à mão: o "proposta em até 24 h" da jornada era uma redação a
 // mais do mesmo passo (AC-12), e a tática da fila já diz o tempo quando ele importa.
 const prazo = computed(() => {
@@ -170,7 +181,7 @@ const primeiroDaFicha = computed(() => primeiroContatoDaFicha(props.lead, {
 const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
   ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
-const agora = computed(() => agoraDaFicha(props.lead, acaoDaFila.value))
+const agora = computed(() => historicoPendente.value && !contatoEmPausa.value ? { frase: 'Confira a conversa antes de decidir a retomada.', citaOProximo: false } : agoraDaFicha(props.lead, acaoDaFila.value))
 
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
 // demo depois do "sim", follow-up). `anota`: tocar já anota o envio, e a ficha avisa isso uma vez.
@@ -193,7 +204,7 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     // Primeiro da lista quando ele gostou: o link da 2ª mensagem ainda pode estar na planilha, e o passo já é outro.
     ['proposta', 'Mandar a proposta', gostou.value ? proposta.value?.url : undefined, true, true],
     ['enviar', 'Enviar a primeira mensagem', l.enviar, true, true],
-    ['convite', 'Enviar o convite', l.convite, true, true],
+    ['convite', 'Abrir convite no WhatsApp', l.convite, true, false],
     ['segunda', segunda, l.segunda, interesse, true],
     ['gerarDemo', 'Gerar o demo', l.gerarDemo, interesse, false],
     ['followup', rotuloDoFollowup(props.lead), l.followup, true, true],
@@ -243,23 +254,13 @@ const secundarias = computed(() => [...doPasso.value.slice(1), ...(propostaAoLad
 const apoio = computed(() => acoes.value.filter((a) => !a.principal && a.chave !== primaria.value?.chave))
 const comProposta = computed(() => primaria.value?.chave === 'proposta' || secundarias.value.some((a) => a.chave === 'proposta'))
 const dicaDaAcao = computed(() => [
-  doPasso.value.some((a) => a.anota && a.chave !== 'proposta') ? 'Tocar já anota o envio.' : '',
-  comProposta.value ? 'Mandar a proposta abre o WhatsApp com ela e já a marca enviada hoje.' : '',
+  doPasso.value.some((a) => a.anota) ? 'O time acompanha o envio pela integração do WhatsApp.' : '',
   props.lead.reenvioDoRobo && doPasso.value.some((a) => a.chave === 'followup') ? 'Reenvio único, pedindo o responsável.' : '',
   doPasso.value.some((a) => a.chave === 'gerarDemo') ? 'O demo sai em 20 a 40 min; o aviso chega no WhatsApp.' : '',
 ].filter(Boolean).join(' '))
 
 /** Os links que anotam o envio ao serem tocados. */
 const TIPO_DA_ACAO: Record<string, TipoDeEnvioAnotado> = { segunda: 'segunda_enviada', followup: 'followup_enviado' }
-function aoTocar(chave: string, href: string) {
-  // O toque abre o WhatsApp (o <a> segue normal) e anota a proposta com a data de hoje: o envio e a marca
-  // eram dois gestos, e só o primeiro acontecia. A planilha confirma no próximo retrato (RULES 11).
-  if (chave === 'proposta') { void registrar('proposta', '', hoje, 'Proposta anotada com a data de hoje.', 'acao'); return }
-  // Plus (15/10/2026): o link de envio não passa pelo n8n, então o toque é que anota a primeira mensagem.
-  const tipo = chave === 'enviar' && props.lead.produto === 'plus' ? 'plus_enviado' : TIPO_DA_ACAO[chave]
-  if (tipo) emit('anotar', props.lead.id, tipo)
-  if (ehPrimeiroContato(props.lead, href)) emit('primeiro', props.lead.id)
-}
 /** "2ª mensagem anotada às 14:02 · Follow-up anotado às 14:05", enquanto a planilha não confirma. */
 const anotacoes = computed(() => (['segunda_enviada', 'followup_enviado', 'plus_enviado'] as const).flatMap((tipo) => {
   const t = anotadoEm(props.anotados, props.lead.id, tipo)
@@ -420,11 +421,12 @@ watch(() => props.lead.id, () => {
   escolhendoPerda.value = false
   marcandoProposta.value = false
   propostaData.value = hoje
+  propostaResumo.value = ''
 })
 
 // ------------------------------------------------------------ gravar na planilha
 
-async function registrar(tipo: TipoDaFicha, texto: string, data: string, feito: string, de: 'proximo' | 'anotar' | 'acao' | 'desfecho' = 'anotar') {
+async function registrar(tipo: TipoDaFicha, texto: string, data: string, feito: string, de: 'proximo' | 'anotar' | 'acao' | 'desfecho' | 'aprendizado' | 'historico' = 'anotar') {
   salvando.value = tipo
   origem.value = de
   mensagem.value = ''
@@ -506,7 +508,15 @@ async function abrirEscolha(qual: 'perda' | 'proposta') {
   await nextTick()
   primeiraDaEscolha.value?.focus()
 }
-const marcarProposta = () => marcarDesfecho('proposta', propostaData.value || hoje)
+const marcarProposta = async () => {
+  if (!propostaResumo.value.trim()) {
+    origem.value = 'desfecho'
+    erro.value = 'Registre o que foi enviado: escopo, valor e prazo, ou a referência da proposta.'
+    return
+  }
+  if (await registrar('proposta', propostaResumo.value.trim(), propostaData.value || hoje, 'Envio da proposta confirmado.', 'desfecho')) marcandoProposta.value = false
+}
+const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Aprendizado salvo.', 'aprendizado')
 
 // ------------------------------------------------------------ anotar
 
@@ -522,7 +532,10 @@ const ROTULO_A_MAO = { segunda_enviada: '2ª mensagem enviada', followup_enviado
 const primeiroAMao = ref<HTMLButtonElement[]>([])
 // O "anote à mão" do aviso leva o foco ao botão: quem lê o erro não precisa achar a seção.
 function irParaAnotar() {
-  primeiroAMao.value[0]?.focus()
+  const botao = primeiroAMao.value[0]
+  const dobra = botao?.closest('details')
+  if (dobra) dobra.open = true
+  botao?.focus()
   primeiroAMao.value[0]?.scrollIntoView({ block: 'center' })
 }
 </script>
@@ -538,6 +551,11 @@ function irParaAnotar() {
         <span>{{ textoDaSubEtapa(lead.subEtapa) }} · {{ diasNaEtapa(lead) }}<template v-if="lead.leitura === 'viu'"> · leu</template><template v-else-if="lead.leitura === 'pela-resposta'"> · leu e respondeu</template></span>
       </p>
     </header>
+
+    <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+
+    <p v-if="lead.revisaoComercial" class="recado recado--atencao"><strong>Classificação ou prazo a revisar.</strong> {{ lead.revisaoComercial }}</p>
+    <p v-if="lead.demoProtegida && !lead.demoApagadoEm" class="texto-2 texto-pequeno"><strong>Demo protegida da limpeza automática.</strong> {{ lead.demoProtegida }}</p>
 
     <section class="crm-ficha__agora" aria-labelledby="crm-ficha-agora">
       <h3 id="crm-ficha-agora" class="crm-ficha__rotulo">Agora</h3>
@@ -566,14 +584,22 @@ function irParaAnotar() {
       </template>
     </section>
 
+    <CrmHistorico v-if="historicoPendente || lead.conversa || lead.marcos.enviado" :lead="lead" :disponivel="disponivel" :salvando="salvando !== null"
+      @importado="lerConversa(); emit('registrado')" />
+    <template v-if="origem === 'historico'">
+      <p class="crm-status" role="status">{{ mensagem }}</p><p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
+    </template>
+
+
+
     <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
-    <figure v-if="rascunho" class="crm-ficha__rascunho">
+    <figure v-if="rascunho && !contatoEmPausa && !historicoPendente" class="crm-ficha__rascunho">
       <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primaria?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base do Roteiro.' }}</template></figcaption>
       <blockquote>{{ rascunho }}</blockquote>
       <p v-if="primaria?.chave === 'proposta' && proposta?.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
     </figure>
     <!-- Proposta ao lado (sem o "gostei" registrado): o texto também à vista antes do toque, dobrado. -->
-    <details v-if="propostaAoLado && proposta" class="dobra crm-ficha__rascunho">
+    <details v-if="propostaAoLado && proposta && !contatoEmPausa" class="dobra crm-ficha__rascunho">
       <summary>Proposta que vai sair <span class="crm-muted">({{ proposta.origem === 'copiloto' ? 'itens do copiloto, preços do cardápio' : 'texto base do Roteiro' }})</span></summary>
       <blockquote>{{ proposta.texto }}</blockquote>
       <p v-if="proposta.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
@@ -581,7 +607,8 @@ function irParaAnotar() {
 
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
-    <div v-if="primaria" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
+    <a v-if="lead.etapa === 'novo'" class="botao" href="/crm?ver=triagem">Ver avaliação do time →</a>
+    <div v-if="lead.etapa !== 'novo' && primaria && !contatoEmPausa && !historicoPendente" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
       <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, e embaixo o recado único das
            travas diz quando volta; o "Liberar" é um link nele, só quando o horário é o que segura. -->
       <template v-if="primarioTravado">
@@ -591,12 +618,13 @@ function irParaAnotar() {
           :rotulo-do-liberar="primarioTravado.pedeLiberar ? rotuloDoLiberar('ficha') : undefined" @liberar="emit('liberar', lead.id)"
         />
       </template>
-      <a v-else class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener" @click="aoTocar(primaria.chave, primaria.href)">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
-      <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
+      <a v-else class="botao botao--primario" :href="primaria.href" target="_blank" rel="noopener">{{ primaria.rotulo }} <span aria-hidden="true">↗</span></a>
+      <a v-for="a in secundarias" :key="a.chave" class="botao" :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} <span aria-hidden="true">↗</span></a>
     </div>
 
     <div class="crm-ficha__status">
-      <p v-if="dicaDaAcao" class="crm-muted">{{ dicaDaAcao }}</p>
+      <AcompanhamentoObservado :lead="lead" />
+      <p v-if="lead.etapa !== 'novo' && dicaDaAcao && !contatoEmPausa && !historicoPendente" class="crm-muted">{{ dicaDaAcao }}</p>
       <template v-if="origem === 'acao'">
         <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}. Marque à mão em Desfecho, “Proposta enviada”.</p>
@@ -627,24 +655,58 @@ function irParaAnotar() {
         </li>
         <li v-if="!disponivel" class="is-atencao">Nada grava na planilha agora: {{ visao.registro.motivo }}</li>
       </ul>
-      <p class="crm-muted crm-ficha__anuncio" role="status" aria-live="polite">{{ anotacoes ? `${anotacoes}. A planilha confirma em alguns minutos.` : '' }}</p>
-      <p v-if="falhaDaAnotacao" class="crm-erro" role="alert">
-        {{ falhaDaAnotacao }}
-        <button v-if="aMao.length" type="button" class="botao botao--leve" @click="irParaAnotar">Anotar à mão</button>
-      </p>
 
       <details v-if="apoio.length" class="dobra">
         <summary>Abrir em outro lugar <span class="crm-muted">({{ apoio.length }})</span></summary>
         <ul class="crm-ficha__apoio">
-          <li v-for="a in apoio" :key="a.chave"><a :href="a.href" target="_blank" rel="noopener" @click="aoTocar(a.chave, a.href)">{{ a.rotulo }} <span aria-hidden="true">↗</span></a></li>
+          <li v-for="a in apoio.filter((a) => !historicoPendente || !a.anota)" :key="a.chave"><a :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} <span aria-hidden="true">↗</span></a></li>
         </ul>
       </details>
     </div>
 
+    <!-- A conversa de verdade (16/10/2026), como o observador guardou; sem ela, a última resposta classificada. -->
+    <details v-if="lead.resposta || conversa.length" class="crm-ficha__secao dobra" :open="historicoPendente && !contatoEmPausa">
+      <summary>Mensagens disponíveis · {{ conversaTodas.length || 'apenas trecho classificado' }}</summary>
+      <p class="crm-muted">Até 60 mensagens recentes do arquivo. Isto não comprova histórico completo, nem leitura de áudios e anexos.</p>
+      <p v-if="lead.resposta" class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
+        <strong>{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</strong>{{ lead.resposta.em ? ` ${quandoFoi(lead.resposta.em)}` : '' }}
+      </p>
+      <ol v-if="conversa.length" class="crm-conversa" aria-label="Mensagens, da mais antiga para a mais nova">
+        <li v-if="conversaCortada" class="crm-muted"><button type="button" class="crm-mais" @click="conversaInteira = true">Ver as {{ conversaTodas.length - conversa.length }} mensagens anteriores</button></li>
+        <li v-for="(m, i) in conversa" :key="`${m.em}-${i}`" :class="`is-${m.direcao}`">
+          <span class="so-leitor">{{ m.direcao === 'entrada' ? `${lead.empresa} escreveu` : 'Você escreveu' }}</span>
+          <p>{{ m.texto ? textoParaATela(m.texto) : (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
+          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}{{ m.papel ? ` · ${QUEM_DO_PAPEL[m.papel]}` : '' }}</time>
+        </li>
+      </ol>
+      <template v-else>
+        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ textoParaATela(lead.resposta.trecho) }}</blockquote>
+        <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
+        <p class="crm-muted">{{ conversaGuardada === false ? 'Sem mensagens arquivadas deste contato. O histórico anterior não foi recuperado; confira no WhatsApp ou importe a exportação.' : conversaErro || '' }}</p>
+      </template>
+    </details>
+
+    <!-- Sinais do site (17/10/2026): seção por título e linha (BP-FICHA), uma linha por sinal COM fonte;
+         o que não se pôde ler não aparece. Só informa; a leitura é deste lead, ao abrir a Ficha. -->
+    <details v-if="mostraSinais" class="crm-ficha__secao dobra">
+      <summary id="crm-ficha-sinais">Sinais do site</summary>
+      <p v-if="estadoDosSinais === 'lendo'" class="crm-muted" role="status">Lendo a página inicial do site…</p>
+      <ul v-if="linhasDeSinais.length" class="crm-ficha__ofertas" aria-label="O que o site mostra">
+        <li v-for="l in linhasDeSinais" :key="l.rotulo"><strong>{{ l.rotulo }}</strong><span>{{ l.motivo }}</span></li>
+      </ul>
+      <p v-else-if="estadoDosSinais === '' && sinaisDoLead" class="crm-muted">A página inicial não deu nada a afirmar (ela é montada no navegador).</p>
+      <p v-if="estadoDosSinais === 'inacessivel'" class="crm-muted" role="status">Não consegui ler o site: fora do ar ou bloqueou a leitura.</p>
+      <p v-else-if="estadoDosSinais === 'bloqueado'" class="crm-muted" role="status">A Central não lê esse endereço (rede que não é pública).</p>
+      <p v-else-if="estadoDosSinais === 'falhou'" class="crm-muted" role="status">Não deu para ler o site agora.</p>
+      <p v-if="podeLerSinais && estadoDosSinais !== 'lendo'" class="crm-muted">
+        {{ lidoEmSinais ? `Lido ${quandoFoi(lidoEmSinais)}. ` : '' }}Só a página inicial e o mapa do site; nada é enviado a ninguém.
+      </p>
+    </details>
+
     <!-- Desfecho (AC-08): ganhou, perdeu e proposta enviada em um toque, em todas as ofertas, com o
          estado marcado e o desfazer certo (desfechosDoLead). Sem caixa: seção com título e divisor. -->
-    <section class="crm-ficha__secao crm-ficha__desfecho" aria-labelledby="crm-ficha-desfecho">
-      <h3 id="crm-ficha-desfecho">Desfecho</h3>
+    <details class="crm-ficha__secao crm-ficha__desfecho dobra" :open="escolhendoPerda || marcandoProposta || confirmandoGanho">
+      <summary>Registrar resultado: proposta, ganho ou perda</summary>
       <ul v-if="desfecho.marcados.length" class="crm-ficha__marcados">
         <li v-for="m in desfecho.marcados" :key="m.id">
           <span>{{ m.texto }}</span>
@@ -670,7 +732,9 @@ function irParaAnotar() {
         </div>
       </div>
       <form v-if="marcandoProposta" class="crm-form" @submit.prevent="marcarProposta">
+        <p class="crm-nota-pequena">Confirme somente depois de enviar. Abrir o WhatsApp não conta como proposta enviada.</p>
         <label><span>Proposta enviada em</span><input ref="primeiraDaEscolha" v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>
+        <label><span>O que foi enviado (escopo, valor, prazo ou referência)</span><textarea v-model="propostaResumo" required maxlength="1000" rows="4" :disabled="!disponivel" /></label>
         <div class="crm-form__botoes">
           <button class="botao" type="submit" :disabled="!disponivel || salvando !== null">{{ salvando === 'proposta' ? 'Marcando…' : 'Marcar a proposta enviada' }}</button>
           <button class="botao botao--leve" type="button" @click="marcandoProposta = false">Cancelar</button>
@@ -680,28 +744,13 @@ function irParaAnotar() {
         <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
       </template>
-    </section>
+    </details>
 
-    <!-- A conversa de verdade (16/10/2026), como o observador guardou; sem ela, a última resposta classificada. -->
-    <section v-if="lead.resposta || conversa.length" class="crm-ficha__secao" aria-labelledby="crm-ficha-conversa">
-      <h3 id="crm-ficha-conversa">Conversa</h3>
-      <p v-if="lead.resposta" class="crm-resposta" :class="`is-${lead.resposta.tipo}`">
-        <strong>{{ ROTULO_DA_RESPOSTA[lead.resposta.tipo] }}</strong>{{ lead.resposta.em ? ` ${quandoFoi(lead.resposta.em)}` : '' }}
-      </p>
-      <ol v-if="conversa.length" class="crm-conversa" aria-label="Mensagens, da mais antiga para a mais nova">
-        <li v-if="conversaCortada" class="crm-muted"><button type="button" class="crm-mais" @click="conversaInteira = true">Ver as {{ conversaTodas.length - conversa.length }} mensagens anteriores</button></li>
-        <li v-for="(m, i) in conversa" :key="`${m.em}-${i}`" :class="`is-${m.direcao}`">
-          <span class="so-leitor">{{ m.direcao === 'entrada' ? `${lead.empresa} escreveu` : 'Você escreveu' }}</span>
-          <p>{{ m.texto ? textoParaATela(m.texto) : (m.direcao === 'saida' ? '(mensagem enviada, sem o texto)' : '(sem texto: áudio, foto ou figurinha)') }}</p>
-          <time :datetime="m.em" class="crm-muted">{{ quandoFoi(m.em) }}{{ m.papel ? ` · ${QUEM_DO_PAPEL[m.papel]}` : '' }}</time>
-        </li>
-      </ol>
-      <template v-else>
-        <blockquote v-if="lead.resposta?.trecho" class="crm-resposta__trecho">{{ textoParaATela(lead.resposta.trecho) }}</blockquote>
-        <p v-else-if="lead.resposta" class="crm-muted">Só resposta automática. Ninguém escreveu ainda.</p>
-        <p class="crm-muted">{{ conversaGuardada === false ? 'A conversa inteira aparece aqui a partir das próximas mensagens: o observador passou a guardar em 16/10/2026.' : conversaErro || '' }}</p>
-      </template>
-    </section>
+    <CrmAprendizado :key="lead.id" :lead="lead" :disponivel="disponivel" :salvando="salvando !== null" @salvar="salvarAprendizado" />
+    <template v-if="origem === 'aprendizado'">
+      <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
+      <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
+    </template>
 
     <!-- Sinais do site (17/10/2026): seção por título e linha (BP-FICHA), uma linha por sinal COM fonte;
          o que não se pôde ler não aparece. Só informa; a leitura é deste lead, ao abrir a Ficha. -->
@@ -723,8 +772,8 @@ function irParaAnotar() {
 
     <!-- Como vender (16/10/2026): oferta e roteiro numa seção com abas; o copiloto, que era a terceira,
          foi para o Assistente em 17/10/2026 (o botão logo abaixo). -->
-    <section class="crm-ficha__secao" aria-labelledby="crm-ficha-vender">
-      <h3 id="crm-ficha-vender">Como vender</h3>
+    <details class="crm-ficha__secao dobra">
+      <summary>Oferta e roteiro de venda</summary>
       <div class="segmentado" role="group" aria-label="Como vender este lead">
         <button v-for="a in ABAS_DE_VENDA" :key="a.id" type="button" :aria-pressed="abaDeVenda === a.id" @click="abaDeVenda = a.id">{{ a.rotulo }}</button>
       </div>
@@ -763,18 +812,11 @@ function irParaAnotar() {
       <button class="botao" type="button" @click="perguntarSobreOLead">Perguntar sobre este lead</button>
       <span class="crm-muted">{{ comCopiloto && copilotoServe(lead) ? 'O Assistente traz a sugestão do copiloto, quando há uma para a conversa de agora, com a proposta e o preço do cardápio.' : 'O Assistente lê este lead e responde ao lado.' }}</span>
     </div>
-    </section>
+    </details>
 
-    <section class="crm-ficha__secao" aria-labelledby="crm-ficha-anotar">
-      <h3 id="crm-ficha-anotar">Anotar</h3>
-      <div v-if="ehPlus && (lead.sinal === 'pronto' || lead.etapa === 'contato')" class="crm-form__botoes">
-        <button v-if="lead.sinal === 'pronto'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarEnviadoPlus">{{ salvando === 'plus_enviado' ? 'Anotando…' : 'Já enviei por fora' }}</button>
-        <button v-if="lead.etapa === 'contato'" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarRespondeuPlus">{{ salvando === 'plus_respondeu' ? 'Anotando…' : plusEmConversa ? 'Respondeu de novo' : 'Respondeu no WhatsApp' }}</button>
-      </div>
+    <details class="crm-ficha__secao dobra" :open="Boolean(falhaDaAnotacao)">
+      <summary>Anotações e registros manuais</summary>
       <!-- AC-09: onde o "anote à mão" aponta. Só no passo de cada envio, ou com a anotação do toque em falha. -->
-      <div v-if="aMao.length" class="crm-form__botoes" role="group" aria-label="Anotar um envio feito à mão">
-        <button v-for="t in aMao" :key="t" ref="primeiroAMao" class="botao" type="button" @click="emit('anotar', lead.id, t)">{{ ROTULO_A_MAO[t] }}</button>
-      </div>
 
       <!-- Só a nota (AC-08): proposta, recusa e sem contato foram para o Desfecho. -->
       <form class="crm-form" @submit.prevent="salvarNota">
@@ -786,7 +828,7 @@ function irParaAnotar() {
         <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
       </template>
-    </section>
+    </details>
 
     <!-- Consulta: de onde veio e o que já aconteceu. Fechado, com a contagem à vista. -->
     <div class="crm-ficha__secao crm-ficha__consulta">

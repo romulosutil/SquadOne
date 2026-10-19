@@ -21,7 +21,7 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
 <template>
   <section class="nao-vende" aria-labelledby="nao-vende-titulo">
     <div class="nao-vende__cabeca">
-      <h2 id="nao-vende-titulo">Por que não está vendendo</h2>
+      <h2 id="nao-vende-titulo">Onde revisar o funil</h2>
       <a v-if="resumido" class="nao-vende__mais" href="/crm?ver=numeros">Ver os números</a>
     </div>
     <!-- Funcional (17/10/2026): o diagnóstico traz os nomes de quem travou e o botão que abre o primeiro,
@@ -29,7 +29,7 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
     <div v-if="d.gargalo" class="nao-vende__gargalo" role="note">
       <strong>{{ d.gargalo.titulo }}</strong>
       <p>{{ d.gargalo.texto }}</p>
-      <p><strong>O que fazer:</strong> {{ d.gargalo.acao }}</p>
+      <p><strong>Próximo passo para conferir:</strong> {{ d.gargalo.acao }}</p>
       <template v-if="d.gargalo.parados.length">
         <p class="nao-vende__parados-titulo">
           {{ d.gargalo.totalParados === 1 ? 'Parado aqui' : `Parados aqui (${d.gargalo.totalParados})` }}:
@@ -45,7 +45,7 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
       </div>
     </div>
     <p v-else-if="!d.degraus[0].n" class="texto-2">Nenhuma primeira mensagem nos últimos {{ d.dias }} dias.</p>
-    <p v-else class="texto-2">Nenhum degrau muito abaixo do esperado nos últimos {{ d.dias }} dias.</p>
+    <p v-else class="texto-2">A regra de triagem não destacou um degrau nos últimos {{ d.dias }} dias. Isso não comprova que a oferta está validada.</p>
 
     <ol v-if="resumido && d.degraus[0].n" class="nao-vende__trilha" :aria-label="`Funil dos últimos ${d.dias} dias`">
       <li v-for="g in d.degraus" :key="g.id" :class="{ 'is-gargalo': d.gargalo?.degrau === g.id }">
@@ -59,10 +59,10 @@ const hrefDaFicha = (id: string) => `/crm?lead=${encodeURIComponent(id)}`
         <span class="nao-vende__rotulo">{{ g.rotulo }}</span>
         <span class="nao-vende__barra" aria-hidden="true"><span :style="{ width: `${Math.max(2, (g.n / maior) * 100)}%` }" /></span>
         <strong class="nao-vende__n">{{ g.n }}</strong>
-        <small class="texto-2 nao-vende__taxa">{{ pct(g.taxa) }}<template v-if="g.referencia !== undefined && g.taxa !== undefined"> (esperado ~{{ pct(g.referencia) }})</template></small>
+        <small class="texto-2 nao-vende__taxa">{{ pct(g.taxa) }}</small>
       </li>
     </ol>
-    <p class="texto-2 texto-pequeno">Últimos {{ d.dias }} dias, pelo retrato das planilhas. "Leram" é quem deixou o recibo ou respondeu (sem recibo é "não sei"), com as mesmas regras do placar abaixo; o "esperado" é referência de prospecção por mensagem, não meta.</p>
+    <p class="texto-2 texto-pequeno">Últimos {{ d.dias }} dias, pelos registros das planilhas. "Leram" é recibo ou resposta; sem recibo é desconhecido. O destaque usa limiares internos de triagem, sem validação como referência de mercado. Os números indicam onde conferir, não a causa de não vender.</p>
     </template>
   </section>
 </template>

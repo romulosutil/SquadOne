@@ -4,9 +4,13 @@ import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
 import CrmFicha from './CrmFicha.vue'
 import CrmFunil from './CrmFunil.vue'
+import FrenteComercial from './FrenteComercial.vue'
+import '../estilos/operacao.css'
 import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
-import ProximaVenda from './ProximaVenda.vue'
+import ConversasParaAvancar from './ConversasParaAvancar.vue'
+import { conversasParaConduzir } from './conversas-para-conduzir'
+import { coberturaDoHistorico } from './historico-comercial'
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { lerFiltroDePasso, type FiltroDePasso } from './funil-lista'
 import {
@@ -43,11 +47,14 @@ import './crm.css'
 // uma linha de saúde do retrato com o Atualizar; os avisos condicionais ficam numa dobra "Avisos (n)",
 // aberta sozinha só quando o retrato falhou. A dica de cada aba foi para o title, e as ofertas para um
 // "Filtros" fechado fora da A fazer. As regras do endereço moram em vendas-abas.ts (PURO, testado).
+const props = defineProps<{ fichaInicial?: string }>()
+const emit = defineEmits<{ fechar: []; registrado: [] }>()
+
 type Vista = VistaDeVendas
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = ref<CrmVisao | null>(null)
-const carregando = ref(true)
+const carregando = ref(false)
 const erro = ref('')
 const lidoEm = ref<Date | null>(null)
 const agora = ref(Date.now())
@@ -101,7 +108,7 @@ const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
 
 /** Lê o endereço; `false` quando ele foi para outra rota (o Roteiro, no Mais) e não há o que montar. */
 function lerEndereco(): boolean {
-  const lido = lerEnderecoDeVendas(window.location.search)
+  const lido = lerEnderecoDeVendas(props.fichaInicial ? `?lead=${encodeURIComponent(props.fichaInicial)}` : window.location.search)
   // Links antigos (Ficha aberta com Ctrl, favoritos, o Hermes): o Roteiro saiu das abas (AC-20).
   if (lido.tipo === 'roteiro') {
     navegar(lido.para, true)
@@ -116,6 +123,7 @@ function lerEndereco(): boolean {
 }
 
 function escreverEndereco(substituir = false) {
+  if (props.fichaInicial) return
   const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value })
   if (url === `${window.location.pathname}${window.location.search}`) return
   if (substituir) history.replaceState(null, '', url)
@@ -128,12 +136,15 @@ const aoVoltarNoNavegador = () => { if (lerEndereco()) escreverEndereco(true) }
 // ------------------------------------------------------------------ leitura
 
 async function carregar(anunciar = false) {
+  if (carregando.value || desmontado) return
+  const controle = new AbortController()
+  const prazo = window.setTimeout(() => controle.abort(), 25_000)
   carregando.value = true
   erro.value = ''
   void lerPrimeirosDoServidor()
   try {
     // no-cache: revalida com o ETag; sem mudança no retrato o servidor responde 304.
-    const resposta = await fetch('/api/operations/crm', { cache: 'no-cache' })
+    const resposta = await fetch('/api/operations/crm', { cache: 'no-cache', signal: controle.signal })
     const corpo = await resposta.json().catch(() => ({}))
     if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
     visao.value = corpo
@@ -149,6 +160,7 @@ async function carregar(anunciar = false) {
     erro.value = motivo instanceof Error ? motivo.message : String(motivo)
     if (anunciar) anuncio.value = 'Não foi possível ler Vendas.'
   } finally {
+    window.clearTimeout(prazo)
     carregando.value = false
   }
 }
@@ -207,6 +219,8 @@ async function liberarVarios(ids: string[]) {
 
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).
 function depoisDoRegistro() {
+  emit('registrado')
+  void carregar()
   atrasos.push(window.setTimeout(() => carregar(), 5000), window.setTimeout(() => carregar(), 15000))
 }
 
@@ -241,6 +255,7 @@ async function anotarEnvio(id: string, tipo: TipoDeEnvioAnotado) {
   }
 }
 
+let desmontado = false
 onMounted(async () => {
   envios.value = lerEnvios(armazenamento(), Date.now())
   anotados.value = lerAnotados(armazenamento(), Date.now())
@@ -248,16 +263,20 @@ onMounted(async () => {
   // Foi para o Roteiro (no Mais): a casca troca a rota e este painel desmonta já.
   if (!lerEndereco()) return
   escreverEndereco(true)
-  window.addEventListener('popstate', aoVoltarNoNavegador)
+  if (!props.fichaInicial) window.addEventListener('popstate', aoVoltarNoNavegador)
   document.addEventListener('visibilitychange', aoMudarVisibilidade)
+  window.addEventListener('focus', aoMudarVisibilidade)
   await carregar()
-  temporizador = window.setInterval(() => { if (document.visibilityState === 'visible') carregar() }, 120_000)
+  if (desmontado) return
+  temporizador = window.setInterval(() => { if (document.visibilityState === 'visible') carregar() }, 30_000)
   relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
 })
 
 onBeforeUnmount(() => {
+  desmontado = true
   window.removeEventListener('popstate', aoVoltarNoNavegador)
   document.removeEventListener('visibilitychange', aoMudarVisibilidade)
+  window.removeEventListener('focus', aoMudarVisibilidade)
   window.clearInterval(temporizador)
   window.clearInterval(relogio)
   atrasos.forEach(id => window.clearTimeout(id))
@@ -278,11 +297,7 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
 const resumoDoCartao = ref<ResumoDoDia | null>(null)
 // Fora da A fazer o cartão desmonta e a última conta dele pararia no tempo (o ritmo e o relógio andam).
 watch(vista, (v) => { if (v !== 'afazer') resumoDoCartao.value = null })
-const totalAFazer = computed(() => {
-  if (resumoDoCartao.value) return resumoDoCartao.value.total
-  const tela = { ritmo: ritmo.value, noExpediente: noExpedienteDeVenda(agora.value), agora: agora.value, liberados: liberados.value }
-  return filaDaTela(visao.value, tela, lerResolvidas(armazenamento(), agora.value)).length
-})
+const totalAFazer = computed(() => conversasParaConduzir(visao.value?.leads ?? [], agora.value).length)
 // Triagem (OT-05, AC-10): só os prospects para revisar, em lotes de 10 (triagem.ts), longe da fila de venda.
 const triagem = computed(() => hoje.value.find(g => g.id === 'revisar') ?? null)
 // Com a aba aberta, o número é o que ela conta (sem os dispensados e convidados desta tela que o
@@ -299,6 +314,7 @@ const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).fil
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
 const ritmo = computed<EstadoDoRitmo>(() => ritmoDoEnvio(
   instantesDePrimeiroContato(visao.value?.leads ?? [], somarPrimeiros(primeirosDoServidor.value, primeiros.value)), agora.value))
+const cobertura = computed(() => coberturaDoHistorico((visao.value?.leads ?? []).filter((l) => l.produto === 'site' || l.produto === 'prumo')))
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
@@ -337,7 +353,7 @@ const avisos = computed(() => {
 // filtrados pela oferta) e, desde a hierarquia de Vendas (17/10/2026), sempre num "Filtros" fechado com
 // o filtro ativo no resumo, também no desktop: filtrar é ajuste, não a decisão da tela. Os cartões de
 // etapa ficam só nos Números, à vista (no Funil cada coluna já traz o número).
-const temFiltroDeOferta = computed(() => vista.value !== 'afazer')
+const temFiltroDeOferta = computed(() => vista.value !== 'afazer' && vista.value !== 'triagem')
 const temCartoesDeEtapa = computed(() => vista.value === 'numeros')
 const resumoDosFiltros = computed(() => (produto.value === 'todos' ? 'Filtros: todas as ofertas' : `Filtros: ${SIGLA_DO_PRODUTO[produto.value]}`))
 
@@ -384,6 +400,7 @@ function abrirFicha(id: string) {
 }
 
 function fecharFicha() {
+  if (props.fichaInicial) emit('fechar')
   leadId.value = null
   escreverEndereco()
 }
@@ -396,14 +413,14 @@ function abrirColinha() {
 </script>
 
 <template>
-  <section class="crm" aria-labelledby="crm-titulo">
+  <section v-if="!fichaInicial" class="crm" aria-labelledby="crm-titulo">
     <!-- Uma linha de saúde: o título, quando as planilhas foram lidas e o Atualizar. -->
     <header class="crm-topo">
       <div>
         <h1 id="crm-titulo">Vendas</h1>
         <p class="crm-topo__fonte" :title="detalheDoRetrato">{{ textoDoRetrato }}</p>
       </div>
-      <button class="botao botao--leve" type="button" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> Vendas</span></button>
+<span class="sincronizacao">Atualização automática</span>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; falta só a anotação, que dá para fazer na ficha (nota). -->
@@ -439,17 +456,13 @@ function abrirColinha() {
       <!-- Três abas na ordem do trabalho (17/10/2026): Fazer, Triar, Entender. A dica de cada uma vai no
            title. No celular, uma linha que rola de lado (AC-15). -->
       <nav class="crm-vistas" aria-label="Vendas: fazer, triar, entender">
-        <a v-for="a in ABAS_DE_VENDAS" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
-          {{ a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span><span v-else-if="visao && a.id === 'triagem'">{{ totalTriagem }}</span>
+        <a v-for="a in ABAS_DE_VENDAS.filter((a) => a.id !== 'entender')" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
+          {{ a.id === 'afazer' ? 'Conversas para você' : 'Primeiros contatos' }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
         </a>
+        <a v-for="s in SECOES_DE_ENTENDER" :key="s.id" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a>
       </nav>
       <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
-      <div v-if="aba === 'entender'" class="crm-entender">
-        <div class="segmentado segmentado--auto" role="group" aria-label="Entender">
-          <button v-for="s in SECOES_DE_ENTENDER" :key="s.id" type="button" :title="s.dica" :aria-pressed="vista === s.id" @click="trocarVista(s.id)">{{ s.rotulo }}</button>
-        </div>
-        <a class="botao botao--leve" :href="ENDERECO_DO_ROTEIRO" @click.prevent="abrirColinha">Roteiro de venda</a>
-      </div>
+
       <!-- As ofertas num "Filtros" fechado, com a escolhida no resumo: filtrar é ajuste, não a decisão. -->
       <details v-if="temFiltroDeOferta" class="dobra crm-filtros-da-aba">
         <summary>{{ resumoDosFiltros }}</summary>
@@ -460,8 +473,10 @@ function abrirColinha() {
     </div>
 
     <template v-if="visao">
-      <ProximaVenda v-if="vista === 'afazer'" :visao="visao" @registrado="depoisDoRegistro" @abrir="abrirFicha" @resumo="resumoDoCartao = $event" />
+      <ConversasParaAvancar v-if="vista === 'afazer'" :visao="visao" :agora="agora" :maximo="20" @abrir="abrirFicha" />
+      <!-- O time só pega o Site em `pronto`; a Triagem (`revisar`) e o Convidar seguem do Rômulo (19/10/2026). -->
       <template v-else-if="vista === 'triagem'">
+        <FrenteComercial />
         <CrmHoje
           v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" :agora="agora"
           :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
@@ -489,27 +504,35 @@ function abrirColinha() {
         @abrir="abrirFicha" @passo="trocarPasso" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
       />
 
-      <Sheet v-if="leadId" cheia titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
-        <div class="crm-na-folha">
-          <CrmFicha
-            v-if="lead" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
-            :falha-da-anotacao="falhaDaAnotacao?.leadId === lead.id ? falhaDaAnotacao.texto : ''"
-            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
-          />
-          <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
-        </div>
-      </Sheet>
 
-      <footer v-if="visao.estado === 'ok'" class="crm-rodape">
+
+      <details v-if="visao.estado === 'ok'" class="dobra crm-fontes">
+        <summary>Leitura e fontes · {{ cobertura.comArquivo }} de {{ cobertura.contatados }} contatos com mensagens guardadas</summary>
+        <p>Site e Organizado: {{ cobertura.semArquivo }} sem conversa arquivada; {{ cobertura.conferidos }} com contexto acompanhado. Mensagens guardadas são parciais, não prova de histórico completo.</p>
+        <footer class="crm-rodape">
         <span v-for="f in visao.fontes" :key="f.id">{{ f.nome }}: {{ f.linhas }} linha{{ f.linhas === 1 ? '' : 's' }}<template v-if="f.erro"> ({{ f.erro }})</template></span>
         <a v-if="visao.links.planilhaSite" :href="visao.links.planilhaSite" target="_blank" rel="noopener">Planilha do Site ↗</a>
         <a v-if="visao.links.planilhaPrumo" :href="visao.links.planilhaPrumo" target="_blank" rel="noopener">Planilha do PRUMO ↗</a>
         <a v-if="visao.links.planilhaIris" :href="visao.links.planilhaIris" target="_blank" rel="noopener">Aba Clínicas (Iris) ↗</a>
         <a v-if="visao.links.planilhaEstampa" :href="visao.links.planilhaEstampa" target="_blank" rel="noopener">Aba Estamparias ↗</a>
-      </footer>
+        <a :href="ENDERECO_DO_ROTEIRO" @click.prevent="abrirColinha">Roteiro de venda →</a>
+        </footer>
+      </details>
     </template>
     <p v-else-if="carregando" class="crm-muted" role="status">Lendo Vendas…</p>
   </section>
+      <Sheet v-if="leadId" flutuante titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
+        <div class="crm-na-folha">
+          <CrmFicha
+            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :anotados="anotados" :ritmo="ritmo"
+            :falha-da-anotacao="falhaDaAnotacao?.leadId === lead.id ? falhaDaAnotacao.texto : ''"
+            @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @anotar="anotarEnvio" @primeiro="marcarPrimeiroContato"
+          />
+          <p v-else-if="carregando" role="status">Lendo a ficha…</p>
+          <p v-else-if="erro" class="recado recado--erro" role="alert">{{ erro }} <button type="button" class="botao" @click="carregar(true)">Tentar de novo</button></p>
+          <p v-else class="crm-aviso" role="status">Este lead não está no retrato atual: pode ter saído da planilha ou mudado de id.</p>
+        </div>
+      </Sheet>
 </template>
 
 <style>

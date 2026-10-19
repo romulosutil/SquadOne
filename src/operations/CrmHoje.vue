@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { aplicarCohort, gravarCohort, lerCohort, motivosDoLead, semCriterios, type Cohort } from './cohort'
 import CrmCohort from './CrmCohort.vue'
+import CrmConfirmarConvite from './CrmConfirmarConvite.vue'
 import { SIGLA_DO_PRODUTO, hora } from './crm-formato'
 import { alvosDoLote, corpoDaLeitura, desfechoDaResposta, lerEmSerie, textoDoAndamento, textoDoResumo, type Andamento } from './leitura-de-sinais'
 import { recadoDasTravas, rotuloDoLiberar } from './recado-de-travas'
@@ -73,7 +74,16 @@ watch(() => [props.leads, props.confirmavel] as const, ([leads, ok]) => {
 // sendo a pessoa, com as mesmas travas: nada abaixo mexe em Convidar, Dispensar ou Desfazer.
 const cohort = ref<Cohort>(lerCohort(armazenamento()))
 const cohortAtivo = computed(() => !semCriterios(cohort.value))
-const naoDecidido = (id: string) => !(id in decisoes.value)
+const naoDecidido = (id: string) => !decisoes.value[id] || decisoes.value[id].tipo === 'adiado'
+const verAdiadas = ref(false)
+const adiadas = computed(() => props.grupo.itens.filter(i => decisoes.value[i.leadId]?.tipo === 'adiado' && props.leads.get(i.leadId)?.sinal === 'revisar'))
+async function adiar(item: CrmItemHoje) { guardar(decidir(decisoes.value, item.leadId, 'adiado', Date.now())); await nextTick(); titulo.value?.focus() }
+async function adiarLote() {
+  guardar(lote.value.pendentes.reduce((d, i) => decidir(d, i.leadId, 'adiado', Date.now()), decisoes.value))
+  await nextTick(); titulo.value?.focus()
+}
+async function voltarATriagem(item: CrmItemHoje) { guardar(esquecerDecisao(decisoes.value, item.leadId)); await nextTick(); titulo.value?.focus() }
+function trocarAdiadas() { verAdiadas.value = !verAdiadas.value; idsDoLote.value = [] }
 
 // Os que ainda estão na Triagem (nem dispensados nesta tela nem no retrato), com o lead de cada um.
 const leadsNaTriagem = computed(() => props.grupo.itens
@@ -100,7 +110,9 @@ const motivosDe = (item: CrmItemHoje): string[] => {
 // ------------------------------------------------------------------ o lote
 
 const idsDoLote = ref<string[]>([])
-const lote = computed(() => loteDaTriagem(itensDaTriagem.value, props.leads, decisoes.value, idsDoLote.value))
+const lote = computed(() => loteDaTriagem(
+  verAdiadas.value ? itensDaTriagem.value.filter(i => decisoes.value[i.leadId]?.tipo === 'adiado') : itensDaTriagem.value,
+  props.leads, verAdiadas.value ? Object.fromEntries(Object.entries(decisoes.value).filter(([, d]) => d.tipo !== 'adiado')) : decisoes.value, idsDoLote.value))
 // O lote nasce na conta pura; aqui só se guarda, para o próximo cálculo saber qual era.
 watch(() => lote.value.ids, (ids) => { if (!mesmoLote(ids, idsDoLote.value)) idsDoLote.value = ids }, { immediate: true })
 // O número da aba é o do grupo inteiro (os que esperam decisão), não o do filtro: o filtro é da tela.
@@ -144,19 +156,13 @@ const recado = computed(() => recadoDasTravas({
 const primeiroConvidavel = computed(() => lote.value.pendentes.find((i) => !motivo(i))?.leadId ?? null)
 
 // "Triar (N)": a aba abre num botão só. Já dentro de um lote (alguma decisão tomada), entra direto.
-const triando = ref(false)
+const triando = ref(true)
 watch(decididosNoLote, (n) => { if (n > 0) triando.value = true }, { immediate: true })
-async function entrar() {
-  triando.value = true
-  await nextTick()
-  titulo.value?.focus()
-}
 
-// O link abre o WhatsApp sozinho (target=_blank) e o clique no link rastreado já marca o envio na
-// planilha (RULES 17); aqui só a marca local e o toque de primeiro contato, para o ritmo andar na hora.
+
+// Abrir o destino direto conta só como tentativa no ritmo. O envio exige confirmação explícita.
 function convidar(item: CrmItemHoje) {
   emit('primeiro', item.leadId)
-  guardar(decidir(decisoes.value, item.leadId, 'convidado', Date.now()))
 }
 
 // ------------------------------------------------------------------ dispensar e desfazer
@@ -380,20 +386,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="crm-triagem__adiadas">
+    <button v-if="adiadas.length || verAdiadas" type="button" class="botao" @click="trocarAdiadas">{{ verAdiadas ? 'Voltar à triagem' : `Avaliar depois (${adiadas.length})` }}</button>
+    <p v-if="verAdiadas">Contatos adiados neste aparelho por até 24 horas. Nenhum foi dispensado ou contatado.</p>
+  </div>
   <div class="crm-hoje crm-triagem">
     <p v-if="falha" class="crm-aviso is-forte crm-triagem__falha" role="alert">
       {{ falha }} <button type="button" class="crm-mais" @click="falha = ''">Entendi</button>
     </p>
-    <p v-if="!linhas.length && !cohortAtivo" class="crm-vazio"><strong>Nada para triar.</strong> Tudo o que os caçadores acharam já foi decidido; o que chegar de novo aparece aqui.</p>
+    <p v-if="!linhas.length && !cohortAtivo" class="crm-vazio"><strong>{{ verAdiadas ? 'Nenhum contato adiado.' : adiadas.length ? 'A triagem atual está concluída.' : 'Nada para triar.' }}</strong> {{ verAdiadas ? 'Volte à triagem para continuar avaliando os demais contatos.' : adiadas.length ? `Há ${adiadas.length} contatos em Avaliar depois; você pode retomá-los quando quiser.` : 'Não há contatos pendentes nesta lista.' }}</p>
 
     <section v-else class="crm-grupo is-revisar" aria-labelledby="crm-triagem-titulo">
       <header class="crm-grupo__cabeca">
-        <h2 id="crm-triagem-titulo" ref="titulo" tabindex="-1">{{ grupo.titulo }}</h2>
-        <strong :aria-label="`${numero(lote.restantes)} esperando decisão`">{{ numero(lote.restantes) }}</strong>
+        <h2 id="crm-triagem-titulo" ref="titulo" tabindex="-1">Escolha os próximos contatos</h2>
+        <strong :aria-label="`${lote.ids.length} neste lote`">{{ lote.ids.length }} neste lote</strong>
       </header>
       <!-- Uma frase: o que fazer com cada um e quando vem o próximo lote. -->
       <p v-if="linhas.length" class="crm-grupo__explicacao">
-        Convide ou dispense cada um destes {{ lote.ids.length }}; decididos todos, vem o próximo lote.<template v-if="comPontuacao"> A pontuação (0 a 100) é do caçador.</template>
+        Abra a ficha para avaliar. Você pode abrir o convite, dispensar ou avaliar depois. Abrir o WhatsApp não registra envio; confirme somente depois de enviar.<template v-if="comPontuacao"> A pontuação (0 a 100) é do caçador.</template>
       </p>
       <!-- Filtro por motivo (BP-DOBRA, cohort.ts): só escolhe quem entra nos lotes; fechado por padrão. -->
       <CrmCohort :model-value="cohort" :leads="aDecidir" :quantos="quantosDoCohort" @update:model-value="mudarCohort" />
@@ -403,19 +413,14 @@ onBeforeUnmount(() => {
         Mude ou limpe o filtro para ver os outros.
       </p>
       <RecadoDeTravas
-        v-if="temConvites && !recado.pode" id="crm-triagem-recado" :recado="recado"
+        v-if="temConvites && !recado.pode" sem-detalhe id="crm-triagem-recado" :recado="recado"
         :rotulo-do-liberar="rotuloDoLiberar('triagem', { quantos: travadosPeloHorario.length })"
         @liberar="emit('liberarLote', travadosPeloHorario)"
       />
       <p v-if="!registro.disponivel" class="crm-nota-pequena">Dispensar está desligado: nada grava na planilha agora<template v-if="registro.motivo"> ({{ registro.motivo }})</template>.</p>
 
       <!-- A entrada da Triagem: um botão só. Dentro, a lista do lote. -->
-      <p v-if="linhas.length && !triando" class="acoes">
-        <button type="button" class="botao botao--primario" @click="entrar">Triar ({{ lote.pendentes.length }})</button>
-      </p>
-      <p v-else-if="linhas.length" class="crm-triagem__conta">
-        {{ numero(lote.restantes) }} no total · lote de {{ lote.ids.length }}<template v-if="decididosNoLote"> · {{ decididosNoLote }} decidido{{ decididosNoLote === 1 ? '' : 's' }}</template><template v-if="cohortAtivo"> · com o filtro por motivo</template>
-      </p>
+      <p v-if="linhas.length" class="crm-triagem__conta">{{ numero(lote.restantes) }} disponíveis · {{ lote.ids.length }} neste lote<template v-if="decididosNoLote"> · {{ decididosNoLote }} decididos</template><template v-if="cohortAtivo"> · com filtro por motivo</template></p>
 
       <!-- Ler os sinais do site só deste lote (BP-BOTAO: um secundário; "Parar" é leve). O primário segue sendo o Convidar. -->
       <div v-if="triando && linhas.length && (alvosDeSinais.length || lendoSinais || resumoDosSinais)" class="crm-triagem__fim crm-triagem__sinais">
@@ -424,7 +429,7 @@ onBeforeUnmount(() => {
           <button type="button" class="botao botao--leve" @click="pararSinais">Parar</button>
         </template>
         <template v-else>
-          <button v-if="alvosDeSinais.length" type="button" class="botao" @click="lerSinaisDoLote">Ler os sinais deste lote ({{ alvosDeSinais.length }})</button>
+          <button v-if="alvosDeSinais.length" type="button" class="botao" @click="lerSinaisDoLote">Conferir sites de {{ alvosDeSinais.length }} leads</button>
           <p v-if="resumoDosSinais" class="crm-nota-pequena" role="status">{{ resumoDosSinais }}</p>
         </template>
       </div>
@@ -454,20 +459,23 @@ onBeforeUnmount(() => {
               <a
                 v-if="!motivo(linha.item)" class="botao" :class="{ 'botao--primario': primeiroConvidavel === linha.item.leadId }"
                 :href="conviteDe(linha.item)" target="_blank" rel="noopener" @click="convidar(linha.item)"
-              >Convidar <span aria-hidden="true">↗</span></a>
+              >Abrir convite no WhatsApp <span aria-hidden="true">↗</span></a>
               <!-- Travado pelas travas do envio: o porquê e o quando estão no recado único, lá em cima.
                    Só a falta de convite é deste prospect e fica ao lado. -->
               <template v-else-if="conviteDe(linha.item)">
-                <button type="button" class="botao" disabled aria-describedby="crm-triagem-recado">Convidar</button>
+                <button type="button" class="botao" disabled aria-describedby="crm-triagem-recado">Abrir convite no WhatsApp</button>
               </template>
               <template v-else>
-                <button type="button" class="botao" disabled :aria-describedby="`crm-triagem-motivo-${linha.item.leadId}`">Convidar</button>
+                <button type="button" class="botao" disabled :aria-describedby="`crm-triagem-motivo-${linha.item.leadId}`">Abrir convite no WhatsApp</button>
                 <span :id="`crm-triagem-motivo-${linha.item.leadId}`" class="crm-triagem__motivo">{{ motivo(linha.item) }}</span>
               </template>
               <button type="button" class="botao botao--leve" :disabled="!registro.disponivel || emSerie !== null" @click="dispensar(linha.item)">
                 Dispensar<span class="so-leitor"> {{ leads.get(linha.item.leadId)?.empresa }}</span>
               </button>
+              <button v-if="!verAdiadas" type="button" class="botao botao--leve" @click="adiar(linha.item)">Avaliar depois<span class="so-leitor"> {{ leads.get(linha.item.leadId)?.empresa }}</span></button>
+              <button v-else type="button" class="botao botao--leve" @click="voltarATriagem(linha.item)">Retomar avaliação<span class="so-leitor"> de {{ leads.get(linha.item.leadId)?.empresa }}</span></button>
             </div>
+            <CrmConfirmarConvite v-if="leads.get(linha.item.leadId) && !convidadoEm(linha.item)" :lead="leads.get(linha.item.leadId)!" :disponivel="registro.disponivel" @registrado="emit('registrado')" />
             <p v-if="secundarios(linha.item).length" class="crm-triagem__links">
               <a v-for="link in secundarios(linha.item)" :key="link.url" :href="link.url" target="_blank" rel="noopener">{{ link.rotulo }} <span aria-hidden="true">↗</span></a>
             </p>
@@ -476,6 +484,10 @@ onBeforeUnmount(() => {
       </ul>
 
       <div v-if="triando && (lote.pendentes.length || emSerie || resultadoDaSerie)" class="crm-triagem__fim">
+        <button v-if="!verAdiadas && lote.pendentes.length" type="button" class="botao" :disabled="emSerie !== null" @click="adiarLote">Avaliar este lote depois</button>
+        <details class="dobra">
+        <summary>Dispensar contatos deste lote</summary>
+        <p>Use somente se estes contatos não servirem para a oferta. Para continuar com outro lote sem descartá-los, use Avaliar este lote depois.</p>
         <button
           v-if="lote.pendentes.length && !emSerie" type="button" class="botao" :class="{ 'is-armado': confirmando }"
           :disabled="!registro.disponivel" @click="armarOuDispensar"
@@ -485,7 +497,13 @@ onBeforeUnmount(() => {
         <button v-if="confirmando" type="button" class="botao botao--leve" @click="confirmando = false">Cancelar</button>
         <p v-if="emSerie" class="crm-nota-pequena" role="status">Dispensando… {{ emSerie.feitos }} de {{ emSerie.total }}</p>
         <p v-else-if="resultadoDaSerie" class="crm-nota-pequena" role="status">{{ resultadoDaSerie }}</p>
+        </details>
       </div>
     </section>
   </div>
 </template>
+
+<style scoped>
+.crm-triagem__sinais { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--esp-2); min-height: 0; }
+.crm-triagem__sinais > .botao { width: auto; white-space: normal; }
+</style>
