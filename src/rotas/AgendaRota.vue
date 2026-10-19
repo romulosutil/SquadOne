@@ -34,12 +34,17 @@ const {
 // não renumerar. O relógio anda para o compromisso sumir no horário.
 const agora = ref(Date.now())
 let relogio = 0
+let sincronizacao = 0
+const relerAgenda = () => { if (conectado.value && !carregandoMochila.value && document.visibilityState === 'visible') void ag.carregarMochila() }
 onMounted(() => {
   relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
   // Abrir a agenda relê: editar no Google reflete aqui sem esperar outro gesto.
-  if (conectado.value) void ag.carregarMochila()
+  relerAgenda()
+  sincronizacao = window.setInterval(relerAgenda, 60_000)
+  document.addEventListener('visibilitychange', relerAgenda)
+  window.addEventListener('focus', relerAgenda)
 })
-onBeforeUnmount(() => window.clearInterval(relogio))
+onBeforeUnmount(() => { window.clearInterval(relogio); window.clearInterval(sincronizacao); document.removeEventListener('visibilitychange', relerAgenda); window.removeEventListener('focus', relerAgenda) })
 
 const diaDe = (q: QuestCalendario): Date => {
   if (q.diaInteiro) return diasDoEventoDiaInteiro(q.inicio, q.fim).primeiro
@@ -77,9 +82,7 @@ const total = computed(() => quests.value.filter((q) => !questTerminou(q, agora.
           <template v-else>Google Calendar desconectado</template>
         </p>
       </div>
-      <button v-if="conectado" type="button" class="botao" :disabled="carregandoMochila" @click="ag.carregarMochila()">
-        {{ carregandoMochila ? 'Lendo…' : 'Atualizar' }}<span class="so-leitor"> a agenda</span>
-      </button>
+      <span v-if="conectado" class="sincronizacao" role="status">Atualização automática</span>
     </header>
 
     <section class="agenda__conexao" aria-label="Conexão com o Google">
@@ -117,7 +120,7 @@ const total = computed(() => quests.value.filter((q) => !questTerminou(q, agora.
         />
       </section>
       <p v-if="carregandoMochila && !porDia.length" class="texto-2" role="status">Lendo o calendário…</p>
-      <p v-else-if="!porDia.length" class="recado">Nada marcado pela frente. Use o ＋ Pedir.</p>
+      <p v-else-if="!porDia.length" class="recado">Nada marcado pela frente. Abra o Assistente para combinar um compromisso com seu time.</p>
       <section v-for="dia in porDia" :key="dia.chave" class="agenda__dia" :aria-labelledby="`agenda-dia-${dia.chave}`">
         <h2 :id="`agenda-dia-${dia.chave}`">{{ dia.nome }}</h2>
         <ListaDeQuests

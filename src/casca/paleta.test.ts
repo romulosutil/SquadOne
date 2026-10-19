@@ -21,25 +21,25 @@ describe('paleta: abas e dicas (AC-23)', () => {
     assert.equal(filtrarComandos(comandosDaPaleta(EASYPANEL, [], null), 'triagem').length, 0)
   })
 
-  it('o Roteiro e o Dell levam à Manutenção pelo ?abrir=; Finanças e Agenda, à folha da Central', () => {
+  it('configurações mantêm atalhos e as áreas do dia abrem diretamente', () => {
     const cmds = comandosDaPaleta({ ...DELL, agentes: true }, [], null)
     const href = (id: string) => { const a = cmds.find((c) => c.id === id)?.acao; return a?.tipo === 'ir' ? a.href : null }
     assert.equal(href('aba:mais-roteiro'), '/mais?abrir=roteiro')
     assert.equal(href('aba:mais-manutencao'), '/mais?abrir=manutencao')
     assert.equal(href('aba:vendas-funil'), '/crm?ver=funil')
     assert.equal(href('aba:financas-lancamentos'), '/financas/lancamentos')
-    assert.equal(href('aba:central-financas'), '/?abrir=financas')
-    assert.equal(href('aba:central-agenda'), '/?abrir=agenda')
+    assert.equal(href('ir:financas'), '/financas')
+    assert.equal(href('ir:agenda'), '/agenda')
     assert.equal(href('aba:central-escritorio'), '/?abrir=escritorio')
     // A Entrada não é da SPA: o App.vue navega de verdade (window.location).
-    assert.equal(href('aba:central-entrada'), '/entrada/')
+    assert.equal(href('ir:entrada'), '/entrada/')
   })
 
   it('nenhuma dica é um caminho cru', () => {
     for (const c of [...comandosDaPaleta(DELL, [], null), ...comandosDaPaleta({ perfil: 'operations', agentes: true }, [{ id: 'a', nome: 'A' }], null)]) {
       assert.ok(!c.dica.startsWith('/'), `${c.id}: ${c.dica}`)
     }
-    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'aba:vendas-triagem')?.dica, 'Vendas › Triagem')
+    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'aba:vendas-triagem')?.dica, 'Vendas › avaliação do time e triagem')
   })
 })
 

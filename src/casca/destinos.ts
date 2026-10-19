@@ -49,7 +49,7 @@ const FUNIL: Destino = { id: 'funil', rotulo: 'Vendas', href: '/crm', icone: '�
 const ESCRITORIO: Destino = { id: 'escritorio', rotulo: 'Escritório', href: '/squadone', icone: '▣' }
 const MAIS: Destino = { id: 'mais', rotulo: 'Mais', href: '/mais', icone: '≡' }
 /** O Mais do `operations` encolheu para a Manutenção: some da barra e vira a engrenagem discreta. */
-const MANUTENCAO: Destino = { id: 'mais', rotulo: 'Manutenção', href: '/mais', icone: '⚙' }
+const MANUTENCAO: Destino = { id: 'mais', rotulo: 'Configurações', href: '/mais', icone: '⚙' }
 
 /** Normaliza o caminho: sem barra final, raiz vira "/". */
 export function normalizarCaminho(caminho: string): string {
@@ -81,7 +81,7 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
  * discreta (`destinoDiscreto`). No `app` (Easypanel, reserva fria) tudo fica como era.
  */
 export function destinosLaterais(c: Capacidades): Destino[] {
-  if (c.perfil === 'operations') return [CENTRAL, FUNIL]
+  if (c.perfil === 'operations') return [CENTRAL, FUNIL, ...(c.agentes ? [AGENDA] : []), { id: 'financas', rotulo: 'Finanças', href: '/financas', icone: '◈' }, { id: 'entrada', rotulo: 'Entrada', href: '/entrada/', icone: '↧' }]
   return [HOJE, ...(c.agentes ? [AGENDA, ESCRITORIO] : []), MAIS]
 }
 
@@ -90,7 +90,7 @@ export function destinosLaterais(c: Capacidades): Destino[] {
  * (o ＋ no meio é o Assistente, o terceiro menu). No `app`, Hoje · Agenda · ＋ · Escritório · Mais.
  */
 export function destinosDaBarra(c: Capacidades): Destino[] {
-  if (c.perfil === 'operations') return [CENTRAL, FUNIL]
+  if (c.perfil === 'operations') return [{ ...CENTRAL, rotulo: 'Escritório', icone: '▣' }, FUNIL, MAIS]
   return [HOJE, AGENDA, ESCRITORIO, MAIS]
 }
 
@@ -113,7 +113,7 @@ export function destinoAtual(caminhoCru: string, c: Capacidades): Destino['id'] 
   // O design system mora dentro do Mais (a Manutenção, no Dell): é ele que fica aceso.
   if (rota === 'design-system') return 'mais'
   if (c.perfil === 'operations') {
-    if (rota === 'agenda' || rota === 'financas') return 'hoje'
+    if (rota === 'agenda' || rota === 'financas') return 'mais'
     if (rota === 'escritorio') return 'mais'
   }
   return rota
@@ -172,8 +172,8 @@ const DICA_DO_DESTINO: Record<Destino['id'], string> = {
 }
 /** No Dell a home e o Mais mudaram de papel (17/10/2026); a dica acompanha. */
 const DICA_NO_DELL: Partial<Record<Destino['id'], string>> = {
-  hoje: 'O Dell, o Escritório e as frentes do dia',
-  mais: 'Escritório completo, como funciona, ferramentas e o Google',
+  hoje: 'Conversas prioritárias e primeiros contatos pelo time',
+  mais: 'Equipe, Escritório completo, aparência, integrações e o Google',
   'design-system': 'Manutenção › Design system',
 }
 
@@ -187,13 +187,10 @@ type Atalho = { id: string; rotulo: string; dica: string; href: string; soComAge
  */
 const ATALHOS_DO_DELL: Atalho[] = [
   { id: 'vendas-afazer', rotulo: 'A fazer', dica: 'Vendas › A fazer', href: '/crm' },
-  { id: 'vendas-triagem', rotulo: 'Triagem', dica: 'Vendas › Triagem', href: '/crm?ver=triagem' },
+  { id: 'vendas-triagem', rotulo: 'Primeiros contatos', dica: 'Vendas › avaliação do time e triagem', href: '/crm?ver=triagem' },
   { id: 'vendas-funil', rotulo: 'Funil', dica: 'Vendas › Funil', href: '/crm?ver=funil' },
   { id: 'vendas-numeros', rotulo: 'Números', dica: 'Vendas › Números', href: '/crm?ver=numeros' },
   { id: 'central-escritorio', rotulo: 'Escritório', dica: 'Central de comando › o mapa das salas', href: '/?abrir=escritorio' },
-  { id: 'central-financas', rotulo: 'Finanças', dica: 'Central de comando › Finanças', href: '/?abrir=financas' },
-  { id: 'central-agenda', rotulo: 'Agenda', dica: 'Central de comando › Agenda', href: '/?abrir=agenda', soComAgentes: true },
-  { id: 'central-entrada', rotulo: 'Entrada', dica: 'Mande um texto ou arquivo para a Mel guardar', href: '/entrada/' },
   { id: 'financas-lancamentos', rotulo: 'Lançamentos', dica: 'Finanças › Lançamentos', href: '/financas/lancamentos' },
   { id: 'financas-organizar', rotulo: 'Organizar', dica: 'Finanças › Organizar', href: '/financas/organizar' },
   { id: 'mais-manutencao', rotulo: 'O que o Dell confere', dica: 'Manutenção › Dell', href: '/mais?abrir=manutencao' },

@@ -56,5 +56,7 @@ const marcado = (id: PreferenciaDeTema) => preferencia.value === id
 
 <style>
 .seletor-tema { display: grid; gap: var(--esp-1); justify-items: start; }
+.seletor-tema .segmentado { display: flex; flex-wrap: wrap; width: auto; }
+.seletor-tema .segmentado button { flex: 0 0 auto; min-width: max-content; padding-inline: var(--esp-3); }
 .seletor-tema p { margin: 0; }
 </style>

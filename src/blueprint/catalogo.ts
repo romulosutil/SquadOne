@@ -17,6 +17,11 @@ export interface PecaDoCatalogo {
 }
 
 export const CATALOGO: readonly PecaDoCatalogo[] = [
+  { id: 'BP-CABECALHO', nome: 'Hierarquia de página e bloco', classe: '.cabecalho-pagina, .cabecalho-bloco, .sobretitulo', onde: 'estilos/operacao.css', regra: 'Uma pergunta principal por página; título de bloco abaixo dela. Sobretítulo orienta o contexto, sem competir com a ação.' },
+  { id: 'BP-ETIQUETA', nome: 'Etiqueta de estado', classe: '.etiqueta[data-tom]', onde: 'estilos/operacao.css', regra: 'Estado compacto, distinto de texto corrido e de botão; palavra sempre presente, cor como reforço. Nunca recebe hover de ação.' },
+  { id: 'BP-METRICAS', nome: 'Métricas de resultado', classe: '.metricas-venda', onde: 'estilos/operacao.css', regra: 'Até três números com unidade e período explícitos; ausência de leitura não vira zero. Avaliação, envio e resposta são fatos diferentes.' },
+  { id: 'BP-PRIORIDADES', nome: 'Lista de prioridades', classe: '.lista-prioridades', onde: 'estilos/operacao.css', regra: 'Ordem, motivo e próxima ação juntos. Um primário na primeira prioridade; demais itens secundários. Sem rolagem interna.' },
+  { id: 'BP-OBSERVACAO', nome: 'Acompanhamento observado', classe: '<AcompanhamentoObservado>', onde: 'office/AcompanhamentoObservado.vue', regra: 'Envio e resposta vêm da integração. Sem evidência, informa a lacuna; nunca pede “já fiz” nem presume a conclusão de uma tarefa.' },
   { id: 'BP-BLOCO', nome: 'Bloco', classe: '.bloco', onde: 'estilos/agentes.css', regra: 'O único nível de contorno da tela ou da folha: 2 px, --raio-bloco, sem sombra. Dentro dele, nada com borda.' },
   { id: 'BP-ZONA', nome: 'Zona', classe: '.zona, .zona--realce, .zona--ok, .zona--atencao, .zona--erro', onde: 'estilos/agentes.css', regra: 'Agrupa dentro de um bloco por fundo, sem borda. O realce é o "o que fazer agora": um por bloco.' },
   { id: 'BP-BOTAO', nome: 'Botão', classe: '.botao, .botao--primario, .botao--leve, .botao--perigo', onde: 'estilos/agentes.css', regra: 'Três degraus: primário (amarelo e sombra, um por tela ou folha), secundário (contorno), leve (só fundo). Link que age é .botao também.' },
@@ -32,7 +37,7 @@ export const CATALOGO: readonly PecaDoCatalogo[] = [
   { id: 'BP-DOBRA', nome: 'Dobra', classe: 'details.dobra', onde: 'estilos/agentes.css', regra: 'O que é consulta e não decisão fica dobrado, com o título e a contagem à vista.' },
   { id: 'BP-ETAPA', nome: 'Etapa do funil', classe: '.crm-etapa.is-…', onde: 'operations/crm.css', regra: 'Pastel fixo nos dois temas, texto sempre --sobre-pastel.' },
   { id: 'BP-SINAL', nome: 'Sinal do funil', classe: '.crm-sinal.is-…', onde: 'operations/crm.css', regra: 'Uma palavra sobre o lead (Resposta, Follow-up, Divergência). Tracejado = incerto.' },
-  { id: 'BP-TRAVAS', nome: 'Recado das travas', classe: '<RecadoDeTravas>', onde: 'operations/RecadoDeTravas.vue', regra: 'Horário e ritmo do primeiro contato numa frase com o quando ("Libera às 14:20 (ritmo)") e o que continua livre. O "Liberar" é link, um por tela, só quando é o horário que segura.' },
+  { id: 'BP-TRAVAS', nome: 'Recado das travas', classe: '<RecadoDeTravas>', onde: 'operations/RecadoDeTravas.vue', regra: 'Horário e ritmo em uma frase com a próxima disponibilidade. O time aguarda o expediente automaticamente; as conversas continuam acessíveis. A pausa da prospecção fica em Configurações.' },
   { id: 'BP-TRECHO', nome: 'Texto pronto', classe: '<CrmTrecho>', onde: 'operations/CrmTrecho.vue', regra: 'Copiar e Abrir no WhatsApp. Marcador por preencher fica realçado e escrito por extenso.' },
   { id: 'BP-FOLHA', nome: 'Folha', classe: '<Sheet>', onde: 'components/Sheet.vue', regra: 'Tudo que abre por cima. A folha é o contorno e a sombra; dentro, blocos sem sombra. Título sempre, "Fechar" com texto, um primário no rodapé.' },
   { id: 'BP-TABELA', nome: 'Tabela do desktop', classe: '.fin-tabela, .crm-tabela', onde: 'operations/financas/financas.css, operations/crm.css', regra: 'Só a partir de 64 rem; abaixo, a lista de sempre. Cabeçalho preso, zebra no lugar do divisor, número à direita, linha de 44 px, uma linha por item.' },
@@ -49,7 +54,7 @@ export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string;
   { bloco: 'Desfecho', pergunta: 'Ganhou (com confirmação), Perdeu (com o motivo) ou Proposta enviada, cada um com o desfazer (AC-08).', visivel: 'sempre' },
   { bloco: 'Conversa', pergunta: 'O que ele disse e o que saiu, em balões.', visivel: 'quando houver' },
   { bloco: 'Como vender', pergunta: 'O que oferecer (abre aqui), Roteiro e Copiloto (em teste).', visivel: 'sempre' },
-  { bloco: 'Anotar', pergunta: 'Nota, e a 2ª mensagem e o follow-up à mão quando a anotação automática falhou (AC-09).', visivel: 'sempre' },
+  { bloco: 'Anotar', pergunta: 'Notas de contexto que você quer acrescentar. Os envios e as respostas são observados nas integrações, sem confirmação manual.', visivel: 'sempre' },
   { bloco: 'Jornada · Sobre o lead · Linha do tempo', pergunta: 'Consulta: a posição na jornada, de onde veio, o que já aconteceu.', visivel: 'dobrado' },
 ]
 

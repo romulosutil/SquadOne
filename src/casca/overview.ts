@@ -14,18 +14,24 @@ const erro = ref('')
 // até a próxima leitura dar certo (RULES 19).
 const agora = ref(Date.now())
 let temporizador = 0
+let controle: AbortController | null = null
+const retomar = () => { if (document.visibilityState === 'visible') void ler() }
 
 async function ler() {
+  if (carregando.value) return
+  controle = new AbortController()
+  const prazo = window.setTimeout(() => controle?.abort(), 25_000)
   carregando.value = true
   erro.value = ''
   try {
-    const response = await fetch('/api/operations/overview')
+    const response = await fetch('/api/operations/overview', { signal: controle.signal })
     const corpo = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(corpo.error ?? `HTTP ${response.status}`)
     overview.value = corpo
   } catch (e) {
     erro.value = e instanceof Error ? e.message : String(e)
   } finally {
+    window.clearTimeout(prazo)
     carregando.value = false
     agora.value = Date.now()
   }
@@ -39,6 +45,8 @@ const falhas = computed(() => resumo.value.precisam.length)
 /** Lê agora e a cada 30 s com a aba visível (o monitor grava a cada minuto). */
 function iniciar() {
   if (temporizador) return
+  document.addEventListener('visibilitychange', retomar)
+  window.addEventListener('focus', retomar)
   void ler()
   temporizador = window.setInterval(() => {
     agora.value = Date.now()
@@ -47,6 +55,9 @@ function iniciar() {
 }
 
 function parar() {
+  controle?.abort()
+  document.removeEventListener('visibilitychange', retomar)
+  window.removeEventListener('focus', retomar)
   window.clearInterval(temporizador)
   temporizador = 0
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { ref } from 'vue'
+import { useAtualizacaoViva } from '../../casca/atualizacao-viva'
 import FinLancamentos from './FinLancamentos.vue'
 import FinOrganizar from './FinOrganizar.vue'
 import FinSaude from './FinSaude.vue'
@@ -21,18 +22,17 @@ const dados = ref<VisaoFinanceira | null>(null)
 const carregando = ref(true)
 const erro = ref('')
 const anuncio = ref('')
-const atualizando = ref(false)
 const versao = ref(0)
 let mes = new URLSearchParams(window.location.search).get('mes') ?? ''
 let visao: 'competencia' | 'caixa' = new URLSearchParams(window.location.search).get('visao') === 'caixa' ? 'caixa' : 'competencia'
 
-async function carregar() {
+async function carregar(signal?: AbortSignal) {
   carregando.value = true
   erro.value = ''
   const q = new URLSearchParams({ visao })
   if (mes) q.set('mes', mes)
   try {
-    const resposta = await fetch(`/api/financas/visao?${q}`)
+    const resposta = await fetch(`/api/financas/visao?${q}`, { signal, cache: 'no-store' })
     const corpo = await resposta.json().catch(() => ({}))
     if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
     dados.value = corpo
@@ -53,35 +53,7 @@ function mudar(novoMes: string, novaVisao: 'competencia' | 'caixa') {
   void carregar()
 }
 
-async function atualizarAgora() {
-  atualizando.value = true
-  anuncio.value = 'Lendo os bancos pela Pluggy…'
-  try {
-    const resposta = await fetch('/api/financas/sincronizar', { method: 'POST' })
-    const corpo = await resposta.json().catch(() => ({}))
-    if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`)
-    const falhas = (corpo.conexoes ?? []).filter((c: { erro: string | null }) => c.erro)
-    anuncio.value = falhas.length
-      ? `Atualizado, mas ${falhas.length} conexão(ões) falharam: ${falhas.map((c: { nome: string }) => c.nome).join(', ')}.`
-      : `Atualizado: ${corpo.conexoes?.length ?? 0} conexão(ões) lidas.`
-  } catch (e) {
-    anuncio.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    atualizando.value = false
-    versao.value += 1
-    await carregar()
-  }
-}
-
-let temporizador = 0
-onMounted(() => {
-  void carregar()
-  // A leitura diária pode chegar com a tela aberta; relê a cada 5 min com a aba visível.
-  temporizador = window.setInterval(() => {
-    if (document.visibilityState === 'visible') void carregar()
-  }, 5 * 60_000)
-})
-onBeforeUnmount(() => window.clearInterval(temporizador))
+useAtualizacaoViva(signal => carregar(signal), 60_000)
 </script>
 
 <template>
@@ -104,17 +76,9 @@ onBeforeUnmount(() => window.clearInterval(temporizador))
          gesto raro: a tela já relê a cada 5 min e a Pluggy lê os bancos sozinha. Vira um botão
          pequeno ao lado do "dados até" (AC-25), o lugar onde se vê que está velho. -->
     <FinSaude v-if="dados" :conexoes="dados.saude.conexoes" :dados-ate="dados.saude.dadosAte" :situacao="dados">
-      <button
-        v-if="dados.pluggyConfigurada"
-        type="button"
-        class="botao botao--leve fin-saude__atualizar"
-        :disabled="atualizando || dados.sincronizando"
-        @click="atualizarAgora"
-      >
-        {{ atualizando || dados.sincronizando ? 'Atualizando…' : 'Atualizar' }}<span class="so-leitor"> as finanças</span>
-      </button>
+      <span class="sincronizacao" role="status">{{ dados.sincronizando ? 'Lendo os bancos…' : 'Atualização automática' }}</span>
     </FinSaude>
-    <p v-if="erro" class="fin-aviso is-forte" role="alert">{{ erro }} <button type="button" class="fin-botao" @click="carregar">Tentar de novo</button></p>
+    <p v-if="erro" class="fin-aviso is-forte" role="alert">{{ erro }} <button type="button" class="fin-botao" @click="carregar()">Tentar de novo</button></p>
     <p v-else-if="carregando && !dados" class="fin-sub" role="status">Carregando…</p>
 
     <FinVisao v-if="aba === 'visao' && dados" :dados="dados" @mudar="mudar" @importado="carregar" />

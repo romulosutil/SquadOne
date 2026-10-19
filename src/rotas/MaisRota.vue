@@ -22,6 +22,8 @@
  * Finanças e o design system; e a conexão com o Google ganhou o Conectar e o Tasks.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import FrenteComercial from '../operations/FrenteComercial.vue'
+import '../estilos/operacao.css'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import CrmColinha from '../operations/CrmColinha.vue'
@@ -41,6 +43,8 @@ const { overview, resumo } = useOverview()
 const ops = computed(() => props.capacidades.perfil === 'operations')
 
 onMounted(() => {
+  const alvo = new URLSearchParams(window.location.search).get('abrir') ?? window.location.hash.slice(1)
+  if (alvo === 'primeiros-contatos' || alvo === 'equipe') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
   // O "Ver em Manutenção" da Central e o "Roteiro" de Vendas: a navegação sobe a página
   // antes de montar esta rota, então rolar até a seção fica para depois de ela existir.
   if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
@@ -49,7 +53,7 @@ onMounted(() => {
 onBeforeUnmount(() => window.clearTimeout(desarmar))
 
 /** No Dell esta tela é a Manutenção; no Easypanel continua o Mais da barra. */
-const titulo = computed(() => (ops.value ? 'Manutenção' : 'Mais'))
+const titulo = computed(() => 'Mais')
 /** O que só se abre para mexer: rotas que existem e saíram dos menus. */
 const atalhos = computed(() => [
   ...(props.capacidades.agentes && ops.value
@@ -101,12 +105,16 @@ const avisoDoDell = computed(() => {
   if (r.semNoticia) return r.textoPrecisam
   return r.precisam.length ? `${r.precisam.length} ${r.precisam.length === 1 ? 'precisa' : 'precisam'} de você` : ''
 })
+
+const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.map(d => ({ ...d, squad: s.nome }))) ?? [])
 </script>
 
 <template>
   <div class="mais">
     <section class="mais__bloco" aria-labelledby="mais-titulo">
-      <h1 id="mais-titulo">{{ titulo }}</h1>
+      <header class="cabecalho-pagina"><div><span class="sobretitulo">Seu escritório</span><h1 id="mais-titulo">{{ titulo }}</h1><p>Agenda, finanças, entrada e configurações, a um toque.</p></div></header>
+      <nav v-if="ops" class="mais__acessos" aria-label="Áreas do escritório"><a v-if="capacidades.agentes" class="botao" href="/agenda">Agenda</a><a class="botao" href="/financas">Finanças</a><a class="botao" href="/entrada/">Entrada</a><a class="botao" href="#configuracoes">Configurações</a></nav>
+      <h2 id="configuracoes">Configurações</h2>
       <!-- A aparência fica à vista: é a primeira coisa que o dono procura quando o escuro cansa. -->
       <h2 class="mais__grupo">Aparência</h2><SeletorDeTema />
       <ul class="mais__links">
@@ -115,6 +123,14 @@ const avisoDoDell = computed(() => {
         </li>
       </ul>
     </section>
+
+    <section v-if="capacidades.agentes" id="equipe" class="mais__bloco configuracao-equipe">
+      <header class="cabecalho-bloco"><div><span class="sobretitulo">Seu time</span><h2>Equipe e responsabilidades</h2></div><a class="botao" href="/squadone">Gerenciar equipe</a></header>
+      <p class="texto-2">As responsabilidades ficam aqui. Na Central, você acompanha as decisões e as conversas.</p>
+      <details v-for="sala in equipe" :key="sala.id" class="dobra"><summary><strong>{{ sala.po.nome }}</strong> · {{ sala.po.papel }} <span class="etiqueta">{{ sala.squad }} · {{ sala.nome }}</span></summary><p>{{ sala.po.escopo }}</p><ul v-if="sala.integrantes.length"><li v-for="pessoa in sala.integrantes" :key="pessoa.id"><strong>{{ pessoa.nome }} · {{ pessoa.papel }}</strong><p>{{ pessoa.escopo }}</p></li></ul></details>
+    </section>
+
+    <section v-if="ops" id="primeiros-contatos"><FrenteComercial configurar /></section>
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
     <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeFluxo || pedeRoteiro">

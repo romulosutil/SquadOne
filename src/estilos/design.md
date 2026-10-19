@@ -1,5 +1,7 @@
 # Design do SquadOne
 
+Escritório imersivo (18/10/2026, correção explícita do Rômulo): a home é um único ambiente aberto em pixel art, com os agentes animados e clicáveis. Dois telões compartilhados mostram as decisões e o andamento do time e as conversas que dependem do usuário; abrem detalhes sobre o cenário. Navegação fixa no rodapé em todas as larguras: Escritório, Assistente, Vendas e Mais. Sem trilho lateral nem campo de busca visível. Vendas abre em drawer; o Assistente conserva seu comportamento e escopo geral. Mais dá acesso a Agenda, Finanças, Entrada e Configurações. A sala permanece montada atrás dos painéis, sem rolagem de página ou zoom manual; painéis têm uma única região de rolagem. Esta decisão substitui a home de cartões com escritório recolhido, sem alterar o serviço comercial autorizado ou suas proteções.
+
 Mínimo, para as telas novas (finanças primeiro) não inventarem cor nem
 tamanho. Tokens em `tokens.css`.
 
@@ -59,6 +61,31 @@ tamanho. Tokens em `tokens.css`.
 Tracking: `-0.02em` no `--tam-secao` e no `--tam-titulo`; `-0.01em` (ou 0) do
 `--tam-nome` para baixo. A Inter a 800 já é compacta: mais apertado que isso
 encosta as letras.
+
+## Hierarquia orientada à conclusão (18/10/2026)
+
+A Central responde “o que é importante para mim?” com conversas e escolhas do time.
+Configuração, responsabilidades, integrações e aparência ficam em Configurações.
+Outras áreas têm acesso direto, sem depender de uma dobra dentro do escritório.
+
+- Página: `.cabecalho-pagina` com `--tam-titulo-pagina`. Bloco: `.cabecalho-bloco`
+  com `--tam-titulo-bloco`. A mesma informação não reaparece em outra caixa na tela.
+- Contexto: `.sobretitulo`, curto e em caixa alta. Campo: `.rotulo-contexto`, acima
+  do controle, com peso e espaçamento próprios. Explicação: texto de apoio, limitado
+  por `--leitura-max`. Rótulo de campo não se mistura ao valor escolhido.
+- Estado: `.etiqueta`, compacto, com fundo e palavra. Uma etiqueta não parece botão.
+  Ação: verbo e destino. Um primário resolve a primeira prioridade; o restante é secundário.
+- Resultado: `.metricas-venda` separa avaliações, envios confirmados e respostas.
+  Ausência de leitura nunca vira zero. Não se mede sucesso por abrir um link.
+- Página usa uma só rolagem. Listas crescem em blocos, sem painéis com `overflow:auto`
+  empilhados. Diálogos têm sua própria rolagem, por serem outra superfície de trabalho.
+- Atualização automática mantém rascunhos, foco e seleção; não remonta a página.
+  No retorno à aba, relê as fontes. Falha mantém o último dado e identifica sua idade.
+- Acompanhamento mostra o fato observado pela integração, sem “já fiz” ou conclusão
+  presumida. As avaliações dos agentes têm pontuação, motivo e autoria reais.
+
+Os padrões e exemplos vivos estão no catálogo BP-CABECALHO, BP-ETIQUETA,
+BP-METRICAS, BP-PRIORIDADES e BP-OBSERVACAO do design system.
 
 ## Neobrutalismo saudável (16/10/2026)
 
@@ -231,3 +258,8 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
   barra sozinha.
 - **Semáforo de conexão**: pílula com a palavra (OK, Atualizando, Atenção,
   Erro) e o fundo correspondente.
+
+
+### Escritório integrado · 18/10/2026
+
+A navegação flutua sobre a sala: amarelo marca somente a página atual; o acesso verde ao Assistente é uma ação separada, com aria-expanded. No desktop, a conversa ocupa uma área lateral independente e pode ser recolhida. O cenário ocupa toda a altura sem reservar faixa para o menu. No celular, a sala mantém escala legível e permite exploração horizontal; os cards continuam com uma única rolagem vertical. O card de agente prioriza o canal direto e diferencia conversas de clientes, agenda e operação, sem abas de nomes semelhantes.

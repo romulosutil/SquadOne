@@ -330,7 +330,12 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
             <span class="texto-2 texto-pequeno">{{ c.regra }} <span class="bp-onde">({{ c.onde }})</span></span>
           </header>
           <div class="bp-peca__vivo">
-            <section v-if="c.id === 'BP-BLOCO'" class="bloco" aria-label="Exemplo de bloco">
+            <div v-if="c.id === 'BP-CABECALHO'" class="cabecalho-pagina"><div><span class="sobretitulo">Seu dia de vendas</span><h2>Conversas para avançar</h2><p>O que precisa de você, antes do que é consulta.</p></div></div>
+            <div v-else-if="c.id === 'BP-ETIQUETA'" class="acoes"><span class="etiqueta" data-tom="ok">Resposta recebida</span><span class="etiqueta" data-tom="atencao">Sem leitura recente</span><span class="etiqueta">Time avaliando</span></div>
+            <div v-else-if="c.id === 'BP-METRICAS'" class="metricas-venda"><div><strong>24<small> / 100</small></strong><span>contatos iniciados hoje</span></div><div><strong>6</strong><span>respostas observadas</span></div><div><strong>80</strong><span>leads avaliados</span></div></div>
+            <ol v-else-if="c.id === 'BP-PRIORIDADES'" class="lista-prioridades"><li><span class="etiqueta" data-tom="atencao">Prioridade agora</span><h3>Conversa com resposta recebida</h3><p>Mostre o motivo e uma ação concreta para continuar.</p><button class="botao botao--primario" type="button">Continuar conversa</button></li><li>As demais prioridades usam ações secundárias.</li></ol>
+            <div v-else-if="c.id === 'BP-OBSERVACAO'" class="zona"><span class="etiqueta" data-tom="ok">Mensagem observada</span><p>O envio apareceu na integração. O time acompanha a próxima resposta.</p></div>
+            <section v-else-if="c.id === 'BP-BLOCO'" class="bloco" aria-label="Exemplo de bloco">
               <h3>Follow-up para mandar</h3>
               <p class="texto-2 texto-pequeno">Em contato há 3 a 6 dias. Quem leu e não respondeu vem primeiro.</p>
             </section>
@@ -380,7 +385,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
             </div>
             <div v-else-if="c.id === 'BP-RECADO'" class="bp-pilha">
               <p class="recado recado--ok">Atualizada às 14:02.</p>
-              <p class="recado recado--atencao">Fora do expediente: o primeiro contato espera o "Liberar".</p>
+              <p class="recado recado--atencao">Próximo expediente: o time inicia os contatos amanhã às 8h. As conversas continuam disponíveis.</p>
               <p class="recado recado--erro">Não foi gravado: a planilha não respondeu. Tente de novo.</p>
             </div>
             <label v-else-if="c.id === 'BP-CAMPO'" class="rotulo">O que fazer <small>(até 200 letras)</small>

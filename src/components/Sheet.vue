@@ -28,6 +28,7 @@ const props = withDefaults(
     bloqueada?: boolean
     /** Altura toda (ficha do CRM): no celular ocupa a tela, no desktop um diálogo largo. */
     cheia?: boolean
+    flutuante?: boolean
     /** Texto curto abaixo do título. */
     subtitulo?: string
   }>(),
@@ -152,11 +153,11 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div class="folha-fundo" @click.self="pedirFechar">
+    <div class="folha-fundo" :class="{ 'folha-fundo--flutuante': flutuante }" @click.self="pedirFechar">
       <section
         ref="painel"
         class="folha"
-        :class="{ 'folha--cheia': cheia }"
+        :class="{ 'folha--cheia': cheia, 'folha--flutuante': flutuante }"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="idTitulo"
@@ -307,6 +308,12 @@ html.com-folha { overflow: hidden; }
   from { transform: translateY(2rem); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+.folha-fundo--flutuante { align-items: center; justify-content: center; padding: var(--esp-8); background: rgb(9 19 25 / .42); }
+.folha--flutuante { width: min(68rem, 100%); height: auto; max-height: calc(100dvh - var(--esp-8) * 2); border: var(--linha); border-radius: var(--raio-bloco); box-shadow: var(--sombra); padding-bottom: 0; overflow: hidden; animation: folha-aparece 140ms ease-out; }
+.folha--flutuante .folha__topo { padding-top: var(--esp-4); }
+.folha--flutuante .folha__alca { display: none; }
+@keyframes folha-aparece { from { transform: translateY(var(--esp-2)); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 47.99rem) { .folha-fundo--flutuante { padding: var(--esp-3); } .folha--flutuante { max-height: calc(100dvh - var(--esp-6) * 2); } }
 @media (prefers-reduced-motion: reduce) {
   .folha { animation: none; }
 }

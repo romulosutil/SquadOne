@@ -45,8 +45,8 @@ defineEmits<{ pedir: []; paleta: [] }>()
     <a v-if="discreto" class="barra-lateral__discreto" :href="discreto.href" :aria-current="atual === discreto.id ? 'page' : undefined">
       <span class="barra-lateral__icone" aria-hidden="true">{{ discreto.icone }}</span>{{ discreto.rotulo }}
     </a>
-    <button type="button" class="barra-lateral__paleta" :class="{ 'barra-lateral__paleta--junto': discreto }" @click="$emit('paleta')">
-      Buscar e ir <kbd>{{ atalho }}</kbd>
+    <button type="button" class="barra-lateral__paleta" aria-label="Buscar páginas e leads" :class="{ 'barra-lateral__paleta--junto': discreto }" @click="$emit('paleta')">
+      Buscar <kbd>{{ atalho }}</kbd>
     </button>
   </aside>
 </template>

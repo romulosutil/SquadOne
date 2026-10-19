@@ -1,0 +1,28 @@
+/* Padrões de operação: hierarquia por finalidade, sem caixas e rolagens sobrepostas. */
+.cabecalho-pagina { display: flex; justify-content: space-between; align-items: start; gap: var(--esp-4); flex-wrap: wrap; }
+.cabecalho-pagina h1 { font-size: var(--tam-titulo-pagina); font-weight: var(--peso-titulo); line-height: 1.15; letter-spacing: -.035em; margin: 0; }
+.cabecalho-pagina p { margin: var(--esp-2) 0 0; max-width: var(--leitura-max); color: var(--texto-2); }
+.cabecalho-bloco { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-3); }
+.cabecalho-bloco h2 { margin: 0; font-size: var(--tam-titulo-bloco); font-weight: var(--peso-forte); line-height: 1.3; letter-spacing: -.02em; }
+.sobretitulo { display: block; color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); text-transform: uppercase; letter-spacing: .09em; margin: 0 0 var(--esp-2); }
+.etiqueta { display: inline-flex; width: fit-content; align-items: center; gap: var(--esp-1); padding: var(--esp-1) var(--esp-2); border: var(--linha-fina); border-radius: var(--raio-selo); background: var(--superficie-2); color: var(--texto); font-size: var(--tam-mini); line-height: 1.3; font-weight: var(--peso-forte); }
+.etiqueta[data-tom="ok"] { background: var(--ok-fundo); color: var(--sobre-pastel); }
+.etiqueta[data-tom="atencao"] { background: var(--atencao-fundo); color: var(--sobre-pastel); }
+.etiqueta[data-tom="erro"] { background: var(--erro-fundo); color: var(--negativo); }
+.painel-venda { min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+.painel-venda p { margin: 0; max-width: var(--leitura-max); }
+.metricas-venda { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--esp-4); padding-block: var(--esp-2); }
+.metricas-venda > div { display: grid; gap: var(--esp-1); }
+.metricas-venda strong { font-size: var(--tam-numero); line-height: 1.1; letter-spacing: -.035em; }
+.metricas-venda strong small { font-size: var(--tam-apoio); color: var(--texto-2); font-weight: var(--peso-medio); }
+.metricas-venda span { font-size: var(--tam-apoio); color: var(--texto-2); }
+.lista-prioridades { list-style: none; margin: 0; padding: 0; }
+.lista-prioridades > li { padding-block: var(--esp-4); border-bottom: var(--divisor); }
+.lista-prioridades > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.ordem-venda { display: inline-grid; place-content: center; min-width: 1.75rem; height: 1.75rem; border-radius: var(--raio-selo); background: var(--superficie-2); font-weight: var(--peso-forte); font-size: var(--tam-apoio); }
+.link-discreto { display: inline-flex; width: fit-content; align-items: center; min-height: var(--toque); color: inherit; font-size: var(--tam-apoio); font-weight: var(--peso-forte); text-underline-offset: .2em; }
+.sincronizacao { display: inline-flex; align-items: center; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
+.sincronizacao::before { content: ''; width: .5rem; height: .5rem; border-radius: var(--raio-pilula); background: var(--positivo); }
+.rotulo-contexto { display: grid; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: .07em; text-transform: uppercase; }
+.rotulo-contexto :is(input,select,textarea) { text-transform: none; letter-spacing: normal; font-size: var(--tam-texto); }
+@media (max-width: 39.99rem) { .metricas-venda { gap: var(--esp-3); } .metricas-venda strong { font-size: var(--tam-secao); } .metricas-venda span { font-size: var(--tam-mini); } }
