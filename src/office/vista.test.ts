@@ -27,8 +27,10 @@ describe('vista do escritório', () => {
     assert.equal(lerVistaGuardada(s), null)
   })
 
-  it('na Central, mapa por padrão em qualquer tela, guardado à parte do Escritório', () => {
+  it('na Central, ações primeiro no celular e mapa no desktop; escolha guardada vence', () => {
     assert.equal(vistaInicialDaCentral(null), 'mapa')
+    assert.equal(vistaInicialDaCentral(null, false), 'lista')
+    assert.equal(vistaInicialDaCentral('mapa', false), 'mapa')
     assert.equal(vistaInicialDaCentral('lista'), 'lista')
     const s = memoria()
     gravarVista(s, 'lista', CHAVE_DA_VISTA_DA_CENTRAL)

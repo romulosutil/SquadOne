@@ -28,6 +28,7 @@
  */
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import { carregarCatalogoSprites } from './catalogoSprites'
 import {
   DOOR_SOUTH,
   INNER_H,
@@ -65,8 +66,8 @@ export interface OfficePessoa {
   sprite: string
   /** graus de hue-rotate, para diferenciar papéis que reusam o mesmo sprite */
   hue?: number
-  /** fallback quando o sheet não carrega */
-  emoji: string
+  /** Compatibilidade com vistas antigas; o mapa não renderiza emojis. */
+  emoji?: string
 }
 
 /** Um domínio = uma sala. O slot é dele, não de quem trabalha dentro. */
@@ -113,7 +114,6 @@ const PASSEIO_FRACAO_MAX = 1 / 3
  */
 const PASSEIO_FOLGA_PX = 40
 
-const MANIFEST_URL = '/sprites/craftpix.manifest.json'
 
 interface CharAnim {
   file: string
@@ -195,7 +195,7 @@ export interface RoomView {
 
 export type RoomPhase = 'pending' | 'building' | 'closing' | null
 
-export function useOffice(dominios: Ref<OfficeDominio[]>) {
+export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolean | null>, margemSuperior?: Ref<number>) {
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
   // `:ref="worldRef"` passaria null em vez do objeto ref.
   const viewportRef = shallowRef<HTMLElement | null>(null)
@@ -227,8 +227,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   let abaOculta = typeof document !== 'undefined' ? document.hidden : false
   let foraDaTela = false
 
-  /** null enquanto carrega ou se o manifest não existir: a UI cai pro emoji. */
+  /** Sem manifesto, a UI mantém o lugar do personagem e informa a falha. */
   const sheets = shallowRef<Record<string, CharSheet> | null>(null)
+  const erroSprites = ref('')
 
   /** Fase de cada sala em obra, por slotKey. Vazio = escritório em repouso. */
   const roomPhase = reactive(new Map<string, Exclude<RoomPhase, null>>())
@@ -280,7 +281,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-reduced-motion: reduce)')
       : null
-  let movimentoReduzido = mqMovimento?.matches ?? false
+  let movimentoReduzido = movimento?.value != null ? !movimento.value : mqMovimento?.matches ?? false
 
   /** Ponto de mundo que a câmera persegue enquanto nenhum ator é o foco. */
   const lookPoint = shallowRef<Vec2 | null>(null)
@@ -305,7 +306,11 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   /** Lista achatada, na ordem da árvore — o v-for dos atores no template. */
   const pessoas = computed<OfficePessoa[]>(() => dominios.value.flatMap((d) => d.pessoas))
   const mapPx = computed<Vec2>(() => [mapTiles.value[0] * TILE, mapTiles.value[1] * TILE])
-  const bounds = computed(() => isoBounds(mapPx.value[0], mapPx.value[1]))
+  const bounds = computed(() => {
+    const margem = margemSuperior?.value ?? 0
+    const b = isoBounds(margem ? Math.max(480, mapPx.value[0]) : mapPx.value[0], margem ? Math.max(512, mapPx.value[1]) : mapPx.value[1])
+    return { ...b, minY: b.minY - margem }
+  })
 
   /** Profundidade do pintor: a diagonal do mundo ortogonal. */
   function depth(wx: number, wy: number): number {
@@ -505,7 +510,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
           if (roomPhase.has(slotKey(dominio.slot))) a.hidden = true
           else iniciarEntrada(a, dominio, idx)
         } else {
-          agendarPasseio(a)
+          agendarPasseio(a, [1200, 5000])
         }
       } else if (!a.hidden) {
         a.dominioId = dominio.id
@@ -714,7 +719,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   }
 
   function onPreferenciaDeMovimento(e: MediaQueryListEvent) {
-    movimentoReduzido = e.matches
+    aplicarMovimento(movimento?.value != null ? !movimento.value : e.matches)
+  }
+  function aplicarMovimento(reduzido: boolean) {
+    movimentoReduzido = reduzido
     for (const a of actors.values()) {
       if (!movimentoReduzido) agendarPasseio(a)
       // Só a espera é cancelada: quem já está fora termina a volta ao posto.
@@ -724,6 +732,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
       }
     }
   }
+
+  if (movimento) watch(movimento, valor => aplicarMovimento(valor === null ? mqMovimento?.matches ?? false : !valor))
 
   /**
    * Sala nova: pan da câmera, materialização, e só então a entrada de quem
@@ -1049,14 +1059,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
   let io: IntersectionObserver | null = null
 
   async function loadSheets() {
-    try {
-      const res = await fetch(MANIFEST_URL, { headers: { accept: 'application/json' } })
-      if (!res.ok) return
-      const data = await res.json()
-      if (data && typeof data === 'object' && data.chars) sheets.value = data.chars
-    } catch {
-      // manifest ausente ou inválido: segue no emoji
-    }
+    erroSprites.value = ''
+    try { sheets.value = await carregarCatalogoSprites() }
+    catch { erroSprites.value = 'Os sprites não carregaram. As salas continuam disponíveis pela lista.' }
   }
 
   // Atores existem antes do primeiro render: os :ref do template rodam antes
@@ -1133,6 +1138,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>) {
     setWorldEl,
     scale,
     sheets,
+    erroSprites,
+    carregarSprites: loadSheets,
     pessoas,
     rooms,
     bounds,

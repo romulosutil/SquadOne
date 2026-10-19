@@ -45,13 +45,9 @@ export function vistaInicial(guardada: VistaDoEscritorio | null, telaLarga: bool
   return guardada ?? (telaLarga ? 'mapa' : 'lista')
 }
 
-/**
- * Na Central o mapa é o padrão também no celular: é o pedido ("o Escritório como página inicial,
- * em movimento"), e lá ele tem altura fixa, sem o andar inteiro a encaixar. Lista é a escolha de
- * quem quer poupar bateria, e fica guardada.
- */
-export function vistaInicialDaCentral(guardada: VistaDoEscritorio | null): VistaDoEscritorio {
-  return guardada ?? 'mapa'
+/** Na Central: ações primeiro no celular, mapa no desktop; escolha explícita vence. */
+export function vistaInicialDaCentral(guardada: VistaDoEscritorio | null, telaLarga = true): VistaDoEscritorio {
+  return vistaInicial(guardada, telaLarga)
 }
 
 export const ESCALA_MAXIMA = 3

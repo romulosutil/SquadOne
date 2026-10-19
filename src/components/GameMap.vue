@@ -24,7 +24,7 @@
  * escala) que abre a sala dele. O estado de cada um vai no nome acessível, em
  * texto (`estados`, só com fonte; `Sem sinal` quando não há).
  */
-import { computed, onBeforeUnmount, ref, shallowRef, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { ESCALA_MAXIMA, escalaInteira } from '../office/vista'
 import type { EstadoDaPessoa } from '../casca/hoje'
 import {
@@ -33,6 +33,7 @@ import {
   type OfficeDominio,
   type OfficePessoa,
   type RoomPhase,
+  type RoomView,
 } from '../office/useOffice'
 import {
   ISO_MATRIX,
@@ -46,6 +47,8 @@ import {
 import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
 import type { BalaoDaSala } from '../office/baloes'
 import type { Pessoa, SquadView } from '../types'
+import { useMovimentoDoEscritorio } from '../office/movimento'
+import { resolverSprite } from '../office/catalogoSprites'
 
 const props = defineProps<{
   agent?: string
@@ -67,27 +70,19 @@ const props = defineProps<{
   visita?: string | null
   /** Na Central: altura fixa e a barra do mapa enxuta, o mapa é uma parte da tela, não a tela. */
   compacto?: boolean
+  salaSelecionada?: string | null
+  imersivo?: boolean
+  painelAgentes?: { resumo: string; detalhe: string }
+  painelDecisoes?: { resumo: string; detalhe: string }
 }>()
 
-const emit = defineEmits<{ abrirSala: [dominioId: string] }>()
+const emit = defineEmits<{ abrirSala: [dominioId: string]; abrirAgente: [salaId: string, pessoaId: string]; painel: [tipo: 'agentes' | 'decisoes'] }>()
 
 const estadoDoAtor = computed<Record<string, BalaoDaSala>>(() => props.baloes ?? {})
+const imagemDaCenaDisponivel = ref(true)
+const cenarioIlustrado = computed(() => imagemDaCenaDisponivel.value && dominios.value.length <= 6)
 
 /** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
-const SPRITE_POOL = ['wraith_01', 'wraith_02', 'wraith_03']
-const HUE_POOL = [0, 150, 45, 280, 200, 320]
-
-const EMOJI_POR_PAPEL: { re: RegExp; emoji: string }[] = [
-  { re: /\bpo\b|product|produto/i, emoji: '🧑‍💼' },
-  { re: /tech|dev|eng/i, emoji: '🧑‍💻' },
-  { re: /design/i, emoji: '🧑‍🎨' },
-  { re: /qa|test/i, emoji: '🕵️' },
-  { re: /dados|data|analy/i, emoji: '🧑‍🔬' },
-]
-
-function emojiDe(papel: string): string {
-  return EMOJI_POR_PAPEL.find((e) => e.re.test(papel))?.emoji ?? '🧑'
-}
 
 function roomIdDe(room: string): RoomId {
   return (room in ROOM_TEMPLATES ? room : 'ROOM_EMPTY') as RoomId
@@ -107,41 +102,41 @@ const manifest = shallowRef<Record<string, CharSheet> | null>(null)
  * trouxe os seus do roster — não tem significado no modelo.
  *
  * O sprite do roster só é honrado se existir em `chars`: um nome morto (roster
- * de uma versão antiga) viraria sheet null e cairia no emoji em silêncio.
+ * de uma versão antiga) usa outro sprite do mesmo pacote quando o nome antigo não existe.
  * Quem cai no pool por sprite inválido ganha hue como qualquer outro do pool.
- * Sem manifest carregado não há o que validar — aí o emoji é o certo.
+ * Sem manifesto, o mapa exibe um marcador neutro e informa a falha.
  */
 function paraOfficePessoa(
   p: Pessoa,
   ordem: number,
   chars: Record<string, CharSheet> | null
 ): OfficePessoa {
-  const proprio = p.sprite && (!chars || chars[p.sprite]) ? p.sprite : ''
   return {
     id: p.id,
     nome: p.nome,
     papel: p.papel,
-    sprite: proprio || SPRITE_POOL[ordem % SPRITE_POOL.length],
-    hue: p.hue ?? (proprio ? undefined : HUE_POOL[Math.floor(ordem / SPRITE_POOL.length) % HUE_POOL.length]),
-    emoji: emojiDe(p.papel),
+    ...resolverSprite(p.sprite, p.hue, ordem, chars),
   }
 }
 
 const dominios = computed<OfficeDominio[]>(() => {
   const chars = manifest.value
   let ordem = 0
-  return (props.squad?.dominios ?? []).map((d) => ({
+  return (props.squad?.dominios ?? []).map((d, indice) => ({
     id: d.id,
     nome: d.nome,
-    slot: d.slot,
+    // Planta do escritório compartilhado: dois postos por fileira. Os IDs e
+    // a ordem do roster continuam sendo a identidade dos agentes e do trabalho.
+    slot: props.imersivo ? [indice % 2, Math.floor(indice / 2)] as [number, number] : d.slot,
     room: roomIdDe(d.room),
     // PO primeiro: a ordem define qual cadeira cada um ocupa na sala.
     pessoas: [d.po, ...d.integrantes].map((p) => paraOfficePessoa(p, ordem++, chars)),
   }))
 })
 
-const { setViewportEl, setWorldEl, scale, sheets, pessoas, rooms, bounds, setActorEl, moveTo, pausado } =
-  useOffice(dominios)
+const { preferencia: preferenciaDeMovimento } = useMovimentoDoEscritorio()
+const { setViewportEl, setWorldEl, scale, sheets, erroSprites, carregarSprites, pessoas, rooms, bounds, setActorEl, moveTo, focus, pausado } =
+  useOffice(dominios, preferenciaDeMovimento, computed(() => props.imersivo ? 180 : 0))
 
 /** Sala de cada pessoa: o toque no personagem abre a sala, não a pessoa. */
 const salaDe = computed(() => {
@@ -149,19 +144,22 @@ const salaDe = computed(() => {
   for (const d of dominios.value) for (const p of d.pessoas) mapa.set(p.id, { id: d.id, nome: d.nome })
   return mapa
 })
+const slotSelecionado = computed(() => dominios.value.find(d => d.id === props.salaSelecionada)?.slot)
+const salaSelecionadaNoMapa = (slot: [number, number]) => slotSelecionado.value?.[0] === slot[0] && slotSelecionado.value?.[1] === slot[1]
 
 const rotuloDoAtor = (p: OfficePessoa) => {
   const sala = salaDe.value.get(p.id)
   const estado = props.estados?.[p.id]?.texto ?? 'Sem sinal'
   // O balão também é lido: quem usa leitor de tela não vê o texto em cima do boneco.
   const balao = estadoDoAtor.value[p.id]?.texto
-  return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${balao ? `${balao}. ` : ''}${estado}. Abrir a sala.`
+  return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${balao ? `${balao}. ` : ''}${estado}. ${sala?.id.startsWith('prumo--') ? 'Conversar com o agente.' : 'Abrir a sala.'}`
 }
 
 // ---------------------------------------------------------------- escala
 
 /** Tamanho do viewport em px de tela, medido por ResizeObserver. */
 const caixa = ref({ w: 0, h: 0 })
+const mapaEl = ref<HTMLElement | null>(null)
 let roCaixa: ResizeObserver | null = null
 function ligarViewport(el: unknown) {
   setViewportEl(el)
@@ -171,6 +169,8 @@ function ligarViewport(el: unknown) {
   if (!no || typeof ResizeObserver === 'undefined') return
   roCaixa = new ResizeObserver(() => {
     caixa.value = { w: no.clientWidth, h: no.clientHeight }
+    // No celular o cenário mantém os personagens legíveis; o gesto lateral explora a sala.
+    if (props.imersivo && mapaEl.value) mapaEl.value.scrollLeft = (mapaEl.value.scrollWidth - mapaEl.value.clientWidth) / 2
   })
   roCaixa.observe(no)
 }
@@ -179,7 +179,9 @@ onBeforeUnmount(() => roCaixa?.disconnect())
 /** null = encaixe automático (a maior escala inteira em que o andar cabe). */
 const zoom = ref<number | null>(null)
 const encaixe = computed(() =>
-  escalaInteira(caixa.value, { w: bounds.value.maxX - bounds.value.minX, h: bounds.value.maxY - bounds.value.minY })
+  props.imersivo
+    ? Math.max(.1, Math.min(2, (caixa.value.w - 24) / (bounds.value.maxX - bounds.value.minX), (caixa.value.h - 24) / (bounds.value.maxY - bounds.value.minY)))
+    : escalaInteira(caixa.value, { w: bounds.value.maxX - bounds.value.minX, h: bounds.value.maxY - bounds.value.minY })
 )
 watchEffect(() => {
   scale.value = zoom.value ?? encaixe.value
@@ -229,12 +231,49 @@ watch(
   { immediate: true }
 )
 
+// A escolha do usuário conserva a câmera, inclusive quando o supervisor visita outra sala.
+function focarSalaSelecionada() {
+  const po = props.squad?.dominios.find(d => d.id === props.salaSelecionada)?.po.id
+  if (po) focus(po)
+}
+watch([() => props.salaSelecionada, salaVisitada], focarSalaSelecionada, { flush: 'post' })
+onMounted(focarSalaSelecionada)
+
 const worldBox = computed(() => ({
   width: bounds.value.maxX - bounds.value.minX + 'px',
   height: bounds.value.maxY - bounds.value.minY + 'px',
   // O botão de toque divide por isto para ter 44 px na TELA em qualquer escala.
   '--escala': String(scale.value),
+  '--profundidade-cena': `${-bounds.value.minX}px`,
 }))
+const paredeNorte = computed(() => ({ width: bounds.value.maxX + 'px', transform: WALL_MATRIX_X }))
+const paredeOeste = computed(() => ({ width: -bounds.value.minX + 'px', transform: WALL_MATRIX_Y }))
+
+// O escritório aberto reaproveita os postos e os caminhos do mapa, mas não a
+// mobília duplicada das antigas salas: uma mesa por posto, apoio compartilhado.
+function mobiliaDaCena(room: RoomView) {
+  if (!props.imersivo) return room.props
+  if (cenarioIlustrado.value) return []
+  const indice = rooms.value.findIndex(r => r.key === room.key)
+  let mesas = 0
+  return room.props.filter(p => {
+    if (p.kind === 'desk') return ++mesas === 1
+    if (p.kind === 'chair') return false
+    if (p.kind === 'shelf') return indice === 1 || indice === 4
+    if (p.kind === 'plant') return indice === 0 || indice === 3 || indice === 5
+    return p.kind !== 'glass'
+  })
+}
+const plataforma = computed(() => {
+  const w = bounds.value.maxX
+  const h = -bounds.value.minX
+  const centro = `${w - h},${(w + h) / 2}`
+  const baixo = `${w - h},${(w + h) / 2 + 12}`
+  return {
+    esquerda: `${-h},${h / 2} ${centro} ${baixo} ${-h},${h / 2 + 12}`,
+    direita: `${centro} ${w},${w / 2} ${w},${w / 2 + 12} ${baixo}`,
+  }
+})
 
 function sheetOf(p: OfficePessoa) {
   return sheets.value?.[p.sprite] ?? null
@@ -284,25 +323,50 @@ function actorStyle(p: OfficePessoa) {
 </script>
 
 <template>
-  <section class="mapa" :class="{ 'mapa--compacto': compacto }" :aria-label="`Mapa do escritório de ${squad?.nome ?? 'squad'}`">
-    <div class="mapa__barra">
+  <section ref="mapaEl" class="mapa" :class="{ 'mapa--compacto': compacto, 'mapa--imersivo': imersivo, 'mapa--ilustrado': imersivo && cenarioIlustrado }" :aria-label="`Escritório de agentes de ${squad?.nome ?? 'squad'}`">
+    <p v-if="erroSprites" class="recado recado--erro" role="alert">{{ erroSprites }} <button type="button" class="botao botao--leve" @click="carregarSprites">Tentar carregar sprites</button></p>
+    <div v-if="!imersivo" class="mapa__barra">
       <p class="mapa__status" role="status">{{ status || 'Aguardando pedidos' }}<template v-if="pausado"> · animação pausada (mapa fora de vista)</template></p>
-      <div class="mapa__zoom" role="group" aria-label="Escala do mapa">
-        <button type="button" class="botao botao--leve" :disabled="scale <= 1" @click="afastar">Afastar</button>
-        <span v-if="!compacto" class="mapa__escala">Escala {{ scale }}x{{ zoom === null ? ' (encaixe)' : '' }}</span>
-        <button type="button" class="botao botao--leve" :disabled="scale >= ESCALA_MAXIMA" @click="aproximar">Aproximar</button>
-        <button v-if="zoom !== null" type="button" class="botao botao--leve" @click="encaixar">Encaixar</button>
-      </div>
+
     </div>
 
     <!-- Viewport: recorta o mundo. A câmera é o transform de .world. -->
-    <div :ref="ligarViewport" class="office-viewport" :class="{ 'office--pausado': pausado }">
+    <div :ref="ligarViewport" class="office-viewport" :data-movimento="preferenciaDeMovimento" :class="{ 'office--pausado': pausado }">
       <!-- SCALE aparece em UM lugar: este transform (escrito por useOffice). -->
       <div :ref="setWorldEl" class="office-world" :style="worldBox">
+        <template v-if="imersivo">
+          <img v-if="cenarioIlustrado" class="cena-ilustrada" src="/office/escritorio-cozy-v1.png" width="1743" height="902" alt="" aria-hidden="true" draggable="false" @error="imagemDaCenaDisponivel = false"/>
+          <svg v-else class="cena-plataforma" width="1" height="1" aria-hidden="true"><polygon :points="plataforma.esquerda" fill="#5d5146"/><polygon :points="plataforma.direita" fill="#403f3c"/></svg>
+          <div class="cena-parede cena-parede--oeste" :style="paredeOeste">
+            <button class="cena-tela cena-tela--agentes" type="button" aria-label="Abrir decisões e andamento dos agentes" @click="emit('painel', 'agentes')">
+              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Decisões dos agentes</strong>
+              <span class="cena-tela__numero">{{ painelAgentes?.resumo ?? 'Lendo o time…' }}</span>
+              <span class="cena-tela__detalhe">{{ painelAgentes?.detalhe ?? 'Acompanhe o trabalho' }}</span>
+              <span class="cena-tela__abrir">Ver andamento →</span>
+            </button>
+          </div>
+          <div class="cena-parede cena-parede--norte" :style="paredeNorte">
+            <span v-if="!cenarioIlustrado" class="cena-marca" aria-hidden="true">SQUAD ONE <small>ESTÚDIO DE OPERAÇÕES</small></span>
+            <div v-if="!cenarioIlustrado" class="cena-janela" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <button class="cena-tela cena-tela--decisoes" type="button" aria-label="Abrir minhas decisões e conversas" @click="emit('painel', 'decisoes')">
+              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Minhas decisões</strong>
+              <span class="cena-tela__numero">{{ painelDecisoes?.resumo ?? 'Lendo as conversas…' }}</span>
+              <span class="cena-tela__detalhe">{{ painelDecisoes?.detalhe ?? 'O que depende de você' }}</span>
+              <span class="cena-tela__abrir">Abrir conversas →</span>
+            </button>
+          </div>
+        </template>
         <!-- Chão: retângulos em coordenadas de mundo, projetados pela matriz. -->
         <div class="ground" :style="{ transform: ISO_MATRIX }">
+          <div v-if="imersivo && !cenarioIlustrado" class="floor cena-chao" :style="{ width: bounds.maxX + 'px', height: -bounds.minX + 'px' }"></div>
+          <template v-if="imersivo && !cenarioIlustrado">
+            <div class="cena-luz" aria-hidden="true"></div>
+            <div class="cena-tapete cena-tapete--criacao" aria-hidden="true"></div>
+            <div class="cena-tapete cena-tapete--operacoes" aria-hidden="true"></div>
+            <div class="cena-tapete cena-tapete--encontro" aria-hidden="true"></div>
+          </template>
           <div
-            v-for="room in rooms"
+            v-for="room in (imersivo ? [] : rooms)"
             :key="room.key + '-base'"
             class="base"
             :class="faseClasse(room)"
@@ -316,7 +380,7 @@ function actorStyle(p: OfficePessoa) {
           <!-- `data-tapete` só varia a cor do tapete entre salas vizinhas; sai do
                slot, então a mesma sala tem sempre o mesmo tapete. -->
           <div
-            v-for="room in rooms"
+            v-for="room in (imersivo ? [] : rooms)"
             :key="room.key + '-floor'"
             class="floor"
             :class="faseClasse(room)"
@@ -339,7 +403,7 @@ function actorStyle(p: OfficePessoa) {
           <div v-for="room in rooms" :key="room.key" class="room-objects" :class="faseClasse(room)">
             <!-- Paredes de trás, um tile por div: o vão da porta é o tile ausente. -->
             <div
-              v-for="w in room.walls"
+              v-for="w in (imersivo ? [] : room.walls)"
               :key="w.key"
               class="wall"
               :class="`wall--${w.axis}`"
@@ -354,7 +418,7 @@ function actorStyle(p: OfficePessoa) {
             ></div>
 
             <div
-              v-for="(p, i) in room.props"
+              v-for="(p, i) in mobiliaDaCena(room)"
               :key="room.key + '-p' + i"
               class="prop"
               :style="{
@@ -377,11 +441,26 @@ function actorStyle(p: OfficePessoa) {
 
             <!-- A placa é do DOMÍNIO: a sala inteira pertence a ele. -->
             <span
+              v-if="!imersivo"
               class="room__label"
+              :data-selecionada="salaSelecionadaNoMapa(room.slot) || undefined"
               :style="{ left: room.label.left + 'px', top: room.label.top + 'px' }"
               >{{ room.label.text }}</span
             >
           </div>
+
+          <!-- Cantinho de encontro: desenho vetorial em pixels, na mesma
+               projeção 2:1 das mesas; deixa as rotas dos postos livres. -->
+          <svg v-if="imersivo && !cenarioIlustrado" class="cena-encontro" :style="{ left: `${130 + bounds.minX}px`, top: `${-bounds.minX / 2 - 24}px`, zIndex: 148 - bounds.minX }" width="168" height="112" viewBox="0 0 168 112" aria-hidden="true" shape-rendering="crispEdges">
+            <g stroke="#222b30" stroke-width="2" stroke-linejoin="miter">
+              <path d="M12 54 40 40 76 58 48 72Z" fill="#6d8e85"/><path d="M12 54 48 72 48 90 12 72Z" fill="#48675f"/><path d="M48 72 76 58 76 76 48 90Z" fill="#38574f"/>
+              <path d="M98 30 126 16 160 33 132 47Z" fill="#6d8e85"/><path d="M98 30 132 47 132 65 98 48Z" fill="#48675f"/><path d="M132 47 160 33 160 51 132 65Z" fill="#38574f"/>
+              <path d="M66 52 104 33 130 46 92 65Z" fill="#c89866"/><path d="M66 52 92 65 92 71 66 58Z" fill="#a77950"/><path d="M92 65 130 46 130 52 92 71Z" fill="#7b573e"/>
+              <path d="M74 60V80M120 55V73" fill="none" stroke-width="4"/>
+              <path d="M87 47 101 40 113 46 99 53Z" fill="#f1e6cb"/><path d="m92 46 8-4m-5 6 8-4" stroke="#8f9c9a" stroke-width="1"/>
+              <path d="M114 37v7l6 3 5-3v-7" fill="#ede1c3"/><path d="m114 37 6-3 5 3-5 3Z" fill="#705847"/>
+            </g>
+          </svg>
 
           <!-- Atores: billboards, movidos por translate3d direto no style.
                Nada de :class aqui: useOffice escreve `actor--walk`/`actor--focus`
@@ -403,18 +482,19 @@ function actorStyle(p: OfficePessoa) {
               type="button"
               class="actor__hit"
               :aria-label="rotuloDoAtor(p)"
-              @click="salaDe.get(p.id) && emit('abrirSala', salaDe.get(p.id)!.id)"
+              :aria-pressed="salaSelecionada ? salaDe.get(p.id)?.id === salaSelecionada : undefined"
+              @click="salaDe.get(p.id) && (emit('abrirSala', salaDe.get(p.id)!.id), emit('abrirAgente', salaDe.get(p.id)!.id, p.id))"
             ></button>
             <div data-billboard class="actor__billboard">
               <template v-if="sheetOf(p)">
                 <div class="actor__strip actor__strip--idle" :style="stripStyle(p, 'idle')"></div>
                 <div data-walk class="actor__strip actor__strip--walk" :style="stripStyle(p, 'walk')"></div>
               </template>
-              <div v-else class="actor__emoji">{{ p.emoji }}</div>
+              <div v-else class="actor__sem-sprite" aria-hidden="true"></div>
             </div>
-            <span class="actor__name" aria-hidden="true">{{ p.nome }} · {{ p.papel }}</span>
+            <span class="actor__name" aria-hidden="true">{{ imersivo ? p.nome : `${p.nome} · ${p.papel}` }}</span>
             <span
-              v-if="estadoDoAtor[p.id]"
+              v-if="estadoDoAtor[p.id] && (!salaSelecionada || salaDe.get(p.id)?.id === salaSelecionada || estadoDoAtor[p.id].destaque)"
               class="actor__estado"
               aria-hidden="true"
               :data-tom="estadoDoAtor[p.id].tom"
@@ -429,6 +509,55 @@ function actorStyle(p: OfficePessoa) {
 </template>
 
 <style scoped>
+.mapa--imersivo { height: 100%; border: 0 !important; box-shadow: none !important; background: #20283a; }
+.mapa--imersivo .office-viewport { height: 100%; min-height: 0; flex: 1; background: radial-gradient(ellipse at 50% 55%, #34414b, #1b2730 78%); }
+@media(max-width:47.99rem) {
+  .mapa--imersivo { display: block; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .mapa--imersivo .office-viewport { width: max(100%, 42rem); }
+}
+.mapa--imersivo .floor { box-shadow: none; }
+.mapa--imersivo .cena-chao { background-color: #c1a27c; background-image: repeating-linear-gradient(0deg, #6e5e491c 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, transparent 0 79px, #6e5e4926 79px 80px), repeating-linear-gradient(0deg, #e5d3a833 0 24px, transparent 24px 48px); background-size: 100% 100%, 160px 48px, 100% 100%; border: 3px solid #534e43; }
+.cena-chao::after { display: none; }
+.cena-plataforma { position: absolute; left: 0; top: 0; overflow: visible; z-index: -2; }
+.cena-luz { position: absolute; left: 28px; top: 4px; width: 200px; height: 174px; clip-path: polygon(0 0, 66% 0, 100% 100%, 30% 100%); background: linear-gradient(#fff1bd38, #fff1bd00); pointer-events: none; }
+.mapa--imersivo .actor__estado { display: none; }
+.mapa--imersivo .actor__estado[data-destaque] { display: block; top: -28px; font-size: 9px; padding: 4px 7px; color: #392c1b; background: #f8d27d; border: 2px solid #473a2d; box-shadow: 2px 2px #192b33; animation: none; }
+.mapa--imersivo .actor__name { visibility: visible; top: -5px; font-size: 9px; padding: 3px 6px; background: #f1e7ca; color: #263839; border: 1px solid #263839; box-shadow: 2px 2px #14232b66; }
+.mapa--imersivo .prop__sprite { filter: saturate(.73); }
+.cena-tapete { position: absolute; pointer-events: none; border: 3px solid #536861; background: repeating-linear-gradient(90deg, #d8e1c514 0 2px, transparent 2px 7px), #6b8273; box-shadow: inset 0 0 0 3px #a4ad8e, inset 0 0 0 6px #536861; clip-path: polygon(8px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, 100% 4px, 100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) 100%, 8px 100%, 8px calc(100% - 4px), 0 calc(100% - 4px), 0 8px, 8px 8px); }
+.cena-tapete--criacao { left: 28px; top: 36px; width: 368px; height: 108px; }
+.cena-tapete--operacoes { left: 236px; top: 206px; width: 182px; height: calc(var(--profundidade-cena) - 252px); background-color: #a9765f; border-color: #7e5649; box-shadow: inset 0 0 0 3px #c49e7b, inset 0 0 0 6px #7e5649; }
+.cena-tapete--encontro { left: 64px; top: calc(var(--profundidade-cena) - 122px); width: 148px; height: 106px; background-color: #c6b98d; border-color: #9c8d69; box-shadow: inset 0 0 0 3px #dfd1aa, inset 0 0 0 6px #9c8d69; }
+.cena-encontro { position: absolute; pointer-events: none; }
+.cena-parede { position: absolute; left: 0; top: -174px; height: 174px; transform-origin: 0 0; border: 3px solid #26383b; border-bottom: 8px solid #26383b; background: linear-gradient(0deg, #3d5859 0 20px, #678079 20px 23px, transparent 23px), repeating-linear-gradient(90deg, transparent 0 79px, #253a3e26 79px 81px), #91a396; box-shadow: inset 0 5px #b9c1a7, inset 0 -4px #30484b; }
+.cena-parede--oeste { background: linear-gradient(0deg, #344c50 0 20px, #536e6b 20px 23px, transparent 23px), repeating-linear-gradient(90deg, transparent 0 79px, #233b4126 79px 81px), #738f87; z-index: -1; }
+.cena-parede--norte { z-index: 0; }
+.cena-marca { position: absolute; top: 24px; left: 26px; color: #293f42; font: 900 17px monospace; letter-spacing: 3px; }
+.cena-marca small { display: block; margin-top: 4px; font-size: 6px; letter-spacing: 1.5px; }
+.cena-janela { position: absolute; left: 28px; top: 76px; width: 136px; height: 67px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 4px solid #324e52; background: #516d6d; box-shadow: 4px 4px #55716a, inset 0 0 0 2px #c4cab0; }
+.cena-janela i { background: linear-gradient(140deg, #cbd9c0 0 40%, #dce2cb 40% 46%, #b4cbbd 46% 70%, #9bbba9 70%); }
+.cena-tela { position: absolute; top: 20px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 5px; width: 288px; height: 124px; padding: 10px 12px; border: 4px solid #263b3d; outline: 2px solid #c4c6a9; background: #203b40; box-shadow: 5px 5px #415e58, inset 0 0 0 2px #4c716e; color: #edf2dc; text-align: left; font: 10px/1.3 var(--fonte); cursor: pointer; }
+.cena-tela--agentes { left: calc(100% - 28px); transform: scaleX(-1); transform-origin: 0 0; --tela-cor: #9bdbbc; }
+.cena-tela--decisoes { left: 184px; width: 266px; --tela-cor: #f2d386; }
+.cena-tela:hover, .cena-tela:focus-visible { outline: 4px solid var(--tela-cor); background: #1b3b49; }
+.cena-tela strong { font-size: 14px; font-weight: 850; color: var(--tela-cor); }
+.cena-tela__numero { font-size: 16px; line-height: 1.2; font-weight: 800; }
+.cena-tela__detalhe { overflow: hidden; color: #c9d9cd; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cena-tela__abrir { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: var(--tela-cor); }
+.cena-tela__luz { position: absolute; width: 6px; height: 6px; right: 7px; top: 7px; background: var(--tela-cor); box-shadow: 0 0 8px var(--tela-cor); }
+.cena-ilustrada { position: absolute; left: -652px; top: -188px; width: 1260px; height: 652px; max-width: none; z-index: -1; pointer-events: none; image-rendering: pixelated; user-select: none; }
+.mapa--ilustrado .cena-parede { background: transparent; border: 0; box-shadow: none; z-index: 0; }
+.mapa--ilustrado .cena-tela { height: 110px; grid-template-rows: auto auto minmax(0, 1fr); gap: 4px; border: 0; outline: 0; box-shadow: none; background: transparent; padding: 10px 11px; }
+.mapa--ilustrado .cena-tela:hover, .mapa--ilustrado .cena-tela:focus-visible { outline: 2px solid var(--tela-cor); background: #ffffff08; }
+.mapa--ilustrado .cena-tela--agentes { left: 441px; width: 255px; top: 19px; }
+.mapa--ilustrado .cena-tela--decisoes { left: 193px; width: 236px; top: 34px; }
+.mapa--ilustrado .cena-tela strong { font-size: 12px; line-height: 1.15; }
+.mapa--ilustrado .cena-tela__numero { font-size: 14px; line-height: 1.15; }
+.mapa--ilustrado .cena-tela__detalhe { font-size: 9px; line-height: 1.15; max-height: 2.3em; }
+.mapa--ilustrado .cena-tela__abrir { display: none; }
+.mapa--ilustrado .cena-tela__luz { right: 6px; top: 7px; width: 4px; height: 4px; }
+@media (max-width: 47.99rem) { .mapa--imersivo .cena-tela__detalhe, .mapa--imersivo .cena-tela__abrir { display: none; } .mapa--imersivo .cena-tela { grid-template-rows: 1fr 1fr; gap: 6px; } .mapa--imersivo .cena-tela strong { font-size: 23px; } .mapa--imersivo .cena-tela__numero { font-size: 20px; line-height: 1.05; } }
+.room__label[data-selecionada] { background: var(--destaque); color: var(--destaque-texto); }
 .mapa {
   display: flex;
   min-width: 0;
@@ -462,17 +591,16 @@ function actorStyle(p: OfficePessoa) {
 
 /* Fora da tela ou com a aba no fundo: nem os ciclos parados em CSS gastam. */
 /* !important: o ciclo idle vem no style inline, e o shorthand dele diz `running`. */
-.office--pausado .actor__strip,
-.office--pausado .actor__emoji {
+.office--pausado .actor__strip {
   animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .actor__strip--idle,
-  .actor__emoji {
+  .office-viewport:not([data-movimento="true"]) .actor__strip--idle {
     animation: none !important;
   }
 }
+.office-viewport[data-movimento="false"] .actor__strip { animation-play-state: paused !important; }
 
 .office-world {
   position: absolute;
@@ -697,19 +825,7 @@ function actorStyle(p: OfficePessoa) {
   display: none;
 }
 
-.actor__emoji {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  line-height: 1;
-  animation: emoji-idle 0.9s steps(2) infinite;
-}
-.actor--walk .actor__emoji {
-  animation: emoji-walk 0.35s steps(2) infinite;
-}
+.actor__sem-sprite { position: absolute; inset: 10px; border: 1px dashed var(--texto-2); opacity: 0.5; }
 
 /*
  * Rótulo escondido por padrão: com cinco pessoas numa sala os rótulos fixos
