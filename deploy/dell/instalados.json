@@ -14,6 +14,7 @@
     "~/licitacoes-automation não é checkout git: só compose, scripts e fluxo versionados; o .env nunca entra. Mudar compose/scripts pede 'docker compose up -d' (ou restart do collector) depois do install."
   ],
   "arquivos": [
+    {"repo": "deploy/dell/frente-comercial.py", "instalado": "~/.local/bin/frente-comercial"},
     {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
     {"repo": "deploy/dell/socorro.py", "instalado": "~/.local/bin/socorro"},
     {"repo": "deploy/dell/atualizar-central.sh", "instalado": "~/.local/bin/atualizar-central"},

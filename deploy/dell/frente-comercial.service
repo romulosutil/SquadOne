@@ -1,0 +1,12 @@
+[Unit]
+Description=Time comercial: avaliar e iniciar primeiros contatos autorizados
+After=network-online.target squadone-operations.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/frente-comercial
+TimeoutStartSec=90min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
