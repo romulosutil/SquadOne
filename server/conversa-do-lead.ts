@@ -41,7 +41,7 @@ export function nomeDoArquivo(chave: string): string | null {
 
 export function lerLinhasDaConversa(conteudo: string, max = MAX_MENSAGENS_NA_FICHA): MensagemDaConversa[] {
   const vistas = new Set<string>();
-  const mensagens: MensagemDaConversa[] = [];
+  const mensagens: Array<MensagemDaConversa & { id?: string; transcrita: boolean }> = [];
   for (const linha of conteudo.split("\n")) {
     if (!linha.trim()) continue;
     let m: any;
@@ -54,12 +54,16 @@ export function lerLinhasDaConversa(conteudo: string, max = MAX_MENSAGENS_NA_FIC
     const id = typeof m.id === "string" ? m.id : "";
     if (id && vistas.has(id)) continue;
     if (id) vistas.add(id);
-    const texto = typeof m.texto === "string" ? m.texto.slice(0, MAX_TEXTO) : "";
+    const texto = m.texto === '[áudio não transcrito]' ? '[áudio]' : typeof m.texto === "string" ? m.texto.slice(0, MAX_TEXTO) : "";
     const papel = m.direcao === "entrada" ? papelDaMensagem(texto, m.papel) : undefined;
-    mensagens.push({ em: new Date(m.em).toISOString(), direcao: m.direcao, texto, ...(papel ? { papel } : {}) });
+    mensagens.push({ em: new Date(m.em).toISOString(), direcao: m.direcao, texto, ...(papel ? { papel } : {}), ...(id ? { id } : {}), transcrita: String(m.origem ?? '').startsWith('print-') });
   }
   mensagens.sort((a, b) => Date.parse(a.em) - Date.parse(b.em));
-  return mensagens.slice(-max);
+  // Prints antigos traziam horas aproximadas. O original recuperado prevalece, sem apagar a evidência.
+  return mensagens.filter((m) => !m.transcrita || !mensagens.some((real) => real.id && !real.transcrita
+    && real.direcao === m.direcao && real.texto.trim() === m.texto.trim()
+    && Math.abs(Date.parse(real.em) - Date.parse(m.em)) < 60_000))
+    .slice(-max).map(({ id: _id, transcrita: _t, ...m }) => m);
 }
 
 /**
@@ -232,12 +236,18 @@ export const FOLGA_DO_TOQUE_MS = 30 * 60_000;
  * com o link que já tinha saído dois dias antes; o que saiu depois foi um "Boa tarde"). Com a
  * conversa cobrindo o instante do toque, só vale o toque com uma mensagem nossa perto dele que leve o
  * link (ou cujo texto não foi guardado); o link visto na conversa entra como envio. Toque recente
- * (FOLGA_DO_TOQUE_MS) ou de antes da conversa guardada vale como era.
+ * (FOLGA_DO_TOQUE_MS) vale como era, e também o toque fora do trecho guardado: antes da primeira
+ * mensagem ou depois da última. Nos dois casos a conversa não cobre aquele instante e não dá para
+ * provar que não saiu (19/10/2026, a Jéssica: o histórico dela vai só até 15/10 19:31 e o observador
+ * só passou a gravar texto em 16/10 17:10; a 2ª mensagem com o preço saiu pelo toque em 16/10 13:37,
+ * e sem isto a Central dizia que o material ainda não tinha ido). Uma mensagem nossa guardada depois
+ * do toque, sem o link, segue derrubando o toque (o "Boa tarde" da Kulniski).
  */
 export function enviosComAConversa(anotados: readonly number[], conversa: ResumoDaConversa | null, saidas: readonly SaidaDaConversa[], agora: number): number[] {
   if (!conversa) return [...anotados];
   const desde = Date.parse(conversa.desde);
-  const valem = anotados.filter((t) => t < desde || agora - t < FOLGA_DO_TOQUE_MS
+  const ate = Date.parse(conversa.ultima.em);
+  const valem = anotados.filter((t) => t < desde || t > ate || agora - t < FOLGA_DO_TOQUE_MS
     || saidas.some((s) => s.link !== false && s.em >= t - 10 * 60_000 && s.em <= t + FOLGA_DO_TOQUE_MS));
   const link = conversa.linkEm ? Date.parse(conversa.linkEm) : NaN;
   if (Number.isFinite(link) && !valem.some((t) => Math.abs(t - link) <= FOLGA_DO_TOQUE_MS)) valem.push(link);

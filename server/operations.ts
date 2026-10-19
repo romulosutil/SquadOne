@@ -3,10 +3,14 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
+import { montarRevisaoDeResposta } from './revisao-resposta.ts';
+import { montarDecisoesComerciais } from './decisoes-comerciais.ts';
+import os from "node:os";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido, siteProprioDoLead } from "./crm.ts";
 import { SiteBloqueado, type LeitorDeSinais } from "./sinais-do-site-leitor.ts";
 import { CopilotoFalhou, LeadForaDoCrm, PassoSemCopiloto, TetoDoCopiloto, type Copiloto } from "./copiloto.ts";
-import { lerConversaDoNumero } from "./conversa-do-lead.ts";
+import { chaveDoNumero, lerConversaDoNumero, pastaDasConversas } from "./conversa-do-lead.ts";
+import { importarConversa } from "./importar-conversa.ts";
 import { lerHistoricoDoVendedor, resumoDoVendedor } from "./vendedor.ts";
 import { lerRegistrosDoLeadQuente } from "./lead-quente-sombra.ts";
 import { resumoDoLeadQuente } from "./lead-quente.ts";
@@ -465,6 +469,8 @@ export function createOperationsRouter(options: {
   sinaisDoSite?: LeitorDeSinais;
 }): express.Router {
   const router = express.Router();
+  montarRevisaoDeResposta(router, options.crm);
+  montarDecisoesComerciais(router, options.crm);
 
   router.get("/overview", async (_req, res) => {
     const [tools, agenda, dell] = await Promise.all([
@@ -574,6 +580,36 @@ export function createOperationsRouter(options: {
     } catch (error) {
       console.error("[operations] Falha ao ler a conversa do lead:", error);
       res.status(500).json({ error: "Não foi possível ler a conversa agora." });
+    }
+  });
+
+  router.post('/crm/historico', express.json({ limit: '4kb' }), async (req, res) => {
+    const leadId = req.body?.leadId;
+    if (typeof leadId !== 'string' || leadId.length > 220) { res.status(400).json({ error: 'Lead inválido.' }); return; }
+    try {
+      const lead = options.crm ? (await options.crm.visao()).leads.find((l) => l.id === leadId) : undefined;
+      const chave = lead ? chaveDoNumero(lead.links.whatsapp) : '';
+      if (!chave) { res.status(404).json({ error: 'Lead sem número conhecido no CRM.' }); return; }
+      const segredo = (await fs.readFile(path.join(os.homedir(), '.config/claude-ops/whatsapp-observador-segredo'), 'utf8')).trim();
+      const numero = new URL(lead!.links.whatsapp!).pathname.replace(/\D/g, '');
+      const r = await fetch('http://127.0.0.1:3000/squadone/historico', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Observador': segredo }, body: JSON.stringify({ chave, numero }), signal: AbortSignal.timeout(8000) });
+      res.status(r.status).json(await r.json());
+    } catch { res.status(503).json({ error: 'Não foi possível consultar o histórico pelo Hermes agora. Nenhuma recuperação foi confirmada.' }); }
+  });
+
+  router.post("/crm/conversa/importar", express.json({ limit: "1mb" }), async (req, res) => {
+    const { leadId, texto, dono, confirmar } = req.body ?? {};
+    if (typeof leadId !== 'string' || typeof texto !== 'string' || typeof dono !== 'string' || confirmar !== true || texto.length > 400_000) {
+      res.status(400).json({ error: 'Confirme o lead, seu nome e uma exportação individual válida.' });
+      return;
+    }
+    try {
+      const lead = options.crm ? (await options.crm.visao()).leads.find((l) => l.id === leadId) : undefined;
+      if (!lead) { res.status(404).json({ error: 'Lead não encontrado no CRM.' }); return; }
+      const resultado = await importarConversa(texto, dono, lead.links.whatsapp, options.crm?.config.conversas ?? pastaDasConversas());
+      res.status(201).json(resultado);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Não foi possível importar.' });
     }
   });
 
@@ -719,13 +755,16 @@ export function createOperationsRouter(options: {
   router.post("/crm/venda/anotar", express.json({ limit: "4kb" }), async (req, res) => {
     if (!options.crm) return void res.status(503).json({ error: "O CRM não está configurado nesta Central." });
     const crm = options.crm;
-    const { chave, produto, id, tipo } = (req.body ?? {}) as Record<string, unknown>;
+    const { chave, produto, id, tipo, texto } = (req.body ?? {}) as Record<string, unknown>;
     if (typeof chave !== "string" || chave.length > MAX_CHAVE || typeof produto !== "string" || typeof id !== "string"
       || typeof tipo !== "string" || !TIPOS_DA_ANOTACAO_DE_VENDA.has(tipo) || !chave.startsWith(`${produto}:${id}|`)) {
       return void res.status(400).json({ error: "Diga a ação, o lead e o que anotar." });
     }
+    if (texto !== undefined && (typeof texto !== "string" || texto.length > 1000)) {
+      return void res.status(400).json({ error: "O resumo deve ter no máximo 1000 caracteres." });
+    }
     try {
-      const r = await memoriaDaVenda.anotarUmaVez(chave, tipo, "central", () => crm.registrar({ produto, id, tipo, texto: "", data: "" }));
+      const r = await memoriaDaVenda.anotarUmaVez(chave, tipo, "central", () => crm.registrar({ produto, id, tipo, texto: tipo === "proposta" && typeof texto === "string" ? texto : "", data: "" }));
       res.status(r.anotou ? 201 : 200).json(r.anotou ? { anotou: true } : { anotou: false, jaEstava: true });
     } catch (error) {
       responderErroDoRegistro(res, error);

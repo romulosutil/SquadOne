@@ -263,7 +263,7 @@ describe("CRM: etapas do PRUMO", () => {
     assert.equal(etapa("diagnostico"), "contato/diagnostico");
     assert.equal(etapa("sem-interesse"), "perdido/sem-interesse");
     assert.equal(etapa("concluido"), "ganho/concluido");
-    assert.equal(lead(leads, "prumo:revisar").links.convite, `${WEBHOOK}/convite?id=revisar`);
+    assert.equal(new URL(lead(leads, "prumo:revisar").links.convite!).hostname, 'wa.me');
     assert.equal(lead(leads, "prumo:revisar").links.whatsapp, "https://wa.me/5511900000000");
   });
 
@@ -604,7 +604,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     const nova = lead(v.leads, "iris:clinica-nova");
     assert.equal(nova.produto, "iris");
     assert.equal(`${nova.etapa}/${nova.sinal}`, "novo/revisar");
-    assert.equal(nova.links.convite, `${WEBHOOK}/convite-iris?id=clinica-nova`);
+    assert.equal(new URL(nova.links.convite!).hostname, 'wa.me');
     assert.equal(nova.links.planilha, "https://docs.google.com/spreadsheets/d/prumo/edit#gid=3&range=A2");
     assert.equal(nova.eventos[0].rotulo, "Encontrado pelo Caçador do Iris");
     const conversa = lead(v.leads, "iris:clinica-conversa");
@@ -651,7 +651,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:baixa", "prumo:revisar", "iris:sem-zap"]);
     const alta = revisar[0];
     assert.match(alta.detalhe, /Prioridade 76 · nota 5 \(43\) · convênio · ABA\./);
-    assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Enviar convite (marca como enviado)"]);
+    assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Abrir convite no WhatsApp (não registra envio)"]);
     assert.equal(lead(v.leads, "iris:alta").links.maps, "https://maps.google.com/?cid=1");
     const semZap = revisar[3];
     assert.equal(semZap.acao, "Conferir o WhatsApp e decidir o convite");
@@ -756,9 +756,10 @@ describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
       linhaSite("so-robo-velho", { status: "enviado", enviado_em: dias(8), resposta_tipo: "bot", resposta_em: dias(1) }),
     ]);
     const parou = lead(leads, "site:parou");
-    assert.equal(estado(parou), "perdido/esfriou/esfriou");
-    assert.equal(parou.subEtapa, "Parou de responder: 7 dias sem mensagem");
-    assert.equal(parou.links.segunda, undefined, "fora do funil não oferece a segunda mensagem");
+    assert.equal(estado(parou), "contato/respondeu/-");
+    assert.equal(parou.subEtapa, "Conversa sem retorno: revisar o próximo passo antes de encerrar");
+    assert.equal(parou.motivoPerda, undefined, "silêncio de gente não é encerramento");
+    assert.ok(parou.demoProtegida);
     assert.equal(estado(lead(leads, "site:voltou-a-falar")), "contato/respondeu/-");
     assert.equal(lead(leads, "site:voltou-a-falar").diasParaSair, 5);
     assert.equal(estado(lead(leads, "site:so-robo-velho")), "perdido/expirou/expirou", "resposta de robô não segura o lead");
@@ -789,7 +790,7 @@ describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
       linhaPrumo("diagnostico-recente", { Etapa: "Diagnóstico pronto", "Convite enviado em": dias(12), "Diagnóstico em": dias(3) }),
     ]);
     assert.equal(estado(lead(leads, "prumo:convite-velho")), "perdido/expirou/expirou");
-    assert.equal(estado(lead(leads, "prumo:diagnostico-parado")), "perdido/esfriou/esfriou");
+    assert.equal(estado(lead(leads, "prumo:diagnostico-parado")), "contato/diagnostico/-");
     assert.equal(estado(lead(leads, "prumo:diagnostico-recente")), "contato/diagnostico/-");
     // O diagnóstico do retrato base tem próximo passo: fica.
     assert.equal(lead(leads, "prumo:diagnostico").diasParaSair, undefined);
@@ -867,11 +868,12 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
     assert.equal(lead(v.leads, "site:saiu").interesseParado, undefined);
   });
 
-  it("a saída normal da etapa tira o interesse parado: 7 dias sem mensagem do lead, proposta", () => {
+  it("7 dias sem retorno exigem revisão; proposta tira o interesse parado", () => {
     const v = com([quer("velho", 8), quer("com-proposta-nova", 5)], [], [
       { em: dias(1), produto: "site", id: "com-proposta-nova", tipo: "proposta", texto: "", data: "2026-10-01" },
     ]);
-    assert.equal(`${lead(v.leads, "site:velho").etapa}/${lead(v.leads, "site:velho").respostaNova}`, "perdido/false");
+    assert.equal(`${lead(v.leads, "site:velho").etapa}/${lead(v.leads, "site:velho").respostaNova}`, "contato/false");
+    assert.ok(lead(v.leads, "site:velho").revisaoComercial);
     assert.equal(lead(v.leads, "site:com-proposta-nova").respostaNova, false);
   });
 
@@ -1282,4 +1284,21 @@ describe("CRM: sinais do site (17/10/2026)", () => {
     const v = montarCrm(retrato(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: new Map([["site:pronto", { url: "https://demo-pronto.vercel.app", sinais: { ...sinais } }]]) });
     assert.equal(lead(v.leads, "site:pronto").sinais, undefined);
   });
+});
+
+
+it("conclusão do passo limpa só o plano ativo e mantém o histórico; reagendamento futuro mantém plano", () => {
+  const r = retrato();
+  const registros = r.fontes.registros!.linhas;
+  registros.push({ em: dias(0.5), produto: "prumo", id: "diagnostico", tipo: "proximo_passo", texto: "", data: "2026-10-02" });
+  const concluido = montarCrm(r, { agora: AGORA }).leads.find(l => l.id === "prumo:diagnostico")!;
+  assert.equal(concluido.proximoPasso, undefined);
+  assert.notEqual(concluido.etapa, "ganho");
+  assert.ok(concluido.eventos.some(e => e.texto?.includes("Ligar para marcar a conversa")));
+  assert.ok(concluido.eventos.some(e => e.texto === "Próximo passo concluído em 02/10"));
+  assert.ok(montarCrm(r, { agora: AGORA }).leads.find(l => l.id === "site:fila")!.eventos.some(e => e.texto === "Próximo passo limpo"));
+  registros.push({ em: dias(0.1), produto: "prumo", id: "diagnostico", tipo: "proximo_passo", texto: "Conferir decisão com a dona", data: "2026-10-05" });
+  const reagendado = montarCrm(r, { agora: AGORA }).leads.find(l => l.id === "prumo:diagnostico")!;
+  assert.equal(reagendado.proximoPasso?.data, "2026-10-05");
+  assert.ok(reagendado.eventos.some(e => e.texto === "Próximo passo concluído em 02/10"));
 });

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "node:test";
 import express from "express";
+import type { CrmStore } from "./crm.ts";
 import {
   classifyProjectTarget,
   createOperationsRouter,
@@ -24,6 +25,50 @@ import {
 
 const temporaryDirectories: string[] = [];
 const servers: http.Server[] = [];
+
+describe('importação individual ligada a um lead conhecido', () => {
+  it('exige confirmação e lead do CRM; não grava registro comercial ao importar', async () => {
+    const dataDir = await tempDir('squadone-importacao-rota-');
+    let registros = 0;
+    const crm = { config: { conversas: path.join(dataDir, 'conversas') }, visao: async () => ({ leads: [{ id: 'site:a', links: { whatsapp: 'https://wa.me/5511999990000' } }] }), registrar: async () => { registros++; } } as unknown as CrmStore;
+    const app = express();
+    app.use('/api/operations', createOperationsRouter({ config: { tools: {} } as OperationsConfig, store: new OperationsProjectStore(dataDir), readings: new HermesReadingsStore(dataDir), dataDir, readAgenda: async () => ({ state: 'disconnected', events: [] }), crm }));
+    const base = await listen(http.createServer(app));
+    const enviar = (extra: Record<string, unknown>) => fetch(`${base}/api/operations/crm/conversa/importar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: 'site:a', texto: '17/10/2026 09:01 - Rômulo: Oi\n17/10/2026 09:02 - Jaqueline: Pode mandar', dono: 'Rômulo', confirmar: true, ...extra }) });
+    assert.equal((await enviar({ confirmar: false })).status, 400);
+    assert.equal((await enviar({ leadId: '../outro' })).status, 404);
+    assert.equal((await enviar({ dono: 'Outro' })).status, 400);
+    const resposta = await enviar({});
+    assert.equal(resposta.status, 201);
+    assert.equal((await resposta.json()).importadas, 2);
+    assert.equal(registros, 0);
+  });
+});
+
+describe("confirmação de proposta na fila de venda", () => {
+  it("preserva o conteúdo confirmado, deduplica e recusa resumo inválido antes de gravar", async () => {
+    const dataDir = await tempDir("squadone-proposta-confirmada-");
+    const registros: unknown[] = [];
+    const crm = { registrar: async (r: unknown) => { registros.push(r); return {}; } } as unknown as CrmStore;
+    const app = express();
+    app.use("/api/operations", createOperationsRouter({
+      config: { tools: {} } as OperationsConfig,
+      store: new OperationsProjectStore(dataDir), readings: new HermesReadingsStore(dataDir), dataDir,
+      readAgenda: async () => ({ state: "disconnected", events: [] }), crm,
+    }));
+    const base = await listen(http.createServer(app));
+    const enviar = (texto: unknown) => fetch(`${base}/api/operations/crm/venda/anotar`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chave: "site:lead|mandar-proposta", produto: "site", id: "lead", tipo: "proposta", texto }),
+    });
+    for (const invalido of [42, "x".repeat(1001)]) assert.equal((await enviar(invalido)).status, 400);
+    assert.equal(registros.length, 0);
+    const texto = "Site com domínio e WhatsApp: R$ 690 + R$ 39/mês. Prazo combinado: 3 dias.";
+    assert.equal((await enviar(texto)).status, 201);
+    assert.equal((await enviar(texto)).status, 200);
+    assert.deepEqual(registros, [{ produto: "site", id: "lead", tipo: "proposta", texto, data: "" }]);
+  });
+});
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));

@@ -1,4 +1,7 @@
 import fs from "node:fs/promises";
+import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
+import { revisaoDaClassificacao, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts';
+import { mensagemDoConvite } from './convite-mensagem.ts';
 import os from "node:os";
 import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
@@ -502,6 +505,8 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
+  revisaoComercial?: string;
+  demoProtegida?: string;
   id: string;
   produto: CrmProduto;
   chave: string;
@@ -932,6 +937,10 @@ function comPrazoDoContato(calculada: EtapaCalculada, ultimoDoLead: number | und
   if (calculada.etapa !== "contato" || proximo || desde === undefined) return calculada;
   const passados = dias(desde, agora) ?? 0;
   if (passados < DIAS_SEM_RESPOSTA) return { ...calculada, diasParaSair: DIAS_SEM_RESPOSTA - passados };
+  // Silêncio em conversa humana exige revisão, não perda nem autorização de apagar demo.
+  if (ultimoDoLead !== undefined || SINAIS_DE_CONVERSA.has(calculada.sinal)) {
+    return { ...calculada, subEtapa: 'Conversa sem retorno: revisar o próximo passo antes de encerrar' };
+  }
   const saiu = desde + DIAS_SEM_RESPOSTA * DIA_MS;
   return ultimoDoLead === undefined && !SINAIS_DE_CONVERSA.has(calculada.sinal)
     ? { etapa: "perdido", sinal: "expirou", subEtapa: `Sem resposta em ${DIAS_SEM_RESPOSTA} dias`, desde: saiu, motivoPerda: "expirou" }
@@ -981,7 +990,7 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
     ...(r.tipo === "proximo_passo"
-      ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : "Próximo passo limpo" }
+      ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : r.data ? `Próximo passo concluído em ${formatarDia(r.data)}` : "Próximo passo limpo" }
       : r.tipo === "proposta" && r.data
         ? { texto: `Data da proposta: ${formatarDia(r.data)}${r.texto ? ` · ${r.texto}` : ""}` }
         // O ganho anotado noutro dia que não o do fechamento: a ficha diz o dia que ele deu.
@@ -1193,7 +1202,7 @@ function leadDoSite(linha: Linha, contexto: {
     // Demo sob pedido (14/10/2026): o Raio-X avulso sai antes do contato; o demo, só depois do botão.
     ...(pasta?.raioXUrl && raioXAvulso(pasta.raioXUrl) ? evento("raio-x", "Raio-X publicado", t.raioXEm, "pasta · publicado.json raio_x_em") : []),
     ...evento("demo-pedido", "Demo pedido (botão Gerar demo)", t.demoPedido, "pasta · PEDIDO-DEMO.json"),
-    ...evento("apagado", "Demo apagado da Vercel (sem interação)", t.apagadoEm, "pasta · publicado.json apagado_em"),
+    ...evento("apagado", "Demo removida da Vercel pela limpeza", t.apagadoEm, "pasta · publicado.json apagado_em"),
     ...evento("enviado", "Enviado pelo WhatsApp", t.enviado, "planilha · enviado_em"),
     ...evento("visto", "Viu a mensagem", t.visto, "planilha · visto_em"),
     ...evento("respondeu", "Respondeu", t.respondeu, "planilha · respondeu_em"),
@@ -1420,7 +1429,8 @@ function leadDoPrumo(linha: Linha, contexto: {
   const ehPrumo = produto === "prumo";
   const registros = contexto.registros.get(`${produto}:${chave}`) ?? [];
   const { proposta, proximo, semContato, ganho, notas, segundas: segundasAnotadas, followups } = manuais(registros);
-  const convite = instante(c("conviteEm"));
+  const confirmado = ultimoConviteConfirmado(eventosManuais(registros));
+  const convite = instante(c("conviteEm")) ?? instante(confirmado?.enviadoEm ?? '');
   const t = {
     encontrado: instante(c("encontradoEm")),
     convite,
@@ -1460,7 +1470,9 @@ function leadDoPrumo(linha: Linha, contexto: {
     || (t.respondeu !== undefined && agora - t.respondeu <= HORAS_DE_RESPOSTA_NOVA * 60 * 60 * 1000));
   const eventos: CrmEvento[] = [
     ...evento("encontrado", oferta.cacador, t.encontrado, "planilha · Encontrado em"),
-    ...evento("convite", "Convite enviado", t.convite, "planilha · Convite enviado em"),
+    ...evento("convite", "Convite enviado", t.convite,
+      instante(c('conviteEm')) !== undefined ? 'planilha · Convite enviado em' : 'CRM · envio confirmado pelo operador',
+      instante(c('conviteEm')) === undefined && confirmado ? { origem: 'manual' } : {}),
     ...evento("visto", "Leu o convite", t.visto, instante(c("vistoEm")) !== undefined ? "planilha · visto_em" : "planilha · Próxima ação"),
     ...evento("respondeu", "Respondeu no WhatsApp", t.respondeu, instante(c("respondeuEm")) !== undefined ? "planilha · respondeu_em" : "planilha · Próxima ação"),
     ...eventoDaResposta(resposta, "planilha · Tipo da resposta"),
@@ -1524,7 +1536,8 @@ function leadDoPrumo(linha: Linha, contexto: {
     links: {
       ...(urlHttps(c("site")) ? { site: urlHttps(c("site")) } : {}),
       ...(urlHttps(c("maps")) ? { maps: urlHttps(c("maps")) } : {}),
-      ...(calculada.sinal === "revisar" && webhook ? { convite: `${webhook}/${oferta.convite}?id=${encodeURIComponent(chave)}` } : {}),
+      // Abrir é apenas navegar. O envio só entra pelos registros confirmados ou pela fonte.
+      ...(calculada.sinal === "revisar" && whatsapp ? { convite: `https://wa.me/${whatsapp}?text=${encodeURIComponent(mensagemDoConvite(produto, c('empresa') || chave, c('nicho'), new Date(agora)))}` } : {}),
       ...(raioX ? { raioX: raioX.url } : {}),
       // Desde 08/10/2026 o "sim" recebe o Raio-X, não o formulário de 16 perguntas (passo=diagnostico):
       // sem Raio-X feito, não há segunda mensagem pronta, e a Hoje pede para fazê-lo.
@@ -1919,7 +1932,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
         links: [
           ...(lead.links.site ? [{ rotulo: "Ver o site da empresa", url: lead.links.site }] : []),
           ...(lead.links.maps ? [{ rotulo: "Ver no Google Maps", url: lead.links.maps }] : []),
-          ...(lead.links.convite ? [{ rotulo: "Enviar convite (marca como enviado)", url: lead.links.convite }] : []),
+          ...(lead.links.convite ? [{ rotulo: "Abrir convite no WhatsApp (não registra envio)", url: lead.links.convite }] : []),
         ],
         // Maior Prioridade primeiro (14/10/2026); desde 17/10 todo prospect em Revisar tem a da Central
         // (prioridadeDaTriagem), e o PRUMO entra na mesma ordem. Sem Prioridade, depois, pela data como antes.
@@ -2065,6 +2078,21 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   }
   const contagens = contagemVazia();
   for (const lead of leads) {
+    const revisao = revisaoDaClassificacao(lead);
+    if (revisao?.decisao === 'reabrir') {
+      lead.etapa = 'contato';
+      lead.sinal = lead.marcos.respondeu ? (lead.produto === 'site' ? 'em-conversa' : 'respondeu-prumo') : (lead.produto === 'site' ? 'enviado' : 'convite');
+      lead.subEtapa = 'Acompanhamento reaberto por você';
+      delete lead.motivoPerda; delete lead.perdaManual; delete lead.ganhoManual; delete lead.diasParaSair;
+      lead.followupHoje = false; lead.respostaNova = false; delete lead.interesseParado;
+    }
+    lead.revisaoComercial = revisao ? undefined : revisaoComercialDoLead(lead, agora);
+    lead.demoProtegida = protecaoDaDemo(lead);
+    if (lead.revisaoComercial) {
+      lead.respostaNova = false;
+      lead.followupHoje = false;
+      delete lead.interesseParado;
+    }
     contagens[lead.etapa].total += 1;
     contagens[lead.etapa][lead.produto] += 1;
   }

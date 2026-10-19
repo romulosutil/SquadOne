@@ -138,6 +138,8 @@ export interface AchadoDoRaioX {
 }
 
 export interface CrmLead {
+  revisaoComercial?: string
+  demoProtegida?: string
   id: string
   produto: CrmProduto
   chave: string

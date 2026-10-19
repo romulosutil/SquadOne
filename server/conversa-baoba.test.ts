@@ -136,7 +136,7 @@ describe("o prazo de Perdido: robô não recomeça, recepção recomeça", () =>
     msg(24, "entrada", ultima),
   ];
   const CASOS: Array<[string, string, string, number | undefined]> = [
-    ["o robô respondeu ontem: 9 dias sem gente, Perdido", "[Atendimento] Olá! Nosso horário é das 8h às 18h.", "perdido", undefined],
+    ["o robô não recomeça o prazo: conversa humana antiga exige revisão", "[Atendimento] Olá! Nosso horário é das 8h às 18h.", "contato", undefined],
     ["a recepção respondeu ontem: segue Em contato", "*[Ana]* Oi, pode falar comigo", "contato", 6],
     ["o lead respondeu ontem: segue Em contato", "Oi, pode falar", "contato", 6],
   ];

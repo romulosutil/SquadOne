@@ -32,24 +32,26 @@ export const VALIDADE_DA_DECISAO_MS = 15 * 60_000
 /** Quanto tempo o "Desfazer" fica à vista depois de um Dispensar. */
 export const DESFAZER_MS = 8_000
 
-export type DecisaoDaTriagem = 'convidado' | 'dispensado'
+export type DecisaoDaTriagem = 'convidado' | 'dispensado' | 'adiado'
 /** Os registros da Triagem no POST /api/operations/crm/registro (o servidor os aceita desde AC-10). */
 export type RegistroDaTriagem = 'dispensado' | 'dispensado_desfeito'
 /** leadId -> a decisão tomada nesta tela e quando. */
 export type DecisoesDaTriagem = Record<string, { tipo: DecisaoDaTriagem; em: number }>
 
-const TIPOS: readonly DecisaoDaTriagem[] = ['convidado', 'dispensado']
+const TIPOS: readonly DecisaoDaTriagem[] = ['convidado', 'dispensado', 'adiado']
 
 function validas(decisoes: DecisoesDaTriagem, agora: number): DecisoesDaTriagem {
   return Object.fromEntries(Object.entries(decisoes).filter(([id, d]) =>
     Boolean(id) && d !== null && typeof d === 'object' && TIPOS.includes(d.tipo)
-    && Number.isFinite(d.em) && d.em <= agora + 60_000 && agora - d.em < VALIDADE_DA_DECISAO_MS))
+    && Number.isFinite(d.em) && d.em <= agora + 60_000 && agora - d.em < (d.tipo === 'adiado' ? 24 * 60 * 60_000 : VALIDADE_DA_DECISAO_MS)))
 }
 
 export function lerDecisoes(storage: Guardador | null | undefined, agora: number): DecisoesDaTriagem {
   try {
     const bruto = JSON.parse(storage?.getItem(CHAVE_DAS_DECISOES) ?? '{}')
-    return bruto && typeof bruto === 'object' && !Array.isArray(bruto) ? validas(bruto as DecisoesDaTriagem, agora) : {}
+    // Marcas antigas de abertura não comprovam envio e não podem esconder contatos após a migração.
+    return bruto && typeof bruto === 'object' && !Array.isArray(bruto)
+      ? Object.fromEntries(Object.entries(validas(bruto as DecisoesDaTriagem, agora)).filter(([, d]) => d.tipo !== 'convidado')) : {}
   } catch {
     return {}
   }
@@ -123,7 +125,7 @@ export function loteDaTriagem(
   const continua = anterior.some((id) => porId.has(id) && !decidido(id))
   const ids = continua ? [...anterior] : aDecidir.slice(0, Math.max(0, tamanho)).map((i) => i.leadId)
   const doLote = ids.map((id) => porId.get(id)).filter((i): i is CrmItemHoje => i !== undefined)
-  return { ids, itens: doLote, pendentes: doLote.filter((i) => !decidido(i.leadId)), restantes: aDecidir.length }
+  return { ids, itens: doLote.filter(i => decisoes[i.leadId]?.tipo !== 'adiado'), pendentes: doLote.filter((i) => !decidido(i.leadId)), restantes: aDecidir.length }
 }
 
 /** Mesmos ids na mesma ordem? (para a tela só trocar o lote guardado quando ele muda de fato) */

@@ -298,7 +298,8 @@ describe("Plus no CRM: o funil sai só dos registros", () => {
     const esfriou = leadPlus([plus(1)], [
       { id: plus(1).id, tipo: "plus_enviado", em: dias(12) }, { id: plus(1).id, tipo: "plus_respondeu", em: dias(8) },
     ]);
-    assert.equal(esfriou.motivoPerda, "esfriou");
+    assert.equal(esfriou.etapa, "contato");
+    assert.equal(esfriou.motivoPerda, undefined, "resposta humana exige revisão antes de encerrar");
   });
 
   it("proposta e \"sem contato\" valem como nos outros funis", () => {

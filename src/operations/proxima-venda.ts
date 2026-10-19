@@ -29,6 +29,8 @@ import type { TipoDeEnvioAnotado } from './anotacao-de-envio'
 import type { Guardador } from './fila-de-envio'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
+import { contatoPausado } from './aprendizado-comercial'
+import { comHistoricoConferido } from './historico-comercial'
 import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
@@ -40,6 +42,7 @@ export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depoi
 export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou'
 
 export interface AcaoDeVenda {
+  conferirHistorico?: boolean
   /** `leadId|tipo`: o mesmo lead pode ter um combinado e uma resposta; cada um é um aviso. */
   chave: string
   leadId: string
@@ -126,7 +129,7 @@ const COM_COPILOTO: ReadonlySet<TipoDeVenda> = new Set(['responder', 'combinado'
 
 /** A ação ganharia com a mensagem do copiloto e ainda está com o texto pronto da esteira. */
 export function esperaOCopiloto(acao: AcaoDeVenda): boolean {
-  return !acao.primeiroContato && !acao.copiloto && COM_COPILOTO.has(acao.tipo)
+  return !acao.conferirHistorico && !acao.primeiroContato && !acao.copiloto && COM_COPILOTO.has(acao.tipo)
 }
 
 function haQuanto(ms: number): string {
@@ -163,8 +166,8 @@ const jaRespondeu = (lead: Pick<CrmLead, 'conversa'>) => lead.conversa?.ultima.d
 export const JANELA_DO_DEPOIS_DO_LINK = { deMs: 20 * 3600_000, ateMs: 72 * 3600_000 } as const
 
 const PERGUNTA_DEPOIS_DO_LINK: Record<CrmProduto, (empresa: string) => string> = {
-  site: (e) => `Oi! Conseguiu ver a demonstração do site da ${e}? O que achou?`,
-  prumo: (e) => `Oi! Conseguiu olhar o Raio-X da ${e}? Qual ponto chamou mais a sua atenção?`,
+  site: (e) => `Oi! Aqui é o Rômulo, do PRUMO. Sobre o site da ${e}: faz sentido colocar no ar agora ou prefere deixar para outro momento?`,
+  prumo: (e) => `Oi! Aqui é o Rômulo, do PRUMO. Sobre o Raio-X da ${e}: faz sentido conversarmos por 20 minutos para escolher um ponto que vocês queiram resolver?`,
   iris: () => 'Oi! Conseguiu dar uma olhada no que te mandei? O que achou?',
   estampa: () => 'Oi! Conseguiu dar uma olhada no que te mandei? O que achou?',
   plus: () => 'Meu Ir.\'., conseguiu dar uma olhada no que te mandei? O que achou?',
@@ -328,7 +331,7 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
       if (lead.resposta?.tipo === 'neutra') return 'Resposta aberta: responda curto, tire a dúvida e devolva uma pergunta de sim ou não que leve ao "quero ver".'
       return 'Responda no mesmo dia, curto, e termine com uma pergunta que ele consiga responder com uma palavra.'
     case 'mandar-proposta':
-      return 'Ele gostou: a resposta é a proposta, hoje (em até 24 h do "gostei"). O que entra, quanto custa e quando começa; tocar já anota a proposta.'
+      return 'Ele gostou: prepare a proposta com o que entra, quanto custa e quando começa. Só confirme o envio depois de enviar; abrir o WhatsApp não comprova envio.'
     case 'combinado':
       return 'Você combinou: cumprir na data é o que faz confiar. Lembre o que ele disse da última vez e proponha o próximo passo com dia e hora.'
     case 'depois-do-link':
@@ -474,10 +477,18 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
  */
 export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | undefined, ctx: ContextoDaVenda, pulados: ReadonlySet<string> = new Set()): AcaoDeVenda[] {
   if (!visao) return []
-  const leads = ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads
+  const elegiveis = (ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads)
+    .filter((l) => !contatoPausado(l))
+  const revisoes = elegiveis.filter((l) => l.revisaoComercial)
+  const leads = elegiveis.filter((l) => !l.revisaoComercial)
   const porId = new Map(leads.map((l) => [l.id, l] as [string, CrmLead]))
   const grupos = new Map(visao.hoje.map((g) => [g.id, g] as [CrmGrupoHojeId, CrmGrupoHoje]))
-  const fila: AcaoDeVenda[] = []
+  const fila: AcaoDeVenda[] = revisoes.map((l) => ({
+    chave: `${l.id}|revisao`, leadId: l.id, empresa: l.empresa, produto: l.produto, tipo: 'combinado',
+    titulo: 'Revisar o contexto antes de encerrar ou retomar', porque: l.revisaoComercial!,
+    tatica: 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
+    contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true,
+  }))
   const vistas = new Set<string>()
   let primeiros = 0
   const depoisDoLink = leads.flatMap((l) => {
@@ -537,7 +548,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
  * envio sozinha: se levar o link, a conversa mostra e o CRM conta.
  */
 function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: ContextoDaVenda): AcaoDeVenda {
-  if (!lead || acao.primeiroContato) return acao
+  if (!lead || acao.primeiroContato || acao.conferirHistorico) return acao
   const conversa = linhaDaConversa(lead, ctx.agora)
   const sugestao = COM_COPILOTO.has(acao.tipo) ? ctx.sugestoes?.get(lead.id) : undefined
   const comLinha = conversa ? { ...acao, conversa } : acao
@@ -631,7 +642,8 @@ export function filaDaTela(visao: Pick<CrmVisao, 'hoje' | 'leads' | 'estado'> | 
   if (tela.sugestoes) ctx.sugestoes = tela.sugestoes
   if (tela.nicho) ctx.nichoDoPrimeiro = tela.nicho
   if (tela.primeirosDoTime) ctx.primeirosDoTime = tela.primeirosDoTime
-  return filaDeVenda(visao, ctx, pulados).filter((a) => !feitos.has(a.chave))
+  const porId = new Map(visao.leads.map((l) => [l.id, l]))
+  return filaDeVenda(visao, ctx, pulados).filter((a) => !feitos.has(a.chave)).map((a) => comHistoricoConferido(a, porId.get(a.leadId)))
 }
 
 /**
@@ -700,7 +712,8 @@ export function acaoDoLead(
 ): AcaoDeVenda | null {
   const ctx: ContextoDaVenda = { primeiroLiberado: true, agora, soDoLead: leadId }
   if (sugestao) ctx.sugestoes = new Map([[leadId, sugestao]])
-  return filaDeVenda(visao, ctx)[0] ?? null
+  const acao = filaDeVenda(visao, ctx)[0]
+  return acao ? comHistoricoConferido(acao, visao?.leads.find((l) => l.id === leadId)) : null
 }
 
 const DIAS_DA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
@@ -730,6 +743,9 @@ const minuscula = (t: string) => t.charAt(0).toLowerCase() + t.slice(1)
  * Eram três "agoras" (copiloto, fila e jornada) e uma linha "Na jornada: …" com uma quarta redação.
  */
 export function agoraDaFicha(lead: CrmLead, acao: Pick<AcaoDeVenda, 'titulo' | 'tatica'> | null): AgoraDaFicha {
+  if (contatoPausado(lead)) return {
+    frase: lead.proximoPasso?.texto ? `Contato em espera. ${lead.proximoPasso.texto}` : 'Contato pausado por você. Aguarde uma resposta humana ou libere em “O que este lead ensinou”.', citaOProximo: true,
+  }
   if (acao) return { frase: acao.titulo, como: acao.tatica, citaOProximo: false }
   if (lead.etapa === 'ganho') return { frase: 'Ganho: nada a vender agora. É entregar e começar a mensalidade.', citaOProximo: false }
   if (lead.etapa === 'perdido') return { frase: 'Fora do funil: nada a mandar, a não ser que ele volte a escrever.', citaOProximo: false }
@@ -780,11 +796,11 @@ export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'p
   const peloPrazo = lead.etapa === 'perdido' && !lead.perdaManual && (lead.motivoPerda === 'expirou' || lead.motivoPerda === 'esfriou')
   const marcados: DesfechoMarcado[] = []
   if (lead.ganhoManual) marcados.push({ id: 'ganhou', texto: 'Ganhou: marcado na Central.', desfazer: { tipo: 'ganhou_desfeito', rotulo: 'Desfazer o ganho' } })
-  else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Ganhou, pela planilha. Para desfazer, use a página do lead no n8n.' })
+  else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Ganho informado pela planilha. Use “Revisar classificação” nesta ficha se precisar corrigir.' })
   if (lead.perdaManual === 'recusou') marcados.push({ id: 'recusou', texto: 'Perdeu: ele disse não.', desfazer: { tipo: 'recusou_desfeito', rotulo: 'Desfazer a recusa' } })
   else if (lead.perdaManual === 'sem-contato') marcados.push({ id: 'sem-contato', texto: 'Perdeu: sem contato fácil.', desfazer: { tipo: 'sem_contato_desfeito', rotulo: 'Desfazer a perda' } })
   else if (lead.perdaManual === 'dispensado') marcados.push({ id: 'dispensado', texto: 'Dispensado na Triagem.', desfazer: { tipo: 'dispensado_desfeito', rotulo: 'Desfazer o dispensar' } })
-  else if (lead.etapa === 'perdido' && !peloPrazo) marcados.push({ id: 'perdido', texto: 'Perdido, pela planilha. Para desfazer, use a página do lead no n8n.' })
+  else if (lead.etapa === 'perdido' && !peloPrazo) marcados.push({ id: 'perdido', texto: 'Perda informada pela planilha. Use “Revisar classificação” nesta ficha se precisar corrigir.' })
   if (lead.etapa === 'proposta') {
     const quando = diaCurto(lead.proposta?.data || lead.proposta?.em)
     marcados.push({ id: 'proposta', texto: `Proposta enviada${quando ? ` ${quando}` : ''}.`, desfazer: { tipo: 'proposta_desfeita', rotulo: 'Desfazer a proposta' } })

@@ -27,8 +27,8 @@ export const SECOES_DE_ENTENDER: ReadonlyArray<{ id: Extract<VistaDeVendas, 'fun
 
 /** As abas, na ordem do trabalho: Fazer → Triar → Entender. A dica vai no title, não na frente. */
 export const ABAS_DE_VENDAS: ReadonlyArray<{ id: AbaDeVendas; rotulo: string; href: string; dica: string }> = [
-  { id: 'afazer', rotulo: 'A fazer', href: '/crm', dica: 'Fazer agora: a próxima venda, uma por vez, na ordem de quem está mais perto de comprar.' },
-  { id: 'triagem', rotulo: 'Triagem', href: '/crm?ver=triagem', dica: 'Triar: prospects que os caçadores acharam, em lotes de 10. Convide ou dispense cada um.' },
+  { id: 'afazer', rotulo: 'Conversas para você', href: '/crm', dica: 'Respostas humanas e combinados que precisam de você, em ordem de prioridade.' },
+  { id: 'triagem', rotulo: 'Primeiros contatos', href: '/crm?ver=triagem', dica: 'O time avalia, seleciona, prepara e envia os primeiros contatos. Acompanhe as escolhas e os resultados.' },
   { id: 'entender', rotulo: 'Entender', href: '/crm?ver=funil', dica: 'Entender: o Funil, os Números e os Resultados, e o Roteiro de venda.' },
 ]
 

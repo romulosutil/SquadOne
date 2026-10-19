@@ -86,10 +86,10 @@ describe('glossário: nenhum nome proibido no texto visível de src/', () => {
 
   it('e lê o texto deles (uma varredura que não lê nada passaria sempre)', () => {
     const de = (a: string) => textosVisiveis(a, arquivos.find((f) => f.arquivo === a)!.conteudo).map((s) => s.trim())
-    assert.ok(de('operations/CrmPanel.vue').includes('Atualizar'))
+    assert.ok(de('operations/CrmPanel.vue').includes('Atualização automática'))
     assert.ok(de('operations/fluxos.ts').includes('Vendas'))
     assert.ok(de('rotas/HojeRota.vue').some((s) => s.startsWith('Ver o escritório')))
-    assert.ok(de('rotas/CentralRota.vue').includes('Central de comando'))
+    assert.ok(de('rotas/CentralRota.vue').some(s => s.includes('Escritório de agentes')))
   })
 
   it('um nome por coisa', () => {

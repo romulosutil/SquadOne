@@ -91,7 +91,9 @@ describe("o resumo da conversa", () => {
     const r = resumirConversa(KULNISKI, [DEMO])!;
     const saidas = saidasDaConversa(KULNISKI, [DEMO]);
     const toqueDeHoje = Date.parse(horas(1));
-    assert.deepEqual(enviosComAConversa([toqueDeHoje], r, saidas, AGORA.getTime()), [Date.parse(horas(50.5))]);
+    // Sem mensagem guardada depois do toque, a conversa não cobre aquele instante: o toque vale, e o
+    // link visto na conversa entra também.
+    assert.deepEqual(enviosComAConversa([toqueDeHoje], r, saidas, AGORA.getTime()), [Date.parse(horas(50.5)), toqueDeHoje]);
     // O caso de 16/10: depois do toque saiu um "Boa tarde", sem o link. Não é a 2ª mensagem.
     const comBoaTarde = [...KULNISKI, msg(0.9, "saida", "Boa tarde")];
     assert.deepEqual(enviosComAConversa([toqueDeHoje], resumirConversa(comBoaTarde, [DEMO]), saidasDaConversa(comBoaTarde, [DEMO]), AGORA.getTime()),
@@ -105,11 +107,27 @@ describe("o resumo da conversa", () => {
     const antes = Date.parse(horas(60));
     assert.ok(enviosComAConversa([antes], r, saidas, AGORA.getTime()).includes(antes));
   });
+
+  it("toque depois da última mensagem guardada vale como era: o histórico parcial não prova que não saiu (a Jéssica, 19/10)", () => {
+    // A conversa guardada vai até 15/10 19:31 (histórico parcial) e o observador só grava texto desde
+    // 16/10 17:10; a 2ª mensagem com o preço saiu pelo toque em 16/10 13:37 e nada depois foi guardado.
+    const agora = Date.parse("2026-10-19T12:00:00Z");
+    const conversa: MensagemDaConversa[] = [
+      { em: "2026-10-15T19:00:00Z", direcao: "entrada", texto: "pode mandar sim" },
+      { em: "2026-10-15T19:31:00Z", direcao: "saida", texto: "🤣 acontece, correria rs" },
+    ];
+    const toque = Date.parse("2026-10-16T16:37:26Z");
+    const r = resumirConversa(conversa, [DEMO]);
+    assert.deepEqual(enviosComAConversa([toque], r, saidasDaConversa(conversa, [DEMO]), agora), [toque]);
+    // Com uma mensagem nossa guardada depois do toque, sem o link, a conversa cobre o instante: não vale.
+    const comDepois = [...conversa, { em: "2026-10-16T16:50:00Z", direcao: "saida" as const, texto: "Boa tarde" }];
+    assert.deepEqual(enviosComAConversa([toque], resumirConversa(comDepois, [DEMO]), saidasDaConversa(comDepois, [DEMO]), agora), []);
+  });
 });
 
 describe("Próxima venda com a conversa", () => {
   it("a Kulniski de 16/10: o link saiu à mão, então a vez é do 'o que achou?', não de mandar o link de novo", () => {
-    const v = visaoCom(SIM, KULNISKI, [{ em: horas(1), produto: "site", id: "K", tipo: "segunda_enviada", texto: "", data: "" }]);
+    const v = visaoCom(SIM, KULNISKI);
     const lead = v.leads[0] as unknown as CrmLead;
     assert.equal(lead.interesseParado, undefined);
     assert.equal(lead.marcos.segundaEnviada, horas(50.5));
@@ -118,6 +136,14 @@ describe("Próxima venda com a conversa", () => {
     const depois = fila.find((a) => a.tipo === "depois-do-link");
     assert.ok(depois, "sem o 'o que achou?'");
     assert.match(depois.conversa ?? "", /^Última mensagem: você, há 2 dias: “Se gostarem/);
+  });
+
+  it("a Kulniski de 16/10: o toque em 'Mandar o link' que virou só um 'Boa tarde' não é a 2ª mensagem", () => {
+    const conversa = [...KULNISKI, msg(0.9, "saida", "Boa tarde")];
+    const v = visaoCom(SIM, conversa, [{ em: horas(1), produto: "site", id: "K", tipo: "segunda_enviada", texto: "", data: "" }]);
+    const lead = v.leads[0] as unknown as CrmLead;
+    assert.equal(lead.marcos.segundaEnviada, horas(50.5));
+    assert.equal(filaDeVenda(v, CTX).some((a) => a.tipo === "responder"), false);
   });
 
   it("'vou pedir o link ao time' não é o link: o 'quero ver' segue na fila, com a última mensagem à vista", () => {
@@ -186,6 +212,7 @@ describe("o copiloto sozinho", () => {
       let agora = AGORA.getTime();
       const enviados: string[] = [];
       const v = visaoCom(SIM, KULNISKI.slice(0, 3));
+      v.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
       const vendedor = criarVendedor({
         lerVisao: async () => v,
         enviar: async (texto) => { enviados.push(texto); },
@@ -210,7 +237,11 @@ describe("o copiloto sozinho", () => {
     try {
       const enviados: string[] = [];
       const vendedor = criarVendedor({
-        lerVisao: async () => visaoCom(SIM, KULNISKI.slice(0, 3)),
+        lerVisao: async () => {
+          const v = visaoCom(SIM, KULNISKI.slice(0, 3));
+          v.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
+          return v;
+        },
         enviar: async (texto) => { enviados.push(texto); },
         registrar: async () => {},
         arquivoDeEstado: path.join(dir, "vendedor.json"),

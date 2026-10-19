@@ -34,6 +34,7 @@ import { randomBytes } from "node:crypto";
 import { esperaOCopiloto, filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from "../src/operations/proxima-venda.ts";
 import { instantesDePrimeiroContato, ritmoDoEnvio, somarPrimeiros } from "../src/operations/trava-de-ritmo.ts";
 import type { CrmVisao } from "../src/operations/types.ts";
+import { comHistoricoConferido } from "../src/operations/historico-comercial.ts";
 import type { Botao } from "./telegram.ts";
 import { dadosDaVenda } from "./telegram-entrada.ts";
 import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
@@ -49,6 +50,7 @@ export const INTERVALO_DO_VENDEDOR_MS = 60_000;
 export const ESPERA_DO_COPILOTO_MS = 4 * 60_000;
 
 export interface AvisoAberto {
+  conferirHistorico?: boolean;
   chave: string;
   token: string;
   em: number;
@@ -180,9 +182,11 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   if (!noExpedienteDeVenda(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
   const toques = somarPrimeiros(doDia?.primeiros, estado.primeiros);
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
+  const porId = new Map((visao?.leads ?? []).map((l) => [l.id, l]));
   const fila = filaDeVenda(visao, {
     primeiroLiberado: ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
-  }, new Set(estado.pulados));
+  }, new Set(estado.pulados))
+    .map((a) => comHistoricoConferido(a, porId.get(a.leadId)));
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
   estado.abertos = ficam;
   for (const a of fechados.expirados) if (!estado.pulados.includes(a.chave)) estado.pulados.push(a.chave);
@@ -387,7 +391,7 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[], 
       : "Mensagem pronta (revise antes de enviar):";
     linhas.push("", titulo, "――――", r, "――――");
     if (confira) linhas.push(`⚠ Confira antes de enviar: ${confira}.`);
-  } else {
+  } else if (!acao.conferirHistorico) {
     linhas.push("", "Sem texto pronto: escreva à mão (a colinha da ficha ajuda).");
   }
   const resto = resumoDaFila(depois);
@@ -397,6 +401,7 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[], 
 
 export function botoesDoAviso(acao: AcaoDeVenda, token: string, origemCentral?: string): Botao[][] {
   const linhas: Botao[][] = [];
+  if (acao.conferirHistorico) return origemCentral ? [[{ texto: 'Conferir histórico e decidir', url: `${origemCentral.replace(/\/$/, '')}/crm?lead=${encodeURIComponent(acao.leadId)}` }]] : [];
   // O desfecho (OT-06): o toque principal é marcar a recusa; o agradecimento no WhatsApp é opcional.
   const desfecho = acao.tipo === "desfecho";
   if (acao.link) linhas.push([{ texto: desfecho ? acao.link.rotulo : acao.rascunho ? "Abrir no WhatsApp com a mensagem" : "Abrir a conversa no WhatsApp", url: acao.link.url }]);
@@ -515,7 +520,11 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       if (lido.dia !== estadoNovo(agora).dia) await gravarEstado(estadoNovo(agora));
       return { tipo: "nada", motivo: "fora-do-expediente" };
     }
-    const visao = await deps.lerVisao();
+    const lida = await deps.lerVisao();
+    // Com o serviço de primeiros contatos configurado, o aviso ao operador cuida só
+    // das conversas. Pausar o time não devolve a ele uma segunda fila de envio manual.
+    const peloTime = await fs.access(path.join(path.dirname(deps.arquivoDeEstado), 'frente-comercial-config.json')).then(() => true, () => false);
+    const visao = peloTime ? { ...lida, leads: lida.leads.filter(l => l.etapa !== 'novo') } : lida;
     if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
     const doDia = await lerDoDia();
@@ -573,6 +582,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
         chave: decisao.acao.chave, token, em: agora, leadId: decisao.acao.leadId, primeiroContato: decisao.acao.primeiroContato,
         produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}),
         tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}),
+        ...(decisao.acao.conferirHistorico ? { conferirHistorico: true } : {}),
         ...(Array.isArray(mensagens) && mensagens.length ? { mensagens } : {}),
       });
       historico.push({ em: agora, evento: "avisado", chave: decisao.acao.chave, tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}) });
@@ -587,6 +597,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     const estado = await lerEstado();
     const aberto = estado.abertos.find((a) => a.token === token);
     if (!aberto) return { curto: "Este aviso já fechou." };
+    if (aberto.conferirHistorico && acao === 'enviei') return { curto: 'Confira o histórico na Ficha antes de escolher a retomada.' };
     estado.abertos = estado.abertos.filter((a) => a.token !== token);
     const toque = toqueNoAviso(aberto, acao, await lerDoDia());
     if (toque.tipo === "ja-feito") {

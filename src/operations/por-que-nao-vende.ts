@@ -62,12 +62,12 @@ const REFERENCIAS: Partial<Record<DegrauDoFunil['id'], number>> = {
 const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'>, (d: DegrauDoFunil, antes: DegrauDoFunil) => Pick<Gargalo, 'titulo' | 'texto' | 'acao'>> = {
   responderam: (d, a) => ({
     titulo: 'Pouca gente responde a primeira mensagem',
-    texto: `${d.n} de ${a.n} responderam. O texto ou o público não estão puxando conversa.`,
+    texto: `${d.n} de ${a.n} têm resposta registrada. Confira acesso ao responsável e cobertura da captura antes de atribuir o resultado ao texto ou ao público.`,
     acao: 'Mande para quem tem WhatsApp no site e nota boa no Google, e termine a primeira mensagem com uma pergunta de sim ou não.',
   }),
   interesse: (d, a) => ({
     titulo: 'Respondem, mas não dizem "quero ver"',
-    texto: `${d.n} de ${a.n} respostas viraram interesse. A conversa morre na segunda frase.`,
+    texto: `${d.n} de ${a.n} respostas têm autorização ou interesse classificados. Isso não confirma intenção de comprar.`,
     acao: 'Responda no mesmo dia, curto, e ofereça uma coisa concreta para ver (o demo ou o Raio-X), não uma reunião.',
   }),
   segunda: (d, a) => ({
@@ -76,9 +76,9 @@ const TEXTO_DO_GARGALO: Record<Exclude<DegrauDoFunil['id'], 'enviados' | 'leram'
     acao: 'Mande o link ou o Raio-X no mesmo dia do "sim". A Próxima venda põe esses na frente de tudo.',
   }),
   proposta: (d, a) => ({
-    titulo: 'Ninguém chega na proposta',
-    texto: `${a.n} receberam a 2ª mensagem (o demo ou o Raio-X) e ${d.n === 0 ? 'nenhuma' : `só ${d.n}`} proposta saiu. O funil quebra depois do "gostei".`,
-    acao: 'Depois do link, pergunte o que achou em 24 h e, no primeiro "gostei", mande o preço e o próximo passo com data. Marque a proposta na ficha.',
+    titulo: 'Poucas propostas registradas',
+    texto: `${a.n} têm material ou avanço posterior registrado e ${d.n} têm proposta registrada. Confira a conversa: ausência de registro não comprova ausência de envio.`,
+    acao: 'Confirme quem decide e se quer contratar. Faça um retorno com uma pergunta de decisão, respeitando o combinado; se já retomou sem resposta, não insista. Confirme a proposta só depois de enviar.',
   }),
   ganho: (d, a) => ({
     titulo: 'Propostas não viram ganho',

@@ -73,6 +73,7 @@ describe('fraseDaAcao: uma frase por tipo de ação (AC-12)', () => {
 
 describe('o cartão da Próxima venda e o "Agora" da Ficha dizem a mesma frase (AC-12)', () => {
   const quente = lead('r1', { etapa: 'contato', sinal: 'respondeu', respostaNova: true,
+    eventos: [{ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: new Date(AGORA).toISOString(), origem: 'manual', fonte: 'CRM' }],
     resposta: { tipo: 'interesse', trecho: 'pode sim', em: '2026-10-14T12:00:00Z' } as CrmLead['resposta'],
     links: { whatsapp: WA, segunda: `${WA}?text=${encodeURIComponent('Segue o link')}` } })
   const v = visao({ resposta: [{ leadId: 'r1', links: [{ rotulo: 'Mandar o link do site', url: quente.links.segunda! }, { rotulo: 'Abrir conversa no WhatsApp', url: WA }] }] }, [quente])

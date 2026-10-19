@@ -2,6 +2,7 @@ import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO } from '../../server/site-mensage
 import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { textoParaATela } from './marcadores-da-conversa'
+import { lerDecisao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, type RevisaoClassificacao, type ConviteConfirmado } from './decisoes-comerciais'
 
 // Textos do CRM usados pelas três vistas (Hoje, Funil e Ficha).
 
@@ -47,6 +48,10 @@ export function textoDaSubEtapa(sub: string): string {
 
 /** O rótulo e o texto de um evento da linha do tempo: o desfecho é um fato, então o verbo. */
 export function textoDoEvento(texto: string): string {
+  const revisao = lerDecisao<RevisaoClassificacao>(texto, PREFIXO_CLASSIFICACAO)
+  if (revisao && typeof revisao.motivo === 'string') return `${revisao.decisao === 'reabrir' ? 'Acompanhamento reaberto em Em contato' : 'Classificação mantida após conferência'}. Motivo: ${revisao.motivo}`
+  const convite = lerDecisao<ConviteConfirmado>(texto, PREFIXO_CONVITE)
+  if (convite && Number.isFinite(Date.parse(convite.enviadoEm))) return `Convite enviado em ${new Date(convite.enviadoEm).toLocaleString('pt-BR')}, confirmado por você. Conteúdo: ${convite.mensagem}`
   // O trecho da resposta pode ser só o marcador de um áudio que ninguém ouviu (17/10/2026).
   return textoParaATela(texto).replace(/^Fechou\b/, 'Ganhou').replace(/^Viu a mensagem\b/, 'Leu a mensagem')
 }

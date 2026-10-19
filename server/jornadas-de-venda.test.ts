@@ -119,7 +119,8 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
     const v = visaoCom(site, registros);
     const a = filaDeVenda(v, { ...LIVRE, agora: AGORA.getTime() }).find((x) => x.tipo === "depois-do-link");
     assert.ok(a, "sem o 'o que achou?'");
-    assert.match(a.rascunho ?? "", /O que achou\?/);
+    assert.match(a.rascunho ?? "", /colocar no ar agora ou prefere deixar para outro momento\?/);
+    assert.doesNotMatch(a.rascunho ?? "", /O que achou\?/);
     assert.match(a.link?.url ?? "", /^https:\/\/wa\.me\/\d+\?text=/);
     // Antes de 20 h não cobra; se ele escreveu depois do link, a vez é de responder, não de perguntar.
     const cedo = visaoCom(site, [{ ...registros[0], em: horas(5) }]);
@@ -187,6 +188,8 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
   it("uma licença nova (menos de 2 h) também fura o aviso aberto de outro lead, que segue na fila", () => {
     // Revisão de 17/10/2026: o "pode mandar" gravado como licença é quente como o interesse (pedeMaterial).
     const licenca = visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "licenca", resposta_trecho: "pode mandar", resposta_em: horas(1) });
+    // Só contexto conferido permite um aviso quente de envio; sem isso, o passo é conferir.
+    licenca.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
     const outro = visaoCom({ place_id: "F", nome: "Studio F", status: "enviado", enviado_em: dias(3), visto_em: dias(2.8) });
     const grupos = new Map<string, CrmVisao["hoje"][number]>();
     for (const g of [...licenca.hoje, ...outro.hoje]) {
@@ -232,6 +235,8 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
 // diretório temporário: nenhum Telegram, n8n ou arquivo de dados real é tocado.
 describe("vendedor e Central: o servidor é a fonte do dia", () => {
   const vFollowup = visaoCom({ status: "enviado", enviado_em: dias(3), visto_em: dias(2.8) });
+  // Estes cenários exercitam confirmação de envios, depois da conferência do contexto.
+  vFollowup.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
   const CHAVE = "site:L|followup";
 
   async function montar(visao: CrmVisao = vFollowup) {

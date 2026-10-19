@@ -23,6 +23,18 @@ const marcar = (base: DecisoesDaTriagem, quais: string[], tipo: 'convidado' | 'd
   quais.reduce((d, id) => decidir(d, id, tipo, T), base)
 
 describe('loteDaTriagem (AC-10): um lote de 10 de verdade', () => {
+  it('adiar libera o próximo lote sem dispensar; a decisão é recuperável e dura 24 horas', () => {
+    const d = ids.slice(0, 10).reduce((acc, id) => decidir(acc, id, 'adiado', T), {} as DecisoesDaTriagem)
+    const novo = loteDaTriagem(itens, leads, d, ids.slice(0, 10))
+    assert.deepEqual(novo.ids, ids.slice(10, 20))
+    assert.equal(dispensado(d, leads.get('p01'), 'p01'), false)
+    const storage = { getItem: () => JSON.stringify(d), setItem: () => {} }
+    assert.equal(lerDecisoes(storage, T + 60 * 60_000).p01.tipo, 'adiado')
+    assert.deepEqual(lerDecisoes(storage, T + 24 * 60 * 60_000), {})
+    const recuperadas = loteDaTriagem(itens.filter(i => d[i.leadId]?.tipo === 'adiado'), leads, {}, [])
+    assert.deepEqual(recuperadas.ids, ids.slice(0, 10))
+    assert.equal(esquecerDecisao(d, 'p01').p01, undefined)
+  })
   it('nasce com os 10 primeiros na ordem do servidor e conta o total', () => {
     const lote = loteDaTriagem(itens, leads, {}, [])
     assert.equal(TAMANHO_DO_LOTE, 10)
@@ -96,6 +108,10 @@ describe('loteDaTriagem (AC-10): um lote de 10 de verdade', () => {
 })
 
 describe('decisões locais: marca otimista e poda pelo retrato', () => {
+  it('descarta marcas antigas de convite aberto: abertura não comprova envio', () => {
+    const storage = { getItem: () => JSON.stringify({ p01: { tipo: 'convidado', em: T }, p02: { tipo: 'adiado', em: T } }), setItem: () => {} }
+    assert.deepEqual(lerDecisoes(storage, T + 1000), { p02: { tipo: 'adiado', em: T } })
+  })
   it('desfazer (ou falha do POST) tira a marca e o item volta ao lote', () => {
     const d = esquecerDecisao(marcar({}, ['p03'], 'dispensado'), 'p03')
     assert.deepEqual(d, {})

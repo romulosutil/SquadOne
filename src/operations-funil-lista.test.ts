@@ -146,7 +146,7 @@ describe('textoDaColunaProximo (AC-19): a coluna "Próximo passo" da Lista', () 
       hoje: [{ id: 'resposta', titulo: '', explicacao: '', itens: [{ leadId: 'k', acao: 'Responder', detalhe: '', ordem: 0, links: [] }] }],
     } as unknown as CrmVisao
     const acao = acaoDoLead(visao, 'k', Date.parse('2026-10-17T13:00:00Z'))
-    assert.equal(textoDaColunaProximo(acao, l), 'Kulniski Advocacia disse sim: mande o link')
+    assert.equal(textoDaColunaProximo(acao, l), 'Conferir a conversa de Kulniski Advocacia')
     assert.equal(textoDaColunaProximo(acaoDoLead(visao, 'outro', 0), lead('outro')), '')
   })
 })

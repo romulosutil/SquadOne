@@ -7,7 +7,7 @@ import {
 describe('abas de Vendas na ordem do trabalho', () => {
   it('Fazer → Triar → Entender, e Entender tem Funil, Números e Resultados', () => {
     assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.id), ['afazer', 'triagem', 'entender'])
-    assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), ['A fazer', 'Triagem', 'Entender'])
+    assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), ['Conversas para você', 'Primeiros contatos', 'Entender'])
     assert.deepEqual(SECOES_DE_ENTENDER.map((s) => s.id), ['funil', 'numeros', 'resultados'])
   })
 

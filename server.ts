@@ -364,6 +364,7 @@ async function startServer() {
     if (usoDaCentral) app.use("/api", contarEscritasDaApi(usoDaCentral));
   }
 
+  app.use("/api/operations/crm/conversa/importar", express.json({ limit: "1mb" }));
   app.use(express.json());
 
   // Disponível nos dois perfis sem expor configuração local. O frontend usa
@@ -439,6 +440,7 @@ async function startServer() {
       criarHermes: ({ tetoDia }) => prepararConsultaAoHermes(process.env, operationsDataDir, { tetoDia }),
       fontes: {
         visao: () => crm.visao(),
+        roster: readRoster,
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
         agenda: readAgenda,
         dell: () => lerStatusDoDell(operationsDataDir),
