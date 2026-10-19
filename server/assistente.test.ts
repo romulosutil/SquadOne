@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { hashDoContexto } from "../src/operations/revisao-resposta.ts";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -662,5 +663,181 @@ describe("fase 2: a sugestão do copiloto no painel", () => {
     await a.ocioso();
     assert.equal(chamadas, 0);
     assert.match(JSON.stringify(g.pedidos[1].contents), /Lead fora do CRM/);
+  });
+});
+
+
+describe("conversa vinculada ao agente do PRUMO", () => {
+  const ids = { squadId: "prumo", salaId: "prumo--organizar", pessoaId: "felipe" };
+  const pessoa = { id: "felipe", nome: "Felipe", papel: "Consultor do Mapa", escopo: "Conduzir entrevistas e o Mapa PRUMO." };
+  const roster = async () => ({ version: 3, squads: [{ id: "prumo", dominios: [{ id: "prumo--organizar", nome: "Organizar", po: pessoa, integrantes: [] }] }], idsAposentados: { pessoas: [], dominios: [] } }) as any;
+  it("resolve perfil no servidor, mantém travas e não mistura canais, inclusive após reinício", async () => {
+    const g = geminiDeRoteiro([{ text: "Posso preparar o roteiro de entrevista." }]);
+    const { a, dir } = await montar({ gerar: g.gerar, fontes: { roster } });
+    const r = await a.receber({ texto: "Qual é seu papel?", contexto: { pagina: "escritorio", agente: ids } });
+    await a.ocioso();
+    const prompt = String(g.pedidos[0].config?.systemInstruction);
+    assert.match(prompt, /Felipe/);
+    assert.match(prompt, /Consultor do Mapa/);
+    assert.match(prompt, /Você nunca executa nada/);
+    assert.doesNotMatch(prompt, /Caçador|cron|systemctl/);
+    await assert.rejects(a.receber({ conversaId: r.conversaId, texto: "oi", contexto: PAGINA }), /outro agente/);
+    const b = (await montar({ gerar: g.gerar, fontes: { roster } }, dir)).a;
+    await assert.rejects(b.receber({ conversaId: r.conversaId, texto: "oi", contexto: PAGINA }), /outro agente/);
+    const retomada = await b.receber({ conversaId: r.conversaId, texto: "Continue", contexto: { pagina: "escritorio", agente: ids } });
+    assert.equal(retomada.conversaId, r.conversaId);
+    await b.ocioso();
+  });
+  it("amarra o cartão ao responsável indicado sem executar o pedido", async () => {
+    const g = geminiDeRoteiro([
+      { functionCalls: [{ name: "propor_pedido_ao_time", args: { demanda: "Preparar roteiro de entrevista" } }] },
+      { text: "Cartão pronto para sua revisão." },
+    ]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster } });
+    const r = await a.receber({ texto: "Prepare um pedido", contexto: { pagina: "escritorio", agente: ids } });
+    await a.ocioso();
+    const c = a.conversa(r.conversaId)!.mensagens.at(-1)!.cartoes[0];
+    assert.equal(c.tipo, "pedido_ao_time");
+    assert.equal(c.estado, "proposto");
+    if (c.tipo === "pedido_ao_time") assert.match(c.dados.demanda, /prumo--organizar; responsável indicado felipe/);
+  });
+  it("lê o lead selecionado sem copiar texto, mascara os dados e isola o canal por empresa", async () => {
+    const crm = crmDeMentira();
+    const g = geminiDeRoteiro([{ text: "Confira o último combinado antes de agir." }]);
+    const { a, dir } = await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } });
+    const contexto = { pagina: "escritorio", agente: ids, lead: { produto: crm.lead.produto, id: crm.lead.id } };
+    const r = await a.receber({ texto: "Resuma este lead", contexto });
+    await a.ocioso();
+    const enviado = JSON.stringify(g.pedidos[0]);
+    assert.match(enviado, /Kulniski/);
+    assert.match(enviado, /Contexto do lead selecionado/);
+    assert.match(enviado, /Ausência de mensagens arquivadas não comprova ausência de interação/);
+    assert.match(enviado, /Silêncio e falta de arquivo nunca justificam sugerir encerramento ou perda/);
+    assert.match(enviado, /o catálogo de ofertas não comprova uma entrega/);
+    assert.doesNotMatch(enviado, /98100-0093|5516981000093/);
+    const outro = { ...contexto, lead: { produto: "site", id: "site:outro" } };
+    await assert.rejects(a.receber({ conversaId: r.conversaId, texto: "Continue", contexto: outro }), /outro agente ou lead/);
+    await assert.rejects(a.receber({ conversaId: r.conversaId, texto: "Continue", contexto: { pagina: "escritorio", agente: ids } }), /outro agente ou lead/);
+    const b = (await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } }, dir)).a;
+    await assert.rejects(b.receber({ conversaId: r.conversaId, texto: "Continue", contexto: outro }), /outro agente ou lead/);
+    const retomada = await b.receber({ conversaId: r.conversaId, texto: "Continue", contexto });
+    assert.equal(retomada.conversaId, r.conversaId);
+    await b.ocioso();
+  });
+  it("lead ausente não produz análise genérica nem chama modelo", async () => {
+    const g = geminiDeRoteiro([]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster } });
+    const r = await a.receber({ texto: "Resuma este lead", contexto: { pagina: "escritorio", agente: ids, lead: { produto: "site", id: "site:sumiu" } } });
+    await a.ocioso();
+    assert.equal(g.pedidos.length, 0);
+    assert.equal(a.conversa(r.conversaId)!.mensagens.at(-1)!.falha?.tipo, "semCrm");
+  });
+  it("mensagem revisável carrega a versão do contexto lido, sem marcar envio", async () => {
+    const crm = crmDeMentira();
+    const g = geminiDeRoteiro([
+      { functionCalls: [{ name: "propor_mensagem_ao_lead", args: { produto: crm.lead.produto, id: crm.lead.id, texto: "Posso conversar com quem decide sobre o projeto?" } }] },
+      { text: "Revise a mensagem e confira a conversa antes de abrir o WhatsApp." },
+    ]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } });
+    const r = await a.receber({ texto: "Prepare uma resposta", contexto: { pagina: "escritorio", agente: ids, lead: { produto: crm.lead.produto, id: crm.lead.id } } });
+    await a.ocioso();
+    const cartao = a.conversa(r.conversaId)!.mensagens.at(-1)!.cartoes[0];
+    assert.equal(cartao.tipo, "mensagem_ao_lead");
+    assert.equal(cartao.estado, "proposto");
+    if (cartao.tipo === "mensagem_ao_lead") assert.equal(cartao.dados.contextoHash, await hashDoContexto(crm.lead));
+    assert.equal(crm.chamadas.registrar, 0);
+  });
+  it("retorno relido alimenta a resposta mascarada; contexto antigo ou retorno ausente não chama modelo", async () => {
+    const crm = crmDeMentira();
+    const antes = await hashDoContexto(crm.lead);
+    const evento = { tipo: 'nota', rotulo: 'Nota', origem: 'manual' as const, fonte: 'planilha', em: AGORA.toISOString(), texto: '[Retorno informado pelo operador · 2026-10-16]\nRecepção: fale com Ana em ana@exemplo.com ou (16) 98100-0093. Ainda não sei se é ela quem decide.' };
+    crm.lead.eventos.push(evento);
+    const atual = await hashDoContexto(crm.lead);
+    const g = geminiDeRoteiro([
+      { functionCalls: [{ name: 'propor_mensagem_ao_lead', args: { produto: crm.lead.produto, id: crm.lead.id, texto: 'Ana é quem decide sobre este projeto?' } }, { name: 'propor_anotacao_no_crm', args: { produto: crm.lead.produto, id: crm.lead.id, tipo: 'proximo_passo', texto: 'Rômulo: conferir o responsável indicado pela recepção.', data: '2026-10-18' } }] },
+      { text: 'Confirme quem decide antes de combinar uma data.' },
+    ]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } });
+    const contexto = { pagina: 'escritorio', agente: ids, lead: { produto: crm.lead.produto, id: crm.lead.id } };
+    const antigo = await a.receber({ texto: 'Prepare a resposta ao retorno', contexto: { ...contexto, retornoContextoHash: antes } });
+    await a.ocioso();
+    assert.equal(g.pedidos.length, 0);
+    assert.equal(a.conversa(antigo.conversaId)!.mensagens.at(-1)!.falha?.tipo, 'semCrm');
+    const novo = await a.receber({ texto: 'Prepare a resposta ao retorno', contexto: { ...contexto, retornoContextoHash: atual } });
+    await a.ocioso();
+    const enviado = JSON.stringify(g.pedidos[0]);
+    assert.match(enviado, /retornoInformadoPeloOperador/);
+    assert.match(enviado, /fale com Ana/);
+    assert.match(enviado, /2026-10-16/);
+    assert.match(enviado, /Compare com mensagens posteriores/);
+    assert.doesNotMatch(enviado, /ana@exemplo.com|98100-0093/);
+    const cartao = a.conversa(novo.conversaId)!.mensagens.at(-1)!.cartoes[0];
+    assert.equal(cartao.estado, 'proposto');
+    const passo = a.conversa(novo.conversaId)!.mensagens.at(-1)!.cartoes.find(c => c.tipo === 'anotacao_no_crm');
+    assert.equal(passo?.tipo, 'anotacao_no_crm');
+    if (passo?.tipo === 'anotacao_no_crm') assert.equal(passo.dados.contextoHash, atual);
+    assert.equal(crm.chamadas.registrar, 0);
+    crm.lead.eventos = [];
+    const ausente = await a.receber({ texto: 'Prepare a resposta ao retorno', contexto: { ...contexto, retornoContextoHash: await hashDoContexto(crm.lead) } });
+    await a.ocioso();
+    assert.equal(g.pedidos.length, 2);
+    assert.equal(a.conversa(ausente.conversaId)!.mensagens.at(-1)!.falha?.tipo, 'semCrm');
+  });
+  it("preparo de amanhã exige contexto atual e só propõe mensagem para o lead, sem mudar o plano", async () => {
+    const crm = crmDeMentira();
+    crm.lead.proximoPasso = { texto: 'Conferir decisão com a responsável', data: '2026-10-18', registradoEm: '2026-10-16T10:00:00Z' };
+    const original = JSON.stringify(crm.lead.proximoPasso);
+    const g = geminiDeRoteiro([{ functionCalls: [
+      { name: 'propor_mensagem_ao_lead', args: { produto: crm.lead.produto, id: crm.lead.id, texto: 'Olá! Podemos conferir a decisão sobre o projeto?' } },
+      { name: 'propor_anotacao_no_crm', args: { produto: crm.lead.produto, id: crm.lead.id, tipo: 'proximo_passo', texto: 'Mudar o combinado', data: '2026-10-19' } },
+    ] }, { text: 'Rascunho para revisar; nada enviado.' }]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } });
+    const contexto = { pagina: 'escritorio', agente: ids, lead: { produto: crm.lead.produto, id: crm.lead.id } };
+    const r = await a.receber({ texto: 'Prepare apenas o rascunho de amanhã', contexto: { ...contexto, preparoAmanhaContextoHash: await hashDoContexto(crm.lead) } });
+    await a.ocioso();
+    const cartoes = a.conversa(r.conversaId)!.mensagens.at(-1)!.cartoes;
+    assert.deepEqual(cartoes.map(c => c.tipo), ['mensagem_ao_lead']);
+    assert.equal(JSON.stringify(crm.lead.proximoPasso), original);
+    assert.equal(crm.chamadas.registrar, 0);
+    assert.match(JSON.stringify(g.pedidos[0]), /Conferir decisão com a responsável/);
+    assert.match(String(g.pedidos[0].config?.systemInstruction), /apenas rascunho/);
+    const velho = await hashDoContexto(crm.lead);
+    crm.lead.proximoPasso.data = '2026-10-19';
+    for (const hash of [velho, await hashDoContexto(crm.lead)]) {
+      const negado = await a.receber({ texto: 'Prepare amanhã', contexto: { ...contexto, preparoAmanhaContextoHash: hash } });
+      await a.ocioso();
+      assert.equal(a.conversa(negado.conversaId)!.mensagens.at(-1)!.falha?.tipo, 'semCrm');
+    }
+    assert.equal(g.pedidos.length, 2);
+  });
+  it("retomada só gera para plano vencido no contexto atual, sem executar ações", async () => {
+    const crm = crmDeMentira();
+    crm.lead.proximoPasso = { texto: 'Confirmar conversa com o responsável', data: '2026-10-17', registradoEm: '2026-10-16T10:00:00Z' };
+    const g = geminiDeRoteiro([{ text: 'Confira o combinado antes de retomar.' }]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster, visao: crm.visao } });
+    const contexto = { pagina: 'escritorio', agente: ids, lead: { produto: crm.lead.produto, id: crm.lead.id } };
+    await a.receber({ texto: 'Prepare a retomada', contexto: { ...contexto, retomadaContextoHash: await hashDoContexto(crm.lead) } });
+    await a.ocioso();
+    assert.equal(g.pedidos.length, 1);
+    assert.match(JSON.stringify(g.pedidos[0]), /Confirmar conversa com o responsável/);
+    assert.equal(crm.chamadas.registrar, 0);
+    const antigo = await hashDoContexto(crm.lead);
+    crm.lead.proximoPasso.data = '2026-10-18';
+    for (const hash of [antigo, await hashDoContexto(crm.lead)]) {
+      const r = await a.receber({ texto: 'Prepare a retomada', contexto: { ...contexto, retomadaContextoHash: hash } });
+      await a.ocioso();
+      assert.equal(a.conversa(r.conversaId)!.mensagens.at(-1)!.falha?.tipo, 'semCrm');
+    }
+    assert.equal(g.pedidos.length, 1);
+  });
+  it("recusa pessoa de outra sala ou arquivada sem chamar modelo nem registrar mensagem", async () => {
+    const g = geminiDeRoteiro([]);
+    const { a } = await montar({ gerar: g.gerar, fontes: { roster } });
+    for (const agente of [{ ...ids, pessoaId: "carla" }, { ...ids, salaId: "prumo--geral" }]) {
+      await assert.rejects(a.receber({ texto: "oi", contexto: { pagina: "escritorio", agente } }), /não está ativo/);
+    }
+    const b = (await montar({ gerar: g.gerar, fontes: { roster: async () => { const r = await roster(); r.squads[0].dominios[0].po.arquivado = true; return r; } } })).a;
+    await assert.rejects(b.receber({ texto: "oi", contexto: { pagina: "escritorio", agente: ids } }), /não está ativo/);
+    assert.equal(g.pedidos.length, 0);
   });
 });

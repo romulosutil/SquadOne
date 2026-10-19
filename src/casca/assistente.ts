@@ -547,18 +547,18 @@ export async function copiarTexto(texto: string): Promise<boolean> {
 const CHAVE_DA_CONVERSA = 'squadone.assistente.conversa'
 
 /** sessionStorage: recarregar a aba volta à mesma conversa; outra aba começa outra. */
-function lerConversaGuardada(): string | null {
+function lerConversaGuardada(chave = CHAVE_DA_CONVERSA): string | null {
   try {
-    return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(CHAVE_DA_CONVERSA)
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(chave)
   } catch {
     return null
   }
 }
-function guardarConversa(id: string | null) {
+function guardarConversa(id: string | null, chave = CHAVE_DA_CONVERSA) {
   try {
     if (typeof sessionStorage === 'undefined') return
-    if (id) sessionStorage.setItem(CHAVE_DA_CONVERSA, id)
-    else sessionStorage.removeItem(CHAVE_DA_CONVERSA)
+    if (id) sessionStorage.setItem(chave, id)
+    else sessionStorage.removeItem(chave)
   } catch {
     // sem guardar: a conversa vale até recarregar
   }
@@ -569,18 +569,21 @@ export interface FalhaNaTela {
   texto: string
 }
 
-function criarAssistente() {
+function criarAssistente(chave = CHAVE_DA_CONVERSA) {
+  const guardar = (id: string | null) => guardarConversa(id, chave)
   /**
    * O Assistente existe nesta Central (a casca diz, pelo /api/runtime): a Ficha só mostra o
    * "Perguntar sobre este lead" com ele. Fora da casca (teste), fica falso.
    */
   const disponivel = ref(false)
   const aberto = ref(false)
+  // Uma ficha no escritório não altera a URL. O contexto dura só enquanto ela está montada.
+  const contextoDaFicha = ref<(ContextoDaPagina & { pagina: 'ficha' }) | null>(null)
   /** Sobe quando o ＋ é tocado com o painel já aberto (desktop): o painel leva o foco ao campo. */
   const focar = ref(0)
   const estado = ref<EstadoDoAssistente | null>(null)
   const erroDoEstado = ref<FalhaNaTela | null>(null)
-  const conversaId = ref<string | null>(lerConversaGuardada())
+  const conversaId = ref<string | null>(lerConversaGuardada(chave))
   const mensagens = ref<MensagemDoAssistente[]>([])
   const pendente = ref<ConversaDoAssistente['pendente']>(null)
   /** A mensagem do Rômulo entre o toque em Enviar e ela aparecer na conversa do servidor. */
@@ -659,7 +662,7 @@ function criarAssistente() {
     geracao += 1
     pausar()
     conversaId.value = null
-    guardarConversa(null)
+    guardar(null)
     mensagens.value = []
     pendente.value = null
     enviando.value = null
@@ -672,7 +675,7 @@ function criarAssistente() {
     if (!t || enviando.value || pendente.value) return false
     // O gasto falado nem sai da aba: cartão por regra fixa, gravado só no toque (RULES 24 e 28).
     const gasto = gastoDoTexto(t)
-    if (gasto) {
+    if (gasto && chave === CHAVE_DA_CONVERSA) {
       falha.value = null
       gastos.value = [...gastos.value, { id: novoIdDeGasto(), texto: t, gasto, depoisDe: maiorN(mensagens.value) ?? 0, estado: 'proposto' }]
       return true
@@ -692,7 +695,7 @@ function criarAssistente() {
           gastos.value = gastos.value.map((g) => ({ ...g, depoisDe: 0 }))
         }
         conversaId.value = r.conversaId
-        guardarConversa(r.conversaId)
+        guardar(r.conversaId)
       }
       enviando.value = { id: r.mensagemId, texto: t }
       pendente.value = { respostaId: r.respostaId, etapa: 'pensando', desde: new Date().toISOString() }
@@ -762,6 +765,7 @@ function criarAssistente() {
 
   return {
     disponivel,
+    contextoDaFicha,
     aberto,
     focar,
     abrir,
@@ -794,4 +798,12 @@ let unica: ConversaDaAba | null = null
 /** A conversa da aba: uma só, criada na primeira chamada (o painel e a casca dividem). */
 export function useAssistente(): ConversaDaAba {
   return (unica ??= criarAssistente())
+}
+
+/** Uma instância por pessoa; nunca reaproveita o histórico do Assistente geral. */
+const porAgente = new Map<string, ConversaDaAba>()
+export function useConversaDoAgente(squad: string, sala: string, pessoa: string, lead?: { produto: string; id: string }): ConversaDaAba {
+  const chave = `squadone.agente.${JSON.stringify([squad, sala, pessoa, ...(lead ? [[lead.produto, lead.id]] : [])])}`
+  if (!porAgente.has(chave)) porAgente.set(chave, criarAssistente(chave))
+  return porAgente.get(chave)!
 }

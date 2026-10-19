@@ -11,9 +11,11 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { itensDaProposta, textoDaProposta, type QuemResponde, type SugestaoDoCopiloto } from '../operations/copiloto'
 import { nomeDaOferta } from '../operations/jornada'
 import { copiarTexto, horaCurta } from './assistente'
+import RevisarResposta from '../office/RevisarResposta.vue'
+import type { CrmLead } from '../operations/types'
 
-const props = defineProps<{ dados: { produto: string; id: string; empresa: string; hashDoDossie: string }; proposto: boolean }>()
-const emit = defineEmits<{ copiou: []; descartar: [] }>()
+const props = defineProps<{ dados: { produto: string; id: string; empresa: string; hashDoDossie: string; contextoHash?: string }; proposto: boolean; leadDaSala?: CrmLead | null; rascunhoId?: string }>()
+const emit = defineEmits<{ copiou: []; descartar: []; ficha: []; atualizar: [] }>()
 
 interface SugestaoGuardada {
   hashDoDossie: string
@@ -99,8 +101,10 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
       <p v-if="lida.sugestao.momento.passo" class="texto-pequeno"><strong>Passo sugerido:</strong> {{ lida.sugestao.momento.passo }}</p>
     </template>
 
-    <p class="texto-pequeno"><strong>Próxima mensagem</strong></p>
+    <RevisarResposta v-if="leadDaSala" :lead="leadDaSala" :mensagem="lida.sugestao.mensagem" :contexto-hash="!mudou ? dados.contextoHash : undefined" :rascunho-id="rascunhoId" :abertura-anterior="!proposto" @revisada="emit('copiou')" @ficha="emit('ficha')" @atualizar="emit('atualizar')" />
+    <template v-else><p class="texto-pequeno"><strong>Próxima mensagem</strong></p>
     <blockquote class="assistente-cartao__mensagem">{{ lida.sugestao.mensagem }}</blockquote>
+    </template>
     <p v-if="lida.sugestao.porque" class="texto-2 texto-pequeno">{{ lida.sugestao.porque }}</p>
 
     <template v-if="lida.avisos.length">
@@ -131,12 +135,13 @@ onBeforeUnmount(() => window.clearTimeout(temporizador))
       <ul class="assistente-cartao__linhas texto-pequeno"><li v-for="t in lida.sugestao.faltaSaber" :key="t">{{ t }}</li></ul>
     </template>
 
-    <p class="texto-2 texto-pequeno">Copie e mande você mesmo: nada é enviado a lead por aqui. {{ lida.provedor }}<template v-if="horaCurta(lida.quando)"> · {{ horaCurta(lida.quando) }}</template></p>
-    <div class="acoes">
+    <p class="texto-2 texto-pequeno">Nada é enviado automaticamente. {{ lida.provedor }}<template v-if="horaCurta(lida.quando)"> · {{ horaCurta(lida.quando) }}</template></p>
+    <div v-if="!leadDaSala" class="acoes">
       <button type="button" class="botao" @click="copiar('mensagem')">{{ copiado === 'mensagem' ? 'Copiado ✓' : 'Copiar a mensagem' }}</button>
       <button v-if="itens.length" type="button" class="botao" @click="copiar('proposta')">{{ copiado === 'proposta' ? 'Copiado ✓' : 'Copiar o rascunho' }}</button>
       <button v-if="proposto" type="button" class="botao botao--leve" @click="emit('descartar')">Descartar</button>
     </div>
+    <button v-if="leadDaSala && proposto" type="button" class="botao botao--leve" @click="emit('descartar')">Descartar esta sugestão</button>
     <p v-if="copiado === 'falhou'" class="recado recado--atencao" role="status">Não consegui copiar: selecione o texto à mão.</p>
   </template>
 </template>

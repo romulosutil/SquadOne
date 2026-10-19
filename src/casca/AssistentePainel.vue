@@ -36,7 +36,7 @@ import {
   usoDeHoje,
 } from './assistente'
 
-defineProps<{ agentes: boolean }>()
+const props = defineProps<{ agentes: boolean; flutuante?: boolean; integrado?: boolean }>()
 const emit = defineEmits<{ fechar: [] }>()
 
 const as = useAssistente()
@@ -50,7 +50,7 @@ const aoMudarLargura = (e: MediaQueryListEvent) => { largo.value = e.matches }
 /** A moldura do desktop: o aside fora do `#app`, com o título e o "Fechar" de texto (BP-FOLHA). */
 const MolduraLateral = defineComponent({
   name: 'MolduraLateral',
-  props: { titulo: { type: String, required: true }, cheia: Boolean },
+  props: { titulo: { type: String, required: true }, cheia: Boolean, integrado: Boolean },
   emits: ['fechar'],
   setup(p, { slots, emit: emitir }) {
     return () =>
@@ -58,7 +58,7 @@ const MolduraLateral = defineComponent({
         h(
           'aside',
           {
-            class: 'assistente',
+            class: ['assistente', { 'assistente--integrado': p.integrado }],
             role: 'complementary',
             'aria-label': 'Assistente',
             // A folha aberta (a Ficha) escuta o focusin no document e puxa o foco de volta para ela.
@@ -66,8 +66,8 @@ const MolduraLateral = defineComponent({
           },
           [
             h('header', { class: 'assistente__topo' }, [
-              h('h2', null, p.titulo),
-              h('button', { type: 'button', class: 'folha__fechar', onClick: () => emitir('fechar') }, 'Fechar'),
+              h('div', null, [h('h2', null, p.titulo), p.integrado ? h('p', { class: 'texto-2 texto-pequeno' }, 'Seu apoio, junto do escritório') : null]),
+              h('button', { type: 'button', class: 'folha__fechar', onClick: () => emitir('fechar') }, p.integrado ? 'Recolher' : 'Fechar'),
             ]),
             h('div', { class: 'assistente__corpo' }, slots.default?.()),
             h('footer', { class: 'assistente__rodape' }, slots.rodape?.()),
@@ -76,7 +76,8 @@ const MolduraLateral = defineComponent({
       ])
   },
 })
-const Moldura = computed(() => (largo.value ? MolduraLateral : Sheet))
+const lateral = computed(() => largo.value && (props.integrado || !props.flutuante))
+const Moldura = computed(() => lateral.value ? MolduraLateral : Sheet)
 
 // ------------------------------------------------------------ contexto
 
@@ -91,7 +92,7 @@ function lerEndereco() {
   // retrato de Vendas de novo só por ele. Ao servidor vai só produto e id.
   empresaDaFicha.value = document.getElementById('crm-ficha-titulo')?.textContent?.trim() ?? ''
 }
-const contexto = computed(() => contextoDoEndereco(endereco.value.caminho, endereco.value.busca))
+const contexto = computed(() => as.contextoDaFicha.value ?? contextoDoEndereco(endereco.value.caminho, endereco.value.busca))
 const atalhos = computed(() => atalhosDoContexto(contexto.value.pagina, { empresa: empresaDaFicha.value }))
 
 // ------------------------------------------------------------ conversa
@@ -194,7 +195,7 @@ watch(() => as.focar.value, focarCampo)
  * keydown no document em captura; a janela captura antes dele.
  */
 function aoTeclarNaJanela(e: KeyboardEvent) {
-  if (e.key !== 'Escape' || !largo.value) return
+  if (e.key !== 'Escape' || !lateral.value) return
   const painel = document.querySelector('.assistente')
   if (!painel || !(e.target instanceof Node) || !painel.contains(e.target)) return
   e.preventDefault()
@@ -213,12 +214,15 @@ onMounted(() => {
   lerEndereco()
   relogio = window.setInterval(lerEndereco, 1000)
   as.retomar()
-  focarCampo()
+  if (!props.integrado) focarCampo()
 })
 
 watch(
   largo,
-  (eh) => document.documentElement.classList.toggle('com-assistente', eh),
+  () => {
+    document.documentElement.classList.toggle('com-assistente', lateral.value)
+    document.documentElement.classList.toggle('com-assistente-integrado', lateral.value && !!props.integrado)
+  },
   { immediate: true }
 )
 
@@ -229,7 +233,8 @@ onBeforeUnmount(() => {
   consulta?.removeEventListener('change', aoMudarLargura)
   window.removeEventListener('keydown', aoTeclarNaJanela, true)
   document.documentElement.classList.remove('com-assistente')
-  if (!largo.value) return // no celular, a Sheet devolve o foco
+  document.documentElement.classList.remove('com-assistente-integrado')
+  if (!lateral.value) return // a Sheet devolve o foco
   // Devolve o foco a quem abriu; se ele está sob o `#app` inerte (a Ficha abriu depois), à folha de cima.
   const volta = quemAbriu
   setTimeout(() => {
@@ -240,7 +245,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <component :is="Moldura" titulo="Assistente" :cheia="!largo" @fechar="emit('fechar')">
+  <component :is="Moldura" titulo="Assistente" :integrado="integrado" :cheia="!largo && !props.flutuante" :flutuante="props.flutuante && !lateral" @fechar="emit('fechar')">
     <div class="assistente-conteudo">
       <div class="assistente-aviso">
         <p class="texto-2 texto-pequeno">Usa IA (Gemini e Hermes). Confira antes de agir; nada é enviado a lead.</p>
@@ -455,4 +460,12 @@ onBeforeUnmount(() => {
 .assistente-form__linha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); }
 .assistente-form__linha > span { flex: 1 1 8rem; }
 .assistente-form__mic[aria-pressed="true"] { background: var(--erro-fundo); }
+.assistente--integrado { top: var(--esp-3); right: var(--esp-3); bottom: var(--esp-3); border: 1px solid #607489; border-radius: var(--raio-controle); overflow: hidden; box-shadow: var(--sombra-pequena); }
+.assistente--integrado .assistente__topo { background: var(--cor-menta); gap: var(--esp-2); }
+.assistente--integrado .assistente__topo h2 { font-size: var(--tam-nome); }
+.assistente--integrado .assistente__topo p { margin: var(--esp-1) 0 0; }
+.assistente--integrado .assistente__topo .folha__fechar { min-height: var(--toque); padding: var(--esp-2); background: transparent; border: 0; font-size: var(--tam-mini); }
+.assistente--integrado .assistente-aviso { align-items: start; }
+.assistente--integrado .assistente-aviso p { flex-basis: 100%; }
+.assistente--integrado .assistente__rodape { background: var(--superficie); }
 </style>

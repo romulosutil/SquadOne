@@ -15,6 +15,7 @@ import {
   linhaDoTempo,
   textoDoValor,
   useAssistente,
+  useConversaDoAgente,
   type GastoNaTela,
   enviar,
   ErroDoAssistente,
@@ -401,3 +402,15 @@ describe('assistente: o gasto falado fica na aba', () => {
     await assert.rejects(gravarGasto('x', 'abcdefgh-1', buscar), /Não reconheci um gasto/)
   })
 })
+
+
+describe('conversas por agente e lead', () => {
+  it('voltar ao mesmo lead retoma a instância; outra empresa e conversa geral ficam isoladas', () => {
+    const ids = ['prumo', 'prumo--organizar', 'felipe'] as const;
+    const a = useConversaDoAgente(...ids, { produto: 'prumo', id: 'prumo:cliente-a' });
+    assert.equal(a, useConversaDoAgente(...ids, { produto: 'prumo', id: 'prumo:cliente-a' }));
+    assert.notEqual(a, useConversaDoAgente(...ids, { produto: 'prumo', id: 'prumo:cliente-b' }));
+    assert.notEqual(a, useConversaDoAgente(...ids));
+    assert.notEqual(a, useConversaDoAgente(...ids, { produto: 'site', id: 'prumo:cliente-a' }));
+  });
+});

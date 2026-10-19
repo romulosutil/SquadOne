@@ -1,3 +1,4 @@
+import { ultimoRetornoRegistrado } from '../src/operations/retorno-da-venda.ts';
 import { Type, type FunctionDeclaration } from "@google/genai";
 import { montarDossie, type LeadDoCopiloto, type MensagemParaODossie } from "../src/operations/copiloto.ts";
 import { acharLead, mapearTextos, prepararTexto, semValores, sugestaoParaOModelo, type LeituraFeita, type ReferenciaDaSugestao, type SugestaoLida } from "../src/operations/assistente.ts";
@@ -121,6 +122,8 @@ export function declaracoesDoAssistente(opcoes: { hermes: boolean; copiloto?: bo
 // --- As fontes -----------------------------------------------------------------
 
 export interface FontesDoAssistente {
+  /** Só para resolver a identidade escolhida; não é ferramenta do modelo. */
+  roster?: () => Promise<import('./squad.ts').Roster>;
   /** A visão do CRM (CrmStore.visao); ausente = CRM não configurado nesta Central. */
   visao?: () => Promise<CrmVisao>;
   /** A conversa guardada do lead (server/conversa-do-lead.ts); null = sem. */
@@ -291,7 +294,7 @@ export class LeiturasDaMensagem {
         // O cardápio leva preço: fica de fora (o R$ de proposta é finanças para a RULES 28). Os links
         // (demo, Raio-X) também: o modelo não precisa deles para conversar, e mascarados não servem.
         const { cardapio: _cardapio, demo: _demo, raioX, ...resto } = dossie;
-        return { ...resto, raioX: { situacao: raioX.situacao, ...(raioX.texto ? { texto: raioX.texto } : {}), ...(raioX.achados ? { achados: raioX.achados } : {}) } };
+        return { ...resto, retornoInformadoPeloOperador: ultimoRetornoRegistrado(lead), raioX: { situacao: raioX.situacao, ...(raioX.texto ? { texto: raioX.texto } : {}), ...(raioX.achados ? { achados: raioX.achados } : {}) } };
       }
       case LER_SUGESTAO_DO_COPILOTO: {
         if (!this.fontes.sugestao) return { semSinal: true, motivo: "O copiloto está desligado nesta Central." };

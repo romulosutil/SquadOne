@@ -50,6 +50,11 @@ export interface EstadoDoAssistente {
 /** Onde o Rômulo está: a página e, na Ficha, o lead aberto (o servidor busca o lead na visão do CRM). */
 export interface ContextoDaPagina {
   pagina: string
+  /** Contexto relido para responder a um retorno humano; validado no servidor. */
+  retornoContextoHash?: string
+  retomadaContextoHash?: string
+  preparoAmanhaContextoHash?: string
+  agente?: { squadId: string; salaId: string; pessoaId: string }
   lead?: { produto: string; id: string }
 }
 
@@ -93,14 +98,14 @@ export type CartaoDoAssistente =
       tipo: 'anotacao_no_crm'
       estado: EstadoDoCartao
       /** Vai ao POST /api/operations/crm/registro de sempre só depois do toque. */
-      dados: { produto: string; id: string; empresa: string; tipo: 'nota' | 'proximo_passo'; texto: string; data?: string }
+      dados: { produto: string; id: string; empresa: string; tipo: 'nota' | 'proximo_passo'; texto: string; data?: string; contextoHash?: string }
     }
   | {
       id: string
       tipo: 'mensagem_ao_lead'
       estado: EstadoDoCartao
-      /** Só "Copiar" (regras 11 e 17): nunca abre o WhatsApp nem marca envio. */
-      dados: { produto: string; id: string; empresa: string; texto: string }
+      /** Copiar no painel; na sala, revisão explícita libera WhatsApp com texto, sem marcar envio. */
+      dados: { produto: string; id: string; empresa: string; texto: string; contextoHash?: string }
     }
   | {
       id: string
@@ -111,9 +116,9 @@ export type CartaoDoAssistente =
        * sugestão guardada, nunca de uma chamada do modelo. Leva só a referência: o painel relê a
        * sugestão de agora no GET /api/operations/crm/copiloto/sugestao e monta os itens com o preço do
        * cardápio (textoDaProposta). Assim nem o texto da sugestão nem R$ de proposta chegam ao
-       * histórico do Assistente (RULES 28). Só "Copiar", como a mensagem ao lead.
+       * histórico do Assistente (RULES 28). Na sala, pode abrir o texto revisado no WhatsApp; nunca confirma envio.
        */
-      dados: { produto: string; id: string; empresa: string; hashDoDossie: string }
+      dados: { produto: string; id: string; empresa: string; hashDoDossie: string; contextoHash?: string }
     }
 
 export interface MensagemDoAssistente {

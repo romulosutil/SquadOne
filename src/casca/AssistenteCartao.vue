@@ -5,7 +5,7 @@
  *  - `pedido_ao_time`: o MESMO caminho do Pedir (`handleDelegation` do estado dos agentes, com as
  *    mesmas guardas). Sem a agenda neste processo não há para onde mandar: o cartão diz por quê;
  *  - `anotacao_no_crm`: o POST /api/operations/crm/registro da Ficha, com o corpo dela;
- *  - `mensagem_ao_lead`: só "Copiar" (regras 11 e 17). Nunca abre o WhatsApp nem anota envio.
+ *  - `mensagem_ao_lead`: copiar no painel; na sala, revisar e abrir no WhatsApp sem anotar envio.
  *  - `sugestao_do_copiloto` (fase 2): a sugestão guardada do copiloto, relida e montada com o preço do
  *    cardápio por AssistenteSugestao.vue; também só "Copiar".
  * Depois do toque, `marcarDesfecho` avisa o servidor, que só conta.
@@ -15,14 +15,20 @@ import type { CartaoDoAssistente } from '../operations/assistente-contrato'
 import { useAgentes } from '../agentes/estado'
 import AssistenteSugestao from './AssistenteSugestao.vue'
 import { chaveParaRegistro, copiarTexto, estadoDoCartao, horaCurta, leadDoCartao, modoDoTurno, useAssistente } from './assistente'
+import type { ConversaDaAba } from './assistente'
+import type { CrmLead } from '../operations/types'
+import RevisarResposta from '../office/RevisarResposta.vue'
 
 /** `leadAberto`: o lead da Ficha aberta agora (o contexto do endereço), para avisar quando o cartão é de outro. */
-const props = defineProps<{ cartao: CartaoDoAssistente; agentes: boolean; leadAberto?: { produto: string; id: string } | null }>()
+const props = defineProps<{ cartao: CartaoDoAssistente; agentes: boolean; leadAberto?: { produto: string; id: string } | null; conversa?: ConversaDaAba; squadId?: string; leadDaSala?: CrmLead | null }>()
+const emit = defineEmits<{ ficha: []; atualizar: []; registrado: [] }>()
+const leadRevisao = computed(() => props.cartao.tipo !== 'pedido_ao_time' && props.leadDaSala?.id === props.cartao.dados.id && props.leadDaSala?.produto === props.cartao.dados.produto ? props.leadDaSala : null)
 
 const lead = computed(() => (props.cartao.tipo === 'pedido_ao_time' ? null : leadDoCartao(props.cartao.dados, props.leadAberto)))
 
 const ag = useAgentes()
-const as = useAssistente()
+const as = props.conversa ?? useAssistente()
+const destino = computed(() => props.squadId ? ag.roster.value?.squads.find(s => s.id === props.squadId)?.nome ?? props.squadId : ag.squadAtiva.value?.nome ?? '…')
 
 const estado = computed(() => estadoDoCartao(props.cartao, as.desfechos.value[props.cartao.id]))
 const proposto = computed(() => estado.value === 'proposto')
@@ -50,26 +56,41 @@ const motivoDoTime = computed(() => {
 })
 const podeMandar = computed(() => props.agentes && !motivoDoTime.value && demanda.value.trim() !== '')
 
-function mandarParaOTime() {
+const erroDoTime = ref('')
+const enviandoAoTime = ref(false)
+const pedidoEnviado = ref('')
+async function mandarParaOTime() {
   if (!podeMandar.value) return
+  if (enviandoAoTime.value) return
+  enviandoAoTime.value = true
+  erroDoTime.value = ''
+  try {
+  if (props.squadId && ag.squadAtiva.value?.id !== props.squadId && !await ag.trocarSquad(props.squadId)) {
+    erroDoTime.value = 'Não foi possível selecionar o escritório. O pedido não foi enviado.'
+    return
+  }
   as.pedidoDoCartao.value = props.cartao.id
-  void ag.handleDelegation({ demanda: demanda.value.trim(), modo: modoDoTurno(modo.value) })
-  as.marcarDesfecho(props.cartao.id, 'confirmado')
+  pedidoEnviado.value = demanda.value.trim()
+  await ag.handleDelegation({ demanda: pedidoEnviado.value, modo: modoDoTurno(modo.value) })
+  if (ag.ultimoPedido.value?.demanda === pedidoEnviado.value && ag.ultimoPedido.value.estado === 'feito') as.marcarDesfecho(props.cartao.id, 'confirmado')
+  } catch (e) { erroDoTime.value = e instanceof Error ? e.message : 'O pedido falhou.' }
+  finally { enviandoAoTime.value = false }
 }
 /** O turno que este cartão mandou: só ele mostra o resultado (outro pedido pode ter vindo depois). */
-const turno = computed(() => (as.pedidoDoCartao.value === props.cartao.id ? ag.ultimoPedido.value : null))
+const turno = computed(() => (as.pedidoDoCartao.value === props.cartao.id && ag.ultimoPedido.value?.demanda === pedidoEnviado.value ? ag.ultimoPedido.value : null))
 
 // ------------------------------------------------------------ anotação em Vendas
 
 const ROTULO_DA_ANOTACAO = { nota: 'Nota', proximo_passo: 'Próximo passo' } as const
 const dataDaAnotacao = ref(props.cartao.tipo === 'anotacao_no_crm' ? props.cartao.dados.data ?? '' : '')
+const textoDaAnotacao = ref(props.cartao.tipo === 'anotacao_no_crm' ? props.cartao.dados.texto : '')
 const anotando = ref(false)
 const anotado = ref('')
 const erroDaAnotacao = ref('')
 
 async function anotar() {
   const c = props.cartao
-  if (c.tipo !== 'anotacao_no_crm' || anotando.value) return
+  if (c.tipo !== 'anotacao_no_crm' || anotando.value || !textoDaAnotacao.value.trim()) return
   if (c.dados.tipo === 'proximo_passo' && !dataDaAnotacao.value) {
     erroDaAnotacao.value = 'Diga quando: o próximo passo precisa de data.'
     return
@@ -77,6 +98,14 @@ async function anotar() {
   anotando.value = true
   erroDaAnotacao.value = ''
   try {
+    if (props.leadDaSala) {
+      if (!leadRevisao.value || !c.dados.contextoHash) throw new Error('Peça ao agente uma sugestão atual para este lead antes de registrar.')
+      const q = new URLSearchParams({ produto: c.dados.produto, id: c.dados.id })
+      const leitura = await fetch(`/api/operations/crm/resposta/contexto?${q}`, { cache: 'no-store' })
+      if (!leitura.ok) throw new Error('Não consegui conferir o contexto atual. Tente novamente após atualizar a sala.')
+      const atual = await leitura.json()
+      if (atual.contextoHash !== c.dados.contextoHash) { emit('atualizar'); throw new Error('O contexto mudou desde a sugestão. Peça ao agente para revisar o próximo passo antes de confirmar.') }
+    }
     // O corpo da Ficha (CrmFicha.vue, registrar): o id é a chave do lead, sem o prefixo do produto.
     const r = await fetch('/api/operations/crm/registro', {
       method: 'POST',
@@ -85,7 +114,7 @@ async function anotar() {
         produto: c.dados.produto,
         id: chaveParaRegistro(c.dados.produto, c.dados.id),
         tipo: c.dados.tipo,
-        texto: c.dados.texto,
+        texto: textoDaAnotacao.value.trim(),
         data: c.dados.tipo === 'proximo_passo' ? dataDaAnotacao.value : '',
       }),
     })
@@ -94,6 +123,7 @@ async function anotar() {
     const hora = typeof corpo.em === 'string' ? horaCurta(corpo.em) : ''
     anotado.value = `Gravado na planilha${hora ? ` às ${hora}` : ''}; aparece em Vendas em alguns segundos.`
     as.marcarDesfecho(c.id, 'confirmado')
+    emit('registrado')
   } catch (e) {
     erroDaAnotacao.value = `Não foi gravado: ${e instanceof Error ? e.message : String(e)}`
   } finally {
@@ -127,13 +157,14 @@ function copiouASugestao() {
   if (proposto.value) as.marcarDesfecho(props.cartao.id, 'confirmado')
 }
 const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado: 'Descartado' } as const
+const rotuloDoEstado = computed(() => estado.value === 'confirmado' && props.cartao.tipo === 'anotacao_no_crm' ? 'Registrado' : estado.value === 'confirmado' && ['mensagem_ao_lead', 'sugestao_do_copiloto'].includes(props.cartao.tipo) ? 'Revisão / cópia registrada' : ROTULO_DO_ESTADO[estado.value])
 </script>
 
 <template>
   <article class="assistente-cartao" :class="{ 'is-fechado': !proposto }" :aria-label="TITULO[cartao.tipo]">
     <header class="assistente-cartao__cabeca">
       <h3>{{ TITULO[cartao.tipo] }}</h3>
-      <span class="selo" :class="{ 'selo--ok': estado === 'confirmado' }">{{ ROTULO_DO_ESTADO[estado] }}</span>
+      <span class="selo" :class="{ 'selo--ok': estado === 'confirmado' }">{{ rotuloDoEstado }}</span>
     </header>
 
     <!-- ---------------------------------------------------- pedido ao time -->
@@ -147,14 +178,15 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
           <button v-for="m in MODOS" :key="m.valor" type="button" :aria-pressed="modo === m.valor" @click="modo = m.valor">{{ m.rotulo }}</button>
         </div>
         <template v-if="agentes">
-          <p class="texto-2 texto-pequeno">Vai para a squad {{ ag.squadAtiva.value?.nome ?? '…' }}, pelo mesmo caminho do Pedir.</p>
+          <p class="texto-2 texto-pequeno">Vai para a equipe {{ destino }}. O responsável é uma indicação; o time pode encaminhar o pedido.</p>
           <p v-if="motivoDoTime" class="texto-2 texto-pequeno" role="status">{{ motivoDoTime }}</p>
         </template>
         <p v-else class="recado recado--atencao">
           A agenda dos agentes não roda nesta Central, então o pedido não tem para onde ir daqui. Peça pelo Telegram ou no SquadOne do Easypanel.
         </p>
         <div class="acoes">
-          <button v-if="agentes" type="button" class="botao" :disabled="!podeMandar" @click="mandarParaOTime">Mandar para o time</button>
+          <p v-if="erroDoTime" class="recado recado--erro" role="alert">{{ erroDoTime }}</p>
+          <button v-if="agentes" type="button" class="botao" :disabled="!podeMandar || enviandoAoTime" @click="mandarParaOTime">{{ enviandoAoTime ? 'Organizando pedido…' : 'Confirmar pedido ao time' }}</button>
           <button type="button" class="botao botao--leve" @click="descartar">Descartar</button>
         </div>
       </template>
@@ -177,15 +209,21 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
     <template v-else-if="cartao.tipo === 'anotacao_no_crm'">
       <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong> · {{ ROTULO_DA_ANOTACAO[cartao.dados.tipo] }}</p>
       <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
-      <p class="assistente-cartao__texto">{{ cartao.dados.texto }}</p>
+      <p v-if="!proposto" class="assistente-cartao__texto">{{ textoDaAnotacao }}</p>
       <template v-if="proposto">
+        <div v-if="leadRevisao && cartao.dados.tipo === 'proximo_passo'" class="recado">
+          <p v-if="leadRevisao.proximoPasso"><strong>Próximo passo atual:</strong> {{ leadRevisao.proximoPasso.texto }} · {{ leadRevisao.proximoPasso.data }}</p>
+          <p v-else>Sem próximo passo na leitura atual.</p>
+          <p class="texto-2 texto-pequeno">Confirmar substitui o próximo passo em Vendas. Não agenda mensagens nem compromissos no calendário.</p>
+        </div>
+        <label class="rotulo">Próximo passo ou anotação<textarea v-model="textoDaAnotacao" class="campo" rows="3" maxlength="2000" :disabled="anotando" /></label>
         <label v-if="cartao.dados.tipo === 'proximo_passo'" class="rotulo">
           Quando
           <input v-model="dataDaAnotacao" class="campo" type="date" />
         </label>
         <p v-if="erroDaAnotacao" class="recado recado--erro" role="alert">{{ erroDaAnotacao }}</p>
         <div class="acoes">
-          <button type="button" class="botao" :disabled="anotando" @click="anotar">{{ anotando ? 'Gravando…' : 'Anotar' }}</button>
+          <button type="button" class="botao" :disabled="anotando || !textoDaAnotacao.trim()" @click="anotar">{{ anotando ? 'Gravando…' : cartao.dados.tipo === 'proximo_passo' ? 'Confirmar próximo passo' : 'Confirmar anotação' }}</button>
           <button type="button" class="botao botao--leve" :disabled="anotando" @click="descartar">Descartar</button>
         </div>
       </template>
@@ -195,6 +233,11 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
 
     <!-- ---------------------------------------------------- mensagem ao lead -->
     <template v-else-if="cartao.tipo === 'mensagem_ao_lead'">
+      <template v-if="leadRevisao && estado !== 'descartado'">
+      <RevisarResposta :lead="leadRevisao" :mensagem="cartao.dados.texto" :contexto-hash="cartao.dados.contextoHash" :rascunho-id="cartao.id" :abertura-anterior="estado === 'confirmado'" @revisada="copiouASugestao" @ficha="emit('ficha')" @atualizar="emit('atualizar')" />
+      <button v-if="proposto" type="button" class="botao botao--leve" @click="descartar">Descartar esta sugestão</button>
+      </template>
+      <template v-else>
       <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong></p>
       <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
       <blockquote class="assistente-cartao__mensagem">{{ cartao.dados.texto }}</blockquote>
@@ -204,13 +247,14 @@ const ROTULO_DO_ESTADO = { proposto: 'Proposto', confirmado: 'Feito', descartado
         <button v-if="proposto" type="button" class="botao botao--leve" @click="descartar">Descartar</button>
       </div>
       <p v-if="copiado === 'falhou'" class="recado recado--atencao" role="status">Não consegui copiar: selecione o texto à mão.</p>
+      </template>
     </template>
 
     <!-- ---------------------------------------------------- sugestão do copiloto (fase 2) -->
     <template v-else-if="cartao.tipo === 'sugestao_do_copiloto'">
       <p class="texto-pequeno"><strong>{{ lead?.rotulo }}</strong></p>
       <p v-if="lead?.outroLead" class="recado recado--atencao">Outro lead, não o da Ficha aberta.</p>
-      <AssistenteSugestao v-if="estado !== 'descartado'" :dados="cartao.dados" :proposto="proposto" @copiou="copiouASugestao" @descartar="descartar" />
+      <AssistenteSugestao v-if="estado !== 'descartado'" :dados="cartao.dados" :rascunho-id="cartao.id" :lead-da-sala="leadRevisao" :proposto="proposto" @copiou="copiouASugestao" @descartar="descartar" @ficha="emit('ficha')" @atualizar="emit('atualizar')" />
     </template>
   </article>
 </template>
