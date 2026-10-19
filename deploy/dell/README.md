@@ -34,6 +34,23 @@ reiniciar `luna-workflows` e `prumo-metricas`; executar o instalador dos workflo
 Testes: `fonte_luna.test.py`, `luna_workflows.test.py`,
 `workflow_confiabilidade.test.py` e `raio-x --testar`. Sem envio de mensagens.
 
+## Time de primeiros contatos (18–19/10/2026; timer desabilitado)
+
+Diego, Elisa e Carla avaliam os leads; o executor sem modelo manda só o primeiro contato pelo número
+do PRUMO, e a conversa depois fica com o Rômulo. Desde 19/10/2026 o `.py` não tem ritmo nem expediente
+próprios: cada envio pede `POST /api/operations/crm/frente/reservar` e a Central decide com a mesma janela
+e a mesma trava de ritmo das telas e do Telegram. Regras, elegibilidade e o porquê:
+`docs/referencia/perfis-e-experimentos.md`, "Time comercial".
+
+Estado privado: `~/.local/share/frente-comercial/registro.sqlite` (avaliações, orçamento de inferência,
+plano e recibos) e `~/.local/share/squadone-operations/frente-comercial{,-config}.json`. O app lê
+`/api/operations/crm/frente` e pausa/ativa em Mais › Primeiros contatos; nenhuma credencial ou comando
+de infraestrutura vai ao navegador.
+
+Instalação: o Python vai para `~/.local/bin/frente-comercial`; service/timer vão para
+`~/.config/systemd/user/`. Validar com `python3 deploy/dell/frente-comercial.test.py`. O timer não
+substitui o observador nem o n8n: os dois precisam estar no ar.
+
 O serviço usa o build do clone Git `~/SquadOne` e escuta apenas em
 `127.0.0.1:9120`. Até 28/09/2026 usava a réplica `~/Pessoal-dev/SquadOne`, que
 congelou com o PC; o `.env` (o build lê `VITE_GOOGLE_CLIENT_ID`, e o
@@ -2301,7 +2318,9 @@ python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Go
 > número (a Evolution e o Hermes convivem como aparelhos conectados), com a sessão antiga em
 > `session.antiga-5527999762786-20261016` (o Rômulo a apagou depois). **Decisão do Rômulo em 16/10/2026: não haverá
 > segundo número.** A Evolution e o Hermes ficam neste chip, e a proteção é a trava de horário mais a trava de ritmo
-> (4 min entre primeiros contatos, 8 por hora, 10/20/30 por dia, follow-up só de quem leu). Se um dia mudar:
+> (desde 18/10/2026: 5 min entre primeiros contatos, 12 por hora, teto interno de 100 por dia,
+> follow-up só de quem leu). Esses valores não garantem ausência de restrições e não substituem
+> autorização do destinatário. Envios diretos no celular podem ficar fora da contagem. Se um dia mudar:
 > `DELETE /instance/logout/prumo` e um QR novo no celular do outro número. Onde este texto diz "número novo" ou
 > "número só do PRUMO", leia "o número da Evolution".
 

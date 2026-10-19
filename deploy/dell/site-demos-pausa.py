@@ -152,6 +152,24 @@ def motivo_de(lead: dict, planilha: dict) -> str | None:
     return FORA.get(lead["topo"])
 
 
+def protecoes_do_crm() -> dict[str, str]:
+    """Mesma proteção da limpeza: pasta antiga não autoriza tirar uma negociação do ar."""
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import spec_from_loader, module_from_spec
+    base = Path(__file__).resolve().parent
+    arquivo = base / 'site-demos-limpeza.py'
+    if not arquivo.is_file():
+        arquivo = base / 'site-demos-limpeza'
+    loader = SourceFileLoader('protecao_da_limpeza', str(arquivo))
+    spec = spec_from_loader('protecao_da_limpeza', loader)
+    modulo = module_from_spec(spec)
+    try:
+        loader.exec_module(modulo)
+        return {l['chave']: modulo.motivo_protecao(l) for l in modulo.ler_crm() if l.get('produto') == 'site'}
+    except Exception as e:
+        raise RuntimeError('Sem CRM atual para conferir a proteção; nenhuma nova pausa autorizada') from e
+
+
 def desde_da_planilha(motivo: str, planilha: dict) -> tuple[date | None, str]:
     status = str(planilha.get("status", "")).strip()
     if motivo == "recusado" and status == "recusado":
@@ -300,6 +318,7 @@ def anotar(evento: dict) -> None:
 
 def main() -> int:
     simular = "--simular" in sys.argv[1:]
+    protecoes = protecoes_do_crm()
     estado = ler_json(ESTADO) or {}
     antes = estado.get("projetos") or {}
     retrato, nota_retrato = ler_retrato()
@@ -317,6 +336,11 @@ def main() -> int:
         planilha = retrato.get(lead["place_id"], {})
         motivo = motivo_de(lead, planilha)
         ant = antes.get(p) or {}
+        if motivo and (lead['place_id'] not in protecoes or protecoes[lead['place_id']]):
+            print(f"Preservado {p}: {protecoes.get(lead['place_id']) or 'lead sem confirmação atual no CRM'}")
+            if ant:
+                agora_contando[p] = ant
+            continue
         if not motivo:
             if ant.get("pausado_em"):
                 despausar.append({**ant, "projeto": p, "voltou_para": lead["topo"] or "raiz"})
@@ -374,6 +398,10 @@ def main() -> int:
                 if info.get("paused"):
                     # Pausado por outra mão: não é deste script, que então nunca o despausa.
                     i.pop("falha", None)
+                    continue
+                atuais = protecoes_do_crm()
+                if i['place_id'] not in atuais or atuais[i['place_id']]:
+                    falhou(i, 'contexto mudou ou está protegido no CRM; demo preservada')
                     continue
                 # pause/unpause só aceitam o id (prj_...), não o nome.
                 vercel("POST", f"/v1/projects/{info['id']}/pause", chave)

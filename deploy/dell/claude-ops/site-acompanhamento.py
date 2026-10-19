@@ -131,6 +131,8 @@ const hoje = diaSP(Date.now());
 const saida = [];
 for (const l of $input.all().map(i => i.json)) {{
   if (String(l.status ?? '').trim() !== 'enviado' || String(l.respondeu_em ?? '').trim()) continue;
+  // Resposta classificada de gente também protege se respondeu_em ficou vazio por falha de cópia.
+  if (['negativa', 'exclusao', 'interesse', 'licenca', 'neutra'].includes(String(l.resposta_tipo ?? '').trim())) continue;
   const enviado = Date.parse(String(l.enviado_em ?? '').trim());
   // Acervo (antes do corte ou sem data): só no resumo único, nada automático.
   if (!Number.isFinite(enviado) || enviado < CORTE) continue;

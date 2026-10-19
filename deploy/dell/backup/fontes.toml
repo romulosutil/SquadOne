@@ -167,6 +167,9 @@ excluir = [
   "~/.hermes/cache", "~/.hermes/*_cache", "~/.hermes/*cache*.json",
   "~/.hermes/backups", "~/.hermes/chrome-debug", "~/.hermes/lsp",
   "~/.hermes/bin", "~/.hermes/installs", "~/.hermes/state-snapshots",
+  # Binários e plugins baixados pelo acesso remoto do Claude se reinstalam.
+  # Históricos, configurações e os dumps consistentes continuam no cofre.
+  "~/.claude/remote/ccd-cli", "~/.claude/remote/plugins", "~/.claude/remote/srv",
   # O financas.db vivo (WAL) fica fora: copiado cru no meio de uma escrita viria
   # corrompido. Quem entra é a financas.copia.db, ao lado (RULES 24: só no cofre).
   "~/.local/share/squadone-operations/financas.db",

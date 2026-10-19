@@ -6,6 +6,11 @@ excluir ele do Vercel; já temos o backup dele no Dell". Antes (07/10) só saía
 demo de quem nunca interagiu, 10 dias depois do envio. Os projetos são o limite
 do plano (hobby): demo de lead perdido ocupa vaga que o gerador precisa.
 
+Proteção de 18/10/2026, após conferir a conversa da Comece: recusa ao canal,
+conversa humana, próximo passo, proposta, pausa ou histórico ausente exigem revisão.
+Antes de cada exclusão automática, o CRM é lido novamente. Uma classificação
+automática negativa não autoriza sozinha apagar a demo.
+
 Quem está em Perdido é o que o Funil mostra: o script lê a visão da Central
 (GET /api/operations/crm, no loopback) em vez de refazer as regras de etapa, que
 moram em server/crm.ts — recusou, sem resposta em 7 dias, parou de responder,
@@ -37,9 +42,8 @@ antigos em Perdido primeiro): um erro de regra não leva a Vercel inteira de uma
 Pedido de exclusão (`--exclusao`, 07/10/2026): o lead respondeu pedindo para
 apagar o site ou o conteúdo ("se puder excluir esse conteúdo por gentileza",
 Baby School). O classificador do WhatsApp grava `resposta_tipo` "exclusao", marca
-o lead como recusado e o aviso pelo Hermes traz este comando. Desde 08/10 o lead
-recusado sai também pela regra de cima, depois da folga; o comando é para apagar
-JÁ. Entra só o projeto nomeado cujo lead, no retrato da planilha (site-leads.json),
+o lead como recusado e o aviso pelo Hermes traz este comando. Desde 18/10 a classificação automática fica protegida na regra geral;
+o comando explícito continua servindo para atender um pedido confirmado de exclusão. Entra só o projeto nomeado cujo lead, no retrato da planilha (site-leads.json),
 tem `resposta_tipo` "exclusao", não está fechado e tem o publicado.json da pasta
 confirmando o projeto. A pasta fica.
 
@@ -98,7 +102,52 @@ def ler_json(p: Path):
         return None
 
 
-def escolher(leads: list[dict], projeto_de, folga: int = FOLGA_DIAS) -> tuple[list[dict], list[tuple[str, str]]]:
+def instante(valor) -> float:
+    try:
+        return datetime.fromisoformat(str(valor).replace('Z', '+00:00')).timestamp()
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
+
+def motivo_protecao(lead: dict) -> str:
+    """Não confunde classificação automática, silêncio ou pausa com encerramento humano."""
+    proximo = lead.get('proximoPasso') or {}
+    conversa, marcos, resposta = (lead.get(k) or {} for k in ('conversa', 'marcos', 'resposta'))
+    eventos = sorted((e for e in lead.get('eventos', []) if e.get('origem') == 'manual'), key=lambda e: instante(e.get('em')), reverse=True)
+    finais = {'recusou', 'sem_contato', 'dispensado'}
+    desfechos = finais | {'recusou_desfeito', 'sem_contato_desfeito', 'dispensado_desfeito'}
+    final = next((e for e in eventos if e.get('tipo') in desfechos), {})
+    pausa_em = 0
+    for e in eventos:
+        if e.get('tipo') == 'nota' and str(e.get('texto', '')).startswith('[aprendizado-v1] '):
+            try:
+                a = json.loads(e['texto'].split(' ', 1)[1])
+                if a.get('pausarAteResposta'):
+                    pausa_em = instante(e.get('em'))
+                break
+            except (ValueError, TypeError):
+                continue
+    contexto = max(instante(conversa.get('ultimaEntrada')), instante(marcos.get('respondeu')), instante(resposta.get('em')), instante((lead.get('proposta') or {}).get('em')), instante(proximo.get('registradoEm')), pausa_em)
+    if final.get('tipo') in finais and instante(final.get('em')) > 0 and instante(final.get('em')) >= contexto:
+        return ''
+    if proximo.get('texto'):
+        return 'próximo passo salvo: resolva antes de apagar'
+    if lead.get('revisaoComercial') or lead.get('demoProtegida'):
+        return str(lead.get('revisaoComercial') or lead['demoProtegida'])
+    if pausa_em and instante(conversa.get('ultimaEntrada')) <= pausa_em:
+        return 'contato em espera por decisão humana'
+    if lead.get('proposta'):
+        return 'proposta sem encerramento manual posterior'
+    if resposta.get('tipo') in ('negativa', 'exclusao') or lead.get('motivoPerda') in ('recusou', 'sem-interesse'):
+        return 'recusa automática exige encerramento manual conferido'
+    if conversa.get('ultimaEntrada') or (marcos.get('respondeu') and resposta.get('tipo') != 'bot'):
+        return 'há conversa humana: revisar antes de encerrar e apagar'
+    if not conversa.get('mensagens'):
+        return 'sem histórico disponível: não comprova ausência de conversa; revisar antes de expirar'
+    return ''
+
+
+def escolher(leads: list[dict], projeto_de, folga: int = FOLGA_DIAS, agora: datetime | None = None) -> tuple[list[dict], list[tuple[str, str]]]:
     """PURO: (quem entra, [(nome, por que não entrou)]) a partir dos leads do CRM.
 
     `projeto_de(pasta)` diz o projeto do publicado.json da pasta (None sem demo ou já apagado).
@@ -121,7 +170,16 @@ def escolher(leads: list[dict], projeto_de, folga: int = FOLGA_DIAS) -> tuple[li
         projeto = str(projeto_de(caminho) or "")
         if not projeto.startswith("demo-"):
             continue  # nunca publicado, ou já apagado
+        protecao = motivo_protecao(l)
+        if protecao:
+            guardados.append((nome, protecao))
+            continue
         dias = l.get("diasNaEtapa")
+        # Confirmação manual recente reinicia a folga, mesmo que a recusa automática seja antiga.
+        finais = [e for e in l.get('eventos', []) if e.get('origem') == 'manual' and e.get('tipo') in ('recusou', 'sem_contato', 'dispensado') and instante(e.get('em'))]
+        if finais:
+            encerrado = max(instante(e.get('em')) for e in finais)
+            dias = ((agora or datetime.now(timezone.utc)).astimezone(SP).date() - datetime.fromtimestamp(encerrado, SP).date()).days
         if isinstance(dias, int) and dias < folga:
             guardados.append((nome, f"em Perdido há {dias} dia(s); entra em {folga - dias}"))
             continue
@@ -341,6 +399,14 @@ def apagar(alvos: list[dict], a_pedido: bool = False) -> int:
             continue
         try:
             info = projeto_na_vercel(e["projeto"], chave)
+            if not a_pedido:
+                # Entre a seleção e o DELETE podem chegar resposta, próximo passo ou proposta.
+                # Sem CRM atual, ou se deixou de ser elegível, não executa a exclusão.
+                atuais, _ = escolher(ler_crm(), projeto_da_pasta)
+                confirmados = [a for a in atuais if a['projeto'] == e['projeto'] and a['pasta'] == e['pasta']]
+                if len(confirmados) != 1:
+                    falhas.append(f"{e['nome']}: contexto mudou ou falta confirmação atual; demo preservada")
+                    continue
             if info is not None:
                 vercel("DELETE", f"/v9/projects/{info['id']}", chave)  # a API apaga pelo id (prj_...)
             marcar_apagado(e["pasta"])

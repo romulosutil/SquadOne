@@ -58,6 +58,13 @@ um `backup:<fonte>` por fonte, pela idade do último sucesso:
 
 ## Decisões que não são óbvias
 
+- **Downloads do acesso remoto do Claude ficam fora do cofre.** As pastas
+  `~/.claude/remote/ccd-cli`, `plugins` e `srv` contêm binários e plugins que
+  o cliente baixa novamente. Em 18/10/2026 acrescentaram cerca de 376 MB numa
+  rodada e dispararam o alerta de volume. Históricos de sessões, configurações
+  e dumps consistentes continuam incluídos. A exclusão só vale para novas
+  rodadas; não remove snapshots anteriores.
+
 - **Estrutura: o filtro de segredos é o centro do bloco.** O
   `estrutura-coletar.py` copia só o que está numa lista de permissão e passa
   tudo por um filtro (valor de `CHAVE=`, `senha:`, URL com senha, Bearer,

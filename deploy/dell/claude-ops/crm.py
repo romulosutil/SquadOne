@@ -114,7 +114,9 @@ const ler = (no, chave, extra) => {
   const linhas = itens.map(i => i.json ?? {}).filter(l => txt(l[chave]))
     // wa_me e wa_link levam a mensagem inteira codificada: cortados em 500, a fila de envio
     // mostrava a primeira mensagem pela metade (26 de 39 em 08/10/2026).
-    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : 500)])),
+    // Notas e propostas aceitam 1000 caracteres no registro; o retrato deve preservá-los.
+    // Cortar JSON do aprendizado em 500 fazia a nota salva sumir na próxima leitura.
+    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : norm(k) === 'texto' ? 1000 : 500)])),
       ...(extra ? extra(l) : {}) }));
   return { colunas: extra ? [...colunas, ...Object.keys(extra({}))] : colunas, linhas };
 };

@@ -357,6 +357,9 @@ const prompt = !primeiro ? '' : [
   '  "agradeço, mas no momento não", "no momento não temos interesse", "agora não dá", pediu para não mandar mais,',
   '  reclamou de spam, disse que é número errado, ou foi hostil (sem pedir para apagar nada).',
   '  Recusa educada continua sendo recusa: agradecer ou elogiar não a transforma em interesse.',
+  '  Recusar um CANAL não recusa o produto: "não clico em link nenhum", "não abro links", "manda print ou vídeo"',
+  '  são "neutra" (ou "licenca" se autorizou um material específico), salvo recusa explícita da oferta ou do contato.',
+  '  "Não resolvo sozinha, vou ver no fim de semana" é avaliação pendente, não recusa nem intenção de compra.',
   '- "licenca": uma pessoa só deu licença para o Rômulo mandar algo que ELE ofereceu (o vídeo, o link, o PDF, o site):',
   '  a última mensagem do Rômulo pedia licença ("posso te mandar o vídeo?", "posso enviar o link?", "sem compromisso")',
   '  e a resposta é "pode", "pode mandar", "claro, pode enviar sim", "manda aí", "ok, pode". Se a primeira mensagem do',
@@ -391,8 +394,18 @@ TIPO_FINAL_JS = """
 //   modelo: é gente, e rebaixá-la apagava interesse de verdade dito por quem atende ("quanto custa?").
 const SO_AUDIO = /^\\[áudio( \\d+s)?\\]$/;
 const soAudioDe = (mensagens) => mensagens.length > 0 && mensagens.every(x => SO_AUDIO.test(String(x?.texto ?? '').trim()));
+const normalizarRecusa = (t) => String(t ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+const recusaSoDoCanal = (mensagens) => {
+  const humanas = mensagens.filter(x => x?.papel !== 'robo').map(x => normalizarRecusa(x?.texto));
+  const canal = /nao\\s+(?:(?:vou|quero|costumo)\\s+)?(?:clico|clicar|abro|abrir|acesso|acessar)\\b.{0,40}\\b(?:links?|urls?)\\b/g;
+  const avaliacao = /nao\\s+(?:decido|resolvo)\\s+sozinh[ao]|(?:vou|irei|tenho q(?:ue)?|terei q(?:ue)?)\\s+(?:ver|verificar|analisar|avaliar|conferir)/;
+  const objeção = humanas.some(t => t.replace(canal, '') !== t || avaliacao.test(t));
+  const ofertaOuContato = humanas.some(t => /nao\\s+(?:tenho|temos)\\s+interesse|nao\\s+(?:quero|queremos|preciso|precisamos)|nao[, ]+obrigad|sem interesse|nao\\s+(?:me\\s+)?(?:mande|envie|contate)|pare de|numero errado|spam|ja\\s+(?:tenho|temos)\\s+(?:site|agencia)|(?:apague|exclua|remova|tira do ar)|(?:agora|no momento)\\s+nao(?:\\s+(?:da|consigo|podemos))?(?:[.!;,]|$)/.test(t.replace(canal, '')));
+  return objeção && !ofertaOuContato;
+};
 const tipoFinalDe = (tipo, mensagens) => {
   if (soAudioDe(mensagens)) return 'neutra';
+  if (tipo === 'negativa' && recusaSoDoCanal(mensagens)) return 'neutra';
   const soRobo = mensagens.length > 0 && mensagens.every(x => x?.papel === 'robo');
   return soRobo && (tipo === 'interesse' || tipo === 'licenca') ? 'neutra' : tipo;
 };
@@ -421,7 +434,7 @@ const RETRATO_DEPOIS = (() => {
 })();
 const txt = (v) => String(v ?? '').trim();
 const ultima = m.mensagens[m.mensagens.length - 1] ?? { em: new Date().toISOString(), texto: '' };
-const trecho = tipo === 'bot' ? '' : (txt(r.trecho) || ultima.texto).replace(/\\s+/g, ' ').slice(0, 200);
+const trecho = tipo === 'bot' ? '' : ((tipo === r.tipo ? txt(r.trecho) : '') || ultima.texto).replace(/\\s+/g, ' ').slice(0, 200);
 const agora = new Date().toISOString();
 const primeiraEm = m.mensagens[0]?.em || ultima.em;
 const quando = new Date(ultima.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -1571,6 +1584,22 @@ def testar() -> int:
             self.assertIn("site de demonstração", montado["prompt"])
             montado, itens, resp = self.classificar("{}", [{"em": "x", "texto": "oi"}], [self.lead_site()], chave=OUTRO)
             self.assertEqual((montado["tem"], itens, resp), (False, [], {"ok": True, "marcados": []}))
+
+        def test_recusa_de_link_ou_avaliacao_pendente_nao_descarta_o_lead(self):
+            for texto in ("Não clico em link nenhum", "Não abro links", "Não quero clicar em links", "Não resolvo sozinha, só irei ver no fim de semana", "Terei q verificar como já te falei"):
+                with self.subTest(texto=texto):
+                    _, itens, _ = self.classificar(json.dumps({"tipo": "negativa", "trecho": texto}),
+                        [{"em": "2026-10-05T12:40:00Z", "texto": texto}], [self.lead_site()])
+                    self.assertEqual((itens[0]["resposta_tipo"], itens[0]["status"]), ("neutra", "enviado"))
+                    self.assertNotIn("pacote", itens[0])
+                    self.assertEqual(itens[0]["resposta_trecho"], texto)
+
+        def test_recusa_ou_exclusao_explicita_continuam_valendo_junto_da_objecao_ao_link(self):
+            for tipo, texto in (("negativa", "Não clico em links. Não tenho interesse"), ("negativa", "Não abro links. Não mande mais"), ("negativa", "Não clico em links. Vou ver depois, mas agora não"), ("exclusao", "Não clico em links. Exclua esse site")):
+                with self.subTest(texto=texto):
+                    _, itens, _ = self.classificar(json.dumps({"tipo": tipo, "trecho": texto}),
+                        [{"em": "2026-10-05T12:40:00Z", "texto": texto}], [self.lead_site()])
+                    self.assertEqual((itens[0]["resposta_tipo"], itens[0]["status"]), (tipo, "recusado"))
 
         def test_negativa_tira_do_funil_como_o_botao_recusou(self):
             _, itens, resp = self.classificar('```json\n{"tipo": "negativa", "trecho": "Não temos interesse", "motivo": "recusou"}\n```',

@@ -16,6 +16,7 @@ import contextlib
 import importlib.util
 import io
 import json
+from datetime import datetime
 import os
 import shutil
 import tempfile
@@ -50,7 +51,8 @@ except Exception:  # noqa: BLE001 — sem fcntl (Windows)
 def perdido(**kw):
     """Um lead como o GET /api/operations/crm devolve (só os campos que o script lê)."""
     base = {"produto": "site", "chave": "ChIJfulano", "empresa": "Fulano", "etapa": "perdido", "motivoPerda": "expirou",
-            "desde": "2026-10-01T15:00:00.000Z", "diasNaEtapa": 3, "pasta": {"lugar": "raiz", "slug": "fulano"}}
+            "desde": "2026-10-01T15:00:00.000Z", "diasNaEtapa": 3, "pasta": {"lugar": "raiz", "slug": "fulano"},
+            "conversa": {"mensagens": 1, "ultimaSaida": "2026-10-01T12:00:00Z"}}
     base.update(kw)
     return base
 
@@ -71,7 +73,7 @@ class Escolher(unittest.TestCase):
 
     def test_todo_motivo_de_perda_entra(self):
         for motivo in ("recusou", "expirou", "esfriou", "sem-contato", "descartado"):
-            self.assertTrue(entra(motivoPerda=motivo)[0], motivo)
+            self.assertEqual(entra(motivoPerda=motivo)[0], motivo != "recusou", motivo)
 
     def test_so_perdido_do_site(self):
         for kw in ({"etapa": "contato"}, {"etapa": "proposta"}, {"etapa": "ganho"}, {"produto": "prumo"}):
@@ -105,6 +107,42 @@ class Escolher(unittest.TestCase):
                  perdido(empresa="Acervo", desde=None, diasNaEtapa=None, pasta={"lugar": "_recusados/", "slug": "acervo"})]
         eleitos, _ = limpeza.escolher(leads, lambda p: "demo-" + p.rsplit("/", 1)[-1])
         self.assertEqual([e["nome"] for e in eleitos], ["Acervo", "Velho", "Novo"])
+
+
+class ProtecaoComercial(unittest.TestCase):
+    def test_preserva_conversa_proposta_proximo_passo_pausa_e_classificacao_duvidosa(self):
+        casos = [
+            {"conversa": None},
+            {"conversa": {"ultimaEntrada": "2026-10-15T20:11:00Z"}},
+            {"marcos": {"respondeu": "2026-10-15T20:11:00Z"}},
+            {"proposta": {"em": "2026-10-15T20:11:00Z"}},
+            {"proximoPasso": {"texto": "Aguardar a comparação", "data": "2026-10-19"}},
+            {"resposta": {"tipo": "negativa", "trecho": "Não clico em link nenhum"}},
+            {"revisaoComercial": "A conversa continuou depois da classificação"},
+            {"eventos": [{"tipo": "nota", "origem": "manual", "em": "2026-10-18T03:00:00Z", "texto": '[aprendizado-v1] {"pausarAteResposta":true}'}]},
+        ]
+        for caso in casos:
+            with self.subTest(caso=caso): self.assertFalse(entra(**caso)[0])
+
+    def test_encerramento_manual_so_libera_se_posterior_ao_contexto(self):
+        conversa = {"ultimaEntrada": "2026-10-15T20:11:00Z"}
+        encerramento = {"tipo": "recusou", "origem": "manual", "em": "2026-10-16T12:00:00Z"}
+        self.assertTrue(entra(conversa=conversa, eventos=[encerramento])[0])
+        self.assertFalse(entra(conversa={"ultimaEntrada": "2026-10-17T12:00:00Z"}, eventos=[encerramento])[0])
+        self.assertFalse(entra(conversa=conversa, eventos=[encerramento, {"tipo": "recusou_desfeito", "origem": "manual", "em": "2026-10-17T12:00:00Z"}])[0])
+        self.assertFalse(entra(conversa=conversa, eventos=[encerramento], proposta={"em": "2026-10-17T12:00:00Z"})[0])
+
+
+class FolgaAposRevisao(unittest.TestCase):
+    def test_encerramento_resolve_compromisso_antigo_e_reinicia_folga(self):
+        l = perdido(motivoPerda='recusou', diasNaEtapa=30,
+            proximoPasso={'texto': 'Aguardar comparação', 'registradoEm': '2026-10-17T12:00:00Z'},
+            eventos=[{'tipo': 'recusou', 'origem': 'manual', 'em': '2026-10-18T12:00:00Z'}])
+        self.assertEqual(limpeza.motivo_protecao(l), '')
+        self.assertEqual(limpeza.escolher([l], DEMOS.get, agora=datetime.fromisoformat('2026-10-18T13:00:00+00:00'))[0], [])
+        self.assertEqual(len(limpeza.escolher([l], DEMOS.get, agora=datetime.fromisoformat('2026-10-20T13:00:00+00:00'))[0]), 1)
+        l['proximoPasso']['registradoEm'] = '2026-10-18T12:01:00Z'
+        self.assertTrue(limpeza.motivo_protecao(l))
 
 
 class ComandoApagar(unittest.TestCase):
@@ -457,6 +495,8 @@ class ApagarGravaOAviso(BaseDoAviso):
     def setUp(self):
         super().setUp()
         self.vercel_chamadas = []
+        self.leads = []
+        limpeza.ler_crm = lambda: self.leads
         limpeza.token = lambda: "token-de-teste"
         limpeza.projeto_na_vercel = lambda nome, chave: {"id": "prj_" + nome}
         limpeza.vercel = lambda metodo, caminho, chave: self.vercel_chamadas.append((metodo, caminho)) or {}
@@ -466,7 +506,24 @@ class ApagarGravaOAviso(BaseDoAviso):
             (limpeza.AUTO / slug).mkdir()
             (limpeza.AUTO / slug / "publicado.json").write_text(
                 json.dumps({"vercel_project": f"demo-{slug}", "place_id": slug}), encoding="utf-8")
+        self.leads.append(perdido(empresa=nome or slug.title(), pasta={"lugar": "raiz", "slug": slug}))
         return {"nome": nome or slug.title(), "projeto": f"demo-{slug}", "pasta": slug, "motivo": "expirou", "desde": ""}
+
+    def test_resposta_entre_selecao_e_exclusao_preserva_demo(self):
+        limpeza.FILA_AVISOS.mkdir()
+        alvo = self.alvo("fulano")
+        self.leads[0]["conversa"] = {"ultimaEntrada": "2026-10-17T12:00:00Z"}
+        self.assertEqual(self.quieto(limpeza.apagar, [alvo]), 1)
+        self.assertEqual(self.vercel_chamadas, [])
+        self.assertNotIn("apagado_em", limpeza.ler_json(limpeza.AUTO / "fulano/publicado.json"))
+
+    def test_crm_indisponivel_na_revalidacao_preserva_demo(self):
+        limpeza.FILA_AVISOS.mkdir()
+        alvo = self.alvo("fulano")
+        def falha(): raise RuntimeError("CRM indisponível")
+        limpeza.ler_crm = falha
+        self.assertEqual(self.quieto(limpeza.apagar, [alvo]), 1)
+        self.assertEqual(self.vercel_chamadas, [])
 
     def test_apaga_marca_a_pasta_e_avisa(self):
         limpeza.FILA_AVISOS.mkdir()

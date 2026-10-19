@@ -63,7 +63,7 @@ class Base(unittest.TestCase):
         self.raiz = Path(tempfile.mkdtemp(prefix="pausa-teste-"))
         self.addCleanup(_apagar_se_meu, str(self.raiz))
         nomes = ("AUTO", "REGISTRO", "RETRATO", "ESTADO", "HISTORICO", "FILA_AVISOS", "PASTAS_DA_LIB",
-                 "token", "projeto", "vercel")
+                 "token", "projeto", "vercel", "protecoes_do_crm")
         antes = {k: getattr(pausa, k) for k in nomes}
         self.addCleanup(lambda: [setattr(pausa, k, v) for k, v in antes.items()])
         pausa.AUTO = self.raiz / "auto-site"
@@ -270,10 +270,36 @@ class Rodada(Base):
     def setUp(self):
         super().setUp()
         self.chamadas = []
+        self.protecoes = {}
+        pausa.protecoes_do_crm = lambda: self.protecoes.copy()
         self.projetos = {}  # nome -> resposta de projeto(); RuntimeError = a Vercel falhou
         pausa.token = lambda: "token-de-teste"
         pausa.projeto = self.projeto
         pausa.vercel = lambda metodo, caminho, chave: self.chamadas.append((metodo, caminho)) or {}
+
+    def test_conversa_protegida_no_crm_nao_e_pausada_pela_pasta_antiga(self):
+        self.lead("fulano")
+        self.retrato(self.recusado_ha("fulano", 20))
+        self.protecoes["P-fulano"] = "Há conversa humana posterior"
+        self.assertEqual(self.rodar(), 0)
+        self.assertEqual(self.chamadas, [])
+
+    def test_protecao_que_chega_entre_selecao_e_pausa_preserva_demo(self):
+        self.lead("fulano")
+        self.retrato(self.recusado_ha("fulano", 20))
+        def durante(nome, chave):
+            self.protecoes["P-fulano"] = "Próximo passo salvo agora"
+            return {"id": "prj_fulano", "paused": False}
+        pausa.projeto = durante
+        self.rodar()
+        self.assertEqual(self.chamadas, [])
+
+    def test_sem_crm_atual_nao_pausa_nada(self):
+        self.lead("fulano")
+        def falha(): raise RuntimeError("CRM indisponível")
+        pausa.protecoes_do_crm = falha
+        with self.assertRaises(RuntimeError): self.rodar()
+        self.assertEqual(self.chamadas, [])
 
     def projeto(self, nome, chave):
         r = self.projetos.get(nome, {"id": "prj_" + nome, "paused": False})
@@ -282,6 +308,7 @@ class Rodada(Base):
         return r
 
     def lead(self, slug, topo="_recusados", place_id=None, nome=None):
+        self.protecoes[place_id or f"P-{slug}"] = ""
         pasta = pausa.AUTO / topo / slug
         pasta.mkdir(parents=True)
         (pasta / "publicado.json").write_text(json.dumps({
