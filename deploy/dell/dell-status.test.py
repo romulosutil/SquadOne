@@ -2018,6 +2018,8 @@ class ServicosHttpEUnitsParadas(unittest.TestCase):
     def test_oneshot_de_timer_e_service_com_restart_e_timer_nao_sao_daemon(self):
         self.assertEqual(ds.avaliar_unit(unit())["estado"], "ok")  # sem Restart=
         self.assertEqual(ds.avaliar_unit(self.daemon(TriggeredBy="pncp-catchup.timer"))["estado"], "ok")
+        # timer desabilitado (Radar pausado): TriggeredBy vem vazio, mas o .timer instalado diz que não é daemon
+        self.assertEqual(ds.avaliar_unit(self.daemon(), tem_gatilho=True)["estado"], "ok")
 
     def test_path_parado_e_atencao(self):
         path = {"Id": "socorro.path", "LoadState": "loaded", "ActiveState": "inactive", "SubState": "dead",

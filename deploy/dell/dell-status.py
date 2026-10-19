@@ -2333,13 +2333,15 @@ def nome_da_pausa(unit: str) -> str:
     return unit.removesuffix(".service")
 
 
-def avaliar_unit(campos: dict, pausada: bool = False) -> dict | None:
+def avaliar_unit(campos: dict, pausada: bool = False, tem_gatilho: bool = False) -> dict | None:
     """Uma unit pelo `systemctl --user show`. None: não está carregada (não
     instalada, ou mascarada de propósito), não é vermelho nem amarelo. Oneshot de
     timer fica `inactive`/`success` entre as rodadas: é ok. O systemd zera o Result
     no start, então a próxima rodada com sucesso apaga a queda sozinha.
     Daemon (Restart= e sem timer/path) e .path têm de estar `active`: parados, ninguém religa o que
-    eles fazem (HC-5/HC-6). `pausada`: a marca de pausa da unit existe."""
+    eles fazem (HC-5/HC-6). `pausada`: a marca de pausa da unit existe. `tem_gatilho`: há um .timer/.path
+    instalado com o mesmo nome; com ele desabilitado o TriggeredBy vem vazio, e o pncp-catchup (Radar pausado
+    de propósito em 11/10, Restart=on-failure só para retentar a coleta) virava "daemon parado" em 19/10."""
     unit, carga = campos.get("Id", "?"), campos.get("LoadState", "")
     if carga in ("", "not-found", "masked"):
         return None
@@ -2351,7 +2353,7 @@ def avaliar_unit(campos: dict, pausada: bool = False) -> dict | None:
         if ativo == "active" or pausada:
             return {**base, "estado": "ok"}
         return {**base, "estado": "atencao", "parada": True, "motivo": f"o gatilho está {ativo or 'parado'}"}
-    daemon = campos.get("Restart") in RESTART_DE_DAEMON and not campos.get("TriggeredBy")
+    daemon = campos.get("Restart") in RESTART_DE_DAEMON and not campos.get("TriggeredBy") and not tem_gatilho
     if daemon and ativo == "inactive" and not pausada:
         return {**base, "estado": "atencao", "parada": True,
                 "motivo": f"deveria ficar sempre de pé (Restart={campos['Restart']}) e está parada"}
@@ -2425,7 +2427,11 @@ def units_que_cairam() -> list[dict]:
                     if i["instalado"].startswith("~/.config/systemd/user/") and i["instalado"].endswith((".service", ".path"))
                     and i["estado"] in ("igual", "diferente")} - UNITS_COM_VERIFICACAO_PROPRIA)
     campos = _campos_das_units(nomes)
-    avaliadas = [a for a in (avaliar_unit(campos[n], pausado_de_proposito(nome_da_pausa(n))) for n in nomes if n in campos) if a]
+    gatilhos = {i["instalado"].rsplit("/", 1)[-1].rsplit(".", 1)[0] for i in itens
+                if i["instalado"].endswith((".timer", ".path")) and i["estado"] in ("igual", "diferente")}
+    avaliadas = [a for a in (avaliar_unit(campos[n], pausado_de_proposito(nome_da_pausa(n)),
+                                          tem_gatilho=n.endswith(".service") and n[:-len(".service")] in gatilhos)
+                             for n in nomes if n in campos) if a]
     return [avaliar_units(avaliadas, agora())] if avaliadas else []
 
 
