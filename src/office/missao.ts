@@ -13,11 +13,31 @@ export interface MovimentoDaMissao {
   como?: string
   /** O combinado é o movimento: "Já resolvi" e "Remarcar" moram no bloco, e a caixa separada some. */
   doCombinado: boolean
+  /** O botão de destaque: abrir o WhatsApp, ou "Já resolvi" quando a mensagem já saiu depois do combinado. */
+  primario: 'whatsapp' | 'resolvi'
+  /** O combinado, quando ele deixou de ser o título (já escreveu): fica à vista para conferir. */
+  lembrete?: string
 }
 
 const LER_A_CONVERSA = 'Abra a conversa no WhatsApp e leia até a última mensagem: o histórico ainda não chegou aqui.'
 const diaEMes = (d: string) => d.split('-').reverse().slice(0, 2).join('/')
 const diasEntre = (de: string, ate: string) => Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
+const emSP = (iso: string, campos: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', ...campos }).format(new Date(iso))
+const instante = (s?: string) => Date.parse(s ?? '') || 0
+
+/**
+ * A nossa última mensagem saiu no dia do combinado ou depois, depois de ele ser anotado, e o lead não
+ * respondeu ainda: o combinado provavelmente foi cumprido e falta só dizer isso aqui (19/10/2026, a
+ * Jéssica: o Rômulo escreveu às 10:54 e o painel seguia mandando "abrir a conversa").
+ */
+function escreveuDepois(lead: CrmLead, combinado: { data: string; registradoEm?: string }): string | null {
+  const saida = lead.conversa?.ultimaSaida
+  if (!saida || !instante(saida)) return null
+  if (emSP(saida, { year: 'numeric', month: '2-digit', day: '2-digit' }) < combinado.data) return null
+  if (instante(saida) <= instante(combinado.registradoEm)) return null
+  if (instante(lead.conversa?.ultimaEntrada) > instante(saida)) return null
+  return saida
+}
 
 /**
  * PURO. O bloco "Seu próximo movimento" das Minhas decisões. Antes (19/10/2026, a Jéssica) ele dizia só
@@ -33,23 +53,33 @@ export function movimentoDaMissao(lead: CrmLead, acao: AcaoDeVenda | null | unde
   const ler = lead.links?.whatsapp ? (conferir ? LER_A_CONVERSA : 'Abra a conversa no WhatsApp e veja onde ela parou.') : 'Leia a conversa em “Ver contexto completo”.'
   if (combinado && (!acao || conferir || acao.tipo === 'combinado')) {
     const atraso = diasEntre(combinado.data, hoje)
+    const quando = atraso <= 0 ? 'Combinado para hoje' : `Combinado para ${diaEMes(combinado.data)} · ${atraso} ${atraso === 1 ? 'dia' : 'dias'} de atraso`
+    const saida = escreveuDepois(lead, combinado)
+    if (saida) {
+      const dia = emSP(saida, { year: 'numeric', month: '2-digit', day: '2-digit' })
+      const hora = emSP(saida, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      return {
+        titulo: `Você já escreveu ${dia === hoje ? 'hoje' : `em ${diaEMes(dia)}`} às ${hora}. Se cumpriu o combinado, marque como resolvido.`,
+        quando, atrasado: false, lembrete: combinado.texto.trim(),
+        passos: ['Compare o que você mandou com o combinado abaixo.', 'Cobriu: toque em “Já resolvi”. A vez passa a ser do cliente.', 'Faltou algo: complete pelo WhatsApp e depois toque em “Já resolvi”.'],
+        doCombinado: true, primario: 'resolvi',
+      }
+    }
     return {
-      titulo: combinado.texto.trim(),
-      quando: atraso <= 0 ? 'Combinado para hoje' : `Combinado para ${diaEMes(combinado.data)} · ${atraso} ${atraso === 1 ? 'dia' : 'dias'} de atraso`,
-      atrasado: atraso > 0,
+      titulo: combinado.texto.trim(), quando, atrasado: atraso > 0,
       passos: [ler, 'Faça o combinado acima, se ainda couber no que a conversa mostra.', 'Volte aqui: “Já resolvi” se fez, “Remarcar” se ficou para outro dia.'],
-      doCombinado: true,
+      doCombinado: true, primario: 'whatsapp',
     }
   }
   if (conferir) return {
     titulo: 'Ler a conversa antes de mandar qualquer coisa',
     atrasado: false,
     passos: [ler, 'Decida a próxima mensagem com o que leu e mande pelo WhatsApp.', 'Se combinou algo, conte em “Informar algo ao time”.'],
-    doCombinado: false,
+    doCombinado: false, primario: 'whatsapp',
   }
   const agora = acao ? agoraDaFicha(lead, acao) : null
-  if (agora) return { titulo: agora.frase, como: agora.como, atrasado: false, passos: [], doCombinado: false }
-  return { titulo: p?.texto || 'Leia a resposta e continue a conversa com o cliente.', atrasado: false, passos: [], doCombinado: false }
+  if (agora) return { titulo: agora.frase, como: agora.como, atrasado: false, passos: [], doCombinado: false, primario: 'whatsapp' }
+  return { titulo: p?.texto || 'Leia a resposta e continue a conversa com o cliente.', atrasado: false, passos: [], doCombinado: false, primario: 'whatsapp' }
 }
 
 export interface MarcoDaMissao {

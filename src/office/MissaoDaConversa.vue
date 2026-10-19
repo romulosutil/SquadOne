@@ -19,6 +19,8 @@ const linkDaAcao = computed(() => props.acao && !props.acao.primeiroContato ? pr
 const hoje = diaEmSP(new Date())
 const combinado = computed(() => { const p = props.lead.proximoPasso; return p?.texto.trim() && p.data && p.data <= hoje ? p : null })
 const movimento = computed(() => movimentoDaMissao(props.lead, props.acao, hoje))
+// A mensagem já saiu depois do combinado: o toque que falta é o "Já resolvi", não abrir o WhatsApp de novo.
+const resolvidoPrimeiro = computed(() => movimento.value.doCombinado && movimento.value.primario === 'resolvi')
 const ajuste = ref<'concluir' | 'reagendar' | null>(null)
 const ultima = computed(() => props.lead.conversa?.ultima ?? null)
 const rotuloDaUltima = computed(() => ultima.value?.direcao === 'saida' ? 'Última mensagem enviada' : ultima.value?.papel === 'robo' ? 'Última mensagem do robô' : 'Última mensagem recebida')
@@ -61,14 +63,16 @@ async function anotar(a: AcaoDeVenda, confirmou = false) {
       <p id="missao-movimento" class="missao-conversa__acao">{{ movimento.titulo }}</p>
       <ol v-if="movimento.passos.length" class="missao-conversa__passos"><li v-for="(passo, i) in movimento.passos" :key="i">{{ passo }}</li></ol>
       <p v-else-if="movimento.como" class="texto-2 texto-pequeno">{{ movimento.como }}</p>
+      <div v-if="movimento.lembrete" class="missao-conversa__rascunho"><span class="sobretitulo">O combinado era</span><p>{{ movimento.lembrete }}</p></div>
       <div v-if="acao?.rascunho" class="missao-conversa__rascunho"><span class="sobretitulo">Mensagem pronta</span><p>{{ acao.rascunho }}</p></div>
       <div class="missao-conversa__acoes">
-        <a v-if="acao && linkDaAcao" class="botao botao--primario" :href="linkDaAcao.url" target="_blank" rel="noopener" @click="anotar(acao)">{{ linkDaAcao.rotulo }}</a>
+        <template v-if="resolvidoPrimeiro && !ajuste"><button type="button" class="botao botao--primario" @click="ajuste = 'concluir'">Já resolvi</button></template>
+        <a v-if="acao && linkDaAcao" :class="['botao', resolvidoPrimeiro ? '' : 'botao--primario']" :href="linkDaAcao.url" target="_blank" rel="noopener" @click="anotar(acao)">{{ linkDaAcao.rotulo }} <span aria-hidden="true">↗</span></a>
         <button v-if="acao && linkDaAcao && acao.anota === 'proposta'" type="button" class="botao" :disabled="anotando || anotado === acao.chave" @click="anotar(acao, true)">Enviei a proposta</button>
         <button v-if="acao && !linkDaAcao && !acao.primeiroContato && acao.anota === 'recusou'" type="button" class="botao botao--primario" :disabled="anotando || anotado === acao.chave" @click="anotar(acao, true)">Marcar a recusa</button>
         <button v-if="acao?.primeiroContato" type="button" class="botao botao--primario" @click="emit('ficha', lead.id)">Enviar pela Ficha</button>
-        <a v-if="lead.links.whatsapp" :class="['botao', acao && (linkDaAcao || acao.primeiroContato) ? '' : 'botao--primario']" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp <span aria-hidden="true">↗</span></a>
-        <template v-if="movimento.doCombinado && !ajuste"><button type="button" class="botao" @click="ajuste = 'concluir'">Já resolvi</button><button type="button" class="botao botao--leve" @click="ajuste = 'reagendar'">Remarcar</button></template>
+        <a v-if="lead.links.whatsapp && linkDaAcao?.url !== lead.links.whatsapp" :class="['botao', resolvidoPrimeiro || (acao && (linkDaAcao || acao.primeiroContato)) ? '' : 'botao--primario']" :href="lead.links.whatsapp" target="_blank" rel="noopener">Abrir conversa no WhatsApp <span aria-hidden="true">↗</span></a>
+        <template v-if="movimento.doCombinado && !ajuste"><button v-if="!resolvidoPrimeiro" type="button" class="botao" @click="ajuste = 'concluir'">Já resolvi</button><button type="button" class="botao botao--leve" @click="ajuste = 'reagendar'">Remarcar</button></template>
       </div>
       <AjustarProximoPasso v-if="movimento.doCombinado && ajuste" :key="ajuste" :lead="lead" :modo="ajuste" @registrado="emit('registrado')" @fechar="ajuste = null" />
       <p v-if="acao?.primeiroContato" class="texto-2 texto-pequeno">O primeiro contato sai pela Ficha, onde valem o horário e o ritmo de envio.</p>
@@ -95,7 +99,8 @@ async function anotar(a: AcaoDeVenda, confirmou = false) {
 .missao-conversa__objetivo p { margin: 0; }
 .missao-conversa__quando { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-2); }
 .missao-conversa__acao { font-size: var(--tam-titulo-bloco); font-weight: var(--peso-forte); line-height: 1.3; overflow-wrap: anywhere; }
-.missao-conversa__passos { display: grid; gap: var(--esp-1); margin: 0; padding-left: var(--esp-5); }
+.missao-conversa__passos { display: grid; gap: var(--esp-1); margin: 0; padding-left: var(--esp-5); list-style: decimal; }
+.missao-conversa__passos li { display: list-item; }
 .missao-conversa__rascunho { margin-top: var(--esp-3); padding: var(--esp-3); background: var(--superficie); border: var(--linha-fina); border-radius: var(--raio-controle); }
 .missao-conversa__rascunho p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .missao-conversa__combinado { display: grid; gap: var(--esp-3); padding: var(--esp-4); background: var(--superficie-2); border-radius: var(--raio-controle); }

@@ -86,3 +86,33 @@ it('ação com mensagem pronta (não é conferir nem combinado) segue a frase da
   assert.equal(m.como, 'Responda curto.')
   assert.deepEqual(m.passos, [])
 })
+
+// 19/10/2026, a Jéssica de novo: o Rômulo escreveu às 10:54 e o painel seguia mandando abrir a conversa.
+const escreveu = (ultimaSaida: string, extra: Record<string, unknown> = {}) => ({
+  ...comCombinado('2026-10-18'),
+  proximoPasso: { texto: JESSICA, data: '2026-10-18', registradoEm: '2026-10-17T20:00:00Z' },
+  conversa: { desde: '2026-10-10T12:00:00Z', mensagens: 9, ultima: { direcao: 'saida', em: ultimaSaida, trecho: 'Bom dia' }, ultimaSaida, ...extra },
+}) as unknown as CrmLead
+const combinadoComLink = { ...conferir, conferirHistorico: undefined, link: { rotulo: 'Abrir conversa no WhatsApp', url: 'https://wa.me/55' } } as AcaoDeVenda
+
+it('mensagem nossa no dia do combinado ou depois: o destaque é o "Já resolvi" e o combinado fica como lembrete', () => {
+  const m = movimentoDaMissao(escreveu('2026-10-19T13:54:00Z'), combinadoComLink, '2026-10-19')
+  assert.equal(m.primario, 'resolvi')
+  assert.equal(m.doCombinado, true)
+  assert.equal(m.titulo, 'Você já escreveu hoje às 10:54. Se cumpriu o combinado, marque como resolvido.')
+  assert.equal(m.lembrete, JESSICA)
+  assert.equal(m.atrasado, false)
+  assert.match(m.passos[1], /Já resolvi/)
+})
+
+it('mensagem de outro dia diz a data; antes do combinado, antes de anotá-lo ou com resposta depois não conta', () => {
+  assert.match(movimentoDaMissao(escreveu('2026-10-18T15:00:00Z'), combinadoComLink, '2026-10-19').titulo, /^Você já escreveu em 18\/10 às 12:00/)
+  // 17/10 às 22h em SP: véspera do combinado.
+  assert.equal(movimentoDaMissao(escreveu('2026-10-18T01:00:00Z'), combinadoComLink, '2026-10-19').primario, 'whatsapp')
+  const anotadoDepois = { ...escreveu('2026-10-19T13:54:00Z'), proximoPasso: { texto: JESSICA, data: '2026-10-18', registradoEm: '2026-10-19T14:00:00Z' } } as unknown as CrmLead
+  assert.equal(movimentoDaMissao(anotadoDepois, combinadoComLink, '2026-10-19').primario, 'whatsapp')
+  const respondeu = escreveu('2026-10-19T13:54:00Z', { ultimaEntrada: '2026-10-19T14:10:00Z' })
+  const m = movimentoDaMissao(respondeu, combinadoComLink, '2026-10-19')
+  assert.equal(m.primario, 'whatsapp')
+  assert.equal(m.titulo, JESSICA)
+})
