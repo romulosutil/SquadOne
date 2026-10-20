@@ -25,6 +25,7 @@ import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
 import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
 import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-site.ts'
 import { lerSpiced, qualificadoParaProposta, type Spiced } from './spiced'
+import { ehTipoAarr } from './aarr'
 
 // ------------------------------------------------------------------ onde o copiloto vale
 
@@ -211,6 +212,8 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     .slice(0, 4)
     .map((o) => ({ fala: o.fala, respostaPronta: preencher(o.resposta.texto, lead) }))
   const historico = [...lead.eventos]
+    // Confirmações comerciais ficam na Ficha. Valores, quantidades e referências de recibo nunca vão ao modelo.
+    .filter(e => !ehTipoAarr(e.tipo))
     .sort((a, b) => a.em.localeCompare(b.em))
     .slice(-MAX_EVENTOS_NO_DOSSIE)
     .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(textoParaOModelo(e.texto, mascarar), MAX_TEXTO_DE_EVENTO) } : {}) }))

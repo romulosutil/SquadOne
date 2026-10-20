@@ -22,7 +22,7 @@ import type { CrmProduto } from "../src/operations/types.ts";
 
 const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
 /** O que a Próxima venda anota num toque (AnotacaoDeVenda de src/operations/proxima-venda.ts). */
-const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou", "cadencia_enviada"]);
+const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou", "cadencia_enviada", "indicacao_pedida"]);
 import { lerStatusDoDell } from "./dell-status.ts";
 import { lerPrimeirosDoTime, montarFrenteComercial } from "./frente-comercial.ts";
 
@@ -771,7 +771,7 @@ export function createOperationsRouter(options: {
       return void res.status(400).json({ error: "O resumo deve ter no máximo 1000 caracteres." });
     }
     try {
-      const r = await memoriaDaVenda.anotarUmaVez(chave, tipo, "central", () => crm.registrar({ produto, id, tipo, texto: ["proposta", "cadencia_enviada", "followup_enviado"].includes(tipo) && typeof texto === "string" ? texto : "", data: "" }));
+      const r = await memoriaDaVenda.anotarUmaVez(chave, tipo, "central", () => crm.registrar({ produto, id, tipo, texto: ["proposta", "cadencia_enviada", "followup_enviado", "indicacao_pedida"].includes(tipo) && typeof texto === "string" ? texto : "", data: "" }));
       res.status(r.anotou ? 201 : 200).json(r.anotou ? { anotou: true } : { anotou: false, jaEstava: true });
     } catch (error) {
       responderErroDoRegistro(res, error);

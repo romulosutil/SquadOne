@@ -117,7 +117,7 @@ const ler = (no, chave, extra) => {
     // mostrava a primeira mensagem pela metade (26 de 39 em 08/10/2026).
     // Notas e propostas aceitam 1000 caracteres no registro; o retrato deve preservá-los.
     // Cortar JSON do aprendizado em 500 fazia a nota salva sumir na próxima leitura.
-    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, l.tipo === 'spiced' && norm(k) === 'texto' && String(l[k] ?? '').length > 1000
+    .map(l => ({ ...Object.fromEntries(colunas.map(k => [k, ['spiced','cadencia_enviada','valor_proposta','pagamento_confirmado','receita_desfeita','origem','motivo_perda','retencao_3m','indicacao_pedida','indicacao_recebida'].includes(l.tipo) && norm(k) === 'texto' && String(l[k] ?? '').length > 1000
       ? '' : txt(l[k]).slice(0, norm(k).startsWith('wa_') ? 4000 : norm(k) === 'texto' ? 1000 : 500)])),
       ...(extra ? extra(l) : {}) }));
   return { colunas: extra ? [...colunas, ...Object.keys(extra({}))] : colunas, linhas };
@@ -156,6 +156,7 @@ VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confer
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
+  'valor_proposta','pagamento_confirmado','receita_desfeita','origem','motivo_perda','retencao_3m','indicacao_pedida','indicacao_recebida',
   'spiced', 'cadencia_enviada',
   'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu', 'recusou', 'recusou_desfeito',
   'ganhou', 'ganhou_desfeito', 'dispensado', 'dispensado_desfeito'];
@@ -166,6 +167,47 @@ if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) return recusa('Lead inválido.');
 if (!TIPOS.includes(b.tipo)) return recusa('Tipo de registro inválido.');
 let texto = txt(b.texto, 1000);
 let data = txt(b.data, 10);
+const AARR = ['valor_proposta','pagamento_confirmado','receita_desfeita','origem','motivo_perda','retencao_3m','indicacao_pedida','indicacao_recebida'];
+if (AARR.includes(b.tipo)) {
+  let v;
+  try { v = JSON.parse(b.texto); } catch { return recusa('Registro comercial inválido.'); }
+  const keys = ks => Object.keys(v).every(k => ks.includes(k));
+  const real = d => typeof d === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(d) && Number.isFinite(Date.parse(d+'T12:00:00Z')) && new Date(d+'T12:00:00Z').toISOString().slice(0,10) === d;
+  const hoje = new Date(Date.now()-10800000).toISOString().slice(0,10);
+  if (typeof b.texto !== 'string' || b.texto.length > 1000 || !v || Array.isArray(v) || v.versao !== 1) return recusa('Registro comercial inválido.');
+  if (['origem','motivo_perda'].includes(b.tipo)) {
+    const valores = b.tipo === 'origem' ? ['cacador','plus','indicacao','CDL','anuncio'] : ['preco','timing','sem-dor','decisor','concorrente','sumiu'];
+    if (!keys(['versao','valor']) || !valores.includes(v.valor)) return recusa('Categoria comercial inválida.');
+    v = {versao:1,valor:v.valor}; data = '';
+  } else {
+    const max = ['receita_desfeita','indicacao_pedida'].includes(b.tipo) ? 400 : 200;
+    if (typeof v.referencia !== 'string' || !v.referencia.trim() || v.referencia.length > max || /[\\u0000-\\u001f\\u007f]/.test(v.referencia) || !real(v.data) || v.data > hoje) return recusa('Confira referência e data real até hoje.');
+    if (['valor_proposta','pagamento_confirmado'].includes(b.tipo)) {
+      if (!keys(['versao','oferta','componente','quantidade','valor_centavos','referencia','data'])) return recusa('Condição comercial inválida.');
+      const tabela = {'encontrado:implantacao':69000,'encontrado:mensalidade':3900,'respondido:implantacao':240000,'respondido:mensalidade':29000,
+        'anuncios:mensalidade':59000,'anuncios-duas:mensalidade':98000,'redes:mensalidade':79000,'fonte:implantacao':150000,'fonte:parcela-1':75000,'fonte:parcela-2':75000,'fonte-em-dia:mensalidade':19000};
+      let valor = tabela[v.oferta+':'+v.componente];
+      if (v.oferta === 'iris' && v.componente === 'mensalidade' && Number.isSafeInteger(v.quantidade) && v.quantidade > 0) valor = Math.min(v.quantidade,15)*3900+Math.max(0,Math.min(v.quantidade,40)-15)*3200+Math.max(0,v.quantidade-40)*2500;
+      if (!Number.isSafeInteger(valor) || valor <= 0 || (v.valor_centavos !== undefined && v.valor_centavos !== valor) || (v.oferta !== 'iris' && v.quantidade !== undefined)) return recusa('Valor fora do catálogo.');
+      if (b.produto === 'estampa' || b.produto === 'iris' && v.oferta !== 'iris' || b.produto === 'site' && v.oferta !== 'encontrado' || b.produto === 'prumo' && v.oferta === 'iris') return recusa('A condição não pertence à oferta.');
+      v = {versao:1,oferta:v.oferta,componente:v.componente,...(v.oferta==='iris'?{quantidade:v.quantidade}:{}),valor_centavos:valor,referencia:v.referencia.trim(),data:v.data};
+    } else if (b.tipo === 'receita_desfeita') {
+      if (!keys(['versao','tipo','referencia','data']) || !['pagamento_confirmado','valor_proposta'].includes(v.tipo)) return recusa('Reversão inválida.');
+      v = {versao:1,tipo:v.tipo,referencia:v.referencia.trim(),data:v.data};
+    } else if (b.tipo === 'retencao_3m') {
+      if (!keys(['versao','referencia','inicio','data','ativa']) || !real(v.inicio) || typeof v.ativa !== 'boolean') return recusa('Retenção inválida.');
+      const [a,m,d] = v.inicio.split('-').map(Number); const mes = new Date(Date.UTC(a,m+1,1));
+      mes.setUTCDate(Math.min(d,new Date(Date.UTC(mes.getUTCFullYear(),mes.getUTCMonth()+1,0)).getUTCDate()));
+      if (v.data < mes.toISOString().slice(0,10)) return recusa('Ainda não chegou ao terceiro mês.');
+      v = {versao:1,referencia:v.referencia.trim(),inicio:v.inicio,data:v.data,ativa:v.ativa};
+    } else {
+      if (!keys(['versao','referencia','data'])) return recusa('Indicação inválida.');
+      v = {versao:1,referencia:v.referencia.trim(),data:v.data};
+    }
+    data = v.data;
+  }
+  texto = JSON.stringify(v);
+}
 if (b.tipo === 'spiced') {
   // Espelho de src/operations/spiced.ts: nada é truncado ou confirmado pelo modelo.
   const obj = v => v && typeof v === 'object' && !Array.isArray(v);

@@ -1,4 +1,5 @@
 import type { CrmLead, CrmProduto } from './types'
+import { contextoHumanoPreservado, ultimaRespostaHumanaEm } from './resposta-humana'
 import { hashDoLead, fisherExato } from './ab-video'
 import { respondeuDeGente } from './resultados'
 
@@ -48,11 +49,9 @@ export function leituraDoFollowup(leads: readonly CrmLead[]) {
     const envio = Date.parse(evento.em)
     if (!Number.isFinite(envio)) continue
     const b = bracos[meta.braco]; b.enviados++
-    // ultimaEntrada é humana no contrato do observador; ultimaEntradaRobo é outro campo.
-    const resposta = Math.max(Date.parse(lead.marcos.respondeu ?? '') || 0, lead.resposta?.tipo !== 'bot' ? Date.parse(lead.resposta?.em ?? '') || 0 : 0, Date.parse(lead.conversa?.ultimaEntrada ?? '') || 0)
-    const contextoHumano = { ...lead, marcos: { ...lead.marcos, ...(resposta ? { respondeu: new Date(resposta).toISOString() } : {}) },
-      resposta: lead.resposta?.tipo === 'bot' && (lead.marcos.respondeu || lead.conversa?.ultimaEntrada) ? undefined : lead.resposta }
-    if (resposta > envio && respondeuDeGente(contextoHumano)) b.responderam++
+    const resposta = ultimaRespostaHumanaEm(lead)
+    const contextoHumano = contextoHumanoPreservado(lead)
+    if (resposta > envio && contextoHumano && respondeuDeGente(contextoHumano)) b.responderam++
   }
   const lido = bracos.A.enviados >= MINIMO_POR_BRACO_DO_FOLLOWUP && bracos.B.enviados >= MINIMO_POR_BRACO_DO_FOLLOWUP
   return { bracos, lido, ...(lido ? { numeros: { taxaA: bracos.A.responderam / bracos.A.enviados, taxaB: bracos.B.responderam / bracos.B.enviados, p: fisherExato(bracos.A.responderam, bracos.A.enviados - bracos.A.responderam, bracos.B.responderam, bracos.B.enviados - bracos.B.responderam) } } : {}) }

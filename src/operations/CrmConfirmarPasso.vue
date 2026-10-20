@@ -41,9 +41,9 @@ async function confirmar() {
     <p><strong>{{ acao.titulo }}</strong></p>
     <blockquote>{{ acao.rascunho }}</blockquote>
     <a v-if="acao.link" class="botao" :href="acao.link.url" target="_blank" rel="noopener">Abrir no WhatsApp com esta mensagem</a>
-    <p class="crm-nota-pequena">Abrir não registra envio. Confirme somente depois de enviar. Esta confirmação guarda o degrau da cadência ou a versão do follow-up que saiu de verdade.</p>
+    <p class="crm-nota-pequena">Abrir não registra envio. Confirme somente depois de enviar. {{ acao.anota === 'indicacao_pedida' ? 'Esta confirmação guarda o pedido de indicação ligado ao pagamento confirmado e encerra esse lembrete.' : 'Esta confirmação guarda o degrau da cadência ou a versão do follow-up que saiu de verdade.' }}</p>
     <label><input v-model="igual" type="checkbox" :disabled="bloqueado">Enviei a mensagem exibida, sem alterar o texto.</label>
-    <button class="botao" type="button" :disabled="bloqueado || !igual" @click="confirmar">{{ estado === 'salvando' ? 'Conferindo…' : 'Enviei esta mensagem' }}</button>
+    <button class="botao" type="button" :disabled="bloqueado || !igual" @click="confirmar">{{ estado === 'salvando' ? 'Conferindo…' : acao.anota === 'indicacao_pedida' ? 'Enviei o pedido de indicação' : 'Enviei esta mensagem' }}</button>
     <p v-if="aviso" role="status" class="recado">{{ aviso }}</p>
   </section>
 </template>

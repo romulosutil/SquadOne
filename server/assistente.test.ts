@@ -479,6 +479,15 @@ describe("a revisão adversarial de 17/10/2026", () => {
     assert.match(dossie, /\[valor omitido\] tá bom\?/);
   });
 
+  it("ferramenta ler_lead omite registros comerciais estruturados inteiros", async () => {
+    const crm = crmDeMentira();
+    const dados = JSON.stringify({ valor_centavos: 69000, quantidade: 27, referencia: "recibo-reservado-aarr" });
+    crm.lead.eventos.push(...["valor_proposta", "pagamento_confirmado", "receita_desfeita", "retencao_3m"].map(tipo => ({ tipo, em: "2026-10-19T13:00:00Z", rotulo: "Pagamento R$ 690", texto: dados, registroTexto: dados, origem: "manual", fonte: "teste" }) as never));
+    const leituras = new LeiturasDaMensagem({ visao: crm.visao }, () => AGORA, silencio);
+    const dossie = JSON.stringify(await leituras.executar("ler_lead", { produto: "site", id: crm.lead.id }));
+    assert.doesNotMatch(dossie, /recibo-reservado-aarr|valor_centavos|quantidade|Pagamento R\$ 690/);
+  });
+
   it("a poda de 90 dias roda pela data da linha, no boot e na primeira gravação de cada dia", async () => {
     const dir = await tempDir();
     const linha = (quando: string, id: string) => JSON.stringify({ tipo: "mensagem", quando, conversaId: "conversa-julho", mensagem: { id, n: 1, autor: "romulo", texto: id, quando, fontes: [], cartoes: [] } });

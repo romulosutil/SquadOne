@@ -24,6 +24,35 @@ def validar(s, produto='site', texto=None, tipo='spiced'):
 
 
 class SpicedDoRegistro(unittest.TestCase):
+    def test_aarr_catalogo_iris_e_oferta_proibem_valor_livre(self):
+        base = {'versao': 1, 'oferta': 'encontrado', 'componente': 'implantacao', 'referencia': 'recibo', 'data': '2026-10-19'}
+        r = validar(base, tipo='pagamento_confirmado')
+        self.assertTrue(r['ok'])
+        self.assertEqual(json.loads(r['linha']['texto'])['valor_centavos'], 69000)
+        for extra in [{'valor_centavos': 9000}, {'data': '2026-02-30'}, {'data': '2099-01-01'}, {'referencia': ''}, {'quantidade': 2}]:
+            with self.subTest(extra=extra): self.assertFalse(validar({**base, **extra}, tipo='pagamento_confirmado')['ok'])
+        for produto in ['iris','estampa']:
+            self.assertFalse(validar(base, produto, tipo='valor_proposta')['ok'])
+        for q, valor in [(1,3900),(15,58500),(16,61700),(20,74500),(40,138500),(41,141000)]:
+            s = {**base, 'oferta': 'iris', 'componente': 'mensalidade', 'quantidade': q}
+            r = validar(s, 'iris', tipo='pagamento_confirmado')
+            self.assertTrue(r['ok'])
+            self.assertEqual(json.loads(r['linha']['texto'])['valor_centavos'], valor)
+        for q in [0,-1,1.5]: self.assertFalse(validar({**base,'oferta':'iris','componente':'mensalidade','quantidade':q}, 'iris', tipo='pagamento_confirmado')['ok'])
+
+    def test_aarr_categorias_calendario_indicacoes_e_reversao_longa(self):
+        for tipo, valores in [('origem',['cacador','plus','indicacao','CDL','anuncio']),('motivo_perda',['preco','timing','sem-dor','decisor','concorrente','sumiu'])]:
+            for valor in valores: self.assertTrue(validar({'versao':1,'valor':valor}, tipo=tipo)['ok'])
+            self.assertFalse(validar({'versao':1,'valor':'inventado'}, tipo=tipo)['ok'])
+        retencao = {'versao':1,'referencia':'encontrado','inicio':'2026-01-31','data':'2026-03-31','ativa':True}
+        self.assertTrue(validar(retencao,tipo='retencao_3m')['ok'])
+        self.assertFalse(validar({**retencao,'data':'2026-03-30'},tipo='retencao_3m')['ok'])
+        undo = {'versao':1,'tipo':'pagamento_confirmado','referencia':'x'*200+'|2026-10-19|encontrado|implantacao','data':'2026-10-19'}
+        self.assertTrue(validar(undo,tipo='receita_desfeita')['ok'])
+        for tipo in ['indicacao_pedida','indicacao_recebida']:
+            self.assertTrue(validar({'versao':1,'referencia':'recibo','data':'2026-10-19'},tipo=tipo)['ok'])
+        self.assertFalse(validar({**undo,'valor_centavos':1},tipo='receita_desfeita')['ok'])
+
     def test_cadencia_duravel_valida_degraus_e_origem(self):
         origem = '2026-10-19T15:00:00.000Z'
         for produto in ['site', 'prumo', 'iris', 'estampa', 'plus']:

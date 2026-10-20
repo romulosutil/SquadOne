@@ -7,6 +7,7 @@ import { describe, it } from 'node:test'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import { build } from 'esbuild'
 import { acaoDoLead } from './operations/proxima-venda.ts'
+import { opcoesDeterministicasDeReceita, textoDoRegistroReceita } from './operations/aarr.ts'
 
 // Renderizador Vue em memória: sem navegador, disco de cliente ou serviço real.
 const arquivo = fileURLToPath(new URL('./operations/CrmConfirmarPasso.vue', import.meta.url))
@@ -39,6 +40,16 @@ const iso = (dia: string) => dia + 'T15:00:00.000Z'
 const lead = () => ({ id:'site:fixture',chave:'fixture',produto:'site',empresa:'Empresa fictícia',etapa:'proposta',sinal:'proposta',proposta:{em:iso('2026-10-15'),data:'2026-10-15'},marcos:{},conversa:{desde:iso('2026-10-15'),mensagens:1,ultima:{direcao:'saida',em:iso('2026-10-15'),trecho:'Proposta enviada'}},eventos:[],links:{whatsapp:'https://wa.me/5511999990000'} } as any)
 const visao = (l: any) => ({estado:'ok',leads:[l],hoje:[{id:'proposta',titulo:'',explicacao:'',itens:[{leadId:l.id,acao:'',detalhe:'',ordem:1,links:[]}]}]} as any)
 describe('Ficha real: confirmação da cadência', () => {
+ it('pedido de indicação guarda metadata real uma vez e desaparece após releitura',async()=>{
+  const relogio=Date.now,anterior=globalThis.fetch;Date.now=()=>Date.parse(iso('2026-10-19'))
+  const l=lead();Object.assign(l,{etapa:'ganho',proposta:undefined,marcos:{enviado:iso('2026-09-01')}})
+  const pagamento=textoDoRegistroReceita('pagamento_confirmado',opcoesDeterministicasDeReceita(l)[0],'contrato-setembro','2026-09-01')
+  l.eventos=[{tipo:'pagamento_confirmado',texto:pagamento,registroTexto:pagamento,origem:'manual',em:iso('2026-09-01'),rotulo:'',fonte:'fixture'}]
+  const v=visao(l),acao=acaoDoLead(v,l.id,Date.now())!;assert.equal(acao.anota,'indicacao_pedida')
+  const posts:any[]=[];globalThis.fetch=(async(_u,op)=>{if(op?.method){const corpo=JSON.parse(String(op.body));posts.push(corpo);l.eventos.push({tipo:corpo.tipo,texto:corpo.texto,registroTexto:corpo.texto,origem:'manual',em:iso('2026-10-19'),rotulo:'',fonte:'fixture'});return new Response('{}',{status:201})}return new Response(JSON.stringify(v))})as typeof fetch
+  const{raiz,app}=montar(l,acao)
+  try{assert.equal(posts.length,0);todos(raiz).find(n=>n.tagName==='INPUT').props['onUpdate:modelValue'](true);await runtime.nextTick();const botao=todos(raiz).find(n=>n.type==='button');assert.match(texto(botao),/pedido de indicação/);await botao.props.onClick();await botao.props.onClick();assert.equal(posts.length,1);assert.equal(posts[0].tipo,'indicacao_pedida');assert.match(JSON.parse(posts[0].texto).referencia,/contrato-setembro/);assert.equal(acaoDoLead(visao(l),l.id,Date.now()),null)}finally{app.unmount();Date.now=relogio;globalThis.fetch=anterior}
+ })
  it('follow-up só confirma braço A e versão depois do envio humano', async()=>{
   const relogio=Date.now,anterior=globalThis.fetch;Date.now=()=>Date.parse(iso('2026-10-19'))
   const l=lead();Object.assign(l,{etapa:'contato',proposta:undefined,marcos:{enviado:iso('2026-10-15')},links:{whatsapp:'https://wa.me/5511999990000',followup:'https://wa.me/5511999990000?text=Pergunta%20de%20controle'}})

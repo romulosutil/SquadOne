@@ -38,3 +38,15 @@ A revisão automática inicialmente recusou o SCP por falta de comprovação do 
 Conferir as conversas atuais, usar os preparos condicionais e confirmar a qualificação real na Ficha antes de preparar proposta. Oito ações internas datadas não significam ligações marcadas ou convites enviados. Comece e Roda Mais continuam aguardando conforme os registros existentes. Quantidade de fichas da Iris e preço da Estamparia exigem confirmação própria.
 
 **Estrela-guia em 19/10:** pagamentos confirmados por semana continuam **não medidos** até a instrumentação da Fase 4. Ganhos registrados permanecem zero; isso não foi usado como prova de zero pagamentos.
+
+## Fase 3 — instalada às 21:17 de 19/10
+
+Commit `51dec32350d927cb058cfa25e3bffd21afae4ab2`, pai `5cce535512024cd62b971f63551383ee922b04f2`. Publicação por índice e objetos isolados, CAS e push normal; HEAD e índice do checkout antigo preservados. A Central foi construída na Mel com sua configuração real às 21:16:30 e respondeu às 21:16:31. O dist de teste não foi transferido.
+
+O snapshot conciliado passou em **3.394 testes, zero falhas e dois ignorados**, typecheck e build. Rota real com CRM e n8n fictícios verificou dia zero, confirmação do primeiro degrau, duplicata, reinício, terceiro degrau, ação antiga recusada após resposta humana e versão do follow-up. O componente atual da Ficha foi exercitado com Vue real. Na Mel, HOME e dados temporários: **130 testes publicáveis e 31 do acervo excluído passaram**, sem skips, incluindo locks Linux. O acervo de pausa não foi publicado nem instalado, pois script e unidades não existem nessa instalação.
+
+Instalação restrita: sete scripts existentes e nós autorizados dos fluxos 03, 05 e 08. O 05 não tinha leitura do CRM: recebeu somente o nó de leitura, duas conexões necessárias e o código Decidir; os demais nós e configurações foram preservados. Falha na fonte CRM interrompe a expiração. Nenhum publicador genérico ou caçador foi executado. O n8n explicitou `saveDataErrorExecution=all`; foi conferido no código instalado que o padrão herdado também era `all`, sem variável de ambiente sobrescrevendo-o. A normalização não alterou a retenção anterior.
+
+Conferência real às **21:17:00**: sete rotas 200, OAuth e Tasks conectados, clone da Mel limpo, sete cópias instaladas idênticas à main; dez leads preservados quanto a etapas, próximos passos e propostas, com oito preparos e duas pausas. Estados ativos dos workflows iguais ao backup. Nenhuma escrita de teste no CRM ou mensagem ao lead. Braços B e D continuam desligados, pendentes da revisão dos textos pelo Rômulo.
+
+Evidências e rollback protegidos na pasta remota da Fase 3, `~/.local/state/squadone-deploy/prumo-fase3-20261020T000228Z/`; confirmação sanitizada em `output/diagnostico-vendas/integracao/fase3/instalacao-fase3.json`. Rollback preparado e não executado. Estrela-guia ainda não medida até a Fase 4.

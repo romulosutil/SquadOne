@@ -35,6 +35,7 @@ import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, indicouInteresseDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { lacunasDoSpiced, qualificadoParaProposta } from './spiced'
 import { cadenciaDoLead, textoDoRegistroCadencia } from './cadencia'
+import { indicacaoPendente, textoDoRegistroAarr } from './aarr'
 import { metadataDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
 import { contatoPausado } from './aprendizado-comercial'
 import { comHistoricoConferido } from './historico-comercial'
@@ -49,7 +50,7 @@ export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depoi
 export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_enviado'
 
 /** O que o "Enviei" grava na aba CRM: um envio, a proposta (o servidor põe a data de hoje) ou a recusa. */
-export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cadencia_enviada'
+export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cadencia_enviada' | 'indicacao_pedida'
 
 export interface AcaoDeVenda {
   conferirHistorico?: boolean
@@ -506,6 +507,17 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true,
   }))
   fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
+  if (ctx.agora !== undefined) for (const l of leads) {
+    if (l.etapa === 'perdido' || ['negativa', 'exclusao'].includes(l.resposta?.tipo ?? '') || (l.proximoPasso?.data && l.proximoPasso.data > new Date(ctx.agora - 10800_000).toISOString().slice(0, 10))) continue
+    const pago = indicacaoPendente(l, ctx.agora)
+    if (!pago) continue
+    const rascunho = 'Oi! Como está sendo usar o que preparamos? Se conhece outra empresa que precisa dessa ajuda, pode nos apresentar?'
+    fila.push({ chave: `${l.id}|indicacao|${pago.chave}`, leadId: l.id, produto: l.produto, empresa: l.empresa, tipo: 'combinado',
+      titulo: `Peça uma indicação a ${l.empresa}`, contexto: '30 dias depois do primeiro pagamento confirmado', porque: 'Converse sobre o resultado e peça uma apresentação, se fizer sentido.',
+      tatica: 'Confira o atendimento e envie à mão. Só confirme depois de pedir a indicação.', rascunho,
+      ...(l.links.whatsapp ? { link: { rotulo: 'Pedir indicação no WhatsApp', url: `${l.links.whatsapp}${l.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(rascunho)}` } } : {}),
+      anota: 'indicacao_pedida', textoDoRegistro: textoDoRegistroAarr('indicacao_pedida', { referencia: pago.chave, data: new Date(ctx.agora - 10800_000).toISOString().slice(0, 10) }), primeiroContato: false, quente: false })
+  }
   const vistas = new Set<string>()
   let primeiros = 0
   const depoisDoLink = leads.flatMap((l) => {

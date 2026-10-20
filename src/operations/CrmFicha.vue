@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CrmJornada from './CrmJornada.vue'
 import CrmAprendizado from './CrmAprendizado.vue'
 import CrmSpiced from './CrmSpiced.vue'
+import CrmReceita from './CrmReceita.vue'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
 import CrmHistorico from './CrmHistorico.vue'
 import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
@@ -186,7 +187,7 @@ const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
   ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
 const agora = computed(() => historicoPendente.value && !contatoEmPausa.value ? { frase: 'Confira a conversa antes de decidir a retomada.', citaOProximo: false } : agoraDaFicha(props.lead, acaoDaFila.value))
-const passoConfirmavel = computed(() => !contatoEmPausa.value && !historicoPendente.value && acaoDaFila.value?.rascunho && acaoDaFila.value.textoDoRegistro && ['cadencia_enviada', 'followup_enviado'].includes(acaoDaFila.value.anota ?? '') ? acaoDaFila.value : null)
+const passoConfirmavel = computed(() => !contatoEmPausa.value && !historicoPendente.value && acaoDaFila.value?.rascunho && acaoDaFila.value.textoDoRegistro && ['cadencia_enviada', 'followup_enviado', 'indicacao_pedida'].includes(acaoDaFila.value.anota ?? '') ? acaoDaFila.value : null)
 
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
 // demo depois do "sim", follow-up). `envia`: é uma mensagem ao lead; abrir não a registra (o observador
@@ -541,6 +542,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
     </header>
 
     <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
+    <CrmReceita :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 
     <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 

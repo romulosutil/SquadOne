@@ -51,6 +51,11 @@ describe('follow-up: braço enviado e versão duráveis', () => {
     l.conversa = { desde: iso(1), mensagens: 4, ultimaEntrada: iso(4), ultimaEntradaRobo: iso(5), entradas: { gente: 1, recepcao: 0, robo: 1 }, ultima: { direcao: 'entrada', em: iso(5), trecho: 'Atendimento automático', papel: 'robo' } }
     assert.equal(leituraDoFollowup([l]).bracos.A.responderam, 1)
   })
+  it('timestamp de resposta automática sozinho não é evidência humana', () => {
+    const l = enviados(1, 'A')[0]
+    l.resposta = { tipo: 'bot', trecho: 'Atendimento automático', em: iso(5) }
+    assert.equal(leituraDoFollowup([l]).bracos.A.responderam, 0)
+  })
 })
 describe('Plus: os primeiros 20 envios confirmados e o mesmo período do Site', () => {
   const plus = (id: string, d: number) => lead(id, 'plus', { eventos: [{ tipo: 'plus_enviado', origem: 'manual', fonte: 'teste', rotulo: 'Envio confirmado', em: iso(d) }], marcos: { enviado: iso(d), respondeu: iso(d + 1) }, resposta: { tipo: 'interesse', trecho: 'Quero ver', em: iso(d + 1) } })
@@ -74,6 +79,15 @@ describe('Plus: os primeiros 20 envios confirmados e o mesmo período do Site', 
     const r = leituraDoTestePlus([antigo, avancou], agora)
     assert.deepEqual(r.ids, [avancou.id])
     assert.equal(r.plus.queroVer, 1)
+  })
+  it('entrada humana preservada sobrevive a robô posterior; só robô com marco não vira resposta', () => {
+    const p = plus('humano-bot', 1)
+    p.etapa = 'proposta'; p.proposta = { em: iso(3), data: iso(3).slice(0, 10) }
+    p.resposta = { tipo: 'bot', trecho: 'Atendimento automático', em: iso(5) }
+    p.conversa = { desde: iso(1), mensagens: 3, ultimaEntrada: iso(2), ultimaEntradaRobo: iso(5), entradas: { gente: 1, recepcao: 0, robo: 1 }, ultima: { direcao: 'entrada', em: iso(5), trecho: 'Atendimento automático', papel: 'robo' } }
+    const bot = plus('so-bot', 1); bot.resposta!.tipo = 'bot'
+    const r = leituraDoTestePlus([p, bot], agora)
+    assert.deepEqual(r.plus, { enviados: 2, respostas: 1, queroVer: 1, propostas: 1 })
   })
 })
 describe('D na régua e objeções por oferta', () => {

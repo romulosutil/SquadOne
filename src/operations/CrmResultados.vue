@@ -16,6 +16,7 @@ import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 import { leituraDoTestePlus, TAMANHO_DO_TESTE_PLUS } from './plus-experimento'
 import { leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
+import { leituraAarr } from './aarr'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
 // rendeu, contado só sobre quem foi enviado no período. Só leitura: os números
@@ -24,7 +25,10 @@ import { leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-expe
 // "onde perde" (os degraus, depois do "sim", o vendedor do Telegram) e, numa dobra "Experimentos"
 // fechada, os três testes A/B (vídeo, 1ª mensagem, recibo): são medição em andamento, não decisão de
 // hoje, e ocupavam metade da tela. `resultados` é o placar do período (nicho, mensagem, site, horário).
-const props = withDefaults(defineProps<{ leads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
+const props = withDefaults(defineProps<{ leads: CrmLead[]; todosLeads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
+const aarr = computed(() => leituraAarr(props.leads, props.agora))
+const estrela = computed(() => leituraAarr(props.todosLeads, props.agora).estrelaGuia)
+const dinheiro = (centavos: number) => (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const periodo = ref<Periodo>('30')
 const testePlus = computed(() => leituraDoTestePlus(props.leads, props.agora))
@@ -97,6 +101,20 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
     </div>
 
     <template v-if="parte === 'numeros'">
+      <section class="crm-grupo" aria-labelledby="crm-aarr-titulo">
+        <header class="crm-grupo__cabeca"><h2 id="crm-aarr-titulo">AARRR · da conversa ao pagamento</h2></header>
+        <p class="crm-resultado__numeros"><strong>Estrela-guia: {{ estrela.pagamentos }} recebimentos confirmados nesta semana</strong> · {{ dinheiro(estrela.valorCentavos) }}.</p>
+        <p class="crm-nota-pequena">Todas as cinco linhas, independentemente do filtro. Semana de São Paulo iniciada em {{ estrela.inicioSemana }}. Conta recebimentos únicos por lead, referência e data; seus componentes somam o valor. Não conta clientes nem “ganhou”.</p>
+        <dl class="crm-aarr-faixa" aria-label="AARRR da seleção atual">
+          <div><dt>Aquisição · 30 dias</dt><dd>{{ aarr.aquisicao.respostas }} respostas de gente / {{ aarr.aquisicao.enviados }} enviados</dd></div>
+          <div><dt>Ativação · 30 dias</dt><dd>{{ aarr.ativacao.qualificados }} “quero ver” com dor, impacto e decisor confirmados / {{ aarr.ativacao.respostas }} respostas</dd></div>
+          <div><dt>Receita</dt><dd>{{ aarr.receita.pagamentos }} recebimentos confirmados · {{ aarr.receita.componentes }} componentes · {{ dinheiro(aarr.receita.valorCentavos) }}</dd><dd>Implantação e parcelas: {{ dinheiro(aarr.receita.implantacaoCentavos) }} · mensalidades recebidas: {{ dinheiro(aarr.receita.mensalidadeCentavos) }} · MRR confirmado: {{ dinheiro(aarr.receita.mrrCentavos) }}</dd></div>
+          <div><dt>Retenção</dt><dd>{{ aarr.retencao.ativas }} mensalidades explicitamente ativas no terceiro mês / {{ aarr.retencao.elegiveis }} elegíveis</dd></div>
+          <div><dt>Indicação</dt><dd>{{ aarr.indicacao.pedidas }} pedidas · {{ aarr.indicacao.recebidas }} recebidas</dd></div>
+        </dl>
+        <p class="crm-nota-pequena">Ativação exige um pedido de material preservado e a qualificação humana. Estar em proposta, sem essa evidência, não confirma o “quero ver” histórico.</p>
+        <p class="crm-nota-pequena">Faixa da seleção atual: aquisição e ativação nos últimos 30 dias; receita, retenção e indicação com instrumentação desde 19/10/2026. Histórico anterior: não medido; zero desde essa data significa nenhum registro confirmado. Sem inferir receita ou retenção de avanço no funil. MRR considera uma mensalidade por contrato com atividade explicitamente confirmada no terceiro mês.</p>
+      </section>
       <section class="crm-grupo" aria-labelledby="crm-plus-teste">
         <header class="crm-grupo__cabeca"><h2 id="crm-plus-teste">Plus · teste de {{ TAMANHO_DO_TESTE_PLUS }} envios</h2></header>
         <p class="crm-grupo__explicacao">Primeiros envios confirmados desde {{ dataCurta(new Date(testePlus.inicio).toISOString()) }}. {{ testePlus.plus.enviados }} de {{ TAMANHO_DO_TESTE_PLUS }} no lote. Somente o Rômulo envia. Comparação com o Site enviado no mesmo período, até {{ dataHora(new Date(testePlus.fim).toISOString()) }}; respostas observadas até {{ dataHora(new Date(testePlus.observacaoAte).toISOString()) }}.</p>
@@ -376,4 +394,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
 .crm-experimentos[open] { display: grid; gap: var(--esp-4); min-width: 0; }
 .crm-spiced-comparacao { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--tam-apoio); }
 .crm-spiced-comparacao th, .crm-spiced-comparacao td { padding: var(--esp-1); overflow-wrap: anywhere; text-align: left; }
+.crm-aarr-faixa { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--esp-3); }
+.crm-aarr-faixa dt { font-weight: var(--peso-forte); }
+.crm-aarr-faixa dd { margin: var(--esp-1) 0 0; }
 </style>

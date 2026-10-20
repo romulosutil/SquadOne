@@ -3,6 +3,7 @@ import { lerRegistroSpiced, type Spiced } from '../src/operations/spiced.ts';
 import { cadenciaDoLead, cadenciaJaConfirmada, lerRegistroCadencia } from '../src/operations/cadencia.ts';
 import { lerRegistroFollowup } from '../src/operations/followup-experimento.ts';
 import { alocarAberturasPrumo } from '../src/operations/abertura-prumo.ts';
+import { TIPOS_AARR, aarrDoLead, chaveDoPagamento, contratosMensais, ehTipoAarr, indicacaoPendente, lerRegistroAarr, registroCompativelComLead, resumoDoRegistroAarr, type ReceitaDoLead, type ReceitaDesfeita, type RegistroReceita, type RegistroRetencao, type RegistroIndicacao } from '../src/operations/aarr.ts';
 import { contatoPausado } from '../src/operations/aprendizado-comercial.ts';
 import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
 import { revisaoDaClassificacao, ultimoConviteConfirmado, PREFIXO_CONVITE_TIME } from '../src/operations/decisoes-comerciais.ts';
@@ -254,6 +255,7 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
+  ...TIPOS_AARR,
   "spiced", "cadencia_enviada",
   "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito",
   "ganhou", "ganhou_desfeito", "dispensado", "dispensado_desfeito"] as const;
@@ -524,6 +526,7 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
+  aarr?: ReceitaDoLead;
   revisaoComercial?: string;
   demoProtegida?: string;
   id: string;
@@ -759,6 +762,7 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
     // JSON qualificado nunca pode ser truncado até parecer outro registro válido.
     if (tipo === 'spiced' && !lerRegistroSpiced(c("texto"))) continue;
     if (tipo === 'cadencia_enviada' && !lerRegistroCadencia(c("texto"))) continue;
+    if (ehTipoAarr(tipo) && !lerRegistroAarr(tipo, c("texto"))) continue;
     lista.push({ em, tipo, texto: tipo === 'spiced' ? c("texto") : texto(c("texto"), 1000), data: c("data") });
     mapa.set(chave, lista);
   }
@@ -986,6 +990,9 @@ function ultimaDoLead(datas: Array<number | undefined>, resposta: CrmResposta | 
 
 function eventosManuais(registros: Registro[]): CrmEvento[] {
   const rotulo: Record<CrmTipoDeRegistro, string> = {
+    valor_proposta: 'Valor de proposta registrado', pagamento_confirmado: 'Pagamento confirmado', receita_desfeita: 'Registro comercial desfeito',
+    origem: 'Origem confirmada', motivo_perda: 'Motivo da perda confirmado', retencao_3m: 'Mensalidade no terceiro mês conferida',
+    indicacao_pedida: 'Indicação pedida', indicacao_recebida: 'Indicação recebida',
     spiced: 'Qualificação SPICED confirmada',
     cadencia_enviada: 'Toque de acompanhamento confirmado',
     nota: "Nota",
@@ -1011,8 +1018,9 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
-    ...(['spiced', 'cadencia_enviada'].includes(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
-    ...(r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
+    ...(['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
+    ...(ehTipoAarr(r.tipo) ? { texto: resumoDoRegistroAarr(r.tipo, lerRegistroAarr(r.tipo, r.texto)!) }
+      : r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
       : r.tipo === 'cadencia_enviada' ? { texto: lerRegistroCadencia(r.texto)?.tipo === 'conversa' ? 'Retomada da conversa confirmada.' : lerRegistroCadencia(r.texto)?.degrau === 'dia-3' ? 'Último retorno da proposta confirmado.' : 'Primeiro retorno da proposta confirmado.' }
       : r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto) ? { texto: 'Follow-up confirmado pelo Rômulo.' }
       : r.tipo === "proximo_passo"
@@ -2129,6 +2137,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   const contagens = contagemVazia();
   for (const lead of leads) {
     const revisao = revisaoDaClassificacao(lead);
+    lead.aarr = aarrDoLead(lead, agora);
     const proximoFuturo = lead.proximoPasso?.data && lead.proximoPasso.data > new Date(agora - 3 * 3600_000).toISOString().slice(0, 10);
     if (proximoFuturo || contatoPausado(lead)) lead.followupHoje = false;
     if (revisao?.decisao === 'reabrir') {
@@ -2241,10 +2250,13 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
     throw new RegistroInvalido('SPICED inválido: confira os campos, limites e a data real do evento crítico.');
   }
   if (tipo === 'cadencia_enviada' && !lerRegistroCadencia(corpo.texto)) throw new RegistroInvalido('Confirmação de acompanhamento inválida.');
+  const aarr = ehTipoAarr(tipo) ? lerRegistroAarr(tipo, corpo.texto, agora.getTime()) : undefined;
+  if (ehTipoAarr(tipo) && (!aarr || !registroCompativelComLead({ produto, ...(produto === 'plus' ? { plus: undefined } : {}) }, aarr) && produto !== 'plus')) throw new RegistroInvalido('Registro comercial inválido: confira catálogo, referência e datas reais até hoje.');
   // Texto vai como está: o n8n grava com cellFormat RAW, então "=..." fica texto e nunca vira fórmula.
-  const textoSeguro = tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto;
+  const textoSeguro = aarr ? JSON.stringify(aarr) : tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto;
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
+  if (aarr) data = 'data' in aarr ? aarr.data : '';
   if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new RegistroInvalido("Data inválida (use AAAA-MM-DD).");
   if (data && !Number.isFinite(Date.parse(`${data}T12:00:00-03:00`))) throw new RegistroInvalido("Data inválida.");
   if (tipo === "proximo_passo" && textoSeguro && !data) throw new RegistroInvalido("Informe a data do próximo passo.");
@@ -2437,6 +2449,8 @@ export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipo
 }
 
 export class CrmStore {
+  private readonly aarrEmCurso = new Map<string, Promise<RespostaDoRegistro>>();
+  private readonly aarrConfirmados = new Map<string, CrmEvento[]>();
   private readonly cadenciasConfirmadas = new Map<string, Promise<RespostaDoRegistro>>();
   /**
    * Envios anotados por este processo há pouco, por produto:id:tipo. O retrato leva segundos para
@@ -2574,6 +2588,15 @@ export class CrmStore {
    */
   async registrar(entrada: unknown, agora = new Date()): Promise<RespostaDoRegistro> {
     const registro = validarRegistro(entrada, agora);
+    if (ehTipoAarr(registro.tipo)) {
+      // Serializar por lead protege dois cliques/abas, inclusive desfazer e corrigir em sequência.
+      const chave = `${registro.produto}:${registro.id}`;
+      const anterior = this.aarrEmCurso.get(chave);
+      if (anterior) { await anterior.catch(() => undefined); return this.registrar(entrada, agora) }
+      const resposta = this.gravar(registro, agora);
+      this.aarrEmCurso.set(chave, resposta);
+      try { return await resposta } finally { if (this.aarrEmCurso.get(chave) === resposta) this.aarrEmCurso.delete(chave) }
+    }
     if (registro.tipo === 'cadencia_enviada') {
       const chave = `${registro.produto}:${registro.id}:${registro.texto}`;
       const anterior = this.cadenciasConfirmadas.get(chave);
@@ -2612,6 +2635,36 @@ export class CrmStore {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
+    if (ehTipoAarr(registro.tipo)) {
+      const confirmados = this.aarrConfirmados.get(lead.id) ?? [];
+      lead.eventos = [...lead.eventos, ...confirmados.filter(c => !lead.eventos.some(e => e.tipo === c.tipo && e.em === c.em && (e.registroTexto ?? e.texto) === c.registroTexto))];
+      const meta = lerRegistroAarr(registro.tipo, registro.texto, agora.getTime())!;
+      if (!registroCompativelComLead(lead, meta)) throw new RegistroInvalido('Essa condição não pertence à oferta deste lead.');
+      const atual = aarrDoLead(lead, agora.getTime());
+      if ('oferta' in meta) {
+        const lista = registro.tipo === 'pagamento_confirmado' ? atual.pagamentos : atual.propostas;
+        const repetido = lista.find(p => chaveDoPagamento(p) === chaveDoPagamento(meta));
+        if (repetido) {
+          if (repetido.valor_centavos !== meta.valor_centavos || repetido.quantidade !== meta.quantidade) throw new RegistroInvalido('Desfaça o registro anterior antes de corrigir seu valor.');
+          return { ok: true, em: repetido.em, repetido: true };
+        }
+        if (meta.oferta === 'fonte' && lista.some(p => p.oferta === 'fonte' && p.referencia.toLocaleLowerCase('pt-BR') === meta.referencia.toLocaleLowerCase('pt-BR') && (p.componente === 'implantacao') !== (meta.componente === 'implantacao'))) throw new RegistroInvalido('Não misture o total da Fonte com suas duas parcelas.');
+      }
+      if (registro.tipo === 'receita_desfeita') {
+        const m = meta as ReceitaDesfeita;
+        const lista = m.tipo === 'pagamento_confirmado' ? atual.pagamentos : atual.propostas;
+        if (!lista.some(p => chaveDoPagamento(p) === m.referencia)) throw new RegistroInvalido('O registro comercial já foi desfeito ou não pertence a este lead.');
+      }
+      if (registro.tipo === 'retencao_3m') {
+        const m = meta as RegistroRetencao;
+        if (!contratosMensais(lead, agora.getTime()).some(c => c.referencia === m.referencia && c.inicio === m.inicio)) throw new RegistroInvalido('Confirme o primeiro pagamento mensal desta oferta antes de registrar sua retenção.');
+      }
+      if (registro.tipo === 'indicacao_pedida') {
+        const m = meta as RegistroIndicacao;
+        if (!atual.pagamentos.some(p => p.chave === m.referencia)) throw new RegistroInvalido('Vincule a indicação a um pagamento confirmado ativo.');
+        if (atual.indicacoes.pedidas.length) return { ok: true, em: atual.indicacoes.pedidas[0]!.em, repetido: true };
+      }
+    }
     if (registro.tipo === 'cadencia_enviada') {
       const meta = lerRegistroCadencia(registro.texto)!;
       if (cadenciaJaConfirmada(lead, meta)) return { ok: true, em: agora.toISOString(), repetido: true };
@@ -2657,6 +2710,12 @@ export class CrmStore {
     if (!resposta.ok || corpo.ok !== true) {
       throw new RegistroFalhou(typeof corpo.erro === "string" ? corpo.erro.slice(0, 200) : `O n8n não gravou (HTTP ${resposta.status}).`, resposta.status);
     }
-    return { ok: true, em: typeof corpo.em === "string" ? corpo.em : agora.toISOString() };
+    const em = typeof corpo.em === "string" ? corpo.em : agora.toISOString();
+    if (ehTipoAarr(registro.tipo)) {
+      const recentes = this.aarrConfirmados.get(lead.id) ?? [];
+      recentes.push({ tipo: registro.tipo, em, texto: registro.texto, registroTexto: registro.texto, origem: 'manual', rotulo: 'Confirmado na aba CRM', fonte: 'aba CRM' });
+      this.aarrConfirmados.set(lead.id, recentes);
+    }
+    return { ok: true, em };
   }
 }

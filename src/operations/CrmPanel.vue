@@ -454,9 +454,9 @@ function abrirColinha() {
             </button>
           </li>
         </ol>
-        <CrmResultados parte="numeros" :leads="leads" :agora="agora" />
+        <CrmResultados parte="numeros" :leads="leads" :todos-leads="visao.leads" :agora="agora" />
       </template>
-      <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :agora="agora" />
+      <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :todos-leads="visao.leads" :agora="agora" />
       <CrmFunil
         v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :agora="agora" :etapa-em-foco="etapaEmFoco" :produto="produto" :passo="passo"
         @abrir="abrirFicha" @passo="trocarPasso"

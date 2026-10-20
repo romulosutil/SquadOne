@@ -141,6 +141,8 @@ export interface AchadoDoRaioX {
 }
 
 export interface CrmLead {
+  /** Instrumentação comercial explicitamente confirmada na aba CRM; nunca Finanças ou receita inferida. */
+  aarr?: import('./aarr').ReceitaDoLead
   revisaoComercial?: string
   demoProtegida?: string
   id: string
@@ -272,6 +274,7 @@ export interface CrmVisao {
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
+  | import('./aarr').TipoAarr
   | 'spiced'
   | 'cadencia_enviada'
   | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu' | 'recusou' | 'recusou_desfeito'
