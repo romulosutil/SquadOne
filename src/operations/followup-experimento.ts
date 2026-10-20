@@ -4,7 +4,7 @@ import { hashDoLead, fisherExato } from './ab-video'
 import { respondeuDeGente } from './resultados'
 
 export const VERSAO_DO_FOLLOWUP = 'followup-2026-10-19' as const
-/** Ativar só após o Rômulo revisar os textos. A flag não vem de um lead nem do modelo. */
+/** Aprovada pelo Rômulo em 19/10/2026 ("Aprovar os textos para teste"); desligar aqui devolve todos ao controle. A flag não vem de um lead nem do modelo. */
 export const FOLLOWUP_NOVO_APROVADO = true
 export const MINIMO_POR_BRACO_DO_FOLLOWUP = 30
 export interface MetadataDoFollowup { braco: 'A' | 'B'; versao: typeof VERSAO_DO_FOLLOWUP }

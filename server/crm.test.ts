@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
+import { leituraDoAbMensagem } from "../src/operations/ab-mensagem.ts";
 import {
   ACAO_DO_REENVIO,
   CrmStore,
@@ -519,6 +520,29 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     for (const [v, esperado] of [["AC", "AC"], ["cab", "ABC"], ["", undefined], ["manual", undefined], ["A, B", "AB"]] as const) {
       assert.equal(elegiveisDaColuna(v), esperado, v);
     }
+  });
+
+  it("A letra D passa pela coluna: 'AD', 'ACD' e 'ABCD' viram elegiveis e entram na leitura do A/B (ida e volta pela planilha)", () => {
+    for (const [v, esperado] of [["AD", "AD"], ["d a", "AD"], ["ACD", "ACD"], ["abcd", "ABCD"], ["D", "D"], ["AXD", undefined], ["ADE", undefined]] as const) {
+      assert.equal(elegiveisDaColuna(v), esperado, v);
+    }
+    // Os testes de leitura do A/B montam o lead já com elegiveis; aqui o conjunto nasce da string
+    // da planilha, que é onde a D se perdia (o lead caía em "sem coluna").
+    const base = retrato();
+    base.fontes.site.linhas.push(
+      linhaSite("ad", { status: "enviado", enviado_em: dias(5), mensagem_variante: "D", ab_elegiveis: "AD" }),
+      linhaSite("acd", { status: "enviado", enviado_em: dias(5), mensagem_variante: "A", ab_elegiveis: "ACD" }),
+      linhaSite("abcd", { status: "enviado", enviado_em: dias(5), mensagem_variante: "C", ab_elegiveis: "ABCD" }),
+    );
+    const visao = montarCrm(base, { agora: AGORA, pastas: PASTAS });
+    assert.equal(lead(visao.leads, "site:ad").abordagem?.elegiveis, "AD");
+    assert.equal(lead(visao.leads, "site:acd").abordagem?.elegiveis, "ACD");
+    assert.equal(lead(visao.leads, "site:abcd").abordagem?.elegiveis, "ABCD");
+    const meus = visao.leads.filter((l) => ["site:ad", "site:acd", "site:abcd"].includes(l.id));
+    const leitura = leituraDoAbMensagem(meus, AGORA.getTime(), "site");
+    assert.equal(leitura.semColuna, 0, "nenhum virou histórico sem coluna");
+    assert.equal(leitura.letraFora, 0);
+    assert.ok(leitura.inicio, "o teste começou: há envio com a coluna");
   });
 
   it("PRUMO: robô não é resposta; interesse sem Raio-X pede para fazê-lo, nunca o formulário", () => {
@@ -1204,6 +1228,22 @@ describe("CRM: retrato e registro", () => {
     assert.deepEqual(JSON.parse(String(chamadas[0].init.body)), {
       produto: "site", id: "respondeu", tipo: "nota", texto: "Quer começar em novembro", data: "", empresa: "Empresa respondeu",
     });
+  });
+
+  it("perdido por proposta sem retorno aceita nova proposta; perdido por recusa continua encerrado", async () => {
+    const base = retrato();
+    base.fontes.site.linhas.push(
+      linhaSite("proposta-velha", { status: "enviado", enviado_em: dias(30), respondeu_em: dias(29) }),
+      linhaSite("recusou-velho", { status: "recusado", enviado_em: dias(20), recusado_em: dias(15) }),
+    );
+    base.fontes.registros.linhas.push({ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "", data: "2026-09-12" });
+    const fetcher = (async () => new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:01Z" }), { status: 200 })) as unknown as typeof fetch;
+    const store = await loja(base, true, fetcher);
+    const visao = await store.visao(AGORA);
+    assert.equal(lead(visao.leads, "site:proposta-velha").motivoPerda, "proposta-sem-retorno", "pré-condição: saiu pela cadência");
+    // Saiu pelo tempo, sem desfecho de ninguém: a nova proposta o traz de volta (antes: "desfaça o desfecho").
+    await store.registrar({ produto: "site", id: "proposta-velha", tipo: "proposta", texto: "Proposta nova" }, AGORA);
+    await assert.rejects(store.registrar({ produto: "site", id: "recusou-velho", tipo: "proposta", texto: "" }, AGORA), /desfaça o desfecho/);
   });
 
   it("classifica as falhas do registro", async () => {

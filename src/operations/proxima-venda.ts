@@ -19,7 +19,7 @@
  *     funil dos 30 dias tinha 0 propostas para 3 "quero ver" atendidos. É ali que a venda acontece.
  *  3. Proposta sem retorno: quem recebeu preço e sumiu tem uma dúvida que não falou. Perguntar
  *     qual é, e oferecer 10 min de ligação, fecha mais que mandar a proposta de novo.
- *  4. Follow-up de quem leu e não respondeu (curto, uma pergunta de sim ou não).
+ *  4. Follow-up do 3º ao 6º dia de quem não respondeu, tenha lido ou não (curto, uma pergunta de sim ou não).
  *  5. Primeiro contato, por último, e só quando a trava de ritmo (trava-de-ritmo.ts) e o expediente
  *     de venda deixam: um por vez. O reenvio do só-robô também é primeiro contato. Quem o oferece é o
  *     vendedor do Telegram e a Ficha; a lista da tela de Vendas não (ele é da aba Primeiros contatos).
@@ -36,7 +36,7 @@ import { gostouDepoisDoLink, indicouInteresseDepoisDoLink, propostaDeUmToque } f
 import { lacunasDoSpiced, qualificadoParaProposta } from './spiced'
 import { cadenciaDoLead, textoDoRegistroCadencia } from './cadencia'
 import { indicacaoPendente, textoDoRegistroAarr } from './aarr'
-import { metadataDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
+import { metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
 import { contatoPausado } from './aprendizado-comercial'
 import { comHistoricoConferido } from './historico-comercial'
 import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
@@ -54,6 +54,11 @@ export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cad
 
 export interface AcaoDeVenda {
   conferirHistorico?: boolean
+  /**
+   * É uma revisão comercial (a do lead com `revisaoComercial` e a "conversa sem retorno há 7 dias"), não
+   * um passo comum cujo histórico falta (esse ganha `conferirHistorico` na tela e mantém a sua ordem).
+   */
+  revisao?: boolean
   /** `leadId|tipo`: o mesmo lead pode ter um combinado e uma resposta; cada um é um aviso. */
   chave: string
   leadId: string
@@ -269,7 +274,7 @@ function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null
     chave: `${lead.id}|revisao-conversa|${c.origem}`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto,
     tipo: 'combinado', titulo: `Revise o próximo passo de ${lead.empresa}`, contexto: 'Conversa sem retorno há 7 dias',
     porque: 'O silêncio pede revisão humana do combinado.', tatica: 'Confira a conversa antes de decidir retomar, esperar ou encerrar.',
-    primeiroContato: false, quente: false, conferirHistorico: true,
+    primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }
   const sugestao = !proposta ? ctx.sugestoes?.get(lead.id) : undefined
   const fallback = proposta
@@ -348,6 +353,62 @@ export function textoDoLink(url: string): string | null {
   } catch {
     return null
   }
+}
+
+/** O mesmo link wa.me com outro `?text=` (os demais parâmetros ficam); a URL que não é de WhatsApp volta igual. */
+export function trocarTextoDoLink(url: string, texto: string): string {
+  try {
+    const u = new URL(url)
+    if (!/(^|\.)wa\.me$|(^|\.)whatsapp\.com$/.test(u.hostname)) return url
+    const outros = [...u.searchParams].filter(([k]) => k !== 'text').map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    return `${u.origin}${u.pathname}?${[...outros, `text=${encodeURIComponent(texto)}`].join('&')}`
+  } catch {
+    return url
+  }
+}
+
+/** Número dos EUA no wa.me (1 + 10 dígitos, o critério de server/site-mensagem.ts): o texto novo é só em português. */
+function linkDosEua(url: string): boolean {
+  try {
+    const numero = new URL(url).pathname.replace(/\D/g, '')
+    return numero.startsWith('1') && numero.length === 11
+  } catch {
+    return false
+  }
+}
+
+/**
+ * PURO. O follow-up do 3º dia como a fila o mostra e abre (A/B do follow-up, 19/10/2026). O servidor
+ * só monta o texto de controle (followupDe); aqui o braço sorteado por hash escolhe o que sai: A é o
+ * controle intacto, B é FOLLOWUP_NOVO. O texto mostrado, o do wa.me e o braço gravado saem da mesma
+ * decisão, para a leitura (leituraDoFollowup) nunca comparar o texto antigo com ele mesmo.
+ * Sem versão (`registro` ausente): link que não leva texto, número dos EUA (o novo não tem inglês)
+ * ou oferta sem texto novo. Esses seguem com o controle e ficam fora do teste, em vez de entrarem
+ * no braço A e sujarem a comparação.
+ */
+export function followupDoBraco(lead: Pick<CrmLead, 'produto' | 'id' | 'empresa' | 'plus'>, link: { rotulo: string; url: string }): {
+  link: { rotulo: string; url: string }; rascunho: string; registro?: string
+} {
+  const controle = textoDoLink(link.url) ?? ''
+  const meta = metadataDoFollowup(lead.produto, lead.id, lead.plus?.oferta)
+  const texto = textoDoFollowup(lead.produto, lead.empresa, meta.braco, lead.plus?.oferta, controle)
+  if (!controle || linkDosEua(link.url)) return { link, rascunho: controle }
+  if (meta.braco === 'A') return { link, rascunho: controle, registro: textoDoRegistroFollowup(meta) }
+  // B sem molde para a oferta devolve o controle: mostrado A, então não pode ser gravado como B.
+  if (texto === controle) return { link, rascunho: controle }
+  return { link: { ...link, url: trocarTextoDoLink(link.url, texto) }, rascunho: texto, registro: textoDoRegistroFollowup(meta) }
+}
+
+/**
+ * PURO. O `texto` que o "Enviei" manda a POST /crm/venda/anotar. A proposta leva o resumo do que saiu;
+ * a cadência, o follow-up e a indicação levam o registro versionado (`textoDoRegistro`), que o servidor
+ * exige (cadência e indicação sem ele são 400) ou usa para a leitura do A/B (follow-up sem ele grava
+ * sem versão e fica fora do teste). O resto não anota texto. Antes a tela de conversas só mandava o da proposta.
+ */
+export function textoDaAnotacaoDeVenda(a: Pick<AcaoDeVenda, 'anota' | 'rascunho' | 'textoDoRegistro'>): string {
+  if (a.anota === 'proposta') return a.rascunho?.slice(0, 1000) ?? ''
+  if (a.anota === 'cadencia_enviada' || a.anota === 'followup_enviado' || a.anota === 'indicacao_pedida') return a.textoDoRegistro ?? ''
+  return ''
 }
 
 function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
@@ -460,9 +521,15 @@ function anotaDoLink(lead: CrmLead, url: string | undefined): TipoDeEnvioAnotado
 }
 
 function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDeVenda {
-  const link = linkDoPasso(item, lead)
+  let link = linkDoPasso(item, lead)
   const primeiroContato = tipo === 'primeiro' || (tipo === 'followup' && Boolean(lead.reenvioDoRobo))
-  const rascunho = (link && textoDoLink(link.url)) ?? (tipo === 'primeiro' ? lead.mensagemPronta : undefined)
+  let rascunho = (link && textoDoLink(link.url)) ?? (tipo === 'primeiro' ? lead.mensagemPronta : undefined)
+  // Follow-up de sempre (não o reenvio do só-robô): o braço sorteado decide o texto que sai.
+  let registroDoFollowup: string | undefined
+  if (tipo === 'followup' && !lead.reenvioDoRobo && link && rascunho) {
+    const braco = followupDoBraco(lead, link)
+    link = braco.link; rascunho = braco.rascunho; registroDoFollowup = braco.registro
+  }
   const anota = tipo === 'followup' && !lead.reenvioDoRobo ? 'followup_enviado' : anotaDoLink(lead, link?.url)
   const lugar = [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · ')
   // Cada mensagem nova dele é uma vez nova de responder (o vendedor avisa de novo, a tela não a dá por feita).
@@ -480,12 +547,26 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
     ...(rascunho ? { rascunho } : {}),
     ...(link ? { link } : {}),
     ...(anota ? { anota } : {}),
-    ...(anota === 'followup_enviado' && !lead.reenvioDoRobo && rascunho ? { textoDoRegistro: textoDoRegistroFollowup(metadataDoFollowup(lead.produto, lead.id, lead.plus?.oferta)) } : {}),
+    ...(anota === 'followup_enviado' && !lead.reenvioDoRobo && rascunho && registroDoFollowup ? { textoDoRegistro: registroDoFollowup } : {}),
     primeiroContato,
     // A licença nova também é quente (pedeMaterial): fura o aviso aberto do vendedor como o "quero ver".
     quente: (tipo === 'responder' && pedeMaterial(lead.resposta)) || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
   }
 }
+
+/**
+ * A ordem de venda de cada passo (menor = antes): responder > mandar a proposta > combinado > "o que
+ * achou?" > proposta sem retorno > revisão do contexto > follow-up > recusa para marcar > primeiro
+ * contato. É a única fonte da ordem: a lista "Conversas para você" (conversas-para-conduzir.ts) lê
+ * daqui, para a tela e o Telegram nunca discordarem de qual vem primeiro.
+ */
+export const PRIORIDADE_DA_FILA: Readonly<Record<TipoDeVenda, number>> = {
+  responder: 0, 'mandar-proposta': 1, combinado: 2, 'depois-do-link': 3, proposta: 4, followup: 6, desfecho: 7, primeiro: 8,
+}
+/** A revisão comercial é `combinado` na fila, mas não é o combinado do lead: vem depois das propostas. */
+export const PRIORIDADE_DA_REVISAO = 5
+export const prioridadeDaAcao = (a: Pick<AcaoDeVenda, 'tipo' | 'revisao'>): number =>
+  a.revisao ? PRIORIDADE_DA_REVISAO : PRIORIDADE_DA_FILA[a.tipo]
 
 /**
  * A fila inteira, na ordem de venda. Primeiro contato (e o reenvio do só-robô) só entra com
@@ -504,7 +585,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     chave: `${l.id}|revisao`, leadId: l.id, empresa: l.empresa, produto: l.produto, tipo: 'combinado',
     titulo: 'Revisar o contexto antes de encerrar ou retomar', porque: l.revisaoComercial!,
     tatica: 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
-    contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true,
+    contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }))
   fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
   if (ctx.agora !== undefined) for (const l of leads) {
@@ -568,8 +649,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   }
   const conscientes = fila.filter(a => !comDesfecho.has(a.leadId) || a.tipo === 'desfecho')
     .map((a) => comAConversa(a, porId.get(a.leadId), ctx))
-  const prioridade = (a: AcaoDeVenda) => a.conferirHistorico ? 5 : ({ responder: 0, 'mandar-proposta': 1, combinado: 2, 'depois-do-link': 3, proposta: 4, followup: 6, desfecho: 7, primeiro: 8 }[a.tipo])
-  const unicos = conscientes.sort((a, b) => prioridade(a) - prioridade(b)).filter((a, i, todos) => todos.findIndex(b => b.leadId === a.leadId) === i)
+  const unicos = conscientes.sort((a, b) => prioridadeDaAcao(a) - prioridadeDaAcao(b)).filter((a, i, todos) => todos.findIndex(b => b.leadId === a.leadId) === i)
   return [...unicos.filter((a) => !pulados.has(a.chave)), ...unicos.filter((a) => pulados.has(a.chave))]
 }
 

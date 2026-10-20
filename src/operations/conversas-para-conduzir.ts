@@ -15,12 +15,12 @@
  */
 import { diaEmSP, rotuloDoPasso } from './retomadas'
 import { entradaDeGenteDaVez } from './resultados'
-import { filaDaTela, type AcaoDeVenda, type Resolvidas, type TipoDeVenda } from './proxima-venda'
+import { PRIORIDADE_DA_FILA, filaDaTela, prioridadeDaAcao, type AcaoDeVenda, type Resolvidas, type TipoDeVenda } from './proxima-venda'
 import type { CrmLead, CrmVisao } from './types'
 
 export interface ConversaParaVoce {
   lead: CrmLead
-  /** 0 = a vez é dele ou há proposta a mandar; 1 = combinado; depois, os passos da fila na ordem dela; 10+ = pulado hoje. */
+  /** A prioridade da fila de venda (PRIORIDADE_DA_FILA): 0 = a vez é dele; 1 = proposta a mandar; 2 = combinado; depois, os passos na ordem dela; 10+ = pulado hoje. */
   prioridade: number
   /** Para ordenar dentro da prioridade: quando foi (resposta/combinado) ou a posição na fila. */
   em: number
@@ -35,15 +35,15 @@ const JANELA_DA_RESPOSTA_MS = 14 * 86_400_000
 /** Quem foi "Pulado" hoje vai para o fim da lista, sem sumir. */
 const PULADO = 10
 
-/** Prioridade e rótulo de cada passo da fila de venda que a lista mostra (a ordem é a da fila). */
-const DO_PASSO: Partial<Record<TipoDeVenda, { prioridade: number; rotulo: string }>> = {
-  responder: { prioridade: 0, rotulo: 'Resposta recebida' },
-  'mandar-proposta': { prioridade: 0, rotulo: 'Proposta para mandar' },
-  combinado: { prioridade: 1, rotulo: 'Combinado pendente' },
-  'depois-do-link': { prioridade: 2, rotulo: 'O que achou?' },
-  proposta: { prioridade: 3, rotulo: 'Proposta sem retorno' },
-  desfecho: { prioridade: 4, rotulo: 'Recusa para marcar' },
-  followup: { prioridade: 5, rotulo: 'Follow-up' },
+/** O rótulo de cada passo da fila de venda que a lista mostra; a prioridade é a da fila (PRIORIDADE_DA_FILA). */
+const ROTULO_DO_PASSO: Partial<Record<TipoDeVenda, string>> = {
+  responder: 'Resposta recebida',
+  'mandar-proposta': 'Proposta para mandar',
+  combinado: 'Combinado pendente',
+  'depois-do-link': 'O que achou?',
+  proposta: 'Proposta sem retorno',
+  desfecho: 'Recusa para marcar',
+  followup: 'Follow-up',
 }
 
 /** Prioridade do operador vem de conversa e compromisso, não de uma lacuna de cadastro. */
@@ -58,7 +58,7 @@ export function conversasParaConduzir(leads: readonly CrmLead[], agora = Date.no
     const combinado = !!p?.texto.trim() && dataValida && p!.data <= hoje
     const espera = !!p && rotuloDoPasso(p.texto) === 'Conferir combinado de espera'
     if (!resposta && (!combinado || espera)) return []
-    return [{ lead, prioridade: resposta ? 0 : 1, em: resposta ? em : Date.parse(`${p!.data}T00:00:00-03:00`), rotulo: resposta ? 'Resposta recebida' : p!.data === hoje ? 'Combinado para hoje' : 'Combinado pendente', resposta }]
+    return [{ lead, prioridade: resposta ? PRIORIDADE_DA_FILA.responder : PRIORIDADE_DA_FILA.combinado, em: resposta ? em : Date.parse(`${p!.data}T00:00:00-03:00`), rotulo: resposta ? 'Resposta recebida' : p!.data === hoje ? 'Combinado para hoje' : 'Combinado pendente', resposta }]
   }).sort((a, b) => a.prioridade - b.prioridade || (a.prioridade === 0 ? b.em - a.em : a.em - b.em) || a.lead.id.localeCompare(b.lead.id))
 }
 
@@ -82,7 +82,7 @@ export function conversasParaVoce(
   const pulou = (a: AcaoDeVenda | undefined) => (a && resolvidas[a.chave]?.pulou ? PULADO : 0)
 
   const acaoDoLead = new Map<string, AcaoDeVenda>()
-  for (const a of fila) if (!acaoDoLead.has(a.leadId) && DO_PASSO[a.tipo]) acaoDoLead.set(a.leadId, a)
+  for (const a of fila) if (!acaoDoLead.has(a.leadId) && ROTULO_DO_PASSO[a.tipo]) acaoDoLead.set(a.leadId, a)
 
   const itens: Array<ConversaParaVoce & { daFila: boolean }> = []
   const vistos = new Set<string>()
@@ -94,12 +94,12 @@ export function conversasParaVoce(
   }
   const porId = new Map(visao.leads.map((l) => [l.id, l] as [string, CrmLead]))
   fila.forEach((a, posicao) => {
-    const passo = DO_PASSO[a.tipo]
+    const rotulo = ROTULO_DO_PASSO[a.tipo]
     const lead = porId.get(a.leadId)
-    if (!passo || !lead || a.primeiroContato || vistos.has(a.leadId) || lead.etapa === 'ganho' || lead.etapa === 'perdido') return
+    if (!rotulo || !lead || a.primeiroContato || vistos.has(a.leadId) || lead.etapa === 'ganho' || lead.etapa === 'perdido') return
     vistos.add(a.leadId)
     itens.push({
-      lead, prioridade: passo.prioridade + pulou(a), em: posicao, rotulo: a.conferirHistorico ? 'Revisar o contexto' : passo.rotulo,
+      lead, prioridade: prioridadeDaAcao(a) + pulou(a), em: posicao, rotulo: a.conferirHistorico ? 'Revisar o contexto' : rotulo,
       resposta: false, acao: a, daFila: true,
     })
   })

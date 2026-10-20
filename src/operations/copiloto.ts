@@ -409,6 +409,41 @@ export interface SugestaoDoCopiloto {
 
 export type SugestaoSpiced = { [K in keyof Spiced]?: { valor: Spiced[K], citacao: string } }
 
+/**
+ * Falas que SUSTENTAM "decisor confirmado: sim" (19/10/2026, auditoria da Fase 2). Antes a citação só
+ * precisava ser literal: um "oi" do lead servia de evidência de que ele decide a compra, e o botão em
+ * lote gravava isso com um toque. Comparadas sem acento nem caixa. A lista é curta de propósito: quem
+ * decide mas disse de outro jeito fica "a confirmar" e o Rômulo toca no decisor por conta própria.
+ */
+export const SINAIS_DE_DECISAO: readonly string[] = [
+  'eu decido', 'quem decide sou eu', 'decido eu', 'a decisao e minha', 'a decisao e minha mesmo',
+  'sou o dono', 'sou a dona', 'sou dono', 'sou dona', 'sou o proprietario', 'sou a proprietaria',
+  'sou socio', 'sou socia', 'sou o socio', 'sou a socia', 'sou eu que', 'eu que pago', 'eu que resolvo',
+  'eu que decido', 'eu resolvo isso', 'comigo mesmo',
+]
+
+/** A fala só adia ou nega a decisão: nenhum sinal acima a sustenta ("não decido", "vou ver com meu sócio"). */
+export const RESSALVAS_DE_DECISAO: readonly string[] = [
+  'nao decido', 'nao sou o dono', 'nao sou a dona', 'nao sou dono', 'nao sou dona', 'nao sou socio', 'nao sou socia',
+  'nao sou eu que', 'nao e comigo', 'nao quem decide', 'ver com', 'falar com', 'perguntar para', 'preciso consultar', 'depende do',
+]
+
+const semAcento = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ')
+
+/** PURO. A citação traz uma fala em que o lead diz que decide, sem ressalva. */
+export function citacaoSustentaDecisor(citacao: string): boolean {
+  const t = semAcento(citacao)
+  return SINAIS_DE_DECISAO.some((sinal) => t.includes(sinal)) && !RESSALVAS_DE_DECISAO.some((r) => t.includes(r))
+}
+
+/**
+ * PURO. Os campos que o botão em lote "Confirmar sugestões exibidas" pode gravar de uma vez. O decisor
+ * "sim" fica de fora: ele destrava a proposta, então pede um toque próprio ("Usar decisão no rascunho").
+ */
+export function camposDoLote(sugestao: SugestaoSpiced | undefined): Array<keyof Spiced> {
+  return (Object.keys(sugestao ?? {}) as Array<keyof Spiced>).filter((campo) => !(campo === 'decisao' && sugestao?.decisao?.valor.decisor_confirmado === 'sim'))
+}
+
 /** Evidência literal é necessária, mas continua sendo só uma sugestão revisável. */
 export function lerSugestaoSpiced(bruto: unknown, dossie: DossieDoLead, momento?: MomentoDaConversa): SugestaoSpiced | undefined {
   if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return undefined
@@ -434,7 +469,12 @@ export function lerSugestaoSpiced(bruto: unknown, dossie: DossieDoLead, momento?
     if ((dinheiro.length && campo !== 'impacto') || dinheiro.some(v => !citacao.includes(v))) continue
     if (campo === 'decisao' && (momento?.quem === 'robo' || momento?.quem === 'recepcao'
       || mensagens.some(m => m.papel === 'recepcao') || dossie.resposta?.tipo === 'bot')) continue
-    Object.assign(saida, { [campo]: { valor: validado[campo], citacao } })
+    let valorFinal: Spiced[typeof campo] = validado[campo]
+    // Decisor "sim" só com uma fala do lead que o sustente; senão a sugestão segue como "a confirmar".
+    if (campo === 'decisao' && validado.decisao.decisor_confirmado === 'sim' && !citacaoSustentaDecisor(citacao)) {
+      valorFinal = { ...validado.decisao, decisor_confirmado: 'nao-sei' }
+    }
+    Object.assign(saida, { [campo]: { valor: valorFinal, citacao } })
   }
   return Object.keys(saida).length ? saida : undefined
 }

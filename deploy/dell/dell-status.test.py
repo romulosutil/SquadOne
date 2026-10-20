@@ -2381,6 +2381,40 @@ class TelegramComoCanal(unittest.TestCase):
     def gravar(self, nome, **extra):
         (ds.FILA / nome).write_text(json.dumps(aviso(**extra)), encoding="utf-8")
 
+    def test_origem_exclusiva_com_o_bot_fora_espera_e_nunca_vai_ao_whatsapp(self):
+        # Fase 5.3 (19/10): as 5 origens e todo P0 só saem pelo Telegram, mesmo com o bot caído.
+        self.bot_no_ar = False
+        for i, origem in enumerate(sorted(ds.ORIGENS_PELO_TELEGRAM)):
+            self.gravar(f"o{i}.json", titulo=origem, origem=origem)
+        self.gravar("p0.json", titulo="urgente", origem="qualquer", prioridade=0)
+        with contextlib.redirect_stderr(io.StringIO()):
+            r = ds.drenar_fila(br("2026-10-19T15:00"))
+        self.assertEqual(self.whatsapp, [])
+        self.assertEqual(r["pelo_telegram"], 0)
+        self.assertEqual(len(list(ds.FILA.glob("*.json"))), len(ds.ORIGENS_PELO_TELEGRAM) + 1)
+
+    def test_falha_de_fluxo_do_n8n_hoje_cai_no_whatsapp_se_o_telegram_falha(self):
+        # FIXA O COMPORTAMENTO ATUAL, não o desejado. O prefixo `n8n:` prefere o Telegram (sai_pelo_telegram) mas NÃO é
+        # exclusivo (telegram_exclusivo só olha ORIGENS_PELO_TELEGRAM e P0): com o bot fora o aviso segue para o
+        # WhatsApp de vendas e expira como aviso comum. Torná-lo exclusivo é decisão de produto do Rômulo: se mudar,
+        # mude este teste junto e a seção "Falha de fluxo do n8n" do deploy/dell/README.md.
+        origem = "n8n:07 · Lead"
+        self.assertTrue(ds.sai_pelo_telegram(origem))
+        self.assertFalse(ds.telegram_exclusivo(aviso(origem=origem, prioridade=2)))
+        self.bot_no_ar = False
+        self.gravar("n.json", titulo="Fluxo", origem=origem)
+        with contextlib.redirect_stderr(io.StringIO()):
+            r = ds.drenar_fila(br("2026-10-19T15:00"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (0, 1))
+        self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["Fluxo"])
+        # Com o bot no ar o mesmo aviso sai só pelo Telegram.
+        self.bot_no_ar = True
+        self.whatsapp.clear()
+        self.gravar("n2.json", titulo="Fluxo 2", origem=origem, chave="outra")
+        r = ds.drenar_fila(br("2026-10-19T15:05"))
+        self.assertEqual((r["pelo_telegram"], r["enviados"]), (1, 0))
+        self.assertEqual(self.whatsapp, [])
+
     def test_drenar_manda_pelo_telegram_as_origens_novas(self):
         self.gravar("a.json", titulo="Backup", origem="backup-dell")
         self.gravar("b.json", titulo="Central não atualizou", origem="atualizar-central")

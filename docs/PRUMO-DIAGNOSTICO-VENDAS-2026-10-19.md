@@ -239,3 +239,16 @@ de ritmo, religar caçadores.
 ENTREGA DE CADA FASE: o que mudou (arquivo:linha), testes adicionados, o que foi instalado na Mel, o que ficou para o
 Rômulo, e o número da Estrela-guia na data.
 ```
+
+---
+
+## Fechamento da auditoria (20/10/2026)
+
+Auditoria do código em `origin/main` (b936237) contra o prompt acima. As Fases 2 a 5 estavam no ar, com estes furos, fechados no commit deste fechamento:
+
+- **Fase 2:** a trava SPICED não alcançava Iris, Estamparia e Plus sem 2ª mensagem (o gatilho dependia de `segundaEnviada`); agora usa o marco real do material (`instanteDoMaterial`) e é testada com fixture sem esse marco. A citação do decisor precisa sustentar o "sim", e o lote não confirma decisor. Textos de jornada e colinha que mandavam propor sem qualificar foram ajustados.
+- **Fase 3:** a letra D do Site não era lida da coluna `ab_elegiveis` (o braço D era incontável); o follow-up "B" mostrava o texto antigo (agora mostra o novo); o "Enviei" durável falhava na tela de conversas; o Perdido por `proposta-sem-retorno` impedia nova proposta; a lista de conversas tinha ordem própria.
+- **Fase 4:** `valor_proposta`, `origem` e `motivo_perda` agora são agregados em Números (BP-AARRR).
+- **Fase 5:** as listas de origens que exigem Telegram eram três e divergiam; agora são uma e há teste de paridade. Documentação do P0 só pelo Telegram corrigida.
+
+**Continua aberto (decisão do Rômulo ou fora desta rodada):** falha de fluxo do n8n (`n8n:`) ainda pode sair só pelo WhatsApp com o bot fora; sugestão do copiloto no toque de conversa em que a vez é nossa (hoje o texto é fixo); "10º dia" da proposta é corrido, não útil; `acaoDepoisDoLink` ainda lê só `segundaEnviada`; preço da Estamparia; `dominio-vencido` sem fonte no Raio-X; Caçador do Site sem construtor; Fase 1 (convites e datas dos quentes) é do Rômulo; reinstalar na Mel `aviso.py`, `site-mensagem.js` e `auto-site-CLAUDE.md`.

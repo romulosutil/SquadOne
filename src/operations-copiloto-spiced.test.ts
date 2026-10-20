@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { lerSaidaDoCopiloto, lerSugestaoSpiced, montarDossie, promptDoCopiloto, type LeadDoCopiloto } from './operations/copiloto.ts'
+import { camposDoLote, citacaoSustentaDecisor, lerSaidaDoCopiloto, lerSugestaoSpiced, montarDossie, promptDoCopiloto, type LeadDoCopiloto } from './operations/copiloto.ts'
 import { spicedVazio } from './operations/spiced.ts'
 
 const lead: LeadDoCopiloto = { id: 'site:teste', produto: 'site', empresa: 'Empresa de teste', nicho: 'teste', cidade: 'Vitória', subEtapa: 'Em conversa', etapa: 'contato', sinal: 'em-conversa', marcos: {}, links: {}, eventos: [], followupHoje: false }
@@ -88,5 +88,51 @@ describe('SPICED do copiloto continua sugestão citada', () => {
     assert.match(p, /SUGESTÃO para confirmação humana/)
     assert.match(p, /trecho literal/)
     assert.doesNotMatch(p, /24 h depois de cada/)
+  })
+})
+
+describe('decisor "sim" só com fala que o sustente (19/10/2026)', () => {
+  const casos: Array<[string, boolean]> = [
+    ['Sou o dono e decido.', true],
+    ['SOU A DONA, pode mandar', true],
+    ['Eu decido isso aqui', true],
+    ['Quem decide sou eu', true],
+    ['sou sócio da clínica', true],
+    ['Sou eu que resolvo essas coisas', true],
+    ['eu que pago, então me fala o valor', true],
+    ['oi', false],
+    ['Pode mandar', false],
+    ['gostei, quanto fica?', false],
+    ['Sou o responsável pelo atendimento', false],
+    ['Não decido sozinho', false],
+    ['não sou o dono, vou ver com meu sócio', false],
+    ['Sou sócio mas preciso falar com minha esposa', false],
+    ['', false],
+  ]
+  for (const [citacao, esperado] of casos) it(`citação ${JSON.stringify(citacao)} -> ${esperado}`, () => assert.equal(citacaoSustentaDecisor(citacao), esperado))
+
+  it('"oi" como citação de decisor=sim vira "a confirmar", nunca "sim"', () => {
+    const d = montarDossie(lead, { conversa: [{ em: '2026-10-19T14:00:00Z', direcao: 'entrada', texto: 'oi, boa tarde' }] })
+    const s = lerSugestaoSpiced({ decisao: { valor: { decisor_confirmado: 'sim', quem: 'Dono', como_paga: '' }, citacao: 'oi' } }, d)
+    assert.equal(s?.decisao?.valor.decisor_confirmado, 'nao-sei')
+    assert.equal(s?.decisao?.valor.quem, 'Dono')
+    assert.equal(s?.decisao?.citacao, 'oi')
+  })
+
+  it('fala que sustenta mantém o "sim" como sugestão; "nao" e "nao-sei" passam como vieram', () => {
+    assert.equal(lerSugestaoSpiced({ decisao }, dossie)?.decisao?.valor.decisor_confirmado, 'sim')
+    for (const valor of ['nao', 'nao-sei'] as const) {
+      const s = lerSugestaoSpiced({ decisao: { ...decisao, valor: { ...decisao.valor, decisor_confirmado: valor } } }, dossie)
+      assert.equal(s?.decisao?.valor.decisor_confirmado, valor)
+    }
+  })
+
+  it('o lote nunca leva o decisor "sim": ele pede um toque próprio', () => {
+    const sim = lerSugestaoSpiced({ dor: { valor: 'Perde pedidos', citacao: 'Perco os pedidos' }, decisao }, dossie)
+    assert.deepEqual(Object.keys(sim ?? {}), ['dor', 'decisao'])
+    assert.deepEqual(camposDoLote(sim), ['dor'])
+    const naoSei = lerSugestaoSpiced({ decisao: { ...decisao, valor: { ...decisao.valor, decisor_confirmado: 'nao-sei' } } }, dossie)
+    assert.deepEqual(camposDoLote(naoSei), ['decisao'])
+    assert.deepEqual(camposDoLote(undefined), [])
   })
 })

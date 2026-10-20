@@ -54,3 +54,30 @@ test('sem retrato legível, lista vazia', () => {
   assert.deepEqual(conversasParaVoce(null, agora), []);
   assert.deepEqual(conversasParaVoce({ ...comRetrato([], []), estado: 'sem-retrato' } as CrmVisao, agora), []);
 });
+
+// Auditoria da Fase 3 (20/10/2026): a revisão do contexto (`conferirHistorico`, tipo 'combinado') ganhava a
+// prioridade do combinado e passava na frente do "o que achou?" e da proposta sem retorno. A ordem agora
+// é a da fila de venda, de uma tabela só (PRIORIDADE_DA_FILA).
+import { PRIORIDADE_DA_FILA, PRIORIDADE_DA_REVISAO, prioridadeDaAcao } from '../operations/proxima-venda.ts';
+test('a ordem da fila de venda, completa e fixa: responder, proposta, combinado, o que achou, proposta sem retorno, revisão, follow-up, recusa, primeiro contato', () => {
+  const ordem = [
+    ['responder', { tipo: 'responder' }], ['mandar-proposta', { tipo: 'mandar-proposta' }], ['combinado', { tipo: 'combinado' }],
+    ['depois-do-link', { tipo: 'depois-do-link' }], ['proposta sem retorno', { tipo: 'proposta' }],
+    ['revisão', { tipo: 'combinado', revisao: true }], ['followup', { tipo: 'followup' }], ['desfecho', { tipo: 'desfecho' }], ['primeiro', { tipo: 'primeiro' }],
+  ] as const;
+  const prioridades = ordem.map(([, a]) => prioridadeDaAcao(a));
+  assert.deepEqual(prioridades, [...prioridades].sort((x, y) => x - y), ordem.map(([nome]) => nome).join(' > '));
+  assert.equal(new Set(prioridades).size, ordem.length, 'cada passo tem a sua posição');
+  assert.equal(PRIORIDADE_DA_REVISAO, PRIORIDADE_DA_FILA.proposta + 1);
+  assert.equal(PRIORIDADE_DA_FILA.followup, PRIORIDADE_DA_REVISAO + 1);
+});
+test('na lista, a revisão do contexto vem depois do "o que achou?" e antes do follow-up', () => {
+  const conv = { desde: '2026-10-13T12:00:00Z', mensagens: 3, ultima: { direcao: 'saida', em: '2026-10-15T12:00:00Z', trecho: 'oi' }, ultimaSaida: '2026-10-15T12:00:00Z' };
+  const link = (id: string) => ({ whatsapp: `https://wa.me/55${id}` });
+  const convDoLink = { ...conv, ultima: { direcao: 'saida', em: new Date(agora - 30 * 3600_000).toISOString(), trecho: 'o link' }, ultimaSaida: new Date(agora - 30 * 3600_000).toISOString() };
+  const achou = base('achou', { conversa: convDoLink, links: link('1'), marcos: { enviado: '2026-10-13T12:00:00Z', segundaEnviada: new Date(agora - 30 * 3600_000).toISOString() } });
+  const revisao = base('revisao', { revisaoComercial: 'Conferir o último combinado antes de encerrar.', conversa: conv, links: link('2'), marcos: { enviado: '2026-10-13T12:00:00Z' } });
+  const follow = base('follow', { followupHoje: true, conversa: conv, links: { ...link('3'), followup: 'https://wa.me/553?text=oi' }, marcos: { enviado: '2026-10-13T12:00:00Z' } });
+  const lista = conversasParaVoce(comRetrato([follow, revisao, achou], [{ id: 'followup', ids: ['follow'] }]), agora);
+  assert.deepEqual(lista.map((x) => [x.lead.id, x.rotulo]), [['achou', 'O que achou?'], ['revisao', 'Revisar o contexto'], ['follow', 'Follow-up']]);
+});

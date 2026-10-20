@@ -56,9 +56,10 @@ porque respondeu, mesmo sem fechar — foi para `_em-conversa/` (também não é
 fila), reservada a leads que responderam e ainda não fecharam nem morreram.
 Desde 29/09/2026 as duas pastas se enchem sozinhas (ver "Depois do envio" em
 "Planilha"): lead que responde vai para `_em-conversa/`, e lead enviado sem
-resposta em 10 dias vira `expirado` e vai para `_concluidos/`. Você não move
-nenhuma das duas à mão. O demo de quem expirou é pausado na Vercel 15 dias
-depois (mesma regra dos recusados, abaixo).
+resposta em 7 dias vira `expirado` e vai para `_concluidos/` (o mesmo 7º dia
+do Perdido no CRM; era 10 até 19/10/2026). Você não move nenhuma das duas à
+mão. O demo de quem ficou em Perdido é APAGADO na Vercel 2 dias depois pelo
+`site-demos-limpeza` (a pausa de 15 dias saiu em 19/10/2026; ver abaixo).
 
 **`_recusados/` também não é fila.** Criada em 25/09/2026 a pedido do Rômulo,
 quando a I&C Climatização (`i-c-informatica-climatizacao-solucoes-em-ar-condicionado`)
@@ -894,9 +895,13 @@ explica por que uma pasta some da raiz:
 - `respondeu_em`: mensagem do lead a 5 min ou mais do envio (antes disso pode
   ser a saudação automática do WhatsApp Business); a pasta vai para
   `_em-conversa/` na hora seguinte;
-- follow-up: no 3º dia sem resposta, o Rômulo recebe um aviso com o texto
-  pronto (`followup_em` na planilha); quem manda é ele;
-- `enviado → expirado`: 10 dias sem resposta; a pasta vai para `_concluidos/`.
+- follow-up: no 3º dia sem resposta, a Central (server/crm.ts) o põe na fila
+  "Próxima venda" com o texto pronto; ela calcula o dia sozinha pelo envio e
+  quem manda é o Rômulo. A coluna `followup_em` segue na planilha só como
+  histórico: ninguém mais a escreve;
+- `enviado → expirado`: 7 dias sem resposta (o mesmo `DIAS_SEM_RESPOSTA` do
+  CRM, `EXPIRA_DIAS` no 05 · Acompanhamento); a pasta vai para `_concluidos/`.
+  Proposta tem relógio próprio: 10 dias corridos sem retorno (`cadencia.ts`).
   Se um expirado responder, volta para `enviado` e a pasta para `_em-conversa/`.
 
 - recusou / fechou / desfazer: botão na página do lead

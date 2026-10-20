@@ -214,7 +214,9 @@ const acoes = computed<AcaoDaFicha[]>(() => {
     ['convite', 'Abrir convite no WhatsApp', l.convite, true, true],
     ['segunda', segunda, l.segunda, interesse, true],
     ['gerarDemo', 'Gerar o demo', l.gerarDemo, interesse, false],
-    ['followup', rotuloDoFollowup(props.lead), l.followup, true, true],
+    // O follow-up do dia sai com o texto do braço sorteado (followupDoBraco), o mesmo do cartão de
+    // confirmação: o botão e o que se confirma não podem mostrar textos diferentes.
+    ['followup', rotuloDoFollowup(props.lead), acaoDaFila.value?.tipo === 'followup' && !props.lead.reenvioDoRobo && acaoDaFila.value.link?.url ? acaoDaFila.value.link.url : l.followup, true, true],
     // A conversa é outra intenção (ler, não mandar texto pronto): fica no apoio, ou vira o primário sem outro.
     ['whatsapp', 'Ler a conversa no WhatsApp', l.whatsapp, false, false],
     ['site', convite ? 'Site da empresa' : 'Demo', l.site, false, false],

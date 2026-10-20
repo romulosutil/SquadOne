@@ -5,7 +5,7 @@ import type { Pessoa } from '../types'
 import SpriteDaSala from './SpriteDaSala.vue'
 import AjustarProximoPasso from './AjustarProximoPasso.vue'
 import { marcosDaMissao, movimentoDaMissao } from './missao'
-import type { AcaoDeVenda } from '../operations/proxima-venda'
+import { textoDaAnotacaoDeVenda, type AcaoDeVenda } from '../operations/proxima-venda'
 import { textoParaATela } from '../operations/marcadores-da-conversa'
 import { diaEmSP } from '../operations/retomadas'
 // `acao`: a mesma da fila de venda (acaoDoLead), calculada na rota. Sem ela o cartão só tinha botões
@@ -51,7 +51,7 @@ async function confirmar(a: AcaoDeVenda, como: 'enviada' | 'recusa' = 'enviada')
   let anotou = ''
   try {
     if (a.anota) {
-      const r = await fetch('/api/operations/crm/venda/anotar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, produto: props.lead.produto, id: props.lead.chave, tipo: a.anota, texto: a.anota === 'proposta' ? a.rascunho?.slice(0, 1000) ?? '' : '' }) })
+      const r = await fetch('/api/operations/crm/venda/anotar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, produto: props.lead.produto, id: props.lead.chave, tipo: a.anota, texto: textoDaAnotacaoDeVenda(a) }) })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const corpo = await r.json().catch(() => ({})) as { jaEstava?: boolean }
       anotou = corpo.jaEstava ? 'Já estava anotado.' : a.anota === 'proposta' ? 'Proposta anotada.' : a.anota === 'recusou' ? 'Recusa marcada.' : 'Envio anotado.'

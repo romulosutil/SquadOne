@@ -7,14 +7,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
+  avisoExigeTelegram,
   avisoParaArquivo,
   AvisoInvalido,
   avisosPessoaisPeloTelegram,
   criarRegistroDeEnviados,
   gravarAvisoNaFila,
   noSilencio,
+  ORIGENS_QUE_EXIGEM_TELEGRAM,
   publicarAviso,
   publicarAvisoPessoal,
   RETENCAO_DOS_ENVIADOS_MS,
@@ -168,6 +171,39 @@ describe("publicarAvisoPessoal", () => {
     assert.equal(avisosPessoaisPeloTelegram({}), true);
     assert.equal(avisosPessoaisPeloTelegram({ SQUADONE_LEMBRETES_PELO_TELEGRAM: "FALSE" }), false);
     assert.equal(avisosPessoaisPeloTelegram({ SQUADONE_LEMBRETES_PELO_TELEGRAM: "true" }), true);
+  });
+});
+
+// Fase 5.3 da auditoria de 19/10/2026: três listas de "origens que só saem pelo Telegram" divergiam (5, 2 e 2).
+// TS e Python não se importam, então o teste lê o texto das constantes dos dois .py e compara com a deste módulo.
+describe("origens que exigem Telegram: paridade com o Python", () => {
+  const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const lerLista = async (arquivo: string, constante: string): Promise<string[]> => {
+    const texto = await fs.readFile(path.join(raiz, arquivo), "utf8");
+    const m = new RegExp(String.raw`^${constante}\s*=\s*\{([^}]*)\}`, "m").exec(texto);
+    assert.ok(m, `${constante} sumiu de ${arquivo}`);
+    return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]).sort();
+  };
+  const daqui = [...ORIGENS_QUE_EXIGEM_TELEGRAM].sort();
+
+  it("a lista do servidor é a do dell-status.py", async () => {
+    assert.deepEqual(await lerLista("deploy/dell/dell-status.py", "ORIGENS_PELO_TELEGRAM"), daqui);
+  });
+
+  it("a lista do servidor é a da lib aviso.py", async () => {
+    assert.deepEqual(await lerLista("deploy/dell/lib/aviso.py", "ORIGENS_TELEGRAM_EXCLUSIVO"), daqui);
+  });
+
+  it("cada origem da lista e todo P0 exigem Telegram; o prefixo n8n: e as origens comuns, não", () => {
+    for (const origem of ORIGENS_QUE_EXIGEM_TELEGRAM) assert.equal(avisoExigeTelegram({ prioridade: 2, origem }), true, origem);
+    assert.equal(avisoExigeTelegram({ prioridade: 0, origem: "qualquer" }), true);
+    // Decisão de produto aberta: falha de fluxo do n8n prefere o Telegram no dell-status, mas não é exclusiva.
+    for (const origem of ["n8n:03 · Balcão", "squadone:vigia", "teste"]) assert.equal(avisoExigeTelegram({ prioridade: 2, origem }), false, origem);
+  });
+
+  it("origem exclusiva vai sem expira_em ao arquivo, a comum mantém", () => {
+    assert.equal("expira_em" in avisoParaArquivo({ ...base, origem: "backup-dell" }), false);
+    assert.equal("expira_em" in avisoParaArquivo(base), true);
   });
 });
 

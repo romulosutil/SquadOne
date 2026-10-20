@@ -72,7 +72,8 @@ const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google 
 // 14/10/2026: o sorteio pelo hash deu lugar a alocarVariante (abaixo): a letra passa a ter
 // estado (a coluna mensagem_variante + ab_elegiveis), nao sai mais so do place_id.
 const LETRAS = ['A', 'B', 'C', 'D'];
-// Revisão humana pendente. Nunca autorizar a partir de campo do lead ou saída de modelo.
+// Aprovada pelo Rômulo em 19/10/2026, às 21h37 ("Aprovar os textos para teste"; docs/PRUMO-TEXTOS-VENDAS-2026-10-19.md).
+// A aprovação é desta constante, escrita à mão: nunca autorizar a partir de campo do lead ou saída de modelo.
 const EVENTO_CRITICO_APROVADO = true;
 const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
 VARIACOES.push(PRIMEIRA_EVENTO_CRITICO);

@@ -61,7 +61,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/plano-de-ajuste.ts  PURO: duração/esforço aprovados sobre o alocador
   server/ajuste.ts        aplica o ajuste aprovado no Google
   server/calendar.ts      leitura/escrita no Google Calendar (listar, GET/PATCH/POST de um evento)
-  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 nos dois canais (capacidade pronta: nenhum chamador o produz), sem R$;
+  server/avisos.ts        Aviso no schema da fila de avisos do Dell, gravação atômica, P0 e as origens de falha só pela outbox do Telegram (nunca WhatsApp; lista única `ORIGENS_QUE_EXIGEM_TELEGRAM`, espelho da do Dell), sem R$;
                           lembrete e alerta de finanças pelo Telegram, fila só de reserva (publicarAvisoPessoal, OT-14); a chave de 24 h dos avisos pessoais
                           fica em disco (RegistroDeEnviados, avisos-enviados.json), porque a Central reinicia a cada merge; o cartão de decisão saiu (19/10/2026)
   server/lembretes.ts     PURO: quais eventos avisar, quando e com que texto (um Aviso)
@@ -89,7 +89,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga);
                           sinais do site (17/10/2026): o dossiê leva sinaisDoSite (sinaisParaODossie, PURO) só com sinais COM fonte, em observação cautelosa (tag/pixel instalado nunca vira gasto; agência só
                           contexto, sem abrir), e o prompt ganha a regra de UMA observação na 1ª linha só quando há sinais; sem sinais o hash do dossiê não muda; nenhum template do funil muda (experimento A/B/C)
-  server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30:
+  server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30
+                          (os avisos que não são de primeiro contato saem das 7h às 22h, inclusive fora do expediente; o primeiro contato conserva horário e ritmo; das 22h às 7h `silencioDoVendedor` não sai nada):
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min só se a última mensagem é do lead) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead;
                           teto de 40 avisos que SAÍRAM por dia (o "quero ver" quente passa por cima); quem faz o 1º contato é a regra da Central (primeirosDoTime); o dia do servidor (venda-do-dia) é obrigatório
   server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
@@ -185,7 +186,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     liberados.ts          o espelho único do "Liberar" do dia (AC-21), do corpo de GET /crm/venda; primeiro-da-ficha.ts PURO (AC-22): quando a
     proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar (responder > mandar a proposta > combinado >
                           "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up > recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo
-                          livre), com o porquê, a tática e a mensagem pronta. Ninguém a desenha como cartão desde 19/10/2026 (ProximaVenda.vue saiu): ela é o "Agora" da Ficha
+                          livre), com o porquê, a tática e a mensagem pronta. `PRIORIDADE_DA_FILA` é a fonte única dessa ordem (a lista "Conversas para você" lê dela; a revisão vale 5, depois da proposta sem retorno). Ninguém a desenha como cartão desde 19/10/2026 (ProximaVenda.vue saiu): ela é o "Agora" da Ficha
                           (acaoDoLead/agoraDaFicha), o "Envie para X" do Telegram e, por filaDaTela, a lista "Conversas para você". fraseDaAcao é a frase única do passo (AC-12),
                           linkDoPasso escolhe o link pelo tipo e nunca abre o gerar_demo (AC-05), desfechosDoLead alimenta a faixa "Desfecho" da Ficha (AC-08), anotacoesAMao o
                           anotar à mão (AC-09); COM_COPILOTO é só `responder` (nos outros passos o copiloto nunca responde)
@@ -257,6 +258,22 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           Fisher de ab-video.ts, "ganhou" só com +20 pontos e p < 0,10. Quem sorteia é o Balcão (alocarRodada,
                           site-mensagem.js: menos atribuídos no nicho × conjunto, congela com o mesmo conjunto); o histórico
                           (150 envios sem letra e os do hash) e o follow-up do 05 · Acompanhamento ficam fora
+    abertura-prumo.ts     PURO (19/10/2026, Fase 3): o A × D da 1ª mensagem dos serviços PRUMO, separado do Site (D = evento crítico do Raio-X, um fato verificável
+                          de `eventoCriticoDe`); estratificado por nicho, só confirma o que de fato saiu; aprovada pelo Rômulo em 19/10 (EVENTO_CRITICO_APROVADO)
+    followup-experimento.ts  PURO (19/10/2026): follow-up A (texto de sempre) × B (texto novo por oferta), braço por hash do lead; FOLLOWUP_NOVO_APROVADO
+                          (aprovado em 19/10); sem taxa antes de 30 confirmações por braço; o envio continua humano
+    plus-experimento.ts   PURO (19/10/2026): o teste dos 20 primeiros envios do Plus (a partir de 19/10, `plus_enviado` manual) contra o Site no mesmo período:
+                          respostas de gente, "quero ver" e propostas, em Números
+    spiced.ts             PURO (19/10/2026, Fase 2): a qualificação SPICED confirmada pelo Rômulo (registro `spiced` na aba CRM, ≤ 200 caracteres por campo, 1000 no JSON,
+                          data real); `qualificadoParaProposta` = dor + impacto + decisor confirmado, a TRAVA da proposta nas cinco linhas (mandar-proposta, proxima-venda,
+                          copiloto, AssistenteSugestao). Sugestão do copiloto nunca entra no registro. CrmSpiced.vue = faixa BP-SPICED da Ficha
+    cadencia.ts           PURO (19/10/2026, Fase 3): o que fazer depois do silêncio, em dias úteis (seg–sex, sem feriado). Proposta: nada no dia 0, toque no 1º e no 3º dia útil, perde
+                          no 10º dia corrido; conversa: um toque no 2º dia útil depois da nossa saída, revisão no 7º corrido. Recusa, perda manual, pausa, resposta humana e próximo
+                          passo futuro preservam. Só vira fato com `cadencia_enviada` (confirmação humana, uma por proposta e degrau); entra na fila de venda (proxima-venda.ts)
+    aarr.ts               PURO (19/10/2026, Fase 4): AARRR comercial só de fatos confirmados na aba CRM (valor_proposta, pagamento_confirmado, receita_desfeita, origem, motivo_perda,
+                          retencao_3m, indicacao_*), desde 19/10; centavos vêm do catálogo da oferta (precos-iris.ts: Iris por ficha ativa em faixas marginais; Estamparia sem preço).
+                          A Estrela-guia = recebimentos (pagamentos) confirmados na semana de São Paulo, nas cinco linhas; "ganhou" não é dinheiro; sem registro é "não medida".
+                          CrmReceita.vue grava os fatos na Ficha; `leituraAarr` também agrega por origem (`canais`, taxa só com 10+ enviados), motivo de perda (`perdas`) e valor de proposta registrado (`propostas`), na seção BP-AARRR de Números; a faixa AARRR e os testes (Plus, abertura A × D, follow-up) moram em CrmResultados.vue (Números)
     copiloto.ts           PURO (15/10/2026): dossiê do lead do "respondeu" à proposta (jornada, colinha, Raio-X, notas; sem telefone),
                           prompt, leitura da saída (id só do cardápio, "R$" só dos preços abertos, número fora do dossiê = aviso)
                           e o rascunho da proposta com preço do cardápio; desde 17/10/2026 a sugestão aparece no cartão do
@@ -347,7 +364,7 @@ checkout; no Dell nunca semeia o roster (`RosterAusente`). `SQUADONE_ROSTER_CONG
 recusa escrita (409). Acesso: identidade do Tailscale Serve em todo pedido e escrita só da
 mesma origem (curl local de escrita precisa de `-H 'Origin: http://127.0.0.1:9120'`). OAuth do
 Google só pelo loopback. Avisos: schema da fila do Dell, gravação atômica, nenhum "R$" passa,
-P0 vai aos dois canais (capacidade pronta, ninguém o produz); lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
+P0 e as origens `socorro`, `dell-status`, `backup-dell`, `atualizar-central` e `silmer-drive-sync` ficam numa outbox exclusiva do Telegram, sem expirar e sem WhatsApp mesmo com o bot fora (a lista é a mesma em `dell-status.py`, `lib/aviso.py` e `server/avisos.ts`, com teste de paridade; o prefixo `n8n:` prefere o Telegram mas ainda tem reserva no WhatsApp: decisão de produto em aberto); lembrete e alerta de finanças vão SÓ pelo Telegram (sem som das 22h às 7h,
 fila do WhatsApp de reserva; OT-14, 16/10/2026, `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` desfaz), com a chave de 24 h em disco (`avisos-enviados.json`); as falhas do
 `dell-status`, o `socorro`, o backup, o `atualizar-central`, o sync do Silmer e os avisos dos fluxos do n8n também, com o token lido do `operations.env`, nunca copiado. Lembretes: a vigia relê a agenda a cada 60 s e nada é agendado
 para o futuro; só o `operations` roda vigia (dois processos duplicariam cada aviso).
@@ -457,4 +474,4 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 
 ## Fase 0 do diagnóstico de vendas (19/10/2026)
 
-Decisão do Rômulo já tomada: teto único de 30 primeiros contatos/dia, somando time comercial, telas e Telegram; manter 5 min e 12/h. As cinco linhas dividem a fila sem cotas e nenhuma fica congelada. Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X será variante nova no A/B, com texto revisado pelo Rômulo antes de ir ao ar. Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".
+Decisão do Rômulo já tomada: teto único de 30 primeiros contatos/dia, somando time comercial, telas e Telegram; manter 5 min e 12/h. As cinco linhas dividem a fila sem cotas e nenhuma fica congelada. Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X virou a variante D do A/B e o follow-up novo o braço B, ambos aprovados pelo Rômulo em 19/10 para teste ("Aprovar os textos para teste"; o envio segue humano). Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".

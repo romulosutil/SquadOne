@@ -4,7 +4,7 @@ import { describe, it } from 'node:test'
 import { FOLLOWUP, FOLLOWUP_COM_LINK, FOLLOWUP_RAIO_X, SEGUNDA, SEGUNDA_RAIO_X, artigoDe } from '../server/site-mensagem.ts'
 import {
   CARDAPIO, CDL, ETAPAS_DA_OFERTA, FRASE_MAPA_E_GRATIS, FRASE_SOB_PROPOSTA, OBJECOES, PRECOS_DO_CARDAPIO, ROTEIRO, SEM_LINK, SOB_PROPOSTA,
-  colinhaDoLead, linkDoWhatsApp, objecao, objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher,
+  colinhaDoLead, linkDoWhatsApp, objecao, objecaoDaOferta, objecoesNoTexto, passo, precoDaTabela, precoParaOCliente, precosNoTexto, preencher, textoDasFaixasIris,
   type LeadDaColinha, type Momento, type Trecho,
 } from './operations/colinha.ts'
 import type { CrmEtapa, CrmProduto, CrmTipoDeResposta } from './operations/types.ts'
@@ -482,6 +482,56 @@ describe('integridade do conteúdo', () => {
     const permitidos = new Set(['{NOME}', '{ARTIGO}', '{O_A}', '{URL}', '{RAIO_X}'])
     for (const texto of TODOS_OS_TEXTOS) {
       for (const m of texto.match(/\{[A-Za-z_]+\}/g) ?? []) assert.ok(permitidos.has(m), `${m} em: ${texto}`)
+    }
+  })
+})
+
+// A objeção de preço é da oferta que o lead discute (Plus: a oferta dele), e o valor só sai da tabela dela. Sem este teste,
+// um "quanto custa" da Iris ou da estamparia podia voltar a responder com o R$ 690 do Site sem nada falhar.
+describe('objecaoDaOferta: o preço da objeção é o da oferta do lead', () => {
+  const PRECO_DO_SITE = ['R$ 690', 'R$ 39']
+  const quanto = objecao('quanto-custa')
+  const caro = objecao('ta-caro')
+  const doProduto = (produto: CrmProduto, oferta?: 'site' | 'prumo' | 'iris' | 'estampa') =>
+    ({ produto, ...(oferta ? { plus: { oferta } } : {}) })
+
+  it('Site mantém a objeção intacta, com o R$ 690 e o R$ 39 do cardápio', () => {
+    for (const o of [quanto, caro]) assert.deepEqual(objecaoDaOferta(o, doProduto('site')), o)
+    for (const valor of PRECO_DO_SITE) assert.ok(quanto.resposta.texto.includes(valor), valor)
+  })
+
+  it('Iris usa as faixas por ficha ativa e pede a quantidade, nunca o preço do Site', () => {
+    const r = objecaoDaOferta(quanto, doProduto('iris'))
+    assert.ok(r.resposta.texto.includes(textoDasFaixasIris()))
+    assert.match(r.resposta.texto, /Quantas vocês têm hoje\?/)
+    assert.ok(!r.resposta.texto.includes('R$ 690'), 'a implantação do Site não entra na Iris (o R$ 39 é a 1ª faixa dela)')
+    assert.ok(!objecaoDaOferta(caro, doProduto('iris')).resposta.texto.includes('R$ 690'))
+  })
+
+  it('PRUMO diz que raio-x e Mapa são grátis e que o trabalho é proposto depois, sem preço', () => {
+    const r = objecaoDaOferta(quanto, doProduto('prumo'))
+    assert.match(r.resposta.texto, /raio-x e o Mapa são gratuitos/)
+    assert.match(r.resposta.texto, /proposto depois/)
+    for (const o of [quanto, caro]) assert.ok(!objecaoDaOferta(o, doProduto('prumo')).resposta.texto.includes('R$'))
+  })
+
+  it('Estamparia não tem preço definido: nenhum R$ em nenhuma das duas objeções', () => {
+    for (const o of [quanto, caro]) assert.ok(!objecaoDaOferta(o, doProduto('estampa')).resposta.texto.includes('R$'), o.id)
+    assert.match(objecaoDaOferta(quanto, doProduto('estampa')).resposta.texto, /ainda precisa ser definido/)
+  })
+
+  it('Plus segue a oferta do lead, não o Site; oferta ausente pergunta qual solução', () => {
+    assert.ok(objecaoDaOferta(quanto, doProduto('plus', 'iris')).resposta.texto.includes(textoDasFaixasIris()))
+    assert.ok(!objecaoDaOferta(quanto, doProduto('plus', 'estampa')).resposta.texto.includes('R$'))
+    assert.deepEqual(objecaoDaOferta(quanto, doProduto('plus', 'site')), quanto)
+    const semOferta = objecaoDaOferta(quanto, doProduto('plus'))
+    assert.match(semOferta.resposta.texto, /Qual solução vocês estão considerando/)
+    assert.ok(!semOferta.resposta.texto.includes('R$'))
+  })
+
+  it('só "quanto-custa" e "tá caro" mudam por oferta; as outras objeções passam intactas', () => {
+    for (const o of OBJECOES.filter((x) => x.id !== 'quanto-custa' && x.id !== 'ta-caro')) {
+      for (const produto of ['site', 'prumo', 'iris', 'estampa'] as const) assert.equal(objecaoDaOferta(o, doProduto(produto)), o, `${o.id} (${produto})`)
     }
   })
 })

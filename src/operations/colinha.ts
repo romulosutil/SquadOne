@@ -469,14 +469,14 @@ export const ROTEIRO: PassoDoRoteiro[] = [
   {
     momento: 'proposta',
     titulo: 'Proposta',
-    objetivo: 'Mandar a proposta em até 24 h depois do "gostei" ou da conversa: o que entra, quanto custa e quando começa.',
+    objetivo: 'Qualificar (dor, impacto, decisor) e depois mandar a proposta em até 24 h do "gostei" ou da conversa: o que entra, quanto custa e quando começa.',
     trechos: [
       {
         id: 'proposta-encontrado',
         titulo: 'Encontrado (depois do "gostei")',
         texto:
           'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
-        dica: 'Até 24 h depois do "gostei". Pediram mudança no demo? Faça antes de cobrar.',
+        dica: 'Qualifique antes (dor, impacto, decisor) e mande em até 24 h depois do "gostei". Pediram mudança no demo? Faça antes de cobrar.',
         produtos: SITE,
       },
       {

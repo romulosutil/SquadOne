@@ -153,7 +153,7 @@ export function segundaDe(l: LeadDaMensagem) {
   return abrir(l, raioX ? SEGUNDA_RAIO_X.split("{RAIO_X}").join(raioX) : SEGUNDA, SEGUNDA_EN);
 }
 
-// Variante D em revisão; espelho literal dos fatos e do texto do Balcão.
+// Variante D aprovada pelo Rômulo em 19/10/2026 ("Aprovar os textos para teste"); espelho literal dos fatos e do texto do Balcão.
 export const EVENTO_CRITICO_APROVADO = true;
 export const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
 export function eventoCriticoDe(lead: { raio_x_url?: unknown; raio_x_achados?: unknown }): string | null {

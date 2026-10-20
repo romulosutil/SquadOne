@@ -286,7 +286,8 @@ substitui o observador nem o n8n: os dois precisam estar no ar.
 Roda a cada minuto e faz duas coisas: grava
 `~/.local/share/squadone-operations/status.json`, que a página inicial da
 Central lê, e avisa o Rômulo quando uma verificação passa a falhar, a cada 12 h enquanto continuar falhando e
-quando volta ao normal: pelo bot do Telegram (OT-14) e, só se ele falhar, pelo WhatsApp do Hermes (`hermes send`).
+quando volta ao normal: **só pelo bot do Telegram** (OT-14; desde a Fase 5.3, 19/10/2026, o "Quebrou" é gravado na fila com
+`origem: dell-status` e a drenagem o entrega; bot fora = o aviso espera a próxima rodada, nunca vai ao WhatsApp do Hermes).
 Estados `atencao` só aparecem na Central. Também esvazia
 `~/.local/share/avisos/fila/*.json`, a fila que os containers e os scripts do
 Dell usam para avisar sem abrir rede nem firewall (formato e regras em "Fila de
@@ -319,8 +320,15 @@ avisos", abaixo).
 - **O socorro só é prometido quando roda:** o "Quebrou" só grava o pedido e só diz "vou tentar religar" ou "diagnóstico do
   Hermes a caminho" para o que tem remédio ou leitura própria (`IDS_COM_REMEDIO`, `IDS_COM_LEITURA`, replicados do
   `socorro.py` de propósito); com o `socorro.path` parado não grava pedido.
-- **Avisos pelo Telegram:** `ORIGENS_PELO_TELEGRAM` = `socorro`, `backup-dell`, `atualizar-central`, `silmer-drive-sync` e o
-  prefixo `n8n:` (todo aviso gravado por fluxo do n8n). O fluxo "00 · Avisar falha pelo Hermes", que não manda `chave`,
+- **Avisos pelo Telegram:** `ORIGENS_PELO_TELEGRAM` = `socorro`, `dell-status`, `backup-dell`, `atualizar-central`,
+  `silmer-drive-sync` (e todo P0): **exclusivos**, só pelo Telegram, sem `expira_em` e sem WhatsApp mesmo com o bot fora.
+  A mesma lista está em `lib/aviso.py` (`ORIGENS_TELEGRAM_EXCLUSIVO`) e em `server/avisos.ts`
+  (`ORIGENS_QUE_EXIGEM_TELEGRAM`); `aviso.test.py`, `dell-status.test.py` e `server/avisos.test.ts` falham se divergirem.
+  **Falha de fluxo do n8n (prefixo `n8n:`) é diferente, e é decisão de produto em aberto:** `sai_pelo_telegram` o manda
+  ao Telegram primeiro, mas ele NÃO é exclusivo (`telegram_exclusivo` olha só as 5 origens e P0): com o bot fora, o aviso
+  segue para o WhatsApp do Hermes e expira como aviso comum. `dell-status.test.py`
+  (`test_falha_de_fluxo_do_n8n_hoje_cai_no_whatsapp_se_o_telegram_falha`) fixa isso; torná-lo exclusivo é acrescentar o
+  prefixo a `telegram_exclusivo` e à lib e ao servidor (ajustando esse teste). O fluxo "00 · Avisar falha pelo Hermes", que não manda `chave`,
   ganha uma por fluxo (`n8n-falha:<fluxo>`, 24 h); o "Quebrou" do `dell-status` (`fluxo:<id>`) ainda repete a mesma
   falha com a causa até 1 min depois (a duplicata só sai mexendo no próprio fluxo 00).
 - **Links que existem:** os botões `acao` das filas apontam para telas da Central de hoje (Vendas › Primeiros contatos,
@@ -617,12 +625,12 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
   do Hermes é o número que fala com os leads (restrição de 24 h em 15/10), então
   as falhas do Dell saem pelo bot da Central. O "Quebrou / Continua fora / Voltou
   ao normal" do próprio `dell-status` (`enviar_pessoal`) e os avisos da fila com
-  `origem` em `ORIGENS_PELO_TELEGRAM` (`socorro`, `backup-dell`, `atualizar-central`, `silmer-drive-sync` e o prefixo `n8n:`) vão por `sendMessage` ao
+  `origem` em `ORIGENS_PELO_TELEGRAM` (`socorro`, `dell-status`, `backup-dell`, `atualizar-central`, `silmer-drive-sync`; e o prefixo `n8n:`, que prefere o Telegram mas tem reserva no WhatsApp, ver "Avisos pelo Telegram" acima) vão por `sendMessage` ao
   chat do dono, em texto puro, cortados em 4096 caracteres: na hora, **sem som
   das 22h às 7h** (`disable_notification`) salvo P0, sem contar no teto de 20 por
   hora (que protege o número) e com a chave de 24 h valendo igual. Bot desligado,
-  mal configurado ou com falha: o caminho do WhatsApp de antes (o "Quebrou" sai na
-  hora; o aviso do socorro espera o silêncio e o teto). Uma tentativa de bot por
+  mal configurado ou com falha: as origens exclusivas e o P0 **esperam** a próxima rodada (sem WhatsApp, sem
+  expirar; Fase 5.3, 19/10/2026); só o prefixo `n8n:` e as demais origens pessoais caem no WhatsApp. Uma tentativa de bot por
   drenagem, 10 s cada. O resto da fila (scripts como o gerador e o observador, a reserva dos lembretes da
   Central) segue no WhatsApp; o cartão de decisão com link da tailnet saiu em 19/10/2026. Cada envio ao bot
   é anotado em `telegram.json` (a conta das falhas seguidas do check `telegram`).
@@ -632,8 +640,8 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
     copiado para a unit nem para o repo, e o log nunca leva a URL (ela tem o token).
     Lista de chats vazia, chat de grupo ou token fora do formato = sem bot.
   - **Desfazer:** `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` no `operations.env` volta
-    as falhas ao WhatsApp no minuto seguinte (e os lembretes da Central depois de
-    reiniciá-la).
+    só os lembretes e o alerta de finanças da Central ao WhatsApp (depois de reiniciá-la). O
+    `dell-status` não lê essa variável: as falhas e o P0 nunca voltam ao WhatsApp por ela.
 
 **Scripts Python gravam pela lib** `deploy/dell/lib/aviso.py` (11/10/2026),
 instalada em `~/.local/lib/mel/aviso.py`: valida contra este formato (mais "R$"
@@ -1394,6 +1402,13 @@ enviado; recibo de leitura → `visto_em` ou "Leu o convite em ..."; resposta �
 `expirado`; página do lead → `recusado`/`fechado`). As pastas espelham a
 planilha (`site-pastas`). A Central não tem etapa própria.
 
+**Registros novos da aba CRM (19/10/2026, Fases 2 a 4 do diagnóstico de vendas).** `spiced` (qualificação SPICED confirmada pelo Rômulo, JSON de
+até 1000 caracteres; dor + impacto + decisor confirmado liberam a proposta), `cadencia_enviada` (o toque de acompanhamento da proposta ou da
+conversa, confirmado à mão) e os fatos do AARRR: `valor_proposta`, `pagamento_confirmado`, `receita_desfeita`, `origem`, `motivo_perda`,
+`retencao_3m`, `indicacao_pedida`, `indicacao_recebida`. O `crm.py` valida o formato de cada um antes de gravar (`python3 crm.py --testar`).
+A **Estrela-guia** é o número de `pagamento_confirmado` da semana de São Paulo (as cinco linhas): "ganhou" não é pagamento, e sem registro é
+"não medida". Regras e telas em `docs/referencia/perfis-e-experimentos.md`, "Diagnóstico de vendas: Fases 2 a 5".
+
 **Ciclo de vida (as 5 etapas, iguais para os dois produtos).** Regras em
 `server/crm.ts` (`etapaDoSite`, `etapaDoPrumo`, `comPrazoDoContato`); nomes de coluna em
 `COLUNAS_DO_SITE`/`COLUNAS_DO_PRUMO` (coluna ausente = vazia, com aviso na tela).
@@ -1417,7 +1432,8 @@ mostra "Perdido em N dias". Um **próximo passo** registrado na ficha segura o
 lead (é o Rômulo dizendo que ainda vale) — inclusive o que a planilha já marcou
 `expirado` pelo 05 —; uma **proposta** também; e uma mensagem nova do lead o
 traz de volta sozinho. O CRM só calcula: a planilha continua com o status que
-tem. **Desde 19/10/2026 o 05 · Acompanhamento expira no mesmo 7º dia** (era o 10º, e as duas contas se desencontravam: o CRM
+tem. **Proposta tem relógio próprio (19/10/2026, `src/operations/cadencia.ts`):** perde no 10º dia corrido sem retorno, com
+retornos no 1º e no 3º dia úteis; a conversa recebe um toque no 2º dia útil e revisão no 7º corrido. **Desde 19/10/2026 o 05 · Acompanhamento expira no mesmo 7º dia** (era o 10º, e as duas contas se desencontravam: o CRM
 tirava o lead no 7º e a planilha só no 10º). Quem sai pela regra cai na limpeza dos demos dois dias depois.
 
 "Entregue sem lido" é **não sei**, nunca "não viu": quem desliga a confirmação
@@ -2409,6 +2425,12 @@ python3 whatsapp-conversa.py --colunas  # só a coluna (precisa da credencial Go
 > autorização do destinatário. Envios diretos no celular podem ficar fora da contagem. Se um dia mudar:
 > `DELETE /instance/logout/prumo` e um QR novo no celular do outro número. Onde este texto diz "número novo" ou
 > "número só do PRUMO", leia "o número da Evolution".
+
+**Entrada durável (19/10/2026, Fase 5 do diagnóstico de vendas).** O `evolution-adaptador.py` só responde 200 à Evolution depois de guardar: com
+a lista de leads velha ou o LID ainda sem telefone, o evento mínimo 1:1 fica em `entrada-pendente.json` (600, atômico; 2000 itens / 2 MiB;
+cheio ou com falha devolve 503) e é reentregue pela hora original quando o vínculo chega. Os pares LID para telefone ficam em
+`lid-telefone.json` (600) e sobrevivem ao reinício. Cada evento útil vira uma captura imutável em `capturas-adaptador/<sha256>.json`, que o
+`observador.py` confirma em disco antes de remover (uma guarda por pasta impede dois consumidores). Grupos e ruído nunca entram.
 
 Fase 2 do plano `docs/superpowers/plans/2026-10-15-envio-whatsapp-sem-bloqueio.md`: a
 prospecção sai do número pessoal (onde mora o Hermes) para um número só do PRUMO no

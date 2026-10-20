@@ -17,7 +17,7 @@ import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } 
 import { leituraDoTestePlus, TAMANHO_DO_TESTE_PLUS } from './plus-experimento'
 import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
 import { EVENTO_CRITICO_APROVADO } from '../../server/site-mensagem'
-import { leituraAarr } from './aarr'
+import { ROTULO_DA_ORIGEM, ROTULO_DO_MOTIVO, leituraAarr } from './aarr'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
 // rendeu, contado só sobre quem foi enviado no período. Só leitura: os números
@@ -29,6 +29,7 @@ import { leituraAarr } from './aarr'
 const props = withDefaults(defineProps<{ leads: CrmLead[]; todosLeads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
 const aarr = computed(() => leituraAarr(props.leads, props.agora))
 const estrela = computed(() => leituraAarr(props.todosLeads, props.agora).estrelaGuia)
+const taxaDaOrigem = (taxa: number | null) => (taxa === null ? `amostra pequena (menos de ${AMOSTRA_MINIMA} enviados)` : `${Math.round(taxa * 100)}%`)
 const dinheiro = (centavos: number) => (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const periodo = ref<Periodo>('30')
@@ -116,6 +117,22 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
         <p class="crm-nota-pequena">Aquisição: respostas humanas comprovadas após o envio registrado. O funil histórico usa a classificação da planilha e pode divergir.</p>
         <p class="crm-nota-pequena">Ativação exige um pedido de material preservado e a qualificação humana. Estar em proposta, sem essa evidência, não confirma o “quero ver” histórico.</p>
         <p class="crm-nota-pequena">Faixa da seleção atual: aquisição e ativação nos últimos 30 dias; receita, retenção e indicação com instrumentação desde 19/10/2026. Histórico anterior: não medido; zero desde essa data significa nenhum registro confirmado. Sem inferir receita ou retenção de avanço no funil. MRR considera uma mensalidade por contrato com atividade explicitamente confirmada no terceiro mês.</p>
+        <div class="crm-aarr-detalhe" data-blueprint="BP-AARRR">
+          <h3 class="crm-aarr-detalhe__titulo">Por origem confirmada</h3>
+          <p v-if="!aarr.canais.linhas.length" class="crm-nota-pequena">Sem registro: nenhum envio nem recebimento na seleção.</p>
+          <table v-else class="crm-spiced-comparacao"><caption>Origem anotada na Ficha. Quem não tem origem anotada fica em “Sem origem”, sem palpite.</caption><thead><tr><th scope="col">Origem</th><th scope="col">Enviados · 30 dias</th><th scope="col">Respostas de gente</th><th scope="col">“Quero ver” qualificados</th><th scope="col">Resposta</th><th scope="col">Recebimentos</th></tr></thead><tbody><tr v-for="l in aarr.canais.linhas" :key="l.canal"><th scope="row">{{ ROTULO_DA_ORIGEM[l.canal] }}</th><td>{{ l.enviados }}</td><td>{{ l.respostas }}</td><td>{{ l.ativados }}</td><td>{{ taxaDaOrigem(l.taxaDeResposta) }}</td><td>{{ l.pagamentos }}</td></tr></tbody></table>
+          <p v-if="aarr.canais.linhas.length && !aarr.canais.comOrigem" class="crm-nota-pequena">Nenhuma origem confirmada nas Fichas desta seleção: tudo cai em “Sem origem”. A comparação entre origens começa quando elas forem anotadas.</p>
+          <h3 class="crm-aarr-detalhe__titulo">Motivo das perdas</h3>
+          <p v-if="!aarr.perdas.comMotivo" class="crm-nota-pequena">Sem registro: {{ aarr.perdas.perdidos }} {{ aarr.perdas.perdidos === 1 ? 'Perdido' : 'Perdidos' }} na seleção, nenhum com o motivo confirmado na Ficha.</p>
+          <p v-else class="crm-resultado__numeros"><template v-for="(m, i) in aarr.perdas.porMotivo" :key="m.motivo"><span v-if="i">· </span>{{ ROTULO_DO_MOTIVO[m.motivo] }}: <strong>{{ m.quantidade }}</strong> </template></p>
+          <h3 class="crm-aarr-detalhe__titulo">Valor das propostas registrado</h3>
+          <p v-if="!aarr.propostas.registros" class="crm-nota-pequena">Sem registro: nenhum valor de proposta confirmado na Ficha desde 19/10/2026.<template v-if="aarr.propostas.semValor"> {{ aarr.propostas.semValor }} em Proposta sem valor registrado.</template></p>
+          <template v-else>
+            <p class="crm-resultado__numeros"><strong>{{ aarr.propostas.registros }}</strong> {{ aarr.propostas.registros === 1 ? 'valor registrado' : 'valores registrados' }} em {{ aarr.propostas.leads }} {{ aarr.propostas.leads === 1 ? 'lead' : 'leads' }} · implantação e parcelas: {{ dinheiro(aarr.propostas.implantacaoCentavos) }} · mensalidades: {{ dinheiro(aarr.propostas.mensalidadeCentavos) }}.</p>
+            <p v-if="aarr.propostas.semValor" class="crm-nota-pequena">{{ aarr.propostas.semValor }} em Proposta sem valor registrado: ficam de fora da soma.</p>
+          </template>
+          <p class="crm-nota-pequena">Só o que foi confirmado na Ficha, com o valor do cardápio. Proposta enviada não é pagamento, e a soma mistura todas as ofertas da seleção.</p>
+        </div>
       </section>
       <section class="crm-grupo" aria-labelledby="crm-plus-teste">
         <header class="crm-grupo__cabeca"><h2 id="crm-plus-teste">Plus · teste de {{ TAMANHO_DO_TESTE_PLUS }} envios</h2></header>
@@ -399,4 +416,6 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
 .crm-aarr-faixa { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--esp-3); }
 .crm-aarr-faixa dt { font-weight: var(--peso-forte); }
 .crm-aarr-faixa dd { margin: var(--esp-1) 0 0; }
+.crm-aarr-detalhe { display: grid; gap: var(--esp-2); margin-top: var(--esp-3); }
+.crm-aarr-detalhe__titulo { margin: 0; font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
 </style>

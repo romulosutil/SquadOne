@@ -2,6 +2,7 @@
 import { mensalidadeIrisCentavos } from './precos-iris'
 import { dataRealDoSpiced, qualificadoParaProposta } from './spiced'
 import { pedeMaterial } from './marcadores-da-conversa'
+import { AMOSTRA_MINIMA } from './resultados'
 import { ultimaRespostaHumanaEm } from './resposta-humana'
 import type { CrmLead } from './types'
 
@@ -12,6 +13,9 @@ export const ORIGENS_AARR = ['cacador', 'plus', 'indicacao', 'CDL', 'anuncio'] a
 export type OrigemAarr = typeof ORIGENS_AARR[number]
 export const MOTIVOS_PERDA_AARR = ['preco', 'timing', 'sem-dor', 'decisor', 'concorrente', 'sumiu'] as const
 export type MotivoPerdaAarr = typeof MOTIVOS_PERDA_AARR[number]
+/** `sem-origem` e `sem-motivo`: o registro não traz o dado. Nunca se infere o canal nem a razão da perda. */
+export type CanalAarr = OrigemAarr | 'sem-origem'
+export type MotivoAgregadoAarr = MotivoPerdaAarr | 'sem-motivo'
 export type OfertaReceita = 'encontrado' | 'respondido' | 'anuncios' | 'anuncios-duas' | 'redes' | 'fonte' | 'fonte-em-dia' | 'iris'
 export type ComponenteReceita = 'implantacao' | 'mensalidade' | 'parcela-1' | 'parcela-2'
 export interface OpcaoReceita {
@@ -170,6 +174,33 @@ export function contratosMensais(lead: Pick<CrmLead, 'eventos' | 'produto'> & Pa
     return { referencia: oferta, oferta, inicio, terceiroMes: terceiroMes(inicio), valorCentavos: recibos.at(-1)!.valor_centavos, retencao }
   })
 }
+export interface LinhaDeCanal {
+  canal: CanalAarr
+  /** Enviados, respostas de gente e "quero ver" qualificado: a janela de 30 dias da aquisição. */
+  enviados: number; respostas: number; ativados: number
+  /** Recebimentos únicos desde a instrumentação (19/10/2026), por lead, referência e data. */
+  pagamentos: number
+  /** Respostas / enviados, só com ao menos AMOSTRA_MINIMA enviados; abaixo disso não há taxa. */
+  taxaDeResposta: number | null
+}
+export interface LinhaDeMotivo { motivo: MotivoAgregadoAarr; quantidade: number }
+export interface LeituraDeCanais {
+  linhas: LinhaDeCanal[]
+  /** Leads com a origem confirmada na Ficha. Zero = nenhum registro: a tela diz "sem registro". */
+  comOrigem: number
+}
+export interface LeituraDePerdas { perdidos: number; comMotivo: number; porMotivo: LinhaDeMotivo[] }
+export interface LeituraDePropostas {
+  /** Registros de valor, leads distintos e a soma do que foi registrado (implantação e mensalidade separadas, como a receita). */
+  registros: number; leads: number; implantacaoCentavos: number; mensalidadeCentavos: number
+  /** Leads em Proposta sem nenhum valor registrado: o que falta registrar, não um valor suposto. */
+  semValor: number
+}
+export const CANAIS_AARR: readonly CanalAarr[] = [...ORIGENS_AARR, 'sem-origem']
+/** Os nomes na tela (Ficha e Resultados leem daqui); os dois "sem" dizem que o registro não traz o dado. */
+export const ROTULO_DA_ORIGEM: Record<CanalAarr, string> = { cacador: 'Caçador', plus: 'Plus', indicacao: 'Indicação', CDL: 'CDL', anuncio: 'Anúncio', 'sem-origem': 'Sem origem' }
+export const ROTULO_DO_MOTIVO: Record<MotivoAgregadoAarr, string> = { preco: 'Preço', timing: 'Timing', 'sem-dor': 'Sem dor', decisor: 'Decisor', concorrente: 'Concorrente', sumiu: 'Sumiu', 'sem-motivo': 'Sem motivo registrado' }
+
 export function leituraAarr(leads: readonly CrmLead[], agora: number) {
   const inicio = Date.parse(INICIO_AARR), hoje = diaAarr(agora)
   const dia = Math.floor((agora - 10800_000) / 86400_000), semana = new Date(dia * 86400_000).getUTCDay()
@@ -186,6 +217,23 @@ export function leituraAarr(leads: readonly CrmLead[], agora: number) {
   const pagamentos = todos.filter(p => p.data >= INICIO_AARR.slice(0, 10))
   const daSemana = todos.filter(p => p.data >= inicioSemana && p.data <= hoje)
   const recebimentos = (ps: typeof todos) => new Set(ps.map(p => `${p.leadId}|${referenciaNormal(p.referencia)}|${p.data}`)).size
+  // Canal (origem registrada), perdas (motivo registrado) e propostas (valor registrado): só o que o Rômulo confirmou na Ficha.
+  const canalDe = (l: { r: ReceitaDoLead }): CanalAarr => l.r.origem ?? 'sem-origem'
+  const doCanal = (canal: CanalAarr) => leituras.filter(l => canalDe(l) === canal)
+  const linhasDeCanal: LinhaDeCanal[] = CANAIS_AARR.map(canal => {
+    const dele = new Set(doCanal(canal).map(l => l.lead.id))
+    const envios = enviados.filter(l => dele.has(l.id))
+    const responderam = envios.filter(respondeu)
+    const pagos = new Set(pagamentos.filter(p => dele.has(p.leadId)).map(p => `${p.leadId}|${referenciaNormal(p.referencia)}|${p.data}`)).size
+    return { canal, enviados: envios.length, respostas: responderam.length,
+      ativados: responderam.filter(l => quisVerHumano(l) && qualificadoParaProposta(l)).length, pagamentos: pagos,
+      taxaDeResposta: envios.length >= AMOSTRA_MINIMA ? responderam.length / envios.length : null }
+  }).filter(l => l.enviados || l.pagamentos)
+  const perdidos = leituras.filter(l => l.lead.etapa === 'perdido')
+  const porMotivo: LinhaDeMotivo[] = ([...MOTIVOS_PERDA_AARR, 'sem-motivo'] as MotivoAgregadoAarr[])
+    .map(motivo => ({ motivo, quantidade: perdidos.filter(l => (l.r.motivoPerda ?? 'sem-motivo') === motivo).length })).filter(l => l.quantidade)
+  const propostas = leituras.flatMap(l => l.r.propostas.filter(p => p.data >= INICIO_AARR.slice(0, 10)).map(p => ({ ...p, leadId: l.lead.id })))
+  const comValor = new Set(propostas.map(p => p.leadId))
   const contratos = leads.flatMap(l => contratosMensais(l, agora))
   const elegiveis = contratos.filter(c => c.terceiroMes <= hoje)
   const ativas = elegiveis.filter(c => c.retencao?.ativa)
@@ -196,6 +244,12 @@ export function leituraAarr(leads: readonly CrmLead[], agora: number) {
     receita: { pagamentos: recebimentos(pagamentos), componentes: pagamentos.length, valorCentavos: pagamentos.reduce((s, p) => s + p.valor_centavos, 0),
       implantacaoCentavos: pagamentos.filter(p => p.componente !== 'mensalidade').reduce((s, p) => s + p.valor_centavos, 0), mensalidadeCentavos: pagamentos.filter(p => p.componente === 'mensalidade').reduce((s, p) => s + p.valor_centavos, 0),
       mrrCentavos: ativas.reduce((s, c) => s + c.valorCentavos, 0) },
+    canais: { linhas: linhasDeCanal, comOrigem: leituras.filter(l => l.r.origem).length } satisfies LeituraDeCanais,
+    perdas: { perdidos: perdidos.length, comMotivo: perdidos.filter(l => l.r.motivoPerda).length, porMotivo } satisfies LeituraDePerdas,
+    propostas: { registros: propostas.length, leads: comValor.size,
+      implantacaoCentavos: propostas.filter(p => p.componente !== 'mensalidade').reduce((s, p) => s + p.valor_centavos, 0),
+      mensalidadeCentavos: propostas.filter(p => p.componente === 'mensalidade').reduce((s, p) => s + p.valor_centavos, 0),
+      semValor: leads.filter(l => l.etapa === 'proposta' && !comValor.has(l.id)).length } satisfies LeituraDePropostas,
     retencao: { elegiveis: elegiveis.length, ativas: ativas.length },
     indicacao: { pedidas: leituras.reduce((s, l) => s + l.r.indicacoes.pedidas.filter(i => i.data >= INICIO_AARR.slice(0, 10)).length, 0), recebidas: leituras.reduce((s, l) => s + l.r.indicacoes.recebidas.filter(i => i.data >= INICIO_AARR.slice(0, 10)).length, 0) },
     estrelaGuia: { inicioSemana, pagamentos: recebimentos(daSemana), valorCentavos: daSemana.reduce((s, p) => s + p.valor_centavos, 0) },

@@ -337,7 +337,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
             <div v-else-if="c.id === 'BP-OBSERVACAO'" class="zona"><span class="etiqueta" data-tom="ok">Mensagem observada</span><p>O envio apareceu na integração. O time acompanha a próxima resposta.</p></div>
             <section v-else-if="c.id === 'BP-BLOCO'" class="bloco" aria-label="Exemplo de bloco">
               <h3>Follow-up para mandar</h3>
-              <p class="texto-2 texto-pequeno">Em contato há 3 a 6 dias. Quem leu e não respondeu vem primeiro.</p>
+              <p class="texto-2 texto-pequeno">Em contato há 3 a 6 dias e sem resposta. Quem sai do funil antes vem primeiro.</p>
             </section>
             <div v-else-if="c.id === 'BP-ZONA'" class="bp-pilha bp-pilha--larga">
               <div class="zona zona--realce">

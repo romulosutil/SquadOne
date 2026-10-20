@@ -34,21 +34,56 @@ function instanteDaResposta(lead: LeadDaJornada): number {
 }
 
 /**
- * A última resposta é de interesse e veio depois do link (a 2ª mensagem: demo ou Raio-X). É o
- * "gostei" e o "quanto fica": a proposta exige antes dor, impacto e decisor confirmados. O "quanto fica" o
- * n8n às vezes classifica como neutra; a pergunta de preço reconhecida pela colinha conta igual.
+ * O instante (ms) do material que o lead já recebeu de nós, em qualquer das cinco linhas; NaN = nenhum
+ * registrado. É o último de dois marcos reais: `marcos.segundaEnviada` (a 2ª mensagem anotada, ou o link
+ * visto na conversa) e `conversa.linkEm` (o link ou a mídia nossa, "[vídeo]", "[documento]", "[imagem]").
+ * Iris e estamparias não têm 2ª mensagem (jornada.ts): o material delas é o vídeo ou o documento mandado
+ * à mão, que só a conversa guardada enxerga. Antes (19/10/2026, auditoria da Fase 2) o gatilho lia só
+ * `segundaEnviada` e o teste fixava esse marco nas cinco linhas: a trava SPICED parecia valer em todas,
+ * mas Iris, Estamparia e o Plus dessas ofertas nunca chegavam ao "Marque 10 minutos".
+ */
+export function instanteDoMaterial(lead: LeadDaJornada): number {
+  const marcos = [lead.marcos.segundaEnviada, lead.conversa?.linkEm].map((v) => Date.parse(v ?? '')).filter(Number.isFinite)
+  return marcos.length ? Math.max(...marcos) : NaN
+}
+
+/** As linhas sem 2ª mensagem: o convite abre a conversa e o material (vídeo, documento) vai à mão. */
+const sem2aMensagem = (lead: LeadDaJornada): boolean => {
+  const funil = funilDoLead(lead)
+  return funil === 'iris' || funil === 'estampa'
+}
+
+/**
+ * A última resposta é de interesse e veio depois do material (a 2ª mensagem: demo ou Raio-X; em Iris e
+ * estamparias, o vídeo ou documento mandado, ver `instanteDoMaterial`). É o "gostei" e o "quanto fica":
+ * a proposta exige antes dor, impacto e decisor confirmados. O "quanto fica" o n8n às vezes classifica
+ * como neutra; a pergunta de preço reconhecida pela colinha conta igual.
  * As cinco linhas usam a mesma qualificação; Iris e estamparias têm condições comerciais próprias.
- * A licença depois do link ("pode mandar" a "posso te mandar a proposta?") também (pedeMaterial): até
+ * A licença depois do material ("pode mandar" a "posso te mandar a proposta?") também (pedeMaterial): até
  * 17/10/2026 ela era gravada como interesse e já abria este passo.
+ *
+ * Escolha conservadora (19/10/2026), só para as linhas sem 2ª mensagem e só quando NENHUM material foi
+ * registrado: o "quero ver" e a licença não bastam (são o pedido do material, que ainda não saiu, e o
+ * cartão certo é mandá-lo); vale apenas a pergunta de preço depois do convite, que é sinal de compra e
+ * não pode ser respondida com número antes de dor, impacto e decisor. Nunca abre proposta sozinha: ela
+ * continua atrás de `qualificadoParaProposta`.
  */
 export function indicouInteresseDepoisDoLink(lead: LeadDaJornada): boolean {
   if (lead.etapa !== 'contato' || lead.proposta) return false
   if (interlocutorSemDecisao(lead)) return false
-  const link = Date.parse(lead.marcos.segundaEnviada ?? '')
   const resposta = instanteDaResposta(lead)
-  if (!Number.isFinite(link) || !Number.isFinite(resposta) || resposta <= link) return false
+  if (!Number.isFinite(resposta)) return false
   const tipo = lead.resposta?.tipo
-  return pedeMaterial(lead.resposta) || (tipo === 'neutra' && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa'))
+  const perguntouPreco = tipo !== 'bot' && tipo !== 'negativa' && tipo !== 'exclusao' && tipo !== 'licenca'
+    && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa')
+  const material = instanteDoMaterial(lead)
+  if (Number.isFinite(material)) {
+    if (resposta <= material) return false
+    return pedeMaterial(lead.resposta) || (tipo === 'neutra' && objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'quanto-custa'))
+  }
+  if (!sem2aMensagem(lead)) return false
+  const convite = Date.parse(lead.marcos.enviado ?? '')
+  return Number.isFinite(convite) && resposta > convite && perguntouPreco
 }
 
 /** A conversa com recepção/robô ainda precisa chegar a quem decide, mesmo com dados confirmados antes. */

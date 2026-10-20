@@ -120,7 +120,7 @@ export const PASSOS: PassoDaJornada[] = [
     como: 'A 2ª mensagem de Vendas (o observador do WhatsApp a marca quando sai); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
     entra: 'A 2ª mensagem saiu (Raio-X, demo ou os dois, com o preço do Encontrado).',
     sai: 'Abre um trilho, ou os dois: por fora, a conversa sobre os produtos; por dentro, o convite para o Mapa (só empresa com equipe).',
-    prazo: 'proposta em até 24 h depois de cada "gostei"',
+    prazo: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h de cada "gostei"',
     blueprint: ['SITE-5', 'PRUMO-2'],
   },
   {
@@ -401,15 +401,15 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
       return { acao: 'Seguir a conversa com o Roteiro', quem: 'você' }
     case 'segunda':
       return dentro
-        ? { acao: 'Convidar para o Mapa e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
-        : { acao: 'Marcar a conversa, ou fechar o Encontrado se ele pediu para pôr no ar', quem: 'você', quando: 'proposta em até 24 h depois do "gostei"' }
+        ? { acao: 'Convidar para o Mapa e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h do "gostei"' }
+        : { acao: 'Marcar a conversa, ou fechar o Encontrado se ele pediu para pôr no ar', quem: 'você', quando: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h do "gostei"' }
     case 'conversa':
-      return { acao: 'Marcar a conversa e mandar a proposta', quem: 'você', quando: 'proposta em até 24 h depois da conversa' }
+      return { acao: 'Marcar a conversa, qualificar (dor, impacto, decisor) e depois mandar a proposta', quem: 'você', quando: 'proposta em até 24 h depois da conversa, com a qualificação confirmada' }
     case 'mapa':
       return { acao: 'Completar o rascunho do Mapa e marcar a devolutiva de 45 min', quem: 'você' }
     case 'mapa-convite':
     case 'devolutiva':
-      return { acao: 'Mandar a proposta da Fonte e dos produtos que o Mapa apontou', quem: 'você', quando: 'em até 24 h' }
+      return { acao: 'Qualificar (dor, impacto, decisor) e depois mandar a proposta da Fonte e dos produtos que o Mapa apontou', quem: 'você', quando: 'em até 24 h' }
     case 'proposta':
       return { acao: 'Cobrar a decisão e salvar a data no próximo passo', quem: 'você' }
     case 'ganho':

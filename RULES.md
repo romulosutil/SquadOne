@@ -310,20 +310,20 @@ não agenda ações e não reescreve estratégia, preço ou prompt automaticamen
       levou restrição de 24 h em 15/10, e cada aviso pessoal era uma mensagem a
       mais na conta dele. A chave de 24 h que a fila dava a esses avisos agora vive em
       `avisos-enviados.json` (sobrevive ao reinício da Central, que acontece a cada
-      merge). O P0 segue nos dois canais, mas hoje é capacidade pronta: nenhum
-      chamador o produz. **As falhas do Dell também
+      merge). O P0 saiu SÓ pelo Telegram (outbox exclusiva
+      do dell-status, sem WhatsApp; Fase 5.3, 19/10/2026). **As falhas do Dell também
       (mesmo dia, segunda parte):** o "Quebrou / Continua fora / Voltou ao normal"
       do `dell-status` e o aviso do `socorro` (`origem` "socorro", que a drenagem
-      separa) vão pelo mesmo bot, sem som das 22h às 7h salvo P0, e só caem no
-      WhatsApp se o bot estiver desligado ou falhar (o socorro então espera o
-      silêncio e o teto da fila). O Python lê `TELEGRAM_BOT_TOKEN` e
+      separa) vão pelo mesmo bot, sem som das 22h às 7h salvo P0; desde 19/10/2026
+      (Fase 5.3) com o bot fora essas origens e o P0 esperam a próxima rodada e
+      não vão ao WhatsApp (só o prefixo `n8n:` e as origens pessoais comuns têm reserva nele). O Python lê `TELEGRAM_BOT_TOKEN` e
       `TELEGRAM_CHAT_IDS` do `operations.env` da Central a cada envio; o segredo
       não é copiado (regra 25). `SQUADONE_LEMBRETES_PELO_TELEGRAM=false` no mesmo
       arquivo desfaz tudo, na Central e no Dell.
     - **P0 é espelhado no Telegram** (`sendMessage` do bot ao chat do dono). A
       sessão do WhatsApp não é oficial e cai (135 quedas em 7 dias, medido em
       05/10/2026); a Bot API é oficial. Só P0, porque P0 também fura o
-      silêncio: espelhar o resto dobraria o barulho.
+      silêncio: espelhar o resto dobraria o barulho. (Hoje o P0 não é "espelho": é a única saída.)
     - **O alarme externo é o healthchecks.io**: o processo do Dell manda sinal
       de vida e, se parar, o healthchecks avisa por Telegram e e-mail. Quem
       avisa que o Dell sumiu tem de estar fora dele: o Hermes cai junto. O

@@ -533,3 +533,49 @@ antes de qualquer código das Fases 1 a 5:
 4. **Os fatos do Raio-X podem abrir a mensagem como evento crítico** (domínio vencido, site fora do ar, posição no Google),
    com respeito e sem nota. Revoga, para a abertura, a regra "o que está bom vem primeiro". Entra como variante nova do
    A/B da 1ª mensagem (30 por braço antes de qualquer taxa).
+
+## Diagnóstico de vendas: Fases 2 a 5 (19/10/2026)
+
+Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMENTACAO-VENDAS-2026-10-19.md`, instalação em
+`docs/PRUMO-INSTALACAO-VENDAS-2026-10-19.md`). Meta até 08/11/2026: cinco propostas qualificadas e um pagamento confirmado.
+
+- **SPICED é a trava da proposta (Fase 2).** `src/operations/spiced.ts`: o registro `spiced` (aba CRM) é só o que o Rômulo
+  confirmou na Ficha (`CrmSpiced.vue`, BP-SPICED); a sugestão do copiloto, com citação literal verificável, nunca o preenche.
+  `qualificadoParaProposta` exige dor + impacto + decisor confirmado nas cinco linhas: sem isso a fila pede "dez minutos" e mostra
+  as perguntas que faltam, o copiloto não prepara itens de proposta e o "Mandar a proposta" não aparece. Recepção ou robô pedem
+  acesso ao responsável. Registrar uma proposta histórica real continua permitido. Impacto em R$ só com o valor literal do lead.
+- **Cadência da proposta e da conversa (Fase 3).** `src/operations/cadencia.ts`, dias úteis seg–sex (sem calendário de feriados).
+  Proposta: nenhum toque no dia 0, retornos no 1º e no 3º dia útil, perde no 10º dia corrido sem retorno (Perdido "Proposta sem
+  retorno"). Conversa: um toque no 2º dia útil depois da nossa última saída e revisão no 7º dia corrido. O toque é humano e só vira
+  fato com a confirmação `cadencia_enviada` (uma por proposta e degrau). Recusa, exclusão, perda manual, pausa, resposta humana e
+  próximo passo futuro impedem a cobrança. Follow-up de contato frio: um só, entre os dias 3 e 6, com ou sem recibo, e perda fria no
+  7º dia (o mesmo `DIAS_SEM_RESPOSTA` do CRM, da planilha e da limpeza do demo, que apaga 2 dias depois).
+- **Vendedor do Telegram em silêncio das 22h às 7h** (`silencioDoVendedor`): nada sai nessa janela. Fora dela os avisos que não
+  são de primeiro contato (responder, proposta qualificada, combinado, depois do link) saem inclusive fora do expediente de venda e
+  passam antes das revisões; o primeiro contato conserva horário, ritmo e o teto compartilhado de 30 por dia.
+- **AARRR e Estrela-guia (Fase 4).** `src/operations/aarr.ts` lê só fatos confirmados na aba CRM, desde 19/10 (`valor_proposta`,
+  `pagamento_confirmado`, `receita_desfeita`, `origem`, `motivo_perda`, `retencao_3m`, `indicacao_*`), gravados na Ficha por
+  `CrmReceita.vue`. Os centavos vêm do catálogo da oferta (Iris por ficha ativa em faixas marginais, `precos-iris.ts`; Estamparia
+  sem preço, não se registra valor dela); nunca de um valor livre nem do modelo. **A Estrela-guia é o número de pagamentos
+  confirmados na semana de São Paulo**, nas cinco linhas e fora do filtro; um recebimento é único por lead, referência e data (os
+  componentes somam o valor). "Ganhou" não é dinheiro recebido: sem registro explícito a Estrela-guia é **não medida**, e o histórico
+  anterior a 19/10 continua não medido. Retenção conta uma assinatura por lead e oferta (elegível no 3º mês de calendário, com
+  atividade confirmada); indicação é um próximo passo humano 30 dias depois do 1º pagamento válido. Registros monetários, de retenção
+  e de indicação ficam fora do histórico do copiloto e das ferramentas do Assistente. A faixa AARRR abre Números (`CrmResultados.vue`).
+- **Textos novos aprovados para teste (19/10, 21h37, "Aprovar os textos para teste").** Abertura **D** (evento crítico do Raio-X, um
+  fato verificável de `eventoCriticoDe`): `EVENTO_CRITICO_APROVADO` em `site-mensagem.js` e `server/site-mensagem.ts`, A × D do
+  PRUMO em `abertura-prumo.ts`. Follow-up **B**: `followup-experimento.ts` (`FOLLOWUP_NOVO_APROVADO`), braço por hash do lead,
+  confirmação humana grava braço e versão do texto realmente enviado. Nos dois, 30 observações por braço antes de qualquer taxa, o
+  que já foi enviado nunca troca de letra, o histórico não recebe braço inventado, o envio segue humano, e a aprovação não religa
+  caçadores nem muda o teto de prospecção. Texto exato em `docs/PRUMO-TEXTOS-VENDAS-2026-10-19.md`.
+- **Teste do Plus de 20 (Fase 0, medido na Fase 3).** `plus-experimento.ts`: os 20 primeiros envios `plus_enviado` manuais a partir de
+  19/10, contra o Site no mesmo período (respostas de gente, "quero ver", propostas), em Números. Reenvio não faz de lead antigo um novo.
+- **Entrada durável do WhatsApp (Fase 5).** `evolution-adaptador.py`: com a lista de leads velha, ou o LID sem telefone correlato, o
+  evento mínimo 1:1 fica em `entrada-pendente.json` (600, atômico, 2000 itens / 2 MiB) **antes** de a Evolution receber o 200; cheio ou
+  com falha devolve 503, nunca sucesso. Os vínculos LID para telefone ficam em `lid-telefone.json` (600) e sobrevivem ao reinício; um
+  LID desconhecido não bloqueia os eventos seguintes e a hora original é preservada. O adaptador publica uma captura imutável por evento
+  (`capturas-adaptador/<sha256>.json`) que o `observador.py` confirma em disco antes de remover. Grupos e ruído nunca entram.
+- **Triagem e avisos.** `prioridadeDaTriagem` (`server/crm.ts`) pontua a dor no Google (nota baixa até 15, poucas avaliações até
+  20, nicho até 10 só por pedido humano de material com 10+ convites); P0 e as 5 origens de falha ficam numa outbox exclusiva do
+  Telegram (lista única nas três pontas, com teste de paridade; o prefixo `n8n:` ainda tem reserva no WhatsApp, decisão em aberto).
+  O fluxo 01 sanitizado (`ops/n8n/workflows/01-Cacador.sanitizado.json`) é só auditoria: inativo, sem importação automática.

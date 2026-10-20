@@ -6,7 +6,7 @@ const rascunhosSpiced = new Map<string, import('./spiced').Spiced>()
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CrmLead } from './types'
-import type { SugestaoSpiced } from './copiloto'
+import { camposDoLote, type SugestaoSpiced } from './copiloto'
 import { lerSpiced, spicedVazio, textoDoRegistroSpiced, type Spiced } from './spiced'
 
 const props = defineProps<{ lead: CrmLead; disponivel: boolean; sugestao?: SugestaoSpiced }>()
@@ -26,6 +26,9 @@ const campos = computed(() => [
   { letra: 'D', nome: 'Decisor', preenchido: confirmado.value.decisao.decisor_confirmado === 'sim' },
 ])
 const sugestoes = computed(() => Object.entries(props.sugestao ?? {}) as Array<[keyof Spiced, NonNullable<SugestaoSpiced[keyof Spiced]>]>)
+// O decisor "sim" fica fora do lote: ele destrava a proposta e pede um toque próprio no "Usar decisão no rascunho".
+const noLote = computed(() => camposDoLote(props.sugestao))
+const decisorFicaAParte = computed(() => noLote.value.length < sugestoes.value.length)
 const nomes = { situacao: 'Situação', dor: 'Dor', impacto: 'Impacto', evento_critico: 'Evento crítico', decisao: 'Decisão' }
 const bloqueado = computed(() => !props.disponivel || estado.value === 'salvando' || estado.value === 'aguardando')
 watch(identidade, (atual, anterior) => {
@@ -45,7 +48,7 @@ function usar(campo: keyof Spiced) {
 }
 async function confirmarSugestoes() {
   if (bloqueado.value) return
-  for (const [campo] of sugestoes.value) usar(campo)
+  for (const campo of noLote.value) usar(campo)
   await salvar()
 }
 function descartar() {
@@ -106,7 +109,8 @@ async function salvar() {
         <blockquote>“{{ sugestao.citacao }}”</blockquote>
         <button type="button" class="botao botao--leve" :disabled="bloqueado" @click="usar(campo)">Usar {{ nomes[campo].toLowerCase() }} no rascunho</button>
       </div>
-      <button v-if="sugestoes.length" type="button" class="botao" :disabled="bloqueado" @click="confirmarSugestoes">Confirmar sugestões exibidas</button>
+      <button v-if="noLote.length" type="button" class="botao" :disabled="bloqueado" @click="confirmarSugestoes">Confirmar sugestões exibidas</button>
+      <p v-if="decisorFicaAParte" class="crm-nota-pequena">O decisor não entra no lote: confirme-o à parte, com “Usar decisão no rascunho”.</p>
       <form class="crm-form" @submit.prevent="salvar">
         <label><span>Situação</span><textarea v-model="rascunho.situacao" maxlength="200" rows="2" :disabled="bloqueado" /></label>
         <label><span>Dor: qual problema ele quer resolver?</span><textarea v-model="rascunho.dor" maxlength="200" rows="2" :disabled="bloqueado" /></label>

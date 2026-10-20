@@ -102,8 +102,24 @@ export function avisoParaArquivo(a: Aviso): Record<string, unknown> {
   };
 }
 
+/**
+ * Origens cujo aviso sai SÓ pelo Telegram (outbox exclusiva, sem expirar, sem fallback para o WhatsApp de vendas).
+ * É a mesma lista de `ORIGENS_PELO_TELEGRAM` (deploy/dell/dell-status.py) e de `ORIGENS_TELEGRAM_EXCLUSIVO`
+ * (deploy/dell/lib/aviso.py): três cópias, porque TS e Python não se importam. Eram três listas diferentes (5, 2 e 2):
+ * um aviso de backup gravado por um lado era exclusivo e, pelo outro, ganhava `expira_em` e um caminho para o WhatsApp.
+ * server/avisos.test.ts lê o texto das duas constantes do .py e falha se alguma divergir desta.
+ * O prefixo `n8n:` NÃO está aqui de propósito: ver "Falha de fluxo do n8n" em deploy/dell/README.md.
+ */
+export const ORIGENS_QUE_EXIGEM_TELEGRAM: readonly string[] = [
+  'socorro',
+  'dell-status',
+  'backup-dell',
+  'atualizar-central',
+  'silmer-drive-sync',
+];
+
 export function avisoExigeTelegram(a: Pick<Aviso, 'prioridade' | 'origem'>): boolean {
-  return a.prioridade === 0 || ['socorro', 'dell-status'].includes(a.origem);
+  return a.prioridade === 0 || ORIGENS_QUE_EXIGEM_TELEGRAM.includes(a.origem);
 }
 
 /** Lança `AvisoInvalido` com o motivo. Mesmas regras do `validar_aviso` do dell-status, mais o R$. */

@@ -131,3 +131,71 @@ it('aquisição30dias preserva quente antigo+SPICEDnovo; bot posterior não apag
   const respostaFutura = { ...botDepois, resposta: { tipo: 'interesse' as const, trecho: 'futuro', em: '2026-10-20T12:00:00Z' } }
   assert.equal(leituraAarr([respostaFutura], AGORA).aquisicao.respostas, 1, 'futuro é ignorado sem apagar a entrada humana anterior')
 })
+
+describe('origem, motivo da perda e valor de proposta na leitura AARRR (Fase 4, 19/10/2026)', () => {
+  const envio = '2026-10-10T12:00:00Z'
+  const origem = (valor: string, em = '2026-10-19T13:00:00Z') => evento('origem', textoDoRegistroAarr('origem', valor), em)
+  const motivo = (valor: string) => evento('motivo_perda', textoDoRegistroAarr('motivo_perda', valor))
+  const proposta = (ref: string, id = 'encontrado:implantacao', data = '2026-10-19') => evento('valor_proposta', textoDoRegistroReceita('valor_proposta', opcao('prumo', id), ref, data))
+  const respondido = (id: string, eventos: CrmEvento[], extra: Partial<CrmLead> = {}) => lead('site', {
+    id: `site:${id}`, marcos: { enviado: envio, respondeu: '2026-10-11T12:00:00Z' }, resposta: { tipo: 'neutra', trecho: 'oi', em: '2026-10-11T12:00:00Z' },
+    conversa: { desde: envio, mensagens: 2, ultimaEntrada: '2026-10-11T12:00:00Z', ultima: { direcao: 'entrada', em: '2026-10-11T12:00:00Z', trecho: 'oi' } }, eventos, ...extra,
+  } as Partial<CrmLead>)
+
+  it('sem nenhum registro: tudo em "sem-origem", sem motivo, sem proposta, e nenhum zero vira taxa', () => {
+    const r = leituraAarr([respondido('a', [])], AGORA)
+    assert.deepEqual(r.canais, { linhas: [{ canal: 'sem-origem', enviados: 1, respostas: 1, ativados: 0, pagamentos: 0, taxaDeResposta: null }], comOrigem: 0 })
+    assert.deepEqual(r.perdas, { perdidos: 0, comMotivo: 0, porMotivo: [] })
+    assert.deepEqual(r.propostas, { registros: 0, leads: 0, implantacaoCentavos: 0, mensalidadeCentavos: 0, semValor: 0 })
+    assert.deepEqual(leituraAarr([], AGORA).canais, { linhas: [], comOrigem: 0 })
+  })
+
+  it('agrega por origem registrada, mantém "sem origem" à parte e só dá taxa com a amostra mínima', () => {
+    const doCacador = Array.from({ length: 10 }, (_, i) => respondido(`c${i}`, [origem('cacador')], i < 4 ? {} : { resposta: undefined, conversa: undefined, marcos: { enviado: envio } }))
+    const indicado = respondido('i', [origem('indicacao'), pagamento('rec-i')])
+    const semOrigem = respondido('s', [])
+    const r = leituraAarr([...doCacador, indicado, semOrigem], AGORA)
+    const linha = (c: string) => r.canais.linhas.find(l => l.canal === c)!
+    assert.deepEqual(linha('cacador'), { canal: 'cacador', enviados: 10, respostas: 4, ativados: 0, pagamentos: 0, taxaDeResposta: 0.4 })
+    assert.equal(linha('indicacao').taxaDeResposta, null, '1 enviado: sem taxa')
+    assert.equal(linha('indicacao').pagamentos, 1)
+    assert.equal(linha('sem-origem').enviados, 1)
+    assert.equal(r.canais.comOrigem, 11)
+    assert.deepEqual(r.canais.linhas.map(l => l.canal), ['cacador', 'indicacao', 'sem-origem'], 'ordem fixa; linha sem movimento não aparece')
+  })
+
+  it('a última origem registrada vale, e origem de evento futuro ou fora do catálogo é ignorada', () => {
+    const l = respondido('o', [origem('cacador'), origem('plus', '2026-10-19T14:30:00Z'), origem('anuncio', '2026-10-20T12:00:00Z'), evento('origem', JSON.stringify({ versao: 1, valor: 'tiktok' }))])
+    const r = leituraAarr([l], AGORA)
+    assert.deepEqual(r.canais.linhas.map(x => x.canal), ['plus'])
+  })
+
+  it('motivo da perda só entre os Perdidos; sem motivo é categoria, e o motivo do sistema não entra', () => {
+    const perdido = (id: string, eventos: CrmEvento[]) => lead('site', { id: `site:${id}`, etapa: 'perdido', motivoPerda: 'expirou', eventos } as Partial<CrmLead>)
+    const r = leituraAarr([perdido('1', [motivo('preco')]), perdido('2', [motivo('preco')]), perdido('3', [motivo('timing')]), perdido('4', []),
+      lead('site', { id: 'site:aberto', eventos: [motivo('sumiu')] })], AGORA)
+    assert.deepEqual(r.perdas, { perdidos: 4, comMotivo: 3, porMotivo: [{ motivo: 'preco', quantidade: 2 }, { motivo: 'timing', quantidade: 1 }, { motivo: 'sem-motivo', quantidade: 1 }] })
+    assert.deepEqual(leituraAarr([perdido('x', [])], AGORA).perdas, { perdidos: 1, comMotivo: 0, porMotivo: [{ motivo: 'sem-motivo', quantidade: 1 }] })
+  })
+
+  it('soma só o valor de proposta registrado (cardápio), separa implantação de mensalidade e conta quem está em Proposta sem valor', () => {
+    const a = lead('prumo', { id: 'prumo:a', eventos: [proposta('p1'), proposta('p1'), proposta('p2', 'encontrado:mensalidade')] })
+    const b = lead('prumo', { id: 'prumo:b', etapa: 'proposta', eventos: [] })
+    const c = lead('prumo', { id: 'prumo:c', etapa: 'proposta', eventos: [proposta('p3', 'respondido:implantacao')] })
+    const antiga = lead('prumo', { id: 'prumo:d', eventos: [proposta('p4', 'encontrado:implantacao', '2026-10-18')] })
+    const r = leituraAarr([a, b, c, antiga], AGORA).propostas
+    assert.deepEqual(r, { registros: 3, leads: 2, implantacaoCentavos: 69000 + 240000, mensalidadeCentavos: 3900, semValor: 1 })
+  })
+
+  it('desfazer o valor da proposta o tira da soma', () => {
+    const p = proposta('p1')
+    const chave = chaveDoPagamento(registroDo(p))
+    const undo = evento('receita_desfeita', textoDoRegistroAarr('receita_desfeita', { tipo: 'valor_proposta', referencia: chave, data: '2026-10-19' }), '2026-10-19T14:01:00Z')
+    assert.equal(leituraAarr([lead('prumo', { eventos: [p, undo] })], AGORA).propostas.registros, 0)
+  })
+
+  it('Estamparia não ganha valor de proposta (preço pendente) e nada em Finanças entra', () => {
+    const e = lead('estampa', { etapa: 'proposta', eventos: [] })
+    assert.deepEqual(leituraAarr([e], AGORA).propostas, { registros: 0, leads: 0, implantacaoCentavos: 0, mensalidadeCentavos: 0, semValor: 1 })
+  })
+})

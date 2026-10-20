@@ -15,6 +15,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -87,6 +88,26 @@ class Formato(unittest.TestCase):
         self.assertEqual(av.MAX_CARACTERES, ds.MAX_CARACTERES)
         self.assertEqual(av.MAX_BYTES_AVISO, ds.MAX_BYTES_AVISO)
         self.assertEqual(set(av.ORDEM_DOS_CAMPOS), av.CAMPOS_DO_AVISO)
+
+    @unittest.skipIf(ds is None, "dell-status não carrega aqui (sem fcntl)")
+    def test_origens_que_exigem_telegram_iguais_as_do_dell_status(self):
+        # Eram 2 aqui e 5 lá: um aviso de backup gravado pela lib saía como aviso comum (Fase 5.3 da auditoria de 19/10).
+        self.assertEqual(av.ORIGENS_TELEGRAM_EXCLUSIVO, ds.ORIGENS_PELO_TELEGRAM)
+
+    def test_origens_que_exigem_telegram_iguais_no_texto_do_dell_status(self):
+        # Vale também onde o dell-status não carrega (Windows): compara o texto da constante.
+        texto = (AQUI.parent / "dell-status.py").read_text(encoding="utf-8")
+        m = re.search(r"^ORIGENS_PELO_TELEGRAM\s*=\s*\{([^}]*)\}", texto, re.MULTILINE)
+        self.assertIsNotNone(m, "ORIGENS_PELO_TELEGRAM sumiu do dell-status.py")
+        self.assertEqual(set(re.findall(r'"([^"]+)"', m.group(1))), av.ORIGENS_TELEGRAM_EXCLUSIVO)
+
+    def test_toda_origem_da_lista_e_exclusiva_e_a_vitrine_nao(self):
+        for origem in sorted(av.ORIGENS_TELEGRAM_EXCLUSIVO):
+            self.assertTrue(av.exige_telegram({"prioridade": 2, "origem": origem}), origem)
+        self.assertTrue(av.exige_telegram({"prioridade": 0, "origem": "qualquer"}))
+        # n8n: sai pelo Telegram no dell-status, mas NÃO é exclusivo (decisão de produto aberta; ver README do Dell).
+        for origem in ("n8n:03 · Balcão", "squadone-lembretes", "teste"):
+            self.assertFalse(av.exige_telegram({"prioridade": 2, "origem": origem}), origem)
 
     def test_o_tmp_nao_casa_com_o_glob_do_dell_status(self):
         # O dell-status drena FILA.glob("*.json"): o .tmp oculto nunca é lido pela metade.
