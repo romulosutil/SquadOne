@@ -48,7 +48,7 @@ class Frente(unittest.TestCase):
         self.now=dt.datetime(2026,10,19,14,tzinfo=dt.timezone.utc)
         self.data=Path(self.tmp.name)/'data';self.data.mkdir()
 
-    def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1):
+    def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1,existe=None,envia=None):
         """Uma rodada com tudo de fora dublado; nunca o disco, a Central, o n8n ou o WhatsApp de verdade."""
         estados=[]
         with patch.object(f,'BASE',Path(self.tmp.name)/'base'),patch.object(f,'H',Path(self.tmp.name)),patch.object(f,'DATA',self.data),\
@@ -56,9 +56,10 @@ class Frente(unittest.TestCase):
              patch.object(f,'inferir',side_effect=avaliar) as ai,patch.object(f,'http',return_value={'primeiros':primeiros or {}}),\
              patch.object(f,'conexao',return_value={'apikey':'fake'}),patch.object(f,'reservar_na_central',side_effect=reserva) as reservar,\
              patch.object(f,'marcar_no_crm',side_effect=marcar) as clique,patch.object(f,'anotar_na_central',return_value=True) as nota,\
-             patch.object(f,'enviar',return_value='id-real-da-integracao') as envio,patch.object(f,'gravar',side_effect=lambda s:estados.append(json.loads(json.dumps(s)))):
+             patch.object(f,'enviar',side_effect=envia or (lambda *a:'id-real-da-integracao')) as envio,\
+             patch.object(f,'existe_no_whatsapp',side_effect=existe or (lambda l,auth:True)) as consulta,patch.object(f,'gravar',side_effect=lambda s:estados.append(json.loads(json.dumps(s)))):
             resultados=[f.rodada() for _ in range(vezes)]
-        return types.SimpleNamespace(estados=estados,ai=ai,reservar=reservar,clique=clique,nota=nota,envio=envio,resultados=resultados)
+        return types.SimpleNamespace(estados=estados,ai=ai,reservar=reservar,clique=clique,nota=nota,envio=envio,consulta=consulta,resultados=resultados)
 
     # 1. Elegibilidade: cada oferta exige mensagem pronta, destino e nenhuma interação anterior.
     def test_so_lead_pronto_do_site_com_link_rastreado(self):
@@ -175,7 +176,7 @@ class Frente(unittest.TestCase):
                          patch.object(f,'http',return_value={'primeiros':{}}),patch.object(f,'conexao',return_value={'apikey':'fake'}),\
                          patch.object(f,'reservar_na_central',return_value={'reservado':True,'texto':MSG}),\
                          patch.object(f,'marcar_no_crm') as clique,patch.object(f,'anotar_na_central',return_value=True) as nota,\
-                         patch.object(f,'enviar',return_value='recibo') as envio,patch.object(f,'gravar'):
+                         patch.object(f,'enviar',return_value='recibo') as envio,patch.object(f,'existe_no_whatsapp',return_value=True),patch.object(f,'gravar'):
                         f.rodada()
                     clique.assert_not_called();envio.assert_called_once();nota.assert_called_once_with(l,MSG,f.iso(self.now))
 
@@ -229,6 +230,137 @@ class Frente(unittest.TestCase):
         erro=urllib.error.HTTPError('u',503,'x',{},io.BytesIO(b'{"motivo":"sem-retrato"}'))
         self.addCleanup(erro.close)
         with patch.object(f,'http',side_effect=erro):self.assertEqual(f.reservar_na_central(lead()),{'reservado':False,'motivo':'sem-retrato'})
+
+    # 5. Número sem WhatsApp (20/10/2026): descarte definitivo, nunca um `incerto` que bloqueia o time inteiro.
+    def contato(self,n='5511998887766'):
+        r=f.Registro(Path(self.tmp.name)/'base'/'registro.sqlite');self.addCleanup(r.db.close)
+        return r,r.contato(f.chave(n))
+
+    def test_consulta_sem_whatsapp_descarta_antes_da_reserva_e_tenta_o_proximo(self):
+        crm={'estado':'ok','leads':[lead('site:a','5511998887700'),lead()]}
+        x=self.rodar(crm,lambda l:{'reservado':True,'texto':MSG},existe=lambda l,auth:l['id']!='site:a')
+        self.assertEqual([c.args[0]['id'] for c in x.consulta.call_args_list],['site:a','site:teste'])
+        self.assertEqual([c.args[0]['id'] for c in x.reservar.call_args_list],['site:teste'])
+        self.assertEqual([c.args[0]['id'] for c in x.envio.call_args_list],['site:teste'])
+        r,morto=self.contato('5511998887700')
+        self.assertEqual(morto['estado'],'sem_whatsapp');self.assertEqual(morto['mensagem'],'');self.assertEqual(morto['recibo'],'')
+        self.assertEqual(r.incertos(),[])
+        final=x.estados[-1]
+        self.assertNotEqual(final['estado'],'bloqueado');self.assertIsNot(x.resultados[0],False)
+        self.assertEqual((final['enviados'],final['semWhatsapp']),(1,1))
+        self.assertEqual([c['id'] for c in final['fila']],['site:teste'])
+        self.assertNotIn('5511998887700',json.dumps(final))
+
+    def test_consulta_que_falha_nao_envia_nao_marca_e_nao_bloqueia(self):
+        crm={'estado':'ok','leads':[lead('site:a','5511998887700'),lead()]}
+        x=self.rodar(crm,lambda l:{'reservado':True,'texto':MSG},existe=lambda l,auth:None)
+        x.reservar.assert_not_called();x.envio.assert_not_called();x.clique.assert_not_called()
+        self.assertEqual(x.consulta.call_count,2)
+        self.assertNotEqual(x.estados[-1]['estado'],'bloqueado');self.assertIsNot(x.resultados[0],False)
+        r,_=self.contato();self.assertEqual(r.db.execute('SELECT COUNT(*) FROM contatos').fetchone()[0],0)
+        self.assertEqual(x.estados[-1]['semWhatsapp'],0)
+
+    def test_consulta_whatsapp_numbers_so_aceita_resposta_legivel(self):
+        l=lead();auth={'apikey':'fake'}
+        casos=[([{'exists':True,'number':'5511998887766','jid':'x@s.whatsapp.net'}],True),([{'exists':False,'number':'5511998887766'}],False),
+               ([{'exists':False}],False),([{'exists':False,'number':'5521998887766'}],None),
+               ([{'exists':'false'}],None),([{'jid':'x'}],None),([],None),({'exists':False},None),('erro',None),
+               ([{'exists':True,'number':'5521900000000'},{'exists':False,'number':'5511998887766'}],False)]
+        for resposta,esperado in casos:
+            with patch.object(f,'http',return_value=resposta) as h:self.assertIs(f.existe_no_whatsapp(l,auth),esperado,resposta)
+        url,corpo,headers=h.call_args.args[:3]
+        self.assertEqual(url,'http://127.0.0.1:8081/chat/whatsappNumbers/prumo');self.assertEqual(corpo,{'numbers':['5511998887766']});self.assertEqual(headers,auth)
+        erro=urllib.error.HTTPError('u',500,'x',{},io.BytesIO(b'{}'));self.addCleanup(erro.close)
+        for falha in (erro,TimeoutError(),urllib.error.URLError('fora'),ValueError('json ilegível')):
+            with patch.object(f,'http',side_effect=falha):self.assertIsNone(f.existe_no_whatsapp(l,auth))
+
+    def test_sendtext_400_com_exists_false_vira_sem_whatsapp_e_nao_bloqueia(self):
+        def recusa(l,texto,auth):raise f.NumeroSemWhatsapp()
+        crm={'estado':'ok','leads':[lead('site:a','5511998887700'),lead()]}
+        x=self.rodar(crm,lambda l:{'reservado':True,'texto':MSG},
+            envia=lambda l,texto,auth:recusa(l,texto,auth) if l['id']=='site:a' else 'id-real')
+        self.assertEqual([c.args[0]['id'] for c in x.envio.call_args_list],['site:a','site:teste'])
+        r,morto=self.contato('5511998887700')
+        self.assertEqual(morto['estado'],'sem_whatsapp');self.assertEqual(r.incertos(),[])
+        self.assertEqual([c.args[0]['id'] for c in x.reservar.call_args_list],['site:a','site:teste'])
+        self.assertIsNot(x.resultados[0],False)
+        self.assertNotEqual(x.estados[-1]['estado'],'bloqueado')
+        self.assertEqual([x.estados[-1]['enviados'],x.estados[-1]['semWhatsapp']],[1,1])
+
+    def test_sem_whatsapp_depois_do_sendtext_nao_volta_a_ser_escolhido(self):
+        def recusa(l,texto,auth):raise f.NumeroSemWhatsapp()
+        x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG},vezes=3,envia=recusa)
+        self.assertEqual(x.envio.call_count,1);self.assertEqual(x.reservar.call_count,1);self.assertEqual(x.consulta.call_count,1)
+        self.assertEqual(x.resultados,[None,None,None]);self.assertNotIn('bloqueado',[e['estado'] for e in x.estados])
+        _,morto=self.contato();self.assertEqual(morto['estado'],'sem_whatsapp')
+        self.assertEqual(x.estados[-1]['fila'],[])
+
+    def test_sendtext_timeout_ou_500_continua_incerto_e_bloqueia(self):
+        for nome,falha in (('timeout',TimeoutError('lento')),('http500',urllib.error.HTTPError('u',500,'x',{},io.BytesIO(b'{"response":{"message":[{"exists":false}]}}'))),
+                           ('sem-id',RuntimeError('A integração não confirmou o destinatário e o id do envio'))):
+            with self.subTest(falha=nome):
+                with tempfile.TemporaryDirectory() as pasta:
+                    antes=(self.tmp,self.data)
+                    self.tmp=types.SimpleNamespace(name=pasta);self.data=Path(pasta)/'data';self.data.mkdir()
+                    try:
+                        x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG},envia=falha)
+                        self.assertIs(x.resultados[0],False);self.assertEqual(x.estados[-1]['estado'],'bloqueado')
+                        r=f.Registro(Path(pasta)/'base'/'registro.sqlite')
+                        try:
+                            self.assertEqual(r.contato(f.chave('5511998887766'))['estado'],'incerto');self.assertEqual(len(r.incertos()),1)
+                        finally:r.db.close()
+                    finally:self.tmp,self.data=antes
+
+    def test_enviar_so_levanta_sem_whatsapp_no_400_com_exists_false_deste_numero(self):
+        def erro(corpo,code=400):
+            return urllib.error.HTTPError('u',code,'x',{},io.BytesIO(corpo if isinstance(corpo,bytes) else json.dumps(corpo).encode()))
+        morto={'status':400,'error':'Bad Request','response':{'message':[{'jid':'5511998887766@s.whatsapp.net','exists':False,'number':'5511998887766'}]}}
+        with patch.object(f,'http',side_effect=erro(morto)) as h:
+            with self.assertRaises(f.NumeroSemWhatsapp):f.enviar(lead(),'Olá',{'apikey':'fake'})
+            self.assertEqual(h.call_count,1)
+        for e in (erro(morto,500),erro(morto,404),erro(b'<html>'),erro({'response':{'message':'texto'}}),
+                  erro({'response':{'message':[{'exists':True,'number':'5511998887766'}]}}),
+                  erro({'response':{'message':[{'exists':False,'number':'5521998887766'}]}}),erro({'response':{'message':[{}]}})):
+            with self.subTest(code=e.code):
+                with patch.object(f,'http',side_effect=e):
+                    with self.assertRaises(urllib.error.HTTPError) as c:f.enviar(lead(),'Olá',{'apikey':'fake'})
+                    self.assertNotIsInstance(c.exception,f.NumeroSemWhatsapp)
+        with patch.object(f,'http',side_effect=TimeoutError()):
+            with self.assertRaises(TimeoutError):f.enviar(lead(),'Olá',{'apikey':'fake'})
+
+    def test_sem_whatsapp_nao_conta_como_enviado_nem_como_pendencia_nem_como_incerto(self):
+        l=lead();self.r.marcar_sem_whatsapp(l,self.now)
+        self.assertEqual(self.r.contato(f.chave('5511998887766'))['estado'],'sem_whatsapp')
+        self.assertEqual(self.r.incertos(),[]);self.assertEqual(self.r.sem_whatsapp_do_dia('2026-10-19'),1)
+        self.assertEqual(self.r.sem_whatsapp_do_dia('2026-10-18'),0)
+        self.assertEqual(self.r.conferir_pendencias({'leads':[outro_produto('iris')]}),0)
+        with patch.object(f,'H',Path(self.tmp.name)):self.r.reconciliar()
+        self.assertEqual(self.r.contato(f.chave('5511998887766'))['estado'],'sem_whatsapp')
+        self.assertEqual(f.metricas_dos_setores([l],[],{'leads':[l]},self.r,self.now),[])
+        # só troca um `incerto`; nunca rebaixa um envio de verdade
+        b=lead('site:b','5511998887711');self.assertTrue(self.r.reservar(b,'Olá',self.now))
+        self.r.marcar_sem_whatsapp(b,self.now)
+        self.assertEqual(self.r.contato(f.chave('5511998887711'))['estado'],'sem_whatsapp')
+        c=lead('site:c','5511998887722');self.assertTrue(self.r.reservar(c,'Olá',self.now));self.r.confirmar(f.chave('5511998887722'),'id')
+        self.r.marcar_sem_whatsapp(c,self.now)
+        self.assertEqual(self.r.contato(f.chave('5511998887722'))['estado'],'enviado')
+
+    def test_sem_whatsapp_nao_entra_em_enviados_nem_gasta_a_reserva_da_central(self):
+        crm={'estado':'ok','leads':[lead()]}
+        x=self.rodar(crm,lambda l:{'reservado':True,'texto':MSG},existe=lambda l,auth:False)
+        final=x.estados[-1]
+        self.assertEqual((final['enviados'],final['semWhatsapp']),(0,1))
+        x.reservar.assert_not_called();x.envio.assert_not_called();x.clique.assert_not_called();x.nota.assert_not_called()
+        self.assertEqual(sum(s['enviados'] for s in final['setores']),0)
+        # a rodada seguinte lê o contador do registro, e o lead não é mais candidato
+        y=self.rodar(crm,lambda l:{'reservado':True,'texto':MSG},existe=lambda l,auth:False)
+        self.assertEqual((y.estados[-1]['enviados'],y.estados[-1]['semWhatsapp']),(0,1))
+        y.consulta.assert_not_called();y.reservar.assert_not_called()
+        self.assertNotIn('5511998887766',json.dumps(x.estados+y.estados))
+
+    def test_pausa_preserva_o_contador_de_sem_whatsapp(self):
+        (self.data/'frente-comercial.json').write_text(json.dumps({'dia':'2026-10-19','semWhatsapp':3,'fila':[]}))
+        self.assertEqual(self.rodar_parado({'ativo':False}).estados[-1]['semWhatsapp'],3)
 
     # 4. Quem faz o 1º contato: lead que o Rômulo já tocou hoje é dele.
     def test_lead_tocado_pelo_operador_hoje_nao_e_pedido(self):

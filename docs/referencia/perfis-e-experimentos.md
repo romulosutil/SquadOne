@@ -421,6 +421,12 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   entra na trava de ritmo, em Números, na taxa do nicho e nos A/B como se o Rômulo tivesse tocado. Clique falhou: nada sai e o número volta a ficar livre no registro do time. Envio confirmado: nota na Ficha.
   Se o envio falhar depois do clique, o lead continua "pronto" (o clique não marca envio); o registro do time fica "incerto" e bloqueia
   novos envios até a reconciliação.
+- **Número sem WhatsApp é descarte definitivo** (20/10/2026): antes de pedir a reserva à Central, o time consulta a Evolution
+  (`POST /chat/whatsappNumbers/prumo`); `exists: false` grava o lead como `sem_whatsapp` no registro do time (a chave nunca é apagada: ele não
+  volta) e passa ao próximo candidato na mesma rodada, sem gastar o primeiro do dia nem o ritmo. Consulta sem resposta legível: o candidato
+  espera a próxima rodada, sem marca e sem bloqueio. Se o `sendText` ainda assim devolver 400 com `exists: false` para aquele número, a
+  linha `incerto` vira `sem_whatsapp` (nada saiu). Só o erro ambíguo (timeout, 5xx, resposta sem id, destinatário diferente) segue `incerto` e bloqueia o time.
+  O resumo do time traz `semWhatsapp` (contagem do dia, sem número).
 - **Quem faz o 1º contato** (`quemFazOPrimeiroContato`): lead na fila do time, com o time ligado, ou cujo envio o time já começou
   (incerto/enviado), é do time; o resto é do Rômulo. `GET /crm/venda` devolve `doTime` e a Próxima venda e o vendedor do Telegram tiram da
   fila o primeiro contato desses leads; o time não pede reserva para lead que o Rômulo já tocou hoje (Central ou Telegram).

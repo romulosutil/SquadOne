@@ -296,6 +296,16 @@ class Registro:
     def liberar(self,key):
         # Só quando é certo que nada saiu (o clique rastreado falhou antes do envio).
         with self.db:self.db.execute("DELETE FROM contatos WHERE chave=? AND estado='incerto'",(key,))
+    def marcar_sem_whatsapp(self,l,now):
+        # Descarte DEFINITIVO: o número não existe no WhatsApp e nada saiu. Nunca apaga a chave (o lead não volta a ser
+        # candidato) e só troca um `incerto`: um `enviado` nunca vira `sem_whatsapp`.
+        key=chave(numero(l))
+        try:
+            with self.db:self.db.execute('INSERT INTO contatos VALUES(?,?,?,?,?,?)',(key,l['id'],'sem_whatsapp',iso(now),'',''))
+        except sqlite3.IntegrityError:
+            with self.db:self.db.execute("UPDATE contatos SET estado='sem_whatsapp',em=?,mensagem='',recibo='' WHERE chave=? AND estado='incerto'",(iso(now),key))
+    def sem_whatsapp_do_dia(self,dia_):
+        return sum(1 for (em,) in self.db.execute("SELECT em FROM contatos WHERE estado='sem_whatsapp'") if dia(dt.datetime.fromisoformat(em))==dia_)
     def confirmar(self,key,recibo):
         with self.db:self.db.execute("UPDATE contatos SET estado='enviado',recibo=? WHERE chave=?",(recibo,key))
     def incertos(self): return self.db.execute("SELECT chave,mensagem,em FROM contatos WHERE estado='incerto'").fetchall()
@@ -381,8 +391,44 @@ def conexao():
     if ativos.returncode!=0:raise RuntimeError('A observação das conversas está indisponível')
     return auth
 
+EVOLUTION='http://127.0.0.1:8081'
+
+class NumeroSemWhatsapp(Exception):
+    """A Evolution afirmou, de forma legível, que o número não existe no WhatsApp: nada saiu."""
+
+def item_do_numero(itens, n):
+    """O item de uma resposta de `whatsappNumbers` que fala deste número, ou None se não der para ter certeza."""
+    if not isinstance(itens, list):return None
+    itens=[i for i in itens if isinstance(i, dict)]
+    def do_numero(i):
+        digitos=re.sub(r'\D','',str(i.get('number') or ''))
+        return chave(digitos)==chave(n) if re.fullmatch(r'55\d{10,11}',digitos) else None
+    if len(itens)==1:return itens[0] if do_numero(itens[0]) is not False else None
+    return next((i for i in itens if do_numero(i)),None)
+
+def existe_no_whatsapp(l, auth):
+    """True/False se a Evolution respondeu de forma legível; None em qualquer dúvida (rede, HTTP, JSON, sem `exists` booleano).
+
+    Consulta ANTES da reserva da Central: número morto não consome o primeiro do dia nem o ritmo de todos.
+    A consulta só lê (não envia nada); na dúvida o candidato fica para a próxima rodada, sem marca e sem bloqueio.
+    """
+    try:r=http(EVOLUTION+'/chat/whatsappNumbers/prumo',{'numbers':[numero(l)]},auth,timeout=20)
+    except Exception:return None
+    item=item_do_numero(r,numero(l))
+    existe=item.get('exists') if item else None
+    return existe if isinstance(existe,bool) else None
+
 def enviar(l, text, auth):
-    r=http('http://127.0.0.1:8081/message/sendText/prumo',{'number':numero(l),'text':text,'linkPreview':False},auth,timeout=40)
+    try:r=http(EVOLUTION+'/message/sendText/prumo',{'number':numero(l),'text':text,'linkPreview':False},auth,timeout=40)
+    except urllib.error.HTTPError as e:
+        # Só o 400 com `exists: false` para ESTE número prova que nada saiu. Qualquer outro erro continua ambíguo.
+        with contextlib.closing(e):
+            try:corpo=json.load(e)
+            except (ValueError,OSError,TypeError):corpo=None
+        resposta=corpo.get('response') if isinstance(corpo,dict) else None
+        item=item_do_numero(resposta.get('message') if isinstance(resposta,dict) else None,numero(l))
+        if e.code==400 and item and item.get('exists') is False:raise NumeroSemWhatsapp() from None
+        raise
     key=r.get('key',{})
     if key.get('fromMe') is not True or not key.get('id') or chave(key.get('remoteJid','').split('@')[0])!=chave(numero(l)):
         raise RuntimeError('A integração não confirmou o destinatário e o id do envio')
@@ -463,7 +509,7 @@ def motivo_da_pausa(config, now):
 
 def rodada():
     now=agora(); alvo=proximo_expediente(now);dia_=dia(alvo)
-    estado={'dia':dia_,'estado':'avaliando','avaliados':0,'selecionados':0,'enviados':0,'respondidos':0,'fila':[],'setores':[],'funil':[],'proximoEnvioEm':alvo.isoformat()}
+    estado={'dia':dia_,'estado':'avaliando','avaliados':0,'selecionados':0,'enviados':0,'semWhatsapp':0,'respondidos':0,'fila':[],'setores':[],'funil':[],'proximoEnvioEm':alvo.isoformat()}
     # Desligado ou em pausa: nada de ler o CRM, abrir o SQLite ou chamar o modelo. O timer roda a cada 60 s e,
     # com o time parado, lia tudo à toa. Os números do dia vêm do último estado gravado (nada sai enquanto parado).
     detalhe=motivo_da_pausa(ler_config(),now)
@@ -471,7 +517,7 @@ def rodada():
         try:
             anterior=json.loads((DATA/'frente-comercial.json').read_text())
             if anterior.get('dia')==dia_:
-                for campo in ['avaliados','selecionados','enviados','respondidos','fila','setores','funil']:estado[campo]=anterior.get(campo,estado[campo])
+                for campo in ['avaliados','selecionados','enviados','semWhatsapp','respondidos','fila','setores','funil']:estado[campo]=anterior.get(campo,estado[campo])
         except (OSError,ValueError):pass
         estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
     registro=Registro(BASE/'registro.sqlite');registro.reconciliar()
@@ -483,6 +529,7 @@ def rodada():
         pendentes=registro.conferir_pendencias(crm)
         for key,em in registro.db.execute("SELECT chave,em FROM contatos WHERE estado='enviado'"):
             if dia(dt.datetime.fromisoformat(em))==dia(now):estado['enviados']+=1
+        estado['semWhatsapp']=registro.sem_whatsapp_do_dia(dia(now))
         enviados={r[0] for r in registro.db.execute("SELECT chave FROM contatos WHERE estado='enviado'")}
         estado['respondidos']=len({chave(numero(l)) for l in crm['leads'] if numero(l) and chave(numero(l)) in enviados and instante(l.get('conversa',{}).get('ultimaEntrada')) and dia(dt.datetime.fromtimestamp(instante(l['conversa']['ultimaEntrada']),dt.timezone.utc))==dia(now)})
         if pendentes:
@@ -532,6 +579,8 @@ def rodada():
                 if all(a['decisao']=='contatar' for a in avaliacoes):
                     nota=round(sum(a['nota'] for a in avaliacoes)/3)
                     contato=registro.contato(chave(numero(l)))
+                    # O plano do dia guarda o lead; descartado por falta de WhatsApp, ele não volta à fila (a tela leria "em preparação").
+                    if contato and contato['estado']=='sem_whatsapp':continue
                     if nota>=65:nova.append({'id':l['id'],'empresa':l['empresa'],'produto':l['produto'],'setor':setor(l),'nota':nota,'estado':contato['estado'] if contato else 'pronto',
                         'motivo':avaliacoes[-1]['motivo'],'avaliacoes':[{k:a[k] for k in ['agente','nota','motivo']} for a in avaliacoes],
                         'mensagem':texto_do_lead(atuais_do_plano[l['id']]),'hash':fingerprint(l)})
@@ -543,7 +592,7 @@ def rodada():
         ids_novos={c['id'] for c in nova}
         anteriores_validos=[]
         for c in estado['fila']:
-            if c.get('estado') in ('enviado','incerto'):
+            if c.get('estado') in ('enviado','incerto','sem_whatsapp'):
                 anteriores_validos.append(c);continue
             l=atuais_do_plano.get(c.get('id'))
             if (c.get('estado')=='pronto' and c.get('id') not in ids_novos and l
@@ -562,7 +611,12 @@ def rodada():
         detalhe=motivo_da_pausa(ler_config(),now)
         if detalhe:estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
         atuais={l['id']:l for l in fresh['leads']}
-        for c in estado['fila']:
+        def descartar(c,l):
+            # Sem WhatsApp: fora da fila (a tela leria "em preparação"), mas gravado no registro para nunca voltar.
+            registro.marcar_sem_whatsapp(l,agora());estado['fila'].remove(c)
+            estado['selecionados']=len(estado['fila']);estado['semWhatsapp']+=1
+        auth=None
+        for c in list(estado['fila']):
             l=atuais.get(c['id'])
             if c.get('estado')!='pronto' or not l or not elegivel(l) or fingerprint(l)!=c['hash'] or not ler_config().get('ativo'):continue
             if l['id'] in primeiros or registro.contato(chave(numero(l))):continue
@@ -570,8 +624,13 @@ def rodada():
             if any(numero(o) and chave(numero(o))==chave(numero(l)) and o['id']!=l['id'] and not elegivel(o) for o in fresh['leads']):continue
             historico=H/'.local/share/whatsapp-conversas'/f'{chave(numero(l))}.jsonl'
             if historico.exists() and historico.stat().st_size:continue
-            auth=conexao()
+            auth=auth or conexao()
             if not ler_config().get('ativo'):break
+            # Antes de pedir a reserva: número que não existe no WhatsApp não gasta o primeiro do dia nem o ritmo.
+            # Sem resposta legível não se envia a este candidato agora, sem marcar nada e sem bloquear o time.
+            existe=existe_no_whatsapp(l,auth)
+            if existe is None:continue
+            if existe is False:descartar(c,l);continue
             # A Central decide (janela, ritmo de todos, dono do lead, gate) e grava o primeiro do dia.
             r=reservar_na_central(l)
             if r.get('reservado') is not True or not isinstance(r.get('texto'),str) or not r['texto'].strip():
@@ -588,7 +647,14 @@ def rodada():
                     # Nada saiu: a reserva da Central impede outra tentativa hoje.
                     registro.liberar(chave(numero(l)));raise
             estado.update(estado='enviando',detalhe='Carla está iniciando uma conversa aprovada pelo time.');gravar(estado)
-            recibo=enviar(l,texto,auth);registro.confirmar(chave(numero(l)),recibo)
+            try:recibo=enviar(l,texto,auth)
+            except NumeroSemWhatsapp:
+                # A Evolution recusou com 400 e `exists: false`: nada saiu. A linha `incerto` vira `sem_whatsapp`
+                # (nunca é apagada) e o time segue; qualquer outro erro sobe e fica `incerto`, bloqueando.
+                descartar(c,l)
+                estado.update(estado='pronto',detalhe='Um número sem WhatsApp foi descartado. O time segue para o próximo candidato.')
+                continue
+            registro.confirmar(chave(numero(l)),recibo)
             confirmado_em=iso(agora())
             registrado=anotar_na_central(l,texto,confirmado_em)
             c.update(estado='enviado',enviadoEm=confirmado_em,mensagem=texto);estado['enviados']+=1
